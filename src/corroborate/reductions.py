@@ -200,7 +200,12 @@ def late_episode_return_mean(
     the surviving values — i.e. mean of episode-end returns
     whose terminal step lies in the late window.
 
-    Returns 0.0 if no episode ended in the late window."""
+    Returns NaN if no episode terminated in the late window —
+    `0.0` would collide with a legitimate ep_return for envs
+    whose reward range crosses zero (Acrobot ∈ [−1, 0],
+    MNISTBandit ∈ [−1, 1], etc.). Downstream consumers must
+    handle NaN explicitly (use `jnp.nanmean` for aggregation,
+    or filter via `math.isnan`)."""
     if not (0.0 < fraction <= 1.0):
         raise ValueError(
             f'late_episode_return_mean: need 0 < fraction ≤ 1; '
@@ -221,7 +226,7 @@ def late_episode_return_mean(
         keep_mask = time_mask & ep_end_mask
         n_kept = int(jnp.sum(keep_mask))
         if n_kept == 0:
-            return 0.0
+            return float('nan')
         masked = jnp.where(keep_mask, ep_return, 0.0)
         return float(jnp.sum(masked) / n_kept)
 

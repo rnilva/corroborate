@@ -109,6 +109,23 @@ def require_kind(
     raise TypeError(f"{key!r} must be 'bridge' or 'invariant', got {v!r}")
 
 
+def require_data_source(
+    d: Mapping[str, object], key: str,
+) -> Literal['train', 'eval']:
+    """Narrow a FactRow.data_source column back to the typed
+    `Literal['train', 'eval']`. Defaults to `'train'` when the
+    key is missing — preserves backward compat with rows
+    persisted before the field was added."""
+    v = d.get(key)
+    if v is None:
+        return 'train'
+    if v == 'train':
+        return 'train'
+    if v == 'eval':
+        return 'eval'
+    raise TypeError(f"{key!r} must be 'train' or 'eval', got {v!r}")
+
+
 def optional_direction(
     d: Mapping[str, object], key: str,
 ) -> Direction | None:

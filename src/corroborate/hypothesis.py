@@ -38,8 +38,6 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Literal
 
-import jax
-
 from corroborate.bridge import Bridge
 from corroborate.claim import Claim
 
@@ -105,7 +103,7 @@ class MechanismKey:
 @dataclass(frozen=True, slots=True)
 class Hypothesis[
     R: Mapping[str, object],
-    E: Mapping[str, object] = Mapping[str, jax.Array],
+    E: Mapping[str, object] = Mapping[str, object],
 ]:
     """A research hypothesis: an intervention plus the bridges
     that should hold under it.
@@ -145,7 +143,12 @@ class Hypothesis[
 
         `bridge_names` unions train-bridges and eval-bridges so
         the mechanism-key reflects the author's full
-        scope-commitment surface."""
+        scope-commitment surface. Eval-bridge names carry an
+        `eval:` prefix so two hypotheses with the same bridge
+        name applied to *different* traces (one as train-bridge,
+        one as eval-bridge) get distinct MechanismKeys —
+        otherwise the redundancy / corpus-grouping primitives
+        would collapse them."""
         intervention_pairs: tuple[tuple[str, str], ...] = tuple(
             sorted(
                 (k, _canonical_str(v))
@@ -154,7 +157,7 @@ class Hypothesis[
         )
         all_bridge_names: frozenset[str] = (
             frozenset(b.name for b in self.bridges)
-            | frozenset(b.name for b in self.eval_bridges)
+            | frozenset(f'eval:{b.name}' for b in self.eval_bridges)
         )
         return MechanismKey(
             intervention_signature=intervention_pairs,

@@ -6,23 +6,32 @@ literal theorem condition. Gap = 0 means the theorem condition
 holds; gap > 0 means it doesn't, and the magnitude is the
 research-actionable signal: "method X reduces gap Y by Δ".
 
+**No-data sentinel: NaN, not 0.** When a gap can't be computed
+from the available data (replay never filled, fewer than 2 sync
+windows, etc.), the measurable returns `float('nan')`. The
+`at_most(gap, threshold)` wrap maps NaN → POWER_INSUFFICIENT
+verdict (rather than HELD), so a hypothesis with a scope-commit
+that never had data won't spuriously hold. Downstream consumers
+must handle NaN: aggregation uses `nanmean`-style reductions.
+
 Three roles consume each gap differently (see `invariant.py`
 module docstring):
 
 - Intervention: read the scalar into RunRow.stats; per-comparison
-  Δ-gap on ComparisonRow.stats.
+  Δ-gap on ComparisonRow.stats. NaN means "no data" — different
+  from "gap = 0" (which means "data confirmed compliance").
 - Falsification: wrap with `at_most(gap, threshold,
-  of_claim=...)` in Hypothesis.bridges. The threshold is the
-  author's scope commitment.
+  of_claim=...)` in Hypothesis.bridges. NaN propagates to
+  POWER_INSUFFICIENT.
 - Causal analysis: same `at_most`-wraps gate discovery sample
-  selection.
+  selection; NaN-bearing facts can be filtered out of the
+  in-scope set.
 
 **Honest scope.** Only the gaps whose data the v0 record can
 already support are implemented here. Gaps that need richer
 logging (Q-snapshots per step for empirical contraction rate;
-MC-return ground truth for Jensen bias; Q-VALUES per batch
-state for Hasselt covariance; per-env state hashes for Watkins
-(s, a)-coverage) are deferred — see FUTURE_WORKS.md."""
+MC-return ground truth for Jensen bias) are deferred — see
+FUTURE_WORKS.md."""
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -73,20 +82,29 @@ def fqi_decay_gap(
         n = int(td.shape[0])
         n_windows = n // sync_period
         if n_windows < 2:
-            # Need at least two windows for an across-window ratio.
-            return 0.0
+            # No across-window ratio computable — NaN sentinel.
+            return float('nan')
         # Per-window sup-norm |TD_error|.
         window_sup_norms: list[float] = []
         for k in range(n_windows):
             window = td[k * sync_period : (k + 1) * sync_period]
             window_sup_norms.append(float(jnp.max(jnp.abs(window))))
-        # Across-window decay ratios.
-        ratios = [
-            window_sup_norms[k] / max(abs(window_sup_norms[k - 1]), 1e-9)
-            for k in range(1, n_windows)
-        ]
-        avg_ratio = sum(ratios) / len(ratios)
-        return float(max(0.0, avg_ratio - gamma))
+        # Across-window decay ratios — geometric mean, principled
+        # for multiplicative-decay statistics (Munos 2003 FQI's
+        # contraction is multiplicative). Skip ratios where the
+        # denominator window had near-zero sup-norm (no signal to
+        # decay from); if all are skipped, return NaN.
+        log_ratios: list[float] = []
+        for k in range(1, n_windows):
+            denom = abs(window_sup_norms[k - 1])
+            if denom < 1e-9:
+                continue
+            ratio = window_sup_norms[k] / denom
+            log_ratios.append(float(jnp.log(jnp.maximum(ratio, 1e-12))))
+        if not log_ratios:
+            return float('nan')
+        geomean_ratio = float(jnp.exp(sum(log_ratios) / len(log_ratios)))
+        return float(max(0.0, geomean_ratio - gamma))
 
     return Measurable(fn=fn, name=name, reads=('td_error',))
 
@@ -128,15 +146,15 @@ def lin_iid_gap(
         full_mask = buf_size >= capacity                 # (T,)
         n_full = int(jnp.sum(full_mask))
         if n_full == 0:
-            return 0.0
+            return float('nan')  # buffer never filled — no data
         # Filter rows where buffer was full; flatten across (T_full, batch).
         full_indices = indices[full_mask].flatten()
         if int(full_indices.size) == 0:
-            return 0.0
+            return float('nan')
         counts = jnp.bincount(full_indices, length=capacity)
         total = float(jnp.sum(counts))
         if total == 0.0:
-            return 0.0
+            return float('nan')
         empirical = counts / total
         eps = 1e-12
         nonzero = empirical > eps
@@ -182,10 +200,14 @@ def hasselt_covariance_gap() -> Measurable[DQNTrajectoryRecord, float]:
         std_on = jnp.sqrt(jnp.mean(on_centered ** 2))
         std_tg = jnp.sqrt(jnp.mean(tg_centered ** 2))
         denom = std_on * std_tg
-        # Constant-variance side ⇒ undefined correlation ⇒ 0.
-        r = jnp.where(denom > 1e-9, cov / jnp.where(denom > 1e-9, denom, 1.0), 0.0)
+        if float(denom) <= 1e-9:
+            # Constant-variance side ⇒ undefined correlation ⇒
+            # NaN sentinel (no information about independence).
+            return float('nan')
+        r = cov / denom
         # Asymmetric: only positive correlation is the failure
-        # mode for DDQN's decoupling assumption.
+        # mode for DDQN's decoupling assumption. Anti-correlation
+        # is favourable ⇒ gap = 0.
         return float(jnp.maximum(0.0, r))
 
     return Measurable(
@@ -203,13 +225,20 @@ def hasselt_covariance_gap() -> Measurable[DQNTrajectoryRecord, float]:
 
 # ============ Jensen overestimation gap (reads EvalRecord) ============
 
-def jensen_overestimation_gap() -> Measurable[Mapping[str, jnp.ndarray], float]:
+def jensen_overestimation_gap() -> Measurable[Mapping[str, object], float]:
     """Empirical mean (predicted_q_at_start − mc_return) over an
     eval-pass record. Hasselt 2010, 2016 §3 — vanilla DQN's
     Jensen-inequality bias is positive (Q̂ overestimates Q*); DDQN
     aims to reduce it. Gap = max(0, mean bias) — clipped because
     only positive bias (over) is the Jensen signature; negative
     means under-estimating and is a different phenomenon.
+
+    Typed at `Mapping[str, object]` (the Hypothesis E broad
+    default) so the resulting `at_most`-wrap fits
+    `Hypothesis.eval_bridges` without requiring authors to
+    parameterise E narrower. Internal narrowing via `jnp.asarray`
+    handles the actual jax.Array values produced by
+    `train_with_eval`'s eval record.
 
     Reads from the `EvalTrajectoryRecord` produced by
     `train_with_eval`'s eval pass. The `(n_bursts, K)`-shaped
@@ -218,7 +247,7 @@ def jensen_overestimation_gap() -> Measurable[Mapping[str, jnp.ndarray], float]:
     eval episodes."""
     name = 'jensen_overestimation_gap'
 
-    def fn(record: Mapping[str, jnp.ndarray]) -> float:
+    def fn(record: Mapping[str, object]) -> float:
         predicted = jnp.asarray(record['predicted_q_at_start'])
         actual = jnp.asarray(record['mc_return'])
         bias = float(jnp.mean(predicted - actual))
@@ -253,12 +282,14 @@ def state_action_coverage_gap(
     theorem isn't measurable in that regime, so we report no
     information rather than a misleading number."""
     if state_hash_cardinality is None or n_actions <= 0:
-        # No-data sentinel: env has no state_hash discretization.
+        # No-data: env has no state_hash discretization. NaN
+        # sentinel — distinguishes "no data" from "perfect
+        # coverage" (gap = 0).
         no_data_name = 'state_action_coverage_gap[no_data]'
 
         def no_data_fn(_record: DQNTrajectoryRecord) -> float:
             del _record
-            return 0.0
+            return float('nan')
         return Measurable(fn=no_data_fn, name=no_data_name, reads=())
 
     max_unique = state_hash_cardinality * n_actions
@@ -268,11 +299,15 @@ def state_action_coverage_gap(
     )
 
     def fn(record: DQNTrajectoryRecord) -> float:
-        sh = jnp.asarray(record['state_hash'])
-        ac = jnp.asarray(record['action'])
-        # Encode (s, a) pair as a combined integer in
-        # [0, cardinality * n_actions).
-        pairs = sh.flatten() * n_actions + ac.flatten()
+        sh = jnp.asarray(record['state_hash']).flatten()
+        ac = jnp.asarray(record['action']).flatten()
+        # Defensive: contract says state_hash ∈ [0, cardinality);
+        # if violated, the pair encoding overflows and unique-count
+        # is misleading. Clip to the valid range so gap stays
+        # honest even on contract-broken inputs.
+        sh_clipped = jnp.clip(sh, 0, state_hash_cardinality - 1)
+        ac_clipped = jnp.clip(ac, 0, n_actions - 1)
+        pairs = sh_clipped * n_actions + ac_clipped
         n_unique = int(jnp.unique(pairs).shape[0])
         coverage = n_unique / max_unique
         return float(max(0.0, 1.0 - coverage))

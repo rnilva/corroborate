@@ -229,6 +229,22 @@ def test_at_most_held_at_exact_threshold() -> None:
     assert inv(record).verdict is Verdict.HELD
 
 
+def test_at_most_power_insufficient_when_gap_is_nan() -> None:
+    """NaN gap (no data — replay never filled, etc.) maps to
+    POWER_INSUFFICIENT, NOT silent HELD. Treating NaN as HELD
+    would be a false-confirmation of scope from a run that
+    couldn't produce evidence."""
+    @claim
+    def some_step(x: int) -> int:
+        return x
+
+    inv = at_most(_fake_gap(), threshold=1.0, of_claim=some_step)
+    record: Mapping[str, object] = {'v': float('nan')}
+    result = inv(record)
+    assert result.verdict is Verdict.POWER_INSUFFICIENT
+    assert result.stats['kind'] == 'tautological'
+
+
 def test_at_most_default_name_includes_gap_and_threshold() -> None:
     @claim
     def step(x: int) -> int:

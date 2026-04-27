@@ -78,14 +78,16 @@ def test_fqi_decay_gap_returns_finite_scalar_on_real_run() -> None:
     assert val >= 0.0  # gap is always non-negative
 
 
-def test_fqi_decay_gap_zero_when_fewer_than_two_windows() -> None:
-    """Need at least 2 windows for an across-window ratio; gap=0
-    no-data otherwise."""
+def test_fqi_decay_gap_nan_when_fewer_than_two_windows() -> None:
+    """Need at least 2 windows for an across-window ratio; NaN
+    no-data sentinel otherwise (distinguishes 'no data' from
+    'data confirmed gap=0')."""
+    import math
     record: Mapping[str, jnp.ndarray] = {
         'td_error': jnp.asarray([0.5] * 5),  # < one full window
     }
     gap = fqi_decay_gap(sync_period=10, gamma=0.99)
-    assert gap(record) == 0.0
+    assert math.isnan(gap(record))
 
 
 def test_fqi_decay_gap_zero_for_geometric_decay_at_gamma() -> None:
@@ -164,18 +166,19 @@ def test_lin_iid_gap_large_for_concentrated_sampling_post_fill() -> None:
     assert val > 4.0
 
 
-def test_lin_iid_gap_zero_when_buffer_never_fills() -> None:
-    """Buffer never fills (always under capacity) → gap=0
-    no-data, NOT a misleading high value from buffer-size
-    confound."""
+def test_lin_iid_gap_nan_when_buffer_never_fills() -> None:
+    """Buffer never fills (always under capacity) → NaN no-data
+    sentinel, NOT a misleading high value from buffer-size
+    confound nor a `0.0` collision with a perfectly-uniform
+    sampling distribution."""
+    import math
     capacity = 1000  # huge capacity buffer never reaches
     record: Mapping[str, jnp.ndarray] = {
         'sample_indices': jnp.zeros((50, 16), dtype=jnp.int32),
         'buf_size': jnp.arange(50, dtype=jnp.int32),  # 0, 1, 2, ..., 49
     }
     gap = lin_iid_gap(capacity=capacity)
-    val = gap(record)
-    assert val == 0.0
+    assert math.isnan(gap(record))
 
 
 def test_lin_iid_gap_filters_out_pre_fill_steps() -> None:
@@ -240,16 +243,17 @@ def test_hasselt_gap_zero_when_q_values_perfectly_anti_correlated() -> None:
     assert gap(record) == 0.0
 
 
-def test_hasselt_gap_zero_when_q_values_constant() -> None:
+def test_hasselt_gap_nan_when_q_values_constant() -> None:
     """Zero variance on either side ⇒ correlation undefined ⇒
-    gap reported as 0 (conservative — no information about
-    independence either way)."""
+    NaN no-data sentinel (no information about independence
+    either way)."""
+    import math
     record: Mapping[str, jnp.ndarray] = {
         'online_q_values': jnp.ones((50, 16, 2)),
         'target_q_values': jnp.arange(50 * 16 * 2, dtype=jnp.float32).reshape((50, 16, 2)),
     }
     gap = hasselt_covariance_gap()
-    assert gap(record) == 0.0
+    assert math.isnan(gap(record))
 
 
 def test_hasselt_gap_carries_both_reads() -> None:
@@ -384,9 +388,11 @@ def test_sa_coverage_gap_one_for_zero_coverage_against_huge_card() -> None:
     assert val > 0.999
 
 
-def test_sa_coverage_gap_no_data_when_cardinality_none() -> None:
+def test_sa_coverage_gap_nan_when_cardinality_none() -> None:
     """env_spec.state_hash=None → cardinality=None → no-data
-    gap measurable returning 0 always."""
+    gap measurable returning NaN. NaN distinguishes 'no data'
+    from 'gap = 0' (perfect coverage)."""
+    import math
     record: Mapping[str, jnp.ndarray] = {
         'state_hash': jnp.zeros((50,), dtype=jnp.int32),
         'action': jnp.zeros((50,), dtype=jnp.int32),
@@ -394,6 +400,6 @@ def test_sa_coverage_gap_no_data_when_cardinality_none() -> None:
     gap = state_action_coverage_gap(
         state_hash_cardinality=None, n_actions=4,
     )
-    assert gap(record) == 0.0
+    assert math.isnan(gap(record))
     # And the reads-set is empty for the no-data variant.
     assert gap.reads == ()

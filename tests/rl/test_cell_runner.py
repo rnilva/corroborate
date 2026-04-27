@@ -238,7 +238,7 @@ def test_run_dqn_cell_runs_eval_bridges_against_eval_record() -> None:
         of_claim=vanilla_bootstrap,
     )
 
-    h: Hypothesis[DQNTrajectoryRecord, Mapping[str, jnp.ndarray]] = Hypothesis(
+    h: Hypothesis[DQNTrajectoryRecord, Mapping[str, object]] = Hypothesis(
         name='vanilla_with_jensen_scope',
         intervention={},
         bridges=(),

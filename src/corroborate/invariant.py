@@ -51,6 +51,7 @@ inline in claim bodies. INVARIANT_VIOLATION is reserved for
 mechanism."""
 from __future__ import annotations
 
+import math
 from collections.abc import Callable, Mapping
 
 from corroborate.bridge import Bridge, BridgeResult
@@ -109,8 +110,17 @@ def at_most[R: Mapping[str, object]](
     name: str | None = None,
 ) -> Bridge[R]:
     """Wrap a theorem-gap `Measurable[R, float]` in a tautological
-    `Bridge[R]` returning `HELD` when `gap(record) <= threshold`
-    and `INVARIANT_VIOLATION` otherwise.
+    `Bridge[R]` whose verdict is:
+
+    - `HELD` when `gap(record) <= threshold` (data confirms scope).
+    - `INVARIANT_VIOLATION` when `gap(record) > threshold` (data
+      shows the theorem's domain was exceeded).
+    - `POWER_INSUFFICIENT` when `gap(record)` is NaN (no data was
+      available to compute the gap — e.g. replay buffer never
+      filled, fewer than two sync windows, eval pass produced no
+      episodes). The author committed scope but the run can't
+      tell whether scope held; treating NaN as HELD would be a
+      silent false-confirmation.
 
     The wrap is the place where the *author commits scope*: the
     paper's claim "method X's mechanism operates when gap_Y <
@@ -123,8 +133,10 @@ def at_most[R: Mapping[str, object]](
     Three roles consume `at_most`-wrapped bridges:
 
     - Falsification: INVARIANT_VIOLATION preempts outcome verdict
-      in `aggregate_verdict`.
+      in `aggregate_verdict`. POWER_INSUFFICIENT means rerun at
+      higher n / more eval bursts.
     - Causal-analysis scope predicate: gates discovery-input runs.
+      NaN-bearing facts can be filtered out of the in-scope set.
     - Intervention sample-filter: gates cells before Δ-gap
       comparison aggregation. (The intervention's *outcome*
       verdict is on the Δ-gap, computed by existing stats; this
@@ -138,6 +150,21 @@ def at_most[R: Mapping[str, object]](
     @invariant(of=of_claim, targets=gap.reads, name=bridge_name)
     def fn(record: R) -> BridgeResult:
         val = gap(record)
+        if math.isnan(val):
+            return BridgeResult(
+                verdict=Verdict.POWER_INSUFFICIENT,
+                reason=(
+                    f'{gap.name} = NaN (no data); cannot evaluate '
+                    f'against threshold {threshold:g}'
+                ),
+                stats={
+                    'gap_value': val,
+                    'threshold': float(threshold),
+                    'measurable': gap.name,
+                },
+                name=bridge_name,
+                targets=gap.reads,
+            )
         ok = val <= threshold
         return BridgeResult(
             verdict=Verdict.HELD if ok else Verdict.INVARIANT_VIOLATION,

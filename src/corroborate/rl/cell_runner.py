@@ -78,9 +78,11 @@ class EvalConfig:
         n_episodes: int = 20,
     ) -> EvalConfig:
         """Construct an EvalConfig with `n_evals` evenly-spaced
-        eval bursts across `total_steps`. Round down — the actual
-        eval count will be `total_steps // (total_steps // n_evals)`,
-        which equals `n_evals` when total_steps divides evenly."""
+        eval bursts across `total_steps`. Validates that
+        `total_steps` divides cleanly into `n_evals` super-steps
+        — the downstream `train_with_eval` requires exact
+        divisibility, so catching the error here gives a clearer
+        message at the construction site."""
         if total_steps <= 0:
             raise ValueError(f'total_steps must be positive; got {total_steps}')
         if n_evals <= 0:
@@ -91,6 +93,14 @@ class EvalConfig:
                 f'n_evals ({n_evals}) larger than total_steps ({total_steps}); '
                 f'cannot fit even one super-step.',
             )
+        if total_steps % eval_every != 0:
+            raise ValueError(
+                f'EvalConfig.n_evals: total_steps ({total_steps}) does not '
+                f'divide cleanly into eval_every ({eval_every}) super-steps '
+                f'(remainder {total_steps % eval_every}). Pick a '
+                f'(total_steps, n_evals) pair where total_steps % '
+                f'(total_steps // n_evals) == 0.',
+            )
         return cls(eval_every=eval_every, n_episodes=n_episodes)
 
 
@@ -99,7 +109,7 @@ class EvalConfig:
 def run_dqn_cell(
     env_spec: EnvSpec,
     seed: int,
-    hypothesis: Hypothesis[DQNTrajectoryRecord, Mapping[str, jax.Array]],
+    hypothesis: Hypothesis[DQNTrajectoryRecord, Mapping[str, object]],
     *,
     total_steps: int,
     optimizer: optax.GradientTransformation,
@@ -195,6 +205,7 @@ def run_dqn_cell(
             bridge=b,
             result=b(trace.train),
             intervention_signature=intervention_sig,
+            data_source='train',
         )
         for b in hypothesis.bridges
     )
@@ -203,6 +214,7 @@ def run_dqn_cell(
             bridge=b,
             result=b(trace.eval),
             intervention_signature=intervention_sig,
+            data_source='eval',
         )
         for b in hypothesis.eval_bridges
     )
@@ -238,13 +250,15 @@ def _bridge_result_to_fact[R: Mapping[str, object]](
     bridge: Bridge[R],
     result: BridgeResult,
     intervention_signature: frozenset[str],
+    data_source: Literal['train', 'eval'],
 ) -> FactRow:
     """Convert a BridgeResult to a FactRow at cell-level
     granularity. Generic over the bridge's record type so the
     same helper handles both train-bridges (over the
     `DQNTrajectoryRecord`) and eval-bridges (over the eval
     record). `kind` is read off `stats['kind']`: tautological →
-    'invariant', otherwise → 'bridge'.
+    'invariant', otherwise → 'bridge'. `data_source` records
+    which trace produced the fact.
 
     `natural_strength` is a binary placeholder (1.0 for HELD, 0.0
     otherwise) — step 5 (statistics module) replaces this with
@@ -261,6 +275,7 @@ def _bridge_result_to_fact[R: Mapping[str, object]](
         evidentiary_level='cell',
         stats=dict(result.stats),
         intervention_signature=intervention_signature,
+        data_source=data_source,
     )
 
 
