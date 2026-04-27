@@ -167,11 +167,12 @@ def _build_record(
     (`max_q`, `loss`, `ep_return`, etc.). Adding a new diagnostic
     is one line in a phase + one line here.
 
-    The per-batch fields (`online_argmax`, `target_argmax`,
-    `sample_indices`) carry shape `(batch,)` per step; under
-    `python_loop` / `scan_loop` stacking they become `(T, batch)`.
-    Theorem-condition invariants flatten across both axes via
-    `unique_count` / `disagreement_rate` reductions."""
+    The Q-value fields (`online_q_values`, `target_q_values`)
+    carry shape `(batch, n_actions)` per step; stacking adds a
+    leading T → `(T, batch, n_actions)`. `sample_indices` is
+    `(batch,)` per step → `(T, batch)`. Reductions flatten or
+    fold the appropriate axes at consumption time; the record
+    deliberately stores raw values, not pre-reductions."""
     return {
         'epsilon': rollout.epsilon,
         'reward': rollout.reward,
@@ -181,7 +182,7 @@ def _build_record(
         'action': rollout.action,
         'loss': train.loss,
         'td_error': train.td_error,
-        'online_argmax': train.online_argmax,
-        'target_argmax': train.target_argmax,
+        'online_q_values': train.online_q_values,
+        'target_q_values': train.target_q_values,
         'sample_indices': train.sample_indices,
     }

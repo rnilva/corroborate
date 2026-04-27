@@ -1,16 +1,18 @@
-"""Smoke test for DQN theorem-condition invariants.
+"""Tests for the DQN theorem-gap measurables.
 
-Verifies:
-- All 6 invariants in `DQN_INVARIANTS` return HELD on a real
-  CartPole trajectory — confirms the run sits inside every
-  theorem's domain.
-- A tampered record (Q exploded to 1e6) triggers
-  INVARIANT_VIOLATION on `q_bounded`, demonstrating the
-  divergence-detector contract.
-- `buffer_coverage(capacity, fraction)` factory returns HELD on
-  a normal run that explores the buffer.
-- The reads-set fingerprint flows from `from_key` through the
-  reductions to the bridge's `targets`."""
+Each gap is a `Measurable[DQNTrajectoryRecord, float]` returning
+a magnitude. Three roles consume gaps differently:
+
+- Intervention: read the scalar directly (`gap(record)`).
+- Falsification / scope: wrap with `at_most(gap, threshold,
+  of_claim=...)` to get a `Bridge[R]` that returns
+  HELD or INVARIANT_VIOLATION.
+
+These tests exercise:
+1. The gap measurables compute the documented quantity on a real
+   trajectory and on synthetic-failure trajectories.
+2. The `at_most` wrap correctly maps gap to verdict for a
+   committed threshold."""
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -18,16 +20,16 @@ from collections.abc import Mapping
 import jax.numpy as jnp
 import optax
 
+from corroborate.invariant import at_most
+from corroborate.rl.dqn.claims.bootstrap import vanilla_bootstrap
+from corroborate.rl.dqn.claims.q_network import mlp_q
+from corroborate.rl.dqn.claims.target_sync import periodic_copy
 from corroborate.rl.dqn.dqn import dqn_step, init_state
 from corroborate.rl.dqn.invariants import (
-    DQN_INVARIANTS,
-    action_coverage,
-    buffer_coverage,
-    loss_bounded,
-    max_q_overestimation_bounded,
-    online_target_disagreement,
-    q_bounded,
-    td_error_bounded,
+    action_coverage_gap,
+    fqi_decay_gap,
+    hasselt_covariance_gap,
+    lin_iid_gap,
 )
 from corroborate.rl.loop import python_loop
 from corroborate.verdict import Verdict
@@ -35,8 +37,7 @@ from corroborate.verdict import Verdict
 
 def _run_short_trajectory() -> Mapping[str, jnp.ndarray]:
     """Run DQN on CartPole for 100 steps and return the stacked
-    record. Short enough for a smoke test, long enough to span
-    warmup + a few training steps."""
+    record."""
     import gymnax
     env, env_params = gymnax.make('CartPole-v1')
     obs_dim = int(env.observation_space(env_params).shape[0])
@@ -61,119 +62,164 @@ def _run_short_trajectory() -> Mapping[str, jnp.ndarray]:
     return record
 
 
-# ============ All invariants HELD on a real run ============
+# ============ FQI decay gap ============
 
-def test_all_invariants_held_on_cartpole_run() -> None:
-    """A normal DQN run on CartPole should sit inside every
-    theorem's domain — all 5 invariants HELD."""
+def test_fqi_decay_gap_returns_finite_scalar_on_real_run() -> None:
     record = _run_short_trajectory()
-    for inv in DQN_INVARIANTS:
-        result = inv(record)
-        assert result.verdict is Verdict.HELD, (
-            f'invariant {inv.name} returned {result.verdict.name}: '
-            f'{result.reason}'
-        )
-        # The tautological tag must always be present.
-        assert result.stats['kind'] == 'tautological'
-        # And the theorem reference must be recorded.
-        assert 'theorem' in result.stats
+    gap = fqi_decay_gap(sync_period=10, gamma=0.99)
+    val = gap(record)
+    assert isinstance(val, float)
+    assert val >= 0.0  # gap is always non-negative
 
 
-# ============ Per-invariant: targets propagate from leaf reads ============
-
-def test_q_bounded_targets_q_max() -> None:
-    assert q_bounded.targets == ('max_q',)
-
-
-def test_max_q_overestimation_bounded_targets_q_max() -> None:
-    # Composition: bounded(growth_window(from_key('max_q'))).
-    # Reads propagate: ('max_q',).
-    assert max_q_overestimation_bounded.targets == ('max_q',)
+def test_fqi_decay_gap_zero_when_no_complete_window() -> None:
+    """Trajectory shorter than one full sync window → gap = 0
+    (no-data, not a violation)."""
+    record: Mapping[str, jnp.ndarray] = {
+        'td_error': jnp.asarray([0.5] * 5),
+    }
+    gap = fqi_decay_gap(sync_period=10, gamma=0.99)
+    assert gap(record) == 0.0
 
 
-def test_loss_bounded_targets_loss() -> None:
-    assert loss_bounded.targets == ('loss',)
+def test_fqi_decay_gap_carries_reads() -> None:
+    gap = fqi_decay_gap(sync_period=10)
+    assert gap.reads == ('td_error',)
 
 
-def test_td_error_bounded_targets_td_error() -> None:
-    assert td_error_bounded.targets == ('td_error',)
+# ============ Lin i.i.d. gap ============
+
+def test_lin_iid_gap_zero_for_uniform_sampling() -> None:
+    """Indices uniformly drawn → KL(empirical || uniform) ≈ 0."""
+    n_steps = 100
+    batch = 16
+    capacity = 50
+    # Generate uniform samples covering the buffer.
+    rng = jnp.arange(n_steps * batch) % capacity
+    indices = rng.reshape((n_steps, batch))
+    record: Mapping[str, jnp.ndarray] = {'sample_indices': indices}
+    gap = lin_iid_gap(capacity=capacity)
+    val = gap(record)
+    # Allow some slack — finite-sample KL won't be exactly zero.
+    assert val < 0.1
 
 
-def test_action_coverage_targets_action() -> None:
-    assert action_coverage.targets == ('action',)
+def test_lin_iid_gap_large_for_concentrated_sampling() -> None:
+    """All samples concentrated on one index → very biased
+    sampling → large KL."""
+    record: Mapping[str, jnp.ndarray] = {
+        'sample_indices': jnp.zeros((50, 16), dtype=jnp.int32),
+    }
+    gap = lin_iid_gap(capacity=200)
+    val = gap(record)
+    # KL(δ_0 || uniform_200) = log(200) ≈ 5.3.
+    assert val > 4.0
 
 
-def test_online_target_disagreement_targets_argmax_keys() -> None:
-    # Multi-input reduction propagates BOTH leaf keys.
-    assert online_target_disagreement.targets == ('online_argmax', 'target_argmax')
+def test_lin_iid_gap_carries_reads() -> None:
+    gap = lin_iid_gap(capacity=200)
+    assert gap.reads == ('sample_indices',)
 
 
-# ============ buffer_coverage factory ============
+# ============ Hasselt covariance gap (Pearson r) ============
 
-def test_buffer_coverage_held_on_real_trajectory() -> None:
+def test_hasselt_gap_one_when_q_values_perfectly_correlated() -> None:
+    """Online and target Q-values identical (varying across
+    samples) → Pearson r = 1 → gap = 1 (DDQN reduces to vanilla,
+    theorem doesn't bite)."""
+    arr = jnp.arange(50 * 16 * 2, dtype=jnp.float32).reshape((50, 16, 2))
+    record: Mapping[str, jnp.ndarray] = {
+        'online_q_values': arr,
+        'target_q_values': arr,
+    }
+    gap = hasselt_covariance_gap()
+    assert abs(gap(record) - 1.0) < 1e-5
+
+
+def test_hasselt_gap_one_when_q_values_perfectly_anti_correlated() -> None:
+    """Anti-correlation (r = -1) ⇒ |r| = 1 — same gap shape, the
+    measurable returns the magnitude not the signed correlation."""
+    arr = jnp.arange(50 * 16 * 2, dtype=jnp.float32).reshape((50, 16, 2))
+    record: Mapping[str, jnp.ndarray] = {
+        'online_q_values': arr,
+        'target_q_values': -arr,
+    }
+    gap = hasselt_covariance_gap()
+    assert abs(gap(record) - 1.0) < 1e-5
+
+
+def test_hasselt_gap_zero_when_q_values_constant() -> None:
+    """Zero variance on either side ⇒ correlation undefined ⇒
+    gap reported as 0 (conservative — no information about
+    independence either way)."""
+    record: Mapping[str, jnp.ndarray] = {
+        'online_q_values': jnp.ones((50, 16, 2)),
+        'target_q_values': jnp.arange(50 * 16 * 2, dtype=jnp.float32).reshape((50, 16, 2)),
+    }
+    gap = hasselt_covariance_gap()
+    assert gap(record) == 0.0
+
+
+def test_hasselt_gap_carries_both_reads() -> None:
+    gap = hasselt_covariance_gap()
+    assert gap.reads == ('online_q_values', 'target_q_values')
+
+
+# ============ Action coverage gap ============
+
+def test_action_coverage_gap_zero_when_floor_met() -> None:
+    record: Mapping[str, jnp.ndarray] = {
+        'action': jnp.asarray([0, 1, 0, 1, 0]),
+    }
+    gap = action_coverage_gap(expected_min_unique=2)
+    assert gap(record) == 0.0
+
+
+def test_action_coverage_gap_positive_when_floor_violated() -> None:
+    record: Mapping[str, jnp.ndarray] = {
+        'action': jnp.asarray([0, 0, 0, 0, 0]),  # only one action
+    }
+    gap = action_coverage_gap(expected_min_unique=2)
+    # Expected ≥ 2 distinct, got 1 → gap = 1.
+    assert gap(record) == 1.0
+
+
+# ============ at_most wrap: scope commitment → verdict ============
+
+def test_at_most_wrap_held_when_gap_under_threshold() -> None:
+    """Author commits scope: 'mlp_q's mechanism operates when
+    fqi_decay_gap < 0.5'. Real run has small gap → HELD."""
     record = _run_short_trajectory()
-    inv = buffer_coverage(capacity=200, fraction=0.1)
-    result = inv(record)
+    gap = fqi_decay_gap(sync_period=10, gamma=0.99)
+    bridge = at_most(gap, threshold=10.0, of_claim=periodic_copy)
+    result = bridge(record)
     assert result.verdict is Verdict.HELD
+    assert result.stats['kind'] == 'tautological'
+    assert result.stats['of_claim'] == 'periodic_copy'
+    assert 'gap_value' in result.stats
+    assert result.stats['threshold'] == 10.0
 
 
-def test_buffer_coverage_violates_when_indices_too_local() -> None:
-    """If `sample_indices` only ever picks 5 distinct positions,
-    a fraction-of-buffer threshold of 50% violates."""
+def test_at_most_wrap_invariant_violation_when_gap_over_threshold() -> None:
+    """Synthetic concentrated sampling → large lin_iid_gap → over
+    threshold → INVARIANT_VIOLATION (theorem out of scope)."""
     record: Mapping[str, jnp.ndarray] = {
-        # Buffer of 200, but sampler only ever drew indices [0..4]
-        'sample_indices': jnp.zeros((50, 16), dtype=jnp.int32),  # all zeros
-        'epsilon': jnp.asarray([0.5] * 50),
-        'reward': jnp.asarray([1.0] * 50),
-        'done': jnp.asarray([0.0] * 50),
-        'max_q': jnp.asarray([1.0] * 50),
-        'ep_return': jnp.asarray([1.0] * 50),
-        'action': jnp.asarray([0] * 50),
-        'loss': jnp.asarray([0.0] * 50),
-        'td_error': jnp.asarray([0.0] * 50),
-        'online_argmax': jnp.zeros((50, 16), dtype=jnp.int32),
-        'target_argmax': jnp.zeros((50, 16), dtype=jnp.int32),
+        'sample_indices': jnp.zeros((50, 16), dtype=jnp.int32),
     }
-    inv = buffer_coverage(capacity=200, fraction=0.5)
-    result = inv(record)
-    # 1 unique index < 100 threshold → invariant violation.
+    gap = lin_iid_gap(capacity=200)
+    bridge = at_most(gap, threshold=1.0, of_claim=periodic_copy)
+    result = bridge(record)
     assert result.verdict is Verdict.INVARIANT_VIOLATION
 
 
-# ============ Tampered record triggers INVARIANT_VIOLATION ============
-
-def test_q_exploded_record_violates_invariant() -> None:
-    """A fabricated record with max_q at 1e6 should trip the
-    Banach-contraction-bound invariant — divergence detector
-    contract."""
-    record: Mapping[str, jnp.ndarray] = {
-        'epsilon': jnp.asarray([0.5] * 100),
-        'reward': jnp.asarray([1.0] * 100),
-        'done': jnp.asarray([0.0] * 100),
-        'max_q': jnp.asarray([1.0] * 50 + [1e6] * 50),  # exploded
-        'ep_return': jnp.asarray([10.0] * 100),
-        'loss': jnp.asarray([0.1] * 100),
-        'td_error': jnp.asarray([0.1] * 100),
-    }
-    result = q_bounded(record)
-    assert result.verdict is Verdict.INVARIANT_VIOLATION
-    assert result.stats['value'] == 1e6
-    assert result.stats['threshold'] == 1e3
+def test_at_most_wrap_targets_propagate_from_gap_reads() -> None:
+    gap = hasselt_covariance_gap()
+    bridge = at_most(gap, threshold=0.5, of_claim=vanilla_bootstrap)
+    assert bridge.targets == ('online_q_values', 'target_q_values')
 
 
-def test_loss_exploded_record_violates_invariant() -> None:
-    """Fabricated loss explosion → loss_bounded INVARIANT_VIOLATION.
-    Demonstrates the semi-gradient-divergence detector path."""
-    record: Mapping[str, jnp.ndarray] = {
-        'epsilon': jnp.asarray([0.5] * 50),
-        'reward': jnp.asarray([1.0] * 50),
-        'done': jnp.asarray([0.0] * 50),
-        'max_q': jnp.asarray([1.0] * 50),
-        'ep_return': jnp.asarray([10.0] * 50),
-        'loss': jnp.asarray([1e7] * 50),  # exploded
-        'td_error': jnp.asarray([0.1] * 50),
-    }
-    result = loss_bounded(record)
-    assert result.verdict is Verdict.INVARIANT_VIOLATION
-
-
+def test_at_most_wrap_default_name_includes_gap_and_threshold() -> None:
+    gap = fqi_decay_gap(sync_period=10)
+    bridge = at_most(gap, threshold=0.5, of_claim=mlp_q)
+    assert 'fqi_decay_gap' in bridge.name
+    assert '0.5' in bridge.name

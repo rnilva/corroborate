@@ -1,229 +1,229 @@
-"""Theorem-condition invariants for the DQN claims.
+"""Theorem-gap measurables for the DQN claims.
 
-Each invariant tests whether a *theorem-level* property holds in
-the run's trajectory. Failure is `INVARIANT_VIOLATION`, not
-`NO_EFFECT`: the claim's mechanism didn't operate within the
-theorem's domain of applicability under this run, so the outcome
-test is out of scope.
+Each entry here is a `Measurable[DQNTrajectoryRecord, float]`
+returning a *gap magnitude* — how far this run sits from the
+literal theorem condition. Gap = 0 means the theorem condition
+holds; gap > 0 means it doesn't, and the magnitude is the
+research-actionable signal: "method X reduces gap Y by Δ".
 
-Composed via `bounded(of=Measurable, threshold, theorem, of_claim)`
-from framework primitives (`reductions`, `invariant`). No DQN-
-specific resolver — every invariant is a value-built composition.
+Three roles consume each gap differently (see `invariant.py`
+module docstring):
 
-The thresholds are deliberately generous: these are *divergence
-detectors*, not tight bounds. A `q_max__max_abs` of 100 is fine
-for CartPole; 1e3 indicates the deadly-triad-triggered runaway
-that target-net + replay are supposed to prevent.
+- Intervention: read the scalar into RunRow.stats; per-comparison
+  Δ-gap on ComparisonRow.stats.
+- Falsification: wrap with `at_most(gap, threshold,
+  of_claim=...)` in Hypothesis.bridges. The threshold is the
+  author's scope commitment.
+- Causal analysis: same `at_most`-wraps gate discovery sample
+  selection.
 
-For tighter bounds (linked to the published Q* range per env),
-the invariants would parameterise on the env's reward range —
-deferred to step 4's env catalogue."""
+**Honest scope.** Only the gaps whose data the v0 record can
+already support are implemented here. Gaps that need richer
+logging (Q-snapshots per step for empirical contraction rate;
+MC-return ground truth for Jensen bias; Q-VALUES per batch
+state for Hasselt covariance; per-env state hashes for Watkins
+(s, a)-coverage) are deferred — see FUTURE_WORKS.md."""
 from __future__ import annotations
 
 from collections.abc import Mapping
 
 import jax.numpy as jnp
 
-from corroborate.bridge import Bridge
-from corroborate.invariant import at_least, bounded
-from corroborate.reductions import (
-    disagreement_rate,
-    from_key,
-    growth_window,
-    max_abs,
-    unique_count,
-)
-from corroborate.rl.dqn.claims.action_select import epsilon_greedy
-from corroborate.rl.dqn.claims.bootstrap import (
-    ddqn_bootstrap,
-    vanilla_bootstrap,
-)
-from corroborate.rl.dqn.claims.loss import squared_error
-from corroborate.rl.dqn.claims.q_network import mlp_q
-from corroborate.rl.dqn.claims.replay import buffer_sample
-from corroborate.rl.dqn.claims.target_sync import periodic_copy
+from corroborate.measurable import Measurable
 
 
-# Convenience type alias for the per-step DQN trajectory record:
-# `dict[str, jax.Array]` after `python_loop` / `scan_loop`
-# stacking. Bridges accept `Mapping[str, jnp.ndarray]` because
-# Mapping is covariant in its value type.
+# Convenience alias. Bridge / Measurable accept Mapping[str,
+# jnp.ndarray] because Mapping is covariant in its value type.
 type DQNTrajectoryRecord = Mapping[str, jnp.ndarray]
 
 
-# ============ Q-network: Banach contraction ============
+# ============ FQI within-window decay gap ============
 
-q_bounded: Bridge[DQNTrajectoryRecord] = bounded(
-    max_abs(from_key('max_q')),
-    threshold=1e3,
-    theorem=(
-        'Banach contraction on T* (Bertsekas-Tsitsiklis 1996, §6.3): '
-        'γ-contraction implies |Q*| ≤ R_max / (1−γ). '
-        'Q diverging past this bound signals the deadly-triad '
-        '(off-policy + bootstrap + FA) overpowering target-net + '
-        'replay stabilisation.'
-    ),
-    of_claim=mlp_q,
-)
-
-
-# ============ Bootstrap: Jensen-bias overestimation drift ============
-
-max_q_overestimation_bounded: Bridge[DQNTrajectoryRecord] = bounded(
-    # Skip the first quarter of the trajectory in the early window:
-    # warmup leaves max_q at random-init magnitudes, and the
-    # late/early ratio is dominated by initial-learning growth
-    # rather than the Jensen-bias drift the invariant targets.
-    growth_window(from_key('max_q'), early=(0.25, 0.5), late=(0.75, 1.0)),
-    threshold=1e3,
-    theorem=(
-        'Hasselt 2010, 2016: vanilla DQN exhibits Jensen-bias '
-        'overestimation, E[max_a Q̂] ≥ max_a E[Q̂]. The bias is '
-        'bounded under stationary policy + target-net; runaway '
-        'late/early growth ratio of max_q indicates diverging '
-        'overestimation. Threshold is generous (divergence '
-        'detector, not tight bound) — tightening requires an '
-        'env-specific Q* range, deferred to step 4.'
-    ),
-    of_claim=vanilla_bootstrap,
-)
-
-
-# ============ Squared-error loss: semi-gradient stability ============
-
-loss_bounded: Bridge[DQNTrajectoryRecord] = bounded(
-    max_abs(from_key('loss')),
-    threshold=1e6,
-    theorem=(
-        'Semi-gradient TD (Sutton-Barto 11.2): L = E[(y − Q)²] is '
-        'bounded iff bootstrap target y and prediction Q are both '
-        'bounded. Loss explosion ⇒ either Q diverged or numerical '
-        'instability — semi-gradient is unbounded under deadly '
-        'triad off-policy.'
-    ),
-    of_claim=squared_error,
-)
-
-
-# ============ Periodic-copy target sync: residual boundedness ============
-
-td_error_bounded: Bridge[DQNTrajectoryRecord] = bounded(
-    max_abs(from_key('td_error')),
-    threshold=1e3,
-    theorem=(
-        'Mnih 2015 §3 / Munos 2003 FQI: target-net freezes the '
-        'regression target y for τ steps, making |y − Q| bounded '
-        'within each τ-window. Unbounded TD-error means target-net '
-        'stabilisation failed — claim out of scope.'
-    ),
-    of_claim=periodic_copy,
-)
-
-
-# ============ ε-greedy: Watkins all-(s,a)-visited ============
-
-action_coverage: Bridge[DQNTrajectoryRecord] = at_least(
-    unique_count(from_key('action')),
-    threshold=2.0,
-    theorem=(
-        "Watkins 1992: tabular Q-learning convergence requires "
-        "every (s, a) visited infinitely often. Necessary "
-        "condition observable from a record: more than one "
-        "distinct action selected over the trajectory. Failing "
-        "this means ε-greedy collapsed to a single action — "
-        "exploration condition violated, theorem out of scope."
-    ),
-    of_claim=epsilon_greedy,
-)
-
-
-# ============ DDQN: Hasselt online ⊥ target ============
-
-online_target_disagreement: Bridge[DQNTrajectoryRecord] = at_least(
-    disagreement_rate(from_key('online_argmax'), from_key('target_argmax')),
-    threshold=0.0,  # any disagreement at all
-    theorem=(
-        "Hasselt 2016: DDQN's bias-correction relies on online "
-        "and target networks being roughly independent estimators. "
-        "When argmax_a Q_online(s, a) == argmax_a Q_target(s, a) "
-        "for every transition, the two are perfectly correlated "
-        "and DDQN ≡ vanilla — the swap's theorem doesn't bite. "
-        "Threshold 0 is the strict 'any disagreement' floor; a "
-        "tighter rate (e.g. ≥ 0.1) is sensible once training has "
-        "had time to drift online from target."
-    ),
-    of_claim=ddqn_bootstrap,
-)
-
-
-# ============ Replay: Lin 1992 transition-coverage ============
-
-# `buffer_coverage` is parameterised on capacity at construction
-# time — the threshold is "how many distinct buffer positions did
-# the sampler visit" relative to the populated portion. Authors
-# choose the fraction per experiment.
-
-def buffer_coverage(
-    capacity: int,
+def fqi_decay_gap(
+    sync_period: int,
     *,
-    fraction: float = 0.5,
-) -> Bridge[DQNTrajectoryRecord]:
-    """Fraction-of-buffer-revisited invariant.
+    gamma: float = 0.99,
+) -> Measurable[DQNTrajectoryRecord, float]:
+    """Empirical per-window decay rate of the TD-error vs. the
+    γ-contraction theoretical rate. Gap is the magnitude by which
+    observed decay falls short of γ.
 
-    Lin 1992 / Singh-Sutton 1996: replay convergence requires every
-    transition eventually replayed. Empirical proxy: the unique
-    buffer indices the sampler drew over the trajectory should
-    cover at least `fraction · capacity` distinct positions.
+    Theory: Mnih 2015 §3 + Munos 2003 fitted-Q-iteration. Within
+    each [k·τ, (k+1)·τ] window, the regression target is frozen,
+    so the gradient step is supervised regression — FQI is a
+    γ-contraction in sup-norm under Lipschitz function-class
+    assumptions. The signature: `||TD_error_late_window||` /
+    `||TD_error_early_window||` ≤ γ per window, asymptotically.
 
-    Returns INVARIANT_VIOLATION if the sampler stayed too local
-    (e.g., always sampling the same handful of recent transitions
-    — a regime where the i.i.d. assumption is severely violated)."""
-    threshold = max(1.0, fraction * capacity)
-    return at_least(
-        unique_count(from_key('sample_indices')),
-        threshold=threshold,
-        theorem=(
-            f"Lin 1992: uniform replay's i.i.d. sampling assumption "
-            f"requires every transition eventually replayed. "
-            f"Empirical condition: ≥ {int(threshold)} unique buffer "
-            f"indices drawn (fraction={fraction:g} of "
-            f"capacity={capacity})."
-        ),
-        of_claim=buffer_sample,
-        name=f'buffer_coverage[{int(threshold)}_of_{capacity}]',
+    What we compute: for each sync window, the ratio `mean(td_error
+    in window's late half) / mean(td_error in window's early half)`.
+    Average those ratios. Gap = max(0, average_ratio − γ): non-zero
+    when observed decay is slower than γ-contraction predicts.
+
+    `sync_period` must match the experiment's sync_period so the
+    windows align with target-net resets."""
+    assert sync_period > 0, f'sync_period must be positive; got {sync_period}'
+    name = f'fqi_decay_gap[τ={sync_period},γ={gamma:g}]'
+
+    def fn(record: DQNTrajectoryRecord) -> float:
+        td = jnp.asarray(record['td_error'])
+        n = int(td.shape[0])
+        # Discard incomplete trailing window if any.
+        n_windows = n // sync_period
+        if n_windows == 0:
+            # Run too short to have even one full window; report 0
+            # (no-data; not a violation).
+            return 0.0
+        ratios: list[float] = []
+        for k in range(n_windows):
+            start = k * sync_period
+            end = start + sync_period
+            window = td[start:end]
+            half = sync_period // 2
+            if half == 0:
+                continue
+            early = float(jnp.mean(window[:half]))
+            late = float(jnp.mean(window[half:]))
+            ratio = late / max(abs(early), 1e-9)
+            ratios.append(ratio)
+        if not ratios:
+            return 0.0
+        avg_ratio = sum(ratios) / len(ratios)
+        return float(max(0.0, avg_ratio - gamma))
+
+    return Measurable(fn=fn, name=name, reads=('td_error',))
+
+
+# ============ Lin 1992 i.i.d. sampling gap ============
+
+def lin_iid_gap(
+    capacity: int,
+) -> Measurable[DQNTrajectoryRecord, float]:
+    """KL divergence of the empirical sampling distribution over
+    buffer indices from the uniform distribution. Gap = the KL
+    itself — 0 means perfectly uniform, >0 means biased.
+
+    Theory: Lin 1992 + Singh-Sutton 1996. Q-learning + replay
+    convergence assumes uniform i.i.d. resampling from the buffer.
+    Uniform replay's empirical sampling distribution should match
+    Uniform(0, buf_size). Bias toward recent transitions, hot
+    indices, etc. shows up as KL > 0.
+
+    What we compute: histogram of `sample_indices` flattened over
+    the trajectory, normalised; KL(empirical || uniform) over the
+    populated buffer support. Larger KL = more biased sampling.
+
+    `capacity` is the buffer's max capacity, used to size the
+    uniform reference distribution."""
+    assert capacity > 0, f'capacity must be positive; got {capacity}'
+    name = f'lin_iid_gap[cap={capacity}]'
+
+    def fn(record: DQNTrajectoryRecord) -> float:
+        indices = jnp.asarray(record['sample_indices']).flatten()
+        if indices.size == 0:
+            return 0.0
+        # Histogram count per buffer index.
+        # bincount returns shape (capacity,) when minlength=capacity.
+        counts = jnp.bincount(indices, length=capacity)
+        total = float(jnp.sum(counts))
+        if total == 0.0:
+            return 0.0
+        empirical = counts / total
+        # KL(empirical || uniform). Uniform = 1/capacity per slot.
+        # KL = Σ p · log(p / q) over support where p > 0.
+        # log(p / q) = log(p · capacity).
+        eps = 1e-12
+        nonzero = empirical > eps
+        log_ratio = jnp.where(
+            nonzero,
+            jnp.log(empirical * capacity + eps),
+            0.0,
+        )
+        kl = float(jnp.sum(empirical * log_ratio))
+        return float(max(0.0, kl))
+
+    return Measurable(fn=fn, name=name, reads=('sample_indices',))
+
+
+# ============ Hasselt independence gap (Pearson correlation) ============
+
+def hasselt_covariance_gap() -> Measurable[DQNTrajectoryRecord, float]:
+    """Empirical |Pearson correlation| between Q_online and
+    Q_target across the sampling distribution.
+
+    Theory: Hasselt 2010, 2016. DDQN's bias-correction relies on
+    online and target nets being roughly independent estimators
+    of Q*. Independence ⇒ correlation ≈ 0 ⇒ gap ≈ 0. Perfect
+    correlation (vanilla DQN at sync, online ≡ target) ⇒ gap = 1.
+
+    Computes Pearson r over flattened `(T, batch, n_actions)`
+    arrays of Q-values from the always-on `_value_probe` in
+    `train_phase`. The probe runs both networks on the bootstrap's
+    batch each step; values are stored raw (not pre-reduced) so
+    the correlation is a post-hoc reduction here."""
+    name = 'hasselt_covariance_gap[Pearson_r]'
+
+    def fn(record: DQNTrajectoryRecord) -> float:
+        on = jnp.asarray(record['online_q_values']).flatten()
+        tg = jnp.asarray(record['target_q_values']).flatten()
+        on_centered = on - jnp.mean(on)
+        tg_centered = tg - jnp.mean(tg)
+        cov = jnp.mean(on_centered * tg_centered)
+        std_on = jnp.sqrt(jnp.mean(on_centered ** 2))
+        std_tg = jnp.sqrt(jnp.mean(tg_centered ** 2))
+        denom = std_on * std_tg
+        # If either side is constant (zero variance), correlation
+        # is undefined; treat as 0 (no information about
+        # independence either way — conservative).
+        r = jnp.where(denom > 1e-9, cov / jnp.where(denom > 1e-9, denom, 1.0), 0.0)
+        return float(jnp.abs(r))
+
+    return Measurable(
+        fn=fn, name=name, reads=('online_q_values', 'target_q_values'),
     )
 
 
-# ============ Public registry ============
+# ============ Action coverage proxy (Watkins, caveated) ============
 
-# Note on static invariants. Kolmogorov-axiom-style checks
-# (ε ∈ [0, 1], action ∈ [0, n_actions), batch shapes match) are
-# guaranteed by construction at the claim's body or call site.
-# Those belong as plain `assert` lines inside the @claim, not as
-# `INVARIANT_VIOLATION` bridges — invariants here are reserved
-# for *theorem-level* scope conditions (when does the run sit
-# inside the theorem's domain of applicability).
+def action_coverage_gap(
+    *,
+    expected_min_unique: int = 2,
+) -> Measurable[DQNTrajectoryRecord, float]:
+    """Gap = max(0, expected_min_unique - unique_actions_seen).
+
+    Watkins 1992 requires every (s, a) visited infinitely often.
+    The literal (s, a)-coverage condition is NOT measured here —
+    that needs per-env state-hashing (deferred to step 4). What
+    we measure: the trivial necessary floor that ε-greedy
+    explored at least `expected_min_unique` distinct actions.
+
+    Gap = 0 when unique actions ≥ expected_min_unique (the floor
+    holds); gap = (expected_min_unique − unique_count) when it
+    doesn't. Failing this means ε-greedy collapsed to fewer
+    actions than expected, which definitely violates Watkins;
+    passing it does NOT imply (s, a) coverage."""
+    name = f'action_coverage_gap[≥{expected_min_unique}]'
+
+    def fn(record: DQNTrajectoryRecord) -> float:
+        actions = jnp.asarray(record['action']).flatten()
+        n_unique = int(jnp.unique(actions).shape[0])
+        return float(max(0, expected_min_unique - n_unique))
+
+    return Measurable(fn=fn, name=name, reads=('action',))
 
 
-# Static invariants (no parameter — DQN_INVARIANTS is the v0
-# always-on registry). `buffer_coverage` is excluded because it
-# requires a `capacity` parameter; consumers compose it
-# explicitly.
-DQN_INVARIANTS: tuple[Bridge[DQNTrajectoryRecord], ...] = (
-    q_bounded,
-    max_q_overestimation_bounded,
-    loss_bounded,
-    td_error_bounded,
-    action_coverage,
-    online_target_disagreement,
-)
-"""Theorem-condition invariants for the v0 DQN claims, attached
-to: mlp_q (Banach contraction), vanilla_bootstrap (Jensen bias),
-squared_error (semi-gradient stability), periodic_copy (FQI
-contraction), epsilon_greedy (Watkins coverage), ddqn_bootstrap
-(Hasselt independence). A trajectory is in-scope of all six
-theorems iff every invariant returns HELD.
+# ============ Convenience: all v0-implementable gaps ============
 
-`buffer_coverage(capacity, fraction=...)` is constructed
-explicitly — the threshold depends on the experiment's buffer
-size."""
+# Note this list contains *Measurable factories* — call each with
+# the experiment's parameters (sync_period, capacity, ...) to get
+# the actual gap Measurable. The author then either reads the
+# scalar directly (intervention) or wraps with `at_most(gap,
+# threshold, of_claim=...)` in Hypothesis.bridges (falsification
+# / scope).
+__all__ = [
+    'DQNTrajectoryRecord',
+    'fqi_decay_gap',
+    'lin_iid_gap',
+    'hasselt_covariance_gap',
+    'action_coverage_gap',
+]

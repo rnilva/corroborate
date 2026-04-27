@@ -8,9 +8,10 @@ alternative @claim for this slot; future work.
 target net for τ steps makes the regression target stationary,
 turning each τ-window into an FQI iteration (Munos 2003 fitted-
 Q-iteration). FQI is a γ-contraction in sup-norm under
-Lipschitz function-class assumptions. The `td_error_bounded`
-invariant detects when target-net stabilisation has failed
-(unbounded TD-error within a window)."""
+Lipschitz function-class assumptions. The
+`fqi_decay_gap(sync_period, gamma)` measurable in
+`invariants.py` reports the empirical decay rate's gap from γ
+within each τ-window — the principled FQI signature."""
 from __future__ import annotations
 
 import jax

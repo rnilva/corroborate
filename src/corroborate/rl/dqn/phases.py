@@ -55,43 +55,45 @@ class RolloutOut(NamedTuple):
 class TrainOut(NamedTuple):
     """Diagnostic record from `train_phase`.
 
-    `online_argmax` and `target_argmax` are computed by the
-    independence probe (see `_argmax_probe`) and let the
-    Hasselt-independence invariant (`online_target_disagreement`)
-    measure how often the two networks pick different actions.
-    They are the same shape `(batch,)` so disagreement-rate is a
-    plain element-wise mean.
+    `online_q_values` and `target_q_values` are produced by the
+    always-on independence probe (`_value_probe`) — full
+    Q-vectors `(batch, n_actions)` per step. The
+    `hasselt_covariance_gap` measurable consumes these to
+    compute the empirical Pearson correlation; argmaxes (if
+    needed downstream) are derived post-hoc via
+    `argmax(axis=-1)`. Logging the raw values rather than the
+    pre-reduced argmaxes keeps the framework-discipline rule
+    (don't log pre-reduced values).
 
     `sample_indices` carries the indices `buffer_sample` drew this
-    step; the Lin-coverage invariant (`buffer_coverage`) reads
-    these to verify the replay isn't sampling the same handful
-    of transitions throughout training."""
-    loss: jax.Array            # mean of per-sample losses
-    td_error: jax.Array        # mean |predicted - target|, abs
-    online_argmax: jax.Array   # (batch,) int32 — argmax_a Q_online(next_obs)
-    target_argmax: jax.Array   # (batch,) int32 — argmax_a Q_target(next_obs)
-    sample_indices: jax.Array  # (batch,) int32 — indices buffer_sample drew
+    step; the `lin_iid_gap` measurable reads these to verify the
+    replay isn't sampling the same handful of transitions
+    throughout training."""
+    loss: jax.Array              # mean of per-sample losses
+    td_error: jax.Array          # mean |predicted - target|, abs
+    online_q_values: jax.Array   # (batch, n_actions) — Q_online(next_obs)
+    target_q_values: jax.Array   # (batch, n_actions) — Q_target(next_obs)
+    sample_indices: jax.Array    # (batch,) int32 — indices buffer_sample drew
 
 
-def _argmax_probe(
+def _value_probe(
     state: DQNState,
     q_network: QNetwork,
     next_obs_b: jax.Array,
 ) -> tuple[jax.Array, jax.Array]:
-    """Compute `argmax_a Q_online` and `argmax_a Q_target` on the
-    same batch — the data the Hasselt-independence invariant
-    needs to test the DDQN-decoupling assumption.
+    """Compute `Q_online(next_obs)` and `Q_target(next_obs)` on
+    the batch. Returns full Q-vectors `(batch, n_actions)` for
+    each net — the principled data the `hasselt_covariance_gap`
+    measurable needs to test the DDQN-decoupling assumption via
+    Pearson correlation across samples.
 
     Independent of which `bootstrap` slot is used. Cheap (two
     forward passes on the already-sampled batch); always-on so
     the invariant has data even when vanilla bootstrap is
-    selected (the disagreement-rate is meaningful for both)."""
+    selected (the correlation is meaningful for both)."""
     online_q = q_network(state.online_params, next_obs_b)
     target_q = q_network(state.target_params, next_obs_b)
-    return (
-        jnp.argmax(online_q, axis=-1).astype(jnp.int32),
-        jnp.argmax(target_q, axis=-1).astype(jnp.int32),
-    )
+    return online_q, target_q
 
 
 # ============ Rollout ============
@@ -195,11 +197,12 @@ def train_phase(
         gamma=gamma,
     )
 
-    # Always-on probe for the Hasselt-independence invariant. Two
-    # forward passes; same batch as bootstrap so the disagreement
-    # rate is faithful to the actual training data the swap
-    # operates on. Independent of which bootstrap is selected.
-    online_argmax, target_argmax = _argmax_probe(state, q_network, next_obs_b)
+    # Always-on probe for the Hasselt-independence measurable.
+    # Two forward passes on the same batch the bootstrap operates
+    # on, returning the FULL Q-vectors per net (not pre-reduced
+    # argmaxes) so post-hoc reductions can compute correlation,
+    # disagreement, etc. Independent of which bootstrap is selected.
+    online_q_values, target_q_values = _value_probe(state, q_network, next_obs_b)
 
     def compute_loss(params: Params) -> tuple[jax.Array, jax.Array]:
         # Predicted Q for the action actually taken in each transition.
@@ -235,8 +238,8 @@ def train_phase(
     out = TrainOut(
         loss=jnp.where(skip, jnp.float32(0.0), loss),
         td_error=jnp.where(skip, jnp.float32(0.0), td_error),
-        online_argmax=online_argmax,
-        target_argmax=target_argmax,
+        online_q_values=online_q_values,
+        target_q_values=target_q_values,
         sample_indices=sample_indices,
     )
     return new_state, out

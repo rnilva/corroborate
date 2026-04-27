@@ -1,31 +1,54 @@
 """Invariant — theorem-direct bridge attached to a Claim.
 
-An `Invariant` is a `Bridge[R]` with two distinguishing
-properties:
+An invariant in `corroborate` is a `Bridge[R]` carrying
+`stats['kind']='tautological'` and `stats['of_claim']=...`. The
+tautological tag flags the result so `aggregate_verdict` treats a
+rejection as `INVARIANT_VIOLATION` (theorem out of scope; mechanism
+didn't operate) rather than `NO_EFFECT` (mechanism tested and
+refuted). Axiom 18: theorem-direct, not proxy-via-assumption.
 
-1. *Attached to a Claim.* The invariant tests a property of the
-   theorem behind that claim — e.g. Q-boundedness for a tabular
-   contraction claim, or Bellman residual decay for a DQN claim.
-   The relationship is recorded in `stats['of_claim']` so
-   downstream consumers can group invariants by claim.
+**Theorem-gap framing.** The primary primitive at the theorem
+layer is *gap magnitude*, not threshold-bounded boolean tests.
+For non-trivial domains (deep RL under deadly triad), the
+literal theorem conditions categorically don't hold — Banach
+contraction fails under FA + bootstrap, Watkins's tabular
+convergence doesn't apply, linear ε violates strict GLIE by
+construction, etc. Asking "is this run inside the theorem's
+domain?" is dishonest because the answer is no for *every* run.
+The principled question is "how far from the domain is it, and
+does the intervention reduce that distance?"
 
-2. *Tautological tag.* `stats['kind'] = 'tautological'` flags the
-   result so `aggregate_verdict` (later module) treats a REJECT
-   as `INVARIANT_VIOLATION` (mechanism didn't operate; claim is
-   out of scope under this run) rather than `NO_EFFECT` (claim
-   was tested and refuted). This is axiom 18: invariants are
-   theorem-direct, not proxy-via-assumption.
+So invariants in this framework are continuous gap-Measurables.
+The threshold-wrap (`at_most(gap, threshold)`) is one consumer
+of the gap, used when an author commits a scope claim. Three
+roles consume the same gap primitive differently:
 
-Generic in `R: Mapping[str, object]` (the record schema), same
-as `Bridge[R]`. The author writes the body as an ordinary
-`(R) -> BridgeResult` function; `@invariant` injects the `kind`
-and `of_claim` tags into the returned `BridgeResult`'s stats
-automatically.
+- **Intervention study (role 1):** read the scalar gap directly
+  into `RunRow.stats`; per-comparison Δ-gap on
+  `ComparisonRow.stats`. The verdict on the *Δ-gap difference*
+  comes from existing power/MDE machinery (Hedges' g, SE,
+  POWER_INSUFFICIENT), not from a threshold on the gap itself.
+  Scope-conditioning via `at_most`-wraps gates which cells feed
+  the comparison aggregation.
+- **Falsification (role 2):** `at_most(gap, threshold)` wraps
+  the gap as a `Bridge[R]` returning HELD or INVARIANT_VIOLATION.
+  The threshold is the author's commitment, written into
+  `Hypothesis.bridges`. INVARIANT_VIOLATION preempts outcome
+  verdicts in `aggregate_verdict`.
+- **Causal analysis (role 3):** same `at_most`-wraps used as
+  scope predicate; gates which runs feed Pearson / PC / mediation
+  discovery. Without scope conditioning, discovery includes
+  off-mechanism runs and biases the inferred graph.
 
-`bounded(of=Measurable, threshold, ...)` is the canonical
-factory for theorem-condition invariants: lifts a `Measurable[R,
-float]` into an `INVARIANT_VIOLATION`-on-overflow bridge with
-the theorem reference recorded in `stats['theorem']`."""
+Same primitive, three downstream pipelines. The author commits
+scope by writing `at_most(...)` calls into their hypothesis's
+`bridges` tuple — no new field on Hypothesis.
+
+**Numerical guardrails are NOT invariants.** Static checks like
+`assert 0 <= eps_final <= eps_init <= 1` (Kolmogorov axiom) live
+inline in claim bodies. INVARIANT_VIOLATION is reserved for
+*theorem-domain* departures; numerical sanity has its own
+mechanism."""
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
@@ -51,15 +74,9 @@ def invariant[R: Mapping[str, object]](
     returned BridgeResult are preserved; the invariant tags
     overlay/extend.
 
-    Usage:
-
-        @claim
-        def vanilla_greedify(q: Array) -> int: ...
-
-        @invariant(of=vanilla_greedify, targets=('max_q_late',))
-        def q_bounded(record: Mapping[str, object]) -> BridgeResult:
-            ...
-    """
+    For theorem-condition invariants composed from gap
+    measurables, prefer the `at_most(...)` factory — this raw
+    decorator is the lower-level primitive."""
     def decorator(fn: Callable[[R], BridgeResult]) -> Bridge[R]:
         resolved_name = name if name is not None else f'invariant_{fn.__name__}_of_{of.name}'
 
@@ -82,90 +99,55 @@ def invariant[R: Mapping[str, object]](
     return decorator
 
 
-# ============ Theorem-condition invariant factory ============
+# ============ Theorem-gap factory: scope-commitment wrap ============
 
-def bounded[R: Mapping[str, object]](
-    of: Measurable[R, float],
+def at_most[R: Mapping[str, object]](
+    gap: Measurable[R, float],
     threshold: float,
     *,
-    theorem: str,
     of_claim: ClaimRecord,
     name: str | None = None,
 ) -> Bridge[R]:
-    """Tautological invariant: `|of(record)| < threshold`.
+    """Wrap a theorem-gap `Measurable[R, float]` in a tautological
+    `Bridge[R]` returning `HELD` when `gap(record) <= threshold`
+    and `INVARIANT_VIOLATION` otherwise.
 
-    Composes a `Measurable[R, float]` value into a `Bridge[R]`
-    whose verdict is `HELD` when the bound holds and
-    `INVARIANT_VIOLATION` when it doesn't. `theorem` records the
-    reference (e.g. `'Banach contraction on T*'`) in
-    `stats['theorem']` so the verdict layer can cite the
-    out-of-scope reason — INVARIANT_VIOLATION ⇒ this run sat
-    outside the theorem's domain of applicability, NOT that the
-    paper-claim was empirically refuted.
+    The wrap is the place where the *author commits scope*: the
+    paper's claim "method X's mechanism operates when gap_Y <
+    threshold" is written by including `at_most(gap_Y, threshold,
+    of_claim=...)` in the Hypothesis's `bridges` tuple. The
+    theorem reference is read off `gap.stats` (set when the gap
+    Measurable was constructed) — `at_most` is consumer-side, the
+    theorem identity lives with the gap.
 
-    `targets` derives from `of.reads`. The reads-set propagation
-    means a reduction (`max_abs(from_key('max_q'))`) attached as
-    an invariant to `mlp_q` correctly fingerprints the bridge's
-    record-key dependencies for redundancy + corpus-graph
-    derivation."""
-    inv_name = name if name is not None else f'bounded[{of.name}<{threshold:g}]'
+    Three roles consume `at_most`-wrapped bridges:
 
-    @invariant(of=of_claim, targets=of.reads, name=inv_name)
+    - Falsification: INVARIANT_VIOLATION preempts outcome verdict
+      in `aggregate_verdict`.
+    - Causal-analysis scope predicate: gates discovery-input runs.
+    - Intervention sample-filter: gates cells before Δ-gap
+      comparison aggregation. (The intervention's *outcome*
+      verdict is on the Δ-gap, computed by existing stats; this
+      bridge gates which cells feed that comparison.)
+
+    `targets` derives from `gap.reads`. The reads-set propagates
+    leaf-record-keys → measurable → bridge for redundancy +
+    corpus-graph derivation."""
+    bridge_name = name if name is not None else f'at_most[{gap.name}<={threshold:g}]'
+
+    @invariant(of=of_claim, targets=gap.reads, name=bridge_name)
     def fn(record: R) -> BridgeResult:
-        val = of(record)
-        ok = abs(val) < threshold
+        val = gap(record)
+        ok = val <= threshold
         return BridgeResult(
             verdict=Verdict.HELD if ok else Verdict.INVARIANT_VIOLATION,
-            reason=f'|{of.name}| = {val:.4g} vs threshold {threshold:g}',
+            reason=f'{gap.name} = {val:.4g} vs threshold {threshold:g}',
             stats={
-                'theorem': theorem,
-                'value': val,
+                'gap_value': float(val),
                 'threshold': float(threshold),
-                'measurable': of.name,
+                'measurable': gap.name,
             },
-            name=inv_name,
-            targets=of.reads,
-        )
-    return fn
-
-
-def at_least[R: Mapping[str, object]](
-    of: Measurable[R, float] | Measurable[R, int],
-    threshold: float,
-    *,
-    theorem: str,
-    of_claim: ClaimRecord,
-    name: str | None = None,
-) -> Bridge[R]:
-    """Tautological invariant: `of(record) >= threshold`.
-
-    The dual of `bounded`. Used for *coverage* invariants where
-    a theorem requires a lower bound — Watkins's all-(s,a)-visited
-    condition tested via action-coverage counts; Hasselt's online
-    ⊥ target tested via disagreement-rate floor; Lin's all-
-    transitions-replayed tested via unique-sample-index counts.
-
-    Returns `INVARIANT_VIOLATION` when the value falls below the
-    bound; `HELD` otherwise. Note no `abs()` — for coverage
-    tests, signed values matter (a negative measurement on a
-    coverage measurable is itself an invariant violation, but we
-    don't flip its sign under the threshold)."""
-    inv_name = name if name is not None else f'at_least[{of.name}>={threshold:g}]'
-
-    @invariant(of=of_claim, targets=of.reads, name=inv_name)
-    def fn(record: R) -> BridgeResult:
-        val = of(record)
-        ok = val >= threshold
-        return BridgeResult(
-            verdict=Verdict.HELD if ok else Verdict.INVARIANT_VIOLATION,
-            reason=f'{of.name} = {val:.4g} vs threshold {threshold:g}',
-            stats={
-                'theorem': theorem,
-                'value': float(val),
-                'threshold': float(threshold),
-                'measurable': of.name,
-            },
-            name=inv_name,
-            targets=of.reads,
+            name=bridge_name,
+            targets=gap.reads,
         )
     return fn

@@ -13,10 +13,11 @@ of tabular Q-learning + replay holds iff every transition is
 eventually replayed (Singh-Sutton 1996). Uniform sampling is
 *not* Bellman-consistent — old transitions reflect a stale
 behaviour distribution, biasing the bootstrap target. This is
-the bias prioritised-replay (Schaul 2016) addresses; v0's
-uniform replay accepts the bias for simplicity. Buffer-coverage
-+ revisit-rate invariants are deferred (need richer logging
-than v0's StepRecord — Step 4 forcing function)."""
+the bias prioritised-replay (Schaul 2016) addresses. The
+`lin_iid_gap(capacity)` measurable in `invariants.py` reports
+KL(empirical sampling ‖ uniform) — quantifies how far the
+realised sampling distribution deviates from the i.i.d.
+assumption."""
 from __future__ import annotations
 
 import jax

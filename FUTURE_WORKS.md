@@ -83,6 +83,53 @@ without a use site risks designing the wrong primitive.
 **Lift when:** step 6 starts. The §3.5 link bridge is the first
 concrete consumer.
 
+### Theorem-gap measurables that need richer logging
+
+**Status:** deferred — multiple gaps blocked on data the v0
+StepRecord doesn't carry.
+
+**Background.** Invariants in `corroborate` measure *gap
+magnitude* from theorem conditions, not threshold-bounded
+boolean tests (`invariant.py` module docstring; memory
+`feedback_invariant_three_roles.md`). Several of the gaps the
+DQN claim set should report aren't computable from the v0
+record. Each needs a specific data extension before the gap
+measurable can be implemented honestly.
+
+**Currently shipped (v0):** `fqi_decay_gap`, `lin_iid_gap`,
+`hasselt_covariance_gap` (Pearson r over kept Q-values),
+`action_coverage_gap` (caveated Watkins floor).
+
+| Gap | Theorem | Data needed | Lift gate |
+|-----|---------|-------------|-----------|
+| Banach contraction rate | Bertsekas-Tsitsiklis 1996 §6.3 — `r_emp = ‖Q_{t+1} − Q_t‖ / ‖Q_t − Q_{t−1}‖` should ≤ γ | Q-evaluation on a fixed probe set per step (or online_params snapshots, much more memory) | Probe-set hook in `dqn_step` (could compose with `_value_probe`); needs probe-set design |
+| Jensen overestimation bias | Hasselt 2010, 2016 — `E[max_a Q̂(s_0)] − G_MC` (predicted vs Monte-Carlo return at episode start) | Separate periodic eval-pass: K greedy rollouts every N training steps, log `predicted_q_at_start` and `mc_return` | Eval-loop infrastructure (a sibling of `dqn_step` for the eval phase); central to PAPER_NOTES.md §3 acceptance test |
+| Watkins (s, a) coverage | Watkins 1992 — every (s, a) ∞-often | Per-env `state_hash` discretization logged per step | Step 4 env catalogue lands `EnvSpec.state_hash` |
+
+**Why each is deferred-on-infrastructure (NOT pre-reduced
+logging):** the `corroborate` discipline is to log raw values
+and reduce post-hoc. Each remaining gap needs *more raw data*,
+not pre-reduced derivatives:
+
+- *Banach* needs Q-evaluations on a probe set per step, or
+  per-step parameter snapshots. Either is a probe pass extension
+  to the training loop, not a logging change to the StepRecord.
+- *Jensen* needs a fundamentally separate eval pass — a greedy
+  rollout interleaved with training, producing an `EvalRecord`
+  parallel to `StepRecord`. This is sizeable infrastructure (an
+  eval-loop alongside `dqn_step`).
+- *Watkins* needs per-env `state_hash` declarations on the env
+  catalogue, which is genuinely Step 4 territory.
+
+**Lift when:**
+- *Jensen*: step 3.5 or step 4 — central to the §3 DDQN
+  acceptance test (the comparative claim "DDQN reduces
+  overestimation by Δ vs vanilla" *is* the §3 thesis). Without
+  it, §3 isn't expressible.
+- *Banach*: when an experiment in §3-§5 needs the contraction-
+  rate gap as a measured outcome.
+- *Watkins (s, a)*: step 4 env catalogue.
+
 ## Cosmetic / micro-cleanups
 
 ### `pytest.raises` over try/raise/except

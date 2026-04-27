@@ -10,8 +10,9 @@ so this is *not* a true gradient method. Convergence holds in
 tabular Q-learning (Watkins 1992) but linear FA + off-policy
 data can diverge (Baird 1995 counterexample). DQN's mitigation
 is target-net + experience replay; deadly-triad divergence
-remains possible. `loss_bounded` invariant detects the
-semi-gradient instability empirically."""
+remains possible. Principled signature is the projected-
+Bellman-operator eigenvalue spectrum; deferred — needs Q-value
+probe extension."""
 from __future__ import annotations
 
 import jax

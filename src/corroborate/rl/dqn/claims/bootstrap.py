@@ -15,9 +15,10 @@ implements T* directly. Hasselt 2010, 2016: vanilla DQN exhibits
 a Jensen-inequality bias E[max_a Q̂(s,a)] ≥ max_a E[Q̂(s,a)],
 because max is convex in Q. DDQN decouples action selection
 (online net) from value evaluation (target net) so the two
-estimators are roughly independent → unbiased target. The
-`max_q_overestimation_bounded` invariant detects unbounded
-Jensen-bias growth empirically."""
+estimators are roughly independent → unbiased target. v0 ships
+`hasselt_independence_gap` as an argmax-disagreement *proxy*;
+the principled value-correlation gap |Cov(Q_online, Q_target)|
+needs Q-value logging (deferred, see FUTURE_WORKS.md)."""
 from __future__ import annotations
 
 import jax

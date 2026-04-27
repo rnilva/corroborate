@@ -78,20 +78,25 @@ def test_vanilla_dqn_runs_on_cartpole_via_python_loop() -> None:
 
     # State advanced 50 steps.
     assert int(final_state.step) == 50
-    # Record has expected keys. Per-step scalars are (50,);
-    # per-batch fields (online_argmax, target_argmax,
-    # sample_indices) carry batch dim → (50, batch_size).
+    # Record has expected keys with three shape families:
+    # - per-step scalars: (T,)
+    # - per-batch indices: (T, batch)
+    # - per-batch Q-vectors: (T, batch, n_actions)
     scalar_keys = {
         'epsilon', 'reward', 'done', 'max_q',
         'ep_return', 'action', 'loss', 'td_error',
     }
-    batched_keys = {'online_argmax', 'target_argmax', 'sample_indices'}
-    assert set(record.keys()) == scalar_keys | batched_keys
+    batch_keys = {'sample_indices'}
+    q_value_keys = {'online_q_values', 'target_q_values'}
+    assert set(record.keys()) == scalar_keys | batch_keys | q_value_keys
     for key in scalar_keys:
         assert record[key].shape == (50,)
-    for key in batched_keys:
+    for key in batch_keys:
         # batch_size = 16 in this smoke fixture
         assert record[key].shape == (50, 16)
+    for key in q_value_keys:
+        # n_actions = 2 for CartPole
+        assert record[key].shape == (50, 16, 2)
 
 
 def test_vanilla_dqn_runs_via_scan_loop() -> None:

@@ -10,9 +10,10 @@ Cybenko 1989): a sufficiently wide MLP can approximate any
 continuous function on a compact set. The function class
 *contains* Q*; gradient descent under bootstrap is *not*
 guaranteed to find it (deadly triad — off-policy + bootstrap +
-FA can diverge per Tsitsiklis & Van Roy 1997). The
-`q_bounded` invariant (`invariants.py`) is the empirical
-divergence detector."""
+FA can diverge per Tsitsiklis & Van Roy 1997). Banach-
+contraction-rate gap (Bertsekas-Tsitsiklis §6.3) is the
+principled measurement; deferred — needs Q-snapshot probe
+(see FUTURE_WORKS.md)."""
 from __future__ import annotations
 
 import jax
