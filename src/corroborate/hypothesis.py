@@ -33,6 +33,7 @@ v0's flat interventions are handled by `functools.partial`
 directly (framework-subtraction discipline)."""
 from __future__ import annotations
 
+import types
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Literal
@@ -116,14 +117,11 @@ def _canonical_str(v: object) -> str:
     """Stable string form of an intervention value, used by
     `mechanism_key` to produce a hashable canonical signature.
 
-    Handles three concrete cases explicitly (Claim instances,
-    primitives, named callables) and falls through to `repr()`
-    for everything else. The `getattr(v, '__name__', None)` for
-    arbitrary callables is the ONE place this module reaches
-    for getattr — justified because intervention values can be
-    any callable type (function, partial, class, builtin) and
-    the framework cannot enumerate them all. Comment justifies
-    the polymorphism per CLAUDE.md."""
+    Handles each concrete callable kind by isinstance against the
+    runtime type — `types.FunctionType`, `type`, and
+    `types.BuiltinFunctionType` all carry typed `__name__: str`,
+    so attribute access after narrowing is fully typed (no
+    `getattr` needed). Anything else falls through to `repr()`."""
     if isinstance(v, Claim):
         return f'Claim:{v.name}'
     if isinstance(v, bool):
@@ -132,12 +130,10 @@ def _canonical_str(v: object) -> str:
         return repr(v)
     if isinstance(v, (int, float, str)):
         return repr(v)
-    if callable(v):
-        # Polymorphism: the framework's intervention API accepts
-        # any callable. Best-effort name extraction; fallback to
-        # repr() preserves uniqueness without typed access.
-        name = getattr(v, '__name__', None)
-        if isinstance(name, str):
-            return f'callable:{name}'
-        return repr(v)
+    if isinstance(v, types.FunctionType):
+        return f'callable:{v.__name__}'
+    if isinstance(v, type):
+        return f'type:{v.__name__}'
+    if isinstance(v, types.BuiltinFunctionType):
+        return f'builtin:{v.__name__}'
     return repr(v)

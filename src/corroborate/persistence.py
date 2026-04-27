@@ -33,6 +33,7 @@ from pathlib import Path
 import polars as pl
 
 from corroborate._json_boundary import loads as _decode_json
+from corroborate._polars_boundary import to_dicts as _to_dicts
 
 from corroborate._narrow import (
     is_list_of_object,
@@ -246,7 +247,7 @@ def write_runrows(rows: Iterable[RunRow], path: Path) -> None:
 def read_runrows(path: Path) -> list[RunRow]:
     df = pl.read_parquet(path)
     out: list[RunRow] = []
-    for d in df.to_dicts():
+    for d in _to_dicts(df):
         out.append(_runrow_from_record(d))
     return out
 
@@ -299,7 +300,7 @@ def write_armrows(rows: Iterable[ArmRow], path: Path) -> None:
 def read_armrows(path: Path) -> list[ArmRow]:
     df = pl.read_parquet(path)
     out: list[ArmRow] = []
-    for d in df.to_dicts():
+    for d in _to_dicts(df):
         out.append(_armrow_from_record(d))
     return out
 
@@ -376,7 +377,7 @@ def write_comparisonrows(rows: Iterable[ComparisonRow], path: Path) -> None:
 def read_comparisonrows(path: Path) -> list[ComparisonRow]:
     df = pl.read_parquet(path)
     out: list[ComparisonRow] = []
-    for d in df.to_dicts():
+    for d in _to_dicts(df):
         out.append(_comparisonrow_from_record(d))
     return out
 
@@ -419,6 +420,6 @@ def write_corpusrows(rows: Iterable[CorpusRow], path: Path) -> None:
 def read_corpusrows(path: Path) -> list[CorpusRow]:
     df = pl.read_parquet(path)
     out: list[CorpusRow] = []
-    for d in df.to_dicts():
+    for d in _to_dicts(df):
         out.append(_corpusrow_from_record(d))
     return out

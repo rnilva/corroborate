@@ -27,10 +27,25 @@ def is_list_of_object(v: object) -> TypeIs[list[object]]:
     return isinstance(v, list)
 
 
-def is_mapping_of_object(v: object) -> TypeIs[Mapping[str, object]]:
-    """Narrows to `Mapping[str, object]` for parquet-shaped dicts.
-    Caller validates keys are strings via the per-field accessors."""
+def _is_mapping(v: object) -> TypeIs[Mapping[object, object]]:
+    """Inner predicate — narrows `object` to `Mapping[object,
+    object]`. Used by `is_mapping_of_object` as the first stage;
+    the second stage iterates keys to validate they're `str`."""
     return isinstance(v, Mapping)
+
+
+def is_mapping_of_object(v: object) -> TypeIs[Mapping[str, object]]:
+    """Narrows to `Mapping[str, object]`. Validates BOTH that `v`
+    is a Mapping AND that all keys are `str`. The key check is
+    O(|v|); callers using this in hot paths should narrow once
+    per parsing pass, not per access. Without the key validation
+    the predicate would be a `cast` smuggled inside a `TypeIs`."""
+    if not _is_mapping(v):
+        return False
+    for k in v:
+        if not isinstance(k, str):
+            return False
+    return True
 
 
 # ============ Required / optional field accessors ============
