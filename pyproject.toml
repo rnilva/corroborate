@@ -18,3 +18,7 @@ packages = ["src/corroborate"]
 dev = [
     "pytest>=8",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
