@@ -26,7 +26,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
-from corroborate.verdict import RefutationClass, Verdict
+from corroborate.verdict import Verdict
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,16 +37,19 @@ class BridgeResult:
     sufficient for audit values (ρ, ATE, sample sizes) and
     discrete labels (estimand expressions, tier markers). Lists,
     arrays, or nested structures do not belong here; they belong
-    on the underlying record. `refutation_class` is the optional
-    sub-classification (see `verdict.py`); `None` when the
-    verdict is HELD or INVARIANT_VIOLATION (no refutation to
-    classify)."""
+    on the underlying record.
+
+    Note: `refutation_class` is **not** carried on BridgeResult
+    (matching v10's design). Per-cell bridge results don't have
+    enough context to choose between NULL_EFFECT vs UNDERPOWERED
+    or SIGN_FLIP — that decision lives at the comparison level
+    where Hedges' g + se + power can disambiguate. `ComparisonRow.
+    refutation_class: RefutationClass | None` is the single home."""
     verdict: Verdict
     reason: str
     stats: Mapping[str, float | int | bool | str]
     name: str
     targets: tuple[str, ...]
-    refutation_class: RefutationClass | None = None
 
 
 @dataclass(frozen=True, slots=True)

@@ -183,8 +183,8 @@ def test_sweep_rows_carry_verdict_from_bridges() -> None:
         runner=_constant_runner,
         primary_outcome_extractor=_extract_value,
     )
-    assert rows_admit[0].verdict == Verdict.HELD.value
-    assert rows_reject[0].verdict == Verdict.NO_EFFECT.value
+    assert rows_admit[0].verdict is Verdict.HELD
+    assert rows_reject[0].verdict is Verdict.NO_EFFECT
 
 
 def test_sweep_primary_outcome_extracted_per_cell() -> None:
@@ -269,7 +269,7 @@ def test_sweep_aggregates_multi_bridge_admit() -> None:
         runner=_constant_runner,
         primary_outcome_extractor=_extract_value,
     )
-    assert rows[0].verdict == Verdict.HELD.value
+    assert rows[0].verdict is Verdict.HELD
     assert len(rows[0].facts) == 3
 
 
@@ -286,7 +286,7 @@ def test_sweep_aggregates_mixed_verdicts() -> None:
         runner=_constant_runner,
         primary_outcome_extractor=_extract_value,
     )
-    assert rows[0].verdict == Verdict.NO_EFFECT.value
+    assert rows[0].verdict is Verdict.NO_EFFECT
 
 
 def test_sweep_no_bridges_yields_power_insufficient() -> None:
@@ -303,7 +303,7 @@ def test_sweep_no_bridges_yields_power_insufficient() -> None:
         runner=_constant_runner,
         primary_outcome_extractor=_extract_value,
     )
-    assert rows[0].verdict == Verdict.POWER_INSUFFICIENT.value
+    assert rows[0].verdict is Verdict.POWER_INSUFFICIENT
 
 
 # ============ Provenance: mechanism_key, timestamp, etc. ============
@@ -361,7 +361,7 @@ def test_sweep_invariant_violation_overrides_no_effect() -> None:
         runner=_constant_runner,
         primary_outcome_extractor=_extract_value,
     )
-    assert rows[0].verdict == Verdict.INVARIANT_VIOLATION.value
+    assert rows[0].verdict is Verdict.INVARIANT_VIOLATION
 
 
 def test_sweep_invariant_violation_overrides_held() -> None:
@@ -379,7 +379,7 @@ def test_sweep_invariant_violation_overrides_held() -> None:
         runner=_constant_runner,
         primary_outcome_extractor=_extract_value,
     )
-    assert rows[0].verdict == Verdict.INVARIANT_VIOLATION.value
+    assert rows[0].verdict is Verdict.INVARIANT_VIOLATION
 
 
 def test_sweep_invariant_held_does_not_trigger_violation() -> None:
@@ -407,7 +407,7 @@ def test_sweep_invariant_held_does_not_trigger_violation() -> None:
         runner=_constant_runner,
         primary_outcome_extractor=_extract_value,
     )
-    assert rows[0].verdict == Verdict.HELD.value
+    assert rows[0].verdict is Verdict.HELD
     assert rows[0].facts[0].kind == 'invariant'
 
 
@@ -436,9 +436,9 @@ def test_sweep_bridge_reads_record_per_seed() -> None:
         primary_outcome_extractor=_extract_value,
     )
     by_seed = {r.seed: r.verdict for r in rows}
-    assert by_seed[0] == Verdict.NO_EFFECT.value
-    assert by_seed[1] == Verdict.HELD.value
-    assert by_seed[2] == Verdict.HELD.value
+    assert by_seed[0] is Verdict.NO_EFFECT
+    assert by_seed[1] is Verdict.HELD
+    assert by_seed[2] is Verdict.HELD
 
 
 def test_sweep_bridge_reads_record_carries_stats_into_fact() -> None:

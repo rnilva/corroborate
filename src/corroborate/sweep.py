@@ -149,7 +149,7 @@ def _bridge_result_to_fact[R: Mapping[str, object]](
         kind='invariant' if is_invariant else 'bridge',
         targets=result.targets if result.targets else bridge.targets,
         reads=frozenset(result.targets if result.targets else bridge.targets),
-        verdict=result.verdict.value,
+        verdict=result.verdict,
         natural_strength=0.0,
         delta_i=0.0,
         evidentiary_level=result.verdict.value,
@@ -171,7 +171,7 @@ def _intervention_signature_leaves(mk: MechanismKey) -> frozenset[str]:
     return frozenset(leaves)
 
 
-def _aggregate_cell_verdict(facts: tuple[FactRow, ...]) -> str:
+def _aggregate_cell_verdict(facts: tuple[FactRow, ...]) -> Verdict:
     """Cell-level verdict from per-bridge facts.
 
     Precedence (highest first):
@@ -185,19 +185,25 @@ def _aggregate_cell_verdict(facts: tuple[FactRow, ...]) -> str:
 
     The statistics layer (step 5) refines this with MDE+power-
     aware trichotomy at the comparison level (ArmRow + ComparisonRow).
-    Cell-level here is the coarse aggregate."""
+    Cell-level here is the coarse aggregate.
+
+    Returns `Verdict` directly (typed enum), not a string — the
+    framework's primary discrimination is the trichotomy, and
+    de-typing it to str at the row boundary loses semantic
+    information. Pyright catches a Verdict variant rename instead
+    of silently mismatching strings."""
     if not facts:
-        return Verdict.POWER_INSUFFICIENT.value
+        return Verdict.POWER_INSUFFICIENT
     has_invariant_violation = any(
-        f.kind == 'invariant' and f.verdict == Verdict.NO_EFFECT.value
+        f.kind == 'invariant' and f.verdict is Verdict.NO_EFFECT
         for f in facts
     )
     if has_invariant_violation:
-        return Verdict.INVARIANT_VIOLATION.value
-    has_no_effect = any(f.verdict == Verdict.NO_EFFECT.value for f in facts)
+        return Verdict.INVARIANT_VIOLATION
+    has_no_effect = any(f.verdict is Verdict.NO_EFFECT for f in facts)
     if has_no_effect:
-        return Verdict.NO_EFFECT.value
-    all_held = all(f.verdict == Verdict.HELD.value for f in facts)
+        return Verdict.NO_EFFECT
+    all_held = all(f.verdict is Verdict.HELD for f in facts)
     if all_held:
-        return Verdict.HELD.value
-    return Verdict.POWER_INSUFFICIENT.value
+        return Verdict.HELD
+    return Verdict.POWER_INSUFFICIENT

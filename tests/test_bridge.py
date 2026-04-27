@@ -7,7 +7,7 @@ from collections.abc import Mapping
 from typing import TypedDict
 
 from corroborate.bridge import Bridge, BridgeResult, bridge
-from corroborate.verdict import RefutationClass, Verdict
+from corroborate.verdict import Verdict
 
 
 # ============ BridgeResult ============
@@ -21,21 +21,26 @@ def test_bridge_result_minimal_construction() -> None:
         targets=('q_mean', 'epsilon'),
     )
     assert r.verdict is Verdict.HELD
-    assert r.refutation_class is None
+    assert r.verdict is Verdict.HELD
     assert r.stats['rho'] == 0.92
 
 
-def test_bridge_result_with_refutation_class() -> None:
-    """NO_EFFECT verdicts can carry a refutation_class refinement."""
+def test_bridge_result_does_not_carry_refutation_class() -> None:
+    """`BridgeResult` deliberately does NOT carry refutation_class
+    — that decision lives at the comparison level (where Hedges'
+    g + se + power can disambiguate NULL_EFFECT vs UNDERPOWERED
+    vs SIGN_FLIP). Single home: `ComparisonRow.refutation_class`."""
     r = BridgeResult(
         verdict=Verdict.NO_EFFECT,
         reason='|g| < MDE',
         stats={'g': 0.05, 'mde': 0.5},
         name='outcome',
         targets=('final_return',),
-        refutation_class=RefutationClass.NULL_EFFECT,
     )
-    assert r.refutation_class is RefutationClass.NULL_EFFECT
+    # No refutation_class field exists — accessing it would be a
+    # type error caught by pyright. The bridge body cannot smuggle
+    # a sub-classification into the BridgeResult.
+    assert not hasattr(r, 'refutation_class')
 
 
 def test_bridge_result_stats_value_types_are_scalar_only() -> None:

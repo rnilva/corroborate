@@ -75,7 +75,6 @@ def invariant[R: Mapping[str, object]](
                 stats=tagged_stats,
                 name=result.name if result.name else resolved_name,
                 targets=result.targets if result.targets else targets,
-                refutation_class=result.refutation_class,
             )
 
         return Bridge(fn=wrapper, name=resolved_name, targets=targets)

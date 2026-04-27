@@ -15,7 +15,7 @@ from collections.abc import Mapping
 from typing import Literal, TypeIs
 
 from corroborate.hypothesis import Direction
-from corroborate.verdict import RefutationClass
+from corroborate.verdict import RefutationClass, Verdict
 
 
 # ============ TypeIs predicates ============
@@ -122,6 +122,23 @@ def optional_direction(
     if v == 'two_sided':
         return 'two_sided'
     raise TypeError(f'{key!r} must be a Direction or None, got {v!r}')
+
+
+def require_verdict(d: Mapping[str, object], key: str) -> Verdict:
+    """Narrow a verdict-string column (parquet representation)
+    back to the typed `Verdict` enum. Round-trip pair with
+    `Verdict.value`. Round-trips break loudly: any unknown
+    string raises `TypeError` at parse time."""
+    v = d.get(key)
+    if v == Verdict.HELD.value:
+        return Verdict.HELD
+    if v == Verdict.NO_EFFECT.value:
+        return Verdict.NO_EFFECT
+    if v == Verdict.POWER_INSUFFICIENT.value:
+        return Verdict.POWER_INSUFFICIENT
+    if v == Verdict.INVARIANT_VIOLATION.value:
+        return Verdict.INVARIANT_VIOLATION
+    raise TypeError(f'{key!r} must be a Verdict value, got {v!r}')
 
 
 def optional_refutation_class(

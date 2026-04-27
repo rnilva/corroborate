@@ -7,7 +7,7 @@ not cast or `# type: ignore`."""
 from __future__ import annotations
 
 from corroborate.hypothesis import MechanismKey
-from corroborate.verdict import RefutationClass
+from corroborate.verdict import RefutationClass, Verdict
 from corroborate.schema import (
     ArmRow,
     ComparisonRow,
@@ -36,7 +36,7 @@ def _sample_fact() -> FactRow:
         kind='bridge',
         targets=('max_q_late',),
         reads=frozenset({'max_q_late'}),
-        verdict='held',
+        verdict=Verdict.HELD,
         natural_strength=0.85,
         delta_i=0.42,
         evidentiary_level='causal_one_sided',
@@ -70,7 +70,7 @@ def test_fact_row_invariant_kind_round_trip() -> None:
         kind='invariant',
         targets=('q_max',),
         reads=frozenset({'q_max'}),
-        verdict='held',
+        verdict=Verdict.HELD,
         natural_strength=1.0,
         delta_i=1.0,
         evidentiary_level='causal_bridged',
@@ -113,7 +113,7 @@ def test_run_row_round_trip() -> None:
         record_keys=('q_max', 'epsilon', 'ep_return'),
         facts=(_sample_fact(),),
         reads_set=frozenset({'max_q_late', 'final_return'}),
-        verdict='held',
+        verdict=Verdict.HELD,
         meta={'agent': 'sweep', 'cycle': 7, 'wall_time_s': 120.5},
     )
     d = run.as_dict()
@@ -136,7 +136,7 @@ def test_run_row_default_meta_round_trip() -> None:
         record_keys=(),
         facts=(),
         reads_set=frozenset(),
-        verdict='held',
+        verdict=Verdict.HELD,
     )
     d = run.as_dict()
     run2: RunRow = RunRow.from_dict(d)
@@ -192,7 +192,7 @@ def test_comparison_row_round_trip_full() -> None:
         se=0.32,
         derived_q=0.93,
         delta_i_population=0.66,
-        verdict='held',
+        verdict=Verdict.HELD,
         refutation_class=None,
         adequately_powered=True,
         facts=(_sample_fact(),),
@@ -227,7 +227,7 @@ def test_comparison_row_round_trip_with_optional_nones() -> None:
         se=None,
         derived_q=None,
         delta_i_population=0.0,
-        verdict='power_insufficient',
+        verdict=Verdict.POWER_INSUFFICIENT,
         refutation_class=RefutationClass.UNDERPOWERED,
         adequately_powered=False,
         facts=(),
@@ -256,7 +256,7 @@ def test_corpus_row_round_trip() -> None:
                 kind='bridge',
                 targets=('mechanism', 'outcome'),
                 reads=frozenset({'mechanism', 'outcome'}),
-                verdict='power_insufficient',
+                verdict=Verdict.POWER_INSUFFICIENT,
                 natural_strength=0.28,
                 delta_i=0.06,
                 evidentiary_level='correlational',
@@ -284,7 +284,7 @@ def test_run_row_homogeneous_collection() -> None:
         env_name='env', total_steps=10, seed=0,
         mechanism_key=_sample_mechanism_key(),
         primary_outcome_summary=0.0, record_keys=(),
-        facts=(), reads_set=frozenset(), verdict='held',
+        facts=(), reads_set=frozenset(), verdict=Verdict.HELD,
     ))
     assert len(runs) == 1
 
@@ -298,7 +298,7 @@ def test_mechanism_key_round_trip_preserves_direction() -> None:
     f = FactRow(
         name='fact', kind='bridge',
         targets=('x',), reads=frozenset({'x'}),
-        verdict='held', natural_strength=1.0, delta_i=1.0,
+        verdict=Verdict.HELD, natural_strength=1.0, delta_i=1.0,
         evidentiary_level='correlational', stats={},
     )
     run: RunRow = RunRow(
@@ -307,7 +307,7 @@ def test_mechanism_key_round_trip_preserves_direction() -> None:
         env_name='e', total_steps=10, seed=0,
         mechanism_key=mk,
         primary_outcome_summary=0.0, record_keys=(),
-        facts=(f,), reads_set=frozenset(), verdict='held',
+        facts=(f,), reads_set=frozenset(), verdict=Verdict.HELD,
     )
     run2: RunRow = RunRow.from_dict(run.as_dict())
     assert run2.mechanism_key == mk
@@ -323,7 +323,7 @@ def test_mechanism_key_round_trip_no_direction() -> None:
     f = FactRow(
         name='fact', kind='bridge',
         targets=(), reads=frozenset(),
-        verdict='held', natural_strength=0.0, delta_i=0.0,
+        verdict=Verdict.HELD, natural_strength=0.0, delta_i=0.0,
         evidentiary_level='', stats={},
     )
     run: RunRow = RunRow(
@@ -332,7 +332,7 @@ def test_mechanism_key_round_trip_no_direction() -> None:
         env_name='e', total_steps=10, seed=0,
         mechanism_key=mk,
         primary_outcome_summary=0.0, record_keys=(),
-        facts=(f,), reads_set=frozenset(), verdict='held',
+        facts=(f,), reads_set=frozenset(), verdict=Verdict.HELD,
     )
     run2: RunRow = RunRow.from_dict(run.as_dict())
     assert run2.mechanism_key.direction is None

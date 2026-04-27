@@ -58,9 +58,10 @@ from corroborate._narrow import (
     require_stats_mapping,
     require_str,
     require_str_list,
+    require_verdict,
 )
 from corroborate.hypothesis import Direction, MechanismKey
-from corroborate.verdict import RefutationClass
+from corroborate.verdict import RefutationClass, Verdict
 
 
 # ============ Default factories (typed) ============
@@ -91,7 +92,7 @@ class FactRow:
     kind: Literal['bridge', 'invariant']
     targets: tuple[str, ...]
     reads: frozenset[str]
-    verdict: str
+    verdict: Verdict
     natural_strength: float
     delta_i: float
     evidentiary_level: str
@@ -104,7 +105,7 @@ class FactRow:
             'kind': self.kind,
             'targets': list(self.targets),
             'reads': sorted(self.reads),
-            'verdict': self.verdict,
+            'verdict': self.verdict.value,
             'natural_strength': self.natural_strength,
             'delta_i': self.delta_i,
             'evidentiary_level': self.evidentiary_level,
@@ -119,7 +120,7 @@ class FactRow:
             kind=require_kind(d, 'kind'),
             targets=tuple(require_str_list(d, 'targets')),
             reads=frozenset(require_str_list(d, 'reads')),
-            verdict=require_str(d, 'verdict'),
+            verdict=require_verdict(d, "verdict"),
             natural_strength=require_float(d, 'natural_strength'),
             delta_i=require_float(d, 'delta_i'),
             evidentiary_level=require_str(d, 'evidentiary_level'),
@@ -154,7 +155,7 @@ class RunRow:
     record_keys: tuple[str, ...]
     facts: tuple[FactRow, ...]
     reads_set: frozenset[str]
-    verdict: str
+    verdict: Verdict
     meta: Mapping[str, str | int | float | bool] = field(default_factory=_empty_meta)
 
     def as_dict(self) -> dict[str, object]:
@@ -172,7 +173,7 @@ class RunRow:
             'record_keys': list(self.record_keys),
             'facts': [f.as_dict() for f in self.facts],
             'reads_set': sorted(self.reads_set),
-            'verdict': self.verdict,
+            'verdict': self.verdict.value,
             'meta': {**self.meta},
         }
 
@@ -197,7 +198,7 @@ class RunRow:
                 for i in range(list_len(d, 'facts'))
             ),
             reads_set=frozenset(require_str_list(d, 'reads_set')),
-            verdict=require_str(d, 'verdict'),
+            verdict=require_verdict(d, "verdict"),
             meta=require_meta_mapping(d, 'meta'),
         )
 
@@ -298,7 +299,7 @@ class ComparisonRow:
     se: float | None
     derived_q: float | None
     delta_i_population: float
-    verdict: str
+    verdict: Verdict
     refutation_class: RefutationClass | None
     adequately_powered: bool
     facts: tuple[FactRow, ...]
@@ -327,7 +328,7 @@ class ComparisonRow:
             'se': self.se,
             'derived_q': self.derived_q,
             'delta_i_population': self.delta_i_population,
-            'verdict': self.verdict,
+            'verdict': self.verdict.value,
             'refutation_class': (
                 self.refutation_class.value
                 if self.refutation_class is not None
@@ -364,7 +365,7 @@ class ComparisonRow:
             se=optional_float(d, 'se'),
             derived_q=optional_float(d, 'derived_q'),
             delta_i_population=require_float(d, 'delta_i_population'),
-            verdict=require_str(d, 'verdict'),
+            verdict=require_verdict(d, "verdict"),
             refutation_class=optional_refutation_class(d, 'refutation_class'),
             adequately_powered=require_bool(d, 'adequately_powered'),
             facts=tuple(
