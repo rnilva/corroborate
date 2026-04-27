@@ -58,24 +58,24 @@ def default_state_hash(obs: jax.Array) -> jax.Array:
     return jnp.int32(0)
 
 
-def init_state(
+def init_state_from_key(
     *,
     env: GymnaxEnvLike,
     env_params: object,
     obs_dim: int,
     n_actions: int,
-    seed: int,
+    rng_key: jax.Array,
     hidden: tuple[int, ...] = (64, 64),
     buffer_capacity: int = 10_000,
     optimizer: optax.GradientTransformation,
 ) -> DQNState:
-    """Build initial DQNState for a single env instance.
+    """Build initial DQNState from a `jax.random.PRNGKey` directly.
 
-    Allocates parameter sets (online + target identical at t=0),
-    initial optimizer state, FIFO replay buffer, env state via
-    gymnax. RNG is split off the seed."""
-    rng = jax.random.PRNGKey(seed)
-    init_key, env_key, run_key = jax.random.split(rng, 3)
+    Vmap-friendly: under `jax.vmap` over a batched key array, this
+    function produces a batched DQNState (each leaf has a leading
+    seed-axis). `init_state` is the seed-int convenience wrapper
+    for non-vmapped callers."""
+    init_key, env_key, run_key = jax.random.split(rng_key, 3)
     online = init_mlp(init_key, obs_dim, n_actions, hidden=hidden)
     opt_state = optimizer.init(online)
     obs, env_state = env.reset(env_key, env_params)
@@ -97,6 +97,34 @@ def init_state(
         step=jnp.int32(0),
         rng_key=run_key,
         ep_return=jnp.float32(0.0),
+    )
+
+
+def init_state(
+    *,
+    env: GymnaxEnvLike,
+    env_params: object,
+    obs_dim: int,
+    n_actions: int,
+    seed: int,
+    hidden: tuple[int, ...] = (64, 64),
+    buffer_capacity: int = 10_000,
+    optimizer: optax.GradientTransformation,
+) -> DQNState:
+    """Build initial DQNState for a single env instance.
+
+    Allocates parameter sets (online + target identical at t=0),
+    initial optimizer state, FIFO replay buffer, env state via
+    gymnax. RNG is split off the seed.
+
+    Single-seed convenience wrapper; for vmap-over-seeds use
+    `init_state_from_key` directly with a batched PRNGKey."""
+    return init_state_from_key(
+        env=env, env_params=env_params,
+        obs_dim=obs_dim, n_actions=n_actions,
+        rng_key=jax.random.PRNGKey(seed),
+        hidden=hidden, buffer_capacity=buffer_capacity,
+        optimizer=optimizer,
     )
 
 
