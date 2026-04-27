@@ -76,6 +76,49 @@ def _always_reject(record: Mapping[str, object]) -> BridgeResult:
     )
 
 
+@bridge(targets=('value',))
+def _invariant_violated(record: Mapping[str, object]) -> BridgeResult:
+    """Mimics what `@invariant` produces: a tautological-tagged
+    NO_EFFECT result. The aggregator's invariant-precedence rule
+    should map this to INVARIANT_VIOLATION at cell level."""
+    del record
+    return BridgeResult(
+        verdict=Verdict.NO_EFFECT,
+        reason='theorem precondition broken',
+        stats={'kind': 'tautological', 'of_claim': 'some_claim'},
+        name='', targets=(),
+    )
+
+
+@bridge(targets=('value',))
+def _value_above_threshold(record: Mapping[str, object]) -> BridgeResult:
+    """Bridge that actually reads its target from the record. Used
+    to verify the bridge↔record contract under sweep — early sweep
+    tests used record-ignoring bridges, missing the most basic
+    framework property (bridges consume records)."""
+    v = record.get('value', 0.0)
+    if isinstance(v, (int, float)) and v > 1.05:
+        return BridgeResult(
+            verdict=Verdict.HELD,
+            reason=f'value={v}',
+            stats={'value': float(v)},
+            name='', targets=(),
+        )
+    if isinstance(v, (int, float)):
+        return BridgeResult(
+            verdict=Verdict.NO_EFFECT,
+            reason=f'value={v} below 1.05',
+            stats={'value': float(v)},
+            name='', targets=(),
+        )
+    return BridgeResult(
+        verdict=Verdict.NO_EFFECT,
+        reason='value missing or non-numeric',
+        stats={},
+        name='', targets=(),
+    )
+
+
 # ============ Basic sweep ============
 
 def test_sweep_returns_one_row_per_cell() -> None:
@@ -297,6 +340,167 @@ def test_sweep_rows_have_distinct_ids() -> None:
     )
     ids = {r.id for r in rows}
     assert len(ids) == 3
+
+
+# ============ Invariant-precedence (verdict aggregation) ============
+
+def test_sweep_invariant_violation_overrides_no_effect() -> None:
+    """A tautological-tagged NO_EFFECT (invariant violated) wins
+    over plain NO_EFFECT, producing INVARIANT_VIOLATION at the
+    cell level. This is the framework's marketed verdict
+    separation — without this test the precedence rule was
+    untested."""
+    h: Hypothesis[Mapping[str, object]] = Hypothesis(
+        name='h',
+        intervention={},
+        bridges=(_invariant_violated, _always_reject),
+    )
+    rows, _ = sweep(
+        h,
+        env_names=('e',), seeds=(0,), total_steps=10,
+        runner=_constant_runner,
+        primary_outcome_extractor=_extract_value,
+    )
+    assert rows[0].verdict == Verdict.INVARIANT_VIOLATION.value
+
+
+def test_sweep_invariant_violation_overrides_held() -> None:
+    """Even when other bridges admit, an invariant-violation tag
+    on any rejected fact dominates: the mechanism didn't operate,
+    so the cell is OUT OF SCOPE rather than HELD."""
+    h: Hypothesis[Mapping[str, object]] = Hypothesis(
+        name='h',
+        intervention={},
+        bridges=(_always_admit, _invariant_violated),
+    )
+    rows, _ = sweep(
+        h,
+        env_names=('e',), seeds=(0,), total_steps=10,
+        runner=_constant_runner,
+        primary_outcome_extractor=_extract_value,
+    )
+    assert rows[0].verdict == Verdict.INVARIANT_VIOLATION.value
+
+
+def test_sweep_invariant_held_does_not_trigger_violation() -> None:
+    """A tautological-tagged HELD result is fine — only
+    tautological NO_EFFECT signals invariant violation. (Empty
+    facts and tautological-HELD coexist normally.)"""
+    @bridge(targets=('value',))
+    def invariant_held(record: Mapping[str, object]) -> BridgeResult:
+        del record
+        return BridgeResult(
+            verdict=Verdict.HELD,
+            reason='theorem precondition holds',
+            stats={'kind': 'tautological'},
+            name='', targets=(),
+        )
+
+    h: Hypothesis[Mapping[str, object]] = Hypothesis(
+        name='h',
+        intervention={},
+        bridges=(invariant_held,),
+    )
+    rows, _ = sweep(
+        h,
+        env_names=('e',), seeds=(0,), total_steps=10,
+        runner=_constant_runner,
+        primary_outcome_extractor=_extract_value,
+    )
+    assert rows[0].verdict == Verdict.HELD.value
+    assert rows[0].facts[0].kind == 'invariant'
+
+
+# ============ Bridge↔record contract ============
+
+def test_sweep_bridge_reads_record_per_seed() -> None:
+    """A bridge that actually consumes the record produces
+    per-seed verdicts based on the cell's record content. Earlier
+    sweep tests used record-ignoring bridges; this exercises the
+    real contract."""
+    h: Hypothesis[Mapping[str, object]] = Hypothesis(
+        name='h',
+        intervention={},
+        bridges=(_value_above_threshold,),
+    )
+    # _constant_runner returns value = 1.0 + seed * 0.1, so:
+    #   seed=0: 1.0  → NO_EFFECT (≤ 1.05)
+    #   seed=1: 1.1  → HELD      (> 1.05)
+    #   seed=2: 1.2  → HELD
+    rows, _ = sweep(
+        h,
+        env_names=('e',),
+        seeds=(0, 1, 2),
+        total_steps=10,
+        runner=_constant_runner,
+        primary_outcome_extractor=_extract_value,
+    )
+    by_seed = {r.seed: r.verdict for r in rows}
+    assert by_seed[0] == Verdict.NO_EFFECT.value
+    assert by_seed[1] == Verdict.HELD.value
+    assert by_seed[2] == Verdict.HELD.value
+
+
+def test_sweep_bridge_reads_record_carries_stats_into_fact() -> None:
+    """The BridgeResult.stats produced by the bridge body flow
+    onto the FactRow's stats — verifying the bridge's
+    record-derived statistics are preserved end-to-end."""
+    h: Hypothesis[Mapping[str, object]] = Hypothesis(
+        name='h',
+        intervention={},
+        bridges=(_value_above_threshold,),
+    )
+    rows, _ = sweep(
+        h,
+        env_names=('e',), seeds=(2,), total_steps=10,
+        runner=_constant_runner,
+        primary_outcome_extractor=_extract_value,
+    )
+    assert rows[0].facts[0].stats['value'] == 1.2
+
+
+# ============ intervention_signature on FactRow ============
+
+def test_sweep_populates_intervention_signature_on_facts() -> None:
+    """Per the redundancy primitive's intervention-similarity
+    factor, FactRow.intervention_signature must carry the parent
+    hypothesis's intervention leaves. Earlier sweep wired the
+    field empty; this verifies it's populated."""
+    h: Hypothesis[Mapping[str, object]] = Hypothesis(
+        name='h',
+        intervention={'slot_a': 'value_x', 'slot_b': 1},
+        bridges=(_always_admit,),
+    )
+    rows, _ = sweep(
+        h,
+        env_names=('e',), seeds=(0,), total_steps=10,
+        runner=_constant_runner,
+        primary_outcome_extractor=_extract_value,
+    )
+    fact_sig = rows[0].facts[0].intervention_signature
+    # Leaves include both slot names and their canonicalized values.
+    assert 'slot_a' in fact_sig
+    assert 'slot_b' in fact_sig
+    # Values canonicalize via repr() (e.g. "'value_x'", "1").
+    assert any('value_x' in leaf for leaf in fact_sig)
+
+
+def test_sweep_baseline_hypothesis_has_empty_intervention_signature() -> None:
+    """A hypothesis with no intervention overrides has an empty
+    intervention_signature on its facts. Distinguishes baseline
+    runs from intervention runs in the redundancy register."""
+    h: Hypothesis[Mapping[str, object]] = Hypothesis(
+        name='baseline',
+        intervention={},
+        bridges=(_always_admit,),
+    )
+    rows, _ = sweep(
+        h,
+        env_names=('e',), seeds=(0,), total_steps=10,
+        runner=_constant_runner,
+        primary_outcome_extractor=_extract_value,
+    )
+    assert rows[0].facts[0].intervention_signature == frozenset()
 
 
 def test_sweep_cycle_id_propagates() -> None:
