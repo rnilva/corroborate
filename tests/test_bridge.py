@@ -4,8 +4,9 @@ object]` and value narrowing happens via `isinstance` (not cast)."""
 from __future__ import annotations
 
 from collections.abc import Mapping
+from typing import TypedDict
 
-from corroborate.bridge import Bridge, BridgeResult, Record, bridge
+from corroborate.bridge import Bridge, BridgeResult, bridge
 from corroborate.verdict import RefutationClass, Verdict
 
 
@@ -61,7 +62,7 @@ def test_bridge_result_stats_value_types_are_scalar_only() -> None:
 
 def test_bridge_decorator_explicit_targets() -> None:
     @bridge(targets=('max_q_late',))
-    def max_q_decreases(record: Record) -> BridgeResult:
+    def max_q_decreases(record: Mapping[str, object]) -> BridgeResult:
         return BridgeResult(
             verdict=Verdict.HELD, reason='stub', stats={},
             name='', targets=(),
@@ -74,7 +75,7 @@ def test_bridge_decorator_explicit_targets() -> None:
 
 def test_bridge_decorator_explicit_name_overrides_fn_name() -> None:
     @bridge(targets=('a', 'b'), name='custom_name')
-    def some_fn(record: Record) -> BridgeResult:
+    def some_fn(record: Mapping[str, object]) -> BridgeResult:
         return BridgeResult(
             verdict=Verdict.HELD, reason='stub', stats={},
             name='', targets=(),
@@ -87,7 +88,7 @@ def test_bridge_decorator_empty_string_name_is_kept() -> None:
     """Empty string is a valid (if odd) name; only `None` falls
     back to the function name."""
     @bridge(targets=('x',), name='')
-    def some_fn(record: Record) -> BridgeResult:
+    def some_fn(record: Mapping[str, object]) -> BridgeResult:
         return BridgeResult(
             verdict=Verdict.HELD, reason='stub', stats={},
             name='', targets=(),
@@ -99,10 +100,10 @@ def test_bridge_decorator_empty_string_name_is_kept() -> None:
 # ============ Calling a Bridge ============
 
 def test_bridge_passes_record_through_to_fn() -> None:
-    captured: list[Record] = []
+    captured: list[Mapping[str, object]] = []
 
     @bridge(targets=('x',))
-    def echo(record: Record) -> BridgeResult:
+    def echo(record: Mapping[str, object]) -> BridgeResult:
         captured.append(record)
         return BridgeResult(
             verdict=Verdict.HELD, reason='ok',
@@ -121,7 +122,7 @@ def test_bridge_value_narrowing_via_isinstance() -> None:
     `isinstance` — no cast, no Any. This is the framework's
     discipline for handling Record's heterogeneous values."""
     @bridge(targets=('count',))
-    def positive_count(record: Record) -> BridgeResult:
+    def positive_count(record: Mapping[str, object]) -> BridgeResult:
         v = record['count']
         if isinstance(v, int) and v > 0:
             return BridgeResult(
@@ -147,17 +148,17 @@ def test_bridge_factory_pattern() -> None:
     the framework's pattern for parameterized bridges. No special
     framework support needed; just compose `@bridge` with
     closures."""
-    def monotonic_of(target: str) -> Bridge:
+    def monotonic_of(target: str) -> Bridge[Mapping[str, object]]:
         @bridge(targets=(target,), name=f'monotonic({target})')
-        def fn(record: Record) -> BridgeResult:
+        def fn(record: Mapping[str, object]) -> BridgeResult:
             return BridgeResult(
                 verdict=Verdict.HELD, reason=f'ok on {target}',
                 stats={}, name='', targets=(),
             )
         return fn
 
-    b1 = monotonic_of('q_mean')
-    b2 = monotonic_of('ep_return')
+    b1: Bridge[Mapping[str, object]] = monotonic_of('q_mean')
+    b2: Bridge[Mapping[str, object]] = monotonic_of('ep_return')
     assert b1.name == 'monotonic(q_mean)'
     assert b1.targets == ('q_mean',)
     assert b2.name == 'monotonic(ep_return)'
@@ -165,10 +166,47 @@ def test_bridge_factory_pattern() -> None:
     assert b1 != b2  # different fn closures
 
 
+# ============ TypedDict Record (typed-body pattern) ============
+
+class _DQNRecord(TypedDict):
+    """Test fixture — a typed record schema. In real code this
+    would live in the theory module."""
+    max_q_late: float
+    epsilon: float
+    seed: int
+
+
+def test_bridge_with_typeddict_record_typed_body() -> None:
+    """Bridges authored against a TypedDict get fully typed field
+    access inside the body — no isinstance narrows. This is the
+    payoff for parameterising Bridge[R: Mapping[str, object]]."""
+    @bridge(targets=('max_q_late',))
+    def max_q_decreases(record: _DQNRecord) -> BridgeResult:
+        # `record['max_q_late']` is typed as `float` directly
+        # because _DQNRecord declares the per-key type. No
+        # isinstance() narrowing needed.
+        v = record['max_q_late']
+        return BridgeResult(
+            verdict=Verdict.HELD if v < 100.0 else Verdict.NO_EFFECT,
+            reason=f'max_q_late = {v:.3f}',
+            stats={'value': v},
+            name='', targets=(),
+        )
+
+    record: _DQNRecord = {
+        'max_q_late': 42.0,
+        'epsilon': 0.1,
+        'seed': 0,
+    }
+    result = max_q_decreases(record)
+    assert result.verdict is Verdict.HELD
+    assert result.stats['value'] == 42.0
+
+
 # ============ Equality ============
 
 def test_bridge_equality_by_field() -> None:
-    def f(record: Record) -> BridgeResult:
+    def f(record: Mapping[str, object]) -> BridgeResult:
         return BridgeResult(
             verdict=Verdict.HELD, reason='', stats={},
             name='', targets=(),

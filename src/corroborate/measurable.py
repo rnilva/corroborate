@@ -1,64 +1,82 @@
-"""Measurable — typed scalar derivation from a Record.
+"""Measurable — typed scalar derivation from a record.
 
-A `Measurable[T]` is a named function `(Record) -> T` that
-produces a summary quantity (late-window mean, growth ratio,
-threshold-margin, etc.) bridges consume. The framework's
-post-hoc analytical layer.
+A `Measurable[R, T]` is a named function `(R) -> T` that produces
+a summary quantity (late-window mean, growth ratio, threshold
+margin, etc.) bridges or consumers read. Two type parameters:
 
-Measurables differ from Claims and Bridges:
-- Claims are STEPS in the algorithm.
-- Bridges are TESTS over the algorithm's record (verdict-producing).
-- Measurables are SCALAR DERIVATIONS from the record (analytical
-  quantities bridges or consumers read).
+- `R: Mapping[str, object]` — the record schema. Author can use
+  plain Mapping, TypedDict, or a custom Mapping subclass.
+- `T` — the scalar return type (float, int, bool, str, jax.Array,
+  etc.). Preserved through `__call__` so consumers see the native
+  scalar type without narrowing.
+
+The framework's post-hoc analytical layer. Distinct from Claims
+(steps in the algorithm) and Bridges (verdict-producing tests).
 
 For v0 the framework provides only the typed wrapper. Composition
 patterns (factories, dependent measurables) are author-side
 concerns expressed as ordinary Python functions returning
-`Measurable[T]`. A registry / dependency-resolver lands when
-graph-derivation use cases force it; v0 does not need them."""
+`Measurable[R, T]`. A registry / dependency-resolver lands when
+graph-derivation use cases force it; v0 doesn't need them
+(framework-subtraction discipline)."""
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-
-from corroborate.bridge import Record
+from typing import overload
 
 
 @dataclass(frozen=True, slots=True)
-class Measurable[T]:
-    """Typed generic wrapper. Behaves as `Callable[[Record], T]`;
-    carries `name` as a typed attribute. The return type `T` is
-    preserved through `__call__` so consumers see the native
-    scalar type without narrowing."""
-    fn: Callable[[Record], T]
+class Measurable[R: Mapping[str, object], T]:
+    """Typed generic wrapper. Behaves as `Callable[[R], T]`;
+    carries `name` as a typed attribute. Both `R` (record type)
+    and `T` (scalar return type) preserved through `__call__`."""
+    fn: Callable[[R], T]
     name: str
 
-    def __call__(self, record: Record) -> T:
+    def __call__(self, record: R) -> T:
         return self.fn(record)
 
 
-def measurable[T](
+@overload
+def measurable[R: Mapping[str, object], T](
+    fn: Callable[[R], T], /,
+) -> Measurable[R, T]: ...
+
+
+@overload
+def measurable[R: Mapping[str, object], T](
     *,
     name: str | None = None,
-) -> Callable[[Callable[[Record], T]], Measurable[T]]:
-    """Decorator factory wrapping a `(Record) -> T` function in a
-    typed `Measurable[T]`. `name` defaults to `fn.__name__` when
-    omitted.
+) -> Callable[[Callable[[R], T]], Measurable[R, T]]: ...
 
-    Usage:
 
-        @measurable()
-        def max_q_late_mean(record: Record) -> float:
-            ...
+def measurable[R: Mapping[str, object], T](
+    fn: Callable[[R], T] | None = None,
+    /,
+    *,
+    name: str | None = None,
+) -> Measurable[R, T] | Callable[[Callable[[R], T]], Measurable[R, T]]:
+    """Wrap an `(R) -> T` function in a typed `Measurable[R, T]`.
 
-    Or as a factory closure:
+    Both decorator forms supported:
 
-        def late_window_mean(target: str) -> Measurable[float]:
-            @measurable(name=f'{target}_late_mean')
-            def fn(record: Record) -> float:
-                ...
-            return fn"""
-    def decorator(fn: Callable[[Record], T]) -> Measurable[T]:
-        resolved_name = name if name is not None else fn.__name__
-        return Measurable(fn=fn, name=resolved_name)
+        @measurable
+        def constant_one(record: Mapping[str, object]) -> float:
+            return 1.0
+
+        @measurable(name='custom')
+        def variable(record: DQNRecord) -> float:
+            return float(record['q_max'])
+
+    The first form (no parens) is canonical when no parameters
+    are needed; the second form is for `name` overrides. Pyright
+    infers `R` from the function's parameter annotation and `T`
+    from its return type."""
+    if fn is not None:
+        return Measurable(fn=fn, name=fn.__name__)
+
+    def decorator(inner: Callable[[R], T]) -> Measurable[R, T]:
+        resolved_name = name if name is not None else inner.__name__
+        return Measurable(fn=inner, name=resolved_name)
     return decorator

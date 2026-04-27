@@ -4,15 +4,16 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from corroborate.bridge import Record
 from corroborate.measurable import Measurable, measurable
 
 
 # ============ Construction + basic call ============
 
-def test_measurable_returns_measurable_instance() -> None:
-    @measurable()
-    def constant_one(record: Record) -> float:
+def test_measurable_no_parens_form() -> None:
+    """`@measurable` without parens is the canonical short form
+    when no parameters are needed."""
+    @measurable
+    def constant_one(record: Mapping[str, object]) -> float:
         del record
         return 1.0
 
@@ -20,9 +21,21 @@ def test_measurable_returns_measurable_instance() -> None:
     assert constant_one.name == 'constant_one'
 
 
+def test_measurable_paren_form() -> None:
+    """`@measurable()` with empty parens is also valid (same
+    behavior as no parens; useful before adding `name=...`)."""
+    @measurable()
+    def some_metric(record: Mapping[str, object]) -> float:
+        del record
+        return 1.0
+
+    assert isinstance(some_metric, Measurable)
+    assert some_metric.name == 'some_metric'
+
+
 def test_measurable_call_returns_native_T() -> None:
     @measurable()
-    def count(record: Record) -> int:
+    def count(record: Mapping[str, object]) -> int:
         return len(record)
 
     record: Mapping[str, object] = {'a': 1, 'b': 2, 'c': 3}
@@ -34,17 +47,17 @@ def test_measurable_call_returns_native_T() -> None:
 
 def test_measurable_preserves_diverse_return_types() -> None:
     @measurable()
-    def as_float(record: Record) -> float:
+    def as_float(record: Mapping[str, object]) -> float:
         del record
         return 0.5
 
     @measurable()
-    def as_str(record: Record) -> str:
+    def as_str(record: Mapping[str, object]) -> str:
         del record
         return 'hello'
 
     @measurable()
-    def as_bool(record: Record) -> bool:
+    def as_bool(record: Mapping[str, object]) -> bool:
         del record
         return True
 
@@ -58,7 +71,7 @@ def test_measurable_preserves_diverse_return_types() -> None:
 
 def test_measurable_name_default_is_fn_name() -> None:
     @measurable()
-    def some_specific_measurable(record: Record) -> int:
+    def some_specific_measurable(record: Mapping[str, object]) -> int:
         del record
         return 0
 
@@ -67,7 +80,7 @@ def test_measurable_name_default_is_fn_name() -> None:
 
 def test_measurable_explicit_name_overrides() -> None:
     @measurable(name='custom_metric')
-    def some_fn(record: Record) -> int:
+    def some_fn(record: Mapping[str, object]) -> int:
         del record
         return 0
 
@@ -76,7 +89,7 @@ def test_measurable_explicit_name_overrides() -> None:
 
 def test_measurable_empty_string_name_kept() -> None:
     @measurable(name='')
-    def some_fn(record: Record) -> int:
+    def some_fn(record: Mapping[str, object]) -> int:
         del record
         return 0
 
@@ -89,9 +102,9 @@ def test_measurable_factory_pattern() -> None:
     """Factories returning Measurable[T] — the framework's pattern
     for parameterized measurables. Implemented with closures, no
     special framework support."""
-    def late_window_mean(target: str) -> Measurable[float]:
+    def late_window_mean(target: str) -> Measurable[Mapping[str, object], float]:
         @measurable(name=f'{target}_late_mean')
-        def fn(record: Record) -> float:
+        def fn(record: Mapping[str, object]) -> float:
             v = record.get(target, 0.0)
             return v if isinstance(v, (int, float)) else 0.0
 
@@ -113,7 +126,7 @@ def test_record_value_narrowing() -> None:
     value. This is the canonical narrowing pattern bridges and
     measurables follow."""
     @measurable(name='scalar_via_x')
-    def from_x(record: Record) -> float:
+    def from_x(record: Mapping[str, object]) -> float:
         v = record['x']
         if isinstance(v, (int, float)):
             return float(v)
@@ -129,7 +142,7 @@ def test_record_value_narrowing() -> None:
 # ============ Equality ============
 
 def test_measurable_equality_by_field() -> None:
-    def f(record: Record) -> int:
+    def f(record: Mapping[str, object]) -> int:
         del record
         return 0
 
@@ -139,11 +152,11 @@ def test_measurable_equality_by_field() -> None:
 
 
 def test_measurable_inequality_on_different_fn() -> None:
-    def f1(record: Record) -> int:
+    def f1(record: Mapping[str, object]) -> int:
         del record
         return 0
 
-    def f2(record: Record) -> int:
+    def f2(record: Mapping[str, object]) -> int:
         del record
         return 0
 

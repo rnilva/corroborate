@@ -1,6 +1,7 @@
 """Invariant — theorem-direct bridge attached to a Claim.
 
-An `Invariant` is a `Bridge` with two distinguishing properties:
+An `Invariant` is a `Bridge[R]` with two distinguishing
+properties:
 
 1. *Attached to a Claim.* The invariant tests a property of the
    theorem behind that claim — e.g. Q-boundedness for a tabular
@@ -15,10 +16,11 @@ An `Invariant` is a `Bridge` with two distinguishing properties:
    was tested and refuted). This is axiom 18: invariants are
    theorem-direct, not proxy-via-assumption.
 
-The author writes the invariant body as an ordinary
-`(Record) -> BridgeResult` function; `@invariant` injects the
-`kind` and `of_claim` tags into the returned `BridgeResult`'s
-stats automatically.
+Generic in `R: Mapping[str, object]` (the record schema), same
+as `Bridge[R]`. The author writes the body as an ordinary
+`(R) -> BridgeResult` function; `@invariant` injects the `kind`
+and `of_claim` tags into the returned `BridgeResult`'s stats
+automatically.
 
 For v0 the framework provides only the decorator. Aggregation
 that maps `kind=='tautological'` REJECT to
@@ -27,20 +29,20 @@ that maps `kind=='tautological'` REJECT to
 consumers are free to ignore it."""
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 
-from corroborate.bridge import Bridge, BridgeResult, Record
+from corroborate.bridge import Bridge, BridgeResult
 from corroborate.claim import ClaimRecord
 
 
-def invariant(
+def invariant[R: Mapping[str, object]](
     *,
     of: ClaimRecord,
     targets: tuple[str, ...],
     name: str | None = None,
-) -> Callable[[Callable[[Record], BridgeResult]], Bridge]:
-    """Decorator factory: wraps a `(Record) -> BridgeResult`
-    function in a Bridge whose results carry `stats['kind'] =
+) -> Callable[[Callable[[R], BridgeResult]], Bridge[R]]:
+    """Decorator factory: wraps an `(R) -> BridgeResult` function
+    in a `Bridge[R]` whose results carry `stats['kind'] =
     'tautological'` and `stats['of_claim'] = of.name`.
 
     Tag injection is automatic — the inner function does not need
@@ -54,13 +56,13 @@ def invariant(
         def vanilla_greedify(q: Array) -> int: ...
 
         @invariant(of=vanilla_greedify, targets=('max_q_late',))
-        def q_bounded(record: Record) -> BridgeResult:
+        def q_bounded(record: Mapping[str, object]) -> BridgeResult:
             ...
     """
-    def decorator(fn: Callable[[Record], BridgeResult]) -> Bridge:
+    def decorator(fn: Callable[[R], BridgeResult]) -> Bridge[R]:
         resolved_name = name if name is not None else f'invariant_{fn.__name__}_of_{of.name}'
 
-        def wrapper(record: Record) -> BridgeResult:
+        def wrapper(record: R) -> BridgeResult:
             result = fn(record)
             tagged_stats: dict[str, float | int | bool | str] = {
                 **result.stats,

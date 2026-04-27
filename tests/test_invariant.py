@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from corroborate.bridge import Bridge, BridgeResult, Record
+from corroborate.bridge import Bridge, BridgeResult
 from corroborate.claim import claim
 from corroborate.invariant import invariant
 from corroborate.verdict import Verdict
@@ -18,7 +18,7 @@ def test_invariant_returns_bridge() -> None:
         return x
 
     @invariant(of=some_claim, targets=('q_max',))
-    def q_bounded(record: Record) -> BridgeResult:
+    def q_bounded(record: Mapping[str, object]) -> BridgeResult:
         return BridgeResult(
             verdict=Verdict.HELD, reason='|q|<1000',
             stats={}, name='', targets=(),
@@ -34,7 +34,7 @@ def test_invariant_default_name_includes_claim_name() -> None:
         return x
 
     @invariant(of=my_step, targets=('x',))
-    def my_test(record: Record) -> BridgeResult:
+    def my_test(record: Mapping[str, object]) -> BridgeResult:
         return BridgeResult(
             verdict=Verdict.HELD, reason='', stats={},
             name='', targets=(),
@@ -50,7 +50,7 @@ def test_invariant_explicit_name_overrides() -> None:
         return x
 
     @invariant(of=some_claim, targets=('x',), name='custom_inv')
-    def fn(record: Record) -> BridgeResult:
+    def fn(record: Mapping[str, object]) -> BridgeResult:
         return BridgeResult(
             verdict=Verdict.HELD, reason='', stats={},
             name='', targets=(),
@@ -70,7 +70,7 @@ def test_invariant_injects_tautological_kind() -> None:
         return x
 
     @invariant(of=step, targets=('x',))
-    def inv(record: Record) -> BridgeResult:
+    def inv(record: Mapping[str, object]) -> BridgeResult:
         return BridgeResult(
             verdict=Verdict.HELD, reason='ok',
             stats={'value': 0.5, 'threshold': 1.0},
@@ -90,7 +90,7 @@ def test_invariant_injects_of_claim_name() -> None:
         return x
 
     @invariant(of=my_specific_claim, targets=('x',))
-    def inv(record: Record) -> BridgeResult:
+    def inv(record: Mapping[str, object]) -> BridgeResult:
         return BridgeResult(
             verdict=Verdict.HELD, reason='', stats={},
             name='', targets=(),
@@ -110,7 +110,7 @@ def test_invariant_tags_added_even_on_reject() -> None:
         return x
 
     @invariant(of=step, targets=('x',))
-    def inv(record: Record) -> BridgeResult:
+    def inv(record: Mapping[str, object]) -> BridgeResult:
         return BridgeResult(
             verdict=Verdict.NO_EFFECT, reason='violated', stats={},
             name='', targets=(),
@@ -130,7 +130,7 @@ def test_invariant_preserves_existing_stats() -> None:
         return x
 
     @invariant(of=step, targets=('x',))
-    def inv(record: Record) -> BridgeResult:
+    def inv(record: Mapping[str, object]) -> BridgeResult:
         return BridgeResult(
             verdict=Verdict.HELD, reason='',
             stats={'a': 1, 'b': 'foo', 'c': True, 'd': 3.14},
@@ -155,7 +155,7 @@ def test_invariant_uses_decorator_targets_when_inner_empty() -> None:
         return x
 
     @invariant(of=step, targets=('q_max', 'epsilon'))
-    def inv(record: Record) -> BridgeResult:
+    def inv(record: Mapping[str, object]) -> BridgeResult:
         return BridgeResult(
             verdict=Verdict.HELD, reason='', stats={},
             name='', targets=(),  # empty — decorator backfills
