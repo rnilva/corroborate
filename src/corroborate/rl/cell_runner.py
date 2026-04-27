@@ -39,7 +39,7 @@ from corroborate.bridge import Bridge, BridgeResult
 from corroborate.hypothesis import Hypothesis
 from corroborate.reductions import late_window_mean
 from corroborate.rl.dqn.claims.q_network import mlp_q
-from corroborate.rl.dqn.dqn import dqn_step, init_state
+from corroborate.rl.dqn.dqn import default_state_hash, dqn_step, init_state
 from corroborate.rl.dqn.eval import (
     EvalBurstOut,
     EvalTrajectoryRecord,
@@ -132,11 +132,18 @@ def run_dqn_cell(
         seed=seed, optimizer=optimizer, buffer_capacity=buffer_capacity,
     )
 
+    # Wire env-specific state_hash; default sentinel for envs
+    # that don't declare one (image envs). The (s, a)-coverage
+    # gap measurable detects the no-data case from env_spec, not
+    # from inspecting the record values.
+    state_hash = env_spec.state_hash or default_state_hash
+
     step_fn = partial(
         dqn_step,
         env=env, env_params=env_params,
         n_actions=env_spec.action_dim,
         optimizer=optimizer,
+        state_hash=state_hash,
         gamma=gamma, batch_size=batch_size,
         buffer_capacity=buffer_capacity,
         warmup_steps=warmup_steps, sync_period=sync_period,

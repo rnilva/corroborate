@@ -32,6 +32,7 @@ from corroborate.rl.dqn.types import (
     QNetwork,
     TargetSync,
 )
+from corroborate.rl.env_catalogue import StateHash
 
 
 # ============ Per-phase output records ============
@@ -41,15 +42,19 @@ class RolloutOut(NamedTuple):
     fields go on `DQNState`; this carries per-step scalars the
     record/bridges read.
 
-    `action` exposes the actually-taken integer action so the
-    Watkins-coverage invariant can verify the policy explored
-    the action space."""
+    `action` exposes the actually-taken integer action; combined
+    with `state_hash` it forms the (s, a) pair the Watkins-style
+    coverage gap measurable consumes. `state_hash` is computed
+    from `state.obs` at action-selection time (env-specific
+    discretization from `EnvSpec.state_hash`); for envs without a
+    declared state_hash, a constant-zero sentinel is wired."""
     epsilon: jax.Array
     reward: jax.Array
     done: jax.Array
     max_q: jax.Array      # max(Q(s, ·)) at action selection — overestimation diagnostic
     ep_return: jax.Array  # cumulative within current episode (reset on done in state)
     action: jax.Array     # int32 — the action ε-greedy returned this step
+    state_hash: jax.Array # int32 — env-specific bucket id for `state.obs`
 
 
 class TrainOut(NamedTuple):
@@ -108,6 +113,7 @@ def rollout_phase(
     q_network: QNetwork,
     action_select: ActionSelect,
     eps_schedule: EpsilonSchedule,
+    state_hash: StateHash,
 ) -> tuple[DQNState, RolloutOut]:
     """One step of acting in the env.
 
@@ -150,6 +156,12 @@ def rollout_phase(
         rng_key=next_rng_key,
         ep_return=next_ep_return,
     )
+    # State-hash logged at action-selection time (matches what the
+    # action-coverage and (s, a)-coverage measurables expect: the
+    # state observed when the action was chosen, not after the
+    # env step).
+    obs_hash = state_hash(state.obs).astype(jnp.int32)
+
     out = RolloutOut(
         epsilon=epsilon,
         reward=reward,
@@ -157,6 +169,7 @@ def rollout_phase(
         max_q=jnp.max(q_values),
         ep_return=cumulative,
         action=action.astype(jnp.int32),
+        state_hash=obs_hash,
     )
     return new_state, out
 

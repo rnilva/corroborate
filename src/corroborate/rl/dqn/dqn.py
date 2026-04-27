@@ -44,6 +44,18 @@ from corroborate.rl.dqn.types import (
     StepRecord,
     TargetSync,
 )
+from corroborate.rl.env_catalogue import StateHash
+
+
+def default_state_hash(obs: jax.Array) -> jax.Array:
+    """Default `StateHash`: returns 0 for any obs. Sentinel
+    wired when no env-specific state_hash is provided (image
+    envs, or experiments not consuming the (s, a)-coverage gap).
+    The gap measurable detects this via the env spec, not via
+    record inspection — see `state_action_coverage_gap` in
+    `invariants.py`."""
+    del obs
+    return jnp.int32(0)
 
 
 def init_state(
@@ -98,6 +110,7 @@ def dqn_step(
     env_params: object,
     n_actions: int,
     optimizer: optax.GradientTransformation,
+    state_hash: StateHash = default_state_hash,
     gamma: float = 0.99,
     batch_size: int = 64,
     buffer_capacity: int = 10_000,
@@ -136,6 +149,7 @@ def dqn_step(
         q_network=q_network,
         action_select=action_select,
         eps_schedule=eps_schedule,
+        state_hash=state_hash,
     )
 
     # --- Train: sample batch, bootstrap target, gradient step ----
@@ -180,6 +194,7 @@ def _build_record(
         'max_q': rollout.max_q,
         'ep_return': rollout.ep_return,
         'action': rollout.action,
+        'state_hash': rollout.state_hash,
         'loss': train.loss,
         'td_error': train.td_error,
         'online_q_values': train.online_q_values,

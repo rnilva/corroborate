@@ -29,7 +29,9 @@ from corroborate.rl.dqn.invariants import (
     action_coverage_gap,
     fqi_decay_gap,
     hasselt_covariance_gap,
+    jensen_overestimation_gap,
     lin_iid_gap,
+    state_action_coverage_gap,
 )
 from corroborate.rl.loop import python_loop
 from corroborate.verdict import Verdict
@@ -223,3 +225,90 @@ def test_at_most_wrap_default_name_includes_gap_and_threshold() -> None:
     bridge = at_most(gap, threshold=0.5, of_claim=mlp_q)
     assert 'fqi_decay_gap' in bridge.name
     assert '0.5' in bridge.name
+
+
+# ============ Jensen overestimation gap ============
+
+def test_jensen_gap_zero_when_predicted_equals_actual() -> None:
+    """No bias → gap = 0."""
+    record: Mapping[str, jnp.ndarray] = {
+        'predicted_q_at_start': jnp.full((5, 4), 10.0),
+        'mc_return': jnp.full((5, 4), 10.0),
+    }
+    gap = jensen_overestimation_gap()
+    assert gap(record) == 0.0
+
+
+def test_jensen_gap_positive_when_predicted_exceeds_actual() -> None:
+    """Predicted > actual on average → positive overestimation
+    bias → gap = mean bias."""
+    record: Mapping[str, jnp.ndarray] = {
+        'predicted_q_at_start': jnp.full((5, 4), 12.0),
+        'mc_return': jnp.full((5, 4), 10.0),
+    }
+    gap = jensen_overestimation_gap()
+    assert abs(gap(record) - 2.0) < 1e-5
+
+
+def test_jensen_gap_zero_when_predicted_under_actual() -> None:
+    """Underestimation isn't the Jensen signature; clip to 0."""
+    record: Mapping[str, jnp.ndarray] = {
+        'predicted_q_at_start': jnp.full((5, 4), 5.0),
+        'mc_return': jnp.full((5, 4), 10.0),
+    }
+    gap = jensen_overestimation_gap()
+    assert gap(record) == 0.0
+
+
+def test_jensen_gap_carries_eval_record_reads() -> None:
+    gap = jensen_overestimation_gap()
+    assert gap.reads == ('predicted_q_at_start', 'mc_return')
+
+
+# ============ State-action coverage gap ============
+
+def test_sa_coverage_gap_zero_for_perfect_coverage() -> None:
+    """Every (s, a) pair visited exactly once → coverage = 1 →
+    gap = 0."""
+    n_buckets = 4
+    n_actions = 2
+    pairs = jnp.arange(n_buckets * n_actions, dtype=jnp.int32)
+    state_hashes = pairs // n_actions
+    actions = pairs % n_actions
+    record: Mapping[str, jnp.ndarray] = {
+        'state_hash': state_hashes,
+        'action': actions,
+    }
+    gap = state_action_coverage_gap(
+        state_hash_cardinality=n_buckets, n_actions=n_actions,
+    )
+    assert gap(record) == 0.0
+
+
+def test_sa_coverage_gap_one_for_zero_coverage_against_huge_card() -> None:
+    """Few unique pairs vs huge cardinality → near-1 gap."""
+    record: Mapping[str, jnp.ndarray] = {
+        'state_hash': jnp.zeros((50,), dtype=jnp.int32),  # all bucket 0
+        'action': jnp.zeros((50,), dtype=jnp.int32),       # all action 0
+    }
+    gap = state_action_coverage_gap(
+        state_hash_cardinality=10000, n_actions=4,
+    )
+    val = gap(record)
+    # 1 unique pair / 40000 max ≈ 0.999975
+    assert val > 0.999
+
+
+def test_sa_coverage_gap_no_data_when_cardinality_none() -> None:
+    """env_spec.state_hash=None → cardinality=None → no-data
+    gap measurable returning 0 always."""
+    record: Mapping[str, jnp.ndarray] = {
+        'state_hash': jnp.zeros((50,), dtype=jnp.int32),
+        'action': jnp.zeros((50,), dtype=jnp.int32),
+    }
+    gap = state_action_coverage_gap(
+        state_hash_cardinality=None, n_actions=4,
+    )
+    assert gap(record) == 0.0
+    # And the reads-set is empty for the no-data variant.
+    assert gap.reads == ()

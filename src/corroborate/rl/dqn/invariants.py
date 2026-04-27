@@ -212,6 +212,85 @@ def action_coverage_gap(
     return Measurable(fn=fn, name=name, reads=('action',))
 
 
+# ============ Jensen overestimation gap (reads EvalRecord) ============
+
+def jensen_overestimation_gap() -> Measurable[Mapping[str, jnp.ndarray], float]:
+    """Empirical mean (predicted_q_at_start − mc_return) over an
+    eval-pass record. Hasselt 2010, 2016 §3 — vanilla DQN's
+    Jensen-inequality bias is positive (Q̂ overestimates Q*); DDQN
+    aims to reduce it. Gap = max(0, mean bias) — clipped because
+    only positive bias (over) is the Jensen signature; negative
+    means under-estimating and is a different phenomenon.
+
+    Reads from the `EvalTrajectoryRecord` produced by
+    `train_with_eval`'s eval pass. The `(n_bursts, K)`-shaped
+    `predicted_q_at_start` and `mc_return` arrays are flattened
+    over both axes to compute the global mean bias across all
+    eval episodes."""
+    name = 'jensen_overestimation_gap'
+
+    def fn(record: Mapping[str, jnp.ndarray]) -> float:
+        predicted = jnp.asarray(record['predicted_q_at_start'])
+        actual = jnp.asarray(record['mc_return'])
+        bias = float(jnp.mean(predicted - actual))
+        return float(max(0.0, bias))
+
+    return Measurable(
+        fn=fn, name=name,
+        reads=('predicted_q_at_start', 'mc_return'),
+    )
+
+
+# ============ Watkins (s, a)-coverage gap (env-parameterised) ============
+
+def state_action_coverage_gap(
+    *,
+    state_hash_cardinality: int | None,
+    n_actions: int,
+) -> Measurable[DQNTrajectoryRecord, float]:
+    """Watkins-style (s, a) coverage gap. Gap = `1 −
+    unique_pairs / max_unique_pairs`. Coverage 1 (every (s, a)
+    visited) ⇒ gap = 0; coverage 0 ⇒ gap = 1.
+
+    Theory: Watkins 1992 tabular Q-learning convergence requires
+    every (s, a) ∞-often. The empirical proxy: count distinct
+    `(state_hash, action)` pairs over the trajectory, normalise
+    by `state_hash_cardinality * n_actions`. Gap measures how far
+    the realised coverage falls short of the theorem's
+    assumption.
+
+    `state_hash_cardinality=None` (image envs without a declared
+    state_hash) produces a `gap=0` no-data Measurable — the
+    theorem isn't measurable in that regime, so we report no
+    information rather than a misleading number."""
+    if state_hash_cardinality is None or n_actions <= 0:
+        # No-data sentinel: env has no state_hash discretization.
+        no_data_name = 'state_action_coverage_gap[no_data]'
+
+        def no_data_fn(_record: DQNTrajectoryRecord) -> float:
+            del _record
+            return 0.0
+        return Measurable(fn=no_data_fn, name=no_data_name, reads=())
+
+    max_unique = state_hash_cardinality * n_actions
+    name = (
+        f'state_action_coverage_gap[card={state_hash_cardinality},'
+        f'A={n_actions}]'
+    )
+
+    def fn(record: DQNTrajectoryRecord) -> float:
+        sh = jnp.asarray(record['state_hash'])
+        ac = jnp.asarray(record['action'])
+        # Encode (s, a) pair as a combined integer in
+        # [0, cardinality * n_actions).
+        pairs = sh.flatten() * n_actions + ac.flatten()
+        n_unique = int(jnp.unique(pairs).shape[0])
+        coverage = n_unique / max_unique
+        return float(max(0.0, 1.0 - coverage))
+
+    return Measurable(fn=fn, name=name, reads=('state_hash', 'action'))
+
+
 # ============ Convenience: all v0-implementable gaps ============
 
 # Note this list contains *Measurable factories* — call each with
@@ -226,4 +305,6 @@ __all__ = [
     'lin_iid_gap',
     'hasselt_covariance_gap',
     'action_coverage_gap',
+    'jensen_overestimation_gap',
+    'state_action_coverage_gap',
 ]

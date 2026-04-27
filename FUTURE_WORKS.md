@@ -96,52 +96,28 @@ DQN claim set should report aren't computable from the v0
 record. Each needs a specific data extension before the gap
 measurable can be implemented honestly.
 
-**Currently shipped (v0):** `fqi_decay_gap`, `lin_iid_gap`,
-`hasselt_covariance_gap` (Pearson r over kept Q-values),
-`action_coverage_gap` (caveated Watkins floor).
+**Currently shipped (v0 + step 4):** `fqi_decay_gap`,
+`lin_iid_gap`, `hasselt_covariance_gap` (Pearson r over kept
+Q-values), `action_coverage_gap` (caveated Watkins floor),
+`jensen_overestimation_gap` (reads EvalRecord — step 4.4 lifted
+this from "needs separate eval pass" via the `train_with_eval`
+infrastructure), `state_action_coverage_gap(env_spec)` (reads
+per-step `state_hash` — step 4.4 lifted via `EnvSpec.state_hash`
++ rollout-phase logging).
 
 | Gap | Theorem | Data needed | Lift gate |
 |-----|---------|-------------|-----------|
 | Banach contraction rate | Bertsekas-Tsitsiklis 1996 §6.3 — `r_emp = ‖Q_{t+1} − Q_t‖ / ‖Q_t − Q_{t−1}‖` should ≤ γ | Q-evaluation on a fixed probe set per step (or online_params snapshots, much more memory) | Probe-set hook in `dqn_step` (could compose with `_value_probe`); needs probe-set design |
-| Jensen overestimation bias | Hasselt 2010, 2016 — `E[max_a Q̂(s_0)] − G_MC` (predicted vs Monte-Carlo return at episode start) | Separate periodic eval-pass: K greedy rollouts every N training steps, log `predicted_q_at_start` and `mc_return` | Eval-loop infrastructure (a sibling of `dqn_step` for the eval phase); central to PAPER_NOTES.md §3 acceptance test |
-| Watkins (s, a) coverage | Watkins 1992 — every (s, a) ∞-often | Per-env `state_hash` discretization logged per step | Step 4 env catalogue lands `EnvSpec.state_hash` |
 
-**Why each is deferred-on-infrastructure (NOT pre-reduced
-logging):** the `corroborate` discipline is to log raw values
-and reduce post-hoc. Each remaining gap needs *more raw data*,
-not pre-reduced derivatives:
+**Banach gap remaining:** the `corroborate` discipline is to log
+raw values and reduce post-hoc. Banach contraction rate needs
+*more raw data* — Q-evaluations on a fixed probe set per step,
+or per-step parameter snapshots. Either is a probe pass
+extension to the training loop, not a logging change.
 
-- *Banach* needs Q-evaluations on a probe set per step, or
-  per-step parameter snapshots. Either is a probe pass extension
-  to the training loop, not a logging change to the StepRecord.
-- *Jensen* needs a fundamentally separate eval pass — a greedy
-  rollout interleaved with training, producing an `EvalRecord`
-  parallel to `StepRecord`. This is sizeable infrastructure (an
-  eval-loop alongside `dqn_step`).
-- *Watkins* needs per-env `state_hash` declarations on the env
-  catalogue, which is genuinely Step 4 territory.
-
-**Lift when:**
-- *Jensen*: step 4. The eval-loop infrastructure (sibling of
-  `dqn_step` for greedy rollouts; `train_with_eval` loop pattern;
-  `EvalTrajectoryRecord` type) lives naturally with the env
-  catalogue — eval rollouts are env-shaped (fresh resets, episode-
-  length caps from `EnvSpec`). Central to PAPER_NOTES.md §3
-  acceptance test ("DDQN reduces overestimation by Δ vs vanilla"
-  *is* the §3 thesis); §3 isn't expressible without it. Step 4
-  scope expanded to include this — see new entries below.
-- *Banach*: when an experiment in §3-§5 needs the contraction-
-  rate gap as a measured outcome.
-- *Watkins (s, a)*: step 4 env catalogue.
-
-**Step 4 expanded scope (decision 2026-04-27).** Originally "env
-wrappers, projections, mechanism markers". Now also: eval-loop
-infrastructure for Jensen overestimation gap + per-env
-`state_hash` for Watkins (s, a) coverage. The env catalogue is
-the natural carrier for both — eval rollouts need fresh env
-resets and episode-length caps; state_hash is per-env
-discretization. Bundling them into Step 4 keeps the env-shape
-concerns together.
+**Lift when:** an experiment in §3-§5 needs the contraction-rate
+gap as a measured outcome. The probe-set hook can compose with
+the existing `_value_probe` in `train_phase`.
 
 ## Cosmetic / micro-cleanups
 

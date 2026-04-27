@@ -84,7 +84,7 @@ def test_vanilla_dqn_runs_on_cartpole_via_python_loop() -> None:
     # - per-batch Q-vectors: (T, batch, n_actions)
     scalar_keys = {
         'epsilon', 'reward', 'done', 'max_q',
-        'ep_return', 'action', 'loss', 'td_error',
+        'ep_return', 'action', 'state_hash', 'loss', 'td_error',
     }
     batch_keys = {'sample_indices'}
     q_value_keys = {'online_q_values', 'target_q_values'}
