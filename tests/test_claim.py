@@ -1,4 +1,4 @@
-"""Tests for `Claim`, `claim`, `TraceContext`, and `is_claim`.
+"""Tests for `Claim`, `claim`, `trace_context`, and `is_claim`.
 
 Property-and-type level: that the wrapper is signature-preserving,
 trace records what fired, outside-context calls are pass-through,
@@ -6,7 +6,7 @@ the TypeIs narrowing works, and the Protocol-based trace boundary
 holds heterogeneous Claim types together."""
 from __future__ import annotations
 
-from corroborate.claim import Claim, ClaimRecord, TraceContext, claim, is_claim
+from corroborate.claim import Claim, ClaimRecord, claim, is_claim, trace_context
 
 
 # ============ Signature preservation ============
@@ -37,10 +37,10 @@ def test_claim_preserves_name_via_fn_dunder() -> None:
     assert some_specific_function.name == 'some_specific_function'
 
 
-# ============ TraceContext ============
+# ============ trace_context ============
 
 def test_outside_context_no_tracing() -> None:
-    """Calling a Claim outside any TraceContext is a pass-through;
+    """Calling a Claim outside any trace_context is a pass-through;
     no records accumulate anywhere."""
     @claim
     def inc(x: int) -> int:
@@ -48,8 +48,6 @@ def test_outside_context_no_tracing() -> None:
 
     result = inc(5)
     assert result == 6
-    # No assertion on records — there's no context to check; the
-    # property is "no error and result returned correctly."
 
 
 def test_inside_context_records_calls() -> None:
@@ -61,17 +59,16 @@ def test_inside_context_records_calls() -> None:
     def g(x: int) -> int:
         return x
 
-    with TraceContext() as trace:
+    with trace_context() as records:
         _ = f(1)
         _ = g(2)
         _ = f(3)
 
-    assert len(trace.records) == 3
-    # Records are Claim instances themselves
-    assert isinstance(trace.records[0], Claim)
-    assert trace.records[0].name == 'f'
-    assert trace.records[1].name == 'g'
-    assert trace.records[2].name == 'f'
+    assert len(records) == 3
+    assert isinstance(records[0], Claim)
+    assert records[0].name == 'f'
+    assert records[1].name == 'g'
+    assert records[2].name == 'f'
 
 
 def test_records_are_claim_instances_after_isinstance_narrow() -> None:
@@ -81,33 +78,31 @@ def test_records_are_claim_instances_after_isinstance_narrow() -> None:
     def h(x: int) -> str:
         return str(x)
 
-    with TraceContext() as trace:
+    with trace_context() as records:
         _ = h(7)
 
-    rec = trace.records[0]
+    rec = records[0]
     assert isinstance(rec, Claim)
-    # rec is now Claim[Unknown, Unknown] under pyright; .fn is
-    # accessible as a Callable, .name as str.
     assert rec.name == 'h'
 
 
 def test_nested_contexts_isolate_records() -> None:
-    """An inner TraceContext receives its own calls; the outer
+    """An inner trace_context receives its own calls; the outer
     context only sees what it itself collected before entering
     the inner block."""
     @claim
     def f() -> None:
         return None
 
-    with TraceContext() as outer:
+    with trace_context() as outer:
         f()
-        with TraceContext() as inner:
+        with trace_context() as inner:
             f()
             f()
         f()
 
-    assert len(outer.records) == 2  # 1 before + 1 after inner
-    assert len(inner.records) == 2
+    assert len(outer) == 2  # 1 before + 1 after inner
+    assert len(inner) == 2
 
 
 def test_context_restores_on_exception() -> None:
@@ -118,15 +113,13 @@ def test_context_restores_on_exception() -> None:
         return None
 
     try:
-        with TraceContext():
+        with trace_context():
             f()
             raise RuntimeError('boom')
     except RuntimeError:
         pass
 
-    # After the exception, no context — call should not raise or
-    # leak into a stale records list. The fact that this completes
-    # without error is the assertion.
+    # No error here means the contextvar reset correctly.
     f()
 
 

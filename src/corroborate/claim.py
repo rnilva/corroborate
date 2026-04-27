@@ -29,9 +29,9 @@ with zero overhead — jit-safe."""
 from __future__ import annotations
 
 import contextvars
-from collections.abc import Callable
+from collections.abc import Callable, Generator
+from contextlib import contextmanager
 from dataclasses import dataclass
-from types import TracebackType
 from typing import Protocol, TypeIs
 
 
@@ -112,27 +112,26 @@ def is_claim(obj: object) -> TypeIs[ClaimRecord]:
     return isinstance(obj, Claim)
 
 
-class TraceContext:
+@contextmanager
+def trace_context() -> Generator[list[ClaimRecord]]:
     """Context manager collecting `Claim` invocations for a probe
-    run. Outside any TraceContext, calls pass through.
+    run. Yields a `list[ClaimRecord]` that's appended to as
+    `@claim`'d functions run inside the with-block. After exit,
+    the contextvar resets so subsequent calls don't append.
 
     Not usable inside `jax.jit`-compiled code: the contextvar is
-    read at concrete-call time, which jit elides."""
+    read at concrete-call time, which jit elides.
 
-    def __init__(self) -> None:
-        self.records: list[ClaimRecord] = []
-        self._token: contextvars.Token[list[ClaimRecord] | None] | None = None
+    Usage:
 
-    def __enter__(self) -> TraceContext:
-        self._token = _TRACE.set(self.records)
-        return self
-
-    def __exit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_value: BaseException | None,
-        traceback: TracebackType | None,
-    ) -> None:
-        if self._token is not None:
-            _TRACE.reset(self._token)
-            self._token = None
+        with trace_context() as records:
+            f()
+            g()
+        # records contains [Claim<f>, Claim<g>] in completion order
+    """
+    records: list[ClaimRecord] = []
+    token = _TRACE.set(records)
+    try:
+        yield records
+    finally:
+        _TRACE.reset(token)
