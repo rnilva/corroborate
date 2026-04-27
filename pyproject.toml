@@ -7,6 +7,10 @@ requires-python = ">=3.13"
 license = { text = "MIT" }
 dependencies = [
     "polars>=1.0",
+    "jax>=0.4.30",
+    "jaxlib>=0.4.30",
+    "optax>=0.2.0",
+    "gymnax>=0.0.8",
 ]
 
 [build-system]
@@ -28,6 +32,7 @@ addopts = "-q --strict-markers"
 
 [tool.pyright]
 include = ["src", "tests"]
+stubPath = "stubs"
 pythonVersion = "3.13"
 typeCheckingMode = "strict"
 reportMissingTypeStubs = false
@@ -37,3 +42,26 @@ reportUnusedCallResult = "none"
 # Custom strictness for our typing-discipline rule (CLAUDE.md):
 reportAny = "error"
 reportExplicitAny = "error"
+
+# Local stubs at `stubs/` narrow gymnax + optax to the surface the
+# RL subtree actually consumes (see stubs/*/__init__.pyi). With those
+# in place the rl/ subtree only needs JAX-stub looseness — JAX itself
+# still leaks Unknown through `jnp.zeros`, `jax.tree.map` lambdas, etc.
+# Relax the Unknown-family rules + reportAny here so claims authoring
+# isn't a per-line ignore festival; discipline is preserved everywhere
+# else in the codebase.
+[[tool.pyright.executionEnvironments]]
+root = "src/corroborate/rl"
+reportAny = "none"
+reportUnknownMemberType = "none"
+reportUnknownArgumentType = "none"
+reportUnknownVariableType = "none"
+reportUnknownParameterType = "none"
+
+[[tool.pyright.executionEnvironments]]
+root = "tests/rl"
+reportAny = "none"
+reportUnknownMemberType = "none"
+reportUnknownArgumentType = "none"
+reportUnknownVariableType = "none"
+reportUnknownParameterType = "none"

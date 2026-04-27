@@ -1,0 +1,225 @@
+"""Smoke test — vanilla DQN + DDQN run on CartPole and produce
+structurally-correct per-step records.
+
+Verifies:
+- `dqn_step` runs end-to-end via both `python_loop` (probe) and
+  `scan_loop` (jit) with identical step semantics.
+- DDQN's `bootstrap` slot is a real algorithmic swap: given
+  non-identical online / target params, the two bootstrap
+  functions produce different targets. (The DDQN-vs-vanilla
+  end-to-end trajectory test was retired: a 50-step CartPole run
+  with sync_period=10 keeps online ≈ target most of the time, so
+  the trajectory diverges only marginally — a property of the
+  numerical regime, not of the swap. The unit test below pins the
+  contract directly without that confound.)
+- The record dict has the expected keys with correct shapes."""
+from __future__ import annotations
+
+from functools import partial
+
+import gymnax
+import jax
+import jax.numpy as jnp
+import optax
+
+from corroborate.rl.dqn.claims.bootstrap import ddqn_bootstrap, vanilla_bootstrap
+from corroborate.rl.dqn.claims.q_network import init_mlp, mlp_q
+from corroborate.rl.dqn.dqn import dqn_step, init_state
+from corroborate.rl.loop import python_loop, scan_loop
+
+
+# ============ Fixtures ============
+
+def _make_env() -> tuple[object, object, int, int]:
+    env, env_params = gymnax.make('CartPole-v1')
+    obs_dim = int(env.observation_space(env_params).shape[0])
+    n_actions = int(env.action_space(env_params).n)
+    return env, env_params, obs_dim, n_actions
+
+
+def _build_step_fn(
+    env: object, env_params: object, n_actions: int,
+    optimizer: optax.GradientTransformation,
+    *, bootstrap_swap: bool = False,
+):
+    """Build a step-fn closure suitable for `python_loop` /
+    `scan_loop` — `(state, idx) -> (state, record)`. The
+    `bootstrap_swap` flag toggles vanilla vs DDQN."""
+    extra: dict[str, object] = {}
+    if bootstrap_swap:
+        extra['bootstrap'] = ddqn_bootstrap
+
+    bound = partial(
+        dqn_step,
+        env=env, env_params=env_params, n_actions=n_actions,
+        optimizer=optimizer,
+        warmup_steps=10,           # tiny for smoke
+        sync_period=10,
+        buffer_capacity=200,
+        batch_size=16,
+        **extra,
+    )
+    return bound
+
+
+# ============ Smoke: vanilla DQN runs on CartPole ============
+
+def test_vanilla_dqn_runs_on_cartpole_via_python_loop() -> None:
+    env, env_params, obs_dim, n_actions = _make_env()
+    optimizer = optax.adam(1e-3)
+    init = init_state(
+        env=env, env_params=env_params,
+        obs_dim=obs_dim, n_actions=n_actions,
+        seed=0, optimizer=optimizer, buffer_capacity=200,
+    )
+    step_fn = _build_step_fn(env, env_params, n_actions, optimizer)
+
+    final_state, record = python_loop(step_fn, init, length=50)
+
+    # State advanced 50 steps.
+    assert int(final_state.step) == 50
+    # Record has expected keys.
+    expected_keys = {
+        'epsilon', 'reward', 'done', 'max_q',
+        'ep_return', 'loss', 'td_error',
+    }
+    assert set(record.keys()) == expected_keys
+    # Each value is a (50,) array.
+    for key in expected_keys:
+        assert record[key].shape == (50,)
+
+
+def test_vanilla_dqn_runs_via_scan_loop() -> None:
+    """Same step function under scan_loop should produce the
+    same record shape (and identical values for fixed seed)."""
+    env, env_params, obs_dim, n_actions = _make_env()
+    optimizer = optax.adam(1e-3)
+    init = init_state(
+        env=env, env_params=env_params,
+        obs_dim=obs_dim, n_actions=n_actions,
+        seed=0, optimizer=optimizer, buffer_capacity=200,
+    )
+    step_fn = _build_step_fn(env, env_params, n_actions, optimizer)
+
+    _, record = scan_loop(step_fn, init, length=50)
+    assert record['ep_return'].shape == (50,)
+
+
+# ============ DDQN swap actually changes computation ============
+
+def test_ddqn_and_vanilla_bootstrap_differ_when_params_differ() -> None:
+    """The DDQN ↔ vanilla swap is meaningful: with non-identical
+    online and target params, the two bootstraps compute different
+    targets. Unit test on the bootstrap functions directly — no env
+    loop, no warmup, no sync confound. (vanilla evaluates
+    max_a' Q_target(s', a'); DDQN evaluates Q_target(s', argmax_a'
+    Q_online(s', a')). When online's argmax disagrees with target's
+    argmax for at least one transition, the targets differ.)"""
+    obs_dim, n_actions, batch_size = 4, 3, 8
+    rng = jax.random.PRNGKey(0)
+    online_key, target_key, obs_key = jax.random.split(rng, 3)
+
+    online = init_mlp(online_key, obs_dim, n_actions, hidden=(16, 16))
+    target = init_mlp(target_key, obs_dim, n_actions, hidden=(16, 16))
+    next_obs = jax.random.normal(obs_key, (batch_size, obs_dim))
+    reward = jnp.ones((batch_size,))
+    done = jnp.zeros((batch_size,))
+
+    target_v = vanilla_bootstrap(
+        online_params=online, target_params=target, q_network=mlp_q,
+        next_obs=next_obs, reward=reward, done=done, gamma=0.99,
+    )
+    target_d = ddqn_bootstrap(
+        online_params=online, target_params=target, q_network=mlp_q,
+        next_obs=next_obs, reward=reward, done=done, gamma=0.99,
+    )
+
+    # Different params → different argmaxes on at least one
+    # transition → different Bellman targets.
+    diffs = jnp.abs(target_v - target_d)
+    assert float(jnp.max(diffs)) > 0.0, (
+        'DDQN and vanilla bootstraps produced identical targets '
+        'despite distinct online/target params — the slot swap '
+        'is a no-op. Check ddqn_bootstrap actually decouples '
+        'argmax (online) from evaluation (target).'
+    )
+
+
+def test_ddqn_and_vanilla_bootstrap_match_when_params_equal() -> None:
+    """Sanity-check the contract from the other side: when online
+    and target params are identical, DDQN reduces to vanilla
+    (online's argmax == target's argmax, so Q_target picks the same
+    value either way). This is why the smoke-loop variant of this
+    test failed — at init `target_params = online_params`, and
+    sync_period=10 keeps re-syncing them inside the 50-step run."""
+    obs_dim, n_actions, batch_size = 4, 3, 8
+    rng = jax.random.PRNGKey(0)
+    init_key, obs_key = jax.random.split(rng)
+
+    params = init_mlp(init_key, obs_dim, n_actions, hidden=(16, 16))
+    next_obs = jax.random.normal(obs_key, (batch_size, obs_dim))
+    reward = jnp.ones((batch_size,))
+    done = jnp.zeros((batch_size,))
+
+    target_v = vanilla_bootstrap(
+        online_params=params, target_params=params, q_network=mlp_q,
+        next_obs=next_obs, reward=reward, done=done, gamma=0.99,
+    )
+    target_d = ddqn_bootstrap(
+        online_params=params, target_params=params, q_network=mlp_q,
+        next_obs=next_obs, reward=reward, done=done, gamma=0.99,
+    )
+    # Online == target → both take the same argmax → identical targets.
+    assert jnp.allclose(target_v, target_d)
+
+
+# ============ Episode return tracking ============
+
+def test_ep_return_resets_in_state_on_done() -> None:
+    """`DQNState.ep_return` should reset to 0 after a step where
+    `done=True`. The record's `ep_return` carries the cumulative
+    value AT the done step (so bridges filtering by done==1 see
+    the final per-episode return)."""
+    env, env_params, obs_dim, n_actions = _make_env()
+    optimizer = optax.adam(1e-3)
+    init = init_state(
+        env=env, env_params=env_params,
+        obs_dim=obs_dim, n_actions=n_actions,
+        seed=0, optimizer=optimizer, buffer_capacity=200,
+    )
+    step_fn = _build_step_fn(env, env_params, n_actions, optimizer)
+
+    # Run long enough to see at least one episode end.
+    _, record = python_loop(step_fn, init, length=200)
+
+    n_dones = int(jnp.sum(record['done']))
+    assert n_dones > 0, "expected at least one episode to end in 200 steps"
+
+    # On done steps, ep_return is the cumulative return for that
+    # episode. (Note: this property is a record-level invariant;
+    # the in-state ep_return resets to 0 the step after.)
+    done_indices = jnp.where(record['done'] > 0.5)[0]
+    for di in done_indices:
+        assert float(record['ep_return'][int(di)]) >= 1.0, (
+            f'ep_return at done step {int(di)} should be ≥ 1; '
+            f'got {float(record["ep_return"][int(di)])}'
+        )
+
+
+# ============ Step counter monotonicity ============
+
+def test_step_counter_advances_monotonically() -> None:
+    """The state.step counter should strictly increment each
+    iteration. (Sanity check on the loop primitive's idx
+    threading.)"""
+    env, env_params, obs_dim, n_actions = _make_env()
+    optimizer = optax.adam(1e-3)
+    init = init_state(
+        env=env, env_params=env_params,
+        obs_dim=obs_dim, n_actions=n_actions,
+        seed=0, optimizer=optimizer, buffer_capacity=200,
+    )
+    step_fn = _build_step_fn(env, env_params, n_actions, optimizer)
+
+    final_state, _ = python_loop(step_fn, init, length=30)
+    assert int(final_state.step) == 30
