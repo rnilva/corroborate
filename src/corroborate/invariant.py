@@ -22,17 +22,18 @@ as `Bridge[R]`. The author writes the body as an ordinary
 and `of_claim` tags into the returned `BridgeResult`'s stats
 automatically.
 
-For v0 the framework provides only the decorator. Aggregation
-that maps `kind=='tautological'` REJECT to
-`INVARIANT_VIOLATION` lands in the verdict-aggregation module
-(later step). Until then, invariant results carry the tag but
-consumers are free to ignore it."""
+`bounded(of=Measurable, threshold, ...)` is the canonical
+factory for theorem-condition invariants: lifts a `Measurable[R,
+float]` into an `INVARIANT_VIOLATION`-on-overflow bridge with
+the theorem reference recorded in `stats['theorem']`."""
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 
 from corroborate.bridge import Bridge, BridgeResult
 from corroborate.claim import ClaimRecord
+from corroborate.measurable import Measurable
+from corroborate.verdict import Verdict
 
 
 def invariant[R: Mapping[str, object]](
@@ -79,3 +80,50 @@ def invariant[R: Mapping[str, object]](
 
         return Bridge(fn=wrapper, name=resolved_name, targets=targets)
     return decorator
+
+
+# ============ Theorem-condition invariant factory ============
+
+def bounded[R: Mapping[str, object]](
+    of: Measurable[R, float],
+    threshold: float,
+    *,
+    theorem: str,
+    of_claim: ClaimRecord,
+    name: str | None = None,
+) -> Bridge[R]:
+    """Tautological invariant: `|of(record)| < threshold`.
+
+    Composes a `Measurable[R, float]` value into a `Bridge[R]`
+    whose verdict is `HELD` when the bound holds and
+    `INVARIANT_VIOLATION` when it doesn't. `theorem` records the
+    reference (e.g. `'Banach contraction on T*'`) in
+    `stats['theorem']` so the verdict layer can cite the
+    out-of-scope reason — INVARIANT_VIOLATION ⇒ this run sat
+    outside the theorem's domain of applicability, NOT that the
+    paper-claim was empirically refuted.
+
+    `targets` derives from `of.reads`. The reads-set propagation
+    means a reduction (`max_abs(from_key('max_q'))`) attached as
+    an invariant to `mlp_q` correctly fingerprints the bridge's
+    record-key dependencies for redundancy + corpus-graph
+    derivation."""
+    inv_name = name if name is not None else f'bounded[{of.name}<{threshold:g}]'
+
+    @invariant(of=of_claim, targets=of.reads, name=inv_name)
+    def fn(record: R) -> BridgeResult:
+        val = of(record)
+        ok = abs(val) < threshold
+        return BridgeResult(
+            verdict=Verdict.HELD if ok else Verdict.INVARIANT_VIOLATION,
+            reason=f'|{of.name}| = {val:.4g} vs threshold {threshold:g}',
+            stats={
+                'theorem': theorem,
+                'value': val,
+                'threshold': float(threshold),
+                'measurable': of.name,
+            },
+            name=inv_name,
+            targets=of.reads,
+        )
+    return fn

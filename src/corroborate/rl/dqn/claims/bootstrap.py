@@ -7,7 +7,17 @@ the target action is selected by the online or target network:
 - DDQN:    r + γ · Q_target(s', argmax_a' Q_online(s', a'))  — decoupled
 
 Same call signature so the swap is a clean drop-in via
-`partial(theory.dqn_step, bootstrap=ddqn_bootstrap)`."""
+`partial(theory.dqn_step, bootstrap=ddqn_bootstrap)`.
+
+**Theorem reference.** Bellman optimality T* is a γ-contraction
+on Q* (Bertsekas-Tsitsiklis 1996 §6.3); vanilla bootstrap
+implements T* directly. Hasselt 2010, 2016: vanilla DQN exhibits
+a Jensen-inequality bias E[max_a Q̂(s,a)] ≥ max_a E[Q̂(s,a)],
+because max is convex in Q. DDQN decouples action selection
+(online net) from value evaluation (target net) so the two
+estimators are roughly independent → unbiased target. The
+`max_q_overestimation_bounded` invariant detects unbounded
+Jensen-bias growth empirically."""
 from __future__ import annotations
 
 import jax

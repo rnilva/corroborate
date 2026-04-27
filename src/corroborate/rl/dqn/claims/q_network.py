@@ -3,7 +3,16 @@
 The Q-network is a function `(params, obs) -> Q-values`. v0
 ships a two-hidden-layer ReLU MLP; alternative architectures
 (dueling, layer-norm, residual, etc.) are future @claim files
-in this module."""
+in this module.
+
+**Theorem reference.** Universal approximation (Hornik 1989,
+Cybenko 1989): a sufficiently wide MLP can approximate any
+continuous function on a compact set. The function class
+*contains* Q*; gradient descent under bootstrap is *not*
+guaranteed to find it (deadly triad — off-policy + bootstrap +
+FA can diverge per Tsitsiklis & Van Roy 1997). The
+`q_bounded` invariant (`invariants.py`) is the empirical
+divergence detector."""
 from __future__ import annotations
 
 import jax

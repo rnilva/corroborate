@@ -4,7 +4,19 @@ The buffer is six parallel arrays (obs, action, reward, next_obs,
 done, size) rather than a struct of per-transition records —
 keeps the pytree threaded through `jax.lax.scan` flat. v0 ships
 uniform sampling; PrioritisedReplay is a future @claim swap on
-the sampling-side, with side-car priority arrays."""
+the sampling-side, with side-car priority arrays.
+
+**Theorem reference.** Lin 1992: uniform i.i.d. resampling from
+a buffer breaks the strong correlation between consecutive
+SGD updates and reduces gradient-estimator variance. Convergence
+of tabular Q-learning + replay holds iff every transition is
+eventually replayed (Singh-Sutton 1996). Uniform sampling is
+*not* Bellman-consistent — old transitions reflect a stale
+behaviour distribution, biasing the bootstrap target. This is
+the bias prioritised-replay (Schaul 2016) addresses; v0's
+uniform replay accepts the bias for simplicity. Buffer-coverage
++ revisit-rate invariants are deferred (need richer logging
+than v0's StepRecord — Step 4 forcing function)."""
 from __future__ import annotations
 
 import jax

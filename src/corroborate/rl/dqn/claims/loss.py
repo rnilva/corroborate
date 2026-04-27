@@ -2,7 +2,16 @@
 
 `squared_error` is v0's default. Huber / pinball / expectile
 losses are alternative @claims for this slot (future work,
-matching v9's per-sample-loss alternatives)."""
+matching v9's per-sample-loss alternatives).
+
+**Theorem reference.** Semi-gradient TD (Sutton-Barto §11.2):
+the bootstrap target y is treated as constant in the gradient,
+so this is *not* a true gradient method. Convergence holds in
+tabular Q-learning (Watkins 1992) but linear FA + off-policy
+data can diverge (Baird 1995 counterexample). DQN's mitigation
+is target-net + experience replay; deadly-triad divergence
+remains possible. `loss_bounded` invariant detects the
+semi-gradient instability empirically."""
 from __future__ import annotations
 
 import jax

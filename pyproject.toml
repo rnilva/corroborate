@@ -65,3 +65,17 @@ reportUnknownMemberType = "none"
 reportUnknownArgumentType = "none"
 reportUnknownVariableType = "none"
 reportUnknownParameterType = "none"
+
+# Framework tests that exercise reductions / measurables on jax
+# arrays touch jax.numpy directly (jnp.arange, jnp.asarray); the
+# JAX stubs leak Unknown through these, same way the rl/ subtree
+# does. Relax the Unknown-family rules + reportAny here on the
+# same boundary; non-jax framework tests stay strict because they
+# never trip these rules.
+[[tool.pyright.executionEnvironments]]
+root = "tests"
+reportAny = "none"
+reportUnknownMemberType = "none"
+reportUnknownArgumentType = "none"
+reportUnknownVariableType = "none"
+reportUnknownParameterType = "none"

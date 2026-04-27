@@ -3,7 +3,22 @@
 `epsilon_greedy` is the canonical exploratory rollout. The
 schedule (`linear_epsilon`) is a separate claim because it
 swaps independently — exponential / cosine / piecewise
-schedules are future alternatives."""
+schedules are future alternatives.
+
+**Theorem references.**
+
+`epsilon_greedy` leans on Watkins 1992 Q-learning convergence:
+optimal-policy convergence requires every (s, a) visited
+infinitely often. ε-greedy with ε > 0 satisfies this on any
+finite MDP under sufficient training.
+
+`linear_epsilon` is a *soft* GLIE schedule (Singh 2000): strict
+GLIE requires ε → 0 ∧ Σε = ∞. Linear schedule violates strict
+GLIE by construction (floors at `eps_final > 0`), so it
+sacrifices asymptotic optimal-policy guarantees for finite-time
+exploration. ε ∈ [0, 1] is a Kolmogorov-axiom static check
+(asserted in the body); the framework reserves invariant-bridge
+machinery for *theorem-level* scope conditions."""
 from __future__ import annotations
 
 import jax
@@ -38,5 +53,10 @@ def linear_epsilon(
 ) -> jax.Array:
     """Linear ε schedule: anneal from `eps_init` at step 0 to
     `eps_final` at `anneal_steps`, constant afterwards."""
+    assert 0.0 <= eps_final <= eps_init <= 1.0, (
+        f'Kolmogorov axiom: ε must be a probability; got '
+        f'eps_init={eps_init}, eps_final={eps_final}'
+    )
+    assert anneal_steps > 0, f'anneal_steps must be positive; got {anneal_steps}'
     progress = jnp.minimum(step / anneal_steps, 1.0)
     return eps_init + (eps_final - eps_init) * progress

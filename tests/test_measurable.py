@@ -163,3 +163,34 @@ def test_measurable_inequality_on_different_fn() -> None:
     m1 = Measurable(fn=f1, name='same')
     m2 = Measurable(fn=f2, name='same')
     assert m1 != m2
+
+
+# ============ reads field ============
+
+def test_measurable_reads_default_empty() -> None:
+    @measurable
+    def m(record: Mapping[str, object]) -> int:
+        del record
+        return 0
+
+    assert m.reads == ()
+
+
+def test_measurable_reads_explicit() -> None:
+    @measurable(name='leaf', reads=('q_max',))
+    def m(record: Mapping[str, object]) -> int:
+        del record
+        return 0
+
+    assert m.reads == ('q_max',)
+
+
+def test_measurable_reads_via_direct_construction() -> None:
+    def fn(record: Mapping[str, object]) -> int:
+        del record
+        return 0
+
+    m: Measurable[Mapping[str, object], int] = Measurable(
+        fn=fn, name='foo', reads=('a', 'b'),
+    )
+    assert m.reads == ('a', 'b')
