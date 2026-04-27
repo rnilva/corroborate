@@ -39,18 +39,59 @@ from corroborate.rl.dqn.types import (
 class RolloutOut(NamedTuple):
     """Diagnostic record from `rollout_phase`. The next-state's
     fields go on `DQNState`; this carries per-step scalars the
-    record/bridges read."""
+    record/bridges read.
+
+    `action` exposes the actually-taken integer action so the
+    Watkins-coverage invariant can verify the policy explored
+    the action space."""
     epsilon: jax.Array
     reward: jax.Array
     done: jax.Array
     max_q: jax.Array      # max(Q(s, ·)) at action selection — overestimation diagnostic
     ep_return: jax.Array  # cumulative within current episode (reset on done in state)
+    action: jax.Array     # int32 — the action ε-greedy returned this step
 
 
 class TrainOut(NamedTuple):
-    """Diagnostic record from `train_phase`."""
-    loss: jax.Array       # mean of per-sample losses
-    td_error: jax.Array   # mean |predicted - target|, abs
+    """Diagnostic record from `train_phase`.
+
+    `online_argmax` and `target_argmax` are computed by the
+    independence probe (see `_argmax_probe`) and let the
+    Hasselt-independence invariant (`online_target_disagreement`)
+    measure how often the two networks pick different actions.
+    They are the same shape `(batch,)` so disagreement-rate is a
+    plain element-wise mean.
+
+    `sample_indices` carries the indices `buffer_sample` drew this
+    step; the Lin-coverage invariant (`buffer_coverage`) reads
+    these to verify the replay isn't sampling the same handful
+    of transitions throughout training."""
+    loss: jax.Array            # mean of per-sample losses
+    td_error: jax.Array        # mean |predicted - target|, abs
+    online_argmax: jax.Array   # (batch,) int32 — argmax_a Q_online(next_obs)
+    target_argmax: jax.Array   # (batch,) int32 — argmax_a Q_target(next_obs)
+    sample_indices: jax.Array  # (batch,) int32 — indices buffer_sample drew
+
+
+def _argmax_probe(
+    state: DQNState,
+    q_network: QNetwork,
+    next_obs_b: jax.Array,
+) -> tuple[jax.Array, jax.Array]:
+    """Compute `argmax_a Q_online` and `argmax_a Q_target` on the
+    same batch — the data the Hasselt-independence invariant
+    needs to test the DDQN-decoupling assumption.
+
+    Independent of which `bootstrap` slot is used. Cheap (two
+    forward passes on the already-sampled batch); always-on so
+    the invariant has data even when vanilla bootstrap is
+    selected (the disagreement-rate is meaningful for both)."""
+    online_q = q_network(state.online_params, next_obs_b)
+    target_q = q_network(state.target_params, next_obs_b)
+    return (
+        jnp.argmax(online_q, axis=-1).astype(jnp.int32),
+        jnp.argmax(target_q, axis=-1).astype(jnp.int32),
+    )
 
 
 # ============ Rollout ============
@@ -113,6 +154,7 @@ def rollout_phase(
         done=done.astype(jnp.float32),
         max_q=jnp.max(q_values),
         ep_return=cumulative,
+        action=action.astype(jnp.int32),
     )
     return new_state, out
 
@@ -139,7 +181,7 @@ def train_phase(
     populated portion."""
     sample_key, next_rng_key = jax.random.split(state.rng_key)
 
-    obs_b, action_b, reward_b, next_obs_b, done_b = buffer_sample(
+    obs_b, action_b, reward_b, next_obs_b, done_b, sample_indices = buffer_sample(
         state=state, rng_key=sample_key,
         batch_size=batch_size, capacity=capacity,
     )
@@ -152,6 +194,12 @@ def train_phase(
         next_obs=next_obs_b, reward=reward_b, done=done_b,
         gamma=gamma,
     )
+
+    # Always-on probe for the Hasselt-independence invariant. Two
+    # forward passes; same batch as bootstrap so the disagreement
+    # rate is faithful to the actual training data the swap
+    # operates on. Independent of which bootstrap is selected.
+    online_argmax, target_argmax = _argmax_probe(state, q_network, next_obs_b)
 
     def compute_loss(params: Params) -> tuple[jax.Array, jax.Array]:
         # Predicted Q for the action actually taken in each transition.
@@ -187,6 +235,9 @@ def train_phase(
     out = TrainOut(
         loss=jnp.where(skip, jnp.float32(0.0), loss),
         td_error=jnp.where(skip, jnp.float32(0.0), td_error),
+        online_argmax=online_argmax,
+        target_argmax=target_argmax,
+        sample_indices=sample_indices,
     )
     return new_state, out
 

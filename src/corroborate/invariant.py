@@ -127,3 +127,45 @@ def bounded[R: Mapping[str, object]](
             targets=of.reads,
         )
     return fn
+
+
+def at_least[R: Mapping[str, object]](
+    of: Measurable[R, float] | Measurable[R, int],
+    threshold: float,
+    *,
+    theorem: str,
+    of_claim: ClaimRecord,
+    name: str | None = None,
+) -> Bridge[R]:
+    """Tautological invariant: `of(record) >= threshold`.
+
+    The dual of `bounded`. Used for *coverage* invariants where
+    a theorem requires a lower bound — Watkins's all-(s,a)-visited
+    condition tested via action-coverage counts; Hasselt's online
+    ⊥ target tested via disagreement-rate floor; Lin's all-
+    transitions-replayed tested via unique-sample-index counts.
+
+    Returns `INVARIANT_VIOLATION` when the value falls below the
+    bound; `HELD` otherwise. Note no `abs()` — for coverage
+    tests, signed values matter (a negative measurement on a
+    coverage measurable is itself an invariant violation, but we
+    don't flip its sign under the threshold)."""
+    inv_name = name if name is not None else f'at_least[{of.name}>={threshold:g}]'
+
+    @invariant(of=of_claim, targets=of.reads, name=inv_name)
+    def fn(record: R) -> BridgeResult:
+        val = of(record)
+        ok = val >= threshold
+        return BridgeResult(
+            verdict=Verdict.HELD if ok else Verdict.INVARIANT_VIOLATION,
+            reason=f'{of.name} = {val:.4g} vs threshold {threshold:g}',
+            stats={
+                'theorem': theorem,
+                'value': float(val),
+                'threshold': float(threshold),
+                'measurable': of.name,
+            },
+            name=inv_name,
+            targets=of.reads,
+        )
+    return fn

@@ -43,16 +43,31 @@ reportUnusedCallResult = "none"
 reportAny = "error"
 reportExplicitAny = "error"
 
-# Local stubs at `stubs/` narrow gymnax + optax to the surface the
-# RL subtree actually consumes (see stubs/*/__init__.pyi). With those
-# in place the rl/ subtree only needs JAX-stub looseness — JAX itself
-# still leaks Unknown through `jnp.zeros`, `jax.tree.map` lambdas, etc.
-# Relax the Unknown-family rules + reportAny here so claims authoring
-# isn't a per-line ignore festival; discipline is preserved everywhere
-# else in the codebase.
+# Pyright matches `executionEnvironments` in declaration order
+# (first-match), not by longest-prefix. List the most specific
+# roots FIRST so the broader `src/corroborate` block doesn't
+# shadow them.
+#
+# RL subtree: full relaxation. JAX leaks Any through jnp.* return
+# types (under real stubs); the rl/ subtree is the boundary where
+# stub looseness is unavoidable.
 [[tool.pyright.executionEnvironments]]
 root = "src/corroborate/rl"
 reportAny = "none"
+reportUnknownMemberType = "none"
+reportUnknownArgumentType = "none"
+reportUnknownVariableType = "none"
+reportUnknownParameterType = "none"
+
+# Framework root: Unknown-family relaxed. `reductions.py` is the
+# framework's JAX boundary at the post-hoc analytical layer
+# (jnp.unique, jnp.mean, etc.). Non-JAX framework files (claim.py,
+# bridge.py, schema.py, ...) never emit Unknown values, so they
+# continue to enforce the strict Unknown-free contract. `reportAny`
+# / `reportExplicitAny` stay strict at this scope — Any is
+# forbidden by the typing discipline at the framework level.
+[[tool.pyright.executionEnvironments]]
+root = "src/corroborate"
 reportUnknownMemberType = "none"
 reportUnknownArgumentType = "none"
 reportUnknownVariableType = "none"

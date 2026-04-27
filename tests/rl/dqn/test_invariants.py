@@ -1,12 +1,14 @@
 """Smoke test for DQN theorem-condition invariants.
 
 Verifies:
-- All 4 invariants in `DQN_INVARIANTS` return HELD on a real
+- All 6 invariants in `DQN_INVARIANTS` return HELD on a real
   CartPole trajectory — confirms the run sits inside every
   theorem's domain.
 - A tampered record (Q exploded to 1e6) triggers
   INVARIANT_VIOLATION on `q_bounded`, demonstrating the
   divergence-detector contract.
+- `buffer_coverage(capacity, fraction)` factory returns HELD on
+  a normal run that explores the buffer.
 - The reads-set fingerprint flows from `from_key` through the
   reductions to the bridge's `targets`."""
 from __future__ import annotations
@@ -19,8 +21,11 @@ import optax
 from corroborate.rl.dqn.dqn import dqn_step, init_state
 from corroborate.rl.dqn.invariants import (
     DQN_INVARIANTS,
+    action_coverage,
+    buffer_coverage,
     loss_bounded,
     max_q_overestimation_bounded,
+    online_target_disagreement,
     q_bounded,
     td_error_bounded,
 )
@@ -92,6 +97,47 @@ def test_loss_bounded_targets_loss() -> None:
 
 def test_td_error_bounded_targets_td_error() -> None:
     assert td_error_bounded.targets == ('td_error',)
+
+
+def test_action_coverage_targets_action() -> None:
+    assert action_coverage.targets == ('action',)
+
+
+def test_online_target_disagreement_targets_argmax_keys() -> None:
+    # Multi-input reduction propagates BOTH leaf keys.
+    assert online_target_disagreement.targets == ('online_argmax', 'target_argmax')
+
+
+# ============ buffer_coverage factory ============
+
+def test_buffer_coverage_held_on_real_trajectory() -> None:
+    record = _run_short_trajectory()
+    inv = buffer_coverage(capacity=200, fraction=0.1)
+    result = inv(record)
+    assert result.verdict is Verdict.HELD
+
+
+def test_buffer_coverage_violates_when_indices_too_local() -> None:
+    """If `sample_indices` only ever picks 5 distinct positions,
+    a fraction-of-buffer threshold of 50% violates."""
+    record: Mapping[str, jnp.ndarray] = {
+        # Buffer of 200, but sampler only ever drew indices [0..4]
+        'sample_indices': jnp.zeros((50, 16), dtype=jnp.int32),  # all zeros
+        'epsilon': jnp.asarray([0.5] * 50),
+        'reward': jnp.asarray([1.0] * 50),
+        'done': jnp.asarray([0.0] * 50),
+        'max_q': jnp.asarray([1.0] * 50),
+        'ep_return': jnp.asarray([1.0] * 50),
+        'action': jnp.asarray([0] * 50),
+        'loss': jnp.asarray([0.0] * 50),
+        'td_error': jnp.asarray([0.0] * 50),
+        'online_argmax': jnp.zeros((50, 16), dtype=jnp.int32),
+        'target_argmax': jnp.zeros((50, 16), dtype=jnp.int32),
+    }
+    inv = buffer_coverage(capacity=200, fraction=0.5)
+    result = inv(record)
+    # 1 unique index < 100 threshold → invariant violation.
+    assert result.verdict is Verdict.INVARIANT_VIOLATION
 
 
 # ============ Tampered record triggers INVARIANT_VIOLATION ============

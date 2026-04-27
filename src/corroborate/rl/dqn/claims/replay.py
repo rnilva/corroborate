@@ -73,10 +73,16 @@ def buffer_sample(
     rng_key: jax.Array,
     batch_size: int,
     capacity: int,
-) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
+) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
     """Uniform-random sample of `batch_size` transitions from the
     populated portion of the buffer. Returns batched
-    `(obs, action, reward, next_obs, done)`."""
+    `(obs, action, reward, next_obs, done, indices)`.
+
+    `indices` is exposed so the Lin-coverage invariant
+    (`buffer_coverage`) can measure how much of the buffer the
+    sampler actually visits — uniform replay is *not* Bellman-
+    consistent, and the sampling distribution's diversity is the
+    empirical proxy for the Lin 1992 i.i.d. assumption."""
     valid_size = jnp.minimum(state.buf_size, capacity)
     indices = jax.random.randint(rng_key, (batch_size,), 0, valid_size)
     return (
@@ -85,4 +91,5 @@ def buffer_sample(
         state.buf_reward[indices],
         state.buf_next_obs[indices],
         state.buf_done[indices],
+        indices.astype(jnp.int32),
     )

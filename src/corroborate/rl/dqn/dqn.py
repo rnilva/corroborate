@@ -165,13 +165,23 @@ def _build_record(
 
     Keys are semantic-role names bridges target by paper-prose
     (`max_q`, `loss`, `ep_return`, etc.). Adding a new diagnostic
-    is one line in a phase + one line here."""
+    is one line in a phase + one line here.
+
+    The per-batch fields (`online_argmax`, `target_argmax`,
+    `sample_indices`) carry shape `(batch,)` per step; under
+    `python_loop` / `scan_loop` stacking they become `(T, batch)`.
+    Theorem-condition invariants flatten across both axes via
+    `unique_count` / `disagreement_rate` reductions."""
     return {
         'epsilon': rollout.epsilon,
         'reward': rollout.reward,
         'done': rollout.done,
         'max_q': rollout.max_q,
         'ep_return': rollout.ep_return,
+        'action': rollout.action,
         'loss': train.loss,
         'td_error': train.td_error,
+        'online_argmax': train.online_argmax,
+        'target_argmax': train.target_argmax,
+        'sample_indices': train.sample_indices,
     }
