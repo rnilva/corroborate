@@ -35,7 +35,7 @@ def _sample_fact() -> FactRow:
         name='mechanism',
         kind='bridge',
         targets=('max_q_late',),
-        reads=frozenset({'max_q_late'}),
+        
         verdict=Verdict.HELD,
         natural_strength=0.85,
         delta_i=0.42,
@@ -69,7 +69,7 @@ def test_fact_row_invariant_kind_round_trip() -> None:
         name='q_bounded',
         kind='invariant',
         targets=('q_max',),
-        reads=frozenset({'q_max'}),
+        
         verdict=Verdict.HELD,
         natural_strength=1.0,
         delta_i=1.0,
@@ -255,7 +255,7 @@ def test_corpus_row_round_trip() -> None:
                 name='hasselt_link',
                 kind='bridge',
                 targets=('mechanism', 'outcome'),
-                reads=frozenset({'mechanism', 'outcome'}),
+                
                 verdict=Verdict.POWER_INSUFFICIENT,
                 natural_strength=0.28,
                 delta_i=0.06,
@@ -297,7 +297,7 @@ def test_mechanism_key_round_trip_preserves_direction() -> None:
     mk = _sample_mechanism_key()
     f = FactRow(
         name='fact', kind='bridge',
-        targets=('x',), reads=frozenset({'x'}),
+        targets=('x',),
         verdict=Verdict.HELD, natural_strength=1.0, delta_i=1.0,
         evidentiary_level='correlational', stats={},
     )
@@ -322,7 +322,7 @@ def test_mechanism_key_round_trip_no_direction() -> None:
     )
     f = FactRow(
         name='fact', kind='bridge',
-        targets=(), reads=frozenset(),
+        targets=(),
         verdict=Verdict.HELD, natural_strength=0.0, delta_i=0.0,
         evidentiary_level='', stats={},
     )

@@ -47,7 +47,7 @@ def _sample_fact() -> FactRow:
         name='mechanism',
         kind='bridge',
         targets=('max_q_late',),
-        reads=frozenset({'max_q_late'}),
+        
         verdict=Verdict.HELD,
         natural_strength=0.85,
         delta_i=0.42,
@@ -252,7 +252,7 @@ def test_corpusrow_parquet_round_trip(tmp_path: Path) -> None:
                 name='hasselt_link',
                 kind='bridge',
                 targets=('mechanism', 'outcome'),
-                reads=frozenset({'mechanism', 'outcome'}),
+                
                 verdict=Verdict.POWER_INSUFFICIENT,
                 natural_strength=0.28,
                 delta_i=0.06,

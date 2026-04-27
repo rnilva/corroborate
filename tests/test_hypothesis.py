@@ -118,6 +118,61 @@ def test_mechanism_key_bridge_names_are_order_independent() -> None:
     assert h1.mechanism_key == h2.mechanism_key
 
 
+def test_mechanism_key_intervention_only_drops_bridge_names() -> None:
+    """`MechanismKey.intervention_only()` projects to
+    `InterventionKey` — preserves intervention_signature and
+    direction, drops bridge_names. Two MechanismKeys with same
+    intervention but different bridge sets project to the same
+    InterventionKey (the projection causal discovery wants for
+    binary intervention variables)."""
+    from corroborate.hypothesis import InterventionKey, MechanismKey
+
+    mk_a = MechanismKey(
+        intervention_signature=(('slot', 'value'),),
+        bridge_names=frozenset({'bridge_x', 'bridge_y'}),
+        direction='a_gt_b',
+    )
+    mk_b = MechanismKey(
+        intervention_signature=(('slot', 'value'),),
+        bridge_names=frozenset({'completely', 'different'}),
+        direction='a_gt_b',
+    )
+
+    iv_a = mk_a.intervention_only()
+    iv_b = mk_b.intervention_only()
+    assert isinstance(iv_a, InterventionKey)
+    assert iv_a == iv_b
+
+
+def test_mechanism_key_intervention_only_preserves_direction() -> None:
+    from corroborate.hypothesis import MechanismKey
+
+    mk = MechanismKey(
+        intervention_signature=(('slot', 'value'),),
+        bridge_names=frozenset(),
+        direction='a_lt_b',
+    )
+    iv = mk.intervention_only()
+    assert iv.direction == 'a_lt_b'
+    assert iv.intervention_signature == (('slot', 'value'),)
+
+
+def test_mechanism_key_intervention_only_distinguishes_interventions() -> None:
+    from corroborate.hypothesis import MechanismKey
+
+    mk_x = MechanismKey(
+        intervention_signature=(('slot', 'value_x'),),
+        bridge_names=frozenset(),
+        direction=None,
+    )
+    mk_y = MechanismKey(
+        intervention_signature=(('slot', 'value_y'),),
+        bridge_names=frozenset(),
+        direction=None,
+    )
+    assert mk_x.intervention_only() != mk_y.intervention_only()
+
+
 def test_mechanism_key_is_hashable() -> None:
     """MechanismKey is hashable so it can be used as a dict key
     or set member — anti-laundering registry uses it that way."""

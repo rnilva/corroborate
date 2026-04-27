@@ -52,6 +52,21 @@ infers from a `held` flag if available)."""
 
 
 @dataclass(frozen=True, slots=True)
+class InterventionKey:
+    """Intervention-only projection of a `MechanismKey`. Carries
+    the intervention identity WITHOUT bridge-name dependence.
+
+    Used by causal discovery (PAPER_NOTES.md §4.3 — `arm_ddqn` as
+    a binary intervention variable in a PC graph): two arms with
+    identical interventions but different bridge sets should map
+    to the SAME node, which `MechanismKey` (which includes
+    `bridge_names`) does NOT do. `InterventionKey` is the cleaner
+    primitive when only the intervention matters."""
+    intervention_signature: tuple[tuple[str, str], ...]
+    direction: Direction | None
+
+
+@dataclass(frozen=True, slots=True)
 class MechanismKey:
     """Canonical structural identity of a Hypothesis.
 
@@ -73,6 +88,16 @@ class MechanismKey:
     intervention_signature: tuple[tuple[str, str], ...]
     bridge_names: frozenset[str]
     direction: Direction | None
+
+    def intervention_only(self) -> InterventionKey:
+        """Project to `InterventionKey` — drops `bridge_names`,
+        retains `intervention_signature` and `direction`. The
+        intervention-only projection causal discovery wants for
+        binary intervention variables."""
+        return InterventionKey(
+            intervention_signature=self.intervention_signature,
+            direction=self.direction,
+        )
 
 
 @dataclass(frozen=True, slots=True)

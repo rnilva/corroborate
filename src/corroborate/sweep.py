@@ -148,7 +148,6 @@ def _bridge_result_to_fact[R: Mapping[str, object]](
         name=result.name if result.name else bridge.name,
         kind='invariant' if is_invariant else 'bridge',
         targets=result.targets if result.targets else bridge.targets,
-        reads=frozenset(result.targets if result.targets else bridge.targets),
         verdict=result.verdict,
         natural_strength=0.0,
         delta_i=0.0,

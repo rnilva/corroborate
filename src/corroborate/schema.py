@@ -83,15 +83,20 @@ class FactRow:
     """One bridge or invariant verdict carried within a `RunRow`.
 
     Stats are scalar primitives only; rich data (arrays, nested
-    structures) lives on the underlying record. The `reads`
-    frozenset feeds axiom 19's redundancy primitive's reads-set
-    Jaccard. `intervention_signature` is the leaf-flattened form
-    of the parent hypothesis's intervention; lets the redundancy
-    primitive's intervention factor activate at the fact level."""
+    structures) lives on the underlying record.
+
+    `targets` is the **canonical** ordered declaration of what
+    record fields the fact reads. `reads` is a **derived
+    property** (frozenset over targets) used by axiom 19's
+    redundancy primitive's reads-set Jaccard — derived rather
+    than stored so direction information in `targets` cannot be
+    silently dropped by an inconsistent caller. `intervention_
+    signature` is the leaf-flattened form of the parent
+    hypothesis's intervention; lets the redundancy primitive's
+    intervention factor activate at the fact level."""
     name: str
     kind: Literal['bridge', 'invariant']
     targets: tuple[str, ...]
-    reads: frozenset[str]
     verdict: Verdict
     natural_strength: float
     delta_i: float
@@ -99,12 +104,19 @@ class FactRow:
     stats: Mapping[str, float | int | bool | str]
     intervention_signature: frozenset[str] = field(default_factory=frozenset)
 
+    @property
+    def reads(self) -> frozenset[str]:
+        """Frozenset over `targets`. Derived (not stored) so
+        ordered direction information in `targets` cannot be
+        accidentally dropped — callers can't construct a FactRow
+        with `reads != frozenset(targets)`."""
+        return frozenset(self.targets)
+
     def as_dict(self) -> dict[str, object]:
         return {
             'name': self.name,
             'kind': self.kind,
             'targets': list(self.targets),
-            'reads': sorted(self.reads),
             'verdict': self.verdict.value,
             'natural_strength': self.natural_strength,
             'delta_i': self.delta_i,
@@ -119,8 +131,7 @@ class FactRow:
             name=require_str(d, 'name'),
             kind=require_kind(d, 'kind'),
             targets=tuple(require_str_list(d, 'targets')),
-            reads=frozenset(require_str_list(d, 'reads')),
-            verdict=require_verdict(d, "verdict"),
+            verdict=require_verdict(d, 'verdict'),
             natural_strength=require_float(d, 'natural_strength'),
             delta_i=require_float(d, 'delta_i'),
             evidentiary_level=require_str(d, 'evidentiary_level'),

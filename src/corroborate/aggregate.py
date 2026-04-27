@@ -133,14 +133,10 @@ def _aggregate_facts_by_name(runs: Sequence[RunRow]) -> tuple[FactRow, ...]:
             verdict = Verdict.POWER_INSUFFICIENT
 
         first = group[0]
-        merged_reads: frozenset[str] = frozenset()
-        for f in group:
-            merged_reads = merged_reads | f.reads
         out.append(FactRow(
             name=name,
             kind=first.kind,
             targets=first.targets,
-            reads=merged_reads,
             verdict=verdict,
             natural_strength=admit_rate,
             delta_i=0.0,

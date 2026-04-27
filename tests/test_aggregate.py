@@ -42,7 +42,7 @@ def _make_runrow(
         name='outcome',
         kind='bridge',
         targets=('final_return',),
-        reads=frozenset({'final_return'}),
+        
         verdict=fact_verdict,
         natural_strength=0.0,
         delta_i=0.0,
