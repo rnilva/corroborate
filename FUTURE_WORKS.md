@@ -122,13 +122,26 @@ not pre-reduced derivatives:
   catalogue, which is genuinely Step 4 territory.
 
 **Lift when:**
-- *Jensen*: step 3.5 or step 4 — central to the §3 DDQN
-  acceptance test (the comparative claim "DDQN reduces
-  overestimation by Δ vs vanilla" *is* the §3 thesis). Without
-  it, §3 isn't expressible.
+- *Jensen*: step 4. The eval-loop infrastructure (sibling of
+  `dqn_step` for greedy rollouts; `train_with_eval` loop pattern;
+  `EvalTrajectoryRecord` type) lives naturally with the env
+  catalogue — eval rollouts are env-shaped (fresh resets, episode-
+  length caps from `EnvSpec`). Central to PAPER_NOTES.md §3
+  acceptance test ("DDQN reduces overestimation by Δ vs vanilla"
+  *is* the §3 thesis); §3 isn't expressible without it. Step 4
+  scope expanded to include this — see new entries below.
 - *Banach*: when an experiment in §3-§5 needs the contraction-
   rate gap as a measured outcome.
 - *Watkins (s, a)*: step 4 env catalogue.
+
+**Step 4 expanded scope (decision 2026-04-27).** Originally "env
+wrappers, projections, mechanism markers". Now also: eval-loop
+infrastructure for Jensen overestimation gap + per-env
+`state_hash` for Watkins (s, a) coverage. The env catalogue is
+the natural carrier for both — eval rollouts need fresh env
+resets and episode-length caps; state_hash is per-env
+discretization. Bundling them into Step 4 keeps the env-shape
+concerns together.
 
 ## Cosmetic / micro-cleanups
 
