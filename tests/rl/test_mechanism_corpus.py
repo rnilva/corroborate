@@ -48,9 +48,9 @@ def test_same_hypothesis_yields_stable_intervention_key() -> None:
     discovery node-identity primitive)."""
     vanilla = _make_hypothesis('vanilla', intervention={})
 
-    run_a, _ = _run_cell('CartPole-v1', seed=0, h=vanilla)
-    run_b, _ = _run_cell('CartPole-v1', seed=1, h=vanilla)
-    run_c, _ = _run_cell('Acrobot-v1', seed=0, h=vanilla)
+    run_a = _run_cell('CartPole-v1', seed=0, h=vanilla)
+    run_b = _run_cell('CartPole-v1', seed=1, h=vanilla)
+    run_c = _run_cell('Acrobot-v1', seed=0, h=vanilla)
 
     key_a = run_a.mechanism_key.intervention_only()
     key_b = run_b.mechanism_key.intervention_only()
@@ -69,8 +69,8 @@ def test_different_interventions_yield_different_keys() -> None:
         'ddqn', intervention={'bootstrap': ddqn_bootstrap},
     )
 
-    vanilla_run, _ = _run_cell('CartPole-v1', seed=0, h=vanilla)
-    ddqn_run, _ = _run_cell('CartPole-v1', seed=0, h=ddqn)
+    vanilla_run = _run_cell('CartPole-v1', seed=0, h=vanilla)
+    ddqn_run = _run_cell('CartPole-v1', seed=0, h=ddqn)
 
     assert vanilla_run.mechanism_key.intervention_only() != \
         ddqn_run.mechanism_key.intervention_only()
@@ -89,10 +89,10 @@ def test_aggregate_runs_groups_by_intervention_and_env() -> None:
     )
 
     runs = [
-        _run_cell('CartPole-v1', seed=0, h=vanilla)[0],
-        _run_cell('CartPole-v1', seed=1, h=vanilla)[0],
-        _run_cell('CartPole-v1', seed=0, h=ddqn)[0],
-        _run_cell('CartPole-v1', seed=1, h=ddqn)[0],
+        _run_cell('CartPole-v1', seed=0, h=vanilla),
+        _run_cell('CartPole-v1', seed=1, h=vanilla),
+        _run_cell('CartPole-v1', seed=0, h=ddqn),
+        _run_cell('CartPole-v1', seed=1, h=ddqn),
     ]
     arms = aggregate_runs(runs)
 

@@ -3,10 +3,10 @@ Hasselt-style overestimation-bias measurement.
 
 The Jensen overestimation gap (Hasselt 2010, 2016) requires
 empirical Q̂ at start states vs. Monte-Carlo return ground truth.
-That can't be derived from training-loop data; it needs a
-*separate* eval pass — periodic greedy rollouts from fresh env
-resets, with predicted-Q recorded at start and discounted MC
-return computed from the realised reward sequence.
+That can't be derived from training-loop data alone; it needs
+periodic greedy rollouts during training, with predicted-Q
+recorded at start and discounted MC return computed from the
+realised reward sequence.
 
 Three pieces in this module:
 
@@ -14,21 +14,22 @@ Three pieces in this module:
    reset state; returns `(predicted_q_at_start, mc_return,
    episode_length)`.
 2. `eval_burst` — K greedy rollouts via vmap over fresh seeds;
-   stacks per-episode results.
-3. `train_with_eval` — Python outer loop running
-   `total_steps // eval_every` super-steps. Each super-step runs
-   `eval_every` training steps via the inner `Loop[C, T]` (jit-
-   compiled), then one `eval_burst`. Returns
-   `(final_state, ComposedTrace)` where `ComposedTrace.train` is
-   the flat training trace `(total_steps,)`-shaped and
-   `ComposedTrace.eval` is the burst-stacked eval trace
-   `(n_bursts, K)`-shaped.
+   stacks per-episode results into `(K,)`-shaped arrays.
+3. `train_with_eval` — single jit-compiled nested scan. Outer
+   scan iterates `n_bursts = total_steps // eval_every`
+   super-steps; each super-step body runs an inner scan over
+   `eval_every` training steps, then one `eval_burst`. Returns
+   `(state, record)` where `record` is a single dict mixing
+   training fields (shape `(total_steps, ...)`) and eval fields
+   (shape `(n_bursts, K, ...)`). The author's bridges read
+   whichever keys they care about.
 
-The eval pass is a separate measurement, NOT part of `dqn_step`.
-This keeps the training step's slot-Protocol surface clean (no
-new slots for eval-frequency) and lets eval be opt-in: callers
-who only need training data use `scan_loop(dqn_step, ...)`;
-callers who want overestimation gap data use `train_with_eval`."""
+Eval IS part of training — they're aspects of one experiment
+run. The merged-dict return shape reflects that: no separate
+"eval record" stream, no `bridges_e`, no train/eval distinction
+in framework code. The cell runner produces one record; bridges
+target arbitrary keys regardless of which sub-process produced
+them."""
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -41,10 +42,9 @@ from corroborate.claim import claim
 from corroborate.rl.dqn.state import DQNState
 from corroborate.rl.dqn.types import QNetwork, StepRecord
 from corroborate.rl.env_catalogue import GymnaxEnvLike
-from corroborate.rl.loop import Loop, scan_loop
 
 
-# ============ Eval record shapes ============
+# ============ Eval per-episode and per-burst record shapes ============
 
 class EvalEpisodeOut(NamedTuple):
     """One eval episode's per-burst record."""
@@ -58,25 +58,6 @@ class EvalBurstOut(NamedTuple):
     predicted_q_at_start: jax.Array   # (K,)
     mc_return: jax.Array              # (K,)
     episode_length: jax.Array         # (K,) int32
-
-
-type EvalTrajectoryRecord = dict[str, jax.Array]
-"""After all bursts stack: each value has shape `(n_bursts, K)`
-(per-episode quantities) or `(n_bursts,)` (per-burst metadata
-like `eval_step_index`). Keyed by the same field names as
-`EvalBurstOut` plus `eval_step_index`."""
-
-
-class ComposedTrace(NamedTuple):
-    """Compose training and eval traces under one return value.
-
-    `train` is the same shape `dqn_step` produces — flat
-    `(total_steps, ...)` per field. `eval` is burst-stacked:
-    each field shaped `(n_bursts, K, ...)` for per-episode
-    quantities, plus `eval_step_index: (n_bursts,)` recording at
-    which training step each burst fired."""
-    train: StepRecord
-    eval: EvalTrajectoryRecord
 
 
 # ============ Single greedy episode ============
@@ -102,15 +83,13 @@ def eval_episode(
     reset_key, run_key = jax.random.split(rng_key)
     obs_0, env_state_0 = env.reset(reset_key, env_params)
 
-    # Predicted Q at start.
     q_at_start = q_network(online_params, obs_0)
     predicted_q_at_start = jnp.max(q_at_start)
 
-    # Greedy rollout via lax.scan with manual termination.
     class Carry(NamedTuple):
         obs: jax.Array
         env_state: object
-        done: jax.Array            # (1,) bool — once True, freeze
+        done: jax.Array
         rng: jax.Array
         cumulative_return: jax.Array
         steps: jax.Array
@@ -125,7 +104,6 @@ def eval_episode(
     )
 
     def step(carry: Carry, _idx: jax.Array) -> tuple[Carry, None]:
-        # Greedy action under online net.
         q_values = q_network(online_params, carry.obs)
         action = jnp.argmax(q_values).astype(jnp.int32)
 
@@ -134,7 +112,6 @@ def eval_episode(
             env_key, carry.env_state, action, env_params,
         )
 
-        # Mask post-done updates: once done, freeze return / state.
         already_done = carry.done
         active = jnp.logical_not(already_done)
         discount = jnp.power(gamma, carry.steps.astype(jnp.float32))
@@ -201,7 +178,7 @@ def eval_burst(
     )
 
 
-# ============ train_with_eval — the composed loop ============
+# ============ train_with_eval — single nested scan ============
 
 def train_with_eval(
     step_fn: Callable[[DQNState, jax.Array], tuple[DQNState, StepRecord]],
@@ -210,71 +187,79 @@ def train_with_eval(
     *,
     eval_fn: Callable[[DQNState, jax.Array], EvalBurstOut],
     eval_every: int,
-    inner_loop: Loop[DQNState, StepRecord] = scan_loop,
-) -> tuple[DQNState, ComposedTrace]:
-    """Python outer loop; each super-step runs `eval_every`
-    training steps via `inner_loop` (default `scan_loop` —
-    jit-compiled) then one `eval_burst` via `eval_fn`.
+) -> tuple[DQNState, dict[str, jax.Array]]:
+    """Single nested `jax.lax.scan`: outer over `n_bursts =
+    total_steps // eval_every` super-steps; each super-step body
+    runs an inner scan over `eval_every` training steps then one
+    `eval_burst`. Single jit-compile boundary (no Python overhead
+    between super-steps, no recompile per chunk).
 
-    `eval_fn` is the closure the caller built around `eval_burst`
-    — it captures `env`, `env_params`, `q_network`, `gamma`,
-    `episode_cap`, `n_episodes`. The framework intentionally
-    doesn't bundle these into the `train_with_eval` signature
-    because they're orthogonal to the loop's shape; the closure
-    pattern keeps the loop primitive minimal.
+    Returns `(state, record)` where `record` is a single dict
+    mixing:
+      - training fields, shape `(total_steps, ...)` per field
+      - eval fields, shape `(n_bursts, K, ...)` per field
+      - `eval_step_index`, shape `(n_bursts,)` int32
 
-    Returns:
-        - final state after `total_steps` of training
-        - `ComposedTrace(train, eval)`: train arrays are flat
-          `(total_steps, ...)`; eval arrays are `(n_bursts, K)`
-          stacks plus `eval_step_index: (n_bursts,)`.
+    The eval-side keys (`predicted_q_at_start`, `mc_return`,
+    `episode_length`, `eval_step_index`) are disjoint from the
+    training keys by RL-substrate convention — bridges read
+    whichever they need without naming collision.
+
+    `eval_fn` is the caller's closure around `eval_burst`,
+    capturing env, q_network, gamma, etc. Single-jit means the
+    closure must be jit-compatible (no Python-level branching on
+    traced values).
 
     Raises `ValueError` if `total_steps` isn't a multiple of
-    `eval_every` (avoids partial chunks at the tail)."""
+    `eval_every` (no partial trailing chunk)."""
     if total_steps % eval_every != 0:
         raise ValueError(
             f'total_steps ({total_steps}) must be a multiple of '
             f'eval_every ({eval_every}); got remainder '
             f'{total_steps % eval_every}',
         )
+    if total_steps < eval_every:
+        raise ValueError(
+            f'total_steps ({total_steps}) must be ≥ eval_every '
+            f'({eval_every}) — at least one super-step is required.',
+        )
 
     n_super_steps = total_steps // eval_every
-    state = init
-    train_chunks: list[StepRecord] = []
-    eval_bursts: list[EvalBurstOut] = []
-    eval_step_indices: list[int] = []
 
-    for super_idx in range(n_super_steps):
-        # Inner loop: eval_every training steps (jit if scan_loop).
-        state, chunk = inner_loop(step_fn, state, eval_every)
-        train_chunks.append(chunk)
+    def super_step(
+        state: DQNState, super_idx: jax.Array,
+    ) -> tuple[DQNState, tuple[StepRecord, EvalBurstOut]]:
+        # Inner scan over eval_every training steps. Build global
+        # step indices so step_fn sees absolute step number even
+        # though we're in a chunked outer loop.
+        offset = super_idx * eval_every
+        inner_indices = offset + jnp.arange(eval_every, dtype=jnp.int32)
+        state, train_chunk = jax.lax.scan(step_fn, state, inner_indices)
+        # Eval burst at the end of this chunk.
+        burst = eval_fn(state, super_idx)
+        return state, (train_chunk, burst)
 
-        # Eval burst at the END of this chunk (training has
-        # advanced eval_every steps from previous burst).
-        eval_step_at = (super_idx + 1) * eval_every
-        eval_step_indices.append(eval_step_at)
-        burst = eval_fn(state, jnp.uint32(super_idx))
-        eval_bursts.append(burst)
+    super_indices = jnp.arange(n_super_steps, dtype=jnp.uint32)
+    state, (train_chunks, eval_bursts) = jax.lax.scan(
+        super_step, init, super_indices,
+    )
 
-    # Concatenate training chunks → (total_steps, ...) per field.
-    def concat_along_zero(*arrays: jax.Array) -> jax.Array:
-        return jnp.concatenate(arrays, axis=0)
+    # train_chunks: pytree where each leaf has shape
+    #   (n_super_steps, eval_every, *original_shape).
+    # Reshape to (total_steps, *original_shape).
+    def _flatten_chunks(x: jax.Array) -> jax.Array:
+        return x.reshape(total_steps, *x.shape[2:])
 
-    train_trace: StepRecord = jax.tree.map(concat_along_zero, *train_chunks)
+    train_trace = jax.tree.map(_flatten_chunks, train_chunks)
 
-    # Stack eval bursts → (n_super_steps, K, ...) per field.
-    def stack_along_zero(*arrays: jax.Array) -> jax.Array:
-        return jnp.stack(arrays, axis=0)
+    # eval_bursts: NamedTuple of (n_super_steps, K, ...) arrays.
+    # Compute eval_step_index as super_idx-aware boundaries.
+    eval_step_indices = (jnp.arange(n_super_steps) + 1) * eval_every
 
-    stacked_predicted = stack_along_zero(*[b.predicted_q_at_start for b in eval_bursts])
-    stacked_returns = stack_along_zero(*[b.mc_return for b in eval_bursts])
-    stacked_lengths = stack_along_zero(*[b.episode_length for b in eval_bursts])
+    record: dict[str, jax.Array] = {**train_trace}
+    record['predicted_q_at_start'] = eval_bursts.predicted_q_at_start
+    record['mc_return'] = eval_bursts.mc_return
+    record['episode_length'] = eval_bursts.episode_length
+    record['eval_step_index'] = eval_step_indices.astype(jnp.int32)
 
-    eval_trace: EvalTrajectoryRecord = {
-        'predicted_q_at_start': stacked_predicted,
-        'mc_return': stacked_returns,
-        'episode_length': stacked_lengths,
-        'eval_step_index': jnp.asarray(eval_step_indices, dtype=jnp.int32),
-    }
-
-    return state, ComposedTrace(train=train_trace, eval=eval_trace)
+    return state, record

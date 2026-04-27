@@ -1,7 +1,7 @@
 """Cell runner — `run_dqn_cell(env_spec, seed, hypothesis) →
-(RunRow, EvalTrajectoryRecord)`. The bridge between the DQN
-training/eval substrate (`dqn_step` + `train_with_eval`) and the
-schema layer (`RunRow` + `FactRow`).
+RunRow`. The bridge between the DQN training/eval substrate
+(`dqn_step` + `train_with_eval`) and the schema layer
+(`RunRow` + `FactRow`).
 
 One cell = one (env, seed, hypothesis) execution. The cell
 runner:
@@ -11,17 +11,18 @@ runner:
    so the hypothesis's intervention applies as slot swaps.
 3. Builds the `eval_fn` closure for `train_with_eval` (fresh
    greedy rollouts every `eval_config.eval_every` training steps).
-4. Runs `train_with_eval` → `(final_state, ComposedTrace)`.
-5. Projects the late-window outcome from `trace.train`.
-6. Runs each `Hypothesis.bridge` against `trace.train`, converts
-   each `BridgeResult` to a `FactRow` (with `kind='invariant'`
-   when `stats['kind']=='tautological'`).
+4. Runs `train_with_eval` → `(final_state, record)`. The record
+   is a single dict mixing per-step training fields (shape
+   `(total_steps, ...)`) and per-burst eval fields (shape
+   `(n_bursts, K, ...)`) — see `train_with_eval`'s docstring.
+5. Projects the late-window outcome from `record`.
+6. Runs each `Hypothesis.bridge` against the merged record;
+   bridges target whichever keys they care about. Converts each
+   `BridgeResult` to a `FactRow` (with `kind='invariant'` when
+   `stats['kind']=='tautological'`).
 7. Aggregates the per-cell verdict (axiom 18 precedence:
    INVARIANT_VIOLATION dominates).
-8. Returns `(RunRow, eval_trace)` — the eval trace is paired
-   alongside the RunRow (not embedded) because eval data is the
-   Hasselt-overestimation-gap consumer's input, not part of the
-   schema-layer corpus."""
+8. Returns the `RunRow`."""
 from __future__ import annotations
 
 import uuid
@@ -37,12 +38,11 @@ import optax
 
 from corroborate.bridge import Bridge, BridgeResult
 from corroborate.hypothesis import Hypothesis
-from corroborate.reductions import late_episode_return_mean
+from corroborate.reductions import masked_window_mean
 from corroborate.rl.dqn.claims.q_network import mlp_q
 from corroborate.rl.dqn.dqn import default_state_hash, dqn_step, init_state
 from corroborate.rl.dqn.eval import (
     EvalBurstOut,
-    EvalTrajectoryRecord,
     eval_burst,
     train_with_eval,
 )
@@ -109,7 +109,7 @@ class EvalConfig:
 def run_dqn_cell(
     env_spec: EnvSpec,
     seed: int,
-    hypothesis: Hypothesis[DQNTrajectoryRecord, Mapping[str, object]],
+    hypothesis: Hypothesis[DQNTrajectoryRecord],
     *,
     total_steps: int,
     optimizer: optax.GradientTransformation,
@@ -122,11 +122,17 @@ def run_dqn_cell(
     sync_period: int = 100,
     outcome_fraction: float = 0.1,
     cycle_id: str | None = None,
-) -> tuple[RunRow, EvalTrajectoryRecord]:
-    """Run one (env, seed, hypothesis) cell. Returns the RunRow
-    summarising the cell + the eval trajectory record (paired,
-    not embedded — eval data is the Hasselt-gap consumer's input,
-    distinct from the schema-layer corpus).
+) -> RunRow:
+    """Run one (env, seed, hypothesis) cell. Returns a `RunRow`
+    summarising the cell.
+
+    Eval IS part of training: `train_with_eval` produces ONE
+    record dict mixing per-step training fields and per-burst
+    eval fields. Hypothesis bridges read whichever keys they
+    target (jensen_overestimation_gap reads
+    `predicted_q_at_start` + `mc_return`; fqi_decay_gap reads
+    `td_error`; etc.) — the framework doesn't distinguish "train
+    bridges" from "eval bridges" in any layer.
 
     `q_network` is required as a separate kwarg (default `mlp_q`)
     because the eval pass needs it to compute predicted-Q-at-start
@@ -176,7 +182,7 @@ def run_dqn_cell(
             n_episodes=eval_config.n_episodes,
         )
 
-    _final_state, trace = train_with_eval(
+    _final_state, record = train_with_eval(
         step_fn, init, total_steps,
         eval_fn=eval_fn, eval_every=eval_config.eval_every,
     )
@@ -186,39 +192,25 @@ def run_dqn_cell(
     # `late_window_mean('ep_return', ...)` would average over a
     # cumulative-within-episode sawtooth; this one filters to
     # episode terminations so the value is the per-episode return.
-    outcome = late_episode_return_mean(
-        return_key='ep_return', done_key='done',
+    outcome = masked_window_mean(
+        value_key='ep_return', mask_key='done',
         fraction=outcome_fraction,
-    )(trace.train)
+    )(record)
 
-    # Run hypothesis bridges → FactRows. Train-bridges read
-    # `trace.train`; eval-bridges read `trace.eval` (the
-    # subsampled greedy-rollout record). Both produce FactRows
-    # in the same flat tuple — downstream consumers don't
-    # distinguish (the bridge's `targets` already encode which
-    # record keys it read).
+    # Run all hypothesis bridges against the merged record.
+    # Bridges target arbitrary keys regardless of which sub-pass
+    # produced them (training fields, eval-burst fields, etc.).
     intervention_sig: frozenset[str] = frozenset(
         slot for slot, _ in hypothesis.mechanism_key.intervention_signature
     )
-    train_facts = tuple(
+    facts = tuple(
         _bridge_result_to_fact(
             bridge=b,
-            result=b(trace.train),
+            result=b(record),
             intervention_signature=intervention_sig,
-            data_source='train',
         )
         for b in hypothesis.bridges
     )
-    eval_facts = tuple(
-        _bridge_result_to_fact(
-            bridge=b,
-            result=b(trace.eval),
-            intervention_signature=intervention_sig,
-            data_source='eval',
-        )
-        for b in hypothesis.eval_bridges
-    )
-    facts = train_facts + eval_facts
 
     reads_set: frozenset[str] = frozenset()
     for f in facts:
@@ -235,12 +227,12 @@ def run_dqn_cell(
         seed=seed,
         mechanism_key=hypothesis.mechanism_key,
         primary_outcome_summary=outcome,
-        record_keys=tuple(trace.train.keys()),
+        record_keys=tuple(record.keys()),
         facts=facts,
         reads_set=reads_set,
         verdict=_aggregate_cell_verdict(facts),
     )
-    return run_row, trace.eval
+    return run_row
 
 
 # ============ Helpers ============
@@ -250,15 +242,13 @@ def _bridge_result_to_fact[R: Mapping[str, object]](
     bridge: Bridge[R],
     result: BridgeResult,
     intervention_signature: frozenset[str],
-    data_source: Literal['train', 'eval'],
 ) -> FactRow:
     """Convert a BridgeResult to a FactRow at cell-level
     granularity. Generic over the bridge's record type so the
-    same helper handles both train-bridges (over the
-    `DQNTrajectoryRecord`) and eval-bridges (over the eval
-    record). `kind` is read off `stats['kind']`: tautological →
-    'invariant', otherwise → 'bridge'. `data_source` records
-    which trace produced the fact.
+    same helper handles both primary-record bridges (over
+    `DQNTrajectoryRecord`) and secondary-record bridges (over the
+    eval record). `kind` is read off `stats['kind']`: tautological
+    → 'invariant', otherwise → 'bridge'.
 
     `natural_strength` is a binary placeholder (1.0 for HELD, 0.0
     otherwise) — step 5 (statistics module) replaces this with
@@ -275,7 +265,6 @@ def _bridge_result_to_fact[R: Mapping[str, object]](
         evidentiary_level='cell',
         stats=dict(result.stats),
         intervention_signature=intervention_signature,
-        data_source=data_source,
     )
 
 

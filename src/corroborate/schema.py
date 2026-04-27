@@ -48,7 +48,6 @@ from corroborate._narrow import (
     optional_refutation_class,
     optional_str,
     require_bool,
-    require_data_source,
     require_float,
     require_int,
     require_int_list,
@@ -79,13 +78,6 @@ def _empty_meta() -> dict[str, str | int | float | bool]:
 
 # ============ FactRow (non-generic — record-agnostic) ============
 
-type FactDataSource = Literal['train', 'eval']
-"""Which trace produced the fact: training-loop record or
-periodic eval-pass record. Required to disambiguate facts
-in `RunRow.facts` after the cell runner threads bridges
-through both `trace.train` and `trace.eval`."""
-
-
 @dataclass(frozen=True, slots=True)
 class FactRow:
     """One bridge or invariant verdict carried within a `RunRow`.
@@ -103,10 +95,14 @@ class FactRow:
     hypothesis's intervention; lets the redundancy primitive's
     intervention factor activate at the fact level.
 
-    `data_source` records which trace the fact was computed from
-    — training-loop StepRecord or periodic eval-pass record.
-    Defaults to `'train'` for backward compat with row-builders
-    that don't yet thread the source explicitly."""
+    Note: which *record* produced this fact is not carried as a
+    field on FactRow. The Hypothesis structure (primary `bridges`
+    vs secondary `bridges_e`) and the bridge `targets` are the
+    framework-honest record-identity primitives — `targets`
+    already encodes which keys this fact read. Adding a
+    `data_source` field would denormalise + import substrate-
+    specific vocabulary (e.g. RL's 'train' / 'eval' phases) into
+    the schema layer."""
     name: str
     kind: Literal['bridge', 'invariant']
     targets: tuple[str, ...]
@@ -116,7 +112,6 @@ class FactRow:
     evidentiary_level: str
     stats: Mapping[str, float | int | bool | str]
     intervention_signature: frozenset[str] = field(default_factory=frozenset)
-    data_source: FactDataSource = 'train'
 
     @property
     def reads(self) -> frozenset[str]:
@@ -137,7 +132,6 @@ class FactRow:
             'evidentiary_level': self.evidentiary_level,
             'stats': {**self.stats},
             'intervention_signature': sorted(self.intervention_signature),
-            'data_source': self.data_source,
         }
 
     @classmethod
@@ -154,7 +148,6 @@ class FactRow:
             intervention_signature=frozenset(
                 require_str_list(d, 'intervention_signature')
             ),
-            data_source=require_data_source(d, 'data_source'),
         )
 
 

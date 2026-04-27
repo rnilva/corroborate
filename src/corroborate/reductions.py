@@ -168,12 +168,14 @@ def late_window_mean(
     """Schema-row outcome projection: mean over the last `fraction`
     of `record[key]`. Convenience wrapper around `mean_window`.
 
-    NOTE: for episode-return outcomes specifically, prefer
-    `late_episode_return_mean` — `ep_return` is per-step
-    cumulative-within-episode (a sawtooth under standard logging)
-    and a plain mean over a sawtooth is NOT the per-episode
-    return. `late_window_mean` is correct for genuinely-per-step
-    quantities (loss, td_error, max_q)."""
+    NOTE: when the trajectory carries a cumulative-within-episode
+    sawtooth (e.g. RL's ep_return signal that resets on episode
+    terminations), a plain `late_window_mean` averages over the
+    sawtooth — NOT the per-episode quantity. Use
+    `masked_window_mean(value_key, mask_key, fraction)` to filter
+    to mask-positive entries (e.g. terminal steps) before
+    averaging. `late_window_mean` is correct for genuinely-
+    per-step quantities (loss, td_error, max_q)."""
     if not (0.0 < fraction <= 1.0):
         raise ValueError(
             f'late_window_mean: need 0 < fraction ≤ 1; got {fraction}',
@@ -181,53 +183,50 @@ def late_window_mean(
     return mean_window(from_key(key), 1.0 - fraction, 1.0)
 
 
-def late_episode_return_mean(
-    return_key: str = 'ep_return',
-    done_key: str = 'done',
+def masked_window_mean(
+    value_key: str,
+    mask_key: str,
     fraction: float = 0.1,
 ) -> Measurable[Mapping[str, jnp.ndarray], float]:
-    """Mean of episode returns terminating in the late
-    `fraction` of the trajectory. Avoids the sawtooth pitfall:
-    plain `late_window_mean('ep_return', fraction)` averages a
-    cumulative-within-episode signal that mixes mid-episode
-    partial sums with end-of-episode totals — NOT the per-episode
-    return.
+    """Mean of `record[value_key]` over entries where (`step in
+    late `fraction` of trajectory` ∧ `record[mask_key] > 0.5`).
 
-    `record[return_key]` is the cumulative-within-episode value
-    at each step (so on `done==1` it's the final episode return).
-    `record[done_key]` is the binary done flag. This reduction
-    masks to (`step in [1-fraction, 1.0)` ∧ `done==1`) then means
-    the surviving values — i.e. mean of episode-end returns
-    whose terminal step lies in the late window.
+    Generic mechanic: take a window of the trajectory's last
+    `fraction`, restrict to indices whose mask flag is set, mean
+    the surviving values. Substrate-neutral.
 
-    Returns NaN if no episode terminated in the late window —
-    `0.0` would collide with a legitimate ep_return for envs
-    whose reward range crosses zero (Acrobot ∈ [−1, 0],
-    MNISTBandit ∈ [−1, 1], etc.). Downstream consumers must
-    handle NaN explicitly (use `jnp.nanmean` for aggregation,
-    or filter via `math.isnan`)."""
+    Use case: in RL, `record['ep_return']` is per-step cumulative
+    return that *resets on done* (a sawtooth); the per-episode
+    return appears on terminal steps where `record['done'] > 0.5`.
+    `masked_window_mean('ep_return', 'done', 0.1)` averages the
+    last 10% of episode-end returns. For non-RL substrates, mask
+    is whatever binary indicator the experiment defines.
+
+    Returns NaN if no element survives the mask in the window —
+    `0.0` would collide with a legitimate `value_key` of zero
+    (e.g. RL envs with reward range crossing zero). Downstream
+    consumers must handle NaN explicitly."""
     if not (0.0 < fraction <= 1.0):
         raise ValueError(
-            f'late_episode_return_mean: need 0 < fraction ≤ 1; '
+            f'masked_window_mean: need 0 < fraction ≤ 1; '
             f'got {fraction}',
         )
     name = (
-        f'{return_key}_at_done__late_window_mean_'
+        f'{value_key}_masked_by_{mask_key}__late_window_mean_'
         f'{int(round((1.0 - fraction) * 100))}_100'
     )
 
     def fn(record: Mapping[str, jnp.ndarray]) -> float:
-        ep_return = record[return_key]
-        done = record[done_key]
-        n = int(ep_return.shape[0])
+        values = record[value_key]
+        mask = record[mask_key]
+        n = int(values.shape[0])
         cutoff = int((1.0 - fraction) * n)
         time_mask = jnp.arange(n) >= cutoff
-        ep_end_mask = done > 0.5
-        keep_mask = time_mask & ep_end_mask
+        keep_mask = time_mask & (mask > 0.5)
         n_kept = int(jnp.sum(keep_mask))
         if n_kept == 0:
             return float('nan')
-        masked = jnp.where(keep_mask, ep_return, 0.0)
+        masked = jnp.where(keep_mask, values, 0.0)
         return float(jnp.sum(masked) / n_kept)
 
-    return Measurable(fn=fn, name=name, reads=(return_key, done_key))
+    return Measurable(fn=fn, name=name, reads=(value_key, mask_key))

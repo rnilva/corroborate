@@ -68,7 +68,7 @@ def test_run_dqn_cell_produces_runrow_on_cartpole() -> None:
         predicted_direction=None,
     )
 
-    run_row, eval_record = run_dqn_cell(
+    run_row = run_dqn_cell(
         env_spec, seed=0, hypothesis=h,
         total_steps=60,
         optimizer=optax.adam(1e-3),
@@ -86,11 +86,12 @@ def test_run_dqn_cell_produces_runrow_on_cartpole() -> None:
     assert run_row.facts == ()
     assert run_row.verdict is Verdict.POWER_INSUFFICIENT
     assert isinstance(run_row.primary_outcome_summary, float)
-
-    # Eval record shape.
-    assert eval_record['predicted_q_at_start'].shape == (2, 2)
-    assert eval_record['mc_return'].shape == (2, 2)
-    assert eval_record['eval_step_index'].shape == (2,)
+    # Record keys include both training fields and eval fields
+    # (cell runner produces ONE merged record).
+    assert 'epsilon' in run_row.record_keys
+    assert 'predicted_q_at_start' in run_row.record_keys
+    assert 'mc_return' in run_row.record_keys
+    assert 'eval_step_index' in run_row.record_keys
 
 
 def test_run_dqn_cell_mechanism_key_matches_hypothesis() -> None:
@@ -114,7 +115,7 @@ def test_run_dqn_cell_mechanism_key_matches_hypothesis() -> None:
         predicted_direction='a_gt_b',
     )
 
-    run_row, _eval = run_dqn_cell(
+    run_row = run_dqn_cell(
         env_spec, seed=0, hypothesis=h,
         total_steps=40,
         optimizer=optax.adam(1e-3),
@@ -159,7 +160,7 @@ def test_run_dqn_cell_classifies_invariant_facts() -> None:
         bridges=(plain_bridge, invariant_bridge),
     )
 
-    run_row, _ = run_dqn_cell(
+    run_row = run_dqn_cell(
         env_spec, seed=0, hypothesis=h,
         total_steps=40,
         optimizer=optax.adam(1e-3),
@@ -205,7 +206,7 @@ def test_run_dqn_cell_invariant_violation_dominates_verdict() -> None:
         bridges=(held_bridge, impossible),
     )
 
-    run_row, _ = run_dqn_cell(
+    run_row = run_dqn_cell(
         env_spec, seed=0, hypothesis=h,
         total_steps=40,
         optimizer=optax.adam(1e-3),
@@ -218,14 +219,15 @@ def test_run_dqn_cell_invariant_violation_dominates_verdict() -> None:
     assert run_row.verdict is Verdict.INVARIANT_VIOLATION
 
 
-# ============ DDQN intervention via slot swap ============
+# ============ Bridges over the merged record ============
 
-# ============ Eval-bridge wiring ============
-
-def test_run_dqn_cell_runs_eval_bridges_against_eval_record() -> None:
-    """Hypothesis.eval_bridges target the eval record (predicted
-    Q vs MC return); cell runner threads them through trace.eval
-    and produces FactRows alongside train-bridge facts."""
+def test_run_dqn_cell_runs_bridges_against_merged_record() -> None:
+    """Hypothesis.bridges target whichever record keys they care
+    about. `jensen_overestimation_gap` reads `predicted_q_at_start`
+    + `mc_return` (eval-burst-shaped fields); the merged record
+    carries them alongside per-step training fields. No
+    `eval_bridges` distinction in framework code — the cell
+    runner produces ONE record dict, bridges pick keys."""
     from corroborate.invariant import at_most
     from corroborate.rl.dqn.claims.bootstrap import vanilla_bootstrap
     from corroborate.rl.dqn.invariants import jensen_overestimation_gap
@@ -238,15 +240,14 @@ def test_run_dqn_cell_runs_eval_bridges_against_eval_record() -> None:
         of_claim=vanilla_bootstrap,
     )
 
-    h: Hypothesis[DQNTrajectoryRecord, Mapping[str, object]] = Hypothesis(
+    h: Hypothesis[DQNTrajectoryRecord] = Hypothesis(
         name='vanilla_with_jensen_scope',
         intervention={},
-        bridges=(),
-        eval_bridges=(jensen_scope,),
+        bridges=(jensen_scope,),
         predicted_direction=None,
     )
 
-    run_row, _eval = run_dqn_cell(
+    run_row = run_dqn_cell(
         env_spec, seed=0, hypothesis=h,
         total_steps=40,
         optimizer=optax.adam(1e-3),
@@ -254,12 +255,12 @@ def test_run_dqn_cell_runs_eval_bridges_against_eval_record() -> None:
         warmup_steps=10, sync_period=10,
         buffer_capacity=200, batch_size=16,
     )
-    # Exactly one fact (the jensen scope).
     assert len(run_row.facts) == 1
     fact = run_row.facts[0]
     assert fact.kind == 'invariant'
     assert 'jensen_overestimation_gap' in fact.name
-    # The eval-bridge name appears in mechanism_key.bridge_names.
+    # The bridge name appears in mechanism_key.bridge_names —
+    # no '@E:' prefix nor any train/eval distinction.
     assert any(
         'jensen_overestimation_gap' in n
         for n in run_row.mechanism_key.bridge_names
@@ -280,7 +281,7 @@ def test_run_dqn_cell_applies_intervention_via_slot_swap() -> None:
         bridges=(),
     )
 
-    run_row, _ = run_dqn_cell(
+    run_row = run_dqn_cell(
         env_spec, seed=0, hypothesis=h,
         total_steps=40,
         optimizer=optax.adam(1e-3),

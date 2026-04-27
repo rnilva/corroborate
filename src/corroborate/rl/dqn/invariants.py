@@ -225,29 +225,23 @@ def hasselt_covariance_gap() -> Measurable[DQNTrajectoryRecord, float]:
 
 # ============ Jensen overestimation gap (reads EvalRecord) ============
 
-def jensen_overestimation_gap() -> Measurable[Mapping[str, object], float]:
-    """Empirical mean (predicted_q_at_start − mc_return) over an
-    eval-pass record. Hasselt 2010, 2016 §3 — vanilla DQN's
-    Jensen-inequality bias is positive (Q̂ overestimates Q*); DDQN
-    aims to reduce it. Gap = max(0, mean bias) — clipped because
-    only positive bias (over) is the Jensen signature; negative
-    means under-estimating and is a different phenomenon.
+def jensen_overestimation_gap() -> Measurable[DQNTrajectoryRecord, float]:
+    """Empirical mean (predicted_q_at_start − mc_return) over the
+    eval-burst fields of the merged record. Hasselt 2010, 2016
+    §3 — vanilla DQN's Jensen-inequality bias is positive (Q̂
+    overestimates Q*); DDQN aims to reduce it. Gap = max(0, mean
+    bias) — clipped because only positive bias (over) is the
+    Jensen signature; negative means under-estimating and is a
+    different phenomenon.
 
-    Typed at `Mapping[str, object]` (the Hypothesis E broad
-    default) so the resulting `at_most`-wrap fits
-    `Hypothesis.eval_bridges` without requiring authors to
-    parameterise E narrower. Internal narrowing via `jnp.asarray`
-    handles the actual jax.Array values produced by
-    `train_with_eval`'s eval record.
-
-    Reads from the `EvalTrajectoryRecord` produced by
-    `train_with_eval`'s eval pass. The `(n_bursts, K)`-shaped
-    `predicted_q_at_start` and `mc_return` arrays are flattened
-    over both axes to compute the global mean bias across all
-    eval episodes."""
+    Typed at `DQNTrajectoryRecord` (the merged training+eval
+    record produced by `train_with_eval`). Reads the
+    `(n_bursts, K)`-shaped `predicted_q_at_start` and `mc_return`
+    arrays, flattening both axes to compute the global mean bias
+    across all eval episodes."""
     name = 'jensen_overestimation_gap'
 
-    def fn(record: Mapping[str, object]) -> float:
+    def fn(record: DQNTrajectoryRecord) -> float:
         predicted = jnp.asarray(record['predicted_q_at_start'])
         actual = jnp.asarray(record['mc_return'])
         bias = float(jnp.mean(predicted - actual))

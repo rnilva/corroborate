@@ -22,7 +22,6 @@ import optax
 from corroborate.rl.dqn.claims.q_network import mlp_q
 from corroborate.rl.dqn.dqn import dqn_step, init_state
 from corroborate.rl.dqn.eval import (
-    ComposedTrace,
     EvalBurstOut,
     eval_burst,
     eval_episode,
@@ -173,22 +172,22 @@ def test_train_with_eval_produces_composed_trace() -> None:
             episode_cap=100, n_episodes=2,
         )
 
-    _final_state, trace = train_with_eval(
+    _final_state, record = train_with_eval(
         step_fn, state, total_steps=40,
         eval_fn=eval_fn, eval_every=20,
     )
 
-    assert isinstance(trace, ComposedTrace)
-    # Train trace is flat (40,) per field.
-    assert trace.train['epsilon'].shape == (40,)
-    assert trace.train['loss'].shape == (40,)
-    # Eval trace stacks (n_bursts=2, K=2).
-    assert trace.eval['predicted_q_at_start'].shape == (2, 2)
-    assert trace.eval['mc_return'].shape == (2, 2)
-    # eval_step_index records which training step each burst ran at.
-    assert trace.eval['eval_step_index'].shape == (2,)
-    assert int(trace.eval['eval_step_index'][0]) == 20
-    assert int(trace.eval['eval_step_index'][1]) == 40
+    # ONE merged dict with mixed-shape fields.
+    # Training fields: (40,) per field.
+    assert record['epsilon'].shape == (40,)
+    assert record['loss'].shape == (40,)
+    # Eval fields: (n_bursts=2, K=2) per field.
+    assert record['predicted_q_at_start'].shape == (2, 2)
+    assert record['mc_return'].shape == (2, 2)
+    # eval_step_index: (n_bursts,) — which training step each burst ran at.
+    assert record['eval_step_index'].shape == (2,)
+    assert int(record['eval_step_index'][0]) == 20
+    assert int(record['eval_step_index'][1]) == 40
 
 
 def test_train_with_eval_rejects_misaligned_steps() -> None:
