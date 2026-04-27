@@ -10,7 +10,7 @@ from __future__ import annotations
 import jax
 import jax.numpy as jnp
 
-from corroborate.rl.loop import python_loop, scan_loop
+from corroborate.loop import python_loop, scan_loop
 
 
 def test_scan_and_python_loops_produce_same_output() -> None:

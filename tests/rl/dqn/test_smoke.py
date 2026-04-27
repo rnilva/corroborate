@@ -26,7 +26,7 @@ from corroborate.rl.dqn.claims.bootstrap import ddqn_bootstrap, vanilla_bootstra
 from corroborate.rl.dqn.claims.q_network import init_mlp, mlp_q
 from corroborate.rl.dqn.dqn import dqn_step, init_state
 from corroborate.rl.env_catalogue import GymnaxEnvLike, HasN, HasShape
-from corroborate.rl.loop import python_loop, scan_loop
+from corroborate.loop import python_loop, scan_loop
 
 
 # ============ Fixtures ============

@@ -73,5 +73,10 @@ def python_loop[C, T](
     def stack(*xs: jax.Array) -> jax.Array:
         return jnp.stack(xs)
 
-    stacked = jax.tree.map(stack, *outs)
+    # `jax.tree.map`'s return is `Any` because pytree heterogeneity
+    # is genuine polymorphism the type system can't capture without
+    # dependent types — that's the "polymorphism truly requires"
+    # carve-out. The explicit `: T` annotation pins the framework-
+    # contracted return shape for the caller; pyright trusts it.
+    stacked: T = jax.tree.map(stack, *outs)  # pyright: ignore[reportAny]
     return carry, stacked
