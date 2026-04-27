@@ -1,35 +1,36 @@
 """Collect DDQN-vs-vanilla DQN runs for §3 acceptance test.
 
-Sweeps a grid of (env, seed, hypothesis) cells: each env runs
-N seeds of vanilla DQN and N seeds of DDQN at matched seeds
-(same seed → same env reset → paired comparison once Step 5
-ships paired statistics).
+Three nested parallelism layers:
 
-Outputs `experiments/data/ddqn/runs.parquet` with one RunRow per
-cell. Step 5's `paired_comparison_from_runs` will read this and
-produce ComparisonRows.
+1. **Subprocess over arms** — `ProcessPoolExecutor` spawns one
+   Python process per (env, hypothesis) pair. Each subprocess
+   has its own JAX / CUDA context, isolating per-env JIT-cache
+   memory (matches v9's pattern; prevents cross-env JIT-cache
+   OOM on long sweeps). Concurrency capped at CPU count or 4
+   for memory headroom.
+2. **Vmap over seeds** — within each subprocess, `run_dqn_arm`
+   batches all seeds in one jit-compiled call. Gymnax envs vmap
+   natively; gradient steps batch.
+3. **Nested scan over training steps** — `train_with_eval` is a
+   single nested-scan: outer over super-steps, inner over
+   `eval_every` training steps + one eval burst.
 
-Scope: classical-control envs (CartPole, Acrobot, MountainCar)
-+ a few bsuite envs. Image envs (MinAtar) deferred — episode
-length and total_steps would be 100× longer; collect them when
-the v0 stats are validated on the cheap envs first.
+Outputs `experiments/data/ddqn/runs.parquet` (union of per-arm
+parquets). Step 5's `paired_comparison_from_runs` reads this
+and produces ComparisonRows.
 
-Run: `uv run python experiments/collect_ddqn_runs.py`. ~10
-minutes wall-clock for the default config (5 envs × 5 seeds × 2
-hypotheses = 50 cells, ~10s/cell on CPU)."""
+Run: `uv run python experiments/collect_ddqn_runs.py`."""
 from __future__ import annotations
 
+import multiprocessing as mp
 import time
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
-import optax
-
 from corroborate.hypothesis import Hypothesis
-from corroborate.persistence import write_runrows
-from corroborate.rl.cell_runner import EvalConfig, run_dqn_arm
+from corroborate.persistence import read_runrows, write_runrows
 from corroborate.rl.dqn.claims.bootstrap import ddqn_bootstrap
 from corroborate.rl.dqn.invariants import DQNTrajectoryRecord
-from corroborate.rl.env_catalogue import get
 from corroborate.schema import RunRow
 
 
@@ -43,87 +44,151 @@ ENV_NAMES = (
     'DeepSea-bsuite',
 )
 
-SEEDS = tuple(range(5))  # 5 seeds per (env, hypothesis)
+SEEDS: tuple[int, ...] = tuple(range(10))
 
-# Total steps per cell. Short enough for v0 wall-clock budget,
-# long enough that the masked_window_mean catches several
-# episode terminations in the late window.
-TOTAL_STEPS = 2000
-
-# Matches `EvalConfig.n_evals` divisibility constraint.
-EVAL_CONFIG = EvalConfig.n_evals(
-    total_steps=TOTAL_STEPS, n_evals=10, n_episodes=5,
-)
+TOTAL_STEPS = 5000  # short-but-meaningful for v0 stats validation
 
 
-def _make_hypotheses() -> tuple[
-    Hypothesis[DQNTrajectoryRecord],
-    Hypothesis[DQNTrajectoryRecord],
-]:
-    """Vanilla and DDQN hypotheses over the DQN record schema.
-    Same intervention SHAPE (single slot swap), so the
-    matched-seed pair runs the same env / training schedule with
-    only the bootstrap slot differing."""
-    vanilla: Hypothesis[DQNTrajectoryRecord] = Hypothesis(
-        name='vanilla_dqn',
-        intervention={},
-        bridges=(),
-        predicted_direction=None,
+def _make_hypothesis(name: str) -> Hypothesis[DQNTrajectoryRecord]:
+    """Reconstruct hypothesis from a string id. Workers can't
+    pickle closures cleanly across spawn-mode processes, so
+    each worker rebuilds the hypothesis from a stable name."""
+    if name == 'vanilla_dqn':
+        return Hypothesis(
+            name='vanilla_dqn',
+            intervention={},
+            bridges=(),
+            predicted_direction=None,
+        )
+    if name == 'ddqn':
+        return Hypothesis(
+            name='ddqn',
+            intervention={'bootstrap': ddqn_bootstrap},
+            bridges=(),
+            predicted_direction='a_gt_b',
+        )
+    raise ValueError(f'unknown hypothesis name: {name!r}')
+
+
+HYPOTHESIS_NAMES = ('vanilla_dqn', 'ddqn')
+
+
+# ============ Worker: one (env, hypothesis) arm ============
+
+def _run_arm_worker(
+    args: tuple[str, str, tuple[int, ...], int, str, float],
+) -> Path:
+    """Subprocess worker. Runs `run_dqn_arm` for one
+    (env, hypothesis) pair and writes the resulting RunRows to a
+    per-arm parquet. Returns the parquet path.
+
+    Disables XLA preallocation BEFORE importing jax — by default
+    each JAX process grabs ~75% of GPU memory at init, which
+    starves sibling workers. With `XLA_PYTHON_CLIENT_PREALLOCATE=
+    false` plus a per-worker `XLA_PYTHON_CLIENT_MEM_FRACTION`
+    cap, N workers can share one device cleanly."""
+    env_name, hypothesis_name, seeds, total_steps, out_dir_str, mem_fraction = args
+
+    # Must set before any jax import in this process.
+    import os
+    os.environ.setdefault('XLA_PYTHON_CLIENT_PREALLOCATE', 'false')
+    os.environ.setdefault(
+        'XLA_PYTHON_CLIENT_MEM_FRACTION', f'{mem_fraction:.3f}',
     )
-    ddqn: Hypothesis[DQNTrajectoryRecord] = Hypothesis(
-        name='ddqn',
-        intervention={'bootstrap': ddqn_bootstrap},
-        bridges=(),
-        predicted_direction='a_gt_b',
-    )
-    return vanilla, ddqn
 
+    out_dir = Path(out_dir_str)
+    out_path = out_dir / f'{env_name}__{hypothesis_name}.parquet'
+
+    import optax
+    from corroborate.rl.cell_runner import EvalConfig, run_dqn_arm
+    from corroborate.rl.env_catalogue import get
+
+    h = _make_hypothesis(hypothesis_name)
+    eval_config = EvalConfig.n_evals(
+        total_steps=total_steps, n_evals=10, n_episodes=5,
+    )
+    rows = run_dqn_arm(
+        get(env_name), seeds, hypothesis=h,
+        total_steps=total_steps,
+        optimizer=optax.adam(1e-3),
+        eval_config=eval_config,
+        warmup_steps=100, sync_period=100,
+        buffer_capacity=2000, batch_size=32,
+    )
+    write_runrows(rows, out_path)
+    return out_path
+
+
+# ============ Orchestrator ============
 
 def main() -> None:
     out_dir = Path(__file__).parent / 'data' / 'ddqn'
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / 'runs.parquet'
+    final_path = out_dir / 'runs.parquet'
 
-    vanilla, ddqn = _make_hypotheses()
-    arms = [
-        (env_name, h)
+    n_arms = len(ENV_NAMES) * len(HYPOTHESIS_NAMES)
+
+    # Cap worker concurrency. With `XLA_PYTHON_CLIENT_PREALLOCATE
+    # =false` + per-worker `MEM_FRACTION = 0.9 / n_workers`,
+    # N workers share one GPU cleanly. 4 is a conservative
+    # default; raise if GPU memory is plentiful.
+    n_workers = min(4, n_arms, mp.cpu_count())
+    mem_fraction = 0.9 / n_workers
+
+    arms_args: list[tuple[str, str, tuple[int, ...], int, str, float]] = [
+        (env_name, h_name, SEEDS, TOTAL_STEPS, str(out_dir), mem_fraction)
         for env_name in ENV_NAMES
-        for h in (vanilla, ddqn)
+        for h_name in HYPOTHESIS_NAMES
     ]
-    n_arms = len(arms)
-    print(f'collecting {n_arms} arms ({len(ENV_NAMES)} envs × 2 '
-          f'hypotheses), {len(SEEDS)} seeds vmapped per arm — '
-          f'{n_arms * len(SEEDS)} cells total')
+    print(
+        f'spawning up to {n_workers} subprocess workers for '
+        f'{n_arms} arms ({len(ENV_NAMES)} envs × '
+        f'{len(HYPOTHESIS_NAMES)} hypotheses), '
+        f'{len(SEEDS)} seeds vmapped per arm — '
+        f'{n_arms * len(SEEDS)} cells total',
+        flush=True,
+    )
 
-    rows: list[RunRow] = []
+    # Spawn-start so each worker gets a clean JAX state (fork
+    # would inherit the parent's CUDA context, breaking GPU
+    # isolation if the parent had touched JAX).
+    ctx = mp.get_context('spawn')
+
     t0 = time.time()
-    for i, (env_name, h) in enumerate(arms):
-        env_spec = get(env_name)
-        arm_t0 = time.time()
-        arm_rows = run_dqn_arm(
-            env_spec, SEEDS, hypothesis=h,
-            total_steps=TOTAL_STEPS,
-            optimizer=optax.adam(1e-3),
-            eval_config=EVAL_CONFIG,
-            warmup_steps=100, sync_period=100,
-            buffer_capacity=2000, batch_size=32,
-        )
-        arm_t = time.time() - arm_t0
-        outcomes = [r.primary_outcome_summary for r in arm_rows]
-        outcome_summary = sum(outcomes) / len(outcomes)
-        elapsed = time.time() - t0
-        eta = elapsed / (i + 1) * (n_arms - i - 1)
-        print(
-            f'[{i + 1:>2}/{n_arms}] {env_name:<22} h={h.name:<12} '
-            f'mean_outcome={outcome_summary:>8.3f} '
-            f'arm={arm_t:>5.1f}s eta={eta:>6.0f}s',
-            flush=True,
-        )
-        rows.extend(arm_rows)
+    parquet_paths: list[Path] = []
+    with ProcessPoolExecutor(max_workers=n_workers, mp_context=ctx) as pool:
+        future_to_arm = {
+            pool.submit(_run_arm_worker, args): args[:2]
+            for args in arms_args
+        }
+        for i, future in enumerate(as_completed(future_to_arm), start=1):
+            env_name, h_name = future_to_arm[future]
+            try:
+                p = future.result()
+            except Exception as e:
+                print(
+                    f'[{i:>2}/{n_arms}] FAILED  {env_name:<22} '
+                    f'h={h_name:<12} {type(e).__name__}: {e}',
+                    flush=True,
+                )
+                continue
+            parquet_paths.append(p)
+            elapsed = time.time() - t0
+            print(
+                f'[{i:>2}/{n_arms}] done    {env_name:<22} '
+                f'h={h_name:<12} elapsed={elapsed:>6.0f}s',
+                flush=True,
+            )
 
-    print(f'\nwriting {len(rows)} rows → {out_path}')
-    write_runrows(rows, out_path)
-    print(f'done. total wall-clock: {time.time() - t0:.0f}s')
+    print(f'\nworkers complete in {time.time() - t0:.0f}s; '
+          f'merging {len(parquet_paths)} per-arm parquets')
+
+    # Union-merge per-arm parquets into one combined file.
+    all_rows: list[RunRow] = []
+    for p in parquet_paths:
+        all_rows.extend(read_runrows(p))
+    write_runrows(all_rows, final_path)
+    print(f'written {len(all_rows)} rows → {final_path}')
 
 
 if __name__ == '__main__':

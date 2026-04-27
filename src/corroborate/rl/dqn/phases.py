@@ -138,6 +138,9 @@ def rollout_phase(
     next_obs, next_env_state, reward, done, _info = env.step(
         env_key, state.env_state, action.astype(jnp.int32), env_params,
     )
+    # Flatten multi-dim obs to match the flat-MLP's input shape
+    # (state.obs is already flat from init_state_from_key).
+    next_obs = next_obs.reshape(state.obs.shape)
 
     # Append to FIFO buffer.
     new_buf = buffer_add(

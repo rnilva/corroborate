@@ -79,6 +79,11 @@ def init_state_from_key(
     online = init_mlp(init_key, obs_dim, n_actions, hidden=hidden)
     opt_state = optimizer.init(online)
     obs, env_state = env.reset(env_key, env_params)
+    # Flatten env-side multi-dim obs (e.g. Catch's (5, 5) grid,
+    # DeepSea's (8, 8)) to a 1D vector matching the flat MLP's
+    # input shape. Conv-based q_networks would NOT use this
+    # flattening; they'd pair with a different state-init path.
+    obs = obs.reshape(obs_dim)
     buf_obs, buf_action, buf_reward, buf_next_obs, buf_done, buf_size = (
         buffer_init(buffer_capacity, obs_dim)
     )
