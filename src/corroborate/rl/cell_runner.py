@@ -99,7 +99,7 @@ class EvalConfig:
 def run_dqn_cell(
     env_spec: EnvSpec,
     seed: int,
-    hypothesis: Hypothesis[DQNTrajectoryRecord],
+    hypothesis: Hypothesis[DQNTrajectoryRecord, Mapping[str, jax.Array]],
     *,
     total_steps: int,
     optimizer: optax.GradientTransformation,
@@ -177,11 +177,16 @@ def run_dqn_cell(
         fraction=outcome_fraction,
     )(trace.train)
 
-    # Run hypothesis bridges → FactRows.
+    # Run hypothesis bridges → FactRows. Train-bridges read
+    # `trace.train`; eval-bridges read `trace.eval` (the
+    # subsampled greedy-rollout record). Both produce FactRows
+    # in the same flat tuple — downstream consumers don't
+    # distinguish (the bridge's `targets` already encode which
+    # record keys it read).
     intervention_sig: frozenset[str] = frozenset(
         slot for slot, _ in hypothesis.mechanism_key.intervention_signature
     )
-    facts = tuple(
+    train_facts = tuple(
         _bridge_result_to_fact(
             bridge=b,
             result=b(trace.train),
@@ -189,6 +194,15 @@ def run_dqn_cell(
         )
         for b in hypothesis.bridges
     )
+    eval_facts = tuple(
+        _bridge_result_to_fact(
+            bridge=b,
+            result=b(trace.eval),
+            intervention_signature=intervention_sig,
+        )
+        for b in hypothesis.eval_bridges
+    )
+    facts = train_facts + eval_facts
 
     reads_set: frozenset[str] = frozenset()
     for f in facts:
@@ -215,15 +229,18 @@ def run_dqn_cell(
 
 # ============ Helpers ============
 
-def _bridge_result_to_fact(
+def _bridge_result_to_fact[R: Mapping[str, object]](
     *,
-    bridge: Bridge[DQNTrajectoryRecord],
+    bridge: Bridge[R],
     result: BridgeResult,
     intervention_signature: frozenset[str],
 ) -> FactRow:
     """Convert a BridgeResult to a FactRow at cell-level
-    granularity. `kind` is read off `stats['kind']`: tautological
-    → 'invariant', otherwise → 'bridge'.
+    granularity. Generic over the bridge's record type so the
+    same helper handles both train-bridges (over the
+    `DQNTrajectoryRecord`) and eval-bridges (over the eval
+    record). `kind` is read off `stats['kind']`: tautological →
+    'invariant', otherwise → 'bridge'.
 
     `natural_strength` is a binary placeholder (1.0 for HELD, 0.0
     otherwise) — step 5 (statistics module) replaces this with

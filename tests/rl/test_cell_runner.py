@@ -220,6 +220,52 @@ def test_run_dqn_cell_invariant_violation_dominates_verdict() -> None:
 
 # ============ DDQN intervention via slot swap ============
 
+# ============ Eval-bridge wiring ============
+
+def test_run_dqn_cell_runs_eval_bridges_against_eval_record() -> None:
+    """Hypothesis.eval_bridges target the eval record (predicted
+    Q vs MC return); cell runner threads them through trace.eval
+    and produces FactRows alongside train-bridge facts."""
+    from corroborate.invariant import at_most
+    from corroborate.rl.dqn.claims.bootstrap import vanilla_bootstrap
+    from corroborate.rl.dqn.invariants import jensen_overestimation_gap
+    from corroborate.rl.env_catalogue import get
+    env_spec = get('CartPole-v1')
+
+    jensen_scope = at_most(
+        jensen_overestimation_gap(),
+        threshold=1e9,  # generous; expected to HELD on a smoke run
+        of_claim=vanilla_bootstrap,
+    )
+
+    h: Hypothesis[DQNTrajectoryRecord, Mapping[str, jnp.ndarray]] = Hypothesis(
+        name='vanilla_with_jensen_scope',
+        intervention={},
+        bridges=(),
+        eval_bridges=(jensen_scope,),
+        predicted_direction=None,
+    )
+
+    run_row, _eval = run_dqn_cell(
+        env_spec, seed=0, hypothesis=h,
+        total_steps=40,
+        optimizer=optax.adam(1e-3),
+        eval_config=EvalConfig(eval_every=20, n_episodes=2),
+        warmup_steps=10, sync_period=10,
+        buffer_capacity=200, batch_size=16,
+    )
+    # Exactly one fact (the jensen scope).
+    assert len(run_row.facts) == 1
+    fact = run_row.facts[0]
+    assert fact.kind == 'invariant'
+    assert 'jensen_overestimation_gap' in fact.name
+    # The eval-bridge name appears in mechanism_key.bridge_names.
+    assert any(
+        'jensen_overestimation_gap' in n
+        for n in run_row.mechanism_key.bridge_names
+    )
+
+
 def test_run_dqn_cell_applies_intervention_via_slot_swap() -> None:
     """DDQN intervention is `intervention={'bootstrap':
     ddqn_bootstrap}`. The cell runner must apply this through

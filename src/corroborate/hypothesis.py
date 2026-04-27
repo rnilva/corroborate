@@ -38,6 +38,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Literal
 
+import jax
+
 from corroborate.bridge import Bridge
 from corroborate.claim import Claim
 
@@ -101,22 +103,37 @@ class MechanismKey:
 
 
 @dataclass(frozen=True, slots=True)
-class Hypothesis[R: Mapping[str, object]]:
+class Hypothesis[
+    R: Mapping[str, object],
+    E: Mapping[str, object] = Mapping[str, jax.Array],
+]:
     """A research hypothesis: an intervention plus the bridges
     that should hold under it.
 
-    Generic in `R: Mapping[str, object]` — the record schema all
-    bridges are typed against. Authors using TypedDict for their
-    record get typed bridge bodies (no narrowing); authors using
-    plain `Mapping[str, object]` continue to narrow at use site.
+    Two generic params:
+
+    - `R: Mapping[str, object]` — the *training* record schema.
+      `bridges` are typed against this.
+    - `E: Mapping[str, object]` — the *eval-pass* record schema
+      (defaults to `Mapping[str, object]` so legacy single-record
+      hypotheses don't need to specify it). `eval_bridges` are
+      typed against this; populated by `train_with_eval`'s eval
+      pass and consumed by gap measurables that read predicted-Q
+      vs MC-return data (e.g. `jensen_overestimation_gap`).
+
+    Authors using TypedDict for their record(s) get typed bridge
+    bodies (no narrowing); authors using plain `Mapping[str,
+    object]` continue to narrow at use site.
 
     `name` is a human-readable label; `mechanism_key` is the
-    structural identity (don't conflate them — two hypotheses
-    can share `name` and have distinct mechanism_keys, or vice
-    versa; `mechanism_key` is the anti-laundering key)."""
+    structural identity. mechanism_key.bridge_names unions
+    `bridges` and `eval_bridges` names — two hypotheses with
+    identical interventions but different scope commitments
+    (eval-bridge thresholds) are structurally distinct."""
     name: str
     intervention: Mapping[str, object]
     bridges: tuple[Bridge[R], ...] = ()
+    eval_bridges: tuple[Bridge[E], ...] = ()
     predicted_direction: Direction | None = None
 
     @property
@@ -124,16 +141,24 @@ class Hypothesis[R: Mapping[str, object]]:
         """Canonical structural identity. Cached implicitly via
         the frozen-dataclass property semantics — pyright infers
         the property as memoizable, but Python re-computes on
-        each access; v0 doesn't cache (cheap to compute)."""
+        each access; v0 doesn't cache (cheap to compute).
+
+        `bridge_names` unions train-bridges and eval-bridges so
+        the mechanism-key reflects the author's full
+        scope-commitment surface."""
         intervention_pairs: tuple[tuple[str, str], ...] = tuple(
             sorted(
                 (k, _canonical_str(v))
                 for k, v in self.intervention.items()
             )
         )
+        all_bridge_names: frozenset[str] = (
+            frozenset(b.name for b in self.bridges)
+            | frozenset(b.name for b in self.eval_bridges)
+        )
         return MechanismKey(
             intervention_signature=intervention_pairs,
-            bridge_names=frozenset(b.name for b in self.bridges),
+            bridge_names=all_bridge_names,
             direction=self.predicted_direction,
         )
 
