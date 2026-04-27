@@ -37,7 +37,7 @@ import optax
 
 from corroborate.bridge import Bridge, BridgeResult
 from corroborate.hypothesis import Hypothesis
-from corroborate.reductions import late_window_mean
+from corroborate.reductions import late_episode_return_mean
 from corroborate.rl.dqn.claims.q_network import mlp_q
 from corroborate.rl.dqn.dqn import default_state_hash, dqn_step, init_state
 from corroborate.rl.dqn.eval import (
@@ -110,7 +110,6 @@ def run_dqn_cell(
     buffer_capacity: int = 10_000,
     warmup_steps: int = 1_000,
     sync_period: int = 100,
-    outcome_key: str = 'ep_return',
     outcome_fraction: float = 0.1,
     cycle_id: str | None = None,
 ) -> tuple[RunRow, EvalTrajectoryRecord]:
@@ -168,8 +167,15 @@ def run_dqn_cell(
         eval_fn=eval_fn, eval_every=eval_config.eval_every,
     )
 
-    # Outcome projection — late-window mean of the chosen record key.
-    outcome = late_window_mean(outcome_key, outcome_fraction)(trace.train)
+    # Outcome projection — late-window mean of *episode-end*
+    # returns (filtered to done==1 in the late window). Plain
+    # `late_window_mean('ep_return', ...)` would average over a
+    # cumulative-within-episode sawtooth; this one filters to
+    # episode terminations so the value is the per-episode return.
+    outcome = late_episode_return_mean(
+        return_key='ep_return', done_key='done',
+        fraction=outcome_fraction,
+    )(trace.train)
 
     # Run hypothesis bridges → FactRows.
     intervention_sig: frozenset[str] = frozenset(

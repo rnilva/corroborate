@@ -166,11 +166,63 @@ def late_window_mean(
     key: str, fraction: float = 0.1,
 ) -> Measurable[Mapping[str, jnp.ndarray], float]:
     """Schema-row outcome projection: mean over the last `fraction`
-    of `record[key]`. Convenience wrapper around `mean_window` for
-    the canonical `primary_outcome_summary` derivation in
-    PAPER_NOTES.md §3 (late-window ep_return mean)."""
+    of `record[key]`. Convenience wrapper around `mean_window`.
+
+    NOTE: for episode-return outcomes specifically, prefer
+    `late_episode_return_mean` — `ep_return` is per-step
+    cumulative-within-episode (a sawtooth under standard logging)
+    and a plain mean over a sawtooth is NOT the per-episode
+    return. `late_window_mean` is correct for genuinely-per-step
+    quantities (loss, td_error, max_q)."""
     if not (0.0 < fraction <= 1.0):
         raise ValueError(
             f'late_window_mean: need 0 < fraction ≤ 1; got {fraction}',
         )
     return mean_window(from_key(key), 1.0 - fraction, 1.0)
+
+
+def late_episode_return_mean(
+    return_key: str = 'ep_return',
+    done_key: str = 'done',
+    fraction: float = 0.1,
+) -> Measurable[Mapping[str, jnp.ndarray], float]:
+    """Mean of episode returns terminating in the late
+    `fraction` of the trajectory. Avoids the sawtooth pitfall:
+    plain `late_window_mean('ep_return', fraction)` averages a
+    cumulative-within-episode signal that mixes mid-episode
+    partial sums with end-of-episode totals — NOT the per-episode
+    return.
+
+    `record[return_key]` is the cumulative-within-episode value
+    at each step (so on `done==1` it's the final episode return).
+    `record[done_key]` is the binary done flag. This reduction
+    masks to (`step in [1-fraction, 1.0)` ∧ `done==1`) then means
+    the surviving values — i.e. mean of episode-end returns
+    whose terminal step lies in the late window.
+
+    Returns 0.0 if no episode ended in the late window."""
+    if not (0.0 < fraction <= 1.0):
+        raise ValueError(
+            f'late_episode_return_mean: need 0 < fraction ≤ 1; '
+            f'got {fraction}',
+        )
+    name = (
+        f'{return_key}_at_done__late_window_mean_'
+        f'{int(round((1.0 - fraction) * 100))}_100'
+    )
+
+    def fn(record: Mapping[str, jnp.ndarray]) -> float:
+        ep_return = record[return_key]
+        done = record[done_key]
+        n = int(ep_return.shape[0])
+        cutoff = int((1.0 - fraction) * n)
+        time_mask = jnp.arange(n) >= cutoff
+        ep_end_mask = done > 0.5
+        keep_mask = time_mask & ep_end_mask
+        n_kept = int(jnp.sum(keep_mask))
+        if n_kept == 0:
+            return 0.0
+        masked = jnp.where(keep_mask, ep_return, 0.0)
+        return float(jnp.sum(masked) / n_kept)
+
+    return Measurable(fn=fn, name=name, reads=(return_key, done_key))

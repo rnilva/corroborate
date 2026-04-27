@@ -44,50 +44,47 @@ def fqi_decay_gap(
     *,
     gamma: float = 0.99,
 ) -> Measurable[DQNTrajectoryRecord, float]:
-    """Empirical per-window decay rate of the TD-error vs. the
-    γ-contraction theoretical rate. Gap is the magnitude by which
-    observed decay falls short of γ.
+    """Across-window sup-norm decay rate of the TD-error vs the
+    γ-contraction theoretical rate.
 
-    Theory: Mnih 2015 §3 + Munos 2003 fitted-Q-iteration. Within
-    each [k·τ, (k+1)·τ] window, the regression target is frozen,
-    so the gradient step is supervised regression — FQI is a
-    γ-contraction in sup-norm under Lipschitz function-class
-    assumptions. The signature: `||TD_error_late_window||` /
-    `||TD_error_early_window||` ≤ γ per window, asymptotically.
+    Theory: Munos 2003 fitted-Q-iteration. Within each
+    [k·τ, (k+1)·τ] window the regression target is frozen, so
+    the inner gradient step is supervised regression — FQI's
+    actual contraction property is **between** iterations
+    (windows, k → k+1) in **sup-norm**, not within a single
+    window's mean. The principled signature:
 
-    What we compute: for each sync window, the ratio `mean(td_error
-    in window's late half) / mean(td_error in window's early half)`.
-    Average those ratios. Gap = max(0, average_ratio − γ): non-zero
-    when observed decay is slower than γ-contraction predicts.
+        ‖TD_error‖_∞ at window k+1 ≤ γ · ‖TD_error‖_∞ at window k
 
-    `sync_period` must match the experiment's sync_period so the
-    windows align with target-net resets."""
+    What we compute: per-window `max|TD_error|` (sup-norm), then
+    consecutive-window decay ratios across windows, averaged.
+    Gap = max(0, avg_ratio − γ) — non-zero when observed
+    across-window contraction falls short of the γ rate.
+
+    `sync_period` must match the experiment's sync_period so
+    windows align with target-net resets. Returns 0.0 when the
+    trajectory has fewer than 2 complete windows (no across-
+    window ratio computable)."""
     assert sync_period > 0, f'sync_period must be positive; got {sync_period}'
     name = f'fqi_decay_gap[τ={sync_period},γ={gamma:g}]'
 
     def fn(record: DQNTrajectoryRecord) -> float:
         td = jnp.asarray(record['td_error'])
         n = int(td.shape[0])
-        # Discard incomplete trailing window if any.
         n_windows = n // sync_period
-        if n_windows == 0:
-            # Run too short to have even one full window; report 0
-            # (no-data; not a violation).
+        if n_windows < 2:
+            # Need at least two windows for an across-window ratio.
             return 0.0
-        ratios: list[float] = []
+        # Per-window sup-norm |TD_error|.
+        window_sup_norms: list[float] = []
         for k in range(n_windows):
-            start = k * sync_period
-            end = start + sync_period
-            window = td[start:end]
-            half = sync_period // 2
-            if half == 0:
-                continue
-            early = float(jnp.mean(window[:half]))
-            late = float(jnp.mean(window[half:]))
-            ratio = late / max(abs(early), 1e-9)
-            ratios.append(ratio)
-        if not ratios:
-            return 0.0
+            window = td[k * sync_period : (k + 1) * sync_period]
+            window_sup_norms.append(float(jnp.max(jnp.abs(window))))
+        # Across-window decay ratios.
+        ratios = [
+            window_sup_norms[k] / max(abs(window_sup_norms[k - 1]), 1e-9)
+            for k in range(1, n_windows)
+        ]
         avg_ratio = sum(ratios) / len(ratios)
         return float(max(0.0, avg_ratio - gamma))
 
@@ -100,38 +97,47 @@ def lin_iid_gap(
     capacity: int,
 ) -> Measurable[DQNTrajectoryRecord, float]:
     """KL divergence of the empirical sampling distribution over
-    buffer indices from the uniform distribution. Gap = the KL
-    itself — 0 means perfectly uniform, >0 means biased.
+    buffer indices from `Uniform(0, capacity)`, computed only
+    over steps where the replay buffer is fully filled
+    (`buf_size == capacity`). Gap = the KL — 0 means perfectly
+    uniform, >0 means biased.
 
     Theory: Lin 1992 + Singh-Sutton 1996. Q-learning + replay
-    convergence assumes uniform i.i.d. resampling from the buffer.
-    Uniform replay's empirical sampling distribution should match
-    Uniform(0, buf_size). Bias toward recent transitions, hot
-    indices, etc. shows up as KL > 0.
+    convergence assumes uniform i.i.d. resampling from the
+    buffer. Uniform replay's empirical sampling distribution
+    should match `Uniform(0, buf_size)` at each step. Bias
+    toward recent transitions, hot indices, etc. shows up as
+    KL > 0.
 
-    What we compute: histogram of `sample_indices` flattened over
-    the trajectory, normalised; KL(empirical || uniform) over the
-    populated buffer support. Larger KL = more biased sampling.
+    Filtering to `buf_size == capacity` avoids a structural
+    confound: during the fill phase the buffer is small, so
+    `sample_indices` is mechanically biased toward low values
+    (because high values aren't available yet). Including those
+    steps would inflate the KL for reasons unrelated to Lin's
+    sampling-uniformity claim. Returns `gap=0` if the buffer
+    never fills (no-data, not a violation).
 
-    `capacity` is the buffer's max capacity, used to size the
-    uniform reference distribution."""
+    `capacity` must match the experiment's `buffer_capacity` so
+    the post-fill filter aligns."""
     assert capacity > 0, f'capacity must be positive; got {capacity}'
     name = f'lin_iid_gap[cap={capacity}]'
 
     def fn(record: DQNTrajectoryRecord) -> float:
-        indices = jnp.asarray(record['sample_indices']).flatten()
-        if indices.size == 0:
+        indices = jnp.asarray(record['sample_indices'])  # (T, batch)
+        buf_size = jnp.asarray(record['buf_size'])       # (T,)
+        full_mask = buf_size >= capacity                 # (T,)
+        n_full = int(jnp.sum(full_mask))
+        if n_full == 0:
             return 0.0
-        # Histogram count per buffer index.
-        # bincount returns shape (capacity,) when minlength=capacity.
-        counts = jnp.bincount(indices, length=capacity)
+        # Filter rows where buffer was full; flatten across (T_full, batch).
+        full_indices = indices[full_mask].flatten()
+        if int(full_indices.size) == 0:
+            return 0.0
+        counts = jnp.bincount(full_indices, length=capacity)
         total = float(jnp.sum(counts))
         if total == 0.0:
             return 0.0
         empirical = counts / total
-        # KL(empirical || uniform). Uniform = 1/capacity per slot.
-        # KL = Σ p · log(p / q) over support where p > 0.
-        # log(p / q) = log(p · capacity).
         eps = 1e-12
         nonzero = empirical > eps
         log_ratio = jnp.where(
@@ -142,22 +148,26 @@ def lin_iid_gap(
         kl = float(jnp.sum(empirical * log_ratio))
         return float(max(0.0, kl))
 
-    return Measurable(fn=fn, name=name, reads=('sample_indices',))
+    return Measurable(fn=fn, name=name, reads=('sample_indices', 'buf_size'))
 
 
 # ============ Hasselt independence gap (Pearson correlation) ============
 
 def hasselt_covariance_gap() -> Measurable[DQNTrajectoryRecord, float]:
-    """Empirical |Pearson correlation| between Q_online and
-    Q_target across the sampling distribution.
+    """Empirical positive Pearson correlation between Q_online
+    and Q_target across the sampling distribution. Gap =
+    `max(0, r)` — only positive correlation degrades DDQN's
+    decoupling; anti-correlation actually *helps* (estimators
+    cancel), so the gap is the asymmetric `max(0, r)`, not `|r|`.
 
     Theory: Hasselt 2010, 2016. DDQN's bias-correction relies on
-    online and target nets being roughly independent estimators
-    of Q*. Independence ⇒ correlation ≈ 0 ⇒ gap ≈ 0. Perfect
-    correlation (vanilla DQN at sync, online ≡ target) ⇒ gap = 1.
+    online and target nets being roughly *uncorrelated*
+    estimators of Q*. Uncorrelated (or anti-correlated) ⇒
+    gap ≈ 0. Perfect positive correlation (vanilla DQN at sync,
+    online ≡ target) ⇒ gap = 1.
 
     Computes Pearson r over flattened `(T, batch, n_actions)`
-    arrays of Q-values from the always-on `_value_probe` in
+    arrays of Q-values from the always-on `value_probe` in
     `train_phase`. The probe runs both networks on the bootstrap's
     batch each step; values are stored raw (not pre-reduced) so
     the correlation is a post-hoc reduction here."""
@@ -172,44 +182,23 @@ def hasselt_covariance_gap() -> Measurable[DQNTrajectoryRecord, float]:
         std_on = jnp.sqrt(jnp.mean(on_centered ** 2))
         std_tg = jnp.sqrt(jnp.mean(tg_centered ** 2))
         denom = std_on * std_tg
-        # If either side is constant (zero variance), correlation
-        # is undefined; treat as 0 (no information about
-        # independence either way — conservative).
+        # Constant-variance side ⇒ undefined correlation ⇒ 0.
         r = jnp.where(denom > 1e-9, cov / jnp.where(denom > 1e-9, denom, 1.0), 0.0)
-        return float(jnp.abs(r))
+        # Asymmetric: only positive correlation is the failure
+        # mode for DDQN's decoupling assumption.
+        return float(jnp.maximum(0.0, r))
 
     return Measurable(
         fn=fn, name=name, reads=('online_q_values', 'target_q_values'),
     )
 
 
-# ============ Action coverage proxy (Watkins, caveated) ============
-
-def action_coverage_gap(
-    *,
-    expected_min_unique: int = 2,
-) -> Measurable[DQNTrajectoryRecord, float]:
-    """Gap = max(0, expected_min_unique - unique_actions_seen).
-
-    Watkins 1992 requires every (s, a) visited infinitely often.
-    The literal (s, a)-coverage condition is NOT measured here —
-    that needs per-env state-hashing (deferred to step 4). What
-    we measure: the trivial necessary floor that ε-greedy
-    explored at least `expected_min_unique` distinct actions.
-
-    Gap = 0 when unique actions ≥ expected_min_unique (the floor
-    holds); gap = (expected_min_unique − unique_count) when it
-    doesn't. Failing this means ε-greedy collapsed to fewer
-    actions than expected, which definitely violates Watkins;
-    passing it does NOT imply (s, a) coverage."""
-    name = f'action_coverage_gap[≥{expected_min_unique}]'
-
-    def fn(record: DQNTrajectoryRecord) -> float:
-        actions = jnp.asarray(record['action']).flatten()
-        n_unique = int(jnp.unique(actions).shape[0])
-        return float(max(0, expected_min_unique - n_unique))
-
-    return Measurable(fn=fn, name=name, reads=('action',))
+# Note: `action_coverage_gap` was retired — it was a
+# numerical-sanity assert ("did ε-greedy explore ≥ 2 distinct
+# actions?") dressed as a Watkins invariant. The literal Watkins
+# (s, a)-coverage measurement is `state_action_coverage_gap`,
+# which lives below; the trivial action-floor check (if needed)
+# is a unit test, not a theorem-condition gap.
 
 
 # ============ Jensen overestimation gap (reads EvalRecord) ============
@@ -304,7 +293,6 @@ __all__ = [
     'fqi_decay_gap',
     'lin_iid_gap',
     'hasselt_covariance_gap',
-    'action_coverage_gap',
     'jensen_overestimation_gap',
     'state_action_coverage_gap',
 ]

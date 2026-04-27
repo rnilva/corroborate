@@ -195,6 +195,7 @@ def _build_record(
         'ep_return': rollout.ep_return,
         'action': rollout.action,
         'state_hash': rollout.state_hash,
+        'buf_size': rollout.buf_size,
         'loss': train.loss,
         'td_error': train.td_error,
         'online_q_values': train.online_q_values,

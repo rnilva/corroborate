@@ -55,6 +55,7 @@ class RolloutOut(NamedTuple):
     ep_return: jax.Array  # cumulative within current episode (reset on done in state)
     action: jax.Array     # int32 — the action ε-greedy returned this step
     state_hash: jax.Array # int32 — env-specific bucket id for `state.obs`
+    buf_size: jax.Array   # int32 — replay buffer fill level AFTER this step's add
 
 
 class TrainOut(NamedTuple):
@@ -170,6 +171,7 @@ def rollout_phase(
         ep_return=cumulative,
         action=action.astype(jnp.int32),
         state_hash=obs_hash,
+        buf_size=buf_size.astype(jnp.int32),
     )
     return new_state, out
 
