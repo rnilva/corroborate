@@ -78,12 +78,14 @@ def _always_reject(record: Mapping[str, object]) -> BridgeResult:
 
 @bridge(targets=('value',))
 def _invariant_violated(record: Mapping[str, object]) -> BridgeResult:
-    """Mimics what `@invariant` produces: a tautological-tagged
-    NO_EFFECT result. The aggregator's invariant-precedence rule
-    should map this to INVARIANT_VIOLATION at cell level."""
+    """Mimics what `at_most(gap, threshold)` produces when the
+    gap exceeds the threshold: a tautological-tagged
+    `Verdict.INVARIANT_VIOLATION` directly. The aggregator's
+    invariant-precedence rule maps this to INVARIANT_VIOLATION
+    at cell level."""
     del record
     return BridgeResult(
-        verdict=Verdict.NO_EFFECT,
+        verdict=Verdict.INVARIANT_VIOLATION,
         reason='theorem precondition broken',
         stats={'kind': 'tautological', 'of_claim': 'some_claim'},
         name='', targets=(),

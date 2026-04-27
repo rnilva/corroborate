@@ -34,10 +34,10 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+from corroborate.aggregate import aggregate_cell_verdict
 from corroborate.bridge import Bridge, BridgeResult
 from corroborate.hypothesis import Hypothesis, MechanismKey
 from corroborate.schema import FactRow, RunRow
-from corroborate.verdict import Verdict
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,7 +95,7 @@ def sweep[R: Mapping[str, object]](
                 _bridge_result_to_fact(b(record), b, intervention_sig)
                 for b in h.bridges
             )
-            verdict = _aggregate_cell_verdict(facts)
+            verdict = aggregate_cell_verdict(facts)
             reads_set: frozenset[str] = frozenset()
             for f in facts:
                 reads_set = reads_set | f.reads
@@ -113,7 +113,7 @@ def sweep[R: Mapping[str, object]](
                 seed=seed,
                 mechanism_key=h.mechanism_key,
                 primary_outcome_summary=primary,
-                record_keys=tuple(sorted(record.keys())),
+                record_keys=tuple(record.keys()),
                 facts=facts,
                 reads_set=reads_set,
                 verdict=verdict,
@@ -170,39 +170,3 @@ def _intervention_signature_leaves(mk: MechanismKey) -> frozenset[str]:
     return frozenset(leaves)
 
 
-def _aggregate_cell_verdict(facts: tuple[FactRow, ...]) -> Verdict:
-    """Cell-level verdict from per-bridge facts.
-
-    Precedence (highest first):
-    1. Any tautological-tagged NO_EFFECT (invariant violated;
-       mechanism didn't operate) → INVARIANT_VIOLATION.
-    2. Any NO_EFFECT → NO_EFFECT (claim was tested and failed).
-    3. All HELD → HELD.
-    4. Otherwise (mixed HELD + POWER_INSUFFICIENT) →
-       POWER_INSUFFICIENT (the framework's 'cannot tell' tag).
-    Empty facts → POWER_INSUFFICIENT (no test was performed).
-
-    The statistics layer (step 5) refines this with MDE+power-
-    aware trichotomy at the comparison level (ArmRow + ComparisonRow).
-    Cell-level here is the coarse aggregate.
-
-    Returns `Verdict` directly (typed enum), not a string — the
-    framework's primary discrimination is the trichotomy, and
-    de-typing it to str at the row boundary loses semantic
-    information. Pyright catches a Verdict variant rename instead
-    of silently mismatching strings."""
-    if not facts:
-        return Verdict.POWER_INSUFFICIENT
-    has_invariant_violation = any(
-        f.kind == 'invariant' and f.verdict is Verdict.NO_EFFECT
-        for f in facts
-    )
-    if has_invariant_violation:
-        return Verdict.INVARIANT_VIOLATION
-    has_no_effect = any(f.verdict is Verdict.NO_EFFECT for f in facts)
-    if has_no_effect:
-        return Verdict.NO_EFFECT
-    all_held = all(f.verdict is Verdict.HELD for f in facts)
-    if all_held:
-        return Verdict.HELD
-    return Verdict.POWER_INSUFFICIENT

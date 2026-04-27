@@ -71,9 +71,10 @@ def fqi_decay_gap(
     across-window contraction falls short of the γ rate.
 
     `sync_period` must match the experiment's sync_period so
-    windows align with target-net resets. Returns 0.0 when the
+    windows align with target-net resets. Returns `NaN` when the
     trajectory has fewer than 2 complete windows (no across-
-    window ratio computable)."""
+    window ratio computable) — the no-data sentinel that
+    `at_most` maps to POWER_INSUFFICIENT."""
     assert sync_period > 0, f'sync_period must be positive; got {sync_period}'
     name = f'fqi_decay_gap[τ={sync_period},γ={gamma:g}]'
 
@@ -132,8 +133,9 @@ def lin_iid_gap(
     `sample_indices` is mechanically biased toward low values
     (because high values aren't available yet). Including those
     steps would inflate the KL for reasons unrelated to Lin's
-    sampling-uniformity claim. Returns `gap=0` if the buffer
-    never fills (no-data, not a violation).
+    sampling-uniformity claim. Returns `NaN` if the buffer never
+    fills (no-data sentinel — `at_most` maps it to
+    POWER_INSUFFICIENT).
 
     `capacity` must match the experiment's `buffer_capacity` so
     the post-fill filter aligns."""
@@ -272,9 +274,9 @@ def state_action_coverage_gap(
     assumption.
 
     `state_hash_cardinality=None` (image envs without a declared
-    state_hash) produces a `gap=0` no-data Measurable — the
-    theorem isn't measurable in that regime, so we report no
-    information rather than a misleading number."""
+    state_hash) produces a `NaN` no-data Measurable — the
+    theorem isn't measurable in that regime; `at_most` maps the
+    NaN to POWER_INSUFFICIENT rather than misleading HELD."""
     if state_hash_cardinality is None or n_actions <= 0:
         # No-data: env has no state_hash discretization. NaN
         # sentinel — distinguishes "no data" from "perfect

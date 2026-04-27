@@ -46,6 +46,42 @@ def _empty_meta() -> dict[str, str | int | float | bool]:
     return {}
 
 
+# ============ Cell-level verdict aggregator (shared) ============
+
+def aggregate_cell_verdict(facts: tuple[FactRow, ...]) -> Verdict:
+    """Cell-level verdict from per-bridge facts. Popperian
+    aggregation: any single refutation refutes.
+
+    Precedence (highest first):
+    1. Any `Verdict.INVARIANT_VIOLATION` (a tautological-tagged
+       gap exceeded its scope-commitment threshold; the run sat
+       outside the theorem's domain — outcome verdicts are out of
+       scope per axiom 18).
+    2. Any `Verdict.NO_EFFECT` → NO_EFFECT (one bridge refuted
+       is enough; the hypothesis as a whole is refuted under this
+       cell — Popperian falsification).
+    3. All `Verdict.HELD` → HELD.
+    4. Otherwise (mixed HELD + POWER_INSUFFICIENT) →
+       `POWER_INSUFFICIENT` (cannot tell).
+    Empty facts → `POWER_INSUFFICIENT` (no test was performed).
+
+    Returns `Verdict` directly (typed enum), not a string —
+    framework's primary discrimination is the trichotomy. Shared
+    between `sweep.py` and `rl/cell_runner.py` so call paths
+    converge on identical semantics; the duplicates had diverged
+    after `at_most` was retyped to return INVARIANT_VIOLATION
+    directly (round 2)."""
+    if not facts:
+        return Verdict.POWER_INSUFFICIENT
+    if any(f.verdict is Verdict.INVARIANT_VIOLATION for f in facts):
+        return Verdict.INVARIANT_VIOLATION
+    if any(f.verdict is Verdict.NO_EFFECT for f in facts):
+        return Verdict.NO_EFFECT
+    if all(f.verdict is Verdict.HELD for f in facts):
+        return Verdict.HELD
+    return Verdict.POWER_INSUFFICIENT
+
+
 def arm_from_runs(
     runs: Sequence[RunRow],
     *,
@@ -71,12 +107,26 @@ def arm_from_runs(
 
     summaries = [r.primary_outcome_summary for r in runs]
     n = len(summaries)
-    arm_mean = sum(summaries) / n
-    if n > 1:
-        var = sum((s - arm_mean) ** 2 for s in summaries) / (n - 1)
-        arm_sd = math.sqrt(var)
+    # NaN-aware mean/sd: `masked_window_mean` returns NaN when no
+    # episode terminated in the late window (legitimate no-data
+    # at small total_steps). `sum / n` would poison the whole arm
+    # with one NaN; instead compute the mean/sd over only finite
+    # summaries. `n` stays the total run count for provenance;
+    # the arm_mean / arm_sd themselves are NaN-tolerant.
+    finite_summaries = [s for s in summaries if not math.isnan(s)]
+    n_finite = len(finite_summaries)
+    if n_finite == 0:
+        arm_mean = float('nan')
+        arm_sd = float('nan')
     else:
-        arm_sd = 0.0
+        arm_mean = sum(finite_summaries) / n_finite
+        if n_finite > 1:
+            var = sum(
+                (s - arm_mean) ** 2 for s in finite_summaries
+            ) / (n_finite - 1)
+            arm_sd = math.sqrt(var)
+        else:
+            arm_sd = 0.0
 
     facts = _aggregate_facts_by_name(runs)
     reads_set: frozenset[str] = frozenset()

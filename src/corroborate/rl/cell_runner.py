@@ -36,6 +36,7 @@ import gymnax
 import jax
 import optax
 
+from corroborate.aggregate import aggregate_cell_verdict
 from corroborate.bridge import Bridge, BridgeResult
 from corroborate.hypothesis import Hypothesis
 from corroborate.reductions import masked_window_mean
@@ -78,29 +79,26 @@ class EvalConfig:
         n_episodes: int = 20,
     ) -> EvalConfig:
         """Construct an EvalConfig with `n_evals` evenly-spaced
-        eval bursts across `total_steps`. Validates that
-        `total_steps` divides cleanly into `n_evals` super-steps
-        — the downstream `train_with_eval` requires exact
-        divisibility, so catching the error here gives a clearer
-        message at the construction site."""
+        eval bursts across `total_steps`. Requires `total_steps`
+        divisible by `n_evals` (so each super-step is a clean
+        chunk and `train_with_eval` accepts the resulting
+        eval_every without remainder)."""
         if total_steps <= 0:
             raise ValueError(f'total_steps must be positive; got {total_steps}')
         if n_evals <= 0:
             raise ValueError(f'n_evals must be positive; got {n_evals}')
-        eval_every = total_steps // n_evals
-        if eval_every <= 0:
+        if n_evals > total_steps:
             raise ValueError(
                 f'n_evals ({n_evals}) larger than total_steps ({total_steps}); '
                 f'cannot fit even one super-step.',
             )
-        if total_steps % eval_every != 0:
+        if total_steps % n_evals != 0:
             raise ValueError(
-                f'EvalConfig.n_evals: total_steps ({total_steps}) does not '
-                f'divide cleanly into eval_every ({eval_every}) super-steps '
-                f'(remainder {total_steps % eval_every}). Pick a '
-                f'(total_steps, n_evals) pair where total_steps % '
-                f'(total_steps // n_evals) == 0.',
+                f'EvalConfig.n_evals: total_steps ({total_steps}) must be '
+                f'divisible by n_evals ({n_evals}); got remainder '
+                f'{total_steps % n_evals}.',
             )
+        eval_every = total_steps // n_evals
         return cls(eval_every=eval_every, n_episodes=n_episodes)
 
 
@@ -230,7 +228,7 @@ def run_dqn_cell(
         record_keys=tuple(record.keys()),
         facts=facts,
         reads_set=reads_set,
-        verdict=_aggregate_cell_verdict(facts),
+        verdict=aggregate_cell_verdict(facts),
     )
     return run_row
 
@@ -279,30 +277,5 @@ def _classify_kind(
     if kind_raw == 'tautological':
         return 'invariant'
     return 'bridge'
-
-
-def _aggregate_cell_verdict(facts: tuple[FactRow, ...]) -> Verdict:
-    """Aggregate per-cell facts into one run-level verdict.
-
-    Axiom 18 precedence: any `INVARIANT_VIOLATION` dominates —
-    the run sat outside a theorem's domain, so the outcome
-    verdict is out of scope. Otherwise: HELD if all bridges
-    held, NO_EFFECT if all rejected, else POWER_INSUFFICIENT
-    (mixed signal — needs more data to resolve).
-
-    Empty facts → POWER_INSUFFICIENT (no claims to test → can't
-    say HELD)."""
-    if not facts:
-        return Verdict.POWER_INSUFFICIENT
-    if any(f.verdict is Verdict.INVARIANT_VIOLATION for f in facts):
-        return Verdict.INVARIANT_VIOLATION
-    n = len(facts)
-    n_held = sum(1 for f in facts if f.verdict is Verdict.HELD)
-    n_rejected = sum(1 for f in facts if f.verdict is Verdict.NO_EFFECT)
-    if n_held == n:
-        return Verdict.HELD
-    if n_rejected == n:
-        return Verdict.NO_EFFECT
-    return Verdict.POWER_INSUFFICIENT
 
 

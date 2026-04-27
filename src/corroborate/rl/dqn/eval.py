@@ -15,14 +15,20 @@ Three pieces in this module:
    episode_length)`.
 2. `eval_burst` — K greedy rollouts via vmap over fresh seeds;
    stacks per-episode results into `(K,)`-shaped arrays.
-3. `train_with_eval` — single jit-compiled nested scan. Outer
-   scan iterates `n_bursts = total_steps // eval_every`
-   super-steps; each super-step body runs an inner scan over
-   `eval_every` training steps, then one `eval_burst`. Returns
-   `(state, record)` where `record` is a single dict mixing
-   training fields (shape `(total_steps, ...)`) and eval fields
-   (shape `(n_bursts, K, ...)`). The author's bridges read
-   whichever keys they care about.
+3. `train_with_eval` — nested `jax.lax.scan`. Outer scan iterates
+   `n_bursts = total_steps // eval_every` super-steps; each
+   super-step body runs an inner scan over `eval_every` training
+   steps, then one `eval_burst`. Both scans jit-trace their
+   bodies; the function itself is NOT `@jax.jit`-decorated, so
+   the top-level Python call re-traces each invocation. Callers
+   that want the full single-compile boundary can wrap with
+   `jax.jit(train_with_eval, static_argnums=(2,), static_argnames=
+   ('eval_every',))` — the `total_steps` and `eval_every` are
+   structural, not traced. Returns `(state, record)` where
+   `record` is a single dict mixing training fields (shape
+   `(total_steps, ...)`) and eval fields (shape `(n_bursts, K,
+   ...)`). The author's bridges read whichever keys they care
+   about.
 
 Eval IS part of training — they're aspects of one experiment
 run. The merged-dict return shape reflects that: no separate
@@ -239,7 +245,11 @@ def train_with_eval(
         burst = eval_fn(state, super_idx)
         return state, (train_chunk, burst)
 
-    super_indices = jnp.arange(n_super_steps, dtype=jnp.uint32)
+    # int32 across both nesting levels — uniform dtype keeps the
+    # `super_idx * eval_every + jnp.arange(eval_every)` arithmetic
+    # in a single integer regime (no silent uint32→int64 promotion
+    # under x64-enabled jax, no implicit downcast under x64-disabled).
+    super_indices = jnp.arange(n_super_steps, dtype=jnp.int32)
     state, (train_chunks, eval_bursts) = jax.lax.scan(
         super_step, init, super_indices,
     )
