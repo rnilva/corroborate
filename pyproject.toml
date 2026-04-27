@@ -17,8 +17,21 @@ packages = ["src/corroborate"]
 [dependency-groups]
 dev = [
     "pytest>=8",
+    "basedpyright>=1.18",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q --strict-markers"
+
+[tool.pyright]
+include = ["src", "tests"]
+pythonVersion = "3.13"
+typeCheckingMode = "strict"
+reportMissingTypeStubs = false
+reportImplicitOverride = "error"
+reportUnnecessaryTypeIgnoreComment = "error"
+reportUnusedCallResult = "none"
+# Custom strictness for our typing-discipline rule (CLAUDE.md):
+reportAny = "error"
+reportExplicitAny = "error"
