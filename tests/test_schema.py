@@ -7,6 +7,7 @@ not cast or `# type: ignore`."""
 from __future__ import annotations
 
 from corroborate.hypothesis import MechanismKey
+from corroborate.verdict import RefutationClass
 from corroborate.schema import (
     ArmRow,
     ComparisonRow,
@@ -227,7 +228,7 @@ def test_comparison_row_round_trip_with_optional_nones() -> None:
         derived_q=None,
         delta_i_population=0.0,
         verdict='power_insufficient',
-        refutation_class='underpowered',
+        refutation_class=RefutationClass.UNDERPOWERED,
         adequately_powered=False,
         facts=(),
         reads_set=frozenset(),
@@ -236,7 +237,7 @@ def test_comparison_row_round_trip_with_optional_nones() -> None:
     cmp2: ComparisonRow = ComparisonRow.from_dict(d)
     assert cmp == cmp2
     assert cmp2.effect_size_g is None
-    assert cmp2.refutation_class == 'underpowered'
+    assert cmp2.refutation_class is RefutationClass.UNDERPOWERED
 
 
 # ============ CorpusRow round-trip ============

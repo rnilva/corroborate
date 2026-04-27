@@ -35,7 +35,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from corroborate.bridge import Bridge, BridgeResult
-from corroborate.hypothesis import Hypothesis
+from corroborate.hypothesis import Hypothesis, MechanismKey
 from corroborate.schema import FactRow, RunRow
 from corroborate.verdict import Verdict
 
@@ -90,8 +90,9 @@ def sweep[R: Mapping[str, object]](
 
             duration = time.monotonic() - t0
             primary = primary_outcome_extractor(record)
+            intervention_sig = _intervention_signature_leaves(h.mechanism_key)
             facts = tuple(
-                _bridge_result_to_fact(b(record), b)
+                _bridge_result_to_fact(b(record), b, intervention_sig)
                 for b in h.bridges
             )
             verdict = _aggregate_cell_verdict(facts)
@@ -125,7 +126,9 @@ def sweep[R: Mapping[str, object]](
 # ============ Bridge-result → FactRow conversion ============
 
 def _bridge_result_to_fact[R: Mapping[str, object]](
-    result: BridgeResult, bridge: Bridge[R],
+    result: BridgeResult,
+    bridge: Bridge[R],
+    intervention_signature: frozenset[str],
 ) -> FactRow:
     """Stub conversion: BridgeResult → FactRow. The framework's
     statistics layer (step 5) populates `natural_strength` and
@@ -133,6 +136,10 @@ def _bridge_result_to_fact[R: Mapping[str, object]](
     (step 6) populates `evidentiary_level` per axiom 19. Until
     those land, placeholders are 0.0 and the verdict's string
     value, respectively.
+
+    `intervention_signature` is the leaf-flattened form of the
+    parent hypothesis's mechanism_key.intervention_signature —
+    feeds axiom 19's redundancy primitive's intervention factor.
 
     `kind='bridge'` unless the result's stats carry the
     'tautological' tag (set by `@invariant`); then `'invariant'`."""
@@ -147,7 +154,21 @@ def _bridge_result_to_fact[R: Mapping[str, object]](
         delta_i=0.0,
         evidentiary_level=result.verdict.value,
         stats=result.stats,
+        intervention_signature=intervention_signature,
     )
+
+
+def _intervention_signature_leaves(mk: MechanismKey) -> frozenset[str]:
+    """Flatten `mechanism_key.intervention_signature` to a
+    frozenset of leaf strings. Each (slot, value) pair contributes
+    both halves; the redundancy primitive's intervention-similarity
+    factor uses Jaccard over these leaves. Empty signatures (e.g.
+    a baseline arm with no overrides) yield an empty frozenset."""
+    leaves: set[str] = set()
+    for slot, value in mk.intervention_signature:
+        leaves.add(slot)
+        leaves.add(value)
+    return frozenset(leaves)
 
 
 def _aggregate_cell_verdict(facts: tuple[FactRow, ...]) -> str:

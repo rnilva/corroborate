@@ -40,6 +40,7 @@ from corroborate._narrow import (
     is_mapping_of_object,
     optional_direction,
     optional_float,
+    optional_refutation_class,
     optional_str,
     require_bool,
     require_float,
@@ -330,7 +331,11 @@ def _comparisonrow_to_record(row: ComparisonRow) -> dict[str, object]:
         'derived_q': row.derived_q,
         'delta_i_population': row.delta_i_population,
         'verdict': row.verdict,
-        'refutation_class': row.refutation_class,
+        'refutation_class': (
+            row.refutation_class.value
+            if row.refutation_class is not None
+            else None
+        ),
         'adequately_powered': row.adequately_powered,
         'facts_json': _facts_to_json(row.facts),
         'reads_set': sorted(row.reads_set),
@@ -361,7 +366,7 @@ def _comparisonrow_from_record(d: Mapping[str, object]) -> ComparisonRow:
         derived_q=optional_float(d, 'derived_q'),
         delta_i_population=require_float(d, 'delta_i_population'),
         verdict=require_str(d, 'verdict'),
-        refutation_class=optional_str(d, 'refutation_class'),
+        refutation_class=optional_refutation_class(d, 'refutation_class'),
         adequately_powered=require_bool(d, 'adequately_powered'),
         facts=_facts_list_from_json(require_str(d, 'facts_json')),
         reads_set=frozenset(require_str_list(d, 'reads_set')),

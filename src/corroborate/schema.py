@@ -45,6 +45,7 @@ from corroborate._narrow import (
     list_len,
     optional_direction,
     optional_float,
+    optional_refutation_class,
     optional_str,
     require_bool,
     require_float,
@@ -59,6 +60,7 @@ from corroborate._narrow import (
     require_str_list,
 )
 from corroborate.hypothesis import Direction, MechanismKey
+from corroborate.verdict import RefutationClass
 
 
 # ============ Default factories (typed) ============
@@ -297,7 +299,7 @@ class ComparisonRow:
     derived_q: float | None
     delta_i_population: float
     verdict: str
-    refutation_class: str | None
+    refutation_class: RefutationClass | None
     adequately_powered: bool
     facts: tuple[FactRow, ...]
     reads_set: frozenset[str]
@@ -326,7 +328,11 @@ class ComparisonRow:
             'derived_q': self.derived_q,
             'delta_i_population': self.delta_i_population,
             'verdict': self.verdict,
-            'refutation_class': self.refutation_class,
+            'refutation_class': (
+                self.refutation_class.value
+                if self.refutation_class is not None
+                else None
+            ),
             'adequately_powered': self.adequately_powered,
             'facts': [f.as_dict() for f in self.facts],
             'reads_set': sorted(self.reads_set),
@@ -359,7 +365,7 @@ class ComparisonRow:
             derived_q=optional_float(d, 'derived_q'),
             delta_i_population=require_float(d, 'delta_i_population'),
             verdict=require_str(d, 'verdict'),
-            refutation_class=optional_str(d, 'refutation_class'),
+            refutation_class=optional_refutation_class(d, 'refutation_class'),
             adequately_powered=require_bool(d, 'adequately_powered'),
             facts=tuple(
                 FactRow.from_dict(require_mapping_in_list(d, 'facts', i))

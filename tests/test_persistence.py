@@ -9,6 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from corroborate.hypothesis import MechanismKey
+from corroborate.verdict import RefutationClass
 from corroborate.persistence import (
     read_armrows,
     read_comparisonrows,
@@ -223,7 +224,7 @@ def test_comparisonrow_parquet_with_optional_nones(tmp_path: Path) -> None:
         derived_q=None,
         delta_i_population=0.0,
         verdict='power_insufficient',
-        refutation_class='underpowered',
+        refutation_class=RefutationClass.UNDERPOWERED,
         adequately_powered=False,
         facts=(),
         reads_set=frozenset(),
@@ -233,7 +234,7 @@ def test_comparisonrow_parquet_with_optional_nones(tmp_path: Path) -> None:
     loaded = read_comparisonrows(path)
     assert loaded == [cmp]
     assert loaded[0].effect_size_g is None
-    assert loaded[0].refutation_class == 'underpowered'
+    assert loaded[0].refutation_class is RefutationClass.UNDERPOWERED
 
 
 # ============ CorpusRow round-trip ============

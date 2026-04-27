@@ -15,6 +15,7 @@ from collections.abc import Mapping
 from typing import Literal, TypeIs
 
 from corroborate.hypothesis import Direction
+from corroborate.verdict import RefutationClass
 
 
 # ============ TypeIs predicates ============
@@ -121,6 +122,28 @@ def optional_direction(
     if v == 'two_sided':
         return 'two_sided'
     raise TypeError(f'{key!r} must be a Direction or None, got {v!r}')
+
+
+def optional_refutation_class(
+    d: Mapping[str, object], key: str,
+) -> RefutationClass | None:
+    """Narrow an optional refutation-class string (the parquet
+    representation) back to the typed `RefutationClass` enum.
+    Round-trip pair with `RefutationClass.value`."""
+    v = d.get(key)
+    if v is None:
+        return None
+    if v == RefutationClass.NULL_EFFECT.value:
+        return RefutationClass.NULL_EFFECT
+    if v == RefutationClass.SIGN_FLIP.value:
+        return RefutationClass.SIGN_FLIP
+    if v == RefutationClass.UNDERPOWERED.value:
+        return RefutationClass.UNDERPOWERED
+    if v == RefutationClass.TIME_BUDGET_DORMANT.value:
+        return RefutationClass.TIME_BUDGET_DORMANT
+    raise TypeError(
+        f'{key!r} must be a RefutationClass value or None, got {v!r}'
+    )
 
 
 def require_str_list(d: Mapping[str, object], key: str) -> list[str]:
