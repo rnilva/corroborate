@@ -25,20 +25,25 @@ import optax
 from corroborate.rl.dqn.claims.bootstrap import ddqn_bootstrap, vanilla_bootstrap
 from corroborate.rl.dqn.claims.q_network import init_mlp, mlp_q
 from corroborate.rl.dqn.dqn import dqn_step, init_state
+from corroborate.rl.env_catalogue import GymnaxEnvLike, HasN, HasShape
 from corroborate.rl.loop import python_loop, scan_loop
 
 
 # ============ Fixtures ============
 
-def _make_env() -> tuple[object, object, int, int]:
+def _make_env() -> tuple[GymnaxEnvLike, object, int, int]:
     env, env_params = gymnax.make('CartPole-v1')
-    obs_dim = int(env.observation_space(env_params).shape[0])
-    n_actions = int(env.action_space(env_params).n)
+    obs_space = env.observation_space(env_params)
+    act_space = env.action_space(env_params)
+    assert isinstance(obs_space, HasShape)
+    assert isinstance(act_space, HasN)
+    obs_dim = int(obs_space.shape[0])
+    n_actions = int(act_space.n)
     return env, env_params, obs_dim, n_actions
 
 
 def _build_step_fn(
-    env: object, env_params: object, n_actions: int,
+    env: GymnaxEnvLike, env_params: object, n_actions: int,
     optimizer: optax.GradientTransformation,
     *, bootstrap_swap: bool = False,
 ):

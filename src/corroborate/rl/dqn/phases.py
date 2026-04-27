@@ -32,7 +32,7 @@ from corroborate.rl.dqn.types import (
     QNetwork,
     TargetSync,
 )
-from corroborate.rl.env_catalogue import StateHash
+from corroborate.rl.env_catalogue import GymnaxEnvLike, StateHash
 
 
 # ============ Per-phase output records ============
@@ -82,7 +82,7 @@ class TrainOut(NamedTuple):
     sample_indices: jax.Array    # (batch,) int32 — indices buffer_sample drew
 
 
-def _value_probe(
+def value_probe(
     state: DQNState,
     q_network: QNetwork,
     next_obs_b: jax.Array,
@@ -96,7 +96,12 @@ def _value_probe(
     Independent of which `bootstrap` slot is used. Cheap (two
     forward passes on the already-sampled batch); always-on so
     the invariant has data even when vanilla bootstrap is
-    selected (the correlation is meaningful for both)."""
+    selected (the correlation is meaningful for both).
+
+    Public (not underscored) because it's the data source for a
+    framework-shipped Measurable. If multi-target ensembles or
+    distributional Q swap this in the future, lift to a slot
+    Protocol."""
     online_q = q_network(state.online_params, next_obs_b)
     target_q = q_network(state.target_params, next_obs_b)
     return online_q, target_q
@@ -107,7 +112,7 @@ def _value_probe(
 def rollout_phase(
     state: DQNState,
     *,
-    env: object,
+    env: GymnaxEnvLike,
     env_params: object,
     n_actions: int,
     capacity: int,
@@ -129,8 +134,8 @@ def rollout_phase(
     action = action_select(q_values, select_key, epsilon, n_actions)
 
     # gymnax's env.step returns (next_obs, env_state, reward, done, info)
-    next_obs, next_env_state, reward, done, _info = env.step(  # type: ignore[attr-defined]
-        env_key, state.env_state, action, env_params,
+    next_obs, next_env_state, reward, done, _info = env.step(
+        env_key, state.env_state, action.astype(jnp.int32), env_params,
     )
 
     # Append to FIFO buffer.
@@ -217,7 +222,7 @@ def train_phase(
     # on, returning the FULL Q-vectors per net (not pre-reduced
     # argmaxes) so post-hoc reductions can compute correlation,
     # disagreement, etc. Independent of which bootstrap is selected.
-    online_q_values, target_q_values = _value_probe(state, q_network, next_obs_b)
+    online_q_values, target_q_values = value_probe(state, q_network, next_obs_b)
 
     def compute_loss(params: Params) -> tuple[jax.Array, jax.Array]:
         # Predicted Q for the action actually taken in each transition.

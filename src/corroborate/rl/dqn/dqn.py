@@ -44,7 +44,7 @@ from corroborate.rl.dqn.types import (
     StepRecord,
     TargetSync,
 )
-from corroborate.rl.env_catalogue import StateHash
+from corroborate.rl.env_catalogue import GymnaxEnvLike, StateHash
 
 
 def default_state_hash(obs: jax.Array) -> jax.Array:
@@ -60,7 +60,7 @@ def default_state_hash(obs: jax.Array) -> jax.Array:
 
 def init_state(
     *,
-    env: object,
+    env: GymnaxEnvLike,
     env_params: object,
     obs_dim: int,
     n_actions: int,
@@ -78,7 +78,7 @@ def init_state(
     init_key, env_key, run_key = jax.random.split(rng, 3)
     online = init_mlp(init_key, obs_dim, n_actions, hidden=hidden)
     opt_state = optimizer.init(online)
-    obs, env_state = env.reset(env_key, env_params)  # type: ignore[attr-defined]
+    obs, env_state = env.reset(env_key, env_params)
     buf_obs, buf_action, buf_reward, buf_next_obs, buf_done, buf_size = (
         buffer_init(buffer_capacity, obs_dim)
     )
@@ -106,7 +106,7 @@ def dqn_step(
     idx: jax.Array,
     *,
     # Exogenous (env + numerical config; not slots)
-    env: object,
+    env: GymnaxEnvLike,
     env_params: object,
     n_actions: int,
     optimizer: optax.GradientTransformation,

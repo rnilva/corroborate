@@ -127,7 +127,7 @@ def run_dqn_cell(
 
     init: DQNState = init_state(
         env=env, env_params=env_params,
-        obs_dim=env_spec.obs_dim, n_actions=env_spec.action_dim,
+        obs_dim=env_spec.obs_dim, n_actions=env_spec.n_actions,
         seed=seed, optimizer=optimizer, buffer_capacity=buffer_capacity,
     )
 
@@ -140,7 +140,7 @@ def run_dqn_cell(
     step_fn = partial(
         dqn_step,
         env=env, env_params=env_params,
-        n_actions=env_spec.action_dim,
+        n_actions=env_spec.n_actions,
         optimizer=optimizer,
         state_hash=state_hash,
         gamma=gamma, batch_size=batch_size,

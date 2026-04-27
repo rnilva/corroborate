@@ -40,6 +40,7 @@ import jax.numpy as jnp
 from corroborate.claim import claim
 from corroborate.rl.dqn.state import DQNState
 from corroborate.rl.dqn.types import QNetwork, StepRecord
+from corroborate.rl.env_catalogue import GymnaxEnvLike
 from corroborate.rl.loop import Loop, scan_loop
 
 
@@ -84,7 +85,7 @@ class ComposedTrace(NamedTuple):
 def eval_episode(
     *,
     online_params: dict[str, jax.Array],
-    env: object,
+    env: GymnaxEnvLike,
     env_params: object,
     rng_key: jax.Array,
     q_network: QNetwork,
@@ -99,7 +100,7 @@ def eval_episode(
     The Hasselt-style gap is `predicted - actual` (positive ⇒
     overestimation, the Jensen-bias signature)."""
     reset_key, run_key = jax.random.split(rng_key)
-    obs_0, env_state_0 = env.reset(reset_key, env_params)  # type: ignore[attr-defined]
+    obs_0, env_state_0 = env.reset(reset_key, env_params)
 
     # Predicted Q at start.
     q_at_start = q_network(online_params, obs_0)
@@ -129,7 +130,7 @@ def eval_episode(
         action = jnp.argmax(q_values).astype(jnp.int32)
 
         env_key, next_rng = jax.random.split(carry.rng)
-        next_obs, next_env_state, reward, done, _info = env.step(  # type: ignore[attr-defined]
+        next_obs, next_env_state, reward, done, _info = env.step(
             env_key, carry.env_state, action, env_params,
         )
 
@@ -169,7 +170,7 @@ def eval_episode(
 def eval_burst(
     *,
     online_params: dict[str, jax.Array],
-    env: object,
+    env: GymnaxEnvLike,
     env_params: object,
     rng_key: jax.Array,
     q_network: QNetwork,

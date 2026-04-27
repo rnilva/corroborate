@@ -29,12 +29,17 @@ from corroborate.rl.dqn.eval import (
     train_with_eval,
 )
 from corroborate.rl.dqn.state import DQNState
+from corroborate.rl.env_catalogue import GymnaxEnvLike, HasN, HasShape
 
 
-def _make_env() -> tuple[object, object, int, int]:
+def _make_env() -> tuple[GymnaxEnvLike, object, int, int]:
     env, env_params = gymnax.make('CartPole-v1')
-    obs_dim = int(env.observation_space(env_params).shape[0])
-    n_actions = int(env.action_space(env_params).n)
+    obs_space = env.observation_space(env_params)
+    act_space = env.action_space(env_params)
+    assert isinstance(obs_space, HasShape)
+    assert isinstance(act_space, HasN)
+    obs_dim = int(obs_space.shape[0])
+    n_actions = int(act_space.n)
     return env, env_params, obs_dim, n_actions
 
 

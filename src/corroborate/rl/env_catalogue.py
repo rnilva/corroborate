@@ -26,7 +26,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import Literal
+from typing import Literal, Protocol, TypedDict, runtime_checkable
 
 import gymnax
 import jax
@@ -50,19 +50,86 @@ the bucket cardinality is astronomical and KL-against-uniform
 has no useful signal there."""
 
 
+# ============ Structural Protocols for gymnax-side typing ============
+
+@runtime_checkable
+class GymnaxEnvLike(Protocol):
+    """Structural Protocol for the env surface `corroborate.rl`
+    consumes. gymnax `Env` instances satisfy structurally; any
+    alternative env library matching this shape works too. Used
+    to type `env` parameters in `dqn_step` / `rollout_phase` /
+    `eval_episode` without importing `gymnax.Env` everywhere."""
+    def reset(
+        self, rng: jax.Array, params: object,
+    ) -> tuple[jax.Array, object]: ...
+
+    def step(
+        self,
+        rng: jax.Array,
+        state: object,
+        action: jax.Array,
+        params: object,
+    ) -> tuple[
+        jax.Array, object, jax.Array, jax.Array, dict[str, object],
+    ]: ...
+
+    def observation_space(self, params: object) -> object: ...
+    def action_space(self, params: object) -> object: ...
+
+
+@runtime_checkable
+class MaxStepsParams(Protocol):
+    """Marker Protocol — env params that declare a per-episode
+    horizon. `isinstance` narrows to the typed attribute access,
+    sidestepping `getattr(..., default)` discipline violation."""
+    max_steps_in_episode: int
+
+
+@runtime_checkable
+class HasShape(Protocol):
+    """Observation / action space surface — exposes `shape` (and
+    optionally `n` for discrete spaces). `isinstance` narrows
+    after `env.observation_space(params)` returns `object`."""
+    shape: tuple[int, ...]
+
+
+@runtime_checkable
+class HasN(Protocol):
+    """Discrete action space — `.n` is the action cardinality."""
+    n: int
+
+
+# ============ TypedDict for introspect_env return ============
+
+class IntrospectedEnv(TypedDict):
+    """Auto-derived fields from `gymnax.make(name)`. Replaces
+    `dict[str, object]` so consumers (`_register`) get typed
+    field access without `# type: ignore`."""
+    name: str
+    action_type: ActionType
+    action_dim: int
+    observation_shape: tuple[int, ...]
+    observation_type: ObservationType
+    horizon: int | None
+
+
 @dataclass(frozen=True, slots=True)
 class EnvSpec:
     """Static metadata for one gymnax env.
 
     Auto-introspected (read from gymnax at registration time):
-    `action_type`, `action_dim`, `observation_shape`, `horizon`.
+    `action_type`, `n_actions`, `observation_shape`, `horizon`.
+    For discrete envs `n_actions` is the action-space cardinality
+    (gymnax's `act_space.n`); v0 only handles discrete envs, so
+    the field name reflects that. Continuous-action envs require
+    a separate field added when needed.
 
     Author-declared (registered via `_register`): `r_min`, `r_max`,
     `reward_regime`, `benchmark_family`, optional `state_hash` +
     `state_hash_cardinality`."""
     name: str
     action_type: ActionType
-    action_dim: int
+    n_actions: int
     observation_shape: tuple[int, ...]
     observation_type: ObservationType
     horizon: int | None
@@ -91,31 +158,56 @@ class EnvSpec:
 
 # ============ Introspection: read gymnax's spaces ============
 
-def introspect_env(name: str) -> dict[str, object]:
+def introspect_env(name: str) -> IntrospectedEnv:
     """Extract auto-derivable fields from gymnax's env+params.
 
-    Returns kwargs ready to merge into `EnvSpec(...)` along with
-    the author-declared metadata."""
+    Returns a typed `IntrospectedEnv` so `_register` consumes
+    fields without `# type: ignore`. Narrowing for action and
+    observation spaces is via runtime-checkable Protocols
+    (`HasShape`, `HasN`, `MaxStepsParams`) — no `getattr`."""
     env_obj, env_params = gymnax.make(name)
     act_space = env_obj.action_space(env_params)
     obs_space = env_obj.observation_space(env_params)
-    is_discrete = hasattr(act_space, 'n')
-    shape = tuple(obs_space.shape)
-    return {
-        'name': name,
-        'action_type': 'discrete' if is_discrete else 'continuous',
-        'action_dim': (
-            int(act_space.n) if is_discrete
-            else int(np.prod(act_space.shape))
-        ),
-        'observation_shape': shape,
-        'observation_type': (
-            'vector' if len(shape) == 1
-            else 'image' if len(shape) == 3
-            else 'structured'
-        ),
-        'horizon': getattr(env_params, 'max_steps_in_episode', None),
-    }
+
+    if isinstance(obs_space, HasShape):
+        shape = tuple(obs_space.shape)
+    else:
+        raise TypeError(
+            f"env '{name}' observation_space lacks `shape`; "
+            f'cannot introspect.',
+        )
+
+    if isinstance(act_space, HasN):
+        is_discrete = True
+        action_dim = int(act_space.n)
+    elif isinstance(act_space, HasShape):
+        is_discrete = False
+        action_dim = int(np.prod(act_space.shape))
+    else:
+        raise TypeError(
+            f"env '{name}' action_space has neither `.n` nor "
+            f'`.shape`; cannot introspect.',
+        )
+
+    horizon: int | None = (
+        env_params.max_steps_in_episode
+        if isinstance(env_params, MaxStepsParams)
+        else None
+    )
+
+    obs_type: ObservationType = (
+        'vector' if len(shape) == 1
+        else 'image' if len(shape) == 3
+        else 'structured'
+    )
+    return IntrospectedEnv(
+        name=name,
+        action_type='discrete' if is_discrete else 'continuous',
+        action_dim=action_dim,
+        observation_shape=shape,
+        observation_type=obs_type,
+        horizon=horizon,
+    )
 
 
 # ============ State-hash factory for vector envs ============
@@ -177,12 +269,12 @@ def _register(
     metadata gymnax doesn't expose."""
     introspected = introspect_env(name)
     ENV_REGISTRY[name] = EnvSpec(
-        name=str(introspected['name']),
-        action_type=introspected['action_type'],  # type: ignore[arg-type]
-        action_dim=int(introspected['action_dim']),  # type: ignore[arg-type]
-        observation_shape=introspected['observation_shape'],  # type: ignore[arg-type]
-        observation_type=introspected['observation_type'],  # type: ignore[arg-type]
-        horizon=introspected['horizon'],  # type: ignore[arg-type]
+        name=introspected['name'],
+        action_type=introspected['action_type'],
+        n_actions=introspected['action_dim'],
+        observation_shape=introspected['observation_shape'],
+        observation_type=introspected['observation_type'],
+        horizon=introspected['horizon'],
         r_min=r_min,
         r_max=r_max,
         reward_regime=reward_regime,
