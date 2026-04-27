@@ -109,6 +109,7 @@ def value_probe(
 
 # ============ Rollout ============
 
+@claim
 def rollout_phase(
     state: DQNState,
     *,
@@ -183,6 +184,7 @@ def rollout_phase(
 
 # ============ Train ============
 
+@claim
 def train_phase(
     state: DQNState,
     *,
@@ -267,6 +269,7 @@ def train_phase(
 
 # ============ Sync ============
 
+@claim
 def sync_phase(
     state: DQNState,
     *,
@@ -283,12 +286,3 @@ def sync_phase(
         sync_period=sync_period,
     )
     return state._replace(target_params=new_target)
-
-
-# Tag the phase functions as Claims via the @claim decorator. Done
-# below rather than as a stacked decorator so each phase reads as
-# a plain function in its definition (no decorator stack noise);
-# the @claim re-bind makes them framework-introspectable.
-rollout_phase = claim(rollout_phase)
-train_phase = claim(train_phase)
-sync_phase = claim(sync_phase)

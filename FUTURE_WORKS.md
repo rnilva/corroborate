@@ -9,6 +9,34 @@ sooner they're likely to bind.
 
 ## Deferred from second-pass external review
 
+### Paired-cell comparison primitive (matched-seed Δ)
+
+**Status:** deferred.
+
+**Description:** `aggregate.comparison_from_arms(treatment,
+baseline)` produces an unpaired `ComparisonRow` from two
+ArmRows already aggregated across seeds. §3's central claim
+("DDQN reduces Jensen-gap by Δ vs vanilla") is more
+statistically powerful as a *paired* test on matched
+(env, seed) pairs — Δ_i = treatment_i − baseline_i, then
+Hedges' g of the Δ distribution vs zero. The pairing helper
+(`pair_runs_by_seed(treatment, baseline) →
+tuple[(RunRow, RunRow), ...]`) and the paired statistics
+aren't yet implemented.
+
+**Why deferred:** Step 5 (MDE + Hedges' g + derived q) is the
+consumer for paired statistics. Pairing without paired-stats
+would be a half-shipped primitive; bundling them keeps the
+statistical contract coherent. Audit pass 4 confirmed the
+unpaired path (`comparison_from_arms`) makes §3 expressible
+end-to-end — not optimal, but viable as a v0 acceptance.
+
+**Lift when:** Step 5 lands paired stats. The factory shape
+should be: `paired_comparison_from_runs(treatment_runs,
+baseline_runs) → ComparisonRow` — pairs by (env_name, seed),
+computes Δ per pair, produces ComparisonRow with
+`effect_size_g` of the Δ distribution.
+
 ### Typed `Powered` record on ComparisonRow
 
 **Status:** deferred.

@@ -135,7 +135,11 @@ def run_dqn_cell(
     # that don't declare one (image envs). The (s, a)-coverage
     # gap measurable detects the no-data case from env_spec, not
     # from inspecting the record values.
-    state_hash = env_spec.state_hash or default_state_hash
+    state_hash = (
+        env_spec.state_hash
+        if env_spec.state_hash is not None
+        else default_state_hash
+    )
 
     step_fn = partial(
         dqn_step,
