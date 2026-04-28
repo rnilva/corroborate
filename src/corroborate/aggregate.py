@@ -635,6 +635,7 @@ def link_pearson_across_envs(
     power: float = 0.8,
     cycle_id: str | None = None,
     timestamp: str | None = None,
+    extra_measurements: Mapping[str, MeasurementLeaf] | None = None,
 ) -> ComparisonRow:
     """Cross-env link verdict — Pearson r between mechanism Δ and
     outcome Δ across envs.
@@ -685,6 +686,13 @@ def link_pearson_across_envs(
     if n < 3:
         # Pearson's r needs at least 3 paired observations to be
         # well-defined; return a POWER_INSUFFICIENT row.
+        underpowered_measurements: dict[str, MeasurementLeaf] = {
+            'env_name': 'cross_env_link',
+            'intervention_name': 'link',
+            'n_paired_envs': n,
+        }
+        if extra_measurements is not None:
+            underpowered_measurements.update(extra_measurements)
         return ComparisonRow(
             id=str(uuid.uuid4()), parent_id=None, cycle_id=cycle_id,
             timestamp=_resolved_timestamp(timestamp),
@@ -693,11 +701,7 @@ def link_pearson_across_envs(
             verdict=Verdict.POWER_INSUFFICIENT,
             refutation_class=RefutationClass.UNDERPOWERED,
             adequately_powered=False,
-            measurements={
-                'env_name': 'cross_env_link',
-                'intervention_name': 'link',
-                'n_paired_envs': n,
-            },
+            measurements=underpowered_measurements,
         )
 
     # Pearson r with one-sided test (predicted positive).
@@ -729,6 +733,8 @@ def link_pearson_across_envs(
         'link.derived_q': q,
         'link.delta_i_population': delta_i,
     }
+    if extra_measurements is not None:
+        measurements.update(extra_measurements)
 
     return ComparisonRow(
         id=str(uuid.uuid4()), parent_id=None, cycle_id=cycle_id,

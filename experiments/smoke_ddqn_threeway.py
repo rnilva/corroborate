@@ -28,11 +28,14 @@ from corroborate.aggregate import (
     link_pearson_across_envs,
     paired_comparison_from_runs,
 )
-from corroborate.persistence import read_runrows
+from corroborate.persistence import read_runrows, write_comparisonrows
 from corroborate.schema import ComparisonRow, RunRow
 
 
 _DATA_PATH = Path(__file__).parent / 'data' / 'ddqn' / 'runs.parquet'
+_COMPARISONS_PATH = (
+    Path(__file__).parent / 'data' / 'ddqn' / 'comparisons.parquet'
+)
 
 
 _OUTCOME_PATHS = (
@@ -76,23 +79,31 @@ def _by_env_capacity_intervention(
 
 
 def _mechanism_cmp(
-    treatment: list[RunRow], baseline: list[RunRow],
+    treatment: list[RunRow], baseline: list[RunRow], capacity: int,
 ) -> ComparisonRow:
     return paired_comparison_from_runs(
         treatment_runs=treatment, baseline_runs=baseline,
         outcome_path='mechanism.jensen_gap',
         predicted_direction='a_lt_b',  # DDQN should REDUCE the gap
+        extra_measurements={
+            'comparison_kind': 'mechanism',
+            'replay.capacity': capacity,
+        },
     )
 
 
 def _outcome_cmp(
     treatment: list[RunRow], baseline: list[RunRow],
-    outcome_path: str,
+    outcome_path: str, capacity: int,
 ) -> ComparisonRow:
     return paired_comparison_from_runs(
         treatment_runs=treatment, baseline_runs=baseline,
         outcome_path=outcome_path,
         predicted_direction='a_gt_b',  # DDQN should INCREASE return
+        extra_measurements={
+            'comparison_kind': 'outcome',
+            'replay.capacity': capacity,
+        },
     )
 
 
@@ -129,6 +140,8 @@ def main() -> None:
         int, dict[str, list[ComparisonRow]]
     ] = defaultdict(lambda: defaultdict(list))
 
+    all_comparisons: list[ComparisonRow] = []
+
     for env, capacity in keys:
         ig = grouped[(env, capacity)]
         if 'ddqn' not in ig or 'vanilla_dqn' not in ig:
@@ -141,19 +154,21 @@ def main() -> None:
 
         # Mechanism (Jensen gap; DDQN should reduce it).
         if any('mechanism.jensen_gap' in r.measurements for r in treatment):
-            mech_cmp = _mechanism_cmp(treatment, baseline)
+            mech_cmp = _mechanism_cmp(treatment, baseline, capacity)
             _print_verdict_row(
                 'mechanism.jensen_gap', mech_cmp, 'mechanism.jensen_gap',
             )
             mech_by_capacity[capacity].append(mech_cmp)
+            all_comparisons.append(mech_cmp)
 
         # Outcomes (return; DDQN should increase).
         for path in _OUTCOME_PATHS:
             if not any(path in r.measurements for r in treatment):
                 continue
-            out_cmp = _outcome_cmp(treatment, baseline, path)
+            out_cmp = _outcome_cmp(treatment, baseline, path, capacity)
             _print_verdict_row(path, out_cmp, path)
             out_by_capacity[capacity][path].append(out_cmp)
+            all_comparisons.append(out_cmp)
 
     # ============ Cross-env LINK verdict per capacity ============
 
@@ -175,7 +190,13 @@ def main() -> None:
                 mech_cmps, out_cmps,
                 mechanism_path='mechanism.jensen_gap.effect_size_g',
                 outcome_path=f'{outcome_path}.effect_size_g',
+                extra_measurements={
+                    'comparison_kind': 'link',
+                    'outcome_path': outcome_path,
+                    'replay.capacity': capacity,
+                },
             )
+            all_comparisons.append(link)
             r = link.measurements.get('link.pearson_r')
             n_envs = link.measurements.get('n_paired_envs')
             rc = link.refutation_class.value if link.refutation_class else '—'
@@ -205,6 +226,18 @@ def main() -> None:
         ]).sort(['env_name', 'intervention_name', 'replay.capacity'])
         print()
         print(summary)
+
+    # Persist all comparisons to a single parquet for downstream
+    # repeatability. Read via `read_comparisonrows(_COMPARISONS_PATH)`
+    # and project by `comparison_kind` / `replay.capacity` /
+    # `outcome_path` to recover the §3 verdict shape without
+    # recomputing.
+    if all_comparisons:
+        write_comparisonrows(all_comparisons, _COMPARISONS_PATH)
+        print(
+            f'\nwrote {len(all_comparisons)} comparisons → '
+            f'{_COMPARISONS_PATH.name}',
+        )
 
     print('\nAll verdicts rendered.')
 
