@@ -246,6 +246,26 @@ def flatten_hp(sig: ClaimSignature) -> dict[str, KwargInfo]:
     return out
 
 
+def walk_paths(sig: ClaimSignature, *, regime: Regime) -> dict[str, KwargInfo]:
+    """Path-keyed projection of the configured tree.
+
+    Returns `{path: KwargInfo}` where `path` is the dotted path
+    from the outermost claim to each kwarg of the given regime.
+    Distinct from `flatten_hp` (flat-keyed, last-wins on
+    collision): two HPs with the same leaf-name at different
+    positions in the tree get distinct keys
+    (`optimizer.lr` vs `q_network.lr`).
+
+    The outermost claim's name is *not* included in the prefix —
+    it's a per-experiment constant and adds noise. So the top-
+    level kwargs of the configured claim appear at depth 1
+    (e.g. `gamma`, `optimizer`, `bootstrap`) and their children
+    extend the path (`optimizer.lr`, `optimizer.inner.warmup_steps`)."""
+    out: dict[str, KwargInfo] = {}
+    _walk_paths(sig, out, regime=regime, prefix='')
+    return out
+
+
 def _flatten(
     sig: ClaimSignature, acc: dict[str, KwargInfo], *, regime: Regime,
 ) -> None:
@@ -254,6 +274,21 @@ def _flatten(
             acc[kw.name] = kw
         if kw.inner is not None:
             _flatten(kw.inner, acc, regime=regime)
+
+
+def _walk_paths(
+    sig: ClaimSignature,
+    acc: dict[str, KwargInfo],
+    *,
+    regime: Regime,
+    prefix: str,
+) -> None:
+    for kw in sig.kwargs:
+        path = f'{prefix}.{kw.name}' if prefix else kw.name
+        if kw.regime == regime:
+            acc[path] = kw
+        if kw.inner is not None:
+            _walk_paths(kw.inner, acc, regime=regime, prefix=path)
 
 
 # ============ Invariant collection ============

@@ -76,6 +76,135 @@ def _empty_meta() -> dict[str, str | int | float | bool]:
     return {}
 
 
+# ============ TraceRow — raw per-cell observation store ============
+
+# A trace leaf is either a scalar (HP value, summary scalar) or a
+# 1-D trajectory list (per-step or per-burst sequence). Higher-
+# dimensional arrays (e.g. `(total_steps, batch_size, n_actions)`
+# for `online_q_values`) are NOT in v0's trace store — substrate
+# authors who need them either reduce to scalar/1-D before yield
+# or wait for a future shape extension. Dropping them keeps the
+# parquet schema columnar (one type per column) and the writer
+# logic flat — no nested-list wrangling, no JSON columns.
+
+type TraceLeaf = (
+    str | int | float | bool
+    | list[float] | list[int] | list[bool] | list[str]
+)
+
+
+@dataclass(frozen=True, slots=True)
+class TraceRow:
+    """One cell's raw observation: HPs (path-keyed scalars) +
+    per-step trajectories (1-D lists) + provenance.
+
+    The trace store is the v9-`traces.parquet` analog: low-
+    derivation, queryable, re-usable for post-hoc bridge
+    re-evaluation. The hypothesis-record store (`RunRow`) sits
+    above this, carrying framework verdicts derived from these
+    leaves.
+
+    `id` matches the corresponding `RunRow.id` so the two stores
+    join on a single column. Linking by UUID (not by hypothesis
+    name as v9 did) lets two cells of the same hypothesis remain
+    distinguishable.
+
+    `leaves` is path-keyed: HPs are dotted topology paths
+    (`bootstrap.gamma`, `optimizer.inner.lr`); trajectories are
+    flat author-chosen return-dict keys (`reward`, `loss`,
+    `td_error`). Mixed scalar/list values per parquet column
+    type — the type tells you which kind a path is.
+
+    No `evidence__` / `binding__` namespace prefixes: paths
+    encode origin via topology (dotted) vs. author-key (flat),
+    and parquet column types disambiguate scalar vs. trajectory."""
+    id: str
+    cycle_id: str | None
+    timestamp: str
+    leaves: Mapping[str, TraceLeaf] = field(
+        default_factory=lambda: {},
+    )
+
+    def as_dict(self) -> dict[str, object]:
+        """Flat top-level dict for parquet: provenance fields +
+        each leaf-path becomes its own top-level key. The writer
+        feeds this directly to `pl.DataFrame` — no JSON wrapping,
+        no nested structs."""
+        out: dict[str, object] = {
+            'id': self.id,
+            'cycle_id': self.cycle_id,
+            'timestamp': self.timestamp,
+        }
+        for path, value in self.leaves.items():
+            out[path] = value
+        return out
+
+    @classmethod
+    def from_row_dict(cls, d: Mapping[str, object]) -> Self:
+        """Reverse of `as_dict`: split provenance fields from
+        leaf-path columns. Any column not in the typed-provenance
+        set is treated as a leaf. Null-padded columns (paths the
+        row didn't carry — polars fills missing columns with None
+        when rows have heterogeneous keys) are skipped."""
+        provenance: frozenset[str] = frozenset(
+            ('id', 'cycle_id', 'timestamp')
+        )
+        leaves: dict[str, TraceLeaf] = {}
+        for k, v in d.items():
+            if k in provenance:
+                continue
+            if v is None:
+                # Polars null-pads columns this row didn't write.
+                continue
+            leaves[k] = _coerce_trace_leaf(v)
+        return cls(
+            id=require_str(d, 'id'),
+            cycle_id=optional_str(d, 'cycle_id'),
+            timestamp=require_str(d, 'timestamp'),
+            leaves=leaves,
+        )
+
+
+def _coerce_trace_leaf(value: object) -> TraceLeaf:
+    """Narrow a parquet-decoded object to `TraceLeaf` at the
+    persistence boundary. Scalars pass through; lists are accepted
+    as `list[float | int | bool | str]` (polars decodes List columns
+    to Python lists)."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float, str)):
+        return value
+    if isinstance(value, list):
+        return _coerce_trace_list(value)
+    raise TypeError(
+        f'unsupported TraceRow leaf type: {type(value).__name__}',
+    )
+
+
+def _coerce_trace_list(
+    value: list[object],
+) -> list[float] | list[int] | list[bool] | list[str]:
+    """Narrow a list to one of the four homogeneous shapes
+    `TraceLeaf` allows. Empty lists are returned as `list[float]`
+    by convention (polars produces typed empty lists at read; we
+    canonicalise to float-list)."""
+    if not value:
+        return []
+    first = value[0]
+    if isinstance(first, bool):
+        return [bool(v) for v in value]
+    if isinstance(first, int):
+        return [int(v) for v in value]
+    if isinstance(first, float):
+        return [float(v) for v in value]
+    if isinstance(first, str):
+        return [str(v) for v in value]
+    raise TypeError(
+        f'unsupported TraceRow list element type: '
+        f'{type(first).__name__}',
+    )
+
+
 # ============ FactRow (non-generic — record-agnostic) ============
 
 @dataclass(frozen=True, slots=True)

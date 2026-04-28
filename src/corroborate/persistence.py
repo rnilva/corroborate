@@ -38,6 +38,7 @@ from corroborate.schema import (
     ComparisonRow,
     CorpusRow,
     RunRow,
+    TraceRow,
 )
 
 
@@ -151,3 +152,31 @@ def read_corpusrows(path: Path) -> list[CorpusRow]:
         CorpusRow.from_dict(_unwrap_from_parquet(d, _JSON_KEYS_CORPUSROW))
         for d in _to_dicts(df)
     ]
+
+
+# ============ TraceRow ============
+
+# Trace persistence is the v9-`traces.parquet` analog: raw per-
+# cell observations as a flat columnar parquet. No JSON wrapping —
+# each leaf-path is its own typed column (scalars: Float64 /
+# Int64 / Utf8 / Boolean; trajectories: List[Float64] etc.).
+# This is what makes HP queries fast at the dataframe level
+# (`df.filter(pl.col('optimizer.inner.lr') < 1e-3)`).
+#
+# Heterogeneous leaves across rows: parquet requires every column
+# to have one type per file, and different cells can carry
+# different leaf paths (one substrate revision adds a new HP, an
+# old one is retired). Polars handles missing columns by null-
+# padding when constructing the DataFrame from a list-of-dicts —
+# rows that don't carry a path get null in that column.
+
+def write_tracerows(rows: Iterable[TraceRow], path: Path) -> None:
+    """Write TraceRows to a flat columnar parquet. Round-trip
+    pair: `read_tracerows`."""
+    records = [r.as_dict() for r in rows]
+    pl.DataFrame(records).write_parquet(path)
+
+
+def read_tracerows(path: Path) -> list[TraceRow]:
+    df = pl.read_parquet(path)
+    return [TraceRow.from_row_dict(d) for d in _to_dicts(df)]
