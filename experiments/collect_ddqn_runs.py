@@ -116,15 +116,44 @@ HP_GRID: dict[str, list[Any]] = {
 
 # Q-tensor reductions now happen in-loop (`train_phase` returns
 # `online_q_per_action` / `target_q_per_action` shape (n_actions,)
-# per step + 5-tuple `pearson_stats`). The high-action-env OOM is
-# avoided at the source. No further trace-time reductions needed
-# for §3-acceptance bridges.
+# per step + 5-tuple `pearson_stats`). High-action-env OOM is
+# avoided at the source. We reduce the per-action vectors here to
+# per-step scalars (max, min, argmax, mean) so PAPER §5's mediator
+# features (q_gap_late, q_gap_growth, greedy_match_late,
+# v_vs_max_delta_late) are derivable downstream without keeping
+# the (steps, n_actions) tensors in zarr.
 
 def _per_step_max_q(nested_list: pl.Series) -> list[float]:
     """Per-step max over the (n_actions,) per-step Q vector.
     Input is a nested list shaped `(steps, n_actions)`; output is
     `(steps,)`."""
     return [max(per_action) for per_action in nested_list.to_list()]
+
+
+def _per_step_min_q(nested_list: pl.Series) -> list[float]:
+    """Per-step min over the (n_actions,) per-step Q vector.
+    `q_gap = max - min` per step is the §5 action-margin signal."""
+    return [min(per_action) for per_action in nested_list.to_list()]
+
+
+def _per_step_mean_q(nested_list: pl.Series) -> list[float]:
+    """Per-step mean over actions of the per-step Q vector. Proxies
+    V; `|V - max| late` is §5's `v_vs_max_delta_late`."""
+    return [
+        sum(per_action) / len(per_action) if per_action else float('nan')
+        for per_action in nested_list.to_list()
+    ]
+
+
+def _per_step_argmax_q(nested_list: pl.Series) -> list[int]:
+    """Per-step argmax over actions. Online-vs-target argmax
+    disagreement is §5's `greedy_match_late = mean(online_argmax ==
+    target_argmax)` over the late window."""
+    return [
+        int(max(range(len(per_action)), key=lambda i: per_action[i]))
+        if per_action else -1
+        for per_action in nested_list.to_list()
+    ]
 
 
 TRACE_POST_REDUCTIONS: tuple[pl.Expr, ...] = (
@@ -134,12 +163,25 @@ TRACE_POST_REDUCTIONS: tuple[pl.Expr, ...] = (
     pl.col('target_q_per_action').map_elements(
         _per_step_max_q, return_dtype=pl.List(pl.Float64),
     ).alias('target_max_q_per_step'),
+    pl.col('online_q_per_action').map_elements(
+        _per_step_min_q, return_dtype=pl.List(pl.Float64),
+    ).alias('online_min_q_per_step'),
+    pl.col('online_q_per_action').map_elements(
+        _per_step_mean_q, return_dtype=pl.List(pl.Float64),
+    ).alias('online_mean_q_per_step'),
+    pl.col('online_q_per_action').map_elements(
+        _per_step_argmax_q, return_dtype=pl.List(pl.Int64),
+    ).alias('online_argmax_per_step'),
+    pl.col('target_q_per_action').map_elements(
+        _per_step_argmax_q, return_dtype=pl.List(pl.Int64),
+    ).alias('target_argmax_per_step'),
 )
 
 
-# Drop the per-action vectors after reducing to per-step max — the
-# bridges that consume max-Q (`lin_iid_gap`, eval-side max-Q
-# correlation) read the per-step max directly.
+# Drop the per-action vectors after reducing — bridges that consume
+# the per-step reductions read the named columns directly. Keeps
+# parquet compact: 6 per-step 1-D columns instead of 2 per-step
+# 2-D tensors.
 TRACE_POST_DROPS: tuple[str, ...] = (
     'online_q_per_action',
     'target_q_per_action',
