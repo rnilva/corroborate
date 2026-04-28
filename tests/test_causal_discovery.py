@@ -178,3 +178,230 @@ def test_stratified_partial_recovers_within_stratum_partial() -> None:
     rho, p = stratified_partial_spearman_rho(x, y, z, strata)
     assert abs(rho) < 0.15
     assert p > 0.05
+
+
+# ============ PC algorithm — discover_adjacency ============
+
+def _df_from_columns(**cols: np.ndarray):  # type: ignore[reportUnknownParameterType, reportMissingParameterType]
+    """Build a polars DataFrame from kwarg columns."""
+    import polars as pl
+    return pl.DataFrame({k: v.tolist() for k, v in cols.items()})
+
+
+def test_discover_chain_removes_marginal_independence_pair() -> None:
+    """3-variable chain X → M → Y. PC at depth 1 should:
+    - Keep X−M and M−Y (direct dependence)
+    - Remove X−Y at depth 1, conditioning on M (X⫫Y | M)."""
+    from corroborate.causal_discovery import discover_adjacency
+    rng = np.random.default_rng(0)
+    n = 500
+    x = rng.standard_normal(n)
+    m = x + rng.standard_normal(n) * 0.3
+    y = m + rng.standard_normal(n) * 0.3
+    df = _df_from_columns(x=x, m=m, y=y)
+
+    adj = discover_adjacency(
+        df, variables=['x', 'm', 'y'],
+        alpha=0.05, max_conditioning=1,
+    )
+    edges = {tuple(sorted(e)) for e in adj.edges}
+    # X−M and M−Y survive
+    assert ('m', 'x') in edges
+    assert ('m', 'y') in edges
+    # X−Y removed (separated by M)
+    assert ('x', 'y') not in edges
+    xy_sepset = adj.separating_sets[frozenset({'x', 'y'})]
+    assert frozenset({'m'}) in xy_sepset
+
+
+def test_discover_collider_keeps_marginal_independence() -> None:
+    """3-variable collider X → Z ← Y. X⫫Y marginally (no direct
+    edge, no path through Z without conditioning). PC should keep
+    X⫫Y at depth 0 (Berkson-bias example)."""
+    from corroborate.causal_discovery import discover_adjacency
+    rng = np.random.default_rng(0)
+    n = 500
+    x = rng.standard_normal(n)
+    y = rng.standard_normal(n)  # independent
+    z = x + y + rng.standard_normal(n) * 0.3  # collider
+    df = _df_from_columns(x=x, y=y, z=z)
+
+    adj = discover_adjacency(
+        df, variables=['x', 'y', 'z'],
+        alpha=0.05, max_conditioning=0,
+    )
+    edges = {tuple(sorted(e)) for e in adj.edges}
+    # X−Z and Y−Z survive
+    assert ('x', 'z') in edges
+    assert ('y', 'z') in edges
+    # X−Y removed at depth 0 (marginal independence)
+    assert ('x', 'y') not in edges
+
+
+def test_discover_with_jci_stratification() -> None:
+    """JCI stratification on a categorical context: edges that
+    look correlated when pooled are within-stratum independent.
+    Stratified PC removes them; unstratified keeps them."""
+    from corroborate.causal_discovery import discover_adjacency
+    rng = np.random.default_rng(0)
+    n_per = 200
+    # Stratum A: X and Y both shifted up (creates pooled correlation
+    # via mean shift even though within-stratum is independent).
+    xa = rng.standard_normal(n_per) - 3
+    ya = rng.standard_normal(n_per) - 3
+    # Stratum B: shifted down.
+    xb = rng.standard_normal(n_per) + 3
+    yb = rng.standard_normal(n_per) + 3
+    df = _df_from_columns(
+        x=np.concatenate([xa, xb]),
+        y=np.concatenate([ya, yb]),
+        env=np.array(['a'] * n_per + ['b'] * n_per, dtype=object),
+    )
+
+    # Without stratification: pooled correlation is real.
+    adj_pooled = discover_adjacency(
+        df, variables=['x', 'y'],
+        alpha=0.05, max_conditioning=0,
+    )
+    edges_pooled = {tuple(sorted(e)) for e in adj_pooled.edges}
+    assert ('x', 'y') in edges_pooled
+
+    # With stratification on env: within-stratum independent.
+    adj_strat = discover_adjacency(
+        df, variables=['x', 'y'],
+        alpha=0.05, max_conditioning=0,
+        stratify_by='env',
+    )
+    edges_strat = {tuple(sorted(e)) for e in adj_strat.edges}
+    assert ('x', 'y') not in edges_strat
+
+
+# ============ Orientation — v-structures + Meek rules ============
+
+def test_orient_v_structure_collider() -> None:
+    """Unshielded X − Z − Y with Z NOT in sepset(X, Y) → orient
+    X → Z ← Y (definite collider)."""
+    from corroborate.causal_discovery import (
+        DiscoveredAdjacency, orient_adjacency,
+    )
+    adj = DiscoveredAdjacency(
+        variables=frozenset({'x', 'y', 'z'}),
+        edges=frozenset({frozenset({'x', 'z'}), frozenset({'y', 'z'})}),
+        separating_sets={
+            frozenset({'x', 'y'}): frozenset({frozenset[str]()}),
+        },
+        n_observations=100, alpha=0.05, max_conditioning=0,
+        stratify_by=None,
+    )
+    oriented = orient_adjacency(adj)
+    assert ('x', 'z') in oriented.directed_edges
+    assert ('y', 'z') in oriented.directed_edges
+    assert oriented.undirected_edges == frozenset()
+    assert oriented.ambiguous_triples == frozenset()
+
+
+def test_orient_non_collider_when_z_in_sepset() -> None:
+    """Unshielded X − Z − Y with Z IN sepset(X, Y) → Z is a
+    non-collider; the X−Z and Y−Z edges stay undirected."""
+    from corroborate.causal_discovery import (
+        DiscoveredAdjacency, orient_adjacency,
+    )
+    adj = DiscoveredAdjacency(
+        variables=frozenset({'x', 'y', 'z'}),
+        edges=frozenset({frozenset({'x', 'z'}), frozenset({'y', 'z'})}),
+        separating_sets={
+            # Z separates X and Y → non-collider
+            frozenset({'x', 'y'}): frozenset({frozenset({'z'})}),
+        },
+        n_observations=100, alpha=0.05, max_conditioning=1,
+        stratify_by=None,
+    )
+    oriented = orient_adjacency(adj)
+    assert oriented.directed_edges == frozenset()
+    assert frozenset({'x', 'z'}) in oriented.undirected_edges
+    assert frozenset({'y', 'z'}) in oriented.undirected_edges
+
+
+def test_orient_meek_r1_propagation() -> None:
+    """A → B and B − C undirected, A not adjacent to C → R1
+    propagates orientation B → C (else A → B ← C would be a new
+    v-structure that v-structure detection would have caught)."""
+    from corroborate.causal_discovery import (
+        DiscoveredAdjacency, orient_adjacency,
+    )
+    # We need: A → B (already directed), B − C undirected, A and C
+    # not adjacent. Construct via a 4-node fixture:
+    # collider triple X → A → ... → no. Simpler: use ambiguity-free
+    # collider that orients A and then a downstream undirected B-C.
+    # Construct: U → A, V → A (collider so A→A wouldn't apply; we
+    # need A→B). Alternative: just synthesise the post-collider
+    # state directly.
+    # Manual construction: discovered adjacency has edges
+    # {U-A, V-A, A-B, B-C} with U, V both colliding into A
+    # (so v-structures orient U → A, V → A) and B-C undirected.
+    # After v-structure: directed = {(U, A), (V, A)}, undirected =
+    # {A-B, B-C}. Meek R1: U → A, A − B undirected, U not adjacent
+    # to B → orient A → B. Then A → B, B − C undirected, A not
+    # adjacent to C → orient B → C.
+    adj = DiscoveredAdjacency(
+        variables=frozenset({'u', 'v', 'a', 'b', 'c'}),
+        edges=frozenset({
+            frozenset({'u', 'a'}),
+            frozenset({'v', 'a'}),
+            frozenset({'a', 'b'}),
+            frozenset({'b', 'c'}),
+        }),
+        separating_sets={
+            # U⫫V at depth 0 (no edge)
+            frozenset({'u', 'v'}): frozenset({frozenset[str]()}),
+            # U⫫B given A
+            frozenset({'u', 'b'}): frozenset({frozenset({'a'})}),
+            # V⫫B given A
+            frozenset({'v', 'b'}): frozenset({frozenset({'a'})}),
+            # A⫫C given B
+            frozenset({'a', 'c'}): frozenset({frozenset({'b'})}),
+            # U⫫C, V⫫C — chain dissipates
+            frozenset({'u', 'c'}): frozenset({frozenset({'a'})}),
+            frozenset({'v', 'c'}): frozenset({frozenset({'a'})}),
+        },
+        n_observations=100, alpha=0.05, max_conditioning=1,
+        stratify_by=None,
+    )
+    oriented = orient_adjacency(adj)
+    # v-structure detection: U-A-V is unshielded; A NOT in sepset(U,V)
+    # → collider U → A ← V.
+    assert ('u', 'a') in oriented.directed_edges
+    assert ('v', 'a') in oriented.directed_edges
+    # Meek R1: U → A, A−B undirected, U not adjacent to B (sepset
+    # has A) → A → B. Then A → B, B−C undirected, A not adjacent
+    # to C → B → C.
+    assert ('a', 'b') in oriented.directed_edges
+    assert ('b', 'c') in oriented.directed_edges
+    assert oriented.undirected_edges == frozenset()
+
+
+def test_orient_ambiguous_triple_skipped() -> None:
+    """Triple where Z is in SOME but not ALL separating sets →
+    ambiguous; not oriented in conservative mode."""
+    from corroborate.causal_discovery import (
+        DiscoveredAdjacency, orient_adjacency,
+    )
+    adj = DiscoveredAdjacency(
+        variables=frozenset({'x', 'y', 'z'}),
+        edges=frozenset({frozenset({'x', 'z'}), frozenset({'y', 'z'})}),
+        separating_sets={
+            # Two sepsets: empty AND {z}. Z is in some but not all.
+            frozenset({'x', 'y'}): frozenset({
+                frozenset[str](),
+                frozenset({'z'}),
+            }),
+        },
+        n_observations=100, alpha=0.05, max_conditioning=1,
+        stratify_by=None,
+    )
+    oriented = orient_adjacency(adj, conservative=True)
+    # Conservative: ambiguous → not oriented.
+    assert ('x', 'z') not in oriented.directed_edges
+    assert ('y', 'z') not in oriented.directed_edges
+    # Tracked as ambiguous triple.
+    assert ('x', 'z', 'y') in oriented.ambiguous_triples
