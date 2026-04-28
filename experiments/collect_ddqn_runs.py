@@ -114,43 +114,35 @@ HP_GRID: dict[str, list[Any]] = {
 
 # ============ Trace post-reductions (polars exprs) ============
 
-# 3-D Q-tensors (`online_q_values`, `target_q_values`) are
-# `(steps, batch, n_actions)` — at 50k steps × 30 seeds they
-# dominate disk (~800 MB per arm). For DDQN §3 acceptance we
-# only need per-step max-Q (online & target) — `hasselt_
-# covariance_gap` reads max-Q across time, not per-batch detail.
-#
-# `map_elements` is the right tool for nested-list aggregation:
-# `pl.list.eval` has known limitations with deeply nested lists.
-# The UDF runs once per cell at write time — overhead negligible.
+# Q-tensor reductions now happen in-loop (`train_phase` returns
+# `online_q_per_action` / `target_q_per_action` shape (n_actions,)
+# per step + 5-tuple `pearson_stats`). The high-action-env OOM is
+# avoided at the source. No further trace-time reductions needed
+# for §3-acceptance bridges.
 
 def _per_step_max_q(nested_list: pl.Series) -> list[float]:
-    """Per-step max-Q over (batch, n_actions). Input is a nested
-    Python list shaped `(steps, batch, n_actions)`; output is
+    """Per-step max over the (n_actions,) per-step Q vector.
+    Input is a nested list shaped `(steps, n_actions)`; output is
     `(steps,)`."""
-    return [
-        max(max(per_action_q) for per_action_q in per_batch)
-        for per_batch in nested_list.to_list()
-    ]
+    return [max(per_action) for per_action in nested_list.to_list()]
 
 
 TRACE_POST_REDUCTIONS: tuple[pl.Expr, ...] = (
-    pl.col('online_q_values').map_elements(
+    pl.col('online_q_per_action').map_elements(
         _per_step_max_q, return_dtype=pl.List(pl.Float64),
     ).alias('online_max_q_per_step'),
-    pl.col('target_q_values').map_elements(
+    pl.col('target_q_per_action').map_elements(
         _per_step_max_q, return_dtype=pl.List(pl.Float64),
     ).alias('target_max_q_per_step'),
 )
 
 
-# Source columns to drop after reductions. Explicit acknowledgment
-# that the raw 3-D arrays are gone from the trace store; bridges
-# that need them must be precomputed at training time. The 2-D
-# `sample_indices` (~50 MB) is kept for `lin_iid_gap` post-hoc.
+# Drop the per-action vectors after reducing to per-step max — the
+# bridges that consume max-Q (`lin_iid_gap`, eval-side max-Q
+# correlation) read the per-step max directly.
 TRACE_POST_DROPS: tuple[str, ...] = (
-    'online_q_values',
-    'target_q_values',
+    'online_q_per_action',
+    'target_q_per_action',
 )
 
 

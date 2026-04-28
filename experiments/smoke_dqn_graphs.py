@@ -112,24 +112,21 @@ def _derive_measurables(rec: dict[str, object]) -> dict[str, object]:
                 out[k] = arr.astype(np.float64)
             elif arr.ndim == 2 and arr.shape[-1] == 1:
                 out[k] = arr.squeeze(-1).astype(np.float64)
-    # Q-tensor reductions (online_q_values: (steps, batch, n_actions)).
-    if 'online_q_values' in rec:
-        q = np.asarray(rec['online_q_values']).astype(np.float64)
-        # Reduce batch axis first → (steps, n_actions).
-        q_per_step = q.mean(axis=1) if q.ndim == 3 else q
-        if q_per_step.ndim == 2:
-            out['q_mean'] = q_per_step.mean(-1)
-            out['q_max'] = q_per_step.max(-1)
-            out['q_std'] = q_per_step.std(-1)
-            sorted_q = np.sort(q_per_step, axis=-1)
+    # Q-vector reductions (online_q_per_action: (steps, n_actions)
+    # — already batch-averaged in train_phase).
+    if 'online_q_per_action' in rec:
+        q = np.asarray(rec['online_q_per_action']).astype(np.float64)
+        if q.ndim == 2:
+            out['q_mean'] = q.mean(-1)
+            out['q_max'] = q.max(-1)
+            out['q_std'] = q.std(-1)
+            sorted_q = np.sort(q, axis=-1)
             out['q_gap'] = sorted_q[..., -1] - sorted_q[..., -2]
-    # Target-Q reductions.
-    if 'target_q_values' in rec:
-        tq = np.asarray(rec['target_q_values']).astype(np.float64)
-        tq_per_step = tq.mean(axis=1) if tq.ndim == 3 else tq
-        if tq_per_step.ndim == 2:
-            out['target_q_mean'] = tq_per_step.mean(-1)
-            out['target_q_max'] = tq_per_step.max(-1)
+    if 'target_q_per_action' in rec:
+        tq = np.asarray(rec['target_q_per_action']).astype(np.float64)
+        if tq.ndim == 2:
+            out['target_q_mean'] = tq.mean(-1)
+            out['target_q_max'] = tq.max(-1)
     return out
 
 

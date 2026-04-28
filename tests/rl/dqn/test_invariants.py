@@ -225,14 +225,31 @@ def test_lin_iid_gap_carries_both_reads() -> None:
 
 # ============ Hasselt covariance gap (Pearson r) ============
 
+def _pearson_stats_from_arrays(
+    on: jnp.ndarray, tg: jnp.ndarray,
+) -> jnp.ndarray:
+    """Build the per-step `pearson_stats` series train_phase
+    emits, given full Q-tensors (T, batch, n_actions). Helper so
+    tests can use natural array fixtures without rewriting in
+    sufficient-statistics form."""
+    on_flat = on.reshape(on.shape[0], -1)  # (T, batch*n_actions)
+    tg_flat = tg.reshape(tg.shape[0], -1)
+    return jnp.stack([
+        on_flat.mean(axis=-1),
+        tg_flat.mean(axis=-1),
+        (on_flat ** 2).mean(axis=-1),
+        (tg_flat ** 2).mean(axis=-1),
+        (on_flat * tg_flat).mean(axis=-1),
+    ], axis=-1)  # (T, 5)
+
+
 def test_hasselt_gap_one_when_q_values_perfectly_correlated() -> None:
     """Online and target Q-values identical (varying across
     samples) → Pearson r = 1 → gap = 1 (DDQN reduces to vanilla,
     theorem doesn't bite)."""
     arr = jnp.arange(50 * 16 * 2, dtype=jnp.float32).reshape((50, 16, 2))
     record: Mapping[str, jnp.ndarray] = {
-        'online_q_values': arr,
-        'target_q_values': arr,
+        'pearson_stats': _pearson_stats_from_arrays(arr, arr),
     }
     gap = hasselt_covariance_gap()
     assert abs(gap(record) - 1.0) < 1e-5
@@ -244,8 +261,7 @@ def test_hasselt_gap_zero_when_q_values_perfectly_anti_correlated() -> None:
     `max(0, r)`, so anti-correlation ⇒ gap = 0 (not 1)."""
     arr = jnp.arange(50 * 16 * 2, dtype=jnp.float32).reshape((50, 16, 2))
     record: Mapping[str, jnp.ndarray] = {
-        'online_q_values': arr,
-        'target_q_values': -arr,
+        'pearson_stats': _pearson_stats_from_arrays(arr, -arr),
     }
     gap = hasselt_covariance_gap()
     assert gap(record) == 0.0
@@ -256,17 +272,18 @@ def test_hasselt_gap_nan_when_q_values_constant() -> None:
     NaN no-data sentinel (no information about independence
     either way)."""
     import math
+    on = jnp.ones((50, 16, 2))
+    tg = jnp.arange(50 * 16 * 2, dtype=jnp.float32).reshape((50, 16, 2))
     record: Mapping[str, jnp.ndarray] = {
-        'online_q_values': jnp.ones((50, 16, 2)),
-        'target_q_values': jnp.arange(50 * 16 * 2, dtype=jnp.float32).reshape((50, 16, 2)),
+        'pearson_stats': _pearson_stats_from_arrays(on, tg),
     }
     gap = hasselt_covariance_gap()
     assert math.isnan(gap(record))
 
 
-def test_hasselt_gap_carries_both_reads() -> None:
+def test_hasselt_gap_carries_pearson_stats_read() -> None:
     gap = hasselt_covariance_gap()
-    assert gap.reads == ('online_q_values', 'target_q_values')
+    assert gap.reads == ('pearson_stats',)
 
 
 # ============ at_most wrap: scope commitment → verdict ============
@@ -314,7 +331,7 @@ def test_at_most_wrap_invariant_violation_when_gap_over_threshold() -> None:
 def test_at_most_wrap_targets_propagate_from_gap_reads() -> None:
     gap = hasselt_covariance_gap()
     bridge = at_most(gap, threshold=0.5, of_claim=bootstrap)
-    assert bridge.targets == ('online_q_values', 'target_q_values')
+    assert bridge.targets == ('pearson_stats',)
 
 
 def test_at_most_wrap_default_name_includes_gap_and_threshold() -> None:

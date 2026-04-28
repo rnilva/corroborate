@@ -180,17 +180,21 @@ def main() -> None:
             f'id-link violated: {run_ids ^ trace_ids}'
         )
 
-        # Verify a multi-dim trajectory survived (online_q_values
-        # is `(total_steps, batch_size, n_actions)` = `(1000, 32, 2)`).
+        # Verify the per-step Q reductions survived the round-trip.
+        # train_phase now emits `online_q_per_action` shape
+        # `(total_steps, n_actions)` and `pearson_stats` shape
+        # `(total_steps, 5)` — both 2-D per cell.
         sample_trace = traces_back[0]
-        oq = sample_trace.leaves['online_q_values']
+        oq = sample_trace.leaves['online_q_per_action']
         assert isinstance(oq, list)
-        # 3-D nested list: outer = total_steps, middle = batch,
-        # inner = n_actions.
         assert isinstance(oq[0], list)
-        assert isinstance(oq[0][0], list)
-        print(f'   online_q_values 3-D shape: '
-              f'({len(oq)}, {len(oq[0])}, {len(oq[0][0])}) — preserved')
+        ps = sample_trace.leaves['pearson_stats']
+        assert isinstance(ps, list)
+        assert isinstance(ps[0], list)
+        print(f'   online_q_per_action 2-D shape: '
+              f'({len(oq)}, {len(oq[0])}) — preserved')
+        print(f'   pearson_stats 2-D shape: '
+              f'({len(ps)}, {len(ps[0])}) — preserved')
         print(f'   id-link OK: {len(run_ids)} cells, {len(trace_ids)} traces, '
               f'matched.')
 

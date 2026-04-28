@@ -144,11 +144,33 @@ def train_phase(
 
     batch = replay.sample_batch(state.replay, sample_key)
 
-    # Always-on probe for the Hasselt-independence measurable —
-    # full Q-vectors on s' for both nets so the invariant has
-    # data regardless of which bootstrap slot is in use.
-    online_q_values = q_network(state.online_params, batch.next_obs)
-    target_q_values = q_network(state.target_params, batch.next_obs)
+    # Always-on probe for derived Q measurables. Compute sufficient
+    # statistics in-loop and DO NOT propagate the full
+    # `(batch, n_actions)` tensors — those stacked over scan
+    # `(super_steps, seeds, train_steps, batch, n_actions)` OOM the
+    # device for high-action envs (observed at MNISTBandit /
+    # BernoulliBandit / MinAtar with n_actions ≥ 6 — autotune asks
+    # for ~4GB on a transpose fusion). The Pearson-r measurable
+    # (hasselt_covariance_gap) reads the per-step (mean, mean_sq,
+    # cross_mean) sum-stats below and aggregates post-hoc — same
+    # information without the materialised tensors.
+    online_q_full = q_network(state.online_params, batch.next_obs)
+    target_q_full = q_network(state.target_params, batch.next_obs)
+    # Per-step Q reductions for the measurable layer (q_mean, q_max,
+    # q_std, q_gap-via-(top-second)).
+    online_q_per_action = online_q_full.mean(axis=0)  # avg over batch
+    target_q_per_action = target_q_full.mean(axis=0)
+    # Pearson sum-stats: enough to compute correlation post-hoc
+    # without storing the full tensors.
+    on_flat = online_q_full.reshape(-1)
+    tg_flat = target_q_full.reshape(-1)
+    pearson_stats = jnp.stack([
+        on_flat.mean(),
+        tg_flat.mean(),
+        (on_flat ** 2).mean(),
+        (tg_flat ** 2).mean(),
+        (on_flat * tg_flat).mean(),
+    ])  # shape (5,) per step
 
     def compute_loss(params: Params) -> tuple[jax.Array, jax.Array]:
         q_b = q_network(params, batch.obs)            # (batch, n_actions)
@@ -187,8 +209,17 @@ def train_phase(
     diagnostics: dict[str, jax.Array] = {
         'loss': loss,
         'td_error': td_error,
-        'online_q_values': online_q_values,
-        'target_q_values': target_q_values,
+        # Pre-reduced Q-summaries: per-step (n_actions,) vectors
+        # instead of the full (batch, n_actions). Shrinks the
+        # per-step trace ~64× without losing the action-axis
+        # structure bridges might want.
+        'online_q_per_action': online_q_per_action,
+        'target_q_per_action': target_q_per_action,
+        # Pearson sufficient-stats: 5 scalars/step. The
+        # `hasselt_covariance_gap` measurable aggregates these
+        # post-hoc to recover the population-level Pearson r over
+        # all (s', a) pairs across training.
+        'pearson_stats': pearson_stats,
         'sample_indices': batch.indices,
     }
     return new_state, diagnostics

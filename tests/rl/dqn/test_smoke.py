@@ -102,16 +102,23 @@ def test_vanilla_dqn_runs_on_cartpole_via_python_loop() -> None:
         'loss', 'td_error',
     }
     batch_keys = {'sample_indices'}
-    q_value_keys = {'online_q_values', 'target_q_values'}
-    assert set(record.keys()) == scalar_keys | batch_keys | q_value_keys
+    # Per-step Q reductions: per-action vectors (n_actions,) and
+    # 5-tuple Pearson sum-stats. Replaces the full
+    # `(batch, n_actions)` Q-tensors that train_phase used to emit;
+    # the in-loop reduction is the OOM fix for high-action envs.
+    q_keys = {
+        'online_q_per_action', 'target_q_per_action', 'pearson_stats',
+    }
+    assert set(record.keys()) == scalar_keys | batch_keys | q_keys
     for key in scalar_keys:
         assert record[key].shape == (50,)
     for key in batch_keys:
         # batch_size = 16 in this smoke fixture
         assert record[key].shape == (50, 16)
-    for key in q_value_keys:
-        # n_actions = 2 for CartPole
-        assert record[key].shape == (50, 16, 2)
+    # n_actions = 2 for CartPole; pearson_stats is 5 sum-stats/step.
+    assert record['online_q_per_action'].shape == (50, 2)
+    assert record['target_q_per_action'].shape == (50, 2)
+    assert record['pearson_stats'].shape == (50, 5)
 
 
 @pytest.mark.slow

@@ -194,26 +194,34 @@ def hasselt_covariance_gap() -> Measurable[DQNTrajectoryRecord, float]:
     name = 'hasselt_covariance_gap[Pearson_r]'
 
     def fn(record: DQNTrajectoryRecord) -> float:
-        on = jnp.asarray(record['online_q_values']).flatten()
-        tg = jnp.asarray(record['target_q_values']).flatten()
-        on_centered = on - jnp.mean(on)
-        tg_centered = tg - jnp.mean(tg)
-        cov = jnp.mean(on_centered * tg_centered)
-        std_on = jnp.sqrt(jnp.mean(on_centered ** 2))
-        std_tg = jnp.sqrt(jnp.mean(tg_centered ** 2))
-        denom = std_on * std_tg
-        if float(denom) <= 1e-9:
+        # Per-step Pearson sum-stats from train_phase, shape
+        # `(T, 5)`: (mean_on, mean_tg, mean_on²,
+        # mean_tg², mean_on·tg). Aggregate population-level Pearson
+        # r over the union of all per-step (s', a) pairs by
+        # AVERAGING the per-step means (each step represents an
+        # equal batch_size×n_actions chunk, so simple mean is the
+        # population estimator).
+        ps = jnp.asarray(record['pearson_stats'])
+        agg = ps.mean(axis=0)
+        m_on, m_tg, m_on_sq, m_tg_sq, m_xy = (
+            float(agg[0]), float(agg[1]), float(agg[2]),
+            float(agg[3]), float(agg[4]),
+        )
+        var_on = m_on_sq - m_on ** 2
+        var_tg = m_tg_sq - m_tg ** 2
+        if var_on <= 1e-12 or var_tg <= 1e-12:
             # Constant-variance side ⇒ undefined correlation ⇒
             # NaN sentinel (no information about independence).
             return float('nan')
-        r = cov / denom
+        cov = m_xy - m_on * m_tg
+        r = cov / (var_on * var_tg) ** 0.5
         # Asymmetric: only positive correlation is the failure
         # mode for DDQN's decoupling assumption. Anti-correlation
         # is favourable ⇒ gap = 0.
-        return float(jnp.maximum(0.0, r))
+        return max(0.0, r)
 
     return Measurable(
-        fn=fn, name=name, reads=('online_q_values', 'target_q_values'),
+        fn=fn, name=name, reads=('pearson_stats',),
     )
 
 
