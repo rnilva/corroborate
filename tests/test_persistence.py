@@ -1,4 +1,4 @@
-"""Tests for parquet round-trip across all five row types.
+"""Tests for parquet round-trip across the row types.
 
 Each row type has paired write/read functions; the test pattern
 is: construct row → write to tmp parquet → read back → assert
@@ -10,19 +10,13 @@ from __future__ import annotations
 from pathlib import Path
 
 from corroborate.persistence import (
-    read_armrows,
     read_comparisonrows,
-    read_corpusrows,
     read_runrows,
-    write_armrows,
     write_comparisonrows,
-    write_corpusrows,
     write_runrows,
 )
 from corroborate.schema import (
-    ArmRow,
     ComparisonRow,
-    CorpusRow,
     RunRow,
 )
 from corroborate.verdict import RefutationClass, Verdict
@@ -127,28 +121,6 @@ def test_runrow_parquet_heterogeneous_keys_null_pad(tmp_path: Path) -> None:
     assert 'env_name' not in rows_out[1].measurements
 
 
-# ============ ArmRow round-trip ============
-
-def test_armrow_parquet_round_trip(tmp_path: Path) -> None:
-    arm = ArmRow(
-        id='arm-1',
-        cycle_id='cycle-7',
-        timestamp='2026-04-27T10:00:00Z',
-        run_ids=('run-1', 'run-2', 'run-3'),
-        measurements={
-            'env_name': 'Asterix-MinAtar',
-            'intervention_name': 'ddqn',
-            'n': 3,
-            'outcome.late_window_mean.arm_mean': 42.5,
-            'outcome.late_window_mean.arm_sd': 3.1,
-            'gamma': 0.99,
-        },
-    )
-    path = tmp_path / 'arms.parquet'
-    write_armrows([arm], path)
-    assert read_armrows(path) == [arm]
-
-
 # ============ ComparisonRow round-trip ============
 
 def test_comparisonrow_parquet_round_trip_full(tmp_path: Path) -> None:
@@ -205,26 +177,6 @@ def test_comparisonrow_parquet_with_optional_nones(tmp_path: Path) -> None:
     assert loaded == [cmp]
     assert loaded[0].predicted_direction is None
     assert loaded[0].refutation_class is RefutationClass.UNDERPOWERED
-
-
-# ============ CorpusRow round-trip ============
-
-def test_corpusrow_parquet_round_trip(tmp_path: Path) -> None:
-    corpus = CorpusRow(
-        id='corpus-1',
-        name='ddqn_link_bridge',
-        cycle_id='cycle-7',
-        timestamp='2026-04-27T10:00:00Z',
-        comparison_ids=('cmp-1', 'cmp-2', 'cmp-3'),
-        measurements={
-            'n_comparisons': 3,
-            'bridge.hasselt_link.verdict': 'power_insufficient',
-            'bridge.hasselt_link.stats.pearson_r': 0.28,
-        },
-    )
-    path = tmp_path / 'corpus.parquet'
-    write_corpusrows([corpus], path)
-    assert read_corpusrows(path) == [corpus]
 
 
 # ============ Empty collections ============

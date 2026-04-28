@@ -1,14 +1,18 @@
-"""Schema — typed row dataclasses for corroborate's four-row corpus.
+"""Schema — typed row dataclasses for corroborate's corpus.
 
-The corpus has four levels:
+Two levels (mirror v9's traces.parquet + measurements.parquet,
+v10's HypothesisRunRow + HypothesisComparisonRow):
 
 - `RunRow` — per-cell evidence (one (env, seed) execution).
   Source of truth.
-- `ArmRow` — per-(intervention, env) aggregate (across seeds).
-- `ComparisonRow` — per (treatment_arm, baseline_arm) pair on one
-  env. Carries Hedges' g, SE, derived_q, etc.
-- `CorpusRow` — across-comparison aggregate (e.g. the Pearson-r
-  link bridge in §3.5 of PAPER_NOTES.md).
+- `ComparisonRow` — per (treatment, baseline) pair on one env.
+  Carries Hedges' g, SE, derived_q, etc. Materialized view of
+  RunRows; re-derivable on demand.
+
+Plus the per-cell raw observation store:
+
+- `TraceRow` — per-cell scalars + 1-D series (parquet) and
+  multi-dim arrays (zarr-backed `arrays` mapping).
 
 Each row splits into a **framework-typed surface** (closed-set
 enums, lineage IDs, framework-controlled provenance) and an
@@ -30,9 +34,12 @@ into `measurements`. Skip None-valued columns (polars null-pads
 when rows have heterogeneous keys).
 
 Lineage is explicit via `*_id` fields:
-- `RunRow.id` → referenced by `ArmRow.run_ids`
-- `ArmRow.id` → referenced by `ComparisonRow.{treatment,baseline}_arm_id`
-- `ComparisonRow.id` → referenced by `CorpusRow.comparison_ids`"""
+- `RunRow.id` → referenced by `TraceRow.id` (1:1 join)
+- `ComparisonRow.{treatment,baseline}_arm_id` is vestigial (an
+  ArmRow id) and is empty-string for paired-by-seed comparisons.
+  The N:1 RunRow→ComparisonRow lineage is currently implicit
+  via paired_comparison_from_runs; field rename to run_ids tuple
+  is a follow-up."""
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -45,7 +52,6 @@ from corroborate._narrow import (
     optional_str,
     require_bool,
     require_str,
-    require_str_list,
     require_verdict,
 )
 from corroborate.hypothesis import Direction
@@ -249,58 +255,6 @@ class RunRow:
         )
 
 
-# ============ ArmRow ============
-
-@dataclass(frozen=True, slots=True)
-class ArmRow:
-    """Per-(intervention, env) aggregate across seeds. Treatment
-    and baseline arms are constructed separately; ComparisonRow
-    pairs them by env.
-
-    Framework-typed surface: lineage IDs (`run_ids`),
-    cycle/timestamp. Open surface: `measurements` carrying HP
-    fingerprint (the configurational keys shared across the arm's
-    runs), per-bridge admit-rates, arm-level outcome statistics
-    (`outcome.<m>.arm_mean`, `outcome.<m>.arm_sd`, `n`)."""
-    id: str
-    cycle_id: str | None
-    timestamp: str
-    run_ids: tuple[str, ...]
-    measurements: Mapping[str, MeasurementLeaf] = field(
-        default_factory=lambda: {},
-    )
-
-    def as_dict(self) -> dict[str, object]:
-        out: dict[str, object] = {
-            'id': self.id,
-            'cycle_id': self.cycle_id,
-            'timestamp': self.timestamp,
-            'run_ids': list(self.run_ids),
-        }
-        _flatten_measurements(out, self.measurements)
-        return out
-
-    @classmethod
-    def from_row_dict(cls, d: Mapping[str, object]) -> Self:
-        provenance: frozenset[str] = frozenset(
-            ('id', 'cycle_id', 'timestamp', 'run_ids')
-        )
-        measurements: dict[str, MeasurementLeaf] = {}
-        for k, v in d.items():
-            if k in provenance:
-                continue
-            if v is None:
-                continue
-            measurements[k] = _coerce_measurement_leaf(v)
-        return cls(
-            id=require_str(d, 'id'),
-            cycle_id=optional_str(d, 'cycle_id'),
-            timestamp=require_str(d, 'timestamp'),
-            run_ids=tuple(require_str_list(d, 'run_ids')),
-            measurements=measurements,
-        )
-
-
 # ============ ComparisonRow ============
 
 @dataclass(frozen=True, slots=True)
@@ -376,51 +330,3 @@ class ComparisonRow:
         )
 
 
-# ============ CorpusRow ============
-
-@dataclass(frozen=True, slots=True)
-class CorpusRow:
-    """Across-comparison aggregate. The corpus-level summary
-    consumed by link bridges (e.g. §3.5's
-    `Pearson r(stat_q, stat_f)` across envs) and by axiom 19's
-    redundancy primitive (G as the latest-wins fact register)."""
-    id: str
-    name: str
-    cycle_id: str | None
-    timestamp: str
-    comparison_ids: tuple[str, ...]
-    measurements: Mapping[str, MeasurementLeaf] = field(
-        default_factory=lambda: {},
-    )
-
-    def as_dict(self) -> dict[str, object]:
-        out: dict[str, object] = {
-            'id': self.id,
-            'name': self.name,
-            'cycle_id': self.cycle_id,
-            'timestamp': self.timestamp,
-            'comparison_ids': list(self.comparison_ids),
-        }
-        _flatten_measurements(out, self.measurements)
-        return out
-
-    @classmethod
-    def from_row_dict(cls, d: Mapping[str, object]) -> Self:
-        provenance: frozenset[str] = frozenset(
-            ('id', 'name', 'cycle_id', 'timestamp', 'comparison_ids')
-        )
-        measurements: dict[str, MeasurementLeaf] = {}
-        for k, v in d.items():
-            if k in provenance:
-                continue
-            if v is None:
-                continue
-            measurements[k] = _coerce_measurement_leaf(v)
-        return cls(
-            id=require_str(d, 'id'),
-            name=require_str(d, 'name'),
-            cycle_id=optional_str(d, 'cycle_id'),
-            timestamp=require_str(d, 'timestamp'),
-            comparison_ids=tuple(require_str_list(d, 'comparison_ids')),
-            measurements=measurements,
-        )

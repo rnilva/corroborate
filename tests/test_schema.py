@@ -9,9 +9,7 @@ not cast or `# type: ignore`."""
 from __future__ import annotations
 
 from corroborate.schema import (
-    ArmRow,
     ComparisonRow,
-    CorpusRow,
     RunRow,
 )
 from corroborate.verdict import RefutationClass, Verdict
@@ -99,28 +97,6 @@ def test_run_row_skips_none_columns_on_read() -> None:
     assert run.measurements == {'gamma': 0.99}
 
 
-# ============ ArmRow round-trip ============
-
-def test_arm_row_round_trip() -> None:
-    arm = ArmRow(
-        id='arm-1',
-        cycle_id='cycle-7',
-        timestamp='2026-04-27T10:00:00Z',
-        run_ids=('run-1', 'run-2', 'run-3'),
-        measurements={
-            'env_name': 'Asterix-MinAtar',
-            'intervention_name': 'ddqn',
-            'n': 3,
-            'outcome.late_window_mean.arm_mean': 42.5,
-            'outcome.late_window_mean.arm_sd': 3.1,
-            'gamma': 0.99,
-            'bridge.some_bridge.admit_rate': 1.0,
-        },
-    )
-    arm2 = ArmRow.from_row_dict(arm.as_dict())
-    assert arm == arm2
-
-
 # ============ ComparisonRow round-trip ============
 
 def test_comparison_row_round_trip_full() -> None:
@@ -181,27 +157,6 @@ def test_comparison_row_round_trip_with_optional_nones() -> None:
     assert cmp == cmp2
     assert cmp2.predicted_direction is None
     assert cmp2.refutation_class is RefutationClass.UNDERPOWERED
-
-
-# ============ CorpusRow round-trip ============
-
-def test_corpus_row_round_trip() -> None:
-    corpus = CorpusRow(
-        id='corpus-1',
-        name='ddqn_link_bridge',
-        cycle_id='cycle-7',
-        timestamp='2026-04-27T10:00:00Z',
-        comparison_ids=('cmp-1', 'cmp-2', 'cmp-3'),
-        measurements={
-            'n_comparisons': 3,
-            'bridge.hasselt_link.verdict': 'power_insufficient',
-            'bridge.hasselt_link.stats.pearson_r': 0.28,
-            'bridge.hasselt_link.stats.p': 0.28,
-            'bridge.hasselt_link.stats.n_envs': 17,
-        },
-    )
-    corpus2 = CorpusRow.from_row_dict(corpus.as_dict())
-    assert corpus == corpus2
 
 
 # ============ Collection composition ============

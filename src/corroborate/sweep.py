@@ -91,7 +91,7 @@ def sweep[R: Mapping[str, object]](
     `runner(h, env_name, seed, total_steps) -> R` is the
     domain-specific cell executor. `primary_outcome_extractor` pulls
     the headline scalar from the record (e.g. `final_return` mean)
-    that downstream `ArmRow` aggregation summarises across seeds."""
+    that downstream comparison aggregation pairs across seeds."""
     rows: list[RunRow] = []
     failures: list[CellFailure] = []
 

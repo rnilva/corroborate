@@ -11,7 +11,7 @@ query support at the dataframe level:
 3. Asserts:
    - `leaf_signature` distinguishes the arms by the `greedification`
      swap (leaf topology paths differ).
-   - `aggregate_runs` groups cells correctly.
+   - `leaf_signature` groups cells consistently across seeds.
    - Each arm has finite outcome summaries.
 4. Persists both stores: writes `runs.parquet` and
    `traces.parquet` to a temp dir, reads back, verifies:
@@ -32,7 +32,7 @@ from pathlib import Path
 
 import polars as pl
 
-from corroborate.aggregate import aggregate_runs, leaf_signature
+from corroborate.aggregate import leaf_signature
 from corroborate.hypothesis import Hypothesis
 from corroborate.persistence import (
     read_runrows,
@@ -137,20 +137,19 @@ def main() -> None:
     print('   OK vanilla-rows share one signature, ddqn-rows share another, '
           'and they differ.\n')
 
-    print('4. aggregate_runs groups by leaf_signature:')
-    arms = aggregate_runs(
-        list(vanilla_rows) + list(ddqn_rows),
-        outcome_path='outcome.late_window_mean',
-    )
-    print(f'   {len(arms)} arms')
-    assert len(arms) == 2, f'expected 2 arms, got {len(arms)}'
-    for arm in arms:
-        name = arm.measurements['intervention_name']
-        env = arm.measurements['env_name']
-        n = arm.measurements['n']
-        mean = arm.measurements['outcome.late_window_mean.arm_mean']
-        sd = arm.measurements['outcome.late_window_mean.arm_sd']
-        print(f'     {name} on {env}: n={n} mean={mean} sd={sd}')
+    print('4. RunRows group by leaf_signature (ArmRow retired):')
+    by_sig: dict[
+        tuple[tuple[str, str], ...], list[RunRow],
+    ] = {}
+    for r in list(vanilla_rows) + list(ddqn_rows):
+        by_sig.setdefault(leaf_signature(r.measurements), []).append(r)
+    print(f'   {len(by_sig)} distinct leaf signatures (one per hypothesis)')
+    assert len(by_sig) == 2, f'expected 2 sigs, got {len(by_sig)}'
+    for sig, members in by_sig.items():
+        name = members[0].measurements['intervention_name']
+        env = members[0].measurements['env_name']
+        n = len(members)
+        print(f'     {name} on {env}: n={n} cells')
 
     print()
     print('5. Two-store persistence round-trip + HP query:')

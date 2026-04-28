@@ -16,7 +16,7 @@ from functools import partial
 
 import pytest
 
-from corroborate.aggregate import aggregate_runs, leaf_signature
+from corroborate.aggregate import leaf_signature
 from corroborate.hypothesis import Hypothesis
 from corroborate.rl.cell_runner import run_dqn_cell
 from corroborate.rl.dqn.claims.bootstrap import bootstrap, double_greedify
@@ -97,11 +97,11 @@ def test_different_interventions_yield_different_leaf_signatures() -> None:
 
 # ============ Corpus aggregation ============
 
-def test_aggregate_runs_groups_by_intervention_and_env() -> None:
-    """`aggregate_runs` collapses cells into ArmRows keyed by
-    (intervention_name, env_name, leaf_signature). Two seeds of
-    vanilla on CartPole + two seeds of DDQN on CartPole produces
-    2 ArmRows."""
+def test_runs_group_by_intervention_via_leaf_signature() -> None:
+    """Cells with the same hypothesis produce the same
+    leaf_signature; cells with different hypotheses produce
+    different signatures. Groupable directly without going
+    through ArmRow construction."""
     vanilla = _make_hypothesis('vanilla', intervention={})
     ddqn = _make_hypothesis(
         'ddqn', intervention={'bootstrap': _DDQN_BOOTSTRAP},
@@ -113,18 +113,17 @@ def test_aggregate_runs_groups_by_intervention_and_env() -> None:
         _run_cell('CartPole-v1', seed=0, h=ddqn),
         _run_cell('CartPole-v1', seed=1, h=ddqn),
     ]
-    arms = aggregate_runs(runs, outcome_path='outcome.late_window_mean')
 
-    # Two arms: one per intervention.
-    assert len(arms) == 2
-    arm_names: set[str] = set()
-    for arm in arms:
-        v = arm.measurements['intervention_name']
+    by_sig: dict[tuple[tuple[str, str], ...], list[str]] = {}
+    for r in runs:
+        sig = leaf_signature(r.measurements)
+        v = r.measurements.get('intervention_name')
         assert isinstance(v, str)
-        arm_names.add(v)
-    assert arm_names == {'vanilla', 'ddqn'}
+        by_sig.setdefault(sig, []).append(v)
 
-    # Each arm has both seeds.
-    for arm in arms:
-        assert arm.measurements['n'] == 2
-        assert arm.measurements['env_name'] == 'CartPole-v1'
+    # Two distinct signatures, one per hypothesis.
+    assert len(by_sig) == 2
+    for names in by_sig.values():
+        # Each group has both seeds of the same hypothesis.
+        assert len(names) == 2
+        assert len(set(names)) == 1

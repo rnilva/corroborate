@@ -32,9 +32,7 @@ import polars as pl
 
 from corroborate._polars_boundary import to_dicts as _to_dicts
 from corroborate.schema import (
-    ArmRow,
     ComparisonRow,
-    CorpusRow,
     RunRow,
     TraceRow,
 )
@@ -54,18 +52,6 @@ def read_runrows(path: Path) -> list[RunRow]:
     return [RunRow.from_row_dict(d) for d in _to_dicts(df)]
 
 
-# ============ ArmRow ============
-
-def write_armrows(rows: Iterable[ArmRow], path: Path) -> None:
-    records = [r.as_dict() for r in rows]
-    pl.DataFrame(records).write_parquet(path)
-
-
-def read_armrows(path: Path) -> list[ArmRow]:
-    df = pl.read_parquet(path)
-    return [ArmRow.from_row_dict(d) for d in _to_dicts(df)]
-
-
 # ============ ComparisonRow ============
 
 def write_comparisonrows(rows: Iterable[ComparisonRow], path: Path) -> None:
@@ -76,18 +62,6 @@ def write_comparisonrows(rows: Iterable[ComparisonRow], path: Path) -> None:
 def read_comparisonrows(path: Path) -> list[ComparisonRow]:
     df = pl.read_parquet(path)
     return [ComparisonRow.from_row_dict(d) for d in _to_dicts(df)]
-
-
-# ============ CorpusRow ============
-
-def write_corpusrows(rows: Iterable[CorpusRow], path: Path) -> None:
-    records = [r.as_dict() for r in rows]
-    pl.DataFrame(records).write_parquet(path)
-
-
-def read_corpusrows(path: Path) -> list[CorpusRow]:
-    df = pl.read_parquet(path)
-    return [CorpusRow.from_row_dict(d) for d in _to_dicts(df)]
 
 
 # ============ TraceRow ============
