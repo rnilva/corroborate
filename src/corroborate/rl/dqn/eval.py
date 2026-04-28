@@ -31,7 +31,7 @@ import jax
 import jax.numpy as jnp
 
 from corroborate.claim import claim
-from corroborate.loop import scan_loop
+from corroborate.rl.loop import scan_loop
 from corroborate.rl.dqn.state import DQNState
 from corroborate.rl.dqn.types import QFunction, StepRecord
 from corroborate.rl.env_catalogue import GymnaxEnvLike

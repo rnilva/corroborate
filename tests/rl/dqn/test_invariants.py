@@ -36,7 +36,7 @@ from corroborate.rl.dqn.invariants import (
     lin_iid_gap,
     state_action_coverage_gap,
 )
-from corroborate.loop import python_loop
+from corroborate.rl.loop import python_loop
 from corroborate.verdict import Verdict
 
 

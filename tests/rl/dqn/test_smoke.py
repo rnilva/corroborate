@@ -33,7 +33,7 @@ from corroborate.rl.dqn.claims.q_network import MLP, mlp_q
 from corroborate.rl.dqn.claims.replay import Replay
 from corroborate.rl.dqn.dqn import dqn_step, init_state
 from corroborate.rl.env_catalogue import GymnaxEnvLike, HasN, HasShape
-from corroborate.loop import python_loop, scan_loop
+from corroborate.rl.loop import python_loop, scan_loop
 
 
 # ============ Fixtures ============

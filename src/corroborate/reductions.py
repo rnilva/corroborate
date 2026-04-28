@@ -3,13 +3,13 @@
 The post-hoc analytical primitive. Three layers in this module:
 
 1. *Lifting record keys to measurables.* `from_key('q_max')`
-   returns a `Measurable[Mapping[str, jax.Array], jax.Array]` that
+   returns a `Measurable[Mapping[str, numpy array], numpy array]` that
    reads `record['q_max']`. The leaf primitive — every other
    reduction is built over `from_key`-derived measurables.
 
 2. *Time-axis reductions.* `max_abs(of)`, `mean_window(of, lo, hi)`,
    `growth_window(of, early, late)` — each takes an existing
-   `Measurable[R, jax.Array]` and returns a new
+   `Measurable[R, numpy array]` and returns a new
    `Measurable[R, float]`. `reads` propagates: a reduction inherits
    the leaf-key set from its operand.
 
@@ -27,7 +27,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-import jax.numpy as jnp
+import numpy as np
 
 from corroborate.measurable import Measurable
 
@@ -36,14 +36,14 @@ from corroborate.measurable import Measurable
 
 def from_key(
     key: str,
-) -> Measurable[Mapping[str, jnp.ndarray], jnp.ndarray]:
-    """Read `record[key]` as a `jax.Array`. The leaf primitive
+) -> Measurable[Mapping[str, np.ndarray], np.ndarray]:
+    """Read `record[key]` as a `numpy array`. The leaf primitive
     that lifts a record-keyed value into typed `Measurable` space.
 
     Parameterized by `key` rather than declared as a `@measurable`
     function because the latter would close over a static name —
     factories take parameters."""
-    def fn(record: Mapping[str, jnp.ndarray]) -> jnp.ndarray:
+    def fn(record: Mapping[str, np.ndarray]) -> np.ndarray:
         return record[key]
     return Measurable(fn=fn, name=key, reads=(key,))
 
@@ -51,7 +51,7 @@ def from_key(
 # ============ Time-axis reductions ============
 
 def max_abs[R: Mapping[str, object]](
-    of: Measurable[R, jnp.ndarray],
+    of: Measurable[R, np.ndarray],
 ) -> Measurable[R, float]:
     """Max of `|·|` over the operand array. Returns scalar.
 
@@ -62,12 +62,12 @@ def max_abs[R: Mapping[str, object]](
     name = f'{of.name}__max_abs'
 
     def fn(record: R) -> float:
-        return float(jnp.max(jnp.abs(of(record))))
+        return float(np.max(np.abs(of(record))))
     return Measurable(fn=fn, name=name, reads=of.reads)
 
 
 def mean_window[R: Mapping[str, object]](
-    of: Measurable[R, jnp.ndarray],
+    of: Measurable[R, np.ndarray],
     lo: float,
     hi: float,
 ) -> Measurable[R, float]:
@@ -92,12 +92,12 @@ def mean_window[R: Mapping[str, object]](
         # least one element falls in the window.
         if i_hi <= i_lo:
             i_hi = i_lo + 1
-        return float(jnp.mean(arr[i_lo:i_hi]))
+        return float(np.mean(arr[i_lo:i_hi]))
     return Measurable(fn=fn, name=name, reads=of.reads)
 
 
 def unique_count[R: Mapping[str, object]](
-    of: Measurable[R, jnp.ndarray],
+    of: Measurable[R, np.ndarray],
 ) -> Measurable[R, int]:
     """Count of distinct values in the operand array (flattened).
 
@@ -108,13 +108,13 @@ def unique_count[R: Mapping[str, object]](
 
     def fn(record: R) -> int:
         arr = of(record)
-        return int(jnp.unique(arr.flatten()).shape[0])
+        return int(np.unique(arr.flatten()).shape[0])
     return Measurable(fn=fn, name=name, reads=of.reads)
 
 
 def disagreement_rate[R: Mapping[str, object]](
-    of_a: Measurable[R, jnp.ndarray],
-    of_b: Measurable[R, jnp.ndarray],
+    of_a: Measurable[R, np.ndarray],
+    of_b: Measurable[R, np.ndarray],
 ) -> Measurable[R, float]:
     """Element-wise mean of `of_a != of_b`.
 
@@ -130,12 +130,12 @@ def disagreement_rate[R: Mapping[str, object]](
     def fn(record: R) -> float:
         a = of_a(record)
         b = of_b(record)
-        return float(jnp.mean(a != b))
+        return float(np.mean(a != b))
     return Measurable(fn=fn, name=name, reads=reads)
 
 
 def growth_window[R: Mapping[str, object]](
-    of: Measurable[R, jnp.ndarray],
+    of: Measurable[R, np.ndarray],
     *,
     early: tuple[float, float] = (0.0, 0.25),
     late: tuple[float, float] = (0.75, 1.0),
@@ -164,7 +164,7 @@ def growth_window[R: Mapping[str, object]](
 
 def late_window_mean(
     key: str, fraction: float = 0.1,
-) -> Measurable[Mapping[str, jnp.ndarray], float]:
+) -> Measurable[Mapping[str, np.ndarray], float]:
     """Schema-row outcome projection: mean over the last `fraction`
     of `record[key]`. Convenience wrapper around `mean_window`.
 
@@ -187,7 +187,7 @@ def masked_window_mean(
     value_key: str,
     mask_key: str,
     fraction: float = 0.1,
-) -> Measurable[Mapping[str, jnp.ndarray], float]:
+) -> Measurable[Mapping[str, np.ndarray], float]:
     """Mean of `record[value_key]` over entries where (`step in
     late `fraction` of trajectory` ∧ `record[mask_key] > 0.5`).
 
@@ -216,17 +216,17 @@ def masked_window_mean(
         f'{int(round((1.0 - fraction) * 100))}_100'
     )
 
-    def fn(record: Mapping[str, jnp.ndarray]) -> float:
+    def fn(record: Mapping[str, np.ndarray]) -> float:
         values = record[value_key]
         mask = record[mask_key]
         n = int(values.shape[0])
         cutoff = int((1.0 - fraction) * n)
-        time_mask = jnp.arange(n) >= cutoff
+        time_mask = np.arange(n) >= cutoff
         keep_mask = time_mask & (mask > 0.5)
-        n_kept = int(jnp.sum(keep_mask))
+        n_kept = int(np.sum(keep_mask))
         if n_kept == 0:
             return float('nan')
-        masked = jnp.where(keep_mask, values, 0.0)
-        return float(jnp.sum(masked) / n_kept)
+        masked = np.where(keep_mask, values, 0.0)
+        return float(np.sum(masked) / n_kept)
 
     return Measurable(fn=fn, name=name, reads=(value_key, mask_key))
