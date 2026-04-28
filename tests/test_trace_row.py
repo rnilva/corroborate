@@ -130,9 +130,9 @@ def test_heterogeneous_leaf_paths_null_pad(tmp_path: Path) -> None:
     assert 'reward' not in rows_out[1].leaves
 
 
-def test_walk_paths_surfaces_nested_hps_at_dotted_paths() -> None:
+def test_walk_paths_surfaces_nested_leaves_at_dotted_paths() -> None:
     """`signature.walk_paths` must produce dotted topology paths
-    keyed at the leaf — `optimizer.inner.lr` (nested HP under
+    keyed at each leaf — `optimizer.inner.lr` (nested leaf under
     WarmedUpdate(inner=Adam(...))) — not the flat `lr`."""
     from functools import partial
 
@@ -140,9 +140,9 @@ def test_walk_paths_surfaces_nested_hps_at_dotted_paths() -> None:
     from corroborate.signature import walk, walk_paths
 
     configured = partial(dqn, optimizer=_make_warmed_adam())
-    paths = walk_paths(walk(configured), regime='hp')
+    paths = walk_paths(walk(configured), regime='leaf')
 
-    # Top-level HPs (gamma is dqn's direct kwarg).
+    # Top-level leaves (gamma is dqn's direct kwarg).
     assert 'gamma' in paths
     # Nested: optimizer is a Module field, inner is its inner
     # Module, lr is Adam's leaf.

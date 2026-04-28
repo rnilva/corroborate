@@ -21,12 +21,12 @@ Three components:
   inference to the consumer (e.g. derive from a `held` flag).
 
 Structural identity of a hypothesis is recoverable from the
-measurements its runs produce — HP values land at dotted topology
-paths via `signature.walk_paths`, and `aggregate.hp_signature`
-projects a `RunRow.measurements` to the configurational subset
-suitable as a group-by key. No separate `MechanismKey` artifact;
-the framework persists the measurements and re-derives identity
-on demand."""
+measurements its runs produce — leaf values land at dotted
+topology paths via `signature.walk_paths`, and
+`aggregate.leaf_signature` projects a `RunRow.measurements` to
+the configurational subset suitable as a group-by key. No
+separate `MechanismKey` artifact; the framework persists the
+measurements and re-derives identity on demand."""
 from __future__ import annotations
 
 import functools
@@ -74,7 +74,7 @@ class Hypothesis[R: Mapping[str, object]]:
 
 
 def _canonical_str(v: object) -> str:
-    """Stable string form of an HP value, used by HP-leaf
+    """Stable string form of a leaf value, used by leaf-path
     flattening to produce a deterministic scalar fingerprint of a
     structured kwarg (a Module, a partial, an FnClaim).
 
@@ -119,9 +119,9 @@ def _canonical_str(v: object) -> str:
         bound = ';'.join(p for p in (args_part, kw_part) if p)
         return f'partial({inner};{bound})'
     if is_dataclass(v) and not isinstance(v, type):
-        # Pytree-shaped HP values (e.g. `DQNHParams`):
+        # Pytree-shaped leaf values (e.g. Module instances):
         # canonicalise by sorted-field expansion so two
-        # configurations differing in a single HP get distinct,
+        # configurations differing in a single leaf get distinct,
         # structured fingerprint entries. The form is process-
         # portable because field declaration order and recursive
         # `_canonical_str` are deterministic.

@@ -6,8 +6,8 @@ vanilla-vs-DDQN comparison:
 1. Builds two hypotheses differing only in `greedification`.
 2. Runs each on CartPole, 3 seeds, 1000 steps via `run_dqn_arm`.
 3. Asserts:
-   - `hp_signature` distinguishes the arms by the `greedification`
-     swap (HP topology paths differ).
+   - `leaf_signature` distinguishes the arms by the `greedification`
+     swap (leaf topology paths differ).
    - `aggregate_runs` groups cells correctly.
    - Each arm has finite outcome summaries.
 
@@ -17,7 +17,7 @@ from __future__ import annotations
 import time
 from functools import partial
 
-from corroborate.aggregate import aggregate_runs, hp_signature
+from corroborate.aggregate import aggregate_runs, leaf_signature
 from corroborate.hypothesis import Hypothesis
 from corroborate.rl.cell_runner import run_dqn_arm
 from corroborate.rl.dqn.claims.bootstrap import bootstrap, double_greedify
@@ -99,20 +99,20 @@ def main() -> None:
               f'outcome={outcome}')
     print()
 
-    print('3. Per-arm hp_signature on RunRows:')
-    v_sigs = {hp_signature(row.measurements) for row in vanilla_rows}
-    d_sigs = {hp_signature(row.measurements) for row in ddqn_rows}
+    print('3. Per-arm leaf_signature on RunRows:')
+    v_sigs = {leaf_signature(row.measurements) for row in vanilla_rows}
+    d_sigs = {leaf_signature(row.measurements) for row in ddqn_rows}
     assert len(v_sigs) == 1, (
-        f'vanilla seeds should share one hp_signature; got {len(v_sigs)}'
+        f'vanilla seeds should share one leaf_signature; got {len(v_sigs)}'
     )
     assert len(d_sigs) == 1, (
-        f'ddqn seeds should share one hp_signature; got {len(d_sigs)}'
+        f'ddqn seeds should share one leaf_signature; got {len(d_sigs)}'
     )
     assert v_sigs != d_sigs, 'vanilla and DDQN must canonicalise distinctly'
     print('   OK vanilla-rows share one signature, ddqn-rows share another, '
           'and they differ.\n')
 
-    print('4. aggregate_runs groups by hp_signature:')
+    print('4. aggregate_runs groups by leaf_signature:')
     arms = aggregate_runs(list(vanilla_rows) + list(ddqn_rows))
     print(f'   {len(arms)} arms')
     assert len(arms) == 2, f'expected 2 arms, got {len(arms)}'

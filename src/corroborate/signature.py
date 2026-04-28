@@ -5,9 +5,10 @@ Two pieces:
 1. **`Exogenous`** — a sentinel class used as PEP 593 `Annotated`
    metadata on claim kwargs. `Annotated[int, Exogenous]` declares
    that a kwarg is something we generalize *over*, not intervene
-   on. Anything not so marked is implicitly an HP — interventionable
-   by default. Authors hide an HP from intervention by baking it
-   in via `functools.partial`; the bake-in records honestly via
+   on. Anything not so marked is implicitly a `leaf` — a
+   configurational scalar claim, interventionable by default.
+   Authors hide a leaf from intervention by baking it in via
+   `functools.partial`; the bake-in records honestly via
    `_canonical_str`'s partial branch.
 
 2. **Walker** — `walk(claim) → ClaimSignature`. Recursively
@@ -22,10 +23,18 @@ Two pieces:
      50_000)` surface `anneal_steps=50_000` instead of the
      original default.
 
-The walker also feeds two consumers: `flatten_hp` /
-`flatten_exogenous` (HP-discovery for parquet columns +
-intervention surface), and `collect_invariants` (auto-discovery
-of invariants attached to any claim in the composition tree)."""
+The walker also feeds two consumers: `flatten_leaves` /
+`flatten_exogenous` (configurational-leaf discovery for parquet
+columns + intervention surface), and `collect_invariants` (auto-
+discovery of invariants attached to any claim in the composition
+tree).
+
+"Leaf" terminology: a leaf-regime kwarg is a configurational
+scalar claim — a non-recursive value in the graph of claims
+that's observed at composition time. RL practice calls these
+"hyperparameters"; the framework uses "leaf" because the same
+shape covers any non-RL configuration too. Authors who want to
+hide a leaf from intervention bake it in via `functools.partial`."""
 from __future__ import annotations
 
 import functools
@@ -46,12 +55,12 @@ class Exogenous:
 
     Class identity (or subclass) is the test. No instances, no
     state. Authors mark a kwarg exogenous by writing
-    `seed: Annotated[int, Exogenous]` — anything else is HP."""
+    `seed: Annotated[int, Exogenous]` — anything else is a leaf."""
 
 
 # ============ Walked-signature shape ============
 
-type Regime = Literal['exogenous', 'hp']
+type Regime = Literal['exogenous', 'leaf']
 
 
 @dataclass(frozen=True, slots=True)
@@ -239,10 +248,16 @@ def flatten_exogenous(sig: ClaimSignature) -> dict[str, KwargInfo]:
     return out
 
 
-def flatten_hp(sig: ClaimSignature) -> dict[str, KwargInfo]:
-    """All HP kwargs across the tree, flattened by name."""
+def flatten_leaves(sig: ClaimSignature) -> dict[str, KwargInfo]:
+    """All leaf-regime kwargs across the tree, flattened by name.
+
+    "Leaf" here means: a configurational scalar claim (a non-
+    recursive node of the configured composition graph). What RL
+    practice calls a "hyperparameter"; the framework-honest term
+    is `leaf` since the value is observed at composition time, not
+    a claim that runs."""
     out: dict[str, KwargInfo] = {}
-    _flatten(sig, out, regime='hp')
+    _flatten(sig, out, regime='leaf')
     return out
 
 
@@ -251,8 +266,8 @@ def walk_paths(sig: ClaimSignature, *, regime: Regime) -> dict[str, KwargInfo]:
 
     Returns `{path: KwargInfo}` where `path` is the dotted path
     from the outermost claim to each kwarg of the given regime.
-    Distinct from `flatten_hp` (flat-keyed, last-wins on
-    collision): two HPs with the same leaf-name at different
+    Distinct from `flatten_leaves` (flat-keyed, last-wins on
+    collision): two leaves with the same name at different
     positions in the tree get distinct keys
     (`optimizer.lr` vs `q_network.lr`).
 
@@ -293,11 +308,11 @@ def _walk_paths(
         # the parent is something we generalize *over* (env_params,
         # rng_key, etc.), its sub-fields are too — they describe
         # the variation surface, not intervention surface. So when
-        # collecting HP paths, don't descend into an exogenous
+        # collecting leaf paths, don't descend into an exogenous
         # parent. Collecting exogenous paths still descends (an
         # author querying the exogenous surface wants the full
         # tree)."""
-        if regime == 'hp' and kw.regime == 'exogenous':
+        if regime == 'leaf' and kw.regime == 'exogenous':
             continue
         _walk_paths(kw.inner, acc, regime=regime, prefix=path)
 
@@ -370,7 +385,7 @@ def _regime_from_annotation(ann: object) -> Regime:
         for meta in get_args(ann)[1:]:
             if _is_exogenous_marker(meta):
                 return 'exogenous'
-    return 'hp'
+    return 'leaf'
 
 
 def _strip_annotated(ann: object) -> object:

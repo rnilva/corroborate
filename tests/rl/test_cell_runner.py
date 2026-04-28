@@ -18,7 +18,7 @@ from collections.abc import Mapping
 import jax.numpy as jnp
 import pytest
 
-from corroborate.aggregate import hp_signature
+from corroborate.aggregate import leaf_signature
 from corroborate.bridge import BridgeResult, bridge
 from corroborate.hypothesis import Hypothesis
 from corroborate.invariant import at_most
@@ -113,12 +113,12 @@ def test_run_dqn_cell_produces_runrow_on_cartpole() -> None:
     assert run_row.verdict is Verdict.POWER_INSUFFICIENT
     # Outcome reduction landed.
     assert isinstance(run_row.measurements['outcome.late_window_mean'], float)
-    # HP topology paths populated.
+    # Leaf topology paths populated.
     assert 'gamma' in run_row.measurements
 
 
-def test_run_dqn_cell_hp_signature_matches_hypothesis() -> None:
-    """The HP signature derived from the RunRow's measurements
+def test_run_dqn_cell_leaf_signature_matches_hypothesis() -> None:
+    """The leaf signature derived from the RunRow's measurements
     distinguishes hypotheses by their intervention overrides."""
     from corroborate.rl.env_catalogue import get
     env_spec = get('CartPole-v1')
@@ -145,8 +145,8 @@ def test_run_dqn_cell_hp_signature_matches_hypothesis() -> None:
 
     # Bridge result surfaces in measurements with bridge name.
     assert 'bridge.some_bridge.verdict' in run_row.measurements
-    # HP signature is non-empty (configurational fingerprint).
-    sig = hp_signature(run_row.measurements)
+    # Leaf signature is non-empty (configurational fingerprint).
+    sig = leaf_signature(run_row.measurements)
     assert len(sig) > 0
 
 

@@ -1,11 +1,11 @@
-"""Tests for `Hypothesis[R]` and HP-value canonicalization. Strict
-typing exercised: bridges and hypothesis share R.
+"""Tests for `Hypothesis[R]` and leaf-value canonicalization.
+Strict typing exercised: bridges and hypothesis share R.
 
 `MechanismKey` no longer exists as a framework artifact; the
 configurational identity of a hypothesis is recovered from its
-runs' `measurements` via `aggregate.hp_signature`. These tests
+runs' `measurements` via `aggregate.leaf_signature`. These tests
 cover the data-class shape + the `_canonical_str` helper used for
-HP-leaf serialization."""
+leaf-value serialization."""
 from __future__ import annotations
 
 from collections.abc import Mapping

@@ -74,12 +74,12 @@ def _make_hypothesis(name: str) -> Hypothesis[DQNTrajectoryRecord]:
     pickle closures cleanly across spawn-mode processes, so each
     worker rebuilds the hypothesis from a stable name.
 
-    HPs live as flat kwargs in `intervention` (matching `dqn`'s
-    signature). Cell-runner records each (kwarg, value) pair as
-    a measurement at its dotted topology path; downstream
-    `hp_signature` projects the configurational subset so two
-    arms differing only in `gamma` produce distinct group-by
-    keys. The `bootstrap` slot swap and `predicted_direction`
+    Configurational leaves live as flat kwargs in `intervention`
+    (matching `dqn`'s signature). Cell-runner records each (kwarg,
+    value) pair as a measurement at its dotted topology path;
+    downstream `leaf_signature` projects the configurational
+    subset so two arms differing only in `gamma` produce distinct
+    group-by keys. The `bootstrap` slot swap and `predicted_direction`
     are the only fields that differ between vanilla and DDQN at
     the structural level."""
     if name == 'vanilla_dqn':

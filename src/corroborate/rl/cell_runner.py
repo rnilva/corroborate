@@ -69,9 +69,9 @@ def _read_total_steps(intervention: Mapping[str, object]) -> int:
     return v
 
 
-def _hp_scalar(value: object) -> MeasurementLeaf:
-    """Coerce an HP value to a scalar measurement leaf. Primitives
-    pass through; structured values (Modules, partials, FnClaims)
+def _leaf_scalar(value: object) -> MeasurementLeaf:
+    """Coerce a leaf value to a scalar measurement. Primitives pass
+    through; structured values (Modules, partials, FnClaims)
     canonicalise to string via `_canonical_str`."""
     if isinstance(value, bool):
         return value
@@ -80,12 +80,13 @@ def _hp_scalar(value: object) -> MeasurementLeaf:
     return _canonical_str(value)
 
 
-def _hp_measurements(configured: object) -> dict[str, MeasurementLeaf]:
-    """Topology walk → dotted-path HP leaves. Each `walk_paths`
+def _leaf_measurements(configured: object) -> dict[str, MeasurementLeaf]:
+    """Topology walk → dotted-path leaves. Each `walk_paths`
     KwargInfo's default contributes one measurement at its dotted
-    path."""
-    paths = walk_paths(walk(configured), regime='hp')
-    return {path: _hp_scalar(kw.default) for path, kw in paths.items()}
+    path. Leaves are non-recursive scalar claims of the configured
+    composition (RL practice's "hyperparameters")."""
+    paths = walk_paths(walk(configured), regime='leaf')
+    return {path: _leaf_scalar(kw.default) for path, kw in paths.items()}
 
 
 def _bridge_result_to_measurements(
@@ -157,11 +158,11 @@ def run_dqn_arm(
     }
     configured = partial(dqn, **{**cell_kwargs, **intervention})
 
-    # HP fingerprint — the configurational measurements that
-    # `aggregate.hp_signature` projects to as the group-by key.
+    # Configurational fingerprint — the leaf measurements that
+    # `aggregate.leaf_signature` projects to as the group-by key.
     # Walks the BOUND `configured` so intervention overrides
     # surface at their dotted topology paths.
-    hp_leaves = _hp_measurements(configured)
+    leaf_measurements = _leaf_measurements(configured)
 
     def by_key(rng_key: jax.Array) -> dict[str, jax.Array]:
         return configured(rng_key=rng_key)
@@ -208,7 +209,7 @@ def run_dqn_arm(
             'seed': seed,
             'total_steps': total_steps,
             'outcome.late_window_mean': outcome,
-            **hp_leaves,
+            **leaf_measurements,
         }
         for result in bridge_results:
             measurements.update(_bridge_result_to_measurements(result))

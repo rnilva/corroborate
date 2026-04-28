@@ -14,7 +14,7 @@ Structure:
   produces an ArmRow from a homogeneous list of RunRows. Computes
   arm-level outcome statistics from each run's
   `outcome.late_window_mean` measurement (NaN-aware), aggregates
-  per-bridge admit-rates across runs, and forwards the HP-only
+  per-bridge admit-rates across runs, and forwards the leaf-only
   subset of measurements (the configurational fingerprint).
 - `comparison_from_arms(treatment, baseline, *, predicted_direction,
   ...)` produces a ComparisonRow with per-arm stats threaded
@@ -22,12 +22,14 @@ Structure:
   fields populated by `_default_statistics_stub` for v0; step 5
   replaces it with Hedges' g + power machinery.
 - `aggregate_runs(runs)` is the convenience entry point: groups
-  runs by (intervention_name, env_name, hp_signature), produces
+  runs by (intervention_name, env_name, leaf_signature), produces
   one ArmRow per group.
-- `hp_signature(measurements)` — the configuration fingerprint
+- `leaf_signature(measurements)` — the configurational fingerprint
   used as a group-by key. Filters out outcome/bridge/invariant
-  paths and substrate-metadata keys, returns sorted (path, str)
-  pairs.
+  paths and per-cell metadata keys, returns sorted (path, str)
+  pairs. "Leaf" because each entry is a non-recursive scalar
+  claim of the configured composition (RL practice calls these
+  hyperparameters; the framework name is `leaf`).
 
 Step 5's MDE+power statistics module will replace the stub with
 real `Hedges_g`, `SE_g`, `derived_q`, `RefutationClass` selection.
@@ -45,31 +47,43 @@ from corroborate.schema import ArmRow, ComparisonRow, MeasurementLeaf, RunRow
 from corroborate.verdict import RefutationClass, Verdict
 
 
-# ============ HP-signature projection ============
+# ============ Leaf-signature projection ============
 
-_NON_HP_PREFIXES: tuple[str, ...] = ('outcome.', 'bridge.', 'invariant.')
-_NON_HP_KEYS: frozenset[str] = frozenset({
+# Output-side prefixes — paths whose values are observed at run
+# time, not authored at composition. Filtered out of the
+# configurational fingerprint.
+_OUTPUT_PREFIXES: tuple[str, ...] = ('outcome.', 'bridge.', 'invariant.')
+
+# Substrate-supplied per-cell metadata that varies independently of
+# configuration (seed, env_name) or restates a leaf already in the
+# fingerprint (total_steps appears in both metadata and as a leaf).
+_NON_LEAF_KEYS: frozenset[str] = frozenset({
     'env_name', 'seed', 'total_steps', 'intervention_name',
 })
 
 
-def hp_signature(
+def leaf_signature(
     measurements: Mapping[str, MeasurementLeaf],
 ) -> tuple[tuple[str, str], ...]:
-    """The configuration fingerprint — HP-only subset of
+    """The configurational fingerprint — leaf-only subset of
     `measurements` as a sorted (path, str-canonical-value) tuple.
     Hashable; suitable as a group-by key.
 
-    Filters out paths under `outcome.`/`bridge.`/`invariant.`
-    prefixes and substrate-metadata keys (`env_name`, `seed`,
-    `total_steps`, `intervention_name`). What remains is the HP
-    leaves at their dotted topology paths plus any other author-
-    chosen scalar measurement that isn't a result/metadata."""
+    Filters out output paths (`outcome.`/`bridge.`/`invariant.`)
+    and per-cell metadata (`env_name`, `seed`, `total_steps`,
+    `intervention_name`). What remains is the configurational
+    leaves at their dotted topology paths.
+
+    "Leaf" rather than "HP": a leaf-regime kwarg is a non-recursive
+    scalar claim of the configured composition, observed at
+    composition time. RL practice calls these hyperparameters; the
+    framework's term is `leaf` since the same shape covers any
+    non-RL configuration too."""
     return tuple(sorted(
         (k, str(v))
         for k, v in measurements.items()
-        if not any(k.startswith(p) for p in _NON_HP_PREFIXES)
-        and k not in _NON_HP_KEYS
+        if not any(k.startswith(p) for p in _OUTPUT_PREFIXES)
+        and k not in _NON_LEAF_KEYS
     ))
 
 
@@ -204,11 +218,12 @@ def arm_from_runs(
         else:
             arm_sd = 0.0
 
-    # HP-subset shared across all runs in the arm. Authors who
-    # follow the grouping contract get identical HP signatures for
-    # all members; we still intersect defensively (a run with a
-    # bridge-set-difference in measurements doesn't poison the arm).
-    common_hp = _intersect_hp_measurements(runs)
+    # Leaf-subset shared across all runs in the arm. Authors who
+    # follow the grouping contract get identical leaf signatures
+    # for all members; we still intersect defensively (a run with
+    # a bridge-set-difference in measurements doesn't poison the
+    # arm).
+    common_leaves = _intersect_leaf_measurements(runs)
 
     measurements: dict[str, MeasurementLeaf] = {
         'env_name': env_name,
@@ -216,7 +231,7 @@ def arm_from_runs(
         'n': n,
         'outcome.late_window_mean.arm_mean': arm_mean,
         'outcome.late_window_mean.arm_sd': arm_sd,
-        **common_hp,
+        **common_leaves,
         **_bridge_admit_rates(runs),
         **(extra_measurements or _empty_meta()),
     }
@@ -230,22 +245,22 @@ def arm_from_runs(
     )
 
 
-def _intersect_hp_measurements(
+def _intersect_leaf_measurements(
     runs: Sequence[RunRow],
 ) -> dict[str, MeasurementLeaf]:
-    """Intersection of HP measurements across runs. A path that
-    appears with the SAME value in every run survives; anything
-    else is dropped. Uses `hp_signature` indirectly via the
-    same NON_HP filter — the projection is HP keys only."""
+    """Intersection of configurational-leaf measurements across
+    runs. A path that appears with the SAME value in every run
+    survives; anything else is dropped. Uses the same filter as
+    `leaf_signature` — projection is leaf keys only."""
     if not runs:
         return {}
-    head_hp = {
+    head = {
         k: v for k, v in runs[0].measurements.items()
-        if not any(k.startswith(p) for p in _NON_HP_PREFIXES)
-        and k not in _NON_HP_KEYS
+        if not any(k.startswith(p) for p in _OUTPUT_PREFIXES)
+        and k not in _NON_LEAF_KEYS
     }
     out: dict[str, MeasurementLeaf] = {}
-    for k, v in head_hp.items():
+    for k, v in head.items():
         if all(r.measurements.get(k) == v for r in runs[1:]):
             out[k] = v
     return out
@@ -445,15 +460,16 @@ def _run_env_name(run: RunRow) -> str:
 
 
 def aggregate_runs(runs: Iterable[RunRow]) -> list[ArmRow]:
-    """Group `runs` by (intervention_name, env_name, hp_signature),
+    """Group `runs` by (intervention_name, env_name, leaf_signature),
     build one ArmRow per group. Convenience for the common
-    dialectic-loop case where a sweep produces a flat list of
-    cells across multiple (hypothesis, env) combinations.
+    dialectic-loop case where a sweep produces a flat list of cells
+    across multiple (hypothesis, env) combinations.
 
-    Grouping uses `hp_signature(run.measurements)` rather than a
-    declared `MechanismKey` artifact — two runs with identical HP
-    settings on the same intervention/env land in the same arm,
-    even if they were authored as distinct Hypothesis instances."""
+    Grouping uses `leaf_signature(run.measurements)` rather than a
+    declared `MechanismKey` artifact — two runs with identical
+    configurational leaves on the same intervention/env land in the
+    same arm, even if they were authored as distinct Hypothesis
+    instances."""
     by_key: dict[
         tuple[str, str, tuple[tuple[str, str], ...]],
         list[RunRow],
@@ -462,7 +478,7 @@ def aggregate_runs(runs: Iterable[RunRow]) -> list[ArmRow]:
         key = (
             _run_intervention_name(r),
             _run_env_name(r),
-            hp_signature(r.measurements),
+            leaf_signature(r.measurements),
         )
         by_key.setdefault(key, []).append(r)
 

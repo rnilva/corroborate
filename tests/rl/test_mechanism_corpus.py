@@ -1,7 +1,7 @@
 """Smoke test for the configurational-corpus path (Step 4.5).
 
 Verifies the end-to-end plumbing for §4.3 PC-discovery node
-identity: cells with the same hypothesis produce stable HP
+identity: cells with the same hypothesis produce stable leaf
 signatures across (env, seed); different hypotheses produce
 distinct signatures; aggregation groups RunRows correctly.
 
@@ -9,14 +9,14 @@ This is the prerequisite for using `arm_ddqn` as a binary
 intervention variable in PC graphs (PAPER_NOTES.md §4.3) — every
 cell of the same intervention must canonicalise identically. The
 v9-`MechanismKey` artifact has been retired in favour of
-`hp_signature(measurements)` projecting directly off the runs."""
+`leaf_signature(measurements)` projecting directly off the runs."""
 from __future__ import annotations
 
 from functools import partial
 
 import pytest
 
-from corroborate.aggregate import aggregate_runs, hp_signature
+from corroborate.aggregate import aggregate_runs, leaf_signature
 from corroborate.hypothesis import Hypothesis
 from corroborate.rl.cell_runner import run_dqn_cell
 from corroborate.rl.dqn.claims.bootstrap import bootstrap, double_greedify
@@ -59,11 +59,11 @@ def _run_cell(env_name: str, seed: int, h: Hypothesis[DQNTrajectoryRecord]):
     )
 
 
-# ============ Stable hp_signature across (env, seed) ============
+# ============ Stable leaf_signature across (env, seed) ============
 
-def test_same_hypothesis_yields_stable_hp_signature() -> None:
+def test_same_hypothesis_yields_stable_leaf_signature() -> None:
     """Two cells of vanilla DQN — different seeds, different envs
-    — must produce the SAME `hp_signature` (the §4.3 PC-discovery
+    — must produce the SAME `leaf_signature` (the §4.3 PC-discovery
     node-identity primitive). The signature filters out
     `env_name` and `seed`, so changes there don't perturb it."""
     vanilla = _make_hypothesis('vanilla', intervention={})
@@ -72,15 +72,15 @@ def test_same_hypothesis_yields_stable_hp_signature() -> None:
     run_b = _run_cell('CartPole-v1', seed=1, h=vanilla)
     run_c = _run_cell('Acrobot-v1', seed=0, h=vanilla)
 
-    sig_a = hp_signature(run_a.measurements)
-    sig_b = hp_signature(run_b.measurements)
-    sig_c = hp_signature(run_c.measurements)
+    sig_a = leaf_signature(run_a.measurements)
+    sig_b = leaf_signature(run_b.measurements)
+    sig_c = leaf_signature(run_c.measurements)
     assert sig_a == sig_b
     assert sig_a == sig_c
 
 
-def test_different_interventions_yield_different_hp_signatures() -> None:
-    """Vanilla and DDQN canonicalise to DISTINCT hp_signatures."""
+def test_different_interventions_yield_different_leaf_signatures() -> None:
+    """Vanilla and DDQN canonicalise to DISTINCT leaf signatures."""
     vanilla = _make_hypothesis('vanilla', intervention={})
     ddqn = _make_hypothesis(
         'ddqn', intervention={'bootstrap': _DDQN_BOOTSTRAP},
@@ -89,15 +89,15 @@ def test_different_interventions_yield_different_hp_signatures() -> None:
     vanilla_run = _run_cell('CartPole-v1', seed=0, h=vanilla)
     ddqn_run = _run_cell('CartPole-v1', seed=0, h=ddqn)
 
-    assert hp_signature(vanilla_run.measurements) != \
-        hp_signature(ddqn_run.measurements)
+    assert leaf_signature(vanilla_run.measurements) != \
+        leaf_signature(ddqn_run.measurements)
 
 
 # ============ Corpus aggregation ============
 
 def test_aggregate_runs_groups_by_intervention_and_env() -> None:
     """`aggregate_runs` collapses cells into ArmRows keyed by
-    (intervention_name, env_name, hp_signature). Two seeds of
+    (intervention_name, env_name, leaf_signature). Two seeds of
     vanilla on CartPole + two seeds of DDQN on CartPole produces
     2 ArmRows."""
     vanilla = _make_hypothesis('vanilla', intervention={})

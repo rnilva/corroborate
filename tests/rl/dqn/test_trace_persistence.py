@@ -3,18 +3,15 @@
 Builds `TraceRow`s from a tiny CartPole DQN run, persists to
 parquet, reads back, and verifies:
 
-1. HP paths from `walk_paths(walk(configured), regime='hp')`
-   appear as scalar leaves at dotted topology paths
-   (`gamma`, `optimizer.inner.lr`, `replay.batch_size`).
+1. Configurational leaves from `walk_paths(walk(configured),
+   regime='leaf')` appear as scalar entries at dotted topology
+   paths (`gamma`, `optimizer.inner.lr`, `replay.batch_size`).
 2. Per-step trajectories from the configured-claim's record dict
    appear as `list[float]` leaves at flat author-chosen keys
    (`reward`, `loss`, `td_error`, ...).
-3. The two namespaces (dotted HP paths vs. flat trajectory keys)
+3. The two namespaces (dotted leaf paths vs. flat trajectory keys)
    coexist in one parquet without collision.
-4. Round-trip through parquet preserves both shapes.
-
-This is the storage-layer smoke for Step 1. Step 2 will integrate
-this into `cell_runner.run_dqn_arm` and link it to RunRow.id."""
+4. Round-trip through parquet preserves both shapes."""
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -40,8 +37,8 @@ from corroborate.signature import KwargInfo, walk, walk_paths
 pytestmark = pytest.mark.slow
 
 
-def _hp_scalar(value: object) -> str | int | float | bool:
-    """Coerce an HP value to a scalar trace leaf. Primitives pass
+def _leaf_scalar(value: object) -> str | int | float | bool:
+    """Coerce a leaf value to a scalar trace entry. Primitives pass
     through; structured values (Modules, partials, FnClaims)
     canonicalise to string."""
     if isinstance(value, bool):
@@ -51,11 +48,11 @@ def _hp_scalar(value: object) -> str | int | float | bool:
     return _canonical_str(value)
 
 
-def _hp_leaves(configured: object) -> dict[str, str | int | float | bool]:
-    """Topology walk → dotted-path HP leaves dict. Each KwargInfo's
-    default contributes one leaf at its dotted path."""
-    paths: dict[str, KwargInfo] = walk_paths(walk(configured), regime='hp')
-    return {path: _hp_scalar(kw.default) for path, kw in paths.items()}
+def _leaf_values(configured: object) -> dict[str, str | int | float | bool]:
+    """Topology walk → dotted-path leaf values. Each KwargInfo's
+    default contributes one entry at its dotted path."""
+    paths: dict[str, KwargInfo] = walk_paths(walk(configured), regime='leaf')
+    return {path: _leaf_scalar(kw.default) for path, kw in paths.items()}
 
 
 def _trajectory_leaves(
@@ -94,12 +91,12 @@ def test_trace_row_round_trip_for_real_dqn_run(tmp_path: Path) -> None:
 
     record = configured(rng_key=jax.random.PRNGKey(0))
 
-    # Step 1: HP leaves from the topology walk.
-    hp_leaves = _hp_leaves(configured)
-    assert hp_leaves['gamma'] == 0.99
+    # Step 1: leaf values from the topology walk.
+    leaf_values = _leaf_values(configured)
+    assert leaf_values['gamma'] == 0.99
     # WarmedUpdate.inner.Adam.lr — captured at the deep dotted path.
-    assert hp_leaves['optimizer.inner.lr'] == 2e-3
-    assert hp_leaves['optimizer.warmup_steps'] == 50
+    assert leaf_values['optimizer.inner.lr'] == 2e-3
+    assert leaf_values['optimizer.warmup_steps'] == 50
 
     # Step 2: trajectory leaves from the record dict.
     traj_leaves = _trajectory_leaves(record)
@@ -110,7 +107,7 @@ def test_trace_row_round_trip_for_real_dqn_run(tmp_path: Path) -> None:
     assert len(traj_leaves['loss']) == 200
 
     # Step 3: assemble + persist.
-    leaves: dict[str, TraceLeaf] = {**hp_leaves, **traj_leaves}
+    leaves: dict[str, TraceLeaf] = {**leaf_values, **traj_leaves}
     row = TraceRow(
         id='cartpole-smoke',
         cycle_id=None,
@@ -131,11 +128,12 @@ def test_trace_row_round_trip_for_real_dqn_run(tmp_path: Path) -> None:
     assert len(reward_traj) == 200
 
 
-def test_hp_and_trajectory_namespaces_do_not_collide(tmp_path: Path) -> None:
-    """HPs use dotted topology paths (`replay.batch_size`),
-    trajectories use flat author-chosen keys (`reward`). The
-    cell layer relies on this naming-convention split — no
-    framework-level collision check is needed."""
+def test_leaf_and_trajectory_namespaces_do_not_collide(tmp_path: Path) -> None:
+    """Configurational leaves use dotted topology paths
+    (`replay.batch_size`); trajectories use flat author-chosen
+    keys (`reward`). The cell layer relies on this naming-
+    convention split — no framework-level collision check is
+    needed."""
     env, env_params = gymnax.make('CartPole-v1')
     obs_space = env.observation_space(env_params)
     act_space = env.action_space(env_params)
@@ -151,17 +149,17 @@ def test_hp_and_trajectory_namespaces_do_not_collide(tmp_path: Path) -> None:
         total_steps=100, eval_every=100, n_episodes=1,
     )
 
-    hp_leaves = _hp_leaves(configured)
+    leaf_values = _leaf_values(configured)
     record = configured(rng_key=jax.random.PRNGKey(0))
     traj_leaves = _trajectory_leaves(record)
 
-    # All HP keys contain a '.' iff they live below the top level
-    # (top-level kwargs of dqn appear flat, e.g. 'gamma').
+    # Nested leaf keys contain a '.' iff they live below the top
+    # level (top-level kwargs of dqn appear flat, e.g. 'gamma').
     # Trajectory keys are always flat (no '.').
-    nested_hp_keys = [k for k in hp_leaves if '.' in k]
+    nested_leaf_keys = [k for k in leaf_values if '.' in k]
     flat_traj_keys = [k for k in traj_leaves if '.' not in k]
-    assert nested_hp_keys, 'expected at least one nested HP path'
+    assert nested_leaf_keys, 'expected at least one nested leaf path'
     assert flat_traj_keys, 'expected at least one flat trajectory key'
 
-    overlap = set(hp_leaves) & set(traj_leaves)
-    assert not overlap, f'HP and trajectory keys collide: {overlap}'
+    overlap = set(leaf_values) & set(traj_leaves)
+    assert not overlap, f'leaf and trajectory keys collide: {overlap}'

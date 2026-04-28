@@ -1,7 +1,7 @@
 """Tests for `aggregate` — sweep → ArmRow → ComparisonRow hand-off.
 
 The framework's typed factory functions. Tests verify the
-arm-construction grouping (now via `hp_signature` rather than
+arm-construction grouping (now via `leaf_signature` rather than
 `MechanismKey`), comparison construction with stat stubs, and the
 convenience `aggregate_runs` entry point."""
 from __future__ import annotations
@@ -11,7 +11,7 @@ from corroborate.aggregate import (
     aggregate_runs,
     arm_from_runs,
     comparison_from_arms,
-    hp_signature,
+    leaf_signature,
 )
 from corroborate.schema import ArmRow, MeasurementLeaf, RunRow
 from corroborate.verdict import Verdict
@@ -86,9 +86,9 @@ def test_aggregate_cell_verdict_mixed_held_power_insufficient() -> None:
     ) is Verdict.POWER_INSUFFICIENT
 
 
-# ============ hp_signature ============
+# ============ leaf_signature ============
 
-def test_hp_signature_filters_outcome_and_metadata() -> None:
+def test_leaf_signature_filters_outcome_and_metadata() -> None:
     measurements: dict[str, MeasurementLeaf] = {
         'gamma': 0.99,
         'optimizer.inner.lr': 0.001,
@@ -100,7 +100,7 @@ def test_hp_signature_filters_outcome_and_metadata() -> None:
         'bridge.x.verdict': 'held',
         'invariant.y.verdict': 'held',
     }
-    sig = hp_signature(measurements)
+    sig = leaf_signature(measurements)
     keys = [k for k, _ in sig]
     assert 'gamma' in keys
     assert 'optimizer.inner.lr' in keys
@@ -113,9 +113,9 @@ def test_hp_signature_filters_outcome_and_metadata() -> None:
     assert not any(k.startswith('invariant.') for k in keys)
 
 
-def test_hp_signature_is_sorted_and_hashable() -> None:
-    sig_a = hp_signature({'b': 1, 'a': 2})
-    sig_b = hp_signature({'a': 2, 'b': 1})
+def test_leaf_signature_is_sorted_and_hashable() -> None:
+    sig_a = leaf_signature({'b': 1, 'a': 2})
+    sig_b = leaf_signature({'a': 2, 'b': 1})
     assert sig_a == sig_b
     # Hashable as a dict key.
     _: dict[tuple[tuple[str, str], ...], int] = {sig_a: 0}
@@ -343,10 +343,10 @@ def test_aggregate_runs_groups_by_intervention_env_hp() -> None:
     assert _arm_n(by_key[('ddqn', 'env_b')]) == 1
 
 
-def test_aggregate_runs_distinct_hp_signatures_split_arms() -> None:
+def test_aggregate_runs_distinct_leaf_signatures_split_arms() -> None:
     """Runs with the SAME intervention_name + env but DIFFERENT
     HP signatures (e.g. different `gamma`) produce distinct
-    arms — `hp_signature` is part of the grouping key."""
+    arms — `leaf_signature` is part of the grouping key."""
     runs = [
         _make_runrow(
             intervention_name='h', env_name='e', seed=0, primary=1.0,
