@@ -468,3 +468,67 @@ def test_pc_dqn_smoke_holds_on_migrated_corpus() -> None:
         'arm_ddqn → mechanism.jensen_gap should survive (DDQN '
         'demonstrably reduces the gap on a subset of envs)'
     )
+
+
+def test_per_env_pc_dqn_smoke_finds_within_env_arm_edges() -> None:
+    """§6 thin per-env PC: at least some envs surface a within-env
+    edge from arm_ddqn (mostly to mechanism.jensen_gap). Skipped if
+    the corpus parquet isn't on disk.
+
+    With only one mechanism feature, this is the *thin* §6 — it
+    cannot reproduce the three-regime mediator taxonomy. The gate
+    is qualitative: at least 3 envs show within-env arm_ddqn
+    neighbours (the slot swap leaves a per-env footprint even
+    where pooled-JCI averages it to zero)."""
+    from pathlib import Path
+
+    import polars as pl
+
+    runs_path = (
+        Path(__file__).parent.parent
+        / 'experiments' / 'data' / 'ddqn' / 'runs.parquet'
+    )
+    if not runs_path.exists():
+        import pytest
+        pytest.skip(f'{runs_path} not on disk')
+
+    from corroborate.causal_discovery import discover_adjacency
+
+    df = pl.read_parquet(runs_path)
+    df = df.with_columns(
+        (pl.col('intervention_name') == 'ddqn')
+        .cast(pl.Int64).alias('arm_ddqn'),
+    )
+    variables = [
+        'arm_ddqn',
+        'mechanism.jensen_gap',
+        'outcome.late_window_mean',
+        'outcome.eval_final_mean',
+        'outcome.eval_best_burst_mean',
+        'outcome.eval_best_burst_step',
+    ]
+    df = df.drop_nulls(subset=variables)
+
+    envs_with_arm_edge: list[str] = []
+    for env in sorted(df['env_name'].unique().to_list()):
+        env_df = df.filter(pl.col('env_name') == env)
+        if env_df.height < 5 or env_df['arm_ddqn'].n_unique() < 2:
+            continue
+        constant_cols = [
+            v for v in variables
+            if env_df[v].dtype.is_float()
+            and float(env_df[v].std() or 0.0) == 0.0
+        ]
+        if constant_cols:
+            continue
+        adj = discover_adjacency(
+            env_df, variables=variables,
+            alpha=0.05, max_conditioning=1,
+        )
+        if any('arm_ddqn' in e for e in adj.edges):
+            envs_with_arm_edge.append(env)
+
+    assert len(envs_with_arm_edge) >= 3, (
+        f'§6 thin gate: expected ≥3 envs with within-env arm_ddqn '
+        f'edges, got {len(envs_with_arm_edge)}: {envs_with_arm_edge}'
+    )
