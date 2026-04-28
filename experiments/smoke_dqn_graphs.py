@@ -35,6 +35,10 @@ from corroborate.computation_graph import (
     build_computation_graph,
     signature,
 )
+from corroborate.measurable import (
+    evaluate_with_measurables,
+    registered_names,
+)
 from corroborate.measurable_graph import (
     correlation_matrix_table,
     explained_by_claim_graph,
@@ -45,6 +49,10 @@ from corroborate.rl.dqn.claims.bootstrap import (
     double_greedify,
 )
 from corroborate.rl.dqn.dqn import dqn
+# Side-effect import: registers the DDQN measurables (q_mean,
+# q_max, q_std, q_gap, target_q_mean, target_q_max,
+# td_error_norm, pearson_r_online_target) in the global registry.
+import corroborate.rl.dqn.measurables  # noqa: F401
 
 
 def _trace_full_dqn(
