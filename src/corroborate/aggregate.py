@@ -621,3 +621,146 @@ def paired_comparison_from_runs(
         adequately_powered=is_powered,
         measurements=measurements,
     )
+
+
+# ============ Cross-env link verdict (PAPER_NOTES.md §3.5) ============
+
+def link_pearson_across_envs(
+    mechanism_comparisons: Sequence[ComparisonRow],
+    outcome_comparisons: Sequence[ComparisonRow],
+    *,
+    mechanism_path: str = 'mechanism.jensen_gap.effect_size_g',
+    outcome_path: str = 'outcome.late_window_mean.effect_size_g',
+    alpha: float = 0.05,
+    power: float = 0.8,
+    cycle_id: str | None = None,
+    timestamp: str | None = None,
+) -> ComparisonRow:
+    """Cross-env link verdict — Pearson r between mechanism Δ and
+    outcome Δ across envs.
+
+    PAPER_NOTES.md §3.5: 'a methodological intervention's mechanism
+    fingerprint should covary with its outcome fingerprint across
+    envs.' If DDQN reduces the Jensen gap on env A and improves
+    the return on env A (and likewise for env B, ...), the Pearson
+    correlation across envs of (mechanism_g, outcome_g) is positive.
+    Negative or zero correlation means mechanism reduction doesn't
+    track outcome improvement — a different relationship than
+    ddqn-helps-on-A AND ddqn-helps-on-B taken separately.
+
+    Inputs are aligned per env: `mechanism_comparisons[i]` and
+    `outcome_comparisons[i]` should refer to the same env. The
+    function pairs by env_name; mismatches raise.
+
+    Returns a ComparisonRow tagged at the cross-env granularity
+    (env_name='cross_env_link'); its measurements include the
+    Pearson r as the effect-size statistic and a derived MDE-style
+    verdict on r vs 0."""
+    from corroborate.statistics import (
+        adequately_powered_paired,
+        delta_i_from_q,
+        derived_q_from_g_se,
+    )
+
+    # Pair by env_name.
+    mech_by_env = {
+        _comparison_env(c): c for c in mechanism_comparisons
+    }
+    out_by_env = {
+        _comparison_env(c): c for c in outcome_comparisons
+    }
+    paired_envs = sorted(mech_by_env.keys() & out_by_env.keys())
+
+    mech_gs: list[float] = []
+    out_gs: list[float] = []
+    for env in paired_envs:
+        mg = mech_by_env[env].measurements.get(mechanism_path)
+        og = out_by_env[env].measurements.get(outcome_path)
+        if isinstance(mg, (int, float)) and isinstance(og, (int, float)):
+            if not (math.isnan(float(mg)) or math.isnan(float(og))):
+                mech_gs.append(float(mg))
+                out_gs.append(float(og))
+
+    n = len(mech_gs)
+    if n < 3:
+        # Pearson's r needs at least 3 paired observations to be
+        # well-defined; return a POWER_INSUFFICIENT row.
+        return ComparisonRow(
+            id=str(uuid.uuid4()), parent_id=None, cycle_id=cycle_id,
+            timestamp=_resolved_timestamp(timestamp),
+            treatment_arm_id='', baseline_arm_id='',
+            predicted_direction='a_gt_b',
+            verdict=Verdict.POWER_INSUFFICIENT,
+            refutation_class=RefutationClass.UNDERPOWERED,
+            adequately_powered=False,
+            measurements={
+                'env_name': 'cross_env_link',
+                'intervention_name': 'link',
+                'n_paired_envs': n,
+            },
+        )
+
+    # Pearson r with one-sided test (predicted positive).
+    r = float(_pearson(mech_gs, out_gs))
+    # SE under H0 (Fisher z-transform approximation): SE_r = 1/sqrt(n-3).
+    se_r = 1.0 / math.sqrt(n - 3) if n > 3 else float('nan')
+    q = derived_q_from_g_se(r, se_r) if not math.isnan(se_r) else float('nan')
+    delta_i = delta_i_from_q(q) if not math.isnan(q) else 0.0
+    is_powered = adequately_powered_paired(
+        r, n, alpha=alpha, power=power, alternative='larger',
+    )
+
+    if not is_powered:
+        verdict = Verdict.POWER_INSUFFICIENT
+        refutation = RefutationClass.UNDERPOWERED
+    elif r > 0:
+        verdict = Verdict.HELD
+        refutation = None
+    else:
+        verdict = Verdict.NO_EFFECT
+        refutation = RefutationClass.SIGN_FLIP
+
+    measurements: dict[str, MeasurementLeaf] = {
+        'env_name': 'cross_env_link',
+        'intervention_name': 'link',
+        'n_paired_envs': n,
+        'link.pearson_r': r,
+        'link.se': se_r,
+        'link.derived_q': q,
+        'link.delta_i_population': delta_i,
+    }
+
+    return ComparisonRow(
+        id=str(uuid.uuid4()), parent_id=None, cycle_id=cycle_id,
+        timestamp=_resolved_timestamp(timestamp),
+        treatment_arm_id='', baseline_arm_id='',
+        predicted_direction='a_gt_b',
+        verdict=verdict,
+        refutation_class=refutation,
+        adequately_powered=is_powered,
+        measurements=measurements,
+    )
+
+
+def _comparison_env(c: ComparisonRow) -> str:
+    """Read env_name off a ComparisonRow's measurements."""
+    v = c.measurements.get('env_name')
+    if not isinstance(v, str):
+        raise TypeError(
+            f"ComparisonRow {c.id!r} missing 'env_name' measurement"
+        )
+    return v
+
+
+def _pearson(xs: Sequence[float], ys: Sequence[float]) -> float:
+    """Pearson r — population formula. Returns 0.0 for zero-
+    variance inputs (degenerate; deferred verdict)."""
+    n = len(xs)
+    mx = sum(xs) / n
+    my = sum(ys) / n
+    num = sum((x - mx) * (y - my) for x, y in zip(xs, ys))
+    sx = math.sqrt(sum((x - mx) ** 2 for x in xs))
+    sy = math.sqrt(sum((y - my) ** 2 for y in ys))
+    if sx == 0.0 or sy == 0.0:
+        return 0.0
+    return num / (sx * sy)

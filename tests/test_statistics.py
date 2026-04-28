@@ -170,3 +170,111 @@ def test_verdict_held_for_no_predicted_direction() -> None:
     )
     assert verdict is Verdict.HELD
     assert is_powered
+
+
+# ============ random_effects_summary ============
+
+def test_random_effects_summary_too_few_cells_returns_nan() -> None:
+    """n<2 → all NaN."""
+    from corroborate.statistics import random_effects_summary
+    p = random_effects_summary([(0.5, 0.2)])
+    assert math.isnan(p.pooled_g)
+    assert p.n_cells == 1
+
+
+def test_random_effects_summary_homogeneous_cells_zero_tau2() -> None:
+    """All cells with same g + same SE → tau² = 0 (no
+    between-cell heterogeneity), pooled_g = common value."""
+    from corroborate.statistics import random_effects_summary
+    p = random_effects_summary([(0.5, 0.2)] * 5)
+    assert p.n_cells == 5
+    assert p.pooled_g == pytest.approx(0.5, abs=1e-6)
+    assert p.tau2 == pytest.approx(0.0, abs=1e-6)
+    # PI brackets the common value at low heterogeneity.
+    assert p.pi_lo < 0.5 < p.pi_hi
+
+
+def test_random_effects_summary_heterogeneous_cells_positive_tau2() -> None:
+    """Wildly different g across cells → tau² > 0; pooled estimate
+    near the mean of the cells."""
+    from corroborate.statistics import random_effects_summary
+    g_se = [(-0.5, 0.2), (1.5, 0.2), (0.0, 0.2), (2.0, 0.2)]
+    p = random_effects_summary(g_se)
+    assert p.n_cells == 4
+    assert p.tau2 > 0.0
+    assert p.I2 > 0.0
+    # Pooled near simple average of g's (since SEs are equal).
+    assert p.pooled_g == pytest.approx(0.75, abs=0.1)
+
+
+# ============ random_effects_verdict ============
+
+def test_random_effects_verdict_underpowered_below_three_cells() -> None:
+    from corroborate.statistics import (
+        random_effects_summary,
+        random_effects_verdict,
+    )
+    p = random_effects_summary([(0.5, 0.1), (0.5, 0.1)])
+    verdict, refutation = random_effects_verdict(
+        p, predicted_direction='a_gt_b',
+    )
+    assert verdict is Verdict.POWER_INSUFFICIENT
+    assert refutation is RefutationClass.UNDERPOWERED
+
+
+def test_random_effects_verdict_held_for_pi_strictly_positive() -> None:
+    from corroborate.statistics import (
+        random_effects_summary,
+        random_effects_verdict,
+    )
+    # Strong consistent effect; tight SE → narrow PI excluding zero.
+    p = random_effects_summary([(1.5, 0.05)] * 5)
+    verdict, _ = random_effects_verdict(
+        p, predicted_direction='a_gt_b',
+    )
+    assert verdict is Verdict.HELD
+
+
+def test_random_effects_verdict_no_effect_when_pi_brackets_zero() -> None:
+    from corroborate.statistics import (
+        random_effects_summary,
+        random_effects_verdict,
+    )
+    # High heterogeneity around zero → PI brackets zero.
+    p = random_effects_summary([
+        (-1.0, 0.3), (1.0, 0.3), (-0.5, 0.3), (0.5, 0.3), (0.0, 0.3),
+    ])
+    verdict, refutation = random_effects_verdict(
+        p, predicted_direction='a_gt_b',
+    )
+    assert verdict is Verdict.NO_EFFECT
+    assert refutation is RefutationClass.NULL_EFFECT
+
+
+# ============ recommended_n_paired ============
+
+def test_recommended_n_paired_inverts_mde_paired() -> None:
+    """If observed g equals the MDE at n=10, the recommended n
+    should be ~10 (round-trip consistency)."""
+    from corroborate.statistics import (
+        mde_paired,
+        recommended_n_paired,
+    )
+    mde_at_10 = mde_paired(10, alpha=0.05, power=0.8)
+    rec_n = recommended_n_paired(mde_at_10, alpha=0.05, power=0.8)
+    assert rec_n == pytest.approx(10.0, rel=0.05)
+
+
+def test_recommended_n_paired_zero_g_returns_nan() -> None:
+    """Detecting a true zero effect with positive power is
+    impossible — no finite n works."""
+    from corroborate.statistics import recommended_n_paired
+    assert math.isnan(recommended_n_paired(0.0))
+
+
+def test_recommended_n_paired_smaller_g_needs_larger_n() -> None:
+    """Detecting a smaller effect needs a larger sample."""
+    from corroborate.statistics import recommended_n_paired
+    n_big_effect = recommended_n_paired(1.0)
+    n_small_effect = recommended_n_paired(0.2)
+    assert n_small_effect > n_big_effect

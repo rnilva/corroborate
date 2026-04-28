@@ -7,6 +7,37 @@ condition that should lift it.
 Entries are ordered by *forcing function*: the higher up, the
 sooner they're likely to bind.
 
+## Vectorised env support (n_envs > 1)
+
+**Status:** deferred — modern DRL feature, not v0 blocker.
+
+**Description:** Modern DRL (SB3, CleanRL, v9) parallelises M envs
+per cell via `vmap(env.step)` — buffer adds M transitions per
+step, one batched gradient step per cycle. Wall-clock benefit is
+M× on slow envs (Atari ~1 ms/step). gymnax envs are
+microsecond-fast so the benefit at v0 scale is marginal.
+
+Mnih 2015 / Hasselt 2016 (DDQN) used single-env per cell; v0
+matches that for paper fidelity.
+
+**Why deferred:** v0's gymnax sweep at 50k steps doesn't need it.
+Adding before a forcing function risks complicating dqn-step
+structure (two-level vmap: seeds × envs) without payoff. v9
+ships with `NUM_ENVS=64` because their sweep is at higher step
+budgets where env-step throughput dominates.
+
+**Lift when:** an Atari-grade env enters the sweep, OR step
+budgets per cell exceed ~500k and env-step throughput becomes
+the bottleneck.
+
+**Insertion point when needed:**
+- `n_envs: Annotated[int, Exogenous] = 1` on `dqn` kwargs.
+- `rollout_phase` vmaps over an n_envs axis.
+- `Replay.add` accepts a vector of M transitions.
+- `DQNState.env_state` / `obs` become `(n_envs, ...)`-batched.
+- ~150 LoC of structural change; clean extension that doesn't
+  break n_envs=1 semantics.
+
 ## Step 3: cell-runner trace emission
 
 **Status:** queued. Next step in the masterplan after Steps 1-2

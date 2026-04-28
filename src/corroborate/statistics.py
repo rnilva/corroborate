@@ -26,6 +26,7 @@ from __future__ import annotations
 import math
 import statistics
 from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import Literal
 
 import scipy.stats as ss
@@ -191,3 +192,163 @@ def verdict_from_paired_stats(
 
     # Unreachable under the Direction Literal; defensive fallback.
     return (Verdict.NO_EFFECT, RefutationClass.NULL_EFFECT, True)
+
+
+# ============ Random-effects meta-analysis (DerSimonian-Laird) ============
+
+@dataclass(frozen=True, slots=True)
+class PooledStats:
+    """Random-effects pooled effect across cells/envs.
+
+    `pooled_g` — DerSimonian-Laird-pooled Hedges' g across cells.
+    `se_pooled` — SE of the pooled estimate.
+    `tau2` — between-cell heterogeneity variance (DerSimonian-
+      Laird estimator).
+    `I2` — fraction of total variance attributable to between-
+      cell heterogeneity (Higgins).
+    `Q` — Cochran's heterogeneity test statistic.
+    `pi_lo`, `pi_hi` — 95% prediction interval (Higgins-Thompson-
+      Spiegelhalter formula `pooled ± t_{n-2, 0.975} *
+      sqrt(τ² + var_pooled)`). Empirical-min-g and empirical-
+      max-g serve as honest backstops when the Gaussian-fit PI
+      extrapolates past observed data.
+    `empirical_min_g`, `empirical_max_g` — observed range.
+    `n_cells` — number of valid cells used in pooling."""
+    pooled_g: float
+    se_pooled: float
+    tau2: float
+    I2: float
+    Q: float
+    pi_lo: float
+    pi_hi: float
+    empirical_min_g: float
+    empirical_max_g: float
+    n_cells: int
+
+
+def random_effects_summary(
+    g_se_pairs: Sequence[tuple[float, float]],
+) -> PooledStats:
+    """DerSimonian-Laird random-effects pool of (Hedges' g, SE)
+    pairs across cells. Returns NaN-filled `PooledStats` when
+    fewer than 2 valid cells are present (PI undefined).
+
+    v9-port of
+    `poc_v9/poc_v8/framework/reporting/aggregation.py:159-207` —
+    same DL formula, same Higgins I², same HTS prediction
+    interval.
+
+    `g_se_pairs` — one (g, SE) per cell. NaN-bearing or
+    zero-SE cells are filtered out (DL needs `var > 0`)."""
+    valid: list[tuple[float, float]] = [
+        (g, se) for g, se in g_se_pairs
+        if not math.isnan(g) and not math.isnan(se) and se > 0.0
+    ]
+    n = len(valid)
+    if n < 2:
+        return PooledStats(
+            pooled_g=float('nan'), se_pooled=float('nan'),
+            tau2=float('nan'), I2=float('nan'), Q=float('nan'),
+            pi_lo=float('nan'), pi_hi=float('nan'),
+            empirical_min_g=float('nan'), empirical_max_g=float('nan'),
+            n_cells=n,
+        )
+    gs = [g for g, _ in valid]
+    vs = [se * se for _, se in valid]   # var = se²
+    w_fixed = [1.0 / v for v in vs]
+    sum_w = sum(w_fixed)
+    g_fixed = sum(w * g for w, g in zip(w_fixed, gs)) / sum_w
+    Q = sum(w * (g - g_fixed) ** 2 for w, g in zip(w_fixed, gs))
+    df = n - 1
+    sum_w_sq = sum(w * w for w in w_fixed)
+    c_term = sum_w - sum_w_sq / sum_w
+    tau2 = max(0.0, (Q - df) / c_term) if c_term > 0.0 else 0.0
+    w_rand = [1.0 / (v + tau2) for v in vs]
+    sum_w_rand = sum(w_rand)
+    g_pooled = sum(w * g for w, g in zip(w_rand, gs)) / sum_w_rand
+    var_pooled = 1.0 / sum_w_rand
+    se_pooled = math.sqrt(var_pooled)
+    I2 = max(0.0, (Q - df) / Q) if Q > 0.0 else 0.0
+    t_crit = float(ss.t.ppf(0.975, df=df))
+    pi_se = math.sqrt(tau2 + var_pooled)
+    return PooledStats(
+        pooled_g=g_pooled,
+        se_pooled=se_pooled,
+        tau2=tau2,
+        I2=I2,
+        Q=Q,
+        pi_lo=g_pooled - t_crit * pi_se,
+        pi_hi=g_pooled + t_crit * pi_se,
+        empirical_min_g=min(gs),
+        empirical_max_g=max(gs),
+        n_cells=n,
+    )
+
+
+def random_effects_verdict(
+    pooled: PooledStats,
+    *,
+    predicted_direction: Direction | None,
+) -> tuple[Verdict, RefutationClass | None]:
+    """Apply Popperian aggregation to a random-effects pool.
+
+    - n_cells < 3 → POWER_INSUFFICIENT (DL τ² estimation
+      unreliable below 3 cells; PI fragile).
+    - PI brackets zero → NO_EFFECT/NULL_EFFECT (population
+      effect could be zero; not robustly directional).
+    - PI strictly positive AND predicted='a_gt_b' (or None /
+      'two_sided') → HELD.
+    - PI strictly negative AND predicted='a_lt_b' (or None /
+      'two_sided') → HELD.
+    - PI strictly negative when predicted positive (or vice
+      versa) → NO_EFFECT/SIGN_FLIP."""
+    if math.isnan(pooled.pooled_g) or pooled.n_cells < 3:
+        return (Verdict.POWER_INSUFFICIENT, RefutationClass.UNDERPOWERED)
+
+    pi_excludes_zero = pooled.pi_lo > 0.0 or pooled.pi_hi < 0.0
+    if not pi_excludes_zero:
+        return (Verdict.NO_EFFECT, RefutationClass.NULL_EFFECT)
+
+    pi_positive = pooled.pi_lo > 0.0
+    pi_negative = pooled.pi_hi < 0.0
+
+    if predicted_direction is None or predicted_direction == 'two_sided':
+        return (Verdict.HELD, None)
+    if predicted_direction == 'a_gt_b':
+        if pi_positive:
+            return (Verdict.HELD, None)
+        if pi_negative:
+            return (Verdict.NO_EFFECT, RefutationClass.SIGN_FLIP)
+    if predicted_direction == 'a_lt_b':
+        if pi_negative:
+            return (Verdict.HELD, None)
+        if pi_positive:
+            return (Verdict.NO_EFFECT, RefutationClass.SIGN_FLIP)
+
+    return (Verdict.NO_EFFECT, RefutationClass.NULL_EFFECT)
+
+
+# ============ Power recommendation ============
+
+def recommended_n_paired(
+    observed_g: float,
+    *,
+    alpha: float = 0.05,
+    power: float = 0.8,
+    alternative: Literal['larger', 'smaller', 'two-sided'] = 'larger',
+) -> float:
+    """Given an observed effect size, return the n needed for
+    adequately-powered detection at the given α and power.
+
+    Wraps `statsmodels.stats.power.TTestPower.solve_power` —
+    given (effect_size, alpha, power), it solves for nobs.
+
+    Returns NaN for `observed_g == 0` (any n is insufficient to
+    detect a true zero effect at non-trivial power)."""
+    if math.isnan(observed_g) or observed_g == 0.0:
+        return float('nan')
+    return float(TTestPower().solve_power(
+        effect_size=abs(observed_g),
+        nobs=None, alpha=alpha, power=power,
+        alternative=alternative,
+    ))

@@ -51,6 +51,51 @@ def _f(x: float | int | str | bool | None, prec: int = 3) -> str:
     return f'{x:.{prec}f}'
 
 
+_OUTCOME_PATHS = (
+    'outcome.late_window_mean',
+    'outcome.eval_final_mean',
+    'outcome.eval_best_burst_mean',
+)
+
+
+def _print_table_header() -> None:
+    print(f'{"env":<22} {"outcome":<32} {"verdict":<22} {"g":>7} '
+          f'{"se":>7} {"q":>7} {"powered":>8} {"n":>3}')
+    print('─' * 110)
+
+
+def _maybe_compare(
+    env: str, outcome_path: str,
+    treatment_runs: list[RunRow], baseline_runs: list[RunRow],
+) -> None:
+    """Try to build a paired comparison; print one row of the
+    table. Skip silently if the outcome path is missing on any
+    run (older sweeps don't carry the eval-based reductions)."""
+    if any(outcome_path not in r.measurements for r in treatment_runs):
+        return
+    if any(outcome_path not in r.measurements for r in baseline_runs):
+        return
+
+    cmp = paired_comparison_from_runs(
+        treatment_runs=treatment_runs,
+        baseline_runs=baseline_runs,
+        predicted_direction='a_gt_b',
+        outcome_path=outcome_path,
+    )
+    m = cmp.measurements
+    g_v = m.get(f'{outcome_path}.effect_size_g')
+    se_v = m.get(f'{outcome_path}.se')
+    q_v = m.get(f'{outcome_path}.derived_q')
+    n_pairs_v = m.get('n_pairs')
+    n_pairs = int(n_pairs_v) if isinstance(n_pairs_v, int) else 0
+
+    print(
+        f'{env:<22} {outcome_path:<32} {cmp.verdict.value:<22} '
+        f'{_f(g_v):>7} {_f(se_v):>7} {_f(q_v):>7} '
+        f'{str(cmp.adequately_powered):>8} {n_pairs:>3}'
+    )
+
+
 def main() -> None:
     rows = read_runrows(_DATA_PATH)
     print(f'loaded {len(rows)} RunRows from {_DATA_PATH.name}')
@@ -61,9 +106,7 @@ def main() -> None:
     print(f'envs: {envs}')
     print()
 
-    print(f'{"env":<22} {"verdict":<22} {"refutation":<22} '
-          f'{"g":>7} {"se":>7} {"q":>7} {"ΔI":>7} {"powered":>8} {"n":>3}')
-    print('─' * 120)
+    _print_table_header()
 
     for env in envs:
         intervention_groups = grouped[env]
@@ -73,34 +116,14 @@ def main() -> None:
         if 'vanilla_dqn' not in intervention_groups:
             print(f'{env:<22} (no vanilla_dqn runs)')
             continue
+        for outcome_path in _OUTCOME_PATHS:
+            _maybe_compare(
+                env, outcome_path,
+                intervention_groups['ddqn'],
+                intervention_groups['vanilla_dqn'],
+            )
+        print()  # spacer between envs
 
-        cmp = paired_comparison_from_runs(
-            treatment_runs=intervention_groups['ddqn'],
-            baseline_runs=intervention_groups['vanilla_dqn'],
-            predicted_direction='a_gt_b',  # DDQN should reduce overestimation
-        )
-        m = cmp.measurements
-
-        # Format and print.
-        rc = (
-            cmp.refutation_class.value
-            if cmp.refutation_class is not None
-            else '—'
-        )
-        g_v = m.get('outcome.late_window_mean.effect_size_g')
-        se_v = m.get('outcome.late_window_mean.se')
-        q_v = m.get('outcome.late_window_mean.derived_q')
-        di_v = m.get('outcome.late_window_mean.delta_i_population')
-        n_pairs_v = m.get('n_pairs')
-        n_pairs = int(n_pairs_v) if isinstance(n_pairs_v, int) else 0
-
-        print(
-            f'{env:<22} {cmp.verdict.value:<22} {rc:<22} '
-            f'{_f(g_v):>7} {_f(se_v):>7} {_f(q_v):>7} {_f(di_v):>7} '
-            f'{str(cmp.adequately_powered):>8} {n_pairs:>3}'
-        )
-
-    print()
     print('All comparisons rendered.')
 
 

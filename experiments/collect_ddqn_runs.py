@@ -48,44 +48,59 @@ ENV_NAMES = (
     'DeepSea-bsuite',
 )
 
-SEEDS: tuple[int, ...] = tuple(range(10))
+SEEDS: tuple[int, ...] = tuple(range(30))
 
-TOTAL_STEPS = 5000  # short-but-meaningful for v0 stats validation
+# v9 parity: TrainingProtocol.total_steps = 50_000 (their default).
+# v9 parallelises 64 envs per cell, so their 50k env-steps is
+# ~781 gradient steps; our 1:1 ratio gives 50k gradient steps —
+# strictly more learning than v9's nominal 50k. Sufficient for
+# CartPole convergence (literature converges in 30-50k steps).
+TOTAL_STEPS = 50_000
 
-
-# Shared HP bundle — author commitments. HPs spread as flat kwargs
-# into `hypothesis.intervention` so the HP signature on each
-# RunRow distinguishes (vanilla, total_steps=5000) from
-# (ddqn, total_steps=5000) AND from any future re-run with a
-# different HP setting.
-_HPARAMS: dict[str, object] = {
-    'total_steps': TOTAL_STEPS,
-    'eval_every': TOTAL_STEPS // 10,
-    'n_episodes': 5,
-    'gamma': 0.99,
-    'replay': Replay(capacity=2000, batch_size=32),
-    'optimizer': WarmedUpdate(inner=Adam(), warmup_steps=100),
-    'sync_period': 100,
-}
+# HP-sensitivity grid for buffer capacity. The principle: don't
+# guess at HP defaults; let the framework's columnar parquet show
+# us which HPs the outcome is actually sensitive to. Three levels
+# spread far enough apart to detect non-trivial sensitivity, and
+# the path-keyed leaf `replay.capacity` gets a distinct value per
+# cell — one-line `df.group_by('replay.capacity').agg(...)` reveals
+# the sensitivity post-hoc.
+CAPACITIES: tuple[int, ...] = (2_000, 10_000, 50_000)
 
 
-def _make_hypothesis(name: str) -> Hypothesis[DQNTrajectoryRecord]:
-    """Reconstruct hypothesis from a string id. Workers can't
-    pickle closures cleanly across spawn-mode processes, so each
-    worker rebuilds the hypothesis from a stable name.
+def _hparams(capacity: int) -> dict[str, object]:
+    """HP bundle parameterised on `replay.capacity`. The other
+    leaves stay fixed across the grid; capacity is the swept
+    dimension. Adding more HP-grid axes (lr, batch_size, ...) is
+    one line each here + the corresponding tuple at module top."""
+    return {
+        'total_steps': TOTAL_STEPS,
+        'eval_every': TOTAL_STEPS // 10,
+        'n_episodes': 5,
+        'gamma': 0.99,
+        'replay': Replay(capacity=capacity, batch_size=32),
+        'optimizer': WarmedUpdate(inner=Adam(), warmup_steps=100),
+        'sync_period': 100,
+    }
+
+
+def _make_hypothesis(
+    name: str, capacity: int,
+) -> Hypothesis[DQNTrajectoryRecord]:
+    """Reconstruct hypothesis from a string id + capacity. Workers
+    can't pickle closures cleanly across spawn-mode processes, so
+    each worker rebuilds the hypothesis from stable args.
 
     Configurational leaves live as flat kwargs in `intervention`
     (matching `dqn`'s signature). Cell-runner records each (kwarg,
     value) pair as a measurement at its dotted topology path;
     downstream `leaf_signature` projects the configurational
-    subset so two arms differing only in `gamma` produce distinct
-    group-by keys. The `bootstrap` slot swap and `predicted_direction`
-    are the only fields that differ between vanilla and DDQN at
-    the structural level."""
+    subset so two arms differing only in `replay.capacity` produce
+    distinct group-by keys."""
+    hparams = _hparams(capacity)
     if name == 'vanilla_dqn':
         return Hypothesis(
             name='vanilla_dqn',
-            intervention={**_HPARAMS},
+            intervention={**hparams},
             bridges=(),
             predicted_direction=None,
         )
@@ -93,7 +108,7 @@ def _make_hypothesis(name: str) -> Hypothesis[DQNTrajectoryRecord]:
         return Hypothesis(
             name='ddqn',
             intervention={
-                **_HPARAMS,
+                **hparams,
                 'bootstrap': partial(
                     bootstrap, greedification=double_greedify,
                 ),
@@ -110,18 +125,19 @@ HYPOTHESIS_NAMES = ('vanilla_dqn', 'ddqn')
 # ============ Worker: one (env, hypothesis) arm ============
 
 def _run_arm_worker(
-    args: tuple[str, str, tuple[int, ...], str, float],
+    args: tuple[str, str, int, tuple[int, ...], str, float],
 ) -> Path:
     """Subprocess worker. Runs `run_dqn_arm` for one
-    (env, hypothesis) pair and writes the resulting RunRows to a
-    per-arm parquet. Returns the parquet path.
+    (env, hypothesis, capacity) cell + writes the resulting
+    RunRows + TraceRows to per-arm parquets. Returns the runs
+    parquet path.
 
     Disables XLA preallocation BEFORE importing jax — by default
     each JAX process grabs ~75% of GPU memory at init, which
     starves sibling workers. With `XLA_PYTHON_CLIENT_PREALLOCATE=
     false` plus a per-worker `XLA_PYTHON_CLIENT_MEM_FRACTION`
     cap, N workers can share one device cleanly."""
-    env_name, hypothesis_name, seeds, out_dir_str, mem_fraction = args
+    env_name, hypothesis_name, capacity, seeds, out_dir_str, mem_fraction = args
 
     # Must set before any jax import in this process.
     import os
@@ -131,15 +147,16 @@ def _run_arm_worker(
     )
 
     out_dir = Path(out_dir_str)
-    runs_path = out_dir / f'{env_name}__{hypothesis_name}__runs.parquet'
-    traces_path = out_dir / f'{env_name}__{hypothesis_name}__traces.parquet'
+    arm_tag = f'{env_name}__{hypothesis_name}__cap{capacity}'
+    runs_path = out_dir / f'{arm_tag}__runs.parquet'
+    traces_path = out_dir / f'{arm_tag}__traces.parquet'
 
     from corroborate.persistence import write_tracerows
     from corroborate.rl.cell_runner import run_dqn_arm
     from corroborate.rl.dqn.claims.optimizer import Adam
     from corroborate.rl.env_catalogue import get
 
-    h = _make_hypothesis(hypothesis_name)
+    h = _make_hypothesis(hypothesis_name, capacity)
     cells = run_dqn_arm(
         get(env_name), seeds, hypothesis=h,
         optimizer=Adam(),
@@ -159,24 +176,29 @@ def main() -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     final_path = out_dir / 'runs.parquet'
 
-    n_arms = len(ENV_NAMES) * len(HYPOTHESIS_NAMES)
+    n_arms = len(ENV_NAMES) * len(HYPOTHESIS_NAMES) * len(CAPACITIES)
 
     # Cap worker concurrency. With `XLA_PYTHON_CLIENT_PREALLOCATE
     # =false` + per-worker `MEM_FRACTION = 0.9 / n_workers`,
-    # N workers share one GPU cleanly. 4 is a conservative
-    # default; raise if GPU memory is plentiful.
-    n_workers = min(4, n_arms, mp.cpu_count())
+    # N workers share one GPU cleanly. 2 is the safe default —
+    # 4 workers concurrently initialising JAX on a single GPU
+    # races on CUDA context allocation and crashes (observed at
+    # capacity=50_000 + 30 seeds + 50k steps; single-arm path
+    # fine, multi-process worker pool kills all workers).
+    n_workers = min(2, n_arms, mp.cpu_count())
     mem_fraction = 0.9 / n_workers
 
-    arms_args: list[tuple[str, str, tuple[int, ...], str, float]] = [
-        (env_name, h_name, SEEDS, str(out_dir), mem_fraction)
+    arms_args: list[tuple[str, str, int, tuple[int, ...], str, float]] = [
+        (env_name, h_name, capacity, SEEDS, str(out_dir), mem_fraction)
         for env_name in ENV_NAMES
         for h_name in HYPOTHESIS_NAMES
+        for capacity in CAPACITIES
     ]
     print(
         f'spawning up to {n_workers} subprocess workers for '
         f'{n_arms} arms ({len(ENV_NAMES)} envs × '
-        f'{len(HYPOTHESIS_NAMES)} hypotheses), '
+        f'{len(HYPOTHESIS_NAMES)} hypotheses × '
+        f'{len(CAPACITIES)} capacities), '
         f'{len(SEEDS)} seeds vmapped per arm — '
         f'{n_arms * len(SEEDS)} cells total',
         flush=True,
@@ -191,17 +213,18 @@ def main() -> None:
     parquet_paths: list[Path] = []
     with ProcessPoolExecutor(max_workers=n_workers, mp_context=ctx) as pool:
         future_to_arm = {
-            pool.submit(_run_arm_worker, args): args[:2]
+            pool.submit(_run_arm_worker, args): args[:3]
             for args in arms_args
         }
         for i, future in enumerate(as_completed(future_to_arm), start=1):
-            env_name, h_name = future_to_arm[future]
+            env_name, h_name, capacity = future_to_arm[future]
             try:
                 p = future.result()
             except Exception as e:
                 print(
                     f'[{i:>2}/{n_arms}] FAILED  {env_name:<22} '
-                    f'h={h_name:<12} {type(e).__name__}: {e}',
+                    f'h={h_name:<12} cap={capacity:<7} '
+                    f'{type(e).__name__}: {e}',
                     flush=True,
                 )
                 continue
@@ -209,7 +232,8 @@ def main() -> None:
             elapsed = time.time() - t0
             print(
                 f'[{i:>2}/{n_arms}] done    {env_name:<22} '
-                f'h={h_name:<12} elapsed={elapsed:>6.0f}s',
+                f'h={h_name:<12} cap={capacity:<7} '
+                f'elapsed={elapsed:>6.0f}s',
                 flush=True,
             )
 
