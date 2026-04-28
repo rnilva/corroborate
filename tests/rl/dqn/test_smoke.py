@@ -27,9 +27,10 @@ from corroborate.rl.dqn.claims.bootstrap import (
     double_greedify,
     max_greedify,
 )
+from corroborate.rl.dqn.claims.optimizer import Adam, WarmedUpdate
 from corroborate.rl.dqn.claims.q_network import MLP, mlp_q
 from corroborate.rl.dqn.claims.replay import Replay
-from corroborate.rl.dqn.dqn import dqn_step, init_state
+from corroborate.rl.dqn.dqn import dqn_step, init_state_from_key
 from corroborate.rl.env_catalogue import GymnaxEnvLike, HasN, HasShape
 from corroborate.loop import python_loop, scan_loop
 
@@ -65,7 +66,6 @@ def _build_step_fn(
         dqn_step,
         env=env, env_params=env_params, n_actions=n_actions,
         optimizer=optimizer,
-        warmup_steps=10,           # tiny for smoke
         sync_period=10,
         replay=Replay(capacity=200, batch_size=16),
         **extra,
@@ -77,11 +77,11 @@ def _build_step_fn(
 
 def test_vanilla_dqn_runs_on_cartpole_via_python_loop() -> None:
     env, env_params, obs_dim, n_actions = _make_env()
-    optimizer = optax.adam(1e-3)
-    init = init_state(
+    optimizer = WarmedUpdate(inner=Adam(), warmup_steps=10)()
+    init = init_state_from_key(
         env=env, env_params=env_params,
         obs_dim=obs_dim, n_actions=n_actions,
-        seed=0, optimizer=optimizer,
+        rng_key=jax.random.PRNGKey(0), optimizer=optimizer,
         replay=Replay(capacity=200),
     )
     step_fn = _build_step_fn(env, env_params, n_actions, optimizer)
@@ -116,11 +116,11 @@ def test_vanilla_dqn_runs_via_scan_loop() -> None:
     """Same step function under scan_loop should produce the
     same record shape (and identical values for fixed seed)."""
     env, env_params, obs_dim, n_actions = _make_env()
-    optimizer = optax.adam(1e-3)
-    init = init_state(
+    optimizer = WarmedUpdate(inner=Adam(), warmup_steps=10)()
+    init = init_state_from_key(
         env=env, env_params=env_params,
         obs_dim=obs_dim, n_actions=n_actions,
-        seed=0, optimizer=optimizer,
+        rng_key=jax.random.PRNGKey(0), optimizer=optimizer,
         replay=Replay(capacity=200),
     )
     step_fn = _build_step_fn(env, env_params, n_actions, optimizer)
@@ -210,11 +210,11 @@ def test_ep_return_resets_in_state_on_done() -> None:
     value AT the done step (so bridges filtering by done==1 see
     the final per-episode return)."""
     env, env_params, obs_dim, n_actions = _make_env()
-    optimizer = optax.adam(1e-3)
-    init = init_state(
+    optimizer = WarmedUpdate(inner=Adam(), warmup_steps=10)()
+    init = init_state_from_key(
         env=env, env_params=env_params,
         obs_dim=obs_dim, n_actions=n_actions,
-        seed=0, optimizer=optimizer,
+        rng_key=jax.random.PRNGKey(0), optimizer=optimizer,
         replay=Replay(capacity=200),
     )
     step_fn = _build_step_fn(env, env_params, n_actions, optimizer)
@@ -243,11 +243,11 @@ def test_step_counter_advances_monotonically() -> None:
     iteration. (Sanity check on the loop primitive's idx
     threading.)"""
     env, env_params, obs_dim, n_actions = _make_env()
-    optimizer = optax.adam(1e-3)
-    init = init_state(
+    optimizer = WarmedUpdate(inner=Adam(), warmup_steps=10)()
+    init = init_state_from_key(
         env=env, env_params=env_params,
         obs_dim=obs_dim, n_actions=n_actions,
-        seed=0, optimizer=optimizer,
+        rng_key=jax.random.PRNGKey(0), optimizer=optimizer,
         replay=Replay(capacity=200),
     )
     step_fn = _build_step_fn(env, env_params, n_actions, optimizer)

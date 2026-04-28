@@ -19,7 +19,7 @@ from corroborate.bridge import BridgeResult, bridge
 from corroborate.hypothesis import Hypothesis
 from corroborate.invariant import at_most
 from corroborate.rl.cell_runner import run_dqn_cell
-from corroborate.rl.dqn.claims.optimizer import Adam
+from corroborate.rl.dqn.claims.optimizer import Adam, WarmedUpdate
 from corroborate.rl.dqn.invariants import (
     DQNTrajectoryRecord,
     fqi_decay_gap,
@@ -37,15 +37,18 @@ from corroborate.verdict import Verdict
 from corroborate.rl.dqn.claims.replay import Replay  # noqa: E402
 
 _REPLAY_SHORT = Replay(capacity=200, batch_size=16)
+_OPTIMIZER_SHORT = WarmedUpdate(inner=Adam(), warmup_steps=10)
 _SHORT_RUN_HP: dict[str, object] = {
     'total_steps': 60, 'eval_every': 30, 'n_episodes': 2,
-    'warmup_steps': 10, 'sync_period': 10,
+    'sync_period': 10,
     'replay': _REPLAY_SHORT,
+    'optimizer': _OPTIMIZER_SHORT,
 }
 _SHORT_RUN_HP_40: dict[str, object] = {
     'total_steps': 40, 'eval_every': 20, 'n_episodes': 2,
-    'warmup_steps': 10, 'sync_period': 10,
+    'sync_period': 10,
     'replay': _REPLAY_SHORT,
+    'optimizer': _OPTIMIZER_SHORT,
 }
 
 

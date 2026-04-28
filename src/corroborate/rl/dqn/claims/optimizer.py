@@ -32,11 +32,14 @@ Author intervention:
     intervention={'optimizer': SGD(lr=0.1, momentum=0.9)}"""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
+import jax
+import jax.numpy as jnp
 import optax
 
 from corroborate.claim import ClaimBase, record_call
+from corroborate.rl.dqn.types import OptimizerFactory
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,6 +87,41 @@ class SGD(ClaimBase):
         result = optax.sgd(
             learning_rate=self.lr,
             momentum=self.momentum if self.momentum > 0.0 else None,
+        )
+        record_call(self, (), {}, result)
+        return result
+
+
+@dataclass(frozen=True, slots=True)
+class WarmedUpdate(ClaimBase):
+    """Optimizer wrapper that zeros parameter updates during the
+    first `warmup_steps` calls — bridges the buffer-warmup gap
+    where sampled gradients are uninformative (replay buffer is
+    near-empty, batches are degenerate).
+
+    Compositionally: `chain(inner_factory(), scale_by_schedule(0
+    while count < warmup_steps else 1))`. The inner optimizer's
+    internal state (e.g. Adam's moment estimates) still advances
+    during warmup; only the parameter deltas are zeroed. Same end
+    behavior as the historical hand-coded skip in `train_phase`,
+    but encoded as a property of the optimizer.
+
+    `warmup_steps` is engineering, not paper-honest theory; making
+    it a wrapper-Module rather than a top-level dqn HP keeps the
+    paper-prose composition (`rollout → train → sync`) clean. The
+    update mechanism owns its own warmup."""
+    inner: 'OptimizerFactory' = field(default_factory=lambda: Adam())  # pyright: ignore[reportAssignmentType]
+    warmup_steps: int = 1_000
+
+    def __call__(self) -> optax.GradientTransformation:
+        warmup = self.warmup_steps
+
+        def schedule(count: jax.Array) -> jax.Array:
+            return jnp.where(count < warmup, 0.0, 1.0)
+
+        result = optax.chain(
+            self.inner(),
+            optax.scale_by_schedule(schedule),
         )
         record_call(self, (), {}, result)
         return result

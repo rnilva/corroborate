@@ -16,7 +16,7 @@ from corroborate.aggregate import aggregate_runs
 from corroborate.hypothesis import Hypothesis, InterventionKey
 from corroborate.rl.cell_runner import run_dqn_cell
 from corroborate.rl.dqn.claims.bootstrap import bootstrap, double_greedify
-from corroborate.rl.dqn.claims.optimizer import Adam
+from corroborate.rl.dqn.claims.optimizer import Adam, WarmedUpdate
 from corroborate.rl.dqn.invariants import DQNTrajectoryRecord
 from corroborate.rl.env_catalogue import get
 
@@ -28,8 +28,9 @@ from corroborate.rl.dqn.claims.replay import Replay
 
 _SHORT_RUN_HP: dict[str, object] = {
     'total_steps': 40, 'eval_every': 20, 'n_episodes': 2,
-    'warmup_steps': 10, 'sync_period': 10,
+    'sync_period': 10,
     'replay': Replay(capacity=200, batch_size=16),
+    'optimizer': WarmedUpdate(inner=Adam(), warmup_steps=10),
 }
 
 

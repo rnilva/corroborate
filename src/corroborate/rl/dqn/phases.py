@@ -1,20 +1,27 @@
-"""DQN phases — rollout / train / sync as separately-typed
-functions composing slots.
+"""DQN phases — rollout / train / sync as `@claim`'d functions
+returning their diagnostic dicts directly.
 
-Each phase advances `DQNState` by one piece of the algorithm:
+Each phase advances `DQNState` by one piece of the algorithm AND
+emits a dict of per-step diagnostics. The phase claim's output
+IS the measurable surface — `dqn_step` composes phases via
+`{**rollout, **train}`, no hand-aggregated `_build_record`.
+
+Phases:
 
 - `rollout_phase`: select action, step env, store transition.
+  Emits `reward, done, max_q, ep_return, action, state_hash,
+  buf_size`.
 - `train_phase`: sample batch, compute TD-error, gradient step.
-- `sync_phase`: target-network update.
+  Emits `loss, td_error, online_q_values, target_q_values,
+  sample_indices`.
+- `sync_phase`: target-network update. Emits no diagnostic
+  (state-only).
 
-Phases call slots through the Protocols in `types.py` — no
-`jnp.argmax` / `jnp.max` / `jnp.dot` inline. All such primitives
-live inside the `@claim`'d implementations under `claims/`. The
-theory layer (`dqn.py`) composes phases; this layer composes
-slots."""
+Phases call slots through Protocols in `types.py` — no
+`jnp.argmax` / `jnp.max` / `jnp.dot` inline. JAX primitives live
+inside the `@claim`'d implementations under `claims/`. The theory
+layer (`dqn.py`) composes phases; this layer composes slots."""
 from __future__ import annotations
-
-from typing import NamedTuple
 
 import jax
 import jax.numpy as jnp
@@ -32,56 +39,6 @@ from corroborate.rl.dqn.types import (
     TargetSync,
 )
 from corroborate.rl.env_catalogue import GymnaxEnvLike, StateHash
-
-
-# ============ Per-phase output records ============
-
-class RolloutOut(NamedTuple):
-    """Diagnostic record from `rollout_phase`. The next-state's
-    fields go on `DQNState`; this carries per-step scalars the
-    record/bridges read.
-
-    `action` exposes the actually-taken integer action; combined
-    with `state_hash` it forms the (s, a) pair the Watkins-style
-    coverage gap measurable consumes. `state_hash` is computed
-    from `state.obs` at action-selection time (env-specific
-    discretization from `EnvSpec.state_hash`); for envs without a
-    declared state_hash, a constant-zero sentinel is wired.
-
-    `epsilon` is NOT a field — exploration HPs live on the
-    action-select Module (e.g. `EpsilonGreedy.schedule`); ε(step)
-    is recoverable from `(mechanism_key, step)` post-hoc."""
-    reward: jax.Array
-    done: jax.Array
-    max_q: jax.Array      # max(Q(s, ·)) at action selection — overestimation diagnostic
-    ep_return: jax.Array  # cumulative within current episode (reset on done in state)
-    action: jax.Array     # int32 — the action selected this step
-    state_hash: jax.Array # int32 — env-specific bucket id for `state.obs`
-    buf_size: jax.Array   # int32 — replay buffer fill level AFTER this step's add
-
-
-class TrainOut(NamedTuple):
-    """Diagnostic record from `train_phase`.
-
-    `online_q_values` and `target_q_values` are produced by the
-    always-on independence probe (`_value_probe`) — full
-    Q-vectors `(batch, n_actions)` per step. The
-    `hasselt_covariance_gap` measurable consumes these to
-    compute the empirical Pearson correlation; argmaxes (if
-    needed downstream) are derived post-hoc via
-    `argmax(axis=-1)`. Logging the raw values rather than the
-    pre-reduced argmaxes keeps the framework-discipline rule
-    (don't log pre-reduced values).
-
-    `sample_indices` carries the indices `buffer_sample` drew this
-    step; the `lin_iid_gap` measurable reads these to verify the
-    replay isn't sampling the same handful of transitions
-    throughout training."""
-    loss: jax.Array              # mean of per-sample losses
-    td_error: jax.Array          # mean |predicted - target|, abs
-    online_q_values: jax.Array   # (batch, n_actions) — Q_online(next_obs)
-    target_q_values: jax.Array   # (batch, n_actions) — Q_target(next_obs)
-    sample_indices: jax.Array    # (batch,) int32 — indices buffer_sample drew
 
 
 def value_probe(
@@ -122,17 +79,16 @@ def rollout_phase(
     q_network: QNetwork,
     action_select: ActionSelect,
     state_hash: StateHash,
-) -> tuple[DQNState, RolloutOut]:
+) -> tuple[DQNState, dict[str, jax.Array]]:
     """One step of acting in the env.
 
     Reads `q_network` to score the current observation, calls
     `action_select(q_values, key, step, n_actions)`, steps the
     env, appends the transition to `replay`.
 
-    `replay` is the Replay Module — `replay.add(state, transition)`
-    encapsulates the buffer's FIFO write semantics. dqn doesn't
-    introspect `state.replay`; PrioritisedReplay is a Module-level
-    swap with the same interface."""
+    Returns `(new_state, diagnostic_dict)` — the dict's keys
+    (`reward, done, max_q, ep_return, action, state_hash,
+    buf_size`) are the measurable signals bridges target."""
     # Q-values at current obs — single observation, not batched.
     q_values = q_network(state.online_params, state.obs)
 
@@ -147,7 +103,6 @@ def rollout_phase(
     # (state.obs is already flat from init_state_from_key).
     next_obs = next_obs.reshape(state.obs.shape)
 
-    # Append to replay via the Module's `add` method.
     new_replay = replay.add(state.replay, Transition(
         obs=state.obs, action=action,
         reward=reward, next_obs=next_obs, done=done,
@@ -168,22 +123,20 @@ def rollout_phase(
         rng_key=next_rng_key,
         ep_return=next_ep_return,
     )
-    # State-hash logged at action-selection time (matches what the
-    # action-coverage and (s, a)-coverage measurables expect: the
-    # state observed when the action was chosen, not after the
-    # env step).
+    # State-hash logged at action-selection time (the state
+    # observed when the action was chosen, not after the env step).
     obs_hash = state_hash(state.obs).astype(jnp.int32)
 
-    out = RolloutOut(
-        reward=reward,
-        done=done.astype(jnp.float32),
-        max_q=jnp.max(q_values),
-        ep_return=cumulative,
-        action=action.astype(jnp.int32),
-        state_hash=obs_hash,
-        buf_size=new_replay.size.astype(jnp.int32),
-    )
-    return new_state, out
+    diagnostics: dict[str, jax.Array] = {
+        'reward': reward,
+        'done': done.astype(jnp.float32),
+        'max_q': jnp.max(q_values),
+        'ep_return': cumulative,
+        'action': action.astype(jnp.int32),
+        'state_hash': obs_hash,
+        'buf_size': new_replay.size.astype(jnp.int32),
+    }
+    return new_state, diagnostics
 
 
 # ============ Train ============
@@ -198,14 +151,20 @@ def train_phase(
     optimizer: optax.GradientTransformation,
     gamma: float,
     replay: Replay,
-    warmup_steps: int,
-) -> tuple[DQNState, TrainOut]:
-    """One gradient step on a batch sampled from the buffer.
+) -> tuple[DQNState, dict[str, jax.Array]]:
+    """One gradient step: sample batch → bootstrap target →
+    compute loss → apply update.
 
-    Skipped (no-op) until `state.step >= warmup_steps`; before
-    warmup the buffer doesn't have enough transitions to train
-    meaningfully. `replay.sample_batch(state.replay, key)` returns
-    a `Batch` with `(obs, action, reward, next_obs, done, indices)`."""
+    Reads paper-honestly. Buffer warmup (skipping params updates
+    until enough transitions are stored) lives on the optimizer
+    via `WarmedUpdate(inner=..., warmup_steps=...)` — not in this
+    phase. Authors who don't want warmup pass an unwrapped
+    `Adam()` / `RMSProp()` directly.
+
+    Returns `(new_state, diagnostic_dict)`. Dict keys: `loss,
+    td_error, online_q_values, target_q_values, sample_indices`.
+    Q-vectors are full `(batch, n_actions)` — bridges that need
+    argmaxes derive post-hoc."""
     sample_key, next_rng_key = jax.random.split(state.rng_key)
 
     batch = replay.sample_batch(state.replay, sample_key)
@@ -220,14 +179,11 @@ def train_phase(
     )
 
     # Always-on probe for the Hasselt-independence measurable.
-    # Two forward passes on the same batch the bootstrap operates
-    # on, returning the FULL Q-vectors per net (not pre-reduced
-    # argmaxes) so post-hoc reductions can compute correlation,
-    # disagreement, etc. Independent of which bootstrap is selected.
-    online_q_values, target_q_values = value_probe(state, q_network, batch.next_obs)
+    online_q_values, target_q_values = value_probe(
+        state, q_network, batch.next_obs,
+    )
 
     def compute_loss(params: Params) -> tuple[jax.Array, jax.Array]:
-        # Predicted Q for the action actually taken in each transition.
         q_b = q_network(params, batch.obs)            # (batch, n_actions)
         predicted = jnp.take_along_axis(
             q_b, batch.action[..., None], axis=-1,
@@ -239,32 +195,24 @@ def train_phase(
         compute_loss, has_aux=True,
     )(state.online_params)
 
-    updates, new_opt_state = optimizer.update(grads, state.opt_state, state.online_params)
+    updates, new_opt_state = optimizer.update(
+        grads, state.opt_state, state.online_params,
+    )
     new_online = optax.apply_updates(state.online_params, updates)
 
-    # Skip the gradient step before warmup — buffer is too small.
-    skip = state.step < warmup_steps
-
-    def select_param(new: jax.Array, old: jax.Array) -> jax.Array:
-        return jnp.where(skip, old, new)
-
-    final_online: Params = jax.tree.map(
-        select_param, new_online, state.online_params,
-    )
-
     new_state = state._replace(
-        online_params=final_online,
+        online_params=new_online,
         opt_state=new_opt_state,
         rng_key=next_rng_key,
     )
-    out = TrainOut(
-        loss=jnp.where(skip, jnp.float32(0.0), loss),
-        td_error=jnp.where(skip, jnp.float32(0.0), td_error),
-        online_q_values=online_q_values,
-        target_q_values=target_q_values,
-        sample_indices=batch.indices,
-    )
-    return new_state, out
+    diagnostics: dict[str, jax.Array] = {
+        'loss': loss,
+        'td_error': td_error,
+        'online_q_values': online_q_values,
+        'target_q_values': target_q_values,
+        'sample_indices': batch.indices,
+    }
+    return new_state, diagnostics
 
 
 # ============ Sync ============
@@ -278,7 +226,11 @@ def sync_phase(
 ) -> DQNState:
     """Apply the target-network update rule. v0's `periodic_copy`
     triggers only every `sync_period` steps; the slot makes the
-    cadence + rule pluggable (Polyak averaging is a future swap)."""
+    cadence + rule pluggable (Polyak averaging is a future swap).
+
+    Emits no diagnostic — sync is state-only. If a future
+    target_sync rule wants to expose a "did_sync" signal, this
+    phase would adopt the same `(state, dict)` return shape."""
     new_target = target_sync(
         online_params=state.online_params,
         target_params=state.target_params,

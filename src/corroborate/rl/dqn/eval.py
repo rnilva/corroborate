@@ -8,30 +8,32 @@ periodic greedy rollouts during training, with predicted-Q
 recorded at start and discounted MC return computed from the
 realised reward sequence.
 
-Two pieces:
+Three pieces:
 
-1. `eval_episode` (`@claim`) — single greedy rollout from a
-   reset state; returns `(predicted_q_at_start, mc_return,
-   episode_length)`.
-2. `eval_burst` — K greedy rollouts via vmap over fresh seeds;
-   stacks per-episode results into `(K,)`-shaped arrays.
+1. `eval_episode` — single greedy rollout from a reset state.
+2. `eval_burst` — K greedy rollouts via vmap over fresh seeds.
+3. `train_with_eval` — nested `scan_loop` driver: outer over
+   super-steps (one eval burst at the end of each), inner over
+   training steps. Returns the merged record dict — training
+   fields shape `(total_steps, ...)` + eval fields shape
+   `(n_bursts, K, ...)` + `eval_step_index`.
 
-The previous `train_with_eval` (nested-scan + record-assembly +
-eval-scheduling fused) has been retired into the `dqn` outermost
-claim in `dqn.py`, which composes init_state + nested
-`scan_loop` + record assembly. Eval IS part of training — they're
-aspects of one experiment run; bridges target whichever record
-keys they care about regardless of sub-process origin."""
+`train_with_eval` is the loop-orchestration primitive — separate
+from `dqn` itself so the algorithm composition stays paper-prose.
+Same backbone could drive a different RL algorithm with eval
+bursts (PPO, SAC, etc.)."""
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping
 from typing import NamedTuple
 
 import jax
 import jax.numpy as jnp
 
 from corroborate.claim import claim
+from corroborate.loop import scan_loop
 from corroborate.rl.dqn.state import DQNState
-from corroborate.rl.dqn.types import QNetwork
+from corroborate.rl.dqn.types import QNetwork, StepRecord
 from corroborate.rl.env_catalogue import GymnaxEnvLike
 
 
@@ -171,3 +173,61 @@ def eval_burst(
         mc_return=stacked.mc_return,
         episode_length=stacked.episode_length,
     )
+
+
+# ============ train_with_eval — nested scan driver ============
+
+def train_with_eval(
+    *,
+    step_fn: Callable[[DQNState, jax.Array], tuple[DQNState, StepRecord]],
+    eval_fn: Callable[[DQNState, jax.Array], EvalBurstOut],
+    init_state: DQNState,
+    total_steps: int,
+    eval_every: int,
+) -> dict[str, jax.Array]:
+    """Run `step_fn` for `total_steps` with an `eval_fn` burst at
+    the end of every `eval_every` chunk. Returns the merged
+    record dict.
+
+    Outer scan over `total_steps // eval_every` super-steps; inner
+    scan over `eval_every` training steps. The outer scan's per-
+    super-step output is `(train_chunk, eval_burst)`. After the
+    full run, train chunks reshape from `(n_super_steps,
+    eval_every, ...)` → `(total_steps, ...)`; eval burst fields
+    stack as `(n_super_steps, K, ...)`.
+
+    Decoupled from `dqn` itself so the algorithm composition stays
+    paper-prose. The same driver can power any RL algorithm with
+    a step+eval shape (PPO, SAC, distributional Q)."""
+    n_super_steps = total_steps // eval_every
+
+    def super_step(
+        s: DQNState, super_idx: jax.Array,
+    ) -> tuple[DQNState, tuple[StepRecord, EvalBurstOut]]:
+        s, train_chunk = scan_loop(step_fn, s, eval_every)
+        burst = eval_fn(s, super_idx)
+        return s, (train_chunk, burst)
+
+    _final, (train_chunks, eval_bursts) = scan_loop(
+        super_step, init_state, n_super_steps,
+    )
+
+    def _flatten(x: jax.Array) -> jax.Array:
+        # Each leaf: (n_super_steps, eval_every, *original) →
+        # (total_steps, *original).
+        return x.reshape(total_steps, *x.shape[2:])
+
+    train_trace: StepRecord = jax.tree.map(  # pyright: ignore[reportAny]
+        _flatten, train_chunks,
+    )
+    eval_step_indices = (
+        jnp.arange(n_super_steps, dtype=jnp.int32) + 1
+    ) * eval_every
+
+    return {
+        **train_trace,
+        'predicted_q_at_start': eval_bursts.predicted_q_at_start,
+        'mc_return': eval_bursts.mc_return,
+        'episode_length': eval_bursts.episode_length,
+        'eval_step_index': eval_step_indices,
+    }

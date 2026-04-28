@@ -24,7 +24,7 @@ from corroborate.invariant import at_most
 from corroborate.rl.dqn.claims.bootstrap import bootstrap
 from corroborate.rl.dqn.claims.q_network import mlp_q
 from corroborate.rl.dqn.claims.target_sync import periodic_copy
-from corroborate.rl.dqn.dqn import dqn_step, init_state
+from corroborate.rl.dqn.dqn import dqn_step, init_state_from_key
 from corroborate.rl.dqn.invariants import (
     fqi_decay_gap,
     hasselt_covariance_gap,
@@ -49,14 +49,17 @@ def _run_short_trajectory() -> Mapping[str, jnp.ndarray]:
     obs_dim = int(obs_space.shape[0])
     n_actions = int(act_space.n)
 
+    from corroborate.rl.dqn.claims.optimizer import Adam, WarmedUpdate
     from corroborate.rl.dqn.claims.replay import Replay
 
-    optimizer = optax.adam(1e-3)
+    optimizer = WarmedUpdate(inner=Adam(), warmup_steps=10)()
     replay = Replay(capacity=200, batch_size=16)
-    state = init_state(
+    import jax
+    state = init_state_from_key(
         env=env, env_params=env_params,
         obs_dim=obs_dim, n_actions=n_actions,
-        seed=0, optimizer=optimizer, replay=replay,
+        rng_key=jax.random.PRNGKey(0),
+        optimizer=optimizer, replay=replay,
     )
 
     from functools import partial
@@ -64,7 +67,7 @@ def _run_short_trajectory() -> Mapping[str, jnp.ndarray]:
         dqn_step,
         env=env, env_params=env_params, n_actions=n_actions,
         optimizer=optimizer,
-        warmup_steps=10, sync_period=10,
+        sync_period=10,
         replay=replay,
     )
     _, record = python_loop(step_fn, state, length=100)

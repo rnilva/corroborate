@@ -32,6 +32,7 @@ from functools import partial
 from corroborate.hypothesis import Hypothesis
 from corroborate.persistence import read_runrows, write_runrows
 from corroborate.rl.dqn.claims.bootstrap import bootstrap, double_greedify
+from corroborate.rl.dqn.claims.optimizer import Adam, WarmedUpdate
 from corroborate.rl.dqn.claims.replay import Replay
 from corroborate.rl.dqn.invariants import DQNTrajectoryRecord
 from corroborate.schema import RunRow
@@ -62,7 +63,7 @@ _HPARAMS: dict[str, object] = {
     'n_episodes': 5,
     'gamma': 0.99,
     'replay': Replay(capacity=2000, batch_size=32),
-    'warmup_steps': 100,
+    'optimizer': WarmedUpdate(inner=Adam(), warmup_steps=100),
     'sync_period': 100,
 }
 

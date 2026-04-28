@@ -21,7 +21,7 @@ from corroborate.aggregate import aggregate_runs
 from corroborate.hypothesis import Hypothesis
 from corroborate.rl.cell_runner import run_dqn_arm
 from corroborate.rl.dqn.claims.bootstrap import bootstrap, double_greedify
-from corroborate.rl.dqn.claims.optimizer import Adam
+from corroborate.rl.dqn.claims.optimizer import Adam, WarmedUpdate
 from corroborate.rl.dqn.claims.replay import Replay
 from corroborate.rl.dqn.invariants import DQNTrajectoryRecord
 from corroborate.rl.env_catalogue import get
@@ -38,7 +38,6 @@ _HPARAMS: dict[str, object] = {
     'n_episodes': 5,
     'gamma': 0.99,
     'replay': Replay(capacity=2000, batch_size=32),
-    'warmup_steps': 100,
     'sync_period': 100,
 }
 
@@ -66,7 +65,7 @@ def _ddqn() -> Hypothesis[DQNTrajectoryRecord]:
 
 def main() -> None:
     env_spec = get(_ENV)
-    optimizer = Adam()
+    optimizer = WarmedUpdate(inner=Adam(), warmup_steps=100)
 
     print(f'env={_ENV}, seeds={_SEEDS}, total_steps={_TOTAL_STEPS}')
     print()
