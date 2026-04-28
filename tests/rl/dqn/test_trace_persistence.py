@@ -25,6 +25,7 @@ from pathlib import Path
 import gymnax
 import jax
 import jax.numpy as jnp
+import pytest
 
 from corroborate.hypothesis import _canonical_str
 from corroborate.persistence import read_tracerows, write_tracerows
@@ -33,6 +34,10 @@ from corroborate.rl.dqn.dqn import default_state_hash, dqn
 from corroborate.rl.env_catalogue import HasN, HasShape
 from corroborate.schema import TraceLeaf, TraceRow
 from corroborate.signature import KwargInfo, walk, walk_paths
+
+# Real DQN rollouts on CartPole — both tests run training to
+# completion; ~6 s each. Skipped by default; opt in via `-m slow`.
+pytestmark = pytest.mark.slow
 
 
 def _hp_scalar(value: object) -> str | int | float | bool:

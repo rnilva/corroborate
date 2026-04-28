@@ -16,6 +16,7 @@ import gymnax
 import jax
 import jax.numpy as jnp
 import optax
+import pytest
 
 from corroborate.rl.dqn.claims.q_network import mlp_q
 from corroborate.rl.dqn.claims.replay import Replay
@@ -25,6 +26,10 @@ from corroborate.rl.dqn.eval import (
     eval_episode,
 )
 from corroborate.rl.env_catalogue import GymnaxEnvLike, HasN, HasShape
+
+# Eval primitives all run real CartPole rollouts under jit/vmap;
+# ~1.5 s each. Skipped by default; opt in via `-m slow`.
+pytestmark = pytest.mark.slow
 
 
 def _make_env() -> tuple[GymnaxEnvLike, object, int, int]:

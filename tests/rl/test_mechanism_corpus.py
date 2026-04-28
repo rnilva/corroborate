@@ -14,6 +14,8 @@ from __future__ import annotations
 
 from functools import partial
 
+import pytest
+
 from corroborate.aggregate import aggregate_runs, hp_signature
 from corroborate.hypothesis import Hypothesis
 from corroborate.rl.cell_runner import run_dqn_cell
@@ -21,6 +23,10 @@ from corroborate.rl.dqn.claims.bootstrap import bootstrap, double_greedify
 from corroborate.rl.dqn.claims.optimizer import Adam, WarmedUpdate
 from corroborate.rl.dqn.invariants import DQNTrajectoryRecord
 from corroborate.rl.env_catalogue import get
+
+# Whole module is end-to-end DQN smoke — multiple cells per test;
+# averaging ~6 s each. Skipped by default; opt in via `-m slow`.
+pytestmark = pytest.mark.slow
 
 
 _DDQN_BOOTSTRAP = partial(bootstrap, greedification=double_greedify)

@@ -21,6 +21,7 @@ import gymnax
 import jax
 import jax.numpy as jnp
 import optax
+import pytest
 
 from corroborate.rl.dqn.claims.bootstrap import (
     bootstrap as bootstrap_claim,
@@ -75,6 +76,7 @@ def _build_step_fn(
 
 # ============ Smoke: vanilla DQN runs on CartPole ============
 
+@pytest.mark.slow
 def test_vanilla_dqn_runs_on_cartpole_via_python_loop() -> None:
     env, env_params, obs_dim, n_actions = _make_env()
     optimizer = WarmedUpdate(inner=Adam(), warmup_steps=10)()
@@ -112,6 +114,7 @@ def test_vanilla_dqn_runs_on_cartpole_via_python_loop() -> None:
         assert record[key].shape == (50, 16, 2)
 
 
+@pytest.mark.slow
 def test_vanilla_dqn_runs_via_scan_loop() -> None:
     """Same step function under scan_loop should produce the
     same record shape (and identical values for fixed seed)."""
@@ -204,6 +207,7 @@ def test_ddqn_and_vanilla_bootstrap_match_when_params_equal() -> None:
 
 # ============ Episode return tracking ============
 
+@pytest.mark.slow
 def test_ep_return_resets_in_state_on_done() -> None:
     """`DQNState.ep_return` should reset to 0 after a step where
     `done=True`. The record's `ep_return` carries the cumulative
@@ -238,6 +242,7 @@ def test_ep_return_resets_in_state_on_done() -> None:
 
 # ============ Step counter monotonicity ============
 
+@pytest.mark.slow
 def test_step_counter_advances_monotonically() -> None:
     """The state.step counter should strictly increment each
     iteration. (Sanity check on the loop primitive's idx

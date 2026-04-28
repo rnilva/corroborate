@@ -28,7 +28,10 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q --strict-markers"
+addopts = "-q --strict-markers -m 'not slow'"
+markers = [
+    "slow: end-to-end DQN/JAX workloads (jit compile + scan loops). Skipped by default for fast iteration. Run via `uv run pytest -m slow tests/` to run only slow tests, or `uv run pytest -m '' tests/` (empty marker) to run the full suite.",
+]
 
 [tool.pyright]
 include = ["src", "tests"]

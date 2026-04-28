@@ -16,6 +16,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 import jax.numpy as jnp
+import pytest
+
 from corroborate.aggregate import hp_signature
 from corroborate.bridge import BridgeResult, bridge
 from corroborate.hypothesis import Hypothesis
@@ -37,6 +39,10 @@ from corroborate.verdict import Verdict
 # capacity, batch size) live on a `Replay` instance under the
 # `replay` key.
 from corroborate.rl.dqn.claims.replay import Replay  # noqa: E402
+
+# Every test runs DQN end-to-end on CartPole — ~3 s each. Skipped
+# by default; opt in via `-m slow` (or `-m ''` for the full suite).
+pytestmark = pytest.mark.slow
 
 _REPLAY_SHORT = Replay(capacity=200, batch_size=16)
 _OPTIMIZER_SHORT = WarmedUpdate(inner=Adam(), warmup_steps=10)

@@ -19,6 +19,7 @@ from collections.abc import Mapping
 
 import jax.numpy as jnp
 import optax
+import pytest
 
 from corroborate.invariant import at_most
 from corroborate.rl.dqn.claims.bootstrap import bootstrap
@@ -76,6 +77,7 @@ def _run_short_trajectory() -> Mapping[str, jnp.ndarray]:
 
 # ============ FQI decay gap ============
 
+@pytest.mark.slow
 def test_fqi_decay_gap_returns_finite_scalar_on_real_run() -> None:
     record = _run_short_trajectory()
     gap = fqi_decay_gap(sync_period=10, gamma=0.99)
