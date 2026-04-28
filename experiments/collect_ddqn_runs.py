@@ -257,7 +257,18 @@ def main() -> None:
 
     t0 = time.time()
     parquet_pairs: list[tuple[Path, Path]] = []
-    with ProcessPoolExecutor(max_workers=n_workers, mp_context=ctx) as pool:
+    # `max_tasks_per_child=1` recycles the worker after each arm —
+    # critical for JAX, where each compiled arm leaves JIT-cache
+    # behind. Without recycling, after ~4 arms per worker the
+    # cache + tensors fill GPU memory, the next CUDA allocation
+    # crashes the worker, and the whole pool collapses with
+    # `BrokenProcessPool`. With recycling: each arm sees a fresh
+    # JAX context. Costs ~5-10s of jit-recompile overhead per arm,
+    # which is acceptable; without it, large grids fail entirely.
+    with ProcessPoolExecutor(
+        max_workers=n_workers, mp_context=ctx,
+        max_tasks_per_child=1,
+    ) as pool:
         future_to_arm = {
             pool.submit(_run_arm_worker, args): args[:3]
             for args in arms_args

@@ -28,3 +28,9 @@ htmlcov/
 .vscode/
 .idea/
 *.swp
+
+# Experiment data / sweep outputs — never commit binary parquets.
+# `experiments/data/` is a generated cache from `collect_*.py`
+# scripts; reproduce by re-running, don't push the binaries.
+experiments/data/
+*.parquet
