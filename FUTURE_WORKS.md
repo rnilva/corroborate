@@ -7,6 +7,108 @@ condition that should lift it.
 Entries are ordered by *forcing function*: the higher up, the
 sooner they're likely to bind.
 
+## v10 audit — features and design degeneracies (2026-04-28)
+
+**Status:** in-flight. This entry tracks the gap between
+poc_v10's primitive set and corroborate's. v0 acceptance (§3
+DDQN three-way verdict) does NOT require closing this gap;
+v1 acceptance (closed dialectic loop with axiom-19 reward) does.
+
+### Feature gaps (no v0 equivalent)
+
+1. **`edges.py` — claim-graph derivation from trace** (~150 LoC).
+   `extract_edges(records)` builds inter-Claim edges by `id()`
+   matching args ↔ outputs. Mechanism dataflow *derived*, not
+   declared. corroborate has TraceContext + CallRecord but the
+   trace is currently dead-end data.
+2. **`measurable_graph.py` — statistical graph** (~80 LoC).
+   Pairwise Pearson over per-step record + "explained-by-claim-
+   graph" diagnostic.
+3. **`computation_graph.py` — graph signature** (~70 LoC).
+   Hashable fingerprint for mechanism_key extension.
+4. **`causal_graph.py` — Pearl-ladder typed BridgeEdges** (~270
+   LoC). `direction × tier × evidentiary_level` with
+   ASSOCIATIONAL → INTERVENTIONAL promotion algebra.
+5. **`redundancy.py` — ΔI_redundancy primitive** (~240 LoC).
+   4-factor jaccard·concord·intervention·identity overlap
+   closing biases 3, 4, 5. The principled axiom-19 redundancy.
+6. **`hypothesis_row.py` — single canonical aggregator** (~720
+   LoC). `HypothesisComparisonRow.from_cells(h, t, b)` is THE
+   one aggregation function. Source-and-view pattern.
+7. **`register.py` — append-only G register** (~120 LoC). The
+   dialectic-loop's register of past comparisons + latest-wins
+   fact projection.
+8. **HPO-smuggle gate.** *Status revised 2026-04-28.* v10's
+   `admission.py` walks `partial.keywords` and buckets diffs as
+   `scalar` vs `callable`; pure-scalar diffs are rejected as HPO
+   smuggle. Heuristic, not principled. The principled form is
+   `computation_graph.signature(g)` — two interventions
+   producing the same structural signature ARE the same
+   mechanism; differing signatures are real interventions. Ported
+   the graph system in commit (this entry); admission as a
+   separate module is **deferred** unless graph-signature equality
+   proves insufficient. Lift conditions: a counterexample where
+   sigs match but mechanisms differ (graph-invisible branch flip,
+   for example) AND it matters for the dialectic loop.
+9. **R-formula / axiom-19 implementation** (~450 LoC of
+   smoke). corroborate has all the inputs (per-bridge ΔI,
+   ΔI_population in stats path) but no consumer that aggregates
+   them into `R(h)`.
+
+**Tally:** ~2.0–2.4 KLoC of v10 functionality not yet ported.
+
+### Design-level degeneracies
+
+- **D1: Five row types vs three.** ArmRow is intermediate
+  machinery no real path uses; aggregate.py's 772 LoC has
+  multiple half-roads vs v10's one canonical `from_cells`.
+- **D2: mechanism_key empirical vs declared.** corroborate
+  derives identity via `leaf_signature(measurements)`; v10 has
+  declared `Hypothesis.mechanism_key`. Probable degeneracy
+  when register dedup is needed.
+- **D3: Reads-set incomplete on Bridge.** `Bridge.targets ⊊
+  reads`. Closure (`targets ∪ measurable transitive deps`) not
+  assembled; ΔI_redundancy can't be wired without it.
+- **D4: No FactRow.** Bridge results land flat-keyed in
+  `RunRow.measurements`; per-fact `delta_i` /
+  `natural_strength` / `evidentiary_level` not preserved.
+  Loses redundancy-primitive substrate.
+- **D5: No graph derivation from trace.** TraceContext logs
+  but doesn't derive edges. Dead-end data.
+- **D6: No HPO-smuggle admission.** Any intervention is
+  admissible. Closed loop will need it.
+- **D7: Three-claim taxonomy might be over-fit.** Module
+  Claim / Free Claim / config bundle vs v10's "claim is a
+  function, module is a dataclass." Replay-as-Claim saga
+  suggests this has wobbled.
+- **D8: No axiom-19 computation.** Theory in PAPER_NOTES.md;
+  zero functions implement it. Reward signal of dialectic
+  loop is unimplemented.
+
+### Sequencing (post-§3-acceptance)
+
+1. **Faithful intervention + auto-induced graphs** (LANDED
+   2026-04-28). `graph.py` + `computation_graph.py` port v10's
+   generic Graph[N, M] + Edge / ComputationEdge / signature.
+   `extract_raw_edges` / `build_computation_graph(records)`
+   derive the claim graph from `trace_context()` records by
+   `id()` matching. The structural signature `signature(g)` is
+   the principled HPO-prevention primitive (subsumes admission
+   heuristic). 26 tests; faithful-intervention property
+   demonstrated (HP tweak → empty diff; slot swap → non-empty).
+2. **D3 + D4 + redundancy system** (next): FactRow lift,
+   reads-set closure, redundancy.py, register.py, compute_R_info.
+   ~600 LoC bundle.
+3. Cleanup step 1 (move rl/dqn/ out of corroborate namespace),
+   step 3 (pull cell_runner reductions to experiment), step 4
+   (lift worker-pool plumbing into sweep.py).
+4. Causal graph + measurable graph (Pearl-ladder typed
+   BridgeEdges + statistical-graph diagnostic). Unblocks PAPER
+   §3.5 in full v10 shape.
+
+**Lift when:** v0 acceptance lands (§3 verdict table renders
+on real sweep data); v1 design starts.
+
 ## Vectorised env support (n_envs > 1)
 
 **Status:** deferred — modern DRL feature, not v0 blocker.

@@ -328,24 +328,44 @@ def main() -> None:
         print(f'  {axis}: {values}')
     print(flush=True)
 
+    # Resume: skip arms whose tmp parquets already exist. Lets a
+    # killed/hung sweep restart without redoing finished work.
+    def _arm_tag(env_name: str, h_name: str, grid_point: dict[str, Any], idx: int) -> str:
+        return f'arm{idx:03d}__{env_name}__{h_name}__{_grid_tag(grid_point)}'
+
+    pre_existing: list[tuple[Path, Path]] = []
+    pending_args: list[
+        tuple[str, str, dict[str, Any], tuple[int, ...], str, float, int]
+    ] = []
+    for args in arms_args:
+        env_name, h_name, gp, *_, idx = args
+        tag = _arm_tag(env_name, h_name, gp, idx)
+        runs_p = tmp_dir / f'{tag}__runs.parquet'
+        traces_p = tmp_dir / f'{tag}__traces.parquet'
+        if runs_p.exists() and traces_p.exists():
+            pre_existing.append((runs_p, traces_p))
+        else:
+            pending_args.append(args)
+    if pre_existing:
+        print(f'resume: {len(pre_existing)} arms already complete on disk; '
+              f'{len(pending_args)} pending', flush=True)
+
     # Spawn-start so each worker gets a clean JAX state.
     ctx = mp.get_context('spawn')
 
     t0 = time.time()
-    parquet_pairs: list[tuple[Path, Path]] = []
-    # `max_tasks_per_child=2` recycles after every 2 arms — fewer
-    # than 4 (where the pool collapsed in earlier observations)
-    # but more than 1 (which paid recompile cost per arm). Saves
-    # half the recompile overhead while staying well under the
-    # JIT-cache-collapse threshold. For 36 arms (18 envs × 2 hyps
-    # × 1 cap), each worker sees ~9 batches of 2 arms each.
+    parquet_pairs: list[tuple[Path, Path]] = list(pre_existing)
+    # No `max_tasks_per_child` recycle — observed deadlock on the
+    # transition: a recycled worker's spawn races with the parent's
+    # future-completion bookkeeping under spawn-context. Accept JIT
+    # cache growth instead; with capacity=10_000 the per-arm memory
+    # cost is small enough that 18-env compilations fit per worker.
     with ProcessPoolExecutor(
         max_workers=n_workers, mp_context=ctx,
-        max_tasks_per_child=2,
     ) as pool:
         future_to_arm = {
             pool.submit(_run_arm_worker, args): args[:3]
-            for args in arms_args
+            for args in pending_args
         }
         for i, future in enumerate(as_completed(future_to_arm), start=1):
             env_name, h_name, grid_point = future_to_arm[future]
@@ -353,7 +373,7 @@ def main() -> None:
                 runs_path, traces_path = future.result()
             except Exception as e:
                 print(
-                    f'[{i:>3}/{n_arms}] FAILED  {env_name:<22} '
+                    f'[{i:>3}/{len(pending_args)}] FAILED  {env_name:<22} '
                     f'h={h_name:<12} {_grid_tag(grid_point):<40} '
                     f'{type(e).__name__}: {e}',
                     flush=True,
@@ -362,7 +382,7 @@ def main() -> None:
             parquet_pairs.append((runs_path, traces_path))
             elapsed = time.time() - t0
             print(
-                f'[{i:>3}/{n_arms}] done    {env_name:<22} '
+                f'[{i:>3}/{len(pending_args)}] done    {env_name:<22} '
                 f'h={h_name:<12} {_grid_tag(grid_point):<40} '
                 f'elapsed={elapsed:>6.0f}s',
                 flush=True,
