@@ -405,3 +405,66 @@ def test_orient_ambiguous_triple_skipped() -> None:
     assert ('y', 'z') not in oriented.directed_edges
     # Tracked as ambiguous triple.
     assert ('x', 'z', 'y') in oriented.ambiguous_triples
+
+
+# ============ §4 acceptance: integration smoke ============
+
+def test_pc_dqn_smoke_holds_on_migrated_corpus() -> None:
+    """§4 acceptance on the existing 17-env / 1020-row corpus:
+    PC + JCI on env_name finds NO edge between arm_ddqn and any
+    outcome variable. Reproduces PAPER §4.3's structural finding.
+
+    Skipped if the corpus parquet isn't on disk — the framework
+    tests don't require it, only the integration smoke does."""
+    from pathlib import Path
+
+    import polars as pl
+
+    runs_path = (
+        Path(__file__).parent.parent
+        / 'experiments' / 'data' / 'ddqn' / 'runs.parquet'
+    )
+    if not runs_path.exists():
+        import pytest
+        pytest.skip(f'{runs_path} not on disk')
+
+    from corroborate.causal_discovery import discover_adjacency
+
+    df = pl.read_parquet(runs_path)
+    df = df.with_columns(
+        (pl.col('intervention_name') == 'ddqn')
+        .cast(pl.Int64).alias('arm_ddqn'),
+    )
+    variables = [
+        'arm_ddqn',
+        'mechanism.jensen_gap',
+        'outcome.late_window_mean',
+        'outcome.eval_final_mean',
+        'outcome.eval_best_burst_mean',
+        'outcome.eval_best_burst_step',
+    ]
+    df = df.drop_nulls(subset=variables)
+
+    adj = discover_adjacency(
+        df, variables=variables,
+        alpha=0.05, max_conditioning=1,
+        stratify_by='env_name',
+    )
+
+    # The §4 finding: NO edge between arm_ddqn and any outcome.
+    outcome_vars = {v for v in variables if v.startswith('outcome.')}
+    arm_outcome_edges = [
+        e for e in adj.edges
+        if 'arm_ddqn' in e and any(v in e for v in outcome_vars)
+    ]
+    assert not arm_outcome_edges, (
+        f'§4 acceptance FAILED — surviving edges from arm_ddqn '
+        f'to outcomes: {arm_outcome_edges}'
+    )
+
+    # Sanity: the mechanism intervention edge SHOULD survive
+    # (DDQN's slot swap reduces the Jensen gap on a subset of envs).
+    assert frozenset({'arm_ddqn', 'mechanism.jensen_gap'}) in adj.edges, (
+        'arm_ddqn → mechanism.jensen_gap should survive (DDQN '
+        'demonstrably reduces the gap on a subset of envs)'
+    )
