@@ -17,15 +17,19 @@ Module layout:
 Re-exports below let consumers `from corroborate.rl.dqn.claims
 import mlp_q` rather than the longer module-qualified path."""
 from corroborate.rl.dqn.claims.action_select import (
+    EpsilonGreedy,
     epsilon_greedy,
     linear_epsilon,
 )
 from corroborate.rl.dqn.claims.bootstrap import (
-    ddqn_bootstrap,
-    vanilla_bootstrap,
+    bootstrap,
+    double_greedify,
+    full_gradient,
+    max_greedify,
+    semi_gradient,
 )
 from corroborate.rl.dqn.claims.loss import squared_error
-from corroborate.rl.dqn.claims.q_network import init_mlp, mlp_q
+from corroborate.rl.dqn.claims.q_network import MLP, mlp_q
 from corroborate.rl.dqn.claims.replay import (
     buffer_add,
     buffer_init,
@@ -34,15 +38,19 @@ from corroborate.rl.dqn.claims.replay import (
 from corroborate.rl.dqn.claims.target_sync import periodic_copy
 
 __all__ = [
+    'EpsilonGreedy',
+    'MLP',
+    'bootstrap',
     'buffer_add',
     'buffer_init',
     'buffer_sample',
-    'ddqn_bootstrap',
+    'double_greedify',
     'epsilon_greedy',
-    'init_mlp',
+    'full_gradient',
     'linear_epsilon',
+    'max_greedify',
     'mlp_q',
     'periodic_copy',
+    'semi_gradient',
     'squared_error',
-    'vanilla_bootstrap',
 ]

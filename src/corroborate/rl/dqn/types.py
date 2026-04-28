@@ -1,66 +1,135 @@
-"""Slot Protocols — typed contracts for each `dqn_step` slot.
+"""Protocols — typed contracts for each component of `dqn`.
 
-Each slot in `theory.dqn_step` is filled by a callable conforming
-to one of these Protocols. The Protocol IS the slot's interface:
-an alternative implementation must structurally match the same
-signature. DDQN's intervention is `{'bootstrap': ddqn_bootstrap}`
-where `ddqn_bootstrap` satisfies `Bootstrap`.
+Each component in `dqn` is filled by a callable conforming to one
+of these Protocols. The Protocol IS the component's interface: an
+alternative implementation must structurally match the same
+signature. DDQN's intervention is `{'greedification':
+double_greedify}` (sub-Protocol of Bootstrap's composition).
 
-Discipline-wise, this turns the "default-arg Callable" pattern
-into a typed-contract pattern: pyright catches a mismatched
-alternative at the call site, not at runtime."""
+Two flavours of component:
+
+- **Module functor** — frozen-dataclass with paired `init` +
+  `__call__` (e.g. `QFunction`). The dataclass fields are the
+  construction-time HPs; calling the instance is the forward pass.
+- **Stateless callable** — a `@claim` function with no init phase
+  (e.g. `Bootstrap`, `LossFn`, `EpsilonSchedule`). The call IS the
+  whole component.
+
+The walker treats both uniformly: it recurses into a Claim's
+function signature OR a frozen dataclass's fields, surfacing each
+HP leaf."""
 from __future__ import annotations
 
 from typing import Protocol
 
 import jax
 
+# Re-exported for back-compat. Concrete Q-function implementations
+# define their own `Params` shapes; dqn threads the opaque pytree.
+from corroborate.rl.dqn.claims.q_network import Params
 
-type Params = dict[str, jax.Array]
 
+class QFunction(Protocol):
+    """Q-function Module: paired `init` + `__call__`.
 
-class QNetwork(Protocol):
-    """Q-value forward pass: parameter pytree + observation →
-    Q-values. Single-obs and batched-obs both supported."""
+    `init(rng, obs_dim, n_actions) -> params` allocates the
+    parameter pytree; `__call__(params, obs) -> q_values` is the
+    forward pass. Implementations carry their construction-time
+    HPs as frozen-dataclass fields (`MLP.hidden`,
+    `SpectralNormMLP.hidden`, etc.) so HPs travel with the
+    function — dqn doesn't see them.
+
+    `Params` is opaque PyTree from dqn's perspective. Tabular,
+    linear, and MLP Q-functions each define their own internal
+    layout; the framework treats it as `dict[str, jax.Array]` for
+    convenience but doesn't constrain the pytree shape further."""
+    def init(
+        self,
+        rng_key: jax.Array,
+        obs_dim: int,
+        n_actions: int,
+    ) -> Params: ...
     def __call__(self, params: Params, obs: jax.Array) -> jax.Array: ...
 
 
-class ActionSelect(Protocol):
-    """Rollout action selection (e.g. ε-greedy). Takes Q-values
-    + RNG + (technique-specific kwargs); returns action index.
+# Historical alias — kept so existing imports don't break while
+# call sites migrate. New code should import `QFunction` directly.
+QNetwork = QFunction
 
-    `epsilon` is `jax.Array` (not `float`) because schedules return
-    a traced array under `jax.lax.scan`; coercing to float there is
-    a ConcretizationTypeError."""
+
+class ActionSelect(Protocol):
+    """Rollout action-selection — e.g. `EpsilonGreedy`. Takes
+    Q-values + RNG + the global step + n_actions; returns action
+    index.
+
+    `step` (not `epsilon` directly) because Module-style action
+    selection owns its schedule internally — the slot's interface
+    is what the rollout-loop has on hand at call time. ε-schedule
+    swaps live as fields on the action-select Module
+    (e.g. `EpsilonGreedy.schedule`)."""
     def __call__(
         self,
         q_values: jax.Array,
         rng_key: jax.Array,
-        epsilon: jax.Array,
+        step: jax.Array,
         n_actions: int,
     ) -> jax.Array: ...
 
 
 class EpsilonSchedule(Protocol):
     """Schedule mapping global step → ε. Linear / exponential /
-    constant implementations all conform to this shape."""
+    constant implementations all conform to this shape. Lives as
+    a field on `ActionSelect` Modules (e.g. `EpsilonGreedy.schedule`),
+    not as a top-level slot of `dqn`."""
     def __call__(self, step: jax.Array) -> jax.Array: ...
 
 
-class Bootstrap(Protocol):
-    """Bellman target. **The slot DDQN swaps**: vanilla and DDQN
-    differ only in whether the online network or target network
-    selects the action used in the bootstrap target.
+class Greedification(Protocol):
+    """Compute v(s') from Q. The DDQN-vs-vanilla axis lives here.
 
-    Keyword-only signature so the swap is a clean call-site drop-
-    in (positional args could let an alternative silently re-order
-    online_params and target_params)."""
+    - `max_greedify` (vanilla): max_a Q_target(s', a)
+    - `double_greedify` (DDQN): Q_target(s', argmax_a Q_online(s', a))
+
+    Pure value computation — no reward, no gamma, no done. The
+    `bootstrap` claim composes greedify+gradient_rule into the
+    Bellman target."""
     def __call__(
         self,
         *,
         online_params: Params,
         target_params: Params,
-        q_network: QNetwork,
+        q_network: 'QFunction',
+        next_obs: jax.Array,
+    ) -> jax.Array: ...
+
+
+class GradientRule(Protocol):
+    """Apply a gradient-flow policy to the bootstrap target. The
+    semi-gradient-vs-full-gradient axis lives here.
+
+    - `semi_gradient` (Mnih 2015 default): `stop_gradient(target)`.
+    - `full_gradient`: identity — gradient flows through.
+
+    Operates on the assembled target `r + γ·(1−done)·v(s')`,
+    not on `v(s')` alone, so the same rule covers both
+    semi-gradient TD and full-gradient TD."""
+    def __call__(self, target: jax.Array) -> jax.Array: ...
+
+
+class Bootstrap(Protocol):
+    """Bellman target. The default `bootstrap` composition is
+    `r + γ · (1−done) · gradient_rule(greedification(...))`.
+
+    Keyword-only signature so the swap is a clean call-site drop-
+    in. The DEFAULT swap-axis for DDQN-vs-vanilla is now
+    `greedification` (sub-Protocol); swapping the entire
+    `Bootstrap` is the wholesale alternative."""
+    def __call__(
+        self,
+        *,
+        online_params: Params,
+        target_params: Params,
+        q_network: 'QFunction',
         next_obs: jax.Array,
         reward: jax.Array,
         done: jax.Array,

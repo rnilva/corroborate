@@ -55,48 +55,131 @@ import math
 from collections.abc import Callable, Mapping
 
 from corroborate.bridge import Bridge, BridgeResult
-from corroborate.claim import ClaimRecord
+from corroborate.claim import (
+    Claim,
+    ClaimBase,
+    FnClaim,
+    get_fn_invariants,
+    _set_fn_invariants,  # pyright: ignore[reportPrivateUsage]
+)
 from corroborate.measurable import Measurable
 from corroborate.verdict import Verdict
 
 
+def attach_invariant(
+    bridge: Bridge[Mapping[str, object]],
+    *,
+    to: Claim[..., object],
+) -> None:
+    """Attach a tautological Bridge to a claim so
+    composition-discovery surfaces it when the claim is in a
+    theory tree.
+
+    Storage location depends on claim shape:
+
+    - Free-function claim (`FnClaim`): keyed by underlying `fn`
+      in the `_FN_INVARIANTS` side-table. All wrappers of the
+      same fn share invariants.
+    - Module claim (`ClaimBase` subclass instance): mutates
+      `type(to).invariants` ClassVar — all instances of the
+      class see the bridge."""
+    if isinstance(to, FnClaim):
+        existing = get_fn_invariants(to.fn)
+        _set_fn_invariants(to.fn, existing + (bridge,))
+        return
+    if isinstance(to, ClaimBase):
+        cls = type(to)
+        existing_cls = cls.invariants
+        cls.invariants = existing_cls + (bridge,)
+        return
+    raise TypeError(
+        f'attach_invariant expects FnClaim or ClaimBase instance; '
+        f'got {type(to).__name__}',
+    )
+
+
+def detach_invariant(
+    bridge: Bridge[Mapping[str, object]],
+    *,
+    from_claim: Claim[..., object],
+) -> None:
+    """Reverse of `attach_invariant`. Removes `bridge` from
+    `from_claim`'s invariant set (by identity). Used by tests +
+    teardown code that mutate global state during an experiment.
+
+    No-op if the bridge isn't attached."""
+    if isinstance(from_claim, FnClaim):
+        existing = get_fn_invariants(from_claim.fn)
+        _set_fn_invariants(
+            from_claim.fn,
+            tuple(b for b in existing if b is not bridge),
+        )
+        return
+    if isinstance(from_claim, ClaimBase):
+        cls = type(from_claim)
+        cls.invariants = tuple(b for b in cls.invariants if b is not bridge)
+        return
+    raise TypeError(
+        f'detach_invariant expects FnClaim or ClaimBase instance; '
+        f'got {type(from_claim).__name__}',
+    )
+
+
+def _build_tagged_bridge[R: Mapping[str, object]](
+    fn: Callable[[R], BridgeResult],
+    *,
+    of: Claim[..., object],
+    targets: tuple[str, ...],
+    name: str | None = None,
+) -> Bridge[R]:
+    """Internal helper: build a tautological-tagged Bridge from an
+    (R) → BridgeResult function. Used by `invariant` (build+attach)
+    and `at_most` (build only)."""
+    of_name = of.name
+    resolved_name = name if name is not None else f'invariant_{fn.__name__}_of_{of_name}'
+
+    def wrapper(record: R) -> BridgeResult:
+        result = fn(record)
+        tagged_stats: dict[str, float | int | bool | str] = {
+            **result.stats,
+            'kind': 'tautological',
+            'of_claim': of_name,
+        }
+        return BridgeResult(
+            verdict=result.verdict,
+            reason=result.reason,
+            stats=tagged_stats,
+            name=result.name if result.name else resolved_name,
+            targets=result.targets if result.targets else targets,
+        )
+
+    return Bridge(fn=wrapper, name=resolved_name, targets=targets)
+
+
 def invariant[R: Mapping[str, object]](
     *,
-    of: ClaimRecord,
+    of: Claim[..., object],
     targets: tuple[str, ...],
     name: str | None = None,
 ) -> Callable[[Callable[[R], BridgeResult]], Bridge[R]]:
-    """Decorator factory: wraps an `(R) -> BridgeResult` function
-    in a `Bridge[R]` whose results carry `stats['kind'] =
-    'tautological'` and `stats['of_claim'] = of.name`.
+    """Decorator factory: build a tautological-tagged Bridge AND
+    attach it to the claim's `invariants` ClassVar so
+    composition-discovery surfaces it.
 
-    Tag injection is automatic — the inner function does not need
-    to set `kind` or `of_claim` itself. Existing `stats` on the
-    returned BridgeResult are preserved; the invariant tags
-    overlay/extend.
-
-    For theorem-condition invariants composed from gap
-    measurables, prefer the `at_most(...)` factory — this raw
-    decorator is the lower-level primitive."""
+    Use this when defining substrate-level invariants the framework
+    should auto-fire whenever the corresponding claim is in a
+    theory tree. For one-off invariants meant to live on a single
+    Hypothesis (without affecting the claim's class), use
+    `at_most(...)` (which constructs without attaching) and pass
+    explicitly via `Hypothesis.bridges`."""
     def decorator(fn: Callable[[R], BridgeResult]) -> Bridge[R]:
-        resolved_name = name if name is not None else f'invariant_{fn.__name__}_of_{of.name}'
-
-        def wrapper(record: R) -> BridgeResult:
-            result = fn(record)
-            tagged_stats: dict[str, float | int | bool | str] = {
-                **result.stats,
-                'kind': 'tautological',
-                'of_claim': of.name,
-            }
-            return BridgeResult(
-                verdict=result.verdict,
-                reason=result.reason,
-                stats=tagged_stats,
-                name=result.name if result.name else resolved_name,
-                targets=result.targets if result.targets else targets,
-            )
-
-        return Bridge(fn=wrapper, name=resolved_name, targets=targets)
+        bridge = _build_tagged_bridge(fn, of=of, targets=targets, name=name)
+        # `attach_invariant` is typed at `Bridge[Mapping[str, object]]`;
+        # `bridge` is `Bridge[R]` where R: Mapping[str, object]. The
+        # variance is honest at runtime (record types vary across
+        # invariants) but pyright needs the upper-bound cast.
+        attach_invariant(bridge, to=of)  # pyright: ignore[reportArgumentType]
+        return bridge
     return decorator
 
 
@@ -106,7 +189,7 @@ def at_most[R: Mapping[str, object]](
     gap: Measurable[R, float],
     threshold: float,
     *,
-    of_claim: ClaimRecord,
+    of_claim: Claim[..., object],
     name: str | None = None,
 ) -> Bridge[R]:
     """Wrap a theorem-gap `Measurable[R, float]` in a tautological
@@ -147,7 +230,6 @@ def at_most[R: Mapping[str, object]](
     corpus-graph derivation."""
     bridge_name = name if name is not None else f'at_most[{gap.name}<={threshold:g}]'
 
-    @invariant(of=of_claim, targets=gap.reads, name=bridge_name)
     def fn(record: R) -> BridgeResult:
         val = gap(record)
         if math.isnan(val):
@@ -177,4 +259,9 @@ def at_most[R: Mapping[str, object]](
             name=bridge_name,
             targets=gap.reads,
         )
-    return fn
+    # Constructor only — does NOT auto-attach to of_claim.invariants.
+    # Substrate authors who want auto-discovery via the composition
+    # tree should pass the returned Bridge to `attach_invariant(..., to=of_claim)`.
+    return _build_tagged_bridge(
+        fn, of=of_claim, targets=gap.reads, name=bridge_name,
+    )

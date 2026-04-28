@@ -27,9 +27,11 @@ import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
+from functools import partial
+
 from corroborate.hypothesis import Hypothesis
 from corroborate.persistence import read_runrows, write_runrows
-from corroborate.rl.dqn.claims.bootstrap import ddqn_bootstrap
+from corroborate.rl.dqn.claims.bootstrap import bootstrap, double_greedify
 from corroborate.rl.dqn.invariants import DQNTrajectoryRecord
 from corroborate.schema import RunRow
 
@@ -49,21 +51,49 @@ SEEDS: tuple[int, ...] = tuple(range(10))
 TOTAL_STEPS = 5000  # short-but-meaningful for v0 stats validation
 
 
+# Shared HP bundle — author commitments. HPs spread as flat kwargs
+# into `hypothesis.intervention` so `mechanism_key` distinguishes
+# (vanilla, total_steps=5000) from (ddqn, total_steps=5000) AND
+# from any future re-run with a different HP setting.
+_HPARAMS: dict[str, object] = {
+    'total_steps': TOTAL_STEPS,
+    'eval_every': TOTAL_STEPS // 10,
+    'n_episodes': 5,
+    'gamma': 0.99,
+    'batch_size': 32,
+    'buffer_capacity': 2000,
+    'warmup_steps': 100,
+    'sync_period': 100,
+}
+
+
 def _make_hypothesis(name: str) -> Hypothesis[DQNTrajectoryRecord]:
     """Reconstruct hypothesis from a string id. Workers can't
-    pickle closures cleanly across spawn-mode processes, so
-    each worker rebuilds the hypothesis from a stable name."""
+    pickle closures cleanly across spawn-mode processes, so each
+    worker rebuilds the hypothesis from a stable name.
+
+    HPs live as flat kwargs in `intervention` (matching `dqn`'s
+    signature). `mechanism_key` canonicalises each (kwarg, value)
+    pair separately so two arms differing only in `gamma` get
+    distinct mechanism_keys. The `bootstrap` slot swap and
+    `predicted_direction` are the only fields that differ between
+    vanilla and DDQN at the structural level."""
     if name == 'vanilla_dqn':
         return Hypothesis(
             name='vanilla_dqn',
-            intervention={},
+            intervention={**_HPARAMS},
             bridges=(),
             predicted_direction=None,
         )
     if name == 'ddqn':
         return Hypothesis(
             name='ddqn',
-            intervention={'bootstrap': ddqn_bootstrap},
+            intervention={
+                **_HPARAMS,
+                'bootstrap': partial(
+                    bootstrap, greedification=double_greedify,
+                ),
+            },
             bridges=(),
             predicted_direction='a_gt_b',
         )
@@ -76,7 +106,7 @@ HYPOTHESIS_NAMES = ('vanilla_dqn', 'ddqn')
 # ============ Worker: one (env, hypothesis) arm ============
 
 def _run_arm_worker(
-    args: tuple[str, str, tuple[int, ...], int, str, float],
+    args: tuple[str, str, tuple[int, ...], str, float],
 ) -> Path:
     """Subprocess worker. Runs `run_dqn_arm` for one
     (env, hypothesis) pair and writes the resulting RunRows to a
@@ -87,7 +117,7 @@ def _run_arm_worker(
     starves sibling workers. With `XLA_PYTHON_CLIENT_PREALLOCATE=
     false` plus a per-worker `XLA_PYTHON_CLIENT_MEM_FRACTION`
     cap, N workers can share one device cleanly."""
-    env_name, hypothesis_name, seeds, total_steps, out_dir_str, mem_fraction = args
+    env_name, hypothesis_name, seeds, out_dir_str, mem_fraction = args
 
     # Must set before any jax import in this process.
     import os
@@ -100,20 +130,13 @@ def _run_arm_worker(
     out_path = out_dir / f'{env_name}__{hypothesis_name}.parquet'
 
     import optax
-    from corroborate.rl.cell_runner import EvalConfig, run_dqn_arm
+    from corroborate.rl.cell_runner import run_dqn_arm
     from corroborate.rl.env_catalogue import get
 
     h = _make_hypothesis(hypothesis_name)
-    eval_config = EvalConfig.n_evals(
-        total_steps=total_steps, n_evals=10, n_episodes=5,
-    )
     rows = run_dqn_arm(
         get(env_name), seeds, hypothesis=h,
-        total_steps=total_steps,
         optimizer=optax.adam(1e-3),
-        eval_config=eval_config,
-        warmup_steps=100, sync_period=100,
-        buffer_capacity=2000, batch_size=32,
     )
     write_runrows(rows, out_path)
     return out_path
@@ -135,8 +158,8 @@ def main() -> None:
     n_workers = min(4, n_arms, mp.cpu_count())
     mem_fraction = 0.9 / n_workers
 
-    arms_args: list[tuple[str, str, tuple[int, ...], int, str, float]] = [
-        (env_name, h_name, SEEDS, TOTAL_STEPS, str(out_dir), mem_fraction)
+    arms_args: list[tuple[str, str, tuple[int, ...], str, float]] = [
+        (env_name, h_name, SEEDS, str(out_dir), mem_fraction)
         for env_name in ENV_NAMES
         for h_name in HYPOTHESIS_NAMES
     ]

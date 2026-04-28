@@ -1,32 +1,41 @@
 """DQN — Mnih 2015 Algorithm 1 in paper-prose form.
 
-`dqn_step` reads top-to-bottom: rollout → train → sync → record.
-Each phase is a typed slot composition; each slot is a Protocol
-contract from `types.py`; each slot's default implementation is
-under `claims/`. JAX primitives (`jnp.dot`, `jnp.argmax`, etc.)
-are NOT in this file — they live inside the `@claim`'d
-implementations where they're a replaceable unit.
+Two claims live in this file:
 
-Intervention: `partial(dqn_step, bootstrap=ddqn_bootstrap)` swaps
-the bootstrap slot wholesale. Hypothesis.intervention's mapping
-is exactly the kwargs `dqn_step` accepts."""
+- `dqn_step` — one training step (rollout → train → sync →
+  record). Each phase is a typed slot composition.
+- `dqn` — the OUTERMOST claim. The full training+eval run as one
+  composition: init_state → nested scan over training+eval bursts
+  → assembled record. Hypothesis intervention names `dqn`'s
+  kwargs; the cell runner is a thin harness that vmaps `dqn` over
+  seeds.
+
+Exogenous kwargs (env, env_params, obs/action dims, eval episode
+cap, state_hash, rng_key) carry `Annotated[T, Exogenous]`
+markers — these are what we generalize *over*, not intervene on.
+Everything else is HP and interventionable by default; authors
+who want to hide an HP from intervention bake it in via
+`functools.partial`."""
 from __future__ import annotations
+
+from functools import partial
+from typing import Annotated
 
 import jax
 import jax.numpy as jnp
 import optax
 
 from corroborate.claim import claim
+from corroborate.loop import scan_loop
 from corroborate.rl.dqn.claims import (
+    bootstrap as default_bootstrap,
     epsilon_greedy,
-    init_mlp,
-    linear_epsilon,
     mlp_q,
     periodic_copy,
     squared_error,
-    vanilla_bootstrap,
 )
 from corroborate.rl.dqn.claims.replay import buffer_init
+from corroborate.rl.dqn.eval import EvalBurstOut, eval_burst
 from corroborate.rl.dqn.phases import (
     RolloutOut,
     TrainOut,
@@ -38,13 +47,13 @@ from corroborate.rl.dqn.state import DQNState
 from corroborate.rl.dqn.types import (
     ActionSelect,
     Bootstrap,
-    EpsilonSchedule,
     LossFn,
-    QNetwork,
+    QFunction,
     StepRecord,
     TargetSync,
 )
 from corroborate.rl.env_catalogue import GymnaxEnvLike, StateHash
+from corroborate.signature import Exogenous
 
 
 def default_state_hash(obs: jax.Array) -> jax.Array:
@@ -65,18 +74,29 @@ def init_state_from_key(
     obs_dim: int,
     n_actions: int,
     rng_key: jax.Array,
-    hidden: tuple[int, ...] = (64, 64),
-    buffer_capacity: int = 10_000,
     optimizer: optax.GradientTransformation,
+    q_network: QFunction = mlp_q,
+    buffer_capacity: int = 10_000,
 ) -> DQNState:
     """Build initial DQNState from a `jax.random.PRNGKey` directly.
+
+    `q_network` is the Q-function functor — it owns its
+    architecture HPs (e.g. `MLP.hidden`) AND knows how to allocate
+    its own params via `q_network.init(rng, obs_dim, n_actions)`.
+    The Q-function's parameterisation is opaque to dqn (`Params` is
+    a PyTree from this layer's perspective).
+
+    `buffer_capacity` is the replay-buffer size — a flat HP on the
+    `dqn` outermost claim. Architecture HPs travel with the
+    Q-function Module; engineering knobs like buffer_capacity are
+    flat top-level kwargs.
 
     Vmap-friendly: under `jax.vmap` over a batched key array, this
     function produces a batched DQNState (each leaf has a leading
     seed-axis). `init_state` is the seed-int convenience wrapper
     for non-vmapped callers."""
     init_key, env_key, run_key = jax.random.split(rng_key, 3)
-    online = init_mlp(init_key, obs_dim, n_actions, hidden=hidden)
+    online = q_network.init(init_key, obs_dim, n_actions)
     opt_state = optimizer.init(online)
     obs, env_state = env.reset(env_key, env_params)
     # Flatten env-side multi-dim obs (e.g. Catch's (5, 5) grid,
@@ -112,9 +132,9 @@ def init_state(
     obs_dim: int,
     n_actions: int,
     seed: int,
-    hidden: tuple[int, ...] = (64, 64),
-    buffer_capacity: int = 10_000,
     optimizer: optax.GradientTransformation,
+    q_network: QFunction = mlp_q,
+    buffer_capacity: int = 10_000,
 ) -> DQNState:
     """Build initial DQNState for a single env instance.
 
@@ -128,8 +148,9 @@ def init_state(
         env=env, env_params=env_params,
         obs_dim=obs_dim, n_actions=n_actions,
         rng_key=jax.random.PRNGKey(seed),
-        hidden=hidden, buffer_capacity=buffer_capacity,
         optimizer=optimizer,
+        q_network=q_network,
+        buffer_capacity=buffer_capacity,
     )
 
 
@@ -144,16 +165,16 @@ def dqn_step(
     n_actions: int,
     optimizer: optax.GradientTransformation,
     state_hash: StateHash = default_state_hash,
+    # HPs (paper-honest where present in math; engineering otherwise)
     gamma: float = 0.99,
     batch_size: int = 64,
     buffer_capacity: int = 10_000,
     warmup_steps: int = 1_000,
     sync_period: int = 100,
-    # Slots (each conforms to a Protocol in `types.py`)
-    q_network: QNetwork = mlp_q,
+    # Slot Claims (each satisfies a Protocol in `types.py`)
+    q_network: QFunction = mlp_q,
     action_select: ActionSelect = epsilon_greedy,
-    eps_schedule: EpsilonSchedule = linear_epsilon,
-    bootstrap: Bootstrap = vanilla_bootstrap,
+    bootstrap: Bootstrap = default_bootstrap,
     loss_fn: LossFn = squared_error,
     target_sync: TargetSync = periodic_copy,
 ) -> tuple[DQNState, StepRecord]:
@@ -168,10 +189,19 @@ def dqn_step(
        step the online network.
     3. Sync: update target network per the `target_sync` slot.
 
-    DDQN intervention: `partial(dqn_step, bootstrap=ddqn_bootstrap)`.
-    The slot-Protocol contract ensures the alternative has a
-    matching signature; pyright catches mismatches at the swap
-    site."""
+    HPs flow through the slot Protocols at call time when paper-
+    honest (e.g. `gamma` is a Bellman-equation parameter, so it's
+    in `Bootstrap`'s signature; `sync_period` is in `TargetSync`'s).
+    Engineering HPs (`batch_size`, `buffer_capacity`,
+    `warmup_steps`) are flat kwargs on this claim. Construction-
+    time / architecture HPs (e.g. `MLP.hidden`,
+    `EpsilonGreedy.schedule`) live on the slot Module that owns
+    them, NOT here.
+
+    DDQN intervention: `partial(dqn_step, bootstrap=partial(
+    bootstrap, greedification=double_greedify))`. Schedule swap:
+    `partial(dqn_step, action_select=replace(EpsilonGreedy(),
+    schedule=other_schedule))`."""
     del idx  # `step` is on `state`; idx is the loop's bookkeeping arg
 
     # --- Rollout: act in env, store transition --------------------
@@ -181,7 +211,6 @@ def dqn_step(
         capacity=buffer_capacity,
         q_network=q_network,
         action_select=action_select,
-        eps_schedule=eps_schedule,
         state_hash=state_hash,
     )
 
@@ -195,7 +224,9 @@ def dqn_step(
     )
 
     # --- Sync: target network update -----------------------------
-    state = sync_phase(state, target_sync=target_sync, sync_period=sync_period)
+    state = sync_phase(
+        state, target_sync=target_sync, sync_period=sync_period,
+    )
 
     # --- Step counter advance (do this last so phases see the
     #     pre-advance step for warmup / sync gating) -------------
@@ -221,7 +252,6 @@ def _build_record(
     fold the appropriate axes at consumption time; the record
     deliberately stores raw values, not pre-reductions."""
     return {
-        'epsilon': rollout.epsilon,
         'reward': rollout.reward,
         'done': rollout.done,
         'max_q': rollout.max_q,
@@ -235,3 +265,149 @@ def _build_record(
         'target_q_values': train.target_q_values,
         'sample_indices': train.sample_indices,
     }
+
+
+# ============ dqn — outermost claim (full run) ============
+
+@claim
+def dqn(
+    *,
+    # Exogenous: per-cell conditions; we generalize *over* these.
+    rng_key: Annotated[jax.Array, Exogenous],
+    env: Annotated[GymnaxEnvLike, Exogenous],
+    env_params: Annotated[object, Exogenous],
+    obs_dim: Annotated[int, Exogenous],
+    n_actions: Annotated[int, Exogenous],
+    eval_episode_cap: Annotated[int, Exogenous] = 500,
+    state_hash: Annotated[StateHash, Exogenous] = default_state_hash,
+    # HPs (paper-honest where part of the math; engineering otherwise)
+    optimizer: optax.GradientTransformation = optax.adam(1e-3),
+    gamma: float = 0.99,
+    batch_size: int = 64,
+    buffer_capacity: int = 10_000,
+    warmup_steps: int = 1_000,
+    sync_period: int = 100,
+    total_steps: int = 50_000,
+    eval_every: int = 5_000,
+    n_episodes: int = 20,
+    # Slot Claims (each satisfies a Protocol in `types.py`)
+    q_network: QFunction = mlp_q,
+    action_select: ActionSelect = epsilon_greedy,
+    bootstrap: Bootstrap = default_bootstrap,
+    loss_fn: LossFn = squared_error,
+    target_sync: TargetSync = periodic_copy,
+) -> dict[str, jax.Array]:
+    """Full DQN training+eval run as one claim.
+
+    Composition reads top-to-bottom:
+
+    1. Split `rng_key` into init / run keys.
+    2. `init_state_from_key(...)` — allocate params, opt state,
+       replay buffer, env state.
+    3. Nested scan: outer `scan_loop` over `total_steps //
+       eval_every` super-steps; each super-step body runs an
+       inner `scan_loop` over `eval_every` training steps then
+       one `eval_burst`.
+    4. Assemble the merged record dict — training fields shape
+       `(total_steps, ...)` + eval fields shape `(n_bursts, K,
+       ...)` + `eval_step_index` shape `(n_bursts,)`.
+
+    HPs are flat top-level kwargs (gamma, batch_size, ...) —
+    intervention names them directly. Architecture HPs (e.g.
+    `MLP.hidden`) live on the slot Module that owns them, NOT
+    here. Construction-time bake-ins (`partial(linear_epsilon,
+    anneal_steps=...)`) flow through `_canonical_str`'s
+    partial-canonicalisation cleanly, so substrate authors who
+    bake-in are honest about WHAT was set.
+
+    Eval IS part of training; bridges read whichever record keys
+    they target without train/eval distinction.
+
+    Hypothesis intervention names this claim's kwargs directly:
+    `intervention={'bootstrap': partial(bootstrap, greedification=
+    double_greedify), 'gamma': 0.95}` is just
+    `partial(dqn, **intervention)`. No broadcast, no flatten, no
+    validation — pyright catches signature mismatches at the swap
+    site; `Annotated[..., Exogenous]` markers tell the framework
+    which kwargs are NOT intervention surface.
+
+    Raises `ValueError` if `total_steps` isn't a multiple of
+    `eval_every`."""
+    if total_steps % eval_every != 0:
+        raise ValueError(
+            f'total_steps ({total_steps}) must be a multiple of '
+            f'eval_every ({eval_every}); got remainder '
+            f'{total_steps % eval_every}',
+        )
+    if total_steps < eval_every:
+        raise ValueError(
+            f'total_steps ({total_steps}) must be ≥ eval_every '
+            f'({eval_every}) — at least one super-step required.',
+        )
+
+    init_key, run_key = jax.random.split(rng_key, 2)
+    state = init_state_from_key(
+        env=env, env_params=env_params,
+        obs_dim=obs_dim, n_actions=n_actions,
+        rng_key=init_key, optimizer=optimizer,
+        q_network=q_network,
+        buffer_capacity=buffer_capacity,
+    )
+
+    step_fn = partial(
+        dqn_step,
+        env=env, env_params=env_params, n_actions=n_actions,
+        optimizer=optimizer, state_hash=state_hash,
+        gamma=gamma, batch_size=batch_size,
+        buffer_capacity=buffer_capacity, warmup_steps=warmup_steps,
+        sync_period=sync_period,
+        q_network=q_network, action_select=action_select,
+        bootstrap=bootstrap,
+        loss_fn=loss_fn, target_sync=target_sync,
+    )
+
+    n_super_steps = total_steps // eval_every
+
+    def super_step(
+        s: DQNState, super_idx: jax.Array,
+    ) -> tuple[DQNState, tuple[StepRecord, EvalBurstOut]]:
+        # Inner scan: `eval_every` training steps. dqn_step
+        # discards the index (its step counter lives on `state`),
+        # so relative indices from scan_loop are fine.
+        s, train_chunk = scan_loop(step_fn, s, eval_every)
+        burst = eval_burst(
+            online_params=s.online_params,
+            env=env, env_params=env_params,
+            rng_key=jax.random.fold_in(run_key, super_idx),
+            q_network=q_network,
+            gamma=gamma,
+            episode_cap=eval_episode_cap,
+            n_episodes=n_episodes,
+        )
+        return s, (train_chunk, burst)
+
+    _final_state, (train_chunks, eval_bursts) = scan_loop(
+        super_step, state, n_super_steps,
+    )
+
+    # train_chunks: pytree where each leaf has shape
+    #   (n_super_steps, eval_every, *original_shape).
+    # Reshape to (total_steps, *original_shape).
+    def _flatten_chunks(x: jax.Array) -> jax.Array:
+        return x.reshape(total_steps, *x.shape[2:])
+
+    train_trace: StepRecord = jax.tree.map(  # pyright: ignore[reportAny]
+        _flatten_chunks, train_chunks,
+    )
+
+    eval_step_indices = (
+        jnp.arange(n_super_steps, dtype=jnp.int32) + 1
+    ) * eval_every
+
+    record: dict[str, jax.Array] = {**train_trace}
+    record['predicted_q_at_start'] = eval_bursts.predicted_q_at_start
+    record['mc_return'] = eval_bursts.mc_return
+    record['episode_length'] = eval_bursts.episode_length
+    record['eval_step_index'] = eval_step_indices
+
+    return record

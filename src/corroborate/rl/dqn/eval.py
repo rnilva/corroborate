@@ -8,37 +8,22 @@ periodic greedy rollouts during training, with predicted-Q
 recorded at start and discounted MC return computed from the
 realised reward sequence.
 
-Three pieces in this module:
+Two pieces:
 
 1. `eval_episode` (`@claim`) — single greedy rollout from a
    reset state; returns `(predicted_q_at_start, mc_return,
    episode_length)`.
 2. `eval_burst` — K greedy rollouts via vmap over fresh seeds;
    stacks per-episode results into `(K,)`-shaped arrays.
-3. `train_with_eval` — nested `jax.lax.scan`. Outer scan iterates
-   `n_bursts = total_steps // eval_every` super-steps; each
-   super-step body runs an inner scan over `eval_every` training
-   steps, then one `eval_burst`. Both scans jit-trace their
-   bodies; the function itself is NOT `@jax.jit`-decorated, so
-   the top-level Python call re-traces each invocation. Callers
-   that want the full single-compile boundary can wrap with
-   `jax.jit(train_with_eval, static_argnums=(2,), static_argnames=
-   ('eval_every',))` — the `total_steps` and `eval_every` are
-   structural, not traced. Returns `(state, record)` where
-   `record` is a single dict mixing training fields (shape
-   `(total_steps, ...)`) and eval fields (shape `(n_bursts, K,
-   ...)`). The author's bridges read whichever keys they care
-   about.
 
-Eval IS part of training — they're aspects of one experiment
-run. The merged-dict return shape reflects that: no separate
-"eval record" stream, no `bridges_e`, no train/eval distinction
-in framework code. The cell runner produces one record; bridges
-target arbitrary keys regardless of which sub-process produced
-them."""
+The previous `train_with_eval` (nested-scan + record-assembly +
+eval-scheduling fused) has been retired into the `dqn` outermost
+claim in `dqn.py`, which composes init_state + nested
+`scan_loop` + record assembly. Eval IS part of training — they're
+aspects of one experiment run; bridges target whichever record
+keys they care about regardless of sub-process origin."""
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import NamedTuple
 
 import jax
@@ -46,7 +31,7 @@ import jax.numpy as jnp
 
 from corroborate.claim import claim
 from corroborate.rl.dqn.state import DQNState
-from corroborate.rl.dqn.types import QNetwork, StepRecord
+from corroborate.rl.dqn.types import QNetwork
 from corroborate.rl.env_catalogue import GymnaxEnvLike
 
 
@@ -186,94 +171,3 @@ def eval_burst(
         mc_return=stacked.mc_return,
         episode_length=stacked.episode_length,
     )
-
-
-# ============ train_with_eval — single nested scan ============
-
-def train_with_eval(
-    step_fn: Callable[[DQNState, jax.Array], tuple[DQNState, StepRecord]],
-    init: DQNState,
-    total_steps: int,
-    *,
-    eval_fn: Callable[[DQNState, jax.Array], EvalBurstOut],
-    eval_every: int,
-) -> tuple[DQNState, dict[str, jax.Array]]:
-    """Single nested `jax.lax.scan`: outer over `n_bursts =
-    total_steps // eval_every` super-steps; each super-step body
-    runs an inner scan over `eval_every` training steps then one
-    `eval_burst`. Single jit-compile boundary (no Python overhead
-    between super-steps, no recompile per chunk).
-
-    Returns `(state, record)` where `record` is a single dict
-    mixing:
-      - training fields, shape `(total_steps, ...)` per field
-      - eval fields, shape `(n_bursts, K, ...)` per field
-      - `eval_step_index`, shape `(n_bursts,)` int32
-
-    The eval-side keys (`predicted_q_at_start`, `mc_return`,
-    `episode_length`, `eval_step_index`) are disjoint from the
-    training keys by RL-substrate convention — bridges read
-    whichever they need without naming collision.
-
-    `eval_fn` is the caller's closure around `eval_burst`,
-    capturing env, q_network, gamma, etc. Single-jit means the
-    closure must be jit-compatible (no Python-level branching on
-    traced values).
-
-    Raises `ValueError` if `total_steps` isn't a multiple of
-    `eval_every` (no partial trailing chunk)."""
-    if total_steps % eval_every != 0:
-        raise ValueError(
-            f'total_steps ({total_steps}) must be a multiple of '
-            f'eval_every ({eval_every}); got remainder '
-            f'{total_steps % eval_every}',
-        )
-    if total_steps < eval_every:
-        raise ValueError(
-            f'total_steps ({total_steps}) must be ≥ eval_every '
-            f'({eval_every}) — at least one super-step is required.',
-        )
-
-    n_super_steps = total_steps // eval_every
-
-    def super_step(
-        state: DQNState, super_idx: jax.Array,
-    ) -> tuple[DQNState, tuple[StepRecord, EvalBurstOut]]:
-        # Inner scan over eval_every training steps. Build global
-        # step indices so step_fn sees absolute step number even
-        # though we're in a chunked outer loop.
-        offset = super_idx * eval_every
-        inner_indices = offset + jnp.arange(eval_every, dtype=jnp.int32)
-        state, train_chunk = jax.lax.scan(step_fn, state, inner_indices)
-        # Eval burst at the end of this chunk.
-        burst = eval_fn(state, super_idx)
-        return state, (train_chunk, burst)
-
-    # int32 across both nesting levels — uniform dtype keeps the
-    # `super_idx * eval_every + jnp.arange(eval_every)` arithmetic
-    # in a single integer regime (no silent uint32→int64 promotion
-    # under x64-enabled jax, no implicit downcast under x64-disabled).
-    super_indices = jnp.arange(n_super_steps, dtype=jnp.int32)
-    state, (train_chunks, eval_bursts) = jax.lax.scan(
-        super_step, init, super_indices,
-    )
-
-    # train_chunks: pytree where each leaf has shape
-    #   (n_super_steps, eval_every, *original_shape).
-    # Reshape to (total_steps, *original_shape).
-    def _flatten_chunks(x: jax.Array) -> jax.Array:
-        return x.reshape(total_steps, *x.shape[2:])
-
-    train_trace = jax.tree.map(_flatten_chunks, train_chunks)
-
-    # eval_bursts: NamedTuple of (n_super_steps, K, ...) arrays.
-    # Compute eval_step_index as super_idx-aware boundaries.
-    eval_step_indices = (jnp.arange(n_super_steps) + 1) * eval_every
-
-    record: dict[str, jax.Array] = {**train_trace}
-    record['predicted_q_at_start'] = eval_bursts.predicted_q_at_start
-    record['mc_return'] = eval_bursts.mc_return
-    record['episode_length'] = eval_bursts.episode_length
-    record['eval_step_index'] = eval_step_indices.astype(jnp.int32)
-
-    return state, record

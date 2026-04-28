@@ -1,33 +1,29 @@
-"""Cell runner — `run_dqn_cell(env_spec, seed, hypothesis) →
-RunRow`. The bridge between the DQN training/eval substrate
-(`dqn_step` + `train_with_eval`) and the schema layer
-(`RunRow` + `FactRow`).
+"""Cell runner — bridges the `dqn` outermost claim to the schema
+layer. One cell = one (env, seed, hypothesis) execution.
 
-One cell = one (env, seed, hypothesis) execution. The cell
-runner:
+The runner is thin:
 
-1. Resolves `env, env_params` from `gymnax` for `env_spec.name`.
-2. Builds `step_fn = partial(dqn_step, ..., **hypothesis.intervention)`
-   so the hypothesis's intervention applies as slot swaps.
-3. Builds the `eval_fn` closure for `train_with_eval` (fresh
-   greedy rollouts every `eval_config.eval_every` training steps).
-4. Runs `train_with_eval` → `(final_state, record)`. The record
-   is a single dict mixing per-step training fields (shape
-   `(total_steps, ...)`) and per-burst eval fields (shape
-   `(n_bursts, K, ...)`) — see `train_with_eval`'s docstring.
-5. Projects the late-window outcome from `record`.
-6. Runs each `Hypothesis.bridge` against the merged record;
-   bridges target whichever keys they care about. Converts each
-   `BridgeResult` to a `FactRow` (with `kind='invariant'` when
-   `stats['kind']=='tautological'`).
-7. Aggregates the per-cell verdict (axiom 18 precedence:
-   INVARIANT_VIOLATION dominates).
-8. Returns the `RunRow`."""
+1. Resolves `env, env_params` from `gymnax`.
+2. Binds the cell's exogenous knobs (env, dims, eval-episode-cap,
+   state_hash) and the hypothesis's intervention into `dqn` via
+   `functools.partial`. Intervention mirrors `dqn`'s signature, so
+   `**hypothesis.intervention` spreads directly — no broadcast,
+   no flatten, no validation. Pyright catches signature mismatches
+   at the swap site.
+3. vmap-over-seeds: each seed becomes a `jax.random.PRNGKey`; the
+   batched call runs `dqn` once jit-compiled and produces a record
+   pytree where each leaf has a leading `(n_seeds, ...)` axis.
+4. Per-seed Python-side: project the late-window outcome,
+   evaluate each hypothesis bridge, build the RunRow.
+
+The DQN algorithm itself lives entirely in the `dqn` claim
+(`rl/dqn/dqn.py`) — composition of init_state, nested scan, and
+record assembly. The cell runner has no knowledge of training-step
+semantics; it's a generic vmap-and-build-RunRow harness."""
 from __future__ import annotations
 
 import uuid
 from collections.abc import Mapping
-from dataclasses import dataclass
 from datetime import UTC, datetime
 from functools import partial
 from typing import Literal
@@ -41,115 +37,58 @@ from corroborate.aggregate import aggregate_cell_verdict
 from corroborate.bridge import Bridge, BridgeResult
 from corroborate.hypothesis import Hypothesis
 from corroborate.reductions import masked_window_mean
-from corroborate.rl.dqn.claims.q_network import mlp_q
-from corroborate.rl.dqn.dqn import (
-    default_state_hash,
-    dqn_step,
-    init_state_from_key,
-)
-from corroborate.rl.dqn.eval import (
-    EvalBurstOut,
-    eval_burst,
-    train_with_eval,
-)
+from corroborate.rl.dqn.dqn import default_state_hash, dqn
 from corroborate.rl.dqn.invariants import DQNTrajectoryRecord
-from corroborate.rl.dqn.state import DQNState
-from corroborate.rl.dqn.types import QNetwork
 from corroborate.rl.env_catalogue import EnvSpec
 from corroborate.schema import FactRow, RunRow
+from corroborate.signature import collect_invariants
 from corroborate.verdict import Verdict
 
 
-# ============ EvalConfig ============
-
-@dataclass(frozen=True, slots=True)
-class EvalConfig:
-    """Eval-loop scheduling for `run_dqn_cell`. `eval_every` is in
-    training-step units; `n_episodes` is K (Hasselt 2016 default
-    20). `total_steps` must be a multiple of `eval_every`
-    (`train_with_eval` enforces this).
-
-    Use `EvalConfig.n_evals(total_steps, n_evals)` to construct a
-    config that gives `n_evals` evenly-spaced bursts across the
-    training run — the natural cross-env-scaling shape since
-    total_steps varies wildly (CartPole 50k, MinAtar 10M)."""
-    eval_every: int
-    n_episodes: int = 20
-
-    @classmethod
-    def n_evals(
-        cls,
-        total_steps: int,
-        n_evals: int = 20,
-        n_episodes: int = 20,
-    ) -> EvalConfig:
-        """Construct an EvalConfig with `n_evals` evenly-spaced
-        eval bursts across `total_steps`. Requires `total_steps`
-        divisible by `n_evals` (so each super-step is a clean
-        chunk and `train_with_eval` accepts the resulting
-        eval_every without remainder)."""
-        if total_steps <= 0:
-            raise ValueError(f'total_steps must be positive; got {total_steps}')
-        if n_evals <= 0:
-            raise ValueError(f'n_evals must be positive; got {n_evals}')
-        if n_evals > total_steps:
-            raise ValueError(
-                f'n_evals ({n_evals}) larger than total_steps ({total_steps}); '
-                f'cannot fit even one super-step.',
-            )
-        if total_steps % n_evals != 0:
-            raise ValueError(
-                f'EvalConfig.n_evals: total_steps ({total_steps}) must be '
-                f'divisible by n_evals ({n_evals}); got remainder '
-                f'{total_steps % n_evals}.',
-            )
-        eval_every = total_steps // n_evals
-        return cls(eval_every=eval_every, n_episodes=n_episodes)
+# `total_steps` default — must match `dqn`'s default. Read from
+# intervention when present, fall back to this when absent.
+_DEFAULT_TOTAL_STEPS: int = 50_000
 
 
-# ============ The arm runner (vmap over seeds) ============
+def _read_total_steps(intervention: Mapping[str, object]) -> int:
+    """Read `total_steps` from intervention, defaulting when absent.
+    Used only to populate `RunRow.total_steps` — the value also
+    flows to `dqn` itself via `**intervention` if the author set
+    it. Loud error on wrong-typed override."""
+    if 'total_steps' not in intervention:
+        return _DEFAULT_TOTAL_STEPS
+    v = intervention['total_steps']
+    if isinstance(v, bool) or not isinstance(v, int):
+        raise TypeError(
+            f"intervention['total_steps'] must be int, "
+            f"got {type(v).__name__}",
+        )
+    return v
+
 
 def run_dqn_arm(
     env_spec: EnvSpec,
     seeds: tuple[int, ...],
     hypothesis: Hypothesis[DQNTrajectoryRecord],
     *,
-    total_steps: int,
-    optimizer: optax.GradientTransformation,
-    eval_config: EvalConfig,
-    q_network: QNetwork = mlp_q,
-    gamma: float = 0.99,
-    batch_size: int = 64,
-    buffer_capacity: int = 10_000,
-    warmup_steps: int = 1_000,
-    sync_period: int = 100,
+    optimizer: optax.GradientTransformation = optax.adam(1e-3),
     outcome_fraction: float = 0.1,
     cycle_id: str | None = None,
 ) -> tuple[RunRow, ...]:
     """Run one (env, hypothesis) arm across `seeds` in parallel via
-    `jax.vmap`. Returns one `RunRow` per seed.
+    `jax.vmap` of the `dqn` outermost claim. Returns one `RunRow`
+    per seed.
 
-    The vmap'd path runs init_state + train_with_eval as a single
-    jit-compiled batched call, producing a record pytree where
-    each leaf has a leading `(n_seeds,)` axis. Per-seed bridge
-    evaluation, outcome projection, and RunRow construction
-    happen Python-side after the vmap returns (bridges aren't
-    necessarily jit-compatible).
-
-    Speedup vs sequential: training compute reuses the same jit
-    cache across seeds, gymnax envs vmap natively, and gradient
-    updates are batched. On GPU this is roughly N× wall-clock
-    relative to sequential (no recompile per seed). On CPU it's
-    still ~5-10× because the inner scan body is jit-compiled
-    once.
-
-    Eval IS part of training: `train_with_eval` produces ONE
-    record dict mixing per-step training fields and per-burst
-    eval fields. Hypothesis bridges read whichever keys they
-    target — the framework doesn't distinguish "train bridges"
-    from "eval bridges"."""
+    `optimizer` is also an HP in `dqn`'s signature; the runner
+    accepts it as a kwarg for the common case where the experiment
+    threads one optimizer choice across an arm. If a hypothesis
+    intervenes on `optimizer`, that intervention wins (intervention
+    ordering mirrors `partial`'s kwarg-merge semantics)."""
     if not seeds:
         raise ValueError('seeds must be non-empty')
+
+    intervention = hypothesis.intervention
+    total_steps = _read_total_steps(intervention)
 
     env, env_params = gymnax.make(env_spec.name)
     state_hash = (
@@ -158,51 +97,29 @@ def run_dqn_arm(
         else default_state_hash
     )
 
-    step_fn = partial(
-        dqn_step,
-        env=env, env_params=env_params,
-        n_actions=env_spec.n_actions,
-        optimizer=optimizer,
-        state_hash=state_hash,
-        gamma=gamma, batch_size=batch_size,
-        buffer_capacity=buffer_capacity,
-        warmup_steps=warmup_steps, sync_period=sync_period,
-        **hypothesis.intervention,
-    )
+    # Compose cell-level exogenous + intervention into dqn via
+    # `functools.partial`. The walker / `collect_invariants` /
+    # `_canonical_str` all unwrap partials, so intervention
+    # overrides shadow defaults in every downstream consumer:
+    # `collect_invariants(configured)` sees only the effective
+    # sub-claims (no leakage from defaults that intervention
+    # swapped out).
+    cell_kwargs: dict[str, object] = {
+        'env': env, 'env_params': env_params,
+        'obs_dim': env_spec.obs_dim, 'n_actions': env_spec.n_actions,
+        'eval_episode_cap': env_spec.eval_episode_cap,
+        'state_hash': state_hash,
+        'optimizer': optimizer,
+    }
+    configured = partial(dqn, **{**cell_kwargs, **intervention})
 
-    def train_for_key(rng_key: jax.Array) -> dict[str, jax.Array]:
-        train_key, eval_key = jax.random.split(rng_key)
-        init: DQNState = init_state_from_key(
-            env=env, env_params=env_params,
-            obs_dim=env_spec.obs_dim, n_actions=env_spec.n_actions,
-            rng_key=train_key, optimizer=optimizer,
-            buffer_capacity=buffer_capacity,
-        )
+    def by_key(rng_key: jax.Array) -> dict[str, jax.Array]:
+        return configured(rng_key=rng_key)
 
-        def eval_fn(s: DQNState, idx: jax.Array) -> EvalBurstOut:
-            return eval_burst(
-                online_params=s.online_params,
-                env=env, env_params=env_params,
-                rng_key=jax.random.fold_in(eval_key, idx),
-                q_network=q_network, gamma=gamma,
-                episode_cap=env_spec.eval_episode_cap,
-                n_episodes=eval_config.n_episodes,
-            )
-
-        _final_state, record = train_with_eval(
-            step_fn, init, total_steps,
-            eval_fn=eval_fn, eval_every=eval_config.eval_every,
-        )
-        return record
-
-    # Build per-seed PRNGKeys; vmap over the batched key.
     keys = jax.vmap(jax.random.PRNGKey)(
         jnp.asarray(seeds, dtype=jnp.uint32),
     )
-    batched_record = jax.vmap(train_for_key)(keys)
-    # batched_record: leaves shape (n_seeds, ...). Unstack per-seed
-    # in Python; bridges + outcome projection aren't necessarily
-    # jit-compatible.
+    batched_record = jax.vmap(by_key)(keys)
 
     intervention_sig: frozenset[str] = frozenset(
         slot for slot, _ in hypothesis.mechanism_key.intervention_signature
@@ -210,6 +127,21 @@ def run_dqn_arm(
     outcome_proj = masked_window_mean(
         value_key='ep_return', mask_key='done',
         fraction=outcome_fraction,
+    )
+
+    # Author-declared bridges + composition-discovered invariants.
+    # Walk the BOUND `configured` tree (with intervention applied)
+    # — this surfaces invariants attached only to the effective
+    # sub-claims, not stale ones from defaults that were swapped
+    # out. De-dup by id.
+    auto_invariants: list[Bridge[DQNTrajectoryRecord]] = []
+    seen_ids: set[int] = set()
+    for inv in collect_invariants(configured):
+        if id(inv) not in seen_ids:
+            seen_ids.add(id(inv))
+            auto_invariants.append(inv)  # pyright: ignore[reportArgumentType]
+    effective_bridges: tuple[Bridge[DQNTrajectoryRecord], ...] = (
+        tuple(hypothesis.bridges) + tuple(auto_invariants)
     )
 
     rows: list[RunRow] = []
@@ -224,7 +156,7 @@ def run_dqn_arm(
                 result=b(per_seed_record),
                 intervention_signature=intervention_sig,
             )
-            for b in hypothesis.bridges
+            for b in effective_bridges
         )
         reads_set: frozenset[str] = frozenset()
         for f in facts:
@@ -245,6 +177,7 @@ def run_dqn_arm(
             facts=facts,
             reads_set=reads_set,
             verdict=aggregate_cell_verdict(facts),
+            meta={},
         ))
     return tuple(rows)
 
@@ -254,38 +187,22 @@ def run_dqn_cell(
     seed: int,
     hypothesis: Hypothesis[DQNTrajectoryRecord],
     *,
-    total_steps: int,
-    optimizer: optax.GradientTransformation,
-    eval_config: EvalConfig,
-    q_network: QNetwork = mlp_q,
-    gamma: float = 0.99,
-    batch_size: int = 64,
-    buffer_capacity: int = 10_000,
-    warmup_steps: int = 1_000,
-    sync_period: int = 100,
+    optimizer: optax.GradientTransformation = optax.adam(1e-3),
     outcome_fraction: float = 0.1,
     cycle_id: str | None = None,
 ) -> RunRow:
     """Run one (env, seed, hypothesis) cell. Thin convenience
     wrapper around `run_dqn_arm` for the single-seed case;
-    multi-seed callers should use `run_dqn_arm` directly to
-    avoid per-call vmap re-compilation."""
+    multi-seed callers should use `run_dqn_arm` directly to avoid
+    per-call vmap re-compilation."""
     rows = run_dqn_arm(
         env_spec, (seed,), hypothesis,
-        total_steps=total_steps,
         optimizer=optimizer,
-        eval_config=eval_config,
-        q_network=q_network,
-        gamma=gamma, batch_size=batch_size,
-        buffer_capacity=buffer_capacity,
-        warmup_steps=warmup_steps, sync_period=sync_period,
         outcome_fraction=outcome_fraction,
         cycle_id=cycle_id,
     )
     return rows[0]
 
-
-# ============ Helpers ============
 
 def _bridge_result_to_fact[R: Mapping[str, object]](
     *,
@@ -294,16 +211,13 @@ def _bridge_result_to_fact[R: Mapping[str, object]](
     intervention_signature: frozenset[str],
 ) -> FactRow:
     """Convert a BridgeResult to a FactRow at cell-level
-    granularity. Generic over the bridge's record type so the
-    same helper handles both primary-record bridges (over
-    `DQNTrajectoryRecord`) and secondary-record bridges (over the
-    eval record). `kind` is read off `stats['kind']`: tautological
+    granularity. `kind` is read off `stats['kind']`: tautological
     → 'invariant', otherwise → 'bridge'.
 
     `natural_strength` is a binary placeholder (1.0 for HELD, 0.0
-    otherwise) — step 5 (statistics module) replaces this with
-    real q values from Hedges' g / sample sizes. `delta_i` stays
-    0.0 at cell level; populated at the comparison level by the
+    otherwise) — step 5 (statistics module) replaces this with real
+    q values from Hedges' g / sample sizes. `delta_i` stays 0.0 at
+    cell level; populated at the comparison level by the
     aggregation pipeline."""
     return FactRow(
         name=bridge.name,
@@ -323,11 +237,9 @@ def _classify_kind(
 ) -> Literal['bridge', 'invariant']:
     """Read `stats['kind']` and project to FactRow's
     `Literal['bridge', 'invariant']`. The `@invariant` decorator
-    sets `stats['kind']='tautological'`; everything else is a
-    plain bridge."""
+    sets `stats['kind']='tautological'`; everything else is a plain
+    bridge."""
     kind_raw = stats.get('kind')
     if kind_raw == 'tautological':
         return 'invariant'
     return 'bridge'
-
-

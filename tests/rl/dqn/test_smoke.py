@@ -22,8 +22,12 @@ import jax
 import jax.numpy as jnp
 import optax
 
-from corroborate.rl.dqn.claims.bootstrap import ddqn_bootstrap, vanilla_bootstrap
-from corroborate.rl.dqn.claims.q_network import init_mlp, mlp_q
+from corroborate.rl.dqn.claims.bootstrap import (
+    bootstrap as bootstrap_claim,
+    double_greedify,
+    max_greedify,
+)
+from corroborate.rl.dqn.claims.q_network import MLP, mlp_q
 from corroborate.rl.dqn.dqn import dqn_step, init_state
 from corroborate.rl.env_catalogue import GymnaxEnvLike, HasN, HasShape
 from corroborate.loop import python_loop, scan_loop
@@ -52,7 +56,9 @@ def _build_step_fn(
     `bootstrap_swap` flag toggles vanilla vs DDQN."""
     extra: dict[str, object] = {}
     if bootstrap_swap:
-        extra['bootstrap'] = ddqn_bootstrap
+        extra['bootstrap'] = partial(
+            bootstrap_claim, greedification=double_greedify,
+        )
 
     bound = partial(
         dqn_step,
@@ -75,7 +81,8 @@ def test_vanilla_dqn_runs_on_cartpole_via_python_loop() -> None:
     init = init_state(
         env=env, env_params=env_params,
         obs_dim=obs_dim, n_actions=n_actions,
-        seed=0, optimizer=optimizer, buffer_capacity=200,
+        seed=0, optimizer=optimizer,
+        buffer_capacity=200,
     )
     step_fn = _build_step_fn(env, env_params, n_actions, optimizer)
 
@@ -88,7 +95,7 @@ def test_vanilla_dqn_runs_on_cartpole_via_python_loop() -> None:
     # - per-batch indices: (T, batch)
     # - per-batch Q-vectors: (T, batch, n_actions)
     scalar_keys = {
-        'epsilon', 'reward', 'done', 'max_q',
+        'reward', 'done', 'max_q',
         'ep_return', 'action', 'state_hash', 'buf_size',
         'loss', 'td_error',
     }
@@ -113,7 +120,8 @@ def test_vanilla_dqn_runs_via_scan_loop() -> None:
     init = init_state(
         env=env, env_params=env_params,
         obs_dim=obs_dim, n_actions=n_actions,
-        seed=0, optimizer=optimizer, buffer_capacity=200,
+        seed=0, optimizer=optimizer,
+        buffer_capacity=200,
     )
     step_fn = _build_step_fn(env, env_params, n_actions, optimizer)
 
@@ -135,19 +143,22 @@ def test_ddqn_and_vanilla_bootstrap_differ_when_params_differ() -> None:
     rng = jax.random.PRNGKey(0)
     online_key, target_key, obs_key = jax.random.split(rng, 3)
 
-    online = init_mlp(online_key, obs_dim, n_actions, hidden=(16, 16))
-    target = init_mlp(target_key, obs_dim, n_actions, hidden=(16, 16))
+    arch = MLP(hidden=(16, 16))
+    online = arch.init(online_key, obs_dim, n_actions)
+    target = arch.init(target_key, obs_dim, n_actions)
     next_obs = jax.random.normal(obs_key, (batch_size, obs_dim))
     reward = jnp.ones((batch_size,))
     done = jnp.zeros((batch_size,))
 
-    target_v = vanilla_bootstrap(
+    target_v = bootstrap_claim(
         online_params=online, target_params=target, q_network=mlp_q,
         next_obs=next_obs, reward=reward, done=done, gamma=0.99,
+        greedification=max_greedify,
     )
-    target_d = ddqn_bootstrap(
+    target_d = bootstrap_claim(
         online_params=online, target_params=target, q_network=mlp_q,
         next_obs=next_obs, reward=reward, done=done, gamma=0.99,
+        greedification=double_greedify,
     )
 
     # Different params → different argmaxes on at least one
@@ -155,8 +166,8 @@ def test_ddqn_and_vanilla_bootstrap_differ_when_params_differ() -> None:
     diffs = jnp.abs(target_v - target_d)
     assert float(jnp.max(diffs)) > 0.0, (
         'DDQN and vanilla bootstraps produced identical targets '
-        'despite distinct online/target params — the slot swap '
-        'is a no-op. Check ddqn_bootstrap actually decouples '
+        'despite distinct online/target params — the greedification '
+        'swap is a no-op. Check double_greedify actually decouples '
         'argmax (online) from evaluation (target).'
     )
 
@@ -172,18 +183,20 @@ def test_ddqn_and_vanilla_bootstrap_match_when_params_equal() -> None:
     rng = jax.random.PRNGKey(0)
     init_key, obs_key = jax.random.split(rng)
 
-    params = init_mlp(init_key, obs_dim, n_actions, hidden=(16, 16))
+    params = MLP(hidden=(16, 16)).init(init_key, obs_dim, n_actions)
     next_obs = jax.random.normal(obs_key, (batch_size, obs_dim))
     reward = jnp.ones((batch_size,))
     done = jnp.zeros((batch_size,))
 
-    target_v = vanilla_bootstrap(
+    target_v = bootstrap_claim(
         online_params=params, target_params=params, q_network=mlp_q,
         next_obs=next_obs, reward=reward, done=done, gamma=0.99,
+        greedification=max_greedify,
     )
-    target_d = ddqn_bootstrap(
+    target_d = bootstrap_claim(
         online_params=params, target_params=params, q_network=mlp_q,
         next_obs=next_obs, reward=reward, done=done, gamma=0.99,
+        greedification=double_greedify,
     )
     # Online == target → both take the same argmax → identical targets.
     assert jnp.allclose(target_v, target_d)
@@ -201,7 +214,8 @@ def test_ep_return_resets_in_state_on_done() -> None:
     init = init_state(
         env=env, env_params=env_params,
         obs_dim=obs_dim, n_actions=n_actions,
-        seed=0, optimizer=optimizer, buffer_capacity=200,
+        seed=0, optimizer=optimizer,
+        buffer_capacity=200,
     )
     step_fn = _build_step_fn(env, env_params, n_actions, optimizer)
 
@@ -233,7 +247,8 @@ def test_step_counter_advances_monotonically() -> None:
     init = init_state(
         env=env, env_params=env_params,
         obs_dim=obs_dim, n_actions=n_actions,
-        seed=0, optimizer=optimizer, buffer_capacity=200,
+        seed=0, optimizer=optimizer,
+        buffer_capacity=200,
     )
     step_fn = _build_step_fn(env, env_params, n_actions, optimizer)
 

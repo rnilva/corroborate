@@ -26,7 +26,6 @@ from corroborate.rl.dqn.state import DQNState
 from corroborate.rl.dqn.types import (
     ActionSelect,
     Bootstrap,
-    EpsilonSchedule,
     LossFn,
     Params,
     QNetwork,
@@ -47,13 +46,16 @@ class RolloutOut(NamedTuple):
     coverage gap measurable consumes. `state_hash` is computed
     from `state.obs` at action-selection time (env-specific
     discretization from `EnvSpec.state_hash`); for envs without a
-    declared state_hash, a constant-zero sentinel is wired."""
-    epsilon: jax.Array
+    declared state_hash, a constant-zero sentinel is wired.
+
+    `epsilon` is NOT a field — exploration HPs live on the
+    action-select Module (e.g. `EpsilonGreedy.schedule`); ε(step)
+    is recoverable from `(mechanism_key, step)` post-hoc."""
     reward: jax.Array
     done: jax.Array
     max_q: jax.Array      # max(Q(s, ·)) at action selection — overestimation diagnostic
     ep_return: jax.Array  # cumulative within current episode (reset on done in state)
-    action: jax.Array     # int32 — the action ε-greedy returned this step
+    action: jax.Array     # int32 — the action selected this step
     state_hash: jax.Array # int32 — env-specific bucket id for `state.obs`
     buf_size: jax.Array   # int32 — replay buffer fill level AFTER this step's add
 
@@ -119,20 +121,25 @@ def rollout_phase(
     capacity: int,
     q_network: QNetwork,
     action_select: ActionSelect,
-    eps_schedule: EpsilonSchedule,
     state_hash: StateHash,
 ) -> tuple[DQNState, RolloutOut]:
     """One step of acting in the env.
 
     Reads `q_network` to score the current observation, calls
-    `action_select` (with `eps_schedule(step)` for ε), steps the
-    env, appends the transition to the replay buffer."""
+    `action_select(q_values, key, step, n_actions)`, steps the
+    env, appends the transition to the replay buffer.
+
+    `action_select` Modules own their schedules / temperatures
+    internally (e.g. `EpsilonGreedy.schedule`), so the rollout
+    phase doesn't see exploration HPs directly — it just passes
+    the global step. The schedule's value at this step is a pure
+    function of `(action_select, step)` and is not logged to the
+    per-step record (recoverable from mechanism_key + step)."""
     # Q-values at current obs — single observation, not batched.
     q_values = q_network(state.online_params, state.obs)
-    epsilon = eps_schedule(state.step)
 
     select_key, env_key, next_rng_key = jax.random.split(state.rng_key, 3)
-    action = action_select(q_values, select_key, epsilon, n_actions)
+    action = action_select(q_values, select_key, state.step, n_actions)
 
     # gymnax's env.step returns (next_obs, env_state, reward, done, info)
     next_obs, next_env_state, reward, done, _info = env.step(
@@ -173,7 +180,6 @@ def rollout_phase(
     obs_hash = state_hash(state.obs).astype(jnp.int32)
 
     out = RolloutOut(
-        epsilon=epsilon,
         reward=reward,
         done=done.astype(jnp.float32),
         max_q=jnp.max(q_values),

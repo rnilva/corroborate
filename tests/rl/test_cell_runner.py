@@ -1,15 +1,14 @@
-"""Tests for `run_dqn_cell` — the bridge between the DQN
-substrate and the schema layer.
+"""Tests for `run_dqn_cell` — the bridge between the `dqn`
+outermost claim and the schema layer.
 
 Verifies:
-1. `EvalConfig.n_evals` constructs eval-loop schedules that
-   align cleanly with `total_steps`.
-2. `run_dqn_cell` runs CartPole end-to-end and produces a
-   well-formed `RunRow` + `EvalTrajectoryRecord`.
-3. RunRow's `mechanism_key` matches the hypothesis's.
-4. RunRow's `facts` includes both bridge and invariant
+1. `run_dqn_cell` runs CartPole end-to-end and produces a
+   well-formed `RunRow` whose record carries both training fields
+   (per-step) and eval fields (per-burst).
+2. RunRow's `mechanism_key` matches the hypothesis's.
+3. RunRow's `facts` includes both bridge and invariant
    classifications, derived from `stats['kind']`.
-5. INVARIANT_VIOLATION on any fact propagates to the run-level
+4. INVARIANT_VIOLATION on any fact propagates to the run-level
    verdict (axiom 18 precedence)."""
 from __future__ import annotations
 
@@ -21,8 +20,7 @@ import optax
 from corroborate.bridge import BridgeResult, bridge
 from corroborate.hypothesis import Hypothesis
 from corroborate.invariant import at_most
-from corroborate.rl.cell_runner import EvalConfig, run_dqn_cell
-from corroborate.rl.dqn.claims.q_network import mlp_q
+from corroborate.rl.cell_runner import run_dqn_cell
 from corroborate.rl.dqn.invariants import (
     DQNTrajectoryRecord,
     fqi_decay_gap,
@@ -31,26 +29,20 @@ from corroborate.schema import RunRow
 from corroborate.verdict import Verdict
 
 
-# ============ EvalConfig ============
-
-def test_eval_config_n_evals_factory_evenly_spaces() -> None:
-    cfg = EvalConfig.n_evals(total_steps=100, n_evals=5)
-    assert cfg.eval_every == 20
-    assert cfg.n_episodes == 20  # default
-
-
-def test_eval_config_n_evals_custom_n_episodes() -> None:
-    cfg = EvalConfig.n_evals(total_steps=200, n_evals=4, n_episodes=10)
-    assert cfg.eval_every == 50
-    assert cfg.n_episodes == 10
-
-
-def test_eval_config_n_evals_rejects_n_evals_larger_than_steps() -> None:
-    try:
-        EvalConfig.n_evals(total_steps=10, n_evals=20)
-        raise AssertionError('expected ValueError')
-    except ValueError:
-        pass
+# Compact HP bundle reused across cell-runner tests. Authors spread
+# these into `intervention` as flat kwargs; cell runner forwards
+# `**intervention` into `partial(dqn, ...)` so the intervention's
+# shape mirrors `dqn`'s signature.
+_SHORT_RUN_HP: dict[str, object] = {
+    'total_steps': 60, 'eval_every': 30, 'n_episodes': 2,
+    'warmup_steps': 10, 'sync_period': 10,
+    'buffer_capacity': 200, 'batch_size': 16,
+}
+_SHORT_RUN_HP_40: dict[str, object] = {
+    'total_steps': 40, 'eval_every': 20, 'n_episodes': 2,
+    'warmup_steps': 10, 'sync_period': 10,
+    'buffer_capacity': 200, 'batch_size': 16,
+}
 
 
 # ============ run_dqn_cell — happy path ============
@@ -63,18 +55,14 @@ def test_run_dqn_cell_produces_runrow_on_cartpole() -> None:
 
     h = Hypothesis[DQNTrajectoryRecord](
         name='vanilla',
-        intervention={},  # no slot swaps — vanilla DQN
+        intervention={**_SHORT_RUN_HP},  # HPs only, no slot swaps
         bridges=(),
         predicted_direction=None,
     )
 
     run_row = run_dqn_cell(
         env_spec, seed=0, hypothesis=h,
-        total_steps=60,
         optimizer=optax.adam(1e-3),
-        eval_config=EvalConfig(eval_every=30, n_episodes=2),
-        warmup_steps=10, sync_period=10,
-        buffer_capacity=200, batch_size=16,
     )
     # RunRow shape.
     assert isinstance(run_row, RunRow)
@@ -88,7 +76,7 @@ def test_run_dqn_cell_produces_runrow_on_cartpole() -> None:
     assert isinstance(run_row.primary_outcome_summary, float)
     # Record keys include both training fields and eval fields
     # (cell runner produces ONE merged record).
-    assert 'epsilon' in run_row.record_keys
+    assert 'max_q' in run_row.record_keys
     assert 'predicted_q_at_start' in run_row.record_keys
     assert 'mc_return' in run_row.record_keys
     assert 'eval_step_index' in run_row.record_keys
@@ -110,18 +98,14 @@ def test_run_dqn_cell_mechanism_key_matches_hypothesis() -> None:
 
     h = Hypothesis[DQNTrajectoryRecord](
         name='ddqn',
-        intervention={},
+        intervention={**_SHORT_RUN_HP_40},
         bridges=(some_bridge,),
         predicted_direction='a_gt_b',
     )
 
     run_row = run_dqn_cell(
         env_spec, seed=0, hypothesis=h,
-        total_steps=40,
         optimizer=optax.adam(1e-3),
-        eval_config=EvalConfig(eval_every=20, n_episodes=2),
-        warmup_steps=10, sync_period=10,
-        buffer_capacity=200, batch_size=16,
     )
 
     # mechanism_key carries the hypothesis's exact identity.
@@ -156,17 +140,13 @@ def test_run_dqn_cell_classifies_invariant_facts() -> None:
 
     h = Hypothesis[DQNTrajectoryRecord](
         name='mixed',
-        intervention={},
+        intervention={**_SHORT_RUN_HP_40},
         bridges=(plain_bridge, invariant_bridge),
     )
 
     run_row = run_dqn_cell(
         env_spec, seed=0, hypothesis=h,
-        total_steps=40,
         optimizer=optax.adam(1e-3),
-        eval_config=EvalConfig(eval_every=20, n_episodes=2),
-        warmup_steps=10, sync_period=10,
-        buffer_capacity=200, batch_size=16,
     )
 
     kinds = {f.name: f.kind for f in run_row.facts}
@@ -202,17 +182,13 @@ def test_run_dqn_cell_invariant_violation_dominates_verdict() -> None:
 
     h = Hypothesis[DQNTrajectoryRecord](
         name='mixed',
-        intervention={},
+        intervention={**_SHORT_RUN_HP_40},
         bridges=(held_bridge, impossible),
     )
 
     run_row = run_dqn_cell(
         env_spec, seed=0, hypothesis=h,
-        total_steps=40,
         optimizer=optax.adam(1e-3),
-        eval_config=EvalConfig(eval_every=20, n_episodes=2),
-        warmup_steps=10, sync_period=10,
-        buffer_capacity=200, batch_size=16,
     )
     # held_bridge=HELD; impossible=INVARIANT_VIOLATION → cell-
     # verdict is INVARIANT_VIOLATION.
@@ -229,7 +205,7 @@ def test_run_dqn_cell_runs_bridges_against_merged_record() -> None:
     `eval_bridges` distinction in framework code — the cell
     runner produces ONE record dict, bridges pick keys."""
     from corroborate.invariant import at_most
-    from corroborate.rl.dqn.claims.bootstrap import vanilla_bootstrap
+    from corroborate.rl.dqn.claims.bootstrap import bootstrap
     from corroborate.rl.dqn.invariants import jensen_overestimation_gap
     from corroborate.rl.env_catalogue import get
     env_spec = get('CartPole-v1')
@@ -237,23 +213,19 @@ def test_run_dqn_cell_runs_bridges_against_merged_record() -> None:
     jensen_scope = at_most(
         jensen_overestimation_gap(),
         threshold=1e9,  # generous; expected to HELD on a smoke run
-        of_claim=vanilla_bootstrap,
+        of_claim=bootstrap,
     )
 
     h: Hypothesis[DQNTrajectoryRecord] = Hypothesis(
         name='vanilla_with_jensen_scope',
-        intervention={},
+        intervention={**_SHORT_RUN_HP_40},
         bridges=(jensen_scope,),
         predicted_direction=None,
     )
 
     run_row = run_dqn_cell(
         env_spec, seed=0, hypothesis=h,
-        total_steps=40,
         optimizer=optax.adam(1e-3),
-        eval_config=EvalConfig(eval_every=20, n_episodes=2),
-        warmup_steps=10, sync_period=10,
-        buffer_capacity=200, batch_size=16,
     )
     assert len(run_row.facts) == 1
     fact = run_row.facts[0]
@@ -267,30 +239,131 @@ def test_run_dqn_cell_runs_bridges_against_merged_record() -> None:
     )
 
 
+def test_intervention_overrides_dont_leak_default_invariants() -> None:
+    """The cell runner uses `partial(dqn, **intervention)` to
+    compute the EFFECTIVE composition. `collect_invariants` walks
+    the partial-aware tree, so an invariant attached to
+    `max_greedify` does NOT fire when the intervention swaps the
+    greedification slot to `double_greedify` (DDQN)."""
+    from functools import partial
+    from corroborate.invariant import attach_invariant, at_most
+    from corroborate.rl.dqn.claims.bootstrap import (
+        bootstrap,
+        double_greedify,
+        max_greedify,
+    )
+    from corroborate.rl.dqn.invariants import jensen_overestimation_gap
+    from corroborate.rl.env_catalogue import get
+    env_spec = get('CartPole-v1')
+
+    # Attach an invariant only to max_greedify (vanilla's value
+    # computation). DDQN swaps to double_greedify, so this
+    # invariant must NOT fire under DDQN intervention.
+    only_vanilla = at_most(
+        jensen_overestimation_gap(),
+        threshold=1e9,
+        of_claim=max_greedify,
+    )
+    attach_invariant(only_vanilla, to=max_greedify)
+
+    try:
+        h = Hypothesis[DQNTrajectoryRecord](
+            name='ddqn_no_leak',
+            intervention={
+                **_SHORT_RUN_HP_40,
+                'bootstrap': partial(
+                    bootstrap, greedification=double_greedify,
+                ),
+            },
+            bridges=(),
+        )
+        run_row = run_dqn_cell(
+            env_spec, seed=0, hypothesis=h,
+            optimizer=optax.adam(1e-3),
+        )
+        names = [f.name for f in run_row.facts]
+        assert not any('jensen_overestimation_gap' in n for n in names), (
+            f'max_greedify-only invariant leaked into a DDQN run; '
+            f'got {names}'
+        )
+    finally:
+        from corroborate.invariant import detach_invariant
+        detach_invariant(only_vanilla, from_claim=max_greedify)
+
+
+def test_composition_discovered_invariants_fire() -> None:
+    """When a substrate author attaches an invariant to a claim
+    (`@invariant(of=...)` or `attach_invariant`), the cell runner
+    auto-discovers it via composition-tree walk and fires it
+    against the per-cell record — without the hypothesis having to
+    list it in `bridges`."""
+    from corroborate.bridge import BridgeResult
+    from corroborate.invariant import attach_invariant, at_most
+    from corroborate.rl.dqn.claims.bootstrap import bootstrap
+    from corroborate.rl.dqn.invariants import jensen_overestimation_gap
+    from corroborate.rl.env_catalogue import get
+    env_spec = get('CartPole-v1')
+
+    # Substrate-attached: build a tautological bridge and attach
+    # to a default sub-claim of dqn (`bootstrap` is dqn's default,
+    # with default `greedification=max_greedify` = vanilla DQN).
+    auto_bridge = at_most(
+        jensen_overestimation_gap(),
+        threshold=1e9,  # generous; expected HELD on smoke
+        of_claim=bootstrap,
+    )
+    attach_invariant(auto_bridge, to=bootstrap)
+
+    try:
+        h: Hypothesis[DQNTrajectoryRecord] = Hypothesis(
+            name='vanilla_no_explicit_bridges',
+            intervention={**_SHORT_RUN_HP_40},
+            bridges=(),  # author declares NO bridges
+            predicted_direction=None,
+        )
+
+        run_row = run_dqn_cell(
+            env_spec, seed=0, hypothesis=h,
+            optimizer=optax.adam(1e-3),
+        )
+
+        # Composition-discovery should have surfaced the
+        # vanilla_bootstrap-attached invariant.
+        names = [f.name for f in run_row.facts]
+        assert any('jensen_overestimation_gap' in n for n in names), (
+            f'expected auto-discovered jensen invariant in facts, got {names}'
+        )
+    finally:
+        from corroborate.invariant import detach_invariant
+        detach_invariant(auto_bridge, from_claim=bootstrap)
+
+
 def test_run_dqn_cell_applies_intervention_via_slot_swap() -> None:
     """DDQN intervention is `intervention={'bootstrap':
-    ddqn_bootstrap}`. The cell runner must apply this through
-    `partial(dqn_step, **intervention)`."""
-    from corroborate.rl.dqn.claims.bootstrap import ddqn_bootstrap
+    partial(bootstrap, greedification=double_greedify)}`. The
+    cell runner spreads `**intervention` into `partial(dqn, ...)`."""
+    from functools import partial
+    from corroborate.rl.dqn.claims.bootstrap import (
+        bootstrap, double_greedify,
+    )
     from corroborate.rl.env_catalogue import get
     env_spec = get('CartPole-v1')
 
     h = Hypothesis[DQNTrajectoryRecord](
         name='ddqn',
-        intervention={'bootstrap': ddqn_bootstrap},
+        intervention={
+            **_SHORT_RUN_HP_40,
+            'bootstrap': partial(bootstrap, greedification=double_greedify),
+        },
         bridges=(),
     )
 
     run_row = run_dqn_cell(
         env_spec, seed=0, hypothesis=h,
-        total_steps=40,
         optimizer=optax.adam(1e-3),
-        eval_config=EvalConfig(eval_every=20, n_episodes=2),
-        q_network=mlp_q,
-        warmup_steps=10, sync_period=10,
-        buffer_capacity=200, batch_size=16,
     )
-    # Intervention identity is preserved on RunRow.
+    # Intervention identity is preserved on RunRow — the partial
+    # canonicalises with the wrapped claim's name + baked kwargs.
     sig = dict(run_row.mechanism_key.intervention_signature)
     assert 'bootstrap' in sig
-    assert 'ddqn_bootstrap' in sig['bootstrap']
+    assert 'double_greedify' in sig['bootstrap']

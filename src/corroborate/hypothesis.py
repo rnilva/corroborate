@@ -33,13 +33,14 @@ v0's flat interventions are handled by `functools.partial`
 directly (framework-subtraction discipline)."""
 from __future__ import annotations
 
+import functools
 import types
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, fields, is_dataclass
 from typing import Literal
 
 from corroborate.bridge import Bridge
-from corroborate.claim import Claim
+from corroborate.claim import FnClaim
 
 
 type Direction = Literal['a_gt_b', 'a_lt_b', 'two_sided']
@@ -155,8 +156,24 @@ def _canonical_str(v: object) -> str:
     runtime type — `types.FunctionType`, `type`, and
     `types.BuiltinFunctionType` all carry typed `__name__: str`,
     so attribute access after narrowing is fully typed (no
-    `getattr` needed). Anything else falls through to `repr()`."""
-    if isinstance(v, Claim):
+    `getattr` needed).
+
+    `functools.partial` is canonicalised by recursing into
+    `.func` and lexicographically encoding `.keywords` (positional
+    `.args` are flattened similarly). This makes baked-in slot
+    parameters (`partial(linear_epsilon, anneal_steps=50_000)`)
+    contribute to the mechanism_key transparently — two
+    independently-constructed partials with the same wrapped
+    callable + same kwargs canonicalise identically across
+    processes. The "bake-in" pattern is then honest: the canonical
+    name records WHAT was baked in.
+
+    Anything else falls through to `repr()`."""
+    if isinstance(v, FnClaim):
+        # Function-claim wrapper: short canonical form `Claim:name`.
+        # Module-claims (instances of @claim-decorated classes with
+        # data fields) fall through to the dataclass branch below
+        # for sorted-field expansion.
         return f'Claim:{v.name}'
     if isinstance(v, bool):
         # Order matters: bool is subclass of int, so this branch
@@ -164,6 +181,35 @@ def _canonical_str(v: object) -> str:
         return repr(v)
     if isinstance(v, (int, float, str)):
         return repr(v)
+    if isinstance(v, functools.partial):
+        inner = _canonical_str(v.func)
+        args_part = (
+            ','.join(_canonical_str(a) for a in v.args) if v.args else ''
+        )
+        kw_part = ','.join(
+            f'{k}={_canonical_str(val)}'
+            for k, val in sorted(v.keywords.items())
+        ) if v.keywords else ''
+        bound = ';'.join(p for p in (args_part, kw_part) if p)
+        return f'partial({inner};{bound})'
+    if is_dataclass(v) and not isinstance(v, type):
+        # Pytree-shaped intervention values (e.g. `DQNHParams`):
+        # canonicalise by sorted-field expansion so two hypotheses
+        # differing in a single HP get distinct, structured
+        # mechanism_key entries. The form is process-portable
+        # because field declaration order and recursive
+        # `_canonical_str` are deterministic.
+        body = ','.join(
+            f'{f.name}={_canonical_str(getattr(v, f.name))}'
+            for f in sorted(fields(v), key=lambda f: f.name)
+        )
+        return f'dataclass:{type(v).__name__}({body})'
+    if isinstance(v, tuple):
+        # Stable canonical form for tuples (e.g. `hidden=(64, 64)`).
+        # Recurse so tuples-of-scalars / tuples-of-tuples stay
+        # process-portable rather than relying on `repr()` which
+        # is stable in CPython but less semantically explicit here.
+        return '(' + ','.join(_canonical_str(item) for item in v) + ')'
     if isinstance(v, types.FunctionType):
         return f'callable:{v.__name__}'
     if isinstance(v, type):

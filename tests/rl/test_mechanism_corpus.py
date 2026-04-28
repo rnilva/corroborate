@@ -12,18 +12,30 @@ from __future__ import annotations
 
 import optax
 
+from functools import partial
+
 from corroborate.aggregate import aggregate_runs
 from corroborate.hypothesis import Hypothesis, InterventionKey
-from corroborate.rl.cell_runner import EvalConfig, run_dqn_cell
-from corroborate.rl.dqn.claims.bootstrap import ddqn_bootstrap
+from corroborate.rl.cell_runner import run_dqn_cell
+from corroborate.rl.dqn.claims.bootstrap import bootstrap, double_greedify
 from corroborate.rl.dqn.invariants import DQNTrajectoryRecord
 from corroborate.rl.env_catalogue import get
+
+
+_DDQN_BOOTSTRAP = partial(bootstrap, greedification=double_greedify)
+
+
+_SHORT_RUN_HP: dict[str, object] = {
+    'total_steps': 40, 'eval_every': 20, 'n_episodes': 2,
+    'warmup_steps': 10, 'sync_period': 10,
+    'buffer_capacity': 200, 'batch_size': 16,
+}
 
 
 def _make_hypothesis(name: str, intervention: dict[str, object]) -> Hypothesis[DQNTrajectoryRecord]:
     return Hypothesis[DQNTrajectoryRecord](
         name=name,
-        intervention=intervention,
+        intervention={**_SHORT_RUN_HP, **intervention},
         bridges=(),
     )
 
@@ -32,11 +44,7 @@ def _make_hypothesis(name: str, intervention: dict[str, object]) -> Hypothesis[D
 def _run_cell(env_name: str, seed: int, h: Hypothesis[DQNTrajectoryRecord]):
     return run_dqn_cell(
         get(env_name), seed=seed, hypothesis=h,
-        total_steps=40,
         optimizer=optax.adam(1e-3),
-        eval_config=EvalConfig(eval_every=20, n_episodes=2),
-        warmup_steps=10, sync_period=10,
-        buffer_capacity=200, batch_size=16,
     )
 
 
@@ -66,7 +74,7 @@ def test_different_interventions_yield_different_keys() -> None:
     them apart."""
     vanilla = _make_hypothesis('vanilla', intervention={})
     ddqn = _make_hypothesis(
-        'ddqn', intervention={'bootstrap': ddqn_bootstrap},
+        'ddqn', intervention={'bootstrap': _DDQN_BOOTSTRAP},
     )
 
     vanilla_run = _run_cell('CartPole-v1', seed=0, h=vanilla)
@@ -85,7 +93,7 @@ def test_aggregate_runs_groups_by_intervention_and_env() -> None:
     2 ArmRows."""
     vanilla = _make_hypothesis('vanilla', intervention={})
     ddqn = _make_hypothesis(
-        'ddqn', intervention={'bootstrap': ddqn_bootstrap},
+        'ddqn', intervention={'bootstrap': _DDQN_BOOTSTRAP},
     )
 
     runs = [

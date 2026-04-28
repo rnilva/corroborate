@@ -21,7 +21,7 @@ import jax.numpy as jnp
 import optax
 
 from corroborate.invariant import at_most
-from corroborate.rl.dqn.claims.bootstrap import vanilla_bootstrap
+from corroborate.rl.dqn.claims.bootstrap import bootstrap
 from corroborate.rl.dqn.claims.q_network import mlp_q
 from corroborate.rl.dqn.claims.target_sync import periodic_copy
 from corroborate.rl.dqn.dqn import dqn_step, init_state
@@ -305,7 +305,7 @@ def test_at_most_wrap_invariant_violation_when_gap_over_threshold() -> None:
 
 def test_at_most_wrap_targets_propagate_from_gap_reads() -> None:
     gap = hasselt_covariance_gap()
-    bridge = at_most(gap, threshold=0.5, of_claim=vanilla_bootstrap)
+    bridge = at_most(gap, threshold=0.5, of_claim=bootstrap)
     assert bridge.targets == ('online_q_values', 'target_q_values')
 
 
