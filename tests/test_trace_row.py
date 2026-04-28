@@ -168,3 +168,122 @@ def test_unsupported_leaf_type_raises() -> None:
             'timestamp': 't',
             'bad_leaf': object(),
         })
+
+
+# ============ apply_trace_reductions ============
+
+def test_apply_trace_reductions_noop_when_empty() -> None:
+    """No exprs + no drops → traces returned unchanged."""
+    from corroborate.persistence import apply_trace_reductions
+    rows = [
+        TraceRow(
+            id='r1', cycle_id=None,
+            timestamp='2026-01-01T00:00:00+00:00',
+            leaves={'reward': [1.0, 0.5, 0.0]},
+        ),
+    ]
+    out = apply_trace_reductions(rows, add=(), drop=())
+    assert out == rows
+
+
+def test_apply_trace_reductions_adds_polars_expr_column() -> None:
+    """An `add` expr produces a new column that lands as a
+    TraceRow leaf."""
+    import polars as pl
+    from corroborate.persistence import apply_trace_reductions
+    rows = [
+        TraceRow(
+            id='r1', cycle_id=None,
+            timestamp='2026-01-01T00:00:00+00:00',
+            leaves={'reward': [1.0, 0.5, 0.0]},
+        ),
+    ]
+    [out] = apply_trace_reductions(
+        rows,
+        add=(pl.col('reward').list.max().alias('reward_max'),),
+    )
+    assert out.leaves['reward'] == [1.0, 0.5, 0.0]
+    assert out.leaves['reward_max'] == 1.0
+
+
+def test_apply_trace_reductions_drops_named_columns() -> None:
+    """A `drop` list removes those columns from the trace.
+    Provenance fields are NOT droppable (they're TraceRow's typed
+    fields, not leaves) — but a leaf can be."""
+    from corroborate.persistence import apply_trace_reductions
+    rows = [
+        TraceRow(
+            id='r1', cycle_id=None,
+            timestamp='2026-01-01T00:00:00+00:00',
+            leaves={'reward': [1.0, 0.5, 0.0], 'gamma': 0.99},
+        ),
+    ]
+    [out] = apply_trace_reductions(rows, drop=('reward',))
+    assert 'reward' not in out.leaves
+    assert out.leaves['gamma'] == 0.99
+
+
+def test_apply_trace_reductions_subsample_via_polars_expr() -> None:
+    """Subsampling expressed as `list.gather_every(N)` — the
+    user's suggested unification of subsample + reduce under one
+    declarative polars-expr surface."""
+    import polars as pl
+    from corroborate.persistence import apply_trace_reductions
+    rows = [
+        TraceRow(
+            id='r1', cycle_id=None,
+            timestamp='2026-01-01T00:00:00+00:00',
+            leaves={'reward': [float(i) for i in range(10)]},
+        ),
+    ]
+    every_other = (
+        pl.col('reward')
+        .list.gather_every(2)
+        .alias('reward_every_2nd')
+    )
+    [out] = apply_trace_reductions(
+        rows,
+        add=(every_other,),
+        drop=('reward',),
+    )
+    assert out.leaves['reward_every_2nd'] == [0.0, 2.0, 4.0, 6.0, 8.0]
+    assert 'reward' not in out.leaves
+
+
+def test_apply_trace_reductions_collapse_3d_to_1d() -> None:
+    """The 3-D → 1-D reduction pattern that's the actual
+    motivation. Polars's `list.eval` has known limitations with
+    deeply nested lists; `map_elements` with a Python UDF handles
+    arbitrary nesting cleanly. Either is a polars expression and
+    works through `apply_trace_reductions`."""
+    import polars as pl
+    from corroborate.persistence import apply_trace_reductions
+    # 3-D shape: (2 outer, 2 inner-batch, 3 actions)
+    online_q = [
+        [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]],   # step 0
+        [[0.0, 0.5, 1.0], [2.0, 1.5, 0.5]],   # step 1
+    ]
+    rows = [
+        TraceRow(
+            id='r1', cycle_id=None,
+            timestamp='2026-01-01T00:00:00+00:00',
+            leaves={'online_q_values': online_q},
+        ),
+    ]
+    # Per-step max-Q over (batch × actions). map_elements + Python
+    # comprehension is the most readable form for nested-list
+    # aggregation; runs once per cell at write time, so the UDF
+    # overhead is negligible.
+    expr = pl.col('online_q_values').map_elements(
+        lambda nested: [max(max(act) for act in batch)
+                        for batch in nested.to_list()],
+        return_dtype=pl.List(pl.Float64),
+    ).alias('online_max_q_per_step')
+    [out] = apply_trace_reductions(
+        rows,
+        add=(expr,),
+        drop=('online_q_values',),
+    )
+    # Step 0: max of [3.0, 6.0] = 6.0; Step 1: max of [1.0, 2.0] = 2.0.
+    assert out.leaves['online_max_q_per_step'] == [6.0, 2.0]
+    assert 'online_q_values' not in out.leaves

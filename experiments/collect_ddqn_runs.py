@@ -38,8 +38,11 @@ from functools import partial
 from pathlib import Path
 from typing import Any
 
+import polars as pl
+
 from corroborate.hypothesis import Hypothesis
 from corroborate.persistence import (
+    apply_trace_reductions,
     read_runrows,
     read_tracerows,
     write_runrows,
@@ -87,6 +90,48 @@ HP_GRID: dict[str, list[Any]] = {
     'batch_size': [32],
     'lr': [1e-3],
 }
+
+
+# ============ Trace post-reductions (polars exprs) ============
+
+# 3-D Q-tensors (`online_q_values`, `target_q_values`) are
+# `(steps, batch, n_actions)` — at 50k steps × 30 seeds they
+# dominate disk (~800 MB per arm). For DDQN §3 acceptance we
+# only need per-step max-Q (online & target) — `hasselt_
+# covariance_gap` reads max-Q across time, not per-batch detail.
+#
+# `map_elements` is the right tool for nested-list aggregation:
+# `pl.list.eval` has known limitations with deeply nested lists.
+# The UDF runs once per cell at write time — overhead negligible.
+
+def _per_step_max_q(nested_list: pl.Series) -> list[float]:
+    """Per-step max-Q over (batch, n_actions). Input is a nested
+    Python list shaped `(steps, batch, n_actions)`; output is
+    `(steps,)`."""
+    return [
+        max(max(per_action_q) for per_action_q in per_batch)
+        for per_batch in nested_list.to_list()
+    ]
+
+
+TRACE_POST_REDUCTIONS: tuple[pl.Expr, ...] = (
+    pl.col('online_q_values').map_elements(
+        _per_step_max_q, return_dtype=pl.List(pl.Float64),
+    ).alias('online_max_q_per_step'),
+    pl.col('target_q_values').map_elements(
+        _per_step_max_q, return_dtype=pl.List(pl.Float64),
+    ).alias('target_max_q_per_step'),
+)
+
+
+# Source columns to drop after reductions. Explicit acknowledgment
+# that the raw 3-D arrays are gone from the trace store; bridges
+# that need them must be precomputed at training time. The 2-D
+# `sample_indices` (~50 MB) is kept for `lin_iid_gap` post-hoc.
+TRACE_POST_DROPS: tuple[str, ...] = (
+    'online_q_values',
+    'target_q_values',
+)
 
 
 def _intervention_for(
@@ -181,8 +226,11 @@ def _run_arm_worker(
     runs_path = tmp_dir / f'{arm_tag}__runs.parquet'
     traces_path = tmp_dir / f'{arm_tag}__traces.parquet'
 
-    from corroborate.persistence import write_tracerows as _write_tracerows
-    from corroborate.persistence import write_runrows as _write_runrows
+    from corroborate.persistence import (
+        apply_trace_reductions as _apply_reductions,
+        write_runrows as _write_runrows,
+        write_tracerows as _write_tracerows,
+    )
     from corroborate.rl.cell_runner import run_dqn_arm
     from corroborate.rl.dqn.claims.optimizer import Adam as _Adam
     from corroborate.rl.env_catalogue import get
@@ -192,7 +240,16 @@ def _run_arm_worker(
         get(env_name), seeds, hypothesis=h, optimizer=_Adam(),
     )
     _write_runrows(tuple(c.run for c in cells), runs_path)
-    _write_tracerows(tuple(c.trace for c in cells), traces_path)
+    # Apply polars-expr reductions in-memory before writing the
+    # trace parquet. Drops 3-D Q-tensors after computing per-step
+    # max-Q reductions — the trace file shrinks ~10× with the
+    # bridge-relevant signal preserved.
+    reduced_traces = _apply_reductions(
+        [c.trace for c in cells],
+        add=TRACE_POST_REDUCTIONS,
+        drop=TRACE_POST_DROPS,
+    )
+    _write_tracerows(reduced_traces, traces_path)
     return runs_path, traces_path
 
 
