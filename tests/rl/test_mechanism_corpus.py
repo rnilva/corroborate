@@ -25,10 +25,12 @@ from corroborate.rl.env_catalogue import get
 _DDQN_BOOTSTRAP = partial(bootstrap, greedification=double_greedify)
 
 
+from corroborate.rl.dqn.claims.replay import Replay
+
 _SHORT_RUN_HP: dict[str, object] = {
     'total_steps': 40, 'eval_every': 20, 'n_episodes': 2,
     'warmup_steps': 10, 'sync_period': 10,
-    'buffer_capacity': 200, 'batch_size': 16,
+    'replay': Replay(capacity=200, batch_size=16),
 }
 
 

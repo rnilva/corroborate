@@ -31,19 +31,22 @@ from corroborate.rl.dqn.claims.bootstrap import (
 from corroborate.rl.dqn.claims.loss import squared_error
 from corroborate.rl.dqn.claims.q_network import MLP, mlp_q
 from corroborate.rl.dqn.claims.replay import (
-    buffer_add,
-    buffer_init,
-    buffer_sample,
+    Batch,
+    Replay,
+    ReplayState,
+    Transition,
+    uniform_sample,
 )
 from corroborate.rl.dqn.claims.target_sync import periodic_copy
 
 __all__ = [
+    'Batch',
     'EpsilonGreedy',
     'MLP',
+    'Replay',
+    'ReplayState',
+    'Transition',
     'bootstrap',
-    'buffer_add',
-    'buffer_init',
-    'buffer_sample',
     'double_greedify',
     'epsilon_greedy',
     'full_gradient',
@@ -53,4 +56,5 @@ __all__ = [
     'periodic_copy',
     'semi_gradient',
     'squared_error',
+    'uniform_sample',
 ]

@@ -28,6 +28,7 @@ from corroborate.rl.dqn.claims.bootstrap import (
     max_greedify,
 )
 from corroborate.rl.dqn.claims.q_network import MLP, mlp_q
+from corroborate.rl.dqn.claims.replay import Replay
 from corroborate.rl.dqn.dqn import dqn_step, init_state
 from corroborate.rl.env_catalogue import GymnaxEnvLike, HasN, HasShape
 from corroborate.loop import python_loop, scan_loop
@@ -66,8 +67,7 @@ def _build_step_fn(
         optimizer=optimizer,
         warmup_steps=10,           # tiny for smoke
         sync_period=10,
-        buffer_capacity=200,
-        batch_size=16,
+        replay=Replay(capacity=200, batch_size=16),
         **extra,
     )
     return bound
@@ -82,7 +82,7 @@ def test_vanilla_dqn_runs_on_cartpole_via_python_loop() -> None:
         env=env, env_params=env_params,
         obs_dim=obs_dim, n_actions=n_actions,
         seed=0, optimizer=optimizer,
-        buffer_capacity=200,
+        replay=Replay(capacity=200),
     )
     step_fn = _build_step_fn(env, env_params, n_actions, optimizer)
 
@@ -121,7 +121,7 @@ def test_vanilla_dqn_runs_via_scan_loop() -> None:
         env=env, env_params=env_params,
         obs_dim=obs_dim, n_actions=n_actions,
         seed=0, optimizer=optimizer,
-        buffer_capacity=200,
+        replay=Replay(capacity=200),
     )
     step_fn = _build_step_fn(env, env_params, n_actions, optimizer)
 
@@ -215,7 +215,7 @@ def test_ep_return_resets_in_state_on_done() -> None:
         env=env, env_params=env_params,
         obs_dim=obs_dim, n_actions=n_actions,
         seed=0, optimizer=optimizer,
-        buffer_capacity=200,
+        replay=Replay(capacity=200),
     )
     step_fn = _build_step_fn(env, env_params, n_actions, optimizer)
 
@@ -248,7 +248,7 @@ def test_step_counter_advances_monotonically() -> None:
         env=env, env_params=env_params,
         obs_dim=obs_dim, n_actions=n_actions,
         seed=0, optimizer=optimizer,
-        buffer_capacity=200,
+        replay=Replay(capacity=200),
     )
     step_fn = _build_step_fn(env, env_params, n_actions, optimizer)
 

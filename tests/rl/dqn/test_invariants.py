@@ -49,11 +49,14 @@ def _run_short_trajectory() -> Mapping[str, jnp.ndarray]:
     obs_dim = int(obs_space.shape[0])
     n_actions = int(act_space.n)
 
+    from corroborate.rl.dqn.claims.replay import Replay
+
     optimizer = optax.adam(1e-3)
+    replay = Replay(capacity=200, batch_size=16)
     state = init_state(
         env=env, env_params=env_params,
         obs_dim=obs_dim, n_actions=n_actions,
-        seed=0, optimizer=optimizer, buffer_capacity=200,
+        seed=0, optimizer=optimizer, replay=replay,
     )
 
     from functools import partial
@@ -62,7 +65,7 @@ def _run_short_trajectory() -> Mapping[str, jnp.ndarray]:
         env=env, env_params=env_params, n_actions=n_actions,
         optimizer=optimizer,
         warmup_steps=10, sync_period=10,
-        buffer_capacity=200, batch_size=16,
+        replay=replay,
     )
     _, record = python_loop(step_fn, state, length=100)
     return record

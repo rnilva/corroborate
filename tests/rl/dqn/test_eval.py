@@ -18,6 +18,7 @@ import jax.numpy as jnp
 import optax
 
 from corroborate.rl.dqn.claims.q_network import mlp_q
+from corroborate.rl.dqn.claims.replay import Replay
 from corroborate.rl.dqn.dqn import init_state
 from corroborate.rl.dqn.eval import (
     eval_burst,
@@ -46,7 +47,7 @@ def test_eval_episode_returns_finite_scalars() -> None:
         env=env, env_params=env_params,
         obs_dim=obs_dim, n_actions=n_actions,
         seed=0, optimizer=optimizer,
-        buffer_capacity=200,
+        replay=Replay(capacity=200),
     )
 
     out = eval_episode(
@@ -76,7 +77,7 @@ def test_eval_episode_mc_return_matches_episode_length_for_cartpole() -> None:
         env=env, env_params=env_params,
         obs_dim=obs_dim, n_actions=n_actions,
         seed=0, optimizer=optimizer,
-        buffer_capacity=200,
+        replay=Replay(capacity=200),
     )
 
     out = eval_episode(
@@ -99,7 +100,7 @@ def test_eval_burst_stacks_k_episodes() -> None:
         env=env, env_params=env_params,
         obs_dim=obs_dim, n_actions=n_actions,
         seed=0, optimizer=optimizer,
-        buffer_capacity=200,
+        replay=Replay(capacity=200),
     )
 
     burst = eval_burst(
@@ -126,7 +127,7 @@ def test_eval_burst_episodes_are_distinct() -> None:
         env=env, env_params=env_params,
         obs_dim=obs_dim, n_actions=n_actions,
         seed=0, optimizer=optimizer,
-        buffer_capacity=200,
+        replay=Replay(capacity=200),
     )
 
     burst = eval_burst(

@@ -20,13 +20,20 @@ function signature OR a frozen dataclass's fields, surfacing each
 HP leaf."""
 from __future__ import annotations
 
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 import jax
 
 # Re-exported for back-compat. Concrete Q-function implementations
 # define their own `Params` shapes; dqn threads the opaque pytree.
 from corroborate.rl.dqn.claims.q_network import Params
+
+if TYPE_CHECKING:
+    # Forward-ref only: `ReplayState` / `Batch` are concrete types
+    # defined in `claims/replay.py`, which imports `BufferSample`
+    # from this module. The TYPE_CHECKING guard breaks the runtime
+    # circular import while still letting pyright resolve the names.
+    from corroborate.rl.dqn.claims.replay import Batch, ReplayState
 
 
 class QFunction(Protocol):
@@ -143,6 +150,23 @@ class LossFn(Protocol):
     def __call__(self, predicted: jax.Array, target: jax.Array) -> jax.Array: ...
 
 
+class BufferSample(Protocol):
+    """Replay sampling strategy. Field of `Replay` Module; default
+    is `uniform_sample`. PrioritisedReplay's swap is the same
+    Protocol with side-car priorities.
+
+    Returns a `Batch` (NamedTuple over the sampled transition
+    arrays + indices)."""
+    def __call__(
+        self,
+        *,
+        state: 'ReplayState',
+        rng_key: jax.Array,
+        batch_size: int,
+        capacity: int,
+    ) -> 'Batch': ...
+
+
 class TargetSync(Protocol):
     """Target-network update rule. Periodic copy / Polyak average."""
     def __call__(
@@ -154,13 +178,6 @@ class TargetSync(Protocol):
         sync_period: int,
     ) -> Params: ...
 
-
-# Replay-buffer shape is six arrays — too many to fit a clean
-# Protocol per call. Convention: callers pass the buffer's
-# component arrays explicitly (as kwargs on `dqn_step`); the
-# `buffer_*` claims below take state and a few side-args. A
-# tighter Protocol-shaped buffer interface lands when the second
-# buffer impl (e.g. PrioritisedReplay) forces the shape.
 
 # Public type alias for `dqn_step`'s record output. The framework
 # stores arbitrary scalars per step; this dict keys are

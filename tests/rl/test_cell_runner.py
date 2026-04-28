@@ -32,16 +32,21 @@ from corroborate.verdict import Verdict
 # Compact HP bundle reused across cell-runner tests. Authors spread
 # these into `intervention` as flat kwargs; cell runner forwards
 # `**intervention` into `partial(dqn, ...)` so the intervention's
-# shape mirrors `dqn`'s signature.
+# shape mirrors `dqn`'s signature. Module-owned HPs (buffer
+# capacity, batch size) live on a `Replay` instance under the
+# `replay` key.
+from corroborate.rl.dqn.claims.replay import Replay  # noqa: E402
+
+_REPLAY_SHORT = Replay(capacity=200, batch_size=16)
 _SHORT_RUN_HP: dict[str, object] = {
     'total_steps': 60, 'eval_every': 30, 'n_episodes': 2,
     'warmup_steps': 10, 'sync_period': 10,
-    'buffer_capacity': 200, 'batch_size': 16,
+    'replay': _REPLAY_SHORT,
 }
 _SHORT_RUN_HP_40: dict[str, object] = {
     'total_steps': 40, 'eval_every': 20, 'n_episodes': 2,
     'warmup_steps': 10, 'sync_period': 10,
-    'buffer_capacity': 200, 'batch_size': 16,
+    'replay': _REPLAY_SHORT,
 }
 
 

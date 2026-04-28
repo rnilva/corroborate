@@ -21,7 +21,7 @@ import jax.numpy as jnp
 import optax
 
 from corroborate.claim import claim
-from corroborate.rl.dqn.claims import buffer_add, buffer_sample
+from corroborate.rl.dqn.claims.replay import Replay, Transition
 from corroborate.rl.dqn.state import DQNState
 from corroborate.rl.dqn.types import (
     ActionSelect,
@@ -118,7 +118,7 @@ def rollout_phase(
     env: GymnaxEnvLike,
     env_params: object,
     n_actions: int,
-    capacity: int,
+    replay: Replay,
     q_network: QNetwork,
     action_select: ActionSelect,
     state_hash: StateHash,
@@ -127,14 +127,12 @@ def rollout_phase(
 
     Reads `q_network` to score the current observation, calls
     `action_select(q_values, key, step, n_actions)`, steps the
-    env, appends the transition to the replay buffer.
+    env, appends the transition to `replay`.
 
-    `action_select` Modules own their schedules / temperatures
-    internally (e.g. `EpsilonGreedy.schedule`), so the rollout
-    phase doesn't see exploration HPs directly — it just passes
-    the global step. The schedule's value at this step is a pure
-    function of `(action_select, step)` and is not logged to the
-    per-step record (recoverable from mechanism_key + step)."""
+    `replay` is the Replay Module — `replay.add(state, transition)`
+    encapsulates the buffer's FIFO write semantics. dqn doesn't
+    introspect `state.replay`; PrioritisedReplay is a Module-level
+    swap with the same interface."""
     # Q-values at current obs — single observation, not batched.
     q_values = q_network(state.online_params, state.obs)
 
@@ -149,13 +147,11 @@ def rollout_phase(
     # (state.obs is already flat from init_state_from_key).
     next_obs = next_obs.reshape(state.obs.shape)
 
-    # Append to FIFO buffer.
-    new_buf = buffer_add(
-        state=state, capacity=capacity,
+    # Append to replay via the Module's `add` method.
+    new_replay = replay.add(state.replay, Transition(
         obs=state.obs, action=action,
         reward=reward, next_obs=next_obs, done=done,
-    )
-    buf_obs, buf_action, buf_reward, buf_next_obs, buf_done, buf_size = new_buf
+    ))
 
     # Episode return: accumulate this step's reward into the
     # running tally. The state's tally resets to 0 on done so the
@@ -166,8 +162,7 @@ def rollout_phase(
     next_ep_return = jnp.where(done, jnp.float32(0.0), cumulative)
 
     new_state = state._replace(
-        buf_obs=buf_obs, buf_action=buf_action, buf_reward=buf_reward,
-        buf_next_obs=buf_next_obs, buf_done=buf_done, buf_size=buf_size,
+        replay=new_replay,
         env_state=next_env_state,
         obs=next_obs,
         rng_key=next_rng_key,
@@ -186,7 +181,7 @@ def rollout_phase(
         ep_return=cumulative,
         action=action.astype(jnp.int32),
         state_hash=obs_hash,
-        buf_size=buf_size.astype(jnp.int32),
+        buf_size=new_replay.size.astype(jnp.int32),
     )
     return new_state, out
 
@@ -202,29 +197,25 @@ def train_phase(
     loss_fn: LossFn,
     optimizer: optax.GradientTransformation,
     gamma: float,
-    batch_size: int,
-    capacity: int,
+    replay: Replay,
     warmup_steps: int,
 ) -> tuple[DQNState, TrainOut]:
     """One gradient step on a batch sampled from the buffer.
 
     Skipped (no-op) until `state.step >= warmup_steps`; before
     warmup the buffer doesn't have enough transitions to train
-    meaningfully. After warmup, samples uniformly from the
-    populated portion."""
+    meaningfully. `replay.sample_batch(state.replay, key)` returns
+    a `Batch` with `(obs, action, reward, next_obs, done, indices)`."""
     sample_key, next_rng_key = jax.random.split(state.rng_key)
 
-    obs_b, action_b, reward_b, next_obs_b, done_b, sample_indices = buffer_sample(
-        state=state, rng_key=sample_key,
-        batch_size=batch_size, capacity=capacity,
-    )
+    batch = replay.sample_batch(state.replay, sample_key)
 
     # Compute target via bootstrap slot — DDQN swaps live here.
     target_b = bootstrap(
         online_params=state.online_params,
         target_params=state.target_params,
         q_network=q_network,
-        next_obs=next_obs_b, reward=reward_b, done=done_b,
+        next_obs=batch.next_obs, reward=batch.reward, done=batch.done,
         gamma=gamma,
     )
 
@@ -233,15 +224,15 @@ def train_phase(
     # on, returning the FULL Q-vectors per net (not pre-reduced
     # argmaxes) so post-hoc reductions can compute correlation,
     # disagreement, etc. Independent of which bootstrap is selected.
-    online_q_values, target_q_values = value_probe(state, q_network, next_obs_b)
+    online_q_values, target_q_values = value_probe(state, q_network, batch.next_obs)
 
     def compute_loss(params: Params) -> tuple[jax.Array, jax.Array]:
         # Predicted Q for the action actually taken in each transition.
-        q_b = q_network(params, obs_b)               # (batch, n_actions)
+        q_b = q_network(params, batch.obs)            # (batch, n_actions)
         predicted = jnp.take_along_axis(
-            q_b, action_b[..., None], axis=-1,
-        ).squeeze(-1)                                 # (batch,)
-        per_sample = loss_fn(predicted, target_b)     # (batch,)
+            q_b, batch.action[..., None], axis=-1,
+        ).squeeze(-1)                                  # (batch,)
+        per_sample = loss_fn(predicted, target_b)      # (batch,)
         return per_sample.mean(), jnp.abs(predicted - target_b).mean()
 
     (loss, td_error), grads = jax.value_and_grad(
@@ -271,7 +262,7 @@ def train_phase(
         td_error=jnp.where(skip, jnp.float32(0.0), td_error),
         online_q_values=online_q_values,
         target_q_values=target_q_values,
-        sample_indices=sample_indices,
+        sample_indices=batch.indices,
     )
     return new_state, out
 

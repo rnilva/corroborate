@@ -34,7 +34,7 @@ from corroborate.rl.dqn.claims import (
     periodic_copy,
     squared_error,
 )
-from corroborate.rl.dqn.claims.replay import buffer_init
+from corroborate.rl.dqn.claims.replay import Replay
 from corroborate.rl.dqn.eval import EvalBurstOut, eval_burst
 from corroborate.rl.dqn.phases import (
     RolloutOut,
@@ -76,20 +76,15 @@ def init_state_from_key(
     rng_key: jax.Array,
     optimizer: optax.GradientTransformation,
     q_network: QFunction = mlp_q,
-    buffer_capacity: int = 10_000,
+    replay: Replay = Replay(),
 ) -> DQNState:
     """Build initial DQNState from a `jax.random.PRNGKey` directly.
 
-    `q_network` is the Q-function functor — it owns its
-    architecture HPs (e.g. `MLP.hidden`) AND knows how to allocate
-    its own params via `q_network.init(rng, obs_dim, n_actions)`.
-    The Q-function's parameterisation is opaque to dqn (`Params` is
-    a PyTree from this layer's perspective).
-
-    `buffer_capacity` is the replay-buffer size — a flat HP on the
-    `dqn` outermost claim. Architecture HPs travel with the
-    Q-function Module; engineering knobs like buffer_capacity are
-    flat top-level kwargs.
+    `q_network` and `replay` are Modules: each owns its own
+    architecture / capacity HPs as fields, allocates its own
+    sub-state via `init`, and is opaque to dqn beyond the
+    Module-level operations. dqn doesn't see `buffer_capacity` or
+    `batch_size` — those live on `Replay`.
 
     Vmap-friendly: under `jax.vmap` over a batched key array, this
     function produces a batched DQNState (each leaf has a leading
@@ -104,19 +99,11 @@ def init_state_from_key(
     # input shape. Conv-based q_networks would NOT use this
     # flattening; they'd pair with a different state-init path.
     obs = obs.reshape(obs_dim)
-    buf_obs, buf_action, buf_reward, buf_next_obs, buf_done, buf_size = (
-        buffer_init(buffer_capacity, obs_dim)
-    )
     return DQNState(
         online_params=online,
         target_params=online,
         opt_state=opt_state,
-        buf_obs=buf_obs,
-        buf_action=buf_action,
-        buf_reward=buf_reward,
-        buf_next_obs=buf_next_obs,
-        buf_done=buf_done,
-        buf_size=buf_size,
+        replay=replay.init(obs_dim),
         env_state=env_state,
         obs=obs,
         step=jnp.int32(0),
@@ -134,7 +121,7 @@ def init_state(
     seed: int,
     optimizer: optax.GradientTransformation,
     q_network: QFunction = mlp_q,
-    buffer_capacity: int = 10_000,
+    replay: Replay = Replay(),
 ) -> DQNState:
     """Build initial DQNState for a single env instance.
 
@@ -150,7 +137,7 @@ def init_state(
         rng_key=jax.random.PRNGKey(seed),
         optimizer=optimizer,
         q_network=q_network,
-        buffer_capacity=buffer_capacity,
+        replay=replay,
     )
 
 
@@ -167,8 +154,6 @@ def dqn_step(
     state_hash: StateHash = default_state_hash,
     # HPs (paper-honest where present in math; engineering otherwise)
     gamma: float = 0.99,
-    batch_size: int = 64,
-    buffer_capacity: int = 10_000,
     warmup_steps: int = 1_000,
     sync_period: int = 100,
     # Slot Claims (each satisfies a Protocol in `types.py`)
@@ -177,6 +162,7 @@ def dqn_step(
     bootstrap: Bootstrap = default_bootstrap,
     loss_fn: LossFn = squared_error,
     target_sync: TargetSync = periodic_copy,
+    replay: Replay = Replay(),
 ) -> tuple[DQNState, StepRecord]:
     """One DQN step: rollout → train → sync → record.
 
@@ -189,26 +175,24 @@ def dqn_step(
        step the online network.
     3. Sync: update target network per the `target_sync` slot.
 
-    HPs flow through the slot Protocols at call time when paper-
-    honest (e.g. `gamma` is a Bellman-equation parameter, so it's
-    in `Bootstrap`'s signature; `sync_period` is in `TargetSync`'s).
-    Engineering HPs (`batch_size`, `buffer_capacity`,
-    `warmup_steps`) are flat kwargs on this claim. Construction-
-    time / architecture HPs (e.g. `MLP.hidden`,
-    `EpsilonGreedy.schedule`) live on the slot Module that owns
-    them, NOT here.
+    Construction-time HPs travel with their owning Module:
+    `replay.capacity`, `replay.batch_size`, `MLP.hidden`,
+    `EpsilonGreedy.schedule`. dqn-level HPs (`gamma`,
+    `warmup_steps`, `sync_period`) are paper-honest cross-cutting
+    parameters that don't belong inside any single Module.
 
     DDQN intervention: `partial(dqn_step, bootstrap=partial(
     bootstrap, greedification=double_greedify))`. Schedule swap:
     `partial(dqn_step, action_select=replace(EpsilonGreedy(),
-    schedule=other_schedule))`."""
+    schedule=other_schedule))`. Capacity swap: `partial(dqn_step,
+    replay=replace(Replay(), capacity=50_000))`."""
     del idx  # `step` is on `state`; idx is the loop's bookkeeping arg
 
     # --- Rollout: act in env, store transition --------------------
     state, rollout_out = rollout_phase(
         state,
         env=env, env_params=env_params, n_actions=n_actions,
-        capacity=buffer_capacity,
+        replay=replay,
         q_network=q_network,
         action_select=action_select,
         state_hash=state_hash,
@@ -219,7 +203,7 @@ def dqn_step(
         state,
         q_network=q_network, bootstrap=bootstrap, loss_fn=loss_fn,
         optimizer=optimizer, gamma=gamma,
-        batch_size=batch_size, capacity=buffer_capacity,
+        replay=replay,
         warmup_steps=warmup_steps,
     )
 
@@ -283,8 +267,6 @@ def dqn(
     # HPs (paper-honest where part of the math; engineering otherwise)
     optimizer: optax.GradientTransformation = optax.adam(1e-3),
     gamma: float = 0.99,
-    batch_size: int = 64,
-    buffer_capacity: int = 10_000,
     warmup_steps: int = 1_000,
     sync_period: int = 100,
     total_steps: int = 50_000,
@@ -296,6 +278,7 @@ def dqn(
     bootstrap: Bootstrap = default_bootstrap,
     loss_fn: LossFn = squared_error,
     target_sync: TargetSync = periodic_copy,
+    replay: Replay = Replay(),
 ) -> dict[str, jax.Array]:
     """Full DQN training+eval run as one claim.
 
@@ -351,19 +334,20 @@ def dqn(
         obs_dim=obs_dim, n_actions=n_actions,
         rng_key=init_key, optimizer=optimizer,
         q_network=q_network,
-        buffer_capacity=buffer_capacity,
+        replay=replay,
     )
 
     step_fn = partial(
         dqn_step,
         env=env, env_params=env_params, n_actions=n_actions,
         optimizer=optimizer, state_hash=state_hash,
-        gamma=gamma, batch_size=batch_size,
-        buffer_capacity=buffer_capacity, warmup_steps=warmup_steps,
+        gamma=gamma,
+        warmup_steps=warmup_steps,
         sync_period=sync_period,
         q_network=q_network, action_select=action_select,
         bootstrap=bootstrap,
         loss_fn=loss_fn, target_sync=target_sync,
+        replay=replay,
     )
 
     n_super_steps = total_steps // eval_every

@@ -3,18 +3,27 @@
 A `NamedTuple` so it threads through `jax.lax.scan` cleanly. The
 state carries everything `dqn_step` needs across iterations: the
 two parameter sets (online + target), optimizer state, replay
-buffer, env state, current observation, step counter, RNG, and
+sub-state, env state, current observation, step counter, RNG, and
 running episode return.
 
-The replay buffer is FLAT (separate fields per transition
-component) rather than a struct of arrays — keeps `jax.lax.scan`'s
-pytree handling shallow."""
+Sub-component states are bundled where their owning Module is a
+typed component:
+
+- `replay: ReplayState` — bundled because `Replay` is a Module
+  with `init/add/sample` methods. Authors swapping for
+  PrioritisedReplay define their own ReplayState shape.
+
+Other state — `online_params`, `target_params`, `opt_state`,
+`env_state`, `obs`, `step`, `rng_key`, `ep_return` — stays flat
+for now (Phase 4 will bundle params+opt_state into a `Learner`
+sub-state when that lands)."""
 from __future__ import annotations
 
 from typing import NamedTuple
 
 import jax
 
+from corroborate.rl.dqn.claims.replay import ReplayState
 from corroborate.rl.dqn.types import EnvState, OptState, Params
 
 
@@ -33,13 +42,11 @@ class DQNState(NamedTuple):
     # optax optimizer state — opaque to the framework.
     opt_state: OptState
 
-    # Replay buffer (FIFO ring): fixed capacity, indexed by step % capacity.
-    buf_obs: jax.Array         # (capacity, obs_dim)
-    buf_action: jax.Array      # (capacity,) int32
-    buf_reward: jax.Array      # (capacity,)
-    buf_next_obs: jax.Array    # (capacity, obs_dim)
-    buf_done: jax.Array        # (capacity,) float32 (0/1)
-    buf_size: jax.Array        # () int32 — number of transitions stored
+    # Replay sub-state — owned by the `Replay` Module's
+    # `init/add/sample_batch` methods. dqn threads it but doesn't
+    # introspect; alternative replay implementations define their
+    # own ReplayState shape.
+    replay: ReplayState
 
     # Env state pytree (gymnax-specific) and current observation.
     env_state: EnvState
