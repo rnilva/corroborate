@@ -9,10 +9,21 @@ v10's HypothesisRunRow + HypothesisComparisonRow):
   Carries Hedges' g, SE, derived_q, etc. Materialized view of
   RunRows; re-derivable on demand.
 
-Plus the per-cell raw observation store:
+Plus the per-cell raw observation store, split across two
+backends:
 
-- `TraceRow` — per-cell scalars + 1-D series (parquet) and
-  multi-dim arrays (zarr-backed `arrays` mapping).
+- `TraceRow.leaves` — scalars + 1-D series, persisted to parquet
+  (one column per leaf path, polars-queryable).
+- `TraceRow.arrays` — multi-dim numpy arrays (2-D+), persisted
+  to zarr keyed by `{cell_id}/{array_name}`. Lazy-loaded on
+  access. Bridges that need full Q-tensors / sample-index
+  matrices read from `arrays` (not `leaves`).
+
+The split is at the dimensionality boundary. Parquet handles
+flat tabular and 1-D-list columns well; deeply-nested-list
+columns (`list<list<list<float>>>`) work technically but suffer
+from Python list materialization overhead and opaque queries.
+zarr is the right format for dense multi-dim arrays.
 
 Each row splits into a **framework-typed surface** (closed-set
 enums, lineage IDs, framework-controlled provenance) and an
@@ -46,6 +57,9 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Self
 
+import numpy as np
+import numpy.typing as npt
+
 from corroborate._narrow import (
     optional_direction,
     optional_refutation_class,
@@ -56,6 +70,12 @@ from corroborate._narrow import (
 )
 from corroborate.hypothesis import Direction
 from corroborate.verdict import RefutationClass, Verdict
+
+
+type ArrayLeaf = npt.NDArray[np.floating] | npt.NDArray[np.integer] | npt.NDArray[np.bool_]
+"""Multi-dim array leaf — what TraceRow.arrays carries. Shape
+and dtype determined by the producer; no constraints at the type
+level. Persisted to zarr by `write_tracerows`."""
 
 
 # ============ Measurement leaf type ============
@@ -81,9 +101,8 @@ type TraceLeaf = str | int | float | bool | list[TraceLeaf]
 
 @dataclass(frozen=True, slots=True)
 class TraceRow:
-    """One cell's raw observation: configurational leaves
-    (path-keyed scalars) + claim-output trajectories (any-dim
-    nested lists) + provenance.
+    """One cell's raw observation: configurational leaves +
+    multi-dim arrays + provenance.
 
     The trace store is the v9-`traces.parquet` analog: low-
     derivation, queryable, re-usable for post-hoc bridge
@@ -96,21 +115,34 @@ class TraceRow:
     name as v9 did) lets two cells of the same hypothesis remain
     distinguishable.
 
-    `leaves` is path-keyed: configurational leaves at dotted
-    topology paths (`bootstrap.gamma`, `optimizer.inner.lr`);
-    claim-output trajectories at flat author-chosen return-dict
-    keys (`reward`, `loss`, `online_q_values`). Scalar columns
-    persist as `Float64`/`Int64`/`Utf8`/`Boolean`; trajectory
-    columns persist as nested `List[...]` (any depth).
+    Two backends, one TraceRow:
+
+    - `leaves` — scalars + 1-D per-step series, persisted to
+      parquet. Path-keyed: configurational leaves at dotted
+      topology paths (`bootstrap.gamma`, `optimizer.inner.lr`);
+      per-step trajectories at flat author-chosen return-dict
+      keys (`reward`, `loss`, `online_max_q_per_step`). Scalar
+      columns persist as `Float64`/`Int64`/`Utf8`/`Boolean`;
+      1-D trajectory columns persist as `List[<scalar>]`. (The
+      `TraceLeaf` type technically allows deeper nesting for
+      backward-compat with pre-zarr trace stores; new code should
+      use `arrays` for 2-D+.)
+    - `arrays` — multi-dim numpy arrays, persisted to zarr keyed
+      by `{cell_id}/{array_name}`. Used for full Q-tensors,
+      sample-index matrices, eval-burst trajectories — anything
+      shaped `(steps, batch, n_actions)` or similar. Lazy-loaded
+      from disk on access; in-memory rows constructed from
+      `run_dqn_arm` carry materialised numpy arrays directly.
 
     No `evidence__` / `binding__` namespace prefixes: paths
-    encode origin via topology (dotted) vs. author-key (flat).
-    No multi-dim drop — all data the substrate emits is
-    persisted; consumers project as needed."""
+    encode origin via topology (dotted) vs. author-key (flat)."""
     id: str
     cycle_id: str | None
     timestamp: str
     leaves: Mapping[str, TraceLeaf] = field(
+        default_factory=lambda: {},
+    )
+    arrays: Mapping[str, ArrayLeaf] = field(
         default_factory=lambda: {},
     )
 
@@ -118,7 +150,10 @@ class TraceRow:
         """Flat top-level dict for parquet: provenance fields +
         each leaf-path becomes its own top-level key. The writer
         feeds this directly to `pl.DataFrame` — no JSON wrapping,
-        no nested structs."""
+        no nested structs.
+
+        `arrays` are NOT included in this dict — they go to zarr
+        via `persistence.write_tracerows`'s `zarr_path` argument."""
         out: dict[str, object] = {
             'id': self.id,
             'cycle_id': self.cycle_id,
@@ -129,12 +164,22 @@ class TraceRow:
         return out
 
     @classmethod
-    def from_row_dict(cls, d: Mapping[str, object]) -> Self:
+    def from_row_dict(
+        cls,
+        d: Mapping[str, object],
+        *,
+        arrays: Mapping[str, ArrayLeaf] | None = None,
+    ) -> Self:
         """Reverse of `as_dict`: split provenance fields from
         leaf-path columns. Any column not in the typed-provenance
         set is treated as a leaf. Null-padded columns (paths the
         row didn't carry — polars fills missing columns with None
-        when rows have heterogeneous keys) are skipped."""
+        when rows have heterogeneous keys) are skipped.
+
+        `arrays` is supplied separately by the caller (e.g.
+        `read_tracerows` reads from zarr and passes it in). If
+        omitted, the resulting TraceRow has no array data — fine
+        for tests / scalar-only workflows."""
         provenance: frozenset[str] = frozenset(
             ('id', 'cycle_id', 'timestamp')
         )
@@ -151,6 +196,7 @@ class TraceRow:
             cycle_id=optional_str(d, 'cycle_id'),
             timestamp=require_str(d, 'timestamp'),
             leaves=leaves,
+            arrays=arrays if arrays is not None else {},
         )
 
 

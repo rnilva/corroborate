@@ -13,6 +13,8 @@ dependencies = [
     "gymnax>=0.0.8",
     "scipy>=1.10",          # distribution quantiles + cdf for stats module
     "statsmodels>=0.14",    # noncentral-t-aware MDE / power machinery
+    "zarr>=3.0,<4",         # multi-dim trace arrays (parquet handles scalars + 1-D)
+    "numcodecs>=0.13",      # zstd compression for zarr arrays
 ]
 
 [build-system]
