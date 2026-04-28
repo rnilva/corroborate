@@ -34,41 +34,44 @@ effect; once it lands `df.filter(pl.col('optimizer.inner.lr') <
 1e-3)` is the workflow that exists end-to-end on disk, not just
 in tests.
 
-## Replay-as-Claim Protocol mismatch (replay.py:150)
+## Replay-as-Claim Protocol mismatch — RESOLVED (2026-04-28)
 
-**Status:** longstanding pre-existing issue surfaced by Step 2A
-audit.
+**Status:** resolved. Replay is no longer a `ClaimBase` subclass.
 
-**Description:** `Claim[**P, T]` Protocol declares `__call__` as
-required. `Replay` (frozen-dataclass `ClaimBase` subclass) has
-`init` / `add` / `sample_batch` instead — multi-method, no single
-`__call__`. So `record_call(self, ...)` inside `Replay.add` fails
-the type check: `Replay` doesn't structurally satisfy
-`Claim[..., object]`.
+**Resolution.** None of the three Protocol-design alternatives
+were taken. Instead, the principled-but-overengineered detour
+(making Replay a Claim somehow) was abandoned in favour of
+acknowledging that `Replay` simply isn't a framework Claim — it's
+a config bundle. The Lin 1992 theoretical claim is about the
+*sampling distribution*, which lives in the `sample` slot
+(an `@claim` free function: `uniform_sample`,
+`prioritised_sample`, …). The slot's FnClaim records itself; the
+Replay dataclass owns HPs + mechanics methods (`init`, `add`,
+`sample_batch`); none of those methods are theoretical claims.
 
-Pyright flags one error consistently:
-`replay.py:150:21 - error: Argument of type "Self@Replay" cannot
-be assigned to parameter "claim_obj" of type "Claim[..., object]"
-in function "record_call"`.
+5 LoC change:
+- Drop `ClaimBase` from `Replay`.
+- Drop `record_call(self, ...)` from `Replay.add` (mechanics, not
+  a Claim — append-to-FIFO has no paper reference).
+- `sample_batch` stays as a binding wrapper around `self.sample`;
+  the slot records the call.
 
-**Why deferred:** needs a Protocol-design call. Three viable
-shapes:
+The walker still surfaces `replay.capacity`, `replay.batch_size`,
+`replay.sample` as topology leaves regardless of Claim status.
+Pyright clean, no Protocol mismatch.
 
-1. Split `Claim` into `Callable Claim` (single `__call__`) and
-   `RecordedClaim` (multi-method but trace-recordable). `Replay`
-   is the latter.
-2. Widen `record_call`'s signature to `ClaimBase | FnClaim`
-   instead of the structural Protocol.
-3. Give Module-shaped multi-method claims a default `__call__`
-   stub that raises NotImplementedError, satisfying the Protocol
-   shape at the cost of a misleading method.
+**Principle that survived:** *every theoretically-meaningful
+operation is a Claim, but not every callable needs to be one.*
+The framework supports both Module Claims (single `__call__`) and
+free-function Claims (FnClaim), plus config bundles (frozen
+dataclasses with no Claim status). Mechanics methods on a config
+bundle are just methods.
 
-(2) is most subtractive; (1) is most honest. Pre-existed before
-the typing-discipline tightening; not blocking any test.
-
-**Lift when:** another multi-method Module claim lands (right now
-`Replay` is the only one) OR a roast pass surfaces it as a paper
-gap. Then design (1) properly.
+**PER infrastructure** (post_train_update slot at the dqn-step
+level, prioritised_sample, update_priorities, no_priority_update)
+deferred until PER actually lands. Design without a use site is
+what almost dragged this fix into a +60 LoC bundle-of-claims
+rewrite — the lesson from the audit thread.
 
 ## Deferred from second-pass external review
 
