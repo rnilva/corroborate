@@ -30,6 +30,11 @@ from corroborate.aggregate import (
 )
 from corroborate.persistence import read_runrows, write_comparisonrows
 from corroborate.schema import ComparisonRow, RunRow
+from corroborate.statistics import (
+    PooledStats,
+    random_effects_summary,
+    random_effects_verdict,
+)
 
 
 _DATA_PATH = Path(__file__).parent / 'data' / 'ddqn' / 'runs.parquet'
@@ -121,6 +126,45 @@ def _print_verdict_row(
     )
 
 
+def _print_pooled_row(
+    label: str,
+    cmps: list[ComparisonRow],
+    path_key: str,
+    *,
+    predicted_direction: str,
+) -> None:
+    """Render the random-effects pooled verdict for a list of
+    per-env ComparisonRows. Reads (g, se) from each comparison's
+    measurements at `<path_key>.effect_size_g` / `<path_key>.se`,
+    pools via DerSimonian-Laird, and prints pooled_g + 95% PI +
+    tau² + I² + Popperian verdict."""
+    pairs: list[tuple[float, float]] = []
+    for cmp in cmps:
+        g = cmp.measurements.get(f'{path_key}.effect_size_g')
+        se = cmp.measurements.get(f'{path_key}.se')
+        if isinstance(g, (int, float)) and isinstance(se, (int, float)):
+            pairs.append((float(g), float(se)))
+    if not pairs:
+        print(f'    {label:<32} (no per-env (g, se) pairs)')
+        return
+    pool: PooledStats = random_effects_summary(pairs)
+    # `random_effects_verdict` accepts None / 'a_gt_b' / 'a_lt_b' /
+    # 'two_sided'; we pass strings directly here for the smoke.
+    from corroborate.hypothesis import Direction as _Dir
+    verdict, refutation = random_effects_verdict(
+        pool,
+        predicted_direction=predicted_direction,  # type: ignore[arg-type]
+    )
+    rc = refutation.value if refutation else '—'
+    print(
+        f'    {label:<32} {verdict.value:<22} {rc:<14} '
+        f'pooled_g={_f(pool.pooled_g):>7} '
+        f'PI=[{_f(pool.pi_lo):>7}, {_f(pool.pi_hi):>7}] '
+        f'tau²={_f(pool.tau2):>5} I²={_f(pool.I2):>5} '
+        f'n_envs={pool.n_cells}'
+    )
+
+
 def main() -> None:
     rows = read_runrows(_DATA_PATH)
     print(f'loaded {len(rows)} RunRows from {_DATA_PATH.name}')
@@ -205,6 +249,31 @@ def main() -> None:
                 f'{link.verdict.value:<22} {rc:<14} '
                 f'r={_f(r):>7} n_envs={n_envs} '
                 f'powered={str(link.adequately_powered)}'
+            )
+
+    # ============ Random-effects pooled verdict per capacity ============
+
+    print('\n' + '=' * 110)
+    print('RANDOM-EFFECTS POOLED VERDICTS (DerSimonian-Laird across envs)')
+    print('=' * 110)
+
+    for capacity in sorted(out_by_capacity.keys()):
+        print(f'\n  replay.capacity={capacity}')
+
+        # Mechanism: predicted_direction='a_lt_b' (DDQN reduces gap).
+        mech_cmps = mech_by_capacity.get(capacity, [])
+        _print_pooled_row(
+            'mechanism.jensen_gap',
+            mech_cmps, 'mechanism.jensen_gap',
+            predicted_direction='a_lt_b',
+        )
+
+        # Outcomes: predicted_direction='a_gt_b' (DDQN increases return).
+        for outcome_path in _OUTCOME_PATHS:
+            out_cmps = out_by_capacity[capacity].get(outcome_path, [])
+            _print_pooled_row(
+                outcome_path, out_cmps, outcome_path,
+                predicted_direction='a_gt_b',
             )
 
     # ============ HP-sensitivity (capacity sweep) ============
