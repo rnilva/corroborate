@@ -61,25 +61,23 @@ leaf as its own typed parquet column."""
 
 # ============ TraceRow — raw per-cell observation store ============
 
-# A trace leaf is either a scalar (HP value, summary scalar) or a
-# 1-D trajectory list (per-step or per-burst sequence). Higher-
-# dimensional arrays (e.g. `(total_steps, batch_size, n_actions)`
-# for `online_q_values`) are NOT in v0's trace store — substrate
-# authors who need them either reduce to scalar/1-D before yield
-# or wait for a future shape extension. Dropping them keeps the
-# parquet schema columnar (one type per column) and the writer
-# logic flat — no nested-list wrangling, no JSON columns.
+# A trace leaf is a scalar (leaf value, summary scalar) OR a list
+# of trace leaves at any nesting depth. Recursive type captures
+# any-dim trajectory: 1-D for per-step series (`reward`, `loss`),
+# 2-D for batch-per-step (`sample_indices` is `(steps, batch)`),
+# 3-D for value-per-action-per-batch-per-step (`online_q_values`
+# is `(steps, batch, n_actions)`). Polars handles arbitrary-depth
+# nested `List` columns natively — `arr.tolist()` produces the
+# nested Python form regardless of dimensionality.
 
-type TraceLeaf = (
-    str | int | float | bool
-    | list[float] | list[int] | list[bool] | list[str]
-)
+type TraceLeaf = str | int | float | bool | list[TraceLeaf]
 
 
 @dataclass(frozen=True, slots=True)
 class TraceRow:
-    """One cell's raw observation: HPs (path-keyed scalars) +
-    per-step trajectories (1-D lists) + provenance.
+    """One cell's raw observation: configurational leaves
+    (path-keyed scalars) + claim-output trajectories (any-dim
+    nested lists) + provenance.
 
     The trace store is the v9-`traces.parquet` analog: low-
     derivation, queryable, re-usable for post-hoc bridge
@@ -92,15 +90,17 @@ class TraceRow:
     name as v9 did) lets two cells of the same hypothesis remain
     distinguishable.
 
-    `leaves` is path-keyed: HPs are dotted topology paths
-    (`bootstrap.gamma`, `optimizer.inner.lr`); trajectories are
-    flat author-chosen return-dict keys (`reward`, `loss`,
-    `td_error`). Mixed scalar/list values per parquet column
-    type — the type tells you which kind a path is.
+    `leaves` is path-keyed: configurational leaves at dotted
+    topology paths (`bootstrap.gamma`, `optimizer.inner.lr`);
+    claim-output trajectories at flat author-chosen return-dict
+    keys (`reward`, `loss`, `online_q_values`). Scalar columns
+    persist as `Float64`/`Int64`/`Utf8`/`Boolean`; trajectory
+    columns persist as nested `List[...]` (any depth).
 
     No `evidence__` / `binding__` namespace prefixes: paths
-    encode origin via topology (dotted) vs. author-key (flat),
-    and parquet column types disambiguate scalar vs. trajectory."""
+    encode origin via topology (dotted) vs. author-key (flat).
+    No multi-dim drop — all data the substrate emits is
+    persisted; consumers project as needed."""
     id: str
     cycle_id: str | None
     timestamp: str
@@ -150,41 +150,18 @@ class TraceRow:
 
 def _coerce_trace_leaf(value: object) -> TraceLeaf:
     """Narrow a parquet-decoded object to `TraceLeaf` at the
-    persistence boundary. Scalars pass through; lists are accepted
-    as `list[float | int | bool | str]` (polars decodes List columns
-    to Python lists)."""
+    persistence boundary. Scalars pass through; lists recurse so
+    arbitrary-depth nested lists (`(total_steps, batch, n_actions)`
+    coming back from polars as `list[list[list[float]]]`) reconstruct
+    correctly."""
     if isinstance(value, bool):
         return value
     if isinstance(value, (int, float, str)):
         return value
     if isinstance(value, list):
-        return _coerce_trace_list(value)
+        return [_coerce_trace_leaf(item) for item in value]
     raise TypeError(
         f'unsupported TraceRow leaf type: {type(value).__name__}',
-    )
-
-
-def _coerce_trace_list(
-    value: list[object],
-) -> list[float] | list[int] | list[bool] | list[str]:
-    """Narrow a list to one of the four homogeneous shapes
-    `TraceLeaf` allows. Empty lists are returned as `list[float]`
-    by convention (polars produces typed empty lists at read; we
-    canonicalise to float-list)."""
-    if not value:
-        return []
-    first = value[0]
-    if isinstance(first, bool):
-        return [bool(v) for v in value]
-    if isinstance(first, int):
-        return [int(v) for v in value]
-    if isinstance(first, float):
-        return [float(v) for v in value]
-    if isinstance(first, str):
-        return [str(v) for v in value]
-    raise TypeError(
-        f'unsupported TraceRow list element type: '
-        f'{type(first).__name__}',
     )
 
 

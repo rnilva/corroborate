@@ -13,20 +13,22 @@ The runner is thin:
 3. vmap-over-seeds: each seed becomes a `jax.random.PRNGKey`; the
    batched call runs `dqn` once jit-compiled and produces a record
    pytree where each leaf has a leading `(n_seeds, ...)` axis.
-4. Per-seed Python-side: project the late-window outcome,
-   evaluate each hypothesis bridge (plus composition-discovered
-   invariants), build the RunRow with measurements at HP topology
-   paths + bridge result paths.
+4. Per-seed Python-side: project the late-window outcome, evaluate
+   each hypothesis bridge (plus composition-discovered invariants),
+   build a `RunRow` (verdict-side: leaves + bridge result paths)
+   and a `TraceRow` (raw-data-side: leaves + 1-D trajectories) with
+   shared id. Returns `CellResult(run, trace)` per seed.
 
 The DQN algorithm itself lives entirely in the `dqn` claim
 (`rl/dqn/dqn.py`). The cell runner has no knowledge of training-
-step semantics; it's a generic vmap-and-build-RunRow harness."""
+step semantics; it's a generic vmap-and-build-records harness."""
 from __future__ import annotations
 
 import uuid
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from functools import partial
+from typing import NamedTuple
 
 import gymnax
 import jax
@@ -44,8 +46,21 @@ from corroborate.rl.dqn.dqn import default_state_hash, dqn
 from corroborate.rl.dqn.invariants import DQNTrajectoryRecord
 from corroborate.rl.dqn.types import OptimizerFactory
 from corroborate.rl.env_catalogue import EnvSpec
-from corroborate.schema import MeasurementLeaf, RunRow
+from corroborate.schema import MeasurementLeaf, RunRow, TraceLeaf, TraceRow
 from corroborate.signature import collect_invariants, walk, walk_paths
+
+
+class CellResult(NamedTuple):
+    """One cell's pair of records — the verdict-side `RunRow` (with
+    derived measurements: leaves + outcome reduction + bridge
+    verdicts/stats) and the raw-data-side `TraceRow` (with
+    leaves + 1-D trajectories from the configured-claim's record).
+
+    `run.id == trace.id` — the two stores join on this UUID, so a
+    consumer reading `runs.parquet` can pull the matching trace from
+    `traces.parquet` and re-evaluate any bridge post-hoc."""
+    run: RunRow
+    trace: TraceRow
 
 
 # `total_steps` default — must match `dqn`'s default. Read from
@@ -89,6 +104,22 @@ def _leaf_measurements(configured: object) -> dict[str, MeasurementLeaf]:
     return {path: _leaf_scalar(kw.default) for path, kw in paths.items()}
 
 
+def _trajectory_leaves(
+    record: Mapping[str, jax.Array],
+) -> dict[str, TraceLeaf]:
+    """Project the per-cell record to trajectory entries keyed by
+    the substrate-author's record key. Any-dim arrays are
+    persisted: 0-D as scalars, 1-D as `list[float]`, higher-dim
+    as nested `list[list[...]]` matching the array shape.
+
+    `arr.tolist()` recursively unrolls any shape into Python's
+    nested-list form; polars persists this as `Float64` (0-D) or
+    `List[...]` columns of arbitrary nesting depth. No data is
+    silently dropped — the substrate decides what's in its
+    record, and the framework persists all of it."""
+    return {key: arr.tolist() for key, arr in record.items()}
+
+
 def _bridge_result_to_measurements(
     result: BridgeResult,
 ) -> dict[str, MeasurementLeaf]:
@@ -119,12 +150,13 @@ def run_dqn_arm(
     optimizer: OptimizerFactory = Adam(),
     outcome_fraction: float = 0.1,
     cycle_id: str | None = None,
-) -> tuple[RunRow, ...]:
+) -> tuple[CellResult, ...]:
     """Run one (env, hypothesis) arm across `seeds` in parallel via
-    `jax.vmap` of the `dqn` outermost claim. Returns one `RunRow`
-    per seed.
+    `jax.vmap` of the `dqn` outermost claim. Returns one
+    `CellResult(run, trace)` per seed — both stores produced and
+    joined by id.
 
-    `optimizer` is also an HP in `dqn`'s signature; the runner
+    `optimizer` is also a leaf in `dqn`'s signature; the runner
     accepts it as a kwarg for the common case where the experiment
     threads one optimizer choice across an arm. If a hypothesis
     intervenes on `optimizer`, that intervention wins (intervention
@@ -192,7 +224,7 @@ def run_dqn_arm(
         tuple(hypothesis.bridges) + tuple(auto_invariants)
     )
 
-    rows: list[RunRow] = []
+    cells: list[CellResult] = []
     for i, seed in enumerate(seeds):
         per_seed_record: dict[str, jax.Array] = {
             k: v[i] for k, v in batched_record.items()
@@ -214,15 +246,31 @@ def run_dqn_arm(
         for result in bridge_results:
             measurements.update(_bridge_result_to_measurements(result))
 
-        rows.append(RunRow(
-            id=str(uuid.uuid4()),
-            parent_id=None,
-            cycle_id=cycle_id,
-            timestamp=datetime.now(UTC).isoformat(timespec='seconds'),
-            verdict=verdict,
-            measurements=measurements,
-        ))
-    return tuple(rows)
+        # Shared id between the two stores: a downstream consumer
+        # reads `runs.parquet`, picks an id, fetches the matching
+        # trace row by `id` from `traces.parquet`, and re-evaluates
+        # any bridge against the persisted trajectory.
+        cell_id = str(uuid.uuid4())
+        timestamp = datetime.now(UTC).isoformat(timespec='seconds')
+
+        run = RunRow(
+            id=cell_id, parent_id=None,
+            cycle_id=cycle_id, timestamp=timestamp,
+            verdict=verdict, measurements=measurements,
+        )
+        # Trace leaves: configurational leaves (shared with the
+        # RunRow's measurements) + 1-D trajectories from the
+        # per-seed record. Heterogeneous types per leaf — scalars
+        # for leaves, lists for trajectories.
+        trace_leaves: dict[str, TraceLeaf] = {}
+        trace_leaves.update(leaf_measurements)
+        trace_leaves.update(_trajectory_leaves(per_seed_record))
+        trace = TraceRow(
+            id=cell_id, cycle_id=cycle_id, timestamp=timestamp,
+            leaves=trace_leaves,
+        )
+        cells.append(CellResult(run=run, trace=trace))
+    return tuple(cells)
 
 
 def run_dqn_cell(
@@ -233,15 +281,15 @@ def run_dqn_cell(
     optimizer: OptimizerFactory = Adam(),
     outcome_fraction: float = 0.1,
     cycle_id: str | None = None,
-) -> RunRow:
+) -> CellResult:
     """Run one (env, seed, hypothesis) cell. Thin convenience
     wrapper around `run_dqn_arm` for the single-seed case;
     multi-seed callers should use `run_dqn_arm` directly to avoid
     per-call vmap re-compilation."""
-    rows = run_dqn_arm(
+    cells = run_dqn_arm(
         env_spec, (seed,), hypothesis,
         optimizer=optimizer,
         outcome_fraction=outcome_fraction,
         cycle_id=cycle_id,
     )
-    return rows[0]
+    return cells[0]

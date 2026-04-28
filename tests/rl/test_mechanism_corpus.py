@@ -53,10 +53,12 @@ def _make_hypothesis(
 
 
 def _run_cell(env_name: str, seed: int, h: Hypothesis[DQNTrajectoryRecord]):
+    """Cell runner returns `CellResult(run, trace)` — these tests
+    only care about the verdict-side row, so unpack `.run` here."""
     return run_dqn_cell(
         get(env_name), seed=seed, hypothesis=h,
         optimizer=Adam(),
-    )
+    ).run
 
 
 # ============ Stable leaf_signature across (env, seed) ============

@@ -131,19 +131,25 @@ def _run_arm_worker(
     )
 
     out_dir = Path(out_dir_str)
-    out_path = out_dir / f'{env_name}__{hypothesis_name}.parquet'
+    runs_path = out_dir / f'{env_name}__{hypothesis_name}__runs.parquet'
+    traces_path = out_dir / f'{env_name}__{hypothesis_name}__traces.parquet'
 
+    from corroborate.persistence import write_tracerows
     from corroborate.rl.cell_runner import run_dqn_arm
     from corroborate.rl.dqn.claims.optimizer import Adam
     from corroborate.rl.env_catalogue import get
 
     h = _make_hypothesis(hypothesis_name)
-    rows = run_dqn_arm(
+    cells = run_dqn_arm(
         get(env_name), seeds, hypothesis=h,
         optimizer=Adam(),
     )
-    write_runrows(rows, out_path)
-    return out_path
+    write_runrows(tuple(c.run for c in cells), runs_path)
+    write_tracerows(tuple(c.trace for c in cells), traces_path)
+    # Caller assembles the corpus from the per-arm runs files;
+    # traces stay co-located so a downstream consumer can rejoin
+    # by id without a separate manifest.
+    return runs_path
 
 
 # ============ Orchestrator ============

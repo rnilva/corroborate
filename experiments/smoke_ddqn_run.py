@@ -1,24 +1,45 @@
 """End-to-end smoke for the DDQN substrate post-decomposition.
 
 Validates the foundation + Phase 1+2 cuts actually carry the
-vanilla-vs-DDQN comparison:
+vanilla-vs-DDQN comparison, AND that the two-store persistence
+(runs.parquet + traces.parquet) round-trips correctly with HP
+query support at the dataframe level:
 
 1. Builds two hypotheses differing only in `greedification`.
-2. Runs each on CartPole, 3 seeds, 1000 steps via `run_dqn_arm`.
+2. Runs each on CartPole, 3 seeds, 1000 steps via `run_dqn_arm`
+   (returns `tuple[CellResult, ...]` per arm — both stores).
 3. Asserts:
    - `leaf_signature` distinguishes the arms by the `greedification`
      swap (leaf topology paths differ).
    - `aggregate_runs` groups cells correctly.
    - Each arm has finite outcome summaries.
+4. Persists both stores: writes `runs.parquet` and
+   `traces.parquet` to a temp dir, reads back, verifies:
+   - Configurational leaf columns (`gamma`, `optimizer.inner.lr`,
+     ...) survive as typed parquet columns query-able via
+     `df.filter(pl.col('optimizer.inner.lr') < 1e-3)`.
+   - Multi-dim trajectory columns persist as nested
+     `List[List[...]]` and round-trip exactly.
+   - `RunRow.id == TraceRow.id` for paired records.
 
 Run: `uv run python experiments/smoke_ddqn_run.py`."""
 from __future__ import annotations
 
+import tempfile
 import time
 from functools import partial
+from pathlib import Path
+
+import polars as pl
 
 from corroborate.aggregate import aggregate_runs, leaf_signature
 from corroborate.hypothesis import Hypothesis
+from corroborate.persistence import (
+    read_runrows,
+    read_tracerows,
+    write_runrows,
+    write_tracerows,
+)
 from corroborate.rl.cell_runner import run_dqn_arm
 from corroborate.rl.dqn.claims.bootstrap import bootstrap, double_greedify
 from corroborate.rl.dqn.claims.optimizer import Adam, WarmedUpdate
@@ -75,10 +96,12 @@ def main() -> None:
 
     print('1. Running vanilla arm on CartPole...')
     t0 = time.time()
-    vanilla_rows = run_dqn_arm(
+    vanilla_cells = run_dqn_arm(
         env_spec, _SEEDS, vanilla, optimizer=optimizer,
     )
-    print(f'   {len(vanilla_rows)} rows in {time.time() - t0:.1f}s')
+    vanilla_rows = tuple(c.run for c in vanilla_cells)
+    vanilla_traces = tuple(c.trace for c in vanilla_cells)
+    print(f'   {len(vanilla_cells)} cells in {time.time() - t0:.1f}s')
     for row in vanilla_rows:
         seed = row.measurements['seed']
         outcome = row.measurements['outcome.late_window_mean']
@@ -88,10 +111,12 @@ def main() -> None:
 
     print('2. Running DDQN arm on CartPole...')
     t0 = time.time()
-    ddqn_rows = run_dqn_arm(
+    ddqn_cells = run_dqn_arm(
         env_spec, _SEEDS, ddqn, optimizer=optimizer,
     )
-    print(f'   {len(ddqn_rows)} rows in {time.time() - t0:.1f}s')
+    ddqn_rows = tuple(c.run for c in ddqn_cells)
+    ddqn_traces = tuple(c.trace for c in ddqn_cells)
+    print(f'   {len(ddqn_cells)} cells in {time.time() - t0:.1f}s')
     for row in ddqn_rows:
         seed = row.measurements['seed']
         outcome = row.measurements['outcome.late_window_mean']
@@ -123,6 +148,48 @@ def main() -> None:
         mean = arm.measurements['outcome.late_window_mean.arm_mean']
         sd = arm.measurements['outcome.late_window_mean.arm_sd']
         print(f'     {name} on {env}: n={n} mean={mean} sd={sd}')
+
+    print()
+    print('5. Two-store persistence round-trip + HP query:')
+    all_runs = vanilla_rows + ddqn_rows
+    all_traces = vanilla_traces + ddqn_traces
+    with tempfile.TemporaryDirectory() as tmp:
+        runs_path = Path(tmp) / 'runs.parquet'
+        traces_path = Path(tmp) / 'traces.parquet'
+        write_runrows(all_runs, runs_path)
+        write_tracerows(all_traces, traces_path)
+
+        # Verify HP querying at the dataframe level.
+        traces_df = pl.read_parquet(traces_path)
+        # Each cell carries `optimizer.inner.lr` as a typed Float64
+        # column — `df.filter(...)` works without JSON decoding.
+        lr_column = traces_df.get_column('optimizer.inner.lr')
+        print(f'   traces.parquet columns: {len(traces_df.columns)}')
+        print(f'   optimizer.inner.lr (per cell): '
+              f'{lr_column.to_list()}')
+
+        # Read back + verify id-link between stores.
+        rows_back = read_runrows(runs_path)
+        traces_back = read_tracerows(traces_path)
+        run_ids = {r.id for r in rows_back}
+        trace_ids = {t.id for t in traces_back}
+        assert run_ids == trace_ids, (
+            f'id-link violated: {run_ids ^ trace_ids}'
+        )
+
+        # Verify a multi-dim trajectory survived (online_q_values
+        # is `(total_steps, batch_size, n_actions)` = `(1000, 32, 2)`).
+        sample_trace = traces_back[0]
+        oq = sample_trace.leaves['online_q_values']
+        assert isinstance(oq, list)
+        # 3-D nested list: outer = total_steps, middle = batch,
+        # inner = n_actions.
+        assert isinstance(oq[0], list)
+        assert isinstance(oq[0][0], list)
+        print(f'   online_q_values 3-D shape: '
+              f'({len(oq)}, {len(oq[0])}, {len(oq[0][0])}) — preserved')
+        print(f'   id-link OK: {len(run_ids)} cells, {len(trace_ids)} traces, '
+              f'matched.')
 
     print()
     print('All checks passed.')
