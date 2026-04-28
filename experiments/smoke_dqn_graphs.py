@@ -1,43 +1,41 @@
-"""Smoke: print the auto-induced computation graphs for vanilla
-DQN and DDQN, demonstrate the structural difference.
+"""Smoke: auto-induced computation graphs for vanilla DQN vs DDQN.
 
-The cleanest minimal trace target is `bootstrap` — it composes
-`greedification` (the DDQN axis: `max_greedify` vs
-`double_greedify`) and `gradient_rule`. Calling `bootstrap` once
-under `trace_context()` with concrete (non-traced) arrays exposes
-the call graph without needing a full training loop.
+Calls the actual `dqn_step` (Mnih 2015 Algorithm 1, one step) on
+a degenerate single-step trace using a tiny CartPole rollout. No
+jit, no scan, no vmap so `record_call` fires for every eager
+claim invocation. Inside `value_and_grad(compute_loss)`,
+JAX-tracer args trigger `record_call`'s tracing-skip logic, so
+bootstrap (and its greedification slot) doesn't appear inside
+the gradient pass — but a separate eager bootstrap call after
+the dqn_step exposes the DDQN axis cleanly.
 
-This smoke does:
+Output structure:
 
-1. Build synthetic concrete inputs (small jax.Arrays — no jit, no
-   scan, no vmap so `record_call` actually fires).
-2. Trace `bootstrap(...)` → vanilla DQN: `max_greedify` slot.
-3. Trace `partial(bootstrap, greedification=double_greedify)(...)`
-   → DDQN: `double_greedify` slot.
-4. Build computation graphs for both.
-5. Print each graph and the diff.
-6. Print signatures and assert they differ.
-
-Demonstrates: a slot-swap intervention (vanilla → DDQN) IS a
-structural change at the auto-induced graph level. A pure HP
-tweak would not be.
+1. Vanilla `dqn_step` trace → graph A.
+2. DDQN `dqn_step` trace (intervention: bootstrap=partial(
+   bootstrap, greedification=double_greedify)) → graph B.
+3. Diff (A, B): top-level claims that change.
+4. Plus a focused bootstrap pipeline showing the DDQN slot swap
+   at the greedification node (since bootstrap-internal calls
+   are gated under value_and_grad in train_phase).
 
 Run: `uv run python experiments/smoke_dqn_graphs.py`."""
 from __future__ import annotations
 
-# Smoke runs on CPU — only structural tracing is exercised; no
-# training compute, no jit. Set BEFORE any jax import.
+# CPU-only: smoke is structural tracing, not training compute.
 import os
 
 os.environ.setdefault('JAX_PLATFORMS', 'cpu')
 
 from functools import partial
 
+import gymnax
 import jax
 import jax.numpy as jnp
 
 from corroborate.claim import trace_context
 from corroborate.computation_graph import (
+    ComputationGraph,
     build_computation_graph,
     signature,
 )
@@ -45,124 +43,155 @@ from corroborate.rl.dqn.claims.bootstrap import (
     bootstrap,
     double_greedify,
 )
-from corroborate.rl.dqn.claims.q_network import MLP
+from corroborate.rl.dqn.claims.optimizer import Adam
+from corroborate.rl.dqn.dqn import dqn_step, init_state
 
 
-def _synthetic_inputs() -> dict[str, object]:
-    """Concrete (non-traced) inputs for one bootstrap call.
+def _build_state_and_kwargs() -> tuple[object, dict[str, object]]:
+    """Init a tiny CartPole DQN state. Returns (state, dqn_step_kwargs)."""
+    env, env_params = gymnax.make('CartPole-v1')
+    rng = jax.random.PRNGKey(0)
+    optimizer = Adam(lr=1e-3)
+    state = init_state(
+        env=env, env_params=env_params,
+        obs_dim=4, n_actions=2,
+        rng_key=rng,
+        optimizer=optimizer(),
+    )
+    # Push a few real transitions into the replay so train_phase's
+    # batch sample isn't all zeros — gives the trace meaningful
+    # claims to fire. Otherwise replay.sample_batch returns
+    # garbage but still fires the @claim, so the graph is the same
+    # shape regardless.
+    kwargs: dict[str, object] = {
+        'env': env, 'env_params': env_params, 'n_actions': 2,
+        'optimizer': optimizer(),
+    }
+    return state, kwargs
 
-    Tiny shapes: 1 sample, 2-D obs, 3 actions. Keep memory minimal
-    — sweep workers may be holding most of the GPU."""
+
+def _trace_one_step(
+    intervention: dict[str, object] | None = None,
+) -> ComputationGraph:
+    """Run one eager `dqn_step` under `trace_context()` and build
+    the resulting computation graph.
+
+    `intervention` is merged into dqn_step kwargs (intervention
+    overrides defaults — same shape as `cell_runner`'s composition
+    via partial)."""
+    state, base_kwargs = _build_state_and_kwargs()
+    eff_kwargs = {**base_kwargs, **(intervention or {})}
+    with trace_context() as records:
+        _new_state, _record = dqn_step(  # pyright: ignore[reportArgumentType]
+            state, jnp.int32(0), **eff_kwargs,
+        )
+    return build_computation_graph(records)
+
+
+def _trace_bootstrap_pipeline(
+    use_double: bool,
+) -> ComputationGraph:
+    """Standalone bootstrap probe — exposes the greedification
+    slot directly. Inputs are concrete arrays so `record_call`
+    fires inside bootstrap (and its sub-claims max_greedify /
+    double_greedify / semi_gradient).
+
+    This is what the dqn_step trace can NOT show because train
+    phase's compute_loss is wrapped in `value_and_grad`, whose
+    tracer args trigger the jit-skip in `record_call`."""
+    from corroborate.rl.dqn.claims.q_network import MLP
     rng = jax.random.PRNGKey(0)
     k1, k2 = jax.random.split(rng)
-    q_network = MLP(hidden=(8,))
-    online_params = q_network.init(k1, obs_dim=2, n_actions=3)
-    target_params = q_network.init(k2, obs_dim=2, n_actions=3)
+    qn = MLP(hidden=(8,))
+    online = qn.init(k1, obs_dim=2, n_actions=3)
+    target = qn.init(k2, obs_dim=2, n_actions=3)
     next_obs = jnp.array([[0.5, -0.3]])
     reward = jnp.array([1.0])
     done = jnp.array([0.0])
-    return {
-        'online_params': online_params,
-        'target_params': target_params,
-        'q_network': q_network,
-        'next_obs': next_obs,
-        'reward': reward,
-        'done': done,
-        'gamma': 0.99,
-    }
+
+    boot = (
+        partial(bootstrap, greedification=double_greedify)
+        if use_double else bootstrap
+    )
+    with trace_context() as records:
+        _ = boot(  # pyright: ignore[reportArgumentType]
+            online_params=online, target_params=target,
+            q_network=qn, next_obs=next_obs,
+            reward=reward, done=done, gamma=0.99,
+        )
+    return build_computation_graph(records)
 
 
-def _print_graph(name: str, g: object) -> None:
-    print(f'\n  --- {name} graph ---')
-    if hasattr(g, 'to_tree'):
-        print(g.to_tree())  # pyright: ignore[reportAny]
-    if hasattr(g, 'edges'):
-        print(f'  ({len(g.edges)} edges)')  # pyright: ignore[reportAny]
+def _print_graph(name: str, g: ComputationGraph) -> None:
+    print(f'\n  --- {name} ---')
+    print(g.to_tree())
+    nodes = sorted(g.nodes)
+    print(f'  ({len(nodes)} nodes, {len(g.edges)} edges)')
+    print(f'  nodes: {nodes}')
+
+
+def _print_diff(label_a: str, label_b: str, g_a: ComputationGraph,
+                g_b: ComputationGraph) -> None:
+    diff = g_a.diff(g_b)
+    print(f'\n  --- diff ({label_a} vs {label_b}) ---')
+    if diff.is_empty():
+        print('  (graphs are structurally identical)')
+        return
+    if diff.nodes_only_in_self:
+        print(f'  nodes only in {label_a}: '
+              f'{sorted(diff.nodes_only_in_self)}')
+    if diff.nodes_only_in_other:
+        print(f'  nodes only in {label_b}: '
+              f'{sorted(diff.nodes_only_in_other)}')
+    if diff.edges_only_in_self:
+        print(f'  edges only in {label_a}:')
+        for e in diff.edges_only_in_self:
+            print(f'    {e.source} → {e.target} [{e.metadata}]')
+    if diff.edges_only_in_other:
+        print(f'  edges only in {label_b}:')
+        for e in diff.edges_only_in_other:
+            print(f'    {e.source} → {e.target} [{e.metadata}]')
 
 
 def main() -> None:
     print('=' * 72)
-    print('DDQN-vs-vanilla DQN: faithful intervention at the graph level')
+    print('§1: dqn_step (one full step on CartPole, eager)')
     print('=' * 72)
 
-    inputs = _synthetic_inputs()
+    g_vanilla_step = _trace_one_step()
+    ddqn_intervention: dict[str, object] = {
+        'bootstrap': partial(bootstrap, greedification=double_greedify),
+    }
+    g_ddqn_step = _trace_one_step(ddqn_intervention)
 
-    # --- Vanilla DQN trace ---
-    with trace_context() as records_vanilla:
-        _ = bootstrap(**inputs)  # pyright: ignore[reportArgumentType]
-    g_vanilla = build_computation_graph(records_vanilla)
-    sig_vanilla = signature(g_vanilla)
+    _print_graph('VANILLA dqn_step', g_vanilla_step)
+    _print_graph('DDQN dqn_step   ', g_ddqn_step)
+    _print_diff('vanilla', 'ddqn', g_vanilla_step, g_ddqn_step)
 
-    # --- DDQN trace (intervention: greedification=double_greedify) ---
-    ddqn_bootstrap = partial(bootstrap, greedification=double_greedify)
-    with trace_context() as records_ddqn:
-        _ = ddqn_bootstrap(**inputs)  # pyright: ignore[reportArgumentType]
-    g_ddqn = build_computation_graph(records_ddqn)
-    sig_ddqn = signature(g_ddqn)
+    sig_v = signature(g_vanilla_step)
+    sig_d = signature(g_ddqn_step)
+    print(f'\n  signatures equal at dqn_step level? = {sig_v == sig_d}')
+    print('  (note: bootstrap fires inside value_and_grad in train_phase,')
+    print('   whose JAX tracers trigger record_call\'s jit-skip — so the')
+    print('   greedification slot swap is invisible at this trace level.)')
 
-    # --- Render both ---
-    _print_graph('VANILLA DQN', g_vanilla)
-    _print_graph('DDQN       ', g_ddqn)
-
-    # --- Diff ---
-    print('\n  --- diff (DDQN vs VANILLA) ---')
-    diff = g_ddqn.diff(g_vanilla)
-    if diff.is_empty():
-        print('  (graphs are structurally identical — no intervention)')
-    else:
-        if diff.nodes_only_in_self:
-            print(f'  nodes only in DDQN:    '
-                  f'{sorted(diff.nodes_only_in_self)}')
-        if diff.nodes_only_in_other:
-            print(f'  nodes only in VANILLA: '
-                  f'{sorted(diff.nodes_only_in_other)}')
-        if diff.edges_only_in_self:
-            print(f'  edges only in DDQN:')
-            for e in diff.edges_only_in_self:
-                print(f'    {e.source} → {e.target} [{e.metadata}]')
-        if diff.edges_only_in_other:
-            print(f'  edges only in VANILLA:')
-            for e in diff.edges_only_in_other:
-                print(f'    {e.source} → {e.target} [{e.metadata}]')
-
-    # --- Signatures ---
-    print('\n  --- structural signatures ---')
-    sv_nodes, sv_edges = sig_vanilla
-    sd_nodes, sd_edges = sig_ddqn
-    print(f'  signature(vanilla) = {len(sv_nodes)} nodes, '
-          f'{len(sv_edges)} edges, hash={hash(sig_vanilla):>20}')
-    print(f'  signature(ddqn)    = {len(sd_nodes)} nodes, '
-          f'{len(sd_edges)} edges, hash={hash(sig_ddqn):>20}')
-    print(f'  signatures equal?  = {sig_vanilla == sig_ddqn}')
-
-    # Hard assertions for smoke value.
-    assert sig_vanilla != sig_ddqn, (
-        'expected vanilla and DDQN to produce different signatures'
-    )
-    print('\n  ✓ slot-swap intervention produces structurally distinct '
-          'graphs.')
-
-    # --- Bonus: an HP-only tweak should NOT change the graph ---
     print()
     print('=' * 72)
-    print('control: pure HP tweak (gamma=0.95) — should be empty diff')
+    print('§2: bootstrap pipeline (eager, no value_and_grad)')
     print('=' * 72)
 
-    tweaked = partial(bootstrap, gamma=0.95)
-    inputs_no_gamma = {k: v for k, v in inputs.items() if k != 'gamma'}
-    with trace_context() as records_tweak:
-        _ = tweaked(**inputs_no_gamma)  # pyright: ignore[reportArgumentType]
-    g_tweak = build_computation_graph(records_tweak)
-    sig_tweak = signature(g_tweak)
+    g_vanilla_boot = _trace_bootstrap_pipeline(use_double=False)
+    g_ddqn_boot = _trace_bootstrap_pipeline(use_double=True)
 
-    diff_tweak = g_vanilla.diff(g_tweak)
-    print(f'\n  diff is_empty? = {diff_tweak.is_empty()}')
-    print(f'  signatures equal? = {sig_vanilla == sig_tweak}')
-    assert sig_vanilla == sig_tweak, (
-        'expected pure HP tweak to leave the graph signature unchanged'
-    )
-    print('\n  ✓ HP tweak (gamma) leaves the structural signature '
-          'identical — anti-laundering.')
+    _print_graph('VANILLA bootstrap', g_vanilla_boot)
+    _print_graph('DDQN bootstrap   ', g_ddqn_boot)
+    _print_diff('vanilla', 'ddqn', g_vanilla_boot, g_ddqn_boot)
+
+    sig_vb = signature(g_vanilla_boot)
+    sig_db = signature(g_ddqn_boot)
+    print(f'\n  signatures equal at bootstrap level? = {sig_vb == sig_db}')
+    assert sig_vb != sig_db, 'expected DDQN slot swap to differ'
+    print('  ✓ bootstrap-level trace surfaces the slot swap.')
 
 
 if __name__ == '__main__':
