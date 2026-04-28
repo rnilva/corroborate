@@ -3,39 +3,53 @@
 Three nested parallelism layers:
 
 1. **Subprocess over arms** — `ProcessPoolExecutor` spawns one
-   Python process per (env, hypothesis) pair. Each subprocess
-   has its own JAX / CUDA context, isolating per-env JIT-cache
-   memory (matches v9's pattern; prevents cross-env JIT-cache
-   OOM on long sweeps). Concurrency capped at CPU count or 4
-   for memory headroom.
+   Python process per (env, hypothesis, hp-grid-point) cell.
+   Each subprocess has its own JAX / CUDA context, isolating
+   per-cell JIT-cache memory. Concurrency capped at 2 — concurrent
+   JAX init on a single GPU races on CUDA context allocation
+   and crashes the worker pool at higher concurrency.
 2. **Vmap over seeds** — within each subprocess, `run_dqn_arm`
-   batches all seeds in one jit-compiled call. Gymnax envs vmap
-   natively; gradient steps batch.
+   batches all seeds in one jit-compiled call.
 3. **Nested scan over training steps** — `train_with_eval` is a
    single nested-scan: outer over super-steps, inner over
    `eval_every` training steps + one eval burst.
 
-Outputs `experiments/data/ddqn/runs.parquet` (union of per-arm
-parquets). Step 5's `paired_comparison_from_runs` reads this
-and produces ComparisonRows.
+**HP grid is multi-axis.** `HP_GRID` is a dict of axes; each
+axis is a list of values. Cartesian product produces the grid
+points. `_intervention_for(hypothesis_name, **grid_point)`
+constructs the intervention dict for one cell. Adding an axis
+is two lines: a key on `HP_GRID` + the corresponding kwarg in
+`_intervention_for`.
+
+**Output is a SINGLE pair of parquets.** Per-arm files live in
+a `tmp/` subdir as intermediate cache; after all workers
+complete, the orchestrator merges into `runs.parquet` +
+`traces.parquet` and (optionally) cleans up the tempfiles.
+Downstream analysis reads two files, not 2 × N.
 
 Run: `uv run python experiments/collect_ddqn_runs.py`."""
 from __future__ import annotations
 
+import itertools
 import multiprocessing as mp
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from pathlib import Path
-
 from functools import partial
+from pathlib import Path
+from typing import Any
 
 from corroborate.hypothesis import Hypothesis
-from corroborate.persistence import read_runrows, write_runrows
+from corroborate.persistence import (
+    read_runrows,
+    read_tracerows,
+    write_runrows,
+    write_tracerows,
+)
 from corroborate.rl.dqn.claims.bootstrap import bootstrap, double_greedify
 from corroborate.rl.dqn.claims.optimizer import Adam, WarmedUpdate
 from corroborate.rl.dqn.claims.replay import Replay
 from corroborate.rl.dqn.invariants import DQNTrajectoryRecord
-from corroborate.schema import RunRow
+from corroborate.schema import RunRow, TraceRow
 
 
 # ============ Experiment grid ============
@@ -48,6 +62,8 @@ ENV_NAMES = (
     'DeepSea-bsuite',
 )
 
+HYPOTHESIS_NAMES = ('vanilla_dqn', 'ddqn')
+
 SEEDS: tuple[int, ...] = tuple(range(30))
 
 # v9 parity: TrainingProtocol.total_steps = 50_000 (their default).
@@ -57,87 +73,101 @@ SEEDS: tuple[int, ...] = tuple(range(30))
 # CartPole convergence (literature converges in 30-50k steps).
 TOTAL_STEPS = 50_000
 
-# HP-sensitivity grid for buffer capacity. The principle: don't
-# guess at HP defaults; let the framework's columnar parquet show
-# us which HPs the outcome is actually sensitive to. Three levels
-# spread far enough apart to detect non-trivial sensitivity, and
-# the path-keyed leaf `replay.capacity` gets a distinct value per
-# cell — one-line `df.group_by('replay.capacity').agg(...)` reveals
-# the sensitivity post-hoc.
-CAPACITIES: tuple[int, ...] = (2_000, 10_000, 50_000)
+
+# Multi-axis HP grid. Each key is a flat axis name; each value is
+# a list of grid points along that axis. Cartesian product over
+# values yields the full grid. Add axes by adding keys here AND
+# the corresponding kwarg in `_intervention_for` below.
+#
+# Single-element lists collapse the axis (no variation along it);
+# this lets the script stay flexible without changing structure
+# when only some axes vary.
+HP_GRID: dict[str, list[Any]] = {
+    'capacity': [2_000, 10_000, 50_000],
+    'batch_size': [32],
+    'lr': [1e-3],
+}
 
 
-def _hparams(capacity: int) -> dict[str, object]:
-    """HP bundle parameterised on `replay.capacity`. The other
-    leaves stay fixed across the grid; capacity is the swept
-    dimension. Adding more HP-grid axes (lr, batch_size, ...) is
-    one line each here + the corresponding tuple at module top."""
-    return {
+def _intervention_for(
+    hypothesis_name: str, *,
+    capacity: int, batch_size: int, lr: float,
+) -> dict[str, object]:
+    """Build the intervention dict for one (hypothesis, grid-point).
+    Pure function so workers can reconstruct it from picklable
+    args (kwargs from `HP_GRID`'s keys).
+
+    Adding a new HP-grid axis: extend `HP_GRID` with the new key,
+    add a matching kwarg here, and use it inside the dict."""
+    base: dict[str, object] = {
         'total_steps': TOTAL_STEPS,
         'eval_every': TOTAL_STEPS // 10,
         'n_episodes': 5,
         'gamma': 0.99,
-        'replay': Replay(capacity=capacity, batch_size=32),
-        'optimizer': WarmedUpdate(inner=Adam(), warmup_steps=100),
+        'replay': Replay(capacity=capacity, batch_size=batch_size),
+        'optimizer': WarmedUpdate(inner=Adam(lr=lr), warmup_steps=100),
         'sync_period': 100,
     }
+    if hypothesis_name == 'ddqn':
+        base['bootstrap'] = partial(
+            bootstrap, greedification=double_greedify,
+        )
+    return base
 
 
 def _make_hypothesis(
-    name: str, capacity: int,
+    hypothesis_name: str, grid_point: dict[str, Any],
 ) -> Hypothesis[DQNTrajectoryRecord]:
-    """Reconstruct hypothesis from a string id + capacity. Workers
-    can't pickle closures cleanly across spawn-mode processes, so
-    each worker rebuilds the hypothesis from stable args.
-
-    Configurational leaves live as flat kwargs in `intervention`
-    (matching `dqn`'s signature). Cell-runner records each (kwarg,
-    value) pair as a measurement at its dotted topology path;
-    downstream `leaf_signature` projects the configurational
-    subset so two arms differing only in `replay.capacity` produce
-    distinct group-by keys."""
-    hparams = _hparams(capacity)
-    if name == 'vanilla_dqn':
+    """Reconstruct hypothesis from a string id + a grid point.
+    Workers can't pickle closures cleanly across spawn-mode
+    processes, so each worker rebuilds the hypothesis from
+    stable args (string + dict of primitives)."""
+    intervention = _intervention_for(hypothesis_name, **grid_point)
+    if hypothesis_name == 'vanilla_dqn':
         return Hypothesis(
             name='vanilla_dqn',
-            intervention={**hparams},
+            intervention=intervention,
             bridges=(),
             predicted_direction=None,
         )
-    if name == 'ddqn':
+    if hypothesis_name == 'ddqn':
         return Hypothesis(
             name='ddqn',
-            intervention={
-                **hparams,
-                'bootstrap': partial(
-                    bootstrap, greedification=double_greedify,
-                ),
-            },
+            intervention=intervention,
             bridges=(),
             predicted_direction='a_gt_b',
         )
-    raise ValueError(f'unknown hypothesis name: {name!r}')
+    raise ValueError(f'unknown hypothesis name: {hypothesis_name!r}')
 
 
-HYPOTHESIS_NAMES = ('vanilla_dqn', 'ddqn')
+def _grid_tag(grid_point: dict[str, Any]) -> str:
+    """Compact tag for arm-file naming. Format:
+    `axis1=v1__axis2=v2__...`. Used only for tempfile names; the
+    leaves are also written as RunRow measurements (the source of
+    truth for analysis)."""
+    return '__'.join(
+        f'{k}={v!r}' for k, v in sorted(grid_point.items())
+    )
 
 
-# ============ Worker: one (env, hypothesis) arm ============
+# ============ Worker: one (env, hypothesis, grid-point) cell ============
 
 def _run_arm_worker(
-    args: tuple[str, str, int, tuple[int, ...], str, float],
-) -> Path:
-    """Subprocess worker. Runs `run_dqn_arm` for one
-    (env, hypothesis, capacity) cell + writes the resulting
-    RunRows + TraceRows to per-arm parquets. Returns the runs
-    parquet path.
+    args: tuple[str, str, dict[str, Any], tuple[int, ...], str, float, int],
+) -> tuple[Path, Path]:
+    """Subprocess worker. Runs `run_dqn_arm` for one (env,
+    hypothesis, grid-point) cell + writes per-arm parquets. Returns
+    (runs_path, traces_path).
 
     Disables XLA preallocation BEFORE importing jax — by default
     each JAX process grabs ~75% of GPU memory at init, which
     starves sibling workers. With `XLA_PYTHON_CLIENT_PREALLOCATE=
     false` plus a per-worker `XLA_PYTHON_CLIENT_MEM_FRACTION`
     cap, N workers can share one device cleanly."""
-    env_name, hypothesis_name, capacity, seeds, out_dir_str, mem_fraction = args
+    (
+        env_name, hypothesis_name, grid_point,
+        seeds, tmp_dir_str, mem_fraction, arm_idx,
+    ) = args
 
     # Must set before any jax import in this process.
     import os
@@ -146,106 +176,139 @@ def _run_arm_worker(
         'XLA_PYTHON_CLIENT_MEM_FRACTION', f'{mem_fraction:.3f}',
     )
 
-    out_dir = Path(out_dir_str)
-    arm_tag = f'{env_name}__{hypothesis_name}__cap{capacity}'
-    runs_path = out_dir / f'{arm_tag}__runs.parquet'
-    traces_path = out_dir / f'{arm_tag}__traces.parquet'
+    tmp_dir = Path(tmp_dir_str)
+    arm_tag = f'arm{arm_idx:03d}__{env_name}__{hypothesis_name}__{_grid_tag(grid_point)}'
+    runs_path = tmp_dir / f'{arm_tag}__runs.parquet'
+    traces_path = tmp_dir / f'{arm_tag}__traces.parquet'
 
-    from corroborate.persistence import write_tracerows
+    from corroborate.persistence import write_tracerows as _write_tracerows
+    from corroborate.persistence import write_runrows as _write_runrows
     from corroborate.rl.cell_runner import run_dqn_arm
-    from corroborate.rl.dqn.claims.optimizer import Adam
+    from corroborate.rl.dqn.claims.optimizer import Adam as _Adam
     from corroborate.rl.env_catalogue import get
 
-    h = _make_hypothesis(hypothesis_name, capacity)
+    h = _make_hypothesis(hypothesis_name, grid_point)
     cells = run_dqn_arm(
-        get(env_name), seeds, hypothesis=h,
-        optimizer=Adam(),
+        get(env_name), seeds, hypothesis=h, optimizer=_Adam(),
     )
-    write_runrows(tuple(c.run for c in cells), runs_path)
-    write_tracerows(tuple(c.trace for c in cells), traces_path)
-    # Caller assembles the corpus from the per-arm runs files;
-    # traces stay co-located so a downstream consumer can rejoin
-    # by id without a separate manifest.
-    return runs_path
+    _write_runrows(tuple(c.run for c in cells), runs_path)
+    _write_tracerows(tuple(c.trace for c in cells), traces_path)
+    return runs_path, traces_path
 
 
 # ============ Orchestrator ============
 
+def _grid_points(grid: dict[str, list[Any]]) -> list[dict[str, Any]]:
+    """Cartesian product of `grid`. Returns a list of dicts, one
+    per grid point, keyed identically to `grid`."""
+    keys = list(grid.keys())
+    return [
+        dict(zip(keys, point))
+        for point in itertools.product(*grid.values())
+    ]
+
+
 def main() -> None:
     out_dir = Path(__file__).parent / 'data' / 'ddqn'
     out_dir.mkdir(parents=True, exist_ok=True)
-    final_path = out_dir / 'runs.parquet'
+    tmp_dir = out_dir / 'tmp'
+    tmp_dir.mkdir(parents=True, exist_ok=True)
 
-    n_arms = len(ENV_NAMES) * len(HYPOTHESIS_NAMES) * len(CAPACITIES)
+    final_runs_path = out_dir / 'runs.parquet'
+    final_traces_path = out_dir / 'traces.parquet'
 
-    # Cap worker concurrency. With `XLA_PYTHON_CLIENT_PREALLOCATE
-    # =false` + per-worker `MEM_FRACTION = 0.9 / n_workers`,
-    # N workers share one GPU cleanly. 2 is the safe default —
-    # 4 workers concurrently initialising JAX on a single GPU
-    # races on CUDA context allocation and crashes (observed at
-    # capacity=50_000 + 30 seeds + 50k steps; single-arm path
-    # fine, multi-process worker pool kills all workers).
+    grid_points = _grid_points(HP_GRID)
+    n_arms = len(ENV_NAMES) * len(HYPOTHESIS_NAMES) * len(grid_points)
+
+    # Cap worker concurrency. 2 is the safe default — concurrent
+    # JAX init on a single GPU races on CUDA context allocation
+    # at higher concurrency (observed `BrokenProcessPool` killing
+    # all workers at 4 with capacity=50_000 + 30 seeds + 50k steps).
     n_workers = min(2, n_arms, mp.cpu_count())
     mem_fraction = 0.9 / n_workers
 
-    arms_args: list[tuple[str, str, int, tuple[int, ...], str, float]] = [
-        (env_name, h_name, capacity, SEEDS, str(out_dir), mem_fraction)
-        for env_name in ENV_NAMES
-        for h_name in HYPOTHESIS_NAMES
-        for capacity in CAPACITIES
+    arms_args: list[
+        tuple[str, str, dict[str, Any], tuple[int, ...], str, float, int]
+    ] = [
+        (
+            env_name, h_name, gp,
+            SEEDS, str(tmp_dir), mem_fraction, idx,
+        )
+        for idx, (env_name, h_name, gp) in enumerate(
+            itertools.product(ENV_NAMES, HYPOTHESIS_NAMES, grid_points),
+        )
     ]
     print(
         f'spawning up to {n_workers} subprocess workers for '
         f'{n_arms} arms ({len(ENV_NAMES)} envs × '
         f'{len(HYPOTHESIS_NAMES)} hypotheses × '
-        f'{len(CAPACITIES)} capacities), '
+        f'{len(grid_points)} grid points), '
         f'{len(SEEDS)} seeds vmapped per arm — '
         f'{n_arms * len(SEEDS)} cells total',
         flush=True,
     )
+    print(f'HP grid axes: {list(HP_GRID.keys())}')
+    for axis, values in HP_GRID.items():
+        print(f'  {axis}: {values}')
+    print(flush=True)
 
-    # Spawn-start so each worker gets a clean JAX state (fork
-    # would inherit the parent's CUDA context, breaking GPU
-    # isolation if the parent had touched JAX).
+    # Spawn-start so each worker gets a clean JAX state.
     ctx = mp.get_context('spawn')
 
     t0 = time.time()
-    parquet_paths: list[Path] = []
+    parquet_pairs: list[tuple[Path, Path]] = []
     with ProcessPoolExecutor(max_workers=n_workers, mp_context=ctx) as pool:
         future_to_arm = {
             pool.submit(_run_arm_worker, args): args[:3]
             for args in arms_args
         }
         for i, future in enumerate(as_completed(future_to_arm), start=1):
-            env_name, h_name, capacity = future_to_arm[future]
+            env_name, h_name, grid_point = future_to_arm[future]
             try:
-                p = future.result()
+                runs_path, traces_path = future.result()
             except Exception as e:
                 print(
-                    f'[{i:>2}/{n_arms}] FAILED  {env_name:<22} '
-                    f'h={h_name:<12} cap={capacity:<7} '
+                    f'[{i:>3}/{n_arms}] FAILED  {env_name:<22} '
+                    f'h={h_name:<12} {_grid_tag(grid_point):<40} '
                     f'{type(e).__name__}: {e}',
                     flush=True,
                 )
                 continue
-            parquet_paths.append(p)
+            parquet_pairs.append((runs_path, traces_path))
             elapsed = time.time() - t0
             print(
-                f'[{i:>2}/{n_arms}] done    {env_name:<22} '
-                f'h={h_name:<12} cap={capacity:<7} '
+                f'[{i:>3}/{n_arms}] done    {env_name:<22} '
+                f'h={h_name:<12} {_grid_tag(grid_point):<40} '
                 f'elapsed={elapsed:>6.0f}s',
                 flush=True,
             )
 
     print(f'\nworkers complete in {time.time() - t0:.0f}s; '
-          f'merging {len(parquet_paths)} per-arm parquets')
+          f'merging {len(parquet_pairs)} per-arm parquet pairs')
 
-    # Union-merge per-arm parquets into one combined file.
-    all_rows: list[RunRow] = []
-    for p in parquet_paths:
-        all_rows.extend(read_runrows(p))
-    write_runrows(all_rows, final_path)
-    print(f'written {len(all_rows)} rows → {final_path}')
+    # Union-merge per-arm parquets into one pair of files.
+    all_runs: list[RunRow] = []
+    all_traces: list[TraceRow] = []
+    for runs_p, traces_p in parquet_pairs:
+        all_runs.extend(read_runrows(runs_p))
+        all_traces.extend(read_tracerows(traces_p))
+    write_runrows(all_runs, final_runs_path)
+    write_tracerows(all_traces, final_traces_path)
+    print(
+        f'written {len(all_runs)} runs → {final_runs_path.name}\n'
+        f'written {len(all_traces)} traces → {final_traces_path.name}',
+    )
+
+    # Clean up per-arm intermediate files. Comment this out to
+    # keep them for debugging.
+    for runs_p, traces_p in parquet_pairs:
+        runs_p.unlink(missing_ok=True)
+        traces_p.unlink(missing_ok=True)
+    try:
+        tmp_dir.rmdir()
+    except OSError:
+        pass  # tmp dir not empty (e.g., FAILED arms left files); leave it
+    print(f'cleaned up per-arm files in {tmp_dir.name}/')
 
 
 if __name__ == '__main__':
