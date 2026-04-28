@@ -287,8 +287,19 @@ def _walk_paths(
         path = f'{prefix}.{kw.name}' if prefix else kw.name
         if kw.regime == regime:
             acc[path] = kw
-        if kw.inner is not None:
-            _walk_paths(kw.inner, acc, regime=regime, prefix=path)
+        if kw.inner is None:
+            continue
+        # Exogenous propagates through structural descent: when
+        # the parent is something we generalize *over* (env_params,
+        # rng_key, etc.), its sub-fields are too — they describe
+        # the variation surface, not intervention surface. So when
+        # collecting HP paths, don't descend into an exogenous
+        # parent. Collecting exogenous paths still descends (an
+        # author querying the exogenous surface wants the full
+        # tree)."""
+        if regime == 'hp' and kw.regime == 'exogenous':
+            continue
+        _walk_paths(kw.inner, acc, regime=regime, prefix=path)
 
 
 # ============ Invariant collection ============

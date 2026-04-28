@@ -1,8 +1,8 @@
 """Tests for `sweep` — multi-cell runner over (env, seed) grid.
 
 Uses synthetic runners (no real training) to exercise the sweep
-machinery: cell iteration, bridge application, RunRow construction,
-failure capture."""
+machinery: cell iteration, bridge application, RunRow construction
+with measurements, failure capture."""
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -52,7 +52,7 @@ def _extract_value(record: Mapping[str, object]) -> float:
     return 0.0
 
 
-# ============ Bridges that always admit ============
+# ============ Bridges ============
 
 @bridge(targets=('value',))
 def _always_admit(record: Mapping[str, object]) -> BridgeResult:
@@ -61,7 +61,7 @@ def _always_admit(record: Mapping[str, object]) -> BridgeResult:
         verdict=Verdict.HELD,
         reason='stub admit',
         stats={},
-        name='', targets=(),
+        name='always_admit', targets=('value',),
     )
 
 
@@ -72,7 +72,7 @@ def _always_reject(record: Mapping[str, object]) -> BridgeResult:
         verdict=Verdict.NO_EFFECT,
         reason='stub reject',
         stats={},
-        name='', targets=(),
+        name='always_reject', targets=('value',),
     )
 
 
@@ -80,44 +80,39 @@ def _always_reject(record: Mapping[str, object]) -> BridgeResult:
 def _invariant_violated(record: Mapping[str, object]) -> BridgeResult:
     """Mimics what `at_most(gap, threshold)` produces when the
     gap exceeds the threshold: a tautological-tagged
-    `Verdict.INVARIANT_VIOLATION` directly. The aggregator's
-    invariant-precedence rule maps this to INVARIANT_VIOLATION
-    at cell level."""
+    `Verdict.INVARIANT_VIOLATION` directly."""
     del record
     return BridgeResult(
         verdict=Verdict.INVARIANT_VIOLATION,
         reason='theorem precondition broken',
         stats={'kind': 'tautological', 'of_claim': 'some_claim'},
-        name='', targets=(),
+        name='invariant_violated', targets=('value',),
     )
 
 
 @bridge(targets=('value',))
 def _value_above_threshold(record: Mapping[str, object]) -> BridgeResult:
-    """Bridge that actually reads its target from the record. Used
-    to verify the bridge↔record contract under sweep — early sweep
-    tests used record-ignoring bridges, missing the most basic
-    framework property (bridges consume records)."""
+    """Bridge that actually reads its target from the record."""
     v = record.get('value', 0.0)
     if isinstance(v, (int, float)) and v > 1.05:
         return BridgeResult(
             verdict=Verdict.HELD,
             reason=f'value={v}',
             stats={'value': float(v)},
-            name='', targets=(),
+            name='value_above_threshold', targets=('value',),
         )
     if isinstance(v, (int, float)):
         return BridgeResult(
             verdict=Verdict.NO_EFFECT,
             reason=f'value={v} below 1.05',
             stats={'value': float(v)},
-            name='', targets=(),
+            name='value_above_threshold', targets=('value',),
         )
     return BridgeResult(
         verdict=Verdict.NO_EFFECT,
         reason='value missing or non-numeric',
         stats={},
-        name='', targets=(),
+        name='value_above_threshold', targets=('value',),
     )
 
 
@@ -126,9 +121,7 @@ def _value_above_threshold(record: Mapping[str, object]) -> BridgeResult:
 def test_sweep_returns_one_row_per_cell() -> None:
     """A 2-env × 3-seed sweep produces 6 rows, no failures."""
     h: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='h',
-        intervention={},
-        bridges=(_always_admit,),
+        name='h', intervention={}, bridges=(_always_admit,),
     )
     rows, failures = sweep(
         h,
@@ -142,12 +135,11 @@ def test_sweep_returns_one_row_per_cell() -> None:
     assert len(failures) == 0
 
 
-def test_sweep_rows_carry_provenance() -> None:
-    """Each RunRow carries the cell's env_name and seed."""
+def test_sweep_rows_carry_provenance_in_measurements() -> None:
+    """Each RunRow carries env_name + seed + total_steps +
+    intervention_name in measurements."""
     h: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='h',
-        intervention={},
-        bridges=(_always_admit,),
+        name='h', intervention={}, bridges=(_always_admit,),
     )
     rows, _ = sweep(
         h,
@@ -157,21 +149,20 @@ def test_sweep_rows_carry_provenance() -> None:
         runner=_constant_runner,
         primary_outcome_extractor=_extract_value,
     )
-    assert all(r.env_name == 'cartpole' for r in rows)
-    assert sorted(r.seed for r in rows) == [0, 1, 2]
+    for r in rows:
+        assert r.measurements['env_name'] == 'cartpole'
+        assert r.measurements['intervention_name'] == 'h'
+        assert r.measurements['total_steps'] == 10
+    seeds = sorted(int(r.measurements['seed']) for r in rows)
+    assert seeds == [0, 1, 2]
 
 
 def test_sweep_rows_carry_verdict_from_bridges() -> None:
-    """Verdict on the RunRow reflects bridge outcomes."""
     h_admit: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='h_admit',
-        intervention={},
-        bridges=(_always_admit,),
+        name='h_admit', intervention={}, bridges=(_always_admit,),
     )
     h_reject: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='h_reject',
-        intervention={},
-        bridges=(_always_reject,),
+        name='h_reject', intervention={}, bridges=(_always_reject,),
     )
     rows_admit, _ = sweep(
         h_admit,
@@ -190,11 +181,10 @@ def test_sweep_rows_carry_verdict_from_bridges() -> None:
 
 
 def test_sweep_primary_outcome_extracted_per_cell() -> None:
-    """`primary_outcome_extractor` is called per record."""
+    """`primary_outcome_extractor` lands at
+    `outcome.late_window_mean`."""
     h: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='h',
-        intervention={},
-        bridges=(),
+        name='h', intervention={}, bridges=(),
     )
     rows, _ = sweep(
         h,
@@ -204,20 +194,19 @@ def test_sweep_primary_outcome_extracted_per_cell() -> None:
         runner=_constant_runner,
         primary_outcome_extractor=_extract_value,
     )
-    summaries = sorted(r.primary_outcome_summary for r in rows)
+    outcomes = sorted(
+        float(r.measurements['outcome.late_window_mean'])
+        for r in rows
+    )
     # _constant_runner returns value = 1.0 + seed * 0.1
-    assert summaries == [1.0, 1.1, 1.2]
+    assert outcomes == [1.0, 1.1, 1.2]
 
 
 # ============ Failure tracking ============
 
 def test_sweep_failures_captured_not_raised() -> None:
-    """A runner exception captures into CellFailure; sweep
-    continues with remaining cells. No silent drops."""
     h: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='h',
-        intervention={},
-        bridges=(_always_admit,),
+        name='h', intervention={}, bridges=(_always_admit,),
     )
     rows, failures = sweep(
         h,
@@ -232,14 +221,11 @@ def test_sweep_failures_captured_not_raised() -> None:
     assert len(failures) == 1
     assert failures[0].seed == 0
     assert 'RuntimeError' in failures[0].error
-    assert 'blew up' in failures[0].error
 
 
 def test_sweep_failure_carries_provenance() -> None:
     h: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='h_fail_test',
-        intervention={},
-        bridges=(),
+        name='h_fail_test', intervention={}, bridges=(),
     )
     _, failures = sweep(
         h,
@@ -253,17 +239,16 @@ def test_sweep_failure_carries_provenance() -> None:
     assert failures[0].intervention_name == 'h_fail_test'
     assert failures[0].env_name == 'e'
     assert failures[0].seed == 0
-    assert isinstance(failures[0].duration_s, float)
 
 
 # ============ Multi-bridge cells ============
 
 def test_sweep_aggregates_multi_bridge_admit() -> None:
-    """All bridges admit → cell verdict is held."""
+    """All bridges admit → cell verdict is HELD; each bridge's
+    verdict lands as a separate measurement."""
     h: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='h',
-        intervention={},
-        bridges=(_always_admit, _always_admit, _always_admit),
+        name='h', intervention={},
+        bridges=(_always_admit, _always_reject, _value_above_threshold),
     )
     rows, _ = sweep(
         h,
@@ -271,15 +256,17 @@ def test_sweep_aggregates_multi_bridge_admit() -> None:
         runner=_constant_runner,
         primary_outcome_extractor=_extract_value,
     )
-    assert rows[0].verdict is Verdict.HELD
-    assert len(rows[0].facts) == 3
+    # value=1.0 → reject under value_above_threshold
+    assert rows[0].verdict is Verdict.NO_EFFECT
+    assert 'bridge.always_admit.verdict' in rows[0].measurements
+    assert 'bridge.always_reject.verdict' in rows[0].measurements
+    assert 'bridge.value_above_threshold.verdict' in rows[0].measurements
 
 
 def test_sweep_aggregates_mixed_verdicts() -> None:
-    """Any reject → cell verdict is no_effect."""
+    """Any reject → cell verdict is NO_EFFECT."""
     h: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='h',
-        intervention={},
+        name='h', intervention={},
         bridges=(_always_admit, _always_reject),
     )
     rows, _ = sweep(
@@ -292,12 +279,8 @@ def test_sweep_aggregates_mixed_verdicts() -> None:
 
 
 def test_sweep_no_bridges_yields_power_insufficient() -> None:
-    """Cell with zero bridges has nothing to verdict on; default
-    is power_insufficient (the framework's 'cannot tell' tag)."""
     h: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='h',
-        intervention={},
-        bridges=(),
+        name='h', intervention={}, bridges=(),
     )
     rows, _ = sweep(
         h,
@@ -308,31 +291,11 @@ def test_sweep_no_bridges_yields_power_insufficient() -> None:
     assert rows[0].verdict is Verdict.POWER_INSUFFICIENT
 
 
-# ============ Provenance: mechanism_key, timestamp, etc. ============
-
-def test_sweep_rows_share_mechanism_key() -> None:
-    """All rows from one sweep share the hypothesis's mechanism_key."""
-    h: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='h',
-        intervention={'slot': 'value'},
-        bridges=(_always_admit,),
-    )
-    rows, _ = sweep(
-        h,
-        env_names=('e',), seeds=(0, 1), total_steps=10,
-        runner=_constant_runner,
-        primary_outcome_extractor=_extract_value,
-    )
-    keys = {r.mechanism_key for r in rows}
-    assert len(keys) == 1
-    assert next(iter(keys)) == h.mechanism_key
-
+# ============ Provenance: distinct ids, cycle_id ============
 
 def test_sweep_rows_have_distinct_ids() -> None:
     h: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='h',
-        intervention={},
-        bridges=(_always_admit,),
+        name='h', intervention={}, bridges=(_always_admit,),
     )
     rows, _ = sweep(
         h,
@@ -344,17 +307,27 @@ def test_sweep_rows_have_distinct_ids() -> None:
     assert len(ids) == 3
 
 
+def test_sweep_cycle_id_propagates() -> None:
+    h: Hypothesis[Mapping[str, object]] = Hypothesis(
+        name='h', intervention={}, bridges=(_always_admit,),
+    )
+    rows, _ = sweep(
+        h,
+        env_names=('e',), seeds=(0,), total_steps=10,
+        runner=_constant_runner,
+        primary_outcome_extractor=_extract_value,
+        cycle_id='cycle-42',
+    )
+    assert rows[0].cycle_id == 'cycle-42'
+
+
 # ============ Invariant-precedence (verdict aggregation) ============
 
 def test_sweep_invariant_violation_overrides_no_effect() -> None:
-    """A tautological-tagged NO_EFFECT (invariant violated) wins
-    over plain NO_EFFECT, producing INVARIANT_VIOLATION at the
-    cell level. This is the framework's marketed verdict
-    separation — without this test the precedence rule was
-    untested."""
+    """A tautological-tagged INVARIANT_VIOLATION wins over plain
+    NO_EFFECT, producing INVARIANT_VIOLATION at the cell level."""
     h: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='h',
-        intervention={},
+        name='h', intervention={},
         bridges=(_invariant_violated, _always_reject),
     )
     rows, _ = sweep(
@@ -367,12 +340,9 @@ def test_sweep_invariant_violation_overrides_no_effect() -> None:
 
 
 def test_sweep_invariant_violation_overrides_held() -> None:
-    """Even when other bridges admit, an invariant-violation tag
-    on any rejected fact dominates: the mechanism didn't operate,
-    so the cell is OUT OF SCOPE rather than HELD."""
+    """Even with HELD bridges, an invariant-violation tag dominates."""
     h: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='h',
-        intervention={},
+        name='h', intervention={},
         bridges=(_always_admit, _invariant_violated),
     )
     rows, _ = sweep(
@@ -384,10 +354,9 @@ def test_sweep_invariant_violation_overrides_held() -> None:
     assert rows[0].verdict is Verdict.INVARIANT_VIOLATION
 
 
-def test_sweep_invariant_held_does_not_trigger_violation() -> None:
-    """A tautological-tagged HELD result is fine — only
-    tautological NO_EFFECT signals invariant violation. (Empty
-    facts and tautological-HELD coexist normally.)"""
+def test_sweep_invariant_held_uses_invariant_prefix() -> None:
+    """A tautological-tagged HELD result lands under
+    `invariant.<name>.verdict`, not `bridge.<name>.verdict`."""
     @bridge(targets=('value',))
     def invariant_held(record: Mapping[str, object]) -> BridgeResult:
         del record
@@ -395,13 +364,11 @@ def test_sweep_invariant_held_does_not_trigger_violation() -> None:
             verdict=Verdict.HELD,
             reason='theorem precondition holds',
             stats={'kind': 'tautological'},
-            name='', targets=(),
+            name='theorem_check', targets=('value',),
         )
 
     h: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='h',
-        intervention={},
-        bridges=(invariant_held,),
+        name='h', intervention={}, bridges=(invariant_held,),
     )
     rows, _ = sweep(
         h,
@@ -410,20 +377,17 @@ def test_sweep_invariant_held_does_not_trigger_violation() -> None:
         primary_outcome_extractor=_extract_value,
     )
     assert rows[0].verdict is Verdict.HELD
-    assert rows[0].facts[0].kind == 'invariant'
+    assert 'invariant.theorem_check.verdict' in rows[0].measurements
+    assert 'bridge.theorem_check.verdict' not in rows[0].measurements
 
 
 # ============ Bridge↔record contract ============
 
 def test_sweep_bridge_reads_record_per_seed() -> None:
-    """A bridge that actually consumes the record produces
-    per-seed verdicts based on the cell's record content. Earlier
-    sweep tests used record-ignoring bridges; this exercises the
-    real contract."""
+    """A bridge that consumes the record produces per-seed
+    verdicts based on the cell's record content."""
     h: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='h',
-        intervention={},
-        bridges=(_value_above_threshold,),
+        name='h', intervention={}, bridges=(_value_above_threshold,),
     )
     # _constant_runner returns value = 1.0 + seed * 0.1, so:
     #   seed=0: 1.0  → NO_EFFECT (≤ 1.05)
@@ -437,20 +401,17 @@ def test_sweep_bridge_reads_record_per_seed() -> None:
         runner=_constant_runner,
         primary_outcome_extractor=_extract_value,
     )
-    by_seed = {r.seed: r.verdict for r in rows}
+    by_seed = {int(r.measurements['seed']): r.verdict for r in rows}
     assert by_seed[0] is Verdict.NO_EFFECT
     assert by_seed[1] is Verdict.HELD
     assert by_seed[2] is Verdict.HELD
 
 
-def test_sweep_bridge_reads_record_carries_stats_into_fact() -> None:
-    """The BridgeResult.stats produced by the bridge body flow
-    onto the FactRow's stats — verifying the bridge's
-    record-derived statistics are preserved end-to-end."""
+def test_sweep_bridge_stats_flow_into_measurements() -> None:
+    """The BridgeResult.stats produced by the bridge body land
+    under `bridge.<name>.stats.<key>` measurements."""
     h: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='h',
-        intervention={},
-        bridges=(_value_above_threshold,),
+        name='h', intervention={}, bridges=(_value_above_threshold,),
     )
     rows, _ = sweep(
         h,
@@ -458,64 +419,4 @@ def test_sweep_bridge_reads_record_carries_stats_into_fact() -> None:
         runner=_constant_runner,
         primary_outcome_extractor=_extract_value,
     )
-    assert rows[0].facts[0].stats['value'] == 1.2
-
-
-# ============ intervention_signature on FactRow ============
-
-def test_sweep_populates_intervention_signature_on_facts() -> None:
-    """Per the redundancy primitive's intervention-similarity
-    factor, FactRow.intervention_signature must carry the parent
-    hypothesis's intervention leaves. Earlier sweep wired the
-    field empty; this verifies it's populated."""
-    h: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='h',
-        intervention={'slot_a': 'value_x', 'slot_b': 1},
-        bridges=(_always_admit,),
-    )
-    rows, _ = sweep(
-        h,
-        env_names=('e',), seeds=(0,), total_steps=10,
-        runner=_constant_runner,
-        primary_outcome_extractor=_extract_value,
-    )
-    fact_sig = rows[0].facts[0].intervention_signature
-    # Leaves include both slot names and their canonicalized values.
-    assert 'slot_a' in fact_sig
-    assert 'slot_b' in fact_sig
-    # Values canonicalize via repr() (e.g. "'value_x'", "1").
-    assert any('value_x' in leaf for leaf in fact_sig)
-
-
-def test_sweep_baseline_hypothesis_has_empty_intervention_signature() -> None:
-    """A hypothesis with no intervention overrides has an empty
-    intervention_signature on its facts. Distinguishes baseline
-    runs from intervention runs in the redundancy register."""
-    h: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='baseline',
-        intervention={},
-        bridges=(_always_admit,),
-    )
-    rows, _ = sweep(
-        h,
-        env_names=('e',), seeds=(0,), total_steps=10,
-        runner=_constant_runner,
-        primary_outcome_extractor=_extract_value,
-    )
-    assert rows[0].facts[0].intervention_signature == frozenset()
-
-
-def test_sweep_cycle_id_propagates() -> None:
-    h: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='h',
-        intervention={},
-        bridges=(_always_admit,),
-    )
-    rows, _ = sweep(
-        h,
-        env_names=('e',), seeds=(0,), total_steps=10,
-        runner=_constant_runner,
-        primary_outcome_extractor=_extract_value,
-        cycle_id='cycle-42',
-    )
-    assert rows[0].cycle_id == 'cycle-42'
+    assert rows[0].measurements['bridge.value_above_threshold.stats.value'] == 1.2

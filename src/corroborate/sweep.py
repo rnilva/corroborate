@@ -10,22 +10,19 @@ between framework-side data flow and domain-specific execution.
 For each cell, sweep:
 1. Calls `runner(h, env_name, seed, total_steps)` and collects the
    record.
-2. Applies each `h.bridges[i]` to the record.
-3. Wraps the bridge results into FactRows and a RunRow.
+2. Applies each `h.bridges[i]` to the record, flattens the result
+   into `bridge.<name>.*` / `invariant.<name>.*` measurements.
+3. Builds a RunRow with substrate-metadata measurements
+   (`env_name`, `seed`, `total_steps`, `intervention_name`),
+   the primary outcome scalar (`outcome.late_window_mean`), and
+   the bridge measurements.
 4. Captures any exception as a `CellFailure` rather than crashing
    the sweep — the caller sees both successful rows and failures.
 
 Subprocess isolation (one process per env, to prevent JIT cache
 OOM as v9 documented) is deferred. v0 runs in-process; large
 sweeps that need isolation can switch to a process-pool runner
-later without changing the Hypothesis / Bridge API.
-
-Statistical computation (Hedges' g, derived q, ΔI) is deferred
-to the statistics module (step 5). The FactRows produced here
-carry verdict and stats from each bridge; natural_strength and
-delta_i are zeroed (placeholder), to be filled in by the
-statistics layer when ArmRow / ComparisonRow / CorpusRow are
-constructed."""
+later without changing the Hypothesis / Bridge API."""
 from __future__ import annotations
 
 import time
@@ -35,9 +32,9 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from corroborate.aggregate import aggregate_cell_verdict
-from corroborate.bridge import Bridge, BridgeResult
-from corroborate.hypothesis import Hypothesis, MechanismKey
-from corroborate.schema import FactRow, RunRow
+from corroborate.bridge import BridgeResult
+from corroborate.hypothesis import Hypothesis
+from corroborate.schema import MeasurementLeaf, RunRow
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,6 +48,31 @@ class CellFailure:
     seed: int
     error: str
     duration_s: float
+
+
+def _bridge_result_to_measurements(
+    result: BridgeResult,
+) -> dict[str, MeasurementLeaf]:
+    """Flatten a BridgeResult into path-keyed measurements.
+
+    `bridge.<name>.verdict` (or `invariant.<name>.verdict` when
+    `stats['kind'] == 'tautological'`) carries the verdict; each
+    scalar entry of `result.stats` lands under
+    `<prefix>.<name>.stats.<key>`. Non-scalar stats (rare; not
+    expected in v0) are silently dropped — the BridgeResult
+    contract types `stats` to scalar primitives, so this is a
+    defensive guard, not the common path."""
+    is_invariant = result.stats.get('kind') == 'tautological'
+    prefix = f'invariant.{result.name}' if is_invariant else f'bridge.{result.name}'
+    out: dict[str, MeasurementLeaf] = {
+        f'{prefix}.verdict': result.verdict.value,
+    }
+    # `BridgeResult.stats` is typed `Mapping[str, float | int |
+    # bool | str]` — every value already satisfies
+    # MeasurementLeaf. Forward each entry verbatim.
+    for stat_key, stat_value in result.stats.items():
+        out[f'{prefix}.stats.{stat_key}'] = stat_value
+    return out
 
 
 def sweep[R: Mapping[str, object]](
@@ -90,83 +112,29 @@ def sweep[R: Mapping[str, object]](
 
             duration = time.monotonic() - t0
             primary = primary_outcome_extractor(record)
-            intervention_sig = _intervention_signature_leaves(h.mechanism_key)
-            facts = tuple(
-                _bridge_result_to_fact(b(record), b, intervention_sig)
-                for b in h.bridges
+            bridge_results = tuple(b(record) for b in h.bridges)
+            verdict = aggregate_cell_verdict(
+                tuple(r.verdict for r in bridge_results),
             )
-            verdict = aggregate_cell_verdict(facts)
-            reads_set: frozenset[str] = frozenset()
-            for f in facts:
-                reads_set = reads_set | f.reads
-            row_meta: dict[str, str | int | float | bool] = {
+
+            measurements: dict[str, MeasurementLeaf] = {
+                'intervention_name': h.name,
+                'env_name': env_name,
+                'seed': seed,
+                'total_steps': total_steps,
+                'outcome.late_window_mean': primary,
                 'duration_s': duration,
             }
+            for result in bridge_results:
+                measurements.update(_bridge_result_to_measurements(result))
+
             rows.append(RunRow(
                 id=str(uuid.uuid4()),
                 parent_id=None,
-                intervention_name=h.name,
                 cycle_id=cycle_id,
                 timestamp=datetime.now(UTC).isoformat(timespec='seconds'),
-                env_name=env_name,
-                total_steps=total_steps,
-                seed=seed,
-                mechanism_key=h.mechanism_key,
-                primary_outcome_summary=primary,
-                record_keys=tuple(record.keys()),
-                facts=facts,
-                reads_set=reads_set,
                 verdict=verdict,
-                meta=row_meta,
+                measurements=measurements,
             ))
 
     return rows, failures
-
-
-# ============ Bridge-result → FactRow conversion ============
-
-def _bridge_result_to_fact[R: Mapping[str, object]](
-    result: BridgeResult,
-    bridge: Bridge[R],
-    intervention_signature: frozenset[str],
-) -> FactRow:
-    """Stub conversion: BridgeResult → FactRow. The framework's
-    statistics layer (step 5) populates `natural_strength` and
-    `delta_i` from the result's stats; the verdict layer
-    (step 6) populates `evidentiary_level` per axiom 19. Until
-    those land, placeholders are 0.0 and the verdict's string
-    value, respectively.
-
-    `intervention_signature` is the leaf-flattened form of the
-    parent hypothesis's mechanism_key.intervention_signature —
-    feeds axiom 19's redundancy primitive's intervention factor.
-
-    `kind='bridge'` unless the result's stats carry the
-    'tautological' tag (set by `@invariant`); then `'invariant'`."""
-    is_invariant = result.stats.get('kind') == 'tautological'
-    return FactRow(
-        name=result.name if result.name else bridge.name,
-        kind='invariant' if is_invariant else 'bridge',
-        targets=result.targets if result.targets else bridge.targets,
-        verdict=result.verdict,
-        natural_strength=0.0,
-        delta_i=0.0,
-        evidentiary_level=result.verdict.value,
-        stats=result.stats,
-        intervention_signature=intervention_signature,
-    )
-
-
-def _intervention_signature_leaves(mk: MechanismKey) -> frozenset[str]:
-    """Flatten `mechanism_key.intervention_signature` to a
-    frozenset of leaf strings. Each (slot, value) pair contributes
-    both halves; the redundancy primitive's intervention-similarity
-    factor uses Jaccard over these leaves. Empty signatures (e.g.
-    a baseline arm with no overrides) yield an empty frozenset."""
-    leaves: set[str] = set()
-    for slot, value in mk.intervention_signature:
-        leaves.add(slot)
-        leaves.add(value)
-    return frozenset(leaves)
-
-

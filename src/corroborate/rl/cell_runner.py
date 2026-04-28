@@ -14,19 +14,19 @@ The runner is thin:
    batched call runs `dqn` once jit-compiled and produces a record
    pytree where each leaf has a leading `(n_seeds, ...)` axis.
 4. Per-seed Python-side: project the late-window outcome,
-   evaluate each hypothesis bridge, build the RunRow.
+   evaluate each hypothesis bridge (plus composition-discovered
+   invariants), build the RunRow with measurements at HP topology
+   paths + bridge result paths.
 
 The DQN algorithm itself lives entirely in the `dqn` claim
-(`rl/dqn/dqn.py`) — composition of init_state, nested scan, and
-record assembly. The cell runner has no knowledge of training-step
-semantics; it's a generic vmap-and-build-RunRow harness."""
+(`rl/dqn/dqn.py`). The cell runner has no knowledge of training-
+step semantics; it's a generic vmap-and-build-RunRow harness."""
 from __future__ import annotations
 
 import uuid
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from functools import partial
-from typing import Literal
 
 import gymnax
 import jax
@@ -34,16 +34,18 @@ import jax.numpy as jnp
 
 from corroborate.aggregate import aggregate_cell_verdict
 from corroborate.bridge import Bridge, BridgeResult
-from corroborate.hypothesis import Hypothesis
+from corroborate.hypothesis import (
+    Hypothesis,
+    _canonical_str,  # pyright: ignore[reportPrivateUsage]
+)
 from corroborate.reductions import masked_window_mean
 from corroborate.rl.dqn.claims.optimizer import Adam
 from corroborate.rl.dqn.dqn import default_state_hash, dqn
 from corroborate.rl.dqn.invariants import DQNTrajectoryRecord
 from corroborate.rl.dqn.types import OptimizerFactory
 from corroborate.rl.env_catalogue import EnvSpec
-from corroborate.schema import FactRow, RunRow
-from corroborate.signature import collect_invariants
-from corroborate.verdict import Verdict
+from corroborate.schema import MeasurementLeaf, RunRow
+from corroborate.signature import collect_invariants, walk, walk_paths
 
 
 # `total_steps` default — must match `dqn`'s default. Read from
@@ -53,9 +55,9 @@ _DEFAULT_TOTAL_STEPS: int = 50_000
 
 def _read_total_steps(intervention: Mapping[str, object]) -> int:
     """Read `total_steps` from intervention, defaulting when absent.
-    Used only to populate `RunRow.total_steps` — the value also
-    flows to `dqn` itself via `**intervention` if the author set
-    it. Loud error on wrong-typed override."""
+    Used only to populate the `total_steps` measurement — the
+    value also flows to `dqn` itself via `**intervention` if the
+    author set it. Loud error on wrong-typed override."""
     if 'total_steps' not in intervention:
         return _DEFAULT_TOTAL_STEPS
     v = intervention['total_steps']
@@ -65,6 +67,47 @@ def _read_total_steps(intervention: Mapping[str, object]) -> int:
             f"got {type(v).__name__}",
         )
     return v
+
+
+def _hp_scalar(value: object) -> MeasurementLeaf:
+    """Coerce an HP value to a scalar measurement leaf. Primitives
+    pass through; structured values (Modules, partials, FnClaims)
+    canonicalise to string via `_canonical_str`."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float, str)):
+        return value
+    return _canonical_str(value)
+
+
+def _hp_measurements(configured: object) -> dict[str, MeasurementLeaf]:
+    """Topology walk → dotted-path HP leaves. Each `walk_paths`
+    KwargInfo's default contributes one measurement at its dotted
+    path."""
+    paths = walk_paths(walk(configured), regime='hp')
+    return {path: _hp_scalar(kw.default) for path, kw in paths.items()}
+
+
+def _bridge_result_to_measurements(
+    result: BridgeResult,
+) -> dict[str, MeasurementLeaf]:
+    """Flatten a BridgeResult into path-keyed measurements.
+
+    `bridge.<name>.verdict` (or `invariant.<name>.verdict` when
+    `stats['kind'] == 'tautological'`) carries the verdict; each
+    scalar entry of `result.stats` lands under
+    `<prefix>.<name>.stats.<key>`."""
+    is_invariant = result.stats.get('kind') == 'tautological'
+    prefix = f'invariant.{result.name}' if is_invariant else f'bridge.{result.name}'
+    out: dict[str, MeasurementLeaf] = {
+        f'{prefix}.verdict': result.verdict.value,
+    }
+    # `BridgeResult.stats` is typed `Mapping[str, float | int |
+    # bool | str]` — every value already satisfies
+    # MeasurementLeaf. Forward each entry verbatim.
+    for stat_key, stat_value in result.stats.items():
+        out[f'{prefix}.stats.{stat_key}'] = stat_value
+    return out
 
 
 def run_dqn_arm(
@@ -114,6 +157,12 @@ def run_dqn_arm(
     }
     configured = partial(dqn, **{**cell_kwargs, **intervention})
 
+    # HP fingerprint — the configurational measurements that
+    # `aggregate.hp_signature` projects to as the group-by key.
+    # Walks the BOUND `configured` so intervention overrides
+    # surface at their dotted topology paths.
+    hp_leaves = _hp_measurements(configured)
+
     def by_key(rng_key: jax.Array) -> dict[str, jax.Array]:
         return configured(rng_key=rng_key)
 
@@ -122,9 +171,6 @@ def run_dqn_arm(
     )
     batched_record = jax.vmap(by_key)(keys)
 
-    intervention_sig: frozenset[str] = frozenset(
-        slot for slot, _ in hypothesis.mechanism_key.intervention_signature
-    )
     outcome_proj = masked_window_mean(
         value_key='ep_return', mask_key='done',
         fraction=outcome_fraction,
@@ -151,34 +197,29 @@ def run_dqn_arm(
             k: v[i] for k, v in batched_record.items()
         }
         outcome = outcome_proj(per_seed_record)
-        facts = tuple(
-            _bridge_result_to_fact(
-                bridge=b,
-                result=b(per_seed_record),
-                intervention_signature=intervention_sig,
-            )
-            for b in effective_bridges
+        bridge_results = tuple(b(per_seed_record) for b in effective_bridges)
+        verdict = aggregate_cell_verdict(
+            tuple(r.verdict for r in bridge_results),
         )
-        reads_set: frozenset[str] = frozenset()
-        for f in facts:
-            reads_set = reads_set | f.reads
+
+        measurements: dict[str, MeasurementLeaf] = {
+            'intervention_name': hypothesis.name,
+            'env_name': env_spec.name,
+            'seed': seed,
+            'total_steps': total_steps,
+            'outcome.late_window_mean': outcome,
+            **hp_leaves,
+        }
+        for result in bridge_results:
+            measurements.update(_bridge_result_to_measurements(result))
 
         rows.append(RunRow(
             id=str(uuid.uuid4()),
             parent_id=None,
-            intervention_name=hypothesis.name,
             cycle_id=cycle_id,
             timestamp=datetime.now(UTC).isoformat(timespec='seconds'),
-            env_name=env_spec.name,
-            total_steps=total_steps,
-            seed=seed,
-            mechanism_key=hypothesis.mechanism_key,
-            primary_outcome_summary=outcome,
-            record_keys=tuple(per_seed_record.keys()),
-            facts=facts,
-            reads_set=reads_set,
-            verdict=aggregate_cell_verdict(facts),
-            meta={},
+            verdict=verdict,
+            measurements=measurements,
         ))
     return tuple(rows)
 
@@ -203,44 +244,3 @@ def run_dqn_cell(
         cycle_id=cycle_id,
     )
     return rows[0]
-
-
-def _bridge_result_to_fact[R: Mapping[str, object]](
-    *,
-    bridge: Bridge[R],
-    result: BridgeResult,
-    intervention_signature: frozenset[str],
-) -> FactRow:
-    """Convert a BridgeResult to a FactRow at cell-level
-    granularity. `kind` is read off `stats['kind']`: tautological
-    → 'invariant', otherwise → 'bridge'.
-
-    `natural_strength` is a binary placeholder (1.0 for HELD, 0.0
-    otherwise) — step 5 (statistics module) replaces this with real
-    q values from Hedges' g / sample sizes. `delta_i` stays 0.0 at
-    cell level; populated at the comparison level by the
-    aggregation pipeline."""
-    return FactRow(
-        name=bridge.name,
-        kind=_classify_kind(result.stats),
-        targets=bridge.targets,
-        verdict=result.verdict,
-        natural_strength=1.0 if result.verdict is Verdict.HELD else 0.0,
-        delta_i=0.0,
-        evidentiary_level='cell',
-        stats=dict(result.stats),
-        intervention_signature=intervention_signature,
-    )
-
-
-def _classify_kind(
-    stats: Mapping[str, float | int | bool | str],
-) -> Literal['bridge', 'invariant']:
-    """Read `stats['kind']` and project to FactRow's
-    `Literal['bridge', 'invariant']`. The `@invariant` decorator
-    sets `stats['kind']='tautological'`; everything else is a plain
-    bridge."""
-    kind_raw = stats.get('kind')
-    if kind_raw == 'tautological':
-        return 'invariant'
-    return 'bridge'

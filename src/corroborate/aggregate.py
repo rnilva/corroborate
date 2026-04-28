@@ -1,28 +1,33 @@
 """Aggregate — typed sweep → ArmRow → ComparisonRow hand-off.
 
 The framework's sweep emits `list[RunRow]`; downstream consumers
-need per-(hypothesis, env) ArmRows and per-(treatment, baseline)
+need per-(intervention, env) ArmRows and per-(treatment, baseline)
 ComparisonRows. This module provides the typed factory functions
-for that hand-off — porting v10's `HypothesisComparisonRow.from_
-cells` pattern with the actual statistics computation deferred
-to step 5.
+for that hand-off.
 
 Structure:
 
+- `aggregate_cell_verdict(verdicts)` — Popperian aggregation over
+  per-bridge verdicts (any single refutation refutes; INVARIANT_
+  VIOLATION dominates).
 - `arm_from_runs(runs, *, intervention_name, env_name, ...)`
-  produces an ArmRow from a homogeneous list of RunRows (same
-  intervention_name + env_name + mechanism_key). Computes
-  `arm_mean` and `arm_sd` from `primary_outcome_summary` across
-  cells. Aggregates `facts` by name (admit-rate per fact).
+  produces an ArmRow from a homogeneous list of RunRows. Computes
+  arm-level outcome statistics from each run's
+  `outcome.late_window_mean` measurement (NaN-aware), aggregates
+  per-bridge admit-rates across runs, and forwards the HP-only
+  subset of measurements (the configurational fingerprint).
 - `comparison_from_arms(treatment, baseline, *, predicted_direction,
   ...)` produces a ComparisonRow with per-arm stats threaded
-  through. Stat fields (effect_size_g, se, derived_q,
-  delta_i_population, refutation_class, adequately_powered) are
-  populated by `_default_statistics_stub` for v0; step 5 replaces
-  it with Hedges' g + power machinery.
+  through `measurements` (`outcome.<m>.arm_a_mean` etc.). Stat
+  fields populated by `_default_statistics_stub` for v0; step 5
+  replaces it with Hedges' g + power machinery.
 - `aggregate_runs(runs)` is the convenience entry point: groups
-  runs by (intervention_name, env_name, mechanism_key), produces
+  runs by (intervention_name, env_name, hp_signature), produces
   one ArmRow per group.
+- `hp_signature(measurements)` — the configuration fingerprint
+  used as a group-by key. Filters out outcome/bridge/invariant
+  paths and substrate-metadata keys, returns sorted (path, str)
+  pairs.
 
 Step 5's MDE+power statistics module will replace the stub with
 real `Hedges_g`, `SE_g`, `derived_q`, `RefutationClass` selection.
@@ -35,21 +40,43 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from corroborate.hypothesis import Direction, MechanismKey
-from corroborate.schema import ArmRow, ComparisonRow, FactRow, RunRow
+from corroborate.hypothesis import Direction
+from corroborate.schema import ArmRow, ComparisonRow, MeasurementLeaf, RunRow
 from corroborate.verdict import RefutationClass, Verdict
 
 
-# ============ ArmRow factory ============
+# ============ HP-signature projection ============
 
-def _empty_meta() -> dict[str, str | int | float | bool]:
-    return {}
+_NON_HP_PREFIXES: tuple[str, ...] = ('outcome.', 'bridge.', 'invariant.')
+_NON_HP_KEYS: frozenset[str] = frozenset({
+    'env_name', 'seed', 'total_steps', 'intervention_name',
+})
+
+
+def hp_signature(
+    measurements: Mapping[str, MeasurementLeaf],
+) -> tuple[tuple[str, str], ...]:
+    """The configuration fingerprint — HP-only subset of
+    `measurements` as a sorted (path, str-canonical-value) tuple.
+    Hashable; suitable as a group-by key.
+
+    Filters out paths under `outcome.`/`bridge.`/`invariant.`
+    prefixes and substrate-metadata keys (`env_name`, `seed`,
+    `total_steps`, `intervention_name`). What remains is the HP
+    leaves at their dotted topology paths plus any other author-
+    chosen scalar measurement that isn't a result/metadata."""
+    return tuple(sorted(
+        (k, str(v))
+        for k, v in measurements.items()
+        if not any(k.startswith(p) for p in _NON_HP_PREFIXES)
+        and k not in _NON_HP_KEYS
+    ))
 
 
 # ============ Cell-level verdict aggregator (shared) ============
 
-def aggregate_cell_verdict(facts: tuple[FactRow, ...]) -> Verdict:
-    """Cell-level verdict from per-bridge facts. Popperian
+def aggregate_cell_verdict(verdicts: tuple[Verdict, ...]) -> Verdict:
+    """Cell-level verdict from per-bridge verdicts. Popperian
     aggregation: any single refutation refutes.
 
     Precedence (highest first):
@@ -63,23 +90,75 @@ def aggregate_cell_verdict(facts: tuple[FactRow, ...]) -> Verdict:
     3. All `Verdict.HELD` → HELD.
     4. Otherwise (mixed HELD + POWER_INSUFFICIENT) →
        `POWER_INSUFFICIENT` (cannot tell).
-    Empty facts → `POWER_INSUFFICIENT` (no test was performed).
-
-    Returns `Verdict` directly (typed enum), not a string —
-    framework's primary discrimination is the trichotomy. Shared
-    between `sweep.py` and `rl/cell_runner.py` so call paths
-    converge on identical semantics; the duplicates had diverged
-    after `at_most` was retyped to return INVARIANT_VIOLATION
-    directly (round 2)."""
-    if not facts:
+    Empty input → `POWER_INSUFFICIENT` (no test was performed)."""
+    if not verdicts:
         return Verdict.POWER_INSUFFICIENT
-    if any(f.verdict is Verdict.INVARIANT_VIOLATION for f in facts):
+    if any(v is Verdict.INVARIANT_VIOLATION for v in verdicts):
         return Verdict.INVARIANT_VIOLATION
-    if any(f.verdict is Verdict.NO_EFFECT for f in facts):
+    if any(v is Verdict.NO_EFFECT for v in verdicts):
         return Verdict.NO_EFFECT
-    if all(f.verdict is Verdict.HELD for f in facts):
+    if all(v is Verdict.HELD for v in verdicts):
         return Verdict.HELD
     return Verdict.POWER_INSUFFICIENT
+
+
+# ============ ArmRow factory ============
+
+def _empty_meta() -> dict[str, MeasurementLeaf]:
+    return {}
+
+
+def _resolved_timestamp(timestamp: str | None) -> str:
+    return (
+        timestamp
+        if timestamp is not None
+        else datetime.now(UTC).isoformat(timespec='seconds')
+    )
+
+
+def _outcome_summary(measurements: Mapping[str, MeasurementLeaf]) -> float:
+    """Read `outcome.late_window_mean` as a float, returning NaN
+    if absent or non-numeric. Cell runners write a substrate-named
+    outcome key; v0's RL substrate uses `outcome.late_window_mean`.
+    Cells without that key contribute NaN to the arm aggregate."""
+    v = measurements.get('outcome.late_window_mean')
+    if v is None:
+        return float('nan')
+    if isinstance(v, bool):
+        return float(v)
+    if isinstance(v, (int, float)):
+        return float(v)
+    return float('nan')
+
+
+def _bridge_admit_rates(
+    runs: Sequence[RunRow],
+) -> dict[str, MeasurementLeaf]:
+    """For each `bridge.<name>.verdict` / `invariant.<name>.verdict`
+    path that appears in any run's measurements, compute the
+    admit-rate across runs (n_held / n_with_verdict) and surface
+    it as `<prefix><name>.admit_rate`. Runs missing a verdict for
+    a given name contribute neither numerator nor denominator."""
+    counts: dict[str, dict[str, int]] = {}
+    for run in runs:
+        for k, v in run.measurements.items():
+            if not (
+                k.startswith('bridge.') or k.startswith('invariant.')
+            ):
+                continue
+            if not k.endswith('.verdict'):
+                continue
+            slot = counts.setdefault(k, {'n': 0, 'n_held': 0})
+            slot['n'] += 1
+            if v == Verdict.HELD.value:
+                slot['n_held'] += 1
+    out: dict[str, MeasurementLeaf] = {}
+    for verdict_path, c in counts.items():
+        # `bridge.<name>.verdict` → `bridge.<name>.admit_rate`
+        base = verdict_path.removesuffix('.verdict')
+        admit_rate = c['n_held'] / c['n'] if c['n'] > 0 else 0.0
+        out[f'{base}.admit_rate'] = admit_rate
+    return out
 
 
 def arm_from_runs(
@@ -87,32 +166,29 @@ def arm_from_runs(
     *,
     intervention_name: str,
     env_name: str,
-    mechanism_key: MechanismKey,
     cycle_id: str | None = None,
     timestamp: str | None = None,
-    meta: Mapping[str, str | int | float | bool] | None = None,
+    extra_measurements: Mapping[str, MeasurementLeaf] | None = None,
 ) -> ArmRow:
-    """Construct an ArmRow from a list of RunRows. The runs must
-    be homogeneous in `intervention_name`, `env_name`, and
-    `mechanism_key` (caller is responsible for grouping); this
-    function trusts that contract.
+    """Construct an ArmRow from a list of RunRows. Runs must be
+    homogeneous in `intervention_name` + `env_name` + HP signature
+    (caller is responsible for grouping); this function trusts
+    that contract.
 
-    Computes `arm_mean` and `arm_sd` from each run's
-    `primary_outcome_summary`. Aggregates facts by name and
-    converts per-cell verdict counts into the ArmRow's facts
-    list (admit-rate becomes `natural_strength` placeholder
-    until step 5 fills in real q values)."""
+    Computes `outcome.late_window_mean.arm_mean` and `arm_sd`
+    (NaN-aware) from each run's outcome measurement. Intersects
+    the HP subset of measurements across the runs and forwards
+    each common (k, v) entry. Per-bridge admit-rates land at
+    `bridge.<name>.admit_rate` / `invariant.<name>.admit_rate`."""
     if not runs:
         raise ValueError('arm_from_runs requires ≥1 RunRow')
 
-    summaries = [r.primary_outcome_summary for r in runs]
+    summaries = [_outcome_summary(r.measurements) for r in runs]
     n = len(summaries)
-    # NaN-aware mean/sd: `masked_window_mean` returns NaN when no
-    # episode terminated in the late window (legitimate no-data
-    # at small total_steps). `sum / n` would poison the whole arm
-    # with one NaN; instead compute the mean/sd over only finite
-    # summaries. `n` stays the total run count for provenance;
-    # the arm_mean / arm_sd themselves are NaN-tolerant.
+    # NaN-aware mean/sd: a run with no terminated episode in the
+    # late window legitimately yields NaN. `sum / n` would poison
+    # the whole arm with one NaN; instead compute over only finite
+    # summaries. `n` stays the total run count for provenance.
     finite_summaries = [s for s in summaries if not math.isnan(s)]
     n_finite = len(finite_summaries)
     if n_finite == 0:
@@ -128,73 +204,51 @@ def arm_from_runs(
         else:
             arm_sd = 0.0
 
-    facts = _aggregate_facts_by_name(runs)
-    reads_set: frozenset[str] = frozenset()
-    for f in facts:
-        reads_set = reads_set | f.reads
+    # HP-subset shared across all runs in the arm. Authors who
+    # follow the grouping contract get identical HP signatures for
+    # all members; we still intersect defensively (a run with a
+    # bridge-set-difference in measurements doesn't poison the arm).
+    common_hp = _intersect_hp_measurements(runs)
 
-    resolved_timestamp = (
-        timestamp
-        if timestamp is not None
-        else datetime.now(UTC).isoformat(timespec='seconds')
-    )
+    measurements: dict[str, MeasurementLeaf] = {
+        'env_name': env_name,
+        'intervention_name': intervention_name,
+        'n': n,
+        'outcome.late_window_mean.arm_mean': arm_mean,
+        'outcome.late_window_mean.arm_sd': arm_sd,
+        **common_hp,
+        **_bridge_admit_rates(runs),
+        **(extra_measurements or _empty_meta()),
+    }
 
     return ArmRow(
         id=str(uuid.uuid4()),
-        intervention_name=intervention_name,
-        env_name=env_name,
         cycle_id=cycle_id,
-        timestamp=resolved_timestamp,
-        mechanism_key=mechanism_key,
+        timestamp=_resolved_timestamp(timestamp),
         run_ids=tuple(r.id for r in runs),
-        seeds=tuple(r.seed for r in runs),
-        n=n,
-        arm_mean=arm_mean,
-        arm_sd=arm_sd,
-        facts=facts,
-        reads_set=reads_set,
-        meta={**(meta or _empty_meta())},
+        measurements=measurements,
     )
 
 
-def _aggregate_facts_by_name(runs: Sequence[RunRow]) -> tuple[FactRow, ...]:
-    """Group facts across runs by `name`, then collapse each group
-    into one fact carrying the per-cell admit-rate as
-    `natural_strength` (placeholder until step 5 derives real q
-    from raw stats). Verdict at the arm level: the majority verdict
-    if any, else the most-common; for v0, `HELD` if all admit,
-    `NO_EFFECT` if all reject, else `POWER_INSUFFICIENT`."""
-    by_name: dict[str, list[FactRow]] = {}
-    for run in runs:
-        for f in run.facts:
-            by_name.setdefault(f.name, []).append(f)
-
-    out: list[FactRow] = []
-    for name, group in by_name.items():
-        n = len(group)
-        n_held = sum(1 for f in group if f.verdict is Verdict.HELD)
-        n_rejected = sum(1 for f in group if f.verdict is Verdict.NO_EFFECT)
-        admit_rate = n_held / n if n > 0 else 0.0
-        if n_held == n:
-            verdict = Verdict.HELD
-        elif n_rejected == n:
-            verdict = Verdict.NO_EFFECT
-        else:
-            verdict = Verdict.POWER_INSUFFICIENT
-
-        first = group[0]
-        out.append(FactRow(
-            name=name,
-            kind=first.kind,
-            targets=first.targets,
-            verdict=verdict,
-            natural_strength=admit_rate,
-            delta_i=0.0,
-            evidentiary_level=first.evidentiary_level,
-            stats={**first.stats},
-            intervention_signature=first.intervention_signature,
-        ))
-    return tuple(out)
+def _intersect_hp_measurements(
+    runs: Sequence[RunRow],
+) -> dict[str, MeasurementLeaf]:
+    """Intersection of HP measurements across runs. A path that
+    appears with the SAME value in every run survives; anything
+    else is dropped. Uses `hp_signature` indirectly via the
+    same NON_HP filter — the projection is HP keys only."""
+    if not runs:
+        return {}
+    head_hp = {
+        k: v for k, v in runs[0].measurements.items()
+        if not any(k.startswith(p) for p in _NON_HP_PREFIXES)
+        and k not in _NON_HP_KEYS
+    }
+    out: dict[str, MeasurementLeaf] = {}
+    for k, v in head_hp.items():
+        if all(r.measurements.get(k) == v for r in runs[1:]):
+            out[k] = v
+    return out
 
 
 # ============ ComparisonRow factory ============
@@ -203,7 +257,9 @@ def _aggregate_facts_by_name(runs: Sequence[RunRow]) -> tuple[FactRow, ...]:
 class _StatisticsStub:
     """Stub statistics — what the step-5 MDE+power module will
     replace with real Hedges' g + SE + derived q. Each field
-    matches the corresponding ComparisonRow field one-to-one."""
+    matches the corresponding ComparisonRow.measurements path or
+    the typed `verdict` / `refutation_class` / `adequately_powered`
+    fields one-to-one."""
     effect_size_g: float | None
     se: float | None
     derived_q: float | None
@@ -232,6 +288,53 @@ def _default_statistics_stub(
     )
 
 
+def _arm_env_name(arm: ArmRow) -> str:
+    """Read `env_name` measurement off an arm; loud error if
+    absent (the arm-builder always writes it)."""
+    v = arm.measurements.get('env_name')
+    if not isinstance(v, str):
+        raise TypeError(
+            f"ArmRow {arm.id!r} missing 'env_name' measurement"
+        )
+    return v
+
+
+def _arm_intervention_name(arm: ArmRow) -> str:
+    v = arm.measurements.get('intervention_name')
+    if not isinstance(v, str):
+        raise TypeError(
+            f"ArmRow {arm.id!r} missing 'intervention_name' measurement"
+        )
+    return v
+
+
+def _arm_n(arm: ArmRow) -> int:
+    v = arm.measurements.get('n')
+    if isinstance(v, bool) or not isinstance(v, int):
+        raise TypeError(
+            f"ArmRow {arm.id!r} missing 'n' measurement"
+        )
+    return v
+
+
+def _arm_outcome_stats(arm: ArmRow) -> tuple[float, float]:
+    """Read (arm_mean, arm_sd) for `outcome.late_window_mean` off
+    an arm. Loud error if absent (arm-builder always writes them)."""
+    mean_v = arm.measurements.get('outcome.late_window_mean.arm_mean')
+    sd_v = arm.measurements.get('outcome.late_window_mean.arm_sd')
+    if isinstance(mean_v, bool) or not isinstance(mean_v, (int, float)):
+        raise TypeError(
+            f"ArmRow {arm.id!r} missing "
+            f"'outcome.late_window_mean.arm_mean' measurement"
+        )
+    if isinstance(sd_v, bool) or not isinstance(sd_v, (int, float)):
+        raise TypeError(
+            f"ArmRow {arm.id!r} missing "
+            f"'outcome.late_window_mean.arm_sd' measurement"
+        )
+    return float(mean_v), float(sd_v)
+
+
 def comparison_from_arms(
     treatment: ArmRow,
     baseline: ArmRow,
@@ -239,28 +342,34 @@ def comparison_from_arms(
     predicted_direction: Direction | None,
     cycle_id: str | None = None,
     timestamp: str | None = None,
-    meta: Mapping[str, str | int | float | bool] | None = None,
+    extra_measurements: Mapping[str, MeasurementLeaf] | None = None,
     statistics_fn: object = None,
 ) -> ComparisonRow:
     """Construct a ComparisonRow from a (treatment, baseline) arm
     pair. The arms must share `env_name` (caller is responsible
     for matching).
 
+    Per-arm stats land in `measurements` under `outcome.<m>.arm_a_*`
+    / `outcome.<m>.arm_b_*` paths plus `n_treatment` / `n_baseline`
+    / `intervention_name` / `env_name`. Step 5 fills in real
+    `outcome.<m>.effect_size_g` / `se` / `derived_q` /
+    `delta_i_population`; v0 stub leaves them None / 0.0.
+
     `statistics_fn` is the pluggable MDE+power computation;
-    `None` uses the v0 stub. Step 5's statistics module passes
-    its own implementation here. Type is `object` because the
-    function signature `Callable[[ArmRow, ArmRow], _StatisticsStub]`
-    isn't carried at the framework level (callers can use the
-    stub or their own — the typed contract is the
-    `_StatisticsStub` shape).
+    `None` uses the v0 stub. Type is `object` because the
+    function signature isn't carried at the framework level
+    (callers can use the stub or their own — the typed contract
+    is the `_StatisticsStub` shape).
 
     `predicted_direction` is taken from the treatment's
     `Hypothesis.predicted_direction` and threaded through; the
     caller passes it explicitly because ArmRow doesn't carry it."""
-    if treatment.env_name != baseline.env_name:
+    treatment_env = _arm_env_name(treatment)
+    baseline_env = _arm_env_name(baseline)
+    if treatment_env != baseline_env:
         raise ValueError(
-            f'env_name mismatch: treatment={treatment.env_name!r} '
-            f'vs baseline={baseline.env_name!r}'
+            f'env_name mismatch: treatment={treatment_env!r} '
+            f'vs baseline={baseline_env!r}'
         )
 
     stats = (
@@ -274,84 +383,95 @@ def comparison_from_arms(
             f'got {type(stats).__name__}'
         )
 
-    # Merge facts from both arms (admit-rate-weighted union).
-    facts = _merge_arm_facts(treatment, baseline)
-    reads_set: frozenset[str] = frozenset()
-    for f in facts:
-        reads_set = reads_set | f.reads
+    arm_a_mean, arm_a_sd = _arm_outcome_stats(treatment)
+    arm_b_mean, arm_b_sd = _arm_outcome_stats(baseline)
+    n_treatment = _arm_n(treatment)
+    n_baseline = _arm_n(baseline)
 
-    resolved_timestamp = (
-        timestamp
-        if timestamp is not None
-        else datetime.now(UTC).isoformat(timespec='seconds')
-    )
+    measurements: dict[str, MeasurementLeaf] = {
+        'env_name': treatment_env,
+        'intervention_name': _arm_intervention_name(treatment),
+        'n_treatment': n_treatment,
+        'n_baseline': n_baseline,
+        'outcome.late_window_mean.arm_a_mean': arm_a_mean,
+        'outcome.late_window_mean.arm_a_sd': arm_a_sd,
+        'outcome.late_window_mean.arm_b_mean': arm_b_mean,
+        'outcome.late_window_mean.arm_b_sd': arm_b_sd,
+        'outcome.late_window_mean.delta_i_population': stats.delta_i_population,
+    }
+    if stats.effect_size_g is not None:
+        measurements['outcome.late_window_mean.effect_size_g'] = stats.effect_size_g
+    if stats.se is not None:
+        measurements['outcome.late_window_mean.se'] = stats.se
+    if stats.derived_q is not None:
+        measurements['outcome.late_window_mean.derived_q'] = stats.derived_q
+
+    if extra_measurements is not None:
+        measurements.update(extra_measurements)
 
     return ComparisonRow(
         id=str(uuid.uuid4()),
         parent_id=None,
-        intervention_name=treatment.intervention_name,
-        env_name=treatment.env_name,
         cycle_id=cycle_id,
-        timestamp=resolved_timestamp,
+        timestamp=_resolved_timestamp(timestamp),
         treatment_arm_id=treatment.id,
         baseline_arm_id=baseline.id,
-        mechanism_key=treatment.mechanism_key,
         predicted_direction=predicted_direction,
-        n_treatment=treatment.n,
-        n_baseline=baseline.n,
-        arm_a_mean=treatment.arm_mean,
-        arm_a_sd=treatment.arm_sd,
-        arm_b_mean=baseline.arm_mean,
-        arm_b_sd=baseline.arm_sd,
-        effect_size_g=stats.effect_size_g,
-        se=stats.se,
-        derived_q=stats.derived_q,
-        delta_i_population=stats.delta_i_population,
         verdict=stats.verdict,
         refutation_class=stats.refutation_class,
         adequately_powered=stats.adequately_powered,
-        facts=facts,
-        reads_set=reads_set,
-        meta={**(meta or _empty_meta())},
+        measurements=measurements,
     )
-
-
-def _merge_arm_facts(
-    treatment: ArmRow, baseline: ArmRow,
-) -> tuple[FactRow, ...]:
-    """Combine arm-level facts. v0: prefer treatment's fact when
-    a name appears on both arms (treatment is what the hypothesis
-    is actually testing); pure baseline-only facts are appended.
-    Step 6 may refine this when comparison-level fact aggregation
-    has clearer semantics."""
-    by_name: dict[str, FactRow] = {}
-    for f in baseline.facts:
-        by_name[f.name] = f
-    for f in treatment.facts:  # treatment overwrites baseline on name conflict
-        by_name[f.name] = f
-    return tuple(by_name.values())
 
 
 # ============ Convenience: aggregate runs into arms ============
 
+def _run_intervention_name(run: RunRow) -> str:
+    v = run.measurements.get('intervention_name')
+    if not isinstance(v, str):
+        raise TypeError(
+            f"RunRow {run.id!r} missing 'intervention_name' measurement"
+        )
+    return v
+
+
+def _run_env_name(run: RunRow) -> str:
+    v = run.measurements.get('env_name')
+    if not isinstance(v, str):
+        raise TypeError(
+            f"RunRow {run.id!r} missing 'env_name' measurement"
+        )
+    return v
+
+
 def aggregate_runs(runs: Iterable[RunRow]) -> list[ArmRow]:
-    """Group `runs` by (intervention_name, env_name,
-    mechanism_key), build one ArmRow per group. Convenience for
-    the common dialectic-loop case where a sweep produces a
-    flat list of cells across multiple (hypothesis, env)
-    combinations."""
-    by_key: dict[tuple[str, str, MechanismKey], list[RunRow]] = {}
+    """Group `runs` by (intervention_name, env_name, hp_signature),
+    build one ArmRow per group. Convenience for the common
+    dialectic-loop case where a sweep produces a flat list of
+    cells across multiple (hypothesis, env) combinations.
+
+    Grouping uses `hp_signature(run.measurements)` rather than a
+    declared `MechanismKey` artifact — two runs with identical HP
+    settings on the same intervention/env land in the same arm,
+    even if they were authored as distinct Hypothesis instances."""
+    by_key: dict[
+        tuple[str, str, tuple[tuple[str, str], ...]],
+        list[RunRow],
+    ] = {}
     for r in runs:
-        key = (r.intervention_name, r.env_name, r.mechanism_key)
+        key = (
+            _run_intervention_name(r),
+            _run_env_name(r),
+            hp_signature(r.measurements),
+        )
         by_key.setdefault(key, []).append(r)
 
     out: list[ArmRow] = []
-    for (intervention_name, env_name, mechanism_key), group in by_key.items():
+    for (intervention_name, env_name, _), group in by_key.items():
         out.append(arm_from_runs(
             group,
             intervention_name=intervention_name,
             env_name=env_name,
-            mechanism_key=mechanism_key,
             cycle_id=group[0].cycle_id,
         ))
     return out

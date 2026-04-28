@@ -1,13 +1,21 @@
-"""Tests for `Hypothesis[R]`, `MechanismKey`, and the canonical
-intervention signature. Strict typing exercised: bridges and
-hypothesis share R; mechanism_key is structurally hashable."""
+"""Tests for `Hypothesis[R]` and HP-value canonicalization. Strict
+typing exercised: bridges and hypothesis share R.
+
+`MechanismKey` no longer exists as a framework artifact; the
+configurational identity of a hypothesis is recovered from its
+runs' `measurements` via `aggregate.hp_signature`. These tests
+cover the data-class shape + the `_canonical_str` helper used for
+HP-leaf serialization."""
 from __future__ import annotations
 
 from collections.abc import Mapping
 
 from corroborate.bridge import BridgeResult, bridge
 from corroborate.claim import claim
-from corroborate.hypothesis import Hypothesis, MechanismKey
+from corroborate.hypothesis import (
+    Hypothesis,
+    _canonical_str,  # pyright: ignore[reportPrivateUsage]
+)
 from corroborate.verdict import Verdict
 
 
@@ -15,8 +23,7 @@ from corroborate.verdict import Verdict
 
 def test_hypothesis_minimal() -> None:
     h: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='baseline',
-        intervention={},
+        name='baseline', intervention={},
     )
     assert h.name == 'baseline'
     assert h.intervention == {}
@@ -42,177 +49,28 @@ def test_hypothesis_with_bridges() -> None:
     assert h.bridges[0] is b
 
 
-# ============ MechanismKey ============
-
-def test_mechanism_key_returns_mechanism_key_dataclass() -> None:
+def test_hypothesis_predicted_direction() -> None:
     h: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='h', intervention={'slot': 'value'},
-    )
-    assert isinstance(h.mechanism_key, MechanismKey)
-
-
-def test_mechanism_key_intervention_signature_is_sorted() -> None:
-    """The intervention signature is sorted by slot name so two
-    hypotheses with reordered intervention dicts produce the same
-    key (dicts in Python 3.7+ are insertion-ordered, but order
-    isn't structural)."""
-    h1: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='a',
-        intervention={'b': 1, 'a': 2, 'c': 3},
-    )
-    h2: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='b',  # different name — name doesn't affect key
-        intervention={'c': 3, 'a': 2, 'b': 1},
-    )
-    assert h1.mechanism_key == h2.mechanism_key
-
-
-def test_mechanism_key_distinguishes_different_interventions() -> None:
-    h1: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='h', intervention={'slot': 'value_a'},
-    )
-    h2: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='h', intervention={'slot': 'value_b'},
-    )
-    assert h1.mechanism_key != h2.mechanism_key
-
-
-def test_mechanism_key_includes_direction() -> None:
-    h_no_dir: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='h', intervention={},
-    )
-    h_a_gt: Hypothesis[Mapping[str, object]] = Hypothesis(
         name='h', intervention={}, predicted_direction='a_gt_b',
     )
-    h_a_lt: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='h', intervention={}, predicted_direction='a_lt_b',
-    )
-
-    assert h_no_dir.mechanism_key != h_a_gt.mechanism_key
-    assert h_a_gt.mechanism_key != h_a_lt.mechanism_key
+    assert h.predicted_direction == 'a_gt_b'
 
 
-def test_mechanism_key_bridge_names_are_order_independent() -> None:
-    @bridge(targets=('x',))
-    def b1(record: Mapping[str, object]) -> BridgeResult:
-        del record
-        return BridgeResult(
-            verdict=Verdict.HELD, reason='', stats={},
-            name='', targets=(),
-        )
-
-    @bridge(targets=('y',))
-    def b2(record: Mapping[str, object]) -> BridgeResult:
-        del record
-        return BridgeResult(
-            verdict=Verdict.HELD, reason='', stats={},
-            name='', targets=(),
-        )
-
-    h1: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='h', intervention={}, bridges=(b1, b2),
-    )
-    h2: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='h', intervention={}, bridges=(b2, b1),
-    )
-    assert h1.mechanism_key == h2.mechanism_key
-
-
-def test_mechanism_key_intervention_only_drops_bridge_names() -> None:
-    """`MechanismKey.intervention_only()` projects to
-    `InterventionKey` — preserves intervention_signature and
-    direction, drops bridge_names. Two MechanismKeys with same
-    intervention but different bridge sets project to the same
-    InterventionKey (the projection causal discovery wants for
-    binary intervention variables)."""
-    from corroborate.hypothesis import InterventionKey, MechanismKey
-
-    mk_a = MechanismKey(
-        intervention_signature=(('slot', 'value'),),
-        bridge_names=frozenset({'bridge_x', 'bridge_y'}),
-        direction='a_gt_b',
-    )
-    mk_b = MechanismKey(
-        intervention_signature=(('slot', 'value'),),
-        bridge_names=frozenset({'completely', 'different'}),
-        direction='a_gt_b',
-    )
-
-    iv_a = mk_a.intervention_only()
-    iv_b = mk_b.intervention_only()
-    assert isinstance(iv_a, InterventionKey)
-    assert iv_a == iv_b
-
-
-def test_mechanism_key_intervention_only_preserves_direction() -> None:
-    from corroborate.hypothesis import MechanismKey
-
-    mk = MechanismKey(
-        intervention_signature=(('slot', 'value'),),
-        bridge_names=frozenset(),
-        direction='a_lt_b',
-    )
-    iv = mk.intervention_only()
-    assert iv.direction == 'a_lt_b'
-    assert iv.intervention_signature == (('slot', 'value'),)
-
-
-def test_mechanism_key_intervention_only_distinguishes_interventions() -> None:
-    from corroborate.hypothesis import MechanismKey
-
-    mk_x = MechanismKey(
-        intervention_signature=(('slot', 'value_x'),),
-        bridge_names=frozenset(),
-        direction=None,
-    )
-    mk_y = MechanismKey(
-        intervention_signature=(('slot', 'value_y'),),
-        bridge_names=frozenset(),
-        direction=None,
-    )
-    assert mk_x.intervention_only() != mk_y.intervention_only()
-
-
-def test_mechanism_key_is_hashable() -> None:
-    """MechanismKey is hashable so it can be used as a dict key
-    or set member — anti-laundering registry uses it that way."""
-    h: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='h', intervention={'a': 1}, predicted_direction='a_gt_b',
-    )
-    keys: set[MechanismKey] = {h.mechanism_key}
-    assert h.mechanism_key in keys
-
-
-# ============ Intervention value canonicalization ============
+# ============ HP-value canonicalization ============
 
 def test_canonical_str_distinguishes_value_types() -> None:
-    """Intervention values of different types canonicalise
-    distinctly so a 'value=1' (int) doesn't collide with 'value=1'
-    (str)."""
-    h_int: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='h', intervention={'v': 1},
-    )
-    h_str: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='h', intervention={'v': '1'},
-    )
-    assert h_int.mechanism_key != h_str.mechanism_key
+    """Different types canonicalise distinctly so '1' (int)
+    doesn't collide with '1' (str)."""
+    assert _canonical_str(1) != _canonical_str('1')
 
 
 def test_canonical_str_handles_claims() -> None:
-    """Claim-typed intervention values canonicalise via
-    `Claim:<name>` so two interventions referencing the same Claim
-    by name produce the same key."""
+    """Claim-typed values canonicalise via `Claim:<name>`."""
     @claim
     def my_alternative(x: int) -> int:
         return x * 2
 
-    h1: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='h', intervention={'mechanism': my_alternative},
-    )
-    h2: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='h2', intervention={'mechanism': my_alternative},
-    )
-    assert h1.mechanism_key == h2.mechanism_key
+    assert _canonical_str(my_alternative) == 'Claim:my_alternative'
 
 
 def test_canonical_str_distinguishes_different_claims() -> None:
@@ -224,38 +82,72 @@ def test_canonical_str_distinguishes_different_claims() -> None:
     def alt_b(x: int) -> int:
         return x
 
-    h_a: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='h', intervention={'mechanism': alt_a},
-    )
-    h_b: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='h', intervention={'mechanism': alt_b},
-    )
-    assert h_a.mechanism_key != h_b.mechanism_key
+    assert _canonical_str(alt_a) != _canonical_str(alt_b)
 
 
 def test_canonical_str_handles_plain_callables() -> None:
-    """Plain (non-@claim) callables are canonicalised via their
-    `__name__` when available, falling through to `repr()`. Allows
-    interventions that haven't been promoted to @claim yet to still
-    be structurally distinguishable."""
+    """Plain callables canonicalise via their `__name__`."""
     def plain_alternative(x: int) -> int:
         return x
 
-    h: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='h', intervention={'mechanism': plain_alternative},
-    )
-    sig = h.mechanism_key.intervention_signature
-    assert any('plain_alternative' in pair[1] for pair in sig)
+    s = _canonical_str(plain_alternative)
+    assert 'plain_alternative' in s
 
 
 def test_canonical_str_bool_distinct_from_int() -> None:
-    """bool is a subclass of int in Python; the canonicaliser
-    handles them separately so True/False don't collide with
-    1/0."""
-    h_true: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='h', intervention={'flag': True},
-    )
-    h_one: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='h', intervention={'flag': 1},
-    )
-    assert h_true.mechanism_key != h_one.mechanism_key
+    """bool is a subclass of int; the canonicaliser handles them
+    separately so True/False don't collide with 1/0."""
+    assert _canonical_str(True) != _canonical_str(1)
+    assert _canonical_str(False) != _canonical_str(0)
+
+
+def test_canonical_str_partial_canonicalises_keywords() -> None:
+    """`functools.partial(fn, kw=value)` canonicalises by
+    recursing into `.func` and lex-encoding `.keywords`. Two
+    independently-constructed partials with the same wrapped
+    callable + same kwargs are equal."""
+    from functools import partial
+
+    def fn(x: int, *, kw: int = 0) -> int:
+        return x + kw
+
+    p1 = partial(fn, kw=5)
+    p2 = partial(fn, kw=5)
+    assert _canonical_str(p1) == _canonical_str(p2)
+
+
+def test_canonical_str_partial_distinguishes_kwargs() -> None:
+    """Partials with different baked kwargs canonicalise
+    distinctly."""
+    from functools import partial
+
+    def fn(*, kw: int = 0) -> int:
+        return kw
+
+    p1 = partial(fn, kw=5)
+    p2 = partial(fn, kw=10)
+    assert _canonical_str(p1) != _canonical_str(p2)
+
+
+def test_canonical_str_dataclass_field_expansion() -> None:
+    """Frozen-dataclass instances canonicalise by sorted-field
+    expansion."""
+    from dataclasses import dataclass
+
+    @dataclass(frozen=True)
+    class HP:
+        a: int = 1
+        b: float = 2.0
+
+    s_default = _canonical_str(HP())
+    s_changed = _canonical_str(HP(a=2))
+    assert s_default != s_changed
+    # Same values → same canonical string.
+    assert _canonical_str(HP(a=1, b=2.0)) == _canonical_str(HP(a=1, b=2.0))
+
+
+def test_canonical_str_tuple_recurses() -> None:
+    """Tuples of scalars get a stable canonical form via element-
+    wise recursion."""
+    s = _canonical_str((1, 2, 3))
+    assert s == '(1,2,3)'

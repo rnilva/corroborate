@@ -20,17 +20,13 @@ Three components:
   by direction-aware verdict computation. None leaves direction
   inference to the consumer (e.g. derive from a `held` flag).
 
-`mechanism_key` is the canonical structural identity — two
-Hypotheses with the same `MechanismKey` make the same structural
-claim about the same intervention even under cosmetic renames.
-This is the anti-laundering primitive (axiom 18, axiom 19's
-redundancy uses it as the intervention-similarity factor).
-
-For v0 the framework provides only the data type. A custom
-`bind()` for recursive intervention (walking nested override
-dicts with TypeIs narrowing) lands when use cases require it;
-v0's flat interventions are handled by `functools.partial`
-directly (framework-subtraction discipline)."""
+Structural identity of a hypothesis is recoverable from the
+measurements its runs produce — HP values land at dotted topology
+paths via `signature.walk_paths`, and `aggregate.hp_signature`
+projects a `RunRow.measurements` to the configurational subset
+suitable as a group-by key. No separate `MechanismKey` artifact;
+the framework persists the measurements and re-derives identity
+on demand."""
 from __future__ import annotations
 
 import functools
@@ -53,55 +49,6 @@ infers from a `held` flag if available)."""
 
 
 @dataclass(frozen=True, slots=True)
-class InterventionKey:
-    """Intervention-only projection of a `MechanismKey`. Carries
-    the intervention identity WITHOUT bridge-name dependence.
-
-    Used by causal discovery (PAPER_NOTES.md §4.3 — `arm_ddqn` as
-    a binary intervention variable in a PC graph): two arms with
-    identical interventions but different bridge sets should map
-    to the SAME node, which `MechanismKey` (which includes
-    `bridge_names`) does NOT do. `InterventionKey` is the cleaner
-    primitive when only the intervention matters."""
-    intervention_signature: tuple[tuple[str, str], ...]
-    direction: Direction | None
-
-
-@dataclass(frozen=True, slots=True)
-class MechanismKey:
-    """Canonical structural identity of a Hypothesis.
-
-    Two Hypotheses with the same `MechanismKey` make the same
-    structural claim about the same intervention — even under
-    cosmetic name changes. The framework uses MechanismKey as
-    the anti-laundering registry key and as the intervention-
-    similarity factor in axiom 19's redundancy primitive.
-
-    Three components:
-    - `intervention_signature` — sorted (slot, value-canonical-
-      string) pairs. Stable across instance creations of the
-      same intervention.
-    - `bridge_names` — frozenset of bridge names. Order-
-      independent; renamed bridges produce different keys.
-    - `direction` — included only when the Hypothesis declared
-      one. Two Hypotheses identical except in direction get
-      distinct keys (direction is a structural distinction)."""
-    intervention_signature: tuple[tuple[str, str], ...]
-    bridge_names: frozenset[str]
-    direction: Direction | None
-
-    def intervention_only(self) -> InterventionKey:
-        """Project to `InterventionKey` — drops `bridge_names`,
-        retains `intervention_signature` and `direction`. The
-        intervention-only projection causal discovery wants for
-        binary intervention variables."""
-        return InterventionKey(
-            intervention_signature=self.intervention_signature,
-            direction=self.direction,
-        )
-
-
-@dataclass(frozen=True, slots=True)
 class Hypothesis[R: Mapping[str, object]]:
     """A research hypothesis: an intervention plus the bridges
     that should hold under it.
@@ -119,38 +66,17 @@ class Hypothesis[R: Mapping[str, object]]:
     different shapes (`(T,)` per-step training fields,
     `(n_bursts, K)` per-burst eval fields). Bridges read whichever
     keys they care about; the record's structure is the substrate
-    author's call.
-
-    `name` is a human-readable label; `mechanism_key` is the
-    structural identity (don't conflate them — two hypotheses
-    can share `name` and have distinct mechanism_keys)."""
+    author's call."""
     name: str
     intervention: Mapping[str, object]
     bridges: tuple[Bridge[R], ...] = ()
     predicted_direction: Direction | None = None
 
-    @property
-    def mechanism_key(self) -> MechanismKey:
-        """Canonical structural identity. Cached implicitly via
-        the frozen-dataclass property semantics — pyright infers
-        the property as memoizable, but Python re-computes on
-        each access; v0 doesn't cache (cheap to compute)."""
-        intervention_pairs: tuple[tuple[str, str], ...] = tuple(
-            sorted(
-                (k, _canonical_str(v))
-                for k, v in self.intervention.items()
-            )
-        )
-        return MechanismKey(
-            intervention_signature=intervention_pairs,
-            bridge_names=frozenset(b.name for b in self.bridges),
-            direction=self.predicted_direction,
-        )
-
 
 def _canonical_str(v: object) -> str:
-    """Stable string form of an intervention value, used by
-    `mechanism_key` to produce a hashable canonical signature.
+    """Stable string form of an HP value, used by HP-leaf
+    flattening to produce a deterministic scalar fingerprint of a
+    structured kwarg (a Module, a partial, an FnClaim).
 
     Handles each concrete callable kind by isinstance against the
     runtime type — `types.FunctionType`, `type`, and
@@ -162,7 +88,7 @@ def _canonical_str(v: object) -> str:
     `.func` and lexicographically encoding `.keywords` (positional
     `.args` are flattened similarly). This makes baked-in slot
     parameters (`partial(linear_epsilon, anneal_steps=50_000)`)
-    contribute to the mechanism_key transparently — two
+    contribute to the fingerprint transparently — two
     independently-constructed partials with the same wrapped
     callable + same kwargs canonicalise identically across
     processes. The "bake-in" pattern is then honest: the canonical
@@ -193,11 +119,11 @@ def _canonical_str(v: object) -> str:
         bound = ';'.join(p for p in (args_part, kw_part) if p)
         return f'partial({inner};{bound})'
     if is_dataclass(v) and not isinstance(v, type):
-        # Pytree-shaped intervention values (e.g. `DQNHParams`):
-        # canonicalise by sorted-field expansion so two hypotheses
-        # differing in a single HP get distinct, structured
-        # mechanism_key entries. The form is process-portable
-        # because field declaration order and recursive
+        # Pytree-shaped HP values (e.g. `DQNHParams`):
+        # canonicalise by sorted-field expansion so two
+        # configurations differing in a single HP get distinct,
+        # structured fingerprint entries. The form is process-
+        # portable because field declaration order and recursive
         # `_canonical_str` are deterministic.
         body = ','.join(
             f'{f.name}={_canonical_str(getattr(v, f.name))}'

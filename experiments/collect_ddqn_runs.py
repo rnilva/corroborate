@@ -54,9 +54,10 @@ TOTAL_STEPS = 5000  # short-but-meaningful for v0 stats validation
 
 
 # Shared HP bundle — author commitments. HPs spread as flat kwargs
-# into `hypothesis.intervention` so `mechanism_key` distinguishes
-# (vanilla, total_steps=5000) from (ddqn, total_steps=5000) AND
-# from any future re-run with a different HP setting.
+# into `hypothesis.intervention` so the HP signature on each
+# RunRow distinguishes (vanilla, total_steps=5000) from
+# (ddqn, total_steps=5000) AND from any future re-run with a
+# different HP setting.
 _HPARAMS: dict[str, object] = {
     'total_steps': TOTAL_STEPS,
     'eval_every': TOTAL_STEPS // 10,
@@ -74,11 +75,13 @@ def _make_hypothesis(name: str) -> Hypothesis[DQNTrajectoryRecord]:
     worker rebuilds the hypothesis from a stable name.
 
     HPs live as flat kwargs in `intervention` (matching `dqn`'s
-    signature). `mechanism_key` canonicalises each (kwarg, value)
-    pair separately so two arms differing only in `gamma` get
-    distinct mechanism_keys. The `bootstrap` slot swap and
-    `predicted_direction` are the only fields that differ between
-    vanilla and DDQN at the structural level."""
+    signature). Cell-runner records each (kwarg, value) pair as
+    a measurement at its dotted topology path; downstream
+    `hp_signature` projects the configurational subset so two
+    arms differing only in `gamma` produce distinct group-by
+    keys. The `bootstrap` slot swap and `predicted_direction`
+    are the only fields that differ between vanilla and DDQN at
+    the structural level."""
     if name == 'vanilla_dqn':
         return Hypothesis(
             name='vanilla_dqn',
