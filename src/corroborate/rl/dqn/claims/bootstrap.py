@@ -40,7 +40,7 @@ from corroborate.rl.dqn.types import (
     Greedification,
     GradientRule,
     Params,
-    QNetwork,
+    QFunction,
 )
 
 
@@ -51,7 +51,7 @@ def max_greedify(
     *,
     online_params: Params,
     target_params: Params,
-    q_network: QNetwork,
+    q_network: QFunction,
     next_obs: jax.Array,
 ) -> jax.Array:
     """Vanilla greedification: v(s') = max_a Q_target(s', a).
@@ -68,7 +68,7 @@ def double_greedify(
     *,
     online_params: Params,
     target_params: Params,
-    q_network: QNetwork,
+    q_network: QFunction,
     next_obs: jax.Array,
 ) -> jax.Array:
     """DDQN greedification: v(s') = Q_target(s', argmax_a Q_online(s', a)).
@@ -110,7 +110,7 @@ def bootstrap(
     *,
     online_params: Params,
     target_params: Params,
-    q_network: QNetwork,
+    q_network: QFunction,
     next_obs: jax.Array,
     reward: jax.Array,
     done: jax.Array,

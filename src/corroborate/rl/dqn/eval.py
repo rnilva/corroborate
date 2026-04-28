@@ -33,7 +33,7 @@ import jax.numpy as jnp
 from corroborate.claim import claim
 from corroborate.loop import scan_loop
 from corroborate.rl.dqn.state import DQNState
-from corroborate.rl.dqn.types import QNetwork, StepRecord
+from corroborate.rl.dqn.types import QFunction, StepRecord
 from corroborate.rl.env_catalogue import GymnaxEnvLike
 
 
@@ -62,7 +62,7 @@ def eval_episode(
     env: GymnaxEnvLike,
     env_params: object,
     rng_key: jax.Array,
-    q_network: QNetwork,
+    q_network: QFunction,
     gamma: float,
     episode_cap: int,
 ) -> EvalEpisodeOut:
@@ -147,7 +147,7 @@ def eval_burst(
     env: GymnaxEnvLike,
     env_params: object,
     rng_key: jax.Array,
-    q_network: QNetwork,
+    q_network: QFunction,
     gamma: float,
     episode_cap: int,
     n_episodes: int,

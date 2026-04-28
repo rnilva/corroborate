@@ -38,19 +38,26 @@ if TYPE_CHECKING:
 
 
 class QFunction(Protocol):
-    """Q-function Module: paired `init` + `__call__`.
+    """Q-function — a Module Claim whose `__call__` is the forward
+    pass.
 
-    `init(rng, obs_dim, n_actions) -> params` allocates the
-    parameter pytree; `__call__(params, obs) -> q_values` is the
-    forward pass. Implementations carry their construction-time
-    HPs as frozen-dataclass fields (`MLP.hidden`,
-    `SpectralNormMLP.hidden`, etc.) so HPs travel with the
-    function — dqn doesn't see them.
+    The theoretical claim attached to a Q-function is universal
+    approximation (Hornik 1989, Cybenko 1989) — the function class
+    *contains* Q*; gradient descent under bootstrap is *not*
+    guaranteed to find it (deadly triad — off-policy + bootstrap +
+    FA). That claim is realised by the forward pass, hence
+    `__call__` IS the Claim and records itself via `record_call`.
 
-    `Params` is opaque PyTree from dqn's perspective. Tabular,
-    linear, and MLP Q-functions each define their own internal
-    layout; the framework treats it as `dict[str, jax.Array]` for
-    convenience but doesn't constrain the pytree shape further."""
+    `init(rng, obs_dim, n_actions) -> params` is **mechanics** —
+    parameter allocation has no theorem; the framework doesn't
+    record it. It's part of the Protocol because dqn calls it once
+    at cell-init to materialise the parameter pytree.
+
+    Implementations carry construction-time leaves (`MLP.hidden`,
+    `SpectralNormMLP.hidden`, etc.) as frozen-dataclass fields so
+    leaves travel with the Module — dqn doesn't see them. `Params`
+    is an opaque PyTree from dqn's perspective; tabular, linear,
+    and MLP Q-functions each define their own internal layout."""
     def init(
         self,
         rng_key: jax.Array,
@@ -58,11 +65,6 @@ class QFunction(Protocol):
         n_actions: int,
     ) -> Params: ...
     def __call__(self, params: Params, obs: jax.Array) -> jax.Array: ...
-
-
-# Historical alias — kept so existing imports don't break while
-# call sites migrate. New code should import `QFunction` directly.
-QNetwork = QFunction
 
 
 class ActionSelect(Protocol):

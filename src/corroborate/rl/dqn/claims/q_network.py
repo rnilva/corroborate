@@ -1,13 +1,15 @@
-"""Q-function — frozen-dataclass functor.
+"""Q-function — Module Claim with `__call__` = forward pass.
 
-A Q-function is two paired operations:
+`MLP` is a Module Claim. Its `__call__` IS the theoretical
+Claim — universal approximation (Hornik 1989, Cybenko 1989) —
+recorded via `record_call`. `init` is parameter-allocation
+**mechanics** — no theorem, no record_call, just bookkeeping
+that materialises the parameter pytree once per cell.
 
-- `init(rng, obs_dim, n_actions) -> params` — allocate parameters.
-- `__call__(params, obs) -> q_values` — forward pass.
-
-Bundling them in one frozen-dataclass functor makes architecture
-HPs travel with the function. `MLP(hidden=(128,))` is the
-configured Q-function; intervention swaps it whole.
+Architecture leaves (`hidden`, etc.) live as frozen-dataclass
+fields so they travel with the Module. `MLP(hidden=(128,))` is
+the configured Q-function; intervention swaps it whole. The
+walker surfaces `q_network.hidden` as a topology leaf.
 
 dqn doesn't know what's INSIDE the params PyTree — `Params` is
 opaque. Tabular Q (params = lookup table), linear Q (params =
@@ -15,15 +17,15 @@ weight matrix), MLP Q (params = list of layer dicts), conv Q,
 etc. all conform to the same `QFunction` Protocol. The
 parameterisation is genuinely Q's business.
 
-**Theorem reference.** Universal approximation (Hornik 1989,
-Cybenko 1989): a sufficiently wide MLP can approximate any
-continuous function on a compact set. The function class
-*contains* Q*; gradient descent under bootstrap is *not*
-guaranteed to find it (deadly triad — off-policy + bootstrap +
-FA can diverge per Tsitsiklis & Van Roy 1997). Banach-
-contraction-rate gap (Bertsekas-Tsitsiklis §6.3) is the
-principled measurement; deferred — needs Q-snapshot probe
-(see FUTURE_WORKS.md)."""
+**Theorem reference (on `__call__`, not on `init`).** Universal
+approximation (Hornik 1989, Cybenko 1989): a sufficiently wide
+MLP can approximate any continuous function on a compact set.
+The function class *contains* Q*; gradient descent under
+bootstrap is *not* guaranteed to find it (deadly triad — off-
+policy + bootstrap + FA can diverge per Tsitsiklis & Van Roy
+1997). Banach-contraction-rate gap (Bertsekas-Tsitsiklis §6.3)
+is the principled measurement; deferred — needs Q-snapshot
+probe (see FUTURE_WORKS.md)."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -43,19 +45,19 @@ through, never inspects it."""
 
 @dataclass(frozen=True, slots=True)
 class MLP(ClaimBase):
-    """Two-hidden-layer ReLU MLP Q-function.
+    """Two-hidden-layer ReLU MLP Q-function — Module Claim.
 
-    Inherits `ClaimBase` for typed `name` property + `invariants`
-    ClassVar. Authors apply `@dataclass(frozen=True, slots=True)`
-    themselves; framework doesn't mutate the class.
+    Inherits `ClaimBase` for typed `name` + `invariants` access.
+    `__call__` IS the framework Claim (universal approximation,
+    Hornik 1989) — invokes `record_call` to participate in the
+    trace. `init` is mechanics (parameter allocation); no
+    `record_call` because there's no theorem to attach to it.
 
-    Construction-time HP: `hidden`. Architecture-defining; lives
-    on the functor itself. Authors override via
-    `replace(MLP(), hidden=(128,))` or by passing a different
-    architecture functor (`SpectralNormMLP`, `Tabular`, etc.).
-
-    `__call__` invokes `record_call` to participate in the trace
-    explicitly — no decorator-injected wrapping."""
+    Construction-time leaf: `hidden`. Architecture-defining; lives
+    on the Module itself. Authors override via
+    `replace(MLP(), hidden=(128,))` or pass a different Module
+    (`SpectralNormMLP`, `Tabular`, etc.) wholesale via
+    intervention."""
     hidden: tuple[int, ...] = (64, 64)
 
     def init(

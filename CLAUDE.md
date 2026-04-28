@@ -128,6 +128,49 @@ configuration; "HP" leaks domain jargon into framework semantics.
 Substrate code is welcome to say "HP" in its own docs/comments
 (it's the reader's vocabulary). Framework code does not.
 
+## Three-way claim taxonomy
+
+The framework supports three categories of authored entities;
+which one applies depends on whether something has theoretical
+content and at what shape:
+
+1. **Module Claim** — a frozen-dataclass `ClaimBase` subclass
+   with a single `__call__` that IS the theoretical claim.
+   `__call__` records itself via `record_call`; the Module bundles
+   construction-time leaves. Used for things with one primary
+   end-to-end operation.
+   *Examples: `Adam`, `MLP`, `EpsilonGreedy`, `WarmedUpdate`.*
+   `dqn` itself (a `@claim`'d free function) sits here too,
+   wrapped as `FnClaim`.
+
+2. **Free Claim** — a top-level `@claim`-decorated function. The
+   `FnClaim` wrapper auto-records calls; the function IS the
+   theoretical operation, no Module wrapper needed.
+   *Examples: `bootstrap`, `double_greedify`, `semi_gradient`,
+   `uniform_sample`, `linear_epsilon`.*
+
+3. **Config bundle** — a frozen-dataclass that's NOT a Claim.
+   Holds construction-time leaves and slot Claims (which are
+   Module Claims or Free Claims), plus possibly mechanics
+   methods that have no theorem (FIFO append, etc.). The walker
+   surfaces its fields as topology leaves regardless of Claim
+   status; mechanics methods are plain methods, no `record_call`.
+   *Example: `Replay` — `capacity`/`batch_size` leaves +
+   `sample` slot Claim + `init`/`add`/`sample_batch` mechanics.*
+
+The discriminator: **does the entity have one theoretically-
+meaningful primary operation?** If yes → Module Claim. If it's
+itself the operation as a free function → Free Claim. If it
+bundles config + slots + mechanics with no single primary
+theorem → config bundle. The category is set by the entity's
+nature, not by framework preference.
+
+A method on a config bundle is just a method — it isn't a Claim
+even though it's callable. Theoretical content lives on the slot
+Claims (e.g., `Replay.sample` is a slot, points at
+`uniform_sample` which IS a Free Claim — that's where Lin 1992
+attaches). The bundle is mechanical organisation.
+
 ## Persistence shape (typed × open)
 
 Each row store splits into two surfaces:

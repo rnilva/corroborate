@@ -35,7 +35,7 @@ from corroborate.rl.dqn.types import (
     Bootstrap,
     LossFn,
     Params,
-    QNetwork,
+    QFunction,
     TargetSync,
 )
 from corroborate.rl.env_catalogue import GymnaxEnvLike, StateHash
@@ -51,7 +51,7 @@ def rollout_phase(
     env_params: object,
     n_actions: int,
     replay: Replay,
-    q_network: QNetwork,
+    q_network: QFunction,
     action_select: ActionSelect,
     state_hash: StateHash,
 ) -> tuple[DQNState, dict[str, jax.Array]]:
@@ -120,7 +120,7 @@ def rollout_phase(
 def train_phase(
     state: DQNState,
     *,
-    q_network: QNetwork,
+    q_network: QFunction,
     bootstrap: Bootstrap,
     loss_fn: LossFn,
     optimizer: optax.GradientTransformation,
