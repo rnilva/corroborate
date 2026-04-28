@@ -1,61 +1,158 @@
 """Measurable — typed scalar derivation from a record.
 
-A `Measurable[R, T]` is a named function `(R) -> T` that produces
-a summary quantity (late-window mean, growth ratio, threshold
-margin, etc.) bridges or consumers read. Two type parameters:
+A `Measurable[R, T]` is a named function `(record, **deps) -> T`
+that produces a summary quantity (late-window mean, q_max,
+td_error_norm, etc.) bridges or other measurables consume. Two
+type parameters:
 
-- `R: Mapping[str, object]` — the record schema. Author can use
-  plain Mapping, TypedDict, or a custom Mapping subclass.
-- `T` — the scalar return type (float, int, bool, str, jax.Array,
-  etc.). Preserved through `__call__` so consumers see the native
-  scalar type without narrowing.
+- `R: Mapping[str, object]` — the record schema.
+- `T` — the scalar return type.
 
 The framework's post-hoc analytical layer. Distinct from Claims
 (steps in the algorithm) and Bridges (verdict-producing tests).
 
-`reads` is the leaf record keys this measurable ultimately
-depends on — the dual of `Bridge.targets`. For a measurable
-defined directly over `record['q_max']`, reads = `('q_max',)`.
-For a reduction `max_abs(from_key('q_max'))`, reads propagates
-to `('q_max',)` (the leaf, not the intermediate name). The
-framework's reads-set discipline (axiom 19's redundancy
-primitive) consumes this for fingerprinting.
+`@measurable` ALSO registers each instance in a name-keyed
+registry. Bridges and other measurables declare dependencies by
+parameter name; `evaluate_with_measurables(bridge_fn, record)`
+inspects the function's signature, looks up each parameter in
+the registry, computes once per record (memoized), and injects.
+Pytest-fixture-style transitive resolution.
 
-Composition patterns (factories, dependent measurables) live in
-`reductions.py` (for time-axis reductions) and as ordinary
-Python factories returning `Measurable[R, T]`. The framework
-explicitly does NOT ship a name-keyed registry + signature
-resolver — value-based composition is the typed equivalent
-without the stringly-keyed indirection."""
+Two surface shapes coexist:
+
+1. **Value-based composition** — pass `Measurable` instances
+   around explicitly, call them on a record. The classical form
+   for ad-hoc reductions.
+2. **Name-based registry resolution** — declare a parameter
+   matching a registered measurable's `name`; the framework
+   injects the computed value. Useful for the `record →
+   {q_mean, q_max, q_std, q_gap, ...}` reduction graph.
+
+`reads` is the LEAF record keys this measurable ultimately
+depends on — the union of its own direct reads and the
+transitive reads of any measurable deps. Populated declaratively
+when known; defaults to `()` otherwise. The framework's
+reads-set discipline (axiom 19's redundancy primitive) consumes
+this for fingerprinting."""
 from __future__ import annotations
 
+import inspect
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from typing import overload
+from typing import Any, overload
 
 
 @dataclass(frozen=True, slots=True)
 class Measurable[R: Mapping[str, object], T]:
-    """Typed generic wrapper. Behaves as `Callable[[R], T]`;
-    carries `name` and `reads` as typed attributes. Both `R`
-    (record type) and `T` (scalar return type) preserved through
-    `__call__`.
+    """Typed generic wrapper. Behaves as `Callable[..., T]` over
+    `(record, **deps)`; carries `name` and `reads` as typed
+    attributes. Both `R` (record type) and `T` (return type) are
+    preserved through `__call__`.
 
-    `reads` defaults to `()` for measurables whose leaf-key set
-    is unknown (e.g. ad-hoc test fixtures). Reductions and the
-    `from_key` primitive populate it explicitly so downstream
-    invariant factories can derive `Bridge.targets` from it."""
-    fn: Callable[[R], T]
+    `reads` defaults to `()`. Reductions and the `from_key`
+    primitive populate it explicitly so downstream invariant
+    factories can derive `Bridge.targets` from it.
+
+    The function may take ONLY a record (`fn(record) -> T`) — the
+    classical shape — OR a record plus named parameters that match
+    other registered measurables (`fn(record, q_mean, q_std) -> T`).
+    Resolver finds and injects the dep values."""
+    fn: Callable[..., T]
     name: str
     reads: tuple[str, ...] = field(default=())
 
-    def __call__(self, record: R) -> T:
-        return self.fn(record)
+    def __call__(self, record: R, **deps: Any) -> T:
+        return self.fn(record, **deps)
 
+
+# ============ Name-keyed registry + resolver ============
+
+_REGISTRY: dict[str, Measurable[Mapping[str, object], object]] = {}
+
+
+def get_registered(
+    name: str,
+) -> Measurable[Mapping[str, object], object] | None:
+    """Look up a measurable by its registered name. Returns None
+    if not registered. Typed accessor for the global registry."""
+    return _REGISTRY.get(name)
+
+
+def registered_names() -> tuple[str, ...]:
+    """Sorted tuple of all currently-registered measurable names.
+    Useful for debug / diagnostic output."""
+    return tuple(sorted(_REGISTRY))
+
+
+def _measurable_param_names(fn: Callable[..., object]) -> tuple[str, ...]:
+    """Parameters of `fn` (after the first positional `record`)
+    whose names are registered measurables. Used by the resolver
+    to decide which params get auto-injected."""
+    try:
+        sig = inspect.signature(fn)
+    except (ValueError, TypeError):
+        return ()
+    params = list(sig.parameters.values())
+    # Skip the first positional — that's the record (or a
+    # zero-arg measurable; we still don't treat it as a dep).
+    deps = [
+        p.name for p in params[1:]
+        if p.name in _REGISTRY
+    ]
+    return tuple(deps)
+
+
+def _resolve_one[R: Mapping[str, object]](
+    name: str, record: R, cache: dict[str, object],
+) -> object:
+    """Resolve one measurable by name; recurses on its deps.
+    Memoizes in `cache` so each measurable computes at most once
+    per record. Loud KeyError if name isn't registered — caller
+    asked for something that doesn't exist."""
+    if name in cache:
+        return cache[name]
+    m = _REGISTRY.get(name)
+    if m is None:
+        raise KeyError(
+            f'no measurable named {name!r}. Registered: '
+            f'{sorted(_REGISTRY)}',
+        )
+    dep_names = _measurable_param_names(m.fn)
+    deps = {d: _resolve_one(d, record, cache) for d in dep_names}
+    cache[name] = m(record, **deps)
+    return cache[name]
+
+
+def evaluate_with_measurables[R: Mapping[str, object], T](
+    fn: Callable[..., T],
+    record: R,
+    *,
+    cache: dict[str, object] | None = None,
+) -> T:
+    """Inspect `fn`'s signature, resolve parameter-named
+    measurables from the registry, call `fn(record, **deps)`.
+
+    `cache` may be shared across multiple `fn` evaluations on the
+    same record so that each measurable computes at most once
+    overall — pass an empty dict the first time, the same dict
+    on subsequent calls.
+
+    Parameters whose names are NOT registered measurables are
+    left for the caller to supply; if `fn` has unmatched required
+    params and none are passed, Python raises the usual
+    TypeError. The resolver only auto-injects what it can find."""
+    if cache is None:
+        cache = {}
+    dep_names = _measurable_param_names(fn)
+    deps = {d: _resolve_one(d, record, cache) for d in dep_names}
+    return fn(record, **deps)
+
+
+# ============ Decorator ============
 
 @overload
 def measurable[R: Mapping[str, object], T](
-    fn: Callable[[R], T], /,
+    fn: Callable[..., T], /,
 ) -> Measurable[R, T]: ...
 
 
@@ -64,36 +161,62 @@ def measurable[R: Mapping[str, object], T](
     *,
     name: str | None = None,
     reads: tuple[str, ...] = (),
-) -> Callable[[Callable[[R], T]], Measurable[R, T]]: ...
+) -> Callable[[Callable[..., T]], Measurable[R, T]]: ...
 
 
 def measurable[R: Mapping[str, object], T](
-    fn: Callable[[R], T] | None = None,
+    fn: Callable[..., T] | None = None,
     /,
     *,
     name: str | None = None,
     reads: tuple[str, ...] = (),
-) -> Measurable[R, T] | Callable[[Callable[[R], T]], Measurable[R, T]]:
-    """Wrap an `(R) -> T` function in a typed `Measurable[R, T]`.
+) -> Measurable[R, T] | Callable[[Callable[..., T]], Measurable[R, T]]:
+    """Register `fn` as a typed `Measurable[R, T]`. The instance
+    is returned (so ad-hoc value-composition still works) AND
+    indexed in a name-keyed registry (so other measurables /
+    bridges can declare deps by parameter name).
 
-    Both decorator forms supported:
+    Two decorator forms:
 
         @measurable
-        def constant_one(record: Mapping[str, object]) -> float:
-            return 1.0
+        def q_mean(record: DQNRecord) -> float: ...
 
-        @measurable(name='custom', reads=('q_max',))
-        def q_max_value(record: DQNRecord) -> float:
-            return float(record['q_max'])
+        @measurable(reads=('online_q_per_action',))
+        def q_max(record: DQNRecord) -> float: ...
 
-    The first form (no parens) is canonical when no parameters
-    are needed; the second form is for `name` / `reads` overrides.
-    Pyright infers `R` from the function's parameter annotation
-    and `T` from its return type."""
+    Pytest-fixture-style transitive deps:
+
+        @measurable
+        def q_gap(record: DQNRecord, q_max: float, q_second: float) -> float:
+            return q_max - q_second
+
+    The framework reads `inspect.signature(q_gap.fn)`, sees the
+    `q_max` and `q_second` parameter names, looks them up in the
+    registry, computes recursively (memoized per record), and
+    injects.
+
+    `reads` is the LEAF record-key set the measurable ultimately
+    depends on. For a measurable that itself reads a record key,
+    declare it explicitly. For a measurable that ONLY depends on
+    other measurables, leave `reads=()` and the framework can
+    derive its reads from the union of its deps' reads (the
+    `redundancy` primitive does this lookup transitively)."""
     if fn is not None:
-        return Measurable(fn=fn, name=fn.__name__, reads=())
+        instance: Measurable[R, T] = Measurable(
+            fn=fn, name=fn.__name__, reads=(),
+        )
+        _REGISTRY[instance.name] = (
+            instance  # pyright: ignore[reportGeneralTypeIssues]
+        )
+        return instance
 
-    def decorator(inner: Callable[[R], T]) -> Measurable[R, T]:
+    def decorator(inner: Callable[..., T]) -> Measurable[R, T]:
         resolved_name = name if name is not None else inner.__name__
-        return Measurable(fn=inner, name=resolved_name, reads=reads)
+        instance: Measurable[R, T] = Measurable(
+            fn=inner, name=resolved_name, reads=reads,
+        )
+        _REGISTRY[instance.name] = (
+            instance  # pyright: ignore[reportGeneralTypeIssues]
+        )
+        return instance
     return decorator
