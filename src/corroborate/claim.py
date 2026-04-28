@@ -84,32 +84,33 @@ _TRACE: contextvars.ContextVar[list[CallRecord] | None] = (
 )
 
 
-def _is_tracing(args: tuple[object, ...], kwargs: Mapping[str, object]) -> bool:
-    """True if any arg is a JAX Tracer — i.e. we're inside
-    `jax.jit` / `lax.scan` / `vmap`'s tracing pass."""
-    try:
-        from jax.core import Tracer
-    except ImportError:
-        return False
-    if any(isinstance(v, Tracer) for v in args):
-        return True
-    return any(isinstance(v, Tracer) for v in kwargs.values())
-
-
 def record_call(
     claim_obj: Claim[..., object],
     args: tuple[object, ...],
     kwargs: Mapping[str, object],
     result: object,
 ) -> None:
-    """Append a CallRecord to the active trace; skip if any arg
-    is a Tracer (jit-safe).
+    """Append a CallRecord to the active trace.
+
+    Records **unconditionally** when a `trace_context()` is active —
+    including under `jax.jit` / `lax.scan` / `vmap`'s tracing pass.
+    The tracing pass fires each `@claim` call once with abstract
+    tracer values; that single pass IS the structural information
+    the graph extractor wants (`computation_graph.build_*`). After
+    the trace pass exits XLA-compiled execution doesn't go through
+    Python, so no further records accumulate.
+
+    Earlier versions skipped tracer-arg calls (a "jit-safety"
+    guard), which silently dropped every claim that fired inside a
+    scan loop — making the full `dqn` call unprofileable. The skip
+    was over-conservative: trace_context is opt-in; if a user
+    enters it, they want everything recorded.
 
     Module authors call this inside `__call__` to participate in
     the trace. Free-function claims (`@claim` decorator) record
     automatically via `FnClaim.__call__`."""
     ctx = _TRACE.get()
-    if ctx is None or _is_tracing(args, kwargs):
+    if ctx is None:
         return
     ctx.append(CallRecord(
         claim=claim_obj, args=args, kwargs=dict(kwargs), result=result,

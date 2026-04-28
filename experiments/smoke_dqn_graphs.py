@@ -171,9 +171,6 @@ def main() -> None:
     sig_v = signature(g_vanilla_step)
     sig_d = signature(g_ddqn_step)
     print(f'\n  signatures equal at dqn_step level? = {sig_v == sig_d}')
-    print('  (note: bootstrap fires inside value_and_grad in train_phase,')
-    print('   whose JAX tracers trigger record_call\'s jit-skip — so the')
-    print('   greedification slot swap is invisible at this trace level.)')
 
     print()
     print('=' * 72)

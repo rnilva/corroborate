@@ -434,11 +434,14 @@ def test_pickle_round_trip_partial_over_claim() -> None:
 
 # ============ JIT silence (#5) ============
 
-def test_trace_skips_recording_under_jit() -> None:
-    """When @claim'd functions run inside `jax.jit`, args are
-    Tracer objects — recording them would produce semantically
-    meaningless first-call records. The wrapper detects Tracer
-    args and skips."""
+def test_trace_records_under_jit_for_structural_extraction() -> None:
+    """When @claim'd functions run inside `jax.jit` / `lax.scan` /
+    `vmap`, args are Tracer objects. Recording fires anyway —
+    that's exactly the structural information `computation_graph.
+    build_*` extracts (which Claim called which during the tracing
+    pass). Earlier versions skipped tracer-arg calls; that
+    silently dropped every claim inside a scan loop, making the
+    full `dqn` (which uses scan) unprofileable."""
     import jax
     import jax.numpy as jnp
 
@@ -447,15 +450,17 @@ def test_trace_skips_recording_under_jit() -> None:
         return x * 2
 
     with trace_context() as records:
-        # Inside jit the arg is a Tracer → skip
+        # Inside jit the arg is a Tracer → still records (one call
+        # per tracing pass).
         result = jax.jit(double)(jnp.float32(3.0))
-        # Concrete call outside jit → record
+        # Concrete call outside jit → records.
         _ = double(jnp.float32(4.0))
 
     assert float(result) == 6.0
-    # Only the concrete call was recorded.
-    assert len(records) == 1
-    assert records[0].claim is double
+    # Both calls record: one from the jit tracing pass + one from
+    # the concrete eager call.
+    assert len(records) == 2
+    assert all(r.claim is double for r in records)
 
 
 def test_is_claim_narrows_type() -> None:
