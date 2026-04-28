@@ -57,13 +57,17 @@ from corroborate.schema import RunRow, TraceRow
 
 # ============ Experiment grid ============
 
-ENV_NAMES = (
-    'CartPole-v1',
-    'Acrobot-v1',
-    'MountainCar-v0',
-    'Catch-bsuite',
-    'DeepSea-bsuite',
-)
+from corroborate.rl.env_catalogue import ENV_REGISTRY
+
+
+# All envs registered in the catalogue. v9-corpus parity: 18-19
+# envs spanning classic-control, bsuite, MinAtar, misc, bandit
+# families. The §3 schema's cross-env aggregation (random-effects
+# PI, link Pearson r) needs n_envs ≥ ~10 to have meaningful
+# corpus-level power. Pong-misc is known to drop seeds (see
+# PAPER_NOTES §3.9 caveat 4); included anyway, downstream filters
+# out failed cells.
+ENV_NAMES: tuple[str, ...] = tuple(ENV_REGISTRY.keys())
 
 HYPOTHESIS_NAMES = ('vanilla_dqn', 'ddqn')
 
@@ -85,8 +89,11 @@ TOTAL_STEPS = 50_000
 # Single-element lists collapse the axis (no variation along it);
 # this lets the script stay flexible without changing structure
 # when only some axes vary.
+# For the all-envs §3 sweep, single-point grid (capacity=10k is
+# the v9 / literature default for CartPole-class). HP-sensitivity
+# can be a separate sweep on a smaller env subset.
 HP_GRID: dict[str, list[Any]] = {
-    'capacity': [2_000, 10_000, 50_000],
+    'capacity': [10_000],
     'batch_size': [32],
     'lr': [1e-3],
 }
@@ -314,17 +321,15 @@ def main() -> None:
 
     t0 = time.time()
     parquet_pairs: list[tuple[Path, Path]] = []
-    # `max_tasks_per_child=1` recycles the worker after each arm —
-    # critical for JAX, where each compiled arm leaves JIT-cache
-    # behind. Without recycling, after ~4 arms per worker the
-    # cache + tensors fill GPU memory, the next CUDA allocation
-    # crashes the worker, and the whole pool collapses with
-    # `BrokenProcessPool`. With recycling: each arm sees a fresh
-    # JAX context. Costs ~5-10s of jit-recompile overhead per arm,
-    # which is acceptable; without it, large grids fail entirely.
+    # `max_tasks_per_child=2` recycles after every 2 arms — fewer
+    # than 4 (where the pool collapsed in earlier observations)
+    # but more than 1 (which paid recompile cost per arm). Saves
+    # half the recompile overhead while staying well under the
+    # JIT-cache-collapse threshold. For 36 arms (18 envs × 2 hyps
+    # × 1 cap), each worker sees ~9 batches of 2 arms each.
     with ProcessPoolExecutor(
         max_workers=n_workers, mp_context=ctx,
-        max_tasks_per_child=1,
+        max_tasks_per_child=2,
     ) as pool:
         future_to_arm = {
             pool.submit(_run_arm_worker, args): args[:3]
