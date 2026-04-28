@@ -38,7 +38,7 @@ from datetime import UTC, datetime
 
 from corroborate.hypothesis import Direction
 from corroborate.schema import ComparisonRow, MeasurementLeaf, RunRow
-from corroborate.verdict import Verdict
+from corroborate.verdict import RefutationClass, Verdict
 
 
 # ============ Leaf-signature projection ============

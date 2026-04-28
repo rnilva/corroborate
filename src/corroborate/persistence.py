@@ -110,6 +110,14 @@ def write_tracerows(
     if zarr_path is None or not has_arrays:
         return
     import zarr  # type: ignore[reportMissingTypeStubs]
+    from zarr.codecs import (  # type: ignore[reportMissingTypeStubs]
+        BloscCodec,
+    )
+    # Blosc/zstd@3 — fast + small. Per-array shuffle helps for
+    # smooth float arrays (Q-values, td-errors), neutral for ints.
+    compressor = BloscCodec(  # type: ignore[reportUnknownMemberType]
+        cname='zstd', clevel=3, shuffle='shuffle',
+    )
     root = zarr.open_group(  # type: ignore[reportUnknownMemberType]
         str(zarr_path), mode='a',
     )
@@ -125,6 +133,7 @@ def write_tracerows(
             np_arr = np.asarray(arr)
             zarr_arr = grp.create_array(  # type: ignore[reportUnknownMemberType]
                 name=name, shape=np_arr.shape, dtype=np_arr.dtype,
+                compressors=compressor,
             )
             zarr_arr[:] = np_arr  # type: ignore[reportUnknownMemberType]
 
