@@ -1,21 +1,20 @@
-"""Migrate `experiments/data/ddqn/traces.parquet` to the new
-parquet+zarr split.
+"""Migrate a parquet trace store to the new parquet+zarr split.
 
-Reads the existing 4.9 GB traces.parquet, splits each row's
-multi-dim list columns out to `arrays.zarr/{cell_id}/{name}`,
-writes a slimmed parquet (scalars + 1-D series only).
+Reads `experiments/data/ddqn/traces.parquet` (or any trace
+parquet), automatically detects columns whose dtype is
+`List(List(...))` (2-D+ nested), splits those into
+`arrays.zarr/{cell_id}/{name}`, writes a slim parquet (scalars +
+1-D series only).
 
-Non-destructive: writes to `traces.parquet.new` + `arrays.zarr.new`.
-Caller verifies §3 verdicts unchanged via `smoke_ddqn_threeway.py`,
-then atomic-renames.
+Substrate-agnostic: NO hardcoded column names. The "is this
+multi-dim?" decision is made from the parquet schema. Works on
+any trace store regardless of substrate (DQN, future RL or non-RL
+substrates).
 
-Schema of multi-dim columns to migrate (verified against current
-on-disk corpus):
-- episode_length:        List(List(Int64))
-- mc_return:             List(List(Float64))
-- predicted_q_at_start:  List(List(Float64))
-- sample_indices:        List(List(Int64))
-- pearson_stats:         List(List(Float64))
+Non-destructive: writes to `traces.parquet.new` +
+`arrays.zarr.new`. Caller verifies analytical content unchanged
+(e.g. via `smoke_ddqn_threeway.py` for the DDQN corpus), then
+atomic-renames.
 
 Run: `uv run python scripts/migrate_traces_to_zarr.py`."""
 from __future__ import annotations
@@ -29,13 +28,26 @@ import zarr  # type: ignore[reportMissingTypeStubs]
 from zarr.codecs import BloscCodec  # type: ignore[reportMissingTypeStubs]
 
 
-MULTI_DIM_COLUMNS: tuple[str, ...] = (
-    'episode_length',
-    'mc_return',
-    'predicted_q_at_start',
-    'sample_indices',
-    'pearson_stats',
-)
+def _is_multi_dim_list_dtype(dtype: pl.DataType) -> bool:
+    """True iff `dtype` is `List(List(...))` — 2-D or deeper
+    nesting. 1-D `List(<scalar>)` columns stay in parquet. The
+    framework's TraceRow schema persists 1-D series as parquet
+    list columns; only 2-D+ data needs the zarr backend."""
+    if not isinstance(dtype, pl.List):
+        return False
+    inner = dtype.inner
+    return isinstance(inner, pl.List)
+
+
+def _detect_multi_dim_columns(parquet_path: Path) -> list[str]:
+    """Inspect the parquet schema; return every column whose dtype
+    is `List(List(...))`. Substrate-agnostic — works on any trace
+    parquet without hardcoded column lists."""
+    schema = pl.scan_parquet(parquet_path).collect_schema()
+    return [
+        name for name, dtype in schema.items()
+        if _is_multi_dim_list_dtype(dtype)
+    ]
 
 
 def main() -> None:
@@ -53,21 +65,18 @@ def main() -> None:
         )
 
     print(f'Source: {src} ({src.stat().st_size / 1e9:.2f} GB)')
-    print(
-        f'Multi-dim columns to migrate: '
-        f'{", ".join(MULTI_DIM_COLUMNS)}',
-    )
+    drop_cols = _detect_multi_dim_columns(src)
+    if not drop_cols:
+        print('No multi-dim columns detected; corpus already migrated?')
+    else:
+        print(f'Multi-dim columns detected: {", ".join(drop_cols)}')
 
     # === Pass 1: slim parquet via polars lazy + sink_parquet ===
     # Drops multi-dim columns; writes scalars + 1-D series only.
     t0 = time.time()
     print(f'\nPass 1: slimming parquet (drops multi-dim columns)...')
     lf = pl.scan_parquet(src)
-    existing_cols = set(lf.collect_schema().names())
-    drop_cols = [c for c in MULTI_DIM_COLUMNS if c in existing_cols]
-    if not drop_cols:
-        print('  no multi-dim columns found; corpus already migrated?')
-    else:
+    if drop_cols:
         lf = lf.drop(drop_cols)
     lf.sink_parquet(dst_parquet)
     print(
