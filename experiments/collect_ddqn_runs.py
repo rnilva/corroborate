@@ -1,55 +1,56 @@
 """Collect DDQN-vs-vanilla DQN runs for §3 acceptance test.
 
-Three nested parallelism layers:
+Single-process sequential. Two parallelism layers (no
+subprocesses):
 
-1. **Subprocess over arms** — `ProcessPoolExecutor` spawns one
-   Python process per (env, hypothesis, hp-grid-point) cell.
-   Each subprocess has its own JAX / CUDA context, isolating
-   per-cell JIT-cache memory. Concurrency capped at 2 — concurrent
-   JAX init on a single GPU races on CUDA context allocation
-   and crashes the worker pool at higher concurrency.
-2. **Vmap over seeds** — within each subprocess, `run_dqn_arm`
-   batches all seeds in one jit-compiled call.
-3. **Nested scan over training steps** — `train_with_eval` is a
+1. **Vmap over seeds** — `run_dqn_arm` batches all seeds in one
+   jit-compiled call.
+2. **Nested scan over training steps** — `train_with_eval` is a
    single nested-scan: outer over super-steps, inner over
    `eval_every` training steps + one eval burst.
 
-**HP grid is multi-axis.** `HP_GRID` is a dict of axes; each
-axis is a list of values. Cartesian product produces the grid
-points. `_intervention_for(hypothesis_name, **grid_point)`
-constructs the intervention dict for one cell. Adding an axis
-is two lines: a key on `HP_GRID` + the corresponding kwarg in
-`_intervention_for`.
+The earlier `ProcessPoolExecutor` design had two recurring failure
+modes on multi-env sweeps:
+- `BrokenProcessPool` from JIT-cache OOMs after ~6-8 distinct env
+  shapes filled the per-worker memory budget.
+- Spawn-context recycle deadlocks when `max_tasks_per_child` was
+  set, leaving workers in a half-restarted state.
 
-**Output is a SINGLE pair of parquets.** Per-arm files live in
-a `tmp/` subdir as intermediate cache; after all workers
-complete, the orchestrator merges into `runs.parquet` +
-`traces.parquet` and (optionally) cleans up the tempfiles.
-Downstream analysis reads two files, not 2 × N.
+`jax.clear_caches()` after each arm is the same primitive workers
+were trying to use, lifted into the main process where it's not
+fighting spawn-context bookkeeping. Single-process is ~2× wall-
+clock vs 2 workers but reliable: 36 arms × ~5 min = ~3 hours.
+
+**HP grid is multi-axis.** `HP_GRID` is a dict of axes; each axis
+is a list of values. Cartesian product produces the grid points.
+`_intervention_for(hypothesis_name, **grid_point)` constructs the
+intervention dict for one cell.
+
+**Output is a SINGLE pair of parquets.** Per-arm files live in a
+`tmp/` subdir as intermediate cache; after each arm completes the
+file is on disk, so a killed sweep can resume cleanly. After all
+arms complete the orchestrator merges into `runs.parquet` +
+`traces.parquet` and cleans up the tempfiles.
 
 Run: `uv run python experiments/collect_ddqn_runs.py`."""
 from __future__ import annotations
 
-# Set JAX memory env vars BEFORE any import that touches jax.
-# `mp.get_context('spawn')` workers re-execute this module as
-# `__mp_main__`, so module-level imports trigger jax initialisation
-# at line ~60 (env_catalogue.py uses `jnp.array(...)` at module
-# top). With JAX's default preallocate=true at 0.9 GPU, the second
-# worker OOMs before its function body can set its own caps.
-# Setting these at the very top makes both parent and every spawned
-# worker share the device cleanly.
+# Cap JAX memory: with single process we own the whole GPU; tell
+# JAX not to preallocate the full device so other things can run
+# alongside without waiting on this script. Set BEFORE any jax
+# import.
 import os
 os.environ.setdefault('XLA_PYTHON_CLIENT_PREALLOCATE', 'false')
-os.environ.setdefault('XLA_PYTHON_CLIENT_MEM_FRACTION', '0.45')
+os.environ.setdefault('XLA_PYTHON_CLIENT_MEM_FRACTION', '0.9')
 
+import gc
 import itertools
-import multiprocessing as mp
 import time
-from concurrent.futures import ProcessPoolExecutor, as_completed
 from functools import partial
 from pathlib import Path
 from typing import Any
 
+import jax
 import polars as pl
 
 from corroborate.hypothesis import Hypothesis
@@ -214,81 +215,46 @@ def _grid_tag(grid_point: dict[str, Any]) -> str:
     )
 
 
-# ============ Worker: one (env, hypothesis, grid-point) cell ============
+# ============ Per-arm runner ============
 
-def _run_arm_worker(
-    args: tuple[str, str, dict[str, Any], tuple[int, ...], str, float, int],
+def _run_one_arm(
+    env_name: str, hypothesis_name: str, grid_point: dict[str, Any],
+    seeds: tuple[int, ...], tmp_dir: Path, arm_idx: int,
 ) -> tuple[Path, Path]:
-    """Subprocess worker. Runs `run_dqn_arm` for one (env,
-    hypothesis, grid-point) cell + writes per-arm parquets. Returns
-    (runs_path, traces_path).
+    """Run `run_dqn_arm` for one (env, hypothesis, grid-point)
+    cell + write per-arm parquets. Returns (runs_path,
+    traces_path).
 
-    Disables XLA preallocation BEFORE importing jax — by default
-    each JAX process grabs ~75% of GPU memory at init, which
-    starves sibling workers. With `XLA_PYTHON_CLIENT_PREALLOCATE=
-    false` plus a per-worker `XLA_PYTHON_CLIENT_MEM_FRACTION`
-    cap, N workers can share one device cleanly."""
-    (
-        env_name, hypothesis_name, grid_point,
-        seeds, tmp_dir_str, mem_fraction, arm_idx,
-    ) = args
+    Plain function (no subprocess). After completion, drops the
+    per-arm payload and clears the JIT cache so the next arm gets
+    a fresh compilation budget — without this, accumulated XLA
+    programs OOM the device after ~6-8 distinct env shapes."""
+    from corroborate.rl.cell_runner import run_dqn_arm
+    from corroborate.rl.env_catalogue import get
 
-    # Must set before any jax import in this process.
-    import os
-    os.environ.setdefault('XLA_PYTHON_CLIENT_PREALLOCATE', 'false')
-    os.environ.setdefault(
-        'XLA_PYTHON_CLIENT_MEM_FRACTION', f'{mem_fraction:.3f}',
-    )
-
-    tmp_dir = Path(tmp_dir_str)
     arm_tag = f'arm{arm_idx:03d}__{env_name}__{hypothesis_name}__{_grid_tag(grid_point)}'
     runs_path = tmp_dir / f'{arm_tag}__runs.parquet'
     traces_path = tmp_dir / f'{arm_tag}__traces.parquet'
 
-    from corroborate.persistence import (
-        apply_trace_reductions as _apply_reductions,
-        write_runrows as _write_runrows,
-        write_tracerows as _write_tracerows,
-    )
-    from corroborate.rl.cell_runner import run_dqn_arm
-    from corroborate.rl.dqn.claims.optimizer import Adam as _Adam
-    from corroborate.rl.env_catalogue import get
-
     h = _make_hypothesis(hypothesis_name, grid_point)
     cells = run_dqn_arm(
-        get(env_name), seeds, hypothesis=h, optimizer=_Adam(),
+        get(env_name), seeds, hypothesis=h, optimizer=Adam(),
     )
-    _write_runrows(tuple(c.run for c in cells), runs_path)
-    # Apply polars-expr reductions in-memory before writing the
-    # trace parquet. Drops 3-D Q-tensors after computing per-step
-    # max-Q reductions — the trace file shrinks ~10× with the
-    # bridge-relevant signal preserved.
-    reduced_traces = _apply_reductions(
+    write_runrows(tuple(c.run for c in cells), runs_path)
+    reduced_traces = apply_trace_reductions(
         [c.trace for c in cells],
         add=TRACE_POST_REDUCTIONS,
         drop=TRACE_POST_DROPS,
     )
-    _write_tracerows(reduced_traces, traces_path)
+    write_tracerows(reduced_traces, traces_path)
 
-    # Free compiled XLA programs from the worker's JIT cache. Each
-    # env shape pulls a fresh compilation; without clearing, the
-    # cache grows unboundedly and the ~6-8th env OOMs the worker
-    # (observed BrokenProcessPool from arm 11/32 onwards on 18-env
-    # sweeps). `jax.clear_caches()` releases the python-side
-    # compilation references; the XLA runtime then frees the device
-    # buffers. Avoids `max_tasks_per_child` recycle, which deadlocked
-    # under the spawn-context pool (parent + worker race during
-    # restart-bookkeeping).
-    #
     # Drop the per-arm cell payload BEFORE clearing caches so the
-    # arrays themselves go away too — otherwise compiled programs
-    # are freed but the JAX arrays from `cells` keep their device
-    # buffers rooted until return.
+    # arrays go away too — otherwise compiled programs are freed
+    # but the JAX arrays from `cells` keep their device buffers
+    # rooted until function return.
     del cells, reduced_traces
-    import jax as _jax
-    _jax.clear_caches()
-    import gc as _gc
-    _gc.collect()
+    jax.clear_caches()
+    gc.collect()
 
     return runs_path, traces_path
 
@@ -317,29 +283,18 @@ def main() -> None:
     grid_points = _grid_points(HP_GRID)
     n_arms = len(ENV_NAMES) * len(HYPOTHESIS_NAMES) * len(grid_points)
 
-    # Cap worker concurrency. 2 is the safe default — concurrent
-    # JAX init on a single GPU races on CUDA context allocation
-    # at higher concurrency (observed `BrokenProcessPool` killing
-    # all workers at 4 with capacity=50_000 + 30 seeds + 50k steps).
-    n_workers = min(2, n_arms, mp.cpu_count())
-    mem_fraction = 0.9 / n_workers
-
-    arms_args: list[
-        tuple[str, str, dict[str, Any], tuple[int, ...], str, float, int]
+    arms_specs: list[
+        tuple[int, str, str, dict[str, Any]]
     ] = [
-        (
-            env_name, h_name, gp,
-            SEEDS, str(tmp_dir), mem_fraction, idx,
-        )
+        (idx, env_name, h_name, gp)
         for idx, (env_name, h_name, gp) in enumerate(
             itertools.product(ENV_NAMES, HYPOTHESIS_NAMES, grid_points),
         )
     ]
     print(
-        f'spawning up to {n_workers} subprocess workers for '
-        f'{n_arms} arms ({len(ENV_NAMES)} envs × '
-        f'{len(HYPOTHESIS_NAMES)} hypotheses × '
-        f'{len(grid_points)} grid points), '
+        f'sequential single-process sweep: {n_arms} arms '
+        f'({len(ENV_NAMES)} envs × {len(HYPOTHESIS_NAMES)} hypotheses '
+        f'× {len(grid_points)} grid points), '
         f'{len(SEEDS)} seeds vmapped per arm — '
         f'{n_arms * len(SEEDS)} cells total',
         flush=True,
@@ -350,22 +305,14 @@ def main() -> None:
     print(flush=True)
 
     # Resume: skip arms whose tmp parquets already exist OR whose
-    # (env_name, intervention_name, leaf-signature) tuple is already
-    # present in the merged `runs.parquet` from a previous sweep.
-    # Two layers because the previous sweep may have:
-    #   (a) been killed mid-run → tmp parquets remain, merge final
-    #       not yet executed; OR
-    #   (b) completed merge for some arms → tmp parquets cleaned,
-    #       data lives only in the merged final.
+    # (env_name, intervention_name, hp) tuple is already in the
+    # merged `runs.parquet` from a previous sweep.
     def _arm_tag(
         env_name: str, h_name: str,
         grid_point: dict[str, Any], idx: int,
     ) -> str:
         return f'arm{idx:03d}__{env_name}__{h_name}__{_grid_tag(grid_point)}'
 
-    # Project (env_name, intervention_name, replay.capacity, batch_size,
-    # lr) tuples already in the merged runs.parquet so we can skip
-    # those arms.
     completed_keys: set[tuple[str, str, int, int, float]] = set()
     if final_runs_path.exists():
         df_existing = pl.read_parquet(final_runs_path)
@@ -387,12 +334,8 @@ def main() -> None:
             )
 
     pre_existing: list[tuple[Path, Path]] = []
-    pending_args: list[
-        tuple[str, str, dict[str, Any], tuple[int, ...], str, float, int]
-    ] = []
-    for args in arms_args:
-        env_name, h_name, gp, *_, idx = args
-        # Skip if already in the merged file.
+    pending_specs: list[tuple[int, str, str, dict[str, Any]]] = []
+    for idx, env_name, h_name, gp in arms_specs:
         gp_key = (
             env_name, h_name,
             int(gp.get('capacity', 0)),
@@ -401,58 +344,50 @@ def main() -> None:
         )
         if gp_key in completed_keys:
             continue
-        # Skip if tmp parquets exist (interrupted-mid-merge case).
         tag = _arm_tag(env_name, h_name, gp, idx)
         runs_p = tmp_dir / f'{tag}__runs.parquet'
         traces_p = tmp_dir / f'{tag}__traces.parquet'
         if runs_p.exists() and traces_p.exists():
             pre_existing.append((runs_p, traces_p))
         else:
-            pending_args.append(args)
+            pending_specs.append((idx, env_name, h_name, gp))
     if pre_existing:
         print(f'resume: {len(pre_existing)} arms in tmp/; '
-              f'{len(pending_args)} pending', flush=True)
-
-    # Spawn-start so each worker gets a clean JAX state.
-    ctx = mp.get_context('spawn')
+              f'{len(pending_specs)} pending', flush=True)
 
     t0 = time.time()
     parquet_pairs: list[tuple[Path, Path]] = list(pre_existing)
-    # No `max_tasks_per_child` recycle — observed deadlock on the
-    # transition: a recycled worker's spawn races with the parent's
-    # future-completion bookkeeping under spawn-context. Accept JIT
-    # cache growth instead; with capacity=10_000 the per-arm memory
-    # cost is small enough that 18-env compilations fit per worker.
-    with ProcessPoolExecutor(
-        max_workers=n_workers, mp_context=ctx,
-    ) as pool:
-        future_to_arm = {
-            pool.submit(_run_arm_worker, args): args[:3]
-            for args in pending_args
-        }
-        for i, future in enumerate(as_completed(future_to_arm), start=1):
-            env_name, h_name, grid_point = future_to_arm[future]
-            try:
-                runs_path, traces_path = future.result()
-            except Exception as e:
-                print(
-                    f'[{i:>3}/{len(pending_args)}] FAILED  {env_name:<22} '
-                    f'h={h_name:<12} {_grid_tag(grid_point):<40} '
-                    f'{type(e).__name__}: {e}',
-                    flush=True,
-                )
-                continue
-            parquet_pairs.append((runs_path, traces_path))
-            elapsed = time.time() - t0
+    failures: list[tuple[str, str, str]] = []  # (env, hyp, exc)
+    for i, (idx, env_name, h_name, gp) in enumerate(pending_specs, start=1):
+        try:
+            runs_path, traces_path = _run_one_arm(
+                env_name, h_name, gp, SEEDS, tmp_dir, idx,
+            )
+        except Exception as e:
             print(
-                f'[{i:>3}/{len(pending_args)}] done    {env_name:<22} '
-                f'h={h_name:<12} {_grid_tag(grid_point):<40} '
-                f'elapsed={elapsed:>6.0f}s',
+                f'[{i:>3}/{len(pending_specs)}] FAILED  {env_name:<22} '
+                f'h={h_name:<12} {_grid_tag(gp):<40} '
+                f'{type(e).__name__}: {e}',
                 flush=True,
             )
+            failures.append((env_name, h_name, repr(e)))
+            # Best-effort cache clear so the next arm gets a clean
+            # state even after a failure.
+            jax.clear_caches()
+            gc.collect()
+            continue
+        parquet_pairs.append((runs_path, traces_path))
+        elapsed = time.time() - t0
+        print(
+            f'[{i:>3}/{len(pending_specs)}] done    {env_name:<22} '
+            f'h={h_name:<12} {_grid_tag(gp):<40} '
+            f'elapsed={elapsed:>6.0f}s',
+            flush=True,
+        )
 
-    print(f'\nworkers complete in {time.time() - t0:.0f}s; '
-          f'merging {len(parquet_pairs)} per-arm parquet pairs')
+    print(f'\nsweep complete in {time.time() - t0:.0f}s; '
+          f'merging {len(parquet_pairs)} per-arm parquet pairs '
+          f'({len(failures)} failures)')
 
     # Union-merge per-arm parquets into one pair of files. If a
     # final file already exists (resume case), seed `all_runs` /
