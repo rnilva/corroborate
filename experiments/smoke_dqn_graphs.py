@@ -35,6 +35,11 @@ from corroborate.computation_graph import (
     build_computation_graph,
     signature,
 )
+from corroborate.measurable_graph import (
+    correlation_matrix_table,
+    explained_by_claim_graph,
+    pairwise_correlations,
+)
 from corroborate.rl.dqn.claims.bootstrap import (
     bootstrap,
     double_greedify,
@@ -44,12 +49,17 @@ from corroborate.rl.dqn.dqn import dqn
 
 def _trace_full_dqn(
     intervention: dict[str, object] | None = None,
-) -> ComputationGraph:
+) -> tuple[ComputationGraph, dict[str, object]]:
     """Run the FULL `dqn` (the outermost claim — nested scan over
     training+eval bursts) under `trace_context()` and build the
     resulting computation graph.
 
-    Tiny config so the smoke runs fast on CPU (one super-step,
+    Returns `(claim_graph, record_dict)`. The record dict is what
+    `dqn` returned — per-step measurable trajectories which we
+    feed into `pairwise_correlations` to derive the statistical
+    measurable-graph dual to the claim graph.
+
+    Tiny config so the smoke runs fast on CPU (a few super-steps,
     one eval burst, one episode). Every `@claim` that fires inside
     the scan's tracing pass shows up in the trace because
     `record_call` records under jit/scan/vmap tracers (v10
@@ -59,19 +69,20 @@ def _trace_full_dqn(
     `cell_runner`'s composition via `partial(dqn, **intervention)`.
     """
     env, env_params = gymnax.make('CartPole-v1')
+    # Slightly larger budget for the measurable graph: pairwise
+    # Pearson on a 4-step series is degenerate. 16 steps gives
+    # enough samples for r to be meaningful while staying fast.
     eff_kwargs: dict[str, object] = {
         'rng_key': jax.random.PRNGKey(0),
         'env': env, 'env_params': env_params,
         'obs_dim': 4, 'n_actions': 2,
         'eval_episode_cap': 8,
-        # Tiny budget — just enough to populate the scan.
-        'total_steps': 4, 'eval_every': 4, 'n_episodes': 1,
-        # Default optimizer / replay / etc. are the v0 vanilla DQN.
+        'total_steps': 16, 'eval_every': 4, 'n_episodes': 1,
         **(intervention or {}),
     }
     with trace_context() as records:
-        _ = dqn(**eff_kwargs)  # pyright: ignore[reportArgumentType]
-    return build_computation_graph(records)
+        record = dqn(**eff_kwargs)  # pyright: ignore[reportArgumentType]
+    return build_computation_graph(records), dict(record)
 
 
 def _print_graph(name: str, g: ComputationGraph) -> None:
@@ -107,24 +118,53 @@ def _print_diff(label_a: str, label_b: str, g_a: ComputationGraph,
 
 def main() -> None:
     print('=' * 72)
-    print('Full `dqn` claim — outermost training+eval run, traced.')
+    print('§1: claim graph — auto-induced computation graph')
     print('=' * 72)
 
-    g_vanilla_step = _trace_full_dqn()
+    g_vanilla, rec_vanilla = _trace_full_dqn()
     ddqn_intervention: dict[str, object] = {
         'bootstrap': partial(bootstrap, greedification=double_greedify),
     }
-    g_ddqn_step = _trace_full_dqn(ddqn_intervention)
+    g_ddqn, rec_ddqn = _trace_full_dqn(ddqn_intervention)
 
-    _print_graph('VANILLA dqn', g_vanilla_step)
-    _print_graph('DDQN dqn   ', g_ddqn_step)
-    _print_diff('vanilla', 'ddqn', g_vanilla_step, g_ddqn_step)
+    _print_graph('VANILLA dqn', g_vanilla)
+    _print_graph('DDQN dqn   ', g_ddqn)
+    _print_diff('vanilla', 'ddqn', g_vanilla, g_ddqn)
 
-    sig_v = signature(g_vanilla_step)
-    sig_d = signature(g_ddqn_step)
-    print(f'\n  signatures equal? = {sig_v == sig_d}')
+    sig_v = signature(g_vanilla)
+    sig_d = signature(g_ddqn)
+    print(f'\n  claim-graph signatures equal? = {sig_v == sig_d}')
     assert sig_v != sig_d, 'expected DDQN slot swap to differ'
-    print('  ✓ slot-swap intervention is structurally distinct.')
+    print('  ✓ slot-swap is structurally distinct at the claim graph.')
+
+    # ============================================================
+    print()
+    print('=' * 72)
+    print('§2: measurable graph — Pearson r across per-step series')
+    print('=' * 72)
+
+    mg_vanilla = pairwise_correlations(rec_vanilla)
+    print(f'\n  vanilla: {len(mg_vanilla.nodes)} measurables, '
+          f'{len(mg_vanilla.edges)} pairs')
+    print('\n  top correlations (|r| ≥ 0.3):')
+    for line in correlation_matrix_table(mg_vanilla, threshold=0.3):
+        print(line)
+
+    # Note: `explained_by_claim_graph` requires the measurable's
+    # name to be a node IN the claim graph. Measurables are RECORD
+    # FIELDS (loss, td_error, ep_return, max_q…) authored by
+    # phases; the claim-graph nodes are CLAIM CLASSES (MLP,
+    # bootstrap, train_phase…). The two layers name different
+    # things. For the diagnostic to bridge them, a producer map
+    # is needed — `record_field → owning_claim_name`. Deferred.
+    print('\n  --- claim-graph reachability of measurables ---')
+    print('  (record-field names ≠ claim names, so this is mostly')
+    print('   "unexplained" — bridging requires a producer map.)')
+    measurables_in_claim_graph = sum(
+        1 for n in mg_vanilla.nodes if n in g_vanilla.nodes
+    )
+    print(f'  {measurables_in_claim_graph} of {len(mg_vanilla.nodes)} '
+          f'measurables also appear as claim-graph nodes.')
 
 
 if __name__ == '__main__':
