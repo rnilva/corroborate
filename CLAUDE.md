@@ -107,6 +107,74 @@ probably needs redesign before adding the ignore.
 - Docstrings explain WHY, not WHAT — well-named identifiers do
   the WHAT.
 
+## Vocabulary (framework-honest, not domain-borrowed)
+
+The framework speaks of two kinds of measurables:
+
+1. **Claim outputs** — what running the configured composition
+   emits at run time (the record dict's entries: `reward[t]`,
+   `loss[t]`, `td_error[t]`, …). Author-named flat keys.
+2. **Leaf scalar claims** — non-recursive nodes in the graph of
+   claims, observed at *composition time* by walking the bound
+   `partial(...)` via `signature.walk_paths`. Dotted topology
+   paths (`gamma`, `optimizer.inner.lr`,
+   `bootstrap.greedification`).
+
+RL practice calls (2) "hyperparameters". The framework does NOT.
+`regime='leaf'`, `aggregate.leaf_signature`, `walk_paths`,
+`flatten_leaves` — never `hp_*`. "Leaf" generalises beyond RL
+configuration; "HP" leaks domain jargon into framework semantics.
+
+Substrate code is welcome to say "HP" in its own docs/comments
+(it's the reader's vocabulary). Framework code does not.
+
+## Persistence shape (typed × open)
+
+Each row store splits into two surfaces:
+
+- **Framework-typed** — closed-set enums (`Verdict`,
+  `RefutationClass`), lineage IDs (`id`, `parent_id`, `cycle_id`,
+  `treatment_arm_id`, …), framework-controlled provenance
+  (`timestamp`). Typed dataclass fields. Stable across substrates.
+- **Open** — `measurements: Mapping[str, MeasurementLeaf]` where
+  `MeasurementLeaf = str | int | float | bool`. Path-keyed
+  scalars, substrate-shaped. The substrate decides what's in here.
+
+Two stores join by UUID:
+
+- **Trace store** (`TraceRow`) — per-cell raw observation. Outputs
+  (1) as 1-D `list[float]` columns + leaves (2) as scalar columns.
+  v9's `traces.parquet` analog.
+- **Row store** (`RunRow` / `ArmRow` / `ComparisonRow` /
+  `CorpusRow`) — provenance + framework verdicts +
+  `measurements`. v9's `measurements.parquet` /
+  `bridge_ledger.parquet` analog.
+
+**Hard rule: no JSON-wrapped struct columns in parquet.** Every
+heterogeneous-keyed dict (HPs, bridge stats, meta) is flattened to
+top-level path-keyed columns at the parquet boundary. Polars
+null-pads heterogeneous keys across rows; readers skip nulls. The
+benefit is `df.filter(pl.col('optimizer.inner.lr') < 1e-3)` works
+at the dataframe level — JSON wrapping kills this.
+
+The path-keyed convention is collision-free by construction:
+leaves use **dotted topology paths** (`replay.batch_size`),
+trajectories use **flat author-chosen keys** (`reward`). Output
+prefixes (`outcome.`, `bridge.`, `invariant.`) on the row store
+namespace results separately from leaves.
+
+## Test iteration
+
+Tests that compile a JAX kernel and run DQN end-to-end on
+CartPole are marked `@pytest.mark.slow`. Defaults:
+
+- `uv run pytest tests/` → fast cohort only (~9 s, 213 tests).
+- `uv run pytest tests/ -m slow` → slow only (~92 s, 22 tests).
+- `uv run pytest tests/ -m ''` → full suite (~95 s, 235 tests).
+
+`addopts = "-q --strict-markers -m 'not slow'"` in pyproject. The
+empty `-m ''` overrides addopts to include both.
+
 ## Acceptance criteria
 
 `v0` is acceptance-tested by reproducing the DDQN study in

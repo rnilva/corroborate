@@ -7,6 +7,69 @@ condition that should lift it.
 Entries are ordered by *forcing function*: the higher up, the
 sooner they're likely to bind.
 
+## Step 3: cell-runner trace emission
+
+**Status:** queued. Next step in the masterplan after Steps 1-2
+landed columnar persistence.
+
+**Description:** `TraceRow` exists as schema + standalone smoke
+(`test_trace_persistence.py`); `run_dqn_cell` / `run_dqn_arm`
+build `RunRow`s only. The two stores aren't yet linked end-to-end
+on disk. After this:
+
+- Each cell produces both a `RunRow` and a `TraceRow` with
+  `RunRow.id == TraceRow.id`.
+- `run_dqn_arm` writes to two parquets via `write_runrows` and
+  `write_tracerows`.
+- `experiments/collect_ddqn_runs.py` writes `runs.parquet` +
+  `traces.parquet` per arm.
+
+**Why deferred:** Steps 1-2 were the design-load-bearing changes
+(decide the shape; collapse the JSON-wrapping crime). Step 3 is
+mechanical plumbing — modest LoC, no design open questions.
+
+**Lift when:** ready to actually persist a multi-cell sweep with
+both stores. Smallest user-visible change with largest practical
+effect; once it lands `df.filter(pl.col('optimizer.inner.lr') <
+1e-3)` is the workflow that exists end-to-end on disk, not just
+in tests.
+
+## Replay-as-Claim Protocol mismatch (replay.py:150)
+
+**Status:** longstanding pre-existing issue surfaced by Step 2A
+audit.
+
+**Description:** `Claim[**P, T]` Protocol declares `__call__` as
+required. `Replay` (frozen-dataclass `ClaimBase` subclass) has
+`init` / `add` / `sample_batch` instead — multi-method, no single
+`__call__`. So `record_call(self, ...)` inside `Replay.add` fails
+the type check: `Replay` doesn't structurally satisfy
+`Claim[..., object]`.
+
+Pyright flags one error consistently:
+`replay.py:150:21 - error: Argument of type "Self@Replay" cannot
+be assigned to parameter "claim_obj" of type "Claim[..., object]"
+in function "record_call"`.
+
+**Why deferred:** needs a Protocol-design call. Three viable
+shapes:
+
+1. Split `Claim` into `Callable Claim` (single `__call__`) and
+   `RecordedClaim` (multi-method but trace-recordable). `Replay`
+   is the latter.
+2. Widen `record_call`'s signature to `ClaimBase | FnClaim`
+   instead of the structural Protocol.
+3. Give Module-shaped multi-method claims a default `__call__`
+   stub that raises NotImplementedError, satisfying the Protocol
+   shape at the cost of a misleading method.
+
+(2) is most subtractive; (1) is most honest. Pre-existed before
+the typing-discipline tightening; not blocking any test.
+
+**Lift when:** another multi-method Module claim lands (right now
+`Replay` is the only one) OR a roast pass surfaces it as a paper
+gap. Then design (1) properly.
+
 ## Deferred from second-pass external review
 
 ### Paired-cell comparison primitive (matched-seed Δ)
