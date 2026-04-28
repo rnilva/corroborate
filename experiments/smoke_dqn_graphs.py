@@ -69,20 +69,68 @@ def _trace_full_dqn(
     `cell_runner`'s composition via `partial(dqn, **intervention)`.
     """
     env, env_params = gymnax.make('CartPole-v1')
-    # Slightly larger budget for the measurable graph: pairwise
-    # Pearson on a 4-step series is degenerate. 16 steps gives
-    # enough samples for r to be meaningful while staying fast.
+    # 2000 steps: enough for measurable-graph correlations to be
+    # meaningful (Pearson r tightens with sample count). Still
+    # ~10s on CPU. v10's smoke uses 5000; matched here at the
+    # tier where DQN's structure is already legible.
     eff_kwargs: dict[str, object] = {
         'rng_key': jax.random.PRNGKey(0),
         'env': env, 'env_params': env_params,
         'obs_dim': 4, 'n_actions': 2,
         'eval_episode_cap': 8,
-        'total_steps': 16, 'eval_every': 4, 'n_episodes': 1,
+        'total_steps': 2000, 'eval_every': 500, 'n_episodes': 1,
         **(intervention or {}),
     }
     with trace_context() as records:
         record = dqn(**eff_kwargs)  # pyright: ignore[reportArgumentType]
     return build_computation_graph(records), dict(record)
+
+
+def _derive_measurables(rec: dict[str, object]) -> dict[str, object]:
+    """Project the raw record dict to a richer measurable series.
+
+    Mirrors v10's `test_measurable_graph.scalar_series`: scalar
+    fields pass through; multi-D claim outputs (per-step Q-vectors,
+    per-sample TD-errors) get inline numpy reductions to produce
+    derived scalar-per-step series. These derived measurables are
+    where the interesting correlations live (q_std, q_gap surface
+    DDQN-relevant overestimation signals).
+
+    Long-term these reductions belong in `apply_trace_reductions`
+    (declarative polars exprs over the trace store); for the smoke
+    they're inline numpy."""
+    import numpy as np
+
+    out: dict[str, object] = {}
+    # Pass-through scalars.
+    for k in ('loss', 'td_error', 'reward', 'done',
+              'ep_return', 'action', 'epsilon', 'buf_size',
+              'eps_value', 'max_q'):
+        if k in rec:
+            arr = np.asarray(rec[k])
+            if arr.ndim == 1:
+                out[k] = arr.astype(np.float64)
+            elif arr.ndim == 2 and arr.shape[-1] == 1:
+                out[k] = arr.squeeze(-1).astype(np.float64)
+    # Q-tensor reductions (online_q_values: (steps, batch, n_actions)).
+    if 'online_q_values' in rec:
+        q = np.asarray(rec['online_q_values']).astype(np.float64)
+        # Reduce batch axis first → (steps, n_actions).
+        q_per_step = q.mean(axis=1) if q.ndim == 3 else q
+        if q_per_step.ndim == 2:
+            out['q_mean'] = q_per_step.mean(-1)
+            out['q_max'] = q_per_step.max(-1)
+            out['q_std'] = q_per_step.std(-1)
+            sorted_q = np.sort(q_per_step, axis=-1)
+            out['q_gap'] = sorted_q[..., -1] - sorted_q[..., -2]
+    # Target-Q reductions.
+    if 'target_q_values' in rec:
+        tq = np.asarray(rec['target_q_values']).astype(np.float64)
+        tq_per_step = tq.mean(axis=1) if tq.ndim == 3 else tq
+        if tq_per_step.ndim == 2:
+            out['target_q_mean'] = tq_per_step.mean(-1)
+            out['target_q_max'] = tq_per_step.max(-1)
+    return out
 
 
 def _print_graph(name: str, g: ComputationGraph) -> None:
@@ -143,7 +191,8 @@ def main() -> None:
     print('§2: measurable graph — Pearson r across per-step series')
     print('=' * 72)
 
-    mg_vanilla = pairwise_correlations(rec_vanilla)
+    series_vanilla = _derive_measurables(rec_vanilla)
+    mg_vanilla = pairwise_correlations(series_vanilla)
     print(f'\n  vanilla: {len(mg_vanilla.nodes)} measurables, '
           f'{len(mg_vanilla.edges)} pairs')
     print('\n  top correlations (|r| ≥ 0.3):')
