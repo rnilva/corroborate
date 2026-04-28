@@ -56,8 +56,6 @@ import polars as pl
 from corroborate.hypothesis import Hypothesis
 from corroborate.persistence import (
     apply_trace_reductions,
-    read_runrows,
-    read_tracerows,
     write_runrows,
     write_tracerows,
 )
@@ -65,7 +63,6 @@ from corroborate.rl.dqn.claims.bootstrap import bootstrap, double_greedify
 from corroborate.rl.dqn.claims.optimizer import Adam, WarmedUpdate
 from corroborate.rl.dqn.claims.replay import Replay
 from corroborate.rl.dqn.invariants import DQNTrajectoryRecord
-from corroborate.schema import RunRow, TraceRow
 
 
 # ============ Experiment grid ============
@@ -86,13 +83,6 @@ HYPOTHESIS_NAMES = ('vanilla_dqn', 'ddqn')
 
 SEEDS: tuple[int, ...] = tuple(range(30))
 
-# v9 parity: TrainingProtocol.total_steps = 50_000 (their default).
-# v9 parallelises 64 envs per cell, so their 50k env-steps is
-# ~781 gradient steps; our 1:1 ratio gives 50k gradient steps —
-# strictly more learning than v9's nominal 50k. Sufficient for
-# CartPole convergence (literature converges in 30-50k steps).
-TOTAL_STEPS = 50_000
-
 
 # Multi-axis HP grid. Each key is a flat axis name; each value is
 # a list of grid points along that axis. Cartesian product over
@@ -102,13 +92,19 @@ TOTAL_STEPS = 50_000
 # Single-element lists collapse the axis (no variation along it);
 # this lets the script stay flexible without changing structure
 # when only some axes vary.
-# For the all-envs §3 sweep, single-point grid (capacity=10k is
-# the v9 / literature default for CartPole-class). HP-sensitivity
-# can be a separate sweep on a smaller env subset.
+#
+# `total_steps` is a grid axis so we can stack training-duration
+# regimes on top of the existing 50k-step corpus. v9 used 50k as
+# the default; the 200k point gives 4× more late-window samples
+# for §5's mediator reductions and lets envs that converge slowly
+# (Acrobot, Pong) settle. `eval_every = total_steps // 10` keeps
+# the eval cadence proportional. The resume key (in `main`) keys
+# on total_steps too so prior 50k-step cells aren't re-run.
 HP_GRID: dict[str, list[Any]] = {
     'capacity': [10_000],
     'batch_size': [32],
     'lr': [1e-3],
+    'total_steps': [50_000, 200_000],
 }
 
 
@@ -190,7 +186,7 @@ TRACE_POST_DROPS: tuple[str, ...] = (
 
 def _intervention_for(
     hypothesis_name: str, *,
-    capacity: int, batch_size: int, lr: float,
+    capacity: int, batch_size: int, lr: float, total_steps: int,
 ) -> dict[str, object]:
     """Build the intervention dict for one (hypothesis, grid-point).
     Pure function so workers can reconstruct it from picklable
@@ -199,8 +195,8 @@ def _intervention_for(
     Adding a new HP-grid axis: extend `HP_GRID` with the new key,
     add a matching kwarg here, and use it inside the dict."""
     base: dict[str, object] = {
-        'total_steps': TOTAL_STEPS,
-        'eval_every': TOTAL_STEPS // 10,
+        'total_steps': total_steps,
+        'eval_every': total_steps // 10,
         'n_episodes': 5,
         'gamma': 0.99,
         'replay': Replay(capacity=capacity, batch_size=batch_size),
@@ -347,19 +343,19 @@ def main() -> None:
     ) -> str:
         return f'arm{idx:03d}__{env_name}__{h_name}__{_grid_tag(grid_point)}'
 
-    completed_keys: set[tuple[str, str, int, int, float]] = set()
+    completed_keys: set[tuple[str, str, int, int, float, int]] = set()
     if final_runs_path.exists():
         df_existing = pl.read_parquet(final_runs_path)
         if not df_existing.is_empty():
             for row in df_existing.select(
                 'env_name', 'intervention_name', 'replay.capacity',
-                'replay.batch_size', 'optimizer.inner.lr',
+                'replay.batch_size', 'optimizer.inner.lr', 'total_steps',
             ).unique().iter_rows(named=False):
                 if row[0] is None or row[1] is None:
                     continue
                 completed_keys.add((
                     str(row[0]), str(row[1]), int(row[2]),
-                    int(row[3]), float(row[4]),
+                    int(row[3]), float(row[4]), int(row[5]),
                 ))
             print(
                 f'resume: {len(completed_keys)} (env, intervention, hp) '
@@ -375,6 +371,7 @@ def main() -> None:
             int(gp.get('capacity', 0)),
             int(gp.get('batch_size', 0)),
             float(gp.get('lr', 0.0)),
+            int(gp.get('total_steps', 0)),
         )
         if gp_key in completed_keys:
             continue
@@ -423,23 +420,50 @@ def main() -> None:
           f'merging {len(parquet_pairs)} per-arm parquet pairs '
           f'({len(failures)} failures)')
 
-    # Union-merge per-arm parquets into one pair of files. If a
-    # final file already exists (resume case), seed `all_runs` /
-    # `all_traces` with it so we APPEND rather than OVERWRITE.
-    all_runs: list[RunRow] = []
-    all_traces: list[TraceRow] = []
+    # Union-merge per-arm parquets into one pair of files via polars
+    # lazy/streaming. The previous Python-object round-trip
+    # (`read_runrows` → `RunRow` list → `write_runrows`)
+    # materialised the entire trace store in memory and OOM'd at
+    # ~50k-step × 36-arm scale. polars' `scan_parquet` + lazy
+    # concat + `sink_parquet` streams: no full in-memory copy.
+    #
+    # `how='diagonal_relaxed'` accepts heterogeneous schemas (e.g.
+    # arms with different `eval_step_index` lengths from different
+    # `total_steps`) — missing columns null-pad, type widening
+    # tolerated.
+    runs_inputs: list[Path] = []
+    traces_inputs: list[Path] = []
     if final_runs_path.exists():
-        all_runs.extend(read_runrows(final_runs_path))
+        runs_inputs.append(final_runs_path)
     if final_traces_path.exists():
-        all_traces.extend(read_tracerows(final_traces_path))
+        traces_inputs.append(final_traces_path)
     for runs_p, traces_p in parquet_pairs:
-        all_runs.extend(read_runrows(runs_p))
-        all_traces.extend(read_tracerows(traces_p))
-    write_runrows(all_runs, final_runs_path)
-    write_tracerows(all_traces, final_traces_path)
+        runs_inputs.append(runs_p)
+        traces_inputs.append(traces_p)
+
+    runs_tmp = final_runs_path.with_suffix('.parquet.tmp')
+    traces_tmp = final_traces_path.with_suffix('.parquet.tmp')
+    pl.concat(
+        [pl.scan_parquet(p) for p in runs_inputs],
+        how='diagonal_relaxed',
+    ).sink_parquet(runs_tmp)
+    pl.concat(
+        [pl.scan_parquet(p) for p in traces_inputs],
+        how='diagonal_relaxed',
+    ).sink_parquet(traces_tmp)
+    # Atomic-rename only after both writes succeed.
+    runs_tmp.replace(final_runs_path)
+    traces_tmp.replace(final_traces_path)
+
+    n_runs = pl.scan_parquet(final_runs_path).select(
+        pl.len(),
+    ).collect().item()
+    n_traces = pl.scan_parquet(final_traces_path).select(
+        pl.len(),
+    ).collect().item()
     print(
-        f'written {len(all_runs)} runs → {final_runs_path.name}\n'
-        f'written {len(all_traces)} traces → {final_traces_path.name}',
+        f'written {n_runs} runs → {final_runs_path.name}\n'
+        f'written {n_traces} traces → {final_traces_path.name}',
     )
 
     # Clean up per-arm intermediate files. Comment this out to
