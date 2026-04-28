@@ -232,8 +232,20 @@ def at_most[R: Mapping[str, object]](
     corpus-graph derivation."""
     bridge_name = name if name is not None else f'at_most[{gap.name}<={threshold:g}]'
 
-    def fn(record: R) -> BridgeResult:
-        val = gap(record)
+    # Propagate the gap's measurable-dep param names to the bridge's
+    # fn signature. The framework's resolver inspects the bridge fn,
+    # injects each registered dep, calls the bridge — which forwards
+    # the same deps to the gap. Without this propagation, gap.fn
+    # would call with `**{}` and crash on missing required params.
+    import inspect as _inspect
+    from corroborate.measurable import (
+        _measurable_param_names,  # type: ignore[reportPrivateUsage]
+    )
+    gap_dep_names = _measurable_param_names(gap.fn)
+
+    def fn(record: R, **deps: object) -> BridgeResult:
+        gap_deps = {n: deps[n] for n in gap_dep_names if n in deps}
+        val = gap.fn(record, **gap_deps)
         if math.isnan(val):
             return BridgeResult(
                 verdict=Verdict.POWER_INSUFFICIENT,
@@ -261,6 +273,18 @@ def at_most[R: Mapping[str, object]](
             name=bridge_name,
             targets=gap.reads,
         )
+
+    # Synthesize the bridge fn's signature so the framework's
+    # resolver sees the measurable-dep params and auto-injects.
+    fn.__signature__ = _inspect.Signature([  # type: ignore[attr-defined]
+        _inspect.Parameter(
+            'record', _inspect.Parameter.POSITIONAL_OR_KEYWORD,
+        ),
+        *(
+            _inspect.Parameter(n, _inspect.Parameter.KEYWORD_ONLY)
+            for n in gap_dep_names
+        ),
+    ])
     # Constructor only — does NOT auto-attach to of_claim.invariants.
     # Substrate authors who want auto-discovery via the composition
     # tree should pass the returned Bridge to `attach_invariant(..., to=of_claim)`.

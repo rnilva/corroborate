@@ -55,20 +55,26 @@ class BridgeResult:
 @dataclass(frozen=True, slots=True)
 class Bridge[R: Mapping[str, object]]:
     """A named paper-level assertion. Behaves as
-    `Callable[[R], BridgeResult]` via `__call__`; carries `name`
+    `Callable[..., BridgeResult]` via `__call__`; carries `name`
     and `targets` as typed attributes for graph derivation and
     reads-set fingerprinting.
 
+    `fn`'s first positional arg is the record. Additional kwargs
+    name registered measurables (`@measurable`-decorated). The
+    framework's `evaluate_with_measurables(b.fn, record, cache)`
+    looks up each declared measurable in the registry, resolves
+    transitively (memoized in `cache`), and injects. Bridges that
+    take only the record continue to work unchanged.
+
     `R` is the record schema. Bound at `Mapping[str, object]` —
     accepts plain Mappings, uniform-value mappings, TypedDicts,
-    and Mapping subclasses. Authors using TypedDict get typed
-    field access inside the bridge body."""
-    fn: Callable[[R], BridgeResult]
+    and Mapping subclasses."""
+    fn: Callable[..., BridgeResult]
     name: str
     targets: tuple[str, ...]
 
-    def __call__(self, record: R) -> BridgeResult:
-        return self.fn(record)
+    def __call__(self, record: R, **deps: object) -> BridgeResult:
+        return self.fn(record, **deps)
 
 
 def bridge[R: Mapping[str, object]](

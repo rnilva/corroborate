@@ -297,13 +297,25 @@ def run_dqn_arm(
         tuple(hypothesis.bridges) + tuple(auto_invariants)
     )
 
+    # Side-effect import: registers DDQN measurables (q_mean,
+    # q_max, ..., pearson_r_online_target) so bridges declaring
+    # them as deps auto-resolve via the registry.
+    import corroborate.rl.dqn.measurables  # noqa: F401
+    from corroborate.measurable import evaluate_with_measurables
+
     cells: list[CellResult] = []
     for i, seed in enumerate(seeds):
         per_seed_record: dict[str, jax.Array] = {
             k: v[i] for k, v in batched_record.items()
         }
         outcome = outcome_proj(per_seed_record)
-        bridge_results = tuple(b(per_seed_record) for b in effective_bridges)
+        # Per-cell measurable cache — shared across all bridges
+        # in this cell so each measurable computes at most once.
+        cache: dict[str, object] = {}
+        bridge_results = tuple(
+            evaluate_with_measurables(b.fn, per_seed_record, cache=cache)
+            for b in effective_bridges
+        )
         verdict = aggregate_cell_verdict(
             tuple(r.verdict for r in bridge_results),
         )

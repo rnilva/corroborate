@@ -22,6 +22,9 @@ import optax
 import pytest
 
 from corroborate.invariant import at_most
+# Side-effect import: registers pearson_r_online_target etc. in
+# the measurable registry so resolved gap evaluation works.
+import corroborate.rl.dqn.measurables  # noqa: F401
 from corroborate.rl.dqn.claims.bootstrap import bootstrap
 from corroborate.rl.dqn.claims.q_network import mlp_q
 from corroborate.rl.dqn.claims.target_sync import periodic_copy
@@ -243,6 +246,14 @@ def _pearson_stats_from_arrays(
     ], axis=-1)  # (T, 5)
 
 
+def _eval_gap(gap, record: Mapping[str, jnp.ndarray]) -> float:
+    """Helper: evaluate a gap measurable through the resolver so
+    its declared measurable-deps (e.g. `pearson_r_online_target`)
+    auto-resolve from the registry."""
+    from corroborate.measurable import evaluate_with_measurables
+    return float(evaluate_with_measurables(gap.fn, dict(record)))
+
+
 def test_hasselt_gap_one_when_q_values_perfectly_correlated() -> None:
     """Online and target Q-values identical (varying across
     samples) → Pearson r = 1 → gap = 1 (DDQN reduces to vanilla,
@@ -252,7 +263,7 @@ def test_hasselt_gap_one_when_q_values_perfectly_correlated() -> None:
         'pearson_stats': _pearson_stats_from_arrays(arr, arr),
     }
     gap = hasselt_covariance_gap()
-    assert abs(gap(record) - 1.0) < 1e-5
+    assert abs(_eval_gap(gap, record) - 1.0) < 1e-5
 
 
 def test_hasselt_gap_zero_when_q_values_perfectly_anti_correlated() -> None:
@@ -264,7 +275,7 @@ def test_hasselt_gap_zero_when_q_values_perfectly_anti_correlated() -> None:
         'pearson_stats': _pearson_stats_from_arrays(arr, -arr),
     }
     gap = hasselt_covariance_gap()
-    assert gap(record) == 0.0
+    assert _eval_gap(gap, record) == 0.0
 
 
 def test_hasselt_gap_nan_when_q_values_constant() -> None:
@@ -278,7 +289,7 @@ def test_hasselt_gap_nan_when_q_values_constant() -> None:
         'pearson_stats': _pearson_stats_from_arrays(on, tg),
     }
     gap = hasselt_covariance_gap()
-    assert math.isnan(gap(record))
+    assert math.isnan(_eval_gap(gap, record))
 
 
 def test_hasselt_gap_carries_pearson_stats_read() -> None:
