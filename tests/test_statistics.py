@@ -1,0 +1,172 @@
+"""Tests for `corroborate.statistics` — paired Hedges' g + MDE +
+verdict-decision tree.
+
+Synthetic-data tests with known answers:
+1. Hedges' g formula matches the v9 reference.
+2. Strong effect at adequate n → HELD.
+3. Null effect at adequate n → NO_EFFECT (NULL_EFFECT or HELD-with-no-direction).
+4. Small n with any effect → POWER_INSUFFICIENT.
+5. Sign-flip (predicted positive, observed negative) → SIGN_FLIP."""
+from __future__ import annotations
+
+import math
+import pytest
+
+from corroborate.statistics import (
+    adequately_powered_paired,
+    delta_i_from_q,
+    derived_q_from_g_se,
+    hedges_g_paired,
+    mde_paired,
+    verdict_from_paired_stats,
+)
+from corroborate.verdict import RefutationClass, Verdict
+
+
+# ============ hedges_g_paired ============
+
+def test_hedges_g_paired_zero_variance_returns_zero_g_nan_se() -> None:
+    """All-equal deltas → g = 0, SE = NaN (no variation to estimate)."""
+    g, se = hedges_g_paired([1.0, 1.0, 1.0, 1.0, 1.0])
+    assert g == 0.0
+    assert math.isnan(se)
+
+
+def test_hedges_g_paired_too_small_n_returns_nan() -> None:
+    """n < 2 → both NaN (no variance estimable)."""
+    g, se = hedges_g_paired([5.0])
+    assert math.isnan(g)
+    assert math.isnan(se)
+
+
+def test_hedges_g_paired_strong_positive_effect() -> None:
+    """A clear positive effect (deltas ≈ 1.5 ± 0.25) gives a large
+    positive g. SE grows with g (variance formula has a g²/(2n)
+    term), so just check finite + positive."""
+    deltas = [1.0, 1.5, 2.0, 1.2, 1.8, 1.4, 1.6, 1.3, 1.7, 1.5]
+    g, se = hedges_g_paired(deltas)
+    assert g > 1.5  # large effect
+    assert se > 0.0  # finite, positive
+    assert math.isfinite(se)
+
+
+def test_hedges_g_paired_textbook_value() -> None:
+    """Hedges' g on `[1.0, 2.0, 3.0]` should match the formula:
+        mean = 2.0, stdev (ddof=1) = 1.0
+        d = 2.0 / 1.0 = 2.0
+        c_4 = 1 - 3 / (4*3 - 5) = 1 - 3/7 ≈ 0.5714
+        g = 2.0 * 0.5714 ≈ 1.1429
+        var = 1/3 + 1.1429^2 / 6 ≈ 0.5510
+        se ≈ 0.7423"""
+    g, se = hedges_g_paired([1.0, 2.0, 3.0])
+    assert g == pytest.approx(2.0 * (1 - 3 / 7), rel=1e-6)
+    expected_var = 1.0 / 3 + g * g / 6
+    assert se == pytest.approx(math.sqrt(expected_var), rel=1e-6)
+
+
+# ============ mde_paired ============
+
+def test_mde_paired_decreases_with_n() -> None:
+    """MDE shrinks as n grows — same α + power."""
+    mde_10 = mde_paired(10, alpha=0.05, power=0.8)
+    mde_100 = mde_paired(100, alpha=0.05, power=0.8)
+    assert mde_100 < mde_10
+
+
+def test_mde_paired_too_small_n_returns_nan() -> None:
+    assert math.isnan(mde_paired(1))
+
+
+# ============ derived_q + delta_i ============
+
+def test_derived_q_zero_when_g_zero() -> None:
+    """g=0, se>0 → Φ(0) = 0.5."""
+    q = derived_q_from_g_se(0.0, 0.5)
+    assert q == pytest.approx(0.5)
+
+
+def test_derived_q_one_for_large_g_over_se() -> None:
+    """Strong positive signal → q close to 1."""
+    q = derived_q_from_g_se(5.0, 0.5)  # z = 10
+    assert q > 0.99
+
+
+def test_delta_i_zero_at_q_half() -> None:
+    """q=0.5 → H_2(0.5) = 1 → ΔI = 0 (no information)."""
+    assert delta_i_from_q(0.5) == pytest.approx(0.0)
+
+
+def test_delta_i_one_at_perfect_signal() -> None:
+    """q approaches 1 → ΔI approaches 1."""
+    assert delta_i_from_q(0.99999) > 0.99
+
+
+def test_delta_i_zero_at_boundary() -> None:
+    """q = 0 or 1 returns 0 (boundary convention)."""
+    assert delta_i_from_q(0.0) == 0.0
+    assert delta_i_from_q(1.0) == 0.0
+
+
+# ============ adequately_powered + verdict_from_paired_stats ============
+
+def test_adequately_powered_strong_effect_n10() -> None:
+    """g ≈ 1.5 at n=10 should be adequately powered."""
+    assert adequately_powered_paired(1.5, 10, alpha=0.05, power=0.8)
+
+
+def test_adequately_powered_weak_effect_n10() -> None:
+    """g ≈ 0.1 at n=10 should NOT be adequately powered."""
+    assert not adequately_powered_paired(0.1, 10, alpha=0.05, power=0.8)
+
+
+def test_verdict_held_for_strong_positive_with_predicted_positive() -> None:
+    """Strong positive g + predicted_direction='a_gt_b' → HELD."""
+    g, se = 1.5, 0.4
+    verdict, refutation, is_powered = verdict_from_paired_stats(
+        g, se, n=10, predicted_direction='a_gt_b',
+    )
+    assert verdict is Verdict.HELD
+    assert refutation is None
+    assert is_powered
+
+
+def test_verdict_sign_flip_for_negative_when_positive_predicted() -> None:
+    """Strong negative g + predicted positive → NO_EFFECT/SIGN_FLIP."""
+    g, se = -1.5, 0.4
+    verdict, refutation, is_powered = verdict_from_paired_stats(
+        g, se, n=10, predicted_direction='a_gt_b',
+    )
+    assert verdict is Verdict.NO_EFFECT
+    assert refutation is RefutationClass.SIGN_FLIP
+    assert is_powered
+
+
+def test_verdict_underpowered_for_small_effect_at_n10() -> None:
+    """Effect below MDE → POWER_INSUFFICIENT/UNDERPOWERED."""
+    g, se = 0.05, 0.4
+    verdict, refutation, is_powered = verdict_from_paired_stats(
+        g, se, n=10, predicted_direction='a_gt_b',
+    )
+    assert verdict is Verdict.POWER_INSUFFICIENT
+    assert refutation is RefutationClass.UNDERPOWERED
+    assert not is_powered
+
+
+def test_verdict_held_for_two_sided_with_either_sign() -> None:
+    """predicted='two_sided' admits either sign at adequate power."""
+    for g in (1.5, -1.5):
+        verdict, refutation, is_powered = verdict_from_paired_stats(
+            g, 0.4, n=10, predicted_direction='two_sided',
+        )
+        assert verdict is Verdict.HELD
+        assert refutation is None
+        assert is_powered
+
+
+def test_verdict_held_for_no_predicted_direction() -> None:
+    """predicted=None admits either sign at adequate power."""
+    verdict, _, is_powered = verdict_from_paired_stats(
+        1.5, 0.4, n=10, predicted_direction=None,
+    )
+    assert verdict is Verdict.HELD
+    assert is_powered

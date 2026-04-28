@@ -11,6 +11,8 @@ dependencies = [
     "jaxlib>=0.4.30",
     "optax>=0.2.0",
     "gymnax>=0.0.8",
+    "scipy>=1.10",          # distribution quantiles + cdf for stats module
+    "statsmodels>=0.14",    # noncentral-t-aware MDE / power machinery
 ]
 
 [build-system]
