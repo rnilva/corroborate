@@ -5,35 +5,46 @@ need per-(intervention, env) ArmRows and per-(treatment, baseline)
 ComparisonRows. This module provides the typed factory functions
 for that hand-off.
 
+The framework is *substrate-agnostic*: the outcome path being
+aggregated is supplied by the caller as `outcome_path: str` on
+every entry point. The framework reads `measurements[outcome_path]`
+off each run, writes `{outcome_path}.arm_mean` / `arm_sd` /
+`effect_size_g` / etc. on the resulting Arm/ComparisonRow. v0's
+RL substrate authors `outcome.late_window_mean`; other substrates
+or other outcomes pass their own keys.
+
 Structure:
 
 - `aggregate_cell_verdict(verdicts)` — Popperian aggregation over
   per-bridge verdicts (any single refutation refutes; INVARIANT_
   VIOLATION dominates).
-- `arm_from_runs(runs, *, intervention_name, env_name, ...)`
-  produces an ArmRow from a homogeneous list of RunRows. Computes
-  arm-level outcome statistics from each run's
-  `outcome.late_window_mean` measurement (NaN-aware), aggregates
-  per-bridge admit-rates across runs, and forwards the leaf-only
-  subset of measurements (the configurational fingerprint).
-- `comparison_from_arms(treatment, baseline, *, predicted_direction,
-  ...)` produces a ComparisonRow with per-arm stats threaded
-  through `measurements` (`outcome.<m>.arm_a_mean` etc.). Stat
-  fields populated by `_default_statistics_stub` for v0; step 5
-  replaces it with Hedges' g + power machinery.
-- `aggregate_runs(runs)` is the convenience entry point: groups
-  runs by (intervention_name, env_name, leaf_signature), produces
-  one ArmRow per group.
+- `arm_from_runs(runs, *, outcome_path, intervention_name,
+  env_name, ...)` produces an ArmRow from a homogeneous list of
+  RunRows. Computes arm-level statistics for `outcome_path`
+  (NaN-aware), aggregates per-bridge admit-rates across runs, and
+  forwards the leaf-only subset of measurements (the
+  configurational fingerprint).
+- `comparison_from_arms(treatment, baseline, *, outcome_path,
+  predicted_direction, ...)` produces a ComparisonRow with per-arm
+  stats for `outcome_path` threaded through `measurements`
+  (`{outcome_path}.arm_a_mean` etc.). Stats populated by
+  `_default_statistics_stub` for the unpaired path; the paired
+  path uses real Hedges' g via `paired_comparison_from_runs`.
+- `aggregate_runs(runs, *, outcome_path)` is the convenience entry
+  point: groups runs by (intervention_name, env_name,
+  leaf_signature), produces one ArmRow per group.
+- `paired_comparison_from_runs(treatment_runs, baseline_runs, *,
+  outcome_path, predicted_direction, ...)` — paired-by-seed Δ on
+  `outcome_path`; computes Hedges' g + SE + Popperian verdict.
+- `link_pearson_across_envs(mechanism_comparisons,
+  outcome_comparisons, *, mechanism_path, outcome_path, ...)` —
+  cross-env Pearson r between mechanism and outcome effect sizes.
 - `leaf_signature(measurements)` — the configurational fingerprint
   used as a group-by key. Filters out outcome/bridge/invariant
   paths and per-cell metadata keys, returns sorted (path, str)
   pairs. "Leaf" because each entry is a non-recursive scalar
   claim of the configured composition (RL practice calls these
-  hyperparameters; the framework name is `leaf`).
-
-Step 5's MDE+power statistics module will replace the stub with
-real `Hedges_g`, `SE_g`, `derived_q`, `RefutationClass` selection.
-The shape stays — only `_default_statistics_stub` swaps out."""
+  hyperparameters; the framework name is `leaf`)."""
 from __future__ import annotations
 
 import math
@@ -130,12 +141,14 @@ def _resolved_timestamp(timestamp: str | None) -> str:
     )
 
 
-def _outcome_summary(measurements: Mapping[str, MeasurementLeaf]) -> float:
-    """Read `outcome.late_window_mean` as a float, returning NaN
-    if absent or non-numeric. Cell runners write a substrate-named
-    outcome key; v0's RL substrate uses `outcome.late_window_mean`.
-    Cells without that key contribute NaN to the arm aggregate."""
-    v = measurements.get('outcome.late_window_mean')
+def _outcome_summary(
+    measurements: Mapping[str, MeasurementLeaf],
+    outcome_path: str,
+) -> float:
+    """Read the outcome at `outcome_path` as a float, returning NaN
+    if absent or non-numeric. Cells without the key contribute NaN
+    to the arm aggregate."""
+    v = measurements.get(outcome_path)
     if v is None:
         return float('nan')
     if isinstance(v, bool):
@@ -178,6 +191,7 @@ def _bridge_admit_rates(
 def arm_from_runs(
     runs: Sequence[RunRow],
     *,
+    outcome_path: str,
     intervention_name: str,
     env_name: str,
     cycle_id: str | None = None,
@@ -189,15 +203,15 @@ def arm_from_runs(
     (caller is responsible for grouping); this function trusts
     that contract.
 
-    Computes `outcome.late_window_mean.arm_mean` and `arm_sd`
-    (NaN-aware) from each run's outcome measurement. Intersects
-    the HP subset of measurements across the runs and forwards
-    each common (k, v) entry. Per-bridge admit-rates land at
-    `bridge.<name>.admit_rate` / `invariant.<name>.admit_rate`."""
+    Computes `{outcome_path}.arm_mean` and `{outcome_path}.arm_sd`
+    (NaN-aware) from each run's `measurements[outcome_path]`.
+    Intersects the HP subset of measurements across the runs and
+    forwards each common (k, v) entry. Per-bridge admit-rates land
+    at `bridge.<name>.admit_rate` / `invariant.<name>.admit_rate`."""
     if not runs:
         raise ValueError('arm_from_runs requires ≥1 RunRow')
 
-    summaries = [_outcome_summary(r.measurements) for r in runs]
+    summaries = [_outcome_summary(r.measurements, outcome_path) for r in runs]
     n = len(summaries)
     # NaN-aware mean/sd: a run with no terminated episode in the
     # late window legitimately yields NaN. `sum / n` would poison
@@ -229,8 +243,8 @@ def arm_from_runs(
         'env_name': env_name,
         'intervention_name': intervention_name,
         'n': n,
-        'outcome.late_window_mean.arm_mean': arm_mean,
-        'outcome.late_window_mean.arm_sd': arm_sd,
+        f'{outcome_path}.arm_mean': arm_mean,
+        f'{outcome_path}.arm_sd': arm_sd,
         **common_leaves,
         **_bridge_admit_rates(runs),
         **(extra_measurements or _empty_meta()),
@@ -334,20 +348,23 @@ def _arm_n(arm: ArmRow) -> int:
     return v
 
 
-def _arm_outcome_stats(arm: ArmRow) -> tuple[float, float]:
-    """Read (arm_mean, arm_sd) for `outcome.late_window_mean` off
-    an arm. Loud error if absent (arm-builder always writes them)."""
-    mean_v = arm.measurements.get('outcome.late_window_mean.arm_mean')
-    sd_v = arm.measurements.get('outcome.late_window_mean.arm_sd')
+def _arm_outcome_stats(
+    arm: ArmRow, outcome_path: str,
+) -> tuple[float, float]:
+    """Read (arm_mean, arm_sd) for `outcome_path` off an arm. Loud
+    error if absent (arm-builder always writes them when given
+    matching `outcome_path`)."""
+    mean_key = f'{outcome_path}.arm_mean'
+    sd_key = f'{outcome_path}.arm_sd'
+    mean_v = arm.measurements.get(mean_key)
+    sd_v = arm.measurements.get(sd_key)
     if isinstance(mean_v, bool) or not isinstance(mean_v, (int, float)):
         raise TypeError(
-            f"ArmRow {arm.id!r} missing "
-            f"'outcome.late_window_mean.arm_mean' measurement"
+            f'ArmRow {arm.id!r} missing {mean_key!r} measurement'
         )
     if isinstance(sd_v, bool) or not isinstance(sd_v, (int, float)):
         raise TypeError(
-            f"ArmRow {arm.id!r} missing "
-            f"'outcome.late_window_mean.arm_sd' measurement"
+            f'ArmRow {arm.id!r} missing {sd_key!r} measurement'
         )
     return float(mean_v), float(sd_v)
 
@@ -356,6 +373,7 @@ def comparison_from_arms(
     treatment: ArmRow,
     baseline: ArmRow,
     *,
+    outcome_path: str,
     predicted_direction: Direction | None,
     cycle_id: str | None = None,
     timestamp: str | None = None,
@@ -366,11 +384,11 @@ def comparison_from_arms(
     pair. The arms must share `env_name` (caller is responsible
     for matching).
 
-    Per-arm stats land in `measurements` under `outcome.<m>.arm_a_*`
-    / `outcome.<m>.arm_b_*` paths plus `n_treatment` / `n_baseline`
-    / `intervention_name` / `env_name`. Step 5 fills in real
-    `outcome.<m>.effect_size_g` / `se` / `derived_q` /
-    `delta_i_population`; v0 stub leaves them None / 0.0.
+    Per-arm stats land in `measurements` under
+    `{outcome_path}.arm_a_*` / `{outcome_path}.arm_b_*` paths plus
+    `n_treatment` / `n_baseline` / `intervention_name` / `env_name`.
+    Stats fields populated by `_default_statistics_stub` for v0;
+    the paired-by-seed flow uses real `paired_comparison_from_runs`.
 
     `statistics_fn` is the pluggable MDE+power computation;
     `None` uses the v0 stub. Type is `object` because the
@@ -400,8 +418,8 @@ def comparison_from_arms(
             f'got {type(stats).__name__}'
         )
 
-    arm_a_mean, arm_a_sd = _arm_outcome_stats(treatment)
-    arm_b_mean, arm_b_sd = _arm_outcome_stats(baseline)
+    arm_a_mean, arm_a_sd = _arm_outcome_stats(treatment, outcome_path)
+    arm_b_mean, arm_b_sd = _arm_outcome_stats(baseline, outcome_path)
     n_treatment = _arm_n(treatment)
     n_baseline = _arm_n(baseline)
 
@@ -410,18 +428,18 @@ def comparison_from_arms(
         'intervention_name': _arm_intervention_name(treatment),
         'n_treatment': n_treatment,
         'n_baseline': n_baseline,
-        'outcome.late_window_mean.arm_a_mean': arm_a_mean,
-        'outcome.late_window_mean.arm_a_sd': arm_a_sd,
-        'outcome.late_window_mean.arm_b_mean': arm_b_mean,
-        'outcome.late_window_mean.arm_b_sd': arm_b_sd,
-        'outcome.late_window_mean.delta_i_population': stats.delta_i_population,
+        f'{outcome_path}.arm_a_mean': arm_a_mean,
+        f'{outcome_path}.arm_a_sd': arm_a_sd,
+        f'{outcome_path}.arm_b_mean': arm_b_mean,
+        f'{outcome_path}.arm_b_sd': arm_b_sd,
+        f'{outcome_path}.delta_i_population': stats.delta_i_population,
     }
     if stats.effect_size_g is not None:
-        measurements['outcome.late_window_mean.effect_size_g'] = stats.effect_size_g
+        measurements[f'{outcome_path}.effect_size_g'] = stats.effect_size_g
     if stats.se is not None:
-        measurements['outcome.late_window_mean.se'] = stats.se
+        measurements[f'{outcome_path}.se'] = stats.se
     if stats.derived_q is not None:
-        measurements['outcome.late_window_mean.derived_q'] = stats.derived_q
+        measurements[f'{outcome_path}.derived_q'] = stats.derived_q
 
     if extra_measurements is not None:
         measurements.update(extra_measurements)
@@ -461,7 +479,9 @@ def _run_env_name(run: RunRow) -> str:
     return v
 
 
-def aggregate_runs(runs: Iterable[RunRow]) -> list[ArmRow]:
+def aggregate_runs(
+    runs: Iterable[RunRow], *, outcome_path: str,
+) -> list[ArmRow]:
     """Group `runs` by (intervention_name, env_name, leaf_signature),
     build one ArmRow per group. Convenience for the common
     dialectic-loop case where a sweep produces a flat list of cells
@@ -471,7 +491,11 @@ def aggregate_runs(runs: Iterable[RunRow]) -> list[ArmRow]:
     declared `MechanismKey` artifact — two runs with identical
     configurational leaves on the same intervention/env land in the
     same arm, even if they were authored as distinct Hypothesis
-    instances."""
+    instances.
+
+    `outcome_path` is the substrate-supplied measurement key whose
+    arm-level mean/sd will be computed (passed through to
+    `arm_from_runs`)."""
     by_key: dict[
         tuple[str, str, tuple[tuple[str, str], ...]],
         list[RunRow],
@@ -488,6 +512,7 @@ def aggregate_runs(runs: Iterable[RunRow]) -> list[ArmRow]:
     for (intervention_name, env_name, _), group in by_key.items():
         out.append(arm_from_runs(
             group,
+            outcome_path=outcome_path,
             intervention_name=intervention_name,
             env_name=env_name,
             cycle_id=group[0].cycle_id,
@@ -511,8 +536,8 @@ def _run_outcome(
     outcome_path: str,
 ) -> float:
     """Read a scalar outcome measurement off a run; loud error if
-    absent or non-numeric. Default outcome is
-    `outcome.late_window_mean`; alternates pass `outcome_path`."""
+    absent or non-numeric. The substrate authors `outcome_path` as
+    the path-keyed measurement; the framework reads it back here."""
     v = run.measurements.get(outcome_path)
     if isinstance(v, bool) or not isinstance(v, (int, float)):
         raise TypeError(
@@ -526,8 +551,8 @@ def paired_comparison_from_runs(
     treatment_runs: Sequence[RunRow],
     baseline_runs: Sequence[RunRow],
     *,
+    outcome_path: str,
     predicted_direction: Direction | None,
-    outcome_path: str = 'outcome.late_window_mean',
     alpha: float = 0.05,
     power: float = 0.8,
     cycle_id: str | None = None,
@@ -629,8 +654,8 @@ def link_pearson_across_envs(
     mechanism_comparisons: Sequence[ComparisonRow],
     outcome_comparisons: Sequence[ComparisonRow],
     *,
-    mechanism_path: str = 'mechanism.jensen_gap.effect_size_g',
-    outcome_path: str = 'outcome.late_window_mean.effect_size_g',
+    mechanism_path: str,
+    outcome_path: str,
     alpha: float = 0.05,
     power: float = 0.8,
     cycle_id: str | None = None,

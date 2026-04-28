@@ -131,7 +131,8 @@ def test_arm_from_runs_computes_outcome_mean_and_sd() -> None:
         for i, p in enumerate([10.0, 12.0, 14.0])
     ]
     arm = arm_from_runs(
-        runs, intervention_name='ddqn', env_name='e',
+        runs, outcome_path='outcome.late_window_mean',
+        intervention_name='ddqn', env_name='e',
     )
     assert arm.measurements['n'] == 3
     assert arm.measurements['outcome.late_window_mean.arm_mean'] == 12.0
@@ -146,7 +147,10 @@ def test_arm_from_runs_n_one_yields_zero_sd() -> None:
             intervention_name='h', env_name='e', seed=0, primary=42.0,
         ),
     ]
-    arm = arm_from_runs(runs, intervention_name='h', env_name='e')
+    arm = arm_from_runs(
+        runs, outcome_path='outcome.late_window_mean',
+        intervention_name='h', env_name='e',
+    )
     assert arm.measurements['outcome.late_window_mean.arm_sd'] == 0.0
 
 
@@ -157,7 +161,10 @@ def test_arm_from_runs_collects_run_ids() -> None:
         )
         for i in [0, 1, 2]
     ]
-    arm = arm_from_runs(runs, intervention_name='h', env_name='e')
+    arm = arm_from_runs(
+        runs, outcome_path='outcome.late_window_mean',
+        intervention_name='h', env_name='e',
+    )
     assert arm.run_ids == ('run-h-e-0', 'run-h-e-1', 'run-h-e-2')
 
 
@@ -171,7 +178,8 @@ def test_arm_from_runs_aggregates_bridge_admit_rate() -> None:
         for i in range(3)
     ]
     arm = arm_from_runs(
-        runs_all_held, intervention_name='h', env_name='e',
+        runs_all_held, outcome_path='outcome.late_window_mean',
+        intervention_name='h', env_name='e',
     )
     assert arm.measurements['bridge.outcome.admit_rate'] == 1.0
 
@@ -186,7 +194,8 @@ def test_arm_from_runs_aggregates_bridge_admit_rate() -> None:
         ),
     ]
     arm = arm_from_runs(
-        runs_mixed, intervention_name='h', env_name='e',
+        runs_mixed, outcome_path='outcome.late_window_mean',
+        intervention_name='h', env_name='e',
     )
     assert arm.measurements['bridge.outcome.admit_rate'] == 0.5
 
@@ -200,14 +209,20 @@ def test_arm_from_runs_forwards_common_hp() -> None:
         )
         for i in range(2)
     ]
-    arm = arm_from_runs(runs, intervention_name='h', env_name='e')
+    arm = arm_from_runs(
+        runs, outcome_path='outcome.late_window_mean',
+        intervention_name='h', env_name='e',
+    )
     assert arm.measurements['gamma'] == 0.99
     assert arm.measurements['lr'] == 0.001
 
 
 def test_arm_from_runs_empty_input_raises() -> None:
     try:
-        arm_from_runs([], intervention_name='h', env_name='e')
+        arm_from_runs(
+            [], outcome_path='outcome.late_window_mean',
+            intervention_name='h', env_name='e',
+        )
         raise AssertionError('expected ValueError')
     except ValueError:
         pass
@@ -224,6 +239,7 @@ def test_comparison_from_arms_carries_arm_stats() -> None:
             )
             for i in range(3)
         ],
+        outcome_path='outcome.late_window_mean',
         intervention_name='ddqn', env_name='e',
     )
     baseline = arm_from_runs(
@@ -234,10 +250,13 @@ def test_comparison_from_arms_carries_arm_stats() -> None:
             )
             for i in range(3)
         ],
+        outcome_path='outcome.late_window_mean',
         intervention_name='vanilla', env_name='e',
     )
     cmp = comparison_from_arms(
-        treatment, baseline, predicted_direction='a_gt_b',
+        treatment, baseline,
+        outcome_path='outcome.late_window_mean',
+        predicted_direction='a_gt_b',
     )
     assert cmp.treatment_arm_id == treatment.id
     assert cmp.baseline_arm_id == baseline.id
@@ -255,15 +274,21 @@ def test_comparison_from_arms_default_stub_yields_power_insufficient() -> None:
         [_make_runrow(
             intervention_name='t', env_name='e', seed=0, primary=1.0,
         )],
+        outcome_path='outcome.late_window_mean',
         intervention_name='t', env_name='e',
     )
     arm_b = arm_from_runs(
         [_make_runrow(
             intervention_name='b', env_name='e', seed=0, primary=0.0,
         )],
+        outcome_path='outcome.late_window_mean',
         intervention_name='b', env_name='e',
     )
-    cmp = comparison_from_arms(arm_t, arm_b, predicted_direction=None)
+    cmp = comparison_from_arms(
+        arm_t, arm_b,
+        outcome_path='outcome.late_window_mean',
+        predicted_direction=None,
+    )
     assert cmp.verdict is Verdict.POWER_INSUFFICIENT
     assert cmp.refutation_class is None
     assert cmp.adequately_powered is False
@@ -278,16 +303,22 @@ def test_comparison_from_arms_env_mismatch_raises() -> None:
         [_make_runrow(
             intervention_name='t', env_name='env_a', seed=0, primary=1.0,
         )],
+        outcome_path='outcome.late_window_mean',
         intervention_name='t', env_name='env_a',
     )
     arm_b = arm_from_runs(
         [_make_runrow(
             intervention_name='b', env_name='env_b', seed=0, primary=0.0,
         )],
+        outcome_path='outcome.late_window_mean',
         intervention_name='b', env_name='env_b',
     )
     try:
-        _ = comparison_from_arms(arm_t, arm_b, predicted_direction=None)
+        _ = comparison_from_arms(
+            arm_t, arm_b,
+            outcome_path='outcome.late_window_mean',
+            predicted_direction=None,
+        )
         raise AssertionError('expected ValueError on env mismatch')
     except ValueError:
         pass
@@ -332,7 +363,7 @@ def test_aggregate_runs_groups_by_intervention_env_hp() -> None:
         _make_runrow(intervention_name='ddqn', env_name='env_b',
                      seed=0, primary=5.0),
     ]
-    arms = aggregate_runs(runs)
+    arms = aggregate_runs(runs, outcome_path='outcome.late_window_mean')
     assert len(arms) == 3
 
     by_key: dict[tuple[str, str], ArmRow] = {
@@ -357,5 +388,5 @@ def test_aggregate_runs_distinct_leaf_signatures_split_arms() -> None:
             extra_hp={'gamma': 0.95},
         ),
     ]
-    arms = aggregate_runs(runs)
+    arms = aggregate_runs(runs, outcome_path='outcome.late_window_mean')
     assert len(arms) == 2

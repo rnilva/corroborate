@@ -30,6 +30,18 @@ Downstream analysis reads two files, not 2 × N.
 Run: `uv run python experiments/collect_ddqn_runs.py`."""
 from __future__ import annotations
 
+# Set JAX memory env vars BEFORE any import that touches jax.
+# `mp.get_context('spawn')` workers re-execute this module as
+# `__mp_main__`, so module-level imports trigger jax initialisation
+# at line ~60 (env_catalogue.py uses `jnp.array(...)` at module
+# top). With JAX's default preallocate=true at 0.9 GPU, the second
+# worker OOMs before its function body can set its own caps.
+# Setting these at the very top makes both parent and every spawned
+# worker share the device cleanly.
+import os
+os.environ.setdefault('XLA_PYTHON_CLIENT_PREALLOCATE', 'false')
+os.environ.setdefault('XLA_PYTHON_CLIENT_MEM_FRACTION', '0.45')
+
 import itertools
 import multiprocessing as mp
 import time

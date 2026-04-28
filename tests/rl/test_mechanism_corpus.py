@@ -113,7 +113,7 @@ def test_aggregate_runs_groups_by_intervention_and_env() -> None:
         _run_cell('CartPole-v1', seed=0, h=ddqn),
         _run_cell('CartPole-v1', seed=1, h=ddqn),
     ]
-    arms = aggregate_runs(runs)
+    arms = aggregate_runs(runs, outcome_path='outcome.late_window_mean')
 
     # Two arms: one per intervention.
     assert len(arms) == 2

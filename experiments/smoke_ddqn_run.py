@@ -138,7 +138,10 @@ def main() -> None:
           'and they differ.\n')
 
     print('4. aggregate_runs groups by leaf_signature:')
-    arms = aggregate_runs(list(vanilla_rows) + list(ddqn_rows))
+    arms = aggregate_runs(
+        list(vanilla_rows) + list(ddqn_rows),
+        outcome_path='outcome.late_window_mean',
+    )
     print(f'   {len(arms)} arms')
     assert len(arms) == 2, f'expected 2 arms, got {len(arms)}'
     for arm in arms:
