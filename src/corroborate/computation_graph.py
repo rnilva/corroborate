@@ -304,19 +304,37 @@ def build_computation_graph(
     return g
 
 
-def signature(g: ComputationGraph) -> tuple[
-    tuple[str, str, str, str], ...,
-]:
+type GraphSignature = tuple[
+    tuple[str, ...],                       # sorted nodes
+    tuple[tuple[str, str, str, str], ...], # sorted edges
+]
+
+
+def signature(g: ComputationGraph) -> GraphSignature:
     """Hashable structural signature of a computation graph.
 
     Two graphs with identical signatures are structurally identical
-    mechanisms (same nodes, same edges by source/target + reader
+    mechanisms (same nodes AND same edges by source/target + reader
     arg + source path).
 
-    Tuple element shape: (source, target, reader_arg, source_path).
-    Sorted for deterministic equality across runs that emit the
-    same edge set in different orders."""
-    return tuple(sorted(
-        (e.source, e.target, e.metadata.reader_arg, e.metadata.source_path)
-        for e in g.edges
-    ))
+    Returns `(sorted_nodes, sorted_edges)`:
+    - `sorted_nodes`: tuple of Claim names in lexical order.
+    - `sorted_edges`: tuple of (source, target, reader_arg,
+      source_path) in lexical order.
+
+    Both halves matter: an intervention may swap a Claim slot
+    (changing the node set) without changing edge cardinality
+    (e.g., `max_greedify` → `double_greedify` in isolation); the
+    signature must distinguish those. In fuller traces both halves
+    typically differ together, but the framework guarantees neither
+    a node-only nor an edge-only difference is missed."""
+    return (
+        tuple(sorted(g.nodes)),
+        tuple(sorted(
+            (
+                e.source, e.target,
+                e.metadata.reader_arg, e.metadata.source_path,
+            )
+            for e in g.edges
+        )),
+    )
