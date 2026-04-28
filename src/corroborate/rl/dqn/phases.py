@@ -41,31 +41,6 @@ from corroborate.rl.dqn.types import (
 from corroborate.rl.env_catalogue import GymnaxEnvLike, StateHash
 
 
-def value_probe(
-    state: DQNState,
-    q_network: QNetwork,
-    next_obs_b: jax.Array,
-) -> tuple[jax.Array, jax.Array]:
-    """Compute `Q_online(next_obs)` and `Q_target(next_obs)` on
-    the batch. Returns full Q-vectors `(batch, n_actions)` for
-    each net — the principled data the `hasselt_covariance_gap`
-    measurable needs to test the DDQN-decoupling assumption via
-    Pearson correlation across samples.
-
-    Independent of which `bootstrap` slot is used. Cheap (two
-    forward passes on the already-sampled batch); always-on so
-    the invariant has data even when vanilla bootstrap is
-    selected (the correlation is meaningful for both).
-
-    Public (not underscored) because it's the data source for a
-    framework-shipped Measurable. If multi-target ensembles or
-    distributional Q swap this in the future, lift to a slot
-    Protocol."""
-    online_q = q_network(state.online_params, next_obs_b)
-    target_q = q_network(state.target_params, next_obs_b)
-    return online_q, target_q
-
-
 # ============ Rollout ============
 
 @claim
@@ -100,7 +75,7 @@ def rollout_phase(
         env_key, state.env_state, action.astype(jnp.int32), env_params,
     )
     # Flatten multi-dim obs to match the flat-MLP's input shape
-    # (state.obs is already flat from init_state_from_key).
+    # (state.obs is already flat from init_state).
     next_obs = next_obs.reshape(state.obs.shape)
 
     new_replay = replay.add(state.replay, Transition(
@@ -169,27 +144,31 @@ def train_phase(
 
     batch = replay.sample_batch(state.replay, sample_key)
 
-    # Compute target via bootstrap slot — DDQN swaps live here.
-    target_b = bootstrap(
-        online_params=state.online_params,
-        target_params=state.target_params,
-        q_network=q_network,
-        next_obs=batch.next_obs, reward=batch.reward, done=batch.done,
-        gamma=gamma,
-    )
-
-    # Always-on probe for the Hasselt-independence measurable.
-    online_q_values, target_q_values = value_probe(
-        state, q_network, batch.next_obs,
-    )
+    # Always-on probe for the Hasselt-independence measurable —
+    # full Q-vectors on s' for both nets so the invariant has
+    # data regardless of which bootstrap slot is in use.
+    online_q_values = q_network(state.online_params, batch.next_obs)
+    target_q_values = q_network(state.target_params, batch.next_obs)
 
     def compute_loss(params: Params) -> tuple[jax.Array, jax.Array]:
         q_b = q_network(params, batch.obs)            # (batch, n_actions)
         predicted = jnp.take_along_axis(
             q_b, batch.action[..., None], axis=-1,
         ).squeeze(-1)                                  # (batch,)
-        per_sample = loss_fn(predicted, target_b)      # (batch,)
-        return per_sample.mean(), jnp.abs(predicted - target_b).mean()
+        # Target computed *inside* the loss closure so
+        # `gradient_rule` (semi_gradient vs full_gradient) actually
+        # controls cotangent flow. With target hoisted outside, it
+        # becomes a constant under value_and_grad and the
+        # stop_gradient is theatre.
+        target = bootstrap(
+            online_params=params,
+            target_params=state.target_params,
+            q_network=q_network,
+            next_obs=batch.next_obs, reward=batch.reward, done=batch.done,
+            gamma=gamma,
+        )
+        per_sample = loss_fn(predicted, target)        # (batch,)
+        return per_sample.mean(), jnp.abs(predicted - target).mean()
 
     (loss, td_error), grads = jax.value_and_grad(
         compute_loss, has_aux=True,

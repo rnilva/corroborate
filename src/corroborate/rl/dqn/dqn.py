@@ -66,7 +66,7 @@ def default_state_hash(obs: jax.Array) -> jax.Array:
     return jnp.int32(0)
 
 
-def init_state_from_key(
+def init_state(
     *,
     env: GymnaxEnvLike,
     env_params: object,
@@ -213,7 +213,7 @@ def dqn(
 
     Composition:
 
-    1. `init_state_from_key(rng_key, ...)` — allocate params, opt
+    1. `init_state(rng_key, ...)` — allocate params, opt
        state, replay buffer, env state.
     2. `train_with_eval(step_fn, eval_fn, ...)` — nested scan
        driver: outer over super-steps (one eval burst at the end
@@ -252,7 +252,7 @@ def dqn(
     optax_handle = optimizer()
 
     init_key, run_key = jax.random.split(rng_key, 2)
-    state = init_state_from_key(
+    state = init_state(
         env=env, env_params=env_params,
         obs_dim=obs_dim, n_actions=n_actions,
         rng_key=init_key, optimizer=optax_handle,

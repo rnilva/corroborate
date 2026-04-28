@@ -78,3 +78,20 @@ def rmsprop(
     momentum: float | None = ...,
     nesterov: bool = ...,
 ) -> GradientTransformation: ...
+
+
+# Composition + scheduling primitives. `chain` glues
+# transformations sequentially; `scale_by_schedule` multiplies
+# update magnitudes by a step-indexed scalar (used by
+# `WarmedUpdate` to zero deltas during the warmup window).
+def chain(*args: GradientTransformation) -> GradientTransformation: ...
+
+
+from collections.abc import Callable as _Callable
+
+import jax as _jax
+
+
+def scale_by_schedule(
+    step_size_fn: _Callable[[_jax.Array], _jax.Array],
+) -> GradientTransformation: ...

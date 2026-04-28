@@ -19,7 +19,7 @@ import optax
 
 from corroborate.rl.dqn.claims.q_network import mlp_q
 from corroborate.rl.dqn.claims.replay import Replay
-from corroborate.rl.dqn.dqn import init_state_from_key
+from corroborate.rl.dqn.dqn import init_state
 from corroborate.rl.dqn.eval import (
     eval_burst,
     eval_episode,
@@ -43,7 +43,7 @@ def _make_env() -> tuple[GymnaxEnvLike, object, int, int]:
 def test_eval_episode_returns_finite_scalars() -> None:
     env, env_params, obs_dim, n_actions = _make_env()
     optimizer = optax.adam(1e-3)
-    state = init_state_from_key(
+    state = init_state(
         env=env, env_params=env_params,
         obs_dim=obs_dim, n_actions=n_actions,
         rng_key=jax.random.PRNGKey(0), optimizer=optimizer,
@@ -73,7 +73,7 @@ def test_eval_episode_mc_return_matches_episode_length_for_cartpole() -> None:
     γ=1.0, the MC return equals the episode length."""
     env, env_params, obs_dim, n_actions = _make_env()
     optimizer = optax.adam(1e-3)
-    state = init_state_from_key(
+    state = init_state(
         env=env, env_params=env_params,
         obs_dim=obs_dim, n_actions=n_actions,
         rng_key=jax.random.PRNGKey(0), optimizer=optimizer,
@@ -96,7 +96,7 @@ def test_eval_episode_mc_return_matches_episode_length_for_cartpole() -> None:
 def test_eval_burst_stacks_k_episodes() -> None:
     env, env_params, obs_dim, n_actions = _make_env()
     optimizer = optax.adam(1e-3)
-    state = init_state_from_key(
+    state = init_state(
         env=env, env_params=env_params,
         obs_dim=obs_dim, n_actions=n_actions,
         rng_key=jax.random.PRNGKey(0), optimizer=optimizer,
@@ -123,7 +123,7 @@ def test_eval_burst_episodes_are_distinct() -> None:
     end-time depends on initial state and action sequence)."""
     env, env_params, obs_dim, n_actions = _make_env()
     optimizer = optax.adam(1e-3)
-    state = init_state_from_key(
+    state = init_state(
         env=env, env_params=env_params,
         obs_dim=obs_dim, n_actions=n_actions,
         rng_key=jax.random.PRNGKey(0), optimizer=optimizer,

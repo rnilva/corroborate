@@ -23,6 +23,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Protocol
 
 import jax
+import optax
 
 # Re-exported for back-compat. Concrete Q-function implementations
 # define their own `Params` shapes; dqn threads the opaque pytree.
@@ -189,7 +190,7 @@ class OptimizerFactory(Protocol):
     dqn calls `optimizer()` once at the top of a run to build
     the optax handle; train_phase consumes the raw handle's
     `.init` / `.update` interface JAX traces over."""
-    def __call__(self) -> 'optax.GradientTransformation': ...
+    def __call__(self) -> optax.GradientTransformation: ...
 
 
 # Public type alias for `dqn_step`'s record output. The framework
@@ -204,9 +205,7 @@ type StepRecord = dict[str, jax.Array]
 type EnvState = object
 
 
-# Optax optimizer state — opaque pytree at runtime; optax exposes
-# `optax.OptState` which is a `chex.ArrayTree` alias. We re-export
-# their type so the optimizer-boundary signatures match without a
-# wrapper.
-import optax
+# Optax optimizer state — opaque pytree at runtime; re-export
+# `optax.OptState` so the optimizer-boundary signatures match
+# without a wrapper.
 OptState = optax.OptState

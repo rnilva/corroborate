@@ -119,7 +119,7 @@ class Replay(ClaimBase):
     operation."""
     capacity: int = 10_000
     batch_size: int = 64
-    sample: 'BufferSample' = field(default=uniform_sample)  # pyright: ignore[reportAssignmentType]
+    sample: 'BufferSample' = field(default=uniform_sample)
 
     def init(self, obs_dim: int) -> ReplayState:
         """Allocate empty buffer arrays. `size` starts at 0."""

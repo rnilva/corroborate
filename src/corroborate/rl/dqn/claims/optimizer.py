@@ -110,7 +110,7 @@ class WarmedUpdate(ClaimBase):
     it a wrapper-Module rather than a top-level dqn HP keeps the
     paper-prose composition (`rollout → train → sync`) clean. The
     update mechanism owns its own warmup."""
-    inner: 'OptimizerFactory' = field(default_factory=lambda: Adam())  # pyright: ignore[reportAssignmentType]
+    inner: 'OptimizerFactory' = field(default_factory=lambda: Adam())
     warmup_steps: int = 1_000
 
     def __call__(self) -> optax.GradientTransformation:

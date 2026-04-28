@@ -24,7 +24,7 @@ Same backbone could drive a different RL algorithm with eval
 bursts (PPO, SAC, etc.)."""
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from typing import NamedTuple
 
 import jax
@@ -217,9 +217,7 @@ def train_with_eval(
         # (total_steps, *original).
         return x.reshape(total_steps, *x.shape[2:])
 
-    train_trace: StepRecord = jax.tree.map(  # pyright: ignore[reportAny]
-        _flatten, train_chunks,
-    )
+    train_trace: StepRecord = jax.tree.map(_flatten, train_chunks)
     eval_step_indices = (
         jnp.arange(n_super_steps, dtype=jnp.int32) + 1
     ) * eval_every

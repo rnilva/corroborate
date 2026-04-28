@@ -119,9 +119,9 @@ def record_call(
 # ============ ClaimBase — Module base class ============
 
 class ClaimBase:
-    """Base class for Module claims. Subclasses inherit a typed
-    `name` property + `invariants: ClassVar` default; both members
-    of the `Claim[P, T]` Protocol are statically typed without
+    """Base class for Module claims. Subclasses inherit `name`
+    and `invariants` properties — both members of the
+    `Claim[P, T]` Protocol satisfied structurally without
     decorator mutation.
 
     Authors write:
@@ -136,16 +136,22 @@ class ClaimBase:
                 record_call(self, (params, obs), {}, result)
                 return result
 
-    `@dataclass(frozen=True, slots=True)` is the Module's own
-    discipline; the framework doesn't apply it. `record_call`
-    inside `__call__` is the explicit trace-participation API
-    (no decorator-injected `__call__` wrapping)."""
+    `_class_invariants` is the per-class storage that
+    `attach_invariant` mutates; the `invariants` property reads
+    `type(self)._class_invariants`. Two-level split because the
+    Protocol declares `invariants` as `@property` (matching
+    `FnClaim`'s side-table-backed property) — `ClassVar` storage
+    paired with a property accessor satisfies both shapes."""
 
-    invariants: ClassVar[tuple['Bridge[Mapping[str, object]]', ...]] = ()
+    _class_invariants: ClassVar[tuple['Bridge[Mapping[str, object]]', ...]] = ()
 
     @property
     def name(self) -> str:
         return type(self).__name__
+
+    @property
+    def invariants(self) -> tuple['Bridge[Mapping[str, object]]', ...]:
+        return type(self)._class_invariants
 
 
 # ============ Free-function claim wrapper ============

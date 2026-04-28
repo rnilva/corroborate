@@ -89,8 +89,8 @@ def attach_invariant(
         return
     if isinstance(to, ClaimBase):
         cls = type(to)
-        existing_cls = cls.invariants
-        cls.invariants = existing_cls + (bridge,)
+        existing_cls = cls._class_invariants
+        cls._class_invariants = existing_cls + (bridge,)
         return
     raise TypeError(
         f'attach_invariant expects FnClaim or ClaimBase instance; '
@@ -117,7 +117,9 @@ def detach_invariant(
         return
     if isinstance(from_claim, ClaimBase):
         cls = type(from_claim)
-        cls.invariants = tuple(b for b in cls.invariants if b is not bridge)
+        cls._class_invariants = tuple(
+            b for b in cls._class_invariants if b is not bridge
+        )
         return
     raise TypeError(
         f'detach_invariant expects FnClaim or ClaimBase instance; '

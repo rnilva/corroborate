@@ -74,7 +74,7 @@ class EpsilonGreedy(ClaimBase):
     # FnClaim singleton, or a partial wrapping it). Field type is
     # the EpsilonSchedule Protocol; pyright unions across concrete
     # implementations satisfying it.
-    schedule: 'EpsilonSchedule' = field(default=linear_epsilon)  # pyright: ignore[reportAssignmentType]
+    schedule: 'EpsilonSchedule' = field(default=linear_epsilon)
 
     def __call__(
         self,
