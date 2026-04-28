@@ -532,3 +532,76 @@ def test_per_env_pc_dqn_smoke_finds_within_env_arm_edges() -> None:
         f'§6 thin gate: expected ≥3 envs with within-env arm_ddqn '
         f'edges, got {len(envs_with_arm_edge)}: {envs_with_arm_edge}'
     )
+
+
+def test_per_env_mediator_pc_smoke_finds_outcome_neighbours() -> None:
+    """§5+§6 rich gate on `runs_with_mediators.parquet`: per-env PC
+    over the 10-variable mediator-augmented set surfaces ≥1 neighbour
+    of `outcome.eval_final_mean` in at least 8 envs (the paper's
+    9-of-15 threshold, allowing 1 slack for corpus-specific noise).
+
+    Skipped if `runs_with_mediators.parquet` isn't on disk — produced
+    by `experiments/compute_mediators.py`."""
+    from pathlib import Path
+
+    import polars as pl
+
+    enriched_path = (
+        Path(__file__).parent.parent
+        / 'experiments' / 'data' / 'ddqn'
+        / 'runs_with_mediators.parquet'
+    )
+    if not enriched_path.exists():
+        import pytest
+        pytest.skip(f'{enriched_path} not on disk')
+
+    from corroborate.causal_discovery import discover_adjacency
+
+    df = pl.read_parquet(enriched_path)
+    df = df.with_columns(
+        (pl.col('intervention_name') == 'ddqn')
+        .cast(pl.Int64).alias('arm_ddqn'),
+    )
+    # Drop epsilon_late and fill_ratio_late — corpus-wide constants.
+    pc_mediators = (
+        'mediator.q_gap_late', 'mediator.q_gap_growth',
+        'mediator.q_max_growth', 'mediator.v_vs_max_delta_late',
+        'mediator.td_residual_late', 'mediator.greedy_match_late',
+    )
+    variables = [
+        'arm_ddqn', 'mechanism.jensen_gap',
+        *pc_mediators,
+        'outcome.eval_final_mean', 'outcome.late_window_mean',
+    ]
+    outcome = 'outcome.eval_final_mean'
+
+    envs_with_neighbour: list[str] = []
+    for env in sorted(df['env_name'].unique().to_list()):
+        env_df = df.filter(pl.col('env_name') == env)
+        if env_df.height < 5 or env_df['arm_ddqn'].n_unique() < 2:
+            continue
+        env_df = env_df.drop_nulls(subset=variables)
+        for v in variables:
+            if env_df[v].dtype.is_float():
+                env_df = env_df.filter(~pl.col(v).is_nan())
+        if env_df.height < 5 or env_df['arm_ddqn'].n_unique() < 2:
+            continue
+        constant_cols = [
+            v for v in variables
+            if env_df[v].dtype.is_float()
+            and float(env_df[v].std() or 0.0) == 0.0
+        ]
+        if constant_cols:
+            continue
+        adj = discover_adjacency(
+            env_df, variables=variables,
+            alpha=0.05, max_conditioning=1,
+        )
+        if any(outcome in edge for edge in adj.edges):
+            envs_with_neighbour.append(env)
+
+    assert len(envs_with_neighbour) >= 8, (
+        f'§5+§6 rich gate: expected ≥8 envs with a within-env '
+        f'{outcome}-neighbour, got {len(envs_with_neighbour)}: '
+        f'{envs_with_neighbour}'
+    )

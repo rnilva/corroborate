@@ -53,11 +53,24 @@ _MEDIATORS: tuple[str, ...] = (
 
 _OUTCOME = 'outcome.eval_final_mean'
 
-# 12-var set for per-env PC: arm + mechanism + 8 mediators + 2 outcomes.
+
+# Mediators with non-trivial within-corpus variance. `epsilon_late`
+# and `fill_ratio_late` are corpus-wide constants in this sweep
+# (every cell uses the default ε-schedule with eps_final=0.05;
+# every cell hits buffer-full by the late half on a 10k-capacity
+# replay × 50k-step run), so they carry no within-env signal and
+# would only force PC to skip envs via the constant-column guard.
+_PC_MEDIATORS: tuple[str, ...] = tuple(
+    m for m in _MEDIATORS
+    if m not in ('mediator.epsilon_late', 'mediator.fill_ratio_late')
+)
+
+
+# 10-var set for per-env PC: arm + mechanism + 6 mediators + 2 outcomes.
 _PC_VARIABLES: tuple[str, ...] = (
     'arm_ddqn',
     'mechanism.jensen_gap',
-    *_MEDIATORS,
+    *_PC_MEDIATORS,
     'outcome.eval_final_mean',
     'outcome.late_window_mean',
 )
