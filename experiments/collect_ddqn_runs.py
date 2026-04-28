@@ -269,6 +269,27 @@ def _run_arm_worker(
         drop=TRACE_POST_DROPS,
     )
     _write_tracerows(reduced_traces, traces_path)
+
+    # Free compiled XLA programs from the worker's JIT cache. Each
+    # env shape pulls a fresh compilation; without clearing, the
+    # cache grows unboundedly and the ~6-8th env OOMs the worker
+    # (observed BrokenProcessPool from arm 11/32 onwards on 18-env
+    # sweeps). `jax.clear_caches()` releases the python-side
+    # compilation references; the XLA runtime then frees the device
+    # buffers. Avoids `max_tasks_per_child` recycle, which deadlocked
+    # under the spawn-context pool (parent + worker race during
+    # restart-bookkeeping).
+    #
+    # Drop the per-arm cell payload BEFORE clearing caches so the
+    # arrays themselves go away too — otherwise compiled programs
+    # are freed but the JAX arrays from `cells` keep their device
+    # buffers rooted until return.
+    del cells, reduced_traces
+    import jax as _jax
+    _jax.clear_caches()
+    import gc as _gc
+    _gc.collect()
+
     return runs_path, traces_path
 
 
@@ -328,10 +349,42 @@ def main() -> None:
         print(f'  {axis}: {values}')
     print(flush=True)
 
-    # Resume: skip arms whose tmp parquets already exist. Lets a
-    # killed/hung sweep restart without redoing finished work.
-    def _arm_tag(env_name: str, h_name: str, grid_point: dict[str, Any], idx: int) -> str:
+    # Resume: skip arms whose tmp parquets already exist OR whose
+    # (env_name, intervention_name, leaf-signature) tuple is already
+    # present in the merged `runs.parquet` from a previous sweep.
+    # Two layers because the previous sweep may have:
+    #   (a) been killed mid-run → tmp parquets remain, merge final
+    #       not yet executed; OR
+    #   (b) completed merge for some arms → tmp parquets cleaned,
+    #       data lives only in the merged final.
+    def _arm_tag(
+        env_name: str, h_name: str,
+        grid_point: dict[str, Any], idx: int,
+    ) -> str:
         return f'arm{idx:03d}__{env_name}__{h_name}__{_grid_tag(grid_point)}'
+
+    # Project (env_name, intervention_name, replay.capacity, batch_size,
+    # lr) tuples already in the merged runs.parquet so we can skip
+    # those arms.
+    completed_keys: set[tuple[str, str, int, int, float]] = set()
+    if final_runs_path.exists():
+        df_existing = pl.read_parquet(final_runs_path)
+        if not df_existing.is_empty():
+            for row in df_existing.select(
+                'env_name', 'intervention_name', 'replay.capacity',
+                'replay.batch_size', 'optimizer.inner.lr',
+            ).unique().iter_rows(named=False):
+                if row[0] is None or row[1] is None:
+                    continue
+                completed_keys.add((
+                    str(row[0]), str(row[1]), int(row[2]),
+                    int(row[3]), float(row[4]),
+                ))
+            print(
+                f'resume: {len(completed_keys)} (env, intervention, hp) '
+                f'tuples already in {final_runs_path.name}',
+                flush=True,
+            )
 
     pre_existing: list[tuple[Path, Path]] = []
     pending_args: list[
@@ -339,6 +392,16 @@ def main() -> None:
     ] = []
     for args in arms_args:
         env_name, h_name, gp, *_, idx = args
+        # Skip if already in the merged file.
+        gp_key = (
+            env_name, h_name,
+            int(gp.get('capacity', 0)),
+            int(gp.get('batch_size', 0)),
+            float(gp.get('lr', 0.0)),
+        )
+        if gp_key in completed_keys:
+            continue
+        # Skip if tmp parquets exist (interrupted-mid-merge case).
         tag = _arm_tag(env_name, h_name, gp, idx)
         runs_p = tmp_dir / f'{tag}__runs.parquet'
         traces_p = tmp_dir / f'{tag}__traces.parquet'
@@ -347,7 +410,7 @@ def main() -> None:
         else:
             pending_args.append(args)
     if pre_existing:
-        print(f'resume: {len(pre_existing)} arms already complete on disk; '
+        print(f'resume: {len(pre_existing)} arms in tmp/; '
               f'{len(pending_args)} pending', flush=True)
 
     # Spawn-start so each worker gets a clean JAX state.
@@ -391,9 +454,15 @@ def main() -> None:
     print(f'\nworkers complete in {time.time() - t0:.0f}s; '
           f'merging {len(parquet_pairs)} per-arm parquet pairs')
 
-    # Union-merge per-arm parquets into one pair of files.
+    # Union-merge per-arm parquets into one pair of files. If a
+    # final file already exists (resume case), seed `all_runs` /
+    # `all_traces` with it so we APPEND rather than OVERWRITE.
     all_runs: list[RunRow] = []
     all_traces: list[TraceRow] = []
+    if final_runs_path.exists():
+        all_runs.extend(read_runrows(final_runs_path))
+    if final_traces_path.exists():
+        all_traces.extend(read_tracerows(final_traces_path))
     for runs_p, traces_p in parquet_pairs:
         all_runs.extend(read_runrows(runs_p))
         all_traces.extend(read_tracerows(traces_p))
