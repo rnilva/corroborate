@@ -10,14 +10,13 @@ intervention variable in PC graphs (PAPER_NOTES.md §4.3) — every
 cell of the same intervention must canonicalise identically."""
 from __future__ import annotations
 
-import optax
-
 from functools import partial
 
 from corroborate.aggregate import aggregate_runs
 from corroborate.hypothesis import Hypothesis, InterventionKey
 from corroborate.rl.cell_runner import run_dqn_cell
 from corroborate.rl.dqn.claims.bootstrap import bootstrap, double_greedify
+from corroborate.rl.dqn.claims.optimizer import Adam
 from corroborate.rl.dqn.invariants import DQNTrajectoryRecord
 from corroborate.rl.env_catalogue import get
 
@@ -46,7 +45,7 @@ def _make_hypothesis(name: str, intervention: dict[str, object]) -> Hypothesis[D
 def _run_cell(env_name: str, seed: int, h: Hypothesis[DQNTrajectoryRecord]):
     return run_dqn_cell(
         get(env_name), seed=seed, hypothesis=h,
-        optimizer=optax.adam(1e-3),
+        optimizer=Adam(),
     )
 
 

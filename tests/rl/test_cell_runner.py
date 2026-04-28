@@ -15,12 +15,11 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 import jax.numpy as jnp
-import optax
-
 from corroborate.bridge import BridgeResult, bridge
 from corroborate.hypothesis import Hypothesis
 from corroborate.invariant import at_most
 from corroborate.rl.cell_runner import run_dqn_cell
+from corroborate.rl.dqn.claims.optimizer import Adam
 from corroborate.rl.dqn.invariants import (
     DQNTrajectoryRecord,
     fqi_decay_gap,
@@ -67,7 +66,7 @@ def test_run_dqn_cell_produces_runrow_on_cartpole() -> None:
 
     run_row = run_dqn_cell(
         env_spec, seed=0, hypothesis=h,
-        optimizer=optax.adam(1e-3),
+        optimizer=Adam(),
     )
     # RunRow shape.
     assert isinstance(run_row, RunRow)
@@ -110,7 +109,7 @@ def test_run_dqn_cell_mechanism_key_matches_hypothesis() -> None:
 
     run_row = run_dqn_cell(
         env_spec, seed=0, hypothesis=h,
-        optimizer=optax.adam(1e-3),
+        optimizer=Adam(),
     )
 
     # mechanism_key carries the hypothesis's exact identity.
@@ -151,7 +150,7 @@ def test_run_dqn_cell_classifies_invariant_facts() -> None:
 
     run_row = run_dqn_cell(
         env_spec, seed=0, hypothesis=h,
-        optimizer=optax.adam(1e-3),
+        optimizer=Adam(),
     )
 
     kinds = {f.name: f.kind for f in run_row.facts}
@@ -193,7 +192,7 @@ def test_run_dqn_cell_invariant_violation_dominates_verdict() -> None:
 
     run_row = run_dqn_cell(
         env_spec, seed=0, hypothesis=h,
-        optimizer=optax.adam(1e-3),
+        optimizer=Adam(),
     )
     # held_bridge=HELD; impossible=INVARIANT_VIOLATION → cell-
     # verdict is INVARIANT_VIOLATION.
@@ -230,7 +229,7 @@ def test_run_dqn_cell_runs_bridges_against_merged_record() -> None:
 
     run_row = run_dqn_cell(
         env_spec, seed=0, hypothesis=h,
-        optimizer=optax.adam(1e-3),
+        optimizer=Adam(),
     )
     assert len(run_row.facts) == 1
     fact = run_row.facts[0]
@@ -284,7 +283,7 @@ def test_intervention_overrides_dont_leak_default_invariants() -> None:
         )
         run_row = run_dqn_cell(
             env_spec, seed=0, hypothesis=h,
-            optimizer=optax.adam(1e-3),
+            optimizer=Adam(),
         )
         names = [f.name for f in run_row.facts]
         assert not any('jensen_overestimation_gap' in n for n in names), (
@@ -329,7 +328,7 @@ def test_composition_discovered_invariants_fire() -> None:
 
         run_row = run_dqn_cell(
             env_spec, seed=0, hypothesis=h,
-            optimizer=optax.adam(1e-3),
+            optimizer=Adam(),
         )
 
         # Composition-discovery should have surfaced the
@@ -365,7 +364,7 @@ def test_run_dqn_cell_applies_intervention_via_slot_swap() -> None:
 
     run_row = run_dqn_cell(
         env_spec, seed=0, hypothesis=h,
-        optimizer=optax.adam(1e-3),
+        optimizer=Adam(),
     )
     # Intervention identity is preserved on RunRow — the partial
     # canonicalises with the wrapped claim's name + baked kwargs.

@@ -17,12 +17,11 @@ from __future__ import annotations
 import time
 from functools import partial
 
-import optax
-
 from corroborate.aggregate import aggregate_runs
 from corroborate.hypothesis import Hypothesis
 from corroborate.rl.cell_runner import run_dqn_arm
 from corroborate.rl.dqn.claims.bootstrap import bootstrap, double_greedify
+from corroborate.rl.dqn.claims.optimizer import Adam
 from corroborate.rl.dqn.claims.replay import Replay
 from corroborate.rl.dqn.invariants import DQNTrajectoryRecord
 from corroborate.rl.env_catalogue import get
@@ -67,7 +66,7 @@ def _ddqn() -> Hypothesis[DQNTrajectoryRecord]:
 
 def main() -> None:
     env_spec = get(_ENV)
-    optimizer = optax.adam(1e-3)
+    optimizer = Adam()
 
     print(f'env={_ENV}, seeds={_SEEDS}, total_steps={_TOTAL_STEPS}')
     print()

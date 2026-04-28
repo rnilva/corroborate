@@ -34,6 +34,7 @@ from corroborate.rl.dqn.claims import (
     periodic_copy,
     squared_error,
 )
+from corroborate.rl.dqn.claims.optimizer import Adam
 from corroborate.rl.dqn.claims.replay import Replay
 from corroborate.rl.dqn.eval import EvalBurstOut, eval_burst
 from corroborate.rl.dqn.phases import (
@@ -48,6 +49,7 @@ from corroborate.rl.dqn.types import (
     ActionSelect,
     Bootstrap,
     LossFn,
+    OptimizerFactory,
     QFunction,
     StepRecord,
     TargetSync,
@@ -265,7 +267,6 @@ def dqn(
     eval_episode_cap: Annotated[int, Exogenous] = 500,
     state_hash: Annotated[StateHash, Exogenous] = default_state_hash,
     # HPs (paper-honest where part of the math; engineering otherwise)
-    optimizer: optax.GradientTransformation = optax.adam(1e-3),
     gamma: float = 0.99,
     warmup_steps: int = 1_000,
     sync_period: int = 100,
@@ -279,6 +280,7 @@ def dqn(
     loss_fn: LossFn = squared_error,
     target_sync: TargetSync = periodic_copy,
     replay: Replay = Replay(),
+    optimizer: OptimizerFactory = Adam(),
 ) -> dict[str, jax.Array]:
     """Full DQN training+eval run as one claim.
 
@@ -328,11 +330,19 @@ def dqn(
             f'({eval_every}) — at least one super-step required.',
         )
 
+    # Build the optax handle once at run-construction time. The
+    # raw handle (an optax.GradientTransformation) is what
+    # init_state_from_key + dqn_step need internally; the
+    # `OptimizerFactory` Module owns construction-time HPs (lr,
+    # b1, b2, decay, eps, momentum, ...) and canonicalises
+    # cleanly in mechanism_key.
+    optax_handle = optimizer()
+
     init_key, run_key = jax.random.split(rng_key, 2)
     state = init_state_from_key(
         env=env, env_params=env_params,
         obs_dim=obs_dim, n_actions=n_actions,
-        rng_key=init_key, optimizer=optimizer,
+        rng_key=init_key, optimizer=optax_handle,
         q_network=q_network,
         replay=replay,
     )
@@ -340,7 +350,7 @@ def dqn(
     step_fn = partial(
         dqn_step,
         env=env, env_params=env_params, n_actions=n_actions,
-        optimizer=optimizer, state_hash=state_hash,
+        optimizer=optax_handle, state_hash=state_hash,
         gamma=gamma,
         warmup_steps=warmup_steps,
         sync_period=sync_period,

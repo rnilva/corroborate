@@ -129,14 +129,14 @@ def _run_arm_worker(
     out_dir = Path(out_dir_str)
     out_path = out_dir / f'{env_name}__{hypothesis_name}.parquet'
 
-    import optax
     from corroborate.rl.cell_runner import run_dqn_arm
+    from corroborate.rl.dqn.claims.optimizer import Adam
     from corroborate.rl.env_catalogue import get
 
     h = _make_hypothesis(hypothesis_name)
     rows = run_dqn_arm(
         get(env_name), seeds, hypothesis=h,
-        optimizer=optax.adam(1e-3),
+        optimizer=Adam(),
     )
     write_runrows(rows, out_path)
     return out_path

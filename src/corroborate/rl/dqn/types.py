@@ -179,6 +179,19 @@ class TargetSync(Protocol):
     ) -> Params: ...
 
 
+class OptimizerFactory(Protocol):
+    """Constructs an `optax.GradientTransformation` from typed
+    construction HPs. Module-shaped (frozen-dataclass with
+    `__call__`) so optimizer choice (Adam vs RMSProp vs SGD) +
+    its HPs (lr, b1, b2, decay, eps, momentum, ...) canonicalise
+    cleanly in mechanism_key.
+
+    dqn calls `optimizer()` once at the top of a run to build
+    the optax handle; train_phase consumes the raw handle's
+    `.init` / `.update` interface JAX traces over."""
+    def __call__(self) -> 'optax.GradientTransformation': ...
+
+
 # Public type alias for `dqn_step`'s record output. The framework
 # stores arbitrary scalars per step; this dict keys are
 # semantic-role names ('loss', 'epsilon', 'max_q_current', ...).

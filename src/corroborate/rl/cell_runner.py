@@ -31,14 +31,15 @@ from typing import Literal
 import gymnax
 import jax
 import jax.numpy as jnp
-import optax
 
 from corroborate.aggregate import aggregate_cell_verdict
 from corroborate.bridge import Bridge, BridgeResult
 from corroborate.hypothesis import Hypothesis
 from corroborate.reductions import masked_window_mean
+from corroborate.rl.dqn.claims.optimizer import Adam
 from corroborate.rl.dqn.dqn import default_state_hash, dqn
 from corroborate.rl.dqn.invariants import DQNTrajectoryRecord
+from corroborate.rl.dqn.types import OptimizerFactory
 from corroborate.rl.env_catalogue import EnvSpec
 from corroborate.schema import FactRow, RunRow
 from corroborate.signature import collect_invariants
@@ -71,7 +72,7 @@ def run_dqn_arm(
     seeds: tuple[int, ...],
     hypothesis: Hypothesis[DQNTrajectoryRecord],
     *,
-    optimizer: optax.GradientTransformation = optax.adam(1e-3),
+    optimizer: OptimizerFactory = Adam(),
     outcome_fraction: float = 0.1,
     cycle_id: str | None = None,
 ) -> tuple[RunRow, ...]:
@@ -187,7 +188,7 @@ def run_dqn_cell(
     seed: int,
     hypothesis: Hypothesis[DQNTrajectoryRecord],
     *,
-    optimizer: optax.GradientTransformation = optax.adam(1e-3),
+    optimizer: OptimizerFactory = Adam(),
     outcome_fraction: float = 0.1,
     cycle_id: str | None = None,
 ) -> RunRow:
