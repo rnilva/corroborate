@@ -52,13 +52,13 @@ def test_aggregate_cell_verdict_mixed_held_power_insufficient() -> None:
 
 # ============ leaf_signature ============
 
-def test_leaf_signature_filters_outcome_and_metadata() -> None:
+def test_leaf_signature_filters_outcome_and_intervention_name() -> None:
+    """`outcome.*`, `bridge.*`, `invariant.*` always filtered.
+    `intervention_name` is the framework-typed Hypothesis name —
+    also always filtered."""
     measurements: dict[str, MeasurementLeaf] = {
         'gamma': 0.99,
         'optimizer.inner.lr': 0.001,
-        'env_name': 'CartPole-v1',
-        'seed': 0,
-        'total_steps': 1000,
         'intervention_name': 'h',
         'outcome.late_window_mean': 100.0,
         'bridge.x.verdict': 'held',
@@ -68,13 +68,42 @@ def test_leaf_signature_filters_outcome_and_metadata() -> None:
     keys = [k for k, _ in sig]
     assert 'gamma' in keys
     assert 'optimizer.inner.lr' in keys
-    assert 'env_name' not in keys
-    assert 'seed' not in keys
-    assert 'total_steps' not in keys
     assert 'intervention_name' not in keys
     assert not any(k.startswith('outcome.') for k in keys)
     assert not any(k.startswith('bridge.') for k in keys)
     assert not any(k.startswith('invariant.') for k in keys)
+
+
+def test_leaf_signature_excludes_substrate_exogenous_keys() -> None:
+    """Substrate-supplied exogenous keys are excluded when caller
+    passes them. The framework does NOT hardcode RL key names —
+    each substrate names its own exogenous keys."""
+    measurements: dict[str, MeasurementLeaf] = {
+        'gamma': 0.99,
+        'env_name': 'CartPole-v1',
+        'seed': 0,
+        'total_steps': 1000,
+        'intervention_name': 'h',
+    }
+    # RL substrate's exogenous keys.
+    sig = leaf_signature(
+        measurements,
+        exogenous_keys=frozenset({'env_name', 'seed', 'total_steps'}),
+    )
+    keys = [k for k, _ in sig]
+    assert 'gamma' in keys
+    assert 'env_name' not in keys
+    assert 'seed' not in keys
+    assert 'total_steps' not in keys
+
+
+def test_leaf_signature_default_no_exogenous_filter() -> None:
+    """Without `exogenous_keys`, only `intervention_name` and
+    output prefixes are filtered. Substrate keys pass through."""
+    sig = leaf_signature({'env_name': 'e', 'seed': 0, 'gamma': 0.9})
+    keys = [k for k, _ in sig]
+    # All three pass through; framework doesn't hardcode RL names.
+    assert set(keys) == {'env_name', 'seed', 'gamma'}
 
 
 def test_leaf_signature_is_sorted_and_hashable() -> None:

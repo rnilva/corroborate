@@ -48,36 +48,42 @@ from corroborate.verdict import RefutationClass, Verdict
 # configurational fingerprint.
 _OUTPUT_PREFIXES: tuple[str, ...] = ('outcome.', 'bridge.', 'invariant.')
 
-# Substrate-supplied per-cell metadata that varies independently of
-# configuration (seed, env_name) or restates a leaf already in the
-# fingerprint (total_steps appears in both metadata and as a leaf).
-_NON_LEAF_KEYS: frozenset[str] = frozenset({
-    'env_name', 'seed', 'total_steps', 'intervention_name',
+# Always-excluded framework-typed metadata. These are
+# substrate-AGNOSTIC: every RunRow carries `intervention_name`
+# (the Hypothesis name), so it's never a configurational leaf.
+_FRAMEWORK_EXCLUDED_KEYS: frozenset[str] = frozenset({
+    'intervention_name',
 })
 
 
 def leaf_signature(
     measurements: Mapping[str, MeasurementLeaf],
+    *,
+    exogenous_keys: frozenset[str] = frozenset(),
 ) -> tuple[tuple[str, str], ...]:
     """The configurational fingerprint — leaf-only subset of
     `measurements` as a sorted (path, str-canonical-value) tuple.
     Hashable; suitable as a group-by key.
 
-    Filters out output paths (`outcome.`/`bridge.`/`invariant.`)
-    and per-cell metadata (`env_name`, `seed`, `total_steps`,
-    `intervention_name`). What remains is the configurational
-    leaves at their dotted topology paths.
+    Filters out:
+    - Output paths (`outcome.`/`bridge.`/`invariant.`).
+    - The framework-typed `intervention_name` (always excluded).
+    - Substrate-supplied exogenous keys: keys the substrate
+      declared via `Annotated[T, Exogenous]` on its `@claim`'s
+      kwargs. Caller passes those names as `exogenous_keys` (e.g.
+      `frozenset({'env_name', 'seed', 'total_steps'})` for the RL
+      substrate). The framework does NOT hardcode RL key names.
 
-    "Leaf" rather than "HP": a leaf-regime kwarg is a non-recursive
-    scalar claim of the configured composition, observed at
-    composition time. RL practice calls these hyperparameters; the
-    framework's term is `leaf` since the same shape covers any
-    non-RL configuration too."""
+    What remains is the configurational leaves at their dotted
+    topology paths. "Leaf" rather than "HP": a leaf-regime kwarg
+    is a non-recursive scalar claim of the configured composition,
+    observed at composition time."""
+    excluded = _FRAMEWORK_EXCLUDED_KEYS | exogenous_keys
     return tuple(sorted(
         (k, str(v))
         for k, v in measurements.items()
         if not any(k.startswith(p) for p in _OUTPUT_PREFIXES)
-        and k not in _NON_LEAF_KEYS
+        and k not in excluded
     ))
 
 
@@ -129,21 +135,22 @@ def _run_intervention_name(run: RunRow) -> str:
     return v
 
 
-def _run_env_name(run: RunRow) -> str:
-    v = run.measurements.get('env_name')
-    if not isinstance(v, str):
-        raise TypeError(
-            f"RunRow {run.id!r} missing 'env_name' measurement"
-        )
-    return v
-
-def _run_seed(run: RunRow) -> int:
-    v = run.measurements.get('seed')
-    if isinstance(v, bool) or not isinstance(v, int):
-        raise TypeError(
-            f"RunRow {run.id!r} missing 'seed' measurement"
-        )
-    return v
+def _run_pair_key(
+    run: RunRow, pair_by: tuple[str, ...],
+) -> tuple[MeasurementLeaf, ...]:
+    """Read the tuple of measurement values at `pair_by` keys.
+    Used as a hashable index for paired comparisons. Loud error
+    if any key is missing or non-scalar."""
+    out: list[MeasurementLeaf] = []
+    for k in pair_by:
+        v = run.measurements.get(k)
+        if v is None or not isinstance(v, (str, int, float, bool)):
+            raise TypeError(
+                f"RunRow {run.id!r} missing scalar pair-key "
+                f"{k!r} (pair_by={pair_by!r})",
+            )
+        out.append(v)
+    return tuple(out)
 
 
 def _run_outcome(
@@ -167,6 +174,7 @@ def paired_comparison_from_runs(
     baseline_runs: Sequence[RunRow],
     *,
     outcome_path: str,
+    pair_by: tuple[str, ...],
     predicted_direction: Direction | None,
     alpha: float = 0.05,
     power: float = 0.8,
@@ -174,17 +182,24 @@ def paired_comparison_from_runs(
     timestamp: str | None = None,
     extra_measurements: Mapping[str, MeasurementLeaf] | None = None,
 ) -> ComparisonRow:
-    """Paired-by-seed ComparisonRow.
+    """Paired-by-`pair_by` ComparisonRow.
 
-    Pairs treatment and baseline runs by `(env_name, seed)`, drops
-    unmatched pairs, computes Δ_i = treatment_i − baseline_i across
-    pairs, fits Hedges' g + SE on the Δ distribution, derives MDE
-    and verdict via `corroborate.statistics`. Same shape as
-    v9's paired comparison (dialectic/hypothesis.py:332-350).
+    Substrate-agnostic: `pair_by` names the measurement keys that
+    identify a matched (treatment, baseline) pair. For RL,
+    `pair_by=('seed',)` (when grouping is per-env) or
+    `pair_by=('env_name', 'seed')` (when one comparison spans
+    multiple envs). For non-RL substrates, whatever the matching
+    axis is.
 
-    All runs must share `env_name`. Treatment and baseline must
-    share at least one seed for a valid comparison; if pairs is
-    empty, returns a POWER_INSUFFICIENT row with NaN stats."""
+    Pairs by tuple-of-values at `pair_by`, drops unmatched pairs,
+    computes Δ_i = treatment_i − baseline_i across pairs, fits
+    Hedges' g + SE on the Δ distribution, derives MDE and verdict
+    via `corroborate.statistics`. Same shape as v9's paired
+    comparison (dialectic/hypothesis.py:332-350).
+
+    Treatment and baseline must share at least one pair-key value
+    for a valid comparison; if the intersection is empty, returns
+    a POWER_INSUFFICIENT row with NaN stats."""
     from corroborate.statistics import (
         delta_i_from_q,
         derived_q_from_g_se,
@@ -197,23 +212,27 @@ def paired_comparison_from_runs(
             'paired_comparison_from_runs requires non-empty '
             'treatment_runs and baseline_runs'
         )
-
-    env_names = {_run_env_name(r) for r in (*treatment_runs, *baseline_runs)}
-    if len(env_names) != 1:
+    if not pair_by:
         raise ValueError(
-            f'env_name mismatch across runs: {env_names!r}'
+            'pair_by must be non-empty — the substrate must name '
+            'the measurement key(s) that identify matched pairs.'
         )
-    env_name = next(iter(env_names))
 
-    # Index by seed; compute Δ over the intersection.
-    treatment_by_seed = {_run_seed(r): r for r in treatment_runs}
-    baseline_by_seed = {_run_seed(r): r for r in baseline_runs}
-    paired_seeds = sorted(treatment_by_seed.keys() & baseline_by_seed.keys())
+    # Index by pair-key tuple; compute Δ over the intersection.
+    treatment_by_key = {
+        _run_pair_key(r, pair_by): r for r in treatment_runs
+    }
+    baseline_by_key = {
+        _run_pair_key(r, pair_by): r for r in baseline_runs
+    }
+    paired_keys = sorted(
+        treatment_by_key.keys() & baseline_by_key.keys()
+    )
 
     deltas: list[float] = [
-        _run_outcome(treatment_by_seed[s], outcome_path)
-        - _run_outcome(baseline_by_seed[s], outcome_path)
-        for s in paired_seeds
+        _run_outcome(treatment_by_key[k], outcome_path)
+        - _run_outcome(baseline_by_key[k], outcome_path)
+        for k in paired_keys
     ]
     n_pairs = len(deltas)
 
@@ -231,7 +250,6 @@ def paired_comparison_from_runs(
     treatment_intervention = _run_intervention_name(treatment_runs[0])
 
     measurements: dict[str, MeasurementLeaf] = {
-        'env_name': env_name,
         'intervention_name': treatment_intervention,
         'n_treatment': len(treatment_runs),
         'n_baseline': len(baseline_runs),
@@ -263,60 +281,64 @@ def paired_comparison_from_runs(
     )
 
 
-# ============ Cross-env link verdict (PAPER_NOTES.md §3.5) ============
+# ============ Cross-group link verdict (PAPER_NOTES.md §3.5) ============
 
-def link_pearson_across_envs(
+def link_pearson_across_groups(
     mechanism_comparisons: Sequence[ComparisonRow],
     outcome_comparisons: Sequence[ComparisonRow],
     *,
     mechanism_path: str,
     outcome_path: str,
+    group_by: str,
     alpha: float = 0.05,
     power: float = 0.8,
     cycle_id: str | None = None,
     timestamp: str | None = None,
     extra_measurements: Mapping[str, MeasurementLeaf] | None = None,
 ) -> ComparisonRow:
-    """Cross-env link verdict — Pearson r between mechanism Δ and
-    outcome Δ across envs.
+    """Cross-group link verdict — Pearson r between mechanism Δ
+    and outcome Δ across groups.
 
     PAPER_NOTES.md §3.5: 'a methodological intervention's mechanism
     fingerprint should covary with its outcome fingerprint across
-    envs.' If DDQN reduces the Jensen gap on env A and improves
-    the return on env A (and likewise for env B, ...), the Pearson
-    correlation across envs of (mechanism_g, outcome_g) is positive.
-    Negative or zero correlation means mechanism reduction doesn't
-    track outcome improvement — a different relationship than
-    ddqn-helps-on-A AND ddqn-helps-on-B taken separately.
+    [groups].' For RL, the group is `env_name`. For non-RL
+    substrates, whatever single key identifies a group across
+    treatment/baseline pairs.
 
-    Inputs are aligned per env: `mechanism_comparisons[i]` and
-    `outcome_comparisons[i]` should refer to the same env. The
-    function pairs by env_name; mismatches raise.
+    `group_by` is the substrate-named measurement key — caller
+    passes `'env_name'` for RL or e.g. `'patient_id'` for clinical.
+    Pairs `mechanism_comparisons[g]` and `outcome_comparisons[g]`
+    by their `measurements[group_by]`; mismatches drop quietly
+    (only fully-paired groups contribute to the Pearson r).
 
-    Returns a ComparisonRow tagged at the cross-env granularity
-    (env_name='cross_env_link'); its measurements include the
-    Pearson r as the effect-size statistic and a derived MDE-style
-    verdict on r vs 0."""
+    Returns a ComparisonRow tagged at the cross-group granularity;
+    its measurements include the Pearson r as the effect-size
+    statistic, a derived MDE-style verdict on r vs 0, and the
+    `group_by` key recorded as `'group_by': <key>`."""
     from corroborate.statistics import (
         adequately_powered_paired,
         delta_i_from_q,
         derived_q_from_g_se,
     )
 
-    # Pair by env_name.
-    mech_by_env = {
-        _comparison_env(c): c for c in mechanism_comparisons
-    }
-    out_by_env = {
-        _comparison_env(c): c for c in outcome_comparisons
-    }
-    paired_envs = sorted(mech_by_env.keys() & out_by_env.keys())
+    def _group_id(c: ComparisonRow) -> str:
+        v = c.measurements.get(group_by)
+        if not isinstance(v, str):
+            raise TypeError(
+                f"ComparisonRow {c.id!r} missing scalar string "
+                f"measurement {group_by!r} for grouping",
+            )
+        return v
+
+    mech_by_group = {_group_id(c): c for c in mechanism_comparisons}
+    out_by_group = {_group_id(c): c for c in outcome_comparisons}
+    paired_groups = sorted(mech_by_group.keys() & out_by_group.keys())
 
     mech_gs: list[float] = []
     out_gs: list[float] = []
-    for env in paired_envs:
-        mg = mech_by_env[env].measurements.get(mechanism_path)
-        og = out_by_env[env].measurements.get(outcome_path)
+    for g_id in paired_groups:
+        mg = mech_by_group[g_id].measurements.get(mechanism_path)
+        og = out_by_group[g_id].measurements.get(outcome_path)
         if isinstance(mg, (int, float)) and isinstance(og, (int, float)):
             if not (math.isnan(float(mg)) or math.isnan(float(og))):
                 mech_gs.append(float(mg))
@@ -327,9 +349,9 @@ def link_pearson_across_envs(
         # Pearson's r needs at least 3 paired observations to be
         # well-defined; return a POWER_INSUFFICIENT row.
         underpowered_measurements: dict[str, MeasurementLeaf] = {
-            'env_name': 'cross_env_link',
             'intervention_name': 'link',
-            'n_paired_envs': n,
+            'n_paired_groups': n,
+            'group_by': group_by,
         }
         if extra_measurements is not None:
             underpowered_measurements.update(extra_measurements)
@@ -365,9 +387,9 @@ def link_pearson_across_envs(
         refutation = RefutationClass.SIGN_FLIP
 
     measurements: dict[str, MeasurementLeaf] = {
-        'env_name': 'cross_env_link',
         'intervention_name': 'link',
-        'n_paired_envs': n,
+        'n_paired_groups': n,
+        'group_by': group_by,
         'link.pearson_r': r,
         'link.se': se_r,
         'link.derived_q': q,
@@ -388,14 +410,8 @@ def link_pearson_across_envs(
     )
 
 
-def _comparison_env(c: ComparisonRow) -> str:
-    """Read env_name off a ComparisonRow's measurements."""
-    v = c.measurements.get('env_name')
-    if not isinstance(v, str):
-        raise TypeError(
-            f"ComparisonRow {c.id!r} missing 'env_name' measurement"
-        )
-    return v
+# Backward-compat alias for the old name (RL substrate uses it).
+link_pearson_across_envs = link_pearson_across_groups
 
 
 def _pearson(xs: Sequence[float], ys: Sequence[float]) -> float:

@@ -84,14 +84,17 @@ def _by_env_capacity_intervention(
 
 
 def _mechanism_cmp(
-    treatment: list[RunRow], baseline: list[RunRow], capacity: int,
+    treatment: list[RunRow], baseline: list[RunRow],
+    env_name: str, capacity: int,
 ) -> ComparisonRow:
     return paired_comparison_from_runs(
         treatment_runs=treatment, baseline_runs=baseline,
         outcome_path='mechanism.jensen_gap',
+        pair_by=('seed',),  # within-env pairing on seed
         predicted_direction='a_lt_b',  # DDQN should REDUCE the gap
         extra_measurements={
             'comparison_kind': 'mechanism',
+            'env_name': env_name,
             'replay.capacity': capacity,
         },
     )
@@ -99,14 +102,16 @@ def _mechanism_cmp(
 
 def _outcome_cmp(
     treatment: list[RunRow], baseline: list[RunRow],
-    outcome_path: str, capacity: int,
+    outcome_path: str, env_name: str, capacity: int,
 ) -> ComparisonRow:
     return paired_comparison_from_runs(
         treatment_runs=treatment, baseline_runs=baseline,
         outcome_path=outcome_path,
+        pair_by=('seed',),
         predicted_direction='a_gt_b',  # DDQN should INCREASE return
         extra_measurements={
             'comparison_kind': 'outcome',
+            'env_name': env_name,
             'replay.capacity': capacity,
         },
     )
@@ -198,7 +203,7 @@ def main() -> None:
 
         # Mechanism (Jensen gap; DDQN should reduce it).
         if any('mechanism.jensen_gap' in r.measurements for r in treatment):
-            mech_cmp = _mechanism_cmp(treatment, baseline, capacity)
+            mech_cmp = _mechanism_cmp(treatment, baseline, env, capacity)
             _print_verdict_row(
                 'mechanism.jensen_gap', mech_cmp, 'mechanism.jensen_gap',
             )
@@ -209,7 +214,7 @@ def main() -> None:
         for path in _OUTCOME_PATHS:
             if not any(path in r.measurements for r in treatment):
                 continue
-            out_cmp = _outcome_cmp(treatment, baseline, path, capacity)
+            out_cmp = _outcome_cmp(treatment, baseline, path, env, capacity)
             _print_verdict_row(path, out_cmp, path)
             out_by_capacity[capacity][path].append(out_cmp)
             all_comparisons.append(out_cmp)
@@ -234,6 +239,7 @@ def main() -> None:
                 mech_cmps, out_cmps,
                 mechanism_path='mechanism.jensen_gap.effect_size_g',
                 outcome_path=f'{outcome_path}.effect_size_g',
+                group_by='env_name',
                 extra_measurements={
                     'comparison_kind': 'link',
                     'outcome_path': outcome_path,

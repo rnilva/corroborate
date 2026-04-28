@@ -81,6 +81,7 @@ def _maybe_compare(
         baseline_runs=baseline_runs,
         predicted_direction='a_gt_b',
         outcome_path=outcome_path,
+        pair_by=('seed',),
     )
     m = cmp.measurements
     g_v = m.get(f'{outcome_path}.effect_size_g')
