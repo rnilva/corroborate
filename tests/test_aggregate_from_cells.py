@@ -30,8 +30,24 @@ from corroborate.aggregate import (
     natural_strength_from_stats,
 )
 from corroborate.bridge import Bridge, BridgeResult, bridge
+from corroborate.claim import claim
 from corroborate.hypothesis import Hypothesis
+from corroborate.intervention import Intervention
 from corroborate.measurable import measurable, transitive_reads
+
+
+@claim
+def _stub_treatment_op(x: int) -> int:
+    """Stub for tests: gives test hypotheses a non-baseline
+    `intervention_arms` so `from_cells` doesn't trip the
+    same-arm-key HPO-smuggle assertion."""
+    return x
+
+
+_STUB_INTERVENTION = Intervention(
+    slot_path='stub', replacement=_stub_treatment_op,
+)
+_TREATMENT_ARM_KEY = _STUB_INTERVENTION.arm_key()
 from corroborate.schema import (
     FactRow,
     GroupStats,
@@ -49,9 +65,15 @@ def _run(
     env: str,
     outcome: float,
     extras: Mapping[str, object] | None = None,
+    arm_key: str | None = None,
 ) -> RunRow:
     """Build a minimal RunRow with the measurements `from_cells`
-    needs (intervention_name, seed, env_name, outcome)."""
+    needs (intervention_name, seed, env_name, outcome).
+
+    `arm_key` defaults to a name-derived placeholder so the
+    treatment-vs-baseline arm-key consistency check in
+    `from_cells` doesn't trip on test fixtures. Production
+    code derives this from `Hypothesis.arm_key()`."""
     measurements: dict[str, object] = {
         'intervention_name': intervention_name,
         'seed': seed,
@@ -60,10 +82,18 @@ def _run(
     }
     if extras:
         measurements.update(extras)
+    resolved_arm_key = (
+        arm_key if arm_key is not None
+        else (
+            'baseline' if intervention_name == 'vanilla'
+            else _TREATMENT_ARM_KEY
+        )
+    )
     return RunRow(
         id=cell_id, parent_id=None, cycle_id=None,
         timestamp='2026-04-29T00:00:00+00:00',
         verdict=Verdict.HELD,
+        arm_key=resolved_arm_key,
         measurements=measurements,  # type: ignore[arg-type]
     )
 
@@ -74,6 +104,7 @@ def _hypothesis(name: str, predicted: str | None) -> Hypothesis[Mapping[str, obj
         intervention={},
         bridges=(),
         predicted_direction=predicted,  # type: ignore[arg-type]
+        intervention_arms=(_STUB_INTERVENTION,),
     )
 
 
@@ -179,7 +210,7 @@ def test_from_cells_stratified_drops_groups_with_one_arm() -> None:
     ]
     baseline = [
         _run(f'b_A_{s}', intervention_name='b', seed=s,
-             env='A', outcome=0.5 + s * 0.1)
+             env='A', outcome=0.5 + s * 0.1, arm_key='baseline')
         for s in range(3)
     ]
     h = _hypothesis('t', None)
@@ -217,6 +248,95 @@ def test_from_cells_raises_on_duplicate_pair_by_in_treatment() -> None:
         )
     except ValueError as e:
         assert 'duplicate pair_by' in str(e)
+        return
+    raise AssertionError('expected ValueError')
+
+
+# ============ Arm-key consistency (A3) ============
+
+def test_from_cells_records_arm_keys() -> None:
+    """`from_cells` populates `treatment_arm_key` from
+    `h.arm_key()` and defaults `baseline_arm_key` to
+    `'baseline'`."""
+    treatment = [
+        _run('t0', intervention_name='ddqn', seed=0,
+             env='A', outcome=1.5),
+        _run('t1', intervention_name='ddqn', seed=1,
+             env='A', outcome=1.6),
+    ]
+    baseline = [
+        _run('b0', intervention_name='vanilla', seed=0,
+             env='A', outcome=1.0),
+        _run('b1', intervention_name='vanilla', seed=1,
+             env='A', outcome=1.0),
+    ]
+    h = _hypothesis('ddqn', 'a_gt_b')
+    row = HypothesisComparisonRow.from_cells(
+        h, treatment, baseline,
+        outcome_path='outcome.value', pair_by=('seed',),
+    )
+    assert row.treatment_arm_key == h.arm_key()
+    assert row.baseline_arm_key == 'baseline'
+    assert row.treatment_arm_key != row.baseline_arm_key
+
+
+@claim
+def _per_replay_op(x: int) -> int:
+    return x + 1
+
+
+def test_from_cells_uses_baseline_h_arm_key() -> None:
+    """When `baseline_h` is provided, its `arm_key()` becomes
+    `baseline_arm_key` — supports treatment-vs-treatment
+    comparisons."""
+    h_baseline: Hypothesis[Mapping[str, object]] = Hypothesis(
+        name='per', intervention={}, bridges=(),
+        intervention_arms=(
+            Intervention(slot_path='replay', replacement=_per_replay_op),
+        ),
+    )
+    treatment = [
+        _run('t0', intervention_name='ddqn', seed=0,
+             env='A', outcome=1.5),
+    ]
+    baseline = [
+        _run('b0', intervention_name='per', seed=0,
+             env='A', outcome=1.2,
+             arm_key=h_baseline.arm_key()),
+    ]
+    h_treatment = _hypothesis('ddqn', None)
+    row = HypothesisComparisonRow.from_cells(
+        h_treatment, treatment, baseline,
+        outcome_path='outcome.value', pair_by=('seed',),
+        baseline_h=h_baseline,
+    )
+    assert row.treatment_arm_key == h_treatment.arm_key()
+    assert row.baseline_arm_key == h_baseline.arm_key()
+
+
+def test_from_cells_raises_on_same_arm_key() -> None:
+    """When treatment and baseline share an arm key (HPO-smuggle
+    indicator), `from_cells` raises ValueError."""
+    treatment = [
+        _run('t0', intervention_name='x', seed=0,
+             env='A', outcome=1.5),
+    ]
+    baseline = [
+        _run('b0', intervention_name='x', seed=0,
+             env='A', outcome=1.0),
+    ]
+    h_treatment = _hypothesis('x', None)
+    h_baseline = _hypothesis('x', None)
+    assert h_treatment.arm_key() == h_baseline.arm_key()
+    try:
+        HypothesisComparisonRow.from_cells(
+            h_treatment, treatment, baseline,
+            outcome_path='outcome.value', pair_by=('seed',),
+            baseline_h=h_baseline,
+        )
+    except ValueError as e:
+        assert 'arm_key' in str(e)
+        assert 'HPO-smuggle' in str(e)
         return
     raise AssertionError('expected ValueError')
 

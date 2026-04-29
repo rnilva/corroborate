@@ -253,3 +253,75 @@ def test_at_most_default_name_includes_gap_and_threshold() -> None:
     inv = at_most(_fake_gap('jensen_gap'), threshold=0.5, of_claim=step)
     assert 'jensen_gap' in inv.name
     assert '0.5' in inv.name
+
+
+# ============ Discovery mode (threshold=None) ============
+
+def test_at_most_discovery_mode_held_when_finite() -> None:
+    """`threshold=None` is discovery mode: any finite gap_value
+    yields HELD with `stats['gap_value']` recorded. Never
+    INVARIANT_VIOLATION — the author hasn't committed scope yet."""
+    @claim
+    def some_step(x: int) -> int:
+        return x
+
+    inv = at_most(_fake_gap(), threshold=None, of_claim=some_step)
+    record: Mapping[str, object] = {'v': 0.42}
+    result = inv(record)
+    assert result.verdict is Verdict.HELD
+    assert result.stats['gap_value'] == 0.42
+    assert result.stats['kind'] == 'tautological'
+
+
+def test_at_most_discovery_mode_held_for_huge_finite_value() -> None:
+    """In discovery mode, even a large gap_value yields HELD —
+    there's no threshold yet to violate."""
+    @claim
+    def some_step(x: int) -> int:
+        return x
+
+    inv = at_most(_fake_gap(), threshold=None, of_claim=some_step)
+    record: Mapping[str, object] = {'v': 1e9}
+    result = inv(record)
+    assert result.verdict is Verdict.HELD
+
+
+def test_at_most_discovery_mode_power_insufficient_on_nan() -> None:
+    """NaN still maps to POWER_INSUFFICIENT in discovery mode —
+    we can't record a `gap_value` that doesn't exist. Treating
+    NaN as HELD would silently record stale-data verdicts as
+    confirmation."""
+    @claim
+    def some_step(x: int) -> int:
+        return x
+
+    inv = at_most(_fake_gap(), threshold=None, of_claim=some_step)
+    record: Mapping[str, object] = {'v': float('nan')}
+    result = inv(record)
+    assert result.verdict is Verdict.POWER_INSUFFICIENT
+
+
+def test_at_most_discovery_mode_default_threshold() -> None:
+    """`threshold` defaults to None — discovery is the default
+    regime, since for novel mechanisms the author rarely knows
+    the threshold a priori."""
+    @claim
+    def some_step(x: int) -> int:
+        return x
+
+    inv = at_most(_fake_gap(), of_claim=some_step)
+    record: Mapping[str, object] = {'v': 100.0}
+    assert inv(record).verdict is Verdict.HELD
+
+
+def test_at_most_discovery_name_uses_asterisk_marker() -> None:
+    """The bridge name uses '*' to signal discovery mode — visible
+    in stdout and in flattened parquet column names so a reader
+    can tell at-a-glance whether scope was committed or not."""
+    @claim
+    def step(x: int) -> int:
+        return x
+
+    inv = at_most(_fake_gap('jensen_gap'), threshold=None, of_claim=step)
+    assert 'jensen_gap' in inv.name
+    assert '*' in inv.name

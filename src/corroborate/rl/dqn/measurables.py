@@ -267,6 +267,29 @@ def td_residual_late(record: Mapping[str, object]) -> float:
     return _mean_window(arr, 0.5, 1.0)
 
 
+@measurable(reads=('td_error_within_batch_std',))
+def td_within_batch_var_late(record: Mapping[str, object]) -> float:
+    """Mean of within-batch std(|TD-error|) over the late 50%.
+
+    Captures *training-signal heterogeneity*: at each training step,
+    the spread of |TD-error| across the batch's transitions. High
+    value = the batch averages diverse transitions (varied gradient
+    directions); low value = the batch is dominated by similar
+    transitions (correlated gradients).
+
+    Theoretically a candidate mediator for `replay.capacity → solve`:
+    larger replay → less correlated samples → higher within-batch
+    variance → less catastrophic forgetting. Crucially *not*
+    deterministic from `capacity` (depends on which transitions
+    happened to be in the batch) and *not* a re-encoding of the
+    outcome (reads `td_error_within_batch_std`, disjoint from
+    `mc_return`)."""
+    arr = _record_array(record, 'td_error_within_batch_std')
+    if arr is None:
+        return float('nan')
+    return _mean_window(arr, 0.5, 1.0)
+
+
 @measurable(reads=('online_argmax_per_step', 'target_argmax_per_step'))
 def greedy_match_late(record: Mapping[str, object]) -> float:
     """Mean of (online_argmax == target_argmax) over the late
@@ -303,3 +326,206 @@ def fill_ratio_late(
     if arr is None:
         return float('nan')
     return _mean_window(arr / float(capacity), 0.5, 1.0)
+
+
+# ============ Value-curve features (PAPER §4.6 family 2) ============
+#
+# Reductions on the eval-burst learning curve `mc_return`. v10 §6
+# left 6 envs with no detected mediator (CartPole, Catch-bsuite,
+# FourRooms, MemoryChain, Asterix-MinAtar, plus one more); §4.6
+# names value-curve features as a candidate mediator family that
+# the existing q_gap / td_residual / greedy_match set doesn't
+# capture. AUC, time-to-threshold, and plateau slope project the
+# learning curve to scalars suitable as additional covariates in
+# meta-regression.
+
+
+def _burst_means_1d(
+    record: Mapping[str, object],
+) -> npt.NDArray[np.float64] | None:
+    """Reduce `mc_return: (n_bursts, K)` to per-burst means
+    `(n_bursts,)`. Returns None when the record lacks the field
+    or the array is degenerate."""
+    if 'mc_return' not in record:
+        return None
+    arr = np.asarray(record['mc_return'], dtype=np.float64)
+    if arr.ndim != 2 or arr.size == 0:
+        return None
+    return np.mean(arr, axis=1)
+
+
+@measurable(reads=('mc_return',))
+def learning_curve_auc(record: Mapping[str, object]) -> float:
+    """Trapezoidal AUC of the per-burst mean MC return. Larger AUC
+    means the agent reaches and holds higher returns earlier and
+    longer in training — a candidate mediator for envs where the
+    *shape* of the learning curve, not just the final value,
+    drives performance.
+
+    AUC is normalised by the burst-axis length so it has the same
+    units as `mc_return` (a return value), not return·step. This
+    keeps the scale interpretable across runs of different total
+    step budgets."""
+    burst_means = _burst_means_1d(record)
+    if burst_means is None or burst_means.size < 2:
+        return float('nan')
+    return float(np.trapezoid(burst_means) / (burst_means.size - 1))
+
+
+@measurable(reads=('mc_return',))
+def time_to_threshold(
+    record: Mapping[str, object], *, target_frac: float = 0.5,
+) -> float:
+    """First burst index (as a fraction of n_bursts) where the
+    burst mean reaches `target_frac × max(burst_means)`. Returns
+    1.0 if the threshold is never crossed (the agent never
+    reaches `target_frac` of its own peak — a degenerate case
+    that callers should treat as 'never converged').
+
+    Sample-efficiency proxy: smaller is faster convergence. The
+    fractional-of-n encoding makes the scalar comparable across
+    cells with different `n_bursts`."""
+    burst_means = _burst_means_1d(record)
+    if burst_means is None or burst_means.size == 0:
+        return float('nan')
+    peak = float(np.max(burst_means))
+    if peak <= 0.0:
+        return float('nan')
+    threshold = target_frac * peak
+    crossed = np.where(burst_means >= threshold)[0]
+    if crossed.size == 0:
+        return 1.0
+    return float(crossed[0]) / float(burst_means.size - 1) if (
+        burst_means.size > 1
+    ) else 0.0
+
+
+@measurable(reads=('mc_return',))
+def return_at_25pct_steps(record: Mapping[str, object]) -> float:
+    """Per-burst mean return at the 25%-of-training checkpoint —
+    a smooth analog of 'sample-efficiency at 25% budget'.
+    Compared with `outcome.eval_final_mean` it tells you whether
+    most of the learning happened in the first quarter or
+    spread out."""
+    burst_means = _burst_means_1d(record)
+    if burst_means is None or burst_means.size == 0:
+        return float('nan')
+    idx = burst_means.size // 4
+    return float(burst_means[idx])
+
+
+@measurable(reads=('mc_return',))
+def plateau_slope_late(
+    record: Mapping[str, object], *, frac: float = 0.25,
+) -> float:
+    """Least-squares slope of per-burst mean return over the last
+    `frac` of bursts. Positive = still improving; near-zero =
+    plateaued; negative = degrading. Distinguishes 'converged at
+    high return' (slope ≈ 0, high level) from 'still climbing'
+    (slope > 0)."""
+    burst_means = _burst_means_1d(record)
+    if burst_means is None or burst_means.size < 4:
+        return float('nan')
+    n = burst_means.size
+    i_lo = int((1.0 - frac) * n)
+    if n - i_lo < 2:
+        return float('nan')
+    y = burst_means[i_lo:]
+    x = np.arange(y.size, dtype=np.float64)
+    x_mean = float(np.mean(x))
+    y_mean = float(np.mean(y))
+    cov = float(np.sum((x - x_mean) * (y - y_mean)))
+    var = float(np.sum((x - x_mean) ** 2))
+    if var <= 0.0:
+        return float('nan')
+    return cov / var
+
+
+# ============ F1: State-coverage family ============
+#
+# Shannon entropy + KL-against-uniform of the `state_hash`
+# distribution over the late window. v10 §4.6 candidate mediator
+# family 3 (on-policy state-distribution coverage). `state_hash`
+# is logged per step by `cell_runner` (default returns 0 for
+# image envs whose hash space is astronomical; bsuite chains and
+# small-discrete envs produce non-trivial distributions).
+#
+# A separate "action-margin" measurable wasn't authored: the
+# obvious 1-D-trace-derivable proxy `mean(|q_mean − q_max|)` is
+# already the existing `v_vs_max_delta_late` — same formula. A
+# *true* Q* − Q_2nd action-margin requires adding a per-step
+# second-max reduction to the collect harness; deferred until a
+# substrate change is forced.
+
+
+def _state_distribution_late_half(
+    record: Mapping[str, object],
+) -> npt.NDArray[np.int64] | None:
+    """Slice `state_hash` to the late 50% and return as int64.
+    None when the field is absent or the slice is empty."""
+    if 'state_hash' not in record:
+        return None
+    arr = np.asarray(record['state_hash'], dtype=np.int64)
+    n = arr.shape[0] if arr.ndim >= 1 else 0
+    if n < 2:
+        return None
+    return arr[n // 2:]
+
+
+@measurable(reads=('state_hash',))
+def state_visit_entropy_late(record: Mapping[str, object]) -> float:
+    """Shannon entropy (in nats) of the `state_hash` distribution
+    over the late 50% of training. Higher entropy = more uniform
+    visitation across states; lower = concentrated visitation.
+
+    Returns NaN when `state_hash` is missing, the slice has < 2
+    samples, or only one bucket was visited (entropy degenerate
+    at zero — could return 0.0 but NaN is more honest about
+    'this measurement carries no signal here').
+
+    Useful for image-state envs (`state_hash` returns 0
+    sentinel) — the measurable returns NaN there because every
+    state hashes to the same bucket. For tabular bsuite chains
+    and small-discrete envs the entropy is meaningful."""
+    late = _state_distribution_late_half(record)
+    if late is None:
+        return float('nan')
+    counts = np.bincount(late.astype(np.int64))
+    nonzero = counts[counts > 0]
+    if nonzero.size <= 1:
+        return float('nan')
+    p = nonzero.astype(np.float64) / float(nonzero.sum())
+    return float(-np.sum(p * np.log(p)))
+
+
+@measurable(reads=('state_hash',))
+def state_coverage_kl_uniform_late(
+    record: Mapping[str, object],
+) -> float:
+    """KL(observed-state-distribution || uniform-over-visited-
+    buckets) over the late 50%. Zero when visitation is uniform
+    across distinct visited states; positive otherwise. Larger =
+    more concentrated visitation (the agent revisits some states
+    far more than others among the buckets it touches at all).
+
+    Reference distribution is uniform OVER VISITED buckets, not
+    uniform over the full state space — that's the cell-by-cell
+    'how concentrated is the visitation pattern' question, not
+    'what fraction of the state space did the agent see'
+    (which would need the global bucket cardinality, env-
+    specific). Returns NaN under the same degenerate cases as
+    `state_visit_entropy_late`."""
+    late = _state_distribution_late_half(record)
+    if late is None:
+        return float('nan')
+    counts = np.bincount(late.astype(np.int64))
+    nonzero = counts[counts > 0]
+    if nonzero.size <= 1:
+        return float('nan')
+    p = nonzero.astype(np.float64) / float(nonzero.sum())
+    n = float(nonzero.size)
+    # KL(p || uniform-over-visited) = sum p_i log(p_i * n)
+    # = sum p_i log p_i + log n
+    # = log n - H(p)   where H(p) = -sum p_i log p_i
+    h = float(-np.sum(p * np.log(p)))
+    return float(np.log(n) - h)

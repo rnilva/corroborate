@@ -188,6 +188,69 @@ def _df_from_columns(**cols: np.ndarray):  # type: ignore[reportUnknownParameter
     return pl.DataFrame({k: v.tolist() for k, v in cols.items()})
 
 
+def test_compare_pc_depths_kills_chain_edge_at_depth_1() -> None:
+    """Three-variable chain X → M → Y. At depth-0 (marginal
+    only), the X-Y edge survives because X and Y are marginally
+    correlated through M. At depth-1, conditioning on M
+    separates X-Y and the edge is removed. The diff catches
+    `xy_edge in low_only` exactly. Same diff shape as depth-1 vs
+    depth-2 catching a confounded edge that needs |Z|=2; the
+    chain example just exercises the primitive cheaply."""
+    from corroborate.causal_discovery import compare_pc_depths
+    rng = np.random.default_rng(0)
+    n = 500
+    x = rng.standard_normal(n)
+    m = x + rng.standard_normal(n) * 0.3
+    y = m + rng.standard_normal(n) * 0.3
+    df = _df_from_columns(x=x, m=m, y=y)
+
+    diff = compare_pc_depths(
+        df, variables=['x', 'm', 'y'],
+        alpha=0.05, depths=(0, 1),
+    )
+    xy_edge = frozenset({'x', 'y'})
+    assert xy_edge in diff.edges_low
+    assert xy_edge not in diff.edges_high
+    assert xy_edge in diff.low_only
+    assert xy_edge not in diff.common
+
+
+def test_compare_pc_depths_chain_unaffected_by_depth_increase() -> None:
+    """X → M → Y: depth-1 already kills X-Y via {M}. Depth-2
+    can only confirm. Diff: low_only and high_only both empty;
+    common == both edge sets."""
+    from corroborate.causal_discovery import compare_pc_depths
+    rng = np.random.default_rng(0)
+    n = 500
+    x = rng.standard_normal(n)
+    m = x + rng.standard_normal(n) * 0.3
+    y = m + rng.standard_normal(n) * 0.3
+    df = _df_from_columns(x=x, m=m, y=y)
+
+    diff = compare_pc_depths(
+        df, variables=['x', 'm', 'y'],
+        alpha=0.05, depths=(1, 2),
+    )
+    assert diff.low_only == frozenset()
+    assert diff.high_only == frozenset()
+    assert diff.common == diff.edges_low == diff.edges_high
+
+
+def test_compare_pc_depths_rejects_descending_depths() -> None:
+    """Depths must be (low, high) with low < high."""
+    from corroborate.causal_discovery import compare_pc_depths
+    df = _df_from_columns(
+        x=np.array([1.0, 2.0, 3.0]),
+        y=np.array([1.0, 2.0, 3.0]),
+    )
+    import pytest
+    with pytest.raises(ValueError, match='low < high'):
+        compare_pc_depths(
+            df, variables=['x', 'y'],
+            alpha=0.05, depths=(2, 1),
+        )
+
+
 def test_discover_chain_removes_marginal_independence_pair() -> None:
     """3-variable chain X → M → Y. PC at depth 1 should:
     - Keep X−M and M−Y (direct dependence)

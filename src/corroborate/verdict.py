@@ -1,4 +1,4 @@
-"""Verdict — the four primary outcomes of a falsifiable test.
+"""Verdict — the primary outcomes of a falsifiable test.
 
 The trichotomy HELD / NO_EFFECT / POWER_INSUFFICIENT encodes the
 field-methodologically-critical distinction between "tested and
@@ -10,7 +10,16 @@ load-bearing — at standard published n=3-10 seeds, most outcome
 tests are POWER_INSUFFICIENT, and treating that as "no effect" or
 "inconclusive" smuggles methodological problems past the reader.
 
-INVARIANT_VIOLATION is the orthogonal fourth: a tautological-
+HELD_WITH_SCOPE_FLAG is a refinement of HELD: the population-
+level pool excludes zero in the predicted direction (so the claim
+corroborates) BUT the random-effects I² indicates effects are
+heterogeneous across strata. v9's aggregation reframing makes
+this the natural input for empirical scope discovery — meta-
+regression on per-stratum g identifies the cleavage axes.
+Treating heterogeneous HELD as plain HELD smuggles a uniform-
+population claim that the data doesn't support.
+
+INVARIANT_VIOLATION is the orthogonal fifth: a tautological-
 tagged invariant rejected, meaning the claim's mechanism didn't
 operate (axiom 18: invariants are theorem-direct, not proxy-via-
 assumption). The outcome test under that condition is out of
@@ -25,22 +34,33 @@ from enum import Enum
 
 
 class Verdict(Enum):
-    """The four primary verdicts of a falsifiable test."""
+    """The primary verdicts of a falsifiable test."""
     HELD = 'held'
+    HELD_WITH_SCOPE_FLAG = 'held_with_scope_flag'
     NO_EFFECT = 'no_effect'
     POWER_INSUFFICIENT = 'power_insufficient'
     INVARIANT_VIOLATION = 'invariant_violation'
 
     def is_terminal(self) -> bool:
         """True iff the verdict doesn't require more data to
-        resolve. HELD, NO_EFFECT, and INVARIANT_VIOLATION are
-        terminal; POWER_INSUFFICIENT is the only verdict that
-        explicitly says 'rerun at higher n'."""
+        resolve. HELD / HELD_WITH_SCOPE_FLAG / NO_EFFECT /
+        INVARIANT_VIOLATION are terminal; POWER_INSUFFICIENT is
+        the only verdict that explicitly says 'rerun at higher
+        n'."""
         return self is not Verdict.POWER_INSUFFICIENT
 
     def is_corroboration(self) -> bool:
         """True iff the verdict is positive evidence the claim
-        holds. Only HELD."""
+        holds at population level. HELD and HELD_WITH_SCOPE_FLAG
+        both qualify — the latter additionally signals
+        heterogeneity for downstream cleavage discovery."""
+        return self in (Verdict.HELD, Verdict.HELD_WITH_SCOPE_FLAG)
+
+    def is_uniform(self) -> bool:
+        """True iff the verdict attests to a uniform population-
+        level effect (low I²). Distinguishes plain HELD from
+        HELD_WITH_SCOPE_FLAG, which corroborates with the caveat
+        that effects vary across strata."""
         return self is Verdict.HELD
 
     def is_refutation(self) -> bool:

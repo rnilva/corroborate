@@ -1,63 +1,100 @@
 """Hypothesis — (intervention, [bridges]) over a record schema R.
 
-A Hypothesis names a CHANGE to the theory (intervention) and a
-SET of paper-level assertions (bridges) that should hold under
-that change. Generic in `R: Mapping[str, object]` — the same R
-the bridges are typed against, so all bridges in a hypothesis
-share the record schema (one theory → one record schema).
+A Hypothesis names a CHANGE to the theory and a SET of paper-level
+assertions (bridges) that should hold under that change. Generic
+in `R: Mapping[str, object]` — the same R the bridges are typed
+against, so all bridges in a hypothesis share the record schema
+(one theory → one record schema).
 
-Three components:
+Components:
 
-- `intervention: Mapping[str, object]` — kwargs passed to
-  `functools.partial(theory, **intervention)` when the
-  hypothesis is run. Values are heterogeneous (Claims, plain
-  callables, primitives) — `object` is GENUINE polymorphism;
-  the framework is theory-neutral.
-- `bridges: tuple[Bridge[R], ...]` — the paper-level assertions
+- `intervention: Mapping[str, object]` — runtime kwargs passed to
+  `functools.partial(theory, **intervention)`. Mixes HP scalars
+  (γ, lr, batch_size, total_steps), config-bundle slots (Replay,
+  WarmedUpdate), and mechanism swaps (`partial(bootstrap,
+  greedification=double_greedify)`). The dict is the *executable*
+  shape; identity at this layer is type-erased on purpose.
+- `intervention_arms: tuple[Intervention, ...]` — the *typed*
+  identity of mechanism swaps only. HPs are NOT here; HPs are
+  cell covariates that downstream meta-regression cleaves on.
+  Empty tuple → baseline arm; non-empty tuple → treatment arm
+  whose `arm_key()` is the canonical fingerprint.
+- `bridges: tuple[Bridge[R], ...]` — paper-level assertions
   applied to the resulting record. All share R.
-- `predicted_direction: Direction | None` — author-declared sign
-  of the predicted treatment-vs-baseline effect, used downstream
-  by direction-aware verdict computation. None leaves direction
-  inference to the consumer (e.g. derive from a `held` flag).
+- `predicted_direction: PredictedDirection | None` — author-declared
+  sign of the predicted treatment-vs-baseline effect.
 
-Structural identity of a hypothesis is recoverable from the
-measurements its runs produce — leaf values land at dotted
-topology paths via `signature.walk_paths`, and
-`aggregate.leaf_signature` projects a `RunRow.measurements` to
-the configurational subset suitable as a group-by key. No
-separate `MechanismKey` artifact; the framework persists the
-measurements and re-derives identity on demand."""
+Arm identity flows exclusively through `intervention_arms` — two
+hypotheses with the same arms but different HP grid points share
+an `arm_key()` and pair as same-arm cells; the HP difference is a
+covariate, not an arm distinguisher.
+
+Structural identity beyond arm key is recoverable from the
+measurements a run produces — leaf values land at dotted topology
+paths via `signature.walk_paths`, and `aggregate.leaf_signature`
+projects a `RunRow.measurements` to the configurational subset
+suitable as a group-by key."""
 from __future__ import annotations
 
-import functools
-import types
 from collections.abc import Mapping
-from dataclasses import dataclass, fields, is_dataclass
-from typing import Literal
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Literal
 
+from corroborate._canonical import canonical_str
 from corroborate.bridge import Bridge
-from corroborate.claim import FnClaim
+from corroborate.intervention import Intervention, combined_arm_key
+
+if TYPE_CHECKING:
+    # `ClaimedEdge` / `BridgeRole` are the typed-subgraph surface;
+    # imported under TYPE_CHECKING because `claimed_edge.py`
+    # depends on `hypothesis.PredictedDirection`. The field
+    # annotation is a string at runtime via
+    # `from __future__ import annotations`.
+    from corroborate.claimed_edge import BridgeRole, ClaimedEdge
+
+__all__ = ['Hypothesis', 'PredictedDirection', 'canonical_str']
 
 
-type Direction = Literal['a_gt_b', 'a_lt_b', 'two_sided']
-"""Author-declared sign of the predicted treatment-vs-baseline
-effect on the primary outcome. `'a_gt_b'` predicts the
+type PredictedDirection = Literal['a_gt_b', 'a_lt_b', 'two_sided']
+"""Author-declared *prior* sign of the predicted treatment-vs-
+baseline effect on the primary outcome. `'a_gt_b'` predicts the
 intervention's arm exceeds the baseline; `'a_lt_b'` predicts
 below; `'two_sided'` predicts non-zero in either direction.
 None on Hypothesis means direction is unstated (downstream
-infers from a `held` flag if available)."""
+infers from a `held` flag if available).
+
+Distinct from `causal_graph.Direction` — that's the *observed*
+sign (DIRECT / INVERSE) inferred post-hoc from a stat's value.
+PredictedDirection is the prior; Direction is the posterior."""
 
 
 @dataclass(frozen=True, slots=True)
 class Hypothesis[R: Mapping[str, object]]:
-    """A research hypothesis: an intervention plus the bridges
-    that should hold under it.
+    """A research hypothesis: an intervention plus the typed
+    causal subgraph (bridge edges) the intervention claims.
 
     Generic in `R: Mapping[str, object]` — the (single) record
     schema all bridges are typed against. Authors using TypedDict
     for their record get typed bridge bodies (no narrowing);
     authors using plain `Mapping[str, object]` continue to narrow
     at use site.
+
+    Two surfaces for declaring per-edge tests, in transition:
+
+    - `edges: tuple[ClaimedEdge[R], ...]` — the *typed* surface.
+      Each `ClaimedEdge` carries its role (mechanism / outcome /
+      link / refuter), source / target measurement paths,
+      predicted direction, Pearl tier, and the Bridge to run.
+      The mechanism edge is the load-bearing claim;
+      `mechanism_edge()` accessor returns it.
+    - `bridges: tuple[Bridge[R], ...]` — the back-compat flat
+      tuple. No per-bridge role, source/target, or tier. Existing
+      callers; new code should populate `edges`.
+
+    Both surfaces can coexist on one Hypothesis. The top-level
+    `predicted_direction: PredictedDirection | None` is vestigial
+    when `edges` is populated (each edge carries its own
+    `predicted_direction`).
 
     The framework treats a cell as producing ONE record, even
     when the underlying machinery has internal sub-passes (RL's
@@ -70,76 +107,37 @@ class Hypothesis[R: Mapping[str, object]]:
     name: str
     intervention: Mapping[str, object]
     bridges: tuple[Bridge[R], ...] = ()
-    predicted_direction: Direction | None = None
+    predicted_direction: PredictedDirection | None = None
+    intervention_arms: tuple[Intervention, ...] = field(default_factory=tuple)
+    edges: tuple[ClaimedEdge[R], ...] = field(default_factory=tuple)
 
+    def mechanism_edge(self) -> ClaimedEdge[R] | None:
+        """Return the load-bearing mechanism edge if one is
+        declared, else None.
 
-def _canonical_str(v: object) -> str:
-    """Stable string form of a leaf value, used by leaf-path
-    flattening to produce a deterministic scalar fingerprint of a
-    structured kwarg (a Module, a partial, an FnClaim).
+        The §3 verdict pattern's central claim. Outcome and link
+        edges test its implications; `arm_key` derives from the
+        intervention that's the source of this edge."""
+        for e in self.edges:
+            if e.role == 'mechanism':
+                return e
+        return None
 
-    Handles each concrete callable kind by isinstance against the
-    runtime type — `types.FunctionType`, `type`, and
-    `types.BuiltinFunctionType` all carry typed `__name__: str`,
-    so attribute access after narrowing is fully typed (no
-    `getattr` needed).
+    def edges_by_role(
+        self, role: 'BridgeRole',
+    ) -> tuple['ClaimedEdge[R]', ...]:
+        """All edges with the given role. Most subgraphs have one
+        mechanism + one outcome + one link, but the API permits
+        multiple of each (e.g., several outcome paths tested
+        against the same intervention)."""
+        return tuple(e for e in self.edges if e.role == role)
 
-    `functools.partial` is canonicalised by recursing into
-    `.func` and lexicographically encoding `.keywords` (positional
-    `.args` are flattened similarly). This makes baked-in slot
-    parameters (`partial(linear_epsilon, anneal_steps=50_000)`)
-    contribute to the fingerprint transparently — two
-    independently-constructed partials with the same wrapped
-    callable + same kwargs canonicalise identically across
-    processes. The "bake-in" pattern is then honest: the canonical
-    name records WHAT was baked in.
+    def arm_key(self) -> str:
+        """Canonical fingerprint of the typed `intervention_arms`.
 
-    Anything else falls through to `repr()`."""
-    if isinstance(v, FnClaim):
-        # Function-claim wrapper: short canonical form `Claim:name`.
-        # Module-claims (instances of @claim-decorated classes with
-        # data fields) fall through to the dataclass branch below
-        # for sorted-field expansion.
-        return f'Claim:{v.name}'
-    if isinstance(v, bool):
-        # Order matters: bool is subclass of int, so this branch
-        # must precede the (int, float, str) check below.
-        return repr(v)
-    if isinstance(v, (int, float, str)):
-        return repr(v)
-    if isinstance(v, functools.partial):
-        inner = _canonical_str(v.func)
-        args_part = (
-            ','.join(_canonical_str(a) for a in v.args) if v.args else ''
-        )
-        kw_part = ','.join(
-            f'{k}={_canonical_str(val)}'
-            for k, val in sorted(v.keywords.items())
-        ) if v.keywords else ''
-        bound = ';'.join(p for p in (args_part, kw_part) if p)
-        return f'partial({inner};{bound})'
-    if is_dataclass(v) and not isinstance(v, type):
-        # Pytree-shaped leaf values (e.g. Module instances):
-        # canonicalise by sorted-field expansion so two
-        # configurations differing in a single leaf get distinct,
-        # structured fingerprint entries. The form is process-
-        # portable because field declaration order and recursive
-        # `_canonical_str` are deterministic.
-        body = ','.join(
-            f'{f.name}={_canonical_str(getattr(v, f.name))}'
-            for f in sorted(fields(v), key=lambda f: f.name)
-        )
-        return f'dataclass:{type(v).__name__}({body})'
-    if isinstance(v, tuple):
-        # Stable canonical form for tuples (e.g. `hidden=(64, 64)`).
-        # Recurse so tuples-of-scalars / tuples-of-tuples stay
-        # process-portable rather than relying on `repr()` which
-        # is stable in CPython but less semantically explicit here.
-        return '(' + ','.join(_canonical_str(item) for item in v) + ')'
-    if isinstance(v, types.FunctionType):
-        return f'callable:{v.__name__}'
-    if isinstance(v, type):
-        return f'type:{v.__name__}'
-    if isinstance(v, types.BuiltinFunctionType):
-        return f'builtin:{v.__name__}'
-    return repr(v)
+        Empty `intervention_arms` → `'baseline'`; non-empty →
+        `'+'`-joined slot=replacement keys (sorted by slot_path).
+        Two hypotheses with same arms but different HP grid
+        points share one `arm_key()`; HP variation is a covariate,
+        not an arm distinguisher."""
+        return combined_arm_key(self.intervention_arms)

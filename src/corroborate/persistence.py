@@ -1,6 +1,6 @@
-"""Persistence — parquet + zarr round-trip for schema rows.
+"""Persistence — parquet round-trip for schema rows.
 
-Most row types write to a flat columnar parquet via `pl.DataFrame
+Every row type writes to a flat columnar parquet via `pl.DataFrame
 ([r.as_dict() for r in rows]).write_parquet(path)`. No JSON
 wrapping, no struct columns: each typed-provenance field becomes
 its own typed column, and each `measurements` entry becomes its
@@ -14,30 +14,25 @@ padding when constructing the DataFrame from a list-of-dicts —
 rows that don't carry a path get null in that column, which
 `from_row_dict` skips on read.
 
-`TraceRow` has a SECOND backend: `arrays` (multi-dim numpy arrays)
-goes to a zarr store keyed by `{cell_id}/{array_name}`. Parquet
-nested-list columns work technically for 2-D+ data but suffer from
-Python list materialisation overhead and opaque queries. Zarr is
-the right fit. The `write_tracerows(rows, parquet_path, *,
-zarr_path=None)` signature lets the caller persist scalars+1-D to
-parquet and arrays to zarr in one call.
+`TraceRow` carries multi-dim arrays in `leaves` as nested-list
+columns. Polars infers narrow dtype from numpy arrays at write
+time (`List(Float32)` / `List(Int32)` / `List(Array(<scalar>,
+shape=N))`); at read time the streaming reader
+(`iter_trace_records`) keeps memory bounded by yielding row
+slices instead of materialising the full corpus.
 
 `apply_trace_reductions(traces, add, drop)` is the polars-expr
 post-trace hook — authors declare reductions as polars exprs +
-an explicit drop list, applied in-memory before persisting. Operates
-on the parquet side (leaves); array-side reductions belong in
-plain numpy in the consumer."""
+an explicit drop list, applied in-memory before persisting."""
 from __future__ import annotations
 
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from pathlib import Path
 
-import numpy as np
 import polars as pl
 
 from corroborate._polars_boundary import to_dicts as _to_dicts
 from corroborate.schema import (
-    ArrayLeaf,
     ComparisonRow,
     RunRow,
     TraceRow,
@@ -72,111 +67,25 @@ def read_comparisonrows(path: Path) -> list[ComparisonRow]:
 
 # ============ TraceRow ============
 
-# Trace persistence: scalars + 1-D series go to parquet (flat
-# columnar, polars-queryable). Multi-dim arrays go to zarr keyed
-# by `{cell_id}/{array_name}`. Both stores join on cell_id.
-
 def write_tracerows(
     rows: Iterable[TraceRow],
     parquet_path: Path,
-    *,
-    zarr_path: Path | None = None,
 ) -> None:
-    """Write TraceRows: scalars + 1-D series → parquet; multi-dim
-    arrays → zarr (if `zarr_path` is given).
-
-    Each row's `leaves` mapping flattens to top-level parquet
-    columns. Each row's `arrays` mapping is split out: for each
-    `(name, ndarray)` pair, writes
-    `zarr_path/{cell_id}/{name}` as a zarr array with zstd
-    compression. If `zarr_path is None` and any row has non-empty
-    arrays, raises ValueError — silent data loss is the wrong
-    default.
-
-    Round-trip pair: `read_tracerows`."""
+    """Write TraceRows to a flat columnar parquet. Each row's
+    `leaves` mapping flattens to top-level columns; multi-dim
+    arrays land in nested-list columns (polars infers narrow
+    dtype from numpy at write time). Round-trip pair:
+    `read_tracerows`."""
     rows_list = list(rows)
-    has_arrays = any(r.arrays for r in rows_list)
-    if has_arrays and zarr_path is None:
-        raise ValueError(
-            'TraceRow.arrays present but zarr_path not provided. '
-            'Pass zarr_path to persist multi-dim arrays.',
-        )
-
-    # Parquet side: scalars + 1-D series.
     records = [r.as_dict() for r in rows_list]
     pl.DataFrame(records).write_parquet(parquet_path)
 
-    # Zarr side: multi-dim arrays per cell.
-    if zarr_path is None or not has_arrays:
-        return
-    import zarr  # type: ignore[reportMissingTypeStubs]
-    from zarr.codecs import (  # type: ignore[reportMissingTypeStubs]
-        BloscCodec,
-    )
-    # Blosc/zstd@3 — fast + small. Per-array shuffle helps for
-    # smooth float arrays (Q-values, td-errors), neutral for ints.
-    compressor = BloscCodec(  # type: ignore[reportUnknownMemberType]
-        cname='zstd', clevel=3, shuffle='shuffle',
-    )
-    root = zarr.open_group(  # type: ignore[reportUnknownMemberType]
-        str(zarr_path), mode='a',
-    )
-    for r in rows_list:
-        if not r.arrays:
-            continue
-        # Overwrite-on-conflict: re-running a sweep should refresh
-        # the zarr group for that cell, not append-and-corrupt.
-        if r.id in root:
-            del root[r.id]  # type: ignore[reportUnknownMemberType]
-        grp = root.create_group(r.id)  # type: ignore[reportUnknownMemberType]
-        for name, arr in r.arrays.items():
-            np_arr = np.asarray(arr)
-            zarr_arr = grp.create_array(  # type: ignore[reportUnknownMemberType]
-                name=name, shape=np_arr.shape, dtype=np_arr.dtype,
-                compressors=compressor,
-            )
-            zarr_arr[:] = np_arr  # type: ignore[reportUnknownMemberType]
 
-
-def read_tracerows(
-    parquet_path: Path,
-    *,
-    zarr_path: Path | None = None,
-) -> list[TraceRow]:
-    """Read TraceRows: scalars + 1-D series from parquet; multi-dim
-    arrays from zarr (if `zarr_path` is given and the cell has a
-    group there).
-
-    For each row in parquet, looks up `zarr_path/{cell_id}/` and
-    materialises every array as numpy via `arr[:]`. Lazy-load is
-    NOT yet exposed; callers that don't want arrays in memory
-    should call without `zarr_path`."""
+def read_tracerows(parquet_path: Path) -> list[TraceRow]:
+    """Read TraceRows from parquet. Materialises the whole file;
+    for memory-bounded streaming reads use `iter_trace_records`."""
     df = pl.read_parquet(parquet_path)
-    parquet_dicts = list(_to_dicts(df))
-
-    arrays_by_id: dict[str, Mapping[str, ArrayLeaf]] = {}
-    if zarr_path is not None and Path(zarr_path).exists():
-        import zarr  # type: ignore[reportMissingTypeStubs]
-        root = zarr.open_group(  # type: ignore[reportUnknownMemberType]
-            str(zarr_path), mode='r',
-        )
-        for cell_id in root:  # type: ignore[reportUnknownVariableType]
-            cell_grp = root[cell_id]  # type: ignore[reportUnknownMemberType]
-            arrays: dict[str, ArrayLeaf] = {}
-            for arr_name in cell_grp:  # type: ignore[reportUnknownVariableType]
-                arrays[arr_name] = np.asarray(  # type: ignore[reportUnknownArgumentType]
-                    cell_grp[arr_name][:]  # type: ignore[reportUnknownMemberType]
-                )
-            arrays_by_id[str(cell_id)] = arrays
-
-    out: list[TraceRow] = []
-    for d in parquet_dicts:
-        cell_id = d.get('id')
-        cell_arrays = (
-            arrays_by_id.get(str(cell_id)) if cell_id is not None else None
-        )
-        out.append(TraceRow.from_row_dict(d, arrays=cell_arrays))
-    return out
+    return [TraceRow.from_row_dict(d) for d in _to_dicts(df)]
 
 
 # ============ Dtype tightening for trace stores ============
@@ -219,13 +128,12 @@ def iter_trace_records(
     *,
     columns: Sequence[str] | None = None,
     batch_size: int = 32,
-    zarr_path: Path | None = None,
 ) -> Iterator[Mapping[str, object]]:
     """Stream per-cell trace records from a parquet without
     full-corpus materialization. Yields one dict per cell; the
-    dict is a polars row dict (1-D `List` columns surface as
-    Python `list[float]` / `list[int]`; scalars surface as their
-    native type).
+    dict is a polars row dict (`List` columns surface as Python
+    `list[float]` / `list[int]` / nested lists for 2-D+; scalars
+    surface as their native type).
 
     `columns` — optional projection. Only the named columns are
     read; saves substantial bandwidth + memory when the consumer
@@ -237,14 +145,8 @@ def iter_trace_records(
     bounds memory at ~`batch_size × per-row-size` even when the
     corpus is large.
 
-    `zarr_path` — when provided, attaches the per-cell zarr
-    arrays to each yielded record under their original keys
-    (numpy ndarrays). Skipped by default to keep the streaming
-    path memory-bounded; pass it only when the consumer actually
-    reads multi-dim arrays.
-
     Memory-bounded alternative to `read_tracerows` for post-hoc
-    per-cell projections (mediator computation, fact extraction
+    per-cell projections (measurable computation, fact extraction
     across the corpus, ...) where TraceRow's typed shape isn't
     needed. Drops the ~30× Python-object overhead of
     `to_dicts(df)` materialisation by reading slice-by-slice.
@@ -257,21 +159,6 @@ def iter_trace_records(
             proj = ['id', *proj]
     else:
         proj = None
-
-    arrays_by_id: dict[str, Mapping[str, np.ndarray]] = {}
-    if zarr_path is not None and Path(zarr_path).exists():
-        import zarr  # type: ignore[reportMissingTypeStubs]
-        root = zarr.open_group(  # type: ignore[reportUnknownMemberType]
-            str(zarr_path), mode='r',
-        )
-        for cell_id in root:  # type: ignore[reportUnknownVariableType]
-            cell_grp = root[cell_id]  # type: ignore[reportUnknownMemberType]
-            arrays: dict[str, np.ndarray] = {}
-            for arr_name in cell_grp:  # type: ignore[reportUnknownVariableType]
-                arrays[arr_name] = np.asarray(  # type: ignore[reportUnknownArgumentType]
-                    cell_grp[arr_name][:]  # type: ignore[reportUnknownMemberType]
-                )
-            arrays_by_id[str(cell_id)] = arrays
 
     n_rows = pl.scan_parquet(parquet_path).select(
         pl.len(),
@@ -287,17 +174,7 @@ def iter_trace_records(
             lf = lf.select(proj)
         df = lf.slice(start, batch_size).collect()
         for row in df.iter_rows(named=True):
-            cell_id = row.get('id')
-            if (zarr_path is not None
-                    and isinstance(cell_id, str)
-                    and cell_id in arrays_by_id):
-                # Attach arrays under their original keys, alongside
-                # the parquet-side fields.
-                merged: dict[str, object] = dict(row)
-                merged.update(arrays_by_id[cell_id])
-                yield merged
-            else:
-                yield row
+            yield row
 
 
 # ============ Polars-expr post-trace reductions ============

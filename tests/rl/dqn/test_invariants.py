@@ -33,7 +33,6 @@ from corroborate.rl.dqn.invariants import (
     fqi_decay_gap,
     hasselt_covariance_gap,
     jensen_overestimation_gap,
-    lin_iid_gap,
     state_action_coverage_gap,
 )
 from corroborate.rl.loop import python_loop
@@ -142,90 +141,6 @@ def test_fqi_decay_gap_carries_reads() -> None:
     assert gap.reads == ('td_error',)
 
 
-# ============ Lin i.i.d. gap ============
-
-def test_lin_iid_gap_zero_for_uniform_sampling_post_fill() -> None:
-    """Indices uniformly drawn from a fully-filled buffer →
-    KL(empirical || uniform) ≈ 0."""
-    n_steps = 100
-    batch = 16
-    capacity = 50
-    rng = jnp.arange(n_steps * batch) % capacity
-    indices = rng.reshape((n_steps, batch))
-    # Buffer is fully filled for the entire trajectory.
-    buf_size = jnp.full((n_steps,), capacity, dtype=jnp.int32)
-    record: Mapping[str, jnp.ndarray] = {
-        'sample_indices': indices, 'buf_size': buf_size,
-    }
-    gap = lin_iid_gap(capacity=capacity)
-    val = gap(record)
-    assert val < 0.1
-
-
-def test_lin_iid_gap_large_for_concentrated_sampling_post_fill() -> None:
-    """All samples concentrated on one index after the buffer
-    fills → very biased sampling → large KL."""
-    capacity = 200
-    record: Mapping[str, jnp.ndarray] = {
-        'sample_indices': jnp.zeros((50, 16), dtype=jnp.int32),
-        # Buffer fills early then stays full.
-        'buf_size': jnp.full((50,), capacity, dtype=jnp.int32),
-    }
-    gap = lin_iid_gap(capacity=capacity)
-    val = gap(record)
-    # KL(δ_0 || uniform_200) = log(200) ≈ 5.3.
-    assert val > 4.0
-
-
-def test_lin_iid_gap_nan_when_buffer_never_fills() -> None:
-    """Buffer never fills (always under capacity) → NaN no-data
-    sentinel, NOT a misleading high value from buffer-size
-    confound nor a `0.0` collision with a perfectly-uniform
-    sampling distribution."""
-    import math
-    capacity = 1000  # huge capacity buffer never reaches
-    record: Mapping[str, jnp.ndarray] = {
-        'sample_indices': jnp.zeros((50, 16), dtype=jnp.int32),
-        'buf_size': jnp.arange(50, dtype=jnp.int32),  # 0, 1, 2, ..., 49
-    }
-    gap = lin_iid_gap(capacity=capacity)
-    assert math.isnan(gap(record))
-
-
-def test_lin_iid_gap_filters_out_pre_fill_steps() -> None:
-    """Pre-fill steps are EXCLUDED from the KL computation —
-    avoids the structural confound where small buffer makes
-    sampling look biased toward low indices."""
-    capacity = 100
-    n_pre_fill = 30
-    n_post_fill = 70
-    # Pre-fill: indices concentrated low (because buffer is small).
-    pre_indices = jnp.zeros((n_pre_fill, 16), dtype=jnp.int32)
-    # Post-fill: indices uniform across capacity.
-    post_indices = (
-        jnp.arange(n_post_fill * 16) % capacity
-    ).reshape((n_post_fill, 16))
-    indices = jnp.concatenate([pre_indices, post_indices], axis=0)
-
-    pre_buf = jnp.arange(n_pre_fill, dtype=jnp.int32)
-    post_buf = jnp.full((n_post_fill,), capacity, dtype=jnp.int32)
-    buf_size = jnp.concatenate([pre_buf, post_buf])
-
-    record: Mapping[str, jnp.ndarray] = {
-        'sample_indices': indices, 'buf_size': buf_size,
-    }
-    gap = lin_iid_gap(capacity=capacity)
-    val = gap(record)
-    # Without filtering, the pre-fill bias would dominate the KL.
-    # With filtering, only the uniform post-fill segment counts.
-    assert val < 0.5
-
-
-def test_lin_iid_gap_carries_both_reads() -> None:
-    gap = lin_iid_gap(capacity=200)
-    assert gap.reads == ('sample_indices', 'buf_size')
-
-
 # ============ Hasselt covariance gap (Pearson r) ============
 
 def _pearson_stats_from_arrays(
@@ -325,16 +240,22 @@ def test_at_most_wrap_held_when_gap_under_threshold() -> None:
 
 
 def test_at_most_wrap_invariant_violation_when_gap_over_threshold() -> None:
-    """Synthetic concentrated sampling on a fully-filled buffer
-    → large lin_iid_gap → over threshold → INVARIANT_VIOLATION
-    (theorem out of scope)."""
-    capacity = 200
+    """Synthetic flat-then-rising td_error → fqi_decay_gap large
+    (window-norm ratios well above gamma) → over threshold →
+    INVARIANT_VIOLATION (theorem out of scope)."""
+    gamma = 0.5
+    sync_period = 10
+    # Per-window sup norms 1.0, 2.0, 4.0, 8.0 → ratio = 2.0 ≫ γ = 0.5.
+    parts: list[jnp.ndarray] = []
+    for sup in (1.0, 2.0, 4.0, 8.0):
+        w = jnp.full(sync_period, sup * 0.5, dtype=jnp.float32)
+        w = w.at[0].set(sup)
+        parts.append(w)
     record: Mapping[str, jnp.ndarray] = {
-        'sample_indices': jnp.zeros((50, 16), dtype=jnp.int32),
-        'buf_size': jnp.full((50,), capacity, dtype=jnp.int32),
+        'td_error': jnp.concatenate(parts),
     }
-    gap = lin_iid_gap(capacity=capacity)
-    bridge = at_most(gap, threshold=1.0, of_claim=periodic_copy)
+    gap = fqi_decay_gap(sync_period=sync_period, gamma=gamma)
+    bridge = at_most(gap, threshold=0.5, of_claim=periodic_copy)
     result = bridge(record)
     assert result.verdict is Verdict.INVARIANT_VIOLATION
 

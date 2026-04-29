@@ -21,7 +21,9 @@ from corroborate.reductions import (
     growth_window,
     late_window_mean,
     max_abs,
+    mean_peak_window,
     mean_window,
+    peak_centered_window,
 )
 
 
@@ -148,3 +150,73 @@ def test_late_window_mean_rejects_invalid_fraction() -> None:
         late_window_mean('x', fraction=0.0)
     with pytest.raises(ValueError):
         late_window_mean('x', fraction=1.5)
+
+
+# ============ mean_peak_window ============
+
+def test_mean_peak_window_pre_half() -> None:
+    """Peak at index 8 of 10; pre_frac=0.5 → window [4, 8].
+    arr = [0, 1, 2, ..., 9]; mean over [4, 5, 6, 7] = 5.5."""
+    arr = jnp.asarray([float(i) for i in range(10)])
+    record: Mapping[str, object] = {
+        'q': arr, 'peak_idx': 8,
+    }
+    m = mean_peak_window(from_key('q'), 'peak_idx', pre_frac=0.5)
+    assert m(record) == pytest.approx(5.5)
+
+
+def test_mean_peak_window_propagates_reads() -> None:
+    m = mean_peak_window(from_key('q'), 'peak_idx', pre_frac=0.5)
+    assert m.reads == ('q', 'peak_idx')
+    assert 'peak_pre50' in m.name
+
+
+def test_mean_peak_window_handles_missing_peak() -> None:
+    """Peak key missing from record → NaN, not crash."""
+    arr = jnp.asarray([float(i) for i in range(10)])
+    record: Mapping[str, jnp.ndarray] = {'q': arr}
+    m = mean_peak_window(from_key('q'), 'peak_idx', pre_frac=0.5)
+    import math
+    assert math.isnan(m(record))
+
+
+def test_mean_peak_window_rejects_bad_pre_frac() -> None:
+    with pytest.raises(ValueError):
+        mean_peak_window(from_key('x'), 'peak', pre_frac=0.0)
+    with pytest.raises(ValueError):
+        mean_peak_window(from_key('x'), 'peak', pre_frac=1.5)
+
+
+# ============ peak_centered_window ============
+
+def test_peak_centered_window_default() -> None:
+    """20-element array, peak at 10, half_width=0.125 (h=2).
+    Window [8, 12); arr=[0..19]; mean = (8+9+10+11)/4 = 9.5."""
+    arr = jnp.asarray([float(i) for i in range(20)])
+    record: Mapping[str, object] = {
+        'q': arr, 'peak_idx': 10,
+    }
+    m = peak_centered_window(from_key('q'), 'peak_idx')
+    assert m(record) == pytest.approx(9.5)
+
+
+def test_peak_centered_window_clipped_at_end() -> None:
+    """Peak at end: window [n-h, n] (clipped). For n=10, peak=10,
+    h=1: window [9, 10] = [9.0]; mean=9.0."""
+    arr = jnp.asarray([float(i) for i in range(10)])
+    record: Mapping[str, object] = {
+        'q': arr, 'peak_idx': 10,
+    }
+    m = peak_centered_window(
+        from_key('q'), 'peak_idx', half_width_frac=0.1,
+    )
+    # Window is too narrow (1 element) → NaN per the < 2 guard.
+    import math
+    assert math.isnan(m(record))
+
+
+def test_peak_centered_window_rejects_bad_half_width() -> None:
+    with pytest.raises(ValueError):
+        peak_centered_window(from_key('x'), 'peak', half_width_frac=0.0)
+    with pytest.raises(ValueError):
+        peak_centered_window(from_key('x'), 'peak', half_width_frac=0.6)

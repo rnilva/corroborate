@@ -92,16 +92,14 @@ def test_vanilla_dqn_runs_on_cartpole_via_python_loop() -> None:
 
     # State advanced 50 steps.
     assert int(final_state.step) == 50
-    # Record has expected keys with three shape families:
+    # Record has expected keys with two shape families:
     # - per-step scalars: (T,)
-    # - per-batch indices: (T, batch)
-    # - per-batch Q-vectors: (T, batch, n_actions)
+    # - per-step Q-summaries: (T, n_actions) or (T, 5)
     scalar_keys = {
         'reward', 'done', 'max_q',
         'ep_return', 'action', 'state_hash', 'buf_size',
         'loss', 'td_error',
     }
-    batch_keys = {'sample_indices'}
     # Per-step Q reductions: per-action vectors (n_actions,) and
     # 5-tuple Pearson sum-stats. Replaces the full
     # `(batch, n_actions)` Q-tensors that train_phase used to emit;
@@ -109,12 +107,9 @@ def test_vanilla_dqn_runs_on_cartpole_via_python_loop() -> None:
     q_keys = {
         'online_q_per_action', 'target_q_per_action', 'pearson_stats',
     }
-    assert set(record.keys()) == scalar_keys | batch_keys | q_keys
+    assert set(record.keys()) == scalar_keys | q_keys
     for key in scalar_keys:
         assert record[key].shape == (50,)
-    for key in batch_keys:
-        # batch_size = 16 in this smoke fixture
-        assert record[key].shape == (50, 16)
     # n_actions = 2 for CartPole; pearson_stats is 5 sum-stats/step.
     assert record['online_q_per_action'].shape == (50, 2)
     assert record['target_q_per_action'].shape == (50, 2)

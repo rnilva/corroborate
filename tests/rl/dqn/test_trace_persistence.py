@@ -24,7 +24,7 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from corroborate.hypothesis import _canonical_str
+from corroborate._canonical import canonical_str
 from corroborate.persistence import read_tracerows, write_tracerows
 from corroborate.rl.dqn.claims.optimizer import Adam, WarmedUpdate
 from corroborate.rl.dqn.dqn import default_state_hash, dqn
@@ -45,7 +45,7 @@ def _leaf_scalar(value: object) -> str | int | float | bool:
         return value
     if isinstance(value, (int, float, str)):
         return value
-    return _canonical_str(value)
+    return canonical_str(value)
 
 
 def _leaf_values(configured: object) -> dict[str, str | int | float | bool]:

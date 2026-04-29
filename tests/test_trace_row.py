@@ -289,125 +289,52 @@ def test_apply_trace_reductions_collapse_3d_to_1d() -> None:
     assert 'online_q_values' not in out.leaves
 
 
-# ============ Zarr round-trip for multi-dim arrays ============
+# ============ Multi-dim arrays via parquet nested-list columns ============
 
-def test_arrays_field_round_trip_via_zarr(tmp_path: Path) -> None:
-    """`TraceRow.arrays` round-trips through zarr keyed by cell_id.
-    `leaves` go to parquet as before; `arrays` to zarr."""
+def test_multi_dim_arrays_round_trip_via_parquet(tmp_path: Path) -> None:
+    """Multi-dim numpy arrays in `leaves` round-trip through
+    parquet's nested-list columns. Polars infers narrow dtype at
+    write time; on read they decode to nested Python lists."""
     import numpy as np
     rows_in = [
         TraceRow(
             id='cell-1', cycle_id='c1',
             timestamp='2026-01-01T00:00:00+00:00',
-            leaves={'gamma': 0.99, 'reward': [1.0, 0.0, 0.5]},
-            arrays={
-                'predicted_q': np.arange(12, dtype=np.float64).reshape(3, 4),
-                'pearson_stats': np.zeros((10, 5), dtype=np.float64),
+            leaves={
+                'gamma': 0.99, 'reward': [1.0, 0.0, 0.5],
+                'predicted_q': np.arange(12, dtype=np.float32).reshape(3, 4),
+                'pearson_stats': np.zeros((10, 5), dtype=np.float32),
             },
         ),
         TraceRow(
             id='cell-2', cycle_id='c1',
             timestamp='2026-01-01T00:00:01+00:00',
-            leaves={'gamma': 0.99, 'reward': [0.5, 1.0]},
-            arrays={
-                'predicted_q': np.ones((2, 4), dtype=np.float64),
+            leaves={
+                'gamma': 0.99, 'reward': [0.5, 1.0],
+                'predicted_q': np.arange(12, 24, dtype=np.float32).reshape(3, 4),
+                'pearson_stats': np.ones((10, 5), dtype=np.float32),
             },
-        ),
-    ]
-    parquet_path = tmp_path / 'traces.parquet'
-    zarr_path = tmp_path / 'arrays.zarr'
-
-    write_tracerows(rows_in, parquet_path, zarr_path=zarr_path)
-    rows_out = read_tracerows(parquet_path, zarr_path=zarr_path)
-
-    assert len(rows_out) == 2
-    by_id = {r.id: r for r in rows_out}
-
-    # Leaves preserved.
-    assert by_id['cell-1'].leaves['gamma'] == 0.99
-    assert by_id['cell-1'].leaves['reward'] == [1.0, 0.0, 0.5]
-
-    # Arrays preserved with shape + values.
-    p1 = by_id['cell-1'].arrays['predicted_q']
-    assert p1.shape == (3, 4)
-    assert p1.tolist() == np.arange(12).reshape(3, 4).tolist()
-    p2 = by_id['cell-1'].arrays['pearson_stats']
-    assert p2.shape == (10, 5)
-
-    # Cell-2's arrays are independent (different shapes per cell).
-    assert by_id['cell-2'].arrays['predicted_q'].shape == (2, 4)
-    # cell-2 has no pearson_stats — heterogeneous-array support.
-    assert 'pearson_stats' not in by_id['cell-2'].arrays
-
-
-def test_write_tracerows_rejects_arrays_without_zarr_path(tmp_path: Path) -> None:
-    """If a TraceRow has non-empty arrays but no zarr_path is given,
-    write fails — silent data loss is the wrong default."""
-    import numpy as np
-    rows = [
-        TraceRow(
-            id='cell-1', cycle_id=None,
-            timestamp='2026-01-01T00:00:00+00:00',
-            leaves={'gamma': 0.99},
-            arrays={'q': np.zeros((3, 4))},
-        ),
-    ]
-    parquet_path = tmp_path / 'traces.parquet'
-    with pytest.raises(ValueError, match='arrays present'):
-        write_tracerows(rows, parquet_path)
-
-
-def test_read_tracerows_without_zarr_returns_empty_arrays(
-    tmp_path: Path,
-) -> None:
-    """Reading parquet without a zarr_path yields rows with empty
-    `arrays`. Useful for scalar-only analyses that don't need
-    multi-dim data."""
-    rows_in = [
-        TraceRow(
-            id='cell-1', cycle_id=None,
-            timestamp='2026-01-01T00:00:00+00:00',
-            leaves={'gamma': 0.99, 'reward': [1.0, 0.5]},
         ),
     ]
     parquet_path = tmp_path / 'traces.parquet'
     write_tracerows(rows_in, parquet_path)
     rows_out = read_tracerows(parquet_path)
-    assert len(rows_out) == 1
-    assert rows_out[0].arrays == {}
-    assert rows_out[0].leaves['gamma'] == 0.99
 
+    assert len(rows_out) == 2
+    by_id = {r.id: r for r in rows_out}
 
-def test_zarr_overwrite_on_rewrite(tmp_path: Path) -> None:
-    """Re-writing to the same zarr_path replaces existing cell
-    groups instead of appending or corrupting."""
-    import numpy as np
-    parquet_path = tmp_path / 'traces.parquet'
-    zarr_path = tmp_path / 'arrays.zarr'
+    # Scalar / 1-D leaves preserved.
+    assert by_id['cell-1'].leaves['gamma'] == 0.99
+    assert by_id['cell-1'].leaves['reward'] == [1.0, 0.0, 0.5]
 
-    # First write.
-    rows_v1 = [
-        TraceRow(
-            id='cell-1', cycle_id=None,
-            timestamp='2026-01-01T00:00:00+00:00',
-            leaves={'gamma': 0.99},
-            arrays={'q': np.zeros((3, 4), dtype=np.float64)},
-        ),
-    ]
-    write_tracerows(rows_v1, parquet_path, zarr_path=zarr_path)
-
-    # Second write: same cell_id, different array values.
-    rows_v2 = [
-        TraceRow(
-            id='cell-1', cycle_id=None,
-            timestamp='2026-01-01T00:00:00+00:00',
-            leaves={'gamma': 0.99},
-            arrays={'q': np.ones((3, 4), dtype=np.float64) * 7.0},
-        ),
-    ]
-    write_tracerows(rows_v2, parquet_path, zarr_path=zarr_path)
-
-    rows_out = read_tracerows(parquet_path, zarr_path=zarr_path)
-    assert rows_out[0].arrays['q'].tolist() == (
-        np.ones((3, 4)) * 7.0
-    ).tolist()
+    # 2-D arrays preserved with shape + values (round-trip as
+    # nested Python lists).
+    p1 = by_id['cell-1'].leaves['predicted_q']
+    assert isinstance(p1, list)
+    assert len(p1) == 3 and len(p1[0]) == 4
+    assert np.asarray(p1).tolist() == (
+        np.arange(12, dtype=np.float32).reshape(3, 4).tolist()
+    )
+    p2 = by_id['cell-1'].leaves['pearson_stats']
+    assert isinstance(p2, list)
+    assert len(p2) == 10 and len(p2[0]) == 5

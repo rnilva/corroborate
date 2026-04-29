@@ -32,7 +32,7 @@ from typing import Literal
 import scipy.stats as ss
 from statsmodels.stats.power import TTestPower
 
-from corroborate.hypothesis import Direction
+from corroborate.hypothesis import PredictedDirection
 from corroborate.verdict import RefutationClass, Verdict
 
 
@@ -144,7 +144,7 @@ def adequately_powered_paired(
 def verdict_from_paired_stats(
     g: float, se: float, n: int,
     *,
-    predicted_direction: Direction | None,
+    predicted_direction: PredictedDirection | None,
     alpha: float = 0.05,
     power: float = 0.8,
 ) -> tuple[Verdict, RefutationClass | None, bool]:
@@ -190,7 +190,7 @@ def verdict_from_paired_stats(
             return (Verdict.HELD, None, True)
         return (Verdict.NO_EFFECT, RefutationClass.SIGN_FLIP, True)
 
-    # Unreachable under the Direction Literal; defensive fallback.
+    # Unreachable under the PredictedDirection Literal; defensive fallback.
     return (Verdict.NO_EFFECT, RefutationClass.NULL_EFFECT, True)
 
 
@@ -285,10 +285,30 @@ def random_effects_summary(
     )
 
 
+I2_THRESHOLD: float = 0.5
+"""Random-effects I² above this threshold routes a corroboration
+verdict (PI excludes zero in predicted direction) through
+`HELD_WITH_SCOPE_FLAG` instead of plain `HELD`. v9's reframing
+default; configurable per-study but holds the same role as
+Higgins's "moderate-to-substantial" heterogeneity threshold."""
+
+
+def _held_or_scope_flag(pooled: PooledStats) -> Verdict:
+    """Return HELD_WITH_SCOPE_FLAG when I² ≥ threshold, else
+    HELD. The held-conditions (PI excludes zero in predicted
+    direction) are the caller's responsibility to verify before
+    calling this helper."""
+    if math.isnan(pooled.I2):
+        return Verdict.HELD
+    if pooled.I2 >= I2_THRESHOLD:
+        return Verdict.HELD_WITH_SCOPE_FLAG
+    return Verdict.HELD
+
+
 def random_effects_verdict(
     pooled: PooledStats,
     *,
-    predicted_direction: Direction | None,
+    predicted_direction: PredictedDirection | None,
 ) -> tuple[Verdict, RefutationClass | None]:
     """Apply Popperian aggregation to a random-effects pool.
 
@@ -296,10 +316,11 @@ def random_effects_verdict(
       unreliable below 3 cells; PI fragile).
     - PI brackets zero → NO_EFFECT/NULL_EFFECT (population
       effect could be zero; not robustly directional).
-    - PI strictly positive AND predicted='a_gt_b' (or None /
-      'two_sided') → HELD.
-    - PI strictly negative AND predicted='a_lt_b' (or None /
-      'two_sided') → HELD.
+    - PI excludes zero in predicted direction:
+      - I² < threshold → HELD (uniform corroboration).
+      - I² ≥ threshold → HELD_WITH_SCOPE_FLAG (corroborates at
+        population level but heterogeneous across strata;
+        meta-regression input).
     - PI strictly negative when predicted positive (or vice
       versa) → NO_EFFECT/SIGN_FLIP."""
     if math.isnan(pooled.pooled_g) or pooled.n_cells < 3:
@@ -313,15 +334,15 @@ def random_effects_verdict(
     pi_negative = pooled.pi_hi < 0.0
 
     if predicted_direction is None or predicted_direction == 'two_sided':
-        return (Verdict.HELD, None)
+        return (_held_or_scope_flag(pooled), None)
     if predicted_direction == 'a_gt_b':
         if pi_positive:
-            return (Verdict.HELD, None)
+            return (_held_or_scope_flag(pooled), None)
         if pi_negative:
             return (Verdict.NO_EFFECT, RefutationClass.SIGN_FLIP)
     if predicted_direction == 'a_lt_b':
         if pi_negative:
-            return (Verdict.HELD, None)
+            return (_held_or_scope_flag(pooled), None)
         if pi_positive:
             return (Verdict.NO_EFFECT, RefutationClass.SIGN_FLIP)
 

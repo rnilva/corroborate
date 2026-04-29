@@ -9,7 +9,7 @@ Two pieces:
    configurational scalar claim, interventionable by default.
    Authors hide a leaf from intervention by baking it in via
    `functools.partial`; the bake-in records honestly via
-   `_canonical_str`'s partial branch.
+   `canonical_str`'s partial branch.
 
 2. **Walker** — `walk(claim) → ClaimSignature`. Recursively
    descends into:

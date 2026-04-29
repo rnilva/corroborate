@@ -1,19 +1,28 @@
 """Tests for `aggregate` — sweep → ComparisonRow hand-off.
 
-Covers the framework's two non-IO primitives that aren't already
-exercised in test_statistics.py:
+Covers the framework's three non-IO primitives that aren't
+already exercised in test_statistics.py:
 
 - `aggregate_cell_verdict(verdicts)` — Popperian aggregation over
   per-bridge verdicts.
 - `leaf_signature(measurements)` — configurational fingerprint
   used as a group-by key.
+- `reconstruct_bridge_results(run)` — inverse of
+  `_bridge_result_to_measurements`. Lossless round-trip of
+  name/verdict/targets/stats from RunRow.measurements.
 
 Paired-comparison + cross-env link tests live in
 test_statistics.py and the §3 smoke."""
 from __future__ import annotations
 
-from corroborate.aggregate import aggregate_cell_verdict, leaf_signature
-from corroborate.schema import MeasurementLeaf
+from corroborate.aggregate import (
+    _bridge_result_to_measurements,
+    aggregate_cell_verdict,
+    leaf_signature,
+    reconstruct_bridge_results,
+)
+from corroborate.bridge import BridgeResult
+from corroborate.schema import MeasurementLeaf, RunRow
 from corroborate.verdict import Verdict
 
 
@@ -112,3 +121,104 @@ def test_leaf_signature_is_sorted_and_hashable() -> None:
     assert sig_a == sig_b
     # Hashable as a dict key.
     _: dict[tuple[tuple[str, str], ...], int] = {sig_a: 0}
+
+
+# ============ reconstruct_bridge_results ============
+
+def _runrow_with_measurements(
+    measurements: dict[str, MeasurementLeaf],
+) -> RunRow:
+    return RunRow(
+        id='c1', parent_id=None, cycle_id=None,
+        timestamp='2026-04-29T00:00:00+00:00',
+        verdict=Verdict.HELD,
+        measurements=measurements,
+    )
+
+
+def test_reconstruct_bridge_results_round_trips_name_verdict_targets_stats() -> None:
+    """Forward: BridgeResult → measurements via cell_runner;
+    Inverse: measurements → BridgeResult via aggregate. All four
+    fields preserved exactly."""
+    original = BridgeResult(
+        verdict=Verdict.HELD,
+        reason='g=0.42 ≥ 0.2 threshold',
+        stats={'g': 0.42, 'se': 0.1, 'tier': 'interventional'},
+        name='paired_hedges_g',
+        targets=('online_max_q_per_step', 'online_min_q_per_step'),
+    )
+    measurements = _bridge_result_to_measurements(original)
+    run = _runrow_with_measurements(measurements)
+
+    rebuilt = reconstruct_bridge_results(run)
+    assert len(rebuilt) == 1
+    r = rebuilt[0]
+    assert r.name == original.name
+    assert r.verdict is original.verdict
+    assert r.reason == original.reason
+    assert r.targets == original.targets
+    assert dict(r.stats) == dict(original.stats)
+
+
+def test_reconstruct_bridge_results_handles_invariant_prefix() -> None:
+    """Invariant results (kind='tautological') write under
+    `invariant.<name>.*`. Reconstruction picks them up alongside
+    bridge results."""
+    inv = BridgeResult(
+        verdict=Verdict.HELD,
+        reason='gap 0.01 ≤ threshold 0.05',
+        stats={'kind': 'tautological', 'gap_value': 0.01,
+               'threshold': 0.05, 'of_claim': 'periodic_copy'},
+        name='periodic_copy_at_most',
+        targets=('td_error',),
+    )
+    bridge = BridgeResult(
+        verdict=Verdict.NO_EFFECT,
+        reason='g=0.05 < 0.2 MDE',
+        stats={'g': 0.05},
+        name='outcome_diff',
+        targets=('outcome.late_window_mean',),
+    )
+    measurements: dict[str, MeasurementLeaf] = {}
+    measurements.update(_bridge_result_to_measurements(inv))
+    measurements.update(_bridge_result_to_measurements(bridge))
+
+    rebuilt = reconstruct_bridge_results(
+        _runrow_with_measurements(measurements),
+    )
+    by_name = {r.name: r for r in rebuilt}
+    assert by_name['periodic_copy_at_most'].targets == ('td_error',)
+    assert by_name['periodic_copy_at_most'].stats['gap_value'] == 0.01
+    assert by_name['outcome_diff'].verdict is Verdict.NO_EFFECT
+    assert by_name['outcome_diff'].targets == ('outcome.late_window_mean',)
+
+
+def test_reconstruct_bridge_results_empty_targets_decode_as_empty_tuple() -> None:
+    """A bridge with no reads (e.g. `lambda _: BridgeResult(..., targets=())`)
+    persists as `bridge.<name>.targets = ''` and reconstructs as
+    an empty tuple, NOT a single-element `('',)`."""
+    no_reads = BridgeResult(
+        verdict=Verdict.HELD,
+        reason='trivially true',
+        stats={'value': 1.0},
+        name='unconditional',
+        targets=(),
+    )
+    measurements = _bridge_result_to_measurements(no_reads)
+    rebuilt = reconstruct_bridge_results(
+        _runrow_with_measurements(measurements),
+    )
+    assert len(rebuilt) == 1
+    assert rebuilt[0].targets == ()
+
+
+def test_reconstruct_bridge_results_skips_runs_with_no_bridges() -> None:
+    """Runs whose measurements are pure HPs / outcomes (no
+    `bridge.*` or `invariant.*` keys) reconstruct to an empty
+    tuple, not an error."""
+    run = _runrow_with_measurements({
+        'gamma': 0.99, 'outcome.late_window_mean': 50.0,
+    })
+    assert reconstruct_bridge_results(run) == ()
+
+

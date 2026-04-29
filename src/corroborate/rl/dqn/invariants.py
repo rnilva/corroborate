@@ -110,67 +110,6 @@ def fqi_decay_gap(
     return Measurable(fn=fn, name=name, reads=('td_error',))
 
 
-# ============ Lin 1992 i.i.d. sampling gap ============
-
-def lin_iid_gap(
-    capacity: int,
-) -> Measurable[DQNTrajectoryRecord, float]:
-    """KL divergence of the empirical sampling distribution over
-    buffer indices from `Uniform(0, capacity)`, computed only
-    over steps where the replay buffer is fully filled
-    (`buf_size == capacity`). Gap = the KL — 0 means perfectly
-    uniform, >0 means biased.
-
-    Theory: Lin 1992 + Singh-Sutton 1996. Q-learning + replay
-    convergence assumes uniform i.i.d. resampling from the
-    buffer. Uniform replay's empirical sampling distribution
-    should match `Uniform(0, buf_size)` at each step. Bias
-    toward recent transitions, hot indices, etc. shows up as
-    KL > 0.
-
-    Filtering to `buf_size == capacity` avoids a structural
-    confound: during the fill phase the buffer is small, so
-    `sample_indices` is mechanically biased toward low values
-    (because high values aren't available yet). Including those
-    steps would inflate the KL for reasons unrelated to Lin's
-    sampling-uniformity claim. Returns `NaN` if the buffer never
-    fills (no-data sentinel — `at_most` maps it to
-    POWER_INSUFFICIENT).
-
-    `capacity` must match the experiment's `buffer_capacity` so
-    the post-fill filter aligns."""
-    assert capacity > 0, f'capacity must be positive; got {capacity}'
-    name = f'lin_iid_gap[cap={capacity}]'
-
-    def fn(record: DQNTrajectoryRecord) -> float:
-        indices = jnp.asarray(record['sample_indices'])  # (T, batch)
-        buf_size = jnp.asarray(record['buf_size'])       # (T,)
-        full_mask = buf_size >= capacity                 # (T,)
-        n_full = int(jnp.sum(full_mask))
-        if n_full == 0:
-            return float('nan')  # buffer never filled — no data
-        # Filter rows where buffer was full; flatten across (T_full, batch).
-        full_indices = indices[full_mask].flatten()
-        if int(full_indices.size) == 0:
-            return float('nan')
-        counts = jnp.bincount(full_indices, length=capacity)
-        total = float(jnp.sum(counts))
-        if total == 0.0:
-            return float('nan')
-        empirical = counts / total
-        eps = 1e-12
-        nonzero = empirical > eps
-        log_ratio = jnp.where(
-            nonzero,
-            jnp.log(empirical * capacity + eps),
-            0.0,
-        )
-        kl = float(jnp.sum(empirical * log_ratio))
-        return float(max(0.0, kl))
-
-    return Measurable(fn=fn, name=name, reads=('sample_indices', 'buf_size'))
-
-
 # ============ Hasselt independence gap (Pearson correlation) ============
 
 def hasselt_covariance_gap() -> Measurable[DQNTrajectoryRecord, float]:
@@ -321,7 +260,6 @@ def state_action_coverage_gap(
 __all__ = [
     'DQNTrajectoryRecord',
     'fqi_decay_gap',
-    'lin_iid_gap',
     'hasselt_covariance_gap',
     'jensen_overestimation_gap',
     'state_action_coverage_gap',

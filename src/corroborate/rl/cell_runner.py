@@ -34,15 +34,17 @@ from typing import NamedTuple
 import gymnax
 import jax
 import jax.numpy as jnp
+import numpy as np
 
-from corroborate.aggregate import aggregate_cell_verdict
+from corroborate.aggregate import (
+    _bridge_result_to_measurements,
+    aggregate_cell_verdict,
+)
 from corroborate.bridge import Bridge, BridgeResult
+from corroborate._canonical import canonical_str
 from corroborate.claim import trace_context
 from corroborate.computation_graph import ComputationGraph, build_computation_graph
-from corroborate.hypothesis import (
-    Hypothesis,
-    _canonical_str,  # pyright: ignore[reportPrivateUsage]
-)
+from corroborate.hypothesis import Hypothesis
 from corroborate.reductions import masked_window_mean
 from corroborate.rl.dqn.claims.optimizer import Adam
 from corroborate.rl.dqn.dqn import default_state_hash, dqn
@@ -110,12 +112,12 @@ def _read_total_steps(intervention: Mapping[str, object]) -> int:
 def _leaf_scalar(value: object) -> MeasurementLeaf:
     """Coerce a leaf value to a scalar measurement. Primitives pass
     through; structured values (Modules, partials, FnClaims)
-    canonicalise to string via `_canonical_str`."""
+    canonicalise to string via `canonical_str`."""
     if isinstance(value, bool):
         return value
     if isinstance(value, (int, float, str)):
         return value
-    return _canonical_str(value)
+    return canonical_str(value)
 
 
 def _leaf_measurements(configured: object) -> dict[str, MeasurementLeaf]:
@@ -200,38 +202,30 @@ def _trajectory_leaves(
     record: Mapping[str, jax.Array],
 ) -> dict[str, TraceLeaf]:
     """Project the per-cell record to trajectory entries keyed by
-    the substrate-author's record key. Any-dim arrays are
-    persisted: 0-D as scalars, 1-D as `list[float]`, higher-dim
-    as nested `list[list[...]]` matching the array shape.
+    the substrate-author's record key. 0-D arrays surface as
+    Python scalars; 1-D+ arrays surface as numpy arrays preserving
+    JAX's source dtype.
 
-    `arr.tolist()` recursively unrolls any shape into Python's
-    nested-list form; polars persists this as `Float64` (0-D) or
-    `List[...]` columns of arbitrary nesting depth. No data is
-    silently dropped — the substrate decides what's in its
-    record, and the framework persists all of it."""
-    return {key: arr.tolist() for key, arr in record.items()}
-
-
-def _bridge_result_to_measurements(
-    result: BridgeResult,
-) -> dict[str, MeasurementLeaf]:
-    """Flatten a BridgeResult into path-keyed measurements.
-
-    `bridge.<name>.verdict` (or `invariant.<name>.verdict` when
-    `stats['kind'] == 'tautological'`) carries the verdict; each
-    scalar entry of `result.stats` lands under
-    `<prefix>.<name>.stats.<key>`."""
-    is_invariant = result.stats.get('kind') == 'tautological'
-    prefix = f'invariant.{result.name}' if is_invariant else f'bridge.{result.name}'
-    out: dict[str, MeasurementLeaf] = {
-        f'{prefix}.verdict': result.verdict.value,
-    }
-    # `BridgeResult.stats` is typed `Mapping[str, float | int |
-    # bool | str]` — every value already satisfies
-    # MeasurementLeaf. Forward each entry verbatim.
-    for stat_key, stat_value in result.stats.items():
-        out[f'{prefix}.stats.{stat_key}'] = stat_value
+    Going through `np.asarray(arr)` (not `arr.tolist()`) preserves
+    `float32` / `int32`: polars infers `List(Float32)` /
+    `List(Int32)` from the numpy dtype at DataFrame construction,
+    avoiding the parquet-side round-trip-to-Python-float upcast
+    that doubled per-step series storage. 0-D values must be
+    Python scalars — polars rejects 0-D ndarrays in row-dict
+    construction."""
+    out: dict[str, TraceLeaf] = {}
+    for key, arr in record.items():
+        np_arr: np.ndarray = np.asarray(arr)  # pyright: ignore[reportMissingTypeArgument]
+        if np_arr.ndim == 0:
+            out[key] = np_arr.item()
+        else:
+            out[key] = np_arr
     return out
+
+
+# `_bridge_result_to_measurements` lives in `aggregate` (the data
+# layer between live BridgeResults and persisted RunRow.measurements).
+# This sweep-path call site uses the canonical impl from there.
 
 
 def run_dqn_arm(
@@ -275,7 +269,7 @@ def run_dqn_arm(
 
     # Compose cell-level exogenous + intervention into dqn via
     # `functools.partial`. The walker / `collect_invariants` /
-    # `_canonical_str` all unwrap partials, so intervention
+    # `canonical_str` all unwrap partials, so intervention
     # overrides shadow defaults in every downstream consumer:
     # `collect_invariants(configured)` sees only the effective
     # sub-claims (no leakage from defaults that intervention
@@ -376,7 +370,8 @@ def run_dqn_arm(
         run = RunRow(
             id=cell_id, parent_id=None,
             cycle_id=cycle_id, timestamp=timestamp,
-            verdict=verdict, measurements=measurements,
+            verdict=verdict, arm_key=hypothesis.arm_key(),
+            measurements=measurements,
         )
         # Trace leaves: configurational leaves (shared with the
         # RunRow's measurements) + 1-D trajectories from the

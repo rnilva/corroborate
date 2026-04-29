@@ -189,31 +189,44 @@ def invariant[R: Mapping[str, object]](
 
 def at_most[R: Mapping[str, object]](
     gap: Measurable[R, float],
-    threshold: float,
+    threshold: float | None = None,
     *,
     of_claim: Claim[..., object],
     name: str | None = None,
 ) -> Bridge[R]:
     """Wrap a theorem-gap `Measurable[R, float]` in a tautological
-    `Bridge[R]` whose verdict is:
+    `Bridge[R]` that records `gap_value` per cell and (optionally)
+    enforces a scope-commitment threshold.
 
-    - `HELD` when `gap(record) <= threshold` (data confirms scope).
-    - `INVARIANT_VIOLATION` when `gap(record) > threshold` (data
-      shows the theorem's domain was exceeded).
-    - `POWER_INSUFFICIENT` when `gap(record)` is NaN (no data was
-      available to compute the gap — e.g. replay buffer never
-      filled, fewer than two sync windows, eval pass produced no
-      episodes). The author committed scope but the run can't
-      tell whether scope held; treating NaN as HELD would be a
-      silent false-confirmation.
+    Two regimes:
 
-    The wrap is the place where the *author commits scope*: the
-    paper's claim "method X's mechanism operates when gap_Y <
-    threshold" is written by including `at_most(gap_Y, threshold,
-    of_claim=...)` in the Hypothesis's `bridges` tuple. The
-    theorem reference is read off `gap.stats` (set when the gap
-    Measurable was constructed) — `at_most` is consumer-side, the
-    theorem identity lives with the gap.
+    1. **Discovery (`threshold=None`).** The wrap records
+       `gap_value` per cell with verdict `HELD` when finite,
+       `POWER_INSUFFICIENT` on NaN. Never `INVARIANT_VIOLATION`.
+       Use when authoring an invariant before observing the
+       gap's distribution — the common case for novel mechanisms
+       where the author can't yet commit a scope threshold.
+       Phase-1 cleavage analysis reads the recorded `gap_value`
+       across the corpus to find where the regression line
+       crosses zero; the author then commits a threshold and
+       re-validates.
+
+    2. **Committed (`threshold: float`).** The wrap's verdict is
+       `HELD` when `gap(record) <= threshold` (data confirms
+       scope), `INVARIANT_VIOLATION` when `gap(record) > threshold`
+       (data shows the theorem's domain was exceeded),
+       `POWER_INSUFFICIENT` when `gap(record)` is NaN. This is
+       the regime the paper's scope claim is written in.
+       Treating NaN as HELD would be a silent false-confirmation.
+
+    The wrap is the place where the *author commits scope* (in
+    regime 2). The paper's claim "method X's mechanism operates
+    when gap_Y < threshold" is written by including
+    `at_most(gap_Y, threshold, of_claim=...)` in the Hypothesis's
+    `bridges` tuple. The theorem reference is read off
+    `gap.stats` (set when the gap Measurable was constructed) —
+    `at_most` is consumer-side, the theorem identity lives with
+    the gap.
 
     Three roles consume `at_most`-wrapped bridges:
 
@@ -230,7 +243,14 @@ def at_most[R: Mapping[str, object]](
     `targets` derives from `gap.reads`. The reads-set propagates
     leaf-record-keys → measurable → bridge for redundancy +
     corpus-graph derivation."""
-    bridge_name = name if name is not None else f'at_most[{gap.name}<={threshold:g}]'
+    effective_threshold = (
+        float('inf') if threshold is None else float(threshold)
+    )
+    threshold_label = '*' if threshold is None else f'{threshold:g}'
+    bridge_name = (
+        name if name is not None
+        else f'at_most[{gap.name}<={threshold_label}]'
+    )
 
     # Propagate the gap's measurable-dep param names to the bridge's
     # fn signature. The framework's resolver inspects the bridge fn,
@@ -251,23 +271,25 @@ def at_most[R: Mapping[str, object]](
                 verdict=Verdict.POWER_INSUFFICIENT,
                 reason=(
                     f'{gap.name} = NaN (no data); cannot evaluate '
-                    f'against threshold {threshold:g}'
+                    f'against threshold {threshold_label}'
                 ),
                 stats={
                     'gap_value': val,
-                    'threshold': float(threshold),
+                    'threshold': effective_threshold,
                     'measurable': gap.name,
                 },
                 name=bridge_name,
                 targets=gap.reads,
             )
-        ok = val <= threshold
+        ok = val <= effective_threshold
         return BridgeResult(
             verdict=Verdict.HELD if ok else Verdict.INVARIANT_VIOLATION,
-            reason=f'{gap.name} = {val:.4g} vs threshold {threshold:g}',
+            reason=(
+                f'{gap.name} = {val:.4g} vs threshold {threshold_label}'
+            ),
             stats={
                 'gap_value': float(val),
-                'threshold': float(threshold),
+                'threshold': effective_threshold,
                 'measurable': gap.name,
             },
             name=bridge_name,

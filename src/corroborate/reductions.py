@@ -230,3 +230,100 @@ def masked_window_mean(
         return float(np.sum(masked) / n_kept)
 
     return Measurable(fn=fn, name=name, reads=(value_key, mask_key))
+
+
+# ============ Peak-aware windows ============
+#
+# `mean_window(of, lo, hi)` uses STATIC fractional bounds — same
+# window for every cell. Useful when "the late half of training"
+# is a meaningful slice. But when each cell has a per-cell peak
+# point (e.g. `outcome.eval_best_burst_step`), a static window
+# averages over different parts of the trajectory across cells.
+# The peak-aware primitives below take `peak_idx_key`: a record
+# key whose value is the per-cell peak in array-index units. The
+# caller is responsible for ensuring the index is array-aligned
+# (typically by precomputing `peak_step * n // total_steps` and
+# inserting the result into the record before invocation).
+
+
+def mean_peak_window[R: Mapping[str, object]](
+    of: Measurable[R, np.ndarray],
+    peak_idx_key: str,
+    *,
+    pre_frac: float = 0.5,
+) -> Measurable[R, float]:
+    """Mean of `of` over the window `[peak_idx * (1 - pre_frac),
+    peak_idx]` — a *pre-peak* slice whose width scales with the
+    cell's own peak position.
+
+    `peak_idx_key` is a record key whose value is an integer-typed
+    per-cell peak point in array-index units. `pre_frac` controls
+    window width as a fraction of `peak_idx`. Default 0.5 means
+    the window spans the late half of the cell's pre-peak
+    trajectory — analogous to `mean_window(_, 0.5, 1.0)` but
+    truncated at the peak.
+
+    Returns NaN when `peak_idx <= 1` (insufficient pre-peak data)
+    or when the window contains zero elements."""
+    if not (0.0 < pre_frac <= 1.0):
+        raise ValueError(
+            f'mean_peak_window: need 0 < pre_frac ≤ 1; got {pre_frac}',
+        )
+    name = f'{of.name}__peak_pre{int(round(pre_frac * 100))}'
+    reads = tuple(dict.fromkeys(of.reads + (peak_idx_key,)))
+
+    def fn(record: R) -> float:
+        peak_v = record.get(peak_idx_key)
+        if not isinstance(peak_v, (int, float)):
+            return float('nan')
+        peak_idx = int(peak_v)
+        if peak_idx <= 1:
+            return float('nan')
+        arr = of(record)
+        n = int(len(arr))
+        peak_idx = min(peak_idx, n)
+        lo = max(0, int(peak_idx - pre_frac * peak_idx))
+        if peak_idx <= lo:
+            return float('nan')
+        return float(np.mean(arr[lo:peak_idx]))
+    return Measurable(fn=fn, name=name, reads=reads)
+
+
+def peak_centered_window[R: Mapping[str, object]](
+    of: Measurable[R, np.ndarray],
+    peak_idx_key: str,
+    *,
+    half_width_frac: float = 0.125,
+) -> Measurable[R, float]:
+    """Mean of `of` over a window centered at the cell's peak —
+    `[peak_idx - h, peak_idx + h]` where `h = half_width_frac * n`
+    (so window width ≈ 2 * half_width_frac of the trajectory).
+    Default `half_width_frac=0.125` → window of width ≈ 25%
+    centered at the peak.
+
+    Returns NaN if the resulting window has fewer than 2 valid
+    elements (degenerate-window case)."""
+    if not (0.0 < half_width_frac <= 0.5):
+        raise ValueError(
+            f'peak_centered_window: need 0 < half_width_frac ≤ 0.5; '
+            f'got {half_width_frac}',
+        )
+    name = f'{of.name}__peak_centered{int(round(half_width_frac * 200))}'
+    reads = tuple(dict.fromkeys(of.reads + (peak_idx_key,)))
+
+    def fn(record: R) -> float:
+        peak_v = record.get(peak_idx_key)
+        if not isinstance(peak_v, (int, float)):
+            return float('nan')
+        peak_idx = int(peak_v)
+        arr = of(record)
+        n = int(len(arr))
+        if n < 2 or peak_idx < 0 or peak_idx > n:
+            return float('nan')
+        h = max(1, int(half_width_frac * n))
+        lo = max(0, peak_idx - h)
+        hi = min(n, peak_idx + h)
+        if hi - lo < 2:
+            return float('nan')
+        return float(np.mean(arr[lo:hi]))
+    return Measurable(fn=fn, name=name, reads=reads)

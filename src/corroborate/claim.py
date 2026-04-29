@@ -20,7 +20,7 @@ Both structurally satisfy `Claim[**P, T]` Protocol.
 
 Bake-in / configuration uses `functools.partial` directly — there
 is no `bind` method. The walker recognises partials and unwraps
-them; mechanism_key's `_canonical_str` canonicalises partials by
+them; mechanism_key's `canonical_str` canonicalises partials by
 recursing into `.func` and `.keywords`. v10's pattern: stdlib
 idioms over invented framework primitives.
 

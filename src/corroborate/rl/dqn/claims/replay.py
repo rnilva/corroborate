@@ -25,10 +25,12 @@ replay holds iff every transition is eventually replayed
 (Singh-Sutton 1996). Uniform sampling is *not* Bellman-consistent
 — old transitions reflect a stale behaviour distribution, biasing
 the bootstrap target. This is the bias prioritised-replay (Schaul
-2016) addresses. The `lin_iid_gap(capacity)` measurable in
-`invariants.py` reports KL(empirical sampling ‖ uniform) —
-quantifies how far the realised sampling distribution deviates
-from the i.i.d. assumption."""
+2016) addresses. Bridges that want to falsify the i.i.d.
+assumption directly need access to the per-step `sample_indices`
+trace; that data isn't currently emitted (it cost ~12 GB / 56% of
+the §3 corpus and had no consumer wired in), but `Batch.indices`
+is still surfaced so a future bridge can opt in by extending the
+trace emission set."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -70,9 +72,11 @@ class Transition(NamedTuple):
 
 class Batch(NamedTuple):
     """Sampled batch returned by `Replay.sample_batch`. `indices`
-    exposes which buffer slots were drawn — measurables like
-    `lin_iid_gap` consume this to quantify sampling-distribution
-    diversity."""
+    exposes which buffer slots were drawn — surfaced for bridges
+    that need to inspect the realised sampling distribution
+    (none currently consume it, but the field is part of the
+    Batch contract so opting back in only requires extending the
+    diagnostic dict in `train_phase`)."""
     obs: jax.Array          # (batch_size, obs_dim)
     action: jax.Array       # (batch_size,) int32
     reward: jax.Array       # (batch_size,)

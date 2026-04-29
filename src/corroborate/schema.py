@@ -9,21 +9,13 @@ v10's HypothesisRunRow + HypothesisComparisonRow):
   Carries Hedges' g, SE, derived_q, etc. Materialized view of
   RunRows; re-derivable on demand.
 
-Plus the per-cell raw observation store, split across two
-backends:
+Plus the per-cell raw observation store:
 
-- `TraceRow.leaves` — scalars + 1-D series, persisted to parquet
-  (one column per leaf path, polars-queryable).
-- `TraceRow.arrays` — multi-dim numpy arrays (2-D+), persisted
-  to zarr keyed by `{cell_id}/{array_name}`. Lazy-loaded on
-  access. Bridges that need full Q-tensors / sample-index
-  matrices read from `arrays` (not `leaves`).
-
-The split is at the dimensionality boundary. Parquet handles
-flat tabular and 1-D-list columns well; deeply-nested-list
-columns (`list<list<list<float>>>`) work technically but suffer
-from Python list materialization overhead and opaque queries.
-zarr is the right format for dense multi-dim arrays.
+- `TraceRow.leaves` — scalars + N-D series, persisted to parquet
+  (one column per leaf path, polars-queryable). Multi-dim
+  arrays live in nested-list columns; the streaming reader
+  (`iter_trace_records`) keeps memory bounded regardless of
+  inner shape, so the older zarr backend was subtracted.
 
 Each row splits into a **framework-typed surface** (closed-set
 enums, lineage IDs, framework-controlled provenance) and an
@@ -72,15 +64,9 @@ from corroborate._narrow import (
     require_str,
     require_verdict,
 )
-from corroborate.hypothesis import Direction
+from corroborate.hypothesis import PredictedDirection
 from corroborate.statistics import PooledStats
 from corroborate.verdict import RefutationClass, Verdict
-
-
-type ArrayLeaf = npt.NDArray[np.floating] | npt.NDArray[np.integer] | npt.NDArray[np.bool_]
-"""Multi-dim array leaf — what TraceRow.arrays carries. Shape
-and dtype determined by the producer; no constraints at the type
-level. Persisted to zarr by `write_tracerows`."""
 
 
 # ============ Measurement leaf type ============
@@ -92,22 +78,28 @@ leaf as its own typed parquet column."""
 
 # ============ TraceRow — raw per-cell observation store ============
 
-# A trace leaf is a scalar (leaf value, summary scalar) OR a list
-# of trace leaves at any nesting depth. Recursive type captures
-# any-dim trajectory: 1-D for per-step series (`reward`, `loss`),
-# 2-D for batch-per-step (`sample_indices` is `(steps, batch)`),
-# 3-D for value-per-action-per-batch-per-step (`online_q_values`
-# is `(steps, batch, n_actions)`). Polars handles arbitrary-depth
-# nested `List` columns natively — `arr.tolist()` produces the
-# nested Python form regardless of dimensionality.
+# A trace leaf is a scalar (leaf value, summary scalar), a numpy
+# ndarray (any dim, write-side: cell_runner emits these directly
+# from JAX so polars infers narrow dtype — `List(Float32)`,
+# `List(Int32)` — at DataFrame construction), or a list of trace
+# leaves at any nesting depth (read-side: parquet decodes
+# `List[...]` columns back to nested Python lists).
+#
+# Both shapes coexist: in-memory rows from `cell_runner` carry
+# ndarrays; rows reconstructed via `from_row_dict` after a parquet
+# round-trip carry lists. Consumers that want a uniform shape
+# should `np.asarray(...)` on access.
 
-type TraceLeaf = str | int | float | bool | list[TraceLeaf]
+type TraceLeaf = (
+    str | int | float | bool
+    | npt.NDArray[np.floating] | npt.NDArray[np.integer] | npt.NDArray[np.bool_]
+    | list[TraceLeaf]
+)
 
 
 @dataclass(frozen=True, slots=True)
 class TraceRow:
-    """One cell's raw observation: configurational leaves +
-    multi-dim arrays + provenance.
+    """One cell's raw observation: leaves + provenance.
 
     The trace store is the v9-`traces.parquet` analog: low-
     derivation, queryable, re-usable for post-hoc bridge
@@ -120,24 +112,16 @@ class TraceRow:
     name as v9 did) lets two cells of the same hypothesis remain
     distinguishable.
 
-    Two backends, one TraceRow:
-
-    - `leaves` — scalars + 1-D per-step series, persisted to
-      parquet. Path-keyed: configurational leaves at dotted
-      topology paths (`bootstrap.gamma`, `optimizer.inner.lr`);
-      per-step trajectories at flat author-chosen return-dict
-      keys (`reward`, `loss`, `online_max_q_per_step`). Scalar
-      columns persist as `Float64`/`Int64`/`Utf8`/`Boolean`;
-      1-D trajectory columns persist as `List[<scalar>]`. (The
-      `TraceLeaf` type technically allows deeper nesting for
-      backward-compat with pre-zarr trace stores; new code should
-      use `arrays` for 2-D+.)
-    - `arrays` — multi-dim numpy arrays, persisted to zarr keyed
-      by `{cell_id}/{array_name}`. Used for full Q-tensors,
-      sample-index matrices, eval-burst trajectories — anything
-      shaped `(steps, batch, n_actions)` or similar. Lazy-loaded
-      from disk on access; in-memory rows constructed from
-      `run_dqn_arm` carry materialised numpy arrays directly.
+    `leaves` — scalars + N-D series, all persisted to parquet via
+    polars' nested-list columns. Path-keyed: configurational
+    leaves at dotted topology paths (`bootstrap.gamma`,
+    `optimizer.inner.lr`); per-step trajectories at flat author-
+    chosen return-dict keys (`reward`, `loss`,
+    `online_max_q_per_step`, `pearson_stats`). Scalar columns
+    persist as `Float32/64`/`Int32/64`/`Utf8`/`Boolean`; 1-D
+    trajectory columns as `List[<scalar>]`; 2-D+ arrays as
+    nested `List[List[...]]` or `List[Array(<scalar>, shape=N)]`
+    when polars detects a uniform inner shape.
 
     No `evidence__` / `binding__` namespace prefixes: paths
     encode origin via topology (dotted) vs. author-key (flat)."""
@@ -147,18 +131,12 @@ class TraceRow:
     leaves: Mapping[str, TraceLeaf] = field(
         default_factory=lambda: {},
     )
-    arrays: Mapping[str, ArrayLeaf] = field(
-        default_factory=lambda: {},
-    )
 
     def as_dict(self) -> dict[str, object]:
         """Flat top-level dict for parquet: provenance fields +
         each leaf-path becomes its own top-level key. The writer
         feeds this directly to `pl.DataFrame` — no JSON wrapping,
-        no nested structs.
-
-        `arrays` are NOT included in this dict — they go to zarr
-        via `persistence.write_tracerows`'s `zarr_path` argument."""
+        no nested structs."""
         out: dict[str, object] = {
             'id': self.id,
             'cycle_id': self.cycle_id,
@@ -172,19 +150,12 @@ class TraceRow:
     def from_row_dict(
         cls,
         d: Mapping[str, object],
-        *,
-        arrays: Mapping[str, ArrayLeaf] | None = None,
     ) -> Self:
         """Reverse of `as_dict`: split provenance fields from
         leaf-path columns. Any column not in the typed-provenance
         set is treated as a leaf. Null-padded columns (paths the
         row didn't carry — polars fills missing columns with None
-        when rows have heterogeneous keys) are skipped.
-
-        `arrays` is supplied separately by the caller (e.g.
-        `read_tracerows` reads from zarr and passes it in). If
-        omitted, the resulting TraceRow has no array data — fine
-        for tests / scalar-only workflows."""
+        when rows have heterogeneous keys) are skipped."""
         provenance: frozenset[str] = frozenset(
             ('id', 'cycle_id', 'timestamp')
         )
@@ -201,7 +172,6 @@ class TraceRow:
             cycle_id=optional_str(d, 'cycle_id'),
             timestamp=require_str(d, 'timestamp'),
             leaves=leaves,
-            arrays=arrays if arrays is not None else {},
         )
 
 
@@ -258,17 +228,25 @@ class RunRow:
     aggregations.
 
     Framework-typed surface: lineage IDs, cycle/timestamp,
-    aggregate `verdict`. Open surface: `measurements` carrying
-    HP values at dotted topology paths, bridge/invariant results
-    under `bridge.<name>.*` / `invariant.<name>.*`, outcome
-    reductions under substrate-named keys (e.g.
-    `outcome.late_window_mean`), and substrate metadata
-    (`env_name`, `seed`, `total_steps`, `intervention_name`)."""
+    aggregate `verdict`, `arm_key` (the canonical fingerprint of
+    the run's intervention arms — load-bearing identity for
+    pairing). Open surface: `measurements` carrying HP values at
+    dotted topology paths, bridge/invariant results under
+    `bridge.<name>.*` / `invariant.<name>.*`, outcome reductions
+    under substrate-named keys (e.g. `outcome.late_window_mean`),
+    and substrate metadata (`env_name`, `seed`, `total_steps`,
+    `intervention_name`).
+
+    `arm_key` defaults to `'baseline'` so hand-constructed
+    fixtures and old parquets without the column read as the
+    baseline arm. Production write paths populate it from
+    `Hypothesis.arm_key()`."""
     id: str
     parent_id: str | None
     cycle_id: str | None
     timestamp: str
     verdict: Verdict
+    arm_key: str = 'baseline'
     measurements: Mapping[str, MeasurementLeaf] = field(
         default_factory=lambda: {},
     )
@@ -280,6 +258,7 @@ class RunRow:
             'cycle_id': self.cycle_id,
             'timestamp': self.timestamp,
             'verdict': self.verdict.value,
+            'arm_key': self.arm_key,
         }
         _flatten_measurements(out, self.measurements)
         return out
@@ -287,7 +266,8 @@ class RunRow:
     @classmethod
     def from_row_dict(cls, d: Mapping[str, object]) -> Self:
         provenance: frozenset[str] = frozenset(
-            ('id', 'parent_id', 'cycle_id', 'timestamp', 'verdict')
+            ('id', 'parent_id', 'cycle_id', 'timestamp', 'verdict',
+             'arm_key')
         )
         measurements: dict[str, MeasurementLeaf] = {}
         for k, v in d.items():
@@ -296,12 +276,15 @@ class RunRow:
             if v is None:
                 continue
             measurements[k] = _coerce_measurement_leaf(v)
+        arm_key_v = d.get('arm_key')
+        arm_key = arm_key_v if isinstance(arm_key_v, str) else 'baseline'
         return cls(
             id=require_str(d, 'id'),
             parent_id=optional_str(d, 'parent_id'),
             cycle_id=optional_str(d, 'cycle_id'),
             timestamp=require_str(d, 'timestamp'),
             verdict=require_verdict(d, 'verdict'),
+            arm_key=arm_key,
             measurements=measurements,
         )
 
@@ -323,7 +306,7 @@ class ComparisonRow:
     timestamp: str
     treatment_arm_id: str
     baseline_arm_id: str
-    predicted_direction: Direction | None
+    predicted_direction: PredictedDirection | None
     verdict: Verdict
     refutation_class: RefutationClass | None
     adequately_powered: bool
@@ -475,9 +458,11 @@ class HypothesisComparisonRow:
     cycle_id: str | None
     timestamp: str
     intervention_name: str
+    treatment_arm_key: str
+    baseline_arm_key: str
     treatment_run_ids: tuple[str, ...]
     baseline_run_ids: tuple[str, ...]
-    predicted_direction: Direction | None
+    predicted_direction: PredictedDirection | None
     pair_by: tuple[str, ...]
     group_by: str | None
 
@@ -521,11 +506,18 @@ class HypothesisComparisonRow:
         power: float = 0.8,
         cycle_id: str | None = None,
         timestamp: str | None = None,
+        baseline_h: 'Hypothesis[Mapping[str, object]] | None' = None,
     ) -> 'HypothesisComparisonRow':
         """Canonical constructor — never call `__init__` directly.
         Delegates to `corroborate.aggregate.
         hypothesis_comparison_from_cells` (lazy import avoids the
         schema → aggregate cycle).
+
+        `baseline_h` carries the typed identity of the baseline
+        arm. Default is None → baseline arm key is `'baseline'`
+        (the empty `intervention_arms` arm). Pass a Hypothesis
+        when the baseline is itself a treatment (e.g. comparing
+        DDQN vs PER, both non-baseline).
 
         See `hypothesis_comparison_from_cells` for parameter
         semantics."""
@@ -538,6 +530,7 @@ class HypothesisComparisonRow:
             pair_by=pair_by, group_by=group_by,
             alpha=alpha, power=power,
             cycle_id=cycle_id, timestamp=timestamp,
+            baseline_h=baseline_h,
         )
 
 

@@ -251,6 +251,73 @@ def test_random_effects_verdict_no_effect_when_pi_brackets_zero() -> None:
     assert refutation is RefutationClass.NULL_EFFECT
 
 
+def test_random_effects_verdict_held_with_scope_flag_high_heterogeneity() -> None:
+    """Heterogeneous-but-positive: PI excludes zero in predicted
+    direction AND I² is high → HELD_WITH_SCOPE_FLAG. Discovery's
+    natural input — meta-regression should identify cleavages.
+
+    Constructed via direct PooledStats so the test asserts on the
+    verdict logic, not on the synthesis-via-`random_effects_summary`
+    path (which couples PI width to τ²)."""
+    from corroborate.statistics import (
+        I2_THRESHOLD,
+        PooledStats,
+        random_effects_verdict,
+    )
+    p = PooledStats(
+        pooled_g=4.0, se_pooled=0.05,
+        tau2=0.5, I2=0.6, Q=10.0,
+        pi_lo=2.0, pi_hi=6.0,
+        empirical_min_g=3.0, empirical_max_g=5.0,
+        n_cells=5,
+    )
+    assert p.I2 >= I2_THRESHOLD
+    verdict, _ = random_effects_verdict(
+        p, predicted_direction='a_gt_b',
+    )
+    assert verdict is Verdict.HELD_WITH_SCOPE_FLAG
+    assert verdict.is_corroboration()
+    assert not verdict.is_uniform()
+
+
+def test_random_effects_verdict_held_uniform_low_heterogeneity() -> None:
+    """Same effect across strata → low I² → plain HELD."""
+    from corroborate.statistics import (
+        I2_THRESHOLD,
+        random_effects_summary,
+        random_effects_verdict,
+    )
+    # Five identical-effect strata → I² ≈ 0.
+    p = random_effects_summary([(1.5, 0.05)] * 5)
+    assert p.I2 < I2_THRESHOLD
+    verdict, _ = random_effects_verdict(
+        p, predicted_direction='a_gt_b',
+    )
+    assert verdict is Verdict.HELD
+    assert verdict.is_uniform()
+
+
+def test_random_effects_verdict_held_with_scope_flag_predicted_negative() -> None:
+    """Symmetric case: a_lt_b with PI strictly negative + high I²
+    → HELD_WITH_SCOPE_FLAG (the corroborated direction is
+    negative, but heterogeneous in magnitude)."""
+    from corroborate.statistics import (
+        PooledStats,
+        random_effects_verdict,
+    )
+    p = PooledStats(
+        pooled_g=-4.0, se_pooled=0.05,
+        tau2=0.5, I2=0.7, Q=12.0,
+        pi_lo=-6.0, pi_hi=-2.0,
+        empirical_min_g=-5.0, empirical_max_g=-3.0,
+        n_cells=5,
+    )
+    verdict, _ = random_effects_verdict(
+        p, predicted_direction='a_lt_b',
+    )
+    assert verdict is Verdict.HELD_WITH_SCOPE_FLAG
+
+
 # ============ recommended_n_paired ============
 
 def test_recommended_n_paired_inverts_mde_paired() -> None:

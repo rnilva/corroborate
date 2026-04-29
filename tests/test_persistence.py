@@ -90,6 +90,41 @@ def test_runrow_parquet_with_no_measurements(tmp_path: Path) -> None:
     assert read_runrows(path) == [row]
 
 
+def test_runrow_parquet_arm_key_round_trip(tmp_path: Path) -> None:
+    """`arm_key` is a typed framework-surface column; explicit
+    values round-trip and the field stays distinct from the
+    `intervention_name` measurement."""
+    row = RunRow(
+        id='r-1', parent_id=None,
+        cycle_id=None, timestamp='t',
+        verdict=Verdict.HELD,
+        arm_key='bootstrap=Claim:double_greedify',
+        measurements={'intervention_name': 'ddqn'},
+    )
+    path = tmp_path / 'runs.parquet'
+    write_runrows([row], path)
+    loaded = read_runrows(path)
+    assert len(loaded) == 1
+    assert loaded[0].arm_key == 'bootstrap=Claim:double_greedify'
+    assert loaded[0].measurements['intervention_name'] == 'ddqn'
+    assert loaded[0] == row
+
+
+def test_runrow_arm_key_defaults_to_baseline(tmp_path: Path) -> None:
+    """RunRows constructed without `arm_key` default to
+    `'baseline'`; backward-compat for fixtures + old parquets."""
+    row = RunRow(
+        id='r-default', parent_id=None,
+        cycle_id=None, timestamp='t',
+        verdict=Verdict.HELD,
+    )
+    assert row.arm_key == 'baseline'
+    path = tmp_path / 'runs.parquet'
+    write_runrows([row], path)
+    loaded = read_runrows(path)
+    assert loaded[0].arm_key == 'baseline'
+
+
 def test_runrow_parquet_heterogeneous_keys_null_pad(tmp_path: Path) -> None:
     """When two rows carry different measurement paths, polars
     null-pads the missing columns. On read, those nulls are

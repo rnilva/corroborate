@@ -37,7 +37,7 @@ from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 
 from corroborate.bridge import BridgeResult
-from corroborate.hypothesis import Direction, Hypothesis
+from corroborate.hypothesis import Hypothesis, PredictedDirection
 from corroborate.schema import (
     ComparisonRow,
     FactRow,
@@ -193,7 +193,7 @@ def paired_comparison_from_runs(
     *,
     outcome_path: str,
     pair_by: tuple[str, ...],
-    predicted_direction: Direction | None,
+    predicted_direction: PredictedDirection | None,
     alpha: float = 0.05,
     power: float = 0.8,
     cycle_id: str | None = None,
@@ -534,34 +534,141 @@ def _evidentiary_level_from_bridge_result(r: BridgeResult) -> str:
     return 'correlational'
 
 
-def _facts_from_runrow(run: RunRow) -> tuple[FactRow, ...]:
-    """Reconstruct FactRows from a RunRow's flat-keyed
-    measurements. Bridge results are persisted as
-    `bridge.<name>.verdict` + `bridge.<name>.stats.<k>` entries
-    (see `cell_runner._bridge_result_to_measurements`); invariants
-    use `invariant.<name>.*` prefixes.
-
-    Targets aren't persisted in measurements (cell_runner doesn't
-    flatten them), so reconstructed FactRows have empty `reads`.
-    The runtime path (`fact_from_bridge_result`) sets reads from
-    BridgeResult.targets directly when called with a live result."""
+def _grouped_bridge_fields(
+    run: RunRow,
+) -> dict[str, dict[str, MeasurementLeaf]]:
+    """Group `(bridge|invariant).<name>.<field>` measurements by
+    bridge name. Shared between `_facts_from_runrow` and
+    `reconstruct_bridge_results` — both walk the same prefix
+    structure persisted by `_bridge_result_to_measurements`."""
     by_name: dict[str, dict[str, MeasurementLeaf]] = {}
-    by_kind: dict[str, str] = {}
     for k, v in run.measurements.items():
         if k.startswith('bridge.'):
-            kind = 'bridge'
+            prefix_len = len('bridge.')
         elif k.startswith('invariant.'):
-            kind = 'invariant'
+            prefix_len = len('invariant.')
         else:
             continue
-        # `<kind>.<name>.<rest>` — split on the second dot, keep
-        # everything after as the field path.
-        rest = k[len(kind) + 1:]      # `<name>.<rest>`
+        rest = k[prefix_len:]  # `<name>.<rest>`
         if '.' not in rest:
             continue
         name, field_path = rest.split('.', 1)
         by_name.setdefault(name, {})[field_path] = v
-        by_kind[name] = kind
+    return by_name
+
+
+def _targets_from_fields(
+    fields: Mapping[str, MeasurementLeaf],
+) -> tuple[str, ...]:
+    """Decode a comma-joined `targets` measurement into the bridge's
+    reads-set tuple. Empty string → empty tuple. Missing targets
+    field (older corpus or hand-constructed RunRow) → empty tuple."""
+    targets_v = fields.get('targets')
+    if not isinstance(targets_v, str) or not targets_v:
+        return ()
+    return tuple(targets_v.split(','))
+
+
+def _stats_from_fields(
+    fields: Mapping[str, MeasurementLeaf],
+) -> dict[str, float | int | bool | str]:
+    """Pull `stats.<k>` measurements into the BridgeResult-shaped
+    stats dict. Non-MeasurementLeaf values are skipped."""
+    stats: dict[str, float | int | bool | str] = {}
+    for fk, fv in fields.items():
+        if fk.startswith('stats.') and isinstance(
+            fv, (int, float, bool, str),
+        ):
+            stats[fk[len('stats.'):]] = fv
+    return stats
+
+
+def reconstruct_bridge_results(
+    run: RunRow,
+) -> tuple[BridgeResult, ...]:
+    """Inverse of `_bridge_result_to_measurements`.
+    Walks `run.measurements` for `bridge.<name>.*` and
+    `invariant.<name>.*` groups and rebuilds a tuple of
+    BridgeResults.
+
+    Lossless round-trip of the five BridgeResult fields:
+    `name` (the path's middle component), `verdict` (from
+    `<prefix>.verdict`), `reason` (from `<prefix>.reason`),
+    `targets` (from `<prefix>.targets`), `stats` (from
+    `<prefix>.stats.<k>`).
+
+    Empty tuple if the run carries no bridge/invariant
+    measurements. Invalid verdict strings or missing verdict
+    fields skip the corresponding bridge silently — same defensive
+    posture as `_facts_from_runrow`."""
+    by_name = _grouped_bridge_fields(run)
+    out: list[BridgeResult] = []
+    for name in sorted(by_name):
+        fields = by_name[name]
+        verdict_v = fields.get('verdict')
+        if not isinstance(verdict_v, str):
+            continue
+        try:
+            verdict = Verdict(verdict_v)
+        except ValueError:
+            continue
+        reason_v = fields.get('reason')
+        reason = reason_v if isinstance(reason_v, str) else ''
+        out.append(BridgeResult(
+            verdict=verdict,
+            reason=reason,
+            stats=_stats_from_fields(fields),
+            name=name,
+            targets=_targets_from_fields(fields),
+        ))
+    return tuple(out)
+
+
+def _bridge_result_to_measurements(
+    result: BridgeResult,
+) -> dict[str, MeasurementLeaf]:
+    """Flatten a BridgeResult into path-keyed measurements.
+    Canonical implementation — used by cell_runner at sweep time.
+    Lives in aggregate because the bridge↔measurements transform
+    IS the data-layer responsibility this module owns.
+
+    `bridge.<name>.verdict` (or `invariant.<name>.verdict` when
+    `stats['kind'] == 'tautological'`) carries the verdict;
+    `<prefix>.<name>.reason` carries the free-text explanation;
+    `<prefix>.<name>.targets` carries the comma-joined reads-set
+    (the trace columns the bridge consumes); each scalar entry
+    of `result.stats` lands under `<prefix>.<name>.stats.<key>`.
+
+    Targets persistence is what makes `reconstruct_bridge_results`
+    lossless and what lets downstream consumers (redundancy,
+    register) compute reads-overlap without re-instantiating
+    bridges from author code."""
+    is_invariant = result.stats.get('kind') == 'tautological'
+    prefix = (
+        f'invariant.{result.name}' if is_invariant
+        else f'bridge.{result.name}'
+    )
+    out: dict[str, MeasurementLeaf] = {
+        f'{prefix}.verdict': result.verdict.value,
+        f'{prefix}.reason': result.reason,
+        f'{prefix}.targets': ','.join(result.targets),
+    }
+    # `BridgeResult.stats` is typed `Mapping[str, float | int |
+    # bool | str]` — every value already satisfies
+    # MeasurementLeaf. Forward each entry verbatim.
+    for stat_key, stat_value in result.stats.items():
+        out[f'{prefix}.stats.{stat_key}'] = stat_value
+    return out
+
+
+def _facts_from_runrow(run: RunRow) -> tuple[FactRow, ...]:
+    """Reconstruct FactRows from a RunRow's flat-keyed
+    measurements. Bridge results are persisted as
+    `bridge.<name>.verdict` + `bridge.<name>.targets` +
+    `bridge.<name>.stats.<k>` entries (see
+    `_bridge_result_to_measurements`); invariants use
+    `invariant.<name>.*` prefixes."""
+    by_name = _grouped_bridge_fields(run)
     facts: list[FactRow] = []
     for name in sorted(by_name):
         fields = by_name[name]
@@ -572,13 +679,7 @@ def _facts_from_runrow(run: RunRow) -> tuple[FactRow, ...]:
             verdict = Verdict(verdict_v)
         except ValueError:
             continue
-        # Stats live under `stats.<k>` keys.
-        stats: dict[str, float | int | bool | str] = {}
-        for fk, fv in fields.items():
-            if fk.startswith('stats.') and isinstance(
-                fv, (int, float, bool, str),
-            ):
-                stats[fk[len('stats.'):]] = fv
+        stats = _stats_from_fields(fields)
         strength = natural_strength_from_stats(stats)
         delta_i = _delta_i_oriented(strength, verdict)
         # Evidentiary level: mirror the BridgeResult-based logic.
@@ -590,7 +691,7 @@ def _facts_from_runrow(run: RunRow) -> tuple[FactRow, ...]:
             level = 'correlational'
         facts.append(FactRow(
             name=name,
-            reads=frozenset(),  # targets not persisted
+            reads=frozenset(_targets_from_fields(fields)),
             verdict=verdict,
             natural_strength=strength,
             delta_i=delta_i,
@@ -788,6 +889,7 @@ def hypothesis_comparison_from_cells(
     power: float = 0.8,
     cycle_id: str | None = None,
     timestamp: str | None = None,
+    baseline_h: 'Hypothesis[Mapping[str, object]] | None' = None,
 ) -> HypothesisComparisonRow:
     """The canonical cross-arm aggregator. Builds one
     HypothesisComparisonRow from per-cell `RunRow`s.
@@ -805,8 +907,17 @@ def hypothesis_comparison_from_cells(
     Hedges' g over the paired Δ distribution; `per_group=()`,
     `pooled=None`.
 
+    `baseline_h` carries the typed identity of the baseline arm
+    (`intervention_arms` tuple). Default None means baseline is
+    the empty-arms baseline (`arm_key()='baseline'`). The two arm
+    keys MUST differ — equal keys raise ValueError as a
+    HPO-smuggle indicator (the comparison would be self-against-
+    self, signal-free).
+
     Raises:
     - `ValueError` on empty arms or empty `pair_by`.
+    - `ValueError` when treatment and baseline arm keys match
+      (HPO-smuggle indicator).
     - `ValueError` on duplicate `pair_by` keys within an arm
       within a group (silent dedup would mask a misconfigured
       slice).
@@ -828,6 +939,39 @@ def hypothesis_comparison_from_cells(
             'hypothesis_comparison_from_cells: pair_by must be non-empty',
         )
 
+    treatment_arm_key = h.arm_key()
+    baseline_arm_key = (
+        baseline_h.arm_key() if baseline_h is not None else 'baseline'
+    )
+    if treatment_arm_key == baseline_arm_key:
+        raise ValueError(
+            f'hypothesis_comparison_from_cells: treatment and baseline '
+            f'share arm_key {treatment_arm_key!r}; the comparison would '
+            f'be self-against-self (HPO-smuggle indicator). Treatment '
+            f'and baseline must differ in their `intervention_arms`.',
+        )
+
+    # Arm-key consistency check: every run in `treatment_runs`
+    # should carry `treatment_arm_key`; same for baseline. The
+    # framework's load-bearing promise: HPO variation does NOT
+    # change arm_key, so mixed-arm runs in one arm-list signal a
+    # pairing-data bug. The default 'baseline' value on legacy
+    # RunRows passes the baseline check transparently.
+    t_arms = {r.arm_key for r in treatment_runs}
+    if t_arms != {treatment_arm_key}:
+        raise ValueError(
+            f'hypothesis_comparison_from_cells: treatment_runs carry '
+            f'mixed arm_keys {sorted(t_arms)!r}; expected all to be '
+            f'{treatment_arm_key!r}. Pairing inconsistency.',
+        )
+    b_arms = {r.arm_key for r in baseline_runs}
+    if b_arms != {baseline_arm_key}:
+        raise ValueError(
+            f'hypothesis_comparison_from_cells: baseline_runs carry '
+            f'mixed arm_keys {sorted(b_arms)!r}; expected all to be '
+            f'{baseline_arm_key!r}. Pairing inconsistency.',
+        )
+
     intervention_name = _run_intervention_name(treatment_runs[0])
 
     if group_by is None:
@@ -846,6 +990,8 @@ def hypothesis_comparison_from_cells(
                 cycle_id=cycle_id,
                 timestamp=_resolved_timestamp(timestamp),
                 intervention_name=intervention_name,
+                treatment_arm_key=treatment_arm_key,
+                baseline_arm_key=baseline_arm_key,
                 treatment_run_ids=tuple(r.id for r in treatment_runs),
                 baseline_run_ids=tuple(r.id for r in baseline_runs),
                 predicted_direction=h.predicted_direction,
@@ -873,6 +1019,8 @@ def hypothesis_comparison_from_cells(
             cycle_id=cycle_id,
             timestamp=_resolved_timestamp(timestamp),
             intervention_name=intervention_name,
+            treatment_arm_key=treatment_arm_key,
+            baseline_arm_key=baseline_arm_key,
             treatment_run_ids=tuple(r.id for r in treatment_runs),
             baseline_run_ids=tuple(r.id for r in baseline_runs),
             predicted_direction=h.predicted_direction,
@@ -972,6 +1120,8 @@ def hypothesis_comparison_from_cells(
         cycle_id=cycle_id,
         timestamp=_resolved_timestamp(timestamp),
         intervention_name=intervention_name,
+        treatment_arm_key=treatment_arm_key,
+        baseline_arm_key=baseline_arm_key,
         treatment_run_ids=tuple(r.id for r in treatment_runs),
         baseline_run_ids=tuple(r.id for r in baseline_runs),
         predicted_direction=h.predicted_direction,

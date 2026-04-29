@@ -14,7 +14,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import TypeIs
 
-from corroborate.hypothesis import Direction
+from corroborate.hypothesis import PredictedDirection
 from corroborate.verdict import RefutationClass, Verdict
 
 
@@ -55,7 +55,7 @@ def require_bool(d: Mapping[str, object], key: str) -> bool:
 
 def optional_direction(
     d: Mapping[str, object], key: str,
-) -> Direction | None:
+) -> PredictedDirection | None:
     v = d.get(key)
     if v is None:
         return None
@@ -65,7 +65,7 @@ def optional_direction(
         return 'a_lt_b'
     if v == 'two_sided':
         return 'two_sided'
-    raise TypeError(f'{key!r} must be a Direction or None, got {v!r}')
+    raise TypeError(f'{key!r} must be a PredictedDirection or None, got {v!r}')
 
 
 def require_verdict(d: Mapping[str, object], key: str) -> Verdict:
@@ -76,6 +76,8 @@ def require_verdict(d: Mapping[str, object], key: str) -> Verdict:
     v = d.get(key)
     if v == Verdict.HELD.value:
         return Verdict.HELD
+    if v == Verdict.HELD_WITH_SCOPE_FLAG.value:
+        return Verdict.HELD_WITH_SCOPE_FLAG
     if v == Verdict.NO_EFFECT.value:
         return Verdict.NO_EFFECT
     if v == Verdict.POWER_INSUFFICIENT.value:

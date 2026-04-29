@@ -399,6 +399,76 @@ def discover_adjacency(
     )
 
 
+# ============ Depth robustness ============
+
+@dataclass(frozen=True, slots=True)
+class EdgeDiff:
+    """Diff of edge sets discovered at two PC conditioning depths.
+
+    Edges are unordered pairs (`frozenset[str]`, size 2). `low_only`
+    are edges that PC kept at the lower depth but dropped at the
+    higher — typically confounded edges that a longer conditioning
+    set kills. `high_only` are edges the higher depth discovered
+    additionally; rare but possible (e.g., a depth-1 sepset that
+    happened to over-condition).
+
+    Defends `PAPER_NOTES.md` §4.8 caveat 3 — at `max_conditioning=
+    1`, some confounded edges survive that a depth-2 conditioning
+    would catch."""
+    depth_low: int
+    depth_high: int
+    edges_low: frozenset[frozenset[str]]
+    edges_high: frozenset[frozenset[str]]
+    common: frozenset[frozenset[str]]
+    low_only: frozenset[frozenset[str]]
+    high_only: frozenset[frozenset[str]]
+
+
+def compare_pc_depths(
+    data: pl.DataFrame,
+    *,
+    variables: Sequence[str],
+    alpha: float = 0.05,
+    depths: tuple[int, int] = (1, 2),
+    stratify_by: str | None = None,
+) -> EdgeDiff:
+    """Run conservative-PC at two conditioning depths and return
+    the edge-set diff.
+
+    `depths` is `(low, high)` with `low < high`. The result names
+    the surviving edges at each depth and the symmetric difference.
+
+    Cost: depth-2 PC is `~V³` pair-tests vs depth-1's `~V²`. For
+    `V=11` (the v10 §4 base set), that's ~1331 vs ~121 tests; the
+    smoke runs in seconds on a few hundred observations."""
+    low, high = depths
+    if low >= high:
+        raise ValueError(
+            f'depths must be (low, high) with low < high, got '
+            f'{depths!r}',
+        )
+    adj_low = discover_adjacency(
+        data, variables=variables, alpha=alpha,
+        max_conditioning=low, stratify_by=stratify_by,
+    )
+    adj_high = discover_adjacency(
+        data, variables=variables, alpha=alpha,
+        max_conditioning=high, stratify_by=stratify_by,
+    )
+    common = adj_low.edges & adj_high.edges
+    low_only = adj_low.edges - adj_high.edges
+    high_only = adj_high.edges - adj_low.edges
+    return EdgeDiff(
+        depth_low=low,
+        depth_high=high,
+        edges_low=adj_low.edges,
+        edges_high=adj_high.edges,
+        common=common,
+        low_only=low_only,
+        high_only=high_only,
+    )
+
+
 # ============ Orientation ============
 
 def _orient(

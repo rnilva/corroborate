@@ -12,8 +12,8 @@ Phases:
   Emits `reward, done, max_q, ep_return, action, state_hash,
   buf_size`.
 - `train_phase`: sample batch, compute TD-error, gradient step.
-  Emits `loss, td_error, online_q_values, target_q_values,
-  sample_indices`.
+  Emits `loss, td_error, online_q_per_action, target_q_per_action,
+  pearson_stats`.
 - `sync_phase`: target-network update. Emits no diagnostic
   (state-only).
 
@@ -137,9 +137,11 @@ def train_phase(
     `Adam()` / `RMSProp()` directly.
 
     Returns `(new_state, diagnostic_dict)`. Dict keys: `loss,
-    td_error, online_q_values, target_q_values, sample_indices`.
-    Q-vectors are full `(batch, n_actions)` — bridges that need
-    argmaxes derive post-hoc."""
+    td_error, online_q_per_action, target_q_per_action,
+    pearson_stats`. Q-vectors are pre-reduced per-action means
+    (batch axis collapsed); bridges that want full distributional
+    information consume `pearson_stats` (5 sufficient statistics
+    per step) instead."""
     sample_key, next_rng_key = jax.random.split(state.rng_key)
 
     batch = replay.sample_batch(state.replay, sample_key)
@@ -172,7 +174,9 @@ def train_phase(
         (on_flat * tg_flat).mean(),
     ])  # shape (5,) per step
 
-    def compute_loss(params: Params) -> tuple[jax.Array, jax.Array]:
+    def compute_loss(
+        params: Params,
+    ) -> tuple[jax.Array, tuple[jax.Array, jax.Array]]:
         q_b = q_network(params, batch.obs)            # (batch, n_actions)
         predicted = jnp.take_along_axis(
             q_b, batch.action[..., None], axis=-1,
@@ -190,9 +194,15 @@ def train_phase(
             gamma=gamma,
         )
         per_sample = loss_fn(predicted, target)        # (batch,)
-        return per_sample.mean(), jnp.abs(predicted - target).mean()
+        abs_td = jnp.abs(predicted - target)           # (batch,)
+        # Aux tuple: (batch-mean |TD|, batch-std |TD|). The latter
+        # captures *training-signal heterogeneity* per step — high
+        # std = the gradient is averaging diverse transitions; low
+        # std = the batch is dominated by similar samples (small
+        # replay or correlated transitions).
+        return per_sample.mean(), (abs_td.mean(), abs_td.std())
 
-    (loss, td_error), grads = jax.value_and_grad(
+    (loss, (td_error, td_error_within_batch_std)), grads = jax.value_and_grad(
         compute_loss, has_aux=True,
     )(state.online_params)
 
@@ -209,6 +219,11 @@ def train_phase(
     diagnostics: dict[str, jax.Array] = {
         'loss': loss,
         'td_error': td_error,
+        # Within-batch std of |TD-error|. A measurement of training-
+        # signal heterogeneity — independent of the HP capacity by
+        # construction (depends on which transitions ended up in the
+        # batch, not just on buffer size).
+        'td_error_within_batch_std': td_error_within_batch_std,
         # Pre-reduced Q-summaries: per-step (n_actions,) vectors
         # instead of the full (batch, n_actions). Shrinks the
         # per-step trace ~64× without losing the action-axis
@@ -220,7 +235,6 @@ def train_phase(
         # post-hoc to recover the population-level Pearson r over
         # all (s', a) pairs across training.
         'pearson_stats': pearson_stats,
-        'sample_indices': batch.indices,
     }
     return new_state, diagnostics
 
