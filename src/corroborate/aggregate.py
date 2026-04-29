@@ -153,6 +153,54 @@ def _run_intervention_name(run: RunRow) -> str:
     return v
 
 
+def _pair_runs_by_key(
+    treatment: Sequence[RunRow], baseline: Sequence[RunRow],
+    *,
+    pair_by: tuple[str, ...],
+    dup_check: bool = False,
+    group_label: object | None = None,
+) -> tuple[
+    list[tuple[MeasurementLeaf, ...]],
+    dict[tuple[MeasurementLeaf, ...], RunRow],
+    dict[tuple[MeasurementLeaf, ...], RunRow],
+    int,
+]:
+    """Index treatment + baseline runs by `pair_by`-key; return
+    paired keys (sorted), the two key→RunRow dicts, and the count
+    of unpaired-and-dropped runs.
+
+    `dup_check=True` raises `ValueError` on duplicate pair-keys
+    within either arm — silent dedup would mask a misconfigured
+    slice. Stratified aggregators set this; the marginal
+    `paired_comparison_from_runs` doesn't (legacy contract)."""
+    def _index(
+        runs: Sequence[RunRow], side: str,
+    ) -> dict[tuple[MeasurementLeaf, ...], RunRow]:
+        out: dict[tuple[MeasurementLeaf, ...], RunRow] = {}
+        for r in runs:
+            pk = _run_pair_key(r, pair_by)
+            if dup_check and pk in out:
+                tag = (
+                    f' for group {group_label!r}'
+                    if group_label is not None else ''
+                )
+                raise ValueError(
+                    f'duplicate pair_by={pair_by!r} key {pk!r} '
+                    f'in {side}{tag}',
+                )
+            out[pk] = r
+        return out
+
+    t_by_key = _index(treatment, 'treatment')
+    b_by_key = _index(baseline, 'baseline')
+    paired = sorted(t_by_key.keys() & b_by_key.keys())
+    n_dropped = (
+        (len(t_by_key) - len(paired))
+        + (len(b_by_key) - len(paired))
+    )
+    return paired, t_by_key, b_by_key, n_dropped
+
+
 def _run_pair_key(
     run: RunRow, pair_by: tuple[str, ...],
 ) -> tuple[MeasurementLeaf, ...]:
@@ -236,15 +284,10 @@ def paired_comparison_from_runs(
             'the measurement key(s) that identify matched pairs.'
         )
 
-    # Index by pair-key tuple; compute Δ over the intersection.
-    treatment_by_key = {
-        _run_pair_key(r, pair_by): r for r in treatment_runs
-    }
-    baseline_by_key = {
-        _run_pair_key(r, pair_by): r for r in baseline_runs
-    }
-    paired_keys = sorted(
-        treatment_by_key.keys() & baseline_by_key.keys()
+    paired_keys, treatment_by_key, baseline_by_key, _ = (
+        _pair_runs_by_key(
+            treatment_runs, baseline_runs, pair_by=pair_by,
+        )
     )
 
     deltas: list[float] = [
@@ -300,6 +343,60 @@ def paired_comparison_from_runs(
 
 
 # ============ Cross-group link verdict (PAPER_NOTES.md §3.5) ============
+
+def paired_deltas_from_runs(
+    treatment_runs: Sequence[RunRow],
+    baseline_runs: Sequence[RunRow],
+    *,
+    paths: Sequence[str],
+    pair_by: tuple[str, ...],
+) -> dict[str, list[float]]:
+    """Per-pair Δ values (treatment − baseline) for each path.
+
+    For within-stratum mediator search: regress Δ_outcome on
+    Δ_mediator across pairs to test whether DDQN's effect on the
+    mediator predicts DDQN's effect on the outcome at the
+    seed-pair level. The cross-env analog is
+    `link_pearson_across_groups`; this is the within-env version.
+
+    Pairs by tuple-of-values at `pair_by` (typically `('seed',)`).
+    Drops unmatched pairs. For each path, drops pairs where
+    either side's measurement is non-finite or missing.
+
+    Returns a dict `{path: [Δ_pair_0, Δ_pair_1, ...]}`. Lengths
+    can differ across paths if some pairs are missing for some
+    paths; the caller handles index alignment if needed.
+
+    Use `scipy.stats.pearsonr` (or spearmanr) on the resulting
+    vectors to score each candidate mediator's correlation with
+    the outcome's Δ."""
+    if not pair_by:
+        raise ValueError(
+            'paired_deltas_from_runs: pair_by must be non-empty',
+        )
+    paired_keys, treatment_by_key, baseline_by_key, _ = (
+        _pair_runs_by_key(
+            treatment_runs, baseline_runs, pair_by=pair_by,
+        )
+    )
+
+    out: dict[str, list[float]] = {}
+    for path in paths:
+        deltas: list[float] = []
+        for k in paired_keys:
+            t = treatment_by_key[k].measurements.get(path)
+            b = baseline_by_key[k].measurements.get(path)
+            if not isinstance(t, (int, float)) or isinstance(t, bool):
+                continue
+            if not isinstance(b, (int, float)) or isinstance(b, bool):
+                continue
+            tf, bf = float(t), float(b)
+            if not (math.isfinite(tf) and math.isfinite(bf)):
+                continue
+            deltas.append(tf - bf)
+        out[path] = deltas
+    return out
+
 
 def per_group_comparisons(
     row: 'HypothesisComparisonRow', *, outcome_path: str,
@@ -852,29 +949,9 @@ def _per_group_stats(
 
     Raises ValueError on duplicate pair_by keys within an arm —
     silent dedup would hide a misconfigured slice."""
-    t_by_pkey: dict[tuple[object, ...], RunRow] = {}
-    for r in treatment_runs:
-        pk = _run_pair_key(r, pair_by)
-        if pk in t_by_pkey:
-            raise ValueError(
-                f'duplicate pair_by={pair_by!r} key {pk!r} in '
-                f'treatment for group {group_value!r}',
-            )
-        t_by_pkey[pk] = r
-    b_by_pkey: dict[tuple[object, ...], RunRow] = {}
-    for r in baseline_runs:
-        pk = _run_pair_key(r, pair_by)
-        if pk in b_by_pkey:
-            raise ValueError(
-                f'duplicate pair_by={pair_by!r} key {pk!r} in '
-                f'baseline for group {group_value!r}',
-            )
-        b_by_pkey[pk] = r
-
-    paired = sorted(t_by_pkey.keys() & b_by_pkey.keys())
-    n_dropped = (
-        (len(t_by_pkey) - len(paired))
-        + (len(b_by_pkey) - len(paired))
+    paired, t_by_pkey, b_by_pkey, n_dropped = _pair_runs_by_key(
+        treatment_runs, baseline_runs,
+        pair_by=pair_by, dup_check=True, group_label=group_value,
     )
 
     a_values: list[float] = []

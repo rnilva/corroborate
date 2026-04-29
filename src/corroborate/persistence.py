@@ -224,117 +224,34 @@ def apply_trace_reductions(
 
 # ============ Streaming concat across many per-arm parquets ============
 
-def _union_schema_with_widening(
-    paths: Sequence[Path], *, type_widening: bool,
-) -> pa.Schema:
-    """Compute a union schema across multiple parquet inputs.
-    First-seen type wins per field by default; with `type_widening`,
-    integer columns are widened to float64 when any input has float
-    for the same field — avoids `Float→int` truncation errors at
-    cast time."""
-    fields: dict[str, pa.Field] = {}
-    promote_to_float: set[str] = set()
-    for p in paths:
-        for f in pq.ParquetFile(p).schema_arrow:
-            existing = fields.setdefault(f.name, f)
-            if not type_widening or existing is f:
-                continue
-            ex_t, new_t = existing.type, f.type
-            if pa.types.is_integer(ex_t) and pa.types.is_floating(new_t):
-                promote_to_float.add(f.name)
-            elif pa.types.is_floating(ex_t) and pa.types.is_integer(new_t):
-                promote_to_float.add(f.name)
-            elif (
-                pa.types.is_list(ex_t) and pa.types.is_list(new_t)
-                and pa.types.is_integer(ex_t.value_type)
-                and pa.types.is_floating(new_t.value_type)
-            ):
-                promote_to_float.add(f.name)
-            elif (
-                pa.types.is_list(ex_t) and pa.types.is_list(new_t)
-                and pa.types.is_floating(ex_t.value_type)
-                and pa.types.is_integer(new_t.value_type)
-            ):
-                promote_to_float.add(f.name)
-    if promote_to_float:
-        promoted: dict[str, pa.Field] = {}
-        for name, f in fields.items():
-            if name not in promote_to_float:
-                promoted[name] = f
-                continue
-            if pa.types.is_list(f.type):
-                promoted[name] = pa.field(name, pa.list_(pa.float64()))
-            else:
-                promoted[name] = pa.field(name, pa.float64())
-        fields = promoted
-    return pa.schema(list(fields.values()))
-
-
-def _cast_to_target(
-    tbl: pa.Table, target: pa.Schema, *, type_widening: bool,
-) -> pa.Table:
-    n = len(tbl)
-    cols: list[pa.Array | pa.ChunkedArray] = []
-    for f in target:
-        if f.name in tbl.column_names:
-            col = tbl.column(f.name)
-            if col.type != f.type:
-                try:
-                    col = col.cast(f.type)
-                except pa.ArrowInvalid:
-                    if not type_widening:
-                        raise
-                    # Float→int truncation (or analogous) fallback —
-                    # widen to float64 for both sides.
-                    if pa.types.is_list(f.type):
-                        col = col.cast(pa.list_(pa.float64()))
-                    else:
-                        col = col.cast(pa.float64())
-            cols.append(col)
-        else:
-            cols.append(pa.nulls(n, type=f.type))
-    return pa.Table.from_arrays(cols, schema=target)
-
-
 def stream_concat_parquets(
     inputs: Sequence[Path], out: Path, *,
     type_widening: bool = True,
     compression: str = 'zstd',
     compression_level: int = 3,
 ) -> None:
-    """Concatenate `inputs` to `out` row-group-by-row-group; never
-    materialises the full dataset in memory.
+    """Concatenate `inputs` to `out` via polars' `concat(how=
+    'vertical_relaxed')` — auto-promotes types across schema
+    differences (int→float when any input has float for the
+    same field; list-of-int→list-of-float for nested lists;
+    large_list and list handled identically).
 
-    `type_widening=True` (default) promotes integer columns to
-    float64 when any input has a float for the same field —
-    avoids the `Float value X.Y was truncated converting to int64`
-    error that occurs when one arm's parquet schema disagrees with
-    another. Set False for strict-typed concat (raises on
-    mismatch).
+    `type_widening=True` (default) uses `vertical_relaxed`.
+    Set False for strict concat that errors on mismatches.
 
-    Use case: per-arm sweep parquets concatenated to a single
-    corpus parquet at the end of `collect_*.py` scripts."""
+    Streams via lazy frames: only one input is loaded at a time;
+    the merged result is written without materialising the full
+    in-memory table. Use case: per-arm sweep parquets
+    concatenated to a single corpus parquet at the end of
+    `collect_*.py` scripts."""
     if not inputs:
         raise ValueError('stream_concat_parquets: no inputs')
-    target = _union_schema_with_widening(
-        inputs, type_widening=type_widening,
-    )
     if out.exists():
         out.unlink()
-    writer = pq.ParquetWriter(
-        out, target,
+    how = 'vertical_relaxed' if type_widening else 'vertical'
+    lazy_frames = [pl.scan_parquet(str(p)) for p in inputs]
+    merged = pl.concat(lazy_frames, how=how)
+    merged.sink_parquet(
+        str(out),
         compression=compression, compression_level=compression_level,
     )
-    try:
-        for p in inputs:
-            pf = pq.ParquetFile(p)
-            for i in range(pf.num_row_groups):
-                tbl = pf.read_row_group(i)
-                tbl = _cast_to_target(
-                    tbl, target, type_widening=type_widening,
-                )
-                writer.write_table(tbl)
-                del tbl
-            del pf
-    finally:
-        writer.close()
