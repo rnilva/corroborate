@@ -53,10 +53,10 @@ class ReplayState(NamedTuple):
     Six parallel arrays + a fill counter — kept flat so the
     pytree leaves are individually `jax.Array` (vmap-friendly).
     Indexed by `step % capacity` for FIFO replacement."""
-    obs: jax.Array          # (capacity, obs_dim)
+    obs: jax.Array          # (capacity, *obs_shape)
     action: jax.Array       # (capacity,) int32
     reward: jax.Array       # (capacity,)
-    next_obs: jax.Array     # (capacity, obs_dim)
+    next_obs: jax.Array     # (capacity, *obs_shape)
     done: jax.Array         # (capacity,) float32 (0/1)
     size: jax.Array         # () int32 — number of transitions stored
 
@@ -77,10 +77,10 @@ class Batch(NamedTuple):
     (none currently consume it, but the field is part of the
     Batch contract so opting back in only requires extending the
     diagnostic dict in `train_phase`)."""
-    obs: jax.Array          # (batch_size, obs_dim)
+    obs: jax.Array          # (batch_size, *obs_shape)
     action: jax.Array       # (batch_size,) int32
     reward: jax.Array       # (batch_size,)
-    next_obs: jax.Array     # (batch_size, obs_dim)
+    next_obs: jax.Array     # (batch_size, *obs_shape)
     done: jax.Array         # (batch_size,)
     indices: jax.Array      # (batch_size,) int32
 
@@ -127,7 +127,7 @@ class Replay:
       slot is how PER intervenes (`Replay(sample=prioritised_sample)`).
 
     Three methods (mechanics, not framework Claims):
-    - `init(obs_dim) → ReplayState` — allocate empty buffer arrays.
+    - `init(obs_shape) → ReplayState` — allocate empty buffer arrays.
     - `add(state, transition) → ReplayState` — FIFO ring append.
     - `sample_batch(state, rng_key) → Batch` — binding wrapper that
       delegates to `self.sample` with `batch_size`/`capacity` from
@@ -142,14 +142,21 @@ class Replay:
     batch_size: int = 64
     sample: 'BufferSample' = field(default=uniform_sample)
 
-    def init(self, obs_dim: int) -> ReplayState:
-        """Allocate empty buffer arrays. `size` starts at 0.
-        Mechanics — not a Claim."""
+    def init(self, obs_shape: tuple[int, ...]) -> ReplayState:
+        """Allocate empty buffer arrays at the env's native obs
+        shape. `size` starts at 0. Mechanics — not a Claim.
+
+        `obs_shape` is the env's `observation_shape` tuple — e.g.
+        `(4,)` for CartPole, `(10, 10, 4)` for MinAtar. The
+        buffer stores at native shape so CNN q-networks see the
+        spatial structure directly; MLP q-networks flatten
+        trailing dims internally (greedy match to weight `w0`'s
+        input dim)."""
         return ReplayState(
-            obs=jnp.zeros((self.capacity, obs_dim)),
+            obs=jnp.zeros((self.capacity, *obs_shape)),
             action=jnp.zeros((self.capacity,), dtype=jnp.int32),
             reward=jnp.zeros((self.capacity,)),
-            next_obs=jnp.zeros((self.capacity, obs_dim)),
+            next_obs=jnp.zeros((self.capacity, *obs_shape)),
             done=jnp.zeros((self.capacity,)),
             size=jnp.int32(0),
         )

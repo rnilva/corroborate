@@ -74,7 +74,7 @@ def test_trace_row_round_trip_for_real_dqn_run(tmp_path: Path) -> None:
     act_space = env.action_space(env_params)
     assert isinstance(obs_space, HasShape)
     assert isinstance(act_space, HasN)
-    obs_dim = int(obs_space.shape[0])
+    obs_shape = tuple(int(d) for d in obs_space.shape)
     n_actions = int(act_space.n)
 
     # Configure dqn with a non-default optimizer to verify HPs are
@@ -82,7 +82,7 @@ def test_trace_row_round_trip_for_real_dqn_run(tmp_path: Path) -> None:
     configured = partial(
         dqn,
         env=env, env_params=env_params,
-        obs_dim=obs_dim, n_actions=n_actions,
+        obs_shape=obs_shape, n_actions=n_actions,
         eval_episode_cap=200,
         state_hash=default_state_hash,
         total_steps=200, eval_every=100, n_episodes=2,
@@ -139,13 +139,13 @@ def test_leaf_and_trajectory_namespaces_do_not_collide(tmp_path: Path) -> None:
     act_space = env.action_space(env_params)
     assert isinstance(obs_space, HasShape)
     assert isinstance(act_space, HasN)
-    obs_dim = int(obs_space.shape[0])
+    obs_shape = tuple(int(d) for d in obs_space.shape)
     n_actions = int(act_space.n)
 
     configured = partial(
         dqn,
         env=env, env_params=env_params,
-        obs_dim=obs_dim, n_actions=n_actions,
+        obs_shape=obs_shape, n_actions=n_actions,
         total_steps=100, eval_every=100, n_episodes=1,
     )
 

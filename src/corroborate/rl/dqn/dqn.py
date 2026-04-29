@@ -70,7 +70,7 @@ def init_state(
     *,
     env: GymnaxEnvLike,
     env_params: object,
-    obs_dim: int,
+    obs_shape: tuple[int, ...],
     n_actions: int,
     rng_key: jax.Array,
     optimizer: optax.GradientTransformation,
@@ -90,19 +90,18 @@ def init_state(
     seed-axis). For non-vmap callers, pass
     `rng_key=jax.random.PRNGKey(seed)` directly."""
     init_key, env_key, run_key = jax.random.split(rng_key, 3)
-    online = q_network.init(init_key, obs_dim, n_actions)
+    online = q_network.init(init_key, obs_shape, n_actions)
     opt_state = optimizer.init(online)
     obs, env_state = env.reset(env_key, env_params)
-    # Flatten env-side multi-dim obs (e.g. Catch's (5, 5) grid,
-    # DeepSea's (8, 8)) to a 1D vector matching the flat MLP's
-    # input shape. Conv-based q_networks would NOT use this
-    # flattening; they'd pair with a different state-init path.
-    obs = obs.reshape(obs_dim)
+    # Substrate stores obs at native shape — q_network handles the
+    # input shape (MLP flattens trailing dims internally; CNN reads
+    # the spatial structure directly). Replay stores at native
+    # shape too, so the rank flowing through training is consistent.
     return DQNState(
         online_params=online,
         target_params=online,
         opt_state=opt_state,
-        replay=replay.init(obs_dim),
+        replay=replay.init(obs_shape),
         env_state=env_state,
         obs=obs,
         step=jnp.int32(0),
@@ -190,7 +189,7 @@ def dqn(
     rng_key: Annotated[jax.Array, Exogenous],
     env: Annotated[GymnaxEnvLike, Exogenous],
     env_params: Annotated[object, Exogenous],
-    obs_dim: Annotated[int, Exogenous],
+    obs_shape: Annotated[tuple[int, ...], Exogenous],
     n_actions: Annotated[int, Exogenous],
     eval_episode_cap: Annotated[int, Exogenous] = 500,
     state_hash: Annotated[StateHash, Exogenous] = default_state_hash,
@@ -254,7 +253,7 @@ def dqn(
     init_key, run_key = jax.random.split(rng_key, 2)
     state = init_state(
         env=env, env_params=env_params,
-        obs_dim=obs_dim, n_actions=n_actions,
+        obs_shape=obs_shape, n_actions=n_actions,
         rng_key=init_key, optimizer=optax_handle,
         q_network=q_network,
         replay=replay,

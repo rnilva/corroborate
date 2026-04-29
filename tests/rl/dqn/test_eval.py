@@ -32,25 +32,25 @@ from corroborate.rl.env_catalogue import GymnaxEnvLike, HasN, HasShape
 pytestmark = pytest.mark.slow
 
 
-def _make_env() -> tuple[GymnaxEnvLike, object, int, int]:
+def _make_env() -> tuple[GymnaxEnvLike, object, tuple[int, ...], int]:
     env, env_params = gymnax.make('CartPole-v1')
     obs_space = env.observation_space(env_params)
     act_space = env.action_space(env_params)
     assert isinstance(obs_space, HasShape)
     assert isinstance(act_space, HasN)
-    obs_dim = int(obs_space.shape[0])
+    obs_shape = tuple(int(d) for d in obs_space.shape)
     n_actions = int(act_space.n)
-    return env, env_params, obs_dim, n_actions
+    return env, env_params, obs_shape, n_actions
 
 
 # ============ eval_episode ============
 
 def test_eval_episode_returns_finite_scalars() -> None:
-    env, env_params, obs_dim, n_actions = _make_env()
+    env, env_params, obs_shape, n_actions = _make_env()
     optimizer = optax.adam(1e-3)
     state = init_state(
         env=env, env_params=env_params,
-        obs_dim=obs_dim, n_actions=n_actions,
+        obs_shape=obs_shape, n_actions=n_actions,
         rng_key=jax.random.PRNGKey(0), optimizer=optimizer,
         replay=Replay(capacity=200),
     )
@@ -76,11 +76,11 @@ def test_eval_episode_returns_finite_scalars() -> None:
 def test_eval_episode_mc_return_matches_episode_length_for_cartpole() -> None:
     """CartPole gives reward=1 every step until done. With
     γ=1.0, the MC return equals the episode length."""
-    env, env_params, obs_dim, n_actions = _make_env()
+    env, env_params, obs_shape, n_actions = _make_env()
     optimizer = optax.adam(1e-3)
     state = init_state(
         env=env, env_params=env_params,
-        obs_dim=obs_dim, n_actions=n_actions,
+        obs_shape=obs_shape, n_actions=n_actions,
         rng_key=jax.random.PRNGKey(0), optimizer=optimizer,
         replay=Replay(capacity=200),
     )
@@ -99,11 +99,11 @@ def test_eval_episode_mc_return_matches_episode_length_for_cartpole() -> None:
 # ============ eval_burst ============
 
 def test_eval_burst_stacks_k_episodes() -> None:
-    env, env_params, obs_dim, n_actions = _make_env()
+    env, env_params, obs_shape, n_actions = _make_env()
     optimizer = optax.adam(1e-3)
     state = init_state(
         env=env, env_params=env_params,
-        obs_dim=obs_dim, n_actions=n_actions,
+        obs_shape=obs_shape, n_actions=n_actions,
         rng_key=jax.random.PRNGKey(0), optimizer=optimizer,
         replay=Replay(capacity=200),
     )
@@ -126,11 +126,11 @@ def test_eval_burst_stacks_k_episodes() -> None:
 def test_eval_burst_episodes_are_distinct() -> None:
     """Different seeds → different episode lengths (CartPole's
     end-time depends on initial state and action sequence)."""
-    env, env_params, obs_dim, n_actions = _make_env()
+    env, env_params, obs_shape, n_actions = _make_env()
     optimizer = optax.adam(1e-3)
     state = init_state(
         env=env, env_params=env_params,
-        obs_dim=obs_dim, n_actions=n_actions,
+        obs_shape=obs_shape, n_actions=n_actions,
         rng_key=jax.random.PRNGKey(0), optimizer=optimizer,
         replay=Replay(capacity=200),
     )

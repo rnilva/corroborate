@@ -273,7 +273,7 @@ def run_dqn_arm(
     # swapped out).
     cell_kwargs: dict[str, object] = {
         'env': env, 'env_params': env_params,
-        'obs_dim': env_spec.obs_dim, 'n_actions': env_spec.n_actions,
+        'obs_shape': env_spec.observation_shape, 'n_actions': env_spec.n_actions,
         'eval_episode_cap': env_spec.eval_episode_cap,
         'state_hash': state_hash,
     }

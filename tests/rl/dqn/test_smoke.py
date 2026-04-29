@@ -38,15 +38,15 @@ from corroborate.rl.loop import python_loop, scan_loop
 
 # ============ Fixtures ============
 
-def _make_env() -> tuple[GymnaxEnvLike, object, int, int]:
+def _make_env() -> tuple[GymnaxEnvLike, object, tuple[int, ...], int]:
     env, env_params = gymnax.make('CartPole-v1')
     obs_space = env.observation_space(env_params)
     act_space = env.action_space(env_params)
     assert isinstance(obs_space, HasShape)
     assert isinstance(act_space, HasN)
-    obs_dim = int(obs_space.shape[0])
+    obs_shape = tuple(int(d) for d in obs_space.shape)
     n_actions = int(act_space.n)
-    return env, env_params, obs_dim, n_actions
+    return env, env_params, obs_shape, n_actions
 
 
 def _build_step_fn(
@@ -78,11 +78,11 @@ def _build_step_fn(
 
 @pytest.mark.slow
 def test_vanilla_dqn_runs_on_cartpole_via_python_loop() -> None:
-    env, env_params, obs_dim, n_actions = _make_env()
+    env, env_params, obs_shape, n_actions = _make_env()
     optimizer = WarmedUpdate(inner=Adam(), warmup_steps=10)()
     init = init_state(
         env=env, env_params=env_params,
-        obs_dim=obs_dim, n_actions=n_actions,
+        obs_shape=obs_shape, n_actions=n_actions,
         rng_key=jax.random.PRNGKey(0), optimizer=optimizer,
         replay=Replay(capacity=200),
     )
@@ -120,11 +120,11 @@ def test_vanilla_dqn_runs_on_cartpole_via_python_loop() -> None:
 def test_vanilla_dqn_runs_via_scan_loop() -> None:
     """Same step function under scan_loop should produce the
     same record shape (and identical values for fixed seed)."""
-    env, env_params, obs_dim, n_actions = _make_env()
+    env, env_params, obs_shape, n_actions = _make_env()
     optimizer = WarmedUpdate(inner=Adam(), warmup_steps=10)()
     init = init_state(
         env=env, env_params=env_params,
-        obs_dim=obs_dim, n_actions=n_actions,
+        obs_shape=obs_shape, n_actions=n_actions,
         rng_key=jax.random.PRNGKey(0), optimizer=optimizer,
         replay=Replay(capacity=200),
     )
@@ -144,13 +144,14 @@ def test_ddqn_and_vanilla_bootstrap_differ_when_params_differ() -> None:
     max_a' Q_target(s', a'); DDQN evaluates Q_target(s', argmax_a'
     Q_online(s', a')). When online's argmax disagrees with target's
     argmax for at least one transition, the targets differ.)"""
-    obs_dim, n_actions, batch_size = 4, 3, 8
+    obs_shape, n_actions, batch_size = (4,), 3, 8
+    obs_dim = obs_shape[0]
     rng = jax.random.PRNGKey(0)
     online_key, target_key, obs_key = jax.random.split(rng, 3)
 
     arch = MLP(hidden=(16, 16))
-    online = arch.init(online_key, obs_dim, n_actions)
-    target = arch.init(target_key, obs_dim, n_actions)
+    online = arch.init(online_key, obs_shape, n_actions)
+    target = arch.init(target_key, obs_shape, n_actions)
     next_obs = jax.random.normal(obs_key, (batch_size, obs_dim))
     reward = jnp.ones((batch_size,))
     done = jnp.zeros((batch_size,))
@@ -184,11 +185,12 @@ def test_ddqn_and_vanilla_bootstrap_match_when_params_equal() -> None:
     value either way). This is why the smoke-loop variant of this
     test failed — at init `target_params = online_params`, and
     sync_period=10 keeps re-syncing them inside the 50-step run."""
-    obs_dim, n_actions, batch_size = 4, 3, 8
+    obs_shape, n_actions, batch_size = (4,), 3, 8
+    obs_dim = obs_shape[0]
     rng = jax.random.PRNGKey(0)
     init_key, obs_key = jax.random.split(rng)
 
-    params = MLP(hidden=(16, 16)).init(init_key, obs_dim, n_actions)
+    params = MLP(hidden=(16, 16)).init(init_key, obs_shape, n_actions)
     next_obs = jax.random.normal(obs_key, (batch_size, obs_dim))
     reward = jnp.ones((batch_size,))
     done = jnp.zeros((batch_size,))
@@ -207,6 +209,46 @@ def test_ddqn_and_vanilla_bootstrap_match_when_params_equal() -> None:
     assert jnp.allclose(target_v, target_d)
 
 
+# ============ CNN q-network ============
+
+def test_cnn_q_network_init_call_round_trip() -> None:
+    """CNN runs at native (H, W, C) — no flatten round-trip
+    inside __call__. Forward pass works for single, batch, and
+    vmap'd inputs."""
+    from corroborate.rl.dqn.claims.q_network import CNN
+    obs_shape = (10, 10, 4)
+    cnn = CNN(obs_shape=obs_shape, channels=(16, 32), kernel_size=3, hidden=(64,))
+    key = jax.random.PRNGKey(0)
+    params = cnn.init(key, obs_shape, n_actions=5)
+
+    # Single (H, W, C) input.
+    single = jnp.zeros(obs_shape)
+    q_single = cnn(params, single)
+    assert q_single.shape == (5,)
+
+    # Batch (B, H, W, C) input.
+    batched = jnp.zeros((32, *obs_shape))
+    q_batch = cnn(params, batched)
+    assert q_batch.shape == (32, 5)
+
+    # Vmap over seeds.
+    keys = jax.random.split(key, 4)
+    multi_params = jax.vmap(lambda k: cnn.init(k, obs_shape, 5))(keys)
+    multi_obs = jnp.zeros((4, 32, *obs_shape))
+    q_multi = jax.vmap(cnn)(multi_params, multi_obs)
+    assert q_multi.shape == (4, 32, 5)
+
+
+def test_cnn_q_network_validates_obs_shape_consistency() -> None:
+    """CNN.init raises when substrate-passed obs_shape differs
+    from Module's declared obs_shape — silent mismatch would
+    pass through with wrong conv kernels."""
+    from corroborate.rl.dqn.claims.q_network import CNN
+    cnn = CNN(obs_shape=(10, 10, 4))
+    with pytest.raises(ValueError, match='inconsistent'):
+        cnn.init(jax.random.PRNGKey(0), (8, 8, 3), n_actions=5)
+
+
 # ============ Episode return tracking ============
 
 @pytest.mark.slow
@@ -215,11 +257,11 @@ def test_ep_return_resets_in_state_on_done() -> None:
     `done=True`. The record's `ep_return` carries the cumulative
     value AT the done step (so bridges filtering by done==1 see
     the final per-episode return)."""
-    env, env_params, obs_dim, n_actions = _make_env()
+    env, env_params, obs_shape, n_actions = _make_env()
     optimizer = WarmedUpdate(inner=Adam(), warmup_steps=10)()
     init = init_state(
         env=env, env_params=env_params,
-        obs_dim=obs_dim, n_actions=n_actions,
+        obs_shape=obs_shape, n_actions=n_actions,
         rng_key=jax.random.PRNGKey(0), optimizer=optimizer,
         replay=Replay(capacity=200),
     )
@@ -249,11 +291,11 @@ def test_step_counter_advances_monotonically() -> None:
     """The state.step counter should strictly increment each
     iteration. (Sanity check on the loop primitive's idx
     threading.)"""
-    env, env_params, obs_dim, n_actions = _make_env()
+    env, env_params, obs_shape, n_actions = _make_env()
     optimizer = WarmedUpdate(inner=Adam(), warmup_steps=10)()
     init = init_state(
         env=env, env_params=env_params,
-        obs_dim=obs_dim, n_actions=n_actions,
+        obs_shape=obs_shape, n_actions=n_actions,
         rng_key=jax.random.PRNGKey(0), optimizer=optimizer,
         replay=Replay(capacity=200),
     )

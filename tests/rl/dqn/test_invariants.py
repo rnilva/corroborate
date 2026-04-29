@@ -51,7 +51,7 @@ def _run_short_trajectory() -> Mapping[str, jnp.ndarray]:
     act_space = env.action_space(env_params)
     assert isinstance(obs_space, HasShape)
     assert isinstance(act_space, HasN)
-    obs_dim = int(obs_space.shape[0])
+    obs_shape = tuple(int(d) for d in obs_space.shape)
     n_actions = int(act_space.n)
 
     from corroborate.rl.dqn.claims.optimizer import Adam, WarmedUpdate
@@ -62,7 +62,7 @@ def _run_short_trajectory() -> Mapping[str, jnp.ndarray]:
     import jax
     state = init_state(
         env=env, env_params=env_params,
-        obs_dim=obs_dim, n_actions=n_actions,
+        obs_shape=obs_shape, n_actions=n_actions,
         rng_key=jax.random.PRNGKey(0),
         optimizer=optimizer, replay=replay,
     )
