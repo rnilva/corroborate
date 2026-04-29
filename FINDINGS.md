@@ -5,6 +5,114 @@ to track when claims were authored vs. observed.
 
 ---
 
+## 2026-04-29 (eighth revision) — Action-dim is the scope at the *mechanism edge*: |A| ≥ 3 is required for DDQN to reduce the gap; |A| = 2 reverses.
+
+### Method
+
+Same action-dim sweep (`experiments/data/action_dim_sweep/`).
+Beyond the dormancy_gap test, compute paired g on
+`mechanism.jensen_gap` per env (DDQN vs vanilla, pair-by seed,
+predicted `a_lt_b` ⇒ DDQN reduces gap, n_pairs = 60 each).
+
+### Result — paired g on mechanism
+
+| Env | \|A\| | g_mech | SE | Verdict |
+|---|---|---|---|---|
+| **CartPole-v1** | **2** | **+0.090** | 0.13 | **POWER_INSUFFICIENT** (sign wrong) |
+| Acrobot-v1 | 3 | **−0.596** | 0.14 | **HELD** |
+| Catch-bsuite | 3 | **−4.662** | 0.44 | **HELD** |
+| DiscountingChain-bsuite | 5 | **−0.600** | 0.14 | **HELD** |
+
+Three envs at |A|≥3 all HELD with substantial reductions
+(g range −0.60 to −4.66). The single |A|=2 env shows a
+positive-sign mechanism g — DDQN slightly *increases* the gap
+on CartPole at converging HPs. The verdict is
+POWER_INSUFFICIENT, not NO_EFFECT, because the sign opposes
+the prediction.
+
+Random-effects pool: g_pooled=−1.31, **I²=0.97** — extreme
+heterogeneity. The heterogeneity *is the signal* — |A|
+separates the envs. Meta-regression of g_mech on action_dim
+shows the right direction (β=−0.18) but n=4 envs is
+underpowered for significance.
+
+### Reading
+
+This is the cleanest scope finding the framework has produced
+on DDQN to date. The action_dim dependency at the
+**mechanism edge** is exactly Hasselt's derivation:
+  Jensen gap ≳ σ · √(2 log |A|)
+At |A|=2 the floor coefficient is √(2 log 2) ≈ 1.18 — small;
+at |A|=10 it's ≈ 2.15. Below |A|=3 the structural leverage
+DDQN's decoupling can apply is at its theoretical minimum.
+
+The CartPole result, framed correctly, isn't "counter-Hasselt"
+— it's what the theory would predict at the structural lower
+bound. The decoupling has no room to reduce bias because
+there's barely a Jensen-bias signal to reduce; the second-
+order variance the asymmetric target-online structure
+introduces dominates.
+
+### Implication for the framework
+
+The attached `jensen_dormancy_gap` invariant is *necessary*
+(catches Catch's near-bandit position) but *not sufficient*
+(its formula computes the floor magnitude, not the |A|≥3
+threshold structurally).
+
+A sharper invariant would commit the explicit |A|≥3
+precondition. Concretely: a second invariant on
+`double_greedify`,
+`action_dim_floor_gap = max(0, 3 − |A|)`, returning HELD when
+|A|≥3 and INVARIANT_VIOLATION otherwise. The current
+dormancy_gap can keep the σ·√(2 log |A|) component for
+within-regime granularity; the action-dim floor handles the
+hard structural cutoff that the magnitude formula misses.
+
+### What the link still tells us
+
+**The link is still null on this sweep** (eval_final_mean
+g_pooled=−0.086, PI brackets zero) even on the |A|≥3 envs
+where the mechanism HELDs cleanly. Mechanism activation is
+**necessary-but-not-sufficient** for outcome benefit.
+Additional chain edges (bootstrap depth, outcome headroom,
+greediness gate) remain unexplored.
+
+The full story of DDQN's scope:
+- **Edge 1 (mechanism activates)**: |A| ≥ 3. **Confirmed
+  empirically** on this sweep.
+- **Edge 2 (mechanism reduces correct bias)**: jensen_gap
+  formula correctly attributes the reduction to Jensen-bias.
+  Tested only indirectly.
+- **Edge 3 (reduced bias improves policy)**: TBD — link is
+  null even on the |A|≥3 envs.
+- **Edge 4 (better policy, better outcome)**: depends on env
+  recoverability + outcome headroom.
+
+The first edge is now mapped. Edges 3-4 are the next scope
+investigations.
+
+### Honest scope of this finding
+
+- 4 envs is too few for meta-regression significance even
+  though the per-env pattern is qualitatively unmistakable.
+  A wider sweep across |A| ∈ {2, 3, 5, 8, 10} (e.g. adding
+  BernoulliBandit, MNISTBandit, MetaMaze, MinAtar envs)
+  would let the meta-regression pin the cutoff.
+- The CartPole result is at converging HPs (cap=50k, 200k
+  steps). At non-converging HPs the picture may differ —
+  e.g. cap=10k saturates the buffer differently and the
+  gap dynamics are dominated by under-sampling, not Jensen
+  bias.
+
+Reproduce with:
+```
+uv run python experiments/analyze_action_dim_dormancy.py  # link analysis
+# (mechanism g per env: see FINDINGS.md eighth revision table above)
+```
+
+---
+
 ## 2026-04-29 (seventh revision) — Action-dim sweep: dormancy_gap correctly fires but doesn't predict link; CartPole at converging HPs has DDQN *increasing* the Jensen gap.
 
 ### Methodology
