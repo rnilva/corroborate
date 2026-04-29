@@ -100,7 +100,7 @@ def test_run_dqn_cell_produces_runrow_on_cartpole() -> None:
 
     run_row = run_dqn_cell(
         env_spec, seed=0, hypothesis=h,
-        optimizer=Adam(),
+        
     ).run
     # RunRow shape.
     assert isinstance(run_row, RunRow)
@@ -140,7 +140,7 @@ def test_run_dqn_cell_leaf_signature_matches_hypothesis() -> None:
 
     run_row = run_dqn_cell(
         env_spec, seed=0, hypothesis=h,
-        optimizer=Adam(),
+        
     ).run
 
     # Bridge result surfaces in measurements with bridge name.
@@ -182,7 +182,7 @@ def test_run_dqn_cell_classifies_invariant_facts() -> None:
 
     run_row = run_dqn_cell(
         env_spec, seed=0, hypothesis=h,
-        optimizer=Adam(),
+        
     ).run
 
     # Plain bridge under 'bridge.' prefix.
@@ -221,7 +221,7 @@ def test_run_dqn_cell_invariant_violation_dominates_verdict() -> None:
 
     run_row = run_dqn_cell(
         env_spec, seed=0, hypothesis=h,
-        optimizer=Adam(),
+        
     ).run
     assert run_row.verdict is Verdict.INVARIANT_VIOLATION
 
@@ -254,7 +254,7 @@ def test_run_dqn_cell_runs_bridges_against_merged_record() -> None:
 
     run_row = run_dqn_cell(
         env_spec, seed=0, hypothesis=h,
-        optimizer=Adam(),
+        
     ).run
     # Invariant verdict surfaced under 'invariant.' prefix.
     assert _has_invariant(run_row, 'jensen_overestimation_gap')
@@ -297,7 +297,7 @@ def test_intervention_overrides_dont_leak_default_invariants() -> None:
         )
         run_row = run_dqn_cell(
             env_spec, seed=0, hypothesis=h,
-            optimizer=Adam(),
+            
         ).run
         assert not _has_invariant(run_row, 'jensen_overestimation_gap'), (
             f'max_greedify-only invariant leaked into a DDQN run; '
@@ -336,7 +336,7 @@ def test_composition_discovered_invariants_fire() -> None:
 
         run_row = run_dqn_cell(
             env_spec, seed=0, hypothesis=h,
-            optimizer=Adam(),
+            
         ).run
 
         assert _has_invariant(run_row, 'jensen_overestimation_gap'), (
@@ -371,7 +371,7 @@ def test_run_dqn_cell_applies_intervention_via_slot_swap() -> None:
 
     run_row = run_dqn_cell(
         env_spec, seed=0, hypothesis=h,
-        optimizer=Adam(),
+        
     ).run
     # The bootstrap HP topology path carries the canonicalised
     # form of the partial — `double_greedify` appears in it.

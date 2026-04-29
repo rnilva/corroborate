@@ -66,6 +66,7 @@ from corroborate.rl.dqn.claims.bootstrap import bootstrap, double_greedify
 from corroborate.rl.dqn.claims.optimizer import Adam, WarmedUpdate
 from corroborate.rl.dqn.claims.replay import Replay
 from corroborate.rl.dqn.invariants import DQNTrajectoryRecord
+from corroborate.rl.sweep import DQNRunner
 
 
 # ============ Experiment grid ============
@@ -267,34 +268,32 @@ def _grid_tag(grid_point: dict[str, Any]) -> str:
 def _run_one_arm(
     env_name: str, hypothesis_name: str, grid_point: dict[str, Any],
     seeds: tuple[int, ...], tmp_dir: Path, arm_idx: int,
+    runner: 'DQNRunner',
 ) -> tuple[Path, Path]:
-    """Run `run_dqn_arm` for one (env, hypothesis, grid-point)
-    cell + write per-arm parquets. Returns (runs_path,
-    traces_path).
+    """Run one (env, hypothesis, grid-point) cell via the
+    framework's `DQNRunner` Protocol + write per-arm parquets.
+    Returns (runs_path, traces_path).
 
     Plain function (no subprocess). After completion, drops the
     per-arm payload and clears the JIT cache so the next arm gets
     a fresh compilation budget — without this, accumulated XLA
-    programs OOM the device after ~6-8 distinct env shapes."""
-    from corroborate.rl.cell_runner import run_dqn_arm
-    from corroborate.rl.env_catalogue import get
+    programs OOM the device after ~6-8 distinct env shapes.
 
+    `runner` is a shared `DQNRunner` instance — the env catalogue
+    is cached in it, so repeated calls don't re-resolve env_specs."""
     arm_tag = f'arm{arm_idx:03d}__{env_name}__{hypothesis_name}__{_grid_tag(grid_point)}'
     runs_path = tmp_dir / f'{arm_tag}__runs.parquet'
     traces_path = tmp_dir / f'{arm_tag}__traces.parquet'
 
     h = _make_hypothesis(hypothesis_name, grid_point)
-    arm = run_dqn_arm(
-        get(env_name), seeds, hypothesis=h, optimizer=Adam(),
-    )
-    cells = arm.cells
-    # arm.graph is the captured ComputationGraph — held in memory
-    # only (per the parquets-are-for-measurables principle); no
-    # current consumer in the §3-§7 path. Forward-investment for
+    cell_result = runner(h, {'env_name': env_name, 'seeds': seeds})
+    # cell_result.graph is the captured ComputationGraph — held in
+    # memory only (per the parquets-are-for-measurables principle);
+    # no current consumer in the §3-§7 path. Forward-investment for
     # the redundancy / register / mechanism-key bundle.
-    write_runrows(tuple(c.run for c in cells), runs_path)
+    write_runrows(cell_result.runs, runs_path)
     reduced_traces = apply_trace_reductions(
-        [c.trace for c in cells],
+        list(cell_result.traces),
         add=TRACE_POST_REDUCTIONS,
         drop=TRACE_POST_DROPS,
     )
@@ -304,7 +303,7 @@ def _run_one_arm(
     # arrays go away too — otherwise compiled programs are freed
     # but the JAX arrays from `cells` keep their device buffers
     # rooted until function return.
-    del arm, cells, reduced_traces
+    del cell_result, reduced_traces
     jax.clear_caches()
     gc.collect()
 
@@ -465,13 +464,18 @@ def main() -> None:
         print(f'resume: {len(pre_existing)} arms in tmp/; '
               f'{len(pending_specs)} pending', flush=True)
 
+    # Shared DQNRunner — caches the full env catalogue once,
+    # avoids per-arm `gymnax.make` lookups + lets a future
+    # scheduler introspect runner state.
+    runner = DQNRunner(ENV_REGISTRY)
+
     t0 = time.time()
     parquet_pairs: list[tuple[Path, Path]] = list(pre_existing)
     failures: list[tuple[str, str, str]] = []  # (env, hyp, exc)
     for i, (idx, env_name, h_name, gp) in enumerate(pending_specs, start=1):
         try:
             runs_path, traces_path = _run_one_arm(
-                env_name, h_name, gp, SEEDS, tmp_dir, idx,
+                env_name, h_name, gp, SEEDS, tmp_dir, idx, runner,
             )
         except Exception as e:
             print(

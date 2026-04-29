@@ -231,7 +231,7 @@ def _run_one_arm(
     for chunk_idx, chunk in enumerate(chunks):
         h = _make_hypothesis(hypothesis_name, grid_point)
         arm = run_dqn_arm(
-            env_spec, chunk, hypothesis=h, optimizer=Adam(),
+            env_spec, chunk, hypothesis=h,
         )
         all_cells.extend(arm.cells)
         del arm

@@ -181,7 +181,7 @@ def _run_one_config(
 
     h = _make_hypothesis(grid_point)
     arm = run_dqn_arm(
-        get(ENV_NAME), seeds, hypothesis=h, optimizer=Adam(),
+        get(ENV_NAME), seeds, hypothesis=h,
     )
     cells = arm.cells
     write_runrows(tuple(c.run for c in cells), runs_path)

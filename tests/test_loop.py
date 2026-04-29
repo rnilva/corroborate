@@ -134,7 +134,7 @@ def test_graph_capture_on_run_dqn_arm_with_real_run() -> None:
         name='vanilla', intervention=intervention,
         bridges=(), predicted_direction=None,
     )
-    arm = run_dqn_arm(get('CartPole-v1'), (0,), hypothesis=h, optimizer=Adam())
+    arm = run_dqn_arm(get('CartPole-v1'), (0,), hypothesis=h)
 
     assert isinstance(arm.graph, Graph)
     assert len(arm.graph.nodes) > 0

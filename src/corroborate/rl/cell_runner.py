@@ -46,13 +46,11 @@ from corroborate.claim import trace_context
 from corroborate.computation_graph import ComputationGraph, build_computation_graph
 from corroborate.hypothesis import Hypothesis
 from corroborate.reductions import masked_window_mean
-from corroborate.rl.dqn.claims.optimizer import Adam
 from corroborate.rl.dqn.dqn import default_state_hash, dqn
 from corroborate.rl.dqn.invariants import (
     DQNTrajectoryRecord,
     jensen_overestimation_gap,
 )
-from corroborate.rl.dqn.types import OptimizerFactory
 from corroborate.rl.env_catalogue import EnvSpec
 from corroborate.schema import MeasurementLeaf, RunRow, TraceLeaf, TraceRow
 from corroborate.signature import collect_invariants, walk, walk_paths
@@ -233,8 +231,6 @@ def run_dqn_arm(
     seeds: tuple[int, ...],
     hypothesis: Hypothesis[DQNTrajectoryRecord],
     *,
-    optimizer: OptimizerFactory = Adam(),
-    outcome_fraction: float = 0.1,
     cycle_id: str | None = None,
 ) -> ArmResult:
     """Run one (env, hypothesis) arm across `seeds` in parallel via
@@ -249,11 +245,12 @@ def run_dqn_arm(
     across seeds (vmap traces the body once); the graph is a
     property of the bound hypothesis, not of any single seed.
 
-    `optimizer` is also a leaf in `dqn`'s signature; the runner
-    accepts it as a kwarg for the common case where the experiment
-    threads one optimizer choice across an arm. If a hypothesis
-    intervenes on `optimizer`, that intervention wins (intervention
-    ordering mirrors `partial`'s kwarg-merge semantics)."""
+    Substrate-internal knobs (optimizer, outcome window fraction,
+    etc.) are NOT runner kwargs. `dqn`'s signature carries its
+    own defaults; experiments that want to override them put the
+    override in `Hypothesis.intervention`. Keeping the runner
+    surface to (env_spec, seeds, hypothesis, cycle_id) makes
+    Hypothesis the sole experiment specification."""
     if not seeds:
         raise ValueError('seeds must be non-empty')
 
@@ -279,7 +276,6 @@ def run_dqn_arm(
         'obs_dim': env_spec.obs_dim, 'n_actions': env_spec.n_actions,
         'eval_episode_cap': env_spec.eval_episode_cap,
         'state_hash': state_hash,
-        'optimizer': optimizer,
     }
     configured = partial(dqn, **{**cell_kwargs, **intervention})
 
@@ -304,9 +300,13 @@ def run_dqn_arm(
         batched_record = jax.vmap(by_key)(keys)
     graph = build_computation_graph(records)
 
+    # Late-window 10% of training is the codebase's standard outcome
+    # reduction. Researchers wanting a different window should
+    # author a different `outcome.<name>` reduction (e.g.
+    # `outcome.mid_window_mean`) rather than tweak this constant —
+    # different windows aren't the same outcome.
     outcome_proj = masked_window_mean(
-        value_key='ep_return', mask_key='done',
-        fraction=outcome_fraction,
+        value_key='ep_return', mask_key='done', fraction=0.1,
     )
 
     # Author-declared bridges + composition-discovered invariants.
@@ -393,8 +393,6 @@ def run_dqn_cell(
     seed: int,
     hypothesis: Hypothesis[DQNTrajectoryRecord],
     *,
-    optimizer: OptimizerFactory = Adam(),
-    outcome_fraction: float = 0.1,
     cycle_id: str | None = None,
 ) -> CellResult:
     """Run one (env, seed, hypothesis) cell. Thin convenience
@@ -404,8 +402,6 @@ def run_dqn_cell(
     that want it should use `run_dqn_arm` directly."""
     arm = run_dqn_arm(
         env_spec, (seed,), hypothesis,
-        optimizer=optimizer,
-        outcome_fraction=outcome_fraction,
         cycle_id=cycle_id,
     )
     return arm.cells[0]

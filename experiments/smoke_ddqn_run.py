@@ -43,7 +43,6 @@ from corroborate.persistence import (
 )
 from corroborate.rl.cell_runner import run_dqn_arm
 from corroborate.rl.dqn.claims.bootstrap import bootstrap, double_greedify
-from corroborate.rl.dqn.claims.optimizer import Adam, WarmedUpdate
 from corroborate.rl.dqn.claims.replay import Replay
 from corroborate.rl.dqn.invariants import DQNTrajectoryRecord
 from corroborate.rl.env_catalogue import get
@@ -96,7 +95,6 @@ def _ddqn() -> Hypothesis[DQNTrajectoryRecord]:
 
 def main() -> None:
     env_spec = get(_ENV)
-    optimizer = WarmedUpdate(inner=Adam(), warmup_steps=100)
 
     print(f'env={_ENV}, seeds={_SEEDS}, total_steps={_TOTAL_STEPS}')
     print()
@@ -107,7 +105,7 @@ def main() -> None:
     print('1. Running vanilla arm on CartPole...')
     t0 = time.time()
     vanilla_arm = run_dqn_arm(
-        env_spec, _SEEDS, vanilla, optimizer=optimizer,
+        env_spec, _SEEDS, vanilla,
     )
     vanilla_cells = vanilla_arm.cells
     vanilla_rows = tuple(c.run for c in vanilla_cells)
@@ -123,7 +121,7 @@ def main() -> None:
     print('2. Running DDQN arm on CartPole...')
     t0 = time.time()
     ddqn_arm = run_dqn_arm(
-        env_spec, _SEEDS, ddqn, optimizer=optimizer,
+        env_spec, _SEEDS, ddqn,
     )
     ddqn_cells = ddqn_arm.cells
     ddqn_rows = tuple(c.run for c in ddqn_cells)
