@@ -26,15 +26,29 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
 import polars as pl
 import scipy.stats as ss
 
 from corroborate._polars_boundary import to_dicts as _to_dicts
 from corroborate.aggregate import paired_deltas_from_runs
+from corroborate.causal_discovery import partial_spearman_rho
 from corroborate.rl.dqn.compute_mediators import (
     DEFAULT_PANEL, compute_mediator_panel,
 )
 from corroborate.schema import RunRow
+
+
+# Outcome-tautological mediators (reads ⊇ outcome reads). Filtered
+# from the mediator search since their high correlation with
+# Δ_outcome is just a re-encoding, not a causal mediator. Same
+# four flagged by `audit_mediator_panel` as `flagged_outcome=True`.
+_OUTCOME_TAUTOLOGICAL: frozenset[str] = frozenset({
+    'mediator.learning_curve_auc',
+    'mediator.plateau_slope_late',
+    'mediator.return_at_25pct_steps',
+    'mediator.time_to_threshold',
+})
 
 
 _RUNS = Path('experiments/data/action_dim_wide/runs.parquet')
@@ -103,10 +117,69 @@ def main() -> None:
     for path, rf, pf, rb, pb in rows:
         sig_f = '✓' if pf < 0.05 else ' '
         sig_b = '✓' if pb < 0.05 else ' '
+        flag = ' [TAUT]' if path in _OUTCOME_TAUTOLOGICAL else ''
         print(
             f'{path:<40} '
             f'{rf:>+14.3f} {pf:>6.3f}{sig_f} '
             f'{rb:>+14.3f} {pb:>6.3f}{sig_b}'
+            f'{flag}'
+        )
+
+    # ============ Partial-ρ analysis: mediator | jensen_gap ============
+    # For each non-tautological mediator, compute partial Spearman
+    # ρ(Δ_outcome, Δ_mediator | Δ_jensen_gap). If significant, the
+    # mediator carries outcome-predictive info BEYOND jensen_gap —
+    # candidate intermediate variable. If null after controlling for
+    # jensen_gap, the mediator is collinear with (or downstream of)
+    # the gap-reduction signal.
+    print()
+    print('Partial ρ(Δ_outcome, Δ_mediator | Δ_jensen_gap):')
+    print(f'  {"candidate":<40} {"partial_ρ_final":>15} {"p":>7} '
+          f'{"partial_ρ_best":>15} {"p":>7}')
+    print('-' * 90)
+    delta_jensen = np.asarray(
+        deltas['mechanism.jensen_gap'], dtype=np.float64,
+    )
+    delta_final = np.asarray(
+        deltas['outcome.eval_final_mean'], dtype=np.float64,
+    )
+    delta_best = np.asarray(
+        deltas['outcome.eval_best_burst_mean'], dtype=np.float64,
+    )
+    partial_rows: list[tuple[str, float, float, float, float]] = []
+    for path in mediator_paths:
+        if path in _OUTCOME_TAUTOLOGICAL:
+            continue
+        delta_med = np.asarray(deltas[path], dtype=np.float64)
+        if not np.all(np.isfinite(delta_med)):
+            partial_rows.append((path, float('nan'), float('nan'), float('nan'), float('nan')))
+            continue
+        n = min(len(delta_final), len(delta_med), len(delta_jensen))
+        rf, pf = partial_spearman_rho(
+            delta_final[:n], delta_med[:n], delta_jensen[:n],
+        )
+        rb, pb = partial_spearman_rho(
+            delta_best[:n], delta_med[:n], delta_jensen[:n],
+        )
+        partial_rows.append((path, rf, pf, rb, pb))
+
+    partial_rows.sort(
+        key=lambda x: max(
+            abs(x[1]) if x[1] == x[1] else 0.0,
+            abs(x[3]) if x[3] == x[3] else 0.0,
+        ),
+        reverse=True,
+    )
+    for path, rf, pf, rb, pb in partial_rows:
+        rf_s = f'{rf:+.3f}' if rf == rf else '   nan'
+        pf_s = f'{pf:.3f}' if pf == pf else '  nan'
+        rb_s = f'{rb:+.3f}' if rb == rb else '   nan'
+        pb_s = f'{pb:.3f}' if pb == pb else '  nan'
+        sig_f = '✓' if pf == pf and pf < 0.05 else ' '
+        sig_b = '✓' if pb == pb and pb < 0.05 else ' '
+        print(
+            f'  {path:<40} {rf_s:>15} {pf_s:>7}{sig_f} '
+            f'{rb_s:>15} {pb_s:>7}{sig_b}'
         )
 
 
