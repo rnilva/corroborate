@@ -121,6 +121,7 @@ def main() -> None:
     print('-' * 100)
 
     obs_list: list[StratumObservation] = []
+    saturated: list[str] = []
     for env in envs:
         try:
             n_a = get(env).n_actions
@@ -132,6 +133,7 @@ def main() -> None:
         delta_bias, delta_ret = arrays
         n_pairs, n_bursts = delta_ret.shape
         gs_per_burst: list[float] = []
+        env_obs: list[StratumObservation] = []
         for b in range(n_bursts):
             dr = list(map(float, delta_ret[:, b].tolist()))
             g, se = hedges_g_paired(dr)
@@ -140,19 +142,31 @@ def main() -> None:
                 isinstance(g, float) and math.isfinite(g)
                 and isinstance(se, float) and math.isfinite(se) and se > 0.0
             ):
-                obs_list.append(StratumObservation(
+                mean_dbias = float(delta_bias[:, b].mean())
+                env_obs.append(StratumObservation(
                     stratum_id=(env, b),
                     g=g, se=se,
                     covariates={
                         'log_action_dim': math.log(max(n_a, 2)),
                         'burst_index': float(b),
+                        'mean_dbias': mean_dbias,
                     },
                 ))
+        # Filter env if all per-burst g values are exactly zero
+        # (saturated outcome, no signal at any burst).
+        if env_obs and all(abs(o.g) < 1e-9 for o in env_obs):
+            saturated.append(env)
+        else:
+            obs_list.extend(env_obs)
         gs_str = ''.join(
             f'{g:>+6.2f}' if isinstance(g, float) and math.isfinite(g) else '   nan'
             for g in gs_per_burst
         )
         print(f'  {env:<25} {n_a:>4} {gs_str}')
+
+    if saturated:
+        print()
+        print(f'Filtered (g=0 across all bursts, no signal): {sorted(saturated)}')
 
     print()
     print(f'Stage 2 — meta-regression on g_(env, burst)')
@@ -161,47 +175,84 @@ def main() -> None:
         print('  (too few strata to fit)')
         return
 
-    # Single-covariate regressions first.
-    for cov in ('burst_index', 'log_action_dim'):
-        single = [
-            StratumObservation(
+    def _project(
+        observations: list[StratumObservation], covs: tuple[str, ...],
+        *, extra: dict[tuple, dict[str, float]] | None = None,
+    ) -> list[StratumObservation]:
+        """Project obs onto a covariate subset, optionally injecting
+        author-computed extras (e.g. interaction terms)."""
+        out: list[StratumObservation] = []
+        for o in observations:
+            base = {c: o.covariates[c] for c in covs}
+            if extra is not None:
+                base.update(extra.get(o.stratum_id, {}))
+            out.append(StratumObservation(
                 stratum_id=o.stratum_id, g=o.g, se=o.se,
-                covariates={cov: o.covariates[cov]},
-            )
-            for o in obs_list
-        ]
-        try:
-            res = meta_regression(single)
-            print()
-            print(f'  --- g ~ {cov} ---')
-            print(f'    n={res.n_strata} R²={res.r_squared:+.3f} '
-                  f'intercept={res.intercept:+.3f}')
-            for c in res.coefficients:
-                sig = '✓' if c.is_significant else ' '
-                print(
-                    f'    {c.name:<18} β={c.coefficient:+.4f}  '
-                    f'CI=[{c.ci_lo:+.4f}, {c.ci_hi:+.4f}]  '
-                    f'p={c.p_value:.4f}  {sig}'
-                )
-        except ValueError as e:
-            print(f'  --- g ~ {cov} skipped: {e} ---')
+                covariates=base,
+            ))
+        return out
 
-    # Joint covariate regression.
-    try:
-        res = meta_regression(obs_list)
+    def _print_result(label: str, res) -> None:
         print()
-        print(f'  --- g ~ burst_index + log_action_dim ---')
+        print(f'  --- {label} ---')
         print(f'    n={res.n_strata} R²={res.r_squared:+.3f} '
               f'intercept={res.intercept:+.3f}')
         for c in res.coefficients:
-            sig = '✓' if c.is_significant else ' '
+            sig = '✓ SIGNIFICANT' if c.is_significant else ' '
             print(
-                f'    {c.name:<18} β={c.coefficient:+.4f}  '
+                f'    {c.name:<22} β={c.coefficient:+.4f}  '
                 f'CI=[{c.ci_lo:+.4f}, {c.ci_hi:+.4f}]  '
                 f'p={c.p_value:.4f}  {sig}'
             )
+
+    # Singletons.
+    for cov in ('burst_index', 'log_action_dim', 'mean_dbias'):
+        try:
+            res = meta_regression(_project(obs_list, (cov,)))
+            _print_result(f'g ~ {cov}', res)
+        except ValueError as e:
+            print(f'  --- g ~ {cov} skipped: {e} ---')
+
+    # Joint (burst + action_dim).
+    try:
+        res = meta_regression(_project(obs_list, ('burst_index', 'log_action_dim')))
+        _print_result('g ~ burst_index + log_action_dim', res)
     except ValueError as e:
-        print(f'  joint meta-regression skipped: {e}')
+        print(f'  joint skipped: {e}')
+
+    # Joint (burst + action_dim + mean_dbias). Tests whether
+    # action_dim's effect survives controlling for the actual
+    # bias-reduction observed at that (env, burst).
+    try:
+        res = meta_regression(_project(
+            obs_list, ('burst_index', 'log_action_dim', 'mean_dbias'),
+        ))
+        _print_result('g ~ burst_index + log_action_dim + mean_dbias', res)
+    except ValueError as e:
+        print(f'  3-cov skipped: {e}')
+
+    # With interaction term (action_dim × burst_index).
+    interaction: dict[tuple, dict[str, float]] = {
+        o.stratum_id: {
+            'log_action_dim_x_burst': (
+                o.covariates['log_action_dim']
+                * o.covariates['burst_index']
+            ),
+        }
+        for o in obs_list
+    }
+    try:
+        res = meta_regression(_project(
+            obs_list,
+            ('burst_index', 'log_action_dim', 'mean_dbias'),
+            extra=interaction,
+        ))
+        _print_result(
+            'g ~ burst_index + log_action_dim + mean_dbias + (log_action_dim × burst_index)',
+            res,
+        )
+    except ValueError as e:
+        print(f'  interaction skipped: {e}')
 
 
 if __name__ == '__main__':
