@@ -267,9 +267,14 @@ def _run_one_arm(
     traces_path = tmp_dir / f'{arm_tag}__traces.parquet'
 
     h = _make_hypothesis(hypothesis_name, grid_point)
-    cells = run_dqn_arm(
+    arm = run_dqn_arm(
         get(env_name), seeds, hypothesis=h, optimizer=Adam(),
     )
+    cells = arm.cells
+    # arm.graph is the captured ComputationGraph — held in memory
+    # only (per the parquets-are-for-measurables principle); no
+    # current consumer in the §3-§7 path. Forward-investment for
+    # the redundancy / register / mechanism-key bundle.
     write_runrows(tuple(c.run for c in cells), runs_path)
     reduced_traces = apply_trace_reductions(
         [c.trace for c in cells],
@@ -282,7 +287,7 @@ def _run_one_arm(
     # arrays go away too — otherwise compiled programs are freed
     # but the JAX arrays from `cells` keep their device buffers
     # rooted until function return.
-    del cells, reduced_traces
+    del arm, cells, reduced_traces
     jax.clear_caches()
     gc.collect()
 

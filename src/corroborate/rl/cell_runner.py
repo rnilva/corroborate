@@ -37,6 +37,8 @@ import jax.numpy as jnp
 
 from corroborate.aggregate import aggregate_cell_verdict
 from corroborate.bridge import Bridge, BridgeResult
+from corroborate.claim import trace_context
+from corroborate.computation_graph import ComputationGraph, build_computation_graph
 from corroborate.hypothesis import (
     Hypothesis,
     _canonical_str,  # pyright: ignore[reportPrivateUsage]
@@ -65,6 +67,23 @@ class CellResult(NamedTuple):
     `traces.parquet` and re-evaluate any bridge post-hoc."""
     run: RunRow
     trace: TraceRow
+
+
+class ArmResult(NamedTuple):
+    """One arm's per-seed cells plus the computation graph captured
+    during the arm's vmap call.
+
+    `graph` is a `ComputationGraph` derived from `@claim` records
+    fired during JAX's abstract-trace pass — structurally constant
+    across seeds since vmap traces the body once. Held in memory,
+    not persisted to parquet (parquets are for measurable values;
+    the graph is a runtime artifact of the bound hypothesis).
+
+    Use `result.cells` for the per-seed CellResults; use
+    `result.graph` to access the static call graph (for downstream
+    redundancy / register / mechanism-key consumers)."""
+    cells: tuple[CellResult, ...]
+    graph: ComputationGraph
 
 
 # `total_steps` default — must match `dqn`'s default. Read from
@@ -223,11 +242,18 @@ def run_dqn_arm(
     optimizer: OptimizerFactory = Adam(),
     outcome_fraction: float = 0.1,
     cycle_id: str | None = None,
-) -> tuple[CellResult, ...]:
+) -> ArmResult:
     """Run one (env, hypothesis) arm across `seeds` in parallel via
-    `jax.vmap` of the `dqn` outermost claim. Returns one
-    `CellResult(run, trace)` per seed — both stores produced and
-    joined by id.
+    `jax.vmap` of the `dqn` outermost claim. Returns
+    `ArmResult(cells, graph)` — per-seed `CellResult`s plus the
+    `ComputationGraph` captured from the bound hypothesis.
+
+    Graph capture: the vmap call is wrapped in `trace_context()`,
+    so JAX's first-call abstract-trace pass fires `@claim` records
+    once. `build_computation_graph(records)` derives the static
+    call graph from those records. This is structurally constant
+    across seeds (vmap traces the body once); the graph is a
+    property of the bound hypothesis, not of any single seed.
 
     `optimizer` is also a leaf in `dqn`'s signature; the runner
     accepts it as a kwarg for the common case where the experiment
@@ -275,7 +301,14 @@ def run_dqn_arm(
     keys = jax.vmap(jax.random.PRNGKey)(
         jnp.asarray(seeds, dtype=jnp.uint32),
     )
-    batched_record = jax.vmap(by_key)(keys)
+    # Wrap the vmap call in trace_context so JAX's first-call
+    # abstract-trace pass fires @claim records once; that single
+    # pass IS the structural graph (per-(theory, intervention),
+    # constant across seeds). build_computation_graph derives the
+    # static call graph from the records.
+    with trace_context() as records:
+        batched_record = jax.vmap(by_key)(keys)
+    graph = build_computation_graph(records)
 
     outcome_proj = masked_window_mean(
         value_key='ep_return', mask_key='done',
@@ -357,7 +390,7 @@ def run_dqn_arm(
             leaves=trace_leaves,
         )
         cells.append(CellResult(run=run, trace=trace))
-    return tuple(cells)
+    return ArmResult(cells=tuple(cells), graph=graph)
 
 
 def run_dqn_cell(
@@ -372,11 +405,12 @@ def run_dqn_cell(
     """Run one (env, seed, hypothesis) cell. Thin convenience
     wrapper around `run_dqn_arm` for the single-seed case;
     multi-seed callers should use `run_dqn_arm` directly to avoid
-    per-call vmap re-compilation."""
-    cells = run_dqn_arm(
+    per-call vmap re-compilation. Discards the graph; callers
+    that want it should use `run_dqn_arm` directly."""
+    arm = run_dqn_arm(
         env_spec, (seed,), hypothesis,
         optimizer=optimizer,
         outcome_fraction=outcome_fraction,
         cycle_id=cycle_id,
     )
-    return cells[0]
+    return arm.cells[0]

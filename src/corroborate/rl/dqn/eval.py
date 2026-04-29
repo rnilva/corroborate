@@ -31,6 +31,7 @@ import jax
 import jax.numpy as jnp
 
 from corroborate.claim import claim
+from corroborate.loop import Loop
 from corroborate.rl.loop import scan_loop
 from corroborate.rl.dqn.state import DQNState
 from corroborate.rl.dqn.types import QFunction, StepRecord
@@ -184,17 +185,23 @@ def train_with_eval(
     init_state: DQNState,
     total_steps: int,
     eval_every: int,
+    loop: Loop[object, object] = scan_loop,
 ) -> dict[str, jax.Array]:
     """Run `step_fn` for `total_steps` with an `eval_fn` burst at
     the end of every `eval_every` chunk. Returns the merged
     record dict.
 
-    Outer scan over `total_steps // eval_every` super-steps; inner
-    scan over `eval_every` training steps. The outer scan's per-
+    Outer loop over `total_steps // eval_every` super-steps; inner
+    loop over `eval_every` training steps. The outer loop's per-
     super-step output is `(train_chunk, eval_burst)`. After the
     full run, train chunks reshape from `(n_super_steps,
     eval_every, ...)` → `(total_steps, ...)`; eval burst fields
     stack as `(n_super_steps, K, ...)`.
+
+    `loop` is the iteration backend (default `scan_loop` for
+    JIT-fast production). Pass `python_loop` (the framework's or
+    the rl/-flavored variant) for probe runs that need exhaustive
+    `@claim` records under `trace_context()`.
 
     Decoupled from `dqn` itself so the algorithm composition stays
     paper-prose. The same driver can power any RL algorithm with
@@ -204,11 +211,11 @@ def train_with_eval(
     def super_step(
         s: DQNState, super_idx: jax.Array,
     ) -> tuple[DQNState, tuple[StepRecord, EvalBurstOut]]:
-        s, train_chunk = scan_loop(step_fn, s, eval_every)
+        s, train_chunk = loop(step_fn, s, eval_every)  # pyright: ignore[reportAssignmentType]
         burst = eval_fn(s, super_idx)
-        return s, (train_chunk, burst)
+        return s, (train_chunk, burst)  # pyright: ignore[reportReturnType]
 
-    _final, (train_chunks, eval_bursts) = scan_loop(
+    _final, (train_chunks, eval_bursts) = loop(  # pyright: ignore[reportAssignmentType]
         super_step, init_state, n_super_steps,
     )
 

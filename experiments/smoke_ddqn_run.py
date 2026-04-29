@@ -96,9 +96,10 @@ def main() -> None:
 
     print('1. Running vanilla arm on CartPole...')
     t0 = time.time()
-    vanilla_cells = run_dqn_arm(
+    vanilla_arm = run_dqn_arm(
         env_spec, _SEEDS, vanilla, optimizer=optimizer,
     )
+    vanilla_cells = vanilla_arm.cells
     vanilla_rows = tuple(c.run for c in vanilla_cells)
     vanilla_traces = tuple(c.trace for c in vanilla_cells)
     print(f'   {len(vanilla_cells)} cells in {time.time() - t0:.1f}s')
@@ -111,9 +112,10 @@ def main() -> None:
 
     print('2. Running DDQN arm on CartPole...')
     t0 = time.time()
-    ddqn_cells = run_dqn_arm(
+    ddqn_arm = run_dqn_arm(
         env_spec, _SEEDS, ddqn, optimizer=optimizer,
     )
+    ddqn_cells = ddqn_arm.cells
     ddqn_rows = tuple(c.run for c in ddqn_cells)
     ddqn_traces = tuple(c.trace for c in ddqn_cells)
     print(f'   {len(ddqn_cells)} cells in {time.time() - t0:.1f}s')
