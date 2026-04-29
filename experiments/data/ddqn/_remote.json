@@ -1,0 +1,29 @@
+{
+  "remote_root": "s3://corroborate-archive/ddqn",
+  "files": [
+    {
+      "relpath": "comparisons.parquet",
+      "size_bytes": 7780,
+      "sha256": "cc6ab0e36b51862933a3e2591d827740188f74b57536ed7f4e233d93f5002048",
+      "pushed_at": "2026-04-29T15:59:07+00:00"
+    },
+    {
+      "relpath": "runs.parquet",
+      "size_bytes": 93899,
+      "sha256": "7399fa64d5040ba03edc638bc2fa6c44507eac6978c769321db4bb4eccf3a06e",
+      "pushed_at": "2026-04-29T15:59:07+00:00"
+    },
+    {
+      "relpath": "runs_with_mediators.parquet",
+      "size_bytes": 262080,
+      "sha256": "1d6c5a21450c083fb8901d8ef60b83e5a8c830047a593f760b5c408794acb14b",
+      "pushed_at": "2026-04-29T15:59:08+00:00"
+    },
+    {
+      "relpath": "traces.parquet",
+      "size_bytes": 10648033383,
+      "sha256": "b04245f9db1436cc03a7da43d1615b37f8c92550101136260659669b649ce928",
+      "pushed_at": "2026-04-29T16:02:04+00:00"
+    }
+  ]
+}

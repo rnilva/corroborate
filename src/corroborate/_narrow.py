@@ -28,6 +28,16 @@ def is_list_of_object(v: object) -> TypeIs[list[object]]:
     return isinstance(v, list)
 
 
+def is_mapping_str_object(v: object) -> TypeIs[Mapping[str, object]]:
+    """TypeIs predicate narrowing `object` to `Mapping[str, object]`.
+    The key-type constraint is a runtime invariant guaranteed by
+    the source (JSON / kwargs payloads always carry string keys);
+    callers narrowing values from those sources can rely on it.
+    Subsequent isinstance-narrows on values work because each
+    value is typed `object`."""
+    return isinstance(v, Mapping)
+
+
 # ============ Required / optional field accessors ============
 
 def require_str(d: Mapping[str, object], key: str) -> str:
@@ -50,6 +60,17 @@ def require_bool(d: Mapping[str, object], key: str) -> bool:
     v = d.get(key)
     if not isinstance(v, bool):
         raise TypeError(f'{key!r} must be bool, got {type(v).__name__}')
+    return v
+
+
+def require_int(d: Mapping[str, object], key: str) -> int:
+    v = d.get(key)
+    # Reject bool explicitly — `bool` is a subclass of `int` in
+    # Python, so an isinstance(int) narrow would silently accept
+    # True/False as 1/0 and corrupt the manifest's size_bytes
+    # field.
+    if isinstance(v, bool) or not isinstance(v, int):
+        raise TypeError(f'{key!r} must be int, got {type(v).__name__}')
     return v
 
 
@@ -119,3 +140,14 @@ def require_str_list(d: Mapping[str, object], key: str) -> list[str]:
             raise TypeError(f'{key!r} contains non-str: {type(item).__name__}')
         out.append(item)
     return out
+
+
+def optional_str_list(
+    d: Mapping[str, object], key: str,
+) -> list[str] | None:
+    """Narrow an optional list-of-strings field. None passes
+    through; a present value is delegated to `require_str_list`."""
+    v = d.get(key)
+    if v is None:
+        return None
+    return require_str_list(d, key)

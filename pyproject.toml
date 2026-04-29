@@ -14,6 +14,8 @@ dependencies = [
     "scipy>=1.10",          # distribution quantiles + cdf for stats module
     "statsmodels>=0.14",    # noncentral-t-aware MDE / power machinery
     "pyarrow>=24.0.0",      # incremental Parquet writer for streaming merges
+    "fsspec>=2024.0",       # provider-agnostic cloud archive (S3/GCS/R2/Azure via extras)
+    "s3fs>=2026.3.0",
 ]
 
 [project.optional-dependencies]

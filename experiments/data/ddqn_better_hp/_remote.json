@@ -1,0 +1,17 @@
+{
+  "remote_root": "s3://corroborate-archive/ddqn_better_hp",
+  "files": [
+    {
+      "relpath": "runs.parquet",
+      "size_bytes": 156695,
+      "sha256": "cee699492592fc4909dd1852321304753754af2c5de18f5235750d3494d40325",
+      "pushed_at": "2026-04-29T15:58:08+00:00"
+    },
+    {
+      "relpath": "traces.parquet",
+      "size_bytes": 3546476839,
+      "sha256": "a275577c787466a9ae3b8ab2002be10c0d32af494422713a1944f0d7aa6255fe",
+      "pushed_at": "2026-04-29T15:59:06+00:00"
+    }
+  ]
+}

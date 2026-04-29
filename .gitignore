@@ -29,8 +29,17 @@ htmlcov/
 .idea/
 *.swp
 
+# Local credentials — never commit.
+.env
+.env.*
+
 # Experiment data / sweep outputs — never commit binary parquets.
 # `experiments/data/` is a generated cache from `collect_*.py`
 # scripts; reproduce by re-running, don't push the binaries.
-experiments/data/
+# Exception: `_remote.json` cloud-archive manifests are tiny
+# pointers that make `corroborate restore` discoverable from a
+# clean checkout — track them.
+experiments/data/**
+!experiments/data/**/
+!experiments/data/**/_remote.json
 *.parquet
