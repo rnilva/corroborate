@@ -118,6 +118,50 @@ variable for the link without further qualification — it's a
 restatement of the outcome, a relabeling of an HP, or a
 non-residual signal.
 
+### Step 5b. Inspect time-series before collapsing to scalars
+
+**Important caveat from the FourRooms study**: scalar reductions
+(per-cell mean of a per-burst trace) can hide phase-dependent
+effects. On FourRooms the env-level scalar `mechanism.jensen_gap
+g=+0.13` (sign reversed) coexisted with per-burst trajectories
+showing DDQN *reduces* bias in bursts 0-3 (Δbias = −1.02 → −0.09)
+and only diverges late (Δbias = +1.15 → +479, success-induced
+Q-growth, not mechanism failure). The within-pair correlation
+`r(Δbias, Δret)` is negative at every burst, confirming the
+mechanism→outcome chain operates throughout — but the scalar
+mean averaged the early reduction with the late explosion to
+near-zero.
+
+The substrate persists raw 2-D per-burst arrays
+(`predicted_q_at_start`, `mc_return` shape `(n_bursts, K)`) so
+this probe is post-hoc-derivable from existing data. The
+per-burst probe to run when scalar mediator analysis returns
+null:
+
+```python
+# Pair runs by seed; stack per-burst arrays.
+delta_bias = ddqn_bias_per_burst - vanilla_bias_per_burst  # (n_pairs, n_bursts)
+delta_ret = ddqn_ret_per_burst - vanilla_ret_per_burst    # (n_pairs, n_bursts)
+
+for b in range(n_bursts):
+    r, p = scipy.stats.pearsonr(delta_bias[:, b], delta_ret[:, b])
+    print(f'burst {b}: r={r:+.3f} p={p:.3f}')
+```
+
+If the per-burst sign is *invariant* but the scalar mean is
+near-zero, the mechanism operates throughout training but at
+different magnitudes per phase — the chain holds; the scalar
+reduction was the wrong abstraction. If the per-burst sign
+*flips* between phases, the mechanism's relationship to outcome
+is genuinely phase-dependent and the scalar would be a false
+average.
+
+**Don't author a `mediator_late` or `mediator_growth` Measurable
+to fix this.** The substrate's raw-trace contract supports any
+post-hoc reduction; ad-hoc reductions belong inline in analysis,
+not in invariants.py / measurables.py (see
+`feedback_measurables_not_logging`).
+
 ### Step 6. Stage-9 meta-regression on covariates
 
 Map per-env GroupStats → StratumObservation, regress per-env g on

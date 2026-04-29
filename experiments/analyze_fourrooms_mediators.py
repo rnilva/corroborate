@@ -1,29 +1,30 @@
-"""Within-env mediator search on FourRooms-misc.
+"""Within-env mediator search + time-series probe on a target env.
 
-The action_dim_wide corpus has FourRooms as the lone DDQN-positive
-env: link g=+0.71 on outcome.eval_final_mean (HELD), but mechanism
-g=+0.13 (sign reversed). Whatever drives DDQN's outcome benefit
-on FourRooms isn't Jensen-bias reduction. Question: which
-substrate-measurable mediator's per-pair Δ predicts the outcome's
-per-pair Δ?
-
-Method:
-  1. Read FourRooms cells from action_dim_wide/runs.parquet.
-  2. Stream FourRooms traces (per-arm parquets in tmp/) through
-     `compute_mediator_panel` to evaluate the substrate's
-     candidate mediators per cell.
+Pipeline:
+  1. Read target-env cells from runs.parquet.
+  2. Stream traces from per-arm parquets through
+     `compute_mediator_panel` to evaluate substrate mediators.
   3. Pair DDQN/vanilla by seed via `paired_deltas_from_runs`.
-  4. For each candidate mediator, scipy.pearsonr between
-     Δ_outcome and Δ_mediator across the 60 pairs. Rank by |r|.
+  4. For each candidate, scipy.pearsonr between Δ_outcome and
+     Δ_mediator across paired pairs. Filter outcome-tautological.
+  5. Partial ρ controlling for Δ_jensen_gap (separates
+     independent mediators from collinear ones).
+  6. Per-burst trajectory (predicted_q_at_start − mc_return)
+     and per-burst Pearson r(Δbias, Δret) — surfaces phase-
+     dependent effects scalar reductions hide.
 
-All glue lives in framework primitives; this script is the call
-site.
+Defaults to FourRooms-misc on action_dim_wide. Override via CLI.
 
 Usage:
   uv run python experiments/analyze_fourrooms_mediators.py
+  uv run python experiments/analyze_fourrooms_mediators.py \\
+      --env Acrobot-v1
+  uv run python experiments/analyze_fourrooms_mediators.py \\
+      --env CartPole-v1 --corpus action_dim_sweep
 """
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 
 import numpy as np
@@ -51,18 +52,37 @@ _OUTCOME_TAUTOLOGICAL: frozenset[str] = frozenset({
 })
 
 
-_RUNS = Path('experiments/data/action_dim_wide/runs.parquet')
-_TRACES_TMP = Path('experiments/data/action_dim_wide/tmp')
+def _arg_paths(corpus: str, env: str) -> tuple[Path, list[Path]]:
+    base = Path('experiments/data') / corpus
+    runs = base / 'runs.parquet'
+    if not runs.exists():
+        raise SystemExit(f'runs.parquet not found at {runs}')
+    # Tokenise env name so the glob matches the per-arm tag pattern
+    # (substrate uses arm-tag like "FourRooms-misc__vanilla_dqn").
+    env_token = env.replace('/', '_')
+    tmp = base / 'tmp'
+    if tmp.exists():
+        traces = sorted(tmp.glob(f'*{env_token}*__traces.parquet'))
+    else:
+        traces = []
+    return runs, traces
 
 
 def main() -> None:
-    runs_df = pl.read_parquet(_RUNS).filter(
-        pl.col('env_name') == 'FourRooms-misc'
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--env', default='FourRooms-misc')
+    parser.add_argument('--corpus', default='action_dim_wide')
+    args = parser.parse_args()
+    env_name: str = args.env
+    corpus: str = args.corpus
+
+    runs_path, trace_paths = _arg_paths(corpus, env_name)
+    print(f'corpus={corpus}  env={env_name}')
+    runs_df = pl.read_parquet(runs_path).filter(
+        pl.col('env_name') == env_name
     )
     runs = [RunRow.from_row_dict(d) for d in _to_dicts(runs_df)]
-    print(f'FourRooms cells: {len(runs)}')
-
-    trace_paths = sorted(_TRACES_TMP.glob('*FourRooms*__traces.parquet'))
+    print(f'{env_name} cells: {len(runs)}')
     print(f'trace parquets: {len(trace_paths)}')
 
     enriched = compute_mediator_panel(runs, trace_paths)
@@ -191,7 +211,7 @@ def main() -> None:
 
     print()
     print('=' * 100)
-    print('Time-series analysis — per-burst trajectories on FourRooms')
+    print(f'Time-series analysis — per-burst trajectories on {env_name}')
     print('=' * 100)
 
     # Pair runs by id → seed; read trace records by id.
