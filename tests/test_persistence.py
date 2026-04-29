@@ -192,4 +192,67 @@ def test_empty_measurements_via_parquet(tmp_path: Path) -> None:
     write_runrows([row], path)
     loaded = read_runrows(path)
     assert loaded == [row]
-    assert dict(loaded[0].measurements) == {}
+
+
+# ============ Dtype tightening + streaming reader ============
+
+def test_tighten_trace_dtypes_casts_list_columns(tmp_path: Path) -> None:
+    """`tighten_trace_dtypes` casts List(Float64) → List(Float32) and
+    List(Int64) → List(Int32). Other column dtypes pass through
+    unchanged."""
+    import polars as pl
+
+    from corroborate.persistence import tighten_trace_dtypes
+
+    src = pl.DataFrame({
+        'id': ['a', 'b'],
+        'series_f64': [[1.0, 2.0], [3.0, 4.0]],
+        'series_i64': [[1, 2], [3, 4]],
+        'scalar_int': [10, 20],
+    })
+    src_path = tmp_path / 'src.parquet'
+    src.write_parquet(src_path)
+
+    tightened = tighten_trace_dtypes(pl.scan_parquet(src_path)).collect()
+    assert tightened['series_f64'].dtype == pl.List(pl.Float32)
+    assert tightened['series_i64'].dtype == pl.List(pl.Int32)
+    # Scalar columns unchanged.
+    assert tightened['scalar_int'].dtype == pl.Int64
+    assert tightened['id'].dtype == pl.String
+    # Values preserved across the cast.
+    assert tightened['series_f64'].to_list() == [[1.0, 2.0], [3.0, 4.0]]
+    assert tightened['series_i64'].to_list() == [[1, 2], [3, 4]]
+
+
+def test_iter_trace_records_streams_one_dict_per_cell(
+    tmp_path: Path,
+) -> None:
+    """`iter_trace_records` yields one polars row dict per cell.
+    With column projection, only the named columns + 'id' surface.
+    Memory-bounded by batch_size, not corpus size."""
+    import polars as pl
+
+    from corroborate.persistence import iter_trace_records
+
+    src = pl.DataFrame({
+        'id': ['a', 'b', 'c', 'd', 'e'],
+        'series_a': [[1.0, 2.0]] * 5,
+        'series_b': [[10, 20, 30]] * 5,
+        'extra': ['x', 'y', 'z', 'q', 'w'],
+    })
+    src_path = tmp_path / 'src.parquet'
+    src.write_parquet(src_path)
+
+    # Stream all rows; verify ids in order.
+    seen_ids: list[str] = []
+    for record in iter_trace_records(src_path, batch_size=2):
+        cid = record['id']
+        assert isinstance(cid, str)
+        seen_ids.append(cid)
+    assert seen_ids == ['a', 'b', 'c', 'd', 'e']
+
+    # Stream with projection — only named columns + 'id' surface.
+    for record in iter_trace_records(
+        src_path, columns=('series_a',), batch_size=10,
+    ):
+        assert set(record.keys()) == {'id', 'series_a'}

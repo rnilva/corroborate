@@ -21,7 +21,7 @@ from pathlib import Path
 
 import polars as pl
 
-from corroborate.persistence import read_tracerows
+from corroborate.persistence import iter_trace_records
 from corroborate.rl.dqn.mediators import (
     epsilon_late,
     fill_ratio_late,
@@ -63,41 +63,59 @@ def main() -> None:
     runs_df = pl.read_parquet(_RUNS_PATH)
     print(f'  {runs_df.height} rows × {len(runs_df.columns)} cols')
 
-    # Mediators only read 1-D per-step series (online_*_q_per_step,
-    # td_error, buf_size, *_argmax_per_step) — all of which live
-    # in the parquet, not zarr. Skip the zarr load entirely; it
-    # holds eval-burst tensors (mc_return, predicted_q_at_start,
-    # ...) that no mediator reads. This keeps the read step at
-    # ~5 GB RAM instead of ~50 GB.
-    traces = read_tracerows(_TRACES_PATH, zarr_path=None)
-    print(f'  {len(traces)} traces (parquet-only, zarr skipped)')
+    # Build per-id lookup of the leaf HPs needed by epsilon_late /
+    # fill_ratio_late. Cheap — runs.parquet has only scalar columns.
+    leaf_lookup: dict[str, dict[str, object]] = {}
+    for row in runs_df.iter_rows(named=True):
+        rid = row.get('id')
+        if isinstance(rid, str):
+            leaf_lookup[rid] = {
+                k: row.get(k) for k in (
+                    _LEAF_KEY_REPLAY_CAPACITY,
+                    'action_select.schedule.eps_init',
+                    'action_select.schedule.eps_final',
+                    'action_select.schedule.anneal_steps',
+                    'total_steps',
+                )
+            }
 
-    traces_by_id = {t.id: t for t in traces}
+    # Streaming read: only the trace columns mediators actually
+    # consume. iter_trace_records bounds peak memory at
+    # O(batch_size × per-row-size) instead of materialising the
+    # full trace store. ~50 GB → ~600 MB peak.
+    needed_columns = (
+        'id',
+        'online_max_q_per_step', 'online_min_q_per_step',
+        'online_mean_q_per_step',
+        'online_argmax_per_step', 'target_argmax_per_step',
+        'td_error', 'buf_size',
+    )
+    print(f'  streaming traces (cols={len(needed_columns)}, '
+          f'batch_size=32, zarr skipped)')
 
-    # Project mediators per row, indexed by run id.
+    # Project mediators per cell as we stream.
     mediator_rows: list[dict[str, object]] = []
     n_skipped = 0
-    for row in runs_df.iter_rows(named=True):
-        cell_id = row.get('id')
-        if cell_id is None or cell_id not in traces_by_id:
+    for record in iter_trace_records(
+        _TRACES_PATH, columns=needed_columns,
+    ):
+        cell_id = record.get('id')
+        if not isinstance(cell_id, str) or cell_id not in leaf_lookup:
             n_skipped += 1
             continue
-        trace = traces_by_id[cell_id]
-        record = trace.leaves
-        # arrays from zarr also live on the trace (TraceRow.arrays);
-        # mediators only need 1-D series (which are in `leaves`).
-        capacity_v = row.get(_LEAF_KEY_REPLAY_CAPACITY)
-        capacity = int(capacity_v) if capacity_v is not None else 0
-        eps_init_v = row.get('action_select.schedule.eps_init')
-        eps_final_v = row.get('action_select.schedule.eps_final')
-        anneal_v = row.get('action_select.schedule.anneal_steps')
-        total_v = row.get('total_steps')
-        eps_init = float(eps_init_v) if eps_init_v is not None else float('nan')
+        leafs = leaf_lookup[cell_id]
+        capacity_v = leafs.get(_LEAF_KEY_REPLAY_CAPACITY)
+        capacity = int(capacity_v) if capacity_v is not None else 0  # type: ignore[arg-type]
+        eps_init_v = leafs.get('action_select.schedule.eps_init')
+        eps_final_v = leafs.get('action_select.schedule.eps_final')
+        anneal_v = leafs.get('action_select.schedule.anneal_steps')
+        total_v = leafs.get('total_steps')
+        eps_init = float(eps_init_v) if eps_init_v is not None else float('nan')  # type: ignore[arg-type]
         eps_final = (
-            float(eps_final_v) if eps_final_v is not None else float('nan')
+            float(eps_final_v) if eps_final_v is not None else float('nan')  # type: ignore[arg-type]
         )
-        anneal_steps = int(anneal_v) if anneal_v is not None else 0
-        total_steps = int(total_v) if total_v is not None else 0
+        anneal_steps = int(anneal_v) if anneal_v is not None else 0  # type: ignore[arg-type]
+        total_steps = int(total_v) if total_v is not None else 0  # type: ignore[arg-type]
         mediator_rows.append({
             'id': cell_id,
             'mediator.q_gap_late': q_gap_late(record),
