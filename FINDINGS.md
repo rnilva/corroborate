@@ -124,6 +124,100 @@ reports = audit_mediator_panel(
 
 ---
 
+## 2026-04-29 (fourth revision) — DoWhy backdoor passes for state_coverage_kl, but direction of causation remains unresolved.
+
+### Setup
+
+Applied `bridges_dowhy.{backdoor_ate, placebo_refutation,
+random_common_cause_refutation}` on:
+
+- treatment: `mediator.state_coverage_kl_uniform_late`
+- outcome: `outcome.eval_final_mean`
+- DAG (caller-posited): every HP → both SCV and outcome
+  (confounders); SCV → outcome (the hypothesis).
+- HP backdoor adjustment set: `{capacity, batch_size, lr,
+  sync_period}`.
+
+### Result
+
+| Check | Result | Verdict |
+|---|---|---|
+| `backdoor_ate` (SCV range [0.96, 2.93]) | ATE = +8.82 / SCV unit | **HELD** |
+| `placebo_refutation` (permuted treatment) | placebo ATE = +0.12 (1.4% of real) | **HELD** |
+| `random_common_cause_refutation` | drift = 0.0075 (synthetic confounder doesn't move estimate) | **HELD** |
+
+CausalGraph after `promote_bridged_evidence`: all three edges
+upgrade to `INTERVENTIONAL / causal_bridged`. State_coverage_kl
+is the first mediator on the CartPole HP corpus that survives
+*every* check the framework currently has:
+
+1. Reads-set jaccard with outcome's source (= 0; not tautological).
+2. HP R² (< 0.95; not deterministic in any HP).
+3. Stratified Spearman within capacity stratum (ρ=+0.19, p=0.011).
+4. Backdoor-adjusted ATE under the posited DAG (+8.82, HELD).
+5. Placebo refutation (placebo ATE / real ATE = 1.4%).
+6. Random-common-cause refutation (drift << tolerance).
+
+### The caveat — direction of causation is not resolved
+
+The backdoor adjustment is **rung-2-conditional-on-DAG**. The
+posited DAG says SCV → outcome. The reverse DAG (outcome → SCV)
+would produce identical observed correlations:
+
+- **Forward**: low SCV (concentrated state visits) → agent stays
+  near goal-region → outcome high.
+- **Reverse**: outcome high (agent solves) → trajectory by
+  construction stays in goal-region → SCV low.
+
+For CartPole specifically, the reverse interpretation is
+plausible: a successful 500-step pole-balancing episode naturally
+produces a state-visit distribution concentrated near the
+upright-pole region. SCV is then a *signature* of solving rather
+than a *cause*.
+
+Backdoor adjustment cannot distinguish forward from reverse — by
+construction, observational data under either DAG produces the
+same correlation matrix. The framework should be honest about
+this: the dowhy verdict is "consistent with mediating ATE +8.82
+*under this DAG*" not "we have proven SCV → outcome."
+
+### What would distinguish the directions
+
+1. **Temporal precedence**: does SCV stabilize *before* outcome
+   stabilizes during training? Mid-training trajectories aren't
+   currently logged at sufficient resolution to test this; would
+   require per-eval-burst SCV computation.
+
+2. **Interventional**: an intervention that forces SCV down
+   (concentrated states) *without* directly improving the policy.
+   Candidates: entropy regularization on policy, intrinsic-
+   curiosity bonus that *spreads* state visits (and check whether
+   the spread reduces solve rate), action-repetition / frame-skip
+   modifications.
+
+3. **Held-out generalization**: does the SCV → outcome ATE
+   replicate on a different corpus (different env or different HP
+   regime)? If so, structural; if not, idiosyncratic.
+
+### Implication for the framework's gist
+
+The framework's audit + dowhy chain is now end-to-end runnable:
+audit selects clean candidates, dowhy backdoor verifies under the
+DAG. What's still missing — and what the SCV story illustrates —
+is the **direction-of-causation gap** between rung-2-conditional
+and true causal claims. The framework can flag a mediator as
+"survives all checks" but should explicitly mark this as
+"observationally indistinguishable from reverse" until an
+intervention or temporal evidence resolves it.
+
+### Reproduction
+
+```
+uv run python experiments/dowhy_state_coverage.py
+```
+
+---
+
 ## 2026-04-29 (revised same day) — Substrate units bug + HP-conditioning of solve verdicts
 
 ### Bug
