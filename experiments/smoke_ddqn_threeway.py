@@ -127,7 +127,18 @@ def _comparison_from_hypothesis_row(
     )
 
 
-def _link_inputs_from_row(
+def _link_inputs_from_row(  # back-compat shim → use the public primitive
+    row: HypothesisComparisonRow,
+    *,
+    outcome_path: str,
+) -> list[ComparisonRow]:
+    """Deprecated — use `corroborate.aggregate.per_group_comparisons`
+    directly. Kept inline so the smoke's surface stays stable."""
+    from corroborate.aggregate import per_group_comparisons
+    return per_group_comparisons(row, outcome_path=outcome_path)
+
+
+def _link_inputs_from_row_legacy(
     row: HypothesisComparisonRow,
     *,
     outcome_path: str,
