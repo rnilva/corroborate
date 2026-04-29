@@ -11,6 +11,16 @@ narrative not Protocols. When a primitive doesn't fit any stage,
 it's misplaced. When a gap appears between two stages, that's a
 wire to add.
 
+**Terminology note.** corroborate has NO `Composition` type. v9's
+`ConditionalComposition` (env-conditional dispatch tree) was
+retired in favor of uniform interventions + post-hoc aggregation
+(random-effects pooling + meta-regression) — scope is empirical,
+not authored. The artifact at stage 2 is just a
+`functools.partial[T]`; the cell_runner names it `configured`.
+"Composition" appears in framework docstrings only as the English
+word for "way of composing primitives," never as a typed
+artifact.
+
 ## The flow
 
 ```
@@ -23,11 +33,12 @@ wire to add.
    │                               │                                          │
    │              ┌─ BIND (2) ─────▼─────────────────────────┐                │
    │              │  apply_interventions(claim, arms)        │                │
-   │              │  → Composition (post-do() SCM)           │                │
+   │              │  → configured claim (`partial[T]`)       │                │
+   │              │    in Pearl: post-do() SCM               │                │
    │              └────────────────┬─────────────────────────┘                │
    │                               │                                          │
    │              ┌─ RUN (3) ──────▼─────────────────────────┐                │
-   │              │  Composition × exogenous_grid            │                │
+   │              │  configured claim × exogenous_grid       │                │
    │              │  → trace_record + CallRecords + bridges  │                │
    │              └────────────────┬─────────────────────────┘                │
    │                               │                                          │
@@ -115,8 +126,15 @@ instances, `@bridge` instances, `Hypothesis` dataclass,
 
 **Inputs**: `Hypothesis` + outermost `@claim`.
 
-**Outputs**: a callable Composition — `partial(claim, **kwargs)`
-form. In Pearl terms: the post-do() SCM.
+**Outputs**: a configured claim — a `functools.partial[T]`. In
+Pearl terms: the post-do() SCM. **There is no `Composition`
+type** — corroborate does not have one. v9's
+`ConditionalComposition` (the env-conditional dispatch tree) was
+retired in favour of uniform interventions + post-hoc
+aggregation; the bound theory is just `partial(claim,
+**intervention_kwargs)` returning a `Callable[..., T]`. The
+cell_runner uses the variable name `configured` for this
+artifact.
 
 **Modules**: `intervention.Intervention.apply`, `apply_interventions`.
 
@@ -133,8 +151,8 @@ the framework primitive be the production path.
 
 ### Stage 3 — RUN
 
-**Inputs**: Composition × exogenous_grid (per-cell exogenous values
-like rng_key, env, env_params, obs_dim, n_actions).
+**Inputs**: configured claim × exogenous_grid (per-cell exogenous
+values like rng_key, env, env_params, obs_dim, n_actions).
 
 **Outputs**: per-cell trace_record (Mapping[str, jax.Array]) +
 list[CallRecord] (under trace_context) + bridge invocations.
