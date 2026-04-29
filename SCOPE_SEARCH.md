@@ -1,0 +1,264 @@
+# Scope-search — canonical procedure
+
+The framework's contribution to a research cycle is finding the
+**scope** of an authored mechanism claim: the load-bearing
+assumption(s) on the chain `env feature → invariance gap →
+mechanism activation → outcome` whose violation makes the link
+break. This document fixes the canonical procedure for that
+search, naming the framework primitives used at each step and
+how the causal-discovery tools interleave with meta-regression.
+
+**Pre-reading**: `LIFECYCLE.md` (12-stage flow); `CLAUDE.md`
+(typing discipline + framework gist); `invariant.py` module
+docstring (gap-Measurable convention).
+
+## The procedure
+
+The procedure's input is a `Hypothesis[R]` carrying a mechanism
+claim. The output is one of:
+
+- **HELD on a subscope**: a measurable scope-condition that, when
+  imposed, makes the mechanism→outcome link HELD. The
+  scope-condition is committed via `at_most(gap, threshold,
+  of_claim=...)` attached to the relevant Claim node.
+- **NULL on every candidate scope**: the mechanism activates but
+  no measurable subscope reproduces the link → the chain has
+  edges the framework hasn't yet captured.
+- **MECHANISM EDGE EXPOSED**: the per-env paired g splits cleanly
+  by an env-feature (e.g. `|A|≥3` for DDQN's Jensen-bias regime)
+  even though the link to outcome stays null — a refinement of
+  the mechanism claim, not a scope for the link.
+
+### Step 1. Articulate the causal chain
+
+Write the chain explicitly: `env_feature → invariance_gap →
+mechanism_activation → outcome`. Identify which edge the
+intervention operates on. For DDQN:
+
+```
+env ─► (|A|, σ_Q) ─► Jensen-max-bias ─► argmax-bias ─► policy ─► outcome
+                                       └────── DDQN ──────┘
+```
+
+DDQN intervenes at the argmax-bias edge; for the link to hold,
+every upstream edge must carry signal.
+
+### Step 2. Identify candidate scope variables
+
+For each upstream edge, name the variable that determines whether
+the edge carries signal. Two flavours:
+
+- **Per-cell measurable** — a continuous per-run quantity computed
+  from the trace (e.g. `jensen_dormancy_gap`,
+  `state_coverage_kl_uniform_late`, `td_residual_late`). Express
+  as `Measurable[R, float]` in the substrate; if it's a
+  theorem-direct invariance gap, attach to the relevant Claim via
+  `attach_invariant`.
+- **Per-env / structural** — a categorical or integer property of
+  the env / configuration (e.g. `action_dim`,
+  `bootstrap_depth = γ × episode_length`). Read from the env
+  catalogue or RunRow.measurements; not a Measurable.
+
+### Step 3. Design a sweep that varies the scope variable
+
+Use the framework's `sweep` + `DQNRunner` (or substrate-equivalent
+Runner). HP knobs that *modulate* the scope variable are fine;
+the load-bearing axis is the scope variable itself.
+
+Don't data-mine an existing corpus when the variable wasn't
+varied at collection time — the result is biased by whatever the
+collection HPs implicitly fixed.
+
+### Step 4. Stage-6 stratified aggregation
+
+Per-env paired g + DerSimonian-Laird random-effects pool — one
+function call:
+
+```python
+from corroborate.aggregate import hypothesis_comparison_from_cells
+
+mech = hypothesis_comparison_from_cells(
+    treatment_h, treatment_runs, baseline_runs,
+    outcome_path='mechanism.jensen_gap',
+    pair_by=('seed',),
+    group_by='env_name',
+    baseline_h=baseline_h,
+)
+# mech.per_group: tuple[GroupStats, ...] — one per env
+# mech.pooled: PooledStats — DL pool with I², PI
+# mech.verdict: Verdict — Popperian aggregate
+```
+
+Repeat for the link edge (`outcome.eval_*`). Two
+HypothesisComparisonRows: one per edge.
+
+### Step 5. Audit candidate per-cell mediators (interleaved)
+
+Before treating a per-cell measurable as a real scope variable,
+run the three-check tautology audit:
+
+```python
+from corroborate.redundancy_check import audit_mediator_panel
+
+reports = audit_mediator_panel(
+    candidate_measurables, runs,
+    outcome_reads=frozenset({'mc_return'}),
+    hp_axes=('replay.capacity', ...),
+    outcome_path='outcome.eval_best_burst_mean',
+    hp_stratum_axis=...,
+)
+# Each TautologyReport carries:
+#   flagged_outcome (reads-jaccard ≥ 0.5)
+#   flagged_hp (R² ≥ 0.95 on any HP axis)
+#   flagged_no_residual_signal (within-stratum ρ ≈ 0)
+```
+
+A candidate that fails any check shouldn't be treated as a scope
+variable for the link without further qualification — it's a
+restatement of the outcome, a relabeling of an HP, or a
+non-residual signal.
+
+### Step 6. Stage-9 meta-regression on covariates
+
+Map per-env GroupStats → StratumObservation, regress per-env g on
+candidate covariates:
+
+```python
+from corroborate.meta_regression import meta_regress_comparison
+
+def covariate_for(env_name: object) -> Mapping[str, float]:
+    return {'log_action_dim': math.log(get(env_name).n_actions)}
+
+res = meta_regress_comparison(mech, covariate_for)
+# res.cleavage_axes: tuple[str, ...] — significant covariates
+# res.coefficients: tuple[CovariateCoefficient, ...] — β + CI + p
+```
+
+A significant β with CI excluding zero is the empirical scope
+claim's content — a numeric threshold on the covariate.
+
+### Step 7. Validate via causal-discovery (interleaved)
+
+A significant meta-regression coefficient says "the per-env g
+varies systematically with this covariate". It does NOT say
+"this covariate causally drives the link". For the rung-2
+interventional verdict, route the covariate through the dowhy
+bridge triple:
+
+```python
+from corroborate.bridges_dowhy import (
+    backdoor_ate, placebo_refutation, random_common_cause_refutation,
+)
+from corroborate.causal_graph import (
+    build_causal_graph, promote_bridged_evidence,
+)
+
+dag = [
+    *((hp, treatment) for hp in hp_axes),  # HPs confound treatment
+    *((hp, outcome) for hp in hp_axes),    # HPs confound outcome
+    (treatment, outcome),                  # the edge under test
+]
+results = [
+    backdoor_ate(treatment, outcome, graph=dag,
+                 expected_sign=+1, threshold=0.5)(record),
+    placebo_refutation(treatment, outcome, graph=dag,
+                       tolerance=1.0)(record),
+    random_common_cause_refutation(treatment, outcome, graph=dag,
+                                   tolerance=1.0)(record),
+]
+g = promote_bridged_evidence(build_causal_graph(results))
+# Edges where all three HELD get tier=INTERVENTIONAL_BRIDGED.
+```
+
+When the dowhy triple HELDs *and* the meta-regression β is
+significant, the scope claim is supported at rung-2-conditional-
+on-DAG. Direction-of-causation caveats from `bridges_dowhy.py`
+apply.
+
+### Step 8. Commit the threshold
+
+If the scope variable + threshold survives validation, commit the
+scope claim by attaching the wrap to the substrate's claim:
+
+```python
+from corroborate.invariant import at_most, attach_invariant
+
+attach_invariant(
+    at_most(gap_measurable, threshold=committed_value,
+            of_claim=double_greedify),
+    to=double_greedify,
+)
+```
+
+After this, every cell in any future sweep auto-fires the
+invariant via `collect_invariants(configured)` — the framework
+routes premise-active vs premise-violating cells without any
+explicit consumer-side filter.
+
+### Step 9. Re-evaluate
+
+Re-run the link analysis on the premise-active subscope:
+
+```python
+active_runs = [
+    r for r in runs
+    if r.measurements.get(f'{at_most_bridge.name}.gap_value', float('inf')) <= threshold
+]
+link_active = hypothesis_comparison_from_cells(
+    treatment_h, active_treatment, active_baseline,
+    outcome_path='outcome.eval_*', pair_by=('seed',),
+    group_by='env_name', baseline_h=baseline_h,
+)
+```
+
+If the link verdict on the subscope is HELD where the marginal
+verdict was NULL, the scope claim is corroborated.
+
+## When discovery interleaves vs precedes regression
+
+The audit (step 5) precedes regression because feeding a tautology
+into meta-regression confuses the result.
+
+DoWhy validation (step 7) follows regression because the
+covariates being tested are the meta-regression-significant ones.
+
+PC-depth structural discovery (`compare_pc_depths`) and partial-
+correlation analysis (`stratified_spearman_rho`) sit alongside
+meta-regression at step 6 — they answer different questions on
+the same per-env table:
+- Meta-regression: "is g systematically explained by feature F?"
+- PC depth: "what's the conditional independency structure
+  between g and {F₁, F₂, …}?"
+- Stratified-ρ: "after binning on F, is there residual within-bin
+  correlation?"
+
+Use them when the question warrants. Don't over-fire — three
+different verdicts on the same data is more confusion than
+corroboration unless they actually disagree.
+
+## When the procedure ends
+
+Three terminating outcomes:
+
+1. **Scope corroborated**: a covariate threshold reproduces the
+   link. Commit via `at_most(...)` (step 8). The mechanism's
+   scope is now part of the substrate's invariants.
+2. **No covariate corroborates**: every candidate's
+   meta-regression β has CI bracketing zero AND/OR fails dowhy
+   validation. Either the upstream chain has edges we haven't
+   measured (extend the substrate's measurable panel) or the
+   sweep design is power-limited (run a wider one).
+3. **Mechanism-edge refinement**: the link stays null but the
+   per-env paired g on the *mechanism* (not the outcome) splits
+   by a covariate. The covariate refines the *mechanism* claim
+   ("DDQN's bias-reduction operates only when …") even if the
+   link to outcome is independently null. Document and commit
+   as a precondition invariant on the relevant claim.
+
+## Worked example
+
+`experiments/analyze_action_dim_wide.py` is the canonical example
+of steps 4 + 6: stratified comparison via
+`hypothesis_comparison_from_cells`, meta-regression via
+`meta_regress_comparison`. Read it before authoring a new
+scope-search.
