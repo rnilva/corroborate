@@ -60,6 +60,121 @@ _REWARD_DENSITY_MAP: dict[str, float] = {
 }
 
 
+def _per_burst_mediator_deltas(
+    corpus: str, env: str, total_steps: int, eval_every: int,
+) -> dict[str, np.ndarray] | None:
+    """Per-(pair, burst) DDQN−vanilla deltas of candidate non-bias
+    mediators, sliced from the flat per-step trace columns by eval
+    burst window of length `eval_every`.
+
+    Returns dict with keys: action_margin, argmax_disagreement,
+    state_coverage, vanilla_q_spread (per-burst mean of vanilla's
+    Q-vector max−min — a σ-proxy for the extreme-value max bias
+    that XQL targets, not a delta), delta_q_spread, delta_q_lower
+    (DDQN−vanilla on the mean−min lower tail). Each value is
+    shape (n_pairs, n_bursts), or None if data is missing."""
+    base = Path('experiments/data') / corpus
+    runs_path = base / 'runs.parquet'
+    if not runs_path.exists():
+        runs_path = base / 'runs_with_mediators.parquet'
+    runs_df = pl.read_parquet(str(runs_path)).filter(
+        (pl.col('env_name') == env)
+        & (pl.col('total_steps') == total_steps)
+    )
+    if runs_df.height == 0:
+        return None
+    ddqn_ids = runs_df.filter(
+        pl.col('intervention_name') == 'ddqn'
+    ).select(['id', 'seed']).to_dicts()
+    van_ids = runs_df.filter(
+        pl.col('intervention_name') == 'vanilla_dqn'
+    ).select(['id', 'seed']).to_dicts()
+    if not ddqn_ids or not van_ids:
+        return None
+
+    all_ids = [d['id'] for d in ddqn_ids] + [d['id'] for d in van_ids]
+    cols = [
+        'id',
+        'online_max_q_per_step', 'online_mean_q_per_step',
+        'online_min_q_per_step',
+        'online_argmax_per_step', 'target_argmax_per_step',
+        'state_hash',
+    ]
+    trace_df = pl.read_parquet(
+        str(base / 'traces.parquet'), columns=cols,
+    ).filter(pl.col('id').is_in(all_ids))
+
+    n_bursts = total_steps // eval_every
+    by_id_action_margin: dict[str, np.ndarray] = {}
+    by_id_disagreement: dict[str, np.ndarray] = {}
+    by_id_state_cov: dict[str, np.ndarray] = {}
+    by_id_q_spread: dict[str, np.ndarray] = {}
+    by_id_q_lower: dict[str, np.ndarray] = {}
+    for row in trace_df.iter_rows(named=True):
+        cid = row['id']
+        omax = np.asarray(row['online_max_q_per_step'], dtype=np.float64)
+        omean = np.asarray(row['online_mean_q_per_step'], dtype=np.float64)
+        omin = np.asarray(row['online_min_q_per_step'], dtype=np.float64)
+        oarg = np.asarray(row['online_argmax_per_step'], dtype=np.int64)
+        targ = np.asarray(row['target_argmax_per_step'], dtype=np.int64)
+        sh = np.asarray(row['state_hash'], dtype=np.int64)
+        if min(len(omax), len(omean), len(omin), len(oarg), len(targ), len(sh)) < total_steps:
+            continue
+        am = np.zeros(n_bursts)
+        dg = np.zeros(n_bursts)
+        sc = np.zeros(n_bursts)
+        sp = np.zeros(n_bursts)
+        lo = np.zeros(n_bursts)
+        for b in range(n_bursts):
+            s, e = b * eval_every, (b + 1) * eval_every
+            am[b] = float((omax[s:e] - omean[s:e]).mean())
+            dg[b] = float((oarg[s:e] != targ[s:e]).mean())
+            sc[b] = float(len(np.unique(sh[s:e])) / max(len(sh[s:e]), 1))
+            sp[b] = float((omax[s:e] - omin[s:e]).mean())
+            lo[b] = float((omean[s:e] - omin[s:e]).mean())
+        by_id_action_margin[cid] = am
+        by_id_disagreement[cid] = dg
+        by_id_state_cov[cid] = sc
+        by_id_q_spread[cid] = sp
+        by_id_q_lower[cid] = lo
+
+    seed_to_van = {d['seed']: d['id'] for d in van_ids}
+    seed_to_ddqn = {d['seed']: d['id'] for d in ddqn_ids}
+    common = sorted(
+        s for s in (set(seed_to_van) & set(seed_to_ddqn))
+        if seed_to_van[s] in by_id_action_margin
+        and seed_to_ddqn[s] in by_id_action_margin
+    )
+    if len(common) < 4:
+        return None
+
+    def _stack_delta(
+        by_id: dict[str, np.ndarray],
+    ) -> np.ndarray:
+        van = np.stack([by_id[seed_to_van[s]] for s in common])
+        ddqn = np.stack([by_id[seed_to_ddqn[s]] for s in common])
+        return ddqn - van
+
+    def _stack_vanilla_only(
+        by_id: dict[str, np.ndarray],
+    ) -> np.ndarray:
+        return np.stack([by_id[seed_to_van[s]] for s in common])
+
+    return {
+        'action_margin': _stack_delta(by_id_action_margin),
+        'argmax_disagreement': _stack_delta(by_id_disagreement),
+        'state_coverage': _stack_delta(by_id_state_cov),
+        'delta_q_spread': _stack_delta(by_id_q_spread),
+        'delta_q_lower': _stack_delta(by_id_q_lower),
+        # Vanilla's q_spread is the structural σ-proxy: per the
+        # XQL paper, the residual max-bias is σ-proportional even
+        # after DDQN's action-noise fix. Sparse-reward envs should
+        # have larger vanilla_q_spread, and that should explain
+        # the residual sparse-reward → outcome edge.
+        'vanilla_q_spread': _stack_vanilla_only(by_id_q_spread),
+    }
+
+
 def _build_panel(corpus: str, total_steps: int, *, include_env: bool = False) -> pl.DataFrame:
     runs_path = Path('experiments/data') / corpus / 'runs.parquet'
     if not runs_path.exists():
@@ -69,6 +184,12 @@ def _build_panel(corpus: str, total_steps: int, *, include_env: bool = False) ->
     df = pl.read_parquet(str(runs_path)).filter(
         pl.col('total_steps') == total_steps,
     )
+    eval_every_unique = df['eval_every'].unique().to_list()
+    if len(eval_every_unique) != 1:
+        raise ValueError(
+            f'eval_every not uniform across corpus: {eval_every_unique}',
+        )
+    eval_every = int(eval_every_unique[0])
     envs = sorted(df['env_name'].unique().to_list())
     rows: list[dict[str, float]] = []
     for env in envs:
@@ -86,6 +207,9 @@ def _build_panel(corpus: str, total_steps: int, *, include_env: bool = False) ->
         if arrays is None:
             continue
         delta_bias, delta_ret = arrays
+        mediators = _per_burst_mediator_deltas(
+            corpus, env, total_steps, eval_every,
+        )
         n_pairs, n_bursts = delta_ret.shape
         for b in range(n_bursts):
             dr = list(map(float, delta_ret[:, b].tolist()))
@@ -114,6 +238,30 @@ def _build_panel(corpus: str, total_steps: int, *, include_env: bool = False) ->
                 'bootstrap_fraction': float(bootstrap_fraction),
                 'burst_index': float(b),
                 'mean_dbias': float(delta_bias[:, b].mean()),
+                'd_action_margin': (
+                    float(mediators['action_margin'][:, b].mean())
+                    if mediators is not None else float('nan')
+                ),
+                'd_argmax_disagreement': (
+                    float(mediators['argmax_disagreement'][:, b].mean())
+                    if mediators is not None else float('nan')
+                ),
+                'd_state_coverage': (
+                    float(mediators['state_coverage'][:, b].mean())
+                    if mediators is not None else float('nan')
+                ),
+                'd_q_spread': (
+                    float(mediators['delta_q_spread'][:, b].mean())
+                    if mediators is not None else float('nan')
+                ),
+                'd_q_lower': (
+                    float(mediators['delta_q_lower'][:, b].mean())
+                    if mediators is not None else float('nan')
+                ),
+                'vanilla_q_spread': (
+                    float(mediators['vanilla_q_spread'][:, b].mean())
+                    if mediators is not None else float('nan')
+                ),
             }
             if include_env:
                 row['env_name'] = env
@@ -134,6 +282,15 @@ def main() -> None:
           f'[corpus={corpus}, total_steps={total_steps}]')
     print('=' * 100)
     panel = _build_panel(corpus, total_steps, include_env=True)
+    # Drop rows with NaN in any mediator (envs missing per-step
+    # trace columns); PC's CI test can't handle NaN.
+    mediator_cols = (
+        'd_action_margin', 'd_argmax_disagreement', 'd_state_coverage',
+        'd_q_spread', 'd_q_lower', 'vanilla_q_spread',
+    )
+    panel = panel.drop_nulls(subset=list(mediator_cols)).filter(
+        ~pl.any_horizontal(pl.col(c).is_nan() for c in mediator_cols)
+    )
     print(f'  n_strata={panel.height}  n_features={len(panel.columns)}')
 
     variables = (
@@ -145,6 +302,12 @@ def main() -> None:
         'empirical_reward_density',
         'log_action_dim',
         'mean_dbias',
+        'd_action_margin',
+        'd_argmax_disagreement',
+        'd_state_coverage',
+        'd_q_spread',
+        'd_q_lower',
+        'vanilla_q_spread',
     )
 
     # Stage 1a: Conservative-PC adjacency at depth ≤ 2 — no JCI.
