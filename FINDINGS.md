@@ -5,6 +5,136 @@ to track when claims were authored vs. observed.
 
 ---
 
+## 2026-04-29 (seventh revision) — Action-dim sweep: dormancy_gap correctly fires but doesn't predict link; CartPole at converging HPs has DDQN *increasing* the Jensen gap.
+
+### Methodology
+
+The framework now carries an attached invariant on `double_greedify`:
+`jensen_dormancy_gap = max(0, σ_Q · √(2 log |A|) − observed_gap)`.
+Convention: gap = 0 ⇒ premise active (vanilla's empirical bias is
+above the structural Jensen floor); gap > 0 ⇒ premise dormant.
+
+This is the framework's-own answer to "what's DDQN's scope": the
+attached gap-Bridge surfaces the load-bearing causal-chain
+assumption (action_dim, σ_Q) and lets `at_most(...)` route cells
+by premise activity at composition discovery time.
+
+To exercise it, a designed sweep at converging HPs across an
+action-dim spectrum (`experiments/collect_action_dim_sweep.py`):
+
+- 4 envs, |A| ∈ {2, 3, 3, 5}: CartPole, Acrobot, Catch,
+  DiscountingChain
+- DDQN vs vanilla, 60 seeds per arm (single vmap, small-obs)
+- HP grid: capacity=50k, batch=32, lr=1e-3, sync=100, 200k steps
+- `online_std_q_per_step` persisted per cell (the σ_Q input)
+- 480 cells total
+
+### Results
+
+Per-env summary (averaged over 60 seeds per arm):
+
+| Env | \|A\| | σ̄_van | σ̄_ddqn | obs_van | obs_ddqn | floor_van | floor_ddqn | %active |
+|---|---|---|---|---|---|---|---|---|
+| Acrobot-v1 | 3 | 0.15 | 0.16 | 7.74 | 5.11 | 0.22 | 0.23 | 100/100 |
+| CartPole-v1 | 2 | 1.83 | **2.84** | 132.41 | **188.73** | 2.16 | 3.34 | 100/100 |
+| Catch-bsuite | 3 | 0.07 | 0.07 | 0.03 | 0.01 | 0.10 | 0.11 | **0/0** |
+| DiscountingChain-bsuite | 5 | 0.00 | 0.00 | 0.55 | 0.37 | 0.01 | 0.01 | 100/100 |
+
+Per-env paired g (DDQN − vanilla on `outcome.eval_final_mean`,
+pair-by seed, n_pairs = 60 each):
+
+| Env | g | premise-active g | premise-dormant g |
+|---|---|---|---|
+| Acrobot-v1 | +0.029 | +0.029 | — |
+| CartPole-v1 | −0.005 | −0.005 | — |
+| Catch-bsuite | +0.000 | — | +0.000 |
+| DiscountingChain-bsuite | **−0.285** | −0.285 | — |
+
+Random-effects pool (premise-active, n=3 envs): g_pooled=−0.086,
+I²=0.42, PI=[−0.73, +0.55] → **NO_EFFECT**.
+
+### Reading
+
+1. **The invariant fires correctly on Catch-bsuite.** Observed
+   bias 0.03 ≪ structural floor 0.10 → premise dormant. Catch is
+   a near-bandit env with sparse terminal reward; the |A|=3
+   Jensen-bias-on-noisy-Q regime requires bootstrap depth, which
+   Catch barely has. The framework's invariant flags this
+   structurally — Catch isn't in the regime where DDQN's
+   correction is supposed to operate.
+
+2. **CartPole at converging HPs has DDQN *increasing* the Jensen
+   gap, not reducing it.** Vanilla σ̄=1.83, observed gap=132;
+   DDQN σ̄=2.84, observed gap=189. Both Q-noise and observed bias
+   are *larger* under DDQN. This is counter-Hasselt at the
+   converging HPs we previously identified for CartPole. Possible
+   readings:
+   - The asymmetric target-online decoupling introduces additional
+     variance that swamps the bias-reduction benefit at long
+     training horizons.
+   - The `predicted_q_at_start − mc_return` measurement is over
+     the full eval episode; if DDQN's Q is more noisy step-to-
+     step but unbiased on average, the formula could over-attribute
+     the variance to "bias".
+   - The discounted-ceiling regime (CartPole at cap=50k saturates
+     best-burst at 99.34) doesn't have headroom for any
+     bias-correction signal.
+
+3. **The dormancy invariant doesn't predict link strength on this
+   sweep.** Premise-active cells across 3 envs pool to g=−0.086
+   on outcome (PI brackets zero). Acrobot and CartPole are
+   premise-active and have null link; DiscountingChain is
+   premise-active and has *negative* link (g=−0.285). Catch is
+   premise-dormant and has zero link (saturated).
+
+4. **Converging HPs collapse outcome variance.** All 4 envs hit
+   their `eval_best_burst_mean` ceiling — no headroom to
+   distinguish DDQN. `eval_final_mean` shows residual variance
+   from instability but the predictive direction is mostly absent.
+
+### Implication for the scope search
+
+The framework's-own scope hypothesis (dormancy_gap = 0 predicts
+link operates) is **not corroborated on this sweep**. Premise
+activity is necessary-but-not-sufficient for DDQN's link to bite.
+Additional load-bearing chain edges that this invariant doesn't
+yet capture:
+
+- **Bootstrap depth** (γ × episode_length): Catch has very short
+  episodes → bias has nowhere to compound. At Catch's structural
+  position, even premise-active cells wouldn't show benefit.
+- **Outcome headroom**: at converging HPs, both arms saturate
+  best_burst → no signal; eval_final_mean retains noise but
+  ambiguous direction.
+- **σ_Q vs target-online correlation interaction**: CartPole's
+  result suggests DDQN's decoupling can *increase* per-step Q
+  variance even while the target-online correlation drops; the
+  variance contribution may swamp bias-reduction at converging
+  regimes.
+
+The honest summary: the framework correctly authored the
+load-bearing premise as a measurable; the sweep shows that
+premise being active doesn't determine link operation. The
+upstream chain has more structure than `σ · √(2 log |A|)` alone.
+
+### Honest scope of this sweep
+
+- All envs at converging HPs ⇒ outcome ceiling saturation; the
+  test of the link is power-limited even with n=60 paired pairs.
+- Only 3/4 envs are premise-active and 1/4 dormant ⇒ a within-
+  env premise-active vs dormant comparison isn't possible on this
+  sweep (every cell of a given env is in the same status).
+- Per-env paired g uses `outcome.eval_final_mean`; switching to
+  `eval_best_burst_mean` collapses every env's g to 0 (saturation).
+
+Reproduce with:
+```
+uv run python experiments/collect_action_dim_sweep.py
+uv run python experiments/analyze_action_dim_dormancy.py
+```
+
+---
+
 ## 2026-04-29 (sixth revision) — Time-to-first-solve link is null on average too: replacing the steady-state outcome with a sample-efficiency proxy doesn't rescue DDQN.
 
 ### Methodology

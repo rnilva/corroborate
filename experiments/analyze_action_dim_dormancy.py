@@ -115,7 +115,7 @@ def _augment_runs_with_dormancy(
 
 def _per_env_g(
     runs: list[RunRow], env_name: str, *,
-    outcome_path: str = 'outcome.eval_best_burst_mean',
+    outcome_path: str = 'outcome.eval_final_mean',
 ) -> tuple[float, float, int]:
     """Paired g per env on outcome, DDQN-vs-vanilla pair-by seed."""
     env_runs = [
@@ -218,7 +218,7 @@ def main() -> None:
 
     # Per-env paired g + dormancy stratification.
     print()
-    print('Per-env paired g on outcome.eval_best_burst_mean:')
+    print('Per-env paired g on outcome.eval_final_mean (avoids best-burst saturation):')
     print(f'  {"env":<25} {"|A|":>4} {"all_n":>6} {"g_all":>7} '
           f'{"act_n":>6} {"g_act":>7} {"dor_n":>6} {"g_dor":>7}')
     print('-' * 100)
