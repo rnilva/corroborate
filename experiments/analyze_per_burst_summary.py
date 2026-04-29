@@ -173,6 +173,43 @@ def main() -> None:
             f'{float(np.mean(dr)):>+10.3f}'
         )
 
+    # ============ Cross-burst lag correlation ============
+    # For each env, compute Pearson r(Δbias[k], Δret[k+τ]) across
+    # all valid (pair, k) pairs, for τ ∈ {-3, -2, -1, 0, +1, +2, +3}.
+    # Forward asymmetry (τ > 0 stronger than τ < 0) is consistent
+    # with bias-reduction temporally preceding outcome benefit.
+    print()
+    print(f'{"env":<25} ' + ' '.join(f'τ={t:>+2}' for t in (-3, -2, -1, 0, 1, 2, 3)))
+    print('-' * 95)
+    for env in envs:
+        arrays = _load(corpus, env)
+        if arrays is None or arrays[0].shape[0] < 4:
+            continue
+        van_bias, van_ret, ddqn_bias, ddqn_ret = arrays
+        delta_bias = ddqn_bias - van_bias
+        delta_ret = ddqn_ret - van_ret
+        n_pairs, n_bursts = delta_bias.shape
+        cells: list[str] = []
+        for tau in (-3, -2, -1, 0, 1, 2, 3):
+            xs: list[float] = []
+            ys: list[float] = []
+            for k in range(n_bursts):
+                k2 = k + tau
+                if k2 < 0 or k2 >= n_bursts:
+                    continue
+                xs.extend(delta_bias[:, k].tolist())
+                ys.extend(delta_ret[:, k2].tolist())
+            if (
+                len(xs) < 4
+                or float(np.std(xs)) == 0.0
+                or float(np.std(ys)) == 0.0
+            ):
+                cells.append('   nan')
+                continue
+            r = ss.pearsonr(np.asarray(xs), np.asarray(ys))
+            cells.append(f'{r.statistic:>+5.2f}')
+        print(f'{env:<25} ' + ' '.join(f'{c:>5}' for c in cells))
+
 
 if __name__ == '__main__':
     main()
