@@ -5,6 +5,142 @@ to track when claims were authored vs. observed.
 
 ---
 
+## 2026-04-29 (fifth revision) — Three-check audit on the DDQN 200k corpus: SCV doesn't generalize; jensen_gap structurally borderline but strongest within-env signal in predicted direction.
+
+### Methodology
+
+Same `audit_mediator_panel` as the third-revision CartPole side-
+quest, applied to the corpus that carries the actual DDQN claim
+(`experiments/data/ddqn/runs_with_mediators.parquet`). The corpus
+fixes numerical HPs (capacity=10000, batch=32, lr=1e-3, sync=100)
+and varies on intervention ∈ {ddqn, vanilla_dqn}, env (18 levels),
+total_steps ∈ {50k, 200k}, seed (30 per cell). The CartPole-corpus
+HP-stratum check is replaced by an **env-stratum** check: each env
+gets its own stratum (60 cells = 30 seeds × 2 budgets); 18 envs
+pooled via Fisher-z. Outcome path: `outcome.eval_best_burst_mean`
+(Hasselt convention).
+
+`mechanism.jensen_gap` reads `(predicted_q_at_start, mc_return)`,
+the outcome reads `mc_return` → reads-jaccard = 1/2 = 0.5. At the
+default threshold this is flagged "outcome-tautological", though
+the semantics (gap = predicted − actual is a *residual*, not a
+restatement) say otherwise. Reported either way; the analyst
+judges.
+
+### Results — DDQN intervention (n=1080, 18 envs)
+
+| Mediator | jaccard | within-env ρ | p | Flags |
+|---|---|---|---|---|
+| `jensen_gap` | 0.50 | **−0.271** | <0.001 | **OUTCOME** (borderline) |
+| `q_max_growth` | 0.00 | +0.136 | <0.001 | clean ✓ |
+| `td_residual_late` | 0.00 | −0.089 | 0.007 | clean ✓ |
+| `state_visit_entropy_late` | 0.00 | **+0.320** | <0.001 | clean ✓ |
+| `state_coverage_kl_uniform_late` | 0.00 | −0.058 | 0.450 | **SHADOW** |
+| `q_gap_late` | 0.00 | −0.053 | 0.107 | SHADOW |
+| `v_vs_max_delta_late` | 0.00 | −0.050 | 0.129 | SHADOW |
+| `greedy_match_late` | 0.00 | −0.005 | 0.873 | SHADOW |
+| `learning_curve_auc` | 1.00 | +0.801 | <0.001 | OUTCOME |
+| `return_at_25pct_steps` | 1.00 | +0.554 | <0.001 | OUTCOME |
+| `time_to_threshold` | 1.00 | +0.090 | 0.143 | OUTCOME / SHADOW |
+| `plateau_slope_late` | 1.00 | +0.057 | 0.248 | OUTCOME / SHADOW |
+| `fill_ratio_late` | 0.00 | nan | nan | **HP** (R²=1.0 on both axes) |
+
+**Clean: 4/15 panel mediators on DDQN cells.**
+
+### Results — vanilla_dqn intervention (n=1080, 18 envs)
+
+| Mediator | jaccard | within-env ρ | p | Flags |
+|---|---|---|---|---|
+| `jensen_gap` | 0.50 | **−0.340** | <0.001 | **OUTCOME** (borderline) |
+| `q_gap_late` | 0.00 | −0.084 | 0.011 | clean ✓ |
+| `q_max_growth` | 0.00 | +0.083 | 0.012 | clean ✓ |
+| `v_vs_max_delta_late` | 0.00 | −0.084 | 0.011 | clean ✓ |
+| `td_residual_late` | 0.00 | −0.096 | 0.004 | clean ✓ |
+| `state_visit_entropy_late` | 0.00 | **+0.391** | <0.001 | clean ✓ |
+| `state_coverage_kl_uniform_late` | 0.00 | **−0.240** | 0.001 | clean ✓ |
+
+**Clean: 7/15 panel mediators on vanilla_dqn cells.**
+
+### Reading
+
+1. **`state_coverage_kl_uniform_late` does not generalize.** The
+   mediator that survived every check on the CartPole HP corpus
+   (ρ=+0.19 within capacity, ATE=+8.82 backdoor with placebo +
+   RCC HELD) **fails the within-env check on DDQN cells**
+   (ρ=−0.058, p=0.450). It still passes on vanilla cells
+   (ρ=−0.24, p=0.001), with the *opposite* sign from the
+   CartPole result. Cross-corpus transfer of this mediator is
+   not warranted by the data.
+
+2. **`jensen_gap` is the strongest within-env signal in the
+   predicted direction** (Hasselt: smaller gap → better outcome).
+   ρ=−0.27 (DDQN), ρ=−0.34 (vanilla), both p<0.001. But the
+   audit flags it as outcome-tautological at jaccard 0.5 — its
+   reads-set partially overlaps the outcome's. This is the
+   audit's threshold being defensive: a mediator computed from
+   `outcome_reads ∪ Δ` will always have jaccard ≥ |outcome_reads|
+   / |outcome_reads ∪ Δ|. The semantics — `gap = predicted_q −
+   actual` is a *residual* — argue the mediator carries
+   independent information; the threshold doesn't know that.
+
+3. **`state_visit_entropy_late` is the strongest clean within-env
+   mediator** on both interventions (ρ=+0.32 DDQN, ρ=+0.39
+   vanilla). Higher visit entropy within an env predicts higher
+   outcome — the *opposite* sign from the CartPole-HP SCV
+   result. (KL-to-uniform and entropy are inverse-related up to
+   a constant, so opposite signs are consistent under that
+   relationship.)
+
+4. **The vanilla panel is "broader-clean" than DDQN's** (7 vs 4).
+   Several within-env signals that survive on vanilla
+   (`q_gap_late`, `v_vs_max_delta_late`, `state_coverage_kl`)
+   are *damped* under DDQN. This is itself a substrate-level
+   observation: DDQN's intervention doesn't just shift jensen_gap;
+   it changes which other measurables retain within-env
+   outcome-predictive variance.
+
+### Implication for the DDQN study
+
+The headline DDQN finding remains: mechanism HELD ↛ link HELD on
+the unconverged 200k corpus. The audit adds:
+
+- **`mechanism.jensen_gap` is not a restatement of the outcome at
+  jaccard 0.5** — but the framework should consider raising the
+  outcome-jaccard threshold default (or distinguish "shares
+  reads" from "is a restatement"). Filed as a TODO for the audit
+  primitive.
+- **The within-env ρ between `jensen_gap` and outcome is real
+  and in the predicted direction** on both interventions.
+  Combined with the prior g≈0 link-marginal-to-env finding, the
+  reading is: *jensen_gap moves with outcome within-env, but the
+  cross-env intervention contrast collapses* — exactly the
+  pattern of a mediator whose effect is env-conditional.
+- **State-coverage stories are corpus-specific.** The CartPole HP
+  result is real on that corpus; the DDQN-cells null tells us the
+  state-coverage → outcome relationship is not invariant across
+  envs / intervention regimes. Don't generalize.
+
+### Honest scope
+
+- The audit's HP-R² check is meaningless on this corpus's
+  numerical axes (only `total_steps` varies, with two values).
+  The within-env stratification is the load-bearing check.
+- The within-env ρ pools 60 cells × 18 envs; statistical power is
+  high but the per-env signal is noisy. The pooled value reflects
+  an "average within-env" effect that may obscure env-specific
+  variation (the convergence-conditioned story).
+- `td_within_batch_var_late` returns NaN on this corpus — it was
+  added to the substrate after the 200k sweep; absence is
+  expected.
+
+Reproduce with:
+```
+uv run python experiments/audit_ddqn_panel.py
+uv run python experiments/audit_ddqn_panel.py --intervention vanilla_dqn
+```
+
+---
+
 ## 2026-04-29 (third revision) — Tautology-audit reveals most "solve predictors" on the CartPole HP corpus are HP-shadow false-positives.
 
 ### Methodology
