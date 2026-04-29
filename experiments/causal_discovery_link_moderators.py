@@ -89,14 +89,24 @@ def _build_panel(corpus: str, total_steps: int, *, include_env: bool = False) ->
         n_pairs, n_bursts = delta_ret.shape
         for b in range(n_bursts):
             dr = list(map(float, delta_ret[:, b].tolist()))
-            g, se = hedges_g_paired(dr)
+            db = list(map(float, delta_bias[:, b].tolist()))
+            g_link, se_link = hedges_g_paired(dr)
+            g_mech, se_mech = hedges_g_paired(db)
             if not (
-                isinstance(g, float) and math.isfinite(g)
-                and isinstance(se, float) and math.isfinite(se) and se > 0.0
+                isinstance(g_link, float) and math.isfinite(g_link)
+                and isinstance(se_link, float) and math.isfinite(se_link)
+                and se_link > 0.0
+            ):
+                continue
+            if not (
+                isinstance(g_mech, float) and math.isfinite(g_mech)
+                and isinstance(se_mech, float) and math.isfinite(se_mech)
+                and se_mech > 0.0
             ):
                 continue
             row: dict[str, object] = {
-                'g_link': float(g),
+                'g_link': float(g_link),
+                'g_mech': float(g_mech),
                 'log_action_dim': math.log(max(n_a, 2)),
                 'log_obs_dim': math.log(max(obs_n, 1)),
                 'log_horizon': math.log(max(horizon, 1.0)),
@@ -128,6 +138,7 @@ def main() -> None:
 
     variables = (
         'g_link',
+        'g_mech',
         'bootstrap_fraction',
         'log_horizon',
         'log_obs_dim',
@@ -179,15 +190,24 @@ def main() -> None:
         a, b = sorted(edge)
         print(f'  {a:<28} ⟷ {b}')
 
-    # Stage 2: DoWhy backdoor on the surviving direct-edge candidate
-    # for g_link. Use bootstrap_fraction → g_link with the rest as
-    # confounders (those that are NOT screened off from g_link).
+    # Markov-blanket extraction for both endpoints.
     g_link_neighbors = sorted(
         nb for edge in adj.edges for nb in edge
         if 'g_link' in edge and nb != 'g_link'
     )
+    g_mech_neighbors = sorted(
+        nb for edge in adj.edges for nb in edge
+        if 'g_mech' in edge and nb != 'g_mech'
+    )
     print()
     print(f'g_link neighbors: {g_link_neighbors}')
+    print(f'g_mech neighbors: {g_mech_neighbors}')
+    chain_edge = frozenset({'g_link', 'g_mech'}) in adj.edges
+    print(f'g_link ⟷ g_mech direct edge: {chain_edge}')
+
+    # Stage 2: DoWhy backdoor on the surviving direct-edge candidate
+    # for g_link. Use bootstrap_fraction → g_link with the rest as
+    # confounders (those that are NOT screened off from g_link).
 
     if not g_link_neighbors:
         print('  no surviving edges from g_link; skipping DoWhy.')

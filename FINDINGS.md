@@ -111,6 +111,35 @@ Reads `experiments/data/ddqn/{runs,traces}.parquet`. Stage 1
 prints per-(env, burst) g_link table; Stage 2 runs g_link
 regressions; Stage 3 runs parallel g_mech regressions.
 
+### Follow-up via joint PC discovery (g_link AND g_mech in the panel)
+
+`experiments/causal_discovery_link_moderators.py` now adds
+g_mech as a panel variable so the PC adjacency captures the
+mechanism→link edge directly. Two further results:
+
+1. **The chain edge `g_mech ⟷ g_link` IS detected** at the
+   cross-env adjacency level (no JCI). This is the framework's
+   evidence that the mechanism→link arrow is observationally
+   connected — not a relationship asserted by theory alone.
+
+2. **JCI (`stratify_by=env_name`) dissolves the chain edge.**
+   Within an env, per-burst g_mech and per-burst g_link are not
+   adjacent. The chain operates at the env-level (envs where
+   bias-reduction is bigger also have larger outcome benefit),
+   but the burst-by-burst within-env coupling is mostly noise.
+
+3. **`bootstrap_fraction → g_link` survives backdoor adjustment
+   on g_mech.** DoWhy: ATE=+0.88 (placebo=+0.02, RCC drift=
+   0.008). After controlling for the bias-reduction mechanism,
+   sparse-reward envs *still* show outcome benefit. There is a
+   non-mechanism pathway from sparse-reward to outcome — likely
+   a state-coverage or value-iteration-speed effect that
+   doesn't go through Q-overestimation.
+
+The chain is real but partial: ~half the sparse-reward outcome
+benefit is mediated by bias-reduction, the other ~half by
+something else not yet captured.
+
 ---
 
 ## 2026-04-29 (ninth revision) — Per-burst trajectory on FourRooms reveals: DDQN's mechanism operates early, scalar mean obscures it. Outcome benefit is stable across all bursts; r(Δbias, Δret) is negative at every burst.
