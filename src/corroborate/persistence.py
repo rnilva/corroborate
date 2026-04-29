@@ -230,14 +230,24 @@ def stream_concat_parquets(
     compression: str = 'zstd',
     compression_level: int = 3,
 ) -> None:
-    """Concatenate `inputs` to `out` via polars' `concat(how=
-    'vertical_relaxed')` — auto-promotes types across schema
-    differences (int→float when any input has float for the
-    same field; list-of-int→list-of-float for nested lists;
-    large_list and list handled identically).
+    """Concatenate `inputs` to `out` via polars'
+    `concat(how='diagonal_relaxed')` — null-pads missing columns
+    across inputs AND auto-promotes types across schema
+    differences (int→float when any input has float for the same
+    field; list-of-int→list-of-float for nested lists; large_list
+    and list handled identically).
 
-    `type_widening=True` (default) uses `vertical_relaxed`.
-    Set False for strict concat that errors on mismatches.
+    `diagonal_relaxed` is necessary because per-arm parquets in
+    a sweep can disagree on column SET (DDQN arms emit
+    `invariant.at_most[jensen_dormancy_gap<=0].*` that vanilla
+    arms don't). The strict `vertical_relaxed` errors on column-
+    set mismatches; the merge primitive at the parquet boundary
+    has to handle the realistic case where two arms authored
+    different intervention_arms / different invariants.
+
+    `type_widening=True` (default) uses `diagonal_relaxed`. Set
+    False for strict diagonal concat that errors on type
+    mismatches but still null-pads missing columns.
 
     Reads all inputs into memory before writing — polars'
     `sink_parquet` silently produces an empty file when
@@ -248,7 +258,7 @@ def stream_concat_parquets(
         raise ValueError('stream_concat_parquets: no inputs')
     if out.exists():
         out.unlink()
-    how = 'vertical_relaxed' if type_widening else 'vertical'
+    how = 'diagonal_relaxed' if type_widening else 'diagonal'
     eager_frames = [pl.read_parquet(str(p)) for p in inputs]
     merged = pl.concat(eager_frames, how=how)
     merged.write_parquet(
