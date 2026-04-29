@@ -91,11 +91,31 @@ is **not carried by the variance-axis**. It's something else.
   the *same* residual, the residual is structural to sparse-
   reward envs themselves; if it has a *different* residual
   pattern, the residual was DDQN-specific.
-- The "headroom" hypothesis (sparse-reward → vanilla baseline
-  is worse → more room for any DDQN-style improvement) is also
-  unfired and arguably the next-cheapest test (just compute
-  vanilla's mean-return per env from existing 200k traces and
-  add to the panel).
+
+### Headroom mediator added to the panel — also fails
+
+`vanilla_mc_return` (per (env, burst) mean MC return on the
+baseline arm) was added to the 200k-corpus mediator panel as a
+"headroom" candidate: low-baseline envs have more room for any
+improvement intervention to translate. PC at α=0.05 places
+`vanilla_mc_return` as adjacent only to `log_obs_dim` (smaller-
+obs envs have smaller absolute-return scales) — NOT adjacent to
+`g_link`. The Markov blanket of g_link stays {bootstrap_fraction,
+g_mech}; the chain edge `g_link ⟷ g_mech` and the residual
+direct edge `bootstrap_fraction ⟷ g_link` both survive. Headroom
+is not the carrier either.
+
+**The residual `bootstrap_fraction → g_link | g_mech` (ATE=
++0.88) has now survived 7 mediator candidates (action_margin,
+argmax_disagreement, state_coverage, delta_q_spread, delta_q_
+lower, vanilla_q_spread, vanilla_mc_return) plus the n-step
+intervention test.** Whatever carries it isn't a simple
+function of trace-level Q dynamics, baseline policy quality, or
+TD-target variance. The remaining unfired test is Strategy 2 —
+a different bias-correction mechanism on the greedification
+axis (expectile / softmax / distributional). If that arm's
+residual has the same shape, the residual is sparse-reward-
+intrinsic; if not, it's DDQN-specific.
 
 ### Reproduction
 

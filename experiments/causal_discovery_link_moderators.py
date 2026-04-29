@@ -73,8 +73,11 @@ def _per_burst_mediator_deltas(
     state_coverage, vanilla_q_spread (per-burst mean of vanilla's
     Q-vector max−min — a σ-proxy for the extreme-value max bias
     that XQL targets, not a delta), delta_q_spread, delta_q_lower
-    (DDQN−vanilla on the mean−min lower tail). Each value is
-    shape (n_pairs, n_bursts), or None if data is missing."""
+    (DDQN−vanilla on the mean−min lower tail), vanilla_mc_return
+    (per-burst mean MC return on the baseline arm — headroom
+    proxy: low-baseline envs have more room for any improvement
+    intervention to translate). Each value is shape
+    (n_pairs, n_bursts), or None if data is missing."""
     base = Path('experiments/data') / corpus
     runs_path = base / 'runs.parquet'
     if not runs_path.exists():
@@ -101,6 +104,7 @@ def _per_burst_mediator_deltas(
         'online_min_q_per_step',
         'online_argmax_per_step', 'target_argmax_per_step',
         'state_hash',
+        'mc_return',
     ]
     trace_df = pl.read_parquet(
         str(base / 'traces.parquet'), columns=cols,
@@ -112,6 +116,7 @@ def _per_burst_mediator_deltas(
     by_id_state_cov: dict[str, np.ndarray] = {}
     by_id_q_spread: dict[str, np.ndarray] = {}
     by_id_q_lower: dict[str, np.ndarray] = {}
+    by_id_mc_return: dict[str, np.ndarray] = {}
     for row in trace_df.iter_rows(named=True):
         cid = row['id']
         omax = np.asarray(row['online_max_q_per_step'], dtype=np.float64)
@@ -120,7 +125,10 @@ def _per_burst_mediator_deltas(
         oarg = np.asarray(row['online_argmax_per_step'], dtype=np.int64)
         targ = np.asarray(row['target_argmax_per_step'], dtype=np.int64)
         sh = np.asarray(row['state_hash'], dtype=np.int64)
+        mcr = np.asarray(row['mc_return'], dtype=np.float64)
         if min(len(omax), len(omean), len(omin), len(oarg), len(targ), len(sh)) < total_steps:
+            continue
+        if mcr.ndim != 2:
             continue
         am = np.zeros(n_bursts)
         dg = np.zeros(n_bursts)
@@ -139,6 +147,8 @@ def _per_burst_mediator_deltas(
         by_id_state_cov[cid] = sc
         by_id_q_spread[cid] = sp
         by_id_q_lower[cid] = lo
+        # mc_return per burst = mean over K eval episodes
+        by_id_mc_return[cid] = mcr.mean(axis=-1)
 
     seed_to_van = {d['seed']: d['id'] for d in van_ids}
     seed_to_ddqn = {d['seed']: d['id'] for d in ddqn_ids}
@@ -162,6 +172,13 @@ def _per_burst_mediator_deltas(
     ) -> np.ndarray:
         return np.stack([by_id[seed_to_van[s]] for s in common])
 
+    if not all(
+        s in by_id_mc_return for s in
+        [seed_to_van[s] for s in common] + [seed_to_ddqn[s] for s in common]
+    ):
+        # Some traces are missing mc_return; bail rather than
+        # surfacing partial mediator panels.
+        return None
     return {
         'action_margin': _stack_delta(by_id_action_margin),
         'argmax_disagreement': _stack_delta(by_id_disagreement),
@@ -174,6 +191,11 @@ def _per_burst_mediator_deltas(
         # have larger vanilla_q_spread, and that should explain
         # the residual sparse-reward → outcome edge.
         'vanilla_q_spread': _stack_vanilla_only(by_id_q_spread),
+        # Vanilla's mean MC return — headroom proxy. Low-baseline
+        # envs (vanilla can't solve) have more room for ANY
+        # improvement intervention to translate, even an
+        # intervention whose mechanism is silent on the residual.
+        'vanilla_mc_return': _stack_vanilla_only(by_id_mc_return),
     }
 
 
@@ -270,6 +292,10 @@ def _build_panel(
                     float(mediators['vanilla_q_spread'][:, b].mean())
                     if mediators is not None else float('nan')
                 ),
+                'vanilla_mc_return': (
+                    float(mediators['vanilla_mc_return'][:, b].mean())
+                    if mediators is not None else float('nan')
+                ),
             }
             if include_env:
                 row['env_name'] = env
@@ -303,6 +329,7 @@ def main() -> None:
     mediator_cols = (
         'd_action_margin', 'd_argmax_disagreement', 'd_state_coverage',
         'd_q_spread', 'd_q_lower', 'vanilla_q_spread',
+        'vanilla_mc_return',
     )
     panel = panel.drop_nulls(subset=list(mediator_cols)).filter(
         ~pl.any_horizontal(pl.col(c).is_nan() for c in mediator_cols)
@@ -324,6 +351,7 @@ def main() -> None:
         'd_q_spread',
         'd_q_lower',
         'vanilla_q_spread',
+        'vanilla_mc_return',
     )
 
     # Stage 1a: Conservative-PC adjacency at depth ≤ 2 — no JCI.
