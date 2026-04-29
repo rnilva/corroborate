@@ -128,7 +128,6 @@ def _stratified_comparison(
         bridges=ddqn_h.bridges,
         predicted_direction=predicted_direction,  # type: ignore[arg-type]
         intervention_arms=ddqn_h.intervention_arms,
-        cycle_id=ddqn_h.cycle_id,
     )
     return hypothesis_comparison_from_cells(
         ddqn_h_typed, ddqn_runs, vanilla_runs,
