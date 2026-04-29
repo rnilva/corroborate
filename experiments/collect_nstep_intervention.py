@@ -96,6 +96,11 @@ def _hypothesis(
             bootstrap, greedification=double_greedify, n_step=n_step,
         ),
     }
+    # `intervention_arms` only carries the typed `bootstrap`
+    # intervention since `Intervention.replacement` is a
+    # claim/partial type — Replay is a config bundle and travels
+    # through `intervention['replay']` directly. arm_key still
+    # identifies the two arms uniquely via the bootstrap partial.
     return Hypothesis(
         name=name, intervention=base,
         bridges=(),
@@ -105,13 +110,6 @@ def _hypothesis(
                 slot_path='bootstrap',
                 replacement=partial(
                     bootstrap, greedification=double_greedify, n_step=n_step,
-                ),
-            ),
-            Intervention(
-                slot_path='replay',
-                replacement=Replay(
-                    capacity=50_000, batch_size=32,
-                    n_step=n_step, gamma=GAMMA,
                 ),
             ),
         ),
