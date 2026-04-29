@@ -239,19 +239,19 @@ def stream_concat_parquets(
     `type_widening=True` (default) uses `vertical_relaxed`.
     Set False for strict concat that errors on mismatches.
 
-    Streams via lazy frames: only one input is loaded at a time;
-    the merged result is written without materialising the full
-    in-memory table. Use case: per-arm sweep parquets
-    concatenated to a single corpus parquet at the end of
-    `collect_*.py` scripts."""
+    Reads all inputs into memory before writing — polars'
+    `sink_parquet` silently produces an empty file when
+    `how='vertical_relaxed'` requires schema resolution it
+    can't perform lazily. For corpus-scale (10s of GB) merges,
+    use a chunked driver upstream rather than this primitive."""
     if not inputs:
         raise ValueError('stream_concat_parquets: no inputs')
     if out.exists():
         out.unlink()
     how = 'vertical_relaxed' if type_widening else 'vertical'
-    lazy_frames = [pl.scan_parquet(str(p)) for p in inputs]
-    merged = pl.concat(lazy_frames, how=how)
-    merged.sink_parquet(
+    eager_frames = [pl.read_parquet(str(p)) for p in inputs]
+    merged = pl.concat(eager_frames, how=how)
+    merged.write_parquet(
         str(out),
         compression=compression, compression_level=compression_level,
     )
