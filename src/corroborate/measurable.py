@@ -84,6 +84,42 @@ def registered_names() -> tuple[str, ...]:
     return tuple(sorted(_REGISTRY))
 
 
+def transitive_reads(name: str) -> frozenset[str]:
+    """The leaf record-keys a registered measurable ultimately
+    depends on, closing over the measurable graph.
+
+    Walks: starting from `name`, recurse into each measurable's
+    parameter-named deps (via `_measurable_param_names`), union
+    each transitively-reached measurable's `reads` field. Cycle-
+    safe via a visited set.
+
+    Loud KeyError if `name` isn't registered — callers asking
+    about an unknown measurable get a useful failure rather than
+    silent empty.
+
+    Returns the union over the closure. Used by `Bridge.transitive_
+    reads` to compute the leaf-key reads-set the redundancy
+    primitive consumes."""
+    visited: set[str] = set()
+
+    def _close(n: str) -> frozenset[str]:
+        if n in visited:
+            return frozenset()
+        visited.add(n)
+        m = _REGISTRY.get(n)
+        if m is None:
+            raise KeyError(
+                f'no measurable named {n!r}. Registered: '
+                f'{sorted(_REGISTRY)}',
+            )
+        out: set[str] = set(m.reads)
+        for dep_name in _measurable_param_names(m.fn):
+            out.update(_close(dep_name))
+        return frozenset(out)
+
+    return _close(name)
+
+
 def _measurable_param_names(fn: Callable[..., object]) -> tuple[str, ...]:
     """Parameters of `fn` (after the first positional `record`)
     whose names are registered measurables. Used by the resolver

@@ -1,7 +1,7 @@
 """§3 acceptance smoke — three-way verdict on the DDQN sweep.
 
 Loads `experiments/data/ddqn/runs.parquet`, then for each
-(env, capacity) combination:
+`replay.capacity`:
 
 1. **Mechanism verdict** — paired Δ on `mechanism.jensen_gap`,
    predicted_direction='a_lt_b' (DDQN should *reduce* the gap).
@@ -12,9 +12,12 @@ Loads `experiments/data/ddqn/runs.parquet`, then for each
    (g) and outcome Δ (g). Predicted positive — mechanism
    reduction should track outcome improvement.
 
-Plus an HP-sensitivity table: outcome by replay capacity,
-holding env fixed. Reveals whether DDQN's effect is robust to
-the buffer-capacity HP.
+The mechanism + outcome verdicts go through
+`HypothesisComparisonRow.from_cells(...)` — the canonical
+aggregator that internally pairs by `('seed',)` within each env,
+runs per-env Hedges' g, and pools across envs via random-effects
+DerSimonian-Laird in one pass. `row.per_group` carries per-env
+stats; `row.pooled` carries the pooled summary.
 
 Run: `uv run python experiments/smoke_ddqn_threeway.py`."""
 from __future__ import annotations
@@ -24,16 +27,13 @@ from pathlib import Path
 
 import polars as pl
 
-from corroborate.aggregate import (
-    link_pearson_across_envs,
-    paired_comparison_from_runs,
-)
+from corroborate.aggregate import link_pearson_across_envs
+from corroborate.hypothesis import Direction, Hypothesis
 from corroborate.persistence import read_runrows, write_comparisonrows
-from corroborate.schema import ComparisonRow, RunRow
-from corroborate.statistics import (
-    PooledStats,
-    random_effects_summary,
-    random_effects_verdict,
+from corroborate.schema import (
+    ComparisonRow,
+    HypothesisComparisonRow,
+    RunRow,
 )
 
 
@@ -60,164 +60,165 @@ def _f(x: float | int | str | bool | None, prec: int = 3) -> str:
     return f'{x:.{prec}f}'
 
 
-def _by_env_capacity_intervention(
+def _by_capacity_intervention(
     rows: list[RunRow],
-) -> dict[tuple[str, int], dict[str, list[RunRow]]]:
-    """Index runs by (env, capacity) → intervention → [runs].
-    Capacity is the swept HP that varies the leaf signature; we
-    pair within each capacity level."""
-    out: dict[tuple[str, int], dict[str, list[RunRow]]] = defaultdict(
+) -> dict[int, dict[str, list[RunRow]]]:
+    """Index runs by capacity → intervention → [runs]."""
+    out: dict[int, dict[str, list[RunRow]]] = defaultdict(
         lambda: defaultdict(list),
     )
     for r in rows:
-        env_name = r.measurements.get('env_name')
         intervention = r.measurements.get('intervention_name')
         capacity = r.measurements.get('replay.capacity')
-        if not isinstance(env_name, str):
-            continue
         if not isinstance(intervention, str):
             continue
         if isinstance(capacity, bool) or not isinstance(capacity, (int, float)):
             continue
-        out[(env_name, int(capacity))][intervention].append(r)
+        out[int(capacity)][intervention].append(r)
     return out
 
 
-def _mechanism_cmp(
-    treatment: list[RunRow], baseline: list[RunRow],
-    env_name: str, capacity: int,
-) -> ComparisonRow:
-    return paired_comparison_from_runs(
-        treatment_runs=treatment, baseline_runs=baseline,
-        outcome_path='mechanism.jensen_gap',
-        pair_by=('seed',),  # within-env pairing on seed
-        predicted_direction='a_lt_b',  # DDQN should REDUCE the gap
-        extra_measurements={
-            'comparison_kind': 'mechanism',
-            'env_name': env_name,
-            'replay.capacity': capacity,
-        },
-    )
+def _print_per_group(row: HypothesisComparisonRow) -> None:
+    """Render per-env GroupStats from a HypothesisComparisonRow."""
+    for gs in sorted(row.per_group, key=lambda g: repr(g.group_value)):
+        rc = gs.refutation_class.value if gs.refutation_class else '—'
+        print(
+            f'      {str(gs.group_value):<28} '
+            f'{gs.verdict.value:<22} {rc:<14} '
+            f'g={_f(gs.effect_size_g):>7} se={_f(gs.se):>7} '
+            f'q={_f(gs.derived_q):>5} n_pairs={gs.n_pairs} '
+            f'powered={str(gs.adequately_powered):>5}'
+        )
 
 
-def _outcome_cmp(
-    treatment: list[RunRow], baseline: list[RunRow],
-    outcome_path: str, env_name: str, capacity: int,
-) -> ComparisonRow:
-    return paired_comparison_from_runs(
-        treatment_runs=treatment, baseline_runs=baseline,
-        outcome_path=outcome_path,
-        pair_by=('seed',),
-        predicted_direction='a_gt_b',  # DDQN should INCREASE return
-        extra_measurements={
-            'comparison_kind': 'outcome',
-            'env_name': env_name,
-            'replay.capacity': capacity,
-        },
-    )
-
-
-def _print_verdict_row(
-    label: str, cmp: ComparisonRow, gp_key: str,
-) -> None:
-    g = cmp.measurements.get(f'{gp_key}.effect_size_g')
-    se = cmp.measurements.get(f'{gp_key}.se')
-    q = cmp.measurements.get(f'{gp_key}.derived_q')
-    rc = cmp.refutation_class.value if cmp.refutation_class else '—'
-    print(
-        f'    {label:<32} {cmp.verdict.value:<22} {rc:<14} '
-        f'g={_f(g):>7} se={_f(se):>7} q={_f(q):>5} '
-        f'powered={str(cmp.adequately_powered):>5}'
-    )
-
-
-def _print_pooled_row(
-    label: str,
-    cmps: list[ComparisonRow],
-    path_key: str,
-    *,
-    predicted_direction: str,
-) -> None:
-    """Render the random-effects pooled verdict for a list of
-    per-env ComparisonRows. Reads (g, se) from each comparison's
-    measurements at `<path_key>.effect_size_g` / `<path_key>.se`,
-    pools via DerSimonian-Laird, and prints pooled_g + 95% PI +
-    tau² + I² + Popperian verdict."""
-    pairs: list[tuple[float, float]] = []
-    for cmp in cmps:
-        g = cmp.measurements.get(f'{path_key}.effect_size_g')
-        se = cmp.measurements.get(f'{path_key}.se')
-        if isinstance(g, (int, float)) and isinstance(se, (int, float)):
-            pairs.append((float(g), float(se)))
-    if not pairs:
-        print(f'    {label:<32} (no per-env (g, se) pairs)')
+def _print_pooled(label: str, row: HypothesisComparisonRow) -> None:
+    """Render the pooled summary line for one HypothesisComparisonRow."""
+    rc = row.refutation_class.value if row.refutation_class else '—'
+    if row.pooled is None:
+        print(f'    {label:<32} {row.verdict.value:<22} '
+              f'{rc:<14} (single-group)')
         return
-    pool: PooledStats = random_effects_summary(pairs)
-    # `random_effects_verdict` accepts None / 'a_gt_b' / 'a_lt_b' /
-    # 'two_sided'; we pass strings directly here for the smoke.
-    from corroborate.hypothesis import Direction as _Dir
-    verdict, refutation = random_effects_verdict(
-        pool,
-        predicted_direction=predicted_direction,  # type: ignore[arg-type]
-    )
-    rc = refutation.value if refutation else '—'
     print(
-        f'    {label:<32} {verdict.value:<22} {rc:<14} '
-        f'pooled_g={_f(pool.pooled_g):>7} '
-        f'PI=[{_f(pool.pi_lo):>7}, {_f(pool.pi_hi):>7}] '
-        f'tau²={_f(pool.tau2):>5} I²={_f(pool.I2):>5} '
-        f'n_envs={pool.n_cells}'
+        f'    {label:<32} {row.verdict.value:<22} {rc:<14} '
+        f'pooled_g={_f(row.pooled.pooled_g):>7} '
+        f'PI=[{_f(row.pooled.pi_lo):>7}, {_f(row.pooled.pi_hi):>7}] '
+        f'tau²={_f(row.pooled.tau2):>5} I²={_f(row.pooled.I2):>5} '
+        f'n_envs={row.pooled.n_cells}'
     )
+
+
+def _comparison_from_hypothesis_row(
+    row: HypothesisComparisonRow, *,
+    extra_measurements: dict[str, object],
+) -> ComparisonRow:
+    """Project a HypothesisComparisonRow's per-env stats into
+    individual ComparisonRows for the link verdict + persistence.
+
+    The link verdict (`link_pearson_across_envs`) operates on
+    per-env (env_name, effect_size_g) pairs, so we surface those
+    from row.per_group as flat-keyed measurements compatible with
+    the existing primitive."""
+    raise NotImplementedError(
+        'projection only used inline; see _link_inputs_from_row',
+    )
+
+
+def _link_inputs_from_row(
+    row: HypothesisComparisonRow,
+    *,
+    outcome_path: str,
+) -> list[ComparisonRow]:
+    """Synthesize per-env `ComparisonRow`s from a stratified
+    HypothesisComparisonRow's `per_group`. Each ComparisonRow
+    carries `<outcome_path>.effect_size_g` and `env_name` so
+    `link_pearson_across_envs` can pair them on env."""
+    from corroborate.verdict import Verdict
+    out: list[ComparisonRow] = []
+    for gs in row.per_group:
+        # Match OLD smoke's behaviour: store effect_size_g + se
+        # independently. link_pearson_across_envs filters NaN
+        # internally; no need to pre-filter here.
+        measurements: dict[str, object] = {
+            'env_name': gs.group_value
+                if isinstance(gs.group_value, (int, float, bool, str))
+                else str(gs.group_value),
+        }
+        if gs.effect_size_g is not None:
+            measurements[f'{outcome_path}.effect_size_g'] = float(
+                gs.effect_size_g,
+            )
+        if gs.se is not None:
+            measurements[f'{outcome_path}.se'] = float(gs.se)
+        cmp = ComparisonRow(
+            id=str(gs.group_value),
+            parent_id=None,
+            cycle_id=None,
+            timestamp=row.timestamp,
+            treatment_arm_id='',
+            baseline_arm_id='',
+            predicted_direction=row.predicted_direction,
+            verdict=gs.verdict,
+            refutation_class=gs.refutation_class,
+            adequately_powered=gs.adequately_powered,
+            measurements=measurements,  # type: ignore[arg-type]
+        )
+        out.append(cmp)
+    return out
 
 
 def main() -> None:
     rows = read_runrows(_DATA_PATH)
     print(f'loaded {len(rows)} RunRows from {_DATA_PATH.name}')
-    grouped = _by_env_capacity_intervention(rows)
-    keys = sorted(grouped.keys())
-
-    # ============ Per (env, capacity) three-way verdict ============
-
-    print('\n' + '=' * 110)
-    print('PER (env, capacity) THREE-WAY VERDICTS')
-    print('=' * 110)
-
-    # Cache mechanism + outcome comparisons (per capacity) for the
-    # link verdict that crosses envs at the same capacity.
-    mech_by_capacity: dict[int, list[ComparisonRow]] = defaultdict(list)
-    out_by_capacity: dict[
-        int, dict[str, list[ComparisonRow]]
-    ] = defaultdict(lambda: defaultdict(list))
+    by_cap = _by_capacity_intervention(rows)
+    capacities = sorted(by_cap.keys())
 
     all_comparisons: list[ComparisonRow] = []
+    rows_by_cap: dict[
+        int, dict[str, HypothesisComparisonRow],
+    ] = defaultdict(dict)
 
-    for env, capacity in keys:
-        ig = grouped[(env, capacity)]
+    for capacity in capacities:
+        ig = by_cap[capacity]
         if 'ddqn' not in ig or 'vanilla_dqn' not in ig:
             continue
         treatment = ig['ddqn']
         baseline = ig['vanilla_dqn']
 
-        print(f'\n  {env} | replay.capacity={capacity} | '
-              f'n_treatment={len(treatment)} n_baseline={len(baseline)}')
+        print('\n' + '=' * 110)
+        print(f'replay.capacity={capacity} | n_treatment={len(treatment)} '
+              f'n_baseline={len(baseline)}')
+        print('=' * 110)
 
-        # Mechanism (Jensen gap; DDQN should reduce it).
-        if any('mechanism.jensen_gap' in r.measurements for r in treatment):
-            mech_cmp = _mechanism_cmp(treatment, baseline, env, capacity)
-            _print_verdict_row(
-                'mechanism.jensen_gap', mech_cmp, 'mechanism.jensen_gap',
-            )
-            mech_by_capacity[capacity].append(mech_cmp)
-            all_comparisons.append(mech_cmp)
+        # Mechanism (DDQN should REDUCE Jensen gap).
+        mech_h: Hypothesis = Hypothesis(
+            name='ddqn', intervention={}, bridges=(),
+            predicted_direction='a_lt_b',
+        )
+        mech_row = HypothesisComparisonRow.from_cells(
+            mech_h, treatment, baseline,
+            outcome_path='mechanism.jensen_gap',
+            pair_by=('seed',),
+            group_by='env_name',
+        )
+        rows_by_cap[capacity]['mechanism.jensen_gap'] = mech_row
+        print(f'\n  mechanism.jensen_gap (per-env, sorted)')
+        _print_per_group(mech_row)
 
-        # Outcomes (return; DDQN should increase).
+        # Outcomes (DDQN should INCREASE return).
+        out_h: Hypothesis = Hypothesis(
+            name='ddqn', intervention={}, bridges=(),
+            predicted_direction='a_gt_b',
+        )
         for path in _OUTCOME_PATHS:
-            if not any(path in r.measurements for r in treatment):
-                continue
-            out_cmp = _outcome_cmp(treatment, baseline, path, env, capacity)
-            _print_verdict_row(path, out_cmp, path)
-            out_by_capacity[capacity][path].append(out_cmp)
-            all_comparisons.append(out_cmp)
+            row = HypothesisComparisonRow.from_cells(
+                out_h, treatment, baseline,
+                outcome_path=path,
+                pair_by=('seed',),
+                group_by='env_name',
+            )
+            rows_by_cap[capacity][path] = row
+            print(f'\n  {path} (per-env, sorted)')
+            _print_per_group(row)
 
     # ============ Cross-env LINK verdict per capacity ============
 
@@ -225,14 +226,23 @@ def main() -> None:
     print('CROSS-ENV LINK VERDICTS (Pearson r between mechanism Δg + outcome Δg)')
     print('=' * 110)
 
-    for capacity in sorted(out_by_capacity.keys()):
-        print(f'\n  replay.capacity={capacity}')
-        mech_cmps = mech_by_capacity.get(capacity, [])
-        if not mech_cmps:
-            print('    (no mechanism comparisons at this capacity)')
+    for capacity in capacities:
+        rows_for_cap = rows_by_cap.get(capacity, {})
+        if 'mechanism.jensen_gap' not in rows_for_cap:
             continue
+        mech_row = rows_for_cap['mechanism.jensen_gap']
+        mech_cmps = _link_inputs_from_row(
+            mech_row, outcome_path='mechanism.jensen_gap',
+        )
+        if len(mech_cmps) < 3:
+            continue
+        print(f'\n  replay.capacity={capacity}')
         for outcome_path in _OUTCOME_PATHS:
-            out_cmps = out_by_capacity[capacity].get(outcome_path, [])
+            if outcome_path not in rows_for_cap:
+                continue
+            out_cmps = _link_inputs_from_row(
+                rows_for_cap[outcome_path], outcome_path=outcome_path,
+            )
             if len(out_cmps) < 3:
                 continue
             link = link_pearson_across_envs(
@@ -257,30 +267,25 @@ def main() -> None:
                 f'powered={str(link.adequately_powered)}'
             )
 
-    # ============ Random-effects pooled verdict per capacity ============
+    # ============ Pooled summary per capacity (one line per kind) ============
 
     print('\n' + '=' * 110)
     print('RANDOM-EFFECTS POOLED VERDICTS (DerSimonian-Laird across envs)')
     print('=' * 110)
 
-    for capacity in sorted(out_by_capacity.keys()):
+    for capacity in capacities:
+        rows_for_cap = rows_by_cap.get(capacity, {})
+        if not rows_for_cap:
+            continue
         print(f'\n  replay.capacity={capacity}')
-
-        # Mechanism: predicted_direction='a_lt_b' (DDQN reduces gap).
-        mech_cmps = mech_by_capacity.get(capacity, [])
-        _print_pooled_row(
-            'mechanism.jensen_gap',
-            mech_cmps, 'mechanism.jensen_gap',
-            predicted_direction='a_lt_b',
-        )
-
-        # Outcomes: predicted_direction='a_gt_b' (DDQN increases return).
-        for outcome_path in _OUTCOME_PATHS:
-            out_cmps = out_by_capacity[capacity].get(outcome_path, [])
-            _print_pooled_row(
-                outcome_path, out_cmps, outcome_path,
-                predicted_direction='a_gt_b',
+        if 'mechanism.jensen_gap' in rows_for_cap:
+            _print_pooled(
+                'mechanism.jensen_gap',
+                rows_for_cap['mechanism.jensen_gap'],
             )
+        for outcome_path in _OUTCOME_PATHS:
+            if outcome_path in rows_for_cap:
+                _print_pooled(outcome_path, rows_for_cap[outcome_path])
 
     # ============ HP-sensitivity (capacity sweep) ============
 
@@ -302,15 +307,11 @@ def main() -> None:
         print()
         print(summary)
 
-    # Persist all comparisons to a single parquet for downstream
-    # repeatability. Read via `read_comparisonrows(_COMPARISONS_PATH)`
-    # and project by `comparison_kind` / `replay.capacity` /
-    # `outcome_path` to recover the §3 verdict shape without
-    # recomputing.
+    # Persist link comparisons for downstream repeatability.
     if all_comparisons:
         write_comparisonrows(all_comparisons, _COMPARISONS_PATH)
         print(
-            f'\nwrote {len(all_comparisons)} comparisons → '
+            f'\nwrote {len(all_comparisons)} link comparisons → '
             f'{_COMPARISONS_PATH.name}',
         )
 

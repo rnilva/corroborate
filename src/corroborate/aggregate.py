@@ -36,8 +36,26 @@ import uuid
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 
-from corroborate.hypothesis import Direction
-from corroborate.schema import ComparisonRow, MeasurementLeaf, RunRow
+from corroborate.bridge import BridgeResult
+from corroborate.hypothesis import Direction, Hypothesis
+from corroborate.schema import (
+    ComparisonRow,
+    FactRow,
+    GroupStats,
+    HypothesisComparisonRow,
+    MeasurementLeaf,
+    RunRow,
+)
+from corroborate.statistics import (
+    PooledStats,
+    adequately_powered_paired,
+    delta_i_from_q,
+    derived_q_from_g_se,
+    hedges_g_paired,
+    random_effects_summary,
+    random_effects_verdict,
+    verdict_from_paired_stats,
+)
 from corroborate.verdict import RefutationClass, Verdict
 
 
@@ -426,3 +444,559 @@ def _pearson(xs: Sequence[float], ys: Sequence[float]) -> float:
     if sx == 0.0 or sy == 0.0:
         return 0.0
     return num / (sx * sy)
+
+
+# ============ FactRow projection ============
+
+def _binary_entropy(p: float) -> float:
+    """H₂(p) = −(p log₂ p + (1−p) log₂ (1−p)). 0 at p=0 or p=1."""
+    if p <= 0.0 or p >= 1.0:
+        return 0.0
+    return -(p * math.log2(p) + (1.0 - p) * math.log2(1.0 - p))
+
+
+def _verdict_q(natural_strength: float, verdict: Verdict) -> float:
+    """Convert natural [0,1] strength + verdict → posterior P(claim
+    is true).
+
+    HELD pulls q above 0.5 by `0.5 * strength`; NO_EFFECT pulls
+    below; everything else (POWER_INSUFFICIENT,
+    INVARIANT_VIOLATION) sits at 0.5 (no information). The
+    factor-of-2 stretch makes a maximal |ρ|=1 reach q=1 (or 0)
+    → 1 bit of ΔI."""
+    s = max(0.0, min(1.0, natural_strength))
+    if verdict is Verdict.HELD:
+        return 0.5 + 0.5 * s
+    if verdict is Verdict.NO_EFFECT:
+        return 0.5 - 0.5 * s
+    return 0.5
+
+
+def _delta_i_oriented(
+    natural_strength: float, verdict: Verdict,
+) -> float:
+    """Verdict-oriented ΔI = 1 − H₂(q_oriented), in bits. Symmetric:
+    HELD with strength 1 and NO_EFFECT with strength 1 both → 1
+    bit. INVARIANT_VIOLATION → 0."""
+    if verdict is Verdict.INVARIANT_VIOLATION:
+        return 0.0
+    q = _verdict_q(natural_strength, verdict)
+    return 1.0 - _binary_entropy(q)
+
+
+def natural_strength_from_stats(
+    stats: Mapping[str, float | int | bool | str],
+) -> float:
+    """Compute a bridge's natural [0,1] strength from its
+    sufficient statistic. Verdict-agnostic — interpretation
+    (HELD / NO_EFFECT) happens at delta_i computation time.
+
+    Looks for these stat keys, in order:
+    - `rho` — Pearson / Spearman correlation; |ρ| capped at 1.
+    - `partial_at` + `partial_bt` — paired partial correlations;
+      min(|.|, 1).
+    - `value` + `threshold` — a bounded-magnitude invariant; the
+      strength is `1 - |value| / threshold` (margin to bound).
+    - `ate` — average treatment effect; tanh(|.|) maps to (0, 1).
+
+    Returns 0.0 when nothing matches — the caller falls back to
+    evidentiary-level placeholders."""
+    rho = stats.get('rho')
+    if isinstance(rho, (int, float)) and not math.isnan(float(rho)):
+        return float(min(abs(rho), 1.0))
+    partial_at = stats.get('partial_at')
+    partial_bt = stats.get('partial_bt')
+    if (isinstance(partial_at, (int, float))
+            and isinstance(partial_bt, (int, float))):
+        return float(min(abs(partial_at), abs(partial_bt), 1.0))
+    value = stats.get('value')
+    threshold = stats.get('threshold')
+    if (isinstance(value, (int, float))
+            and isinstance(threshold, (int, float))
+            and threshold > 0):
+        margin = 1.0 - abs(value) / threshold
+        return float(max(0.0, min(margin, 1.0)))
+    ate = stats.get('ate')
+    if isinstance(ate, (int, float)):
+        return float(math.tanh(abs(ate)))
+    return 0.0
+
+
+def _evidentiary_level_from_bridge_result(r: BridgeResult) -> str:
+    """Per-result evidentiary tier label. 'causal_bridged' is a
+    graph-level promotion (≥2 paired admits) computed elsewhere;
+    the per-result tier is at most causal_one_sided."""
+    if r.verdict is not Verdict.HELD:
+        return 'refuted'
+    tier = r.stats.get('tier')
+    if tier == 'interventional':
+        return 'causal_one_sided'
+    return 'correlational'
+
+
+def _facts_from_runrow(run: RunRow) -> tuple[FactRow, ...]:
+    """Reconstruct FactRows from a RunRow's flat-keyed
+    measurements. Bridge results are persisted as
+    `bridge.<name>.verdict` + `bridge.<name>.stats.<k>` entries
+    (see `cell_runner._bridge_result_to_measurements`); invariants
+    use `invariant.<name>.*` prefixes.
+
+    Targets aren't persisted in measurements (cell_runner doesn't
+    flatten them), so reconstructed FactRows have empty `reads`.
+    The runtime path (`fact_from_bridge_result`) sets reads from
+    BridgeResult.targets directly when called with a live result."""
+    by_name: dict[str, dict[str, MeasurementLeaf]] = {}
+    by_kind: dict[str, str] = {}
+    for k, v in run.measurements.items():
+        if k.startswith('bridge.'):
+            kind = 'bridge'
+        elif k.startswith('invariant.'):
+            kind = 'invariant'
+        else:
+            continue
+        # `<kind>.<name>.<rest>` — split on the second dot, keep
+        # everything after as the field path.
+        rest = k[len(kind) + 1:]      # `<name>.<rest>`
+        if '.' not in rest:
+            continue
+        name, field_path = rest.split('.', 1)
+        by_name.setdefault(name, {})[field_path] = v
+        by_kind[name] = kind
+    facts: list[FactRow] = []
+    for name in sorted(by_name):
+        fields = by_name[name]
+        verdict_v = fields.get('verdict')
+        if not isinstance(verdict_v, str):
+            continue
+        try:
+            verdict = Verdict(verdict_v)
+        except ValueError:
+            continue
+        # Stats live under `stats.<k>` keys.
+        stats: dict[str, float | int | bool | str] = {}
+        for fk, fv in fields.items():
+            if fk.startswith('stats.') and isinstance(
+                fv, (int, float, bool, str),
+            ):
+                stats[fk[len('stats.'):]] = fv
+        strength = natural_strength_from_stats(stats)
+        delta_i = _delta_i_oriented(strength, verdict)
+        # Evidentiary level: mirror the BridgeResult-based logic.
+        if verdict is not Verdict.HELD:
+            level = 'refuted'
+        elif stats.get('tier') == 'interventional':
+            level = 'causal_one_sided'
+        else:
+            level = 'correlational'
+        facts.append(FactRow(
+            name=name,
+            reads=frozenset(),  # targets not persisted
+            verdict=verdict,
+            natural_strength=strength,
+            delta_i=delta_i,
+            evidentiary_level=level,
+        ))
+    return tuple(facts)
+
+
+def _aggregate_facts_across_runs(
+    runs: Sequence[RunRow],
+) -> tuple[FactRow, ...]:
+    """Fold per-run facts into a deduped union, one FactRow per
+    bridge name.
+
+    `verdict` is the majority verdict across runs; ties break to
+    POWER_INSUFFICIENT (consistent with how aggregate_cell_verdict
+    handles disagreement). `natural_strength` and `delta_i` are
+    averaged. `reads` unions across runs."""
+    by_name: dict[str, list[FactRow]] = {}
+    for run in runs:
+        for fact in _facts_from_runrow(run):
+            by_name.setdefault(fact.name, []).append(fact)
+    out: list[FactRow] = []
+    for name in sorted(by_name):
+        facts = by_name[name]
+        verdicts = [f.verdict for f in facts]
+        # Majority verdict; ties go to POWER_INSUFFICIENT.
+        from collections import Counter
+        c = Counter(verdicts)
+        most_common = c.most_common()
+        if len(most_common) == 1 or most_common[0][1] > most_common[1][1]:
+            verdict = most_common[0][0]
+        else:
+            verdict = Verdict.POWER_INSUFFICIENT
+        ns_mean = sum(f.natural_strength for f in facts) / len(facts)
+        di_mean = sum(f.delta_i for f in facts) / len(facts)
+        reads = frozenset().union(*(f.reads for f in facts))
+        # Use the first fact's evidentiary_level as the
+        # representative — this is best-effort; a richer
+        # consumer would track per-run levels.
+        out.append(FactRow(
+            name=name, reads=reads, verdict=verdict,
+            natural_strength=ns_mean, delta_i=di_mean,
+            evidentiary_level=facts[0].evidentiary_level,
+        ))
+    return tuple(out)
+
+
+def fact_from_bridge_result(r: BridgeResult) -> FactRow:
+    """Project a `BridgeResult` into a `FactRow`.
+
+    `reads` is `frozenset(r.targets)` — the bridge's declared
+    target keys. Bridges that consume registered measurables get
+    a richer reads-set when consumers call
+    `Bridge.transitive_reads()` and substitute it; per-result
+    bridge introspection isn't possible from `BridgeResult`
+    alone (no back-reference to the Bridge that produced it),
+    so this projection uses targets only."""
+    strength = natural_strength_from_stats(r.stats)
+    delta_i = _delta_i_oriented(strength, r.verdict)
+    return FactRow(
+        name=r.name,
+        reads=frozenset(r.targets),
+        verdict=r.verdict,
+        natural_strength=strength,
+        delta_i=delta_i,
+        evidentiary_level=_evidentiary_level_from_bridge_result(r),
+    )
+
+
+# ============ HypothesisComparisonRow.from_cells ============
+
+def _partition_runs_by(
+    runs: Sequence[RunRow], group_by: str,
+) -> dict[object, list[RunRow]]:
+    """Partition runs by the value of measurement key `group_by`.
+    Loud KeyError when a run is missing the key."""
+    out: dict[object, list[RunRow]] = {}
+    for r in runs:
+        if group_by not in r.measurements:
+            raise KeyError(
+                f'run {r.id!r} missing group_by key {group_by!r}',
+            )
+        out.setdefault(r.measurements[group_by], []).append(r)
+    return out
+
+
+def _per_group_stats(
+    h: 'Hypothesis[Mapping[str, object]]',
+    group_value: object,
+    treatment_runs: Sequence[RunRow],
+    baseline_runs: Sequence[RunRow],
+    *,
+    outcome_path: str,
+    pair_by: tuple[str, ...],
+    alpha: float,
+    power: float,
+) -> tuple[GroupStats | None, int]:
+    """Pair within one group, compute Hedges' g + verdict +
+    GroupStats. Returns (GroupStats | None, n_dropped_unpaired).
+    None when no pairs survive the outcome-finite filter.
+
+    Raises ValueError on duplicate pair_by keys within an arm —
+    silent dedup would hide a misconfigured slice."""
+    t_by_pkey: dict[tuple[object, ...], RunRow] = {}
+    for r in treatment_runs:
+        pk = _run_pair_key(r, pair_by)
+        if pk in t_by_pkey:
+            raise ValueError(
+                f'duplicate pair_by={pair_by!r} key {pk!r} in '
+                f'treatment for group {group_value!r}',
+            )
+        t_by_pkey[pk] = r
+    b_by_pkey: dict[tuple[object, ...], RunRow] = {}
+    for r in baseline_runs:
+        pk = _run_pair_key(r, pair_by)
+        if pk in b_by_pkey:
+            raise ValueError(
+                f'duplicate pair_by={pair_by!r} key {pk!r} in '
+                f'baseline for group {group_value!r}',
+            )
+        b_by_pkey[pk] = r
+
+    paired = sorted(t_by_pkey.keys() & b_by_pkey.keys())
+    n_dropped = (
+        (len(t_by_pkey) - len(paired))
+        + (len(b_by_pkey) - len(paired))
+    )
+
+    a_values: list[float] = []
+    b_values: list[float] = []
+    deltas: list[float] = []
+    for pk in paired:
+        a = _run_outcome(t_by_pkey[pk], outcome_path)
+        b = _run_outcome(b_by_pkey[pk], outcome_path)
+        if not (math.isfinite(a) and math.isfinite(b)):
+            continue
+        a_values.append(a)
+        b_values.append(b)
+        deltas.append(a - b)
+
+    n_pairs = len(deltas)
+    if n_pairs == 0:
+        return None, n_dropped
+
+    a_mean = float(sum(a_values) / n_pairs)
+    b_mean = float(sum(b_values) / n_pairs)
+    a_sd: float | None
+    b_sd: float | None
+    if n_pairs > 1:
+        a_var = sum((v - a_mean) ** 2 for v in a_values) / (n_pairs - 1)
+        b_var = sum((v - b_mean) ** 2 for v in b_values) / (n_pairs - 1)
+        a_sd = float(a_var ** 0.5)
+        b_sd = float(b_var ** 0.5)
+    else:
+        a_sd = b_sd = None
+
+    g, se = (
+        hedges_g_paired(deltas) if n_pairs >= 2
+        else (float('nan'), float('nan'))
+    )
+    q = derived_q_from_g_se(g, se)
+    di = delta_i_from_q(q)
+    verdict, refutation, is_powered = verdict_from_paired_stats(
+        g, se, n_pairs,
+        predicted_direction=h.predicted_direction,
+        alpha=alpha, power=power,
+    )
+
+    g_safe: float | None = None if math.isnan(g) else float(g)
+    se_safe: float | None = None if math.isnan(se) else float(se)
+    q_safe: float | None = None if math.isnan(q) else float(q)
+
+    return GroupStats(
+        group_value=group_value,
+        n_pairs=n_pairs,
+        arm_a_mean=a_mean, arm_a_sd=a_sd,
+        arm_b_mean=b_mean, arm_b_sd=b_sd,
+        effect_size_g=g_safe, se=se_safe, derived_q=q_safe,
+        delta_i=di, verdict=verdict,
+        refutation_class=refutation,
+        adequately_powered=is_powered,
+    ), n_dropped
+
+
+def hypothesis_comparison_from_cells(
+    h: 'Hypothesis[Mapping[str, object]]',
+    treatment_runs: Sequence[RunRow],
+    baseline_runs: Sequence[RunRow],
+    *,
+    outcome_path: str,
+    pair_by: tuple[str, ...],
+    group_by: str | None = None,
+    alpha: float = 0.05,
+    power: float = 0.8,
+    cycle_id: str | None = None,
+    timestamp: str | None = None,
+) -> HypothesisComparisonRow:
+    """The canonical cross-arm aggregator. Builds one
+    HypothesisComparisonRow from per-cell `RunRow`s.
+
+    `pair_by` identifies a (treatment, baseline) pair within a
+    stratum (e.g. `('seed',)` for DQN). REQUIRED for paired tests.
+
+    `group_by` partitions runs into strata before pairing (e.g.
+    `'env_name'`). When set, the row carries `per_group:
+    tuple[GroupStats, ...]` AND `pooled: PooledStats` from
+    DerSimonian-Laird random-effects pooling across strata; the
+    top-level `effect_size_g` mirrors `pooled.pooled_g`.
+
+    When `group_by` is None, single-group mode: per-arm stats and
+    Hedges' g over the paired Δ distribution; `per_group=()`,
+    `pooled=None`.
+
+    Raises:
+    - `ValueError` on empty arms or empty `pair_by`.
+    - `ValueError` on duplicate `pair_by` keys within an arm
+      within a group (silent dedup would mask a misconfigured
+      slice).
+    - `KeyError` when a run is missing the `group_by` measurement
+      key (should never happen for a correctly-typed corpus).
+
+    Drops unmatched pairs silently; the count lands on
+    `row.n_dropped_unpaired` so consumers see the gap."""
+    if not treatment_runs:
+        raise ValueError(
+            'hypothesis_comparison_from_cells: treatment_runs empty',
+        )
+    if not baseline_runs:
+        raise ValueError(
+            'hypothesis_comparison_from_cells: baseline_runs empty',
+        )
+    if not pair_by:
+        raise ValueError(
+            'hypothesis_comparison_from_cells: pair_by must be non-empty',
+        )
+
+    intervention_name = _run_intervention_name(treatment_runs[0])
+
+    if group_by is None:
+        # Single-group mode.
+        gs, n_dropped = _per_group_stats(
+            h, group_value=None,
+            treatment_runs=treatment_runs,
+            baseline_runs=baseline_runs,
+            outcome_path=outcome_path,
+            pair_by=pair_by, alpha=alpha, power=power,
+        )
+        if gs is None:
+            return HypothesisComparisonRow(
+                id=str(uuid.uuid4()),
+                parent_id=None,
+                cycle_id=cycle_id,
+                timestamp=_resolved_timestamp(timestamp),
+                intervention_name=intervention_name,
+                treatment_run_ids=tuple(r.id for r in treatment_runs),
+                baseline_run_ids=tuple(r.id for r in baseline_runs),
+                predicted_direction=h.predicted_direction,
+                pair_by=pair_by,
+                group_by=group_by,
+                arm_a_n=0, arm_a_mean=None, arm_a_sd=None,
+                arm_b_n=0, arm_b_mean=None, arm_b_sd=None,
+                effect_size_g=None, se=None, derived_q=None,
+                delta_i_population=0.0,
+                adequately_powered=False,
+                verdict=Verdict.POWER_INSUFFICIENT,
+                refutation_class=None,
+                per_group=(), pooled=None,
+                facts=_aggregate_facts_across_runs(treatment_runs),
+                reads_set=frozenset(),
+                n_dropped_unpaired=n_dropped,
+            )
+        facts = _aggregate_facts_across_runs(treatment_runs)
+        reads_set = frozenset().union(
+            *(f.reads for f in facts),
+        ) if facts else frozenset()
+        return HypothesisComparisonRow(
+            id=str(uuid.uuid4()),
+            parent_id=None,
+            cycle_id=cycle_id,
+            timestamp=_resolved_timestamp(timestamp),
+            intervention_name=intervention_name,
+            treatment_run_ids=tuple(r.id for r in treatment_runs),
+            baseline_run_ids=tuple(r.id for r in baseline_runs),
+            predicted_direction=h.predicted_direction,
+            pair_by=pair_by,
+            group_by=group_by,
+            arm_a_n=gs.n_pairs, arm_a_mean=gs.arm_a_mean,
+            arm_a_sd=gs.arm_a_sd,
+            arm_b_n=gs.n_pairs, arm_b_mean=gs.arm_b_mean,
+            arm_b_sd=gs.arm_b_sd,
+            effect_size_g=gs.effect_size_g, se=gs.se,
+            derived_q=gs.derived_q,
+            delta_i_population=gs.delta_i,
+            adequately_powered=gs.adequately_powered,
+            verdict=gs.verdict,
+            refutation_class=gs.refutation_class,
+            per_group=(), pooled=None,
+            facts=facts, reads_set=reads_set,
+            n_dropped_unpaired=n_dropped,
+        )
+
+    # Stratified mode.
+    treatment_groups = _partition_runs_by(treatment_runs, group_by)
+    baseline_groups = _partition_runs_by(baseline_runs, group_by)
+    all_keys = sorted(
+        treatment_groups.keys() | baseline_groups.keys(),
+        key=lambda k: repr(k),
+    )
+
+    per_group: list[GroupStats] = []
+    g_se_pairs: list[tuple[float, float]] = []
+    n_dropped = 0
+    all_a: list[float] = []
+    all_b: list[float] = []
+
+    for gkey in all_keys:
+        t_g = treatment_groups.get(gkey, [])
+        b_g = baseline_groups.get(gkey, [])
+        if not t_g or not b_g:
+            n_dropped += len(t_g) + len(b_g)
+            continue
+        gs, dropped = _per_group_stats(
+            h, group_value=gkey,
+            treatment_runs=t_g,
+            baseline_runs=b_g,
+            outcome_path=outcome_path,
+            pair_by=pair_by, alpha=alpha, power=power,
+        )
+        n_dropped += dropped
+        if gs is None:
+            continue
+        per_group.append(gs)
+        if (gs.effect_size_g is not None
+                and gs.se is not None
+                and not math.isnan(gs.effect_size_g)
+                and not math.isnan(gs.se)):
+            g_se_pairs.append((gs.effect_size_g, gs.se))
+        if gs.arm_a_mean is not None:
+            all_a.extend([gs.arm_a_mean] * gs.n_pairs)
+        if gs.arm_b_mean is not None:
+            all_b.extend([gs.arm_b_mean] * gs.n_pairs)
+
+    pooled = random_effects_summary(g_se_pairs)
+    verdict_p, refutation_p = random_effects_verdict(
+        pooled, predicted_direction=h.predicted_direction,
+    )
+
+    arm_n = sum(gs.n_pairs for gs in per_group)
+    if math.isnan(pooled.pooled_g) or math.isnan(pooled.se_pooled):
+        effect_g: float | None = None
+        se_top: float | None = None
+        derived_q: float | None = None
+        delta_i_pop = 0.0
+        adequately_powered = False
+    else:
+        effect_g = float(pooled.pooled_g)
+        se_top = float(pooled.se_pooled)
+        # Use the pooled n_cells as n for power assessment — the
+        # appropriate n for "is the pooled estimate detectable at
+        # this number of cells?" rather than total pair count.
+        adequately_powered = adequately_powered_paired(
+            effect_g, pooled.n_cells, alpha=alpha, power=power,
+        )
+        q_val = derived_q_from_g_se(effect_g, se_top)
+        derived_q = None if math.isnan(q_val) else float(q_val)
+        delta_i_pop = (
+            delta_i_from_q(q_val) if not math.isnan(q_val) else 0.0
+        )
+
+    facts = _aggregate_facts_across_runs(treatment_runs)
+    reads_set = frozenset().union(
+        *(f.reads for f in facts),
+    ) if facts else frozenset()
+
+    return HypothesisComparisonRow(
+        id=str(uuid.uuid4()),
+        parent_id=None,
+        cycle_id=cycle_id,
+        timestamp=_resolved_timestamp(timestamp),
+        intervention_name=intervention_name,
+        treatment_run_ids=tuple(r.id for r in treatment_runs),
+        baseline_run_ids=tuple(r.id for r in baseline_runs),
+        predicted_direction=h.predicted_direction,
+        pair_by=pair_by,
+        group_by=group_by,
+        arm_a_n=arm_n,
+        arm_a_mean=(
+            float(sum(all_a) / arm_n) if arm_n > 0 else None
+        ),
+        arm_a_sd=None,
+        arm_b_n=arm_n,
+        arm_b_mean=(
+            float(sum(all_b) / arm_n) if arm_n > 0 else None
+        ),
+        arm_b_sd=None,
+        effect_size_g=effect_g,
+        se=se_top,
+        derived_q=derived_q,
+        delta_i_population=delta_i_pop,
+        adequately_powered=adequately_powered,
+        verdict=verdict_p,
+        refutation_class=refutation_p,
+        per_group=tuple(per_group),
+        pooled=pooled,
+        facts=facts,
+        reads_set=reads_set,
+        n_dropped_unpaired=n_dropped,
+    )

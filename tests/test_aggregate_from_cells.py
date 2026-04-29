@@ -1,0 +1,307 @@
+"""Tests for `HypothesisComparisonRow.from_cells` — the canonical
+cross-arm aggregator + supporting primitives (FactRow,
+fact_from_bridge_result, natural_strength_from_stats,
+transitive_reads).
+
+Validates:
+1. Single-group `from_cells` produces correct per-arm + Hedges' g
+   on a synthetic paired corpus.
+2. Stratified `from_cells` (group_by='env_name') partitions, runs
+   per-stratum stats, pools via random-effects, mirrors pooled_g
+   in the top-level row.
+3. Duplicate `pair_by` keys raise ValueError (silent dedup is the
+   bug class this replaces).
+4. Asymmetric counts drop unmatched pairs and report the count
+   in `n_dropped_unpaired`.
+5. FactRow projection from BridgeResult correctly extracts
+   natural_strength + delta_i + evidentiary_level.
+6. transitive_reads closes over the measurable graph.
+7. Bridge.transitive_reads unions targets + measurable closure.
+"""
+from __future__ import annotations
+
+from collections.abc import Mapping
+
+import math
+
+from corroborate.aggregate import (
+    fact_from_bridge_result,
+    hypothesis_comparison_from_cells,
+    natural_strength_from_stats,
+)
+from corroborate.bridge import Bridge, BridgeResult, bridge
+from corroborate.hypothesis import Hypothesis
+from corroborate.measurable import measurable, transitive_reads
+from corroborate.schema import (
+    FactRow,
+    GroupStats,
+    HypothesisComparisonRow,
+    RunRow,
+)
+from corroborate.verdict import Verdict
+
+
+def _run(
+    cell_id: str,
+    *,
+    intervention_name: str,
+    seed: int,
+    env: str,
+    outcome: float,
+    extras: Mapping[str, object] | None = None,
+) -> RunRow:
+    """Build a minimal RunRow with the measurements `from_cells`
+    needs (intervention_name, seed, env_name, outcome)."""
+    measurements: dict[str, object] = {
+        'intervention_name': intervention_name,
+        'seed': seed,
+        'env_name': env,
+        'outcome.value': outcome,
+    }
+    if extras:
+        measurements.update(extras)
+    return RunRow(
+        id=cell_id, parent_id=None, cycle_id=None,
+        timestamp='2026-04-29T00:00:00+00:00',
+        verdict=Verdict.HELD,
+        measurements=measurements,  # type: ignore[arg-type]
+    )
+
+
+def _hypothesis(name: str, predicted: str | None) -> Hypothesis[Mapping[str, object]]:
+    return Hypothesis(
+        name=name,
+        intervention={},
+        bridges=(),
+        predicted_direction=predicted,  # type: ignore[arg-type]
+    )
+
+
+# ============ Single-group from_cells ============
+
+def test_from_cells_single_group_paired_hedges_g() -> None:
+    """One env, 6 seeds, treatment outcome systematically beats
+    baseline with non-zero Δ variance → finite paired Hedges' g.
+    group_by=None."""
+    # Per-seed Δs vary so SD(Δ) > 0 and Hedges' g is defined.
+    deltas = [0.4, 0.6, 0.5, 0.7, 0.55, 0.45]
+    treatment = [
+        _run(f't{i}', intervention_name='ddqn', seed=i,
+             env='Acrobot', outcome=1.0 + i * 0.1 + deltas[i])
+        for i in range(6)
+    ]
+    baseline = [
+        _run(f'b{i}', intervention_name='vanilla', seed=i,
+             env='Acrobot', outcome=1.0 + i * 0.1)
+        for i in range(6)
+    ]
+    h = _hypothesis('ddqn', 'a_gt_b')
+    row = HypothesisComparisonRow.from_cells(
+        h, treatment, baseline,
+        outcome_path='outcome.value',
+        pair_by=('seed',),
+    )
+    assert row.intervention_name == 'ddqn'
+    assert row.pair_by == ('seed',)
+    assert row.group_by is None
+    assert row.per_group == ()
+    assert row.pooled is None
+    assert row.arm_a_n == 6 and row.arm_b_n == 6
+    assert row.effect_size_g is not None and row.effect_size_g > 0
+
+
+def test_from_cells_single_group_no_pairs_returns_underpowered_row() -> None:
+    """Treatment + baseline at disjoint seeds → 0 pairs survive →
+    POWER_INSUFFICIENT verdict, all stats None."""
+    treatment = [_run('t0', intervention_name='ddqn', seed=0,
+                      env='X', outcome=1.0)]
+    baseline = [_run('b1', intervention_name='vanilla', seed=1,
+                     env='X', outcome=0.5)]
+    h = _hypothesis('ddqn', None)
+    row = HypothesisComparisonRow.from_cells(
+        h, treatment, baseline,
+        outcome_path='outcome.value', pair_by=('seed',),
+    )
+    assert row.verdict is Verdict.POWER_INSUFFICIENT
+    assert row.effect_size_g is None
+    assert row.n_dropped_unpaired == 2
+
+
+# ============ Stratified from_cells (group_by) ============
+
+def test_from_cells_stratified_per_group_plus_pooled() -> None:
+    """Two envs × 6 seeds; per-seed Δ varies so per-stratum
+    Hedges' g is finite. Stratified mode produces 2 GroupStats and
+    a pooled summary."""
+    treatment = []
+    baseline = []
+    deltas_a = [0.4, 0.6, 0.5, 0.7, 0.55, 0.45]
+    deltas_b = [0.7, 0.9, 0.8, 1.0, 0.85, 0.75]
+    for env, deltas in (('A', deltas_a), ('B', deltas_b)):
+        for s in range(6):
+            treatment.append(_run(
+                f't_{env}_{s}', intervention_name='ddqn', seed=s,
+                env=env, outcome=1.0 + s * 0.1 + deltas[s],
+            ))
+            baseline.append(_run(
+                f'b_{env}_{s}', intervention_name='vanilla', seed=s,
+                env=env, outcome=1.0 + s * 0.1,
+            ))
+    h = _hypothesis('ddqn', 'a_gt_b')
+    row = HypothesisComparisonRow.from_cells(
+        h, treatment, baseline,
+        outcome_path='outcome.value',
+        pair_by=('seed',),
+        group_by='env_name',
+    )
+    assert row.group_by == 'env_name'
+    assert len(row.per_group) == 2
+    assert row.pooled is not None
+    assert row.pooled.n_cells == 2
+    # Top-level effect_size_g mirrors pooled_g.
+    assert row.effect_size_g is not None
+    assert math.isclose(row.effect_size_g, row.pooled.pooled_g)
+    # Per-group group_values cover both envs.
+    group_values = {gs.group_value for gs in row.per_group}
+    assert group_values == {'A', 'B'}
+
+
+def test_from_cells_stratified_drops_groups_with_one_arm() -> None:
+    """Treatment has env C but baseline doesn't — env C contributes
+    to n_dropped_unpaired and is absent from per_group."""
+    treatment = [
+        _run(f't_A_{s}', intervention_name='t', seed=s,
+             env='A', outcome=1.0 + s * 0.1)
+        for s in range(3)
+    ] + [
+        _run('t_C_0', intervention_name='t', seed=0, env='C',
+             outcome=2.0),
+    ]
+    baseline = [
+        _run(f'b_A_{s}', intervention_name='b', seed=s,
+             env='A', outcome=0.5 + s * 0.1)
+        for s in range(3)
+    ]
+    h = _hypothesis('t', None)
+    row = HypothesisComparisonRow.from_cells(
+        h, treatment, baseline,
+        outcome_path='outcome.value',
+        pair_by=('seed',),
+        group_by='env_name',
+    )
+    # Only env A has both arms; env C dropped.
+    assert {gs.group_value for gs in row.per_group} == {'A'}
+    assert row.n_dropped_unpaired >= 1
+
+
+# ============ Validation: duplicate pair_by ============
+
+def test_from_cells_raises_on_duplicate_pair_by_in_treatment() -> None:
+    """Two treatment rows with the same seed → silent dict
+    overwrite would mask a misconfigured slice. Raise loudly."""
+    treatment = [
+        _run('t0', intervention_name='ddqn', seed=0,
+             env='A', outcome=1.0),
+        _run('t0_dup', intervention_name='ddqn', seed=0,
+             env='A', outcome=1.5),  # same seed
+    ]
+    baseline = [
+        _run('b0', intervention_name='vanilla', seed=0,
+             env='A', outcome=0.5),
+    ]
+    h = _hypothesis('ddqn', None)
+    try:
+        HypothesisComparisonRow.from_cells(
+            h, treatment, baseline,
+            outcome_path='outcome.value', pair_by=('seed',),
+        )
+    except ValueError as e:
+        assert 'duplicate pair_by' in str(e)
+        return
+    raise AssertionError('expected ValueError')
+
+
+# ============ FactRow + natural_strength ============
+
+def test_natural_strength_from_rho_caps_at_one() -> None:
+    assert natural_strength_from_stats({'rho': 0.7}) == 0.7
+    assert natural_strength_from_stats({'rho': -0.5}) == 0.5
+    assert natural_strength_from_stats({'rho': 1.5}) == 1.0
+
+
+def test_natural_strength_from_threshold_margin() -> None:
+    """value=0.4, threshold=2.0 → margin = 1 - 0.2 = 0.8."""
+    s = natural_strength_from_stats({'value': 0.4, 'threshold': 2.0})
+    assert math.isclose(s, 0.8)
+
+
+def test_natural_strength_falls_back_to_zero() -> None:
+    assert natural_strength_from_stats({'unknown_stat': 0.5}) == 0.0
+
+
+def test_fact_from_bridge_result_carries_targets_and_strength() -> None:
+    r = BridgeResult(
+        verdict=Verdict.HELD, reason='ρ above threshold',
+        stats={'rho': 0.6, 'tier': 'interventional'},
+        name='hasselt_link', targets=('q_max', 'mc_return'),
+    )
+    fact = fact_from_bridge_result(r)
+    assert fact.name == 'hasselt_link'
+    assert fact.reads == frozenset({'q_max', 'mc_return'})
+    assert fact.verdict is Verdict.HELD
+    assert fact.natural_strength == 0.6
+    assert fact.evidentiary_level == 'causal_one_sided'
+    # delta_i: q_oriented = 0.5 + 0.5 * 0.6 = 0.8;
+    # H₂(0.8) ≈ 0.722; ΔI ≈ 1 - 0.722 ≈ 0.278.
+    assert 0.25 < fact.delta_i < 0.30
+
+
+def test_fact_from_rejected_bridge_has_refuted_level() -> None:
+    r = BridgeResult(
+        verdict=Verdict.NO_EFFECT, reason='|ρ| below null band',
+        stats={'rho': 0.1},
+        name='link_x', targets=('a',),
+    )
+    fact = fact_from_bridge_result(r)
+    assert fact.verdict is Verdict.NO_EFFECT
+    assert fact.evidentiary_level == 'refuted'
+
+
+# ============ transitive_reads / Bridge.transitive_reads ============
+
+def test_transitive_reads_closes_over_measurable_graph() -> None:
+    """A measurable that depends on another measurable inherits
+    its reads transitively."""
+    @measurable(reads=('online_max_q_per_step',))
+    def _q_peak_internal(record: Mapping[str, object]) -> float:
+        return 0.0
+
+    @measurable
+    def _peak_late_internal(
+        record: Mapping[str, object], _q_peak_internal: float,
+    ) -> float:
+        return _q_peak_internal
+
+    closure = transitive_reads('_peak_late_internal')
+    assert 'online_max_q_per_step' in closure
+
+
+def test_bridge_transitive_reads_unions_targets_and_measurable_closure() -> None:
+    """A bridge declares targets + reads a measurable param. Its
+    transitive_reads = targets ∪ measurable's reads."""
+    @measurable(reads=('td_error',))
+    def _td_late_internal(record: Mapping[str, object]) -> float:
+        return 0.0
+
+    @bridge(targets=('reward', 'done'))
+    def _bridge_internal(
+        record: Mapping[str, object], _td_late_internal: float,
+    ) -> BridgeResult:
+        return BridgeResult(
+            verdict=Verdict.HELD, reason='ok',
+            stats={}, name='_bridge_internal',
+            targets=('reward', 'done'),
+        )
+
+    closure = _bridge_internal.transitive_reads()
+    assert closure == frozenset({'reward', 'done', 'td_error'})

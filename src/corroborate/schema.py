@@ -53,7 +53,11 @@ Lineage is explicit via `*_id` fields:
   is a follow-up."""
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from corroborate.hypothesis import Hypothesis
 from dataclasses import dataclass, field
 from typing import Self
 
@@ -69,6 +73,7 @@ from corroborate._narrow import (
     require_verdict,
 )
 from corroborate.hypothesis import Direction
+from corroborate.statistics import PooledStats
 from corroborate.verdict import RefutationClass, Verdict
 
 
@@ -373,6 +378,166 @@ class ComparisonRow:
             refutation_class=optional_refutation_class(d, 'refutation_class'),
             adequately_powered=require_bool(d, 'adequately_powered'),
             measurements=measurements,
+        )
+
+
+# ============ FactRow — typed projection of a BridgeResult ============
+
+@dataclass(frozen=True, slots=True)
+class FactRow:
+    """One per-bridge / per-invariant fact attached to a hypothesis
+    comparison. The typed projection of a `BridgeResult` after a
+    cell evaluates its bridges + composition-discovered invariants.
+
+    Carries the verdict-oriented information `compute_R_info` and
+    the redundancy primitive will read:
+
+    - `name` — bridge / invariant identifier (matches
+      `BridgeResult.name`).
+    - `reads` — leaf record-key fingerprint (the union of the
+      bridge's `targets` and the transitive `reads` of any
+      registered measurables it consumes via `evaluate_with_
+      measurables`). Computed by `aggregate.fact_from_bridge_
+      result`.
+    - `verdict` — strongly-typed `Verdict`.
+    - `natural_strength` — continuous evidence strength in [0, 1],
+      derived from `BridgeResult.stats` (ρ, partial correlations,
+      threshold margins, ATE — whatever the bridge reports).
+    - `delta_i` — verdict-oriented information gain in bits,
+      `1 - H₂(q_oriented)` where `q_oriented = 0.5 ± 0.5 *
+      natural_strength` depending on verdict polarity.
+    - `evidentiary_level` — coarse causal-tier label
+      ('correlational' / 'causal_one_sided' / 'refuted').
+    - `refutation_class` — `RefutationClass | None` (only set on
+      REJECT-style verdicts where the comparison-level diagnostic
+      could distinguish null vs underpowered)."""
+    name: str
+    reads: frozenset[str]
+    verdict: Verdict
+    natural_strength: float
+    delta_i: float
+    evidentiary_level: str
+    refutation_class: RefutationClass | None = None
+
+
+# ============ GroupStats — per-stratum summary ============
+
+@dataclass(frozen=True, slots=True)
+class GroupStats:
+    """Per-stratum (paired Hedges' g + se + verdict) summary, one
+    per `group_by`-value when `HypothesisComparisonRow.from_cells`
+    runs in stratified mode.
+
+    `group_value` carries whatever value the `group_by` column had
+    for this stratum (e.g. `'CartPole-v1'` when `group_by=
+    'env_name'`). Heterogeneous Python types are intentional —
+    different substrates use different group identities."""
+    group_value: object
+    n_pairs: int
+    arm_a_mean: float | None
+    arm_a_sd: float | None
+    arm_b_mean: float | None
+    arm_b_sd: float | None
+    effect_size_g: float | None
+    se: float | None
+    derived_q: float | None
+    delta_i: float
+    verdict: Verdict
+    refutation_class: RefutationClass | None
+    adequately_powered: bool
+
+
+# ============ HypothesisComparisonRow — canonical aggregator ============
+
+@dataclass(frozen=True, slots=True)
+class HypothesisComparisonRow:
+    """The canonical per-hypothesis comparison row. Materialized by
+    `from_cells` from per-cell `RunRow`s; never authored by hand.
+
+    Compresses the per-(env, leaf-sig) `paired_comparison_from_
+    runs` + cross-env `random_effects_summary` thread into one
+    object. When `group_by` is None, single-group mode: per-arm
+    stats + Hedges' g over the paired Δ distribution. When
+    `group_by` is set, stratified mode: `per_group` carries one
+    `GroupStats` per stratum and `pooled` carries the random-
+    effects pooled summary; the row's top-level `effect_size_g`
+    mirrors `pooled.pooled_g`.
+
+    `pair_by` and `group_by` are recorded on the row so consumers
+    know how the aggregation was performed.
+
+    `facts` is the deduped union of bridge / invariant facts
+    across treatment cells (one FactRow per name; verdict folded
+    by majority, natural_strength by mean). `reads_set` is the
+    union of fact reads — the input to the redundancy primitive."""
+    id: str
+    parent_id: str | None
+    cycle_id: str | None
+    timestamp: str
+    intervention_name: str
+    treatment_run_ids: tuple[str, ...]
+    baseline_run_ids: tuple[str, ...]
+    predicted_direction: Direction | None
+    pair_by: tuple[str, ...]
+    group_by: str | None
+
+    # Single-group / overall stats.
+    arm_a_n: int
+    arm_a_mean: float | None
+    arm_a_sd: float | None
+    arm_b_n: int
+    arm_b_mean: float | None
+    arm_b_sd: float | None
+    effect_size_g: float | None
+    se: float | None
+    derived_q: float | None
+    delta_i_population: float
+    adequately_powered: bool
+    verdict: Verdict
+    refutation_class: RefutationClass | None
+
+    # Stratified mode (empty / None when group_by is None).
+    per_group: tuple[GroupStats, ...]
+    pooled: PooledStats | None
+
+    # Fact union + reads.
+    facts: tuple[FactRow, ...]
+    reads_set: frozenset[str]
+
+    # Diagnostics.
+    n_dropped_unpaired: int
+
+    @classmethod
+    def from_cells(
+        cls,
+        h: 'Hypothesis[Mapping[str, object]]',
+        treatment_runs: Sequence['RunRow'],
+        baseline_runs: Sequence['RunRow'],
+        *,
+        outcome_path: str,
+        pair_by: tuple[str, ...],
+        group_by: str | None = None,
+        alpha: float = 0.05,
+        power: float = 0.8,
+        cycle_id: str | None = None,
+        timestamp: str | None = None,
+    ) -> 'HypothesisComparisonRow':
+        """Canonical constructor — never call `__init__` directly.
+        Delegates to `corroborate.aggregate.
+        hypothesis_comparison_from_cells` (lazy import avoids the
+        schema → aggregate cycle).
+
+        See `hypothesis_comparison_from_cells` for parameter
+        semantics."""
+        from corroborate.aggregate import (
+            hypothesis_comparison_from_cells,
+        )
+        return hypothesis_comparison_from_cells(
+            h, treatment_runs, baseline_runs,
+            outcome_path=outcome_path,
+            pair_by=pair_by, group_by=group_by,
+            alpha=alpha, power=power,
+            cycle_id=cycle_id, timestamp=timestamp,
         )
 
 

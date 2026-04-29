@@ -76,6 +76,25 @@ class Bridge[R: Mapping[str, object]]:
     def __call__(self, record: R, **deps: object) -> BridgeResult:
         return self.fn(record, **deps)
 
+    def transitive_reads(self) -> frozenset[str]:
+        """Leaf record-keys this bridge ultimately reads, closing
+        over the measurable graph for any registered-measurable
+        parameters in `fn`'s signature.
+
+        Returns `frozenset(targets) ∪ ⋃_{p ∈ measurable_params}
+        transitive_reads(p)`. The reads-set the redundancy
+        primitive consumes."""
+        # Local import to avoid circular dependency
+        # (measurable.py is independent of bridge.py).
+        from corroborate.measurable import (
+            _measurable_param_names,  # pyright: ignore[reportPrivateUsage]
+            transitive_reads,
+        )
+        out: set[str] = set(self.targets)
+        for dep_name in _measurable_param_names(self.fn):
+            out.update(transitive_reads(dep_name))
+        return frozenset(out)
+
 
 def bridge[R: Mapping[str, object]](
     *,
