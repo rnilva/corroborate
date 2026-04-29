@@ -63,11 +63,14 @@ def main() -> None:
     runs_df = pl.read_parquet(_RUNS_PATH)
     print(f'  {runs_df.height} rows × {len(runs_df.columns)} cols')
 
-    traces = read_tracerows(
-        _TRACES_PATH,
-        zarr_path=_ZARR_PATH if _ZARR_PATH.exists() else None,
-    )
-    print(f'  {len(traces)} traces')
+    # Mediators only read 1-D per-step series (online_*_q_per_step,
+    # td_error, buf_size, *_argmax_per_step) — all of which live
+    # in the parquet, not zarr. Skip the zarr load entirely; it
+    # holds eval-burst tensors (mc_return, predicted_q_at_start,
+    # ...) that no mediator reads. This keeps the read step at
+    # ~5 GB RAM instead of ~50 GB.
+    traces = read_tracerows(_TRACES_PATH, zarr_path=None)
+    print(f'  {len(traces)} traces (parquet-only, zarr skipped)')
 
     traces_by_id = {t.id: t for t in traces}
 

@@ -133,3 +133,73 @@ def test_epsilon_late_returns_nan_on_zero_anneal() -> None:
         eps_init=1.0, eps_final=0.0,
         anneal_steps=0, total_steps=200,
     ))
+
+
+# ============ Measurable-contract tests ============
+
+def test_record_only_mediators_are_typed_measurables() -> None:
+    """Each of the 6 record→float mediators is a `Measurable`
+    instance carrying name + reads."""
+    from corroborate.measurable import Measurable
+    from corroborate.rl.dqn.mediators import RECORD_ONLY_MEDIATORS
+
+    assert len(RECORD_ONLY_MEDIATORS) == 6
+    for m in RECORD_ONLY_MEDIATORS:
+        assert isinstance(m, Measurable)
+        assert m.name != ''
+        # All record-only mediators read at least one record key.
+        assert len(m.reads) >= 1
+
+
+def test_mediators_registered_under_their_function_names() -> None:
+    """`@measurable` registers each mediator under its declared
+    name in the global registry; lookup via `get_registered`
+    returns the same instance."""
+    from corroborate.measurable import get_registered
+
+    for name in (
+        'q_gap_late', 'q_gap_growth', 'q_max_growth',
+        'v_vs_max_delta_late', 'td_residual_late',
+        'greedy_match_late', 'fill_ratio_late',
+    ):
+        m = get_registered(name)
+        assert m is not None, f'{name} not in measurable registry'
+        assert m.name == name
+
+
+def test_mediator_reads_match_declared_record_keys() -> None:
+    """Each mediator's `reads` declares the exact record keys its
+    fn body consumes — used downstream by Bridge.transitive_reads
+    for the redundancy primitive."""
+    assert q_gap_late.reads == (
+        'online_max_q_per_step', 'online_min_q_per_step',
+    )
+    assert q_max_growth.reads == ('online_max_q_per_step',)
+    assert td_residual_late.reads == ('td_error',)
+    assert greedy_match_late.reads == (
+        'online_argmax_per_step', 'target_argmax_per_step',
+    )
+    assert fill_ratio_late.reads == ('buf_size',)
+
+
+def test_fill_ratio_late_is_measurable_with_extra_kwarg() -> None:
+    """fill_ratio_late wraps as Measurable but takes an extra
+    `capacity` kwarg the framework's auto-resolver doesn't fill.
+    Caller must pass capacity directly."""
+    from corroborate.measurable import Measurable
+
+    assert isinstance(fill_ratio_late, Measurable)
+    record = {'buf_size': np.array([0, 100, 500, 1000])}
+    # Direct call with capacity works (Measurable.__call__ proxies
+    # to fn(record, **deps) — passing capacity as a dep).
+    assert fill_ratio_late(record, capacity=1000) == 0.75
+
+
+def test_epsilon_late_is_plain_function_not_measurable() -> None:
+    """epsilon_late doesn't fit Measurable[Mapping, T] because it
+    takes no record. Stays a plain function — the registry
+    doesn't know about it."""
+    from corroborate.measurable import Measurable, get_registered
+
+    assert not isinstance(epsilon_late, Measurable)
+    assert get_registered('epsilon_late') is None
