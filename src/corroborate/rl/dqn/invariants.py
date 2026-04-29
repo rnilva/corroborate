@@ -34,6 +34,7 @@ MC-return ground truth for Jensen bias) are deferred — see
 FUTURE_WORKS.md."""
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 
 import jax.numpy as jnp
@@ -193,6 +194,99 @@ def jensen_overestimation_gap() -> Measurable[DQNTrajectoryRecord, float]:
     )
 
 
+# ============ Jensen structural floor + dormancy gap ============
+#
+# The Jensen-overestimation theorem (Hasselt 2010) gives, for |A|
+# iid noisy Q estimators with std σ:
+#
+#     E[max_a Q̂_a] − max_a E[Q̂_a]  ≳  σ · √(2 log |A|)
+#
+# This is the *structural floor* of the bias under the iid-Gaussian
+# regime — the minimum overestimation that exists by Jensen alone.
+# DDQN's `double_greedify` claims to reduce overestimation by
+# decoupling selection from valuation; for the claim to bite, the
+# observed bias has to actually be in this regime (≥ the floor).
+# When the observed bias is *below* the structural floor, the
+# Jensen-premise of `double_greedify` is dormant — there's no max-
+# of-noisy-estimators bias to correct, so the mechanism's edge in
+# the causal chain is structurally weak.
+#
+# Implementation note (load-bearing). The structural floor depends
+# on (action_dim, q_noise). Both surface naturally from the per-
+# step Q distribution `online_q_per_action` shape `(steps,
+# n_actions)`:
+# - `n_actions = q.shape[-1]` — action dim is the last axis's
+#   length, no separate measurement plumbing needed.
+# - `σ_q = mean_t std_a(q[t, :])` — std *across actions* per step,
+#   averaged across the late training half. Each axis-collapse is
+#   spelled out explicitly: `jnp.std(..., axis=-1)` for the action
+#   axis (where Jensen-max bias is computed), then `jnp.mean(...)`
+#   for the time axis to produce the scalar floor. Aggregating in
+#   one shot would hide which axis is which.
+
+def jensen_floor_late() -> Measurable[DQNTrajectoryRecord, float]:
+    """Structural Jensen floor: `σ_late × √(2 log |A|)`. Reads
+    `online_q_per_action` shape `(steps, n_actions)`. Returns the
+    minimum-bias-by-Jensen-alone scalar at the late-half regime.
+
+    The σ collapse is over the action axis (per-step std-across-
+    actions), then averaged over the late training half. The mean
+    is inevitable to make the metric scalar; making it explicit
+    keeps the action-axis dependence visible in the code path."""
+    name = 'jensen_floor_late'
+
+    def fn(record: DQNTrajectoryRecord) -> float:
+        q = jnp.asarray(record['online_q_per_action'])
+        # Shape contract: (steps, n_actions). Action dim emerges
+        # from `q.shape[-1]` — explicit, no plumbed leaf.
+        if q.ndim != 2 or q.shape[0] < 2 or q.shape[1] < 2:
+            return float('nan')
+        n_actions = int(q.shape[-1])
+        late_lo = int(q.shape[0]) // 2
+        late = q[late_lo:]                          # (late_steps, n_actions)
+        per_step_action_std = jnp.std(late, axis=-1)  # (late_steps,)
+        sigma = float(jnp.mean(per_step_action_std))
+        if not math.isfinite(sigma):
+            return float('nan')
+        return sigma * math.sqrt(2.0 * math.log(n_actions))
+
+    return Measurable(fn=fn, name=name, reads=('online_q_per_action',))
+
+
+def jensen_dormancy_gap() -> Measurable[DQNTrajectoryRecord, float]:
+    """Gap between the *structural* Jensen floor and the *observed*
+    overestimation: `max(0, floor − observed_gap)`.
+
+    Convention: gap = 0 ⇒ Jensen-premise active (observed bias ≥
+    structural floor), so `double_greedify` has something to
+    correct. gap > 0 ⇒ Jensen-premise dormant (observed bias is
+    *below* what Jensen-alone would predict at this |A| and σ_Q),
+    so the mechanism's edge in DDQN's causal chain is structurally
+    weak — the data isn't in the regime where decoupling matters.
+
+    Wrap with `at_most(jensen_dormancy_gap, threshold=0,
+    of_claim=double_greedify)` to commit the scope: HELD when
+    premise active, INVARIANT_VIOLATION when premise dormant.
+
+    Reads `(predicted_q_at_start, mc_return, online_q_per_action)`.
+    """
+    name = 'jensen_dormancy_gap'
+    observed = jensen_overestimation_gap()
+    floor = jensen_floor_late()
+
+    def fn(record: DQNTrajectoryRecord) -> float:
+        obs = observed.fn(record)
+        flr = floor.fn(record)
+        if math.isnan(obs) or math.isnan(flr):
+            return float('nan')
+        return float(max(0.0, flr - obs))
+
+    return Measurable(
+        fn=fn, name=name,
+        reads=('predicted_q_at_start', 'mc_return', 'online_q_per_action'),
+    )
+
+
 # ============ Watkins (s, a)-coverage gap (env-parameterised) ============
 
 def state_action_coverage_gap(
@@ -261,6 +355,8 @@ __all__ = [
     'DQNTrajectoryRecord',
     'fqi_decay_gap',
     'hasselt_covariance_gap',
+    'jensen_dormancy_gap',
+    'jensen_floor_late',
     'jensen_overestimation_gap',
     'state_action_coverage_gap',
 ]

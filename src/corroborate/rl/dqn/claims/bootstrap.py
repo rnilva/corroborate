@@ -36,6 +36,8 @@ import jax
 import jax.numpy as jnp
 
 from corroborate.claim import claim
+from corroborate.invariant import at_most, attach_invariant
+from corroborate.rl.dqn.invariants import jensen_dormancy_gap
 from corroborate.rl.dqn.types import (
     Greedification,
     GradientRule,
@@ -76,13 +78,36 @@ def double_greedify(
     Action selection uses online network; value evaluation uses
     target network. Hasselt 2016: this asymmetry reduces vanilla
     DQN's Q-overestimation bias by decorrelating the two
-    estimators (Jensen-bias signature)."""
+    estimators (Jensen-bias signature).
+
+    **Premise dependency.** The mechanism's bite scales with the
+    structural Jensen floor `σ_Q · √(2 log |A|)`: at |A|=2 with
+    low Q-noise the floor is small and the correction is
+    structurally weak. The attached `jensen_dormancy_gap`
+    invariant fires INVARIANT_VIOLATION when the *observed*
+    overestimation is below this floor — there's no Jensen-bias
+    above noise to correct, so the mechanism's causal-chain edge
+    is dormant on this run regardless of activation."""
     next_q_online = q_network(online_params, next_obs)
     a_star = jnp.argmax(next_q_online, axis=-1)
     next_q_target = q_network(target_params, next_obs)
     return jnp.take_along_axis(
         next_q_target, a_star[..., None], axis=-1,
     ).squeeze(-1)
+
+
+# Attach the Jensen-dormancy invariant to `double_greedify`. The
+# claim graph now exposes the dependency on (action_dim, σ_Q):
+# composition discovery surfaces the bridge whenever
+# `double_greedify` is in a theory tree, and `gap_value > 0`
+# (premise dormant) preempts an outcome-positive verdict.
+attach_invariant(
+    at_most(
+        jensen_dormancy_gap(), threshold=0.0,
+        of_claim=double_greedify,
+    ),
+    to=double_greedify,
+)
 
 
 # ============ Gradient rule: what backprops through target ============

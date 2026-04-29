@@ -32,6 +32,8 @@ from corroborate.rl.dqn.dqn import dqn_step, init_state
 from corroborate.rl.dqn.invariants import (
     fqi_decay_gap,
     hasselt_covariance_gap,
+    jensen_dormancy_gap,
+    jensen_floor_late,
     jensen_overestimation_gap,
     state_action_coverage_gap,
 )
@@ -304,6 +306,98 @@ def test_jensen_gap_zero_when_predicted_under_actual() -> None:
     }
     gap = jensen_overestimation_gap()
     assert gap(record) == 0.0
+
+
+def test_jensen_floor_scales_with_log_action_dim() -> None:
+    """σ × √(2 log |A|): doubling |A| from 2 to 4 increases the
+    floor by √(log 4 / log 2) = √2 ≈ 1.414. Action dim emerges
+    from `q.shape[-1]`; no separate plumbing."""
+    import math
+    sigma = 1.0
+    # |A|=2 with σ=1: floor = √(2·log 2) ≈ 1.1774
+    q2 = jnp.tile(jnp.array([[-sigma, sigma]]), (10, 1))
+    # |A|=4 with σ=1 (achieved by symmetric ±σ split): floor =
+    # √(2·log 4) ≈ 1.6651
+    q4 = jnp.tile(jnp.array([[-sigma, -sigma, sigma, sigma]]), (10, 1))
+    floor = jensen_floor_late()
+    f2 = floor({'online_q_per_action': q2})
+    f4 = floor({'online_q_per_action': q4})
+    assert math.isclose(f2, math.sqrt(2.0 * math.log(2.0)), rel_tol=1e-3)
+    assert math.isclose(f4, math.sqrt(2.0 * math.log(4.0)), rel_tol=1e-3)
+    # Ratio is √(log 4 / log 2) = √2.
+    assert math.isclose(f4 / f2, math.sqrt(2.0), rel_tol=1e-3)
+
+
+def test_jensen_floor_late_uses_late_half_only() -> None:
+    """Early half ignored: floor reflects late-training σ,
+    matching where DDQN's correction is supposed to bite."""
+    import math
+    n_steps = 20
+    early = jnp.tile(jnp.array([[-3.0, 3.0]]), (n_steps // 2, 1))   # σ=3
+    late = jnp.tile(jnp.array([[-1.0, 1.0]]), (n_steps // 2, 1))    # σ=1
+    q = jnp.concatenate([early, late], axis=0)
+    floor = jensen_floor_late()
+    val = floor({'online_q_per_action': q})
+    # Expected: σ_late=1, |A|=2 → 1 × √(2 log 2)
+    assert math.isclose(val, math.sqrt(2.0 * math.log(2.0)), rel_tol=1e-3)
+
+
+def test_jensen_floor_nan_for_too_few_steps_or_actions() -> None:
+    """Defensive: degenerate shapes (≤1 action or ≤1 step) yield
+    NaN — the formula's domain doesn't apply."""
+    import math
+    floor = jensen_floor_late()
+    assert math.isnan(floor({
+        'online_q_per_action': jnp.array([[1.0]]),  # |A|=1
+    }))
+    assert math.isnan(floor({
+        'online_q_per_action': jnp.array([[1.0, 2.0]]),  # 1 step
+    }))
+
+
+def test_jensen_dormancy_gap_zero_when_observed_above_floor() -> None:
+    """Premise active: observed bias ≥ structural floor. dormancy
+    gap = max(0, floor − observed) = 0."""
+    sigma = 1.0
+    q = jnp.tile(jnp.array([[-sigma, sigma]]), (10, 1))
+    record: Mapping[str, jnp.ndarray] = {
+        'predicted_q_at_start': jnp.full((5, 4), 11.0),
+        'mc_return': jnp.full((5, 4), 10.0),    # observed_gap = 1.0
+        'online_q_per_action': q,                # floor ≈ 1.18
+    }
+    # Wait — with observed=1.0 < floor≈1.18, premise is dormant.
+    # Use a larger observed gap to demonstrate the active case.
+    record = {
+        **record,
+        'predicted_q_at_start': jnp.full((5, 4), 12.0),  # gap=2.0 > 1.18
+    }
+    gap = jensen_dormancy_gap()
+    assert gap(record) == 0.0
+
+
+def test_jensen_dormancy_gap_positive_when_observed_below_floor() -> None:
+    """Premise dormant: observed bias < structural floor → dormancy
+    gap = floor − observed > 0."""
+    sigma = 1.0
+    q = jnp.tile(jnp.array([[-sigma, sigma]]), (10, 1))
+    record: Mapping[str, jnp.ndarray] = {
+        'predicted_q_at_start': jnp.full((5, 4), 10.5),
+        'mc_return': jnp.full((5, 4), 10.0),    # observed_gap = 0.5
+        'online_q_per_action': q,                # floor ≈ 1.1774
+    }
+    import math
+    val = jensen_dormancy_gap()(record)
+    expected_floor = math.sqrt(2.0 * math.log(2.0))
+    assert math.isclose(val, expected_floor - 0.5, rel_tol=1e-3)
+
+
+def test_jensen_dormancy_gap_carries_three_reads() -> None:
+    """Reads-set is the union of jensen_overestimation_gap +
+    jensen_floor_late."""
+    gap = jensen_dormancy_gap()
+    assert set(gap.reads) == {
+        'predicted_q_at_start', 'mc_return', 'online_q_per_action',
+    }
 
 
 def test_jensen_gap_carries_eval_record_reads() -> None:
