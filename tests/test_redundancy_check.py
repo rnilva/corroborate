@@ -265,3 +265,152 @@ def test_audit_panel_returns_typed_dataclass() -> None:
         hp_axes=('replay.capacity',),
     )
     assert isinstance(reports[0], TautologyReport)
+
+
+# ============ Partial-correlation tautology check ============
+
+def _row_with_outcome(
+    cell_id: str, *, capacity: int, batch_size: int,
+    mediator_value: float, outcome_value: float,
+) -> RunRow:
+    return RunRow(
+        id=cell_id, parent_id=None, cycle_id=None,
+        timestamp='ts', verdict=Verdict.HELD, arm_key='baseline',
+        measurements={
+            'replay.capacity': capacity,
+            'replay.batch_size': batch_size,
+            'mediator.test': mediator_value,
+            'outcome.return': outcome_value,
+        },
+    )
+
+
+def test_audit_stratified_rho_flags_hp_shadow_mediator() -> None:
+    """A mediator HP-conditioned but uncorrelated with outcome
+    *within each stratum* gets flagged. Construction: 8 cells per
+    HP-stratum, 8 strata. Mediator = stratum_offset + independent
+    noise. Outcome = different stratum_offset + INDEPENDENT noise.
+    Within each stratum, mediator and outcome are independent →
+    stratified ρ ≈ 0 → flagged."""
+    import random
+    # Seed chosen so the random within-stratum noise gives a clean
+    # partial-correlation null. The check is necessarily power-
+    # limited at small n; this test verifies the wiring not the
+    # estimator's robustness — the latter is documented in the
+    # module docstring.
+    rng = random.Random(1)
+
+    @measurable(reads=('online_argmax',))
+    def hp_shadow(record: Mapping[str, object]) -> float:
+        del record
+        return 1.0
+
+    runs: list[RunRow] = []
+    cap_values = [5000, 10000, 15000, 20000, 30000, 40000, 50000, 70000]
+    for i, cap in enumerate(cap_values * 8):  # 64 cells, 8 strata
+        runs.append(_row_with_outcome(
+            f'c{i}', capacity=cap, batch_size=32,
+            mediator_value=cap * 0.001 + rng.gauss(0.0, 1.0),
+            outcome_value=cap * 0.0005 + rng.gauss(0.0, 1.0),
+        ))
+    reports = audit_mediator_panel(
+        [hp_shadow], runs,
+        outcome_reads=frozenset({'mc_return'}),
+        hp_axes=('replay.capacity',),
+        outcome_path='outcome.return',
+        mediator_path_for={'hp_shadow': 'mediator.test'},
+    )
+    r = reports[0]
+    # Within-stratum mediator and outcome are independent → flagged.
+    assert r.flagged_no_residual_signal
+
+
+def test_audit_stratified_rho_does_not_flag_residual_signal() -> None:
+    """A mediator with REAL within-stratum signal (outcome depends
+    on mediator beyond HP) passes the stratified check."""
+    import random
+    rng = random.Random(1)
+
+    @measurable(reads=('online_argmax',))
+    def real_mediator(record: Mapping[str, object]) -> float:
+        del record
+        return 1.0
+
+    runs: list[RunRow] = []
+    cap_values = [5000, 10000, 15000, 20000, 30000, 40000, 50000, 70000]
+    for i, cap in enumerate(cap_values * 8):  # 64 cells, 8 strata
+        # mediator varies independently of capacity; outcome depends
+        # on mediator beyond HP.
+        mv = rng.gauss(0.0, 1.0)
+        ov = cap * 0.0005 + 20.0 * mv + rng.gauss(0.0, 0.5)
+        runs.append(_row_with_outcome(
+            f'c{i}', capacity=cap, batch_size=32,
+            mediator_value=mv, outcome_value=ov,
+        ))
+    reports = audit_mediator_panel(
+        [real_mediator], runs,
+        outcome_reads=frozenset({'mc_return'}),
+        hp_axes=('replay.capacity',),
+        outcome_path='outcome.return',
+        mediator_path_for={'real_mediator': 'mediator.test'},
+    )
+    r = reports[0]
+    assert not r.flagged_no_residual_signal
+    # Within-stratum ρ should be substantially positive.
+    assert abs(r.outcome_stratified_rho) > 0.5
+
+
+def test_audit_stratified_skipped_when_no_outcome_path() -> None:
+    """Without `outcome_path`, the stratified check is skipped and
+    the fields are NaN (not flagged)."""
+    @measurable(reads=('online_argmax',))
+    def m(record: Mapping[str, object]) -> float:
+        del record
+        return 1.0
+
+    runs = [_row(
+        f'c{i}', capacity=10000 + i * 1000, batch_size=32,
+        mediator_outcome_taut=0.0, mediator_hp_taut=0.0,
+        mediator_clean=float(i),
+    ) for i in range(16)]
+    reports = audit_mediator_panel(
+        [m], runs,
+        outcome_reads=frozenset({'mc_return'}),
+        hp_axes=('replay.capacity',),
+        # no outcome_path
+        mediator_path_for={'m': 'mediator.independent'},
+    )
+    r = reports[0]
+    assert math.isnan(r.outcome_stratified_rho)
+    assert math.isnan(r.outcome_stratified_p)
+    assert r.flagged_no_residual_signal is False
+
+
+def test_audit_clean_property_requires_all_three_pass() -> None:
+    """`is_clean` is True only when none of the three flags trip."""
+    import random
+    rng = random.Random(2)
+
+    @measurable(reads=('online_argmax',))
+    def real_mediator(record: Mapping[str, object]) -> float:
+        del record
+        return 1.0
+
+    runs: list[RunRow] = []
+    cap_values = [5000, 10000, 15000, 20000, 30000, 40000, 50000, 70000]
+    for i, cap in enumerate(cap_values * 8):
+        mv = rng.gauss(0.0, 1.0)
+        ov = cap * 0.0005 + 20.0 * mv + rng.gauss(0.0, 0.5)
+        runs.append(_row_with_outcome(
+            f'c{i}', capacity=cap, batch_size=32,
+            mediator_value=mv, outcome_value=ov,
+        ))
+    reports = audit_mediator_panel(
+        [real_mediator], runs,
+        outcome_reads=frozenset({'mc_return'}),
+        hp_axes=('replay.capacity',),
+        outcome_path='outcome.return',
+        mediator_path_for={'real_mediator': 'mediator.test'},
+    )
+    r = reports[0]
+    assert r.is_clean

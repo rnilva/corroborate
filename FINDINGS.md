@@ -5,6 +5,125 @@ to track when claims were authored vs. observed.
 
 ---
 
+## 2026-04-29 (third revision) — Tautology-audit reveals most "solve predictors" on the CartPole HP corpus are HP-shadow false-positives.
+
+### Methodology
+
+`redundancy_check.audit_mediator_panel` was extended with three
+independent checks:
+
+1. **Outcome-tautological** (`flagged_outcome`): structural reads-
+   set jaccard between the mediator and the outcome's source
+   columns. Flagged when ≥ 0.5.
+2. **HP-deterministic** (`flagged_hp`): per-axis OLS R² of mediator
+   on each HP. Flagged when ≥ 0.95.
+3. **HP-shadow / no-residual-signal** (`flagged_no_residual_signal`):
+   stratified Spearman ρ(mediator, outcome | HP-stratum) using
+   `causal_discovery.stratified_spearman_rho`. Flagged when |ρ| <
+   0.1 AND p ≥ 0.05 — within each HP stratum the mediator doesn't
+   correlate with the outcome, so the marginal correlation is
+   purely HP-mediated.
+
+The third check replaced an earlier partial-Spearman version that
+was systematically biased toward large ρ on small samples (rank
+artifacts when within-stratum noise was small relative to
+between-stratum signal).
+
+### Result on CartPole HP corpus (180 cells, 36 configs × 5 seeds, vanilla DQN)
+
+Outcome path: `outcome.eval_final_mean`. HP stratum: `replay.capacity`.
+
+| Mediator | jaccard | strat ρ | strat p | Flags |
+|---|---|---|---|---|
+| `learning_curve_auc` | 1.00 | +0.52 | <0.001 | **OUTCOME** |
+| `plateau_slope_late` | 1.00 | +0.44 | <0.001 | **OUTCOME** |
+| `return_at_25pct_steps` | 1.00 | +0.05 | 0.524 | **OUTCOME / SHADOW** |
+| `greedy_match_late` | 0.00 | −0.08 | 0.285 | **SHADOW** |
+| `q_gap_late` | 0.00 | +0.05 | 0.507 | **SHADOW** |
+| `q_max_growth` | 0.00 | −0.01 | 0.908 | **SHADOW** |
+| `v_vs_max_delta_late` | 0.00 | +0.05 | 0.507 | **SHADOW** |
+| `td_residual_late` | 0.00 | +0.10 | 0.168 | clean (borderline) |
+| `td_within_batch_var_late` | 0.00 | +0.10 | 0.179 | clean (borderline) |
+| `state_coverage_kl_uniform_late` | 0.00 | +0.19 | **0.011** | **clean ✓** |
+
+### Reading
+
+1. **Most "solve predictors" are mechanical, not causal.** Three
+   are outcome-tautological (read from `mc_return`, the same
+   trace column the outcome aggregates from); five more
+   (including `greedy_match_late`, which I had earlier framed as
+   the strongest scale-free predictor) are HP-shadow — their
+   marginal correlation with solving comes entirely from the
+   HP, with no residual within-capacity-stratum signal.
+
+2. **`greedy_match_late`'s sign-flip across HP regimes** (which
+   I'd noted earlier as a "wild interaction") is exactly the
+   signature of HP-shadow. Within each capacity, ρ ≈ 0; the
+   marginal cross-capacity correlation comes from the HP-driven
+   regime change, not from greedy-match per se.
+
+3. **`state_coverage_kl_uniform_late` is the only mediator with
+   significant residual signal** (ρ=+0.19, p=0.011). Within each
+   capacity stratum, agents whose late-training state visits are
+   more concentrated relative to uniform are more likely to solve.
+   Theoretical reading: solving cells have converged to a focused
+   policy region; non-solving cells are still flailing.
+
+4. **A new training-stability candidate** (`td_within_batch_var_late`
+   — within-batch std of |TD-error|, added to the substrate) passes
+   all three checks but has only borderline within-stratum signal
+   (ρ=+0.10, p=0.18). Promising but underpowered at n=180.
+
+### Implication for prior FINDINGS entries
+
+The "consistent positive predictors of solving" listed in the
+2026-04-29 morning entry (`learning_curve_auc`, `plateau_slope_late`,
+`return_at_25pct_steps`, `greedy_match_late`) are **all false
+positives** by the corrected three-check standard. The morning
+entry's claim that `learning_curve_auc` was the strongest predictor
+is now superseded — it was reading from `mc_return` (the outcome's
+source), so the high g was a re-encoding, not a mediator.
+
+This is the framework working as intended: the audit primitive
+catches an analyst (me) conflating outcome-restatement with
+causation, and HP-conditioning with causation.
+
+### Honest scope
+
+- **Within-capacity power is thin.** With 90 cells per capacity
+  level and 5 seeds per config, the within-stratum ρ has wide
+  CIs. Borderline mediators (`td_*` with ρ ≈ 0.10) need a fuller
+  sweep before we can call them clean *or* shadow.
+- **The audit is necessary, not sufficient.** Surviving all three
+  checks means the mediator might be causal — it doesn't prove
+  it. Only an interventional study that varies the mediator
+  directly can establish that. For `state_coverage_kl_uniform_late`,
+  a future study could add an exploration-bonus intervention to
+  test whether forcing higher coverage improves solving.
+- **The check at the corpus level depends on the HP grid spanning
+  enough variation.** A corpus with one HP setting can't surface
+  HP-shadow mediators by definition.
+
+### Reproduction
+
+```
+# Compute mediators on the CartPole HP corpus:
+uv run python experiments/cartpole_hp_sweep.py
+uv run python -c "import compute_mediators; ..."  # path-overridden
+
+# Apply the three-check audit:
+from corroborate.redundancy_check import audit_mediator_panel
+reports = audit_mediator_panel(
+    panel, runs,
+    outcome_reads=frozenset({'mc_return'}),
+    hp_axes=('replay.capacity', 'replay.batch_size', ...),
+    outcome_path='outcome.eval_final_mean',
+    hp_stratum_axis='replay.capacity',
+)
+```
+
+---
+
 ## 2026-04-29 (revised same day) — Substrate units bug + HP-conditioning of solve verdicts
 
 ### Bug

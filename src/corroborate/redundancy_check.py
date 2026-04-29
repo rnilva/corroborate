@@ -1,29 +1,46 @@
-"""Tautology audit — does a candidate mediator share information
-with the outcome (reads-set jaccard) or is it deterministic from
-the HP (regression R²)?
+"""Tautology audit — three independent checks for whether a
+candidate mediator can carry causal information in an HP→outcome
+analysis.
 
-Two distinct tautology kinds:
+Three distinct tautology kinds, each with its own check:
 
-- **Outcome-tautological**: the mediator reads from the same trace
-  columns the outcome aggregates from. Example: `learning_curve_auc`
-  integrates `mc_return` over training; `outcome.eval_best_burst_mean`
+- **Outcome-tautological** (`flagged_outcome`): the mediator reads
+  from the same trace columns the outcome aggregates from. Example:
+  `learning_curve_auc` integrates `mc_return`; the outcome path
   averages `mc_return` over eval bursts. The mediator's "g of solved
   vs unsolved" is then a re-statement of the outcome at a different
-  aggregation, not a causal mediator. Detected by jaccard on the
+  aggregation, not a causal mediator. **Detection**: jaccard on the
   measurable's `reads` field vs the outcome's source columns.
 
-- **HP-tautological**: the mediator's per-cell value is a
-  deterministic function of the HP. Example: at steady state with
-  uniform sampling, `mean_replay_sample_age = capacity / 2`. The
-  mediator then *encodes* the HP rather than mediating its effect.
-  Detected empirically: regress the mediator's per-cell value on the
-  HP axis; R² ≥ threshold flags determinism.
+- **HP-deterministic** (`flagged_hp`): the mediator's per-cell value
+  is a deterministic function of the HP. Example: at steady state
+  with uniform sampling, `mean_replay_sample_age = capacity / 2`.
+  **Detection**: OLS R² of mediator on HP ≥ threshold (default 0.95).
 
-Both checks gate whether a measurable can serve as a *causal*
-mediator in HP→outcome analyses. A measurable that's flagged on
-either check should not be reported as a mediator without explicit
-acknowledgment — its appearance as a "predictor of solve" is
-mechanical, not causal."""
+- **HP-shadow / no-residual-signal** (`flagged_no_residual_signal`):
+  the mediator's apparent association with the outcome is *entirely
+  mediated by the HP*. After controlling for HP via stratified
+  Spearman ρ(mediator, outcome | HP-stratum), the within-stratum
+  pooled correlation is near zero. The mediator doesn't contribute
+  solve-prediction beyond what the HP itself provides. Example:
+  `td_within_batch_var_late` on the CartPole HP corpus — strongly
+  HP-conditioned (10× difference cap=10k vs cap=50k), but within
+  each capacity stratum it doesn't predict solving.
+
+  Implementation note: uses `stratified_spearman_rho` (per-stratum
+  ρ pooled via Fisher z, weighted by n−3) rather than residual-
+  partial-Spearman, because the latter is unstable when within-
+  stratum noise is small relative to between-stratum signal — rank
+  residuals collapse and the resulting Pearson is noisy. Stratified
+  ρ is more robust at the discrete-HP-grid corpora the framework
+  typically operates on. Only one HP axis is used as the stratum
+  key (the first in `hp_axes`); for multi-axis HP-shadow detection
+  the analyst can collapse the HP grid into a single configuration
+  ID upstream.
+
+A clean mediator passes all three: structurally independent of the
+outcome's source columns, not deterministic in any HP, and adds
+residual signal beyond the HP."""
 from __future__ import annotations
 
 import math
@@ -32,6 +49,9 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
+import numpy as np
+
+from corroborate.causal_discovery import stratified_spearman_rho
 from corroborate.schema import RunRow
 
 
@@ -137,23 +157,39 @@ def is_hp_tautological(
 @dataclass(frozen=True, slots=True)
 class TautologyReport:
     """Per-measurable audit summary against a (corpus, outcome,
-    HP-axes) trio.
+    HP-axes) trio. Three flags, each from an independent check:
 
-    `outcome_jaccard` — reads-set jaccard with `outcome_reads`.
-    `hp_r_squared` — per-HP-axis R² of the mediator regressed on
-      that axis individually.
-    `flagged_outcome` — `outcome_jaccard ≥ outcome_threshold`.
-    `flagged_hp` — tuple of HP axis names where R² ≥ hp_threshold."""
+    `outcome_jaccard` / `flagged_outcome` — structural: reads-set
+      overlap with the outcome's source columns.
+    `hp_r_squared` / `flagged_hp` — empirical: per-HP-axis OLS R².
+      Flagged axes are those where the mediator is essentially a
+      deterministic function of the HP.
+    `outcome_stratified_rho` / `outcome_stratified_p` /
+    `flagged_no_residual_signal` — empirical: stratified Spearman
+      ρ(mediator, outcome | hp_stratum_axis). Flagged when |ρ| <
+      threshold AND p ≥ alpha — meaning within-stratum correlation
+      between mediator and outcome is null after pooling, so the
+      mediator's apparent outcome association is HP-mediated. NaN
+      when `outcome_path` or `hp_stratum_axis` wasn't provided."""
     measurable_name: str
     outcome_jaccard: float
     hp_r_squared: Mapping[str, float]
+    outcome_stratified_rho: float
+    outcome_stratified_p: float
     flagged_outcome: bool
     flagged_hp: tuple[str, ...]
+    flagged_no_residual_signal: bool
 
     @property
     def is_clean(self) -> bool:
-        """Mediator is independent of both outcome and HPs."""
-        return not self.flagged_outcome and not self.flagged_hp
+        """Mediator passes all three checks: structurally independent
+        of the outcome, not deterministic in any HP, and adds residual
+        signal beyond HP."""
+        return (
+            not self.flagged_outcome
+            and not self.flagged_hp
+            and not self.flagged_no_residual_signal
+        )
 
 
 def audit_mediator_panel(
@@ -162,23 +198,42 @@ def audit_mediator_panel(
     *,
     outcome_reads: frozenset[str],
     hp_axes: tuple[str, ...],
+    outcome_path: str | None = None,
+    hp_stratum_axis: str | None = None,
     mediator_path_for: Mapping[str, str] | None = None,
     outcome_jaccard_threshold: float = 0.5,
     hp_r_squared_threshold: float = 0.95,
+    stratified_rho_threshold: float = 0.1,
+    stratified_alpha: float = 0.05,
+    stratified_min_stratum_size: int = 4,
 ) -> tuple[TautologyReport, ...]:
-    """Audit a panel of mediators against an outcome's reads-set
-    and a set of HP axes.
+    """Audit a panel of mediators with all three checks.
 
-    `outcome_reads` — the set of trace-column names the outcome
-      aggregates from. Caller-provided because outcome paths are
-      flat strings on `RunRow.measurements`, not Measurable
-      instances.
-    `hp_axes` — sequence of `RunRow.measurements` keys that name the
-      HPs (e.g. `('replay.capacity', 'replay.batch_size', ...)`).
+    `outcome_reads` — trace-column names the outcome aggregates from.
+      Used for the structural jaccard check.
+    `hp_axes` — `RunRow.measurements` keys naming the HPs.
+    `outcome_path` — flat path to a per-cell outcome scalar. When
+      provided alongside `hp_stratum_axis`, the audit computes
+      stratified Spearman ρ(mediator, outcome | hp_stratum) for
+      each measurable.
+    `hp_stratum_axis` — single HP axis to stratify by for the
+      partial-correlation check. Defaults to the first axis in
+      `hp_axes`. (Multi-axis stratification means more strata with
+      fewer cells each — typically not power-feasible.)
     `mediator_path_for` — optional override mapping
-      `measurable.name → RunRow.measurements key`. Defaults to
-      `f'mediator.{measurable.name}'` (the cell-runner's projection
-      convention). Override per-measurable when the path differs."""
+      `measurable.name → RunRow.measurements key`.
+    `stratified_rho_threshold` — `|ρ| < threshold` flags HP-shadow.
+    `stratified_alpha` — significance threshold for the test.
+    `stratified_min_stratum_size` — strata with fewer cells are
+      skipped (Fisher-z floor at n=4).
+
+    Three flags per measurable:
+    - `flagged_outcome`: jaccard ≥ outcome_jaccard_threshold.
+    - `flagged_hp`: HP axes where R² ≥ hp_r_squared_threshold.
+    - `flagged_no_residual_signal`: |stratified_ρ| < threshold AND
+      p ≥ alpha — within each HP-stratum the mediator doesn't
+      correlate with the outcome, so the marginal correlation is
+      HP-mediated."""
     reports: list[TautologyReport] = []
     for m in measurables:
         # Outcome-side: structural reads-jaccard.
@@ -192,6 +247,7 @@ def audit_mediator_panel(
             else f'mediator.{m.name}'
         )
         mediator_vals: list[float] = []
+        outcome_vals: list[float] = []
         hp_vals_by_axis: dict[str, list[float]] = {a: [] for a in hp_axes}
         for r in runs:
             mv = r.measurements.get(path)
@@ -200,6 +256,18 @@ def audit_mediator_panel(
             mvf = float(mv)
             if math.isnan(mvf) or math.isinf(mvf):
                 continue
+            ov: float | None = None
+            if outcome_path is not None:
+                ov_raw = r.measurements.get(outcome_path)
+                if (
+                    not isinstance(ov_raw, (int, float))
+                    or isinstance(ov_raw, bool)
+                ):
+                    continue
+                ov_f = float(ov_raw)
+                if math.isnan(ov_f) or math.isinf(ov_f):
+                    continue
+                ov = ov_f
             row_hp_vals: dict[str, float] = {}
             ok = True
             for axis in hp_axes:
@@ -215,6 +283,8 @@ def audit_mediator_panel(
             if not ok:
                 continue
             mediator_vals.append(mvf)
+            if ov is not None:
+                outcome_vals.append(ov)
             for axis in hp_axes:
                 hp_vals_by_axis[axis].append(row_hp_vals[axis])
 
@@ -226,11 +296,46 @@ def audit_mediator_panel(
             if not math.isnan(r2) and r2 >= hp_r_squared_threshold:
                 flagged_hp.append(axis)
 
+        # Stratified-correlation check. Skipped when outcome_path
+        # is missing, when no HP-stratum axis is available, or when
+        # data is too thin per stratum.
+        stratum_axis = (
+            hp_stratum_axis if hp_stratum_axis is not None
+            else (hp_axes[0] if hp_axes else None)
+        )
+        strat_rho = float('nan')
+        strat_p = float('nan')
+        flagged_no_residual = False
+        if (
+            outcome_path is not None
+            and stratum_axis is not None
+            and len(outcome_vals) == len(mediator_vals)
+            and len(mediator_vals) >= 2 * stratified_min_stratum_size
+        ):
+            x_arr = np.asarray(mediator_vals, dtype=np.float64)
+            y_arr = np.asarray(outcome_vals, dtype=np.float64)
+            stratum_vals = hp_vals_by_axis.get(stratum_axis, [])
+            if len(stratum_vals) == len(mediator_vals):
+                strat_rho, strat_p = stratified_spearman_rho(
+                    x_arr, y_arr, stratum_vals,
+                    min_stratum_size=stratified_min_stratum_size,
+                )
+                if (
+                    not math.isnan(strat_rho)
+                    and abs(strat_rho) < stratified_rho_threshold
+                    and not math.isnan(strat_p)
+                    and strat_p >= stratified_alpha
+                ):
+                    flagged_no_residual = True
+
         reports.append(TautologyReport(
             measurable_name=m.name,
             outcome_jaccard=oj,
             hp_r_squared=hp_r2,
+            outcome_stratified_rho=strat_rho,
+            outcome_stratified_p=strat_p,
             flagged_outcome=flagged_o,
             flagged_hp=tuple(flagged_hp),
+            flagged_no_residual_signal=flagged_no_residual,
         ))
     return tuple(reports)

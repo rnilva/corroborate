@@ -463,7 +463,8 @@ substrate; would compose stages 1b–11 into a closed loop.
 | value-curve mediators (D3) | 7b | live | feed candidate-mediator covariates into stage 9 |
 | `cross_validate_meta_regression` (D2) | 9 | live | — |
 | `compare_pc_depths` (D1) | 7a | live | — |
-| `redundancy` | 10 | absent | port from v10 |
+| `redundancy_check.audit_mediator_panel` (3-check tautology) | 7 | live | — |
+| `redundancy` (v10's 4-factor R_info) | 10 | absent | port from v10 |
 | `register` | 11 | absent | port from v10 |
 | `compute_R_info` | 10 | absent | port from v10 |
 
