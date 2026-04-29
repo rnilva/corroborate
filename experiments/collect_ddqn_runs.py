@@ -156,6 +156,21 @@ def _per_step_argmax_q(nested_list: pl.Series) -> list[int]:
     ]
 
 
+def _per_step_std_q(nested_list: pl.Series) -> list[float]:
+    """Per-step std-across-actions of the (n_actions,) Q vector.
+    σ_action input to `jensen_floor_late = σ × √(2 log |A|)`. The
+    action-axis collapse is named explicitly here; offline analysis
+    averages across the time axis to recover the scalar floor."""
+    import statistics as _stat
+    out: list[float] = []
+    for per_action in nested_list.to_list():
+        if per_action is None or len(per_action) < 2:
+            out.append(float('nan'))
+        else:
+            out.append(float(_stat.pstdev(per_action)))
+    return out
+
+
 TRACE_POST_REDUCTIONS: tuple[pl.Expr, ...] = (
     pl.col('online_q_per_action').map_elements(
         _per_step_max_q, return_dtype=pl.List(pl.Float64),
@@ -169,6 +184,9 @@ TRACE_POST_REDUCTIONS: tuple[pl.Expr, ...] = (
     pl.col('online_q_per_action').map_elements(
         _per_step_mean_q, return_dtype=pl.List(pl.Float64),
     ).alias('online_mean_q_per_step'),
+    pl.col('online_q_per_action').map_elements(
+        _per_step_std_q, return_dtype=pl.List(pl.Float64),
+    ).alias('online_std_q_per_step'),
     pl.col('online_q_per_action').map_elements(
         _per_step_argmax_q, return_dtype=pl.List(pl.Int64),
     ).alias('online_argmax_per_step'),

@@ -1,30 +1,37 @@
-"""DDQN-vs-vanilla sweep at the *converging* HP regime.
+"""Action-dim spectrum sweep — designed to exercise the
+`jensen_dormancy_gap` invariant attached to `double_greedify`.
 
-The original 200k corpus uses `capacity=10_000` — which the
-CartPole HP sweep showed is too small for stable convergence
-(CartPole peaks at 99.34 then forgets). A 5× larger replay buffer
-(`capacity=50_000`) fixes the stability problem on CartPole
-*without any new mechanism*.
+The DDQN claim graph now has a load-bearing invariant on
+`double_greedify`: the mechanism's premise needs σ_Q · √(2 log
+|A|) of empirical Q-overestimation. This sweep varies action_dim
+across small-observation envs at converging HPs and records the
+dormancy_gap per cell. Analysis stratifies DDQN-vs-vanilla
+outcome g by premise-active (gap = 0) vs premise-dormant (gap > 0)
+to test whether the framework's own invariant identifies the
+scope of DDQN's link.
 
-This sweep tests whether the existing DDQN-vs-vanilla finding
-(mechanism HELD, link to outcome BROKEN) is robust to the
-HP regime, or whether it was conditioned on under-converged
-training. Same shape as `collect_ddqn_runs.py` with two
-restrictions:
+Design:
+- 4 envs, all small-obs (≤ 50 obs scalars), action_dim ∈ {2, 3, 3, 5}:
+    CartPole-v1            |A|=2   obs=4
+    Acrobot-v1             |A|=3   obs=6
+    Catch-bsuite           |A|=3   obs=50
+    DiscountingChain-bsuite |A|=5   obs=2
+- 2 interventions: vanilla_dqn, ddqn
+- HP grid: capacity=50k, batch=32, lr=1e-3, sync=100, 200k steps
+  (the converging regime confirmed by the CartPole HPO).
+- 60 seeds per arm in a single vmap (no chunking) — small-obs
+  envs at cap=50k fit comfortably; previous OOM (Freeway-MinAtar
+  at cap=50k × 30 seeds) was driven by the 784-D obs, not seed
+  count.
 
-- `capacity=50_000` (the load-bearing fix from the CartPole HP
-  sweep, with `lr=1e-3, batch=32, sync=100` matching the
-  original corpus on every other axis).
-- 6 iteration envs, balanced by family for diversity.
-- Single `total_steps=200_000` grid point.
-
-Output: `experiments/data/ddqn_better_hp/runs.parquet` +
-`traces.parquet`. Apply the convergence audit + §3 verdict
-afterwards to see how the §3 pattern shifts under the better-HP
-regime.
+Output:
+  experiments/data/action_dim_sweep/runs.parquet
+  experiments/data/action_dim_sweep/traces.parquet
+  with `online_std_q_per_step` persisted per cell — enabling
+  offline jensen_dormancy_gap re-evaluation across the corpus.
 
 Usage:
-    uv run python experiments/collect_ddqn_better_hp.py
+  uv run python experiments/collect_action_dim_sweep.py
 """
 from __future__ import annotations
 
@@ -57,40 +64,27 @@ from corroborate.rl.dqn.claims.replay import Replay
 from corroborate.rl.dqn.invariants import DQNTrajectoryRecord
 
 
-# ============ Iteration env subset ============
-
-# 6 envs balanced by family. Picked for diversity, not for
-# pre-existing convergence — we want to see how the better-HP
-# regime classifies them.
 ENV_NAMES: tuple[str, ...] = (
-    'CartPole-v1',          # classic, HP-sensitive
-    'Catch-bsuite',         # bsuite, fast-converging
-    'MNISTBandit-bsuite',   # bsuite, was unsolved at capacity=10k
-    'Freeway-MinAtar',      # MinAtar, was unsolved
-    'GaussianBandit-misc',  # misc, no threshold
-    'MetaMaze-misc',        # misc, no threshold
+    'CartPole-v1',                # |A|=2
+    'Acrobot-v1',                 # |A|=3
+    'Catch-bsuite',               # |A|=3
+    'DiscountingChain-bsuite',    # |A|=5
 )
 
 HYPOTHESIS_NAMES = ('vanilla_dqn', 'ddqn')
-# 30 seeds total, run as 3 chunks of 10 (vmap can't fit all 30 ×
-# capacity=50k × 784 obs in 16GB GPU). Chunked sequentially per
-# arm; cells concatenated before parquet write so the output is
-# indistinguishable from an n=30 vmapped arm.
-SEEDS: tuple[int, ...] = tuple(range(30))
-SEED_CHUNK_SIZE: int = 10
 
-
-# ============ HP grid (converging regime) ============
+SEEDS: tuple[int, ...] = tuple(range(60))
+SEED_CHUNK_SIZE: int = 60  # single vmap for small-obs envs
 
 HP_GRID: dict[str, list[Any]] = {
-    'capacity': [50_000],   # 5× larger than original corpus's 10_000
+    'capacity': [50_000],
     'batch_size': [32],
     'lr': [1e-3],
     'total_steps': [200_000],
 }
 
 
-# ============ Trace post-reductions (mirror collect_ddqn_runs) ============
+# ============ Trace post-reductions (mirror collect_ddqn_better_hp) ============
 
 def _per_step_max_q(nested_list: pl.Series) -> list[float]:
     return [max(per_action) for per_action in nested_list.to_list()]
@@ -116,10 +110,7 @@ def _per_step_argmax_q(nested_list: pl.Series) -> list[int]:
 
 
 def _per_step_std_q(nested_list: pl.Series) -> list[float]:
-    """Per-step std-across-actions of the (n_actions,) Q vector.
-    σ_action input to `jensen_floor_late = σ × √(2 log |A|)`. The
-    action-axis collapse is named explicitly here; offline analysis
-    averages across the time axis to recover the scalar floor."""
+    """σ_action input to `jensen_floor_late = σ × √(2 log |A|)`."""
     import statistics as _stat
     out: list[float] = []
     for per_action in nested_list.to_list():
@@ -187,18 +178,14 @@ def _make_hypothesis(
     intervention = _intervention_for(hypothesis_name, **grid_point)
     if hypothesis_name == 'vanilla_dqn':
         return Hypothesis(
-            name='vanilla_dqn',
-            intervention=intervention,
-            bridges=(),
-            predicted_direction=None,
+            name='vanilla_dqn', intervention=intervention,
+            bridges=(), predicted_direction=None,
             intervention_arms=(),
         )
     if hypothesis_name == 'ddqn':
         return Hypothesis(
-            name='ddqn',
-            intervention=intervention,
-            bridges=(),
-            predicted_direction='a_gt_b',
+            name='ddqn', intervention=intervention,
+            bridges=(), predicted_direction='a_gt_b',
             intervention_arms=(
                 Intervention(
                     slot_path='bootstrap',
@@ -223,13 +210,6 @@ def _run_one_arm(
     *,
     chunk_size: int = SEED_CHUNK_SIZE,
 ) -> tuple[Path, Path]:
-    """Run an arm's seeds in sequential chunks to fit GPU memory.
-
-    With capacity=50k the f32[50000, n_seeds, obs] replay tensor
-    OOMs at n_seeds=30 on a 16GB GPU. We split into 3 chunks of 10,
-    run each as a separate `run_dqn_arm` (vmap-batched), then
-    concatenate cells before parquet write. Output is identical to
-    a single n=30 vmap call would have produced."""
     from corroborate.rl.cell_runner import CellResult, run_dqn_arm
     from corroborate.rl.env_catalogue import get
 
@@ -246,16 +226,11 @@ def _run_one_arm(
     ]
     all_cells: list[CellResult] = []
     env_spec = get(env_name)
-    for chunk_idx, chunk in enumerate(chunks):
+    for chunk in chunks:
         h = _make_hypothesis(hypothesis_name, grid_point)
-        arm = run_dqn_arm(
-            env_spec, chunk, hypothesis=h,
-        )
+        arm = run_dqn_arm(env_spec, chunk, hypothesis=h)
         all_cells.extend(arm.cells)
         del arm
-        # Clear between chunks so the next chunk's compile gets
-        # fresh device memory; without this the prior chunk's
-        # arrays stay rooted until function return.
         jax.clear_caches()
         gc.collect()
 
@@ -326,7 +301,7 @@ def _stream_concat(inputs: list[Path], out: Path) -> None:
 
 
 def main() -> None:
-    out_dir = Path(__file__).parent / 'data' / 'ddqn_better_hp'
+    out_dir = Path(__file__).parent / 'data' / 'action_dim_sweep'
     out_dir.mkdir(parents=True, exist_ok=True)
     tmp_dir = out_dir / 'tmp'
     tmp_dir.mkdir(parents=True, exist_ok=True)
@@ -353,6 +328,7 @@ def main() -> None:
     )
     print(f'HP: {dict(HP_GRID)}', flush=True)
     print(f'envs: {list(ENV_NAMES)}', flush=True)
+    print(f'persisted: online_std_q_per_step (σ for jensen_floor_late)', flush=True)
     print(flush=True)
 
     runs_paths: list[Path] = []
