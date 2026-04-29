@@ -5,6 +5,112 @@ to track when claims were authored vs. observed.
 
 ---
 
+## 2026-04-29 (eleventh revision) — N-step intervention test refutes the variance-reduction hypothesis for the residual `bootstrap_fraction → g_link | g_mech` direct edge. Adding 3-step return on top of DDQN HURTS outcome on most sparse-reward envs.
+
+### Methodology
+
+Strategy 1 from the user's intervention design: hold DDQN
+(double_greedify) fixed in both arms; intervene on n-step return
+(replay-axis variance-reduction knob). Two arms:
+
+- arm A baseline: DDQN + n_step=1 (single-step Bellman backup;
+  recovers standard DDQN exactly).
+- arm B treatment: DDQN + n_step=3 (replay aggregates Σ γ^k r
+  over 3 raw transitions; bootstrap discount = γ^3).
+
+Sweep: 4 sparse-reward envs (Catch, DiscountingChain,
+MountainCar, Acrobot — FourRooms crashed on a dtype regression
+that was hot-fixed post-sweep), 30 seeds, total_steps=200k,
+HPs matched to the 200k DDQN corpus (cap=50k, lr=1e-4, sync=100,
+γ=0.99). 240 cells in `experiments/data/nstep_intervention/`.
+
+### Result
+
+| env | mean Δret (3-step − 1-step) | mean Δbias | r(Δbias, Δret) |
+|---|---|---|---|
+| Acrobot-v1 | **−1.62** | −7.55 (less biased) | −0.75 |
+| Catch-bsuite | **−1.08** | +0.05 | −0.74 |
+| DiscountingChain-bsuite | +0.11 | −0.49 | −0.60 |
+| MountainCar-v0 | −0.16 | −3.90 | +0.10 |
+
+3-step DDQN does not help — and *hurts* meaningfully on Acrobot
+and Catch. The bias-side regression confirms 3-step DOES reduce
+bias more than 1-step (negative `mean_dbias` on 3 of 4 envs)
+exactly as the theory predicts: less bootstrap chain → less
+compounded overestimation. So the *mechanism* activates; the
+*link* fails to translate it. With only 4 envs the meta-
+regression and PC are power-insufficient (g_link / g_mech end
+up with zero PC neighbors at α=0.05, n=38). The single-covariate
+regressions still show positive `bootstrap_fraction → g_link`
+and positive `log_action_dim → g_link` coefficients — driven
+almost entirely by DiscountingChain (|A|=5) being the only env
+where 3-step is non-negative.
+
+### Reading
+
+The 200k corpus identified a residual edge
+`bootstrap_fraction → g_link | g_mech` (ATE=+0.88) — sparse-
+reward envs see additional outcome benefit beyond what bias-
+reduction mediates. The candidate hypothesis from the
+intervention design was: the residual is *TD-target variance*
+reduction, not bias. n-step return is the natural test
+(directly reduces the bootstrap term's contribution to the TD
+target).
+
+The data refutes that hypothesis. n-step does what variance-
+reduction theory predicts at the *mechanism* level (more bias-
+reduction on top of DDQN), but the outcome benefit doesn't
+follow. On Acrobot and Catch the outcome benefit is *negative*
+— 3-step DDQN's policy is worse than 1-step DDQN's. Two
+plausible reads of why:
+
+1. **Over-correction.** DDQN already removes the action-noise
+   bias; n-step removes additional bootstrap-compounding bias.
+   Together they may push the Q-estimate *below* the true Q,
+   producing under-estimation that hurts greedy policy
+   quality. This is the "double bias-correction is too much"
+   reading.
+
+2. **Variance-amplification on short-episode envs.** n-step
+   trades bootstrap-bias for Monte-Carlo-rollout-variance.
+   On envs where the rare positive reward dominates (Catch,
+   Acrobot's terminal goal), longer rollouts dilute that
+   signal. The variance-reduction-on-bootstrap is overwhelmed
+   by variance-amplification-from-rollout.
+
+Either way: the residual `bootstrap_fraction → g_link | g_mech`
+is **not carried by the variance-axis**. It's something else.
+
+### Implications for future intervention design
+
+- The two-arm design (Strategy 1) gave a clean refutation. The
+  hypothesis was specific enough to fail.
+- Strategy 2 (different bias-correction mechanism on the same
+  greedification axis — expectile, softmax, distributional)
+  remains the unfired test. If e.g. expectile-greedify shows
+  the *same* residual, the residual is structural to sparse-
+  reward envs themselves; if it has a *different* residual
+  pattern, the residual was DDQN-specific.
+- The "headroom" hypothesis (sparse-reward → vanilla baseline
+  is worse → more room for any DDQN-style improvement) is also
+  unfired and arguably the next-cheapest test (just compute
+  vanilla's mean-return per env from existing 200k traces and
+  add to the panel).
+
+### Reproduction
+
+```
+uv run python experiments/collect_nstep_intervention.py
+uv run python experiments/analyze_per_burst_summary.py \
+  --corpus nstep_intervention \
+  --treatment-arm ddqn_3step --baseline-arm ddqn_1step
+uv run python experiments/analyze_per_burst_meta_regression.py \
+  --corpus nstep_intervention \
+  --treatment-arm ddqn_3step --baseline-arm ddqn_1step
+```
+
+---
+
 ## 2026-04-29 (tenth revision) — The DDQN chain has two distinct bottlenecks: high-|A| weakens the *mechanism*, low-obs-dim filters the *link*. Parallel meta-regression of g_mech vs g_link recovers separable moderator structure.
 
 ### Methodology
