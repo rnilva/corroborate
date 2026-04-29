@@ -76,8 +76,9 @@ def eval_episode(
     overestimation, the Jensen-bias signature)."""
     reset_key, run_key = jax.random.split(rng_key)
     obs_0, env_state_0 = env.reset(reset_key, env_params)
-    # Flatten env-side multi-dim obs to match the flat-MLP shape.
-    obs_0 = obs_0.reshape(-1)
+    # Substrate keeps obs at native shape; q_network handles its own
+    # input shape (MLP flattens trailing dims internally; CNN reads
+    # spatial structure directly).
 
     q_at_start = q_network(online_params, obs_0)
     predicted_q_at_start = jnp.max(q_at_start)
@@ -107,7 +108,9 @@ def eval_episode(
         next_obs, next_env_state, reward, done, _info = env.step(
             env_key, carry.env_state, action, env_params,
         )
-        # Flatten multi-dim obs to match the flat-MLP shape.
+        # carry.obs is at native shape; reshape is a no-op for
+        # well-shaped envs and a defensive guard against gymnax
+        # quirks that emit a different flat shape on step.
         next_obs = next_obs.reshape(carry.obs.shape)
 
         already_done = carry.done
