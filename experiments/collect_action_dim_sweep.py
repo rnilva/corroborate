@@ -62,6 +62,8 @@ from corroborate.rl.dqn.claims.bootstrap import bootstrap, double_greedify
 from corroborate.rl.dqn.claims.optimizer import Adam, WarmedUpdate
 from corroborate.rl.dqn.claims.replay import Replay
 from corroborate.rl.dqn.invariants import DQNTrajectoryRecord
+from corroborate.rl.env_catalogue import get as _get_env_spec
+from corroborate.rl.sweep import DQNRunner
 
 
 ENV_NAMES: tuple[str, ...] = (
@@ -74,7 +76,6 @@ ENV_NAMES: tuple[str, ...] = (
 HYPOTHESIS_NAMES = ('vanilla_dqn', 'ddqn')
 
 SEEDS: tuple[int, ...] = tuple(range(60))
-SEED_CHUNK_SIZE: int = 60  # single vmap for small-obs envs
 
 HP_GRID: dict[str, list[Any]] = {
     'capacity': [50_000],
@@ -207,12 +208,11 @@ def _grid_tag(grid_point: dict[str, Any]) -> str:
 def _run_one_arm(
     env_name: str, hypothesis_name: str, grid_point: dict[str, Any],
     seeds: tuple[int, ...], tmp_dir: Path, arm_idx: int,
-    *,
-    chunk_size: int = SEED_CHUNK_SIZE,
+    runner: 'DQNRunner',
 ) -> tuple[Path, Path]:
-    from corroborate.rl.cell_runner import CellResult, run_dqn_arm
-    from corroborate.rl.env_catalogue import get
-
+    """Run one (env, hypothesis, grid-point) cell via the
+    framework's `DQNRunner` Protocol. Same shape as
+    `collect_ddqn_runs._run_one_arm`."""
     arm_tag = (
         f'arm{arm_idx:03d}__{env_name}__{hypothesis_name}__'
         f'{_grid_tag(grid_point)}'
@@ -220,29 +220,18 @@ def _run_one_arm(
     runs_path = tmp_dir / f'{arm_tag}__runs.parquet'
     traces_path = tmp_dir / f'{arm_tag}__traces.parquet'
 
-    chunks = [
-        seeds[i:i + chunk_size]
-        for i in range(0, len(seeds), chunk_size)
-    ]
-    all_cells: list[CellResult] = []
-    env_spec = get(env_name)
-    for chunk in chunks:
-        h = _make_hypothesis(hypothesis_name, grid_point)
-        arm = run_dqn_arm(env_spec, chunk, hypothesis=h)
-        all_cells.extend(arm.cells)
-        del arm
-        jax.clear_caches()
-        gc.collect()
+    h = _make_hypothesis(hypothesis_name, grid_point)
+    cell_result = runner(h, {'env_name': env_name, 'seeds': seeds})
 
-    write_runrows(tuple(c.run for c in all_cells), runs_path)
+    write_runrows(cell_result.runs, runs_path)
     reduced_traces = apply_trace_reductions(
-        [c.trace for c in all_cells],
+        list(cell_result.traces),
         add=TRACE_POST_REDUCTIONS,
         drop=TRACE_POST_DROPS,
     )
     write_tracerows(reduced_traces, traces_path)
 
-    del all_cells, reduced_traces
+    del cell_result, reduced_traces
     jax.clear_caches()
     gc.collect()
     return runs_path, traces_path
@@ -331,6 +320,11 @@ def main() -> None:
     print(f'persisted: online_std_q_per_step (σ for jensen_floor_late)', flush=True)
     print(flush=True)
 
+    # Shared DQNRunner — caches the env catalogue once across arms,
+    # following the canonical pattern from `collect_ddqn_runs.py`.
+    env_specs = {name: _get_env_spec(name) for name in ENV_NAMES}
+    runner = DQNRunner(env_specs)
+
     runs_paths: list[Path] = []
     traces_paths: list[Path] = []
     t_start = time.time()
@@ -341,7 +335,7 @@ def main() -> None:
             f'{_grid_tag(gp)} ...',
             flush=True,
         )
-        rp, tp = _run_one_arm(env_name, h_name, gp, SEEDS, tmp_dir, idx)
+        rp, tp = _run_one_arm(env_name, h_name, gp, SEEDS, tmp_dir, idx, runner)
         runs_paths.append(rp)
         traces_paths.append(tp)
         elapsed = time.time() - t_arm
