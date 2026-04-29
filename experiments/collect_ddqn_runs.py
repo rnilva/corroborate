@@ -54,6 +54,7 @@ import jax
 import polars as pl
 
 from corroborate.hypothesis import Hypothesis
+from corroborate.intervention import Intervention
 from corroborate.persistence import (
     apply_trace_reductions,
     tighten_trace_dtypes,
@@ -217,7 +218,12 @@ def _make_hypothesis(
     """Reconstruct hypothesis from a string id + a grid point.
     Workers can't pickle closures cleanly across spawn-mode
     processes, so each worker rebuilds the hypothesis from
-    stable args (string + dict of primitives)."""
+    stable args (string + dict of primitives).
+
+    `intervention_arms` carries the typed identity of mechanism
+    swaps (DDQN's `bootstrap` → `partial(bootstrap, greedification=
+    double_greedify)`); HPs (capacity, batch_size, lr,
+    total_steps) stay in `intervention` as covariates."""
     intervention = _intervention_for(hypothesis_name, **grid_point)
     if hypothesis_name == 'vanilla_dqn':
         return Hypothesis(
@@ -225,6 +231,7 @@ def _make_hypothesis(
             intervention=intervention,
             bridges=(),
             predicted_direction=None,
+            intervention_arms=(),
         )
     if hypothesis_name == 'ddqn':
         return Hypothesis(
@@ -232,6 +239,14 @@ def _make_hypothesis(
             intervention=intervention,
             bridges=(),
             predicted_direction='a_gt_b',
+            intervention_arms=(
+                Intervention(
+                    slot_path='bootstrap',
+                    replacement=partial(
+                        bootstrap, greedification=double_greedify,
+                    ),
+                ),
+            ),
         )
     raise ValueError(f'unknown hypothesis name: {hypothesis_name!r}')
 
@@ -453,16 +468,17 @@ def main() -> None:
         [pl.scan_parquet(p) for p in runs_inputs],
         how='diagonal_relaxed',
     ).sink_parquet(runs_tmp)
-    # Tighten dtypes on the trace store: List(Float64) → List(Float32)
-    # and List(Int64) → List(Int32). Undoes the `arr.tolist()` upcast
-    # that the cell_runner introduces (JAX float32 → Python float =
-    # float64 in polars). Halves per-step series storage with no
-    # information loss; ~13% on-disk reduction overall + faster
-    # writes (less data to compress).
-    tighten_trace_dtypes(pl.concat(
+    # Plain concat on traces — no in-stream dtype tightening.
+    # `tighten_trace_dtypes` composed inside `sink_parquet`'s
+    # streaming plan can OOM on large diagonal_relaxed concats
+    # (observed at 36 arms × 200k-step traces). The dtype-narrowing
+    # post-pass is a separate, idempotent step authors run via
+    # `scripts/tighten_traces.py` — read-modify-write on the
+    # merged file. Splits the work into proven-streaming primitives.
+    pl.concat(
         [pl.scan_parquet(p) for p in traces_inputs],
         how='diagonal_relaxed',
-    )).sink_parquet(traces_tmp)
+    ).sink_parquet(traces_tmp)
     # Atomic-rename only after both writes succeed.
     runs_tmp.replace(final_runs_path)
     traces_tmp.replace(final_traces_path)
