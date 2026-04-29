@@ -23,15 +23,21 @@ import polars as pl
 import scipy.stats as ss
 
 
-def _load(corpus: str, env: str) -> tuple[
+def _load(
+    corpus: str, env: str,
+    treatment_arm: str = 'ddqn',
+    baseline_arm: str = 'vanilla_dqn',
+) -> tuple[
     np.ndarray, np.ndarray, np.ndarray, np.ndarray
 ] | None:
-    """Read DDQN + vanilla cells for `env` in `corpus`; return per-cell
-    per-burst (bias, return) arrays paired by seed.
+    """Read treatment + baseline cells for `env` in `corpus`;
+    return per-cell per-burst (bias, return) arrays paired by
+    seed.
 
     Returns (van_bias, van_ret, ddqn_bias, ddqn_ret), each shape
-    `(n_pairs, n_bursts)`. Returns None if corpus is missing data
-    or no paired cells exist for the env."""
+    `(n_pairs, n_bursts)` (van=baseline, ddqn=treatment in
+    variable names). Returns None if corpus is missing data or
+    no paired cells exist for the env."""
     base = Path('experiments/data') / corpus
     runs_path = base / 'runs.parquet'
     if not runs_path.exists():
@@ -48,10 +54,10 @@ def _load(corpus: str, env: str) -> tuple[
         return None
     # Collect ids per arm.
     ddqn_ids = runs_df.filter(
-        pl.col('intervention_name') == 'ddqn'
+        pl.col('intervention_name') == treatment_arm
     ).select(['id', 'seed']).to_dicts()
     van_ids = runs_df.filter(
-        pl.col('intervention_name') == 'vanilla_dqn'
+        pl.col('intervention_name') == baseline_arm
     ).select(['id', 'seed']).to_dicts()
     if not ddqn_ids or not van_ids:
         return None
@@ -122,8 +128,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--corpus', default='ddqn')
     parser.add_argument('--total-steps', type=int, default=200000)
+    parser.add_argument('--treatment-arm', default='ddqn')
+    parser.add_argument('--baseline-arm', default='vanilla_dqn')
     args = parser.parse_args()
     corpus: str = args.corpus
+    treatment_arm: str = args.treatment_arm
+    baseline_arm: str = args.baseline_arm
 
     runs_path = Path('experiments/data') / corpus / 'runs.parquet'
     if not runs_path.exists():
@@ -139,7 +149,7 @@ def main() -> None:
 
     rows: list[tuple] = []
     for env in envs:
-        arrays = _load(corpus, env)
+        arrays = _load(corpus, env, treatment_arm, baseline_arm)
         if arrays is None or arrays[0].shape[0] < 4:
             print(f'  {env}: skipped (insufficient pairs)')
             continue
@@ -182,7 +192,7 @@ def main() -> None:
     print(f'{"env":<25} ' + ' '.join(f'τ={t:>+2}' for t in (-3, -2, -1, 0, 1, 2, 3)))
     print('-' * 95)
     for env in envs:
-        arrays = _load(corpus, env)
+        arrays = _load(corpus, env, treatment_arm, baseline_arm)
         if arrays is None or arrays[0].shape[0] < 4:
             continue
         van_bias, van_ret, ddqn_bias, ddqn_ret = arrays

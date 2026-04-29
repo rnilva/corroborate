@@ -62,6 +62,8 @@ _REWARD_DENSITY_MAP: dict[str, float] = {
 
 def _per_burst_mediator_deltas(
     corpus: str, env: str, total_steps: int, eval_every: int,
+    treatment_arm: str = 'ddqn',
+    baseline_arm: str = 'vanilla_dqn',
 ) -> dict[str, np.ndarray] | None:
     """Per-(pair, burst) DDQN−vanilla deltas of candidate non-bias
     mediators, sliced from the flat per-step trace columns by eval
@@ -84,10 +86,10 @@ def _per_burst_mediator_deltas(
     if runs_df.height == 0:
         return None
     ddqn_ids = runs_df.filter(
-        pl.col('intervention_name') == 'ddqn'
+        pl.col('intervention_name') == treatment_arm
     ).select(['id', 'seed']).to_dicts()
     van_ids = runs_df.filter(
-        pl.col('intervention_name') == 'vanilla_dqn'
+        pl.col('intervention_name') == baseline_arm
     ).select(['id', 'seed']).to_dicts()
     if not ddqn_ids or not van_ids:
         return None
@@ -175,7 +177,12 @@ def _per_burst_mediator_deltas(
     }
 
 
-def _build_panel(corpus: str, total_steps: int, *, include_env: bool = False) -> pl.DataFrame:
+def _build_panel(
+    corpus: str, total_steps: int, *,
+    include_env: bool = False,
+    treatment_arm: str = 'ddqn',
+    baseline_arm: str = 'vanilla_dqn',
+) -> pl.DataFrame:
     runs_path = Path('experiments/data') / corpus / 'runs.parquet'
     if not runs_path.exists():
         runs_path = (
@@ -203,12 +210,13 @@ def _build_panel(corpus: str, total_steps: int, *, include_env: bool = False) ->
         if empirical is None:
             continue
         nonzero_reward_frac, bootstrap_fraction = empirical
-        arrays = _load_arrays(corpus, env)
+        arrays = _load_arrays(corpus, env, treatment_arm, baseline_arm)
         if arrays is None:
             continue
         delta_bias, delta_ret = arrays
         mediators = _per_burst_mediator_deltas(
             corpus, env, total_steps, eval_every,
+            treatment_arm=treatment_arm, baseline_arm=baseline_arm,
         )
         n_pairs, n_bursts = delta_ret.shape
         for b in range(n_bursts):
@@ -273,15 +281,23 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--corpus', default='ddqn')
     parser.add_argument('--total-steps', type=int, default=200_000)
+    parser.add_argument('--treatment-arm', default='ddqn')
+    parser.add_argument('--baseline-arm', default='vanilla_dqn')
     args = parser.parse_args()
     corpus: str = args.corpus
     total_steps: int = args.total_steps
+    treatment_arm: str = args.treatment_arm
+    baseline_arm: str = args.baseline_arm
 
     print('=' * 100)
     print(f'Causal discovery on per-(env, burst) link moderator panel '
-          f'[corpus={corpus}, total_steps={total_steps}]')
+          f'[corpus={corpus}, total_steps={total_steps}, '
+          f'treatment={treatment_arm}, baseline={baseline_arm}]')
     print('=' * 100)
-    panel = _build_panel(corpus, total_steps, include_env=True)
+    panel = _build_panel(
+        corpus, total_steps, include_env=True,
+        treatment_arm=treatment_arm, baseline_arm=baseline_arm,
+    )
     # Drop rows with NaN in any mediator (envs missing per-step
     # trace columns); PC's CI test can't handle NaN.
     mediator_cols = (

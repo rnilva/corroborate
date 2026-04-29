@@ -81,8 +81,15 @@ def _empirical_reward_features(
 
 def _load_arrays(
     corpus: str, env: str,
+    treatment_arm: str = 'ddqn',
+    baseline_arm: str = 'vanilla_dqn',
 ) -> tuple[np.ndarray, np.ndarray] | None:
-    """Per-pair Δbias and Δret (shape (n_pairs, n_bursts)) for env."""
+    """Per-pair Δbias and Δret (shape (n_pairs, n_bursts)) for env.
+
+    `treatment_arm` / `baseline_arm` select which two
+    `intervention_name` values to pair (treatment − baseline).
+    Defaults reproduce the DDQN-vs-vanilla pairing used by the
+    200k corpus."""
     base = Path('experiments/data') / corpus
     runs_path = base / 'runs.parquet'
     if not runs_path.exists():
@@ -98,10 +105,10 @@ def _load_arrays(
     if df.height == 0:
         return None
     ddqn_ids = df.filter(
-        pl.col('intervention_name') == 'ddqn'
+        pl.col('intervention_name') == treatment_arm
     ).select(['id', 'seed']).to_dicts()
     van_ids = df.filter(
-        pl.col('intervention_name') == 'vanilla_dqn'
+        pl.col('intervention_name') == baseline_arm
     ).select(['id', 'seed']).to_dicts()
     if not ddqn_ids or not van_ids:
         return None
@@ -140,8 +147,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--corpus', default='ddqn')
     parser.add_argument('--total-steps', type=int, default=200000)
+    parser.add_argument('--treatment-arm', default='ddqn')
+    parser.add_argument('--baseline-arm', default='vanilla_dqn')
     args = parser.parse_args()
     corpus: str = args.corpus
+    treatment_arm: str = args.treatment_arm
+    baseline_arm: str = args.baseline_arm
 
     runs_path = Path('experiments/data') / corpus / 'runs.parquet'
     if not runs_path.exists():
@@ -191,7 +202,7 @@ def main() -> None:
             nonzero_reward_frac, bootstrap_fraction = 0.0, 1.0
         else:
             nonzero_reward_frac, bootstrap_fraction = empirical
-        arrays = _load_arrays(corpus, env)
+        arrays = _load_arrays(corpus, env, treatment_arm, baseline_arm)
         if arrays is None:
             continue
         delta_bias, delta_ret = arrays

@@ -140,11 +140,20 @@ def bootstrap(
     reward: jax.Array,
     done: jax.Array,
     gamma: float,
+    n_step: int = 1,
     greedification: Greedification = max_greedify,
     gradient_rule: GradientRule = semi_gradient,
 ) -> jax.Array:
-    """Bellman target: `r + γ · (1−done) · gradient_rule(
+    """Bellman target: `R^n + γ^n · (1−done) · gradient_rule(
     greedification(...))`.
+
+    For 1-step (n_step=1, default) this collapses to the standard
+    `r + γ · (1−done) · v(s')`. For n_step=k, the Replay buffer
+    must have aggregated k consecutive raw transitions into the
+    stored `(s_t, a_t, R^k_t, s_{t+k}, done_within_k)` — `reward`
+    here is the discounted n-step return, and the bootstrap
+    discount on v(s') is `γ^k` (not `γ`) because the bootstrap
+    target lies k steps in the future.
 
     `greedification` is the DDQN-vs-vanilla axis; `gradient_rule`
     is the semi-gradient-vs-full-gradient axis. Authors swap
@@ -152,19 +161,21 @@ def bootstrap(
 
         partial(bootstrap, greedification=double_greedify)
         partial(bootstrap, gradient_rule=full_gradient)
-        partial(bootstrap, greedification=double_greedify,
-                gradient_rule=full_gradient)
+        partial(bootstrap, n_step=3,
+                greedification=double_greedify)
 
-    `online_params`, `target_params`, `q_network`, `next_obs`
-    flow to `greedification`. `reward`, `done`, `gamma`,
-    `gradient_rule` are bootstrap-level."""
+    Note: setting `n_step=k` on bootstrap requires also setting
+    `n_step=k` (and `gamma=γ`) on the `Replay` config bundle so
+    the buffer aggregates correctly. The two settings travel as
+    a pair through the Hypothesis intervention dict."""
     v_next = greedification(
         online_params=online_params,
         target_params=target_params,
         q_network=q_network,
         next_obs=next_obs,
     )
-    target = reward + gamma * (1.0 - done) * v_next
+    discount = gamma ** n_step
+    target = reward + discount * (1.0 - done) * v_next
     return gradient_rule(target)
 
 
