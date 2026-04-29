@@ -120,13 +120,30 @@ def main() -> None:
     print(f'  {"env":<25} {"|A|":>4} ' + ''.join(f'b{b:<5}' for b in range(10)))
     print('-' * 100)
 
+    # Reward-regime ordinal: 0=terminal_only (sparsest), 1=event/shaped,
+    # 2=per_step (densest). Captures bootstrap-signal density.
+    _reward_density_map: dict[str, float] = {
+        'terminal_only': 0.0,
+        'shaped': 1.0,
+        'event_triggered': 1.0,
+        'per_step': 2.0,
+    }
+
     obs_list: list[StratumObservation] = []
     saturated: list[str] = []
     for env in envs:
         try:
-            n_a = get(env).n_actions
+            spec = get(env)
+            n_a = spec.n_actions
+            obs_n = 1
+            for d in spec.observation_shape:
+                obs_n *= int(d)
+            horizon = float(spec.horizon) if spec.horizon else 1000.0
+            reward_density = _reward_density_map.get(
+                str(spec.reward_regime), 1.0,
+            )
         except Exception:
-            n_a = 0
+            n_a, obs_n, horizon, reward_density = 0, 4, 1000.0, 1.0
         arrays = _load_arrays(corpus, env)
         if arrays is None:
             continue
@@ -150,6 +167,9 @@ def main() -> None:
                         'log_action_dim': math.log(max(n_a, 2)),
                         'burst_index': float(b),
                         'mean_dbias': mean_dbias,
+                        'log_obs_dim': math.log(max(obs_n, 1)),
+                        'log_horizon': math.log(max(horizon, 1.0)),
+                        'reward_density': reward_density,
                     },
                 ))
         # Filter env if all per-burst g values are exactly zero
@@ -253,6 +273,26 @@ def main() -> None:
         )
     except ValueError as e:
         print(f'  interaction skipped: {e}')
+
+    # Confound test: does log_action_dim survive when we add
+    # plausible confounds (log_obs_dim, log_horizon, reward_density)?
+    # If another covariate absorbs action_dim, then action_dim was
+    # a proxy for that variable.
+    confound_sets: tuple[tuple[str, ...], ...] = (
+        ('log_action_dim', 'log_obs_dim'),
+        ('log_action_dim', 'log_horizon'),
+        ('log_action_dim', 'reward_density'),
+        ('log_action_dim', 'log_obs_dim', 'log_horizon', 'reward_density'),
+        ('log_action_dim', 'log_obs_dim', 'log_horizon', 'reward_density',
+         'mean_dbias', 'burst_index'),
+    )
+    for cset in confound_sets:
+        try:
+            res = meta_regression(_project(obs_list, cset))
+            label = ' + '.join(cset)
+            _print_result(f'g ~ {label}', res)
+        except ValueError as e:
+            print(f'  confound-set {cset} skipped: {e}')
 
 
 if __name__ == '__main__':
