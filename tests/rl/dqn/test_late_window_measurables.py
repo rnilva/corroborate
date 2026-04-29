@@ -1,13 +1,15 @@
-"""Tests for `corroborate.rl.dqn.mediators` — §5 candidate-mediator
-projections from per-cell DQN traces."""
+"""Tests for the late-window scalar Measurables in
+`corroborate.rl.dqn.measurables` — typed reductions over per-step
+columns, used as inputs to PAPER §5/§6's mediator analysis. The
+"mediator" framing is paper-section domain language; in the
+framework these are plain `Measurable[Mapping, float]`s."""
 from __future__ import annotations
 
 import math
 
 import numpy as np
 
-from corroborate.rl.dqn.mediators import (
-    epsilon_late,
+from corroborate.rl.dqn.measurables import (
     fill_ratio_late,
     greedy_match_late,
     q_gap_growth,
@@ -103,58 +105,12 @@ def test_fill_ratio_late_returns_nan_on_zero_capacity() -> None:
     assert math.isnan(fill_ratio_late(record, capacity=0))
 
 
-def test_epsilon_late_closed_form_linear_schedule() -> None:
-    # eps_init=1.0, eps_final=0.1, anneal_steps=100, total=200.
-    # late half = steps 100..199; all clipped to anneal_steps so
-    # progress=1.0; ε = eps_final = 0.1.
-    eps = epsilon_late(
-        eps_init=1.0, eps_final=0.1,
-        anneal_steps=100, total_steps=200,
-    )
-    assert math.isclose(eps, 0.1)
-
-
-def test_epsilon_late_partial_anneal_in_late_window() -> None:
-    # If anneal_steps spans into the late window, the late-window
-    # mean is intermediate. eps_init=1.0, eps_final=0.0,
-    # anneal_steps=200, total=200. Late half = steps 100..199.
-    # progress = step/200 ∈ [0.5, 0.995]; ε = 1 - progress.
-    # mean(1 - progress) on [100..199] = 1 - mean([100..199])/200
-    #   = 1 - 149.5/200 = 0.2525.
-    eps = epsilon_late(
-        eps_init=1.0, eps_final=0.0,
-        anneal_steps=200, total_steps=200,
-    )
-    assert math.isclose(eps, 0.2525)
-
-
-def test_epsilon_late_returns_nan_on_zero_anneal() -> None:
-    assert math.isnan(epsilon_late(
-        eps_init=1.0, eps_final=0.0,
-        anneal_steps=0, total_steps=200,
-    ))
-
-
 # ============ Measurable-contract tests ============
 
-def test_record_only_mediators_are_typed_measurables() -> None:
-    """Each of the 6 record→float mediators is a `Measurable`
-    instance carrying name + reads."""
-    from corroborate.measurable import Measurable
-    from corroborate.rl.dqn.mediators import RECORD_ONLY_MEDIATORS
-
-    assert len(RECORD_ONLY_MEDIATORS) == 6
-    for m in RECORD_ONLY_MEDIATORS:
-        assert isinstance(m, Measurable)
-        assert m.name != ''
-        # All record-only mediators read at least one record key.
-        assert len(m.reads) >= 1
-
-
-def test_mediators_registered_under_their_function_names() -> None:
-    """`@measurable` registers each mediator under its declared
-    name in the global registry; lookup via `get_registered`
-    returns the same instance."""
+def test_late_window_measurables_registered_under_their_function_names() -> None:
+    """`@measurable` registers each late-window scalar under its
+    declared name in the global registry; lookup via
+    `get_registered` returns the same instance."""
     from corroborate.measurable import get_registered
 
     for name in (
@@ -167,10 +123,10 @@ def test_mediators_registered_under_their_function_names() -> None:
         assert m.name == name
 
 
-def test_mediator_reads_match_declared_record_keys() -> None:
-    """Each mediator's `reads` declares the exact record keys its
-    fn body consumes — used downstream by Bridge.transitive_reads
-    for the redundancy primitive."""
+def test_late_window_measurable_reads_match_declared_record_keys() -> None:
+    """Each measurable's `reads` declares the exact record keys
+    its fn body consumes — used downstream by
+    `Bridge.transitive_reads` for the redundancy primitive."""
     assert q_gap_late.reads == (
         'online_max_q_per_step', 'online_min_q_per_step',
     )
@@ -193,13 +149,3 @@ def test_fill_ratio_late_is_measurable_with_extra_kwarg() -> None:
     # Direct call with capacity works (Measurable.__call__ proxies
     # to fn(record, **deps) — passing capacity as a dep).
     assert fill_ratio_late(record, capacity=1000) == 0.75
-
-
-def test_epsilon_late_is_plain_function_not_measurable() -> None:
-    """epsilon_late doesn't fit Measurable[Mapping, T] because it
-    takes no record. Stays a plain function — the registry
-    doesn't know about it."""
-    from corroborate.measurable import Measurable, get_registered
-
-    assert not isinstance(epsilon_late, Measurable)
-    assert get_registered('epsilon_late') is None

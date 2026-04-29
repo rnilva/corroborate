@@ -21,9 +21,10 @@ from pathlib import Path
 
 import polars as pl
 
+import numpy as np
+
 from corroborate.persistence import iter_trace_records
-from corroborate.rl.dqn.mediators import (
-    epsilon_late,
+from corroborate.rl.dqn.measurables import (
     fill_ratio_late,
     greedy_match_late,
     q_gap_growth,
@@ -32,6 +33,26 @@ from corroborate.rl.dqn.mediators import (
     td_residual_late,
     v_vs_max_delta_late,
 )
+
+
+def _epsilon_late(
+    *, eps_init: float, eps_final: float,
+    anneal_steps: int, total_steps: int,
+) -> float:
+    """Mean of the linear-ε schedule value over the late 50% of
+    training. Closed-form from leaves; not a Measurable because
+    it reads HP scalars, not a per-step record. Inlined here as
+    a §5-analysis-specific projection — `mediator.epsilon_late`
+    measurement on the enriched runs parquet."""
+    if anneal_steps <= 0 or total_steps <= 0:
+        return float('nan')
+    lo = total_steps // 2
+    if lo >= total_steps:
+        return float('nan')
+    steps = np.arange(lo, total_steps, dtype=np.float64)
+    progress = np.minimum(steps / float(anneal_steps), 1.0)
+    eps = eps_init + (eps_final - eps_init) * progress
+    return float(np.mean(eps))
 
 
 _DATA_DIR = Path(__file__).parent / 'data' / 'ddqn'
@@ -127,7 +148,7 @@ def main() -> None:
             'mediator.fill_ratio_late': fill_ratio_late(
                 record, capacity=capacity,
             ),
-            'mediator.epsilon_late': epsilon_late(
+            'mediator.epsilon_late': _epsilon_late(
                 eps_init=eps_init, eps_final=eps_final,
                 anneal_steps=anneal_steps, total_steps=total_steps,
             ),
