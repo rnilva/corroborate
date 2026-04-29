@@ -60,23 +60,23 @@ from corroborate.rl.sweep import DQNRunner
 from corroborate.sweep import SweepCellResult
 
 
-# Env list with per-env (seeds, chunk_size). Small-obs envs run
-# 60 seeds in a single vmap. MNISTBandit (obs=784) chunks 30
-# seeds into 3 × 10 to fit GPU memory.
+# Env list with per-env (seeds, chunk_size). Only the *new* envs
+# not already in `action_dim_sweep/`. The analysis combines this
+# corpus with the existing 4-env action_dim_sweep corpus to give
+# n=10 envs at the same converging-HP regime.
+#
+# Small-obs envs run 60 seeds in a single vmap. MNISTBandit
+# (obs=784) chunks 30 seeds into 3 × 10 to fit GPU memory.
 ENV_CONFIG: tuple[tuple[str, int, int], ...] = (
-    # |A|=2
-    ('CartPole-v1', 60, 60),
+    # |A|=2 (CartPole already collected)
     ('BernoulliBandit-misc', 60, 60),
     ('GaussianBandit-misc', 60, 60),
-    # |A|=3
-    ('Acrobot-v1', 60, 60),
-    ('Catch-bsuite', 60, 60),
+    # |A|=3 (Acrobot, Catch already collected)
     ('MountainCar-v0', 60, 60),
     # |A|=4
     ('FourRooms-misc', 60, 60),
     ('MetaMaze-misc', 60, 60),
-    # |A|=5
-    ('DiscountingChain-bsuite', 60, 60),
+    # |A|=5 (DiscountingChain already collected)
     # |A|=10
     ('MNISTBandit-bsuite', 30, 10),
 )
