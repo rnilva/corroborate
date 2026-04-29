@@ -38,6 +38,47 @@ from corroborate.rl.env_catalogue import get
 from corroborate.statistics import hedges_g_paired
 
 
+def _empirical_reward_features(
+    corpus: str, env: str,
+) -> tuple[float, float] | None:
+    """Per-env (mean across cells) empirical reward features:
+      - nonzero_reward_frac: mean(reward != 0) across training steps
+      - bootstrap_fraction:  1 - mean(done) — fraction of steps
+        with bootstrapped target (proxy for episode-length /
+        bias-compounding depth).
+    Computed from the persisted raw trace columns. NO new
+    Measurable; this is post-hoc inline."""
+    base = Path('experiments/data') / corpus
+    runs_path = base / 'runs.parquet'
+    if not runs_path.exists():
+        runs_path = base / 'runs_with_mediators.parquet'
+    traces_path = base / 'traces.parquet'
+    if not runs_path.exists() or not traces_path.exists():
+        return None
+    runs_df = pl.read_parquet(str(runs_path)).filter(
+        pl.col('env_name') == env
+    )
+    if runs_df.height == 0:
+        return None
+    ids = runs_df['id'].to_list()
+    trace_df = pl.read_parquet(
+        str(traces_path),
+        columns=['id', 'reward', 'done'],
+    ).filter(pl.col('id').is_in(ids))
+    nonzero_fracs: list[float] = []
+    bootstrap_fracs: list[float] = []
+    for row in trace_df.iter_rows(named=True):
+        rewards = np.asarray(row['reward'], dtype=np.float64)
+        dones = np.asarray(row['done'], dtype=np.float64)
+        if rewards.size > 0:
+            nonzero_fracs.append(float((rewards != 0.0).mean()))
+        if dones.size > 0:
+            bootstrap_fracs.append(float(1.0 - dones.mean()))
+    if not nonzero_fracs or not bootstrap_fracs:
+        return None
+    return float(np.mean(nonzero_fracs)), float(np.mean(bootstrap_fracs))
+
+
 def _load_arrays(
     corpus: str, env: str,
 ) -> tuple[np.ndarray, np.ndarray] | None:
@@ -144,6 +185,11 @@ def main() -> None:
             )
         except Exception:
             n_a, obs_n, horizon, reward_density = 0, 4, 1000.0, 1.0
+        empirical = _empirical_reward_features(corpus, env)
+        if empirical is None:
+            nonzero_reward_frac, bootstrap_fraction = 0.0, 1.0
+        else:
+            nonzero_reward_frac, bootstrap_fraction = empirical
         arrays = _load_arrays(corpus, env)
         if arrays is None:
             continue
@@ -170,6 +216,8 @@ def main() -> None:
                         'log_obs_dim': math.log(max(obs_n, 1)),
                         'log_horizon': math.log(max(horizon, 1.0)),
                         'reward_density': reward_density,
+                        'empirical_reward_density': nonzero_reward_frac,
+                        'bootstrap_fraction': bootstrap_fraction,
                     },
                 ))
         # Filter env if all per-burst g values are exactly zero
@@ -282,9 +330,17 @@ def main() -> None:
         ('log_action_dim', 'log_obs_dim'),
         ('log_action_dim', 'log_horizon'),
         ('log_action_dim', 'reward_density'),
+        ('log_action_dim', 'empirical_reward_density'),
+        ('log_action_dim', 'bootstrap_fraction'),
+        ('reward_density', 'empirical_reward_density'),
         ('log_action_dim', 'log_obs_dim', 'log_horizon', 'reward_density'),
+        ('log_action_dim', 'log_obs_dim', 'log_horizon',
+         'empirical_reward_density', 'bootstrap_fraction'),
         ('log_action_dim', 'log_obs_dim', 'log_horizon', 'reward_density',
          'mean_dbias', 'burst_index'),
+        ('log_action_dim', 'log_obs_dim', 'log_horizon',
+         'empirical_reward_density', 'bootstrap_fraction', 'mean_dbias',
+         'burst_index'),
     )
     for cset in confound_sets:
         try:
