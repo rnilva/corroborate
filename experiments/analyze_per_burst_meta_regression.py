@@ -171,6 +171,7 @@ def main() -> None:
     }
 
     obs_list: list[StratumObservation] = []
+    obs_list_mech: list[StratumObservation] = []
     saturated: list[str] = []
     for env in envs:
         try:
@@ -199,26 +200,36 @@ def main() -> None:
         env_obs: list[StratumObservation] = []
         for b in range(n_bursts):
             dr = list(map(float, delta_ret[:, b].tolist()))
+            db = list(map(float, delta_bias[:, b].tolist()))
             g, se = hedges_g_paired(dr)
+            g_m, se_m = hedges_g_paired(db)
             gs_per_burst.append(g)
+            covariates = {
+                'log_action_dim': math.log(max(n_a, 2)),
+                'burst_index': float(b),
+                'mean_dbias': float(delta_bias[:, b].mean()),
+                'log_obs_dim': math.log(max(obs_n, 1)),
+                'log_horizon': math.log(max(horizon, 1.0)),
+                'reward_density': reward_density,
+                'empirical_reward_density': nonzero_reward_frac,
+                'bootstrap_fraction': bootstrap_fraction,
+            }
             if (
                 isinstance(g, float) and math.isfinite(g)
                 and isinstance(se, float) and math.isfinite(se) and se > 0.0
             ):
-                mean_dbias = float(delta_bias[:, b].mean())
                 env_obs.append(StratumObservation(
-                    stratum_id=(env, b),
-                    g=g, se=se,
-                    covariates={
-                        'log_action_dim': math.log(max(n_a, 2)),
-                        'burst_index': float(b),
-                        'mean_dbias': mean_dbias,
-                        'log_obs_dim': math.log(max(obs_n, 1)),
-                        'log_horizon': math.log(max(horizon, 1.0)),
-                        'reward_density': reward_density,
-                        'empirical_reward_density': nonzero_reward_frac,
-                        'bootstrap_fraction': bootstrap_fraction,
-                    },
+                    stratum_id=(env, b), g=g, se=se,
+                    covariates=dict(covariates),
+                ))
+            if (
+                isinstance(g_m, float) and math.isfinite(g_m)
+                and isinstance(se_m, float) and math.isfinite(se_m)
+                and se_m > 0.0
+            ):
+                obs_list_mech.append(StratumObservation(
+                    stratum_id=(env, b), g=g_m, se=se_m,
+                    covariates=dict(covariates),
                 ))
         # Filter env if all per-burst g values are exactly zero
         # (saturated outcome, no signal at any burst).
@@ -349,6 +360,36 @@ def main() -> None:
             _print_result(f'g ~ {label}', res)
         except ValueError as e:
             print(f'  confound-set {cset} skipped: {e}')
+
+    # Stage 3 — parallel regression on g_mech (Hedges' g on Δbias).
+    # Comparing the moderator structure of bias-reduction (g_mech)
+    # against the moderator structure of outcome benefit (g_link)
+    # tells whether the chain is unified-scoped (same moderators)
+    # or bottlenecked at the link (g_mech moderated broadly but
+    # g_link only on a subset).
+    print()
+    print('=' * 100)
+    print('Stage 3 — parallel meta-regression on g_mech (Hedges\' g on Δbias)')
+    print('=' * 100)
+    print(f'  n_strata: {len(obs_list_mech)}')
+    if len(obs_list_mech) >= 4:
+        # Run only the most informative subset of the confound menu
+        # — the ones that revealed structural moderators on g_link.
+        mech_sets: tuple[tuple[str, ...], ...] = (
+            ('log_action_dim',),
+            ('bootstrap_fraction',),
+            ('empirical_reward_density',),
+            ('log_horizon',),
+            ('log_obs_dim',),
+            ('log_action_dim', 'log_obs_dim', 'log_horizon',
+             'empirical_reward_density', 'bootstrap_fraction'),
+        )
+        for cset in mech_sets:
+            try:
+                res = meta_regression(_project(obs_list_mech, cset))
+                _print_result(f'g_mech ~ {" + ".join(cset)}', res)
+            except ValueError as e:
+                print(f'  g_mech confound-set {cset} skipped: {e}')
 
 
 if __name__ == '__main__':

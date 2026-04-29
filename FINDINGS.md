@@ -5,6 +5,114 @@ to track when claims were authored vs. observed.
 
 ---
 
+## 2026-04-29 (tenth revision) — The DDQN chain has two distinct bottlenecks: high-|A| weakens the *mechanism*, low-obs-dim filters the *link*. Parallel meta-regression of g_mech vs g_link recovers separable moderator structure.
+
+### Methodology
+
+149-stratum (env, burst) panel from the 200k DDQN corpus
+(`experiments/data/ddqn/`). For each (env, burst):
+
+- `g_link = hedges_g_paired(Δret_per_pair)`
+- `g_mech = hedges_g_paired(Δbias_per_pair)` (signed; we KEEP
+  the sign so that "more negative" = bigger bias-reduction)
+
+Two parallel random-effects meta-regressions on the same
+covariate menu:
+`{log_action_dim, log_obs_dim, log_horizon,
+empirical_reward_density, bootstrap_fraction}`
+
+(`bootstrap_fraction` and `empirical_reward_density` are computed
+inline from `reward[t]` and `done[t]` raw trace columns — the
+fraction of episode-internal transitions, and the fraction of
+transitions with non-zero reward.)
+
+### Result — joint regression on all 5 moderators
+
+| Moderator | g_link (Δret) | g_mech (Δbias) |
+|---|---|---|
+| `bootstrap_fraction` | β=+2.91, p=0.0005 ✓ | β=+3.93, p<0.0001 ✓ |
+| `log_horizon` | β=+0.18, p=0.0001 ✓ | β=+0.22, p<0.0001 ✓ |
+| `log_obs_dim` | β=−0.07, p=0.0001 ✓ | β=−0.01, p=0.49 ✗ |
+| `log_action_dim` | β=+0.01, p=0.94 ✗ | β=−0.39, p=0.005 ✓ |
+| `empirical_reward_density` | β=−0.16, p=0.03 ✓ | β=+0.10, p=0.25 ✗ |
+
+### Reading
+
+The chain `arm → mechanism → link → outcome` decomposes the
+moderator structure cleanly:
+
+1. **Shared moderators (drive both mechanism and link).**
+   `bootstrap_fraction` and `log_horizon` enter both regressions
+   with the same sign and similar magnitude. Sparse-reward and
+   long-horizon envs are where DDQN's bias-correction has both
+   the *room* (more max-of-noisy compounding to undo) and the
+   *translation pathway* (reduced bias actually changes
+   trajectory-onward returns).
+
+2. **Mechanism-only moderator: `log_action_dim`** (β=−0.39 on
+   g_mech, p=0.005, but null on g_link, p=0.94). Sign: g_mech
+   is `hedges_g_paired(Δbias)` where Δbias = bias_DDQN −
+   bias_vanilla, and DDQN typically reduces bias so g_mech is
+   typically negative; β=−0.39 on log_action_dim means *more*
+   negative g_mech as |A| grows, i.e. *bigger* bias reduction
+   on high-|A| envs. This matches action-noise theory: more
+   arms → more max-of-noisy compounding → vanilla accumulates
+   more bias → DDQN reduces more. But the link is null on |A|
+   (p=0.94) — the larger bias reduction on high-|A| does NOT
+   convert into a larger outcome benefit. The mechanism
+   activates more strongly on high-|A|; the link doesn't
+   propagate it.
+
+3. **Link-only moderator: `log_obs_dim`** (β=−0.07 on g_link,
+   p=0.0001, but null on g_mech, p=0.49). Smaller-obs envs see
+   bigger outcome benefit *for the same amount of bias
+   reduction*. The mechanism activates uniformly across obs_dim,
+   but the link only converts bias-reduction into outcome
+   benefit on small-obs envs. This is a *chain-bottleneck at
+   the link*, not at the mechanism.
+
+4. **`log_action_dim`'s prior significance was action-noise
+   compounding at the mechanism, not at the link.** The
+   single-covariate g_link ~ log_action_dim regression had
+   p=0.038 (revision 7); the joint regression with confounds
+   crashed it to p=0.94 (revision 8). The g_mech regression
+   recovers it cleanly at p=0.005 — the action-dim hypothesis
+   is real, just at the wrong stage of the chain. The
+   confound-deconfounding test (revision 8) was correctly
+   identifying that |A| was screened off from g_link by
+   `bootstrap_fraction`+`log_horizon`+`log_obs_dim`; this 10th
+   revision shows |A| is *not* screened off from g_mech.
+
+### Why this matters for the framework
+
+The framework's gist is "find scope, verify chain". The chain
+decomposition `arm → mechanism → link → outcome` is what makes
+this kind of moderator-structure differential possible —
+without separating the two regressions, the |A| moderator
+appears null (because it's null at the link) and the obs_dim
+moderator appears generic (because it's significant at the
+link but not the mechanism). The differential reveals:
+
+- **Sparse-reward + long-horizon** = both ends of the chain are
+  open. Unified scope.
+- **High |A|** = mechanism opens, link closes. Bias-reduction
+  doesn't reach outcome.
+- **Small obs_dim** = mechanism uniform, link opens. Outcome
+  benefit selectively materializes on simple-state envs.
+
+### Reproduction
+
+```
+uv run python experiments/analyze_per_burst_meta_regression.py \
+  --corpus ddqn --total-steps 200000
+```
+
+Reads `experiments/data/ddqn/{runs,traces}.parquet`. Stage 1
+prints per-(env, burst) g_link table; Stage 2 runs g_link
+regressions; Stage 3 runs parallel g_mech regressions.
+
+---
+
 ## 2026-04-29 (ninth revision) — Per-burst trajectory on FourRooms reveals: DDQN's mechanism operates early, scalar mean obscures it. Outcome benefit is stable across all bursts; r(Δbias, Δret) is negative at every burst.
 
 ### Methodology

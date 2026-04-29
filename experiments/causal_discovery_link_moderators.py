@@ -23,9 +23,12 @@ correlated-but-screened-off.
 
 Usage:
   uv run python experiments/causal_discovery_link_moderators.py
+  uv run python experiments/causal_discovery_link_moderators.py \
+    --corpus ddqn_effective_cohort --total-steps 200000
 """
 from __future__ import annotations
 
+import argparse
 import math
 from collections.abc import Mapping
 from pathlib import Path
@@ -109,10 +112,18 @@ def _build_panel(corpus: str, total_steps: int, *, include_env: bool = False) ->
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--corpus', default='ddqn')
+    parser.add_argument('--total-steps', type=int, default=200_000)
+    args = parser.parse_args()
+    corpus: str = args.corpus
+    total_steps: int = args.total_steps
+
     print('=' * 100)
-    print('Causal discovery on per-(env, burst) link moderator panel')
+    print(f'Causal discovery on per-(env, burst) link moderator panel '
+          f'[corpus={corpus}, total_steps={total_steps}]')
     print('=' * 100)
-    panel = _build_panel('ddqn', 200_000, include_env=True)
+    panel = _build_panel(corpus, total_steps, include_env=True)
     print(f'  n_strata={panel.height}  n_features={len(panel.columns)}')
 
     variables = (
