@@ -53,19 +53,30 @@ _OUTCOME_TAUTOLOGICAL: frozenset[str] = frozenset({
 
 
 def _arg_paths(corpus: str, env: str) -> tuple[Path, list[Path]]:
+    """Locate runs.parquet + trace parquets for `corpus`, restricted
+    to `env` if per-arm parquets are available. Falls back to the
+    corpus's single merged traces.parquet (e.g., older corpora that
+    don't keep per-arm tmp/ around)."""
     base = Path('experiments/data') / corpus
     runs = base / 'runs.parquet'
     if not runs.exists():
-        raise SystemExit(f'runs.parquet not found at {runs}')
-    # Tokenise env name so the glob matches the per-arm tag pattern
-    # (substrate uses arm-tag like "FourRooms-misc__vanilla_dqn").
+        # `runs_with_mediators.parquet` is the older corpus naming.
+        alt = base / 'runs_with_mediators.parquet'
+        if alt.exists():
+            runs = alt
+        else:
+            raise SystemExit(f'runs.parquet not found at {runs}')
     env_token = env.replace('/', '_')
     tmp = base / 'tmp'
     if tmp.exists():
         traces = sorted(tmp.glob(f'*{env_token}*__traces.parquet'))
-    else:
-        traces = []
-    return runs, traces
+        if traces:
+            return runs, traces
+    # Fallback: single merged traces.parquet at corpus root.
+    merged = base / 'traces.parquet'
+    if merged.exists():
+        return runs, [merged]
+    return runs, []
 
 
 def main() -> None:
