@@ -216,9 +216,17 @@ class Replay:
         For `n_step=1` this short-circuits to the original single-
         step semantics: count goes 0→1, emit immediately, write
         the raw transition to the buffer slot at `size % capacity`."""
+        # Cast to the pending-window's init dtypes (jnp.zeros
+        # defaults to float32 for floats; obs in some envs is
+        # int32 — without the cast, scan's carry-input/output
+        # type check fails: float32 in, int32 out, "carry types
+        # differ").
+        obs_dtype = state.pending_head_obs.dtype
         starting_new = state.pending_count == 0
         new_head_obs = jnp.where(
-            starting_new, transition.obs, state.pending_head_obs,
+            starting_new,
+            transition.obs.astype(obs_dtype),
+            state.pending_head_obs,
         )
         new_head_action = jnp.where(
             starting_new,
@@ -226,11 +234,14 @@ class Replay:
             state.pending_head_action,
         )
         gamma_k = self.gamma ** state.pending_count.astype(jnp.float32)
-        new_acc_reward = state.pending_acc_reward + gamma_k * transition.reward
+        new_acc_reward = (
+            state.pending_acc_reward
+            + gamma_k * transition.reward.astype(jnp.float32)
+        )
         new_acc_done = jnp.maximum(
             state.pending_acc_done, transition.done.astype(jnp.float32),
         )
-        new_next_obs = transition.next_obs
+        new_next_obs = transition.next_obs.astype(obs_dtype)
         new_count = state.pending_count + 1
 
         should_emit = (new_count >= self.n_step) | (new_acc_done > 0.5)
