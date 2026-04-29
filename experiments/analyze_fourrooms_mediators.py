@@ -182,6 +182,103 @@ def main() -> None:
             f'{rb_s:>15} {pb_s:>7}{sig_b}'
         )
 
+    # ============ Time-series analysis (per-burst trajectories) ============
+    # Scalar mediators collapse training to a single number per cell,
+    # losing the time dimension. The persisted raw trace columns
+    # (`predicted_q_at_start`, `mc_return`, both shape (n_bursts, K))
+    # let us recover per-burst trajectories. Inline analysis: not a
+    # new Measurable.
+
+    print()
+    print('=' * 100)
+    print('Time-series analysis — per-burst trajectories on FourRooms')
+    print('=' * 100)
+
+    # Pair runs by id → seed; read trace records by id.
+    runs_by_id = {r.id: r for r in enriched}
+    seed_by_id = {
+        r.id: int(r.measurements['seed'])
+        for r in enriched
+        if isinstance(r.measurements.get('seed'), int)
+    }
+    intervention_by_id = {
+        r.id: r.measurements['intervention_name']
+        for r in enriched
+    }
+
+    # Read per-burst arrays from each FourRooms trace parquet.
+    bias_by_id: dict[str, np.ndarray] = {}    # (n_bursts,)
+    return_by_id: dict[str, np.ndarray] = {}  # (n_bursts,)
+    for tp in trace_paths:
+        df_t = pl.read_parquet(str(tp), columns=[
+            'id', 'predicted_q_at_start', 'mc_return',
+        ])
+        for row in df_t.iter_rows(named=True):
+            cell_id = row['id']
+            if cell_id not in runs_by_id:
+                continue
+            pred = np.asarray(row['predicted_q_at_start'], dtype=np.float64)
+            actual = np.asarray(row['mc_return'], dtype=np.float64)
+            if pred.ndim != 2 or actual.ndim != 2:
+                continue
+            bias_by_id[cell_id] = (pred - actual).mean(axis=-1)
+            return_by_id[cell_id] = actual.mean(axis=-1)
+
+    # Stack per arm: (n_cells, n_bursts).
+    def _stack(intervention: str) -> tuple[np.ndarray, np.ndarray, list[int]]:
+        ids = sorted(
+            (i for i in bias_by_id if intervention_by_id.get(i) == intervention),
+            key=lambda i: seed_by_id.get(i, -1),
+        )
+        bias = np.stack([bias_by_id[i] for i in ids], axis=0)
+        ret = np.stack([return_by_id[i] for i in ids], axis=0)
+        seeds = [seed_by_id[i] for i in ids]
+        return bias, ret, seeds
+
+    van_bias, van_ret, van_seeds = _stack('vanilla_dqn')
+    ddqn_bias, ddqn_ret, ddqn_seeds = _stack('ddqn')
+    if van_seeds != ddqn_seeds:
+        # Realign by intersection.
+        common = sorted(set(van_seeds) & set(ddqn_seeds))
+        van_idx = [van_seeds.index(s) for s in common]
+        ddqn_idx = [ddqn_seeds.index(s) for s in common]
+        van_bias, van_ret = van_bias[van_idx], van_ret[van_idx]
+        ddqn_bias, ddqn_ret = ddqn_bias[ddqn_idx], ddqn_ret[ddqn_idx]
+    n_pairs, n_bursts = van_bias.shape
+    print(f'  paired pairs={n_pairs}, n_bursts={n_bursts}')
+
+    delta_bias = ddqn_bias - van_bias       # (n_pairs, n_bursts)
+    delta_ret = ddqn_ret - van_ret           # (n_pairs, n_bursts)
+
+    # Per-burst summary table.
+    print()
+    print(f'  {"burst":>5} '
+          f'{"van_bias(μ)":>12} {"ddqn_bias(μ)":>13} {"Δbias(μ)":>10} {"Δbias_se":>9} '
+          f'{"van_ret(μ)":>11} {"ddqn_ret(μ)":>12} {"Δret(μ)":>9} '
+          f'{"r(Δbias,Δret)":>13} {"p":>6}')
+    print('-' * 130)
+    for b in range(n_bursts):
+        db = delta_bias[:, b]
+        dr = delta_ret[:, b]
+        # Skip degenerate bursts (constant outputs across pairs)
+        if float(db.std()) == 0.0 or float(dr.std()) == 0.0:
+            r, p = float('nan'), float('nan')
+        else:
+            r_obj = ss.pearsonr(db, dr)
+            r, p = r_obj.statistic, r_obj.pvalue
+        sig = '✓' if p == p and p < 0.05 else ' '
+        print(
+            f'  {b:>5} '
+            f'{float(van_bias[:, b].mean()):>+12.3f} '
+            f'{float(ddqn_bias[:, b].mean()):>+13.3f} '
+            f'{float(db.mean()):>+10.3f} '
+            f'{float(db.std() / np.sqrt(n_pairs)):>9.3f} '
+            f'{float(van_ret[:, b].mean()):>+11.3f} '
+            f'{float(ddqn_ret[:, b].mean()):>+12.3f} '
+            f'{float(dr.mean()):>+9.3f} '
+            f'{r:>+13.3f} {p:>6.3f}{sig}'
+        )
+
 
 if __name__ == '__main__':
     main()
