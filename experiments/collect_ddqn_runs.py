@@ -52,12 +52,13 @@ from typing import Any
 
 import jax
 import polars as pl
+import pyarrow as pa
+import pyarrow.parquet as pq
 
 from corroborate.hypothesis import Hypothesis
 from corroborate.intervention import Intervention
 from corroborate.persistence import (
     apply_trace_reductions,
-    tighten_trace_dtypes,
     write_runrows,
     write_tracerows,
 )
@@ -119,7 +120,7 @@ HP_GRID: dict[str, list[Any]] = {
 # per-step scalars (max, min, argmax, mean) so PAPER §5's mediator
 # features (q_gap_late, q_gap_growth, greedy_match_late,
 # v_vs_max_delta_late) are derivable downstream without keeping
-# the (steps, n_actions) tensors in zarr.
+# the (steps, n_actions) tensors in trace.
 
 def _per_step_max_q(nested_list: pl.Series) -> list[float]:
     """Per-step max over the (n_actions,) per-step Q vector.
@@ -322,6 +323,63 @@ def _grid_points(grid: dict[str, list[Any]]) -> list[dict[str, Any]]:
     ]
 
 
+def _union_schema(paths: list[Path]) -> pa.Schema:
+    """Compute the union of all input parquets' schemas. Each
+    field appears at most once; first-seen type wins on collision
+    (per-arm parquets share types per-column by construction —
+    only the column SET differs across step-counts when new
+    measurables get added mid-corpus)."""
+    fields: dict[str, pa.Field] = {}
+    for p in paths:
+        for f in pq.ParquetFile(p).schema_arrow:
+            fields.setdefault(f.name, f)
+    return pa.schema(list(fields.values()))
+
+
+def _cast_to_target(tbl: pa.Table, target: pa.Schema) -> pa.Table:
+    """Project / null-pad `tbl` to match `target`. Existing columns
+    cast to the target type; missing columns inserted as full-null
+    arrays of the target type."""
+    n = len(tbl)
+    cols: list[pa.Array | pa.ChunkedArray] = []
+    for f in target:
+        if f.name in tbl.column_names:
+            col = tbl.column(f.name)
+            if col.type != f.type:
+                col = col.cast(f.type)
+            cols.append(col)
+        else:
+            cols.append(pa.nulls(n, type=f.type))
+    return pa.Table.from_arrays(cols, schema=target)
+
+
+def _stream_concat_traces(inputs: list[Path], out: Path) -> None:
+    """pyarrow incremental union-merge of `inputs` → `out`.
+    Per-row-group streaming: never materialises the full corpus,
+    bounded at ~one row group + the writer's pending buffer.
+    Heterogeneous schemas (new columns added mid-corpus) null-pad
+    via `_cast_to_target`."""
+    if not inputs:
+        raise ValueError('no input parquets to concat')
+    target = _union_schema(inputs)
+    if out.exists():
+        out.unlink()
+    writer = pq.ParquetWriter(
+        out, target, compression='zstd', compression_level=3,
+    )
+    try:
+        for p in inputs:
+            pf = pq.ParquetFile(p)
+            for i in range(pf.num_row_groups):
+                tbl = pf.read_row_group(i)
+                tbl = _cast_to_target(tbl, target)
+                writer.write_table(tbl)
+                del tbl
+            del pf
+    finally:
+        writer.close()
+
+
 def main() -> None:
     out_dir = Path(__file__).parent / 'data' / 'ddqn'
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -441,17 +499,10 @@ def main() -> None:
           f'merging {len(parquet_pairs)} per-arm parquet pairs '
           f'({len(failures)} failures)')
 
-    # Union-merge per-arm parquets into one pair of files via polars
-    # lazy/streaming. The previous Python-object round-trip
-    # (`read_runrows` → `RunRow` list → `write_runrows`)
-    # materialised the entire trace store in memory and OOM'd at
-    # ~50k-step × 36-arm scale. polars' `scan_parquet` + lazy
-    # concat + `sink_parquet` streams: no full in-memory copy.
-    #
-    # `how='diagonal_relaxed'` accepts heterogeneous schemas (e.g.
-    # arms with different `eval_step_index` lengths from different
-    # `total_steps`) — missing columns null-pad, type widening
-    # tolerated.
+    # Runs: small (<1 MB total even at full corpus); polars in-memory
+    # `diagonal_relaxed` concat is fine. Heterogeneous columns
+    # across arms (e.g. arms with different `eval_step_index`
+    # lengths from different `total_steps`) null-pad cleanly.
     runs_inputs: list[Path] = []
     traces_inputs: list[Path] = []
     if final_runs_path.exists():
@@ -468,17 +519,19 @@ def main() -> None:
         [pl.scan_parquet(p) for p in runs_inputs],
         how='diagonal_relaxed',
     ).sink_parquet(runs_tmp)
-    # Plain concat on traces — no in-stream dtype tightening.
-    # `tighten_trace_dtypes` composed inside `sink_parquet`'s
-    # streaming plan can OOM on large diagonal_relaxed concats
-    # (observed at 36 arms × 200k-step traces). The dtype-narrowing
-    # post-pass is a separate, idempotent step authors run via
-    # `scripts/tighten_traces.py` — read-modify-write on the
-    # merged file. Splits the work into proven-streaming primitives.
-    pl.concat(
-        [pl.scan_parquet(p) for p in traces_inputs],
-        how='diagonal_relaxed',
-    ).sink_parquet(traces_tmp)
+
+    # Traces: pyarrow incremental writer. polars' `sink_parquet`
+    # over a `diagonal_relaxed` lazy plan dies silently at multi-tens
+    # of GB on cross-corpus merges (observed when bringing a 200k-
+    # step corpus alongside an existing 50k-step corpus —
+    # `concat([scan(50k), scan(200k_arms...)]).sink_parquet(...)`
+    # exits at 0 bytes with no traceback). pyarrow's per-row-group
+    # read-cast-write is bounded at ~one row group + the writer's
+    # pending buffer and survives at the multi-tens-of-GB scale
+    # (proven by `scripts/tighten_traces.py` and
+    # `scripts/merge_50k_200k.py`).
+    _stream_concat_traces(traces_inputs, traces_tmp)
+
     # Atomic-rename only after both writes succeed.
     runs_tmp.replace(final_runs_path)
     traces_tmp.replace(final_traces_path)

@@ -34,6 +34,7 @@ import polars as pl
 
 from corroborate.aggregate import leaf_signature
 from corroborate.hypothesis import Hypothesis
+from corroborate.intervention import Intervention
 from corroborate.persistence import (
     read_runrows,
     read_tracerows,
@@ -69,6 +70,7 @@ def _vanilla() -> Hypothesis[DQNTrajectoryRecord]:
         intervention={**_HPARAMS},
         bridges=(),
         predicted_direction=None,
+        intervention_arms=(),
     )
 
 
@@ -81,6 +83,14 @@ def _ddqn() -> Hypothesis[DQNTrajectoryRecord]:
         },
         bridges=(),
         predicted_direction='a_gt_b',
+        intervention_arms=(
+            Intervention(
+                slot_path='bootstrap',
+                replacement=partial(
+                    bootstrap, greedification=double_greedify,
+                ),
+            ),
+        ),
     )
 
 

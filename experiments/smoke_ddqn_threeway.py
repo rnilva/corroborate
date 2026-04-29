@@ -27,9 +27,13 @@ from pathlib import Path
 
 import polars as pl
 
+from functools import partial
+
 from corroborate.aggregate import link_pearson_across_envs
-from corroborate.hypothesis import Direction, Hypothesis
+from corroborate.hypothesis import Hypothesis
+from corroborate.intervention import Intervention
 from corroborate.persistence import read_runrows, write_comparisonrows
+from corroborate.rl.dqn.claims.bootstrap import bootstrap, double_greedify
 from corroborate.schema import (
     ComparisonRow,
     HypothesisComparisonRow,
@@ -189,10 +193,20 @@ def main() -> None:
               f'n_baseline={len(baseline)}')
         print('=' * 110)
 
+        ddqn_arms = (
+            Intervention(
+                slot_path='bootstrap',
+                replacement=partial(
+                    bootstrap, greedification=double_greedify,
+                ),
+            ),
+        )
+
         # Mechanism (DDQN should REDUCE Jensen gap).
         mech_h: Hypothesis = Hypothesis(
             name='ddqn', intervention={}, bridges=(),
             predicted_direction='a_lt_b',
+            intervention_arms=ddqn_arms,
         )
         mech_row = HypothesisComparisonRow.from_cells(
             mech_h, treatment, baseline,
@@ -208,6 +222,7 @@ def main() -> None:
         out_h: Hypothesis = Hypothesis(
             name='ddqn', intervention={}, bridges=(),
             predicted_direction='a_gt_b',
+            intervention_arms=ddqn_arms,
         )
         for path in _OUTCOME_PATHS:
             row = HypothesisComparisonRow.from_cells(

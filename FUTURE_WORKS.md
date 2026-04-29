@@ -324,7 +324,7 @@ record. Each needs a specific data extension before the gap
 measurable can be implemented honestly.
 
 **Currently shipped (v0 + step 4):** `fqi_decay_gap`,
-`lin_iid_gap`, `hasselt_covariance_gap` (Pearson r over kept
+`hasselt_covariance_gap` (Pearson r over kept
 Q-values), `action_coverage_gap` (caveated Watkins floor),
 `jensen_overestimation_gap` (reads EvalRecord — step 4.4 lifted
 this from "needs separate eval pass" via the `train_with_eval`

@@ -1,34 +1,64 @@
 # corroborate lifecycle
 
-The framework's primitives compose into a 12-stage flow. Drawn here
-to make the wiring legible: each stage names its inputs, its
-outputs, the modules that implement it, and its current state
-(**live** = production consumer; **orphan** = primitive exists but
-no consumer; **missing** = stage isn't implemented).
+The framework's primitives compose into a 12-stage flow (stage 1
+split into substrate authoring vs hypothesis formation — see
+diagram). Drawn here to make the wiring legible: each stage names
+its inputs, its outputs, the modules that implement it, and its
+current state (**live** = production consumer; **orphan** =
+primitive exists but no consumer; **missing** = stage isn't
+implemented).
 
 This is a **diagnostic map**, not a typed contract. Stages are
 narrative not Protocols. When a primitive doesn't fit any stage,
 it's misplaced. When a gap appears between two stages, that's a
 wire to add.
 
-**Terminology note.** corroborate has NO `Composition` type. v9's
-`ConditionalComposition` (env-conditional dispatch tree) was
-retired in favor of uniform interventions + post-hoc aggregation
-(random-effects pooling + meta-regression) — scope is empirical,
-not authored. The artifact at stage 2 is just a
-`functools.partial[T]`; the cell_runner names it `configured`.
+**Two research lifecycles, one diagram.** The framework supports
+both *hypothesis-driven* research (mechanism authored from theory
+at stage 1b, then validated through stages 2–8) and
+*discovery-first* research (intervene with a simple sweep,
+discover candidate mediators at stages 7+9, then *propose* a
+mechanism back to 1b for validation). The short feedback edge `7,
+9 → 1b` is what makes discovery-first work: it's the path by
+which the mechanism edge gets *proposed* rather than *assumed*.
+Real research is usually discovery-first; the §3 verdict is the
+*closing* move of an investigation, not the opening.
+
+**Terminology note (Composition).** corroborate has NO
+`Composition` type. v9's `ConditionalComposition` (env-conditional
+dispatch tree) was retired in favor of uniform interventions +
+post-hoc aggregation (random-effects pooling + meta-regression) —
+scope is empirical, not authored. The artifact at stage 2 is just
+a `functools.partial[T]`; the cell_runner names it `configured`.
 "Composition" appears in framework docstrings only as the English
-word for "way of composing primitives," never as a typed
-artifact.
+word for "way of composing primitives," never as a typed artifact.
+
+**Terminology note (MechanismKey).** corroborate has NO
+`MechanismKey` type. v10 had an explicit `Hypothesis.mechanism_key`
+artifact; corroborate derives the canonical fingerprint from
+`intervention_arms` via `Hypothesis.arm_key()`, which composes
+each `Intervention`'s `(slot_path, replacement)` through
+`canonical_str`. Identity is derived, not declared. Two hypotheses
+with the same `intervention_arms` (and possibly different HP grid
+points) share an `arm_key`; HP variation is a covariate, not an
+arm distinguisher.
 
 ## The flow
 
 ```
    ┌──────────────────────────────────────────────────────────────────────────┐
    │                                                                          │
-   │              ┌─ AUTHOR (1) ─────────────────────────────┐                │
+   │              ┌─ SUBSTRATE (1a) ─────────────────────────┐                │
    │              │  @claim, @measurable, @bridge,           │                │
-   │              │  Hypothesis, EnvSpec                     │                │
+   │              │  EnvSpec, bridge factories               │                │
+   │              │  (pre-research; persistent code)         │                │
+   │              └────────────────┬─────────────────────────┘                │
+   │                               │                                          │
+   │              ┌─ HYPOTHESIS-FORMATION (1b) ─────────────┐                 │
+   │              │  Hypothesis(intervention_arms, bridges) │                 │
+   │              │  mechanism edge = load-bearing claim    │                 │
+   │              │  ◄── short loop from 7, 9 (discovery)   │                 │
+   │              │  ◄── long loop from 12 (dialectic)      │                 │
    │              └────────────────┬─────────────────────────┘                │
    │                               │                                          │
    │              ┌─ BIND (2) ─────▼─────────────────────────┐                │
@@ -95,30 +125,85 @@ artifact.
                                                                                  │
               ┌──────────────────────────────────────────────────────────────────┘
               │
-              └──→ back to BIND (2)
+              └──→ back to HYPOTHESIS-FORMATION (1b)
 ```
+
+**Feedback edges.** Two loops feed back into stage 1b:
+
+- **Short loop (within a research cycle):** stages 7 (DISCOVER) and 9
+  (SCOPE-PREDICT) propose mechanism candidates back to 1b. v10 §4–§6 →
+  §3 IS this loop — discovery names which algorithmic quantity to test;
+  1b authors the bridge that tests it. Today this is *manual* (an author
+  reads the discovery output and writes a new mechanism bridge); the
+  framework provides the discovery primitives but doesn't auto-propose
+  candidates.
+- **Long loop (across research cycles):** stage 12 (IMPROVE/FALSIFY)
+  reads the register, identifies under-tested mechanism candidates from
+  stages 7+9, and authors a new Hypothesis at 1b. This is the dialectic
+  loop — currently missing infrastructure (stages 10–12 not yet
+  implemented).
 
 ## Per-stage status
 
-### Stage 1 — AUTHOR
+### Stage 1a — SUBSTRATE
 
-**Inputs**: code (substrate-author or paper-author).
+**Inputs**: substrate-author code.
 
 **Outputs**: `@claim`-decorated Module/Free Claims, `@measurable`
-instances, `@bridge` instances, `Hypothesis` dataclass,
-`EnvSpec`.
+instances, `@bridge` instances, `EnvSpec`, bridge factories.
+Persistent code; written once and reused across many hypotheses.
 
 **Modules**: `claim.py`, `measurable.py`, `bridge.py`, `bridges.py`
-(factories), `hypothesis.py`, `intervention.py`, `verdict.py`,
-`reductions.py`, `signature.py`, `invariant.py`,
-`rl/dqn/measurables.py`, `rl/dqn/claims/*`, `rl/dqn/dqn.py`.
+(factories), `intervention.py`, `verdict.py`, `reductions.py`,
+`signature.py`, `invariant.py`, `rl/dqn/measurables.py`,
+`rl/dqn/claims/*`, `rl/dqn/dqn.py`, `rl/env_catalogue.py`.
 
-**Status**: **live**. Substrate authors use this surface.
+**Status**: **live**.
 
 **Orphans at this stage**:
 - `bridges.py` factories (`monotonic`, `correlation`,
   `mean_exceeds`, `variance_shrinks`) — authored, no Hypothesis
   attaches them today (`bridges=()` in §3 sweep).
+
+---
+
+### Stage 1b — HYPOTHESIS-FORMATION
+
+**Inputs**: a research question, plus either (a) theoretical
+content naming the mechanism, OR (b) discovery output from
+stages 7/9 proposing candidate mechanisms, OR (c) register
+output from stage 12 selecting an under-tested candidate.
+
+**Outputs**: a typed `Hypothesis` carrying:
+- `intervention_arms: tuple[Intervention, ...]` — the typed
+  identity of mechanism swaps (sourced from the substrate).
+  Defines `arm_key` via canonical fingerprint.
+- `bridges: tuple[Bridge[R], ...]` — the per-edge tests applied
+  to the resulting record. Today this is a flat tuple; the v10
+  vision (queued, see step 1 below) is for a typed
+  `CausalSubgraph` with role-tagged edges (mechanism / outcome /
+  link / refuter) read by the §3 verdict pipeline.
+
+**Modules**: `hypothesis.py`, `intervention.py`. The Hypothesis
+construction sites today are the experiment scripts
+(`experiments/collect_ddqn_runs.py`, the smokes); 1b doesn't have
+its own module because the construction is one frozen-dataclass
+call.
+
+**Status**: **live for the flat-bridges shape**;
+**partially-typed for the subgraph shape** — `causal_graph.py`
+provides the edge / tier / direction primitives but the
+Hypothesis itself doesn't yet carry a `CausalSubgraph` field.
+The connector from `Hypothesis.bridges` to a typed subgraph is
+the highest-leverage v0 → v1 move.
+
+**Load-bearing observation**: the *mechanism edge* of a Hypothesis
+is the central theoretical claim; outcome and link edges test
+its implications. `arm_key` derives from the mechanism edge's
+source (the intervention). Two hypotheses with the same
+intervention but different mechanism-edge *targets* are different
+hypotheses (same do, different theoretical commitment about what
+the do affects).
 
 ---
 
@@ -241,15 +326,39 @@ for stages 10/11.
 
 ### Stage 7 — DISCOVER (rung 1 — observational)
 
+**Prerequisites**: a corpus of RunRows (NOT a Hypothesis — stage 7
+is hypothesis-free; it operates on raw data).
+
 **Inputs**: corpus dataframe + variable list + `stratify_by`.
 
 **Outputs**: `DiscoveredAdjacency` (PC + JCI),
-`OrientedAdjacency` (Meek-rule oriented).
+`OrientedAdjacency` (Meek-rule oriented), candidate-mediator
+projections (typed `@measurable` reductions of trace data),
+within-env Pearson correlations.
 
-**Modules**: `causal_discovery.{discover_adjacency, orient_adjacency,
-partial_spearman_rho, stratified_spearman_rho, ...}`.
+**Modules**: `causal_discovery.{discover_adjacency,
+orient_adjacency, compare_pc_depths, partial_spearman_rho,
+stratified_spearman_rho, ...}`, `rl/dqn/measurables.py` (typed
+mediator catalog: q_gap_late, td_residual_late, greedy_match_late,
+plus the value-curve family — learning_curve_auc,
+time_to_threshold, return_at_25pct_steps, plateau_slope_late),
+the per-env Pearson smokes.
 
-**Status**: **live**. §4 / §5-thin / §6 smokes consume this.
+**Status**: **live**. §4 / §5 / §6 smokes consume this.
+
+**Sub-stages.** Discovery has internal structure worth naming:
+- **7a** — PC adjacency + orientation on a chosen variable set
+  (the §4 path).
+- **7b** — typed mediator projection + within-env Pearson on the
+  candidate-mediator set (the §5 path).
+- **7c** — per-env PC, run within each stratum separately when
+  pooled discovery is null (the §6 path).
+
+The output of any sub-stage feeds back to **stage 1b** — a
+mediator with a significant within-env Pearson, or an edge
+adjacent to `final_return` in per-env PC, IS a mechanism
+candidate. The discovery → 1b feedback edge is what makes
+discovery-first research a closed loop.
 
 ---
 
@@ -323,12 +432,16 @@ calculation + dialectic-loop frontier selection.
 ### Stage 12 — IMPROVE / FALSIFY (the dialectic loop)
 
 **Inputs**: register state + a frontier (queue of hypotheses to
-improve / falsify next).
+improve / falsify next) + discovery output from stages 7+9
+identifying under-tested mechanism candidates.
 
-**Outputs**: new Hypothesis → back to stage 2.
+**Outputs**: a candidate mechanism / intervention spec routed
+*back to stage 1b* (NOT directly to stage 2), so 1b can author
+the typed Hypothesis (typed bridges, predicted directions, etc.)
+before it gets bound and run.
 
 **Modules**: **MISSING**. Orchestrator lives outside any single
-substrate; would compose stages 2–11 into a closed loop.
+substrate; would compose stages 1b–11 into a closed loop.
 
 ---
 
@@ -336,7 +449,9 @@ substrate; would compose stages 2–11 into a closed loop.
 
 | Primitive | Stage | Status | Wire to consumer |
 |---|---|---|---|
-| `bridges.py` factories | 1 | orphan | requires Hypothesis-author work, not a framework wire |
+| `bridges.py` factories | 1a | orphan | requires Hypothesis-author work, not a framework wire |
+| typed `CausalSubgraph` on Hypothesis | 1b | partial | `causal_graph.py` exists but `Hypothesis.bridges` is still a flat tuple — needs role-tagged edges |
+| short feedback loop (discovery → 1b) | 7→1b | manual | author reads discovery output and writes mechanism bridge; could grow into a typed candidate-proposer |
 | `Intervention.apply` | 2 | orphan (parallel path) | replace `partial(...)` in cell_runner |
 | `sweep.sweep` | 3 | orphan | collect_ddqn_runs migration |
 | `ComputationGraph` capture | 4 | orphan | requires stage 8 connector |
@@ -345,27 +460,40 @@ substrate; would compose stages 2–11 into a closed loop.
 | `transitive_reads` | 6 | orphan | requires stage 10 |
 | `measurable_graph` | 9 alt | orphan | §3.5 didn't migrate |
 | `meta_regression` | 9 | live | — |
+| value-curve mediators (D3) | 7b | live | feed candidate-mediator covariates into stage 9 |
+| `cross_validate_meta_regression` (D2) | 9 | live | — |
+| `compare_pc_depths` (D1) | 7a | live | — |
 | `redundancy` | 10 | absent | port from v10 |
 | `register` | 11 | absent | port from v10 |
 | `compute_R_info` | 10 | absent | port from v10 |
 
 ## Highest-leverage wires (in order)
 
-1. **Stage 4 → Stage 8 connector**:
+1. **Hypothesis-as-subgraph (stage 1b → stages 6+8)**:
+   typed `CausalSubgraph` on `Hypothesis`, replacing the flat
+   `bridges: tuple[Bridge[R], ...]` tuple. Role-tagged edges
+   (mechanism / outcome / link / refuter) so the §3 verdict
+   pipeline reads role explicitly. Now that `causal_graph.py`
+   has landed the BridgeEdge / Tier / Direction primitives, the
+   Hypothesis-side typing is the missing connector. Unblocks
+   the v10 §3 verdict pattern as a *typed* artifact rather than
+   an implicit consumer pattern.
+
+2. **Stage 4 → Stage 8 connector**:
    `aggregate.reconstruct_bridge_results(run: RunRow) ->
    tuple[BridgeResult, ...]`. ~30 LoC. Single primitive that
    unblocks the entire `causal_graph` pipeline. After this,
    Pearl-tier rung 1+2 promotion becomes runnable on the §3
    corpus.
 
-2. **Stage 10 + 11 port**:
+3. **Stage 10 + 11 port**:
    `redundancy.py` + `register.py` from v10. ~400 LoC bundle.
    Closes the dialectic-loop reward signal. Reads stage 6's
    `facts` + `reads_set` (which are already populated). After
    this, axiom 19's ΔI is computable.
 
-3. **Stage 12 orchestrator**:
-   Improve / Falsify driver composing stages 2–11. ~200 LoC.
+4. **Stage 12 orchestrator**:
+   Improve / Falsify driver composing stages 1b–11. ~200 LoC.
    This is where v0 → v1 transition happens.
 
 ## Honest caveats
@@ -374,10 +502,21 @@ substrate; would compose stages 2–11 into a closed loop.
   status changes, update this file. When a stage isn't reflected,
   this file is wrong. Read commit history if uncertain.
 
-- **Multiple lifecycles, one diagram.** Per-cell lifecycle (3 → 4 →
-  5), per-hypothesis lifecycle (1 → 6 → 11), per-paper-section
-  lifecycle (5 → 7 / 5 → 6 → 9). The diagram collapses them. Real
-  flows are sub-paths.
+- **Multiple lifecycles, one diagram.** The diagram collapses
+  several real flows; readers should expect to traverse only one
+  at a time:
+  - **Per-cell lifecycle:** 3 → 4 → 5.
+  - **Per-hypothesis lifecycle:** 1b → 2 → ... → 6 → 11.
+  - **Per-paper-section lifecycle:** 5 → 7 (for §4); 5 → 6 → 9
+    (for §3 + §7).
+  - **Hypothesis-driven research lifecycle:** 1a → 1b → 2 →
+    ... → 6 → 8. Mechanism authored from theory; framework
+    verdicts each edge of the subgraph claim.
+  - **Discovery-first research lifecycle:** 1a → 2 → 3 → 4 →
+    5 → 7 → 9 → *back to 1b* (propose mechanism candidate from
+    discovery output) → 2 → ... → 6 → 8. The mechanism edge gets
+    *proposed* by stages 7+9, not assumed at 1b. v10 §4–§6 → §3
+    is exactly this lifecycle.
 
 - **Forward-investment is allowed but typed.** A primitive in stage
   X with no consumer at stage Y is "orphan" not "wrong." Some

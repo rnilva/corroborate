@@ -2,11 +2,20 @@
 
 ## Purpose
 
-`corroborate` provides three composable capabilities on top of a
-`@claim`-decorated executable program: (a) intervention study,
+`corroborate` finds the *scope* of an authored mechanism claim,
+then verifies the *causal chain* that explains it. The chain
+runs `env feature → invariance gap → mechanism activation →
+outcome`; the invariance gap (residual of the theorem's premise,
+measured per env) is the load-bearing node — both the
+scope-defining feature and the causal mediator.
+
+The framework provides three composable capabilities on top of
+a `@claim`-decorated executable program: (a) intervention study,
 (b) falsification, (c) causal discovery. These are substrate, not
 application — orchestrators (dialectic loops, audits, data-mining)
-compose them differently. See `README.md`.
+compose them differently. Authoring an invariant per mechanism
+claim is the substrate-author's primary commitment. See
+`README.md`.
 
 ## Typing discipline (load-bearing)
 
