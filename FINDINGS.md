@@ -5,6 +5,114 @@ to track when claims were authored vs. observed.
 
 ---
 
+## 2026-04-29 (sixth revision) — Time-to-first-solve link is null on average too: replacing the steady-state outcome with a sample-efficiency proxy doesn't rescue DDQN.
+
+### Methodology
+
+The headline DDQN finding (mechanism HELD ↛ link HELD) was read on
+the *steady-state* outcome: `outcome.eval_best_burst_mean`. That
+metric saturates at the discounted-return ceiling for envs where
+both arms eventually solve, hiding any *sample-efficiency* effect.
+
+This revision tests a different link: among cells that solved at
+all, does DDQN reach threshold *faster* than vanilla?
+
+- Outcome proxy: `outcome.eval_best_burst_step` (the training step
+  at which the best evaluation burst occurred). Upper bound on
+  first-crossing step; for monotonic learners they coincide. Used
+  as a first-pass proxy here; if the headline result demanded
+  precision the same analysis can rerun on stream-extracted
+  first-crossing-of-threshold steps.
+- Filter: 200k-step cells; per (env, seed) pair, both ddqn and
+  vanilla cells must have `eval_best_burst_mean ≥ env_threshold`
+  (both solved).
+- Per env: paired Hedges' g, pair-by seed, predicted direction
+  `a_lt_b` (DDQN should solve faster ⇒ smaller best-burst-step).
+- Random-effects pool by solve-rate class (high ≥ 80% paired
+  solves, mixed 30–80%, low < 30%).
+
+### Results
+
+| Env | Class | n_pairs | g | SE | Verdict |
+|---|---|---|---|---|---|
+| Acrobot-v1 | high | 30 | +0.149 | 0.184 | PI |
+| Breakout-MinAtar | high | 30 | −0.129 | 0.183 | PI |
+| Catch-bsuite | high | 30 | +0.000 | nan | PI |
+| DiscountingChain-bsuite | high | 28 | +0.314 | 0.194 | PI |
+| MemoryChain-bsuite | high | 30 | +0.164 | 0.184 | PI |
+| **SpaceInvaders-MinAtar** | high | 30 | **−0.532** | 0.195 | **HELD** |
+| UmbrellaChain-bsuite | high | 30 | +0.000 | nan | PI |
+| CartPole-v1 | mixed | 18 | +0.149 | 0.237 | PI |
+| DeepSea-bsuite | mixed | 15 | +0.000 | nan | PI |
+| MNISTBandit-bsuite | mixed | 10 | +0.000 | nan | PI |
+
+Random-effects pool, high-solve class (n=5 envs with non-degenerate
+g/SE): g_pooled=−0.005, I²=0.67, PI=[−0.85, +0.84] → **NO_EFFECT**.
+
+All envs pooled (n=6): g_pooled=+0.017, I²=0.60, PI=[−0.67, +0.70]
+→ **NO_EFFECT**.
+
+### Reading
+
+1. **The link is null at the sample-efficiency lens too.** Across
+   six pool-eligible envs the predicted-direction effect averages
+   zero with prediction interval bracketing zero. The headline
+   "mechanism HELD ↛ link HELD" pattern is not rescued by reading
+   sample-efficiency instead of steady-state outcome.
+
+2. **One env where DDQN solves faster: SpaceInvaders-MinAtar**
+   (g=−0.532, HELD). Breakout-MinAtar leans the same direction
+   (g=−0.13) but underpowered. Both are MinAtar — sparse-reward
+   pixel-input envs where overestimation bias plausibly costs
+   sample efficiency in a way the outcome ceiling masks.
+
+3. **Heterogeneity is high** (I²=0.67 on the high-solve pool).
+   Per-env effects vary in sign, not just magnitude. The pooled
+   null comes from envs cancelling — the link "exists for some
+   envs and against the prediction for others", not "absent
+   everywhere".
+
+4. **Several envs report g=0 with NaN SE** (Catch, DeepSea-bsuite,
+   MNISTBandit, UmbrellaChain). The best-burst-step is identical
+   across all paired cells — eval cadence is coarse enough that
+   first-crossing falls in the same evaluation burst for every
+   seed. The metric is degenerate on these envs at this eval
+   resolution; a finer-grained "first crossing in trace steps"
+   would resolve them.
+
+### Implication for the DDQN study
+
+The mechanism HELD ↛ link HELD pattern is robust to the choice
+of outcome metric:
+- `outcome.eval_best_burst_mean` (best burst): null link.
+- `outcome.eval_final_mean` (last burst): null link.
+- `outcome.eval_best_burst_step` (sample efficiency proxy): null
+  link on average, env-specific exception on SpaceInvaders.
+
+DDQN's bias-reduction is real and measurable. Its translation to
+benefit on this corpus is consistently env-specific, never
+universal — exactly the headline. The MinAtar finding suggests
+DDQN's sample-efficiency benefit *might* be detectable on
+sparse-pixel envs, but n=2 (SpaceInvaders, Breakout) is too thin
+to pin that down.
+
+### Honest scope
+
+- Best-burst-step is an upper bound on first-solve-step. Stream-
+  extracted exact first-crossing would tighten variance but is
+  unlikely to flip the headline.
+- I² ≈ 0.6 — pooled estimate is unstable; the per-env table
+  carries more information than the pooled g.
+- Eval-cadence-degenerate envs need either finer eval resolution
+  or per-step trace extraction to participate.
+
+Reproduce with:
+```
+uv run python experiments/time_to_solve_ddqn.py
+```
+
+---
+
 ## 2026-04-29 (fifth revision) — Three-check audit on the DDQN 200k corpus: SCV doesn't generalize; jensen_gap structurally borderline but strongest within-env signal in predicted direction.
 
 ### Methodology
