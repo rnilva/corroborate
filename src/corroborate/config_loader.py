@@ -32,7 +32,7 @@ from typing import TypeIs, cast
 import yaml
 
 from corroborate.hypothesis import Hypothesis, PredictedDirection
-from corroborate.intervention import Intervention, Replacement
+from corroborate.intervention import Intervention, is_replacement
 from corroborate.registry import Registry
 
 
@@ -155,15 +155,7 @@ def _resolve_class(
         k: resolve(v, reg=reg, env_attrs=env_attrs)
         for k, v in node.items() if k != _CLASS_KEY
     }
-    if name in reg.module_classes:
-        return _construct(reg.module_class(name), kwargs)
-    if name in reg.containers:
-        return _construct(reg.container(name), kwargs)
-    raise KeyError(
-        f'no Module Claim or container named {name!r}; '
-        f'modules={sorted(reg.module_classes)}, '
-        f'containers={sorted(reg.containers)}',
-    )
+    return _construct(reg.cls(name), kwargs)
 
 
 def _resolve_fn(
@@ -289,17 +281,12 @@ def _build_arm(
     if 'replacement' not in node:
         raise KeyError('intervention_arm missing `replacement`')
     raw_repl = resolve(node['replacement'], reg=reg, env_attrs=env_attrs)
-    # Replacement = ClaimBase | FnClaim | partial | Callable.
-    # Resolve always returns a callable for class/fn-keyed nodes;
-    # if YAML authored a non-callable replacement (a leaf scalar),
-    # that's a config error caught at construction time.
-    if not callable(raw_repl):
+    if not is_replacement(raw_repl):
         raise TypeError(
             f'intervention_arm.replacement must resolve to a '
             f'callable; got {type(raw_repl).__name__}',
         )
-    replacement = cast(Replacement, raw_repl)
-    return Intervention(slot_path=slot_path, replacement=replacement)
+    return Intervention(slot_path=slot_path, replacement=raw_repl)
 
 
 __all__ = [

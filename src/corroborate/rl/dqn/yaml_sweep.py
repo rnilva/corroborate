@@ -1,26 +1,26 @@
-"""DQN-substrate YAML manifest → `run_hypotheses` dispatch.
+"""DQN-substrate YAML → `run_hypotheses` dispatch.
 
-Two arm-shape modes, each with its own manifest dataclass for
-typed discrimination at use-sites:
+`DQNSweep` is the typed shape of a configured experiment loaded
+from YAML — one dataclass for both arm shapes. The dispatch
+distinction lives in `arms_shape: 'chunked' | 'paired'` and the
+`{from_env: <attr>}` placeholders inside `hypothesis_templates`,
+not in the manifest type.
 
-- `ChunkedManifest` — `arms_shape: chunked`. Hypotheses are
-  env-generic and built once at load time. The dispatcher pairs
-  each with every env Cartesianly via `chunked_arms`.
-- `PairedManifest` — `arms_shape: paired`. Each Hypothesis is
-  bound to one env (e.g. CNN configured per-env obs_shape). The
-  YAML carries hypothesis *templates* with `{from_env: <attr>}`
-  placeholders; the dispatcher iterates envs, substitutes
-  placeholders against `EnvSpec` attributes, builds one concrete
-  Hypothesis per (template, env) pair, and runs `paired_arms`.
+- `arms_shape: 'chunked'` — hypotheses are env-generic. The
+  templates resolve once (no env_attrs) and pair Cartesianly with
+  envs via `chunked_arms`.
+- `arms_shape: 'paired'` — each (template × env) builds one
+  concrete Hypothesis after `{from_env: <attr>}` substitution
+  against `EnvSpec.public_attrs()`. The substrate's `paired_arms`
+  zips them with one env_config per arm.
 
-The split between *manifest* and *dispatch* keeps tests cheap:
-they load manifests without spinning up the runner so signature
-parity can be checked against a Python-authored Hypothesis tuple
-before any sweep launches."""
+The split between *shape* (the dataclass) and *dispatch* (the
+function) keeps tests cheap: they load a `DQNSweep` and inspect
+without spinning up the runner."""
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass, fields as dc_fields
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, TypeIs, cast
 
@@ -45,45 +45,50 @@ def _is_arms_shape(v: object) -> TypeIs[ArmsShape]:
 
 
 @dataclass(frozen=True, slots=True)
-class ChunkedManifest:
-    """Manifest for chunked dispatch: hypotheses built eagerly and
-    paired with envs Cartesianly at dispatch."""
-    name: str
-    out_dir: Path
-    envs: tuple[EnvConfig, ...]
-    hypotheses: tuple[Hypothesis[Mapping[str, object]], ...]
-    archive_remote: str | None = None
+class DQNSweep:
+    """A configured DQN sweep. `hypothesis_templates` are raw
+    string-keyed mappings (pre-resolution); call
+    `build_hypotheses` with the appropriate env context to get
+    concrete `Hypothesis` instances.
 
-
-@dataclass(frozen=True, slots=True)
-class PairedManifest:
-    """Manifest for paired dispatch: hypothesis templates are
-    deferred — each env-spec resolves the templates per-env via
-    `{from_env: <attr>}` substitution, then `paired_arms` zips
-    one (built-from-template) Hypothesis with each env_config."""
+    The dataclass is shape-uniform between chunked and paired
+    modes. The dispatch routine reads `arms_shape` to decide
+    whether to resolve once (chunked) or per-env (paired)."""
     name: str
     out_dir: Path
     envs: tuple[EnvConfig, ...]
     hypothesis_templates: tuple[Mapping[str, object], ...]
+    arms_shape: ArmsShape
     archive_remote: str | None = None
 
+    def build_hypotheses(
+        self,
+        *,
+        reg: Registry,
+        env_attrs: Mapping[str, object] | None = None,
+    ) -> tuple[Hypothesis[Mapping[str, object]], ...]:
+        """Resolve every template against `reg` and return the
+        built Hypothesis tuple. Pass `env_attrs=None` for chunked
+        mode (any `{from_env: <attr>}` placeholder raises);
+        provide an env's `public_attrs()` map for paired mode."""
+        return tuple(
+            build_hypothesis_from_mapping(
+                t, reg=reg, env_attrs=env_attrs,
+            )
+            for t in self.hypothesis_templates
+        )
 
-type DQNExperimentManifest = ChunkedManifest | PairedManifest
+
+def env_attrs_from_spec(spec: EnvSpec) -> Mapping[str, object]:
+    """Adapter to the catalogue's whitelist. Kept here so the
+    YAML loader doesn't import `EnvSpec.public_attrs` directly —
+    swapping the env catalogue for a substrate-specific one is
+    one function change."""
+    return spec.public_attrs()
 
 
-def env_attrs_from_spec(spec: EnvSpec) -> dict[str, object]:
-    """Project an `EnvSpec` to the attribute map consumed by the
-    `from_env` resolver. Each public field becomes a key; the
-    YAML's `{from_env: observation_shape}` resolves directly to
-    `spec.observation_shape`."""
-    return {f.name: getattr(spec, f.name) for f in dc_fields(spec)}
-
-
-def load_manifest(
-    path: Path, *, reg: Registry,
-) -> DQNExperimentManifest:
-    """Parse a YAML manifest into the typed manifest variant
-    matching its `arms_shape`. Raises `TypeError` /
+def load_sweep(path: Path, *, reg: Registry) -> DQNSweep:
+    """Parse a YAML sweep config. Raises `TypeError` /
     `ValueError` / `KeyError` on schema violations with messages
     naming the offending field."""
     with path.open() as f:
@@ -93,12 +98,10 @@ def load_manifest(
             f'top-level YAML must be a string-keyed mapping; got '
             f'{type(raw).__name__}',
         )
-    return _build_manifest(raw, reg=reg)
+    return _build_sweep(raw)
 
 
-def _build_manifest(
-    node: Mapping[str, object], *, reg: Registry,
-) -> DQNExperimentManifest:
+def _build_sweep(node: Mapping[str, object]) -> DQNSweep:
     name = _require_str(node, 'name')
     out_dir = Path(_require_str(node, 'out_dir'))
     envs = _build_envs(node)
@@ -108,31 +111,18 @@ def _build_manifest(
     hypotheses_raw = node.get('hypotheses')
     if not isinstance(hypotheses_raw, list):
         raise TypeError(
-            f'manifest.hypotheses must be a list; got '
+            f'sweep.hypotheses must be a list; got '
             f'{type(hypotheses_raw).__name__}',
         )
     hypotheses_typed: list[object] = list(hypotheses_raw)
-
-    merged_templates = tuple(
+    templates = tuple(
         _merge_with_base(h, base_intervention)
         for h in hypotheses_typed
     )
-
-    if arms_shape == 'chunked':
-        # Eager build — chunked has no env-binding.
-        hypotheses = tuple(
-            build_hypothesis_from_mapping(t, reg=reg)
-            for t in merged_templates
-        )
-        return ChunkedManifest(
-            name=name, out_dir=out_dir, envs=envs,
-            hypotheses=hypotheses,
-            archive_remote=archive_remote,
-        )
-    return PairedManifest(
+    return DQNSweep(
         name=name, out_dir=out_dir, envs=envs,
-        hypothesis_templates=merged_templates,
-        archive_remote=archive_remote,
+        hypothesis_templates=templates,
+        arms_shape=arms_shape, archive_remote=archive_remote,
     )
 
 
@@ -140,7 +130,7 @@ def _require_str(node: Mapping[str, object], key: str) -> str:
     v = node.get(key)
     if not isinstance(v, str):
         raise TypeError(
-            f'manifest.{key} must be a string; got '
+            f'sweep.{key} must be a string; got '
             f'{type(v).__name__}',
         )
     return v
@@ -150,7 +140,7 @@ def _build_envs(node: Mapping[str, object]) -> tuple[EnvConfig, ...]:
     envs_raw = node.get('envs')
     if not isinstance(envs_raw, list):
         raise TypeError(
-            f'manifest.envs must be a list; got '
+            f'sweep.envs must be a list; got '
             f'{type(envs_raw).__name__}',
         )
     envs_typed: list[object] = list(envs_raw)
@@ -161,7 +151,7 @@ def _require_arms_shape(node: Mapping[str, object]) -> ArmsShape:
     v = node.get('arms_shape', 'chunked')
     if not _is_arms_shape(v):
         raise ValueError(
-            f'manifest.arms_shape must be chunked|paired; got {v!r}',
+            f'sweep.arms_shape must be chunked|paired; got {v!r}',
         )
     return v
 
@@ -173,7 +163,7 @@ def _build_archive_remote(node: Mapping[str, object]) -> str | None:
     if isinstance(v, str):
         return v
     raise TypeError(
-        f'manifest.archive_remote must be string|null; got '
+        f'sweep.archive_remote must be string|null; got '
         f'{type(v).__name__}',
     )
 
@@ -184,7 +174,7 @@ def _build_base_intervention(
     v = node.get('base_intervention', {})
     if not is_str_keyed_mapping(v):
         raise TypeError(
-            f'manifest.base_intervention must be a mapping; got '
+            f'sweep.base_intervention must be a mapping; got '
             f'{type(v).__name__}',
         )
     return v
@@ -195,8 +185,7 @@ def _merge_with_base(
 ) -> Mapping[str, object]:
     """Shallow-merge `base` under the hypothesis's own
     `intervention` (own keys override). Returns the merged
-    template (still raw — not yet `build_hypothesis_from_mapping`-
-    resolved). Used for both chunked and paired modes."""
+    template (still raw — not yet resolved)."""
     if not is_str_keyed_mapping(h_node):
         raise TypeError(
             f'hypothesis must be a mapping; got '
@@ -243,8 +232,8 @@ def _build_env(node: object) -> EnvConfig:
 def default_dqn_registry() -> Registry:
     """Pre-populated Registry covering the DQN substrate's claim
     namespace + the `Replay` config bundle. Authors of one-off
-    experiments rarely need to extend this; substrates with extra
-    Module Claims call `add_modules` / `add_container` after."""
+    sweeps rarely need to extend this; substrates with extra
+    Module Claims call `add_modules` / `add_class` after."""
     from corroborate.rl.dqn.claims.replay import Replay
     reg = Registry()
     reg.add_modules((
@@ -256,51 +245,48 @@ def default_dqn_registry() -> Registry:
         'corroborate.rl.dqn.claims.target_sync',
         'corroborate.rl.dqn.claims.loss',
     ))
-    reg.add_container(Replay)
+    reg.add_class(Replay)
     return reg
 
 
-def build_paired_hypotheses(
-    manifest: PairedManifest, *, reg: Registry,
+def build_paired(
+    sweep: DQNSweep, *, reg: Registry,
 ) -> tuple[
     tuple[Hypothesis[Mapping[str, object]], ...],
     tuple[EnvConfig, ...],
 ]:
-    """Resolve a `PairedManifest`'s templates against each env's
-    `EnvSpec` attributes. Returns `(hypotheses, envs_aligned)`
-    suitable for `paired_arms`: each env appears once per template,
-    and the hypothesis tuple is the (env, template) Cartesian
-    expansion in env-major order.
+    """Resolve a paired sweep's templates against each env's
+    `EnvSpec.public_attrs()`. Returns `(hypotheses,
+    envs_aligned)` suitable for `paired_arms`: each env appears
+    once per template, in env-major order.
 
-    Pulled out as a standalone function so tests can verify
-    per-env resolution without dispatching the whole sweep."""
+    Standalone so tests can verify per-env resolution without
+    dispatching the whole sweep."""
+    if sweep.arms_shape != 'paired':
+        raise ValueError(
+            f"build_paired requires arms_shape='paired'; got "
+            f'{sweep.arms_shape!r}',
+        )
     from corroborate.rl.env_catalogue import get as get_env_spec
 
     hypotheses: list[Hypothesis[Mapping[str, object]]] = []
     envs_aligned: list[EnvConfig] = []
-    for ec in manifest.envs:
+    for ec in sweep.envs:
         spec = get_env_spec(ec.env_name)
         env_attrs = env_attrs_from_spec(spec)
-        for template in manifest.hypothesis_templates:
-            hypotheses.append(
-                build_hypothesis_from_mapping(
-                    template, reg=reg, env_attrs=env_attrs,
-                ),
-            )
+        for built in sweep.build_hypotheses(reg=reg, env_attrs=env_attrs):
+            hypotheses.append(built)
             envs_aligned.append(ec)
     return tuple(hypotheses), tuple(envs_aligned)
 
 
-def dispatch_manifest(
-    manifest: DQNExperimentManifest,
-) -> tuple[Path, Path]:
-    """Run the manifest end-to-end: build arms + env_specs +
-    runner, forward to `run_hypotheses`. Returns the merged
+def dispatch_sweep(sweep: DQNSweep) -> tuple[Path, Path]:
+    """Run the sweep end-to-end: build arms + env_specs + runner,
+    forward to `run_hypotheses`. Returns the merged
     `(runs.parquet, traces.parquet)` paths.
 
     Substrate-coupled by design (knows about `DQNRunner`,
-    `Q_TRACE_REDUCTIONS`, env catalogue). Replaces what the
-    per-experiment Python script's `main()` used to do."""
+    `Q_TRACE_REDUCTIONS`, env catalogue)."""
     from corroborate.rl.dqn.collect import (
         chunked_arms, env_arm_tag, paired_arms,
     )
@@ -311,35 +297,29 @@ def dispatch_manifest(
     from corroborate.rl.sweep import DQNRunner
     from corroborate.sweep import run_hypotheses
 
-    if isinstance(manifest, ChunkedManifest):
+    reg = default_dqn_registry()
+    if sweep.arms_shape == 'chunked':
+        built = sweep.build_hypotheses(reg=reg)
         hypotheses_dqn: list[Hypothesis[DQNTrajectoryRecord]] = [
-            cast(Hypothesis[DQNTrajectoryRecord], h)
-            for h in manifest.hypotheses
-        ]
-        arms = chunked_arms(hypotheses_dqn, manifest.envs)
-        envs_for_specs = manifest.envs
-    else:
-        reg = default_dqn_registry()
-        built, envs_aligned = build_paired_hypotheses(
-            manifest, reg=reg,
-        )
-        hypotheses_dqn_paired: list[
-            Hypothesis[DQNTrajectoryRecord]
-        ] = [
             cast(Hypothesis[DQNTrajectoryRecord], h) for h in built
         ]
-        arms = paired_arms(hypotheses_dqn_paired, envs_aligned)
-        envs_for_specs = manifest.envs
+        arms = chunked_arms(hypotheses_dqn, sweep.envs)
+    else:
+        built_paired, envs_aligned = build_paired(sweep, reg=reg)
+        hypotheses_dqn = [
+            cast(Hypothesis[DQNTrajectoryRecord], h)
+            for h in built_paired
+        ]
+        arms = paired_arms(hypotheses_dqn, envs_aligned)
 
     env_specs = {
-        ec.env_name: get_env_spec(ec.env_name)
-        for ec in envs_for_specs
+        ec.env_name: get_env_spec(ec.env_name) for ec in sweep.envs
     }
     return run_hypotheses(
         arms,
         runner=DQNRunner(env_specs),
-        out_dir=manifest.out_dir,
-        archive_remote=manifest.archive_remote,
+        out_dir=sweep.out_dir,
+        archive_remote=sweep.archive_remote,
         arm_tag=env_arm_tag,
         trace_reductions=Q_TRACE_REDUCTIONS,
         trace_drops=Q_TRACE_DROPS,
@@ -348,12 +328,10 @@ def dispatch_manifest(
 
 __all__ = [
     'ArmsShape',
-    'ChunkedManifest',
-    'DQNExperimentManifest',
-    'PairedManifest',
-    'build_paired_hypotheses',
+    'DQNSweep',
+    'build_paired',
     'default_dqn_registry',
-    'dispatch_manifest',
+    'dispatch_sweep',
     'env_attrs_from_spec',
-    'load_manifest',
+    'load_sweep',
 ]

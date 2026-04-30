@@ -36,7 +36,7 @@ def reg() -> Registry:
     from corroborate.rl.dqn.claims.replay import Replay
     r = Registry()
     r.add_modules(DQN_CLAIM_MODULES)
-    r.add_container(Replay)
+    r.add_class(Replay)
     return r
 
 
@@ -139,7 +139,7 @@ def test_resolve_partial_of_fn_with_partial_kwarg(
 
 
 def test_resolve_unknown_class_raises(reg: Registry) -> None:
-    with pytest.raises(KeyError, match='no Module Claim'):
+    with pytest.raises(KeyError, match='no class'):
         resolve({'class': 'NotARealModule'}, reg=reg)
 
 

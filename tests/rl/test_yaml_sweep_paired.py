@@ -1,17 +1,13 @@
-"""Paired-mode parity smoke: `minatar_1M.yaml` and
-`ddqn_effective.yaml` manifests reproduce the per-env Hypothesis
-tuples that the canonical Python recipe below produces, including
-env-specific CNN obs_shape resolution.
+"""Schema-contract smoke for `minatar_1M.yaml` and
+`ddqn_effective.yaml` paired-mode sweeps. The schema's contract:
+each `(template, env)` resolves to a concrete `Hypothesis` with
+- `CNN.obs_shape` substituted from `EnvSpec.public_attrs()`,
+- frozen-dataclass equality on every Module Claim slot,
+- stable `arm_key()` and `claim_graph_signature`.
 
-Identity contract per (template, env) pair:
-- Frozen-dataclass equality on Module Claims (CNN/MLP/Adam/...).
-- Per-env CNN.obs_shape matches `EnvSpec.observation_shape`.
-- `arm_key()` and `claim_graph_signature` match between the
-  YAML- and Python-built path.
-
-`build_paired_hypotheses` is the substrate's per-env resolver;
-asserting parity at its output is the strongest guarantee
-short of running the sweep itself."""
+`build_paired` is the substrate's per-env resolver; asserting
+the contract at its output is the strongest guarantee short of
+running the sweep itself."""
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -22,10 +18,10 @@ import pytest
 
 from corroborate.hypothesis import Hypothesis
 from corroborate.intervention import Intervention
+from corroborate.registry import Registry
 from corroborate.rl.dqn.collect import EnvConfig
 from corroborate.rl.dqn.yaml_sweep import (
-    PairedManifest, build_paired_hypotheses,
-    default_dqn_registry, load_manifest,
+    DQNSweep, build_paired, default_dqn_registry, load_sweep,
 )
 from corroborate.rl.env_catalogue import get as get_env_spec
 from corroborate.signature import claim_graph_signature
@@ -141,60 +137,63 @@ def _python_ddqn_effective_hypothesis(
 # ---------- fixtures ----------
 
 @pytest.fixture
-def minatar_1M_manifest() -> PairedManifest:
-    reg = default_dqn_registry()
-    m = load_manifest(MINATAR_1M_PATH, reg=reg)
-    assert isinstance(m, PairedManifest)
-    return m
+def reg() -> Registry:
+    return default_dqn_registry()
 
 
 @pytest.fixture
-def ddqn_effective_manifest() -> PairedManifest:
-    reg = default_dqn_registry()
-    m = load_manifest(DDQN_EFFECTIVE_PATH, reg=reg)
-    assert isinstance(m, PairedManifest)
-    return m
+def minatar_1M_sweep(reg: Registry) -> DQNSweep:
+    s = load_sweep(MINATAR_1M_PATH, reg=reg)
+    assert s.arms_shape == 'paired'
+    return s
+
+
+@pytest.fixture
+def ddqn_effective_sweep(reg: Registry) -> DQNSweep:
+    s = load_sweep(DDQN_EFFECTIVE_PATH, reg=reg)
+    assert s.arms_shape == 'paired'
+    return s
 
 
 # ---------- minatar_1M envelope ----------
 
 def test_minatar_1M_envelope(
-    minatar_1M_manifest: PairedManifest,
+    minatar_1M_sweep: DQNSweep,
 ) -> None:
-    m = minatar_1M_manifest
-    assert m.name == 'minatar_1M'
-    assert m.out_dir == Path('experiments/data/minatar_1M')
-    assert m.archive_remote == 's3://corroborate-archive/minatar_1M'
-    assert m.envs == (
+    s = minatar_1M_sweep
+    assert s.name == 'minatar_1M'
+    assert s.out_dir == Path('experiments/data/minatar_1M')
+    assert s.archive_remote == 's3://corroborate-archive/minatar_1M'
+    assert s.envs == (
         EnvConfig('Asterix-MinAtar', n_seeds=30, chunk_size=15),
         EnvConfig('Breakout-MinAtar', n_seeds=30, chunk_size=15),
         EnvConfig('Freeway-MinAtar', n_seeds=30, chunk_size=15),
         EnvConfig('SpaceInvaders-MinAtar', n_seeds=30, chunk_size=15),
     )
-    assert len(m.hypothesis_templates) == 2
+    assert len(s.hypothesis_templates) == 2
 
 
 # ---------- ddqn_effective envelope ----------
 
 def test_ddqn_effective_envelope(
-    ddqn_effective_manifest: PairedManifest,
+    ddqn_effective_sweep: DQNSweep,
 ) -> None:
-    m = ddqn_effective_manifest
-    assert m.name == 'ddqn_effective_cohort'
-    assert m.out_dir == Path(
+    s = ddqn_effective_sweep
+    assert s.name == 'ddqn_effective_cohort'
+    assert s.out_dir == Path(
         'experiments/data/ddqn_effective_cohort',
     )
-    assert m.archive_remote is None
-    assert len(m.envs) == 5
-    assert {ec.env_name for ec in m.envs} == {
+    assert s.archive_remote is None
+    assert len(s.envs) == 5
+    assert {ec.env_name for ec in s.envs} == {
         'Asterix-MinAtar', 'Breakout-MinAtar',
         'SpaceInvaders-MinAtar', 'Freeway-MinAtar',
         'MNISTBandit-bsuite',
     }
-    assert len(m.hypothesis_templates) == 2
+    assert len(s.hypothesis_templates) == 2
 
 
-# ---------- per-env build parity, parametrised ----------
+# ---------- per-env build contract, parametrised ----------
 
 @pytest.mark.parametrize(
     'env_name', [
@@ -203,18 +202,17 @@ def test_ddqn_effective_envelope(
     ],
 )
 @pytest.mark.parametrize('h_name', ['vanilla_dqn', 'ddqn'])
-def test_minatar_1M_per_env_parity(
-    minatar_1M_manifest: PairedManifest,
+def test_minatar_1M_per_env_contract(
+    minatar_1M_sweep: DQNSweep,
+    reg: Registry,
     env_name: str,
     h_name: str,
 ) -> None:
-    """Build the YAML manifest's hypotheses against env_specs,
-    pick the one for `(env_name, h_name)`, compare against the
-    Python authoring path."""
-    reg = default_dqn_registry()
-    built, envs_aligned = build_paired_hypotheses(
-        minatar_1M_manifest, reg=reg,
-    )
+    """For each (env, hypothesis), the YAML resolves to a
+    Hypothesis whose Module Claims match a reference Python
+    construction, including env-specific CNN.obs_shape
+    substitution."""
+    built, envs_aligned = build_paired(minatar_1M_sweep, reg=reg)
     yaml_h = _pick(built, envs_aligned, env_name, h_name)
     py_h = _python_minatar_1M_hypothesis(h_name, env_name)
 
@@ -222,7 +220,6 @@ def test_minatar_1M_per_env_parity(
     assert yaml_h.predicted_direction == py_h.predicted_direction
     assert yaml_h.arm_key() == py_h.arm_key()
 
-    # Module Claim equality (frozen dataclasses).
     for k in ('q_network', 'optimizer', 'replay'):
         assert yaml_h.intervention[k] == py_h.intervention[k]
 
@@ -242,15 +239,13 @@ def test_minatar_1M_per_env_parity(
     ],
 )
 @pytest.mark.parametrize('h_name', ['vanilla_dqn', 'ddqn'])
-def test_ddqn_effective_per_env_parity(
-    ddqn_effective_manifest: PairedManifest,
+def test_ddqn_effective_per_env_contract(
+    ddqn_effective_sweep: DQNSweep,
+    reg: Registry,
     env_name: str,
     h_name: str,
 ) -> None:
-    reg = default_dqn_registry()
-    built, envs_aligned = build_paired_hypotheses(
-        ddqn_effective_manifest, reg=reg,
-    )
+    built, envs_aligned = build_paired(ddqn_effective_sweep, reg=reg)
     yaml_h = _pick(built, envs_aligned, env_name, h_name)
     py_h = _python_ddqn_effective_hypothesis(h_name, env_name)
 
@@ -261,19 +256,15 @@ def test_ddqn_effective_per_env_parity(
         assert yaml_h.intervention[k] == py_h.intervention[k]
 
 
-# ---------- cross-env signature distinguishability ----------
+# ---------- cross-env signature stability ----------
 
-def test_paired_ddqn_bootstrap_signature_matches_python(
-    minatar_1M_manifest: PairedManifest,
+def test_paired_ddqn_bootstrap_signature_stable(
+    minatar_1M_sweep: DQNSweep, reg: Registry,
 ) -> None:
     """The DDQN partial sits inside the intervention dict; its
-    `claim_graph_signature` must match between YAML and Python
-    paths regardless of which env we look at — the bootstrap
-    binding is env-independent (only CNN slot has env binding)."""
-    reg = default_dqn_registry()
-    built, envs_aligned = build_paired_hypotheses(
-        minatar_1M_manifest, reg=reg,
-    )
+    `claim_graph_signature` is env-independent (only CNN slot has
+    env binding) — same hash across all envs."""
+    built, envs_aligned = build_paired(minatar_1M_sweep, reg=reg)
     yaml_h = _pick(built, envs_aligned, 'Asterix-MinAtar', 'ddqn')
     py_h = _python_minatar_1M_hypothesis('ddqn', 'Asterix-MinAtar')
     sig_yaml = claim_graph_signature(
@@ -286,19 +277,40 @@ def test_paired_ddqn_bootstrap_signature_matches_python(
 
 
 def test_paired_arms_count_matches_paired_arms_helper(
-    minatar_1M_manifest: PairedManifest,
+    minatar_1M_sweep: DQNSweep, reg: Registry,
 ) -> None:
     """The expanded (hypotheses, envs_aligned) tuples have
     `n_envs * n_templates` entries — so `paired_arms` zips them
     cleanly, one (h, env) pair per arm."""
-    reg = default_dqn_registry()
-    built, envs_aligned = build_paired_hypotheses(
-        minatar_1M_manifest, reg=reg,
-    )
-    n_envs = len(minatar_1M_manifest.envs)
-    n_templates = len(minatar_1M_manifest.hypothesis_templates)
+    built, envs_aligned = build_paired(minatar_1M_sweep, reg=reg)
+    n_envs = len(minatar_1M_sweep.envs)
+    n_templates = len(minatar_1M_sweep.hypothesis_templates)
     assert len(built) == n_envs * n_templates
     assert len(envs_aligned) == n_envs * n_templates
+
+
+def test_chunked_sweep_rejects_build_paired(reg: Registry) -> None:
+    """`build_paired` is the wrong helper for a chunked sweep
+    and refuses early — the alternative would be silently
+    iterating envs while ignoring per-env env_attrs, which
+    would produce nonsense output."""
+    chunked_path = (
+        REPO_ROOT / 'experiments' / 'configs' / 'expectile_3way.yaml'
+    )
+    chunked = load_sweep(chunked_path, reg=reg)
+    assert chunked.arms_shape == 'chunked'
+    with pytest.raises(ValueError, match="arms_shape='paired'"):
+        _ = build_paired(chunked, reg=reg)
+
+
+def test_from_env_in_chunked_mode_raises(reg: Registry) -> None:
+    """A `{from_env: ...}` placeholder is only meaningful in
+    paired-mode dispatch; trying to build hypotheses for a
+    chunked sweep that contains one fails fast with a clear
+    error pointing at the schema mistake."""
+    sweep = load_sweep(MINATAR_1M_PATH, reg=reg)
+    with pytest.raises(ValueError, match='from_env'):
+        _ = sweep.build_hypotheses(reg=reg)  # no env_attrs
 
 
 # ---------- helpers ----------

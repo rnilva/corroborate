@@ -155,6 +155,21 @@ class EnvSpec:
         without a declared horizon (bandits)."""
         return self.horizon if self.horizon is not None else 1000
 
+    def public_attrs(self) -> dict[str, object]:
+        """Whitelist of attributes the YAML manifest's
+        `{from_env: <attr>}` placeholder is allowed to bind to.
+        Explicit because dataclass-field introspection would let
+        a private cache field silently grow the YAML schema —
+        this method names the contract."""
+        return {
+            'name': self.name,
+            'n_actions': self.n_actions,
+            'observation_shape': self.observation_shape,
+            'horizon': self.horizon,
+            'r_min': self.r_min,
+            'r_max': self.r_max,
+        }
+
 
 # ============ Introspection: read gymnax's spaces ============
 

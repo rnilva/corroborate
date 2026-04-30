@@ -30,6 +30,7 @@ from __future__ import annotations
 import functools
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from typing import TypeIs
 
 from corroborate._canonical import canonical_str
 from corroborate.claim import ClaimBase, FnClaim
@@ -45,6 +46,15 @@ FnClaim free-function wrapper, a `functools.partial` binding, or a
 plain callable. Each canonicalises distinctly via `canonical_str`
 so two structurally-equal replacements produce the same
 fingerprint across processes."""
+
+
+def is_replacement(v: object) -> TypeIs[Replacement]:
+    """Narrow `v` to `Replacement` when it's callable. Every union
+    arm is callable (Module Claims via `__call__`, FnClaim wrappers,
+    partials, plain functions); a runtime `callable()` check is
+    therefore sufficient and the TypeIs is honest about the
+    narrowing."""
+    return callable(v)
 
 
 @dataclass(frozen=True, slots=True)

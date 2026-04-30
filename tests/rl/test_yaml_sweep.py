@@ -1,17 +1,13 @@
-"""End-to-end parity smoke: the YAML-loaded `expectile_3way`
-manifest produces a Hypothesis tuple that is structurally
-identical to the canonical Python recipe below.
+"""Schema-contract smoke for the `expectile_3way` YAML sweep:
+every authored slot resolves to the typed handle the substrate's
+Claim graph holds.
 
-Identity contract:
-- Per-hypothesis: `name`, `predicted_direction`, `arm_key()`,
-  intervention leaves equal, intervention slot Claims equal
-  (frozen-dataclass equality), and `claim_graph_signature` of
-  every callable slot value matches between paths.
-- Per-manifest: `name`, `out_dir`, `archive_remote`, `arms_shape`
-  match; `envs` tuple equals.
-
-If the YAML schema or the loader drifts from the Python authoring
-shape, the smoke catches it before any sweep runs."""
+The reference Python construction below is one realisation of
+the same schema — useful for catching loader regressions, but
+the canonical contract is the YAML schema itself: a
+Module Claim slot resolves to a `ClaimBase` instance, a slot
+binding to a `partial`-of-FnClaim resolves with the right inner
+FnClaim, and `claim_graph_signature` is stable across loads."""
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -23,8 +19,9 @@ import pytest
 from corroborate.hypothesis import Hypothesis
 from corroborate.intervention import Intervention
 from corroborate.rl.dqn.collect import EnvConfig
+from corroborate.registry import Registry
 from corroborate.rl.dqn.yaml_sweep import (
-    ChunkedManifest, default_dqn_registry, load_manifest,
+    DQNSweep, default_dqn_registry, load_sweep,
 )
 from corroborate.signature import claim_graph_signature
 
@@ -98,30 +95,36 @@ def _python_hypothesis(
 # ---------- fixtures ----------
 
 @pytest.fixture
-def manifest() -> ChunkedManifest:
-    reg = default_dqn_registry()
-    m = load_manifest(MANIFEST_PATH, reg=reg)
-    assert isinstance(m, ChunkedManifest), (
-        f'expected ChunkedManifest, got {type(m).__name__}'
-    )
-    return m
+def reg() -> Registry:
+    return default_dqn_registry()
+
+
+@pytest.fixture
+def sweep(reg: Registry) -> DQNSweep:
+    s = load_sweep(MANIFEST_PATH, reg=reg)
+    assert s.arms_shape == 'chunked'
+    return s
+
+
+@pytest.fixture
+def yaml_hypotheses(
+    sweep: DQNSweep, reg: Registry,
+) -> tuple[Hypothesis[Mapping[str, object]], ...]:
+    return sweep.build_hypotheses(reg=reg)
 
 
 # ---------- envelope checks ----------
 
-def test_manifest_envelope_fields(
-    manifest: ChunkedManifest,
-) -> None:
-    assert manifest.name == 'expectile_3way'
-    assert manifest.out_dir == Path(
+def test_sweep_envelope_fields(sweep: DQNSweep) -> None:
+    assert sweep.name == 'expectile_3way'
+    assert sweep.out_dir == Path(
         'experiments/data/expectile_3way',
     )
-    assert manifest.archive_remote is None
+    assert sweep.archive_remote is None
+    assert sweep.arms_shape == 'chunked'
 
 
-def test_manifest_envs_tuple_matches(
-    manifest: ChunkedManifest,
-) -> None:
+def test_sweep_envs_tuple_matches(sweep: DQNSweep) -> None:
     expected_envs = (
         EnvConfig('Catch-bsuite', n_seeds=30, chunk_size=15),
         EnvConfig('DiscountingChain-bsuite', n_seeds=30, chunk_size=15),
@@ -129,28 +132,28 @@ def test_manifest_envs_tuple_matches(
         EnvConfig('Acrobot-v1', n_seeds=30, chunk_size=15),
         EnvConfig('FourRooms-misc', n_seeds=30, chunk_size=15),
     )
-    assert manifest.envs == expected_envs
+    assert sweep.envs == expected_envs
 
 
-def test_manifest_hypothesis_count(
-    manifest: ChunkedManifest,
+def test_sweep_hypothesis_count(
+    yaml_hypotheses: tuple[Hypothesis[Mapping[str, object]], ...],
 ) -> None:
-    assert len(manifest.hypotheses) == 3
-    assert [h.name for h in manifest.hypotheses] == [
+    assert len(yaml_hypotheses) == 3
+    assert [h.name for h in yaml_hypotheses] == [
         'vanilla_dqn', 'ddqn', 'expectile_dqn',
     ]
 
 
-# ---------- per-hypothesis parity (parametrised) ----------
+# ---------- per-hypothesis schema-contract checks ----------
 
 @pytest.fixture
 def hypothesis_pairs(
-    manifest: ChunkedManifest,
+    yaml_hypotheses: tuple[Hypothesis[Mapping[str, object]], ...],
 ) -> dict[str, tuple[
     Hypothesis[Mapping[str, object]],
     Hypothesis[Mapping[str, object]],
 ]]:
-    yaml_by_name = {h.name: h for h in manifest.hypotheses}
+    yaml_by_name = {h.name: h for h in yaml_hypotheses}
     return {
         name: (yaml_by_name[name], _python_hypothesis(name))
         for name in ('vanilla_dqn', 'ddqn', 'expectile_dqn')
@@ -252,13 +255,13 @@ def test_arm_key_matches(
 
 
 def test_signatures_distinct_across_arms(
-    manifest: ChunkedManifest,
+    yaml_hypotheses: tuple[Hypothesis[Mapping[str, object]], ...],
 ) -> None:
     """The signature is not constant — it actually distinguishes
     the three arms. ddqn != expectile_dqn at the bootstrap slot,
     confirming the registry-resolved partials aren't collapsing
     into the same hash."""
-    by_name = {h.name: h for h in manifest.hypotheses}
+    by_name = {h.name: h for h in yaml_hypotheses}
     sig_ddqn = claim_graph_signature(
         by_name['ddqn'].intervention['bootstrap'],
     )

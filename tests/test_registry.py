@@ -33,7 +33,7 @@ def dqn_registry() -> Registry:
     from corroborate.rl.dqn.claims.replay import Replay
     reg = Registry()
     reg.add_modules(DQN_CLAIM_MODULES)
-    reg.add_container(Replay)
+    reg.add_class(Replay)
     return reg
 
 
@@ -53,18 +53,21 @@ def test_fn_discovery_covers_every_authored_claim(
     assert not missing, f'missing FnClaim registrations: {missing}'
 
 
-def test_module_class_discovery_covers_every_authored_module(
+def test_class_discovery_covers_every_authored_module_and_container(
     dqn_registry: Registry,
 ) -> None:
-    """Every `ClaimBase` subclass is reachable by name."""
-    expected_modules = {
+    """Every `ClaimBase` subclass and the explicitly-registered
+    `Replay` container are reachable by name through the
+    unified `classes` map."""
+    expected_classes = {
         'MLP', 'CNN',
         'Adam', 'RMSProp', 'SGD', 'WarmedUpdate',
         'EpsilonGreedy',
+        'Replay',
     }
-    missing = expected_modules - set(dqn_registry.module_classes)
+    missing = expected_classes - set(dqn_registry.classes)
     assert not missing, (
-        f'missing ClaimBase subclass registrations: {missing}'
+        f'missing class registrations: {missing}'
     )
 
 
@@ -85,23 +88,18 @@ def test_resolved_fn_is_identical_to_imported_handle(
     assert dqn_registry.fn('max_greedify') is max_greedify
 
 
-def test_resolved_module_class_is_identical_to_imported_class(
+def test_resolved_class_is_identical_to_imported_class(
     dqn_registry: Registry,
 ) -> None:
     from corroborate.rl.dqn.claims.optimizer import (
         Adam, WarmedUpdate,
     )
     from corroborate.rl.dqn.claims.q_network import MLP
-    assert dqn_registry.module_class('Adam') is Adam
-    assert dqn_registry.module_class('WarmedUpdate') is WarmedUpdate
-    assert dqn_registry.module_class('MLP') is MLP
-
-
-def test_resolved_container_is_identical_to_imported_class(
-    dqn_registry: Registry,
-) -> None:
     from corroborate.rl.dqn.claims.replay import Replay
-    assert dqn_registry.container('Replay') is Replay
+    assert dqn_registry.cls('Adam') is Adam
+    assert dqn_registry.cls('WarmedUpdate') is WarmedUpdate
+    assert dqn_registry.cls('MLP') is MLP
+    assert dqn_registry.cls('Replay') is Replay
 
 
 def test_round_trip_reconstructs_expectile_intervention(
@@ -145,10 +143,8 @@ def test_unknown_name_raises_with_known_set(
 ) -> None:
     with pytest.raises(KeyError, match='no FnClaim'):
         dqn_registry.fn('not_a_real_claim')
-    with pytest.raises(KeyError, match='no ClaimBase'):
-        dqn_registry.module_class('NotARealModule')
-    with pytest.raises(KeyError, match='no container'):
-        dqn_registry.container('NotARealContainer')
+    with pytest.raises(KeyError, match='no class'):
+        dqn_registry.cls('NotARealClass')
 
 
 def test_collision_on_different_handle_raises() -> None:
@@ -166,9 +162,9 @@ def test_collision_on_different_handle_raises() -> None:
     A.__name__ = 'Same'
     B.__name__ = 'Same'
 
-    reg._add_module_class(A)  # pyright: ignore[reportPrivateUsage]
+    reg.add_class(A)
     with pytest.raises(ValueError, match='already registered'):
-        reg._add_module_class(B)  # pyright: ignore[reportPrivateUsage]
+        reg.add_class(B)
 
 
 def test_idempotent_re_add_is_a_noop(dqn_registry: Registry) -> None:
@@ -182,10 +178,11 @@ def test_idempotent_re_add_is_a_noop(dqn_registry: Registry) -> None:
 def test_registered_handles_are_the_typed_shape(
     dqn_registry: Registry,
 ) -> None:
-    """No type erasure: `fn` returns FnClaim, `module_class`
-    returns a ClaimBase subclass, `container` returns a class."""
+    """No type erasure: `fn` returns FnClaim, `cls` returns a
+    `type`. ClaimBase subclasses round-trip without losing
+    `issubclass(_, ClaimBase)`."""
     assert isinstance(dqn_registry.fn('bootstrap'), FnClaim)
-    cls = dqn_registry.module_class('MLP')
-    assert issubclass(cls, ClaimBase)
-    cont = dqn_registry.container('Replay')
-    assert isinstance(cont, type)
+    mlp_cls = dqn_registry.cls('MLP')
+    assert issubclass(mlp_cls, ClaimBase)
+    replay_cls = dqn_registry.cls('Replay')
+    assert isinstance(replay_cls, type)

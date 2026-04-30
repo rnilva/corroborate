@@ -1,10 +1,10 @@
 """Generic YAML-driven DQN sweep runner.
 
-Replaces per-experiment Python scripts: pass a manifest YAML, the
+Replaces per-experiment Python scripts: pass a sweep YAML, the
 runner loads it through the auto-registry, builds the arms, and
-forwards to `run_hypotheses`. The manifest is the single
-authoring surface; the corpus shape (parquets, archive, arm
-tags) is unchanged from the per-script path.
+forwards to `run_hypotheses`. The YAML is the single authoring
+surface; the corpus shape (parquets, archive, arm tags) is
+unchanged from the per-script path.
 
 Usage:
   uv run python experiments/run_yaml_sweep.py \\
@@ -20,9 +20,7 @@ import argparse
 from pathlib import Path
 from typing import cast
 
-from corroborate.rl.dqn.yaml_sweep import (
-    default_dqn_registry, dispatch_manifest, load_manifest,
-)
+from corroborate.rl.dqn.yaml_sweep import dispatch_sweep, load_sweep
 
 
 def main() -> None:
@@ -31,23 +29,29 @@ def main() -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     _ = parser.add_argument(
-        'manifest', type=Path,
-        help='Path to the experiment YAML manifest.',
+        'manifest', type=str,
+        help='Path to the sweep YAML.',
     )
-    args = parser.parse_args()
-    # argparse types attribute access as Any — cast at the boundary.
-    manifest_path = cast(Path, args.manifest)
+    # `argparse.Namespace` attribute access is `Any` by stub
+    # convention; cast at the boundary, then runtime-check to
+    # narrow before constructing the Path.
+    manifest_attr = cast(object, parser.parse_args().manifest)
+    if not isinstance(manifest_attr, str):
+        raise TypeError(
+            f'manifest path must be a string; got '
+            f'{type(manifest_attr).__name__}',
+        )
 
-    reg = default_dqn_registry()
-    manifest = load_manifest(manifest_path, reg=reg)
+    from corroborate.rl.dqn.yaml_sweep import default_dqn_registry
+    sweep = load_sweep(Path(manifest_attr), reg=default_dqn_registry())
     print(
-        f'manifest: {manifest.name} '
-        f'({len(manifest.hypotheses)} hypotheses × '
-        f'{len(manifest.envs)} envs, '
-        f'arms_shape={manifest.arms_shape})',
+        f'sweep: {sweep.name} '
+        f'({len(sweep.hypothesis_templates)} hypotheses × '
+        f'{len(sweep.envs)} envs, '
+        f'arms_shape={sweep.arms_shape})',
         flush=True,
     )
-    runs, traces = dispatch_manifest(manifest)
+    runs, traces = dispatch_sweep(sweep)
     print(f'corpus → {runs}, {traces}', flush=True)
 
 
