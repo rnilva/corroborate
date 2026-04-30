@@ -110,6 +110,55 @@ attach_invariant(
 )
 
 
+@claim
+def expectile_greedify(
+    *,
+    online_params: Params,
+    target_params: Params,
+    q_network: QFunction,
+    next_obs: jax.Array,
+    tau: float = 0.7,
+    n_iters: int = 8,
+) -> jax.Array:
+    """Expectile-pessimistic greedification: v(s') =
+    expectile_τ(Q_target(s', ·)).
+
+    The asymmetric expectile of a vector v at level τ is the
+    fixed-point of the weighted mean μ where w_i = τ if v_i ≥ μ
+    else (1−τ). For τ=1 the weights collapse to "max only",
+    recovering vanilla. For τ=0.5 the weights are uniform,
+    recovering mean. Intermediate τ ∈ (0.5, 1) is pessimistic
+    relative to max.
+
+    `online_params` is unused — expectile-greedify, like vanilla
+    `max_greedify`, doesn't decouple selection from evaluation.
+    The mechanism is structurally distinct from DDQN's
+    selection-evaluation decoupling; the contrast tests whether
+    the residual `bootstrap_fraction → g_link | g_mech` (DDQN
+    200k corpus, ATE=+0.88) is DDQN-specific (different
+    bias-correction mechanism fixes it) or sparse-reward-
+    intrinsic (same residual under both).
+
+    Garg et al 2023 (Extreme Q-Learning, "XQL"): the residual
+    max-bias after DDQN's action-noise correction is σ-
+    proportional to Q-vector spread; an expectile target is the
+    consistent estimator under extreme-value statistics for
+    finite action sets.
+
+    `n_iters`: fixed-point iterations. 8 converges for typical
+    n_actions ≤ 16 (RL standard); raise for larger spaces."""
+    del online_params  # not used — pessimistic operator on target
+    next_q = q_network(target_params, next_obs)
+    mu = jnp.mean(next_q, axis=-1, keepdims=True)
+    for _ in range(n_iters):
+        weights = jnp.where(next_q >= mu, tau, 1.0 - tau)
+        mu = (
+            jnp.sum(weights * next_q, axis=-1, keepdims=True)
+            / jnp.sum(weights, axis=-1, keepdims=True)
+        )
+    return mu.squeeze(-1)
+
+
 # ============ Gradient rule: what backprops through target ============
 
 @claim
