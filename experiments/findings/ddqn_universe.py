@@ -237,12 +237,114 @@ def ddqn_attenuates_at_late_bursts__spaceinvaders(
     return Verdict.NO_EFFECT
 
 
+# =====================================================================
+# Asymptote-progress bridges. The strongest single predictor of
+# Δmc_per_burst is `mc_progress` — vanilla's burst-k mc_return
+# normalized to its env-specific [floor, asymptote] range. DDQN
+# helps when vanilla is FAR from asymptote (still learning) and
+# hurts as vanilla approaches it. This is the "DDQN's effect
+# saturates against vanilla's convergence" claim made testable.
+#
+# `mc_progress` is precomputed in
+# `paired_delta_per_burst.parquet`.
+# =====================================================================
+
+
+@claim_bridge
+def ddqn_helps_when_below_asymptote(
+    universe_scope: UniverseScopeResult,
+    *,
+    source: str = 'arm.ddqn[mc_progress<0.5]',
+    target: str = 'mc_return[mc_progress<0.5]',
+    direction: Direction = Direction.DIRECT,
+    tier: Tier = Tier.ASSOCIATIONAL,
+    outcome_col: str = 'delta_mc',
+    delta_jensen_col: str = 'delta_bias',
+    filter_min_pairs: tuple[tuple[str, float], ...] = (
+        ('log_obs_dim', 5.0),
+        ('total_steps', 1000000.0),
+    ),
+    filter_max_pairs: tuple[tuple[str, float], ...] = (
+        ('mc_progress', 0.5),
+    ),
+    filter_eq_pairs: tuple[tuple[str, str], ...] = (),
+) -> Verdict:
+    """Asymptote-conditional scope: on long-horizon high-obs-dim
+    envs where vanilla has covered ≤50% of its env-specific
+    [floor, asymptote] range at burst k, DDQN's per-burst Δmc is
+    positive in the majority of cells with substantial pooled
+    effect.
+
+    HELD when helped_fraction ≥ 0.6 AND g_outcome ≥ +0.25.
+    The mc_progress<0.5 predicate captures "vanilla is still
+    learning, far from its plateau" — the regime where DDQN's
+    bias-correction has room to operate."""
+    del source, target, direction, tier
+    del outcome_col, delta_jensen_col
+    del filter_min_pairs, filter_max_pairs, filter_eq_pairs
+    if universe_scope.n_in_scope < 100:
+        return Verdict.POWER_INSUFFICIENT
+    if math.isnan(universe_scope.helped_fraction):
+        return Verdict.POWER_INSUFFICIENT
+    if (
+        universe_scope.helped_fraction >= 0.60
+        and universe_scope.g_outcome >= 0.25
+    ):
+        return Verdict.HELD
+    return Verdict.NO_EFFECT
+
+
+@claim_bridge
+def ddqn_refuted_at_asymptote(
+    universe_scope: UniverseScopeResult,
+    *,
+    source: str = 'mc_progress',
+    target: str = 'arm.ddqn(no_effect)',
+    direction: Direction = Direction.INVERSE,
+    tier: Tier = Tier.ASSOCIATIONAL,
+    outcome_col: str = 'delta_mc',
+    delta_jensen_col: str = 'delta_bias',
+    filter_min_pairs: tuple[tuple[str, float], ...] = (
+        ('mc_progress', 0.9),
+    ),
+    filter_max_pairs: tuple[tuple[str, float], ...] = (),
+    filter_eq_pairs: tuple[tuple[str, str], ...] = (),
+) -> Verdict:
+    """Asymptote-refutation: on (cell, burst) rows where vanilla
+    is within 10% of its env-specific asymptote (mc_progress ≥
+    0.9), DDQN's per-burst Δmc is reliably small or negative.
+    Vanilla has saturated; there's no room left for bias-
+    correction to operate; DDQN's intervention either does
+    nothing or destabilises.
+
+    HELD when helped_fraction ≤ 0.10 AND g_outcome ≤ −0.30 (the
+    refutation prediction is corroborated). Companion to
+    `ddqn_refuted_when_dormancy_fires` — same shape (necessary-
+    condition refutation), different layer (temporal vs
+    structural)."""
+    del source, target, direction, tier
+    del outcome_col, delta_jensen_col
+    del filter_min_pairs, filter_max_pairs, filter_eq_pairs
+    if universe_scope.n_in_scope < 50:
+        return Verdict.POWER_INSUFFICIENT
+    if math.isnan(universe_scope.helped_fraction):
+        return Verdict.POWER_INSUFFICIENT
+    if (
+        universe_scope.helped_fraction <= 0.10
+        and universe_scope.g_outcome <= -0.30
+    ):
+        return Verdict.HELD
+    return Verdict.NO_EFFECT
+
+
 # === The DDQN measurement graph (built from scratch) ===
 DDQN_UNIVERSE_BRIDGES = (
     ddqn_helps_within_empirical_scope,
     ddqn_refuted_when_dormancy_fires,
     ddqn_helps_at_early_bursts__pixel_envs,
     ddqn_attenuates_at_late_bursts__spaceinvaders,
+    ddqn_helps_when_below_asymptote,
+    ddqn_refuted_at_asymptote,
 )
 """The two terminal bridges that close the DDQN study on the
 universal paired-delta cells. Run against the universal dataset
@@ -254,6 +356,8 @@ __all__ = [
     'DDQN_UNIVERSE_BRIDGES',
     'ddqn_attenuates_at_late_bursts__spaceinvaders',
     'ddqn_helps_at_early_bursts__pixel_envs',
+    'ddqn_helps_when_below_asymptote',
     'ddqn_helps_within_empirical_scope',
+    'ddqn_refuted_at_asymptote',
     'ddqn_refuted_when_dormancy_fires',
 ]

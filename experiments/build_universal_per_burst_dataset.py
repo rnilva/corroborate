@@ -224,6 +224,25 @@ def main() -> None:
         print('no rows')
         return
     df = pl.DataFrame(rows, strict=False)
+
+    # mc_progress: vanilla's per-burst mc_return normalized to
+    # the env-specific [floor, asymptote] range. Captures "where
+    # is vanilla in its learning trajectory at burst k" — the
+    # strongest single predictor of Δmc per the within-env
+    # analysis.
+    asymptote = df.group_by('env_name').agg(
+        pl.col('mc_vanilla').max().alias('mc_vanilla_asymptote'),
+        pl.col('mc_vanilla').min().alias('mc_vanilla_floor'),
+    )
+    df = df.join(asymptote, on='env_name')
+    df = df.with_columns(
+        mc_progress=(
+            (pl.col('mc_vanilla') - pl.col('mc_vanilla_floor'))
+            / (pl.col('mc_vanilla_asymptote')
+               - pl.col('mc_vanilla_floor') + 1e-9)
+        ).clip(0.0, 1.0),
+    )
+
     df.write_parquet(str(_OUT))
     print(f'\nrows: {len(df)}, file: {_OUT.stat().st_size / 1024:.1f} KB')
     print()
