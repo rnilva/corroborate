@@ -240,13 +240,22 @@ class RunRow:
     `arm_key` defaults to `'baseline'` so hand-constructed
     fixtures and old parquets without the column read as the
     baseline arm. Production write paths populate it from
-    `Hypothesis.arm_key()`."""
+    `Hypothesis.arm_key()`.
+
+    `claim_graph_signature` is the program-instance fingerprint:
+    `claim_graph_signature(partial(substrate_claim, **intervention))`
+    canonicalised with default-axis elision. Serves as the
+    structurally-honest cross-corpus identity column; rows from
+    different corpora with matching signatures came from the
+    same canonical program. Defaults to `''` for old parquets
+    (read as "unknown" — no structural-equality joins available)."""
     id: str
     parent_id: str | None
     cycle_id: str | None
     timestamp: str
     verdict: Verdict
     arm_key: str = 'baseline'
+    claim_graph_signature: str = ''
     measurements: Mapping[str, MeasurementLeaf] = field(
         default_factory=lambda: {},
     )
@@ -259,6 +268,7 @@ class RunRow:
             'timestamp': self.timestamp,
             'verdict': self.verdict.value,
             'arm_key': self.arm_key,
+            'claim_graph_signature': self.claim_graph_signature,
         }
         _flatten_measurements(out, self.measurements)
         return out
@@ -267,7 +277,7 @@ class RunRow:
     def from_row_dict(cls, d: Mapping[str, object]) -> Self:
         provenance: frozenset[str] = frozenset(
             ('id', 'parent_id', 'cycle_id', 'timestamp', 'verdict',
-             'arm_key')
+             'arm_key', 'claim_graph_signature')
         )
         measurements: dict[str, MeasurementLeaf] = {}
         for k, v in d.items():
@@ -278,6 +288,8 @@ class RunRow:
             measurements[k] = _coerce_measurement_leaf(v)
         arm_key_v = d.get('arm_key')
         arm_key = arm_key_v if isinstance(arm_key_v, str) else 'baseline'
+        cgs_v = d.get('claim_graph_signature')
+        claim_graph_signature = cgs_v if isinstance(cgs_v, str) else ''
         return cls(
             id=require_str(d, 'id'),
             parent_id=optional_str(d, 'parent_id'),
@@ -285,6 +297,7 @@ class RunRow:
             timestamp=require_str(d, 'timestamp'),
             verdict=require_verdict(d, 'verdict'),
             arm_key=arm_key,
+            claim_graph_signature=claim_graph_signature,
             measurements=measurements,
         )
 
