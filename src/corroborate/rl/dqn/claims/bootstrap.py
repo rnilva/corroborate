@@ -140,27 +140,23 @@ def bootstrap(
     reward: jax.Array,
     done: jax.Array,
     gamma: float,
-    n_step: int = 1,
     greedification: Greedification = max_greedify,
     gradient_rule: GradientRule = semi_gradient,
 ) -> jax.Array:
-    """Bellman target: `R^n + γ^n · (1−done) · gradient_rule(
+    """Bellman target: `reward + gamma · (1−done) · gradient_rule(
     greedification(...))`.
 
-    For 1-step (n_step=1, default) this collapses to the standard
-    `r + γ · (1−done) · v(s')`. For n_step=k, the input `reward`
-    is already the k-step accumulated return Σ_{j=0}^{k-1} γʲ
-    r_{t+j} (computed by the `n_step_return` Free Claim during
-    rollout, before the transition is added to Replay), and the
-    bootstrap discount on v(s_{t+k}) is `γ^k` because the
-    bootstrap target lies k steps in the future.
+    `gamma` here is the BOOTSTRAP DISCOUNT on v(s'), which equals
+    γⁿ for an n-step return and γ¹ = γ for the standard 1-step
+    case. dqn_step computes `gamma**n_step` once and passes that
+    as `gamma`, so bootstrap doesn't need to know `n_step`
+    separately — single leaf in the configuration surface, no
+    duplication.
 
-    Single source of truth: `n_step` is a top-level kwarg of
-    `dqn` / `dqn_step` and flows here from there. Both rollout's
-    `n_step_return` and bootstrap's discount read the same
-    value; the Hypothesis intervention dict sets it ONCE at the
-    dqn level (`{'n_step': 3}`), not separately on Replay and
-    bootstrap.
+    `reward` is the (potentially-aggregated) n-step return
+    `Σⱼ γʲ rⱼ` precomputed by the `n_step_return` Free Claim
+    during rollout. For 1-step this is just rₜ and the formula
+    collapses to the textbook `rₜ + γ·(1−d)·v(s_{t+1})`.
 
     `greedification` is the DDQN-vs-vanilla axis; `gradient_rule`
     is the semi-gradient-vs-full-gradient axis. Authors swap
@@ -169,19 +165,14 @@ def bootstrap(
         partial(bootstrap, greedification=double_greedify)
         partial(bootstrap, gradient_rule=full_gradient)
         partial(bootstrap, greedification=double_greedify,
-                gradient_rule=full_gradient)
-
-    `n_step` is NOT typically set via partial on bootstrap —
-    callers pass it as a top-level dqn kwarg, and dqn_step
-    forwards it to bootstrap internally."""
+                gradient_rule=full_gradient)"""
     v_next = greedification(
         online_params=online_params,
         target_params=target_params,
         q_network=q_network,
         next_obs=next_obs,
     )
-    discount = gamma ** n_step
-    target = reward + discount * (1.0 - done) * v_next
+    target = reward + gamma * (1.0 - done) * v_next
     return gradient_rule(target)
 
 

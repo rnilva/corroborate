@@ -128,10 +128,14 @@ class GradientRule(Protocol):
 
 class Bootstrap(Protocol):
     """Bellman target. The default `bootstrap` composition is
-    `R^n + γ^n · (1−done) · gradient_rule(greedification(...))`,
-    where `R^n = Σ γᵏ rₖ` is the n-step return precomputed by
-    `n_step_return` during rollout. For `n_step=1` this collapses
-    to the standard 1-step target.
+    `reward + gamma · (1−done) · gradient_rule(greedification(...))`.
+
+    `gamma` here is the BOOTSTRAP DISCOUNT — for n-step it equals
+    γⁿ (computed by dqn_step from the env's γ); for 1-step it's
+    just γ. `reward` is the (potentially-aggregated) n-step return
+    precomputed during rollout by the `n_step_return` Free Claim.
+    bootstrap itself doesn't need to know `n_step` — single leaf
+    in the configuration surface.
 
     Keyword-only signature so the swap is a clean call-site drop-
     in. The DEFAULT swap-axis for DDQN-vs-vanilla is now
@@ -147,7 +151,6 @@ class Bootstrap(Protocol):
         reward: jax.Array,
         done: jax.Array,
         gamma: float,
-        n_step: int = 1,
     ) -> jax.Array: ...
 
 

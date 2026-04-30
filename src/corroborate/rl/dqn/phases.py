@@ -208,12 +208,15 @@ def train_phase(
         # controls cotangent flow. With target hoisted outside, it
         # becomes a constant under value_and_grad and the
         # stop_gradient is theatre.
+        # Bootstrap takes γⁿ as its `gamma` (the discount on
+        # v(s')); n_step is consumed at the dqn-level only.
+        bootstrap_gamma = float(gamma) ** int(n_step)
         target = bootstrap(
             online_params=params,
             target_params=state.target_params,
             q_network=q_network,
             next_obs=batch.next_obs, reward=batch.reward, done=batch.done,
-            gamma=gamma, n_step=n_step,
+            gamma=bootstrap_gamma,
         )
         per_sample = loss_fn(predicted, target)        # (batch,)
         abs_td = jnp.abs(predicted - target)           # (batch,)
