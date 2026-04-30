@@ -123,3 +123,78 @@ def test_audit_trail_carries_analysis_result(
     assert pg.measurable == 'mechanism.jensen_gap'
     assert pg.treatment_arm == 'ddqn'
     assert pg.baseline_arm == 'vanilla_dqn'
+
+
+# ============ Meta-regression: log_action_dim moderates g_mech ============
+
+def test_meta_regression_action_dim_reproduces_findings(
+    action_dim_cells: list[dict[str, object]],
+) -> None:
+    """FINDINGS.md eighth revision: meta-regression of `g_mech`
+    on action_dim shows the right direction (β negative — more
+    bias-reduction at higher |A|) but n=4 envs is underpowered
+    for significance.
+
+    The bridge asserts the sign, and POWER_INSUFFICIENT when
+    the coefficient is non-significant. Magnitude isn't fixed
+    by the claim — different inverse-variance weightings
+    legitimately produce different β; the substantive finding
+    is the negative sign + underpowered."""
+    import math
+    from corroborate.meta_regression import MetaRegressionResult
+
+    covariates_per_env: dict[str, dict[str, float]] = {
+        'CartPole-v1': {'log_action_dim': math.log(2)},
+        'Acrobot-v1': {'log_action_dim': math.log(3)},
+        'Catch-bsuite': {'log_action_dim': math.log(3)},
+        'DiscountingChain-bsuite': {'log_action_dim': math.log(5)},
+    }
+
+    @claim_bridge(
+        name='log_action_dim_drives_jensen_gap_reduction',
+        source='mechanism.jensen_gap',
+        target='mechanism.jensen_gap',
+        direction=Direction.INVERSE,
+        tier=Tier.ASSOCIATIONAL,
+        treatment_arm='ddqn',
+        baseline_arm='vanilla_dqn',
+        pair_by=('seed',),
+        covariates_per_env=covariates_per_env,
+    )
+    def claim(
+        meta_regression_paired_g: MetaRegressionResult,
+    ) -> Verdict:
+        coef = next(
+            (c for c in meta_regression_paired_g.coefficients
+             if c.name == 'log_action_dim'),
+            None,
+        )
+        if coef is None:
+            return Verdict.NO_EFFECT
+        if coef.coefficient < 0:
+            return (
+                Verdict.HELD if coef.is_significant
+                else Verdict.POWER_INSUFFICIENT
+            )
+        return Verdict.NO_EFFECT
+
+    out = evaluate(claim, action_dim_cells)
+    assert out.verdict == Verdict.POWER_INSUFFICIENT, (
+        f'expected POWER_INSUFFICIENT (right direction, '
+        f'underpowered at n=4); got {out.verdict.value}'
+    )
+    mr = cast(
+        MetaRegressionResult,
+        out.analysis_results['meta_regression_paired_g'],
+    )
+    assert mr.n_strata == 4
+    coef = next(
+        c for c in mr.coefficients if c.name == 'log_action_dim'
+    )
+    assert coef.coefficient < 0, (
+        f'expected negative slope (DDQN reduces gap more on '
+        f'higher-|A| envs); got β={coef.coefficient:+.3f}'
+    )
+    assert not coef.is_significant, (
+        f'expected p > α at n=4; got p={coef.p_value:.4f}'
+    )
