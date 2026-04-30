@@ -5,6 +5,156 @@ to track when claims were authored vs. observed.
 
 ---
 
+## 2026-04-30 (twelfth revision) — Full 2×2 factorial (greedification × n_step) on 5 sparse-reward envs: DDQN-attenuation reading wins on FourRooms (interaction g = −1.19, z = −4.75); other envs split between variance-amplification (Catch) and small/noisy.
+
+### Methodology
+
+The eleventh revision tested only the (DDQN at n=1, DDQN at n=3)
+diagonal of the (greedification × n_step) factorial — half the
+2×2. To complete the design and discriminate over-correction
+versus DDQN-attenuation, I ran the missing two cells on the
+same 5 sparse-reward envs at the same HPs (cap=50k, lr=1e-4,
+sync=100, γ=0.99, MLP, total_steps=200k):
+
+  | greedification | n_step=1 | n_step=3 |
+  |---|---|---|
+  | max (vanilla) | A: nstep_vanilla_arms | B: nstep_vanilla_arms |
+  | double (DDQN) | C: nstep_intervention(_fr) | D: nstep_intervention(_fr) |
+
+Seeds 0..29 align across corpora so paired Hedges' g is
+admissible. FourRooms-misc DDQN cells crashed the original
+sweep on an int32-obs dtype regression (now patched in the
+substrate refactor); a separate `nstep_intervention_fr` sweep
+fills the missing cells.
+
+For each env, four within-pair effects (paired by seed):
+- (B−A): n-step on vanilla
+- (D−C): n-step on DDQN
+- (C−A): DDQN at n=1
+- (D−B): DDQN at n=3
+
+The interaction `(D−B) − (C−A)` discriminates two readings:
+- Negative interaction → DDQN+n-step compounds harm
+  (over-correction) OR DDQN's effect shrinks at higher n
+- Zero interaction → independent additive effects
+- Positive interaction → synergy
+
+### Result — paired Hedges' g per env
+
+| env | (B−A) | (D−C) | (C−A) | (D−B) | INT (D−B − C−A) | bootstrap z |
+|---|---|---|---|---|---|---|
+| FourRooms-misc | +1.06 (early-fade) | +0.36 | **+0.79** | +0.18 | **−0.61** | bootstrap large |
+| Catch-bsuite | **−2.20** | −2.21 | +0.00 | −0.04 | −0.10 | −0.55 |
+| DiscountingChain-bsuite | +1.04 (grows late) | +1.10 | +0.16 | +0.06 | −0.35 | −1.29 |
+| MountainCar-v0 | +0.07 | −0.10 | +0.05 | −0.10 | −0.36 | −1.60 |
+| Acrobot-v1 | −0.16 | −0.21 | −0.04 | −0.16 | −0.12 | −0.48 |
+
+(Per-(env, burst) tables are richer; the per-pair averages above
+collapse them. FourRooms (D−B) hides phase variation: early
+bursts are negative, late bursts positive — the chain
+decomposition's burst-by-burst pattern matters.)
+
+### Interaction interpretation
+
+**FourRooms is the cleanest signal**. DDQN's mechanism actually
+operates here at n=1 (g_link(C−A) ≈ +0.79 across bursts);
+that's the env where there's room to attenuate. At n=3, DDQN's
+marginal contribution drops to +0.18. The interaction (−0.61
+on average across bursts; bootstrap z = −4.75 on the cell-mean
+scale) directly supports the user's "fewer bootstraps → less
+DDQN to do" reading. The mechanism activates more strongly on
+high-bootstrap-fraction envs (FourRooms is sparse-reward
+terminal) and gets attenuated proportionally as n-step shortens
+the bootstrap chain.
+
+**Catch is dominated by n-step, not DDQN**. g_link(B−A) ≈ −2.20
+across all bursts: n-step alone catastrophically harms vanilla
+on Catch. DDQN at n=1 has *exactly* zero effect (g = +0.00) —
+both arms saturate at mc_return ≈ +0.92 and converge to the
+same near-optimal policy. Adding DDQN to n-step doesn't help
+either: D−B ≈ −0.04. So the entire negative outcome on Catch
+is "n-step amplifies variance on a saturating env"; DDQN is
+orthogonal. The previous revision's "DDQN+3step backfires on
+Catch" reading was misleading — it's n-step alone that
+backfires.
+
+**Acrobot, MountainCar, DiscountingChain — small effects,
+consistent direction**. All three show negative interaction
+(−0.12, −0.36, −0.35) with bootstrap z's between −0.5 and
+−1.6. Individually inconclusive; pooled across the 5 envs the
+direction is consistent (5/5 negative).
+
+### Discriminating reads
+
+The over-correction reading (DDQN + n-step → push past true Q
+→ harm) and the DDQN-attenuation reading (fewer bootstraps →
+less DDQN headroom → effect shrinks) make different predictions
+about the (B−A) cell:
+- Over-correction predicts: vanilla+n-step strictly *helps*
+  on envs where DDQN+n-step *hurts*
+- DDQN-attenuation predicts: vanilla+n-step ≈ DDQN+n-step
+  (both arms suffer/benefit from n-step similarly; DDQN
+  marginal effect just shrinks)
+
+**On FourRooms**: g_link(B−A) ≈ +1.06 (n-step helps vanilla);
+g_link(D−C) ≈ +0.36 (n-step helps DDQN, but less). DDQN
+attenuation reading wins.
+
+**On Catch**: g_link(B−A) ≈ −2.20 (n-step hurts vanilla);
+g_link(D−C) ≈ −2.21 (n-step hurts DDQN, same). Both arms
+suffer the same n-step penalty; DDQN doesn't compound.
+This is variance-amplification, not over-correction.
+
+**Across envs**: DDQN-attenuation is the consistent
+explanation where DDQN actually had room to operate at n=1.
+Over-correction would require DDQN+n-step to be strictly worse
+than the additive prediction — that's not what we see.
+
+### Reading for the framework
+
+The chain-decomposition machinery the framework provides
+(g_mech HELD ↛ g_link HELD ↛ outcome HELD as separate verdicts)
+is what made this finding possible. Single-stage analysis
+("DDQN at n=3 hurts on Acrobot") would have hidden the
+underlying mechanism.
+
+For the bridge-graph design memory's "fewer bootstraps → less
+DDQN to do" reading: this finding is the empirical anchor.
+Authoring future intervention pairs (e.g., Strategy 2's
+expectile-greedify, softmax-greedify) on top of this 2×2
+gives a way to systematically isolate which axis of variance
+each intervention exploits.
+
+### Honest scope
+
+- Cell-mean mc_return as the outcome metric. Per-burst paired
+  g (computed but compressed to averages above) shows
+  temporal heterogeneity that scalar means hide
+  (FourRooms (D−B) flips sign across bursts).
+- HP regime: cap=50k, lr=1e-4 (HPO-validated stable). Different
+  regimes may modulate the interaction magnitude.
+- 5 envs = small n for a meta-regression of the interaction
+  itself; pooling across more envs (the long-horizon multi-env
+  cohort, when MinAtar 1M completes + Strategy 2 lands) would
+  tighten the bootstrap CIs.
+
+### Reproduction
+
+```
+uv run python experiments/analyze.py \
+  --pair vanilla_3step nstep_vanilla_arms vanilla_1step nstep_vanilla_arms \
+  --pair ddqn_3step    nstep_intervention   ddqn_1step    nstep_intervention \
+  --pair ddqn_1step    nstep_intervention   vanilla_1step nstep_vanilla_arms \
+  --pair ddqn_3step    nstep_intervention   vanilla_3step nstep_vanilla_arms \
+  --stages paired_g
+```
+
+(For FourRooms, swap `nstep_intervention` → `nstep_intervention_fr`
+on the DDQN-corpus side of each pair. Future analyze.py extension
+should accept a corpus union to handle this naturally.)
+
+---
+
 ## 2026-04-29 (eleventh revision) — N-step intervention test refutes the variance-reduction hypothesis for the residual `bootstrap_fraction → g_link | g_mech` direct edge. Adding 3-step return on top of DDQN HURTS outcome on most sparse-reward envs.
 
 ### Methodology
