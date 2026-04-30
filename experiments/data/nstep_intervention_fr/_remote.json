@@ -1,0 +1,41 @@
+{
+  "remote_root": "s3://corroborate-archive/nstep_intervention_fr",
+  "files": [
+    {
+      "relpath": "runs.parquet",
+      "size_bytes": 28831,
+      "sha256": "598bc93b0084852c7bba7520ca7e2579123a46eb5086e4bdba0f9adacc1cef2d",
+      "pushed_at": "2026-04-30T03:45:58+00:00"
+    },
+    {
+      "relpath": "tmp/arm000__FourRooms-misc__ddqn_1step__runs.parquet",
+      "size_bytes": 27509,
+      "sha256": "ac23b93997a8791446b197c721b07605c8c9046378e316723735a71ad45c8e4b",
+      "pushed_at": "2026-04-30T03:38:19+00:00"
+    },
+    {
+      "relpath": "tmp/arm000__FourRooms-misc__ddqn_1step__traces.parquet",
+      "size_bytes": 340279592,
+      "sha256": "940e067b48a2ecdc1839680fef67d10e6d3c590cc0823b0c93dac3e8811f6797",
+      "pushed_at": "2026-04-30T03:38:28+00:00"
+    },
+    {
+      "relpath": "tmp/arm001__FourRooms-misc__ddqn_3step__runs.parquet",
+      "size_bytes": 27629,
+      "sha256": "0675ceff168cd0c45d286fe19eae881639edc19904a5f3972f4521689beffe08",
+      "pushed_at": "2026-04-30T03:45:38+00:00"
+    },
+    {
+      "relpath": "tmp/arm001__FourRooms-misc__ddqn_3step__traces.parquet",
+      "size_bytes": 341721975,
+      "sha256": "eb82acb91aec6ca652429f02944e41797166aa1de8626be40ee924d18b186f70",
+      "pushed_at": "2026-04-30T03:45:43+00:00"
+    },
+    {
+      "relpath": "traces.parquet",
+      "size_bytes": 681976164,
+      "sha256": "737a9632e086d48e57abc857cf2f02303bc04d4fad08513b661f564024eb9072",
+      "pushed_at": "2026-04-30T03:46:07+00:00"
+    }
+  ]
+}

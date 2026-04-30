@@ -184,9 +184,8 @@ def empty_graph() -> ComputationGraph:
 # ============ run_hypotheses — the framework's `do()` operator ============
 
 def run_hypotheses[R: Mapping[str, object]](
-    hypotheses: Sequence[Hypothesis[R]],
+    arms: Sequence[tuple[Hypothesis[R], Mapping[str, object]]],
     *,
-    grid_per_arm: Sequence[Mapping[str, object]],
     runner: Runner[R],
     out_dir: Path,
     archive_remote: str | None = None,
@@ -194,18 +193,24 @@ def run_hypotheses[R: Mapping[str, object]](
     trace_reductions: Sequence[pl.Expr] = (),
     trace_drops: Sequence[str] = (),
 ) -> tuple[Path, Path]:
-    """Execute the Cartesian product of `hypotheses × grid_per_arm`,
-    persist per-arm parquets, merge to a corpus.
+    """Execute each `(hypothesis, grid_point)` arm via runner;
+    persist per-arm parquets; merge to a corpus.
 
     This is the framework's rung-2 `do()` operator at the corpus
     level: authored Hypothesis (claim graph + intervention spec) +
-    exogenous grid in, materialized RunRow / TraceRow corpus out.
-    The corpus IS the evidence produced by the intervention.
+    exogenous grid_point in, materialized RunRow / TraceRow corpus
+    out. The corpus IS the evidence produced by the intervention.
 
-    Each (h, grid_point) pair is one *arm*: one runner call → one
-    `SweepCellResult` → one (runs, traces) parquet pair. Final
-    step concatenates per-arm parquets via `stream_concat_parquets`
-    (`diagonal_relaxed`).
+    `arms` are EXPLICIT pairs. Substrates that want a Cartesian
+    product author it inline:
+      `arms = [(h, gp) for h in hypotheses for gp in grid_per_arm]`
+    Substrates that want hypothesis-paired-with-env (e.g. each
+    hypothesis has a CNN configured for one env) author it
+    directly. The framework doesn't impose a structure.
+
+    Each arm is one runner call → one `SweepCellResult` → one
+    (runs, traces) parquet pair. Final step concatenates via
+    `stream_concat_parquets` (`diagonal_relaxed`).
 
     Substrate-agnostic: works for any `Runner[R]`. Substrates
     handle chunking by authoring multiple grid_points sharing the
@@ -224,10 +229,8 @@ def run_hypotheses[R: Mapping[str, object]](
     analysis).
 
     `arm_tag` produces the filename suffix for each arm's
-    parquets. Default: `{hypothesis.name}__{idx}` — uniquely
-    identifies arms within a sweep. Substrates with named
-    grid dims (DQN: `env_name`) typically override to encode
-    them.
+    parquets. Default: `{hypothesis.name}` — caller usually
+    overrides to encode grid_point keys (e.g. `env_name`).
 
     `trace_reductions` / `trace_drops` are forwarded to
     `apply_trace_reductions` per arm; substrate authors who
@@ -243,6 +246,7 @@ def run_hypotheses[R: Mapping[str, object]](
         def arm_tag_default(
             h: Hypothesis[R], grid_point: Mapping[str, object],
         ) -> str:
+            del grid_point
             return f'{h.name}'
         effective_arm_tag: Callable[
             [Hypothesis[R], Mapping[str, object]], str,
@@ -250,14 +254,7 @@ def run_hypotheses[R: Mapping[str, object]](
     else:
         effective_arm_tag = arm_tag
 
-    arms: list[tuple[Hypothesis[R], Mapping[str, object]]] = [
-        (h, gp) for h in hypotheses for gp in grid_per_arm
-    ]
-    print(
-        f'sweep: {len(arms)} arms ({len(hypotheses)} hypotheses × '
-        f'{len(grid_per_arm)} grid points)',
-        flush=True,
-    )
+    print(f'sweep: {len(arms)} arms', flush=True)
 
     runs_paths: list[Path] = []
     traces_paths: list[Path] = []

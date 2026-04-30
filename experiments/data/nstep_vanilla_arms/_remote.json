@@ -1,0 +1,137 @@
+{
+  "remote_root": "s3://corroborate-archive/nstep_vanilla_arms",
+  "files": [
+    {
+      "relpath": "runs.parquet",
+      "size_bytes": 30617,
+      "sha256": "77420c60f9e04b951bee61cafe2926cd2d4c69c6757b3a10a6c62082b6929646",
+      "pushed_at": "2026-04-30T03:22:33+00:00"
+    },
+    {
+      "relpath": "tmp/arm000__Catch-bsuite__vanilla_1step__runs.parquet",
+      "size_bytes": 21110,
+      "sha256": "69ca3f5cb6b26133e5e2deebcfeb6fe3321e04fccbb410cb3cb3f0fad5597a8f",
+      "pushed_at": "2026-04-30T02:14:29+00:00"
+    },
+    {
+      "relpath": "tmp/arm000__Catch-bsuite__vanilla_1step__traces.parquet",
+      "size_bytes": 350707158,
+      "sha256": "4b1579512dec0274cabb5345095fae6f5aa4660002f24a876499e1a5c5855cfd",
+      "pushed_at": "2026-04-30T02:14:35+00:00"
+    },
+    {
+      "relpath": "tmp/arm001__Catch-bsuite__vanilla_3step__runs.parquet",
+      "size_bytes": 21278,
+      "sha256": "a6564f04430864b687d3b1338941a02c199f2f371c2a89f598845bbc08d53f08",
+      "pushed_at": "2026-04-30T02:22:01+00:00"
+    },
+    {
+      "relpath": "tmp/arm001__Catch-bsuite__vanilla_3step__traces.parquet",
+      "size_bytes": 377249466,
+      "sha256": "293e6737ddff4e3e21bdba64fee5a6574c35235f80db4dc02db81075e47f20ac",
+      "pushed_at": "2026-04-30T02:22:07+00:00"
+    },
+    {
+      "relpath": "tmp/arm002__DiscountingChain-bsuite__vanilla_1step__runs.parquet",
+      "size_bytes": 21300,
+      "sha256": "98d5d33a21be0fb8951141ef1716a54a99b7e7bf0d3c2556890d8301a431ed53",
+      "pushed_at": "2026-04-30T02:28:56+00:00"
+    },
+    {
+      "relpath": "tmp/arm002__DiscountingChain-bsuite__vanilla_1step__traces.parquet",
+      "size_bytes": 367684602,
+      "sha256": "a62d265f651caa6ccbb6bb37ddc476451a81b2c84635d3867bce42035e66ed2f",
+      "pushed_at": "2026-04-30T02:31:27+00:00"
+    },
+    {
+      "relpath": "tmp/arm003__DiscountingChain-bsuite__vanilla_3step__runs.parquet",
+      "size_bytes": 21254,
+      "sha256": "8493d3aa36b57be49e45301a6060195a1d9f8228a8926407f83a62164e8655dc",
+      "pushed_at": "2026-04-30T02:38:25+00:00"
+    },
+    {
+      "relpath": "tmp/arm003__DiscountingChain-bsuite__vanilla_3step__traces.parquet",
+      "size_bytes": 375765002,
+      "sha256": "e7937f0c8214ba5897b8a37590014da5ed1ac9d79bceecf648f0d34d8181a952",
+      "pushed_at": "2026-04-30T02:38:30+00:00"
+    },
+    {
+      "relpath": "tmp/arm004__MountainCar-v0__vanilla_1step__runs.parquet",
+      "size_bytes": 21286,
+      "sha256": "4adecf776dab76e482b3ecdeb4e91d64717b4578e9b4c35adfad93acedcb4953",
+      "pushed_at": "2026-04-30T02:45:25+00:00"
+    },
+    {
+      "relpath": "tmp/arm004__MountainCar-v0__vanilla_1step__traces.parquet",
+      "size_bytes": 335403279,
+      "sha256": "9ac1590039f2a111bbfb0be0de0506718f99eb790abd9a1c586efb34657b38a4",
+      "pushed_at": "2026-04-30T02:45:31+00:00"
+    },
+    {
+      "relpath": "tmp/arm005__MountainCar-v0__vanilla_3step__runs.parquet",
+      "size_bytes": 21229,
+      "sha256": "fb97c183780e45cee880b9f27bfb142f9596da0b4be788cbde548d8e75f3effc",
+      "pushed_at": "2026-04-30T02:52:29+00:00"
+    },
+    {
+      "relpath": "tmp/arm005__MountainCar-v0__vanilla_3step__traces.parquet",
+      "size_bytes": 334311184,
+      "sha256": "8f151044840fd616c591f3a48c6df643189463a32c9755a6e280496d3da684ba",
+      "pushed_at": "2026-04-30T02:52:34+00:00"
+    },
+    {
+      "relpath": "tmp/arm006__Acrobot-v1__vanilla_1step__runs.parquet",
+      "size_bytes": 21518,
+      "sha256": "aa4689962b695add6cc061dad0ba070efc15df39066273005642cc76f5f5a8cd",
+      "pushed_at": "2026-04-30T02:59:25+00:00"
+    },
+    {
+      "relpath": "tmp/arm006__Acrobot-v1__vanilla_1step__traces.parquet",
+      "size_bytes": 365141981,
+      "sha256": "c9c29bbfa3052552005dc9f55209f9c7c1e482b6e78e5283a529af6cf4c37d1a",
+      "pushed_at": "2026-04-30T02:59:35+00:00"
+    },
+    {
+      "relpath": "tmp/arm007__Acrobot-v1__vanilla_3step__runs.parquet",
+      "size_bytes": 21361,
+      "sha256": "2049b5b0a02d2848efba9f0948777ba80a6a9cc75075e5514fe7ea63980170c5",
+      "pushed_at": "2026-04-30T03:06:30+00:00"
+    },
+    {
+      "relpath": "tmp/arm007__Acrobot-v1__vanilla_3step__traces.parquet",
+      "size_bytes": 362880552,
+      "sha256": "81a159cfacd95758c42135a8df7bc337fcba61a482490cf47f5d366eed35dc2c",
+      "pushed_at": "2026-04-30T03:06:35+00:00"
+    },
+    {
+      "relpath": "tmp/arm008__FourRooms-misc__vanilla_1step__runs.parquet",
+      "size_bytes": 21423,
+      "sha256": "009a7284a775e262bf6f92df2e82c4b4f1917b39151c5fe3830e001888079f2c",
+      "pushed_at": "2026-04-30T03:13:36+00:00"
+    },
+    {
+      "relpath": "tmp/arm008__FourRooms-misc__vanilla_1step__traces.parquet",
+      "size_bytes": 334515309,
+      "sha256": "1b011095f60fa0ae062820ab9d1379440af50b8ee9f16656268905c5c2d1a5af",
+      "pushed_at": "2026-04-30T03:14:12+00:00"
+    },
+    {
+      "relpath": "tmp/arm009__FourRooms-misc__vanilla_3step__runs.parquet",
+      "size_bytes": 21382,
+      "sha256": "bc97d76199eaa8a00cbf2c813e97b06e43c70f4d6064de69da6ac006249ba3e8",
+      "pushed_at": "2026-04-30T03:21:12+00:00"
+    },
+    {
+      "relpath": "tmp/arm009__FourRooms-misc__vanilla_3step__traces.parquet",
+      "size_bytes": 339928936,
+      "sha256": "67304bd00f43847478047ec87ebca616d9a7124e03cdde805a72dc77f1534071",
+      "pushed_at": "2026-04-30T03:21:16+00:00"
+    },
+    {
+      "relpath": "traces.parquet",
+      "size_bytes": 3543881012,
+      "sha256": "d5cc78a4b290fd3643da01a87b8330d5738f0624353d83ba63a2ccb311c66f5c",
+      "pushed_at": "2026-04-30T03:23:21+00:00"
+    }
+  ]
+}

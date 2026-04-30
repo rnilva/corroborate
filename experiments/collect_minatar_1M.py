@@ -105,6 +105,15 @@ def _hypothesis(
 
 
 def main() -> None:
+    from corroborate.rl.dqn.collect import (
+        env_arm_tag, paired_arms,
+    )
+    from corroborate.rl.dqn.trace_reductions import (
+        Q_TRACE_DROPS, Q_TRACE_REDUCTIONS,
+    )
+    from corroborate.rl.sweep import DQNRunner
+    from corroborate.sweep import run_hypotheses
+
     hypotheses: list[Hypothesis[DQNTrajectoryRecord]] = []
     env_configs_aligned: list[EnvConfig] = []
     for ec in ENV_CONFIGS:
@@ -113,75 +122,17 @@ def main() -> None:
             env_configs_aligned.append(ec)
 
     out_dir = Path(__file__).parent / 'data' / 'minatar_1M'
-
-    # Manual arm iteration since each hypothesis is env-paired
-    # (CNN.obs_shape varies). The orchestrator's default Cartesian
-    # product would mis-pair hypotheses with envs; we walk the
-    # zipped list and call _run_one_arm directly.
-    from corroborate.rl.dqn.collect import _run_one_arm  # type: ignore[reportPrivateUsage]
-    from corroborate.persistence import stream_concat_parquets
-    from corroborate.cloud import archive
-    from corroborate.rl.sweep import DQNRunner
-    from corroborate.rl.dqn.trace_reductions import (
-        Q_TRACE_DROPS, Q_TRACE_REDUCTIONS,
-    )
-    import time
-
-    out_dir.mkdir(parents=True, exist_ok=True)
-    tmp_dir = out_dir / 'tmp'
-    tmp_dir.mkdir(parents=True, exist_ok=True)
-
     env_specs = {ec.env_name: _get_env_spec(ec.env_name) for ec in ENV_CONFIGS}
-    runner = DQNRunner(env_specs)
 
-    archived_runs_uris: list[str] = []
-    archived_traces_uris: list[str] = []
-    print(f'sweep: {len(hypotheses)} arms = '
-          f'{len(ENV_CONFIGS)} envs × 2 hypotheses, '
-          f'remote={REMOTE}', flush=True)
-    t_start = time.time()
-    for idx, (h, ec) in enumerate(zip(hypotheses, env_configs_aligned)):
-        t_arm = time.time()
-        tag = f'{ec.env_name}__{h.name}'
-        print(
-            f'  [{idx+1}/{len(hypotheses)}] {tag} '
-            f'(seeds={ec.n_seeds}, chunk={ec.chunk_size}) ...',
-            flush=True,
-        )
-        rp, tp = _run_one_arm(
-            h, ec, runner, tmp_dir, idx, tag,
-            trace_reductions=Q_TRACE_REDUCTIONS,
-            trace_drops=Q_TRACE_DROPS,
-        )
-        rp_rel = rp.relative_to(out_dir).as_posix()
-        tp_rel = tp.relative_to(out_dir).as_posix()
-        archive(
-            out_dir, REMOTE,
-            files=[rp_rel, tp_rel], purge_local=True,
-        )
-        archived_runs_uris.append(f'{REMOTE.rstrip("/")}/{rp_rel}')
-        archived_traces_uris.append(f'{REMOTE.rstrip("/")}/{tp_rel}')
-        elapsed = time.time() - t_arm
-        total = time.time() - t_start
-        print(f'    done in {elapsed:.1f}s '
-              f'(cumulative {total/60:.1f} min) '
-              f'archived → {REMOTE}/{rp_rel}',
-              flush=True)
-
-    print()
-    print('merging per-arm parquets from remote ...', flush=True)
-    final_runs = out_dir / 'runs.parquet'
-    final_traces = out_dir / 'traces.parquet'
-    stream_concat_parquets(archived_runs_uris, final_runs)
-    stream_concat_parquets(archived_traces_uris, final_traces)
-    # Archive the merged outputs without purging.
-    archive(
-        out_dir, REMOTE,
-        files=['runs.parquet', 'traces.parquet'],
-        purge_local=False,
+    run_hypotheses(
+        paired_arms(hypotheses, env_configs_aligned),
+        runner=DQNRunner(env_specs),
+        out_dir=out_dir,
+        archive_remote=REMOTE,
+        arm_tag=env_arm_tag,
+        trace_reductions=Q_TRACE_REDUCTIONS,
+        trace_drops=Q_TRACE_DROPS,
     )
-    print(f'  → {final_runs}')
-    print(f'  → {final_traces}')
 
 
 if __name__ == '__main__':

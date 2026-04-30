@@ -38,7 +38,7 @@ from corroborate.rl.dqn.claims.bootstrap import bootstrap, double_greedify
 from corroborate.rl.dqn.claims.optimizer import Adam, WarmedUpdate
 from corroborate.rl.dqn.claims.q_network import CNN
 from corroborate.rl.dqn.claims.replay import Replay
-from corroborate.rl.dqn.collect import EnvConfig, collect_sweep_to_parquet
+from corroborate.rl.dqn.collect import EnvConfig
 from corroborate.rl.dqn.invariants import DQNTrajectoryRecord
 from corroborate.rl.env_catalogue import get as _get_env_spec
 
@@ -101,9 +101,17 @@ def _hypothesis(
 
 
 def main() -> None:
-    # Each hypothesis is env-specific (CNN.obs_shape varies);
-    # we author n_envs × 2 hypotheses and pair each with its
-    # corresponding env_config.
+    from corroborate.rl.dqn.collect import (
+        env_arm_tag, paired_arms,
+    )
+    from corroborate.rl.dqn.trace_reductions import (
+        Q_TRACE_DROPS, Q_TRACE_REDUCTIONS,
+    )
+    from corroborate.rl.sweep import DQNRunner
+    from corroborate.sweep import run_hypotheses
+
+    # Each hypothesis is env-specific (CNN.obs_shape varies); we
+    # author n_envs × 2 hypotheses and pair each with its env.
     hypotheses: list[Hypothesis[DQNTrajectoryRecord]] = []
     env_configs_aligned: list[EnvConfig] = []
     for ec in ENV_CONFIGS:
@@ -112,59 +120,16 @@ def main() -> None:
             env_configs_aligned.append(ec)
 
     out_dir = Path(__file__).parent / 'data' / 'ddqn_effective_cohort'
-
-    # Manual arm iteration since each hypothesis is env-paired.
-    # The orchestrator's default Cartesian product would mis-pair
-    # hypotheses with envs; supply arm_tag to encode the pair
-    # uniquely. We iterate via a single-env list per hypothesis:
-    from corroborate.rl.dqn.collect import _run_one_arm  # type: ignore[reportPrivateUsage]
-    from corroborate.persistence import stream_concat_parquets
-    from corroborate.rl.sweep import DQNRunner
-    from corroborate.rl.dqn.trace_reductions import (
-        Q_TRACE_DROPS, Q_TRACE_REDUCTIONS,
-    )
-    import time
-
-    out_dir.mkdir(parents=True, exist_ok=True)
-    tmp_dir = out_dir / 'tmp'
-    tmp_dir.mkdir(parents=True, exist_ok=True)
-
     env_specs = {ec.env_name: _get_env_spec(ec.env_name) for ec in ENV_CONFIGS}
-    runner = DQNRunner(env_specs)
 
-    runs_paths: list[Path] = []
-    traces_paths: list[Path] = []
-    print(f'sweep: {len(hypotheses)} arms = '
-          f'{len(ENV_CONFIGS)} envs × 2 hypotheses', flush=True)
-    t_start = time.time()
-    for idx, (h, ec) in enumerate(zip(hypotheses, env_configs_aligned)):
-        t_arm = time.time()
-        tag = f'{ec.env_name}__{h.name}'
-        print(
-            f'  [{idx+1}/{len(hypotheses)}] {tag} '
-            f'(seeds={ec.n_seeds}, chunk={ec.chunk_size}) ...',
-            flush=True,
-        )
-        rp, tp = _run_one_arm(
-            h, ec, runner, tmp_dir, idx, tag,
-            trace_reductions=Q_TRACE_REDUCTIONS,
-            trace_drops=Q_TRACE_DROPS,
-        )
-        runs_paths.append(rp)
-        traces_paths.append(tp)
-        elapsed = time.time() - t_arm
-        total = time.time() - t_start
-        print(f'    done in {elapsed:.1f}s '
-              f'(cumulative {total/60:.1f} min)', flush=True)
-
-    print()
-    print('merging per-arm parquets ...', flush=True)
-    final_runs = out_dir / 'runs.parquet'
-    final_traces = out_dir / 'traces.parquet'
-    stream_concat_parquets(runs_paths, final_runs)
-    stream_concat_parquets(traces_paths, final_traces)
-    print(f'  → {final_runs}')
-    print(f'  → {final_traces}')
+    run_hypotheses(
+        paired_arms(hypotheses, env_configs_aligned),
+        runner=DQNRunner(env_specs),
+        out_dir=out_dir,
+        arm_tag=env_arm_tag,
+        trace_reductions=Q_TRACE_REDUCTIONS,
+        trace_drops=Q_TRACE_DROPS,
+    )
 
 
 if __name__ == '__main__':
