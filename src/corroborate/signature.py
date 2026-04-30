@@ -38,6 +38,7 @@ hide a leaf from intervention bake it in via `functools.partial`."""
 from __future__ import annotations
 
 import functools
+import hashlib
 import inspect
 import typing
 from collections.abc import Callable, Mapping
@@ -65,12 +66,28 @@ type Regime = Literal['exogenous', 'leaf']
 
 @dataclass(frozen=True, slots=True)
 class KwargInfo:
-    """One kwarg's introspected description."""
+    """One kwarg's introspected description.
+
+    `is_at_default` is true iff the bound `default` value equals
+    the function's signature default by `==`. This catches the
+    simple case (user explicitly bound the same scalar/Claim as
+    the default).
+
+    `sig_default_inner` carries the walked structure of the
+    function's signature default (when it's recursable: a
+    callable / partial / dataclass). At canonicalization time, if
+    `is_at_default` is False but `canonical(inner) == canonical(
+    sig_default_inner)`, the binding is canonically a no-op and
+    the kwarg is elided. This covers the `partial(claim_default)`
+    wrapping case where the partial object isn't `==` the FnClaim
+    but their canonical forms match."""
     name: str
     regime: Regime
     annotation: object
     default: object
     inner: ClaimSignature | None = None
+    is_at_default: bool = True
+    sig_default_inner: ClaimSignature | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -191,9 +208,33 @@ def _walk_fn(
         inner: ClaimSignature | None = (
             _walk(default, depth=depth + 1) if _is_recursable(default) else None
         )
+        sig_default = param.default
+        # Walk the signature default itself (separate from `default`
+        # which may be baked-over) so `canonical()` can compare
+        # canonical forms when the user wraps the default in a partial.
+        sig_default_inner: ClaimSignature | None = (
+            _walk(sig_default, depth=depth + 1)
+            if sig_default is not inspect.Parameter.empty
+            and _is_recursable(sig_default)
+            else None
+        )
+        if baked_value is _MISSING:
+            is_at_default = True
+        elif sig_default is inspect.Parameter.empty:
+            is_at_default = False
+        else:
+            try:
+                is_at_default = (
+                    baked_value is sig_default
+                    or bool(baked_value == sig_default)
+                )
+            except (TypeError, ValueError):
+                is_at_default = baked_value is sig_default
         kwargs_out.append(KwargInfo(
             name=param_name, regime=regime,
             annotation=base_annotation, default=default, inner=inner,
+            is_at_default=is_at_default,
+            sig_default_inner=sig_default_inner,
         ))
     return ClaimSignature(name=name, kwargs=tuple(kwargs_out))
 
@@ -215,9 +256,28 @@ def _walk_dataclass(instance: object, *, depth: int) -> ClaimSignature:
         inner: ClaimSignature | None = (
             _walk(value, depth=depth + 1) if _is_recursable(value) else None
         )
+        # Dataclass field's declared default — used by canonical
+        # form elision. `dataclasses.MISSING` is the sentinel for
+        # "no default declared".
+        from dataclasses import MISSING as _DC_MISSING
+        if f.default is not _DC_MISSING:
+            sig_default = f.default
+            try:
+                is_at_default = value is sig_default or bool(value == sig_default)
+            except (TypeError, ValueError):
+                is_at_default = value is sig_default
+        elif f.default_factory is not _DC_MISSING:
+            try:
+                sig_default = f.default_factory()
+                is_at_default = value is sig_default or bool(value == sig_default)
+            except (TypeError, ValueError, Exception):
+                is_at_default = False
+        else:
+            is_at_default = False
         kwargs_out.append(KwargInfo(
             name=f.name, regime=regime,
             annotation=base_annotation, default=value, inner=inner,
+            is_at_default=is_at_default,
         ))
     return ClaimSignature(name=cls.__name__, kwargs=tuple(kwargs_out))
 
@@ -392,3 +452,105 @@ def _strip_annotated(ann: object) -> object:
     if get_origin(ann) is Annotated:
         return get_args(ann)[0]
     return ann
+
+
+# ============ Canonical form for graph identity ============
+
+CANONICAL_VERSION: str = 'v1'
+
+
+def canonical(sig: ClaimSignature) -> ClaimSignature:
+    """Strip kwargs whose binding is canonically equivalent to the
+    signature default.
+
+    Two equivalence rules:
+    1. Direct: bound value `==` signature default → elide.
+    2. Canonical: canonical(walk(bound)) == canonical(walk(sig_default))
+       → elide. Catches the `partial(claim_default)` wrapper case
+       where the partial object isn't `==` the FnClaim but their
+       walked-and-canonicalised structures match.
+
+    The second rule gives the framework forward-compatibility: a
+    new Protocol axis added with a default implementation doesn't
+    perturb canonical forms of corpora that pre-date the axis,
+    even if those corpora wrapped the default in partials.
+
+    Recursive: child ClaimSignatures are canonicalised too. A
+    divergent grandchild keeps the parent kwarg in the canonical
+    form even if the parent itself looks at-default."""
+    out: list[KwargInfo] = []
+    for k in sig.kwargs:
+        inner = canonical(k.inner) if k.inner is not None else None
+        sig_inner = (
+            canonical(k.sig_default_inner)
+            if k.sig_default_inner is not None else None
+        )
+        if k.is_at_default and (inner is None or len(inner.kwargs) == 0):
+            continue
+        if (
+            inner is not None and sig_inner is not None
+            and inner == sig_inner
+        ):
+            continue
+        out.append(KwargInfo(
+            name=k.name, regime=k.regime,
+            annotation=k.annotation, default=k.default,
+            inner=inner, is_at_default=k.is_at_default,
+            sig_default_inner=k.sig_default_inner,
+        ))
+    return ClaimSignature(name=sig.name, kwargs=tuple(out))
+
+
+def _stable_repr(value: object) -> str:
+    """Hash-friendly stringification for leaf values. Handles the
+    closed set of canonical-form leaf types: scalars, tuples, lists,
+    frozen dataclasses (by class name + fields), partials and FnClaims
+    (by name; their inner structure is captured in the recursive
+    walk, not at this level)."""
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return repr(value)
+    if isinstance(value, (tuple, list)):
+        return '[' + ','.join(_stable_repr(v) for v in value) + ']'
+    if isinstance(value, FnClaim):
+        return f'Claim:{value.name}'
+    if isinstance(value, functools.partial):
+        wrapped = value.func
+        wname = (
+            wrapped.name if isinstance(wrapped, FnClaim)
+            else getattr(wrapped, '__name__', repr(wrapped))
+        )
+        return f'partial({wname})'
+    if is_dataclass(value) and not isinstance(value, type):
+        return f'dataclass:{type(value).__name__}'
+    if callable(value):
+        return f'callable:{getattr(value, "__name__", repr(value))}'
+    return repr(value)
+
+
+def claim_graph_signature(claim: object) -> str:
+    """Deterministic structural hash of `claim`'s canonical form.
+
+    Two bound partials with the same canonical form (after default-
+    elision) produce the same signature, regardless of syntactic
+    bake-in differences. Used as the program-instance identity
+    column on RunRow / BridgeRow.
+
+    Versioned: the `CANONICAL_VERSION` prefix means future changes
+    to the canonicalisation rule produce different hashes, so old
+    corpora's signatures don't silently collide with new ones."""
+    sig = canonical(walk(claim))
+    parts: list[str] = [CANONICAL_VERSION, sig.name]
+    _emit_signature(sig, parts)
+    blob = '|'.join(parts).encode()
+    return hashlib.sha256(blob).hexdigest()[:16]
+
+
+def _emit_signature(sig: ClaimSignature, parts: list[str]) -> None:
+    """Recursive emit for hash. Sorted by name for determinism."""
+    sorted_kwargs = sorted(sig.kwargs, key=lambda k: k.name)
+    for k in sorted_kwargs:
+        if k.inner is not None:
+            parts.append(f'{k.name}=>{k.inner.name}')
+            _emit_signature(k.inner, parts)
+        else:
+            parts.append(f'{k.name}={_stable_repr(k.default)}')
