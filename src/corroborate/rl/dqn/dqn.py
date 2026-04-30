@@ -34,7 +34,7 @@ from corroborate.rl.dqn.claims import (
     squared_error,
 )
 from corroborate.rl.dqn.claims.optimizer import Adam, WarmedUpdate
-from corroborate.rl.dqn.claims.replay import Replay
+from corroborate.rl.dqn.claims.replay import Replay, init_pending_n_step
 from corroborate.rl.dqn.eval import EvalBurstOut, eval_burst, train_with_eval
 from corroborate.rl.dqn.phases import (
     rollout_phase,
@@ -102,6 +102,7 @@ def init_state(
         target_params=online,
         opt_state=opt_state,
         replay=replay.init(obs_shape),
+        pending_n_step=init_pending_n_step(obs_shape),
         env_state=env_state,
         obs=obs,
         step=jnp.int32(0),
@@ -122,6 +123,7 @@ def dqn_step(
     state_hash: StateHash = default_state_hash,
     gamma: float = 0.99,
     sync_period: int = 100,
+    n_step: int = 1,
     q_network: QFunction = mlp_q,
     action_select: ActionSelect = epsilon_greedy,
     replay: Replay = Replay(),
@@ -159,12 +161,13 @@ def dqn_step(
         q_network=q_network,
         action_select=action_select,
         state_hash=state_hash,
+        n_step=n_step, gamma=gamma,
     )
 
     state, train = train_phase(
         state,
         q_network=q_network, bootstrap=bootstrap, loss_fn=loss_fn,
-        optimizer=optimizer, gamma=gamma,
+        optimizer=optimizer, gamma=gamma, n_step=n_step,
         replay=replay,
     )
 
@@ -196,6 +199,7 @@ def dqn(
     # Cross-cutting HPs (no single Module owns these).
     gamma: float = 0.99,
     sync_period: int = 100,
+    n_step: int = 1,
     total_steps: int = 50_000,
     eval_every: int = 5_000,
     n_episodes: int = 20,
@@ -263,7 +267,7 @@ def dqn(
         dqn_step,
         env=env, env_params=env_params, n_actions=n_actions,
         optimizer=optax_handle, state_hash=state_hash,
-        gamma=gamma, sync_period=sync_period,
+        gamma=gamma, sync_period=sync_period, n_step=n_step,
         q_network=q_network, action_select=action_select,
         replay=replay,
         bootstrap=bootstrap,

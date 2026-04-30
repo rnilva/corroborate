@@ -148,12 +148,19 @@ def bootstrap(
     greedification(...))`.
 
     For 1-step (n_step=1, default) this collapses to the standard
-    `r + γ · (1−done) · v(s')`. For n_step=k, the Replay buffer
-    must have aggregated k consecutive raw transitions into the
-    stored `(s_t, a_t, R^k_t, s_{t+k}, done_within_k)` — `reward`
-    here is the discounted n-step return, and the bootstrap
-    discount on v(s') is `γ^k` (not `γ`) because the bootstrap
-    target lies k steps in the future.
+    `r + γ · (1−done) · v(s')`. For n_step=k, the input `reward`
+    is already the k-step accumulated return Σ_{j=0}^{k-1} γʲ
+    r_{t+j} (computed by the `n_step_return` Free Claim during
+    rollout, before the transition is added to Replay), and the
+    bootstrap discount on v(s_{t+k}) is `γ^k` because the
+    bootstrap target lies k steps in the future.
+
+    Single source of truth: `n_step` is a top-level kwarg of
+    `dqn` / `dqn_step` and flows here from there. Both rollout's
+    `n_step_return` and bootstrap's discount read the same
+    value; the Hypothesis intervention dict sets it ONCE at the
+    dqn level (`{'n_step': 3}`), not separately on Replay and
+    bootstrap.
 
     `greedification` is the DDQN-vs-vanilla axis; `gradient_rule`
     is the semi-gradient-vs-full-gradient axis. Authors swap
@@ -161,13 +168,12 @@ def bootstrap(
 
         partial(bootstrap, greedification=double_greedify)
         partial(bootstrap, gradient_rule=full_gradient)
-        partial(bootstrap, n_step=3,
-                greedification=double_greedify)
+        partial(bootstrap, greedification=double_greedify,
+                gradient_rule=full_gradient)
 
-    Note: setting `n_step=k` on bootstrap requires also setting
-    `n_step=k` (and `gamma=γ`) on the `Replay` config bundle so
-    the buffer aggregates correctly. The two settings travel as
-    a pair through the Hypothesis intervention dict."""
+    `n_step` is NOT typically set via partial on bootstrap —
+    callers pass it as a top-level dqn kwarg, and dqn_step
+    forwards it to bootstrap internally."""
     v_next = greedification(
         online_params=online_params,
         target_params=target_params,

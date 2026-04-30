@@ -64,13 +64,21 @@ def _resolve(uri: str) -> tuple[FsspecFs, str]:
 
 def put_file(local_path: Path, remote_uri: str) -> None:
     """Upload `local_path` to `remote_uri`. Best-effort `makedirs`
-    on the parent (no-op for object stores; mkdir for posix-like)."""
+    on the parent (no-op for object stores; mkdir for posix-like).
+
+    `OSError` is caught alongside the structural exceptions because
+    Cloudflare R2's S3 endpoint translates `makedirs(bucket/prefix,
+    exist_ok=True)` into a `create_bucket` request that R2 rejects
+    with `Errno 22 Credential access key has length 33, should be
+    32`. The bucket already exists on first archive; we don't need
+    s3fs to ensure it. Falling through to `put_file` performs the
+    actual upload."""
     fs, path = _resolve(remote_uri)
     parent = path.rsplit('/', 1)[0] if '/' in path else ''
     if parent:
         try:
             fs.makedirs(parent, exist_ok=True)
-        except (NotImplementedError, AttributeError):
+        except (NotImplementedError, AttributeError, OSError):
             pass
     fs.put_file(str(local_path), path)
 

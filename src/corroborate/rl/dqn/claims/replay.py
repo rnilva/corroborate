@@ -17,6 +17,14 @@ the Claim Protocol. The walker still surfaces `replay.capacity`,
 `replay.batch_size`, `replay.sample` as topology leaves
 regardless of Claim status.
 
+**N-step targets do NOT live on `Replay`.** The Σγᵏrₖ
+accumulation that produces an n-step return is theoretical
+content (Sutton 1988 / Sutton-Barto §7.6), not buffer mechanics.
+It lives in the `n_step_return` Free Claim in this module,
+called from `rollout_phase` between the env step and
+`Replay.add`. `Replay` itself stores raw transitions whatever
+their semantic — single-step or pre-aggregated n-step.
+
 **Theorem reference (on the `sample` slot, not on Replay itself).**
 Lin 1992: uniform i.i.d. resampling from a buffer breaks the
 strong correlation between consecutive SGD updates and reduces
@@ -50,33 +58,47 @@ class ReplayState(NamedTuple):
     swapping `Replay` for a different implementation (e.g. PER)
     define their own `ReplayState`-shaped substate.
 
-    Six parallel arrays + a fill counter — kept flat so the
+    Five parallel arrays + a fill counter — kept flat so the
     pytree leaves are individually `jax.Array` (vmap-friendly).
-    Indexed by `step % capacity` for FIFO replacement.
-
-    For n-step accumulation, six pending-window scalars/arrays
-    track the in-progress aggregate (head obs+action, accumulated
-    γ-weighted reward, latest next_obs, accumulated done, count of
-    raw transitions consumed). For n_step=1 the window emits on
-    every add and these fields go through identity-shaped
-    transitions only — observable behavior matches the pre-n-step
-    version exactly."""
+    Indexed by `step % capacity` for FIFO replacement."""
     obs: jax.Array          # (capacity, *obs_shape)
     action: jax.Array       # (capacity,) int32
     reward: jax.Array       # (capacity,)
     next_obs: jax.Array     # (capacity, *obs_shape)
     done: jax.Array         # (capacity,) float32 (0/1)
     size: jax.Array         # () int32 — number of transitions stored
-    # N-step pending window. `pending_count` tells us how many raw
-    # transitions have been folded into the in-progress aggregate.
-    # When `pending_count == n_step` or `pending_acc_done == 1`,
-    # the next `add` emits the aggregate and resets the window.
-    pending_head_obs: jax.Array     # (*obs_shape,)
-    pending_head_action: jax.Array  # () int32
-    pending_acc_reward: jax.Array   # () float32 — Σ γ^k r_{t+k}
-    pending_next_obs: jax.Array     # (*obs_shape,) — most recent s'
-    pending_acc_done: jax.Array     # () float32 — max done in window
-    pending_count: jax.Array        # () int32 — raw transitions in window
+
+
+class PendingNStepState(NamedTuple):
+    """In-progress n-step return aggregate. Sub-state of
+    `DQNState`. `count` tells how many raw transitions have been
+    folded into the running aggregate. When `count == n_step` or
+    `acc_done == 1`, `n_step_return` emits an aggregated
+    transition for `Replay.add` and resets the window.
+
+    For `n_step=1` the window emits on every step and these
+    fields turn over once per call — observable behavior matches
+    pre-n-step DQN exactly."""
+    head_obs: jax.Array         # (*obs_shape,) — sₜ at start of window
+    head_action: jax.Array      # () int32 — aₜ
+    acc_reward: jax.Array       # () float32 — Σ γᵏ r_{t+k}
+    next_obs: jax.Array         # (*obs_shape,) — most recent s'
+    acc_done: jax.Array         # () float32 — max done in window
+    n_in_window: jax.Array      # () int32 — raw transitions in window
+
+
+def init_pending_n_step(obs_shape: tuple[int, ...]) -> PendingNStepState:
+    """Allocate an empty pending-window state. Called by
+    `init_state` alongside `Replay.init`. Mechanics — not a Claim
+    (no theorem; just zero-filled arrays at the right shapes)."""
+    return PendingNStepState(
+        head_obs=jnp.zeros(obs_shape),
+        head_action=jnp.int32(0),
+        acc_reward=jnp.float32(0.0),
+        next_obs=jnp.zeros(obs_shape),
+        acc_done=jnp.float32(0.0),
+        n_in_window=jnp.int32(0),
+    )
 
 
 class Transition(NamedTuple):
@@ -133,6 +155,100 @@ def uniform_sample(
 
 # ============ Replay Module ============
 
+# ============ N-step return: theoretical claim ============
+
+@claim
+def n_step_return(
+    *,
+    pending: PendingNStepState,
+    transition: Transition,
+    n_step: int,
+    gamma: float,
+) -> tuple[PendingNStepState, Transition, jax.Array]:
+    """Sutton-Barto §7.6: n-step return as the bootstrap target.
+
+    Folds `transition` into the in-progress window. Returns the
+    updated `pending` state, an emitted `Transition`, and a
+    scalar `should_emit` mask (1.0 when the emitted transition
+    should be appended to Replay; 0.0 otherwise — the emitted
+    transition's contents are stale in that case and must be
+    masked out at the call site).
+
+    The emit decision: window full (`count + 1 == n_step`) OR the
+    new transition is terminal. On terminal mid-window, the
+    emitted transition has `done=1` so the bootstrap discount
+    `γⁿ·(1-done)·v(s')` zeroes its bootstrap term — semantically
+    equivalent to "n-step return up to the terminal state, no
+    bootstrap past it" (Sutton-Barto Eq 7.5).
+
+    The `n_step` parameter at call time is the AUTHORED window
+    length. For terminal transitions where the window emits early
+    at `count = k < n_step`, the bootstrap discount γⁿ is wrong
+    in principle (should be γᵏ), but `done=1` zeroes the v(s')
+    term so the discrepancy is invisible — the target reduces to
+    pure accumulated reward.
+
+    **Off-policy bias (NOT corrected).** Under ε-greedy rollout,
+    the actions a_{t+1},…,a_{t+n-1} composing the in-window sum
+    are not all greedy w.r.t. the target Q. The standard n-step
+    Q-learning target this claim emits assumes they are; the
+    resulting bias is small in practice (Hessel et al 2018 §5)
+    and uncorrected here to match Rainbow / standard DQN+n-step
+    code. An IS-corrected alternative would be a separate Claim
+    occupying the same role in `rollout_phase`.
+
+    **Single-step special case (`n_step=1`).** count goes 0→1
+    every call, emit always fires, the emitted Transition is
+    identical to the input. Observable behavior matches plain
+    DQN; the claim graph still records the call so the
+    intervention surface is uniform across n_step values."""
+    # Cast to the pending state's init dtypes — env-emitted
+    # int32 obs (e.g. FourRooms) would otherwise mismatch the
+    # zero-initialised float32 pending fields, and scan's carry-
+    # type check fails.
+    obs_dtype = pending.head_obs.dtype
+    starting_new = pending.n_in_window == 0
+    head_obs = jnp.where(
+        starting_new,
+        transition.obs.astype(obs_dtype),
+        pending.head_obs,
+    )
+    head_action = jnp.where(
+        starting_new,
+        transition.action.astype(jnp.int32),
+        pending.head_action,
+    )
+    gamma_k = gamma ** pending.n_in_window.astype(jnp.float32)
+    acc_reward = (
+        pending.acc_reward
+        + gamma_k * transition.reward.astype(jnp.float32)
+    )
+    acc_done = jnp.maximum(
+        pending.acc_done, transition.done.astype(jnp.float32),
+    )
+    next_obs = transition.next_obs.astype(obs_dtype)
+    n_in_window = pending.n_in_window + 1
+
+    should_emit_bool = (n_in_window >= n_step) | (acc_done > 0.5)
+    should_emit = should_emit_bool.astype(jnp.float32)
+
+    emitted = Transition(
+        obs=head_obs, action=head_action, reward=acc_reward,
+        next_obs=next_obs, done=acc_done,
+    )
+    new_pending = PendingNStepState(
+        head_obs=jnp.where(should_emit_bool, jnp.zeros_like(head_obs), head_obs),
+        head_action=jnp.where(should_emit_bool, jnp.int32(0), head_action),
+        acc_reward=jnp.where(should_emit_bool, jnp.float32(0.0), acc_reward),
+        next_obs=jnp.where(should_emit_bool, jnp.zeros_like(next_obs), next_obs),
+        acc_done=jnp.where(should_emit_bool, jnp.float32(0.0), acc_done),
+        n_in_window=jnp.where(should_emit_bool, jnp.int32(0), n_in_window),
+    )
+    return new_pending, emitted, should_emit
+
+
+# ============ Replay Module ============
+
 @dataclass(frozen=True, slots=True)
 class Replay:
     """FIFO replay buffer config bundle.
@@ -140,24 +256,17 @@ class Replay:
     Construction-time HPs:
     - `capacity` — total buffer size; FIFO replacement.
     - `batch_size` — sample size per `sample_batch` call.
-    - `n_step` — number of raw transitions folded into each
-      stored "n-step transition". `n_step=1` (default) recovers
-      single-step DQN exactly. `n_step=k` accumulates Σ γ^j r_{t+j}
-      over the window and stores `(s_t, a_t, R^k_t, s_{t+k},
-      done_within_k)` as one buffer entry.
-    - `gamma` — discount used for the in-window reward sum.
-      Required when n_step > 1; for n_step=1 it's ignored
-      (single-step `add` doesn't multiply rewards).
     - `sample` — sampling-strategy slot (default `uniform_sample`).
       The slot IS the theoretical claim (Lin 1992); swapping the
       slot is how PER intervenes (`Replay(sample=prioritised_sample)`).
 
     Three methods (mechanics, not framework Claims):
     - `init(obs_shape) → ReplayState` — allocate empty buffer arrays.
-    - `add(state, transition) → ReplayState` — FIFO ring append.
-      For n_step > 1: accumulate into the pending window; emit
-      aggregate to the main buffer when window is full or the
-      transition is terminal.
+    - `add(state, transition, mask=1) → ReplayState` — FIFO ring
+      append. `mask=0` no-ops the append (size + 1*0 unchanged,
+      buffer slot stays the previous value); rollout passes the
+      n-step `should_emit` mask so adds are skipped when the
+      n-step window hasn't filled yet.
     - `sample_batch(state, rng_key) → Batch` — binding wrapper that
       delegates to `self.sample` with `batch_size`/`capacity` from
       the bundle. The slot's FnClaim records itself via `record_call`;
@@ -166,19 +275,15 @@ class Replay:
     `Replay` is NOT a framework Claim — it has no single end-to-end
     operation; it bundles config + mechanics + a slot Claim. The
     walker surfaces `replay.capacity`, `replay.batch_size`,
-    `replay.n_step`, `replay.gamma`, `replay.sample` as topology
-    leaves regardless.
+    `replay.sample` as topology leaves regardless of Claim status.
 
-    **Theorem reference (n-step).** Sutton 1988 / Sutton-Barto §7:
-    n-step returns trade off bias (longer horizon → more bootstrap
-    bias compounding) against variance (longer rollout → more
-    Monte Carlo noise). For DQN, multi-step accelerates credit
-    assignment on sparse-reward envs by reducing the chain of
-    bootstraps the algorithm relies on."""
+    N-step semantics live OUTSIDE Replay: see `n_step_return`
+    Free Claim. Replay stores raw transitions; the n-step return
+    is computed in rollout (between env step and `Replay.add`)
+    by `n_step_return`, which masks the add when the window
+    hasn't yet emitted."""
     capacity: int = 10_000
     batch_size: int = 64
-    n_step: int = 1
-    gamma: float = 0.99
     sample: 'BufferSample' = field(default=uniform_sample)
 
     def init(self, obs_shape: tuple[int, ...]) -> ReplayState:
@@ -198,99 +303,63 @@ class Replay:
             next_obs=jnp.zeros((self.capacity, *obs_shape)),
             done=jnp.zeros((self.capacity,)),
             size=jnp.int32(0),
-            pending_head_obs=jnp.zeros(obs_shape),
-            pending_head_action=jnp.int32(0),
-            pending_acc_reward=jnp.float32(0.0),
-            pending_next_obs=jnp.zeros(obs_shape),
-            pending_acc_done=jnp.float32(0.0),
-            pending_count=jnp.int32(0),
         )
 
-    def add(self, state: ReplayState, transition: Transition) -> ReplayState:
-        """Fold `transition` into the in-progress n-step pending
-        window. Emit an aggregated (head_obs, head_action,
-        n_step_reward, latest_next_obs, any_done) transition to the
-        main buffer when the window is full or the transition is
-        terminal. Mechanics — not a Claim.
+    def add(
+        self,
+        state: ReplayState,
+        transition: Transition,
+        mask: jax.Array | float = 1.0,
+    ) -> ReplayState:
+        """Append `transition` to the FIFO ring at index
+        `state.size % capacity`, gated by `mask` ∈ {0.0, 1.0}.
 
-        For `n_step=1` this short-circuits to the original single-
-        step semantics: count goes 0→1, emit immediately, write
-        the raw transition to the buffer slot at `size % capacity`."""
-        # Cast to the pending-window's init dtypes (jnp.zeros
-        # defaults to float32 for floats; obs in some envs is
-        # int32 — without the cast, scan's carry-input/output
-        # type check fails: float32 in, int32 out, "carry types
-        # differ").
-        obs_dtype = state.pending_head_obs.dtype
-        starting_new = state.pending_count == 0
-        new_head_obs = jnp.where(
-            starting_new,
-            transition.obs.astype(obs_dtype),
-            state.pending_head_obs,
-        )
-        new_head_action = jnp.where(
-            starting_new,
-            transition.action.astype(jnp.int32),
-            state.pending_head_action,
-        )
-        gamma_k = self.gamma ** state.pending_count.astype(jnp.float32)
-        new_acc_reward = (
-            state.pending_acc_reward
-            + gamma_k * transition.reward.astype(jnp.float32)
-        )
-        new_acc_done = jnp.maximum(
-            state.pending_acc_done, transition.done.astype(jnp.float32),
-        )
-        new_next_obs = transition.next_obs.astype(obs_dtype)
-        new_count = state.pending_count + 1
+        `mask=1` (default) appends and increments size by 1. `mask=0`
+        leaves the buffer slot at its previous value and does NOT
+        increment size. The mask is the n-step window's
+        `should_emit` flag — when the rollout's `n_step_return`
+        hasn't yet emitted, we still call `add` (to keep scan's
+        carry shape stable) but with mask=0.
 
-        should_emit = (new_count >= self.n_step) | (new_acc_done > 0.5)
-        emit = should_emit.astype(jnp.float32)
-
+        Mechanics — not a Claim, no theoretical content beyond
+        data-structure correctness."""
         idx = state.size % self.capacity
-        new_buffer_obs = state.obs.at[idx].set(new_head_obs)
-        new_buffer_action = state.action.at[idx].set(new_head_action)
-        new_buffer_reward = state.reward.at[idx].set(new_acc_reward)
-        new_buffer_next_obs = state.next_obs.at[idx].set(new_next_obs)
-        new_buffer_done = state.done.at[idx].set(new_acc_done)
-        new_size = jnp.minimum(
-            state.size + should_emit.astype(jnp.int32), self.capacity,
+        emit = jnp.asarray(mask, dtype=jnp.float32)
+        keep = 1.0 - emit
+        # Blend new value vs existing at the index.
+        old_obs = state.obs[idx]
+        old_action = state.action[idx]
+        old_reward = state.reward[idx]
+        old_next_obs = state.next_obs[idx]
+        old_done = state.done[idx]
+        new_obs_val = (
+            emit.reshape((1,) * old_obs.ndim) * transition.obs.astype(old_obs.dtype)
+            + keep.reshape((1,) * old_obs.ndim) * old_obs
         )
-
-        # Reset pending on emit; otherwise carry forward the in-
-        # progress aggregate for the next add to extend.
-        zero_obs = jnp.zeros_like(new_head_obs)
-        new_pending_head_obs = jnp.where(should_emit, zero_obs, new_head_obs)
-        new_pending_head_action = jnp.where(
-            should_emit, jnp.int32(0), new_head_action,
+        new_action_val = (
+            emit * transition.action.astype(jnp.float32)
+            + keep * old_action.astype(jnp.float32)
+        ).astype(jnp.int32)
+        new_reward_val = (
+            emit * transition.reward.astype(jnp.float32) + keep * old_reward
         )
-        new_pending_acc_reward = jnp.where(
-            should_emit, jnp.float32(0.0), new_acc_reward,
+        new_next_obs_val = (
+            emit.reshape((1,) * old_next_obs.ndim)
+            * transition.next_obs.astype(old_next_obs.dtype)
+            + keep.reshape((1,) * old_next_obs.ndim) * old_next_obs
         )
-        new_pending_next_obs = jnp.where(
-            should_emit, jnp.zeros_like(new_next_obs), new_next_obs,
+        new_done_val = (
+            emit * transition.done.astype(jnp.float32) + keep * old_done
         )
-        new_pending_acc_done = jnp.where(
-            should_emit, jnp.float32(0.0), new_acc_done,
-        )
-        new_pending_count = jnp.where(
-            should_emit, jnp.int32(0), new_count,
-        )
-        del emit
-
         return ReplayState(
-            obs=new_buffer_obs,
-            action=new_buffer_action,
-            reward=new_buffer_reward,
-            next_obs=new_buffer_next_obs,
-            done=new_buffer_done,
-            size=new_size,
-            pending_head_obs=new_pending_head_obs,
-            pending_head_action=new_pending_head_action,
-            pending_acc_reward=new_pending_acc_reward,
-            pending_next_obs=new_pending_next_obs,
-            pending_acc_done=new_pending_acc_done,
-            pending_count=new_pending_count,
+            obs=state.obs.at[idx].set(new_obs_val),
+            action=state.action.at[idx].set(new_action_val),
+            reward=state.reward.at[idx].set(new_reward_val),
+            next_obs=state.next_obs.at[idx].set(new_next_obs_val),
+            done=state.done.at[idx].set(new_done_val),
+            size=jnp.minimum(
+                state.size + emit.astype(jnp.int32), self.capacity,
+            ),
         )
 
     def sample_batch(self, state: ReplayState, rng_key: jax.Array) -> Batch:

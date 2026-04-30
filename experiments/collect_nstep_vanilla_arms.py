@@ -66,23 +66,21 @@ def _hypothesis(
 ) -> Hypothesis[DQNTrajectoryRecord]:
     """Vanilla (max_greedify) DQN with n_step ∈ {1, 3}.
 
-    Replay's `n_step` and `gamma` HPs travel as a pair with
-    bootstrap's `n_step` kwarg. greedification is bootstrap's
-    default (max_greedify), so we don't pass it."""
+    n-step lives at the dqn-level as a top-level HP (single
+    source of truth). `Replay` is a vanilla FIFO ring;
+    `bootstrap` is the default max-greedify composition."""
     base: dict[str, object] = {
         'total_steps': 200_000,
         'eval_every': 20_000,
         'n_episodes': 5,
         'gamma': GAMMA,
-        'replay': Replay(
-            capacity=50_000, batch_size=32,
-            n_step=n_step, gamma=GAMMA,
-        ),
+        'n_step': n_step,
+        'replay': Replay(capacity=50_000, batch_size=32),
         'optimizer': WarmedUpdate(
             inner=Adam(lr=1e-4), warmup_steps=100,
         ),
         'sync_period': 100,
-        'bootstrap': partial(bootstrap, n_step=n_step),
+        'bootstrap': bootstrap,
     }
     return Hypothesis(
         name=name, intervention=base,
@@ -91,8 +89,7 @@ def _hypothesis(
         # we want clean per-(env, burst) g without sign assumption
         intervention_arms=(
             Intervention(
-                slot_path='bootstrap',
-                replacement=partial(bootstrap, n_step=n_step),
+                slot_path='bootstrap', replacement=bootstrap,
             ),
         ),
     )

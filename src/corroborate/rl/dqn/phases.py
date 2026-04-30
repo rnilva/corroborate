@@ -28,7 +28,9 @@ import jax.numpy as jnp
 import optax
 
 from corroborate.claim import claim
-from corroborate.rl.dqn.claims.replay import Replay, Transition
+from corroborate.rl.dqn.claims.replay import (
+    Replay, Transition, n_step_return,
+)
 from corroborate.rl.dqn.state import DQNState
 from corroborate.rl.dqn.types import (
     ActionSelect,
@@ -54,16 +56,28 @@ def rollout_phase(
     q_network: QFunction,
     action_select: ActionSelect,
     state_hash: StateHash,
+    n_step: int = 1,
+    gamma: float = 0.99,
 ) -> tuple[DQNState, dict[str, jax.Array]]:
     """One step of acting in the env.
 
     Reads `q_network` to score the current observation, calls
     `action_select(q_values, key, step, n_actions)`, steps the
-    env, appends the transition to `replay`.
+    env, folds the raw transition into the n-step pending window
+    via the `n_step_return` Free Claim, and appends the
+    aggregated transition to `replay` when the window emits.
+
+    For `n_step=1` the window emits every step (mask=1), so
+    `replay.add` runs every step exactly as in plain DQN. For
+    `n_step>1`, `replay.add` runs gated by the emit mask — adds
+    are no-op when the window hasn't yet filled.
 
     Returns `(new_state, diagnostic_dict)` — the dict's keys
     (`reward, done, max_q, ep_return, action, state_hash,
-    buf_size`) are the measurable signals bridges target."""
+    buf_size`) are the measurable signals bridges target. Reward
+    and done in the diagnostic dict are the RAW per-step values
+    from this rollout step, not the n-step aggregates (those are
+    in the buffer, not in per-step traces)."""
     # Q-values at current obs — single observation, not batched.
     q_values = q_network(state.online_params, state.obs)
 
@@ -78,10 +92,16 @@ def rollout_phase(
     # no-op for well-shaped envs and a defensive guard.
     next_obs = next_obs.reshape(state.obs.shape)
 
-    new_replay = replay.add(state.replay, Transition(
+    raw_transition = Transition(
         obs=state.obs, action=action,
         reward=reward, next_obs=next_obs, done=done,
-    ))
+    )
+    new_pending, emitted, should_emit = n_step_return(
+        pending=state.pending_n_step,
+        transition=raw_transition,
+        n_step=n_step, gamma=gamma,
+    )
+    new_replay = replay.add(state.replay, emitted, mask=should_emit)
 
     # Episode return: accumulate this step's reward into the
     # running tally. The state's tally resets to 0 on done so the
@@ -93,6 +113,7 @@ def rollout_phase(
 
     new_state = state._replace(
         replay=new_replay,
+        pending_n_step=new_pending,
         env_state=next_env_state,
         obs=next_obs,
         rng_key=next_rng_key,
@@ -125,6 +146,7 @@ def train_phase(
     loss_fn: LossFn,
     optimizer: optax.GradientTransformation,
     gamma: float,
+    n_step: int,
     replay: Replay,
 ) -> tuple[DQNState, dict[str, jax.Array]]:
     """One gradient step: sample batch → bootstrap target →
@@ -191,7 +213,7 @@ def train_phase(
             target_params=state.target_params,
             q_network=q_network,
             next_obs=batch.next_obs, reward=batch.reward, done=batch.done,
-            gamma=gamma,
+            gamma=gamma, n_step=n_step,
         )
         per_sample = loss_fn(predicted, target)        # (batch,)
         abs_td = jnp.abs(predicted - target)           # (batch,)

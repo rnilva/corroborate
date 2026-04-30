@@ -74,33 +74,24 @@ def _hypothesis(
     """Per-env hypothesis with DDQN held fixed (double_greedify on
     both arms) and n_step varied.
 
-    Replay's `n_step` and `gamma` HPs travel as a pair with
-    bootstrap's `n_step` kwarg — the buffer aggregates k raw
-    transitions per stored entry, and bootstrap uses γ^k as the
-    v_next discount."""
+    n-step lives at the dqn-level as a top-level HP (single
+    source of truth for `n_step_return` during rollout AND for
+    bootstrap's γⁿ discount); `Replay` is a vanilla FIFO ring
+    that's unaware of n-step semantics."""
     del env_name  # MLP q_network handles all classic-env obs shapes
     base: dict[str, object] = {
         'total_steps': 200_000,
         'eval_every': 20_000,
         'n_episodes': 5,
         'gamma': GAMMA,
-        'replay': Replay(
-            capacity=50_000, batch_size=32,
-            n_step=n_step, gamma=GAMMA,
-        ),
+        'n_step': n_step,
+        'replay': Replay(capacity=50_000, batch_size=32),
         'optimizer': WarmedUpdate(
             inner=Adam(lr=1e-4), warmup_steps=100,
         ),
         'sync_period': 100,
-        'bootstrap': partial(
-            bootstrap, greedification=double_greedify, n_step=n_step,
-        ),
+        'bootstrap': partial(bootstrap, greedification=double_greedify),
     }
-    # `intervention_arms` only carries the typed `bootstrap`
-    # intervention since `Intervention.replacement` is a
-    # claim/partial type — Replay is a config bundle and travels
-    # through `intervention['replay']` directly. arm_key still
-    # identifies the two arms uniquely via the bootstrap partial.
     return Hypothesis(
         name=name, intervention=base,
         bridges=(),
@@ -108,9 +99,7 @@ def _hypothesis(
         intervention_arms=(
             Intervention(
                 slot_path='bootstrap',
-                replacement=partial(
-                    bootstrap, greedification=double_greedify, n_step=n_step,
-                ),
+                replacement=partial(bootstrap, greedification=double_greedify),
             ),
         ),
     )

@@ -23,7 +23,7 @@ from typing import NamedTuple
 
 import jax
 
-from corroborate.rl.dqn.claims.replay import ReplayState
+from corroborate.rl.dqn.claims.replay import PendingNStepState, ReplayState
 from corroborate.rl.dqn.types import EnvState, OptState, Params
 
 
@@ -47,6 +47,13 @@ class DQNState(NamedTuple):
     # introspect; alternative replay implementations define their
     # own ReplayState shape.
     replay: ReplayState
+
+    # In-progress n-step pending window. Owned by the
+    # `n_step_return` Free Claim called from `rollout_phase`.
+    # For n_step=1 this is a no-op state (count goes 0→1 every
+    # step and resets on emit), for n_step>1 it holds the running
+    # Σ γᵏ rₖ aggregate over the window.
+    pending_n_step: PendingNStepState
 
     # Env state pytree (gymnax-specific) and current observation.
     env_state: EnvState
