@@ -29,7 +29,7 @@ import polars as pl
 
 from functools import partial
 
-from corroborate.aggregate import link_pearson_across_envs
+from corroborate.aggregate import link_pearson_across_groups
 from corroborate.hypothesis import Hypothesis
 from corroborate.intervention import Intervention
 from corroborate.persistence import read_runrows, write_comparisonrows
@@ -118,7 +118,7 @@ def _comparison_from_hypothesis_row(
     """Project a HypothesisComparisonRow's per-env stats into
     individual ComparisonRows for the link verdict + persistence.
 
-    The link verdict (`link_pearson_across_envs`) operates on
+    The link verdict (`link_pearson_across_groups`) operates on
     per-env (env_name, effect_size_g) pairs, so we surface those
     from row.per_group as flat-keyed measurements compatible with
     the existing primitive."""
@@ -146,12 +146,12 @@ def _link_inputs_from_row_legacy(
     """Synthesize per-env `ComparisonRow`s from a stratified
     HypothesisComparisonRow's `per_group`. Each ComparisonRow
     carries `<outcome_path>.effect_size_g` and `env_name` so
-    `link_pearson_across_envs` can pair them on env."""
+    `link_pearson_across_groups` can pair them on env."""
     from corroborate.verdict import Verdict
     out: list[ComparisonRow] = []
     for gs in row.per_group:
         # Match OLD smoke's behaviour: store effect_size_g + se
-        # independently. link_pearson_across_envs filters NaN
+        # independently. link_pearson_across_groups filters NaN
         # internally; no need to pre-filter here.
         measurements: dict[str, object] = {
             'env_name': gs.group_value
@@ -271,7 +271,7 @@ def main() -> None:
             )
             if len(out_cmps) < 3:
                 continue
-            link = link_pearson_across_envs(
+            link = link_pearson_across_groups(
                 mech_cmps, out_cmps,
                 mechanism_path='mechanism.jensen_gap.effect_size_g',
                 outcome_path=f'{outcome_path}.effect_size_g',

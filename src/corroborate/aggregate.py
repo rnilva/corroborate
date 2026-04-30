@@ -26,9 +26,10 @@ Structure:
 - `paired_comparison_from_runs(treatment_runs, baseline_runs, *,
   outcome_path, predicted_direction, ...)` — paired-by-seed Δ on
   `outcome_path`; computes Hedges' g + SE + Popperian verdict.
-- `link_pearson_across_envs(mechanism_comparisons,
-  outcome_comparisons, *, mechanism_path, outcome_path, ...)` —
-  cross-env Pearson r between mechanism and outcome effect sizes."""
+- `link_pearson_across_groups(mechanism_comparisons,
+  outcome_comparisons, *, mechanism_path, outcome_path,
+  group_label, ...)` — cross-group Pearson r between mechanism
+  and outcome effect sizes (groups typically envs)."""
 from __future__ import annotations
 
 import math
@@ -579,10 +580,6 @@ def link_pearson_across_groups(
         adequately_powered=is_powered,
         measurements=measurements,
     )
-
-
-# Backward-compat alias for the old name (RL substrate uses it).
-link_pearson_across_envs = link_pearson_across_groups
 
 
 def _pearson(xs: Sequence[float], ys: Sequence[float]) -> float:
