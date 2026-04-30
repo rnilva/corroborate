@@ -35,13 +35,22 @@ from __future__ import annotations
 
 import itertools
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Protocol
+
+import polars as pl
 
 from corroborate.computation_graph import ComputationGraph
 from corroborate.graph import Graph
 from corroborate.hypothesis import Hypothesis
+from corroborate.persistence import (
+    apply_trace_reductions,
+    stream_concat_parquets,
+    write_runrows,
+    write_tracerows,
+)
 from corroborate.schema import RunRow, TraceRow
 
 
@@ -170,3 +179,153 @@ def empty_graph() -> ComputationGraph:
     """Convenience for substrates that don't capture a graph.
     Returns a fresh empty `Graph[str, ComputationEdge]`."""
     return Graph()
+
+
+# ============ run_hypotheses — the framework's `do()` operator ============
+
+def run_hypotheses[R: Mapping[str, object]](
+    hypotheses: Sequence[Hypothesis[R]],
+    *,
+    grid_per_arm: Sequence[Mapping[str, object]],
+    runner: Runner[R],
+    out_dir: Path,
+    archive_remote: str | None = None,
+    arm_tag: Callable[[Hypothesis[R], Mapping[str, object]], str] | None = None,
+    trace_reductions: Sequence[pl.Expr] = (),
+    trace_drops: Sequence[str] = (),
+) -> tuple[Path, Path]:
+    """Execute the Cartesian product of `hypotheses × grid_per_arm`,
+    persist per-arm parquets, merge to a corpus.
+
+    This is the framework's rung-2 `do()` operator at the corpus
+    level: authored Hypothesis (claim graph + intervention spec) +
+    exogenous grid in, materialized RunRow / TraceRow corpus out.
+    The corpus IS the evidence produced by the intervention.
+
+    Each (h, grid_point) pair is one *arm*: one runner call → one
+    `SweepCellResult` → one (runs, traces) parquet pair. Final
+    step concatenates per-arm parquets via `stream_concat_parquets`
+    (`diagonal_relaxed`).
+
+    Substrate-agnostic: works for any `Runner[R]`. Substrates
+    handle chunking by authoring multiple grid_points sharing the
+    same outer key (e.g. `env_name`) but different inner ranges
+    (e.g. `seeds`). Each chunk becomes its own arm.
+
+    `archive_remote`: optional fsspec URI prefix
+    (e.g. `s3://corroborate-archive/<sweep>`). When set, each
+    arm's tmp parquet pair is uploaded to remote storage right
+    after the arm completes, and the local copies are purged —
+    bounding peak local-disk usage to ~one arm's worth across
+    the whole sweep. The final merge then reads back from the
+    remote URIs in the manifest, writes the merged
+    `{runs,traces}.parquet` locally, and archives those merged
+    outputs (without purging — they stay local for downstream
+    analysis).
+
+    `arm_tag` produces the filename suffix for each arm's
+    parquets. Default: `{hypothesis.name}__{idx}` — uniquely
+    identifies arms within a sweep. Substrates with named
+    grid dims (DQN: `env_name`) typically override to encode
+    them.
+
+    `trace_reductions` / `trace_drops` are forwarded to
+    `apply_trace_reductions` per arm; substrate authors who
+    need to shrink trajectory columns before persistence pass
+    polars expressions here."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    tmp_dir = out_dir / 'tmp'
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+    final_runs = out_dir / 'runs.parquet'
+    final_traces = out_dir / 'traces.parquet'
+
+    if arm_tag is None:
+        def arm_tag_default(
+            h: Hypothesis[R], grid_point: Mapping[str, object],
+        ) -> str:
+            return f'{h.name}'
+        effective_arm_tag: Callable[
+            [Hypothesis[R], Mapping[str, object]], str,
+        ] = arm_tag_default
+    else:
+        effective_arm_tag = arm_tag
+
+    arms: list[tuple[Hypothesis[R], Mapping[str, object]]] = [
+        (h, gp) for h in hypotheses for gp in grid_per_arm
+    ]
+    print(
+        f'sweep: {len(arms)} arms ({len(hypotheses)} hypotheses × '
+        f'{len(grid_per_arm)} grid points)',
+        flush=True,
+    )
+
+    runs_paths: list[Path] = []
+    traces_paths: list[Path] = []
+    archived_runs_uris: list[str] = []
+    archived_traces_uris: list[str] = []
+    t_start = time.monotonic()
+    for idx, (h, grid_point) in enumerate(arms):
+        t_arm = time.monotonic()
+        tag = effective_arm_tag(h, grid_point)
+        runs_path = tmp_dir / f'arm{idx:03d}__{tag}__runs.parquet'
+        traces_path = tmp_dir / f'arm{idx:03d}__{tag}__traces.parquet'
+        print(
+            f'  [{idx+1}/{len(arms)}] {tag} '
+            f'(grid_point keys: {sorted(grid_point.keys())}) ...',
+            flush=True,
+        )
+        cell_result = runner(h, grid_point)
+        write_runrows(cell_result.runs, runs_path)
+        reduced = apply_trace_reductions(
+            list(cell_result.traces),
+            add=trace_reductions, drop=trace_drops,
+        )
+        write_tracerows(reduced, traces_path)
+        runs_paths.append(runs_path)
+        traces_paths.append(traces_path)
+        if archive_remote is not None:
+            from corroborate.cloud import archive
+            rp_rel = runs_path.relative_to(out_dir).as_posix()
+            tp_rel = traces_path.relative_to(out_dir).as_posix()
+            archive(
+                out_dir, archive_remote,
+                files=[rp_rel, tp_rel], purge_local=True,
+            )
+            archived_runs_uris.append(
+                f'{archive_remote.rstrip("/")}/{rp_rel}'
+            )
+            archived_traces_uris.append(
+                f'{archive_remote.rstrip("/")}/{tp_rel}'
+            )
+        elapsed = time.monotonic() - t_arm
+        total = time.monotonic() - t_start
+        print(
+            f'    done in {elapsed:.1f}s '
+            f'(cumulative {total/60:.1f} min)',
+            flush=True,
+        )
+
+    print()
+    print('merging per-arm parquets ...', flush=True)
+    if archive_remote is not None:
+        stream_concat_parquets(
+            [str(u) for u in archived_runs_uris], final_runs,
+        )
+        stream_concat_parquets(
+            [str(u) for u in archived_traces_uris], final_traces,
+        )
+        from corroborate.cloud import archive as _archive_merged
+        _archive_merged(
+            out_dir, archive_remote,
+            files=[
+                final_runs.relative_to(out_dir).as_posix(),
+                final_traces.relative_to(out_dir).as_posix(),
+            ],
+            purge_local=False,
+        )
+    else:
+        stream_concat_parquets(runs_paths, final_runs)
+        stream_concat_parquets(traces_paths, final_traces)
+    print(f'  → {final_runs}')
+    print(f'  → {final_traces}')
+    return final_runs, final_traces
