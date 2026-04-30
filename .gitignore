@@ -43,3 +43,6 @@ experiments/data/**
 !experiments/data/**/
 !experiments/data/**/_remote.json
 *.parquet
+
+# Claude Code local state
+.claude/
