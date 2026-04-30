@@ -348,6 +348,33 @@ the existing `_value_probe` in `train_phase`.
 
 ## Cosmetic / micro-cleanups
 
+### `signature.py` reportAny errors from `inspect.signature`
+
+**Status:** deferred (22 errors).
+
+**Description:** strict-mode pyright flags `signature.py` lines
+~218–303 and ~469–477 with `reportAny`. The Anys originate from
+`inspect.Parameter.default` and `typing.get_type_hints(...)[k]`
+returning Any per the typeshed stubs. The walker stores those
+defaults as `KwargInfo.default: object` (correct shape) but
+pyright flags every assignment site and downstream `==` /
+`isinstance` arg.
+
+**Why deferred:** count is unchanged across the YAML cleanup
+passes — no regression introduced. Resolving cleanly requires
+either (a) wrapping `inspect.signature` access in a typed
+adapter that narrows defaults to `object` at the boundary, or
+(b) adding `# pyright: ignore[reportAny]` at every assignment
+site with a comment. (a) is the principled fix but is ~15 LoC
+of typed-adapter scaffolding for signature/get_type_hints
+together; (b) is one-line escapes that don't earn anything.
+Neither blocks current usage.
+
+**Lift when:** a substrate hits a real type-confusion bug
+traced to the Any leak (so the typed adapter is informed by an
+actual failure mode) — or pyright's strict mode shifts how it
+treats inspect/typing returns.
+
 ### `pytest.raises` over try/raise/except
 
 **Status:** deferred.
