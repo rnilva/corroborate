@@ -145,3 +145,67 @@ def test_meta_regression_reproduces_findings(
     )
     assert coef.coefficient < 0
     assert not coef.is_significant
+
+
+# ============ Per-burst panel claims (revisions 9, 12) ============
+
+
+EXPECTILE_RUNS = (
+    REPO_ROOT / 'experiments' / 'data' / 'expectile_3way'
+    / 'runs.parquet'
+)
+EXPECTILE_TRACES = (
+    REPO_ROOT / 'experiments' / 'data' / 'expectile_3way'
+    / 'traces.parquet'
+)
+
+
+@pytest.fixture(scope='module')
+def expectile_per_burst_cells() -> list[dict[str, object]]:
+    """Joined runs × traces, projected to columns the per-burst
+    analysis needs. Skipped if the corpus isn't available."""
+    if not (EXPECTILE_RUNS.exists() and EXPECTILE_TRACES.exists()):
+        pytest.skip('expectile_3way corpus not available')
+    runs = pl.read_parquet(
+        EXPECTILE_RUNS,
+        columns=['id', 'intervention_name', 'env_name', 'seed'],
+    )
+    traces = pl.read_parquet(
+        EXPECTILE_TRACES,
+        columns=['id', 'mc_return', 'predicted_q_at_start'],
+    )
+    return list(
+        runs.join(traces, on='id', how='inner').iter_rows(named=True),
+    )
+
+
+def test_per_burst_fourrooms_reproduces_revision_9(
+    expectile_per_burst_cells: list[dict[str, object]],
+) -> None:
+    """FINDINGS revision 9: 'DDQN outcome benefit is stable
+    across all bursts on FourRooms.' The bridge requires ≥9/10
+    bursts positive AND mean g > 0.3 → HELD."""
+    from experiments.findings.dqn_bridges import (
+        ddqn_outcome_stable_across_bursts__fourrooms,
+    )
+    out = evaluate(
+        ddqn_outcome_stable_across_bursts__fourrooms,
+        expectile_per_burst_cells,
+    )
+    assert out.verdict == Verdict.HELD
+
+
+def test_per_burst_catch_reproduces_revision_12(
+    expectile_per_burst_cells: list[dict[str, object]],
+) -> None:
+    """FINDINGS revision 12: 'DDQN at n=1 has *exactly* zero
+    effect (g = +0.00) on Catch — both arms saturate.' The
+    bridge requires |g| < 0.1 across every burst → NO_EFFECT."""
+    from experiments.findings.dqn_bridges import (
+        ddqn_outcome_zero_across_bursts__catch,
+    )
+    out = evaluate(
+        ddqn_outcome_zero_across_bursts__catch,
+        expectile_per_burst_cells,
+    )
+    assert out.verdict == Verdict.NO_EFFECT

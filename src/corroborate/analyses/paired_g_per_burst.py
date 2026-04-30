@@ -98,6 +98,7 @@ def paired_g_per_burst(
     pair_by: tuple[str, ...] = ('seed',),
     source: str = 'mc_return',
     reduction: str = 'mean',
+    env_name: str | None = None,
     arm_field: str = 'intervention_name',
 ) -> PerBurstResult:
     """Per-(env, burst) paired Hedges' g panel.
@@ -110,7 +111,11 @@ def paired_g_per_burst(
     `reduction='mean'`: burst-mean of the named measurable.
     `reduction='mc_minus_q'`: Jensen-bias proxy (predicted_q -
     mc_return), per-burst-mean. Custom reductions go in the
-    fn — keep the kwarg-driven branching shallow."""
+    fn — keep the kwarg-driven branching shallow.
+
+    `env_name`, when supplied, restricts the analysis to one env
+    (skips cells with `record['env_name'] != env_name`). When
+    None, all envs participate."""
     from corroborate.statistics import hedges_g_paired
 
     # Group cells by (env_name, arm), key on pair_by.
@@ -121,6 +126,8 @@ def paired_g_per_burst(
         env = cell.get('env_name')
         arm = cell.get(arm_field)
         if not isinstance(env, str) or not isinstance(arm, str):
+            continue
+        if env_name is not None and env != env_name:
             continue
         if arm not in (treatment_arm, baseline_arm):
             continue
