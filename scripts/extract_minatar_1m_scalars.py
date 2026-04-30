@@ -30,7 +30,8 @@ import polars as pl
 
 _MAIN = Path('experiments/data/minatar_1M')
 _SI = Path('experiments/data/minatar_1M_spaceinvaders')
-_OUT = _MAIN / 'per_burst_scalars.parquet'
+_OUT_SCALARS = _MAIN / 'per_burst_scalars.parquet'
+_OUT_BURSTS = _MAIN / 'per_burst_arrays.parquet'
 
 
 _REMOTE_TRACES_TO_RESTORE: tuple[str, ...] = (
@@ -53,6 +54,32 @@ def _sigma_late_proxy(
         return float('nan')
     late = half_range[half_range.size // 2:]
     return float(np.mean(late))
+
+
+def _per_cell_burst_arrays(
+    row: dict[str, object],
+) -> dict[str, object] | None:
+    """Return `{id, mc_per_burst, bias_per_burst}` for the cell —
+    full per-burst trajectories so the universal dataset can
+    pivot to (cell, burst) long format."""
+    cell_id = row.get('id')
+    if not isinstance(cell_id, str):
+        return None
+    mc = row.get('mc_return')
+    pq = row.get('predicted_q_at_start')
+    if mc is None or pq is None:
+        return None
+    mc_arr = np.asarray(mc, dtype=np.float64)
+    pq_arr = np.asarray(pq, dtype=np.float64)
+    if mc_arr.ndim != 2 or pq_arr.ndim != 2 or mc_arr.shape != pq_arr.shape:
+        return None
+    if mc_arr.shape[0] < 2:
+        return None
+    return {
+        'id': cell_id,
+        'mc_per_burst': mc_arr.mean(axis=1).tolist(),
+        'bias_per_burst': (pq_arr - mc_arr).mean(axis=1).tolist(),
+    }
 
 
 def _per_cell_scalars(
@@ -113,18 +140,23 @@ _NEEDED_TRACE_COLS: tuple[str, ...] = (
 
 
 def _process_traces_file(
-    traces_path: Path, accum: list[dict[str, object]],
+    traces_path: Path,
+    accum_scalars: list[dict[str, object]],
+    accum_arrays: list[dict[str, object]],
 ) -> None:
     print(f'  reading {traces_path.name} ...', flush=True)
     available = pl.read_parquet(traces_path, n_rows=1).columns
     cols = [c for c in _NEEDED_TRACE_COLS if c in available]
     df = pl.read_parquet(str(traces_path), columns=cols)
-    n_before = len(accum)
+    n_before = len(accum_scalars)
     for row in df.iter_rows(named=True):
         sc = _per_cell_scalars(row)
         if sc is not None:
-            accum.append(sc)
-    print(f'    +{len(accum) - n_before} cells', flush=True)
+            accum_scalars.append(sc)
+        ar = _per_cell_burst_arrays(row)
+        if ar is not None:
+            accum_arrays.append(ar)
+    print(f'    +{len(accum_scalars) - n_before} cells', flush=True)
     del df
 
 
@@ -139,18 +171,19 @@ def _restore_one(remote_relpath: str) -> Path:
 
 
 def main() -> None:
-    accum: list[dict[str, object]] = []
+    accum_scalars: list[dict[str, object]] = []
+    accum_arrays: list[dict[str, object]] = []
 
     # 1. Local arm traces in tmp/.
     local_arm_traces = sorted((_MAIN / 'tmp').glob('arm*__*__traces.parquet'))
     for p in local_arm_traces:
-        _process_traces_file(p, accum)
+        _process_traces_file(p, accum_scalars, accum_arrays)
         p.unlink()
 
     # 2. SpaceInvaders top-level traces.
     si_top = _SI / 'traces.parquet'
     if si_top.exists():
-        _process_traces_file(si_top, accum)
+        _process_traces_file(si_top, accum_scalars, accum_arrays)
         # leave SpaceInvaders top-level alone; user may want
         # the consolidated SpaceInvaders corpus separately.
 
@@ -158,7 +191,7 @@ def main() -> None:
     for relpath in _REMOTE_TRACES_TO_RESTORE:
         local = _MAIN / relpath
         if local.exists():
-            _process_traces_file(local, accum)
+            _process_traces_file(local, accum_scalars, accum_arrays)
             local.unlink()
             continue
         try:
@@ -167,13 +200,17 @@ def main() -> None:
             print(f'  restore failed: {e}')
             continue
         if local.exists():
-            _process_traces_file(local, accum)
+            _process_traces_file(local, accum_scalars, accum_arrays)
             local.unlink()
 
-    print(f'\ntotal cells with scalars: {len(accum)}')
-    out_df = pl.DataFrame(accum, strict=False)
-    out_df.write_parquet(str(_OUT))
-    print(f'wrote {_OUT} ({_OUT.stat().st_size / 1024:.1f} KB)')
+    print(f'\ntotal cells: scalars={len(accum_scalars)}, '
+          f'arrays={len(accum_arrays)}')
+    pl.DataFrame(accum_scalars, strict=False).write_parquet(str(_OUT_SCALARS))
+    print(f'wrote {_OUT_SCALARS} '
+          f'({_OUT_SCALARS.stat().st_size / 1024:.1f} KB)')
+    pl.DataFrame(accum_arrays, strict=False).write_parquet(str(_OUT_BURSTS))
+    print(f'wrote {_OUT_BURSTS} '
+          f'({_OUT_BURSTS.stat().st_size / 1024:.1f} KB)')
 
 
 if __name__ == '__main__':

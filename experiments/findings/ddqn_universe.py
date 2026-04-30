@@ -127,10 +127,122 @@ def ddqn_refuted_when_dormancy_fires(
     return Verdict.NO_EFFECT
 
 
+# =====================================================================
+# Burst-conditional bridges on the per-burst universal dataset
+# (`paired_delta_per_burst.parquet`). Cell-mean bridges above
+# average across the entire training trajectory; these expose
+# the per-burst dynamics cell-mean canceled.
+#
+# `outcome_col='delta_mc'` is the per-burst outcome delta.
+# `delta_jensen_col='delta_bias'` is the per-burst bias delta.
+# `burst_index` lets us scope to specific training-time windows.
+# =====================================================================
+
+
+@claim_bridge
+def ddqn_helps_at_early_bursts__pixel_envs(
+    universe_scope: UniverseScopeResult,
+    *,
+    source: str = 'arm.ddqn[burst=0]',
+    target: str = 'mc_return[burst=0]',
+    direction: Direction = Direction.DIRECT,
+    tier: Tier = Tier.ASSOCIATIONAL,
+    outcome_col: str = 'delta_mc',
+    delta_jensen_col: str = 'delta_bias',
+    filter_min_pairs: tuple[tuple[str, float], ...] = (
+        ('log_obs_dim', 5.0),
+        ('burst_index', 0.0),
+        ('total_steps', 1000000.0),
+    ),
+    filter_max_pairs: tuple[tuple[str, float], ...] = (
+        ('burst_index', 0.0),
+    ),
+    filter_eq_pairs: tuple[tuple[str, str], ...] = (),
+) -> Verdict:
+    """Burst-conditional scope claim: at the FIRST eval burst on
+    high-obs-dim long-horizon envs (MinAtar 1M), DDQN's outcome
+    delta is positive in the majority of cells with substantial
+    pooled effect.
+
+    `total_steps ≥ 1000000` excludes the 200k cap=10k saturated
+    regime where DDQN doesn't help even early, and the 200k
+    cap=20k effective_cohort which has different sub-saturating
+    dynamics. Long-horizon-only is the cleanest carve-out for
+    the early-burst help signal.
+
+    HELD when helped_fraction ≥ 0.55 AND g_outcome ≥ +0.20.
+    The first burst is where DDQN's bias-correction translates
+    to outcome benefit cleanly; subsequent bursts attenuate
+    (rev 9 + MinAtar 1M finding)."""
+    del source, target, direction, tier
+    del outcome_col, delta_jensen_col
+    del filter_min_pairs, filter_max_pairs, filter_eq_pairs
+    if universe_scope.n_in_scope < 30:
+        return Verdict.POWER_INSUFFICIENT
+    if math.isnan(universe_scope.helped_fraction):
+        return Verdict.POWER_INSUFFICIENT
+    if (
+        universe_scope.helped_fraction >= 0.55
+        and universe_scope.g_outcome >= 0.20
+    ):
+        return Verdict.HELD
+    return Verdict.NO_EFFECT
+
+
+@claim_bridge
+def ddqn_attenuates_at_late_bursts__spaceinvaders(
+    universe_scope: UniverseScopeResult,
+    *,
+    source: str = 'arm.ddqn[burst≥3]',
+    target: str = 'mc_return[burst≥3]',
+    direction: Direction = Direction.INVERSE,
+    tier: Tier = Tier.ASSOCIATIONAL,
+    outcome_col: str = 'delta_mc',
+    delta_jensen_col: str = 'delta_bias',
+    filter_min_pairs: tuple[tuple[str, float], ...] = (
+        ('burst_index', 3.0),
+        ('total_steps', 1000000.0),
+    ),
+    filter_max_pairs: tuple[tuple[str, float], ...] = (),
+    filter_eq_pairs: tuple[tuple[str, str], ...] = (
+        ('env_name', 'SpaceInvaders-MinAtar'),
+    ),
+) -> Verdict:
+    """Burst-conditional refutation: on SpaceInvaders-MinAtar at
+    1M training steps, after burst 3, DDQN's outcome is reliably
+    WORSE than vanilla (mean Δmc ≈ −1.5 across the 1M corpus).
+    The early-burst help inverts; cell-mean averaging hides this.
+
+    `total_steps ≥ 1000000` restricts to the long-horizon corpus.
+    The same env at 200k cap=10k shows attenuation too (g=−0.42)
+    but the 200k cap=20k effective_cohort REVERSES (DDQN helps
+    g=+1.46) — pooling all three masks the signal. Long-horizon
+    isolates the cleanest attenuation regime.
+
+    HELD when helped_fraction ≤ 0.40 AND g_outcome ≤ −0.30
+    (the prediction of late attenuation is corroborated).
+    NO_EFFECT otherwise."""
+    del source, target, direction, tier
+    del outcome_col, delta_jensen_col
+    del filter_min_pairs, filter_max_pairs, filter_eq_pairs
+    if universe_scope.n_in_scope < 50:
+        return Verdict.POWER_INSUFFICIENT
+    if math.isnan(universe_scope.helped_fraction):
+        return Verdict.POWER_INSUFFICIENT
+    if (
+        universe_scope.helped_fraction <= 0.40
+        and universe_scope.g_outcome <= -0.30
+    ):
+        return Verdict.HELD
+    return Verdict.NO_EFFECT
+
+
 # === The DDQN measurement graph (built from scratch) ===
 DDQN_UNIVERSE_BRIDGES = (
     ddqn_helps_within_empirical_scope,
     ddqn_refuted_when_dormancy_fires,
+    ddqn_helps_at_early_bursts__pixel_envs,
+    ddqn_attenuates_at_late_bursts__spaceinvaders,
 )
 """The two terminal bridges that close the DDQN study on the
 universal paired-delta cells. Run against the universal dataset
@@ -140,6 +252,8 @@ longer load-bearing."""
 
 __all__ = [
     'DDQN_UNIVERSE_BRIDGES',
+    'ddqn_attenuates_at_late_bursts__spaceinvaders',
+    'ddqn_helps_at_early_bursts__pixel_envs',
     'ddqn_helps_within_empirical_scope',
     'ddqn_refuted_when_dormancy_fires',
 ]

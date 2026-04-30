@@ -43,12 +43,14 @@ class UniverseScopeResult:
     se_jensen_gap: float
     filter_min_pairs: tuple[tuple[str, float], ...]
     filter_max_pairs: tuple[tuple[str, float], ...]
+    filter_eq_pairs: tuple[tuple[str, str], ...]
 
 
 def _passes(
     cell: Mapping[str, object],
     min_pairs: tuple[tuple[str, float], ...],
     max_pairs: tuple[tuple[str, float], ...],
+    eq_pairs: tuple[tuple[str, str], ...],
 ) -> bool:
     for col, thr in min_pairs:
         v = cell.get(col)
@@ -64,6 +66,10 @@ def _passes(
         f = float(v)
         if math.isnan(f) or f > thr:
             return False
+    for col, val in eq_pairs:
+        v = cell.get(col)
+        if v != val:
+            return False
     return True
 
 
@@ -75,6 +81,7 @@ def universe_scope(
     delta_jensen_col: str = 'delta_jensen_gap',
     filter_min_pairs: tuple[tuple[str, float], ...] = (),
     filter_max_pairs: tuple[tuple[str, float], ...] = (),
+    filter_eq_pairs: tuple[tuple[str, str], ...] = (),
 ) -> UniverseScopeResult:
     """Filter `cells` by `filter_min_pairs` (column ≥ threshold)
     and `filter_max_pairs` (column ≤ threshold); compute helped
@@ -87,7 +94,7 @@ def universe_scope(
     cells_list = [dict(c) for c in cells]
     in_scope = [
         c for c in cells_list
-        if _passes(c, filter_min_pairs, filter_max_pairs)
+        if _passes(c, filter_min_pairs, filter_max_pairs, filter_eq_pairs)
     ]
 
     deltas_outcome: list[float] = []
@@ -123,6 +130,7 @@ def universe_scope(
         g_jensen_gap=g_jen, se_jensen_gap=se_jen,
         filter_min_pairs=filter_min_pairs,
         filter_max_pairs=filter_max_pairs,
+        filter_eq_pairs=filter_eq_pairs,
     )
 
 
