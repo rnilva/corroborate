@@ -46,7 +46,8 @@ markers = [
 ]
 
 [tool.pyright]
-include = ["src", "tests"]
+include = ["src", "tests", "experiments"]
+extraPaths = ["."]
 stubPath = "stubs"
 pythonVersion = "3.13"
 typeCheckingMode = "strict"
