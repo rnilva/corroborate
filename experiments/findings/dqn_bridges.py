@@ -377,6 +377,116 @@ _SCV_DAG: list[tuple[str, str]] = [
 ]
 
 
+# ============ Strategy 2 — expectile-greedify contrast ============
+#
+# Authored against the expectile_3way corpus (the live sweep
+# launched mid-session). Expectile is a structurally different
+# bias-correction operator (Garg et al 2023, "XQL") — does it
+# reproduce DDQN's chain decomposition?
+#
+# Empirical reading from the corpus:
+#   Mechanism (jensen_gap): expectile reduces gap MORE than ddqn
+#     on every env (g vs vanilla in [-2.7, -11.6]; g vs ddqn in
+#     [-0.5, -2.7] — uniformly negative).
+#   Outcome (eval_best_burst_mean): mixed. ddqn beats expectile
+#     on FourRooms (g=-0.63 vs ddqn) and Acrobot (g=-0.63 vs ddqn).
+#     null on Catch (saturated). DiscountingChain marginal.
+#
+# So the mechanism-link disconnect REPRODUCES under expectile —
+# more bias-reduction does NOT translate to more outcome benefit.
+# The residual `bootstrap_fraction → g_link | g_mech` appears to
+# be mechanism-non-specific (sparse-reward intrinsic), not
+# DDQN-specific.
+
+
+def _expectile_reduces_gap_holds_when(paired_g: PairedGResult) -> Verdict:
+    if paired_g.n_pairs < 30:
+        return Verdict.POWER_INSUFFICIENT
+    if paired_g.g >= 0:
+        return Verdict.POWER_INSUFFICIENT
+    if paired_g.g < -0.3 and paired_g.p_value < 0.05:
+        return Verdict.HELD
+    return Verdict.NO_EFFECT
+
+
+@claim_bridge
+def expectile_reduces_jensen_gap_more_than_ddqn__fourrooms(
+    paired_g: PairedGResult,
+    *,
+    source: str = 'mechanism.jensen_gap',
+    target: str = 'mechanism.jensen_gap',
+    direction: Direction = Direction.INVERSE,
+    tier: Tier = Tier.ASSOCIATIONAL,
+    treatment_arm: str = 'expectile_dqn',
+    baseline_arm: str = 'ddqn',
+    pair_by: tuple[str, ...] = ('seed',),
+    env_name: str = 'FourRooms-misc',
+) -> Verdict:
+    """Expectile reduces jensen_gap further than DDQN does on
+    FourRooms (the env where DDQN had room to operate).
+    Confirms expectile's bias-correction is more aggressive."""
+    del source, target, direction, tier
+    del treatment_arm, baseline_arm, pair_by, env_name
+    return _expectile_reduces_gap_holds_when(paired_g)
+
+
+@claim_bridge
+def ddqn_outperforms_expectile_on_outcome__fourrooms(
+    paired_g: PairedGResult,
+    *,
+    source: str = 'outcome.eval_best_burst_mean',
+    target: str = 'outcome.eval_best_burst_mean',
+    direction: Direction = Direction.INVERSE,
+    tier: Tier = Tier.ASSOCIATIONAL,
+    treatment_arm: str = 'expectile_dqn',
+    baseline_arm: str = 'ddqn',
+    pair_by: tuple[str, ...] = ('seed',),
+    env_name: str = 'FourRooms-misc',
+) -> Verdict:
+    """Despite expectile's bigger bias-reduction, DDQN beats
+    expectile on FourRooms outcome. Verdict HELD when expectile
+    < ddqn on outcome (g < -0.3 with p < 0.05). The bigger-bias-
+    reduction-doesn't-translate finding from FINDINGS revisions
+    9 + 10 reproduces under a different mechanism family."""
+    del source, target, direction, tier
+    del treatment_arm, baseline_arm, pair_by, env_name
+    if paired_g.n_pairs < 30:
+        return Verdict.POWER_INSUFFICIENT
+    if paired_g.g < -0.3 and paired_g.p_value < 0.05:
+        return Verdict.HELD
+    return Verdict.NO_EFFECT
+
+
+@claim_bridge
+def expectile_reproduces_mechanism_link_disconnect__fourrooms(
+    paired_g: PairedGResult,
+    *,
+    source: str = 'outcome.eval_best_burst_mean',
+    target: str = 'outcome.eval_best_burst_mean',
+    direction: Direction = Direction.DIRECT,
+    tier: Tier = Tier.ASSOCIATIONAL,
+    treatment_arm: str = 'expectile_dqn',
+    baseline_arm: str = 'vanilla_dqn',
+    pair_by: tuple[str, ...] = ('seed',),
+    env_name: str = 'FourRooms-misc',
+) -> Verdict:
+    """Strategy 2's headline question: does expectile produce
+    the same outcome-vs-vanilla effect as DDQN on FourRooms?
+    (FINDINGS revision 9: DDQN g_link ≈ +0.79 across bursts.)
+
+    HELD when expectile shows a similar magnitude DIRECT effect
+    (g > 0.3 + p < 0.05); NO_EFFECT when expectile's outcome
+    effect is much smaller than DDQN's; both establish the
+    finding (whether the link reproduces or not is the answer)."""
+    del source, target, direction, tier
+    del treatment_arm, baseline_arm, pair_by, env_name
+    if paired_g.n_pairs < 30:
+        return Verdict.POWER_INSUFFICIENT
+    if paired_g.g > 0.3 and paired_g.p_value < 0.05:
+        return Verdict.HELD
+    return Verdict.NO_EFFECT
+
+
 @claim_bridge
 def state_coverage_kl_causes_outcome(
     backdoor_ate: BackdoorResult,
@@ -422,15 +532,28 @@ def state_coverage_kl_causes_outcome(
     return Verdict.NO_EFFECT
 
 
+EXPECTILE_STRATEGY_2_BRIDGES = (
+    expectile_reduces_jensen_gap_more_than_ddqn__fourrooms,
+    ddqn_outperforms_expectile_on_outcome__fourrooms,
+    expectile_reproduces_mechanism_link_disconnect__fourrooms,
+)
+"""Strategy-2 bridges (expectile-greedify contrast). Run against
+the expectile_3way runs.parquet (no traces required)."""
+
+
 __all__ = [
     'ACTION_DIM_BRIDGES',
     'EXPECTILE_PER_BURST_BRIDGES',
+    'EXPECTILE_STRATEGY_2_BRIDGES',
     'ddqn_outcome_stable_across_bursts__fourrooms',
     'ddqn_outcome_zero_across_bursts__catch',
+    'ddqn_outperforms_expectile_on_outcome__fourrooms',
     'ddqn_reduces_jensen_gap__acrobot',
     'ddqn_reduces_jensen_gap__catch',
     'ddqn_reduces_jensen_gap__cartpole',
     'ddqn_reduces_jensen_gap__discounting_chain',
+    'expectile_reduces_jensen_gap_more_than_ddqn__fourrooms',
+    'expectile_reproduces_mechanism_link_disconnect__fourrooms',
     'jensen_gap_outcome_borderline',
     'log_action_dim_drives_jensen_gap_reduction',
     'state_coverage_kl_causes_outcome',

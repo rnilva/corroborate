@@ -20,6 +20,7 @@ import polars as pl
 from corroborate.claim_bridge import Bridge, evaluate
 from experiments.findings.dqn_bridges import (
     ACTION_DIM_BRIDGES, EXPECTILE_PER_BURST_BRIDGES,
+    EXPECTILE_STRATEGY_2_BRIDGES,
     jensen_gap_outcome_borderline,
     state_coverage_kl_causes_outcome,
 )
@@ -169,29 +170,40 @@ def main() -> None:
     else:
         print(f'(skip action_dim_sweep — {ACTION_DIM_PARQUET} missing)')
 
-    if EXPECTILE_RUNS.exists() and EXPECTILE_TRACES.exists():
-        runs = pl.read_parquet(
-            EXPECTILE_RUNS,
-            columns=['id', 'intervention_name', 'env_name', 'seed'],
-        )
-        traces = pl.read_parquet(
-            EXPECTILE_TRACES,
-            columns=['id', 'mc_return', 'predicted_q_at_start'],
-        )
-        joined = runs.join(traces, on='id', how='inner')
-        cells = list(joined.iter_rows(named=True))
+    if EXPECTILE_RUNS.exists():
+        runs_df = pl.read_parquet(EXPECTILE_RUNS)
+        runs_cells = list(runs_df.iter_rows(named=True))
         print(
-            f'\n# expectile_3way ({len(cells)} cells, '
-            f'{joined["env_name"].n_unique()} envs, joined '
-            f'runs × traces)',
+            f'\n# expectile_3way ({len(runs_cells)} cells, '
+            f'{runs_df["env_name"].n_unique()} envs, '
+            f'{runs_df["intervention_name"].n_unique()} arms)',
         )
         print('-' * 110)
-        _print_verdicts(EXPECTILE_PER_BURST_BRIDGES, cells)
+        _print_verdicts(EXPECTILE_STRATEGY_2_BRIDGES, runs_cells)
+
+        if EXPECTILE_TRACES.exists():
+            runs = pl.read_parquet(
+                EXPECTILE_RUNS,
+                columns=[
+                    'id', 'intervention_name', 'env_name', 'seed',
+                ],
+            )
+            traces = pl.read_parquet(
+                EXPECTILE_TRACES,
+                columns=['id', 'mc_return', 'predicted_q_at_start'],
+            )
+            joined_cells = list(
+                runs.join(traces, on='id', how='inner')
+                .iter_rows(named=True),
+            )
+            print(
+                f'\n# expectile_3way joined runs × traces '
+                f'({len(joined_cells)} cells)',
+            )
+            print('-' * 110)
+            _print_verdicts(EXPECTILE_PER_BURST_BRIDGES, joined_cells)
     else:
-        print(
-            f'(skip expectile_3way — '
-            f'{EXPECTILE_RUNS}/{EXPECTILE_TRACES} missing)',
-        )
+        print(f'(skip expectile_3way — {EXPECTILE_RUNS} missing)')
 
     if CARTPOLE_HP_MEDIATORS.exists():
         df = pl.read_parquet(CARTPOLE_HP_MEDIATORS)
