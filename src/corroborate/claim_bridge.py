@@ -1,45 +1,57 @@
 """Claim-bridge — typed authored edge declaration on the
 measurable graph, with `holds_when` threshold body.
 
-A *claim bridge* is the authoring unit of the measurable-graph
-file protocol: a structural declaration (source, target,
-direction, tier, plus claim-specific kwargs) paired with a
-`holds_when` body that consumes registered `@analysis` results
-and returns a `Verdict`. Like a pytest test that consumes
-fixtures.
+A claim bridge is the authoring unit of the measurable-graph
+file protocol. The author writes a Python function whose
+*signature* IS the declaration:
 
-    @claim_bridge(
-        name='ddqn_helps_outcome_acrobot',
-        source='outcome.eval_best_burst_mean',
-        target='outcome.eval_best_burst_mean',
-        direction=Direction.DIRECT,
-        tier=Tier.ASSOCIATIONAL,
-        treatment_arm='ddqn',
-        baseline_arm='vanilla_dqn',
-        pair_by=('seed',),
-        env_name='Acrobot-v1',
-    )
-    def claim(paired_g: PairedGResult) -> Verdict:
-        if paired_g.g > 0.3 and paired_g.p < 0.05:
+  - **Function name** = bridge name.
+  - **Defaulted kwargs `source`, `target`, `direction`, `tier`** =
+    structural fields of the edge.
+  - **Other defaulted kwargs** = the params bag the framework
+    forwards to analyses at evaluation time (`treatment_arm`,
+    `pair_by`, `env_name`, `dag`, ...).
+  - **Parameters WITHOUT defaults** = analysis fixtures the
+    framework injects by name. The type annotation
+    (`paired_g: PairedGResult`) is for the IDE/type-checker;
+    runtime resolution is by parameter name against the
+    `@analysis` registry.
+
+  - **Function body** = the `holds_when` threshold — explicit
+    sign / magnitude / power criterion, returning a `Verdict`.
+
+The decorator is no-arg: `@claim_bridge` reads everything from
+the function's signature. Like a pytest test that consumes
+fixtures, but with the test's metadata sitting as keyword
+defaults.
+
+    @claim_bridge
+    def ddqn_helps_outcome_acrobot(
+        paired_g: PairedGResult,
+        *,
+        source: str = 'outcome.eval_best_burst_mean',
+        target: str = 'outcome.eval_best_burst_mean',
+        direction: Direction = Direction.DIRECT,
+        tier: Tier = Tier.ASSOCIATIONAL,
+        treatment_arm: str = 'ddqn',
+        baseline_arm: str = 'vanilla_dqn',
+        pair_by: tuple[str, ...] = ('seed',),
+        env_name: str = 'Acrobot-v1',
+    ) -> Verdict:
+        if paired_g.g > 0.3 and paired_g.p_value < 0.05:
             return Verdict.HELD
         if paired_g.n_pairs < 30:
             return Verdict.POWER_INSUFFICIENT
         return Verdict.NO_EFFECT
-
-`evaluate(bridge, cells)` resolves every analysis the
-`holds_when` body references (by parameter name, against the
-analysis registry), parameterises each from the bridge's
-structural fields + kwargs, runs them on `cells`, injects the
-results into `holds_when`, and returns `(verdict,
-analysis_results)` — verdict is the bridge's authored claim;
-analysis_results is the audit trail.
 """
 from __future__ import annotations
 
+import inspect
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from enum import Enum, IntEnum
 from types import MappingProxyType
+from typing import cast
 
 from corroborate.analysis import resolve_for_holds_when
 from corroborate.verdict import Verdict
@@ -49,11 +61,7 @@ class Direction(Enum):
     """Sign of an edge's claimed coupling.
 
     `DIRECT`: source ↑ ⇒ target ↑.
-    `INVERSE`: source ↑ ⇒ target ↓.
-
-    Lifted from the legacy `corroborate.causal_graph` so the
-    file-protocol bridges have direction structure without
-    importing the deprecated module."""
+    `INVERSE`: source ↑ ⇒ target ↓."""
     DIRECT = 'direct'
     INVERSE = 'inverse'
 
@@ -62,32 +70,27 @@ class Tier(IntEnum):
     """Pearl-ladder tier of an edge's evidentiary claim.
 
     `ASSOCIATIONAL`: observational coupling (rung 1).
-    `INTERVENTIONAL`: confirmed do-operation effect (rung 2).
-    """
+    `INTERVENTIONAL`: confirmed do-operation effect (rung 2)."""
     ASSOCIATIONAL = 1
     INTERVENTIONAL = 2
+
+
+# Reserved kwarg names the decorator extracts as the bridge's
+# structural fields; everything else lands in `params`.
+_STRUCTURAL_FIELDS: frozenset[str] = frozenset(
+    {'source', 'target', 'direction', 'tier'},
+)
 
 
 @dataclass(frozen=True, slots=True)
 class Bridge:
     """Authored edge declaration on the measurable graph.
 
-    Structural fields name the edge (`source`, `target`,
-    `direction`, `tier`); `params` is the open kwarg bag the
-    bridge author populates with claim-specific values
-    (`treatment_arm`, `pair_by`, `env_name`, `dag`,
-    `adjustment_set`, ...) that the framework forwards to each
-    registered analysis the `holds_when` body consumes.
-
-    `holds_when` is the body of the bridge: a typed callable
-    whose parameter names match registered `@analysis` names.
-    The framework injects analysis results at evaluation time;
-    the body returns a `Verdict`.
-
-    Two bridges with the same `(source, target, direction, tier,
-    params)` and identical `holds_when` are structurally
-    equivalent; the framework doesn't enforce uniqueness, but
-    the smoke layer can canonicalise."""
+    Built by `@claim_bridge` from the wrapped function's
+    signature. Structural fields name the edge (`source`,
+    `target`, `direction`, `tier`); `params` is the bag of
+    claim-specific kwargs the bridge forwards to each registered
+    analysis the `holds_when` body consumes."""
     name: str
     source: str
     target: str
@@ -101,75 +104,113 @@ class Bridge:
 
 @dataclass(frozen=True, slots=True)
 class BridgeEvaluation:
-    """The result of evaluating one bridge against one cell-set:
-    the authored verdict + the analysis results that produced it.
-
-    `analysis_results` is the audit trail; downstream tooling
-    (FINDINGS reproduction, falsifiability diff) can inspect the
-    raw fixtures. Each key matches a `holds_when` parameter
-    name."""
+    """One bridge evaluated against one cell-set: the verdict the
+    `holds_when` body returned + the analysis results that
+    produced it (the audit trail)."""
     bridge_name: str
     verdict: Verdict
     analysis_results: Mapping[str, object]
 
 
-def claim_bridge(
-    *,
-    name: str,
-    source: str,
-    target: str,
-    direction: Direction = Direction.DIRECT,
-    tier: Tier = Tier.ASSOCIATIONAL,
-    **params: object,
-) -> Callable[[Callable[..., Verdict]], Bridge]:
-    """Decorator factory: wrap a `holds_when` body into a
-    `Bridge` declaration. All extra kwargs to the decorator
-    land in `Bridge.params` for the resolver to forward to
-    analyses.
-
-    Usage:
-
-        @claim_bridge(
-            name='X',
-            source='source_measurable',
-            target='target_measurable',
-            direction=Direction.DIRECT,
-            tier=Tier.ASSOCIATIONAL,
-            # claim-specific params (forwarded to analyses):
-            treatment_arm='ddqn',
-            baseline_arm='vanilla_dqn',
-            pair_by=('seed',),
+def _require_str(value: object, field_name: str, fn_name: str) -> str:
+    if not isinstance(value, str):
+        raise TypeError(
+            f'@claim_bridge {fn_name!r}: default for {field_name!r} '
+            f'must be a string; got {type(value).__name__}',
         )
-        def claim(paired_g: PairedGResult) -> Verdict:
-            ...
+    return value
+
+
+def _require_direction(
+    value: object, fn_name: str,
+) -> Direction:
+    if not isinstance(value, Direction):
+        raise TypeError(
+            f'@claim_bridge {fn_name!r}: default for `direction` '
+            f'must be a Direction enum; got {type(value).__name__}',
+        )
+    return value
+
+
+def _require_tier(value: object, fn_name: str) -> Tier:
+    if not isinstance(value, Tier):
+        raise TypeError(
+            f'@claim_bridge {fn_name!r}: default for `tier` must '
+            f'be a Tier enum; got {type(value).__name__}',
+        )
+    return value
+
+
+def claim_bridge(fn: Callable[..., Verdict]) -> Bridge:
+    """Wrap `fn` into a `Bridge` declaration. Reads metadata from
+    the function's name + signature defaults:
+
+    - bridge name = `fn.__name__`
+    - structural fields (`source`, `target`, `direction`, `tier`)
+      = the function's defaulted kwargs of those reserved names
+    - other defaulted kwargs → `Bridge.params`
+    - parameters without defaults → analysis fixtures, resolved
+      at evaluate time
+
+    Raises `TypeError` if `source`/`target` aren't both supplied
+    as defaulted-string kwargs, or if `direction`/`tier` are
+    supplied with the wrong type.
     """
-    def decorator(fn: Callable[..., Verdict]) -> Bridge:
-        return Bridge(
-            name=name,
-            source=source,
-            target=target,
-            direction=direction,
-            tier=tier,
-            params=MappingProxyType(dict(params)),
-            holds_when=fn,
+    try:
+        sig = inspect.signature(fn)
+    except (TypeError, ValueError) as exc:
+        raise TypeError(
+            f'@claim_bridge {fn.__name__!r}: cannot inspect '
+            f'signature: {exc}',
+        ) from exc
+
+    structural: dict[str, object] = {}
+    params: dict[str, object] = {}
+    for param_name, param in sig.parameters.items():
+        # `inspect.Parameter.default` is `Any` per typeshed; cast
+        # at the boundary. Tracked in FUTURE_WORKS.md.
+        default = cast(object, param.default)
+        if default is inspect.Parameter.empty:
+            continue  # fixture; resolved at evaluate time
+        if param_name in _STRUCTURAL_FIELDS:
+            structural[param_name] = default
+        else:
+            params[param_name] = default
+
+    if 'source' not in structural or 'target' not in structural:
+        raise TypeError(
+            f'@claim_bridge {fn.__name__!r}: must declare both '
+            f'`source` and `target` as defaulted kwargs',
         )
-    return decorator
+    source = _require_str(structural['source'], 'source', fn.__name__)
+    target = _require_str(structural['target'], 'target', fn.__name__)
+    direction = _require_direction(
+        structural.get('direction', Direction.DIRECT), fn.__name__,
+    )
+    tier = _require_tier(
+        structural.get('tier', Tier.ASSOCIATIONAL), fn.__name__,
+    )
+
+    return Bridge(
+        name=fn.__name__,
+        source=source,
+        target=target,
+        direction=direction,
+        tier=tier,
+        params=MappingProxyType(params),
+        holds_when=fn,
+    )
 
 
 def evaluate(
     bridge: Bridge,
     cells: Iterable[Mapping[str, object]],
 ) -> BridgeEvaluation:
-    """Run a bridge against a cell-set: resolve each analysis the
-    `holds_when` body references, parameterise from the bridge's
-    structural fields + params, inject results, return the
-    verdict + audit trail.
-
-    The bridge's structural fields (`source`, `target`,
-    `direction`, `tier`) are added to the parameter bag the
-    analyses receive — analyses that take e.g. `source: str` as
-    a kwarg pull it from there; analyses that don't accept it
-    silently ignore it (filtered by `Analysis._kwargs_for`)."""
+    """Run a bridge against a cell-set: resolve each fixture (a
+    `holds_when` parameter without a default) by looking up the
+    matching `@analysis`, parameterise from the bridge's
+    structural fields + params, run on `cells`, inject results,
+    return verdict + audit trail."""
     bridge_params: dict[str, object] = {
         'source': bridge.source,
         'target': bridge.target,

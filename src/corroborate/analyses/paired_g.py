@@ -70,7 +70,7 @@ def _key_tuple(
     return tuple(record[k] for k in pair_by)
 
 
-@analysis(name='paired_g')
+@analysis
 def paired_g(
     cells: Iterable[Mapping[str, object]],
     *,

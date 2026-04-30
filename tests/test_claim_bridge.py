@@ -8,12 +8,12 @@ much higher threshold should NO_EFFECT.
 
 The smoke proves:
 - The `@analysis` decorator + registry round-trip.
-- The `@claim_bridge` decorator builds a typed Bridge with
-  structural fields + `holds_when`.
-- `evaluate(bridge, cells)` resolves the analysis from the
-  `holds_when` parameter name, parameterises it from the
-  bridge's structural fields, runs it, and routes the result
-  through the bridge's threshold body.
+- The `@claim_bridge` decorator reads bridge metadata from
+  the function's signature defaults and produces a typed Bridge.
+- `evaluate(bridge, cells)` resolves each fixture (parameter
+  without a default) by name against the analysis registry,
+  parameterises from the bridge's structural fields + params
+  bag, runs, injects, and routes through the bridge body.
 """
 from __future__ import annotations
 
@@ -39,9 +39,6 @@ def _synthetic_cells(
     baseline_mean: float = 0.0,
     noise: float = 0.1,
 ) -> list[dict[str, object]]:
-    """Build a paired corpus: n_seeds × {treatment, baseline}
-    cells, each with `intervention_name`, `seed`, `env_name`, and
-    a single outcome path."""
     import random
     rng = random.Random(0)
     out: list[dict[str, object]] = []
@@ -79,15 +76,13 @@ def test_paired_g_analysis_runs_directly() -> None:
     )
     assert isinstance(result, PairedGResult)
     assert result.n_pairs == 30
-    # treatment_mean=1.0, baseline_mean=0.0, noise=0.1 → g should
-    # be very large (Cohen-d ~ 7+, Hedges-corrected ~ 6.8).
     assert result.g > 3.0, f'expected g > 3, got {result.g}'
     assert result.p_value < 1e-6
 
 
 def test_analysis_registered_globally() -> None:
     """Importing `corroborate.analyses` registers `paired_g` under
-    that name — the lookup the bridge resolver uses."""
+    its function name — the lookup the bridge resolver uses."""
     from corroborate.analysis import (
         get_registered, registered_names,
     )
@@ -95,31 +90,34 @@ def test_analysis_registered_globally() -> None:
     assert get_registered('paired_g') is not None
 
 
+@claim_bridge
+def treatment_helps_outcome(
+    paired_g: PairedGResult,
+    *,
+    source: str = 'outcome.eval_best_burst_mean',
+    target: str = 'outcome.eval_best_burst_mean',
+    direction: Direction = Direction.DIRECT,
+    tier: Tier = Tier.ASSOCIATIONAL,
+    treatment_arm: str = 'treatment',
+    baseline_arm: str = 'baseline',
+    pair_by: tuple[str, ...] = ('seed',),
+    env_name: str = 'TestEnv',
+) -> Verdict:
+    del source, target, direction, tier
+    del treatment_arm, baseline_arm, pair_by, env_name
+    if paired_g.n_pairs < 10:
+        return Verdict.POWER_INSUFFICIENT
+    if paired_g.g > 0.3 and paired_g.p_value < 0.05:
+        return Verdict.HELD
+    return Verdict.NO_EFFECT
+
+
 def test_bridge_held_under_explicit_threshold() -> None:
-    """Authoring path: a bridge that consumes paired_g and
-    asserts a sign+magnitude+power threshold. Synthetic corpus
-    with strong effect → HELD."""
-
-    @claim_bridge(
-        name='treatment_helps_outcome',
-        source='outcome.eval_best_burst_mean',
-        target='outcome.eval_best_burst_mean',
-        direction=Direction.DIRECT,
-        tier=Tier.ASSOCIATIONAL,
-        treatment_arm='treatment',
-        baseline_arm='baseline',
-        pair_by=('seed',),
-        env_name='TestEnv',
-    )
-    def claim(paired_g: PairedGResult) -> Verdict:
-        if paired_g.n_pairs < 10:
-            return Verdict.POWER_INSUFFICIENT
-        if paired_g.g > 0.3 and paired_g.p_value < 0.05:
-            return Verdict.HELD
-        return Verdict.NO_EFFECT
-
+    """Authoring path: the bridge is just a function whose
+    signature carries the metadata. Synthetic corpus with strong
+    effect → HELD."""
     cells = _synthetic_cells()
-    out = evaluate(claim, cells)
+    out = evaluate(treatment_helps_outcome, cells)
     assert out.verdict == Verdict.HELD
     assert out.bridge_name == 'treatment_helps_outcome'
     pg = cast(PairedGResult, out.analysis_results['paired_g'])
@@ -128,93 +126,99 @@ def test_bridge_held_under_explicit_threshold() -> None:
 
 
 def test_bridge_no_effect_when_signal_absent() -> None:
-    """Same bridge shape, treatment ≈ baseline → NO_EFFECT."""
-
-    @claim_bridge(
-        name='no_real_effect',
-        source='outcome.eval_best_burst_mean',
-        target='outcome.eval_best_burst_mean',
-        direction=Direction.DIRECT,
-        tier=Tier.ASSOCIATIONAL,
-        treatment_arm='treatment',
-        baseline_arm='baseline',
-        pair_by=('seed',),
-        env_name='TestEnv',
-    )
-    def claim(paired_g: PairedGResult) -> Verdict:
-        if paired_g.g > 0.3 and paired_g.p_value < 0.05:
-            return Verdict.HELD
-        return Verdict.NO_EFFECT
-
+    """Treatment ≈ baseline → NO_EFFECT."""
     cells = _synthetic_cells(treatment_mean=0.0, baseline_mean=0.0)
-    out = evaluate(claim, cells)
+    out = evaluate(treatment_helps_outcome, cells)
     assert out.verdict == Verdict.NO_EFFECT
 
 
+@claim_bridge
+def want_30_pairs(
+    paired_g: PairedGResult,
+    *,
+    source: str = 'outcome.eval_best_burst_mean',
+    target: str = 'outcome.eval_best_burst_mean',
+    direction: Direction = Direction.DIRECT,
+    tier: Tier = Tier.ASSOCIATIONAL,
+    treatment_arm: str = 'treatment',
+    baseline_arm: str = 'baseline',
+    pair_by: tuple[str, ...] = ('seed',),
+    env_name: str = 'TestEnv',
+) -> Verdict:
+    del source, target, direction, tier
+    del treatment_arm, baseline_arm, pair_by, env_name
+    if paired_g.n_pairs < 30:
+        return Verdict.POWER_INSUFFICIENT
+    if paired_g.g > 0.3 and paired_g.p_value < 0.05:
+        return Verdict.HELD
+    return Verdict.NO_EFFECT
+
+
 def test_bridge_power_insufficient_with_few_seeds() -> None:
-    """Few pairs → bridge's `holds_when` returns
-    POWER_INSUFFICIENT. The threshold is encoded in the bridge,
-    not the analysis."""
-
-    @claim_bridge(
-        name='want_30_pairs',
-        source='outcome.eval_best_burst_mean',
-        target='outcome.eval_best_burst_mean',
-        direction=Direction.DIRECT,
-        tier=Tier.ASSOCIATIONAL,
-        treatment_arm='treatment',
-        baseline_arm='baseline',
-        pair_by=('seed',),
-        env_name='TestEnv',
-    )
-    def claim(paired_g: PairedGResult) -> Verdict:
-        if paired_g.n_pairs < 30:
-            return Verdict.POWER_INSUFFICIENT
-        if paired_g.g > 0.3 and paired_g.p_value < 0.05:
-            return Verdict.HELD
-        return Verdict.NO_EFFECT
-
+    """Few pairs → POWER_INSUFFICIENT. The threshold is encoded in
+    the bridge body, not the analysis."""
     cells = _synthetic_cells(n_seeds=5)
-    out = evaluate(claim, cells)
+    out = evaluate(want_30_pairs, cells)
     assert out.verdict == Verdict.POWER_INSUFFICIENT
 
 
-def test_unknown_analysis_in_holds_when_raises() -> None:
-    """A bridge that names an unregistered analysis fails fast at
-    evaluation, not silently."""
-    @claim_bridge(
-        name='broken',
-        source='x', target='y',
-    )
-    def claim(not_a_real_analysis: object) -> Verdict:
+def test_unknown_fixture_raises() -> None:
+    """A fixture parameter (no default) that doesn't match a
+    registered analysis fails fast at evaluation."""
+    @claim_bridge
+    def broken(
+        not_a_real_analysis: object,
+        *,
+        source: str = 'x',
+        target: str = 'y',
+    ) -> Verdict:
         del not_a_real_analysis
         return Verdict.HELD
 
     cells: list[Mapping[str, object]] = [{'env_name': 'X'}]
     with pytest.raises(KeyError, match='not_a_real_analysis'):
-        _ = evaluate(claim, cells)
+        _ = evaluate(broken, cells)
 
 
 def test_bridge_carries_structural_metadata() -> None:
-    """The bridge preserves the structural declaration as typed
-    fields (for downstream introspection / persistence)."""
-
-    @claim_bridge(
-        name='X', source='A', target='B',
-        direction=Direction.INVERSE,
-        tier=Tier.INTERVENTIONAL,
-        treatment_arm='ddqn',
-        baseline_arm='vanilla_dqn',
-    )
-    def claim(paired_g: PairedGResult) -> Verdict:
-        del paired_g
+    """The decorator preserves the structural declaration as
+    typed Bridge fields for downstream introspection."""
+    @claim_bridge
+    def carries_metadata(
+        paired_g: PairedGResult,
+        *,
+        source: str = 'A',
+        target: str = 'B',
+        direction: Direction = Direction.INVERSE,
+        tier: Tier = Tier.INTERVENTIONAL,
+        treatment_arm: str = 'ddqn',
+        baseline_arm: str = 'vanilla_dqn',
+    ) -> Verdict:
+        del paired_g, source, target, direction, tier
+        del treatment_arm, baseline_arm
         return Verdict.HELD
 
-    assert isinstance(claim, Bridge)
-    assert claim.name == 'X'
-    assert claim.source == 'A'
-    assert claim.target == 'B'
-    assert claim.direction == Direction.INVERSE
-    assert claim.tier == Tier.INTERVENTIONAL
-    assert claim.params['treatment_arm'] == 'ddqn'
-    assert claim.params['baseline_arm'] == 'vanilla_dqn'
+    assert isinstance(carries_metadata, Bridge)
+    assert carries_metadata.name == 'carries_metadata'
+    assert carries_metadata.source == 'A'
+    assert carries_metadata.target == 'B'
+    assert carries_metadata.direction == Direction.INVERSE
+    assert carries_metadata.tier == Tier.INTERVENTIONAL
+    assert carries_metadata.params['treatment_arm'] == 'ddqn'
+    assert carries_metadata.params['baseline_arm'] == 'vanilla_dqn'
+
+
+def test_bridge_requires_source_and_target() -> None:
+    """A bridge declaration without `source`/`target` defaults
+    raises at decoration time — the structural contract is
+    enforced at authoring."""
+    def _no_source_target(
+        paired_g: PairedGResult,
+        *,
+        direction: Direction = Direction.DIRECT,
+    ) -> Verdict:
+        del paired_g, direction
+        return Verdict.HELD
+
+    with pytest.raises(TypeError, match='source.*target'):
+        _ = claim_bridge(_no_source_target)

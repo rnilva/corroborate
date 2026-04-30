@@ -26,7 +26,7 @@ from corroborate.meta_regression import (
 )
 
 
-@analysis(name='meta_regression_paired_g')
+@analysis
 def meta_regression_paired_g(
     cells: Iterable[Mapping[str, object]],
     *,
