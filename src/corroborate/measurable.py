@@ -56,13 +56,39 @@ class Measurable[R: Mapping[str, object], T]:
     The function may take ONLY a record (`fn(record) -> T`) — the
     classical shape — OR a record plus named parameters that match
     other registered measurables (`fn(record, q_mean, q_std) -> T`).
-    Resolver finds and injects the dep values."""
+    Resolver finds and injects the dep values.
+
+    `fallbacks` declare alternative-input siblings tried in order
+    when the primary's `reads` are absent (typically: the
+    pre-reduced form of a column dropped at persistence). Each
+    fallback is itself a full Measurable with its OWN `name` —
+    callers that need to record provenance (e.g. invariant
+    persistence) `dispatch(record)` to pick whichever's reads are
+    present and use that Measurable's `name`. A fallback CAN be
+    an approximation (different reduction order, different
+    sufficient statistic), so persisting under its own name keeps
+    aliased observations distinct from primary ones rather than
+    silently filing both into the canonical column."""
     fn: Callable[..., T]
     name: str
     reads: tuple[str, ...] = field(default=())
+    fallbacks: tuple['Measurable[R, T]', ...] = field(default=())
 
     def __call__(self, record: R, **deps: Any) -> T:
-        return self.fn(record, **deps)
+        return self.dispatch(record).fn(record, **deps)
+
+    def dispatch(self, record: R) -> 'Measurable[R, T]':
+        """Pick the Measurable whose `reads` are present in
+        `record`: primary first, else the first matching
+        fallback, else the primary as final fallback (so a
+        downstream `.fn(record)` raises naturally on the first
+        missing key)."""
+        if not self.fallbacks or all(k in record for k in self.reads):
+            return self
+        for alt in self.fallbacks:
+            if all(k in record for k in alt.reads):
+                return alt
+        return self
 
 
 # ============ Name-keyed registry + resolver ============
@@ -90,8 +116,10 @@ def transitive_reads(name: str) -> frozenset[str]:
 
     Walks: starting from `name`, recurse into each measurable's
     parameter-named deps (via `_measurable_param_names`), union
-    each transitively-reached measurable's `reads` field. Cycle-
-    safe via a visited set.
+    each transitively-reached measurable's `reads` field plus any
+    `aliases[i].reads` (alias paths consume disjoint leaves and
+    the redundancy primitive needs the conservative upper bound).
+    Cycle-safe via a visited set.
 
     Loud KeyError if `name` isn't registered — callers asking
     about an unknown measurable get a useful failure rather than
@@ -113,6 +141,8 @@ def transitive_reads(name: str) -> frozenset[str]:
                 f'{sorted(_REGISTRY)}',
             )
         out: set[str] = set(m.reads)
+        for alt in m.fallbacks:
+            out.update(alt.reads)
         for dep_name in _measurable_param_names(m.fn):
             out.update(_close(dep_name))
         return frozenset(out)

@@ -247,7 +247,7 @@ def at_most[R: Mapping[str, object]](
         float('inf') if threshold is None else float(threshold)
     )
     threshold_label = '*' if threshold is None else f'{threshold:g}'
-    bridge_name = (
+    canonical_name = (
         name if name is not None
         else f'at_most[{gap.name}<={threshold_label}]'
     )
@@ -263,37 +263,48 @@ def at_most[R: Mapping[str, object]](
     )
     gap_dep_names = _measurable_param_names(gap.fn)
 
+    def _resolve_name(chosen_name: str) -> str:
+        # When a fallback fired, embed its name in
+        # BridgeResult.name so the persisted column reflects the
+        # observation source. The Bridge's own canonical name
+        # remains unchanged for runtime identity.
+        if chosen_name == gap.name or name is not None:
+            return canonical_name
+        return f'at_most[{chosen_name}<={threshold_label}]'
+
     def fn(record: R, **deps: object) -> BridgeResult:
         gap_deps = {n: deps[n] for n in gap_dep_names if n in deps}
-        val = gap.fn(record, **gap_deps)
+        chosen = gap.dispatch(record)
+        val = chosen.fn(record, **gap_deps)
+        result_name = _resolve_name(chosen.name)
         if math.isnan(val):
             return BridgeResult(
                 verdict=Verdict.POWER_INSUFFICIENT,
                 reason=(
-                    f'{gap.name} = NaN (no data); cannot evaluate '
+                    f'{chosen.name} = NaN (no data); cannot evaluate '
                     f'against threshold {threshold_label}'
                 ),
                 stats={
                     'gap_value': val,
                     'threshold': effective_threshold,
-                    'measurable': gap.name,
+                    'measurable': chosen.name,
                 },
-                name=bridge_name,
-                targets=gap.reads,
+                name=result_name,
+                targets=chosen.reads,
             )
         ok = val <= effective_threshold
         return BridgeResult(
             verdict=Verdict.HELD if ok else Verdict.INVARIANT_VIOLATION,
             reason=(
-                f'{gap.name} = {val:.4g} vs threshold {threshold_label}'
+                f'{chosen.name} = {val:.4g} vs threshold {threshold_label}'
             ),
             stats={
                 'gap_value': float(val),
                 'threshold': effective_threshold,
-                'measurable': gap.name,
+                'measurable': chosen.name,
             },
-            name=bridge_name,
-            targets=gap.reads,
+            name=result_name,
+            targets=chosen.reads,
         )
 
     # Synthesize the bridge fn's signature so the framework's
@@ -311,5 +322,5 @@ def at_most[R: Mapping[str, object]](
     # Substrate authors who want auto-discovery via the composition
     # tree should pass the returned Bridge to `attach_invariant(..., to=of_claim)`.
     return _build_tagged_bridge(
-        fn, of=of_claim, targets=gap.reads, name=bridge_name,
+        fn, of=of_claim, targets=gap.reads, name=canonical_name,
     )

@@ -8,8 +8,11 @@ from corroborate.analyses import (  # noqa: F401
     meta_regression_paired_g as _mr,  # pyright: ignore[reportUnusedImport]
     meta_regression_per_burst as _mr_per_burst,  # pyright: ignore[reportUnusedImport]
     paired_g as _paired_g,  # pyright: ignore[reportUnusedImport]
+    paired_g_among_solvers as _solvers,  # pyright: ignore[reportUnusedImport]
     paired_g_per_burst as _per_burst,  # pyright: ignore[reportUnusedImport]
+    paired_g_pooled as _pooled,  # pyright: ignore[reportUnusedImport]
     tautology_audit as _audit,  # pyright: ignore[reportUnusedImport]
+    verdict_distribution as _verdict_dist,  # pyright: ignore[reportUnusedImport]
 )
 
 __all__: list[str] = []

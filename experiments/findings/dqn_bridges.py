@@ -31,7 +31,14 @@ from corroborate.analyses.paired_g import PairedGResult
 from corroborate.analyses.paired_g_per_burst import (
     PerBurstResult, panel_for_env,
 )
+from corroborate.analyses.paired_g_pooled import (
+    PooledPairedGResult,
+)
+from corroborate.rl.env_solve_thresholds import SOLVE_THRESHOLDS
 from corroborate.analyses.tautology_audit import AuditResult
+from corroborate.analyses.verdict_distribution import (
+    VerdictDistributionResult,
+)
 from corroborate.claim_bridge import (
     Direction, Tier, claim_bridge,
 )
@@ -187,6 +194,135 @@ def log_action_dim_drives_jensen_gap_reduction(
     return Verdict.NO_EFFECT
 
 
+# ============ Seventh revision: dormancy invariant per env =========
+#
+# Per-env verdict on `at_most[jensen_dormancy_gap<=0]` — the
+# framework's-own scope predicate for `double_greedify`. The
+# invariant fires per cell with verdict HELD (premise active:
+# observed bias ≥ structural Jensen floor) or INVARIANT_VIOLATION
+# (premise dormant: observed bias < floor → DDQN's correction has
+# nothing to bite on). Authored against the action_dim_sweep
+# corpus where each env has a specific structural prediction:
+#
+#   Acrobot-v1   |A|=3 → premise active   (HELD on 60/60 cells)
+#   CartPole-v1  |A|=2 → premise active   (HELD on 60/60 cells)
+#   Catch-bsuite |A|=3 → premise dormant  (INVARIANT_VIOLATION on 60/60)
+#   DiscountingChain-bsuite |A|=5 → premise active (HELD on 60/60)
+#
+# These are CATEGORICAL claims (not continuous-effect): the
+# `verdict_distribution_per_env` analysis tallies the persisted
+# verdict column; bridges assert "≥90% of cells fire the
+# predicted verdict on this env".
+
+
+_DORMANCY_VERDICT_COLUMN: str = (
+    'invariant.at_most[jensen_dormancy_gap<=0].verdict'
+)
+
+
+def _premise_holds_when(
+    distribution: VerdictDistributionResult,
+    env_name: str,
+    *,
+    expected: str,
+    fraction_threshold: float = 0.9,
+    min_cells: int = 30,
+) -> Verdict:
+    counts = distribution.for_env(env_name)
+    if counts is None or counts.total < min_cells:
+        return Verdict.POWER_INSUFFICIENT
+    if expected == 'held':
+        fraction = counts.held_fraction
+    elif expected == 'invariant_violation':
+        fraction = counts.violation_fraction
+    else:
+        return Verdict.POWER_INSUFFICIENT
+    if fraction != fraction:  # NaN
+        return Verdict.POWER_INSUFFICIENT
+    return (
+        Verdict.HELD if fraction >= fraction_threshold
+        else Verdict.INVARIANT_VIOLATION
+    )
+
+
+@claim_bridge
+def jensen_premise_active__acrobot(
+    verdict_distribution_per_env: VerdictDistributionResult,
+    *,
+    source: str = 'invariant.at_most[jensen_dormancy_gap<=0]',
+    target: str = 'invariant.at_most[jensen_dormancy_gap<=0]',
+    direction: Direction = Direction.DIRECT,
+    tier: Tier = Tier.ASSOCIATIONAL,
+    arm_filter: str = 'ddqn',
+    verdict_column: str = _DORMANCY_VERDICT_COLUMN,
+    env_name: str = 'Acrobot-v1',
+) -> Verdict:
+    del source, target, direction, tier, arm_filter, verdict_column
+    return _premise_holds_when(
+        verdict_distribution_per_env, env_name, expected='held',
+    )
+
+
+@claim_bridge
+def jensen_premise_active__cartpole(
+    verdict_distribution_per_env: VerdictDistributionResult,
+    *,
+    source: str = 'invariant.at_most[jensen_dormancy_gap<=0]',
+    target: str = 'invariant.at_most[jensen_dormancy_gap<=0]',
+    direction: Direction = Direction.DIRECT,
+    tier: Tier = Tier.ASSOCIATIONAL,
+    arm_filter: str = 'ddqn',
+    verdict_column: str = _DORMANCY_VERDICT_COLUMN,
+    env_name: str = 'CartPole-v1',
+) -> Verdict:
+    del source, target, direction, tier, arm_filter, verdict_column
+    return _premise_holds_when(
+        verdict_distribution_per_env, env_name, expected='held',
+    )
+
+
+@claim_bridge
+def jensen_premise_dormant__catch(
+    verdict_distribution_per_env: VerdictDistributionResult,
+    *,
+    source: str = 'invariant.at_most[jensen_dormancy_gap<=0]',
+    target: str = 'invariant.at_most[jensen_dormancy_gap<=0]',
+    direction: Direction = Direction.DIRECT,
+    tier: Tier = Tier.ASSOCIATIONAL,
+    arm_filter: str = 'ddqn',
+    verdict_column: str = _DORMANCY_VERDICT_COLUMN,
+    env_name: str = 'Catch-bsuite',
+) -> Verdict:
+    """Catch is the structural counterexample: |A|=3 but σ_Q is
+    tiny (0.07) and observed bias even tinier (0.03), so the
+    Jensen floor (0.10) exceeds observed → premise dormant. The
+    invariant correctly fires on this env; the bridge HELD when
+    ≥90% of cells return INVARIANT_VIOLATION."""
+    del source, target, direction, tier, arm_filter, verdict_column
+    return _premise_holds_when(
+        verdict_distribution_per_env, env_name,
+        expected='invariant_violation',
+    )
+
+
+@claim_bridge
+def jensen_premise_active__discounting_chain(
+    verdict_distribution_per_env: VerdictDistributionResult,
+    *,
+    source: str = 'invariant.at_most[jensen_dormancy_gap<=0]',
+    target: str = 'invariant.at_most[jensen_dormancy_gap<=0]',
+    direction: Direction = Direction.DIRECT,
+    tier: Tier = Tier.ASSOCIATIONAL,
+    arm_filter: str = 'ddqn',
+    verdict_column: str = _DORMANCY_VERDICT_COLUMN,
+    env_name: str = 'DiscountingChain-bsuite',
+) -> Verdict:
+    del source, target, direction, tier, arm_filter, verdict_column
+    return _premise_holds_when(
+        verdict_distribution_per_env, env_name, expected='held',
+    )
+
+
 # ============ Per-burst panel claims (revisions 9, 12) ============
 #
 # Per-(env, burst) paired g on `mc_return`. Asserted on the
@@ -260,6 +396,248 @@ def ddqn_outcome_zero_across_bursts__catch(
     return Verdict.POWER_INSUFFICIENT
 
 
+# ============ First revision (ddqn 200k corpus) =====================
+#
+# The headline DDQN finding: on the convergence-conditioned
+# subset, mechanism (Δjensen_gap) activates strongly (g≈-0.93),
+# but the link to outcome (Δeval_best_burst_mean) is null
+# (g≈-0.03). The "+0.086 across all 18 envs" outcome g from the
+# unrestricted analysis is a convergence artifact — once we
+# restrict to envs where vanilla DQN reached a learned policy,
+# DDQN's outcome contribution disappears.
+#
+# Reference verdicts on `experiments/data/ddqn/runs.parquet`,
+# total_steps=200000 cells (1080 of 2160), corrected discounted
+# thresholds (rev 2):
+#
+#   Mechanism on converged subset (6 envs): pooled g=-0.925,
+#     I²=0.94 → HELD
+#   Outcome on converged subset:           pooled g=-0.032,
+#     I²=0.35 → NO_EFFECT (link broken)
+#
+# Converged subset is the substrate's `classify_envs` result on
+# the baseline arm at 200k. Encoded as a literal tuple here so
+# the bridge commits to a specific scope claim; reproduction
+# against a fresh corpus may produce a different subset.
+
+
+_CONVERGED_ENVS_DDQN_200K: tuple[str, ...] = (
+    'Acrobot-v1',
+    'Breakout-MinAtar',
+    'Catch-bsuite',
+    'DeepSea-bsuite',
+    'DiscountingChain-bsuite',
+    'UmbrellaChain-bsuite',
+)
+
+
+def _pooled_negative_holds_when(
+    pooled: PooledPairedGResult,
+    *,
+    g_threshold: float,
+    min_envs: int,
+) -> Verdict:
+    """HELD when pooled g < -|threshold| with sufficient envs;
+    sign-positive → POWER_INSUFFICIENT; insufficient envs →
+    POWER_INSUFFICIENT; otherwise NO_EFFECT."""
+    if pooled.n_envs < min_envs:
+        return Verdict.POWER_INSUFFICIENT
+    g = pooled.pooled.pooled_g
+    if math.isnan(g):
+        return Verdict.POWER_INSUFFICIENT
+    if g >= 0:
+        return Verdict.POWER_INSUFFICIENT  # sign opposes prediction
+    if g < -abs(g_threshold):
+        return Verdict.HELD
+    return Verdict.NO_EFFECT
+
+
+def _pooled_null_holds_when(
+    pooled: PooledPairedGResult,
+    *,
+    null_band: float,
+    min_envs: int,
+) -> Verdict:
+    """NO_EFFECT (the rev 1 outcome reading) when |pooled g| <
+    null_band — small effect, link is empirically broken;
+    otherwise the prediction-of-no-effect is refuted."""
+    if pooled.n_envs < min_envs:
+        return Verdict.POWER_INSUFFICIENT
+    g = pooled.pooled.pooled_g
+    if math.isnan(g):
+        return Verdict.POWER_INSUFFICIENT
+    if abs(g) < null_band:
+        return Verdict.NO_EFFECT
+    return Verdict.HELD
+
+
+@claim_bridge
+def ddqn_reduces_jensen_gap__converged_subset(
+    paired_g_pooled: PooledPairedGResult,
+    *,
+    source: str = 'mechanism.jensen_gap',
+    target: str = 'mechanism.jensen_gap',
+    direction: Direction = Direction.INVERSE,
+    tier: Tier = Tier.ASSOCIATIONAL,
+    treatment_arm: str = 'ddqn',
+    baseline_arm: str = 'vanilla_dqn',
+    pair_by: tuple[str, ...] = ('seed',),
+    env_filter: tuple[str, ...] = _CONVERGED_ENVS_DDQN_200K,
+    total_steps_filter: int = 200000,
+) -> Verdict:
+    """rev 1: pooled paired g(jensen_gap) on the converged subset
+    is strongly negative (~-0.93), HELD."""
+    del source, target, direction, tier
+    del treatment_arm, baseline_arm, pair_by
+    del env_filter, total_steps_filter
+    return _pooled_negative_holds_when(
+        paired_g_pooled, g_threshold=0.5, min_envs=5,
+    )
+
+
+@claim_bridge
+def ddqn_link_to_outcome_null__converged_subset(
+    paired_g_pooled: PooledPairedGResult,
+    *,
+    source: str = 'outcome.eval_best_burst_mean',
+    target: str = 'outcome.eval_best_burst_mean',
+    direction: Direction = Direction.DIRECT,
+    tier: Tier = Tier.ASSOCIATIONAL,
+    treatment_arm: str = 'ddqn',
+    baseline_arm: str = 'vanilla_dqn',
+    pair_by: tuple[str, ...] = ('seed',),
+    env_filter: tuple[str, ...] = _CONVERGED_ENVS_DDQN_200K,
+    total_steps_filter: int = 200000,
+) -> Verdict:
+    """rev 1: pooled paired g(outcome.eval_best_burst_mean) on the
+    converged subset is essentially zero (~-0.03). The literature-
+    predicted outcome benefit fails — link broken on this corpus.
+    Verdict NO_EFFECT encodes that null-link reading directly.
+
+    `source` is the measured column (the analysis's input); the
+    conceptual edge is `mechanism.jensen_gap → outcome.eval_best_
+    burst_mean`, but the paired-g consumes only the target column
+    + arm. The 'link broken' reading lives in the bridge's
+    NO_EFFECT verdict combined with the mechanism HELD on
+    `ddqn_reduces_jensen_gap__converged_subset` — same scope,
+    same arm, mechanism activates but outcome doesn't move."""
+    del source, target, direction, tier
+    del treatment_arm, baseline_arm, pair_by
+    del env_filter, total_steps_filter
+    return _pooled_null_holds_when(
+        paired_g_pooled, null_band=0.15, min_envs=3,
+    )
+
+
+# Note: paired_g_pooled is the analysis name. Both bridges
+# consume the SAME analysis name but with different `source`
+# values (mechanism.jensen_gap vs outcome.eval_best_burst_mean) —
+# the framework's resolver instantiates separately per bridge.
+
+
+# ============ Sixth revision: time-to-first-solve ====================
+#
+# Sample-efficiency probe at the link edge: among (env, seed)
+# pairs where BOTH arms reached threshold, does DDQN cross the
+# bar faster (smaller `outcome.eval_best_burst_step`)?
+#
+# Reference verdicts on `experiments/data/ddqn/runs.parquet`,
+# total_steps=200000, gate=`outcome.eval_best_burst_mean ≥
+# SOLVE_THRESHOLDS[env]`:
+#
+#   Pool (high-solve, 5 non-degenerate envs): pooled g=−0.005,
+#     I²=0.67 → NO_EFFECT (link null at sample-efficiency lens too)
+#   SpaceInvaders-MinAtar (single env): g=−0.532, n=30 → HELD
+#     (DDQN solves faster on this sparse-pixel env)
+
+
+_SOLVE_THRESHOLDS_FLAT: dict[str, float] = {
+    env: spec.threshold
+    for env, spec in SOLVE_THRESHOLDS.items()
+    if spec.threshold is not None
+}
+
+
+_TIME_TO_SOLVE_HIGH_SOLVE_ENVS: tuple[str, ...] = (
+    'Acrobot-v1',
+    'Breakout-MinAtar',
+    'Catch-bsuite',
+    'DiscountingChain-bsuite',
+    'MemoryChain-bsuite',
+    'SpaceInvaders-MinAtar',
+    'UmbrellaChain-bsuite',
+)
+
+
+@claim_bridge
+def time_to_solve_link_null__pooled(
+    paired_g_among_solvers: PooledPairedGResult,
+    *,
+    source: str = 'outcome.eval_best_burst_step',
+    target: str = 'outcome.eval_best_burst_step',
+    direction: Direction = Direction.INVERSE,
+    tier: Tier = Tier.ASSOCIATIONAL,
+    treatment_arm: str = 'ddqn',
+    baseline_arm: str = 'vanilla_dqn',
+    pair_by: tuple[str, ...] = ('seed',),
+    gate_column: str = 'outcome.eval_best_burst_mean',
+    gate_thresholds: dict[str, float] = _SOLVE_THRESHOLDS_FLAT,
+    env_filter: tuple[str, ...] = _TIME_TO_SOLVE_HIGH_SOLVE_ENVS,
+    total_steps_filter: int = 200000,
+) -> Verdict:
+    """rev 6: replacing the steady-state outcome with a sample-
+    efficiency proxy doesn't rescue DDQN. Pooled across 5
+    non-degenerate high-solve envs, predicted-direction effect
+    averages zero with PI bracketing zero — NO_EFFECT."""
+    del source, target, direction, tier
+    del treatment_arm, baseline_arm, pair_by
+    del gate_column, gate_thresholds, env_filter, total_steps_filter
+    return _pooled_null_holds_when(
+        paired_g_among_solvers, null_band=0.15, min_envs=4,
+    )
+
+
+@claim_bridge
+def ddqn_solves_faster__spaceinvaders(
+    paired_g_among_solvers: PooledPairedGResult,
+    *,
+    source: str = 'outcome.eval_best_burst_step',
+    target: str = 'outcome.eval_best_burst_step',
+    direction: Direction = Direction.INVERSE,
+    tier: Tier = Tier.ASSOCIATIONAL,
+    treatment_arm: str = 'ddqn',
+    baseline_arm: str = 'vanilla_dqn',
+    pair_by: tuple[str, ...] = ('seed',),
+    gate_column: str = 'outcome.eval_best_burst_mean',
+    gate_thresholds: dict[str, float] = _SOLVE_THRESHOLDS_FLAT,
+    env_filter: tuple[str, ...] = ('SpaceInvaders-MinAtar',),
+    total_steps_filter: int = 200000,
+) -> Verdict:
+    """rev 6: SpaceInvaders-MinAtar is the one env where DDQN
+    crosses the solve threshold reliably faster than vanilla
+    (g=-0.532, n=30 — moderate effect, sign matches Hasselt's
+    overestimation-bias-cost-on-sparse-reward prediction)."""
+    del source, target, direction, tier
+    del treatment_arm, baseline_arm, pair_by
+    del gate_column, gate_thresholds, total_steps_filter
+    spaceinvaders = next(
+        (p for p in paired_g_among_solvers.per_env
+         if p.env_name == env_filter[0]),
+        None,
+    )
+    if spaceinvaders is None:
+        return Verdict.POWER_INSUFFICIENT
+    if spaceinvaders.n_pairs < 20:
+        return Verdict.POWER_INSUFFICIENT
+    if math.isnan(spaceinvaders.g):
+        return Verdict.POWER_INSUFFICIENT
+    if spaceinvaders.g >= 0:
+        return Verdict.POWER_INSUFFICIENT  # sign opposes prediction
+    if spaceinvaders.g < -0.3:
+        return Verdict.HELD
+    return Verdict.NO_EFFECT
+
+
 # ============ Bridge collection — the file's exported claims ============
 
 ACTION_DIM_BRIDGES = (
@@ -268,9 +646,23 @@ ACTION_DIM_BRIDGES = (
     ddqn_reduces_jensen_gap__discounting_chain,
     ddqn_reduces_jensen_gap__cartpole,
     log_action_dim_drives_jensen_gap_reduction,
+    jensen_premise_active__acrobot,
+    jensen_premise_active__cartpole,
+    jensen_premise_dormant__catch,
+    jensen_premise_active__discounting_chain,
 )
 """Bridges asserted on the action_dim_sweep corpus
 (`experiments/data/action_dim_sweep/runs.parquet`)."""
+
+
+DDQN_200K_BRIDGES = (
+    ddqn_reduces_jensen_gap__converged_subset,
+    ddqn_link_to_outcome_null__converged_subset,
+    time_to_solve_link_null__pooled,
+    ddqn_solves_faster__spaceinvaders,
+)
+"""Bridges asserted on the ddqn 200k corpus
+(`experiments/data/ddqn/runs.parquet`, total_steps=200000)."""
 
 
 EXPECTILE_PER_BURST_BRIDGES = (
@@ -681,20 +1073,29 @@ decomposition. Run against a per-(env, burst)-panel-able corpus
 __all__ = [
     'ACTION_DIM_BRIDGES',
     'CHAIN_DECOMPOSITION_BRIDGES',
+    'DDQN_200K_BRIDGES',
     'EXPECTILE_PER_BURST_BRIDGES',
     'EXPECTILE_STRATEGY_2_BRIDGES',
+    'ddqn_link_to_outcome_null__converged_subset',
     'ddqn_outcome_stable_across_bursts__fourrooms',
     'ddqn_outcome_zero_across_bursts__catch',
     'ddqn_outperforms_expectile_on_outcome__fourrooms',
     'ddqn_reduces_jensen_gap__acrobot',
     'ddqn_reduces_jensen_gap__catch',
     'ddqn_reduces_jensen_gap__cartpole',
+    'ddqn_reduces_jensen_gap__converged_subset',
     'ddqn_reduces_jensen_gap__discounting_chain',
+    'ddqn_solves_faster__spaceinvaders',
     'expectile_reduces_jensen_gap_more_than_ddqn__fourrooms',
     'expectile_reproduces_mechanism_link_disconnect__fourrooms',
     'jensen_gap_outcome_borderline',
+    'jensen_premise_active__acrobot',
+    'jensen_premise_active__cartpole',
+    'jensen_premise_active__discounting_chain',
+    'jensen_premise_dormant__catch',
     'log_action_dim_drives_g_mech',
     'log_action_dim_drives_jensen_gap_reduction',
     'log_obs_dim_drives_g_link',
     'state_coverage_kl_causes_outcome',
+    'time_to_solve_link_null__pooled',
 ]

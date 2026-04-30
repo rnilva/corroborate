@@ -224,6 +224,36 @@ def jensen_overestimation_gap() -> Measurable[DQNTrajectoryRecord, float]:
 #   for the time axis to produce the scalar floor. Aggregating in
 #   one shot would hide which axis is which.
 
+def _jensen_floor_late_from_reduced() -> Measurable[
+    DQNTrajectoryRecord, float,
+]:
+    """Sibling of `jensen_floor_late` that reads the persisted
+    1-D per-step σ_Q (`online_std_q_per_step`, emitted by
+    `Q_TRACE_REDUCTIONS`) plus the joined `n_actions` scalar
+    instead of the dropped 2-D `online_q_per_action`. Same
+    formula `σ_late × √(2 log |A|)`, distinct name so persistence
+    keeps observations from this path under their own column."""
+    name = 'jensen_floor_late_from_reduced'
+
+    def fn(record: DQNTrajectoryRecord) -> float:
+        std = jnp.asarray(record['online_std_q_per_step'])
+        if std.ndim != 1 or std.shape[0] < 2:
+            return float('nan')
+        n_actions_v = record['n_actions']
+        if not isinstance(n_actions_v, int) or n_actions_v < 2:
+            return float('nan')
+        late_lo = int(std.shape[0]) // 2
+        sigma = float(jnp.mean(std[late_lo:]))
+        if not math.isfinite(sigma):
+            return float('nan')
+        return sigma * math.sqrt(2.0 * math.log(n_actions_v))
+
+    return Measurable(
+        fn=fn, name=name,
+        reads=('online_std_q_per_step', 'n_actions'),
+    )
+
+
 def jensen_floor_late() -> Measurable[DQNTrajectoryRecord, float]:
     """Structural Jensen floor: `σ_late × √(2 log |A|)`. Reads
     `online_q_per_action` shape `(steps, n_actions)`. Returns the
@@ -232,7 +262,13 @@ def jensen_floor_late() -> Measurable[DQNTrajectoryRecord, float]:
     The σ collapse is over the action axis (per-step std-across-
     actions), then averaged over the late training half. The mean
     is inevitable to make the metric scalar; making it explicit
-    keeps the action-axis dependence visible in the code path."""
+    keeps the action-axis dependence visible in the code path.
+
+    `fallbacks` adds `jensen_floor_late_from_reduced` — fires when
+    persistence has already collapsed the action axis
+    (`online_std_q_per_step` from `Q_TRACE_REDUCTIONS`) and joined
+    env metadata supplies `n_actions` as a scalar field. Same
+    formula, distinct persisted name."""
     name = 'jensen_floor_late'
 
     def fn(record: DQNTrajectoryRecord) -> float:
@@ -250,7 +286,10 @@ def jensen_floor_late() -> Measurable[DQNTrajectoryRecord, float]:
             return float('nan')
         return sigma * math.sqrt(2.0 * math.log(n_actions))
 
-    return Measurable(fn=fn, name=name, reads=('online_q_per_action',))
+    return Measurable(
+        fn=fn, name=name, reads=('online_q_per_action',),
+        fallbacks=(_jensen_floor_late_from_reduced(),),
+    )
 
 
 def jensen_dormancy_gap() -> Measurable[DQNTrajectoryRecord, float]:
@@ -270,20 +309,29 @@ def jensen_dormancy_gap() -> Measurable[DQNTrajectoryRecord, float]:
 
     Reads `(predicted_q_at_start, mc_return, online_q_per_action)`.
     """
-    name = 'jensen_dormancy_gap'
     observed = jensen_overestimation_gap()
-    floor = jensen_floor_late()
 
-    def fn(record: DQNTrajectoryRecord) -> float:
-        obs = observed.fn(record)
-        flr = floor.fn(record)
-        if math.isnan(obs) or math.isnan(flr):
-            return float('nan')
-        return float(max(0.0, flr - obs))
+    def _build(floor: Measurable[DQNTrajectoryRecord, float], name: str) -> (
+        Measurable[DQNTrajectoryRecord, float]
+    ):
+        def fn(record: DQNTrajectoryRecord) -> float:
+            obs = observed(record)
+            flr = floor(record)
+            if math.isnan(obs) or math.isnan(flr):
+                return float('nan')
+            return float(max(0.0, flr - obs))
+        return Measurable(
+            fn=fn, name=name,
+            reads=tuple(observed.reads) + tuple(floor.reads),
+        )
 
+    primary = _build(jensen_floor_late(), 'jensen_dormancy_gap')
     return Measurable(
-        fn=fn, name=name,
-        reads=('predicted_q_at_start', 'mc_return', 'online_q_per_action'),
+        fn=primary.fn, name=primary.name, reads=primary.reads,
+        fallbacks=(_build(
+            _jensen_floor_late_from_reduced(),
+            'jensen_dormancy_gap_from_reduced',
+        ),),
     )
 
 

@@ -20,7 +20,8 @@ import polars as pl
 from corroborate.claim_bridge import Bridge, evaluate
 from experiments.findings.dqn_bridges import (
     ACTION_DIM_BRIDGES, CHAIN_DECOMPOSITION_BRIDGES,
-    EXPECTILE_PER_BURST_BRIDGES, EXPECTILE_STRATEGY_2_BRIDGES,
+    DDQN_200K_BRIDGES, EXPECTILE_PER_BURST_BRIDGES,
+    EXPECTILE_STRATEGY_2_BRIDGES,
     jensen_gap_outcome_borderline,
     state_coverage_kl_causes_outcome,
 )
@@ -42,6 +43,9 @@ EXPECTILE_TRACES = (
 CARTPOLE_HP_MEDIATORS = (
     REPO_ROOT / 'experiments' / 'data' / 'cartpole_hp_v2'
     / 'runs_with_mediators.parquet'
+)
+DDQN_200K_RUNS = (
+    REPO_ROOT / 'experiments' / 'data' / 'ddqn' / 'runs.parquet'
 )
 
 
@@ -112,6 +116,31 @@ def _format_per_burst(result: object) -> str:
     )
 
 
+def _format_pooled(result: object) -> str:
+    from corroborate.analyses.paired_g_pooled import PooledPairedGResult
+    if not isinstance(result, PooledPairedGResult):
+        return str(result)
+    return (
+        f'pooled_g={result.pooled.pooled_g:+.3f}, '
+        f'I²={result.pooled.I2:.2f}, n_envs={result.n_envs}'
+    )
+
+
+def _format_verdict_distribution(result: object) -> str:
+    from corroborate.analyses.verdict_distribution import (
+        VerdictDistributionResult,
+    )
+    if not isinstance(result, VerdictDistributionResult):
+        return str(result)
+    parts: list[str] = []
+    for env, c in sorted(result.per_env.items()):
+        parts.append(
+            f'{env}: held={c.held} violation={c.invariant_violation} '
+            f'(n={c.total}, dom={c.dominant})',
+        )
+    return '; '.join(parts)
+
+
 def _format_analysis_result(result: object) -> str:
     """Dispatch by registered analysis return type."""
     from corroborate.analyses.dowhy import (
@@ -119,12 +148,18 @@ def _format_analysis_result(result: object) -> str:
     )
     from corroborate.analyses.paired_g import PairedGResult
     from corroborate.analyses.paired_g_per_burst import PerBurstResult
+    from corroborate.analyses.paired_g_pooled import PooledPairedGResult
     from corroborate.analyses.tautology_audit import AuditResult
+    from corroborate.analyses.verdict_distribution import (
+        VerdictDistributionResult,
+    )
     from corroborate.meta_regression import MetaRegressionResult
     if isinstance(result, PairedGResult):
         return _format_paired_g(result)
     if isinstance(result, PerBurstResult):
         return _format_per_burst(result)
+    if isinstance(result, PooledPairedGResult):
+        return _format_pooled(result)
     if isinstance(result, MetaRegressionResult):
         return _format_meta_regression(result)
     if isinstance(result, AuditResult):
@@ -133,6 +168,8 @@ def _format_analysis_result(result: object) -> str:
         return _format_backdoor(result)
     if isinstance(result, RefutationResult):
         return _format_refutation(result)
+    if isinstance(result, VerdictDistributionResult):
+        return _format_verdict_distribution(result)
     return str(result)
 
 
@@ -219,6 +256,30 @@ def main() -> None:
         print(
             f'(skip DoWhy — restore cartpole_hp_v2 from R2 to '
             f'evaluate state_coverage_kl_causes_outcome)',
+        )
+
+    if DDQN_200K_RUNS.exists():
+        df = pl.read_parquet(
+            DDQN_200K_RUNS,
+            columns=[
+                'id', 'env_name', 'intervention_name', 'seed',
+                'total_steps', 'mechanism.jensen_gap',
+                'outcome.eval_best_burst_mean',
+                'outcome.eval_best_burst_step',
+            ],
+        )
+        cells = list(df.iter_rows(named=True))
+        print(
+            f'\n# ddqn 200k corpus ({len(cells)} cells, '
+            f'{df["env_name"].n_unique()} envs, '
+            f'{df["total_steps"].n_unique()} step-budgets)',
+        )
+        print('-' * 110)
+        _print_verdicts(DDQN_200K_BRIDGES, cells)
+    else:
+        print(
+            f'(skip ddqn 200k — restore via `corroborate restore '
+            f'experiments/data/ddqn`)',
         )
 
 
