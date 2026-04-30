@@ -541,8 +541,146 @@ EXPECTILE_STRATEGY_2_BRIDGES = (
 the expectile_3way runs.parquet (no traces required)."""
 
 
+# ============ Chain decomposition (FINDINGS revision 10) ============
+#
+# Per-(env, burst) panel meta-regression on env covariates.
+# Original 200k DDQN corpus (revision 10) found:
+#   β(log_action_dim) on g_mech: −0.39 p=0.005  (HELD — drives mech only)
+#   β(log_action_dim) on g_link: +0.01 p=0.94   (null — does not drive link)
+#   β(log_obs_dim)    on g_link: −0.07 p=0.0001 (HELD — drives link only)
+#   β(log_obs_dim)    on g_mech: −0.01 p=0.49   (null — does not drive mech)
+#
+# These bridges encode the per-coefficient claims; running them
+# on a NEW corpus tests whether the chain bottlenecks reproduce.
+
+
+_CHAIN_COVARIATES_PER_ENV: dict[str, dict[str, float]] = {
+    'Catch-bsuite':            {
+        'log_action_dim': math.log(3), 'log_obs_dim': math.log(50),
+    },
+    'Acrobot-v1':              {
+        'log_action_dim': math.log(3), 'log_obs_dim': math.log(6),
+    },
+    'DiscountingChain-bsuite': {
+        'log_action_dim': math.log(5), 'log_obs_dim': math.log(5),
+    },
+    'FourRooms-misc':          {
+        'log_action_dim': math.log(5), 'log_obs_dim': math.log(81),
+    },
+    'MountainCar-v0':          {
+        'log_action_dim': math.log(3), 'log_obs_dim': math.log(2),
+    },
+}
+
+
+def _chain_coef_holds_when(
+    result: MetaRegressionResult,
+    coef_name: str,
+    expected_sign: int,
+    min_abs_magnitude: float = 0.05,
+) -> Verdict:
+    """Generic threshold logic for a chain-decomposition
+    coefficient claim. HELD when the named coefficient has the
+    predicted sign + magnitude + significance; POWER_INSUFFICIENT
+    when not significant (under-powered for the directional
+    claim); NO_EFFECT when significant with the wrong sign."""
+    coef = next(
+        (c for c in result.coefficients if c.name == coef_name),
+        None,
+    )
+    if coef is None:
+        return Verdict.NO_EFFECT
+    if not coef.is_significant:
+        return Verdict.POWER_INSUFFICIENT
+    sign_ok = (coef.coefficient > 0) == (expected_sign > 0)
+    if sign_ok and abs(coef.coefficient) >= min_abs_magnitude:
+        return Verdict.HELD
+    return Verdict.NO_EFFECT
+
+
+@claim_bridge
+def log_action_dim_drives_g_mech(
+    meta_regression_per_burst: MetaRegressionResult,
+    *,
+    source: str = 'predicted_q_at_start',
+    target: str = 'mechanism.jensen_gap',
+    direction: Direction = Direction.INVERSE,
+    tier: Tier = Tier.ASSOCIATIONAL,
+    treatment_arm: str = 'ddqn',
+    baseline_arm: str = 'vanilla_dqn',
+    pair_by: tuple[str, ...] = ('seed',),
+    reduction: str = 'mc_minus_q',
+    covariates_per_env: dict[str, dict[str, float]] = (
+        _CHAIN_COVARIATES_PER_ENV
+    ),
+) -> Verdict:
+    """FINDINGS revision 10: 'log_action_dim moderates the
+    mechanism — bigger bias-reduction at higher |A| (β=−0.39,
+    p=0.005 on g_mech).'
+
+    Bridge HELD when β(log_action_dim) on g_mech is significantly
+    negative."""
+    del source, target, direction, tier
+    del treatment_arm, baseline_arm, pair_by, reduction
+    del covariates_per_env
+    return _chain_coef_holds_when(
+        meta_regression_per_burst,
+        coef_name='log_action_dim',
+        expected_sign=-1,
+    )
+
+
+@claim_bridge
+def log_obs_dim_drives_g_link(
+    meta_regression_per_burst: MetaRegressionResult,
+    *,
+    source: str = 'mc_return',
+    target: str = 'outcome.eval_best_burst_mean',
+    direction: Direction = Direction.DIRECT,
+    tier: Tier = Tier.ASSOCIATIONAL,
+    treatment_arm: str = 'ddqn',
+    baseline_arm: str = 'vanilla_dqn',
+    pair_by: tuple[str, ...] = ('seed',),
+    reduction: str = 'mean',
+    covariates_per_env: dict[str, dict[str, float]] = (
+        _CHAIN_COVARIATES_PER_ENV
+    ),
+) -> Verdict:
+    """FINDINGS revision 10: 'log_obs_dim moderates the link —
+    smaller-obs envs see bigger outcome benefit (β=−0.07,
+    p=0.0001 on g_link).'
+
+    Bridge HELD when β(log_obs_dim) on g_link is significantly
+    non-null. Sign isn't pinned in the original (the magnitude
+    is small either way); we accept either positive or negative
+    significant β as confirming the moderator-bottleneck."""
+    del source, target, direction, tier
+    del treatment_arm, baseline_arm, pair_by, reduction
+    del covariates_per_env
+    coef = next(
+        (c for c in meta_regression_per_burst.coefficients
+         if c.name == 'log_obs_dim'),
+        None,
+    )
+    if coef is None or not coef.is_significant:
+        return Verdict.POWER_INSUFFICIENT
+    if abs(coef.coefficient) >= 0.05:
+        return Verdict.HELD
+    return Verdict.NO_EFFECT
+
+
+CHAIN_DECOMPOSITION_BRIDGES = (
+    log_action_dim_drives_g_mech,
+    log_obs_dim_drives_g_link,
+)
+"""Per-coefficient bridges from revision 10's chain
+decomposition. Run against a per-(env, burst)-panel-able corpus
+(joined runs.parquet × traces.parquet)."""
+
+
 __all__ = [
     'ACTION_DIM_BRIDGES',
+    'CHAIN_DECOMPOSITION_BRIDGES',
     'EXPECTILE_PER_BURST_BRIDGES',
     'EXPECTILE_STRATEGY_2_BRIDGES',
     'ddqn_outcome_stable_across_bursts__fourrooms',
@@ -555,6 +693,8 @@ __all__ = [
     'expectile_reduces_jensen_gap_more_than_ddqn__fourrooms',
     'expectile_reproduces_mechanism_link_disconnect__fourrooms',
     'jensen_gap_outcome_borderline',
+    'log_action_dim_drives_g_mech',
     'log_action_dim_drives_jensen_gap_reduction',
+    'log_obs_dim_drives_g_link',
     'state_coverage_kl_causes_outcome',
 ]

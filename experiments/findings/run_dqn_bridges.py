@@ -19,8 +19,8 @@ import polars as pl
 
 from corroborate.claim_bridge import Bridge, evaluate
 from experiments.findings.dqn_bridges import (
-    ACTION_DIM_BRIDGES, EXPECTILE_PER_BURST_BRIDGES,
-    EXPECTILE_STRATEGY_2_BRIDGES,
+    ACTION_DIM_BRIDGES, CHAIN_DECOMPOSITION_BRIDGES,
+    EXPECTILE_PER_BURST_BRIDGES, EXPECTILE_STRATEGY_2_BRIDGES,
     jensen_gap_outcome_borderline,
     state_coverage_kl_causes_outcome,
 )
@@ -202,6 +202,7 @@ def main() -> None:
             )
             print('-' * 110)
             _print_verdicts(EXPECTILE_PER_BURST_BRIDGES, joined_cells)
+            _print_verdicts(CHAIN_DECOMPOSITION_BRIDGES, joined_cells)
     else:
         print(f'(skip expectile_3way — {EXPECTILE_RUNS} missing)')
 
