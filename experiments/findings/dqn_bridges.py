@@ -1024,6 +1024,188 @@ def jensen_gap_outcome_borderline(
     return Verdict.NO_EFFECT
 
 
+# ============ Third revision (CartPole HP audit) ====================
+#
+# The 180-cell vanilla-DQN CartPole HP corpus, audited under three
+# checks (outcome-tautology / HP-determinism / HP-shadow). Most
+# "solve predictors" turn out to be HP-shadow false positives;
+# only state-coverage-KL survives all three checks with
+# significant within-stratum signal.
+#
+# Reference verdicts on `experiments/data/cartpole_hp/
+# runs_with_mediators.parquet`, outcome=`outcome.eval_final_mean`,
+# stratified by `replay.capacity`:
+#
+#   learning_curve_auc / plateau_slope_late /
+#     return_at_25pct_steps:                   OUTCOME-tautological
+#                                              (jaccard=1.0)
+#   greedy_match_late / q_gap_late /
+#     q_max_growth / v_vs_max_delta_late:      HP-SHADOW
+#                                              (|stratified ρ| < 0.1)
+#   td_residual_late:                          borderline-clean
+#   state_coverage_kl_uniform_late:            CLEAN (sole survivor
+#                                              with significant
+#                                              within-stratum signal)
+
+
+_CARTPOLE_HP_AUDIT_PANEL: tuple[dict[str, object], ...] = (
+    {
+        'name': 'mediator.learning_curve_auc',
+        'reads': ('mc_return',),
+    },
+    {
+        'name': 'mediator.plateau_slope_late',
+        'reads': ('mc_return',),
+    },
+    {
+        'name': 'mediator.return_at_25pct_steps',
+        'reads': ('mc_return',),
+    },
+    {
+        'name': 'mediator.greedy_match_late',
+        'reads': ('online_argmax_per_step', 'target_argmax_per_step'),
+    },
+    {
+        'name': 'mediator.q_gap_late',
+        'reads': ('online_max_q_per_step', 'online_min_q_per_step'),
+    },
+    {
+        'name': 'mediator.q_max_growth',
+        'reads': ('online_max_q_per_step',),
+    },
+    {
+        'name': 'mediator.v_vs_max_delta_late',
+        'reads': ('online_mean_q_per_step', 'online_max_q_per_step'),
+    },
+    {
+        'name': 'mediator.td_residual_late',
+        'reads': ('td_error',),
+    },
+    {
+        'name': 'mediator.state_coverage_kl_uniform_late',
+        'reads': ('state_hash',),
+    },
+)
+
+
+_CARTPOLE_HP_AUDIT_HP_AXES: tuple[str, ...] = (
+    'replay.capacity', 'replay.batch_size',
+    'optimizer.inner.lr', 'sync_period',
+)
+
+
+@claim_bridge
+def state_coverage_kl_clean_mediator__cartpole_hp(
+    tautology_audit: AuditResult,
+    *,
+    source: str = 'mediator.state_coverage_kl_uniform_late',
+    target: str = 'outcome.eval_final_mean',
+    direction: Direction = Direction.DIRECT,
+    tier: Tier = Tier.ASSOCIATIONAL,
+    measurables: tuple[dict[str, object], ...] = _CARTPOLE_HP_AUDIT_PANEL,
+    outcome_path: str = 'outcome.eval_final_mean',
+    outcome_reads: tuple[str, ...] = ('mc_return',),
+    hp_axes: tuple[str, ...] = _CARTPOLE_HP_AUDIT_HP_AXES,
+    hp_stratum_axis: str = 'replay.capacity',
+    arm_filter: str = 'vanilla_dqn',
+) -> Verdict:
+    """rev 3: state_coverage_kl_uniform_late is the lone mediator
+    that survives all three audit checks AND retains a
+    significant within-capacity-stratum correlation with outcome.
+    HELD when `is_clean` AND |stratified ρ| ≥ 0.1."""
+    del source, target, direction, tier
+    del measurables, outcome_path, outcome_reads
+    del hp_axes, hp_stratum_axis, arm_filter
+    report = tautology_audit.by_name(
+        'mediator.state_coverage_kl_uniform_late',
+    )
+    if report is None:
+        return Verdict.POWER_INSUFFICIENT
+    if math.isnan(report.outcome_stratified_rho):
+        return Verdict.POWER_INSUFFICIENT
+    if not report.is_clean:
+        return Verdict.NO_EFFECT
+    if abs(report.outcome_stratified_rho) >= 0.1:
+        return Verdict.HELD
+    return Verdict.NO_EFFECT
+
+
+@claim_bridge
+def learning_curve_auc_outcome_tautological__cartpole_hp(
+    tautology_audit: AuditResult,
+    *,
+    source: str = 'mediator.learning_curve_auc',
+    target: str = 'outcome.eval_final_mean',
+    direction: Direction = Direction.DIRECT,
+    tier: Tier = Tier.ASSOCIATIONAL,
+    measurables: tuple[dict[str, object], ...] = _CARTPOLE_HP_AUDIT_PANEL,
+    outcome_path: str = 'outcome.eval_final_mean',
+    outcome_reads: tuple[str, ...] = ('mc_return',),
+    hp_axes: tuple[str, ...] = _CARTPOLE_HP_AUDIT_HP_AXES,
+    hp_stratum_axis: str = 'replay.capacity',
+    arm_filter: str = 'vanilla_dqn',
+) -> Verdict:
+    """rev 3: learning_curve_auc reads from `mc_return` directly,
+    which IS the outcome's source column → jaccard=1.0,
+    outcome-tautological. HELD as flagged-by-the-audit; this
+    "predictor" is just a re-encoding of the outcome, not a
+    mediator."""
+    del source, target, direction, tier
+    del measurables, outcome_path, outcome_reads
+    del hp_axes, hp_stratum_axis, arm_filter
+    report = tautology_audit.by_name('mediator.learning_curve_auc')
+    if report is None:
+        return Verdict.POWER_INSUFFICIENT
+    return (
+        Verdict.HELD if report.flagged_outcome
+        else Verdict.NO_EFFECT
+    )
+
+
+@claim_bridge
+def greedy_match_late_hp_shadow__cartpole_hp(
+    tautology_audit: AuditResult,
+    *,
+    source: str = 'mediator.greedy_match_late',
+    target: str = 'outcome.eval_final_mean',
+    direction: Direction = Direction.DIRECT,
+    tier: Tier = Tier.ASSOCIATIONAL,
+    measurables: tuple[dict[str, object], ...] = _CARTPOLE_HP_AUDIT_PANEL,
+    outcome_path: str = 'outcome.eval_final_mean',
+    outcome_reads: tuple[str, ...] = ('mc_return',),
+    hp_axes: tuple[str, ...] = _CARTPOLE_HP_AUDIT_HP_AXES,
+    hp_stratum_axis: str = 'replay.capacity',
+    arm_filter: str = 'vanilla_dqn',
+) -> Verdict:
+    """rev 3: greedy_match_late's marginal correlation with
+    outcome is HP-mediated — within each capacity stratum,
+    |ρ|<0.1 → no residual signal once the HP regime is
+    controlled for. HELD when `flagged_no_residual_signal`. The
+    "wild interaction" of greedy_match across HPs from earlier
+    revisions is exactly the signature of HP-shadow."""
+    del source, target, direction, tier
+    del measurables, outcome_path, outcome_reads
+    del hp_axes, hp_stratum_axis, arm_filter
+    report = tautology_audit.by_name('mediator.greedy_match_late')
+    if report is None:
+        return Verdict.POWER_INSUFFICIENT
+    return (
+        Verdict.HELD
+        if report.flagged_no_residual_signal
+        and not report.flagged_outcome
+        else Verdict.NO_EFFECT
+    )
+
+
+CARTPOLE_HP_AUDIT_BRIDGES = (
+    state_coverage_kl_clean_mediator__cartpole_hp,
+    learning_curve_auc_outcome_tautological__cartpole_hp,
+    greedy_match_late_hp_shadow__cartpole_hp,
+)
+"""Bridges asserted on the cartpole_hp 180-cell vanilla-DQN
+corpus (`runs_with_mediators.parquet`) — rev 3."""
+
+
 # ============ DoWhy claims (FINDINGS revision 4) ============
 #
 # State-coverage-KL → outcome on the CartPole HP corpus:

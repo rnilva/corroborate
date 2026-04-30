@@ -19,7 +19,8 @@ import polars as pl
 
 from corroborate.claim_bridge import Bridge, evaluate
 from experiments.findings.dqn_bridges import (
-    ACTION_DIM_BRIDGES, CHAIN_DECOMPOSITION_BRIDGES,
+    ACTION_DIM_BRIDGES, CARTPOLE_HP_AUDIT_BRIDGES,
+    CHAIN_DECOMPOSITION_BRIDGES,
     DDQN_200K_BRIDGES, EXPECTILE_PER_BURST_BRIDGES,
     EXPECTILE_STRATEGY_2_BRIDGES, NSTEP_FACTORIAL_BRIDGES,
     NSTEP_INTERVENTION_BRIDGES,
@@ -43,6 +44,10 @@ EXPECTILE_TRACES = (
 )
 CARTPOLE_HP_MEDIATORS = (
     REPO_ROOT / 'experiments' / 'data' / 'cartpole_hp_v2'
+    / 'runs_with_mediators.parquet'
+)
+CARTPOLE_HP_RUNS = (
+    REPO_ROOT / 'experiments' / 'data' / 'cartpole_hp'
     / 'runs_with_mediators.parquet'
 )
 DDQN_200K_RUNS = (
@@ -275,12 +280,25 @@ def main() -> None:
     else:
         print(f'(skip expectile_3way — {EXPECTILE_RUNS} missing)')
 
+    if CARTPOLE_HP_RUNS.exists():
+        df = pl.read_parquet(CARTPOLE_HP_RUNS)
+        cells = list(df.iter_rows(named=True))
+        print(
+            f'\n# cartpole_hp 180-cell audit ({len(cells)} cells)',
+        )
+        print('-' * 110)
+        _print_verdicts(CARTPOLE_HP_AUDIT_BRIDGES, cells)
+    else:
+        print(
+            f'(skip cartpole_hp audit — restore via `corroborate '
+            f'restore experiments/data/cartpole_hp`)',
+        )
+
     if CARTPOLE_HP_MEDIATORS.exists():
         df = pl.read_parquet(CARTPOLE_HP_MEDIATORS)
         cells = list(df.iter_rows(named=True))
         print(
-            f'\n# cartpole_hp_v2 mediators ({len(cells)} cells; '
-            f'restore from R2 if absent)',
+            f'\n# cartpole_hp_v2 mediators ({len(cells)} cells)',
         )
         print('-' * 110)
         _print_verdicts((state_coverage_kl_causes_outcome,), cells)

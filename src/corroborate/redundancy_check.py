@@ -240,12 +240,17 @@ def audit_mediator_panel(
         oj = jaccard(frozenset(m.reads), outcome_reads)
         flagged_o = oj >= outcome_jaccard_threshold
 
-        # HP-side: empirical R² per axis.
-        path = (
-            mediator_path_for[m.name]
-            if mediator_path_for and m.name in mediator_path_for
-            else f'mediator.{m.name}'
-        )
+        # HP-side: empirical R² per axis. Path resolution:
+        #   1. explicit override via `mediator_path_for[m.name]`
+        #   2. names that already contain a path-prefix dot
+        #      (`mediator.X`, `mechanism.X`) are used as-is
+        #   3. otherwise prepend the default `mediator.` prefix
+        if mediator_path_for and m.name in mediator_path_for:
+            path = mediator_path_for[m.name]
+        elif '.' in m.name:
+            path = m.name
+        else:
+            path = f'mediator.{m.name}'
         mediator_vals: list[float] = []
         outcome_vals: list[float] = []
         hp_vals_by_axis: dict[str, list[float]] = {a: [] for a in hp_axes}
