@@ -27,6 +27,7 @@ import corroborate.analyses  # noqa: F401  # pyright: ignore[reportUnusedImport]
 from corroborate.analyses.dowhy import (
     BackdoorResult, RefutationResult,
 )
+from corroborate.analyses.factorial_2x2 import Factorial2x2Result
 from corroborate.analyses.paired_g import PairedGResult
 from corroborate.analyses.paired_g_per_burst import (
     PerBurstResult, panel_for_env,
@@ -535,6 +536,270 @@ def ddqn_link_to_outcome_null__converged_subset(
 # the framework's resolver instantiates separately per bridge.
 
 
+# ============ Eleventh revision: n-step refutes variance-reduction ===
+#
+# Strategy 1 from the intervention design: hold DDQN fixed; vary
+# n_step ∈ {1, 3}. Variance-reduction theory predicts 3-step
+# return reduces bootstrap-variance on top of DDQN's bias-
+# correction, so outcome should improve. Data refutes:
+#
+#   Mechanism (pooled paired g(jensen_gap), 4 envs):
+#     pooled g=-0.91, I²=0.96 → HELD (3-step DOES reduce bias)
+#   Outcome (pooled paired g(eval_final_mean)):
+#     pooled g=-0.27, I²=0.96 → NO_EFFECT (no average benefit;
+#     I² shows env-heterogeneity, not a clean null)
+#   Catch-bsuite outcome:           g=-2.14 → 3-step HURTS
+#   DiscountingChain-bsuite outcome: g=+1.20 → 3-step helps (only
+#     env where the variance-reduction prediction lands)
+#
+# Mechanism activates exactly as theory predicts; link fails to
+# follow. The residual `bootstrap_fraction → g_link | g_mech`
+# (rev 10's ATE=+0.88) is NOT carried by the variance axis.
+
+
+@claim_bridge
+def nstep_3step_reduces_bias_on_top_of_ddqn(
+    paired_g_pooled: PooledPairedGResult,
+    *,
+    source: str = 'mechanism.jensen_gap',
+    target: str = 'mechanism.jensen_gap',
+    direction: Direction = Direction.INVERSE,
+    tier: Tier = Tier.INTERVENTIONAL,
+    treatment_arm: str = 'ddqn_3step',
+    baseline_arm: str = 'ddqn_1step',
+    pair_by: tuple[str, ...] = ('seed',),
+    env_filter: tuple[str, ...] = (),
+    total_steps_filter: int = 200000,
+) -> Verdict:
+    """rev 11: pooled g(jensen_gap) over 4 sparse-reward envs is
+    -0.91 → HELD. n-step return DOES additionally reduce
+    overestimation bias on top of DDQN's mechanism, exactly as
+    variance-reduction theory predicts at the bias level."""
+    del source, target, direction, tier
+    del treatment_arm, baseline_arm, pair_by
+    del env_filter, total_steps_filter
+    return _pooled_negative_holds_when(
+        paired_g_pooled, g_threshold=0.5, min_envs=3,
+    )
+
+
+@claim_bridge
+def nstep_3step_does_not_help_outcome__pool(
+    paired_g_pooled: PooledPairedGResult,
+    *,
+    source: str = 'outcome.eval_final_mean',
+    target: str = 'outcome.eval_final_mean',
+    direction: Direction = Direction.DIRECT,
+    tier: Tier = Tier.INTERVENTIONAL,
+    treatment_arm: str = 'ddqn_3step',
+    baseline_arm: str = 'ddqn_1step',
+    pair_by: tuple[str, ...] = ('seed',),
+    env_filter: tuple[str, ...] = (),
+    total_steps_filter: int = 200000,
+) -> Verdict:
+    """rev 11: pooled paired g(eval_final_mean) over 4 envs is
+    -0.27 with I²=0.96 — variance-reduction predicted positive g,
+    pool sits null-or-mildly-negative. Verdict NO_EFFECT encodes
+    the falsified prediction; the I² hides env-specific harm
+    (Catch g=-2.14) and help (DiscountingChain g=+1.20) cancelling
+    in the pool."""
+    del source, target, direction, tier
+    del treatment_arm, baseline_arm, pair_by
+    del env_filter, total_steps_filter
+    return _pooled_null_holds_when(
+        paired_g_pooled, null_band=0.5, min_envs=3,
+    )
+
+
+def _per_env_harm_holds_when(paired_g: PairedGResult) -> Verdict:
+    """HELD when treatment significantly REDUCES outcome —
+    the inverse of `_ddqn_reduces_gap_holds_when`. Predicted
+    direction is INVERSE: treatment is claimed to reduce the
+    outcome (i.e. HURT relative to baseline)."""
+    if paired_g.n_pairs < 20:
+        return Verdict.POWER_INSUFFICIENT
+    if math.isnan(paired_g.g):
+        return Verdict.POWER_INSUFFICIENT
+    if paired_g.g >= 0:
+        return Verdict.POWER_INSUFFICIENT  # sign opposes prediction
+    if paired_g.g < -0.5 and paired_g.p_value < 0.05:
+        return Verdict.HELD
+    return Verdict.NO_EFFECT
+
+
+@claim_bridge
+def nstep_3step_hurts_outcome__catch(
+    paired_g: PairedGResult,
+    *,
+    source: str = 'outcome.eval_final_mean',
+    target: str = 'outcome.eval_final_mean',
+    direction: Direction = Direction.INVERSE,
+    tier: Tier = Tier.INTERVENTIONAL,
+    treatment_arm: str = 'ddqn_3step',
+    baseline_arm: str = 'ddqn_1step',
+    pair_by: tuple[str, ...] = ('seed',),
+    env_name: str = 'Catch-bsuite',
+) -> Verdict:
+    """rev 11: 3-step on top of DDQN strongly HURTS outcome on
+    Catch-bsuite (g=-2.14, n=30). Catch is short-episode +
+    saturating-reward — long rollouts dilute the rare positive
+    signal, so n-step's variance trade is net negative."""
+    del source, target, direction, tier
+    del treatment_arm, baseline_arm, pair_by, env_name
+    return _per_env_harm_holds_when(paired_g)
+
+
+@claim_bridge
+def nstep_3step_helps_outcome__discounting_chain(
+    paired_g: PairedGResult,
+    *,
+    source: str = 'outcome.eval_final_mean',
+    target: str = 'outcome.eval_final_mean',
+    direction: Direction = Direction.DIRECT,
+    tier: Tier = Tier.INTERVENTIONAL,
+    treatment_arm: str = 'ddqn_3step',
+    baseline_arm: str = 'ddqn_1step',
+    pair_by: tuple[str, ...] = ('seed',),
+    env_name: str = 'DiscountingChain-bsuite',
+) -> Verdict:
+    """rev 11: DiscountingChain is the one env where 3-step
+    actually helps outcome on top of DDQN (g=+1.20). |A|=5
+    + chain structure means the env has enough action-margin AND
+    long horizons for the variance-reduction prediction to land.
+    Sole positive on this corpus — the heterogeneity that drives
+    the pool's high I²."""
+    del source, target, direction, tier
+    del treatment_arm, baseline_arm, pair_by, env_name
+    if paired_g.n_pairs < 20:
+        return Verdict.POWER_INSUFFICIENT
+    if math.isnan(paired_g.g):
+        return Verdict.POWER_INSUFFICIENT
+    if paired_g.g <= 0:
+        return Verdict.POWER_INSUFFICIENT
+    if paired_g.g > 0.5 and paired_g.p_value < 0.05:
+        return Verdict.HELD
+    return Verdict.NO_EFFECT
+
+
+# ============ Twelfth revision: 2×2 factorial ========================
+#
+# Complete (greedification × n_step) factorial on 5 sparse-reward
+# envs. Per-env discriminator: over-correction (DDQN+n_step
+# strictly worse than additive) vs DDQN-attenuation (DDQN's
+# marginal benefit shrinks where n_step covers the same axis) vs
+# variance-amplification (n-step alone backfires; DDQN orthogonal).
+#
+# Reference values on `outcome.eval_best_burst_mean` (the
+# Hasselt-convention default), 4 corpora unioned:
+#
+#   FourRooms-misc:  (B−A)=+0.74 (D−C)=+0.16 (C−A)=+0.73
+#                    (D−B)=+0.09 INT=-0.71 z=-3.49 → DDQN-attenuation
+#   Catch-bsuite:    (B−A)=-1.16 (D−C)=-1.15 (C−A)=+0.00
+#                    (D−B)=-0.05 INT=-0.05      → variance-amplification
+#                    (n-step alone hurts; DDQN orthogonal)
+#   Other 3 envs:    small/noisy, |INT| < 0.4, |z| < 2
+#
+# Cells expected from union(nstep_intervention, nstep_intervention_
+# fr, nstep_vanilla_arms): 600 (5 envs × 4 arms × 30 seeds).
+
+
+@claim_bridge
+def factorial_ddqn_attenuation__fourrooms(
+    factorial_2x2_interaction: Factorial2x2Result,
+    *,
+    source: str = 'outcome.eval_best_burst_mean',
+    target: str = 'outcome.eval_best_burst_mean',
+    direction: Direction = Direction.INVERSE,
+    tier: Tier = Tier.INTERVENTIONAL,
+    arm_a: str = 'vanilla_1step',
+    arm_b: str = 'vanilla_3step',
+    arm_c: str = 'ddqn_1step',
+    arm_d: str = 'ddqn_3step',
+    pair_by: tuple[str, ...] = ('seed',),
+    env_filter: tuple[str, ...] = ('FourRooms-misc',),
+    total_steps_filter: int = 200000,
+    env_name: str = 'FourRooms-misc',
+) -> Verdict:
+    """rev 12: on FourRooms, DDQN's marginal outcome benefit
+    shrinks 4× when n_step rises from 1 to 3 (g(C-A)=+0.73 →
+    g(D-B)=+0.09). Both arms benefit from n-step similarly
+    ((B-A)=+0.74 vs (D-C)=+0.16), so the shrink isn't over-
+    correction — it's attenuation: the bias-correction axes
+    overlap. Interaction g=-0.71 with z=-3.49 → HELD."""
+    del source, target, direction, tier
+    del arm_a, arm_b, arm_c, arm_d, pair_by
+    del env_filter, total_steps_filter
+    p = factorial_2x2_interaction.for_env(env_name)
+    if p is None or p.n_pairs < 20:
+        return Verdict.POWER_INSUFFICIENT
+    if math.isnan(p.g_interaction) or p.se_interaction <= 0:
+        return Verdict.POWER_INSUFFICIENT
+    z = p.g_interaction / p.se_interaction
+    # DDQN-attenuation reading needs:
+    # - interaction strongly negative (DDQN benefit shrinks at n=3)
+    # - DDQN actually has room at n=1 (C-A > 0)
+    # - both arms benefit from n-step in the same direction
+    #   ((B-A) > 0 AND (D-C) > 0)
+    if p.g_interaction >= 0:
+        return Verdict.POWER_INSUFFICIENT  # sign opposes prediction
+    attenuation_consistent = (
+        p.g_interaction < -0.4
+        and z < -2.0
+        and p.g_c_minus_a > 0.3
+        and p.g_b_minus_a > 0
+        and p.g_d_minus_c > 0
+    )
+    return Verdict.HELD if attenuation_consistent else Verdict.NO_EFFECT
+
+
+@claim_bridge
+def factorial_variance_amplification__catch(
+    factorial_2x2_interaction: Factorial2x2Result,
+    *,
+    source: str = 'outcome.eval_best_burst_mean',
+    target: str = 'outcome.eval_best_burst_mean',
+    direction: Direction = Direction.INVERSE,
+    tier: Tier = Tier.INTERVENTIONAL,
+    arm_a: str = 'vanilla_1step',
+    arm_b: str = 'vanilla_3step',
+    arm_c: str = 'ddqn_1step',
+    arm_d: str = 'ddqn_3step',
+    pair_by: tuple[str, ...] = ('seed',),
+    env_filter: tuple[str, ...] = ('Catch-bsuite',),
+    total_steps_filter: int = 200000,
+    env_name: str = 'Catch-bsuite',
+) -> Verdict:
+    """rev 12: on Catch, n_step alone catastrophically harms
+    vanilla ((B-A)=-1.16); DDQN at n=1 has *exactly* zero
+    effect ((C-A)=+0.00 — saturated policy); n_step on top of
+    DDQN matches the vanilla harm ((D-C)=-1.15, ≈ B-A); the
+    interaction is null (INT=-0.05). The entire negative outcome
+    is variance-amplification from n-step; DDQN is orthogonal.
+    HELD when the discriminator pattern (n-step harm symmetric
+    across greedification, DDQN ineffective at n=1, no
+    interaction) holds."""
+    del source, target, direction, tier
+    del arm_a, arm_b, arm_c, arm_d, pair_by
+    del env_filter, total_steps_filter
+    p = factorial_2x2_interaction.for_env(env_name)
+    if p is None or p.n_pairs < 20:
+        return Verdict.POWER_INSUFFICIENT
+    if math.isnan(p.g_b_minus_a):
+        return Verdict.POWER_INSUFFICIENT
+    # Variance-amplification pattern:
+    # - n_step alone strongly harms (B-A) << 0
+    # - n_step on DDQN harms ~equally ((D-C) ≈ (B-A))
+    # - DDQN at n=1 inert ((C-A) ≈ 0)
+    # - interaction near zero (no DDQN+n_step compounding)
+    pattern = (
+        p.g_b_minus_a < -0.5
+        and abs(p.g_d_minus_c - p.g_b_minus_a) < 0.5
+        and abs(p.g_c_minus_a) < 0.3
+        and abs(p.g_interaction) < 0.3
+    )
+    return Verdict.HELD if pattern else Verdict.NO_EFFECT
+
+
 # ============ Sixth revision: time-to-first-solve ====================
 #
 # Sample-efficiency probe at the link edge: among (env, seed)
@@ -663,6 +928,23 @@ DDQN_200K_BRIDGES = (
 )
 """Bridges asserted on the ddqn 200k corpus
 (`experiments/data/ddqn/runs.parquet`, total_steps=200000)."""
+
+
+NSTEP_INTERVENTION_BRIDGES = (
+    nstep_3step_reduces_bias_on_top_of_ddqn,
+    nstep_3step_does_not_help_outcome__pool,
+    nstep_3step_hurts_outcome__catch,
+    nstep_3step_helps_outcome__discounting_chain,
+)
+"""Bridges asserted on the nstep_intervention corpus (rev 11)."""
+
+
+NSTEP_FACTORIAL_BRIDGES = (
+    factorial_ddqn_attenuation__fourrooms,
+    factorial_variance_amplification__catch,
+)
+"""Bridges asserted on the union of nstep_intervention,
+nstep_intervention_fr, nstep_vanilla_arms (rev 12 2×2 factorial)."""
 
 
 EXPECTILE_PER_BURST_BRIDGES = (

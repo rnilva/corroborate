@@ -21,7 +21,8 @@ from corroborate.claim_bridge import Bridge, evaluate
 from experiments.findings.dqn_bridges import (
     ACTION_DIM_BRIDGES, CHAIN_DECOMPOSITION_BRIDGES,
     DDQN_200K_BRIDGES, EXPECTILE_PER_BURST_BRIDGES,
-    EXPECTILE_STRATEGY_2_BRIDGES,
+    EXPECTILE_STRATEGY_2_BRIDGES, NSTEP_FACTORIAL_BRIDGES,
+    NSTEP_INTERVENTION_BRIDGES,
     jensen_gap_outcome_borderline,
     state_coverage_kl_causes_outcome,
 )
@@ -46,6 +47,18 @@ CARTPOLE_HP_MEDIATORS = (
 )
 DDQN_200K_RUNS = (
     REPO_ROOT / 'experiments' / 'data' / 'ddqn' / 'runs.parquet'
+)
+NSTEP_INTERVENTION_RUNS = (
+    REPO_ROOT / 'experiments' / 'data' / 'nstep_intervention'
+    / 'runs.parquet'
+)
+NSTEP_INTERVENTION_FR_RUNS = (
+    REPO_ROOT / 'experiments' / 'data' / 'nstep_intervention_fr'
+    / 'runs.parquet'
+)
+NSTEP_VANILLA_ARMS_RUNS = (
+    REPO_ROOT / 'experiments' / 'data' / 'nstep_vanilla_arms'
+    / 'runs.parquet'
 )
 
 
@@ -116,6 +129,22 @@ def _format_per_burst(result: object) -> str:
     )
 
 
+def _format_factorial(result: object) -> str:
+    from corroborate.analyses.factorial_2x2 import Factorial2x2Result
+    if not isinstance(result, Factorial2x2Result):
+        return str(result)
+    parts: list[str] = []
+    for p in result.per_env:
+        z = (
+            p.g_interaction / p.se_interaction
+            if p.se_interaction > 0 else float('nan')
+        )
+        parts.append(
+            f'{p.env_name}: INT={p.g_interaction:+.2f} z={z:+.1f}',
+        )
+    return '; '.join(parts)
+
+
 def _format_pooled(result: object) -> str:
     from corroborate.analyses.paired_g_pooled import PooledPairedGResult
     if not isinstance(result, PooledPairedGResult):
@@ -146,6 +175,7 @@ def _format_analysis_result(result: object) -> str:
     from corroborate.analyses.dowhy import (
         BackdoorResult, RefutationResult,
     )
+    from corroborate.analyses.factorial_2x2 import Factorial2x2Result
     from corroborate.analyses.paired_g import PairedGResult
     from corroborate.analyses.paired_g_per_burst import PerBurstResult
     from corroborate.analyses.paired_g_pooled import PooledPairedGResult
@@ -160,6 +190,8 @@ def _format_analysis_result(result: object) -> str:
         return _format_per_burst(result)
     if isinstance(result, PooledPairedGResult):
         return _format_pooled(result)
+    if isinstance(result, Factorial2x2Result):
+        return _format_factorial(result)
     if isinstance(result, MetaRegressionResult):
         return _format_meta_regression(result)
     if isinstance(result, AuditResult):
@@ -281,6 +313,39 @@ def main() -> None:
             f'(skip ddqn 200k — restore via `corroborate restore '
             f'experiments/data/ddqn`)',
         )
+
+    if NSTEP_INTERVENTION_RUNS.exists():
+        df = pl.read_parquet(NSTEP_INTERVENTION_RUNS)
+        cells = list(df.iter_rows(named=True))
+        print(
+            f'\n# nstep_intervention ({len(cells)} cells, '
+            f'{df["env_name"].n_unique()} envs, '
+            f'{df["intervention_name"].n_unique()} arms)',
+        )
+        print('-' * 110)
+        _print_verdicts(NSTEP_INTERVENTION_BRIDGES, cells)
+
+    factorial_paths = (
+        NSTEP_INTERVENTION_RUNS, NSTEP_INTERVENTION_FR_RUNS,
+        NSTEP_VANILLA_ARMS_RUNS,
+    )
+    if all(p.exists() for p in factorial_paths):
+        cols = [
+            'env_name', 'intervention_name', 'seed',
+            'total_steps', 'outcome.eval_best_burst_mean',
+        ]
+        union_df = pl.concat(
+            [pl.read_parquet(p, columns=cols) for p in factorial_paths],
+            how='vertical_relaxed',
+        )
+        cells = list(union_df.iter_rows(named=True))
+        print(
+            f'\n# 2×2 factorial union ({len(cells)} cells, '
+            f'{union_df["env_name"].n_unique()} envs, '
+            f'{union_df["intervention_name"].n_unique()} arms)',
+        )
+        print('-' * 110)
+        _print_verdicts(NSTEP_FACTORIAL_BRIDGES, cells)
 
 
 if __name__ == '__main__':
