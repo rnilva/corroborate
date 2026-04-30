@@ -96,44 +96,6 @@ def mean_window[R: Mapping[str, object]](
     return Measurable(fn=fn, name=name, reads=of.reads)
 
 
-def unique_count[R: Mapping[str, object]](
-    of: Measurable[R, np.ndarray],
-) -> Measurable[R, int]:
-    """Count of distinct values in the operand array (flattened).
-
-    Used by coverage invariants — `at_least(unique_count(action),
-    threshold=2)` is the necessary-condition test that ε-greedy
-    explored more than one action over the trajectory."""
-    name = f'{of.name}__unique_count'
-
-    def fn(record: R) -> int:
-        arr = of(record)
-        return int(np.unique(arr.flatten()).shape[0])
-    return Measurable(fn=fn, name=name, reads=of.reads)
-
-
-def disagreement_rate[R: Mapping[str, object]](
-    of_a: Measurable[R, np.ndarray],
-    of_b: Measurable[R, np.ndarray],
-) -> Measurable[R, float]:
-    """Element-wise mean of `of_a != of_b`.
-
-    Multi-input reduction. Used by the Hasselt-independence
-    invariant: comparing `online_argmax` and `target_argmax` per
-    transition tells us how often the two estimators pick
-    different actions on the same state. DDQN's bias-correction
-    leans on this disagreement being non-trivial; rate ≈ 0 means
-    online ≡ target (so DDQN reduces to vanilla)."""
-    name = f'disagreement[{of_a.name},{of_b.name}]'
-    reads = tuple(dict.fromkeys(of_a.reads + of_b.reads))
-
-    def fn(record: R) -> float:
-        a = of_a(record)
-        b = of_b(record)
-        return float(np.mean(a != b))
-    return Measurable(fn=fn, name=name, reads=reads)
-
-
 def growth_window[R: Mapping[str, object]](
     of: Measurable[R, np.ndarray],
     *,

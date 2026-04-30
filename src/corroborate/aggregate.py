@@ -399,62 +399,6 @@ def paired_deltas_from_runs(
     return out
 
 
-def per_group_comparisons(
-    row: 'HypothesisComparisonRow', *, outcome_path: str,
-) -> list[ComparisonRow]:
-    """Synthesize per-group `ComparisonRow`s from a stratified
-    `HypothesisComparisonRow`'s `per_group`. Each output ComparisonRow
-    carries `<outcome_path>.effect_size_g` + `<outcome_path>.se` and
-    the group key (e.g. `env_name`) at top-level so
-    `link_pearson_across_groups` can pair them on the group key.
-
-    Use when feeding a stratified row into the cross-group link
-    primitive: stratified row → per-group comparisons → link r.
-    Promoted from the §3 smoke's private adapter so other consumers
-    (mediator search, multi-outcome cross-checks) reuse the same
-    glue."""
-    if not row.per_group:
-        raise ValueError(
-            'per_group_comparisons: row.per_group is empty — '
-            'this row is not stratified.',
-        )
-    group_by = row.group_by
-    if not group_by:
-        raise ValueError(
-            'per_group_comparisons: row.group_by is empty — '
-            'caller must aggregate with group_by set.',
-        )
-    out: list[ComparisonRow] = []
-    for gs in row.per_group:
-        # Restrict to scalar group keys; complex tuples land as
-        # str() because parquet round-trip needs scalar columns.
-        group_key: MeasurementLeaf
-        if isinstance(gs.group_value, (int, float, bool, str)):
-            group_key = gs.group_value
-        else:
-            group_key = str(gs.group_value)
-        measurements: dict[str, MeasurementLeaf] = {group_by: group_key}
-        if gs.effect_size_g is not None:
-            measurements[f'{outcome_path}.effect_size_g'] = float(
-                gs.effect_size_g,
-            )
-        if gs.se is not None:
-            measurements[f'{outcome_path}.se'] = float(gs.se)
-        out.append(ComparisonRow(
-            id=str(gs.group_value),
-            parent_id=None, cycle_id=None,
-            timestamp=row.timestamp,
-            treatment_arm_id=row.treatment_arm_id,
-            baseline_arm_id=row.baseline_arm_id,
-            predicted_direction=row.predicted_direction,
-            verdict=gs.verdict,
-            refutation_class=gs.refutation_class,
-            adequately_powered=gs.adequately_powered,
-            measurements=measurements,
-        ))
-    return out
-
-
 def link_pearson_across_groups(
     mechanism_comparisons: Sequence[ComparisonRow],
     outcome_comparisons: Sequence[ComparisonRow],
