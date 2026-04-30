@@ -50,13 +50,22 @@ _OUT_FILE = _OUT_DIR / 'paired_delta_cells.parquet'
 # `nstep_intervention*` arms are ddqn_1step / ddqn_3step (no
 # plain ddqn or vanilla_dqn) so they're excluded from the
 # universal join. cartpole_hp* corpora are vanilla-only.
+# `minatar_1M` doesn't have a consolidated traces.parquet
+# (disk-economical: per-burst scalars precomputed in
+# `per_burst_scalars.parquet` via
+# `scripts/extract_minatar_1m_scalars.py`). The assembler reads
+# the precomputed scalars when traces are absent.
 _CORPORA: tuple[str, ...] = (
     'action_dim_sweep',
     'ddqn',
     'expectile_3way',
     'ddqn_better_hp',
     'ddqn_effective_cohort',
+    'minatar_1M',
 )
+
+
+_PRECOMPUTED_SCALARS_NAME: str = 'per_burst_scalars.parquet'
 
 
 _HP_KEYS: tuple[str, ...] = (
@@ -243,7 +252,27 @@ def _build_corpus_cells(corpus: str) -> list[dict[str, object]] | None:
 
     sigma_by_id: dict[str, float] = {}
     burst_by_id: dict[str, dict[str, float]] = {}
-    if traces_path.exists():
+    precomputed_path = base / _PRECOMPUTED_SCALARS_NAME
+    if precomputed_path.exists():
+        # Precomputed per-cell scalars (e.g. minatar_1M, where
+        # per-arm traces were extracted to a small parquet to
+        # avoid consolidating multi-GB traces).
+        scalars_df = pl.read_parquet(precomputed_path)
+        for row in scalars_df.iter_rows(named=True):
+            cell_id = row.get('id')
+            if not isinstance(cell_id, str):
+                continue
+            burst_by_id[cell_id] = {
+                k: float(row[k])
+                for k in ('bias_early', 'bias_late',
+                          'mc_early', 'mc_late',
+                          'mc_peak_burst', 'mc_range')
+                if k in row and isinstance(row[k], (int, float))
+            }
+            sigma_v = row.get('sigma_late')
+            if isinstance(sigma_v, (int, float)):
+                sigma_by_id[cell_id] = float(sigma_v)
+    elif traces_path.exists():
         sigma_by_id = _late_sigma_q_per_id(traces_path)
         burst_by_id = _per_burst_features_per_id(traces_path)
 
