@@ -1,0 +1,23 @@
+{
+  "remote_root": "s3://corroborate-archive/action_dim_wide",
+  "files": [
+    {
+      "relpath": "runs.parquet",
+      "size_bytes": 196551,
+      "sha256": "c42a6d5114f4b1b827a15972f081a27552ba1845f55fdd38d76ea6880ff859fd",
+      "pushed_at": "2026-04-30T13:00:31+00:00"
+    },
+    {
+      "relpath": "tmp_fourrooms_merged.parquet",
+      "size_bytes": 1360964293,
+      "sha256": "cbdb95bd433316e77ba25a2649d4e1d0038acd479ef7618e46baaa590745fb87",
+      "pushed_at": "2026-04-30T13:00:48+00:00"
+    },
+    {
+      "relpath": "traces.parquet",
+      "size_bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "pushed_at": "2026-04-30T13:00:32+00:00"
+    }
+  ]
+}

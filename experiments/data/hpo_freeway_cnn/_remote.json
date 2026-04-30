@@ -1,0 +1,17 @@
+{
+  "remote_root": "s3://corroborate-archive/hpo_freeway_cnn",
+  "files": [
+    {
+      "relpath": "runs.parquet",
+      "size_bytes": 85718,
+      "sha256": "ec3e82fba310775a97ada78cf33a3b197de6912112f577ae1fafdd2e3c1a4851",
+      "pushed_at": "2026-04-30T13:00:48+00:00"
+    },
+    {
+      "relpath": "traces.parquet",
+      "size_bytes": 2039586242,
+      "sha256": "f167c939db3ad4040f1379497f8291097566b212433ccd341cb61b3b4ddaed30",
+      "pushed_at": "2026-04-30T13:01:13+00:00"
+    }
+  ]
+}

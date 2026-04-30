@@ -1,0 +1,23 @@
+{
+  "remote_root": "s3://corroborate-archive/cartpole_hp_v2",
+  "files": [
+    {
+      "relpath": "runs.parquet",
+      "size_bytes": 47614,
+      "sha256": "74eae1e1cf6fb1f57b36a05f9dbfb134963a8add800e9dfc64df6a08b9e943eb",
+      "pushed_at": "2026-04-30T13:01:14+00:00"
+    },
+    {
+      "relpath": "runs_with_mediators.parquet",
+      "size_bytes": 30686,
+      "sha256": "460c732a98fe938dadf5d096048418388d23d66daac3e1202131bdd0ce805cd4",
+      "pushed_at": "2026-04-30T13:01:19+00:00"
+    },
+    {
+      "relpath": "traces.parquet",
+      "size_bytes": 330491537,
+      "sha256": "7ae5df6abc9e668da8f157d8d76c12734e2e96a31a16e53cb1256df75b31c95d",
+      "pushed_at": "2026-04-30T13:01:18+00:00"
+    }
+  ]
+}

@@ -75,6 +75,18 @@ reportUnknownArgumentType = "none"
 reportUnknownVariableType = "none"
 reportUnknownParameterType = "none"
 
+# Analyses subtree: like the rl/ subtree, this is the post-hoc
+# numerical-array boundary. numpy / scipy / pandas stubs leak Any
+# through .mean()/.shape/etc.; the analyses package is the layer
+# where that's expected. Relax fully here.
+[[tool.pyright.executionEnvironments]]
+root = "src/corroborate/analyses"
+reportAny = "none"
+reportUnknownMemberType = "none"
+reportUnknownArgumentType = "none"
+reportUnknownVariableType = "none"
+reportUnknownParameterType = "none"
+
 # Framework root: Unknown-family relaxed. `reductions.py` is the
 # framework's JAX boundary at the post-hoc analytical layer
 # (jnp.unique, jnp.mean, etc.). Non-JAX framework files (claim.py,
