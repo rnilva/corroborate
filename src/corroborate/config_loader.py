@@ -40,7 +40,7 @@ _CLASS_KEY = 'class'
 _FN_KEY = 'fn'
 
 
-def _is_str_keyed_mapping(v: object) -> TypeIs[Mapping[str, object]]:
+def is_str_keyed_mapping(v: object) -> TypeIs[Mapping[str, object]]:
     """Narrow YAML's `Any`-ish output to a typed mapping. PyYAML's
     `safe_load` returns nested `dict | list | scalar`; without
     narrowing, downstream walks lose all element types."""
@@ -70,7 +70,7 @@ def resolve(value: object, *, reg: Registry) -> object:
     Mappings with `class` or `fn` keys dispatch to the registry;
     other mappings recurse element-wise. Lists tuple-ify and
     recurse. Scalars pass through unchanged."""
-    if _is_str_keyed_mapping(value):
+    if is_str_keyed_mapping(value):
         if _CLASS_KEY in value:
             return _resolve_class(value, reg=reg)
         if _FN_KEY in value:
@@ -135,17 +135,21 @@ def load_hypothesis(
     by `load_hypotheses`."""
     with path.open() as f:
         raw = cast(object, yaml.safe_load(f))
-    if not _is_str_keyed_mapping(raw):
+    if not is_str_keyed_mapping(raw):
         raise TypeError(
             f'top-level YAML must be a string-keyed mapping; got '
             f'{type(raw).__name__}',
         )
-    return _build_hypothesis(raw, reg=reg)
+    return build_hypothesis_from_mapping(raw, reg=reg)
 
 
-def _build_hypothesis(
+def build_hypothesis_from_mapping(
     node: Mapping[str, object], *, reg: Registry,
 ) -> Hypothesis[Mapping[str, object]]:
+    """Public path-into-loader for callers (e.g. the RL manifest
+    dispatcher) that already have the parsed mapping in hand and
+    just need it turned into a Hypothesis. `load_hypothesis`
+    delegates here after `yaml.safe_load`."""
     name = node.get('name')
     if not isinstance(name, str):
         raise TypeError(
@@ -154,7 +158,7 @@ def _build_hypothesis(
         )
 
     intervention_raw = node.get('intervention', {})
-    if not _is_str_keyed_mapping(intervention_raw):
+    if not is_str_keyed_mapping(intervention_raw):
         raise TypeError(
             f'intervention must be a string-keyed mapping; got '
             f'{type(intervention_raw).__name__}',
@@ -195,7 +199,7 @@ def _build_hypothesis(
 
 
 def _build_arm(node: object, *, reg: Registry) -> Intervention:
-    if not _is_str_keyed_mapping(node):
+    if not is_str_keyed_mapping(node):
         raise TypeError(
             f'intervention_arm must be a mapping; got '
             f'{type(node).__name__}',
@@ -222,4 +226,9 @@ def _build_arm(node: object, *, reg: Registry) -> Intervention:
     return Intervention(slot_path=slot_path, replacement=replacement)
 
 
-__all__ = ['load_hypothesis', 'resolve']
+__all__ = [
+    'build_hypothesis_from_mapping',
+    'is_str_keyed_mapping',
+    'load_hypothesis',
+    'resolve',
+]
