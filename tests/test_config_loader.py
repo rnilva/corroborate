@@ -178,8 +178,8 @@ intervention_arms:
 
 
 def _expectile_python() -> Hypothesis[Mapping[str, object]]:
-    """Python-authored equivalent — what `collect_expectile_3way.py`
-    constructs for the expectile arm."""
+    """Canonical Python recipe for the expectile arm — the
+    reference the YAML loader must match."""
     from corroborate.rl.dqn.claims.bootstrap import (
         bootstrap, expectile_greedify,
     )

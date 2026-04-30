@@ -38,6 +38,7 @@ from corroborate.registry import Registry
 
 _CLASS_KEY = 'class'
 _FN_KEY = 'fn'
+_FROM_ENV_KEY = 'from_env'
 
 
 def is_str_keyed_mapping(v: object) -> TypeIs[Mapping[str, object]]:
@@ -64,28 +65,85 @@ def _construct(cls: type, kwargs: Mapping[str, object]) -> object:
     return cast(object, cls(**kwargs))
 
 
-def resolve(value: object, *, reg: Registry) -> object:
+def resolve(
+    value: object,
+    *,
+    reg: Registry,
+    env_attrs: Mapping[str, object] | None = None,
+) -> object:
     """Recursive YAML node → Python value.
 
-    Mappings with `class` or `fn` keys dispatch to the registry;
-    other mappings recurse element-wise. Lists tuple-ify and
-    recurse. Scalars pass through unchanged."""
+    Mappings with `class`, `fn`, or `from_env` keys dispatch to
+    the registry / env-attribute lookup; other mappings recurse
+    element-wise. Lists tuple-ify and recurse. Scalars pass
+    through unchanged.
+
+    `env_attrs` is the per-env attribute map used to resolve
+    `{from_env: <attr>}` placeholders in paired mode. When
+    `None` (chunked default), encountering a `from_env` mapping
+    raises — placeholders only make sense inside paired-mode
+    dispatch where the env context is known."""
     if is_str_keyed_mapping(value):
+        if _FROM_ENV_KEY in value:
+            return _resolve_from_env(value, env_attrs=env_attrs)
         if _CLASS_KEY in value:
-            return _resolve_class(value, reg=reg)
+            return _resolve_class(
+                value, reg=reg, env_attrs=env_attrs,
+            )
         if _FN_KEY in value:
-            return _resolve_fn(value, reg=reg)
-        return {k: resolve(v, reg=reg) for k, v in value.items()}
+            return _resolve_fn(value, reg=reg, env_attrs=env_attrs)
+        return {
+            k: resolve(v, reg=reg, env_attrs=env_attrs)
+            for k, v in value.items()
+        }
     if isinstance(value, list):
         # Tuple-ify: ClaimBase fields like MLP.hidden are typed
         # `tuple[int, ...]`; YAML lists must coerce.
         elements: list[object] = list(value)  # narrow Any → object
-        return tuple(resolve(v, reg=reg) for v in elements)
+        return tuple(
+            resolve(v, reg=reg, env_attrs=env_attrs) for v in elements
+        )
     return value
 
 
+def _resolve_from_env(
+    node: Mapping[str, object],
+    *,
+    env_attrs: Mapping[str, object] | None,
+) -> object:
+    """Resolve a `{from_env: <attr>}` placeholder against
+    `env_attrs`. The mapping must contain ONLY the `from_env`
+    key — no peer kwargs — so the substitution is unambiguous."""
+    if env_attrs is None:
+        raise ValueError(
+            '`from_env` reference encountered but no env context '
+            'provided; this placeholder is only valid in '
+            "paired-mode dispatch (`arms_shape: 'paired'`).",
+        )
+    if len(node) != 1:
+        raise TypeError(
+            f'`from_env` mapping must contain exactly one key; '
+            f'got {sorted(node)}',
+        )
+    attr = node[_FROM_ENV_KEY]
+    if not isinstance(attr, str):
+        raise TypeError(
+            f'`from_env` value must be a string; got '
+            f'{type(attr).__name__}',
+        )
+    if attr not in env_attrs:
+        raise KeyError(
+            f'env attribute {attr!r} not in env_attrs '
+            f'(known: {sorted(env_attrs)})',
+        )
+    return env_attrs[attr]
+
+
 def _resolve_class(
-    node: Mapping[str, object], *, reg: Registry,
+    node: Mapping[str, object],
+    *,
+    reg: Registry,
+    env_attrs: Mapping[str, object] | None,
 ) -> object:
     name = node[_CLASS_KEY]
     if not isinstance(name, str):
@@ -94,7 +152,7 @@ def _resolve_class(
             f'{type(name).__name__}',
         )
     kwargs = {
-        k: resolve(v, reg=reg)
+        k: resolve(v, reg=reg, env_attrs=env_attrs)
         for k, v in node.items() if k != _CLASS_KEY
     }
     if name in reg.module_classes:
@@ -109,7 +167,10 @@ def _resolve_class(
 
 
 def _resolve_fn(
-    node: Mapping[str, object], *, reg: Registry,
+    node: Mapping[str, object],
+    *,
+    reg: Registry,
+    env_attrs: Mapping[str, object] | None,
 ) -> object:
     name = node[_FN_KEY]
     if not isinstance(name, str):
@@ -119,7 +180,7 @@ def _resolve_fn(
         )
     fn = reg.fn(name)
     kwargs = {
-        k: resolve(v, reg=reg)
+        k: resolve(v, reg=reg, env_attrs=env_attrs)
         for k, v in node.items() if k != _FN_KEY
     }
     if not kwargs:
@@ -144,12 +205,19 @@ def load_hypothesis(
 
 
 def build_hypothesis_from_mapping(
-    node: Mapping[str, object], *, reg: Registry,
+    node: Mapping[str, object],
+    *,
+    reg: Registry,
+    env_attrs: Mapping[str, object] | None = None,
 ) -> Hypothesis[Mapping[str, object]]:
     """Public path-into-loader for callers (e.g. the RL manifest
     dispatcher) that already have the parsed mapping in hand and
     just need it turned into a Hypothesis. `load_hypothesis`
-    delegates here after `yaml.safe_load`."""
+    delegates here after `yaml.safe_load`.
+
+    `env_attrs` is forwarded to `resolve` so the loader can
+    substitute `{from_env: <attr>}` placeholders during
+    paired-mode dispatch."""
     name = node.get('name')
     if not isinstance(name, str):
         raise TypeError(
@@ -164,7 +232,7 @@ def build_hypothesis_from_mapping(
             f'{type(intervention_raw).__name__}',
         )
     intervention: dict[str, object] = {
-        k: resolve(v, reg=reg)
+        k: resolve(v, reg=reg, env_attrs=env_attrs)
         for k, v in intervention_raw.items()
     }
 
@@ -187,7 +255,10 @@ def build_hypothesis_from_mapping(
             f'{type(arms_raw).__name__}',
         )
     arms_typed: list[object] = list(arms_raw)
-    arms = tuple(_build_arm(a, reg=reg) for a in arms_typed)
+    arms = tuple(
+        _build_arm(a, reg=reg, env_attrs=env_attrs)
+        for a in arms_typed
+    )
 
     return Hypothesis(
         name=name,
@@ -198,7 +269,12 @@ def build_hypothesis_from_mapping(
     )
 
 
-def _build_arm(node: object, *, reg: Registry) -> Intervention:
+def _build_arm(
+    node: object,
+    *,
+    reg: Registry,
+    env_attrs: Mapping[str, object] | None,
+) -> Intervention:
     if not is_str_keyed_mapping(node):
         raise TypeError(
             f'intervention_arm must be a mapping; got '
@@ -212,7 +288,7 @@ def _build_arm(node: object, *, reg: Registry) -> Intervention:
         )
     if 'replacement' not in node:
         raise KeyError('intervention_arm missing `replacement`')
-    raw_repl = resolve(node['replacement'], reg=reg)
+    raw_repl = resolve(node['replacement'], reg=reg, env_attrs=env_attrs)
     # Replacement = ClaimBase | FnClaim | partial | Callable.
     # Resolve always returns a callable for class/fn-keyed nodes;
     # if YAML authored a non-callable replacement (a leaf scalar),

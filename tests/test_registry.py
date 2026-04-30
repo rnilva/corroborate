@@ -108,10 +108,10 @@ def test_round_trip_reconstructs_expectile_intervention(
     dqn_registry: Registry,
 ) -> None:
     """End-to-end: YAML-style name resolution reconstructs the
-    exact `intervention['bootstrap']` partial that
-    `experiments/collect_expectile_3way.py` builds via direct
-    imports. Identity (not just equality) of the inner FnClaims
-    is the round-trip guarantee."""
+    exact `intervention['bootstrap']` partial that the canonical
+    expectile recipe builds via direct imports. Identity (not
+    just equality) of the inner FnClaims is the round-trip
+    guarantee."""
     bootstrap = dqn_registry.fn('bootstrap')
     expectile = dqn_registry.fn('expectile_greedify')
 

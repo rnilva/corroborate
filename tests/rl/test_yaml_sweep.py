@@ -1,7 +1,6 @@
 """End-to-end parity smoke: the YAML-loaded `expectile_3way`
 manifest produces a Hypothesis tuple that is structurally
-identical to the Python-authored `_hypothesis()` recipe in
-`experiments/collect_expectile_3way.py`.
+identical to the canonical Python recipe below.
 
 Identity contract:
 - Per-hypothesis: `name`, `predicted_direction`, `arm_key()`,
@@ -25,7 +24,7 @@ from corroborate.hypothesis import Hypothesis
 from corroborate.intervention import Intervention
 from corroborate.rl.dqn.collect import EnvConfig
 from corroborate.rl.dqn.yaml_sweep import (
-    DQNExperimentManifest, default_dqn_registry, load_manifest,
+    ChunkedManifest, default_dqn_registry, load_manifest,
 )
 from corroborate.signature import claim_graph_signature
 
@@ -41,9 +40,9 @@ MANIFEST_PATH = (
 def _python_hypothesis(
     name: str,
 ) -> Hypothesis[Mapping[str, object]]:
-    """Mirrors `experiments/collect_expectile_3way.py::_hypothesis`
-    exactly. Inlined so the test does not import a script (which
-    triggers the script's `os.environ` setup as a side effect)."""
+    """Canonical Python recipe for the expectile_3way cohort —
+    the reference that `expectile_3way.yaml` must match
+    structurally."""
     from corroborate.rl.dqn.claims.bootstrap import (
         bootstrap, double_greedify, expectile_greedify,
     )
@@ -99,26 +98,29 @@ def _python_hypothesis(
 # ---------- fixtures ----------
 
 @pytest.fixture
-def manifest() -> DQNExperimentManifest:
+def manifest() -> ChunkedManifest:
     reg = default_dqn_registry()
-    return load_manifest(MANIFEST_PATH, reg=reg)
+    m = load_manifest(MANIFEST_PATH, reg=reg)
+    assert isinstance(m, ChunkedManifest), (
+        f'expected ChunkedManifest, got {type(m).__name__}'
+    )
+    return m
 
 
 # ---------- envelope checks ----------
 
 def test_manifest_envelope_fields(
-    manifest: DQNExperimentManifest,
+    manifest: ChunkedManifest,
 ) -> None:
     assert manifest.name == 'expectile_3way'
     assert manifest.out_dir == Path(
         'experiments/data/expectile_3way',
     )
     assert manifest.archive_remote is None
-    assert manifest.arms_shape == 'chunked'
 
 
 def test_manifest_envs_tuple_matches(
-    manifest: DQNExperimentManifest,
+    manifest: ChunkedManifest,
 ) -> None:
     expected_envs = (
         EnvConfig('Catch-bsuite', n_seeds=30, chunk_size=15),
@@ -131,7 +133,7 @@ def test_manifest_envs_tuple_matches(
 
 
 def test_manifest_hypothesis_count(
-    manifest: DQNExperimentManifest,
+    manifest: ChunkedManifest,
 ) -> None:
     assert len(manifest.hypotheses) == 3
     assert [h.name for h in manifest.hypotheses] == [
@@ -143,7 +145,7 @@ def test_manifest_hypothesis_count(
 
 @pytest.fixture
 def hypothesis_pairs(
-    manifest: DQNExperimentManifest,
+    manifest: ChunkedManifest,
 ) -> dict[str, tuple[
     Hypothesis[Mapping[str, object]],
     Hypothesis[Mapping[str, object]],
@@ -250,7 +252,7 @@ def test_arm_key_matches(
 
 
 def test_signatures_distinct_across_arms(
-    manifest: DQNExperimentManifest,
+    manifest: ChunkedManifest,
 ) -> None:
     """The signature is not constant — it actually distinguishes
     the three arms. ddqn != expectile_dqn at the bootstrap slot,
