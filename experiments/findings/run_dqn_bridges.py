@@ -20,6 +20,8 @@ import polars as pl
 from corroborate.claim_bridge import Bridge, evaluate
 from experiments.findings.dqn_bridges import (
     ACTION_DIM_BRIDGES, EXPECTILE_PER_BURST_BRIDGES,
+    jensen_gap_outcome_borderline,
+    state_coverage_kl_causes_outcome,
 )
 
 
@@ -35,6 +37,10 @@ EXPECTILE_RUNS = (
 EXPECTILE_TRACES = (
     REPO_ROOT / 'experiments' / 'data' / 'expectile_3way'
     / 'traces.parquet'
+)
+CARTPOLE_HP_MEDIATORS = (
+    REPO_ROOT / 'experiments' / 'data' / 'cartpole_hp_v2'
+    / 'runs_with_mediators.parquet'
 )
 
 
@@ -58,6 +64,39 @@ def _format_meta_regression(result: object) -> str:
     )
 
 
+def _format_backdoor(result: object) -> str:
+    from corroborate.analyses.dowhy import BackdoorResult
+    if not isinstance(result, BackdoorResult):
+        return str(result)
+    return (
+        f'ATE={result.ate:+.3f}, identified={result.identified}, '
+        f'n={result.n_rows}'
+    )
+
+
+def _format_refutation(result: object) -> str:
+    from corroborate.analyses.dowhy import RefutationResult
+    if not isinstance(result, RefutationResult):
+        return str(result)
+    return (
+        f'real={result.real_ate:+.3f}, refuted={result.refuted_ate:+.3f}, '
+        f'drift={result.drift:.3f}'
+    )
+
+
+def _format_audit(result: object) -> str:
+    from corroborate.analyses.tautology_audit import AuditResult
+    if not isinstance(result, AuditResult):
+        return str(result)
+    parts: list[str] = []
+    for r in result.reports:
+        parts.append(
+            f'{r.measurable_name}: jaccard={r.outcome_jaccard:.2f}, '
+            f'clean={r.is_clean}',
+        )
+    return '; '.join(parts)
+
+
 def _format_per_burst(result: object) -> str:
     from corroborate.analyses.paired_g_per_burst import PerBurstResult
     if not isinstance(result, PerBurstResult):
@@ -74,8 +113,12 @@ def _format_per_burst(result: object) -> str:
 
 def _format_analysis_result(result: object) -> str:
     """Dispatch by registered analysis return type."""
+    from corroborate.analyses.dowhy import (
+        BackdoorResult, RefutationResult,
+    )
     from corroborate.analyses.paired_g import PairedGResult
     from corroborate.analyses.paired_g_per_burst import PerBurstResult
+    from corroborate.analyses.tautology_audit import AuditResult
     from corroborate.meta_regression import MetaRegressionResult
     if isinstance(result, PairedGResult):
         return _format_paired_g(result)
@@ -83,6 +126,12 @@ def _format_analysis_result(result: object) -> str:
         return _format_per_burst(result)
     if isinstance(result, MetaRegressionResult):
         return _format_meta_regression(result)
+    if isinstance(result, AuditResult):
+        return _format_audit(result)
+    if isinstance(result, BackdoorResult):
+        return _format_backdoor(result)
+    if isinstance(result, RefutationResult):
+        return _format_refutation(result)
     return str(result)
 
 
@@ -113,6 +162,10 @@ def main() -> None:
         )
         print('-' * 110)
         _print_verdicts(ACTION_DIM_BRIDGES, cells)
+        # Audit-style claim — homogeneous-HP corpus so within-env
+        # ρ stratification is degenerate, but the structural
+        # jaccard reproduces.
+        _print_verdicts((jensen_gap_outcome_borderline,), cells)
     else:
         print(f'(skip action_dim_sweep — {ACTION_DIM_PARQUET} missing)')
 
@@ -138,6 +191,21 @@ def main() -> None:
         print(
             f'(skip expectile_3way — '
             f'{EXPECTILE_RUNS}/{EXPECTILE_TRACES} missing)',
+        )
+
+    if CARTPOLE_HP_MEDIATORS.exists():
+        df = pl.read_parquet(CARTPOLE_HP_MEDIATORS)
+        cells = list(df.iter_rows(named=True))
+        print(
+            f'\n# cartpole_hp_v2 mediators ({len(cells)} cells; '
+            f'restore from R2 if absent)',
+        )
+        print('-' * 110)
+        _print_verdicts((state_coverage_kl_causes_outcome,), cells)
+    else:
+        print(
+            f'(skip DoWhy — restore cartpole_hp_v2 from R2 to '
+            f'evaluate state_coverage_kl_causes_outcome)',
         )
 
 

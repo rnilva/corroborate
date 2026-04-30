@@ -209,3 +209,71 @@ def test_per_burst_catch_reproduces_revision_12(
         expectile_per_burst_cells,
     )
     assert out.verdict == Verdict.NO_EFFECT
+
+
+# ============ DoWhy SCV → outcome (revision 4) ============
+
+
+CARTPOLE_HP_MEDIATORS = (
+    REPO_ROOT / 'experiments' / 'data' / 'cartpole_hp_v2'
+    / 'runs_with_mediators.parquet'
+)
+
+
+@pytest.fixture(scope='module')
+def cartpole_hp_mediator_cells() -> list[dict[str, object]]:
+    """Mediator-augmented CartPole HP corpus. Restores from R2
+    if absent locally."""
+    if not CARTPOLE_HP_MEDIATORS.exists():
+        try:
+            from corroborate.cloud import restore
+            _ = restore(CARTPOLE_HP_MEDIATORS.parent)
+        except Exception as exc:
+            pytest.skip(
+                f'cartpole_hp_v2 unavailable and restore failed: {exc}',
+            )
+    if not CARTPOLE_HP_MEDIATORS.exists():
+        pytest.skip('cartpole_hp_v2 corpus unavailable')
+    return list(
+        pl.read_parquet(CARTPOLE_HP_MEDIATORS).iter_rows(named=True),
+    )
+
+
+def test_state_coverage_kl_causes_outcome_dowhy_bridge(
+    cartpole_hp_mediator_cells: list[dict[str, object]],
+) -> None:
+    """FINDINGS revision 4: state_coverage_kl is the first
+    mediator on the CartPole HP corpus that survives every check
+    (backdoor + placebo + RCC). The multi-fixture bridge
+    consumes all three analyses and asserts the conjunction.
+
+    Verdict: HELD (ATE > 0, placebo destroys signal, RCC drift
+    near zero). Exact ATE magnitude varies across CartPole HP
+    corpora — the bridge claim is qualitative (sign + refuter
+    survival), not magnitude-pinned."""
+    from corroborate.analyses.dowhy import (
+        BackdoorResult, RefutationResult,
+    )
+    from experiments.findings.dqn_bridges import (
+        state_coverage_kl_causes_outcome,
+    )
+    out = evaluate(
+        state_coverage_kl_causes_outcome,
+        cartpole_hp_mediator_cells,
+    )
+    assert out.verdict == Verdict.HELD
+    bd = cast(BackdoorResult, out.analysis_results['backdoor_ate'])
+    pl_ = cast(
+        RefutationResult,
+        out.analysis_results['placebo_refutation'],
+    )
+    rcc = cast(
+        RefutationResult,
+        out.analysis_results['random_common_cause_refutation'],
+    )
+    assert bd.identified
+    assert bd.ate > 0
+    # Placebo refutation: refuted ATE should be much smaller than real.
+    assert abs(pl_.refuted_ate) < 0.1 * abs(pl_.real_ate)
+    # RCC drift small relative to real ATE.
+    assert rcc.drift < 0.5

@@ -1,0 +1,17 @@
+{
+  "remote_root": "s3://corroborate-archive/minatar_1M",
+  "files": [
+    {
+      "relpath": "tmp/arm000__SpaceInvaders-MinAtar__vanilla_dqn__runs.parquet",
+      "size_bytes": 22259,
+      "sha256": "16c7b10c5ee71ad78022bc60989acf243082a1d89e9ab88f82d3b2552851191c",
+      "pushed_at": "2026-04-30T13:30:08+00:00"
+    },
+    {
+      "relpath": "tmp/arm000__SpaceInvaders-MinAtar__vanilla_dqn__traces.parquet",
+      "size_bytes": 871272410,
+      "sha256": "608d647509d074cdcb5b7a57d815190a034741b7deef0f129786481cd0f7e9a0",
+      "pushed_at": "2026-04-30T13:30:19+00:00"
+    }
+  ]
+}
