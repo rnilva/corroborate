@@ -124,6 +124,7 @@ def collect_sweep_to_parquet(
     trace_reductions: Sequence = Q_TRACE_REDUCTIONS,
     trace_drops: Sequence[str] = Q_TRACE_DROPS,
     arm_tag: 'callable[[Hypothesis[DQNTrajectoryRecord], EnvConfig], str] | None' = None,
+    archive_remote: str | None = None,
 ) -> tuple[Path, Path]:
     """Run all (hypothesis × env_config) arms, persist per-arm,
     concatenate to `out_dir/{runs,traces}.parquet`. Returns the
@@ -142,7 +143,18 @@ def collect_sweep_to_parquet(
     Default: `{env_name}__{hypothesis.name}` — uniquely identifies
     arms within a sweep but not across HP grid points; callers
     that vary HPs through hypothesis_count should override to
-    encode the grid point in the tag."""
+    encode the grid point in the tag.
+
+    `archive_remote`: optional fsspec URI prefix
+    (e.g. `s3://corroborate-archive/<sweep>`). When set, each
+    arm's tmp parquet pair is uploaded to remote storage right
+    after the arm completes, and the local copies are purged —
+    bounding peak local-disk usage to ~one arm's worth across
+    the whole sweep. The final merge then reads back from the
+    remote URIs in the manifest, writes the merged
+    `{runs,traces}.parquet` locally, and archives those merged
+    outputs (without purging — they stay local for downstream
+    analysis)."""
     from corroborate.rl.env_catalogue import get as _get_spec
 
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -173,6 +185,8 @@ def collect_sweep_to_parquet(
 
     runs_paths: list[Path] = []
     traces_paths: list[Path] = []
+    archived_runs_uris: list[str] = []
+    archived_traces_uris: list[str] = []
     t_start = time.time()
     for idx, (h, ec) in enumerate(arms):
         t_arm = time.time()
@@ -189,6 +203,20 @@ def collect_sweep_to_parquet(
         )
         runs_paths.append(rp)
         traces_paths.append(tp)
+        if archive_remote is not None:
+            from corroborate.cloud import archive
+            rp_rel = rp.relative_to(out_dir).as_posix()
+            tp_rel = tp.relative_to(out_dir).as_posix()
+            archive(
+                out_dir, archive_remote,
+                files=[rp_rel, tp_rel], purge_local=True,
+            )
+            archived_runs_uris.append(
+                f'{archive_remote.rstrip("/")}/{rp_rel}'
+            )
+            archived_traces_uris.append(
+                f'{archive_remote.rstrip("/")}/{tp_rel}'
+            )
         elapsed = time.time() - t_arm
         total = time.time() - t_start
         print(
@@ -199,8 +227,29 @@ def collect_sweep_to_parquet(
 
     print()
     print('merging per-arm parquets ...', flush=True)
-    stream_concat_parquets(runs_paths, final_runs)
-    stream_concat_parquets(traces_paths, final_traces)
+    if archive_remote is not None:
+        # Local arm parquets were purged; merge directly from remote
+        # URIs so peak disk stays bounded by one arm's worth.
+        stream_concat_parquets(
+            [str(u) for u in archived_runs_uris], final_runs,
+        )
+        stream_concat_parquets(
+            [str(u) for u in archived_traces_uris], final_traces,
+        )
+        # Archive the merged outputs too — without purging, since
+        # the caller usually wants them local for analysis.
+        from corroborate.cloud import archive as _archive_merged
+        _archive_merged(
+            out_dir, archive_remote,
+            files=[
+                final_runs.relative_to(out_dir).as_posix(),
+                final_traces.relative_to(out_dir).as_posix(),
+            ],
+            purge_local=False,
+        )
+    else:
+        stream_concat_parquets(runs_paths, final_runs)
+        stream_concat_parquets(traces_paths, final_traces)
     print(f'  → {final_runs}')
     print(f'  → {final_traces}')
     return final_runs, final_traces

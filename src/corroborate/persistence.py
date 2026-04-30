@@ -225,7 +225,7 @@ def apply_trace_reductions(
 # ============ Streaming concat across many per-arm parquets ============
 
 def stream_concat_parquets(
-    inputs: Sequence[Path], out: Path, *,
+    inputs: Sequence[Path | str], out: Path, *,
     type_widening: bool = True,
     compression: str = 'zstd',
     compression_level: int = 3,
@@ -236,6 +236,10 @@ def stream_concat_parquets(
     differences (int→float when any input has float for the same
     field; list-of-int→list-of-float for nested lists; large_list
     and list handled identically).
+
+    `inputs` accepts either local `Path`s or fsspec URI strings
+    (e.g. `s3://bucket/path/file.parquet`); polars dispatches via
+    fsspec for URI inputs. Mixing both in one call is allowed.
 
     `diagonal_relaxed` is necessary because per-arm parquets in
     a sweep can disagree on column SET (DDQN arms emit
