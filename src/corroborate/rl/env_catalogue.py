@@ -156,7 +156,7 @@ class EnvSpec:
         return self.horizon if self.horizon is not None else 1000
 
     def public_attrs(self) -> dict[str, object]:
-        """Whitelist of attributes the YAML manifest's
+        """Whitelist of attributes the YAML sweep's
         `{from_env: <attr>}` placeholder is allowed to bind to.
         Explicit because dataclass-field introspection would let
         a private cache field silently grow the YAML schema —

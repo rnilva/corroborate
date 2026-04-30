@@ -42,7 +42,7 @@ def _python_minatar_1M_hypothesis(
     name: str, env_name: str,
 ) -> Hypothesis[Mapping[str, object]]:
     """Canonical Python recipe for the minatar_1M cohort. Used as
-    the reference the YAML manifest must match structurally."""
+    the reference the YAML sweep must match structurally."""
     from corroborate.rl.dqn.claims.bootstrap import (
         bootstrap, double_greedify,
     )
@@ -90,7 +90,7 @@ def _python_ddqn_effective_hypothesis(
     name: str, env_name: str,
 ) -> Hypothesis[Mapping[str, object]]:
     """Canonical Python recipe for the ddqn_effective cohort
-    (200k steps). Reference for the matching YAML manifest."""
+    (200k steps). Reference for the matching YAML sweep."""
     from corroborate.rl.dqn.claims.bootstrap import (
         bootstrap, double_greedify,
     )

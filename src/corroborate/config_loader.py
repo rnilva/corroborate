@@ -27,7 +27,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from functools import partial
 from pathlib import Path
-from typing import TypeIs, cast
+from typing import TypeIs
 
 import yaml
 
@@ -62,7 +62,8 @@ def _construct(cls: type, kwargs: Mapping[str, object]) -> object:
     doesn't know e.g. `Replay.__init__`'s arity), so the return
     type widens to `object`. Callers narrow at use-site
     (Intervention.replacement is typed as `Replacement`, etc.)."""
-    return cast(object, cls(**kwargs))
+    instance: object = cls(**kwargs)
+    return instance
 
 
 def resolve(
@@ -184,10 +185,11 @@ def load_hypothesis(
     path: Path, *, reg: Registry,
 ) -> Hypothesis[Mapping[str, object]]:
     """Build a Hypothesis from a YAML file. The file is one
-    hypothesis per `path`; multi-hypothesis manifests are loaded
-    by `load_hypotheses`."""
+    hypothesis per `path`; multi-hypothesis sweeps are loaded
+    by the substrate dispatcher (e.g. `corroborate.rl.dqn.yaml_sweep
+    .load_sweep`)."""
     with path.open() as f:
-        raw = cast(object, yaml.safe_load(f))
+        raw: object = yaml.safe_load(f)
     if not is_str_keyed_mapping(raw):
         raise TypeError(
             f'top-level YAML must be a string-keyed mapping; got '
@@ -202,7 +204,7 @@ def build_hypothesis_from_mapping(
     reg: Registry,
     env_attrs: Mapping[str, object] | None = None,
 ) -> Hypothesis[Mapping[str, object]]:
-    """Public path-into-loader for callers (e.g. the RL manifest
+    """Public path-into-loader for callers (e.g. the RL sweep
     dispatcher) that already have the parsed mapping in hand and
     just need it turned into a Hypothesis. `load_hypothesis`
     delegates here after `yaml.safe_load`.

@@ -43,10 +43,35 @@ import inspect
 import typing
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, fields, is_dataclass
-from typing import Annotated, Literal, TypeIs, get_args, get_origin
+from typing import (
+    Annotated, Literal, Protocol, TypeIs,
+    get_args, get_origin, runtime_checkable,
+)
 
 from corroborate.bridge import Bridge
 from corroborate.claim import FnClaim, iter_invariants
+
+
+@runtime_checkable
+class _Named(Protocol):
+    """Anything with a string `__name__` — captures `def`-ed
+    functions, lambdas (`<lambda>`), classes, and most builtins.
+    Replacing `getattr(value, '__name__', ...)` with an isinstance
+    check against this Protocol satisfies the typing-discipline
+    rule against dynamic-attribute access on typed values."""
+    @property
+    def __name__(self) -> str: ...
+
+
+def _callable_name(value: object) -> str:
+    """Best-effort name of a callable for hash/error messages.
+    Returns the `__name__` attribute when present (the common
+    case for any function / class / builtin), otherwise the
+    repr — which is stable for identity-based callables like
+    `object.__init__`."""
+    if isinstance(value, _Named):
+        return value.__name__
+    return repr(value)
 
 
 # ============ Marker ============
@@ -130,10 +155,9 @@ def _walk(value: object, *, depth: int) -> ClaimSignature:
     if callable(value):
         # Plain function (not @claim'd) or builtin — treat like
         # a function-claim: walk its signature with empty baked.
-        name = getattr(value, '__name__', '<callable>')
-        if not isinstance(name, str):
-            name = '<callable>'
-        return _walk_fn(value, name=name, depth=depth, baked={})
+        return _walk_fn(
+            value, name=_callable_name(value), depth=depth, baked={},
+        )
     return ClaimSignature(name='<leaf>', kwargs=())
 
 
@@ -159,10 +183,10 @@ def _walk_partial(p: functools.partial[object], *, depth: int) -> ClaimSignature
         # call-args. Walk the dataclass and ignore baked here.
         return _walk_dataclass(wrapped, depth=depth)
     if callable(wrapped):
-        name = getattr(wrapped, '__name__', '<callable>')
-        if not isinstance(name, str):
-            name = '<callable>'
-        return _walk_fn(wrapped, name=name, depth=depth, baked=baked)
+        return _walk_fn(
+            wrapped, name=_callable_name(wrapped),
+            depth=depth, baked=baked,
+        )
     return ClaimSignature(name='<leaf>', kwargs=())
 
 
@@ -514,16 +538,16 @@ def _stable_repr(value: object) -> str:
     if isinstance(value, FnClaim):
         return f'Claim:{value.name}'
     if isinstance(value, functools.partial):
-        wrapped = value.func
+        wrapped: object = value.func
         wname = (
             wrapped.name if isinstance(wrapped, FnClaim)
-            else getattr(wrapped, '__name__', repr(wrapped))
+            else _callable_name(wrapped)
         )
         return f'partial({wname})'
     if is_dataclass(value) and not isinstance(value, type):
         return f'dataclass:{type(value).__name__}'
     if callable(value):
-        return f'callable:{getattr(value, "__name__", repr(value))}'
+        return f'callable:{_callable_name(value)}'
     return repr(value)
 
 

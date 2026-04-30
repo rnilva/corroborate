@@ -242,13 +242,17 @@ class RunRow:
     baseline arm. Production write paths populate it from
     `Hypothesis.arm_key()`.
 
-    `claim_graph_signature` is the program-instance fingerprint:
+    `claim_graph_signature` is the structural-form fingerprint of
+    the *bound* substrate program:
     `claim_graph_signature(partial(substrate_claim, **intervention))`
-    canonicalised with default-axis elision. Serves as the
-    structurally-honest cross-corpus identity column; rows from
-    different corpora with matching signatures came from the
-    same canonical program. Defaults to `''` for old parquets
-    (read as "unknown" — no structural-equality joins available)."""
+    canonicalised with default-axis elision. It hashes the
+    `intervention` dict's spread into the substrate claim — NOT
+    `intervention_arms`; pair with `arm_key()` (the typed-arms
+    fingerprint) when both surfaces matter to a downstream
+    consumer. Currently a foundation for the bridge-persistence
+    consumer plan; defaults to `''` for old parquets and for
+    rows written before the column was wired (read as "unknown" —
+    no structural-equality joins available)."""
     id: str
     parent_id: str | None
     cycle_id: str | None

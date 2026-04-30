@@ -1,10 +1,10 @@
 """DQN-substrate YAML → `run_hypotheses` dispatch.
 
-`DQNSweep` is the typed shape of a configured experiment loaded
-from YAML — one dataclass for both arm shapes. The dispatch
+`DQNSweep` is the typed shape of a configured sweep loaded from
+YAML — one dataclass for both arm shapes. The dispatch
 distinction lives in `arms_shape: 'chunked' | 'paired'` and the
 `{from_env: <attr>}` placeholders inside `hypothesis_templates`,
-not in the manifest type.
+not in the dataclass type.
 
 - `arms_shape: 'chunked'` — hypotheses are env-generic. The
   templates resolve once (no env_attrs) and pair Cartesianly with
@@ -92,7 +92,7 @@ def load_sweep(path: Path, *, reg: Registry) -> DQNSweep:
     `ValueError` / `KeyError` on schema violations with messages
     naming the offending field."""
     with path.open() as f:
-        raw = cast(object, yaml.safe_load(f))
+        raw: object = yaml.safe_load(f)
     if not is_str_keyed_mapping(raw):
         raise TypeError(
             f'top-level YAML must be a string-keyed mapping; got '

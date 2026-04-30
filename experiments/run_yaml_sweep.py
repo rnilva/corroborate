@@ -18,7 +18,6 @@ os.environ.setdefault('XLA_PYTHON_CLIENT_MEM_FRACTION', '0.9')
 
 import argparse
 from pathlib import Path
-from typing import cast
 
 from corroborate.rl.dqn.yaml_sweep import dispatch_sweep, load_sweep
 
@@ -29,21 +28,21 @@ def main() -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     _ = parser.add_argument(
-        'manifest', type=str,
+        'sweep', type=str,
         help='Path to the sweep YAML.',
     )
     # `argparse.Namespace` attribute access is `Any` by stub
-    # convention; cast at the boundary, then runtime-check to
-    # narrow before constructing the Path.
-    manifest_attr = cast(object, parser.parse_args().manifest)
-    if not isinstance(manifest_attr, str):
+    # convention. Annotate at assignment so the type narrows to
+    # `object`, then `isinstance` narrows further.
+    sweep_path_attr: object = parser.parse_args().sweep
+    if not isinstance(sweep_path_attr, str):
         raise TypeError(
-            f'manifest path must be a string; got '
-            f'{type(manifest_attr).__name__}',
+            f'sweep path must be a string; got '
+            f'{type(sweep_path_attr).__name__}',
         )
 
     from corroborate.rl.dqn.yaml_sweep import default_dqn_registry
-    sweep = load_sweep(Path(manifest_attr), reg=default_dqn_registry())
+    sweep = load_sweep(Path(sweep_path_attr), reg=default_dqn_registry())
     print(
         f'sweep: {sweep.name} '
         f'({len(sweep.hypothesis_templates)} hypotheses × '
