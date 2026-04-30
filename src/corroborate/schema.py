@@ -242,24 +242,18 @@ class RunRow:
     baseline arm. Production write paths populate it from
     `Hypothesis.arm_key()`.
 
-    `claim_graph_signature` is the structural-form fingerprint of
-    the *bound* substrate program:
-    `claim_graph_signature(partial(substrate_claim, **intervention))`
-    canonicalised with default-axis elision. It hashes the
-    `intervention` dict's spread into the substrate claim — NOT
-    `intervention_arms`; pair with `arm_key()` (the typed-arms
-    fingerprint) when both surfaces matter to a downstream
-    consumer. Currently a foundation for the bridge-persistence
-    consumer plan; defaults to `''` for old parquets and for
-    rows written before the column was wired (read as "unknown" —
-    no structural-equality joins available)."""
+    Older parquets may carry a `claim_graph_signature` column
+    (legacy program-structural fingerprint); `from_row_dict`
+    silently absorbs it into `measurements` if encountered. The
+    column is no longer authored — the per-cell program identity
+    is derivable from the leaves the path-keyed convention already
+    flattens, and a denormalised hash didn't earn its keep."""
     id: str
     parent_id: str | None
     cycle_id: str | None
     timestamp: str
     verdict: Verdict
     arm_key: str = 'baseline'
-    claim_graph_signature: str = ''
     measurements: Mapping[str, MeasurementLeaf] = field(
         default_factory=lambda: {},
     )
@@ -272,7 +266,6 @@ class RunRow:
             'timestamp': self.timestamp,
             'verdict': self.verdict.value,
             'arm_key': self.arm_key,
-            'claim_graph_signature': self.claim_graph_signature,
         }
         _flatten_measurements(out, self.measurements)
         return out
@@ -292,8 +285,6 @@ class RunRow:
             measurements[k] = _coerce_measurement_leaf(v)
         arm_key_v = d.get('arm_key')
         arm_key = arm_key_v if isinstance(arm_key_v, str) else 'baseline'
-        cgs_v = d.get('claim_graph_signature')
-        claim_graph_signature = cgs_v if isinstance(cgs_v, str) else ''
         return cls(
             id=require_str(d, 'id'),
             parent_id=optional_str(d, 'parent_id'),
@@ -301,7 +292,6 @@ class RunRow:
             timestamp=require_str(d, 'timestamp'),
             verdict=require_verdict(d, 'verdict'),
             arm_key=arm_key,
-            claim_graph_signature=claim_graph_signature,
             measurements=measurements,
         )
 

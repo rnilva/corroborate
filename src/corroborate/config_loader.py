@@ -16,12 +16,12 @@ authors never need string-prefix sigils. List literals tuple-ify
 to match `frozen=True, slots=True` ClaimBase fields like
 `MLP.hidden: tuple[int, ...]`.
 
-Round-trip contract: a YAML-loaded Hypothesis's slot values pass
-`claim_graph_signature` equality with the equivalent Python-
-authored Hypothesis. The signature is the canonical name of the
-configured composition; if the YAML and Python paths produce
-different signatures, the YAML schema is wrong and the loader
-should refuse before the sweep launches."""
+Round-trip contract: a YAML-loaded Hypothesis's slot values are
+structurally equal (frozen-dataclass `==` on Module Claims, identity
+on FnClaim references) to the equivalent Python-authored Hypothesis.
+The smokes assert this; drift means the YAML schema diverged from
+the Python authoring shape and the loader should refuse before
+the sweep launches."""
 from __future__ import annotations
 
 from collections.abc import Mapping

@@ -45,7 +45,6 @@ from corroborate._canonical import canonical_str
 from corroborate.claim import trace_context
 from corroborate.computation_graph import ComputationGraph, build_computation_graph
 from corroborate.hypothesis import Hypothesis
-from corroborate.signature import claim_graph_signature
 from corroborate.reductions import masked_window_mean
 from corroborate.rl.dqn.dqn import default_state_hash, dqn
 from corroborate.rl.dqn.invariants import (
@@ -286,12 +285,6 @@ def run_dqn_arm(
     # surface at their dotted topology paths.
     leaf_measurements = _leaf_measurements(configured)
 
-    # Program-instance fingerprint — canonical-form claim graph
-    # hash over the bound program (default-axis elision applied).
-    # Constant across seeds, so computed once per arm and stamped
-    # on every RunRow this arm produces.
-    arm_claim_graph_signature = claim_graph_signature(configured)
-
     def by_key(rng_key: jax.Array) -> dict[str, jax.Array]:
         return configured(rng_key=rng_key)
 
@@ -378,7 +371,6 @@ def run_dqn_arm(
             id=cell_id, parent_id=None,
             cycle_id=cycle_id, timestamp=timestamp,
             verdict=verdict, arm_key=hypothesis.arm_key(),
-            claim_graph_signature=arm_claim_graph_signature,
             measurements=measurements,
         )
         # Trace leaves: configurational leaves (shared with the
