@@ -5,9 +5,9 @@ id, computes the eight measurable scalars per cell, writes
 `runs_with_mediators.parquet` with new `mediator.*` columns
 alongside the original run-level columns.
 
-After this, `experiments/smoke_per_env_mediator_pc.py` consumes
-the enriched runs to reproduce PAPER §5's within-env Pearson and
-§6's per-env PC with the rich variable set.
+After this, downstream analyses consume the enriched runs via
+`experiments/analyze.py --stages pc` (with the appropriate
+mediator paths surfaced as variables).
 
 Run: `uv run python experiments/compute_mediators.py`."""
 from __future__ import annotations

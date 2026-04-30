@@ -1055,7 +1055,9 @@ intervention or temporal evidence resolves it.
 ### Reproduction
 
 ```
-uv run python experiments/dowhy_state_coverage.py
+uv run python experiments/analyze.py \
+    --corpus ddqn --treatment-arm ddqn --baseline-arm vanilla_dqn \
+    --stages dowhy
 ```
 
 ---

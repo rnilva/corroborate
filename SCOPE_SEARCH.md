@@ -301,8 +301,14 @@ Three terminating outcomes:
 
 ## Worked example
 
-`experiments/analyze_action_dim_wide.py` is the canonical example
-of steps 4 + 6: stratified comparison via
-`hypothesis_comparison_from_cells`, meta-regression via
-`meta_regress_comparison`. Read it before authoring a new
-scope-search.
+`experiments/analyze.py` is the canonical scope-search:
+
+```
+uv run python experiments/analyze.py \
+    --corpus action_dim_wide \
+    --treatment-arm ddqn --baseline-arm vanilla_dqn \
+    --stages paired_g,meta_reg,pc
+```
+
+Stages 4 + 6 of the procedure correspond to `meta_reg` and `pc`
+in `analyze.py`'s pipeline.
