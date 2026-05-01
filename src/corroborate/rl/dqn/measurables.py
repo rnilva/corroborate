@@ -305,6 +305,42 @@ def greedy_match_late(record: Mapping[str, object]) -> float:
     return _mean_window(match, 0.5, 1.0)
 
 
+@measurable(reads=(
+    'online_argmax_per_step', 'target_argmax_per_step',
+    'eval_step_index',
+))
+def greedy_match_per_burst(
+    record: Mapping[str, object],
+) -> npt.NDArray[np.float64]:
+    """Per-burst fraction of (online_argmax == target_argmax).
+    Shape `(n_bursts,)`. Chunks the per-step argmax disagreement
+    into n_bursts equal windows along the training trajectory.
+
+    Direct measurement of "DDQN-mechanism-activation rate over
+    training". 1.0 means the two argmaxes always agreed in that
+    burst's training window (DDQN ≡ DQN per-step); 0.0 means
+    they always disagreed (every TD update saw the slot swap
+    bite). Used to characterize DDQN intrinsically — does the
+    mechanism even fire? — without arm-comparison.
+
+    `1 - greedy_match_per_burst` is the activation frequency."""
+    online = _record_array(record, 'online_argmax_per_step')
+    target = _record_array(record, 'target_argmax_per_step')
+    eval_idx = _record_array(record, 'eval_step_index')
+    if online is None or target is None or eval_idx is None:
+        return np.zeros((0,), dtype=np.float64)
+    match = (online == target).astype(np.float64)
+    n_bursts = int(eval_idx.shape[0])
+    if n_bursts == 0:
+        return np.zeros((0,), dtype=np.float64)
+    n_steps = match.shape[0]
+    edges = np.linspace(0, n_steps, n_bursts + 1, dtype=np.int64)
+    return np.array(
+        [match[edges[i]:edges[i+1]].mean() for i in range(n_bursts)],
+        dtype=np.float64,
+    )
+
+
 @measurable(reads=('buf_size',))
 def fill_ratio_late(
     record: Mapping[str, object], *, capacity: int,
