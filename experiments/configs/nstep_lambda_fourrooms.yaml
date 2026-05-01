@@ -1,0 +1,120 @@
+name: nstep_lambda_fourrooms
+out_dir: experiments/data/nstep_lambda_fourrooms
+arms_shape: chunked
+archive_remote: s3://corroborate-archive/nstep_lambda_fourrooms
+
+# n-step sweep as a proxy for the λ-return falsification probe.
+#
+# Hypothesis: DDQN's benefit depends on bootstrap-bias compounding.
+# Increasing n shifts the target away from full-bootstrap (n=1)
+# toward Monte Carlo (n→∞). Theory predicts DDQN benefit declines
+# monotonically with n: more n-step → less compounded bias to fix.
+#
+# This is a *negative-prediction* test. Existing nstep_intervention
+# 2×2 already showed Δ shrinks 4× from n=1 to n=3 — consistent
+# with the prediction. A wider sweep gives the curve.
+#
+# 5 n × 2 arms × 30 seeds × 200k = 10 arms. CPU runtime ~5 min/arm
+# × 10 = ~25 min.
+
+envs:
+  - {name: FourRooms-misc, n_seeds: 30, chunk_size: 30}
+
+base_intervention:
+  total_steps: 200000
+  eval_every:  20000
+  n_episodes:  5
+  gamma:       0.99
+  sync_period: 100
+  replay:
+    class: Replay
+    capacity: 50000
+    batch_size: 32
+  optimizer:
+    class: WarmedUpdate
+    inner: {class: Adam, lr: 0.0001}
+    warmup_steps: 100
+  q_network:
+    class: MLP
+    hidden: [64, 64]
+
+hypotheses:
+  - name: vanilla_n1
+    predicted_direction: null
+    intervention: {n_step: 1}
+  - name: ddqn_n1
+    predicted_direction: a_gt_b
+    intervention:
+      n_step: 1
+      bootstrap:
+        fn: bootstrap
+        greedification: {fn: double_greedify}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement:
+          fn: bootstrap
+          greedification: {fn: double_greedify}
+
+  - name: vanilla_n2
+    predicted_direction: null
+    intervention: {n_step: 2}
+  - name: ddqn_n2
+    predicted_direction: a_gt_b
+    intervention:
+      n_step: 2
+      bootstrap:
+        fn: bootstrap
+        greedification: {fn: double_greedify}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement:
+          fn: bootstrap
+          greedification: {fn: double_greedify}
+
+  - name: vanilla_n3
+    predicted_direction: null
+    intervention: {n_step: 3}
+  - name: ddqn_n3
+    predicted_direction: a_gt_b
+    intervention:
+      n_step: 3
+      bootstrap:
+        fn: bootstrap
+        greedification: {fn: double_greedify}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement:
+          fn: bootstrap
+          greedification: {fn: double_greedify}
+
+  - name: vanilla_n5
+    predicted_direction: null
+    intervention: {n_step: 5}
+  - name: ddqn_n5
+    predicted_direction: a_gt_b
+    intervention:
+      n_step: 5
+      bootstrap:
+        fn: bootstrap
+        greedification: {fn: double_greedify}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement:
+          fn: bootstrap
+          greedification: {fn: double_greedify}
+
+  - name: vanilla_n10
+    predicted_direction: null
+    intervention: {n_step: 10}
+  - name: ddqn_n10
+    predicted_direction: a_gt_b
+    intervention:
+      n_step: 10
+      bootstrap:
+        fn: bootstrap
+        greedification: {fn: double_greedify}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement:
+          fn: bootstrap
+          greedification: {fn: double_greedify}

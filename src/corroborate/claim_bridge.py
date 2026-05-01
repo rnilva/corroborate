@@ -229,6 +229,52 @@ def evaluate(
     )
 
 
+def measurable_names_for_bridges(
+    bridges: Iterable[Bridge],
+) -> frozenset[str]:
+    """Walk `bridges` → return every registered-measurable name
+    they consume (transitively via the @measurable graph).
+
+    A bridge declares measurable names through three channels:
+
+    - `bridge.source` and `bridge.target` are the canonical
+      measurable-name slots (default `'outcome.eval_best_burst_mean'`-
+      style strings; analyses pass them as `source=` to read via the
+      registry).
+    - `bridge.params[*]` may carry measurable names too — bridges
+      authored with extra defaulted-string kwargs (`predictor_name`,
+      `mediator`) that downstream analyses route through the registry.
+
+    For each declared name that's a registered measurable, expand
+    via `transitive_measurables` to include every dep. Returns
+    the union — exactly the set a cache builder must materialise
+    so analyses on this bridge file find their scalars
+    pre-computed.
+
+    Names that aren't in the measurable registry are silently
+    dropped. They're either claim-output field paths
+    (`outcome.eval_best_burst_mean`) — already in the raw
+    parquet, no recompute needed — or bridge-specific identifiers
+    that aren't measurables (e.g. `'outcome_native'` IS a
+    measurable, but `'eval_best_burst_mean'` as a raw field is
+    not).
+    """
+    from corroborate.measurable import (
+        get_registered, transitive_measurables,
+    )
+    out: set[str] = set()
+    for b in bridges:
+        candidates: list[str] = [b.source, b.target]
+        for v in b.params.values():
+            if isinstance(v, str):
+                candidates.append(v)
+        for name in candidates:
+            if get_registered(name) is None:
+                continue
+            out.update(transitive_measurables(name))
+    return frozenset(out)
+
+
 __all__ = [
     'Bridge',
     'BridgeEvaluation',
@@ -236,4 +282,5 @@ __all__ = [
     'Tier',
     'claim_bridge',
     'evaluate',
+    'measurable_names_for_bridges',
 ]

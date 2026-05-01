@@ -110,6 +110,36 @@ def registered_names() -> tuple[str, ...]:
     return tuple(sorted(_REGISTRY))
 
 
+def transitive_measurables(name: str) -> frozenset[str]:
+    """All registered-measurable names reachable from `name` via
+    the parameter-name dependency graph (inclusive of `name`).
+
+    Walks `_measurable_param_names` recursively. Cycle-safe via a
+    visited set. Used by cache builders to materialise every
+    measurable a bridge file consumes — declared name + every
+    transitive measurable dep — so analyses can read pre-computed
+    scalars rather than recomputing per cell.
+
+    Loud KeyError if `name` isn't registered."""
+    visited: set[str] = set()
+
+    def _close(n: str) -> None:
+        if n in visited:
+            return
+        visited.add(n)
+        m = _REGISTRY.get(n)
+        if m is None:
+            raise KeyError(
+                f'no measurable named {n!r}. Registered: '
+                f'{sorted(_REGISTRY)}',
+            )
+        for dep_name in _measurable_param_names(m.fn):
+            _close(dep_name)
+
+    _close(name)
+    return frozenset(visited)
+
+
 def transitive_reads(name: str) -> frozenset[str]:
     """The leaf record-keys a registered measurable ultimately
     depends on, closing over the measurable graph.
