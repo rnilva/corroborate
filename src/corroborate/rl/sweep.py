@@ -88,45 +88,21 @@ class DQNRunner:
                 f"got {type(seeds_v).__name__}",
             )
         seeds = cast(tuple[int, ...], seeds_v)
-        unexpected = set(grid_point) - {
-            'env_name', 'seeds',
-            'reward_scale', 'reward_clip_min', 'reward_clip_max',
-        }
+        unexpected = set(grid_point) - {'env_name', 'seeds', 'wrappers'}
         if unexpected:
             raise ValueError(
                 f"DQNRunner: unexpected grid_point keys {sorted(unexpected)} "
                 f"— HP variation belongs in the Hypothesis, not the grid",
             )
-        reward_scale_v = grid_point.get('reward_scale', 1.0)
-        if not isinstance(reward_scale_v, (int, float)):
+        wrappers_v = grid_point.get('wrappers', ())
+        if not isinstance(wrappers_v, tuple):
             raise TypeError(
-                f"DQNRunner: grid_point['reward_scale'] must be float; "
-                f"got {type(reward_scale_v).__name__}",
-            )
-        clip_min_v = grid_point.get('reward_clip_min')
-        if clip_min_v is not None and not isinstance(clip_min_v, (int, float)):
-            raise TypeError(
-                f"DQNRunner: grid_point['reward_clip_min'] must be float | None; "
-                f"got {type(clip_min_v).__name__}",
-            )
-        clip_max_v = grid_point.get('reward_clip_max')
-        if clip_max_v is not None and not isinstance(clip_max_v, (int, float)):
-            raise TypeError(
-                f"DQNRunner: grid_point['reward_clip_max'] must be float | None; "
-                f"got {type(clip_max_v).__name__}",
+                f"DQNRunner: grid_point['wrappers'] must be tuple; "
+                f"got {type(wrappers_v).__name__}",
             )
         env_spec = self._envs[env_name]
 
-        arm = run_dqn_arm(
-            env_spec, seeds, h,
-            reward_scale=float(reward_scale_v),
-            reward_clip_min=(
-                float(clip_min_v) if clip_min_v is not None else None
-            ),
-            reward_clip_max=(
-                float(clip_max_v) if clip_max_v is not None else None
-            ),
-        )
+        arm = run_dqn_arm(env_spec, seeds, h, wrappers=wrappers_v)
         return SweepCellResult(
             runs=tuple(c.run for c in arm.cells),
             traces=tuple(c.trace for c in arm.cells),

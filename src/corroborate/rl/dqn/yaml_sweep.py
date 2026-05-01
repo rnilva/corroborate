@@ -224,38 +224,73 @@ def _build_env(node: object) -> EnvConfig:
             f'env.chunk_size must be int; got '
             f'{type(chunk_size).__name__}',
         )
-    reward_scale = node.get('reward_scale', 1.0)
-    if not isinstance(reward_scale, (int, float)) or isinstance(reward_scale, bool):
-        raise TypeError(
-            f'env.reward_scale must be float; got '
-            f'{type(reward_scale).__name__}',
-        )
-    clip_min = node.get('reward_clip_min')
-    if clip_min is not None and (
-        not isinstance(clip_min, (int, float)) or isinstance(clip_min, bool)
-    ):
-        raise TypeError(
-            f'env.reward_clip_min must be float | None; got '
-            f'{type(clip_min).__name__}',
-        )
-    clip_max = node.get('reward_clip_max')
-    if clip_max is not None and (
-        not isinstance(clip_max, (int, float)) or isinstance(clip_max, bool)
-    ):
-        raise TypeError(
-            f'env.reward_clip_max must be float | None; got '
-            f'{type(clip_max).__name__}',
-        )
+    wrappers = _build_wrappers(node)
     return EnvConfig(
         env_name=name, n_seeds=n_seeds, chunk_size=chunk_size,
-        reward_scale=float(reward_scale),
-        reward_clip_min=(
-            float(clip_min) if clip_min is not None else None
-        ),
-        reward_clip_max=(
-            float(clip_max) if clip_max is not None else None
-        ),
+        wrappers=wrappers,
     )
+
+
+def _build_wrappers(node: Mapping[str, object]) -> tuple['EnvWrapper', ...]:
+    """Parse `wrappers: [{type: <name>, ...}]` plus legacy
+    sugar (`reward_scale: ...`, `reward_clip_min: ...`,
+    `reward_clip_max: ...`) into an `EnvWrapper` tuple. Legacy
+    fields auto-build the equivalent wrapper instances; the
+    explicit `wrappers` list (if present) is appended after,
+    preserving order. Existing YAMLs migrate transparently."""
+    from corroborate.rl.env_catalogue import (
+        EnvWrapper, RewardClip, RewardScale, get_wrapper_class,
+    )
+    out: list[EnvWrapper] = []
+    # Legacy sugar — if any of the per-wrapper fields are set,
+    # build the equivalent wrappers.
+    rs = node.get('reward_scale')
+    if rs is not None:
+        if not isinstance(rs, (int, float)) or isinstance(rs, bool):
+            raise TypeError(
+                f'env.reward_scale must be float; got '
+                f'{type(rs).__name__}',
+            )
+        if float(rs) != 1.0:
+            out.append(RewardScale(scale=float(rs)))
+    clip_min = node.get('reward_clip_min')
+    clip_max = node.get('reward_clip_max')
+    if clip_min is not None or clip_max is not None:
+        for k, v in (('reward_clip_min', clip_min),
+                      ('reward_clip_max', clip_max)):
+            if v is not None and (
+                not isinstance(v, (int, float)) or isinstance(v, bool)
+            ):
+                raise TypeError(
+                    f'env.{k} must be float | None; got {type(v).__name__}',
+                )
+        out.append(RewardClip(
+            clip_min=(float(clip_min) if clip_min is not None else None),
+            clip_max=(float(clip_max) if clip_max is not None else None),
+        ))
+    # Explicit `wrappers: [{type: <name>, ...}]` list.
+    raw = node.get('wrappers')
+    if raw is not None:
+        if not isinstance(raw, list):
+            raise TypeError(
+                f'env.wrappers must be a list; got {type(raw).__name__}',
+            )
+        for entry in raw:
+            if not is_str_keyed_mapping(entry):
+                raise TypeError(
+                    f'env.wrappers entry must be a mapping; got '
+                    f'{type(entry).__name__}',
+                )
+            type_v = entry.get('type')
+            if not isinstance(type_v, str):
+                raise TypeError(
+                    f"env.wrappers entry must have 'type: <name>'; "
+                    f"got {entry!r}",
+                )
+            cls = get_wrapper_class(type_v)
+            kwargs = {k: v for k, v in entry.items() if k != 'type'}
+            out.append(cls(**kwargs))
+    return tuple(out)
 
 
 def default_dqn_registry() -> Registry:

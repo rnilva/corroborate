@@ -77,6 +77,93 @@ class GymnaxEnvLike(Protocol):
     def action_space(self, params: object) -> object: ...
 
 
+@runtime_checkable
+class EnvWrapper(Protocol):
+    """Anything that wraps a gymnax-style env in another
+    `GymnaxEnvLike`. Frozen-dataclass implementations carry
+    their config + a `wrap(inner)` method that returns the
+    wrapped env. Composable: `cell_runner` applies a tuple of
+    wrappers in order, so `(RewardScale(0.5), RewardClip(0.0,
+    None))` first scales then clips.
+
+    Add a new wrapper by:
+      1. Define `@dataclass(frozen=True, slots=True) class
+         FooWrapper: ... def wrap(self, inner) -> ...`
+      2. Register: `_WRAPPER_REGISTRY['foo'] = FooWrapper`
+      3. Use in YAML: `wrappers: [{type: foo, ...}]`
+
+    No 7-place plumbing per wrapper — the registry is the only
+    surface that grows."""
+    def wrap(self, inner: 'GymnaxEnvLike') -> 'GymnaxEnvLike': ...
+
+
+@dataclass(frozen=True, slots=True)
+class RewardScale:
+    """Wrapper config: multiply step reward by `scale`."""
+    scale: float
+
+    def wrap(self, inner: 'GymnaxEnvLike') -> 'GymnaxEnvLike':
+        return RewardScaledEnv(inner=inner, scale=self.scale)
+
+
+@dataclass(frozen=True, slots=True)
+class RewardClip:
+    """Wrapper config: clip step reward to `[clip_min, clip_max]`.
+    Either bound may be None to disable that side."""
+    clip_min: float | None = None
+    clip_max: float | None = None
+
+    def wrap(self, inner: 'GymnaxEnvLike') -> 'GymnaxEnvLike':
+        return RewardClippedEnv(
+            inner=inner, clip_min=self.clip_min, clip_max=self.clip_max,
+        )
+
+
+_WRAPPER_REGISTRY: dict[str, type[EnvWrapper]] = {
+    'reward_scale': RewardScale,
+    'reward_clip': RewardClip,
+}
+"""Name → wrapper class. YAML's `wrappers: [{type: <name>, ...}]`
+parses each entry by looking up `<name>` here and instantiating
+with the remaining kwargs."""
+
+
+def get_wrapper_class(name: str) -> type[EnvWrapper]:
+    """Look up a registered wrapper class by name. Raises
+    KeyError with the registry's known names if missing."""
+    cls = _WRAPPER_REGISTRY.get(name)
+    if cls is None:
+        raise KeyError(
+            f'no env wrapper registered as {name!r}; known: '
+            f'{sorted(_WRAPPER_REGISTRY)}',
+        )
+    return cls
+
+
+def wrappers_canonical_str(wrappers: tuple[EnvWrapper, ...]) -> str:
+    """Stable-order canonical string for an env-wrapper tuple.
+    Used as the suffix on `env_arm_tag` so `(RewardScale(0.5),
+    RewardClip(0.0, None))` and `(RewardClip(0.0, None),
+    RewardScale(0.5))` get distinct identities (order matters
+    in wrap composition)."""
+    if not wrappers:
+        return ''
+    parts: list[str] = []
+    for w in wrappers:
+        # Read fields off the dataclass via vars() — frozen + slots
+        # means the asdict-style listing is stable.
+        from dataclasses import fields
+        cls_name = next(
+            (k for k, v in _WRAPPER_REGISTRY.items() if v is type(w)),
+            type(w).__name__,
+        )
+        kvs = ','.join(
+            f'{f.name}={getattr(w, f.name)}' for f in fields(w)
+        )
+        parts.append(f'{cls_name}({kvs})')
+    return ','.join(parts)
+
+
 @dataclass(frozen=True, slots=True)
 class RewardScaledEnv:
     """Wraps a gymnax-style env, scaling step reward by `scale`.
