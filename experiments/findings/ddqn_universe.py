@@ -75,6 +75,7 @@ import numpy as np
 import corroborate.analyses  # pyright: ignore[reportUnusedImport]  # populate registry
 from corroborate.analyses.mundlak_decomposition import MundlakResult
 from corroborate.analyses.paired_g import PairedGResult
+from corroborate.analyses.paired_g_per_burst import PerBurstResult
 from corroborate.analyses.universe_scope import UniverseScopeResult
 from corroborate.claim_bridge import (
     Direction, Tier, claim_bridge,
@@ -978,6 +979,115 @@ def ddqn_dominates_vanilla_response_curve__fourrooms_rs_0p3(
 
 
 # =====================================================================
+# CLAIM 8 — Per-burst learning-curve crossover on SpaceInvaders.
+# =====================================================================
+# Per-burst analysis on minatar_1M (paired across 30 seeds, env=
+# SpaceInvaders-MinAtar, total_steps=1M) shows a sharp sign-flip
+# in the interventional contrast `do(arm=ddqn) − do(arm=vanilla)`:
+#
+#   burst 0:    diff +1.97 (DDQN ahead, significant)
+#   bursts 1-2: ~tied
+#   bursts 3-5: DDQN sliding (-0.5 to -1.0, ns)
+#   bursts 6+:  diff -1.4 to -2.0, all significant negative
+#
+# Other 3 MinAtar envs (Asterix, Breakout, Freeway) do NOT show
+# this crossover. SpaceInvaders is the only MinAtar env with
+# stochastic NEGATIVE reward (-1 per hit, random enemy fire);
+# the others are positive-only or zero-stochasticity.
+#
+# Mechanism reading: vanilla's overestimation acts as
+# optimism-under-hit-uncertainty regularization that's USEFUL
+# late in training. DDQN's bias correction strips this away
+# → realistic-but-pessimistic policy → conservative
+# → fewer kills per episode → DDQN's mc_return curve sits below
+# vanilla's despite being indistinguishable at peak (best-burst
+# outcomes tied at 13.4 vs 13.3 native).
+#
+# This is a SHAPE claim — the per-burst trajectory has a
+# specific qualitative pattern (early+, late−, with crossover
+# around burst 6). NOT just an aggregate sign claim.
+# Pearl-rung-2 corroboration via `spaceinvaders_no_hit_penalty`
+# (queued sweep) — strip the −1 hit penalty; predict the
+# crossover disappears.
+# =====================================================================
+
+
+@claim_bridge
+def ddqn_curve_crosses_vanilla_late__spaceinvaders(
+    paired_g_per_burst: PerBurstResult,
+    *,
+    source: str = 'mc_return',
+    target: str = 'mc_return[per_burst]',
+    direction: Direction = Direction.INVERSE,
+    tier: Tier = Tier.ASSOCIATIONAL,
+    env_name: str = 'SpaceInvaders-MinAtar',
+    treatment_arm: str = 'ddqn',
+    baseline_arm: str = 'vanilla_dqn',
+    pair_by: tuple[str, ...] = ('seed',),
+    reduction: str = 'mean',
+    crossover_burst_min: int = 3,
+    crossover_burst_max: int = 10,
+    late_negative_floor: float = -0.3,
+) -> Verdict:
+    """Per-burst crossover detection on SpaceInvaders 1M.
+
+    Walks `paired_g_per_burst.strata` filtered to `env_name`, in
+    burst-index order. HELD when:
+      (1) The first stratum where g < 0 lies in
+          [crossover_burst_min, crossover_burst_max] inclusive
+          (the curves cross within the expected window).
+      (2) The mean g across late bursts (index ≥ crossover) is
+          ≤ `late_negative_floor` (the late-training side of the
+          curve has a substantial negative drift, not just a
+          one-burst fluctuation).
+
+    POWER_INSUFFICIENT when (1) holds but (2) fails (crossover
+    detected, but late drift is too small to assert magnitude).
+    NO_EFFECT when no crossover or curve never goes negative.
+
+    Reads `paired_g_per_burst.strata[i].g` (standardized Hedges'
+    g) — within env, the SD-scaling is ~constant so sign
+    detection is invariant. The bridge is a SHAPE claim about
+    the per-burst-index curve, not a single aggregate effect."""
+    del source, target, direction, tier
+    del treatment_arm, baseline_arm, pair_by, reduction
+    env_strata = sorted(
+        (s for s in paired_g_per_burst.strata if s.env_name == env_name),
+        key=lambda s: s.burst_index,
+    )
+    if len(env_strata) < crossover_burst_max + 1:
+        return Verdict.NO_EFFECT
+
+    # Find the crossover: first burst where g < 0 (after
+    # potentially seeing positive g earlier — the bridge isn't
+    # strict about an early-positive prefix; the late-floor check
+    # in step (2) carries the magnitude signal).
+    crossover_idx: int | None = None
+    for s in env_strata:
+        if math.isnan(s.g):
+            continue
+        if s.g < 0.0:
+            crossover_idx = s.burst_index
+            break
+    if crossover_idx is None:
+        return Verdict.NO_EFFECT
+    if not (crossover_burst_min <= crossover_idx <= crossover_burst_max):
+        return Verdict.NO_EFFECT
+
+    # Late-side magnitude floor.
+    late_gs = [
+        s.g for s in env_strata
+        if s.burst_index >= crossover_idx and not math.isnan(s.g)
+    ]
+    if not late_gs:
+        return Verdict.NO_EFFECT
+    late_mean = float(np.mean(late_gs))
+    if late_mean > late_negative_floor:
+        return Verdict.POWER_INSUFFICIENT
+    return Verdict.HELD
+
+
+# =====================================================================
 # DDQN measurement graph — the closure.
 # =====================================================================
 DDQN_UNIVERSE_BRIDGES = (
@@ -1000,6 +1110,8 @@ DDQN_UNIVERSE_BRIDGES = (
     ddqn_rescues_underlearning_vanilla__fourrooms_rs_0p1,
     # CLAIM 7b — same dominance at rs=0.3 (rescue-regime peak).
     ddqn_dominates_vanilla_response_curve__fourrooms_rs_0p3,
+    # CLAIM 8 — per-burst crossover shape on SpaceInvaders 1M.
+    ddqn_curve_crosses_vanilla_late__spaceinvaders,
     # TIER A2 existence proofs (per-burst, env-conditional).
     ddqn_helps_at_early_bursts__pixel_envs,
     ddqn_attenuates_at_late_bursts__spaceinvaders,
