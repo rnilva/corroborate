@@ -803,31 +803,54 @@ def mc_variance_attenuates_g_link__between_env(
 
 
 # =====================================================================
-# CLAIM 7 — DDQN rescues under-learning vanilla on FourRooms at
-#           low reward scale (Pearl rung-2, interventional).
+# CLAIM 7 — DDQN's reward-scale-response curve dominates vanilla's
+#           on FourRooms at low reward scale (Pearl rung-2,
+#           interventional contrast).
 # =====================================================================
-# `reward_scale_sweep` revealed: scaling FourRooms reward × 0.1
-# produces vanilla_dqn catastrophic failure (native outcome 0.05/
-# 0.80 ≈ 6% of optimal) while DDQN reaches 68% of optimal —
-# native-outcome advantage +0.49 (p ≈ 2e-16). This is the
-# largest interventional DDQN benefit observed in the entire
-# corpus; baseline rs=1.0 shows only +0.09 advantage.
+# `reward_scale_sweep` + `reward_scale_low_fourrooms` mapped the
+# native-outcome curves of both arms across rs ∈ [0.01, 10] on
+# FourRooms:
 #
-# Mechanism reading: at low reward, gradient magnitudes shrink
-# but learning-rate / Adam β's don't; vanilla's compounded
-# Jensen bias cannot overcome the diminished signal-to-bias
-# ratio. DDQN's bias-corrected target enables it to converge
-# where vanilla cannot. The headline mc_variance reading
-# (CLAIM 6) was a SHADOW of this: low-mc envs in the
-# observational corpus correlate with envs where vanilla's
-# Jensen bias is binding.
+#                rs       vanilla_native     ddqn_native    Δ (interventional)
+#                0.01     0.08               0.17           +0.087
+#                0.03     0.05               0.30           +0.245
+#                0.10     0.06               0.54           +0.488 ★★★
+#                0.30     0.24               0.74           +0.497 ★★★
+#                1.00     0.70               0.79           +0.075
+#                10.00    0.80               0.80           ~0.000  (ceiling)
 #
-# Pearl-rung-2: each (FourRooms, rs=0.1) cell is a randomized
-# treatment-vs-baseline assignment with paired seeds. The
-# native-outcome diff is a do(reward_scale=0.1) probe.
-# Cluster-count irrelevant — within-env paired comparison.
+# The interventional contrast `do(arm=ddqn) − do(arm=baseline)`
+# at fixed (FourRooms, rs, seed) is large at rs ∈ [0.03, 0.3] —
+# peak +0.50 native at rs=0.3.
 #
-# Predicted: native_outcome_diff(ddqn, vanilla | FourRooms, rs=0.1) ≥ +0.4
+# **Defensive framing (load-bearing, applies to all
+# treatment-vs-baseline claims)**: Δ is NOT an observational
+# edge between two outcome nodes. Vanilla and DDQN runs are
+# independent training trajectories under different algorithms;
+# they share log_rs, env_name, seed, but have no causal arrow
+# between their outputs. JCI on (vanilla_native, ddqn_native,
+# log_rs) correctly drops the vanilla↔ddqn edge at depth 1
+# (partial r ≈ −0.04 conditional on log_rs). The two arms have
+# two INDEPENDENT response curves to log_rs; Δ is the
+# interventional contrast, NOT a causal mechanism between them.
+#
+# The narrative "DDQN rescues vanilla's under-learning" is
+# misleading — there's no causal arrow from vanilla's
+# under-learning TO DDQN's success. Both arms have independent
+# learning dynamics under log_rs; DDQN's curve simply
+# saturates at smaller rs than vanilla's. The Hasselt-floor
+# theory predicts this directly: ε = σ_Q · √(2 log|A|) sets the
+# minimum reward magnitude where each arm's gradient signal
+# overcomes its compounded Jensen bias; DDQN's reduced ε lets
+# it learn at smaller σ_Q, hence smaller reward scales. The
+# interventional gap is the visible signature of two arms with
+# different ε.
+#
+# Pearl-rung-2: paired (env, rs, seed) cells with randomized
+# arm assignment. The mean_diff IS the do-effect; cluster-count
+# irrelevant.
+#
+# Predicted: mean_diff(do(ddqn), do(vanilla) | FourRooms, rs=0.1) ≥ +0.4
 # Observed: +0.486, p=2.2e-16 — HELD.
 # =====================================================================
 
@@ -849,9 +872,9 @@ def ddqn_rescues_underlearning_vanilla__fourrooms_rs_0p1(
     ),
     threshold_diff: float = 0.4,
 ) -> Verdict:
-    """Pearl-rung-2 interventional claim: do(reward_scale=0.1)
-    on FourRooms produces vanilla under-learning that DDQN
-    rescues by ≥ 0.4 native-outcome units.
+    """Pearl-rung-2 interventional contrast: do(arm=ddqn) on
+    FourRooms at reward_scale=0.1 produces native-outcome
+    ≥ +0.4 above the do(arm=vanilla_dqn) baseline.
 
     Generic primitive shape: consumes `paired_g` with
     `source='outcome_native'` (the registered measurable
@@ -866,10 +889,77 @@ def ddqn_rescues_underlearning_vanilla__fourrooms_rs_0p1(
     when diff in expected direction but underpowered.
     NO_EFFECT otherwise.
 
-    `paired_g.mean_diff` (NOT `paired_g.g`) is the right metric:
-    standardized Hedges' g pools SD that scales with reward,
-    hiding the interventional effect under apparent sweet-
-    spotting at baseline."""
+    Asserts on `paired_g.mean_diff` (the interventional contrast
+    in native units), NOT `paired_g.g` (standardized Hedges' g
+    pools SD that scales with reward, hiding the interventional
+    effect under apparent sweet-spotting at baseline).
+
+    **Defensive note**: `mean_diff` is the do-effect of arm
+    assignment at fixed (env, rs, seed); it is NOT an
+    observational edge between vanilla and ddqn outcome nodes.
+    The two arms run as independent training trajectories under
+    different algorithms — JCI confirms vanilla_native ⊥
+    ddqn_native | log_rs (partial r ≈ −0.04). The bridge tests
+    a CONTRAST between two independent reward-scale-response
+    curves, not a causal arrow between cell outputs."""
+    del source, target, direction, tier
+    del env_name, treatment_arm, baseline_arm, pair_by, extra_filters
+    diff = paired_g.mean_diff
+    p = paired_g.mean_diff_p_value
+    if math.isnan(diff) or math.isnan(p):
+        return Verdict.NO_EFFECT
+    if diff < 0.0:
+        return Verdict.NO_EFFECT
+    significant = p < 0.05
+    above_threshold = diff >= threshold_diff
+    if significant and above_threshold:
+        return Verdict.HELD
+    if above_threshold or significant:
+        return Verdict.POWER_INSUFFICIENT
+    return Verdict.NO_EFFECT
+
+
+# =====================================================================
+# CLAIM 7b — same interventional contrast at rs=0.3 (rescue-regime
+#            peak in the reward_scale_low_fourrooms sweep map).
+# =====================================================================
+# At rs=0.3 the do-effect peaks at +0.50 native (vanilla 0.24,
+# ddqn 0.74); at rs=0.1 the do-effect is +0.49 (vanilla 0.06,
+# ddqn 0.54). Both clear the +0.4 threshold. The ratio
+# 0.30 → 0.50 vs 0.10 → 0.49 confirms the rescue-regime is a
+# plateau, not a single-point effect.
+# =====================================================================
+
+
+@claim_bridge
+def ddqn_dominates_vanilla_response_curve__fourrooms_rs_0p3(
+    paired_g: PairedGResult,
+    *,
+    source: str = 'outcome_native',
+    target: str = 'outcome.eval_best_burst_mean',
+    direction: Direction = Direction.DIRECT,
+    tier: Tier = Tier.INTERVENTIONAL,
+    env_name: str = 'FourRooms-misc',
+    treatment_arm: str = 'ddqn',
+    baseline_arm: str = 'vanilla_dqn',
+    pair_by: tuple[str, ...] = ('seed',),
+    extra_filters: Mapping[str, object] = MappingProxyType(
+        {'reward_scale': 0.3},
+    ),
+    threshold_diff: float = 0.4,
+) -> Verdict:
+    """Sibling of CLAIM 7 at the rescue-regime peak (rs=0.3).
+    Same primitive shape (`paired_g` with measurable source +
+    extra_filters); just a different scale point. Together with
+    CLAIM 7 (rs=0.1) and the underpowered-but-direction-correct
+    rs=0.03 / rs=0.01 datapoints, establishes the rescue regime
+    as a plateau, not a knife-edge point. Generalizes the
+    reward-scale-response-curve-dominance claim across the
+    interior of the inverted-U.
+
+    Same defensive framing as CLAIM 7: `mean_diff` is the
+    interventional contrast, not an observational edge between
+    arm outputs."""
     del source, target, direction, tier
     del env_name, treatment_arm, baseline_arm, pair_by, extra_filters
     diff = paired_g.mean_diff
@@ -905,9 +995,11 @@ DDQN_UNIVERSE_BRIDGES = (
     # CLAIM 6 — between-env mc_variance attenuates g_link
     #           (POWER_INSUFFICIENT under CR1; SHADOW of CLAIM 7).
     mc_variance_attenuates_g_link__between_env,
-    # CLAIM 7 — Pearl-rung-2: DDQN rescues vanilla under-learning
-    #           at low reward scale on FourRooms.
+    # CLAIM 7 — Pearl-rung-2: DDQN's reward-scale-response curve
+    #           dominates vanilla's at rs=0.1 on FourRooms.
     ddqn_rescues_underlearning_vanilla__fourrooms_rs_0p1,
+    # CLAIM 7b — same dominance at rs=0.3 (rescue-regime peak).
+    ddqn_dominates_vanilla_response_curve__fourrooms_rs_0p3,
     # TIER A2 existence proofs (per-burst, env-conditional).
     ddqn_helps_at_early_bursts__pixel_envs,
     ddqn_attenuates_at_late_bursts__spaceinvaders,
