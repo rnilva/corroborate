@@ -2,6 +2,12 @@
   "remote_root": "s3://corroborate-archive/minatar_1M",
   "files": [
     {
+      "relpath": "runs.parquet",
+      "size_bytes": 30002,
+      "sha256": "b3947e3ad3445e013b02f9956be052a5dc9b34f7cd93ec6cef4f3ef629400533",
+      "pushed_at": "2026-04-30T14:46:21+00:00"
+    },
+    {
       "relpath": "tmp/arm000__SpaceInvaders-MinAtar__vanilla_dqn__runs.parquet",
       "size_bytes": 22259,
       "sha256": "16c7b10c5ee71ad78022bc60989acf243082a1d89e9ab88f82d3b2552851191c",
@@ -12,6 +18,48 @@
       "size_bytes": 871272410,
       "sha256": "608d647509d074cdcb5b7a57d815190a034741b7deef0f129786481cd0f7e9a0",
       "pushed_at": "2026-04-30T13:30:19+00:00"
+    },
+    {
+      "relpath": "tmp/arm001__SpaceInvaders-MinAtar__vanilla_dqn__runs.parquet",
+      "size_bytes": 22259,
+      "sha256": "8087c4a8bf0ec9af3726bb541f01683ba6a19423dd265ab636deca60f8f6961a",
+      "pushed_at": "2026-04-30T13:54:53+00:00"
+    },
+    {
+      "relpath": "tmp/arm001__SpaceInvaders-MinAtar__vanilla_dqn__traces.parquet",
+      "size_bytes": 871865929,
+      "sha256": "1e202c9a0d111fcc2e3b3796085902a4eda99931d92252a5f0b7f5cde140111b",
+      "pushed_at": "2026-04-30T13:55:06+00:00"
+    },
+    {
+      "relpath": "tmp/arm002__SpaceInvaders-MinAtar__ddqn__runs.parquet",
+      "size_bytes": 28237,
+      "sha256": "d63dff8644f67db19e2f879d0befe206fa7c220cb4a0dcca9ec86beb1dd697f7",
+      "pushed_at": "2026-04-30T14:19:46+00:00"
+    },
+    {
+      "relpath": "tmp/arm002__SpaceInvaders-MinAtar__ddqn__traces.parquet",
+      "size_bytes": 869123922,
+      "sha256": "6ec240ee75f2ddaef4c8b35c05a8c1dfa48d61c1bb4bdcdf2f8d9fe3db79d502",
+      "pushed_at": "2026-04-30T14:19:57+00:00"
+    },
+    {
+      "relpath": "tmp/arm003__SpaceInvaders-MinAtar__ddqn__runs.parquet",
+      "size_bytes": 28226,
+      "sha256": "dc93602de67418168a92ab1a4d1ffb60a212a2d657e0556265b42b8efca4f510",
+      "pushed_at": "2026-04-30T14:44:31+00:00"
+    },
+    {
+      "relpath": "tmp/arm003__SpaceInvaders-MinAtar__ddqn__traces.parquet",
+      "size_bytes": 869617733,
+      "sha256": "00b14851a798d97a09a61bc0a82f921bbe6188f8ebdb746c77aa0e4527dd272f",
+      "pushed_at": "2026-04-30T14:45:08+00:00"
+    },
+    {
+      "relpath": "traces.parquet",
+      "size_bytes": 3481799700,
+      "sha256": "f93898d47423d260af76ecaaf64a4f51687821cf8e6039d21da7c5fafd73ef1a",
+      "pushed_at": "2026-04-30T14:47:05+00:00"
     }
   ]
 }

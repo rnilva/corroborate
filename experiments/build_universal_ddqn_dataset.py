@@ -62,6 +62,7 @@ _CORPORA: tuple[str, ...] = (
     'ddqn_better_hp',
     'ddqn_effective_cohort',
     'minatar_1M',
+    'fourrooms_1m',
 )
 
 
@@ -71,8 +72,13 @@ _PRECOMPUTED_SCALARS_NAME: str = 'per_burst_scalars.parquet'
 _HP_KEYS: tuple[str, ...] = (
     'replay.capacity', 'replay.batch_size',
     'optimizer.inner.lr', 'sync_period',
-    'total_steps',
+    'total_steps', 'reward_scale',
 )
+# `reward_scale` is part of the cell identity; without it, cells
+# from the same seed at different scales clobber each other in
+# the pairing dict. Legacy corpora that don't write the column
+# return `None` for it via `row.get(...)` — the None hashes
+# consistently, so legacy pairing is unchanged.
 
 
 def _env_features(env: str) -> dict[str, float | int]:
