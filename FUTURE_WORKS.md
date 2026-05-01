@@ -7,6 +7,27 @@ condition that should lift it.
 Entries are ordered by *forcing function*: the higher up, the
 sooner they're likely to bind.
 
+## v10 `redundancy.py` port — explicitly deferred (2026-05-01)
+
+**Status:** not blocking active work; deferred until the
+authoring layer (file protocol + analyses + bridges) has settled
+enough that R(h) over a register of authored claims is the
+natural next consumer.
+
+**Why deferred:** the file protocol shipped 32 authored claim_
+bridges (~1565 LoC) and is producing real verdicts; the bottleneck
+right now is *authoring ergonomics* (per-env factory, threshold
+helpers, structural-field plumbing), not the absence of an axiom-
+19 reward signal. A redundancy primitive built before the register
+shape stabilises would have to be re-fitted afterwards — a worse
+order of operations than the reverse.
+
+**Lift condition:** the authoring layer settles AND a register/
+cycle persistence path lands. At that point `compute_R_info(h,
+register)` has its inputs typed and its consumer named. See item
+#5 (`redundancy.py — ΔI_redundancy primitive`) in the v10 audit
+section below for the implementation specs.
+
 ## v10 audit — features and design degeneracies (2026-04-28)
 
 **Status:** in-flight. This entry tracks the gap between
