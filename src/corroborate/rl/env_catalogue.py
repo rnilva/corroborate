@@ -86,15 +86,23 @@ class EnvWrapper(Protocol):
     wrappers in order, so `(RewardScale(0.5), RewardClip(0.0,
     None))` first scales then clips.
 
+    Each wrapper also declares its own `measurement_keys()` —
+    the per-cell scalar columns it contributes to the persisted
+    `RunRow.measurements`. This keeps cell_runner generic: it
+    iterates `for w in wrappers: cols.update(w.measurement_keys())`
+    rather than hardcoding `if isinstance(w, RewardScale): …`.
+
     Add a new wrapper by:
       1. Define `@dataclass(frozen=True, slots=True) class
-         FooWrapper: ... def wrap(self, inner) -> ...`
+         FooWrapper: ... def wrap(self, inner) -> ...
+                      def measurement_keys(self) -> Mapping[...]: ...`
       2. Register: `_WRAPPER_REGISTRY['foo'] = FooWrapper`
       3. Use in YAML: `wrappers: [{type: foo, ...}]`
 
-    No 7-place plumbing per wrapper — the registry is the only
-    surface that grows."""
+    No 7-place plumbing per wrapper — the wrapper class is the
+    only surface that grows."""
     def wrap(self, inner: 'GymnaxEnvLike') -> 'GymnaxEnvLike': ...
+    def measurement_keys(self) -> Mapping[str, float]: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,6 +112,9 @@ class RewardScale:
 
     def wrap(self, inner: 'GymnaxEnvLike') -> 'GymnaxEnvLike':
         return RewardScaledEnv(inner=inner, scale=self.scale)
+
+    def measurement_keys(self) -> Mapping[str, float]:
+        return {'reward_scale': float(self.scale)}
 
 
 @dataclass(frozen=True, slots=True)
@@ -117,6 +128,14 @@ class RewardClip:
         return RewardClippedEnv(
             inner=inner, clip_min=self.clip_min, clip_max=self.clip_max,
         )
+
+    def measurement_keys(self) -> Mapping[str, float]:
+        out: dict[str, float] = {}
+        if self.clip_min is not None:
+            out['reward_clip_min'] = float(self.clip_min)
+        if self.clip_max is not None:
+            out['reward_clip_max'] = float(self.clip_max)
+        return out
 
 
 _WRAPPER_REGISTRY: dict[str, type[EnvWrapper]] = {

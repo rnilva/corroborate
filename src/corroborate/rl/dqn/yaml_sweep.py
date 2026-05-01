@@ -243,7 +243,11 @@ def _build_wrappers(node: Mapping[str, object]) -> tuple['EnvWrapper', ...]:
     )
     out: list[EnvWrapper] = []
     # Legacy sugar — if any of the per-wrapper fields are set,
-    # build the equivalent wrappers.
+    # build the equivalent wrappers. Always-instantiate (even
+    # for scale=1.0) so the `reward_scale` measurement key is
+    # written; downstream filters on `reward_scale == 1.0` find
+    # the cells. `r * 1.0` is identity in JAX so the no-op wrap
+    # has negligible runtime cost.
     rs = node.get('reward_scale')
     if rs is not None:
         if not isinstance(rs, (int, float)) or isinstance(rs, bool):
@@ -251,8 +255,7 @@ def _build_wrappers(node: Mapping[str, object]) -> tuple['EnvWrapper', ...]:
                 f'env.reward_scale must be float; got '
                 f'{type(rs).__name__}',
             )
-        if float(rs) != 1.0:
-            out.append(RewardScale(scale=float(rs)))
+        out.append(RewardScale(scale=float(rs)))
     clip_min = node.get('reward_clip_min')
     clip_max = node.get('reward_clip_max')
     if clip_min is not None or clip_max is not None:

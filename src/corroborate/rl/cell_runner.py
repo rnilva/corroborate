@@ -357,23 +357,13 @@ def run_dqn_arm(
             tuple(r.verdict for r in bridge_results),
         )
 
-        # Derive per-wrapper-type scalar columns for analysis
-        # backward-compat — bridges that filtered on
-        # `reward_scale=0.1` keep working without knowing the
-        # wrapper-tuple format. Last-occurrence wins if multiple
-        # wrappers of the same type are configured (rare).
-        from corroborate.rl.env_catalogue import RewardClip, RewardScale
+        # Each wrapper declares its own measurement keys via
+        # `measurement_keys()` — no central isinstance chain.
+        # Adding a new wrapper just adds the method; cell_runner
+        # is invariant under wrapper-type extension.
         wrapper_cols: dict[str, MeasurementLeaf] = {}
         for w in wrappers:
-            if isinstance(w, RewardScale):
-                wrapper_cols['reward_scale'] = float(w.scale)
-            elif isinstance(w, RewardClip):
-                if w.clip_min is not None:
-                    wrapper_cols['reward_clip_min'] = float(w.clip_min)
-                if w.clip_max is not None:
-                    wrapper_cols['reward_clip_max'] = float(w.clip_max)
-        if 'reward_scale' not in wrapper_cols:
-            wrapper_cols['reward_scale'] = 1.0  # legacy default
+            wrapper_cols.update(w.measurement_keys())
         measurements: dict[str, MeasurementLeaf] = {
             'intervention_name': hypothesis.name,
             'env_name': env_spec.name,
