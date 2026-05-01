@@ -232,6 +232,7 @@ def run_dqn_arm(
     hypothesis: Hypothesis[DQNTrajectoryRecord],
     *,
     cycle_id: str | None = None,
+    reward_scale: float = 1.0,
 ) -> ArmResult:
     """Run one (env, hypothesis) arm across `seeds` in parallel via
     `jax.vmap` of the `dqn` outermost claim. Returns
@@ -258,6 +259,9 @@ def run_dqn_arm(
     total_steps = _read_total_steps(intervention)
 
     env, env_params = gymnax.make(env_spec.name)
+    if reward_scale != 1.0:
+        from corroborate.rl.env_catalogue import RewardScaledEnv
+        env = RewardScaledEnv(inner=env, scale=reward_scale)
     state_hash = (
         env_spec.state_hash
         if env_spec.state_hash is not None
@@ -352,6 +356,7 @@ def run_dqn_arm(
             'env_name': env_spec.name,
             'seed': seed,
             'total_steps': total_steps,
+            'reward_scale': reward_scale,
             'outcome.late_window_mean': outcome,
             **_eval_outcomes(per_seed_record),
             **_mechanism_measurements(per_seed_record),

@@ -77,6 +77,52 @@ class GymnaxEnvLike(Protocol):
     def action_space(self, params: object) -> object: ...
 
 
+@dataclass(frozen=True, slots=True)
+class RewardScaledEnv:
+    """Wraps a gymnax-style env, scaling step reward by `scale`.
+
+    Causal-probe lever: scaling reward changes mc_variance by
+    `scale²` without altering dynamics, |A|, obs_dim, or the
+    optimal policy. Used to test whether observed mc_variance →
+    g_link associations are causal (vary the moderator
+    interventionally) vs spurious (proxy for something correlated).
+
+    Implements `GymnaxEnvLike` structurally — reset/step/spaces
+    delegate to `inner`; only `step` is overridden to multiply
+    reward by `scale`. The optimal Q* under the scaled reward is
+    `scale * Q*_original`, so DDQN's Jensen gap (in Q-units)
+    scales with `scale` while standardized comparisons (Hedges' g)
+    are mostly invariant — the deviation from invariance is the
+    causal signature."""
+    inner: 'GymnaxEnvLike'
+    scale: float
+
+    def reset(
+        self, rng: jax.Array, params: object,
+    ) -> tuple[jax.Array, object]:
+        return self.inner.reset(rng, params)
+
+    def step(
+        self,
+        rng: jax.Array,
+        state: object,
+        action: jax.Array,
+        params: object,
+    ) -> tuple[
+        jax.Array, object, jax.Array, jax.Array, dict[str, object],
+    ]:
+        next_obs, next_state, reward, done, info = self.inner.step(
+            rng, state, action, params,
+        )
+        return next_obs, next_state, reward * self.scale, done, info
+
+    def observation_space(self, params: object) -> object:
+        return self.inner.observation_space(params)
+
+    def action_space(self, params: object) -> object:
+        return self.inner.action_space(params)
+
+
 @runtime_checkable
 class MaxStepsParams(Protocol):
     """Marker Protocol — env params that declare a per-episode

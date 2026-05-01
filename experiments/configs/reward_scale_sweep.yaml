@@ -1,0 +1,69 @@
+name: reward_scale_sweep
+out_dir: experiments/data/reward_scale_sweep
+arms_shape: chunked
+# archive_remote removed — no R2 credentials in this environment.
+# Run the archive step manually after the sweep:
+#   uv run python -m corroborate archive experiments/data/reward_scale_sweep \
+#       --remote s3://corroborate-archive/reward_scale_sweep
+
+# Pearl-rung-2 causal probe of the env-level `log_mc_variance →
+# g_link` attenuator. Reward scaling × k changes mc_variance by k²
+# without changing dynamics, |A|, obs_dim, or the optimal policy.
+# If the moderator effect is causal, scaling reward DOWN (k=0.1)
+# should preserve DDQN's link benefit (mc_variance dropped → less
+# attenuation → larger g_link), while scaling UP (k=10) should
+# attenuate further.
+#
+# 3 envs × 3 reward_scales × 2 arms × 30 seeds = 540 cells.
+# Envs picked to span existing log_mc_variance range:
+#   FourRooms-misc      log_mc≈-2.4 (low)   eff_h≈72  scope env
+#   Acrobot-v1          log_mc≈+5.2 (high)  eff_h≈100 chain-depth env
+#   CartPole-v1         log_mc≈+5.3 (high)  eff_h≈100 reverse-DDQN env
+envs:
+  - {name: FourRooms-misc, n_seeds: 30, chunk_size: 30, reward_scale: 0.1}
+  - {name: FourRooms-misc, n_seeds: 30, chunk_size: 30, reward_scale: 1.0}
+  - {name: FourRooms-misc, n_seeds: 30, chunk_size: 30, reward_scale: 10.0}
+  - {name: Acrobot-v1,     n_seeds: 30, chunk_size: 30, reward_scale: 0.1}
+  - {name: Acrobot-v1,     n_seeds: 30, chunk_size: 30, reward_scale: 1.0}
+  - {name: Acrobot-v1,     n_seeds: 30, chunk_size: 30, reward_scale: 10.0}
+  - {name: CartPole-v1,    n_seeds: 30, chunk_size: 30, reward_scale: 0.1}
+  - {name: CartPole-v1,    n_seeds: 30, chunk_size: 30, reward_scale: 1.0}
+  - {name: CartPole-v1,    n_seeds: 30, chunk_size: 30, reward_scale: 10.0}
+
+# Same HP regime as gamma_sweep / dampened_ddqn_alpha — γ fixed at
+# 0.99, MLP backbone, capacity 50k. Reward scale is the ONLY varied
+# axis (× the vanilla/ddqn arm split).
+base_intervention:
+  total_steps: 200000
+  eval_every:  20000
+  n_episodes:  5
+  gamma:       0.99
+  sync_period: 100
+  replay:
+    class: Replay
+    capacity: 50000
+    batch_size: 32
+  optimizer:
+    class: WarmedUpdate
+    inner: {class: Adam, lr: 0.0001}
+    warmup_steps: 100
+  q_network:
+    class: MLP
+    hidden: [64, 64]
+
+hypotheses:
+  - name: vanilla_dqn
+    predicted_direction: null
+    intervention: {}
+
+  - name: ddqn
+    predicted_direction: a_gt_b
+    intervention:
+      bootstrap:
+        fn: bootstrap
+        greedification: {fn: double_greedify}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement:
+          fn: bootstrap
+          greedification: {fn: double_greedify}

@@ -29,10 +29,18 @@ class EnvConfig:
     chunks split the arm into multiple grid points (each becomes
     its own arm at the framework level). Used when an env's
     obs-shape × capacity blows up the f32[cap, n_seeds, obs]
-    replay tensor on the GPU."""
+    replay tensor on the GPU.
+
+    `reward_scale != 1.0` wraps the env in `RewardScaledEnv` —
+    multiplies env reward by `scale` at every step, so MC
+    variance scales by `scale²` while dynamics, |A|, obs_dim, and
+    optimal policy are unchanged. Causal-probe lever for
+    moderator hypotheses (the env-level `log_mc_variance →
+    g_link` attenuation in particular)."""
     env_name: str
     n_seeds: int = 30
     chunk_size: int = 30
+    reward_scale: float = 1.0
 
 
 def _chunks(ec: EnvConfig) -> list[tuple[int, ...]]:
@@ -52,7 +60,8 @@ def chunked_arms(
     (h, env, seed_chunk) triple, suitable for
     `run_hypotheses(arms=...)`."""
     return [
-        (h, {'env_name': ec.env_name, 'seeds': chunk})
+        (h, {'env_name': ec.env_name, 'seeds': chunk,
+             'reward_scale': ec.reward_scale})
         for h in hypotheses
         for ec in env_configs
         for chunk in _chunks(ec)
@@ -74,7 +83,8 @@ def paired_arms(
             f'must match length.',
         )
     return [
-        (h, {'env_name': ec.env_name, 'seeds': chunk})
+        (h, {'env_name': ec.env_name, 'seeds': chunk,
+             'reward_scale': ec.reward_scale})
         for h, ec in zip(hypotheses, env_configs_aligned, strict=True)
         for chunk in _chunks(ec)
     ]
@@ -84,10 +94,19 @@ def env_arm_tag(
     h: Hypothesis[DQNTrajectoryRecord],
     grid_point: Mapping[str, object],
 ) -> str:
-    """Default arm_tag for DQN sweeps: `{env_name}__{h.name}`.
-    Pass to `run_hypotheses(arm_tag=env_arm_tag, ...)`."""
+    """Default arm_tag for DQN sweeps: `{env_name}__{h.name}` with
+    a `__rs={scale}` suffix when `reward_scale != 1.0`. The suffix
+    keeps arm identity unique when the same env runs at multiple
+    reward scales (causal-probe sweeps)."""
     env_name = grid_point.get('env_name', '')
-    return f'{env_name}__{h.name}'
+    reward_scale = grid_point.get('reward_scale', 1.0)
+    suffix = (
+        f'__rs={reward_scale}'
+        if isinstance(reward_scale, (int, float))
+            and float(reward_scale) != 1.0
+        else ''
+    )
+    return f'{env_name}__{h.name}{suffix}'
 
 
 __all__ = [

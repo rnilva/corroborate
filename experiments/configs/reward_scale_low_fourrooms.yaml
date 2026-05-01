@@ -1,0 +1,64 @@
+name: reward_scale_low_fourrooms
+out_dir: experiments/data/reward_scale_low_fourrooms
+arms_shape: chunked
+archive_remote: s3://corroborate-archive/reward_scale_low_fourrooms
+
+# Find the under-learning rescue boundary on FourRooms.
+#
+# Initial reward_scale_sweep showed: at rs=0.1, vanilla_dqn fails
+# catastrophically (native outcome 0.05/0.80 ≈ 6% of optimum)
+# while DDQN partially rescues (68% of optimum) — DDQN advantage
+# +0.49. The simple "mc_variance attenuates DDQN" reading was a
+# shadow of this under-learning rescue.
+#
+# This sweep maps the rescue regime: 5 reward scales spanning 2
+# OOMs below baseline. Predict:
+#   rs=0.01:  vanilla totally fails, DDQN may also struggle (LR
+#             too small relative to gradient magnitudes)
+#   rs=0.03:  vanilla fails, DDQN rescues (peak rescue regime)
+#   rs=0.10:  vanilla fails, DDQN rescues (already observed)
+#   rs=0.30:  vanilla starts learning; DDQN smaller edge
+#   rs=1.00:  both learn; DDQN minor edge (already observed)
+#
+# 5 scales × 2 arms × 30 seeds = 300 cells.
+envs:
+  - {name: FourRooms-misc, n_seeds: 30, chunk_size: 30, reward_scale: 0.01}
+  - {name: FourRooms-misc, n_seeds: 30, chunk_size: 30, reward_scale: 0.03}
+  - {name: FourRooms-misc, n_seeds: 30, chunk_size: 30, reward_scale: 0.1}
+  - {name: FourRooms-misc, n_seeds: 30, chunk_size: 30, reward_scale: 0.3}
+  - {name: FourRooms-misc, n_seeds: 30, chunk_size: 30, reward_scale: 1.0}
+
+base_intervention:
+  total_steps: 200000
+  eval_every:  20000
+  n_episodes:  5
+  gamma:       0.99
+  sync_period: 100
+  replay:
+    class: Replay
+    capacity: 50000
+    batch_size: 32
+  optimizer:
+    class: WarmedUpdate
+    inner: {class: Adam, lr: 0.0001}
+    warmup_steps: 100
+  q_network:
+    class: MLP
+    hidden: [64, 64]
+
+hypotheses:
+  - name: vanilla_dqn
+    predicted_direction: null
+    intervention: {}
+
+  - name: ddqn
+    predicted_direction: a_gt_b
+    intervention:
+      bootstrap:
+        fn: bootstrap
+        greedification: {fn: double_greedify}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement:
+          fn: bootstrap
+          greedification: {fn: double_greedify}

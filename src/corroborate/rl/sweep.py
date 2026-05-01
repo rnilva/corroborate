@@ -88,15 +88,23 @@ class DQNRunner:
                 f"got {type(seeds_v).__name__}",
             )
         seeds = cast(tuple[int, ...], seeds_v)
-        unexpected = set(grid_point) - {'env_name', 'seeds'}
+        unexpected = set(grid_point) - {'env_name', 'seeds', 'reward_scale'}
         if unexpected:
             raise ValueError(
                 f"DQNRunner: unexpected grid_point keys {sorted(unexpected)} "
                 f"— HP variation belongs in the Hypothesis, not the grid",
             )
+        reward_scale_v = grid_point.get('reward_scale', 1.0)
+        if not isinstance(reward_scale_v, (int, float)):
+            raise TypeError(
+                f"DQNRunner: grid_point['reward_scale'] must be float; "
+                f"got {type(reward_scale_v).__name__}",
+            )
         env_spec = self._envs[env_name]
 
-        arm = run_dqn_arm(env_spec, seeds, h)
+        arm = run_dqn_arm(
+            env_spec, seeds, h, reward_scale=float(reward_scale_v),
+        )
         return SweepCellResult(
             runs=tuple(c.run for c in arm.cells),
             traces=tuple(c.trace for c in arm.cells),

@@ -224,8 +224,15 @@ def _build_env(node: object) -> EnvConfig:
             f'env.chunk_size must be int; got '
             f'{type(chunk_size).__name__}',
         )
+    reward_scale = node.get('reward_scale', 1.0)
+    if not isinstance(reward_scale, (int, float)) or isinstance(reward_scale, bool):
+        raise TypeError(
+            f'env.reward_scale must be float; got '
+            f'{type(reward_scale).__name__}',
+        )
     return EnvConfig(
         env_name=name, n_seeds=n_seeds, chunk_size=chunk_size,
+        reward_scale=float(reward_scale),
     )
 
 
