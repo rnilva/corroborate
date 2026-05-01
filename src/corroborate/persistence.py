@@ -263,7 +263,11 @@ def stream_concat_parquets(
     if out.exists():
         out.unlink()
     how = 'diagonal_relaxed' if type_widening else 'diagonal'
-    eager_frames = [pl.read_parquet(str(p)) for p in inputs]
+    # `glob=False`: arm-tag relpaths embed `wrap[<wrapper>(<args>)]`
+    # which polars otherwise treats as glob character classes,
+    # producing "expanded paths were empty" on S3 URIs. Each input
+    # is a single concrete path, never a glob — so disable globbing.
+    eager_frames = [pl.read_parquet(str(p), glob=False) for p in inputs]
     merged = pl.concat(eager_frames, how=how)
     merged.write_parquet(
         str(out),

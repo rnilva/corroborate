@@ -853,6 +853,33 @@ def mc_variance_attenuates_g_link__between_env(
 #
 # Predicted: mean_diff(do(ddqn), do(vanilla) | FourRooms, rs=0.1) ≥ +0.4
 # Observed: +0.486, p=2.2e-16 — HELD.
+#
+# **Scope of the rescue regime is FourRooms-specific, NOT a
+# general √(log|A|) phenomenon.** The Hasselt-floor reading above
+# predicts that at rs=0.1 the rescue gap should scale across envs
+# as √(log|A|): DeepSea (|A|=2) at 71% of FourRooms's gap,
+# DiscountingChain (|A|=5) at 107%, MNISTBandit (|A|=10) at 140%.
+# `action_dim_at_low_rs` (4 envs × 2 rs × 30 seeds) tested this
+# corollary directly:
+#
+#                env                |A|    obs Δ at rs=0.1   pred Δ
+#                DeepSea-bsuite      2     +0.06 (ns)        +0.35
+#                FourRooms-misc      4     +0.49 (HELD)      +0.49 (anchor)
+#                DiscountingChain    5     +0.02 (ns)        +0.53
+#                MNISTBandit-bsuite  10    +0.00 (degen)     +0.63
+#
+# Pearson r(predicted, observed) = −0.16 → REFUTED. The other
+# three envs do not enter the rescue regime at rs=0.1: DeepSea's
+# vanilla solves at native 0.80 (no failure to rescue);
+# MNISTBandit is a bandit, both arms cap at the supervised-MNIST
+# floor regardless of bias; DiscountingChain solves quickly. The
+# Hasselt-floor formula is necessary at the mechanism layer (DDQN
+# does reduce Jensen bias, and the floor is real) but it doesn't
+# *predict gap magnitude across envs* because vanilla doesn't
+# fail at rs=0.1 outside FourRooms's specific under-learning
+# window. The bridge below holds at FourRooms; we don't author
+# sibling bridges at other |A| envs because the premise (vanilla
+# fails) doesn't hold there.
 # =====================================================================
 
 

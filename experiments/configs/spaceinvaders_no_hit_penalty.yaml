@@ -1,6 +1,6 @@
 name: spaceinvaders_no_hit_penalty
 out_dir: experiments/data/spaceinvaders_no_hit_penalty
-arms_shape: chunked
+arms_shape: paired
 archive_remote: s3://corroborate-archive/spaceinvaders_no_hit_penalty
 
 # Pearl-rung-2 mechanism test: does DDQN's per-burst attenuation

@@ -75,7 +75,7 @@ def registered_names() -> tuple[str, ...]:
     return tuple(sorted(_REGISTRY))
 
 
-def analysis[R: Mapping[str, object], O](
+def analysis[R: Mapping[str, object] = Mapping[str, object], O = object](
     fn: Callable[..., O],
 ) -> Analysis[R, O]:
     """Register `fn` as a framework analysis. Name is taken from
@@ -84,7 +84,11 @@ def analysis[R: Mapping[str, object], O](
     The wrapped function's first positional arg is the corpus
     (`Iterable[R]` or whatever shape the analysis consumes); the
     rest are keyword parameters supplied by the bridge's
-    structural fields + params bag at run time."""
+    structural fields + params bag at run time. The type-param
+    defaults (PEP 696) keep `paired_g`, `paired_g_per_burst`, etc.
+    callable from standalone analysis scripts as
+    `Analysis[Mapping[str, object], <Result>]` rather than
+    `Analysis[Unknown, <Result>]`."""
     name = fn.__name__
     wrapper: Analysis[R, O] = Analysis(fn=fn, name=name)
     existing = _REGISTRY.get(name)
