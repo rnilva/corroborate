@@ -31,7 +31,7 @@ import jax
 import jax.numpy as jnp
 
 from corroborate.claim import claim
-from corroborate.loop import Loop
+from corroborate.loop import Loop, iterate
 from corroborate.rl.loop import scan_loop
 from corroborate.rl.dqn.state import DQNState
 from corroborate.rl.dqn.types import QFunction, StepRecord
@@ -214,12 +214,15 @@ def train_with_eval(
     def super_step(
         s: DQNState, super_idx: jax.Array,
     ) -> tuple[DQNState, tuple[StepRecord, EvalBurstOut]]:
-        s, train_chunk = loop(step_fn, s, eval_every)  # pyright: ignore[reportAssignmentType]
+        s, train_chunk = iterate(  # pyright: ignore[reportAssignmentType]
+            step=step_fn, init=s, length=eval_every, backend=loop,
+        )
         burst = eval_fn(s, super_idx)
         return s, (train_chunk, burst)  # pyright: ignore[reportReturnType]
 
-    _final, (train_chunks, eval_bursts) = loop(  # pyright: ignore[reportAssignmentType]
-        super_step, init_state, n_super_steps,
+    _final, (train_chunks, eval_bursts) = iterate(  # pyright: ignore[reportAssignmentType]
+        step=super_step, init=init_state, length=n_super_steps,
+        backend=loop,
     )
 
     def _flatten(x: jax.Array) -> jax.Array:

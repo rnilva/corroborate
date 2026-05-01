@@ -40,6 +40,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Protocol
 
+from corroborate.claim import claim
+
 
 class Loop[C, T](Protocol):
     """Iteration-backend contract.
@@ -86,3 +88,40 @@ def python_loop[C, T](
         state, out = step(state, i)
         outs.append(out)
     return state, outs
+
+
+@claim
+def iterate[C, T](
+    *,
+    step: Callable[[C, int], tuple[C, T]],
+    init: C,
+    length: int,
+    backend: Loop[C, T],
+) -> tuple[C, object]:
+    """Iteration as a typed claim. Thin wrapper over the
+    `Loop[C, T]` Protocol that records the loop boundary as a
+    single `@claim` call.
+
+    Why this exists: per-iteration `@claim` records get
+    deduplicated by `build_computation_graph` (the same
+    `(reader, source)` tuple appears N times but is collapsed
+    to one edge), so the recurrence — what the loop adds beyond
+    its body — is invisible to the structural graph extractor.
+    Wrapping the iteration in this claim surfaces (`step`, `init`,
+    `length`, `backend`) as typed inputs of a single recorded
+    call. The result `final_state` then has tracked identity for
+    downstream consumers (outcome aggregators, eval drivers).
+
+    The trace edges become:
+      step's leaves (γ, env_attrs, hp_*) → step → iterate →
+        final_state → outcome_aggregator
+    where the integration over `length` iterations is captured
+    structurally by the iterate node, not erased by dedup. Any
+    substrate composing with this primitive gets the loop axis
+    in its claim graph for free — no per-substrate ad-hoc node
+    needed.
+
+    Returns whatever `backend` returns (`tuple[final_state,
+    aggregated]`). Authors who only need the structural
+    boundary record can ignore the aggregated half."""
+    return backend(step, init, length)

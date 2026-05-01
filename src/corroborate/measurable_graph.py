@@ -30,8 +30,9 @@ claim-graph mediators; interventional Δs across arms;
 multi-edge stratification by Pearl-ladder tier."""
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+from enum import Enum
 
 import numpy as np
 import numpy.typing as npt
@@ -165,3 +166,176 @@ def explained_by_claim_graph(
                 seen.add(nxt)
                 frontier.append(nxt)
     return False
+
+
+class DiffCategory(Enum):
+    """Why a discovered edge is or isn't in the claim graph.
+
+    `EXPLAINED` — the column→claim-node bridge maps both endpoints
+      to claim graph node sets, and at least one cross-pair is
+      reachable via `explained_by_claim_graph`. The mechanism
+      skeleton predicts the statistical edge.
+
+    `UNREACHABLE_IN_CLAIM` — both endpoints map to non-empty
+      claim node sets but no cross-pair is reachable. The
+      claim graph asserts independence; PC says otherwise.
+      Strongest missing-edge signal: the authored mechanism is
+      genuinely incomplete here.
+
+    `UNMAPPED_OUTCOME` — at least one endpoint is an outcome
+      aggregate with no claim-node projection. Outcomes are
+      Measurables (observation reductions), not Claims —
+      mechanism-vs-observation is a framework-design separation.
+      The substrate is expected to project a Measurable to its
+      claim-graph entry points via `transitive_reads → claims
+      that write those keys`. Until the substrate supplies that
+      projection, the diff cannot bridge namespaces.
+
+    `UNMAPPED_DERIVED` — at least one endpoint is a derived
+      cross-leaf feature (e.g. `effective_horizon = γ × bf`)
+      computed at analysis time, not produced by a claim's
+      record_call. Derived features could be promoted to typed
+      reductions in the claim graph; until then they live
+      outside it.
+
+    `UNMAPPED_OTHER` — both endpoints are unmapped and not
+      flagged above; typically leaf↔leaf cross-correlations
+      arising from corpus HP-by-env design choices, not a
+      framework gap."""
+    EXPLAINED = 'explained'
+    UNMAPPED_OUTCOME = 'unmapped_outcome'
+    UNMAPPED_DERIVED = 'unmapped_derived'
+    UNMAPPED_OTHER = 'unmapped_other'
+    UNREACHABLE_IN_CLAIM = 'unreachable_in_claim'
+
+
+@dataclass(frozen=True, slots=True)
+class DiffEdge:
+    """One discovered edge categorized against a claim graph."""
+    a: str
+    b: str
+    category: DiffCategory
+    reason: str
+
+
+@dataclass(frozen=True, slots=True)
+class ColumnRole:
+    """Substrate-supplied bridge between PC column names and the
+    per-step claim graph + role taxonomy.
+
+    `claim_nodes` — set of claim graph entry points this column
+      depends on. For a column representing a single claim's
+      output, this is `frozenset({claim_name})`. For a column
+      representing a Measurable observation/reduction, this is
+      the set of claim graph nodes whose `record_call` outputs
+      contribute to the measurable's `transitive_reads` — i.e.
+      the substrate's projection of "which claims feed this
+      measurable" via the trace. Empty when the column doesn't
+      map to the claim graph (leaves, structural HPs).
+    `role` — one of `'outcome'`, `'derived'`, `'leaf'`, `'claim'`,
+      `'measurable'`. Drives which `DiffCategory` an unmapped or
+      unreachable edge falls into.
+
+    Why a SET of claim nodes, not a single one: Measurables are
+    observation reductions — by design separate from mechanism
+    claims (the framework's typed×open shape). A measurable's
+    bridge into the claim graph is the trace keys it reads,
+    which can come from multiple claim nodes. The diff tool asks
+    "is any pair (a' ∈ a.claim_nodes, b' ∈ b.claim_nodes)
+    connected?" — `EXPLAINED` iff at least one pair is reachable.
+    This keeps the framework's mechanism-vs-observation separation
+    intact while letting the diff tool bridge namespaces."""
+    claim_nodes: frozenset[str]
+    role: str
+
+
+def diff_against_claim_graph(
+    edges: Iterable[tuple[str, str]],
+    claim_graph: ComputationGraph,
+    column_roles: Mapping[str, ColumnRole],
+) -> tuple[DiffEdge, ...]:
+    """Categorize each PC-discovered edge against the per-step
+    claim graph using the substrate's column→claim-node bridge.
+
+    Counterpart to `explained_by_claim_graph`: takes a SET of
+    edges + a typed bridge, returns the diff partitioned by
+    `DiffCategory`. The `UNMAPPED_OUTCOME` category surfaces the
+    training-loop integration axis specifically — these are
+    edges the per-step claim graph cannot represent by
+    construction. A framework extension that surfaces the loop
+    axis as a typed structural element would convert these to
+    `EXPLAINED`.
+
+    `column_roles` is the substrate's bridge mapping. For RL,
+    typically supplied by the rl-substrate module (e.g.,
+    `corroborate.rl.dqn.column_roles.DDQN_COLUMN_ROLES`).
+
+    Edges are normalized to `(min, max)` ordering."""
+    out: list[DiffEdge] = []
+    for raw_a, raw_b in edges:
+        a, b = sorted((raw_a, raw_b))
+        ra = column_roles.get(a)
+        rb = column_roles.get(b)
+        nodes_a = ra.claim_nodes if ra else frozenset()
+        nodes_b = rb.claim_nodes if rb else frozenset()
+        if nodes_a and nodes_b:
+            # Any-pair reachability: a column may project to
+            # multiple claim graph entry points (measurables read
+            # from multiple trace keys). Edge is EXPLAINED iff at
+            # least one cross-pair is connected.
+            connected_pair: tuple[str, str] | None = None
+            for na in nodes_a:
+                for nb in nodes_b:
+                    if explained_by_claim_graph(na, nb, claim_graph):
+                        connected_pair = (na, nb)
+                        break
+                if connected_pair is not None:
+                    break
+            if connected_pair is not None:
+                na, nb = connected_pair
+                out.append(DiffEdge(
+                    a=a, b=b, category=DiffCategory.EXPLAINED,
+                    reason=f'{na} ↔ {nb} reachable',
+                ))
+            else:
+                out.append(DiffEdge(
+                    a=a, b=b,
+                    category=DiffCategory.UNREACHABLE_IN_CLAIM,
+                    reason=f'projections {sorted(nodes_a)} and '
+                           f'{sorted(nodes_b)} both populated but '
+                           f'no cross-pair reachable',
+                ))
+            continue
+        # At least one side has no claim-graph projection.
+        roles = {ra.role if ra else 'unknown',
+                 rb.role if rb else 'unknown'}
+        if 'outcome' in roles:
+            out.append(DiffEdge(
+                a=a, b=b, category=DiffCategory.UNMAPPED_OUTCOME,
+                reason='outcome aggregate has no measurable→claim '
+                       'projection (substrate must supply '
+                       'transitive_reads → claim mapping)',
+            ))
+        elif 'derived' in roles:
+            out.append(DiffEdge(
+                a=a, b=b, category=DiffCategory.UNMAPPED_DERIVED,
+                reason='derived cross-leaf feature',
+            ))
+        else:
+            out.append(DiffEdge(
+                a=a, b=b, category=DiffCategory.UNMAPPED_OTHER,
+                reason=f'roles={sorted(roles)}',
+            ))
+    return tuple(out)
+
+
+__all__ = [
+    'ColumnRole',
+    'Correlation',
+    'DiffCategory',
+    'DiffEdge',
+    'correlation_matrix_table',
+    'diff_against_claim_graph',
+    'explained_by_claim_graph',
+    'pairwise_correlations',
+]
