@@ -266,6 +266,42 @@ def run_hypotheses[R: Mapping[str, object]](
         tag = effective_arm_tag(h, grid_point)
         runs_path = tmp_dir / f'arm{idx:03d}__{tag}__runs.parquet'
         traces_path = tmp_dir / f'arm{idx:03d}__{tag}__traces.parquet'
+        rp_rel = runs_path.relative_to(out_dir).as_posix()
+        tp_rel = traces_path.relative_to(out_dir).as_posix()
+
+        # Resume support: skip arms whose outputs already exist —
+        # either remotely (archive_remote with manifest entry) or
+        # locally (no archive_remote, parquets on disk). Lets a
+        # relaunch after a partial crash pick up where it left
+        # off without redoing finished arms.
+        if archive_remote is not None:
+            from corroborate.cloud import archived_uri, is_archived
+            if (
+                is_archived(out_dir, rp_rel)
+                and is_archived(out_dir, tp_rel)
+            ):
+                archived_runs_uris.append(
+                    archived_uri(archive_remote, rp_rel),
+                )
+                archived_traces_uris.append(
+                    archived_uri(archive_remote, tp_rel),
+                )
+                print(
+                    f'  [{idx+1}/{len(arms)}] {tag} '
+                    f'✓ already archived, skipping',
+                    flush=True,
+                )
+                continue
+        elif runs_path.exists() and traces_path.exists():
+            runs_paths.append(runs_path)
+            traces_paths.append(traces_path)
+            print(
+                f'  [{idx+1}/{len(arms)}] {tag} '
+                f'✓ local parquets exist, skipping',
+                flush=True,
+            )
+            continue
+
         print(
             f'  [{idx+1}/{len(arms)}] {tag} '
             f'(grid_point keys: {sorted(grid_point.keys())}) ...',
@@ -282,8 +318,6 @@ def run_hypotheses[R: Mapping[str, object]](
         traces_paths.append(traces_path)
         if archive_remote is not None:
             from corroborate.cloud import archive
-            rp_rel = runs_path.relative_to(out_dir).as_posix()
-            tp_rel = traces_path.relative_to(out_dir).as_posix()
             archive(
                 out_dir, archive_remote,
                 files=[rp_rel, tp_rel], purge_local=True,

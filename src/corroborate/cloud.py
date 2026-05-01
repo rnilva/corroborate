@@ -359,6 +359,24 @@ def restore(
     return restored
 
 
+def is_archived(sweep_dir: Path, relpath: str) -> bool:
+    """True iff `relpath` (relative to `sweep_dir`) is recorded in
+    the per-sweep manifest. Used by sweep-loop resume: skip arms
+    whose tmp parquets are already on the remote so a relaunch
+    after a partial crash doesn't redo finished work."""
+    manifest = _load_manifest(sweep_dir)
+    if manifest is None:
+        return False
+    return any(f.relpath == relpath for f in manifest.files)
+
+
+def archived_uri(remote_root: str, relpath: str) -> str:
+    """Public wrapper around the URI-join helper. Sweep-loop
+    resume uses this to record archived URIs for the merge step
+    when skipping a run-the-arm step."""
+    return _join_remote(remote_root, relpath)
+
+
 def ls(sweep_dir: Path) -> RemoteManifest:
     """Read and return the per-sweep manifest. Raises
     `FileNotFoundError` if no archive yet exists for
