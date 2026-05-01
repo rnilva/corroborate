@@ -1,0 +1,163 @@
+"""`mundlak_paired_g_per_burst` — composite analysis: per-(env,
+burst) Hedges' g paired panel + Mundlak within/between
+decomposition of a *named* per-burst measurable.
+
+Phase B refactor — the per-burst predictor is identified by
+NAME (a registered `@measurable` returning a `(n_bursts,)`
+array), not by a callable. Swap moderator candidates by
+changing the string; no per-moderator helper functions.
+
+The shape:
+
+  cells × `predictor_name` (registered @measurable)
+    → paired_g_per_burst (per-(env, burst) → (g, se))
+    → resolve `predictor_name` once per cell (cached array)
+    → mundlak_decomposition (env-mean + within-deviation)
+    → MundlakResult
+
+Bridge consumers declare `mundlak_paired_g_per_burst:
+MundlakResult`; the bridge's `predictor_name` defaulted-kwarg
+controls which measurable is decomposed."""
+from __future__ import annotations
+
+import math
+from collections.abc import Iterable, Mapping, Sequence
+
+import numpy as np
+import numpy.typing as npt
+
+from corroborate.analyses.mundlak_decomposition import (
+    MundlakResult, mundlak_decomposition,
+)
+from corroborate.analyses.paired_g_per_burst import paired_g_per_burst
+from corroborate.analysis import analysis
+
+
+def _per_env_burst_predictor_mean(
+    cells: Sequence[Mapping[str, object]],
+    burst_index: int,
+    per_cell_array: dict[str, npt.NDArray[np.float64]],
+    env_name: str,
+    arm_filter: str | None,
+) -> float:
+    """Average a precomputed per-burst array across the cells of
+    `env_name` at `burst_index`. `per_cell_array` is keyed by
+    cell `id`. `arm_filter` restricts the average to a single
+    arm (e.g., baseline `vanilla_dqn`)."""
+    vals: list[float] = []
+    for c in cells:
+        if c.get('env_name') != env_name:
+            continue
+        if arm_filter is not None and c.get('intervention_name') != arm_filter:
+            continue
+        cell_id = c.get('id')
+        if not isinstance(cell_id, str):
+            continue
+        arr = per_cell_array.get(cell_id)
+        if arr is None or arr.ndim < 1 or burst_index >= arr.shape[0]:
+            continue
+        v = float(arr[burst_index])
+        if not math.isnan(v):
+            vals.append(v)
+    return float(np.mean(vals)) if vals else float('nan')
+
+
+@analysis
+def mundlak_paired_g_per_burst(
+    cells: Iterable[Mapping[str, object]],
+    *,
+    treatment_arm: str,
+    baseline_arm: str,
+    pair_by: tuple[str, ...] = ('seed',),
+    source: str = 'mc_return',
+    reduction: str = 'mean',
+    predictor_name: str = 'log_mc_variance_per_burst',
+    predictor_arm_filter: str | None = None,
+    alpha: float = 0.05,
+    cluster_robust: bool = True,
+) -> MundlakResult:
+    """Per-(env, burst) Hedges' g panel + Mundlak decomposition
+    of a per-burst measurable.
+
+    `predictor_name` resolves a registered `@measurable` whose
+    `__call__(record)` returns a `(n_bursts,)` array (e.g.
+    `log_mc_variance_per_burst`, `mc_variance_per_burst`). The
+    analysis applies it once per cell, caches the array, then
+    averages across cells at each burst index to build the
+    per-(env, burst) predictor column.
+
+    `predictor_arm_filter='vanilla_dqn'` restricts the per-cell
+    predictor average to baseline cells — for predictors that
+    should reflect baseline-only state (e.g. baseline mc_variance,
+    baseline σ_Q).
+
+    `cluster_robust` defaults to **True** — bursts within an env
+    share the agent's training trajectory and the env's
+    structural noise, so per-burst residuals are correlated
+    within env. OLS-style SEs would overstate significance.
+    Forwarded to `mundlak_decomposition` as the Liang-Zeger CR1
+    sandwich (clusters by env)."""
+    cells_list = [dict(c) for c in cells]
+    per_burst_g = paired_g_per_burst.fn(
+        cells_list, treatment_arm=treatment_arm,
+        baseline_arm=baseline_arm, pair_by=pair_by,
+        source=source, reduction=reduction,
+    )
+
+    # Resolve the named measurable; apply once per cell with
+    # transitive dep resolution via `evaluate_with_measurables`,
+    # cache the array.
+    import corroborate.rl.dqn.measurables as _m  # noqa: F401
+    _ = _m
+    from corroborate.measurable import (
+        get_registered, evaluate_with_measurables,
+    )
+    predictor_m = get_registered(predictor_name)
+    if predictor_m is None:
+        raise RuntimeError(
+            f'measurable {predictor_name!r} is not registered; '
+            f'declare it via `@measurable` and ensure the '
+            f'declaring module is imported.',
+        )
+    per_cell_array: dict[str, npt.NDArray[np.float64]] = {}
+    for c in cells_list:
+        cell_id = c.get('id')
+        if not isinstance(cell_id, str):
+            continue
+        # Resolves any other measurables `predictor_m` depends on
+        # (e.g. `log_mc_variance_per_burst` reads
+        # `mc_variance_per_burst`). Cache is per-cell.
+        arr_obj: object = evaluate_with_measurables(
+            predictor_m.fn, c,
+        )
+        per_cell_array[cell_id] = np.asarray(arr_obj, dtype=np.float64)
+
+    panel: list[dict[str, object]] = []
+    for s in per_burst_g.strata:
+        if s.n_pairs < 2 or math.isnan(s.g) or math.isnan(s.se) \
+                or s.se <= 0.0:
+            continue
+        x = _per_env_burst_predictor_mean(
+            cells_list, s.burst_index, per_cell_array,
+            s.env_name, predictor_arm_filter,
+        )
+        if math.isnan(x):
+            continue
+        panel.append({
+            'stratum_id': s.env_name,
+            'x': x, 'y': s.g, 'se': s.se,
+        })
+
+    if len(panel) < 4:
+        raise ValueError(
+            f'mundlak_paired_g_per_burst: panel has only '
+            f'{len(panel)} valid (env, burst) strata after '
+            f'predictor join + drops; need at least 4.',
+        )
+
+    return mundlak_decomposition.fn(
+        panel, alpha=alpha, cluster_robust=cluster_robust,
+    )
+
+
+__all__ = ['mundlak_paired_g_per_burst']

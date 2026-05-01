@@ -529,3 +529,121 @@ def state_coverage_kl_uniform_late(
     # = log n - H(p)   where H(p) = -sum p_i log p_i
     h = float(-np.sum(p * np.log(p)))
     return float(np.log(n) - h)
+
+
+# ============ Post-run per-cell measurables (universal-ready) ============
+#
+# Phase A measurables: per-cell scalar / array derivations that
+# bridges or analyses currently compute INLINE. Declaring them as
+# named, registered fixtures lets the framework cache the result
+# once per cell and serve to any consumer by name. The "universal"
+# parquet (per the architectural principle) is then just (1)
+# claim outputs + (2) a chosen subset of these cached measurables.
+#
+# Each must depend only on the per-cell record (runs.parquet row
+# fields and/or persisted trace fields), not on cross-cell
+# pairing — pairing is an analysis primitive, NOT a measurable.
+
+
+@measurable(reads=('outcome.eval_best_burst_mean', 'reward_scale'))
+def outcome_native(record: Mapping[str, object]) -> float:
+    """Outcome divided by `reward_scale` — the agent's policy
+    quality in units invariant under reward magnitude scaling.
+    The optimal policy achieves the same `outcome_native`
+    regardless of how reward is scaled (because optimal value
+    scales linearly with reward; division cancels). Hedges' g
+    standardizes this away too via pooled SD; bridges that test
+    interventional effects ON reward magnitude must use this
+    native unit, NOT standardized g.
+
+    Returns the raw outcome unchanged when `reward_scale` is
+    absent (legacy corpora that didn't record the column). NaN
+    when reward_scale is exactly zero (defensive)."""
+    outcome = record.get('outcome.eval_best_burst_mean')
+    if not isinstance(outcome, (int, float)):
+        return float('nan')
+    rs = record.get('reward_scale', 1.0)
+    if not isinstance(rs, (int, float)) or float(rs) == 0.0:
+        return float('nan')
+    return float(outcome) / float(rs)
+
+
+@measurable(reads=('mc_return',))
+def mc_variance_per_burst(
+    record: Mapping[str, object],
+) -> npt.NDArray[np.float64]:
+    """Per-burst variance of `mc_return` across the K eval
+    episodes within each burst. Shape `(n_bursts,)`.
+
+    The within-burst spread of returns is a proxy for *epistemic
+    uncertainty* in the agent's current policy — when the same
+    policy produces variable episodic returns, the agent is
+    sampling a high-variance distribution. Distinct from
+    *between-env* mc_variance (which captures structural env
+    noise). The bridge `mc_variance_attenuates_g_link__between_env`
+    consumes this for the per-(env, burst) panel."""
+    arr = np.asarray(record['mc_return'], dtype=np.float64)
+    if arr.ndim != 2 or arr.size == 0:
+        return np.zeros((0,), dtype=np.float64)
+    return arr.var(axis=1)
+
+
+@measurable(reads=('mc_return',))
+def log_mc_variance_per_burst(
+    record: Mapping[str, object],
+    mc_variance_per_burst: npt.NDArray[np.float64],
+) -> npt.NDArray[np.float64]:
+    """`log(mc_variance_per_burst)`. Composes the variance
+    measurable. Zero-variance bursts (converged-deterministic
+    runs — e.g. Catch reaches optimum and every episode returns
+    the same scalar) produce NaN, NOT a fudge floor. Downstream
+    consumers that average across cells must filter NaN; the
+    +1e-9 epsilon shortcut leaks deterministic-success bursts
+    in as -20.7 outliers and contaminates the average."""
+    arr = np.asarray(mc_variance_per_burst, dtype=np.float64)
+    out = np.full(arr.shape, np.nan, dtype=np.float64)
+    mask = arr > 0
+    out[mask] = np.log(arr[mask])
+    return out
+
+
+@measurable(reads=('mc_return',))
+def mc_cv_per_burst(
+    record: Mapping[str, object],
+) -> npt.NDArray[np.float64]:
+    """Per-burst coefficient of variation: `√var / |mean|`. Shape
+    `(n_bursts,)`. NaN when |mean| is zero (degenerate, no
+    well-defined CV) or when mc_return is mis-shaped.
+
+    Variance scales with reward magnitude squared (k²) — it
+    confounds with reward-scale interventions. CV is unitless,
+    invariant under positive linear scaling of reward, and so
+    captures *intrinsic relative noisiness* of returns rather
+    than absolute spread. If `log_mc_variance` attenuates DDQN
+    because it correlates with reward magnitude, CV should NOT
+    reproduce the attenuation; if there's a true relative-noise
+    moderator, CV will surface it."""
+    arr = np.asarray(record['mc_return'], dtype=np.float64)
+    if arr.ndim != 2 or arr.size == 0:
+        return np.zeros((0,), dtype=np.float64)
+    means = arr.mean(axis=1)
+    stds = arr.std(axis=1)
+    out = np.full(means.shape, np.nan, dtype=np.float64)
+    mask = np.abs(means) > 0
+    out[mask] = stds[mask] / np.abs(means[mask])
+    return out
+
+
+@measurable(reads=('mc_return',))
+def log_mc_cv_per_burst(
+    record: Mapping[str, object],
+    mc_cv_per_burst: npt.NDArray[np.float64],
+) -> npt.NDArray[np.float64]:
+    """`log(mc_cv_per_burst)`. Zero-CV bursts (deterministic
+    success or failure) produce NaN — same NaN-honest discipline
+    as `log_mc_variance_per_burst`."""
+    arr = np.asarray(mc_cv_per_burst, dtype=np.float64)
+    out = np.full(arr.shape, np.nan, dtype=np.float64)
+    mask = arr > 0
+    out[mask] = np.log(arr[mask])
+    return out

@@ -8,6 +8,8 @@ from corroborate.analyses import (  # noqa: F401
     factorial_2x2 as _factorial,  # pyright: ignore[reportUnusedImport]
     meta_regression_paired_g as _mr,  # pyright: ignore[reportUnusedImport]
     meta_regression_per_burst as _mr_per_burst,  # pyright: ignore[reportUnusedImport]
+    mundlak_decomposition as _mundlak,  # pyright: ignore[reportUnusedImport]
+    mundlak_paired_g_per_burst as _mundlak_pgpb,  # pyright: ignore[reportUnusedImport]
     paired_g as _paired_g,  # pyright: ignore[reportUnusedImport]
     paired_g_among_solvers as _solvers,  # pyright: ignore[reportUnusedImport]
     paired_g_per_burst as _per_burst,  # pyright: ignore[reportUnusedImport]
