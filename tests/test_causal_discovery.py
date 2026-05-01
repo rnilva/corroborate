@@ -7,9 +7,14 @@ from __future__ import annotations
 import math
 
 import numpy as np
+import polars as pl
+import pytest
 from scipy.stats import spearmanr  # type: ignore[reportMissingTypeStubs]
 
 from corroborate.causal_discovery import (
+    VariableScope,
+    assert_stratification_admissible,
+    classify_variable_scope,
     partial_spearman_rho,
     partial_spearman_rho_multi,
     stratified_partial_spearman_rho,
@@ -180,11 +185,108 @@ def test_stratified_partial_recovers_within_stratum_partial() -> None:
     assert p > 0.05
 
 
+# ============ classify_variable_scope — within vs across stratum ============
+
+def test_classify_within_stratum_per_burst_at_fixed_env() -> None:
+    """Per-burst measurements at fixed env: variance lives within env.
+    The motivating WITHIN_STRATUM case — JCI's natural domain."""
+    rng = np.random.default_rng(0)
+    # 3 envs, 100 bursts each. Within-env: noisy values. Across-env:
+    # same mean (no env effect on the per-burst variable).
+    values = rng.standard_normal(300)
+    strata = ['envA'] * 100 + ['envB'] * 100 + ['envC'] * 100
+    scope = classify_variable_scope(values, strata)
+    assert scope is VariableScope.WITHIN_STRATUM
+
+
+def test_classify_across_stratum_env_level_feature() -> None:
+    """Env-level feature (constant within env, varies across envs):
+    the case that motivated codification — JCI silently NaN-skips
+    these because within-stratum variance is zero."""
+    # Three envs with different log_obs_dim values, but each env's
+    # bursts share the same value (env-level feature).
+    values = np.concatenate([
+        np.full(50, 2.0),   # envA: log_obs_dim = 2.0
+        np.full(50, 5.0),   # envB: log_obs_dim = 5.0
+        np.full(50, 8.0),   # envC: log_obs_dim = 8.0
+    ])
+    strata = ['envA'] * 50 + ['envB'] * 50 + ['envC'] * 50
+    scope = classify_variable_scope(values, strata)
+    assert scope is VariableScope.ACROSS_STRATUM
+
+
+def test_classify_both_when_within_and_across_variance_present() -> None:
+    """Variable that varies both within and across strata: BOTH —
+    compatible with either analysis, choice depends on question."""
+    rng = np.random.default_rng(0)
+    # Each env has its own mean (across-stratum variance) AND noise
+    # within (within-stratum variance), both substantial.
+    values = np.concatenate([
+        rng.standard_normal(100) * 1.0 + 0.0,
+        rng.standard_normal(100) * 1.0 + 5.0,
+        rng.standard_normal(100) * 1.0 + 10.0,
+    ])
+    strata = ['envA'] * 100 + ['envB'] * 100 + ['envC'] * 100
+    scope = classify_variable_scope(values, strata)
+    assert scope is VariableScope.BOTH
+
+
+def test_classify_degenerate_constant_column() -> None:
+    """Constant variable across the full panel: useless for any
+    test; explicitly DEGENERATE (not silently mistaken for one
+    side or the other)."""
+    values = np.full(150, 3.14)
+    strata = ['envA'] * 50 + ['envB'] * 50 + ['envC'] * 50
+    scope = classify_variable_scope(values, strata)
+    assert scope is VariableScope.DEGENERATE
+
+
+def test_classify_single_stratum_treated_as_within() -> None:
+    """One stratum present → no across-stratum dimension to test;
+    classify by whether values vary at all."""
+    rng = np.random.default_rng(0)
+    values = rng.standard_normal(50)
+    strata = ['envA'] * 50
+    assert classify_variable_scope(values, strata) is VariableScope.WITHIN_STRATUM
+    assert classify_variable_scope(np.zeros(50), strata) is VariableScope.DEGENERATE
+
+
+def test_assert_stratification_admissible_raises_on_env_level_features() -> None:
+    """The motivating reproducer: passing env-level features (e.g.
+    `log_obs_dim`, `log_action_dim`) to a stratify_by='env_name'
+    primitive must fail loudly, not silently NaN-skip."""
+    df = pl.DataFrame({
+        'env_name': ['envA'] * 50 + ['envB'] * 50 + ['envC'] * 50,
+        'g_link': np.random.default_rng(0).standard_normal(150).tolist(),
+        'log_obs_dim': [2.0] * 50 + [5.0] * 50 + [8.0] * 50,
+    })
+    with pytest.raises(ValueError, match='ACROSS_STRATUM'):
+        assert_stratification_admissible(
+            df, ['g_link', 'log_obs_dim'], 'env_name',
+        )
+
+
+def test_assert_stratification_admissible_passes_within_stratum_variables() -> None:
+    """The happy path: per-burst measurements (within-stratum
+    variance) pass the admissibility check and return their scope
+    classification."""
+    rng = np.random.default_rng(0)
+    df = pl.DataFrame({
+        'env_name': ['envA'] * 50 + ['envB'] * 50 + ['envC'] * 50,
+        'g_link': rng.standard_normal(150).tolist(),
+        'g_mech': rng.standard_normal(150).tolist(),
+    })
+    scopes = assert_stratification_admissible(
+        df, ['g_link', 'g_mech'], 'env_name',
+    )
+    assert scopes['g_link'] is VariableScope.WITHIN_STRATUM
+    assert scopes['g_mech'] is VariableScope.WITHIN_STRATUM
+
+
 # ============ PC algorithm — discover_adjacency ============
 
 def _df_from_columns(**cols: np.ndarray):  # type: ignore[reportUnknownParameterType, reportMissingParameterType]
     """Build a polars DataFrame from kwarg columns."""
-    import polars as pl
     return pl.DataFrame({k: v.tolist() for k, v in cols.items()})
 
 

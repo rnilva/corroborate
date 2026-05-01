@@ -31,8 +31,9 @@ heterogeneity without ordinal-encoding the env.
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from enum import Enum
 from itertools import combinations
 
 import numpy as np
@@ -40,6 +41,173 @@ import numpy.typing as npt
 import polars as pl
 import statsmodels.api as sm  # type: ignore[reportMissingTypeStubs]
 from scipy.stats import norm, spearmanr  # type: ignore[reportMissingTypeStubs]
+
+
+# ============ Variable-scope classification ============
+#
+# Load-bearing methodological rule: JCI/stratified primitives test
+# WITHIN-stratum conditional independence; pooled primitives (DoWhy
+# backdoor, unstratified meta-regression) test ACROSS-stratum effects.
+# When the variable's variance lives in the wrong place relative to
+# the analysis, you get silent false negatives — the stratified test
+# returns NaN per stratum (constant input) and the analysis loses
+# power without surfacing why.
+#
+# `VariableScope` + `classify_variable_scope` codify this so callers
+# can validate before running an analysis.
+
+
+class VariableScope(Enum):
+    """Where a variable's variance lives relative to a stratification.
+
+    `WITHIN_STRATUM` — variance lives within strata (per-stratum
+      observations vary). Compatible with JCI/stratified primitives.
+      Example: per-burst measurements at fixed env.
+
+    `ACROSS_STRATUM` — variance lives across strata, constant within
+      stratum (env-level features under env-stratification). NOT
+      compatible with JCI — within-stratum tests have zero variance
+      and silently skip. Use pooled-with-confounders analysis instead
+      (DoWhy backdoor, unstratified meta-regression).
+
+    `BOTH` — variance in both directions. Compatible with either
+      analysis; the choice depends on the causal question.
+
+    `DEGENERATE` — variance in neither direction (column is constant
+      across the entire panel). Useless for any test."""
+    WITHIN_STRATUM = 'within_stratum'
+    ACROSS_STRATUM = 'across_stratum'
+    BOTH = 'both'
+    DEGENERATE = 'degenerate'
+
+
+def classify_variable_scope(
+    values: npt.NDArray[np.float64],
+    strata: Sequence[object],
+    *,
+    relative_threshold: float = 0.05,
+) -> VariableScope:
+    """Classify where `values`'s variance lives w.r.t. `strata`.
+
+    Decomposes total variance into within-stratum (mean of
+    per-stratum variances) and across-stratum (variance of
+    per-stratum means). Reports the scope based on which dominates.
+
+    `relative_threshold` — fraction of total variance below which a
+    side counts as "negligible". Default 0.05 (5%); values below
+    that imply the variable is effectively constant on that axis.
+
+    Returns `DEGENERATE` if total variance is zero (constant column),
+    `WITHIN_STRATUM` if across-stratum variance is below threshold,
+    `ACROSS_STRATUM` if within-stratum variance is below threshold,
+    `BOTH` otherwise. Use this before running a stratified analysis
+    to verify the variable has within-stratum variance to test."""
+    # Group by stratum via Python set/list since `Sequence[object]`
+    # admits heterogeneous keys (str env names, int burst indices, …)
+    # and we want explicit typing through the loop. Index lookup is
+    # O(N·K) but K is small for typical stratifications.
+    strata_list: list[object] = list(strata)
+    unique_strata: tuple[object, ...] = tuple(
+        dict.fromkeys(strata_list).keys(),
+    )
+    # Global-degeneracy short-circuit. Use exact peak-to-peak
+    # (max − min) rather than std/var because std on a uniform
+    # column has ~1e-16 float-noise (mean isn't bit-exact when the
+    # value isn't representable, e.g. 3.14). ptp == 0 ⟺ truly
+    # constant column. numpy ptp on typed NDArray[float64] is `Any`
+    # per stubs.
+    if (values.max() - values.min()).item() == 0.0:  # pyright: ignore[reportAny]
+        return VariableScope.DEGENERATE
+    if len(unique_strata) < 2:
+        return VariableScope.WITHIN_STRATUM
+    per_stratum_means: list[float] = []
+    per_stratum_vars: list[float] = []
+    weights: list[float] = []
+    # numpy stubs type ndarray.sum/.mean/.var/.item as `Any`; the
+    # typed `sub: NDArray[float64]` plus `n_k: int` is the runtime
+    # invariant the stubs miss. Pinned ignores rather than wrapping
+    # every reduction in a cast — same Any-from-numpy pattern as
+    # `stratified_spearman_rho` and `partial_spearman_rho_multi`
+    # below.
+    for k in unique_strata:
+        mask = np.fromiter(
+            (s == k for s in strata_list),
+            dtype=bool, count=len(strata_list),
+        )
+        sub: npt.NDArray[np.float64] = values[mask]
+        n_k: int = mask.sum().item()  # pyright: ignore[reportAny]
+        per_stratum_means.append(
+            sub.mean().item(),  # pyright: ignore[reportAny]
+        )
+        per_stratum_vars.append(
+            sub.var().item()  # pyright: ignore[reportAny]
+            if n_k >= 2 else 0.0,
+        )
+        weights.append(float(n_k))
+    total_w = sum(weights)
+    if total_w == 0:
+        return VariableScope.DEGENERATE
+    within_var = sum(w * v for w, v in zip(weights, per_stratum_vars)) / total_w
+    grand_mean = sum(w * m for w, m in zip(weights, per_stratum_means)) / total_w
+    across_var = sum(
+        w * (m - grand_mean) ** 2
+        for w, m in zip(weights, per_stratum_means)
+    ) / total_w
+    total_var = within_var + across_var
+    if total_var <= 0:
+        return VariableScope.DEGENERATE
+    within_frac = within_var / total_var
+    across_frac = across_var / total_var
+    if within_frac < relative_threshold:
+        return VariableScope.ACROSS_STRATUM
+    if across_frac < relative_threshold:
+        return VariableScope.WITHIN_STRATUM
+    return VariableScope.BOTH
+
+
+def assert_stratification_admissible(
+    data: pl.DataFrame,
+    variables: Sequence[str],
+    stratify_by: str,
+    *,
+    relative_threshold: float = 0.05,
+) -> Mapping[str, VariableScope]:
+    """Validate that every variable in `variables` has within-stratum
+    variance under `stratify_by`. Raises `ValueError` if any variable
+    is `ACROSS_STRATUM` or `DEGENERATE` — a stratified analysis on
+    such a variable returns silent NaN.
+
+    Use before `discover_adjacency(stratify_by=...)` or any other
+    JCI/stratified primitive when uncertain about variable scope.
+
+    Returns the scope classification for each variable. Callers who
+    want to pass-through can catch the exception or call
+    `classify_variable_scope` directly."""
+    strata = data[stratify_by].to_list()
+    scopes: dict[str, VariableScope] = {}
+    blocked: list[tuple[str, VariableScope]] = []
+    for v in variables:
+        arr = np.asarray(data[v].to_list(), dtype=np.float64)
+        scope = classify_variable_scope(
+            arr, strata, relative_threshold=relative_threshold,
+        )
+        scopes[v] = scope
+        if scope in (VariableScope.ACROSS_STRATUM, VariableScope.DEGENERATE):
+            blocked.append((v, scope))
+    if blocked:
+        details = ', '.join(
+            f'{v}={s.value}' for v, s in blocked
+        )
+        raise ValueError(
+            f'stratify_by={stratify_by!r} is incompatible with '
+            f'variables that are constant within stratum: {details}. '
+            f'JCI tests within-stratum CI; ACROSS_STRATUM variables '
+            f'have zero within-stratum variance and silently skip. '
+            f'For env-level features moderating an outcome, use '
+            f'`backdoor_ate` or unstratified meta-regression with '
+            f'env-feature confounders, NOT a stratified primitive.',
+        )
+    return scopes
 
 
 # ============ CI-test primitives ============
