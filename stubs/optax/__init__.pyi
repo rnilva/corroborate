@@ -95,3 +95,32 @@ import jax as _jax
 def scale_by_schedule(
     step_size_fn: _Callable[[_jax.Array], _jax.Array],
 ) -> GradientTransformation: ...
+
+
+# AdamW components — `optax.adamw` decomposes as
+# `chain(scale_by_adam, add_decayed_weights, scale_by_learning_rate)`.
+# Exposed as separate primitives for callers that need explicit
+# composition (e.g. matching weight-decay placement to a custom
+# schedule).
+def scale_by_adam(
+    b1: float = ...,
+    b2: float = ...,
+    eps: float = ...,
+    eps_root: float = ...,
+    mu_dtype: object = ...,
+    *,
+    nesterov: bool = ...,
+) -> GradientTransformation: ...
+
+
+def add_decayed_weights(
+    weight_decay: float = ...,
+    mask: object = ...,
+) -> GradientTransformation: ...
+
+
+def scale_by_learning_rate(
+    learning_rate: float,
+    *,
+    flip_sign: bool = ...,
+) -> GradientTransformation: ...

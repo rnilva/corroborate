@@ -45,16 +45,32 @@ from corroborate.rl.dqn.types import OptimizerFactory
 @dataclass(frozen=True, slots=True)
 class Adam(ClaimBase):
     """Adam optimizer (Kingma & Ba 2015). Default lr=1e-3 matches
-    optax's default; b1/b2/eps are the canonical Adam HPs."""
+    optax's default; b1/b2/eps are the canonical Adam HPs.
+
+    `weight_decay > 0` switches to AdamW (Loshchilov & Hutter 2019)
+    — decoupled weight decay applied after the Adam update. Used
+    as an explicit L2 regularizer to test whether γ-as-implicit-
+    regularizer confounds chain-depth-amplifier interpretations at
+    high γ. Default 0 preserves the historical Adam behavior and
+    canonical-string for existing configs."""
     lr: float = 1e-3
     b1: float = 0.9
     b2: float = 0.999
     eps: float = 1e-8
+    weight_decay: float = 0.0
 
     def __call__(self) -> optax.GradientTransformation:
-        result = optax.adam(
-            learning_rate=self.lr, b1=self.b1, b2=self.b2, eps=self.eps,
-        )
+        if self.weight_decay > 0.0:
+            # AdamW = scale_by_adam → add_decayed_weights → scale_by_lr.
+            result = optax.chain(
+                optax.scale_by_adam(b1=self.b1, b2=self.b2, eps=self.eps),
+                optax.add_decayed_weights(self.weight_decay),
+                optax.scale_by_learning_rate(self.lr),
+            )
+        else:
+            result = optax.adam(
+                learning_rate=self.lr, b1=self.b1, b2=self.b2, eps=self.eps,
+            )
         record_call(self, (), {}, result)
         return result
 
