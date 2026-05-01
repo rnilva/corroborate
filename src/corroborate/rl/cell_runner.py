@@ -233,6 +233,8 @@ def run_dqn_arm(
     *,
     cycle_id: str | None = None,
     reward_scale: float = 1.0,
+    reward_clip_min: float | None = None,
+    reward_clip_max: float | None = None,
 ) -> ArmResult:
     """Run one (env, hypothesis) arm across `seeds` in parallel via
     `jax.vmap` of the `dqn` outermost claim. Returns
@@ -262,6 +264,11 @@ def run_dqn_arm(
     if reward_scale != 1.0:
         from corroborate.rl.env_catalogue import RewardScaledEnv
         env = RewardScaledEnv(inner=env, scale=reward_scale)
+    if reward_clip_min is not None or reward_clip_max is not None:
+        from corroborate.rl.env_catalogue import RewardClippedEnv
+        env = RewardClippedEnv(
+            inner=env, clip_min=reward_clip_min, clip_max=reward_clip_max,
+        )
     state_hash = (
         env_spec.state_hash
         if env_spec.state_hash is not None
@@ -357,6 +364,14 @@ def run_dqn_arm(
             'seed': seed,
             'total_steps': total_steps,
             'reward_scale': reward_scale,
+            **(
+                {'reward_clip_min': float(reward_clip_min)}
+                if reward_clip_min is not None else {}
+            ),
+            **(
+                {'reward_clip_max': float(reward_clip_max)}
+                if reward_clip_max is not None else {}
+            ),
             'outcome.late_window_mean': outcome,
             **_eval_outcomes(per_seed_record),
             **_mechanism_measurements(per_seed_record),

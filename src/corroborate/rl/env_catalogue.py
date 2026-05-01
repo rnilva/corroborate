@@ -123,6 +123,55 @@ class RewardScaledEnv:
         return self.inner.action_space(params)
 
 
+@dataclass(frozen=True, slots=True)
+class RewardClippedEnv:
+    """Wraps a gymnax-style env, clipping step reward to
+    `[clip_min, clip_max]`. Either bound may be None to disable
+    that side.
+
+    Causal-probe lever for envs with stochastic mixed-sign
+    reward (e.g. SpaceInvaders-MinAtar's +1-kill / −1-hit). Tests
+    whether DDQN's bias-correction attenuation in such envs is
+    driven by the negative-reward stochasticity: with
+    `clip_min=0`, the negative tail vanishes; the optimal policy
+    changes (no longer needs to weigh hit-cost against kill
+    reward), but the test isolates whether DDQN's behaviour
+    inherits the same attenuation pattern under positive-only
+    reward."""
+    inner: 'GymnaxEnvLike'
+    clip_min: float | None = None
+    clip_max: float | None = None
+
+    def reset(
+        self, rng: jax.Array, params: object,
+    ) -> tuple[jax.Array, object]:
+        return self.inner.reset(rng, params)
+
+    def step(
+        self,
+        rng: jax.Array,
+        state: object,
+        action: jax.Array,
+        params: object,
+    ) -> tuple[
+        jax.Array, object, jax.Array, jax.Array, dict[str, object],
+    ]:
+        next_obs, next_state, reward, done, info = self.inner.step(
+            rng, state, action, params,
+        )
+        if self.clip_min is not None:
+            reward = jnp.maximum(reward, self.clip_min)
+        if self.clip_max is not None:
+            reward = jnp.minimum(reward, self.clip_max)
+        return next_obs, next_state, reward, done, info
+
+    def observation_space(self, params: object) -> object:
+        return self.inner.observation_space(params)
+
+    def action_space(self, params: object) -> object:
+        return self.inner.action_space(params)
+
+
 @runtime_checkable
 class MaxStepsParams(Protocol):
     """Marker Protocol — env params that declare a per-episode

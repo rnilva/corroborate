@@ -230,9 +230,31 @@ def _build_env(node: object) -> EnvConfig:
             f'env.reward_scale must be float; got '
             f'{type(reward_scale).__name__}',
         )
+    clip_min = node.get('reward_clip_min')
+    if clip_min is not None and (
+        not isinstance(clip_min, (int, float)) or isinstance(clip_min, bool)
+    ):
+        raise TypeError(
+            f'env.reward_clip_min must be float | None; got '
+            f'{type(clip_min).__name__}',
+        )
+    clip_max = node.get('reward_clip_max')
+    if clip_max is not None and (
+        not isinstance(clip_max, (int, float)) or isinstance(clip_max, bool)
+    ):
+        raise TypeError(
+            f'env.reward_clip_max must be float | None; got '
+            f'{type(clip_max).__name__}',
+        )
     return EnvConfig(
         env_name=name, n_seeds=n_seeds, chunk_size=chunk_size,
         reward_scale=float(reward_scale),
+        reward_clip_min=(
+            float(clip_min) if clip_min is not None else None
+        ),
+        reward_clip_max=(
+            float(clip_max) if clip_max is not None else None
+        ),
     )
 
 
