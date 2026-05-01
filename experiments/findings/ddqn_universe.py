@@ -991,24 +991,45 @@ def ddqn_dominates_vanilla_response_curve__fourrooms_rs_0p3(
 #   bursts 6+:  diff -1.4 to -2.0, all significant negative
 #
 # Other 3 MinAtar envs (Asterix, Breakout, Freeway) do NOT show
-# this crossover. SpaceInvaders is the only MinAtar env with
-# stochastic NEGATIVE reward (-1 per hit, random enemy fire);
-# the others are positive-only or zero-stochasticity.
+# this crossover under the same paired_g_per_burst test.
+# SpaceInvaders is the only MinAtar env with stochastic NEGATIVE
+# reward (-1 per hit, random enemy fire); the others are
+# positive-only or zero-stochasticity.
 #
-# Mechanism reading: vanilla's overestimation acts as
-# optimism-under-hit-uncertainty regularization that's USEFUL
-# late in training. DDQN's bias correction strips this away
-# → realistic-but-pessimistic policy → conservative
-# → fewer kills per episode → DDQN's mc_return curve sits below
-# vanilla's despite being indistinguishable at peak (best-burst
-# outcomes tied at 13.4 vs 13.3 native).
+# **Burst-level JCI on (mc, bias, burst_index) per arm**
+# refines the mechanism reading:
+#   - BOTH arms decline late on SpaceInvaders. vanilla goes
+#     9.2→7.5 native; ddqn 11.1→6.1. The "late crossover" isn't
+#     "DDQN fails while vanilla succeeds" — it's "both arms
+#     decay, DDQN decays faster from a higher start."
+#   - DDQN has STRONGER mc↔bias coupling (ρ=−0.70 vs vanilla's
+#     −0.58). Counter-intuitive: DDQN's bias-correction was
+#     supposed to break the bias→mc dependence, but it
+#     TIGHTENS it. Plausible reading: vanilla's overestimation
+#     noise decouples observed mc from instantaneous bias;
+#     DDQN removes the noise → mc faithfully reflects the
+#     residual bias trajectory → tighter negative ρ.
+#   - bias↔burst_index in both arms (ρ=+0.95-0.97) — Q-magnitude
+#     inflates monotonically over training. The underlying
+#     issue is shared late-training Q-explosion; DDQN doesn't
+#     cause it, but its noise-reduction makes the consequences
+#     visible.
 #
-# This is a SHAPE claim — the per-burst trajectory has a
-# specific qualitative pattern (early+, late−, with crossover
-# around burst 6). NOT just an aggregate sign claim.
-# Pearl-rung-2 corroboration via `spaceinvaders_no_hit_penalty`
-# (queued sweep) — strip the −1 hit penalty; predict the
-# crossover disappears.
+# Two competing mechanism hypotheses, distinguished by the
+# queued `spaceinvaders_no_hit_penalty` Pearl-rung-2 sweep:
+#   1. Pessimism: vanilla's overestimation acts as
+#      optimism-under-hit-uncertainty regularization that helps
+#      the agent stay aggressive. Stripping the −1 hit removes
+#      the differential pessimism source → crossover disappears.
+#   2. Q-explosion: late training, Q-values diverge in both
+#      arms (bias↔burst ρ=+0.95). DDQN's bias correction makes
+#      mc track the explosion more faithfully, so the curve
+#      drops faster. Stripping the hit doesn't fix divergence
+#      → crossover persists.
+#
+# Bridge below detects the SHAPE only — the crossover-and-late-
+# negative pattern. The mechanism claim awaits the no-hit-
+# penalty sweep result.
 # =====================================================================
 
 
