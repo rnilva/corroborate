@@ -80,6 +80,7 @@ from corroborate.analyses.universe_scope import UniverseScopeResult
 from corroborate.claim_bridge import (
     Direction, Tier, claim_bridge,
 )
+from corroborate.intervention import DoEffect
 from corroborate.meta_regression import MetaRegressionResult
 from corroborate.rl import env_catalogue as _ec
 from corroborate.verdict import Verdict
@@ -891,6 +892,9 @@ def ddqn_rescues_underlearning_vanilla__fourrooms_rs_0p1(
     target: str = 'outcome.eval_best_burst_mean',
     direction: Direction = Direction.DIRECT,
     tier: Tier = Tier.INTERVENTIONAL,
+    intervention: DoEffect = DoEffect(
+        treatment_arm='ddqn', baseline_arm='vanilla_dqn',
+    ),
     env_name: str = 'FourRooms-misc',
     treatment_arm: str = 'ddqn',
     baseline_arm: str = 'vanilla_dqn',
@@ -930,7 +934,7 @@ def ddqn_rescues_underlearning_vanilla__fourrooms_rs_0p1(
     ddqn_native | log_rs (partial r ≈ −0.04). The bridge tests
     a CONTRAST between two independent reward-scale-response
     curves, not a causal arrow between cell outputs."""
-    del source, target, direction, tier
+    del source, target, direction, tier, intervention
     del env_name, treatment_arm, baseline_arm, pair_by, extra_filters
     diff = paired_g.mean_diff
     p = paired_g.mean_diff_p_value
@@ -967,6 +971,9 @@ def ddqn_dominates_vanilla_response_curve__fourrooms_rs_0p3(
     target: str = 'outcome.eval_best_burst_mean',
     direction: Direction = Direction.DIRECT,
     tier: Tier = Tier.INTERVENTIONAL,
+    intervention: DoEffect = DoEffect(
+        treatment_arm='ddqn', baseline_arm='vanilla_dqn',
+    ),
     env_name: str = 'FourRooms-misc',
     treatment_arm: str = 'ddqn',
     baseline_arm: str = 'vanilla_dqn',
@@ -988,7 +995,7 @@ def ddqn_dominates_vanilla_response_curve__fourrooms_rs_0p3(
     Same defensive framing as CLAIM 7: `mean_diff` is the
     interventional contrast, not an observational edge between
     arm outputs."""
-    del source, target, direction, tier
+    del source, target, direction, tier, intervention
     del env_name, treatment_arm, baseline_arm, pair_by, extra_filters
     diff = paired_g.mean_diff
     p = paired_g.mean_diff_p_value

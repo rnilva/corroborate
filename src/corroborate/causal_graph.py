@@ -45,11 +45,16 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, replace
 from enum import Enum, IntEnum
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from corroborate.bridge import BridgeResult
 from corroborate.graph import Edge, Graph
 from corroborate.verdict import Verdict
+
+if TYPE_CHECKING:
+    # Forward import: `claim_bridge` depends on `causal_graph`
+    # transitively via verdict; lazy-typed to avoid the cycle.
+    from corroborate.claim_bridge import Bridge as ClaimBridge
 
 
 # ============ Direction — sign of an edge ============
@@ -111,6 +116,7 @@ class Tier(IntEnum):
 # ============ EvidentiaryLevel ============
 
 EvidentiaryLevel = Literal[
+    'unevaluated',
     'refuted', 'correlational', 'causal_one_sided', 'causal_bridged',
 ]
 
@@ -290,6 +296,44 @@ def build_causal_graph(
                     feedback=feedback_flag,
                 )
                 g = g.with_edge(source, target, edge)
+    return g
+
+
+# ============ Pre-evaluation authored graph ============
+
+def authored_graph(
+    bridges: 'Iterable[ClaimBridge]',
+) -> CausalGraph:
+    """Build the unevaluated graph topology from a `Sequence[Bridge]`.
+
+    Each bridge contributes one edge. When `bridge.intervention is
+    None`, the edge is `bridge.source → bridge.target` (measurable-
+    to-measurable). When set, the edge is
+    `bridge.intervention.node_key() → bridge.target` — an
+    *intervention → measurable* edge with the do-node as source.
+    All edges get `evidentiary_level='unevaluated'`; tier is
+    INTERVENTIONAL when an intervention is declared (the edge is
+    by construction a Pearl-rung-2 contrast), else inherits the
+    bridge's declared `tier`.
+
+    Used by analyses that want to inspect the authored graph
+    topology BEFORE running bridges — e.g. cache builders,
+    Protocol-conforming module discoverers."""
+    g: CausalGraph = Graph()
+    for b in bridges:
+        if b.intervention is not None:
+            source_key = b.intervention.node_key()
+            tier = Tier.INTERVENTIONAL
+        else:
+            source_key = b.source
+            tier = b.tier
+        edge = BridgeEdge(
+            bridge_name=b.name,
+            direction=b.direction,
+            tier=tier,
+            evidentiary_level='unevaluated',
+        )
+        g = g.with_edge(source_key, b.target, edge)
     return g
 
 

@@ -206,6 +206,56 @@ def test_bridge_carries_structural_metadata() -> None:
     assert carries_metadata.tier == Tier.INTERVENTIONAL
     assert carries_metadata.params['treatment_arm'] == 'ddqn'
     assert carries_metadata.params['baseline_arm'] == 'vanilla_dqn'
+    assert carries_metadata.intervention is None
+
+
+def test_bridge_carries_typed_intervention() -> None:
+    """A do-effect bridge declares `intervention=DoEffect(...)` as
+    a defaulted kwarg; the decorator routes it to the structural
+    `Bridge.intervention` field. The framework can then emit a
+    `do(treatment|vs=baseline) → target` graph edge instead of
+    burying the arm names in `params`."""
+    from corroborate.intervention import DoEffect
+
+    @claim_bridge
+    def carries_intervention(
+        paired_g: PairedGResult,
+        *,
+        source: str = 'outcome_native',
+        target: str = 'outcome.eval_best_burst_mean',
+        direction: Direction = Direction.DIRECT,
+        tier: Tier = Tier.INTERVENTIONAL,
+        intervention: DoEffect = DoEffect(
+            treatment_arm='ddqn', baseline_arm='vanilla_dqn',
+        ),
+    ) -> Verdict:
+        del paired_g, source, target, direction, tier, intervention
+        return Verdict.HELD
+
+    assert isinstance(carries_intervention, Bridge)
+    assert carries_intervention.intervention is not None
+    assert carries_intervention.intervention.treatment_arm == 'ddqn'
+    assert carries_intervention.intervention.baseline_arm == 'vanilla_dqn'
+    assert (
+        carries_intervention.intervention.node_key()
+        == 'do(ddqn|vs=vanilla_dqn)'
+    )
+
+
+def test_bridge_rejects_non_doeffect_intervention() -> None:
+    """If `intervention=` is set but isn't a DoEffect, the
+    decorator raises TypeError loudly — typed metadata."""
+    with pytest.raises(TypeError, match='intervention'):
+        @claim_bridge
+        def bad_intervention(
+            paired_g: PairedGResult,
+            *,
+            source: str = 'A',
+            target: str = 'B',
+            intervention: str = 'not-a-doeffect',
+        ) -> Verdict:
+            del paired_g, source, target, intervention
+            return Verdict.HELD
 
 
 def test_bridge_requires_source_and_target() -> None:

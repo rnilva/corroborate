@@ -49,36 +49,26 @@ from __future__ import annotations
 import inspect
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
-from enum import Enum, IntEnum
 from types import MappingProxyType
 from typing import cast
 
 from corroborate.analysis import resolve_for_holds_when
+from corroborate.intervention import DoEffect
 from corroborate.verdict import Verdict
 
 
-class Direction(Enum):
-    """Sign of an edge's claimed coupling.
-
-    `DIRECT`: source ↑ ⇒ target ↑.
-    `INVERSE`: source ↑ ⇒ target ↓."""
-    DIRECT = 'direct'
-    INVERSE = 'inverse'
-
-
-class Tier(IntEnum):
-    """Pearl-ladder tier of an edge's evidentiary claim.
-
-    `ASSOCIATIONAL`: observational coupling (rung 1).
-    `INTERVENTIONAL`: confirmed do-operation effect (rung 2)."""
-    ASSOCIATIONAL = 1
-    INTERVENTIONAL = 2
+# Direction and Tier are the canonical edge-metadata enums used
+# across the framework. Re-imported from `causal_graph` rather
+# than redefined to keep the two layers' types unified — the
+# graph builder reads `bridge.tier` / `bridge.direction` directly
+# without conversion.
+from corroborate.causal_graph import Direction, Tier  # noqa: E402
 
 
 # Reserved kwarg names the decorator extracts as the bridge's
 # structural fields; everything else lands in `params`.
 _STRUCTURAL_FIELDS: frozenset[str] = frozenset(
-    {'source', 'target', 'direction', 'tier'},
+    {'source', 'target', 'direction', 'tier', 'intervention'},
 )
 
 
@@ -90,7 +80,17 @@ class Bridge:
     signature. Structural fields name the edge (`source`,
     `target`, `direction`, `tier`); `params` is the bag of
     claim-specific kwargs the bridge forwards to each registered
-    analysis the `holds_when` body consumes."""
+    analysis the `holds_when` body consumes.
+
+    `intervention: DoEffect | None` is the Pearl-rung-2
+    annotation: when set, the graph builder emits an
+    `do(treatment|vs=baseline) → target` edge instead of (or in
+    addition to) the measurable-to-measurable one. Required for
+    bridges whose verdict comes from an intervention contrast
+    (paired_g.mean_diff between treatment_arm and baseline_arm
+    cells). Strictly stronger than burying the arm names in
+    `params` — surfaces the do() relationship at the graph
+    layer, where it belongs."""
     name: str
     source: str
     target: str
@@ -100,6 +100,7 @@ class Bridge:
     params: Mapping[str, object] = field(
         default_factory=lambda: MappingProxyType({}),
     )
+    intervention: DoEffect | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -190,6 +191,15 @@ def claim_bridge(fn: Callable[..., Verdict]) -> Bridge:
     tier = _require_tier(
         structural.get('tier', Tier.ASSOCIATIONAL), fn.__name__,
     )
+    intervention_default = structural.get('intervention')
+    if intervention_default is not None and not isinstance(
+        intervention_default, DoEffect,
+    ):
+        raise TypeError(
+            f'@claim_bridge {fn.__name__!r}: default for '
+            f'`intervention` must be a DoEffect (or omitted); got '
+            f'{type(intervention_default).__name__}',
+        )
 
     return Bridge(
         name=fn.__name__,
@@ -199,6 +209,7 @@ def claim_bridge(fn: Callable[..., Verdict]) -> Bridge:
         tier=tier,
         params=MappingProxyType(params),
         holds_when=fn,
+        intervention=intervention_default,
     )
 
 

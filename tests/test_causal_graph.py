@@ -309,3 +309,57 @@ def test_promote_bridged_evidence_independent_pairs_independent() -> None:
         for e in promoted.edges if (e.source, e.target) == ('c', 'd')
     ]
     assert cd_levels == ['causal_one_sided']
+
+
+def test_authored_graph_emits_intervention_edge() -> None:
+    """`bridge.intervention=DoEffect(...)` produces a graph edge
+    with `do(treatment|vs=baseline)` as the source node and
+    tier=INTERVENTIONAL — the Pearl-rung-2 edge that the legacy
+    measurable-to-measurable encoding hides."""
+    from corroborate.analyses.paired_g import PairedGResult
+    from corroborate.causal_graph import (
+        Direction, Tier, authored_graph,
+    )
+    from corroborate.claim_bridge import claim_bridge
+    from corroborate.intervention import DoEffect
+    from corroborate.verdict import Verdict
+
+    @claim_bridge
+    def do_effect_bridge(
+        paired_g: PairedGResult,
+        *,
+        source: str = 'outcome_native',
+        target: str = 'outcome.eval_best_burst_mean',
+        direction: Direction = Direction.DIRECT,
+        tier: Tier = Tier.INTERVENTIONAL,
+        intervention: DoEffect = DoEffect(
+            treatment_arm='ddqn', baseline_arm='vanilla_dqn',
+        ),
+    ) -> Verdict:
+        del paired_g, source, target, direction, tier, intervention
+        return Verdict.HELD
+
+    @claim_bridge
+    def observational_bridge(
+        paired_g: PairedGResult,
+        *,
+        source: str = 'jensen_gap',
+        target: str = 'outcome.eval_best_burst_mean',
+        direction: Direction = Direction.INVERSE,
+        tier: Tier = Tier.ASSOCIATIONAL,
+    ) -> Verdict:
+        del paired_g, source, target, direction, tier
+        return Verdict.HELD
+
+    g = authored_graph([do_effect_bridge, observational_bridge])
+    edges = list(g.edges)
+    do_edges = [
+        e for e in edges if e.source == 'do(ddqn|vs=vanilla_dqn)'
+    ]
+    obs_edges = [e for e in edges if e.source == 'jensen_gap']
+    assert len(do_edges) == 1, do_edges
+    assert do_edges[0].target == 'outcome.eval_best_burst_mean'
+    assert do_edges[0].metadata.tier is Tier.INTERVENTIONAL
+    assert do_edges[0].metadata.evidentiary_level == 'unevaluated'
+    assert len(obs_edges) == 1
+    assert obs_edges[0].metadata.tier is Tier.ASSOCIATIONAL

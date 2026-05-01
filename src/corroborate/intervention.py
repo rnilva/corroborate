@@ -142,3 +142,29 @@ def combined_arm_key(interventions: tuple[Intervention, ...]) -> str:
     if not interventions:
         return 'baseline'
     return '+'.join(sorted(i.arm_key() for i in interventions))
+
+
+@dataclass(frozen=True, slots=True)
+class DoEffect:
+    """Annotation on a Bridge: this bridge measures a do() contrast
+    between two named hypothesis arms.
+
+    Pearl-rung-2 edges in the causal graph have an *intervention*
+    as the source node, NOT a measurable. `DoEffect` carries the
+    treatment / baseline arm names so the graph builder can emit
+    a `do(treatment|vs=baseline) → target_measurable` edge.
+
+    `treatment_arm` and `baseline_arm` are arm keys (or hypothesis
+    names) — the same strings analyses like `paired_g` use to
+    select which cells get paired. Distinct from the underlying
+    `Intervention` tuples (`Hypothesis.intervention_arms`); this
+    is a graph-level annotation that summarises which arms the
+    contrast crosses without recapitulating the swap details."""
+    treatment_arm: str
+    baseline_arm: str
+
+    def node_key(self) -> str:
+        """Canonical string identity for the do-node in
+        `CausalGraph`. `'do(treatment|vs=baseline)'` form makes
+        the contrast explicit when the graph is rendered."""
+        return f'do({self.treatment_arm}|vs={self.baseline_arm})'
