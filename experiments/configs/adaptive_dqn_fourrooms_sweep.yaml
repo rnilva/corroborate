@@ -1,0 +1,74 @@
+name: adaptive_dqn_fourrooms_sweep
+out_dir: experiments/data/adaptive_dqn_fourrooms_sweep
+arms_shape: chunked
+
+envs:
+  - {name: FourRooms-misc, n_seeds: 30, chunk_size: 15}
+
+base_intervention:
+  total_steps: 200000
+  eval_every:  20000
+  n_episodes:  5
+  gamma:       0.99
+  sync_period: 100
+  replay:
+    class: Replay
+    capacity: 50000
+    batch_size: 32
+  optimizer:
+    class: WarmedUpdate
+    inner: {class: Adam, lr: 0.0001}
+    warmup_steps: 100
+  q_network:
+    class: MLP
+    hidden: [64, 64]
+
+# Three sigma_floor_factor values — find the right threshold.
+hypotheses:
+  - name: adaptive_dqn_factor_0p25
+    predicted_direction: a_gt_b
+    intervention:
+      bootstrap:
+        fn: bootstrap
+        greedification:
+          fn: adaptive_dormancy_greedify
+          sigma_floor_factor: 0.25
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement:
+          fn: bootstrap
+          greedification:
+            fn: adaptive_dormancy_greedify
+            sigma_floor_factor: 0.25
+
+  - name: adaptive_dqn_factor_0p5
+    predicted_direction: a_gt_b
+    intervention:
+      bootstrap:
+        fn: bootstrap
+        greedification:
+          fn: adaptive_dormancy_greedify
+          sigma_floor_factor: 0.5
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement:
+          fn: bootstrap
+          greedification:
+            fn: adaptive_dormancy_greedify
+            sigma_floor_factor: 0.5
+
+  - name: adaptive_dqn_factor_0p1
+    predicted_direction: a_gt_b
+    intervention:
+      bootstrap:
+        fn: bootstrap
+        greedification:
+          fn: adaptive_dormancy_greedify
+          sigma_floor_factor: 0.1
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement:
+          fn: bootstrap
+          greedification:
+            fn: adaptive_dormancy_greedify
+            sigma_floor_factor: 0.1

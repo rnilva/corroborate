@@ -1,0 +1,62 @@
+name: gamma_sweep_metamaze_high
+out_dir: experiments/data/gamma_sweep_metamaze_high
+arms_shape: chunked
+archive_remote: s3://corroborate-archive/gamma_sweep_metamaze_high
+
+# Push effective_horizon up: γ=0.995 → eff_h≈200, γ=0.999 → eff_h≈1000.
+# Existing gamma_sweep_metamaze covers γ ∈ {0.99, 0.95, 0.90}.
+envs:
+  - {name: MetaMaze-misc, n_seeds: 30, chunk_size: 30}
+
+base_intervention:
+  total_steps: 200000
+  eval_every:  20000
+  n_episodes:  5
+  gamma:       0.99
+  sync_period: 100
+  replay:
+    class: Replay
+    capacity: 50000
+    batch_size: 32
+  optimizer:
+    class: WarmedUpdate
+    inner: {class: Adam, lr: 0.0001}
+    warmup_steps: 100
+  q_network:
+    class: MLP
+    hidden: [64, 64]
+
+hypotheses:
+  - name: vanilla_dqn_g0995
+    predicted_direction: null
+    intervention:
+      gamma: 0.995
+  - name: ddqn_g0995
+    predicted_direction: a_gt_b
+    intervention:
+      gamma: 0.995
+      bootstrap:
+        fn: bootstrap
+        greedification: {fn: double_greedify}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement:
+          fn: bootstrap
+          greedification: {fn: double_greedify}
+
+  - name: vanilla_dqn_g0999
+    predicted_direction: null
+    intervention:
+      gamma: 0.999
+  - name: ddqn_g0999
+    predicted_direction: a_gt_b
+    intervention:
+      gamma: 0.999
+      bootstrap:
+        fn: bootstrap
+        greedification: {fn: double_greedify}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement:
+          fn: bootstrap
+          greedification: {fn: double_greedify}

@@ -159,6 +159,98 @@ def expectile_greedify(
     return mu.squeeze(-1)
 
 
+@claim
+def dampened_double_greedify(
+    *,
+    online_params: Params,
+    target_params: Params,
+    q_network: QFunction,
+    next_obs: jax.Array,
+    alpha: float = 1.0,
+) -> jax.Array:
+    """Linearly-interpolated DDQN: v(s') = α·v_DDQN + (1−α)·v_vanilla.
+
+    α=0 → vanilla `max_greedify`.
+    α=1 → full `double_greedify`.
+    Intermediate α scales the per-step Jensen correction ε by α.
+
+    Used to test the multiplicative claim
+    `g_link ≈ ε · effective_horizon` by varying ε at fixed
+    γ (i.e. fixed effective_horizon). If g_link is linear in α,
+    the multiplicative model is corroborated; if not (e.g.
+    threshold response or non-monotone), refuted.
+
+    Both branches compute (it's an interpolation, not a switch),
+    so per-batch cost is the sum of vanilla + DDQN target ops."""
+    v_ddqn = double_greedify.fn(
+        online_params=online_params, target_params=target_params,
+        q_network=q_network, next_obs=next_obs,
+    )
+    v_vanilla = max_greedify.fn(
+        online_params=online_params, target_params=target_params,
+        q_network=q_network, next_obs=next_obs,
+    )
+    return alpha * v_ddqn + (1.0 - alpha) * v_vanilla
+
+
+@claim
+def adaptive_dormancy_greedify(
+    *,
+    online_params: Params,
+    target_params: Params,
+    q_network: QFunction,
+    next_obs: jax.Array,
+    sigma_floor_factor: float = 1.0,
+) -> jax.Array:
+    """Adaptive greedification that switches between
+    `max_greedify` (vanilla) and `double_greedify` (DDQN) per
+    batch based on a per-batch dormancy heuristic.
+
+    The framework's `jensen_dormancy_gap` invariant tests whether
+    the structural Jensen floor `σ_Q · √(2 log |A|)` is exceeded
+    by the observed bias. We don't have observed bias inside a
+    training batch, so we use a per-batch in-state proxy:
+
+        excess  = mean_b(max_a Q_target(s'_b, a) − mean_a Q_target(s'_b, a))
+        floor   = σ_Q · √(2 log |A|)  with σ_Q = mean_b(std_a Q_target(s'_b, a))
+        active  = excess ≥ sigma_floor_factor · floor
+
+    When `active`, dispatch to DDQN's `double_greedify` (premise
+    active → bias to correct). When dormant, dispatch to
+    `max_greedify` (vanilla → avoid over-correction on a tightly-
+    distributed Q).
+
+    `sigma_floor_factor` is a knob:
+      - 1.0 matches the strict dormancy threshold
+      - <1.0 makes DDQN MORE active (lower bar)
+      - >1.0 makes DDQN LESS active (higher bar)
+
+    Both branches compute (jax.lax.select), so JIT tracing is
+    uniform — ~10% extra compute on the bootstrap target."""
+    next_q_target = q_network(target_params, next_obs)
+    n_actions = next_q_target.shape[-1]
+    # Per-state action-axis stats, then averaged across batch.
+    per_state_std = jnp.std(next_q_target, axis=-1)
+    per_state_max = jnp.max(next_q_target, axis=-1)
+    per_state_mean = jnp.mean(next_q_target, axis=-1)
+    sigma_q = jnp.mean(per_state_std)
+    excess = jnp.mean(per_state_max - per_state_mean)
+    floor = sigma_q * jnp.sqrt(
+        2.0 * jnp.log(jnp.maximum(jnp.float32(n_actions), 2.0)),
+    )
+    is_active = excess >= sigma_floor_factor * floor
+
+    v_active = double_greedify.fn(
+        online_params=online_params, target_params=target_params,
+        q_network=q_network, next_obs=next_obs,
+    )
+    v_dormant = max_greedify.fn(
+        online_params=online_params, target_params=target_params,
+        q_network=q_network, next_obs=next_obs,
+    )
+    return jax.lax.select(is_active, v_active, v_dormant)
+
+
 # ============ Gradient rule: what backprops through target ============
 
 @claim

@@ -1,0 +1,92 @@
+name: gamma_sweep
+out_dir: experiments/data/gamma_sweep
+arms_shape: chunked
+archive_remote: s3://corroborate-archive/gamma_sweep
+
+# 3 envs × 3 γ values × 2 arms × 30 seeds = 540 cells.
+# Pearl-rung-2 designed intervention: vary γ to disentangle
+# bootstrap_fraction (env-structural) from effective horizon
+# 1/(1 − γ·bf) on the bootstrap_fraction → g_link residual.
+envs:
+  # FourRooms is the load-bearing env for the bf residual.
+  - {name: FourRooms-misc, n_seeds: 30, chunk_size: 30}
+  # Catch is a low-bf outlier (bf≈0.89) — γ should change its
+  # effective horizon ratio differently.
+  - {name: Catch-bsuite, n_seeds: 30, chunk_size: 30}
+  # Acrobot is a high-bf well-behaved baseline.
+  - {name: Acrobot-v1, n_seeds: 30, chunk_size: 30}
+
+# All HPs match expectile_3way's MLP regime — γ is the only axis
+# the hypotheses differ on (plus the vanilla/ddqn arm split).
+base_intervention:
+  total_steps: 200000
+  eval_every:  20000
+  n_episodes:  5
+  gamma:       0.99
+  sync_period: 100
+  replay:
+    class: Replay
+    capacity: 50000
+    batch_size: 32
+  optimizer:
+    class: WarmedUpdate
+    inner: {class: Adam, lr: 0.0001}
+    warmup_steps: 100
+  q_network:
+    class: MLP
+    hidden: [64, 64]
+
+hypotheses:
+  # γ = 0.99 (baseline)
+  - name: vanilla_dqn_g099
+    predicted_direction: null
+    intervention:
+      gamma: 0.99
+  - name: ddqn_g099
+    predicted_direction: a_gt_b
+    intervention:
+      gamma: 0.99
+      bootstrap:
+        fn: bootstrap
+        greedification: {fn: double_greedify}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement:
+          fn: bootstrap
+          greedification: {fn: double_greedify}
+
+  # γ = 0.95
+  - name: vanilla_dqn_g095
+    predicted_direction: null
+    intervention:
+      gamma: 0.95
+  - name: ddqn_g095
+    predicted_direction: a_gt_b
+    intervention:
+      gamma: 0.95
+      bootstrap:
+        fn: bootstrap
+        greedification: {fn: double_greedify}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement:
+          fn: bootstrap
+          greedification: {fn: double_greedify}
+
+  # γ = 0.90
+  - name: vanilla_dqn_g090
+    predicted_direction: null
+    intervention:
+      gamma: 0.90
+  - name: ddqn_g090
+    predicted_direction: a_gt_b
+    intervention:
+      gamma: 0.90
+      bootstrap:
+        fn: bootstrap
+        greedification: {fn: double_greedify}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement:
+          fn: bootstrap
+          greedification: {fn: double_greedify}

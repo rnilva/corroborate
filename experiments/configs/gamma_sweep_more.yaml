@@ -1,0 +1,85 @@
+name: gamma_sweep_more
+out_dir: experiments/data/gamma_sweep_more
+arms_shape: chunked
+archive_remote: s3://corroborate-archive/gamma_sweep_more
+
+# Three more envs to broaden the γ × env coverage.
+# Picks chosen for known DDQN behavior + |A| variation:
+#   - DiscountingChain |A|=5, DDQN-helped (action_dim_sweep)
+#   - MountainCar      |A|=3, sparse-reward classic
+#   - CartPole         |A|=2, the env where DDQN can reverse sign
+# 3 envs × 3 γ × 2 arms × 30 seeds = 540 cells.
+envs:
+  - {name: DiscountingChain-bsuite, n_seeds: 30, chunk_size: 30}
+  - {name: MountainCar-v0,          n_seeds: 30, chunk_size: 30}
+  - {name: CartPole-v1,             n_seeds: 30, chunk_size: 30}
+
+base_intervention:
+  total_steps: 200000
+  eval_every:  20000
+  n_episodes:  5
+  gamma:       0.99
+  sync_period: 100
+  replay:
+    class: Replay
+    capacity: 50000
+    batch_size: 32
+  optimizer:
+    class: WarmedUpdate
+    inner: {class: Adam, lr: 0.0001}
+    warmup_steps: 100
+  q_network:
+    class: MLP
+    hidden: [64, 64]
+
+hypotheses:
+  - name: vanilla_dqn_g099
+    predicted_direction: null
+    intervention:
+      gamma: 0.99
+  - name: ddqn_g099
+    predicted_direction: a_gt_b
+    intervention:
+      gamma: 0.99
+      bootstrap:
+        fn: bootstrap
+        greedification: {fn: double_greedify}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement:
+          fn: bootstrap
+          greedification: {fn: double_greedify}
+
+  - name: vanilla_dqn_g095
+    predicted_direction: null
+    intervention:
+      gamma: 0.95
+  - name: ddqn_g095
+    predicted_direction: a_gt_b
+    intervention:
+      gamma: 0.95
+      bootstrap:
+        fn: bootstrap
+        greedification: {fn: double_greedify}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement:
+          fn: bootstrap
+          greedification: {fn: double_greedify}
+
+  - name: vanilla_dqn_g090
+    predicted_direction: null
+    intervention:
+      gamma: 0.90
+  - name: ddqn_g090
+    predicted_direction: a_gt_b
+    intervention:
+      gamma: 0.90
+      bootstrap:
+        fn: bootstrap
+        greedification: {fn: double_greedify}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement:
+          fn: bootstrap
+          greedification: {fn: double_greedify}

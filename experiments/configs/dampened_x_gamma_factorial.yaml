@@ -1,0 +1,105 @@
+name: dampened_x_gamma_factorial
+out_dir: experiments/data/dampened_x_gamma_factorial
+arms_shape: chunked
+archive_remote: s3://corroborate-archive/dampened_x_gamma_factorial
+
+# (α × γ) factorial on FourRooms. Tests whether
+# g_link ≈ α · ε(γ) · effective_horizon(γ) is multiplicatively
+# separable in α and γ.
+envs:
+  - {name: FourRooms-misc, n_seeds: 30, chunk_size: 30}
+
+base_intervention:
+  total_steps: 200000
+  eval_every:  20000
+  n_episodes:  5
+  gamma:       0.99
+  sync_period: 100
+  replay:
+    class: Replay
+    capacity: 50000
+    batch_size: 32
+  optimizer:
+    class: WarmedUpdate
+    inner: {class: Adam, lr: 0.0001}
+    warmup_steps: 100
+  q_network:
+    class: MLP
+    hidden: [64, 64]
+
+# 3 α × 3 γ = 9 arms.
+hypotheses:
+  - name: a000_g099
+    predicted_direction: null
+    intervention:
+      gamma: 0.99
+      bootstrap: {fn: bootstrap, greedification: {fn: dampened_double_greedify, alpha: 0.0}}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement: {fn: bootstrap, greedification: {fn: dampened_double_greedify, alpha: 0.0}}
+  - name: a050_g099
+    predicted_direction: a_gt_b
+    intervention:
+      gamma: 0.99
+      bootstrap: {fn: bootstrap, greedification: {fn: dampened_double_greedify, alpha: 0.5}}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement: {fn: bootstrap, greedification: {fn: dampened_double_greedify, alpha: 0.5}}
+  - name: a100_g099
+    predicted_direction: a_gt_b
+    intervention:
+      gamma: 0.99
+      bootstrap: {fn: bootstrap, greedification: {fn: dampened_double_greedify, alpha: 1.0}}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement: {fn: bootstrap, greedification: {fn: dampened_double_greedify, alpha: 1.0}}
+
+  - name: a000_g095
+    predicted_direction: null
+    intervention:
+      gamma: 0.95
+      bootstrap: {fn: bootstrap, greedification: {fn: dampened_double_greedify, alpha: 0.0}}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement: {fn: bootstrap, greedification: {fn: dampened_double_greedify, alpha: 0.0}}
+  - name: a050_g095
+    predicted_direction: a_gt_b
+    intervention:
+      gamma: 0.95
+      bootstrap: {fn: bootstrap, greedification: {fn: dampened_double_greedify, alpha: 0.5}}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement: {fn: bootstrap, greedification: {fn: dampened_double_greedify, alpha: 0.5}}
+  - name: a100_g095
+    predicted_direction: a_gt_b
+    intervention:
+      gamma: 0.95
+      bootstrap: {fn: bootstrap, greedification: {fn: dampened_double_greedify, alpha: 1.0}}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement: {fn: bootstrap, greedification: {fn: dampened_double_greedify, alpha: 1.0}}
+
+  - name: a000_g090
+    predicted_direction: null
+    intervention:
+      gamma: 0.90
+      bootstrap: {fn: bootstrap, greedification: {fn: dampened_double_greedify, alpha: 0.0}}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement: {fn: bootstrap, greedification: {fn: dampened_double_greedify, alpha: 0.0}}
+  - name: a050_g090
+    predicted_direction: a_gt_b
+    intervention:
+      gamma: 0.90
+      bootstrap: {fn: bootstrap, greedification: {fn: dampened_double_greedify, alpha: 0.5}}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement: {fn: bootstrap, greedification: {fn: dampened_double_greedify, alpha: 0.5}}
+  - name: a100_g090
+    predicted_direction: a_gt_b
+    intervention:
+      gamma: 0.90
+      bootstrap: {fn: bootstrap, greedification: {fn: dampened_double_greedify, alpha: 1.0}}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement: {fn: bootstrap, greedification: {fn: dampened_double_greedify, alpha: 1.0}}
