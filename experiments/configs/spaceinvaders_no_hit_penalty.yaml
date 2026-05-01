@@ -27,7 +27,7 @@ archive_remote: s3://corroborate-archive/spaceinvaders_no_hit_penalty
 
 envs:
   - {name: SpaceInvaders-MinAtar, n_seeds: 30, chunk_size: 10}
-  - {name: SpaceInvaders-MinAtar, n_seeds: 30, chunk_size: 10, reward_clip_min: 0.0}
+  - {name: SpaceInvaders-MinAtar, n_seeds: 30, chunk_size: 10, wrappers: [{type: reward_clip, clip_min: 0.0}]}
 
 base_intervention:
   total_steps: 1000000

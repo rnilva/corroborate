@@ -20,15 +20,15 @@ arms_shape: chunked
 #   Acrobot-v1          log_mc≈+5.2 (high)  eff_h≈100 chain-depth env
 #   CartPole-v1         log_mc≈+5.3 (high)  eff_h≈100 reverse-DDQN env
 envs:
-  - {name: FourRooms-misc, n_seeds: 30, chunk_size: 30, reward_scale: 0.1}
-  - {name: FourRooms-misc, n_seeds: 30, chunk_size: 30, reward_scale: 1.0}
-  - {name: FourRooms-misc, n_seeds: 30, chunk_size: 30, reward_scale: 10.0}
-  - {name: Acrobot-v1,     n_seeds: 30, chunk_size: 30, reward_scale: 0.1}
-  - {name: Acrobot-v1,     n_seeds: 30, chunk_size: 30, reward_scale: 1.0}
-  - {name: Acrobot-v1,     n_seeds: 30, chunk_size: 30, reward_scale: 10.0}
-  - {name: CartPole-v1,    n_seeds: 30, chunk_size: 30, reward_scale: 0.1}
-  - {name: CartPole-v1,    n_seeds: 30, chunk_size: 30, reward_scale: 1.0}
-  - {name: CartPole-v1,    n_seeds: 30, chunk_size: 30, reward_scale: 10.0}
+  - {name: FourRooms-misc, n_seeds: 30, chunk_size: 30, wrappers: [{type: reward_scale, scale: 0.1}]}
+  - {name: FourRooms-misc, n_seeds: 30, chunk_size: 30, wrappers: [{type: reward_scale, scale: 1.0}]}
+  - {name: FourRooms-misc, n_seeds: 30, chunk_size: 30, wrappers: [{type: reward_scale, scale: 10.0}]}
+  - {name: Acrobot-v1,     n_seeds: 30, chunk_size: 30, wrappers: [{type: reward_scale, scale: 0.1}]}
+  - {name: Acrobot-v1,     n_seeds: 30, chunk_size: 30, wrappers: [{type: reward_scale, scale: 1.0}]}
+  - {name: Acrobot-v1,     n_seeds: 30, chunk_size: 30, wrappers: [{type: reward_scale, scale: 10.0}]}
+  - {name: CartPole-v1,    n_seeds: 30, chunk_size: 30, wrappers: [{type: reward_scale, scale: 0.1}]}
+  - {name: CartPole-v1,    n_seeds: 30, chunk_size: 30, wrappers: [{type: reward_scale, scale: 1.0}]}
+  - {name: CartPole-v1,    n_seeds: 30, chunk_size: 30, wrappers: [{type: reward_scale, scale: 10.0}]}
 
 # Same HP regime as gamma_sweep / dampened_ddqn_alpha — γ fixed at
 # 0.99, MLP backbone, capacity 50k. Reward scale is the ONLY varied

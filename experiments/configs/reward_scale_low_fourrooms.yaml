@@ -22,11 +22,11 @@ archive_remote: s3://corroborate-archive/reward_scale_low_fourrooms
 #
 # 5 scales × 2 arms × 30 seeds = 300 cells.
 envs:
-  - {name: FourRooms-misc, n_seeds: 30, chunk_size: 30, reward_scale: 0.01}
-  - {name: FourRooms-misc, n_seeds: 30, chunk_size: 30, reward_scale: 0.03}
-  - {name: FourRooms-misc, n_seeds: 30, chunk_size: 30, reward_scale: 0.1}
-  - {name: FourRooms-misc, n_seeds: 30, chunk_size: 30, reward_scale: 0.3}
-  - {name: FourRooms-misc, n_seeds: 30, chunk_size: 30, reward_scale: 1.0}
+  - {name: FourRooms-misc, n_seeds: 30, chunk_size: 30, wrappers: [{type: reward_scale, scale: 0.01}]}
+  - {name: FourRooms-misc, n_seeds: 30, chunk_size: 30, wrappers: [{type: reward_scale, scale: 0.03}]}
+  - {name: FourRooms-misc, n_seeds: 30, chunk_size: 30, wrappers: [{type: reward_scale, scale: 0.1}]}
+  - {name: FourRooms-misc, n_seeds: 30, chunk_size: 30, wrappers: [{type: reward_scale, scale: 0.3}]}
+  - {name: FourRooms-misc, n_seeds: 30, chunk_size: 30, wrappers: [{type: reward_scale, scale: 1.0}]}
 
 base_intervention:
   total_steps: 200000

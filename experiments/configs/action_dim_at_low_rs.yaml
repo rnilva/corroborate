@@ -23,14 +23,14 @@ archive_remote: s3://corroborate-archive/action_dim_at_low_rs
 # (MNISTBandit isn't sparse-reward so vanilla may not fail —
 #  serves as a NULL test if rescue depends on sparse reward.)
 envs:
-  - {name: DeepSea-bsuite,          n_seeds: 30, chunk_size: 30, reward_scale: 0.1}
-  - {name: DeepSea-bsuite,          n_seeds: 30, chunk_size: 30, reward_scale: 1.0}
-  - {name: FourRooms-misc,          n_seeds: 30, chunk_size: 30, reward_scale: 0.1}
-  - {name: FourRooms-misc,          n_seeds: 30, chunk_size: 30, reward_scale: 1.0}
-  - {name: DiscountingChain-bsuite, n_seeds: 30, chunk_size: 30, reward_scale: 0.1}
-  - {name: DiscountingChain-bsuite, n_seeds: 30, chunk_size: 30, reward_scale: 1.0}
-  - {name: MNISTBandit-bsuite,      n_seeds: 30, chunk_size: 10, reward_scale: 0.1}
-  - {name: MNISTBandit-bsuite,      n_seeds: 30, chunk_size: 10, reward_scale: 1.0}
+  - {name: DeepSea-bsuite,          n_seeds: 30, chunk_size: 30, wrappers: [{type: reward_scale, scale: 0.1}]}
+  - {name: DeepSea-bsuite,          n_seeds: 30, chunk_size: 30, wrappers: [{type: reward_scale, scale: 1.0}]}
+  - {name: FourRooms-misc,          n_seeds: 30, chunk_size: 30, wrappers: [{type: reward_scale, scale: 0.1}]}
+  - {name: FourRooms-misc,          n_seeds: 30, chunk_size: 30, wrappers: [{type: reward_scale, scale: 1.0}]}
+  - {name: DiscountingChain-bsuite, n_seeds: 30, chunk_size: 30, wrappers: [{type: reward_scale, scale: 0.1}]}
+  - {name: DiscountingChain-bsuite, n_seeds: 30, chunk_size: 30, wrappers: [{type: reward_scale, scale: 1.0}]}
+  - {name: MNISTBandit-bsuite,      n_seeds: 30, chunk_size: 10, wrappers: [{type: reward_scale, scale: 0.1}]}
+  - {name: MNISTBandit-bsuite,      n_seeds: 30, chunk_size: 10, wrappers: [{type: reward_scale, scale: 1.0}]}
 
 base_intervention:
   total_steps: 200000
