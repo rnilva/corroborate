@@ -56,6 +56,59 @@ TRACES = (
 )
 
 
+def _read_traces(corpus_dir: Path) -> pl.DataFrame:
+    """Read mc_return per cell. Prefers the local merged
+    `traces.parquet` if non-empty; falls back to per-arm shards
+    listed in `_remote.json` (the manifest). Per-arm fallback
+    streams shards individually then concatenates the small
+    `(id, mc_return)` projections — works even when the merged
+    file failed to materialise (OOM during stream_concat)."""
+    import json
+    import os
+
+    merged = corpus_dir / 'traces.parquet'
+    if merged.exists() and merged.stat().st_size > 0:
+        return pl.read_parquet(merged, columns=['id', 'mc_return'])
+
+    manifest_path = corpus_dir / '_remote.json'
+    if not manifest_path.exists():
+        raise FileNotFoundError(
+            f'no merged traces.parquet and no manifest at '
+            f'{manifest_path}; cannot locate per-arm shards',
+        )
+    with open(manifest_path) as f:
+        manifest = json.load(f)
+    remote_root = manifest['remote_root']
+    trace_relpaths = sorted(
+        e['relpath'] for e in manifest['files']
+        if e['relpath'].endswith('traces.parquet')
+        and e['relpath'].startswith('tmp/')
+    )
+    if not trace_relpaths:
+        raise FileNotFoundError(
+            f'manifest at {manifest_path} has no per-arm trace shards',
+        )
+    storage_options = {
+        'aws_endpoint_url': os.environ.get('AWS_ENDPOINT_URL', ''),
+        'aws_access_key_id': os.environ.get('AWS_ACCESS_KEY_ID', ''),
+        'aws_secret_access_key': os.environ.get('AWS_SECRET_ACCESS_KEY', ''),
+        'aws_region': 'auto',
+    }
+    print(
+        f'  reading {len(trace_relpaths)} per-arm trace shards from {remote_root}',
+        flush=True,
+    )
+    frames: list[pl.DataFrame] = []
+    for relpath in trace_relpaths:
+        uri = f'{remote_root.rstrip("/")}/{relpath}'
+        df_shard = pl.read_parquet(
+            uri, glob=False, storage_options=storage_options,
+            columns=['id', 'mc_return'],
+        )
+        frames.append(df_shard)
+    return pl.concat(frames, how='vertical_relaxed')
+
+
 def _has_clip(cell: dict[str, object]) -> bool:
     """True if the cell has the reward_clip wrapper applied."""
     v = cell.get('reward_clip_min')
@@ -85,8 +138,8 @@ def _print_strata(label: str, result: PerBurstResult) -> None:
 
 
 def main() -> None:
-    if not RUNS.exists() or not TRACES.exists():
-        print(f'(skip — {RUNS.parent} parquets missing)')
+    if not RUNS.exists():
+        print(f'(skip — {RUNS} missing)')
         return
 
     runs = pl.read_parquet(
@@ -96,9 +149,7 @@ def main() -> None:
             'reward_clip_min',
         ],
     )
-    traces = pl.read_parquet(
-        TRACES, columns=['id', 'mc_return'],
-    )
+    traces = _read_traces(RUNS.parent)
     joined = list(
         runs.join(traces, on='id', how='inner').iter_rows(named=True),
     )
