@@ -148,10 +148,28 @@ def build_cache(
         df = runs_df
         log('traces: not needed or unavailable; using runs only')
 
-    new_cols: dict[str, list[object]] = {n: [] for n in names}
+    # Cache-first discipline at the measurable layer too: if the
+    # measurable's name already exists as a column in runs.parquet
+    # (cell_runner persisted it at sweep time), the persisted
+    # value is authoritative — recomputing would NaN-overwrite
+    # values for cells without their leaf trace reads (e.g.
+    # `eval_final_mean` was emitted by cell_runner reading the
+    # online `ep_return`/`done` series; post-hoc on a runs-only
+    # cache the measurable's leaf reads are absent and it returns
+    # None, which would clobber the original finite value).
+    runs_cols_set = set(runs_df.columns)
+    names_to_compute = [n for n in names if n not in runs_cols_set]
+    names_skipped = [n for n in names if n in runs_cols_set]
+    if names_skipped:
+        log(
+            f'measurables already persisted in runs.parquet '
+            f'({len(names_skipped)}): {names_skipped[:8]}'
+            f'{"..." if len(names_skipped) > 8 else ""}',
+        )
+    new_cols: dict[str, list[object]] = {n: [] for n in names_to_compute}
     for cell in df.iter_rows(named=True):
         cache: dict[str, object] = {}
-        for n in names:
+        for n in names_to_compute:
             m = get_registered(n)
             if m is None:
                 new_cols[n].append(None)
@@ -200,7 +218,7 @@ def build_cache(
                 on='id', how='left',
             )
             .with_columns([
-                pl.Series(n, new_cols[n]) for n in names
+                pl.Series(n, new_cols[n]) for n in names_to_compute
             ])
         )
         log(
@@ -210,7 +228,7 @@ def build_cache(
         )
     else:
         enriched = runs_df.with_columns([
-            pl.Series(n, new_cols[n]) for n in names
+            pl.Series(n, new_cols[n]) for n in names_to_compute
         ])
     enriched.write_parquet(out_path)
     log(
