@@ -12,40 +12,22 @@ envs, hiding any first-crossing-step difference.
 Distinct from `paired_g_pooled`: the gate filter excludes pairs
 where at least one arm failed to solve, so the per-env pair
 count is `min(n_seeds, n_solved_pairs)`. The pool is over envs
-where ≥2 surviving pairs produce finite g/SE."""
+where ≥2 surviving pairs produce finite g/SE.
+
+Wraps `per_env_paired_g_panel` with a per-env `cell_predicate`
+that gates by `gate_thresholds[env]` — the underlying pairing
+loop lives in `paired_g.fn`."""
 from __future__ import annotations
 
 import math
 from collections.abc import Iterable, Mapping
 
+from corroborate.analyses.paired_g import per_env_paired_g_panel
 from corroborate.analyses.paired_g_pooled import (
     PerEnvG, PooledPairedGResult,
 )
 from corroborate.analysis import analysis
-from corroborate.statistics import (
-    hedges_g_paired, random_effects_summary,
-)
-
-
-def _passes_gate(
-    cell: Mapping[str, object],
-    gate_column: str,
-    threshold: float,
-) -> bool:
-    v = cell.get(gate_column)
-    if not isinstance(v, (int, float)):
-        return False
-    if math.isnan(float(v)):
-        return False
-    return float(v) >= threshold
-
-
-def _scalar(cell: Mapping[str, object], path: str) -> float | None:
-    v = cell.get(path)
-    if isinstance(v, bool) or not isinstance(v, (int, float)):
-        return None
-    fv = float(v)
-    return fv if not math.isnan(fv) else None
+from corroborate.statistics import random_effects_summary
 
 
 @analysis
@@ -80,81 +62,60 @@ def paired_g_among_solvers(
             if c.get(total_steps_field) == total_steps_filter
         ]
 
-    by_env_arm_key: dict[
-        tuple[str, str, tuple[object, ...]], dict[str, float],
-    ] = {}
-    envs_seen: set[str] = set()
-    for cell in cells_list:
+    # `cell_predicate` reads the gate threshold per cell's env;
+    # cells in envs without a threshold drop out (so the panel
+    # ends up restricted to gated envs even when env_filter is
+    # empty).
+    def gate(cell: Mapping[str, object]) -> bool:
         env_v = cell.get('env_name')
-        arm_v = cell.get(arm_field)
         if not isinstance(env_v, str):
-            continue
-        envs_seen.add(env_v)
-        if arm_v not in (treatment_arm, baseline_arm):
-            continue
-        if env_v not in gate_thresholds:
-            continue
-        threshold = gate_thresholds[env_v]
-        if not _passes_gate(cell, gate_column, threshold):
-            continue
-        s = _scalar(cell, source)
-        if s is None:
-            continue
-        key = tuple(cell[k] for k in pair_by)
-        slot = by_env_arm_key.setdefault(
-            (env_v, str(arm_v), key), {},
-        )
-        slot[source] = s
+            return False
+        threshold = gate_thresholds.get(env_v)
+        if threshold is None:
+            return False
+        v = cell.get(gate_column)
+        if not isinstance(v, (int, float)) or isinstance(v, bool):
+            return False
+        fv = float(v)
+        if math.isnan(fv):
+            return False
+        return fv >= threshold
 
-    target_envs: tuple[str, ...]
+    # Effective env set: explicit `env_filter` ∩ envs with a
+    # gate, else all gated envs in `cells_list`.
     if env_filter:
-        target_envs = tuple(e for e in env_filter if e in envs_seen)
+        target = tuple(e for e in env_filter if e in gate_thresholds)
     else:
-        target_envs = tuple(sorted(envs_seen))
-
-    per_env: list[PerEnvG] = []
-    pool_obs: list[tuple[float, float]] = []
-    for env in target_envs:
-        if env not in gate_thresholds:
-            per_env.append(PerEnvG(
-                env_name=env, g=float('nan'),
-                se=float('nan'), n_pairs=0,
-            ))
-            continue
-        treatment_keys: dict[tuple[object, ...], float] = {}
-        baseline_keys: dict[tuple[object, ...], float] = {}
-        for (e, arm, key), data in by_env_arm_key.items():
-            if e != env:
-                continue
-            v = data.get(source)
-            if v is None:
-                continue
-            if arm == treatment_arm:
-                treatment_keys[key] = v
-            elif arm == baseline_arm:
-                baseline_keys[key] = v
-        paired_keys = sorted(set(treatment_keys) & set(baseline_keys))
-        deltas = [
-            treatment_keys[k] - baseline_keys[k] for k in paired_keys
-        ]
-        n_pairs = len(deltas)
-        g, se = (
-            hedges_g_paired(deltas) if n_pairs >= 2
-            else (float('nan'), float('nan'))
-        )
-        per_env.append(PerEnvG(
-            env_name=env, g=g, se=se, n_pairs=n_pairs,
+        envs_seen = {
+            c.get('env_name') for c in cells_list
+            if isinstance(c.get('env_name'), str)
+        }
+        target = tuple(sorted(
+            e for e in envs_seen
+            if isinstance(e, str) and e in gate_thresholds
         ))
-        if (
-            n_pairs >= 2 and not math.isnan(g)
-            and not math.isnan(se) and se > 0.0
-        ):
-            pool_obs.append((g, se))
 
+    panel = per_env_paired_g_panel(
+        cells_list,
+        treatment_arm=treatment_arm,
+        baseline_arm=baseline_arm,
+        source=source,
+        env_filter=target,
+        pair_by=pair_by,
+        arm_field=arm_field,
+        cell_predicate=gate,
+    )
+
+    pool_obs: list[tuple[float, float]] = [
+        (s.g, s.se) for s in panel
+        if s.n_pairs >= 2
+        and not math.isnan(s.g) and not math.isnan(s.se)
+        and s.se > 0.0
+    ]
     pooled = random_effects_summary(pool_obs)
     return PooledPairedGResult(
         pooled=pooled,
-        per_env=tuple(per_env),
+        per_env=panel,
         n_envs=len(pool_obs),
         total_steps_filter=total_steps_filter,
         measurable=source,
@@ -163,4 +124,5 @@ def paired_g_among_solvers(
     )
 
 
-__all__ = ['paired_g_among_solvers']
+# Re-export PerEnvG for substrate-side imports.
+__all__ = ['PerEnvG', 'paired_g_among_solvers']

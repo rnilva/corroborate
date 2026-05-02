@@ -25,11 +25,12 @@ total_steps, …) sub-corpus without bespoke per-bridge analyses.
 from __future__ import annotations
 
 import math
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from types import MappingProxyType
 
 from corroborate.analysis import analysis
+from corroborate.stratum import StratumG
 
 
 @dataclass(frozen=True, slots=True)
@@ -152,6 +153,7 @@ def paired_g(
     env_name: str | None = None,
     arm_field: str = 'intervention_name',
     extra_filters: Mapping[str, object] = MappingProxyType({}),
+    cell_predicate: Callable[[Mapping[str, object]], bool] | None = None,
 ) -> PairedGResult:
     """Pair `treatment_arm` cells with `baseline_arm` cells on
     `pair_by`, compute per-pair Δ at `source`, return Hedges' g
@@ -167,7 +169,13 @@ def paired_g(
     `extra_filters={'reward_scale': 0.1}` filters to that sub-
     corpus; combine with `env_name='FourRooms-misc'` for
     bridge-specific cohorts without a bespoke per-bridge
-    analysis."""
+    analysis.
+
+    `cell_predicate` is a per-cell callable filter applied AFTER
+    `env_name` / `extra_filters`. Bridges that need richer scope
+    logic (e.g. "both arms cleared an env-specific solve
+    threshold") supply a closure here instead of reimplementing
+    the pairing loop."""
     from corroborate.statistics import hedges_g_paired
 
     treatment: dict[tuple[object, ...], float] = {}
@@ -176,6 +184,8 @@ def paired_g(
         if env_name is not None and cell.get('env_name') != env_name:
             continue
         if extra_filters and not _matches_filters(cell, extra_filters):
+            continue
+        if cell_predicate is not None and not cell_predicate(cell):
             continue
         arm = cell.get(arm_field)
         if arm == treatment_arm:
@@ -218,4 +228,66 @@ def paired_g(
     )
 
 
-__all__ = ['PairedGResult', 'paired_g']
+# ============ per-env panel helper ============
+
+def per_env_paired_g_panel(
+    cells: Sequence[Mapping[str, object]],
+    *,
+    treatment_arm: str,
+    baseline_arm: str,
+    source: str,
+    env_filter: tuple[str, ...] = (),
+    pair_by: tuple[str, ...] = ('seed',),
+    arm_field: str = 'intervention_name',
+    cell_predicate: Callable[[Mapping[str, object]], bool] | None = None,
+) -> tuple[StratumG[str], ...]:
+    """Per-env paired-g panel — one `StratumG[str]` per env in
+    `env_filter` (or every env present in `cells` when empty).
+
+    Calls `paired_g.fn` per env (with `env_name=env` and the
+    optional `cell_predicate`), packs the per-env result as
+    `StratumG[str]`. NO panel-level filtering: every env in the
+    target set produces an entry, including degenerate ones
+    (n_pairs<2 → g/se=NaN). Consumers that need to drop
+    underpowered strata filter at their own boundary so they
+    can decide what to report (e.g. an explicit `n_pairs=0`
+    entry tells `paired_g_among_solvers` "this env was in
+    `gate_thresholds` but no surviving pair").
+
+    The framework's shared per-env loop primitive — consumers
+    (`paired_g_pooled`, `paired_g_among_solvers`,
+    `meta_regression_paired_g`) iterate the panel rather than
+    re-pairing."""
+    envs_seen: set[str] = set()
+    for c in cells:
+        env_v = c.get('env_name')
+        if isinstance(env_v, str):
+            envs_seen.add(env_v)
+    target_envs: tuple[str, ...]
+    if env_filter:
+        target_envs = tuple(e for e in env_filter if e in envs_seen)
+    else:
+        target_envs = tuple(sorted(envs_seen))
+
+    panel: list[StratumG[str]] = []
+    for env in target_envs:
+        result = paired_g.fn(
+            cells,
+            treatment_arm=treatment_arm,
+            baseline_arm=baseline_arm,
+            pair_by=pair_by,
+            source=source,
+            env_name=env,
+            arm_field=arm_field,
+            cell_predicate=cell_predicate,
+        )
+        panel.append(StratumG[str](
+            stratum_id=env,
+            g=result.g,
+            se=result.se,
+            n_pairs=result.n_pairs,
+        ))
+    return tuple(panel)
+
+
+__all__ = ['PairedGResult', 'paired_g', 'per_env_paired_g_panel']

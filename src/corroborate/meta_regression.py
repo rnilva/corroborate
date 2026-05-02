@@ -25,13 +25,23 @@ import math
 import random
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 
 import numpy as np
 import scipy.stats as ss
 
 if TYPE_CHECKING:
     from corroborate.schema import HypothesisComparisonRow
+
+
+class StratumGProtocol[K](Protocol):
+    """Structural protocol for per-stratum (g, se, n_pairs) records.
+    `StratumG[K]` (in `corroborate.stratum`) satisfies it; anything
+    carrying the four fields works."""
+    stratum_id: K
+    g: float
+    se: float
+    n_pairs: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -386,3 +396,38 @@ def cross_validate_meta_regression(
         sign_consistency=sign_consistency,
         coefficient_stability=coefficient_stability,
     )
+
+
+# ============ Panel → meta-regression bridge ============
+
+def meta_regress_panel[K](
+    panel: Sequence[StratumGProtocol[K]],
+    *,
+    covariates_per_stratum: Mapping[K, Mapping[str, float]],
+    alpha: float = 0.05,
+) -> MetaRegressionResult:
+    """Project a per-stratum panel of (stratum_id, g, se, n_pairs)
+    observations to `StratumObservation`s and run `meta_regression`.
+
+    Both `meta_regression_paired_g` (per-env panel,
+    `K = str`) and `meta_regression_per_burst` (per-(env, burst)
+    panel, `K = tuple[str, int]`) consume this helper — the
+    panel→regression projection is identical apart from the
+    stratum-id type.
+
+    Strata with `n_pairs < 2`, NaN g/se, or `se <= 0.0` drop
+    silently. Covariate lookup falls back to an empty mapping
+    when a stratum-id is absent from `covariates_per_stratum`."""
+    observations: list[StratumObservation] = []
+    for s in panel:
+        if s.n_pairs < 2 or math.isnan(s.g) or math.isnan(s.se):
+            continue
+        if s.se <= 0.0:
+            continue
+        observations.append(StratumObservation(
+            stratum_id=s.stratum_id,
+            g=s.g,
+            se=s.se,
+            covariates=covariates_per_stratum.get(s.stratum_id, {}),
+        ))
+    return meta_regression(observations, alpha=alpha)

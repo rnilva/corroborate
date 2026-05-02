@@ -18,21 +18,17 @@ import math
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
-from corroborate.analyses.paired_g import paired_g
+from corroborate.analyses.paired_g import per_env_paired_g_panel
 from corroborate.analysis import analysis
 from corroborate.statistics import (
     PooledStats, random_effects_summary,
 )
+from corroborate.stratum import StratumG
 
 
-@dataclass(frozen=True, slots=True)
-class PerEnvG:
-    """One stratum's paired Hedges' g + SE + pair count, for the
-    pooled-panel."""
-    env_name: str
-    g: float
-    se: float
-    n_pairs: int
+# Backward-compatible alias for substrate code that imports the
+# old class-name shape.
+type PerEnvG = StratumG[str]
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,7 +39,7 @@ class PooledPairedGResult:
     `total_steps_filter` is the filter that was applied (None if
     all total_steps values were included)."""
     pooled: PooledStats
-    per_env: tuple[PerEnvG, ...]
+    per_env: tuple[StratumG[str], ...]
     n_envs: int
     total_steps_filter: int | None
     measurable: str
@@ -77,46 +73,26 @@ def paired_g_pooled(
             if c.get(total_steps_field) == total_steps_filter
         ]
 
-    envs_in_corpus: set[str] = set()
-    for c in cells_list:
-        env_v = c.get('env_name')
-        if isinstance(env_v, str):
-            envs_in_corpus.add(env_v)
+    panel = per_env_paired_g_panel(
+        cells_list,
+        treatment_arm=treatment_arm,
+        baseline_arm=baseline_arm,
+        source=source,
+        env_filter=env_filter,
+        pair_by=pair_by,
+        arm_field=arm_field,
+    )
 
-    target_envs: tuple[str, ...]
-    if env_filter:
-        target_envs = tuple(e for e in env_filter if e in envs_in_corpus)
-    else:
-        target_envs = tuple(sorted(envs_in_corpus))
-
-    per_env: list[PerEnvG] = []
-    pool_obs: list[tuple[float, float]] = []
-    for env in target_envs:
-        result = paired_g.fn(
-            cells_list,
-            treatment_arm=treatment_arm,
-            baseline_arm=baseline_arm,
-            pair_by=pair_by,
-            source=source,
-            env_name=env,
-            arm_field=arm_field,
-        )
-        per_env.append(PerEnvG(
-            env_name=env, g=result.g, se=result.se,
-            n_pairs=result.n_pairs,
-        ))
-        if (
-            result.n_pairs >= 2
-            and not math.isnan(result.g)
-            and not math.isnan(result.se)
-            and result.se > 0.0
-        ):
-            pool_obs.append((result.g, result.se))
-
+    pool_obs: list[tuple[float, float]] = [
+        (s.g, s.se) for s in panel
+        if s.n_pairs >= 2
+        and not math.isnan(s.g) and not math.isnan(s.se)
+        and s.se > 0.0
+    ]
     pooled = random_effects_summary(pool_obs)
     return PooledPairedGResult(
         pooled=pooled,
-        per_env=tuple(per_env),
+        per_env=panel,
         n_envs=len(pool_obs),
         total_steps_filter=total_steps_filter,
         measurable=source,

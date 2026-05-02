@@ -15,17 +15,26 @@ Reproduces revision 10's chain-decomposition shape:
   β(log_action_dim) on g_mech: −0.39, p=0.005 (HELD)
   β(log_action_dim) on g_link: +0.01, p=0.94 (NO_EFFECT)
   → action-dim moderates the mechanism but not the link.
+
+Implementation: builds the per-(env, burst) panel via
+`paired_g_per_burst.fn`, projects each `PerBurstStratum` to a
+`StratumG[tuple[str, int]]`, then runs `meta_regress_panel` —
+the panel→regression bridge shared with
+`meta_regression_paired_g`. Stratum-level covariates fall back
+to the env-level row (covariates at the burst granularity would
+require per-burst keys in `covariates_per_env`; the analysis
+broadcasts the env-level vector across all bursts in that env).
 """
 from __future__ import annotations
 
-import math
 from collections.abc import Iterable, Mapping
 
 from corroborate.analyses.paired_g_per_burst import paired_g_per_burst
 from corroborate.analysis import analysis
 from corroborate.meta_regression import (
-    MetaRegressionResult, StratumObservation, meta_regression,
+    MetaRegressionResult, meta_regress_panel,
 )
+from corroborate.stratum import StratumG
 
 
 @analysis
@@ -62,22 +71,28 @@ def meta_regression_per_burst(
         source=source,
         reduction=reduction,
     )
-
-    observations: list[StratumObservation] = []
-    for s in per_burst.strata:
-        if s.n_pairs < 2 or math.isnan(s.g) or math.isnan(s.se):
-            continue
-        if s.se <= 0.0:
-            continue
-        env_covs = covariates_per_env.get(s.env_name, {})
-        observations.append(StratumObservation(
+    panel: tuple[StratumG[tuple[str, int]], ...] = tuple(
+        StratumG[tuple[str, int]](
             stratum_id=(s.env_name, s.burst_index),
-            g=s.g,
-            se=s.se,
-            covariates=env_covs,
-        ))
-
-    return meta_regression(observations, alpha=alpha)
+            g=s.g, se=s.se, n_pairs=s.n_pairs,
+        )
+        for s in per_burst.strata
+    )
+    # Broadcast env-level covariates across every (env, burst).
+    covariates_per_stratum: dict[
+        tuple[str, int], Mapping[str, float],
+    ] = {}
+    for s in panel:
+        env, _ = s.stratum_id
+        if env in covariates_per_env:
+            covariates_per_stratum[s.stratum_id] = (
+                covariates_per_env[env]
+            )
+    return meta_regress_panel(
+        panel,
+        covariates_per_stratum=covariates_per_stratum,
+        alpha=alpha,
+    )
 
 
 __all__ = ['meta_regression_per_burst']
