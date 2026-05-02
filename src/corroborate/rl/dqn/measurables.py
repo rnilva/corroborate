@@ -760,7 +760,8 @@ def jensen_gap(record: Mapping[str, object]) -> float:
 
 @measurable(
     name='jensen_dormancy_gap',
-    reads=('predicted_q_at_start', 'mc_return', 'online_q_per_action'),
+    reads=('predicted_q_at_start', 'mc_return',
+           'online_std_q_per_step', 'env_name'),
 )
 def jensen_dormancy_gap_measurable(record: Mapping[str, object]) -> float:
     """`max(0, structural_floor − observed_bias)` — gap between
@@ -773,30 +774,41 @@ def jensen_dormancy_gap_measurable(record: Mapping[str, object]) -> float:
     (observed bias is below what Jensen-alone predicts at this
     |A| and σ_Q; mechanism is structurally weak).
 
+    Reads the persisted per-step σ_Q reduction
+    (`online_std_q_per_step`) rather than raw
+    `online_q_per_action` — the latter is dropped by
+    `Q_TRACE_REDUCTIONS` at trace persistence time, so the
+    measurable would always NaN post-hoc on persisted corpora.
+    `n_actions` comes from the env catalogue keyed by
+    `record['env_name']`.
+
     Returns NaN when inputs are missing or shapes are degenerate.
     The full registered version of `rl/dqn/invariants.py:
     jensen_dormancy_gap()` — Phase 4 lifts the invariant to the
-    measurable channel; the old per-cell Bridge channel goes
-    away in 4C–4F."""
-    if (
-        'predicted_q_at_start' not in record
-        or 'mc_return' not in record
-        or 'online_q_per_action' not in record
-    ):
+    measurable channel."""
+    predicted_v = record.get('predicted_q_at_start')
+    actual_v = record.get('mc_return')
+    sigma_v = record.get('online_std_q_per_step')
+    env = record.get('env_name')
+    if predicted_v is None or actual_v is None or sigma_v is None:
         return float('nan')
-    predicted = np.asarray(record['predicted_q_at_start'], dtype=np.float64)
-    actual = np.asarray(record['mc_return'], dtype=np.float64)
-    q = np.asarray(record['online_q_per_action'], dtype=np.float64)
-    if predicted.size == 0 or actual.size == 0:
+    if not isinstance(env, str):
         return float('nan')
-    if q.ndim != 2 or q.shape[0] < 2 or q.shape[1] < 2:
+    predicted = np.asarray(predicted_v, dtype=np.float64)
+    actual = np.asarray(actual_v, dtype=np.float64)
+    sigma_per_step = np.asarray(sigma_v, dtype=np.float64)
+    if predicted.size == 0 or actual.size == 0 or sigma_per_step.size < 2:
+        return float('nan')
+    try:
+        spec = env_catalogue.get(env)
+    except KeyError:
+        return float('nan')
+    n_actions = int(spec.n_actions)
+    if n_actions < 2:
         return float('nan')
     observed_bias = float(max(0.0, (predicted - actual).mean()))
-    n_actions = int(q.shape[-1])
-    late_lo = int(q.shape[0]) // 2
-    late = q[late_lo:]
-    per_step_action_std = late.std(axis=-1)
-    sigma = float(per_step_action_std.mean())
+    late_lo = int(sigma_per_step.shape[0]) // 2
+    sigma = float(sigma_per_step[late_lo:].mean())
     if not (sigma == sigma and abs(sigma) < float('inf')):
         return float('nan')
     floor = sigma * math.sqrt(2.0 * math.log(n_actions))

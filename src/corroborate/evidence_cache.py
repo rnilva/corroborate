@@ -164,17 +164,54 @@ def build_cache(
                 v = None
             new_cols[n].append(_to_polars_value(v))
 
-    # Persist the joined frame (runs + needed trace cols) plus
-    # the new measurable cols. Preserving the trace cols matters
-    # for analyses like `paired_g_per_burst` that consume raw 2-D
-    # series (e.g. `mc_return` shape `(n_bursts, n_episodes)`)
-    # rather than just the per-cell scalars derived from them.
-    # `df` (= runs ⨝ traces) is what the per-cell loop iterated;
-    # writing it out keeps the cache consistent with what cells
-    # the analyses see at run time.
-    enriched = df.with_columns([
-        pl.Series(n, new_cols[n]) for n in names
-    ])
+    # Persist runs + scalar measurables + a NARROW set of 2-D
+    # trace cols. Per-step 1-D trajectories (`online_max_q_per_
+    # step` etc. — shape `(n_steps,)`, hundreds of thousands of
+    # entries per cell) are used to compute the scalar
+    # measurables but get dropped from the cache; preserving
+    # them on every cell would inflate the cache by orders of
+    # magnitude (1-D series at 1M+ steps × n_cells × n_corpora
+    # = tens of GB).
+    #
+    # 2-D structured cols (e.g. `mc_return` shape `(n_bursts,
+    # n_episodes)` ≈ 100 entries per cell) ARE preserved: they're
+    # consumed raw by downstream per-burst analyses
+    # (`paired_g_per_burst`, `mundlak_paired_g_per_burst`,
+    # `paired_link_per_burst`) which read the 2-D layout. Cost
+    # is small: each cell carries only `~n_bursts × n_episodes`
+    # scalars, not the full per-step trajectory.
+    preserve_trace_cols: list[str] = []
+    runs_col_set = set(runs_df.columns)
+    for c in df.columns:
+        if c in runs_col_set or c == 'id':
+            continue
+        if not isinstance(df.schema[c], pl.List):
+            continue
+        # 2-D = `List(List(<scalar>))`; 1-D = `List(<scalar>)`.
+        # Polars exposes nested-list dtype via the inner type.
+        inner = df.schema[c].inner  # pyright: ignore[reportAttributeAccessIssue]
+        if isinstance(inner, pl.List):
+            preserve_trace_cols.append(c)
+    if preserve_trace_cols:
+        enriched = (
+            runs_df
+            .join(
+                df.select(['id', *preserve_trace_cols]),
+                on='id', how='left',
+            )
+            .with_columns([
+                pl.Series(n, new_cols[n]) for n in names
+            ])
+        )
+        log(
+            f'preserving 2-D trace cols ({len(preserve_trace_cols)}): '
+            f'{preserve_trace_cols[:6]}'
+            f'{"..." if len(preserve_trace_cols) > 6 else ""}',
+        )
+    else:
+        enriched = runs_df.with_columns([
+            pl.Series(n, new_cols[n]) for n in names
+        ])
     enriched.write_parquet(out_path)
     log(
         f'wrote: {out_path}  '
