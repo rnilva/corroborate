@@ -887,7 +887,7 @@ def ddqn_solves_faster__spaceinvaders(
     del gate_column, gate_thresholds, total_steps_filter
     spaceinvaders = next(
         (p for p in paired_g_among_solvers.per_env
-         if p.env_name == env_filter[0]),
+         if p.stratum_id == env_filter[0]),
         None,
     )
     if spaceinvaders is None:

@@ -1,20 +1,28 @@
 """One-shot rename: strip `outcome.` / `mechanism.` / `invariant.`
-prefixes from `runs.parquet` columns across all corpora.
+prefixes from columns across all parquet files under
+`experiments/data/`.
 
 The Phase 5 schema rename ("drop substrate-paper-narrative
 prefixes — bare measurable names") changed cell_runner's emit
 from prefixed (`mechanism.jensen_gap`) to bare (`jensen_gap`).
 Bridges + analyses now reference bare names. Pre-Phase-5
-corpora on disk still carry the prefixes, so paired_g and the
-test fixture corpora can't resolve names. This script renames
-in-place + writes back to the same parquet path.
+artifacts on disk still carry the prefixes, so paired_g and
+the test fixture corpora can't resolve names. This script
+renames in-place + writes back to the same parquet path.
 
-Operates on `runs.parquet` only — `traces.parquet` does not
-carry prefixed columns.
+Walks every `*.parquet` under `experiments/data/` recursively:
+- per-corpus `runs.parquet`
+- per-arm shards (`arm000__<env>__<arm>__runs.parquet` etc.)
+- bridge caches (`runs_with_bridge_cache.parquet`)
+- the universal evidence parquet (`universal_evidence.parquet`)
+- anything else that contains prefixed columns
+
+`traces.parquet` files don't carry prefixed columns; they
+flow through unchanged when re-scanned.
 
 Skips a column when stripping the prefix would collide with an
-existing bare column on the same row (none observed across the
-29 corpora as of 2026-05-02, but checked defensively).
+existing bare column (none observed across the 29 corpora as of
+2026-05-02, but checked defensively).
 
 Usage:
     uv run python scripts/sanitise_runs_parquet_prefixes.py
@@ -81,24 +89,22 @@ def main() -> None:
 
     n_renamed = 0
     n_total = 0
-    for d in sorted(data_root.iterdir()):
-        if not d.is_dir():
-            continue
-        runs = d / 'runs.parquet'
-        if not runs.exists() or runs.stat().st_size < 1024:
+    for parquet in sorted(data_root.rglob('*.parquet')):
+        try:
+            cols_before = pl.scan_parquet(parquet).collect_schema().names()
+        except Exception as exc:  # noqa: BLE001 — log + skip unreadable
+            print(f'[{parquet}] UNREADABLE: {exc!r}')
             continue
         n_total += 1
-        cols_before = pl.scan_parquet(runs).collect_schema().names()
         rename = _rename_map(cols_before)
         if not rename:
             continue
-        print(f'\n[{d.name}] renaming {len(rename)} cols:')
-        for old, new in sorted(rename.items()):
-            print(f'  {old}  ->  {new}')
-        if sanitise(runs):
+        rel = parquet.relative_to(data_root)
+        print(f'\n[{rel}] renaming {len(rename)} cols')
+        if sanitise(parquet):
             n_renamed += 1
     print()
-    print(f'sanitised {n_renamed} / {n_total} corpora')
+    print(f'sanitised {n_renamed} / {n_total} parquet files')
 
 
 if __name__ == '__main__':
