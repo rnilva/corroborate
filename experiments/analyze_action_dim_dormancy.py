@@ -33,7 +33,7 @@ import numpy as np
 import polars as pl
 
 from corroborate._polars_boundary import to_dicts as _to_dicts
-from corroborate.aggregate import paired_comparison_from_runs
+from corroborate.analyses.paired_g import paired_g
 from corroborate.rl.env_catalogue import get
 from corroborate.schema import RunRow
 from corroborate.statistics import (
@@ -117,28 +117,17 @@ def _per_env_g(
     runs: list[RunRow], env_name: str, *,
     outcome_path: str = 'eval_final_mean',
 ) -> tuple[float, float, int]:
-    """Paired g per env on outcome, DDQN-vs-vanilla pair-by seed."""
-    env_runs = [
-        r for r in runs
-        if r.measurements.get('env_name') == env_name
-    ]
-    ddqn = [r for r in env_runs if r.measurements.get('intervention_name') == 'ddqn']
-    vanilla = [r for r in env_runs if r.measurements.get('intervention_name') == 'vanilla_dqn']
-    if not ddqn or not vanilla:
-        return float('nan'), float('nan'), 0
-    cmp = paired_comparison_from_runs(
-        ddqn, vanilla,
-        outcome_path=outcome_path,
+    """Paired g per env on outcome, DDQN-vs-vanilla pair-by seed.
+    Delegates to the registered `paired_g` analysis."""
+    result = paired_g.fn(
+        [r.measurements for r in runs],
+        treatment_arm='ddqn',
+        baseline_arm='vanilla_dqn',
         pair_by=('seed',),
-        predicted_direction='a_gt_b',
+        source=outcome_path,
+        env_name=env_name,
     )
-    g_v = cmp.measurements.get(f'{outcome_path}.effect_size_g', float('nan'))
-    se_v = cmp.measurements.get(f'{outcome_path}.se', float('nan'))
-    n_v = cmp.measurements.get('n_pairs', 0)
-    g = float(g_v) if isinstance(g_v, (int, float)) else float('nan')
-    se = float(se_v) if isinstance(se_v, (int, float)) else float('nan')
-    n = int(n_v) if isinstance(n_v, (int, float)) else 0
-    return g, se, n
+    return result.g, result.se, result.n_pairs
 
 
 def _filter_by_dormancy(

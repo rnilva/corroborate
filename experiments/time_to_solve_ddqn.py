@@ -18,10 +18,10 @@ Method:
     if interesting, redo with streaming-trace exact first-crossing.
   - Filter to (env, seed) pairs where BOTH ddqn and vanilla cells
     have `eval_best_burst_mean >= env_threshold` (both solved).
-  - Per env: `paired_comparison_from_runs(treatment=ddqn,
-    baseline=vanilla, outcome_path=eval_best_burst_step,
-    pair_by=('seed',), predicted_direction='a_lt_b')`. DDQN should
-    solve faster ⇒ smaller best-burst-step.
+  - Per env: `paired_g.fn(cells, treatment_arm='ddqn',
+    baseline_arm='vanilla_dqn', source='eval_best_burst_step',
+    pair_by=('seed',))`. DDQN should solve faster ⇒ smaller
+    best-burst-step ⇒ negative g (predicted a_lt_b).
   - Random-effects pool over envs, stratified by solve-rate
     class (high ≥80%, mixed 30–80%, low <30%).
 
@@ -37,13 +37,14 @@ Usage:
 """
 from __future__ import annotations
 
+import math
 from collections.abc import Sequence
 from pathlib import Path
 
 import polars as pl
 
 from corroborate._polars_boundary import to_dicts as _to_dicts
-from corroborate.aggregate import paired_comparison_from_runs
+from corroborate.analyses.paired_g import paired_g
 from corroborate.rl.env_solve_thresholds import (
     SOLVE_THRESHOLDS, envs_with_threshold,
 )
@@ -79,6 +80,35 @@ def _load_solved_runs(env_name: str) -> tuple[list[RunRow], list[RunRow]]:
     return ddqn, vanilla
 
 
+def _paired_proxy_g(
+    ddqn_runs: Sequence[RunRow],
+    vanilla_runs: Sequence[RunRow],
+) -> tuple[float, float, int, Verdict]:
+    """Pair (ddqn, vanilla) by seed via the registered `paired_g`
+    analysis on `eval_best_burst_step`. Returns (g, se, n_pairs,
+    display_verdict) where verdict is a coarse HELD/NO_EFFECT/
+    POWER_INSUFFICIENT for the predicted direction (a_lt_b: DDQN
+    solves faster ⇒ g < 0)."""
+    cells = [
+        r.measurements
+        for r in (*ddqn_runs, *vanilla_runs)
+    ]
+    result = paired_g.fn(
+        cells,
+        treatment_arm='ddqn',
+        baseline_arm='vanilla_dqn',
+        pair_by=('seed',),
+        source=_PROXY_PATH,
+    )
+    if result.n_pairs < 2:
+        return result.g, result.se, result.n_pairs, Verdict.POWER_INSUFFICIENT
+    verdict = (
+        Verdict.HELD if (math.isfinite(result.g) and result.g < 0.0)
+        else Verdict.NO_EFFECT
+    )
+    return result.g, result.se, result.n_pairs, verdict
+
+
 def _solve_class(ddqn_n: int, vanilla_n: int) -> str:
     n = min(ddqn_n, vanilla_n)
     if n >= 24:  # ≥ 80% of 30 seeds
@@ -106,19 +136,10 @@ def main() -> None:
         if not ddqn_runs or not vanilla_runs:
             continue
         cls = _solve_class(len(ddqn_runs), len(vanilla_runs))
-        cmp = paired_comparison_from_runs(
+        g_f, se_f, n_pairs_i, verdict = _paired_proxy_g(
             ddqn_runs, vanilla_runs,
-            outcome_path=_PROXY_PATH,
-            pair_by=('seed',),
-            predicted_direction='a_lt_b',
         )
-        g = cmp.measurements.get(f'{_PROXY_PATH}.effect_size_g', float('nan'))
-        se = cmp.measurements.get(f'{_PROXY_PATH}.se', float('nan'))
-        n_pairs = cmp.measurements.get('n_pairs', 0)
-        g_f = float(g) if isinstance(g, (int, float)) else float('nan')
-        se_f = float(se) if isinstance(se, (int, float)) else float('nan')
-        n_pairs_i = int(n_pairs) if isinstance(n_pairs, (int, float)) else 0
-        per_env.append((env, cls, n_pairs_i, g_f, se_f, cmp.verdict))
+        per_env.append((env, cls, n_pairs_i, g_f, se_f, verdict))
         g_se_by_class[cls].append((g_f, se_f))
 
     # Per-env table.

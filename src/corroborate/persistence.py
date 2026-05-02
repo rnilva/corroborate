@@ -48,7 +48,6 @@ from corroborate.computation_graph import (
 )
 from corroborate.graph import Graph
 from corroborate.schema import (
-    ComparisonRow,
     RunRow,
     TraceRow,
 )
@@ -66,18 +65,6 @@ def write_runrows(rows: Iterable[RunRow], path: Path) -> None:
 def read_runrows(path: Path) -> list[RunRow]:
     df = pl.read_parquet(path)
     return [RunRow.from_row_dict(d) for d in _to_dicts(df)]
-
-
-# ============ ComparisonRow ============
-
-def write_comparisonrows(rows: Iterable[ComparisonRow], path: Path) -> None:
-    records = [r.as_dict() for r in rows]
-    pl.DataFrame(records).write_parquet(path)
-
-
-def read_comparisonrows(path: Path) -> list[ComparisonRow]:
-    df = pl.read_parquet(path)
-    return [ComparisonRow.from_row_dict(d) for d in _to_dicts(df)]
 
 
 # ============ TraceRow ============

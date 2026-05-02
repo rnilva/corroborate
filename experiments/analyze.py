@@ -4,8 +4,7 @@ Replaces the per-study analyze_*.py scripts. One script, parameterised
 by the (corpus, treatment, baseline, mediator_path, outcome_path) tuple.
 Composes existing primitives — does NOT introduce new ones:
 
-  - `paired_deltas_from_runs` style pairing (re-implemented inline so
-    we can pair across corpora; see `_paired_arrays`)
+  - per-pair Δ extraction (inline; see `_paired_arrays`)
   - `hedges_g_paired` for per-stratum effect size
   - `meta_regression` for moderator coefficients
   - `discover_adjacency` for PC adjacency

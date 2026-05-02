@@ -831,7 +831,7 @@ def jensen_gap(record: Mapping[str, object]) -> float:
     name='jensen_dormancy_gap',
     reads=('predicted_q_at_start', 'mc_return', 'online_q_per_action'),
 )
-def jensen_dormancy_gap_m(record: Mapping[str, object]) -> float:
+def jensen_dormancy_gap_measurable(record: Mapping[str, object]) -> float:
     """`max(0, structural_floor − observed_bias)` — gap between
     the Jensen-alone structural floor (`σ_late × √(2 log |A|)`)
     and the empirical overestimation (`mean(predicted_q_at_start −
@@ -931,6 +931,6 @@ def dqn_default_measurables() -> tuple[
         eval_best_burst_mean,
         eval_best_burst_step,
         jensen_gap,
-        jensen_dormancy_gap_m,
+        jensen_dormancy_gap_measurable,
         at_most_jensen_dormancy_gap_zero_verdict,
     )

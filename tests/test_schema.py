@@ -8,11 +8,8 @@ from_row_dict happens via TypeIs predicates and isinstance checks,
 not cast or `# type: ignore`."""
 from __future__ import annotations
 
-from corroborate.schema import (
-    ComparisonRow,
-    RunRow,
-)
-from corroborate.verdict import RefutationClass, Verdict
+from corroborate.schema import RunRow
+from corroborate.verdict import Verdict
 
 
 # ============ RunRow round-trip ============
@@ -97,68 +94,6 @@ def test_run_row_skips_none_columns_on_read() -> None:
     assert run.measurements == {'gamma': 0.99}
 
 
-# ============ ComparisonRow round-trip ============
-
-def test_comparison_row_round_trip_full() -> None:
-    cmp = ComparisonRow(
-        id='cmp-1',
-        parent_id=None,
-        cycle_id='cycle-7',
-        timestamp='2026-04-27T10:00:00Z',
-        treatment_arm_id='arm-ddqn',
-        baseline_arm_id='arm-vanilla',
-        predicted_direction='a_gt_b',
-        verdict=Verdict.HELD,
-        refutation_class=None,
-        adequately_powered=True,
-        measurements={
-            'env_name': 'Asterix-MinAtar',
-            'intervention_name': 'ddqn',
-            'n_treatment': 15,
-            'n_baseline': 15,
-            'late_window_mean.arm_a_mean': 42.5,
-            'late_window_mean.arm_a_sd': 3.1,
-            'late_window_mean.arm_b_mean': 39.0,
-            'late_window_mean.arm_b_sd': 4.2,
-            'late_window_mean.effect_size_g': 0.91,
-            'late_window_mean.se': 0.32,
-            'late_window_mean.derived_q': 0.93,
-            'late_window_mean.delta_i_population': 0.66,
-        },
-    )
-    cmp2 = ComparisonRow.from_row_dict(cmp.as_dict())
-    assert cmp == cmp2
-
-
-def test_comparison_row_round_trip_with_optional_nones() -> None:
-    """`refutation_class` and `predicted_direction` round-trip
-    through None vs explicit values."""
-    cmp = ComparisonRow(
-        id='cmp-2',
-        parent_id=None,
-        cycle_id=None,
-        timestamp='2026-04-27T10:00:00Z',
-        treatment_arm_id='arm-t',
-        baseline_arm_id='arm-b',
-        predicted_direction=None,
-        verdict=Verdict.POWER_INSUFFICIENT,
-        refutation_class=RefutationClass.UNDERPOWERED,
-        adequately_powered=False,
-        measurements={
-            'env_name': 'Acrobot-v1',
-            'intervention_name': 'underpowered',
-            'n_treatment': 5,
-            'n_baseline': 5,
-            'late_window_mean.arm_a_mean': -200.0,
-            'late_window_mean.arm_b_mean': -180.0,
-        },
-    )
-    cmp2 = ComparisonRow.from_row_dict(cmp.as_dict())
-    assert cmp == cmp2
-    assert cmp2.predicted_direction is None
-    assert cmp2.refutation_class is RefutationClass.UNDERPOWERED
-
-
 # ============ Collection composition ============
 
 def test_run_row_homogeneous_collection() -> None:
@@ -188,16 +123,3 @@ def test_run_row_verdict_round_trip_all_values() -> None:
         assert run2.verdict is v
 
 
-def test_comparison_row_refutation_class_round_trip_all_values() -> None:
-    """Each RefutationClass enum value round-trips."""
-    for rc in RefutationClass:
-        cmp = ComparisonRow(
-            id='c', parent_id=None, cycle_id=None, timestamp='t',
-            treatment_arm_id='at', baseline_arm_id='ab',
-            predicted_direction=None,
-            verdict=Verdict.NO_EFFECT,
-            refutation_class=rc,
-            adequately_powered=True,
-        )
-        cmp2 = ComparisonRow.from_row_dict(cmp.as_dict())
-        assert cmp2.refutation_class is rc

@@ -4,7 +4,7 @@ Pipeline:
   1. Read target-env cells from runs.parquet.
   2. Stream traces from per-arm parquets through
      `compute_mediator_panel` to evaluate substrate mediators.
-  3. Pair DDQN/vanilla by seed via `paired_deltas_from_runs`.
+  3. Pair DDQN/vanilla by seed (inline `_paired_deltas_by_seed`).
   4. For each candidate, scipy.pearsonr between Δ_outcome and
      Δ_mediator across paired pairs. Filter outcome-tautological.
   5. Partial ρ controlling for Δ_jensen_gap (separates
@@ -25,6 +25,8 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import math
+from collections.abc import Sequence
 from pathlib import Path
 
 import numpy as np
@@ -32,12 +34,42 @@ import polars as pl
 import scipy.stats as ss
 
 from corroborate._polars_boundary import to_dicts as _to_dicts
-from corroborate.aggregate import paired_deltas_from_runs
 from corroborate.causal_discovery import partial_spearman_rho
 from corroborate.rl.dqn.compute_mediators import (
     DEFAULT_PANEL, compute_mediator_panel,
 )
 from corroborate.schema import RunRow
+
+
+def _paired_deltas_by_seed(
+    treatment_runs: Sequence[RunRow],
+    baseline_runs: Sequence[RunRow],
+    *,
+    paths: Sequence[str],
+) -> dict[str, list[float]]:
+    """Per-pair Δ (treatment − baseline) for each path. Pairs by
+    `seed`; drops pairs whose source value is non-finite or
+    missing per path, so different paths can have different
+    survivor counts. Caller index-aligns by truncation."""
+    by_seed_t = {r.measurements.get('seed'): r for r in treatment_runs}
+    by_seed_b = {r.measurements.get('seed'): r for r in baseline_runs}
+    paired_seeds = sorted(by_seed_t.keys() & by_seed_b.keys(), key=repr)
+    out: dict[str, list[float]] = {}
+    for path in paths:
+        deltas: list[float] = []
+        for seed in paired_seeds:
+            t = by_seed_t[seed].measurements.get(path)
+            b = by_seed_b[seed].measurements.get(path)
+            if not isinstance(t, (int, float)) or isinstance(t, bool):
+                continue
+            if not isinstance(b, (int, float)) or isinstance(b, bool):
+                continue
+            tf, bf = float(t), float(b)
+            if not (math.isfinite(tf) and math.isfinite(bf)):
+                continue
+            deltas.append(tf - bf)
+        out[path] = deltas
+    return out
 
 
 # Outcome-tautological mediators (reads ⊇ outcome reads). Filtered
@@ -107,9 +139,7 @@ def main() -> None:
     mediator_paths = [f'mediator.{m.name}' for m in DEFAULT_PANEL]
     paths = ['eval_final_mean', 'eval_best_burst_mean',
              'jensen_gap', *mediator_paths]
-    deltas = paired_deltas_from_runs(
-        ddqn, vanilla, paths=paths, pair_by=('seed',),
-    )
+    deltas = _paired_deltas_by_seed(ddqn, vanilla, paths=paths)
 
     # Anchor on Δ outcome (final-mean and best-burst); rank candidates
     # by Pearson r against each.
@@ -132,7 +162,7 @@ def main() -> None:
         d_med = deltas[path]
         # Align: deltas may have different length across paths if some
         # pairs had non-finite values for a path. Use the intersection
-        # by index — paired_deltas_from_runs preserves the original
+        # by index — _paired_deltas_by_seed preserves the original
         # paired_keys order, so paths agree on which pair index they
         # represent (just with some pairs dropped per path).
         n_min = min(len(final), len(d_med))

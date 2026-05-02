@@ -1,35 +1,30 @@
-"""Aggregate — sweep → ComparisonRow hand-off.
+"""Aggregate — sweep → HypothesisComparisonRow hand-off.
 
 The framework's sweep emits `list[RunRow]`; downstream consumers
-need per-(treatment, baseline) ComparisonRows. This module
+need per-(treatment, baseline) comparison rows. This module
 provides the typed factory functions for that hand-off.
 
 The framework is *substrate-agnostic*: the outcome path being
 aggregated is supplied by the caller as `outcome_path: str` on
 every entry point. The framework reads `measurements[outcome_path]`
-off each run, writes `{outcome_path}.effect_size_g` / `se` /
-`derived_q` / etc. on the resulting ComparisonRow. v0's RL
-substrate authors `late_window_mean`; other substrates or
+off each run; the resulting `HypothesisComparisonRow` carries
+typed `effect_size_g` / `se` / `derived_q` / `pooled` fields.
+v0's RL substrate authors `late_window_mean`; other substrates or
 other outcomes pass their own keys.
 
 Structure:
 
 - `leaf_signature(measurements)` — the configurational fingerprint
-  used as a group-by key. Filters out outcome/bridge/invariant
-  paths and per-cell metadata keys, returns sorted (path, str)
-  pairs. "Leaf" because each entry is a non-recursive scalar
-  claim of the configured composition (RL practice calls these
+  used as a group-by key. Filters out registered-measurable
+  outputs and per-cell metadata, returns sorted (path, str) pairs.
+  "Leaf" because each entry is a non-recursive scalar claim of
+  the configured composition (RL practice calls these
   hyperparameters; the framework name is `leaf`).
-- `aggregate_cell_verdict(verdicts)` — Popperian aggregation over
-  per-bridge verdicts (any single refutation refutes; INVARIANT_
-  VIOLATION dominates).
-- `paired_comparison_from_runs(treatment_runs, baseline_runs, *,
-  outcome_path, predicted_direction, ...)` — paired-by-seed Δ on
-  `outcome_path`; computes Hedges' g + SE + Popperian verdict.
-- `link_pearson_across_groups(mechanism_comparisons,
-  outcome_comparisons, *, mechanism_path, outcome_path,
-  group_label, ...)` — cross-group Pearson r between mechanism
-  and outcome effect sizes (groups typically envs)."""
+- `hypothesis_comparison_from_cells(...)` — the canonical typed
+  cross-arm aggregator. Paired by `pair_by`, optionally
+  stratified by `group_by` for random-effects pooling. Consumed
+  by `HypothesisComparisonRow.from_cells` and the verdict-walk
+  (`hypothesis_subgraph_verdict`)."""
 from __future__ import annotations
 
 import math
@@ -39,14 +34,12 @@ from datetime import UTC, datetime
 
 from corroborate.hypothesis import Hypothesis, PredictedDirection
 from corroborate.schema import (
-    ComparisonRow,
     GroupStats,
     HypothesisComparisonRow,
     MeasurementLeaf,
     RunRow,
 )
 from corroborate.statistics import (
-    PooledStats,
     adequately_powered_paired,
     delta_i_from_q,
     derived_q_from_g_se,
@@ -55,7 +48,7 @@ from corroborate.statistics import (
     random_effects_verdict,
     verdict_from_paired_stats,
 )
-from corroborate.verdict import RefutationClass, Verdict
+from corroborate.verdict import Verdict
 
 
 # ============ Leaf-signature projection ============
@@ -142,8 +135,7 @@ def _pair_runs_by_key(
 
     `dup_check=True` raises `ValueError` on duplicate pair-keys
     within either arm — silent dedup would mask a misconfigured
-    slice. Stratified aggregators set this; the marginal
-    `paired_comparison_from_runs` doesn't (legacy contract)."""
+    slice."""
     def _index(
         runs: Sequence[RunRow], side: str,
     ) -> dict[tuple[MeasurementLeaf, ...], RunRow]:
@@ -204,312 +196,6 @@ def _run_outcome(
             f"measurement"
         )
     return float(v)
-
-
-def paired_comparison_from_runs(
-    treatment_runs: Sequence[RunRow],
-    baseline_runs: Sequence[RunRow],
-    *,
-    outcome_path: str,
-    pair_by: tuple[str, ...],
-    predicted_direction: PredictedDirection | None,
-    alpha: float = 0.05,
-    power: float = 0.8,
-    cycle_id: str | None = None,
-    timestamp: str | None = None,
-    extra_measurements: Mapping[str, MeasurementLeaf] | None = None,
-) -> ComparisonRow:
-    """Paired-by-`pair_by` ComparisonRow.
-
-    Substrate-agnostic: `pair_by` names the measurement keys that
-    identify a matched (treatment, baseline) pair. For RL,
-    `pair_by=('seed',)` (when grouping is per-env) or
-    `pair_by=('env_name', 'seed')` (when one comparison spans
-    multiple envs). For non-RL substrates, whatever the matching
-    axis is.
-
-    Pairs by tuple-of-values at `pair_by`, drops unmatched pairs,
-    computes Δ_i = treatment_i − baseline_i across pairs, fits
-    Hedges' g + SE on the Δ distribution, derives MDE and verdict
-    via `corroborate.statistics`. Same shape as v9's paired
-    comparison (dialectic/hypothesis.py:332-350).
-
-    Treatment and baseline must share at least one pair-key value
-    for a valid comparison; if the intersection is empty, returns
-    a POWER_INSUFFICIENT row with NaN stats."""
-    from corroborate.statistics import (
-        delta_i_from_q,
-        derived_q_from_g_se,
-        hedges_g_paired,
-        verdict_from_paired_stats,
-    )
-
-    if not treatment_runs or not baseline_runs:
-        raise ValueError(
-            'paired_comparison_from_runs requires non-empty '
-            'treatment_runs and baseline_runs'
-        )
-    if not pair_by:
-        raise ValueError(
-            'pair_by must be non-empty — the substrate must name '
-            'the measurement key(s) that identify matched pairs.'
-        )
-
-    paired_keys, treatment_by_key, baseline_by_key, _ = (
-        _pair_runs_by_key(
-            treatment_runs, baseline_runs, pair_by=pair_by,
-        )
-    )
-
-    deltas: list[float] = [
-        _run_outcome(treatment_by_key[k], outcome_path)
-        - _run_outcome(baseline_by_key[k], outcome_path)
-        for k in paired_keys
-    ]
-    n_pairs = len(deltas)
-
-    g, se = hedges_g_paired(deltas) if n_pairs >= 2 else (
-        float('nan'), float('nan'),
-    )
-    q = derived_q_from_g_se(g, se)
-    delta_i = delta_i_from_q(q)
-    verdict, refutation_class, is_powered = verdict_from_paired_stats(
-        g, se, n_pairs,
-        predicted_direction=predicted_direction,
-        alpha=alpha, power=power,
-    )
-
-    treatment_intervention = _run_intervention_name(treatment_runs[0])
-
-    measurements: dict[str, MeasurementLeaf] = {
-        'intervention_name': treatment_intervention,
-        'n_treatment': len(treatment_runs),
-        'n_baseline': len(baseline_runs),
-        'n_pairs': n_pairs,
-    }
-    if not math.isnan(g):
-        measurements[f'{outcome_path}.effect_size_g'] = g
-    if not math.isnan(se):
-        measurements[f'{outcome_path}.se'] = se
-    if not math.isnan(q):
-        measurements[f'{outcome_path}.derived_q'] = q
-    measurements[f'{outcome_path}.delta_i_population'] = delta_i
-
-    if extra_measurements is not None:
-        measurements.update(extra_measurements)
-
-    return ComparisonRow(
-        id=str(uuid.uuid4()),
-        parent_id=None,
-        cycle_id=cycle_id,
-        timestamp=_resolved_timestamp(timestamp),
-        treatment_arm_id='',  # paired path doesn't materialise arms
-        baseline_arm_id='',
-        predicted_direction=predicted_direction,
-        verdict=verdict,
-        refutation_class=refutation_class,
-        adequately_powered=is_powered,
-        measurements=measurements,
-    )
-
-
-# ============ Cross-group link verdict (PAPER_NOTES.md §3.5) ============
-
-def paired_deltas_from_runs(
-    treatment_runs: Sequence[RunRow],
-    baseline_runs: Sequence[RunRow],
-    *,
-    paths: Sequence[str],
-    pair_by: tuple[str, ...],
-) -> dict[str, list[float]]:
-    """Per-pair Δ values (treatment − baseline) for each path.
-
-    For within-stratum mediator search: regress Δ_outcome on
-    Δ_mediator across pairs to test whether DDQN's effect on the
-    mediator predicts DDQN's effect on the outcome at the
-    seed-pair level. The cross-env analog is
-    `link_pearson_across_groups`; this is the within-env version.
-
-    Pairs by tuple-of-values at `pair_by` (typically `('seed',)`).
-    Drops unmatched pairs. For each path, drops pairs where
-    either side's measurement is non-finite or missing.
-
-    Returns a dict `{path: [Δ_pair_0, Δ_pair_1, ...]}`. Lengths
-    can differ across paths if some pairs are missing for some
-    paths; the caller handles index alignment if needed.
-
-    Use `scipy.stats.pearsonr` (or spearmanr) on the resulting
-    vectors to score each candidate mediator's correlation with
-    the outcome's Δ."""
-    if not pair_by:
-        raise ValueError(
-            'paired_deltas_from_runs: pair_by must be non-empty',
-        )
-    paired_keys, treatment_by_key, baseline_by_key, _ = (
-        _pair_runs_by_key(
-            treatment_runs, baseline_runs, pair_by=pair_by,
-        )
-    )
-
-    out: dict[str, list[float]] = {}
-    for path in paths:
-        deltas: list[float] = []
-        for k in paired_keys:
-            t = treatment_by_key[k].measurements.get(path)
-            b = baseline_by_key[k].measurements.get(path)
-            if not isinstance(t, (int, float)) or isinstance(t, bool):
-                continue
-            if not isinstance(b, (int, float)) or isinstance(b, bool):
-                continue
-            tf, bf = float(t), float(b)
-            if not (math.isfinite(tf) and math.isfinite(bf)):
-                continue
-            deltas.append(tf - bf)
-        out[path] = deltas
-    return out
-
-
-def link_pearson_across_groups(
-    mechanism_comparisons: Sequence[ComparisonRow],
-    outcome_comparisons: Sequence[ComparisonRow],
-    *,
-    mechanism_path: str,
-    outcome_path: str,
-    group_by: str,
-    alpha: float = 0.05,
-    power: float = 0.8,
-    cycle_id: str | None = None,
-    timestamp: str | None = None,
-    extra_measurements: Mapping[str, MeasurementLeaf] | None = None,
-) -> ComparisonRow:
-    """Cross-group link verdict — Pearson r between mechanism Δ
-    and outcome Δ across groups.
-
-    PAPER_NOTES.md §3.5: 'a methodological intervention's mechanism
-    fingerprint should covary with its outcome fingerprint across
-    [groups].' For RL, the group is `env_name`. For non-RL
-    substrates, whatever single key identifies a group across
-    treatment/baseline pairs.
-
-    `group_by` is the substrate-named measurement key — caller
-    passes `'env_name'` for RL or e.g. `'patient_id'` for clinical.
-    Pairs `mechanism_comparisons[g]` and `outcome_comparisons[g]`
-    by their `measurements[group_by]`; mismatches drop quietly
-    (only fully-paired groups contribute to the Pearson r).
-
-    Returns a ComparisonRow tagged at the cross-group granularity;
-    its measurements include the Pearson r as the effect-size
-    statistic, a derived MDE-style verdict on r vs 0, and the
-    `group_by` key recorded as `'group_by': <key>`."""
-    from corroborate.statistics import (
-        adequately_powered_paired,
-        delta_i_from_q,
-        derived_q_from_g_se,
-    )
-
-    def _group_id(c: ComparisonRow) -> str:
-        v = c.measurements.get(group_by)
-        if not isinstance(v, str):
-            raise TypeError(
-                f"ComparisonRow {c.id!r} missing scalar string "
-                f"measurement {group_by!r} for grouping",
-            )
-        return v
-
-    mech_by_group = {_group_id(c): c for c in mechanism_comparisons}
-    out_by_group = {_group_id(c): c for c in outcome_comparisons}
-    paired_groups = sorted(mech_by_group.keys() & out_by_group.keys())
-
-    mech_gs: list[float] = []
-    out_gs: list[float] = []
-    for g_id in paired_groups:
-        mg = mech_by_group[g_id].measurements.get(mechanism_path)
-        og = out_by_group[g_id].measurements.get(outcome_path)
-        if isinstance(mg, (int, float)) and isinstance(og, (int, float)):
-            if not (math.isnan(float(mg)) or math.isnan(float(og))):
-                mech_gs.append(float(mg))
-                out_gs.append(float(og))
-
-    n = len(mech_gs)
-    if n < 3:
-        # Pearson's r needs at least 3 paired observations to be
-        # well-defined; return a POWER_INSUFFICIENT row.
-        underpowered_measurements: dict[str, MeasurementLeaf] = {
-            'intervention_name': 'link',
-            'n_paired_groups': n,
-            'group_by': group_by,
-        }
-        if extra_measurements is not None:
-            underpowered_measurements.update(extra_measurements)
-        return ComparisonRow(
-            id=str(uuid.uuid4()), parent_id=None, cycle_id=cycle_id,
-            timestamp=_resolved_timestamp(timestamp),
-            treatment_arm_id='', baseline_arm_id='',
-            predicted_direction='a_gt_b',
-            verdict=Verdict.POWER_INSUFFICIENT,
-            refutation_class=RefutationClass.UNDERPOWERED,
-            adequately_powered=False,
-            measurements=underpowered_measurements,
-        )
-
-    # Pearson r with one-sided test (predicted positive).
-    r = float(_pearson(mech_gs, out_gs))
-    # SE under H0 (Fisher z-transform approximation): SE_r = 1/sqrt(n-3).
-    se_r = 1.0 / math.sqrt(n - 3) if n > 3 else float('nan')
-    q = derived_q_from_g_se(r, se_r) if not math.isnan(se_r) else float('nan')
-    delta_i = delta_i_from_q(q) if not math.isnan(q) else 0.0
-    is_powered = adequately_powered_paired(
-        r, n, alpha=alpha, power=power, alternative='larger',
-    )
-
-    if not is_powered:
-        verdict = Verdict.POWER_INSUFFICIENT
-        refutation = RefutationClass.UNDERPOWERED
-    elif r > 0:
-        verdict = Verdict.HELD
-        refutation = None
-    else:
-        verdict = Verdict.NO_EFFECT
-        refutation = RefutationClass.SIGN_FLIP
-
-    measurements: dict[str, MeasurementLeaf] = {
-        'intervention_name': 'link',
-        'n_paired_groups': n,
-        'group_by': group_by,
-        'link.pearson_r': r,
-        'link.se': se_r,
-        'link.derived_q': q,
-        'link.delta_i_population': delta_i,
-    }
-    if extra_measurements is not None:
-        measurements.update(extra_measurements)
-
-    return ComparisonRow(
-        id=str(uuid.uuid4()), parent_id=None, cycle_id=cycle_id,
-        timestamp=_resolved_timestamp(timestamp),
-        treatment_arm_id='', baseline_arm_id='',
-        predicted_direction='a_gt_b',
-        verdict=verdict,
-        refutation_class=refutation,
-        adequately_powered=is_powered,
-        measurements=measurements,
-    )
-
-
-def _pearson(xs: Sequence[float], ys: Sequence[float]) -> float:
-    """Pearson r — population formula. Returns 0.0 for zero-
-    variance inputs (degenerate; deferred verdict)."""
-    n = len(xs)
-    mx = sum(xs) / n
-    my = sum(ys) / n
-    num = sum((x - mx) * (y - my) for x, y in zip(xs, ys))
-    sx = math.sqrt(sum((x - mx) ** 2 for x in xs))
-    sy = math.sqrt(sum((y - my) ** 2 for y in ys))
-    if sx == 0.0 or sy == 0.0:
-        return 0.0
-    return num / (sx * sy)
-
-
 
 
 # ============ HypothesisComparisonRow.from_cells ============

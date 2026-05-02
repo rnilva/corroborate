@@ -17,9 +17,11 @@ must handle NaN: aggregation uses `nanmean`-style reductions.
 Three roles consume each gap differently (see `invariant.py`
 module docstring):
 
-- Intervention: read the scalar into RunRow.stats; per-comparison
-  Δ-gap on ComparisonRow.stats. NaN means "no data" — different
-  from "gap = 0" (which means "data confirmed compliance").
+- Intervention: read the scalar into RunRow.measurements; the
+  paired comparison surface (`HypothesisComparisonRow.from_cells`)
+  computes Δ-gap across (treatment, baseline) pairs. NaN means
+  "no data" — different from "gap = 0" (which means "data
+  confirmed compliance").
 - Falsification: wrap with `at_most(gap, threshold,
   of_claim=...)` in Hypothesis.bridges. NaN propagates to
   POWER_INSUFFICIENT.

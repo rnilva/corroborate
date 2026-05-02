@@ -5,9 +5,11 @@ v10's HypothesisRunRow + HypothesisComparisonRow):
 
 - `RunRow` — per-cell evidence (one (env, seed) execution).
   Source of truth.
-- `ComparisonRow` — per (treatment, baseline) pair on one env.
-  Carries Hedges' g, SE, derived_q, etc. Materialized view of
-  RunRows; re-derivable on demand.
+- `HypothesisComparisonRow` — per-Hypothesis cross-arm row, built
+  by `from_cells` over RunRows. Carries typed per-arm stats,
+  Hedges' g, derived_q, plus stratified `per_group: tuple[
+  GroupStats, ...]` and random-effects `pooled: PooledStats` when
+  `group_by` is set. Re-derivable on demand.
 
 Plus the per-cell raw observation store:
 
@@ -38,11 +40,9 @@ when rows have heterogeneous keys).
 
 Lineage is explicit via `*_id` fields:
 - `RunRow.id` → referenced by `TraceRow.id` (1:1 join)
-- `ComparisonRow.{treatment,baseline}_arm_id` is vestigial (an
-  ArmRow id) and is empty-string for paired-by-seed comparisons.
-  The N:1 RunRow→ComparisonRow lineage is currently implicit
-  via paired_comparison_from_runs; field rename to run_ids tuple
-  is a follow-up."""
+- `HypothesisComparisonRow.{treatment,baseline}_run_ids` are
+  tuples of the per-cell RunRow ids that fed each arm — the N:1
+  lineage is materialised on the row."""
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
@@ -57,10 +57,7 @@ import numpy as np
 import numpy.typing as npt
 
 from corroborate._narrow import (
-    optional_direction,
-    optional_refutation_class,
     optional_str,
-    require_bool,
     require_str,
     require_verdict,
 )
@@ -292,81 +289,6 @@ class RunRow:
             timestamp=require_str(d, 'timestamp'),
             verdict=require_verdict(d, 'verdict'),
             arm_key=arm_key,
-            measurements=measurements,
-        )
-
-
-# ============ ComparisonRow ============
-
-@dataclass(frozen=True, slots=True)
-class ComparisonRow:
-    """Per (treatment_arm, baseline_arm) comparison on one env.
-
-    Statistical fields (`predicted_direction`, `verdict`,
-    `refutation_class`, `adequately_powered`) are framework-typed.
-    Per-arm stats (`n_treatment`, `n_baseline`, effect sizes, SEs)
-    live in `measurements` under `outcome.<m>.*` / `bridge.<name>.*`
-    keys."""
-    id: str
-    parent_id: str | None
-    cycle_id: str | None
-    timestamp: str
-    treatment_arm_id: str
-    baseline_arm_id: str
-    predicted_direction: PredictedDirection | None
-    verdict: Verdict
-    refutation_class: RefutationClass | None
-    adequately_powered: bool
-    measurements: Mapping[str, MeasurementLeaf] = field(
-        default_factory=lambda: {},
-    )
-
-    def as_dict(self) -> dict[str, object]:
-        out: dict[str, object] = {
-            'id': self.id,
-            'parent_id': self.parent_id,
-            'cycle_id': self.cycle_id,
-            'timestamp': self.timestamp,
-            'treatment_arm_id': self.treatment_arm_id,
-            'baseline_arm_id': self.baseline_arm_id,
-            'predicted_direction': self.predicted_direction,
-            'verdict': self.verdict.value,
-            'refutation_class': (
-                self.refutation_class.value
-                if self.refutation_class is not None
-                else None
-            ),
-            'adequately_powered': self.adequately_powered,
-        }
-        _flatten_measurements(out, self.measurements)
-        return out
-
-    @classmethod
-    def from_row_dict(cls, d: Mapping[str, object]) -> Self:
-        provenance: frozenset[str] = frozenset((
-            'id', 'parent_id', 'cycle_id', 'timestamp',
-            'treatment_arm_id', 'baseline_arm_id',
-            'predicted_direction', 'verdict', 'refutation_class',
-            'adequately_powered',
-        ))
-        measurements: dict[str, MeasurementLeaf] = {}
-        for k, v in d.items():
-            if k in provenance:
-                continue
-            if v is None:
-                continue
-            measurements[k] = _coerce_measurement_leaf(v)
-        return cls(
-            id=require_str(d, 'id'),
-            parent_id=optional_str(d, 'parent_id'),
-            cycle_id=optional_str(d, 'cycle_id'),
-            timestamp=require_str(d, 'timestamp'),
-            treatment_arm_id=require_str(d, 'treatment_arm_id'),
-            baseline_arm_id=require_str(d, 'baseline_arm_id'),
-            predicted_direction=optional_direction(d, 'predicted_direction'),
-            verdict=require_verdict(d, 'verdict'),
-            refutation_class=optional_refutation_class(d, 'refutation_class'),
-            adequately_powered=require_bool(d, 'adequately_powered'),
             measurements=measurements,
         )
 
