@@ -58,8 +58,7 @@ def _make_hypothesis(name: str) -> Hypothesis[DQNTrajectoryRecord]:
     }
     if name == 'vanilla_dqn':
         return Hypothesis(
-            name='vanilla_dqn', intervention=intervention,
-            bridges=(), predicted_direction=None,
+            name='vanilla_dqn', intervention=intervention, predicted_direction=None,
             intervention_arms=(),
         )
     if name == 'ddqn':
@@ -67,8 +66,7 @@ def _make_hypothesis(name: str) -> Hypothesis[DQNTrajectoryRecord]:
             bootstrap, greedification=double_greedify,
         )
         return Hypothesis(
-            name='ddqn', intervention=intervention,
-            bridges=(), predicted_direction='a_gt_b',
+            name='ddqn', intervention=intervention, predicted_direction='a_gt_b',
             intervention_arms=(
                 Intervention(
                     slot_path='bootstrap',
@@ -129,7 +127,7 @@ def _per_env_link(
     vanilla_h = _make_hypothesis('vanilla_dqn')
     ddqn_h_typed = Hypothesis(
         name=ddqn_h.name, intervention=ddqn_h.intervention,
-        bridges=ddqn_h.bridges, predicted_direction='a_gt_b',
+        predicted_direction='a_gt_b',
         intervention_arms=ddqn_h.intervention_arms,
     )
     ddqn = [r for r in runs if r.measurements.get('intervention_name') == 'ddqn']

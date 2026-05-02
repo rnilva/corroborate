@@ -257,7 +257,6 @@ def build_hypothesis_from_mapping(
     return Hypothesis(
         name=name,
         intervention=intervention,
-        bridges=(),
         predicted_direction=direction,
         intervention_arms=arms,
     )

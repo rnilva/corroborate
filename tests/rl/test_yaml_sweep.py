@@ -62,16 +62,14 @@ def _python_hypothesis(
     }
     if name == 'vanilla_dqn':
         return Hypothesis(
-            name='vanilla_dqn', intervention=base,
-            bridges=(), predicted_direction=None,
+            name='vanilla_dqn', intervention=base, predicted_direction=None,
             intervention_arms=(),
         )
     if name == 'ddqn':
         boot = partial(bootstrap, greedification=double_greedify)
         base['bootstrap'] = boot
         return Hypothesis(
-            name='ddqn', intervention=base,
-            bridges=(), predicted_direction='a_gt_b',
+            name='ddqn', intervention=base, predicted_direction='a_gt_b',
             intervention_arms=(
                 Intervention(slot_path='bootstrap', replacement=boot),
             ),
@@ -83,8 +81,7 @@ def _python_hypothesis(
         )
         base['bootstrap'] = boot
         return Hypothesis(
-            name='expectile_dqn', intervention=base,
-            bridges=(), predicted_direction='a_gt_b',
+            name='expectile_dqn', intervention=base, predicted_direction='a_gt_b',
             intervention_arms=(
                 Intervention(slot_path='bootstrap', replacement=boot),
             ),

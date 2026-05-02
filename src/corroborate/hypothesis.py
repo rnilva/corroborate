@@ -1,10 +1,9 @@
-"""Hypothesis — (intervention, [bridges]) over a record schema R.
+"""Hypothesis — (intervention, edges, measurables) over a record schema R.
 
-A Hypothesis names a CHANGE to the theory and a SET of paper-level
-assertions (bridges) that should hold under that change. Generic
-in `R: Mapping[str, object]` — the same R the bridges are typed
-against, so all bridges in a hypothesis share the record schema
-(one theory → one record schema).
+A Hypothesis names a CHANGE to the theory and a SET of typed
+edges + pre-registered measurables. Generic in `R: Mapping[str,
+object]` — the (single) record schema all measurables are typed
+against.
 
 Components:
 
@@ -19,18 +18,18 @@ Components:
   cell covariates that downstream meta-regression cleaves on.
   Empty tuple → baseline arm; non-empty tuple → treatment arm
   whose `arm_key()` is the canonical fingerprint.
-- `bridges: tuple[Bridge[R], ...]` — paper-level assertions
-  applied to the resulting record. All share R.
 - `edges: tuple[claim_bridge.Bridge, ...]` — typed-edge subgraph
   claim. Each Bridge carries `source` / `target` paths,
   `intervention: DoEffect | None` (interventional vs coupling
   edge), `tier`, and per-edge `predicted_direction`. Body-less
   for the verdict-walk path (`hypothesis_subgraph_verdict`
   consumes Bridges as metadata only).
+- `measurables: tuple[Measurable[R, object], ...]` — pre-
+  registered measurables cell_runner persists as scalar columns.
 - `predicted_direction: PredictedDirection | None` — author-declared
   sign of the predicted treatment-vs-baseline effect (top-level
   hypothesis-wide default; per-edge predicted_direction overrides
-  the analyses per stratum once Phase 1+ plumbing lands).
+  the analyses per stratum).
 
 Arm identity flows exclusively through `intervention_arms` — two
 hypotheses with the same arms but different HP grid points share
@@ -49,7 +48,6 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal
 
 from corroborate._canonical import canonical_str
-from corroborate.bridge import Bridge
 from corroborate.intervention import Intervention, combined_arm_key
 from corroborate.measurable import Measurable
 
@@ -88,32 +86,25 @@ class Hypothesis[R: Mapping[str, object]]:
     authors using plain `Mapping[str, object]` continue to narrow
     at use site.
 
-    Two surfaces for declaring per-edge tests, in transition:
+    `edges: tuple[claim_bridge.Bridge, ...]` is the typed-edge
+    subgraph surface. Each Bridge carries source / target
+    measurement paths, `intervention: DoEffect | None`
+    (interventional contrast vs measurement-coupling), Pearl
+    `tier`, and per-edge `predicted_direction`. Bridges with
+    `intervention is not None` are the rung-2 mechanism /
+    outcome edges; bridges with `intervention is None` are
+    measurement-to-measurement coupling edges.
 
-    - `edges: tuple[claim_bridge.Bridge, ...]` — the *typed*
-      subgraph surface. Each Bridge carries source / target
-      measurement paths, `intervention: DoEffect | None`
-      (interventional contrast vs measurement-coupling), Pearl
-      `tier`, and per-edge `predicted_direction`. Bridges with
-      `intervention is not None` are the rung-2 mechanism /
-      outcome edges; bridges with `intervention is None` are
-      measurement-to-measurement coupling edges (formerly the
-      "link" role).
-    - `bridges: tuple[Bridge[R], ...]` — the back-compat flat
-      tuple of per-record bridges (corroborate.bridge.Bridge[R]).
-      Defers to Phase 4 for collapse into the typed surface.
-
-    `measurables: tuple[Measurable[R, float], ...]` is the
+    `measurables: tuple[Measurable[R, object], ...]` is the
     sweep-time pre-registration channel — measurables the author
     wants computed and persisted as scalar columns on every
-    RunRow without having to author a per-record bridge for each.
+    RunRow without having to author a per-record body for each.
     Each entry produces a column at the measurable's bare `.name`
     in `RunRow.measurements`; the substrate controls the column-
     name namespace (a measurable named `outcome.eval_final_mean`
     lands as `outcome.eval_final_mean`). Available downstream for
     typed-edge bridges (`Bridge.target=<name>`) and analyses to
-    consume directly. Co-existence with `bridges` is intentional
-    until Phase 4 collapses both into one channel.
+    consume directly.
 
     Both surfaces can coexist on one Hypothesis. The top-level
     `predicted_direction: PredictedDirection | None` is vestigial
@@ -130,7 +121,6 @@ class Hypothesis[R: Mapping[str, object]]:
     author's call."""
     name: str
     intervention: Mapping[str, object]
-    bridges: tuple[Bridge[R], ...] = ()
     predicted_direction: PredictedDirection | None = None
     intervention_arms: tuple[Intervention, ...] = field(default_factory=tuple)
     edges: tuple['ClaimBridge', ...] = field(default_factory=tuple)

@@ -206,7 +206,6 @@ def _expectile_python() -> Hypothesis[Mapping[str, object]]:
     return Hypothesis(
         name='expectile_dqn',
         intervention=intervention,
-        bridges=(),
         predicted_direction='a_gt_b',
         intervention_arms=(
             Intervention(slot_path='bootstrap', replacement=boot),

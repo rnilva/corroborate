@@ -102,7 +102,6 @@ def _hypothesis(name: str, predicted: str | None) -> Hypothesis[Mapping[str, obj
     return Hypothesis(
         name=name,
         intervention={},
-        bridges=(),
         predicted_direction=predicted,  # type: ignore[arg-type]
         intervention_arms=(_STUB_INTERVENTION,),
     )
@@ -290,7 +289,7 @@ def test_from_cells_uses_baseline_h_arm_key() -> None:
     `baseline_arm_key` — supports treatment-vs-treatment
     comparisons."""
     h_baseline: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='per', intervention={}, bridges=(),
+        name='per', intervention={},
         intervention_arms=(
             Intervention(slot_path='replay', replacement=_per_replay_op),
         ),

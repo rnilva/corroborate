@@ -101,7 +101,6 @@ def _make_hypothesis(
     return Hypothesis(
         name='vanilla_dqn',
         intervention=_intervention_for(**grid_point),
-        bridges=(),
         predicted_direction=None,
         intervention_arms=(),
         measurables=dqn_default_measurables(),

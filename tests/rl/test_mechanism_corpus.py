@@ -48,7 +48,6 @@ def _make_hypothesis(
     return Hypothesis[DQNTrajectoryRecord](
         name=name,
         intervention={**_SHORT_RUN_HP, **intervention},
-        bridges=(),
     )
 
 

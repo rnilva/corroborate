@@ -93,7 +93,7 @@ def test_sweep_iterates_cartesian_product() -> None:
     """A 2 × 3 grid produces 6 cell calls; with one row per call
     that's 6 runs across 6 SweepCellResults."""
     h: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='h', intervention={}, bridges=(),
+        name='h', intervention={},
     )
     result = sweep(
         h,
@@ -112,7 +112,7 @@ def test_sweep_runner_can_emit_multiple_rows() -> None:
     """Substrates that batch internally return multiple rows per
     grid point. all_runs flattens across cell_results."""
     h: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='h', intervention={}, bridges=(),
+        name='h', intervention={},
     )
     result = sweep(
         h,
@@ -132,7 +132,7 @@ def test_sweep_runner_can_emit_multiple_rows() -> None:
 def test_sweep_empty_grid_runs_runner_once() -> None:
     """An empty grid means one cell with empty grid_point."""
     h: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='h', intervention={}, bridges=(),
+        name='h', intervention={},
     )
     result = sweep(
         h, exogenous_grid={}, runner=_trivial_runner,
@@ -144,7 +144,7 @@ def test_sweep_failures_captured_with_grid_point() -> None:
     """Runner exceptions become CellFailures with the grid_point
     that caused them. Successful cells continue."""
     h: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='h_fail', intervention={}, bridges=(),
+        name='h_fail', intervention={},
     )
     result = sweep(
         h,
@@ -163,7 +163,7 @@ def test_sweep_runner_stamps_grid_point_into_measurements() -> None:
     """The framework does NOT auto-stamp grid values onto rows.
     Whether they appear is up to the substrate's runner."""
     h: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='h', intervention={}, bridges=(),
+        name='h', intervention={},
     )
     result = sweep(
         h,
@@ -206,7 +206,7 @@ def test_sweep_accepts_class_based_runner_with_state() -> None:
     """A class implementing __call__(h, grid_point) -> SweepCellResult
     satisfies the Runner Protocol structurally; sweep accepts it."""
     h: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='h', intervention={}, bridges=(),
+        name='h', intervention={},
     )
     runner = _StatefulRunner(prefix='X')
     result = sweep(

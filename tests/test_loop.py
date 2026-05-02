@@ -131,8 +131,7 @@ def test_graph_capture_on_run_dqn_arm_with_real_run() -> None:
         'gamma': 0.99, 'sync_period': 25,
     }
     h = Hypothesis(
-        name='vanilla', intervention=intervention,
-        bridges=(), predicted_direction=None,
+        name='vanilla', intervention=intervention, predicted_direction=None,
     )
     arm = run_dqn_arm(get('CartPole-v1'), (0,), hypothesis=h)
 

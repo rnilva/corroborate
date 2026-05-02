@@ -11,7 +11,6 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
-from corroborate.bridge import BridgeResult, bridge
 from corroborate._canonical import canonical_str
 from corroborate.claim import claim
 from corroborate.hypothesis import Hypothesis
@@ -31,26 +30,9 @@ def test_hypothesis_minimal() -> None:
     )
     assert h.name == 'baseline'
     assert h.intervention == {}
-    assert h.bridges == ()
+    assert h.edges == ()
+    assert h.measurables == ()
     assert h.predicted_direction is None
-
-
-def test_hypothesis_with_bridges() -> None:
-    @bridge(targets=('x',))
-    def b(record: Mapping[str, object]) -> BridgeResult:
-        del record
-        return BridgeResult(
-            verdict=Verdict.HELD, reason='', stats={},
-            name='', targets=(),
-        )
-
-    h: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='with_bridges',
-        intervention={'slot': 'value'},
-        bridges=(b,),
-    )
-    assert len(h.bridges) == 1
-    assert h.bridges[0] is b
 
 
 def test_hypothesis_predicted_direction() -> None:

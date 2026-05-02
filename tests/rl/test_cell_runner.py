@@ -167,7 +167,6 @@ def test_run_dqn_cell_applies_intervention_via_slot_swap() -> None:
             **_SHORT_RUN_HP_40,
             'bootstrap': partial(bootstrap, greedification=double_greedify),
         },
-        bridges=(),
     )
 
     run_row = run_dqn_cell(
