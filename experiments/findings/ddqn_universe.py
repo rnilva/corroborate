@@ -77,6 +77,9 @@ import corroborate.rl.dqn.measurables  # pyright: ignore[reportUnusedImport]  # 
 from corroborate.analyses.dowhy import (
     BackdoorResult, RefutationResult,
 )
+from corroborate.analyses.link_attenuation_dowhy import (
+    LinkAttenuationDowhyResult,
+)
 from corroborate.analyses.mundlak_decomposition import MundlakResult
 from corroborate.analyses.paired_g import PairedGResult
 from corroborate.analyses.paired_g_per_burst import PerBurstResult
@@ -1387,51 +1390,64 @@ def acrobot_link_rcc_robust__gamma_0999(
 
 @claim_bridge
 def extreme_q_divergence_attenuates_link__binary(
-    backdoor_ate: BackdoorResult,
+    link_attenuation_dowhy: LinkAttenuationDowhyResult,
     *,
     source: str = 'q_divergence_score',
-    target: str = 'g_link',
+    target: str = 'outcome.eval_best_burst_mean',
     direction: Direction = Direction.INVERSE,
     tier: Tier = Tier.INTERVENTIONAL,
-    treatment: str = 'above_1000',
-    outcome: str = 'g_link',
+    treatment_arm: str = 'ddqn',
+    baseline_arm: str = 'vanilla_dqn',
+    pair_by: tuple[str, ...] = ('seed',),
+    attenuator: str = 'q_divergence_score',
+    binary_threshold: float = 1000.0,
     ate_ceiling: float = -0.10,
 ) -> Verdict:
-    """Binary form: cells with q_divergence_score > 1000 have g_link
-    attenuated by at least 0.10 compared to the band-cells (0.02 < score
-    < 1000), after backdoor adjustment for env family. HELD when ATE
-    ≤ -0.10 AND identified=True. Empirical: ATE = -0.21."""
-    del source, target, direction, tier, treatment, outcome
-    if not backdoor_ate.identified:
+    """Binary form: cells with `q_divergence_score > 1000` have
+    per-(env, burst) link strength attenuated by ≥ 0.10 compared
+    to band-cells (0.02 < score < 1000), after backdoor
+    adjustment for env family. HELD when ATE ≤ -0.10 AND
+    identified=True. Empirical: ATE = -0.21."""
+    del source, target, direction, tier
+    del treatment_arm, baseline_arm, pair_by
+    del attenuator, binary_threshold
+    b = link_attenuation_dowhy.backdoor
+    if not b.identified:
         return Verdict.POWER_INSUFFICIENT
-    if math.isnan(backdoor_ate.ate):
+    if math.isnan(b.ate):
         return Verdict.POWER_INSUFFICIENT
-    if backdoor_ate.ate <= ate_ceiling:
+    if b.ate <= ate_ceiling:
         return Verdict.HELD
-    if backdoor_ate.ate < 0.0:
+    if b.ate < 0.0:
         return Verdict.POWER_INSUFFICIENT
     return Verdict.NO_EFFECT
 
 
 @claim_bridge
 def extreme_q_divergence_attenuates_link__placebo_refuted(
-    placebo_refutation: RefutationResult,
+    link_attenuation_dowhy: LinkAttenuationDowhyResult,
     *,
     source: str = 'q_divergence_score',
-    target: str = 'g_link',
+    target: str = 'outcome.eval_best_burst_mean',
     direction: Direction = Direction.INVERSE,
     tier: Tier = Tier.INTERVENTIONAL,
-    treatment: str = 'above_1000',
-    outcome: str = 'g_link',
+    treatment_arm: str = 'ddqn',
+    baseline_arm: str = 'vanilla_dqn',
+    pair_by: tuple[str, ...] = ('seed',),
+    attenuator: str = 'q_divergence_score',
+    binary_threshold: float = 1000.0,
     placebo_max_ratio: float = 0.2,
 ) -> Verdict:
     """Placebo refutation shrinks the binary above-1000 ATE to ≤
-    placebo_max_ratio of the real value, confirming the attenuation is
-    treatment-specific (not noise). Empirical: real -0.21, placebo 0,
-    ratio 0%."""
-    del source, target, direction, tier, treatment, outcome
-    real = placebo_refutation.real_ate
-    placebo = placebo_refutation.refuted_ate
+    `placebo_max_ratio` of the real value, confirming the
+    attenuation is treatment-specific (not noise). Empirical:
+    real -0.21, placebo 0, ratio 0%."""
+    del source, target, direction, tier
+    del treatment_arm, baseline_arm, pair_by
+    del attenuator, binary_threshold
+    p = link_attenuation_dowhy.placebo
+    real = p.real_ate
+    placebo = p.refuted_ate
     if math.isnan(real) or math.isnan(placebo) or abs(real) < 1e-9:
         return Verdict.POWER_INSUFFICIENT
     ratio = abs(placebo / real)
@@ -1444,23 +1460,29 @@ def extreme_q_divergence_attenuates_link__placebo_refuted(
 
 @claim_bridge
 def extreme_q_divergence_attenuates_link__rcc_robust(
-    random_common_cause_refutation: RefutationResult,
+    link_attenuation_dowhy: LinkAttenuationDowhyResult,
     *,
     source: str = 'q_divergence_score',
-    target: str = 'g_link',
+    target: str = 'outcome.eval_best_burst_mean',
     direction: Direction = Direction.INVERSE,
     tier: Tier = Tier.INTERVENTIONAL,
-    treatment: str = 'above_1000',
-    outcome: str = 'g_link',
+    treatment_arm: str = 'ddqn',
+    baseline_arm: str = 'vanilla_dqn',
+    pair_by: tuple[str, ...] = ('seed',),
+    attenuator: str = 'q_divergence_score',
+    binary_threshold: float = 1000.0,
     rcc_max_drift_ratio: float = 0.15,
 ) -> Verdict:
-    """RCC refutation: adding a noise covariate to the adjustment set
-    leaves the binary above-1000 ATE within rcc_max_drift_ratio of real.
-    Confirms robustness to spurious-confound vulnerability. Empirical:
-    drift ratio ≈ 5%."""
-    del source, target, direction, tier, treatment, outcome
-    real = random_common_cause_refutation.real_ate
-    refuted = random_common_cause_refutation.refuted_ate
+    """RCC refutation: adding a noise covariate to the adjustment
+    set leaves the binary above-1000 ATE within
+    `rcc_max_drift_ratio` of real. Confirms robustness to
+    spurious-confound vulnerability. Empirical: drift ratio ≈ 5%."""
+    del source, target, direction, tier
+    del treatment_arm, baseline_arm, pair_by
+    del attenuator, binary_threshold
+    r = link_attenuation_dowhy.random_common_cause
+    real = r.real_ate
+    refuted = r.refuted_ate
     if math.isnan(real) or math.isnan(refuted) or abs(real) < 1e-9:
         return Verdict.POWER_INSUFFICIENT
     drift_ratio = abs(refuted - real) / abs(real)
