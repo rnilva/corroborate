@@ -347,7 +347,8 @@ def run_dqn_arm(
         }
         outcome = outcome_proj(per_seed_record)
         # Per-cell measurable cache — shared across all bridges
-        # in this cell so each measurable computes at most once.
+        # AND pre-registered measurables in this cell so each
+        # measurable computes at most once.
         cache: dict[str, object] = {}
         bridge_results = tuple(
             evaluate_with_measurables(b.fn, per_seed_record, cache=cache)
@@ -356,6 +357,21 @@ def run_dqn_arm(
         verdict = aggregate_cell_verdict(
             tuple(r.verdict for r in bridge_results),
         )
+
+        # Pre-registered measurables: walk `hypothesis.measurables`
+        # and persist each as a `mediator.<name>` column. Sharing
+        # `cache` with the per-record bridges so dep-measurables
+        # (q_mean, q_std, etc.) compute once per cell across both
+        # channels. The `mediator.` prefix is paper-section
+        # vocabulary — Phase 5 of the Bridge-collapse refactor
+        # drops the prefix in favour of bare names.
+        mediator_cols: dict[str, MeasurementLeaf] = {}
+        for m in hypothesis.measurables:
+            value = evaluate_with_measurables(
+                m.fn, per_seed_record, cache=cache,
+            )
+            scalar = _leaf_scalar(value)
+            mediator_cols[f'mediator.{m.name}'] = scalar
 
         # Each wrapper declares its own measurement keys via
         # `measurement_keys()` — no central isinstance chain.
@@ -374,6 +390,7 @@ def run_dqn_arm(
             **_eval_outcomes(per_seed_record),
             **_mechanism_measurements(per_seed_record),
             **leaf_measurements,
+            **mediator_cols,
         }
         for result in bridge_results:
             measurements.update(_bridge_result_to_measurements(result))

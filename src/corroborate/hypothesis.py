@@ -51,6 +51,7 @@ from typing import TYPE_CHECKING, Literal
 from corroborate._canonical import canonical_str
 from corroborate.bridge import Bridge
 from corroborate.intervention import Intervention, combined_arm_key
+from corroborate.measurable import Measurable
 
 if TYPE_CHECKING:
     # `claim_bridge.Bridge` is the typed-edge surface for the
@@ -102,6 +103,16 @@ class Hypothesis[R: Mapping[str, object]]:
       tuple of per-record bridges (corroborate.bridge.Bridge[R]).
       Defers to Phase 4 for collapse into the typed surface.
 
+    `measurables: tuple[Measurable[R, float], ...]` is the
+    sweep-time pre-registration channel — measurables the author
+    wants computed and persisted as scalar columns on every
+    RunRow without having to author a per-record bridge for each.
+    Each entry produces a `mediator.<name>` column in
+    `RunRow.measurements`, available downstream for typed-edge
+    bridges (`Bridge.target='mediator.<name>'`) and analyses to
+    consume directly. Co-existence with `bridges` is intentional
+    until Phase 4 collapses both into one channel.
+
     Both surfaces can coexist on one Hypothesis. The top-level
     `predicted_direction: PredictedDirection | None` is vestigial
     when `edges` is populated (each edge carries its own
@@ -121,6 +132,9 @@ class Hypothesis[R: Mapping[str, object]]:
     predicted_direction: PredictedDirection | None = None
     intervention_arms: tuple[Intervention, ...] = field(default_factory=tuple)
     edges: tuple['ClaimBridge', ...] = field(default_factory=tuple)
+    measurables: tuple[Measurable[R, float], ...] = field(
+        default_factory=tuple,
+    )
 
     def edges_by_target(self, target: str) -> tuple['ClaimBridge', ...]:
         """All typed edges whose `target` matches `target`. The

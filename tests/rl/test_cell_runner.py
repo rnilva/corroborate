@@ -152,6 +152,43 @@ def test_run_dqn_cell_leaf_signature_matches_hypothesis() -> None:
 
 # ============ Bridge → measurements conversion ============
 
+def test_run_dqn_cell_pre_registered_measurables_persist_as_mediator_columns() -> None:
+    """Pre-registered measurables on `Hypothesis.measurables` land
+    in the cell's RunRow.measurements under `mediator.<name>`. The
+    pre-registration channel sits alongside per-record bridges
+    (Phase 2 of the Bridge-collapse refactor) so authors can
+    declare summary scalars without authoring a per-record
+    `Bridge[R]` for each."""
+    from corroborate.measurable import Measurable
+    from corroborate.rl.env_catalogue import get
+    env_spec = get('CartPole-v1')
+
+    def _ep_return_mean(record: Mapping[str, jnp.ndarray]) -> float:
+        v = record.get('ep_return')
+        if not isinstance(v, jnp.ndarray):
+            return float('nan')
+        return float(jnp.nanmean(v))
+
+    m = Measurable[DQNTrajectoryRecord, float](
+        fn=_ep_return_mean,
+        name='ep_return_mean_summary',
+        reads=('ep_return',),
+    )
+    h = Hypothesis[DQNTrajectoryRecord](
+        name='vanilla_with_measurable',
+        intervention={**_SHORT_RUN_HP_40},
+        measurables=(m,),
+    )
+
+    run_row = run_dqn_cell(
+        env_spec, seed=0, hypothesis=h,
+    ).run
+
+    assert 'mediator.ep_return_mean_summary' in run_row.measurements
+    val = run_row.measurements['mediator.ep_return_mean_summary']
+    assert isinstance(val, float)
+
+
 def test_run_dqn_cell_classifies_invariant_facts() -> None:
     """A bridge created via `at_most(...)` has `stats['kind']=
     'tautological'` → measurements appear under
