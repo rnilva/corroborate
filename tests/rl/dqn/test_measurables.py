@@ -12,121 +12,18 @@ from corroborate.measurable import (
     evaluate_with_measurables,
     get_registered,
 )
-from corroborate.rl.dqn.measurables import (
-    pearson_r_online_target,
-    q_gap_per_step,
-    q_max_per_step,
-    q_mean_per_step,
-    q_std_per_step,
-    target_q_max_per_step,
-    target_q_mean_per_step,
-    td_error_norm_per_step,
-)
+from corroborate.rl.dqn.measurables import pearson_r_online_target
 
 
 # ============ Registration ============
 
-def test_all_dqn_measurables_registered() -> None:
-    """Every measurable defined in `rl.dqn.measurables` is
-    indexed in the global registry by its function name."""
-    for m in (
-        q_mean_per_step, q_max_per_step, q_std_per_step,
-        q_gap_per_step, target_q_mean_per_step,
-        target_q_max_per_step, td_error_norm_per_step,
-        pearson_r_online_target,
-    ):
-        assert get_registered(m.name) is m
+def test_pearson_r_online_target_registered() -> None:
+    """The measurable is indexed in the global registry under its
+    function name."""
+    assert get_registered(pearson_r_online_target.name) is pearson_r_online_target
 
 
-# ============ Q-distribution measurables ============
-
-def _q_record() -> Mapping[str, object]:
-    """Synthetic record with per-step Q-vectors over 3 actions."""
-    online = np.array([
-        [1.0, 2.0, 3.0],
-        [4.0, 4.0, 5.0],
-        [0.0, 1.0, 2.0],
-    ])
-    target = np.array([
-        [0.5, 1.5, 2.5],
-        [3.0, 3.5, 4.5],
-        [0.5, 0.5, 1.5],
-    ])
-    return {
-        'online_q_per_action': online,
-        'target_q_per_action': target,
-        'td_error': np.array([0.1, 0.2, -0.3]),
-        'pearson_stats': np.zeros((3, 5)),  # placeholder
-    }
-
-
-def test_q_mean_per_step_value() -> None:
-    rec = _q_record()
-    out = q_mean_per_step(rec)
-    assert out.tolist() == [2.0, (4 + 4 + 5) / 3, 1.0]
-
-
-def test_q_max_per_step_value() -> None:
-    rec = _q_record()
-    out = q_max_per_step(rec)
-    assert out.tolist() == [3.0, 5.0, 2.0]
-
-
-def test_q_std_per_step_finite() -> None:
-    rec = _q_record()
-    out = q_std_per_step(rec)
-    assert all(math.isfinite(v) for v in out.tolist())
-
-
-def test_q_gap_per_step_value() -> None:
-    """Gap = max - second_max. For [1, 2, 3], gap = 3 - 2 = 1.
-    For [4, 4, 5], gap = 5 - 4 = 1."""
-    rec = _q_record()
-    out = q_gap_per_step(rec)
-    assert out.tolist() == [1.0, 1.0, 1.0]
-
-
-def test_target_q_mean_per_step_value() -> None:
-    rec = _q_record()
-    out = target_q_mean_per_step(rec)
-    expected = [1.5, (3.0 + 3.5 + 4.5) / 3, (0.5 + 0.5 + 1.5) / 3]
-    for got, want in zip(out.tolist(), expected, strict=True):
-        assert math.isclose(got, want)
-
-
-def test_target_q_max_per_step_value() -> None:
-    rec = _q_record()
-    out = target_q_max_per_step(rec)
-    assert out.tolist() == [2.5, 4.5, 1.5]
-
-
-def test_td_error_norm_per_step_value() -> None:
-    """td_error 1-D: per-step magnitude is just abs(td_error)."""
-    rec = _q_record()
-    out = td_error_norm_per_step(rec)
-    assert out.tolist() == [0.1, 0.2, 0.3]
-
-
-# ============ Transitive resolution via evaluate_with_measurables ============
-
-def test_consumer_can_declare_measurables_as_params() -> None:
-    """A consumer fn that declares q_max_per_step and
-    q_mean_per_step as parameters has both auto-injected by
-    `evaluate_with_measurables`."""
-    def consumer(
-        record: Mapping[str, object],
-        q_max_per_step: np.ndarray,
-        q_mean_per_step: np.ndarray,
-    ) -> float:
-        del record
-        # Average gap between max and mean across steps.
-        return float((q_max_per_step - q_mean_per_step).mean())
-
-    out = evaluate_with_measurables(consumer, _q_record())
-    # Per-step (max - mean) for the 3 steps in _q_record:
-    # (3 - 2) = 1; (5 - 13/3) ≈ 0.667; (2 - 1) = 1. Mean ≈ 0.889.
-    assert math.isclose(out, (1.0 + (5.0 - 13/3) + 1.0) / 3, abs_tol=1e-9)
-
+# ============ Pearson r — online vs target ============
 
 def test_pearson_r_online_target_via_resolver() -> None:
     """Pearson-r measurable computed through the resolver. Inputs

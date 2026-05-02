@@ -49,92 +49,15 @@ from corroborate.measurable import measurable
 from corroborate.rl import env_catalogue
 
 
-# ============ Online Q distribution ============
-
-# Inputs are `online_q_per_action` shape `(steps, n_actions)` — the
-# in-loop batch-averaged per-step Q vector. Reductions collapse the
-# action axis to per-step scalars.
-
-@measurable(reads=('online_q_per_action',))
-def q_mean_per_step(
-    record: Mapping[str, object],
-) -> npt.NDArray[np.float64]:
-    """Mean Q across actions, per training step. Series shape
-    `(steps,)`."""
-    arr = np.asarray(record['online_q_per_action']).astype(np.float64)
-    return arr.mean(axis=-1) if arr.ndim >= 1 else arr
-
-
-@measurable(reads=('online_q_per_action',))
-def q_max_per_step(
-    record: Mapping[str, object],
-) -> npt.NDArray[np.float64]:
-    """Max Q across actions, per training step."""
-    arr = np.asarray(record['online_q_per_action']).astype(np.float64)
-    return arr.max(axis=-1) if arr.ndim >= 1 else arr
-
-
-@measurable(reads=('online_q_per_action',))
-def q_std_per_step(
-    record: Mapping[str, object],
-) -> npt.NDArray[np.float64]:
-    """Std Q across actions, per step. Captures the spread of
-    the action-value distribution at each training step."""
-    arr = np.asarray(record['online_q_per_action']).astype(np.float64)
-    return arr.std(axis=-1) if arr.ndim >= 1 else arr
-
-
-@measurable(reads=('online_q_per_action',))
-def q_gap_per_step(
-    record: Mapping[str, object],
-) -> npt.NDArray[np.float64]:
-    """Gap between max and second-max Q-values per step. The
-    DDQN-relevant signal: a small gap means the greedy action is
-    barely distinguishable from a runner-up — the regime where
-    overestimation matters most."""
-    arr = np.asarray(record['online_q_per_action']).astype(np.float64)
-    if arr.ndim < 2 or arr.shape[-1] < 2:
-        return np.zeros(arr.shape[:-1], dtype=np.float64)
-    sorted_arr = np.sort(arr, axis=-1)
-    return sorted_arr[..., -1] - sorted_arr[..., -2]
-
-
-# ============ Target Q distribution ============
-
-@measurable(reads=('target_q_per_action',))
-def target_q_mean_per_step(
-    record: Mapping[str, object],
-) -> npt.NDArray[np.float64]:
-    """Mean target-Q across actions, per step."""
-    arr = np.asarray(record['target_q_per_action']).astype(np.float64)
-    return arr.mean(axis=-1) if arr.ndim >= 1 else arr
-
-
-@measurable(reads=('target_q_per_action',))
-def target_q_max_per_step(
-    record: Mapping[str, object],
-) -> npt.NDArray[np.float64]:
-    """Max target-Q across actions, per step."""
-    arr = np.asarray(record['target_q_per_action']).astype(np.float64)
-    return arr.max(axis=-1) if arr.ndim >= 1 else arr
-
-
-# ============ TD-error magnitude ============
-
-@measurable(reads=('td_error',))
-def td_error_norm_per_step(
-    record: Mapping[str, object],
-) -> npt.NDArray[np.float64]:
-    """Per-step √mean(td_error²) — a positive scalar magnitude."""
-    arr = np.asarray(record['td_error']).astype(np.float64)
-    if arr.ndim == 0:
-        return np.abs(arr)
-    if arr.ndim == 1:
-        return np.abs(arr)
-    return np.sqrt(np.mean(arr ** 2, axis=tuple(range(1, arr.ndim))))
-
-
 # ============ Pearson r — online vs target Q populations ============
+#
+# (The per-step Q-distribution measurables — `q_{mean,max,std,gap}_
+# _per_step`, `target_q_{mean,max}_per_step`, `td_error_norm_per_
+# step` — were removed: they read `online_q_per_action` /
+# `target_q_per_action`, which `Q_TRACE_REDUCTIONS` in
+# `trace_reductions.py` drops at trace persistence time. They could
+# only resolve on synthetic test records, never on persisted
+# corpora — pure scaffold.)
 
 @measurable(reads=('pearson_stats',))
 def pearson_r_online_target(record: Mapping[str, object]) -> float:
