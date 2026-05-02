@@ -39,7 +39,9 @@ from __future__ import annotations
 import inspect
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from typing import Any, overload
+from typing import Any, cast, overload
+
+from corroborate._registry import Registry
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,7 +95,7 @@ class Measurable[R: Mapping[str, object], T]:
 
 # ============ Name-keyed registry + resolver ============
 
-_REGISTRY: dict[str, Measurable[Mapping[str, object], object]] = {}
+_REGISTRY: Registry[Measurable[Mapping[str, object], object]] = Registry()
 
 
 def get_registered(
@@ -107,7 +109,7 @@ def get_registered(
 def registered_names() -> tuple[str, ...]:
     """Sorted tuple of all currently-registered measurable names.
     Useful for debug / diagnostic output."""
-    return tuple(sorted(_REGISTRY))
+    return _REGISTRY.names()
 
 
 def transitive_measurables(name: str) -> frozenset[str]:
@@ -131,7 +133,7 @@ def transitive_measurables(name: str) -> frozenset[str]:
         if m is None:
             raise KeyError(
                 f'no measurable named {n!r}. Registered: '
-                f'{sorted(_REGISTRY)}',
+                f'{_REGISTRY.names()}',
             )
         for dep_name in _measurable_param_names(m.fn):
             _close(dep_name)
@@ -168,7 +170,7 @@ def transitive_reads(name: str) -> frozenset[str]:
         if m is None:
             raise KeyError(
                 f'no measurable named {n!r}. Registered: '
-                f'{sorted(_REGISTRY)}',
+                f'{_REGISTRY.names()}',
             )
         out: set[str] = set(m.reads)
         for alt in m.fallbacks:
@@ -211,7 +213,7 @@ def _resolve_one[R: Mapping[str, object]](
     if m is None:
         raise KeyError(
             f'no measurable named {name!r}. Registered: '
-            f'{sorted(_REGISTRY)}',
+            f'{_REGISTRY.names()}',
         )
     dep_names = _measurable_param_names(m.fn)
     deps = {d: _resolve_one(d, record, cache) for d in dep_names}
@@ -301,8 +303,20 @@ def measurable[R: Mapping[str, object], T](
         instance: Measurable[R, T] = Measurable(
             fn=fn, name=fn.__name__, reads=(),
         )
-        _REGISTRY[instance.name] = (
-            instance  # pyright: ignore[reportGeneralTypeIssues]
+        # `@measurable` uses `replace` (last-write-wins) rather
+        # than `register`. The decorator runs once per
+        # module-import, but pytest fixtures redefine measurables
+        # with the same name across tests; strict registration
+        # would raise. The framework's substantive collision
+        # discipline is in `analysis.register` (analysis names
+        # SHOULD be globally unique) and the YAML-side `@claim`
+        # registry; measurables are author-facing and re-entrant.
+        _REGISTRY.replace(
+            instance.name,
+            cast(
+                'Measurable[Mapping[str, object], object]',
+                instance,
+            ),
         )
         return instance
 
@@ -311,8 +325,20 @@ def measurable[R: Mapping[str, object], T](
         instance: Measurable[R, T] = Measurable(
             fn=inner, name=resolved_name, reads=reads,
         )
-        _REGISTRY[instance.name] = (
-            instance  # pyright: ignore[reportGeneralTypeIssues]
+        # `@measurable` uses `replace` (last-write-wins) rather
+        # than `register`. The decorator runs once per
+        # module-import, but pytest fixtures redefine measurables
+        # with the same name across tests; strict registration
+        # would raise. The framework's substantive collision
+        # discipline is in `analysis.register` (analysis names
+        # SHOULD be globally unique) and the YAML-side `@claim`
+        # registry; measurables are author-facing and re-entrant.
+        _REGISTRY.replace(
+            instance.name,
+            cast(
+                'Measurable[Mapping[str, object], object]',
+                instance,
+            ),
         )
         return instance
     return decorator

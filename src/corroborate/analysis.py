@@ -48,6 +48,8 @@ from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from typing import cast
 
+from corroborate._registry import Registry
+
 
 @dataclass(frozen=True, slots=True)
 class Analysis[R: Mapping[str, object], O]:
@@ -60,7 +62,7 @@ class Analysis[R: Mapping[str, object], O]:
     name: str
 
 
-_REGISTRY: dict[str, Analysis[Mapping[str, object], object]] = {}
+_REGISTRY: Registry[Analysis[Mapping[str, object], object]] = Registry()
 
 
 def get_registered(
@@ -72,7 +74,7 @@ def get_registered(
 
 def registered_names() -> tuple[str, ...]:
     """Sorted tuple of registered analysis names — for diagnostics."""
-    return tuple(sorted(_REGISTRY))
+    return _REGISTRY.names()
 
 
 def analysis[R: Mapping[str, object] = Mapping[str, object], O = object](
@@ -91,13 +93,14 @@ def analysis[R: Mapping[str, object] = Mapping[str, object], O = object](
     `Analysis[Unknown, <Result>]`."""
     name = fn.__name__
     wrapper: Analysis[R, O] = Analysis(fn=fn, name=name)
-    existing = _REGISTRY.get(name)
-    if existing is not None and existing.fn is not fn:
-        raise ValueError(
-            f'analysis {name!r} already registered to a '
-            f'different function',
-        )
-    _REGISTRY[name] = wrapper  # type: ignore[assignment]
+    # `Registry[Analysis[Mapping[str, object], object]]` accepts
+    # this generic-parameter narrowing at the storage boundary;
+    # the `cast` lifts `Analysis[R, O]` through Python's
+    # invariant-generic constraint without a `# type: ignore`.
+    _REGISTRY.register(
+        name,
+        cast('Analysis[Mapping[str, object], object]', wrapper),
+    )
     return wrapper
 
 
@@ -179,7 +182,7 @@ def resolve_for_holds_when(
             raise KeyError(
                 f'holds_when parameter {param_name!r} has no '
                 f'default and is not a registered analysis; '
-                f'known analyses: {sorted(_REGISTRY)}',
+                f'known analyses: {_REGISTRY.names()}',
             )
         out[param_name] = run_for(
             analysis_obj, cells_list, bridge_params,
