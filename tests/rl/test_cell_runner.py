@@ -84,7 +84,7 @@ def test_run_dqn_cell_produces_runrow_on_cartpole() -> None:
     # claim_bridges run post-hoc.
     assert run_row.verdict is Verdict.HELD
     # Outcome reduction landed.
-    assert isinstance(run_row.measurements['outcome.late_window_mean'], float)
+    assert isinstance(run_row.measurements['late_window_mean'], float)
     # Leaf topology paths populated.
     assert 'gamma' in run_row.measurements
 
@@ -114,7 +114,7 @@ def test_run_dqn_cell_pre_registered_measurables_persist_at_their_name() -> None
     """Pre-registered measurables on `Hypothesis.measurables` land
     in the cell's RunRow.measurements under their bare measurable
     `.name` — the substrate controls the column-name namespace
-    (e.g., `outcome.eval_final_mean` vs. bare `jensen_gap`). The
+    (e.g., `eval_final_mean` vs. bare `jensen_gap`). The
     pre-registration channel sits alongside per-record bridges
     (Phase 2 of the Bridge-collapse refactor) so authors can
     declare summary scalars without authoring a per-record

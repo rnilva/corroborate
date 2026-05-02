@@ -45,9 +45,9 @@ _DEFAULT_RUNS = Path(
     '/workspace/corroborate/experiments/data/ddqn/'
     'runs_with_mediators.parquet'
 )
-_BEST = 'outcome.eval_best_burst_mean'
-_FINAL = 'outcome.eval_final_mean'
-_MECHANISM = 'mechanism.jensen_gap'
+_BEST = 'eval_best_burst_mean'
+_FINAL = 'eval_final_mean'
+_MECHANISM = 'jensen_gap'
 _DDQN_DO = DoEffect(treatment_arm='ddqn', baseline_arm='vanilla_dqn')
 
 

@@ -41,7 +41,7 @@ def _synthetic_audit_cells() -> list[dict[str, object]]:
             'intervention_name': 'arm',
             'capacity': cap,
             'lr': 0.001,
-            'outcome.eval_final_mean': 0.5 + 0.01 * i,
+            'eval_final_mean': 0.5 + 0.01 * i,
             'mediator.clean': 0.1 * i + 0.2,
             'mediator.shadow': 0.5 + 0.01 * i,  # shadows outcome
         })
@@ -59,7 +59,7 @@ def test_synthetic_audit_runs_and_returns_per_measurable() -> None:
                 'reads': ('mc_return',),  # same as outcome's reads
             },
         ],
-        outcome_path='outcome.eval_final_mean',
+        outcome_path='eval_final_mean',
         outcome_reads=('mc_return',),
         hp_axes=('capacity', 'lr'),
         hp_stratum_axis='capacity',
@@ -110,15 +110,15 @@ def test_jensen_gap_jaccard_matches_findings_revision_5(
         action_dim_cells,
         measurables=[
             {
-                'name': 'mechanism.jensen_gap',
+                'name': 'jensen_gap',
                 'reads': ('predicted_q_at_start', 'mc_return'),
             },
         ],
-        outcome_path='outcome.eval_best_burst_mean',
+        outcome_path='eval_best_burst_mean',
         outcome_reads=('mc_return',),
         hp_axes=('total_steps',),
         arm_filter='ddqn',
     )
-    report = result.by_name('mechanism.jensen_gap')
+    report = result.by_name('jensen_gap')
     assert report is not None
     assert report.outcome_jaccard == 0.5  # matches FINDINGS rev 5

@@ -39,7 +39,6 @@ from corroborate._canonical import canonical_str
 from corroborate.claim import trace_context
 from corroborate.computation_graph import ComputationGraph, build_computation_graph
 from corroborate.hypothesis import Hypothesis
-from corroborate.reductions import masked_window_mean
 from corroborate.rl.dqn.dqn import default_state_hash, dqn
 from corroborate.rl.dqn.invariants import DQNTrajectoryRecord
 from corroborate.rl.env_catalogue import EnvSpec, EnvWrapper
@@ -233,18 +232,11 @@ def run_dqn_arm(
         batched_record = jax.vmap(by_key)(keys)
     graph = build_computation_graph(records)
 
-    # Late-window 10% of training is the codebase's standard outcome
-    # reduction. Researchers wanting a different window should
-    # author a different `outcome.<name>` reduction (e.g.
-    # `outcome.mid_window_mean`) rather than tweak this constant —
-    # different windows aren't the same outcome.
-    outcome_proj = masked_window_mean(
-        value_key='ep_return', mask_key='done', fraction=0.1,
-    )
-
     # Side-effect import: registers DDQN measurables (q_mean,
-    # q_max, ..., pearson_r_online_target) so measurables declaring
-    # them as deps auto-resolve via the registry.
+    # q_max, ..., pearson_r_online_target, late_window_mean) so
+    # measurables declaring them as deps auto-resolve via the
+    # registry. Substrate-side `dqn_default_measurables()` is
+    # how authors enumerate the standard set on each Hypothesis.
     import corroborate.rl.dqn.measurables  # noqa: F401
     from corroborate.measurable import evaluate_with_measurables
 
@@ -253,7 +245,6 @@ def run_dqn_arm(
         per_seed_record: dict[str, jax.Array] = {
             k: v[i] for k, v in batched_record.items()
         }
-        outcome = outcome_proj(per_seed_record)
         # Per-cell measurable cache — shared across `hypothesis.
         # measurables` so dep-measurables (q_mean, q_std, etc.)
         # compute once per cell.
@@ -261,12 +252,11 @@ def run_dqn_arm(
 
         # Pre-registered measurables: walk `hypothesis.measurables`
         # and persist each at its bare measurable name as the
-        # column key. Substrate controls column-name namespace via
-        # the measurable's name (a measurable named
-        # `outcome.eval_final_mean` lands as `outcome.eval_final_
-        # mean`; a bare `eval_final_mean` lands at the bare name).
-        # Phase 5 of the Bridge-collapse refactor will normalise
-        # the substrate-paper-narrative prefixes to bare names.
+        # column key. Phase 5 of the Bridge-collapse refactor
+        # normalised the substrate-paper-narrative prefixes
+        # (`outcome.` / `mechanism.` / `invariant.`) — measurable
+        # names are now bare (`eval_final_mean`, `jensen_gap`,
+        # `late_window_mean`).
         measurable_cols: dict[str, MeasurementLeaf] = {}
         for m in hypothesis.measurables:
             value = evaluate_with_measurables(
@@ -288,7 +278,6 @@ def run_dqn_arm(
             'seed': seed,
             'total_steps': total_steps,
             **wrapper_cols,
-            'outcome.late_window_mean': outcome,
             **leaf_measurements,
             **measurable_cols,
         }

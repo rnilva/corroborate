@@ -24,7 +24,7 @@ path-keyed scalar leaves. HPs land at dotted topology paths
 (`gamma`, `optimizer.inner.lr`); bridge/invariant results at
 `bridge.<name>.verdict`/`bridge.<name>.stats.<key>` and
 `invariant.<name>.verdict`; substrate-named outcome reductions
-under their own keys (e.g. `outcome.late_window_mean`).
+under their own keys (e.g. `late_window_mean`).
 
 No JSON-wrapped struct columns, no `evidence__`/`binding__`
 namespace prefixes. Persistence is flat columnar parquet — every
@@ -233,7 +233,7 @@ class RunRow:
     pairing). Open surface: `measurements` carrying HP values at
     dotted topology paths, bridge/invariant results under
     `bridge.<name>.*` / `invariant.<name>.*`, outcome reductions
-    under substrate-named keys (e.g. `outcome.late_window_mean`),
+    under substrate-named keys (e.g. `late_window_mean`),
     and substrate metadata (`env_name`, `seed`, `total_steps`,
     `intervention_name`).
 

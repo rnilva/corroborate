@@ -582,7 +582,7 @@ def state_coverage_kl_uniform_late(
 # pairing — pairing is an analysis primitive, NOT a measurable.
 
 
-@measurable(reads=('outcome.eval_best_burst_mean', 'reward_scale'))
+@measurable(reads=('eval_best_burst_mean', 'reward_scale'))
 def outcome_native(record: Mapping[str, object]) -> float:
     """Outcome divided by `reward_scale` — the agent's policy
     quality in units invariant under reward magnitude scaling.
@@ -596,7 +596,7 @@ def outcome_native(record: Mapping[str, object]) -> float:
     Returns the raw outcome unchanged when `reward_scale` is
     absent (legacy corpora that didn't record the column). NaN
     when reward_scale is exactly zero (defensive)."""
-    outcome = record.get('outcome.eval_best_burst_mean')
+    outcome = record.get('eval_best_burst_mean')
     if not isinstance(outcome, (int, float)):
         return float('nan')
     rs = record.get('reward_scale', 1.0)
@@ -698,8 +698,43 @@ def log_mc_cv_per_burst(
 # (paper_full_range.py §3-§7, dqn_bridges.py claim_bridges) keep
 # reading the same column keys until Phase 5's bare-name pass.
 
-@measurable(name='outcome.eval_final_mean', reads=('mc_return',))
-def outcome_eval_final_mean(record: Mapping[str, object]) -> float:
+@measurable(name='late_window_mean', reads=('ep_return', 'done'))
+def late_window_mean(record: Mapping[str, object]) -> float:
+    """Late-window 10% mean of episode returns, restricted to
+    terminal steps (`done > 0.5`). The codebase's standard outcome
+    reduction over training trajectories: averages the last 10%
+    of episode-end returns. Returns NaN if no terminal step
+    survives the late window (e.g. an env that never terminates
+    in the budget).
+
+    Same formula as `masked_window_mean('ep_return', 'done', 0.1)`
+    in `reductions.py`; lifted here as a registered substrate
+    measurable so cell_runner persists it through the same
+    channel as the rest of `dqn_default_measurables()`."""
+    values = record.get('ep_return')
+    done = record.get('done')
+    if not isinstance(values, np.ndarray) or not isinstance(done, np.ndarray):
+        # JAX arrays satisfy the same axis / shape protocol — np.asarray
+        # at the boundary handles the cross-backend case.
+        try:
+            values = np.asarray(values)
+            done = np.asarray(done)
+        except (TypeError, ValueError):
+            return float('nan')
+    fraction = 0.1
+    n = int(values.shape[0])
+    cutoff = int((1.0 - fraction) * n)
+    time_mask = np.arange(n) >= cutoff
+    keep_mask = time_mask & (np.asarray(done) > 0.5)
+    n_kept = int(np.sum(keep_mask))
+    if n_kept == 0:
+        return float('nan')
+    masked = np.where(keep_mask, values, 0.0)
+    return float(np.sum(masked) / n_kept)
+
+
+@measurable(name='eval_final_mean', reads=('mc_return',))
+def eval_final_mean(record: Mapping[str, object]) -> float:
     """`mean(mc_return[-1, :])`. The LAST eval burst's mean MC
     return — honest "final policy performance" (greedy, no
     exploration noise). Vulnerable to late-training instability.
@@ -712,8 +747,8 @@ def outcome_eval_final_mean(record: Mapping[str, object]) -> float:
     return float(mc[-1, :].mean())
 
 
-@measurable(name='outcome.eval_best_burst_mean', reads=('mc_return',))
-def outcome_eval_best_burst_mean(record: Mapping[str, object]) -> float:
+@measurable(name='eval_best_burst_mean', reads=('mc_return',))
+def eval_best_burst_mean(record: Mapping[str, object]) -> float:
     """`max_i(mean(mc_return[i, :]))`. Best-burst-seen during
     training. Robust to instability, slightly optimistic — the
     standard reduction for unstable-RL evaluation."""
@@ -726,10 +761,10 @@ def outcome_eval_best_burst_mean(record: Mapping[str, object]) -> float:
 
 
 @measurable(
-    name='outcome.eval_best_burst_step',
+    name='eval_best_burst_step',
     reads=('mc_return', 'eval_step_index'),
 )
-def outcome_eval_best_burst_step(record: Mapping[str, object]) -> float:
+def eval_best_burst_step(record: Mapping[str, object]) -> float:
     """Provenance: training step at which the best burst occurred.
     Lets consumers see whether 'best' is at convergence or an
     early lucky checkpoint. Returns NaN when either input is
@@ -754,10 +789,10 @@ def outcome_eval_best_burst_step(record: Mapping[str, object]) -> float:
 # ============ Lifted from cell_runner._mechanism_measurements (Phase 3B) ============
 
 @measurable(
-    name='mechanism.jensen_gap',
+    name='jensen_gap',
     reads=('predicted_q_at_start', 'mc_return'),
 )
-def mechanism_jensen_gap(record: Mapping[str, object]) -> float:
+def jensen_gap(record: Mapping[str, object]) -> float:
     """`max(0, mean(predicted_q_at_start − mc_return))`. Hasselt
     2010/2016: vanilla DQN's positive Jensen-bias is what DDQN
     reduces by decoupling action selection (online) from value
@@ -838,7 +873,7 @@ def jensen_dormancy_gap_m(record: Mapping[str, object]) -> float:
 
 
 @measurable(
-    name='invariant.at_most[jensen_dormancy_gap<=0].verdict',
+    name='at_most[jensen_dormancy_gap<=0].verdict',
     reads=(),
 )
 def at_most_jensen_dormancy_gap_zero_verdict(
@@ -891,10 +926,11 @@ def dqn_default_measurables() -> tuple[
     (`'held'` / `'invariant_violation'` / `'power_insufficient'`),
     the others are scalar floats."""
     return (
-        outcome_eval_final_mean,
-        outcome_eval_best_burst_mean,
-        outcome_eval_best_burst_step,
-        mechanism_jensen_gap,
+        late_window_mean,
+        eval_final_mean,
+        eval_best_burst_mean,
+        eval_best_burst_step,
+        jensen_gap,
         jensen_dormancy_gap_m,
         at_most_jensen_dormancy_gap_zero_verdict,
     )

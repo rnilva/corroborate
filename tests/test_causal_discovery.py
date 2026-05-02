@@ -602,11 +602,11 @@ def test_pc_dqn_smoke_holds_on_migrated_corpus() -> None:
     )
     variables = [
         'arm_ddqn',
-        'mechanism.jensen_gap',
-        'outcome.late_window_mean',
-        'outcome.eval_final_mean',
-        'outcome.eval_best_burst_mean',
-        'outcome.eval_best_burst_step',
+        'jensen_gap',
+        'late_window_mean',
+        'eval_final_mean',
+        'eval_best_burst_mean',
+        'eval_best_burst_step',
     ]
     df = df.drop_nulls(subset=variables)
 
@@ -629,15 +629,15 @@ def test_pc_dqn_smoke_holds_on_migrated_corpus() -> None:
 
     # Sanity: the mechanism intervention edge SHOULD survive
     # (DDQN's slot swap reduces the Jensen gap on a subset of envs).
-    assert frozenset({'arm_ddqn', 'mechanism.jensen_gap'}) in adj.edges, (
-        'arm_ddqn → mechanism.jensen_gap should survive (DDQN '
+    assert frozenset({'arm_ddqn', 'jensen_gap'}) in adj.edges, (
+        'arm_ddqn → jensen_gap should survive (DDQN '
         'demonstrably reduces the gap on a subset of envs)'
     )
 
 
 def test_per_env_pc_dqn_smoke_finds_within_env_arm_edges() -> None:
     """§6 thin per-env PC: at least some envs surface a within-env
-    edge from arm_ddqn (mostly to mechanism.jensen_gap). Skipped if
+    edge from arm_ddqn (mostly to jensen_gap). Skipped if
     the corpus parquet isn't on disk.
 
     With only one mechanism feature, this is the *thin* §6 — it
@@ -666,11 +666,11 @@ def test_per_env_pc_dqn_smoke_finds_within_env_arm_edges() -> None:
     )
     variables = [
         'arm_ddqn',
-        'mechanism.jensen_gap',
-        'outcome.late_window_mean',
-        'outcome.eval_final_mean',
-        'outcome.eval_best_burst_mean',
-        'outcome.eval_best_burst_step',
+        'jensen_gap',
+        'late_window_mean',
+        'eval_final_mean',
+        'eval_best_burst_mean',
+        'eval_best_burst_step',
     ]
     df = df.drop_nulls(subset=variables)
 
@@ -702,7 +702,7 @@ def test_per_env_pc_dqn_smoke_finds_within_env_arm_edges() -> None:
 def test_per_env_mediator_pc_smoke_finds_outcome_neighbours() -> None:
     """§5+§6 rich gate on `runs_with_mediators.parquet`: per-env PC
     over the 10-variable mediator-augmented set surfaces ≥1 neighbour
-    of `outcome.eval_final_mean` in at least 8 envs (the paper's
+    of `eval_final_mean` in at least 8 envs (the paper's
     9-of-15 threshold, allowing 1 slack for corpus-specific noise).
 
     Skipped if `runs_with_mediators.parquet` isn't on disk — produced
@@ -734,11 +734,11 @@ def test_per_env_mediator_pc_smoke_finds_outcome_neighbours() -> None:
         'mediator.td_residual_late', 'mediator.greedy_match_late',
     )
     variables = [
-        'arm_ddqn', 'mechanism.jensen_gap',
+        'arm_ddqn', 'jensen_gap',
         *pc_mediators,
-        'outcome.eval_final_mean', 'outcome.late_window_mean',
+        'eval_final_mean', 'late_window_mean',
     ]
-    outcome = 'outcome.eval_final_mean'
+    outcome = 'eval_final_mean'
 
     envs_with_neighbour: list[str] = []
     for env in sorted(df['env_name'].unique().to_list()):

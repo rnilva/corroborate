@@ -38,7 +38,7 @@ def _sample_runrow() -> RunRow:
             'intervention_name': 'dqn_with_double_greedify',
             'gamma': 0.99,
             'optimizer.inner.lr': 0.001,
-            'outcome.late_window_mean': 120.5,
+            'late_window_mean': 120.5,
             'bridge.some_bridge.verdict': 'held',
             'bridge.some_bridge.stats.rho': 0.85,
         },
@@ -67,7 +67,7 @@ def test_runrow_parquet_round_trip_multiple_homogeneous(tmp_path: Path) -> None:
             measurements={
                 'env_name': 'CartPole-v1', 'seed': i,
                 'gamma': 0.99,
-                'outcome.late_window_mean': float(i),
+                'late_window_mean': float(i),
             },
         )
         for i in range(3)
@@ -175,9 +175,9 @@ def test_comparisonrow_parquet_round_trip_full(tmp_path: Path) -> None:
             'intervention_name': 'ddqn',
             'n_treatment': 15,
             'n_baseline': 15,
-            'outcome.late_window_mean.arm_a_mean': 42.5,
-            'outcome.late_window_mean.arm_b_mean': 39.0,
-            'outcome.late_window_mean.effect_size_g': 0.91,
+            'late_window_mean.arm_a_mean': 42.5,
+            'late_window_mean.arm_b_mean': 39.0,
+            'late_window_mean.effect_size_g': 0.91,
         },
     )
     path = tmp_path / 'comparisons.parquet'

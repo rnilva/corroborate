@@ -265,8 +265,8 @@ def main() -> None:
         str(_RUNS),
         columns=[
             'id', 'env_name', 'intervention_name', 'seed',
-            'total_steps', 'outcome.eval_best_burst_mean',
-            'outcome.eval_final_mean',
+            'total_steps', 'eval_best_burst_mean',
+            'eval_final_mean',
         ],
     )
     traces_df = pl.read_parquet(

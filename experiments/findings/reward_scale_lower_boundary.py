@@ -76,7 +76,7 @@ def _arm_mean(cells: list[dict[str, object]], arm: str, rs: float) -> float:
         rs_v = c.get('reward_scale', 1.0)
         if not isinstance(rs_v, (int, float)) or float(rs_v) != rs:
             continue
-        outcome = c.get('outcome.eval_best_burst_mean')
+        outcome = c.get('eval_best_burst_mean')
         if not isinstance(outcome, (int, float)):
             continue
         vals.append(float(outcome) / float(rs_v))

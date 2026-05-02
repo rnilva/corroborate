@@ -29,8 +29,8 @@ defaults.
     def ddqn_helps_outcome_acrobot(
         paired_g: PairedGResult,
         *,
-        source: str = 'outcome.eval_best_burst_mean',
-        target: str = 'outcome.eval_best_burst_mean',
+        source: str = 'eval_best_burst_mean',
+        target: str = 'eval_best_burst_mean',
         direction: Direction = Direction.DIRECT,
         tier: Tier = Tier.ASSOCIATIONAL,
         treatment_arm: str = 'ddqn',
@@ -308,7 +308,7 @@ def measurable_names_for_bridges(
     A bridge declares measurable names through three channels:
 
     - `bridge.source` and `bridge.target` are the canonical
-      measurable-name slots (default `'outcome.eval_best_burst_mean'`-
+      measurable-name slots (default `'eval_best_burst_mean'`-
       style strings; analyses pass them as `source=` to read via the
       registry).
     - `bridge.params[*]` may carry measurable names too — bridges
@@ -323,7 +323,7 @@ def measurable_names_for_bridges(
 
     Names that aren't in the measurable registry are silently
     dropped. They're either claim-output field paths
-    (`outcome.eval_best_burst_mean`) — already in the raw
+    (`eval_best_burst_mean`) — already in the raw
     parquet, no recompute needed — or bridge-specific identifiers
     that aren't measurables (e.g. `'outcome_native'` IS a
     measurable, but `'eval_best_burst_mean'` as a raw field is

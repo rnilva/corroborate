@@ -22,8 +22,8 @@ def _run(
         verdict=Verdict.HELD, arm_key='baseline',
         measurements={
             'env_name': env,
-            'outcome.eval_best_burst_mean': best,
-            'outcome.eval_final_mean': final,
+            'eval_best_burst_mean': best,
+            'eval_final_mean': final,
         },
     )
 
@@ -130,8 +130,8 @@ def test_classify_envs_drops_nan_and_non_numeric_outcomes() -> None:
             verdict=Verdict.HELD, arm_key='baseline',
             measurements={
                 'env_name': 'EasyEnv',
-                'outcome.eval_best_burst_mean': float('nan'),
-                'outcome.eval_final_mean': float('nan'),
+                'eval_best_burst_mean': float('nan'),
+                'eval_final_mean': float('nan'),
             },
         ),
     ]

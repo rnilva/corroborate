@@ -312,14 +312,14 @@ def _build_corpus_cells(corpus: str) -> list[dict[str, object]] | None:
             continue
         n_actions = int(ef['n_actions'])
         ts = int(d_cell.get('total_steps', 0)) or int(v_cell.get('total_steps', 0))
-        d_jensen = d_cell.get('mechanism.jensen_gap')
-        v_jensen = v_cell.get('mechanism.jensen_gap')
+        d_jensen = d_cell.get('jensen_gap')
+        v_jensen = v_cell.get('jensen_gap')
         if not isinstance(d_jensen, (int, float)) or not isinstance(v_jensen, (int, float)):
             continue
-        d_best = d_cell.get('outcome.eval_best_burst_mean')
-        v_best = v_cell.get('outcome.eval_best_burst_mean')
-        d_final = d_cell.get('outcome.eval_final_mean')
-        v_final = v_cell.get('outcome.eval_final_mean')
+        d_best = d_cell.get('eval_best_burst_mean')
+        v_best = v_cell.get('eval_best_burst_mean')
+        d_final = d_cell.get('eval_final_mean')
+        v_final = v_cell.get('eval_final_mean')
         d_dorm = _dormancy_gap(
             sigma_by_id.get(d_cell['id'], float('nan')) if isinstance(d_cell.get('id'), str) else float('nan'),
             n_actions,

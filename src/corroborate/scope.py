@@ -136,7 +136,7 @@ def build_scope(
     each RunRow's measurements. With proper invariant wiring this
     is `f'invariant.{at_most_bridge.name}.stats.gap_value'`; for
     corpora that only carry the cell-runner's flat projection it
-    can also be `'mechanism.jensen_gap'`.
+    can also be `'jensen_gap'`.
 
     `gap_name` — the Measurable's name (e.g.
     `'jensen_overestimation_gap'`). Stored on `Scope.gap_name`;

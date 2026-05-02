@@ -105,8 +105,8 @@ def main() -> None:
 
     # Per-pair Δ on outcome + each candidate mediator.
     mediator_paths = [f'mediator.{m.name}' for m in DEFAULT_PANEL]
-    paths = ['outcome.eval_final_mean', 'outcome.eval_best_burst_mean',
-             'mechanism.jensen_gap', *mediator_paths]
+    paths = ['eval_final_mean', 'eval_best_burst_mean',
+             'jensen_gap', *mediator_paths]
     deltas = paired_deltas_from_runs(
         ddqn, vanilla, paths=paths, pair_by=('seed',),
     )
@@ -118,9 +118,9 @@ def main() -> None:
           f'{"r vs Δ_final":>14} {"p":>6} '
           f'{"r vs Δ_best":>14} {"p":>6}')
     print('-' * 100)
-    final = deltas['outcome.eval_final_mean']
-    best = deltas['outcome.eval_best_burst_mean']
-    print(f'{"  Δ outcome.eval_final_mean":<40} {"-":>14} {"-":>6} '
+    final = deltas['eval_final_mean']
+    best = deltas['eval_best_burst_mean']
+    print(f'{"  Δ eval_final_mean":<40} {"-":>14} {"-":>6} '
           f'{ss.pearsonr(final, best).statistic:>+14.3f} '
           f'{ss.pearsonr(final, best).pvalue:>6.3f}')
     print()
@@ -128,7 +128,7 @@ def main() -> None:
     # Build a list (path, r_final, p_final, r_best, p_best) and rank by
     # max |r|.
     rows: list[tuple[str, float, float, float, float]] = []
-    for path in [*mediator_paths, 'mechanism.jensen_gap']:
+    for path in [*mediator_paths, 'jensen_gap']:
         d_med = deltas[path]
         # Align: deltas may have different length across paths if some
         # pairs had non-finite values for a path. Use the intersection
@@ -169,13 +169,13 @@ def main() -> None:
           f'{"partial_ρ_best":>15} {"p":>7}')
     print('-' * 90)
     delta_jensen = np.asarray(
-        deltas['mechanism.jensen_gap'], dtype=np.float64,
+        deltas['jensen_gap'], dtype=np.float64,
     )
     delta_final = np.asarray(
-        deltas['outcome.eval_final_mean'], dtype=np.float64,
+        deltas['eval_final_mean'], dtype=np.float64,
     )
     delta_best = np.asarray(
-        deltas['outcome.eval_best_burst_mean'], dtype=np.float64,
+        deltas['eval_best_burst_mean'], dtype=np.float64,
     )
     partial_rows: list[tuple[str, float, float, float, float]] = []
     for path in mediator_paths:

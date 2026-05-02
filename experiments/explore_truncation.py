@@ -21,7 +21,7 @@ This script computes mediators on-the-fly under three strategies:
 
 For each (env, arm, strategy, mediator), compute:
 - mean across cells (per-arm summary)
-- per-env Pearson r vs `outcome.eval_best_burst_mean`
+- per-env Pearson r vs `eval_best_burst_mean`
 
 Output: per-env table comparing within-env Pearson under each
 strategy. Lets us see whether truncation reveals stronger or
@@ -168,7 +168,7 @@ def _pearson_safe(x: np.ndarray, y: np.ndarray) -> tuple[float, float]:
 _STRATEGIES: tuple[str, ...] = (
     'no_trunc', 'peak_truncated', 'peak_centered',
 )
-_OUTCOME = 'outcome.eval_best_burst_mean'
+_OUTCOME = 'eval_best_burst_mean'
 
 
 def main() -> None:
@@ -180,7 +180,7 @@ def main() -> None:
         pl.col('total_steps') == 200000,
     ).select(
         'id', 'env_name', 'arm_key', 'total_steps',
-        'outcome.eval_best_burst_step',
+        'eval_best_burst_step',
         _OUTCOME,
     )
     print(f'runs (200k): {len(runs)} cells, '
@@ -204,7 +204,7 @@ def main() -> None:
     for r in df.iter_rows(named=True):
         env: str = r['env_name']  # pyright: ignore[reportAny]
         arm: str = r['arm_key']  # pyright: ignore[reportAny]
-        peak_step = int(r['outcome.eval_best_burst_step'])  # pyright: ignore[reportAny]
+        peak_step = int(r['eval_best_burst_step'])  # pyright: ignore[reportAny]
         total_steps = int(r['total_steps'])  # pyright: ignore[reportAny]
         outcome = float(r[_OUTCOME])  # pyright: ignore[reportAny]
         for strat in _STRATEGIES:

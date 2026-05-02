@@ -160,7 +160,7 @@ def paired_g(
     `source` resolves through the measurable registry (preferred)
     or as a field-path read on the cell record. Bridges declare
     `source='outcome_native'` to consume the registered
-    measurable, or `source='outcome.eval_best_burst_mean'` for a
+    measurable, or `source='eval_best_burst_mean'` for a
     raw field.
 
     `env_name` and `extra_filters` scope the corpus pre-pairing.

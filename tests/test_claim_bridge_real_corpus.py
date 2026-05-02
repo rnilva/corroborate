@@ -114,7 +114,7 @@ def test_audit_trail_carries_analysis_result(
     assert 'paired_g' in out.analysis_results
     pg = out.analysis_results['paired_g']
     assert isinstance(pg, PairedGResult)
-    assert pg.measurable == 'mechanism.jensen_gap'
+    assert pg.measurable == 'jensen_gap'
     assert pg.treatment_arm == 'ddqn'
     assert pg.baseline_arm == 'vanilla_dqn'
 

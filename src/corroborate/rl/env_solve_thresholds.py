@@ -38,8 +38,8 @@ maps an outcome scalar to a bool; cells where the agent's outcome
 (in discounted units) ≥ threshold count as solved.
 
 Threshold semantics: applied to whichever outcome path the caller
-specifies. The framework's `outcome.eval_final_mean` and
-`outcome.eval_best_burst_mean` both record discounted return."""
+specifies. The framework's `eval_final_mean` and
+`eval_best_burst_mean` both record discounted return."""
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -64,7 +64,7 @@ class SolveThreshold:
     `confidence` — quality tier of the threshold (see module
       docstring).
     `outcome_path_assumed` — which outcome path the threshold is
-      written for. Mostly `'outcome.eval_final_mean'` for stable
+      written for. Mostly `'eval_final_mean'` for stable
       convergence; using a softer outcome path with the same
       threshold is permissive (catastrophic-forgetting envs would
       pass best_burst but fail final_mean)."""
@@ -72,7 +72,7 @@ class SolveThreshold:
     threshold: float | None
     source: str
     confidence: ThresholdConfidence
-    outcome_path_assumed: str = 'outcome.eval_final_mean'
+    outcome_path_assumed: str = 'eval_final_mean'
 
 
 # ============ The table ============

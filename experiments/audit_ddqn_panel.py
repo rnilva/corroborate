@@ -19,7 +19,7 @@ inject into `RunRow.measurements` (`_env_id`), which puts the
 within-env Spearman check at full power: 30 seeds × 2 budgets = 60
 cells per env, 18 envs pooled via Fisher-z.
 
-Note: `mechanism.jensen_gap` reads `(predicted_q_at_start, mc_return)`
+Note: `jensen_gap` reads `(predicted_q_at_start, mc_return)`
 and the outcome reads `mc_return` — jaccard = 1/2 = 0.5, exactly at
 the default threshold. Reported either way; the analyst judges
 whether a residual-on-outcome mediator counts as "outcome-tautological"
@@ -62,7 +62,7 @@ from corroborate.rl.dqn.measurables import (
 from corroborate.schema import RunRow
 
 _RUNS = Path('experiments/data/ddqn/runs_with_mediators.parquet')
-_OUTCOME_PATH = 'outcome.eval_best_burst_mean'
+_OUTCOME_PATH = 'eval_best_burst_mean'
 _OUTCOME_READS: frozenset[str] = frozenset({'mc_return'})
 
 
@@ -87,7 +87,7 @@ _PANEL: tuple[object, ...] = (
     state_visit_entropy_late, state_coverage_kl_uniform_late,
 )
 _MEDIATOR_PATH_FOR: dict[str, str] = {
-    'jensen_gap': 'mechanism.jensen_gap',
+    'jensen_gap': 'jensen_gap',
     # all others default to `mediator.{name}`
 }
 

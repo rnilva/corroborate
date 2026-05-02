@@ -111,7 +111,7 @@ _MEDIATORS: tuple[str, ...] = (
     # H2 peak-truncated reductions — per-cell-aware windows that
     # avoid post-peak contamination. Same per-cell signal as their
     # `_late` counterparts but with the window cut at each cell's
-    # `outcome.eval_best_burst_step`. Empirically (H1 exploration)
+    # `eval_best_burst_step`. Empirically (H1 exploration)
     # these surface 24-28% larger mean |r| vs outcome across envs.
     'mediator.q_gap_peak_truncated_late',
     'mediator.td_residual_peak_truncated_late',
@@ -121,24 +121,24 @@ _MEDIATORS: tuple[str, ...] = (
 
 import os as _os
 _OUTCOME = _os.environ.get(
-    'OUTCOME_PATH', 'outcome.eval_best_burst_mean',
+    'OUTCOME_PATH', 'eval_best_burst_mean',
 )
 """Primary outcome path. Default matches Hasselt 2016's
-literature convention: `outcome.eval_best_burst_mean` is the
+literature convention: `eval_best_burst_mean` is the
 max over per-eval-burst mean returns — the 'best eval score'
 metric Atari benchmarks report. Override via env var:
 
-- `OUTCOME_PATH=outcome.eval_best_burst_mean` (default;
+- `OUTCOME_PATH=eval_best_burst_mean` (default;
   Hasselt-convention; sample-efficiency-aware but possibly
   optimistic on unstable runs).
-- `OUTCOME_PATH=outcome.eval_final_mean` (final eval burst —
+- `OUTCOME_PATH=eval_final_mean` (final eval burst —
   what return the agent achieved at training's end; vulnerable
   to one-bad-gradient noise).
-- `OUTCOME_PATH=outcome.late_window_mean` (per-step late-window
+- `OUTCOME_PATH=late_window_mean` (per-step late-window
   mean — stability-aware; the framework's stability-flavored
   outcome that gives a different mech↔outcome story than
   best-eval-burst, see §3 paper paragraph)."""
-_MECHANISM = 'mechanism.jensen_gap'
+_MECHANISM = 'jensen_gap'
 
 # Mediators with non-trivial within-corpus variance for PC.
 # Exclusions:
@@ -161,13 +161,13 @@ _PC_MEDIATORS: tuple[str, ...] = tuple(
 )
 
 # Per-env PC variable set (§4 + §6). Includes both
-# `outcome.eval_final_mean` and the primary `_OUTCOME`; deduped
+# `eval_final_mean` and the primary `_OUTCOME`; deduped
 # in case the override picks `eval_final_mean` itself.
 _PC_VARIABLES: tuple[str, ...] = tuple(dict.fromkeys((
     'arm_ddqn',
     _MECHANISM,
     *_PC_MEDIATORS,
-    'outcome.eval_final_mean',
+    'eval_final_mean',
     _OUTCOME,
 )))
 

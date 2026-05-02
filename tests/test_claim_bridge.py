@@ -47,7 +47,7 @@ def _synthetic_cells(
             'intervention_name': 'treatment',
             'seed': s,
             'env_name': 'TestEnv',
-            'outcome.eval_best_burst_mean': (
+            'eval_best_burst_mean': (
                 treatment_mean + rng.gauss(0, noise)
             ),
         })
@@ -55,7 +55,7 @@ def _synthetic_cells(
             'intervention_name': 'baseline',
             'seed': s,
             'env_name': 'TestEnv',
-            'outcome.eval_best_burst_mean': (
+            'eval_best_burst_mean': (
                 baseline_mean + rng.gauss(0, noise)
             ),
         })
@@ -71,7 +71,7 @@ def test_paired_g_analysis_runs_directly() -> None:
         treatment_arm='treatment',
         baseline_arm='baseline',
         pair_by=('seed',),
-        source='outcome.eval_best_burst_mean',
+        source='eval_best_burst_mean',
         env_name='TestEnv',
     )
     assert isinstance(result, PairedGResult)
@@ -94,8 +94,8 @@ def test_analysis_registered_globally() -> None:
 def treatment_helps_outcome(
     paired_g: PairedGResult,
     *,
-    source: str = 'outcome.eval_best_burst_mean',
-    target: str = 'outcome.eval_best_burst_mean',
+    source: str = 'eval_best_burst_mean',
+    target: str = 'eval_best_burst_mean',
     direction: Direction = Direction.DIRECT,
     tier: Tier = Tier.ASSOCIATIONAL,
     treatment_arm: str = 'treatment',
@@ -136,8 +136,8 @@ def test_bridge_no_effect_when_signal_absent() -> None:
 def want_30_pairs(
     paired_g: PairedGResult,
     *,
-    source: str = 'outcome.eval_best_burst_mean',
-    target: str = 'outcome.eval_best_burst_mean',
+    source: str = 'eval_best_burst_mean',
+    target: str = 'eval_best_burst_mean',
     direction: Direction = Direction.DIRECT,
     tier: Tier = Tier.ASSOCIATIONAL,
     treatment_arm: str = 'treatment',
@@ -222,7 +222,7 @@ def test_bridge_carries_typed_intervention() -> None:
         paired_g: PairedGResult,
         *,
         source: str = 'outcome_native',
-        target: str = 'outcome.eval_best_burst_mean',
+        target: str = 'eval_best_burst_mean',
         direction: Direction = Direction.DIRECT,
         tier: Tier = Tier.INTERVENTIONAL,
         intervention: DoEffect = DoEffect(

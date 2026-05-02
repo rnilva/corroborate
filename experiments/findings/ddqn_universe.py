@@ -180,7 +180,7 @@ def ddqn_refuted_when_dormancy_fires(
     universe_scope: UniverseScopeResult,
     *,
     source: str = 'invariant.jensen_dormancy_gap',
-    target: str = 'outcome.eval_best_burst_mean',
+    target: str = 'eval_best_burst_mean',
     direction: Direction = Direction.INVERSE,
     tier: Tier = Tier.ASSOCIATIONAL,
     outcome_col: str = 'delta_outcome_best',
@@ -243,8 +243,8 @@ def ddqn_refuted_when_dormancy_fires(
 def adaptive_dqn_recovers_ddqn_benefit__fourrooms_factor_0p5(
     paired_g: PairedGResult,
     *,
-    source: str = 'outcome.eval_final_mean',
-    target: str = 'outcome.eval_final_mean',
+    source: str = 'eval_final_mean',
+    target: str = 'eval_final_mean',
     direction: Direction = Direction.DIRECT,
     tier: Tier = Tier.INTERVENTIONAL,
     treatment_arm: str = 'adaptive_dqn_factor_0p5',
@@ -401,8 +401,8 @@ def ddqn_attenuates_at_late_bursts__spaceinvaders(
 def adaptive_dqn_fails_to_avoid_attenuation__spaceinvaders_1m(
     paired_g: PairedGResult,
     *,
-    source: str = 'outcome.eval_final_mean',
-    target: str = 'outcome.eval_final_mean',
+    source: str = 'eval_final_mean',
+    target: str = 'eval_final_mean',
     direction: Direction = Direction.INVERSE,
     tier: Tier = Tier.INTERVENTIONAL,
     treatment_arm: str = 'adaptive_dqn',
@@ -478,7 +478,7 @@ def ddqn_benefit_scales_with_effective_horizon__fourrooms(
     universe_scope: UniverseScopeResult,
     *,
     source: str = 'effective_horizon',
-    target: str = 'outcome.eval_best_burst_mean',
+    target: str = 'eval_best_burst_mean',
     direction: Direction = Direction.DIRECT,
     tier: Tier = Tier.INTERVENTIONAL,
     outcome_col: str = 'delta_outcome_best',
@@ -557,7 +557,7 @@ def ddqn_benefit_scales_with_effective_horizon__metamaze_high_gamma(
     universe_scope: UniverseScopeResult,
     *,
     source: str = 'effective_horizon',
-    target: str = 'outcome.eval_best_burst_mean',
+    target: str = 'eval_best_burst_mean',
     direction: Direction = Direction.DIRECT,
     tier: Tier = Tier.INTERVENTIONAL,
     outcome_col: str = 'delta_outcome_best',
@@ -606,7 +606,7 @@ def ddqn_benefit_scales_with_gamma__discountingchain(
     universe_scope: UniverseScopeResult,
     *,
     source: str = 'gamma',
-    target: str = 'outcome.eval_best_burst_mean',
+    target: str = 'eval_best_burst_mean',
     direction: Direction = Direction.DIRECT,
     tier: Tier = Tier.INTERVENTIONAL,
     outcome_col: str = 'delta_outcome_best',
@@ -683,7 +683,7 @@ def bootstrap_fraction_drives_g_link__net_of_dormancy(
     meta_regression_per_burst: MetaRegressionResult,
     *,
     source: str = 'mc_return',
-    target: str = 'outcome.eval_best_burst_mean',
+    target: str = 'eval_best_burst_mean',
     direction: Direction = Direction.DIRECT,
     tier: Tier = Tier.ASSOCIATIONAL,
     treatment_arm: str = 'ddqn',
@@ -764,7 +764,7 @@ def mc_variance_attenuates_g_link__between_env(
     mundlak_paired_g_per_burst: MundlakResult,
     *,
     source: str = 'mc_return',
-    target: str = 'outcome.eval_best_burst_mean',
+    target: str = 'eval_best_burst_mean',
     direction: Direction = Direction.DIRECT,
     tier: Tier = Tier.ASSOCIATIONAL,
     treatment_arm: str = 'ddqn',
@@ -889,7 +889,7 @@ def ddqn_rescues_underlearning_vanilla__fourrooms_rs_0p1(
     paired_g: PairedGResult,
     *,
     source: str = 'outcome_native',
-    target: str = 'outcome.eval_best_burst_mean',
+    target: str = 'eval_best_burst_mean',
     direction: Direction = Direction.DIRECT,
     tier: Tier = Tier.INTERVENTIONAL,
     intervention: DoEffect = DoEffect(
@@ -910,7 +910,7 @@ def ddqn_rescues_underlearning_vanilla__fourrooms_rs_0p1(
 
     Generic primitive shape: consumes `paired_g` with
     `source='outcome_native'` (the registered measurable
-    `outcome.eval_best_burst_mean / reward_scale`) and
+    `eval_best_burst_mean / reward_scale`) and
     `extra_filters={'reward_scale': 0.1}` to scope the corpus.
     No bespoke analysis — the bridge supplies measurable name +
     filters, the framework runs `paired_g` and injects the
@@ -968,7 +968,7 @@ def ddqn_dominates_vanilla_response_curve__fourrooms_rs_0p3(
     paired_g: PairedGResult,
     *,
     source: str = 'outcome_native',
-    target: str = 'outcome.eval_best_burst_mean',
+    target: str = 'eval_best_burst_mean',
     direction: Direction = Direction.DIRECT,
     tier: Tier = Tier.INTERVENTIONAL,
     intervention: DoEffect = DoEffect(
@@ -1181,8 +1181,8 @@ def ddqn_curve_crosses_vanilla_late__spaceinvaders(
 def ddqn_helps_at_full_bootstrap__fourrooms_n1(
     paired_g: PairedGResult,
     *,
-    source: str = 'outcome.eval_best_burst_mean',
-    target: str = 'outcome.eval_best_burst_mean',
+    source: str = 'eval_best_burst_mean',
+    target: str = 'eval_best_burst_mean',
     direction: Direction = Direction.DIRECT,
     tier: Tier = Tier.INTERVENTIONAL,
     intervention: DoEffect = DoEffect(
@@ -1220,8 +1220,8 @@ def ddqn_helps_at_full_bootstrap__fourrooms_n1(
 def ddqn_null_under_monte_carlo__fourrooms_n10(
     paired_g: PairedGResult,
     *,
-    source: str = 'outcome.eval_best_burst_mean',
-    target: str = 'outcome.eval_best_burst_mean',
+    source: str = 'eval_best_burst_mean',
+    target: str = 'eval_best_burst_mean',
     direction: Direction = Direction.DIRECT,
     tier: Tier = Tier.INTERVENTIONAL,
     intervention: DoEffect = DoEffect(

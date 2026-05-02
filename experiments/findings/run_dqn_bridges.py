@@ -313,9 +313,9 @@ def main() -> None:
             DDQN_200K_RUNS,
             columns=[
                 'id', 'env_name', 'intervention_name', 'seed',
-                'total_steps', 'mechanism.jensen_gap',
-                'outcome.eval_best_burst_mean',
-                'outcome.eval_best_burst_step',
+                'total_steps', 'jensen_gap',
+                'eval_best_burst_mean',
+                'eval_best_burst_step',
             ],
         )
         cells = list(df.iter_rows(named=True))
@@ -350,7 +350,7 @@ def main() -> None:
     if all(p.exists() for p in factorial_paths):
         cols = [
             'env_name', 'intervention_name', 'seed',
-            'total_steps', 'outcome.eval_best_burst_mean',
+            'total_steps', 'eval_best_burst_mean',
         ]
         union_df = pl.concat(
             [pl.read_parquet(p, columns=cols) for p in factorial_paths],

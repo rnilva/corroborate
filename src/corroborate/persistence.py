@@ -256,7 +256,7 @@ def stream_concat_parquets(
 
     `diagonal_relaxed` is necessary because per-arm parquets in
     a sweep can disagree on column SET (DDQN arms emit
-    `invariant.at_most[jensen_dormancy_gap<=0].*` that vanilla
+    `at_most[jensen_dormancy_gap<=0].*` that vanilla
     arms don't). The strict `vertical_relaxed` errors on column-
     set mismatches; the merge primitive at the parquet boundary
     has to handle the realistic case where two arms authored

@@ -199,7 +199,7 @@ def masked_window_mean(
 # `mean_window(of, lo, hi)` uses STATIC fractional bounds — same
 # window for every cell. Useful when "the late half of training"
 # is a meaningful slice. But when each cell has a per-cell peak
-# point (e.g. `outcome.eval_best_burst_step`), a static window
+# point (e.g. `eval_best_burst_step`), a static window
 # averages over different parts of the trajectory across cells.
 # The peak-aware primitives below take `peak_idx_key`: a record
 # key whose value is the per-cell peak in array-index units. The

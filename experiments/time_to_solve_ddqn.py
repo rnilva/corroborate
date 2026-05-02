@@ -1,7 +1,7 @@
 """Time-to-first-solve as the link metric on the DDQN corpus.
 
 The headline DDQN finding (mechanism HELD ↛ link HELD) reads the
-*steady-state* outcome: `outcome.eval_best_burst_mean` averaged
+*steady-state* outcome: `eval_best_burst_mean` averaged
 over the late-training distribution. That metric saturates at
 the discounted-return ceiling for envs where both arms eventually
 solve, hiding any *sample-efficiency* effect of DDQN.
@@ -10,7 +10,7 @@ This script tests a different link: among cells that solved their
 env at all, does DDQN reach threshold *faster* than vanilla?
 
 Method:
-  - For each cell, take `outcome.eval_best_burst_step` as a proxy
+  - For each cell, take `eval_best_burst_step` as a proxy
     for "step at first crossing of solve threshold". Best-burst
     step is an upper bound on first-crossing step — for monotonic
     learners they coincide; for unstable cells the best crossing
@@ -55,8 +55,8 @@ from corroborate.verdict import Verdict
 
 
 _RUNS = Path('experiments/data/ddqn/runs_with_mediators.parquet')
-_PROXY_PATH = 'outcome.eval_best_burst_step'
-_OUTCOME_PATH = 'outcome.eval_best_burst_mean'
+_PROXY_PATH = 'eval_best_burst_step'
+_OUTCOME_PATH = 'eval_best_burst_mean'
 
 
 def _load_solved_runs(env_name: str) -> tuple[list[RunRow], list[RunRow]]:
@@ -91,7 +91,7 @@ def _solve_class(ddqn_n: int, vanilla_n: int) -> str:
 def main() -> None:
     print('=' * 100)
     print('Time-to-first-solve link — DDQN vs vanilla on 200k corpus')
-    print('  proxy: outcome.eval_best_burst_step')
+    print('  proxy: eval_best_burst_step')
     print('  pair_by: seed (within env)')
     print('  predicted: ddqn < vanilla (DDQN solves faster)')
     print('=' * 100)

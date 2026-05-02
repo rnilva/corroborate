@@ -124,8 +124,8 @@ def main() -> None:
     print('per (env, arm):')
     summary = df.group_by('env_name', 'intervention_name').agg(
         pl.len().alias('n'),
-        pl.col('outcome.eval_best_burst_mean').mean().alias('mean_best'),
-        pl.col('outcome.eval_final_mean').mean().alias('mean_final'),
+        pl.col('eval_best_burst_mean').mean().alias('mean_best'),
+        pl.col('eval_final_mean').mean().alias('mean_final'),
     ).sort('env_name', 'intervention_name')
     print(summary)
 

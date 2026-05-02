@@ -6,7 +6,7 @@ Reads:
   experiments/data/action_dim_sweep/traces.parquet  (online_std_q_per_step persisted)
 
 Per-cell dormancy_gap reconstruction:
-  observed = mechanism.jensen_gap (already in runs)
+  observed = jensen_gap (already in runs)
   σ_late   = mean over late half of online_std_q_per_step (from traces)
   |A|      = q_network.action_dim or env-derived (looked up via env_catalogue)
   floor    = σ_late · √(2 log |A|)
@@ -14,7 +14,7 @@ Per-cell dormancy_gap reconstruction:
 
 Then:
   - Distribution of dormancy_gap by env / intervention.
-  - Per-env paired g on outcome.eval_best_burst_mean (DDQN vs
+  - Per-env paired g on eval_best_burst_mean (DDQN vs
     vanilla, pair-by seed), stratified by:
       class A: pairs where BOTH cells are premise-active (gap=0)
       class B: pairs where AT LEAST ONE cell is premise-dormant
@@ -86,7 +86,7 @@ def _augment_runs_with_dormancy(
     for row in runs_df.iter_rows(named=True):
         cell_id = row['id']
         env_name = row['env_name']
-        observed = row.get('mechanism.jensen_gap')
+        observed = row.get('jensen_gap')
         if not isinstance(cell_id, str) or not isinstance(env_name, str):
             continue
         sigma = sigma_by_id.get(cell_id, float('nan'))
@@ -115,7 +115,7 @@ def _augment_runs_with_dormancy(
 
 def _per_env_g(
     runs: list[RunRow], env_name: str, *,
-    outcome_path: str = 'outcome.eval_final_mean',
+    outcome_path: str = 'eval_final_mean',
 ) -> tuple[float, float, int]:
     """Paired g per env on outcome, DDQN-vs-vanilla pair-by seed."""
     env_runs = [
@@ -202,8 +202,8 @@ def main() -> None:
         n_actions = _action_dim_for(env)
         sig_v = float(van['mediator.sigma_late'].drop_nulls().mean() or float('nan'))
         sig_d = float(ddq['mediator.sigma_late'].drop_nulls().mean() or float('nan'))
-        obs_v = float(van['mechanism.jensen_gap'].drop_nulls().mean() or float('nan'))
-        obs_d = float(ddq['mechanism.jensen_gap'].drop_nulls().mean() or float('nan'))
+        obs_v = float(van['jensen_gap'].drop_nulls().mean() or float('nan'))
+        obs_d = float(ddq['jensen_gap'].drop_nulls().mean() or float('nan'))
         flr_v = float(van['mediator.jensen_floor_late'].drop_nulls().mean() or float('nan'))
         flr_d = float(ddq['mediator.jensen_floor_late'].drop_nulls().mean() or float('nan'))
         act_v_n = int((van['mediator.jensen_dormancy_gap'] == 0.0).sum() or 0)
@@ -218,7 +218,7 @@ def main() -> None:
 
     # Per-env paired g + dormancy stratification.
     print()
-    print('Per-env paired g on outcome.eval_final_mean (avoids best-burst saturation):')
+    print('Per-env paired g on eval_final_mean (avoids best-burst saturation):')
     print(f'  {"env":<25} {"|A|":>4} {"all_n":>6} {"g_all":>7} '
           f'{"act_n":>6} {"g_act":>7} {"dor_n":>6} {"g_dor":>7}')
     print('-' * 100)

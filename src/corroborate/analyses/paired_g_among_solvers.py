@@ -5,7 +5,7 @@ the env-specific gate threshold.
 The shape FINDINGS revision 6 consumes: among cells that solved
 at all, does the treatment reach threshold faster (smaller
 best-burst-step) than baseline? Sample-efficiency probe at the
-link edge — the conventional `outcome.eval_best_burst_mean`
+link edge — the conventional `eval_best_burst_mean`
 saturates at the discounted-return ceiling for jointly-solved
 envs, hiding any first-crossing-step difference.
 

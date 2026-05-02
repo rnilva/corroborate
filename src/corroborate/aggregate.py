@@ -9,7 +9,7 @@ aggregated is supplied by the caller as `outcome_path: str` on
 every entry point. The framework reads `measurements[outcome_path]`
 off each run, writes `{outcome_path}.effect_size_g` / `se` /
 `derived_q` / etc. on the resulting ComparisonRow. v0's RL
-substrate authors `outcome.late_window_mean`; other substrates or
+substrate authors `late_window_mean`; other substrates or
 other outcomes pass their own keys.
 
 Structure:
@@ -60,11 +60,6 @@ from corroborate.verdict import RefutationClass, Verdict
 
 # ============ Leaf-signature projection ============
 
-# Output-side prefixes — paths whose values are observed at run
-# time, not authored at composition. Filtered out of the
-# configurational fingerprint.
-_OUTPUT_PREFIXES: tuple[str, ...] = ('outcome.', 'bridge.', 'invariant.')
-
 # Always-excluded framework-typed metadata. These are
 # substrate-AGNOSTIC: every RunRow carries `intervention_name`
 # (the Hypothesis name), so it's never a configurational leaf.
@@ -83,13 +78,9 @@ def leaf_signature(
     Hashable; suitable as a group-by key.
 
     Filters out:
-    - Output paths (`outcome.`/`bridge.`/`invariant.`).
-    - Every registered-measurable name (registry-based filter).
-      Becomes load-bearing once Phase 5 drops the substrate-paper-
-      narrative prefixes; today it's a superset of the prefix
-      filter (every registered measurable's column name still
-      matches one of the existing prefixes), so behaviour is
-      unchanged.
+    - Every registered-measurable name (the registry is the
+      single source of truth post-Phase-5; substrate-paper-
+      narrative prefixes are gone).
     - The framework-typed `intervention_name` (always excluded).
     - Substrate-supplied exogenous keys: keys the substrate
       declared via `Annotated[T, Exogenous]` on its `@claim`'s
@@ -110,8 +101,7 @@ def leaf_signature(
     return tuple(sorted(
         (k, str(v))
         for k, v in measurements.items()
-        if not any(k.startswith(p) for p in _OUTPUT_PREFIXES)
-        and k not in excluded
+        if k not in excluded
     ))
 
 

@@ -79,8 +79,8 @@ def _ddqn_reduces_gap_holds_when(paired_g: PairedGResult) -> Verdict:
 def ddqn_reduces_jensen_gap__acrobot(
     paired_g: PairedGResult,
     *,
-    source: str = 'mechanism.jensen_gap',
-    target: str = 'mechanism.jensen_gap',
+    source: str = 'jensen_gap',
+    target: str = 'jensen_gap',
     direction: Direction = Direction.INVERSE,
     tier: Tier = Tier.ASSOCIATIONAL,
     treatment_arm: str = 'ddqn',
@@ -97,8 +97,8 @@ def ddqn_reduces_jensen_gap__acrobot(
 def ddqn_reduces_jensen_gap__catch(
     paired_g: PairedGResult,
     *,
-    source: str = 'mechanism.jensen_gap',
-    target: str = 'mechanism.jensen_gap',
+    source: str = 'jensen_gap',
+    target: str = 'jensen_gap',
     direction: Direction = Direction.INVERSE,
     tier: Tier = Tier.ASSOCIATIONAL,
     treatment_arm: str = 'ddqn',
@@ -115,8 +115,8 @@ def ddqn_reduces_jensen_gap__catch(
 def ddqn_reduces_jensen_gap__discounting_chain(
     paired_g: PairedGResult,
     *,
-    source: str = 'mechanism.jensen_gap',
-    target: str = 'mechanism.jensen_gap',
+    source: str = 'jensen_gap',
+    target: str = 'jensen_gap',
     direction: Direction = Direction.INVERSE,
     tier: Tier = Tier.ASSOCIATIONAL,
     treatment_arm: str = 'ddqn',
@@ -133,8 +133,8 @@ def ddqn_reduces_jensen_gap__discounting_chain(
 def ddqn_reduces_jensen_gap__cartpole(
     paired_g: PairedGResult,
     *,
-    source: str = 'mechanism.jensen_gap',
-    target: str = 'mechanism.jensen_gap',
+    source: str = 'jensen_gap',
+    target: str = 'jensen_gap',
     direction: Direction = Direction.INVERSE,
     tier: Tier = Tier.ASSOCIATIONAL,
     treatment_arm: str = 'ddqn',
@@ -167,8 +167,8 @@ _LOG_ACTION_DIM_PER_ENV: dict[str, dict[str, float]] = {
 def log_action_dim_drives_jensen_gap_reduction(
     meta_regression_paired_g: MetaRegressionResult,
     *,
-    source: str = 'mechanism.jensen_gap',
-    target: str = 'mechanism.jensen_gap',
+    source: str = 'jensen_gap',
+    target: str = 'jensen_gap',
     direction: Direction = Direction.INVERSE,
     tier: Tier = Tier.ASSOCIATIONAL,
     treatment_arm: str = 'ddqn',
@@ -217,7 +217,7 @@ def log_action_dim_drives_jensen_gap_reduction(
 
 
 _DORMANCY_VERDICT_COLUMN: str = (
-    'invariant.at_most[jensen_dormancy_gap<=0].verdict'
+    'at_most[jensen_dormancy_gap<=0].verdict'
 )
 
 
@@ -250,8 +250,8 @@ def _premise_holds_when(
 def jensen_premise_active__acrobot(
     verdict_distribution_per_env: VerdictDistributionResult,
     *,
-    source: str = 'invariant.at_most[jensen_dormancy_gap<=0]',
-    target: str = 'invariant.at_most[jensen_dormancy_gap<=0]',
+    source: str = 'at_most[jensen_dormancy_gap<=0]',
+    target: str = 'at_most[jensen_dormancy_gap<=0]',
     direction: Direction = Direction.DIRECT,
     tier: Tier = Tier.ASSOCIATIONAL,
     arm_filter: str = 'ddqn',
@@ -268,8 +268,8 @@ def jensen_premise_active__acrobot(
 def jensen_premise_active__cartpole(
     verdict_distribution_per_env: VerdictDistributionResult,
     *,
-    source: str = 'invariant.at_most[jensen_dormancy_gap<=0]',
-    target: str = 'invariant.at_most[jensen_dormancy_gap<=0]',
+    source: str = 'at_most[jensen_dormancy_gap<=0]',
+    target: str = 'at_most[jensen_dormancy_gap<=0]',
     direction: Direction = Direction.DIRECT,
     tier: Tier = Tier.ASSOCIATIONAL,
     arm_filter: str = 'ddqn',
@@ -286,8 +286,8 @@ def jensen_premise_active__cartpole(
 def jensen_premise_dormant__catch(
     verdict_distribution_per_env: VerdictDistributionResult,
     *,
-    source: str = 'invariant.at_most[jensen_dormancy_gap<=0]',
-    target: str = 'invariant.at_most[jensen_dormancy_gap<=0]',
+    source: str = 'at_most[jensen_dormancy_gap<=0]',
+    target: str = 'at_most[jensen_dormancy_gap<=0]',
     direction: Direction = Direction.DIRECT,
     tier: Tier = Tier.ASSOCIATIONAL,
     arm_filter: str = 'ddqn',
@@ -310,8 +310,8 @@ def jensen_premise_dormant__catch(
 def jensen_premise_active__discounting_chain(
     verdict_distribution_per_env: VerdictDistributionResult,
     *,
-    source: str = 'invariant.at_most[jensen_dormancy_gap<=0]',
-    target: str = 'invariant.at_most[jensen_dormancy_gap<=0]',
+    source: str = 'at_most[jensen_dormancy_gap<=0]',
+    target: str = 'at_most[jensen_dormancy_gap<=0]',
     direction: Direction = Direction.DIRECT,
     tier: Tier = Tier.ASSOCIATIONAL,
     arm_filter: str = 'ddqn',
@@ -476,8 +476,8 @@ def _pooled_null_holds_when(
 def ddqn_reduces_jensen_gap__converged_subset(
     paired_g_pooled: PooledPairedGResult,
     *,
-    source: str = 'mechanism.jensen_gap',
-    target: str = 'mechanism.jensen_gap',
+    source: str = 'jensen_gap',
+    target: str = 'jensen_gap',
     direction: Direction = Direction.INVERSE,
     tier: Tier = Tier.ASSOCIATIONAL,
     treatment_arm: str = 'ddqn',
@@ -500,8 +500,8 @@ def ddqn_reduces_jensen_gap__converged_subset(
 def ddqn_link_to_outcome_null__converged_subset(
     paired_g_pooled: PooledPairedGResult,
     *,
-    source: str = 'outcome.eval_best_burst_mean',
-    target: str = 'outcome.eval_best_burst_mean',
+    source: str = 'eval_best_burst_mean',
+    target: str = 'eval_best_burst_mean',
     direction: Direction = Direction.DIRECT,
     tier: Tier = Tier.ASSOCIATIONAL,
     treatment_arm: str = 'ddqn',
@@ -510,13 +510,13 @@ def ddqn_link_to_outcome_null__converged_subset(
     env_filter: tuple[str, ...] = _CONVERGED_ENVS_DDQN_200K,
     total_steps_filter: int = 200000,
 ) -> Verdict:
-    """rev 1: pooled paired g(outcome.eval_best_burst_mean) on the
+    """rev 1: pooled paired g(eval_best_burst_mean) on the
     converged subset is essentially zero (~-0.03). The literature-
     predicted outcome benefit fails — link broken on this corpus.
     Verdict NO_EFFECT encodes that null-link reading directly.
 
     `source` is the measured column (the analysis's input); the
-    conceptual edge is `mechanism.jensen_gap → outcome.eval_best_
+    conceptual edge is `jensen_gap → outcome.eval_best_
     burst_mean`, but the paired-g consumes only the target column
     + arm. The 'link broken' reading lives in the bridge's
     NO_EFFECT verdict combined with the mechanism HELD on
@@ -532,7 +532,7 @@ def ddqn_link_to_outcome_null__converged_subset(
 
 # Note: paired_g_pooled is the analysis name. Both bridges
 # consume the SAME analysis name but with different `source`
-# values (mechanism.jensen_gap vs outcome.eval_best_burst_mean) —
+# values (jensen_gap vs eval_best_burst_mean) —
 # the framework's resolver instantiates separately per bridge.
 
 
@@ -561,8 +561,8 @@ def ddqn_link_to_outcome_null__converged_subset(
 def nstep_3step_reduces_bias_on_top_of_ddqn(
     paired_g_pooled: PooledPairedGResult,
     *,
-    source: str = 'mechanism.jensen_gap',
-    target: str = 'mechanism.jensen_gap',
+    source: str = 'jensen_gap',
+    target: str = 'jensen_gap',
     direction: Direction = Direction.INVERSE,
     tier: Tier = Tier.INTERVENTIONAL,
     treatment_arm: str = 'ddqn_3step',
@@ -587,8 +587,8 @@ def nstep_3step_reduces_bias_on_top_of_ddqn(
 def nstep_3step_does_not_help_outcome__pool(
     paired_g_pooled: PooledPairedGResult,
     *,
-    source: str = 'outcome.eval_final_mean',
-    target: str = 'outcome.eval_final_mean',
+    source: str = 'eval_final_mean',
+    target: str = 'eval_final_mean',
     direction: Direction = Direction.DIRECT,
     tier: Tier = Tier.INTERVENTIONAL,
     treatment_arm: str = 'ddqn_3step',
@@ -631,8 +631,8 @@ def _per_env_harm_holds_when(paired_g: PairedGResult) -> Verdict:
 def nstep_3step_hurts_outcome__catch(
     paired_g: PairedGResult,
     *,
-    source: str = 'outcome.eval_final_mean',
-    target: str = 'outcome.eval_final_mean',
+    source: str = 'eval_final_mean',
+    target: str = 'eval_final_mean',
     direction: Direction = Direction.INVERSE,
     tier: Tier = Tier.INTERVENTIONAL,
     treatment_arm: str = 'ddqn_3step',
@@ -653,8 +653,8 @@ def nstep_3step_hurts_outcome__catch(
 def nstep_3step_helps_outcome__discounting_chain(
     paired_g: PairedGResult,
     *,
-    source: str = 'outcome.eval_final_mean',
-    target: str = 'outcome.eval_final_mean',
+    source: str = 'eval_final_mean',
+    target: str = 'eval_final_mean',
     direction: Direction = Direction.DIRECT,
     tier: Tier = Tier.INTERVENTIONAL,
     treatment_arm: str = 'ddqn_3step',
@@ -689,7 +689,7 @@ def nstep_3step_helps_outcome__discounting_chain(
 # marginal benefit shrinks where n_step covers the same axis) vs
 # variance-amplification (n-step alone backfires; DDQN orthogonal).
 #
-# Reference values on `outcome.eval_best_burst_mean` (the
+# Reference values on `eval_best_burst_mean` (the
 # Hasselt-convention default), 4 corpora unioned:
 #
 #   FourRooms-misc:  (B−A)=+0.74 (D−C)=+0.16 (C−A)=+0.73
@@ -707,8 +707,8 @@ def nstep_3step_helps_outcome__discounting_chain(
 def factorial_ddqn_attenuation__fourrooms(
     factorial_2x2_interaction: Factorial2x2Result,
     *,
-    source: str = 'outcome.eval_best_burst_mean',
-    target: str = 'outcome.eval_best_burst_mean',
+    source: str = 'eval_best_burst_mean',
+    target: str = 'eval_best_burst_mean',
     direction: Direction = Direction.INVERSE,
     tier: Tier = Tier.INTERVENTIONAL,
     arm_a: str = 'vanilla_1step',
@@ -756,8 +756,8 @@ def factorial_ddqn_attenuation__fourrooms(
 def factorial_variance_amplification__catch(
     factorial_2x2_interaction: Factorial2x2Result,
     *,
-    source: str = 'outcome.eval_best_burst_mean',
-    target: str = 'outcome.eval_best_burst_mean',
+    source: str = 'eval_best_burst_mean',
+    target: str = 'eval_best_burst_mean',
     direction: Direction = Direction.INVERSE,
     tier: Tier = Tier.INTERVENTIONAL,
     arm_a: str = 'vanilla_1step',
@@ -804,10 +804,10 @@ def factorial_variance_amplification__catch(
 #
 # Sample-efficiency probe at the link edge: among (env, seed)
 # pairs where BOTH arms reached threshold, does DDQN cross the
-# bar faster (smaller `outcome.eval_best_burst_step`)?
+# bar faster (smaller `eval_best_burst_step`)?
 #
 # Reference verdicts on `experiments/data/ddqn/runs.parquet`,
-# total_steps=200000, gate=`outcome.eval_best_burst_mean ≥
+# total_steps=200000, gate=`eval_best_burst_mean ≥
 # SOLVE_THRESHOLDS[env]`:
 #
 #   Pool (high-solve, 5 non-degenerate envs): pooled g=−0.005,
@@ -838,14 +838,14 @@ _TIME_TO_SOLVE_HIGH_SOLVE_ENVS: tuple[str, ...] = (
 def time_to_solve_link_null__pooled(
     paired_g_among_solvers: PooledPairedGResult,
     *,
-    source: str = 'outcome.eval_best_burst_step',
-    target: str = 'outcome.eval_best_burst_step',
+    source: str = 'eval_best_burst_step',
+    target: str = 'eval_best_burst_step',
     direction: Direction = Direction.INVERSE,
     tier: Tier = Tier.ASSOCIATIONAL,
     treatment_arm: str = 'ddqn',
     baseline_arm: str = 'vanilla_dqn',
     pair_by: tuple[str, ...] = ('seed',),
-    gate_column: str = 'outcome.eval_best_burst_mean',
+    gate_column: str = 'eval_best_burst_mean',
     gate_thresholds: dict[str, float] = _SOLVE_THRESHOLDS_FLAT,
     env_filter: tuple[str, ...] = _TIME_TO_SOLVE_HIGH_SOLVE_ENVS,
     total_steps_filter: int = 200000,
@@ -866,14 +866,14 @@ def time_to_solve_link_null__pooled(
 def ddqn_solves_faster__spaceinvaders(
     paired_g_among_solvers: PooledPairedGResult,
     *,
-    source: str = 'outcome.eval_best_burst_step',
-    target: str = 'outcome.eval_best_burst_step',
+    source: str = 'eval_best_burst_step',
+    target: str = 'eval_best_burst_step',
     direction: Direction = Direction.INVERSE,
     tier: Tier = Tier.ASSOCIATIONAL,
     treatment_arm: str = 'ddqn',
     baseline_arm: str = 'vanilla_dqn',
     pair_by: tuple[str, ...] = ('seed',),
-    gate_column: str = 'outcome.eval_best_burst_mean',
+    gate_column: str = 'eval_best_burst_mean',
     gate_thresholds: dict[str, float] = _SOLVE_THRESHOLDS_FLAT,
     env_filter: tuple[str, ...] = ('SpaceInvaders-MinAtar',),
     total_steps_filter: int = 200000,
@@ -965,7 +965,7 @@ EXPECTILE_PER_BURST_BRIDGES = (
 
 _DDQN_AUDIT_PANEL: tuple[dict[str, object], ...] = (
     {
-        'name': 'mechanism.jensen_gap',
+        'name': 'jensen_gap',
         'reads': ('predicted_q_at_start', 'mc_return'),
     },
 )
@@ -975,12 +975,12 @@ _DDQN_AUDIT_PANEL: tuple[dict[str, object], ...] = (
 def jensen_gap_outcome_borderline(
     tautology_audit: AuditResult,
     *,
-    source: str = 'mechanism.jensen_gap',
-    target: str = 'outcome.eval_best_burst_mean',
+    source: str = 'jensen_gap',
+    target: str = 'eval_best_burst_mean',
     direction: Direction = Direction.INVERSE,
     tier: Tier = Tier.ASSOCIATIONAL,
     measurables: tuple[dict[str, object], ...] = _DDQN_AUDIT_PANEL,
-    outcome_path: str = 'outcome.eval_best_burst_mean',
+    outcome_path: str = 'eval_best_burst_mean',
     outcome_reads: tuple[str, ...] = ('mc_return',),
     hp_axes: tuple[str, ...] = (
         'replay.capacity', 'replay.batch_size',
@@ -1006,7 +1006,7 @@ def jensen_gap_outcome_borderline(
     del source, target, direction, tier
     del measurables, outcome_path, outcome_reads
     del hp_axes, hp_stratum_axis, arm_filter
-    report = tautology_audit.by_name('mechanism.jensen_gap')
+    report = tautology_audit.by_name('jensen_gap')
     if report is None:
         return Verdict.POWER_INSUFFICIENT
     rho_significant = (
@@ -1033,7 +1033,7 @@ def jensen_gap_outcome_borderline(
 # significant within-stratum signal.
 #
 # Reference verdicts on `experiments/data/cartpole_hp/
-# runs_with_mediators.parquet`, outcome=`outcome.eval_final_mean`,
+# runs_with_mediators.parquet`, outcome=`eval_final_mean`,
 # stratified by `replay.capacity`:
 #
 #   learning_curve_auc / plateau_slope_late /
@@ -1099,11 +1099,11 @@ def state_coverage_kl_clean_mediator__cartpole_hp(
     tautology_audit: AuditResult,
     *,
     source: str = 'mediator.state_coverage_kl_uniform_late',
-    target: str = 'outcome.eval_final_mean',
+    target: str = 'eval_final_mean',
     direction: Direction = Direction.DIRECT,
     tier: Tier = Tier.ASSOCIATIONAL,
     measurables: tuple[dict[str, object], ...] = _CARTPOLE_HP_AUDIT_PANEL,
-    outcome_path: str = 'outcome.eval_final_mean',
+    outcome_path: str = 'eval_final_mean',
     outcome_reads: tuple[str, ...] = ('mc_return',),
     hp_axes: tuple[str, ...] = _CARTPOLE_HP_AUDIT_HP_AXES,
     hp_stratum_axis: str = 'replay.capacity',
@@ -1135,11 +1135,11 @@ def learning_curve_auc_outcome_tautological__cartpole_hp(
     tautology_audit: AuditResult,
     *,
     source: str = 'mediator.learning_curve_auc',
-    target: str = 'outcome.eval_final_mean',
+    target: str = 'eval_final_mean',
     direction: Direction = Direction.DIRECT,
     tier: Tier = Tier.ASSOCIATIONAL,
     measurables: tuple[dict[str, object], ...] = _CARTPOLE_HP_AUDIT_PANEL,
-    outcome_path: str = 'outcome.eval_final_mean',
+    outcome_path: str = 'eval_final_mean',
     outcome_reads: tuple[str, ...] = ('mc_return',),
     hp_axes: tuple[str, ...] = _CARTPOLE_HP_AUDIT_HP_AXES,
     hp_stratum_axis: str = 'replay.capacity',
@@ -1167,11 +1167,11 @@ def greedy_match_late_hp_shadow__cartpole_hp(
     tautology_audit: AuditResult,
     *,
     source: str = 'mediator.greedy_match_late',
-    target: str = 'outcome.eval_final_mean',
+    target: str = 'eval_final_mean',
     direction: Direction = Direction.DIRECT,
     tier: Tier = Tier.ASSOCIATIONAL,
     measurables: tuple[dict[str, object], ...] = _CARTPOLE_HP_AUDIT_PANEL,
-    outcome_path: str = 'outcome.eval_final_mean',
+    outcome_path: str = 'eval_final_mean',
     outcome_reads: tuple[str, ...] = ('mc_return',),
     hp_axes: tuple[str, ...] = _CARTPOLE_HP_AUDIT_HP_AXES,
     hp_stratum_axis: str = 'replay.capacity',
@@ -1224,12 +1224,12 @@ _SCV_DAG: list[tuple[str, str]] = [
     ('replay.batch_size', 'mediator.state_coverage_kl_uniform_late'),
     ('optimizer.inner.lr', 'mediator.state_coverage_kl_uniform_late'),
     ('sync_period', 'mediator.state_coverage_kl_uniform_late'),
-    ('replay.capacity', 'outcome.eval_final_mean'),
-    ('replay.batch_size', 'outcome.eval_final_mean'),
-    ('optimizer.inner.lr', 'outcome.eval_final_mean'),
-    ('sync_period', 'outcome.eval_final_mean'),
+    ('replay.capacity', 'eval_final_mean'),
+    ('replay.batch_size', 'eval_final_mean'),
+    ('optimizer.inner.lr', 'eval_final_mean'),
+    ('sync_period', 'eval_final_mean'),
     ('mediator.state_coverage_kl_uniform_late',
-     'outcome.eval_final_mean'),
+     'eval_final_mean'),
 ]
 
 
@@ -1269,8 +1269,8 @@ def _expectile_reduces_gap_holds_when(paired_g: PairedGResult) -> Verdict:
 def expectile_reduces_jensen_gap_more_than_ddqn__fourrooms(
     paired_g: PairedGResult,
     *,
-    source: str = 'mechanism.jensen_gap',
-    target: str = 'mechanism.jensen_gap',
+    source: str = 'jensen_gap',
+    target: str = 'jensen_gap',
     direction: Direction = Direction.INVERSE,
     tier: Tier = Tier.ASSOCIATIONAL,
     treatment_arm: str = 'expectile_dqn',
@@ -1290,8 +1290,8 @@ def expectile_reduces_jensen_gap_more_than_ddqn__fourrooms(
 def ddqn_outperforms_expectile_on_outcome__fourrooms(
     paired_g: PairedGResult,
     *,
-    source: str = 'outcome.eval_best_burst_mean',
-    target: str = 'outcome.eval_best_burst_mean',
+    source: str = 'eval_best_burst_mean',
+    target: str = 'eval_best_burst_mean',
     direction: Direction = Direction.INVERSE,
     tier: Tier = Tier.ASSOCIATIONAL,
     treatment_arm: str = 'expectile_dqn',
@@ -1317,8 +1317,8 @@ def ddqn_outperforms_expectile_on_outcome__fourrooms(
 def expectile_reproduces_mechanism_link_disconnect__fourrooms(
     paired_g: PairedGResult,
     *,
-    source: str = 'outcome.eval_best_burst_mean',
-    target: str = 'outcome.eval_best_burst_mean',
+    source: str = 'eval_best_burst_mean',
+    target: str = 'eval_best_burst_mean',
     direction: Direction = Direction.DIRECT,
     tier: Tier = Tier.ASSOCIATIONAL,
     treatment_arm: str = 'expectile_dqn',
@@ -1350,11 +1350,11 @@ def state_coverage_kl_causes_outcome(
     random_common_cause_refutation: RefutationResult,
     *,
     source: str = 'mediator.state_coverage_kl_uniform_late',
-    target: str = 'outcome.eval_final_mean',
+    target: str = 'eval_final_mean',
     direction: Direction = Direction.DIRECT,
     tier: Tier = Tier.INTERVENTIONAL,
     treatment: str = 'mediator.state_coverage_kl_uniform_late',
-    outcome: str = 'outcome.eval_final_mean',
+    outcome: str = 'eval_final_mean',
     dag: list[tuple[str, str]] = _SCV_DAG,
 ) -> Verdict:
     """FINDINGS revision 4: state_coverage_kl is the first
@@ -1459,7 +1459,7 @@ def log_action_dim_drives_g_mech(
     meta_regression_per_burst: MetaRegressionResult,
     *,
     source: str = 'predicted_q_at_start',
-    target: str = 'mechanism.jensen_gap',
+    target: str = 'jensen_gap',
     direction: Direction = Direction.INVERSE,
     tier: Tier = Tier.ASSOCIATIONAL,
     treatment_arm: str = 'ddqn',
@@ -1491,7 +1491,7 @@ def log_obs_dim_drives_g_link(
     meta_regression_per_burst: MetaRegressionResult,
     *,
     source: str = 'mc_return',
-    target: str = 'outcome.eval_best_burst_mean',
+    target: str = 'eval_best_burst_mean',
     direction: Direction = Direction.DIRECT,
     tier: Tier = Tier.ASSOCIATIONAL,
     treatment_arm: str = 'ddqn',

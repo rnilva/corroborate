@@ -39,7 +39,7 @@ outcome`, plus moderators + identification primitives).
 from __future__ import annotations
 
 from experiments.findings.dqn_bridges import (
-    # Mechanism activation: arm → mechanism.jensen_gap
+    # Mechanism activation: arm → jensen_gap
     ddqn_reduces_jensen_gap__acrobot,
     ddqn_reduces_jensen_gap__catch,
     ddqn_reduces_jensen_gap__converged_subset,
@@ -52,7 +52,7 @@ from experiments.findings.dqn_bridges import (
     jensen_premise_active__discounting_chain,
     jensen_premise_dormant__catch,
     # Link broken (NO_EFFECT corroborates the null-link claim):
-    # mechanism.jensen_gap → outcome
+    # jensen_gap → outcome
     ddqn_link_to_outcome_null__converged_subset,
     ddqn_outcome_zero_across_bursts__catch,
     nstep_3step_does_not_help_outcome__pool,
@@ -78,7 +78,7 @@ from experiments.findings.dqn_bridges import (
 )
 
 
-# === Mechanism activation: arm → mechanism.jensen_gap ===
+# === Mechanism activation: arm → jensen_gap ===
 #
 # DDQN reduces the empirical Jensen-overestimation gap. Per-env
 # (action_dim_sweep) on |A|≥3 envs; pooled (200k corpus) on the

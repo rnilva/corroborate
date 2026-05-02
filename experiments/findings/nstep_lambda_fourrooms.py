@@ -63,12 +63,12 @@ def main() -> None:
     for n in n_values:
         sub = [c for c in cells if c.get('n_step') == n]
         v_out = [
-            c['outcome.eval_best_burst_mean']
+            c['eval_best_burst_mean']
             for c in sub
             if c.get('intervention_name') == f'vanilla_n{n}'
         ]
         d_out = [
-            c['outcome.eval_best_burst_mean']
+            c['eval_best_burst_mean']
             for c in sub
             if c.get('intervention_name') == f'ddqn_n{n}'
         ]
@@ -76,7 +76,7 @@ def main() -> None:
         d_mean = sum(d_out) / len(d_out) if d_out else float('nan')
         r = paired_g.fn(
             sub, treatment_arm=f'ddqn_n{n}', baseline_arm=f'vanilla_n{n}',
-            pair_by=('seed',), source='outcome.eval_best_burst_mean',
+            pair_by=('seed',), source='eval_best_burst_mean',
         )
         print(
             f'{n:>3}  {v_mean:>+16.4f}  {d_mean:>+13.4f}  '

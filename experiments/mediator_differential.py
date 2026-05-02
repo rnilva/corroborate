@@ -55,9 +55,9 @@ _DEFAULT_RUNS = Path(
 # Variable set for PC discovery — mirrors paper_full_range §4.
 _PC_VARIABLES: tuple[str, ...] = (
     'arm_ddqn',
-    'mechanism.jensen_gap',
-    'outcome.eval_best_burst_mean',
-    'outcome.eval_final_mean',
+    'jensen_gap',
+    'eval_best_burst_mean',
+    'eval_final_mean',
     'mediator.q_gap_late',
     'mediator.q_gap_growth',
     'mediator.q_max_growth',
@@ -79,7 +79,7 @@ _PC_VARIABLES: tuple[str, ...] = (
 # unsolved BASELINES, not which env-side variables.
 _MEDIATOR_PATHS: tuple[str, ...] = tuple(
     p for p in _PC_VARIABLES if p.startswith('mediator.')
-) + ('mechanism.jensen_gap',)
+) + ('jensen_gap',)
 
 
 def main() -> None:

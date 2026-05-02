@@ -180,7 +180,7 @@ def main() -> None:
     print(f'  {runs_df.height} rows × {len(runs_df.columns)} cols')
 
     # Build per-id lookup of the leaf HPs needed by epsilon_late /
-    # fill_ratio_late, plus `outcome.eval_best_burst_step` used by
+    # fill_ratio_late, plus `eval_best_burst_step` used by
     # peak-truncated reductions. Cheap — runs.parquet has only
     # scalar columns.
     leaf_lookup: dict[str, dict[str, object]] = {}
@@ -194,7 +194,7 @@ def main() -> None:
                     'action_select.schedule.eps_final',
                     'action_select.schedule.anneal_steps',
                     'total_steps',
-                    'outcome.eval_best_burst_step',
+                    'eval_best_burst_step',
                 )
             }
 
@@ -243,7 +243,7 @@ def main() -> None:
         )
         anneal_steps = int(anneal_v) if anneal_v is not None else 0  # type: ignore[arg-type]
         total_steps = int(total_v) if total_v is not None else 0  # type: ignore[arg-type]
-        peak_step_v = leafs.get('outcome.eval_best_burst_step')
+        peak_step_v = leafs.get('eval_best_burst_step')
         peak_step = (
             float(peak_step_v) if peak_step_v is not None else float('nan')  # type: ignore[arg-type]
         )

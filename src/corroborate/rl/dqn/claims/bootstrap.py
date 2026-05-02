@@ -98,7 +98,7 @@ def double_greedify(
 # (`rl/dqn/measurables.py:at_most_jensen_dormancy_gap_zero_verdict`)
 # after Phase 4 of the Bridge-collapse refactor. Substrate factories
 # include it via `dqn_default_measurables()`; cell_runner persists
-# the per-cell verdict at `invariant.at_most[jensen_dormancy_gap<=0].
+# the per-cell verdict at `at_most[jensen_dormancy_gap<=0].
 # verdict`. The framework no longer carries a per-record Bridge
 # channel, so attach_invariant is gone.
 

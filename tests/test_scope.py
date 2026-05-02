@@ -75,7 +75,7 @@ def _run(
             'env_name': env, 'seed': seed,
             'mechanism.q': mech,
             'outcome.r': outcome_v,
-            'mechanism.jensen_gap': gap,
+            'jensen_gap': gap,
             'intervention_name': (
                 'treat' if arm_key != 'baseline' else 'baseline'
             ),
@@ -100,7 +100,7 @@ def _build_corpus(
     envs: tuple[str, ...], seeds_per_env: int = 8,
 ) -> tuple[list[RunRow], list[RunRow]]:
     """Synthetic corpus with env-varying mechanism + outcome and
-    per-(env, seed) noise. Each cell carries a `mechanism.jensen_gap`
+    per-(env, seed) noise. Each cell carries a `jensen_gap`
     value: baseline cells have a per-env mean that varies with i,
     treatment cells have a smaller (DDQN reduces the gap)."""
     import random
@@ -190,7 +190,7 @@ def test_is_in_scope_committed_mode_compares_to_threshold() -> None:
 def test_build_scope_target_outcome() -> None:
     """`build_scope` with `target='outcome.r'`: cleavage carries
     the per-env outcome g regressed on the per-env baseline gap
-    aggregated from `mechanism.jensen_gap`."""
+    aggregated from `jensen_gap`."""
     envs = ('A', 'B', 'C', 'D', 'E', 'F')
     treatment, baseline = _build_corpus(envs)
     h = _three_edge_hypothesis()
@@ -201,7 +201,7 @@ def test_build_scope_target_outcome() -> None:
 
     scope = build_scope(
         v, baseline,
-        gap_path='mechanism.jensen_gap',
+        gap_path='jensen_gap',
         gap_name='jensen_overestimation_gap',
         target='outcome.r',
     )
@@ -230,7 +230,7 @@ def test_build_scope_log_scale_uses_log_prefix_name() -> None:
     )
     scope = build_scope(
         v, baseline,
-        gap_path='mechanism.jensen_gap',
+        gap_path='jensen_gap',
         gap_name='jensen_overestimation_gap',
         target='outcome.r',
         log_scale=True,
@@ -252,7 +252,7 @@ def test_build_scope_threshold_metadata_round_trips() -> None:
     )
     scope = build_scope(
         v, baseline,
-        gap_path='mechanism.jensen_gap',
+        gap_path='jensen_gap',
         gap_name='jensen_overestimation_gap',
         target='outcome.r',
         threshold=2.0,
@@ -273,7 +273,7 @@ def test_build_scope_drops_strata_with_nan_gap() -> None:
     for r in baseline:
         if r.measurements.get('env_name') == 'C':
             patched = dict(r.measurements)
-            patched['mechanism.jensen_gap'] = float('nan')
+            patched['jensen_gap'] = float('nan')
             r = RunRow(
                 id=r.id, parent_id=r.parent_id, cycle_id=r.cycle_id,
                 timestamp=r.timestamp, verdict=r.verdict,
@@ -288,7 +288,7 @@ def test_build_scope_drops_strata_with_nan_gap() -> None:
     )
     scope = build_scope(
         v, patched_baseline,
-        gap_path='mechanism.jensen_gap',
+        gap_path='jensen_gap',
         gap_name='jensen_overestimation_gap',
         target='outcome.r',
     )
@@ -308,7 +308,7 @@ def test_build_scope_chain_is_verdict_graph() -> None:
     )
     scope = build_scope(
         v, baseline,
-        gap_path='mechanism.jensen_gap',
+        gap_path='jensen_gap',
         gap_name='jensen_overestimation_gap',
         target='outcome.r',
     )
@@ -335,7 +335,7 @@ def test_build_scope_missing_target_raises() -> None:
     with pytest.raises(ValueError, match="target='outcome.r'"):
         _ = build_scope(
             v, baseline,
-            gap_path='mechanism.jensen_gap',
+            gap_path='jensen_gap',
             gap_name='jensen_overestimation_gap',
             target='outcome.r',
         )
@@ -352,13 +352,13 @@ def test_build_scope_target_mechanism_uses_mechanism_row() -> None:
     )
     s_out = build_scope(
         v, baseline,
-        gap_path='mechanism.jensen_gap',
+        gap_path='jensen_gap',
         gap_name='jensen_overestimation_gap',
         target='outcome.r',
     )
     s_mech = build_scope(
         v, baseline,
-        gap_path='mechanism.jensen_gap',
+        gap_path='jensen_gap',
         gap_name='jensen_overestimation_gap',
         target='mechanism.q',
     )

@@ -2,7 +2,7 @@
 
 The 10-env analysis surfaces a measurement-degeneracy: 4 of the
 "solved" envs (CartPole, Catch, DiscountingChain — and to a
-lesser extent BernoulliBandit) saturate `outcome.eval_best_burst_mean`
+lesser extent BernoulliBandit) saturate `eval_best_burst_mean`
 at the discounted ceiling. Both arms read the *same* number, so
 the paired g is structurally null regardless of policy quality.
 
@@ -106,13 +106,13 @@ def _classify_cell(
 
 def _augment_with_class(df: pl.DataFrame) -> pl.DataFrame:
     corpus_max = {
-        env: float(df.filter(pl.col('env_name') == env)['outcome.eval_best_burst_mean'].max() or float('-inf'))
+        env: float(df.filter(pl.col('env_name') == env)['eval_best_burst_mean'].max() or float('-inf'))
         for env in df['env_name'].unique()
     }
     classes = []
     for row in df.iter_rows(named=True):
         env = row['env_name']
-        best = row.get('outcome.eval_best_burst_mean')
+        best = row.get('eval_best_burst_mean')
         if not isinstance(best, (int, float)) or math.isnan(float(best)):
             classes.append('missing')
             continue
@@ -121,7 +121,7 @@ def _augment_with_class(df: pl.DataFrame) -> pl.DataFrame:
 
 
 def _per_env_link(
-    runs: list[RunRow], outcome_path: str = 'outcome.eval_final_mean',
+    runs: list[RunRow], outcome_path: str = 'eval_final_mean',
 ) -> HypothesisComparisonRow:
     ddqn_h = _make_hypothesis('ddqn')
     vanilla_h = _make_hypothesis('vanilla_dqn')
@@ -196,7 +196,7 @@ def main() -> None:
 
     print()
     print('Link analysis on each cell-class subset:')
-    print('  (paired g on outcome.eval_final_mean per env)')
+    print('  (paired g on eval_final_mean per env)')
     for cls in ('solved', 'no_threshold', 'unsolved'):
         sub = aug.filter(pl.col('_class') == cls)
         if sub.height == 0:
@@ -214,7 +214,7 @@ def main() -> None:
             print(f'\n  {cls}: no env has both arms; skipped')
             continue
         try:
-            comp = _per_env_link(runs_filtered, outcome_path='outcome.eval_final_mean')
+            comp = _per_env_link(runs_filtered, outcome_path='eval_final_mean')
             print()
             _print_per_group(f'class={cls!r}, n_envs={len(envs_with_both)}', comp)
         except ValueError as e:
@@ -225,7 +225,7 @@ def main() -> None:
     # input). Useful for comparing "did DDQN reach a higher peak?"
     print()
     print('Best-burst link analysis on each cell-class subset:')
-    print('  (paired g on outcome.eval_best_burst_mean per env)')
+    print('  (paired g on eval_best_burst_mean per env)')
     for cls in ('solved', 'no_threshold', 'unsolved'):
         sub = aug.filter(pl.col('_class') == cls)
         if sub.height == 0:
@@ -240,7 +240,7 @@ def main() -> None:
         if not runs_filtered:
             continue
         try:
-            comp = _per_env_link(runs_filtered, outcome_path='outcome.eval_best_burst_mean')
+            comp = _per_env_link(runs_filtered, outcome_path='eval_best_burst_mean')
             print()
             _print_per_group(f'class={cls!r}, n_envs={len(envs_with_both)}', comp)
         except ValueError as e:

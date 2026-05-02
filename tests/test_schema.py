@@ -29,7 +29,7 @@ def test_run_row_as_dict_flattens_measurements_to_top_level() -> None:
             'optimizer.inner.lr': 0.001,
             'env_name': 'CartPole-v1',
             'seed': 42,
-            'outcome.late_window_mean': 120.5,
+            'late_window_mean': 120.5,
             'bridge.some_bridge.verdict': 'held',
         },
     )
@@ -44,7 +44,7 @@ def test_run_row_as_dict_flattens_measurements_to_top_level() -> None:
     assert d['optimizer.inner.lr'] == 0.001
     assert d['env_name'] == 'CartPole-v1'
     assert d['seed'] == 42
-    assert d['outcome.late_window_mean'] == 120.5
+    assert d['late_window_mean'] == 120.5
     assert d['bridge.some_bridge.verdict'] == 'held'
 
 
@@ -62,7 +62,7 @@ def test_run_row_round_trip() -> None:
             'seed': 42,
             'total_steps': 30_000,
             'intervention_name': 'dqn_with_double_greedify',
-            'outcome.late_window_mean': 120.5,
+            'late_window_mean': 120.5,
             'bridge.some_bridge.verdict': 'held',
         },
     )
@@ -116,14 +116,14 @@ def test_comparison_row_round_trip_full() -> None:
             'intervention_name': 'ddqn',
             'n_treatment': 15,
             'n_baseline': 15,
-            'outcome.late_window_mean.arm_a_mean': 42.5,
-            'outcome.late_window_mean.arm_a_sd': 3.1,
-            'outcome.late_window_mean.arm_b_mean': 39.0,
-            'outcome.late_window_mean.arm_b_sd': 4.2,
-            'outcome.late_window_mean.effect_size_g': 0.91,
-            'outcome.late_window_mean.se': 0.32,
-            'outcome.late_window_mean.derived_q': 0.93,
-            'outcome.late_window_mean.delta_i_population': 0.66,
+            'late_window_mean.arm_a_mean': 42.5,
+            'late_window_mean.arm_a_sd': 3.1,
+            'late_window_mean.arm_b_mean': 39.0,
+            'late_window_mean.arm_b_sd': 4.2,
+            'late_window_mean.effect_size_g': 0.91,
+            'late_window_mean.se': 0.32,
+            'late_window_mean.derived_q': 0.93,
+            'late_window_mean.delta_i_population': 0.66,
         },
     )
     cmp2 = ComparisonRow.from_row_dict(cmp.as_dict())
@@ -149,8 +149,8 @@ def test_comparison_row_round_trip_with_optional_nones() -> None:
             'intervention_name': 'underpowered',
             'n_treatment': 5,
             'n_baseline': 5,
-            'outcome.late_window_mean.arm_a_mean': -200.0,
-            'outcome.late_window_mean.arm_b_mean': -180.0,
+            'late_window_mean.arm_a_mean': -200.0,
+            'late_window_mean.arm_b_mean': -180.0,
         },
     )
     cmp2 = ComparisonRow.from_row_dict(cmp.as_dict())

@@ -107,8 +107,8 @@ def _scalar_outcome(
 def classify_envs(
     baseline_runs: Sequence[RunRow],
     *,
-    best_burst_path: str = 'outcome.eval_best_burst_mean',
-    final_mean_path: str = 'outcome.eval_final_mean',
+    best_burst_path: str = 'eval_best_burst_mean',
+    final_mean_path: str = 'eval_final_mean',
     table: Mapping[str, SolveThreshold] = SOLVE_THRESHOLDS,
     solved_threshold: float = 0.5,
     group_by: str = 'env_name',

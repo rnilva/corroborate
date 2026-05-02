@@ -20,8 +20,8 @@ the claim's `holds_when` body consumes:
     def ddqn_helps_outcome(
         paired_g: PairedGResult,
         *,
-        source: str = 'outcome.eval_best_burst_mean',
-        target: str = 'outcome.eval_best_burst_mean',
+        source: str = 'eval_best_burst_mean',
+        target: str = 'eval_best_burst_mean',
         direction: Direction = Direction.DIRECT,
         tier: Tier = Tier.ASSOCIATIONAL,
         treatment_arm: str = 'ddqn',

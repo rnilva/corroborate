@@ -92,7 +92,7 @@ def is_outcome_tautological(
     a re-encoding of the outcome at a different aggregation.
 
     `outcome_reads` is provided by the caller — for path-keyed
-    outcomes (`outcome.eval_best_burst_mean`, etc.), this is the
+    outcomes (`eval_best_burst_mean`, etc.), this is the
     trace columns the cell-runner aggregates from to produce that
     path. Most RL outcome paths derive from `mc_return` per eval
     episode."""

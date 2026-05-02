@@ -101,8 +101,8 @@ class Hypothesis[R: Mapping[str, object]]:
     RunRow without having to author a per-record body for each.
     Each entry produces a column at the measurable's bare `.name`
     in `RunRow.measurements`; the substrate controls the column-
-    name namespace (a measurable named `outcome.eval_final_mean`
-    lands as `outcome.eval_final_mean`). Available downstream for
+    name namespace (a measurable named `eval_final_mean`
+    lands as `eval_final_mean`). Available downstream for
     typed-edge bridges (`Bridge.target=<name>`) and analyses to
     consume directly.
 
