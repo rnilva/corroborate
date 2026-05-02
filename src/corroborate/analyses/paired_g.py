@@ -44,8 +44,13 @@ class PairedGResult:
     reward magnitude itself must consume `mean_diff` (Hedges' g
     cancels reward-scale variance via the pooled SD).
 
-    All four are NaN if `n_pairs < 2` or per-pair Δ has zero
-    spread."""
+    `helped_fraction` is the fraction of pairs with positive Δ
+    (treatment > baseline) — the count-style report a number of
+    bridges want alongside the standardized magnitude. NaN when
+    `n_pairs == 0`.
+
+    All other quantities are NaN if `n_pairs < 2` or per-pair Δ
+    has zero spread."""
     g: float
     se: float
     mean_diff: float
@@ -53,6 +58,7 @@ class PairedGResult:
     n_pairs: int
     n_treatment: int
     n_baseline: int
+    helped_fraction: float
     pair_by: tuple[str, ...]
     measurable: str
     treatment_arm: str
@@ -153,29 +159,28 @@ def paired_g(
     env_name: str | None = None,
     arm_field: str = 'intervention_name',
     extra_filters: Mapping[str, object] = MappingProxyType({}),
+    extra_min_pairs: tuple[tuple[str, float], ...] = (),
+    extra_max_pairs: tuple[tuple[str, float], ...] = (),
     cell_predicate: Callable[[Mapping[str, object]], bool] | None = None,
 ) -> PairedGResult:
     """Pair `treatment_arm` cells with `baseline_arm` cells on
     `pair_by`, compute per-pair Δ at `source`, return Hedges' g
-    + raw mean-diff (both with their SEs).
+    + raw mean-diff (both with their SEs) + helped-fraction.
 
     `source` resolves through the measurable registry (preferred)
     or as a field-path read on the cell record. Bridges declare
     `source='outcome_native'` to consume the registered
-    measurable, or `source='eval_best_burst_mean'` for a
-    raw field.
+    measurable, or any field-path string for a raw column.
 
-    `env_name` and `extra_filters` scope the corpus pre-pairing.
-    `extra_filters={'reward_scale': 0.1}` filters to that sub-
-    corpus; combine with `env_name='FourRooms-misc'` for
-    bridge-specific cohorts without a bespoke per-bridge
-    analysis.
-
-    `cell_predicate` is a per-cell callable filter applied AFTER
-    `env_name` / `extra_filters`. Bridges that need richer scope
-    logic (e.g. "both arms cleared an env-specific solve
-    threshold") supply a closure here instead of reimplementing
-    the pairing loop."""
+    `env_name`, `extra_filters`, `extra_min_pairs`, `extra_max_pairs`,
+    and `cell_predicate` scope the corpus pre-pairing. Equality
+    via `extra_filters={'reward_scale': 0.1}`; numeric thresholds
+    via `extra_min_pairs=(('effective_horizon', 50.0),)` (column
+    ≥ value) or `extra_max_pairs=(('total_steps', 200000.0),)`
+    (column ≤ value). `cell_predicate` is a callable for richer
+    per-cell scope (e.g. "both arms cleared an env-specific solve
+    threshold"). All filters AND together; cells not satisfying
+    every predicate drop out before pairing."""
     from corroborate.statistics import hedges_g_paired
 
     treatment: dict[tuple[object, ...], float] = {}
@@ -184,6 +189,8 @@ def paired_g(
         if env_name is not None and cell.get('env_name') != env_name:
             continue
         if extra_filters and not _matches_filters(cell, extra_filters):
+            continue
+        if not _matches_thresholds(cell, extra_min_pairs, extra_max_pairs):
             continue
         if cell_predicate is not None and not cell_predicate(cell):
             continue
@@ -213,6 +220,10 @@ def paired_g(
         mean_diff_se = sd / math.sqrt(n)
     else:
         g = se = mean_diff = mean_diff_se = float('nan')
+    helped_fraction = (
+        sum(1 for d in deltas if d > 0.0) / n_pairs
+        if n_pairs > 0 else float('nan')
+    )
 
     return PairedGResult(
         g=g, se=se,
@@ -221,11 +232,38 @@ def paired_g(
         n_pairs=n_pairs,
         n_treatment=len(treatment),
         n_baseline=len(baseline),
+        helped_fraction=helped_fraction,
         pair_by=pair_by,
         measurable=source,
         treatment_arm=treatment_arm,
         baseline_arm=baseline_arm,
     )
+
+
+def _matches_thresholds(
+    cell: Mapping[str, object],
+    min_pairs: tuple[tuple[str, float], ...],
+    max_pairs: tuple[tuple[str, float], ...],
+) -> bool:
+    """All `(col, val)` in `min_pairs` require `cell[col] >= val`;
+    all in `max_pairs` require `cell[col] <= val`. NaN or missing
+    values fail the predicate (defensive — don't include cells
+    with ambiguous threshold positioning)."""
+    for col, thr in min_pairs:
+        v = cell.get(col)
+        if not isinstance(v, (int, float)):
+            return False
+        f = float(v)
+        if math.isnan(f) or f < thr:
+            return False
+    for col, thr in max_pairs:
+        v = cell.get(col)
+        if not isinstance(v, (int, float)):
+            return False
+        f = float(v)
+        if math.isnan(f) or f > thr:
+            return False
+    return True
 
 
 # ============ per-env panel helper ============
@@ -239,18 +277,21 @@ def per_env_paired_g_panel(
     env_filter: tuple[str, ...] = (),
     pair_by: tuple[str, ...] = ('seed',),
     arm_field: str = 'intervention_name',
+    extra_filters: Mapping[str, object] = MappingProxyType({}),
+    extra_min_pairs: tuple[tuple[str, float], ...] = (),
+    extra_max_pairs: tuple[tuple[str, float], ...] = (),
     cell_predicate: Callable[[Mapping[str, object]], bool] | None = None,
 ) -> tuple[StratumG[str], ...]:
     """Per-env paired-g panel — one `StratumG[str]` per env in
     `env_filter` (or every env present in `cells` when empty).
 
     Calls `paired_g.fn` per env (with `env_name=env` and the
-    optional `cell_predicate`), packs the per-env result as
-    `StratumG[str]`. NO panel-level filtering: every env in the
-    target set produces an entry, including degenerate ones
-    (n_pairs<2 → g/se=NaN). Consumers that need to drop
-    underpowered strata filter at their own boundary so they
-    can decide what to report (e.g. an explicit `n_pairs=0`
+    optional `cell_predicate` / threshold filters), packs the
+    per-env result as `StratumG[str]`. NO panel-level filtering:
+    every env in the target set produces an entry, including
+    degenerate ones (n_pairs<2 → g/se=NaN). Consumers that need
+    to drop underpowered strata filter at their own boundary so
+    they can decide what to report (e.g. an explicit `n_pairs=0`
     entry tells `paired_g_among_solvers` "this env was in
     `gate_thresholds` but no surviving pair").
 
@@ -279,6 +320,9 @@ def per_env_paired_g_panel(
             source=source,
             env_name=env,
             arm_field=arm_field,
+            extra_filters=extra_filters,
+            extra_min_pairs=extra_min_pairs,
+            extra_max_pairs=extra_max_pairs,
             cell_predicate=cell_predicate,
         )
         panel.append(StratumG[str](

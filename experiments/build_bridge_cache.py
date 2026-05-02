@@ -1,146 +1,110 @@
-"""Build a per-corpus measurable cache for an authored bridges file.
+"""CLI for `corroborate.evidence_cache`.
 
-Discovers every measurable a `Sequence[Bridge]` consumes
-(transitively via the @measurable graph), computes each scalar
-per-cell from `runs.parquet × traces.parquet`, and writes
-`runs_with_mediators.parquet` with the original run cols + new
-measurable cols.
+Two modes:
 
-Replaces `experiments/compute_mediators.py` (hardcoded measurable
-list) with a bridge-driven discovery.
+  Per-corpus:
+    uv run python -m experiments.build_bridge_cache \\
+        --module experiments.findings.ddqn_universe \\
+        --corpus experiments/data/ddqn
 
-Usage:
-  uv run python -m experiments.build_bridge_cache \\
-      --module experiments.findings.ddqn_universe \\
-      --corpus experiments/data/ddqn
+  Universal (auto-discover every corpus under `--data-root`):
+    uv run python -m experiments.build_bridge_cache \\
+        --module experiments.findings.ddqn_universe \\
+        --universal \\
+        --out experiments/data/universal_evidence.parquet
 
-`--module` must export a `Sequence[Bridge]` named via `--bridges-attr`
-(default: `DDQN_UNIVERSE_BRIDGES`).
+`--module` must export a `Sequence[Bridge]` named via
+`--bridges-attr` (default: `DDQN_UNIVERSE_BRIDGES`).
 
 The discovered measurable set is the union over `bridge.source`,
 `bridge.target`, and any `bridge.params[*]` string values that
-resolve in the @measurable registry, transitively closed.
+resolve in the @measurable registry, transitively closed via the
+@measurable graph.
 """
 from __future__ import annotations
 
 import argparse
 import importlib
-import os
-
-# Pure numpy on persisted traces. Force CPU before any JAX import.
-os.environ.setdefault('JAX_PLATFORMS', 'cpu')
-
 from collections.abc import Sequence
 from pathlib import Path
+from typing import TypeIs, cast
 
-import numpy as np
-import polars as pl
+from corroborate._argparse_boundary import to_mapping
+from corroborate._narrow import optional_str, require_str
+from corroborate.claim_bridge import Bridge
+from corroborate.evidence_cache import build_cache, build_universal_cache
 
-from corroborate.claim_bridge import Bridge, measurable_names_for_bridges
-from corroborate.measurable import (
-    evaluate_with_measurables, get_registered, transitive_reads,
-)
+
+def _is_bridge_sequence(obj: object) -> TypeIs[Sequence[Bridge]]:
+    """Narrow `getattr(module, attr)`'s `object` value to
+    `Sequence[Bridge]` — runtime invariant the framework can
+    express where typeshed's `getattr` returns `Any`."""
+    if not isinstance(obj, Sequence):
+        return False
+    # `isinstance(_, Sequence)` narrows to `Sequence[Unknown]`;
+    # re-bind through `Sequence[object]` so the loop var is typed.
+    seq: Sequence[object] = cast(Sequence[object], obj)
+    for b in seq:
+        if not isinstance(b, Bridge):
+            return False
+    return True
 
 
 def _bridges_from(module_name: str, attr: str) -> Sequence[Bridge]:
     mod = importlib.import_module(module_name)
-    bridges = getattr(mod, attr)
-    return bridges  # pyright: ignore[reportAny]
-
-
-def build_cache(
-    bridges: Sequence[Bridge],
-    runs_path: Path,
-    traces_path: Path,
-    out_path: Path,
-) -> None:
-    names = sorted(measurable_names_for_bridges(bridges))
-    if not names:
-        print('no measurables required by these bridges; nothing to cache')
-        return
-    print(f'measurables to cache ({len(names)}):')
-    for n in names:
-        print(f'  {n}')
-
-    runs_df = pl.read_parquet(runs_path)
-    print(f'runs:   {runs_df.height} rows × {len(runs_df.columns)} cols')
-
-    # Only pull the trace columns the requested measurables read.
-    # Loading the full traces.parquet is multi-GB on long sweeps;
-    # narrowing to the read set avoids OOM.
-    trace_reads: set[str] = set()
-    for n in names:
-        trace_reads |= transitive_reads(n)
-    runs_cols = set(runs_df.columns)
-    needed_trace_cols = sorted(
-        (k for k in trace_reads if k not in runs_cols),
-    )
-    if traces_path.exists() and traces_path.stat().st_size > 0 and needed_trace_cols:
-        traces_df = pl.read_parquet(
-            traces_path, columns=['id', *needed_trace_cols],
+    obj: object = cast(object, getattr(mod, attr))
+    if not _is_bridge_sequence(obj):
+        raise TypeError(
+            f'{module_name}.{attr} is not Sequence[Bridge]; '
+            f'got {type(obj).__name__}',
         )
-        df = runs_df.join(traces_df, on='id', how='inner')
-        print(
-            f'traces: {traces_df.height} rows × '
-            f'{len(needed_trace_cols)} cols (filtered from full file); '
-            f'joined → {df.height} cells',
-        )
-    else:
-        df = runs_df
-        print('traces: not needed or unavailable; using runs only')
-
-    # Compute each measurable per cell. evaluate_with_measurables
-    # memoizes within-cell so transitive deps run once.
-    new_cols: dict[str, list[object]] = {n: [] for n in names}
-    for cell in df.iter_rows(named=True):
-        cache: dict[str, object] = {}
-        for n in names:
-            m = get_registered(n)
-            if m is None:
-                new_cols[n].append(None)
-                continue
-            try:
-                v = evaluate_with_measurables(m.fn, cell, cache=cache)
-            except (KeyError, TypeError, ValueError):
-                # Missing leaf reads → measurable can't resolve;
-                # store None so downstream can NaN-skip.
-                v = None
-            new_cols[n].append(_to_polars_value(v))
-
-    enriched = runs_df.with_columns([
-        pl.Series(n, new_cols[n]) for n in names
-    ])
-    enriched.write_parquet(out_path)
-    print(f'wrote: {out_path}  ({enriched.height} rows × {len(enriched.columns)} cols)')
-
-
-def _to_polars_value(v: object) -> object:
-    """Coerce a measurable's output to something polars accepts:
-    scalars stay scalar; numpy arrays become Python lists (polars
-    encodes as list-of-float); None passes through."""
-    if v is None:
-        return None
-    if isinstance(v, (int, float, bool, str)):
-        return v
-    if isinstance(v, np.ndarray):
-        return v.tolist()
-    return v
+    return obj
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument('--module', required=True)
     parser.add_argument('--bridges-attr', default='DDQN_UNIVERSE_BRIDGES')
-    parser.add_argument('--corpus', required=True)
-    parser.add_argument('--out-name', default='runs_with_mediators.parquet')
-    args = parser.parse_args()
+    parser.add_argument('--corpus', default=None)
+    parser.add_argument('--universal', action='store_true')
+    parser.add_argument('--data-root', default='experiments/data')
+    parser.add_argument('--out', default=None)
+    parser.add_argument('--out-name', default='runs_with_bridge_cache.parquet')
+    parser.add_argument('--force', action='store_true')
 
-    bridges = _bridges_from(args.module, args.bridges_attr)
-    corpus = Path(args.corpus)
+    raw = to_mapping(parser.parse_args())
+    module_name = require_str(raw, 'module')
+    bridges_attr = require_str(raw, 'bridges_attr')
+    out_name = require_str(raw, 'out_name')
+    data_root_s = require_str(raw, 'data_root')
+    corpus_s = optional_str(raw, 'corpus')
+    out_s = optional_str(raw, 'out')
+    universal = bool(raw.get('universal'))
+    force = bool(raw.get('force'))
+
+    bridges = _bridges_from(module_name, bridges_attr)
+
+    if universal:
+        out_path = Path(out_s) if out_s is not None else (
+            Path(data_root_s) / 'universal_evidence.parquet'
+        )
+        build_universal_cache(
+            bridges,
+            data_root=Path(data_root_s),
+            out_path=out_path,
+            out_name=out_name,
+            skip_up_to_date=not force,
+        )
+        return
+
+    if corpus_s is None:
+        raise SystemExit(
+            'must pass either --corpus <dir> or --universal',
+        )
+    corpus = Path(corpus_s)
     runs_path = corpus / 'runs.parquet'
     traces_path = corpus / 'traces.parquet'
-    out_path = corpus / args.out_name
-
+    out_path = Path(out_s) if out_s is not None else (corpus / out_name)
     if not runs_path.exists():
         raise SystemExit(f'no runs.parquet at {runs_path}')
     build_cache(bridges, runs_path, traces_path, out_path)

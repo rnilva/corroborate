@@ -138,9 +138,25 @@ class RewardClip:
         return out
 
 
+@dataclass(frozen=True, slots=True)
+class ActionDuplicate:
+    """Wrapper config: inflate action space by integer factor `k`.
+    Action `i` for `i in [0, k * inner_n)` maps to inner action
+    `i % inner_n`. Same dynamics, same optimal Q*, only declared
+    `|A|` changes — Hasselt floor scales as √(2 log(k * inner_n))."""
+    k: int
+
+    def wrap(self, inner: 'GymnaxEnvLike') -> 'GymnaxEnvLike':
+        return ActionDuplicatedEnv(inner=inner, k=self.k)
+
+    def measurement_keys(self) -> Mapping[str, float]:
+        return {'action_duplicate_k': float(self.k)}
+
+
 _WRAPPER_REGISTRY: dict[str, type[EnvWrapper]] = {
     'reward_scale': RewardScale,
     'reward_clip': RewardClip,
+    'action_duplicate': ActionDuplicate,
 }
 """Name → wrapper class. YAML's `wrappers: [{type: <name>, ...}]`
 parses each entry by looking up `<name>` here and instantiating
@@ -276,6 +292,62 @@ class RewardClippedEnv:
 
     def action_space(self, params: object) -> object:
         return self.inner.action_space(params)
+
+
+@dataclass(frozen=True, slots=True)
+class ActionDuplicatedEnv:
+    """Wraps a gymnax-style env, inflating its discrete action
+    space by factor `k`. Step delegates to inner with action
+    folded back via `action % inner_n_actions` — every duplicate
+    is dynamically identical to its inner counterpart.
+
+    Causal-probe lever: declared |A| varies (k * inner_n) while
+    dynamics, reward, optimal Q*, and observation space are
+    unchanged. Hasselt 2010's max-bias floor is ε ≤
+    σ_Q · √(2 log|A|), so DDQN's bias-correction headroom should
+    grow with k. If DDQN's outcome benefit is bottlenecked by
+    Hasselt floor, varying k cleanly resolves whether |A|∈{3,4}
+    is a true sweet spot or a corpus-specific artifact."""
+    inner: 'GymnaxEnvLike'
+    k: int
+
+    def reset(
+        self, rng: jax.Array, params: object,
+    ) -> tuple[jax.Array, object]:
+        return self.inner.reset(rng, params)
+
+    def step(
+        self,
+        rng: jax.Array,
+        state: object,
+        action: jax.Array,
+        params: object,
+    ) -> tuple[
+        jax.Array, object, jax.Array, jax.Array, dict[str, object],
+    ]:
+        inner_space = self.inner.action_space(params)
+        if not isinstance(inner_space, HasN):
+            raise TypeError(
+                'ActionDuplicatedEnv requires inner action_space '
+                'with `.n` (Discrete); got '
+                f'{type(inner_space).__name__}',
+            )
+        inner_action = action % inner_space.n
+        return self.inner.step(rng, state, inner_action, params)
+
+    def observation_space(self, params: object) -> object:
+        return self.inner.observation_space(params)
+
+    def action_space(self, params: object) -> object:
+        from gymnax.environments import spaces
+        inner_space = self.inner.action_space(params)
+        if not isinstance(inner_space, HasN):
+            raise TypeError(
+                'ActionDuplicatedEnv requires inner action_space '
+                'with `.n` (Discrete); got '
+                f'{type(inner_space).__name__}',
+            )
+        return spaces.Discrete(inner_space.n * self.k)
 
 
 @runtime_checkable

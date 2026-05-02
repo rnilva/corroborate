@@ -215,6 +215,74 @@ trajectories use **flat author-chosen keys** (`reward`). Output
 prefixes (`outcome.`, `bridge.`, `invariant.`) on the row store
 namespace results separately from leaves.
 
+## Canonical analyses (use these, don't reimplement)
+
+The framework provides typed analysis primitives that should be
+the default surface for mech / link / outcome analyses on
+substrate corpora. Reimplementing these inline in experiments
+duplicates logic that's already centralized; **prefer the
+primitives** below.
+
+### Per-cell vs per-burst — when to choose
+
+- **Per-cell scalar** (`paired_g`, `meta_regression_paired_g`):
+  pair vanilla / DDQN at the trajectory-averaged level. Fast,
+  reliable when training is uniphase. **Fails silently** when
+  Q dynamics are non-monotone (e.g., Q-explosion-prone envs):
+  the trajectory-averaged Δ_jens combines causally opposite
+  phases (early bias-correction vs late Q-explosion), washing
+  the signal to ~0.
+
+- **Per-burst** (`paired_g_per_burst`,
+  `paired_link_per_burst`, `meta_regression_per_burst`,
+  `mundlak_paired_g_per_burst`): compute Δ per (env, burst).
+  Default for any env where Q dynamics aren't monotone. The
+  panel makes phase structure visible and corroborable.
+
+`findings_fourrooms_time_series.md` and the SpaceInvaders late-
+burst attenuation history establish per-burst as the canonical
+form for any analysis on Q-explosion-prone or phase-transition
+envs. Cross-burst link cancellation is real; per-burst unmasks it.
+
+### Mech / link / outcome separation
+
+Three verdicts are kept independent (PAPER_NOTES.md §3
+methodological claim). The corpus's `mechanism.jensen_gap` is
+clamped to `max(0, mean(Q − MC))` — `0` does NOT mean
+"unbiased": pair with the `jensen_dormancy_gap` invariant to
+distinguish "true zero" from "underestimating (mech dormant)".
+Link verdicts on dormant-mech cells are UNTESTABLE, not NULL.
+
+### Conditioning rule
+
+Link analyses MUST condition on `mech HELD` (Δ_jens < 0 with
+the mechanism active, not just `jensen_gap > 0`). Otherwise
+"link null" claims silently mix mech-dormant (bias premise
+inactive) with mech-active-but-link-broken cells. The two are
+different verdicts — the framework refuses to collapse them.
+
+### Concrete primitives
+
+| analysis | use for |
+|---|---|
+| `paired_g` | scalar Δ on a single measurable (outcome OR mech), pair-by seed |
+| `paired_g_per_burst` | per-burst Δ on one measurable; reductions `mean` and `mc_minus_q` |
+| `paired_link_per_burst` | per-burst r(Δ_target, Δ_predictor) — the empirical link, panel-typed |
+| `phase_link_consistency` | scalar derived from per-burst link panel: fraction of bursts with significant negative r |
+| `meta_regression_paired_g` | per-stratum Δ regressed on covariates |
+| `meta_regression_per_burst` | per-(stratum, burst) panel meta-regression |
+| `mundlak_paired_g_per_burst` | per-cell mediator + per-burst g (composite for moderator probes) |
+| `dowhy` | DoWhy backdoor / refutation on a typed causal graph |
+| `factorial_2x2` | 2×2 factorial interaction Δ |
+| `tautology_audit` | three-check audit (HP shadow / partial-correlation / convergence) |
+| `verdict_distribution` | corpus-level verdict count / class breakdown |
+| `universe_scope` | universal scope analysis primitive |
+
+When proposing an analysis: **check this list first**. New
+inline analyses only when none of the above fits — and even then,
+prefer to extend an existing primitive (or add a sibling) rather
+than copying logic.
+
 ## Test iteration
 
 Tests that compile a JAX kernel and run DQN end-to-end on

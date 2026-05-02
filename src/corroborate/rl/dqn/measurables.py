@@ -46,94 +46,18 @@ import numpy as np
 import numpy.typing as npt
 
 from corroborate.measurable import Measurable, measurable
-
-
-# ============ Online Q distribution ============
-
-# Inputs are `online_q_per_action` shape `(steps, n_actions)` — the
-# in-loop batch-averaged per-step Q vector. Reductions collapse the
-# action axis to per-step scalars.
-
-@measurable(reads=('online_q_per_action',))
-def q_mean_per_step(
-    record: Mapping[str, object],
-) -> npt.NDArray[np.float64]:
-    """Mean Q across actions, per training step. Series shape
-    `(steps,)`."""
-    arr = np.asarray(record['online_q_per_action']).astype(np.float64)
-    return arr.mean(axis=-1) if arr.ndim >= 1 else arr
-
-
-@measurable(reads=('online_q_per_action',))
-def q_max_per_step(
-    record: Mapping[str, object],
-) -> npt.NDArray[np.float64]:
-    """Max Q across actions, per training step."""
-    arr = np.asarray(record['online_q_per_action']).astype(np.float64)
-    return arr.max(axis=-1) if arr.ndim >= 1 else arr
-
-
-@measurable(reads=('online_q_per_action',))
-def q_std_per_step(
-    record: Mapping[str, object],
-) -> npt.NDArray[np.float64]:
-    """Std Q across actions, per step. Captures the spread of
-    the action-value distribution at each training step."""
-    arr = np.asarray(record['online_q_per_action']).astype(np.float64)
-    return arr.std(axis=-1) if arr.ndim >= 1 else arr
-
-
-@measurable(reads=('online_q_per_action',))
-def q_gap_per_step(
-    record: Mapping[str, object],
-) -> npt.NDArray[np.float64]:
-    """Gap between max and second-max Q-values per step. The
-    DDQN-relevant signal: a small gap means the greedy action is
-    barely distinguishable from a runner-up — the regime where
-    overestimation matters most."""
-    arr = np.asarray(record['online_q_per_action']).astype(np.float64)
-    if arr.ndim < 2 or arr.shape[-1] < 2:
-        return np.zeros(arr.shape[:-1], dtype=np.float64)
-    sorted_arr = np.sort(arr, axis=-1)
-    return sorted_arr[..., -1] - sorted_arr[..., -2]
-
-
-# ============ Target Q distribution ============
-
-@measurable(reads=('target_q_per_action',))
-def target_q_mean_per_step(
-    record: Mapping[str, object],
-) -> npt.NDArray[np.float64]:
-    """Mean target-Q across actions, per step."""
-    arr = np.asarray(record['target_q_per_action']).astype(np.float64)
-    return arr.mean(axis=-1) if arr.ndim >= 1 else arr
-
-
-@measurable(reads=('target_q_per_action',))
-def target_q_max_per_step(
-    record: Mapping[str, object],
-) -> npt.NDArray[np.float64]:
-    """Max target-Q across actions, per step."""
-    arr = np.asarray(record['target_q_per_action']).astype(np.float64)
-    return arr.max(axis=-1) if arr.ndim >= 1 else arr
-
-
-# ============ TD-error magnitude ============
-
-@measurable(reads=('td_error',))
-def td_error_norm_per_step(
-    record: Mapping[str, object],
-) -> npt.NDArray[np.float64]:
-    """Per-step √mean(td_error²) — a positive scalar magnitude."""
-    arr = np.asarray(record['td_error']).astype(np.float64)
-    if arr.ndim == 0:
-        return np.abs(arr)
-    if arr.ndim == 1:
-        return np.abs(arr)
-    return np.sqrt(np.mean(arr ** 2, axis=tuple(range(1, arr.ndim))))
+from corroborate.rl import env_catalogue
 
 
 # ============ Pearson r — online vs target Q populations ============
+#
+# (The per-step Q-distribution measurables — `q_{mean,max,std,gap}_
+# _per_step`, `target_q_{mean,max}_per_step`, `td_error_norm_per_
+# step` — were removed: they read `online_q_per_action` /
+# `target_q_per_action`, which `Q_TRACE_REDUCTIONS` in
+# `trace_reductions.py` drops at trace persistence time. They could
+# only resolve on synthetic test records, never on persisted
+# corpora — pure scaffold.)
 
 @measurable(reads=('pearson_stats',))
 def pearson_r_online_target(record: Mapping[str, object]) -> float:
@@ -606,6 +530,57 @@ def outcome_native(record: Mapping[str, object]) -> float:
 
 
 @measurable(reads=('mc_return',))
+def mc_return_first_quarter(
+    record: Mapping[str, object],
+) -> float:
+    """Mean of `mc_return` over the first quarter of training
+    bursts. Per-cell scalar.
+
+    `mc_return` is shape `(n_bursts, K)` (eval-burst index × K
+    eval episodes per burst). Reduces to a single scalar
+    representing performance early in training. Bridges that
+    test "DDQN's outcome benefit at the start of training" pair
+    cells on this scalar; the difference (treatment − baseline)
+    captures the early-burst arm gap without the best-burst
+    selection bias of `outcome.eval_best_burst_mean`."""
+    arr = np.asarray(record['mc_return'], dtype=np.float64)
+    if arr.ndim != 2 or arr.size == 0:
+        return float('nan')
+    n_bursts = arr.shape[0]
+    q = max(1, n_bursts // 4)
+    return float(arr[:q].mean())
+
+
+@measurable(reads=('mc_return',))
+def mc_return_last_quarter(
+    record: Mapping[str, object],
+) -> float:
+    """Mean of `mc_return` over the last quarter of training
+    bursts. Sibling of `mc_return_first_quarter`; the late-
+    training scalar."""
+    arr = np.asarray(record['mc_return'], dtype=np.float64)
+    if arr.ndim != 2 or arr.size == 0:
+        return float('nan')
+    n_bursts = arr.shape[0]
+    q = max(1, n_bursts // 4)
+    return float(arr[-q:].mean())
+
+
+@measurable(reads=('gamma',))
+def effective_horizon(record: Mapping[str, object]) -> float:
+    """Geometric-series sum `1 / (1 - gamma)` — the effective
+    horizon over which discounted returns accumulate. NaN when
+    gamma is missing, non-numeric, or ≥ 1.0 (degenerate)."""
+    gamma = record.get('gamma')
+    if not isinstance(gamma, (int, float)):
+        return float('nan')
+    g = float(gamma)
+    if math.isnan(g) or g >= 1.0 or g < 0.0:
+        return float('nan')
+    return 1.0 / (1.0 - g)
+
+
+@measurable(reads=('mc_return',))
 def mc_variance_per_burst(
     record: Mapping[str, object],
 ) -> npt.NDArray[np.float64]:
@@ -934,3 +909,158 @@ def dqn_default_measurables() -> tuple[
         jensen_dormancy_gap_measurable,
         at_most_jensen_dormancy_gap_zero_verdict,
     )
+
+
+# ============ Env-structural measurables ============
+#
+# Per-cell scalars derived from the env catalogue keyed by
+# `record['env_name']`. These replace inline static dicts in
+# bridges (`_DDQN_200K_BOOTSTRAP_FRACTION`, etc.) — bridges now
+# reference these by name in their `covariates` param, and the
+# cache builder materialises them per cell across whatever corpus
+# is in scope. NaN when env_name isn't a string or isn't
+# registered in the catalogue.
+
+
+def _env_spec_for(record: Mapping[str, object]) -> object:
+    """Resolve `env_catalogue.get(record['env_name'])` defensively
+    — returns the EnvSpec or None on missing/unknown env. Typed
+    `object` because env_catalogue.EnvSpec isn't imported at
+    module top-level (avoiding a circular dependency for code
+    that loads measurables before env_catalogue's gymnax-side
+    initialisation completes)."""
+    name = record.get('env_name')
+    if not isinstance(name, str):
+        return None
+    try:
+        return env_catalogue.get(name)
+    except KeyError:
+        return None
+
+
+@measurable(reads=('env_name',))
+def log_action_dim(record: Mapping[str, object]) -> float:
+    """`log(max(n_actions, 2))` — the discrete-action dimensionality
+    on log scale. Matches Hasselt's overestimation-bias floor
+    `√(2 log|A|)` only logarithmically, so log_action_dim is the
+    natural covariate for cross-env meta-regressions of bias."""
+    spec = _env_spec_for(record)
+    if not isinstance(spec, env_catalogue.EnvSpec):
+        return float('nan')
+    return math.log(max(int(spec.n_actions), 2))
+
+
+@measurable(reads=('env_name',))
+def log_obs_dim(record: Mapping[str, object]) -> float:
+    """`log(max(obs_dim, 1))` — total flattened observation
+    dimensionality on log scale. Useful as a structural covariate
+    for cross-env regressions; image envs (MinAtar) have
+    `obs_dim ≈ 10⁴`, vector envs ≈ 4-25."""
+    spec = _env_spec_for(record)
+    if not isinstance(spec, env_catalogue.EnvSpec):
+        return float('nan')
+    return math.log(max(int(spec.obs_dim), 1))
+
+
+@measurable(reads=('env_name',))
+def log_horizon(record: Mapping[str, object]) -> float:
+    """`log(max(horizon, 1))` — episode-length cap on log scale.
+    Falls back to 1000 (gymnax's default cap) when the env's
+    `horizon` is None."""
+    spec = _env_spec_for(record)
+    if not isinstance(spec, env_catalogue.EnvSpec):
+        return float('nan')
+    h = spec.horizon if spec.horizon is not None else 1000
+    return math.log(max(int(h), 1))
+
+
+@measurable(reads=('env_name',))
+def r_max(record: Mapping[str, object]) -> float:
+    """Per-step reward upper bound from the env catalogue. Used
+    by `q_divergence_score` to compute the Bellman fixed-point
+    Q-bound `r_max / (1 - γ)`."""
+    spec = _env_spec_for(record)
+    if not isinstance(spec, env_catalogue.EnvSpec):
+        return float('nan')
+    return float(spec.r_max)
+
+
+@measurable(reads=('env_name',))
+def r_min(record: Mapping[str, object]) -> float:
+    """Per-step reward lower bound. Sibling of `r_max`; used in
+    contexts that need the symmetric reward span (e.g. signed
+    Bellman bounds for envs with negative rewards)."""
+    spec = _env_spec_for(record)
+    if not isinstance(spec, env_catalogue.EnvSpec):
+        return float('nan')
+    return float(spec.r_min)
+
+
+# ============ Episode dynamics measurables ============
+
+
+@measurable(reads=('done',))
+def bootstrap_fraction(record: Mapping[str, object]) -> float:
+    """Fraction of update steps that bootstrap (i.e. don't
+    terminate). `1 - mean(done)` over the per-step trajectory.
+
+    A bootstrap-fraction of 1.0 means the agent never reaches a
+    terminal state during training (long-horizon envs like
+    Acrobot at high γ); 0.0 means every step terminates (bandit
+    envs where the agent never bootstraps from its own Q
+    estimate). The covariate predicts DDQN-link strength: bias
+    compounds along bootstrapped chains, so envs in the high-
+    bootstrap regime show stronger Hasselt-mechanism → outcome
+    translation.
+
+    NaN when `done` is missing or empty; the framework's typed
+    None handling in the cache builder propagates this without
+    column-erasure."""
+    arr = record.get('done')
+    if arr is None:
+        return float('nan')
+    a = np.asarray(arr, dtype=np.float64)
+    if a.size == 0:
+        return float('nan')
+    return float(1.0 - a.mean())
+
+
+# ============ Bellman-bound measurable ============
+
+
+@measurable(reads=('jensen_gap', 'gamma'))
+def q_divergence_score(
+    record: Mapping[str, object],
+    r_max: float,  # injected via @measurable name resolution
+) -> float:
+    """`jensen_gap / (r_max / (1 - gamma))` — the overestimation-
+    bias gap normalised by the Bellman fixed-point Q-bound.
+    Per-cell scalar.
+
+    Reading: scores below ~1 mean Q stays within the theoretical
+    bound and DDQN's correction translates to outcome; scores
+    above ~1000 mean Q has diverged orders of magnitude beyond
+    the bound and DDQN's link to outcome attenuates (CLAIM 11
+    in `findings_minatar_link_attenuation.md`).
+
+    Composes the env-driven `r_max` measurable with the cell's
+    runs.parquet `jensen_gap` and `gamma` columns —
+    transitive_reads(`q_divergence_score`) closes over
+    `{jensen_gap, gamma, env_name}`. NaN on degenerate inputs
+    (gamma >= 1, missing fields, r_max non-positive).
+
+    Post-Phase-5: reads bare-named `jensen_gap` (was
+    `mechanism.jensen_gap` pre-migration)."""
+    jens = record.get('jensen_gap')
+    gamma = record.get('gamma')
+    if not isinstance(jens, (int, float)):
+        return float('nan')
+    if not isinstance(gamma, (int, float)):
+        return float('nan')
+    g = float(gamma)
+    if g >= 1.0 or g < 0.0:
+        return float('nan')
+    if math.isnan(r_max) or r_max <= 0.0:
+        return float('nan')
+    bound = r_max / (1.0 - g)
+    return float(jens) / bound

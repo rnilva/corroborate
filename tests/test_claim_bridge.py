@@ -364,3 +364,62 @@ def test_evaluate_forwards_predicted_direction_to_analyses() -> None:
     cells: list[Mapping[str, object]] = [{'env_name': 'X'}]
     _ = evaluate(consumer, cells)
     assert captured['predicted_direction'] == 'a_lt_b'
+
+
+def test_bridge_accepts_measurable_as_source() -> None:
+    """`source` / `target` may be a `Measurable` instance passed by
+    value (typically a value-composed reduction). The decorator
+    auto-registers it so the cache walker finds it; analyses see
+    `bridge.source_name` (the auto-generated column name)."""
+    from corroborate.measurable import (
+        Measurable, get_registered, registered_names,
+    )
+    from corroborate.reductions import from_key, mean_window
+
+    q_max_late = mean_window(
+        from_key('online_max_q_per_step'), 0.5, 1.0,
+    )
+
+    @claim_bridge
+    def reduces_q_max_late(
+        paired_g: PairedGResult,
+        *,
+        source: Measurable[Mapping[str, object], object] = (
+            cast(Measurable[Mapping[str, object], object], q_max_late)
+        ),
+        target: str = 'outcome.eval_best_burst_mean',
+        direction: Direction = Direction.DIRECT,
+        tier: Tier = Tier.ASSOCIATIONAL,
+        treatment_arm: str = 'ddqn',
+        baseline_arm: str = 'vanilla_dqn',
+    ) -> Verdict:
+        del paired_g, source, target, direction, tier
+        del treatment_arm, baseline_arm
+        return Verdict.HELD
+
+    assert isinstance(reduces_q_max_late, Bridge)
+    assert reduces_q_max_late.source is q_max_late
+    assert (
+        reduces_q_max_late.source_name
+        == 'online_max_q_per_step__mean_50_100'
+    )
+    assert reduces_q_max_late.target_name == 'outcome.eval_best_burst_mean'
+    # Auto-registered in the global registry — cache walker finds it.
+    assert get_registered(q_max_late.name) is q_max_late
+    assert q_max_late.name in registered_names()
+
+
+def test_bridge_rejects_non_str_non_measurable_source() -> None:
+    """Anything other than str | Measurable for source/target is an
+    authoring mistake — fail loudly at decoration time."""
+    def _bad_source(
+        paired_g: PairedGResult,
+        *,
+        source: int = 42,
+        target: str = 'B',
+    ) -> Verdict:
+        del paired_g, source, target
+        return Verdict.HELD
+
+    with pytest.raises(TypeError, match='source.*str or Measurable'):
+        _ = claim_bridge(_bad_source)

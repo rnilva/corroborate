@@ -227,7 +227,7 @@ def authored_graph(
             source_key = b.intervention.node_key()
             tier = Tier.INTERVENTIONAL
         else:
-            source_key = b.source
+            source_key = b.source_name
             tier = b.tier
         edge = BridgeEdge(
             bridge_name=b.name,
@@ -235,7 +235,7 @@ def authored_graph(
             tier=tier,
             evidentiary_level='unevaluated',
         )
-        g = g.with_edge(source_key, b.target, edge)
+        g = g.with_edge(source_key, b.target_name, edge)
     return g
 
 

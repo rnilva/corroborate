@@ -78,7 +78,11 @@ class Registry:
             if attr_name.startswith('_'):
                 continue
             if isinstance(value, FnClaim):
-                self.fns.register(value.name, value)
+                # Type narrowing: value is an `FnClaim[Any, Any]`
+                # instance after isinstance; `name` is a typed
+                # field. Annotating locally makes pyright happy.
+                fn_value: FnClaim[..., object] = value
+                self.fns.register(fn_value.name, fn_value)
             elif (
                 isinstance(value, type)
                 and issubclass(value, ClaimBase)

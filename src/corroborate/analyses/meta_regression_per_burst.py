@@ -27,7 +27,8 @@ broadcasts the env-level vector across all bursts in that env).
 """
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+import math
+from collections.abc import Iterable, Mapping, Sequence
 
 from corroborate.analyses.paired_g_per_burst import paired_g_per_burst
 from corroborate.analysis import analysis
@@ -46,19 +47,28 @@ def meta_regression_per_burst(
     pair_by: tuple[str, ...] = ('seed',),
     source: str = 'mc_return',
     reduction: str = 'mean',
-    covariates_per_env: Mapping[str, Mapping[str, float]],
+    covariates: tuple[str, ...] = (),
+    covariates_per_env: Mapping[str, Mapping[str, float]] | None = None,
     alpha: float = 0.05,
 ) -> MetaRegressionResult:
     """Per-(env, burst) panel: paired g on `source`/`reduction`
     for each (env, burst), then meta-regression on env-level
     covariates.
 
-    `covariates_per_env` is the env-keyed covariate vector
-    (e.g. `{'Acrobot-v1': {'log_action_dim': log(3),
-    'log_obs_dim': log(6)}}`). Each (env, burst) stratum inherits
-    the env's covariates — covariates at the burst granularity
-    (e.g. eval_step_index) require an extension this analysis
-    doesn't ship today.
+    Two paths for supplying covariates:
+
+    - `covariates: tuple[str, ...]` (preferred) — column names on
+      the cells. The analysis groups by `env_name` and takes the
+      per-env mean of each named column to form the env-keyed
+      covariate vector. Covariate values come from the corpus
+      itself; bridges declare which columns matter, not the
+      frozen values. Combine with materialised
+      `@measurable`-derived columns (e.g. `log_action_dim`,
+      `bootstrap_fraction`) for the env-level features.
+    - `covariates_per_env: Mapping[env, Mapping[name, value]]`
+      (legacy) — env-keyed value-bag. Used when the bridge needs
+      a frozen reference (e.g. the original-corpus moments). Wins
+      when both are set.
 
     Strata with NaN g/SE or zero variance are dropped from the
     panel."""
@@ -71,6 +81,18 @@ def meta_regression_per_burst(
         source=source,
         reduction=reduction,
     )
+    # Resolve per-env covariates from either the explicit
+    # `covariates_per_env` mapping or by averaging the named
+    # `covariates` columns across cells.
+    if covariates_per_env is not None:
+        env_covariates: Mapping[str, Mapping[str, float]] = (
+            covariates_per_env
+        )
+    elif covariates:
+        env_covariates = _env_means_from_cells(cells_list, covariates)
+    else:
+        env_covariates = {}
+
     panel: tuple[StratumG[tuple[str, int]], ...] = tuple(
         StratumG[tuple[str, int]](
             stratum_id=(s.env_name, s.burst_index),
@@ -84,15 +106,49 @@ def meta_regression_per_burst(
     ] = {}
     for s in panel:
         env, _ = s.stratum_id
-        if env in covariates_per_env:
-            covariates_per_stratum[s.stratum_id] = (
-                covariates_per_env[env]
-            )
+        if env in env_covariates:
+            covariates_per_stratum[s.stratum_id] = env_covariates[env]
     return meta_regress_panel(
         panel,
         covariates_per_stratum=covariates_per_stratum,
         alpha=alpha,
     )
+
+
+def _env_means_from_cells(
+    cells: Sequence[Mapping[str, object]],
+    columns: tuple[str, ...],
+) -> dict[str, dict[str, float]]:
+    """Build `{env_name: {col: mean(col over env's cells)}}` from
+    a per-cell list. NaN-skip per column. Cells lacking `env_name`
+    or with non-numeric column values are excluded from that
+    column's mean.
+
+    Used to lift cell-level columns (typically materialised by
+    the @measurable cache) to env-level covariates for the
+    meta-regression's stratum panel."""
+    by_env: dict[str, dict[str, list[float]]] = {}
+    for cell in cells:
+        env = cell.get('env_name')
+        if not isinstance(env, str):
+            continue
+        slot = by_env.setdefault(env, {})
+        for col in columns:
+            v = cell.get(col)
+            if not isinstance(v, (int, float)):
+                continue
+            f = float(v)
+            if math.isnan(f):
+                continue
+            slot.setdefault(col, []).append(f)
+    out: dict[str, dict[str, float]] = {}
+    for env, col_map in by_env.items():
+        env_means: dict[str, float] = {}
+        for col, vs in col_map.items():
+            if vs:
+                env_means[col] = sum(vs) / len(vs)
+        out[env] = env_means
+    return out
 
 
 __all__ = ['meta_regression_per_burst']

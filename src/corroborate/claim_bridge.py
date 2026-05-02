@@ -55,6 +55,7 @@ from typing import cast
 from corroborate.analysis import resolve_for_holds_when
 from corroborate.hypothesis import PredictedDirection
 from corroborate.intervention import DoEffect
+from corroborate.measurable import Measurable, register
 from corroborate.verdict import Verdict
 
 
@@ -64,6 +65,29 @@ from corroborate.verdict import Verdict
 # graph builder reads `bridge.tier` / `bridge.direction` directly
 # without conversion.
 from corroborate.causal_graph import Direction, Tier  # noqa: E402
+
+
+# A bridge endpoint is either a string (raw column path or a name
+# that resolves in the @measurable registry) OR a `Measurable`
+# instance (typically a value-composed reduction like
+# `mean_window(from_key('q_max'), 0.5, 1.0)`). The framework
+# normalises the latter to its `.name` before handing off to
+# analyses, which only see strings.
+type BridgeEndpoint = str | Measurable[Mapping[str, object], object]
+
+
+def endpoint_name(e: BridgeEndpoint) -> str:
+    """Normalise a `BridgeEndpoint` to a column name. For str
+    inputs the name passes through unchanged; for `Measurable`
+    instances the `.name` field is returned (the cache builder
+    materialises that name as a parquet column).
+
+    Single laundering point so analyses, the causal graph builder,
+    and the cache walker can treat source/target uniformly as
+    strings."""
+    if isinstance(e, str):
+        return e
+    return e.name
 
 
 # Reserved kwarg names the decorator extracts as the bridge's
@@ -88,6 +112,17 @@ class Bridge:
     `target`, `direction`, `tier`); `params` is the bag of
     claim-specific kwargs the bridge forwards to each registered
     analysis the `holds_when` body consumes.
+
+    `source` / `target` are `BridgeEndpoint`s: either a string
+    (raw column path or a `@measurable`-registered name) OR a
+    `Measurable` instance passed by value (typically a value-
+    composed reduction from `corroborate.reductions`). Passing a
+    Measurable directly avoids the boilerplate of a top-level
+    `@measurable` wrapper for every reduction variant; the
+    framework auto-registers each by-value Measurable at
+    decoration time so the cache walker finds it. The
+    `endpoint_name` helper normalises both cases to a single
+    column-name string for analyses + the causal graph.
 
     `intervention: DoEffect | None` is the Pearl-rung-2
     annotation: when set, the graph builder emits an
@@ -116,8 +151,8 @@ class Bridge:
     verdict from runs directly, never invoking a body. `evaluate`
     raises `TypeError` if called on a body-less Bridge."""
     name: str
-    source: str
-    target: str
+    source: BridgeEndpoint
+    target: BridgeEndpoint
     direction: Direction = Direction.DIRECT
     tier: Tier = Tier.ASSOCIATIONAL
     params: Mapping[str, object] = field(
@@ -126,6 +161,17 @@ class Bridge:
     intervention: DoEffect | None = None
     predicted_direction: PredictedDirection | None = None
     holds_when: Callable[..., Verdict] | None = None
+
+    @property
+    def source_name(self) -> str:
+        """Column name normalised from `source` (str passes through;
+        Measurable returns `.name`)."""
+        return endpoint_name(self.source)
+
+    @property
+    def target_name(self) -> str:
+        """Column name normalised from `target`."""
+        return endpoint_name(self.target)
 
 
 @dataclass(frozen=True, slots=True)
@@ -138,13 +184,21 @@ class BridgeEvaluation:
     analysis_results: Mapping[str, object]
 
 
-def _require_str(value: object, field_name: str, fn_name: str) -> str:
-    if not isinstance(value, str):
-        raise TypeError(
-            f'@claim_bridge {fn_name!r}: default for {field_name!r} '
-            f'must be a string; got {type(value).__name__}',
-        )
-    return value
+def _require_endpoint(
+    value: object, field_name: str, fn_name: str,
+) -> BridgeEndpoint:
+    """Validate a `source` / `target` default. Accepts either a
+    str (raw column or registered measurable name) or a
+    `Measurable` instance (value-composed reduction). Anything
+    else is an authoring mistake — fail loudly at import time."""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, Measurable):
+        return value
+    raise TypeError(
+        f'@claim_bridge {fn_name!r}: default for {field_name!r} '
+        f'must be a str or Measurable; got {type(value).__name__}',
+    )
 
 
 def _require_direction(
@@ -225,8 +279,22 @@ def claim_bridge(fn: Callable[..., Verdict]) -> Bridge:
             f'@claim_bridge {fn.__name__!r}: must declare both '
             f'`source` and `target` as defaulted kwargs',
         )
-    source = _require_str(structural['source'], 'source', fn.__name__)
-    target = _require_str(structural['target'], 'target', fn.__name__)
+    source = _require_endpoint(
+        structural['source'], 'source', fn.__name__,
+    )
+    target = _require_endpoint(
+        structural['target'], 'target', fn.__name__,
+    )
+    # Auto-register Measurable instances passed by value so the
+    # cache walker (`measurable_names_for_bridges`) finds them via
+    # the standard registry path. Idempotent on (name, identity).
+    if isinstance(source, Measurable):
+        register(source)
+    if isinstance(target, Measurable):
+        register(target)
+    for v in params.values():
+        if isinstance(v, Measurable):
+            register(v)
     direction = _require_direction(
         structural.get('direction', Direction.DIRECT), fn.__name__,
     )
@@ -269,6 +337,11 @@ def evaluate(
     structural fields + params, run on `cells`, inject results,
     return verdict + audit trail.
 
+    `source` and `target` are normalised via `endpoint_name`
+    before reaching analyses — analyses always see the column-name
+    string regardless of whether the bridge declared the endpoint
+    as a string or a `Measurable` instance.
+
     Raises `TypeError` if the Bridge has no `holds_when` body —
     such a Bridge is a typed-edge declaration only (the
     Hypothesis-side verdict-walk surface) and carries no
@@ -281,8 +354,8 @@ def evaluate(
             f'not carry a threshold to evaluate against a cell-set.',
         )
     bridge_params: dict[str, object] = {
-        'source': bridge.source,
-        'target': bridge.target,
+        'source': bridge.source_name,
+        'target': bridge.target_name,
         'direction': bridge.direction,
         'tier': bridge.tier,
         'predicted_direction': bridge.predicted_direction,
@@ -308,12 +381,17 @@ def measurable_names_for_bridges(
     A bridge declares measurable names through three channels:
 
     - `bridge.source` and `bridge.target` are the canonical
-      measurable-name slots (default `'eval_best_burst_mean'`-
-      style strings; analyses pass them as `source=` to read via the
-      registry).
+      measurable-name slots. They may be either a string
+      (registered measurable name or raw column path) OR a
+      `Measurable` instance passed by value (auto-registered at
+      `@claim_bridge` decode time). Both shapes normalise to a
+      column-name string via `bridge.source_name` /
+      `bridge.target_name`.
     - `bridge.params[*]` may carry measurable names too — bridges
       authored with extra defaulted-string kwargs (`predictor_name`,
       `mediator`) that downstream analyses route through the registry.
+      `Measurable` instances passed via params are also auto-
+      registered + walked.
 
     For each declared name that's a registered measurable, expand
     via `transitive_measurables` to include every dep. Returns
@@ -334,10 +412,22 @@ def measurable_names_for_bridges(
     )
     out: set[str] = set()
     for b in bridges:
-        candidates: list[str] = [b.source, b.target]
+        candidates: list[str] = [b.source_name, b.target_name]
         for v in b.params.values():
             if isinstance(v, str):
                 candidates.append(v)
+            elif isinstance(v, Measurable):
+                candidates.append(v.name)
+            elif isinstance(v, (tuple, list)):
+                # Tuple/list params (e.g. `covariates: tuple[str, ...]`)
+                # carry column names too — bridges declaring a list
+                # of measurable-derived covariates expect each name
+                # in the cache.
+                for item in v:
+                    if isinstance(item, str):
+                        candidates.append(item)
+                    elif isinstance(item, Measurable):
+                        candidates.append(item.name)
         for name in candidates:
             if get_registered(name) is None:
                 continue
@@ -347,10 +437,12 @@ def measurable_names_for_bridges(
 
 __all__ = [
     'Bridge',
+    'BridgeEndpoint',
     'BridgeEvaluation',
     'Direction',
     'Tier',
     'claim_bridge',
+    'endpoint_name',
     'evaluate',
     'measurable_names_for_bridges',
 ]

@@ -1,0 +1,67 @@
+name: asterix_sync_1k_3k
+out_dir: experiments/data/asterix_sync_1k_3k
+arms_shape: paired
+
+# Intermediate sync_period values on Asterix.
+# sync=100 → Q-divergent (jens=47), mechanism active, link null
+# sync=10000 → Q-dormant (jens=0, underestimating), mechanism INACTIVE
+# Looking for the regime where mechanism is still active AND Q is bounded
+# enough to interpret the link verdict cleanly.
+#
+# 2 sync values × 2 arms × 30 seeds × 100k = 120 cells. GPU ~25 min.
+
+envs:
+  - {name: Asterix-MinAtar, n_seeds: 30, chunk_size: 15}
+
+base_intervention:
+  total_steps: 100000
+  eval_every:  10000
+  n_episodes:  5
+  gamma:       0.99
+  replay:
+    class: Replay
+    capacity: 50000
+    batch_size: 32
+  optimizer:
+    class: WarmedUpdate
+    inner: {class: Adam, lr: 0.0001, weight_decay: 0.0}
+    warmup_steps: 100
+  q_network:
+    class: CNN
+    obs_shape: {from_env: observation_shape}
+    channels: [16, 32]
+    kernel_size: 3
+    hidden: [128]
+
+hypotheses:
+  - name: vanilla_sync1k
+    predicted_direction: null
+    intervention: {sync_period: 1000}
+  - name: ddqn_sync1k
+    predicted_direction: a_gt_b
+    intervention:
+      sync_period: 1000
+      bootstrap:
+        fn: bootstrap
+        greedification: {fn: double_greedify}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement:
+          fn: bootstrap
+          greedification: {fn: double_greedify}
+
+  - name: vanilla_sync3k
+    predicted_direction: null
+    intervention: {sync_period: 3000}
+  - name: ddqn_sync3k
+    predicted_direction: a_gt_b
+    intervention:
+      sync_period: 3000
+      bootstrap:
+        fn: bootstrap
+        greedification: {fn: double_greedify}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement:
+          fn: bootstrap
+          greedification: {fn: double_greedify}

@@ -39,7 +39,7 @@ from __future__ import annotations
 import inspect
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from typing import Any, cast, overload
+from typing import cast, overload
 
 from corroborate._registry import Registry
 
@@ -76,7 +76,7 @@ class Measurable[R: Mapping[str, object], T]:
     reads: tuple[str, ...] = field(default=())
     fallbacks: tuple['Measurable[R, T]', ...] = field(default=())
 
-    def __call__(self, record: R, **deps: Any) -> T:
+    def __call__(self, record: R, **deps: object) -> T:
         return self.dispatch(record).fn(record, **deps)
 
     def dispatch(self, record: R) -> 'Measurable[R, T]':
@@ -104,6 +104,35 @@ def get_registered(
     """Look up a measurable by its registered name. Returns None
     if not registered. Typed accessor for the global registry."""
     return _REGISTRY.get(name)
+
+
+def register[R: Mapping[str, object], T](
+    m: Measurable[R, T],
+) -> Measurable[R, T]:
+    """Register `m` in the global name-keyed registry, idempotent
+    on (name, identity). Returns the same instance.
+
+    Two registration paths converge here:
+
+    - The `@measurable` decorator at function-definition time.
+    - The `@claim_bridge` decoder at bridges-import time, which
+      auto-registers `Measurable` instances passed by value as a
+      bridge's `source` / `target` (so a value-composed reduction
+      like `mean_window(from_key('q_max'), 0.5, 1.0)` becomes
+      cache-buildable without the author writing a separate
+      `@measurable` wrapper).
+
+    Same-name re-registration with the same identity is a no-op;
+    same-name with a *different* instance raises `ValueError` to
+    catch authoring mistakes (two reductions colliding on an
+    auto-generated name)."""
+    # Same-identity re-entry is idempotent; same-name with a
+    # different instance raises `ValueError` via `Registry.register`.
+    _REGISTRY.register(
+        m.name,
+        cast('Measurable[Mapping[str, object], object]', m),
+    )
+    return m
 
 
 def registered_names() -> tuple[str, ...]:
@@ -200,8 +229,9 @@ def _measurable_param_names(fn: Callable[..., object]) -> tuple[str, ...]:
     return tuple(deps)
 
 
-def _resolve_one[R: Mapping[str, object]](
-    name: str, record: R, cache: dict[str, object],
+def _resolve_one(
+    name: str, record: Mapping[str, object],
+    cache: dict[str, object],
 ) -> object:
     """Resolve one measurable by name; recurses on its deps.
     Memoizes in `cache` so each measurable computes at most once
@@ -221,9 +251,9 @@ def _resolve_one[R: Mapping[str, object]](
     return cache[name]
 
 
-def evaluate_with_measurables[R: Mapping[str, object], T](
+def evaluate_with_measurables[T](
     fn: Callable[..., T],
-    record: R,
+    record: Mapping[str, object],
     *,
     cache: dict[str, object] | None = None,
 ) -> T:
@@ -307,10 +337,9 @@ def measurable[R: Mapping[str, object], T](
         # than `register`. The decorator runs once per
         # module-import, but pytest fixtures redefine measurables
         # with the same name across tests; strict registration
-        # would raise. The framework's substantive collision
-        # discipline is in `analysis.register` (analysis names
-        # SHOULD be globally unique) and the YAML-side `@claim`
-        # registry; measurables are author-facing and re-entrant.
+        # would raise. The public `register(m)` function (above)
+        # IS strict — it's the path `@claim_bridge` uses to
+        # enforce uniqueness on auto-named composed measurables.
         _REGISTRY.replace(
             instance.name,
             cast(
@@ -325,14 +354,6 @@ def measurable[R: Mapping[str, object], T](
         instance: Measurable[R, T] = Measurable(
             fn=inner, name=resolved_name, reads=reads,
         )
-        # `@measurable` uses `replace` (last-write-wins) rather
-        # than `register`. The decorator runs once per
-        # module-import, but pytest fixtures redefine measurables
-        # with the same name across tests; strict registration
-        # would raise. The framework's substantive collision
-        # discipline is in `analysis.register` (analysis names
-        # SHOULD be globally unique) and the YAML-side `@claim`
-        # registry; measurables are author-facing and re-entrant.
         _REGISTRY.replace(
             instance.name,
             cast(

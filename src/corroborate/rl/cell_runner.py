@@ -41,7 +41,7 @@ from corroborate.computation_graph import ComputationGraph, build_computation_gr
 from corroborate.hypothesis import Hypothesis
 from corroborate.rl.dqn.dqn import default_state_hash, dqn
 from corroborate.rl.dqn.invariants import DQNTrajectoryRecord
-from corroborate.rl.env_catalogue import EnvSpec, EnvWrapper
+from corroborate.rl.env_catalogue import EnvSpec, EnvWrapper, HasN
 from corroborate.schema import MeasurementLeaf, RunRow, TraceLeaf, TraceRow
 from corroborate.signature import walk, walk_paths
 from corroborate.verdict import Verdict
@@ -203,9 +203,20 @@ def run_dqn_arm(
     # `collect_invariants(configured)` sees only the effective
     # sub-claims (no leakage from defaults that intervention
     # swapped out).
+    # Read n_actions from the wrapped env's action_space, not the
+    # static catalogue, so wrappers like ActionDuplicate that
+    # inflate |A| are reflected in the Q-network output dim and
+    # the epsilon-greedy sampling range.
+    wrapped_action_space = env.action_space(env_params)
+    if not isinstance(wrapped_action_space, HasN):
+        raise TypeError(
+            f"wrapped env action_space lacks `.n` (Discrete); "
+            f'got {type(wrapped_action_space).__name__}',
+        )
+    n_actions = int(wrapped_action_space.n)
     cell_kwargs: dict[str, object] = {
         'env': env, 'env_params': env_params,
-        'obs_shape': env_spec.observation_shape, 'n_actions': env_spec.n_actions,
+        'obs_shape': env_spec.observation_shape, 'n_actions': n_actions,
         'eval_episode_cap': env_spec.eval_episode_cap,
         'state_hash': state_hash,
     }
