@@ -8,8 +8,8 @@ much higher threshold should NO_EFFECT.
 
 The smoke proves:
 - The `@analysis` decorator + registry round-trip.
-- The `@claim_bridge` decorator reads bridge metadata from
-  the function's signature defaults and produces a typed Bridge.
+- The `@claim_bridge` decorator factory accepts bridge metadata as
+  kwargs and produces a typed Bridge.
 - `evaluate(bridge, cells)` resolves each fixture (parameter
   without a default) by name against the analysis registry,
   parameterises from the bridge's structural fields + params
@@ -29,7 +29,12 @@ from corroborate.analyses.paired_g import PairedGResult
 from corroborate.claim_bridge import (
     Bridge, Direction, Tier, claim_bridge, evaluate,
 )
+from corroborate.intervention import DoEffect
 from corroborate.verdict import Verdict
+
+
+# Module-level contrast for the top-level bridges in this file.
+INTERVENTION = DoEffect(treatment_arm='treatment', baseline_arm='baseline')
 
 
 def _synthetic_cells(
@@ -90,21 +95,19 @@ def test_analysis_registered_globally() -> None:
     assert get_registered('paired_g') is not None
 
 
-@claim_bridge
+@claim_bridge(
+    source='eval_best_burst_mean',
+    target='eval_best_burst_mean',
+    direction=Direction.DIRECT,
+    tier=Tier.ASSOCIATIONAL,
+)
 def treatment_helps_outcome(
     paired_g: PairedGResult,
     *,
-    source: str = 'eval_best_burst_mean',
-    target: str = 'eval_best_burst_mean',
-    direction: Direction = Direction.DIRECT,
-    tier: Tier = Tier.ASSOCIATIONAL,
-    treatment_arm: str = 'treatment',
-    baseline_arm: str = 'baseline',
     pair_by: tuple[str, ...] = ('seed',),
     env_name: str = 'TestEnv',
 ) -> Verdict:
-    del source, target, direction, tier
-    del treatment_arm, baseline_arm, pair_by, env_name
+    del pair_by, env_name
     if paired_g.n_pairs < 10:
         return Verdict.POWER_INSUFFICIENT
     if paired_g.g > 0.3 and paired_g.p_value < 0.05:
@@ -113,9 +116,8 @@ def treatment_helps_outcome(
 
 
 def test_bridge_held_under_explicit_threshold() -> None:
-    """Authoring path: the bridge is just a function whose
-    signature carries the metadata. Synthetic corpus with strong
-    effect → HELD."""
+    """Authoring path: the bridge is declared via decorator args.
+    Synthetic corpus with strong effect → HELD."""
     cells = _synthetic_cells()
     out = evaluate(treatment_helps_outcome, cells)
     assert out.verdict == Verdict.HELD
@@ -132,21 +134,19 @@ def test_bridge_no_effect_when_signal_absent() -> None:
     assert out.verdict == Verdict.NO_EFFECT
 
 
-@claim_bridge
+@claim_bridge(
+    source='eval_best_burst_mean',
+    target='eval_best_burst_mean',
+    direction=Direction.DIRECT,
+    tier=Tier.ASSOCIATIONAL,
+)
 def want_30_pairs(
     paired_g: PairedGResult,
     *,
-    source: str = 'eval_best_burst_mean',
-    target: str = 'eval_best_burst_mean',
-    direction: Direction = Direction.DIRECT,
-    tier: Tier = Tier.ASSOCIATIONAL,
-    treatment_arm: str = 'treatment',
-    baseline_arm: str = 'baseline',
     pair_by: tuple[str, ...] = ('seed',),
     env_name: str = 'TestEnv',
 ) -> Verdict:
-    del source, target, direction, tier
-    del treatment_arm, baseline_arm, pair_by, env_name
+    del pair_by, env_name
     if paired_g.n_pairs < 30:
         return Verdict.POWER_INSUFFICIENT
     if paired_g.g > 0.3 and paired_g.p_value < 0.05:
@@ -165,12 +165,9 @@ def test_bridge_power_insufficient_with_few_seeds() -> None:
 def test_unknown_fixture_raises() -> None:
     """A fixture parameter (no default) that doesn't match a
     registered analysis fails fast at evaluation."""
-    @claim_bridge
+    @claim_bridge(source='x', target='y')
     def broken(
         not_a_real_analysis: object,
-        *,
-        source: str = 'x',
-        target: str = 'y',
     ) -> Verdict:
         del not_a_real_analysis
         return Verdict.HELD
@@ -183,19 +180,19 @@ def test_unknown_fixture_raises() -> None:
 def test_bridge_carries_structural_metadata() -> None:
     """The decorator preserves the structural declaration as
     typed Bridge fields for downstream introspection."""
-    @claim_bridge
+    @claim_bridge(
+        source='A',
+        target='B',
+        direction=Direction.INVERSE,
+        tier=Tier.INTERVENTIONAL,
+    )
     def carries_metadata(
         paired_g: PairedGResult,
         *,
-        source: str = 'A',
-        target: str = 'B',
-        direction: Direction = Direction.INVERSE,
-        tier: Tier = Tier.INTERVENTIONAL,
         treatment_arm: str = 'ddqn',
         baseline_arm: str = 'vanilla_dqn',
     ) -> Verdict:
-        del paired_g, source, target, direction, tier
-        del treatment_arm, baseline_arm
+        del paired_g
         return Verdict.HELD
 
     assert isinstance(carries_metadata, Bridge)
@@ -206,88 +203,83 @@ def test_bridge_carries_structural_metadata() -> None:
     assert carries_metadata.tier == Tier.INTERVENTIONAL
     assert carries_metadata.params['treatment_arm'] == 'ddqn'
     assert carries_metadata.params['baseline_arm'] == 'vanilla_dqn'
-    assert carries_metadata.intervention is None
+    # Module-level INTERVENTION is inherited by all bridges in this module.
+    assert carries_metadata.intervention == INTERVENTION
 
 
 def test_bridge_carries_typed_intervention() -> None:
-    """A do-effect bridge declares `intervention=DoEffect(...)` as
-    a defaulted kwarg; the decorator routes it to the structural
-    `Bridge.intervention` field. The framework can then emit a
-    `do(treatment|vs=baseline) → target` graph edge instead of
-    burying the arm names in `params`."""
-    from corroborate.intervention import DoEffect
-
-    @claim_bridge
+    """A do-effect bridge declares source=DoEffect(...) in the
+    decorator; the framework routes it to the structural
+    `Bridge.source` field. The framework can then emit a
+    `do(treatment|vs=baseline) → target` graph edge."""
+    @claim_bridge(
+        source=DoEffect(treatment_arm='ddqn', baseline_arm='vanilla_dqn'),
+        target='eval_best_burst_mean',
+        direction=Direction.DIRECT,
+        tier=Tier.INTERVENTIONAL,
+    )
     def carries_intervention(
         paired_g: PairedGResult,
-        *,
-        source: str = 'outcome_native',
-        target: str = 'eval_best_burst_mean',
-        direction: Direction = Direction.DIRECT,
-        tier: Tier = Tier.INTERVENTIONAL,
-        intervention: DoEffect = DoEffect(
-            treatment_arm='ddqn', baseline_arm='vanilla_dqn',
-        ),
     ) -> Verdict:
-        del paired_g, source, target, direction, tier, intervention
+        del paired_g
         return Verdict.HELD
 
     assert isinstance(carries_intervention, Bridge)
-    assert carries_intervention.intervention is not None
-    assert carries_intervention.intervention.treatment_arm == 'ddqn'
-    assert carries_intervention.intervention.baseline_arm == 'vanilla_dqn'
+    assert isinstance(carries_intervention.source, DoEffect)
+    assert carries_intervention.source.treatment_arm == 'ddqn'
+    assert carries_intervention.source.baseline_arm == 'vanilla_dqn'
     assert (
-        carries_intervention.intervention.node_key()
+        carries_intervention.source.node_key()
         == 'do(ddqn|vs=vanilla_dqn)'
     )
 
 
 def test_bridge_rejects_non_doeffect_intervention() -> None:
-    """If `intervention=` is set but isn't a DoEffect, the
+    """If `source` is not a str, Measurable, or DoEffect, the
     decorator raises TypeError loudly — typed metadata."""
-    with pytest.raises(TypeError, match='intervention'):
-        @claim_bridge
-        def bad_intervention(
+    with pytest.raises(TypeError, match='source.*str or Measurable'):
+        @claim_bridge(
+            source=42,  # type: ignore[arg-type]
+            target='B',
+        )
+        def bad_source(
             paired_g: PairedGResult,
-            *,
-            source: str = 'A',
-            target: str = 'B',
-            intervention: str = 'not-a-doeffect',
         ) -> Verdict:
-            del paired_g, source, target, intervention
+            del paired_g
             return Verdict.HELD
 
 
 def test_bridge_requires_source_and_target() -> None:
-    """A bridge declaration without `source`/`target` defaults
-    raises at decoration time — the structural contract is
-    enforced at authoring."""
-    def _no_source_target(
-        paired_g: PairedGResult,
-        *,
-        direction: Direction = Direction.DIRECT,
-    ) -> Verdict:
-        del paired_g, direction
-        return Verdict.HELD
-
-    with pytest.raises(TypeError, match='source.*target'):
-        _ = claim_bridge(_no_source_target)
+    """A bridge declaration without `source`/`target` in the
+    decorator raises at decoration time — the structural contract
+    is enforced at authoring."""
+    with pytest.raises(TypeError):
+        # Missing required `source` and `target` args.
+        @claim_bridge()  # type: ignore[call-overload]
+        def _no_source_target(
+            paired_g: PairedGResult,
+            *,
+            direction: Direction = Direction.DIRECT,
+        ) -> Verdict:
+            del paired_g, direction
+            return Verdict.HELD
 
 
 def test_bridge_carries_typed_predicted_direction() -> None:
-    """A bridge with `predicted_direction='a_gt_b'` defaulted lands
-    on `Bridge.predicted_direction` as the typed structural field —
-    not buried in `params`. Promoted because paired/RE analyses
-    consume it as shared metadata across most bridges."""
-    @claim_bridge
+    """A bridge with `predicted_direction='a_gt_b'` in the
+    decorator lands on `Bridge.predicted_direction` as the typed
+    structural field — not buried in `params`. Promoted because
+    paired/RE analyses consume it as shared metadata across most
+    bridges."""
+    @claim_bridge(
+        source='A',
+        target='B',
+        predicted_direction='a_gt_b',
+    )
     def carries_predicted_direction(
         paired_g: PairedGResult,
-        *,
-        source: str = 'A',
-        target: str = 'B',
-        predicted_direction: str = 'a_gt_b',
     ) -> Verdict:
-        del paired_g, source, target, predicted_direction
+        del paired_g
         return Verdict.HELD
 
     assert isinstance(carries_predicted_direction, Bridge)
@@ -302,14 +294,11 @@ def test_bridge_predicted_direction_defaults_to_none() -> None:
     """A bridge that does NOT declare `predicted_direction` carries
     None on the typed field. Backwards-compatible with all existing
     @claim_bridge declarations."""
-    @claim_bridge
+    @claim_bridge(source='A', target='B')
     def no_predicted_direction(
         paired_g: PairedGResult,
-        *,
-        source: str = 'A',
-        target: str = 'B',
     ) -> Verdict:
-        del paired_g, source, target
+        del paired_g
         return Verdict.HELD
 
     assert no_predicted_direction.predicted_direction is None
@@ -319,15 +308,15 @@ def test_bridge_rejects_invalid_predicted_direction() -> None:
     """Only `'a_gt_b' | 'a_lt_b' | 'two_sided' | None` accepted —
     typed validation at decoration."""
     with pytest.raises(TypeError, match='predicted_direction'):
-        @claim_bridge
+        @claim_bridge(
+            source='A',
+            target='B',
+            predicted_direction='positive',  # type: ignore[arg-type]
+        )
         def bad_predicted_direction(
             paired_g: PairedGResult,
-            *,
-            source: str = 'A',
-            target: str = 'B',
-            predicted_direction: str = 'positive',
         ) -> Verdict:
-            del paired_g, source, target, predicted_direction
+            del paired_g
             return Verdict.HELD
 
 
@@ -350,15 +339,15 @@ def test_evaluate_forwards_predicted_direction_to_analyses() -> None:
         captured['predicted_direction'] = predicted_direction
         return 1
 
-    @claim_bridge
+    @claim_bridge(
+        source='A',
+        target='B',
+        predicted_direction='a_lt_b',
+    )
     def consumer(
         _captures_pd: int,
-        *,
-        source: str = 'A',
-        target: str = 'B',
-        predicted_direction: str = 'a_lt_b',
     ) -> Verdict:
-        del _captures_pd, source, target, predicted_direction
+        del _captures_pd
         return Verdict.HELD
 
     cells: list[Mapping[str, object]] = [{'env_name': 'X'}]
@@ -380,21 +369,19 @@ def test_bridge_accepts_measurable_as_source() -> None:
         from_key('online_max_q_per_step'), 0.5, 1.0,
     )
 
-    @claim_bridge
+    @claim_bridge(
+        source=cast(Measurable[Mapping[str, object], object], q_max_late),
+        target='outcome.eval_best_burst_mean',
+        direction=Direction.DIRECT,
+        tier=Tier.ASSOCIATIONAL,
+    )
     def reduces_q_max_late(
         paired_g: PairedGResult,
         *,
-        source: Measurable[Mapping[str, object], object] = (
-            cast(Measurable[Mapping[str, object], object], q_max_late)
-        ),
-        target: str = 'outcome.eval_best_burst_mean',
-        direction: Direction = Direction.DIRECT,
-        tier: Tier = Tier.ASSOCIATIONAL,
         treatment_arm: str = 'ddqn',
         baseline_arm: str = 'vanilla_dqn',
     ) -> Verdict:
-        del paired_g, source, target, direction, tier
-        del treatment_arm, baseline_arm
+        del paired_g
         return Verdict.HELD
 
     assert isinstance(reduces_q_max_late, Bridge)
@@ -410,16 +397,15 @@ def test_bridge_accepts_measurable_as_source() -> None:
 
 
 def test_bridge_rejects_non_str_non_measurable_source() -> None:
-    """Anything other than str | Measurable for source/target is an
-    authoring mistake — fail loudly at decoration time."""
-    def _bad_source(
-        paired_g: PairedGResult,
-        *,
-        source: int = 42,
-        target: str = 'B',
-    ) -> Verdict:
-        del paired_g, source, target
-        return Verdict.HELD
-
+    """Anything other than str | Measurable | DoEffect for source is
+    an authoring mistake — fail loudly at decoration time."""
     with pytest.raises(TypeError, match='source.*str or Measurable'):
-        _ = claim_bridge(_bad_source)
+        @claim_bridge(
+            source=42,  # type: ignore[arg-type]
+            target='B',
+        )
+        def _bad_source(
+            paired_g: PairedGResult,
+        ) -> Verdict:
+            del paired_g
+            return Verdict.HELD

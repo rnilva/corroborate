@@ -105,14 +105,6 @@ def endpoint_name(e: BridgeEndpoint) -> str:
     return e.name
 
 
-# Reserved kwarg names the decorator extracts as the bridge's
-# structural fields; everything else lands in `params`.
-_STRUCTURAL_FIELDS: frozenset[str] = frozenset(
-    {'source', 'target', 'direction', 'tier', 'intervention',
-     'predicted_direction'},
-)
-
-
 _PREDICTED_DIRECTION_VALUES: frozenset[str] = frozenset(
     {'a_gt_b', 'a_lt_b', 'two_sided'},
 )
@@ -140,14 +132,14 @@ class Bridge:
     column-name string for analyses + the causal graph.
 
     `intervention: DoEffect | None` is the Pearl-rung-2
-    annotation: when set, the graph builder emits an
-    `do(treatment|vs=baseline) → target` edge instead of (or in
-    addition to) the measurable-to-measurable one. Required for
-    bridges whose verdict comes from an intervention contrast
-    (paired_g.mean_diff between treatment_arm and baseline_arm
-    cells). Strictly stronger than burying the arm names in
-    `params` — surfaces the do() relationship at the graph
-    layer, where it belongs.
+    annotation: the do-contrast for analyses that need it
+    (paired_g, dowhy, mundlak, etc.). Auto-resolved at
+    decoration time from `module.INTERVENTION` — bridge authors
+    declare it once at the top of the file rather than per-
+    bridge. Per-bridge `source = DoEffect(...)` (in the decorator
+    args) overrides the module-level default. The graph builder
+    emits a `do(treatment|vs=baseline) → target` edge when
+    either source-as-DoEffect or this field is set.
 
     `predicted_direction: PredictedDirection | None` is the
     author-declared *prior* sign of the predicted effect, used by
@@ -267,91 +259,93 @@ def _require_predicted_direction(
     return cast(PredictedDirection, value)
 
 
-def claim_bridge(fn: Callable[..., Verdict]) -> Bridge:
-    """Wrap `fn` into a `Bridge` declaration. Reads metadata from
-    the function's name + signature defaults:
+def claim_bridge(
+    *,
+    source: BridgeEndpoint,
+    target: BridgeEndpoint,
+    direction: Direction = Direction.DIRECT,
+    tier: Tier = Tier.ASSOCIATIONAL,
+    predicted_direction: PredictedDirection | None = None,
+) -> Callable[[Callable[..., Verdict]], Bridge]:
+    """Decorator factory: wraps a function into a `Bridge`
+    declaration. Bridge metadata lives in the decorator args; the
+    function signature carries only fixture parameters (analyses)
+    and analysis-tool kwargs.
 
-    - bridge name = `fn.__name__`
-    - structural fields (`source`, `target`, `direction`, `tier`)
-      = the function's defaulted kwargs of those reserved names
-    - other defaulted kwargs → `Bridge.params`
-    - parameters without defaults → analysis fixtures, resolved
-      at evaluate time
-
-    Raises `TypeError` if `source`/`target` aren't both supplied
-    as defaulted-string kwargs, or if `direction`/`tier` are
-    supplied with the wrong type.
-    """
-    try:
-        sig = inspect.signature(fn)
-    except (TypeError, ValueError) as exc:
-        raise TypeError(
-            f'@claim_bridge {fn.__name__!r}: cannot inspect '
-            f'signature: {exc}',
-        ) from exc
-
-    structural: dict[str, object] = {}
-    params: dict[str, object] = {}
-    for param_name, param in sig.parameters.items():
-        # `inspect.Parameter.default` is `Any` per typeshed; cast
-        # at the boundary. Tracked in FUTURE_WORKS.md.
-        default = cast(object, param.default)
-        if default is inspect.Parameter.empty:
-            continue  # fixture; resolved at evaluate time
-        if param_name in _STRUCTURAL_FIELDS:
-            structural[param_name] = default
-        else:
-            params[param_name] = default
-
-    if 'source' not in structural or 'target' not in structural:
-        raise TypeError(
-            f'@claim_bridge {fn.__name__!r}: must declare both '
-            f'`source` and `target` as defaulted kwargs',
+        @claim_bridge(
+            source='eval_best_burst_mean',
+            target='eval_best_burst_mean',
+            direction=Direction.DIRECT,
+            tier=Tier.INTERVENTIONAL,
         )
-    source = _require_endpoint(
-        structural['source'], 'source', fn.__name__,
+        def some_bridge(
+            paired_g: PairedGResult,           # fixture (analysis result)
+            *,
+            pair_by: tuple[str, ...] = ('seed',),
+            extra_filters: Mapping[str, object] = MappingProxyType({...}),
+        ) -> Verdict:
+            ...
+
+    Module-level `INTERVENTION = DoEffect(...)` provides the
+    contrast for all bridges in the file unless overridden via
+    `source = DoEffect(...)` in the decorator (per-bridge
+    different intervention).
+
+    `Bridge.intervention` is auto-resolved from
+    `module.INTERVENTION` at decoration time and threaded into
+    analysis kwargs by `evaluate()`. Bridge authors do NOT write
+    `treatment_arm` / `baseline_arm` / `intervention=` as bridge
+    params anywhere.
+    """
+    # Validate decorator args at module-import time (early failure).
+    source_validated = _require_endpoint(
+        source, 'source', '<claim_bridge decorator>',
         allow_do_effect=True,
     )
-    target = _require_endpoint(
-        structural['target'], 'target', fn.__name__,
+    target_validated = _require_endpoint(
+        target, 'target', '<claim_bridge decorator>',
     )
-    # Auto-register Measurable instances passed by value so the
-    # cache walker (`measurable_names_for_bridges`) finds them via
-    # the standard registry path. Idempotent on (name, identity).
-    if isinstance(source, Measurable):
-        register(source)
-    if isinstance(target, Measurable):
-        register(target)
-    for v in params.values():
-        if isinstance(v, Measurable):
-            register(v)
-    direction = _require_direction(
-        structural.get('direction', Direction.DIRECT), fn.__name__,
+    direction_validated = _require_direction(
+        direction, '<claim_bridge decorator>',
     )
-    tier = _require_tier(
-        structural.get('tier', Tier.ASSOCIATIONAL), fn.__name__,
+    tier_validated = _require_tier(
+        tier, '<claim_bridge decorator>',
     )
-    # File-level INTERVENTION resolution. The bridge module declares
-    # `INTERVENTION = DoEffect(...)` at top level; every bridge in
-    # that file inherits the contrast as a default — no per-bridge
-    # `treatment_arm` / `baseline_arm` plumbing needed. Per-bridge
-    # `source = DoEffect(...)` is the explicit override path; the
-    # legacy per-bridge `intervention=DoEffect(...)` field still
-    # works during migration but is no longer needed.
-    #
-    # Precedence (resolved here at decoration time):
-    #   per-bridge `intervention=DoEffect(...)` (legacy)
-    #     > module-level `INTERVENTION = DoEffect(...)` (new shape)
-    intervention_default = structural.get('intervention')
-    if intervention_default is not None and not isinstance(
-        intervention_default, DoEffect,
-    ):
-        raise TypeError(
-            f'@claim_bridge {fn.__name__!r}: default for '
-            f'`intervention` must be a DoEffect (or omitted); got '
-            f'{type(intervention_default).__name__}',
-        )
-    if intervention_default is None:
+    predicted_direction_validated = _require_predicted_direction(
+        predicted_direction, '<claim_bridge decorator>',
+    )
+
+    def _decorator(fn: Callable[..., Verdict]) -> Bridge:
+        try:
+            sig = inspect.signature(fn)
+        except (TypeError, ValueError) as exc:
+            raise TypeError(
+                f'@claim_bridge {fn.__name__!r}: cannot inspect '
+                f'signature: {exc}',
+            ) from exc
+
+        # Defaulted kwargs become `Bridge.params`; non-defaulted
+        # parameters are fixtures resolved at evaluate time.
+        params: dict[str, object] = {}
+        for param_name, param in sig.parameters.items():
+            default = cast(object, param.default)
+            if default is inspect.Parameter.empty:
+                continue
+            params[param_name] = default
+
+        # Auto-register Measurable instances passed by value.
+        if isinstance(source_validated, Measurable):
+            register(source_validated)
+        if isinstance(target_validated, Measurable):
+            register(target_validated)
+        for v in params.values():
+            if isinstance(v, Measurable):
+                register(v)
+
+        # Module-level INTERVENTION resolution. The module declares
+        # `INTERVENTION = DoEffect(...)` at top level; every bridge
+        # in that file inherits the contrast as a default. Per-bridge
+        # `source = DoEffect(...)` overrides it.
         module = sys.modules.get(fn.__module__)
         module_intervention: object = (
             getattr(module, 'INTERVENTION', None)
@@ -366,22 +360,25 @@ def claim_bridge(fn: Callable[..., Verdict]) -> Bridge:
                 f'{type(module_intervention).__name__}; must be a '
                 f'DoEffect (or omitted).',
             )
-        intervention_default = module_intervention
-    predicted_direction = _require_predicted_direction(
-        structural.get('predicted_direction'), fn.__name__,
-    )
+        intervention = (
+            module_intervention
+            if isinstance(module_intervention, DoEffect)
+            else None
+        )
 
-    return Bridge(
-        name=fn.__name__,
-        source=source,
-        target=target,
-        direction=direction,
-        tier=tier,
-        params=MappingProxyType(params),
-        holds_when=fn,
-        intervention=intervention_default,
-        predicted_direction=predicted_direction,
-    )
+        return Bridge(
+            name=fn.__name__,
+            source=source_validated,
+            target=target_validated,
+            direction=direction_validated,
+            tier=tier_validated,
+            params=MappingProxyType(params),
+            holds_when=fn,
+            intervention=intervention,
+            predicted_direction=predicted_direction_validated,
+        )
+
+    return _decorator
 
 
 def evaluate(
@@ -440,9 +437,16 @@ def evaluate(
         'predicted_direction': bridge.predicted_direction,
         **dict(bridge.params),
     }
+    # Inject contrast arms ONLY when the bridge hasn't already
+    # supplied them via legacy `treatment_arm` / `baseline_arm`
+    # params. Migrated bridges drop those params and inherit from
+    # the resolved contrast; unmigrated bridges keep their explicit
+    # arm strings during the transition.
     if contrast is not None:
-        bridge_params['treatment_arm'] = contrast.treatment_arm
-        bridge_params['baseline_arm'] = contrast.baseline_arm
+        if 'treatment_arm' not in bridge_params:
+            bridge_params['treatment_arm'] = contrast.treatment_arm
+        if 'baseline_arm' not in bridge_params:
+            bridge_params['baseline_arm'] = contrast.baseline_arm
     analysis_results = resolve_for_holds_when(
         bridge.holds_when, cells, bridge_params,
     )

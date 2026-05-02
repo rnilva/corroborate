@@ -70,19 +70,19 @@ SYNTHETIC_DAG: list[tuple[str, str]] = [
 
 def test_backdoor_ate_runs_directly() -> None:
     """Single-fixture: bridge consuming only backdoor_ate."""
-    @claim_bridge
+    @claim_bridge(
+        source='treatment_var',
+        target='outcome_var',
+        direction=Direction.DIRECT,
+        tier=Tier.INTERVENTIONAL,
+    )
     def claim(
         backdoor_ate: BackdoorResult,
         *,
-        source: str = 'treatment_var',
-        target: str = 'outcome_var',
-        direction: Direction = Direction.DIRECT,
-        tier: Tier = Tier.INTERVENTIONAL,
         treatment: str = 'treatment_var',
         outcome: str = 'outcome_var',
         dag: list[tuple[str, str]] = SYNTHETIC_DAG,
     ) -> Verdict:
-        del source, target, direction, tier
         del treatment, outcome, dag
         if not backdoor_ate.identified:
             return Verdict.POWER_INSUFFICIENT
@@ -104,21 +104,21 @@ def test_multi_fixture_bridge_consumes_three_analyses() -> None:
     random_common_cause_refutation). The framework resolves each
     by parameter name, runs them, injects all three results
     into the bridge body."""
-    @claim_bridge
+    @claim_bridge(
+        source='treatment_var',
+        target='outcome_var',
+        direction=Direction.DIRECT,
+        tier=Tier.INTERVENTIONAL,
+    )
     def claim(
         backdoor_ate: BackdoorResult,
         placebo_refutation: RefutationResult,
         random_common_cause_refutation: RefutationResult,
         *,
-        source: str = 'treatment_var',
-        target: str = 'outcome_var',
-        direction: Direction = Direction.DIRECT,
-        tier: Tier = Tier.INTERVENTIONAL,
         treatment: str = 'treatment_var',
         outcome: str = 'outcome_var',
         dag: list[tuple[str, str]] = SYNTHETIC_DAG,
     ) -> Verdict:
-        del source, target, direction, tier
         del treatment, outcome, dag
         if not backdoor_ate.identified:
             return Verdict.POWER_INSUFFICIENT
