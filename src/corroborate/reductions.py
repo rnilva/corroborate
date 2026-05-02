@@ -26,25 +26,40 @@ whose `reads` is `('q_max',)`. No name-keyed registry, no
 from __future__ import annotations
 
 from collections.abc import Mapping
+from typing import Literal, cast
 
 import numpy as np
 
 from corroborate.measurable import Measurable
 
 
+type _AxisOp = Literal['mean', 'var', 'std', 'max', 'min', 'sum']
+
+
 # ============ Leaf: lift a record key to a Measurable ============
 
 def from_key(
     key: str,
-) -> Measurable[Mapping[str, np.ndarray], np.ndarray]:
-    """Read `record[key]` as a `numpy array`. The leaf primitive
+) -> Measurable[Mapping[str, object], np.ndarray]:
+    """Read `record[key]` as a `numpy.ndarray`. The leaf primitive
     that lifts a record-keyed value into typed `Measurable` space.
+
+    Coerces via `np.asarray` so polars-shape inputs (e.g. a 2-D
+    `mc_return` column surfacing as `list[list[float]]` in a row
+    dict) become proper ndarrays before downstream factories
+    apply their `.shape` / `.mean(axis=...)` / etc. calls. Without
+    this coercion every caller would have to repeat the
+    `np.asarray(record['key'], dtype=np.float64)` boilerplate.
+
+    Raises `KeyError` if `key` is absent from the record — the
+    cache builder catches this upstream and stores None.
 
     Parameterized by `key` rather than declared as a `@measurable`
     function because the latter would close over a static name —
     factories take parameters."""
-    def fn(record: Mapping[str, np.ndarray]) -> np.ndarray:
-        return record[key]
+    def fn(record: Mapping[str, object]) -> np.ndarray:
+        v = record[key]
+        return np.asarray(v)
     return Measurable(fn=fn, name=key, reads=(key,))
 
 
@@ -289,3 +304,153 @@ def peak_centered_window[R: Mapping[str, object]](
             return float('nan')
         return float(np.mean(arr[lo:hi]))
     return Measurable(fn=fn, name=name, reads=reads)
+
+
+# ============ Axis-aware reductions for N-D operands ============
+#
+# `mean_window` / `growth_window` / `peak_*` assume a 1-D operand
+# and reduce along its leading axis. When an operand is 2-D
+# (e.g. `mc_return` shape `(n_outer, n_inner)` — eval-checkpoint
+# index × replicates per checkpoint), authors typically want to
+# (a) collapse the inner axis to per-outer scalars, then (b)
+# window or otherwise reduce along the leading axis.
+#
+# `reduce_axis` and `slice_axis` are the substrate-blind primitives
+# for that shape: each collapses or slices a single axis. The
+# composition `mean_window(reduce_axis(from_key('X'), op='mean'),
+# 0.0, 0.25)` reads as "first-quarter of per-outer means on X" —
+# a pattern previously written as a hand-rolled `@measurable`.
+#
+# Auto-generated names embed the axis + op for cache predictability:
+#   `X__mean_axis_-1`, `X__var_axis_-1`,
+#   `X__slice_axis_0_25_75`.
+
+
+def reduce_axis[R: Mapping[str, object]](
+    of: Measurable[R, np.ndarray],
+    *,
+    axis: int = -1,
+    op: _AxisOp = 'mean',
+) -> Measurable[R, np.ndarray]:
+    """Collapse `axis` of `of`'s output via `op`. Returns an
+    array one dimension lower than the input. `axis=-1` (default)
+    is the inner-axis collapse — the typical "reduce-replicates-
+    keep-checkpoints" shape (e.g. `mc_return` shape `(n_bursts,
+    n_episodes)` → per-burst scalars shape `(n_bursts,)`).
+
+    `op` supports `'mean'` / `'var'` / `'std'` / `'max'` /
+    `'min'` / `'sum'`. Other ops belong in a hand-written
+    `@measurable` (the framework primitives stay narrow).
+
+    Empty operand passes through unchanged so downstream factories
+    can NaN-propagate. The factory itself doesn't catch missing
+    leaf reads — the cache builder catches `KeyError` from
+    `from_key` upstream and stores None on cells where the leaf
+    isn't present."""
+    name = f'{of.name}__{op}_axis_{axis}'
+
+    def fn(record: R) -> np.ndarray:
+        arr = of(record)
+        if arr.size == 0:
+            return arr
+        # `ndarray.mean(axis=...)` and friends are typed `Any` in
+        # numpy's stubs (the return is value-dependent: scalar for
+        # 1-D + axis=0, ndarray for N-D + axis<N). Cast at the
+        # boundary; the runtime invariant is "always an ndarray
+        # because we already short-circuited size==0 above."
+        if op == 'mean':
+            return cast(np.ndarray, arr.mean(axis=axis))
+        if op == 'var':
+            return cast(np.ndarray, arr.var(axis=axis))
+        if op == 'std':
+            return cast(np.ndarray, arr.std(axis=axis))
+        if op == 'max':
+            return cast(np.ndarray, arr.max(axis=axis))
+        if op == 'min':
+            return cast(np.ndarray, arr.min(axis=axis))
+        return cast(np.ndarray, arr.sum(axis=axis))
+    return Measurable(fn=fn, name=name, reads=of.reads)
+
+
+def slice_axis[R: Mapping[str, object]](
+    of: Measurable[R, np.ndarray],
+    *,
+    axis: int = 0,
+    lo: float = 0.0,
+    hi: float = 1.0,
+) -> Measurable[R, np.ndarray]:
+    """Take the fractional `[lo, hi]` window along `axis` of
+    `of`'s output, returning the slice (same N-D as input).
+    Sibling of `mean_window` that keeps the slice instead of
+    averaging it — useful when downstream wants a non-mean
+    reduction over the windowed slice.
+
+    Bounds: `0.0 <= lo < hi <= 1.0`."""
+    if not (0.0 <= lo < hi <= 1.0):
+        raise ValueError(
+            f'slice_axis: need 0 ≤ lo < hi ≤ 1; got [{lo}, {hi}]',
+        )
+    label = f'slice_axis_{axis}_{int(round(lo * 100))}_{int(round(hi * 100))}'
+    name = f'{of.name}__{label}'
+
+    def fn(record: R) -> np.ndarray:
+        arr = of(record)
+        if arr.size == 0:
+            return arr
+        n = int(arr.shape[axis])
+        i_lo = int(lo * n)
+        i_hi = max(int(hi * n), i_lo + 1)
+        idx: list[slice | int] = [slice(None)] * arr.ndim
+        idx[axis] = slice(i_lo, i_hi)
+        return arr[tuple(idx)]
+    return Measurable(fn=fn, name=name, reads=of.reads)
+
+
+# ============ Element-wise unary lifts ============
+
+
+def log_safe[R: Mapping[str, object]](
+    of: Measurable[R, np.ndarray],
+) -> Measurable[R, np.ndarray]:
+    """Element-wise `log(x)` with NaN on non-positive values.
+    Same NaN-honest discipline as the hand-written `log_mc_variance_
+    per_burst`: zero or negative entries (e.g. deterministic-
+    converged bursts with mc_return variance = 0) become NaN, so
+    averaging across cells doesn't leak `-∞` outliers via a 1e-9
+    epsilon shortcut."""
+    name = f'{of.name}__log'
+
+    def fn(record: R) -> np.ndarray:
+        arr = np.asarray(of(record), dtype=np.float64)
+        out = np.full(arr.shape, np.nan, dtype=np.float64)
+        mask = arr > 0
+        out[mask] = np.log(arr[mask])
+        return out
+    return Measurable(fn=fn, name=name, reads=of.reads)
+
+
+def cv_safe[R: Mapping[str, object]](
+    of: Measurable[R, np.ndarray],
+    *,
+    axis: int = -1,
+) -> Measurable[R, np.ndarray]:
+    """Coefficient of variation: `std(arr, axis) / |mean(arr,
+    axis)|`. Reduces `axis`; output has one less dimension. NaN
+    where mean is zero (degenerate; CV undefined). Composes with
+    the rest of the toolkit — feeding `cv_safe` into
+    `mean_window` gives e.g. mean-CV-late."""
+    mean_m = reduce_axis(of, axis=axis, op='mean')
+    std_m = reduce_axis(of, axis=axis, op='std')
+    name = f'{of.name}__cv_axis_{axis}'
+
+    def fn(record: R) -> np.ndarray:
+        m = np.asarray(mean_m(record), dtype=np.float64)
+        s = np.asarray(std_m(record), dtype=np.float64)
+        out = np.full(m.shape, np.nan, dtype=np.float64)
+        mask = np.abs(m) > 0
+        out[mask] = s[mask] / np.abs(m[mask])
+        return out
+    return Measurable(fn=fn, name=name, reads=of.reads)
+
+
+

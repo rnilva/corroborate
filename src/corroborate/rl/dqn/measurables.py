@@ -45,7 +45,14 @@ import jax.numpy as jnp
 import numpy as np
 import numpy.typing as npt
 
-from corroborate.measurable import Measurable, measurable
+from corroborate.measurable import Measurable, measurable, register
+from corroborate.reductions import (
+    cv_safe,
+    from_key,
+    log_safe,
+    mean_window,
+    reduce_axis,
+)
 from corroborate.rl import env_catalogue
 
 
@@ -529,41 +536,34 @@ def outcome_native(record: Mapping[str, object]) -> float:
     return float(outcome) / float(rs)
 
 
-@measurable(reads=('mc_return',))
-def mc_return_first_quarter(
-    record: Mapping[str, object],
-) -> float:
-    """Mean of `mc_return` over the first quarter of training
-    bursts. Per-cell scalar.
+# mc_return reductions: 2-D shape (n_bursts, n_episodes). The
+# per-cell scalars below collapse the inner (episode) axis with
+# `reduce_axis(..., op='mean')` then window the leading (burst)
+# axis with `mean_window(..., lo, hi)`. Composed factories carry
+# `reads=('mc_return',)` automatically; cells without the column
+# fail at `from_key` and the cache builder NaN-stores them. Each
+# is rebound under a stable substrate name so existing bridges
+# referencing 'mc_return_first_quarter' etc. resolve unchanged.
 
-    `mc_return` is shape `(n_bursts, K)` (eval-burst index × K
-    eval episodes per burst). Reduces to a single scalar
-    representing performance early in training. Bridges that
-    test "DDQN's outcome benefit at the start of training" pair
-    cells on this scalar; the difference (treatment − baseline)
-    captures the early-burst arm gap without the best-burst
-    selection bias of `outcome.eval_best_burst_mean`."""
-    arr = np.asarray(record['mc_return'], dtype=np.float64)
-    if arr.ndim != 2 or arr.size == 0:
-        return float('nan')
-    n_bursts = arr.shape[0]
-    q = max(1, n_bursts // 4)
-    return float(arr[:q].mean())
+mc_return_first_quarter = Measurable(
+    fn=mean_window(
+        reduce_axis(from_key('mc_return'), axis=-1, op='mean'),
+        0.0, 0.25,
+    ).fn,
+    name='mc_return_first_quarter',
+    reads=('mc_return',),
+)
+register(mc_return_first_quarter)
 
-
-@measurable(reads=('mc_return',))
-def mc_return_last_quarter(
-    record: Mapping[str, object],
-) -> float:
-    """Mean of `mc_return` over the last quarter of training
-    bursts. Sibling of `mc_return_first_quarter`; the late-
-    training scalar."""
-    arr = np.asarray(record['mc_return'], dtype=np.float64)
-    if arr.ndim != 2 or arr.size == 0:
-        return float('nan')
-    n_bursts = arr.shape[0]
-    q = max(1, n_bursts // 4)
-    return float(arr[-q:].mean())
+mc_return_last_quarter = Measurable(
+    fn=mean_window(
+        reduce_axis(from_key('mc_return'), axis=-1, op='mean'),
+        0.75, 1.0,
+    ).fn,
+    name='mc_return_last_quarter',
+    reads=('mc_return',),
+)
+register(mc_return_last_quarter)
 
 
 @measurable(reads=('gamma',))
@@ -580,85 +580,41 @@ def effective_horizon(record: Mapping[str, object]) -> float:
     return 1.0 / (1.0 - g)
 
 
-@measurable(reads=('mc_return',))
-def mc_variance_per_burst(
-    record: Mapping[str, object],
-) -> npt.NDArray[np.float64]:
-    """Per-burst variance of `mc_return` across the K eval
-    episodes within each burst. Shape `(n_bursts,)`.
+# Per-burst variance / CV / log: variance over the inner
+# (episode) axis, then optionally elementwise log. `cv_safe`
+# composes mean+std internally; `log_safe` is NaN-on-non-positive.
+# Each rebound under a stable name for back-compat with bridges
+# that reference these by string source/target.
 
-    The within-burst spread of returns is a proxy for *epistemic
-    uncertainty* in the agent's current policy — when the same
-    policy produces variable episodic returns, the agent is
-    sampling a high-variance distribution. Distinct from
-    *between-env* mc_variance (which captures structural env
-    noise). The bridge `mc_variance_attenuates_g_link__between_env`
-    consumes this for the per-(env, burst) panel."""
-    arr = np.asarray(record['mc_return'], dtype=np.float64)
-    if arr.ndim != 2 or arr.size == 0:
-        return np.zeros((0,), dtype=np.float64)
-    return arr.var(axis=1)
+mc_variance_per_burst = Measurable(
+    fn=reduce_axis(from_key('mc_return'), axis=-1, op='var').fn,
+    name='mc_variance_per_burst',
+    reads=('mc_return',),
+)
+register(mc_variance_per_burst)
 
+log_mc_variance_per_burst = Measurable(
+    fn=log_safe(
+        reduce_axis(from_key('mc_return'), axis=-1, op='var'),
+    ).fn,
+    name='log_mc_variance_per_burst',
+    reads=('mc_return',),
+)
+register(log_mc_variance_per_burst)
 
-@measurable(reads=('mc_return',))
-def log_mc_variance_per_burst(
-    record: Mapping[str, object],
-    mc_variance_per_burst: npt.NDArray[np.float64],
-) -> npt.NDArray[np.float64]:
-    """`log(mc_variance_per_burst)`. Composes the variance
-    measurable. Zero-variance bursts (converged-deterministic
-    runs — e.g. Catch reaches optimum and every episode returns
-    the same scalar) produce NaN, NOT a fudge floor. Downstream
-    consumers that average across cells must filter NaN; the
-    +1e-9 epsilon shortcut leaks deterministic-success bursts
-    in as -20.7 outliers and contaminates the average."""
-    arr = np.asarray(mc_variance_per_burst, dtype=np.float64)
-    out = np.full(arr.shape, np.nan, dtype=np.float64)
-    mask = arr > 0
-    out[mask] = np.log(arr[mask])
-    return out
+mc_cv_per_burst = Measurable(
+    fn=cv_safe(from_key('mc_return'), axis=-1).fn,
+    name='mc_cv_per_burst',
+    reads=('mc_return',),
+)
+register(mc_cv_per_burst)
 
-
-@measurable(reads=('mc_return',))
-def mc_cv_per_burst(
-    record: Mapping[str, object],
-) -> npt.NDArray[np.float64]:
-    """Per-burst coefficient of variation: `√var / |mean|`. Shape
-    `(n_bursts,)`. NaN when |mean| is zero (degenerate, no
-    well-defined CV) or when mc_return is mis-shaped.
-
-    Variance scales with reward magnitude squared (k²) — it
-    confounds with reward-scale interventions. CV is unitless,
-    invariant under positive linear scaling of reward, and so
-    captures *intrinsic relative noisiness* of returns rather
-    than absolute spread. If `log_mc_variance` attenuates DDQN
-    because it correlates with reward magnitude, CV should NOT
-    reproduce the attenuation; if there's a true relative-noise
-    moderator, CV will surface it."""
-    arr = np.asarray(record['mc_return'], dtype=np.float64)
-    if arr.ndim != 2 or arr.size == 0:
-        return np.zeros((0,), dtype=np.float64)
-    means = arr.mean(axis=1)
-    stds = arr.std(axis=1)
-    out = np.full(means.shape, np.nan, dtype=np.float64)
-    mask = np.abs(means) > 0
-    out[mask] = stds[mask] / np.abs(means[mask])
-    return out
-
-
-@measurable(reads=('mc_return',))
-def log_mc_cv_per_burst(
-    record: Mapping[str, object],
-    mc_cv_per_burst: npt.NDArray[np.float64],
-) -> npt.NDArray[np.float64]:
-    """`log(mc_cv_per_burst)`. Zero-CV bursts (deterministic
-    success or failure) produce NaN — same NaN-honest discipline
-    as `log_mc_variance_per_burst`."""
-    arr = np.asarray(mc_cv_per_burst, dtype=np.float64)
-    out = np.full(arr.shape, np.nan, dtype=np.float64)
-    mask = arr > 0
-    out[mask] = np.log(arr[mask])
-    return out
+log_mc_cv_per_burst = Measurable(
+    fn=log_safe(cv_safe(from_key('mc_return'), axis=-1)).fn,
+    name='log_mc_cv_per_burst',
+    reads=('mc_return',),
+)
+register(log_mc_cv_per_burst)
 
 
 # ============ Lifted from cell_runner._eval_outcomes (Phase 3A) ============
