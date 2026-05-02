@@ -9,8 +9,8 @@ search, naming the framework primitives used at each step and
 how the causal-discovery tools interleave with meta-regression.
 
 **Pre-reading**: `LIFECYCLE.md` (12-stage flow); `CLAUDE.md`
-(typing discipline + framework gist); `invariant.py` module
-docstring (gap-Measurable convention).
+(typing discipline + framework gist); `claim_bridge.py` module
+docstring (file-protocol bridge authoring).
 
 ## The procedure
 
@@ -19,8 +19,10 @@ claim. The output is one of:
 
 - **HELD on a subscope**: a measurable scope-condition that, when
   imposed, makes the mechanism→outcome link HELD. The
-  scope-condition is committed via `at_most(gap, threshold,
-  of_claim=...)` attached to the relevant Claim node.
+  scope-condition is committed as a *verdict measurable* the
+  substrate registers via `@measurable` (e.g.
+  `at_most[gap<=threshold].verdict`) and pre-registers on
+  `Hypothesis.measurables`.
 - **NULL on every candidate scope**: the mechanism activates but
   no measurable subscope reproduces the link → the chain has
   edges the framework hasn't yet captured.
@@ -51,13 +53,14 @@ the edge carries signal. Two flavours:
 - **Per-cell measurable** — a continuous per-run quantity computed
   from the trace (e.g. `jensen_dormancy_gap`,
   `state_coverage_kl_uniform_late`, `td_residual_late`). Express
-  as `Measurable[R, float]` in the substrate; if it's a
-  theorem-direct invariance gap, attach to the relevant Claim via
-  `attach_invariant`.
+  as `Measurable[R, float]` in the substrate via `@measurable`
+  and pre-register on `Hypothesis.measurables` so cell_runner
+  persists it as a scalar column on every RunRow.
 - **Per-env / structural** — a categorical or integer property of
   the env / configuration (e.g. `action_dim`,
   `bootstrap_depth = γ × episode_length`). Read from the env
-  catalogue or RunRow.measurements; not a Measurable.
+  catalogue or a `@measurable(reads=('env_name',))` resolver
+  (`log_action_dim`, `log_obs_dim`, `r_max`, etc.).
 
 ### Step 3. Design a sweep that varies the scope variable
 
@@ -79,7 +82,7 @@ from corroborate.aggregate import hypothesis_comparison_from_cells
 
 mech = hypothesis_comparison_from_cells(
     treatment_h, treatment_runs, baseline_runs,
-    outcome_path='mechanism.jensen_gap',
+    outcome_path='jensen_gap',
     pair_by=('seed',),
     group_by='env_name',
     baseline_h=baseline_h,
@@ -89,8 +92,9 @@ mech = hypothesis_comparison_from_cells(
 # mech.verdict: Verdict — Popperian aggregate
 ```
 
-Repeat for the link edge (`outcome.eval_*`). Two
-HypothesisComparisonRows: one per edge.
+Repeat for the link edge (`eval_best_burst_mean`,
+`eval_final_mean`, etc.). Two HypothesisComparisonRows: one per
+edge.
 
 ### Step 5. Audit candidate per-cell mediators (interleaved)
 
@@ -104,7 +108,7 @@ reports = audit_mediator_panel(
     candidate_measurables, runs,
     outcome_reads=frozenset({'mc_return'}),
     hp_axes=('replay.capacity', ...),
-    outcome_path='outcome.eval_best_burst_mean',
+    outcome_path='eval_best_burst_mean',
     hp_stratum_axis=...,
 )
 # Each TautologyReport carries:
@@ -122,10 +126,10 @@ non-residual signal.
 
 **Important caveat from the FourRooms study**: scalar reductions
 (per-cell mean of a per-burst trace) can hide phase-dependent
-effects. On FourRooms the env-level scalar `mechanism.jensen_gap
-g=+0.13` (sign reversed) coexisted with per-burst trajectories
-showing DDQN *reduces* bias in bursts 0-3 (Δbias = −1.02 → −0.09)
-and only diverges late (Δbias = +1.15 → +479, success-induced
+effects. On FourRooms the env-level scalar `jensen_gap g=+0.13`
+(sign reversed) coexisted with per-burst trajectories showing
+DDQN *reduces* bias in bursts 0-3 (Δbias = −1.02 → −0.09) and
+only diverges late (Δbias = +1.15 → +479, success-induced
 Q-growth, not mechanism failure). The within-pair correlation
 `r(Δbias, Δret)` is negative at every burst, confirming the
 mechanism→outcome chain operates throughout — but the scalar
@@ -156,24 +160,35 @@ reduction was the wrong abstraction. If the per-burst sign
 is genuinely phase-dependent and the scalar would be a false
 average.
 
+The framework provides `paired_link_per_burst` and
+`paired_g_per_burst` analyses for the panel-typed form of this
+probe; consume them via `@claim_bridge` for typed verdicts.
+
 **Don't author a `mediator_late` or `mediator_growth` Measurable
 to fix this.** The substrate's raw-trace contract supports any
 post-hoc reduction; ad-hoc reductions belong inline in analysis,
-not in invariants.py / measurables.py (see
-`feedback_measurables_not_logging`).
+not in `measurables.py` (see `feedback_measurables_not_logging`).
 
 ### Step 6. Stage-9 meta-regression on covariates
 
-Map per-env GroupStats → StratumObservation, regress per-env g on
-candidate covariates:
+Map per-env GroupStats → StratumG[str] panel, regress per-env g
+on candidate covariates:
 
 ```python
-from corroborate.meta_regression import meta_regress_comparison
+from corroborate.analyses.paired_g import per_env_paired_g_panel
+from corroborate.meta_regression import meta_regress_panel
 
-def covariate_for(env_name: object) -> Mapping[str, float]:
-    return {'log_action_dim': math.log(get(env_name).n_actions)}
-
-res = meta_regress_comparison(mech, covariate_for)
+panel = per_env_paired_g_panel(
+    cells, treatment_arm='ddqn', baseline_arm='vanilla_dqn',
+    source='jensen_gap',
+)
+res = meta_regress_panel(
+    panel,
+    covariates_per_stratum={
+        env: {'log_action_dim': math.log(get(env).n_actions)}
+        for env in envs
+    },
+)
 # res.cleavage_axes: tuple[str, ...] — significant covariates
 # res.coefficients: tuple[CovariateCoefficient, ...] — β + CI + p
 ```
@@ -187,71 +202,68 @@ A significant meta-regression coefficient says "the per-env g
 varies systematically with this covariate". It does NOT say
 "this covariate causally drives the link". For the rung-2
 interventional verdict, route the covariate through the dowhy
-bridge triple:
+analysis triple authored as `@claim_bridge`s:
 
 ```python
-from corroborate.bridges_dowhy import (
-    backdoor_ate, placebo_refutation, random_common_cause_refutation,
-)
-from corroborate.causal_graph import (
-    build_causal_graph, promote_bridged_evidence,
-)
-
-dag = [
-    *((hp, treatment) for hp in hp_axes),  # HPs confound treatment
-    *((hp, outcome) for hp in hp_axes),    # HPs confound outcome
-    (treatment, outcome),                  # the edge under test
-]
-results = [
-    backdoor_ate(treatment, outcome, graph=dag,
-                 expected_sign=+1, threshold=0.5)(record),
-    placebo_refutation(treatment, outcome, graph=dag,
-                       tolerance=1.0)(record),
-    random_common_cause_refutation(treatment, outcome, graph=dag,
-                                   tolerance=1.0)(record),
-]
-g = promote_bridged_evidence(build_causal_graph(results))
-# Edges where all three HELD get tier=INTERVENTIONAL_BRIDGED.
+# Author intervention/refuter bridges in a substrate bridges
+# module via @claim_bridge; consume `analyses.dowhy.backdoor_ate`,
+# `analyses.dowhy.placebo_refutation`,
+# `analyses.dowhy.random_common_cause_refutation` as fixtures.
+# `hypothesis_subgraph_verdict(h, runs, baseline_runs)` walks
+# the Hypothesis's edges and produces a CausalGraph where pairs
+# with ≥2 INTERVENTIONAL HELDs promote to causal_bridged via
+# `promote_bridged_evidence`.
 ```
 
 When the dowhy triple HELDs *and* the meta-regression β is
 significant, the scope claim is supported at rung-2-conditional-
-on-DAG. Direction-of-causation caveats from `bridges_dowhy.py`
+on-DAG. Direction-of-causation caveats from `analyses/dowhy.py`
 apply.
 
 ### Step 8. Commit the threshold
 
-If the scope variable + threshold survives validation, commit the
-scope claim by attaching the wrap to the substrate's claim:
+If the scope variable + threshold survives validation, commit
+the scope claim as a **verdict measurable** the substrate
+registers via `@measurable`. Convention: the column name encodes
+the threshold (e.g. `at_most[jensen_dormancy_gap<=0].verdict`),
+and the body returns `'held'` / `'invariant_violation'` /
+`'power_insufficient'` per cell.
 
 ```python
-from corroborate.invariant import at_most, attach_invariant
-
-attach_invariant(
-    at_most(gap_measurable, threshold=committed_value,
-            of_claim=double_greedify),
-    to=double_greedify,
+@measurable(
+    name='at_most[gap<=threshold].verdict',
+    reads=(),
 )
+def at_most_gap_verdict(
+    record: Mapping[str, object],
+    gap: float,  # auto-injected from the gap @measurable
+) -> str:
+    if gap != gap:  # NaN
+        return 'power_insufficient'
+    return 'held' if gap <= 0.0 else 'invariant_violation'
 ```
 
-After this, every cell in any future sweep auto-fires the
-invariant via `collect_invariants(configured)` — the framework
-routes premise-active vs premise-violating cells without any
-explicit consumer-side filter.
+After registration, the substrate adds the verdict measurable to
+`Hypothesis.measurables` and cell_runner persists the per-cell
+verdict on every RunRow. Bridges that test "≥X% of cells fire
+the predicted verdict" consume the column name directly via the
+`source` field of an `@claim_bridge`.
 
 ### Step 9. Re-evaluate
 
-Re-run the link analysis on the premise-active subscope:
+Re-run the link analysis on the premise-active subscope. The
+`paired_g` analysis's `cell_predicate` kwarg accepts a closure
+that reads the verdict measurable column and returns True for
+premise-active cells:
 
 ```python
-active_runs = [
-    r for r in runs
-    if r.measurements.get(f'{at_most_bridge.name}.gap_value', float('inf')) <= threshold
-]
-link_active = hypothesis_comparison_from_cells(
-    treatment_h, active_treatment, active_baseline,
-    outcome_path='outcome.eval_*', pair_by=('seed',),
-    group_by='env_name', baseline_h=baseline_h,
+def premise_active(cell: Mapping[str, object]) -> bool:
+    return cell.get('at_most[gap<=threshold].verdict') == 'held'
+
+link_active = paired_g.fn(
+    cells, treatment_arm='ddqn', baseline_arm='vanilla_dqn',
+    pair_by=('seed',), source='eval_best_burst_mean',
+    env_name=env, cell_predicate=premise_active,
 )
 ```
 
@@ -285,8 +297,9 @@ corroboration unless they actually disagree.
 Three terminating outcomes:
 
 1. **Scope corroborated**: a covariate threshold reproduces the
-   link. Commit via `at_most(...)` (step 8). The mechanism's
-   scope is now part of the substrate's invariants.
+   link. Commit as a verdict measurable (step 8); pre-register
+   it on `Hypothesis.measurables`. The mechanism's scope is now
+   part of the substrate's persisted columns.
 2. **No covariate corroborates**: every candidate's
    meta-regression β has CI bracketing zero AND/OR fails dowhy
    validation. Either the upstream chain has edges we haven't
@@ -297,7 +310,7 @@ Three terminating outcomes:
    by a covariate. The covariate refines the *mechanism* claim
    ("DDQN's bias-reduction operates only when …") even if the
    link to outcome is independently null. Document and commit
-   as a precondition invariant on the relevant claim.
+   as a verdict measurable on the mechanism edge.
 
 ## Worked example
 

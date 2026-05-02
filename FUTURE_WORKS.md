@@ -56,107 +56,28 @@ register)` has its inputs typed and its consumer named. See item
 #5 (`redundancy.py — ΔI_redundancy primitive`) in the v10 audit
 section below for the implementation specs.
 
-## v10 audit — features and design degeneracies (2026-04-28)
+## Open primitives bundled toward v1 acceptance
 
-**Status:** in-flight. This entry tracks the gap between
-poc_v10's primitive set and corroborate's. v0 acceptance (§3
-DDQN three-way verdict) does NOT require closing this gap;
-v1 acceptance (closed dialectic loop with axiom-19 reward) does.
+v0 acceptance (§3 DDQN three-way verdict) is closed by the
+typed-edge / verdict-walk path. v1 acceptance (closed dialectic
+loop with axiom-19 reward) needs three primitives still
+missing:
 
-### Feature gaps (no v0 equivalent)
+1. **`redundancy.py` — ΔI_redundancy primitive** (~240 LoC).
+   4-factor jaccard·concord·intervention·identity overlap.
+2. **`register.py` — append-only G register** (~120 LoC).
+   Past comparisons + latest-wins fact projection.
+3. **`compute_R_info` aggregator** (~80 LoC). Combines per-
+   bridge ΔI with the redundancy term into `R(h)`.
 
-1. **`edges.py` — claim-graph derivation from trace** (~150 LoC).
-   `extract_edges(records)` builds inter-Claim edges by `id()`
-   matching args ↔ outputs. Mechanism dataflow *derived*, not
-   declared. corroborate has TraceContext + CallRecord but the
-   trace is currently dead-end data.
-2. **`measurable_graph.py` — statistical graph** (~80 LoC).
-   Pairwise Pearson over per-step record + "explained-by-claim-
-   graph" diagnostic.
-3. **`computation_graph.py` — graph signature** (~70 LoC).
-   Hashable fingerprint for mechanism_key extension.
-4. **`causal_graph.py` — Pearl-ladder typed BridgeEdges** (~270
-   LoC). `direction × tier × evidentiary_level` with
-   ASSOCIATIONAL → INTERVENTIONAL promotion algebra.
-5. **`redundancy.py` — ΔI_redundancy primitive** (~240 LoC).
-   4-factor jaccard·concord·intervention·identity overlap
-   closing biases 3, 4, 5. The principled axiom-19 redundancy.
-6. **`hypothesis_row.py` — single canonical aggregator** (~720
-   LoC). `HypothesisComparisonRow.from_cells(h, t, b)` is THE
-   one aggregation function. Source-and-view pattern.
-7. **`register.py` — append-only G register** (~120 LoC). The
-   dialectic-loop's register of past comparisons + latest-wins
-   fact projection.
-8. **HPO-smuggle gate.** *Status revised 2026-04-28.* v10's
-   `admission.py` walks `partial.keywords` and buckets diffs as
-   `scalar` vs `callable`; pure-scalar diffs are rejected as HPO
-   smuggle. Heuristic, not principled. The principled form is
-   `computation_graph.signature(g)` — two interventions
-   producing the same structural signature ARE the same
-   mechanism; differing signatures are real interventions. Ported
-   the graph system in commit (this entry); admission as a
-   separate module is **deferred** unless graph-signature equality
-   proves insufficient. Lift conditions: a counterexample where
-   sigs match but mechanisms differ (graph-invisible branch flip,
-   for example) AND it matters for the dialectic loop.
-9. **R-formula / axiom-19 implementation** (~450 LoC of
-   smoke). corroborate has all the inputs (per-bridge ΔI,
-   ΔI_population in stats path) but no consumer that aggregates
-   them into `R(h)`.
+**HPO-smuggle gate** is deferred: `computation_graph.signature(g)`
+is the principled form (two interventions producing the same
+structural signature ARE the same mechanism). Lift only if a
+counterexample appears where signatures match but mechanisms
+differ in a way that matters for the dialectic loop.
 
-**Tally:** ~2.0–2.4 KLoC of v10 functionality not yet ported.
-
-### Design-level degeneracies
-
-- **D1: Five row types vs three.** ArmRow is intermediate
-  machinery no real path uses; aggregate.py's 772 LoC has
-  multiple half-roads vs v10's one canonical `from_cells`.
-- **D2: mechanism_key empirical vs declared.** corroborate
-  derives identity via `leaf_signature(measurements)`; v10 has
-  declared `Hypothesis.mechanism_key`. Probable degeneracy
-  when register dedup is needed.
-- **D3: Reads-set incomplete on Bridge.** `Bridge.targets ⊊
-  reads`. Closure (`targets ∪ measurable transitive deps`) not
-  assembled; ΔI_redundancy can't be wired without it.
-- **D4: No FactRow.** Bridge results land flat-keyed in
-  `RunRow.measurements`; per-fact `delta_i` /
-  `natural_strength` / `evidentiary_level` not preserved.
-  Loses redundancy-primitive substrate.
-- **D5: No graph derivation from trace.** TraceContext logs
-  but doesn't derive edges. Dead-end data.
-- **D6: No HPO-smuggle admission.** Any intervention is
-  admissible. Closed loop will need it.
-- **D7: Three-claim taxonomy might be over-fit.** Module
-  Claim / Free Claim / config bundle vs v10's "claim is a
-  function, module is a dataclass." Replay-as-Claim saga
-  suggests this has wobbled.
-- **D8: No axiom-19 computation.** Theory in PAPER_NOTES.md;
-  zero functions implement it. Reward signal of dialectic
-  loop is unimplemented.
-
-### Sequencing (post-§3-acceptance)
-
-1. **Faithful intervention + auto-induced graphs** (LANDED
-   2026-04-28). `graph.py` + `computation_graph.py` port v10's
-   generic Graph[N, M] + Edge / ComputationEdge / signature.
-   `extract_raw_edges` / `build_computation_graph(records)`
-   derive the claim graph from `trace_context()` records by
-   `id()` matching. The structural signature `signature(g)` is
-   the principled HPO-prevention primitive (subsumes admission
-   heuristic). 26 tests; faithful-intervention property
-   demonstrated (HP tweak → empty diff; slot swap → non-empty).
-2. **D3 + D4 + redundancy system** (next): FactRow lift,
-   reads-set closure, redundancy.py, register.py, compute_R_info.
-   ~600 LoC bundle.
-3. Cleanup step 1 (move rl/dqn/ out of corroborate namespace),
-   step 3 (pull cell_runner reductions to experiment), step 4
-   (lift worker-pool plumbing into sweep.py).
-4. Causal graph + measurable graph (Pearl-ladder typed
-   BridgeEdges + statistical-graph diagnostic). Unblocks PAPER
-   §3.5 in full v10 shape.
-
-**Lift when:** v0 acceptance lands (§3 verdict table renders
-on real sweep data); v1 design starts.
+**Lift when:** v1 design starts; the authoring layer is settled
+enough that the register's typing is forced by real consumers.
 
 ## Vectorised env support (n_envs > 1)
 
@@ -188,33 +109,6 @@ the bottleneck.
 - `DQNState.env_state` / `obs` become `(n_envs, ...)`-batched.
 - ~150 LoC of structural change; clean extension that doesn't
   break n_envs=1 semantics.
-
-## Step 3: cell-runner trace emission
-
-**Status:** queued. Next step in the masterplan after Steps 1-2
-landed columnar persistence.
-
-**Description:** `TraceRow` exists as schema + standalone smoke
-(`test_trace_persistence.py`); `run_dqn_cell` / `run_dqn_arm`
-build `RunRow`s only. The two stores aren't yet linked end-to-end
-on disk. After this:
-
-- Each cell produces both a `RunRow` and a `TraceRow` with
-  `RunRow.id == TraceRow.id`.
-- `run_dqn_arm` writes to two parquets via `write_runrows` and
-  `write_tracerows`.
-- `experiments/collect_ddqn_runs.py` writes `runs.parquet` +
-  `traces.parquet` per arm.
-
-**Why deferred:** Steps 1-2 were the design-load-bearing changes
-(decide the shape; collapse the JSON-wrapping crime). Step 3 is
-mechanical plumbing — modest LoC, no design open questions.
-
-**Lift when:** ready to actually persist a multi-cell sweep with
-both stores. Smallest user-visible change with largest practical
-effect; once it lands `df.filter(pl.col('optimizer.inner.lr') <
-1e-3)` is the workflow that exists end-to-end on disk, not just
-in tests.
 
 ## Replay-as-Claim Protocol mismatch — RESOLVED (2026-04-28)
 
@@ -257,53 +151,22 @@ rewrite — the lesson from the audit thread.
 
 ## Deferred from second-pass external review
 
-### Paired-cell comparison primitive (matched-seed Δ)
+### Typed `Powered` record on HypothesisComparisonRow
 
 **Status:** deferred.
 
-**Description:** `aggregate.comparison_from_arms(treatment,
-baseline)` produces an unpaired `ComparisonRow` from two
-ArmRows already aggregated across seeds. §3's central claim
-("DDQN reduces Jensen-gap by Δ vs vanilla") is more
-statistically powerful as a *paired* test on matched
-(env, seed) pairs — Δ_i = treatment_i − baseline_i, then
-Hedges' g of the Δ distribution vs zero. The pairing helper
-(`pair_runs_by_seed(treatment, baseline) →
-tuple[(RunRow, RunRow), ...]`) and the paired statistics
-aren't yet implemented.
+**Description:** `HypothesisComparisonRow.adequately_powered:
+bool` collapses the gradient that derived it (n + sd + observed
+g + MDE). A typed `Powered(mde_d, observed_g, achieved_power)`
+would carry the inputs so two stat implementations can't
+disagree about what "adequately" means.
 
-**Why deferred:** Step 5 (MDE + Hedges' g + derived q) is the
-consumer for paired statistics. Pairing without paired-stats
-would be a half-shipped primitive; bundling them keeps the
-statistical contract coherent. Audit pass 4 confirmed the
-unpaired path (`comparison_from_arms`) makes §3 expressible
-end-to-end — not optimal, but viable as a v0 acceptance.
+**Why deferred:** the bool tracks the gate result; richer
+power-curve diagnostics aren't a current consumer demand.
 
-**Lift when:** Step 5 lands paired stats. The factory shape
-should be: `paired_comparison_from_runs(treatment_runs,
-baseline_runs) → ComparisonRow` — pairs by (env_name, seed),
-computes Δ per pair, produces ComparisonRow with
-`effect_size_g` of the Δ distribution.
-
-### Typed `Powered` record on ComparisonRow
-
-**Status:** deferred.
-
-**Description:** `ComparisonRow.adequately_powered: bool`
-collapses the gradient that derived it (n + sd + observed g + MDE).
-A typed `Powered(mde_d, observed_g, achieved_power)` would carry
-the inputs so two stat implementations can't disagree about what
-"adequately" means.
-
-**Why deferred:** v0's auto-detection (`_is_adequately_powered`)
-matches v10's pattern; bool tracks the gate result. Step 5's
-MDE+power module is the consumer that would benefit from the
-richer record.
-
-**Lift when:** step 5 lands and needs to log per-env power-curve
-diagnostics (PAPER_NOTES.md §3.4 has 5 of 17 mechanism-HELD with
-adequate power; the rest POWER_INSUFFICIENT — recording WHY each
-fell which way is the natural next step).
+**Lift when:** a consumer needs to log per-env power-curve
+diagnostics (recording WHY each cell fell HELD vs
+POWER_INSUFFICIENT).
 
 ### Vector outcomes (`primary_outcome_summary: float` → `tuple[float, ...]`)
 

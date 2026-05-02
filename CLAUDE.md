@@ -82,7 +82,7 @@ through call chains.
   over `cast` (no narrowing). It's how runtime predicates avoid
   type erasure.
 - **Concrete generic types** in containers — `list[Claim[P, T]]`,
-  `dict[str, FactRow]`, never bare `list` or `dict`.
+  `dict[str, RunRow]`, never bare `list` or `dict`.
 - **Frozen dataclasses with `slots=True`** for typed records —
   attribute access is statically resolved; no `getattr` paths.
 
@@ -196,24 +196,30 @@ Two stores join by UUID:
 
 - **Trace store** (`TraceRow`) — per-cell raw observation. Outputs
   (1) as 1-D `list[float]` columns + leaves (2) as scalar columns.
-  v9's `traces.parquet` analog.
-- **Row store** (`RunRow` / `ArmRow` / `ComparisonRow` /
-  `CorpusRow`) — provenance + framework verdicts +
-  `measurements`. v9's `measurements.parquet` /
-  `bridge_ledger.parquet` analog.
+- **Row store** (`RunRow`) — provenance + framework verdict +
+  `measurements`. The cross-arm aggregate
+  (`HypothesisComparisonRow`) is materialised on demand from
+  RunRows via `from_cells`; it has no on-disk persistence pair.
+
+A topology sidecar `<corpus>/graphs.json` is written alongside
+the row stores. It carries one `ComputationGraph` per `arm_key`
+so post-hoc consumers can recover the per-arm Claim-to-Claim
+data flow that ran each cell.
 
 **Hard rule: no JSON-wrapped struct columns in parquet.** Every
-heterogeneous-keyed dict (HPs, bridge stats, meta) is flattened to
-top-level path-keyed columns at the parquet boundary. Polars
+heterogeneous-keyed dict (HPs, derived measurables) is flattened
+to top-level path-keyed columns at the parquet boundary. Polars
 null-pads heterogeneous keys across rows; readers skip nulls. The
 benefit is `df.filter(pl.col('optimizer.inner.lr') < 1e-3)` works
 at the dataframe level — JSON wrapping kills this.
 
 The path-keyed convention is collision-free by construction:
 leaves use **dotted topology paths** (`replay.batch_size`),
-trajectories use **flat author-chosen keys** (`reward`). Output
-prefixes (`outcome.`, `bridge.`, `invariant.`) on the row store
-namespace results separately from leaves.
+trajectories use **flat author-chosen keys** (`reward`),
+registered measurables use **bare names** (`jensen_gap`,
+`eval_best_burst_mean`). The framework's namespace filter is the
+measurable registry itself — `aggregate.leaf_signature` excludes
+`registered_names()` from the configurational fingerprint.
 
 ## Canonical analyses (use these, don't reimplement)
 
@@ -247,9 +253,9 @@ envs. Cross-burst link cancellation is real; per-burst unmasks it.
 ### Mech / link / outcome separation
 
 Three verdicts are kept independent (PAPER_NOTES.md §3
-methodological claim). The corpus's `mechanism.jensen_gap` is
+methodological claim). The corpus's `jensen_gap` measurable is
 clamped to `max(0, mean(Q − MC))` — `0` does NOT mean
-"unbiased": pair with the `jensen_dormancy_gap` invariant to
+"unbiased": pair with the `jensen_dormancy_gap` measurable to
 distinguish "true zero" from "underestimating (mech dormant)".
 Link verdicts on dormant-mech cells are UNTESTABLE, not NULL.
 

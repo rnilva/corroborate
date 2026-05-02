@@ -49,14 +49,15 @@ arm distinguisher.
    ┌──────────────────────────────────────────────────────────────────────────┐
    │                                                                          │
    │              ┌─ SUBSTRATE (1a) ─────────────────────────┐                │
-   │              │  @claim, @measurable, @bridge,           │                │
-   │              │  EnvSpec, bridge factories               │                │
+   │              │  @claim, @measurable, @claim_bridge,     │                │
+   │              │  EnvSpec                                 │                │
    │              │  (pre-research; persistent code)         │                │
    │              └────────────────┬─────────────────────────┘                │
    │                               │                                          │
    │              ┌─ HYPOTHESIS-FORMATION (1b) ─────────────┐                 │
-   │              │  Hypothesis(intervention_arms, bridges) │                 │
-   │              │  mechanism edge = load-bearing claim    │                 │
+   │              │  Hypothesis(intervention_arms,          │                 │
+   │              │             edges, measurables)         │                 │
+   │              │  intervention edge = load-bearing claim │                 │
    │              │  ◄── short loop from 7, 9 (discovery)   │                 │
    │              │  ◄── long loop from 12 (dialectic)      │                 │
    │              └────────────────┬─────────────────────────┘                │
@@ -69,22 +70,19 @@ arm distinguisher.
    │                               │                                          │
    │              ┌─ RUN (3) ──────▼─────────────────────────┐                │
    │              │  configured claim × exogenous_grid       │                │
-   │              │  → trace_record + CallRecords + bridges  │                │
+   │              │  → trace_record + CallRecords            │                │
    │              └────────────────┬─────────────────────────┘                │
    │                               │                                          │
    │              ┌─ PROJECT (4) ──▼─────────────────────────┐                │
    │              │  cell_runner builds:                     │                │
-   │              │  • RunRow (verdicts + measurements)      │                │
+   │              │  • RunRow (verdict + measurements)       │                │
    │              │  • TraceRow (trace + arrays)             │                │
    │              │  • ComputationGraph (call structure)     │                │
-   │              │  • BridgeResult tuple (per-cell)         │                │
    │              └────────────────┬─────────────────────────┘                │
    │                               │                                          │
    │              ┌─ PERSIST (5) ──▼─────────────────────────┐                │
    │              │  parquet (RunRow, TraceRow scalars+1D)   │                │
-   │              │  zarr    (TraceRow multi-dim arrays)     │                │
-   │              │  ☒ ComputationGraph not persisted        │                │
-   │              │  ☒ BridgeResult tuple not preserved      │                │
+   │              │  graphs.json sidecar (per-arm topology)  │                │
    │              └────────────────┬─────────────────────────┘                │
    │                               │                                          │
    │   ┌───────────────────────────┼─────────────────────────────┐            │
@@ -94,16 +92,14 @@ arm distinguisher.
    │   per-arm Hedges' g           PC + JCI on outcome cols      │            │
    │   per-group GroupStats        DiscoveredAdjacency           │            │
    │   pooled PooledStats          OrientedAdjacency             │            │
-   │   facts: tuple[FactRow]                                     │            │
-   │   reads_set                                                 │            │
    │   →  HypothesisComparisonRow                                │            │
    │                                                             │            │
    │       └────────┐                       ┌────────────────────┘            │
    │                │                       │                                 │
    │                ▼ PROMOTE (8, rung 1+2) ▼                                 │
-   │           build_causal_graph(BridgeResults, links)                       │
+   │           hypothesis_subgraph_verdict(h, runs)                           │
+   │           → CausalGraph[BridgeEdge] + edge_verdicts                      │
    │           promote_bridged_evidence(graph)                                │
-   │           → CausalGraph with Tier-typed BridgeEdges                      │
    │           → 'causal_bridged' upgrade when ≥2 paired admits               │
    │                                                                          │
    │                ┌────────────────────────────────┐                        │
@@ -111,7 +107,7 @@ arm distinguisher.
    │                ▼ SCOPE-PREDICT (9)              ▼ REWARD (10)            │
    │                meta_regression on               compute_R_info(h, reg)   │
    │                (env_features, per_env_g)        ΔI(h) per axiom 19       │
-   │                → MetaRegressionReport           uses facts + reads_set   │
+   │                → MetaRegressionReport                                    │
    │                                                                          │
    │                                                 ▼ REGISTER (11)          │
    │                                                 RegisterState            │
@@ -150,20 +146,16 @@ arm distinguisher.
 **Inputs**: substrate-author code.
 
 **Outputs**: `@claim`-decorated Module/Free Claims, `@measurable`
-instances, `@bridge` instances, `EnvSpec`, bridge factories.
-Persistent code; written once and reused across many hypotheses.
+instances, `@claim_bridge`-decorated bridge declarations,
+`EnvSpec`. Persistent code; written once and reused across many
+hypotheses.
 
-**Modules**: `claim.py`, `measurable.py`, `bridge.py`, `bridges.py`
-(factories), `intervention.py`, `verdict.py`, `reductions.py`,
-`signature.py`, `invariant.py`, `rl/dqn/measurables.py`,
+**Modules**: `claim.py`, `measurable.py`, `claim_bridge.py`,
+`intervention.py`, `verdict.py`, `reductions.py`, `signature.py`,
+`stratum.py`, `_registry.py`, `rl/dqn/measurables.py`,
 `rl/dqn/claims/*`, `rl/dqn/dqn.py`, `rl/env_catalogue.py`.
 
 **Status**: **live**.
-
-**Orphans at this stage**:
-- `bridges.py` factories (`monotonic`, `correlation`,
-  `mean_exceeds`, `variance_shrinks`) — authored, no Hypothesis
-  attaches them today (`bridges=()` in §3 sweep).
 
 ---
 
@@ -174,36 +166,23 @@ content naming the mechanism, OR (b) discovery output from
 stages 7/9 proposing candidate mechanisms, OR (c) register
 output from stage 12 selecting an under-tested candidate.
 
-**Outputs**: a typed `Hypothesis` carrying:
+**Outputs**: a typed `Hypothesis[R]` carrying:
 - `intervention_arms: tuple[Intervention, ...]` — the typed
-  identity of mechanism swaps (sourced from the substrate).
-  Defines `arm_key` via canonical fingerprint.
-- `bridges: tuple[Bridge[R], ...]` — the per-edge tests applied
-  to the resulting record. Today this is a flat tuple; the v10
-  vision (queued, see step 1 below) is for a typed
-  `CausalSubgraph` with role-tagged edges (mechanism / outcome /
-  link / refuter) read by the §3 verdict pipeline.
+  identity of mechanism swaps. Defines `arm_key` via canonical
+  fingerprint.
+- `edges: tuple[claim_bridge.Bridge, ...]` — typed-edge subgraph
+  claim. Each `Bridge` carries `source` / `target`,
+  `intervention: DoEffect | None`, `tier`, `direction`, and
+  per-edge `predicted_direction`. Body-less for the verdict-walk
+  path; `holds_when` populated for the file-protocol path.
+- `measurables: tuple[Measurable[R, object], ...]` — pre-
+  registered measurables cell_runner persists as scalar columns
+  on every RunRow.
 
-**Modules**: `hypothesis.py`, `intervention.py`. The Hypothesis
-construction sites today are the experiment scripts
-(`experiments/collect_ddqn_runs.py`, the smokes); 1b doesn't have
-its own module because the construction is one frozen-dataclass
-call.
+**Modules**: `hypothesis.py`, `intervention.py`,
+`claim_bridge.py`.
 
-**Status**: **live for the flat-bridges shape**;
-**partially-typed for the subgraph shape** — `causal_graph.py`
-provides the edge / tier / direction primitives but the
-Hypothesis itself doesn't yet carry a `CausalSubgraph` field.
-The connector from `Hypothesis.bridges` to a typed subgraph is
-the highest-leverage v0 → v1 move.
-
-**Load-bearing observation**: the *mechanism edge* of a Hypothesis
-is the central theoretical claim; outcome and link edges test
-its implications. `arm_key` derives from the mechanism edge's
-source (the intervention). Two hypotheses with the same
-intervention but different mechanism-edge *targets* are different
-hypotheses (same do, different theoretical commitment about what
-the do affects).
+**Status**: **live**.
 
 ---
 
@@ -258,28 +237,18 @@ agnostic; has tests but no production consumer).
 
 **Outputs**:
 - `RunRow` (id, parent_id, cycle_id, timestamp, verdict,
-  arm_key, measurements). Bridge results flatten into measurements
-  as `bridge.<name>.verdict` + `bridge.<name>.stats.<key>`.
-- `TraceRow` (id, leaves, arrays). Per-step series + multi-dim
-  arrays.
-- `ComputationGraph` from `build_computation_graph(records)`.
-  Returned in `ArmResult.graph`.
-- (implicitly) the per-cell BridgeResult tuple inside cell_runner.
+  arm_key, measurements). Pre-registered measurables and HPs
+  flatten into `measurements` under bare names; verdict is
+  HELD for any successfully-completed cell.
+- `TraceRow` (id, leaves). Per-step series + multi-dim arrays.
+- `ComputationGraph` from `build_computation_graph(records)` —
+  one per arm, captured under `trace_context()` and persisted
+  to the `graphs.json` sidecar at stage 5.
 
-**Modules**: `rl/cell_runner`, `computation_graph.build_computation_graph`,
-`aggregate.fact_from_bridge_result` (runtime path).
+**Modules**: `rl/cell_runner.run_dqn_arm`,
+`computation_graph.build_computation_graph`.
 
-**Status**: **live for RunRow / TraceRow.** **Orphan**:
-`ComputationGraph` is built per arm but no consumer reads it.
-**Missing**: BridgeResult tuple is consumed inline (flattened into
-RunRow.measurements) but not preserved as a structured artifact —
-which is why stage 8 has no input.
-
-**Wire to add (load-bearing, ~30 LoC)**:
-`aggregate.reconstruct_bridge_results(run: RunRow) ->
-tuple[BridgeResult, ...]` lifts the flat-keyed `bridge.<name>.*`
-back into BridgeResult objects. Restores the structure that
-stage 8 consumes.
+**Status**: **live**.
 
 ---
 
@@ -287,15 +256,15 @@ stage 8 consumes.
 
 **Inputs**: rows from stage 4.
 
-**Outputs**: parquet (runs.parquet, traces.parquet,
-comparisons.parquet), zarr (arrays.zarr).
+**Outputs**: `runs.parquet`, `traces.parquet`, and
+`graphs.json` (a sidecar mapping `arm_key → GraphSpec`).
 
-**Modules**: `persistence.write_runrows`, `write_tracerows`,
-`write_comparisonrows`, `iter_trace_records`, `tighten_trace_dtypes`.
+**Modules**: `persistence.{write_runrows, write_tracerows,
+iter_trace_records, tighten_trace_dtypes,
+write_graphs_sidecar, read_graphs_sidecar}`.
 
-**Status**: **live**. ComputationGraph deliberately not persisted
-(per design — runtime artifact only). HypothesisComparisonRow has
-no read/write yet.
+**Status**: **live**. `HypothesisComparisonRow` is materialised
+on demand at stage 6 and not persisted to disk.
 
 ---
 
@@ -306,21 +275,21 @@ slice + pair_by + optional group_by.
 
 **Outputs**: `HypothesisComparisonRow` carrying:
 - per-arm stats (mean, sd, n)
-- effect_size_g, se, derived_q, delta_i_population
-- per_group: tuple[GroupStats] (stratified mode)
-- pooled: PooledStats (random-effects DerSimonian-Laird)
-- facts: tuple[FactRow] (per-bridge projection across cells)
-- reads_set: frozenset[str] (union of fact reads)
-- adequately_powered + verdict + refutation_class
+- `effect_size_g`, `se`, `derived_q`, `delta_i_population`
+- `per_group: tuple[GroupStats, ...]` (stratified mode)
+- `pooled: PooledStats` (random-effects DerSimonian-Laird)
+- `adequately_powered` + `verdict` + `refutation_class`
 
-**Modules**: `aggregate.paired_comparison_from_runs`,
-`hypothesis_comparison_from_cells` (HypothesisComparisonRow.from_cells),
+**Modules**:
+`aggregate.hypothesis_comparison_from_cells`
+(`HypothesisComparisonRow.from_cells`),
 `statistics.{hedges_g_paired, mde_paired, derived_q_from_g_se,
-delta_i_from_q, random_effects_summary, random_effects_verdict}`.
+delta_i_from_q, random_effects_summary,
+random_effects_verdict}`. Shared per-env loop primitive at
+`analyses.paired_g.per_env_paired_g_panel`; panel→regression
+bridge at `meta_regression.meta_regress_panel`.
 
-**Status**: **live**. `facts` and `reads_set` are populated but
-**unread** by any current consumer — they're forward-investment
-for stages 10/11.
+**Status**: **live**. Materialised view; not persisted to disk.
 
 ---
 
@@ -364,39 +333,48 @@ discovery-first research a closed loop.
 
 ### Stage 8 — PROMOTE (rung 1 + rung 2 typed)
 
-**Inputs**: BridgeResults (from stage 4), per-cell HELDs (from
-stage 6's per_group), cross-env link verdicts (from
-`link_pearson_across_groups`).
+**Inputs**: `Hypothesis` + treatment / baseline RunRows.
 
-**Outputs**: `CausalGraph` with `BridgeEdge`s typed by `Direction
-× Tier × evidentiary_level`. After `promote_bridged_evidence`:
-pairs with ≥2 `causal_one_sided` edges upgrade to
-`causal_bridged`. PAPER §3.5's contract.
+**Outputs**: `HypothesisVerdict[R]` carrying:
+- `graph: CausalGraph` — `BridgeEdge` per claimed edge keyed by
+  `(source, target)`, with Pearl tier × direction ×
+  evidentiary_level + per-edge stats (`ate`, `rho`, `pvalue`,
+  `n_observations`).
+- `edge_verdicts: Mapping[(s, t), Verdict]` — raw 4-bucket
+  verdicts.
+- `comparison_rows: Mapping[str, HypothesisComparisonRow]` —
+  rich per-edge detail for intervention edges.
 
-**Modules**: `causal_graph.{Direction, Tier, BridgeEdge,
-build_causal_graph, compose_direction, chain_tier,
-promote_bridged_evidence}`.
+After `promote_bridged_evidence`: pairs with ≥2
+`causal_one_sided` edges upgrade to `causal_bridged`.
 
-**Status**: **primitives exist; stage entirely missing the
-input connector**. `build_causal_graph` consumes
-`Iterable[BridgeResult]` but no path lifts BridgeResults out of
-the corpus. Once stage 4's `reconstruct_bridge_results` lands,
-stage 8 becomes live.
+**Modules**: `hypothesis_verdict.hypothesis_subgraph_verdict`,
+`causal_graph.{Direction, Tier, BridgeEdge, authored_graph,
+compose_direction, chain_tier, promote_bridged_evidence}`.
+Topology helpers in `computation_graph.{producing_paths,
+measurables_by_attachment, measurable_scope, ScopeInfo}` let
+substrates derive paper-narrative scope (mechanism / outcome /
+link) from claim-graph attachment.
+
+**Status**: **live**.
 
 ---
 
 ### Stage 9 — SCOPE-PREDICT
 
-**Inputs**: per-group g + se from stage 6's `per_group` +
-env_feature columns.
+**Inputs**: per-stratum (g, se) panel from stage 6's `per_group`
++ env-feature columns (`covariates_per_env` mapping or
+`covariates: tuple[str, ...]` column-name list averaged per-env).
 
-**Outputs**: `MetaRegressionReport` with per-feature coefficients,
-SE, p-values, R².
+**Outputs**: `MetaRegressionResult` with per-feature
+coefficients, SE, p-values, R².
 
-**Modules**: `meta_regression.py`.
+**Modules**: `meta_regression.py`,
+`analyses.meta_regression_paired_g`,
+`analyses.meta_regression_per_burst` (both delegate to
+`meta_regress_panel`).
 
-**Status**: **live**. `smoke_phase_c_meta_regression` consumes it.
-The §7 paper section's operational scope predictor lives here.
+**Status**: **live**.
 
 ---
 
@@ -405,11 +383,7 @@ The §7 paper section's operational scope predictor lives here.
 **Inputs**: HypothesisComparisonRow (from 6) + register state
 (from 11).
 
-**Outputs**: `ΔI(h)` — scalar information gain. Built from:
-- per-fact ΔI from FactRow.delta_i (verdict-oriented information).
-- redundancy term from `compute_redundancy(h, register)` — the
-  4-factor jaccard·concord·intervention·identity overlap.
-- aggregation across facts.
+**Outputs**: `ΔI(h)` — scalar information gain.
 
 **Modules**: **MISSING**. v10 has `redundancy.py` (~240 LoC) and
 `compute_R_info` (~100 LoC). corroborate hasn't ported either.
@@ -449,51 +423,20 @@ substrate; would compose stages 1b–11 into a closed loop.
 
 | Primitive | Stage | Status | Wire to consumer |
 |---|---|---|---|
-| `bridges.py` factories | 1a | orphan | requires Hypothesis-author work, not a framework wire |
-| typed `CausalSubgraph` on Hypothesis | 1b | partial | `causal_graph.py` exists but `Hypothesis.bridges` is still a flat tuple — needs role-tagged edges |
-| short feedback loop (discovery → 1b) | 7→1b | manual | author reads discovery output and writes mechanism bridge; could grow into a typed candidate-proposer |
+| short feedback loop (discovery → 1b) | 7→1b | manual | author reads discovery output and writes mechanism bridge |
 | `Intervention.apply` | 2 | orphan (parallel path) | replace `partial(...)` in cell_runner |
-| `sweep.sweep` | 3 | orphan | collect_ddqn_runs migration |
-| `ComputationGraph` capture | 4 | orphan | requires stage 8 connector |
-| `causal_graph` (build_causal_graph, promote) | 8 | missing-connector | needs `reconstruct_bridge_results` from stage 4 |
-| `FactRow` / `reads_set` | 6 | populated, unread | requires stage 10 (compute_R_info) |
-| `transitive_reads` | 6 | orphan | requires stage 10 |
-| `measurable_graph` | 9 alt | orphan | §3.5 didn't migrate |
-| `meta_regression` | 9 | live | — |
-| value-curve mediators (D3) | 7b | live | feed candidate-mediator covariates into stage 9 |
-| `cross_validate_meta_regression` (D2) | 9 | live | — |
-| `compare_pc_depths` (D1) | 7a | live | — |
-| `redundancy_check.audit_mediator_panel` (3-check tautology) | 7 | live | — |
-| `redundancy` (v10's 4-factor R_info) | 10 | absent | port from v10 |
+| `redundancy.py` (axiom-19 R_info) | 10 | absent | port from v10 |
 | `register` | 11 | absent | port from v10 |
 | `compute_R_info` | 10 | absent | port from v10 |
+| `experiments/compute_mediators.py` | — | superseded | scheduled subtraction (Phase 6C); per-cell measurables now flow through cell_runner inline |
 
 ## Highest-leverage wires (in order)
 
-1. **Hypothesis-as-subgraph (stage 1b → stages 6+8)**:
-   typed `CausalSubgraph` on `Hypothesis`, replacing the flat
-   `bridges: tuple[Bridge[R], ...]` tuple. Role-tagged edges
-   (mechanism / outcome / link / refuter) so the §3 verdict
-   pipeline reads role explicitly. Now that `causal_graph.py`
-   has landed the BridgeEdge / Tier / Direction primitives, the
-   Hypothesis-side typing is the missing connector. Unblocks
-   the v10 §3 verdict pattern as a *typed* artifact rather than
-   an implicit consumer pattern.
-
-2. **Stage 4 → Stage 8 connector**:
-   `aggregate.reconstruct_bridge_results(run: RunRow) ->
-   tuple[BridgeResult, ...]`. ~30 LoC. Single primitive that
-   unblocks the entire `causal_graph` pipeline. After this,
-   Pearl-tier rung 1+2 promotion becomes runnable on the §3
-   corpus.
-
-3. **Stage 10 + 11 port**:
+1. **Stage 10 + 11 port**:
    `redundancy.py` + `register.py` from v10. ~400 LoC bundle.
-   Closes the dialectic-loop reward signal. Reads stage 6's
-   `facts` + `reads_set` (which are already populated). After
-   this, axiom 19's ΔI is computable.
+   Closes the dialectic-loop reward signal.
 
-4. **Stage 12 orchestrator**:
+2. **Stage 12 orchestrator**:
    Improve / Falsify driver composing stages 1b–11. ~200 LoC.
    This is where v0 → v1 transition happens.
 

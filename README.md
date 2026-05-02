@@ -28,7 +28,7 @@ makes the heterogeneity legible in two phases:
 
 2. **Verify the causal chain.** Test each edge of the chain
    `env feature → invariance gap → mechanism activation →
-   outcome` as a typed `ClaimedEdge` with a Pearl tier
+   outcome` as a typed `claim_bridge.Bridge` with a Pearl tier
    (associational / interventional) and a power-aware verdict
    (`HELD` / `NO_EFFECT` / `POWER_INSUFFICIENT` /
    `HELD_WITH_SCOPE_FLAG` / `INVARIANT_VIOLATION`).
