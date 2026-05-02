@@ -47,6 +47,7 @@ defaults.
 from __future__ import annotations
 
 import inspect
+import sys
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
@@ -330,6 +331,17 @@ def claim_bridge(fn: Callable[..., Verdict]) -> Bridge:
     tier = _require_tier(
         structural.get('tier', Tier.ASSOCIATIONAL), fn.__name__,
     )
+    # File-level INTERVENTION resolution. The bridge module declares
+    # `INTERVENTION = DoEffect(...)` at top level; every bridge in
+    # that file inherits the contrast as a default — no per-bridge
+    # `treatment_arm` / `baseline_arm` plumbing needed. Per-bridge
+    # `source = DoEffect(...)` is the explicit override path; the
+    # legacy per-bridge `intervention=DoEffect(...)` field still
+    # works during migration but is no longer needed.
+    #
+    # Precedence (resolved here at decoration time):
+    #   per-bridge `intervention=DoEffect(...)` (legacy)
+    #     > module-level `INTERVENTION = DoEffect(...)` (new shape)
     intervention_default = structural.get('intervention')
     if intervention_default is not None and not isinstance(
         intervention_default, DoEffect,
@@ -339,6 +351,22 @@ def claim_bridge(fn: Callable[..., Verdict]) -> Bridge:
             f'`intervention` must be a DoEffect (or omitted); got '
             f'{type(intervention_default).__name__}',
         )
+    if intervention_default is None:
+        module = sys.modules.get(fn.__module__)
+        module_intervention: object = (
+            getattr(module, 'INTERVENTION', None)
+            if module is not None else None
+        )
+        if module_intervention is not None and not isinstance(
+            module_intervention, DoEffect,
+        ):
+            raise TypeError(
+                f'@claim_bridge {fn.__name__!r}: module '
+                f'{fn.__module__!r} declares `INTERVENTION` as '
+                f'{type(module_intervention).__name__}; must be a '
+                f'DoEffect (or omitted).',
+            )
+        intervention_default = module_intervention
     predicted_direction = _require_predicted_direction(
         structural.get('predicted_direction'), fn.__name__,
     )
@@ -382,34 +410,39 @@ def evaluate(
             f'consumed by `hypothesis_subgraph_verdict`; they do '
             f'not carry a threshold to evaluate against a cell-set.',
         )
-    # Pearl-rung-2 dispatch: when source is a `DoEffect`, the
-    # bridge declares a do() contrast. Analyses still operate on
-    # measurables, so we map the bridge's `target` measurable into
-    # the analysis's `source` slot (the column to compute on) and
-    # extract the contrast's arm names into `treatment_arm` /
-    # `baseline_arm` kwargs. This lets every existing analysis
-    # primitive consume DoEffect-declared bridges without changing
-    # its signature.
+    # Contrast resolution precedence (decided here):
+    #   1. `source = DoEffect(...)` (per-bridge explicit override)
+    #   2. `Bridge.intervention` (module-level `INTERVENTION` or
+    #      legacy per-bridge `intervention=` field, resolved at
+    #      decoration time)
+    #   3. None (correlation/correlation-like bridges with no
+    #      arm contrast)
+    #
+    # When source is a DoEffect, the analysis's `source` slot maps
+    # to the bridge's TARGET measurable (the column to compute on).
+    # When source is a measurable, it stays as-is.
+    contrast: DoEffect | None
+    source_for_analysis: str
     if isinstance(bridge.source, DoEffect):
-        bridge_params: dict[str, object] = {
-            'source': bridge.target_name,
-            'target': bridge.target_name,
-            'direction': bridge.direction,
-            'tier': bridge.tier,
-            'predicted_direction': bridge.predicted_direction,
-            'treatment_arm': bridge.source.treatment_arm,
-            'baseline_arm': bridge.source.baseline_arm,
-            **dict(bridge.params),
-        }
+        contrast = bridge.source
+        source_for_analysis = bridge.target_name
+    elif bridge.intervention is not None:
+        contrast = bridge.intervention
+        source_for_analysis = bridge.source_name
     else:
-        bridge_params = {
-            'source': bridge.source_name,
-            'target': bridge.target_name,
-            'direction': bridge.direction,
-            'tier': bridge.tier,
-            'predicted_direction': bridge.predicted_direction,
-            **dict(bridge.params),
-        }
+        contrast = None
+        source_for_analysis = bridge.source_name
+    bridge_params: dict[str, object] = {
+        'source': source_for_analysis,
+        'target': bridge.target_name,
+        'direction': bridge.direction,
+        'tier': bridge.tier,
+        'predicted_direction': bridge.predicted_direction,
+        **dict(bridge.params),
+    }
+    if contrast is not None:
+        bridge_params['treatment_arm'] = contrast.treatment_arm
+        bridge_params['baseline_arm'] = contrast.baseline_arm
     analysis_results = resolve_for_holds_when(
         bridge.holds_when, cells, bridge_params,
     )
