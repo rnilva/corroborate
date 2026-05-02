@@ -97,12 +97,14 @@ def _intervention_for(
 def _make_hypothesis(
     grid_point: dict[str, Any],
 ) -> Hypothesis[DQNTrajectoryRecord]:
+    from corroborate.rl.dqn.measurables import dqn_default_measurables
     return Hypothesis(
         name='vanilla_dqn',
         intervention=_intervention_for(**grid_point),
         bridges=(),
         predicted_direction=None,
         intervention_arms=(),
+        measurables=dqn_default_measurables(),
     )
 
 

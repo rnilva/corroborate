@@ -152,9 +152,11 @@ def test_run_dqn_cell_leaf_signature_matches_hypothesis() -> None:
 
 # ============ Bridge → measurements conversion ============
 
-def test_run_dqn_cell_pre_registered_measurables_persist_as_mediator_columns() -> None:
+def test_run_dqn_cell_pre_registered_measurables_persist_at_their_name() -> None:
     """Pre-registered measurables on `Hypothesis.measurables` land
-    in the cell's RunRow.measurements under `mediator.<name>`. The
+    in the cell's RunRow.measurements under their bare measurable
+    `.name` — the substrate controls the column-name namespace
+    (e.g., `outcome.eval_final_mean` vs. bare `jensen_gap`). The
     pre-registration channel sits alongside per-record bridges
     (Phase 2 of the Bridge-collapse refactor) so authors can
     declare summary scalars without authoring a per-record
@@ -184,8 +186,8 @@ def test_run_dqn_cell_pre_registered_measurables_persist_as_mediator_columns() -
         env_spec, seed=0, hypothesis=h,
     ).run
 
-    assert 'mediator.ep_return_mean_summary' in run_row.measurements
-    val = run_row.measurements['mediator.ep_return_mean_summary']
+    assert 'ep_return_mean_summary' in run_row.measurements
+    val = run_row.measurements['ep_return_mean_summary']
     assert isinstance(val, float)
 
 

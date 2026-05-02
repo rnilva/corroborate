@@ -107,9 +107,11 @@ class Hypothesis[R: Mapping[str, object]]:
     sweep-time pre-registration channel — measurables the author
     wants computed and persisted as scalar columns on every
     RunRow without having to author a per-record bridge for each.
-    Each entry produces a `mediator.<name>` column in
-    `RunRow.measurements`, available downstream for typed-edge
-    bridges (`Bridge.target='mediator.<name>'`) and analyses to
+    Each entry produces a column at the measurable's bare `.name`
+    in `RunRow.measurements`; the substrate controls the column-
+    name namespace (a measurable named `outcome.eval_final_mean`
+    lands as `outcome.eval_final_mean`). Available downstream for
+    typed-edge bridges (`Bridge.target=<name>`) and analyses to
     consume directly. Co-existence with `bridges` is intentional
     until Phase 4 collapses both into one channel.
 

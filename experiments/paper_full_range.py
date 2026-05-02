@@ -68,6 +68,7 @@ from corroborate.meta_regression import (
 )
 from corroborate.persistence import read_runrows
 from corroborate.rl.dqn.claims.bootstrap import bootstrap, double_greedify
+from corroborate.rl.dqn.measurables import dqn_default_measurables
 from corroborate.rl.env_catalogue import (
     BenchmarkFamily,
     ENV_REGISTRY,
@@ -227,12 +228,14 @@ def _ddqn_hypothesis() -> Hypothesis[Mapping[str, object]]:
                 predicted_direction='a_gt_b',
             ),
         ),
+        measurables=dqn_default_measurables(),
     )
 
 
 def _vanilla_hypothesis() -> Hypothesis[Mapping[str, object]]:
     return Hypothesis(
         name='vanilla_dqn', intervention={}, intervention_arms=(),
+        measurables=dqn_default_measurables(),
     )
 
 

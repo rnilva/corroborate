@@ -24,7 +24,6 @@ The DQN algorithm itself lives entirely in the `dqn` claim
 step semantics; it's a generic vmap-and-build-records harness."""
 from __future__ import annotations
 
-import math
 import uuid
 from collections.abc import Mapping
 from datetime import UTC, datetime
@@ -47,10 +46,7 @@ from corroborate.computation_graph import ComputationGraph, build_computation_gr
 from corroborate.hypothesis import Hypothesis
 from corroborate.reductions import masked_window_mean
 from corroborate.rl.dqn.dqn import default_state_hash, dqn
-from corroborate.rl.dqn.invariants import (
-    DQNTrajectoryRecord,
-    jensen_overestimation_gap,
-)
+from corroborate.rl.dqn.invariants import DQNTrajectoryRecord
 from corroborate.rl.env_catalogue import EnvSpec, EnvWrapper
 from corroborate.schema import MeasurementLeaf, RunRow, TraceLeaf, TraceRow
 from corroborate.signature import collect_invariants, walk, walk_paths
@@ -125,75 +121,6 @@ def _leaf_measurements(configured: object) -> dict[str, MeasurementLeaf]:
     composition (RL practice's "hyperparameters")."""
     paths = walk_paths(walk(configured), regime='leaf')
     return {path: _leaf_scalar(kw.default) for path, kw in paths.items()}
-
-
-def _mechanism_measurements(
-    record: Mapping[str, jax.Array],
-) -> dict[str, MeasurementLeaf]:
-    """Per-cell mechanism-side measurements — theorem-gap scalars
-    that DDQN's algorithmic intervention specifically targets.
-
-    Currently:
-    - `mechanism.jensen_gap` — `max(0, mean(predicted_q_at_start −
-      mc_return))` over eval bursts. Hasselt 2010/2016: vanilla
-      DQN's positive Jensen bias is what DDQN reduces by
-      decoupling action selection (online) from value evaluation
-      (target). Smaller is better.
-
-    These scalars feed `paired_comparison_from_runs(outcome_path=
-    'mechanism.jensen_gap', predicted_direction='a_lt_b')` to
-    produce a per-env *mechanism* verdict — distinct from the
-    *outcome* verdict on `outcome.late_window_mean`. The §3
-    acceptance test wants both; their joint pattern (mechanism
-    HELD ↛ outcome HELD ↛ link HELD) is the methodological claim."""
-    out: dict[str, MeasurementLeaf] = {}
-    if 'predicted_q_at_start' not in record or 'mc_return' not in record:
-        return out
-    gap = jensen_overestimation_gap()(record)
-    if not math.isnan(gap):
-        out['mechanism.jensen_gap'] = float(gap)
-    return out
-
-
-def _eval_outcomes(
-    record: Mapping[str, jax.Array],
-) -> dict[str, MeasurementLeaf]:
-    """Extract robust eval-based outcome scalars from the per-cell
-    record. Three reductions, each appropriate to a different
-    research question on an unstable algorithm like DQN:
-
-    - `outcome.eval_final_mean` — `mean(mc_return[-1, :])`. The
-      LAST eval burst's mean MC return. Honest "final policy
-      performance" — greedy, no exploration noise. Vulnerable to
-      late-training instability (the network may have just had a
-      bad gradient).
-    - `outcome.eval_best_burst_mean` — `max_i(mean(mc_return[i, :]))`.
-      The best burst seen during training. Robust to instability,
-      slightly optimistic but standard for unstable-RL evaluation.
-    - `outcome.eval_best_burst_step` — provenance: which training
-      step produced the best burst. Lets consumers see whether
-      'best' is at convergence or an early lucky checkpoint.
-
-    All three computed cheaply from the eval-burst arrays already
-    in the record. The trace store carries the raw arrays for any
-    further post-hoc reduction; this helper bakes the standard
-    three so `paired_comparison_from_runs(outcome_path=...)` can
-    pick a reduction without cracking open the trace store."""
-    out: dict[str, MeasurementLeaf] = {}
-    if 'mc_return' not in record:
-        return out
-    mc = record['mc_return']  # (n_super_steps, K)
-    if mc.ndim != 2 or mc.size == 0:
-        return out
-    burst_means = jnp.mean(mc, axis=1)        # (n_super_steps,)
-    out['outcome.eval_final_mean'] = float(burst_means[-1])
-    best_idx = int(jnp.argmax(burst_means))
-    out['outcome.eval_best_burst_mean'] = float(burst_means[best_idx])
-    if 'eval_step_index' in record:
-        eval_steps = record['eval_step_index']
-        if eval_steps.ndim == 1 and eval_steps.size > best_idx:
-            out['outcome.eval_best_burst_step'] = int(eval_steps[best_idx])
-    return out
 
 
 def _trajectory_leaves(
@@ -359,19 +286,24 @@ def run_dqn_arm(
         )
 
         # Pre-registered measurables: walk `hypothesis.measurables`
-        # and persist each as a `mediator.<name>` column. Sharing
-        # `cache` with the per-record bridges so dep-measurables
-        # (q_mean, q_std, etc.) compute once per cell across both
-        # channels. The `mediator.` prefix is paper-section
-        # vocabulary — Phase 5 of the Bridge-collapse refactor
-        # drops the prefix in favour of bare names.
-        mediator_cols: dict[str, MeasurementLeaf] = {}
+        # and persist each at its bare measurable name as the
+        # column key. Sharing `cache` with the per-record bridges
+        # so dep-measurables (q_mean, q_std, etc.) compute once
+        # per cell across both channels. Column-name namespacing
+        # is the substrate's call: a measurable named
+        # `outcome.eval_final_mean` lands as `outcome.eval_final_
+        # mean`; a bare `eval_final_mean` lands at the bare name.
+        # Phase 5 of the Bridge-collapse refactor will normalise
+        # the substrate-paper-narrative prefixes (`outcome.`,
+        # `mechanism.`, `mediator.`) to bare names; until then,
+        # the substrate controls the column-name namespace.
+        measurable_cols: dict[str, MeasurementLeaf] = {}
         for m in hypothesis.measurables:
             value = evaluate_with_measurables(
                 m.fn, per_seed_record, cache=cache,
             )
             scalar = _leaf_scalar(value)
-            mediator_cols[f'mediator.{m.name}'] = scalar
+            measurable_cols[m.name] = scalar
 
         # Each wrapper declares its own measurement keys via
         # `measurement_keys()` — no central isinstance chain.
@@ -387,10 +319,8 @@ def run_dqn_arm(
             'total_steps': total_steps,
             **wrapper_cols,
             'outcome.late_window_mean': outcome,
-            **_eval_outcomes(per_seed_record),
-            **_mechanism_measurements(per_seed_record),
             **leaf_measurements,
-            **mediator_cols,
+            **measurable_cols,
         }
         for result in bridge_results:
             measurements.update(_bridge_result_to_measurements(result))

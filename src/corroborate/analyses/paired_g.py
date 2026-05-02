@@ -83,32 +83,37 @@ class PairedGResult:
 
 
 def _resolve_value(record: Mapping[str, object], source: str) -> float:
-    """Resolve `source` from a cell record. Tries the measurable
-    registry first; falls back to a direct field-path read.
+    """Resolve `source` from a cell record. Tries the persisted
+    field-path read first; falls back to the measurable registry.
 
-    The measurable route lets analyses reference any registered
-    `@measurable` by name (`outcome_native`, `effective_horizon`,
-    …); per-cell values are computed via the Measurable's
-    `__call__`. The field-path fallback covers raw claim outputs
-    that aren't wrapped as measurables.
+    Record-first matches the "persisted columns are authoritative"
+    discipline: when cell_runner has already persisted a scalar at
+    `source`, downstream analyses use that value rather than
+    recomputing via the registered measurable (which might fail
+    on a corpus row that doesn't carry the source-side raw arrays).
+    The measurable fallback covers analyses that request a derived
+    quantity by name on a record where only the raw inputs were
+    persisted (e.g. ad-hoc reductions over the trace store).
 
     Raises `KeyError` if neither route resolves to a scalar."""
+    v = record.get(source)
+    if isinstance(v, bool):
+        return float(v)
+    if isinstance(v, (int, float)):
+        return float(v)
     from corroborate.measurable import get_registered as _get_m
     m = _get_m(source)
     if m is not None:
-        v: object = m(record)
-        if isinstance(v, (int, float)):
-            return float(v)
+        computed: object = m(record)
+        if isinstance(computed, (int, float)):
+            return float(computed)
         raise TypeError(
             f'measurable {source!r} returned non-scalar '
-            f'{type(v).__name__}; paired-g source must be scalar',
+            f'{type(computed).__name__}; paired-g source must be scalar',
         )
-    v = record.get(source)
-    if isinstance(v, (int, float)):
-        return float(v)
     raise KeyError(
-        f'no measurable named {source!r} and no scalar at path '
-        f'{source!r} in record',
+        f'no scalar at path {source!r} in record and no measurable '
+        f'named {source!r}',
     )
 
 

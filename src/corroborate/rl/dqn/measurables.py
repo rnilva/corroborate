@@ -44,7 +44,7 @@ import jax.numpy as jnp
 import numpy as np
 import numpy.typing as npt
 
-from corroborate.measurable import measurable
+from corroborate.measurable import Measurable, measurable
 
 
 # ============ Online Q distribution ============
@@ -683,3 +683,123 @@ def log_mc_cv_per_burst(
     mask = arr > 0
     out[mask] = np.log(arr[mask])
     return out
+
+
+# ============ Lifted from cell_runner._eval_outcomes (Phase 3A) ============
+#
+# Three eval-burst reductions persisted on every cell. Each is a
+# `@measurable` reading `mc_return` (and `eval_step_index` for the
+# step-provenance reduction). Substrates that want the standard set
+# wire them via `dqn_default_measurables()` rather than naming each
+# explicitly.
+#
+# Names retain the `outcome.` prefix so downstream consumers
+# (paper_full_range.py §3-§7, dqn_bridges.py claim_bridges) keep
+# reading the same column keys until Phase 5's bare-name pass.
+
+@measurable(name='outcome.eval_final_mean', reads=('mc_return',))
+def outcome_eval_final_mean(record: Mapping[str, object]) -> float:
+    """`mean(mc_return[-1, :])`. The LAST eval burst's mean MC
+    return — honest "final policy performance" (greedy, no
+    exploration noise). Vulnerable to late-training instability.
+    NaN when `mc_return` is missing or degenerate."""
+    if 'mc_return' not in record:
+        return float('nan')
+    mc = np.asarray(record['mc_return'], dtype=np.float64)
+    if mc.ndim != 2 or mc.size == 0:
+        return float('nan')
+    return float(mc[-1, :].mean())
+
+
+@measurable(name='outcome.eval_best_burst_mean', reads=('mc_return',))
+def outcome_eval_best_burst_mean(record: Mapping[str, object]) -> float:
+    """`max_i(mean(mc_return[i, :]))`. Best-burst-seen during
+    training. Robust to instability, slightly optimistic — the
+    standard reduction for unstable-RL evaluation."""
+    if 'mc_return' not in record:
+        return float('nan')
+    mc = np.asarray(record['mc_return'], dtype=np.float64)
+    if mc.ndim != 2 or mc.size == 0:
+        return float('nan')
+    return float(mc.mean(axis=1).max())
+
+
+@measurable(
+    name='outcome.eval_best_burst_step',
+    reads=('mc_return', 'eval_step_index'),
+)
+def outcome_eval_best_burst_step(record: Mapping[str, object]) -> float:
+    """Provenance: training step at which the best burst occurred.
+    Lets consumers see whether 'best' is at convergence or an
+    early lucky checkpoint. Returns NaN when either input is
+    missing or shapes are inconsistent (cell_runner persisted as
+    `int` historically; lifting to `float` is honest about NaN-
+    sentinel and matches the framework's `Measurable[R, float]`
+    pre-registration shape)."""
+    if 'mc_return' not in record or 'eval_step_index' not in record:
+        return float('nan')
+    mc = np.asarray(record['mc_return'], dtype=np.float64)
+    eval_steps = np.asarray(record['eval_step_index'])
+    if mc.ndim != 2 or mc.size == 0:
+        return float('nan')
+    if eval_steps.ndim != 1:
+        return float('nan')
+    best_idx = int(mc.mean(axis=1).argmax())
+    if best_idx >= eval_steps.size:
+        return float('nan')
+    return float(eval_steps[best_idx])
+
+
+# ============ Lifted from cell_runner._mechanism_measurements (Phase 3B) ============
+
+@measurable(
+    name='mechanism.jensen_gap',
+    reads=('predicted_q_at_start', 'mc_return'),
+)
+def mechanism_jensen_gap(record: Mapping[str, object]) -> float:
+    """`max(0, mean(predicted_q_at_start − mc_return))`. Hasselt
+    2010/2016: vanilla DQN's positive Jensen-bias is what DDQN
+    reduces by decoupling action selection (online) from value
+    evaluation (target). Smaller is better. Clipped at 0 because
+    only positive bias is the Jensen signature; negative
+    (under-estimation) is a different phenomenon. NaN-honest:
+    returns NaN when either input is missing.
+
+    The full-named version of `jensen_overestimation_gap()` —
+    same formula, registered under `mechanism.jensen_gap` so
+    column names stay continuous through Phase 3 (Phase 5
+    normalises the prefix)."""
+    if (
+        'predicted_q_at_start' not in record
+        or 'mc_return' not in record
+    ):
+        return float('nan')
+    predicted = np.asarray(record['predicted_q_at_start'], dtype=np.float64)
+    actual = np.asarray(record['mc_return'], dtype=np.float64)
+    if predicted.size == 0 or actual.size == 0:
+        return float('nan')
+    return float(max(0.0, (predicted - actual).mean()))
+
+
+# ============ Substrate helper — default measurable set ============
+
+def dqn_default_measurables() -> tuple[
+    Measurable[Mapping[str, object], float], ...,
+]:
+    """The standard pre-registered measurable set every DDQN
+    Hypothesis includes: three outcome reductions + Jensen-gap.
+    Substrates that want the full set call this; ad-hoc
+    hypotheses can construct a custom tuple instead.
+
+    Author-side ergonomics: `Hypothesis(..., measurables=
+    dqn_default_measurables())`. Each entry is a `Measurable[
+    Mapping[str, object], float]` registered globally via
+    `@measurable`, so corpus-side analyses that read the
+    persisted columns by name (`outcome.eval_final_mean`,
+    `mechanism.jensen_gap`) stay untouched."""
+    return (
+        outcome_eval_final_mean,
+        outcome_eval_best_burst_mean,
+        outcome_eval_best_burst_step,
+        mechanism_jensen_gap,
+    )

@@ -37,6 +37,7 @@ from corroborate.rl.convergence import (
     classify_envs, envs_in_class, filter_to_classes,
 )
 from corroborate.rl.dqn.claims.bootstrap import bootstrap, double_greedify
+from corroborate.rl.dqn.measurables import dqn_default_measurables
 from corroborate.verdict import Verdict
 
 
@@ -90,12 +91,14 @@ def _ddqn_hypothesis(outcome_path: str) -> Hypothesis[Mapping[str, object]]:
                 predicted_direction='a_gt_b',
             ),
         ),
+        measurables=dqn_default_measurables(),
     )
 
 
 def _vanilla_hypothesis() -> Hypothesis[Mapping[str, object]]:
     return Hypothesis(
         name='vanilla_dqn', intervention={}, intervention_arms=(),
+        measurables=dqn_default_measurables(),
     )
 
 
