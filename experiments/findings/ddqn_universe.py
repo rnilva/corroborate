@@ -128,7 +128,7 @@ from corroborate.verdict import Verdict
 def ddqn_refuted_when_dormancy_fires(
     paired_g: PairedGResult,
     *,
-    source: str = 'invariant.jensen_dormancy_gap',
+    source: str = 'jensen_dormancy_gap',
     target: str = 'eval_best_burst_mean',
     direction: Direction = Direction.INVERSE,
     tier: Tier = Tier.ASSOCIATIONAL,
@@ -136,7 +136,7 @@ def ddqn_refuted_when_dormancy_fires(
     baseline_arm: str = 'vanilla_dqn',
     pair_by: tuple[str, ...] = ('seed', 'env_name'),
     extra_min_pairs: tuple[tuple[str, float], ...] = (
-        ('invariant.jensen_dormancy_gap', 1e-9),
+        ('jensen_dormancy_gap', 1e-9),
     ),
 ) -> Verdict:
     """Necessary-condition claim. The framework's-own Jensen
@@ -640,7 +640,7 @@ def bootstrap_fraction_drives_g_link__net_of_dormancy(
         'log_obs_dim',
         'log_horizon',
         'bootstrap_fraction',
-        'invariant.jensen_dormancy_gap',
+        'jensen_dormancy_gap',
     ),
 ) -> Verdict:
     """Independent link-side scope predicate. The (env, burst)
