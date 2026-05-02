@@ -217,8 +217,15 @@ def paired_g(
             )
 
     paired_keys = sorted(set(treatment) & set(baseline))
+    # NaN-skip pairs where either side is missing (e.g. cells from
+    # corpora that didn't carry the source column, surfacing as
+    # NaN through `_resolve_value`'s present-but-None path). The
+    # statistics primitives reject NaN-containing inputs; better
+    # to filter at the analysis boundary than to crash.
     deltas = [
-        treatment[k] - baseline[k] for k in paired_keys
+        treatment[k] - baseline[k]
+        for k in paired_keys
+        if not (math.isnan(treatment[k]) or math.isnan(baseline[k]))
     ]
     n_pairs = len(deltas)
 

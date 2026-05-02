@@ -164,7 +164,15 @@ def build_cache(
                 v = None
             new_cols[n].append(_to_polars_value(v))
 
-    enriched = runs_df.with_columns([
+    # Persist the joined frame (runs + needed trace cols) plus
+    # the new measurable cols. Preserving the trace cols matters
+    # for analyses like `paired_g_per_burst` that consume raw 2-D
+    # series (e.g. `mc_return` shape `(n_bursts, n_episodes)`)
+    # rather than just the per-cell scalars derived from them.
+    # `df` (= runs ⨝ traces) is what the per-cell loop iterated;
+    # writing it out keeps the cache consistent with what cells
+    # the analyses see at run time.
+    enriched = df.with_columns([
         pl.Series(n, new_cols[n]) for n in names
     ])
     enriched.write_parquet(out_path)

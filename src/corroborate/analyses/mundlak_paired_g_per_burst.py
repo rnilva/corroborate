@@ -124,12 +124,29 @@ def mundlak_paired_g_per_burst(
         cell_id = c.get('id')
         if not isinstance(cell_id, str):
             continue
-        # Resolves any other measurables `predictor_m` depends on
-        # (e.g. `log_mc_variance_per_burst` reads
-        # `mc_variance_per_burst`). Cache is per-cell.
-        arr_obj: object = evaluate_with_measurables(
-            predictor_m.fn, c,
-        )
+        # Cache-first discipline: if the bridge cache materialised
+        # the predictor as a column at build time, the persisted
+        # value is authoritative. Recompute only when the column
+        # is absent from the schema entirely (legacy corpora,
+        # fresh @measurable not yet seen by any prior cache build).
+        # Heterogeneous universal-merge corpora often have the
+        # column with None for cells from sources without traces;
+        # NaN-skip those rather than re-trigger the same KeyError
+        # by evaluating the measurable on a leaf-less cell.
+        if predictor_name in c:
+            cached = c[predictor_name]
+            if cached is None:
+                continue
+            per_cell_array[cell_id] = np.asarray(
+                cached, dtype=np.float64,
+            )
+            continue
+        try:
+            arr_obj: object = evaluate_with_measurables(
+                predictor_m.fn, c,
+            )
+        except (KeyError, TypeError, ValueError):
+            continue
         per_cell_array[cell_id] = np.asarray(arr_obj, dtype=np.float64)
 
     panel: list[dict[str, object]] = []
