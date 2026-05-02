@@ -357,6 +357,16 @@ def measurable_names_for_bridges(
                 candidates.append(v)
             elif isinstance(v, Measurable):
                 candidates.append(v.name)
+            elif isinstance(v, (tuple, list)):
+                # Tuple/list params (e.g. `covariates: tuple[str, ...]`)
+                # carry column names too — bridges declaring a list
+                # of measurable-derived covariates expect each name
+                # in the cache.
+                for item in v:
+                    if isinstance(item, str):
+                        candidates.append(item)
+                    elif isinstance(item, Measurable):
+                        candidates.append(item.name)
         for name in candidates:
             if get_registered(name) is None:
                 continue

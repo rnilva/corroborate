@@ -89,7 +89,6 @@ from corroborate.claim_bridge import (
 )
 from corroborate.intervention import DoEffect
 from corroborate.meta_regression import MetaRegressionResult
-from corroborate.rl import env_catalogue as _ec
 from corroborate.verdict import Verdict
 
 
@@ -109,72 +108,13 @@ from corroborate.verdict import Verdict
 # =====================================================================
 
 
-_DDQN_200K_BOOTSTRAP_FRACTION: dict[str, float] = {
-    'Acrobot-v1':              0.991,
-    'Asterix-MinAtar':         0.987,
-    'BernoulliBandit-misc':    0.990,
-    'Breakout-MinAtar':        0.975,
-    'CartPole-v1':             0.993,
-    'Catch-bsuite':            0.889,
-    'DeepSea-bsuite':          0.875,
-    'DiscountingChain-bsuite': 0.990,
-    'FourRooms-misc':          0.996,
-    'Freeway-MinAtar':         1.000,
-    'GaussianBandit-misc':     0.990,
-    'MNISTBandit-bsuite':      0.000,
-    'MemoryChain-bsuite':      0.833,
-    'MetaMaze-misc':           0.995,
-    'MountainCar-v0':          0.995,
-    'Pong-misc':               0.995,
-    'SpaceInvaders-MinAtar':   0.989,
-    'UmbrellaChain-bsuite':    0.900,
-}
-
-
-_DDQN_200K_DORMANCY_ENV_MEAN: dict[str, float] = {
-    'Acrobot-v1':              14.788,
-    'Asterix-MinAtar':          0.000,
-    'BernoulliBandit-misc':     0.041,
-    'Breakout-MinAtar':        98.489,
-    'CartPole-v1':             37.381,
-    'Catch-bsuite':             0.059,
-    'DeepSea-bsuite':           0.148,
-    'DiscountingChain-bsuite':  0.000,
-    'FourRooms-misc':          11.756,
-    'Freeway-MinAtar':          0.045,
-    'GaussianBandit-misc':      0.017,
-    'MNISTBandit-bsuite':       0.115,
-    'MemoryChain-bsuite':       0.002,
-    'MetaMaze-misc':            0.000,
-    'MountainCar-v0':           0.000,
-    'Pong-misc':               17.278,
-    'SpaceInvaders-MinAtar':    0.072,
-    'UmbrellaChain-bsuite':     0.017,
-}
-
-
-def _structural_covariates(env_name: str) -> dict[str, float]:
-    spec = _ec.get(env_name)
-    obs = (
-        int(np.prod(np.asarray(spec.observation_shape)))
-        if spec.observation_shape else 1
-    )
-    horizon = float(spec.horizon) if spec.horizon else 1000.0
-    return {
-        'log_action_dim': math.log(max(int(spec.n_actions), 2)),
-        'log_obs_dim':    math.log(max(obs, 1)),
-        'log_horizon':    math.log(max(horizon, 1.0)),
-    }
-
-
-_DDQN_UNIVERSE_COVARIATES_PER_ENV: dict[str, dict[str, float]] = {
-    env: {
-        **_structural_covariates(env),
-        'bootstrap_fraction': bf,
-        'dormancy_env_mean':  _DDQN_200K_DORMANCY_ENV_MEAN[env],
-    }
-    for env, bf in _DDQN_200K_BOOTSTRAP_FRACTION.items()
-}
+# Static covariates per env are no longer baked inline. The
+# bridges that use env-level features (bootstrap_fraction,
+# log_action_dim, log_obs_dim, log_horizon, jensen_dormancy_gap)
+# now reference them as column NAMES; the meta-regression
+# analysis groups by env and computes per-env means from the
+# materialised cache columns at evaluation time. See the
+# `bootstrap_fraction_drives_g_link__net_of_dormancy` bridge.
 
 
 # =====================================================================
@@ -697,8 +637,21 @@ def bootstrap_fraction_drives_g_link__net_of_dormancy(
     baseline_arm: str = 'vanilla_dqn',
     pair_by: tuple[str, ...] = ('seed',),
     reduction: str = 'mean',
-    covariates_per_env: dict[str, dict[str, float]] = (
-        _DDQN_UNIVERSE_COVARIATES_PER_ENV
+    # Column-name covariates: each is materialised per-cell by the
+    # @measurable cache, then averaged to env-level inside the
+    # analysis. Replaces the inline `_DDQN_UNIVERSE_COVARIATES_PER_ENV`
+    # static dict (frozen values from the 200k corpus, applied to
+    # whatever corpus runs now). Per-env values now come from the
+    # corpus itself: `log_action_dim`/`log_obs_dim`/`log_horizon`
+    # are env-catalogue lookups, `bootstrap_fraction` is per-cell
+    # `1 - mean(done)`, `invariant.jensen_dormancy_gap` is the raw
+    # invariant column from runs.parquet.
+    covariates: tuple[str, ...] = (
+        'log_action_dim',
+        'log_obs_dim',
+        'log_horizon',
+        'bootstrap_fraction',
+        'invariant.jensen_dormancy_gap',
     ),
 ) -> Verdict:
     """Independent link-side scope predicate. The (env, burst)
@@ -726,7 +679,7 @@ def bootstrap_fraction_drives_g_link__net_of_dormancy(
     not a marginal one."""
     del source, target, direction, tier
     del treatment_arm, baseline_arm, pair_by, reduction
-    del covariates_per_env
+    del covariates
     coef = next(
         (c for c in meta_regression_per_burst.coefficients
          if c.name == 'bootstrap_fraction'),
