@@ -102,12 +102,24 @@ def _resolve_value(record: Mapping[str, object], source: str) -> float:
     quantity by name on a record where only the raw inputs were
     persisted (e.g. ad-hoc reductions over the trace store).
 
-    Raises `KeyError` if neither route resolves to a scalar."""
-    v = record.get(source)
-    if isinstance(v, bool):
-        return float(v)
-    if isinstance(v, (int, float)):
-        return float(v)
+    A *present* key with a None / NaN / non-numeric value is
+    treated as a cached miss (returns NaN) — DO NOT fall through
+    to the measurable. The bridge cache writes None for cells
+    where the measurable couldn't resolve at build time (e.g.
+    corpus without traces); recomputing here would re-trigger the
+    same failure with no new information AND mask the universal-
+    merge schema heterogeneity. Only an *absent* key falls through
+    to the registry.
+
+    Raises `KeyError` if `source` isn't in the record AND no
+    measurable is registered under that name."""
+    if source in record:
+        v = record[source]
+        if isinstance(v, bool):
+            return float(v)
+        if isinstance(v, (int, float)):
+            return float(v)
+        return float('nan')
     from corroborate.measurable import get_registered as _get_m
     m = _get_m(source)
     if m is not None:
