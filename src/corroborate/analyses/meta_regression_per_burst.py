@@ -33,7 +33,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from corroborate.analyses.paired_g_per_burst import paired_g_per_burst
 from corroborate.analysis import analysis
 from corroborate.meta_regression import (
-    MetaRegressionResult, meta_regress_panel,
+    MetaRegressionResult, Pool, meta_regress_panel,
 )
 from corroborate.stratum import StratumG
 
@@ -50,6 +50,7 @@ def meta_regression_per_burst(
     covariates: tuple[str, ...] = (),
     covariates_per_env: Mapping[str, Mapping[str, float]] | None = None,
     alpha: float = 0.05,
+    pool: Pool = 'random',
 ) -> MetaRegressionResult:
     """Per-(env, burst) panel: paired g on `source`/`reduction`
     for each (env, burst), then meta-regression on env-level
@@ -112,6 +113,7 @@ def meta_regression_per_burst(
         panel,
         covariates_per_stratum=covariates_per_stratum,
         alpha=alpha,
+        pool=pool,
     )
 
 

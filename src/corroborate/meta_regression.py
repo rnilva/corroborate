@@ -25,10 +25,17 @@ import math
 import random
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Literal, Protocol
 
 import numpy as np
 import scipy.stats as ss
+
+type Pool = Literal['fixed', 'random']
+"""Pooling regime. `'fixed'` weighs strata by within-stratum
+precision only (w_i = 1/v_i). `'random'` adds between-stratum
+heterogeneity τ² to the variance (w_i = 1/(v_i + τ²)) — the
+honest treatment when strata draw from a population of effects
+rather than realizing one shared effect."""
 
 if TYPE_CHECKING:
     from corroborate.schema import HypothesisComparisonRow
@@ -86,30 +93,101 @@ class MetaRegressionResult:
     the weighted R² (1 minus residual sum of weighted squares
     over total sum of weighted squares around the weighted
     mean). `cleavage_axes` are the names of significant
-    covariates — the empirical scope claim's content."""
+    covariates — the empirical scope claim's content.
+
+    Heterogeneity fields (`tau_sq`, `q_statistic`, `i_squared`,
+    `pool`) carry the random-effects diagnostics. With an
+    intercept-only fit (no covariates), the intercept IS the
+    pooled "total mean from population means" — its
+    `intercept_se` / `intercept_ci_*` reflect the chosen
+    `pool` regime (random-effects widens the CI proportionally
+    to τ²). `tau_sq=0` and `i_squared=0` when between-stratum
+    heterogeneity is undetectable; `i_squared` near 1.0 means
+    almost all variance is between-stratum (the scope-flag
+    signal — effects vary with regime more than within)."""
     n_strata: int
     intercept: float
     coefficients: tuple[CovariateCoefficient, ...]
     r_squared: float
+    intercept_se: float = 0.0
+    intercept_ci_lo: float = 0.0
+    intercept_ci_hi: float = 0.0
+    intercept_p_value: float = float('nan')
+    tau_sq: float = 0.0
+    q_statistic: float = 0.0
+    i_squared: float = 0.0
+    pool: Pool = 'fixed'
 
     @property
     def cleavage_axes(self) -> tuple[str, ...]:
         return tuple(c.name for c in self.coefficients if c.is_significant)
 
 
+def _fit_wls(
+    x_mat: np.ndarray, y_vec: np.ndarray, w_vec: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, float]:
+    """Weighted-least-squares core. Returns
+    `(beta, xtwx_inv, weighted_rss)`. Raises `np.linalg.LinAlgError`
+    when the weighted normal equations are singular."""
+    xtw = x_mat.T * w_vec  # (p, n) — broadcast diag(w) without materialising
+    xtwx = xtw @ x_mat
+    xtwy = xtw @ y_vec
+    xtwx_inv = np.linalg.inv(xtwx)
+    beta = xtwx_inv @ xtwy
+    residuals = y_vec - x_mat @ beta
+    weighted_rss = float((w_vec * residuals ** 2).sum())  # pyright: ignore[reportAny]
+    return beta, xtwx_inv, weighted_rss
+
+
+def _dl_tau_sq(
+    x_mat: np.ndarray, w_fe: np.ndarray, q_statistic: float, df: int,
+) -> float:
+    """DerSimonian-Laird τ² estimator from FE residuals.
+
+    Uses the matrix form τ² = max(0, (Q − df) / c) where
+    c = tr(W) − tr((X'WX)⁻¹ X'W²X). Reduces to the textbook
+    intercept-only formula c = Σwᵢ − Σwᵢ²/Σwᵢ when X is the
+    ones-column. Returns 0 when df ≤ 0 or c ≤ 0 — both cases
+    indicate the data carries no information about
+    between-stratum heterogeneity beyond the within-stratum
+    sampling variance."""
+    if df <= 0:
+        return 0.0
+    xtwx = (x_mat.T * w_fe) @ x_mat
+    xtw2x = (x_mat.T * w_fe ** 2) @ x_mat
+    try:
+        c_factor = float(w_fe.sum()) - float(  # pyright: ignore[reportAny]
+            np.trace(np.linalg.solve(xtwx, xtw2x)),  # pyright: ignore[reportAny]
+        )
+    except np.linalg.LinAlgError:
+        return 0.0
+    if c_factor <= 0.0 or q_statistic <= df:
+        return 0.0
+    return (q_statistic - df) / c_factor
+
+
 def meta_regression(
     observations: Sequence[StratumObservation],
     *,
     alpha: float = 0.05,
+    pool: Pool = 'random',
 ) -> MetaRegressionResult:
     """Inverse-variance-weighted least-squares regression of
     per-stratum effect sizes on covariates.
 
     Each observation contributes one row: outcome `g`, weight
-    `1/se²`, and a covariate vector. The fit minimises
-    `Σ wᵢ (gᵢ - ŷᵢ)²` where `ŷᵢ = β₀ + Σⱼ βⱼ xᵢⱼ`. CIs use the
-    weighted-residual covariance matrix and a t-distribution with
-    `n − p` degrees of freedom (p = 1 + n_covariates).
+    `1/(vᵢ + τ²)` (`vᵢ = seᵢ²`), and a covariate vector. The fit
+    minimises `Σ wᵢ (gᵢ − ŷᵢ)²` where `ŷᵢ = β₀ + Σⱼ βⱼ xᵢⱼ`. CIs
+    use the weighted-residual covariance matrix and a
+    t-distribution with `n − p` degrees of freedom
+    (p = 1 + n_covariates).
+
+    `pool='random'` (default) estimates τ² (DerSimonian-Laird)
+    from the FE-fit residuals and refits with RE weights. The
+    intercept-only fit is the random-effects pooled mean — the
+    "total mean from population means" answer. `pool='fixed'`
+    leaves wᵢ = 1/vᵢ; τ² and q_statistic are still computed and
+    reported on the result for inspection.
 
     Covariate names that appear in some `observations[i].covariates`
     but not others default to `0.0` for the missing rows; the
@@ -147,46 +225,56 @@ def meta_regression(
 
     x_mat = np.ones((n, p), dtype=np.float64)
     y_vec = np.zeros(n, dtype=np.float64)
-    w_vec = np.zeros(n, dtype=np.float64)
+    v_vec = np.zeros(n, dtype=np.float64)
     for i, obs in enumerate(observations):
         y_vec[i] = obs.g
-        w_vec[i] = 1.0 / (obs.se ** 2)
+        v_vec[i] = obs.se ** 2
         for j, name in enumerate(covariate_names):
             x_mat[i, j + 1] = obs.covariates.get(name, 0.0)
 
-    w_mat = np.diag(w_vec)
-    xtw = x_mat.T @ w_mat
-    xtwx = xtw @ x_mat
-    xtwy = xtw @ y_vec
+    df = n - p
+    w_fe = 1.0 / v_vec
     try:
-        xtwx_inv = np.linalg.inv(xtwx)
+        _, _, q_statistic = _fit_wls(x_mat, y_vec, w_fe)
     except np.linalg.LinAlgError as e:
         raise ValueError(
             f'meta_regression: design matrix singular ({e}); '
             f'covariates may be collinear',
         ) from e
 
-    # Numpy boundary — `@` and elementwise ops on numpy arrays
-    # produce values stub-typed as `Any`. Single-line `float(...)`
-    # calls keep the laundering scoped; per-line
-    # `pyright: ignore[reportAny]` matches `_json_boundary.py`'s
-    # pattern.
-    beta = xtwx_inv @ xtwy
-    y_hat = x_mat @ beta
-    residuals = y_vec - y_hat
-    weighted_rss = float((w_vec * residuals ** 2).sum())  # pyright: ignore[reportAny]
-    df = n - p
+    tau_sq = _dl_tau_sq(x_mat, w_fe, q_statistic, df)
+    i_squared = (
+        max(0.0, 1.0 - df / q_statistic) if q_statistic > 0.0 else 0.0
+    )
+
+    if pool == 'random' and tau_sq > 0.0:
+        w_final = 1.0 / (v_vec + tau_sq)
+    else:
+        w_final = w_fe
+    beta, xtwx_inv, weighted_rss = _fit_wls(x_mat, y_vec, w_final)
+
     sigma_sq = weighted_rss / df
     cov_beta = sigma_sq * xtwx_inv
-
     t_crit = float(ss.t.ppf(1.0 - alpha / 2.0, df=df))
 
-    y_mean = float(np.average(y_vec, weights=w_vec))
-    weighted_tss = float((w_vec * (y_vec - y_mean) ** 2).sum())  # pyright: ignore[reportAny]
+    y_mean = float(np.average(y_vec, weights=w_final))
+    weighted_tss = float(
+        (w_final * (y_vec - y_mean) ** 2).sum(),  # pyright: ignore[reportAny]
+    )
     r_squared = (
         1.0 - weighted_rss / weighted_tss
         if weighted_tss > 0.0 else float('nan')
     )
+
+    intercept = float(beta[0])  # pyright: ignore[reportAny]
+    intercept_var = float(cov_beta[0, 0])  # pyright: ignore[reportAny]
+    intercept_se = math.sqrt(intercept_var) if intercept_var > 0.0 else 0.0
+    intercept_margin = t_crit * intercept_se
+    if intercept_se > 0.0:
+        intercept_t = abs(intercept) / intercept_se
+        intercept_p = float(2.0 * (1.0 - ss.t.cdf(intercept_t, df=df)))
+    else:
+        intercept_p = float('nan')
 
     coefficients: list[CovariateCoefficient] = []
     for j, name in enumerate(covariate_names):
@@ -208,9 +296,17 @@ def meta_regression(
 
     return MetaRegressionResult(
         n_strata=n,
-        intercept=float(beta[0]),  # pyright: ignore[reportAny]
+        intercept=intercept,
         coefficients=tuple(coefficients),
         r_squared=r_squared,
+        intercept_se=intercept_se,
+        intercept_ci_lo=intercept - intercept_margin,
+        intercept_ci_hi=intercept + intercept_margin,
+        intercept_p_value=intercept_p,
+        tau_sq=tau_sq,
+        q_statistic=q_statistic,
+        i_squared=i_squared,
+        pool=pool,
     )
 
 
@@ -219,6 +315,7 @@ def meta_regress_comparison(
     covariate_for: Callable[[object], Mapping[str, float]],
     *,
     alpha: float = 0.05,
+    pool: Pool = 'random',
 ) -> MetaRegressionResult:
     """Run meta-regression on a stratified HypothesisComparisonRow.
 
@@ -258,7 +355,7 @@ def meta_regress_comparison(
             se=gs.se,
             covariates=covariate_for(gs.group_value),
         ))
-    return meta_regression(observations, alpha=alpha)
+    return meta_regression(observations, alpha=alpha, pool=pool)
 
 
 # ============ Cross-validation ============
@@ -405,6 +502,7 @@ def meta_regress_panel[K](
     *,
     covariates_per_stratum: Mapping[K, Mapping[str, float]],
     alpha: float = 0.05,
+    pool: Pool = 'random',
 ) -> MetaRegressionResult:
     """Project a per-stratum panel of (stratum_id, g, se, n_pairs)
     observations to `StratumObservation`s and run `meta_regression`.
@@ -430,4 +528,4 @@ def meta_regress_panel[K](
             se=s.se,
             covariates=covariates_per_stratum.get(s.stratum_id, {}),
         ))
-    return meta_regression(observations, alpha=alpha)
+    return meta_regression(observations, alpha=alpha, pool=pool)

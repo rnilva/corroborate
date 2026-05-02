@@ -22,7 +22,7 @@ from collections.abc import Iterable, Mapping
 from corroborate.analyses.paired_g import per_env_paired_g_panel
 from corroborate.analysis import analysis
 from corroborate.meta_regression import (
-    MetaRegressionResult, meta_regress_panel,
+    MetaRegressionResult, Pool, meta_regress_panel,
 )
 
 
@@ -36,6 +36,7 @@ def meta_regression_paired_g(
     source: str,
     covariates_per_env: Mapping[str, Mapping[str, float]],
     alpha: float = 0.05,
+    pool: Pool = 'random',
 ) -> MetaRegressionResult:
     """For each unique `env_name` in `cells`, compute paired g
     on `source` (treatment vs baseline by `pair_by`), then
@@ -57,6 +58,7 @@ def meta_regression_paired_g(
         panel,
         covariates_per_stratum=covariates_per_env,
         alpha=alpha,
+        pool=pool,
     )
 
 

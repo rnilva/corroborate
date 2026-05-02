@@ -31,6 +31,103 @@ from corroborate.verdict import Verdict
 
 # ============ Recovery on synthetic-known-effect data ============
 
+def test_intercept_only_pools_inverse_variance_weighted_mean() -> None:
+    """Intercept-only fit (no covariates) is the textbook
+    inverse-variance-weighted pooled mean. With pool='fixed',
+    intercept = Σwᵢgᵢ / Σwᵢ where wᵢ = 1/seᵢ²."""
+    observations = [
+        StratumObservation(stratum_id='a', g=1.0, se=0.1, covariates={}),
+        StratumObservation(stratum_id='b', g=2.0, se=0.2, covariates={}),
+        StratumObservation(stratum_id='c', g=3.0, se=0.3, covariates={}),
+    ]
+    result = meta_regression(observations, alpha=0.05, pool='fixed')
+    # w = (100, 25, 11.111); sum=136.111; weighted_sum=100*1+25*2+11.111*3
+    #   = 100+50+33.333 = 183.333; mean = 1.347
+    expected = (100.0*1.0 + 25.0*2.0 + (1/0.09)*3.0) / (
+        100.0 + 25.0 + 1/0.09
+    )
+    assert result.intercept == pytest.approx(expected, rel=1e-3)
+    assert result.intercept_se > 0.0
+    assert result.intercept_ci_lo < result.intercept < result.intercept_ci_hi
+
+
+def test_homogeneous_data_yields_tau_sq_zero() -> None:
+    """When effects are essentially identical across strata
+    (only sampling noise), DL τ² estimator returns 0 and RE
+    weights collapse to FE weights — RE intercept equals FE
+    intercept."""
+    observations = [
+        StratumObservation(
+            stratum_id=i, g=1.0 + (0.005 if i % 2 else -0.005),
+            se=0.1, covariates={},
+        )
+        for i in range(10)
+    ]
+    fe = meta_regression(observations, alpha=0.05, pool='fixed')
+    re = meta_regression(observations, alpha=0.05, pool='random')
+    assert re.tau_sq == pytest.approx(0.0, abs=1e-9)
+    assert re.intercept == pytest.approx(fe.intercept, rel=1e-9)
+    assert re.intercept_se == pytest.approx(fe.intercept_se, rel=1e-9)
+    assert re.i_squared == pytest.approx(0.0, abs=0.01)
+
+
+def test_heterogeneous_data_yields_positive_tau_sq() -> None:
+    """When per-stratum effects vary far more than each
+    stratum's within-variance can explain, DL τ² > 0 and the
+    Q-statistic exceeds df. The intercept-only fit's pooled g
+    converges on the across-stratum mean (≈2.25 for these
+    effects)."""
+    # 10 strata with effects spread {0.0, 0.5, 1.0, …, 4.5} and
+    # tight within-stratum SE. Between-stratum SD ≈ 1.4; within
+    # SE 0.05. So τ² should land near (1.4)² ≈ 2.0 if estimator
+    # is unbiased under the model — DL recovers within ~30%.
+    observations = [
+        StratumObservation(
+            stratum_id=i, g=0.5 * i, se=0.05, covariates={},
+        )
+        for i in range(10)
+    ]
+    re = meta_regression(observations, alpha=0.05, pool='random')
+    assert re.tau_sq > 0.5  # clearly positive
+    assert re.q_statistic > re.n_strata  # heterogeneity beyond df
+    assert re.i_squared > 0.9  # nearly all variance is between-stratum
+    # Intercept estimates the across-stratum mean — RE with τ²>0
+    # weights observations by 1/(v+τ²), which here are ~uniform
+    # since τ² ≫ v. So the pooled g is approximately the
+    # arithmetic mean of the per-stratum effects.
+    assert re.intercept == pytest.approx(2.25, abs=0.1)
+
+
+def test_pool_fixed_vs_random_with_nonuniform_weights() -> None:
+    """When within-stratum SEs vary across strata (so FE and RE
+    weights aren't proportional), random-effects pooling shifts
+    the pooled mean toward the noisier strata (their RE weight
+    is closer to FE because τ² adds the same constant)."""
+    # 4 precise strata at g=0; 4 noisy strata at g=4. Without τ²
+    # (FE), the precise strata dominate → pooled near 0. With
+    # τ²≫v_FE for the precise strata, the RE weights flatten and
+    # the pooled mean rises toward the across-stratum mean (2.0).
+    precise = [
+        StratumObservation(
+            stratum_id=f'p{i}', g=0.0, se=0.05, covariates={},
+        )
+        for i in range(4)
+    ]
+    noisy = [
+        StratumObservation(
+            stratum_id=f'n{i}', g=4.0, se=1.0, covariates={},
+        )
+        for i in range(4)
+    ]
+    fe = meta_regression([*precise, *noisy], alpha=0.05, pool='fixed')
+    re = meta_regression([*precise, *noisy], alpha=0.05, pool='random')
+    assert re.tau_sq > 0.0
+    # FE: precise strata dominate → pooled near 0
+    assert abs(fe.intercept) < 0.5
+    # RE: weights flatten → pooled shifts toward the across-stratum mean
+    assert re.intercept > fe.intercept
+
+
 def test_recovers_single_cleaver() -> None:
     """g_i = 2.0 + 0.5 * x_i with tight noise → coefficient on
     `x` is significant, ~0.5, intercept ~2.0."""
