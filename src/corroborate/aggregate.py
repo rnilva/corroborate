@@ -894,10 +894,17 @@ def _per_group_stats(
     pair_by: tuple[str, ...],
     alpha: float,
     power: float,
+    predicted_direction: PredictedDirection | None = None,
 ) -> tuple[GroupStats | None, int]:
     """Pair within one group, compute Hedges' g + verdict +
     GroupStats. Returns (GroupStats | None, n_dropped_unpaired).
     None when no pairs survive the outcome-finite filter.
+
+    `predicted_direction` overrides `h.predicted_direction` for
+    the sign test when the caller knows a per-edge prior (e.g.
+    a typed `claim_bridge.Bridge` carries `predicted_direction='a_lt_b'`
+    on its mechanism edge but `'a_gt_b'` on its outcome edge). When
+    None, falls back to `h.predicted_direction`.
 
     Raises ValueError on duplicate pair_by keys within an arm —
     silent dedup would hide a misconfigured slice."""
@@ -940,9 +947,13 @@ def _per_group_stats(
     )
     q = derived_q_from_g_se(g, se)
     di = delta_i_from_q(q)
+    effective_direction = (
+        predicted_direction if predicted_direction is not None
+        else h.predicted_direction
+    )
     verdict, refutation, is_powered = verdict_from_paired_stats(
         g, se, n_pairs,
-        predicted_direction=h.predicted_direction,
+        predicted_direction=effective_direction,
         alpha=alpha, power=power,
     )
 
@@ -975,6 +986,7 @@ def hypothesis_comparison_from_cells(
     cycle_id: str | None = None,
     timestamp: str | None = None,
     baseline_h: 'Hypothesis[Mapping[str, object]] | None' = None,
+    predicted_direction: PredictedDirection | None = None,
 ) -> HypothesisComparisonRow:
     """The canonical cross-arm aggregator. Builds one
     HypothesisComparisonRow from per-cell `RunRow`s.
@@ -998,6 +1010,14 @@ def hypothesis_comparison_from_cells(
     keys MUST differ — equal keys raise ValueError as a
     HPO-smuggle indicator (the comparison would be self-against-
     self, signal-free).
+
+    `predicted_direction` overrides the hypothesis-level prior
+    (`h.predicted_direction`) for the sign test. The verdict-walk
+    path through `hypothesis_subgraph_verdict` passes the per-edge
+    `claim_bridge.Bridge.predicted_direction` here so each edge's
+    sign test uses its own prior (mechanism predicts a_lt_b,
+    outcome predicts a_gt_b — they can't share one direction).
+    When None, falls back to `h.predicted_direction`.
 
     Raises:
     - `ValueError` on empty arms or empty `pair_by`.
@@ -1059,6 +1079,11 @@ def hypothesis_comparison_from_cells(
 
     intervention_name = _run_intervention_name(treatment_runs[0])
 
+    effective_direction = (
+        predicted_direction if predicted_direction is not None
+        else h.predicted_direction
+    )
+
     if group_by is None:
         # Single-group mode.
         gs, n_dropped = _per_group_stats(
@@ -1067,6 +1092,7 @@ def hypothesis_comparison_from_cells(
             baseline_runs=baseline_runs,
             outcome_path=outcome_path,
             pair_by=pair_by, alpha=alpha, power=power,
+            predicted_direction=effective_direction,
         )
         if gs is None:
             return HypothesisComparisonRow(
@@ -1079,7 +1105,7 @@ def hypothesis_comparison_from_cells(
                 baseline_arm_key=baseline_arm_key,
                 treatment_run_ids=tuple(r.id for r in treatment_runs),
                 baseline_run_ids=tuple(r.id for r in baseline_runs),
-                predicted_direction=h.predicted_direction,
+                predicted_direction=effective_direction,
                 pair_by=pair_by,
                 group_by=group_by,
                 arm_a_n=0, arm_a_mean=None, arm_a_sd=None,
@@ -1108,7 +1134,7 @@ def hypothesis_comparison_from_cells(
             baseline_arm_key=baseline_arm_key,
             treatment_run_ids=tuple(r.id for r in treatment_runs),
             baseline_run_ids=tuple(r.id for r in baseline_runs),
-            predicted_direction=h.predicted_direction,
+            predicted_direction=effective_direction,
             pair_by=pair_by,
             group_by=group_by,
             arm_a_n=gs.n_pairs, arm_a_mean=gs.arm_a_mean,
@@ -1152,6 +1178,7 @@ def hypothesis_comparison_from_cells(
             baseline_runs=b_g,
             outcome_path=outcome_path,
             pair_by=pair_by, alpha=alpha, power=power,
+            predicted_direction=effective_direction,
         )
         n_dropped += dropped
         if gs is None:
@@ -1169,7 +1196,7 @@ def hypothesis_comparison_from_cells(
 
     pooled = random_effects_summary(g_se_pairs)
     verdict_p, refutation_p = random_effects_verdict(
-        pooled, predicted_direction=h.predicted_direction,
+        pooled, predicted_direction=effective_direction,
     )
 
     arm_n = sum(gs.n_pairs for gs in per_group)
@@ -1209,7 +1236,7 @@ def hypothesis_comparison_from_cells(
         baseline_arm_key=baseline_arm_key,
         treatment_run_ids=tuple(r.id for r in treatment_runs),
         baseline_run_ids=tuple(r.id for r in baseline_runs),
-        predicted_direction=h.predicted_direction,
+        predicted_direction=effective_direction,
         pair_by=pair_by,
         group_by=group_by,
         arm_a_n=arm_n,

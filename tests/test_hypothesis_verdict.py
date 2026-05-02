@@ -176,6 +176,62 @@ def test_three_edge_subgraph_produces_per_edge_bridge_results() -> None:
     _ = v.verdict_at('outcome.r')
 
 
+def test_per_edge_predicted_direction_drives_sign_test() -> None:
+    """A bridge declaring `predicted_direction='a_lt_b'` should
+    HELD when treatment_minus_baseline is negative; flip the sign
+    by declaring `'a_gt_b'` and the same data should refute. Per-
+    edge override flows through `hypothesis_subgraph_verdict` →
+    `hypothesis_comparison_from_cells` → `_per_group_stats` →
+    `verdict_from_paired_stats`."""
+    treatment: list[RunRow] = []
+    baseline: list[RunRow] = []
+    treatment_arm_key = (
+        Hypothesis(
+            name='_', intervention={}, intervention_arms=_TREATMENT_ARMS,
+        ).arm_key()
+    )
+    # Treatment mech < baseline mech across all envs and seeds.
+    for env in ('A', 'B', 'C', 'D'):
+        for seed in range(8):
+            treatment.append(_run(
+                f't{env}{seed}', env=env, seed=seed,
+                arm_key=treatment_arm_key,
+                mech=0.0 + seed * 0.001,
+                outcome_v=1.0,
+            ))
+            baseline.append(_run(
+                f'b{env}{seed}', env=env, seed=seed,
+                arm_key='baseline',
+                mech=1.0 + seed * 0.001,
+                outcome_v=1.0,
+            ))
+
+    # Predict a_lt_b ("treatment less than baseline") — matches the data.
+    h_correct: Hypothesis[Mapping[str, object]] = Hypothesis(
+        name='correct', intervention={},
+        intervention_arms=_TREATMENT_ARMS,
+        edges=(_intervention_edge('mechanism.q', 'a_lt_b'),),
+    )
+    v_correct = hypothesis_subgraph_verdict(
+        h_correct, treatment, baseline,
+        pair_by=('seed',), group_by='env_name',
+    )
+    assert v_correct.verdict_at('mechanism.q') is Verdict.HELD
+
+    # Predict a_gt_b ("treatment greater than baseline") — sign-
+    # opposite of the data; the same evidence refutes.
+    h_wrong: Hypothesis[Mapping[str, object]] = Hypothesis(
+        name='wrong', intervention={},
+        intervention_arms=_TREATMENT_ARMS,
+        edges=(_intervention_edge('mechanism.q', 'a_gt_b'),),
+    )
+    v_wrong = hypothesis_subgraph_verdict(
+        h_wrong, treatment, baseline,
+        pair_by=('seed',), group_by='env_name',
+    )
+    assert v_wrong.verdict_at('mechanism.q') is Verdict.NO_EFFECT
+
+
 def test_verdict_at_returns_power_insufficient_for_missing_target() -> None:
     """A hypothesis with only one intervention edge produces a
     verdict for that target; absent targets fall back to

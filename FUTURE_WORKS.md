@@ -7,6 +7,34 @@ condition that should lift it.
 Entries are ordered by *forcing function*: the higher up, the
 sooner they're likely to bind.
 
+## Refuter semantics — `is_refuter` flag deferred (2026-05-02)
+
+**Status:** removed without replacement during Phase 1 of the
+Bridge-collapse refactor. The `BridgeRole` enum's `'refuter'`
+member, plus the `refuter_edge` factory, were deleted along with
+the rest of `claimed_edge.py`.
+
+**Why deferred:** the only consumer of refuter-as-Hypothesis-edge-
+role was `tests/test_claimed_edge.py` (also deleted). No
+experiment, smoke, or analysis currently authors a refuter edge.
+The plan called out the `is_refuter: bool` distinction
+(HELD-flips-interpretation: a HELD refuter *contradicts* the
+hypothesis) as the one piece of role-enum semantics worth
+preserving, but with zero current consumers there's nothing for
+the flag to drive.
+
+**Lift condition:** when a substrate authors a refuter edge —
+i.e. an intervention-shaped Bridge whose HELD verdict should
+flip the hypothesis-level interpretation. At that point: add
+`is_refuter: bool = False` to `claim_bridge.Bridge`, have
+`hypothesis_subgraph_verdict` invert the verdict for refuter
+edges before assembling the Hypothesis-level pattern.
+
+(Note: `bridges_dowhy.py` uses `'role': 'refuter'` strings
+inside DoWhy refutation analyses — those are stats-dict labels
+on placebo / random-common-cause refutations, unrelated to the
+Hypothesis-edge role taxonomy. They stay untouched.)
+
 ## v10 `redundancy.py` port — explicitly deferred (2026-05-01)
 
 **Status:** not blocking active work; deferred until the

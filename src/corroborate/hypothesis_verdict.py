@@ -272,17 +272,20 @@ def hypothesis_subgraph_verdict(
     """Verdict-walk a Hypothesis's typed claimed edges.
 
     Two passes:
-    1. Mechanism / outcome / refuter edges — paired comparison
-       via `hypothesis_comparison_from_cells`, stratified by
-       `group_by`, reading the edge's `target` as outcome_path.
-    2. Link edges — Pearson r over the source's and target's
-       per-group effect sizes from pass 1.
+    1. Intervention edges (`bridge.intervention is not None`) —
+       paired comparison via `hypothesis_comparison_from_cells`,
+       stratified by `group_by`, reading the edge's `target` as
+       outcome_path. Per-edge `predicted_direction` (when set)
+       overrides the hypothesis-level prior in the sign test.
+    2. Coupling edges (`bridge.intervention is None`) — Pearson
+       r over the source's and target's per-group effect sizes
+       from pass 1.
 
     Pass 2 strictly requires that the source and target paths of
-    every link edge match a comparison computed in pass 1. If a
-    link edge references paths not produced by any pass-1 edge,
-    the framework raises ValueError — this is an authoring bug,
-    not a runtime degenerate case.
+    every coupling edge match a comparison computed in pass 1. If
+    a coupling edge references paths not produced by any pass-1
+    edge, the framework raises ValueError — this is an authoring
+    bug, not a runtime degenerate case.
 
     Each pass produces a `BridgeResult` keyed by `(source, target)`.
     The graph is built via `build_causal_graph` over those results,
@@ -311,6 +314,7 @@ def hypothesis_subgraph_verdict(
             alpha=alpha,
             power=power,
             baseline_h=baseline_h,
+            predicted_direction=edge.predicted_direction,
         )
         comparison_rows[edge.target] = row
         bridge_results[(edge.source, edge.target)] = (
