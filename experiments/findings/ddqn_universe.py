@@ -73,6 +73,7 @@ from types import MappingProxyType
 import numpy as np
 
 import corroborate.analyses  # pyright: ignore[reportUnusedImport]  # populate registry
+import corroborate.rl.dqn.measurables  # pyright: ignore[reportUnusedImport]  # populate measurable registry
 from corroborate.analyses.dowhy import (
     BackdoorResult, RefutationResult,
 )

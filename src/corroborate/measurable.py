@@ -39,7 +39,7 @@ from __future__ import annotations
 import inspect
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from typing import Any, overload
+from typing import overload
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,7 +74,7 @@ class Measurable[R: Mapping[str, object], T]:
     reads: tuple[str, ...] = field(default=())
     fallbacks: tuple['Measurable[R, T]', ...] = field(default=())
 
-    def __call__(self, record: R, **deps: Any) -> T:
+    def __call__(self, record: R, **deps: object) -> T:
         return self.dispatch(record).fn(record, **deps)
 
     def dispatch(self, record: R) -> 'Measurable[R, T]':
@@ -102,6 +102,42 @@ def get_registered(
     """Look up a measurable by its registered name. Returns None
     if not registered. Typed accessor for the global registry."""
     return _REGISTRY.get(name)
+
+
+def register[R: Mapping[str, object], T](
+    m: Measurable[R, T],
+) -> Measurable[R, T]:
+    """Register `m` in the global name-keyed registry, idempotent
+    on (name, identity). Returns the same instance.
+
+    Two registration paths converge here:
+
+    - The `@measurable` decorator at function-definition time.
+    - The `@claim_bridge` decoder at bridges-import time, which
+      auto-registers `Measurable` instances passed by value as a
+      bridge's `source` / `target` (so a value-composed reduction
+      like `mean_window(from_key('q_max'), 0.5, 1.0)` becomes
+      cache-buildable without the author writing a separate
+      `@measurable` wrapper).
+
+    Same-name re-registration with the same identity is a no-op;
+    same-name with a *different* instance raises `ValueError` to
+    catch authoring mistakes (two reductions colliding on an
+    auto-generated name)."""
+    existing = _REGISTRY.get(m.name)
+    if existing is None:
+        # Assigning `Measurable[R, T]` into `Measurable[Mapping[str,
+        # object], object]`-typed registry. The type parameters are
+        # invariant for hashability; values flow out only through
+        # `get_registered`'s typed accessor, so the widening is safe.
+        _REGISTRY[m.name] = m  # pyright: ignore[reportArgumentType]
+        return m
+    if existing is m:
+        return m
+    raise ValueError(
+        f'measurable {m.name!r} already registered to a different '
+        f'instance; rename or de-duplicate the call site',
+    )
 
 
 def registered_names() -> tuple[str, ...]:
@@ -198,8 +234,9 @@ def _measurable_param_names(fn: Callable[..., object]) -> tuple[str, ...]:
     return tuple(deps)
 
 
-def _resolve_one[R: Mapping[str, object]](
-    name: str, record: R, cache: dict[str, object],
+def _resolve_one(
+    name: str, record: Mapping[str, object],
+    cache: dict[str, object],
 ) -> object:
     """Resolve one measurable by name; recurses on its deps.
     Memoizes in `cache` so each measurable computes at most once
@@ -219,9 +256,9 @@ def _resolve_one[R: Mapping[str, object]](
     return cache[name]
 
 
-def evaluate_with_measurables[R: Mapping[str, object], T](
+def evaluate_with_measurables[T](
     fn: Callable[..., T],
-    record: R,
+    record: Mapping[str, object],
     *,
     cache: dict[str, object] | None = None,
 ) -> T:
@@ -301,9 +338,8 @@ def measurable[R: Mapping[str, object], T](
         instance: Measurable[R, T] = Measurable(
             fn=fn, name=fn.__name__, reads=(),
         )
-        _REGISTRY[instance.name] = (
-            instance  # pyright: ignore[reportGeneralTypeIssues]
-        )
+        # Invariant-widen at registry boundary; see `register`.
+        _REGISTRY[instance.name] = instance  # pyright: ignore[reportArgumentType]
         return instance
 
     def decorator(inner: Callable[..., T]) -> Measurable[R, T]:
@@ -311,8 +347,6 @@ def measurable[R: Mapping[str, object], T](
         instance: Measurable[R, T] = Measurable(
             fn=inner, name=resolved_name, reads=reads,
         )
-        _REGISTRY[instance.name] = (
-            instance  # pyright: ignore[reportGeneralTypeIssues]
-        )
+        _REGISTRY[instance.name] = instance  # pyright: ignore[reportArgumentType]
         return instance
     return decorator
