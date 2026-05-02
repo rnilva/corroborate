@@ -1,0 +1,57 @@
+name: action_dim_inflated_fourrooms
+out_dir: experiments/data/action_dim_inflated_fourrooms
+arms_shape: chunked
+# Test the |A|∈{3,4} → LINK_ACTIVE rule by inflating FourRooms's
+# declared action space via duplication. ActionDuplicate(k) maps
+# action `i ∈ [0, k*4)` to inner action `i % 4`, preserving
+# dynamics + reward + optimal Q* — only the Hasselt floor
+# √(2 log|A|) varies.
+#
+# Hypothesis: if the |A|∈{3,4} sweet spot in the ddqn 200k corpus
+# is theoretically real (Hasselt floor active but not too large),
+# inflating |A| via duplication should NOT increase DDQN benefit
+# and may saturate or shrink it. If the sweet spot was a corpus
+# artifact, DDQN benefit should grow with k (more bias to fix).
+#
+# 4 conditions × 2 arms × 30 seeds × 200k = 240 cells. CPU runtime
+# ~5 min/arm × 8 = ~40 min.
+envs:
+  - {name: FourRooms-misc, n_seeds: 30, chunk_size: 30, wrappers: [{type: action_duplicate, k: 1}]}
+  - {name: FourRooms-misc, n_seeds: 30, chunk_size: 30, wrappers: [{type: action_duplicate, k: 2}]}
+  - {name: FourRooms-misc, n_seeds: 30, chunk_size: 30, wrappers: [{type: action_duplicate, k: 3}]}
+  - {name: FourRooms-misc, n_seeds: 30, chunk_size: 30, wrappers: [{type: action_duplicate, k: 4}]}
+
+base_intervention:
+  total_steps: 200000
+  eval_every:  20000
+  n_episodes:  5
+  gamma:       0.99
+  sync_period: 100
+  replay:
+    class: Replay
+    capacity: 50000
+    batch_size: 32
+  optimizer:
+    class: WarmedUpdate
+    inner: {class: Adam, lr: 0.0001}
+    warmup_steps: 100
+  q_network:
+    class: MLP
+    hidden: [64, 64]
+
+hypotheses:
+  - name: vanilla_dqn
+    predicted_direction: null
+    intervention: {}
+
+  - name: ddqn
+    predicted_direction: a_gt_b
+    intervention:
+      bootstrap:
+        fn: bootstrap
+        greedification: {fn: double_greedify}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement:
+          fn: bootstrap
+          greedification: {fn: double_greedify}

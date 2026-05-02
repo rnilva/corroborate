@@ -52,7 +52,7 @@ class PerBurstResult:
         return len(self.strata)
 
 
-def _cell_burst_values(
+def cell_burst_values(
     cell: Mapping[str, object],
     measurable: str,
     reduction: str,
@@ -131,7 +131,7 @@ def paired_g_per_burst(
             continue
         if arm not in (treatment_arm, baseline_arm):
             continue
-        per_burst = _cell_burst_values(cell, source, reduction)
+        per_burst = cell_burst_values(cell, source, reduction)
         if per_burst.size == 0:
             continue
         bucket = by_env_arm.setdefault((env, arm), {})
@@ -191,4 +191,7 @@ def panel_for_env(
     )
 
 
-__all__ = ['PerBurstResult', 'PerBurstStratum', 'paired_g_per_burst']
+__all__ = [
+    'PerBurstResult', 'PerBurstStratum', 'paired_g_per_burst',
+    'cell_burst_values',
+]
