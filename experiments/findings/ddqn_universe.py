@@ -74,13 +74,13 @@ import numpy as np
 
 import corroborate.analyses  # pyright: ignore[reportUnusedImport]  # populate registry
 import corroborate.rl.dqn.measurables  # pyright: ignore[reportUnusedImport]  # populate measurable registry
-from corroborate.analyses.dowhy import (
-    BackdoorResult, RefutationResult,
-)
 from corroborate.analyses.link_attenuation_dowhy import (
     LinkAttenuationDowhyResult,
 )
 from corroborate.analyses.mundlak_decomposition import MundlakResult
+from corroborate.analyses.paired_delta_link_dowhy import (
+    PairedDeltaLinkDowhyResult,
+)
 from corroborate.analyses.paired_g import PairedGResult
 from corroborate.analyses.paired_g_per_burst import PerBurstResult
 from corroborate.analyses.paired_link_per_burst import (
@@ -1269,57 +1269,73 @@ def acrobot_per_burst_link_active__gamma_0999(
 
 @claim_bridge
 def acrobot_link_backdoor_ate_negative__gamma_0999(
-    backdoor_ate: BackdoorResult,
+    paired_delta_link_dowhy: PairedDeltaLinkDowhyResult,
     *,
     source: str = 'mechanism.jensen_gap',
-    target: str = 'outcome.mc_return',
-    treatment: str = 'djens',
-    outcome: str = 'dout',
+    target: str = 'outcome.eval_best_burst_mean',
     direction: Direction = Direction.INVERSE,
     tier: Tier = Tier.INTERVENTIONAL,
-    method_name: str = 'backdoor.linear_regression',
-    env_name: str = 'Acrobot-v1',
+    treatment_arm: str = 'ddqn',
+    baseline_arm: str = 'vanilla_dqn',
+    pair_by: tuple[str, ...] = ('seed',),
+    link_predictor: str = 'mc_return',
+    link_predictor_reduction: str = 'mc_minus_q',
+    link_target: str = 'mc_return',
+    link_target_reduction: str = 'mean',
+    env_filter: tuple[str, ...] = ('Acrobot-v1',),
     ate_ceiling: float = -0.1,
 ) -> Verdict:
-    """DoWhy backdoor adjustment over the per-burst panel
-    (treatment=Δ_jens, outcome=Δ_out, adjusters=burst+seed) on
-    Acrobot γ=0.999 yields a NEGATIVE ATE bigger than `ate_ceiling`
-    (i.e. ATE <= -0.1). HELD when identified AND ATE <= ceiling.
-    Empirical -0.6312."""
-    del source, target, treatment, outcome, direction, tier
-    del method_name, env_name
-    if not backdoor_ate.identified:
+    """DoWhy backdoor adjustment over the per-(env, burst, seed)
+    paired-Δ panel (treatment=Δ_jens, outcome=Δ_out, adjusters=
+    burst dummies) on Acrobot γ=0.999 yields a NEGATIVE ATE
+    bigger than `ate_ceiling` (i.e. ATE <= -0.1). HELD when
+    identified AND ATE <= ceiling. Empirical -0.6312."""
+    del source, target, direction, tier
+    del treatment_arm, baseline_arm, pair_by
+    del link_predictor, link_predictor_reduction
+    del link_target, link_target_reduction, env_filter
+    b = paired_delta_link_dowhy.backdoor
+    if not b.identified:
         return Verdict.POWER_INSUFFICIENT
-    if math.isnan(backdoor_ate.ate):
+    if math.isnan(b.ate):
         return Verdict.POWER_INSUFFICIENT
-    if backdoor_ate.ate <= ate_ceiling:
+    if b.ate <= ate_ceiling:
         return Verdict.HELD
-    if backdoor_ate.ate < 0.0:
+    if b.ate < 0.0:
         return Verdict.POWER_INSUFFICIENT
     return Verdict.NO_EFFECT
 
 
 @claim_bridge
 def acrobot_link_placebo_refuted__gamma_0999(
-    placebo_refutation: RefutationResult,
+    paired_delta_link_dowhy: PairedDeltaLinkDowhyResult,
     *,
     source: str = 'mechanism.jensen_gap',
-    target: str = 'outcome.mc_return',
-    treatment: str = 'djens',
-    outcome: str = 'dout',
+    target: str = 'outcome.eval_best_burst_mean',
     direction: Direction = Direction.INVERSE,
     tier: Tier = Tier.INTERVENTIONAL,
-    env_name: str = 'Acrobot-v1',
+    treatment_arm: str = 'ddqn',
+    baseline_arm: str = 'vanilla_dqn',
+    pair_by: tuple[str, ...] = ('seed',),
+    link_predictor: str = 'mc_return',
+    link_predictor_reduction: str = 'mc_minus_q',
+    link_target: str = 'mc_return',
+    link_target_reduction: str = 'mean',
+    env_filter: tuple[str, ...] = ('Acrobot-v1',),
     placebo_max_ratio: float = 0.2,
 ) -> Verdict:
-    """Placebo refutation shrinks ATE to ≤ `placebo_max_ratio` of the
-    real ATE on Acrobot γ=0.999. HELD when |placebo / real| <
-    placebo_max_ratio AND real ATE is non-zero. Confirms the
+    """Placebo refutation shrinks ATE to ≤ `placebo_max_ratio` of
+    the real ATE on Acrobot γ=0.999. HELD when |placebo / real|
+    < placebo_max_ratio AND real ATE is non-zero. Confirms the
     bias-correction effect is treatment-specific (not noise).
     Empirical: real -0.6312, placebo 0.0000, ratio 0%."""
-    del source, target, treatment, outcome, direction, tier, env_name
-    real = placebo_refutation.real_ate
-    placebo = placebo_refutation.refuted_ate
+    del source, target, direction, tier
+    del treatment_arm, baseline_arm, pair_by
+    del link_predictor, link_predictor_reduction
+    del link_target, link_target_reduction, env_filter
+    p = paired_delta_link_dowhy.placebo
+    real = p.real_ate
+    placebo = p.refuted_ate
     if math.isnan(real) or math.isnan(placebo) or abs(real) < 1e-9:
         return Verdict.POWER_INSUFFICIENT
     ratio = abs(placebo / real)
@@ -1332,25 +1348,34 @@ def acrobot_link_placebo_refuted__gamma_0999(
 
 @claim_bridge
 def acrobot_link_rcc_robust__gamma_0999(
-    random_common_cause_refutation: RefutationResult,
+    paired_delta_link_dowhy: PairedDeltaLinkDowhyResult,
     *,
     source: str = 'mechanism.jensen_gap',
-    target: str = 'outcome.mc_return',
-    treatment: str = 'djens',
-    outcome: str = 'dout',
+    target: str = 'outcome.eval_best_burst_mean',
     direction: Direction = Direction.INVERSE,
     tier: Tier = Tier.INTERVENTIONAL,
-    env_name: str = 'Acrobot-v1',
+    treatment_arm: str = 'ddqn',
+    baseline_arm: str = 'vanilla_dqn',
+    pair_by: tuple[str, ...] = ('seed',),
+    link_predictor: str = 'mc_return',
+    link_predictor_reduction: str = 'mc_minus_q',
+    link_target: str = 'mc_return',
+    link_target_reduction: str = 'mean',
+    env_filter: tuple[str, ...] = ('Acrobot-v1',),
     rcc_max_drift_ratio: float = 0.1,
 ) -> Verdict:
-    """Random-common-cause refutation: adding a noise covariate to
-    the adjustment set leaves ATE within `rcc_max_drift_ratio` of the
-    real ATE on Acrobot γ=0.999. HELD when |refuted - real| / |real|
-    < rcc_max_drift_ratio. Confirms robustness to spurious-confound
-    vulnerability. Empirical drift = 0.000."""
-    del source, target, treatment, outcome, direction, tier, env_name
-    real = random_common_cause_refutation.real_ate
-    refuted = random_common_cause_refutation.refuted_ate
+    """Random-common-cause refutation: adding a noise covariate
+    to the adjustment set leaves ATE within `rcc_max_drift_ratio`
+    of the real ATE on Acrobot γ=0.999. HELD when |refuted -
+    real| / |real| < rcc_max_drift_ratio. Confirms robustness to
+    spurious-confound vulnerability. Empirical drift = 0.000."""
+    del source, target, direction, tier
+    del treatment_arm, baseline_arm, pair_by
+    del link_predictor, link_predictor_reduction
+    del link_target, link_target_reduction, env_filter
+    r = paired_delta_link_dowhy.random_common_cause
+    real = r.real_ate
+    refuted = r.refuted_ate
     if math.isnan(real) or math.isnan(refuted) or abs(real) < 1e-9:
         return Verdict.POWER_INSUFFICIENT
     drift_ratio = abs(refuted - real) / abs(real)
