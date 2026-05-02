@@ -134,7 +134,7 @@ class Hypothesis[R: Mapping[str, object]]:
     predicted_direction: PredictedDirection | None = None
     intervention_arms: tuple[Intervention, ...] = field(default_factory=tuple)
     edges: tuple['ClaimBridge', ...] = field(default_factory=tuple)
-    measurables: tuple[Measurable[R, float], ...] = field(
+    measurables: tuple[Measurable[R, object], ...] = field(
         default_factory=tuple,
     )
 

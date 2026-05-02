@@ -38,6 +38,7 @@ Two output shapes coexist:
    language, not a framework concept."""
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 
 import jax.numpy as jnp
@@ -781,25 +782,119 @@ def mechanism_jensen_gap(record: Mapping[str, object]) -> float:
     return float(max(0.0, (predicted - actual).mean()))
 
 
+# ============ Lifted from rl/dqn/invariants.py (Phase 4A) ============
+#
+# Theorem-gap measurables that previously lived as factory-returned
+# `Measurable[..., float]` instances attached via `attach_invariant`
+# to specific Claims. Phase 4 of the Bridge-collapse refactor moves
+# these into the registry-based measurable channel — substrate
+# enumerates them on `Hypothesis.measurables` and cell_runner
+# persists each as a named scalar column.
+
+
+@measurable(
+    name='jensen_dormancy_gap',
+    reads=('predicted_q_at_start', 'mc_return', 'online_q_per_action'),
+)
+def jensen_dormancy_gap_m(record: Mapping[str, object]) -> float:
+    """`max(0, structural_floor − observed_bias)` — gap between
+    the Jensen-alone structural floor (`σ_late × √(2 log |A|)`)
+    and the empirical overestimation (`mean(predicted_q_at_start −
+    mc_return)`).
+
+    Convention: gap = 0 ⇒ Jensen-premise active (DDQN's correction
+    has something to bite on). gap > 0 ⇒ Jensen-premise dormant
+    (observed bias is below what Jensen-alone predicts at this
+    |A| and σ_Q; mechanism is structurally weak).
+
+    Returns NaN when inputs are missing or shapes are degenerate.
+    The full registered version of `rl/dqn/invariants.py:
+    jensen_dormancy_gap()` — Phase 4 lifts the invariant to the
+    measurable channel; the old per-cell Bridge channel goes
+    away in 4C–4F."""
+    if (
+        'predicted_q_at_start' not in record
+        or 'mc_return' not in record
+        or 'online_q_per_action' not in record
+    ):
+        return float('nan')
+    predicted = np.asarray(record['predicted_q_at_start'], dtype=np.float64)
+    actual = np.asarray(record['mc_return'], dtype=np.float64)
+    q = np.asarray(record['online_q_per_action'], dtype=np.float64)
+    if predicted.size == 0 or actual.size == 0:
+        return float('nan')
+    if q.ndim != 2 or q.shape[0] < 2 or q.shape[1] < 2:
+        return float('nan')
+    observed_bias = float(max(0.0, (predicted - actual).mean()))
+    n_actions = int(q.shape[-1])
+    late_lo = int(q.shape[0]) // 2
+    late = q[late_lo:]
+    per_step_action_std = late.std(axis=-1)
+    sigma = float(per_step_action_std.mean())
+    if not (sigma == sigma and abs(sigma) < float('inf')):
+        return float('nan')
+    floor = sigma * math.sqrt(2.0 * math.log(n_actions))
+    return float(max(0.0, floor - observed_bias))
+
+
+@measurable(
+    name='invariant.at_most[jensen_dormancy_gap<=0].verdict',
+    reads=(),
+)
+def at_most_jensen_dormancy_gap_zero_verdict(
+    record: Mapping[str, object],
+    jensen_dormancy_gap: float,
+) -> str:
+    """Per-cell categorical verdict: `'held'` when
+    `jensen_dormancy_gap <= 0` (Jensen premise active),
+    `'invariant_violation'` when `> 0` (premise dormant), and
+    `'power_insufficient'` when the gap is NaN.
+
+    The column name `invariant.at_most[jensen_dormancy_gap<=0].
+    verdict` matches the legacy per-cell Bridge column dqn_bridges
+    consume — preserving column-name continuity through the
+    Bridge[R] subtraction. `verdict_distribution_per_env` tallies
+    the column across cells; bridges assert "≥90% of cells fire
+    the predicted verdict on this env".
+
+    Auto-injected dep on `jensen_dormancy_gap` (the bare
+    measurable above) — the resolver matches by parameter name."""
+    del record  # the dep injection IS the read.
+    if jensen_dormancy_gap != jensen_dormancy_gap:  # NaN
+        return 'power_insufficient'
+    if jensen_dormancy_gap <= 0.0:
+        return 'held'
+    return 'invariant_violation'
+
+
 # ============ Substrate helper — default measurable set ============
 
 def dqn_default_measurables() -> tuple[
-    Measurable[Mapping[str, object], float], ...,
+    Measurable[Mapping[str, object], object], ...,
 ]:
     """The standard pre-registered measurable set every DDQN
-    Hypothesis includes: three outcome reductions + Jensen-gap.
-    Substrates that want the full set call this; ad-hoc
-    hypotheses can construct a custom tuple instead.
+    Hypothesis includes: three outcome reductions + Jensen-gap +
+    Jensen-dormancy invariant verdict. Substrates that want the
+    full set call this; ad-hoc hypotheses can construct a custom
+    tuple instead.
 
     Author-side ergonomics: `Hypothesis(..., measurables=
     dqn_default_measurables())`. Each entry is a `Measurable[
-    Mapping[str, object], float]` registered globally via
-    `@measurable`, so corpus-side analyses that read the
+    Mapping[str, object], MeasurementLeaf]` registered globally
+    via `@measurable`, so corpus-side analyses that read the
     persisted columns by name (`outcome.eval_final_mean`,
-    `mechanism.jensen_gap`) stay untouched."""
+    `mechanism.jensen_gap`, `invariant.at_most[jensen_dormancy_
+    gap<=0].verdict`) stay untouched.
+
+    Returned as `Measurable[..., object]` to admit both float and
+    string return types — the dormancy verdict is categorical
+    (`'held'` / `'invariant_violation'` / `'power_insufficient'`),
+    the others are scalar floats."""
     return (
         outcome_eval_final_mean,
         outcome_eval_best_burst_mean,
         outcome_eval_best_burst_step,
         mechanism_jensen_gap,
+        jensen_dormancy_gap_m,
+        at_most_jensen_dormancy_gap_zero_verdict,
     )
