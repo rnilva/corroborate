@@ -52,7 +52,7 @@ from corroborate.causal_graph import (
 )
 from corroborate.claim_bridge import Bridge as ClaimBridge
 from corroborate.graph import Graph
-from corroborate.hypothesis import Hypothesis, PredictedDirection
+from corroborate.hypothesis import Hypothesis
 from corroborate.schema import HypothesisComparisonRow, RunRow
 from corroborate.verdict import Verdict
 
@@ -78,11 +78,11 @@ class HypothesisVerdict[R: Mapping[str, object]]:
     def edge_verdict(self, edge: ClaimBridge) -> Verdict:
         """Verdict for a specific claimed edge — looked up via
         the edge's `(source, target)` key in `edge_verdicts`."""
-        v = self.edge_verdicts.get((edge.source, edge.target))
+        v = self.edge_verdicts.get((edge.source_name, edge.target_name))
         if v is None:
             raise KeyError(
-                f'no verdict for ({edge.source!r}, '
-                f'{edge.target!r}) — edge not in this hypothesis '
+                f'no verdict for ({edge.source_name!r}, '
+                f'{edge.target_name!r}) — edge not in this hypothesis '
                 f'verdict',
             )
         return v
@@ -100,12 +100,13 @@ class HypothesisVerdict[R: Mapping[str, object]]:
         paper-narrative reading unambiguous. Use `edge_verdict(edge)`
         when you need the coupling edge's verdict explicitly."""
         for edge in self.hypothesis.edges:
-            if edge.target != target:
+            if edge.target_name != target:
                 continue
             if edge.intervention is None:
                 continue
             return self.edge_verdicts.get(
-                (edge.source, edge.target), Verdict.POWER_INSUFFICIENT,
+                (edge.source_name, edge.target_name),
+                Verdict.POWER_INSUFFICIENT,
             )
         return Verdict.POWER_INSUFFICIENT
 
@@ -275,7 +276,7 @@ def hypothesis_subgraph_verdict(
             continue
         row = hypothesis_comparison_from_cells(
             h, treatment_runs, baseline_runs,
-            outcome_path=edge.target,
+            outcome_path=edge.target_name,
             pair_by=pair_by,
             group_by=group_by,
             alpha=alpha,
@@ -283,44 +284,45 @@ def hypothesis_subgraph_verdict(
             baseline_h=baseline_h,
             predicted_direction=edge.predicted_direction,
         )
-        comparison_rows[edge.target] = row
+        comparison_rows[edge.target_name] = row
         be, v = _intervention_edge(edge, row)
-        edges_built[(edge.source, edge.target)] = be
-        edge_verdicts[(edge.source, edge.target)] = v
+        edges_built[(edge.source_name, edge.target_name)] = be
+        edge_verdicts[(edge.source_name, edge.target_name)] = v
 
     # Pass 2: coupling edges — Pearson r over per-stratum effects
     # produced in pass 1.
     for edge in h.edges:
         if edge.intervention is not None:
             continue
-        if edge.source not in comparison_rows:
+        if edge.source_name not in comparison_rows:
             raise ValueError(
-                f'coupling edge references source={edge.source!r} '
+                f'coupling edge references source={edge.source_name!r} '
                 f'which is not the target of any intervention edge '
                 f'in this hypothesis. Add an intervention edge that '
                 f'produces the source path before the coupling edge '
                 f'can be evaluated.',
             )
-        if edge.target not in comparison_rows:
+        if edge.target_name not in comparison_rows:
             raise ValueError(
-                f'coupling edge references target={edge.target!r} '
+                f'coupling edge references target={edge.target_name!r} '
                 f'which is not the target of any intervention edge '
                 f'in this hypothesis.',
             )
         if edge.predicted_direction is None:
             raise ValueError(
-                f'coupling edge ({edge.source!r} -> {edge.target!r}) '
-                f'must declare `predicted_direction` — Pearson sign '
-                f'check needs a prior.',
+                f'coupling edge ({edge.source_name!r} -> '
+                f'{edge.target_name!r}) must declare '
+                f'`predicted_direction` — Pearson sign check needs '
+                f'a prior.',
             )
         be, v = _coupling_edge(
             edge,
-            comparison_rows[edge.source],
-            comparison_rows[edge.target],
+            comparison_rows[edge.source_name],
+            comparison_rows[edge.target_name],
             alpha=alpha,
         )
-        edges_built[(edge.source, edge.target)] = be
-        edge_verdicts[(edge.source, edge.target)] = v
+        edges_built[(edge.source_name, edge.target_name)] = be
+        edge_verdicts[(edge.source_name, edge.target_name)] = v
 
     graph: CausalGraph = Graph()
     for (s, t), be in edges_built.items():
