@@ -310,6 +310,118 @@ type GraphSignature = tuple[
 ]
 
 
+# ============ Measurable ↔ Claim topology helpers ============
+
+def producing_paths(
+    g: ComputationGraph, claim_name: str,
+) -> frozenset[str]:
+    """Source-paths the named Claim emitted in `g`.
+
+    Each `ComputationEdge` carries a `source_path` — the dotted/
+    indexed path inside the source Claim's return value. Bare-
+    return edges (`source_path=''`) are Claim-to-Claim flow-
+    through (a downstream reader took the whole return value);
+    they're filtered out of the result because they correspond
+    to no specific record key.
+
+    Returns an empty set when `claim_name` isn't a node in `g`
+    (callers asking about an absent claim get a typed empty,
+    not a KeyError — useful for substrate-side scope helpers
+    iterating across claim sets where some may not have fired)."""
+    out: set[str] = set()
+    for e in g.edges:
+        if e.source == claim_name and e.metadata.source_path:
+            out.add(e.metadata.source_path)
+    return frozenset(out)
+
+
+def measurables_by_attachment(
+    g: ComputationGraph, claim_name: str,
+) -> tuple[str, ...]:
+    """Names of registered measurables whose `reads` tuple
+    intersects the source-paths emitted by `claim_name` in `g`.
+
+    Closes the loop between the measurable graph (record-key
+    reads) and the claim graph (source-path emissions). A
+    measurable `reads=('mc_return',)` is attached to whichever
+    Claim emitted `mc_return` as a return-value field. The
+    substrate's paper-narrative scope (mechanism / outcome / link)
+    is a substrate-side reading on top of this structural
+    attachment, not a framework-level type."""
+    from corroborate.measurable import get_registered, registered_names
+    paths = producing_paths(g, claim_name)
+    if not paths:
+        return ()
+    out: list[str] = []
+    for name in registered_names():
+        m = get_registered(name)
+        if m is None:
+            continue
+        if any(r in paths for r in m.reads):
+            out.append(name)
+    return tuple(out)
+
+
+@dataclass(frozen=True, slots=True)
+class ScopeInfo:
+    """Structural attachment info for a measurable, derived from
+    the computation graph.
+
+    `producing_claims` lists the Claims whose return-value paths
+    match keys in the measurable's `reads`. Multiple claims may
+    contribute when a measurable reads from a substrate's
+    multi-claim record assembly.
+
+    `unmatched_reads` lists reads that no Claim in `g` produces —
+    typically substrate-supplied exogenous fields (`env_name`,
+    `seed`) or claim outputs whose source claims didn't fire in
+    the trace `g` was built from. Empty `unmatched_reads` means
+    every read is structurally accounted for in this graph."""
+    measurable_name: str
+    producing_claims: tuple[str, ...]
+    unmatched_reads: tuple[str, ...]
+
+
+def measurable_scope(
+    g: ComputationGraph, measurable_name: str,
+) -> ScopeInfo:
+    """Look up `measurable_name` in the registry; for each of its
+    `reads`, find the Claim(s) that emit the matching source-path
+    in `g`. Returns the structural attachment as a `ScopeInfo`.
+
+    Loud `KeyError` when `measurable_name` isn't registered —
+    the measurable name is the framework's authority, asking
+    about an unknown name is a substrate bug."""
+    from corroborate.measurable import get_registered, registered_names
+    m = get_registered(measurable_name)
+    if m is None:
+        raise KeyError(
+            f'no measurable named {measurable_name!r}; '
+            f'registered: {registered_names()}',
+        )
+
+    # Inverse index: source_path → set of claims that emit it.
+    by_path: dict[str, set[str]] = {}
+    for e in g.edges:
+        if e.metadata.source_path:
+            by_path.setdefault(e.metadata.source_path, set()).add(e.source)
+
+    producing: set[str] = set()
+    unmatched: list[str] = []
+    for r in m.reads:
+        producers = by_path.get(r)
+        if producers:
+            producing.update(producers)
+        else:
+            unmatched.append(r)
+
+    return ScopeInfo(
+        measurable_name=measurable_name,
+        producing_claims=tuple(sorted(producing)),
+        unmatched_reads=tuple(unmatched),
+    )
+
+
 def signature(g: ComputationGraph) -> GraphSignature:
     """Hashable structural signature of a computation graph.
 
