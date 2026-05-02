@@ -24,16 +24,10 @@ from collections.abc import Mapping
 
 import math
 
-from corroborate.aggregate import (
-    fact_from_bridge_result,
-    hypothesis_comparison_from_cells,
-    natural_strength_from_stats,
-)
-from corroborate.bridge import Bridge, BridgeResult, bridge
+from corroborate.aggregate import hypothesis_comparison_from_cells
 from corroborate.claim import claim
 from corroborate.hypothesis import Hypothesis
 from corroborate.intervention import Intervention
-from corroborate.measurable import measurable, transitive_reads
 
 
 @claim
@@ -49,7 +43,6 @@ _STUB_INTERVENTION = Intervention(
 )
 _TREATMENT_ARM_KEY = _STUB_INTERVENTION.arm_key()
 from corroborate.schema import (
-    FactRow,
     GroupStats,
     HypothesisComparisonRow,
     RunRow,
@@ -340,87 +333,3 @@ def test_from_cells_raises_on_same_arm_key() -> None:
     raise AssertionError('expected ValueError')
 
 
-# ============ FactRow + natural_strength ============
-
-def test_natural_strength_from_rho_caps_at_one() -> None:
-    assert natural_strength_from_stats({'rho': 0.7}) == 0.7
-    assert natural_strength_from_stats({'rho': -0.5}) == 0.5
-    assert natural_strength_from_stats({'rho': 1.5}) == 1.0
-
-
-def test_natural_strength_from_threshold_margin() -> None:
-    """value=0.4, threshold=2.0 → margin = 1 - 0.2 = 0.8."""
-    s = natural_strength_from_stats({'value': 0.4, 'threshold': 2.0})
-    assert math.isclose(s, 0.8)
-
-
-def test_natural_strength_falls_back_to_zero() -> None:
-    assert natural_strength_from_stats({'unknown_stat': 0.5}) == 0.0
-
-
-def test_fact_from_bridge_result_carries_targets_and_strength() -> None:
-    r = BridgeResult(
-        verdict=Verdict.HELD, reason='ρ above threshold',
-        stats={'rho': 0.6, 'tier': 'interventional'},
-        name='hasselt_link', targets=('q_max', 'mc_return'),
-    )
-    fact = fact_from_bridge_result(r)
-    assert fact.name == 'hasselt_link'
-    assert fact.reads == frozenset({'q_max', 'mc_return'})
-    assert fact.verdict is Verdict.HELD
-    assert fact.natural_strength == 0.6
-    assert fact.evidentiary_level == 'causal_one_sided'
-    # delta_i: q_oriented = 0.5 + 0.5 * 0.6 = 0.8;
-    # H₂(0.8) ≈ 0.722; ΔI ≈ 1 - 0.722 ≈ 0.278.
-    assert 0.25 < fact.delta_i < 0.30
-
-
-def test_fact_from_rejected_bridge_has_refuted_level() -> None:
-    r = BridgeResult(
-        verdict=Verdict.NO_EFFECT, reason='|ρ| below null band',
-        stats={'rho': 0.1},
-        name='link_x', targets=('a',),
-    )
-    fact = fact_from_bridge_result(r)
-    assert fact.verdict is Verdict.NO_EFFECT
-    assert fact.evidentiary_level == 'refuted'
-
-
-# ============ transitive_reads / Bridge.transitive_reads ============
-
-def test_transitive_reads_closes_over_measurable_graph() -> None:
-    """A measurable that depends on another measurable inherits
-    its reads transitively."""
-    @measurable(reads=('online_max_q_per_step',))
-    def _q_peak_internal(record: Mapping[str, object]) -> float:
-        return 0.0
-
-    @measurable
-    def _peak_late_internal(
-        record: Mapping[str, object], _q_peak_internal: float,
-    ) -> float:
-        return _q_peak_internal
-
-    closure = transitive_reads('_peak_late_internal')
-    assert 'online_max_q_per_step' in closure
-
-
-def test_bridge_transitive_reads_unions_targets_and_measurable_closure() -> None:
-    """A bridge declares targets + reads a measurable param. Its
-    transitive_reads = targets ∪ measurable's reads."""
-    @measurable(reads=('td_error',))
-    def _td_late_internal(record: Mapping[str, object]) -> float:
-        return 0.0
-
-    @bridge(targets=('reward', 'done'))
-    def _bridge_internal(
-        record: Mapping[str, object], _td_late_internal: float,
-    ) -> BridgeResult:
-        return BridgeResult(
-            verdict=Verdict.HELD, reason='ok',
-            stats={}, name='_bridge_internal',
-            targets=('reward', 'done'),
-        )
-
-    closure = _bridge_internal.transitive_reads()
-    assert closure == frozenset({'reward', 'done', 'td_error'})

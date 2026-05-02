@@ -371,45 +371,6 @@ class ComparisonRow:
         )
 
 
-# ============ FactRow — typed projection of a BridgeResult ============
-
-@dataclass(frozen=True, slots=True)
-class FactRow:
-    """One per-bridge / per-invariant fact attached to a hypothesis
-    comparison. The typed projection of a `BridgeResult` after a
-    cell evaluates its bridges + composition-discovered invariants.
-
-    Carries the verdict-oriented information `compute_R_info` and
-    the redundancy primitive will read:
-
-    - `name` — bridge / invariant identifier (matches
-      `BridgeResult.name`).
-    - `reads` — leaf record-key fingerprint (the union of the
-      bridge's `targets` and the transitive `reads` of any
-      registered measurables it consumes via `evaluate_with_
-      measurables`). Computed by `aggregate.fact_from_bridge_
-      result`.
-    - `verdict` — strongly-typed `Verdict`.
-    - `natural_strength` — continuous evidence strength in [0, 1],
-      derived from `BridgeResult.stats` (ρ, partial correlations,
-      threshold margins, ATE — whatever the bridge reports).
-    - `delta_i` — verdict-oriented information gain in bits,
-      `1 - H₂(q_oriented)` where `q_oriented = 0.5 ± 0.5 *
-      natural_strength` depending on verdict polarity.
-    - `evidentiary_level` — coarse causal-tier label
-      ('correlational' / 'causal_one_sided' / 'refuted').
-    - `refutation_class` — `RefutationClass | None` (only set on
-      REJECT-style verdicts where the comparison-level diagnostic
-      could distinguish null vs underpowered)."""
-    name: str
-    reads: frozenset[str]
-    verdict: Verdict
-    natural_strength: float
-    delta_i: float
-    evidentiary_level: str
-    refutation_class: RefutationClass | None = None
-
-
 # ============ GroupStats — per-stratum summary ============
 
 @dataclass(frozen=True, slots=True)
@@ -454,12 +415,7 @@ class HypothesisComparisonRow:
     mirrors `pooled.pooled_g`.
 
     `pair_by` and `group_by` are recorded on the row so consumers
-    know how the aggregation was performed.
-
-    `facts` is the deduped union of bridge / invariant facts
-    across treatment cells (one FactRow per name; verdict folded
-    by majority, natural_strength by mean). `reads_set` is the
-    union of fact reads — the input to the redundancy primitive."""
+    know how the aggregation was performed."""
     id: str
     parent_id: str | None
     cycle_id: str | None
@@ -491,10 +447,6 @@ class HypothesisComparisonRow:
     # Stratified mode (empty / None when group_by is None).
     per_group: tuple[GroupStats, ...]
     pooled: PooledStats | None
-
-    # Fact union + reads.
-    facts: tuple[FactRow, ...]
-    reads_set: frozenset[str]
 
     # Diagnostics.
     n_dropped_unpaired: int

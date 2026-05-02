@@ -37,11 +37,9 @@ import uuid
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 
-from corroborate.bridge import BridgeResult
 from corroborate.hypothesis import Hypothesis, PredictedDirection
 from corroborate.schema import (
     ComparisonRow,
-    FactRow,
     GroupStats,
     HypothesisComparisonRow,
     MeasurementLeaf,
@@ -115,35 +113,6 @@ def leaf_signature(
         if not any(k.startswith(p) for p in _OUTPUT_PREFIXES)
         and k not in excluded
     ))
-
-
-# ============ Cell-level verdict aggregator (shared) ============
-
-def aggregate_cell_verdict(verdicts: tuple[Verdict, ...]) -> Verdict:
-    """Cell-level verdict from per-bridge verdicts. Popperian
-    aggregation: any single refutation refutes.
-
-    Precedence (highest first):
-    1. Any `Verdict.INVARIANT_VIOLATION` (a tautological-tagged
-       gap exceeded its scope-commitment threshold; the run sat
-       outside the theorem's domain — outcome verdicts are out of
-       scope per axiom 18).
-    2. Any `Verdict.NO_EFFECT` → NO_EFFECT (one bridge refuted
-       is enough; the hypothesis as a whole is refuted under this
-       cell — Popperian falsification).
-    3. All `Verdict.HELD` → HELD.
-    4. Otherwise (mixed HELD + POWER_INSUFFICIENT) →
-       `POWER_INSUFFICIENT` (cannot tell).
-    Empty input → `POWER_INSUFFICIENT` (no test was performed)."""
-    if not verdicts:
-        return Verdict.POWER_INSUFFICIENT
-    if any(v is Verdict.INVARIANT_VIOLATION for v in verdicts):
-        return Verdict.INVARIANT_VIOLATION
-    if any(v is Verdict.NO_EFFECT for v in verdicts):
-        return Verdict.NO_EFFECT
-    if all(v is Verdict.HELD for v in verdicts):
-        return Verdict.HELD
-    return Verdict.POWER_INSUFFICIENT
 
 
 # ============ Paired-by-seed comparison (v9-port stats) ============
@@ -551,320 +520,6 @@ def _pearson(xs: Sequence[float], ys: Sequence[float]) -> float:
     return num / (sx * sy)
 
 
-# ============ FactRow projection ============
-
-def _binary_entropy(p: float) -> float:
-    """H₂(p) = −(p log₂ p + (1−p) log₂ (1−p)). 0 at p=0 or p=1."""
-    if p <= 0.0 or p >= 1.0:
-        return 0.0
-    return -(p * math.log2(p) + (1.0 - p) * math.log2(1.0 - p))
-
-
-def _verdict_q(natural_strength: float, verdict: Verdict) -> float:
-    """Convert natural [0,1] strength + verdict → posterior P(claim
-    is true).
-
-    HELD pulls q above 0.5 by `0.5 * strength`; NO_EFFECT pulls
-    below; everything else (POWER_INSUFFICIENT,
-    INVARIANT_VIOLATION) sits at 0.5 (no information). The
-    factor-of-2 stretch makes a maximal |ρ|=1 reach q=1 (or 0)
-    → 1 bit of ΔI."""
-    s = max(0.0, min(1.0, natural_strength))
-    if verdict is Verdict.HELD:
-        return 0.5 + 0.5 * s
-    if verdict is Verdict.NO_EFFECT:
-        return 0.5 - 0.5 * s
-    return 0.5
-
-
-def _delta_i_oriented(
-    natural_strength: float, verdict: Verdict,
-) -> float:
-    """Verdict-oriented ΔI = 1 − H₂(q_oriented), in bits. Symmetric:
-    HELD with strength 1 and NO_EFFECT with strength 1 both → 1
-    bit. INVARIANT_VIOLATION → 0."""
-    if verdict is Verdict.INVARIANT_VIOLATION:
-        return 0.0
-    q = _verdict_q(natural_strength, verdict)
-    return 1.0 - _binary_entropy(q)
-
-
-def natural_strength_from_stats(
-    stats: Mapping[str, float | int | bool | str],
-) -> float:
-    """Compute a bridge's natural [0,1] strength from its
-    sufficient statistic. Verdict-agnostic — interpretation
-    (HELD / NO_EFFECT) happens at delta_i computation time.
-
-    Looks for these stat keys, in order:
-    - `rho` — Pearson / Spearman correlation; |ρ| capped at 1.
-    - `partial_at` + `partial_bt` — paired partial correlations;
-      min(|.|, 1).
-    - `value` + `threshold` — a bounded-magnitude invariant; the
-      strength is `1 - |value| / threshold` (margin to bound).
-    - `ate` — average treatment effect; tanh(|.|) maps to (0, 1).
-
-    Returns 0.0 when nothing matches — the caller falls back to
-    evidentiary-level placeholders."""
-    rho = stats.get('rho')
-    if isinstance(rho, (int, float)) and not math.isnan(float(rho)):
-        return float(min(abs(rho), 1.0))
-    partial_at = stats.get('partial_at')
-    partial_bt = stats.get('partial_bt')
-    if (isinstance(partial_at, (int, float))
-            and isinstance(partial_bt, (int, float))):
-        return float(min(abs(partial_at), abs(partial_bt), 1.0))
-    value = stats.get('value')
-    threshold = stats.get('threshold')
-    if (isinstance(value, (int, float))
-            and isinstance(threshold, (int, float))
-            and threshold > 0):
-        margin = 1.0 - abs(value) / threshold
-        return float(max(0.0, min(margin, 1.0)))
-    ate = stats.get('ate')
-    if isinstance(ate, (int, float)):
-        return float(math.tanh(abs(ate)))
-    return 0.0
-
-
-def _evidentiary_level_from_bridge_result(r: BridgeResult) -> str:
-    """Per-result evidentiary tier label. 'causal_bridged' is a
-    graph-level promotion (≥2 paired admits) computed elsewhere;
-    the per-result tier is at most causal_one_sided."""
-    if r.verdict is not Verdict.HELD:
-        return 'refuted'
-    tier = r.stats.get('tier')
-    if tier == 'interventional':
-        return 'causal_one_sided'
-    return 'correlational'
-
-
-def _grouped_bridge_fields(
-    run: RunRow,
-) -> dict[str, dict[str, MeasurementLeaf]]:
-    """Group `(bridge|invariant).<name>.<field>` measurements by
-    bridge name. Shared between `_facts_from_runrow` and
-    `reconstruct_bridge_results` — both walk the same prefix
-    structure persisted by `_bridge_result_to_measurements`."""
-    by_name: dict[str, dict[str, MeasurementLeaf]] = {}
-    for k, v in run.measurements.items():
-        if k.startswith('bridge.'):
-            prefix_len = len('bridge.')
-        elif k.startswith('invariant.'):
-            prefix_len = len('invariant.')
-        else:
-            continue
-        rest = k[prefix_len:]  # `<name>.<rest>`
-        if '.' not in rest:
-            continue
-        name, field_path = rest.split('.', 1)
-        by_name.setdefault(name, {})[field_path] = v
-    return by_name
-
-
-def _targets_from_fields(
-    fields: Mapping[str, MeasurementLeaf],
-) -> tuple[str, ...]:
-    """Decode a comma-joined `targets` measurement into the bridge's
-    reads-set tuple. Empty string → empty tuple. Missing targets
-    field (older corpus or hand-constructed RunRow) → empty tuple."""
-    targets_v = fields.get('targets')
-    if not isinstance(targets_v, str) or not targets_v:
-        return ()
-    return tuple(targets_v.split(','))
-
-
-def _stats_from_fields(
-    fields: Mapping[str, MeasurementLeaf],
-) -> dict[str, float | int | bool | str]:
-    """Pull `stats.<k>` measurements into the BridgeResult-shaped
-    stats dict. Non-MeasurementLeaf values are skipped."""
-    stats: dict[str, float | int | bool | str] = {}
-    for fk, fv in fields.items():
-        if fk.startswith('stats.') and isinstance(
-            fv, (int, float, bool, str),
-        ):
-            stats[fk[len('stats.'):]] = fv
-    return stats
-
-
-def reconstruct_bridge_results(
-    run: RunRow,
-) -> tuple[BridgeResult, ...]:
-    """Inverse of `_bridge_result_to_measurements`.
-    Walks `run.measurements` for `bridge.<name>.*` and
-    `invariant.<name>.*` groups and rebuilds a tuple of
-    BridgeResults.
-
-    Lossless round-trip of the five BridgeResult fields:
-    `name` (the path's middle component), `verdict` (from
-    `<prefix>.verdict`), `reason` (from `<prefix>.reason`),
-    `targets` (from `<prefix>.targets`), `stats` (from
-    `<prefix>.stats.<k>`).
-
-    Empty tuple if the run carries no bridge/invariant
-    measurements. Invalid verdict strings or missing verdict
-    fields skip the corresponding bridge silently — same defensive
-    posture as `_facts_from_runrow`."""
-    by_name = _grouped_bridge_fields(run)
-    out: list[BridgeResult] = []
-    for name in sorted(by_name):
-        fields = by_name[name]
-        verdict_v = fields.get('verdict')
-        if not isinstance(verdict_v, str):
-            continue
-        try:
-            verdict = Verdict(verdict_v)
-        except ValueError:
-            continue
-        reason_v = fields.get('reason')
-        reason = reason_v if isinstance(reason_v, str) else ''
-        out.append(BridgeResult(
-            verdict=verdict,
-            reason=reason,
-            stats=_stats_from_fields(fields),
-            name=name,
-            targets=_targets_from_fields(fields),
-        ))
-    return tuple(out)
-
-
-def _bridge_result_to_measurements(
-    result: BridgeResult,
-) -> dict[str, MeasurementLeaf]:
-    """Flatten a BridgeResult into path-keyed measurements.
-    Canonical implementation — used by cell_runner at sweep time.
-    Lives in aggregate because the bridge↔measurements transform
-    IS the data-layer responsibility this module owns.
-
-    `bridge.<name>.verdict` (or `invariant.<name>.verdict` when
-    `stats['kind'] == 'tautological'`) carries the verdict;
-    `<prefix>.<name>.reason` carries the free-text explanation;
-    `<prefix>.<name>.targets` carries the comma-joined reads-set
-    (the trace columns the bridge consumes); each scalar entry
-    of `result.stats` lands under `<prefix>.<name>.stats.<key>`.
-
-    Targets persistence is what makes `reconstruct_bridge_results`
-    lossless and what lets downstream consumers (redundancy,
-    register) compute reads-overlap without re-instantiating
-    bridges from author code."""
-    is_invariant = result.stats.get('kind') == 'tautological'
-    prefix = (
-        f'invariant.{result.name}' if is_invariant
-        else f'bridge.{result.name}'
-    )
-    out: dict[str, MeasurementLeaf] = {
-        f'{prefix}.verdict': result.verdict.value,
-        f'{prefix}.reason': result.reason,
-        f'{prefix}.targets': ','.join(result.targets),
-    }
-    # `BridgeResult.stats` is typed `Mapping[str, float | int |
-    # bool | str]` — every value already satisfies
-    # MeasurementLeaf. Forward each entry verbatim.
-    for stat_key, stat_value in result.stats.items():
-        out[f'{prefix}.stats.{stat_key}'] = stat_value
-    return out
-
-
-def _facts_from_runrow(run: RunRow) -> tuple[FactRow, ...]:
-    """Reconstruct FactRows from a RunRow's flat-keyed
-    measurements. Bridge results are persisted as
-    `bridge.<name>.verdict` + `bridge.<name>.targets` +
-    `bridge.<name>.stats.<k>` entries (see
-    `_bridge_result_to_measurements`); invariants use
-    `invariant.<name>.*` prefixes."""
-    by_name = _grouped_bridge_fields(run)
-    facts: list[FactRow] = []
-    for name in sorted(by_name):
-        fields = by_name[name]
-        verdict_v = fields.get('verdict')
-        if not isinstance(verdict_v, str):
-            continue
-        try:
-            verdict = Verdict(verdict_v)
-        except ValueError:
-            continue
-        stats = _stats_from_fields(fields)
-        strength = natural_strength_from_stats(stats)
-        delta_i = _delta_i_oriented(strength, verdict)
-        # Evidentiary level: mirror the BridgeResult-based logic.
-        if verdict is not Verdict.HELD:
-            level = 'refuted'
-        elif stats.get('tier') == 'interventional':
-            level = 'causal_one_sided'
-        else:
-            level = 'correlational'
-        facts.append(FactRow(
-            name=name,
-            reads=frozenset(_targets_from_fields(fields)),
-            verdict=verdict,
-            natural_strength=strength,
-            delta_i=delta_i,
-            evidentiary_level=level,
-        ))
-    return tuple(facts)
-
-
-def _aggregate_facts_across_runs(
-    runs: Sequence[RunRow],
-) -> tuple[FactRow, ...]:
-    """Fold per-run facts into a deduped union, one FactRow per
-    bridge name.
-
-    `verdict` is the majority verdict across runs; ties break to
-    POWER_INSUFFICIENT (consistent with how aggregate_cell_verdict
-    handles disagreement). `natural_strength` and `delta_i` are
-    averaged. `reads` unions across runs."""
-    by_name: dict[str, list[FactRow]] = {}
-    for run in runs:
-        for fact in _facts_from_runrow(run):
-            by_name.setdefault(fact.name, []).append(fact)
-    out: list[FactRow] = []
-    for name in sorted(by_name):
-        facts = by_name[name]
-        verdicts = [f.verdict for f in facts]
-        # Majority verdict; ties go to POWER_INSUFFICIENT.
-        from collections import Counter
-        c = Counter(verdicts)
-        most_common = c.most_common()
-        if len(most_common) == 1 or most_common[0][1] > most_common[1][1]:
-            verdict = most_common[0][0]
-        else:
-            verdict = Verdict.POWER_INSUFFICIENT
-        ns_mean = sum(f.natural_strength for f in facts) / len(facts)
-        di_mean = sum(f.delta_i for f in facts) / len(facts)
-        reads = frozenset().union(*(f.reads for f in facts))
-        # Use the first fact's evidentiary_level as the
-        # representative — this is best-effort; a richer
-        # consumer would track per-run levels.
-        out.append(FactRow(
-            name=name, reads=reads, verdict=verdict,
-            natural_strength=ns_mean, delta_i=di_mean,
-            evidentiary_level=facts[0].evidentiary_level,
-        ))
-    return tuple(out)
-
-
-def fact_from_bridge_result(r: BridgeResult) -> FactRow:
-    """Project a `BridgeResult` into a `FactRow`.
-
-    `reads` is `frozenset(r.targets)` — the bridge's declared
-    target keys. Bridges that consume registered measurables get
-    a richer reads-set when consumers call
-    `Bridge.transitive_reads()` and substitute it; per-result
-    bridge introspection isn't possible from `BridgeResult`
-    alone (no back-reference to the Bridge that produced it),
-    so this projection uses targets only."""
-    strength = natural_strength_from_stats(r.stats)
-    delta_i = _delta_i_oriented(strength, r.verdict)
-    return FactRow(
-        name=r.name,
-        reads=frozenset(r.targets),
-        verdict=r.verdict,
-        natural_strength=strength,
-        delta_i=delta_i,
-        evidentiary_level=_evidentiary_level_from_bridge_result(r),
-    )
 
 
 # ============ HypothesisComparisonRow.from_cells ============
@@ -1116,14 +771,8 @@ def hypothesis_comparison_from_cells(
                 verdict=Verdict.POWER_INSUFFICIENT,
                 refutation_class=None,
                 per_group=(), pooled=None,
-                facts=_aggregate_facts_across_runs(treatment_runs),
-                reads_set=frozenset(),
                 n_dropped_unpaired=n_dropped,
             )
-        facts = _aggregate_facts_across_runs(treatment_runs)
-        reads_set = frozenset().union(
-            *(f.reads for f in facts),
-        ) if facts else frozenset()
         return HypothesisComparisonRow(
             id=str(uuid.uuid4()),
             parent_id=None,
@@ -1148,7 +797,6 @@ def hypothesis_comparison_from_cells(
             verdict=gs.verdict,
             refutation_class=gs.refutation_class,
             per_group=(), pooled=None,
-            facts=facts, reads_set=reads_set,
             n_dropped_unpaired=n_dropped,
         )
 
@@ -1221,11 +869,6 @@ def hypothesis_comparison_from_cells(
             delta_i_from_q(q_val) if not math.isnan(q_val) else 0.0
         )
 
-    facts = _aggregate_facts_across_runs(treatment_runs)
-    reads_set = frozenset().union(
-        *(f.reads for f in facts),
-    ) if facts else frozenset()
-
     return HypothesisComparisonRow(
         id=str(uuid.uuid4()),
         parent_id=None,
@@ -1258,7 +901,5 @@ def hypothesis_comparison_from_cells(
         refutation_class=refutation_p,
         per_group=tuple(per_group),
         pooled=pooled,
-        facts=facts,
-        reads_set=reads_set,
         n_dropped_unpaired=n_dropped,
     )

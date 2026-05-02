@@ -237,8 +237,6 @@ def _hcr(per_group: tuple[GroupStats, ...]) -> HypothesisComparisonRow:
         refutation_class=None,
         per_group=per_group,
         pooled=None,
-        facts=(),
-        reads_set=frozenset(),
         n_dropped_unpaired=0,
     )
 
