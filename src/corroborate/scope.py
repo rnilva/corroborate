@@ -33,7 +33,6 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from corroborate.causal_graph import CausalGraph
-from corroborate.claimed_edge import BridgeRole
 from corroborate.hypothesis_verdict import HypothesisVerdict
 from corroborate.meta_regression import (
     MetaRegressionResult,
@@ -120,7 +119,7 @@ def build_scope(
     *,
     gap_path: str,
     gap_name: str,
-    role: BridgeRole = 'outcome',
+    target: str,
     alpha: float = 0.05,
     threshold: float | None = None,
     log_scale: bool = False,
@@ -144,6 +143,11 @@ def build_scope(
     used as the regression covariate's name (with `'log_'` prefix
     when `log_scale=True`).
 
+    `target` — the comparison's target path (the outcome path the
+    hypothesis edge claims). Names which row in
+    `verdict.comparison_rows` carries the per-stratum effect-sizes
+    that the meta-regression cleaves on.
+
     `log_scale` — when True, regress on `log10(gap_mean)` instead
     of the raw mean. Necessary when gap magnitudes span many
     orders of magnitude across envs (e.g. Atari-MinAtar ~10⁶ vs
@@ -160,25 +164,17 @@ def build_scope(
     se are dropped before regression — meta_regression's design
     matrix would carry NaN through to a numerical crash otherwise.
 
-    Raises `ValueError` when the role doesn't have a comparison
-    edge in the hypothesis, when the comparison row's group_by
-    is None, or when after filtering there are too few strata."""
-    edges = verdict.hypothesis.edges_by_role(role)
-    if not edges:
-        raise ValueError(
-            f'build_scope: hypothesis {verdict.hypothesis.name!r} '
-            f'has no edge with role={role!r}',
-        )
-    edge = edges[0]
-    row = verdict.comparison_rows.get(edge.target)
+    Raises `ValueError` when the target doesn't have a comparison
+    row in the verdict, when the comparison row's group_by is
+    None, or when after filtering there are too few strata."""
+    row = verdict.comparison_rows.get(target)
     if row is None:
         raise ValueError(
-            f'build_scope: no comparison row for role={role!r} '
-            f'target={edge.target!r}',
+            f'build_scope: no comparison row for target={target!r}',
         )
     if row.group_by is None:
         raise ValueError(
-            f'build_scope: comparison row for {edge.target!r} '
+            f'build_scope: comparison row for {target!r} '
             f'has group_by=None — meta-regression needs strata',
         )
 

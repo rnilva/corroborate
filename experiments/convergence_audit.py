@@ -25,17 +25,13 @@ from collections.abc import Mapping
 from functools import partial
 from pathlib import Path
 
-from corroborate.bridge import Bridge, BridgeResult, bridge as bridge_decorator
-from corroborate.claimed_edge import (
-    link_edge,
-    mechanism_edge,
-    outcome_edge,
-)
+from corroborate.causal_graph import Direction, Tier
+from corroborate.claim_bridge import Bridge as ClaimBridge
 from corroborate.hypothesis import Hypothesis
 from corroborate.hypothesis_verdict import (
     HypothesisVerdict, hypothesis_subgraph_verdict,
 )
-from corroborate.intervention import Intervention
+from corroborate.intervention import DoEffect, Intervention
 from corroborate.persistence import read_runrows
 from corroborate.rl.convergence import (
     classify_envs, envs_in_class, filter_to_classes,
@@ -50,19 +46,8 @@ _DEFAULT_RUNS = Path(
 )
 _BEST = 'outcome.eval_best_burst_mean'
 _FINAL = 'outcome.eval_final_mean'
-
-
-def _path_finite_bridge(path: str) -> Bridge[Mapping[str, object]]:
-    @bridge_decorator(targets=(path,), name=f'path_finite({path})')
-    def _b(record: Mapping[str, object]) -> BridgeResult:
-        v = record.get(path)
-        finite = isinstance(v, (int, float)) and math.isfinite(float(v))
-        return BridgeResult(
-            verdict=Verdict.HELD if finite else Verdict.POWER_INSUFFICIENT,
-            reason='', stats={},
-            name=f'path_finite({path})', targets=(path,),
-        )
-    return _b
+_MECHANISM = 'mechanism.jensen_gap'
+_DDQN_DO = DoEffect(treatment_arm='ddqn', baseline_arm='vanilla_dqn')
 
 
 def _ddqn_hypothesis(outcome_path: str) -> Hypothesis[Mapping[str, object]]:
@@ -78,21 +63,31 @@ def _ddqn_hypothesis(outcome_path: str) -> Hypothesis[Mapping[str, object]]:
             ),
         ),
         edges=(
-            mechanism_edge(
-                target='mechanism.jensen_gap',
+            ClaimBridge(
+                name=f'ddqn_mechanism({_MECHANISM})',
+                source=_DDQN_DO.node_key(),
+                target=_MECHANISM,
+                tier=Tier.INTERVENTIONAL,
+                direction=Direction.DIRECT,
+                intervention=_DDQN_DO,
                 predicted_direction='a_lt_b',
-                bridge=_path_finite_bridge('mechanism.jensen_gap'),
             ),
-            outcome_edge(
+            ClaimBridge(
+                name=f'ddqn_outcome({outcome_path})',
+                source=_DDQN_DO.node_key(),
                 target=outcome_path,
+                tier=Tier.INTERVENTIONAL,
+                direction=Direction.DIRECT,
+                intervention=_DDQN_DO,
                 predicted_direction='a_gt_b',
-                bridge=_path_finite_bridge(outcome_path),
             ),
-            link_edge(
-                source='mechanism.jensen_gap',
+            ClaimBridge(
+                name=f'coupling({_MECHANISM}->{outcome_path})',
+                source=_MECHANISM,
                 target=outcome_path,
+                tier=Tier.ASSOCIATIONAL,
+                direction=Direction.DIRECT,
                 predicted_direction='a_gt_b',
-                bridge=_path_finite_bridge(outcome_path),
             ),
         ),
     )
@@ -109,10 +104,30 @@ def _print_verdict(
     verdict: HypothesisVerdict[Mapping[str, object]],
     hypothesis: Hypothesis[Mapping[str, object]],
 ) -> None:
-    print(f'  §3 pattern (mechanism, outcome, link) — {label}: '
-          f'{tuple(v.value for v in verdict.pattern())}')
+    # Substrate-side §3 narrative: the intervention edge with
+    # target=mechanism path is "mechanism"; the intervention edge
+    # with target=outcome path is "outcome"; the coupling edge is
+    # the "link".
+    intervention_targets = tuple(
+        e.target for e in hypothesis.edges if e.intervention is not None
+    )
+    pattern_components: list[Verdict] = []
+    for t in intervention_targets:
+        pattern_components.append(verdict.verdict_at(t))
+    coupling = next(
+        (e for e in hypothesis.edges if e.intervention is None), None,
+    )
+    if coupling is not None:
+        br = verdict.bridge_results.get((coupling.source, coupling.target))
+        pattern_components.append(
+            br.verdict if br is not None else Verdict.POWER_INSUFFICIENT
+        )
+    print(f'  §3 pattern (mechanism, outcome, coupling) — {label}: '
+          f'{tuple(v.value for v in pattern_components)}')
     for edge in hypothesis.edges:
         if edge.target not in verdict.comparison_rows:
+            continue
+        if edge.intervention is None:
             continue
         row = verdict.comparison_rows[edge.target]
         g = (
@@ -120,8 +135,11 @@ def _print_verdict(
             if row.effect_size_g is not None else float('nan')
         )
         i2 = row.pooled.I2 if row.pooled is not None else float('nan')
+        role_label = (
+            'mechanism' if edge.target == _MECHANISM else 'outcome'
+        )
         print(
-            f'    {edge.role:<10} → {edge.target!r:<35} '
+            f'    {role_label:<10} → {edge.target!r:<35} '
             f'verdict={row.verdict.value:<22} '
             f'g={g:+.3f}  I²={i2:.3f}'
         )

@@ -9,6 +9,7 @@ leaf-value serialization."""
 from __future__ import annotations
 
 from collections.abc import Mapping
+from typing import TYPE_CHECKING
 
 from corroborate.bridge import BridgeResult, bridge
 from corroborate._canonical import canonical_str
@@ -16,6 +17,10 @@ from corroborate.claim import claim
 from corroborate.hypothesis import Hypothesis
 from corroborate.intervention import Intervention
 from corroborate.verdict import Verdict
+
+if TYPE_CHECKING:
+    from corroborate.claim_bridge import Bridge as ClaimBridge
+    from corroborate.hypothesis import PredictedDirection
 
 
 # ============ Construction ============
@@ -223,129 +228,87 @@ def test_arm_key_distinguishes_different_arms() -> None:
     assert h_a.arm_key() != h_b.arm_key()
 
 
-# ============ edges + mechanism_edge accessor (E2) ============
+# ============ typed-edge subgraph (claim_bridge.Bridge) ============
 
 def test_hypothesis_default_edges_empty() -> None:
-    """Backward-compat: a Hypothesis without typed edges has an
-    empty `edges` tuple. The flat `bridges` tuple stays usable."""
+    """A Hypothesis without typed edges has an empty `edges`
+    tuple. The flat per-record `bridges` tuple stays usable."""
     h: Hypothesis[Mapping[str, object]] = Hypothesis(
         name='legacy', intervention={},
     )
     assert h.edges == ()
-    assert h.mechanism_edge() is None
 
 
-def test_hypothesis_mechanism_edge_returns_role_mechanism() -> None:
-    """`mechanism_edge()` returns the first edge with role
-    'mechanism' or None if none declared."""
-    from corroborate.bridge import BridgeResult, bridge as bridge_decorator
-    from corroborate.claimed_edge import (
-        link_edge,
-        mechanism_edge,
-        outcome_edge,
+def _intervention_edge(
+    *, target: str, predicted_direction: 'PredictedDirection',
+) -> 'ClaimBridge':
+    from corroborate.causal_graph import Direction, Tier
+    from corroborate.claim_bridge import Bridge as ClaimBridge
+    from corroborate.intervention import DoEffect
+    do = DoEffect(treatment_arm='a', baseline_arm='b')
+    return ClaimBridge(
+        name=f'do->{target}',
+        source=do.node_key(), target=target,
+        intervention=do,
+        tier=Tier.INTERVENTIONAL, direction=Direction.DIRECT,
+        predicted_direction=predicted_direction,
     )
 
-    @bridge_decorator(targets=('m',))
-    def _stub_m(record: Mapping[str, object]) -> BridgeResult:
-        del record
-        return BridgeResult(
-            verdict=Verdict.HELD, reason='', stats={},
-            name='_stub_m', targets=('m',),
-        )
 
-    @bridge_decorator(targets=('o',))
-    def _stub_o(record: Mapping[str, object]) -> BridgeResult:
-        del record
-        return BridgeResult(
-            verdict=Verdict.HELD, reason='', stats={},
-            name='_stub_o', targets=('o',),
-        )
+def _coupling_edge(
+    *, source: str, target: str, predicted_direction: 'PredictedDirection',
+) -> 'ClaimBridge':
+    from corroborate.causal_graph import Direction, Tier
+    from corroborate.claim_bridge import Bridge as ClaimBridge
+    return ClaimBridge(
+        name=f'{source}->{target}',
+        source=source, target=target,
+        tier=Tier.ASSOCIATIONAL, direction=Direction.DIRECT,
+        predicted_direction=predicted_direction,
+    )
 
-    @bridge_decorator(targets=('o',))
-    def _stub_l(record: Mapping[str, object]) -> BridgeResult:
-        del record
-        return BridgeResult(
-            verdict=Verdict.HELD, reason='', stats={},
-            name='_stub_l', targets=('o',),
-        )
 
+def test_hypothesis_intervention_and_coupling_edges() -> None:
+    """`intervention_edges()` returns rung-2 contrast edges
+    (bridge.intervention is not None); `coupling_edges()` returns
+    measurement-to-measurement edges (intervention is None).
+    Together they partition `edges`."""
     h: Hypothesis[Mapping[str, object]] = Hypothesis(
         name='ddqn', intervention={},
         edges=(
-            outcome_edge(
-                target='o', predicted_direction='a_gt_b',
-                bridge=_stub_o,
-            ),
-            mechanism_edge(
-                target='m', predicted_direction='a_lt_b',
-                bridge=_stub_m,
-            ),
-            link_edge(
-                source='m', target='o',
-                predicted_direction='a_gt_b', bridge=_stub_l,
+            _intervention_edge(target='m', predicted_direction='a_lt_b'),
+            _intervention_edge(target='o', predicted_direction='a_gt_b'),
+            _coupling_edge(
+                source='m', target='o', predicted_direction='a_gt_b',
             ),
         ),
     )
-    me = h.mechanism_edge()
-    assert me is not None
-    assert me.role == 'mechanism'
-    assert me.target == 'm'
-    assert me.predicted_direction == 'a_lt_b'
+    iv = h.intervention_edges()
+    co = h.coupling_edges()
+    assert len(iv) == 2
+    assert len(co) == 1
+    assert {e.target for e in iv} == {'m', 'o'}
+    assert co[0].source == 'm' and co[0].target == 'o'
 
 
-def test_hypothesis_edges_by_role() -> None:
-    """`edges_by_role` returns all edges with the given role."""
-    from corroborate.bridge import BridgeResult, bridge as bridge_decorator
-    from corroborate.claimed_edge import outcome_edge
-
-    @bridge_decorator(targets=('o1',))
-    def _b1(record: Mapping[str, object]) -> BridgeResult:
-        del record
-        return BridgeResult(
-            verdict=Verdict.HELD, reason='', stats={},
-            name='_b1', targets=('o1',),
-        )
-
-    @bridge_decorator(targets=('o2',))
-    def _b2(record: Mapping[str, object]) -> BridgeResult:
-        del record
-        return BridgeResult(
-            verdict=Verdict.HELD, reason='', stats={},
-            name='_b2', targets=('o2',),
-        )
-
+def test_hypothesis_edges_by_target() -> None:
+    """`edges_by_target` returns all edges with the given target."""
     h: Hypothesis[Mapping[str, object]] = Hypothesis(
         name='multi', intervention={},
         edges=(
-            outcome_edge(
-                target='o1', predicted_direction='a_gt_b',
-                bridge=_b1,
-            ),
-            outcome_edge(
-                target='o2', predicted_direction='a_gt_b',
-                bridge=_b2,
-            ),
+            _intervention_edge(target='o1', predicted_direction='a_gt_b'),
+            _intervention_edge(target='o2', predicted_direction='a_gt_b'),
         ),
     )
-    outs = h.edges_by_role('outcome')
-    assert len(outs) == 2
-    assert h.edges_by_role('mechanism') == ()
+    outs = h.edges_by_target('o1')
+    assert len(outs) == 1
+    assert outs[0].target == 'o1'
+    assert h.edges_by_target('m') == ()
 
 
 def test_hypothesis_edges_invariant_under_arm_key() -> None:
     """`arm_key` derives from `intervention_arms` only — adding
     or changing `edges` doesn't perturb arm identity."""
-    from corroborate.bridge import BridgeResult, bridge as bridge_decorator
-    from corroborate.claimed_edge import mechanism_edge
-
-    @bridge_decorator(targets=('m',))
-    def _b(record: Mapping[str, object]) -> BridgeResult:
-        del record
-        return BridgeResult(
-            verdict=Verdict.HELD, reason='', stats={},
-            name='_b', targets=('m',),
-        )
-
     arms = (
         Intervention(slot_path='bootstrap', replacement=_alt_a),
     )
@@ -355,8 +318,8 @@ def test_hypothesis_edges_invariant_under_arm_key() -> None:
     h_with_edges: Hypothesis[Mapping[str, object]] = Hypothesis(
         name='ddqn', intervention={}, intervention_arms=arms,
         edges=(
-            mechanism_edge(
-                target='m', predicted_direction='a_lt_b', bridge=_b,
+            _intervention_edge(
+                target='m', predicted_direction='a_lt_b',
             ),
         ),
     )

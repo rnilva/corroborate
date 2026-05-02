@@ -13,22 +13,23 @@ A `HypothesisVerdict` carries:
   source of truth for the per-edge verdict.
 - `comparison_rows: Mapping[str, HypothesisComparisonRow]` —
   rich per-edge detail (per_group, pooled, facts, reads_set) for
-  the *paired-comparison* edges (mechanism / outcome / refuter),
-  keyed by target path. Link edges are pure cross-stratum
+  the *intervention* edges (`bridge.intervention is not None`),
+  keyed by target path. Coupling edges are pure cross-stratum
   Pearson; their richer detail collapses cleanly into the
   BridgeResult and they don't contribute here.
 
-Verdict logic per role:
+Verdict logic per edge category:
 
-- `mechanism` / `outcome` / `refuter` — paired comparison via
-  `hypothesis_comparison_from_cells`, stratified by `group_by`,
-  reading the edge's `target` as the outcome path. Verdict comes
-  from the random-effects PI test (HELD / HELD_WITH_SCOPE_FLAG /
-  NO_EFFECT / POWER_INSUFFICIENT).
-- `link` — corpus-level Pearson r over the per-group effect
-  sizes of the edge's `source` and `target` comparisons. Requires
-  that the source's mechanism / outcome verdict has already been
-  computed (link is paired-second)."""
+- Intervention edges (`bridge.intervention is not None`) —
+  paired comparison via `hypothesis_comparison_from_cells`,
+  stratified by `group_by`, reading the edge's `target` as the
+  outcome path. Verdict comes from the random-effects PI test
+  (HELD / HELD_WITH_SCOPE_FLAG / NO_EFFECT / POWER_INSUFFICIENT).
+- Coupling edges (`bridge.intervention is None`) — corpus-level
+  Pearson r over the per-group effect sizes of the edge's
+  `source` and `target` comparisons. Requires that an
+  intervention edge with the source path as its target has
+  already been computed (coupling edges run paired-second)."""
 from __future__ import annotations
 
 import math
@@ -45,7 +46,7 @@ from corroborate.causal_graph import (
     build_causal_graph,
     promote_bridged_evidence,
 )
-from corroborate.claimed_edge import BridgeRole, ClaimedEdge
+from corroborate.claim_bridge import Bridge as ClaimBridge
 from corroborate.hypothesis import Hypothesis, PredictedDirection
 from corroborate.schema import HypothesisComparisonRow, MeasurementLeaf
 from corroborate.schema import RunRow
@@ -68,7 +69,7 @@ class HypothesisVerdict[R: Mapping[str, object]]:
     bridge_results: Mapping[tuple[str, str], BridgeResult]
     comparison_rows: Mapping[str, HypothesisComparisonRow]
 
-    def edge_verdict(self, edge: ClaimedEdge[R]) -> Verdict:
+    def edge_verdict(self, edge: ClaimBridge) -> Verdict:
         """Verdict for a specific claimed edge — looked up via
         the edge's `(source, target)` key in `bridge_results`."""
         br = self.bridge_results.get((edge.source, edge.target))
@@ -80,24 +81,29 @@ class HypothesisVerdict[R: Mapping[str, object]]:
             )
         return br.verdict
 
-    def pattern(self) -> tuple[Verdict, ...]:
-        """The §3 verdict chain in canonical order: mechanism →
-        outcome → link. Roles absent from the Hypothesis produce
-        POWER_INSUFFICIENT in their slot ('unknown')."""
-        out: list[Verdict] = []
-        roles: tuple[BridgeRole, ...] = ('mechanism', 'outcome', 'link')
-        for role in roles:
-            edges = self.hypothesis.edges_by_role(role)
-            if not edges:
-                out.append(Verdict.POWER_INSUFFICIENT)
+    def verdict_at(self, target: str) -> Verdict:
+        """Verdict for the rung-2 intervention edge whose target
+        is `target`. Returns POWER_INSUFFICIENT if no intervention
+        edge in this hypothesis claims that target — paper-narrative
+        reading is best-effort, substrate code that asks for a
+        path the hypothesis didn't claim shouldn't crash.
+
+        Coupling edges (intervention is None) typically share the
+        target with the matched outcome intervention edge; `verdict_at`
+        always reports the intervention-edge verdict to keep the
+        paper-narrative reading unambiguous. Use `edge_verdict(edge)`
+        when you need the coupling edge's verdict explicitly."""
+        for edge in self.hypothesis.edges:
+            if edge.target != target:
                 continue
-            edge = edges[0]
+            if edge.intervention is None:
+                continue
             br = self.bridge_results.get((edge.source, edge.target))
-            out.append(
+            return (
                 br.verdict if br is not None
                 else Verdict.POWER_INSUFFICIENT
             )
-        return tuple(out)
+        return Verdict.POWER_INSUFFICIENT
 
 
 # ============ link-edge Pearson computation ============
@@ -210,7 +216,7 @@ def _pearson_link_to_bridge_result(
 # ============ comparison-edge → BridgeResult ============
 
 def _comparison_to_bridge_result(
-    edge: ClaimedEdge[Mapping[str, object]],
+    edge: ClaimBridge,
     row: HypothesisComparisonRow,
 ) -> BridgeResult:
     """Convert a paired-comparison `HypothesisComparisonRow` into
@@ -244,7 +250,7 @@ def _comparison_to_bridge_result(
         verdict=graph_verdict,
         reason='',
         stats=stats,
-        name=f'{edge.role}({edge.target})',
+        name=edge.name,
         targets=(edge.source, edge.target),
     )
 
@@ -284,16 +290,18 @@ def hypothesis_subgraph_verdict(
     if not h.edges:
         raise ValueError(
             'hypothesis_subgraph_verdict: hypothesis has no '
-            'typed edges; populate `Hypothesis.edges` via the '
-            'role factories (mechanism_edge, outcome_edge, '
-            'link_edge, refuter_edge).',
+            'typed edges; populate `Hypothesis.edges` with one or '
+            'more `claim_bridge.Bridge` declarations (intervention '
+            'edges set `intervention=DoEffect(...)`; coupling '
+            'edges leave `intervention=None`).',
         )
 
     bridge_results: dict[tuple[str, str], BridgeResult] = {}
     comparison_rows: dict[str, HypothesisComparisonRow] = {}
 
+    # Pass 1: intervention edges (rung-2 paired contrasts).
     for edge in h.edges:
-        if edge.role == 'link':
+        if edge.intervention is None:
             continue
         row = hypothesis_comparison_from_cells(
             h, treatment_runs, baseline_runs,
@@ -309,22 +317,30 @@ def hypothesis_subgraph_verdict(
             _comparison_to_bridge_result(edge, row)
         )
 
+    # Pass 2: coupling edges — Pearson r over per-stratum effects
+    # produced in pass 1.
     for edge in h.edges:
-        if edge.role != 'link':
+        if edge.intervention is not None:
             continue
         if edge.source not in comparison_rows:
             raise ValueError(
-                f'link edge references source={edge.source!r} '
-                f'which is not the target of any mechanism / '
-                f'outcome / refuter edge in this hypothesis. '
-                f'Add an edge that produces the source path '
-                f'before the link edge can be evaluated.',
+                f'coupling edge references source={edge.source!r} '
+                f'which is not the target of any intervention edge '
+                f'in this hypothesis. Add an intervention edge that '
+                f'produces the source path before the coupling edge '
+                f'can be evaluated.',
             )
         if edge.target not in comparison_rows:
             raise ValueError(
-                f'link edge references target={edge.target!r} '
-                f'which is not the target of any mechanism / '
-                f'outcome / refuter edge in this hypothesis.',
+                f'coupling edge references target={edge.target!r} '
+                f'which is not the target of any intervention edge '
+                f'in this hypothesis.',
+            )
+        if edge.predicted_direction is None:
+            raise ValueError(
+                f'coupling edge ({edge.source!r} -> {edge.target!r}) '
+                f'must declare `predicted_direction` — Pearson sign '
+                f'check needs a prior.',
             )
         bridge_results[(edge.source, edge.target)] = (
             _pearson_link_to_bridge_result(

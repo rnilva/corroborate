@@ -52,19 +52,15 @@ import numpy as np
 import polars as pl
 import scipy.stats as ss
 
-from corroborate.bridge import Bridge, BridgeResult, bridge as bridge_decorator
 from corroborate.causal_discovery import compare_pc_depths, discover_adjacency
-from corroborate.claimed_edge import (
-    link_edge,
-    mechanism_edge,
-    outcome_edge,
-)
+from corroborate.causal_graph import Direction, Tier
+from corroborate.claim_bridge import Bridge as ClaimBridge
 from corroborate.hypothesis import Hypothesis
 from corroborate.hypothesis_verdict import (
     HypothesisVerdict,
     hypothesis_subgraph_verdict,
 )
-from corroborate.intervention import Intervention
+from corroborate.intervention import DoEffect, Intervention
 from corroborate.meta_regression import (
     StratumObservation,
     cross_validate_meta_regression,
@@ -188,24 +184,7 @@ _REGIMES: tuple[RewardRegime, ...] = (
 
 # ============ Helpers ============
 
-def _path_finite_bridge(path: str) -> Bridge[Mapping[str, object]]:
-    """Stub bridge — measurement paths are populated by the
-    substrate's per-cell projections, not by per-cell bridge
-    invocations; the verdict is the cross-arm comparison via
-    `from_cells`."""
-    @bridge_decorator(targets=(path,), name=f'path_finite({path})')
-    def _b(record: Mapping[str, object]) -> BridgeResult:
-        v = record.get(path)
-        finite = isinstance(v, (int, float)) and math.isfinite(float(v))
-        return BridgeResult(
-            verdict=(
-                Verdict.HELD if finite else Verdict.POWER_INSUFFICIENT
-            ),
-            reason='', stats={},
-            name=f'path_finite({path})',
-            targets=(path,),
-        )
-    return _b
+_DDQN_DO = DoEffect(treatment_arm='ddqn', baseline_arm='vanilla_dqn')
 
 
 def _ddqn_hypothesis() -> Hypothesis[Mapping[str, object]]:
@@ -221,21 +200,31 @@ def _ddqn_hypothesis() -> Hypothesis[Mapping[str, object]]:
             ),
         ),
         edges=(
-            mechanism_edge(
+            ClaimBridge(
+                name=f'ddqn_mechanism({_MECHANISM})',
+                source=_DDQN_DO.node_key(),
                 target=_MECHANISM,
+                tier=Tier.INTERVENTIONAL,
+                direction=Direction.DIRECT,
+                intervention=_DDQN_DO,
                 predicted_direction='a_lt_b',
-                bridge=_path_finite_bridge(_MECHANISM),
             ),
-            outcome_edge(
+            ClaimBridge(
+                name=f'ddqn_outcome({_OUTCOME})',
+                source=_DDQN_DO.node_key(),
                 target=_OUTCOME,
+                tier=Tier.INTERVENTIONAL,
+                direction=Direction.DIRECT,
+                intervention=_DDQN_DO,
                 predicted_direction='a_gt_b',
-                bridge=_path_finite_bridge(_OUTCOME),
             ),
-            link_edge(
+            ClaimBridge(
+                name=f'coupling({_MECHANISM}->{_OUTCOME})',
                 source=_MECHANISM,
                 target=_OUTCOME,
+                tier=Tier.ASSOCIATIONAL,
+                direction=Direction.DIRECT,
                 predicted_direction='a_gt_b',
-                bridge=_path_finite_bridge(_OUTCOME),
             ),
         ),
     )
@@ -444,21 +433,37 @@ def _section_3_three_way(
         pair_by=('seed',), group_by='env_name',
         baseline_h=baseline_h,
     )
-    pattern = verdict.pattern()
+    # §3 verdict pattern, expressed in paper-narrative shape:
+    # mechanism (intervention edge with target=_MECHANISM),
+    # outcome (intervention edge with target=_OUTCOME), and
+    # coupling (the link from _MECHANISM → _OUTCOME). The
+    # framework no longer encodes these labels — paper-narrative
+    # naming is a substrate concern.
+    pattern = (
+        verdict.verdict_at(_MECHANISM),
+        verdict.verdict_at(_OUTCOME),
+        verdict.bridge_results[(_MECHANISM, _OUTCOME)].verdict
+        if (_MECHANISM, _OUTCOME) in verdict.bridge_results
+        else Verdict.POWER_INSUFFICIENT,
+    )
     print(
-        f'  §3 pattern (mechanism, outcome, link): '
+        f'  §3 pattern (mechanism, outcome, coupling): '
         f'{tuple(v.value for v in pattern)}'
     )
     for edge in treatment_h.edges:
         br = verdict.bridge_results.get((edge.source, edge.target))
         if br is None:
             continue
-        if edge.target in verdict.comparison_rows:
+        role_label = (
+            'intervention' if edge.intervention is not None
+            else 'coupling'
+        )
+        if edge.target in verdict.comparison_rows and edge.intervention is not None:
             row = verdict.comparison_rows[edge.target]
             g = row.effect_size_g if row.effect_size_g is not None else float('nan')
             i2 = row.pooled.I2 if row.pooled is not None else float('nan')
             print(
-                f'    {edge.role:<10} → {edge.target!r:<35} '
+                f'    {role_label:<12} → {edge.target!r:<35} '
                 f'verdict={br.verdict.value:<22} g={g:+.3f}  I²={i2:.3f}'
             )
         else:
@@ -469,7 +474,7 @@ def _section_3_three_way(
             p_v = float(p) if isinstance(p, (int, float)) else float('nan')
             n_v = int(n) if isinstance(n, int) else 0
             print(
-                f'    {edge.role:<10} {edge.source!r:<22} → '
+                f'    {role_label:<12} {edge.source!r:<22} → '
                 f'{edge.target!r:<35} '
                 f'verdict={br.verdict.value:<22} '
                 f'r={r_v:+.3f}  p={p_v:.3f}  n={n_v}'
@@ -495,11 +500,16 @@ def _section_3_three_way(
     # across games — not pooled effect-size with random-effects
     # CIs. Reproducing these lets reviewers compare our findings
     # to Hasselt's reporting conventions directly.
-    for role in ('mechanism', 'outcome'):
-        edges = treatment_h.edges_by_role(role)
-        if not edges:
+    for role_label, target_path in (
+        ('mechanism', _MECHANISM), ('outcome', _OUTCOME),
+    ):
+        matched_edges = treatment_h.edges_by_target(target_path)
+        intervention_matches = tuple(
+            e for e in matched_edges if e.intervention is not None
+        )
+        if not intervention_matches:
             continue
-        edge = edges[0]
+        edge = intervention_matches[0]
         row = verdict.comparison_rows.get(edge.target)
         if row is None:
             continue
@@ -523,7 +533,7 @@ def _section_3_three_way(
         median_g = sorted(finite_gs)[n_total // 2]
         sign_pred = 'g<0' if pred_sign == -1 else 'g>0'
         print(
-            f'  Hasselt-descriptive [{role}]: '
+            f'  Hasselt-descriptive [{role_label}]: '
             f'{n_in_predicted_direction}/{n_total} envs in predicted '
             f'direction ({sign_pred}); median g = {median_g:+.3f}'
         )
@@ -695,11 +705,10 @@ def _section_7_meta_regression(
           f'(total_steps={total_steps}, covariates={covariate_set_name})')
     print('=' * 92)
 
-    for role in ('mechanism', 'outcome'):
-        edges = verdict.hypothesis.edges_by_role(role)
-        if not edges:
-            continue
-        row = verdict.comparison_rows.get(edges[0].target)
+    for role, target_path in (
+        ('mechanism', _MECHANISM), ('outcome', _OUTCOME),
+    ):
+        row = verdict.comparison_rows.get(target_path)
         if row is None:
             continue
         observations: list[StratumObservation] = []
@@ -821,11 +830,10 @@ def _section_d2_kfold_cv(
           f'covariates={covariate_set_name})')
     print('=' * 92)
 
-    for role in ('mechanism', 'outcome'):
-        edges = verdict.hypothesis.edges_by_role(role)
-        if not edges:
-            continue
-        row = verdict.comparison_rows.get(edges[0].target)
+    for role, target_path in (
+        ('mechanism', _MECHANISM), ('outcome', _OUTCOME),
+    ):
+        row = verdict.comparison_rows.get(target_path)
         if row is None:
             continue
         observations: list[StratumObservation] = []

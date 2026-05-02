@@ -8,7 +8,7 @@ Validates:
   `gap_path`, aggregates per-stratum mean, runs meta_regression.
 - `log_scale=True` regresses on log10 of gap magnitude.
 - Strata with NaN gap or insufficient g/se are dropped.
-- Missing role raises loudly.
+- Missing target raises loudly.
 - Discovery vs committed mode round-trip on `Scope.threshold`."""
 from __future__ import annotations
 
@@ -17,17 +17,13 @@ from collections.abc import Mapping
 
 import pytest
 
-from corroborate.bridge import Bridge, BridgeResult, bridge as bridge_decorator
+from corroborate.causal_graph import Direction, Tier
 from corroborate.claim import claim
-from corroborate.claimed_edge import (
-    link_edge,
-    mechanism_edge,
-    outcome_edge,
-)
+from corroborate.claim_bridge import Bridge as ClaimBridge
 from corroborate.graph import Graph
-from corroborate.hypothesis import Hypothesis
+from corroborate.hypothesis import Hypothesis, PredictedDirection
 from corroborate.hypothesis_verdict import hypothesis_subgraph_verdict
-from corroborate.intervention import Intervention
+from corroborate.intervention import DoEffect, Intervention
 from corroborate.meta_regression import MetaRegressionResult
 from corroborate.schema import RunRow
 from corroborate.scope import Scope, build_scope
@@ -40,17 +36,30 @@ def _stub_arm(x: int) -> int:
 
 
 _TREATMENT_ARMS = (Intervention(slot_path='stub', replacement=_stub_arm),)
+_TEST_DO = DoEffect(treatment_arm='treat', baseline_arm='baseline')
 
 
-def _stub_bridge(target: str) -> Bridge[Mapping[str, object]]:
-    @bridge_decorator(targets=(target,), name=f'stub({target})')
-    def _b(record: Mapping[str, object]) -> BridgeResult:
-        del record
-        return BridgeResult(
-            verdict=Verdict.HELD, reason='', stats={},
-            name=f'stub({target})', targets=(target,),
-        )
-    return _b
+def _intervention_edge(
+    target: str, predicted_direction: PredictedDirection,
+) -> ClaimBridge:
+    return ClaimBridge(
+        name=f'do->{target}',
+        source=_TEST_DO.node_key(), target=target,
+        intervention=_TEST_DO,
+        tier=Tier.INTERVENTIONAL, direction=Direction.DIRECT,
+        predicted_direction=predicted_direction,
+    )
+
+
+def _coupling_edge(
+    source: str, target: str, predicted_direction: PredictedDirection,
+) -> ClaimBridge:
+    return ClaimBridge(
+        name=f'{source}->{target}',
+        source=source, target=target,
+        tier=Tier.ASSOCIATIONAL, direction=Direction.DIRECT,
+        predicted_direction=predicted_direction,
+    )
 
 
 def _run(
@@ -80,22 +89,9 @@ def _three_edge_hypothesis() -> Hypothesis[Mapping[str, object]]:
         intervention={},
         intervention_arms=_TREATMENT_ARMS,
         edges=(
-            mechanism_edge(
-                target='mechanism.q',
-                predicted_direction='a_lt_b',
-                bridge=_stub_bridge('mechanism.q'),
-            ),
-            outcome_edge(
-                target='outcome.r',
-                predicted_direction='a_gt_b',
-                bridge=_stub_bridge('outcome.r'),
-            ),
-            link_edge(
-                source='mechanism.q',
-                target='outcome.r',
-                predicted_direction='a_gt_b',
-                bridge=_stub_bridge('outcome.r'),
-            ),
+            _intervention_edge('mechanism.q', 'a_lt_b'),
+            _intervention_edge('outcome.r', 'a_gt_b'),
+            _coupling_edge('mechanism.q', 'outcome.r', 'a_gt_b'),
         ),
     )
 
@@ -191,8 +187,8 @@ def test_is_in_scope_committed_mode_compares_to_threshold() -> None:
 
 # ============ build_scope ============
 
-def test_build_scope_default_role_is_outcome() -> None:
-    """`build_scope` defaults to role='outcome'; cleavage carries
+def test_build_scope_target_outcome() -> None:
+    """`build_scope` with `target='outcome.r'`: cleavage carries
     the per-env outcome g regressed on the per-env baseline gap
     aggregated from `mechanism.jensen_gap`."""
     envs = ('A', 'B', 'C', 'D', 'E', 'F')
@@ -207,6 +203,7 @@ def test_build_scope_default_role_is_outcome() -> None:
         v, baseline,
         gap_path='mechanism.jensen_gap',
         gap_name='jensen_overestimation_gap',
+        target='outcome.r',
     )
     assert isinstance(scope, Scope)
     assert scope.hypothesis_name == 'ddqn_test'
@@ -235,6 +232,7 @@ def test_build_scope_log_scale_uses_log_prefix_name() -> None:
         v, baseline,
         gap_path='mechanism.jensen_gap',
         gap_name='jensen_overestimation_gap',
+        target='outcome.r',
         log_scale=True,
     )
     assert scope.cleavage.coefficients[0].name == (
@@ -256,6 +254,7 @@ def test_build_scope_threshold_metadata_round_trips() -> None:
         v, baseline,
         gap_path='mechanism.jensen_gap',
         gap_name='jensen_overestimation_gap',
+        target='outcome.r',
         threshold=2.0,
     )
     assert scope.threshold == 2.0
@@ -291,6 +290,7 @@ def test_build_scope_drops_strata_with_nan_gap() -> None:
         v, patched_baseline,
         gap_path='mechanism.jensen_gap',
         gap_name='jensen_overestimation_gap',
+        target='outcome.r',
     )
     # 6 envs total, 'C' has NaN gap → dropped → 5 strata.
     assert scope.cleavage.n_strata == 5
@@ -310,13 +310,14 @@ def test_build_scope_chain_is_verdict_graph() -> None:
         v, baseline,
         gap_path='mechanism.jensen_gap',
         gap_name='jensen_overestimation_gap',
+        target='outcome.r',
     )
     assert scope.chain is v.graph
 
 
-def test_build_scope_missing_role_raises() -> None:
-    """A hypothesis with no edge of the requested role can't be
-    scoped on that role — raise loudly."""
+def test_build_scope_missing_target_raises() -> None:
+    """A hypothesis with no edge whose target matches `target`
+    can't be scoped on that target — raise loudly."""
     envs = ('A', 'B', 'C', 'D')
     treatment, baseline = _build_corpus(envs)
     h: Hypothesis[Mapping[str, object]] = Hypothesis(
@@ -324,27 +325,24 @@ def test_build_scope_missing_role_raises() -> None:
         intervention={},
         intervention_arms=_TREATMENT_ARMS,
         edges=(
-            mechanism_edge(
-                target='mechanism.q',
-                predicted_direction='a_lt_b',
-                bridge=_stub_bridge('mechanism.q'),
-            ),
+            _intervention_edge('mechanism.q', 'a_lt_b'),
         ),
     )
     v = hypothesis_subgraph_verdict(
         h, treatment, baseline,
         pair_by=('seed',), group_by='env_name',
     )
-    with pytest.raises(ValueError, match="role='outcome'"):
+    with pytest.raises(ValueError, match="target='outcome.r'"):
         _ = build_scope(
             v, baseline,
             gap_path='mechanism.jensen_gap',
             gap_name='jensen_overestimation_gap',
+            target='outcome.r',
         )
 
 
-def test_build_scope_role_mechanism_uses_mechanism_edge() -> None:
-    """`role='mechanism'` regresses the mechanism g on the gap."""
+def test_build_scope_target_mechanism_uses_mechanism_row() -> None:
+    """`target='mechanism.q'` regresses the mechanism g on the gap."""
     envs = ('A', 'B', 'C', 'D', 'E', 'F')
     treatment, baseline = _build_corpus(envs)
     h = _three_edge_hypothesis()
@@ -356,13 +354,13 @@ def test_build_scope_role_mechanism_uses_mechanism_edge() -> None:
         v, baseline,
         gap_path='mechanism.jensen_gap',
         gap_name='jensen_overestimation_gap',
-        role='outcome',
+        target='outcome.r',
     )
     s_mech = build_scope(
         v, baseline,
         gap_path='mechanism.jensen_gap',
         gap_name='jensen_overestimation_gap',
-        role='mechanism',
+        target='mechanism.q',
     )
     # Different regression targets → different intercepts.
     assert not math.isclose(

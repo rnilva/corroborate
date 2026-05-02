@@ -105,11 +105,19 @@ class Bridge:
     test. Promoted out of `params` because it is shared structural
     metadata across most claims (consumed by `paired_g`,
     `random_effects`, etc.) — keeping it inside the params bag
-    forced every analysis to fish it out by name."""
+    forced every analysis to fish it out by name.
+
+    `holds_when: Callable[..., Verdict] | None` is optional. The
+    file-protocol path (analyses on a corpus) sets it; the
+    Hypothesis-side typed-edge path (verdict walks via
+    `hypothesis_subgraph_verdict`) leaves it None — the verdict
+    walk consumes the Bridge as metadata (source / target /
+    intervention / tier / predicted_direction) and computes the
+    verdict from runs directly, never invoking a body. `evaluate`
+    raises `TypeError` if called on a body-less Bridge."""
     name: str
     source: str
     target: str
-    holds_when: Callable[..., Verdict]
     direction: Direction = Direction.DIRECT
     tier: Tier = Tier.ASSOCIATIONAL
     params: Mapping[str, object] = field(
@@ -117,6 +125,7 @@ class Bridge:
     )
     intervention: DoEffect | None = None
     predicted_direction: PredictedDirection | None = None
+    holds_when: Callable[..., Verdict] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -258,7 +267,19 @@ def evaluate(
     `holds_when` parameter without a default) by looking up the
     matching `@analysis`, parameterise from the bridge's
     structural fields + params, run on `cells`, inject results,
-    return verdict + audit trail."""
+    return verdict + audit trail.
+
+    Raises `TypeError` if the Bridge has no `holds_when` body —
+    such a Bridge is a typed-edge declaration only (the
+    Hypothesis-side verdict-walk surface) and carries no
+    threshold logic to invoke."""
+    if bridge.holds_when is None:
+        raise TypeError(
+            f'evaluate({bridge.name!r}): Bridge has no holds_when '
+            f'body. Body-less Bridges are typed-edge declarations '
+            f'consumed by `hypothesis_subgraph_verdict`; they do '
+            f'not carry a threshold to evaluate against a cell-set.',
+        )
     bridge_params: dict[str, object] = {
         'source': bridge.source,
         'target': bridge.target,

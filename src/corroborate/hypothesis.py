@@ -21,8 +21,16 @@ Components:
   whose `arm_key()` is the canonical fingerprint.
 - `bridges: tuple[Bridge[R], ...]` — paper-level assertions
   applied to the resulting record. All share R.
+- `edges: tuple[claim_bridge.Bridge, ...]` — typed-edge subgraph
+  claim. Each Bridge carries `source` / `target` paths,
+  `intervention: DoEffect | None` (interventional vs coupling
+  edge), `tier`, and per-edge `predicted_direction`. Body-less
+  for the verdict-walk path (`hypothesis_subgraph_verdict`
+  consumes Bridges as metadata only).
 - `predicted_direction: PredictedDirection | None` — author-declared
-  sign of the predicted treatment-vs-baseline effect.
+  sign of the predicted treatment-vs-baseline effect (top-level
+  hypothesis-wide default; per-edge predicted_direction overrides
+  the analyses per stratum once Phase 1+ plumbing lands).
 
 Arm identity flows exclusively through `intervention_arms` — two
 hypotheses with the same arms but different HP grid points share
@@ -45,12 +53,12 @@ from corroborate.bridge import Bridge
 from corroborate.intervention import Intervention, combined_arm_key
 
 if TYPE_CHECKING:
-    # `ClaimedEdge` / `BridgeRole` are the typed-subgraph surface;
-    # imported under TYPE_CHECKING because `claimed_edge.py`
-    # depends on `hypothesis.PredictedDirection`. The field
-    # annotation is a string at runtime via
-    # `from __future__ import annotations`.
-    from corroborate.claimed_edge import BridgeRole, ClaimedEdge
+    # `claim_bridge.Bridge` is the typed-edge surface for the
+    # Hypothesis subgraph claim; imported under TYPE_CHECKING
+    # because `claim_bridge` depends on `hypothesis.PredictedDirection`.
+    # The field annotation resolves through `from __future__ import
+    # annotations`.
+    from corroborate.claim_bridge import Bridge as ClaimBridge
 
 __all__ = ['Hypothesis', 'PredictedDirection', 'canonical_str']
 
@@ -81,15 +89,18 @@ class Hypothesis[R: Mapping[str, object]]:
 
     Two surfaces for declaring per-edge tests, in transition:
 
-    - `edges: tuple[ClaimedEdge[R], ...]` — the *typed* surface.
-      Each `ClaimedEdge` carries its role (mechanism / outcome /
-      link / refuter), source / target measurement paths,
-      predicted direction, Pearl tier, and the Bridge to run.
-      The mechanism edge is the load-bearing claim;
-      `mechanism_edge()` accessor returns it.
+    - `edges: tuple[claim_bridge.Bridge, ...]` — the *typed*
+      subgraph surface. Each Bridge carries source / target
+      measurement paths, `intervention: DoEffect | None`
+      (interventional contrast vs measurement-coupling), Pearl
+      `tier`, and per-edge `predicted_direction`. Bridges with
+      `intervention is not None` are the rung-2 mechanism /
+      outcome edges; bridges with `intervention is None` are
+      measurement-to-measurement coupling edges (formerly the
+      "link" role).
     - `bridges: tuple[Bridge[R], ...]` — the back-compat flat
-      tuple. No per-bridge role, source/target, or tier. Existing
-      callers; new code should populate `edges`.
+      tuple of per-record bridges (corroborate.bridge.Bridge[R]).
+      Defers to Phase 4 for collapse into the typed surface.
 
     Both surfaces can coexist on one Hypothesis. The top-level
     `predicted_direction: PredictedDirection | None` is vestigial
@@ -109,28 +120,29 @@ class Hypothesis[R: Mapping[str, object]]:
     bridges: tuple[Bridge[R], ...] = ()
     predicted_direction: PredictedDirection | None = None
     intervention_arms: tuple[Intervention, ...] = field(default_factory=tuple)
-    edges: tuple[ClaimedEdge[R], ...] = field(default_factory=tuple)
+    edges: tuple['ClaimBridge', ...] = field(default_factory=tuple)
 
-    def mechanism_edge(self) -> ClaimedEdge[R] | None:
-        """Return the load-bearing mechanism edge if one is
-        declared, else None.
+    def edges_by_target(self, target: str) -> tuple['ClaimBridge', ...]:
+        """All typed edges whose `target` matches `target`. The
+        primary lookup after the role-enum subtraction — consumers
+        select on the path, not on a paper-narrative name."""
+        return tuple(e for e in self.edges if e.target == target)
 
-        The §3 verdict pattern's central claim. Outcome and link
-        edges test its implications; `arm_key` derives from the
-        intervention that's the source of this edge."""
-        for e in self.edges:
-            if e.role == 'mechanism':
-                return e
-        return None
+    def intervention_edges(self) -> tuple['ClaimBridge', ...]:
+        """Edges whose `intervention is not None` — the rung-2
+        contrast edges that drive paired comparisons. Replaces the
+        former `mechanism + outcome + refuter` role union; the
+        scope-distinction (mechanism vs outcome) is recoverable
+        from `target` namespace or claim-graph topology, not from
+        a per-edge enum."""
+        return tuple(e for e in self.edges if e.intervention is not None)
 
-    def edges_by_role(
-        self, role: 'BridgeRole',
-    ) -> tuple['ClaimedEdge[R]', ...]:
-        """All edges with the given role. Most subgraphs have one
-        mechanism + one outcome + one link, but the API permits
-        multiple of each (e.g., several outcome paths tested
-        against the same intervention)."""
-        return tuple(e for e in self.edges if e.role == role)
+    def coupling_edges(self) -> tuple['ClaimBridge', ...]:
+        """Edges whose `intervention is None` — measurement-to-
+        measurement coupling edges (formerly `role='link'`).
+        Tested via cross-stratum Pearson r over the per-group
+        effect sizes of the source and target paths."""
+        return tuple(e for e in self.edges if e.intervention is None)
 
     def arm_key(self) -> str:
         """Canonical fingerprint of the typed `intervention_arms`.

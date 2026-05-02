@@ -2,35 +2,32 @@
 over a Hypothesis's typed claimed edges into `HypothesisVerdict`.
 
 Validates:
-1. 3-edge subgraph (mechanism + outcome + link) produces
-   per-edge BridgeResults, a typed CausalGraph, and the §3
-   pattern.
-2. Mechanism-only subgraphs work (no outcome / link).
-3. Link edges with missing-source raise loudly.
+1. 3-edge subgraph (two intervention edges + a coupling edge)
+   produces per-edge BridgeResults, a typed CausalGraph, and the
+   target-keyed verdict lookup.
+2. Single-intervention-edge subgraphs work.
+3. Coupling edges with missing-source raise loudly.
 4. Empty edges raise (the typed surface is required).
 5. The graph carries Tier-typed BridgeEdges; INTERVENTIONAL for
-   `do(arm)`-sourced edges, ASSOCIATIONAL for link edges."""
+   intervention edges, ASSOCIATIONAL for coupling edges."""
 from __future__ import annotations
 
 from collections.abc import Mapping
 
 import pytest
 
-from corroborate.bridge import Bridge, BridgeResult, bridge as bridge_decorator
-from corroborate.causal_graph import Tier as GraphTier
+from corroborate.bridge import BridgeResult
+from corroborate.causal_graph import Direction, Tier as GraphTier
 from corroborate.causal_graph import build_causal_graph, promote_bridged_evidence
+from corroborate.causal_graph import Tier
 from corroborate.claim import claim
-from corroborate.claimed_edge import (
-    link_edge,
-    mechanism_edge,
-    outcome_edge,
-)
-from corroborate.hypothesis import Hypothesis
+from corroborate.claim_bridge import Bridge as ClaimBridge
+from corroborate.hypothesis import Hypothesis, PredictedDirection
 from corroborate.hypothesis_verdict import (
     HypothesisVerdict,
     hypothesis_subgraph_verdict,
 )
-from corroborate.intervention import Intervention
+from corroborate.intervention import DoEffect, Intervention
 from corroborate.schema import RunRow
 from corroborate.verdict import Verdict
 
@@ -43,17 +40,30 @@ def _stub_arm(x: int) -> int:
 
 
 _TREATMENT_ARMS = (Intervention(slot_path='stub', replacement=_stub_arm),)
+_TEST_DO = DoEffect(treatment_arm='treat', baseline_arm='baseline')
 
 
-def _stub_bridge(target: str) -> Bridge[Mapping[str, object]]:
-    @bridge_decorator(targets=(target,), name=f'stub({target})')
-    def _b(record: Mapping[str, object]) -> BridgeResult:
-        del record
-        return BridgeResult(
-            verdict=Verdict.HELD, reason='', stats={},
-            name=f'stub({target})', targets=(target,),
-        )
-    return _b
+def _intervention_edge(
+    target: str, predicted_direction: PredictedDirection,
+) -> ClaimBridge:
+    return ClaimBridge(
+        name=f'do->{target}',
+        source=_TEST_DO.node_key(), target=target,
+        intervention=_TEST_DO,
+        tier=Tier.INTERVENTIONAL, direction=Direction.DIRECT,
+        predicted_direction=predicted_direction,
+    )
+
+
+def _coupling_edge(
+    source: str, target: str, predicted_direction: PredictedDirection,
+) -> ClaimBridge:
+    return ClaimBridge(
+        name=f'{source}->{target}',
+        source=source, target=target,
+        tier=Tier.ASSOCIATIONAL, direction=Direction.DIRECT,
+        predicted_direction=predicted_direction,
+    )
 
 
 def _run(
@@ -85,22 +95,9 @@ def _three_edge_hypothesis() -> Hypothesis[Mapping[str, object]]:
         intervention={},
         intervention_arms=_TREATMENT_ARMS,
         edges=(
-            mechanism_edge(
-                target='mechanism.q',
-                predicted_direction='a_lt_b',
-                bridge=_stub_bridge('mechanism.q'),
-            ),
-            outcome_edge(
-                target='outcome.r',
-                predicted_direction='a_gt_b',
-                bridge=_stub_bridge('outcome.r'),
-            ),
-            link_edge(
-                source='mechanism.q',
-                target='outcome.r',
-                predicted_direction='a_gt_b',
-                bridge=_stub_bridge('outcome.r'),
-            ),
+            _intervention_edge('mechanism.q', 'a_lt_b'),
+            _intervention_edge('outcome.r', 'a_gt_b'),
+            _coupling_edge('mechanism.q', 'outcome.r', 'a_gt_b'),
         ),
     )
 
@@ -153,14 +150,16 @@ def test_three_edge_subgraph_produces_per_edge_bridge_results() -> None:
     )
     assert isinstance(v, HypothesisVerdict)
     assert len(v.bridge_results) == 3
-    assert len(v.comparison_rows) == 2  # mech + outcome (no link)
+    # Two intervention edges drive comparison rows; coupling does not.
+    assert len(v.comparison_rows) == 2
 
     # Each edge has a BridgeResult keyed by (source, target).
-    assert ('do(arm)', 'mechanism.q') in v.bridge_results
-    assert ('do(arm)', 'outcome.r') in v.bridge_results
+    do_node = _TEST_DO.node_key()
+    assert (do_node, 'mechanism.q') in v.bridge_results
+    assert (do_node, 'outcome.r') in v.bridge_results
     assert ('mechanism.q', 'outcome.r') in v.bridge_results
 
-    # Comparison rows are keyed by target; only non-link edges.
+    # Comparison rows are keyed by target; only intervention edges.
     assert 'mechanism.q' in v.comparison_rows
     assert 'outcome.r' in v.comparison_rows
 
@@ -168,19 +167,19 @@ def test_three_edge_subgraph_produces_per_edge_bridge_results() -> None:
     edges_by_pair = {
         (e.source, e.target): e.metadata for e in v.graph.edges
     }
-    assert ('do(arm)', 'mechanism.q') in edges_by_pair
-    assert ('do(arm)', 'outcome.r') in edges_by_pair
+    assert (do_node, 'mechanism.q') in edges_by_pair
+    assert (do_node, 'outcome.r') in edges_by_pair
     assert ('mechanism.q', 'outcome.r') in edges_by_pair
 
-    # Pattern is a 3-tuple in canonical order.
-    pattern = v.pattern()
-    assert len(pattern) == 3
+    # Target-path verdict lookup (replaces the role-based pattern()).
+    _ = v.verdict_at('mechanism.q')
+    _ = v.verdict_at('outcome.r')
 
 
-def test_pattern_default_when_role_missing() -> None:
-    """A hypothesis with only a mechanism edge produces a pattern
-    of (mech_verdict, POWER_INSUFFICIENT, POWER_INSUFFICIENT) —
-    missing roles default to 'unknown'."""
+def test_verdict_at_returns_power_insufficient_for_missing_target() -> None:
+    """A hypothesis with only one intervention edge produces a
+    verdict for that target; absent targets fall back to
+    POWER_INSUFFICIENT (paper-narrative reading is best-effort)."""
     treatment: list[RunRow] = []
     baseline: list[RunRow] = []
     treatment_arm_key = (
@@ -206,20 +205,18 @@ def test_pattern_default_when_role_missing() -> None:
         intervention={},
         intervention_arms=_TREATMENT_ARMS,
         edges=(
-            mechanism_edge(
-                target='mechanism.q',
-                predicted_direction='a_lt_b',
-                bridge=_stub_bridge('mechanism.q'),
-            ),
+            _intervention_edge('mechanism.q', 'a_lt_b'),
         ),
     )
     v = hypothesis_subgraph_verdict(
         h, treatment, baseline,
         pair_by=('seed',), group_by='env_name',
     )
-    pattern = v.pattern()
-    assert pattern[1] is Verdict.POWER_INSUFFICIENT  # outcome missing
-    assert pattern[2] is Verdict.POWER_INSUFFICIENT  # link missing
+    # Mechanism edge produces a real verdict for its target.
+    _ = v.verdict_at('mechanism.q')
+    # Targets that no edge claims are reported as POWER_INSUFFICIENT.
+    assert v.verdict_at('outcome.r') is Verdict.POWER_INSUFFICIENT
+    assert v.verdict_at('not_a_real_target') is Verdict.POWER_INSUFFICIENT
 
 
 def test_edge_verdict_lookup() -> None:
@@ -250,10 +247,10 @@ def test_edge_verdict_lookup() -> None:
         h, treatment, baseline,
         pair_by=('seed',), group_by='env_name',
     )
-    mech = h.mechanism_edge()
-    assert mech is not None
+    mech_edges = h.edges_by_target('mechanism.q')
+    assert len(mech_edges) == 1
     # Reading the verdict back through the edge.
-    _ = v.edge_verdict(mech)
+    _ = v.edge_verdict(mech_edges[0])
 
 
 # ============ Error paths ============
@@ -271,22 +268,17 @@ def test_empty_edges_raises() -> None:
 
 
 def test_link_with_unknown_source_raises() -> None:
-    """A link edge whose source isn't produced by any pass-1 edge
-    is an authoring bug — raise loudly."""
+    """A coupling edge whose source isn't produced by any
+    intervention edge is an authoring bug — raise loudly."""
     h: Hypothesis[Mapping[str, object]] = Hypothesis(
         name='dangling_link', intervention={},
         intervention_arms=_TREATMENT_ARMS,
         edges=(
-            outcome_edge(
-                target='outcome.r',
-                predicted_direction='a_gt_b',
-                bridge=_stub_bridge('outcome.r'),
-            ),
-            link_edge(
+            _intervention_edge('outcome.r', 'a_gt_b'),
+            _coupling_edge(
                 source='mechanism.q',  # not produced by any edge
                 target='outcome.r',
                 predicted_direction='a_gt_b',
-                bridge=_stub_bridge('outcome.r'),
             ),
         ),
     )
@@ -346,16 +338,17 @@ def test_verdict_graph_has_typed_tiers() -> None:
         promote_bridged=False,
     )
     g = v.graph
+    do_node = _TEST_DO.node_key()
 
     edges_by_pair = {
         (e.source, e.target): e.metadata for e in g.edges
     }
-    assert ('do(arm)', 'mechanism.q') in edges_by_pair
-    assert ('do(arm)', 'outcome.r') in edges_by_pair
+    assert (do_node, 'mechanism.q') in edges_by_pair
+    assert (do_node, 'outcome.r') in edges_by_pair
     assert ('mechanism.q', 'outcome.r') in edges_by_pair
 
-    mech_edge = edges_by_pair[('do(arm)', 'mechanism.q')]
-    out_edge = edges_by_pair[('do(arm)', 'outcome.r')]
+    mech_edge = edges_by_pair[(do_node, 'mechanism.q')]
+    out_edge = edges_by_pair[(do_node, 'outcome.r')]
     link_meta = edges_by_pair[('mechanism.q', 'outcome.r')]
 
     assert mech_edge.tier is GraphTier.INTERVENTIONAL or (
