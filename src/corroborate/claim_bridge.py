@@ -67,26 +67,40 @@ from corroborate.verdict import Verdict
 from corroborate.causal_graph import Direction, Tier  # noqa: E402
 
 
-# A bridge endpoint is either a string (raw column path or a name
-# that resolves in the @measurable registry) OR a `Measurable`
-# instance (typically a value-composed reduction like
-# `mean_window(from_key('q_max'), 0.5, 1.0)`). The framework
-# normalises the latter to its `.name` before handing off to
-# analyses, which only see strings.
-type BridgeEndpoint = str | Measurable[Mapping[str, object], object]
+# A bridge endpoint is one of:
+# - `str`: raw column path or a name that resolves in the
+#   @measurable registry
+# - `Measurable`: instance passed by value (typically a value-
+#   composed reduction like `mean_window(from_key('q_max'), 0.5,
+#   1.0)`). The framework normalises to `.name`.
+# - `DoEffect`: ONLY valid as `Bridge.source`, not target. Marks
+#   the bridge as Pearl-rung-2 — the source IS the do-contrast,
+#   not a measurable. Per `intervention.py:153`: "Pearl-rung-2
+#   edges in the causal graph have an *intervention* as the
+#   source node, NOT a measurable." Analyses that consume a
+#   DoEffect-sourced bridge get the contrast's `treatment_arm` /
+#   `baseline_arm` extracted into their kwargs by `evaluate()`.
+type BridgeEndpoint = (
+    str | Measurable[Mapping[str, object], object] | DoEffect
+)
 
 
 def endpoint_name(e: BridgeEndpoint) -> str:
-    """Normalise a `BridgeEndpoint` to a column name. For str
-    inputs the name passes through unchanged; for `Measurable`
-    instances the `.name` field is returned (the cache builder
-    materialises that name as a parquet column).
+    """Normalise a `BridgeEndpoint` to a column name (str). For
+    str inputs the name passes through; for `Measurable` instances
+    `.name` is returned. For `DoEffect`, returns
+    `node_key()` — the `'do(treatment|vs=baseline)'` graph-render
+    string. Analyses that consume a DoEffect-sourced bridge see
+    `treatment_arm` / `baseline_arm` extracted into their kwargs
+    by `evaluate()`; the do-string is for graph builders, not
+    measurable-resolution.
 
-    Single laundering point so analyses, the causal graph builder,
-    and the cache walker can treat source/target uniformly as
-    strings."""
+    Single laundering point so the causal graph builder and the
+    cache walker can treat source/target uniformly as strings."""
     if isinstance(e, str):
         return e
+    if isinstance(e, DoEffect):
+        return e.node_key()
     return e.name
 
 
@@ -186,18 +200,32 @@ class BridgeEvaluation:
 
 def _require_endpoint(
     value: object, field_name: str, fn_name: str,
+    *,
+    allow_do_effect: bool = False,
 ) -> BridgeEndpoint:
-    """Validate a `source` / `target` default. Accepts either a
-    str (raw column or registered measurable name) or a
-    `Measurable` instance (value-composed reduction). Anything
-    else is an authoring mistake — fail loudly at import time."""
+    """Validate a `source` / `target` default. Accepts a str (raw
+    column or registered measurable name), a `Measurable` instance
+    (value-composed reduction), or — only when `allow_do_effect=True`
+    (i.e., for `source`) — a `DoEffect` (Pearl-rung-2 do-contrast).
+    Anything else is an authoring mistake — fail loudly at import
+    time."""
     if isinstance(value, str):
         return value
     if isinstance(value, Measurable):
         return value
+    if allow_do_effect and isinstance(value, DoEffect):
+        return value
+    if not allow_do_effect and isinstance(value, DoEffect):
+        raise TypeError(
+            f'@claim_bridge {fn_name!r}: `target` cannot be a '
+            f'DoEffect — only `source` may carry the Pearl-rung-2 '
+            f'do-contrast. `target` must be a measurable column.',
+        )
     raise TypeError(
         f'@claim_bridge {fn_name!r}: default for {field_name!r} '
-        f'must be a str or Measurable; got {type(value).__name__}',
+        f'must be a str or Measurable'
+        f'{" or DoEffect" if allow_do_effect else ""}; '
+        f'got {type(value).__name__}',
     )
 
 
@@ -281,6 +309,7 @@ def claim_bridge(fn: Callable[..., Verdict]) -> Bridge:
         )
     source = _require_endpoint(
         structural['source'], 'source', fn.__name__,
+        allow_do_effect=True,
     )
     target = _require_endpoint(
         structural['target'], 'target', fn.__name__,
@@ -353,14 +382,34 @@ def evaluate(
             f'consumed by `hypothesis_subgraph_verdict`; they do '
             f'not carry a threshold to evaluate against a cell-set.',
         )
-    bridge_params: dict[str, object] = {
-        'source': bridge.source_name,
-        'target': bridge.target_name,
-        'direction': bridge.direction,
-        'tier': bridge.tier,
-        'predicted_direction': bridge.predicted_direction,
-        **dict(bridge.params),
-    }
+    # Pearl-rung-2 dispatch: when source is a `DoEffect`, the
+    # bridge declares a do() contrast. Analyses still operate on
+    # measurables, so we map the bridge's `target` measurable into
+    # the analysis's `source` slot (the column to compute on) and
+    # extract the contrast's arm names into `treatment_arm` /
+    # `baseline_arm` kwargs. This lets every existing analysis
+    # primitive consume DoEffect-declared bridges without changing
+    # its signature.
+    if isinstance(bridge.source, DoEffect):
+        bridge_params: dict[str, object] = {
+            'source': bridge.target_name,
+            'target': bridge.target_name,
+            'direction': bridge.direction,
+            'tier': bridge.tier,
+            'predicted_direction': bridge.predicted_direction,
+            'treatment_arm': bridge.source.treatment_arm,
+            'baseline_arm': bridge.source.baseline_arm,
+            **dict(bridge.params),
+        }
+    else:
+        bridge_params = {
+            'source': bridge.source_name,
+            'target': bridge.target_name,
+            'direction': bridge.direction,
+            'tier': bridge.tier,
+            'predicted_direction': bridge.predicted_direction,
+            **dict(bridge.params),
+        }
     analysis_results = resolve_for_holds_when(
         bridge.holds_when, cells, bridge_params,
     )

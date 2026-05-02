@@ -208,22 +208,29 @@ def authored_graph(
 ) -> CausalGraph:
     """Build the unevaluated graph topology from a `Sequence[Bridge]`.
 
-    Each bridge contributes one edge. When `bridge.intervention is
-    None`, the edge is `bridge.source → bridge.target` (measurable-
-    to-measurable). When set, the edge is
-    `bridge.intervention.node_key() → bridge.target` — an
-    *intervention → measurable* edge with the do-node as source.
+    Each bridge contributes one edge. When `bridge.source` is a
+    `DoEffect` (Pearl-rung-2), the edge is
+    `do(treatment|vs=baseline) → bridge.target` — an
+    *intervention → measurable* edge. Otherwise it's
+    `bridge.source → bridge.target` (measurable-to-measurable).
     All edges get `evidentiary_level='unevaluated'`; tier is
-    INTERVENTIONAL when an intervention is declared (the edge is
-    by construction a Pearl-rung-2 contrast), else inherits the
+    INTERVENTIONAL when source is a DoEffect (the edge is by
+    construction a Pearl-rung-2 contrast), else inherits the
     bridge's declared `tier`.
 
     Used by analyses that want to inspect the authored graph
     topology BEFORE running bridges — e.g. cache builders,
     Protocol-conforming module discoverers."""
+    from corroborate.intervention import DoEffect
     g: CausalGraph = Graph()
     for b in bridges:
-        if b.intervention is not None:
+        if isinstance(b.source, DoEffect):
+            source_key = b.source.node_key()
+            tier = Tier.INTERVENTIONAL
+        elif b.intervention is not None:
+            # Legacy path: source=measurable + intervention=DoEffect
+            # field. Migrating to source=DoEffect; both forms render
+            # the same do-node edge during the transition.
             source_key = b.intervention.node_key()
             tier = Tier.INTERVENTIONAL
         else:
