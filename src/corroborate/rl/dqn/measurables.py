@@ -38,6 +38,7 @@ Two output shapes coexist:
    language, not a framework concept."""
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 
 import jax.numpy as jnp
@@ -45,6 +46,7 @@ import numpy as np
 import numpy.typing as npt
 
 from corroborate.measurable import measurable
+from corroborate.rl import env_catalogue
 
 
 # ============ Online Q distribution ============
@@ -683,3 +685,156 @@ def log_mc_cv_per_burst(
     mask = arr > 0
     out[mask] = np.log(arr[mask])
     return out
+
+
+# ============ Env-structural measurables ============
+#
+# Per-cell scalars derived from the env catalogue keyed by
+# `record['env_name']`. These replace inline static dicts in
+# bridges (`_DDQN_200K_BOOTSTRAP_FRACTION`, etc.) — bridges now
+# reference these by name in their `covariates` param, and the
+# cache builder materialises them per cell across whatever corpus
+# is in scope. NaN when env_name isn't a string or isn't
+# registered in the catalogue.
+
+
+def _env_spec_for(record: Mapping[str, object]) -> object:
+    """Resolve `env_catalogue.get(record['env_name'])` defensively
+    — returns the EnvSpec or None on missing/unknown env. Typed
+    `object` because env_catalogue.EnvSpec isn't imported at
+    module top-level (avoiding a circular dependency for code
+    that loads measurables before env_catalogue's gymnax-side
+    initialisation completes)."""
+    name = record.get('env_name')
+    if not isinstance(name, str):
+        return None
+    try:
+        return env_catalogue.get(name)
+    except KeyError:
+        return None
+
+
+@measurable(reads=('env_name',))
+def log_action_dim(record: Mapping[str, object]) -> float:
+    """`log(max(n_actions, 2))` — the discrete-action dimensionality
+    on log scale. Matches Hasselt's overestimation-bias floor
+    `√(2 log|A|)` only logarithmically, so log_action_dim is the
+    natural covariate for cross-env meta-regressions of bias."""
+    spec = _env_spec_for(record)
+    if not isinstance(spec, env_catalogue.EnvSpec):
+        return float('nan')
+    return math.log(max(int(spec.n_actions), 2))
+
+
+@measurable(reads=('env_name',))
+def log_obs_dim(record: Mapping[str, object]) -> float:
+    """`log(max(obs_dim, 1))` — total flattened observation
+    dimensionality on log scale. Useful as a structural covariate
+    for cross-env regressions; image envs (MinAtar) have
+    `obs_dim ≈ 10⁴`, vector envs ≈ 4-25."""
+    spec = _env_spec_for(record)
+    if not isinstance(spec, env_catalogue.EnvSpec):
+        return float('nan')
+    return math.log(max(int(spec.obs_dim), 1))
+
+
+@measurable(reads=('env_name',))
+def log_horizon(record: Mapping[str, object]) -> float:
+    """`log(max(horizon, 1))` — episode-length cap on log scale.
+    Falls back to 1000 (gymnax's default cap) when the env's
+    `horizon` is None."""
+    spec = _env_spec_for(record)
+    if not isinstance(spec, env_catalogue.EnvSpec):
+        return float('nan')
+    h = spec.horizon if spec.horizon is not None else 1000
+    return math.log(max(int(h), 1))
+
+
+@measurable(reads=('env_name',))
+def r_max(record: Mapping[str, object]) -> float:
+    """Per-step reward upper bound from the env catalogue. Used
+    by `q_divergence_score` to compute the Bellman fixed-point
+    Q-bound `r_max / (1 - γ)`."""
+    spec = _env_spec_for(record)
+    if not isinstance(spec, env_catalogue.EnvSpec):
+        return float('nan')
+    return float(spec.r_max)
+
+
+@measurable(reads=('env_name',))
+def r_min(record: Mapping[str, object]) -> float:
+    """Per-step reward lower bound. Sibling of `r_max`; used in
+    contexts that need the symmetric reward span (e.g. signed
+    Bellman bounds for envs with negative rewards)."""
+    spec = _env_spec_for(record)
+    if not isinstance(spec, env_catalogue.EnvSpec):
+        return float('nan')
+    return float(spec.r_min)
+
+
+# ============ Episode dynamics measurables ============
+
+
+@measurable(reads=('done',))
+def bootstrap_fraction(record: Mapping[str, object]) -> float:
+    """Fraction of update steps that bootstrap (i.e. don't
+    terminate). `1 - mean(done)` over the per-step trajectory.
+
+    A bootstrap-fraction of 1.0 means the agent never reaches a
+    terminal state during training (long-horizon envs like
+    Acrobot at high γ); 0.0 means every step terminates (bandit
+    envs where the agent never bootstraps from its own Q
+    estimate). The covariate predicts DDQN-link strength: bias
+    compounds along bootstrapped chains, so envs in the high-
+    bootstrap regime show stronger Hasselt-mechanism → outcome
+    translation.
+
+    NaN when `done` is missing or empty; the framework's typed
+    None handling in the cache builder propagates this without
+    column-erasure."""
+    arr = record.get('done')
+    if arr is None:
+        return float('nan')
+    a = np.asarray(arr, dtype=np.float64)
+    if a.size == 0:
+        return float('nan')
+    return float(1.0 - a.mean())
+
+
+# ============ Bellman-bound measurable ============
+
+
+@measurable(reads=('mechanism.jensen_gap', 'gamma'))
+def q_divergence_score(
+    record: Mapping[str, object],
+    r_max: float,  # injected via @measurable name resolution
+) -> float:
+    """`mechanism.jensen_gap / (r_max / (1 - gamma))` — the
+    overestimation-bias gap normalised by the Bellman fixed-point
+    Q-bound. Per-cell scalar.
+
+    Reading: scores below ~1 mean Q stays within the theoretical
+    bound and DDQN's correction translates to outcome; scores
+    above ~1000 mean Q has diverged orders of magnitude beyond
+    the bound and DDQN's link to outcome attenuates (CLAIM 11
+    in `findings_minatar_link_attenuation.md`).
+
+    Composes the env-driven `r_max` measurable with the cell's
+    runs.parquet `mechanism.jensen_gap` and `gamma` columns —
+    transitive_reads(`q_divergence_score`) closes over
+    `{mechanism.jensen_gap, gamma, env_name}`. NaN on
+    degenerate inputs (gamma >= 1, missing fields, r_max
+    non-positive)."""
+    jens = record.get('mechanism.jensen_gap')
+    gamma = record.get('gamma')
+    if not isinstance(jens, (int, float)):
+        return float('nan')
+    if not isinstance(gamma, (int, float)):
+        return float('nan')
+    g = float(gamma)
+    if g >= 1.0 or g < 0.0:
+        return float('nan')
+    if math.isnan(r_max) or r_max <= 0.0:
+        return float('nan')
+    bound = r_max / (1.0 - g)
+    return float(jens) / bound
