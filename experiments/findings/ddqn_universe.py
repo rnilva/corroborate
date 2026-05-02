@@ -1418,6 +1418,119 @@ def acrobot_link_rcc_robust__gamma_0999(
     return Verdict.NO_EFFECT
 
 
+# ============ CLAIM 11 — extreme Q-divergence attenuates link
+#
+# Companion to CLAIM 2 (dormancy refutes mech). Where dormancy bounds the
+# LOWER attenuation (mech inactive), CLAIM 11 bounds the UPPER attenuation
+# (Q-explosion overwhelms link translation):
+#
+#   q_divergence_score = vanilla_jens_late / (r_max / (1 - γ))
+#
+# When score > 1000 (Q exceeds Bellman fixed-point bound by 3+ orders of
+# magnitude), the link from mechanism to outcome attenuates significantly.
+# Together with dormancy, they bound the band 0.02 < score < 1000 within
+# which DDQN's link operates.
+#
+# Empirical panel (13 (env, regime) cells, mech-HELD subset, no bandits):
+#   below band (score < 0.02): n=3, mean g_link = -0.09 (mostly null)
+#   in band (0.02-1000):       n=7, mean g_link = +0.34 (link works)
+#   above band (score > 1000): n=3, mean g_link = -0.09 (link attenuated)
+#
+# DoWhy backdoor ATE (above_1000 vs band, adjusting for env family):
+#   ATE = -0.21, placebo refutation passes (|p/r|=0%), RCC drift = 0.012
+#   → causally HELD with refutations.
+#
+# Pearl-rung-2 corroboration via Asterix sync × training-length sweep:
+#   sync=1000 100k → q_div=0.02, g_link=+0.21 (in band, link active)
+#   sync=100  1M   → q_div=17300, g_link=-0.23 (above band, link collapsed)
+
+
+@claim_bridge
+def extreme_q_divergence_attenuates_link__binary(
+    backdoor_ate: BackdoorResult,
+    *,
+    source: str = 'q_divergence_score',
+    target: str = 'g_link',
+    direction: Direction = Direction.INVERSE,
+    tier: Tier = Tier.INTERVENTIONAL,
+    treatment: str = 'above_1000',
+    outcome: str = 'g_link',
+    ate_ceiling: float = -0.10,
+) -> Verdict:
+    """Binary form: cells with q_divergence_score > 1000 have g_link
+    attenuated by at least 0.10 compared to the band-cells (0.02 < score
+    < 1000), after backdoor adjustment for env family. HELD when ATE
+    ≤ -0.10 AND identified=True. Empirical: ATE = -0.21."""
+    del source, target, direction, tier, treatment, outcome
+    if not backdoor_ate.identified:
+        return Verdict.POWER_INSUFFICIENT
+    if math.isnan(backdoor_ate.ate):
+        return Verdict.POWER_INSUFFICIENT
+    if backdoor_ate.ate <= ate_ceiling:
+        return Verdict.HELD
+    if backdoor_ate.ate < 0.0:
+        return Verdict.POWER_INSUFFICIENT
+    return Verdict.NO_EFFECT
+
+
+@claim_bridge
+def extreme_q_divergence_attenuates_link__placebo_refuted(
+    placebo_refutation: RefutationResult,
+    *,
+    source: str = 'q_divergence_score',
+    target: str = 'g_link',
+    direction: Direction = Direction.INVERSE,
+    tier: Tier = Tier.INTERVENTIONAL,
+    treatment: str = 'above_1000',
+    outcome: str = 'g_link',
+    placebo_max_ratio: float = 0.2,
+) -> Verdict:
+    """Placebo refutation shrinks the binary above-1000 ATE to ≤
+    placebo_max_ratio of the real value, confirming the attenuation is
+    treatment-specific (not noise). Empirical: real -0.21, placebo 0,
+    ratio 0%."""
+    del source, target, direction, tier, treatment, outcome
+    real = placebo_refutation.real_ate
+    placebo = placebo_refutation.refuted_ate
+    if math.isnan(real) or math.isnan(placebo) or abs(real) < 1e-9:
+        return Verdict.POWER_INSUFFICIENT
+    ratio = abs(placebo / real)
+    if ratio < placebo_max_ratio:
+        return Verdict.HELD
+    if ratio < placebo_max_ratio * 2:
+        return Verdict.POWER_INSUFFICIENT
+    return Verdict.NO_EFFECT
+
+
+@claim_bridge
+def extreme_q_divergence_attenuates_link__rcc_robust(
+    random_common_cause_refutation: RefutationResult,
+    *,
+    source: str = 'q_divergence_score',
+    target: str = 'g_link',
+    direction: Direction = Direction.INVERSE,
+    tier: Tier = Tier.INTERVENTIONAL,
+    treatment: str = 'above_1000',
+    outcome: str = 'g_link',
+    rcc_max_drift_ratio: float = 0.15,
+) -> Verdict:
+    """RCC refutation: adding a noise covariate to the adjustment set
+    leaves the binary above-1000 ATE within rcc_max_drift_ratio of real.
+    Confirms robustness to spurious-confound vulnerability. Empirical:
+    drift ratio ≈ 5%."""
+    del source, target, direction, tier, treatment, outcome
+    real = random_common_cause_refutation.real_ate
+    refuted = random_common_cause_refutation.refuted_ate
+    if math.isnan(real) or math.isnan(refuted) or abs(real) < 1e-9:
+        return Verdict.POWER_INSUFFICIENT
+    drift_ratio = abs(refuted - real) / abs(real)
+    if drift_ratio < rcc_max_drift_ratio:
+        return Verdict.HELD
+    if drift_ratio < rcc_max_drift_ratio * 2:
+        return Verdict.POWER_INSUFFICIENT
+    return Verdict.NO_EFFECT
+
+
 # =====================================================================
 # DDQN measurement graph — the closure.
 # =====================================================================
@@ -1460,6 +1573,14 @@ DDQN_UNIVERSE_BRIDGES = (
     acrobot_link_backdoor_ate_negative__gamma_0999,
     acrobot_link_placebo_refuted__gamma_0999,
     acrobot_link_rcc_robust__gamma_0999,
+    # CLAIM 11 — extreme Q-divergence attenuates the link. Companion
+    # to CLAIM 2's dormancy bridge: dormancy bounds the lower
+    # attenuation (mech inactive); extreme Q-divergence bounds the
+    # upper attenuation (Q-explosion overwhelms link). Together they
+    # bound the link-active band on q_divergence_score.
+    extreme_q_divergence_attenuates_link__binary,
+    extreme_q_divergence_attenuates_link__placebo_refuted,
+    extreme_q_divergence_attenuates_link__rcc_robust,
 )
 """The six bridges that close the DDQN study. CLAIM 1 (mechanism
 activation, do(DDQN) ↓ jensen_gap) is corroborated by
@@ -1477,6 +1598,9 @@ __all__ = [
     'acrobot_link_placebo_refuted__gamma_0999',
     'acrobot_link_rcc_robust__gamma_0999',
     'acrobot_per_burst_link_active__gamma_0999',
+    'extreme_q_divergence_attenuates_link__binary',
+    'extreme_q_divergence_attenuates_link__placebo_refuted',
+    'extreme_q_divergence_attenuates_link__rcc_robust',
     'adaptive_dqn_fails_to_avoid_attenuation__spaceinvaders_1m',
     'adaptive_dqn_recovers_ddqn_benefit__fourrooms_factor_0p5',
     'bootstrap_fraction_drives_g_link__net_of_dormancy',
