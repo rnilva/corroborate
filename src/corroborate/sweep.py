@@ -48,6 +48,8 @@ from corroborate.hypothesis import Hypothesis
 from corroborate.persistence import (
     apply_trace_reductions,
     stream_concat_parquets,
+    read_graphs_sidecar,
+    write_graphs_sidecar,
     write_runrows,
     write_tracerows,
 )
@@ -258,6 +260,11 @@ def run_hypotheses[R: Mapping[str, object]](
 
     runs_paths: list[Path] = []
     traces_paths: list[Path] = []
+    graph_paths: list[Path] = []
+    # Per-arm graphs keyed by `Hypothesis.arm_key()` — the static
+    # call topology each arm captured during its first vmap pass.
+    # Merged into a single `graphs.json` sidecar after the loop.
+    arm_graphs: dict[str, ComputationGraph] = {}
     archived_runs_uris: list[str] = []
     archived_traces_uris: list[str] = []
     t_start = time.monotonic()
@@ -266,6 +273,7 @@ def run_hypotheses[R: Mapping[str, object]](
         tag = effective_arm_tag(h, grid_point)
         runs_path = tmp_dir / f'arm{idx:03d}__{tag}__runs.parquet'
         traces_path = tmp_dir / f'arm{idx:03d}__{tag}__traces.parquet'
+        graph_path = tmp_dir / f'arm{idx:03d}__{tag}__graph.json'
         rp_rel = runs_path.relative_to(out_dir).as_posix()
         tp_rel = traces_path.relative_to(out_dir).as_posix()
 
@@ -286,6 +294,13 @@ def run_hypotheses[R: Mapping[str, object]](
                 archived_traces_uris.append(
                     archived_uri(archive_remote, tp_rel),
                 )
+                # Recover graph from local sidecar if present (the
+                # graph isn't archived remotely yet — same-pass
+                # only). Resume continues without it for archived-
+                # only arms; the merged sidecar carries whatever
+                # graphs the local pass produced.
+                if graph_path.exists():
+                    graph_paths.append(graph_path)
                 print(
                     f'  [{idx+1}/{len(arms)}] {tag} '
                     f'✓ already archived, skipping',
@@ -295,6 +310,8 @@ def run_hypotheses[R: Mapping[str, object]](
         elif runs_path.exists() and traces_path.exists():
             runs_paths.append(runs_path)
             traces_paths.append(traces_path)
+            if graph_path.exists():
+                graph_paths.append(graph_path)
             print(
                 f'  [{idx+1}/{len(arms)}] {tag} '
                 f'✓ local parquets exist, skipping',
@@ -314,8 +331,17 @@ def run_hypotheses[R: Mapping[str, object]](
             add=trace_reductions, drop=trace_drops,
         )
         write_tracerows(reduced, traces_path)
+        # Per-arm graph sidecar; same arm_key may repeat across
+        # grid points (HP variation doesn't perturb arm_key) — last
+        # writer wins, which is fine since the topology is
+        # constant for a given arm_key by construction.
+        write_graphs_sidecar(
+            {h.arm_key(): cell_result.graph}, graph_path,
+        )
+        arm_graphs[h.arm_key()] = cell_result.graph
         runs_paths.append(runs_path)
         traces_paths.append(traces_path)
+        graph_paths.append(graph_path)
         if archive_remote is not None:
             from corroborate.cloud import archive
             archive(
@@ -359,4 +385,16 @@ def run_hypotheses[R: Mapping[str, object]](
         stream_concat_parquets(traces_paths, final_traces)
     print(f'  → {final_runs}')
     print(f'  → {final_traces}')
+
+    # Merge per-arm graph sidecars into one corpus-level
+    # `graphs.json`. Resume mode: read from existing per-arm
+    # sidecars; same-pass mode: `arm_graphs` already populated.
+    merged_graphs: dict[str, ComputationGraph] = dict(arm_graphs)
+    for gp in graph_paths:
+        if gp.exists():
+            merged_graphs.update(read_graphs_sidecar(gp))
+    if merged_graphs:
+        final_graphs = out_dir / 'graphs.json'
+        write_graphs_sidecar(merged_graphs, final_graphs)
+        print(f'  → {final_graphs}')
     return final_runs, final_traces

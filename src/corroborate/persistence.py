@@ -23,9 +23,16 @@ slices instead of materialising the full corpus.
 
 `apply_trace_reductions(traces, add, drop)` is the polars-expr
 post-trace hook — authors declare reductions as polars exprs +
-an explicit drop list, applied in-memory before persisting."""
+an explicit drop list, applied in-memory before persisting.
+
+`ComputationGraph` topology is persisted as a sidecar JSON file
+(`graphs.json`) keyed by `Hypothesis.arm_key()` — one entry per
+hypothesis-arm. The graph survives sweep-time provenance: post-
+sweep consumers reconstruct the static call topology
+(`@claim` invocation edges) without re-running the trace pass."""
 from __future__ import annotations
 
+import json
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from pathlib import Path
 
@@ -35,6 +42,11 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 from corroborate._polars_boundary import to_dicts as _to_dicts
+from corroborate.computation_graph import (
+    ComputationEdge,
+    ComputationGraph,
+)
+from corroborate.graph import Graph
 from corroborate.schema import (
     ComparisonRow,
     RunRow,
@@ -322,3 +334,108 @@ def stream_concat_parquets(
         )
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
+# ============ ComputationGraph sidecar (provenance) ============
+
+def _graph_to_spec(g: ComputationGraph) -> dict[str, object]:
+    """Serialise a `ComputationGraph` to a JSON-friendly mapping.
+    Edges encode as `(source, target, reader_arg, source_path)`
+    tuples (the same shape as `signature(g)`'s edge tuples) — the
+    minimal-fingerprint representation."""
+    return {
+        'nodes': sorted(g.nodes),
+        'edges': sorted(
+            [
+                e.source,
+                e.target,
+                e.metadata.reader_arg,
+                e.metadata.source_path,
+            ]
+            for e in g.edges
+        ),
+    }
+
+
+def _spec_to_graph(spec: Mapping[str, object]) -> ComputationGraph:
+    """Inverse of `_graph_to_spec`. Reconstructs a
+    `ComputationGraph` from the JSON-decoded mapping."""
+    g: ComputationGraph = Graph()
+    nodes = spec.get('nodes', [])
+    if not isinstance(nodes, list):
+        raise TypeError(
+            f'graph spec `nodes` must be a list of strings, '
+            f'got {type(nodes).__name__}',
+        )
+    for n in nodes:
+        if not isinstance(n, str):
+            raise TypeError(
+                f'graph spec node must be str, got {type(n).__name__}',
+            )
+        g = g.with_node(n)
+    edges = spec.get('edges', [])
+    if not isinstance(edges, list):
+        raise TypeError(
+            f'graph spec `edges` must be a list, got {type(edges).__name__}',
+        )
+    for e in edges:
+        if (
+            not isinstance(e, list) or len(e) != 4
+            or not all(isinstance(x, str) for x in e)
+        ):
+            raise TypeError(
+                f'graph spec edge must be [source, target, reader_arg, '
+                f'source_path] of strings, got {e!r}',
+            )
+        source, target, reader_arg, source_path = e
+        g = g.with_edge(
+            source, target,
+            ComputationEdge(
+                reader_arg=reader_arg,
+                source_path=source_path,
+            ),
+        )
+    return g
+
+
+def write_graphs_sidecar(
+    graphs: Mapping[str, ComputationGraph], path: Path,
+) -> None:
+    """Persist `graphs` keyed by `Hypothesis.arm_key()` (or any
+    substrate-chosen identifier) as a JSON sidecar at `path`. Each
+    entry stores the static call topology — the `@claim` invocation
+    edges captured during the sweep's first abstract-trace pass.
+
+    Round-trip pair: `read_graphs_sidecar(path)`. Use this once
+    per corpus alongside `runs.parquet` / `traces.parquet` so
+    post-hoc consumers can recover topology without re-running
+    the sweep."""
+    spec = {arm_key: _graph_to_spec(g) for arm_key, g in graphs.items()}
+    path.write_text(json.dumps(spec, indent=2, sort_keys=True))
+
+
+def read_graphs_sidecar(path: Path) -> dict[str, ComputationGraph]:
+    """Inverse of `write_graphs_sidecar`. Returns an empty dict
+    when the sidecar is absent — substrates with no graph capture
+    omit it transparently."""
+    if not path.exists():
+        return {}
+    raw = json.loads(path.read_text())
+    if not isinstance(raw, dict):
+        raise TypeError(
+            f'graphs sidecar at {path} must be a JSON object, '
+            f'got {type(raw).__name__}',
+        )
+    out: dict[str, ComputationGraph] = {}
+    for arm_key, spec in raw.items():
+        if not isinstance(arm_key, str):
+            raise TypeError(
+                f'graphs sidecar keys must be str, got {type(arm_key).__name__}',
+            )
+        if not isinstance(spec, dict):
+            raise TypeError(
+                f'graphs sidecar value for {arm_key!r} must be an '
+                f'object, got {type(spec).__name__}',
+            )
+        out[arm_key] = _spec_to_graph(spec)
+    return out

@@ -291,3 +291,62 @@ def test_iter_trace_records_streams_one_dict_per_cell(
         src_path, columns=('series_a',), batch_size=10,
     ):
         assert set(record.keys()) == {'id', 'series_a'}
+
+
+# ============ ComputationGraph sidecar round-trip ============
+
+def test_graphs_sidecar_round_trips_topology(tmp_path: Path) -> None:
+    """`write_graphs_sidecar` + `read_graphs_sidecar` recovers
+    the same nodes + edges + edge metadata. Provenance survives
+    a sweep — post-hoc consumers reconstruct the static call
+    topology without re-running the trace pass."""
+    from corroborate.computation_graph import (
+        ComputationEdge, ComputationGraph,
+    )
+    from corroborate.graph import Graph
+    from corroborate.persistence import (
+        read_graphs_sidecar, write_graphs_sidecar,
+    )
+
+    g: ComputationGraph = Graph()
+    g = g.with_node('claim_a')
+    g = g.with_node('claim_b')
+    g = g.with_node('claim_c')
+    g = g.with_edge(
+        'claim_a', 'claim_b',
+        ComputationEdge(reader_arg='x', source_path=''),
+    )
+    g = g.with_edge(
+        'claim_b', 'claim_c',
+        ComputationEdge(reader_arg='y', source_path='value'),
+    )
+
+    p = tmp_path / 'graphs.json'
+    write_graphs_sidecar({'arm_one': g, 'arm_two': g}, p)
+    out = read_graphs_sidecar(p)
+    assert set(out.keys()) == {'arm_one', 'arm_two'}
+    for arm_key in out:
+        recovered = out[arm_key]
+        assert sorted(recovered.nodes) == ['claim_a', 'claim_b', 'claim_c']
+        edges = sorted(
+            (
+                e.source, e.target,
+                e.metadata.reader_arg, e.metadata.source_path,
+            )
+            for e in recovered.edges
+        )
+        assert edges == [
+            ('claim_a', 'claim_b', 'x', ''),
+            ('claim_b', 'claim_c', 'y', 'value'),
+        ]
+
+
+def test_graphs_sidecar_absent_file_returns_empty(
+    tmp_path: Path,
+) -> None:
+    """Missing sidecar isn't an error — substrates that don't
+    capture a graph (or didn't persist one) should return an
+    empty mapping cleanly."""
+    from corroborate.persistence import read_graphs_sidecar
+    out = read_graphs_sidecar(tmp_path / 'absent.json')
+    assert out == {}
