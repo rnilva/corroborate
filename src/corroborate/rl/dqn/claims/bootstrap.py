@@ -36,8 +36,6 @@ import jax
 import jax.numpy as jnp
 
 from corroborate.claim import claim
-from corroborate.invariant import at_most, attach_invariant
-from corroborate.rl.dqn.invariants import jensen_dormancy_gap
 from corroborate.rl.dqn.types import (
     Greedification,
     GradientRule,
@@ -96,18 +94,13 @@ def double_greedify(
     ).squeeze(-1)
 
 
-# Attach the Jensen-dormancy invariant to `double_greedify`. The
-# claim graph now exposes the dependency on (action_dim, σ_Q):
-# composition discovery surfaces the bridge whenever
-# `double_greedify` is in a theory tree, and `gap_value > 0`
-# (premise dormant) preempts an outcome-positive verdict.
-attach_invariant(
-    at_most(
-        jensen_dormancy_gap(), threshold=0.0,
-        of_claim=double_greedify,
-    ),
-    to=double_greedify,
-)
+# Jensen-dormancy invariant lives on the measurable channel
+# (`rl/dqn/measurables.py:at_most_jensen_dormancy_gap_zero_verdict`)
+# after Phase 4 of the Bridge-collapse refactor. Substrate factories
+# include it via `dqn_default_measurables()`; cell_runner persists
+# the per-cell verdict at `invariant.at_most[jensen_dormancy_gap<=0].
+# verdict`. The framework no longer carries a per-record Bridge
+# channel, so attach_invariant is gone.
 
 
 @claim

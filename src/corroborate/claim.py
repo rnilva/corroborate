@@ -37,29 +37,21 @@ from collections.abc import Callable, Generator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import (
-    TYPE_CHECKING,
-    ClassVar,
     Protocol,
     TypeIs,
     overload,
     runtime_checkable,
 )
 
-if TYPE_CHECKING:
-    from corroborate.bridge import Bridge
-
-
 # ============ Protocol — the structural contract ============
 
 @runtime_checkable
 class Claim[**P, T](Protocol):
-    """A callable claim with `name` and an `invariants` set.
-    Structurally satisfied by `FnClaim[P, T]` instances and by
-    instances of `ClaimBase`-derived classes."""
+    """A callable claim with a `name`. Structurally satisfied by
+    `FnClaim[P, T]` instances and by instances of `ClaimBase`-
+    derived classes."""
     @property
     def name(self) -> str: ...
-    @property
-    def invariants(self) -> tuple[Bridge[Mapping[str, object]], ...]: ...
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> T: ...
 
 
@@ -120,9 +112,8 @@ def record_call(
 # ============ ClaimBase — Module base class ============
 
 class ClaimBase:
-    """Base class for Module claims. Subclasses inherit `name`
-    and `invariants` properties — both members of the
-    `Claim[P, T]` Protocol satisfied structurally without
+    """Base class for Module claims. Subclasses inherit a `name`
+    property satisfying `Claim[P, T]` structurally without
     decorator mutation.
 
     Authors write:
@@ -135,55 +126,14 @@ class ClaimBase:
             def __call__(self, params, obs):
                 result = ...
                 record_call(self, (params, obs), {}, result)
-                return result
-
-    `_class_invariants` is the per-class storage that
-    `attach_invariant` mutates; the `invariants` property reads
-    `type(self)._class_invariants`. Two-level split because the
-    Protocol declares `invariants` as `@property` (matching
-    `FnClaim`'s side-table-backed property) — `ClassVar` storage
-    paired with a property accessor satisfies both shapes."""
-
-    _class_invariants: ClassVar[tuple['Bridge[Mapping[str, object]]', ...]] = ()
+                return result"""
 
     @property
     def name(self) -> str:
         return type(self).__name__
 
-    @property
-    def invariants(self) -> tuple['Bridge[Mapping[str, object]]', ...]:
-        return type(self)._class_invariants
-
 
 # ============ Free-function claim wrapper ============
-
-# Side-table for free-function claim invariants. Keyed by
-# underlying `fn` so all `FnClaim` wrappers of the same function
-# share invariants. Module-claim invariants live as `ClassVar` on
-# the class via `ClaimBase`.
-_FN_INVARIANTS: dict[
-    Callable[..., object],
-    tuple['Bridge[Mapping[str, object]]', ...],
-] = {}
-
-
-def get_fn_invariants(
-    fn: Callable[..., object],
-) -> tuple['Bridge[Mapping[str, object]]', ...]:
-    """Read free-function-claim invariants attached to `fn`.
-    Typed accessor for `_FN_INVARIANTS` so consumers don't reach
-    into the dict directly."""
-    return _FN_INVARIANTS.get(fn, ())
-
-
-def _set_fn_invariants(
-    fn: Callable[..., object],
-    bridges: tuple['Bridge[Mapping[str, object]]', ...],
-) -> None:
-    """Replace the invariants tuple for a free-function claim.
-    Internal — public attach/detach use this."""
-    _FN_INVARIANTS[fn] = bridges
-
 
 # Memoize so `claim(f) is claim(f)` for the same `f`.
 _FN_CACHE: dict[Callable[..., object], 'FnClaim[..., object]'] = {}
@@ -194,18 +144,13 @@ class FnClaim[**P, T]:
     """Typed wrapper for a free-function claim. Public — the
     concrete class consumers `isinstance`-check against.
 
-    `fn` and `_name` are dataclass fields. `invariants` is a
-    property reading `_FN_INVARIANTS` keyed by `fn`."""
+    `fn` and `_name` are dataclass fields."""
     fn: Callable[P, T]
     _name: str
 
     @property
     def name(self) -> str:
         return self._name
-
-    @property
-    def invariants(self) -> tuple['Bridge[Mapping[str, object]]', ...]:
-        return get_fn_invariants(self.fn)
 
     @property
     def __signature__(self) -> inspect.Signature:
@@ -296,20 +241,6 @@ def is_claim(obj: object) -> TypeIs[Claim[..., object]]:
     """`PEP 742 TypeIs` — narrows `obj` to `Claim[..., object]`
     in the True branch."""
     return isinstance(obj, Claim)
-
-
-def iter_invariants(
-    value: object,
-) -> tuple['Bridge[Mapping[str, object]]', ...]:
-    """Read `value.invariants` if `value` is a Claim, else `()`.
-    Typed accessor consumers use to avoid `getattr(value,
-    'invariants', ())` paths that lose element types.
-
-    Used by the walker / collector to gather composition-discovered
-    invariants."""
-    if isinstance(value, Claim):
-        return value.invariants
-    return ()
 
 
 # ============ Trace context manager ============

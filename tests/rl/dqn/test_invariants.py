@@ -21,13 +21,9 @@ import jax.numpy as jnp
 import optax
 import pytest
 
-from corroborate.invariant import at_most
 # Side-effect import: registers pearson_r_online_target etc. in
 # the measurable registry so resolved gap evaluation works.
 import corroborate.rl.dqn.measurables  # noqa: F401
-from corroborate.rl.dqn.claims.bootstrap import bootstrap
-from corroborate.rl.dqn.claims.q_network import mlp_q
-from corroborate.rl.dqn.claims.target_sync import periodic_copy
 from corroborate.rl.dqn.dqn import dqn_step, init_state
 from corroborate.rl.dqn.invariants import (
     fqi_decay_gap,
@@ -212,67 +208,6 @@ def test_hasselt_gap_nan_when_q_values_constant() -> None:
 def test_hasselt_gap_carries_pearson_stats_read() -> None:
     gap = hasselt_covariance_gap()
     assert gap.reads == ('pearson_stats',)
-
-
-# ============ at_most wrap: scope commitment → verdict ============
-
-def test_at_most_wrap_held_when_gap_under_threshold() -> None:
-    """Author commits scope: 'periodic_copy's mechanism operates
-    when fqi_decay_gap ≤ 0.05'. Synthetic decay-at-γ trajectory
-    has gap=0 → HELD."""
-    gamma = 0.5
-    sync_period = 10
-    # Per-window sup norms 1.0, 0.5, 0.25, 0.125 → ratio = γ
-    parts: list[jnp.ndarray] = []
-    for sup in (1.0, 0.5, 0.25, 0.125):
-        w = jnp.full(sync_period, sup * 0.9, dtype=jnp.float32)
-        w = w.at[0].set(sup)
-        parts.append(w)
-    record: Mapping[str, jnp.ndarray] = {
-        'td_error': jnp.concatenate(parts),
-    }
-    gap = fqi_decay_gap(sync_period=sync_period, gamma=gamma)
-    bridge = at_most(gap, threshold=0.05, of_claim=periodic_copy)
-    result = bridge(record)
-    assert result.verdict is Verdict.HELD
-    assert result.stats['kind'] == 'tautological'
-    assert result.stats['of_claim'] == 'periodic_copy'
-    assert 'gap_value' in result.stats
-    assert result.stats['threshold'] == 0.05
-
-
-def test_at_most_wrap_invariant_violation_when_gap_over_threshold() -> None:
-    """Synthetic flat-then-rising td_error → fqi_decay_gap large
-    (window-norm ratios well above gamma) → over threshold →
-    INVARIANT_VIOLATION (theorem out of scope)."""
-    gamma = 0.5
-    sync_period = 10
-    # Per-window sup norms 1.0, 2.0, 4.0, 8.0 → ratio = 2.0 ≫ γ = 0.5.
-    parts: list[jnp.ndarray] = []
-    for sup in (1.0, 2.0, 4.0, 8.0):
-        w = jnp.full(sync_period, sup * 0.5, dtype=jnp.float32)
-        w = w.at[0].set(sup)
-        parts.append(w)
-    record: Mapping[str, jnp.ndarray] = {
-        'td_error': jnp.concatenate(parts),
-    }
-    gap = fqi_decay_gap(sync_period=sync_period, gamma=gamma)
-    bridge = at_most(gap, threshold=0.5, of_claim=periodic_copy)
-    result = bridge(record)
-    assert result.verdict is Verdict.INVARIANT_VIOLATION
-
-
-def test_at_most_wrap_targets_propagate_from_gap_reads() -> None:
-    gap = hasselt_covariance_gap()
-    bridge = at_most(gap, threshold=0.5, of_claim=bootstrap)
-    assert bridge.targets == ('pearson_stats',)
-
-
-def test_at_most_wrap_default_name_includes_gap_and_threshold() -> None:
-    gap = fqi_decay_gap(sync_period=10)
-    bridge = at_most(gap, threshold=0.5, of_claim=mlp_q)
-    assert 'fqi_decay_gap' in bridge.name
-    assert '0.5' in bridge.name
 
 
 # ============ Jensen overestimation gap ============

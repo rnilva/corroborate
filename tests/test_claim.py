@@ -33,10 +33,6 @@ def test_claim_returns_callable_with_native_signature() -> None:
 
     assert add(2, 3) == 5
     assert add.name == 'add'
-    # @claim on a function returns a singleton instance of an
-    # auto-generated frozen-dataclass class. `invariants` ClassVar
-    # exists, starts empty.
-    assert add.invariants == ()
 
 
 def test_claim_preserves_name() -> None:
@@ -143,8 +139,7 @@ def test_context_restores_on_exception() -> None:
 def test_module_via_claimbase_inheritance() -> None:
     """Module-claim authoring: inherit `ClaimBase` + apply
     `@dataclass(frozen=True, slots=True)`. Inherited `name`
-    property + `invariants` ClassVar default; no decorator
-    mutation."""
+    property; no decorator mutation."""
     @dataclass(frozen=True, slots=True)
     class Doubler(ClaimBase):
         factor: int = 2
@@ -155,7 +150,6 @@ def test_module_via_claimbase_inheritance() -> None:
     d = Doubler()
     assert d(5) == 10
     assert d.name == 'Doubler'
-    assert d.invariants == ()
 
     # frozen — assignment fails.
     try:
@@ -262,70 +256,6 @@ def test_is_claim_false_for_non_callable() -> None:
     assert is_claim(42) is False
     assert is_claim('string') is False
     assert is_claim(None) is False
-
-
-def test_invariant_attaches_to_claim_class() -> None:
-    """`@invariant(of=claim)` mutates `type(claim).invariants` so
-    composition-level discovery (`signature.collect_invariants`) can
-    surface it."""
-    from collections.abc import Mapping
-
-    from corroborate.bridge import BridgeResult
-    from corroborate.invariant import invariant
-    from corroborate.verdict import Verdict
-
-    @claim
-    def my_step(x: int) -> int:
-        return x + 1
-
-    assert my_step.invariants == ()
-
-    @invariant(of=my_step, targets=('x',))
-    def some_invariant(record: Mapping[str, int]) -> BridgeResult:
-        del record
-        return BridgeResult(
-            verdict=Verdict.HELD, reason='ok', stats={},
-            name='', targets=(),
-        )
-
-    # After @invariant, the bridge is appended to the claim's
-    # class-level `invariants` ClassVar — visible via the instance.
-    assert len(my_step.invariants) == 1
-    assert 'some_invariant' in my_step.invariants[0].name
-
-
-def test_invariant_attaches_to_module_class_via_instance() -> None:
-    """`@invariant(of=...)` attaches at the class level. Authors
-    pass a Module INSTANCE — its class carries the invariants
-    ClassVar, so all instances see it."""
-    from collections.abc import Mapping
-
-    from corroborate.bridge import BridgeResult
-    from corroborate.invariant import invariant
-    from corroborate.verdict import Verdict
-
-    @dataclass(frozen=True, slots=True)
-    class Tripler(ClaimBase):
-        factor: int = 3
-
-        def __call__(self, x: int) -> int:
-            return x * self.factor
-
-    canonical = Tripler()  # default-instantiate to attach class-level invariant
-
-    @invariant(of=canonical, targets=('x',))
-    def tripler_invariant(record: Mapping[str, int]) -> BridgeResult:
-        del record
-        return BridgeResult(
-            verdict=Verdict.HELD, reason='ok', stats={},
-            name='', targets=(),
-        )
-
-    t = Tripler()
-    assert len(t.invariants) == 1
-    # Other instances of the same class see the SAME class-level invariants.
-    other = Tripler(factor=5)
-    assert other.invariants == t.invariants
 
 
 def test_claim_is_idempotent_on_already_decorated_function() -> None:

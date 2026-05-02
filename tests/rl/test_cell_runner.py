@@ -19,15 +19,10 @@ import jax.numpy as jnp
 import pytest
 
 from corroborate.aggregate import leaf_signature
-from corroborate.bridge import BridgeResult, bridge
 from corroborate.hypothesis import Hypothesis
-from corroborate.invariant import at_most
 from corroborate.rl.cell_runner import run_dqn_cell
 from corroborate.rl.dqn.claims.optimizer import Adam, WarmedUpdate
-from corroborate.rl.dqn.invariants import (
-    DQNTrajectoryRecord,
-    fqi_decay_gap,
-)
+from corroborate.rl.dqn.invariants import DQNTrajectoryRecord
 from corroborate.schema import RunRow
 from corroborate.verdict import Verdict
 
@@ -60,29 +55,6 @@ _SHORT_RUN_HP_40: dict[str, object] = {
 }
 
 
-def _bridge_names_in(run: RunRow) -> set[str]:
-    """Collect the set of bridge/invariant names from a RunRow's
-    measurements — the verdict-bearing keys are
-    `bridge.<name>.verdict` / `invariant.<name>.verdict`."""
-    out: set[str] = set()
-    for k in run.measurements:
-        if k.startswith('bridge.') and k.endswith('.verdict'):
-            out.add(k.removeprefix('bridge.').removesuffix('.verdict'))
-        elif k.startswith('invariant.') and k.endswith('.verdict'):
-            out.add(k.removeprefix('invariant.').removesuffix('.verdict'))
-    return out
-
-
-def _has_invariant(run: RunRow, substring: str) -> bool:
-    """True iff some `invariant.<name>.verdict` key in the row's
-    measurements has `substring` in `<name>`."""
-    return any(
-        k.startswith('invariant.') and k.endswith('.verdict')
-        and substring in k.removeprefix('invariant.').removesuffix('.verdict')
-        for k in run.measurements
-    )
-
-
 # ============ run_dqn_cell — happy path ============
 
 def test_run_dqn_cell_produces_runrow_on_cartpole() -> None:
@@ -94,13 +66,11 @@ def test_run_dqn_cell_produces_runrow_on_cartpole() -> None:
     h = Hypothesis[DQNTrajectoryRecord](
         name='vanilla',
         intervention={**_SHORT_RUN_HP},  # HPs only, no slot swaps
-        bridges=(),
         predicted_direction=None,
     )
 
     run_row = run_dqn_cell(
         env_spec, seed=0, hypothesis=h,
-        
     ).run
     # RunRow shape.
     assert isinstance(run_row, RunRow)
@@ -108,9 +78,11 @@ def test_run_dqn_cell_produces_runrow_on_cartpole() -> None:
     assert run_row.measurements['env_name'] == 'CartPole-v1'
     assert run_row.measurements['seed'] == 0
     assert run_row.measurements['total_steps'] == 60
-    # Empty bridges → no bridge measurements → POWER_INSUFFICIENT.
-    assert _bridge_names_in(run_row) == set()
-    assert run_row.verdict is Verdict.POWER_INSUFFICIENT
+    # Phase 4 of the Bridge-collapse refactor: per-cell `Bridge[R]`
+    # channel is gone; cell verdict is HELD for any successfully-
+    # completed cell. Verdict authority moves to corpus-side
+    # claim_bridges run post-hoc.
+    assert run_row.verdict is Verdict.HELD
     # Outcome reduction landed.
     assert isinstance(run_row.measurements['outcome.late_window_mean'], float)
     # Leaf topology paths populated.
@@ -123,34 +95,20 @@ def test_run_dqn_cell_leaf_signature_matches_hypothesis() -> None:
     from corroborate.rl.env_catalogue import get
     env_spec = get('CartPole-v1')
 
-    @bridge(targets=('ep_return',))
-    def some_bridge(record: Mapping[str, jnp.ndarray]) -> BridgeResult:
-        del record
-        return BridgeResult(
-            verdict=Verdict.HELD, reason='ok', stats={},
-            name='some_bridge', targets=('ep_return',),
-        )
-
     h = Hypothesis[DQNTrajectoryRecord](
         name='ddqn',
         intervention={**_SHORT_RUN_HP_40},
-        bridges=(some_bridge,),
         predicted_direction='a_gt_b',
     )
 
     run_row = run_dqn_cell(
         env_spec, seed=0, hypothesis=h,
-        
     ).run
 
-    # Bridge result surfaces in measurements with bridge name.
-    assert 'bridge.some_bridge.verdict' in run_row.measurements
     # Leaf signature is non-empty (configurational fingerprint).
     sig = leaf_signature(run_row.measurements)
     assert len(sig) > 0
 
-
-# ============ Bridge → measurements conversion ============
 
 def test_run_dqn_cell_pre_registered_measurables_persist_at_their_name() -> None:
     """Pre-registered measurables on `Hypothesis.measurables` land
@@ -189,202 +147,6 @@ def test_run_dqn_cell_pre_registered_measurables_persist_at_their_name() -> None
     assert 'ep_return_mean_summary' in run_row.measurements
     val = run_row.measurements['ep_return_mean_summary']
     assert isinstance(val, float)
-
-
-def test_run_dqn_cell_classifies_invariant_facts() -> None:
-    """A bridge created via `at_most(...)` has `stats['kind']=
-    'tautological'` → measurements appear under
-    `invariant.<name>.*`. A plain bridge has `bridge.<name>.*`."""
-    from corroborate.rl.dqn.claims.target_sync import periodic_copy
-    from corroborate.rl.env_catalogue import get
-    env_spec = get('CartPole-v1')
-
-    @bridge(targets=('ep_return',))
-    def plain_bridge(record: Mapping[str, jnp.ndarray]) -> BridgeResult:
-        del record
-        return BridgeResult(
-            verdict=Verdict.HELD, reason='ok', stats={},
-            name='plain_bridge', targets=('ep_return',),
-        )
-
-    invariant_bridge = at_most(
-        fqi_decay_gap(sync_period=10, gamma=0.99),
-        threshold=10.0,
-        of_claim=periodic_copy,
-    )
-
-    h = Hypothesis[DQNTrajectoryRecord](
-        name='mixed',
-        intervention={**_SHORT_RUN_HP_40},
-        bridges=(plain_bridge, invariant_bridge),
-    )
-
-    run_row = run_dqn_cell(
-        env_spec, seed=0, hypothesis=h,
-        
-    ).run
-
-    # Plain bridge under 'bridge.' prefix.
-    assert 'bridge.plain_bridge.verdict' in run_row.measurements
-    # Invariant under 'invariant.' prefix; name contains the
-    # measurable's name (fqi_decay_gap).
-    assert _has_invariant(run_row, 'fqi_decay_gap')
-
-
-def test_run_dqn_cell_invariant_violation_dominates_verdict() -> None:
-    """Axiom 18: INVARIANT_VIOLATION preempts NO_EFFECT/HELD at
-    the cell verdict layer."""
-    from corroborate.rl.dqn.claims.target_sync import periodic_copy
-    from corroborate.rl.env_catalogue import get
-    env_spec = get('CartPole-v1')
-
-    impossible = at_most(
-        fqi_decay_gap(sync_period=10, gamma=0.99),
-        threshold=-1.0,  # gap is non-negative; can never be ≤ -1
-        of_claim=periodic_copy,
-    )
-
-    @bridge(targets=('ep_return',))
-    def held_bridge(record: Mapping[str, jnp.ndarray]) -> BridgeResult:
-        del record
-        return BridgeResult(
-            verdict=Verdict.HELD, reason='ok', stats={},
-            name='held_bridge', targets=('ep_return',),
-        )
-
-    h = Hypothesis[DQNTrajectoryRecord](
-        name='mixed',
-        intervention={**_SHORT_RUN_HP_40},
-        bridges=(held_bridge, impossible),
-    )
-
-    run_row = run_dqn_cell(
-        env_spec, seed=0, hypothesis=h,
-        
-    ).run
-    assert run_row.verdict is Verdict.INVARIANT_VIOLATION
-
-
-# ============ Bridges over the merged record ============
-
-def test_run_dqn_cell_runs_bridges_against_merged_record() -> None:
-    """Hypothesis.bridges target whichever record keys they care
-    about. `jensen_overestimation_gap` reads `predicted_q_at_start`
-    + `mc_return` (eval-burst-shaped fields); the merged record
-    carries them alongside per-step training fields."""
-    from corroborate.invariant import at_most
-    from corroborate.rl.dqn.claims.bootstrap import bootstrap
-    from corroborate.rl.dqn.invariants import jensen_overestimation_gap
-    from corroborate.rl.env_catalogue import get
-    env_spec = get('CartPole-v1')
-
-    jensen_scope = at_most(
-        jensen_overestimation_gap(),
-        threshold=1e9,
-        of_claim=bootstrap,
-    )
-
-    h: Hypothesis[DQNTrajectoryRecord] = Hypothesis(
-        name='vanilla_with_jensen_scope',
-        intervention={**_SHORT_RUN_HP_40},
-        bridges=(jensen_scope,),
-        predicted_direction=None,
-    )
-
-    run_row = run_dqn_cell(
-        env_spec, seed=0, hypothesis=h,
-        
-    ).run
-    # Invariant verdict surfaced under 'invariant.' prefix.
-    assert _has_invariant(run_row, 'jensen_overestimation_gap')
-
-
-def test_intervention_overrides_dont_leak_default_invariants() -> None:
-    """The cell runner uses `partial(dqn, **intervention)` to
-    compute the EFFECTIVE composition. `collect_invariants` walks
-    the partial-aware tree, so an invariant attached to
-    `max_greedify` does NOT fire when the intervention swaps the
-    greedification slot to `double_greedify` (DDQN)."""
-    from functools import partial
-    from corroborate.invariant import attach_invariant, at_most
-    from corroborate.rl.dqn.claims.bootstrap import (
-        bootstrap,
-        double_greedify,
-        max_greedify,
-    )
-    from corroborate.rl.dqn.invariants import jensen_overestimation_gap
-    from corroborate.rl.env_catalogue import get
-    env_spec = get('CartPole-v1')
-
-    only_vanilla = at_most(
-        jensen_overestimation_gap(),
-        threshold=1e9,
-        of_claim=max_greedify,
-    )
-    attach_invariant(only_vanilla, to=max_greedify)
-
-    try:
-        h = Hypothesis[DQNTrajectoryRecord](
-            name='ddqn_no_leak',
-            intervention={
-                **_SHORT_RUN_HP_40,
-                'bootstrap': partial(
-                    bootstrap, greedification=double_greedify,
-                ),
-            },
-            bridges=(),
-        )
-        run_row = run_dqn_cell(
-            env_spec, seed=0, hypothesis=h,
-            
-        ).run
-        assert not _has_invariant(run_row, 'jensen_overestimation_gap'), (
-            f'max_greedify-only invariant leaked into a DDQN run; '
-            f'got measurements {sorted(run_row.measurements)}'
-        )
-    finally:
-        from corroborate.invariant import detach_invariant
-        detach_invariant(only_vanilla, from_claim=max_greedify)
-
-
-def test_composition_discovered_invariants_fire() -> None:
-    """When a substrate author attaches an invariant to a claim,
-    the cell runner auto-discovers it via composition-tree walk
-    and fires it against the per-cell record — without the
-    hypothesis having to list it in `bridges`."""
-    from corroborate.invariant import attach_invariant, at_most
-    from corroborate.rl.dqn.claims.bootstrap import bootstrap
-    from corroborate.rl.dqn.invariants import jensen_overestimation_gap
-    from corroborate.rl.env_catalogue import get
-    env_spec = get('CartPole-v1')
-
-    auto_bridge = at_most(
-        jensen_overestimation_gap(),
-        threshold=1e9,
-        of_claim=bootstrap,
-    )
-    attach_invariant(auto_bridge, to=bootstrap)
-
-    try:
-        h: Hypothesis[DQNTrajectoryRecord] = Hypothesis(
-            name='vanilla_no_explicit_bridges',
-            intervention={**_SHORT_RUN_HP_40},
-            bridges=(),
-            predicted_direction=None,
-        )
-
-        run_row = run_dqn_cell(
-            env_spec, seed=0, hypothesis=h,
-            
-        ).run
-
-        assert _has_invariant(run_row, 'jensen_overestimation_gap'), (
-            f'expected auto-discovered jensen invariant; got '
-            f'{sorted(run_row.measurements)}'
-        )
-    finally:
-        from corroborate.invariant import detach_invariant
-        detach_invariant(auto_bridge, from_claim=bootstrap)
 
 
 def test_run_dqn_cell_applies_intervention_via_slot_swap() -> None:

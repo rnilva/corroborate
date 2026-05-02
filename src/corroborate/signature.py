@@ -48,8 +48,7 @@ from typing import (
     get_args, get_origin, runtime_checkable,
 )
 
-from corroborate.bridge import Bridge
-from corroborate.claim import FnClaim, iter_invariants
+from corroborate.claim import FnClaim
 
 
 @runtime_checkable
@@ -399,63 +398,6 @@ def _walk_paths(
         if regime == 'leaf' and kw.regime == 'exogenous':
             continue
         _walk_paths(kw.inner, acc, regime=regime, prefix=path)
-
-
-# ============ Invariant collection ============
-
-def collect_invariants(claim: object) -> tuple[Bridge[Mapping[str, object]], ...]:
-    """Walk the composition tree starting from `claim`; union all
-    `invariants` from each Claim node encountered. De-duplicated
-    by `id`.
-
-    Implementation: traverse the `walk(claim)` output. Each
-    `KwargInfo.default` is the effective sub-claim AFTER bake
-    (the walker already overlays partial.keywords as defaults),
-    so bake-shadowing falls out for free — no separate accounting
-    needed. For each visited default we collect its invariants
-    via `iter_invariants` (typed predicate) and recurse via
-    `kw.inner`."""
-    bridges: list[Bridge[Mapping[str, object]]] = []
-    seen: set[int] = set()
-
-    # Top-level: invariants attached to `claim` itself. For
-    # `partial(claim, ...)`, the wrapped claim's invariants live
-    # on `.func`; drill through partials to find them.
-    target = claim
-    while isinstance(target, functools.partial):
-        target = target.func
-    _add(iter_invariants(target), bridges, seen)
-
-    # Recurse: each kwarg's default is an effective sub-claim
-    # (post-bake). Walker handles partial-overlay; we just visit
-    # the resulting tree.
-    sig = walk(claim)
-    _walk_collect(sig, bridges, seen)
-    return tuple(bridges)
-
-
-def _walk_collect(
-    sig: ClaimSignature,
-    bridges: list[Bridge[Mapping[str, object]]],
-    seen: set[int],
-) -> None:
-    """Visit each kwarg's default + recurse via `kw.inner`."""
-    for kw in sig.kwargs:
-        _add(iter_invariants(kw.default), bridges, seen)
-        if kw.inner is not None:
-            _walk_collect(kw.inner, bridges, seen)
-
-
-def _add(
-    invs: tuple[Bridge[Mapping[str, object]], ...],
-    bridges: list[Bridge[Mapping[str, object]]],
-    seen: set[int],
-) -> None:
-    """Append unseen invariants (de-dup by id)."""
-    for inv in invs:
-        if id(inv) not in seen:
-            seen.add(id(inv))
-            bridges.append(inv)
 
 
 # ============ Annotation helpers ============

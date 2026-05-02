@@ -35,11 +35,6 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from corroborate.aggregate import (
-    _bridge_result_to_measurements,
-    aggregate_cell_verdict,
-)
-from corroborate.bridge import Bridge, BridgeResult
 from corroborate._canonical import canonical_str
 from corroborate.claim import trace_context
 from corroborate.computation_graph import ComputationGraph, build_computation_graph
@@ -49,7 +44,8 @@ from corroborate.rl.dqn.dqn import default_state_hash, dqn
 from corroborate.rl.dqn.invariants import DQNTrajectoryRecord
 from corroborate.rl.env_catalogue import EnvSpec, EnvWrapper
 from corroborate.schema import MeasurementLeaf, RunRow, TraceLeaf, TraceRow
-from corroborate.signature import collect_invariants, walk, walk_paths
+from corroborate.signature import walk, walk_paths
+from corroborate.verdict import Verdict
 
 
 class CellResult(NamedTuple):
@@ -246,23 +242,8 @@ def run_dqn_arm(
         value_key='ep_return', mask_key='done', fraction=0.1,
     )
 
-    # Author-declared bridges + composition-discovered invariants.
-    # Walk the BOUND `configured` tree (with intervention applied)
-    # — this surfaces invariants attached only to the effective
-    # sub-claims, not stale ones from defaults that were swapped
-    # out. De-dup by id.
-    auto_invariants: list[Bridge[DQNTrajectoryRecord]] = []
-    seen_ids: set[int] = set()
-    for inv in collect_invariants(configured):
-        if id(inv) not in seen_ids:
-            seen_ids.add(id(inv))
-            auto_invariants.append(inv)  # pyright: ignore[reportArgumentType]
-    effective_bridges: tuple[Bridge[DQNTrajectoryRecord], ...] = (
-        tuple(hypothesis.bridges) + tuple(auto_invariants)
-    )
-
     # Side-effect import: registers DDQN measurables (q_mean,
-    # q_max, ..., pearson_r_online_target) so bridges declaring
+    # q_max, ..., pearson_r_online_target) so measurables declaring
     # them as deps auto-resolve via the registry.
     import corroborate.rl.dqn.measurables  # noqa: F401
     from corroborate.measurable import evaluate_with_measurables
@@ -273,30 +254,19 @@ def run_dqn_arm(
             k: v[i] for k, v in batched_record.items()
         }
         outcome = outcome_proj(per_seed_record)
-        # Per-cell measurable cache — shared across all bridges
-        # AND pre-registered measurables in this cell so each
-        # measurable computes at most once.
+        # Per-cell measurable cache — shared across `hypothesis.
+        # measurables` so dep-measurables (q_mean, q_std, etc.)
+        # compute once per cell.
         cache: dict[str, object] = {}
-        bridge_results = tuple(
-            evaluate_with_measurables(b.fn, per_seed_record, cache=cache)
-            for b in effective_bridges
-        )
-        verdict = aggregate_cell_verdict(
-            tuple(r.verdict for r in bridge_results),
-        )
 
         # Pre-registered measurables: walk `hypothesis.measurables`
         # and persist each at its bare measurable name as the
-        # column key. Sharing `cache` with the per-record bridges
-        # so dep-measurables (q_mean, q_std, etc.) compute once
-        # per cell across both channels. Column-name namespacing
-        # is the substrate's call: a measurable named
+        # column key. Substrate controls column-name namespace via
+        # the measurable's name (a measurable named
         # `outcome.eval_final_mean` lands as `outcome.eval_final_
-        # mean`; a bare `eval_final_mean` lands at the bare name.
+        # mean`; a bare `eval_final_mean` lands at the bare name).
         # Phase 5 of the Bridge-collapse refactor will normalise
-        # the substrate-paper-narrative prefixes (`outcome.`,
-        # `mechanism.`, `mediator.`) to bare names; until then,
-        # the substrate controls the column-name namespace.
+        # the substrate-paper-narrative prefixes to bare names.
         measurable_cols: dict[str, MeasurementLeaf] = {}
         for m in hypothesis.measurables:
             value = evaluate_with_measurables(
@@ -322,8 +292,12 @@ def run_dqn_arm(
             **leaf_measurements,
             **measurable_cols,
         }
-        for result in bridge_results:
-            measurements.update(_bridge_result_to_measurements(result))
+        # Per-cell verdict: a successfully-completed cell is HELD;
+        # the per-cell `Bridge[R]` aggregation that produced
+        # Popperian verdicts is gone (Phase 4C). Verdicts now
+        # emerge post-hoc from corpus-side `claim_bridge.Bridge`
+        # declarations consuming the persisted columns.
+        verdict = Verdict.HELD
 
         # Shared id between the two stores: a downstream consumer
         # reads `runs.parquet`, picks an id, fetches the matching
