@@ -272,3 +272,95 @@ def test_bridge_requires_source_and_target() -> None:
 
     with pytest.raises(TypeError, match='source.*target'):
         _ = claim_bridge(_no_source_target)
+
+
+def test_bridge_carries_typed_predicted_direction() -> None:
+    """A bridge with `predicted_direction='a_gt_b'` defaulted lands
+    on `Bridge.predicted_direction` as the typed structural field —
+    not buried in `params`. Promoted because paired/RE analyses
+    consume it as shared metadata across most bridges."""
+    @claim_bridge
+    def carries_predicted_direction(
+        paired_g: PairedGResult,
+        *,
+        source: str = 'A',
+        target: str = 'B',
+        predicted_direction: str = 'a_gt_b',
+    ) -> Verdict:
+        del paired_g, source, target, predicted_direction
+        return Verdict.HELD
+
+    assert isinstance(carries_predicted_direction, Bridge)
+    assert carries_predicted_direction.predicted_direction == 'a_gt_b'
+    # Not leaked into params.
+    assert 'predicted_direction' not in (
+        carries_predicted_direction.params
+    )
+
+
+def test_bridge_predicted_direction_defaults_to_none() -> None:
+    """A bridge that does NOT declare `predicted_direction` carries
+    None on the typed field. Backwards-compatible with all existing
+    @claim_bridge declarations."""
+    @claim_bridge
+    def no_predicted_direction(
+        paired_g: PairedGResult,
+        *,
+        source: str = 'A',
+        target: str = 'B',
+    ) -> Verdict:
+        del paired_g, source, target
+        return Verdict.HELD
+
+    assert no_predicted_direction.predicted_direction is None
+
+
+def test_bridge_rejects_invalid_predicted_direction() -> None:
+    """Only `'a_gt_b' | 'a_lt_b' | 'two_sided' | None` accepted —
+    typed validation at decoration."""
+    with pytest.raises(TypeError, match='predicted_direction'):
+        @claim_bridge
+        def bad_predicted_direction(
+            paired_g: PairedGResult,
+            *,
+            source: str = 'A',
+            target: str = 'B',
+            predicted_direction: str = 'positive',
+        ) -> Verdict:
+            del paired_g, source, target, predicted_direction
+            return Verdict.HELD
+
+
+def test_evaluate_forwards_predicted_direction_to_analyses() -> None:
+    """`evaluate` injects `predicted_direction` into bridge_params
+    so analyses that take it as a kwarg resolve transparently —
+    same channel as `source`/`target`/`tier`."""
+    captured: dict[str, object] = {}
+
+    from corroborate.analysis import analysis
+
+    @analysis
+    def _captures_pd(
+        cells: list[Mapping[str, object]],
+        *,
+        predicted_direction: object,
+        source: str = 'A',
+    ) -> int:
+        del cells, source
+        captured['predicted_direction'] = predicted_direction
+        return 1
+
+    @claim_bridge
+    def consumer(
+        _captures_pd: int,
+        *,
+        source: str = 'A',
+        target: str = 'B',
+        predicted_direction: str = 'a_lt_b',
+    ) -> Verdict:
+        del _captures_pd, source, target, predicted_direction
+        return Verdict.HELD
+
+    cells: list[Mapping[str, object]] = [{'env_name': 'X'}]
+    _ = evaluate(consumer, cells)
+    assert captured['predicted_direction'] == 'a_lt_b'

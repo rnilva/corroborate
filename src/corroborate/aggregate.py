@@ -86,6 +86,12 @@ def leaf_signature(
 
     Filters out:
     - Output paths (`outcome.`/`bridge.`/`invariant.`).
+    - Every registered-measurable name (registry-based filter).
+      Becomes load-bearing once Phase 5 drops the substrate-paper-
+      narrative prefixes; today it's a superset of the prefix
+      filter (every registered measurable's column name still
+      matches one of the existing prefixes), so behaviour is
+      unchanged.
     - The framework-typed `intervention_name` (always excluded).
     - Substrate-supplied exogenous keys: keys the substrate
       declared via `Annotated[T, Exogenous]` on its `@claim`'s
@@ -97,7 +103,12 @@ def leaf_signature(
     topology paths. "Leaf" rather than "HP": a leaf-regime kwarg
     is a non-recursive scalar claim of the configured composition,
     observed at composition time."""
-    excluded = _FRAMEWORK_EXCLUDED_KEYS | exogenous_keys
+    from corroborate.measurable import registered_names
+    excluded = (
+        _FRAMEWORK_EXCLUDED_KEYS
+        | exogenous_keys
+        | frozenset(registered_names())
+    )
     return tuple(sorted(
         (k, str(v))
         for k, v in measurements.items()

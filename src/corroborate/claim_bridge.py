@@ -53,6 +53,7 @@ from types import MappingProxyType
 from typing import cast
 
 from corroborate.analysis import resolve_for_holds_when
+from corroborate.hypothesis import PredictedDirection
 from corroborate.intervention import DoEffect
 from corroborate.verdict import Verdict
 
@@ -68,7 +69,13 @@ from corroborate.causal_graph import Direction, Tier  # noqa: E402
 # Reserved kwarg names the decorator extracts as the bridge's
 # structural fields; everything else lands in `params`.
 _STRUCTURAL_FIELDS: frozenset[str] = frozenset(
-    {'source', 'target', 'direction', 'tier', 'intervention'},
+    {'source', 'target', 'direction', 'tier', 'intervention',
+     'predicted_direction'},
+)
+
+
+_PREDICTED_DIRECTION_VALUES: frozenset[str] = frozenset(
+    {'a_gt_b', 'a_lt_b', 'two_sided'},
 )
 
 
@@ -90,7 +97,15 @@ class Bridge:
     (paired_g.mean_diff between treatment_arm and baseline_arm
     cells). Strictly stronger than burying the arm names in
     `params` — surfaces the do() relationship at the graph
-    layer, where it belongs."""
+    layer, where it belongs.
+
+    `predicted_direction: PredictedDirection | None` is the
+    author-declared *prior* sign of the predicted effect, used by
+    paired/random-effects analyses to pick a one- vs two-sided
+    test. Promoted out of `params` because it is shared structural
+    metadata across most claims (consumed by `paired_g`,
+    `random_effects`, etc.) — keeping it inside the params bag
+    forced every analysis to fish it out by name."""
     name: str
     source: str
     target: str
@@ -101,6 +116,7 @@ class Bridge:
         default_factory=lambda: MappingProxyType({}),
     )
     intervention: DoEffect | None = None
+    predicted_direction: PredictedDirection | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -140,6 +156,23 @@ def _require_tier(value: object, fn_name: str) -> Tier:
             f'be a Tier enum; got {type(value).__name__}',
         )
     return value
+
+
+def _require_predicted_direction(
+    value: object, fn_name: str,
+) -> PredictedDirection | None:
+    if value is None:
+        return None
+    if (not isinstance(value, str)
+            or value not in _PREDICTED_DIRECTION_VALUES):
+        raise TypeError(
+            f'@claim_bridge {fn_name!r}: default for '
+            f'`predicted_direction` must be one of '
+            f"{sorted(_PREDICTED_DIRECTION_VALUES)!r} (or None); "
+            f'got {value!r}',
+        )
+    # `value` is now provably a member of the literal set.
+    return cast(PredictedDirection, value)
 
 
 def claim_bridge(fn: Callable[..., Verdict]) -> Bridge:
@@ -200,6 +233,9 @@ def claim_bridge(fn: Callable[..., Verdict]) -> Bridge:
             f'`intervention` must be a DoEffect (or omitted); got '
             f'{type(intervention_default).__name__}',
         )
+    predicted_direction = _require_predicted_direction(
+        structural.get('predicted_direction'), fn.__name__,
+    )
 
     return Bridge(
         name=fn.__name__,
@@ -210,6 +246,7 @@ def claim_bridge(fn: Callable[..., Verdict]) -> Bridge:
         params=MappingProxyType(params),
         holds_when=fn,
         intervention=intervention_default,
+        predicted_direction=predicted_direction,
     )
 
 
@@ -227,6 +264,7 @@ def evaluate(
         'target': bridge.target,
         'direction': bridge.direction,
         'tier': bridge.tier,
+        'predicted_direction': bridge.predicted_direction,
         **dict(bridge.params),
     }
     analysis_results = resolve_for_holds_when(
