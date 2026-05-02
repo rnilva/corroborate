@@ -83,7 +83,6 @@ from corroborate.analyses.paired_g_per_burst import PerBurstResult
 from corroborate.analyses.paired_link_per_burst import (
     PerBurstLinkResult, phase_link_consistency,
 )
-from corroborate.analyses.universe_scope import UniverseScopeResult
 from corroborate.claim_bridge import (
     Direction, Tier, claim_bridge,
 )
@@ -124,19 +123,18 @@ from corroborate.verdict import Verdict
 
 @claim_bridge
 def ddqn_refuted_when_dormancy_fires(
-    universe_scope: UniverseScopeResult,
+    paired_g: PairedGResult,
     *,
-    source: str = 'invariant.jensen_dormancy_gap',
+    source: str = 'outcome.eval_best_burst_mean',
     target: str = 'outcome.eval_best_burst_mean',
     direction: Direction = Direction.INVERSE,
     tier: Tier = Tier.ASSOCIATIONAL,
-    outcome_col: str = 'delta_outcome_best',
-    delta_jensen_col: str = 'delta_jensen_gap',
-    filter_min_pairs: tuple[tuple[str, float], ...] = (
-        ('dormancy_gap_avg', 1e-9),
+    treatment_arm: str = 'ddqn',
+    baseline_arm: str = 'vanilla_dqn',
+    pair_by: tuple[str, ...] = ('seed', 'env_name'),
+    extra_min_pairs: tuple[tuple[str, float], ...] = (
+        ('invariant.jensen_dormancy_gap', 1e-9),
     ),
-    filter_max_pairs: tuple[tuple[str, float], ...] = (),
-    filter_eq_pairs: tuple[tuple[str, str], ...] = (),
 ) -> Verdict:
     """Necessary-condition claim. The framework's-own Jensen
     dormancy invariant `at_most[jensen_dormancy_gap<=0]`
@@ -145,34 +143,27 @@ def ddqn_refuted_when_dormancy_fires(
     fires (gap > 0, premise dormant), DDQN's bias-correction
     mechanism has nothing to operate on.
 
-    HELD when helped_fraction ≤ 0.15 AND |g_outcome| ≤ 0.20 —
-    the refutation prediction is corroborated. INVARIANT_VIOLATION
+    HELD when helped_fraction ≤ 0.15 AND |g| ≤ 0.20 — the
+    refutation prediction is corroborated. INVARIANT_VIOLATION
     when DDQN unexpectedly helps despite dormancy (helped > 0.40).
 
-    Endogeneity audit: `dormancy_gap_avg` is computed as the
-    average of vanilla and DDQN dormancy gaps. Each gap uses the
-    arm's σ_Q (per-cell empirical) and vanilla's observed bias
-    (per-cell empirical). So the predicate has a partial control-
-    trajectory dependence — but the underlying Jensen floor
-    (σ × √(2 log |A|)) is structural-theoretical, not endogenous.
     The Pearl-rung-2 corroboration via `adaptive_dqn_recovers_
     ddqn_benefit__fourrooms_factor_0p5` validates this as
     actionable: a runtime controller using a per-batch dormancy
     proxy (max_Q − mean_Q vs σ_Q × √(2 log |A|)) recovers DDQN's
     outcome benefit on FourRooms (g=+0.78 vs vanilla, p<0.001)."""
     del source, target, direction, tier
-    del outcome_col, delta_jensen_col
-    del filter_min_pairs, filter_max_pairs, filter_eq_pairs
-    if universe_scope.n_in_scope < 50:
+    del treatment_arm, baseline_arm, pair_by, extra_min_pairs
+    if paired_g.n_pairs < 50:
         return Verdict.POWER_INSUFFICIENT
-    if math.isnan(universe_scope.helped_fraction):
+    if math.isnan(paired_g.helped_fraction):
         return Verdict.POWER_INSUFFICIENT
     if (
-        universe_scope.helped_fraction <= 0.15
-        and abs(universe_scope.g_outcome) <= 0.20
+        paired_g.helped_fraction <= 0.15
+        and abs(paired_g.g) <= 0.20
     ):
         return Verdict.HELD
-    if universe_scope.helped_fraction > 0.40:
+    if paired_g.helped_fraction > 0.40:
         return Verdict.INVARIANT_VIOLATION
     return Verdict.NO_EFFECT
 
@@ -244,42 +235,38 @@ def adaptive_dqn_recovers_ddqn_benefit__fourrooms_factor_0p5(
 
 @claim_bridge
 def ddqn_helps_at_early_bursts__pixel_envs(
-    universe_scope: UniverseScopeResult,
+    paired_g: PairedGResult,
     *,
-    source: str = 'arm.ddqn[burst=0]',
-    target: str = 'mc_return[burst=0]',
+    source: str = 'mc_return_first_quarter',
+    target: str = 'mc_return_first_quarter',
     direction: Direction = Direction.DIRECT,
     tier: Tier = Tier.ASSOCIATIONAL,
-    outcome_col: str = 'delta_mc',
-    delta_jensen_col: str = 'delta_bias',
-    filter_min_pairs: tuple[tuple[str, float], ...] = (
+    treatment_arm: str = 'ddqn',
+    baseline_arm: str = 'vanilla_dqn',
+    pair_by: tuple[str, ...] = ('seed', 'env_name'),
+    extra_min_pairs: tuple[tuple[str, float], ...] = (
         ('log_obs_dim', 5.0),
-        ('burst_index', 0.0),
         ('total_steps', 1000000.0),
     ),
-    filter_max_pairs: tuple[tuple[str, float], ...] = (
-        ('burst_index', 0.0),
-    ),
-    filter_eq_pairs: tuple[tuple[str, str], ...] = (),
 ) -> Verdict:
-    """TIER A2 existence proof: at the first eval burst on
-    long-horizon high-obs-dim envs (MinAtar 1M), DDQN's outcome
-    delta is positive in the majority of cells with substantial
-    pooled effect. Per-cell helped=56.7%, g=+0.30, n=120.
+    """TIER A2 existence proof: at the first eval-burst quarter
+    on long-horizon high-obs-dim envs (MinAtar 1M), DDQN's
+    outcome delta is positive in the majority of cells with
+    substantial pooled effect. Per-cell helped=56.7%, g=+0.30,
+    n=120 in the original analysis.
 
     Generalizes within the MinAtar 1M sample, not across all
     high-obs-dim envs (log_obs_dim alone is not predictive —
     see K1 LOO + four-MinAtar comparison)."""
     del source, target, direction, tier
-    del outcome_col, delta_jensen_col
-    del filter_min_pairs, filter_max_pairs, filter_eq_pairs
-    if universe_scope.n_in_scope < 30:
+    del treatment_arm, baseline_arm, pair_by, extra_min_pairs
+    if paired_g.n_pairs < 30:
         return Verdict.POWER_INSUFFICIENT
-    if math.isnan(universe_scope.helped_fraction):
+    if math.isnan(paired_g.helped_fraction):
         return Verdict.POWER_INSUFFICIENT
     if (
-        universe_scope.helped_fraction >= 0.55
-        and universe_scope.g_outcome >= 0.20
+        paired_g.helped_fraction >= 0.55
+        and paired_g.g >= 0.20
     ):
         return Verdict.HELD
     return Verdict.NO_EFFECT
@@ -287,49 +274,48 @@ def ddqn_helps_at_early_bursts__pixel_envs(
 
 @claim_bridge
 def ddqn_attenuates_at_late_bursts__spaceinvaders(
-    universe_scope: UniverseScopeResult,
+    paired_g: PairedGResult,
     *,
-    source: str = 'arm.ddqn[burst≥3]',
-    target: str = 'mc_return[burst≥3]',
+    source: str = 'mc_return_last_quarter',
+    target: str = 'mc_return_last_quarter',
     direction: Direction = Direction.INVERSE,
     tier: Tier = Tier.ASSOCIATIONAL,
-    outcome_col: str = 'delta_mc',
-    delta_jensen_col: str = 'delta_bias',
-    filter_min_pairs: tuple[tuple[str, float], ...] = (
-        ('burst_index', 3.0),
+    treatment_arm: str = 'ddqn',
+    baseline_arm: str = 'vanilla_dqn',
+    pair_by: tuple[str, ...] = ('seed',),
+    env_name: str = 'SpaceInvaders-MinAtar',
+    extra_min_pairs: tuple[tuple[str, float], ...] = (
         ('total_steps', 1000000.0),
-    ),
-    filter_max_pairs: tuple[tuple[str, float], ...] = (),
-    filter_eq_pairs: tuple[tuple[str, str], ...] = (
-        ('env_name', 'SpaceInvaders-MinAtar'),
     ),
 ) -> Verdict:
     """TIER A2 existence proof: on SpaceInvaders-MinAtar at 1M
-    training steps, after burst 3, DDQN's outcome is reliably
-    WORSE than vanilla. Per-cell helped=36.5%, g=−0.42, n=510.
+    training steps, in the last quarter of training bursts,
+    DDQN's outcome is reliably WORSE than vanilla. Per-cell
+    helped=36.5%, g=−0.42, n=510 in the original analysis.
 
     Env-specific: other long-horizon high-obs-dim envs (Asterix,
-    Breakout, Freeway at 1M) do NOT show the same late attenuation
-    (K1 audit). SpaceInvaders is the canonical example, not an
-    instance of a structural law. The dormancy invariant captures
-    this regime more cleanly via CLAIM 2 (necessary scope) — when
-    Q-network explodes at 1M, observed_bias rises faster than σ_Q
-    × √(2 log |A|), so dormancy doesn't fire on this proxy and
-    DDQN keeps engaging counterproductively. Pearl-rung-2
-    corroboration of the dormancy-blind-spot reading: bridge
+    Breakout, Freeway at 1M) do NOT show the same late
+    attenuation (K1 audit). SpaceInvaders is the canonical
+    example, not an instance of a structural law. The dormancy
+    invariant captures this regime more cleanly via CLAIM 2
+    (necessary scope) — when Q-network explodes at 1M,
+    observed_bias rises faster than σ_Q × √(2 log |A|), so
+    dormancy doesn't fire on this proxy and DDQN keeps engaging
+    counterproductively. Pearl-rung-2 corroboration of the
+    dormancy-blind-spot reading: bridge
     `adaptive_dqn_fails_to_avoid_attenuation__spaceinvaders_1m`
     runs the dormancy controller on this regime; it tracks DDQN
     (g≈0) and inherits the attenuation (g=−0.46 vs vanilla)."""
     del source, target, direction, tier
-    del outcome_col, delta_jensen_col
-    del filter_min_pairs, filter_max_pairs, filter_eq_pairs
-    if universe_scope.n_in_scope < 50:
+    del treatment_arm, baseline_arm, pair_by, env_name
+    del extra_min_pairs
+    if paired_g.n_pairs < 50:
         return Verdict.POWER_INSUFFICIENT
-    if math.isnan(universe_scope.helped_fraction):
+    if math.isnan(paired_g.helped_fraction):
         return Verdict.POWER_INSUFFICIENT
     if (
-        universe_scope.helped_fraction <= 0.40
-        and universe_scope.g_outcome <= -0.30
+        paired_g.helped_fraction <= 0.40
+        and paired_g.g <= -0.30
     ):
         return Verdict.HELD
     return Verdict.NO_EFFECT
@@ -422,21 +408,21 @@ def adaptive_dqn_fails_to_avoid_attenuation__spaceinvaders_1m(
 
 @claim_bridge
 def ddqn_benefit_scales_with_effective_horizon__fourrooms(
-    universe_scope: UniverseScopeResult,
+    paired_g: PairedGResult,
     *,
-    source: str = 'effective_horizon',
+    source: str = 'outcome.eval_best_burst_mean',
     target: str = 'outcome.eval_best_burst_mean',
     direction: Direction = Direction.DIRECT,
     tier: Tier = Tier.INTERVENTIONAL,
-    outcome_col: str = 'delta_outcome_best',
-    delta_jensen_col: str = 'delta_jensen_gap',
-    filter_min_pairs: tuple[tuple[str, float], ...] = (
-        ('effective_horizon', 50.0),
+    treatment_arm: str = 'ddqn',
+    baseline_arm: str = 'vanilla_dqn',
+    pair_by: tuple[str, ...] = ('seed',),
+    env_name: str = 'FourRooms-misc',
+    extra_filters: Mapping[str, object] = MappingProxyType(
+        {'corpus': 'gamma_sweep'},
     ),
-    filter_max_pairs: tuple[tuple[str, float], ...] = (),
-    filter_eq_pairs: tuple[tuple[str, str], ...] = (
-        ('env_name', 'FourRooms-misc'),
-        ('corpus', 'gamma_sweep'),
+    extra_min_pairs: tuple[tuple[str, float], ...] = (
+        ('effective_horizon', 50.0),
     ),
 ) -> Verdict:
     """Pearl-rung-2 designed-γ-intervention bridge. Filters
@@ -482,18 +468,18 @@ def ddqn_benefit_scales_with_effective_horizon__fourrooms(
     partial ρ | mc_progress = −0.440 — mechanism→link causal
     edge is robust to saturation control across most envs.
 
-    HELD when helped_fraction ≥ 0.55 AND g_outcome ≥ 0.30 on the
+    HELD when helped_fraction ≥ 0.55 AND g ≥ 0.30 on the
     high-eff_h subset. NO_EFFECT or INVARIANT_VIOLATION otherwise."""
     del source, target, direction, tier
-    del outcome_col, delta_jensen_col
-    del filter_min_pairs, filter_max_pairs, filter_eq_pairs
-    if universe_scope.n_in_scope < 20:
+    del treatment_arm, baseline_arm, pair_by, env_name
+    del extra_filters, extra_min_pairs
+    if paired_g.n_pairs < 20:
         return Verdict.POWER_INSUFFICIENT
-    if math.isnan(universe_scope.helped_fraction):
+    if math.isnan(paired_g.helped_fraction):
         return Verdict.POWER_INSUFFICIENT
     if (
-        universe_scope.helped_fraction >= 0.55
-        and universe_scope.g_outcome >= 0.30
+        paired_g.helped_fraction >= 0.55
+        and paired_g.g >= 0.30
     ):
         return Verdict.HELD
     return Verdict.NO_EFFECT
@@ -501,21 +487,21 @@ def ddqn_benefit_scales_with_effective_horizon__fourrooms(
 
 @claim_bridge
 def ddqn_benefit_scales_with_effective_horizon__metamaze_high_gamma(
-    universe_scope: UniverseScopeResult,
+    paired_g: PairedGResult,
     *,
-    source: str = 'effective_horizon',
+    source: str = 'outcome.eval_best_burst_mean',
     target: str = 'outcome.eval_best_burst_mean',
     direction: Direction = Direction.DIRECT,
     tier: Tier = Tier.INTERVENTIONAL,
-    outcome_col: str = 'delta_outcome_best',
-    delta_jensen_col: str = 'delta_jensen_gap',
-    filter_min_pairs: tuple[tuple[str, float], ...] = (
-        ('effective_horizon', 18.0),
+    treatment_arm: str = 'ddqn',
+    baseline_arm: str = 'vanilla_dqn',
+    pair_by: tuple[str, ...] = ('seed',),
+    env_name: str = 'MetaMaze-misc',
+    extra_filters: Mapping[str, object] = MappingProxyType(
+        {'corpus': 'gamma_sweep_metamaze_high'},
     ),
-    filter_max_pairs: tuple[tuple[str, float], ...] = (),
-    filter_eq_pairs: tuple[tuple[str, str], ...] = (
-        ('env_name', 'MetaMaze-misc'),
-        ('corpus', 'gamma_sweep_metamaze_high'),
+    extra_min_pairs: tuple[tuple[str, float], ...] = (
+        ('effective_horizon', 18.0),
     ),
 ) -> Verdict:
     """Portability probe — chain-depth-amplifier activates on
@@ -532,17 +518,17 @@ def ddqn_benefit_scales_with_effective_horizon__metamaze_high_gamma(
     (g_link=0 at eff_h<10), this brackets the operating range
     of the chain-depth-amplifier: ~10-20 effective steps minimum.
 
-    HELD when helped_fraction ≥ 0.45 AND g_outcome ≥ 0.20."""
+    HELD when helped_fraction ≥ 0.45 AND g ≥ 0.20."""
     del source, target, direction, tier
-    del outcome_col, delta_jensen_col
-    del filter_min_pairs, filter_max_pairs, filter_eq_pairs
-    if universe_scope.n_in_scope < 20:
+    del treatment_arm, baseline_arm, pair_by, env_name
+    del extra_filters, extra_min_pairs
+    if paired_g.n_pairs < 20:
         return Verdict.POWER_INSUFFICIENT
-    if math.isnan(universe_scope.helped_fraction):
+    if math.isnan(paired_g.helped_fraction):
         return Verdict.POWER_INSUFFICIENT
     if (
-        universe_scope.helped_fraction >= 0.45
-        and universe_scope.g_outcome >= 0.20
+        paired_g.helped_fraction >= 0.45
+        and paired_g.g >= 0.20
     ):
         return Verdict.HELD
     return Verdict.NO_EFFECT
@@ -550,21 +536,21 @@ def ddqn_benefit_scales_with_effective_horizon__metamaze_high_gamma(
 
 @claim_bridge
 def ddqn_benefit_scales_with_gamma__discountingchain(
-    universe_scope: UniverseScopeResult,
+    paired_g: PairedGResult,
     *,
-    source: str = 'gamma',
+    source: str = 'outcome.eval_best_burst_mean',
     target: str = 'outcome.eval_best_burst_mean',
     direction: Direction = Direction.DIRECT,
     tier: Tier = Tier.INTERVENTIONAL,
-    outcome_col: str = 'delta_outcome_best',
-    delta_jensen_col: str = 'delta_jensen_gap',
-    filter_min_pairs: tuple[tuple[str, float], ...] = (
-        ('gamma', 0.985),
+    treatment_arm: str = 'ddqn',
+    baseline_arm: str = 'vanilla_dqn',
+    pair_by: tuple[str, ...] = ('seed',),
+    env_name: str = 'DiscountingChain-bsuite',
+    extra_filters: Mapping[str, object] = MappingProxyType(
+        {'corpus': 'gamma_sweep_more'},
     ),
-    filter_max_pairs: tuple[tuple[str, float], ...] = (),
-    filter_eq_pairs: tuple[tuple[str, str], ...] = (
-        ('env_name', 'DiscountingChain-bsuite'),
-        ('corpus', 'gamma_sweep_more'),
+    extra_min_pairs: tuple[tuple[str, float], ...] = (
+        ('gamma', 0.985),
     ),
 ) -> Verdict:
     """Pearl-rung-2 do(γ) bridge on DiscountingChain. Filters
@@ -586,21 +572,21 @@ def ddqn_benefit_scales_with_gamma__discountingchain(
     different (mechanism stays strong, link weakens) — the
     chain-depth-as-amplifier reading.
 
-    HELD when g_outcome ≥ 0.30 AND helped_fraction ≥ 0.20 on the
+    HELD when g ≥ 0.30 AND helped_fraction ≥ 0.20 on the
     high-γ subset. helped threshold is lower than other bridges
     because DC is sparse-reward bimodal: many seeds score 0
     (never find goal), so helped_fraction undershoots even when
     the mean effect is significant."""
     del source, target, direction, tier
-    del outcome_col, delta_jensen_col
-    del filter_min_pairs, filter_max_pairs, filter_eq_pairs
-    if universe_scope.n_in_scope < 20:
+    del treatment_arm, baseline_arm, pair_by, env_name
+    del extra_filters, extra_min_pairs
+    if paired_g.n_pairs < 20:
         return Verdict.POWER_INSUFFICIENT
-    if math.isnan(universe_scope.helped_fraction):
+    if math.isnan(paired_g.helped_fraction):
         return Verdict.POWER_INSUFFICIENT
     if (
-        universe_scope.helped_fraction >= 0.20
-        and universe_scope.g_outcome >= 0.30
+        paired_g.helped_fraction >= 0.20
+        and paired_g.g >= 0.30
     ):
         return Verdict.HELD
     return Verdict.NO_EFFECT

@@ -530,6 +530,57 @@ def outcome_native(record: Mapping[str, object]) -> float:
 
 
 @measurable(reads=('mc_return',))
+def mc_return_first_quarter(
+    record: Mapping[str, object],
+) -> float:
+    """Mean of `mc_return` over the first quarter of training
+    bursts. Per-cell scalar.
+
+    `mc_return` is shape `(n_bursts, K)` (eval-burst index × K
+    eval episodes per burst). Reduces to a single scalar
+    representing performance early in training. Bridges that
+    test "DDQN's outcome benefit at the start of training" pair
+    cells on this scalar; the difference (treatment − baseline)
+    captures the early-burst arm gap without the best-burst
+    selection bias of `outcome.eval_best_burst_mean`."""
+    arr = np.asarray(record['mc_return'], dtype=np.float64)
+    if arr.ndim != 2 or arr.size == 0:
+        return float('nan')
+    n_bursts = arr.shape[0]
+    q = max(1, n_bursts // 4)
+    return float(arr[:q].mean())
+
+
+@measurable(reads=('mc_return',))
+def mc_return_last_quarter(
+    record: Mapping[str, object],
+) -> float:
+    """Mean of `mc_return` over the last quarter of training
+    bursts. Sibling of `mc_return_first_quarter`; the late-
+    training scalar."""
+    arr = np.asarray(record['mc_return'], dtype=np.float64)
+    if arr.ndim != 2 or arr.size == 0:
+        return float('nan')
+    n_bursts = arr.shape[0]
+    q = max(1, n_bursts // 4)
+    return float(arr[-q:].mean())
+
+
+@measurable(reads=('gamma',))
+def effective_horizon(record: Mapping[str, object]) -> float:
+    """Geometric-series sum `1 / (1 - gamma)` — the effective
+    horizon over which discounted returns accumulate. NaN when
+    gamma is missing, non-numeric, or ≥ 1.0 (degenerate)."""
+    gamma = record.get('gamma')
+    if not isinstance(gamma, (int, float)):
+        return float('nan')
+    g = float(gamma)
+    if math.isnan(g) or g >= 1.0 or g < 0.0:
+        return float('nan')
+    return 1.0 / (1.0 - g)
+
+
+@measurable(reads=('mc_return',))
 def mc_variance_per_burst(
     record: Mapping[str, object],
 ) -> npt.NDArray[np.float64]:

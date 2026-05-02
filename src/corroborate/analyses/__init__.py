@@ -15,7 +15,6 @@ from corroborate.analyses import (  # noqa: F401
     paired_g_per_burst as _per_burst,  # pyright: ignore[reportUnusedImport]
     paired_g_pooled as _pooled,  # pyright: ignore[reportUnusedImport]
     paired_link_per_burst as _link_per_burst,  # pyright: ignore[reportUnusedImport]
-    universe_scope as _universe,  # pyright: ignore[reportUnusedImport]
     tautology_audit as _audit,  # pyright: ignore[reportUnusedImport]
     verdict_distribution as _verdict_dist,  # pyright: ignore[reportUnusedImport]
 )
