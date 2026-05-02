@@ -16,10 +16,13 @@ from collections.abc import Mapping
 
 import pytest
 
-from corroborate.bridge import BridgeResult
-from corroborate.causal_graph import Direction, Tier as GraphTier
-from corroborate.causal_graph import build_causal_graph, promote_bridged_evidence
-from corroborate.causal_graph import Tier
+from corroborate.causal_graph import (
+    CausalGraph,
+    Direction,
+    Tier,
+    Tier as GraphTier,
+    promote_bridged_evidence,
+)
 from corroborate.claim import claim
 from corroborate.claim_bridge import Bridge as ClaimBridge
 from corroborate.hypothesis import Hypothesis, PredictedDirection
@@ -149,15 +152,15 @@ def test_three_edge_subgraph_produces_per_edge_bridge_results() -> None:
         pair_by=('seed',), group_by='env_name',
     )
     assert isinstance(v, HypothesisVerdict)
-    assert len(v.bridge_results) == 3
+    assert len(v.edge_verdicts) == 3
     # Two intervention edges drive comparison rows; coupling does not.
     assert len(v.comparison_rows) == 2
 
-    # Each edge has a BridgeResult keyed by (source, target).
+    # Each edge has a verdict keyed by (source, target).
     do_node = _TEST_DO.node_key()
-    assert (do_node, 'mechanism.q') in v.bridge_results
-    assert (do_node, 'outcome.r') in v.bridge_results
-    assert ('mechanism.q', 'outcome.r') in v.bridge_results
+    assert (do_node, 'mechanism.q') in v.edge_verdicts
+    assert (do_node, 'outcome.r') in v.edge_verdicts
+    assert ('mechanism.q', 'outcome.r') in v.edge_verdicts
 
     # Comparison rows are keyed by target; only intervention edges.
     assert 'mechanism.q' in v.comparison_rows
@@ -423,19 +426,25 @@ def test_promote_bridged_runs_when_two_interventional_admits() -> None:
     `causal_bridged`. The Hypothesis surface doesn't naturally
     produce duplicates, but the post-pass should hand off
     correctly when given them. Sanity-only test of the wiring."""
-    r1 = BridgeResult(
-        verdict=Verdict.HELD,
-        reason='',
-        stats={'tier': 'interventional', 'ate': 1.0},
-        name='estimate', targets=('a', 'b'),
+    from corroborate.causal_graph import BridgeEdge, Direction
+    from corroborate.graph import Graph
+    e1 = BridgeEdge(
+        bridge_name='estimate',
+        direction=Direction.DIRECT,
+        tier=Tier.INTERVENTIONAL,
+        evidentiary_level='causal_one_sided',
+        ate=1.0,
     )
-    r2 = BridgeResult(
-        verdict=Verdict.HELD,
-        reason='',
-        stats={'tier': 'interventional', 'ate': 1.0},
-        name='placebo_refuter', targets=('a', 'b'),
+    e2 = BridgeEdge(
+        bridge_name='placebo_refuter',
+        direction=Direction.DIRECT,
+        tier=Tier.INTERVENTIONAL,
+        evidentiary_level='causal_one_sided',
+        ate=1.0,
     )
-    g = build_causal_graph([r1, r2])
+    g: 'CausalGraph' = Graph()
+    g = g.with_edge('a', 'b', e1)
+    g = g.with_edge('a', 'b', e2)
     g = promote_bridged_evidence(g)
     edges = [
         e.metadata for e in g.edges

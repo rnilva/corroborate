@@ -15,24 +15,19 @@ Nodes are measurable / record-key names (strings). Edges are
 - `evidentiary_level: str` — the verdict-derived label
   ('refuted' / 'correlational' / 'causal_one_sided' /
   'causal_bridged'). Lifecycle the bridge is in.
+- `ate` / `rho` / `pvalue` / `n_observations` — typed evidence
+  fields. Intervention edges populate `ate` + `n_observations`;
+  coupling edges populate `rho` + `pvalue` + `n_observations`.
 
 `compose_direction` and `chain_tier` walk an edge sequence to
 produce path-level direction + tier — chain composition for
 admissibility / promotion checks.
 
-`build_causal_graph(bridge_results)` consumes a list of corroborate
-`BridgeResult`s and produces a `CausalGraph`. Convention on
-targets-arity (mirrors v10):
-
-- `len(targets) == 1` → node-only annotation (no outgoing edge).
-- `len(targets) == 2` → binary edge `(source → target)`.
-- `len(targets) >= 3` → JOINT bridge. Last target is the joint
-  target; preceding targets are sources. Emits one `BridgeEdge`
-  per `(source_i → target)` with `co_sources` = the OTHER sources
-  of the same joint bridge. Graph stays binary; multi-source
-  nature is preserved on each edge's metadata, and the joint
-  bridge can be reconstructed by grouping edges with the same
-  `bridge_name`.
+`hypothesis_subgraph_verdict` (in `hypothesis_verdict.py`) is the
+sole producer of `BridgeEdge`s: it constructs them inline as it
+walks a Hypothesis's typed claimed edges, then passes the
+resulting graph through `promote_bridged_evidence` for the
+`causal_one_sided` → `causal_bridged` post-pass.
 
 `promote_bridged_evidence(g)` is the post-pass: for any (source,
 target) pair with ≥2 `causal_one_sided` edges (≥2 INTERVENTIONAL
@@ -42,12 +37,11 @@ by an INDEPENDENT bridge — typically an estimate plus a refuter —
 not just an estimate matched by a correlational coupling."""
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable
 from dataclasses import dataclass, replace
 from enum import Enum, IntEnum
 from typing import TYPE_CHECKING, Literal
 
-from corroborate.bridge import BridgeResult
 from corroborate.graph import Edge, Graph
 from corroborate.verdict import Verdict
 
@@ -127,32 +121,41 @@ EvidentiaryLevel = Literal[
 class BridgeEdge:
     """Metadata stored on each edge of a `CausalGraph`.
 
-    `bridge_name` — the source bridge / invariant name (matches
-    `BridgeResult.name`).
-    `direction` — DIRECT or INVERSE, inferred from `stats`'s `ate`
-    sign (priority) or `rho` sign (fallback) at construction.
+    `bridge_name` — the claim_bridge.Bridge.name that produced
+    this edge.
+    `direction` — DIRECT or INVERSE, inferred from `ate` sign
+    (priority) or `rho` sign (fallback) at construction.
     `tier` — ASSOCIATIONAL by default; INTERVENTIONAL when the
-    bridge result carries `stats['tier'] == 'interventional'` AND
-    the verdict is HELD.
-    `evidentiary_level` — 'refuted' for non-HELD; 'causal_one_sided'
-    for INTERVENTIONAL admit; 'correlational' for ASSOCIATIONAL
-    admit; 'causal_bridged' is set only by
+    edge represents an intervention contrast AND the verdict is
+    HELD.
+    `evidentiary_level` — 'refuted' for non-HELD;
+    'causal_one_sided' for INTERVENTIONAL admit; 'correlational'
+    for ASSOCIATIONAL admit; 'causal_bridged' is set only by
     `promote_bridged_evidence` post-pass.
 
-    `co_sources` — for joint bridges (len(targets) ≥ 3 emit one
-    edge per source), this lists the OTHER sources of the same
-    bridge so the joint claim is reconstructable by grouping
-    edges with the same `bridge_name`.
+    `ate` — effect-size-g for intervention edges (paired Hedges'
+    g across cells in the comparison row). None for coupling
+    edges.
+    `rho` — Pearson r for coupling edges (cross-stratum on
+    per-stratum effect sizes). None for intervention edges.
+    `pvalue` — significance test p-value where defined (coupling
+    edges' Pearson p, etc.). None where not applicable.
+    `n_observations` — sample size used for the verdict's
+    statistical test (n_pairs for intervention, n_groups for
+    coupling). None where not applicable.
 
-    `feedback` — set when `stats['feedback'] == True`; signals
-    intentional cycle participation. Graph walks use this to
-    break cycle traversal."""
+    `feedback` — set on edges that intentionally participate in
+    cycles. Graph walks use this to break cycle traversal.
+    `condition_desc` — optional condition annotation (e.g.
+    'when reward_scale > 0')."""
     bridge_name: str
     direction: Direction
     tier: Tier
     evidentiary_level: EvidentiaryLevel
+    ate: float | None = None
     rho: float | None = None
-    co_sources: tuple[str, ...] = ()
+    pvalue: float | None = None
+    n_observations: int | None = None
     feedback: bool = False
     condition_desc: str | None = None
 
@@ -161,10 +164,10 @@ class BridgeEdge:
             self.bridge_name,
             f'{self.direction.value}/{self.tier.name.lower()}/{self.evidentiary_level}',
         ]
+        if self.ate is not None:
+            bits.append(f'ate={self.ate:+.3f}')
         if self.rho is not None:
             bits.append(f'ρ={self.rho:+.2f}')
-        if self.co_sources:
-            bits.append(f'joint:co_sources={list(self.co_sources)}')
         if self.feedback:
             bits.append('feedback')
         return ' '.join(bits)
@@ -196,107 +199,6 @@ def chain_tier(edges: Iterable[BridgeEdge]) -> Tier:
         if e.tier < result:
             result = e.tier
     return result if any_edge else Tier.ASSOCIATIONAL
-
-
-# ============ build_causal_graph ============
-
-def _direction_from_stats(
-    stats: 'Mapping[str, float | int | bool | str]',
-) -> tuple[Direction, float | None]:
-    """Infer direction from stats. Priority: ate sign >
-    rho sign > DIRECT default. Returns (direction, rho_or_None)."""
-    rho_raw = stats.get('rho')
-    ate_raw = stats.get('ate')
-    rho: float | None = (
-        float(rho_raw) if isinstance(rho_raw, (int, float))
-        and not isinstance(rho_raw, bool) else None
-    )
-    ate: float | None = (
-        float(ate_raw) if isinstance(ate_raw, (int, float))
-        and not isinstance(ate_raw, bool) else None
-    )
-
-    if ate is not None and ate != 0:
-        direction = Direction.INVERSE if ate < 0 else Direction.DIRECT
-    elif rho is not None and rho < 0:
-        direction = Direction.INVERSE
-    else:
-        direction = Direction.DIRECT
-    return direction, rho
-
-
-def build_causal_graph(
-    bridge_results: Iterable[BridgeResult],
-) -> CausalGraph:
-    """Construct a `CausalGraph` from a list of `BridgeResult`s.
-
-    Verdict mapping (corroborate's typology):
-    - `Verdict.HELD` + `stats['tier'] == 'interventional'` →
-      tier=INTERVENTIONAL, evidentiary_level='causal_one_sided'.
-    - `Verdict.HELD` (no interventional tier marker) →
-      tier=ASSOCIATIONAL, evidentiary_level='correlational'.
-    - Any other verdict (`NO_EFFECT`, `POWER_INSUFFICIENT`,
-      `INVARIANT_VIOLATION`) → tier=ASSOCIATIONAL,
-      evidentiary_level='refuted'.
-
-    `'causal_bridged'` is NOT derivable from a single BridgeResult;
-    see `promote_bridged_evidence` for the graph-level post-pass."""
-    g: CausalGraph = Graph()
-    for r in bridge_results:
-        # Single-target → node-only annotation.
-        if len(r.targets) == 1:
-            g = g.with_node(r.targets[0])
-            continue
-        if len(r.targets) < 2:
-            continue
-
-        direction, rho = _direction_from_stats(r.stats)
-        tier_marker = r.stats.get('tier')
-        is_held = r.verdict is Verdict.HELD
-        promoted = is_held and tier_marker == 'interventional'
-        tier = Tier.INTERVENTIONAL if promoted else Tier.ASSOCIATIONAL
-
-        level: EvidentiaryLevel
-        if not is_held:
-            level = 'refuted'
-        elif promoted:
-            level = 'causal_one_sided'
-        else:
-            level = 'correlational'
-
-        feedback_v = r.stats.get('feedback', False)
-        feedback_flag = bool(feedback_v) if isinstance(
-            feedback_v, (bool, int)
-        ) else False
-
-        if len(r.targets) == 2:
-            a, b = r.targets[0], r.targets[1]
-            edge = BridgeEdge(
-                bridge_name=r.name,
-                direction=direction,
-                tier=tier,
-                evidentiary_level=level,
-                rho=rho,
-                feedback=feedback_flag,
-            )
-            g = g.with_edge(a, b, edge)
-        else:
-            # Joint bridge: last is target, others are sources.
-            sources = r.targets[:-1]
-            target = r.targets[-1]
-            for source in sources:
-                co_sources = tuple(s for s in sources if s != source)
-                edge = BridgeEdge(
-                    bridge_name=r.name,
-                    direction=direction,
-                    tier=tier,
-                    evidentiary_level=level,
-                    rho=rho,
-                    co_sources=co_sources,
-                    feedback=feedback_flag,
-                )
-                g = g.with_edge(source, target, edge)
-    return g
 
 
 # ============ Pre-evaluation authored graph ============

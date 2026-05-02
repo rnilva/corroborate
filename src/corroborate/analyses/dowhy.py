@@ -30,11 +30,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from corroborate.analysis import analysis
-# Private helpers from bridges_dowhy are reused here while the
-# legacy bridges module still exists; cross-module private use
-# is intentional during the migration. Once bridges_dowhy retires
-# these helpers move to a shared `_dowhy_internal` location.
-from corroborate.bridges_dowhy import (  # noqa
+from corroborate.analyses._dowhy_internal import (
     DAGLike,
     _build_causal_model,  # pyright: ignore[reportPrivateUsage]
     _record_keys_for,  # pyright: ignore[reportPrivateUsage]

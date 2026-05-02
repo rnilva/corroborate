@@ -25,8 +25,8 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 
-from corroborate.bridges_dowhy import (
-    backdoor_ate, placebo_refutation,
+from corroborate.analyses.dowhy import (
+    backdoor_ate as backdoor_ate_analysis,
 )
 
 
@@ -83,18 +83,20 @@ def _backdoor_dag() -> list[tuple[str, str]]:
     ]
 
 
-def _record_from_df(sub: pl.DataFrame) -> dict[str, list[float]]:
-    """Project the long-format DataFrame to a record that
-    `backdoor_ate.fn` consumes (column → list)."""
-    return {
-        'arm': sub['arm'].to_list(),
-        'mc_return': sub['mc_return'].to_list(),
-        **{c: sub[c].cast(pl.Float64).to_list() for c in _CONFOUNDERS},
-    }
-
-
-# bridge.fn takes a Mapping[str, object] directly — we pass the
-# record dict (column → list) without wrapping in RunRow.
+def _cells_from_df(sub: pl.DataFrame) -> list[dict[str, float]]:
+    """Project the long-format DataFrame to a list of cell dicts
+    that the `analyses/dowhy.py:backdoor_ate` `@analysis` consumes
+    (one dict per row, with treatment / outcome / confounders)."""
+    cols = ['arm', 'mc_return', *_CONFOUNDERS]
+    sub_typed = sub.with_columns(
+        [pl.col(c).cast(pl.Float64) for c in _CONFOUNDERS]
+        + [pl.col('arm').cast(pl.Float64),
+           pl.col('mc_return').cast(pl.Float64)],
+    )
+    return [
+        {c: float(row[c]) for c in cols}
+        for row in sub_typed.iter_rows(named=True)
+    ]
 
 
 def main() -> None:
@@ -110,10 +112,7 @@ def main() -> None:
     print(f'envs: {n_envs}, arms: {n_arms}')
     print()
 
-    bridge = backdoor_ate(
-        treatment='arm', outcome='mc_return',
-        graph=_backdoor_dag(), expected_sign=1, threshold=0.0,
-    )
+    dag = _backdoor_dag()
 
     def run_block(label: str, subset: pl.DataFrame) -> None:
         print()
@@ -126,14 +125,21 @@ def main() -> None:
             sub = subset.filter(pl.col('decile') == d)
             if len(sub) < 50:
                 continue
-            rec = _record_from_df(sub)
+            cells = _cells_from_df(sub)
             try:
-                res = bridge.fn(rec)  # type: ignore[arg-type]
-                ate = res.stats.get('ate', float('nan'))
-                if not isinstance(ate, (int, float)):
-                    ate = float('nan')
-                print(f'{d:<7} {len(sub):>6} {float(ate):>+10.4f} '
-                      f'{res.verdict.value:<22}')
+                res = backdoor_ate_analysis.fn(
+                    cells=cells,
+                    treatment='arm', outcome='mc_return',
+                    dag=dag,
+                )
+                # expected_sign=+1, threshold=0.0 — substrate-side
+                # verdict mapping (was on the gone Bridge[R] factory).
+                ate_held = (
+                    res.identified and res.ate > 0.0
+                )
+                verdict_str = 'held' if ate_held else 'no_effect'
+                print(f'{d:<7} {len(sub):>6} {res.ate:>+10.4f} '
+                      f'{verdict_str:<22}')
             except (ValueError, KeyError, TypeError) as e:
                 print(f'{d:<7} {len(sub):>6} ERROR: {e!s:<40.40s}')
 

@@ -54,8 +54,10 @@ import numpy as np
 import polars as pl
 import scipy.stats as ss
 
-from corroborate.bridges_dowhy import (
-    backdoor_ate, placebo_refutation, random_common_cause_refutation,
+from corroborate.analyses.dowhy import (
+    backdoor_ate as backdoor_ate_analysis,
+    placebo_refutation as placebo_refutation_analysis,
+    random_common_cause_refutation as random_common_cause_refutation_analysis,
 )
 from corroborate.causal_discovery import discover_adjacency
 from corroborate.meta_regression import (
@@ -489,52 +491,59 @@ def _print_dowhy_backdoor(
         keys = ('bootstrap_fraction', 'g_mech', 'g_link')
         if not all(k in rows[0] for k in keys):
             continue
-        record: Mapping[str, np.ndarray] = {
-            k: np.asarray([r[k] for r in rows], dtype=np.float64)
-            for k in rows[0]
-            if all(k in r for r in rows)
-        }
         dag = [('g_mech', 'bootstrap_fraction'),
                ('g_mech', 'g_link'),
                ('bootstrap_fraction', 'g_link')]
-        triple = (
-            ('backdoor_ate', backdoor_ate(
-                'bootstrap_fraction', 'g_link', graph=dag,
-                expected_sign=+1, threshold=0.05,
-            )),
-            ('placebo', placebo_refutation(
-                'bootstrap_fraction', 'g_link', graph=dag, tolerance=0.1,
-            )),
-            ('random_common_cause', random_common_cause_refutation(
-                'bootstrap_fraction', 'g_link', graph=dag, tolerance=0.1,
-            )),
+        # `analyses/dowhy.py` `@analysis` versions consume cells
+        # directly (each cell a Mapping[str, object]); rows fits the
+        # shape verbatim. The framework no longer wraps these in
+        # per-record Bridges (Phase 4F deleted the per-record Bridge[R]
+        # channel); call the analysis bodies directly and decide the
+        # verdict here.
+        cells: list[Mapping[str, object]] = list(rows)
+        backdoor_r = backdoor_ate_analysis.fn(
+            cells=cells,
+            treatment='bootstrap_fraction',
+            outcome='g_link',
+            dag=dag,
+        )
+        placebo_r = placebo_refutation_analysis.fn(
+            cells=cells,
+            treatment='bootstrap_fraction',
+            outcome='g_link',
+            dag=dag,
+        )
+        rcc_r = random_common_cause_refutation_analysis.fn(
+            cells=cells,
+            treatment='bootstrap_fraction',
+            outcome='g_link',
+            dag=dag,
         )
         print()
         print(f'pair: {pair.name}  (n={len(rows)})')
-        for label, bridge in triple:
-            r = bridge(record)  # type: ignore[arg-type]
-            keystat = ''
-            if 'ate' in r.stats:
-                ate = r.stats['ate']
-                keystat = (f'ATE={float(ate):+.4f}'
-                           if isinstance(ate, (int, float)) else 'ATE=?')
-            elif 'placebo_ate' in r.stats:
-                p = r.stats['placebo_ate']
-                real = r.stats.get('real_ate', float('nan'))
-                keystat = (
-                    f'placebo={float(p):+.4f} real={float(real):+.4f}'
-                    if isinstance(p, (int, float))
-                    and isinstance(real, (int, float)) else 'placebo=?'
-                )
-            elif 'drift' in r.stats:
-                d = r.stats['drift']
-                real = r.stats.get('real_ate', float('nan'))
-                keystat = (
-                    f'drift={float(d):.4f} real={float(real):+.4f}'
-                    if isinstance(d, (int, float))
-                    and isinstance(real, (int, float)) else 'drift=?'
-                )
-            print(f'  {label:<22} verdict={r.verdict.value:<22} {keystat}')
+        ate_held = (
+            backdoor_r.identified
+            and abs(backdoor_r.ate) >= 0.05
+            and backdoor_r.ate > 0  # expected_sign=+1
+        )
+        print(
+            f'  backdoor_ate           '
+            f'verdict={"held" if ate_held else "no_effect":<22} '
+            f'ATE={backdoor_r.ate:+.4f}',
+        )
+        placebo_held = placebo_r.drift <= 0.1
+        print(
+            f'  placebo                '
+            f'verdict={"held" if placebo_held else "no_effect":<22} '
+            f'placebo={placebo_r.refuted_ate:+.4f} '
+            f'real={placebo_r.real_ate:+.4f}',
+        )
+        rcc_held = rcc_r.drift <= 0.1
+        print(
+            f'  random_common_cause    '
+            f'verdict={"held" if rcc_held else "no_effect":<22} '
+            f'drift={rcc_r.drift:.4f} real={rcc_r.real_ate:+.4f}',
+        )
 
 
 # ============ CLI ============

@@ -4,32 +4,35 @@ edges into a `HypothesisVerdict[R]`.
 A `HypothesisVerdict` carries:
 
 - `hypothesis: Hypothesis[R]` — the original subgraph claim.
-- `graph: CausalGraph` — the typed graph (BridgeEdges keyed by
-  Pearl tier × direction × evidentiary level), eagerly built from
-  the per-edge BridgeResults via `build_causal_graph` +
-  `promote_bridged_evidence`.
-- `bridge_results: Mapping[(source, target), BridgeResult]` —
-  the per-edge BridgeResult keyed by (source, target). Single
-  source of truth for the per-edge verdict.
+- `graph: CausalGraph` — the typed graph: one `BridgeEdge` per
+  claimed edge, keyed by `(source, target)` with Pearl tier ×
+  direction × evidentiary level + per-edge stats (ate / rho /
+  pvalue / n_observations).
+- `edge_verdicts: Mapping[(source, target), Verdict]` — raw
+  4-bucket verdicts (HELD / NO_EFFECT / POWER_INSUFFICIENT /
+  INVARIANT_VIOLATION) preserving full resolution that the
+  graph's evidentiary_level field collapses ('refuted' /
+  'correlational' / 'causal_one_sided' / 'causal_bridged').
 - `comparison_rows: Mapping[str, HypothesisComparisonRow]` —
-  rich per-edge detail (per_group, pooled, facts, reads_set) for
-  the *intervention* edges (`bridge.intervention is not None`),
-  keyed by target path. Coupling edges are pure cross-stratum
-  Pearson; their richer detail collapses cleanly into the
-  BridgeResult and they don't contribute here.
+  rich per-edge detail (per_group, pooled) for *intervention*
+  edges, keyed by target path. Coupling edges' rho/pvalue/n live
+  on the BridgeEdge directly.
 
 Verdict logic per edge category:
 
 - Intervention edges (`bridge.intervention is not None`) —
   paired comparison via `hypothesis_comparison_from_cells`,
   stratified by `group_by`, reading the edge's `target` as the
-  outcome path. Verdict comes from the random-effects PI test
-  (HELD / HELD_WITH_SCOPE_FLAG / NO_EFFECT / POWER_INSUFFICIENT).
-- Coupling edges (`bridge.intervention is None`) — corpus-level
-  Pearson r over the per-group effect sizes of the edge's
-  `source` and `target` comparisons. Requires that an
+  outcome path. Verdict comes from the random-effects PI test.
+- Coupling edges (`bridge.intervention is None`) — Pearson r
+  over the per-group effect sizes of the edge's `source` and
+  `target` intervention comparisons. Requires that an
   intervention edge with the source path as its target has
-  already been computed (coupling edges run paired-second)."""
+  already been computed (coupling edges run paired-second).
+
+The verdict-walk constructs `BridgeEdge`s inline as it processes
+each claimed edge — no intermediate `BridgeResult` shape; the
+edge metadata is the typed product the graph layer wants."""
 from __future__ import annotations
 
 import math
@@ -39,47 +42,50 @@ from dataclasses import dataclass
 import scipy.stats as ss
 
 from corroborate.aggregate import hypothesis_comparison_from_cells
-from corroborate.bridge import BridgeResult
 from corroborate.causal_graph import (
+    BridgeEdge,
     CausalGraph,
+    Direction,
+    EvidentiaryLevel,
     Tier,
-    build_causal_graph,
     promote_bridged_evidence,
 )
 from corroborate.claim_bridge import Bridge as ClaimBridge
+from corroborate.graph import Graph
 from corroborate.hypothesis import Hypothesis, PredictedDirection
-from corroborate.schema import HypothesisComparisonRow, MeasurementLeaf
-from corroborate.schema import RunRow
-from corroborate.verdict import RefutationClass, Verdict
+from corroborate.schema import HypothesisComparisonRow, RunRow
+from corroborate.verdict import Verdict
 
 
 @dataclass(frozen=True, slots=True)
 class HypothesisVerdict[R: Mapping[str, object]]:
     """Corroboration verdict of a Hypothesis: typed CausalGraph
-    plus the per-edge BridgeResults that built it, plus rich
-    per-edge detail for paired-comparison edges.
+    plus per-edge raw verdicts plus rich per-edge detail for
+    intervention edges.
 
-    The `graph` is the canonical typed subgraph artifact (stage 8
-    output). The `bridge_results` map is the single source of
-    truth for per-edge verdicts (the graph's evidentiary_level is
-    derived). The `comparison_rows` map carries the meta-regression
-    inputs (per_group, pooled) for the paired-comparison edges."""
+    The `graph` is the canonical typed subgraph artifact (BridgeEdge
+    per claimed edge, with ate/rho/pvalue/n_observations populated).
+    `edge_verdicts` carries the raw 4-bucket Verdict per edge
+    (HELD / NO_EFFECT / POWER_INSUFFICIENT / INVARIANT_VIOLATION),
+    preserving resolution that the graph's evidentiary_level
+    collapses. `comparison_rows` carries meta-regression inputs
+    (per_group, pooled) for the paired-comparison edges."""
     hypothesis: Hypothesis[R]
     graph: CausalGraph
-    bridge_results: Mapping[tuple[str, str], BridgeResult]
+    edge_verdicts: Mapping[tuple[str, str], Verdict]
     comparison_rows: Mapping[str, HypothesisComparisonRow]
 
     def edge_verdict(self, edge: ClaimBridge) -> Verdict:
         """Verdict for a specific claimed edge — looked up via
-        the edge's `(source, target)` key in `bridge_results`."""
-        br = self.bridge_results.get((edge.source, edge.target))
-        if br is None:
+        the edge's `(source, target)` key in `edge_verdicts`."""
+        v = self.edge_verdicts.get((edge.source, edge.target))
+        if v is None:
             raise KeyError(
-                f'no bridge result for ({edge.source!r}, '
+                f'no verdict for ({edge.source!r}, '
                 f'{edge.target!r}) — edge not in this hypothesis '
                 f'verdict',
             )
-        return br.verdict
+        return v
 
     def verdict_at(self, target: str) -> Verdict:
         """Verdict for the rung-2 intervention edge whose target
@@ -98,33 +104,61 @@ class HypothesisVerdict[R: Mapping[str, object]]:
                 continue
             if edge.intervention is None:
                 continue
-            br = self.bridge_results.get((edge.source, edge.target))
-            return (
-                br.verdict if br is not None
-                else Verdict.POWER_INSUFFICIENT
+            return self.edge_verdicts.get(
+                (edge.source, edge.target), Verdict.POWER_INSUFFICIENT,
             )
         return Verdict.POWER_INSUFFICIENT
 
 
-# ============ link-edge Pearson computation ============
+# ============ Edge constructors ============
 
-def _pearson_link_to_bridge_result(
+def _intervention_edge(
+    edge: ClaimBridge, row: HypothesisComparisonRow,
+) -> tuple[BridgeEdge, Verdict]:
+    """Build a `BridgeEdge` + raw `Verdict` for an intervention
+    edge from its paired-comparison row. Direction inferred from
+    `ate` sign; tier/level inferred from corroboration status."""
+    raw_verdict = row.verdict
+    is_held = raw_verdict.is_corroboration()
+    ate: float | None = (
+        float(row.effect_size_g)
+        if row.effect_size_g is not None
+        and not math.isnan(row.effect_size_g)
+        else None
+    )
+    promoted = is_held and edge.tier is Tier.INTERVENTIONAL
+    tier = Tier.INTERVENTIONAL if promoted else Tier.ASSOCIATIONAL
+    level: EvidentiaryLevel = (
+        'causal_one_sided' if promoted
+        else 'correlational' if is_held
+        else 'refuted'
+    )
+    direction = (
+        Direction.INVERSE if (ate is not None and ate < 0)
+        else Direction.DIRECT
+    )
+    return BridgeEdge(
+        bridge_name=edge.name,
+        direction=direction,
+        tier=tier,
+        evidentiary_level=level,
+        ate=ate,
+        n_observations=row.arm_a_n if row.arm_a_n > 0 else None,
+    ), raw_verdict
+
+
+def _coupling_edge(
+    edge: ClaimBridge,
     source_row: HypothesisComparisonRow,
     target_row: HypothesisComparisonRow,
     *,
-    source_path: str,
-    target_path: str,
-    predicted_direction: PredictedDirection,
     alpha: float,
-) -> BridgeResult:
-    """Compute Pearson r of per-group effect sizes and package as
-    a `BridgeResult` for graph consumption.
-
-    Pairs strata by `group_value`; only strata where BOTH
-    comparisons have a finite `effect_size_g` contribute. The
-    result is a BridgeResult with `targets=(source, target)` and
-    stats carrying `rho`, `pvalue`, `n_groups`, plus refutation
-    class string when the verdict isn't HELD."""
+) -> tuple[BridgeEdge, Verdict]:
+    """Build a `BridgeEdge` + raw `Verdict` for a coupling edge
+    by computing Pearson r over the source's and target's per-
+    stratum effect sizes. Always associational tier; verdict
+    follows sign-and-significance against the edge's predicted
+    direction."""
     src_by_group = {
         gs.group_value: gs.effect_size_g
         for gs in source_row.per_group
@@ -145,21 +179,14 @@ def _pearson_link_to_bridge_result(
     tgt: list[float] = [tgt_by_group[k] for k in paired]
     n = len(src)
 
-    name = f'link({source_path}->{target_path})'
-    targets = (source_path, target_path)
-
     if n < 3:
-        return BridgeResult(
-            verdict=Verdict.POWER_INSUFFICIENT,
-            reason=f'only {n} paired strata; need ≥3 for link Pearson',
-            stats={
-                'n_groups': n,
-                'refutation_class': RefutationClass.UNDERPOWERED.value,
-                'predicted_direction': predicted_direction,
-            },
-            name=name,
-            targets=targets,
-        )
+        return BridgeEdge(
+            bridge_name=edge.name,
+            direction=Direction.DIRECT,
+            tier=Tier.ASSOCIATIONAL,
+            evidentiary_level='refuted',
+            n_observations=n,
+        ), Verdict.POWER_INSUFFICIENT
 
     # scipy boundary — `pearsonr` returns a NamedTuple-like
     # PearsonRResult whose attribute / element types are
@@ -168,91 +195,30 @@ def _pearson_link_to_bridge_result(
     r = float(r_value)  # pyright: ignore[reportArgumentType]
     p = float(p_value)  # pyright: ignore[reportArgumentType]
 
-    base_stats: dict[str, MeasurementLeaf] = {
-        'rho': r,
-        'pvalue': p,
-        'n_groups': n,
-        'predicted_direction': predicted_direction,
-    }
-
+    pred = edge.predicted_direction
     if p >= alpha:
-        return BridgeResult(
-            verdict=Verdict.NO_EFFECT,
-            reason=f'p={p:.3g} ≥ α={alpha}',
-            stats=base_stats | {
-                'refutation_class': RefutationClass.NULL_EFFECT.value,
-            },
-            name=name, targets=targets,
-        )
-    # p < alpha — significant; check direction.
-    if predicted_direction == 'two_sided':
-        return BridgeResult(
-            verdict=Verdict.HELD,
-            reason=f'r={r:+.3f}, p={p:.3g} < α',
-            stats=base_stats, name=name, targets=targets,
-        )
-    if predicted_direction == 'a_gt_b' and r > 0.0:
-        return BridgeResult(
-            verdict=Verdict.HELD,
-            reason=f'r={r:+.3f}, p={p:.3g} < α',
-            stats=base_stats, name=name, targets=targets,
-        )
-    if predicted_direction == 'a_lt_b' and r < 0.0:
-        return BridgeResult(
-            verdict=Verdict.HELD,
-            reason=f'r={r:+.3f}, p={p:.3g} < α',
-            stats=base_stats, name=name, targets=targets,
-        )
-    return BridgeResult(
-        verdict=Verdict.NO_EFFECT,
-        reason=f'sign mismatch: r={r:+.3f}, predicted={predicted_direction}',
-        stats=base_stats | {
-            'refutation_class': RefutationClass.SIGN_FLIP.value,
-        },
-        name=name, targets=targets,
-    )
+        verdict = Verdict.NO_EFFECT
+    elif pred == 'two_sided':
+        verdict = Verdict.HELD
+    elif pred == 'a_gt_b' and r > 0.0:
+        verdict = Verdict.HELD
+    elif pred == 'a_lt_b' and r < 0.0:
+        verdict = Verdict.HELD
+    else:
+        verdict = Verdict.NO_EFFECT
 
-
-# ============ comparison-edge → BridgeResult ============
-
-def _comparison_to_bridge_result(
-    edge: ClaimBridge,
-    row: HypothesisComparisonRow,
-) -> BridgeResult:
-    """Convert a paired-comparison `HypothesisComparisonRow` into
-    a `BridgeResult` shaped for `build_causal_graph` consumption.
-
-    `targets=(source, target)` — the directed pair this edge
-    spans. `stats['tier']='interventional'` is set when the
-    claimed edge declared INTERVENTIONAL tier so
-    `build_causal_graph`'s promotion logic fires.
-
-    `HELD_WITH_SCOPE_FLAG` is mapped down to `HELD` for the graph
-    builder's binary `is_held` check — both attest to corroboration
-    at population level. The heterogeneity flag remains on the
-    HypothesisComparisonRow for meta-regression to consume; the
-    graph layer just records the corroboration."""
-    stats: dict[str, MeasurementLeaf] = {}
-    if edge.tier is Tier.INTERVENTIONAL:
-        stats['tier'] = 'interventional'
-    if (
-        row.effect_size_g is not None
-        and not math.isnan(row.effect_size_g)
-    ):
-        stats['ate'] = float(row.effect_size_g)
-
-    raw_verdict = row.verdict
-    graph_verdict = (
-        Verdict.HELD if raw_verdict.is_corroboration() else raw_verdict
-    )
-
-    return BridgeResult(
-        verdict=graph_verdict,
-        reason='',
-        stats=stats,
-        name=edge.name,
-        targets=(edge.source, edge.target),
-    )
+    is_held = verdict is Verdict.HELD
+    direction = Direction.INVERSE if r < 0 else Direction.DIRECT
+    level: EvidentiaryLevel = 'correlational' if is_held else 'refuted'
+    return BridgeEdge(
+        bridge_name=edge.name,
+        direction=direction,
+        tier=Tier.ASSOCIATIONAL,
+        evidentiary_level=level,
+        rho=r,
+        pvalue=p,
+        n_observations=n,
+    ), verdict
 
 
 # ============ Top-level verdict walk ============
@@ -299,7 +265,8 @@ def hypothesis_subgraph_verdict(
             'edges leave `intervention=None`).',
         )
 
-    bridge_results: dict[tuple[str, str], BridgeResult] = {}
+    edges_built: dict[tuple[str, str], BridgeEdge] = {}
+    edge_verdicts: dict[tuple[str, str], Verdict] = {}
     comparison_rows: dict[str, HypothesisComparisonRow] = {}
 
     # Pass 1: intervention edges (rung-2 paired contrasts).
@@ -317,9 +284,9 @@ def hypothesis_subgraph_verdict(
             predicted_direction=edge.predicted_direction,
         )
         comparison_rows[edge.target] = row
-        bridge_results[(edge.source, edge.target)] = (
-            _comparison_to_bridge_result(edge, row)
-        )
+        be, v = _intervention_edge(edge, row)
+        edges_built[(edge.source, edge.target)] = be
+        edge_verdicts[(edge.source, edge.target)] = v
 
     # Pass 2: coupling edges — Pearson r over per-stratum effects
     # produced in pass 1.
@@ -346,24 +313,24 @@ def hypothesis_subgraph_verdict(
                 f'must declare `predicted_direction` — Pearson sign '
                 f'check needs a prior.',
             )
-        bridge_results[(edge.source, edge.target)] = (
-            _pearson_link_to_bridge_result(
-                comparison_rows[edge.source],
-                comparison_rows[edge.target],
-                source_path=edge.source,
-                target_path=edge.target,
-                predicted_direction=edge.predicted_direction,
-                alpha=alpha,
-            )
+        be, v = _coupling_edge(
+            edge,
+            comparison_rows[edge.source],
+            comparison_rows[edge.target],
+            alpha=alpha,
         )
+        edges_built[(edge.source, edge.target)] = be
+        edge_verdicts[(edge.source, edge.target)] = v
 
-    graph = build_causal_graph(bridge_results.values())
+    graph: CausalGraph = Graph()
+    for (s, t), be in edges_built.items():
+        graph = graph.with_edge(s, t, be)
     if promote_bridged:
         graph = promote_bridged_evidence(graph)
 
     return HypothesisVerdict(
         hypothesis=h,
         graph=graph,
-        bridge_results=bridge_results,
+        edge_verdicts=edge_verdicts,
         comparison_rows=comparison_rows,
     )
