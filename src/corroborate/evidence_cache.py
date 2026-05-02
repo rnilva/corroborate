@@ -109,15 +109,41 @@ def build_cache(
         and traces_path.stat().st_size > 0
         and needed_trace_cols
     ):
-        traces_df = pl.read_parquet(
-            traces_path, columns=['id', *needed_trace_cols],
+        # Some corpora don't carry every column the bridges'
+        # measurables would read (e.g. older sweeps without
+        # `reward_scale`). Project to the intersection with the
+        # traces schema; missing columns surface as None per cell
+        # via the measurable's defensive `record.get(...)` path.
+        trace_schema_cols = set(
+            pl.scan_parquet(traces_path).collect_schema().names(),
         )
-        df = runs_df.join(traces_df, on='id', how='inner')
-        log(
-            f'traces: {traces_df.height} rows × '
-            f'{len(needed_trace_cols)} cols (filtered from full file); '
-            f'joined → {df.height} cells',
-        )
+        present_trace_cols = [
+            c for c in needed_trace_cols if c in trace_schema_cols
+        ]
+        missing = [
+            c for c in needed_trace_cols if c not in trace_schema_cols
+        ]
+        if present_trace_cols:
+            traces_df = pl.read_parquet(
+                traces_path, columns=['id', *present_trace_cols],
+            )
+            df = runs_df.join(traces_df, on='id', how='inner')
+            log(
+                f'traces: {traces_df.height} rows × '
+                f'{len(present_trace_cols)} cols (filtered from full '
+                f'file); joined → {df.height} cells',
+            )
+        else:
+            df = runs_df
+            log(
+                f'traces: no needed cols present; '
+                f'missing={missing[:8]}; using runs only',
+            )
+        if missing:
+            log(
+                f'traces: {len(missing)} needed cols missing from this '
+                f'corpus — measurables that read them will yield None',
+            )
     else:
         df = runs_df
         log('traces: not needed or unavailable; using runs only')
@@ -204,7 +230,7 @@ def build_universal_cache(
     *,
     data_root: Path,
     out_path: Path,
-    out_name: str = 'runs_with_mediators.parquet',
+    out_name: str = 'runs_with_bridge_cache.parquet',
     skip_up_to_date: bool = True,
     quiet_per_corpus: bool = False,
 ) -> None:

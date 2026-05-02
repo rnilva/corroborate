@@ -69,7 +69,7 @@ def main() -> None:
     parser.add_argument('--universal', action='store_true')
     parser.add_argument('--data-root', default='experiments/data')
     parser.add_argument('--out', default=None)
-    parser.add_argument('--out-name', default='runs_with_mediators.parquet')
+    parser.add_argument('--out-name', default='runs_with_bridge_cache.parquet')
     parser.add_argument('--force', action='store_true')
 
     raw = to_mapping(parser.parse_args())
