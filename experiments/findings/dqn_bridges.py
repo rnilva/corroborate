@@ -26,6 +26,13 @@ import polars as pl
 # resolution by parameter name succeeds.
 import corroborate.analyses  # noqa: F401  # pyright: ignore[reportUnusedImport]
 
+# Substrate measurables (jensen_gap, jensen_dormancy_*, eval_*,
+# etc.) are registered by importing the rl.dqn module — without
+# this, the runner's measurable-signature manifest is empty
+# because `get_registered(name)` returns None for every required
+# name.
+import corroborate.rl.dqn.measurables  # noqa: F401  # pyright: ignore[reportUnusedImport]
+
 from corroborate.analyses.dowhy import (
     BackdoorResult, RefutationResult,
 )
