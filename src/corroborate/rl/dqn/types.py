@@ -13,13 +13,11 @@ to which framework primitive provides it. Per
 satisfy the contracts:
 
 - **Free Claim** (`@claim`-decorated function): one pure
-  operation. Conforms to call-signature Protocols (`Bootstrap`,
-  `LossFn`, `EpsilonSchedule`, `BufferSample`, `Greedification`,
-  `GradientRule`, `TargetSync`).
-- **Module Claim** (`ClaimBase` subclass): one operation that
-  needs a slot field for a sub-Claim. `EpsilonGreedy` is the
-  remaining example (`__call__` satisfies `ActionSelect`,
-  `schedule` field is an `EpsilonSchedule` sub-Claim).
+  operation, possibly with `schedule` / `greedification`-style
+  sub-Claim kwargs. Conforms to call-signature Protocols
+  (`Bootstrap`, `LossFn`, `EpsilonSchedule`, `ActionSelect`,
+  `BufferSample`, `Greedification`, `GradientRule`,
+  `TargetSync`).
 - **Config bundle** (frozen dataclass with mechanics + slot
   Claims): satisfies bundle-shaped Protocols where the caller
   needs both stateful methods and pluggable behaviour. `MLP` /
@@ -27,10 +25,9 @@ satisfy the contracts:
   delegation); `Replay` carries init/add/sample_batch mechanics
   + a `BufferSample` slot.
 
-The walker treats all three uniformly: it recurses into a Free
-Claim's function signature, a Module Claim's dataclass fields,
-or a config bundle's dataclass fields — surfacing each HP leaf
-at composition time."""
+The walker treats both shapes uniformly: it recurses into a Free
+Claim's function signature OR a config bundle's dataclass
+fields — surfacing each HP leaf at composition time."""
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Protocol
@@ -52,37 +49,12 @@ if TYPE_CHECKING:
 
 
 # `QFunction` Protocol lives in
-# `corroborate.rl.dqn.claims.q_network`. Sibling Protocols in this
-# file reference it via TYPE_CHECKING-guarded forward strings to
-# avoid a runtime cycle (q_network imports nothing from this
-# module).
-
-
-class ActionSelect(Protocol):
-    """Rollout action-selection — e.g. `EpsilonGreedy`. Takes
-    Q-values + RNG + the global step + n_actions; returns action
-    index.
-
-    `step` (not `epsilon` directly) because Module-style action
-    selection owns its schedule internally — the slot's interface
-    is what the rollout-loop has on hand at call time. ε-schedule
-    swaps live as fields on the action-select Module
-    (e.g. `EpsilonGreedy.schedule`)."""
-    def __call__(
-        self,
-        q_values: jax.Array,
-        rng_key: jax.Array,
-        step: jax.Array,
-        n_actions: int,
-    ) -> jax.Array: ...
-
-
-class EpsilonSchedule(Protocol):
-    """Schedule mapping global step → ε. Linear / exponential /
-    constant implementations all conform to this shape. Lives as
-    a field on `ActionSelect` Modules (e.g. `EpsilonGreedy.schedule`),
-    not as a top-level slot of `dqn`."""
-    def __call__(self, step: jax.Array) -> jax.Array: ...
+# `corroborate.rl.dqn.claims.q_network`. `ActionSelect` and
+# `EpsilonSchedule` Protocols live in
+# `corroborate.rl.dqn.claims.action_select`. Sibling Protocols
+# in this file reference forward types via TYPE_CHECKING-guarded
+# strings to avoid runtime cycles (the claims modules import
+# nothing from this module).
 
 
 class Greedification(Protocol):

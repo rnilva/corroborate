@@ -32,9 +32,9 @@ from corroborate.rl.dqn.claims.replay import (
     Replay, Transition, n_step_return,
 )
 from corroborate.rl.dqn.state import DQNState
+from corroborate.rl.dqn.claims.action_select import ActionSelect
 from corroborate.rl.dqn.claims.q_network import Params, QFunction
 from corroborate.rl.dqn.types import (
-    ActionSelect,
     Bootstrap,
     LossFn,
     TargetSync,

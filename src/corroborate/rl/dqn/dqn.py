@@ -33,6 +33,7 @@ from corroborate.rl.dqn.claims import (
     periodic_copy,
     squared_error,
 )
+from corroborate.rl.dqn.claims.action_select import ActionSelect
 from corroborate.rl.dqn.claims.optimizer import (
     OptimizerFactory,
     default_optimizer,
@@ -47,7 +48,6 @@ from corroborate.rl.dqn.phases import (
 )
 from corroborate.rl.dqn.state import DQNState
 from corroborate.rl.dqn.types import (
-    ActionSelect,
     Bootstrap,
     LossFn,
     StepRecord,
@@ -144,22 +144,31 @@ def dqn_step(
 
     Construction-time HPs travel with their owning component:
     `replay.capacity`, `replay.batch_size`, `MLP.hidden` live on
-    config bundles (`Replay`, `MLP`); `EpsilonGreedy.schedule` on
-    a Module Claim; `warmed_update.warmup_steps` on an `@claim`
-    factory's signature. The only top-level HPs are `gamma`
-    (Bellman γ) and `sync_period` (target-sync cadence) — paper-
-    honest cross-cutting parameters that don't belong inside any
-    single component.
+    config bundles (`Replay`, `MLP`); `epsilon_greedy.schedule`,
+    `warmed_update.warmup_steps`, `adam.lr` live on `@claim`
+    factory signatures, baked at composition time via `partial`.
+    The only top-level HPs are `gamma` (Bellman γ) and
+    `sync_period` (target-sync cadence) — paper-honest cross-
+    cutting parameters that don't belong inside any single
+    component.
 
-    DDQN intervention: `partial(dqn_step, bootstrap=partial(
-    bootstrap, greedification=double_greedify))`. Schedule swap:
-    `partial(dqn_step, action_select=replace(EpsilonGreedy(),
-    schedule=other_schedule))`. Capacity swap: `partial(dqn_step,
-    replay=replace(Replay(), capacity=50_000))`. Q-network swap:
-    `partial(dqn_step, q_network=MLP(hidden=(128,)))`. Optimizer
-    swap: `partial(dqn_step, optimizer=partial(rmsprop, lr=2.5e-4))`
-    (this kwarg is on `dqn`, threaded through `dqn_step` as the
-    raw optax handle — see `dqn`'s docstring)."""
+    Author interventions read uniformly — name the kwarg, supply
+    the alternative:
+
+        # DDQN: swap the greedification slot inside bootstrap
+        partial(dqn_step, bootstrap=partial(
+            bootstrap, greedification=double_greedify))
+        # Schedule swap: bake schedule into action_select
+        partial(dqn_step, action_select=partial(
+            epsilon_greedy, schedule=other_schedule))
+        # Capacity swap: replace a config-bundle field
+        partial(dqn_step, replay=replace(Replay(), capacity=50_000))
+        # Q-network swap: another config bundle
+        partial(dqn_step, q_network=MLP(hidden=(128,)))
+        # Optimizer swap: factory partial (this kwarg is on `dqn`,
+        # threaded through `dqn_step` as the raw optax handle —
+        # see `dqn`'s docstring)
+        partial(dqn_step, optimizer=partial(rmsprop, lr=2.5e-4))"""
     del idx  # `step` is on `state`; idx is the loop's bookkeeping arg
 
     state, rollout = rollout_phase(

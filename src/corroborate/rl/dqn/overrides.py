@@ -26,19 +26,18 @@ Note: this is a pure-typing layer. The runtime behaviour of
 (v10's `bind` was retired in corroborate via subtraction; the
 walker / `canonical_str` handle `partial` directly).
 
-Config bundles (`MLP`, `Replay`) and Module Claims
-(`EpsilonGreedy`) are typed as their concrete dataclass classes —
-the override surface is the constructor / `replace()`. Free-
-function Claims (`bootstrap`, `periodic_copy`, `linear_epsilon`,
-`squared_error`, optimizer factories `adam`/`rmsprop`/...) accept
-`Callable` for full swap or a `partial` binding."""
+Config bundles (`MLP`, `Replay`) are typed as their concrete
+dataclass classes — the override surface is the constructor /
+`replace()`. Free-function Claims (`bootstrap`, `periodic_copy`,
+`epsilon_greedy`, `linear_epsilon`, `squared_error`, optimizer
+factories `adam`/`rmsprop`/...) accept `Callable` for full swap
+or a `partial` binding."""
 from __future__ import annotations
 
 from collections.abc import Callable
 
 from typing_extensions import TypedDict
 
-from corroborate.rl.dqn.claims.action_select import EpsilonGreedy
 from corroborate.rl.dqn.claims.q_network import MLP
 from corroborate.rl.dqn.claims.replay import Replay
 from corroborate.rl.dqn.claims.optimizer import OptimizerFactory
@@ -80,10 +79,10 @@ class DQNOverrides(TypedDict, total=False, closed=True):
     eval_every: int
     n_episodes: int
 
-    # Slot Claims — Module Claims as concrete dataclass instances;
+    # Slot Claims — config bundles as concrete dataclass instances;
     # free-function Claims as Callable (full swap or partial).
     q_network: MLP | Callable[..., object]
-    action_select: EpsilonGreedy | Callable[..., object]
+    action_select: Callable[..., object]
     replay: Replay
     bootstrap: Callable[..., object]
     loss_fn: Callable[..., object]

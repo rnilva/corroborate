@@ -1,10 +1,12 @@
 """Action selection — rollout policy claims.
 
-`EpsilonGreedy` is the canonical exploratory rollout, a Module
-that owns its own ε-schedule as a field. The schedule swaps via
-`replace(EpsilonGreedy(), schedule=other_schedule)` —
-mechanism_key sees one entry (`action_select`) carrying the
-nested configuration.
+`epsilon_greedy` is the canonical exploratory rollout, a Free
+Claim with the ε-schedule as a `schedule` kwarg. Authors swap the
+schedule via `partial(epsilon_greedy, schedule=cosine_epsilon)`
+or bake schedule HPs via `partial(epsilon_greedy, schedule=
+partial(linear_epsilon, anneal_steps=50_000))` — same partial-
+composition pattern as bootstrap's greedification slot or the
+optimizer factories.
 
 `linear_epsilon` is one schedule shape; alternatives
 (exponential, cosine, piecewise) implement the same
@@ -25,13 +27,44 @@ exploration. ε ∈ [0, 1] is a Kolmogorov-axiom static check
 (asserted in the body)."""
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from typing import Protocol
 
 import jax
 import jax.numpy as jnp
 
-from corroborate.claim import ClaimBase, claim, record_call
+from corroborate.claim import claim
 
+
+# ============ Protocols ============
+
+class EpsilonSchedule(Protocol):
+    """Schedule mapping global step → ε. Linear / exponential /
+    constant implementations all conform to this shape. Lives as
+    a kwarg on `epsilon_greedy` (slot Claim), not as a top-level
+    slot of `dqn` — substrate-author authors swap via
+    `partial(epsilon_greedy, schedule=...)`."""
+    def __call__(self, step: jax.Array) -> jax.Array: ...
+
+
+class ActionSelect(Protocol):
+    """Rollout action-selection — Free Claim with signature
+    `(q_values, rng_key, step, n_actions) -> action`.
+
+    `step` (not `epsilon` directly) because the action-select
+    Claim owns its schedule internally as a kwarg — the slot's
+    interface is what the rollout-loop has on hand at call time.
+    ε-schedule swaps live as `schedule` kwarg bake-ins
+    (`partial(epsilon_greedy, schedule=...)`)."""
+    def __call__(
+        self,
+        q_values: jax.Array,
+        rng_key: jax.Array,
+        step: jax.Array,
+        n_actions: int,
+    ) -> jax.Array: ...
+
+
+# ============ Schedules ============
 
 @claim
 def linear_epsilon(
@@ -52,55 +85,34 @@ def linear_epsilon(
     return eps_init + (eps_final - eps_init) * progress
 
 
-# Forward declaration — `EpsilonSchedule` Protocol lives in
-# `types.py`. We import lazily inside `EpsilonGreedy` to avoid a
-# circular import.
-@dataclass(frozen=True, slots=True)
-class EpsilonGreedy(ClaimBase):
-    """ε-greedy action selection — Module with `schedule` field.
+# ============ Action-selection ============
+
+@claim
+def epsilon_greedy(
+    q_values: jax.Array,
+    rng_key: jax.Array,
+    step: jax.Array,
+    n_actions: int,
+    *,
+    schedule: EpsilonSchedule = linear_epsilon,
+) -> jax.Array:
+    """ε-greedy action selection — Free Claim with `schedule`
+    sub-slot.
 
     With probability `schedule(step)`, sample uniformly from the
     action space; else argmax over Q-values. The schedule is a
-    Module field so authors swap it via
-    `replace(EpsilonGreedy(), schedule=cosine_epsilon)` or
-    pass a different `ActionSelect` slot whole.
+    keyword Claim slot so authors swap it via `partial(
+    epsilon_greedy, schedule=cosine_epsilon)` or pass a different
+    `ActionSelect` slot whole.
 
-    Default schedule is `linear_epsilon` (un-baked — its own
-    HP defaults `eps_init=1.0, eps_final=0.05, anneal_steps=
-    10_000` apply). To bake schedule HPs at composition time,
-    use `replace(EpsilonGreedy(), schedule=partial(
-    linear_epsilon, anneal_steps=50_000))`."""
-    # Schedule's type at runtime is `Claim` (the linear_epsilon
-    # FnClaim singleton, or a partial wrapping it). Field type is
-    # the EpsilonSchedule Protocol; pyright unions across concrete
-    # implementations satisfying it.
-    schedule: 'EpsilonSchedule' = field(default=linear_epsilon)
-
-    def __call__(
-        self,
-        q_values: jax.Array,
-        rng_key: jax.Array,
-        step: jax.Array,
-        n_actions: int,
-    ) -> jax.Array:
-        epsilon = self.schedule(step)
-        explore_key, action_key = jax.random.split(rng_key)
-        explore = jax.random.uniform(explore_key) < epsilon
-        random_action = jax.random.randint(action_key, (), 0, n_actions)
-        greedy_action = jnp.argmax(q_values).astype(jnp.int32)
-        result = jnp.where(explore, random_action, greedy_action)
-        record_call(
-            self, (q_values, rng_key, step, n_actions), {}, result,
-        )
-        return result
-
-
-# Default ε-greedy instance — `epsilon_greedy` re-exported as the
-# instance authors use as a default value.
-epsilon_greedy = EpsilonGreedy()
-
-
-# Late-import to satisfy the ForwardRef in `EpsilonGreedy.schedule`'s
-# default annotation. Avoids the circular-import boomerang between
-# action_select.py and types.py.
-from corroborate.rl.dqn.types import EpsilonSchedule  # noqa: E402  pyright: ignore[reportUnusedImport]
+    Default schedule is `linear_epsilon` (un-baked — its own HP
+    defaults `eps_init=1.0, eps_final=0.05, anneal_steps=10_000`
+    apply). To bake schedule HPs at composition time, use
+    `partial(epsilon_greedy, schedule=partial(linear_epsilon,
+    anneal_steps=50_000))`."""
+    epsilon = schedule(step)
+    explore_key, action_key = jax.random.split(rng_key)
+    explore = jax.random.uniform(explore_key) < epsilon
+    random_action = jax.random.randint(action_key, (), 0, n_actions)
+    greedy_action = jnp.argmax(q_values).astype(jnp.int32)
+    return jnp.where(explore, random_action, greedy_action)

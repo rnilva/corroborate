@@ -43,7 +43,7 @@ def test_fn_discovery_covers_every_authored_claim(
     expected_fns = {
         'max_greedify', 'double_greedify', 'expectile_greedify',
         'semi_gradient', 'full_gradient', 'bootstrap',
-        'linear_epsilon',
+        'epsilon_greedy', 'linear_epsilon',
         'uniform_sample', 'n_step_return',
         'periodic_copy', 'squared_error',
     }
@@ -51,19 +51,16 @@ def test_fn_discovery_covers_every_authored_claim(
     assert not missing, f'missing FnClaim registrations: {missing}'
 
 
-def test_class_discovery_covers_every_authored_module_and_container(
+def test_class_discovery_covers_every_config_bundle(
     dqn_registry: Registry,
 ) -> None:
-    """Every Module-Claim subclass (`EpsilonGreedy`) AND every
-    explicitly-registered config bundle (`MLP`, `CNN`, `Replay`)
-    are reachable by name through the unified `classes` map.
-    Optimizers are now `@claim`-functions (in `fns`); see
-    `test_fn_discovery_covers_optimizers`. Q-networks are
-    config bundles whose forward pass is `mlp_forward` /
-    `cnn_forward` (in `fns`)."""
+    """Every config bundle (`MLP`, `CNN`, `Replay`) is reachable
+    by name through the `classes` map. Optimizers and action-
+    select are now `@claim`-functions (in `fns`); see
+    `test_fn_discovery_covers_optimizers` and
+    `test_fn_discovery_covers_every_authored_claim`."""
     expected_classes = {
         'MLP', 'CNN',
-        'EpsilonGreedy',
         'Replay',
     }
     missing = expected_classes - set(dqn_registry.classes)
@@ -191,13 +188,10 @@ def test_registered_handles_are_the_typed_shape(
     dqn_registry: Registry,
 ) -> None:
     """No type erasure: `fn` returns FnClaim, `cls` returns a
-    `type`. Module Claim subclasses (e.g. `EpsilonGreedy`)
-    round-trip without losing `issubclass(_, ClaimBase)`. Config
-    bundles (`MLP`, `Replay`) are plain frozen-dataclass classes
-    — `type`, but not `ClaimBase`."""
+    `type`. Config bundles (`MLP`, `Replay`) round-trip as plain
+    frozen-dataclass classes."""
     assert isinstance(dqn_registry.fn('bootstrap'), FnClaim)
-    eg_cls = dqn_registry.cls('EpsilonGreedy')
-    assert issubclass(eg_cls, ClaimBase)
+    assert isinstance(dqn_registry.fn('epsilon_greedy'), FnClaim)
     mlp_cls = dqn_registry.cls('MLP')
     assert isinstance(mlp_cls, type)
     replay_cls = dqn_registry.cls('Replay')

@@ -17,7 +17,6 @@ Module layout:
 Re-exports below let consumers `from corroborate.rl.dqn.claims
 import mlp_q` rather than the longer module-qualified path."""
 from corroborate.rl.dqn.claims.action_select import (
-    EpsilonGreedy,
     epsilon_greedy,
     linear_epsilon,
 )
@@ -41,7 +40,6 @@ from corroborate.rl.dqn.claims.target_sync import periodic_copy
 
 __all__ = [
     'Batch',
-    'EpsilonGreedy',
     'MLP',
     'Replay',
     'ReplayState',
