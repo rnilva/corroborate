@@ -201,7 +201,22 @@ def ddqn_refuted_when_dormancy_fires(
     target='eval_final_mean',
     direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
-    scope=(pl.col('env_name') == 'FourRooms-misc'),
+    # Pearl-rung-2 pairing: adaptive_dqn cells from the
+    # designed-intervention sweep (`adaptive_dqn_fourrooms_sweep`,
+    # which carries no vanilla_dqn arm) against the existing
+    # `expectile_3way` FourRooms vanilla_dqn cohort (rs≈0.1, 200k
+    # steps, comparable eval scale). Without this corpus filter,
+    # `paired_g` pools across 7 other vanilla_dqn FourRooms-misc
+    # cohorts at unrelated reward scales (e.g. `reward_scale_sweep`
+    # at eval_mean=2.74 vs. expectile_3way at 0.56), inflating
+    # `mean_diff` by an order of magnitude and silently
+    # misclassifying a refutation as no_effect.
+    scope=(
+        (pl.col('env_name') == 'FourRooms-misc')
+        & pl.col('corpus').is_in(
+            ('adaptive_dqn_fourrooms_sweep', 'expectile_3way'),
+        )
+    ),
 )
 def adaptive_dqn_recovers_ddqn_benefit__fourrooms_factor_0p5(
     paired_g: PairedGResult,
@@ -339,7 +354,19 @@ def ddqn_attenuates_at_late_bursts__spaceinvaders(
     target='eval_final_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
-    scope=(pl.col('env_name') == 'SpaceInvaders-MinAtar'),
+    # Pearl-rung-2 pairing: adaptive_dqn from the 1M-step
+    # designed-intervention sweep (`adaptive_dqn_spaceinvaders_1m`)
+    # against the existing minatar_1M SpaceInvaders vanilla_dqn
+    # cells. Other corpora carry vanilla_dqn at SpaceInvaders-MinAtar
+    # at different `total_steps` regimes (50k in `ddqn`, 200k in
+    # `ddqn_effective_cohort`) which `pair_by=('seed',)` would
+    # silently pool with the 1M cells.
+    scope=(
+        (pl.col('env_name') == 'SpaceInvaders-MinAtar')
+        & pl.col('corpus').is_in(
+            ('adaptive_dqn_spaceinvaders_1m', 'minatar_1M_spaceinvaders'),
+        )
+    ),
 )
 def adaptive_dqn_fails_to_avoid_attenuation__spaceinvaders_1m(
     paired_g: PairedGResult,
