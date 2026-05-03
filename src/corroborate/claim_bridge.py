@@ -565,26 +565,60 @@ def claim_bridge(
 def _filter_with_missing_cols(
     df: pl.DataFrame, expr: pl.Expr,
 ) -> pl.DataFrame:
-    """Apply `expr` as a filter to `df`, after pre-filling any
-    referenced column the DataFrame doesn't carry as a null
-    literal.
+    """Apply `expr` as a filter to `df`. For columns referenced
+    by `expr` but absent from `df`:
 
-    Universal-cache schema heterogeneity: corpus A has
-    `reward_scale` but corpus B doesn't; the `diagonal_relaxed`
-    concat null-pads when both are present, but a column absent
-    in EVERY contributing corpus stays missing entirely. A bridge
-    scoped on `pl.col('reward_scale')` against such a parquet
-    would otherwise raise `ColumnNotFoundError`.
-
-    The pre-fill makes those rows null-valued; polars's filter
-    excludes null-result rows by default (matching the legacy
-    `_matches_filters` "missing key → False" semantics)."""
+    - If the name resolves in the `@measurable` registry, compute
+      it per-cell (with shared dep memoisation via
+      `evaluate_with_measurables`) and add it as a column. This
+      is the "bridges-verify-against-raw-traces" path: when a
+      bridge declares `scope = pl.col('jensen_dormancy_gap') >= 0`
+      and the input DataFrame is a raw `runs.parquet` without
+      that measurable yet, the framework computes it on the fly.
+    - Otherwise, pre-fill as null. Universal-cache schema
+      heterogeneity (corpus A has `reward_scale`, corpus B
+      doesn't, neither corpus computed it) lands here — null
+      rows fail the predicate naturally (polars filter excludes
+      null-result rows), matching the legacy `_matches_filters`
+      "missing key → False" semantics."""
     referenced = expr.meta.root_names()
     missing = [c for c in referenced if c not in df.columns]
-    if missing:
+    if not missing:
+        return df.filter(expr)
+
+    from corroborate.measurable import (
+        evaluate_with_measurables, get_registered,
+    )
+    measurable_missing: list[str] = []
+    truly_missing: list[str] = []
+    for col in missing:
+        if get_registered(col) is not None:
+            measurable_missing.append(col)
+        else:
+            truly_missing.append(col)
+
+    if measurable_missing:
+        cells = cast(list[dict[str, object]], df.to_dicts())
+        computed: dict[str, list[object]] = {
+            col: [] for col in measurable_missing
+        }
+        for cell in cells:
+            cache: dict[str, object] = {}
+            for col in measurable_missing:
+                m = get_registered(col)
+                assert m is not None  # checked above
+                computed[col].append(
+                    evaluate_with_measurables(m.fn, cell, cache=cache),
+                )
         df = df.with_columns(
-            [pl.lit(None).alias(c) for c in missing],
+            [pl.Series(c, v) for c, v in computed.items()],
         )
+
+    if truly_missing:
+        df = df.with_columns(
+            [pl.lit(None).alias(c) for c in truly_missing],
+        )
+
     return df.filter(expr)
 
 
