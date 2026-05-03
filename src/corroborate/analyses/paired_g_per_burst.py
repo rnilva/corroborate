@@ -28,19 +28,9 @@ from corroborate.analysis import analysis
 @dataclass(frozen=True, slots=True)
 class PerBurstStratum:
     """One (env, burst) stratum: paired Hedges' g + SE + count.
-
-    `burst_index` is the cell-internal 0-based eval-burst index.
-    The wall-clock meaning of a burst depends on the substrate's
-    own conventions (e.g. `eval_every × (burst_index + 1)` in the
-    RL substrate); the analysis stays domain-agnostic. Bridges
-    that need an absolute-step filter must scope cells to a
-    single training-time regime (e.g. fixed `total_steps`) and
-    apply the multiplication themselves.
-
-    `helped_fraction` is the fraction of paired (treatment,
-    baseline) seeds where Δ_source > 0 — the rank-free
-    signed-direction aggregate that complements the standardised
-    `g`."""
+    `helped_fraction` is the fraction of paired (treatment, baseline)
+    seeds where Δ_source > 0 — the rank-free signed-direction
+    aggregate that complements the standardised `g`."""
     env_name: str
     burst_index: int
     g: float
