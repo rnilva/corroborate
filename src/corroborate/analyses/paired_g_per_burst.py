@@ -27,12 +27,16 @@ from corroborate.analysis import analysis
 
 @dataclass(frozen=True, slots=True)
 class PerBurstStratum:
-    """One (env, burst) stratum: paired Hedges' g + SE + count."""
+    """One (env, burst) stratum: paired Hedges' g + SE + count.
+    `helped_fraction` is the fraction of paired (treatment, baseline)
+    seeds where Δ_source > 0 — the rank-free signed-direction
+    aggregate that complements the standardised `g`."""
     env_name: str
     burst_index: int
     g: float
     se: float
     n_pairs: int
+    helped_fraction: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -166,9 +170,14 @@ def paired_g_per_burst(
                 hedges_g_paired(deltas) if n_pairs >= 2
                 else (float('nan'), float('nan'))
             )
+            helped_fraction = (
+                sum(1 for d in deltas if d > 0.0) / n_pairs
+                if n_pairs > 0 else float('nan')
+            )
             strata.append(PerBurstStratum(
                 env_name=env, burst_index=b,
                 g=g, se=se, n_pairs=n_pairs,
+                helped_fraction=helped_fraction,
             ))
 
     return PerBurstResult(

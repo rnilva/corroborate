@@ -302,7 +302,7 @@ def ddqn_helps_at_early_bursts__pixel_envs(
 
 @claim_bridge(
     source=INTERVENTION,
-    target='mc_return_last_quarter',
+    target='mc_return',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
     scope=(
@@ -311,14 +311,32 @@ def ddqn_helps_at_early_bursts__pixel_envs(
     ),
 )
 def ddqn_attenuates_at_late_bursts__spaceinvaders(
-    paired_g: PairedGResult,
+    paired_g_per_burst: PerBurstResult,
     *,
-    dedupe_strategy: str = 'mean',
+    source: str = 'mc_return',
+    reduction: str = 'mean',
+    burst_floor: int = 3,
+    helped_ceiling: float = 0.40,
+    g_ceiling: float = -0.30,
+    n_pairs_floor: int = 50,
 ) -> Verdict:
     """TIER A2 existence proof: on SpaceInvaders-MinAtar at 1M
     training steps, in the last quarter of training bursts,
-    DDQN's outcome is reliably WORSE than vanilla. Per-cell
-    helped=36.5%, g=−0.42, n=510 in the original analysis.
+    DDQN's outcome is reliably WORSE than vanilla. Per-cell-burst
+    helped=36.5%, g=−0.42, n=510 in the original analysis (30
+    seeds × 17 bursts after `burst_index ≥ 3`).
+
+    Consumes `paired_g_per_burst` — a per-(env, burst) panel where
+    each stratum holds (g, n_pairs, helped_fraction) computed from
+    the seed-paired Δ in that burst. The bridge filters strata to
+    `env_name == 'SpaceInvaders-MinAtar'` AND `burst_index >=
+    burst_floor`, then aggregates: `n_pairs_total = Σ n_pairs`
+    (the cell-burst count, ≈ 510 at the 1M corpus), and
+    sample-size-weighted means for `helped_fraction` and `g`.
+
+    HELD when (a) cell-burst total ≥ `n_pairs_floor` (=50), AND
+    (b) pooled helped_fraction ≤ `helped_ceiling` (=0.40), AND
+    (c) pooled g ≤ `g_ceiling` (=−0.30).
 
     Env-specific: other long-horizon high-obs-dim envs (Asterix,
     Breakout, Freeway at 1M) do NOT show the same late
@@ -333,15 +351,23 @@ def ddqn_attenuates_at_late_bursts__spaceinvaders(
     `adaptive_dqn_fails_to_avoid_attenuation__spaceinvaders_1m`
     runs the dormancy controller on this regime; it tracks DDQN
     (g≈0) and inherits the attenuation (g=−0.46 vs vanilla)."""
-    del dedupe_strategy  # forwarded to paired_g
-    if paired_g.n_pairs < 50:
+    del source, reduction
+    late = [
+        s for s in paired_g_per_burst.strata
+        if s.env_name == 'SpaceInvaders-MinAtar'
+        and s.burst_index >= burst_floor
+        and s.n_pairs > 0
+        and not math.isnan(s.g)
+        and not math.isnan(s.helped_fraction)
+    ]
+    if not late:
         return Verdict.POWER_INSUFFICIENT
-    if math.isnan(paired_g.helped_fraction):
+    n_total = sum(s.n_pairs for s in late)
+    if n_total < n_pairs_floor:
         return Verdict.POWER_INSUFFICIENT
-    if (
-        paired_g.helped_fraction <= 0.40
-        and paired_g.g <= -0.30
-    ):
+    g_pooled = sum(s.g * s.n_pairs for s in late) / n_total
+    helped_pooled = sum(s.helped_fraction * s.n_pairs for s in late) / n_total
+    if helped_pooled <= helped_ceiling and g_pooled <= g_ceiling:
         return Verdict.HELD
     return Verdict.NO_EFFECT
 
