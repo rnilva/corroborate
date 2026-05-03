@@ -153,6 +153,7 @@ def paired_g(
     baseline_arm: str,
     pair_by: tuple[str, ...] = ('seed',),
     arm_field: str = 'intervention_name',
+    dedupe_strategy: str = 'raise',
 ) -> PairedGResult:
     """Compute paired Hedges' g + raw mean-diff at `source` across
     matched (T, B) pairs in `cells`.
@@ -171,21 +172,72 @@ def paired_g(
     Cell-level scoping (env, HP equality, threshold gates,
     arbitrary predicates) lives on `Bridge.scope` as a polars
     `pl.Expr`; `claim_bridge.evaluate()` filters before this
-    analysis sees the cells. The analysis itself does not scope."""
+    analysis sees the cells. The analysis itself does not scope.
+
+    `dedupe_strategy` controls the policy when multiple cells share
+    the same `(arm, pair_by)` tuple:
+    - `'raise'` (default): error loudly. The dict-overwrite would
+      silently drop data; force the bridge author to either tighten
+      `pair_by` or opt into aggregation.
+    - `'mean'`: average the per-cell `source` values within each
+      `(arm, pair_by)` bucket, then run paired-g on the aggregated
+      values. The intended use is M2M scenarios where the user
+      genuinely wants to pool across e.g. multiple corpora at the
+      same `(seed, env)`."""
     from corroborate.statistics import hedges_g_paired
 
-    treatment: dict[tuple[object, ...], float] = {}
-    baseline: dict[tuple[object, ...], float] = {}
+    if dedupe_strategy not in ('raise', 'mean'):
+        raise ValueError(
+            f'paired_g: unknown dedupe_strategy {dedupe_strategy!r}; '
+            f'expected "raise" or "mean"',
+        )
+    treatment_buckets: dict[tuple[object, ...], list[float]] = {}
+    baseline_buckets: dict[tuple[object, ...], list[float]] = {}
     for cell in cells:
         arm = cell.get(arm_field)
         if arm == treatment_arm:
-            treatment[_key_tuple(cell, pair_by)] = _resolve_value(
-                cell, source,
-            )
+            key = _key_tuple(cell, pair_by)
+            bucket = treatment_buckets.setdefault(key, [])
+            if bucket and dedupe_strategy == 'raise':
+                raise ValueError(
+                    f'paired_g: duplicate cell for {treatment_arm!r} at '
+                    f'pair_by={pair_by} key={key}. The dict-overwrite '
+                    f'silently kept the last-written value, dropping '
+                    f'data. Tighten `pair_by` to a discriminating tuple, '
+                    f'set dedupe_strategy="mean" to aggregate the '
+                    f'cells, or use an M2M-friendly analysis '
+                    f'(e.g. stratified Spearman) instead.',
+                )
+            bucket.append(_resolve_value(cell, source))
         elif arm == baseline_arm:
-            baseline[_key_tuple(cell, pair_by)] = _resolve_value(
-                cell, source,
-            )
+            key = _key_tuple(cell, pair_by)
+            bucket = baseline_buckets.setdefault(key, [])
+            if bucket and dedupe_strategy == 'raise':
+                raise ValueError(
+                    f'paired_g: duplicate cell for {baseline_arm!r} at '
+                    f'pair_by={pair_by} key={key}. The dict-overwrite '
+                    f'silently kept the last-written value, dropping '
+                    f'data. Tighten `pair_by` to a discriminating tuple, '
+                    f'set dedupe_strategy="mean" to aggregate the '
+                    f'cells, or use an M2M-friendly analysis '
+                    f'(e.g. stratified Spearman) instead.',
+                )
+            bucket.append(_resolve_value(cell, source))
+
+    treatment: dict[tuple[object, ...], float] = {
+        k: (
+            sum(v for v in vs if not math.isnan(v))
+            / max(1, sum(1 for v in vs if not math.isnan(v)))
+        ) if any(not math.isnan(v) for v in vs) else float('nan')
+        for k, vs in treatment_buckets.items()
+    }
+    baseline: dict[tuple[object, ...], float] = {
+        k: (
+            sum(v for v in vs if not math.isnan(v))
+            / max(1, sum(1 for v in vs if not math.isnan(v)))
+        ) if any(not math.isnan(v) for v in vs) else float('nan')
+        for k, vs in baseline_buckets.items()
+    }
 
     paired_keys = sorted(set(treatment) & set(baseline))
     # NaN-skip pairs where either side is missing (e.g. cells from

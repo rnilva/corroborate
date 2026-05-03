@@ -275,6 +275,8 @@ def adaptive_dqn_recovers_ddqn_benefit__fourrooms_factor_0p5(
 )
 def ddqn_helps_at_early_bursts__pixel_envs(
     paired_g: PairedGResult,
+    *,
+    dedupe_strategy: str = 'mean',
 ) -> Verdict:
     """TIER A2 existence proof: at the first eval-burst quarter
     on long-horizon high-obs-dim envs (MinAtar 1M), DDQN's
@@ -285,6 +287,7 @@ def ddqn_helps_at_early_bursts__pixel_envs(
     Generalizes within the MinAtar 1M sample, not across all
     high-obs-dim envs (log_obs_dim alone is not predictive —
     see K1 LOO + four-MinAtar comparison)."""
+    del dedupe_strategy  # forwarded to paired_g
     if paired_g.n_pairs < 30:
         return Verdict.POWER_INSUFFICIENT
     if math.isnan(paired_g.helped_fraction):
@@ -309,6 +312,8 @@ def ddqn_helps_at_early_bursts__pixel_envs(
 )
 def ddqn_attenuates_at_late_bursts__spaceinvaders(
     paired_g: PairedGResult,
+    *,
+    dedupe_strategy: str = 'mean',
 ) -> Verdict:
     """TIER A2 existence proof: on SpaceInvaders-MinAtar at 1M
     training steps, in the last quarter of training bursts,
@@ -328,6 +333,7 @@ def ddqn_attenuates_at_late_bursts__spaceinvaders(
     `adaptive_dqn_fails_to_avoid_attenuation__spaceinvaders_1m`
     runs the dormancy controller on this regime; it tracks DDQN
     (g≈0) and inherits the attenuation (g=−0.46 vs vanilla)."""
+    del dedupe_strategy  # forwarded to paired_g
     if paired_g.n_pairs < 50:
         return Verdict.POWER_INSUFFICIENT
     if math.isnan(paired_g.helped_fraction):
@@ -875,6 +881,7 @@ def ddqn_rescues_underlearning_vanilla__fourrooms_rs_0p1(
     paired_g: PairedGResult,
     *,
     threshold_diff: float = 0.4,
+    dedupe_strategy: str = 'mean',
 ) -> Verdict:
     """Pearl-rung-2 interventional contrast: do(arm=ddqn) on
     FourRooms at reward_scale=0.1 produces native-outcome
@@ -907,6 +914,7 @@ def ddqn_rescues_underlearning_vanilla__fourrooms_rs_0p1(
     ddqn_native | log_rs (partial r ≈ −0.04). The bridge tests
     a CONTRAST between two independent reward-scale-response
     curves, not a causal arrow between cell outputs."""
+    del dedupe_strategy  # forwarded to paired_g; not used in body
     diff = paired_g.mean_diff
     p = paired_g.mean_diff_p_value
     if math.isnan(diff) or math.isnan(p):
