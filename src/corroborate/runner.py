@@ -532,6 +532,57 @@ def _load_data(
     raise FileNotFoundError(f'no such data path: {data}')
 
 
+def _missing_for_restore(
+    runs_path: Path,
+    traces_path: Path,
+    trace_reads: frozenset[str],
+    manifest_path: Path,
+) -> list[str] | None:
+    """Decide which files we need restored from cloud for this
+    corpus.
+
+    `runs.parquet` is always required (the row store). `traces.
+    parquet` is required only when any required measurable or
+    declared analysis-read pulls from a trace-store column AND the
+    remote manifest carries it AND it's missing/stub locally.
+
+    Returns the list of relpaths to restore, or None if nothing
+    needs restoring. Stub local files (size < 1KB) are treated as
+    missing — some corpora carry zero-byte placeholders."""
+    targets: list[str] = []
+    if not _file_present(runs_path):
+        targets.append('runs.parquet')
+    if trace_reads and not _file_present(traces_path):
+        # Only ask for `traces.parquet` if the manifest has it.
+        try:
+            raw = cast(object, json.loads(manifest_path.read_text()))
+        except (OSError, ValueError):
+            raw = {}
+        if isinstance(raw, dict):
+            files = raw.get('files', [])
+            if isinstance(files, list):
+                relpaths: set[str] = set()
+                for f in files:
+                    if isinstance(f, dict):
+                        rp = f.get('relpath')
+                        if isinstance(rp, str):
+                            relpaths.add(rp)
+                if 'traces.parquet' in relpaths:
+                    targets.append('traces.parquet')
+    return targets or None
+
+
+def _file_present(path: Path, *, min_size: int = 1024) -> bool:
+    """A file 'counts' only if it exists AND is at least
+    `min_size` bytes (skips zero-byte placeholders)."""
+    if not path.exists():
+        return False
+    try:
+        return path.stat().st_size >= min_size
+    except OSError:
+        return False
+
+
 def _required_record_keys(required: Sequence[str]) -> frozenset[str]:
     """Union of leaf record-keys the required measurables read,
     walked transitively via `transitive_reads`. Used to determine
@@ -619,22 +670,36 @@ def _load_directory(
         if not sub.is_dir():
             continue
         runs_path = sub / 'runs.parquet'
+        traces_path = sub / 'traces.parquet'
         manifest = sub / '_remote.json'
-        if not runs_path.exists() and manifest.exists():
-            if restore_from_cloud:
-                from corroborate.cloud import restore
-                print(
-                    f'runner: restoring {sub.name} from cloud...',
-                    file=sys.stderr,
-                )
-                restore(sub)
-            else:
-                print(
-                    f'runner: WARNING — {sub.name} has _remote.json '
-                    f'but no local runs.parquet; restore disabled',
-                    file=sys.stderr,
-                )
-                continue
+        # Restore from cloud if (a) runs.parquet is missing OR (b)
+        # we need traces (any required measurable / analysis read)
+        # and traces.parquet is missing/stub locally but listed in
+        # the remote manifest. Without (b), corpora with local
+        # runs.parquet but cloud-only traces.parquet (e.g. the
+        # original `ddqn` 200k corpus) silently lose their trace-
+        # reading measurables to NaN.
+        if manifest.exists():
+            need_restore = _missing_for_restore(
+                runs_path, traces_path, trace_reads, manifest,
+            )
+            if need_restore:
+                if restore_from_cloud:
+                    from corroborate.cloud import restore
+                    print(
+                        f'runner: restoring {sub.name} from cloud '
+                        f'({need_restore})...',
+                        file=sys.stderr,
+                    )
+                    restore(sub, files=need_restore, overwrite=True)
+                else:
+                    print(
+                        f'runner: WARNING — {sub.name} needs '
+                        f'{need_restore} from cloud; restore disabled',
+                        file=sys.stderr,
+                    )
+                    if not runs_path.exists():
+                        continue
         if not runs_path.exists():
             continue
         df = pl.read_parquet(runs_path)
