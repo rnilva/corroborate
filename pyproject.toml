@@ -53,7 +53,11 @@ include = ["src", "tests"]
 # framework's type discipline is for the framework itself, not
 # for one-off corpus consumers. Many of those scripts will be
 # deleted rather than typed.
-extraPaths = ["."]
+extraPaths = ["src", "."]
+# Worktree-local: share main checkout's venv. Revert these
+# (extraPaths back to ["."], drop venvPath/venv) before merge.
+venvPath = "/workspace/corroborate"
+venv = ".venv"
 stubPath = "stubs"
 pythonVersion = "3.13"
 typeCheckingMode = "strict"

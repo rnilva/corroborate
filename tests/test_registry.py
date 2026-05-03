@@ -58,16 +58,29 @@ def test_class_discovery_covers_every_authored_module_and_container(
 ) -> None:
     """Every `ClaimBase` subclass and the explicitly-registered
     `Replay` container are reachable by name through the
-    unified `classes` map."""
+    unified `classes` map. Optimizers are now `@claim`-functions
+    (in `fns`), not classes — see `test_fn_discovery_covers_optimizers`."""
     expected_classes = {
         'MLP', 'CNN',
-        'Adam', 'RMSProp', 'SGD', 'WarmedUpdate',
         'EpsilonGreedy',
         'Replay',
     }
     missing = expected_classes - set(dqn_registry.classes)
     assert not missing, (
         f'missing class registrations: {missing}'
+    )
+
+
+def test_fn_discovery_covers_optimizers(
+    dqn_registry: Registry,
+) -> None:
+    """Optimizer factories (`adam`, `rmsprop`, `sgd`,
+    `warmed_update`) are `@claim`-decorated functions registered
+    in the `fns` map. Authors compose via
+    `partial(adam, lr=...)`."""
+    expected_fns = {'adam', 'rmsprop', 'sgd', 'warmed_update'}
+    assert expected_fns <= set(dqn_registry.fns), (
+        f'missing fn registrations: {expected_fns - set(dqn_registry.fns)}'
     )
 
 
@@ -91,13 +104,11 @@ def test_resolved_fn_is_identical_to_imported_handle(
 def test_resolved_class_is_identical_to_imported_class(
     dqn_registry: Registry,
 ) -> None:
-    from corroborate.rl.dqn.claims.optimizer import (
-        Adam, WarmedUpdate,
-    )
+    from corroborate.rl.dqn.claims.optimizer import adam, warmed_update
     from corroborate.rl.dqn.claims.q_network import MLP
     from corroborate.rl.dqn.claims.replay import Replay
-    assert dqn_registry.cls('Adam') is Adam
-    assert dqn_registry.cls('WarmedUpdate') is WarmedUpdate
+    assert dqn_registry.fn('adam') is adam
+    assert dqn_registry.fn('warmed_update') is warmed_update
     assert dqn_registry.cls('MLP') is MLP
     assert dqn_registry.cls('Replay') is Replay
 

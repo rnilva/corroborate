@@ -94,22 +94,27 @@ def test_resolve_fn_with_kwargs_returns_partial(
     assert out.keywords == {'tau': 0.7}
 
 
-def test_resolve_nested_fn_in_class_kwargs(reg: Registry) -> None:
-    """Nested case: a Module Claim's slot binds to an FnClaim. The
-    real example: `WarmedUpdate(inner=Adam(...), warmup_steps=100)`
-    — same shape but at module-of-modules depth."""
-    from corroborate.rl.dqn.claims.optimizer import Adam, WarmedUpdate
+def test_resolve_nested_fn_in_fn_kwargs(reg: Registry) -> None:
+    """Nested case: an FnClaim factory takes another FnClaim
+    factory as a kwarg. Real example:
+    `partial(warmed_update, inner=partial(adam, lr=...), warmup_steps=100)`
+    — same shape but at factory-of-factories depth."""
+    from corroborate.rl.dqn.claims.optimizer import adam, warmed_update
     out = resolve(
         {
-            'class': 'WarmedUpdate',
-            'inner': {'class': 'Adam', 'lr': 0.0001},
+            'fn': 'warmed_update',
+            'inner': {'fn': 'adam', 'lr': 0.0001},
             'warmup_steps': 100,
         },
         reg=reg,
     )
-    assert out == WarmedUpdate(
-        inner=Adam(lr=0.0001), warmup_steps=100,
-    )
+    assert isinstance(out, partial)
+    assert out.func is warmed_update
+    inner_partial = out.keywords['inner']
+    assert isinstance(inner_partial, partial)
+    assert inner_partial.func is adam
+    assert inner_partial.keywords == {'lr': 0.0001}
+    assert out.keywords['warmup_steps'] == 100
 
 
 def test_resolve_partial_of_fn_with_partial_kwarg(
@@ -162,8 +167,8 @@ intervention:
   sync_period: 100
   replay: {class: Replay, capacity: 50000, batch_size: 32}
   optimizer:
-    class: WarmedUpdate
-    inner: {class: Adam, lr: 0.0001}
+    fn: warmed_update
+    inner: {fn: adam, lr: 0.0001}
     warmup_steps: 100
   q_network: {class: MLP, hidden: [64, 64]}
   bootstrap:
@@ -183,7 +188,7 @@ def _expectile_python() -> Hypothesis[Mapping[str, object]]:
     from corroborate.rl.dqn.claims.bootstrap import (
         bootstrap, expectile_greedify,
     )
-    from corroborate.rl.dqn.claims.optimizer import Adam, WarmedUpdate
+    from corroborate.rl.dqn.claims.optimizer import adam, warmed_update
     from corroborate.rl.dqn.claims.q_network import MLP
     from corroborate.rl.dqn.claims.replay import Replay
     boot = partial(
@@ -197,8 +202,10 @@ def _expectile_python() -> Hypothesis[Mapping[str, object]]:
         'gamma': 0.99,
         'sync_period': 100,
         'replay': Replay(capacity=50_000, batch_size=32),
-        'optimizer': WarmedUpdate(
-            inner=Adam(lr=1e-4), warmup_steps=100,
+        'optimizer': partial(
+            warmed_update,
+            inner=partial(adam, lr=1e-4),
+            warmup_steps=100,
         ),
         'q_network': MLP(hidden=(64, 64)),
         'bootstrap': boot,
@@ -246,10 +253,14 @@ def test_yaml_module_claim_slots_equal_python_constructions(
 ) -> None:
     h_yaml = load_hypothesis(expectile_yaml_path, reg=reg)
     h_python = _expectile_python()
-    # Module Claim instances are frozen dataclasses with
-    # value equality.
+    # Slot equality compared via `canonical_str` — `functools
+    # .partial` instances don't define value equality, but the
+    # canonical-string fingerprint does, by construction.
+    from corroborate._canonical import canonical_str
     for k in ('q_network', 'optimizer', 'replay'):
-        assert h_yaml.intervention[k] == h_python.intervention[k]
+        assert canonical_str(h_yaml.intervention[k]) == canonical_str(
+            h_python.intervention[k],
+        )
 
 
 def test_yaml_bootstrap_partial_signature_matches_python(

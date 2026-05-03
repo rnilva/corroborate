@@ -25,7 +25,9 @@ import pytest
 
 from corroborate._canonical import canonical_str
 from corroborate.persistence import read_tracerows, write_tracerows
-from corroborate.rl.dqn.claims.optimizer import Adam, WarmedUpdate
+from functools import partial as _partial
+
+from corroborate.rl.dqn.claims.optimizer import adam, warmed_update
 from corroborate.rl.dqn.dqn import default_state_hash, dqn
 from corroborate.rl.env_catalogue import HasN, HasShape
 from corroborate.schema import TraceLeaf, TraceRow
@@ -85,7 +87,9 @@ def test_trace_row_round_trip_for_real_dqn_run(tmp_path: Path) -> None:
         eval_episode_cap=200,
         state_hash=default_state_hash,
         total_steps=200, eval_every=100, n_episodes=2,
-        optimizer=WarmedUpdate(inner=Adam(lr=2e-3), warmup_steps=50),
+        optimizer=_partial(
+            warmed_update, inner=_partial(adam, lr=2e-3), warmup_steps=50,
+        ),
     )
 
     record = configured(rng_key=jax.random.PRNGKey(0))
@@ -93,7 +97,7 @@ def test_trace_row_round_trip_for_real_dqn_run(tmp_path: Path) -> None:
     # Step 1: leaf values from the topology walk.
     leaf_values = _leaf_values(configured)
     assert leaf_values['gamma'] == 0.99
-    # WarmedUpdate.inner.Adam.lr — captured at the deep dotted path.
+    # warmed_update.inner.adam.lr — captured at the deep dotted path.
     assert leaf_values['optimizer.inner.lr'] == 2e-3
     assert leaf_values['optimizer.warmup_steps'] == 50
 

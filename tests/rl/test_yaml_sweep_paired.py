@@ -46,9 +46,7 @@ def _python_minatar_1M_hypothesis(
     from corroborate.rl.dqn.claims.bootstrap import (
         bootstrap, double_greedify,
     )
-    from corroborate.rl.dqn.claims.optimizer import (
-        Adam, WarmedUpdate,
-    )
+    from corroborate.rl.dqn.claims.optimizer import adam, warmed_update
     from corroborate.rl.dqn.claims.q_network import CNN
     from corroborate.rl.dqn.claims.replay import Replay
     spec = get_env_spec(env_name)
@@ -58,8 +56,10 @@ def _python_minatar_1M_hypothesis(
         'n_episodes': 5,
         'gamma': 0.99,
         'replay': Replay(capacity=50_000, batch_size=32),
-        'optimizer': WarmedUpdate(
-            inner=Adam(lr=1e-4), warmup_steps=100,
+        'optimizer': partial(
+            warmed_update,
+            inner=partial(adam, lr=1e-4),
+            warmup_steps=100,
         ),
         'sync_period': 100,
         'q_network': CNN(
@@ -92,9 +92,7 @@ def _python_ddqn_effective_hypothesis(
     from corroborate.rl.dqn.claims.bootstrap import (
         bootstrap, double_greedify,
     )
-    from corroborate.rl.dqn.claims.optimizer import (
-        Adam, WarmedUpdate,
-    )
+    from corroborate.rl.dqn.claims.optimizer import adam, warmed_update
     from corroborate.rl.dqn.claims.q_network import CNN
     from corroborate.rl.dqn.claims.replay import Replay
     spec = get_env_spec(env_name)
@@ -104,8 +102,10 @@ def _python_ddqn_effective_hypothesis(
         'n_episodes': 5,
         'gamma': 0.99,
         'replay': Replay(capacity=50_000, batch_size=32),
-        'optimizer': WarmedUpdate(
-            inner=Adam(lr=1e-4), warmup_steps=100,
+        'optimizer': partial(
+            warmed_update,
+            inner=partial(adam, lr=1e-4),
+            warmup_steps=100,
         ),
         'sync_period': 100,
         'q_network': CNN(
@@ -216,8 +216,13 @@ def test_minatar_1M_per_env_contract(
     assert yaml_h.predicted_direction == py_h.predicted_direction
     assert yaml_h.arm_key() == py_h.arm_key()
 
+    # `partial` lacks value equality; `canonical_str` is the
+    # framework's value-equality contract for partial-baked claims.
+    from corroborate._canonical import canonical_str
     for k in ('q_network', 'optimizer', 'replay'):
-        assert yaml_h.intervention[k] == py_h.intervention[k]
+        assert canonical_str(yaml_h.intervention[k]) == canonical_str(
+            py_h.intervention[k],
+        )
 
     # CNN obs_shape resolved to the env's spec attribute.
     spec = get_env_spec(env_name)
@@ -248,8 +253,13 @@ def test_ddqn_effective_per_env_contract(
     assert yaml_h.name == py_h.name
     assert yaml_h.predicted_direction == py_h.predicted_direction
     assert yaml_h.arm_key() == py_h.arm_key()
+    # `partial` lacks value equality; `canonical_str` is the
+    # framework's value-equality contract for partial-baked claims.
+    from corroborate._canonical import canonical_str
     for k in ('q_network', 'optimizer', 'replay'):
-        assert yaml_h.intervention[k] == py_h.intervention[k]
+        assert canonical_str(yaml_h.intervention[k]) == canonical_str(
+            py_h.intervention[k],
+        )
 
 
 # ---------- cross-env signature stability ----------

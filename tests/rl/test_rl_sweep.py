@@ -21,7 +21,8 @@ import pytest
 from corroborate.hypothesis import Hypothesis
 from corroborate.intervention import Intervention
 from corroborate.rl.dqn.claims.bootstrap import bootstrap, double_greedify
-from corroborate.rl.dqn.claims.optimizer import Adam, WarmedUpdate
+from functools import partial as _partial
+from corroborate.rl.dqn.claims.optimizer import adam, warmed_update
 from corroborate.rl.dqn.claims.replay import Replay
 from corroborate.rl.dqn.invariants import DQNTrajectoryRecord
 from corroborate.rl.env_catalogue import get
@@ -32,7 +33,7 @@ _SHORT_RUN_INTERVENTION: dict[str, object] = {
     'total_steps': 60, 'eval_every': 30, 'n_episodes': 2,
     'sync_period': 10,
     'replay': Replay(capacity=200, batch_size=8),
-    'optimizer': WarmedUpdate(inner=Adam(), warmup_steps=10),
+    'optimizer': _partial(warmed_update, inner=_partial(adam), warmup_steps=10),
 }
 
 

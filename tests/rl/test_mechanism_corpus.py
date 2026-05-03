@@ -20,7 +20,8 @@ from corroborate.aggregate import leaf_signature
 from corroborate.hypothesis import Hypothesis
 from corroborate.rl.cell_runner import run_dqn_cell
 from corroborate.rl.dqn.claims.bootstrap import bootstrap, double_greedify
-from corroborate.rl.dqn.claims.optimizer import Adam, WarmedUpdate
+from functools import partial as _partial
+from corroborate.rl.dqn.claims.optimizer import adam, warmed_update
 from corroborate.rl.dqn.invariants import DQNTrajectoryRecord
 from corroborate.rl.env_catalogue import get
 
@@ -38,7 +39,7 @@ _SHORT_RUN_HP: dict[str, object] = {
     'total_steps': 40, 'eval_every': 20, 'n_episodes': 2,
     'sync_period': 10,
     'replay': Replay(capacity=200, batch_size=16),
-    'optimizer': WarmedUpdate(inner=Adam(), warmup_steps=10),
+    'optimizer': _partial(warmed_update, inner=_partial(adam), warmup_steps=10),
 }
 
 

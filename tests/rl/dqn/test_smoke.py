@@ -28,7 +28,8 @@ from corroborate.rl.dqn.claims.bootstrap import (
     double_greedify,
     max_greedify,
 )
-from corroborate.rl.dqn.claims.optimizer import Adam, WarmedUpdate
+from functools import partial as _partial
+from corroborate.rl.dqn.claims.optimizer import adam, warmed_update
 from corroborate.rl.dqn.claims.q_network import MLP, mlp_q
 from corroborate.rl.dqn.claims.replay import Replay
 from corroborate.rl.dqn.dqn import dqn_step, init_state
@@ -79,7 +80,7 @@ def _build_step_fn(
 @pytest.mark.slow
 def test_vanilla_dqn_runs_on_cartpole_via_python_loop() -> None:
     env, env_params, obs_shape, n_actions = _make_env()
-    optimizer = WarmedUpdate(inner=Adam(), warmup_steps=10)()
+    optimizer = warmed_update(inner=_partial(adam), warmup_steps=10)
     init = init_state(
         env=env, env_params=env_params,
         obs_shape=obs_shape, n_actions=n_actions,
@@ -121,7 +122,7 @@ def test_vanilla_dqn_runs_via_scan_loop() -> None:
     """Same step function under scan_loop should produce the
     same record shape (and identical values for fixed seed)."""
     env, env_params, obs_shape, n_actions = _make_env()
-    optimizer = WarmedUpdate(inner=Adam(), warmup_steps=10)()
+    optimizer = warmed_update(inner=_partial(adam), warmup_steps=10)
     init = init_state(
         env=env, env_params=env_params,
         obs_shape=obs_shape, n_actions=n_actions,
@@ -258,7 +259,7 @@ def test_ep_return_resets_in_state_on_done() -> None:
     value AT the done step (so bridges filtering by done==1 see
     the final per-episode return)."""
     env, env_params, obs_shape, n_actions = _make_env()
-    optimizer = WarmedUpdate(inner=Adam(), warmup_steps=10)()
+    optimizer = warmed_update(inner=_partial(adam), warmup_steps=10)
     init = init_state(
         env=env, env_params=env_params,
         obs_shape=obs_shape, n_actions=n_actions,
@@ -292,7 +293,7 @@ def test_step_counter_advances_monotonically() -> None:
     iteration. (Sanity check on the loop primitive's idx
     threading.)"""
     env, env_params, obs_shape, n_actions = _make_env()
-    optimizer = WarmedUpdate(inner=Adam(), warmup_steps=10)()
+    optimizer = warmed_update(inner=_partial(adam), warmup_steps=10)
     init = init_state(
         env=env, env_params=env_params,
         obs_shape=obs_shape, n_actions=n_actions,

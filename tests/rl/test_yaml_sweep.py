@@ -43,9 +43,7 @@ def _python_hypothesis(
     from corroborate.rl.dqn.claims.bootstrap import (
         bootstrap, double_greedify, expectile_greedify,
     )
-    from corroborate.rl.dqn.claims.optimizer import (
-        Adam, WarmedUpdate,
-    )
+    from corroborate.rl.dqn.claims.optimizer import adam, warmed_update
     from corroborate.rl.dqn.claims.q_network import MLP
     from corroborate.rl.dqn.claims.replay import Replay
     base: dict[str, object] = {
@@ -54,8 +52,10 @@ def _python_hypothesis(
         'n_episodes': 5,
         'gamma': 0.99,
         'replay': Replay(capacity=50_000, batch_size=32),
-        'optimizer': WarmedUpdate(
-            inner=Adam(lr=1e-4), warmup_steps=100,
+        'optimizer': partial(
+            warmed_update,
+            inner=partial(adam, lr=1e-4),
+            warmup_steps=100,
         ),
         'sync_period': 100,
         'q_network': MLP(hidden=(64, 64)),
@@ -203,11 +203,17 @@ def test_module_claim_slots_equal(
     ]],
     h_name: str,
 ) -> None:
-    """Frozen-dataclass equality on Module Claim slots —
-    Replay/WarmedUpdate/Adam/MLP all `==` between paths."""
+    """Slot equality across YAML- and Python-built hypotheses.
+    Compared via `canonical_str` because `functools.partial`
+    instances don't define value-equality (`partial(f, x=1) !=
+    partial(f, x=1)`); the framework's canonical-string fingerprint
+    IS the value-equality contract for partial-baked claims."""
+    from corroborate._canonical import canonical_str
     yaml_h, py_h = hypothesis_pairs[h_name]
     for k in ('q_network', 'optimizer', 'replay'):
-        assert yaml_h.intervention[k] == py_h.intervention[k]
+        assert canonical_str(yaml_h.intervention[k]) == canonical_str(
+            py_h.intervention[k],
+        )
 
 
 @pytest.mark.parametrize(

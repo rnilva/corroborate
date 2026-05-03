@@ -1,19 +1,21 @@
-"""Tests for optimizer factories — Adam / RMSProp / SGD / WarmedUpdate.
+"""Tests for optimizer factories — adam / rmsprop / sgd / warmed_update.
 
-WarmedUpdate's contract: parameter updates are zero during the
+`warmed_update`'s contract: parameter updates are zero during the
 first `warmup_steps` calls, then identical to the inner optimizer's
 updates afterwards. Inner state still advances through warmup."""
 from __future__ import annotations
+
+from functools import partial
 
 import jax
 import jax.numpy as jnp
 import optax
 
 from corroborate.rl.dqn.claims.optimizer import (
-    Adam,
-    RMSProp,
-    SGD,
-    WarmedUpdate,
+    adam,
+    rmsprop,
+    sgd,
+    warmed_update,
 )
 
 
@@ -23,17 +25,17 @@ def _grads_like(params: jax.Array) -> jax.Array:
 
 
 def test_adam_returns_optax_handle() -> None:
-    handle = Adam(lr=1e-3)()
+    handle = adam(lr=1e-3)
     assert isinstance(handle, optax.GradientTransformation)
 
 
 def test_rmsprop_returns_optax_handle() -> None:
-    handle = RMSProp(lr=2.5e-4)()
+    handle = rmsprop(lr=2.5e-4)
     assert isinstance(handle, optax.GradientTransformation)
 
 
 def test_sgd_returns_optax_handle() -> None:
-    handle = SGD(lr=0.1)()
+    handle = sgd(lr=0.1)
     assert isinstance(handle, optax.GradientTransformation)
 
 
@@ -43,7 +45,11 @@ def test_warmed_update_zeros_updates_during_warmup() -> None:
     gradient magnitude. After warmup, deltas match Adam-style
     nonzero updates."""
     warmup = 5
-    factory = WarmedUpdate(inner=Adam(lr=1e-2), warmup_steps=warmup)
+    factory = partial(
+        warmed_update,
+        inner=partial(adam, lr=1e-2),
+        warmup_steps=warmup,
+    )
     handle = factory()
 
     params = jnp.zeros((4,))
@@ -72,8 +78,10 @@ def test_warmed_update_inner_state_advances_during_warmup() -> None:
     match the no-warmup updates at the same call index, since the
     inner optimizer has seen the same gradient sequence."""
     warmup = 3
-    warmed = WarmedUpdate(inner=Adam(lr=1e-2), warmup_steps=warmup)()
-    plain = Adam(lr=1e-2)()
+    warmed = warmed_update(
+        inner=partial(adam, lr=1e-2), warmup_steps=warmup,
+    )
+    plain = adam(lr=1e-2)
 
     params = jnp.zeros((4,))
     grads = _grads_like(params)

@@ -33,7 +33,7 @@ from corroborate.rl.dqn.claims import (
     periodic_copy,
     squared_error,
 )
-from corroborate.rl.dqn.claims.optimizer import Adam, WarmedUpdate
+from corroborate.rl.dqn.claims.optimizer import default_optimizer
 from corroborate.rl.dqn.claims.replay import Replay, init_pending_n_step
 from corroborate.rl.dqn.eval import EvalBurstOut, eval_burst, train_with_eval
 from corroborate.rl.dqn.phases import (
@@ -42,11 +42,11 @@ from corroborate.rl.dqn.phases import (
     train_phase,
 )
 from corroborate.rl.dqn.state import DQNState
+from corroborate.rl.dqn.claims.optimizer import OptimizerFactory
 from corroborate.rl.dqn.types import (
     ActionSelect,
     Bootstrap,
     LossFn,
-    OptimizerFactory,
     QFunction,
     StepRecord,
     TargetSync,
@@ -210,7 +210,7 @@ def dqn(
     bootstrap: Bootstrap = default_bootstrap,
     loss_fn: LossFn = squared_error,
     target_sync: TargetSync = periodic_copy,
-    optimizer: OptimizerFactory = WarmedUpdate(inner=Adam()),
+    optimizer: OptimizerFactory = default_optimizer,
 ) -> dict[str, jax.Array]:
     """Full DQN training+eval run as one claim.
 

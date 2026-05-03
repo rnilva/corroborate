@@ -39,19 +39,16 @@ from collections.abc import Callable
 from typing_extensions import TypedDict
 
 from corroborate.rl.dqn.claims.action_select import EpsilonGreedy
-from corroborate.rl.dqn.claims.optimizer import (
-    Adam,
-    RMSProp,
-    SGD,
-    WarmedUpdate,
-)
 from corroborate.rl.dqn.claims.q_network import MLP
 from corroborate.rl.dqn.claims.replay import Replay
+from corroborate.rl.dqn.claims.optimizer import OptimizerFactory
 
 
-# Optimizer factories — concrete subclasses or a wrapping
-# WarmedUpdate. Authors swap by constructing a different one.
-type OptimizerOverride = Adam | RMSProp | SGD | WarmedUpdate
+# Optimizer factories — any callable returning an optax handle.
+# `OptimizerFactory` Protocol covers `partial(adam, lr=...)`,
+# `partial(warmed_update, inner=..., warmup_steps=...)`, etc.
+# Authors swap via a different partial composition.
+type OptimizerOverride = OptimizerFactory
 
 
 class DQNOverrides(TypedDict, total=False, closed=True):

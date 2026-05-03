@@ -153,8 +153,12 @@ def test_walk_paths_surfaces_nested_leaves_at_dotted_paths() -> None:
 
 
 def _make_warmed_adam() -> object:
-    from corroborate.rl.dqn.claims.optimizer import Adam, WarmedUpdate
-    return WarmedUpdate(inner=Adam(lr=1e-3), warmup_steps=100)
+    from functools import partial
+
+    from corroborate.rl.dqn.claims.optimizer import adam, warmed_update
+    return partial(
+        warmed_update, inner=partial(adam, lr=1e-3), warmup_steps=100,
+    )
 
 
 def test_unsupported_leaf_type_raises() -> None:

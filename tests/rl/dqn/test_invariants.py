@@ -49,10 +49,12 @@ def _run_short_trajectory() -> Mapping[str, jnp.ndarray]:
     obs_shape = tuple(int(d) for d in obs_space.shape)
     n_actions = int(act_space.n)
 
-    from corroborate.rl.dqn.claims.optimizer import Adam, WarmedUpdate
+    from functools import partial
+
+    from corroborate.rl.dqn.claims.optimizer import adam, warmed_update
     from corroborate.rl.dqn.claims.replay import Replay
 
-    optimizer = WarmedUpdate(inner=Adam(), warmup_steps=10)()
+    optimizer = warmed_update(inner=partial(adam), warmup_steps=10)
     replay = Replay(capacity=200, batch_size=16)
     import jax
     state = init_state(

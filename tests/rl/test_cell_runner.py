@@ -21,7 +21,9 @@ import pytest
 from corroborate.aggregate import leaf_signature
 from corroborate.hypothesis import Hypothesis
 from corroborate.rl.cell_runner import run_dqn_cell
-from corroborate.rl.dqn.claims.optimizer import Adam, WarmedUpdate
+from functools import partial
+
+from corroborate.rl.dqn.claims.optimizer import adam, warmed_update
 from corroborate.rl.dqn.invariants import DQNTrajectoryRecord
 from corroborate.schema import RunRow
 from corroborate.verdict import Verdict
@@ -40,7 +42,9 @@ from corroborate.rl.dqn.claims.replay import Replay  # noqa: E402
 pytestmark = pytest.mark.slow
 
 _REPLAY_SHORT = Replay(capacity=200, batch_size=16)
-_OPTIMIZER_SHORT = WarmedUpdate(inner=Adam(), warmup_steps=10)
+_OPTIMIZER_SHORT = partial(
+    warmed_update, inner=partial(adam), warmup_steps=10,
+)
 _SHORT_RUN_HP: dict[str, object] = {
     'total_steps': 60, 'eval_every': 30, 'n_episodes': 2,
     'sync_period': 10,

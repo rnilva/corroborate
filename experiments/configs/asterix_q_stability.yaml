@@ -51,16 +51,16 @@ hypotheses:
     intervention:
       sync_period: 100
       optimizer:
-        class: WarmedUpdate
-        inner: {class: Adam, lr: 0.0001, weight_decay: 0.0}
+        fn: warmed_update
+        inner: {fn: adam, lr: 0.0001, weight_decay: 0.0}
         warmup_steps: 100
   - name: ddqn_sync100_wd0
     predicted_direction: a_gt_b
     intervention:
       sync_period: 100
       optimizer:
-        class: WarmedUpdate
-        inner: {class: Adam, lr: 0.0001, weight_decay: 0.0}
+        fn: warmed_update
+        inner: {fn: adam, lr: 0.0001, weight_decay: 0.0}
         warmup_steps: 100
       bootstrap:
         fn: bootstrap
@@ -76,16 +76,16 @@ hypotheses:
     intervention:
       sync_period: 10000
       optimizer:
-        class: WarmedUpdate
-        inner: {class: Adam, lr: 0.0001, weight_decay: 0.0}
+        fn: warmed_update
+        inner: {fn: adam, lr: 0.0001, weight_decay: 0.0}
         warmup_steps: 100
   - name: ddqn_sync10k_wd0
     predicted_direction: a_gt_b
     intervention:
       sync_period: 10000
       optimizer:
-        class: WarmedUpdate
-        inner: {class: Adam, lr: 0.0001, weight_decay: 0.0}
+        fn: warmed_update
+        inner: {fn: adam, lr: 0.0001, weight_decay: 0.0}
         warmup_steps: 100
       bootstrap:
         fn: bootstrap
@@ -101,16 +101,16 @@ hypotheses:
     intervention:
       sync_period: 100
       optimizer:
-        class: WarmedUpdate
-        inner: {class: Adam, lr: 0.0001, weight_decay: 0.001}
+        fn: warmed_update
+        inner: {fn: adam, lr: 0.0001, weight_decay: 0.001}
         warmup_steps: 100
   - name: ddqn_sync100_wd1e3
     predicted_direction: a_gt_b
     intervention:
       sync_period: 100
       optimizer:
-        class: WarmedUpdate
-        inner: {class: Adam, lr: 0.0001, weight_decay: 0.001}
+        fn: warmed_update
+        inner: {fn: adam, lr: 0.0001, weight_decay: 0.001}
         warmup_steps: 100
       bootstrap:
         fn: bootstrap
@@ -126,16 +126,16 @@ hypotheses:
     intervention:
       sync_period: 10000
       optimizer:
-        class: WarmedUpdate
-        inner: {class: Adam, lr: 0.0001, weight_decay: 0.001}
+        fn: warmed_update
+        inner: {fn: adam, lr: 0.0001, weight_decay: 0.001}
         warmup_steps: 100
   - name: ddqn_sync10k_wd1e3
     predicted_direction: a_gt_b
     intervention:
       sync_period: 10000
       optimizer:
-        class: WarmedUpdate
-        inner: {class: Adam, lr: 0.0001, weight_decay: 0.001}
+        fn: warmed_update
+        inner: {fn: adam, lr: 0.0001, weight_decay: 0.001}
         warmup_steps: 100
       bootstrap:
         fn: bootstrap

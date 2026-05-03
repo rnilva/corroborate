@@ -18,8 +18,8 @@ base_intervention:
     capacity: 50000
     batch_size: 32
   optimizer:
-    class: WarmedUpdate
-    inner: {class: Adam, lr: 0.0001}
+    fn: warmed_update
+    inner: {fn: adam, lr: 0.0001}
     warmup_steps: 100
   q_network:
     class: MLP
