@@ -47,10 +47,20 @@ markers = [
 
 [tool.pyright]
 include = ["src", "tests", "experiments"]
-extraPaths = ["."]
+extraPaths = ["src", "."]
 stubPath = "stubs"
 pythonVersion = "3.13"
 typeCheckingMode = "strict"
+# Worktree-local: share main checkout's venv to avoid disk-space cost
+# of a duplicate 6.4GB .venv. The venv's editable `.pth` points at
+# `/workspace/corroborate/src`, but pyright resolves `corroborate.*`
+# via `include = ["src"]` first (workspace-local sources win over the
+# .pth-installed copy because pyright ranks include-listed paths
+# above venv site-packages). Revert these two lines (venvPath / venv)
+# before merging — main shouldn't depend on a sibling worktree's
+# .venv.
+venvPath = "/workspace/corroborate"
+venv = ".venv"
 reportMissingTypeStubs = false
 reportImplicitOverride = "error"
 reportUnnecessaryTypeIgnoreComment = "error"
@@ -74,6 +84,7 @@ reportUnknownMemberType = "none"
 reportUnknownArgumentType = "none"
 reportUnknownVariableType = "none"
 reportUnknownParameterType = "none"
+reportUnknownLambdaType = "none"
 
 # Analyses subtree: like the rl/ subtree, this is the post-hoc
 # numerical-array boundary. numpy / scipy / pandas stubs leak Any
@@ -86,6 +97,7 @@ reportUnknownMemberType = "none"
 reportUnknownArgumentType = "none"
 reportUnknownVariableType = "none"
 reportUnknownParameterType = "none"
+reportUnknownLambdaType = "none"
 
 # Framework root: Unknown-family relaxed. `reductions.py` is the
 # framework's JAX boundary at the post-hoc analytical layer
@@ -108,6 +120,7 @@ reportUnknownMemberType = "none"
 reportUnknownArgumentType = "none"
 reportUnknownVariableType = "none"
 reportUnknownParameterType = "none"
+reportUnknownLambdaType = "none"
 
 # Framework tests that exercise reductions / measurables on jax
 # arrays touch jax.numpy directly (jnp.arange, jnp.asarray); the
@@ -115,6 +128,16 @@ reportUnknownParameterType = "none"
 # does. Relax the Unknown-family rules + reportAny here on the
 # same boundary; non-jax framework tests stay strict because they
 # never trip these rules.
+#
+# `reportUnusedFunction = "none"` is the test-specific relaxation:
+# tests routinely define `@measurable` / `@claim`-decorated nested
+# fixtures whose only purpose is the side-effect registration in
+# the global registry. The local symbol is unused by design — the
+# test bodies retrieve the fixture via `get_registered(name)`.
+# Strict-unused-function detection in tests/ would force a
+# scattered `# pyright: ignore[reportUnusedFunction]` per fixture,
+# losing the architectural signal. The rule stays strict in `src/`
+# where genuine unused functions are real bugs.
 [[tool.pyright.executionEnvironments]]
 root = "tests"
 reportAny = "none"
@@ -122,3 +145,5 @@ reportUnknownMemberType = "none"
 reportUnknownArgumentType = "none"
 reportUnknownVariableType = "none"
 reportUnknownParameterType = "none"
+reportUnknownLambdaType = "none"
+reportUnusedFunction = "none"

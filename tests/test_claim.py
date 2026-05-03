@@ -277,7 +277,7 @@ def test_claim_rejects_class_input() -> None:
         def __call__(self) -> None: ...
 
     try:
-        _ = claim(NotAClaim)  # pyright: ignore[reportCallIssue]
+        _ = claim(NotAClaim)
         raise AssertionError('expected TypeError')
     except TypeError as e:
         assert 'free functions only' in str(e)
@@ -293,7 +293,7 @@ def test_claim_idempotent_on_module_instance() -> None:
             return x
 
     instance = M()
-    re_wrapped = claim(instance)  # pyright: ignore[reportCallIssue]
+    re_wrapped = claim(instance)
     assert re_wrapped is instance
 
 

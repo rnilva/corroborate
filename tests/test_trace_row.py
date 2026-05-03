@@ -328,13 +328,21 @@ def test_multi_dim_arrays_round_trip_via_parquet(tmp_path: Path) -> None:
     assert by_id['cell-1'].leaves['reward'] == [1.0, 0.0, 0.5]
 
     # 2-D arrays preserved with shape + values (round-trip as
-    # nested Python lists).
+    # nested Python lists). Inner-list narrowing via a separate
+    # isinstance — TraceLeaf's recursive shape means `p1[0]` is
+    # itself a TraceLeaf, not yet narrowed.
     p1 = by_id['cell-1'].leaves['predicted_q']
     assert isinstance(p1, list)
-    assert len(p1) == 3 and len(p1[0]) == 4
+    assert len(p1) == 3
+    p1_row0 = p1[0]
+    assert isinstance(p1_row0, list)
+    assert len(p1_row0) == 4
     assert np.asarray(p1).tolist() == (
         np.arange(12, dtype=np.float32).reshape(3, 4).tolist()
     )
     p2 = by_id['cell-1'].leaves['pearson_stats']
     assert isinstance(p2, list)
-    assert len(p2) == 10 and len(p2[0]) == 5
+    assert len(p2) == 10
+    p2_row0 = p2[0]
+    assert isinstance(p2_row0, list)
+    assert len(p2_row0) == 5

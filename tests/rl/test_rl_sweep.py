@@ -107,7 +107,7 @@ def test_run_dqn_sweep_iterates_envs_and_hypotheses() -> None:
     env_specs: Mapping[str, object] = {'CartPole-v1': get('CartPole-v1')}
     result = run_dqn_sweep(
         [_vanilla_h(), _ddqn_h()],
-        env_specs=env_specs,  # type: ignore[arg-type]
+        env_specs=env_specs,
         seeds=(0, 1),
     )
     assert len(result.cell_results) == 2

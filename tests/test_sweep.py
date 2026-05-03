@@ -215,8 +215,13 @@ def test_sweep_accepts_class_based_runner_with_state() -> None:
         runner=runner,
     )
     assert len(result.all_runs) == 3
-    # The runner accumulated state across calls.
-    assert runner._calls == 3
+    # The runner accumulated state across calls. Reading the
+    # underscore-prefixed counter directly is the test's whole
+    # purpose (verify Runner stateful semantics) — the
+    # `reportPrivateUsage` warning is the diagnostic this assert
+    # would otherwise be: "you're touching private state". Yes,
+    # intentionally.
+    assert runner._calls == 3  # pyright: ignore[reportPrivateUsage]
     # Calls 1, 2, 3 reflected in the runs (order matches grid iteration).
     indices = [int(r.measurements['call_index']) for r in result.all_runs]
     assert indices == [1, 2, 3]

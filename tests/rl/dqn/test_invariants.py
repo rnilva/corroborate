@@ -18,12 +18,12 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 import jax.numpy as jnp
-import optax
 import pytest
 
 # Side-effect import: registers pearson_r_online_target etc. in
 # the measurable registry so resolved gap evaluation works.
-import corroborate.rl.dqn.measurables  # noqa: F401
+import corroborate.rl.dqn.measurables  # noqa: F401  # pyright: ignore[reportUnusedImport]
+from corroborate.measurable import Measurable
 from corroborate.rl.dqn.dqn import dqn_step, init_state
 from corroborate.rl.dqn.invariants import (
     fqi_decay_gap,
@@ -34,7 +34,6 @@ from corroborate.rl.dqn.invariants import (
     state_action_coverage_gap,
 )
 from corroborate.rl.loop import python_loop
-from corroborate.verdict import Verdict
 
 
 def _run_short_trajectory() -> Mapping[str, jnp.ndarray]:
@@ -159,10 +158,16 @@ def _pearson_stats_from_arrays(
     ], axis=-1)  # (T, 5)
 
 
-def _eval_gap(gap, record: Mapping[str, jnp.ndarray]) -> float:
+def _eval_gap[R: Mapping[str, object]](
+    gap: Measurable[R, float],
+    record: Mapping[str, jnp.ndarray],
+) -> float:
     """Helper: evaluate a gap measurable through the resolver so
     its declared measurable-deps (e.g. `pearson_r_online_target`)
-    auto-resolve from the registry."""
+    auto-resolve from the registry. Generic in R because gap
+    measurables have substrate-specific record types
+    (`DQNTrajectoryRecord`); the resolver consumes the record
+    structurally and is independent of R's nominal identity."""
     from corroborate.measurable import evaluate_with_measurables
     return float(evaluate_with_measurables(gap.fn, dict(record)))
 

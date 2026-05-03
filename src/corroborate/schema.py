@@ -90,8 +90,14 @@ leaf as its own typed parquet column."""
 type TraceLeaf = (
     str | int | float | bool
     | npt.NDArray[np.floating] | npt.NDArray[np.integer] | npt.NDArray[np.bool_]
-    | list[TraceLeaf]
+    | Sequence[TraceLeaf]
 )
+# `Sequence[TraceLeaf]` (covariant) rather than `list[TraceLeaf]`
+# (invariant) so that `list[list[float]]` and `list[list[list[
+# float]]]` and so on can be assigned through the recursive shape
+# without requiring callers to up-cast each layer. polars decodes
+# nested-list columns to plain Python `list`s, which satisfy
+# `Sequence`; numpy ndarrays already cover the dense-array branch.
 
 
 @dataclass(frozen=True, slots=True)

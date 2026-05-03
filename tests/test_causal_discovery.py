@@ -9,8 +9,9 @@ import math
 import numpy as np
 import polars as pl
 import pytest
-from scipy.stats import spearmanr  # type: ignore[reportMissingTypeStubs]
+from scipy.stats import spearmanr
 
+from corroborate._polars_boundary import series_std_float
 from corroborate.causal_discovery import (
     VariableScope,
     assert_stratification_admissible,
@@ -33,7 +34,7 @@ def test_partial_reduces_to_marginal_when_z_is_orthogonal() -> None:
     y = 0.7 * x + rng.standard_normal(200) * 0.7
     z = rng.standard_normal(200)  # independent of X, Y
 
-    marginal_r, _ = spearmanr(x, y)  # type: ignore[reportUnknownMemberType]
+    marginal_r, _ = spearmanr(x, y)
     partial_r, _ = partial_spearman_rho(x, y, z)
     assert abs(float(marginal_r) - partial_r) < 0.05
 
@@ -119,7 +120,7 @@ def test_stratified_finds_within_stratum_correlation_masked_by_pooling() -> None
     y = np.concatenate([ya, yb])
     strata = ['a'] * n_per + ['b'] * n_per
 
-    pooled_rho, _ = spearmanr(x, y)  # type: ignore[reportUnknownMemberType]
+    pooled_rho, _ = spearmanr(x, y)
     strat_rho, strat_p = stratified_spearman_rho(x, y, strata)
 
     # Pooled marginal is misled (could be either sign depending on
@@ -285,7 +286,7 @@ def test_assert_stratification_admissible_passes_within_stratum_variables() -> N
 
 # ============ PC algorithm — discover_adjacency ============
 
-def _df_from_columns(**cols: np.ndarray):  # type: ignore[reportUnknownParameterType, reportMissingParameterType]
+def _df_from_columns(**cols: np.ndarray) -> pl.DataFrame:
     """Build a polars DataFrame from kwarg columns."""
     return pl.DataFrame({k: v.tolist() for k, v in cols.items()})
 
@@ -682,7 +683,7 @@ def test_per_env_pc_dqn_smoke_finds_within_env_arm_edges() -> None:
         constant_cols = [
             v for v in variables
             if env_df[v].dtype.is_float()
-            and float(env_df[v].std() or 0.0) == 0.0
+            and series_std_float(env_df[v]) == 0.0
         ]
         if constant_cols:
             continue
@@ -754,7 +755,7 @@ def test_per_env_mediator_pc_smoke_finds_outcome_neighbours() -> None:
         constant_cols = [
             v for v in variables
             if env_df[v].dtype.is_float()
-            and float(env_df[v].std() or 0.0) == 0.0
+            and series_std_float(env_df[v]) == 0.0
         ]
         if constant_cols:
             continue

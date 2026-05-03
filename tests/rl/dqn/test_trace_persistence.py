@@ -21,7 +21,6 @@ from pathlib import Path
 
 import gymnax
 import jax
-import jax.numpy as jnp
 import pytest
 
 from corroborate._canonical import canonical_str

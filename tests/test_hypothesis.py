@@ -15,7 +15,6 @@ from corroborate._canonical import canonical_str
 from corroborate.claim import claim
 from corroborate.hypothesis import Hypothesis
 from corroborate.intervention import Intervention
-from corroborate.verdict import Verdict
 
 if TYPE_CHECKING:
     from corroborate.claim_bridge import Bridge as ClaimBridge

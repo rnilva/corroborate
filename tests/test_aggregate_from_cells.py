@@ -24,7 +24,6 @@ from collections.abc import Mapping
 
 import math
 
-from corroborate.aggregate import hypothesis_comparison_from_cells
 from corroborate.claim import claim
 from corroborate.hypothesis import Hypothesis
 from corroborate.intervention import Intervention
@@ -43,7 +42,6 @@ _STUB_INTERVENTION = Intervention(
 )
 _TREATMENT_ARM_KEY = _STUB_INTERVENTION.arm_key()
 from corroborate.schema import (
-    GroupStats,
     HypothesisComparisonRow,
     RunRow,
 )

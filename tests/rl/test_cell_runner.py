@@ -129,7 +129,14 @@ def test_run_dqn_cell_pre_registered_measurables_persist_at_their_name() -> None
             return float('nan')
         return float(jnp.nanmean(v))
 
-    m = Measurable[DQNTrajectoryRecord, float](
+    # Construct the Measurable typed at the upper-bound directly
+    # to match `Hypothesis.measurables: tuple[Measurable[R, object],
+    # ...]`. Authoring-time T narrowing (`Measurable[..., float]`)
+    # is preserved through the local var only — the Hypothesis
+    # field uses the tuple-element upper-bound, which is the
+    # heterogeneous-tuple case CLAUDE.md describes (Measurable.T
+    # invariance + heterogeneous panels).
+    m: Measurable[DQNTrajectoryRecord, object] = Measurable(
         fn=_ep_return_mean,
         name='ep_return_mean_summary',
         reads=('ep_return',),

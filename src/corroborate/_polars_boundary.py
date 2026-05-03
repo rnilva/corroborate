@@ -62,6 +62,28 @@ def scalar_int(lf: pl.LazyFrame, expr: pl.Expr) -> int:
     return v
 
 
+def series_std_float(series: pl.Series) -> float:
+    """Std of a float-typed polars Series, narrowed to `float`.
+
+    Polars' `Series.std()` is typed `float | timedelta | None`
+    because polars admits time-typed columns (where std is a
+    duration). Callers that already filtered to float columns
+    (e.g. via `dtype.is_float()`) get a typed exit here without
+    repeating the timedelta narrow at every site. `None` is
+    returned by polars on empty / all-null series; the helper
+    coerces to `0.0` to match the `or 0.0` idiom callers used
+    inline before this boundary existed."""
+    v = series.std()
+    if v is None:
+        return 0.0
+    if not isinstance(v, (int, float)):
+        raise TypeError(
+            f"expected float from polars Series.std(), got "
+            f"{type(v).__name__} (column dtype must be float)",
+        )
+    return float(v)
+
+
 def is_list_of_list(df: pl.DataFrame, col: str) -> bool:
     """True iff `col` is a 2-D `List(List(...))` polars column.
 
