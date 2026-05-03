@@ -208,10 +208,11 @@ def masked_window_mean(
         n_kept = int(np.sum(keep_mask))
         if n_kept == 0:
             return float('nan')
-        # `values * keep_mask` (bool×float broadcast) preserves
-        # floating dtype; `np.where(...)` returns dtype[Any].
-        masked = values * keep_mask
-        return float(np.sum(masked) / n_kept)
+        # `np.sum(values, where=keep_mask)` selects which positions
+        # contribute — typed `floating[Any]` and (unlike
+        # `values * keep_mask`) safe against NaN at False-mask
+        # positions, which would otherwise propagate via NaN×0=NaN.
+        return float(np.sum(values, where=keep_mask) / n_kept)
 
     return Measurable(fn=fn, name=name, reads=(value_key, mask_key))
 

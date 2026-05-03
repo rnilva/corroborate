@@ -5,7 +5,7 @@ import functools
 
 import pytest
 
-from corroborate.claim import claim
+from corroborate.claim import FnClaim, claim
 from corroborate.intervention import (
     Intervention,
     apply_interventions,
@@ -85,8 +85,30 @@ def test_combined_arm_key_contains_each_arm() -> None:
 
 # ============ apply / apply_interventions ============
 
-def _theory(*, bootstrap: object = 'default_bs',
-            action_select: object = 'default_as') -> dict[str, object]:
+def _make_claim(label: str) -> FnClaim[..., str]:
+    """Build a unique `@claim`-wrapped callable carrying `label` as
+    its `__name__` — satisfies the `Replacement` callable contract
+    while remaining identity-comparable in assertions. The shape
+    matches how authored substrates compose: `replacement=` always
+    receives a Claim, never a stringly-typed sentinel.
+
+    The typed first overload of `claim` returns `FnClaim[P, T]`;
+    cast through `Callable` keeps the helper's return narrow."""
+    def _r() -> str:
+        return label
+    _r.__name__ = label
+    return claim(_r)
+
+
+_DEFAULT_BS = _make_claim('default_bs')
+_DEFAULT_AS = _make_claim('default_as')
+
+
+def _theory(
+    *,
+    bootstrap: object = _DEFAULT_BS,
+    action_select: object = _DEFAULT_AS,
+) -> dict[str, object]:
     """Tiny stand-in for a `dqn`-shape kwarg-only function. The
     return value tells us which slot got which value."""
     return {'bootstrap': bootstrap, 'action_select': action_select}
@@ -95,28 +117,31 @@ def _theory(*, bootstrap: object = 'default_bs',
 def test_apply_returns_partial_with_slot_pinned() -> None:
     """`Intervention.apply(base)` returns `partial(base, slot_path
     =replacement)` — the post-do() SCM with that slot pinned."""
-    iv = Intervention(slot_path='bootstrap', replacement='ddqn_bs')
+    ddqn_bs = _make_claim('ddqn_bs')
+    iv = Intervention(slot_path='bootstrap', replacement=ddqn_bs)
     do_theory = iv.apply(_theory)
     out = do_theory()
-    assert out['bootstrap'] == 'ddqn_bs'
+    assert out['bootstrap'] is ddqn_bs
     # All other slots fall through to base's defaults.
-    assert out['action_select'] == 'default_as'
+    assert out['action_select'] is _DEFAULT_AS
 
 
 def test_apply_does_not_touch_other_slots() -> None:
     """Pearl: do() on X doesn't alter Y's mechanism. Verify by
     applying do(bootstrap=X) and checking action_select is
     unchanged."""
-    iv = Intervention(slot_path='bootstrap', replacement='X')
+    iv = Intervention(slot_path='bootstrap', replacement=_make_claim('X'))
     out = iv.apply(_theory)()
-    assert out['action_select'] == 'default_as'
+    assert out['action_select'] is _DEFAULT_AS
 
 
 def test_apply_rejects_nested_slot_path() -> None:
     """Nested slot_paths require parent-claim reconstruction; not
     supported by .apply(). Author constructs the parent claim
     with the substituted child explicitly."""
-    iv = Intervention(slot_path='replay.sample', replacement='X')
+    iv = Intervention(
+        slot_path='replay.sample', replacement=_make_claim('X'),
+    )
     with pytest.raises(ValueError, match='nested slot_path'):
         iv.apply(_theory)
 
@@ -124,27 +149,30 @@ def test_apply_rejects_nested_slot_path() -> None:
 def test_apply_interventions_sequential_composition() -> None:
     """Sequential do()s on disjoint slots produce a composition
     where each slot is pinned to its respective replacement."""
+    ddqn_bs = _make_claim('ddqn_bs')
+    boltzmann = _make_claim('boltzmann')
     arms = (
-        Intervention(slot_path='bootstrap', replacement='ddqn_bs'),
-        Intervention(slot_path='action_select', replacement='boltzmann'),
+        Intervention(slot_path='bootstrap', replacement=ddqn_bs),
+        Intervention(slot_path='action_select', replacement=boltzmann),
     )
     composed = apply_interventions(_theory, arms)
     out = composed()
-    assert out['bootstrap'] == 'ddqn_bs'
-    assert out['action_select'] == 'boltzmann'
+    assert out['bootstrap'] is ddqn_bs
+    assert out['action_select'] is boltzmann
 
 
 def test_apply_interventions_overlapping_slots_last_wins() -> None:
     """Overlapping do()s on the same slot: later one wins (Pearl:
     the second do() shadows the first, since both pin the same
     variable)."""
+    second = _make_claim('second')
     arms = (
-        Intervention(slot_path='bootstrap', replacement='first'),
-        Intervention(slot_path='bootstrap', replacement='second'),
+        Intervention(slot_path='bootstrap', replacement=_make_claim('first')),
+        Intervention(slot_path='bootstrap', replacement=second),
     )
     composed = apply_interventions(_theory, arms)
     out = composed()
-    assert out['bootstrap'] == 'second'
+    assert out['bootstrap'] is second
 
 
 def test_apply_interventions_empty_returns_base_unchanged() -> None:
@@ -152,24 +180,25 @@ def test_apply_interventions_empty_returns_base_unchanged() -> None:
     used as-is, all slots resolve to defaults."""
     composed = apply_interventions(_theory, ())
     out = composed()
-    assert out['bootstrap'] == 'default_bs'
-    assert out['action_select'] == 'default_as'
+    assert out['bootstrap'] is _DEFAULT_BS
+    assert out['action_select'] is _DEFAULT_AS
 
 
 def test_apply_pearl_honest_pair_shares_base() -> None:
     """Demonstrates the Pearl-honest contrast: treatment and
     baseline applied to the same base produce compositions that
     differ ONLY on the do()'d slots."""
+    treatment_bs = _make_claim('treatment_bs')
     treatment_arms = (
-        Intervention(slot_path='bootstrap', replacement='treatment_bs'),
+        Intervention(slot_path='bootstrap', replacement=treatment_bs),
     )
     baseline_arms = ()  # baseline = no do()
     treatment = apply_interventions(_theory, treatment_arms)
     baseline = apply_interventions(_theory, baseline_arms)
     t_out, b_out = treatment(), baseline()
     # Treatment's bootstrap is the do()'d value.
-    assert t_out['bootstrap'] == 'treatment_bs'
+    assert t_out['bootstrap'] is treatment_bs
     # Baseline's bootstrap is the natural default.
-    assert b_out['bootstrap'] == 'default_bs'
+    assert b_out['bootstrap'] is _DEFAULT_BS
     # Every other slot agrees — only the do()'d slot differs.
-    assert t_out['action_select'] == b_out['action_select']
+    assert t_out['action_select'] is b_out['action_select']

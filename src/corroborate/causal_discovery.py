@@ -320,7 +320,13 @@ def stratified_spearman_rho(
     Returns (rho_pooled, two-sided p) with z-stat normalised by
     pooled-weight √(Σ (n_k − 3))."""
     strata_list = list(strata)
-    unique_strata = list(dict.fromkeys(strata_list))
+    # `np.unique` returns sorted unique values — preserves
+    # determinism across runs (vs `dict.fromkeys`'s
+    # insertion-order, which leaks input ordering into pooled
+    # sums in the last decimals). `list(...)` forces typed
+    # `list[object]` iteration; bare ndarray iteration yields Any.
+    strata_arr: npt.NDArray[np.object_] = np.asarray(strata_list, dtype=object)
+    unique_strata: list[object] = list(np.unique(strata_arr))
     z_vals: list[float] = []
     weights: list[float] = []
     for k in unique_strata:
@@ -367,7 +373,13 @@ def stratified_partial_spearman_rho(
     Per stratum: closed-form `partial_spearman_rho(x_k, y_k, z_k)`.
     Fisher z pooled by `(n_k − 4)`. Returns (rho_pooled, p)."""
     strata_list = list(strata)
-    unique_strata = list(dict.fromkeys(strata_list))
+    # `np.unique` returns sorted unique values — preserves
+    # determinism across runs (vs `dict.fromkeys`'s
+    # insertion-order, which leaks input ordering into pooled
+    # sums in the last decimals). `list(...)` forces typed
+    # `list[object]` iteration; bare ndarray iteration yields Any.
+    strata_arr: npt.NDArray[np.object_] = np.asarray(strata_list, dtype=object)
+    unique_strata: list[object] = list(np.unique(strata_arr))
     z_vals: list[float] = []
     weights: list[float] = []
     for k in unique_strata:

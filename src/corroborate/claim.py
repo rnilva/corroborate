@@ -39,7 +39,6 @@ from dataclasses import dataclass
 from typing import (
     Protocol,
     TypeIs,
-    cast,
     overload,
     override,
     runtime_checkable,
@@ -80,8 +79,8 @@ _TRACE: contextvars.ContextVar[list[CallRecord] | None] = (
 )
 
 
-def record_call(
-    claim_obj: Claim[..., object],
+def record_call[**P, T](
+    claim_obj: Claim[P, T],
     args: tuple[object, ...],
     kwargs: Mapping[str, object],
     result: object,
@@ -162,17 +161,7 @@ class FnClaim[**P, T]:
 
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> T:
         result = self.fn(*args, **kwargs)
-        # Runtime invariant: `FnClaim[P, T]` structurally satisfies
-        # `Claim[..., object]` (the wider variadic protocol). Pyright
-        # can't see through the ParamSpec/TypeVar narrowing here —
-        # `Callable[P, T]` is genuinely assignable to `Callable[...,
-        # object]` (P is a subtype of ..., T is a subtype of object),
-        # but the ParamSpec subtyping check is stricter than the
-        # runtime structural match.
-        record_call(
-            cast(Claim[..., object], self),
-            tuple(args), dict(kwargs), result,
-        )
+        record_call(self, tuple(args), dict(kwargs), result)
         return result
 
     @override
