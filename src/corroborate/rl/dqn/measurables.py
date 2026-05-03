@@ -816,24 +816,28 @@ def jensen_dormancy_gap_measurable(record: Mapping[str, object]) -> float:
 
 
 @measurable(
-    name='at_most[jensen_dormancy_gap<=0].verdict',
+    name='jensen_dormancy_premise_active',
     reads=(),
 )
-def at_most_jensen_dormancy_gap_zero_verdict(
+def jensen_dormancy_premise_active(
     record: Mapping[str, object],
     jensen_dormancy_gap: float,
 ) -> str:
-    """Per-cell categorical verdict: `'held'` when
-    `jensen_dormancy_gap <= 0` (Jensen premise active),
-    `'invariant_violation'` when `> 0` (premise dormant), and
-    `'power_insufficient'` when the gap is NaN.
+    """Per-cell categorical verdict for the Hasselt-2010 Jensen
+    premise: `'held'` when `jensen_dormancy_gap <= 0` (premise
+    active — observed bias exceeds the σ_Q × √(2 log |A|)
+    structural floor), `'invariant_violation'` when `> 0`
+    (premise dormant — DDQN's bias-correction has nothing to
+    operate on), `'power_insufficient'` when the gap is NaN
+    (no convergent data to evaluate).
 
-    The column name `invariant.at_most[jensen_dormancy_gap<=0].
-    verdict` matches the legacy per-cell Bridge column dqn_bridges
-    consume — preserving column-name continuity through the
-    Bridge[R] subtraction. `verdict_distribution_per_env` tallies
-    the column across cells; bridges assert "≥90% of cells fire
-    the predicted verdict on this env".
+    Plain Python name — the predicate (`<= 0`) lives implicitly
+    in the function body, not encoded into the measurable name.
+    Phase 5 of the bridge-portability migration retired the
+    legacy DSL-encoded name `at_most[jensen_dormancy_gap<=0].
+    verdict` for this clean form. `verdict_distribution_per_env`
+    tallies the column; bridges assert "≥90% of cells fire the
+    predicted verdict on this env".
 
     Auto-injected dep on `jensen_dormancy_gap` (the bare
     measurable above) — the resolver matches by parameter name."""
@@ -859,15 +863,14 @@ def dqn_default_measurables() -> tuple[
     Author-side ergonomics: `Hypothesis(..., measurables=
     dqn_default_measurables())`. Each entry is a `Measurable[
     Mapping[str, object], MeasurementLeaf]` registered globally
-    via `@measurable`, so corpus-side analyses that read the
-    persisted columns by name (`outcome.eval_final_mean`,
-    `mechanism.jensen_gap`, `invariant.at_most[jensen_dormancy_
-    gap<=0].verdict`) stay untouched.
+    via `@measurable`, so corpus-side analyses read the persisted
+    columns by their plain measurable names (`eval_final_mean`,
+    `jensen_gap`, `jensen_dormancy_premise_active`).
 
     Returned as `Measurable[..., object]` to admit both float and
-    string return types — the dormancy verdict is categorical
-    (`'held'` / `'invariant_violation'` / `'power_insufficient'`),
-    the others are scalar floats."""
+    string return types — the dormancy-premise verdict is
+    categorical (`'held'` / `'invariant_violation'` /
+    `'power_insufficient'`), the others are scalar floats."""
     return (
         late_window_mean,
         eval_final_mean,
@@ -875,7 +878,7 @@ def dqn_default_measurables() -> tuple[
         eval_best_burst_step,
         jensen_gap,
         jensen_dormancy_gap_measurable,
-        at_most_jensen_dormancy_gap_zero_verdict,
+        jensen_dormancy_premise_active,
     )
 
 

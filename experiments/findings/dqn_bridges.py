@@ -215,7 +215,7 @@ def log_action_dim_drives_jensen_gap_reduction(
 
 
 _DORMANCY_VERDICT_COLUMN: str = (
-    'at_most[jensen_dormancy_gap<=0].verdict'
+    'jensen_dormancy_premise_active'
 )
 
 
@@ -245,8 +245,8 @@ def _premise_holds_when(
 
 
 @claim_bridge(
-    source='at_most[jensen_dormancy_gap<=0]',
-    target='at_most[jensen_dormancy_gap<=0]',
+    source='jensen_dormancy_premise_active',
+    target='jensen_dormancy_premise_active',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
 )
@@ -264,8 +264,8 @@ def jensen_premise_active__acrobot(
 
 
 @claim_bridge(
-    source='at_most[jensen_dormancy_gap<=0]',
-    target='at_most[jensen_dormancy_gap<=0]',
+    source='jensen_dormancy_premise_active',
+    target='jensen_dormancy_premise_active',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
 )
@@ -283,8 +283,8 @@ def jensen_premise_active__cartpole(
 
 
 @claim_bridge(
-    source='at_most[jensen_dormancy_gap<=0]',
-    target='at_most[jensen_dormancy_gap<=0]',
+    source='jensen_dormancy_premise_active',
+    target='jensen_dormancy_premise_active',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
 )
@@ -308,8 +308,8 @@ def jensen_premise_dormant__catch(
 
 
 @claim_bridge(
-    source='at_most[jensen_dormancy_gap<=0]',
-    target='at_most[jensen_dormancy_gap<=0]',
+    source='jensen_dormancy_premise_active',
+    target='jensen_dormancy_premise_active',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
 )
