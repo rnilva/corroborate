@@ -1,8 +1,8 @@
 """Canonical string fingerprint for leaf values.
 
 `canonical_str(v)` produces a deterministic, process-portable
-string form of a leaf value (Module Claim, FnClaim, partial,
-primitive, dataclass, tuple, function, type) — the substrate for
+string form of a leaf value (FnClaim, partial, primitive,
+dataclass, tuple, function, type) — the substrate for
 mechanism-key fingerprints, arm-key derivation, and trace-leaf
 encoding.
 

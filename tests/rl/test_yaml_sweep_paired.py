@@ -2,7 +2,7 @@
 `ddqn_effective.yaml` paired-mode sweeps. The schema's contract:
 each `(template, env)` resolves to a concrete `Hypothesis` with
 - `CNN.obs_shape` substituted from `EnvSpec.public_attrs()`,
-- frozen-dataclass equality on every Module Claim slot,
+- frozen-dataclass equality on every config-bundle slot,
 - stable `arm_key()` and `claim_graph_signature`.
 
 `build_paired` is the substrate's per-env resolver; asserting
@@ -205,7 +205,7 @@ def test_minatar_1M_per_env_contract(
     h_name: str,
 ) -> None:
     """For each (env, hypothesis), the YAML resolves to a
-    Hypothesis whose Module Claims match a reference Python
+    Hypothesis whose config bundles match a reference Python
     construction, including env-specific CNN.obs_shape
     substitution."""
     built, envs_aligned = build_paired(minatar_1M_sweep, reg=reg)

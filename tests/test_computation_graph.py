@@ -215,19 +215,19 @@ def test_slot_swap_intervention_changes_graph() -> None:
     assert signature(g_b) != signature(g_i)
 
 
-# ============ Module Claim integration ============
+# ============ Class-based Claim integration (escape hatch) ============
 
 @dataclass(frozen=True, slots=True)
-class _ModuleAdder:
-    """Minimal Module Claim — uses `record_call` inside __call__
-    to participate in the trace. Tests that
+class _ClassAdder:
+    """Minimal class-based Claim using the manual-dataclass +
+    `record_call` escape hatch. Tests that
     `_claim_callable(class.__call__)` resolves cleanly and `self`
     is stripped from the parameter list."""
     bias: int = 0
 
     @property
     def name(self) -> str:
-        return 'module_adder'
+        return 'class_adder'
 
     @property
     def invariants(self) -> tuple[object, ...]:
@@ -235,21 +235,21 @@ class _ModuleAdder:
 
     def __call__(self, payload: object) -> object:
         from corroborate.claim import record_call
-        result = ('module-out', payload, self.bias)
+        result = ('class-out', payload, self.bias)
         record_call(self, (payload,), {}, result)
         return result
 
 
-def test_module_claim_emits_edge_with_param_name() -> None:
-    """A ClaimBase-style Module Claim records via record_call;
-    `_claim_callable` uses `type(self).__call__` to recover the
-    parameter name (`payload`). The edge from `alpha` reaches
-    the module by that arg name."""
-    adder = _ModuleAdder(bias=1)
+def test_class_based_claim_emits_edge_with_param_name() -> None:
+    """A class-based Claim using the escape hatch records via
+    `record_call`; `_claim_callable` uses `type(self).__call__`
+    to recover the parameter name (`payload`). The edge from
+    `alpha` reaches the class by that arg name."""
+    adder = _ClassAdder(bias=1)
     with trace_context() as records:
         a_out = alpha('seed')
         adder(payload=a_out)
     g = build_computation_graph(records)
-    edges = g.edges_between('alpha', 'module_adder')
+    edges = g.edges_between('alpha', 'class_adder')
     assert len(edges) == 1
     assert edges[0].metadata.reader_arg == 'payload'

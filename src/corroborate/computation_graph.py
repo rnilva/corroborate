@@ -106,11 +106,12 @@ class _RawEdge:
 def _claim_callable(claim: Claim[..., object]) -> Callable[..., object] | None:
     """Extract the callable to inspect for signature binding.
 
-    For `FnClaim`, the underlying `fn` field. For `ClaimBase`
-    instances, the class's `__call__` method (positional 0 is
-    `self` — `inspect.signature` on a bound method strips `self`
-    automatically, so we use `type(instance).__call__` and bind
-    the instance manually below).
+    For `FnClaim`, the underlying `fn` field. For class-based
+    Claims using the `record_call` escape hatch, the class's
+    `__call__` method (positional 0 is `self` — `inspect.signature`
+    on a bound method strips `self` automatically, so we use
+    `type(instance).__call__` and bind the instance manually
+    below).
 
     Returns None if no signature is recoverable — those calls are
     skipped during edge extraction."""
@@ -149,8 +150,9 @@ def extract_raw_edges(
 
         try:
             sig = inspect.signature(callable_for_sig)
-            # For ClaimBase.__call__ (a function, not a bound method),
-            # the first parameter is `self`; bind the instance.
+            # For class-based Claim's `__call__` (a function, not a
+            # bound method), the first parameter is `self`; bind the
+            # instance.
             params = list(sig.parameters.values())
             if (
                 params and params[0].name == 'self'

@@ -17,8 +17,9 @@ to match `frozen=True, slots=True` config-bundle fields like
 `MLP.hidden: tuple[int, ...]`.
 
 Round-trip contract: a YAML-loaded Hypothesis's slot values are
-structurally equal (frozen-dataclass `==` on Module Claims, identity
-on FnClaim references) to the equivalent Python-authored Hypothesis.
+structurally equal (frozen-dataclass `==` on config bundles,
+identity on FnClaim references) to the equivalent Python-authored
+Hypothesis.
 The smokes assert this; drift means the YAML schema diverged from
 the Python authoring shape and the loader should refuse before
 the sweep launches."""

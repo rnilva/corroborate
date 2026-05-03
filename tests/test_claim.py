@@ -3,9 +3,8 @@
 
 Verifies:
 - `@claim` on a free function returns a Protocol-conforming wrapper.
-- `@claim` on a class applies dataclass(frozen, slots) + adds default
-  `name` property + wraps `__call__` for trace participation.
-- `@claim` on a method records the bound instance to the trace.
+- The manual-dataclass + `record_call` escape hatch satisfies
+  the Claim Protocol structurally and participates in the trace.
 - `CallRecord` captures (claim, args, kwargs, result) per call.
 - `is_claim` narrows structurally (Claim Protocol).
 - Trace contexts isolate properly + restore on exception."""
@@ -16,7 +15,6 @@ from dataclasses import dataclass
 from corroborate.claim import (
     CallRecord,
     Claim,
-    ClaimBase,
     claim,
     is_claim,
     record_call,
@@ -134,70 +132,15 @@ def test_context_restores_on_exception() -> None:
     f()
 
 
-# ============ Module class via @claim ============
-
-def test_module_via_claimbase_inheritance() -> None:
-    """Module-claim authoring: inherit `ClaimBase` + apply
-    `@dataclass(frozen=True, slots=True)`. Inherited `name`
-    property; no decorator mutation."""
-    @dataclass(frozen=True, slots=True)
-    class Doubler(ClaimBase):
-        factor: int = 2
-
-        def __call__(self, x: int) -> int:
-            return x * self.factor
-
-    d = Doubler()
-    assert d(5) == 10
-    assert d.name == 'Doubler'
-
-    # frozen — assignment fails.
-    try:
-        d.factor = 3  # pyright: ignore[reportAttributeAccessIssue]
-        raise AssertionError('expected FrozenInstanceError')
-    except Exception:
-        pass
-
-
-def test_module_records_self_to_trace_via_record_call() -> None:
-    """Module authors call `record_call` inside `__call__` to
-    participate in the trace — explicit, no decorator magic."""
-    @dataclass(frozen=True, slots=True)
-    class Doubler(ClaimBase):
-        factor: int = 3
-
-        def __call__(self, x: int) -> int:
-            result = x * self.factor
-            record_call(self, (x,), {}, result)
-            return result
-
-    d = Doubler()
-    with trace_context() as records:
-        _ = d(4)
-
-    assert len(records) == 1
-    assert records[0].claim is d
-    assert records[0].claim.name == 'Doubler'
-    assert records[0].args == (4,)
-    assert records[0].result == 12
-
-
-def test_module_satisfies_claim_protocol() -> None:
-    @dataclass(frozen=True, slots=True)
-    class Identity(ClaimBase):
-        def __call__(self, x: int) -> int:
-            return x
-
-    items: list[Claim[..., object]] = [Identity()]
-    assert items[0].name == 'Identity'
-
-
 # ============ Manual @dataclass + record_call escape hatch ============
 
 def test_manual_dataclass_with_record_call() -> None:
-    """Authors who want explicit @dataclass control (e.g. custom
-    options) opt out of `@claim` on the class and use `record_call`
-    to participate in the trace explicitly."""
+    """Substrate authors who need a class-based Claim write a
+    frozen dataclass exposing `name: str` and call `record_call`
+    inside `__call__` to participate in the trace explicitly.
+    This is the canonical escape hatch — no framework base
+    class, just stdlib `@dataclass` plus the structural Claim
+    Protocol."""
     @dataclass(frozen=True, slots=True)
     class Tripler:
         factor: int = 3
@@ -224,6 +167,48 @@ def test_manual_dataclass_with_record_call() -> None:
     assert records[0].result == 15
 
 
+def test_manual_dataclass_satisfies_claim_protocol() -> None:
+    """The structural Claim Protocol accepts any object with
+    `name: str` and `__call__`. No inheritance required."""
+    @dataclass(frozen=True, slots=True)
+    class Identity:
+        @property
+        def name(self) -> str:
+            return 'Identity'
+
+        def __call__(self, x: int) -> int:
+            return x
+
+    items: list[Claim[..., object]] = [Identity()]
+    assert items[0].name == 'Identity'
+
+
+def test_manual_dataclass_is_frozen() -> None:
+    """Frozen-dataclass discipline: post-construction mutation
+    fails. Substrate authors using the escape hatch get the
+    same immutability guarantees as `@claim`-wrapped Free
+    Claims."""
+    @dataclass(frozen=True, slots=True)
+    class Doubler:
+        factor: int = 2
+
+        @property
+        def name(self) -> str:
+            return 'Doubler'
+
+        def __call__(self, x: int) -> int:
+            return x * self.factor
+
+    d = Doubler()
+    assert d(5) == 10
+
+    try:
+        d.factor = 3  # pyright: ignore[reportAttributeAccessIssue]
+        raise AssertionError('expected FrozenInstanceError')
+    except Exception:
+        pass
+
+
 # ============ is_claim TypeIs narrowing ============
 
 def test_is_claim_true_for_decorated_function() -> None:
@@ -234,9 +219,13 @@ def test_is_claim_true_for_decorated_function() -> None:
     assert is_claim(f) is True
 
 
-def test_is_claim_true_for_module_instance() -> None:
+def test_is_claim_true_for_manual_dataclass_instance() -> None:
     @dataclass(frozen=True, slots=True)
-    class M(ClaimBase):
+    class M:
+        @property
+        def name(self) -> str:
+            return 'M'
+
         def __call__(self) -> None:
             return None
 
@@ -271,8 +260,9 @@ def test_claim_is_idempotent_on_already_decorated_function() -> None:
 
 
 def test_claim_rejects_class_input() -> None:
-    """`@claim` is for free functions only. Module-claims inherit
-    `ClaimBase` directly + apply `@dataclass`."""
+    """`@claim` is for free functions only. Class-based Claims
+    use the manual-dataclass + `record_call` escape hatch (no
+    decorator on the class)."""
     class NotAClaim:
         def __call__(self) -> None: ...
 
@@ -281,20 +271,6 @@ def test_claim_rejects_class_input() -> None:
         raise AssertionError('expected TypeError')
     except TypeError as e:
         assert 'free functions only' in str(e)
-
-
-def test_claim_idempotent_on_module_instance() -> None:
-    """`claim(module_instance)` is idempotent — Module instances
-    structurally satisfy Claim Protocol, so the function-claim
-    branch is short-circuited."""
-    @dataclass(frozen=True, slots=True)
-    class M(ClaimBase):
-        def __call__(self, x: int) -> int:
-            return x
-
-    instance = M()
-    re_wrapped = claim(instance)
-    assert re_wrapped is instance
 
 
 # ============ Bake-in via functools.partial ============

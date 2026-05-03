@@ -11,15 +11,9 @@ Two surfaces:
   `__name__`). YAML uses these to fill slot bindings, e.g.
   `bootstrap.greedification: double_greedify`.
 
-- `classes` — `Registry[type]`. Module-Claim *classes* (subclasses
-  of `ClaimBase`) AND config-bundle classes (frozen dataclasses
-  like `Replay`, `MLP`, `CNN`), ready to instantiate with YAML
-  kwargs. The Module-vs-bundle taxonomy distinction is a Claim
-  semantics question reasserted by `is_claim()` at use-site, not
-  by the registry — at the YAML resolution boundary both shapes
-  are interchangeable ("instantiate with kwargs"), so encoding
-  the split here just doubled the surface without preventing any
-  error.
+- `classes` — `Registry[type]`. Frozen-dataclass config bundles
+  (`Replay`, `MLP`, `CNN`), ready to instantiate with YAML
+  kwargs.
 
 Both surfaces share `corroborate._registry.Registry[T]`; this
 module is the substrate-facing facade that adds `add_module` /
@@ -27,12 +21,12 @@ module is the substrate-facing facade that adds `add_module` /
 loud-`KeyError` accessors YAML loaders surface as config errors.
 
 `add_module(module)` walks `vars(module)` and indexes every
-`FnClaim` instance, every `ClaimBase` subclass, AND every
-frozen-dataclass class it finds (config bundles). NamedTuple
-record types (`Transition`, `Batch`, ...) are filtered out via
-the `tuple`-subclass check. Authors who keep their bundles in
-the same module as their `@claim` functions get auto-discovery
-for free; explicit `add_class` remains for cross-module imports.
+`FnClaim` instance and every frozen-dataclass class it finds
+(config bundles). NamedTuple record types (`Transition`, `Batch`,
+...) are filtered out via the `tuple`-subclass check. Authors who
+keep their bundles in the same module as their `@claim` functions
+get auto-discovery for free; explicit `add_class` remains for
+cross-module imports.
 
 Name collisions raise `ValueError` at registration time; the
 substrate fixes the ambiguity by renaming. Lookups raise
@@ -48,7 +42,7 @@ from importlib import import_module
 from types import ModuleType
 
 from corroborate._registry import Registry as _Registry
-from corroborate.claim import ClaimBase, FnClaim
+from corroborate.claim import FnClaim
 
 
 @dataclass(slots=True)
@@ -66,16 +60,15 @@ class Registry:
     classes: _Registry[type] = field(default_factory=_Registry)
 
     def add_module(self, module: ModuleType) -> None:
-        """Index every `FnClaim` instance, `ClaimBase` subclass,
-        AND frozen-dataclass class found in `vars(module)`. Skips
-        dunder/private names, `ClaimBase` itself, and NamedTuple
-        record types (filtered via the `tuple`-subclass check).
+        """Index every `FnClaim` instance AND every frozen-
+        dataclass class found in `vars(module)`. Skips
+        dunder/private names and NamedTuple record types
+        (filtered via the `tuple`-subclass check).
 
-        Config bundles (`Replay`, `MLP`, `CNN`) auto-discover the
-        same way as Module Claims — the discriminator is
-        "instantiable with kwargs", which `dataclasses.is_dataclass`
-        captures. Pure record types (`Transition`, `Batch`,
-        `ReplayState`) are NamedTuples and skipped.
+        Config bundles (`Replay`, `MLP`, `CNN`) auto-discover via
+        `dataclasses.is_dataclass`. Pure record types
+        (`Transition`, `Batch`, `ReplayState`) are NamedTuples
+        and skipped.
 
         Re-adding the same value at the same name is a no-op;
         adding a *different* value at an already-present name
@@ -92,17 +85,15 @@ class Registry:
                 # field. Annotating locally makes pyright happy.
                 fn_value: FnClaim[..., object] = value
                 self.fns.register(fn_value.name, fn_value)
-            elif isinstance(value, type) and value is not ClaimBase:
-                if issubclass(value, ClaimBase):
-                    self.classes.register(value.__name__, value)
-                elif (
-                    dataclasses.is_dataclass(value)
-                    and not issubclass(value, tuple)
-                ):
-                    # Frozen-dataclass config bundle (e.g. `Replay`,
-                    # `MLP`, `CNN`). NamedTuples (`Transition`,
-                    # `Batch`) are tuple-subclasses and skipped.
-                    self.classes.register(value.__name__, value)
+            elif (
+                isinstance(value, type)
+                and dataclasses.is_dataclass(value)
+                and not issubclass(value, tuple)
+            ):
+                # Frozen-dataclass config bundle (e.g. `Replay`,
+                # `MLP`, `CNN`). NamedTuples (`Transition`,
+                # `Batch`) are tuple-subclasses and skipped.
+                self.classes.register(value.__name__, value)
 
     def add_modules(self, module_names: Iterable[str]) -> None:
         """Convenience: import each name and `add_module`. Order
@@ -115,9 +106,10 @@ class Registry:
         """Register a class at its `__name__`. Idempotent on the
         same class; raises on a different class at the same key.
 
-        Used both by `add_module` (auto-discovered ClaimBase
-        subclasses) and by the substrate (manual config-bundle
-        registration)."""
+        Used both by `add_module` (auto-discovered config-bundle
+        classes) and by the substrate (manual cross-module
+        registration when a bundle lives outside the substrate's
+        claim modules)."""
         self.classes.register(cls.__name__, cls)
 
     def fn(self, name: str) -> FnClaim[..., object]:
@@ -132,8 +124,8 @@ class Registry:
         return v
 
     def cls(self, name: str) -> type:
-        """Resolve `name` to a registered class (Module Claim or
-        config bundle). `KeyError` if absent."""
+        """Resolve `name` to a registered config-bundle class.
+        `KeyError` if absent."""
         v = self.classes.get(name)
         if v is None:
             raise KeyError(

@@ -1,34 +1,32 @@
 """Claim — typed wrapper around a callable scientific claim.
 
-Two surface shapes, ONE Protocol:
-
-- **Free function** — `@claim def f(...)` returns a typed
-  `FnClaim[P, T]` instance. `FnClaim` is a single shared frozen-
-  dataclass class (NOT generated per-function). Instances carry
-  `fn` and `_name` as typed fields; `invariants` is a property
-  reading the side-table `_FN_INVARIANTS`, keyed by the wrapped
-  fn so all wrappers of the same fn share invariants.
-
-- **Module class** — author writes
-  `class M(ClaimBase): ...`, applies `@dataclass(frozen=True,
-  slots=True)` themselves, and calls `record_call` inside
-  `__call__` to participate in the trace. `ClaimBase` provides
-  the typed `name` property + `invariants: ClassVar` default —
-  pyright sees the inherited types; no decorator mutation needed.
-
-Both structurally satisfy `Claim[**P, T]` Protocol.
-
-Bake-in / configuration uses `functools.partial` directly — there
-is no `bind` method. The walker recognises partials and unwraps
-them; mechanism_key's `canonical_str` canonicalises partials by
-recursing into `.func` and `.keywords`. v10's pattern: stdlib
+`@claim def f(...)` returns a typed `FnClaim[P, T]` instance.
+`FnClaim` is a single shared frozen-dataclass class (NOT
+generated per-function). Instances carry `fn` and `_name` as
+typed fields; `invariants` is a property reading the side-table
+`_FN_INVARIANTS`, keyed by the wrapped fn so all wrappers of the
+same fn share invariants. Configuration uses `functools.partial`
+directly — there is no `bind` method. The walker recognises
+partials and unwraps them; `canonical_str` canonicalises partials
+by recursing into `.func` and `.keywords`. v10's pattern: stdlib
 idioms over invented framework primitives.
 
+`Claim[**P, T]` is the structural Protocol — anything with a
+`name: str` property and a `__call__` matches. `FnClaim` is the
+sole built-in shape; substrate authors who need a class-based
+Claim with stateful `__call__` write a frozen dataclass exposing
+`name` and call `record_call(self, args, kwargs, result)` inside
+`__call__` (escape hatch — see `tests/test_claim.py` for the
+canonical example). Most substrate authoring goes through
+`@claim` on free functions plus frozen-dataclass config bundles
+that delegate to Free Claims; the escape hatch is genuinely
+rare.
+
 Under a `trace_context()`, each call appends a `CallRecord(claim,
-args, kwargs, result)` — UNLESS any arg is a `jax.core.Tracer`
-(jit/scan tracing — recording would produce meaningless
-first-call records). Outside the context, calls pass through with
-zero overhead — jit-safe."""
+args, kwargs, result)`. JIT/scan tracing fires each `@claim` call
+once with abstract tracer values; that single pass IS the
+structural information the graph extractor wants. Outside the
+context, calls pass through with zero overhead — jit-safe."""
 from __future__ import annotations
 
 import contextvars
@@ -51,8 +49,9 @@ from corroborate._introspection_boundary import get_attr_obj
 @runtime_checkable
 class Claim[**P, T](Protocol):
     """A callable claim with a `name`. Structurally satisfied by
-    `FnClaim[P, T]` instances and by instances of `ClaimBase`-
-    derived classes."""
+    `FnClaim[P, T]` instances and by any class-based Claim using
+    the `record_call` escape hatch (a frozen dataclass with
+    `name: str` and `__call__`)."""
     @property
     def name(self) -> str: ...
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> T: ...
@@ -95,45 +94,16 @@ def record_call[**P, T](
     the trace pass exits XLA-compiled execution doesn't go through
     Python, so no further records accumulate.
 
-    Earlier versions skipped tracer-arg calls (a "jit-safety"
-    guard), which silently dropped every claim that fired inside a
-    scan loop — making the full `dqn` call unprofileable. The skip
-    was over-conservative: trace_context is opt-in; if a user
-    enters it, they want everything recorded.
-
-    Module authors call this inside `__call__` to participate in
-    the trace. Free-function claims (`@claim` decorator) record
-    automatically via `FnClaim.__call__`."""
+    Free-function claims (`@claim` decorator) record automatically
+    via `FnClaim.__call__`. Class-based Claims using the escape
+    hatch call this inside `__call__` to participate in the trace
+    explicitly."""
     ctx = _TRACE.get()
     if ctx is None:
         return
     ctx.append(CallRecord(
         claim=claim_obj, args=args, kwargs=dict(kwargs), result=result,
     ))
-
-
-# ============ ClaimBase — Module base class ============
-
-class ClaimBase:
-    """Base class for Module claims. Subclasses inherit a `name`
-    property satisfying `Claim[P, T]` structurally without
-    decorator mutation.
-
-    Authors write:
-
-        @dataclass(frozen=True, slots=True)
-        class MLP(ClaimBase):
-            hidden: tuple[int, ...] = (64, 64)
-
-            def init(self, ...) -> Params: ...
-            def __call__(self, params, obs):
-                result = ...
-                record_call(self, (params, obs), {}, result)
-                return result"""
-
-    @property
-    def name(self) -> str:
-        return type(self).__name__
 
 
 # ============ Free-function claim wrapper ============
@@ -216,25 +186,26 @@ def claim(target: object) -> object:
     """Wrap a free function as a `FnClaim[P, T]`. Memoized so
     `claim(f) is claim(f)`.
 
-    For Module classes (callable dataclass-shaped components),
-    inherit `ClaimBase` directly and apply `@dataclass(frozen=
-    True, slots=True)` yourself — there is no class-decorator
-    path. Bake-in via `functools.partial`.
+    `@claim` decorates free functions only — there is no class-
+    decorator path. Substrate authors who need a class-based
+    Claim (rare) write a frozen dataclass exposing `name: str`
+    and call `record_call(self, args, kwargs, result)` inside
+    `__call__`. Bake-in via `functools.partial`.
 
     The first overload is the typed primary path (`@claim` on a
     Callable produces a typed `FnClaim[P, T]`). The second is the
-    catch-all for runtime defensive checks — passes `FnClaim` /
-    `ClaimBase` instances through idempotently, and raises
-    `TypeError` on classes / non-callables."""
-    if isinstance(target, (FnClaim, ClaimBase)):
-        # Idempotent: function-claim wrappers AND Module-claim
-        # instances pass through unchanged.
+    catch-all for runtime defensive checks — passes `FnClaim`
+    instances through idempotently, and raises `TypeError` on
+    classes / non-callables."""
+    if isinstance(target, FnClaim):
+        # Idempotent: function-claim wrappers pass through unchanged.
         return target
     if isinstance(target, type):
         raise TypeError(
-            '@claim is for free functions only. For Module-shaped '
-            'claims, inherit `ClaimBase` directly: '
-            '`@dataclass(frozen=True, slots=True) class M(ClaimBase): ...`',
+            '@claim is for free functions only. For class-based '
+            'Claims, write a frozen dataclass with `name: str` '
+            'and call `record_call(self, args, kwargs, result)` '
+            'inside `__call__`.',
         )
     if callable(target):
         cached = _FN_CACHE.get(target)

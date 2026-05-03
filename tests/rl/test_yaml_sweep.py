@@ -4,8 +4,8 @@ Claim graph holds.
 
 The reference Python construction below is one realisation of
 the same schema — useful for catching loader regressions, but
-the canonical contract is the YAML schema itself: a
-Module Claim slot resolves to a `ClaimBase` instance, a slot
+the canonical contract is the YAML schema itself: a config-
+bundle slot resolves to a frozen-dataclass instance, a slot
 binding to a `partial`-of-FnClaim resolves with the right inner
 FnClaim, and `claim_graph_signature` is stable across loads."""
 from __future__ import annotations

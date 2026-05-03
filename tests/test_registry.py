@@ -12,7 +12,9 @@ from functools import partial
 
 import pytest
 
-from corroborate.claim import ClaimBase, FnClaim
+from dataclasses import dataclass
+
+from corroborate.claim import FnClaim
 from corroborate.registry import Registry
 
 
@@ -161,10 +163,12 @@ def test_collision_on_different_handle_raises() -> None:
     is a substrate-author error; the registry refuses."""
     reg = Registry()
 
-    class A(ClaimBase):
+    @dataclass(frozen=True)
+    class A:
         pass
 
-    class B(ClaimBase):
+    @dataclass(frozen=True)
+    class B:
         pass
 
     # Spoof the names so they collide.

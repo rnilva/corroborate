@@ -33,25 +33,25 @@ from dataclasses import dataclass
 from typing import TypeIs
 
 from corroborate._canonical import canonical_str
-from corroborate.claim import ClaimBase, FnClaim
+from corroborate.claim import FnClaim
 
 type Replacement = (
-    ClaimBase
-    | FnClaim[..., object]
+    FnClaim[..., object]
     | functools.partial[object]
     | Callable[..., object]
 )
-"""Runtime universe of slot replacements: a Module Claim, a
-FnClaim free-function wrapper, a `functools.partial` binding, or a
-plain callable. Each canonicalises distinctly via `canonical_str`
-so two structurally-equal replacements produce the same
-fingerprint across processes."""
+"""Runtime universe of slot replacements: a FnClaim free-function
+wrapper, a `functools.partial` binding, or a plain callable
+(covers config-bundle instances and class-based Claims using the
+`record_call` escape hatch — they're callable). Each canonicalises
+distinctly via `canonical_str` so two structurally-equal
+replacements produce the same fingerprint across processes."""
 
 
 def is_replacement(v: object) -> TypeIs[Replacement]:
     """Narrow `v` to `Replacement` when it's callable. Every union
-    arm is callable (Module Claims via `__call__`, FnClaim wrappers,
-    partials, plain functions); a runtime `callable()` check is
+    arm is callable (FnClaim wrappers, partials, plain
+    callables / config bundles); a runtime `callable()` check is
     therefore sufficient and the TypeIs is honest about the
     narrowing."""
     return callable(v)
@@ -101,7 +101,7 @@ class Intervention:
             Intervention(slot_path='replay',
                          replacement=Replay(sample=X))
 
-        The framework's Module Claims are frozen dataclasses;
+        The framework's config bundles are frozen dataclasses;
         constructing the substituted parent is the substrate
         author's idiom."""
         if '.' in self.slot_path:

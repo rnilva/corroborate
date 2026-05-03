@@ -48,9 +48,10 @@ def test_resolve_passes_scalar_through(reg: Registry) -> None:
 
 
 def test_resolve_tuple_ifies_list(reg: Registry) -> None:
-    """ClaimBase fields like `MLP.hidden: tuple[int, ...]` need
-    YAML lists coerced to tuples or `replace(MLP(), hidden=[64,64])`
-    raises on the frozen-dataclass equality check downstream."""
+    """Config-bundle fields like `MLP.hidden: tuple[int, ...]`
+    need YAML lists coerced to tuples or `replace(MLP(),
+    hidden=[64,64])` raises on the frozen-dataclass equality
+    check downstream."""
     assert resolve([64, 64], reg=reg) == (64, 64)
 
 
