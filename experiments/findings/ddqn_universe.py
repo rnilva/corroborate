@@ -147,23 +147,38 @@ INTERVENTION = DoEffect(treatment_arm='ddqn', baseline_arm='vanilla_dqn')
 )
 def ddqn_refuted_when_dormancy_fires(
     paired_g: PairedGResult,
+    *,
+    # Decorator-args declare the graph edge `jensen_dormancy_gap
+    # → eval_best_burst_mean` (source = mech-state, target =
+    # outcome). The framework's evaluate() defaults to passing
+    # bridge.source_name as paired_g's `source` when a contrast
+    # exists — that would compute Δ on jensen_dormancy_gap, which
+    # is by-construction larger for ddqn cells (DDQN reduces
+    # observed bias → larger σ-floor-minus-observed gap). The
+    # body-default override below pins paired_g to compute Δ on
+    # the OUTCOME (the actual refutation predicate). bridge.params
+    # entries override evaluate()'s defaults via `**dict(bridge.
+    # params)`, so this kwarg routes the analysis without losing
+    # the graph-edge metadata.
+    source: str = 'eval_best_burst_mean',
 ) -> Verdict:
     """Necessary-condition claim. The framework's-own Jensen
-    dormancy invariant `at_most[jensen_dormancy_gap<=0]`
-    operationalizes the Hasselt-2010 structural floor
-    `σ_Q × √(2 log |A|)` against observed bias. When the gap
+    dormancy invariant operationalizes the Hasselt-2010 structural
+    floor `σ_Q × √(2 log |A|)` against observed bias. When the gap
     fires (gap > 0, premise dormant), DDQN's bias-correction
     mechanism has nothing to operate on.
 
     HELD when helped_fraction ≤ 0.15 AND |g| ≤ 0.20 — the
-    refutation prediction is corroborated. INVARIANT_VIOLATION
-    when DDQN unexpectedly helps despite dormancy (helped > 0.40).
+    refutation prediction is corroborated (DDQN does NOT help
+    outcome on dormant cells). INVARIANT_VIOLATION when DDQN
+    unexpectedly helps despite dormancy (helped > 0.40).
 
     The Pearl-rung-2 corroboration via `adaptive_dqn_recovers_
     ddqn_benefit__fourrooms_factor_0p5` validates this as
     actionable: a runtime controller using a per-batch dormancy
     proxy (max_Q − mean_Q vs σ_Q × √(2 log |A|)) recovers DDQN's
     outcome benefit on FourRooms (g=+0.78 vs vanilla, p<0.001)."""
+    del source  # consumed by paired_g via params; not used here.
     if paired_g.n_pairs < 50:
         return Verdict.POWER_INSUFFICIENT
     if math.isnan(paired_g.helped_fraction):
