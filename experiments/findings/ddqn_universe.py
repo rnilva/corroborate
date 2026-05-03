@@ -1553,3 +1553,9 @@ __all__ = [
     'ddqn_helps_at_early_bursts__pixel_envs',
     'ddqn_refuted_when_dormancy_fires',
 ]
+
+
+# Canonical name `corroborate.runner` imports;
+# DDQN_UNIVERSE_BRIDGES stays as an alias for legacy call sites.
+BRIDGES = DDQN_UNIVERSE_BRIDGES
+

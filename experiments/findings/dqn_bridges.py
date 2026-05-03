@@ -86,7 +86,7 @@ def _ddqn_reduces_gap_holds_when(paired_g: PairedGResult) -> Verdict:
 
 
 @claim_bridge(
-    source='jensen_gap',
+    source=INTERVENTION,
     target='jensen_gap',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
@@ -99,7 +99,7 @@ def ddqn_reduces_jensen_gap__acrobot(
 
 
 @claim_bridge(
-    source='jensen_gap',
+    source=INTERVENTION,
     target='jensen_gap',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
@@ -112,7 +112,7 @@ def ddqn_reduces_jensen_gap__catch(
 
 
 @claim_bridge(
-    source='jensen_gap',
+    source=INTERVENTION,
     target='jensen_gap',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
@@ -125,7 +125,7 @@ def ddqn_reduces_jensen_gap__discounting_chain(
 
 
 @claim_bridge(
-    source='jensen_gap',
+    source=INTERVENTION,
     target='jensen_gap',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
@@ -154,7 +154,7 @@ _LOG_ACTION_DIM_PER_ENV: dict[str, dict[str, float]] = {
 
 
 @claim_bridge(
-    source='jensen_gap',
+    source=INTERVENTION,
     target='jensen_gap',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
@@ -329,7 +329,7 @@ def jensen_premise_active__discounting_chain(
 
 
 @claim_bridge(
-    source='mc_return',
+    source=INTERVENTION,
     target='mc_return',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
@@ -355,7 +355,7 @@ def ddqn_outcome_stable_across_bursts__fourrooms(
 
 
 @claim_bridge(
-    source='mc_return',
+    source=INTERVENTION,
     target='mc_return',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
@@ -459,7 +459,7 @@ def _pooled_null_holds_when(
 
 
 @claim_bridge(
-    source='jensen_gap',
+    source=INTERVENTION,
     target='jensen_gap',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
@@ -479,7 +479,7 @@ def ddqn_reduces_jensen_gap__converged_subset(
 
 
 @claim_bridge(
-    source='eval_best_burst_mean',
+    source=INTERVENTION,
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
@@ -662,7 +662,7 @@ def nstep_3step_helps_outcome__discounting_chain(
 
 
 @claim_bridge(
-    source='eval_best_burst_mean',
+    source=INTERVENTION,
     target='eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
@@ -710,7 +710,7 @@ def factorial_ddqn_attenuation__fourrooms(
 
 
 @claim_bridge(
-    source='eval_best_burst_mean',
+    source=INTERVENTION,
     target='eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
@@ -791,7 +791,7 @@ _TIME_TO_SOLVE_HIGH_SOLVE_ENVS: tuple[str, ...] = (
 
 
 @claim_bridge(
-    source='eval_best_burst_step',
+    source=INTERVENTION,
     target='eval_best_burst_step',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
@@ -815,7 +815,7 @@ def time_to_solve_link_null__pooled(
 
 
 @claim_bridge(
-    source='eval_best_burst_step',
+    source=INTERVENTION,
     target='eval_best_burst_step',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
@@ -1388,7 +1388,7 @@ def _chain_coef_holds_when(
 
 
 @claim_bridge(
-    source='predicted_q_at_start',
+    source=INTERVENTION,
     target='jensen_gap',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
@@ -1416,7 +1416,7 @@ def log_action_dim_drives_g_mech(
 
 
 @claim_bridge(
-    source='mc_return',
+    source=INTERVENTION,
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
@@ -1459,8 +1459,25 @@ decomposition. Run against a per-(env, burst)-panel-able corpus
 (joined runs.parquet × traces.parquet)."""
 
 
+# Canonical name the runner imports — union of every bridge in
+# this file. Per-corpus tuples (`ACTION_DIM_BRIDGES`,
+# `DDQN_200K_BRIDGES`, etc.) stay for legacy `run_dqn_bridges.py`
+# call sites that route specific corpora to specific subsets.
+BRIDGES = (
+    *ACTION_DIM_BRIDGES,
+    *DDQN_200K_BRIDGES,
+    *NSTEP_INTERVENTION_BRIDGES,
+    *NSTEP_FACTORIAL_BRIDGES,
+    *EXPECTILE_PER_BURST_BRIDGES,
+    *CARTPOLE_HP_AUDIT_BRIDGES,
+    *EXPECTILE_STRATEGY_2_BRIDGES,
+    *CHAIN_DECOMPOSITION_BRIDGES,
+)
+
+
 __all__ = [
     'ACTION_DIM_BRIDGES',
+    'BRIDGES',
     'CHAIN_DECOMPOSITION_BRIDGES',
     'DDQN_200K_BRIDGES',
     'EXPECTILE_PER_BURST_BRIDGES',
