@@ -39,8 +39,8 @@ from itertools import combinations
 import numpy as np
 import numpy.typing as npt
 import polars as pl
-import statsmodels.api as sm  # type: ignore[reportMissingTypeStubs]
-from scipy.stats import norm, spearmanr  # type: ignore[reportMissingTypeStubs]
+import statsmodels.api as sm
+from scipy.stats import norm, spearmanr
 
 
 # ============ Variable-scope classification ============
@@ -114,34 +114,26 @@ def classify_variable_scope(
     # (max − min) rather than std/var because std on a uniform
     # column has ~1e-16 float-noise (mean isn't bit-exact when the
     # value isn't representable, e.g. 3.14). ptp == 0 ⟺ truly
-    # constant column. numpy ptp on typed NDArray[float64] is `Any`
-    # per stubs.
-    if (values.max() - values.min()).item() == 0.0:  # pyright: ignore[reportAny]
+    # constant column. numpy's function-form reductions (np.max,
+    # np.min, np.std, np.mean, np.var) are typed in stubs while the
+    # method form returns Any — prefer the function form throughout.
+    if float(np.max(values) - np.min(values)) == 0.0:
         return VariableScope.DEGENERATE
     if len(unique_strata) < 2:
         return VariableScope.WITHIN_STRATUM
     per_stratum_means: list[float] = []
     per_stratum_vars: list[float] = []
     weights: list[float] = []
-    # numpy stubs type ndarray.sum/.mean/.var/.item as `Any`; the
-    # typed `sub: NDArray[float64]` plus `n_k: int` is the runtime
-    # invariant the stubs miss. Pinned ignores rather than wrapping
-    # every reduction in a cast — same Any-from-numpy pattern as
-    # `stratified_spearman_rho` and `partial_spearman_rho_multi`
-    # below.
     for k in unique_strata:
         mask = np.fromiter(
             (s == k for s in strata_list),
             dtype=bool, count=len(strata_list),
         )
         sub: npt.NDArray[np.float64] = values[mask]
-        n_k: int = mask.sum().item()  # pyright: ignore[reportAny]
-        per_stratum_means.append(
-            sub.mean().item(),  # pyright: ignore[reportAny]
-        )
+        n_k: int = int(np.count_nonzero(mask))
+        per_stratum_means.append(float(np.mean(sub)))
         per_stratum_vars.append(
-            sub.var().item()  # pyright: ignore[reportAny]
-            if n_k >= 2 else 0.0,
+            float(np.var(sub)) if n_k >= 2 else 0.0,
         )
         weights.append(float(n_k))
     total_w = sum(weights)
@@ -218,10 +210,10 @@ def _spearman_marginal(
     """Marginal Spearman ρ + two-sided p. Returns (NaN, NaN) when
     either side is constant or `n < 4` (smallest n with a
     well-defined spearmanr p-value)."""
-    if len(x) < 4 or float(x.std()) == 0.0 or float(y.std()) == 0.0:
+    if len(x) < 4 or float(np.std(x)) == 0.0 or float(np.std(y)) == 0.0:
         return float('nan'), float('nan')
-    r, p = spearmanr(x, y)  # type: ignore[reportUnknownMemberType]
-    return float(r), float(p)  # type: ignore[reportUnknownArgumentType]
+    r, p = spearmanr(x, y)
+    return float(r), float(p)
 
 
 def partial_spearman_rho(
@@ -285,26 +277,24 @@ def partial_spearman_rho_multi(
     if z_matrix.ndim == 1:
         z_matrix = z_matrix.reshape(-1, 1)
     rz = np.column_stack([_rank(z_matrix[:, j]) for j in range(k)])
-    rz_with_intercept = sm.add_constant(  # type: ignore[reportUnknownMemberType]
-        rz,
-    )
+    rz_with_intercept = sm.add_constant(rz)
     try:
-        x_resid: npt.NDArray[np.float64] = sm.OLS(  # type: ignore[reportUnknownMemberType]
+        x_resid: npt.NDArray[np.float64] = sm.OLS(
             rx, rz_with_intercept,
         ).fit().resid
-        y_resid: npt.NDArray[np.float64] = sm.OLS(  # type: ignore[reportUnknownMemberType]
+        y_resid: npt.NDArray[np.float64] = sm.OLS(
             ry, rz_with_intercept,
         ).fit().resid
     except (ValueError, np.linalg.LinAlgError):
         return float('nan'), float('nan')
     if not np.all(np.isfinite(x_resid)) or not np.all(np.isfinite(y_resid)):
         return float('nan'), float('nan')
-    sx = float(x_resid.std())
-    sy = float(y_resid.std())
+    sx = float(np.std(x_resid))
+    sy = float(np.std(y_resid))
     if sx == 0.0 or sy == 0.0:
         return float('nan'), float('nan')
     rho = float(
-        np.mean((x_resid - x_resid.mean()) * (y_resid - y_resid.mean()))
+        np.mean((x_resid - np.mean(x_resid)) * (y_resid - np.mean(y_resid)))
         / (sx * sy),
     )
     rho = max(-0.999999, min(0.999999, rho))
@@ -329,18 +319,21 @@ def stratified_spearman_rho(
     Skips strata with `n_k < min_stratum_size` (Fisher z floor).
     Returns (rho_pooled, two-sided p) with z-stat normalised by
     pooled-weight √(Σ (n_k − 3))."""
-    strata_arr = np.asarray(strata)
-    unique = np.unique(strata_arr)
+    strata_list = list(strata)
+    unique_strata = list(dict.fromkeys(strata_list))
     z_vals: list[float] = []
     weights: list[float] = []
-    for k in unique:
-        mask = strata_arr == k
-        n_k = int(mask.sum())
+    for k in unique_strata:
+        mask: npt.NDArray[np.bool_] = np.fromiter(
+            (s == k for s in strata_list),
+            dtype=bool, count=len(strata_list),
+        )
+        n_k = int(np.count_nonzero(mask))
         if n_k < min_stratum_size:
             continue
         x_k = x[mask]
         y_k = y[mask]
-        if float(x_k.std()) == 0.0 or float(y_k.std()) == 0.0:
+        if float(np.std(x_k)) == 0.0 or float(np.std(y_k)) == 0.0:
             continue
         r, _ = _spearman_marginal(x_k, y_k)
         if math.isnan(r):
@@ -373,13 +366,16 @@ def stratified_partial_spearman_rho(
 
     Per stratum: closed-form `partial_spearman_rho(x_k, y_k, z_k)`.
     Fisher z pooled by `(n_k − 4)`. Returns (rho_pooled, p)."""
-    strata_arr = np.asarray(strata)
-    unique = np.unique(strata_arr)
+    strata_list = list(strata)
+    unique_strata = list(dict.fromkeys(strata_list))
     z_vals: list[float] = []
     weights: list[float] = []
-    for k in unique:
-        mask = strata_arr == k
-        n_k = int(mask.sum())
+    for k in unique_strata:
+        mask: npt.NDArray[np.bool_] = np.fromiter(
+            (s == k for s in strata_list),
+            dtype=bool, count=len(strata_list),
+        )
+        n_k = int(np.count_nonzero(mask))
         if n_k < min_stratum_size:
             continue
         rho_k, _ = partial_spearman_rho(

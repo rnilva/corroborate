@@ -37,17 +37,26 @@ shape covers any non-RL configuration too. Authors who want to
 hide a leaf from intervention bake it in via `functools.partial`."""
 from __future__ import annotations
 
+import dataclasses
 import functools
 import hashlib
 import inspect
-import typing
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, fields, is_dataclass
 from typing import (
     Annotated, Literal, Protocol, TypeIs,
-    get_args, get_origin, runtime_checkable,
+    get_origin, runtime_checkable,
 )
 
+from corroborate._introspection_boundary import (
+    get_attr_obj,
+    get_field_default,
+    get_field_default_factory,
+    get_param_annotation,
+    get_param_default,
+    get_type_hints_obj,
+    get_typing_args,
+)
 from corroborate.claim import FnClaim
 
 
@@ -201,9 +210,9 @@ def _walk_fn(
     defaults)."""
     try:
         sig = inspect.signature(fn)
-        hints = typing.get_type_hints(fn, include_extras=True)
-    except (TypeError, NameError, ValueError):
+    except (TypeError, ValueError):
         return ClaimSignature(name=name, kwargs=())
+    hints = get_type_hints_obj(fn)
 
     kwargs_out: list[KwargInfo] = []
     for param_name, param in sig.parameters.items():
@@ -214,24 +223,24 @@ def _walk_fn(
             continue
         if param_name in ('self', 'cls'):
             continue
-        annotation = hints.get(param_name, param.annotation)
+        annotation: object = hints.get(param_name, get_param_annotation(param))
         regime = _regime_from_annotation(annotation)
         base_annotation = _strip_annotated(annotation)
 
         baked_value = baked.get(param_name, _MISSING)
+        sig_default = get_param_default(param)
         has_default = (
             baked_value is not _MISSING
-            or param.default is not inspect.Parameter.empty
+            or sig_default is not inspect.Parameter.empty
         )
         # Data-flow filter at depth >= 1.
         if depth >= 1 and not has_default and regime != 'exogenous':
             continue
 
-        default = baked_value if baked_value is not _MISSING else param.default
+        default = baked_value if baked_value is not _MISSING else sig_default
         inner: ClaimSignature | None = (
             _walk(default, depth=depth + 1) if _is_recursable(default) else None
         )
-        sig_default = param.default
         # Walk the signature default itself (separate from `default`
         # which may be baked-over) so `canonical()` can compare
         # canonical forms when the user wraps the default in a partial.
@@ -264,34 +273,39 @@ def _walk_fn(
 
 def _walk_dataclass(instance: object, *, depth: int) -> ClaimSignature:
     """Walk a frozen-dataclass instance's fields."""
+    if not is_dataclass(instance) or isinstance(instance, type):
+        # Defensive: callers (`_walk`) gate this with the same
+        # check, but inline narrowing here lets `fields(instance)`
+        # accept the typed argument without falling back to
+        # `DataclassInstance`-incompatible `object`.
+        return ClaimSignature(name=type(instance).__name__, kwargs=())
     cls = type(instance)
-    try:
-        hints = typing.get_type_hints(cls, include_extras=True)
-    except (TypeError, NameError):
-        hints = {}
+    hints = get_type_hints_obj(cls)
 
     kwargs_out: list[KwargInfo] = []
     for f in fields(instance):
-        annotation = hints.get(f.name, f.type)
+        annotation: object = hints.get(f.name, f.type)
         regime = _regime_from_annotation(annotation)
         base_annotation = _strip_annotated(annotation)
-        value = getattr(instance, f.name)
+        value: object = get_attr_obj(instance, f.name)
         inner: ClaimSignature | None = (
             _walk(value, depth=depth + 1) if _is_recursable(value) else None
         )
         # Dataclass field's declared default — used by canonical
-        # form elision. `dataclasses.MISSING` is the sentinel for
-        # "no default declared".
-        from dataclasses import MISSING as _DC_MISSING
-        if f.default is not _DC_MISSING:
-            sig_default = f.default
+        # form elision. `MISSING` is the sentinel for "no default
+        # declared"; the boundary returns it (or the factory's
+        # output) typed as `object`, so `is`-comparison narrows
+        # cleanly.
+        field_default = get_field_default(f)
+        if field_default is not dataclasses.MISSING:
+            sig_default: object = field_default
             try:
                 is_at_default = value is sig_default or bool(value == sig_default)
             except (TypeError, ValueError):
                 is_at_default = value is sig_default
-        elif f.default_factory is not _DC_MISSING:
+        elif (factory := get_field_default_factory(f)) is not None:
             try:
-                sig_default = f.default_factory()
+                sig_default = factory()
                 is_at_default = value is sig_default or bool(value == sig_default)
             except (TypeError, ValueError, Exception):
                 is_at_default = False
@@ -408,7 +422,7 @@ def _is_exogenous_marker(meta: object) -> TypeIs[type[Exogenous]]:
 
 def _regime_from_annotation(ann: object) -> Regime:
     if get_origin(ann) is Annotated:
-        for meta in get_args(ann)[1:]:
+        for meta in get_typing_args(ann)[1:]:
             if _is_exogenous_marker(meta):
                 return 'exogenous'
     return 'leaf'
@@ -416,7 +430,7 @@ def _regime_from_annotation(ann: object) -> Regime:
 
 def _strip_annotated(ann: object) -> object:
     if get_origin(ann) is Annotated:
-        return get_args(ann)[0]
+        return get_typing_args(ann)[0]
     return ann
 
 

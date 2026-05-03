@@ -24,7 +24,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, TypeIs, cast
 
-import yaml
+from corroborate._yaml_boundary import safe_load as _yaml_load
 
 from corroborate.config_loader import (
     build_hypothesis_from_mapping,
@@ -92,7 +92,7 @@ def load_sweep(path: Path, *, reg: Registry) -> DQNSweep:
     `ValueError` / `KeyError` on schema violations with messages
     naming the offending field."""
     with path.open() as f:
-        raw: object = yaml.safe_load(f)
+        raw = _yaml_load(f)
     if not is_str_keyed_mapping(raw):
         raise TypeError(
             f'top-level YAML must be a string-keyed mapping; got '

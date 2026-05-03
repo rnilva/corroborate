@@ -15,6 +15,11 @@ import functools
 import types
 from dataclasses import fields, is_dataclass
 
+from corroborate._introspection_boundary import (
+    get_attr_obj,
+    get_partial_args,
+    get_partial_keywords,
+)
 from corroborate.claim import FnClaim
 
 
@@ -39,18 +44,21 @@ def canonical_str(v: object) -> str:
         return repr(v)
     if isinstance(v, functools.partial):
         inner = canonical_str(v.func)
+        partial_args = get_partial_args(v)
+        partial_kw = get_partial_keywords(v)
         args_part = (
-            ','.join(canonical_str(a) for a in v.args) if v.args else ''
+            ','.join(canonical_str(a) for a in partial_args)
+            if partial_args else ''
         )
         kw_part = ','.join(
             f'{k}={canonical_str(val)}'
-            for k, val in sorted(v.keywords.items())
-        ) if v.keywords else ''
+            for k, val in sorted(partial_kw.items())
+        ) if partial_kw else ''
         bound = ';'.join(p for p in (args_part, kw_part) if p)
         return f'partial({inner};{bound})'
     if is_dataclass(v) and not isinstance(v, type):
         body = ','.join(
-            f'{f.name}={canonical_str(getattr(v, f.name))}'
+            f'{f.name}={canonical_str(get_attr_obj(v, f.name))}'
             for f in sorted(fields(v), key=lambda f: f.name)
         )
         return f'dataclass:{type(v).__name__}({body})'

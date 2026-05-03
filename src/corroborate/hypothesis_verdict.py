@@ -189,12 +189,7 @@ def _coupling_edge(
             n_observations=n,
         ), Verdict.POWER_INSUFFICIENT
 
-    # scipy boundary — `pearsonr` returns a NamedTuple-like
-    # PearsonRResult whose attribute / element types are
-    # stub-typed loosely. Coerce both elements at the boundary.
-    r_value, p_value = ss.pearsonr(src, tgt)
-    r = float(r_value)  # pyright: ignore[reportArgumentType]
-    p = float(p_value)  # pyright: ignore[reportArgumentType]
+    r, p = ss.pearsonr(src, tgt)
 
     pred = edge.predicted_direction
     if p >= alpha:

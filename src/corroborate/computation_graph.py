@@ -54,6 +54,12 @@ import dataclasses as _dc
 import inspect
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from typing import override
+
+from corroborate._introspection_boundary import (
+    get_attr_obj,
+    get_bound_arguments,
+)
 
 from corroborate.claim import CallRecord, Claim
 from corroborate.graph import Graph
@@ -74,6 +80,7 @@ class ComputationEdge:
     reader_arg: str
     source_path: str = ''
 
+    @override
     def __str__(self) -> str:
         if self.source_path:
             return f'.{self.reader_arg} ← .{self.source_path}'
@@ -158,7 +165,7 @@ def extract_raw_edges(
             _register_leaves(record.result, i, claim_name, '', registry)
             continue
 
-        for arg_name, arg_value in bound.arguments.items():
+        for arg_name, arg_value in get_bound_arguments(bound).items():
             if arg_name == 'self':
                 continue  # don't emit self-edges from Module call sites
             _scan_arg_for_edges(
@@ -239,17 +246,19 @@ def _register_leaves(
         for f in _dc.fields(value):
             sub = f'{path}.{f.name}' if path else f.name
             _register_leaves(
-                getattr(value, f.name), call_idx, claim_name, sub, registry,
+                get_attr_obj(value, f.name),
+                call_idx, claim_name, sub, registry,
             )
         return
-    fields = getattr(value, '_fields', None)
-    if isinstance(fields, tuple):  # NamedTuple
-        for f_name in fields:
+    nt_fields = get_attr_obj(value, '_fields') if hasattr(value, '_fields') else None
+    if isinstance(nt_fields, tuple):  # NamedTuple
+        for f_name in nt_fields:
             if not isinstance(f_name, str):
                 continue
             sub = f'{path}.{f_name}' if path else f_name
             _register_leaves(
-                getattr(value, f_name), call_idx, claim_name, sub, registry,
+                get_attr_obj(value, f_name),
+                call_idx, claim_name, sub, registry,
             )
         return
     if isinstance(value, (tuple, list)):

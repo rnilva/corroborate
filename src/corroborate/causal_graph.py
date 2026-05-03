@@ -40,10 +40,9 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass, replace
 from enum import Enum, IntEnum
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, override
 
 from corroborate.graph import Edge, Graph
-from corroborate.verdict import Verdict
 
 if TYPE_CHECKING:
     # Forward import: `claim_bridge` depends on `causal_graph`
@@ -159,6 +158,7 @@ class BridgeEdge:
     feedback: bool = False
     condition_desc: str | None = None
 
+    @override
     def __str__(self) -> str:
         bits = [
             self.bridge_name,

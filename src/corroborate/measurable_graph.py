@@ -33,6 +33,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from enum import Enum
+from typing import override
 
 import numpy as np
 import numpy.typing as npt
@@ -47,6 +48,7 @@ class Correlation:
     is constant or shorter than 2."""
     r: float
 
+    @override
     def __str__(self) -> str:
         if not np.isfinite(self.r):
             return 'r=nan'
@@ -65,12 +67,12 @@ def _safe_pearson(
     cadences in the same record dict)."""
     if len(a) < 2 or len(a) != len(b):
         return float('nan')
-    s1 = float(a.std())
-    s2 = float(b.std())
+    s1 = float(np.std(a))
+    s2 = float(np.std(b))
     if s1 == 0.0 or s2 == 0.0:
         return float('nan')
-    centred = (a - float(a.mean())) * (b - float(b.mean()))
-    return float(centred.mean() / (s1 * s2))
+    centred = (a - float(np.mean(a))) * (b - float(np.mean(b)))
+    return float(np.mean(centred) / (s1 * s2))
 
 
 def pairwise_correlations(

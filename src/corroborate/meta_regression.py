@@ -28,6 +28,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal, Protocol
 
 import numpy as np
+import numpy.typing as npt
 import scipy.stats as ss
 
 type Pool = Literal['fixed', 'random']
@@ -124,23 +125,31 @@ class MetaRegressionResult:
 
 
 def _fit_wls(
-    x_mat: np.ndarray, y_vec: np.ndarray, w_vec: np.ndarray,
-) -> tuple[np.ndarray, np.ndarray, float]:
+    x_mat: npt.NDArray[np.float64],
+    y_vec: npt.NDArray[np.float64],
+    w_vec: npt.NDArray[np.float64],
+) -> tuple[npt.NDArray[np.floating], npt.NDArray[np.floating], float]:
     """Weighted-least-squares core. Returns
     `(beta, xtwx_inv, weighted_rss)`. Raises `np.linalg.LinAlgError`
-    when the weighted normal equations are singular."""
+    when the weighted normal equations are singular.
+
+    Return uses `np.floating` (not `np.float64`) because numpy stubs
+    type `np.linalg.inv` as returning the broader `floating` dtype.
+    Downstream consumers narrow back to `float` via `.item(...)`."""
     xtw = x_mat.T * w_vec  # (p, n) — broadcast diag(w) without materialising
     xtwx = xtw @ x_mat
     xtwy = xtw @ y_vec
     xtwx_inv = np.linalg.inv(xtwx)
     beta = xtwx_inv @ xtwy
     residuals = y_vec - x_mat @ beta
-    weighted_rss = float((w_vec * residuals ** 2).sum())  # pyright: ignore[reportAny]
+    weighted_rss = float(np.sum(w_vec * residuals ** 2))
     return beta, xtwx_inv, weighted_rss
 
 
 def _dl_tau_sq(
-    x_mat: np.ndarray, w_fe: np.ndarray, q_statistic: float, df: int,
+    x_mat: npt.NDArray[np.float64],
+    w_fe: npt.NDArray[np.float64],
+    q_statistic: float, df: int,
 ) -> float:
     """DerSimonian-Laird τ² estimator from FE residuals.
 
@@ -156,8 +165,11 @@ def _dl_tau_sq(
     xtwx = (x_mat.T * w_fe) @ x_mat
     xtw2x = (x_mat.T * w_fe ** 2) @ x_mat
     try:
-        c_factor = float(w_fe.sum()) - float(  # pyright: ignore[reportAny]
-            np.trace(np.linalg.solve(xtwx, xtw2x)),  # pyright: ignore[reportAny]
+        # `np.sum(np.diagonal(...))` rather than `np.trace(...)`: trace
+        # returns Any in numpy stubs (overloaded; can't resolve dtype),
+        # the diagonal-sum form preserves dtype through both calls.
+        c_factor = float(np.sum(w_fe)) - float(
+            np.sum(np.diagonal(np.linalg.solve(xtwx, xtw2x))),
         )
     except np.linalg.LinAlgError:
         return 0.0
@@ -258,16 +270,14 @@ def meta_regression(
     t_crit = float(ss.t.ppf(1.0 - alpha / 2.0, df=df))
 
     y_mean = float(np.average(y_vec, weights=w_final))
-    weighted_tss = float(
-        (w_final * (y_vec - y_mean) ** 2).sum(),  # pyright: ignore[reportAny]
-    )
+    weighted_tss = float(np.sum(w_final * (y_vec - y_mean) ** 2))
     r_squared = (
         1.0 - weighted_rss / weighted_tss
         if weighted_tss > 0.0 else float('nan')
     )
 
-    intercept = float(beta[0])  # pyright: ignore[reportAny]
-    intercept_var = float(cov_beta[0, 0])  # pyright: ignore[reportAny]
+    intercept = beta.item(0)
+    intercept_var = cov_beta.item(0, 0)
     intercept_se = math.sqrt(intercept_var) if intercept_var > 0.0 else 0.0
     intercept_margin = t_crit * intercept_se
     if intercept_se > 0.0:
@@ -279,8 +289,8 @@ def meta_regression(
     coefficients: list[CovariateCoefficient] = []
     for j, name in enumerate(covariate_names):
         idx = j + 1
-        b = float(beta[idx])  # pyright: ignore[reportAny]
-        var_b = float(cov_beta[idx, idx])  # pyright: ignore[reportAny]
+        b = beta.item(idx)
+        var_b = cov_beta.item(idx, idx)
         se_b = math.sqrt(var_b) if var_b > 0.0 else 0.0
         margin = t_crit * se_b
         t_stat = b / se_b if se_b > 0.0 else float('inf')

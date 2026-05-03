@@ -173,7 +173,7 @@ def _run_pair_key(
     out: list[MeasurementLeaf] = []
     for k in pair_by:
         v = run.measurements.get(k)
-        if v is None or not isinstance(v, (str, int, float, bool)):
+        if v is None:
             raise TypeError(
                 f"RunRow {run.id!r} missing scalar pair-key "
                 f"{k!r} (pair_by={pair_by!r})",
@@ -267,8 +267,8 @@ def _per_group_stats(
     if n_pairs > 1:
         a_var = sum((v - a_mean) ** 2 for v in a_values) / (n_pairs - 1)
         b_var = sum((v - b_mean) ** 2 for v in b_values) / (n_pairs - 1)
-        a_sd = float(a_var ** 0.5)
-        b_sd = float(b_var ** 0.5)
+        a_sd = math.sqrt(a_var)
+        b_sd = math.sqrt(b_var)
     else:
         a_sd = b_sd = None
 

@@ -29,8 +29,7 @@ from functools import partial
 from pathlib import Path
 from typing import TypeIs
 
-import yaml
-
+from corroborate._yaml_boundary import safe_load as _yaml_load
 from corroborate.hypothesis import Hypothesis, PredictedDirection
 from corroborate.intervention import Intervention, is_replacement
 from corroborate.registry import Registry
@@ -61,9 +60,12 @@ def _construct(cls: type, kwargs: Mapping[str, object]) -> object:
     Constructor signatures are dynamic at this layer (the loader
     doesn't know e.g. `Replay.__init__`'s arity), so the return
     type widens to `object`. Callers narrow at use-site
-    (Intervention.replacement is typed as `Replacement`, etc.)."""
-    instance: object = cls(**kwargs)
-    return instance
+    (Intervention.replacement is typed as `Replacement`, etc.).
+
+    `type.__call__` returns `Any` in typeshed because the
+    constructor return type is bound to the unparameterised `type`
+    here; widen to `object` once at this boundary."""
+    return cls(**kwargs)  # pyright: ignore[reportAny]
 
 
 def resolve(
@@ -189,7 +191,7 @@ def load_hypothesis(
     by the substrate dispatcher (e.g. `corroborate.rl.dqn.yaml_sweep
     .load_sweep`)."""
     with path.open() as f:
-        raw: object = yaml.safe_load(f)
+        raw = _yaml_load(f)
     if not is_str_keyed_mapping(raw):
         raise TypeError(
             f'top-level YAML must be a string-keyed mapping; got '

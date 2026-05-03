@@ -29,6 +29,7 @@ from collections.abc import Mapping
 from typing import Literal, cast
 
 import numpy as np
+import numpy.typing as npt
 
 from corroborate.measurable import Measurable
 
@@ -40,7 +41,7 @@ type _AxisOp = Literal['mean', 'var', 'std', 'max', 'min', 'sum']
 
 def from_key(
     key: str,
-) -> Measurable[Mapping[str, object], np.ndarray]:
+) -> Measurable[Mapping[str, object], npt.NDArray[np.floating]]:
     """Read `record[key]` as a `numpy.ndarray`. The leaf primitive
     that lifts a record-keyed value into typed `Measurable` space.
 
@@ -57,7 +58,7 @@ def from_key(
     Parameterized by `key` rather than declared as a `@measurable`
     function because the latter would close over a static name —
     factories take parameters."""
-    def fn(record: Mapping[str, object]) -> np.ndarray:
+    def fn(record: Mapping[str, object]) -> npt.NDArray[np.floating]:
         v = record[key]
         return np.asarray(v)
     return Measurable(fn=fn, name=key, reads=(key,))
@@ -66,7 +67,7 @@ def from_key(
 # ============ Time-axis reductions ============
 
 def max_abs[R: Mapping[str, object]](
-    of: Measurable[R, np.ndarray],
+    of: Measurable[R, npt.NDArray[np.floating]],
 ) -> Measurable[R, float]:
     """Max of `|·|` over the operand array. Returns scalar.
 
@@ -77,12 +78,16 @@ def max_abs[R: Mapping[str, object]](
     name = f'{of.name}__max_abs'
 
     def fn(record: R) -> float:
-        return float(np.max(np.abs(of(record))))
+        # max |x| = max(max(x), -min(x)). The reduction-then-abs path
+        # preserves dtype through numpy's stubs; `np.abs(arr)` itself
+        # returns dtype[Any] for arbitrary inputs.
+        arr = of(record)
+        return float(max(abs(np.max(arr)), abs(np.min(arr))))
     return Measurable(fn=fn, name=name, reads=of.reads)
 
 
 def mean_window[R: Mapping[str, object]](
-    of: Measurable[R, np.ndarray],
+    of: Measurable[R, npt.NDArray[np.floating]],
     lo: float,
     hi: float,
 ) -> Measurable[R, float]:
@@ -100,7 +105,7 @@ def mean_window[R: Mapping[str, object]](
 
     def fn(record: R) -> float:
         arr = of(record)
-        n = int(arr.shape[0])
+        n = len(arr)
         i_lo = int(lo * n)
         i_hi = int(hi * n)
         # Guard the corner cases where n is tiny: ensure at
@@ -112,7 +117,7 @@ def mean_window[R: Mapping[str, object]](
 
 
 def growth_window[R: Mapping[str, object]](
-    of: Measurable[R, np.ndarray],
+    of: Measurable[R, npt.NDArray[np.floating]],
     *,
     early: tuple[float, float] = (0.0, 0.25),
     late: tuple[float, float] = (0.75, 1.0),
@@ -141,7 +146,7 @@ def growth_window[R: Mapping[str, object]](
 
 def late_window_mean(
     key: str, fraction: float = 0.1,
-) -> Measurable[Mapping[str, np.ndarray], float]:
+) -> Measurable[Mapping[str, object], float]:
     """Schema-row outcome projection: mean over the last `fraction`
     of `record[key]`. Convenience wrapper around `mean_window`.
 
@@ -164,7 +169,7 @@ def masked_window_mean(
     value_key: str,
     mask_key: str,
     fraction: float = 0.1,
-) -> Measurable[Mapping[str, np.ndarray], float]:
+) -> Measurable[Mapping[str, npt.NDArray[np.floating]], float]:
     """Mean of `record[value_key]` over entries where (`step in
     late `fraction` of trajectory` ∧ `record[mask_key] > 0.5`).
 
@@ -193,17 +198,19 @@ def masked_window_mean(
         f'{int(round((1.0 - fraction) * 100))}_100'
     )
 
-    def fn(record: Mapping[str, np.ndarray]) -> float:
+    def fn(record: Mapping[str, npt.NDArray[np.floating]]) -> float:
         values = record[value_key]
         mask = record[mask_key]
-        n = int(values.shape[0])
+        n = len(values)
         cutoff = int((1.0 - fraction) * n)
         time_mask = np.arange(n) >= cutoff
         keep_mask = time_mask & (mask > 0.5)
         n_kept = int(np.sum(keep_mask))
         if n_kept == 0:
             return float('nan')
-        masked = np.where(keep_mask, values, 0.0)
+        # `values * keep_mask` (bool×float broadcast) preserves
+        # floating dtype; `np.where(...)` returns dtype[Any].
+        masked = values * keep_mask
         return float(np.sum(masked) / n_kept)
 
     return Measurable(fn=fn, name=name, reads=(value_key, mask_key))
@@ -224,7 +231,7 @@ def masked_window_mean(
 
 
 def mean_peak_window[R: Mapping[str, object]](
-    of: Measurable[R, np.ndarray],
+    of: Measurable[R, npt.NDArray[np.floating]],
     peak_idx_key: str,
     *,
     pre_frac: float = 0.5,
@@ -267,7 +274,7 @@ def mean_peak_window[R: Mapping[str, object]](
 
 
 def peak_centered_window[R: Mapping[str, object]](
-    of: Measurable[R, np.ndarray],
+    of: Measurable[R, npt.NDArray[np.floating]],
     peak_idx_key: str,
     *,
     half_width_frac: float = 0.125,
@@ -327,11 +334,11 @@ def peak_centered_window[R: Mapping[str, object]](
 
 
 def reduce_axis[R: Mapping[str, object]](
-    of: Measurable[R, np.ndarray],
+    of: Measurable[R, npt.NDArray[np.floating]],
     *,
     axis: int = -1,
     op: _AxisOp = 'mean',
-) -> Measurable[R, np.ndarray]:
+) -> Measurable[R, npt.NDArray[np.floating]]:
     """Collapse `axis` of `of`'s output via `op`. Returns an
     array one dimension lower than the input. `axis=-1` (default)
     is the inner-axis collapse — the typical "reduce-replicates-
@@ -349,7 +356,7 @@ def reduce_axis[R: Mapping[str, object]](
     isn't present."""
     name = f'{of.name}__{op}_axis_{axis}'
 
-    def fn(record: R) -> np.ndarray:
+    def fn(record: R) -> npt.NDArray[np.floating]:
         arr = of(record)
         if arr.size == 0:
             return arr
@@ -359,26 +366,26 @@ def reduce_axis[R: Mapping[str, object]](
         # boundary; the runtime invariant is "always an ndarray
         # because we already short-circuited size==0 above."
         if op == 'mean':
-            return cast(np.ndarray, arr.mean(axis=axis))
+            return cast(npt.NDArray[np.floating], arr.mean(axis=axis))
         if op == 'var':
-            return cast(np.ndarray, arr.var(axis=axis))
+            return cast(npt.NDArray[np.floating], arr.var(axis=axis))
         if op == 'std':
-            return cast(np.ndarray, arr.std(axis=axis))
+            return cast(npt.NDArray[np.floating], arr.std(axis=axis))
         if op == 'max':
-            return cast(np.ndarray, arr.max(axis=axis))
+            return cast(npt.NDArray[np.floating], arr.max(axis=axis))
         if op == 'min':
-            return cast(np.ndarray, arr.min(axis=axis))
-        return cast(np.ndarray, arr.sum(axis=axis))
+            return cast(npt.NDArray[np.floating], arr.min(axis=axis))
+        return cast(npt.NDArray[np.floating], arr.sum(axis=axis))
     return Measurable(fn=fn, name=name, reads=of.reads)
 
 
 def slice_axis[R: Mapping[str, object]](
-    of: Measurable[R, np.ndarray],
+    of: Measurable[R, npt.NDArray[np.floating]],
     *,
     axis: int = 0,
     lo: float = 0.0,
     hi: float = 1.0,
-) -> Measurable[R, np.ndarray]:
+) -> Measurable[R, npt.NDArray[np.floating]]:
     """Take the fractional `[lo, hi]` window along `axis` of
     `of`'s output, returning the slice (same N-D as input).
     Sibling of `mean_window` that keeps the slice instead of
@@ -393,11 +400,11 @@ def slice_axis[R: Mapping[str, object]](
     label = f'slice_axis_{axis}_{int(round(lo * 100))}_{int(round(hi * 100))}'
     name = f'{of.name}__{label}'
 
-    def fn(record: R) -> np.ndarray:
+    def fn(record: R) -> npt.NDArray[np.floating]:
         arr = of(record)
         if arr.size == 0:
             return arr
-        n = int(arr.shape[axis])
+        n = np.size(arr, axis)
         i_lo = int(lo * n)
         i_hi = max(int(hi * n), i_lo + 1)
         idx: list[slice | int] = [slice(None)] * arr.ndim
@@ -410,8 +417,8 @@ def slice_axis[R: Mapping[str, object]](
 
 
 def log_safe[R: Mapping[str, object]](
-    of: Measurable[R, np.ndarray],
-) -> Measurable[R, np.ndarray]:
+    of: Measurable[R, npt.NDArray[np.floating]],
+) -> Measurable[R, npt.NDArray[np.floating]]:
     """Element-wise `log(x)` with NaN on non-positive values.
     Same NaN-honest discipline as the hand-written `log_mc_variance_
     per_burst`: zero or negative entries (e.g. deterministic-
@@ -420,7 +427,7 @@ def log_safe[R: Mapping[str, object]](
     epsilon shortcut."""
     name = f'{of.name}__log'
 
-    def fn(record: R) -> np.ndarray:
+    def fn(record: R) -> npt.NDArray[np.floating]:
         arr = np.asarray(of(record), dtype=np.float64)
         out = np.full(arr.shape, np.nan, dtype=np.float64)
         mask = arr > 0
@@ -430,10 +437,10 @@ def log_safe[R: Mapping[str, object]](
 
 
 def cv_safe[R: Mapping[str, object]](
-    of: Measurable[R, np.ndarray],
+    of: Measurable[R, npt.NDArray[np.floating]],
     *,
     axis: int = -1,
-) -> Measurable[R, np.ndarray]:
+) -> Measurable[R, npt.NDArray[np.floating]]:
     """Coefficient of variation: `std(arr, axis) / |mean(arr,
     axis)|`. Reduces `axis`; output has one less dimension. NaN
     where mean is zero (degenerate; CV undefined). Composes with
@@ -443,7 +450,7 @@ def cv_safe[R: Mapping[str, object]](
     std_m = reduce_axis(of, axis=axis, op='std')
     name = f'{of.name}__cv_axis_{axis}'
 
-    def fn(record: R) -> np.ndarray:
+    def fn(record: R) -> npt.NDArray[np.floating]:
         m = np.asarray(mean_m(record), dtype=np.float64)
         s = np.asarray(std_m(record), dtype=np.float64)
         out = np.full(m.shape, np.nan, dtype=np.float64)

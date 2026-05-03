@@ -40,6 +40,7 @@ from typing import (
     Protocol,
     TypeIs,
     overload,
+    override,
     runtime_checkable,
 )
 
@@ -161,6 +162,7 @@ class FnClaim[**P, T]:
         record_call(self, tuple(args), dict(kwargs), result)
         return result
 
+    @override
     def __reduce__(self) -> tuple[Callable[..., object], tuple[str, str]]:
         """Pickle reconstruction. `@claim` rebinds the module
         attribute to this wrapper, so we look up the wrapper at
