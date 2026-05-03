@@ -43,7 +43,13 @@ class PerBurstLinkStratum:
     units per unit bias reduction); `mean_d_predictor` and
     `mean_d_target` give the headroom DDQN exploited and the
     outcome change observed; `sd_d_target` is the per-seed
-    Δ_target dispersion (outcome noise floor at this burst)."""
+    Δ_target dispersion (outcome noise floor at this burst).
+
+    `burst_index` is the cell-internal 0-based eval-burst index;
+    its wall-clock meaning depends on substrate-specific cadence
+    (e.g. `eval_every × (burst_index + 1)` in the RL substrate).
+    Bridges that need an absolute-step filter must scope cells to
+    a single training-time regime."""
     env_name: str
     burst_index: int
     r: float

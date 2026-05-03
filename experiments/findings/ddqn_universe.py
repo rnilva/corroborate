@@ -156,6 +156,8 @@ INTERVENTION = DoEffect(treatment_arm='ddqn', baseline_arm='vanilla_dqn')
 )
 def ddqn_refuted_when_dormancy_fires(
     paired_g: PairedGResult,
+    *,
+    dedupe_strategy: str = 'mean',
 ) -> Verdict:
     """Necessary-condition claim. The framework's-own Jensen
     dormancy invariant operationalizes the Hasselt-2010 structural
@@ -173,6 +175,7 @@ def ddqn_refuted_when_dormancy_fires(
     actionable: a runtime controller using a per-batch dormancy
     proxy (max_Q − mean_Q vs σ_Q × √(2 log |A|)) recovers DDQN's
     outcome benefit on FourRooms (g=+0.78 vs vanilla, p<0.001)."""
+    del dedupe_strategy  # forwarded to paired_g
     if paired_g.n_pairs < 50:
         return Verdict.POWER_INSUFFICIENT
     if math.isnan(paired_g.helped_fraction):
@@ -321,18 +324,21 @@ def ddqn_attenuates_at_late_bursts__spaceinvaders(
     n_pairs_floor: int = 50,
 ) -> Verdict:
     """TIER A2 existence proof: on SpaceInvaders-MinAtar at 1M
-    training steps, in the last quarter of training bursts,
-    DDQN's outcome is reliably WORSE than vanilla. Per-cell-burst
-    helped=36.5%, g=−0.42, n=510 in the original analysis (30
-    seeds × 17 bursts after `burst_index ≥ 3`).
+    training steps, after `burst_floor` (=3 of 20 → step 150k+
+    given the substrate's `eval_every=50000` at 1M), DDQN's
+    outcome is reliably WORSE than vanilla. Per-cell-burst
+    helped=36.5%, g=−0.42, n=510 in the original analysis.
 
-    Consumes `paired_g_per_burst` — a per-(env, burst) panel where
-    each stratum holds (g, n_pairs, helped_fraction) computed from
-    the seed-paired Δ in that burst. The bridge filters strata to
-    `env_name == 'SpaceInvaders-MinAtar'` AND `burst_index >=
-    burst_floor`, then aggregates: `n_pairs_total = Σ n_pairs`
-    (the cell-burst count, ≈ 510 at the 1M corpus), and
-    sample-size-weighted means for `helped_fraction` and `g`.
+    Consumes `paired_g_per_burst` — a per-(env, burst) panel.
+    The bridge filters strata to `env_name == 'SpaceInvaders-
+    MinAtar'` AND `burst_index >= burst_floor`, then aggregates:
+    `n_pairs_total = Σ n_pairs` (the cell-burst count, ≈ 510 at
+    the 1M corpus), and sample-size-weighted means for
+    `helped_fraction` and `g`. The burst→absolute-step
+    translation is substrate-specific (eval_every is RL-cadence
+    config); the bridge's `total_steps == 1_000_000` scope
+    pins the regime so `burst_index` is unambiguous within this
+    bridge's claim.
 
     HELD when (a) cell-burst total ≥ `n_pairs_floor` (=50), AND
     (b) pooled helped_fraction ≤ `helped_ceiling` (=0.40), AND
@@ -1070,7 +1076,15 @@ def ddqn_dominates_vanilla_response_curve__fourrooms_rs_0p3(
     target='mc_return[per_burst]',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
-    scope=(pl.col('env_name') == 'SpaceInvaders-MinAtar'),
+    # Pin to 1M training so the per-burst panel has a single
+    # `eval_every` (the absolute-step clock matches across all
+    # cells in scope). Cells at 50k / 200k have different
+    # `eval_every` values; pooling them mixes wall-clock-different
+    # bursts and the per-burst analysis raises.
+    scope=(
+        (pl.col('env_name') == 'SpaceInvaders-MinAtar')
+        & (pl.col('total_steps') == 1_000_000)
+    ),
 )
 def ddqn_curve_crosses_vanilla_late__spaceinvaders(
     paired_g_per_burst: PerBurstResult,
@@ -1457,6 +1471,11 @@ def acrobot_link_rcc_robust__gamma_0999(
     target='outcome.eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
+    # Pin to 1M training so the per-burst link panel has a single
+    # `eval_every` per env. The high-q-divergence regime
+    # (Asterix at 1M) is the canonical above-threshold case
+    # anyway; below-1M cells rarely cross qds=1000.
+    scope=(pl.col('total_steps') == 1_000_000),
 )
 def extreme_q_divergence_attenuates_link__binary(
     link_attenuation_dowhy: LinkAttenuationDowhyResult,
@@ -1488,6 +1507,7 @@ def extreme_q_divergence_attenuates_link__binary(
     target='outcome.eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
+    scope=(pl.col('total_steps') == 1_000_000),
 )
 def extreme_q_divergence_attenuates_link__placebo_refuted(
     link_attenuation_dowhy: LinkAttenuationDowhyResult,
@@ -1519,6 +1539,7 @@ def extreme_q_divergence_attenuates_link__placebo_refuted(
     target='outcome.eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
+    scope=(pl.col('total_steps') == 1_000_000),
 )
 def extreme_q_divergence_attenuates_link__rcc_robust(
     link_attenuation_dowhy: LinkAttenuationDowhyResult,
