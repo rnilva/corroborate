@@ -20,6 +20,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import cast
 
+import polars as pl
 import pytest
 
 # Importing analyses populates the registry.
@@ -68,16 +69,20 @@ def _synthetic_cells(
 
 
 def test_paired_g_analysis_runs_directly() -> None:
-    """The analysis is callable on its own — no bridge needed."""
+    """The analysis is callable on its own — no bridge needed.
+    Cell-level scope (env filtering) lives upstream on Bridge.scope;
+    when calling paired_g.fn directly the test pre-filters cells."""
     from corroborate.analyses.paired_g import paired_g
-    cells = _synthetic_cells()
+    cells = [
+        c for c in _synthetic_cells()
+        if c.get('env_name') == 'TestEnv'
+    ]
     result = paired_g.fn(
         cells,
         treatment_arm='treatment',
         baseline_arm='baseline',
         pair_by=('seed',),
         source='eval_best_burst_mean',
-        env_name='TestEnv',
     )
     assert isinstance(result, PairedGResult)
     assert result.n_pairs == 30
@@ -96,18 +101,15 @@ def test_analysis_registered_globally() -> None:
 
 
 @claim_bridge(
-    source='eval_best_burst_mean',
+    source=INTERVENTION,
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
+    scope=pl.col('env_name') == 'TestEnv',
 )
 def treatment_helps_outcome(
     paired_g: PairedGResult,
-    *,
-    pair_by: tuple[str, ...] = ('seed',),
-    env_name: str = 'TestEnv',
 ) -> Verdict:
-    del pair_by, env_name
     if paired_g.n_pairs < 10:
         return Verdict.POWER_INSUFFICIENT
     if paired_g.g > 0.3 and paired_g.p_value < 0.05:
@@ -135,18 +137,15 @@ def test_bridge_no_effect_when_signal_absent() -> None:
 
 
 @claim_bridge(
-    source='eval_best_burst_mean',
+    source=INTERVENTION,
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
+    scope=pl.col('env_name') == 'TestEnv',
 )
 def want_30_pairs(
     paired_g: PairedGResult,
-    *,
-    pair_by: tuple[str, ...] = ('seed',),
-    env_name: str = 'TestEnv',
 ) -> Verdict:
-    del pair_by, env_name
     if paired_g.n_pairs < 30:
         return Verdict.POWER_INSUFFICIENT
     if paired_g.g > 0.3 and paired_g.p_value < 0.05:
@@ -203,8 +202,6 @@ def test_bridge_carries_structural_metadata() -> None:
     assert carries_metadata.tier == Tier.INTERVENTIONAL
     assert carries_metadata.params['treatment_arm'] == 'ddqn'
     assert carries_metadata.params['baseline_arm'] == 'vanilla_dqn'
-    # Module-level INTERVENTION is inherited by all bridges in this module.
-    assert carries_metadata.intervention == INTERVENTION
 
 
 def test_bridge_carries_typed_intervention() -> None:

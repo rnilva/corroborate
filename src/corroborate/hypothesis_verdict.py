@@ -99,10 +99,11 @@ class HypothesisVerdict[R: Mapping[str, object]]:
         always reports the intervention-edge verdict to keep the
         paper-narrative reading unambiguous. Use `edge_verdict(edge)`
         when you need the coupling edge's verdict explicitly."""
+        from corroborate.intervention import DoEffect
         for edge in self.hypothesis.edges:
             if edge.target_name != target:
                 continue
-            if edge.intervention is None:
+            if not isinstance(edge.source, DoEffect):
                 continue
             return self.edge_verdicts.get(
                 (edge.source_name, edge.target_name),
@@ -265,9 +266,10 @@ def hypothesis_subgraph_verdict(
     edge_verdicts: dict[tuple[str, str], Verdict] = {}
     comparison_rows: dict[str, HypothesisComparisonRow] = {}
 
+    from corroborate.intervention import DoEffect
     # Pass 1: intervention edges (rung-2 paired contrasts).
     for edge in h.edges:
-        if edge.intervention is None:
+        if not isinstance(edge.source, DoEffect):
             continue
         row = hypothesis_comparison_from_cells(
             h, treatment_runs, baseline_runs,
@@ -287,7 +289,7 @@ def hypothesis_subgraph_verdict(
     # Pass 2: coupling edges — Pearson r over per-stratum effects
     # produced in pass 1.
     for edge in h.edges:
-        if edge.intervention is not None:
+        if isinstance(edge.source, DoEffect):
             continue
         if edge.source_name not in comparison_rows:
             raise ValueError(

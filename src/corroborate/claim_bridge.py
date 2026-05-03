@@ -47,10 +47,13 @@ defaults.
 from __future__ import annotations
 
 import inspect
-import sys
+import math
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
+from typing import cast
+
+import polars as pl
 
 from corroborate._introspection_boundary import get_param_default
 from corroborate.analysis import resolve_for_holds_when
@@ -110,6 +113,50 @@ _PREDICTED_DIRECTION_VALUES: frozenset[str] = frozenset(
 )
 
 
+def _build_invariant_measurable(
+    *,
+    name: str,
+    source_name: str,
+    threshold: float,
+    direction: Direction,
+) -> Measurable[Mapping[str, object], object]:
+    """Construct a per-cell verdict Measurable from a threshold
+    predicate. Hidden behind `Bridge.to_invariant_measurable()`;
+    not a public entrypoint.
+
+    The synthesized fn declares the source measurable as a
+    dependency via `__signature__` (so the framework's
+    parameter-name dep resolver injects the source's value at
+    cache-build time), AND falls back to a record-direct read for
+    post-hoc evaluations on a persisted parquet (where the source
+    column is already present in the record dict)."""
+    use_at_most = direction is Direction.AT_MOST
+
+    def fn(record: Mapping[str, object], **kwargs: object) -> str:
+        v: object = kwargs.get(source_name)
+        if v is None:
+            v = record.get(source_name)
+        if v is None or isinstance(v, bool) or not isinstance(v, (int, float)):
+            return 'power_insufficient'
+        fv = float(v)
+        if math.isnan(fv):
+            return 'power_insufficient'
+        if use_at_most:
+            return 'held' if fv <= threshold else 'invariant_violation'
+        return 'held' if fv >= threshold else 'invariant_violation'
+
+    # Declare the dep via __signature__ so `_measurable_param_names`
+    # picks `source_name` up and the resolver pre-computes it.
+    fn.__signature__ = inspect.Signature(parameters=[  # type: ignore[attr-defined]
+        inspect.Parameter('record', inspect.Parameter.POSITIONAL_OR_KEYWORD),
+        inspect.Parameter(
+            source_name, inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            default=None, annotation=float,
+        ),
+    ])
+    return Measurable(fn=fn, name=name, reads=())
+
+
 @dataclass(frozen=True, slots=True)
 class Bridge:
     """Authored edge declaration on the measurable graph.
@@ -121,25 +168,26 @@ class Bridge:
     analysis the `holds_when` body consumes.
 
     `source` / `target` are `BridgeEndpoint`s: either a string
-    (raw column path or a `@measurable`-registered name) OR a
+    (raw column path or a `@measurable`-registered name), a
     `Measurable` instance passed by value (typically a value-
-    composed reduction from `corroborate.reductions`). Passing a
-    Measurable directly avoids the boilerplate of a top-level
-    `@measurable` wrapper for every reduction variant; the
-    framework auto-registers each by-value Measurable at
-    decoration time so the cache walker finds it. The
-    `endpoint_name` helper normalises both cases to a single
-    column-name string for analyses + the causal graph.
+    composed reduction from `corroborate.reductions`), OR — for
+    `source` only — a `DoEffect`. `DoEffect` declares the
+    Pearl-rung-2 contrast (treatment_arm / baseline_arm) AND
+    routes the analysis: when `source` is a DoEffect, the
+    analysis's `source` slot maps to `bridge.target_name` (the
+    measurement column). When `source` is a string/measurable,
+    that name flows directly as the analysis's `source`. The
+    explicit per-bridge declaration replaces an earlier
+    file-level `INTERVENTION = DoEffect(...)` auto-resolution
+    that introduced source-vs-target routing ambiguity — bridges
+    now state their contrast unambiguously.
 
-    `intervention: DoEffect | None` is the Pearl-rung-2
-    annotation: the do-contrast for analyses that need it
-    (paired_g, dowhy, mundlak, etc.). Auto-resolved at
-    decoration time from `module.INTERVENTION` — bridge authors
-    declare it once at the top of the file rather than per-
-    bridge. Per-bridge `source = DoEffect(...)` (in the decorator
-    args) overrides the module-level default. The graph builder
-    emits a `do(treatment|vs=baseline) → target` edge when
-    either source-as-DoEffect or this field is set.
+    Passing a `Measurable` directly avoids the boilerplate of a
+    top-level `@measurable` wrapper for every reduction variant;
+    the framework auto-registers each by-value Measurable at
+    decoration time so the cache walker finds it. The
+    `endpoint_name` helper normalises str/Measurable cases to a
+    single column-name string for analyses + the causal graph.
 
     `predicted_direction: PredictedDirection | None` is the
     author-declared *prior* sign of the predicted effect, used by
@@ -153,21 +201,47 @@ class Bridge:
     file-protocol path (analyses on a corpus) sets it; the
     Hypothesis-side typed-edge path (verdict walks via
     `hypothesis_subgraph_verdict`) leaves it None — the verdict
-    walk consumes the Bridge as metadata (source / target /
-    intervention / tier / predicted_direction) and computes the
-    verdict from runs directly, never invoking a body. `evaluate`
-    raises `TypeError` if called on a body-less Bridge."""
+    walk consumes the Bridge as metadata (source / target / tier
+    / predicted_direction) and computes the verdict from runs
+    directly, never invoking a body. `evaluate` raises
+    `TypeError` if called on a body-less Bridge.
+
+    `threshold: float | None = None` is the predicate threshold
+    for INVARIANT self-loop bridges (`Direction.AT_MOST` /
+    `Direction.AT_LEAST`). When set together with `tier=INVARIANT`,
+    `direction in {AT_MOST, AT_LEAST}`, and `source_name ==
+    target_name`, the bridge is a substrate-axiom claim. Use
+    `to_invariant_measurable()` to synthesize the per-cell verdict
+    Measurable that the cache builder evaluates and persists.
+
+    `scope: pl.Expr | None = None` filters the cell-set the
+    framework hands to the analysis. The cache flows as a
+    `pl.DataFrame`; `evaluate()` applies `df.filter(scope)` (with
+    missing-column null-padding via `_filter_with_missing_cols`)
+    before converting to dicts and forwarding. `None` means
+    "match all". Replaces the legacy `env_name` /
+    `extra_filters` / `extra_min_pairs` / `extra_max_pairs` /
+    `cell_predicate` kwargs that used to live in the holds_when
+    params bag — scope is structural metadata, not body argument.
+
+    `pair_by: tuple[str, ...] = ('seed',)` is the pairing-axis
+    tuple forwarded to analyses that compute paired contrasts.
+    Typed Bridge field (rather than holds_when default) since
+    81% of bridges use the same `('seed',)` value and never
+    consume it in their body."""
     name: str
     source: BridgeEndpoint
     target: BridgeEndpoint
     direction: Direction = Direction.DIRECT
     tier: Tier = Tier.ASSOCIATIONAL
+    pair_by: tuple[str, ...] = ('seed',)
+    scope: pl.Expr | None = None
     params: Mapping[str, object] = field(
         default_factory=lambda: MappingProxyType({}),
     )
-    intervention: DoEffect | None = None
     predicted_direction: PredictedDirection | None = None
     holds_when: Callable[..., Verdict] | None = None
+    threshold: float | None = None
 
     @property
     def source_name(self) -> str:
@@ -179,6 +253,69 @@ class Bridge:
     def target_name(self) -> str:
         """Column name normalised from `target`."""
         return endpoint_name(self.target)
+
+    def to_invariant_measurable(
+        self,
+    ) -> Measurable[Mapping[str, object], object]:
+        """Synthesize the per-cell verdict Measurable for an
+        INVARIANT self-loop bridge with a threshold predicate.
+
+        Validity preconditions (raise `ValueError` otherwise):
+
+        - `tier is Tier.INVARIANT`
+        - `direction in {Direction.AT_MOST, Direction.AT_LEAST}`
+        - `threshold is not None`
+        - `source_name == target_name` (self-loop)
+        - the source name matches a registered measurable (lazily
+          checked: the synthesized fn looks up the source from the
+          registry at evaluation time, so the dep-resolver can
+          inject it before invoking)
+
+        The synthesized Measurable is named after `bridge.name`
+        and returns one of `'held'` / `'invariant_violation'` /
+        `'power_insufficient'` per record:
+
+        - `held` when the source value satisfies the predicate
+          (`≤ threshold` for AT_MOST, `≥ threshold` for AT_LEAST).
+        - `invariant_violation` when the source value violates it.
+        - `power_insufficient` when the source is NaN, missing,
+          or non-numeric.
+
+        Caller must register the returned Measurable (typically
+        as part of a substrate's default measurable panel)."""
+        from corroborate.causal_graph import Direction as _D
+        from corroborate.causal_graph import Tier as _T
+        if self.tier is not _T.INVARIANT:
+            raise ValueError(
+                f'to_invariant_measurable: bridge {self.name!r} has '
+                f'tier={self.tier.name}; required INVARIANT.',
+            )
+        if self.direction not in (_D.AT_MOST, _D.AT_LEAST):
+            raise ValueError(
+                f'to_invariant_measurable: bridge {self.name!r} has '
+                f'direction={self.direction.name}; required AT_MOST '
+                f'or AT_LEAST.',
+            )
+        if self.threshold is None:
+            raise ValueError(
+                f'to_invariant_measurable: bridge {self.name!r} has '
+                f'no threshold; required for INVARIANT predicate.',
+            )
+        src_name = self.source_name
+        tgt_name = self.target_name
+        if src_name != tgt_name:
+            raise ValueError(
+                f'to_invariant_measurable: bridge {self.name!r} '
+                f'declares source={src_name!r} != target={tgt_name!r}; '
+                f'INVARIANT bridges are self-loops.',
+            )
+
+        return _build_invariant_measurable(
+            name=self.name,
+            source_name=src_name,
+            threshold=self.threshold,
+            direction=self.direction,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -242,6 +379,38 @@ def _require_tier(value: object, fn_name: str) -> Tier:
     return value
 
 
+def _require_scope(value: object, fn_name: str) -> pl.Expr | None:
+    """Validate `scope` decorator arg. `None` → no filter; a
+    `pl.Expr` is accepted as the polars-native cell predicate. Any
+    other value is an authoring mistake — fail loudly at import."""
+    if value is None:
+        return None
+    if isinstance(value, pl.Expr):
+        return value
+    raise TypeError(
+        f'@claim_bridge {fn_name!r}: default for `scope` must be a '
+        f'pl.Expr (e.g. `pl.col(\'env_name\') == \'X\'`) or None; '
+        f'got {type(value).__name__}',
+    )
+
+
+def _require_pair_by(value: object, fn_name: str) -> tuple[str, ...]:
+    """Validate `pair_by` decorator arg. Must be a tuple of strings.
+    Empty tuple is allowed (analyses that don't pair ignore it)."""
+    if not isinstance(value, tuple):
+        raise TypeError(
+            f'@claim_bridge {fn_name!r}: default for `pair_by` must '
+            f'be a tuple[str, ...]; got {type(value).__name__}',
+        )
+    for k in cast(tuple[object, ...], value):
+        if not isinstance(k, str):
+            raise TypeError(
+                f'@claim_bridge {fn_name!r}: pair_by entries must '
+                f'be strings; got {type(k).__name__} ({k!r}).',
+            )
+    return cast(tuple[str, ...], value)
+
+
 def _require_predicted_direction(
     value: object, fn_name: str,
 ) -> PredictedDirection | None:
@@ -272,6 +441,8 @@ def claim_bridge(
     target: BridgeEndpoint,
     direction: Direction = Direction.DIRECT,
     tier: Tier = Tier.ASSOCIATIONAL,
+    pair_by: tuple[str, ...] = ('seed',),
+    scope: pl.Expr | None = None,
     predicted_direction: PredictedDirection | None = None,
 ) -> Callable[[Callable[..., Verdict]], Bridge]:
     """Decorator factory: wraps a function into a `Bridge`
@@ -284,25 +455,31 @@ def claim_bridge(
             target='eval_best_burst_mean',
             direction=Direction.DIRECT,
             tier=Tier.INTERVENTIONAL,
+            pair_by=('seed',),
+            scope=(
+                (pl.col('env_name') == 'Acrobot-v1')
+                & (pl.col('reward_scale') == 0.1)
+            ),
         )
         def some_bridge(
             paired_g: PairedGResult,           # fixture (analysis result)
-            *,
-            pair_by: tuple[str, ...] = ('seed',),
-            extra_filters: Mapping[str, object] = MappingProxyType({...}),
         ) -> Verdict:
             ...
 
-    Module-level `INTERVENTION = DoEffect(...)` provides the
-    contrast for all bridges in the file unless overridden via
-    `source = DoEffect(...)` in the decorator (per-bridge
-    different intervention).
+    Interventional bridges declare the do-contrast via
+    `source = DoEffect(treatment_arm=..., baseline_arm=...)`.
+    The framework extracts treatment/baseline arms from
+    `bridge.source` at evaluate() time and threads them into the
+    analysis's kwargs. When `source` is a string/Measurable, no
+    contrast is set and the analysis runs without arm-pairing
+    (correlation-style or pre-paired bridges).
 
-    `Bridge.intervention` is auto-resolved from
-    `module.INTERVENTION` at decoration time and threaded into
-    analysis kwargs by `evaluate()`. Bridge authors do NOT write
-    `treatment_arm` / `baseline_arm` / `intervention=` as bridge
-    params anywhere.
+    A common idiom is to define `INTERVENTION = DoEffect(...)`
+    once at the top of the bridge file and reference it as
+    `source=INTERVENTION` in each interventional bridge — the
+    constant lives in the file's namespace, not in framework
+    auto-resolution. Per-bridge variants (e.g. HP-encoded arms)
+    declare their own DoEffect inline.
     """
     # Validate decorator args at module-import time (early failure).
     source_validated = _require_endpoint(
@@ -317,6 +494,12 @@ def claim_bridge(
     )
     tier_validated = _require_tier(
         tier, '<claim_bridge decorator>',
+    )
+    pair_by_validated = _require_pair_by(
+        pair_by, '<claim_bridge decorator>',
+    )
+    scope_validated = _require_scope(
+        scope, '<claim_bridge decorator>',
     )
     predicted_direction_validated = _require_predicted_direction(
         predicted_direction, '<claim_bridge decorator>',
@@ -349,54 +532,99 @@ def claim_bridge(
             if isinstance(v, Measurable):
                 register(v)
 
-        # Module-level INTERVENTION resolution. The module declares
-        # `INTERVENTION = DoEffect(...)` at top level; every bridge
-        # in that file inherits the contrast as a default. Per-bridge
-        # `source = DoEffect(...)` overrides it.
-        module = sys.modules.get(fn.__module__)
-        module_intervention: object = (
-            getattr(module, 'INTERVENTION', None)
-            if module is not None else None
-        )
-        if module_intervention is not None and not isinstance(
-            module_intervention, DoEffect,
-        ):
-            raise TypeError(
-                f'@claim_bridge {fn.__name__!r}: module '
-                f'{fn.__module__!r} declares `INTERVENTION` as '
-                f'{type(module_intervention).__name__}; must be a '
-                f'DoEffect (or omitted).',
-            )
-        intervention = (
-            module_intervention
-            if isinstance(module_intervention, DoEffect)
-            else None
-        )
-
         return Bridge(
             name=fn.__name__,
             source=source_validated,
             target=target_validated,
             direction=direction_validated,
             tier=tier_validated,
+            pair_by=pair_by_validated,
+            scope=scope_validated,
             params=MappingProxyType(params),
             holds_when=fn,
-            intervention=intervention,
             predicted_direction=predicted_direction_validated,
         )
 
     return _decorator
 
 
+def _filter_with_missing_cols(
+    df: pl.DataFrame, expr: pl.Expr,
+) -> pl.DataFrame:
+    """Apply `expr` as a filter to `df`. For columns referenced
+    by `expr` but absent from `df`:
+
+    - If the name resolves in the `@measurable` registry, compute
+      it per-cell (with shared dep memoisation via
+      `evaluate_with_measurables`) and add it as a column. This
+      is the "bridges-verify-against-raw-traces" path: when a
+      bridge declares `scope = pl.col('jensen_dormancy_gap') >= 0`
+      and the input DataFrame is a raw `runs.parquet` without
+      that measurable yet, the framework computes it on the fly.
+    - Otherwise, pre-fill as null. Universal-cache schema
+      heterogeneity (corpus A has `reward_scale`, corpus B
+      doesn't, neither corpus computed it) lands here — null
+      rows fail the predicate naturally (polars filter excludes
+      null-result rows), matching the legacy `_matches_filters`
+      "missing key → False" semantics."""
+    referenced = expr.meta.root_names()
+    missing = [c for c in referenced if c not in df.columns]
+    if not missing:
+        return df.filter(expr)
+
+    from corroborate.measurable import (
+        evaluate_with_measurables, get_registered,
+    )
+    measurable_missing: list[str] = []
+    truly_missing: list[str] = []
+    for col in missing:
+        if get_registered(col) is not None:
+            measurable_missing.append(col)
+        else:
+            truly_missing.append(col)
+
+    if measurable_missing:
+        cells = cast(list[dict[str, object]], df.to_dicts())
+        computed: dict[str, list[object]] = {
+            col: [] for col in measurable_missing
+        }
+        for cell in cells:
+            cache: dict[str, object] = {}
+            for col in measurable_missing:
+                m = get_registered(col)
+                assert m is not None  # checked above
+                computed[col].append(
+                    evaluate_with_measurables(m.fn, cell, cache=cache),
+                )
+        df = df.with_columns(
+            [pl.Series(c, v) for c, v in computed.items()],
+        )
+
+    if truly_missing:
+        df = df.with_columns(
+            [pl.lit(None).alias(c) for c in truly_missing],
+        )
+
+    return df.filter(expr)
+
+
 def evaluate(
     bridge: Bridge,
-    cells: Iterable[Mapping[str, object]],
+    cells: pl.DataFrame | Iterable[Mapping[str, object]],
 ) -> BridgeEvaluation:
-    """Run a bridge against a cell-set: resolve each fixture (a
-    `holds_when` parameter without a default) by looking up the
-    matching `@analysis`, parameterise from the bridge's
-    structural fields + params, run on `cells`, inject results,
-    return verdict + audit trail.
+    """Run a bridge against a cell-set: apply `bridge.scope` as a
+    polars filter, resolve each fixture (a `holds_when` parameter
+    without a default) by looking up the matching `@analysis`,
+    parameterise from the bridge's structural fields + params,
+    run on the filtered cells, inject results, return verdict +
+    audit trail.
+
+    Cell input may be either a `pl.DataFrame` (the canonical cache
+    shape — fast, vectorised filter) or an `Iterable[Mapping]`
+    (synthetic test cells, ad-hoc). Iterables are materialised
+    into a DataFrame before filtering. Analyses receive the
+    filtered cells as `list[dict]` after a single `to_dicts()`
+    conversion — they don't see `pl.DataFrame` directly.
 
     `source` and `target` are normalised via `endpoint_name`
     before reaching analyses — analyses always see the column-name
@@ -414,25 +642,42 @@ def evaluate(
             f'consumed by `hypothesis_subgraph_verdict`; they do '
             f'not carry a threshold to evaluate against a cell-set.',
         )
-    # Contrast resolution precedence (decided here):
-    #   1. `source = DoEffect(...)` (per-bridge explicit override)
-    #   2. `Bridge.intervention` (module-level `INTERVENTION` or
-    #      legacy per-bridge `intervention=` field, resolved at
-    #      decoration time)
-    #   3. None (correlation/correlation-like bridges with no
-    #      arm contrast)
-    #
-    # When source is a DoEffect, the analysis's `source` slot maps
-    # to the bridge's TARGET measurable (the column to compute on).
-    # When source is a measurable, it stays as-is.
+    filtered_cells: list[dict[str, object]]
+    if bridge.scope is None:
+        # No scope filter — skip the DataFrame round-trip. Convert
+        # to list[dict] so the analysis fn can re-iterate.
+        if isinstance(cells, pl.DataFrame):
+            filtered_cells = cast(list[dict[str, object]], cells.to_dicts())
+        else:
+            filtered_cells = [dict(c) for c in cells]
+    else:
+        # Scope filter — materialise to DataFrame (if not already),
+        # filter, convert back to list[dict] for the analysis.
+        df: pl.DataFrame
+        if isinstance(cells, pl.DataFrame):
+            df = cells
+        else:
+            cells_list = list(cells)
+            df = pl.from_dicts(cells_list) if cells_list else pl.DataFrame()
+        if df.height > 0:
+            df = _filter_with_missing_cols(df, bridge.scope)
+        filtered_cells = (
+            cast(list[dict[str, object]], df.to_dicts())
+            if df.height > 0 else []
+        )
+    # Contrast resolution:
+    #   - `source = DoEffect(...)` → contrast = the DoEffect, and
+    #     the analysis's `source` slot maps to bridge.target_name
+    #     (the measurement column).
+    #   - `source = str | Measurable` → no contrast; the name flows
+    #     directly as the analysis's source. Correlational bridges,
+    #     or bridges where the author wants paired_g to compute on
+    #     a non-outcome measurable.
     contrast: DoEffect | None
     source_for_analysis: str
     if isinstance(bridge.source, DoEffect):
         contrast = bridge.source
         source_for_analysis = bridge.target_name
-    elif bridge.intervention is not None:
-        contrast = bridge.intervention
-        source_for_analysis = bridge.source_name
     else:
         contrast = None
         source_for_analysis = bridge.source_name
@@ -442,20 +687,14 @@ def evaluate(
         'direction': bridge.direction,
         'tier': bridge.tier,
         'predicted_direction': bridge.predicted_direction,
+        'pair_by': bridge.pair_by,
         **dict(bridge.params),
     }
-    # Inject contrast arms ONLY when the bridge hasn't already
-    # supplied them via legacy `treatment_arm` / `baseline_arm`
-    # params. Migrated bridges drop those params and inherit from
-    # the resolved contrast; unmigrated bridges keep their explicit
-    # arm strings during the transition.
     if contrast is not None:
-        if 'treatment_arm' not in bridge_params:
-            bridge_params['treatment_arm'] = contrast.treatment_arm
-        if 'baseline_arm' not in bridge_params:
-            bridge_params['baseline_arm'] = contrast.baseline_arm
+        bridge_params['treatment_arm'] = contrast.treatment_arm
+        bridge_params['baseline_arm'] = contrast.baseline_arm
     analysis_results = resolve_for_holds_when(
-        bridge.holds_when, cells, bridge_params,
+        bridge.holds_when, filtered_cells, bridge_params,
     )
     verdict = bridge.holds_when(**analysis_results)
     return BridgeEvaluation(

@@ -51,8 +51,7 @@ def _intervention_edge(
 ) -> ClaimBridge:
     return ClaimBridge(
         name=f'do->{target}',
-        source=_TEST_DO.node_key(), target=target,
-        intervention=_TEST_DO,
+        source=_TEST_DO, target=target,
         tier=Tier.INTERVENTIONAL, direction=Direction.DIRECT,
         predicted_direction=predicted_direction,
     )

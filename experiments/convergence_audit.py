@@ -112,13 +112,16 @@ def _print_verdict(
     # with target=outcome path is "outcome"; the coupling edge is
     # the "link".
     intervention_targets = tuple(
-        e.target for e in hypothesis.edges if e.intervention is not None
+        e.target for e in hypothesis.edges
+        if isinstance(e.source, DoEffect)
     )
     pattern_components: list[Verdict] = []
     for t in intervention_targets:
         pattern_components.append(verdict.verdict_at(t))
     coupling = next(
-        (e for e in hypothesis.edges if e.intervention is None), None,
+        (e for e in hypothesis.edges
+         if not isinstance(e.source, DoEffect)),
+        None,
     )
     if coupling is not None:
         br = verdict.bridge_results.get((coupling.source, coupling.target))
@@ -130,7 +133,7 @@ def _print_verdict(
     for edge in hypothesis.edges:
         if edge.target not in verdict.comparison_rows:
             continue
-        if edge.intervention is None:
+        if not isinstance(edge.source, DoEffect):
             continue
         row = verdict.comparison_rows[edge.target]
         g = (

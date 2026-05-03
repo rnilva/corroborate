@@ -67,10 +67,9 @@ envs structurally.
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping
-from types import MappingProxyType
 
 import numpy as np
+import polars as pl
 
 import corroborate.analyses  # pyright: ignore[reportUnusedImport]  # populate registry
 import corroborate.rl.dqn.measurables  # pyright: ignore[reportUnusedImport]  # populate measurable registry
@@ -131,36 +130,49 @@ INTERVENTION = DoEffect(treatment_arm='ddqn', baseline_arm='vanilla_dqn')
 
 
 @claim_bridge(
-    source='jensen_dormancy_gap',
+    # Decorator declares the do-contrast (vanilla → ddqn) on the
+    # OUTCOME column. The graph edge `jensen_dormancy_gap →
+    # eval_best_burst_mean` (mech-state predicate of refutation
+    # → outcome) lives in the docstring/scope rather than the
+    # source field — the source field now carries the contrast
+    # exclusively. paired_g computes Δ on `target=eval_best_burst_mean`
+    # under the file's INTERVENTION, which IS the actual refutation
+    # predicate; the dormancy-gap is consumed by `scope` as a cell
+    # filter, not as paired_g's measurement axis.
+    source=INTERVENTION,
     target='eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
+    pair_by=('seed', 'env_name'),
+    # `is_finite()` excludes both null and NaN — required because
+    # polars admits NaN through `>=` comparisons (NaN >= 1e-9 → True
+    # in polars's filter context, unlike IEEE-754 semantics). Cells
+    # with NaN `jensen_dormancy_gap` are "couldn't evaluate" and
+    # should drop, not pass.
+    scope=(
+        pl.col('jensen_dormancy_gap').is_finite()
+        & (pl.col('jensen_dormancy_gap') >= 1e-9)
+    ),
 )
 def ddqn_refuted_when_dormancy_fires(
     paired_g: PairedGResult,
-    *,
-    pair_by: tuple[str, ...] = ('seed', 'env_name'),
-    extra_min_pairs: tuple[tuple[str, float], ...] = (
-        ('jensen_dormancy_gap', 1e-9),
-    ),
 ) -> Verdict:
     """Necessary-condition claim. The framework's-own Jensen
-    dormancy invariant `at_most[jensen_dormancy_gap<=0]`
-    operationalizes the Hasselt-2010 structural floor
-    `σ_Q × √(2 log |A|)` against observed bias. When the gap
+    dormancy invariant operationalizes the Hasselt-2010 structural
+    floor `σ_Q × √(2 log |A|)` against observed bias. When the gap
     fires (gap > 0, premise dormant), DDQN's bias-correction
     mechanism has nothing to operate on.
 
     HELD when helped_fraction ≤ 0.15 AND |g| ≤ 0.20 — the
-    refutation prediction is corroborated. INVARIANT_VIOLATION
-    when DDQN unexpectedly helps despite dormancy (helped > 0.40).
+    refutation prediction is corroborated (DDQN does NOT help
+    outcome on dormant cells). INVARIANT_VIOLATION when DDQN
+    unexpectedly helps despite dormancy (helped > 0.40).
 
     The Pearl-rung-2 corroboration via `adaptive_dqn_recovers_
     ddqn_benefit__fourrooms_factor_0p5` validates this as
     actionable: a runtime controller using a per-batch dormancy
     proxy (max_Q − mean_Q vs σ_Q × √(2 log |A|)) recovers DDQN's
     outcome benefit on FourRooms (g=+0.78 vs vanilla, p<0.001)."""
-    del pair_by, extra_min_pairs
     if paired_g.n_pairs < 50:
         return Verdict.POWER_INSUFFICIENT
     if math.isnan(paired_g.helped_fraction):
@@ -189,12 +201,10 @@ def ddqn_refuted_when_dormancy_fires(
     target='eval_final_mean',
     direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
+    scope=(pl.col('env_name') == 'FourRooms-misc'),
 )
 def adaptive_dqn_recovers_ddqn_benefit__fourrooms_factor_0p5(
     paired_g: PairedGResult,
-    *,
-    pair_by: tuple[str, ...] = ('seed',),
-    env_name: str = 'FourRooms-misc',
 ) -> Verdict:
     """Pearl-rung-2 designed-intervention bridge. The adaptive
     controller (`adaptive_dormancy_greedify` with
@@ -220,7 +230,6 @@ def adaptive_dqn_recovers_ddqn_benefit__fourrooms_factor_0p5(
     The trend is consistent with "occasional vanilla fallback
     on dormant batches strictly helps", but a tighter claim
     needs a wider seed budget. Tracked as a non-claim here."""
-    del pair_by, env_name
     if paired_g.n_pairs < 20:
         return Verdict.POWER_INSUFFICIENT
     if math.isnan(paired_g.g):
@@ -239,19 +248,18 @@ def adaptive_dqn_recovers_ddqn_benefit__fourrooms_factor_0p5(
 
 
 @claim_bridge(
-    source='mc_return_first_quarter',
+    source=INTERVENTION,
     target='mc_return_first_quarter',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
+    pair_by=('seed', 'env_name'),
+    scope=(
+        (pl.col('log_obs_dim') >= 5.0)
+        & (pl.col('total_steps') >= 1000000.0)
+    ),
 )
 def ddqn_helps_at_early_bursts__pixel_envs(
     paired_g: PairedGResult,
-    *,
-    pair_by: tuple[str, ...] = ('seed', 'env_name'),
-    extra_min_pairs: tuple[tuple[str, float], ...] = (
-        ('log_obs_dim', 5.0),
-        ('total_steps', 1000000.0),
-    ),
 ) -> Verdict:
     """TIER A2 existence proof: at the first eval-burst quarter
     on long-horizon high-obs-dim envs (MinAtar 1M), DDQN's
@@ -262,7 +270,6 @@ def ddqn_helps_at_early_bursts__pixel_envs(
     Generalizes within the MinAtar 1M sample, not across all
     high-obs-dim envs (log_obs_dim alone is not predictive —
     see K1 LOO + four-MinAtar comparison)."""
-    del pair_by, extra_min_pairs
     if paired_g.n_pairs < 30:
         return Verdict.POWER_INSUFFICIENT
     if math.isnan(paired_g.helped_fraction):
@@ -276,19 +283,17 @@ def ddqn_helps_at_early_bursts__pixel_envs(
 
 
 @claim_bridge(
-    source='mc_return_last_quarter',
+    source=INTERVENTION,
     target='mc_return_last_quarter',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
+    scope=(
+        (pl.col('env_name') == 'SpaceInvaders-MinAtar')
+        & (pl.col('total_steps') >= 1000000.0)
+    ),
 )
 def ddqn_attenuates_at_late_bursts__spaceinvaders(
     paired_g: PairedGResult,
-    *,
-    pair_by: tuple[str, ...] = ('seed',),
-    env_name: str = 'SpaceInvaders-MinAtar',
-    extra_min_pairs: tuple[tuple[str, float], ...] = (
-        ('total_steps', 1000000.0),
-    ),
 ) -> Verdict:
     """TIER A2 existence proof: on SpaceInvaders-MinAtar at 1M
     training steps, in the last quarter of training bursts,
@@ -308,7 +313,6 @@ def ddqn_attenuates_at_late_bursts__spaceinvaders(
     `adaptive_dqn_fails_to_avoid_attenuation__spaceinvaders_1m`
     runs the dormancy controller on this regime; it tracks DDQN
     (g≈0) and inherits the attenuation (g=−0.46 vs vanilla)."""
-    del pair_by, env_name, extra_min_pairs
     if paired_g.n_pairs < 50:
         return Verdict.POWER_INSUFFICIENT
     if math.isnan(paired_g.helped_fraction):
@@ -335,12 +339,10 @@ def ddqn_attenuates_at_late_bursts__spaceinvaders(
     target='eval_final_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
+    scope=(pl.col('env_name') == 'SpaceInvaders-MinAtar'),
 )
 def adaptive_dqn_fails_to_avoid_attenuation__spaceinvaders_1m(
     paired_g: PairedGResult,
-    *,
-    pair_by: tuple[str, ...] = ('seed',),
-    env_name: str = 'SpaceInvaders-MinAtar',
 ) -> Verdict:
     """Pearl-rung-2 scope-limitation bridge. The same dormancy-
     aware controller that recovers DDQN's benefit on FourRooms
@@ -375,7 +377,6 @@ def adaptive_dqn_fails_to_avoid_attenuation__spaceinvaders_1m(
     actionable scope is "envs where dormancy fires and DDQN's
     bias-correction has bias to bite on", not "all DDQN-hurt
     envs"."""
-    del pair_by, env_name
     if paired_g.n_pairs < 20:
         return Verdict.POWER_INSUFFICIENT
     if math.isnan(paired_g.g):
@@ -405,22 +406,23 @@ def adaptive_dqn_fails_to_avoid_attenuation__spaceinvaders_1m(
 
 
 @claim_bridge(
-    source='effective_horizon',
+    # gamma_sweep stamps γ into the arm name (ddqn_g090 / _g095 /
+    # _g099); the high-effective-horizon scope picks γ=0.99, so the
+    # contrast is the γ=0.99 pair specifically. File-level
+    # INTERVENTION's plain `ddqn`/`vanilla_dqn` doesn't match any
+    # cell here.
+    source=DoEffect(treatment_arm='ddqn_g099', baseline_arm='vanilla_dqn_g099'),
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
+    scope=(
+        (pl.col('env_name') == 'FourRooms-misc')
+        & (pl.col('corpus') == 'gamma_sweep')
+        & (pl.col('effective_horizon') >= 50.0)
+    ),
 )
 def ddqn_benefit_scales_with_effective_horizon__fourrooms(
     paired_g: PairedGResult,
-    *,
-    pair_by: tuple[str, ...] = ('seed',),
-    env_name: str = 'FourRooms-misc',
-    extra_filters: Mapping[str, object] = MappingProxyType(
-        {'corpus': 'gamma_sweep'},
-    ),
-    extra_min_pairs: tuple[tuple[str, float], ...] = (
-        ('effective_horizon', 50.0),
-    ),
 ) -> Verdict:
     """Pearl-rung-2 designed-γ-intervention bridge. Filters
     gamma_sweep's FourRooms cells to the high-effective-horizon
@@ -467,7 +469,6 @@ def ddqn_benefit_scales_with_effective_horizon__fourrooms(
 
     HELD when helped_fraction ≥ 0.55 AND g ≥ 0.30 on the
     high-eff_h subset. NO_EFFECT or INVARIANT_VIOLATION otherwise."""
-    del pair_by, env_name, extra_filters, extra_min_pairs
     if paired_g.n_pairs < 20:
         return Verdict.POWER_INSUFFICIENT
     if math.isnan(paired_g.helped_fraction):
@@ -481,22 +482,24 @@ def ddqn_benefit_scales_with_effective_horizon__fourrooms(
 
 
 @claim_bridge(
-    source='effective_horizon',
+    # gamma_sweep_metamaze_high stamps γ into the arm name
+    # (ddqn_g0995 / ddqn_g0999); the asserted activation is at
+    # γ=0.999 (eff_h≈1000 in this corpus's effective_horizon
+    # encoding), so contrast the γ=0.999 pair specifically.
+    source=DoEffect(
+        treatment_arm='ddqn_g0999', baseline_arm='vanilla_dqn_g0999',
+    ),
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
+    scope=(
+        (pl.col('env_name') == 'MetaMaze-misc')
+        & (pl.col('corpus') == 'gamma_sweep_metamaze_high')
+        & (pl.col('effective_horizon') >= 18.0)
+    ),
 )
 def ddqn_benefit_scales_with_effective_horizon__metamaze_high_gamma(
     paired_g: PairedGResult,
-    *,
-    pair_by: tuple[str, ...] = ('seed',),
-    env_name: str = 'MetaMaze-misc',
-    extra_filters: Mapping[str, object] = MappingProxyType(
-        {'corpus': 'gamma_sweep_metamaze_high'},
-    ),
-    extra_min_pairs: tuple[tuple[str, float], ...] = (
-        ('effective_horizon', 18.0),
-    ),
 ) -> Verdict:
     """Portability probe — chain-depth-amplifier activates on
     MetaMaze when γ pushed to 0.999 (eff_h≈20). The earlier
@@ -513,7 +516,6 @@ def ddqn_benefit_scales_with_effective_horizon__metamaze_high_gamma(
     of the chain-depth-amplifier: ~10-20 effective steps minimum.
 
     HELD when helped_fraction ≥ 0.45 AND g ≥ 0.20."""
-    del pair_by, env_name, extra_filters, extra_min_pairs
     if paired_g.n_pairs < 20:
         return Verdict.POWER_INSUFFICIENT
     if math.isnan(paired_g.helped_fraction):
@@ -527,22 +529,21 @@ def ddqn_benefit_scales_with_effective_horizon__metamaze_high_gamma(
 
 
 @claim_bridge(
-    source='gamma',
+    # gamma_sweep_more stamps γ into the arm name (ddqn_g090 /
+    # _g095 / _g099); the high-γ scope picks γ=0.99, so contrast
+    # the γ=0.99 pair specifically.
+    source=DoEffect(treatment_arm='ddqn_g099', baseline_arm='vanilla_dqn_g099'),
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
+    scope=(
+        (pl.col('env_name') == 'DiscountingChain-bsuite')
+        & (pl.col('corpus') == 'gamma_sweep_more')
+        & (pl.col('gamma') >= 0.985)
+    ),
 )
 def ddqn_benefit_scales_with_gamma__discountingchain(
     paired_g: PairedGResult,
-    *,
-    pair_by: tuple[str, ...] = ('seed',),
-    env_name: str = 'DiscountingChain-bsuite',
-    extra_filters: Mapping[str, object] = MappingProxyType(
-        {'corpus': 'gamma_sweep_more'},
-    ),
-    extra_min_pairs: tuple[tuple[str, float], ...] = (
-        ('gamma', 0.985),
-    ),
 ) -> Verdict:
     """Pearl-rung-2 do(γ) bridge on DiscountingChain. Filters
     gamma_sweep_more's DiscountingChain cells to γ=0.99 only and
@@ -568,7 +569,6 @@ def ddqn_benefit_scales_with_gamma__discountingchain(
     because DC is sparse-reward bimodal: many seeds score 0
     (never find goal), so helped_fraction undershoots even when
     the mean effect is significant."""
-    del pair_by, env_name, extra_filters, extra_min_pairs
     if paired_g.n_pairs < 20:
         return Verdict.POWER_INSUFFICIENT
     if math.isnan(paired_g.helped_fraction):
@@ -601,7 +601,7 @@ def ddqn_benefit_scales_with_gamma__discountingchain(
 
 
 @claim_bridge(
-    source='mc_return',
+    source=INTERVENTION,
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
@@ -609,7 +609,16 @@ def ddqn_benefit_scales_with_gamma__discountingchain(
 def bootstrap_fraction_drives_g_link__net_of_dormancy(
     meta_regression_per_burst: MetaRegressionResult,
     *,
-    pair_by: tuple[str, ...] = ('seed',),
+    # `source` here pins the per-burst measurable the underlying
+    # `paired_g_per_burst` projects each cell to (a 2-D
+    # `(n_bursts, n_episodes)` array). The decorator's
+    # `source=INTERVENTION` carries the do-contrast (treatment /
+    # baseline arms); the bridge's `target='eval_best_burst_mean'`
+    # would otherwise be auto-injected as the analysis source
+    # (a scalar, no per-burst structure). The body default below
+    # routes the panel computation back onto `mc_return` per the
+    # claim's g_link reading.
+    source: str = 'mc_return',
     reduction: str = 'mean',
     # Column-name covariates: each is materialised per-cell by the
     # @measurable cache, then averaged to env-level inside the
@@ -651,7 +660,7 @@ def bootstrap_fraction_drives_g_link__net_of_dormancy(
     covariate set itself: dormancy_env_mean is in the model, so
     a surviving β(bootstrap_fraction) is a partial coefficient,
     not a marginal one."""
-    del pair_by, reduction, covariates
+    del source, reduction, covariates
     coef = next(
         (c for c in meta_regression_per_burst.coefficients
          if c.name == 'bootstrap_fraction'),
@@ -692,7 +701,7 @@ def bootstrap_fraction_drives_g_link__net_of_dormancy(
 
 
 @claim_bridge(
-    source='mc_return',
+    source=INTERVENTION,
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
@@ -700,7 +709,13 @@ def bootstrap_fraction_drives_g_link__net_of_dormancy(
 def mc_variance_attenuates_g_link__between_env(
     mundlak_paired_g_per_burst: MundlakResult,
     *,
-    pair_by: tuple[str, ...] = ('seed',),
+    # See `bootstrap_fraction_drives_g_link__net_of_dormancy`
+    # for the rationale: pin the per-burst measurable that
+    # `paired_g_per_burst` (called inside Mundlak) projects each
+    # cell onto. The decorator's `source=INTERVENTION` carries
+    # the do-contrast; the body default below routes the panel
+    # computation back onto `mc_return` per the g_link reading.
+    source: str = 'mc_return',
     reduction: str = 'mean',
     predictor_name: str = 'log_mc_variance_per_burst',
     predictor_arm_filter: str = 'vanilla_dqn',
@@ -722,7 +737,7 @@ def mc_variance_attenuates_g_link__between_env(
 
     Pearl-rung-2 corroboration comes from `reward_scale_sweep`
     (causal probe via reward × k intervention)."""
-    del pair_by, reduction, predictor_name, predictor_arm_filter
+    del source, reduction, predictor_name, predictor_arm_filter
     coef = mundlak_paired_g_per_burst.between
     if not coef.p_value < 0.05:
         if coef.coefficient < -0.01:
@@ -814,19 +829,18 @@ def mc_variance_attenuates_g_link__between_env(
 
 
 @claim_bridge(
-    source='outcome_native',
-    target='eval_best_burst_mean',
+    source=INTERVENTION,
+    target='outcome_native',
     direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
+    scope=(
+        (pl.col('env_name') == 'FourRooms-misc')
+        & (pl.col('reward_scale') == 0.1)
+    ),
 )
 def ddqn_rescues_underlearning_vanilla__fourrooms_rs_0p1(
     paired_g: PairedGResult,
     *,
-    env_name: str = 'FourRooms-misc',
-    pair_by: tuple[str, ...] = ('seed',),
-    extra_filters: Mapping[str, object] = MappingProxyType(
-        {'reward_scale': 0.1},
-    ),
     threshold_diff: float = 0.4,
 ) -> Verdict:
     """Pearl-rung-2 interventional contrast: do(arm=ddqn) on
@@ -834,12 +848,13 @@ def ddqn_rescues_underlearning_vanilla__fourrooms_rs_0p1(
     ≥ +0.4 above the do(arm=vanilla_dqn) baseline.
 
     Generic primitive shape: consumes `paired_g` with
-    `source='outcome_native'` (the registered measurable
-    `eval_best_burst_mean / reward_scale`) and
-    `extra_filters={'reward_scale': 0.1}` to scope the corpus.
-    No bespoke analysis — the bridge supplies measurable name +
-    filters, the framework runs `paired_g` and injects the
-    result.
+    `target='outcome_native'` (the registered measurable
+    `eval_best_burst_mean / reward_scale`) under
+    `source=INTERVENTION` (do(ddqn) − do(vanilla_dqn) contrast)
+    and `scope=(env_name == 'FourRooms-misc') & (reward_scale ==
+    0.1)` to filter the corpus. No bespoke analysis — the bridge
+    supplies the measurable name + scope, the framework runs
+    `paired_g` and injects the result.
 
     HELD when `paired_g.mean_diff ≥ threshold_diff (=+0.4)` AND
     `paired_g.mean_diff_p_value < 0.05`. POWER_INSUFFICIENT
@@ -859,7 +874,6 @@ def ddqn_rescues_underlearning_vanilla__fourrooms_rs_0p1(
     ddqn_native | log_rs (partial r ≈ −0.04). The bridge tests
     a CONTRAST between two independent reward-scale-response
     curves, not a causal arrow between cell outputs."""
-    del env_name, pair_by, extra_filters
     diff = paired_g.mean_diff
     p = paired_g.mean_diff_p_value
     if math.isnan(diff) or math.isnan(p):
@@ -888,19 +902,18 @@ def ddqn_rescues_underlearning_vanilla__fourrooms_rs_0p1(
 
 
 @claim_bridge(
-    source='outcome_native',
-    target='eval_best_burst_mean',
+    source=INTERVENTION,
+    target='outcome_native',
     direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
+    scope=(
+        (pl.col('env_name') == 'FourRooms-misc')
+        & (pl.col('reward_scale') == 0.3)
+    ),
 )
 def ddqn_dominates_vanilla_response_curve__fourrooms_rs_0p3(
     paired_g: PairedGResult,
     *,
-    env_name: str = 'FourRooms-misc',
-    pair_by: tuple[str, ...] = ('seed',),
-    extra_filters: Mapping[str, object] = MappingProxyType(
-        {'reward_scale': 0.3},
-    ),
     threshold_diff: float = 0.4,
 ) -> Verdict:
     """Sibling of CLAIM 7 at the rescue-regime peak (rs=0.3).
@@ -915,7 +928,6 @@ def ddqn_dominates_vanilla_response_curve__fourrooms_rs_0p3(
     Same defensive framing as CLAIM 7: `mean_diff` is the
     interventional contrast, not an observational edge between
     arm outputs."""
-    del env_name, pair_by, extra_filters
     diff = paired_g.mean_diff
     p = paired_g.mean_diff_p_value
     if math.isnan(diff) or math.isnan(p):
@@ -987,16 +999,23 @@ def ddqn_dominates_vanilla_response_curve__fourrooms_rs_0p3(
 
 
 @claim_bridge(
-    source='mc_return',
+    source=INTERVENTION,
     target='mc_return[per_burst]',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
+    scope=(pl.col('env_name') == 'SpaceInvaders-MinAtar'),
 )
 def ddqn_curve_crosses_vanilla_late__spaceinvaders(
     paired_g_per_burst: PerBurstResult,
     *,
+    # Pin the per-burst measurable: the decorator's target
+    # `mc_return[per_burst]` is the human-readable name of what
+    # the analysis projects, but `paired_g_per_burst` indexes
+    # cells by the raw per-burst column `mc_return`. The body
+    # default routes the per-burst projection back onto the
+    # underlying 2-D `mc_return` array.
+    source: str = 'mc_return',
     env_name: str = 'SpaceInvaders-MinAtar',
-    pair_by: tuple[str, ...] = ('seed',),
     reduction: str = 'mean',
     crossover_burst_min: int = 3,
     crossover_burst_max: int = 10,
@@ -1022,7 +1041,7 @@ def ddqn_curve_crosses_vanilla_late__spaceinvaders(
     g) — within env, the SD-scaling is ~constant so sign
     detection is invariant. The bridge is a SHAPE claim about
     the per-burst-index curve, not a single aggregate effect."""
-    del pair_by, reduction
+    del source, reduction
     env_strata = sorted(
         (s for s in paired_g_per_burst.strata if s.env_name == env_name),
         key=lambda s: s.burst_index,
@@ -1099,12 +1118,11 @@ def ddqn_curve_crosses_vanilla_late__spaceinvaders(
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
+    scope=(pl.col('env_name') == 'FourRooms-misc'),
 )
 def ddqn_helps_at_full_bootstrap__fourrooms_n1(
     paired_g: PairedGResult,
     *,
-    env_name: str = 'FourRooms-misc',
-    pair_by: tuple[str, ...] = ('seed',),
     threshold_diff: float = 0.05,
 ) -> Verdict:
     """At n=1 (full bootstrap), DDQN's outcome benefit on
@@ -1112,7 +1130,6 @@ def ddqn_helps_at_full_bootstrap__fourrooms_n1(
     the falsification curve — pairs with the n=10 NO_EFFECT
     bridge to corroborate that bootstrap dependence is the
     mechanism's necessary substrate."""
-    del env_name, pair_by
     diff = paired_g.mean_diff
     p = paired_g.mean_diff_p_value
     if math.isnan(diff) or math.isnan(p):
@@ -1133,12 +1150,11 @@ def ddqn_helps_at_full_bootstrap__fourrooms_n1(
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
+    scope=(pl.col('env_name') == 'FourRooms-misc'),
 )
 def ddqn_null_under_monte_carlo__fourrooms_n10(
     paired_g: PairedGResult,
     *,
-    env_name: str = 'FourRooms-misc',
-    pair_by: tuple[str, ...] = ('seed',),
     null_ceiling: float = 0.02,
 ) -> Verdict:
     """At n=10 (near-Monte-Carlo, bootstrap influence ≈ 0), DDQN's
@@ -1149,7 +1165,6 @@ def ddqn_null_under_monte_carlo__fourrooms_n10(
     when the difference is small (the *predicted* outcome of the
     falsification probe). Verdict mapping is inverted vs the n=1
     bridge by design — the theorem predicts smallness here."""
-    del env_name, pair_by
     diff = paired_g.mean_diff
     p = paired_g.mean_diff_p_value
     if math.isnan(diff) or math.isnan(p):
@@ -1203,6 +1218,7 @@ def ddqn_null_under_monte_carlo__fourrooms_n10(
     target='mc_return',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
+    scope=(pl.col('env_name') == 'Acrobot-v1'),
 )
 def acrobot_per_burst_link_active__gamma_0999(
     paired_link_per_burst: PerBurstLinkResult,
@@ -1210,7 +1226,6 @@ def acrobot_per_burst_link_active__gamma_0999(
     target_reduction: str = 'mean',
     predictor: str = 'mc_return',
     predictor_reduction: str = 'mc_minus_q',
-    pair_by: tuple[str, ...] = ('seed',),
     env_name: str = 'Acrobot-v1',
     consistency_floor: float = 0.7,
 ) -> Verdict:
@@ -1218,7 +1233,7 @@ def acrobot_per_burst_link_active__gamma_0999(
     least `consistency_floor` of bursts on Acrobot γ=0.999. HELD when
     `phase_link_consistency >= consistency_floor`. Empirical 1.000
     (every burst significant) at the corroborating regime."""
-    del target_reduction, predictor, predictor_reduction, pair_by
+    del target_reduction, predictor, predictor_reduction
     plc = phase_link_consistency(
         paired_link_per_burst, env_name=env_name,
     )
@@ -1232,7 +1247,7 @@ def acrobot_per_burst_link_active__gamma_0999(
 
 
 @claim_bridge(
-    source='mechanism.jensen_gap',
+    source=INTERVENTION,
     target='outcome.eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
@@ -1240,7 +1255,6 @@ def acrobot_per_burst_link_active__gamma_0999(
 def acrobot_link_backdoor_ate_negative__gamma_0999(
     paired_delta_link_dowhy: PairedDeltaLinkDowhyResult,
     *,
-    pair_by: tuple[str, ...] = ('seed',),
     link_predictor: str = 'mc_return',
     link_predictor_reduction: str = 'mc_minus_q',
     link_target: str = 'mc_return',
@@ -1253,7 +1267,7 @@ def acrobot_link_backdoor_ate_negative__gamma_0999(
     burst dummies) on Acrobot γ=0.999 yields a NEGATIVE ATE
     bigger than `ate_ceiling` (i.e. ATE <= -0.1). HELD when
     identified AND ATE <= ceiling. Empirical -0.6312."""
-    del pair_by, link_predictor, link_predictor_reduction
+    del link_predictor, link_predictor_reduction
     del link_target, link_target_reduction, env_filter
     b = paired_delta_link_dowhy.backdoor
     if not b.identified:
@@ -1268,7 +1282,7 @@ def acrobot_link_backdoor_ate_negative__gamma_0999(
 
 
 @claim_bridge(
-    source='mechanism.jensen_gap',
+    source=INTERVENTION,
     target='outcome.eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
@@ -1276,7 +1290,6 @@ def acrobot_link_backdoor_ate_negative__gamma_0999(
 def acrobot_link_placebo_refuted__gamma_0999(
     paired_delta_link_dowhy: PairedDeltaLinkDowhyResult,
     *,
-    pair_by: tuple[str, ...] = ('seed',),
     link_predictor: str = 'mc_return',
     link_predictor_reduction: str = 'mc_minus_q',
     link_target: str = 'mc_return',
@@ -1289,7 +1302,7 @@ def acrobot_link_placebo_refuted__gamma_0999(
     < placebo_max_ratio AND real ATE is non-zero. Confirms the
     bias-correction effect is treatment-specific (not noise).
     Empirical: real -0.6312, placebo 0.0000, ratio 0%."""
-    del pair_by, link_predictor, link_predictor_reduction
+    del link_predictor, link_predictor_reduction
     del link_target, link_target_reduction, env_filter
     p = paired_delta_link_dowhy.placebo
     real = p.real_ate
@@ -1305,7 +1318,7 @@ def acrobot_link_placebo_refuted__gamma_0999(
 
 
 @claim_bridge(
-    source='mechanism.jensen_gap',
+    source=INTERVENTION,
     target='outcome.eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
@@ -1313,7 +1326,6 @@ def acrobot_link_placebo_refuted__gamma_0999(
 def acrobot_link_rcc_robust__gamma_0999(
     paired_delta_link_dowhy: PairedDeltaLinkDowhyResult,
     *,
-    pair_by: tuple[str, ...] = ('seed',),
     link_predictor: str = 'mc_return',
     link_predictor_reduction: str = 'mc_minus_q',
     link_target: str = 'mc_return',
@@ -1326,7 +1338,7 @@ def acrobot_link_rcc_robust__gamma_0999(
     of the real ATE on Acrobot γ=0.999. HELD when |refuted -
     real| / |real| < rcc_max_drift_ratio. Confirms robustness to
     spurious-confound vulnerability. Empirical drift = 0.000."""
-    del pair_by, link_predictor, link_predictor_reduction
+    del link_predictor, link_predictor_reduction
     del link_target, link_target_reduction, env_filter
     r = paired_delta_link_dowhy.random_common_cause
     real = r.real_ate
@@ -1369,7 +1381,7 @@ def acrobot_link_rcc_robust__gamma_0999(
 
 
 @claim_bridge(
-    source='q_divergence_score',
+    source=INTERVENTION,
     target='outcome.eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
@@ -1377,7 +1389,6 @@ def acrobot_link_rcc_robust__gamma_0999(
 def extreme_q_divergence_attenuates_link__binary(
     link_attenuation_dowhy: LinkAttenuationDowhyResult,
     *,
-    pair_by: tuple[str, ...] = ('seed',),
     attenuator: str = 'q_divergence_score',
     binary_threshold: float = 1000.0,
     ate_ceiling: float = -0.10,
@@ -1387,7 +1398,7 @@ def extreme_q_divergence_attenuates_link__binary(
     to band-cells (0.02 < score < 1000), after backdoor
     adjustment for env family. HELD when ATE ≤ -0.10 AND
     identified=True. Empirical: ATE = -0.21."""
-    del pair_by, attenuator, binary_threshold
+    del attenuator, binary_threshold
     b = link_attenuation_dowhy.backdoor
     if not b.identified:
         return Verdict.POWER_INSUFFICIENT
@@ -1401,7 +1412,7 @@ def extreme_q_divergence_attenuates_link__binary(
 
 
 @claim_bridge(
-    source='q_divergence_score',
+    source=INTERVENTION,
     target='outcome.eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
@@ -1409,7 +1420,6 @@ def extreme_q_divergence_attenuates_link__binary(
 def extreme_q_divergence_attenuates_link__placebo_refuted(
     link_attenuation_dowhy: LinkAttenuationDowhyResult,
     *,
-    pair_by: tuple[str, ...] = ('seed',),
     attenuator: str = 'q_divergence_score',
     binary_threshold: float = 1000.0,
     placebo_max_ratio: float = 0.2,
@@ -1418,7 +1428,7 @@ def extreme_q_divergence_attenuates_link__placebo_refuted(
     `placebo_max_ratio` of the real value, confirming the
     attenuation is treatment-specific (not noise). Empirical:
     real -0.21, placebo 0, ratio 0%."""
-    del pair_by, attenuator, binary_threshold
+    del attenuator, binary_threshold
     p = link_attenuation_dowhy.placebo
     real = p.real_ate
     placebo = p.refuted_ate
@@ -1433,7 +1443,7 @@ def extreme_q_divergence_attenuates_link__placebo_refuted(
 
 
 @claim_bridge(
-    source='q_divergence_score',
+    source=INTERVENTION,
     target='outcome.eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
@@ -1441,7 +1451,6 @@ def extreme_q_divergence_attenuates_link__placebo_refuted(
 def extreme_q_divergence_attenuates_link__rcc_robust(
     link_attenuation_dowhy: LinkAttenuationDowhyResult,
     *,
-    pair_by: tuple[str, ...] = ('seed',),
     attenuator: str = 'q_divergence_score',
     binary_threshold: float = 1000.0,
     rcc_max_drift_ratio: float = 0.15,
@@ -1450,7 +1459,7 @@ def extreme_q_divergence_attenuates_link__rcc_robust(
     set leaves the binary above-1000 ATE within
     `rcc_max_drift_ratio` of real. Confirms robustness to
     spurious-confound vulnerability. Empirical: drift ratio ≈ 5%."""
-    del pair_by, attenuator, binary_threshold
+    del attenuator, binary_threshold
     r = link_attenuation_dowhy.random_common_cause
     real = r.real_ate
     refuted = r.refuted_ate

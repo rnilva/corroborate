@@ -457,11 +457,11 @@ def _section_3_three_way(
         br = verdict.bridge_results.get((edge.source, edge.target))
         if br is None:
             continue
+        is_intervention = isinstance(edge.source, DoEffect)
         role_label = (
-            'intervention' if edge.intervention is not None
-            else 'coupling'
+            'intervention' if is_intervention else 'coupling'
         )
-        if edge.target in verdict.comparison_rows and edge.intervention is not None:
+        if edge.target in verdict.comparison_rows and is_intervention:
             row = verdict.comparison_rows[edge.target]
             g = row.effect_size_g if row.effect_size_g is not None else float('nan')
             i2 = row.pooled.I2 if row.pooled is not None else float('nan')
@@ -508,7 +508,7 @@ def _section_3_three_way(
     ):
         matched_edges = treatment_h.edges_by_target(target_path)
         intervention_matches = tuple(
-            e for e in matched_edges if e.intervention is not None
+            e for e in matched_edges if isinstance(e.source, DoEffect)
         )
         if not intervention_matches:
             continue

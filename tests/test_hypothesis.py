@@ -229,8 +229,7 @@ def _intervention_edge(
     do = DoEffect(treatment_arm='a', baseline_arm='b')
     return ClaimBridge(
         name=f'do->{target}',
-        source=do.node_key(), target=target,
-        intervention=do,
+        source=do, target=target,
         tier=Tier.INTERVENTIONAL, direction=Direction.DIRECT,
         predicted_direction=predicted_direction,
     )

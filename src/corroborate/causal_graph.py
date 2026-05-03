@@ -50,16 +50,37 @@ if TYPE_CHECKING:
     from corroborate.claim_bridge import Bridge as ClaimBridge
 
 
-# ============ Direction — sign of an edge ============
+# ============ Direction — sign or predicate of an edge ============
 
 class Direction(Enum):
-    """Sign of an edge: DIRECT = source↑ ⇒ target↑; INVERSE =
-    source↑ ⇒ target↓. Multiplicative chain composition: DIRECT
-    is identity, INVERSE squared is DIRECT (two negatives cancel)."""
+    """Sign or predicate carried by an edge.
+
+    Two axes coexist:
+
+    - **Coupling sign**: DIRECT = source↑ ⇒ target↑; INVERSE =
+      source↑ ⇒ target↓. Multiplicative chain composition: DIRECT
+      is identity, INVERSE squared is DIRECT.
+    - **Threshold predicate**: AT_MOST = `source ≤ threshold`;
+      AT_LEAST = `source ≥ threshold`. Used by INVARIANT self-loop
+      bridges with `Bridge.threshold` set; carried as direction so
+      the predicate is one typed field instead of a separate enum.
+      Predicates are NOT chain-composable — invariants are
+      self-loops, never cross-node chain edges."""
     DIRECT = 'direct'
     INVERSE = 'inverse'
+    AT_MOST = 'at_most'
+    AT_LEAST = 'at_least'
 
     def __mul__(self, other: 'Direction') -> 'Direction':
+        if (
+            self in (Direction.AT_MOST, Direction.AT_LEAST)
+            or other in (Direction.AT_MOST, Direction.AT_LEAST)
+        ):
+            raise TypeError(
+                f'cannot compose threshold direction {self.name} with '
+                f'{other.name}; AT_MOST/AT_LEAST are predicates on '
+                f'self-loop invariants, not chain-edge signs.',
+            )
         if self is other:
             return Direction.DIRECT
         return Direction.INVERSE
@@ -74,8 +95,16 @@ class InvalidTierTransition(ValueError):
 
 
 class Tier(IntEnum):
-    """Pearl-ladder rung the evidence has reached.
+    """Pearl-ladder rung the evidence has reached, plus INVARIANT
+    for substrate-axiom claims that are NOT on the rung.
 
+    - `INVARIANT` (numeric 0) = substrate-author axiom expressed
+      as a self-loop bridge with a threshold predicate (e.g.
+      `jensen_dormancy_gap ≤ 0` is the Hasselt-2010 premise
+      check). Pre-statistical: a structural constraint the
+      substrate declares as the precondition under which the
+      mechanism's causal-chain bites. Never appears in cross-node
+      chains — `chain_tier` skips it.
     - `ASSOCIATIONAL` (rung 1) = observational coupling. PC
       adjacency, Spearman correlation, mediator-features within-
       env Pearson — all rung 1.
@@ -83,11 +112,14 @@ class Tier(IntEnum):
       Hedges' g HELD on a treatment-vs-baseline comparison.
 
     Promotion is structurally constrained: only ASSOCIATIONAL →
-    INTERVENTIONAL via `.promote()`. The reverse via `.demote()`
-    exists for downgrade scenarios (refuter contradicts an
-    interventional admit), but the framework treats refutation
-    primarily through `evidentiary_level='refuted'` on the
-    BridgeEdge — `.demote()` is the rare case."""
+    INTERVENTIONAL via `.promote()`. INVARIANT is orthogonal —
+    `.promote()` / `.demote()` raise on it. The reverse via
+    `.demote()` exists for downgrade scenarios (refuter
+    contradicts an interventional admit), but the framework
+    treats refutation primarily through
+    `evidentiary_level='refuted'` on the BridgeEdge — `.demote()`
+    is the rare case."""
+    INVARIANT = 0
     ASSOCIATIONAL = 1
     INTERVENTIONAL = 2
 
@@ -95,14 +127,14 @@ class Tier(IntEnum):
         if self is Tier.ASSOCIATIONAL:
             return Tier.INTERVENTIONAL
         raise InvalidTierTransition(
-            f'{self.name} cannot promote — already top.',
+            f'{self.name} cannot promote — already top or off-ladder.',
         )
 
     def demote(self) -> 'Tier':
         if self is Tier.INTERVENTIONAL:
             return Tier.ASSOCIATIONAL
         raise InvalidTierTransition(
-            f'{self.name} cannot demote — already bottom.',
+            f'{self.name} cannot demote — already bottom or off-ladder.',
         )
 
 
@@ -191,10 +223,17 @@ def compose_direction(edges: Iterable[BridgeEdge]) -> Direction:
 def chain_tier(edges: Iterable[BridgeEdge]) -> Tier:
     """Minimum tier along a chain — the chain is no stronger than
     its weakest link. Empty chain → ASSOCIATIONAL (no evidence,
-    coarsest tier as default)."""
+    coarsest tier as default).
+
+    INVARIANT edges are SKIPPED: they're substrate-axiom self-loops,
+    never compose into cross-node chains; pulling the chain min
+    down to INVARIANT (numerically 0) would misrepresent the
+    chain's evidence rung."""
     result = Tier.INTERVENTIONAL
     any_edge = False
     for e in edges:
+        if e.tier is Tier.INVARIANT:
+            continue
         any_edge = True
         if e.tier < result:
             result = e.tier
@@ -208,15 +247,13 @@ def authored_graph(
 ) -> CausalGraph:
     """Build the unevaluated graph topology from a `Sequence[Bridge]`.
 
-    Each bridge contributes one edge. When `bridge.source` is a
-    `DoEffect` (Pearl-rung-2), the edge is
-    `do(treatment|vs=baseline) → bridge.target` — an
-    *intervention → measurable* edge. Otherwise it's
-    `bridge.source → bridge.target` (measurable-to-measurable).
-    All edges get `evidentiary_level='unevaluated'`; tier is
-    INTERVENTIONAL when source is a DoEffect (the edge is by
-    construction a Pearl-rung-2 contrast), else inherits the
-    bridge's declared `tier`.
+    Each bridge contributes one edge. The source-node rendering:
+
+    - `bridge.source` is a `DoEffect`:
+      `do(treatment|vs=baseline) → bridge.target`, tier
+      INTERVENTIONAL.
+    - Otherwise: `bridge.source → bridge.target`
+      (measurable-to-measurable), tier inherits `bridge.tier`.
 
     Used by analyses that want to inspect the authored graph
     topology BEFORE running bridges — e.g. cache builders,
@@ -226,12 +263,6 @@ def authored_graph(
     for b in bridges:
         if isinstance(b.source, DoEffect):
             source_key = b.source.node_key()
-            tier = Tier.INTERVENTIONAL
-        elif b.intervention is not None:
-            # Legacy path: source=measurable + intervention=DoEffect
-            # field. Migrating to source=DoEffect; both forms render
-            # the same do-node edge during the transition.
-            source_key = b.intervention.node_key()
             tier = Tier.INTERVENTIONAL
         else:
             source_key = b.source_name
