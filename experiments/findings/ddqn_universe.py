@@ -397,7 +397,12 @@ def adaptive_dqn_fails_to_avoid_attenuation__spaceinvaders_1m(
 
 
 @claim_bridge(
-    source='effective_horizon',
+    # gamma_sweep stamps γ into the arm name (ddqn_g090 / _g095 /
+    # _g099); the high-effective-horizon scope picks γ=0.99, so the
+    # contrast is the γ=0.99 pair specifically. File-level
+    # INTERVENTION's plain `ddqn`/`vanilla_dqn` doesn't match any
+    # cell here.
+    source=DoEffect(treatment_arm='ddqn_g099', baseline_arm='vanilla_dqn_g099'),
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
@@ -468,7 +473,13 @@ def ddqn_benefit_scales_with_effective_horizon__fourrooms(
 
 
 @claim_bridge(
-    source='effective_horizon',
+    # gamma_sweep_metamaze_high stamps γ into the arm name
+    # (ddqn_g0995 / ddqn_g0999); the asserted activation is at
+    # γ=0.999 (eff_h≈1000 in this corpus's effective_horizon
+    # encoding), so contrast the γ=0.999 pair specifically.
+    source=DoEffect(
+        treatment_arm='ddqn_g0999', baseline_arm='vanilla_dqn_g0999',
+    ),
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
@@ -509,7 +520,10 @@ def ddqn_benefit_scales_with_effective_horizon__metamaze_high_gamma(
 
 
 @claim_bridge(
-    source='gamma',
+    # gamma_sweep_more stamps γ into the arm name (ddqn_g090 /
+    # _g095 / _g099); the high-γ scope picks γ=0.99, so contrast
+    # the γ=0.99 pair specifically.
+    source=DoEffect(treatment_arm='ddqn_g099', baseline_arm='vanilla_dqn_g099'),
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
