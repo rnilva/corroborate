@@ -214,18 +214,6 @@ Any-leaks; the walker on top is bookkeeping.
 **Lift when:** signature.py needs other changes (extending the
 regime taxonomy, supporting new claim shapes, etc.).
 
-### `evidence_cache.build_universal_cache` decomposition
-
-**Status:** deferred (cosmetic).
-
-**Description:** 250+ lines for one cache builder, four
-concerns interleaved: corpus discovery, per-corpus measurable
-resolution, parquet writing, multi-corpus merge. Each could
-be its own function returning a typed intermediate.
-
-**Lift when:** the cache builder gets new requirements (a
-fifth concern would force the split).
-
 ### Stubs maintenance procedure
 
 **Status:** deferred.
