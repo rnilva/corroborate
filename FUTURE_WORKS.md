@@ -56,6 +56,200 @@ register)` has its inputs typed and its consumer named. See item
 #5 (`redundancy.py — ΔI_redundancy primitive`) in the v10 audit
 section below for the implementation specs.
 
+## Type-discipline refactorings (framework-types pass, 2026-05-03)
+
+Surfaced during the strict-Any cleanup. Listed by structural
+significance, not by typing severity — the framework now passes
+pyright cleanly; these are design quirks the cleanup made visible.
+
+### Module Claims → pure-functional
+
+**Status:** deferred (user-flagged during review).
+
+**Description:** `ClaimBase` subclasses with `__call__` + manual
+`record_call` inside duplicate the `@claim` / `FnClaim` decorator
+path. The Three-way claim taxonomy in CLAUDE.md (Module Claim /
+Free Claim / Config bundle) collapses to two if Module Claims are
+expressed as a config bundle (frozen dataclass, no `__call__`)
+plus a top-level `@claim`'d function taking the bundle as a
+kwarg. `record_call` becomes the framework's responsibility
+universally; authors stop writing it.
+
+**Why deferred:** ripples through every `ClaimBase` subclass in
+`rl/dqn/claims/*` and the walker in `signature.py`. Bigger than
+the type cleanup wanted to scope.
+
+**Lift when:** the substrate-extension pass starts (so a second
+substrate's Module-shaped claims are designed pure-functional
+from the start), or a Claim Protocol mismatch surfaces a third
+time.
+
+### Bridge / Verdict / Direction surface still in flux
+
+**Status:** main is iterating actively (`drop Bridge.intervention`
+2026-05-03, `INVARIANT bridges`, `INTERVENTION auto-resolution`,
+`bridges-on-raw`).
+
+**Description:** `Bridge.source` accepts `str | Measurable[...] |
+DoEffect | INTERVENTION` — wide tape suggesting two distinct
+shapes ("interventional contrast" vs "measurement coupling")
+collapsed into one type. `intervention_edges` /
+`coupling_edges` was just refactored from a field-check to an
+`isinstance(e.source, DoEffect)` check (post-merge in
+hypothesis.py). Suggests the surface wants two Bridge subtypes,
+or a sealed `BridgeKind` discriminator.
+
+**Why deferred:** ongoing iteration; another design pass while
+main is mid-refactor would conflict.
+
+**Lift when:** `claim_bridge.py` settles (no significant changes
+for a sweep cycle).
+
+### `iterate` / `Loop[C, T, Idx]` / record_call interaction
+
+**Status:** deferred.
+
+**Description:** `iterate` exists primarily so the loop boundary
+appears as one node in the computation graph. The mechanism is
+heavyweight: every substrate that wants graph capture wraps
+loops in `iterate`, which forces parametric Loop typing
+gymnastics (3 casts in `rl/dqn/eval.py` for T re-binding +
+aggregation narrow). Alternative: graph-extraction-time
+post-processor that recognises loop boundaries from records,
+without the wrapping primitive. Eliminates `iterate` and the
+`Loop[C, T, Idx]` Protocol; substrates use plain `for` /
+`jax.lax.scan`.
+
+**Why deferred:** rl is the only substrate exercising graph
+capture; the graph extractor's current shape works.
+
+**Lift when:** a non-RL substrate adopts `iterate` (cost
+becomes visible) or graph extraction gains new requirements
+(the post-processor design becomes the natural home).
+
+### Phantom `Analysis[R]` parameter
+
+**Status:** deferred.
+
+**Description:** `Analysis[R: Mapping[str, object], O]` declares
+`R` but never uses it in any field — pure documentation as
+type. Either drop `R` to `Analysis[O]`, or wire it through to
+a method (`def __call__(self, corpus: Iterable[R], **deps) ->
+O`) so it has structural meaning. Currently, the registry cast
+at `analysis.py:103` exists because `R` invariance + phantom
+status forces the upper-bound erasure.
+
+**Why deferred:** documentation value of `R` is real; removing
+it loses the substrate-record-shape signal at the analysis
+type. Wiring it through requires settling on an
+`Iterable[R]` / `Sequence[Mapping[str, object]]` shape for the
+corpus argument across all `@analysis` impls.
+
+**Lift when:** a substrate has multiple distinct record shapes
+that need analyses keyed by R, OR the corpus shape stabilises
+across analyses (currently varies).
+
+### Substrate extension contract not formalised
+
+**Status:** deferred.
+
+**Description:** `rl/` is the only substrate. Framework hooks
+(`Hypothesis.measurables`, `Bridge.source`, `Loop[C, T, Idx]`,
+`Claim` Protocol) are implicitly substrate-extension points,
+but no documentation says so and no test exercises the
+framework with a non-RL substrate. RL-isms could be baked into
+the framework root by accident.
+
+**Why deferred:** YAGNI until a second substrate is real.
+
+**Lift when:** a second substrate (supervised learning,
+optimization, evolutionary search) is in play. Add: a
+"to add a substrate, implement X / Y / Z" doc + a tiny
+non-RL substrate as test fixture.
+
+### Registry consolidation
+
+**Status:** deferred.
+
+**Description:** Three independent `_REGISTRY` globals
+(`measurable._REGISTRY`, `analysis._REGISTRY`, `claim._FN_CACHE`),
+each a `Registry[T]` singleton. Could consolidate to
+`corroborate.registries` with explicit handles —
+simplifies introspection ("what's registered globally?") and
+testing (mocking).
+
+**Why deferred:** isolation has worked; consolidation is
+ergonomic, not load-bearing.
+
+**Lift when:** registry introspection becomes a first-class
+need (a debug command, a registry-diff tool) — or a registry
+collision bug appears.
+
+### `analyses/__init__.py` 14 side-effect imports
+
+**Status:** deferred (small).
+
+**Description:** `from .X import Y as _Y  # pyright: ignore
+[reportUnusedImport]` × 14. Function-scoped imports inside a
+`_register_default_analyses()` function don't trigger
+`reportUnusedImport`. Same pattern fits `cell_runner.py`'s
+`import corroborate.rl.dqn.measurables` side-effect.
+
+**Why deferred:** 14 ignores are bounded; the function-scope
+move is a stylistic choice that doesn't affect behaviour.
+
+**Lift when:** doing another pass on `analyses/`'s public
+API surface.
+
+### `signature.py` walker functional refactor
+
+**Status:** deferred (cosmetic).
+
+**Description:** the recursive walker (200+ lines) uses mutable
+`kwargs_out: list[KwargInfo]` state through helpers. Could be
+expressed functionally — each helper returns a tuple, no
+mutation. The `_introspection_boundary` already wraps the
+Any-leaks; the walker on top is bookkeeping.
+
+**Lift when:** signature.py needs other changes (extending the
+regime taxonomy, supporting new claim shapes, etc.).
+
+### `evidence_cache.build_universal_cache` decomposition
+
+**Status:** deferred (cosmetic).
+
+**Description:** 250+ lines for one cache builder, four
+concerns interleaved: corpus discovery, per-corpus measurable
+resolution, parquet writing, multi-corpus merge. Each could
+be its own function returning a typed intermediate.
+
+**Lift when:** the cache builder gets new requirements (a
+fifth concern would force the split).
+
+### Stubs maintenance procedure
+
+**Status:** deferred.
+
+**Description:** 5 hand-written stubs (`gymnax`, `optax`,
+`scipy`, `statsmodels`, `dowhy`). On upstream API drift, stubs
+silently rot. Cheap remediation: a smoke test that exercises
+the stub'd surface against the real installed library; a
+note documenting which version each stub matches.
+
+**Lift when:** a dep upgrade trips a runtime AttributeError
+that pyright would have caught with up-to-date stubs.
+
+### Numpy axis-aware reduction helper
+
+**Status:** deferred (cosmetic).
+
+**Description:** 5 nearly-identical `cast(npt.NDArray[np
+.floating], arr.X(axis=axis))` lines in `reductions.py
+:reduce_axis`. A single helper collapses to one cast.
+
+**Lift when:** more axis-aware reductions are added (the
+duplication forcing function bites).
+
 ## Open primitives bundled toward v1 acceptance
 
 v0 acceptance (§3 DDQN three-way verdict) is closed by the
@@ -260,32 +454,17 @@ the existing `_value_probe` in `train_phase`.
 
 ## Cosmetic / micro-cleanups
 
-### `signature.py` reportAny errors from `inspect.signature`
+### `signature.py` reportAny errors — RESOLVED (2026-05-03)
 
-**Status:** deferred (22 errors).
-
-**Description:** strict-mode pyright flags `signature.py` lines
-~218–303 and ~469–477 with `reportAny`. The Anys originate from
-`inspect.Parameter.default` and `typing.get_type_hints(...)[k]`
-returning Any per the typeshed stubs. The walker stores those
-defaults as `KwargInfo.default: object` (correct shape) but
-pyright flags every assignment site and downstream `==` /
-`isinstance` arg.
-
-**Why deferred:** count is unchanged across the YAML cleanup
-passes — no regression introduced. Resolving cleanly requires
-either (a) wrapping `inspect.signature` access in a typed
-adapter that narrows defaults to `object` at the boundary, or
-(b) adding `# pyright: ignore[reportAny]` at every assignment
-site with a comment. (a) is the principled fix but is ~15 LoC
-of typed-adapter scaffolding for signature/get_type_hints
-together; (b) is one-line escapes that don't earn anything.
-Neither blocks current usage.
-
-**Lift when:** a substrate hits a real type-confusion bug
-traced to the Any leak (so the typed adapter is informed by an
-actual failure mode) — or pyright's strict mode shifts how it
-treats inspect/typing returns.
+**Status:** resolved via `_introspection_boundary.py`
+(framework-types branch). The principled-adapter option (a)
+above was taken: typed wrappers `get_type_hints_obj`,
+`get_param_default`, `get_param_annotation`,
+`get_field_default{_factory}`, `get_typing_args`,
+`get_partial_args`, `get_partial_keywords`, `get_attr_obj`,
+`get_bound_arguments` narrow `Any` → `object` /
+`Mapping[str, object]` at one site. `signature.py`,
+`_canonical.py`, and `computation_graph.py` route through it.
 
 ### `pytest.raises` over try/raise/except
 
