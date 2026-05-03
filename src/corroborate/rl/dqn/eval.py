@@ -25,7 +25,7 @@ bursts (PPO, SAC, etc.)."""
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import NamedTuple
+from typing import NamedTuple, cast
 
 import jax
 import jax.numpy as jnp
@@ -188,7 +188,9 @@ def train_with_eval(
     init_state: DQNState,
     total_steps: int,
     eval_every: int,
-    loop: Loop[object, object] = scan_loop,
+    loop: Loop[
+        DQNState, tuple[StepRecord, EvalBurstOut], jax.Array,
+    ] = scan_loop,
 ) -> dict[str, jax.Array]:
     """Run `step_fn` for `total_steps` with an `eval_fn` burst at
     the end of every `eval_every` chunk. Returns the merged
@@ -202,27 +204,53 @@ def train_with_eval(
     stack as `(n_super_steps, K, ...)`.
 
     `loop` is the iteration backend (default `scan_loop` for
-    JIT-fast production). Pass `python_loop` (the framework's or
-    the rl/-flavored variant) for probe runs that need exhaustive
-    `@claim` records under `trace_context()`.
+    JIT-fast production). Pass `python_loop` (the rl-flavored
+    variant — same `jax.Array` step idx as `scan_loop`) for probe
+    runs that need exhaustive `@claim` records under
+    `trace_context()`.
+
+    The `loop` parameter's outer `T` is `tuple[StepRecord,
+    EvalBurstOut]` — the per-super-step aggregate. The inner
+    `iterate` call (over training steps) reuses the same Loop
+    backend with a different `T` binding (`StepRecord` only); the
+    Protocol's parametric polymorphism makes that re-binding
+    static.
 
     Decoupled from `dqn` itself so the algorithm composition stays
     paper-prose. The same driver can power any RL algorithm with
     a step+eval shape (PPO, SAC, distributional Q)."""
     n_super_steps = total_steps // eval_every
 
+    # Inner loop: re-bind the backend's `T` to `StepRecord` (the
+    # training step's per-step output). `Loop` is parametric in T,
+    # so the same `loop` instance satisfies both bindings.
+    inner_loop: Loop[DQNState, StepRecord, jax.Array] = loop  # pyright: ignore[reportAssignmentType]
+
     def super_step(
         s: DQNState, super_idx: jax.Array,
     ) -> tuple[DQNState, tuple[StepRecord, EvalBurstOut]]:
-        s, train_chunk = iterate(  # pyright: ignore[reportAssignmentType]
-            step=step_fn, init=s, length=eval_every, backend=loop,
+        s, train_chunk_obj = iterate(
+            step=step_fn, init=s, length=eval_every, backend=inner_loop,
         )
+        # `iterate`'s return is `tuple[C, object]` — aggregation
+        # polymorphism at the Protocol seam. The runtime invariant
+        # under `scan_loop`/rl-`python_loop` is that the aggregated
+        # half is a `StepRecord` pytree (each leaf stacked to leading
+        # `(eval_every, ...)`). Cast at the use site.
+        train_chunk = cast(StepRecord, train_chunk_obj)
         burst = eval_fn(s, super_idx)
-        return s, (train_chunk, burst)  # pyright: ignore[reportReturnType]
+        return s, (train_chunk, burst)
 
-    _final, (train_chunks, eval_bursts) = iterate(  # pyright: ignore[reportAssignmentType]
+    _final, super_aggregated_obj = iterate(
         step=super_step, init=init_state, length=n_super_steps,
         backend=loop,
+    )
+    # Same cast pattern at the outer scope: scan_loop / rl-python_loop
+    # stack super_step's output, producing
+    # `tuple[StepRecord (n_super_steps-stacked),
+    #        EvalBurstOut (n_super_steps-stacked)]`.
+    train_chunks, eval_bursts = cast(
+        tuple[StepRecord, EvalBurstOut], super_aggregated_obj,
     )
 
     def _flatten(x: jax.Array) -> jax.Array:

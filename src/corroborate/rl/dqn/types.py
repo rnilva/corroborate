@@ -48,10 +48,16 @@ class QFunction(Protocol):
     FA). That claim is realised by the forward pass, hence
     `__call__` IS the Claim and records itself via `record_call`.
 
-    `init(rng, obs_dim, n_actions) -> params` is **mechanics** —
+    `init(rng, obs_shape, n_actions) -> params` is **mechanics** —
     parameter allocation has no theorem; the framework doesn't
     record it. It's part of the Protocol because dqn calls it once
     at cell-init to materialise the parameter pytree.
+
+    `obs_shape` is the env's full observation shape — typically
+    `(d,)` for vector envs (CartPole, Acrobot, ...) and
+    `(H, W, C)` / similar for image-shaped envs (MinAtar,
+    procgen). Q-network impls flatten or convolve internally
+    based on the shape they receive.
 
     Implementations carry construction-time leaves (`MLP.hidden`,
     `SpectralNormMLP.hidden`, etc.) as frozen-dataclass fields so
@@ -61,7 +67,7 @@ class QFunction(Protocol):
     def init(
         self,
         rng_key: jax.Array,
-        obs_dim: int,
+        obs_shape: tuple[int, ...],
         n_actions: int,
     ) -> Params: ...
     def __call__(self, params: Params, obs: jax.Array) -> jax.Array: ...

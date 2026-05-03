@@ -59,9 +59,10 @@ def test_python_loop_passes_step_index_to_step_fn() -> None:
 
 def test_python_loop_satisfies_loop_protocol() -> None:
     """Static + structural check: `python_loop` is assignable to
-    a `Loop[int, int]`-typed slot. The Protocol is satisfied
-    structurally — no explicit subclassing."""
-    holder: Loop[int, int] = python_loop  # pyright/static check
+    a `Loop[int, int, int]`-typed slot — `Idx=int` because this is
+    the substrate-agnostic Python backend. The Protocol is
+    satisfied structurally — no explicit subclassing."""
+    holder: Loop[int, int, int] = python_loop  # pyright/static check
     # Runtime structural sanity: holder is callable with the
     # expected signature.
     final, outs = holder(lambda s, _i: (s + 1, s), 0, 3)
@@ -70,23 +71,26 @@ def test_python_loop_satisfies_loop_protocol() -> None:
 
 
 def test_rl_scan_loop_satisfies_loop_protocol() -> None:
-    """The rl-substrate's `scan_loop` is also assignable to a
-    `Loop[..., ...]`-typed slot. The Protocol is the seam between
-    substrates that have a fast/jit path and ones that don't."""
+    """The rl-substrate's `scan_loop` is `Loop[C, T, jax.Array]` —
+    the `Idx` parameter binds to `jax.Array` because scan's body
+    is traced (jit elides Python int conversion)."""
+    import jax
+
     from corroborate.rl.loop import scan_loop
 
-    # Type-level: scan_loop's signature is more specific (jax
-    # tracers as idx), but it still satisfies the loose Protocol.
-    holder: Loop[object, object] = scan_loop
+    holder: Loop[object, object, jax.Array] = scan_loop
     assert holder is scan_loop
 
 
 def test_rl_python_loop_satisfies_loop_protocol() -> None:
     """The rl-substrate's `python_loop` (with jax stacking)
-    likewise satisfies the framework Protocol."""
+    likewise satisfies `Loop[C, T, jax.Array]` — same step-fn
+    signature as `scan_loop` so authors write the theory once."""
+    import jax
+
     from corroborate.rl.loop import python_loop as rl_python_loop
 
-    holder: Loop[object, object] = rl_python_loop
+    holder: Loop[object, object, jax.Array] = rl_python_loop
     assert holder is rl_python_loop
 
 
@@ -123,7 +127,6 @@ def test_graph_capture_on_run_dqn_arm_with_real_run() -> None:
     from corroborate.graph import Graph
     from corroborate.hypothesis import Hypothesis
     from corroborate.rl.cell_runner import run_dqn_arm
-    from corroborate.rl.dqn.claims.optimizer import Adam
     from corroborate.rl.env_catalogue import get
 
     intervention = {

@@ -1,37 +1,36 @@
 """Substrate-agnostic loop primitive — `Loop` Protocol + Python
-for-loop impl.
+for-loop impl + `iterate` claim wrapper.
 
-A `Loop[C, T]` is the iteration-backend contract: run
+A `Loop[C, T, Idx]` is the iteration-backend contract: run
 `step(state, idx)` for `length` iterations, return
-`(final_state, aggregated_outputs)`. Two reference impls
-coexist; both structurally satisfy the Protocol:
+`(final_state, aggregated_outputs)`. `Idx` is parameterized so
+substrates pick the form that fits their backend:
 
-- `python_loop` (this module) — pure Python `for`-loop, no jax
-  dep. Aggregates per-step `T` as `list[T]`. Substrate-agnostic.
-- `corroborate.rl.loop.scan_loop` — `jax.lax.scan` backend.
-  Aggregates with `jnp.stack` so each leaf gains a leading
-  `(length, ...)` axis. Production-grade for JAX-shaped state.
+- `int` for substrate-agnostic Python (`python_loop` here).
+- `jax.Array` for jax-flavored backends (`corroborate.rl.loop
+  .scan_loop` and the rl-flavored `python_loop`).
 
-The two impls have *different* aggregation contracts (list vs
-stacked tree), which is why the Protocol's return is annotated
-loosely (`tuple[C, object]`). Callers pick the impl whose
-aggregation matches their consumer; the Protocol just says
-"this thing iterates."
+The aggregation contract (list, stacked pytree, generator, ...)
+is the impl's choice — the Protocol's return is annotated loosely
+(`tuple[C, object]`) because aggregation polymorphism is intrinsic.
+Callers pick the impl whose aggregation matches their consumer.
 
-Substrate authors who don't have a fast/jit path use
-`python_loop` directly. RL substrate authors thread `scan_loop`
-through their `train_with_eval`-shaped consumers via a
-`loop: Loop = scan_loop` kwarg.
+**Why the parametric `Idx`**: jax's `lax.scan` produces array
+indices (its scan body is traced; `int(...)` on a tracer is a
+type error inside jit). Substrate-agnostic Python loops produce
+plain `int`. The two can't share a step-fn signature without the
+parameter; without it, either the framework primitive depends on
+jax (wrong) or the rl substrate has its own duplicated `Loop`
+Protocol that drifts (the original sin this redesign closes).
 
 **Trace-context behaviour.** Under an active `trace_context()`:
-- `python_loop` fires `@claim` records every iteration —
-  exhaustive trace.
+- `python_loop` (this module) fires `@claim` records every
+  iteration — exhaustive trace.
 - `scan_loop` fires records once during JAX's abstract-trace
-  pass, which is sufficient for static graph capture
-  (`build_computation_graph`); subsequent compiled invocations
-  don't re-fire contextvars. This is *correct* for the typical
-  graph-extraction use case (the graph is structurally constant
-  across iterations).
+  pass, sufficient for static graph capture
+  (`build_computation_graph`); compiled invocations don't re-fire
+  contextvars. Correct for the typical graph-extraction use case
+  (the graph is structurally constant across iterations).
 
 No framework-level dispatcher is needed: `record_call` already
 handles jit/scan/vmap correctly (see `claim.py:82-110`)."""
@@ -43,27 +42,31 @@ from typing import Protocol
 from corroborate.claim import claim
 
 
-class Loop[C, T](Protocol):
+class Loop[C, T, Idx](Protocol):
     """Iteration-backend contract.
 
-    `step` takes a state and an idx, returns
-    `(new_state, per_step_T)`. The `Loop` runs this for
-    `length` iterations and returns
-    `(final_state, aggregated_T)`. The aggregation strategy
-    (list, stacked pytree, generator, ...) is the impl's choice
-    — different impls have different `aggregated_T` shapes.
+    `step` takes a state and an idx (of type `Idx`), returns
+    `(new_state, per_step_T)`. The `Loop` runs this for `length`
+    iterations and returns `(final_state, aggregated_T)`. The
+    aggregation strategy (list, stacked pytree, generator, ...) is
+    the impl's choice — different impls have different
+    `aggregated_T` shapes; the Protocol's return is `tuple[C,
+    object]` to admit them all.
 
     Implementations:
-    - `python_loop` returns `tuple[C, list[T]]`.
-    - `corroborate.rl.loop.scan_loop` returns `tuple[C, T]`
-      with each T-leaf stacked to leading `(length, ...)` axis.
+    - `python_loop` (this module): `Loop[C, T, int]`, returns
+      `tuple[C, list[T]]`.
+    - `corroborate.rl.loop.scan_loop`: `Loop[C, T, jax.Array]`,
+      returns `tuple[C, T]` with each T-leaf stacked to leading
+      `(length, ...)` axis.
+    - `corroborate.rl.loop.python_loop`: `Loop[C, T, jax.Array]`,
+      returns `tuple[C, T]` (jax-stacked to match scan's shape).
 
-    Both structurally satisfy this Protocol. Callers pick by
-    aggregation shape; the Protocol is the seam, not the
-    aggregator."""
+    All structurally satisfy this Protocol with their respective
+    `Idx` binding."""
     def __call__(
         self,
-        step: Callable[..., tuple[C, T]],
+        step: Callable[[C, Idx], tuple[C, T]],
         init: C,
         length: int,
     ) -> tuple[C, object]: ...
@@ -81,7 +84,9 @@ def python_loop[C, T](
     Under `trace_context()`, every iteration fires `@claim`
     records — exhaustive trace coverage. Use for substrates
     without a fast backend, or for probe runs where every
-    iteration's call sequence matters."""
+    iteration's call sequence matters.
+
+    Structurally satisfies `Loop[C, T, int]`."""
     state = init
     outs: list[T] = []
     for i in range(length):
@@ -91,16 +96,16 @@ def python_loop[C, T](
 
 
 @claim
-def iterate[C, T](
+def iterate[C, T, Idx](
     *,
-    step: Callable[[C, int], tuple[C, T]],
+    step: Callable[[C, Idx], tuple[C, T]],
     init: C,
     length: int,
-    backend: Loop[C, T],
+    backend: Loop[C, T, Idx],
 ) -> tuple[C, object]:
     """Iteration as a typed claim. Thin wrapper over the
-    `Loop[C, T]` Protocol that records the loop boundary as a
-    single `@claim` call.
+    `Loop[C, T, Idx]` Protocol that records the loop boundary as
+    a single `@claim` call.
 
     Why this exists: per-iteration `@claim` records get
     deduplicated by `build_computation_graph` (the same
@@ -123,5 +128,8 @@ def iterate[C, T](
 
     Returns whatever `backend` returns (`tuple[final_state,
     aggregated]`). Authors who only need the structural
-    boundary record can ignore the aggregated half."""
+    boundary record can ignore the aggregated half. The aggregated
+    half is typed `object` because the Protocol admits multiple
+    aggregation contracts (list, stacked tree, ...); narrow at the
+    use site after picking a specific backend."""
     return backend(step, init, length)
