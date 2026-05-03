@@ -6,18 +6,31 @@ alternative implementation must structurally match the same
 signature. DDQN's intervention is `{'greedification':
 double_greedify}` (sub-Protocol of Bootstrap's composition).
 
-Two flavours of component:
+The Protocols here are **shape-agnostic** — they say what the
+caller needs (a function with this signature) without committing
+to which framework primitive provides it. Per
+`CLAUDE.md` §"Three-way claim taxonomy", three primitive shapes
+satisfy the contracts:
 
-- **Module functor** — frozen-dataclass with paired `init` +
-  `__call__` (e.g. `QFunction`). The dataclass fields are the
-  construction-time HPs; calling the instance is the forward pass.
-- **Stateless callable** — a `@claim` function with no init phase
-  (e.g. `Bootstrap`, `LossFn`, `EpsilonSchedule`). The call IS the
-  whole component.
+- **Free Claim** (`@claim`-decorated function): one pure
+  operation. Conforms to call-signature Protocols (`Bootstrap`,
+  `LossFn`, `EpsilonSchedule`, `BufferSample`, `Greedification`,
+  `GradientRule`, `TargetSync`).
+- **Module Claim** (`ClaimBase` subclass): one operation that
+  needs a slot field for a sub-Claim. `EpsilonGreedy` is the
+  remaining example (`__call__` satisfies `ActionSelect`,
+  `schedule` field is an `EpsilonSchedule` sub-Claim).
+- **Config bundle** (frozen dataclass with mechanics + slot
+  Claims): satisfies bundle-shaped Protocols where the caller
+  needs both stateful methods and pluggable behaviour. `MLP` /
+  `CNN` satisfy `QFunction` (init mechanics + forward
+  delegation); `Replay` carries init/add/sample_batch mechanics
+  + a `BufferSample` slot.
 
-The walker treats both uniformly: it recurses into a Claim's
-function signature OR a frozen dataclass's fields, surfacing each
-HP leaf."""
+The walker treats all three uniformly: it recurses into a Free
+Claim's function signature, a Module Claim's dataclass fields,
+or a config bundle's dataclass fields — surfacing each HP leaf
+at composition time."""
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Protocol

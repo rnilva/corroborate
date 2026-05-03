@@ -142,18 +142,24 @@ def dqn_step(
        step the online network.
     3. Sync: update target network.
 
-    Construction-time HPs travel with their owning Module —
-    `replay.capacity`, `replay.batch_size`, `MLP.hidden`,
-    `EpsilonGreedy.schedule`, `WarmedUpdate.warmup_steps`. The
-    only top-level HPs are `gamma` (Bellman γ) and `sync_period`
-    (target-sync cadence) — paper-honest cross-cutting parameters
-    that don't belong inside any single Module.
+    Construction-time HPs travel with their owning component:
+    `replay.capacity`, `replay.batch_size`, `MLP.hidden` live on
+    config bundles (`Replay`, `MLP`); `EpsilonGreedy.schedule` on
+    a Module Claim; `warmed_update.warmup_steps` on an `@claim`
+    factory's signature. The only top-level HPs are `gamma`
+    (Bellman γ) and `sync_period` (target-sync cadence) — paper-
+    honest cross-cutting parameters that don't belong inside any
+    single component.
 
     DDQN intervention: `partial(dqn_step, bootstrap=partial(
     bootstrap, greedification=double_greedify))`. Schedule swap:
     `partial(dqn_step, action_select=replace(EpsilonGreedy(),
     schedule=other_schedule))`. Capacity swap: `partial(dqn_step,
-    replay=replace(Replay(), capacity=50_000))`."""
+    replay=replace(Replay(), capacity=50_000))`. Q-network swap:
+    `partial(dqn_step, q_network=MLP(hidden=(128,)))`. Optimizer
+    swap: `partial(dqn_step, optimizer=partial(rmsprop, lr=2.5e-4))`
+    (this kwarg is on `dqn`, threaded through `dqn_step` as the
+    raw optax handle — see `dqn`'s docstring)."""
     del idx  # `step` is on `state`; idx is the loop's bookkeeping arg
 
     state, rollout = rollout_phase(

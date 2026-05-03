@@ -7,28 +7,13 @@ envs and the literature inconsistently specifies which was used —
 making the *optimizer* a first-class intervention surface, not an
 engineering detail.
 
-Optax's `optax.adam(lr=...)` is itself a factory returning a
-`GradientTransformation` (a NamedTuple of `(init, update)`
-closures). Two problems for `mechanism_key` stability if the
-substrate consumed it directly:
-
-1. `repr(optax.adam(0.001))` includes memory addresses of internal
-   functions — process-unstable canonical strings.
-2. The construction-time leaves (lr, b1, b2, eps) aren't visible
-   at the optax-handle level; intervention can't address them.
-
-This module's solution: `@claim`-wrapped factory functions
-(`adam`, `rmsprop`, `sgd`, `warmed_update`). Substrate composes
-via `partial(adam, lr=2e-3)` — the walker descends into the
-partial's `.keywords` AND the wrapped function's signature
-defaults, surfacing every leaf at composition time.
-`canonical_str` produces stable strings like
-`partial(Claim:adam;lr=0.002)` regardless of process address.
-
-dqn calls `optimizer()` once at the top of a run to build the
-optax handle; `dqn_step` still takes the raw
-`GradientTransformation` internally (the `.init` / `.update`
-interface JAX traces over).
+**The shape: `@claim`-wrapped factory functions
+(`adam`, `rmsprop`, `sgd`, `warmed_update`).** Authors compose
+via `partial(adam, lr=2e-3)`; dqn calls `optimizer()` once at
+the top of a run to materialise the optax handle. The walker
+descends into the partial's `.keywords` AND the wrapped
+function's signature defaults, surfacing every leaf at
+composition time.
 
 Author intervention:
 
@@ -36,10 +21,26 @@ Author intervention:
     intervention={'optimizer': partial(adam, lr=1e-4)}        # post-Hessel default
     intervention={'optimizer': partial(sgd, lr=0.1, momentum=0.9)}
 
-Module-Claim form (`Adam(ClaimBase)`, etc.) was retired —
-`@claim`-wrapped factories cover the same ground without
-duplicating optax's natural shape. See FUTURE_WORKS.md
-"Module Claims → pure-functional"."""
+**Why factory, not config bundle?** Optax's
+`optax.adam(lr=...)` is itself a factory returning a
+`GradientTransformation` (a NamedTuple of `(init, update)`
+closures). Wrapping in our own dataclass would have two costs:
+
+1. `repr(optax.adam(0.001))` includes memory addresses of
+   internal closures — process-unstable canonical strings. A
+   bundle wrapper would inherit the instability.
+2. The construction-time leaves (lr, b1, b2, eps) aren't visible
+   at the optax-handle level; surfacing them would mean
+   duplicating each leaf as a dataclass field next to the
+   wrapped handle.
+
+`@claim`-wrapped factories sidestep both: `canonical_str`
+produces stable strings like `partial(Claim:adam;lr=0.002)`
+regardless of process address, and the leaves live on the
+factory's signature where the walker already finds them.
+
+`dqn_step` consumes the raw `GradientTransformation` directly
+(`.init` / `.update` is what JAX traces over)."""
 from __future__ import annotations
 
 from functools import partial
