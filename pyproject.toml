@@ -53,20 +53,10 @@ include = ["src", "tests"]
 # framework's type discipline is for the framework itself, not
 # for one-off corpus consumers. Many of those scripts will be
 # deleted rather than typed.
-extraPaths = ["src", "."]
+extraPaths = ["."]
 stubPath = "stubs"
 pythonVersion = "3.13"
 typeCheckingMode = "strict"
-# Worktree-local: share main checkout's venv to avoid disk-space cost
-# of a duplicate 6.4GB .venv. The venv's editable `.pth` points at
-# `/workspace/corroborate/src`, but pyright resolves `corroborate.*`
-# via `include = ["src"]` first (workspace-local sources win over the
-# .pth-installed copy because pyright ranks include-listed paths
-# above venv site-packages). Revert these two lines (venvPath / venv)
-# before merging — main shouldn't depend on a sibling worktree's
-# .venv.
-venvPath = "/workspace/corroborate"
-venv = ".venv"
 reportMissingTypeStubs = false
 reportImplicitOverride = "error"
 reportUnnecessaryTypeIgnoreComment = "error"
