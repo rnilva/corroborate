@@ -679,6 +679,7 @@ def _load_directory(
         # runs.parquet but cloud-only traces.parquet (e.g. the
         # original `ddqn` 200k corpus) silently lose their trace-
         # reading measurables to NaN.
+        just_restored_traces = False
         if manifest.exists():
             need_restore = _missing_for_restore(
                 runs_path, traces_path, trace_reads, manifest,
@@ -692,6 +693,7 @@ def _load_directory(
                         file=sys.stderr,
                     )
                     restore(sub, files=need_restore, overwrite=True)
+                    just_restored_traces = 'traces.parquet' in need_restore
                 else:
                     print(
                         f'runner: WARNING — {sub.name} needs '
@@ -725,6 +727,26 @@ def _load_directory(
             df = df.drop(joined_trace_cols)
         if 'corpus' not in df.columns:
             df = df.with_columns(pl.lit(sub.name).alias('corpus'))
+        # Disk-evict traces.parquet — but ONLY if we ourselves
+        # restored it on this run. Pre-existing local traces are
+        # left alone so users with full local copies aren't
+        # silently losing data. Total traces in cloud sum to ~60 GB;
+        # this keeps peak local-disk usage at one-corpus-worth.
+        if just_restored_traces and traces_path.exists():
+            try:
+                traces_path.unlink()
+                print(
+                    f'runner: evicted {sub.name}/traces.parquet '
+                    f'(restored just-in-time, scalar measurables '
+                    f'persisted in cache)',
+                    file=sys.stderr,
+                )
+            except OSError as e:
+                print(
+                    f'runner: WARNING — could not evict '
+                    f'{sub.name}/traces.parquet: {e}',
+                    file=sys.stderr,
+                )
         frames.append(df)
     if not frames:
         return pl.DataFrame()
