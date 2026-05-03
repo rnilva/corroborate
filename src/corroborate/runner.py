@@ -66,6 +66,7 @@ from corroborate.measurable import (
     evaluate_with_measurables,
     get_registered,
     transitive_measurables,
+    transitive_reads,
 )
 
 
@@ -345,7 +346,9 @@ def _ingest_and_compute(
 
     cache = _load_cache(cache_path)
     cache = _invalidate_drifted(cache, stored_manifest, required)
-    new_data = _load_data(data, restore_from_cloud=restore_from_cloud)
+    new_data = _load_data(
+        data, restore_from_cloud=restore_from_cloud, required=required,
+    )
 
     if new_data is None or new_data.height == 0:
         return _enrich_cache_in_place(
@@ -503,6 +506,7 @@ def _load_data(
     data: pl.DataFrame | Path | str | None,
     *,
     restore_from_cloud: bool,
+    required: Sequence[str],
 ) -> pl.DataFrame | None:
     """Resolve data into a DataFrame, with auto-restore on missing-
     raw corpora when given a directory."""
@@ -516,21 +520,66 @@ def _load_data(
     ):
         p = Path.cwd() / p
     if p.is_dir():
-        return _load_directory(p, restore_from_cloud=restore_from_cloud)
+        return _load_directory(
+            p, restore_from_cloud=restore_from_cloud, required=required,
+        )
     if p.is_file():
         return pl.read_parquet(p)
     raise FileNotFoundError(f'no such data path: {data}')
+
+
+# Per-burst trace columns small enough to persist in the cache —
+# downstream analyses (`paired_g_per_burst`, `paired_link_per_burst`,
+# `link_attenuation_dowhy`, …) read them directly off the cell
+# record, bypassing the @measurable resolver, so we can't drop
+# them after the per-corpus compute step. Per-step columns
+# (`done`, `online_std_q_per_step`, `pearson_stats`, …) blow up
+# the cache by orders of magnitude and ARE dropped.
+_PERSIST_AFTER_COMPUTE: frozenset[str] = frozenset({
+    'mc_return',
+    'predicted_q_at_start',
+    'episode_length',
+})
+
+
+def _required_record_keys(required: Sequence[str]) -> frozenset[str]:
+    """Union of leaf record-keys the required measurables read,
+    walked transitively via `transitive_reads`. Used to determine
+    which `traces.parquet` columns to join per-corpus before the
+    measurable evaluator runs.
+
+    Names that aren't registered are silently dropped — they're
+    e.g. raw record fields the measurables don't go through."""
+    out: set[str] = set()
+    for name in required:
+        m = get_registered(name)
+        if m is None:
+            continue
+        try:
+            out.update(transitive_reads(name))
+        except KeyError:
+            continue
+    return frozenset(out)
 
 
 def _load_directory(
     root: Path,
     *,
     restore_from_cloud: bool,
+    required: Sequence[str],
 ) -> pl.DataFrame:
     """Walk subdirs of `root`; for each subdir's `runs.parquet`,
-    load it (auto-restore from s3 if local missing) and left-join
-    per-burst trace columns from `traces.parquet`. Concat via
-    `diagonal_relaxed` so heterogeneous schemas null-pad."""
+    load it, join the trace columns the required measurables
+    transitively read, compute the measurables, then DROP the
+    trace columns before merging.
+
+    The drop step is load-bearing: per-step trace columns
+    (`done`, `online_std_q_per_step`, …) can be GBs per cell, so
+    keeping them across the diagonal_relaxed concat would OOM.
+    Computing measurables per-corpus while traces are in scope,
+    then dropping the heavy columns, lets the merged cache stay
+    scalar-only."""
+    trace_reads = _required_record_keys(required)
     frames: list[pl.DataFrame] = []
     for sub in sorted(root.iterdir()):
         if not sub.is_dir():
@@ -555,7 +604,27 @@ def _load_directory(
         if not runs_path.exists():
             continue
         df = pl.read_parquet(runs_path)
-        df = _join_per_burst_traces(df, sub / 'traces.parquet')
+        runs_columns = set(df.columns)
+        df = _join_required_traces(
+            df, sub / 'traces.parquet', trace_reads,
+        )
+        # Compute measurables NOW, while the joined trace columns
+        # are in scope. Subsequent calls on the merged frame are
+        # no-ops because the scalar columns are already filled.
+        df = _compute_measurables(df, required)
+        # Drop the heavy per-step trace columns we joined for
+        # measurable computation, but keep the small per-burst
+        # arrays (`_PERSIST_AFTER_COMPUTE`) — analyses like
+        # `paired_link_per_burst` read those off the cell record
+        # directly, bypassing the @measurable resolver.
+        joined_trace_cols = [
+            c for c in df.columns
+            if c in trace_reads
+            and c not in runs_columns
+            and c not in _PERSIST_AFTER_COMPUTE
+        ]
+        if joined_trace_cols:
+            df = df.drop(joined_trace_cols)
         if 'corpus' not in df.columns:
             df = df.with_columns(pl.lit(sub.name).alias('corpus'))
         frames.append(df)
@@ -564,53 +633,35 @@ def _load_directory(
     return pl.concat(frames, how='diagonal_relaxed')
 
 
-# Substrate-declared per-burst trace columns. These are
-# `(n_bursts, n_eval_episodes_per_burst)`-shaped arrays the eval
-# aggregator emits — small enough to join into the cache. Other
-# `List(List(_))` columns in `traces.parquet` (e.g. `pearson_stats`
-# at shape `(n_steps, k)`) are per-step and would blow up the
-# cache by ~5 orders of magnitude, so we deliberately don't
-# heuristic-detect — the runner reads only this allowlist.
-_PER_BURST_TRACE_COLS: frozenset[str] = frozenset({
-    'mc_return',
-    'predicted_q_at_start',
-    'episode_length',
-})
-
-
-def _join_per_burst_traces(
+def _join_required_traces(
     runs: pl.DataFrame, traces_path: Path,
+    required_reads: frozenset[str],
 ) -> pl.DataFrame:
-    """Left-join the small per-burst trace columns into `runs`.
+    """Left-join the trace columns the required measurables need
+    (`required_reads`, intersected with what `traces.parquet`
+    actually carries). Per-burst columns (`mc_return`, …) and
+    per-step columns (`done`, `online_std_q_per_step`, …) flow
+    through the same path; the caller drops them after the
+    measurable evaluator runs.
 
-    `traces.parquet` carries both per-step (long) and per-burst
-    (short, nested) columns. We join exactly the substrate-declared
-    per-burst names (`_PER_BURST_TRACE_COLS`) — `mc_return`,
-    `predicted_q_at_start`, `episode_length` — leaving per-step
-    arrays (`loss`, `td_error`, `pearson_stats`, …) on disk.
-
-    The join is left so cells without a matching trace row keep
-    their existing data + null-pad the joined columns."""
+    Tolerates stub / corrupt traces.parquet — some corpora carry
+    a 0-byte placeholder."""
     if not traces_path.exists() or 'id' not in runs.columns:
         return runs
-    # Tolerate stub / corrupt traces.parquet — some corpora carry
-    # a 0-byte placeholder. Treat as "no traces" rather than abort.
     try:
         schema = pl.scan_parquet(traces_path).collect_schema()
     except pl.exceptions.ComputeError as e:
         print(
             f'runner: WARNING — {traces_path.parent.name}/traces.parquet '
-            f'unreadable ({e!s}); skipping per-burst trace join',
+            f'unreadable ({e!s}); skipping trace join',
             file=sys.stderr,
         )
         return runs
     available = set(schema.names())
-    cols_to_load = ['id'] + sorted(_PER_BURST_TRACE_COLS & available)
+    cols_to_load = ['id'] + sorted(required_reads & available)
     if len(cols_to_load) == 1:
         return runs
     traces = pl.read_parquet(traces_path, columns=cols_to_load)
-    # Don't shadow columns runs already has (would happen if a
-    # corpus pre-joined). Prefer runs's version.
     overlap = [c for c in traces.columns if c in runs.columns and c != 'id']
     if overlap:
         traces = traces.drop(overlap)
