@@ -469,8 +469,31 @@ def _compute_measurables(
             new_cols[m].append(v)
 
     return df.with_columns(
-        [pl.Series(name, vals) for name, vals in new_cols.items()],
+        [_to_series(name, vals) for name, vals in new_cols.items()],
     )
+
+
+def _to_series(name: str, vals: list[object]) -> pl.Series:
+    """Construct a polars Series from a heterogeneous-shape value
+    list, tolerating None entries for measurables that return
+    list/array types.
+
+    Polars's default dtype inference treats `[None, [1, 2], [3, 4]]`
+    as needing-uniform-length sequences and crashes on `len(None)`.
+    For sequence-typed measurables, replace None with an empty list
+    so the constructor sees a uniform List shape; downstream
+    consumers null-check the per-row length anyway."""
+    has_seq = any(
+        v is not None and not isinstance(v, (str, bytes, int, float, bool))
+        for v in vals
+    )
+    if not has_seq:
+        return pl.Series(name, vals)
+    normalized = [
+        v if v is not None else []
+        for v in vals
+    ]
+    return pl.Series(name, normalized)
 
 
 # ============ Data loading ============
@@ -505,7 +528,8 @@ def _load_directory(
     restore_from_cloud: bool,
 ) -> pl.DataFrame:
     """Walk subdirs of `root`; for each subdir's `runs.parquet`,
-    load it (auto-restore from s3 if local missing). Concat via
+    load it (auto-restore from s3 if local missing) and left-join
+    per-burst trace columns from `traces.parquet`. Concat via
     `diagonal_relaxed` so heterogeneous schemas null-pad."""
     frames: list[pl.DataFrame] = []
     for sub in sorted(root.iterdir()):
@@ -531,12 +555,66 @@ def _load_directory(
         if not runs_path.exists():
             continue
         df = pl.read_parquet(runs_path)
+        df = _join_per_burst_traces(df, sub / 'traces.parquet')
         if 'corpus' not in df.columns:
             df = df.with_columns(pl.lit(sub.name).alias('corpus'))
         frames.append(df)
     if not frames:
         return pl.DataFrame()
     return pl.concat(frames, how='diagonal_relaxed')
+
+
+# Substrate-declared per-burst trace columns. These are
+# `(n_bursts, n_eval_episodes_per_burst)`-shaped arrays the eval
+# aggregator emits — small enough to join into the cache. Other
+# `List(List(_))` columns in `traces.parquet` (e.g. `pearson_stats`
+# at shape `(n_steps, k)`) are per-step and would blow up the
+# cache by ~5 orders of magnitude, so we deliberately don't
+# heuristic-detect — the runner reads only this allowlist.
+_PER_BURST_TRACE_COLS: frozenset[str] = frozenset({
+    'mc_return',
+    'predicted_q_at_start',
+    'episode_length',
+})
+
+
+def _join_per_burst_traces(
+    runs: pl.DataFrame, traces_path: Path,
+) -> pl.DataFrame:
+    """Left-join the small per-burst trace columns into `runs`.
+
+    `traces.parquet` carries both per-step (long) and per-burst
+    (short, nested) columns. We join exactly the substrate-declared
+    per-burst names (`_PER_BURST_TRACE_COLS`) — `mc_return`,
+    `predicted_q_at_start`, `episode_length` — leaving per-step
+    arrays (`loss`, `td_error`, `pearson_stats`, …) on disk.
+
+    The join is left so cells without a matching trace row keep
+    their existing data + null-pad the joined columns."""
+    if not traces_path.exists() or 'id' not in runs.columns:
+        return runs
+    # Tolerate stub / corrupt traces.parquet — some corpora carry
+    # a 0-byte placeholder. Treat as "no traces" rather than abort.
+    try:
+        schema = pl.scan_parquet(traces_path).collect_schema()
+    except pl.exceptions.ComputeError as e:
+        print(
+            f'runner: WARNING — {traces_path.parent.name}/traces.parquet '
+            f'unreadable ({e!s}); skipping per-burst trace join',
+            file=sys.stderr,
+        )
+        return runs
+    available = set(schema.names())
+    cols_to_load = ['id'] + sorted(_PER_BURST_TRACE_COLS & available)
+    if len(cols_to_load) == 1:
+        return runs
+    traces = pl.read_parquet(traces_path, columns=cols_to_load)
+    # Don't shadow columns runs already has (would happen if a
+    # corpus pre-joined). Prefer runs's version.
+    overlap = [c for c in traces.columns if c in runs.columns and c != 'id']
+    if overlap:
+        traces = traces.drop(overlap)
+    return runs.join(traces, on='id', how='left')
 
 
 __all__ = [

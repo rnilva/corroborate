@@ -285,6 +285,14 @@ class RunRow:
                 continue
             if v is None:
                 continue
+            # `RunRow` is the *scalar* row store; per-burst trace
+            # arrays (`mc_return`, `predicted_q_at_start`, …) joined
+            # in by the runner are list-typed and don't belong here.
+            # Skipping them keeps RunRow's measurements scalar and
+            # leaves the array form available on the source DataFrame
+            # for analyses that consume it directly.
+            if isinstance(v, list):
+                continue
             measurements[k] = _coerce_measurement_leaf(v)
         arm_key_v = d.get('arm_key')
         arm_key = arm_key_v if isinstance(arm_key_v, str) else 'baseline'
