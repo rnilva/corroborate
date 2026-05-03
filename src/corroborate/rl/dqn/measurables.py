@@ -40,7 +40,6 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping
-from typing import cast
 
 import jax.numpy as jnp
 import numpy as np
@@ -872,26 +871,19 @@ def dqn_default_measurables() -> tuple[
     string return types — the dormancy-premise verdict is
     categorical (`'held'` / `'invariant_violation'` /
     `'power_insufficient'`), the others are scalar floats.
-
-    `cast` at the tuple boundary is the upper-bound erasure CLAUDE
-    .md describes: heterogeneous `Measurable[..., float]` and
-    `Measurable[..., str]` elements collapse to the loose
-    `Measurable[..., object]` at the container, intrinsic
-    polymorphism the type system can't capture without
-    `Measurable.T` covariance (deferred — see commit history).
-    Per-element narrowing happens at the consumption site via
-    each measurable's own typed signature."""
-    return cast(
-        tuple[Measurable[Mapping[str, object], object], ...],
-        (
-            late_window_mean,
-            eval_final_mean,
-            eval_best_burst_mean,
-            eval_best_burst_step,
-            jensen_gap,
-            jensen_dormancy_gap_measurable,
-            jensen_dormancy_premise_active,
-        ),
+    `Measurable.T` is covariant (per the regular-class +
+    `@property` form), so `Measurable[..., float]` and
+    `Measurable[..., str]` both lift cleanly to the
+    `Measurable[..., object]` upper bound at the tuple boundary —
+    no `cast` needed."""
+    return (
+        late_window_mean,
+        eval_final_mean,
+        eval_best_burst_mean,
+        eval_best_burst_step,
+        jensen_gap,
+        jensen_dormancy_gap_measurable,
+        jensen_dormancy_premise_active,
     )
 
 

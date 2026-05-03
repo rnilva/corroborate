@@ -46,7 +46,13 @@ markers = [
 ]
 
 [tool.pyright]
-include = ["src", "tests", "experiments"]
+include = ["src", "tests"]
+# `experiments/` excluded from the strict-Any contract — those
+# scripts are ad-hoc analysis runners that consume the framework
+# at the polars / numpy / pandas iter_rows boundary; the
+# framework's type discipline is for the framework itself, not
+# for one-off corpus consumers. Many of those scripts will be
+# deleted rather than typed.
 extraPaths = ["src", "."]
 stubPath = "stubs"
 pythonVersion = "3.13"

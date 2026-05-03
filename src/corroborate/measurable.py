@@ -38,13 +38,11 @@ from __future__ import annotations
 
 import inspect
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
-from typing import cast, overload
+from typing import cast, overload, override
 
 from corroborate._registry import Registry
 
 
-@dataclass(frozen=True, slots=True)
 class Measurable[R: Mapping[str, object], T]:
     """Typed generic wrapper. Behaves as `Callable[..., T]` over
     `(record, **deps)`; carries `name` and `reads` as typed
@@ -70,11 +68,51 @@ class Measurable[R: Mapping[str, object], T]:
     an approximation (different reduction order, different
     sufficient statistic), so persisting under its own name keeps
     aliased observations distinct from primary ones rather than
-    silently filing both into the canonical column."""
-    fn: Callable[..., T]
-    name: str
-    reads: tuple[str, ...] = field(default=())
-    fallbacks: tuple['Measurable[R, T]', ...] = field(default=())
+    silently filing both into the canonical column.
+
+    **Variance.** Field access is via `@property` (not bare
+    dataclass attrs) so PEP 695 inference lands `R` contravariant
+    and `T` covariant — the natural variance for "function reading
+    R, returning T". A `Measurable[Mapping[str, object], float]`
+    is therefore assignable to a slot expecting
+    `Measurable[Mapping[str, NDArray], float]` (wider record
+    acceptance is fine where narrower is expected) and a
+    `Measurable[..., float]` to a slot expecting
+    `Measurable[..., object]` (more specific T is fine where
+    wider is expected). Frozen-dataclass form would invariance both
+    parameters because dataclass-auto `__init__` puts fields in
+    contravariant input position; the read-only property form is
+    the variance-friendly shape."""
+
+    __slots__ = ('_fn', '_name', '_reads', '_fallbacks')
+
+    def __init__(
+        self,
+        fn: Callable[..., T],
+        name: str,
+        reads: tuple[str, ...] = (),
+        fallbacks: tuple['Measurable[R, T]', ...] = (),
+    ) -> None:
+        self._fn = fn
+        self._name = name
+        self._reads = reads
+        self._fallbacks = fallbacks
+
+    @property
+    def fn(self) -> Callable[..., T]:
+        return self._fn
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def reads(self) -> tuple[str, ...]:
+        return self._reads
+
+    @property
+    def fallbacks(self) -> tuple['Measurable[R, T]', ...]:
+        return self._fallbacks
 
     def __call__(self, record: R, **deps: object) -> T:
         return self.dispatch(record).fn(record, **deps)
@@ -85,12 +123,40 @@ class Measurable[R: Mapping[str, object], T]:
         fallback, else the primary as final fallback (so a
         downstream `.fn(record)` raises naturally on the first
         missing key)."""
-        if not self.fallbacks or all(k in record for k in self.reads):
+        if not self._fallbacks or all(k in record for k in self._reads):
             return self
-        for alt in self.fallbacks:
-            if all(k in record for k in alt.reads):
+        for alt in self._fallbacks:
+            if all(k in record for k in alt._reads):
                 return alt
         return self
+
+    @override
+    def __repr__(self) -> str:
+        return (
+            f'Measurable(name={self._name!r}, reads={self._reads!r}, '
+            f'fn={self._fn!r})'
+        )
+
+    @override
+    def __eq__(self, other: object) -> bool:
+        # Field-wise equality (mirrors the prior frozen-dataclass
+        # behavior). Two Measurables are equal iff they wrap the
+        # same fn (identity) under the same name + reads +
+        # fallbacks. Diverging fn at the same name compares unequal
+        # — that's how `test_measurable_inequality_on_different_fn`
+        # catches accidental fixture redefinition.
+        if not isinstance(other, Measurable):
+            return NotImplemented
+        return (
+            self._fn == other._fn
+            and self._name == other._name
+            and self._reads == other._reads
+            and self._fallbacks == other._fallbacks
+        )
+
+    @override
+    def __hash__(self) -> int:
+        return hash((self._fn, self._name, self._reads, self._fallbacks))
 
 
 # ============ Name-keyed registry + resolver ============
