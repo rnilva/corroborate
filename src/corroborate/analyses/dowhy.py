@@ -32,9 +32,9 @@ from typing import TYPE_CHECKING
 from corroborate.analysis import analysis
 from corroborate.analyses._dowhy_internal import (
     DAGLike,
-    _build_causal_model,  # pyright: ignore[reportPrivateUsage]
-    _record_keys_for,  # pyright: ignore[reportPrivateUsage]
-    _refuter_effect,  # pyright: ignore[reportPrivateUsage]
+    _build_causal_model,
+    _record_keys_for,
+    _refuter_effect,
 )
 
 
@@ -161,9 +161,9 @@ def backdoor_ate(
             n_rows=len(df),
         )
     # `estimate.value` is `float | numpy scalar` per DoWhy stubs.
-    ate_val = getattr(estimate, 'value')  # pyright: ignore[reportAny]
+    ate_val = getattr(estimate, 'value')
     return BackdoorResult(
-        ate=float(ate_val),  # pyright: ignore[reportAny]
+        ate=float(ate_val),
         identified=True,
         estimand_str=str(identified),
         method_name=method_name,
@@ -199,7 +199,7 @@ def _run_refuter(
             outcome=outcome,
             n_rows=len(df),
         )
-    real_ate = float(getattr(estimate, 'value'))  # pyright: ignore[reportAny]
+    real_ate = float(getattr(estimate, 'value'))
 
     # `estimate` and `identified` are dynamic DoWhy objects; the
     # refute_estimate API takes both.

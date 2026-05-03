@@ -135,7 +135,7 @@ def _trajectory_leaves(
     construction."""
     out: dict[str, TraceLeaf] = {}
     for key, arr in record.items():
-        np_arr: np.ndarray = np.asarray(arr)  # pyright: ignore[reportMissingTypeArgument]
+        np_arr: np.ndarray = np.asarray(arr)
         if np_arr.ndim == 0:
             out[key] = np_arr.item()
         else:
@@ -182,13 +182,12 @@ def run_dqn_arm(
 
     env, env_params = gymnax.make(env_spec.name)
     # Apply wrappers in order. Each is a frozen-dataclass with a
-    # `wrap(inner)` method (the `EnvWrapper` Protocol).
+    # `wrap(inner)` method (the `EnvWrapper` Protocol). Tuple
+    # parameter is statically typed `tuple[EnvWrapper, ...]` so
+    # the runtime check is defensive against caller errors that
+    # bypass the type system — drop in favour of trusting the
+    # contract.
     for w in wrappers:
-        if not isinstance(w, EnvWrapper):
-            raise TypeError(
-                f'wrappers entry {w!r} is not an EnvWrapper '
-                f'(missing `wrap(inner)` method).',
-            )
         env = w.wrap(env)
     state_hash = (
         env_spec.state_hash
@@ -248,7 +247,7 @@ def run_dqn_arm(
     # measurables declaring them as deps auto-resolve via the
     # registry. Substrate-side `dqn_default_measurables()` is
     # how authors enumerate the standard set on each Hypothesis.
-    import corroborate.rl.dqn.measurables  # noqa: F401
+    import corroborate.rl.dqn.measurables  # noqa: F401  # pyright: ignore[reportUnusedImport]
     from corroborate.measurable import evaluate_with_measurables
 
     cells: list[CellResult] = []

@@ -185,17 +185,27 @@ def wrappers_canonical_str(wrappers: tuple[EnvWrapper, ...]) -> str:
         return ''
     parts: list[str] = []
     for w in wrappers:
-        # Read fields off the dataclass via vars() — frozen + slots
-        # means the asdict-style listing is stable.
-        from dataclasses import fields
+        # Read fields off the dataclass via fields() — frozen +
+        # slots means the asdict-style listing is stable. The
+        # `is_dataclass(w) and not isinstance(w, type)` narrow
+        # satisfies stdlib's `DataclassInstance` Protocol; the
+        # EnvWrapper Protocol itself doesn't declare
+        # `__dataclass_fields__` because not every conforming
+        # impl needs to be a dataclass (a hand-rolled wrapper
+        # could expose `wrap`/`measurement_keys` without
+        # @dataclass).
+        from dataclasses import fields, is_dataclass
         cls_name = next(
             (k for k, v in _WRAPPER_REGISTRY.items() if v is type(w)),
             type(w).__name__,
         )
-        kvs = ','.join(
-            f'{f.name}={getattr(w, f.name)}' for f in fields(w)
-        )
-        parts.append(f'{cls_name}({kvs})')
+        if is_dataclass(w) and not isinstance(w, type):
+            kvs = ','.join(
+                f'{f.name}={getattr(w, f.name)}' for f in fields(w)
+            )
+            parts.append(f'{cls_name}({kvs})')
+        else:
+            parts.append(f'{cls_name}()')
     return ','.join(parts)
 
 

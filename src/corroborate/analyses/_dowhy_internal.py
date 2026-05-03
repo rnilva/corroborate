@@ -87,7 +87,7 @@ def _refuter_effect(refuter: object) -> float:
     newer expose `new_effect`. Try both."""
     for attr in ('new_effect', 'estimated_effect'):
         if hasattr(refuter, attr):
-            return float(getattr(refuter, attr))  # pyright: ignore[reportAny]
+            return float(getattr(refuter, attr))
     raise AttributeError(
         f'DoWhy refuter {type(refuter).__name__} has neither '
         f'`new_effect` nor `estimated_effect` — version mismatch?',

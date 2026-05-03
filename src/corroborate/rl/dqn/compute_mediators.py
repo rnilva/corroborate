@@ -36,7 +36,6 @@ from pathlib import Path
 from corroborate.measurable import Measurable
 from corroborate.persistence import iter_trace_records
 from corroborate.rl.dqn.measurables import (
-    fill_ratio_late,
     greedy_match_late,
     learning_curve_auc,
     plateau_slope_late,
@@ -108,10 +107,15 @@ def compute_mediator_panel(
             if not isinstance(cell_id, str) or cell_id not in runs_by_id:
                 continue
             run = runs_by_id[cell_id]
-            new_meas: dict[str, object] = dict(run.measurements)
+            # `panel` measurables return `float` (Measurable[..., float]
+            # bound at the panel-element type), which is one of the
+            # `MeasurementLeaf` arms — type the dict accordingly so
+            # `replace(run, measurements=...)` lands without a cast.
+            from corroborate.schema import MeasurementLeaf
+            new_meas: dict[str, MeasurementLeaf] = dict(run.measurements)
             for m in panel:
                 new_meas[f'mediator.{m.name}'] = m.fn(record)
-            enriched.append(replace(run, measurements=new_meas))  # type: ignore[arg-type]
+            enriched.append(replace(run, measurements=new_meas))
     return enriched
 
 

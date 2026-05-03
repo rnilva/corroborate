@@ -45,11 +45,20 @@ if TYPE_CHECKING:
 class StratumGProtocol[K](Protocol):
     """Structural protocol for per-stratum (g, se, n_pairs) records.
     `StratumG[K]` (in `corroborate.stratum`) satisfies it; anything
-    carrying the four fields works."""
-    stratum_id: K
-    g: float
-    se: float
-    n_pairs: int
+    carrying the four read-only fields works.
+
+    Fields are `@property` (not bare attrs) per CLAUDE.md's
+    typing-discipline rule: writable Protocol fields don't match
+    immutable concrete fields (frozen-dataclass instance attrs).
+    `StratumG` is `frozen=True`; the Protocol must mirror that."""
+    @property
+    def stratum_id(self) -> K: ...
+    @property
+    def g(self) -> float: ...
+    @property
+    def se(self) -> float: ...
+    @property
+    def n_pairs(self) -> int: ...
 
 
 @dataclass(frozen=True, slots=True)

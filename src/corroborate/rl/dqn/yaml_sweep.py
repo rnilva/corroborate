@@ -33,6 +33,7 @@ from corroborate.config_loader import (
 from corroborate.hypothesis import Hypothesis
 from corroborate.registry import Registry
 from corroborate.rl.dqn.collect import EnvConfig
+from corroborate.rl.env_catalogue import EnvWrapper
 from corroborate.rl.dqn.invariants import DQNTrajectoryRecord
 from corroborate.rl.env_catalogue import EnvSpec
 
@@ -242,9 +243,7 @@ def _build_wrappers(node: Mapping[str, object]) -> tuple['EnvWrapper', ...]:
     `wrappers: [{type: reward_scale, scale: 0.1}]`. Single
     canonical form keeps future readers from wondering which
     is authoritative."""
-    from corroborate.rl.env_catalogue import (
-        EnvWrapper, get_wrapper_class,
-    )
+    from corroborate.rl.env_catalogue import get_wrapper_class
     # Catch the legacy sugar fields with a loud error rather than
     # silently ignoring them — sweeps that relied on them would
     # otherwise produce a corpus without the wrapper applied.
