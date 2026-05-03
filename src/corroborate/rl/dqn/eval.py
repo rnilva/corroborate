@@ -34,7 +34,8 @@ from corroborate.claim import claim
 from corroborate.loop import Loop, iterate
 from corroborate.rl.loop import scan_loop
 from corroborate.rl.dqn.state import DQNState
-from corroborate.rl.dqn.types import QFunction, StepRecord
+from corroborate.rl.dqn.claims.q_network import QFunction
+from corroborate.rl.dqn.types import StepRecord
 from corroborate.rl.env_catalogue import GymnaxEnvLike
 
 

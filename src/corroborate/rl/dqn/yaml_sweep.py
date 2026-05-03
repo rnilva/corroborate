@@ -282,10 +282,10 @@ def _build_wrappers(node: Mapping[str, object]) -> tuple['EnvWrapper', ...]:
 
 def default_dqn_registry() -> Registry:
     """Pre-populated Registry covering the DQN substrate's claim
-    namespace + the `Replay` config bundle. Authors of one-off
-    sweeps rarely need to extend this; substrates with extra
-    Module Claims call `add_modules` / `add_class` after."""
-    from corroborate.rl.dqn.claims.replay import Replay
+    namespace. `add_modules` auto-discovers `@claim` free
+    functions, `ClaimBase` subclasses, and frozen-dataclass
+    config bundles (`Replay`, `MLP`, `CNN`); authors of one-off
+    sweeps rarely need to extend this."""
     reg = Registry()
     reg.add_modules((
         'corroborate.rl.dqn.claims.bootstrap',
@@ -296,7 +296,6 @@ def default_dqn_registry() -> Registry:
         'corroborate.rl.dqn.claims.target_sync',
         'corroborate.rl.dqn.claims.loss',
     ))
-    reg.add_class(Replay)
     return reg
 
 

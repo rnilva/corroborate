@@ -34,43 +34,15 @@ if TYPE_CHECKING:
     # defined in `claims/replay.py`, which imports `BufferSample`
     # from this module. The TYPE_CHECKING guard breaks the runtime
     # circular import while still letting pyright resolve the names.
+    from corroborate.rl.dqn.claims.q_network import QFunction
     from corroborate.rl.dqn.claims.replay import Batch, ReplayState
 
 
-class QFunction(Protocol):
-    """Q-function — a Module Claim whose `__call__` is the forward
-    pass.
-
-    The theoretical claim attached to a Q-function is universal
-    approximation (Hornik 1989, Cybenko 1989) — the function class
-    *contains* Q*; gradient descent under bootstrap is *not*
-    guaranteed to find it (deadly triad — off-policy + bootstrap +
-    FA). That claim is realised by the forward pass, hence
-    `__call__` IS the Claim and records itself via `record_call`.
-
-    `init(rng, obs_shape, n_actions) -> params` is **mechanics** —
-    parameter allocation has no theorem; the framework doesn't
-    record it. It's part of the Protocol because dqn calls it once
-    at cell-init to materialise the parameter pytree.
-
-    `obs_shape` is the env's full observation shape — typically
-    `(d,)` for vector envs (CartPole, Acrobot, ...) and
-    `(H, W, C)` / similar for image-shaped envs (MinAtar,
-    procgen). Q-network impls flatten or convolve internally
-    based on the shape they receive.
-
-    Implementations carry construction-time leaves (`MLP.hidden`,
-    `SpectralNormMLP.hidden`, etc.) as frozen-dataclass fields so
-    leaves travel with the Module — dqn doesn't see them. `Params`
-    is an opaque PyTree from dqn's perspective; tabular, linear,
-    and MLP Q-functions each define their own internal layout."""
-    def init(
-        self,
-        rng_key: jax.Array,
-        obs_shape: tuple[int, ...],
-        n_actions: int,
-    ) -> Params: ...
-    def __call__(self, params: Params, obs: jax.Array) -> jax.Array: ...
+# `QFunction` Protocol lives in
+# `corroborate.rl.dqn.claims.q_network`. Sibling Protocols in this
+# file reference it via TYPE_CHECKING-guarded forward strings to
+# avoid a runtime cycle (q_network imports nothing from this
+# module).
 
 
 class ActionSelect(Protocol):

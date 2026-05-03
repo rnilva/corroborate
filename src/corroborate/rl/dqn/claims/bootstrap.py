@@ -36,11 +36,10 @@ import jax
 import jax.numpy as jnp
 
 from corroborate.claim import claim
+from corroborate.rl.dqn.claims.q_network import Params, QFunction
 from corroborate.rl.dqn.types import (
     Greedification,
     GradientRule,
-    Params,
-    QFunction,
 )
 
 

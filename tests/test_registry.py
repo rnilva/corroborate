@@ -30,10 +30,8 @@ DQN_CLAIM_MODULES = (
 
 @pytest.fixture
 def dqn_registry() -> Registry:
-    from corroborate.rl.dqn.claims.replay import Replay
     reg = Registry()
     reg.add_modules(DQN_CLAIM_MODULES)
-    reg.add_class(Replay)
     return reg
 
 
@@ -56,10 +54,13 @@ def test_fn_discovery_covers_every_authored_claim(
 def test_class_discovery_covers_every_authored_module_and_container(
     dqn_registry: Registry,
 ) -> None:
-    """Every `ClaimBase` subclass and the explicitly-registered
-    `Replay` container are reachable by name through the
-    unified `classes` map. Optimizers are now `@claim`-functions
-    (in `fns`), not classes — see `test_fn_discovery_covers_optimizers`."""
+    """Every Module-Claim subclass (`EpsilonGreedy`) AND every
+    explicitly-registered config bundle (`MLP`, `CNN`, `Replay`)
+    are reachable by name through the unified `classes` map.
+    Optimizers are now `@claim`-functions (in `fns`); see
+    `test_fn_discovery_covers_optimizers`. Q-networks are
+    config bundles whose forward pass is `mlp_forward` /
+    `cnn_forward` (in `fns`)."""
     expected_classes = {
         'MLP', 'CNN',
         'EpsilonGreedy',
@@ -190,10 +191,14 @@ def test_registered_handles_are_the_typed_shape(
     dqn_registry: Registry,
 ) -> None:
     """No type erasure: `fn` returns FnClaim, `cls` returns a
-    `type`. ClaimBase subclasses round-trip without losing
-    `issubclass(_, ClaimBase)`."""
+    `type`. Module Claim subclasses (e.g. `EpsilonGreedy`)
+    round-trip without losing `issubclass(_, ClaimBase)`. Config
+    bundles (`MLP`, `Replay`) are plain frozen-dataclass classes
+    — `type`, but not `ClaimBase`."""
     assert isinstance(dqn_registry.fn('bootstrap'), FnClaim)
+    eg_cls = dqn_registry.cls('EpsilonGreedy')
+    assert issubclass(eg_cls, ClaimBase)
     mlp_cls = dqn_registry.cls('MLP')
-    assert issubclass(mlp_cls, ClaimBase)
+    assert isinstance(mlp_cls, type)
     replay_cls = dqn_registry.cls('Replay')
     assert isinstance(replay_cls, type)

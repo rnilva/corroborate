@@ -13,7 +13,7 @@ for lists and plain mappings).
 
 The two magic keys (`class`, `fn`) are reserved at any depth; YAML
 authors never need string-prefix sigils. List literals tuple-ify
-to match `frozen=True, slots=True` ClaimBase fields like
+to match `frozen=True, slots=True` config-bundle fields like
 `MLP.hidden: tuple[int, ...]`.
 
 Round-trip contract: a YAML-loaded Hypothesis's slot values are
@@ -100,7 +100,7 @@ def resolve(
             for k, v in value.items()
         }
     if isinstance(value, list):
-        # Tuple-ify: ClaimBase fields like MLP.hidden are typed
+        # Tuple-ify: bundle fields like MLP.hidden are typed
         # `tuple[int, ...]`; YAML lists must coerce.
         elements: list[object] = list(value)  # narrow Any → object
         return tuple(

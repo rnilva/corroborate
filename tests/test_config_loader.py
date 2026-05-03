@@ -33,10 +33,8 @@ DQN_CLAIM_MODULES = (
 
 @pytest.fixture
 def reg() -> Registry:
-    from corroborate.rl.dqn.claims.replay import Replay
     r = Registry()
     r.add_modules(DQN_CLAIM_MODULES)
-    r.add_class(Replay)
     return r
 
 

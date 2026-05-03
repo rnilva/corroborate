@@ -26,12 +26,12 @@ Note: this is a pure-typing layer. The runtime behaviour of
 (v10's `bind` was retired in corroborate via subtraction; the
 walker / `canonical_str` handle `partial` directly).
 
-Module Claims (`MLP`, `EpsilonGreedy`, `Replay`, optimizer
-subclasses) are typed as their concrete dataclass classes — the
-override surface is the constructor / `replace()`. Free-function
-Claims (`bootstrap`, `periodic_copy`, `linear_epsilon`,
-`squared_error`) accept `Callable` for full swap or a `partial`
-binding."""
+Config bundles (`MLP`, `Replay`) and Module Claims
+(`EpsilonGreedy`) are typed as their concrete dataclass classes —
+the override surface is the constructor / `replace()`. Free-
+function Claims (`bootstrap`, `periodic_copy`, `linear_epsilon`,
+`squared_error`, optimizer factories `adam`/`rmsprop`/...) accept
+`Callable` for full swap or a `partial` binding."""
 from __future__ import annotations
 
 from collections.abc import Callable

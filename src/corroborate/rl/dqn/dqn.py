@@ -33,7 +33,11 @@ from corroborate.rl.dqn.claims import (
     periodic_copy,
     squared_error,
 )
-from corroborate.rl.dqn.claims.optimizer import default_optimizer
+from corroborate.rl.dqn.claims.optimizer import (
+    OptimizerFactory,
+    default_optimizer,
+)
+from corroborate.rl.dqn.claims.q_network import QFunction
 from corroborate.rl.dqn.claims.replay import Replay, init_pending_n_step
 from corroborate.rl.dqn.eval import EvalBurstOut, eval_burst, train_with_eval
 from corroborate.rl.dqn.phases import (
@@ -42,12 +46,10 @@ from corroborate.rl.dqn.phases import (
     train_phase,
 )
 from corroborate.rl.dqn.state import DQNState
-from corroborate.rl.dqn.claims.optimizer import OptimizerFactory
 from corroborate.rl.dqn.types import (
     ActionSelect,
     Bootstrap,
     LossFn,
-    QFunction,
     StepRecord,
     TargetSync,
 )
@@ -79,10 +81,10 @@ def init_state(
 ) -> DQNState:
     """Build initial DQNState from a `jax.random.PRNGKey` directly.
 
-    `q_network` and `replay` are Modules: each owns its own
-    architecture / capacity HPs as fields, allocates its own
+    `q_network` and `replay` are config bundles: each owns its
+    own architecture / capacity HPs as fields, allocates its own
     sub-state via `init`, and is opaque to dqn beyond the
-    Module-level operations. dqn doesn't see `buffer_capacity` or
+    bundle-level operations. dqn doesn't see `buffer_capacity` or
     `batch_size` — those live on `Replay`.
 
     Vmap-friendly: under `jax.vmap` over a batched key array, this
