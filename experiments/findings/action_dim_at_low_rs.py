@@ -116,14 +116,16 @@ def main() -> None:
         observed_pairs: list[tuple[str, int, float, float, float]] = []
         for env in sorted(envs, key=lambda e: n_actions[e]):
             n_a = n_actions[env]
+            scoped = [
+                c for c in cells
+                if c.get('env_name') == env and c.get('reward_scale') == rs
+            ]
             r = paired_g.fn(
-                cells,
+                scoped,
                 treatment_arm='ddqn',
                 baseline_arm='vanilla_dqn',
                 pair_by=('seed',),
                 source='outcome_native',
-                env_name=env,
-                extra_filters={'reward_scale': rs},
             )
             pred = _predicted_gap(n_a) if rs == 0.1 else None
             print(_format_row(

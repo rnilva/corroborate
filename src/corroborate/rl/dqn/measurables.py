@@ -45,6 +45,8 @@ import jax.numpy as jnp
 import numpy as np
 import numpy.typing as npt
 
+from corroborate.causal_graph import Direction, Tier
+from corroborate.claim_bridge import Bridge
 from corroborate.measurable import Measurable, measurable, register
 from corroborate.reductions import (
     cv_safe,
@@ -815,38 +817,27 @@ def jensen_dormancy_gap_measurable(record: Mapping[str, object]) -> float:
     return float(max(0.0, floor - observed_bias))
 
 
-@measurable(
+# Hasselt-2010 Jensen premise as a self-loop INVARIANT bridge.
+# The bridge is the typed, declarative source of truth: the
+# threshold `0.0`, the predicate `AT_MOST`, the source measurable
+# `jensen_dormancy_gap`, and the bridge's name (which becomes the
+# emitted column name) all sit on Bridge fields rather than
+# encoded in a measurable function body. The framework synthesizes
+# the per-cell verdict measurable from the bridge — the substrate
+# registers the synthesized one; the bridge's metadata is what
+# carries the predicate.
+jensen_dormancy_premise_active_bridge: Bridge = Bridge(
     name='jensen_dormancy_premise_active',
-    reads=(),
+    source='jensen_dormancy_gap',
+    target='jensen_dormancy_gap',
+    direction=Direction.AT_MOST,
+    tier=Tier.INVARIANT,
+    threshold=0.0,
 )
-def jensen_dormancy_premise_active(
-    record: Mapping[str, object],
-    jensen_dormancy_gap: float,
-) -> str:
-    """Per-cell categorical verdict for the Hasselt-2010 Jensen
-    premise: `'held'` when `jensen_dormancy_gap <= 0` (premise
-    active — observed bias exceeds the σ_Q × √(2 log |A|)
-    structural floor), `'invariant_violation'` when `> 0`
-    (premise dormant — DDQN's bias-correction has nothing to
-    operate on), `'power_insufficient'` when the gap is NaN
-    (no convergent data to evaluate).
-
-    Plain Python name — the predicate (`<= 0`) lives implicitly
-    in the function body, not encoded into the measurable name.
-    Phase 5 of the bridge-portability migration retired the
-    legacy DSL-encoded name `at_most[jensen_dormancy_gap<=0].
-    verdict` for this clean form. `verdict_distribution_per_env`
-    tallies the column; bridges assert "≥90% of cells fire the
-    predicted verdict on this env".
-
-    Auto-injected dep on `jensen_dormancy_gap` (the bare
-    measurable above) — the resolver matches by parameter name."""
-    del record  # the dep injection IS the read.
-    if jensen_dormancy_gap != jensen_dormancy_gap:  # NaN
-        return 'power_insufficient'
-    if jensen_dormancy_gap <= 0.0:
-        return 'held'
-    return 'invariant_violation'
+jensen_dormancy_premise_active: Measurable[Mapping[str, object], object] = (
+    jensen_dormancy_premise_active_bridge.to_invariant_measurable()
+)
+register(jensen_dormancy_premise_active)
 
 
 # ============ Substrate helper — default measurable set ============

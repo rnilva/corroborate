@@ -212,7 +212,7 @@ def _format_analysis_result(result: object) -> str:
 
 def _print_verdicts(
     bridges: Sequence[Bridge],
-    cells: Sequence[dict[str, object]],
+    cells: pl.DataFrame,
 ) -> None:
     for bridge in bridges:
         out = evaluate(bridge, cells)
@@ -230,30 +230,28 @@ def main() -> None:
 
     if ACTION_DIM_PARQUET.exists():
         df = pl.read_parquet(ACTION_DIM_PARQUET)
-        cells = list(df.iter_rows(named=True))
         print(
-            f'\n# action_dim_sweep ({len(cells)} cells, '
+            f'\n# action_dim_sweep ({df.height} cells, '
             f'{df["env_name"].n_unique()} envs)',
         )
         print('-' * 110)
-        _print_verdicts(ACTION_DIM_BRIDGES, cells)
+        _print_verdicts(ACTION_DIM_BRIDGES, df)
         # Audit-style claim — homogeneous-HP corpus so within-env
         # ρ stratification is degenerate, but the structural
         # jaccard reproduces.
-        _print_verdicts((jensen_gap_outcome_borderline,), cells)
+        _print_verdicts((jensen_gap_outcome_borderline,), df)
     else:
         print(f'(skip action_dim_sweep — {ACTION_DIM_PARQUET} missing)')
 
     if EXPECTILE_RUNS.exists():
         runs_df = pl.read_parquet(EXPECTILE_RUNS)
-        runs_cells = list(runs_df.iter_rows(named=True))
         print(
-            f'\n# expectile_3way ({len(runs_cells)} cells, '
+            f'\n# expectile_3way ({runs_df.height} cells, '
             f'{runs_df["env_name"].n_unique()} envs, '
             f'{runs_df["intervention_name"].n_unique()} arms)',
         )
         print('-' * 110)
-        _print_verdicts(EXPECTILE_STRATEGY_2_BRIDGES, runs_cells)
+        _print_verdicts(EXPECTILE_STRATEGY_2_BRIDGES, runs_df)
 
         if EXPECTILE_TRACES.exists():
             runs = pl.read_parquet(
@@ -266,28 +264,24 @@ def main() -> None:
                 EXPECTILE_TRACES,
                 columns=['id', 'mc_return', 'predicted_q_at_start'],
             )
-            joined_cells = list(
-                runs.join(traces, on='id', how='inner')
-                .iter_rows(named=True),
-            )
+            joined_df = runs.join(traces, on='id', how='inner')
             print(
                 f'\n# expectile_3way joined runs × traces '
-                f'({len(joined_cells)} cells)',
+                f'({joined_df.height} cells)',
             )
             print('-' * 110)
-            _print_verdicts(EXPECTILE_PER_BURST_BRIDGES, joined_cells)
-            _print_verdicts(CHAIN_DECOMPOSITION_BRIDGES, joined_cells)
+            _print_verdicts(EXPECTILE_PER_BURST_BRIDGES, joined_df)
+            _print_verdicts(CHAIN_DECOMPOSITION_BRIDGES, joined_df)
     else:
         print(f'(skip expectile_3way — {EXPECTILE_RUNS} missing)')
 
     if CARTPOLE_HP_RUNS.exists():
         df = pl.read_parquet(CARTPOLE_HP_RUNS)
-        cells = list(df.iter_rows(named=True))
         print(
-            f'\n# cartpole_hp 180-cell audit ({len(cells)} cells)',
+            f'\n# cartpole_hp 180-cell audit ({df.height} cells)',
         )
         print('-' * 110)
-        _print_verdicts(CARTPOLE_HP_AUDIT_BRIDGES, cells)
+        _print_verdicts(CARTPOLE_HP_AUDIT_BRIDGES, df)
     else:
         print(
             f'(skip cartpole_hp audit — restore via `corroborate '
@@ -296,12 +290,11 @@ def main() -> None:
 
     if CARTPOLE_HP_MEDIATORS.exists():
         df = pl.read_parquet(CARTPOLE_HP_MEDIATORS)
-        cells = list(df.iter_rows(named=True))
         print(
-            f'\n# cartpole_hp_v2 mediators ({len(cells)} cells)',
+            f'\n# cartpole_hp_v2 mediators ({df.height} cells)',
         )
         print('-' * 110)
-        _print_verdicts((state_coverage_kl_causes_outcome,), cells)
+        _print_verdicts((state_coverage_kl_causes_outcome,), df)
     else:
         print(
             f'(skip DoWhy — restore cartpole_hp_v2 from R2 to '
@@ -318,14 +311,13 @@ def main() -> None:
                 'eval_best_burst_step',
             ],
         )
-        cells = list(df.iter_rows(named=True))
         print(
-            f'\n# ddqn 200k corpus ({len(cells)} cells, '
+            f'\n# ddqn 200k corpus ({df.height} cells, '
             f'{df["env_name"].n_unique()} envs, '
             f'{df["total_steps"].n_unique()} step-budgets)',
         )
         print('-' * 110)
-        _print_verdicts(DDQN_200K_BRIDGES, cells)
+        _print_verdicts(DDQN_200K_BRIDGES, df)
     else:
         print(
             f'(skip ddqn 200k — restore via `corroborate restore '
@@ -334,14 +326,13 @@ def main() -> None:
 
     if NSTEP_INTERVENTION_RUNS.exists():
         df = pl.read_parquet(NSTEP_INTERVENTION_RUNS)
-        cells = list(df.iter_rows(named=True))
         print(
-            f'\n# nstep_intervention ({len(cells)} cells, '
+            f'\n# nstep_intervention ({df.height} cells, '
             f'{df["env_name"].n_unique()} envs, '
             f'{df["intervention_name"].n_unique()} arms)',
         )
         print('-' * 110)
-        _print_verdicts(NSTEP_INTERVENTION_BRIDGES, cells)
+        _print_verdicts(NSTEP_INTERVENTION_BRIDGES, df)
 
     factorial_paths = (
         NSTEP_INTERVENTION_RUNS, NSTEP_INTERVENTION_FR_RUNS,
@@ -356,14 +347,13 @@ def main() -> None:
             [pl.read_parquet(p, columns=cols) for p in factorial_paths],
             how='vertical_relaxed',
         )
-        cells = list(union_df.iter_rows(named=True))
         print(
-            f'\n# 2×2 factorial union ({len(cells)} cells, '
+            f'\n# 2×2 factorial union ({union_df.height} cells, '
             f'{union_df["env_name"].n_unique()} envs, '
             f'{union_df["intervention_name"].n_unique()} arms)',
         )
         print('-' * 110)
-        _print_verdicts(NSTEP_FACTORIAL_BRIDGES, cells)
+        _print_verdicts(NSTEP_FACTORIAL_BRIDGES, union_df)
 
 
 if __name__ == '__main__':

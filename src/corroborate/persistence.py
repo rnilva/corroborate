@@ -38,9 +38,6 @@ from pathlib import Path
 
 import polars as pl
 
-import pyarrow as pa
-import pyarrow.parquet as pq
-
 from corroborate._polars_boundary import to_dicts as _to_dicts
 from corroborate.computation_graph import (
     ComputationEdge,

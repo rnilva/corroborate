@@ -5,7 +5,6 @@ inspect verdict distribution after framework / bridge edits."""
 from __future__ import annotations
 
 import os
-from collections.abc import Mapping
 from pathlib import Path
 
 os.environ.setdefault('JAX_PLATFORMS', 'cpu')
@@ -33,21 +32,16 @@ def _summarize(result: object) -> str:
     return ' '.join(parts)
 
 
-def _to_cells(df: pl.DataFrame) -> list[Mapping[str, object]]:
-    return [dict(r) for r in df.iter_rows(named=True)]
-
-
 def main() -> None:
     if not UNIVERSAL.exists():
         raise SystemExit(f'no universal cache at {UNIVERSAL}')
     df = pl.read_parquet(UNIVERSAL)
-    cells = _to_cells(df)
-    print(f'loaded {len(cells)} cells from {UNIVERSAL.name}\n')
+    print(f'loaded {df.height} cells from {UNIVERSAL.name}\n')
 
     counts: dict[str, int] = {}
     for bridge in DDQN_UNIVERSE_BRIDGES:
         try:
-            outcome = evaluate(bridge, cells)
+            outcome = evaluate(bridge, df)
         except Exception as e:  # noqa: BLE001
             counts['ERROR'] = counts.get('ERROR', 0) + 1
             print(f'{bridge.name:60s}  ERROR  {e!r}')

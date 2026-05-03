@@ -62,10 +62,11 @@ def paired_g_among_solvers(
             if c.get(total_steps_field) == total_steps_filter
         ]
 
-    # `cell_predicate` reads the gate threshold per cell's env;
-    # cells in envs without a threshold drop out (so the panel
-    # ends up restricted to gated envs even when env_filter is
-    # empty).
+    # Apply the per-env gate filter inline (specialised scope —
+    # gate threshold varies by env, so it doesn't reduce to a
+    # single `pl.Expr` cleanly). Cells in envs without a gate
+    # threshold drop out, so the panel ends up restricted to
+    # gated envs even when env_filter is empty.
     def gate(cell: Mapping[str, object]) -> bool:
         env_v = cell.get('env_name')
         if not isinstance(env_v, str):
@@ -80,6 +81,8 @@ def paired_g_among_solvers(
         if math.isnan(fv):
             return False
         return fv >= threshold
+
+    cells_list = [c for c in cells_list if gate(c)]
 
     # Effective env set: explicit `env_filter` ∩ envs with a
     # gate, else all gated envs in `cells_list`.
@@ -103,7 +106,6 @@ def paired_g_among_solvers(
         env_filter=target,
         pair_by=pair_by,
         arm_field=arm_field,
-        cell_predicate=gate,
     )
 
     pool_obs: list[tuple[float, float]] = [

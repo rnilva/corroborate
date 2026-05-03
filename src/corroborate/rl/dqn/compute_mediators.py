@@ -36,7 +36,6 @@ from pathlib import Path
 from corroborate.measurable import Measurable
 from corroborate.persistence import iter_trace_records
 from corroborate.rl.dqn.measurables import (
-    fill_ratio_late,
     greedy_match_late,
     learning_curve_auc,
     plateau_slope_late,

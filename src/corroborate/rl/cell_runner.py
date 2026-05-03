@@ -248,7 +248,7 @@ def run_dqn_arm(
     # measurables declaring them as deps auto-resolve via the
     # registry. Substrate-side `dqn_default_measurables()` is
     # how authors enumerate the standard set on each Hypothesis.
-    import corroborate.rl.dqn.measurables  # noqa: F401
+    import corroborate.rl.dqn.measurables  # noqa: F401  # pyright: ignore[reportUnusedImport]
     from corroborate.measurable import evaluate_with_measurables
 
     cells: list[CellResult] = []

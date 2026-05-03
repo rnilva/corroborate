@@ -110,14 +110,17 @@ def main() -> None:
 
     cells = list(df.iter_rows(named=True))
     for rs in rss:
+        scoped = [
+            c for c in cells
+            if c.get('env_name') == 'FourRooms-misc'
+            and c.get('reward_scale') == rs
+        ]
         r = paired_g.fn(
-            cells,
+            scoped,
             treatment_arm='ddqn',
             baseline_arm='vanilla_dqn',
             pair_by=('seed',),
             source='outcome_native',
-            env_name='FourRooms-misc',
-            extra_filters={'reward_scale': rs},
         )
         v_mean = _arm_mean(cells, 'vanilla_dqn', rs)
         d_mean = _arm_mean(cells, 'ddqn', rs)

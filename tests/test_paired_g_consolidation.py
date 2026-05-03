@@ -1,12 +1,15 @@
 """Tests for the Phase 8 paired_g consolidation surface.
 
-Three new entry points to exercise:
+Two entry points to exercise:
 
-- `paired_g.fn(..., cell_predicate=...)` — per-cell filter applied
-  before pairing.
 - `per_env_paired_g_panel(...)` — shared per-env loop helper.
 - `meta_regress_panel(panel, covariates_per_stratum=...)` —
   StratumG[K] panel → MetaRegressionResult bridge.
+
+Cell-level scope (env_name / extra_filters / extra_min_pairs /
+cell_predicate) lives upstream on `Bridge.scope` as a polars Expr;
+analyses themselves no longer accept those kwargs. Tests that
+need scoped cell-sets pre-filter the input.
 
 The legacy paired_g_pooled / paired_g_among_solvers /
 meta_regression_paired_g entry points are exercised indirectly
@@ -32,8 +35,7 @@ def _cell(env: str, arm: str, seed: int, value: float) -> Mapping[str, object]:
 
 def _two_env_corpus() -> list[Mapping[str, object]]:
     """Two envs × two arms × four seeds. ddqn beats vanilla on
-    Acrobot (g positive); ties on CartPole. Used to exercise the
-    per-env panel + cell_predicate paths under known data."""
+    Acrobot (g positive); ties on CartPole."""
     rows: list[Mapping[str, object]] = []
     for s in range(4):
         rows.append(_cell('Acrobot-v1', 'ddqn', s, 1.0 + 0.1 * s))
@@ -43,45 +45,39 @@ def _two_env_corpus() -> list[Mapping[str, object]]:
     return rows
 
 
-# ============ cell_predicate ============
-
-def test_paired_g_cell_predicate_filters_before_pairing() -> None:
-    """Predicate `seed < 2` cuts each arm to 2 cells; n_pairs == 2."""
-    cells = _two_env_corpus()
-    full = paired_g.fn(
-        cells,
-        treatment_arm='ddqn',
-        baseline_arm='vanilla_dqn',
-        pair_by=('seed',),
-        source='eval_best_burst_mean',
-        env_name='Acrobot-v1',
-    )
-    assert full.n_pairs == 4
-
-    half = paired_g.fn(
-        cells,
-        treatment_arm='ddqn',
-        baseline_arm='vanilla_dqn',
-        pair_by=('seed',),
-        source='eval_best_burst_mean',
-        env_name='Acrobot-v1',
-        cell_predicate=lambda c: int(c.get('seed', -1) or -1) < 2,
-    )
-    assert half.n_pairs == 2
-    assert half.n_treatment == 2
-    assert half.n_baseline == 2
+def _filter_env(
+    cells: list[Mapping[str, object]], env: str,
+) -> list[Mapping[str, object]]:
+    """Pre-filter cells by env. Bridges express this via
+    `scope=pl.col('env_name') == env`; tests calling paired_g.fn
+    directly handle it inline."""
+    return [c for c in cells if c.get('env_name') == env]
 
 
-def test_paired_g_cell_predicate_excludes_all() -> None:
-    """An always-false predicate yields n_pairs == 0 (NaN g/se)."""
+# ============ paired_g pre-scoped input ============
+
+def test_paired_g_on_pre_scoped_subset() -> None:
+    """Pre-filtering cells to one env yields paired-g over that env."""
+    cells = _filter_env(_two_env_corpus(), 'Acrobot-v1')
     result = paired_g.fn(
-        _two_env_corpus(),
+        cells,
         treatment_arm='ddqn',
         baseline_arm='vanilla_dqn',
         pair_by=('seed',),
         source='eval_best_burst_mean',
-        env_name='Acrobot-v1',
-        cell_predicate=lambda c: False,
+    )
+    assert result.n_pairs == 4
+    assert result.g > 0.0
+
+
+def test_paired_g_on_empty_subset() -> None:
+    """An empty cell-set yields n_pairs == 0 (NaN g/se)."""
+    result = paired_g.fn(
+        [],
+        treatment_arm='ddqn',
+        baseline_arm='vanilla_dqn',
+        pair_by=('seed',),
+        source='eval_best_burst_mean',
     )
     assert result.n_pairs == 0
     # NaN — written as `g != g` to avoid a math import.

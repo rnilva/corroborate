@@ -20,6 +20,8 @@ from __future__ import annotations
 
 import math
 
+import polars as pl
+
 # Importing the analyses package populates the registry so
 # resolution by parameter name succeeds.
 import corroborate.analyses  # noqa: F401  # pyright: ignore[reportUnusedImport]
@@ -88,14 +90,11 @@ def _ddqn_reduces_gap_holds_when(paired_g: PairedGResult) -> Verdict:
     target='jensen_gap',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
+    scope=(pl.col('env_name') == 'Acrobot-v1'),
 )
 def ddqn_reduces_jensen_gap__acrobot(
     paired_g: PairedGResult,
-    *,
-    pair_by: tuple[str, ...] = ('seed',),
-    env_name: str = 'Acrobot-v1',
 ) -> Verdict:
-    del pair_by, env_name
     return _ddqn_reduces_gap_holds_when(paired_g)
 
 
@@ -104,14 +103,11 @@ def ddqn_reduces_jensen_gap__acrobot(
     target='jensen_gap',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
+    scope=(pl.col('env_name') == 'Catch-bsuite'),
 )
 def ddqn_reduces_jensen_gap__catch(
     paired_g: PairedGResult,
-    *,
-    pair_by: tuple[str, ...] = ('seed',),
-    env_name: str = 'Catch-bsuite',
 ) -> Verdict:
-    del pair_by, env_name
     return _ddqn_reduces_gap_holds_when(paired_g)
 
 
@@ -120,14 +116,11 @@ def ddqn_reduces_jensen_gap__catch(
     target='jensen_gap',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
+    scope=(pl.col('env_name') == 'DiscountingChain-bsuite'),
 )
 def ddqn_reduces_jensen_gap__discounting_chain(
     paired_g: PairedGResult,
-    *,
-    pair_by: tuple[str, ...] = ('seed',),
-    env_name: str = 'DiscountingChain-bsuite',
 ) -> Verdict:
-    del pair_by, env_name
     return _ddqn_reduces_gap_holds_when(paired_g)
 
 
@@ -136,14 +129,11 @@ def ddqn_reduces_jensen_gap__discounting_chain(
     target='jensen_gap',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
+    scope=(pl.col('env_name') == 'CartPole-v1'),
 )
 def ddqn_reduces_jensen_gap__cartpole(
     paired_g: PairedGResult,
-    *,
-    pair_by: tuple[str, ...] = ('seed',),
-    env_name: str = 'CartPole-v1',
 ) -> Verdict:
-    del pair_by, env_name
     return _ddqn_reduces_gap_holds_when(paired_g)
 
 
@@ -172,12 +162,11 @@ _LOG_ACTION_DIM_PER_ENV: dict[str, dict[str, float]] = {
 def log_action_dim_drives_jensen_gap_reduction(
     meta_regression_paired_g: MetaRegressionResult,
     *,
-    pair_by: tuple[str, ...] = ('seed',),
     covariates_per_env: dict[str, dict[str, float]] = (
         _LOG_ACTION_DIM_PER_ENV
     ),
 ) -> Verdict:
-    del pair_by, covariates_per_env
+    del covariates_per_env
     coef = next(
         (c for c in meta_regression_paired_g.coefficients
          if c.name == 'log_action_dim'),
@@ -249,17 +238,17 @@ def _premise_holds_when(
     target='jensen_dormancy_premise_active',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
+    scope=(pl.col('env_name') == 'Acrobot-v1'),
 )
 def jensen_premise_active__acrobot(
     verdict_distribution_per_env: VerdictDistributionResult,
     *,
     arm_filter: str = 'ddqn',
     verdict_column: str = _DORMANCY_VERDICT_COLUMN,
-    env_name: str = 'Acrobot-v1',
 ) -> Verdict:
     del arm_filter, verdict_column
     return _premise_holds_when(
-        verdict_distribution_per_env, env_name, expected='held',
+        verdict_distribution_per_env, 'Acrobot-v1', expected='held',
     )
 
 
@@ -268,17 +257,17 @@ def jensen_premise_active__acrobot(
     target='jensen_dormancy_premise_active',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
+    scope=(pl.col('env_name') == 'CartPole-v1'),
 )
 def jensen_premise_active__cartpole(
     verdict_distribution_per_env: VerdictDistributionResult,
     *,
     arm_filter: str = 'ddqn',
     verdict_column: str = _DORMANCY_VERDICT_COLUMN,
-    env_name: str = 'CartPole-v1',
 ) -> Verdict:
     del arm_filter, verdict_column
     return _premise_holds_when(
-        verdict_distribution_per_env, env_name, expected='held',
+        verdict_distribution_per_env, 'CartPole-v1', expected='held',
     )
 
 
@@ -287,13 +276,13 @@ def jensen_premise_active__cartpole(
     target='jensen_dormancy_premise_active',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
+    scope=(pl.col('env_name') == 'Catch-bsuite'),
 )
 def jensen_premise_dormant__catch(
     verdict_distribution_per_env: VerdictDistributionResult,
     *,
     arm_filter: str = 'ddqn',
     verdict_column: str = _DORMANCY_VERDICT_COLUMN,
-    env_name: str = 'Catch-bsuite',
 ) -> Verdict:
     """Catch is the structural counterexample: |A|=3 but σ_Q is
     tiny (0.07) and observed bias even tinier (0.03), so the
@@ -302,7 +291,7 @@ def jensen_premise_dormant__catch(
     ≥90% of cells return INVARIANT_VIOLATION."""
     del arm_filter, verdict_column
     return _premise_holds_when(
-        verdict_distribution_per_env, env_name,
+        verdict_distribution_per_env, 'Catch-bsuite',
         expected='invariant_violation',
     )
 
@@ -312,17 +301,18 @@ def jensen_premise_dormant__catch(
     target='jensen_dormancy_premise_active',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
+    scope=(pl.col('env_name') == 'DiscountingChain-bsuite'),
 )
 def jensen_premise_active__discounting_chain(
     verdict_distribution_per_env: VerdictDistributionResult,
     *,
     arm_filter: str = 'ddqn',
     verdict_column: str = _DORMANCY_VERDICT_COLUMN,
-    env_name: str = 'DiscountingChain-bsuite',
 ) -> Verdict:
     del arm_filter, verdict_column
     return _premise_holds_when(
-        verdict_distribution_per_env, env_name, expected='held',
+        verdict_distribution_per_env, 'DiscountingChain-bsuite',
+        expected='held',
     )
 
 
@@ -343,19 +333,18 @@ def jensen_premise_active__discounting_chain(
     target='mc_return',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
+    scope=(pl.col('env_name') == 'FourRooms-misc'),
 )
 def ddqn_outcome_stable_across_bursts__fourrooms(
     paired_g_per_burst: PerBurstResult,
     *,
-    pair_by: tuple[str, ...] = ('seed',),
     reduction: str = 'mean',
-    env_name: str = 'FourRooms-misc',
 ) -> Verdict:
     """DDQN's outcome benefit on FourRooms is stable across every
     eval burst. HELD when (a) at least 9/10 bursts have positive
     g and (b) the per-burst mean g exceeds 0.3."""
-    del pair_by, reduction
-    panel = panel_for_env(paired_g_per_burst, env_name)
+    del reduction
+    panel = panel_for_env(paired_g_per_burst, 'FourRooms-misc')
     if not panel:
         return Verdict.POWER_INSUFFICIENT
     positive = sum(1 for s in panel if s.g > 0)
@@ -370,20 +359,19 @@ def ddqn_outcome_stable_across_bursts__fourrooms(
     target='mc_return',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
+    scope=(pl.col('env_name') == 'Catch-bsuite'),
 )
 def ddqn_outcome_zero_across_bursts__catch(
     paired_g_per_burst: PerBurstResult,
     *,
-    pair_by: tuple[str, ...] = ('seed',),
     reduction: str = 'mean',
-    env_name: str = 'Catch-bsuite',
 ) -> Verdict:
     """Catch-bsuite saturates near-optimal under both arms;
     DDQN at n=1 has zero per-burst effect. NO_EFFECT when
     every burst's |g| is below 0.1; HELD-shaped verdicts are
     impossible since the prediction is null."""
-    del pair_by, reduction
-    panel = panel_for_env(paired_g_per_burst, env_name)
+    del reduction
+    panel = panel_for_env(paired_g_per_burst, 'Catch-bsuite')
     if not panel:
         return Verdict.POWER_INSUFFICIENT
     if all(abs(s.g) < 0.1 for s in panel):
@@ -475,17 +463,16 @@ def _pooled_null_holds_when(
     target='jensen_gap',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
+    scope=pl.col('env_name').is_in(list(_CONVERGED_ENVS_DDQN_200K)),
 )
 def ddqn_reduces_jensen_gap__converged_subset(
     paired_g_pooled: PooledPairedGResult,
     *,
-    pair_by: tuple[str, ...] = ('seed',),
-    env_filter: tuple[str, ...] = _CONVERGED_ENVS_DDQN_200K,
     total_steps_filter: int = 200000,
 ) -> Verdict:
     """rev 1: pooled paired g(jensen_gap) on the converged subset
     is strongly negative (~-0.93), HELD."""
-    del pair_by, env_filter, total_steps_filter
+    del total_steps_filter
     return _pooled_negative_holds_when(
         paired_g_pooled, g_threshold=0.5, min_envs=5,
     )
@@ -496,12 +483,11 @@ def ddqn_reduces_jensen_gap__converged_subset(
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
+    scope=pl.col('env_name').is_in(list(_CONVERGED_ENVS_DDQN_200K)),
 )
 def ddqn_link_to_outcome_null__converged_subset(
     paired_g_pooled: PooledPairedGResult,
     *,
-    pair_by: tuple[str, ...] = ('seed',),
-    env_filter: tuple[str, ...] = _CONVERGED_ENVS_DDQN_200K,
     total_steps_filter: int = 200000,
 ) -> Verdict:
     """rev 1: pooled paired g(eval_best_burst_mean) on the
@@ -516,7 +502,7 @@ def ddqn_link_to_outcome_null__converged_subset(
     NO_EFFECT verdict combined with the mechanism HELD on
     `ddqn_reduces_jensen_gap__converged_subset` — same scope,
     same arm, mechanism activates but outcome doesn't move."""
-    del pair_by, env_filter, total_steps_filter
+    del total_steps_filter
     return _pooled_null_holds_when(
         paired_g_pooled, null_band=0.15, min_envs=3,
     )
@@ -558,15 +544,13 @@ def ddqn_link_to_outcome_null__converged_subset(
 def nstep_3step_reduces_bias_on_top_of_ddqn(
     paired_g_pooled: PooledPairedGResult,
     *,
-    pair_by: tuple[str, ...] = ('seed',),
-    env_filter: tuple[str, ...] = (),
     total_steps_filter: int = 200000,
 ) -> Verdict:
     """rev 11: pooled g(jensen_gap) over 4 sparse-reward envs is
     -0.91 → HELD. n-step return DOES additionally reduce
     overestimation bias on top of DDQN's mechanism, exactly as
     variance-reduction theory predicts at the bias level."""
-    del pair_by, env_filter, total_steps_filter
+    del total_steps_filter
     return _pooled_negative_holds_when(
         paired_g_pooled, g_threshold=0.5, min_envs=3,
     )
@@ -581,8 +565,6 @@ def nstep_3step_reduces_bias_on_top_of_ddqn(
 def nstep_3step_does_not_help_outcome__pool(
     paired_g_pooled: PooledPairedGResult,
     *,
-    pair_by: tuple[str, ...] = ('seed',),
-    env_filter: tuple[str, ...] = (),
     total_steps_filter: int = 200000,
 ) -> Verdict:
     """rev 11: pooled paired g(eval_final_mean) over 4 envs is
@@ -591,7 +573,7 @@ def nstep_3step_does_not_help_outcome__pool(
     the falsified prediction; the I² hides env-specific harm
     (Catch g=-2.14) and help (DiscountingChain g=+1.20) cancelling
     in the pool."""
-    del pair_by, env_filter, total_steps_filter
+    del total_steps_filter
     return _pooled_null_holds_when(
         paired_g_pooled, null_band=0.5, min_envs=3,
     )
@@ -618,18 +600,15 @@ def _per_env_harm_holds_when(paired_g: PairedGResult) -> Verdict:
     target='eval_final_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
+    scope=(pl.col('env_name') == 'Catch-bsuite'),
 )
 def nstep_3step_hurts_outcome__catch(
     paired_g: PairedGResult,
-    *,
-    pair_by: tuple[str, ...] = ('seed',),
-    env_name: str = 'Catch-bsuite',
 ) -> Verdict:
     """rev 11: 3-step on top of DDQN strongly HURTS outcome on
     Catch-bsuite (g=-2.14, n=30). Catch is short-episode +
     saturating-reward — long rollouts dilute the rare positive
     signal, so n-step's variance trade is net negative."""
-    del pair_by, env_name
     return _per_env_harm_holds_when(paired_g)
 
 
@@ -638,12 +617,10 @@ def nstep_3step_hurts_outcome__catch(
     target='eval_final_mean',
     direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
+    scope=(pl.col('env_name') == 'DiscountingChain-bsuite'),
 )
 def nstep_3step_helps_outcome__discounting_chain(
     paired_g: PairedGResult,
-    *,
-    pair_by: tuple[str, ...] = ('seed',),
-    env_name: str = 'DiscountingChain-bsuite',
 ) -> Verdict:
     """rev 11: DiscountingChain is the one env where 3-step
     actually helps outcome on top of DDQN (g=+1.20). |A|=5
@@ -651,7 +628,6 @@ def nstep_3step_helps_outcome__discounting_chain(
     long horizons for the variance-reduction prediction to land.
     Sole positive on this corpus — the heterogeneity that drives
     the pool's high I²."""
-    del pair_by, env_name
     if paired_g.n_pairs < 20:
         return Verdict.POWER_INSUFFICIENT
     if math.isnan(paired_g.g):
@@ -690,6 +666,7 @@ def nstep_3step_helps_outcome__discounting_chain(
     target='eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
+    scope=(pl.col('env_name') == 'FourRooms-misc'),
 )
 def factorial_ddqn_attenuation__fourrooms(
     factorial_2x2_interaction: Factorial2x2Result,
@@ -698,10 +675,8 @@ def factorial_ddqn_attenuation__fourrooms(
     arm_b: str = 'vanilla_3step',
     arm_c: str = 'ddqn_1step',
     arm_d: str = 'ddqn_3step',
-    pair_by: tuple[str, ...] = ('seed',),
     env_filter: tuple[str, ...] = ('FourRooms-misc',),
     total_steps_filter: int = 200000,
-    env_name: str = 'FourRooms-misc',
 ) -> Verdict:
     """rev 12: on FourRooms, DDQN's marginal outcome benefit
     shrinks 4× when n_step rises from 1 to 3 (g(C-A)=+0.73 →
@@ -709,9 +684,9 @@ def factorial_ddqn_attenuation__fourrooms(
     ((B-A)=+0.74 vs (D-C)=+0.16), so the shrink isn't over-
     correction — it's attenuation: the bias-correction axes
     overlap. Interaction g=-0.71 with z=-3.49 → HELD."""
-    del arm_a, arm_b, arm_c, arm_d, pair_by
+    del arm_a, arm_b, arm_c, arm_d
     del env_filter, total_steps_filter
-    p = factorial_2x2_interaction.for_env(env_name)
+    p = factorial_2x2_interaction.for_env('FourRooms-misc')
     if p is None or p.n_pairs < 20:
         return Verdict.POWER_INSUFFICIENT
     if math.isnan(p.g_interaction) or p.se_interaction <= 0:
@@ -739,6 +714,7 @@ def factorial_ddqn_attenuation__fourrooms(
     target='eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
+    scope=(pl.col('env_name') == 'Catch-bsuite'),
 )
 def factorial_variance_amplification__catch(
     factorial_2x2_interaction: Factorial2x2Result,
@@ -747,10 +723,8 @@ def factorial_variance_amplification__catch(
     arm_b: str = 'vanilla_3step',
     arm_c: str = 'ddqn_1step',
     arm_d: str = 'ddqn_3step',
-    pair_by: tuple[str, ...] = ('seed',),
     env_filter: tuple[str, ...] = ('Catch-bsuite',),
     total_steps_filter: int = 200000,
-    env_name: str = 'Catch-bsuite',
 ) -> Verdict:
     """rev 12: on Catch, n_step alone catastrophically harms
     vanilla ((B-A)=-1.16); DDQN at n=1 has *exactly* zero
@@ -761,9 +735,9 @@ def factorial_variance_amplification__catch(
     HELD when the discriminator pattern (n-step harm symmetric
     across greedification, DDQN ineffective at n=1, no
     interaction) holds."""
-    del arm_a, arm_b, arm_c, arm_d, pair_by
+    del arm_a, arm_b, arm_c, arm_d
     del env_filter, total_steps_filter
-    p = factorial_2x2_interaction.for_env(env_name)
+    p = factorial_2x2_interaction.for_env('Catch-bsuite')
     if p is None or p.n_pairs < 20:
         return Verdict.POWER_INSUFFICIENT
     if math.isnan(p.g_b_minus_a):
@@ -825,7 +799,6 @@ _TIME_TO_SOLVE_HIGH_SOLVE_ENVS: tuple[str, ...] = (
 def time_to_solve_link_null__pooled(
     paired_g_among_solvers: PooledPairedGResult,
     *,
-    pair_by: tuple[str, ...] = ('seed',),
     gate_column: str = 'eval_best_burst_mean',
     gate_thresholds: dict[str, float] = _SOLVE_THRESHOLDS_FLAT,
     env_filter: tuple[str, ...] = _TIME_TO_SOLVE_HIGH_SOLVE_ENVS,
@@ -835,7 +808,7 @@ def time_to_solve_link_null__pooled(
     efficiency proxy doesn't rescue DDQN. Pooled across 5
     non-degenerate high-solve envs, predicted-direction effect
     averages zero with PI bracketing zero — NO_EFFECT."""
-    del pair_by, gate_column, gate_thresholds, env_filter, total_steps_filter
+    del gate_column, gate_thresholds, env_filter, total_steps_filter
     return _pooled_null_holds_when(
         paired_g_among_solvers, null_band=0.15, min_envs=4,
     )
@@ -850,7 +823,6 @@ def time_to_solve_link_null__pooled(
 def ddqn_solves_faster__spaceinvaders(
     paired_g_among_solvers: PooledPairedGResult,
     *,
-    pair_by: tuple[str, ...] = ('seed',),
     gate_column: str = 'eval_best_burst_mean',
     gate_thresholds: dict[str, float] = _SOLVE_THRESHOLDS_FLAT,
     env_filter: tuple[str, ...] = ('SpaceInvaders-MinAtar',),
@@ -860,7 +832,7 @@ def ddqn_solves_faster__spaceinvaders(
     crosses the solve threshold reliably faster than vanilla
     (g=-0.532, n=30 — moderate effect, sign matches Hasselt's
     overestimation-bias-cost-on-sparse-reward prediction)."""
-    del pair_by, gate_column, gate_thresholds, total_steps_filter
+    del gate_column, gate_thresholds, total_steps_filter
     spaceinvaders = next(
         (p for p in paired_g_among_solvers.per_env
          if p.stratum_id == env_filter[0]),
@@ -1246,17 +1218,14 @@ def _expectile_reduces_gap_holds_when(paired_g: PairedGResult) -> Verdict:
     target='jensen_gap',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
+    scope=(pl.col('env_name') == 'FourRooms-misc'),
 )
 def expectile_reduces_jensen_gap_more_than_ddqn__fourrooms(
     paired_g: PairedGResult,
-    *,
-    pair_by: tuple[str, ...] = ('seed',),
-    env_name: str = 'FourRooms-misc',
 ) -> Verdict:
     """Expectile reduces jensen_gap further than DDQN does on
     FourRooms (the env where DDQN had room to operate).
     Confirms expectile's bias-correction is more aggressive."""
-    del pair_by, env_name
     return _expectile_reduces_gap_holds_when(paired_g)
 
 
@@ -1265,19 +1234,16 @@ def expectile_reduces_jensen_gap_more_than_ddqn__fourrooms(
     target='eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
+    scope=(pl.col('env_name') == 'FourRooms-misc'),
 )
 def ddqn_outperforms_expectile_on_outcome__fourrooms(
     paired_g: PairedGResult,
-    *,
-    pair_by: tuple[str, ...] = ('seed',),
-    env_name: str = 'FourRooms-misc',
 ) -> Verdict:
     """Despite expectile's bigger bias-reduction, DDQN beats
     expectile on FourRooms outcome. Verdict HELD when expectile
     < ddqn on outcome (g < -0.3 with p < 0.05). The bigger-bias-
     reduction-doesn't-translate finding from FINDINGS revisions
     9 + 10 reproduces under a different mechanism family."""
-    del pair_by, env_name
     if paired_g.n_pairs < 30:
         return Verdict.POWER_INSUFFICIENT
     if paired_g.g < -0.3 and paired_g.p_value < 0.05:
@@ -1290,12 +1256,10 @@ def ddqn_outperforms_expectile_on_outcome__fourrooms(
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
+    scope=(pl.col('env_name') == 'FourRooms-misc'),
 )
 def expectile_reproduces_mechanism_link_disconnect__fourrooms(
     paired_g: PairedGResult,
-    *,
-    pair_by: tuple[str, ...] = ('seed',),
-    env_name: str = 'FourRooms-misc',
 ) -> Verdict:
     """Strategy 2's headline question: does expectile produce
     the same outcome-vs-vanilla effect as DDQN on FourRooms?
@@ -1305,7 +1269,6 @@ def expectile_reproduces_mechanism_link_disconnect__fourrooms(
     (g > 0.3 + p < 0.05); NO_EFFECT when expectile's outcome
     effect is much smaller than DDQN's; both establish the
     finding (whether the link reproduces or not is the answer)."""
-    del pair_by, env_name
     if paired_g.n_pairs < 30:
         return Verdict.POWER_INSUFFICIENT
     if paired_g.g > 0.3 and paired_g.p_value < 0.05:
@@ -1433,7 +1396,6 @@ def _chain_coef_holds_when(
 def log_action_dim_drives_g_mech(
     meta_regression_per_burst: MetaRegressionResult,
     *,
-    pair_by: tuple[str, ...] = ('seed',),
     reduction: str = 'mc_minus_q',
     covariates_per_env: dict[str, dict[str, float]] = (
         _CHAIN_COVARIATES_PER_ENV
@@ -1445,7 +1407,7 @@ def log_action_dim_drives_g_mech(
 
     Bridge HELD when β(log_action_dim) on g_mech is significantly
     negative."""
-    del pair_by, reduction, covariates_per_env
+    del reduction, covariates_per_env
     return _chain_coef_holds_when(
         meta_regression_per_burst,
         coef_name='log_action_dim',
@@ -1462,7 +1424,6 @@ def log_action_dim_drives_g_mech(
 def log_obs_dim_drives_g_link(
     meta_regression_per_burst: MetaRegressionResult,
     *,
-    pair_by: tuple[str, ...] = ('seed',),
     reduction: str = 'mean',
     covariates_per_env: dict[str, dict[str, float]] = (
         _CHAIN_COVARIATES_PER_ENV
@@ -1476,7 +1437,7 @@ def log_obs_dim_drives_g_link(
     non-null. Sign isn't pinned in the original (the magnitude
     is small either way); we accept either positive or negative
     significant β as confirming the moderator-bottleneck."""
-    del pair_by, reduction, covariates_per_env
+    del reduction, covariates_per_env
     coef = next(
         (c for c in meta_regression_per_burst.coefficients
          if c.name == 'log_obs_dim'),
