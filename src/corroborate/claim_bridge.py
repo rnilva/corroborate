@@ -48,7 +48,6 @@ from __future__ import annotations
 
 import inspect
 import math
-import sys
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
@@ -168,25 +167,26 @@ class Bridge:
     analysis the `holds_when` body consumes.
 
     `source` / `target` are `BridgeEndpoint`s: either a string
-    (raw column path or a `@measurable`-registered name) OR a
+    (raw column path or a `@measurable`-registered name), a
     `Measurable` instance passed by value (typically a value-
-    composed reduction from `corroborate.reductions`). Passing a
-    Measurable directly avoids the boilerplate of a top-level
-    `@measurable` wrapper for every reduction variant; the
-    framework auto-registers each by-value Measurable at
-    decoration time so the cache walker finds it. The
-    `endpoint_name` helper normalises both cases to a single
-    column-name string for analyses + the causal graph.
+    composed reduction from `corroborate.reductions`), OR — for
+    `source` only — a `DoEffect`. `DoEffect` declares the
+    Pearl-rung-2 contrast (treatment_arm / baseline_arm) AND
+    routes the analysis: when `source` is a DoEffect, the
+    analysis's `source` slot maps to `bridge.target_name` (the
+    measurement column). When `source` is a string/measurable,
+    that name flows directly as the analysis's `source`. The
+    explicit per-bridge declaration replaces an earlier
+    file-level `INTERVENTION = DoEffect(...)` auto-resolution
+    that introduced source-vs-target routing ambiguity — bridges
+    now state their contrast unambiguously.
 
-    `intervention: DoEffect | None` is the Pearl-rung-2
-    annotation: the do-contrast for analyses that need it
-    (paired_g, dowhy, mundlak, etc.). Auto-resolved at
-    decoration time from `module.INTERVENTION` — bridge authors
-    declare it once at the top of the file rather than per-
-    bridge. Per-bridge `source = DoEffect(...)` (in the decorator
-    args) overrides the module-level default. The graph builder
-    emits a `do(treatment|vs=baseline) → target` edge when
-    either source-as-DoEffect or this field is set.
+    Passing a `Measurable` directly avoids the boilerplate of a
+    top-level `@measurable` wrapper for every reduction variant;
+    the framework auto-registers each by-value Measurable at
+    decoration time so the cache walker finds it. The
+    `endpoint_name` helper normalises str/Measurable cases to a
+    single column-name string for analyses + the causal graph.
 
     `predicted_direction: PredictedDirection | None` is the
     author-declared *prior* sign of the predicted effect, used by
@@ -200,10 +200,10 @@ class Bridge:
     file-protocol path (analyses on a corpus) sets it; the
     Hypothesis-side typed-edge path (verdict walks via
     `hypothesis_subgraph_verdict`) leaves it None — the verdict
-    walk consumes the Bridge as metadata (source / target /
-    intervention / tier / predicted_direction) and computes the
-    verdict from runs directly, never invoking a body. `evaluate`
-    raises `TypeError` if called on a body-less Bridge.
+    walk consumes the Bridge as metadata (source / target / tier
+    / predicted_direction) and computes the verdict from runs
+    directly, never invoking a body. `evaluate` raises
+    `TypeError` if called on a body-less Bridge.
 
     `threshold: float | None = None` is the predicate threshold
     for INVARIANT self-loop bridges (`Direction.AT_MOST` /
@@ -238,7 +238,6 @@ class Bridge:
     params: Mapping[str, object] = field(
         default_factory=lambda: MappingProxyType({}),
     )
-    intervention: DoEffect | None = None
     predicted_direction: PredictedDirection | None = None
     holds_when: Callable[..., Verdict] | None = None
     threshold: float | None = None
@@ -459,16 +458,20 @@ def claim_bridge(
         ) -> Verdict:
             ...
 
-    Module-level `INTERVENTION = DoEffect(...)` provides the
-    contrast for all bridges in the file unless overridden via
-    `source = DoEffect(...)` in the decorator (per-bridge
-    different intervention).
+    Interventional bridges declare the do-contrast via
+    `source = DoEffect(treatment_arm=..., baseline_arm=...)`.
+    The framework extracts treatment/baseline arms from
+    `bridge.source` at evaluate() time and threads them into the
+    analysis's kwargs. When `source` is a string/Measurable, no
+    contrast is set and the analysis runs without arm-pairing
+    (correlation-style or pre-paired bridges).
 
-    `Bridge.intervention` is auto-resolved from
-    `module.INTERVENTION` at decoration time and threaded into
-    analysis kwargs by `evaluate()`. Bridge authors do NOT write
-    `treatment_arm` / `baseline_arm` / `intervention=` as bridge
-    params anywhere.
+    A common idiom is to define `INTERVENTION = DoEffect(...)`
+    once at the top of the bridge file and reference it as
+    `source=INTERVENTION` in each interventional bridge — the
+    constant lives in the file's namespace, not in framework
+    auto-resolution. Per-bridge variants (e.g. HP-encoded arms)
+    declare their own DoEffect inline.
     """
     # Validate decorator args at module-import time (early failure).
     source_validated = _require_endpoint(
@@ -521,30 +524,6 @@ def claim_bridge(
             if isinstance(v, Measurable):
                 register(v)
 
-        # Module-level INTERVENTION resolution. The module declares
-        # `INTERVENTION = DoEffect(...)` at top level; every bridge
-        # in that file inherits the contrast as a default. Per-bridge
-        # `source = DoEffect(...)` overrides it.
-        module = sys.modules.get(fn.__module__)
-        module_intervention: object = (
-            getattr(module, 'INTERVENTION', None)
-            if module is not None else None
-        )
-        if module_intervention is not None and not isinstance(
-            module_intervention, DoEffect,
-        ):
-            raise TypeError(
-                f'@claim_bridge {fn.__name__!r}: module '
-                f'{fn.__module__!r} declares `INTERVENTION` as '
-                f'{type(module_intervention).__name__}; must be a '
-                f'DoEffect (or omitted).',
-            )
-        intervention = (
-            module_intervention
-            if isinstance(module_intervention, DoEffect)
-            else None
-        )
-
         return Bridge(
             name=fn.__name__,
             source=source_validated,
@@ -555,7 +534,6 @@ def claim_bridge(
             scope=scope_validated,
             params=MappingProxyType(params),
             holds_when=fn,
-            intervention=intervention,
             predicted_direction=predicted_direction_validated,
         )
 
@@ -679,24 +657,19 @@ def evaluate(
             cast(list[dict[str, object]], df.to_dicts())
             if df.height > 0 else []
         )
-    # Contrast resolution precedence:
-    #   1. `source = DoEffect(...)` (per-bridge explicit override)
-    #   2. `Bridge.intervention` (file-level `INTERVENTION`,
-    #      resolved at decoration time)
-    #   3. None (correlation/correlation-like bridges with no
-    #      arm contrast)
-    #
-    # When source is a DoEffect, the analysis's `source` slot maps
-    # to the bridge's TARGET measurable (the column to compute on).
-    # When source is a measurable, it stays as-is.
+    # Contrast resolution:
+    #   - `source = DoEffect(...)` → contrast = the DoEffect, and
+    #     the analysis's `source` slot maps to bridge.target_name
+    #     (the measurement column).
+    #   - `source = str | Measurable` → no contrast; the name flows
+    #     directly as the analysis's source. Correlational bridges,
+    #     or bridges where the author wants paired_g to compute on
+    #     a non-outcome measurable.
     contrast: DoEffect | None
     source_for_analysis: str
     if isinstance(bridge.source, DoEffect):
         contrast = bridge.source
         source_for_analysis = bridge.target_name
-    elif bridge.intervention is not None:
-        contrast = bridge.intervention
-        source_for_analysis = bridge.source_name
     else:
         contrast = None
         source_for_analysis = bridge.source_name

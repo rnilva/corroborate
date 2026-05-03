@@ -246,14 +246,10 @@ def authored_graph(
 ) -> CausalGraph:
     """Build the unevaluated graph topology from a `Sequence[Bridge]`.
 
-    Each bridge contributes one edge. The source-node rendering
-    follows the contrast-resolution precedence:
+    Each bridge contributes one edge. The source-node rendering:
 
-    - `bridge.source` is a `DoEffect` (per-bridge override):
+    - `bridge.source` is a `DoEffect`:
       `do(treatment|vs=baseline) → bridge.target`, tier
-      INTERVENTIONAL.
-    - `bridge.intervention is not None` (file-level INTERVENTION
-      resolved at decoration time): same do-node rendering, tier
       INTERVENTIONAL.
     - Otherwise: `bridge.source → bridge.target`
       (measurable-to-measurable), tier inherits `bridge.tier`.
@@ -266,9 +262,6 @@ def authored_graph(
     for b in bridges:
         if isinstance(b.source, DoEffect):
             source_key = b.source.node_key()
-            tier = Tier.INTERVENTIONAL
-        elif b.intervention is not None:
-            source_key = b.intervention.node_key()
             tier = Tier.INTERVENTIONAL
         else:
             source_key = b.source_name

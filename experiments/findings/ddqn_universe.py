@@ -130,7 +130,16 @@ INTERVENTION = DoEffect(treatment_arm='ddqn', baseline_arm='vanilla_dqn')
 
 
 @claim_bridge(
-    source='jensen_dormancy_gap',
+    # Decorator declares the do-contrast (vanilla → ddqn) on the
+    # OUTCOME column. The graph edge `jensen_dormancy_gap →
+    # eval_best_burst_mean` (mech-state predicate of refutation
+    # → outcome) lives in the docstring/scope rather than the
+    # source field — the source field now carries the contrast
+    # exclusively. paired_g computes Δ on `target=eval_best_burst_mean`
+    # under the file's INTERVENTION, which IS the actual refutation
+    # predicate; the dormancy-gap is consumed by `scope` as a cell
+    # filter, not as paired_g's measurement axis.
+    source=INTERVENTION,
     target='eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
@@ -147,20 +156,6 @@ INTERVENTION = DoEffect(treatment_arm='ddqn', baseline_arm='vanilla_dqn')
 )
 def ddqn_refuted_when_dormancy_fires(
     paired_g: PairedGResult,
-    *,
-    # Decorator-args declare the graph edge `jensen_dormancy_gap
-    # → eval_best_burst_mean` (source = mech-state, target =
-    # outcome). The framework's evaluate() defaults to passing
-    # bridge.source_name as paired_g's `source` when a contrast
-    # exists — that would compute Δ on jensen_dormancy_gap, which
-    # is by-construction larger for ddqn cells (DDQN reduces
-    # observed bias → larger σ-floor-minus-observed gap). The
-    # body-default override below pins paired_g to compute Δ on
-    # the OUTCOME (the actual refutation predicate). bridge.params
-    # entries override evaluate()'s defaults via `**dict(bridge.
-    # params)`, so this kwarg routes the analysis without losing
-    # the graph-edge metadata.
-    source: str = 'eval_best_burst_mean',
 ) -> Verdict:
     """Necessary-condition claim. The framework's-own Jensen
     dormancy invariant operationalizes the Hasselt-2010 structural
@@ -178,7 +173,6 @@ def ddqn_refuted_when_dormancy_fires(
     actionable: a runtime controller using a per-batch dormancy
     proxy (max_Q − mean_Q vs σ_Q × √(2 log |A|)) recovers DDQN's
     outcome benefit on FourRooms (g=+0.78 vs vanilla, p<0.001)."""
-    del source  # consumed by paired_g via params; not used here.
     if paired_g.n_pairs < 50:
         return Verdict.POWER_INSUFFICIENT
     if math.isnan(paired_g.helped_fraction):
@@ -254,7 +248,7 @@ def adaptive_dqn_recovers_ddqn_benefit__fourrooms_factor_0p5(
 
 
 @claim_bridge(
-    source='mc_return_first_quarter',
+    source=INTERVENTION,
     target='mc_return_first_quarter',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
@@ -289,7 +283,7 @@ def ddqn_helps_at_early_bursts__pixel_envs(
 
 
 @claim_bridge(
-    source='mc_return_last_quarter',
+    source=INTERVENTION,
     target='mc_return_last_quarter',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
@@ -607,7 +601,7 @@ def ddqn_benefit_scales_with_gamma__discountingchain(
 
 
 @claim_bridge(
-    source='mc_return',
+    source=INTERVENTION,
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
@@ -615,6 +609,16 @@ def ddqn_benefit_scales_with_gamma__discountingchain(
 def bootstrap_fraction_drives_g_link__net_of_dormancy(
     meta_regression_per_burst: MetaRegressionResult,
     *,
+    # `source` here pins the per-burst measurable the underlying
+    # `paired_g_per_burst` projects each cell to (a 2-D
+    # `(n_bursts, n_episodes)` array). The decorator's
+    # `source=INTERVENTION` carries the do-contrast (treatment /
+    # baseline arms); the bridge's `target='eval_best_burst_mean'`
+    # would otherwise be auto-injected as the analysis source
+    # (a scalar, no per-burst structure). The body default below
+    # routes the panel computation back onto `mc_return` per the
+    # claim's g_link reading.
+    source: str = 'mc_return',
     reduction: str = 'mean',
     # Column-name covariates: each is materialised per-cell by the
     # @measurable cache, then averaged to env-level inside the
@@ -656,7 +660,7 @@ def bootstrap_fraction_drives_g_link__net_of_dormancy(
     covariate set itself: dormancy_env_mean is in the model, so
     a surviving β(bootstrap_fraction) is a partial coefficient,
     not a marginal one."""
-    del reduction, covariates
+    del source, reduction, covariates
     coef = next(
         (c for c in meta_regression_per_burst.coefficients
          if c.name == 'bootstrap_fraction'),
@@ -697,7 +701,7 @@ def bootstrap_fraction_drives_g_link__net_of_dormancy(
 
 
 @claim_bridge(
-    source='mc_return',
+    source=INTERVENTION,
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
@@ -705,6 +709,13 @@ def bootstrap_fraction_drives_g_link__net_of_dormancy(
 def mc_variance_attenuates_g_link__between_env(
     mundlak_paired_g_per_burst: MundlakResult,
     *,
+    # See `bootstrap_fraction_drives_g_link__net_of_dormancy`
+    # for the rationale: pin the per-burst measurable that
+    # `paired_g_per_burst` (called inside Mundlak) projects each
+    # cell onto. The decorator's `source=INTERVENTION` carries
+    # the do-contrast; the body default below routes the panel
+    # computation back onto `mc_return` per the g_link reading.
+    source: str = 'mc_return',
     reduction: str = 'mean',
     predictor_name: str = 'log_mc_variance_per_burst',
     predictor_arm_filter: str = 'vanilla_dqn',
@@ -726,7 +737,7 @@ def mc_variance_attenuates_g_link__between_env(
 
     Pearl-rung-2 corroboration comes from `reward_scale_sweep`
     (causal probe via reward × k intervention)."""
-    del reduction, predictor_name, predictor_arm_filter
+    del source, reduction, predictor_name, predictor_arm_filter
     coef = mundlak_paired_g_per_burst.between
     if not coef.p_value < 0.05:
         if coef.coefficient < -0.01:
@@ -818,8 +829,8 @@ def mc_variance_attenuates_g_link__between_env(
 
 
 @claim_bridge(
-    source='outcome_native',
-    target='eval_best_burst_mean',
+    source=INTERVENTION,
+    target='outcome_native',
     direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
     scope=(
@@ -837,12 +848,13 @@ def ddqn_rescues_underlearning_vanilla__fourrooms_rs_0p1(
     ≥ +0.4 above the do(arm=vanilla_dqn) baseline.
 
     Generic primitive shape: consumes `paired_g` with
-    `source='outcome_native'` (the registered measurable
-    `eval_best_burst_mean / reward_scale`) and
-    `extra_filters={'reward_scale': 0.1}` to scope the corpus.
-    No bespoke analysis — the bridge supplies measurable name +
-    filters, the framework runs `paired_g` and injects the
-    result.
+    `target='outcome_native'` (the registered measurable
+    `eval_best_burst_mean / reward_scale`) under
+    `source=INTERVENTION` (do(ddqn) − do(vanilla_dqn) contrast)
+    and `scope=(env_name == 'FourRooms-misc') & (reward_scale ==
+    0.1)` to filter the corpus. No bespoke analysis — the bridge
+    supplies the measurable name + scope, the framework runs
+    `paired_g` and injects the result.
 
     HELD when `paired_g.mean_diff ≥ threshold_diff (=+0.4)` AND
     `paired_g.mean_diff_p_value < 0.05`. POWER_INSUFFICIENT
@@ -890,8 +902,8 @@ def ddqn_rescues_underlearning_vanilla__fourrooms_rs_0p1(
 
 
 @claim_bridge(
-    source='outcome_native',
-    target='eval_best_burst_mean',
+    source=INTERVENTION,
+    target='outcome_native',
     direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
     scope=(
@@ -987,7 +999,7 @@ def ddqn_dominates_vanilla_response_curve__fourrooms_rs_0p3(
 
 
 @claim_bridge(
-    source='mc_return',
+    source=INTERVENTION,
     target='mc_return[per_burst]',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
@@ -996,6 +1008,13 @@ def ddqn_dominates_vanilla_response_curve__fourrooms_rs_0p3(
 def ddqn_curve_crosses_vanilla_late__spaceinvaders(
     paired_g_per_burst: PerBurstResult,
     *,
+    # Pin the per-burst measurable: the decorator's target
+    # `mc_return[per_burst]` is the human-readable name of what
+    # the analysis projects, but `paired_g_per_burst` indexes
+    # cells by the raw per-burst column `mc_return`. The body
+    # default routes the per-burst projection back onto the
+    # underlying 2-D `mc_return` array.
+    source: str = 'mc_return',
     env_name: str = 'SpaceInvaders-MinAtar',
     reduction: str = 'mean',
     crossover_burst_min: int = 3,
@@ -1022,7 +1041,7 @@ def ddqn_curve_crosses_vanilla_late__spaceinvaders(
     g) — within env, the SD-scaling is ~constant so sign
     detection is invariant. The bridge is a SHAPE claim about
     the per-burst-index curve, not a single aggregate effect."""
-    del reduction
+    del source, reduction
     env_strata = sorted(
         (s for s in paired_g_per_burst.strata if s.env_name == env_name),
         key=lambda s: s.burst_index,
@@ -1228,7 +1247,7 @@ def acrobot_per_burst_link_active__gamma_0999(
 
 
 @claim_bridge(
-    source='mechanism.jensen_gap',
+    source=INTERVENTION,
     target='outcome.eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
@@ -1263,7 +1282,7 @@ def acrobot_link_backdoor_ate_negative__gamma_0999(
 
 
 @claim_bridge(
-    source='mechanism.jensen_gap',
+    source=INTERVENTION,
     target='outcome.eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
@@ -1299,7 +1318,7 @@ def acrobot_link_placebo_refuted__gamma_0999(
 
 
 @claim_bridge(
-    source='mechanism.jensen_gap',
+    source=INTERVENTION,
     target='outcome.eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
@@ -1362,7 +1381,7 @@ def acrobot_link_rcc_robust__gamma_0999(
 
 
 @claim_bridge(
-    source='q_divergence_score',
+    source=INTERVENTION,
     target='outcome.eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
@@ -1393,7 +1412,7 @@ def extreme_q_divergence_attenuates_link__binary(
 
 
 @claim_bridge(
-    source='q_divergence_score',
+    source=INTERVENTION,
     target='outcome.eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
@@ -1424,7 +1443,7 @@ def extreme_q_divergence_attenuates_link__placebo_refuted(
 
 
 @claim_bridge(
-    source='q_divergence_score',
+    source=INTERVENTION,
     target='outcome.eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,

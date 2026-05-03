@@ -101,7 +101,7 @@ def test_analysis_registered_globally() -> None:
 
 
 @claim_bridge(
-    source='eval_best_burst_mean',
+    source=INTERVENTION,
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
@@ -137,7 +137,7 @@ def test_bridge_no_effect_when_signal_absent() -> None:
 
 
 @claim_bridge(
-    source='eval_best_burst_mean',
+    source=INTERVENTION,
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
@@ -202,8 +202,6 @@ def test_bridge_carries_structural_metadata() -> None:
     assert carries_metadata.tier == Tier.INTERVENTIONAL
     assert carries_metadata.params['treatment_arm'] == 'ddqn'
     assert carries_metadata.params['baseline_arm'] == 'vanilla_dqn'
-    # Module-level INTERVENTION is inherited by all bridges in this module.
-    assert carries_metadata.intervention == INTERVENTION
 
 
 def test_bridge_carries_typed_intervention() -> None:

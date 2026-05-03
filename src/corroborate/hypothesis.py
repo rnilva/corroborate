@@ -135,20 +135,26 @@ class Hypothesis[R: Mapping[str, object]]:
         return tuple(e for e in self.edges if e.target == target)
 
     def intervention_edges(self) -> tuple['ClaimBridge', ...]:
-        """Edges whose `intervention is not None` — the rung-2
+        """Edges whose `source` is a `DoEffect` — the rung-2
         contrast edges that drive paired comparisons. Replaces the
         former `mechanism + outcome + refuter` role union; the
         scope-distinction (mechanism vs outcome) is recoverable
         from `target` namespace or claim-graph topology, not from
         a per-edge enum."""
-        return tuple(e for e in self.edges if e.intervention is not None)
+        from corroborate.intervention import DoEffect
+        return tuple(
+            e for e in self.edges if isinstance(e.source, DoEffect)
+        )
 
     def coupling_edges(self) -> tuple['ClaimBridge', ...]:
-        """Edges whose `intervention is None` — measurement-to-
-        measurement coupling edges (formerly `role='link'`).
+        """Edges whose `source` is NOT a `DoEffect` — measurement-
+        to-measurement coupling edges (formerly `role='link'`).
         Tested via cross-stratum Pearson r over the per-group
         effect sizes of the source and target paths."""
-        return tuple(e for e in self.edges if e.intervention is None)
+        from corroborate.intervention import DoEffect
+        return tuple(
+            e for e in self.edges if not isinstance(e.source, DoEffect)
+        )
 
     def arm_key(self) -> str:
         """Canonical fingerprint of the typed `intervention_arms`.
