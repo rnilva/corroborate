@@ -122,9 +122,12 @@ def paired_link_per_burst(
       predictor = mc_return with reduction='mc_minus_q'
                   (per-burst Jensen bias = E[Q] - E[MC])
 
-    Negative r at burst b means: at this point in training, more
-    bias reduction by DDQN translates to bigger outcome benefit
-    (the textbook bias-correction story). Positive r means the
+    `r` is computed against the *negated* predictor so the value
+    reads "active link = positive r" (matches the bias-correction
+    framing in the DDQN literature: more reduction → more outcome
+    gain). Positive r at burst b means: at this point in training,
+    more bias reduction by DDQN translates to bigger outcome
+    benefit (the textbook story). Negative r means the
     relationship has flipped (Q-explosion-induced anti-link).
 
     `env_name`, when supplied, restricts the analysis to one env."""
@@ -178,7 +181,16 @@ def paired_link_per_burst(
             finite = np.isfinite(d_target) & np.isfinite(d_predictor)
             d_t = d_target[finite]
             d_p = d_predictor[finite]
-            r, p, slope = _pearson_r_p_slope(d_p, d_t)
+            # Convention: link strength is positive when active.
+            # The natural primitive is "bias reduction → outcome
+            # gain": more reduction (i.e., more *negative* Δ_jens
+            # under DDQN's mc_minus_q) correlates with more positive
+            # Δ_outcome. We negate Δ_predictor so the reported r and
+            # slope read positive-when-active, matching the
+            # bias-correction framing in the DDQN literature
+            # (Hasselt 2010 et seq.) and the docstring conventions in
+            # the bridge zoo (`g_link = +0.34, link works`).
+            r, p, slope = _pearson_r_p_slope(-d_p, d_t)
             mean_p = float(d_p.mean()) if d_p.size else float('nan')
             mean_t = float(d_t.mean()) if d_t.size else float('nan')
             sd_t = float(d_t.std(ddof=1)) if d_t.size > 1 else float('nan')
@@ -208,7 +220,7 @@ def phase_link_consistency(
     *,
     env_name: str | None = None,
     significance: float = 0.05,
-    expected_sign: int = -1,
+    expected_sign: int = +1,
 ) -> float:
     """Scalar derived from a `PerBurstLinkResult`: proportion of
     bursts where the link r matches `expected_sign` AND p <
@@ -216,8 +228,9 @@ def phase_link_consistency(
     training; low = phase-dependent (Phase 1 holds, Phase 2 doesn't,
     etc.).
 
-    Default `expected_sign=-1` matches the bias-correction story:
-    negative r means more Δ_jens reduction → more Δ_outcome gain.
+    Default `expected_sign=+1` matches the bias-correction story
+    under the panel's positive-when-active convention: r > 0 means
+    more bias reduction → more outcome gain.
 
     Returns nan if the panel has no strata for the env."""
     panel = (

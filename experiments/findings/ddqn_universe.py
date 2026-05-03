@@ -1399,6 +1399,11 @@ def acrobot_link_rcc_robust__gamma_0999(
 # Together with dormancy, they bound the band 0.02 < score < 1000 within
 # which DDQN's link operates.
 #
+# Convention: `g_link` is the per-(env, burst) Pearson correlation between
+# bias reduction (-Δ_jens) and outcome gain (Δ_outcome) across paired
+# seeds — see `paired_link_per_burst` for the negate-and-correlate step.
+# Active link → r > 0 (more reduction, more gain). Attenuation → r → 0.
+#
 # Empirical panel (13 (env, regime) cells, mech-HELD subset, no bandits):
 #   below band (score < 0.02): n=3, mean g_link = -0.09 (mostly null)
 #   in band (0.02-1000):       n=7, mean g_link = +0.34 (link works)
