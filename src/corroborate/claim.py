@@ -39,10 +39,13 @@ from dataclasses import dataclass
 from typing import (
     Protocol,
     TypeIs,
+    cast,
     overload,
     override,
     runtime_checkable,
 )
+
+from corroborate._introspection_boundary import get_attr_obj
 
 # ============ Protocol — the structural contract ============
 
@@ -159,7 +162,17 @@ class FnClaim[**P, T]:
 
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> T:
         result = self.fn(*args, **kwargs)
-        record_call(self, tuple(args), dict(kwargs), result)
+        # Runtime invariant: `FnClaim[P, T]` structurally satisfies
+        # `Claim[..., object]` (the wider variadic protocol). Pyright
+        # can't see through the ParamSpec/TypeVar narrowing here —
+        # `Callable[P, T]` is genuinely assignable to `Callable[...,
+        # object]` (P is a subtype of ..., T is a subtype of object),
+        # but the ParamSpec subtyping check is stricter than the
+        # runtime structural match.
+        record_call(
+            cast(Claim[..., object], self),
+            tuple(args), dict(kwargs), result,
+        )
         return result
 
     @override
@@ -195,13 +208,19 @@ def _unpickle_fn_claim(module_name: str, qualname: str) -> object:
     placed there)."""
     import importlib
     module = importlib.import_module(module_name)
-    return getattr(module, qualname)
+    # `getattr` on a module returns `Any`; the runtime invariant is
+    # that `qualname` resolves to the `@claim`-rebound `FnClaim`,
+    # but the framework's typed surface is `object` here (pickle
+    # reconstruction is intentionally erased).
+    return get_attr_obj(module, qualname)
 
 
 # ============ @claim decorator (function-only) ============
 
 @overload
 def claim[T, **P](target: Callable[P, T]) -> FnClaim[P, T]: ...
+@overload
+def claim(target: object) -> object: ...
 
 
 def claim(target: object) -> object:
@@ -211,7 +230,13 @@ def claim(target: object) -> object:
     For Module classes (callable dataclass-shaped components),
     inherit `ClaimBase` directly and apply `@dataclass(frozen=
     True, slots=True)` yourself — there is no class-decorator
-    path. Bake-in via `functools.partial`."""
+    path. Bake-in via `functools.partial`.
+
+    The first overload is the typed primary path (`@claim` on a
+    Callable produces a typed `FnClaim[P, T]`). The second is the
+    catch-all for runtime defensive checks — passes `FnClaim` /
+    `ClaimBase` instances through idempotently, and raises
+    `TypeError` on classes / non-callables."""
     if isinstance(target, (FnClaim, ClaimBase)):
         # Idempotent: function-claim wrappers AND Module-claim
         # instances pass through unchanged.

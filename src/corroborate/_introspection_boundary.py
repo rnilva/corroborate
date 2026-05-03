@@ -50,10 +50,12 @@ def get_param_annotation(p: inspect.Parameter) -> object:
     """`inspect.Parameter.annotation` is `Any` — the source-level
     annotation expression is arbitrary. Returns
     `inspect.Parameter.empty` when no annotation is declared, so
-    callers can compare with `is`."""
-    if p.annotation is inspect.Parameter.empty:
+    callers can compare with `is`. Single-site Any laundering at
+    the read; same shape as `get_param_default`."""
+    annotation: object = p.annotation  # pyright: ignore[reportAny]
+    if annotation is inspect.Parameter.empty:
         return inspect.Parameter.empty
-    return p.annotation  # pyright: ignore[reportAny]
+    return annotation
 
 
 def get_param_default(p: inspect.Parameter) -> object:
