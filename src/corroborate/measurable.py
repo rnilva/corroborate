@@ -86,6 +86,11 @@ class Measurable[R: Mapping[str, object], T]:
 
     __slots__ = ('_fn', '_name', '_reads', '_fallbacks')
 
+    _fn: Callable[..., T]
+    _name: str
+    _reads: tuple[str, ...]
+    _fallbacks: tuple['Measurable[R, T]', ...]
+
     def __init__(
         self,
         fn: Callable[..., T],

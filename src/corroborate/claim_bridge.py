@@ -51,8 +51,8 @@ import sys
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import cast
 
+from corroborate._introspection_boundary import get_param_default
 from corroborate.analysis import resolve_for_holds_when
 from corroborate.hypothesis import PredictedDirection
 from corroborate.intervention import DoEffect
@@ -245,18 +245,25 @@ def _require_tier(value: object, fn_name: str) -> Tier:
 def _require_predicted_direction(
     value: object, fn_name: str,
 ) -> PredictedDirection | None:
+    # Literal-by-literal narrowing — pyright narrows on `==
+    # 'literal'` comparisons. Same pattern as
+    # `_narrow.optional_direction` and `require_verdict`. Avoids a
+    # `cast` at the end (which would smuggle the runtime
+    # set-membership check past the type system).
     if value is None:
         return None
-    if (not isinstance(value, str)
-            or value not in _PREDICTED_DIRECTION_VALUES):
-        raise TypeError(
-            f'@claim_bridge {fn_name!r}: default for '
-            f'`predicted_direction` must be one of '
-            f"{sorted(_PREDICTED_DIRECTION_VALUES)!r} (or None); "
-            f'got {value!r}',
-        )
-    # `value` is now provably a member of the literal set.
-    return cast(PredictedDirection, value)
+    if value == 'a_gt_b':
+        return 'a_gt_b'
+    if value == 'a_lt_b':
+        return 'a_lt_b'
+    if value == 'two_sided':
+        return 'two_sided'
+    raise TypeError(
+        f'@claim_bridge {fn_name!r}: default for '
+        f'`predicted_direction` must be one of '
+        f"{sorted(_PREDICTED_DIRECTION_VALUES)!r} (or None); "
+        f'got {value!r}',
+    )
 
 
 def claim_bridge(
@@ -328,7 +335,7 @@ def claim_bridge(
         # parameters are fixtures resolved at evaluate time.
         params: dict[str, object] = {}
         for param_name, param in sig.parameters.items():
-            default = cast(object, param.default)
+            default = get_param_default(param)
             if default is inspect.Parameter.empty:
                 continue
             params[param_name] = default

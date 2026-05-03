@@ -38,6 +38,17 @@ def is_mapping_str_object(v: object) -> TypeIs[Mapping[str, object]]:
     return isinstance(v, Mapping)
 
 
+def is_tuple_of_int(v: object) -> TypeIs[tuple[int, ...]]:
+    """TypeIs predicate narrowing `object` to `tuple[int, ...]`.
+    Excludes `bool` per `int`-vs-`bool` subclass relationship —
+    `True/False` would otherwise pass an `isinstance(_, int)` check
+    and corrupt downstream consumers expecting a true int."""
+    return (
+        isinstance(v, tuple)
+        and all(isinstance(s, int) and not isinstance(s, bool) for s in v)
+    )
+
+
 # ============ Required / optional field accessors ============
 
 def require_str(d: Mapping[str, object], key: str) -> str:

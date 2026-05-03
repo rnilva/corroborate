@@ -22,7 +22,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, TypeIs, cast
+from typing import Literal, TypeIs
 
 from corroborate._yaml_boundary import safe_load as _yaml_load
 
@@ -350,17 +350,19 @@ def dispatch_sweep(sweep: DQNSweep) -> tuple[Path, Path]:
 
     reg = default_dqn_registry()
     if sweep.arms_shape == 'chunked':
-        built = sweep.build_hypotheses(reg=reg)
-        hypotheses_dqn: list[Hypothesis[DQNTrajectoryRecord]] = [
-            cast(Hypothesis[DQNTrajectoryRecord], h) for h in built
-        ]
+        # `build_hypotheses` returns `Hypothesis[Mapping[str,
+        # object]]` (framework-generic); the substrate slot wants
+        # `Hypothesis[DQNTrajectoryRecord]`. Hypothesis.R is
+        # contravariant (regular-class + @property form), so the
+        # wider-R framework-generic IS assignable to the narrower-R
+        # substrate type without a `cast`.
+        hypotheses_dqn: list[Hypothesis[DQNTrajectoryRecord]] = list(
+            sweep.build_hypotheses(reg=reg),
+        )
         arms = chunked_arms(hypotheses_dqn, sweep.envs)
     else:
         built_paired, envs_aligned = build_paired(sweep, reg=reg)
-        hypotheses_dqn = [
-            cast(Hypothesis[DQNTrajectoryRecord], h)
-            for h in built_paired
-        ]
+        hypotheses_dqn = list(built_paired)
         arms = paired_arms(hypotheses_dqn, envs_aligned)
 
     env_specs = {

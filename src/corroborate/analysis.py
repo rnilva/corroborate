@@ -48,6 +48,7 @@ from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from typing import cast
 
+from corroborate._introspection_boundary import get_param_default
 from corroborate._registry import Registry
 
 
@@ -171,8 +172,7 @@ def resolve_for_holds_when(
     out: dict[str, object] = {}
     cells_list = list(cells)
     for param_name, param in sig.parameters.items():
-        # `inspect.Parameter.default` is Any per typeshed.
-        default = cast(object, param.default)
+        default = get_param_default(param)
         if default is not inspect.Parameter.empty:
             # Metadata kwarg — already bound as the function's
             # default; no fixture to resolve.

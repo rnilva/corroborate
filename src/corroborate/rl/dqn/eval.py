@@ -222,9 +222,14 @@ def train_with_eval(
     n_super_steps = total_steps // eval_every
 
     # Inner loop: re-bind the backend's `T` to `StepRecord` (the
-    # training step's per-step output). `Loop` is parametric in T,
-    # so the same `loop` instance satisfies both bindings.
-    inner_loop: Loop[DQNState, StepRecord, jax.Array] = loop  # pyright: ignore[reportAssignmentType]
+    # training step's per-step output). `Loop` is genuinely
+    # parametric in T at the value level (`scan_loop[C, T]` is
+    # generic; the same instance type-checks at any T binding), but
+    # Python's type system can't express a callable that re-binds
+    # T per call site without higher-kinded polymorphism.
+    # `cast` is the documented escape hatch — same Loop instance,
+    # different T binding for the inner-vs-outer call.
+    inner_loop = cast('Loop[DQNState, StepRecord, jax.Array]', loop)
 
     def super_step(
         s: DQNState, super_idx: jax.Array,

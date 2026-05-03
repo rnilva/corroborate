@@ -32,8 +32,7 @@ wraps `run_dqn_sweep` for that."""
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import cast
-
+from corroborate._narrow import is_tuple_of_int
 from corroborate.hypothesis import Hypothesis
 from corroborate.rl.cell_runner import run_dqn_arm
 from corroborate.rl.dqn.invariants import DQNTrajectoryRecord
@@ -79,15 +78,12 @@ class DQNRunner:
                 f"got {type(env_name).__name__}",
             )
         seeds_v = grid_point['seeds']
-        if not (
-            isinstance(seeds_v, tuple)
-            and all(isinstance(s, int) and not isinstance(s, bool) for s in seeds_v)
-        ):
+        if not is_tuple_of_int(seeds_v):
             raise TypeError(
                 f"DQNRunner: grid_point['seeds'] must be tuple[int, ...], "
                 f"got {type(seeds_v).__name__}",
             )
-        seeds = cast(tuple[int, ...], seeds_v)
+        seeds = seeds_v
         unexpected = set(grid_point) - {'env_name', 'seeds', 'wrappers'}
         if unexpected:
             raise ValueError(

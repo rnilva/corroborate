@@ -44,8 +44,7 @@ suitable as a group-by key."""
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, override
 
 from corroborate._canonical import canonical_str
 from corroborate.intervention import Intervention, combined_arm_key
@@ -75,7 +74,6 @@ sign (DIRECT / INVERSE) inferred post-hoc from a stat's value.
 PredictedDirection is the prior; Direction is the posterior."""
 
 
-@dataclass(frozen=True, slots=True)
 class Hypothesis[R: Mapping[str, object]]:
     """A research hypothesis: an intervention plus the typed
     causal subgraph (bridge edges) the intervention claims.
@@ -118,21 +116,74 @@ class Hypothesis[R: Mapping[str, object]]:
     different shapes (`(T,)` per-step training fields,
     `(n_bursts, K)` per-burst eval fields). Bridges read whichever
     keys they care about; the record's structure is the substrate
-    author's call."""
-    name: str
-    intervention: Mapping[str, object]
-    predicted_direction: PredictedDirection | None = None
-    intervention_arms: tuple[Intervention, ...] = field(default_factory=tuple)
-    edges: tuple['ClaimBridge', ...] = field(default_factory=tuple)
-    measurables: tuple[Measurable[R, object], ...] = field(
-        default_factory=tuple,
+    author's call.
+
+    **Variance.** Field access is via `@property` (not bare
+    dataclass attrs) so PEP 695 inference lands `R` contravariant
+    — `Measurable[R, object]` is contravariant in R (post the
+    Measurable refactor), and the recursive `tuple` field is
+    covariant in element. A `Hypothesis[Mapping[str, object]]`
+    (framework-built generic) is therefore assignable to a slot
+    expecting `Hypothesis[DQNTrajectoryRecord]` (substrate-typed),
+    no `cast` needed at the substrate boundary."""
+
+    __slots__ = (
+        '_name', '_intervention', '_predicted_direction',
+        '_intervention_arms', '_edges', '_measurables',
     )
+
+    _name: str
+    _intervention: Mapping[str, object]
+    _predicted_direction: PredictedDirection | None
+    _intervention_arms: tuple[Intervention, ...]
+    _edges: tuple['ClaimBridge', ...]
+    _measurables: tuple[Measurable[R, object], ...]
+
+    def __init__(
+        self,
+        name: str,
+        intervention: Mapping[str, object],
+        predicted_direction: PredictedDirection | None = None,
+        intervention_arms: tuple[Intervention, ...] = (),
+        edges: tuple['ClaimBridge', ...] = (),
+        measurables: tuple[Measurable[R, object], ...] = (),
+    ) -> None:
+        self._name = name
+        self._intervention = intervention
+        self._predicted_direction = predicted_direction
+        self._intervention_arms = intervention_arms
+        self._edges = edges
+        self._measurables = measurables
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def intervention(self) -> Mapping[str, object]:
+        return self._intervention
+
+    @property
+    def predicted_direction(self) -> PredictedDirection | None:
+        return self._predicted_direction
+
+    @property
+    def intervention_arms(self) -> tuple[Intervention, ...]:
+        return self._intervention_arms
+
+    @property
+    def edges(self) -> tuple['ClaimBridge', ...]:
+        return self._edges
+
+    @property
+    def measurables(self) -> tuple[Measurable[R, object], ...]:
+        return self._measurables
 
     def edges_by_target(self, target: str) -> tuple['ClaimBridge', ...]:
         """All typed edges whose `target` matches `target`. The
         primary lookup after the role-enum subtraction — consumers
         select on the path, not on a paper-narrative name."""
-        return tuple(e for e in self.edges if e.target == target)
+        return tuple(e for e in self._edges if e.target == target)
 
     def intervention_edges(self) -> tuple['ClaimBridge', ...]:
         """Edges whose `intervention is not None` — the rung-2
@@ -141,14 +192,14 @@ class Hypothesis[R: Mapping[str, object]]:
         scope-distinction (mechanism vs outcome) is recoverable
         from `target` namespace or claim-graph topology, not from
         a per-edge enum."""
-        return tuple(e for e in self.edges if e.intervention is not None)
+        return tuple(e for e in self._edges if e.intervention is not None)
 
     def coupling_edges(self) -> tuple['ClaimBridge', ...]:
         """Edges whose `intervention is None` — measurement-to-
         measurement coupling edges (formerly `role='link'`).
         Tested via cross-stratum Pearson r over the per-group
         effect sizes of the source and target paths."""
-        return tuple(e for e in self.edges if e.intervention is None)
+        return tuple(e for e in self._edges if e.intervention is None)
 
     def arm_key(self) -> str:
         """Canonical fingerprint of the typed `intervention_arms`.
@@ -158,4 +209,39 @@ class Hypothesis[R: Mapping[str, object]]:
         Two hypotheses with same arms but different HP grid
         points share one `arm_key()`; HP variation is a covariate,
         not an arm distinguisher."""
-        return combined_arm_key(self.intervention_arms)
+        return combined_arm_key(self._intervention_arms)
+
+    @override
+    def __repr__(self) -> str:
+        return (
+            f'Hypothesis(name={self._name!r}, '
+            f'intervention={self._intervention!r}, '
+            f'predicted_direction={self._predicted_direction!r}, '
+            f'intervention_arms={self._intervention_arms!r}, '
+            f'edges={self._edges!r}, '
+            f'measurables={self._measurables!r})'
+        )
+
+    @override
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Hypothesis):
+            return NotImplemented
+        return (
+            self._name == other._name
+            and self._intervention == other._intervention
+            and self._predicted_direction == other._predicted_direction
+            and self._intervention_arms == other._intervention_arms
+            and self._edges == other._edges
+            and self._measurables == other._measurables
+        )
+
+    @override
+    def __hash__(self) -> int:
+        return hash((
+            self._name,
+            tuple(sorted(self._intervention.items())),
+            self._predicted_direction,
+            self._intervention_arms,
+            self._edges,
+            self._measurables,
+        ))
