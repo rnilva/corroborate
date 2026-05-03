@@ -35,13 +35,25 @@ from __future__ import annotations
 import json
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from pathlib import Path
+from typing import Literal
 
 import polars as pl
 
-import pyarrow as pa
-import pyarrow.parquet as pq
+# Mirrors polars' private `ParquetCompression` alias (which sits in
+# `polars._typing` — not part of the public surface). Inlining keeps
+# our signature stable across polars internal renames and lets the
+# checker reject typos at the call boundary.
+ParquetCompression = Literal[
+    'lz4', 'uncompressed', 'snappy', 'gzip', 'brotli', 'zstd',
+]
 
-from corroborate._polars_boundary import to_dicts as _to_dicts
+from corroborate._json_boundary import loads as _json_loads
+from corroborate._narrow import is_mapping_str_object
+from corroborate._polars_boundary import (
+    iter_dicts as _iter_dicts,
+    scalar_int as _scalar_int,
+    to_dicts as _to_dicts,
+)
 from corroborate.computation_graph import (
     ComputationEdge,
     ComputationGraph,
@@ -162,21 +174,14 @@ def iter_trace_records(
     else:
         proj = None
 
-    n_rows = pl.scan_parquet(parquet_path).select(
-        pl.len(),
-    ).collect().item()
-    if not isinstance(n_rows, int):
-        raise TypeError(
-            f'expected int row count from parquet, got {type(n_rows)}',
-        )
+    n_rows = _scalar_int(pl.scan_parquet(parquet_path), pl.len())
 
     for start in range(0, n_rows, batch_size):
         lf = pl.scan_parquet(parquet_path)
         if proj is not None:
             lf = lf.select(proj)
         df = lf.slice(start, batch_size).collect()
-        for row in df.iter_rows(named=True):
-            yield row
+        yield from _iter_dicts(df)
 
 
 # ============ Polars-expr post-trace reductions ============
@@ -226,7 +231,7 @@ def apply_trace_reductions(
 def stream_concat_parquets(
     inputs: Sequence[Path | str], out: Path, *,
     type_widening: bool = True,
-    compression: str = 'zstd',
+    compression: ParquetCompression = 'zstd',
     compression_level: int = 3,
     chunk_size: int = 4,
 ) -> None:
@@ -407,19 +412,15 @@ def read_graphs_sidecar(path: Path) -> dict[str, ComputationGraph]:
     omit it transparently."""
     if not path.exists():
         return {}
-    raw = json.loads(path.read_text())
-    if not isinstance(raw, dict):
+    raw = _json_loads(path.read_text())
+    if not is_mapping_str_object(raw):
         raise TypeError(
             f'graphs sidecar at {path} must be a JSON object, '
             f'got {type(raw).__name__}',
         )
     out: dict[str, ComputationGraph] = {}
     for arm_key, spec in raw.items():
-        if not isinstance(arm_key, str):
-            raise TypeError(
-                f'graphs sidecar keys must be str, got {type(arm_key).__name__}',
-            )
-        if not isinstance(spec, dict):
+        if not is_mapping_str_object(spec):
             raise TypeError(
                 f'graphs sidecar value for {arm_key!r} must be an '
                 f'object, got {type(spec).__name__}',

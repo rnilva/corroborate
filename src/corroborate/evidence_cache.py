@@ -43,6 +43,10 @@ from typing import cast
 import numpy as np
 import polars as pl
 
+from corroborate._polars_boundary import (
+    is_list_of_list as _is_list_of_list,
+    iter_dicts as _iter_dicts,
+)
 from corroborate.claim_bridge import Bridge, measurable_names_for_bridges
 from corroborate.measurable import (
     evaluate_with_measurables, get_registered, transitive_reads,
@@ -167,7 +171,7 @@ def build_cache(
             f'{"..." if len(names_skipped) > 8 else ""}',
         )
     new_cols: dict[str, list[object]] = {n: [] for n in names_to_compute}
-    for cell in df.iter_rows(named=True):
+    for cell in _iter_dicts(df):
         cache: dict[str, object] = {}
         for n in names_to_compute:
             m = get_registered(n)
@@ -203,12 +207,10 @@ def build_cache(
     for c in df.columns:
         if c in runs_col_set or c == 'id':
             continue
-        if not isinstance(df.schema[c], pl.List):
-            continue
-        # 2-D = `List(List(<scalar>))`; 1-D = `List(<scalar>)`.
-        # Polars exposes nested-list dtype via the inner type.
-        inner = df.schema[c].inner  # pyright: ignore[reportAttributeAccessIssue]
-        if isinstance(inner, pl.List):
+        # 2-D = `List(List(<scalar>))` is what we preserve; 1-D
+        # `List(<scalar>)` is dropped (per-step trajectories that
+        # inflate the cache).
+        if _is_list_of_list(df, c):
             preserve_trace_cols.append(c)
     if preserve_trace_cols:
         enriched = (
