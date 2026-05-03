@@ -693,8 +693,14 @@ def bootstrap_fraction_drives_g_link__net_of_dormancy(
          if c.name == 'bootstrap_fraction'),
         None,
     )
+    # `coef is None` means the covariate was dropped by the
+    # regression — typically because it was all-NaN at the cells
+    # available (e.g. `bootstrap_fraction` reads the per-step
+    # `done` trace which isn't joined into the runner's cache).
+    # That's a data-availability gap, not "no signal", so call
+    # POWER_INSUFFICIENT rather than silently NO_EFFECT.
     if coef is None:
-        return Verdict.NO_EFFECT
+        return Verdict.POWER_INSUFFICIENT
     if not coef.is_significant:
         return Verdict.POWER_INSUFFICIENT
     if coef.coefficient >= 1.0:
