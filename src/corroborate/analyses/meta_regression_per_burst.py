@@ -38,7 +38,7 @@ from corroborate.meta_regression import (
 from corroborate.stratum import StratumG
 
 
-@analysis
+@analysis(reads=('mc_return', 'predicted_q_at_start'))
 def meta_regression_per_burst(
     cells: Iterable[Mapping[str, object]],
     *,

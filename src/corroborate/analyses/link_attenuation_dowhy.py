@@ -201,7 +201,7 @@ def _nan_refutation(
     )
 
 
-@analysis
+@analysis(reads=('mc_return', 'predicted_q_at_start'))
 def link_attenuation_dowhy(
     cells: Iterable[Mapping[str, object]],
     *,

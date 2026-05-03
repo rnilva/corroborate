@@ -62,7 +62,7 @@ def _per_env_burst_predictor_mean(
     return float(np.mean(vals)) if vals else float('nan')
 
 
-@analysis
+@analysis(reads=('mc_return', 'predicted_q_at_start'))
 def mundlak_paired_g_per_burst(
     cells: Iterable[Mapping[str, object]],
     *,

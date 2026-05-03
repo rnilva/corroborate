@@ -96,7 +96,7 @@ def _pearson_r_p_slope(
     return r, p, slope
 
 
-@analysis
+@analysis(reads=('mc_return', 'predicted_q_at_start'))
 def paired_link_per_burst(
     cells: Iterable[Mapping[str, object]],
     *,

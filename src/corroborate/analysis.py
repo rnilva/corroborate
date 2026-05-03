@@ -45,8 +45,8 @@ from __future__ import annotations
 
 import inspect
 from collections.abc import Callable, Iterable, Mapping
-from dataclasses import dataclass
-from typing import cast
+from dataclasses import dataclass, field
+from typing import cast, overload
 
 from corroborate._introspection_boundary import get_param_default
 from corroborate._registry import Registry
@@ -58,9 +58,18 @@ class Analysis[R: Mapping[str, object], O]:
     corpus as its first positional argument plus keyword
     parameters that the bridge populates at run time. `O` is the
     typed result the bridge `holds_when` consumes; `name` is the
-    lookup key (= `fn.__name__`)."""
+    lookup key (= `fn.__name__`).
+
+    `reads` declares record-key columns the analysis touches off
+    the cell record directly (i.e. `cell['mc_return']`-style),
+    BYPASSING the @measurable resolver. The runner unions these
+    with bridge measurables' transitive_reads so the trace-column
+    join + the no-drop set know what to bring in. Scalar fields
+    already present in `runs.parquet` (`env_name`, `seed`, …) do
+    NOT need to be declared — they're loaded for free."""
     fn: Callable[..., O]
     name: str
+    reads: tuple[str, ...] = field(default=())
 
 
 _REGISTRY: Registry[Analysis[Mapping[str, object], object]] = Registry()
@@ -78,9 +87,24 @@ def registered_names() -> tuple[str, ...]:
     return _REGISTRY.names()
 
 
+@overload
 def analysis[R: Mapping[str, object] = Mapping[str, object], O = object](
-    fn: Callable[..., O],
-) -> Analysis[R, O]:
+    fn: Callable[..., O], /,
+) -> Analysis[R, O]: ...
+
+
+@overload
+def analysis[R: Mapping[str, object] = Mapping[str, object], O = object](
+    *, reads: tuple[str, ...] = (),
+) -> Callable[[Callable[..., O]], Analysis[R, O]]: ...
+
+
+def analysis[R: Mapping[str, object] = Mapping[str, object], O = object](
+    fn: Callable[..., O] | None = None,
+    /,
+    *,
+    reads: tuple[str, ...] = (),
+) -> Analysis[R, O] | Callable[[Callable[..., O]], Analysis[R, O]]:
     """Register `fn` as a framework analysis. Name is taken from
     `fn.__name__`; rename the function to rename the analysis.
 
@@ -91,18 +115,39 @@ def analysis[R: Mapping[str, object] = Mapping[str, object], O = object](
     defaults (PEP 696) keep `paired_g`, `paired_g_per_burst`, etc.
     callable from standalone analysis scripts as
     `Analysis[Mapping[str, object], <Result>]` rather than
-    `Analysis[Unknown, <Result>]`."""
-    name = fn.__name__
-    wrapper: Analysis[R, O] = Analysis(fn=fn, name=name)
-    # `Registry[Analysis[Mapping[str, object], object]]` accepts
-    # this generic-parameter narrowing at the storage boundary;
-    # the `cast` lifts `Analysis[R, O]` through Python's
-    # invariant-generic constraint without a `# type: ignore`.
-    _REGISTRY.register(
-        name,
-        cast('Analysis[Mapping[str, object], object]', wrapper),
-    )
-    return wrapper
+    `Analysis[Unknown, <Result>]`.
+
+    Two decorator forms:
+
+        @analysis
+        def paired_g(cells, *, ...) -> PairedGResult: ...
+
+        @analysis(reads=('mc_return', 'predicted_q_at_start'))
+        def paired_link_per_burst(cells, *, ...) -> ...: ...
+
+    `reads` declares trace-store record-keys the analysis touches
+    directly (without going through the @measurable resolver). The
+    runner uses this to decide which trace columns to load from
+    `traces.parquet` and to KEEP after the per-corpus measurable
+    compute step (otherwise the trace data goes away before the
+    analysis sees it)."""
+
+    def _build(fn_inner: Callable[..., O]) -> Analysis[R, O]:
+        name = fn_inner.__name__
+        wrapper: Analysis[R, O] = Analysis(fn=fn_inner, name=name, reads=reads)
+        # `Registry[Analysis[Mapping[str, object], object]]` accepts
+        # this generic-parameter narrowing at the storage boundary;
+        # the `cast` lifts `Analysis[R, O]` through Python's
+        # invariant-generic constraint without a `# type: ignore`.
+        _REGISTRY.register(
+            name,
+            cast('Analysis[Mapping[str, object], object]', wrapper),
+        )
+        return wrapper
+
+    if fn is None:
+        return _build
+    return _build(fn)
 
 
 def _kwargs_for(

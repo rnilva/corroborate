@@ -200,7 +200,7 @@ def _nan_refutation(
     )
 
 
-@analysis
+@analysis(reads=('mc_return', 'predicted_q_at_start'))
 def paired_delta_link_dowhy(
     cells: Iterable[Mapping[str, object]],
     *,

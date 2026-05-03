@@ -56,6 +56,7 @@ from typing import Protocol, cast, runtime_checkable
 
 import polars as pl
 
+from corroborate.analysis import get_registered as _get_analysis
 from corroborate.claim_bridge import (
     Bridge,
     BridgeEvaluation,
@@ -347,7 +348,8 @@ def _ingest_and_compute(
     cache = _load_cache(cache_path)
     cache = _invalidate_drifted(cache, stored_manifest, required)
     new_data = _load_data(
-        data, restore_from_cloud=restore_from_cloud, required=required,
+        data, restore_from_cloud=restore_from_cloud,
+        required=required, bridges=bridges,
     )
 
     if new_data is None or new_data.height == 0:
@@ -507,6 +509,7 @@ def _load_data(
     *,
     restore_from_cloud: bool,
     required: Sequence[str],
+    bridges: tuple[Bridge, ...],
 ) -> pl.DataFrame | None:
     """Resolve data into a DataFrame, with auto-restore on missing-
     raw corpora when given a directory."""
@@ -521,25 +524,12 @@ def _load_data(
         p = Path.cwd() / p
     if p.is_dir():
         return _load_directory(
-            p, restore_from_cloud=restore_from_cloud, required=required,
+            p, restore_from_cloud=restore_from_cloud,
+            required=required, bridges=bridges,
         )
     if p.is_file():
         return pl.read_parquet(p)
     raise FileNotFoundError(f'no such data path: {data}')
-
-
-# Per-burst trace columns small enough to persist in the cache —
-# downstream analyses (`paired_g_per_burst`, `paired_link_per_burst`,
-# `link_attenuation_dowhy`, …) read them directly off the cell
-# record, bypassing the @measurable resolver, so we can't drop
-# them after the per-corpus compute step. Per-step columns
-# (`done`, `online_std_q_per_step`, `pearson_stats`, …) blow up
-# the cache by orders of magnitude and ARE dropped.
-_PERSIST_AFTER_COMPUTE: frozenset[str] = frozenset({
-    'mc_return',
-    'predicted_q_at_start',
-    'episode_length',
-})
 
 
 def _required_record_keys(required: Sequence[str]) -> frozenset[str]:
@@ -562,24 +552,68 @@ def _required_record_keys(required: Sequence[str]) -> frozenset[str]:
     return frozenset(out)
 
 
+def _analysis_reads_for_bridges(
+    bridges: tuple[Bridge, ...],
+) -> frozenset[str]:
+    """Union of `Analysis.reads` for every analysis a bridge in
+    `bridges` consumes. The bridge's holds_when fixture-parameter
+    names ARE the analysis names — so we walk those.
+
+    These reads are columns the analyses touch off the cell record
+    DIRECTLY (e.g. `cell['mc_return']` in `paired_link_per_burst`),
+    bypassing the @measurable resolver. The runner unions them
+    with the measurables' transitive reads to decide what to load
+    from `traces.parquet`, AND keeps them through the per-corpus
+    drop step so the analyses can find them at evaluate time."""
+    import inspect as _inspect
+
+    from corroborate._introspection_boundary import get_param_default
+
+    out: set[str] = set()
+    for b in bridges:
+        if b.holds_when is None:
+            continue
+        try:
+            sig = _inspect.signature(b.holds_when)
+        except (ValueError, TypeError):
+            continue
+        for name, param in sig.parameters.items():
+            if get_param_default(param) is not _inspect.Parameter.empty:
+                continue
+            ar = _get_analysis(name)
+            if ar is None:
+                continue
+            out.update(ar.reads)
+    return frozenset(out)
+
+
 def _load_directory(
     root: Path,
     *,
     restore_from_cloud: bool,
     required: Sequence[str],
+    bridges: tuple[Bridge, ...],
 ) -> pl.DataFrame:
     """Walk subdirs of `root`; for each subdir's `runs.parquet`,
-    load it, join the trace columns the required measurables
-    transitively read, compute the measurables, then DROP the
-    trace columns before merging.
+    load it, join the trace columns required by:
+
+    - measurables' transitive `reads` (the @measurable resolver
+      consumes these at compute time), AND
+    - analyses' declared `reads` (consumed directly off the cell
+      record by the analysis fn at bridge-evaluate time)
+
+    Then compute the measurables (so the heavy-trace-input ones
+    like `bootstrap_fraction` get filled in WHILE traces are in
+    scope) and DROP the measurable-only trace columns before
+    merging. Columns the analyses declared via `Analysis.reads`
+    survive the drop — the analyses need them at evaluate time.
 
     The drop step is load-bearing: per-step trace columns
     (`done`, `online_std_q_per_step`, …) can be GBs per cell, so
-    keeping them across the diagonal_relaxed concat would OOM.
-    Computing measurables per-corpus while traces are in scope,
-    then dropping the heavy columns, lets the merged cache stay
-    scalar-only."""
-    trace_reads = _required_record_keys(required)
+    keeping them across the diagonal_relaxed concat would OOM."""
+    measurable_reads = _required_record_keys(required)
+    analysis_reads = _analysis_reads_for_bridges(bridges)
+    trace_reads = measurable_reads | analysis_reads
     frames: list[pl.DataFrame] = []
     for sub in sorted(root.iterdir()):
         if not sub.is_dir():
@@ -612,16 +646,15 @@ def _load_directory(
         # are in scope. Subsequent calls on the merged frame are
         # no-ops because the scalar columns are already filled.
         df = _compute_measurables(df, required)
-        # Drop the heavy per-step trace columns we joined for
-        # measurable computation, but keep the small per-burst
-        # arrays (`_PERSIST_AFTER_COMPUTE`) — analyses like
-        # `paired_link_per_burst` read those off the cell record
-        # directly, bypassing the @measurable resolver.
+        # Drop the heavy trace columns we joined ONLY for
+        # measurable computation. Columns analyses declared via
+        # `Analysis.reads` survive — those analyses read off the
+        # cell record at evaluate time, after the cache load.
         joined_trace_cols = [
             c for c in df.columns
             if c in trace_reads
             and c not in runs_columns
-            and c not in _PERSIST_AFTER_COMPUTE
+            and c not in analysis_reads
         ]
         if joined_trace_cols:
             df = df.drop(joined_trace_cols)

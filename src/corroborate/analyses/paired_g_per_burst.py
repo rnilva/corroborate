@@ -89,7 +89,7 @@ def _key_tuple(
     return tuple(cell[k] for k in pair_by)
 
 
-@analysis
+@analysis(reads=('mc_return', 'predicted_q_at_start'))
 def paired_g_per_burst(
     cells: Iterable[Mapping[str, object]],
     *,
