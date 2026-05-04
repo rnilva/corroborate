@@ -25,6 +25,7 @@ from corroborate.bridge.bridge import Bridge, evaluate
 from corroborate.stats import MetaRegressionResult
 from corroborate.bridge.verdict import Verdict
 from experiments.findings.dqn_bridges import (
+    INTERVENTION,
     ddqn_reduces_jensen_gap__acrobot,
     ddqn_reduces_jensen_gap__cartpole,
     ddqn_reduces_jensen_gap__catch,
@@ -115,8 +116,11 @@ def test_audit_trail_carries_analysis_result(
     pg = out.analysis_results['paired_g']
     assert isinstance(pg, PairedGResult)
     assert pg.measurable == 'jensen_gap'
-    assert pg.treatment_arm == 'ddqn'
-    assert pg.baseline_arm == 'vanilla_dqn'
+    # Post-Phase-6: treatment/baseline arm strings are
+    # canonical_str fingerprints derived from the typed
+    # DoEffect's Intervention tuples.
+    assert pg.treatment_arm == INTERVENTION.treatment_arm_key()
+    assert pg.baseline_arm == INTERVENTION.baseline_arm_key()
 
 
 # ============ Meta-regression: log_action_dim moderates g_mech ============

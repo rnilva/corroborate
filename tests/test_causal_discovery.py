@@ -598,7 +598,13 @@ def test_pc_dqn_smoke_holds_on_migrated_corpus() -> None:
 
     df = pl.read_parquet(runs_path)
     df = df.with_columns(
-        (pl.col('arm_key') == 'ddqn')
+        # `arm_ddqn` is the binary one-hot of the DDQN arm. Post-
+        # Phase-6 the corpus's `arm_key` column carries
+        # `canonical_str(intervention_arms)`; the legacy
+        # `intervention_name` column is preserved (`'ddqn'` /
+        # `'vanilla_dqn'`) and is the canonical one-hot source for
+        # PC discovery tests like this one.
+        (pl.col('intervention_name') == 'ddqn')
         .cast(pl.Int64).alias('arm_ddqn'),
     )
     variables = [
@@ -662,7 +668,13 @@ def test_per_env_pc_dqn_smoke_finds_within_env_arm_edges() -> None:
 
     df = pl.read_parquet(runs_path)
     df = df.with_columns(
-        (pl.col('arm_key') == 'ddqn')
+        # `arm_ddqn` is the binary one-hot of the DDQN arm. Post-
+        # Phase-6 the corpus's `arm_key` column carries
+        # `canonical_str(intervention_arms)`; the legacy
+        # `intervention_name` column is preserved (`'ddqn'` /
+        # `'vanilla_dqn'`) and is the canonical one-hot source for
+        # PC discovery tests like this one.
+        (pl.col('intervention_name') == 'ddqn')
         .cast(pl.Int64).alias('arm_ddqn'),
     )
     variables = [
@@ -725,7 +737,13 @@ def test_per_env_mediator_pc_smoke_finds_outcome_neighbours() -> None:
 
     df = pl.read_parquet(enriched_path)
     df = df.with_columns(
-        (pl.col('arm_key') == 'ddqn')
+        # `arm_ddqn` is the binary one-hot of the DDQN arm. Post-
+        # Phase-6 the corpus's `arm_key` column carries
+        # `canonical_str(intervention_arms)`; the legacy
+        # `intervention_name` column is preserved (`'ddqn'` /
+        # `'vanilla_dqn'`) and is the canonical one-hot source for
+        # PC discovery tests like this one.
+        (pl.col('intervention_name') == 'ddqn')
         .cast(pl.Int64).alias('arm_ddqn'),
     )
     # Drop epsilon_late and fill_ratio_late — corpus-wide constants.
