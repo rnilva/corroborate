@@ -180,6 +180,23 @@ def needs_sanitisation(values: pl.Series) -> bool:
     return False
 
 
+def is_already_canonical(runs_path: Path) -> bool:
+    """Return True iff the corpus's `arm_key` column is already
+    in canonical_str form (idempotency check, no rewrite needed).
+
+    A canonical `arm_key` is either `'baseline'` (empty
+    intervention_arms) or contains `'='` (slot=replacement
+    fingerprint). Substrate-chosen short tokens (`'ddqn'`,
+    `'ddqn_g0999'`) match neither.
+
+    If the corpus has no `arm_key` column but has
+    `intervention_name`, it's NOT canonical (the older shape)."""
+    df = pl.read_parquet(runs_path)
+    if 'arm_key' not in df.columns:
+        return False
+    return not needs_sanitisation(df['arm_key'])
+
+
 def sanitise_one(
     runs_path: Path, name_to_canonical: Mapping[str, str],
 ) -> bool:
@@ -248,12 +265,30 @@ def main(argv: list[str]) -> None:
                 targets.append((d.name, runs))
 
     print(f'scanning {len(targets)} locally-present corpora.')
-    n_changed = n_clean = n_skipped = n_error = 0
+    n_changed = n_clean = n_legacy_no_yaml = n_error = 0
     for corpus_name, runs_path in targets:
+        # Idempotency check first — already-canonical corpora are
+        # no-ops regardless of YAML availability.
+        try:
+            if is_already_canonical(runs_path):
+                print(f'  {corpus_name}: clean (already canonical).')
+                n_clean += 1
+                continue
+        except Exception as e:  # noqa: BLE001
+            print(
+                f'  {corpus_name}: ERROR (canonical-check) '
+                f'{type(e).__name__}: {e}',
+            )
+            n_error += 1
+            continue
+        # Legacy corpus — needs YAML to derive name→canonical mapping.
         config = discover_config_for_corpus(corpus_name)
         if config is None:
-            print(f'  {corpus_name}: SKIP (no matching YAML config)')
-            n_skipped += 1
+            print(
+                f'  {corpus_name}: LEGACY (no YAML config — needs '
+                f'hand-authored name→canonical mapping)',
+            )
+            n_legacy_no_yaml += 1
             continue
         try:
             mapping = derive_name_to_canonical(config)
@@ -269,13 +304,24 @@ def main(argv: list[str]) -> None:
             )
             n_changed += 1
         else:
-            print(f'  {corpus_name}: clean (already canonical).')
+            # Idempotency check above should have caught this; if we
+            # get here, sanitise_one's no-rewrite path fired —
+            # report as clean.
+            print(f'  {corpus_name}: clean (no-op via {config.name}).')
             n_clean += 1
 
     print(
         f'\nsanitised {n_changed}, clean {n_clean}, '
-        f'skipped {n_skipped}, errors {n_error}.',
+        f'legacy-no-yaml {n_legacy_no_yaml}, errors {n_error}.',
     )
+    if n_legacy_no_yaml:
+        print(
+            'Legacy corpora without a YAML config need either '
+            'a reconstructed YAML in `experiments/configs/` or a '
+            'hand-authored name→canonical mapping. The substrate-'
+            'chosen short names in the corpus\'s `arm_key` /'
+            '`intervention_name` column are the keys to map.',
+        )
 
 
 if __name__ == '__main__':
