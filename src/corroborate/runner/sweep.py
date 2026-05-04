@@ -102,20 +102,25 @@ class SweepResult:
 
 class Runner[R: Mapping[str, object]](Protocol):
     """Substrate's bridge into corroborate.sweep. Receives one
-    composed Claim + its arm_key + the pre-registered measurables +
-    one exogenous-grid point; returns a `SweepCellResult` with
-    per-cell records + captured graph.
+    composed Claim + its arm_key + the (optional) measurables to
+    pre-register + one exogenous-grid point; returns a
+    `SweepCellResult` with per-cell records + captured graph.
 
     Protocol (not a bare Callable alias) so substrates can hold
     init state — e.g. the RL runner caches the env catalogue and
-    JIT-compiles once per arm, not once per grid point. Bare
-    functions still satisfy via their implicit `__call__`.
+    JIT-compiles once per arm, not once per grid point.
+
+    `measurables` is OPTIONAL: substrates that want certain
+    scalars baked into RunRow.measurements at sweep time pass them
+    here (the runner computes each per-record and persists them
+    under the measurable's `.name`). Substrates that compute
+    mediators post-sweep from raw traces leave it empty.
 
     The cell runner's contract:
     - Invoke `claim(...)` parameterised by `grid_point` to produce
       one record per seed/replicate.
-    - Compute each `Measurable` in `measurables` per record;
-      attach the scalar to `RunRow.measurements`.
+    - For each `Measurable` in `measurables`, compute and persist
+      the scalar at `RunRow.measurements[<measurable>.name]`.
     - Set `RunRow.arm_key = arm_key` on every emitted RunRow —
       arm identity is framework-derived (canonical_str of the
       Intervention tuple), NOT substrate-chosen."""
@@ -153,31 +158,28 @@ def run_intervention[R: Mapping[str, object]](
     over the discrete sequence `grid_points`; persist per-cell
     parquets; merge to a corpus.
 
-    This is the framework's rung-2 `do()` operator at the corpus
-    level. It's a sweep-time primitive — its inputs are sweep-
-    time inputs (intervention + measurables + base + grid_points
-    + runner). Bridges are NOT consumed here; bridges are
-    verdict-time concerns (`runner.run_module`).
-
-    Per grid point, the runner is invoked twice — once for the
-    treatment claim (`apply_interventions(base, intervention.treatment)`)
-    and once for the baseline claim
-    (`apply_interventions(base, intervention.baseline)`). Pairing
-    is intrinsic: treatment and baseline cells at the same
-    `grid_point` ARE matched by construction.
+    The framework's rung-2 `do()` operator at the corpus level.
+    A sweep-time primitive: its job is to compose treatment +
+    baseline claims via `apply_interventions(base,
+    intervention.treatment / .baseline)` and dispatch each
+    (claim, arm_key, measurables, grid_point) to `runner`.
+    Pairing is intrinsic — treatment and baseline cells at the
+    same `grid_point` ARE matched by construction.
 
     `base` is the substrate's theory pre-bound with HPs (e.g.
     `partial(dqn, gamma=0.99, lr=1e-3, total_steps=200_000, ...)`).
     The framework does not introspect or modify it; it just
     threads it through `apply_interventions`. HPs are substrate-
-    side; they live on `base` — never on the
-    `intervention` tuple, per the leaves-as-covariates discipline.
+    side; they live on `base` — never on the `intervention`
+    tuple, per the leaves-as-covariates discipline.
 
-    `measurables` is the (typically empty) tuple of pre-registered
-    Measurable instances the substrate's runner persists per cell.
-    Substrates that compute mediators post-sweep from raw traces
-    leave this empty; substrates that want eagerly-computed
-    scalars per cell pass them here.
+    `measurables` is OPTIONAL: pre-registered Measurable instances
+    the substrate's runner persists per cell at sweep time
+    (typically used to bake outcome reductions or cheap-to-compute
+    scalars into RunRow.measurements alongside the leaf
+    fingerprint). Substrates that compute mediators post-sweep
+    from raw traces leave this empty; substrates that want
+    eagerly-computed scalars baked into the corpus pass them.
 
     `grid_points` is a discrete sequence of grid_point dicts —
     NOT a Cartesian-product mapping. Substrates that want
