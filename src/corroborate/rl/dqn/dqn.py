@@ -246,10 +246,46 @@ def dqn(
     (rollout / train / eval).
 
     Hypothesis intervention names this claim's kwargs directly:
-    `intervention={'bootstrap': partial(bootstrap, greedification=
-    double_greedify), 'gamma': 0.95}` is just `partial(dqn,
-    **intervention)`. `Annotated[..., Exogenous]` markers tell
-    the framework which kwargs are NOT intervention surface.
+    `partial(dqn, **intervention)`. `Annotated[..., Exogenous]`
+    markers declare which kwargs are NOT intervention surface
+    (env, rng_key, etc.); everything else is interventionable.
+
+    **Intervention cookbook.** Each kwarg's value-shape depends
+    on whether the slot is a config bundle or a Free Claim — but
+    the substitution syntax is always "name the kwarg, supply the
+    alternative." Five canonical patterns:
+
+        # 1. Cross-cutting scalar HP — pass the value directly.
+        intervention = {'gamma': 0.95}
+
+        # 2. Config bundle — instantiate with the new field.
+        # `MLP`, `CNN`, `Replay` are frozen dataclasses; pass an
+        # instance. `replace(MLP(), hidden=...)` is equivalent.
+        intervention = {'q_network': MLP(hidden=(128,))}
+        intervention = {'replay': Replay(capacity=50_000)}
+
+        # 3. Free Claim with sub-slot — bake the sub-slot via
+        # `partial`. The walker recurses into the partial and
+        # surfaces the sub-leaf at composition time.
+        intervention = {'bootstrap': partial(
+            bootstrap, greedification=double_greedify)}
+        intervention = {'action_select': partial(
+            epsilon_greedy, schedule=cosine_epsilon)}
+
+        # 4. Free Claim factory — `partial(factory, **leaves)`.
+        # Same pattern as (3); the factory returns a runtime
+        # handle (e.g. `optax.GradientTransformation`).
+        intervention = {'optimizer': partial(rmsprop, lr=2.5e-4)}
+
+        # 5. Wholesale Free Claim swap — supply a different
+        # `@claim` function. Loss / target_sync / etc. are pure
+        # Free Claims; just hand over a sibling.
+        intervention = {'loss_fn': huber_loss}
+        intervention = {'target_sync': polyak_average}
+
+    Combine freely: `Hypothesis(name='ddqn_lower_gamma',
+    intervention={'bootstrap': partial(bootstrap, greedification=
+    double_greedify), 'gamma': 0.95}, ...)`.
 
     Raises `ValueError` if `total_steps` isn't a multiple of
     `eval_every`."""

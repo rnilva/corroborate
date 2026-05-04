@@ -137,48 +137,66 @@ configuration; "HP" leaks domain jargon into framework semantics.
 Substrate code is welcome to say "HP" in its own docs/comments
 (it's the reader's vocabulary). Framework code does not.
 
-## Three-way claim taxonomy
+## Two primitive shapes
 
-The framework supports three categories of authored entities;
-which one applies depends on whether something has theoretical
-content and at what shape:
+Substrate authoring uses two shapes; which one applies depends on
+whether the entity has theoretical content and whether it carries
+construction-time configuration:
 
-1. **Module Claim** — a frozen-dataclass `ClaimBase` subclass
-   with a single `__call__` that IS the theoretical claim.
-   `__call__` records itself via `record_call`; the Module bundles
-   construction-time leaves. Used for things with one primary
-   end-to-end operation.
-   *Examples: `Adam`, `MLP`, `EpsilonGreedy`, `WarmedUpdate`.*
-   `dqn` itself (a `@claim`'d free function) sits here too,
-   wrapped as `FnClaim`.
-
-2. **Free Claim** — a top-level `@claim`-decorated function. The
+1. **Free Claim** — a top-level `@claim`-decorated function. The
    `FnClaim` wrapper auto-records calls; the function IS the
-   theoretical operation, no Module wrapper needed.
+   theoretical operation, no class needed. Bake leaves at
+   composition time via `functools.partial`. The default shape
+   for everything that's a pure operation:
    *Examples: `bootstrap`, `double_greedify`, `semi_gradient`,
-   `uniform_sample`, `linear_epsilon`.*
+   `uniform_sample`, `linear_epsilon`, `epsilon_greedy`,
+   `mlp_forward`, `cnn_forward`, `adam`, `rmsprop`,
+   `warmed_update`, `periodic_copy`, `squared_error`.*
+   `dqn` itself (a `@claim`'d free function) sits here too.
 
-3. **Config bundle** — a frozen-dataclass that's NOT a Claim.
-   Holds construction-time leaves and slot Claims (which are
-   Module Claims or Free Claims), plus possibly mechanics
-   methods that have no theorem (FIFO append, etc.). The walker
-   surfaces its fields as topology leaves regardless of Claim
-   status; mechanics methods are plain methods, no `record_call`.
-   *Example: `Replay` — `capacity`/`batch_size` leaves +
-   `sample` slot Claim + `init`/`add`/`sample_batch` mechanics.*
+2. **Config bundle** — a frozen-dataclass that's NOT a Claim.
+   Carries construction-time leaves as fields + slot Claims as
+   fields + mechanics methods (allocation / state-update glue
+   with no theorem attached). The walker surfaces its fields as
+   topology leaves; mechanics methods are plain methods, no
+   `record_call`. Used when stateful mechanics need to be paired
+   with the configuration that parameterises them.
+   *Examples: `Replay` (`capacity` / `batch_size` leaves +
+   `sample` slot Claim + `init` / `add` / `sample_batch`
+   mechanics); `MLP` / `CNN` (`hidden` / `obs_shape` leaves +
+   `init` mechanics + `__call__` delegating to the
+   `mlp_forward` / `cnn_forward` Free Claim where Hornik 1989
+   attaches).*
 
-The discriminator: **does the entity have one theoretically-
-meaningful primary operation?** If yes → Module Claim. If it's
-itself the operation as a free function → Free Claim. If it
-bundles config + slots + mechanics with no single primary
-theorem → config bundle. The category is set by the entity's
-nature, not by framework preference.
+The discriminator: **does this entity bundle stateful mechanics
+that need to be paired with construction-time HPs?** If yes →
+config bundle (the methods are the mechanics, the fields are the
+HPs and slot Claims). If no, it's just a function → Free Claim
+(decorate with `@claim`, configure via `partial`).
+
+The `@claim` decorator is the **single marker** for "this carries
+a theorem and records itself." Plain functions (no decorator) are
+mechanics — paired with a Claim through delegation (`MLP.__call__`
+calls `mlp_forward`) or through bundle methods (`Replay.add`).
+Decorator absence IS the negation; there's no `@mechanics` marker.
 
 A method on a config bundle is just a method — it isn't a Claim
 even though it's callable. Theoretical content lives on the slot
-Claims (e.g., `Replay.sample` is a slot, points at
-`uniform_sample` which IS a Free Claim — that's where Lin 1992
-attaches). The bundle is mechanical organisation.
+Claims that the bundle holds (e.g., `Replay.sample` is a field
+pointing at `uniform_sample`, which IS a Free Claim — that's
+where Lin 1992 attaches) or on the Free Claim that
+`__call__` delegates to (e.g., `MLP.__call__` calls
+`mlp_forward`, which IS the Hornik 1989 Claim). The bundle is
+mechanical organisation around a Claim or slot of Claims.
+
+**Escape hatch (rare).** Substrate authors who genuinely need a
+class-based Claim — stateful `__call__` with a theorem attached
+directly to the instance, not delegated — write a frozen
+dataclass exposing `name: str` and call `record_call(self,
+args, kwargs, result)` inside `__call__`. The class structurally
+satisfies `Claim[P, T]` without inheritance. Unused in the
+current substrate; documented in `claim.py` and tested in
+`tests/test_claim.py::test_manual_dataclass_with_record_call`.
 
 ## Persistence shape (typed × open)
 
