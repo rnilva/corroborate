@@ -452,15 +452,17 @@ def ddqn_attenuates_at_late_bursts__spaceinvaders(
 
 
 @claim_bridge(
-    source=DoEffect(treatment=(ADAPTIVE_DQN_SWAP,), baseline=()),
+    source=DoEffect(treatment=(ADAPTIVE_DQN_FACTOR_0P5_SWAP,), baseline=()),
     target='eval_final_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
     # Pearl-rung-2 pairing: adaptive_dqn from the 1M-step
-    # designed-intervention sweep (`adaptive_dqn_spaceinvaders_1m`)
-    # against the existing minatar_1M SpaceInvaders vanilla_dqn
-    # cells. Other corpora carry vanilla_dqn at SpaceInvaders-MinAtar
-    # at different `total_steps` regimes (50k in `ddqn`, 200k in
+    # designed-intervention sweep (`adaptive_dqn_spaceinvaders_1m`,
+    # which ran the dormancy controller at sigma_floor_factor=0.5
+    # — same setting as the FourRooms recovery bridge) against the
+    # existing minatar_1M SpaceInvaders vanilla_dqn cells. Other
+    # corpora carry vanilla_dqn at SpaceInvaders-MinAtar at
+    # different `total_steps` regimes (50k in `ddqn`, 200k in
     # `ddqn_effective_cohort`) which `pair_by=('seed',)` would
     # silently pool with the 1M cells.
     scope=(
@@ -733,6 +735,18 @@ def ddqn_benefit_scales_with_gamma__discountingchain(
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
     pair_by=('seed', 'total_steps', 'eval_every'),
+    # The CLAIM 4 panel-level finding (β=+2.7, p=0.001) was authored
+    # against the 200k DDQN corpus's 18-env panel. As more corpora
+    # (reward_scale_sweep, dampened_alpha_envs, gamma_sweep,
+    # action_dim_inflated_fourrooms, …) accumulated in the bridge
+    # cache, the pooled meta-regression became confounded with the
+    # under-learning rescue regime (CLAIM 7) and the chain-depth
+    # amplifier (CLAIM 5) — bootstrap_fraction's signal dissolves
+    # at the broader pool while jensen_dormancy_gap and
+    # log_action_dim survive. Restrict to the original cohort so
+    # the bridge tests the claim on its source data instead of a
+    # pooled superset that mixes intervention regimes.
+    scope=pl.col('corpus') == 'ddqn',
 )
 def bootstrap_fraction_drives_g_link__net_of_dormancy(
     meta_regression_per_burst: MetaRegressionResult,
