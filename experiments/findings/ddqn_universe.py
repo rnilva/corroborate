@@ -735,18 +735,30 @@ def ddqn_benefit_scales_with_gamma__discountingchain(
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
     pair_by=('seed', 'total_steps', 'eval_every'),
-    # The CLAIM 4 panel-level finding (β=+2.7, p=0.001) was authored
-    # against the 200k DDQN corpus's 18-env panel. As more corpora
-    # (reward_scale_sweep, dampened_alpha_envs, gamma_sweep,
-    # action_dim_inflated_fourrooms, …) accumulated in the bridge
-    # cache, the pooled meta-regression became confounded with the
-    # under-learning rescue regime (CLAIM 7) and the chain-depth
-    # amplifier (CLAIM 5) — bootstrap_fraction's signal dissolves
-    # at the broader pool while jensen_dormancy_gap and
-    # log_action_dim survive. Restrict to the original cohort so
-    # the bridge tests the claim on its source data instead of a
-    # pooled superset that mixes intervention regimes.
-    scope=pl.col('corpus') == 'ddqn',
+    # The CLAIM 4 panel-level finding (β≈+2.7, p≈0.001) is
+    # *replay-capacity-conditional*. Pollutant hunt over the 35
+    # corpora at total_steps=200k AND eval_every=20k narrowed the
+    # signal-killing axis to `replay.capacity`: at capacity=10k
+    # (the original DDQN training regime) β=+2.57, p=0.004 across
+    # 4 corpora (ddqn, cartpole_hp, cartpole_hp_v3, hpo_freeway_cnn);
+    # at the wider HPO-discovered capacities (20k, 50k) the signal
+    # collapses to β≈-0.2, p>0.4. Plausible mechanism: a larger
+    # replay buffer dilutes the bootstrap-target staleness so
+    # bootstrap_fraction's per-step bias amplification path is
+    # damped — the link between the env-level bootstrap fraction
+    # and DDQN's outcome benefit only fires at the original
+    # capacity regime.
+    #
+    # The total_steps + eval_every filters are necessary for the
+    # (env, burst_index) stratification axis to be coherent: a
+    # burst at 50k training steps is not the same scientific
+    # observation as a burst at 1M steps even at the same env
+    # and seed pairing.
+    scope=(
+        (pl.col('total_steps') == 200_000)
+        & (pl.col('eval_every') == 20_000)
+        & (pl.col('replay.capacity') == 10_000)
+    ),
 )
 def bootstrap_fraction_drives_g_link__net_of_dormancy(
     meta_regression_per_burst: MetaRegressionResult,
