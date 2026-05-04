@@ -1,253 +1,101 @@
-"""Hypothesis — (intervention, edges, measurables) over a record schema R.
+"""Hypothesis — the framework's typed verdict-time contract.
 
-A Hypothesis names a CHANGE to the theory and a SET of typed
-edges + pre-registered measurables. Generic in `R: Mapping[str,
-object]` — the (single) record schema all measurables are typed
-against.
+A Hypothesis is anything structurally exposing two attributes:
 
-Components:
+- `INTERVENTION: DoEffect` — the typed contrast (treatment +
+  baseline arms as Intervention tuples on the claim graph).
+- `BRIDGES: tuple[Bridge, ...]` — the authored verdict
+  declarations the framework evaluates against a corpus.
 
-- `intervention: Mapping[str, object]` — runtime kwargs passed to
-  `functools.partial(theory, **intervention)`. Mixes HP scalars
-  (γ, lr, batch_size, total_steps), config-bundle slots (Replay,
-  WarmedUpdate), and mechanism swaps (`partial(bootstrap,
-  greedification=double_greedify)`). The dict is the *executable*
-  shape; identity at this layer is type-erased on purpose.
-- `intervention_arms: tuple[Intervention, ...]` — the *typed*
-  identity of mechanism swaps only. HPs are NOT here; HPs are
-  cell covariates that downstream meta-regression cleaves on.
-  Empty tuple → baseline arm; non-empty tuple → treatment arm
-  whose `arm_key()` is the canonical fingerprint.
-- `edges: tuple[claim_bridge.Bridge, ...]` — typed-edge subgraph
-  claim. Each Bridge carries `source` / `target` paths,
-  `intervention: DoEffect | None` (interventional vs coupling
-  edge), `tier`, and per-edge `predicted_direction`. Body-less
-  for the verdict-walk path (`hypothesis_subgraph_verdict`
-  consumes Bridges as metadata only).
-- `measurables: tuple[Measurable[R, object], ...]` — pre-
-  registered measurables cell_runner persists as scalar columns.
-- `predicted_direction: PredictedDirection | None` — author-declared
-  sign of the predicted treatment-vs-baseline effect (top-level
-  hypothesis-wide default; per-edge predicted_direction overrides
-  the analyses per stratum).
+Both shapes satisfy the Protocol structurally:
 
-Arm identity flows exclusively through `intervention_arms` — two
-hypotheses with the same arms but different HP grid points share
-an `arm_key()` and pair as same-arm cells; the HP difference is a
-covariate, not an arm distinguisher.
+- **Module as hypothesis:** a Python module declaring module-level
+  `INTERVENTION` and `BRIDGES`. Modules are Python objects;
+  `getattr(module, 'INTERVENTION')` lands on the module-level
+  constant.
+- **Class as hypothesis:** a frozen dataclass (or any class) with
+  `ClassVar` fields:
+  ```python
+  @dataclass(frozen=True)
+  class DDQNvsVanilla:
+      INTERVENTION: ClassVar[DoEffect] = DoEffect(...)
+      BRIDGES: ClassVar[tuple[Bridge, ...]] = (...)
+  ```
+  Multiple hypotheses can live in one file as separate classes.
 
-Structural identity beyond arm key is recoverable from the
-measurements a run produces — leaf values land at dotted topology
-paths via `signature.walk_paths`, and `aggregate.leaf_signature`
-projects a `RunRow.measurements` to the configurational subset
-suitable as a group-by key."""
+For runtime-constructed Hypotheses (e.g. YAML-driven), use
+`types.SimpleNamespace` with the required attributes — it
+satisfies the Protocol via duck-typing.
+
+`MEASURABLES` is NOT on the Protocol. Pre-registered measurables
+are a sweep-time concern: `runner.sweep.run_intervention` takes
+them as an explicit parameter, and substrates that compute
+mediators post-sweep from raw traces leave the parameter empty.
+Bridges that consume measurables import them by name (typed
+`Measurable` instance) at module load — the registry resolves
+chained dependencies; the Protocol doesn't need to repeat what
+bridges already carry.
+
+`__name__: str` is on the Protocol so the runner's typed access
+(cache-path defaults / display) doesn't have to fall back to
+`getattr` — both Python modules and classes carry `__name__: str`
+for free, so requiring it costs no Hypothesis author anything.
+Arm *identity*, distinct from `__name__`, flows exclusively
+through `canonical_str` of the underlying Intervention tuples
+(via `DoEffect.treatment_arm_key()` / `baseline_arm_key()`);
+substrate-chosen short labels are no longer part of the
+framework's identity surface."""
 from __future__ import annotations
 
-from collections.abc import Mapping
-from typing import TYPE_CHECKING, Literal, override
+from typing import (
+    TYPE_CHECKING,
+    Literal,
+    Protocol,
+    runtime_checkable,
+)
 
 from corroborate._internals.canonical import canonical_str
-from corroborate.core.intervention import Intervention, combined_arm_key
+from corroborate.core.intervention import DoEffect
 
 if TYPE_CHECKING:
-    from corroborate.measurables import Measurable
-    # `claim_bridge.Bridge` is the typed-edge surface for the
-    # Hypothesis subgraph claim; imported under TYPE_CHECKING
-    # because `claim_bridge` depends on `hypothesis.PredictedDirection`.
-    # The field annotation resolves through `from __future__ import
-    # annotations`.
-    from corroborate.bridge.bridge import Bridge as ClaimBridge
+    from corroborate.bridge.bridge import Bridge
+
 
 __all__ = ['Hypothesis', 'PredictedDirection', 'canonical_str']
 
 
 type PredictedDirection = Literal['a_gt_b', 'a_lt_b', 'two_sided']
 """Author-declared *prior* sign of the predicted treatment-vs-
-baseline effect on the primary outcome. `'a_gt_b'` predicts the
-intervention's arm exceeds the baseline; `'a_lt_b'` predicts
-below; `'two_sided'` predicts non-zero in either direction.
-None on Hypothesis means direction is unstated (downstream
-infers from a `held` flag if available).
+baseline effect. `'a_gt_b'` predicts the intervention's arm
+exceeds the baseline; `'a_lt_b'` predicts below; `'two_sided'`
+predicts non-zero in either direction.
 
-Distinct from `causal_graph.Direction` — that's the *observed*
-sign (DIRECT / INVERSE) inferred post-hoc from a stat's value.
-PredictedDirection is the prior; Direction is the posterior."""
+Per-bridge metadata: `Bridge.predicted_direction` carries it for
+the analysis the bridge consumes. Distinct from
+`graph.causal.Direction` — that's the *observed* sign (DIRECT /
+INVERSE) inferred post-hoc from a stat's value."""
 
 
-class Hypothesis[R: Mapping[str, object]]:
-    """A research hypothesis: an intervention plus the typed
-    causal subgraph (bridge edges) the intervention claims.
+@runtime_checkable
+class Hypothesis(Protocol):
+    """The framework's typed verdict-time hypothesis contract.
 
-    Generic in `R: Mapping[str, object]` — the (single) record
-    schema all bridges are typed against. Authors using TypedDict
-    for their record get typed bridge bodies (no narrowing);
-    authors using plain `Mapping[str, object]` continue to narrow
-    at use site.
+    Conforming objects expose three read-only attributes:
 
-    `edges: tuple[claim_bridge.Bridge, ...]` is the typed-edge
-    subgraph surface. Each Bridge carries source / target
-    measurement paths, `intervention: DoEffect | None`
-    (interventional contrast vs measurement-coupling), Pearl
-    `tier`, and per-edge `predicted_direction`. Bridges with
-    `intervention is not None` are the rung-2 mechanism /
-    outcome edges; bridges with `intervention is None` are
-    measurement-to-measurement coupling edges.
+    - `INTERVENTION: DoEffect` — the typed contrast (treatment +
+      baseline arms as Intervention tuples).
+    - `BRIDGES: tuple[Bridge, ...]` — the authored verdict
+      declarations.
+    - `__name__: str` — the Python identity attribute. Modules
+      carry their dotted path; classes carry their bare name. The
+      runner uses it for cache-path defaults and display; both
+      module and class shapes carry it for free.
 
-    `measurables: tuple[Measurable[R, object], ...]` is the
-    sweep-time pre-registration channel — measurables the author
-    wants computed and persisted as scalar columns on every
-    RunRow without having to author a per-record body for each.
-    Each entry produces a column at the measurable's bare `.name`
-    in `RunRow.measurements`; the substrate controls the column-
-    name namespace (a measurable named `eval_final_mean`
-    lands as `eval_final_mean`). Available downstream for
-    typed-edge bridges (`Bridge.target=<name>`) and analyses to
-    consume directly.
+    Modules and classes both satisfy the Protocol structurally
+    via attribute access. The framework's verdict-time runner
+    reads `BRIDGES`; the substrate's sweep glue reads
+    `INTERVENTION` to drive paired sweep iteration."""
 
-    Both surfaces can coexist on one Hypothesis. The top-level
-    `predicted_direction: PredictedDirection | None` is vestigial
-    when `edges` is populated (each edge carries its own
-    `predicted_direction`).
-
-    The framework treats a cell as producing ONE record, even
-    when the underlying machinery has internal sub-passes (RL's
-    eval bursts during training, etc.). Sub-pass results are
-    additional fields on the same record dict — possibly with
-    different shapes (`(T,)` per-step training fields,
-    `(n_bursts, K)` per-burst eval fields). Bridges read whichever
-    keys they care about; the record's structure is the substrate
-    author's call.
-
-    **Variance.** Field access is via `@property` (not bare
-    dataclass attrs) so PEP 695 inference lands `R` contravariant
-    — `Measurable[R, object]` is contravariant in R (post the
-    Measurable refactor), and the recursive `tuple` field is
-    covariant in element. A `Hypothesis[Mapping[str, object]]`
-    (framework-built generic) is therefore assignable to a slot
-    expecting `Hypothesis[DQNTrajectoryRecord]` (substrate-typed),
-    no `cast` needed at the substrate boundary."""
-
-    __slots__ = (
-        '_name', '_intervention', '_predicted_direction',
-        '_intervention_arms', '_edges', '_measurables',
-    )
-
-    _name: str
-    _intervention: Mapping[str, object]
-    _predicted_direction: PredictedDirection | None
-    _intervention_arms: tuple[Intervention, ...]
-    _edges: tuple['ClaimBridge', ...]
-    _measurables: tuple[Measurable[R, object], ...]
-
-    def __init__(
-        self,
-        name: str,
-        intervention: Mapping[str, object],
-        predicted_direction: PredictedDirection | None = None,
-        intervention_arms: tuple[Intervention, ...] = (),
-        edges: tuple['ClaimBridge', ...] = (),
-        measurables: tuple[Measurable[R, object], ...] = (),
-    ) -> None:
-        self._name = name
-        self._intervention = intervention
-        self._predicted_direction = predicted_direction
-        self._intervention_arms = intervention_arms
-        self._edges = edges
-        self._measurables = measurables
-
-    @property
-    def name(self) -> str:
-        return self._name
-
-    @property
-    def intervention(self) -> Mapping[str, object]:
-        return self._intervention
-
-    @property
-    def predicted_direction(self) -> PredictedDirection | None:
-        return self._predicted_direction
-
-    @property
-    def intervention_arms(self) -> tuple[Intervention, ...]:
-        return self._intervention_arms
-
-    @property
-    def edges(self) -> tuple['ClaimBridge', ...]:
-        return self._edges
-
-    @property
-    def measurables(self) -> tuple[Measurable[R, object], ...]:
-        return self._measurables
-
-    def edges_by_target(self, target: str) -> tuple['ClaimBridge', ...]:
-        """All typed edges whose `target` matches `target`. The
-        primary lookup after the role-enum subtraction — consumers
-        select on the path, not on a paper-narrative name."""
-        return tuple(e for e in self._edges if e.target == target)
-
-    def intervention_edges(self) -> tuple['ClaimBridge', ...]:
-        """Edges whose `source` is a `DoEffect` — the rung-2
-        contrast edges that drive paired comparisons. Replaces the
-        former `mechanism + outcome + refuter` role union; the
-        scope-distinction (mechanism vs outcome) is recoverable
-        from `target` namespace or claim-graph topology, not from
-        a per-edge enum."""
-        from corroborate.core.intervention import DoEffect
-        return tuple(
-            e for e in self._edges if isinstance(e.source, DoEffect)
-        )
-
-    def coupling_edges(self) -> tuple['ClaimBridge', ...]:
-        """Edges whose `source` is NOT a `DoEffect` — measurement-
-        to-measurement coupling edges (formerly `role='link'`).
-        Tested via cross-stratum Pearson r over the per-group
-        effect sizes of the source and target paths."""
-        from corroborate.core.intervention import DoEffect
-        return tuple(
-            e for e in self._edges if not isinstance(e.source, DoEffect)
-        )
-
-    def arm_key(self) -> str:
-        """Canonical fingerprint of the typed `intervention_arms`.
-
-        Empty `intervention_arms` → `'baseline'`; non-empty →
-        `'+'`-joined slot=replacement keys (sorted by slot_path).
-        Two hypotheses with same arms but different HP grid
-        points share one `arm_key()`; HP variation is a covariate,
-        not an arm distinguisher."""
-        return combined_arm_key(self._intervention_arms)
-
-    @override
-    def __repr__(self) -> str:
-        return (
-            f'Hypothesis(name={self._name!r}, '
-            f'intervention={self._intervention!r}, '
-            f'predicted_direction={self._predicted_direction!r}, '
-            f'intervention_arms={self._intervention_arms!r}, '
-            f'edges={self._edges!r}, '
-            f'measurables={self._measurables!r})'
-        )
-
-    @override
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, Hypothesis):
-            return NotImplemented
-        return (
-            self._name == other._name
-            and self._intervention == other._intervention
-            and self._predicted_direction == other._predicted_direction
-            and self._intervention_arms == other._intervention_arms
-            and self._edges == other._edges
-            and self._measurables == other._measurables
-        )
-
-    @override
-    def __hash__(self) -> int:
-        return hash((
-            self._name,
-            tuple(sorted(self._intervention.items())),
-            self._predicted_direction,
-            self._intervention_arms,
-            self._edges,
-            self._measurables,
-        ))
+    __name__: str
+    INTERVENTION: DoEffect
+    BRIDGES: 'tuple[Bridge, ...]'

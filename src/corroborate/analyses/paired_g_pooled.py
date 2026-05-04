@@ -56,7 +56,7 @@ def paired_g_pooled(
     source: str,
     pair_by: tuple[str, ...] = ('seed',),
     env_filter: tuple[str, ...] = (),
-    arm_field: str = 'intervention_name',
+    arm_field: str = 'arm_key',
     total_steps_filter: int | None = None,
     total_steps_field: str = 'total_steps',
 ) -> PooledPairedGResult:

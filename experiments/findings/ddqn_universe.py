@@ -74,7 +74,7 @@ import numpy.typing as npt
 import polars as pl
 
 import corroborate.analyses  # pyright: ignore[reportUnusedImport]  # populate registry
-import corroborate.rl.dqn.measurables  # pyright: ignore[reportUnusedImport]  # populate measurable registry
+import corroborate_rl.dqn.measurables  # pyright: ignore[reportUnusedImport]  # populate measurable registry
 from corroborate.analyses.link_attenuation_dowhy import (
     LinkAttenuationDowhyResult,
 )
@@ -87,14 +87,19 @@ from corroborate.analyses.paired_g_per_burst import PerBurstResult
 from corroborate.analyses.paired_link_per_burst import (
     PerBurstLinkResult, phase_link_consistency,
 )
+from functools import partial
+
 from corroborate.bridge.bridge import (
     Direction, Tier, claim_bridge,
 )
-from corroborate.core.intervention import DoEffect
+from corroborate.core.intervention import DoEffect, Intervention
 from corroborate.measurables import Measurable
 from corroborate.stats import MetaRegressionResult
 from corroborate.measurables.reductions import from_key, reduce_axis
-from corroborate.rl.dqn.measurables import jensen_bias_per_eps
+from corroborate_rl.dqn.claims.bootstrap import (
+    adaptive_dormancy_greedify, bootstrap, double_greedify,
+)
+from corroborate_rl.dqn.measurables import jensen_bias_per_eps
 from corroborate.bridge.verdict import Verdict
 
 
@@ -111,10 +116,41 @@ _JENSEN_BIAS_PER_BURST_MEAN: Measurable[
 ] = reduce_axis(jensen_bias_per_eps, axis=-1, op='mean')
 
 
+# Typed structural deltas reused across bridges in this universe.
+# Each `Intervention` is a single-slot replacement on the claim
+# graph; `DoEffect` composes them into treatment / baseline arms.
+DDQN_SWAP = Intervention(
+    slot_path='bootstrap',
+    replacement=partial(bootstrap, greedification=double_greedify),
+)
+ADAPTIVE_DQN_SWAP = Intervention(
+    slot_path='bootstrap',
+    replacement=partial(
+        bootstrap,
+        greedification=partial(
+            adaptive_dormancy_greedify, sigma_floor_factor=1.0,
+        ),
+    ),
+)
+ADAPTIVE_DQN_FACTOR_0P5_SWAP = Intervention(
+    slot_path='bootstrap',
+    replacement=partial(
+        bootstrap,
+        greedification=partial(
+            adaptive_dormancy_greedify, sigma_floor_factor=0.5,
+        ),
+    ),
+)
+
+
 # File-level intervention: every bridge in this module tests
-# `do(arm=ddqn) → effect`. Bridges that test a DIFFERENT
-# intervention override via decorator `source = DoEffect(...)`.
-INTERVENTION = DoEffect(treatment_arm='ddqn', baseline_arm='vanilla_dqn')
+# `do(bootstrap = ddqn) → effect`. Bridges that test a DIFFERENT
+# mechanism contrast (adaptive_dqn variants) override via the
+# per-decorator `source = DoEffect(...)` kwarg. HP-encoded
+# variants of the SAME contrast (γ-stratified, n_step-stratified,
+# etc.) reuse `INTERVENTION` and add an `n_step` / `gamma` /
+# `weight_decay` predicate to the bridge's `scope`.
+INTERVENTION = DoEffect(treatment=(DDQN_SWAP,), baseline=())
 
 
 # =====================================================================
@@ -218,7 +254,7 @@ def ddqn_refuted_when_dormancy_fires(
 
 
 @claim_bridge(
-    source=DoEffect(treatment_arm='adaptive_dqn_factor_0p5', baseline_arm='vanilla_dqn'),
+    source=DoEffect(treatment=(ADAPTIVE_DQN_FACTOR_0P5_SWAP,), baseline=()),
     target='eval_final_mean',
     direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
@@ -416,7 +452,7 @@ def ddqn_attenuates_at_late_bursts__spaceinvaders(
 
 
 @claim_bridge(
-    source=DoEffect(treatment_arm='adaptive_dqn', baseline_arm='vanilla_dqn'),
+    source=DoEffect(treatment=(ADAPTIVE_DQN_SWAP,), baseline=()),
     target='eval_final_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
@@ -499,18 +535,18 @@ def adaptive_dqn_fails_to_avoid_attenuation__spaceinvaders_1m(
 
 
 @claim_bridge(
-    # gamma_sweep stamps γ into the arm name (ddqn_g090 / _g095 /
-    # _g099); the high-effective-horizon scope picks γ=0.99, so the
-    # contrast is the γ=0.99 pair specifically. File-level
-    # INTERVENTION's plain `ddqn`/`vanilla_dqn` doesn't match any
-    # cell here.
-    source=DoEffect(treatment_arm='ddqn_g099', baseline_arm='vanilla_dqn_g099'),
+    # The structural mechanism contrast is the same DDQN-vs-
+    # vanilla swap; the γ-specific subset is captured as an HP
+    # scope predicate (`gamma == 0.99` corresponds to the high-
+    # effective-horizon cohort in `gamma_sweep`).
+    source=INTERVENTION,
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
     scope=(
         (pl.col('env_name') == 'FourRooms-misc')
         & (pl.col('corpus') == 'gamma_sweep')
+        & (pl.col('gamma') == 0.99)
         & (pl.col('effective_horizon') >= 50.0)
     ),
 )
@@ -575,19 +611,17 @@ def ddqn_benefit_scales_with_effective_horizon__fourrooms(
 
 
 @claim_bridge(
-    # gamma_sweep_metamaze_high stamps γ into the arm name
-    # (ddqn_g0995 / ddqn_g0999); the asserted activation is at
-    # γ=0.999 (eff_h≈1000 in this corpus's effective_horizon
-    # encoding), so contrast the γ=0.999 pair specifically.
-    source=DoEffect(
-        treatment_arm='ddqn_g0999', baseline_arm='vanilla_dqn_g0999',
-    ),
+    # γ=0.999 cohort selected via the `gamma == 0.999` HP scope
+    # predicate; the structural mechanism contrast stays the
+    # file-level DDQN-vs-vanilla swap.
+    source=INTERVENTION,
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
     scope=(
         (pl.col('env_name') == 'MetaMaze-misc')
         & (pl.col('corpus') == 'gamma_sweep_metamaze_high')
+        & (pl.col('gamma') == 0.999)
         & (pl.col('effective_horizon') >= 18.0)
     ),
 )
@@ -622,10 +656,10 @@ def ddqn_benefit_scales_with_effective_horizon__metamaze_high_gamma(
 
 
 @claim_bridge(
-    # gamma_sweep_more stamps γ into the arm name (ddqn_g090 /
-    # _g095 / _g099); the high-γ scope picks γ=0.99, so contrast
-    # the γ=0.99 pair specifically.
-    source=DoEffect(treatment_arm='ddqn_g099', baseline_arm='vanilla_dqn_g099'),
+    # γ≥0.985 (i.e. γ=0.99) cohort selected via HP scope; the
+    # structural mechanism contrast stays the file-level DDQN-vs-
+    # vanilla swap.
+    source=INTERVENTION,
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
@@ -956,8 +990,8 @@ def ddqn_rescues_underlearning_vanilla__fourrooms_rs_0p1(
     `target='outcome_native'` (the registered measurable
     `eval_best_burst_mean / reward_scale`) under
     `source=INTERVENTION` (do(ddqn) − do(vanilla_dqn) contrast)
-    and `scope=(env_name == 'FourRooms-misc') & (reward_scale ==
-    0.1)` to filter the corpus. No bespoke analysis — the bridge
+    and `scope=(env_name == 'FourRooms-misc') & (reward_scale
+    == 0.1)` to filter the corpus. No bespoke analysis — the bridge
     supplies the measurable name + scope, the framework runs
     `paired_g` and injects the result.
 
@@ -1227,11 +1261,14 @@ def ddqn_curve_crosses_vanilla_late__spaceinvaders(
 
 
 @claim_bridge(
-    source=DoEffect(treatment_arm='ddqn_n1', baseline_arm='vanilla_n1'),
+    source=INTERVENTION,
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
-    scope=(pl.col('env_name') == 'FourRooms-misc'),
+    scope=(
+        (pl.col('env_name') == 'FourRooms-misc')
+        & (pl.col('n_step') == 1)
+    ),
 )
 def ddqn_helps_at_full_bootstrap__fourrooms_n1(
     paired_g: PairedGResult,
@@ -1259,11 +1296,14 @@ def ddqn_helps_at_full_bootstrap__fourrooms_n1(
 
 
 @claim_bridge(
-    source=DoEffect(treatment_arm='ddqn_n10', baseline_arm='vanilla_n10'),
+    source=INTERVENTION,
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
-    scope=(pl.col('env_name') == 'FourRooms-misc'),
+    scope=(
+        (pl.col('env_name') == 'FourRooms-misc')
+        & (pl.col('n_step') == 10)
+    ),
 )
 def ddqn_null_under_monte_carlo__fourrooms_n10(
     paired_g: PairedGResult,
@@ -1319,19 +1359,20 @@ def ddqn_null_under_monte_carlo__fourrooms_n10(
 
 
 @claim_bridge(
-    # Override: this bridge runs on the `l2_x_gamma_acrobot` traces
-    # which authored γ + weight-decay into the arm name strings
-    # (substrate-side smuggle). File-level INTERVENTION's plain
-    # `ddqn` / `vanilla_dqn` won't match; consume the corpus's
-    # actual arm shape via a per-bridge override.
-    source=DoEffect(
-        treatment_arm='ddqn_g0999_wd1em4',
-        baseline_arm='vanilla_g0999_wd1em4',
-    ),
+    # Runs against the `l2_x_gamma_acrobot` corpus's
+    # γ=0.999 × wd=1e-4 cohort. Mechanism contrast is the same
+    # DDQN-vs-vanilla swap; the cell selector is HP scope
+    # (γ + corpus + weight_decay).
+    source=INTERVENTION,
     target='mc_return',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
-    scope=(pl.col('env_name') == 'Acrobot-v1'),
+    scope=(
+        (pl.col('env_name') == 'Acrobot-v1')
+        & (pl.col('corpus') == 'l2_x_gamma_acrobot')
+        & (pl.col('gamma') == 0.999)
+        & (pl.col('optimizer.inner.weight_decay') == 0.0001)
+    ),
 )
 def acrobot_per_burst_link_active__gamma_0999(
     paired_link_per_burst: PerBurstLinkResult,
@@ -1363,9 +1404,7 @@ def acrobot_per_burst_link_active__gamma_0999(
 
 
 @claim_bridge(
-    source=DoEffect(
-        treatment_arm='ddqn_g0999', baseline_arm='vanilla_dqn_g0999',
-    ),
+    source=INTERVENTION,
     target='outcome.eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
@@ -1405,9 +1444,7 @@ def acrobot_link_backdoor_ate_negative__gamma_0999(
 
 
 @claim_bridge(
-    source=DoEffect(
-        treatment_arm='ddqn_g0999', baseline_arm='vanilla_dqn_g0999',
-    ),
+    source=INTERVENTION,
     target='outcome.eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
@@ -1448,9 +1485,7 @@ def acrobot_link_placebo_refuted__gamma_0999(
 
 
 @claim_bridge(
-    source=DoEffect(
-        treatment_arm='ddqn_g0999', baseline_arm='vanilla_dqn_g0999',
-    ),
+    source=INTERVENTION,
     target='outcome.eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,

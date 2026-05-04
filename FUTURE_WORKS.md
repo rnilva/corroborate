@@ -193,7 +193,7 @@ collision bug appears.
 [reportUnusedImport]` × 14. Function-scoped imports inside a
 `_register_default_analyses()` function don't trigger
 `reportUnusedImport`. Same pattern fits `cell_runner.py`'s
-`import corroborate.rl.dqn.measurables` side-effect.
+`import corroborate_rl.dqn.measurables` side-effect.
 
 **Why deferred:** 14 ignores are bounded; the function-scope
 move is a stylistic choice that doesn't affect behaviour.

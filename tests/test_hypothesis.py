@@ -1,44 +1,27 @@
-"""Tests for `Hypothesis[R]` and leaf-value canonicalization.
-Strict typing exercised: bridges and hypothesis share R.
+"""Tests for the `Hypothesis` Protocol + canonical_str leaf
+fingerprinting + combined_arm_key.
 
-`MechanismKey` no longer exists as a framework artifact; the
-configurational identity of a hypothesis is recovered from its
-runs' `measurements` via `aggregate.leaf_signature`. These tests
-cover the data-class shape + the `canonical_str` helper used for
-leaf-value serialization."""
+After Phase 6 the Hypothesis dataclass is gone — the framework's
+verdict-time contract is a runtime_checkable Protocol with three
+attributes (INTERVENTION + BRIDGES + __name__). Substrate
+authoring uses module-level constants OR class-with-ClassVars
+to satisfy it. These tests cover:
+- The Protocol's runtime_checkable shape.
+- `canonical_str` leaf-value fingerprinting.
+- `combined_arm_key` over Intervention tuples (HPs don't
+  perturb arm identity)."""
 from __future__ import annotations
 
-from collections.abc import Mapping
-from typing import TYPE_CHECKING
+from dataclasses import dataclass
+from typing import ClassVar
 
 from corroborate._internals.canonical import canonical_str
+from corroborate.bridge.bridge import Bridge
 from corroborate.core.claim import claim
 from corroborate.core.hypothesis import Hypothesis
-from corroborate.core.intervention import Intervention
-
-if TYPE_CHECKING:
-    from corroborate.bridge.bridge import Bridge as ClaimBridge
-    from corroborate.core.hypothesis import PredictedDirection
-
-
-# ============ Construction ============
-
-def test_hypothesis_minimal() -> None:
-    h: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='baseline', intervention={},
-    )
-    assert h.name == 'baseline'
-    assert h.intervention == {}
-    assert h.edges == ()
-    assert h.measurables == ()
-    assert h.predicted_direction is None
-
-
-def test_hypothesis_predicted_direction() -> None:
-    h: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='h', intervention={}, predicted_direction='a_gt_b',
-    )
-    assert h.predicted_direction == 'a_gt_b'
+from corroborate.core.intervention import (
+    DoEffect, Intervention, combined_arm_key,
+)
 
 
 # ============ HP-value canonicalization ============
@@ -87,10 +70,10 @@ def test_canonical_str_bool_distinct_from_int() -> None:
 
 
 def test_canonical_str_partial_canonicalises_keywords() -> None:
-    """`functools.partial(fn, kw=value)` canonicalises by
-    recursing into `.func` and lex-encoding `.keywords`. Two
-    independently-constructed partials with the same wrapped
-    callable + same kwargs are equal."""
+    """`functools.partial(fn, kw=value)` canonicalises by recursing
+    into `.func` and lex-encoding `.keywords`. Two independently-
+    constructed partials with the same wrapped callable + same
+    kwargs are equal."""
     from functools import partial
 
     def fn(x: int, *, kw: int = 0) -> int:
@@ -102,8 +85,7 @@ def test_canonical_str_partial_canonicalises_keywords() -> None:
 
 
 def test_canonical_str_partial_distinguishes_kwargs() -> None:
-    """Partials with different baked kwargs canonicalise
-    distinctly."""
+    """Partials with different baked kwargs canonicalise distinctly."""
     from functools import partial
 
     def fn(*, kw: int = 0) -> int:
@@ -127,7 +109,6 @@ def test_canonical_str_dataclass_field_expansion() -> None:
     s_default = canonical_str(HP())
     s_changed = canonical_str(HP(a=2))
     assert s_default != s_changed
-    # Same values → same canonical string.
     assert canonical_str(HP(a=1, b=2.0)) == canonical_str(HP(a=1, b=2.0))
 
 
@@ -138,7 +119,7 @@ def test_canonical_str_tuple_recurses() -> None:
     assert s == '(1,2,3)'
 
 
-# ============ intervention_arms + arm_key ============
+# ============ Intervention arm_key fingerprinting ============
 
 @claim
 def _alt_a(x: int) -> int:
@@ -150,157 +131,98 @@ def _alt_b(x: int) -> int:
     return x * 2
 
 
-def test_hypothesis_default_arms_baseline() -> None:
-    """An empty `intervention_arms` tuple yields the baseline arm
-    key, regardless of what the runtime `intervention` dict
-    contains."""
-    h: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='vanilla', intervention={'gamma': 0.99, 'lr': 1e-3},
-    )
-    assert h.intervention_arms == ()
-    assert h.arm_key() == 'baseline'
+def test_combined_arm_key_empty_tuple_baseline() -> None:
+    """Empty Intervention tuple → `'baseline'`."""
+    assert combined_arm_key(()) == 'baseline'
 
 
-def test_hypothesis_arm_key_reflects_arms() -> None:
-    """A non-empty `intervention_arms` produces a fingerprint
-    derived from the typed swaps."""
-    h: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='ddqn', intervention={'gamma': 0.99},
-        intervention_arms=(
-            Intervention(slot_path='bootstrap', replacement=_alt_a),
-        ),
-    )
-    assert h.arm_key() == 'bootstrap=Claim:_alt_a'
-
-
-def test_arm_key_invariant_under_hp_change() -> None:
-    """Different HP grid points with the same `intervention_arms`
-    produce the same arm key — the framework's load-bearing
-    promise that HPs are covariates, not arm distinguishers."""
+def test_combined_arm_key_reflects_swap() -> None:
+    """Non-empty Intervention tuple produces a fingerprint derived
+    from the typed swap's slot_path + canonical_str(replacement)."""
     arms = (Intervention(slot_path='bootstrap', replacement=_alt_a),)
-    h_lo: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='ddqn',
-        intervention={'gamma': 0.99, 'lr': 1e-3},
-        intervention_arms=arms,
-    )
-    h_hi: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='ddqn',
-        intervention={'gamma': 0.95, 'lr': 1e-4},
-        intervention_arms=arms,
-    )
-    assert h_lo.arm_key() == h_hi.arm_key()
+    assert combined_arm_key(arms) == 'bootstrap=Claim:_alt_a'
 
 
-def test_arm_key_distinguishes_different_arms() -> None:
-    """Two hypotheses with different arms produce different arm
-    keys."""
-    h_a: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='a', intervention={},
-        intervention_arms=(
-            Intervention(slot_path='bootstrap', replacement=_alt_a),
-        ),
-    )
-    h_b: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='b', intervention={},
-        intervention_arms=(
-            Intervention(slot_path='bootstrap', replacement=_alt_b),
-        ),
-    )
-    assert h_a.arm_key() != h_b.arm_key()
+def test_combined_arm_key_distinguishes_different_replacements() -> None:
+    """Same slot_path, different replacements → different arm_keys."""
+    arms_a = (Intervention(slot_path='bootstrap', replacement=_alt_a),)
+    arms_b = (Intervention(slot_path='bootstrap', replacement=_alt_b),)
+    assert combined_arm_key(arms_a) != combined_arm_key(arms_b)
 
 
-# ============ typed-edge subgraph (claim_bridge.Bridge) ============
+# ============ Hypothesis Protocol shape ============
 
-def test_hypothesis_default_edges_empty() -> None:
-    """A Hypothesis without typed edges has an empty `edges`
-    tuple. The flat per-record `bridges` tuple stays usable."""
-    h: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='legacy', intervention={},
-    )
-    assert h.edges == ()
-
-
-def _intervention_edge(
-    *, target: str, predicted_direction: 'PredictedDirection',
-) -> 'ClaimBridge':
-    from corroborate.graph.causal import Direction, Tier
-    from corroborate.bridge.bridge import Bridge as ClaimBridge
-    from corroborate.core.intervention import DoEffect
-    do = DoEffect(treatment_arm='a', baseline_arm='b')
-    return ClaimBridge(
-        name=f'do->{target}',
-        source=do, target=target,
-        tier=Tier.INTERVENTIONAL, direction=Direction.DIRECT,
-        predicted_direction=predicted_direction,
-    )
+def test_module_lacking_attrs_is_not_hypothesis() -> None:
+    """A module without INTERVENTION / BRIDGES doesn't conform.
+    The framework's `core.hypothesis` module is a counter-example —
+    it defines the Protocol but doesn't carry it."""
+    import corroborate.core.hypothesis as mod
+    assert not isinstance(mod, Hypothesis)
 
 
-def _coupling_edge(
-    *, source: str, target: str, predicted_direction: 'PredictedDirection',
-) -> 'ClaimBridge':
-    from corroborate.graph.causal import Direction, Tier
-    from corroborate.bridge.bridge import Bridge as ClaimBridge
-    return ClaimBridge(
-        name=f'{source}->{target}',
-        source=source, target=target,
-        tier=Tier.ASSOCIATIONAL, direction=Direction.DIRECT,
-        predicted_direction=predicted_direction,
-    )
-
-
-def test_hypothesis_intervention_and_coupling_edges() -> None:
-    """`intervention_edges()` returns rung-2 contrast edges
-    (bridge.intervention is not None); `coupling_edges()` returns
-    measurement-to-measurement edges (intervention is None).
-    Together they partition `edges`."""
-    h: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='ddqn', intervention={},
-        edges=(
-            _intervention_edge(target='m', predicted_direction='a_lt_b'),
-            _intervention_edge(target='o', predicted_direction='a_gt_b'),
-            _coupling_edge(
-                source='m', target='o', predicted_direction='a_gt_b',
+def test_class_with_classvars_satisfies_protocol() -> None:
+    """A frozen dataclass with ClassVar fields conforms — the
+    canonical class-based authoring shape. Module-shape conformance
+    is exercised by the substrate's bridge-zoo files (`dqn_bridges.py`,
+    `ddqn_universe.py`) at production load time."""
+    @dataclass(frozen=True)
+    class MyHypothesis:
+        INTERVENTION: ClassVar[DoEffect] = DoEffect(
+            treatment=(
+                Intervention(slot_path='bootstrap', replacement=_alt_a),
             ),
-        ),
-    )
-    iv = h.intervention_edges()
-    co = h.coupling_edges()
-    assert len(iv) == 2
-    assert len(co) == 1
-    assert {e.target for e in iv} == {'m', 'o'}
-    assert co[0].source == 'm' and co[0].target == 'o'
+            baseline=(),
+        )
+        BRIDGES: ClassVar[tuple[Bridge, ...]] = ()
+    assert isinstance(MyHypothesis, Hypothesis)
 
 
-def test_hypothesis_edges_by_target() -> None:
-    """`edges_by_target` returns all edges with the given target."""
-    h: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='multi', intervention={},
-        edges=(
-            _intervention_edge(target='o1', predicted_direction='a_gt_b'),
-            _intervention_edge(target='o2', predicted_direction='a_gt_b'),
-        ),
-    )
-    outs = h.edges_by_target('o1')
-    assert len(outs) == 1
-    assert outs[0].target == 'o1'
-    assert h.edges_by_target('m') == ()
+def test_class_missing_intervention_is_not_hypothesis() -> None:
+    """A class without INTERVENTION → fails Protocol check."""
+    @dataclass(frozen=True)
+    class Broken:
+        BRIDGES: ClassVar[tuple[Bridge, ...]] = ()
+    assert not isinstance(Broken, Hypothesis)
 
 
-def test_hypothesis_edges_invariant_under_arm_key() -> None:
-    """`arm_key` derives from `intervention_arms` only — adding
-    or changing `edges` doesn't perturb arm identity."""
-    arms = (
-        Intervention(slot_path='bootstrap', replacement=_alt_a),
+def test_class_missing_bridges_is_not_hypothesis() -> None:
+    """A class without BRIDGES → fails Protocol check."""
+    @dataclass(frozen=True)
+    class Broken:
+        INTERVENTION: ClassVar[DoEffect] = DoEffect(
+            treatment=(), baseline=(),
+        )
+    assert not isinstance(Broken, Hypothesis)
+
+
+def test_doeffect_arm_keys() -> None:
+    """`DoEffect.treatment_arm_key()` derives from
+    `combined_arm_key(treatment)`; baseline same."""
+    de = DoEffect(
+        treatment=(Intervention(slot_path='bootstrap', replacement=_alt_a),),
+        baseline=(),
     )
-    h_no_edges: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='ddqn', intervention={}, intervention_arms=arms,
-    )
-    h_with_edges: Hypothesis[Mapping[str, object]] = Hypothesis(
-        name='ddqn', intervention={}, intervention_arms=arms,
-        edges=(
-            _intervention_edge(
-                target='m', predicted_direction='a_lt_b',
-            ),
-        ),
-    )
-    assert h_no_edges.arm_key() == h_with_edges.arm_key()
+    assert de.treatment_arm_key() == 'bootstrap=Claim:_alt_a'
+    assert de.baseline_arm_key() == 'baseline'
+
+
+def test_doeffect_empty_treatment_collides_with_baseline() -> None:
+    """Empty treatment tuple yields the same canonical key as the
+    empty baseline ('baseline'). Authors using a treatment-vs-
+    baseline contrast must pass a non-empty treatment tuple; the
+    framework would reject the self-vs-self comparison at
+    paired_g time."""
+    de = DoEffect(treatment=(), baseline=())
+    assert de.treatment_arm_key() == 'baseline'
+    assert de.baseline_arm_key() == 'baseline'
+
+
+def test_doeffect_multi_intervention_treatment() -> None:
+    """Multiple Interventions in treatment compose into a
+    sorted-joined arm key (order-invariant fingerprint)."""
+    iv1 = Intervention(slot_path='bootstrap', replacement=_alt_a)
+    iv2 = Intervention(slot_path='action_select', replacement=_alt_b)
+    de_a = DoEffect(treatment=(iv1, iv2), baseline=())
+    de_b = DoEffect(treatment=(iv2, iv1), baseline=())
+    assert de_a.treatment_arm_key() == de_b.treatment_arm_key()
+    assert '+' in de_a.treatment_arm_key()  # joined with '+'

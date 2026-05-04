@@ -79,7 +79,7 @@ def verdict_distribution_per_env(
     cells: Iterable[Mapping[str, object]],
     *,
     arm_filter: str,
-    arm_field: str = 'intervention_name',
+    arm_field: str = 'arm_key',
     verdict_column: str,
 ) -> VerdictDistributionResult:
     """Per-env tally of `verdict_column` values for cells whose

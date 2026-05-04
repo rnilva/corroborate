@@ -15,8 +15,6 @@ Validates:
 """
 from __future__ import annotations
 
-from collections.abc import Mapping
-
 import pytest
 
 from corroborate.stats import (
@@ -25,10 +23,7 @@ from corroborate.stats import (
 )
 from corroborate.stats.meta_regression import (
     cross_validate_meta_regression,
-    meta_regress_comparison,
 )
-from corroborate.corpus.schema import GroupStats, HypothesisComparisonRow
-from corroborate.bridge.verdict import Verdict
 
 
 # ============ Recovery on synthetic-known-effect data ============
@@ -293,112 +288,6 @@ def test_missing_covariate_defaults_to_zero() -> None:
     # Treats stratum 0 as x=0 → fits a line through (0,0), (1,1),
     # (2,2), (3,3) → slope ≈ 1.
     assert result.coefficients[0].coefficient == pytest.approx(1.0, abs=0.05)
-
-
-# ============ meta_regress_comparison ============
-
-def _gs(group_value: object, g: float, se: float) -> GroupStats:
-    """Build a minimal GroupStats with only the fields B3 reads."""
-    return GroupStats(
-        group_value=group_value,
-        n_pairs=10,
-        arm_a_mean=0.0, arm_a_sd=None,
-        arm_b_mean=0.0, arm_b_sd=None,
-        effect_size_g=g,
-        se=se,
-        derived_q=None,
-        delta_i=0.0,
-        verdict=Verdict.HELD,
-        refutation_class=None,
-        adequately_powered=True,
-    )
-
-
-def _hcr(per_group: tuple[GroupStats, ...]) -> HypothesisComparisonRow:
-    """Minimal HypothesisComparisonRow carrying just `per_group` —
-    enough for `meta_regress_comparison` to do its job."""
-    return HypothesisComparisonRow(
-        id='test-row', parent_id=None, cycle_id=None,
-        timestamp='2026-04-29T00:00:00Z',
-        intervention_name='test',
-        treatment_arm_key='treatment',
-        baseline_arm_key='baseline',
-        treatment_run_ids=(), baseline_run_ids=(),
-        predicted_direction=None,
-        pair_by=('seed',),
-        group_by='env_name',
-        arm_a_n=0, arm_a_mean=None, arm_a_sd=None,
-        arm_b_n=0, arm_b_mean=None, arm_b_sd=None,
-        effect_size_g=None, se=None, derived_q=None,
-        delta_i_population=0.0,
-        adequately_powered=False,
-        verdict=Verdict.HELD,
-        refutation_class=None,
-        per_group=per_group,
-        pooled=None,
-        n_dropped_unpaired=0,
-    )
-
-
-def test_meta_regress_comparison_recovers_known_cleaver() -> None:
-    """Stratified comparison row with per-stratum effects driven
-    by one covariate → meta_regress_comparison flags it
-    significant."""
-    per_group = tuple(
-        _gs(group_value=f'env{i}', g=2.0 + 0.5 * i, se=0.1)
-        for i in range(10)
-    )
-    row = _hcr(per_group)
-
-    def covariate_for(gv: object) -> Mapping[str, float]:
-        # group_value is the env name like 'env3'; encode as int.
-        assert isinstance(gv, str)
-        return {'env_index': float(gv.removeprefix('env'))}
-
-    result = meta_regress_comparison(row, covariate_for, alpha=0.05)
-    assert result.n_strata == 10
-    assert result.cleavage_axes == ('env_index',)
-
-
-def test_meta_regress_comparison_skips_none_strata() -> None:
-    """Strata with `effect_size_g=None` or `se=None` are silently
-    dropped — those are degenerate per-strata flagged earlier in
-    aggregation."""
-    per_group = (
-        _gs(group_value='env0', g=0.0, se=0.1),
-        GroupStats(  # null stratum (no pairs)
-            group_value='env_null', n_pairs=0,
-            arm_a_mean=None, arm_a_sd=None,
-            arm_b_mean=None, arm_b_sd=None,
-            effect_size_g=None, se=None,
-            derived_q=None, delta_i=0.0,
-            verdict=Verdict.POWER_INSUFFICIENT,
-            refutation_class=None,
-            adequately_powered=False,
-        ),
-        _gs(group_value='env1', g=0.5, se=0.1),
-        _gs(group_value='env2', g=1.0, se=0.1),
-        _gs(group_value='env3', g=1.5, se=0.1),
-    )
-    row = _hcr(per_group)
-
-    def covariate_for(gv: object) -> Mapping[str, float]:
-        assert isinstance(gv, str)
-        return {'idx': float(gv.removeprefix('env'))}
-
-    result = meta_regress_comparison(row, covariate_for, alpha=0.05)
-    assert result.n_strata == 4  # null stratum dropped
-
-
-def test_meta_regress_comparison_empty_per_group_raises() -> None:
-    row = _hcr(per_group=())
-
-    def covariate_for(gv: object) -> Mapping[str, float]:
-        del gv
-        return {}
-
-    with pytest.raises(ValueError, match='per_group is empty'):
-        meta_regress_comparison(row, covariate_for, alpha=0.05)
 
 
 # ============ cross_validate_meta_regression ============

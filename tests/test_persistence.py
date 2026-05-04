@@ -26,11 +26,11 @@ def _sample_runrow() -> RunRow:
         cycle_id='cycle-7',
         timestamp='2026-04-27T10:00:00Z',
         verdict=Verdict.HELD,
+        arm_key='dqn_with_double_greedify',
         measurements={
             'env_name': 'CartPole-v1',
             'seed': 42,
             'total_steps': 30_000,
-            'intervention_name': 'dqn_with_double_greedify',
             'gamma': 0.99,
             'optimizer.inner.lr': 0.001,
             'late_window_mean': 120.5,
@@ -87,21 +87,20 @@ def test_runrow_parquet_with_no_measurements(tmp_path: Path) -> None:
 
 def test_runrow_parquet_arm_key_round_trip(tmp_path: Path) -> None:
     """`arm_key` is a typed framework-surface column; explicit
-    values round-trip and the field stays distinct from the
-    `intervention_name` measurement."""
+    values round-trip distinct from any open-surface measurement."""
     row = RunRow(
         id='r-1', parent_id=None,
         cycle_id=None, timestamp='t',
         verdict=Verdict.HELD,
         arm_key='bootstrap=Claim:double_greedify',
-        measurements={'intervention_name': 'ddqn'},
+        measurements={'env_name': 'TestEnv'},
     )
     path = tmp_path / 'runs.parquet'
     write_runrows([row], path)
     loaded = read_runrows(path)
     assert len(loaded) == 1
     assert loaded[0].arm_key == 'bootstrap=Claim:double_greedify'
-    assert loaded[0].measurements['intervention_name'] == 'ddqn'
+    assert loaded[0].measurements['env_name'] == 'TestEnv'
     assert loaded[0] == row
 
 
@@ -287,3 +286,103 @@ def test_graphs_sidecar_absent_file_returns_empty(
     from corroborate.corpus.persistence import read_graphs_sidecar
     out = read_graphs_sidecar(tmp_path / 'absent.json')
     assert out == {}
+
+
+# ============ stream_concat_parquets scratch-dir placement ============
+
+def _write_tiny_parquet(path: Path, n_rows: int, salt: int) -> None:
+    import polars as pl
+    pl.DataFrame({
+        'id': [f'r-{salt}-{i}' for i in range(n_rows)],
+        'value': [float(salt + i) for i in range(n_rows)],
+    }).write_parquet(str(path))
+
+
+def test_stream_concat_scratch_defaults_to_out_parent(
+    tmp_path: Path,
+) -> None:
+    """Regression for the merge-bug where the dispatcher's
+    `stream_concat_parquets` silently failed with `ENOSPC` on
+    `/tmp` (small overlay fs). The fix routes the chunked
+    scratch to `out.parent` by default, putting it on the same
+    filesystem the output is provisioned on. This test checks
+    the placement contract: the scratch dir is created inside
+    `out.parent`, not in the system tempfile dir."""
+    import os
+    from corroborate.corpus.persistence import stream_concat_parquets
+
+    src_dir = tmp_path / 'src'
+    out_dir = tmp_path / 'out'
+    src_dir.mkdir()
+    out_dir.mkdir()
+    inputs = [src_dir / f'shard_{i:02d}.parquet' for i in range(8)]
+    for i, p in enumerate(inputs):
+        _write_tiny_parquet(p, n_rows=3, salt=i)
+
+    seen_dirs: list[str] = []
+    real_mkdtemp = __import__('tempfile').mkdtemp
+
+    def spy_mkdtemp(prefix: str = 'tmp', dir: str | None = None) -> str:
+        # Capture the dir kwarg so we can assert placement without
+        # hooking the resulting Path itself (which gets cleaned up).
+        seen_dirs.append(str(dir))
+        return real_mkdtemp(prefix=prefix, dir=dir)
+
+    import tempfile
+    monkey = tempfile
+    orig = monkey.mkdtemp
+    monkey.mkdtemp = spy_mkdtemp  # pyright: ignore[reportAttributeAccessIssue]
+    try:
+        stream_concat_parquets(
+            inputs, out_dir / 'merged.parquet', chunk_size=3,
+        )
+    finally:
+        monkey.mkdtemp = orig  # pyright: ignore[reportAttributeAccessIssue]
+
+    # 8 inputs at chunk_size=3 → ceil(8/3) = 3 chunks → recursive
+    # call with 3 chunks ≤ 3 hits the small case (no temp dir).
+    # So mkdtemp should have been called exactly once at the
+    # outer level, with `dir=str(out_dir)`.
+    assert len(seen_dirs) == 1, seen_dirs
+    assert seen_dirs[0] == str(out_dir), (
+        f'expected scratch in out.parent={out_dir!r}, got {seen_dirs[0]!r}'
+    )
+    assert (out_dir / 'merged.parquet').exists()
+
+
+def test_stream_concat_explicit_scratch_dir_honored(
+    tmp_path: Path,
+) -> None:
+    """Caller can override the scratch placement (e.g. point at a
+    fast SSD even when the output lands on a slow archive disk)."""
+    import tempfile
+    from corroborate.corpus.persistence import stream_concat_parquets
+
+    src_dir = tmp_path / 'src'
+    out_dir = tmp_path / 'out'
+    scratch_dir = tmp_path / 'fast_scratch'
+    src_dir.mkdir()
+    out_dir.mkdir()
+    inputs = [src_dir / f'shard_{i:02d}.parquet' for i in range(8)]
+    for i, p in enumerate(inputs):
+        _write_tiny_parquet(p, n_rows=3, salt=i)
+
+    seen_dirs: list[str] = []
+    orig = tempfile.mkdtemp
+
+    def spy_mkdtemp(prefix: str = 'tmp', dir: str | None = None) -> str:
+        seen_dirs.append(str(dir))
+        return orig(prefix=prefix, dir=dir)
+
+    tempfile.mkdtemp = spy_mkdtemp  # pyright: ignore[reportAttributeAccessIssue]
+    try:
+        stream_concat_parquets(
+            inputs, out_dir / 'merged.parquet',
+            chunk_size=3, scratch_dir=scratch_dir,
+        )
+    finally:
+        tempfile.mkdtemp = orig  # pyright: ignore[reportAttributeAccessIssue]
+
+    assert seen_dirs == [str(scratch_dir)], seen_dirs
+    assert scratch_dir.exists(), 'scratch_dir auto-created if missing'
+    assert (out_dir / 'merged.parquet').exists()

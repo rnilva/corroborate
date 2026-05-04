@@ -38,7 +38,7 @@ def _synthetic_audit_cells() -> list[dict[str, object]]:
             'timestamp': '2026-04-30T00:00:00',
             'verdict': 'held',
             'arm_key': 'baseline',
-            'intervention_name': 'arm',
+            'arm_key': 'arm',
             'capacity': cap,
             'lr': 0.001,
             'eval_final_mean': 0.5 + 0.01 * i,

@@ -234,6 +234,7 @@ def stream_concat_parquets(
     compression: ParquetCompression = 'zstd',
     compression_level: int = 3,
     chunk_size: int = 4,
+    scratch_dir: Path | None = None,
 ) -> None:
     """Concatenate `inputs` to `out` via polars'
     `concat(how='diagonal_relaxed')` — null-pads missing columns
@@ -268,7 +269,19 @@ def stream_concat_parquets(
 
     For 12 SpaceInvaders 1M trace shards (~580MB compressed each,
     ~5GB decompressed), `chunk_size=4` keeps peak RAM under ~20GB
-    versus ~60GB for unchunked."""
+    versus ~60GB for unchunked.
+
+    `scratch_dir` controls where the per-chunk temp parquets
+    land during the recursive merge. **Defaults to `out.parent`**
+    (the output's directory) so the temp scratch shares the same
+    filesystem as the final output and can't outgrow a tiny
+    overlay/`/tmp` mount. Pass an explicit path to override (e.g.
+    a fast SSD scratch). Containerized runs where `/tmp` is on a
+    small overlay used to silently fail the merge with
+    `ENOSPC` — the chunk outputs (~chunk_size × compressed input
+    size) easily exceed a few-GB overlay; the new default puts
+    them next to the actual output where disk space was already
+    provisioned for the result."""
     if not inputs:
         raise ValueError('stream_concat_parquets: no inputs')
     if chunk_size < 1:
@@ -299,7 +312,11 @@ def stream_concat_parquets(
     # fits the chunk_size threshold in one more pass).
     import tempfile
     import shutil
-    tmp_dir = Path(tempfile.mkdtemp(prefix='stream_concat_'))
+    effective_scratch = scratch_dir if scratch_dir is not None else out.parent
+    effective_scratch.mkdir(parents=True, exist_ok=True)
+    tmp_dir = Path(tempfile.mkdtemp(
+        prefix='stream_concat_', dir=str(effective_scratch),
+    ))
     try:
         chunk_outs: list[Path] = []
         for i in range(0, len(inputs_list), chunk_size):
@@ -316,13 +333,16 @@ def stream_concat_parquets(
             chunk_outs.append(chunk_path)
         # Recurse on the chunk files. Same chunk_size — at most
         # log_chunk_size(N) levels of recursion (small for any
-        # realistic N).
+        # realistic N). Recursive calls inherit `scratch_dir`
+        # (None means each level recomputes its own `out.parent`,
+        # which is correct when chunks are inside `tmp_dir`).
         stream_concat_parquets(
             chunk_outs, out,
             type_widening=type_widening,
             compression=compression,
             compression_level=compression_level,
             chunk_size=chunk_size,
+            scratch_dir=scratch_dir,
         )
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)

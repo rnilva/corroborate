@@ -12,7 +12,8 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-import jax.numpy as jnp
+import numpy as np
+import numpy.typing as npt
 import pytest
 
 from corroborate.measurables import Measurable
@@ -37,10 +38,10 @@ def test_from_key_returns_measurable() -> None:
 
 
 def test_from_key_reads_record_value() -> None:
-    arr = jnp.asarray([1.0, 2.0, 3.0])
-    record: Mapping[str, jnp.ndarray] = {'q_max': arr}
+    arr = np.asarray([1.0, 2.0, 3.0])
+    record: Mapping[str, npt.NDArray[np.floating]] = {'q_max': arr}
     m = from_key('q_max')
-    assert jnp.allclose(m(record), arr)
+    assert np.allclose(m(record), arr)
 
 
 # ============ max_abs ============
@@ -52,8 +53,8 @@ def test_max_abs_propagates_reads() -> None:
 
 
 def test_max_abs_computes_max_of_absolute() -> None:
-    record: Mapping[str, jnp.ndarray] = {
-        'q_max': jnp.asarray([1.0, -5.0, 3.0, -2.0]),
+    record: Mapping[str, npt.NDArray[np.floating]] = {
+        'q_max': np.asarray([1.0, -5.0, 3.0, -2.0]),
     }
     m = max_abs(from_key('q_max'))
     assert m(record) == 5.0
@@ -62,8 +63,8 @@ def test_max_abs_computes_max_of_absolute() -> None:
 # ============ mean_window ============
 
 def test_mean_window_late_10pct() -> None:
-    record: Mapping[str, jnp.ndarray] = {
-        'x': jnp.arange(10, dtype=jnp.float32),  # 0..9
+    record: Mapping[str, npt.NDArray[np.floating]] = {
+        'x': np.arange(10, dtype=np.float32),  # 0..9
     }
     m = mean_window(from_key('x'), 0.9, 1.0)
     # Last 10% of 10 elements = index 9 = value 9.0
@@ -71,8 +72,8 @@ def test_mean_window_late_10pct() -> None:
 
 
 def test_mean_window_first_quarter() -> None:
-    record: Mapping[str, jnp.ndarray] = {
-        'x': jnp.arange(8, dtype=jnp.float32),  # 0..7
+    record: Mapping[str, npt.NDArray[np.floating]] = {
+        'x': np.arange(8, dtype=np.float32),  # 0..7
     }
     m = mean_window(from_key('x'), 0.0, 0.25)
     # First 25% of 8 elements = indices [0, 2) → mean(0, 1) = 0.5
@@ -97,8 +98,8 @@ def test_mean_window_rejects_inverted_bounds() -> None:
 def test_mean_window_handles_tiny_arrays() -> None:
     """When `n` is so small the window collapses, the reduction
     still returns a valid mean (i_hi gets bumped to i_lo + 1)."""
-    record: Mapping[str, jnp.ndarray] = {
-        'x': jnp.asarray([7.0, 3.0]),
+    record: Mapping[str, npt.NDArray[np.floating]] = {
+        'x': np.asarray([7.0, 3.0]),
     }
     m = mean_window(from_key('x'), 0.0, 0.25)
     # 0.25 * 2 = 0; i_hi = 0 → bumped to 1 → mean(arr[0:1]) = 7
@@ -108,9 +109,9 @@ def test_mean_window_handles_tiny_arrays() -> None:
 # ============ growth_window ============
 
 def test_growth_window_decay_returns_lt_one() -> None:
-    record: Mapping[str, jnp.ndarray] = {
+    record: Mapping[str, npt.NDArray[np.floating]] = {
         # Geometric decay 100 → ~6
-        'r': jnp.asarray([100.0, 50.0, 25.0, 12.0, 6.0]),
+        'r': np.asarray([100.0, 50.0, 25.0, 12.0, 6.0]),
     }
     m = growth_window(from_key('r'))
     # early = mean(arr[0:1]) = 100; late = mean(arr[3:5]) = 9
@@ -119,8 +120,8 @@ def test_growth_window_decay_returns_lt_one() -> None:
 
 
 def test_growth_window_growth_returns_gt_one() -> None:
-    record: Mapping[str, jnp.ndarray] = {
-        'q': jnp.asarray([1.0, 2.0, 4.0, 8.0]),
+    record: Mapping[str, npt.NDArray[np.floating]] = {
+        'q': np.asarray([1.0, 2.0, 4.0, 8.0]),
     }
     m = growth_window(from_key('q'))
     # early ≈ 1, late ≈ 8 → growth ≈ 8
@@ -136,8 +137,8 @@ def test_growth_window_propagates_reads() -> None:
 # ============ late_window_mean (outcome projection) ============
 
 def test_late_window_mean_returns_late_fraction() -> None:
-    record: Mapping[str, jnp.ndarray] = {
-        'ep_return': jnp.asarray([1.0] * 9 + [10.0]),
+    record: Mapping[str, npt.NDArray[np.floating]] = {
+        'ep_return': np.asarray([1.0] * 9 + [10.0]),
     }
     m = late_window_mean('ep_return', fraction=0.1)
     # Last 10% of 10 = index [9, 10) = 10.0
@@ -157,7 +158,7 @@ def test_late_window_mean_rejects_invalid_fraction() -> None:
 def test_mean_peak_window_pre_half() -> None:
     """Peak at index 8 of 10; pre_frac=0.5 → window [4, 8].
     arr = [0, 1, 2, ..., 9]; mean over [4, 5, 6, 7] = 5.5."""
-    arr = jnp.asarray([float(i) for i in range(10)])
+    arr = np.asarray([float(i) for i in range(10)])
     record: Mapping[str, object] = {
         'q': arr, 'peak_idx': 8,
     }
@@ -173,8 +174,8 @@ def test_mean_peak_window_propagates_reads() -> None:
 
 def test_mean_peak_window_handles_missing_peak() -> None:
     """Peak key missing from record → NaN, not crash."""
-    arr = jnp.asarray([float(i) for i in range(10)])
-    record: Mapping[str, jnp.ndarray] = {'q': arr}
+    arr = np.asarray([float(i) for i in range(10)])
+    record: Mapping[str, npt.NDArray[np.floating]] = {'q': arr}
     m = mean_peak_window(from_key('q'), 'peak_idx', pre_frac=0.5)
     import math
     assert math.isnan(m(record))
@@ -192,7 +193,7 @@ def test_mean_peak_window_rejects_bad_pre_frac() -> None:
 def test_peak_centered_window_default() -> None:
     """20-element array, peak at 10, half_width=0.125 (h=2).
     Window [8, 12); arr=[0..19]; mean = (8+9+10+11)/4 = 9.5."""
-    arr = jnp.asarray([float(i) for i in range(20)])
+    arr = np.asarray([float(i) for i in range(20)])
     record: Mapping[str, object] = {
         'q': arr, 'peak_idx': 10,
     }
@@ -203,7 +204,7 @@ def test_peak_centered_window_default() -> None:
 def test_peak_centered_window_clipped_at_end() -> None:
     """Peak at end: window [n-h, n] (clipped). For n=10, peak=10,
     h=1: window [9, 10] = [9.0]; mean=9.0."""
-    arr = jnp.asarray([float(i) for i in range(10)])
+    arr = np.asarray([float(i) for i in range(10)])
     record: Mapping[str, object] = {
         'q': arr, 'peak_idx': 10,
     }

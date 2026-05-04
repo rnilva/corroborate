@@ -22,6 +22,16 @@ from corroborate.core.claim import (
 )
 
 
+@claim
+def _module_level_claim(a: int, b: float = 0.0) -> float:
+    """Module-level `@claim` so pickle's module:qualname lookup
+    can find both the wrapper and the wrapped fn. Used solely by
+    the pickle round-trip cases below; substrate-side pickle of
+    real `@claim`-decorated DQN functions lives in
+    `src/corroborate_rl/tests/test_claim_substrate_integration.py`."""
+    return a + b
+
+
 # ============ Free-function decoration ============
 
 def test_claim_returns_callable_with_native_signature() -> None:
@@ -308,65 +318,37 @@ def test_partial_signature_overlay_via_walker() -> None:
     assert by_name['anneal'].default == 50_000
 
 
-# ============ Pickle round-trip ============
+# ============ Pickle round-trip (framework-level) ============
 
 def test_pickle_round_trip_function_claim() -> None:
     """`_FnClaim` is a single shared frozen-dataclass class living
-    at module-scope in `corroborate.claim`; pickle finds it via
-    standard module:qualname lookup. The wrapped `fn` must also
-    be module-level (which the substrate's `@claim`'d functions
-    are)."""
+    at module-scope in `corroborate.core.claim`; pickle finds it
+    via standard module:qualname lookup. The wrapped `fn` must
+    also be module-level — emulated here with a module-scope
+    `_module_level_claim` so the test stays substrate-free.
+    Substrate-side pickle round-trip on a real DQN claim lives in
+    `src/corroborate_rl/tests/test_claim_substrate_integration.py`."""
     import pickle
-    from corroborate.rl.dqn.claims.bootstrap import bootstrap as vanilla_bootstrap
 
-    blob = pickle.dumps(vanilla_bootstrap)
+    blob = pickle.dumps(_module_level_claim)
     restored = pickle.loads(blob)
     # Memoization gives us singleton identity.
-    assert restored is vanilla_bootstrap
+    assert restored is _module_level_claim
 
 
 def test_pickle_round_trip_partial_over_claim() -> None:
-    """`functools.partial` over a claim pickles natively."""
+    """`functools.partial` over a claim pickles natively, including
+    its baked float kwargs — the shape `partial(claim, kw=0.95)`
+    that substrate sweep authoring uses for topology-leaf
+    binding."""
     import pickle
     from functools import partial
-    from corroborate.rl.dqn.claims.bootstrap import bootstrap as vanilla_bootstrap
 
-    baked = partial(vanilla_bootstrap, gamma=0.95)
+    baked = partial(_module_level_claim, b=0.95)
     blob = pickle.dumps(baked)
     restored = pickle.loads(blob)
-    assert restored.func is vanilla_bootstrap
-    assert restored.keywords == {'gamma': 0.95}
-
-
-# ============ JIT silence (#5) ============
-
-def test_trace_records_under_jit_for_structural_extraction() -> None:
-    """When @claim'd functions run inside `jax.jit` / `lax.scan` /
-    `vmap`, args are Tracer objects. Recording fires anyway —
-    that's exactly the structural information `computation_graph.
-    build_*` extracts (which Claim called which during the tracing
-    pass). Earlier versions skipped tracer-arg calls; that
-    silently dropped every claim inside a scan loop, making the
-    full `dqn` (which uses scan) unprofileable."""
-    import jax
-    import jax.numpy as jnp
-
-    @claim
-    def double(x: jax.Array) -> jax.Array:
-        return x * 2
-
-    with trace_context() as records:
-        # Inside jit the arg is a Tracer → still records (one call
-        # per tracing pass).
-        result = jax.jit(double)(jnp.float32(3.0))
-        # Concrete call outside jit → records.
-        _ = double(jnp.float32(4.0))
-
-    assert float(result) == 6.0
-    # Both calls record: one from the jit tracing pass + one from
-    # the concrete eager call.
-    assert len(records) == 2
-    assert all(r.claim is double for r in records)
+    assert restored.func is _module_level_claim
+    assert restored.keywords == {'b': 0.95}
 
 
 def test_is_claim_narrows_type() -> None:

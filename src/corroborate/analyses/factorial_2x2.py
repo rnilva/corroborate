@@ -91,7 +91,7 @@ def factorial_2x2_interaction(
     arm_d: str,
     source: str,
     pair_by: tuple[str, ...] = ('seed',),
-    arm_field: str = 'intervention_name',
+    arm_field: str = 'arm_key',
     env_filter: tuple[str, ...] = (),
     total_steps_filter: int | None = None,
     total_steps_field: str = 'total_steps',

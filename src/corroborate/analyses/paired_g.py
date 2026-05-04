@@ -30,7 +30,7 @@ import math
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 
-from corroborate.analyses._panel import per_stratum_panel
+from corroborate.analyses.panel import per_stratum_panel
 from corroborate.bridge.analysis import analysis
 from corroborate.corpus.schema import StratumG
 
@@ -152,19 +152,22 @@ def paired_g(
     treatment_arm: str,
     baseline_arm: str,
     pair_by: tuple[str, ...] = ('seed',),
-    arm_field: str = 'intervention_name',
+    arm_field: str = 'arm_key',
     dedupe_strategy: str = 'raise',
 ) -> PairedGResult:
     """Compute paired Hedges' g + raw mean-diff at `source` across
     matched (T, B) pairs in `cells`.
 
-    Pairing is by string match on `arm_field` (typically
-    `intervention_name`). `treatment_arm` and `baseline_arm` come
-    from the bridge's `DoEffect` — either via per-bridge
-    `source = DoEffect(...)` decorator override or via file-level
-    `INTERVENTION = DoEffect(...)` resolved at decoration time.
-    `claim_bridge.evaluate()` extracts the contrast and forwards
-    the arm strings into this analysis's kwargs.
+    Pairing is by string match on `arm_field` (defaults to
+    `'arm_key'`; the `canonical_str` fingerprint the substrate's
+    cell runner stamps on each cell). `treatment_arm` and
+    `baseline_arm` come from the bridge's `DoEffect` — either via
+    per-bridge `source = DoEffect(...)` decorator override or via
+    file-level `INTERVENTION = DoEffect(...)` resolved at
+    decoration time. `claim_bridge.evaluate()` derives the
+    canonical arm strings via `DoEffect.treatment_arm_key()` /
+    `baseline_arm_key()` and forwards them into this analysis's
+    kwargs.
 
     `source` resolves through the measurable registry (preferred)
     or as a field-path read on the cell record.
@@ -292,7 +295,7 @@ def per_env_paired_g_panel(
     source: str,
     env_filter: tuple[str, ...] = (),
     pair_by: tuple[str, ...] = ('seed',),
-    arm_field: str = 'intervention_name',
+    arm_field: str = 'arm_key',
 ) -> tuple[StratumG[str], ...]:
     """Per-env paired-g panel — one `StratumG[str]` per env in
     `env_filter` (or every env present in `cells` when empty).

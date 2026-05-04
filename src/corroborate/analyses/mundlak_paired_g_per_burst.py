@@ -51,7 +51,7 @@ def _per_env_burst_predictor_mean(
     for c in cells:
         if c.get('env_name') != env_name:
             continue
-        if arm_filter is not None and c.get('intervention_name') != arm_filter:
+        if arm_filter is not None and c.get('arm_key') != arm_filter:
             continue
         cell_id = c.get('id')
         if not isinstance(cell_id, str):
@@ -117,10 +117,9 @@ def mundlak_paired_g_per_burst(
     # Resolve the named measurable; apply once per cell with
     # transitive dep resolution via `evaluate_with_measurables`,
     # cache the array. Substrate consumers register their
-    # measurables via the substrate's `__init__.py` side effect
-    # (e.g. importing `corroborate.rl.dqn` triggers DQN
-    # measurable registration); this analysis is substrate-
-    # neutral and does not register anything itself.
+    # measurables via their package's `__init__.py` side effect;
+    # this analysis is substrate-neutral and does not register
+    # anything itself.
     from corroborate.measurables import (
         get_registered, evaluate_with_measurables,
     )

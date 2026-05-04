@@ -23,12 +23,6 @@ Nodes are measurable / record-key names (strings). Edges are
 produce path-level direction + tier — chain composition for
 admissibility / promotion checks.
 
-`hypothesis_subgraph_verdict` (in `hypothesis_verdict.py`) is the
-sole producer of `BridgeEdge`s: it constructs them inline as it
-walks a Hypothesis's typed claimed edges, then passes the
-resulting graph through `promote_bridged_evidence` for the
-`causal_one_sided` → `causal_bridged` post-pass.
-
 `promote_bridged_evidence(g)` is the post-pass: for any (source,
 target) pair with ≥2 `causal_one_sided` edges (≥2 INTERVENTIONAL
 HELD bridges under the same DAG), those edges promote to

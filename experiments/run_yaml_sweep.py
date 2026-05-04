@@ -19,7 +19,7 @@ os.environ.setdefault('XLA_PYTHON_CLIENT_MEM_FRACTION', '0.9')
 import argparse
 from pathlib import Path
 
-from corroborate.rl.dqn.yaml_sweep import dispatch_sweep, load_sweep
+from corroborate_rl.dqn.yaml_sweep import dispatch_sweep, load_sweep
 
 
 def main() -> None:
@@ -41,7 +41,7 @@ def main() -> None:
             f'{type(sweep_path_attr).__name__}',
         )
 
-    from corroborate.rl.dqn.yaml_sweep import default_dqn_registry
+    from corroborate_rl.dqn.yaml_sweep import default_dqn_registry
     sweep = load_sweep(Path(sweep_path_attr), reg=default_dqn_registry())
     print(
         f'sweep: {sweep.name} '

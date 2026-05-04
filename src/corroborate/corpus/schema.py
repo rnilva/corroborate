@@ -1,23 +1,18 @@
 """Schema — typed row dataclasses for corroborate's corpus.
 
-Two levels (mirror v9's traces.parquet + measurements.parquet,
-v10's HypothesisRunRow + HypothesisComparisonRow):
+Two persistence stores:
 
 - `RunRow` — per-cell evidence (one (env, seed) execution).
   Source of truth.
-- `HypothesisComparisonRow` — per-Hypothesis cross-arm row, built
-  by `from_cells` over RunRows. Carries typed per-arm stats,
-  Hedges' g, derived_q, plus stratified `per_group: tuple[
-  GroupStats, ...]` and random-effects `pooled: PooledStats` when
-  `group_by` is set. Re-derivable on demand.
-
-Plus the per-cell raw observation store:
-
 - `TraceRow.leaves` — scalars + N-D series, persisted to parquet
   (one column per leaf path, polars-queryable). Multi-dim
   arrays live in nested-list columns; the streaming reader
   (`iter_trace_records`) keeps memory bounded regardless of
   inner shape, so the older zarr backend was subtracted.
+
+The cross-arm aggregation surface (paired Hedges' g + per-group +
+pooled) lives in `corroborate.analyses.paired_comparison`, not
+here — the analysis is ephemeral / not persisted.
 
 Each row splits into a **framework-typed surface** (closed-set
 enums, lineage IDs, framework-controlled provenance) and an
@@ -36,20 +31,10 @@ measurement is its own typed column, queryable directly.
 fields plus each measurement at top-level, unprefixed).
 `from_row_dict(d)` reverses: provenance fields by name, the rest
 into `measurements`. Skip None-valued columns (polars null-pads
-when rows have heterogeneous keys).
-
-Lineage is explicit via `*_id` fields:
-- `RunRow.id` → referenced by `TraceRow.id` (1:1 join)
-- `HypothesisComparisonRow.{treatment,baseline}_run_ids` are
-  tuples of the per-cell RunRow ids that fed each arm — the N:1
-  lineage is materialised on the row."""
+when rows have heterogeneous keys)."""
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from corroborate.core.hypothesis import Hypothesis
 from dataclasses import dataclass, field, fields
 from typing import Self
 
@@ -61,9 +46,7 @@ from corroborate._internals.narrow import (
     require_str,
     require_verdict,
 )
-from corroborate.core.hypothesis import PredictedDirection
-from corroborate.stats import PooledStats
-from corroborate.bridge.verdict import RefutationClass, Verdict
+from corroborate.bridge.verdict import Verdict
 
 
 # ============ Measurement leaf type ============
@@ -234,13 +217,13 @@ class RunRow:
     dotted topology paths, bridge/invariant results under
     `bridge.<name>.*` / `invariant.<name>.*`, outcome reductions
     under substrate-named keys (e.g. `late_window_mean`),
-    and substrate metadata (`env_name`, `seed`, `total_steps`,
-    `intervention_name`).
+    and substrate metadata (`env_name`, `seed`, `total_steps`).
 
     `arm_key` defaults to `'baseline'` so hand-constructed
     fixtures and old parquets without the column read as the
     baseline arm. Production write paths populate it from
-    `Hypothesis.arm_key()`.
+    `canonical_str(claim)` of the per-arm composition (the
+    substrate's cell runner).
 
     Older parquets may carry a `claim_graph_signature` column
     (legacy program-structural fingerprint); `from_row_dict`
@@ -345,127 +328,5 @@ class StratumG[K]:
 # Convenience aliases for the two common shapes.
 type PerEnvG = StratumG[str]
 type PerBurstStratum = StratumG[tuple[str, int]]
-
-
-# ============ GroupStats — per-stratum summary ============
-
-@dataclass(frozen=True, slots=True)
-class GroupStats:
-    """Per-stratum (paired Hedges' g + se + verdict) summary, one
-    per `group_by`-value when `HypothesisComparisonRow.from_cells`
-    runs in stratified mode.
-
-    `group_value` carries whatever value the `group_by` column had
-    for this stratum (e.g. `'CartPole-v1'` when `group_by=
-    'env_name'`). Heterogeneous Python types are intentional —
-    different substrates use different group identities."""
-    group_value: object
-    n_pairs: int
-    arm_a_mean: float | None
-    arm_a_sd: float | None
-    arm_b_mean: float | None
-    arm_b_sd: float | None
-    effect_size_g: float | None
-    se: float | None
-    derived_q: float | None
-    delta_i: float
-    verdict: Verdict
-    refutation_class: RefutationClass | None
-    adequately_powered: bool
-
-
-# ============ HypothesisComparisonRow — canonical aggregator ============
-
-@dataclass(frozen=True, slots=True)
-class HypothesisComparisonRow:
-    """The canonical per-hypothesis comparison row. Materialized by
-    `from_cells` from per-cell `RunRow`s; never authored by hand.
-
-    Compresses the per-(env, leaf-sig) `paired_comparison_from_
-    runs` + cross-env `random_effects_summary` thread into one
-    object. When `group_by` is None, single-group mode: per-arm
-    stats + Hedges' g over the paired Δ distribution. When
-    `group_by` is set, stratified mode: `per_group` carries one
-    `GroupStats` per stratum and `pooled` carries the random-
-    effects pooled summary; the row's top-level `effect_size_g`
-    mirrors `pooled.pooled_g`.
-
-    `pair_by` and `group_by` are recorded on the row so consumers
-    know how the aggregation was performed."""
-    id: str
-    parent_id: str | None
-    cycle_id: str | None
-    timestamp: str
-    intervention_name: str
-    treatment_arm_key: str
-    baseline_arm_key: str
-    treatment_run_ids: tuple[str, ...]
-    baseline_run_ids: tuple[str, ...]
-    predicted_direction: PredictedDirection | None
-    pair_by: tuple[str, ...]
-    group_by: str | None
-
-    # Single-group / overall stats.
-    arm_a_n: int
-    arm_a_mean: float | None
-    arm_a_sd: float | None
-    arm_b_n: int
-    arm_b_mean: float | None
-    arm_b_sd: float | None
-    effect_size_g: float | None
-    se: float | None
-    derived_q: float | None
-    delta_i_population: float
-    adequately_powered: bool
-    verdict: Verdict
-    refutation_class: RefutationClass | None
-
-    # Stratified mode (empty / None when group_by is None).
-    per_group: tuple[GroupStats, ...]
-    pooled: PooledStats | None
-
-    # Diagnostics.
-    n_dropped_unpaired: int
-
-    @classmethod
-    def from_cells(
-        cls,
-        h: 'Hypothesis[Mapping[str, object]]',
-        treatment_runs: Sequence['RunRow'],
-        baseline_runs: Sequence['RunRow'],
-        *,
-        outcome_path: str,
-        pair_by: tuple[str, ...],
-        group_by: str | None = None,
-        alpha: float = 0.05,
-        power: float = 0.8,
-        cycle_id: str | None = None,
-        timestamp: str | None = None,
-        baseline_h: 'Hypothesis[Mapping[str, object]] | None' = None,
-    ) -> 'HypothesisComparisonRow':
-        """Canonical constructor — never call `__init__` directly.
-        Delegates to `corroborate.aggregate.
-        hypothesis_comparison_from_cells` (lazy import avoids the
-        schema → aggregate cycle).
-
-        `baseline_h` carries the typed identity of the baseline
-        arm. Default is None → baseline arm key is `'baseline'`
-        (the empty `intervention_arms` arm). Pass a Hypothesis
-        when the baseline is itself a treatment (e.g. comparing
-        two non-baseline arms).
-
-        See `hypothesis_comparison_from_cells` for parameter
-        semantics."""
-        from corroborate.corpus.aggregate import (
-            hypothesis_comparison_from_cells,
-        )
-        return hypothesis_comparison_from_cells(
-            h, treatment_runs, baseline_runs,
-            outcome_path=outcome_path,
-            pair_by=pair_by, group_by=group_by,
-            alpha=alpha, power=power,
-            cycle_id=cycle_id, timestamp=timestamp,
-            baseline_h=baseline_h,
-        )
 
 

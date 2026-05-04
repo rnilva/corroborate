@@ -41,7 +41,7 @@ def paired_g_among_solvers(
     gate_thresholds: Mapping[str, float],
     pair_by: tuple[str, ...] = ('seed',),
     env_filter: tuple[str, ...] = (),
-    arm_field: str = 'intervention_name',
+    arm_field: str = 'arm_key',
     total_steps_filter: int | None = None,
     total_steps_field: str = 'total_steps',
 ) -> PooledPairedGResult:
@@ -51,10 +51,9 @@ def paired_g_among_solvers(
     effects.
 
     `gate_thresholds` is the env-keyed solve-threshold mapping
-    (typically derived from
-    `corroborate.rl.env_solve_thresholds.SOLVE_THRESHOLDS`).
-    Envs without a threshold entry are skipped — `absent`-class
-    envs can't participate in the solve filter."""
+    supplied by the substrate. Envs without a threshold entry
+    are skipped — `absent`-class envs can't participate in the
+    solve filter."""
     cells_list = list(cells)
     if total_steps_filter is not None:
         cells_list = [

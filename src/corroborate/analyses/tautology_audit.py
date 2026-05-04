@@ -78,7 +78,7 @@ def tautology_audit(
     hp_axes: tuple[str, ...],
     hp_stratum_axis: str | None = None,
     arm_filter: str | None = None,
-    arm_field: str = 'intervention_name',
+    arm_field: str = 'arm_key',
     outcome_jaccard_threshold: float = 0.5,
     hp_r_squared_threshold: float = 0.95,
     stratified_rho_threshold: float = 0.1,

@@ -7,8 +7,8 @@ A `Loop[C, T, Idx]` is the iteration-backend contract: run
 substrates pick the form that fits their backend:
 
 - `int` for substrate-agnostic Python (`python_loop` here).
-- `jax.Array` for jax-flavored backends (`corroborate.rl.loop
-  .scan_loop` and the rl-flavored `python_loop`).
+- A traced array index for jax-flavored backends (a substrate's
+  `scan_loop` over `lax.scan`, or jax-stacked `python_loop`).
 
 The aggregation contract (list, stacked pytree, generator, ...)
 is the impl's choice — the Protocol's return is annotated loosely
@@ -56,14 +56,13 @@ class Loop[C, T, Idx](Protocol):
     Implementations:
     - `python_loop` (this module): `Loop[C, T, int]`, returns
       `tuple[C, list[T]]`.
-    - `corroborate.rl.loop.scan_loop`: `Loop[C, T, jax.Array]`,
-      returns `tuple[C, T]` with each T-leaf stacked to leading
-      `(length, ...)` axis.
-    - `corroborate.rl.loop.python_loop`: `Loop[C, T, jax.Array]`,
-      returns `tuple[C, T]` (jax-stacked to match scan's shape).
+    - A jax-flavored substrate may provide `Loop[C, T, jax.Array]`
+      backends — typically a `lax.scan` wrapper returning a
+      stacked T pytree, plus a Python-fallback that produces the
+      same shape under tracing.
 
-    All structurally satisfy this Protocol with their respective
-    `Idx` binding."""
+    Substrates structurally satisfy this Protocol via their
+    chosen `Idx` binding; no inheritance required."""
     def __call__(
         self,
         step: Callable[[C, Idx], tuple[C, T]],

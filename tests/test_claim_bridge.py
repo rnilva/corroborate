@@ -30,12 +30,33 @@ from corroborate.analyses.paired_g import PairedGResult
 from corroborate.bridge.bridge import (
     Bridge, Direction, Tier, claim_bridge, evaluate,
 )
-from corroborate.core.intervention import DoEffect
+from corroborate.core.claim import claim
+from corroborate.core.intervention import DoEffect, Intervention
 from corroborate.bridge.verdict import Verdict
 
 
-# Module-level contrast for the top-level bridges in this file.
-INTERVENTION = DoEffect(treatment_arm='treatment', baseline_arm='baseline')
+# Synthetic intervention arms for the top-level bridges in this file.
+@claim
+def _treatment_op(x: int) -> int:
+    return x
+
+
+@claim
+def _baseline_op(x: int) -> int:
+    return x
+
+
+_TREATMENT_ARMS: tuple[Intervention, ...] = (
+    Intervention(slot_path='op', replacement=_treatment_op),
+)
+_BASELINE_ARMS: tuple[Intervention, ...] = (
+    Intervention(slot_path='op', replacement=_baseline_op),
+)
+INTERVENTION = DoEffect(
+    treatment=_TREATMENT_ARMS, baseline=_BASELINE_ARMS,
+)
+_TREATMENT_KEY = INTERVENTION.treatment_arm_key()
+_BASELINE_KEY = INTERVENTION.baseline_arm_key()
 
 
 def _synthetic_cells(
@@ -50,7 +71,7 @@ def _synthetic_cells(
     out: list[dict[str, object]] = []
     for s in range(n_seeds):
         out.append({
-            'intervention_name': 'treatment',
+            'arm_key': _TREATMENT_KEY,
             'seed': s,
             'env_name': 'TestEnv',
             'eval_best_burst_mean': (
@@ -58,7 +79,7 @@ def _synthetic_cells(
             ),
         })
         out.append({
-            'intervention_name': 'baseline',
+            'arm_key': _BASELINE_KEY,
             'seed': s,
             'env_name': 'TestEnv',
             'eval_best_burst_mean': (
@@ -70,7 +91,7 @@ def _synthetic_cells(
 
 def test_paired_g_analysis_runs_directly() -> None:
     """The analysis is callable on its own — no bridge needed.
-    Cell-level scope (env filtering) lives upstream on Bridge.scope;
+    Cell-level filtering lives upstream on `Bridge.scope`;
     when calling paired_g.fn directly the test pre-filters cells."""
     from corroborate.analyses.paired_g import paired_g
     cells = [
@@ -79,8 +100,8 @@ def test_paired_g_analysis_runs_directly() -> None:
     ]
     result = paired_g.fn(
         cells,
-        treatment_arm='treatment',
-        baseline_arm='baseline',
+        treatment_arm=_TREATMENT_KEY,
+        baseline_arm=_BASELINE_KEY,
         pair_by=('seed',),
         source='eval_best_burst_mean',
     )
@@ -208,9 +229,14 @@ def test_bridge_carries_typed_intervention() -> None:
     """A do-effect bridge declares source=DoEffect(...) in the
     decorator; the framework routes it to the structural
     `Bridge.source` field. The framework can then emit a
-    `do(treatment|vs=baseline) → target` graph edge."""
+    `do(treatment|vs=baseline) → target` graph edge.
+
+    `DoEffect` carries Intervention tuples per arm; arm keys
+    derive from `combined_arm_key` (canonical_str) — the
+    structural link between the do-contrast and the claim graph
+    the substrate's intervention_arms produce."""
     @claim_bridge(
-        source=DoEffect(treatment_arm='ddqn', baseline_arm='vanilla_dqn'),
+        source=INTERVENTION,
         target='eval_best_burst_mean',
         direction=Direction.DIRECT,
         tier=Tier.INTERVENTIONAL,
@@ -223,11 +249,15 @@ def test_bridge_carries_typed_intervention() -> None:
 
     assert isinstance(carries_intervention, Bridge)
     assert isinstance(carries_intervention.source, DoEffect)
-    assert carries_intervention.source.treatment_arm == 'ddqn'
-    assert carries_intervention.source.baseline_arm == 'vanilla_dqn'
+    assert carries_intervention.source.treatment == _TREATMENT_ARMS
+    assert carries_intervention.source.baseline == _BASELINE_ARMS
+    assert (
+        carries_intervention.source.treatment_arm_key()
+        == _TREATMENT_KEY
+    )
     assert (
         carries_intervention.source.node_key()
-        == 'do(ddqn|vs=vanilla_dqn)'
+        == f'do({_TREATMENT_KEY}|vs={_BASELINE_KEY})'
     )
 
 

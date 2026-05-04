@@ -197,14 +197,11 @@ class Bridge:
     `random_effects`, etc.) — keeping it inside the params bag
     forced every analysis to fish it out by name.
 
-    `holds_when: Callable[..., Verdict] | None` is optional. The
-    file-protocol path (analyses on a corpus) sets it; the
-    Hypothesis-side typed-edge path (verdict walks via
-    `hypothesis_subgraph_verdict`) leaves it None — the verdict
-    walk consumes the Bridge as metadata (source / target / tier
-    / predicted_direction) and computes the verdict from runs
-    directly, never invoking a body. `evaluate` raises
-    `TypeError` if called on a body-less Bridge.
+    `holds_when: Callable[..., Verdict] | None` carries the
+    threshold body. `@claim_bridge` always populates it from the
+    decorated function; constructing a body-less Bridge directly
+    is a programming error. `evaluate` raises `TypeError` if
+    called on a body-less Bridge as a defensive guard.
 
     `threshold: float | None = None` is the predicate threshold
     for INVARIANT self-loop bridges (`Direction.AT_MOST` /
@@ -214,15 +211,18 @@ class Bridge:
     `to_invariant_measurable()` to synthesize the per-cell verdict
     Measurable that the cache builder evaluates and persists.
 
-    `scope: pl.Expr | None = None` filters the cell-set the
-    framework hands to the analysis. The cache flows as a
-    `pl.DataFrame`; `evaluate()` applies `df.filter(scope)` (with
-    missing-column null-padding via `_filter_with_missing_cols`)
-    before converting to dicts and forwarding. `None` means
-    "match all". Replaces the legacy `env_name` /
-    `extra_filters` / `extra_min_pairs` / `extra_max_pairs` /
-    `cell_predicate` kwargs that used to live in the holds_when
-    params bag — scope is structural metadata, not body argument.
+    `scope: pl.Expr | None = None` filters the cell-set
+    the framework hands to the analysis. The cache flows as a
+    `pl.DataFrame`; `evaluate()` applies `df.filter(scope)`
+    (with missing-column null-padding via
+    `_filter_with_missing_cols`) before converting to dicts and
+    forwarding. `None` means "match all". Replaces the legacy
+    `env_name` / `extra_filters` / `extra_min_pairs` /
+    `extra_max_pairs` / `cell_predicate` kwargs that used to
+    live in the holds_when params bag — `scope` is
+    structural metadata, not body argument. (Renamed from
+    `scope` to disambiguate from the analytical `Scope` claim
+    in `bridge.scope`.)
 
     `pair_by: tuple[str, ...] = ('seed',)` is the pairing-axis
     tuple forwarded to analyses that compute paired contrasts.
@@ -380,17 +380,18 @@ def _require_tier(value: object, fn_name: str) -> Tier:
 
 
 def _require_scope(value: object, fn_name: str) -> pl.Expr | None:
-    """Validate `scope` decorator arg. `None` → no filter; a
-    `pl.Expr` is accepted as the polars-native cell predicate. Any
-    other value is an authoring mistake — fail loudly at import."""
+    """Validate `scope` decorator arg. `None` → no filter;
+    a `pl.Expr` is accepted as the polars-native cell predicate.
+    Any other value is an authoring mistake — fail loudly at
+    import."""
     if value is None:
         return None
     if isinstance(value, pl.Expr):
         return value
     raise TypeError(
-        f'@claim_bridge {fn_name!r}: default for `scope` must be a '
-        f'pl.Expr (e.g. `pl.col(\'env_name\') == \'X\'`) or None; '
-        f'got {type(value).__name__}',
+        f'@claim_bridge {fn_name!r}: default for `scope` '
+        f'must be a pl.Expr (e.g. `pl.col(\'env_name\') == \'X\'`) '
+        f'or None; got {type(value).__name__}',
     )
 
 
@@ -467,19 +468,23 @@ def claim_bridge(
             ...
 
     Interventional bridges declare the do-contrast via
-    `source = DoEffect(treatment_arm=..., baseline_arm=...)`.
-    The framework extracts treatment/baseline arms from
-    `bridge.source` at evaluate() time and threads them into the
-    analysis's kwargs. When `source` is a string/Measurable, no
-    contrast is set and the analysis runs without arm-pairing
-    (correlation-style or pre-paired bridges).
+    `source = DoEffect(treatment=(Intervention(...),), baseline=())`.
+    The framework derives `treatment_arm` / `baseline_arm` strings
+    via `DoEffect.treatment_arm_key()` / `baseline_arm_key()` (the
+    canonical_str fingerprints of the typed Intervention tuples)
+    at evaluate() time and threads them into the analysis's kwargs.
+    When `source` is a string/Measurable, no contrast is set and
+    the analysis runs without arm-pairing (correlation-style or
+    pre-paired bridges).
 
     A common idiom is to define `INTERVENTION = DoEffect(...)`
     once at the top of the bridge file and reference it as
     `source=INTERVENTION` in each interventional bridge — the
     constant lives in the file's namespace, not in framework
-    auto-resolution. Per-bridge variants (e.g. HP-encoded arms)
-    declare their own DoEffect inline.
+    auto-resolution. HP-cleaved variants of the same structural
+    contrast (γ-stratified, n_step-stratified, etc.) reuse the
+    file-level `INTERVENTION` and add an HP scope predicate via
+    `scope=pl.col('gamma') == 0.999` on the per-bridge decorator.
     """
     # Validate decorator args at module-import time (early failure).
     source_validated = _require_endpoint(
@@ -558,9 +563,10 @@ def _filter_with_missing_cols(
       it per-cell (with shared dep memoisation via
       `evaluate_with_measurables`) and add it as a column. This
       is the "bridges-verify-against-raw-traces" path: when a
-      bridge declares `scope = pl.col('jensen_dormancy_gap') >= 0`
-      and the input DataFrame is a raw `runs.parquet` without
-      that measurable yet, the framework computes it on the fly.
+      bridge declares `scope = pl.col('jensen_dormancy_gap')
+      >= 0` and the input DataFrame is a raw `runs.parquet`
+      without that measurable yet, the framework computes it on
+      the fly.
     - Otherwise, pre-fill as null. Universal-cache schema
       heterogeneity (corpus A has `reward_scale`, corpus B
       doesn't, neither corpus computed it) lands here — null
@@ -592,8 +598,8 @@ def evaluate(
     bridge: Bridge,
     cells: pl.DataFrame | Iterable[Mapping[str, object]],
 ) -> BridgeEvaluation:
-    """Run a bridge against a cell-set: apply `bridge.scope` as a
-    polars filter, resolve each fixture (a `holds_when` parameter
+    """Run a bridge against a cell-set: apply `bridge.scope`
+    as a polars filter, resolve each fixture (a `holds_when` parameter
     without a default) by looking up the matching `@analysis`,
     parameterise from the bridge's structural fields + params,
     run on the filtered cells, inject results, return verdict +
@@ -612,26 +618,24 @@ def evaluate(
     as a string or a `Measurable` instance.
 
     Raises `TypeError` if the Bridge has no `holds_when` body —
-    such a Bridge is a typed-edge declaration only (the
-    Hypothesis-side verdict-walk surface) and carries no
-    threshold logic to invoke."""
+    `@claim_bridge` always populates it; this guard catches direct
+    `Bridge(...)` construction with `holds_when=None`."""
     if bridge.holds_when is None:
         raise TypeError(
             f'evaluate({bridge.name!r}): Bridge has no holds_when '
-            f'body. Body-less Bridges are typed-edge declarations '
-            f'consumed by `hypothesis_subgraph_verdict`; they do '
-            f'not carry a threshold to evaluate against a cell-set.',
+            f'body — @claim_bridge always populates it; constructing '
+            f'a Bridge directly with holds_when=None is unsupported.',
         )
     filtered_cells: list[dict[str, object]]
     if bridge.scope is None:
-        # No scope filter — skip the DataFrame round-trip. Convert
+        # No cell filter — skip the DataFrame round-trip. Convert
         # to list[dict] so the analysis fn can re-iterate.
         if isinstance(cells, pl.DataFrame):
             filtered_cells = cast(list[dict[str, object]], cells.to_dicts())
         else:
             filtered_cells = [dict(c) for c in cells]
     else:
-        # Scope filter — materialise to DataFrame (if not already),
+        # Cell filter — materialise to DataFrame (if not already),
         # filter, convert back to list[dict] for the analysis.
         df: pl.DataFrame
         if isinstance(cells, pl.DataFrame):
@@ -671,8 +675,8 @@ def evaluate(
         **dict(bridge.params),
     }
     if contrast is not None:
-        bridge_params['treatment_arm'] = contrast.treatment_arm
-        bridge_params['baseline_arm'] = contrast.baseline_arm
+        bridge_params['treatment_arm'] = contrast.treatment_arm_key()
+        bridge_params['baseline_arm'] = contrast.baseline_arm_key()
     analysis_results = resolve_for_holds_when(
         bridge.holds_when, filtered_cells, bridge_params,
     )

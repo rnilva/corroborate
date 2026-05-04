@@ -7,10 +7,7 @@ requires-python = ">=3.13"
 license = { text = "MIT" }
 dependencies = [
     "polars>=1.0",
-    "jax[cuda12]>=0.4.30",
-    "jaxlib>=0.4.30",
-    "optax>=0.2.0",
-    "gymnax>=0.0.8",
+    "numpy>=1.26",
     "scipy>=1.10",          # distribution quantiles + cdf for stats module
     "statsmodels>=0.14",    # noncentral-t-aware MDE / power machinery
     "pyarrow>=24.0.0",      # incremental Parquet writer for streaming merges
@@ -19,11 +16,21 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+yaml = [
+    "pyyaml>=6.0",          # `load_hypothesis` + `_internals/yaml`
+]
 dowhy = [
     "dowhy>=0.13",
     "pandas>=2.0",
     "networkx>=3.0",
 ]
+
+[tool.uv.workspace]
+# `corroborate_rl` is the RL substrate (DQN + gymnax envs +
+# sweep dispatcher). It depends on the framework but the
+# framework does not depend on it — substrate-neutrality
+# enforced by package boundary, not just by author discipline.
+members = ["src/corroborate_rl"]
 
 [build-system]
 requires = ["hatchling"]
@@ -47,12 +54,20 @@ markers = [
 
 [tool.pyright]
 include = ["src", "tests"]
+# `src/corroborate_rl/` is the sibling RL substrate package with
+# its own `pyproject.toml` + `[tool.basedpyright]` block. Framework
+# pyright runs do NOT type-check substrate code; the substrate
+# enforces its own discipline. Without this exclude, `include =
+# ["src", ...]` globs substrate files because `corroborate_rl`
+# lives under `src/`.
+#
 # `experiments/` excluded from the strict-Any contract — those
 # scripts are ad-hoc analysis runners that consume the framework
 # at the polars / numpy / pandas iter_rows boundary; the
 # framework's type discipline is for the framework itself, not
 # for one-off corpus consumers. Many of those scripts will be
 # deleted rather than typed.
+exclude = ["src/corroborate_rl"]
 extraPaths = ["."]
 stubPath = "stubs"
 pythonVersion = "3.13"
@@ -70,22 +85,16 @@ reportExplicitAny = "error"
 # roots FIRST so the broader `src/corroborate` block doesn't
 # shadow them.
 #
-# RL subtree: full relaxation. JAX leaks Any through jnp.* return
-# types (under real stubs); the rl/ subtree is the boundary where
-# stub looseness is unavoidable.
-[[tool.pyright.executionEnvironments]]
-root = "src/corroborate/rl"
-reportAny = "none"
-reportUnknownMemberType = "none"
-reportUnknownArgumentType = "none"
-reportUnknownVariableType = "none"
-reportUnknownParameterType = "none"
-reportUnknownLambdaType = "none"
+# Sibling RL package has its own `pyproject.toml` with its own
+# `[tool.basedpyright]` config; framework-side `pyright` runs
+# never touch `src/corroborate_rl/`. (If pyright is ever invoked
+# across both packages from the repo root, that should go through
+# the substrate's pyproject explicitly.)
 
-# Analyses subtree: like the rl/ subtree, this is the post-hoc
-# numerical-array boundary. numpy / scipy / pandas stubs leak Any
-# through .mean()/.shape/etc.; the analyses package is the layer
-# where that's expected. Relax fully here.
+# Analyses subtree: this is the post-hoc numerical-array boundary.
+# numpy / scipy / pandas stubs leak Any through .mean()/.shape/
+# etc.; the analyses package is the layer where that's expected.
+# Relax fully here.
 [[tool.pyright.executionEnvironments]]
 root = "src/corroborate/analyses"
 reportAny = "none"
@@ -109,21 +118,10 @@ reportUnknownArgumentType = "none"
 reportUnknownVariableType = "none"
 reportUnknownParameterType = "none"
 
-[[tool.pyright.executionEnvironments]]
-root = "tests/rl"
-reportAny = "none"
-reportUnknownMemberType = "none"
-reportUnknownArgumentType = "none"
-reportUnknownVariableType = "none"
-reportUnknownParameterType = "none"
-reportUnknownLambdaType = "none"
-
-# Framework tests that exercise reductions / measurables on jax
-# arrays touch jax.numpy directly (jnp.arange, jnp.asarray); the
-# JAX stubs leak Unknown through these, same way the rl/ subtree
-# does. Relax the Unknown-family rules + reportAny here on the
-# same boundary; non-jax framework tests stay strict because they
-# never trip these rules.
+# Framework tests boundary. Numpy / scipy / pandas / polars stubs
+# leak Unknown through `.shape`, `.mean()`, `.iter_rows`, etc.;
+# tests sit at the array-stub boundary the same way `analyses/`
+# does. Relax the Unknown-family rules here.
 #
 # `reportUnusedFunction = "none"` is the test-specific relaxation:
 # tests routinely define `@measurable` / `@claim`-decorated nested
