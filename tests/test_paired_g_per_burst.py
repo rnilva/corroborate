@@ -8,11 +8,9 @@ g≈0.00 across bursts" observation."""
 from __future__ import annotations
 
 import random
-from collections.abc import Mapping
 from pathlib import Path
 
 import numpy as np
-import numpy.typing as npt
 import polars as pl
 import pytest
 
@@ -23,27 +21,6 @@ from corroborate.analyses.paired_g_per_burst import (
 )
 from corroborate.measurables.measurable import Measurable
 from corroborate.measurables.reductions import from_key, reduce_axis
-
-
-def _q_minus_mc_fn(
-    record: Mapping[str, object],
-) -> npt.NDArray[np.floating]:
-    """Per-(burst, episode) Q − MC; same shape as the substrate's
-    `jensen_bias_per_eps`. Synthetic so this test stays
-    framework-pure (and exercises the Measurable + reduce_axis
-    composition without depending on a substrate measurable)."""
-    q = np.asarray(record['predicted_q_at_start'], dtype=np.float64)
-    mc = np.asarray(record['mc_return'], dtype=np.float64)
-    return q - mc
-
-
-_q_minus_mc: Measurable[
-    Mapping[str, object], npt.NDArray[np.floating],
-] = Measurable(
-    fn=_q_minus_mc_fn,
-    name='q_minus_mc',
-    reads=('predicted_q_at_start', 'mc_return'),
-)
 
 
 def _synthetic_burst_cells(
@@ -125,47 +102,53 @@ def test_per_burst_synthetic_no_signal() -> None:
         assert abs(s.g) < 1.0, f'expected g ≈ 0, got {s.g}'
 
 
-def test_q_minus_mc_per_burst_reduction() -> None:
-    """Composing a Q − MC `Measurable` with `reduce_axis(_,
-    axis=-1, op='mean')` produces the per-burst gap. This is the
-    same shape the substrate's `jensen_bias_per_eps` follows; the
-    framework only needs to verify that
-    `Measurable -> reduce_axis -> paired_g_per_burst.fn` composes
-    correctly, without binding to a substrate measurable."""
+def test_named_measurable_composes_with_reduce_axis() -> None:
+    """Composition contract: a two-input `Measurable` reduced via
+    `reduce_axis(_, axis=-1, op='mean')` plugs cleanly into
+    `paired_g_per_burst.fn` as `source=`, and the resulting
+    panel.measurable matches the composed name. Verifies the
+    Measurable -> reduce_axis -> paired_g_per_burst pipeline
+    without binding to a substrate-authored measurable."""
+    delta = Measurable(
+        fn=lambda r: (
+            np.asarray(r['series_a'], dtype=np.float64)
+            - np.asarray(r['series_b'], dtype=np.float64)
+        ),
+        name='a_minus_b',
+        reads=('series_a', 'series_b'),
+    )
     rng = random.Random(0)
     cells: list[dict[str, object]] = []
     for s in range(20):
-        for arm, q_mean, mc_mean in (
-            ('treatment', 1.0, 0.5),  # ddqn: small bias
-            ('baseline', 1.5, 0.5),    # vanilla: bigger bias
+        for arm, a_mean, b_mean in (
+            ('treatment', 1.0, 0.5),
+            ('baseline', 1.5, 0.5),
         ):
             cells.append({
                 'intervention_name': arm,
                 'env_name': 'TestEnv',
                 'seed': s,
-                'predicted_q_at_start': [
-                    [q_mean + rng.gauss(0, 0.01) for _ in range(3)]
+                'series_a': [
+                    [a_mean + rng.gauss(0, 0.01) for _ in range(3)]
                     for _ in range(4)
                 ],
-                'mc_return': [
-                    [mc_mean + rng.gauss(0, 0.01) for _ in range(3)]
+                'series_b': [
+                    [b_mean + rng.gauss(0, 0.01) for _ in range(3)]
                     for _ in range(4)
                 ],
             })
-    bias_per_burst_mean = reduce_axis(
-        _q_minus_mc, axis=-1, op='mean',
-    )
+    delta_per_burst_mean = reduce_axis(delta, axis=-1, op='mean')
     result = paired_g_per_burst.fn(
         cells,
         treatment_arm='treatment',
         baseline_arm='baseline',
         pair_by=('seed',),
-        source=bias_per_burst_mean,
+        source=delta_per_burst_mean,
     )
     panel = panel_for_env(result, 'TestEnv')
-    assert result.measurable == bias_per_burst_mean.name
-    # treatment bias = 0.5 (q=1.0, mc=0.5), baseline bias = 1.0
-    # Δ = -0.5 per burst → g should be strongly negative.
+    assert result.measurable == delta_per_burst_mean.name
+    # Δ_treatment = 0.5, Δ_baseline = 1.0 → paired difference -0.5
+    # per burst with tight noise → strongly negative g per burst.
     for s in panel:
         assert s.g < -3.0, f'expected strongly negative g, got {s.g}'
 

@@ -8,7 +8,6 @@ license = { text = "MIT" }
 dependencies = [
     "polars>=1.0",
     "numpy>=1.26",
-    "pyyaml>=6.0",          # YAML config loader for hypothesis manifests
     "scipy>=1.10",          # distribution quantiles + cdf for stats module
     "statsmodels>=0.14",    # noncentral-t-aware MDE / power machinery
     "pyarrow>=24.0.0",      # incremental Parquet writer for streaming merges
@@ -17,6 +16,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+yaml = [
+    "pyyaml>=6.0",          # `load_hypothesis` + `_internals/yaml`
+]
 dowhy = [
     "dowhy>=0.13",
     "pandas>=2.0",
@@ -75,18 +77,11 @@ reportExplicitAny = "error"
 # roots FIRST so the broader `src/corroborate` block doesn't
 # shadow them.
 #
-# Sibling RL package: full relaxation. JAX leaks Any through
-# jnp.* return types under stubs; the substrate package is the
-# boundary where stub looseness is unavoidable. Mirrors the
-# block that previously lived under `src/corroborate/rl`.
-[[tool.pyright.executionEnvironments]]
-root = "src/corroborate_rl"
-reportAny = "none"
-reportUnknownMemberType = "none"
-reportUnknownArgumentType = "none"
-reportUnknownVariableType = "none"
-reportUnknownParameterType = "none"
-reportUnknownLambdaType = "none"
+# Sibling RL package has its own `pyproject.toml` with its own
+# `[tool.basedpyright]` config; framework-side `pyright` runs
+# never touch `src/corroborate_rl/`. (If pyright is ever invoked
+# across both packages from the repo root, that should go through
+# the substrate's pyproject explicitly.)
 
 # Analyses subtree: this is the post-hoc numerical-array boundary.
 # numpy / scipy / pandas stubs leak Any through .mean()/.shape/
@@ -115,15 +110,10 @@ reportUnknownArgumentType = "none"
 reportUnknownVariableType = "none"
 reportUnknownParameterType = "none"
 
-# (The former `tests/rl` execution-environment block moved to
-# `src/corroborate_rl/pyproject.toml` with the substrate's tests.)
-
-# Framework tests that exercise reductions / measurables on jax
-# arrays touch jax.numpy directly (jnp.arange, jnp.asarray); the
-# JAX stubs leak Unknown through these, same way the rl/ subtree
-# does. Relax the Unknown-family rules + reportAny here on the
-# same boundary; non-jax framework tests stay strict because they
-# never trip these rules.
+# Framework tests boundary. Numpy / scipy / pandas / polars stubs
+# leak Unknown through `.shape`, `.mean()`, `.iter_rows`, etc.;
+# tests sit at the array-stub boundary the same way `analyses/`
+# does. Relax the Unknown-family rules here.
 #
 # `reportUnusedFunction = "none"` is the test-specific relaxation:
 # tests routinely define `@measurable` / `@claim`-decorated nested

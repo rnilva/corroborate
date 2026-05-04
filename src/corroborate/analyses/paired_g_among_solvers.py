@@ -51,10 +51,9 @@ def paired_g_among_solvers(
     effects.
 
     `gate_thresholds` is the env-keyed solve-threshold mapping
-    (typically derived from
-    `corroborate_rl.env_solve_thresholds.SOLVE_THRESHOLDS`).
-    Envs without a threshold entry are skipped — `absent`-class
-    envs can't participate in the solve filter."""
+    supplied by the substrate. Envs without a threshold entry
+    are skipped — `absent`-class envs can't participate in the
+    solve filter."""
     cells_list = list(cells)
     if total_steps_filter is not None:
         cells_list = [

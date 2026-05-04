@@ -23,10 +23,12 @@ from corroborate.core.claim import (
 
 
 @claim
-def _module_level_claim(a: int, b: int = 0) -> int:
+def _module_level_claim(a: int, b: float = 0.0) -> float:
     """Module-level `@claim` so pickle's module:qualname lookup
-    can find both the wrapper and the wrapped fn. Emulates a
-    substrate-authored claim without depending on a substrate."""
+    can find both the wrapper and the wrapped fn. Used solely by
+    the pickle round-trip cases below; substrate-side pickle of
+    real `@claim`-decorated DQN functions lives in
+    `src/corroborate_rl/tests/test_claim_substrate_integration.py`."""
     return a + b
 
 
@@ -335,15 +337,18 @@ def test_pickle_round_trip_function_claim() -> None:
 
 
 def test_pickle_round_trip_partial_over_claim() -> None:
-    """`functools.partial` over a claim pickles natively."""
+    """`functools.partial` over a claim pickles natively, including
+    its baked float kwargs — the shape `partial(claim, kw=0.95)`
+    that substrate sweep authoring uses for topology-leaf
+    binding."""
     import pickle
     from functools import partial
 
-    baked = partial(_module_level_claim, b=10)
+    baked = partial(_module_level_claim, b=0.95)
     blob = pickle.dumps(baked)
     restored = pickle.loads(blob)
     assert restored.func is _module_level_claim
-    assert restored.keywords == {'b': 10}
+    assert restored.keywords == {'b': 0.95}
 
 
 def test_is_claim_narrows_type() -> None:

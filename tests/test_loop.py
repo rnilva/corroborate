@@ -3,18 +3,16 @@
 
 Verifies:
 
-1. Both `python_loop` (substrate-agnostic) and rl-substrate
-   `scan_loop` / `python_loop` structurally satisfy the
-   framework `Loop[C, T]` Protocol.
-2. `python_loop` produces correct (final_state, list_of_T)
-   output for a hand-checked tiny step function.
-3. Under an active `trace_context()`, `@claim`-decorated step
-   bodies fire records on every iteration (the eager-trace
+1. `python_loop` produces correct `(final_state, list_of_T)`
+   output for a hand-checked tiny step function and structurally
+   satisfies the framework `Loop[C, T, int]` Protocol.
+2. Under an active `trace_context()`, `@claim`-decorated step
+   bodies fire records on every iteration — the eager-trace
    guarantee that `python_loop` provides for substrates without
-   a fast/jit backend).
+   a fast/jit backend.
 
-The substrate-side conformance cases (scan_loop, rl python_loop,
-cell-runner graph capture) live in
+Substrate-side conformance cases (jax-flavoured `scan_loop` and
+`python_loop`, cell-runner graph capture) live in
 `src/corroborate_rl/tests/test_loop_protocol_conformance.py`."""
 from __future__ import annotations
 
