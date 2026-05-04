@@ -5,8 +5,8 @@ import functools
 
 import pytest
 
-from corroborate.claim import FnClaim, claim
-from corroborate.intervention import (
+from corroborate.core.claim import FnClaim, claim
+from corroborate.core.intervention import (
     Intervention,
     apply_interventions,
     combined_arm_key,

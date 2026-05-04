@@ -31,8 +31,8 @@ from pathlib import Path
 from typing import TypeIs
 
 from corroborate._internals.yaml_boundary import safe_load as _yaml_load
-from corroborate.hypothesis import Hypothesis, PredictedDirection
-from corroborate.intervention import Intervention, is_replacement
+from corroborate.core.hypothesis import Hypothesis, PredictedDirection
+from corroborate.core.intervention import Intervention, is_replacement
 from corroborate.registry import Registry
 
 

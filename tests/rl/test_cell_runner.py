@@ -19,7 +19,7 @@ import jax.numpy as jnp
 import pytest
 
 from corroborate.aggregate import leaf_signature
-from corroborate.hypothesis import Hypothesis
+from corroborate.core.hypothesis import Hypothesis
 from corroborate.rl.cell_runner import run_dqn_cell
 from functools import partial
 

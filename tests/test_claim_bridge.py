@@ -30,7 +30,7 @@ from corroborate.analyses.paired_g import PairedGResult
 from corroborate.claim_bridge import (
     Bridge, Direction, Tier, claim_bridge, evaluate,
 )
-from corroborate.intervention import DoEffect
+from corroborate.core.intervention import DoEffect
 from corroborate.verdict import Verdict
 
 

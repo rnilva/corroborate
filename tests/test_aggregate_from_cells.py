@@ -24,9 +24,9 @@ from collections.abc import Mapping
 
 import math
 
-from corroborate.claim import claim
-from corroborate.hypothesis import Hypothesis
-from corroborate.intervention import Intervention
+from corroborate.core.claim import claim
+from corroborate.core.hypothesis import Hypothesis
+from corroborate.core.intervention import Intervention
 
 
 @claim

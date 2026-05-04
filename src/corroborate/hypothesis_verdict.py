@@ -52,7 +52,7 @@ from corroborate.graph.causal import (
 )
 from corroborate.claim_bridge import Bridge as ClaimBridge
 from corroborate.graph import Graph
-from corroborate.hypothesis import Hypothesis
+from corroborate.core.hypothesis import Hypothesis
 from corroborate.schema import HypothesisComparisonRow, RunRow
 from corroborate.verdict import Verdict
 
@@ -99,7 +99,7 @@ class HypothesisVerdict[R: Mapping[str, object]]:
         always reports the intervention-edge verdict to keep the
         paper-narrative reading unambiguous. Use `edge_verdict(edge)`
         when you need the coupling edge's verdict explicitly."""
-        from corroborate.intervention import DoEffect
+        from corroborate.core.intervention import DoEffect
         for edge in self.hypothesis.edges:
             if edge.target_name != target:
                 continue
@@ -266,7 +266,7 @@ def hypothesis_subgraph_verdict(
     edge_verdicts: dict[tuple[str, str], Verdict] = {}
     comparison_rows: dict[str, HypothesisComparisonRow] = {}
 
-    from corroborate.intervention import DoEffect
+    from corroborate.core.intervention import DoEffect
     # Pass 1: intervention edges (rung-2 paired contrasts).
     for edge in h.edges:
         if not isinstance(edge.source, DoEffect):

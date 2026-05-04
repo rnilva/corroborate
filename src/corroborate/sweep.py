@@ -44,7 +44,7 @@ import polars as pl
 
 from corroborate.graph.computation import ComputationGraph
 from corroborate.graph import Graph
-from corroborate.hypothesis import Hypothesis
+from corroborate.core.hypothesis import Hypothesis
 from corroborate.persistence import (
     apply_trace_reductions,
     stream_concat_parquets,

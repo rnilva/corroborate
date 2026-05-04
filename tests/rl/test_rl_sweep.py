@@ -18,8 +18,8 @@ from functools import partial
 
 import pytest
 
-from corroborate.hypothesis import Hypothesis
-from corroborate.intervention import Intervention
+from corroborate.core.hypothesis import Hypothesis
+from corroborate.core.intervention import Intervention
 from corroborate.rl.dqn.claims.bootstrap import bootstrap, double_greedify
 from functools import partial as _partial
 from corroborate.rl.dqn.claims.optimizer import adam, warmed_update

@@ -44,7 +44,7 @@ import polars as pl
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from corroborate.hypothesis import Hypothesis
+from corroborate.core.hypothesis import Hypothesis
 from corroborate.persistence import (
     apply_trace_reductions,
     write_runrows,

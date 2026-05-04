@@ -27,7 +27,7 @@ import jax
 import jax.numpy as jnp
 import optax
 
-from corroborate.claim import claim
+from corroborate.core.claim import claim
 from corroborate.rl.dqn.claims.replay import (
     Replay, Transition, n_step_return,
 )

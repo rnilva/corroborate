@@ -61,7 +61,7 @@ from corroborate._internals.introspection import (
     get_bound_arguments,
 )
 
-from corroborate.claim import CallRecord, Claim
+from corroborate.core.claim import CallRecord, Claim
 from corroborate.graph.graph import Graph
 
 

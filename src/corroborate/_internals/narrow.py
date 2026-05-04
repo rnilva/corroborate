@@ -14,7 +14,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import TypeIs
 
-from corroborate.hypothesis import PredictedDirection
+from corroborate.core.hypothesis import PredictedDirection
 from corroborate.verdict import RefutationClass, Verdict
 
 

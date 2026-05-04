@@ -23,14 +23,14 @@ from corroborate.graph.causal import (
     Tier as GraphTier,
     promote_bridged_evidence,
 )
-from corroborate.claim import claim
+from corroborate.core.claim import claim
 from corroborate.claim_bridge import Bridge as ClaimBridge
-from corroborate.hypothesis import Hypothesis, PredictedDirection
+from corroborate.core.hypothesis import Hypothesis, PredictedDirection
 from corroborate.hypothesis_verdict import (
     HypothesisVerdict,
     hypothesis_subgraph_verdict,
 )
-from corroborate.intervention import DoEffect, Intervention
+from corroborate.core.intervention import DoEffect, Intervention
 from corroborate.schema import RunRow
 from corroborate.verdict import Verdict
 

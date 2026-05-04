@@ -14,7 +14,7 @@ import pytest
 
 from dataclasses import dataclass
 
-from corroborate.claim import FnClaim
+from corroborate.core.claim import FnClaim
 from corroborate.registry import Registry
 
 

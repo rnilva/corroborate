@@ -34,7 +34,7 @@ from pathlib import Path
 
 import polars as pl
 
-from corroborate.intervention import Intervention
+from corroborate.core.intervention import Intervention
 from corroborate.rl.dqn.claims.bootstrap import bootstrap, double_greedify
 
 

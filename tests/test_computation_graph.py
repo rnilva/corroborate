@@ -17,7 +17,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from functools import partial
 
-from corroborate.claim import claim, trace_context
+from corroborate.core.claim import claim, trace_context
 from corroborate.graph.computation import (
     ComputationEdge,
     build_computation_graph,
@@ -234,7 +234,7 @@ class _ClassAdder:
         return ()
 
     def __call__(self, payload: object) -> object:
-        from corroborate.claim import record_call
+        from corroborate.core.claim import record_call
         result = ('class-out', payload, self.bias)
         record_call(self, (payload,), {}, result)
         return result

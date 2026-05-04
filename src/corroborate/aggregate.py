@@ -32,7 +32,7 @@ import uuid
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 
-from corroborate.hypothesis import Hypothesis, PredictedDirection
+from corroborate.core.hypothesis import Hypothesis, PredictedDirection
 from corroborate.schema import (
     GroupStats,
     HypothesisComparisonRow,

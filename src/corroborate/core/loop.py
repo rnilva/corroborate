@@ -39,7 +39,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Protocol
 
-from corroborate.claim import claim
+from corroborate.core.claim import claim
 
 
 class Loop[C, T, Idx](Protocol):

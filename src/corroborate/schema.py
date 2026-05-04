@@ -49,7 +49,7 @@ from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from corroborate.hypothesis import Hypothesis
+    from corroborate.core.hypothesis import Hypothesis
 from dataclasses import dataclass, field, fields
 from typing import Self
 
@@ -61,7 +61,7 @@ from corroborate._internals.narrow import (
     require_str,
     require_verdict,
 )
-from corroborate.hypothesis import PredictedDirection
+from corroborate.core.hypothesis import PredictedDirection
 from corroborate.stats import PooledStats
 from corroborate.verdict import RefutationClass, Verdict
 

@@ -20,8 +20,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from functools import partial
 
-from corroborate.claim import claim
-from corroborate.signature import (
+from corroborate.core.claim import claim
+from corroborate.core.signature import (
     canonical, claim_graph_signature, walk,
 )
 
@@ -138,6 +138,6 @@ def test_signature_includes_canonical_version() -> None:
     """The version prefix in the hash means future canonicalisation
     rule changes produce different hashes (no silent collisions
     across corpora at different framework versions)."""
-    from corroborate.signature import CANONICAL_VERSION
+    from corroborate.core.signature import CANONICAL_VERSION
     assert isinstance(CANONICAL_VERSION, str)
     assert len(CANONICAL_VERSION) > 0

@@ -55,12 +55,12 @@ import scipy.stats as ss
 from corroborate.graph.discovery import compare_pc_depths, discover_adjacency
 from corroborate.graph.causal import Direction, Tier
 from corroborate.claim_bridge import Bridge as ClaimBridge
-from corroborate.hypothesis import Hypothesis
+from corroborate.core.hypothesis import Hypothesis
 from corroborate.hypothesis_verdict import (
     HypothesisVerdict,
     hypothesis_subgraph_verdict,
 )
-from corroborate.intervention import DoEffect, Intervention
+from corroborate.core.intervention import DoEffect, Intervention
 from corroborate.stats import (
     StratumObservation,
     cross_validate_meta_regression,

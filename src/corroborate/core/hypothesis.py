@@ -47,7 +47,7 @@ from collections.abc import Mapping
 from typing import TYPE_CHECKING, Literal, override
 
 from corroborate._internals.canonical import canonical_str
-from corroborate.intervention import Intervention, combined_arm_key
+from corroborate.core.intervention import Intervention, combined_arm_key
 
 if TYPE_CHECKING:
     from corroborate.measurables import Measurable
@@ -192,7 +192,7 @@ class Hypothesis[R: Mapping[str, object]]:
         scope-distinction (mechanism vs outcome) is recoverable
         from `target` namespace or claim-graph topology, not from
         a per-edge enum."""
-        from corroborate.intervention import DoEffect
+        from corroborate.core.intervention import DoEffect
         return tuple(
             e for e in self._edges if isinstance(e.source, DoEffect)
         )
@@ -202,7 +202,7 @@ class Hypothesis[R: Mapping[str, object]]:
         to-measurement coupling edges (formerly `role='link'`).
         Tested via cross-stratum Pearson r over the per-group
         effect sizes of the source and target paths."""
-        from corroborate.intervention import DoEffect
+        from corroborate.core.intervention import DoEffect
         return tuple(
             e for e in self._edges if not isinstance(e.source, DoEffect)
         )

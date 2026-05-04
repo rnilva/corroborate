@@ -30,8 +30,8 @@ import polars as pl
 
 from corroborate._internals.polars_boundary import to_dicts as _to_dicts
 from corroborate.aggregate import hypothesis_comparison_from_cells
-from corroborate.hypothesis import Hypothesis
-from corroborate.intervention import Intervention
+from corroborate.core.hypothesis import Hypothesis
+from corroborate.core.intervention import Intervention
 from corroborate.rl.dqn.claims.bootstrap import bootstrap, double_greedify
 from corroborate.rl.dqn.claims.optimizer import Adam, WarmedUpdate
 from corroborate.rl.dqn.claims.replay import Replay

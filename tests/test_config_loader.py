@@ -14,10 +14,10 @@ from pathlib import Path
 import pytest
 
 from corroborate.config_loader import load_hypothesis, resolve
-from corroborate.hypothesis import Hypothesis
-from corroborate.intervention import Intervention
+from corroborate.core.hypothesis import Hypothesis
+from corroborate.core.intervention import Intervention
 from corroborate.registry import Registry
-from corroborate.signature import claim_graph_signature
+from corroborate.core.signature import claim_graph_signature
 
 
 DQN_CLAIM_MODULES = (

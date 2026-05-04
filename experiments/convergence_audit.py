@@ -27,11 +27,11 @@ from pathlib import Path
 
 from corroborate.graph.causal import Direction, Tier
 from corroborate.claim_bridge import Bridge as ClaimBridge
-from corroborate.hypothesis import Hypothesis
+from corroborate.core.hypothesis import Hypothesis
 from corroborate.hypothesis_verdict import (
     HypothesisVerdict, hypothesis_subgraph_verdict,
 )
-from corroborate.intervention import DoEffect, Intervention
+from corroborate.core.intervention import DoEffect, Intervention
 from corroborate.persistence import read_runrows
 from corroborate.rl.convergence import (
     classify_envs, envs_in_class, filter_to_classes,

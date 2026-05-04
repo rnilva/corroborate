@@ -25,7 +25,7 @@ import jax
 import jax.numpy as jnp
 import optax
 
-from corroborate.claim import claim
+from corroborate.core.claim import claim
 from corroborate.rl.dqn.claims import (
     bootstrap as default_bootstrap,
     epsilon_greedy,
@@ -54,7 +54,7 @@ from corroborate.rl.dqn.types import (
     TargetSync,
 )
 from corroborate.rl.env_catalogue import GymnaxEnvLike, StateHash
-from corroborate.signature import Exogenous
+from corroborate.core.signature import Exogenous
 
 
 def default_state_hash(obs: jax.Array) -> jax.Array:

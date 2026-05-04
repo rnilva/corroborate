@@ -57,7 +57,7 @@ from corroborate._internals.introspection import (
     get_type_hints_obj,
     get_typing_args,
 )
-from corroborate.claim import FnClaim
+from corroborate.core.claim import FnClaim
 
 
 @runtime_checkable

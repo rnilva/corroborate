@@ -90,7 +90,7 @@ from corroborate.analyses.paired_link_per_burst import (
 from corroborate.claim_bridge import (
     Direction, Tier, claim_bridge,
 )
-from corroborate.intervention import DoEffect
+from corroborate.core.intervention import DoEffect
 from corroborate.measurables import Measurable
 from corroborate.stats import MetaRegressionResult
 from corroborate.measurables.reductions import from_key, reduce_axis

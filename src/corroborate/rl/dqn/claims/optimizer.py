@@ -50,7 +50,7 @@ import jax
 import jax.numpy as jnp
 import optax
 
-from corroborate.claim import claim
+from corroborate.core.claim import claim
 
 
 class OptimizerFactory(Protocol):

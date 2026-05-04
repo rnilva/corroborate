@@ -31,7 +31,7 @@ from corroborate.rl.dqn.claims.optimizer import adam, warmed_update
 from corroborate.rl.dqn.dqn import default_state_hash, dqn
 from corroborate.rl.env_catalogue import HasN, HasShape
 from corroborate.schema import TraceLeaf, TraceRow
-from corroborate.signature import KwargInfo, walk, walk_paths
+from corroborate.core.signature import KwargInfo, walk, walk_paths
 
 # Real DQN rollouts on CartPole — both tests run training to
 # completion; ~6 s each. Skipped by default; opt in via `-m slow`.

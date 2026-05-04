@@ -16,15 +16,15 @@ from pathlib import Path
 
 import pytest
 
-from corroborate.hypothesis import Hypothesis
-from corroborate.intervention import Intervention
+from corroborate.core.hypothesis import Hypothesis
+from corroborate.core.intervention import Intervention
 from corroborate.registry import Registry
 from corroborate.rl.dqn.collect import EnvConfig
 from corroborate.rl.dqn.yaml_sweep import (
     DQNSweep, build_paired, default_dqn_registry, load_sweep,
 )
 from corroborate.rl.env_catalogue import get as get_env_spec
-from corroborate.signature import claim_graph_signature
+from corroborate.core.signature import claim_graph_signature
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]

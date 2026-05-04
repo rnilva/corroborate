@@ -137,7 +137,7 @@ def test_walk_paths_surfaces_nested_leaves_at_dotted_paths() -> None:
     from functools import partial
 
     from corroborate.rl.dqn.dqn import dqn
-    from corroborate.signature import walk, walk_paths
+    from corroborate.core.signature import walk, walk_paths
 
     configured = partial(dqn, optimizer=_make_warmed_adam())
     paths = walk_paths(walk(configured), regime='leaf')

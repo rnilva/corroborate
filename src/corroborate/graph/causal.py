@@ -259,7 +259,7 @@ def authored_graph(
     Used by analyses that want to inspect the authored graph
     topology BEFORE running bridges — e.g. cache builders,
     Protocol-conforming module discoverers."""
-    from corroborate.intervention import DoEffect
+    from corroborate.core.intervention import DoEffect
     g: CausalGraph = Graph()
     for b in bridges:
         if isinstance(b.source, DoEffect):

@@ -12,13 +12,13 @@ from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
 from corroborate._internals.canonical import canonical_str
-from corroborate.claim import claim
-from corroborate.hypothesis import Hypothesis
-from corroborate.intervention import Intervention
+from corroborate.core.claim import claim
+from corroborate.core.hypothesis import Hypothesis
+from corroborate.core.intervention import Intervention
 
 if TYPE_CHECKING:
     from corroborate.claim_bridge import Bridge as ClaimBridge
-    from corroborate.hypothesis import PredictedDirection
+    from corroborate.core.hypothesis import PredictedDirection
 
 
 # ============ Construction ============
@@ -225,7 +225,7 @@ def _intervention_edge(
 ) -> 'ClaimBridge':
     from corroborate.graph.causal import Direction, Tier
     from corroborate.claim_bridge import Bridge as ClaimBridge
-    from corroborate.intervention import DoEffect
+    from corroborate.core.intervention import DoEffect
     do = DoEffect(treatment_arm='a', baseline_arm='b')
     return ClaimBridge(
         name=f'do->{target}',

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from corroborate.claim import (
+from corroborate.core.claim import (
     CallRecord,
     Claim,
     claim,
@@ -295,7 +295,7 @@ def test_partial_signature_overlay_via_walker() -> None:
     sees the post-bake defaults."""
     from functools import partial
 
-    from corroborate.signature import walk
+    from corroborate.core.signature import walk
 
     @claim
     def schedule(step: int, *, anneal: int = 10_000) -> float:

@@ -14,13 +14,16 @@ from __future__ import annotations
 import functools
 import types
 from dataclasses import fields, is_dataclass
+from typing import TYPE_CHECKING
 
 from corroborate._internals.introspection import (
     get_attr_obj,
     get_partial_args,
     get_partial_keywords,
 )
-from corroborate.claim import FnClaim
+
+if TYPE_CHECKING:
+    from corroborate.core.claim import FnClaim as FnClaim  # noqa: PLC0414  re-export-style for typing
 
 
 def canonical_str(v: object) -> str:
@@ -36,6 +39,10 @@ def canonical_str(v: object) -> str:
     flatten similarly), so two independently-constructed partials
     with the same wrapped callable + same kwargs canonicalise
     identically across processes."""
+    # Lazy import: `FnClaim` lives in `core.claim`; eagerly importing
+    # would cycle (canonical → core.claim → core.__init__ →
+    # core.hypothesis → canonical).
+    from corroborate.core.claim import FnClaim
     if isinstance(v, FnClaim):
         return f'Claim:{v.name}'
     if isinstance(v, bool):

@@ -57,8 +57,8 @@ import polars as pl
 
 from corroborate._internals.introspection import get_param_default
 from corroborate.analysis import resolve_for_holds_when
-from corroborate.hypothesis import PredictedDirection
-from corroborate.intervention import DoEffect
+from corroborate.core.hypothesis import PredictedDirection
+from corroborate.core.intervention import DoEffect
 from corroborate.measurables import Measurable, register
 from corroborate.verdict import Verdict
 

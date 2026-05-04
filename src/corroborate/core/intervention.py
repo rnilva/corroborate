@@ -33,7 +33,7 @@ from dataclasses import dataclass
 from typing import TypeIs
 
 from corroborate._internals.canonical import canonical_str
-from corroborate.claim import FnClaim
+from corroborate.core.claim import FnClaim
 
 type Replacement = (
     FnClaim[..., object]

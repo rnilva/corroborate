@@ -32,7 +32,7 @@ from typing import Protocol
 import jax
 import jax.numpy as jnp
 
-from corroborate.claim import claim
+from corroborate.core.claim import claim
 
 
 # ============ Protocols ============
