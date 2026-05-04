@@ -64,7 +64,7 @@ class StratumObservation:
     error and a flat covariate vector.
 
     `g` and `se` typically come from per-stratum aggregation in
-    `HypothesisComparisonRow.per_group`; `covariates` is a flat
+    `PairedComparisonResult.per_group`; `covariates` is a flat
     `Mapping[str, float]` keyed by author-chosen covariate names.
     Categoricals must be one-hot or label-encoded by the caller
     before reaching this function (the regression is purely

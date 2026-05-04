@@ -29,7 +29,10 @@ from pathlib import Path
 import polars as pl
 
 from corroborate._internals.polars import to_dicts as _to_dicts
-from corroborate.corpus.aggregate import hypothesis_comparison_from_cells
+from corroborate.analyses.paired_comparison import (
+    PairedComparisonResult,
+    paired_comparison,
+)
 from corroborate.core.hypothesis import Hypothesis
 from corroborate.core.intervention import Intervention
 from corroborate_rl.dqn.claims.bootstrap import bootstrap, double_greedify
@@ -38,7 +41,7 @@ from corroborate_rl.dqn.claims.replay import Replay
 from corroborate_rl.dqn.invariants import DQNTrajectoryRecord
 from corroborate_rl.env_catalogue import get
 from corroborate_rl.env_solve_thresholds import SOLVE_THRESHOLDS, is_solved
-from corroborate.corpus.schema import HypothesisComparisonRow, RunRow
+from corroborate.corpus.schema import RunRow
 from corroborate.stats import random_effects_summary, random_effects_verdict
 
 
@@ -122,24 +125,21 @@ def _augment_with_class(df: pl.DataFrame) -> pl.DataFrame:
 
 def _per_env_link(
     runs: list[RunRow], outcome_path: str = 'eval_final_mean',
-) -> HypothesisComparisonRow:
+) -> PairedComparisonResult:
     ddqn_h = _make_hypothesis('ddqn')
     vanilla_h = _make_hypothesis('vanilla_dqn')
-    ddqn_h_typed = Hypothesis(
-        name=ddqn_h.name, intervention=ddqn_h.intervention,
-        predicted_direction='a_gt_b',
-        intervention_arms=ddqn_h.intervention_arms,
-    )
-    ddqn = [r for r in runs if r.measurements.get('intervention_name') == 'ddqn']
-    vanilla = [r for r in runs if r.measurements.get('intervention_name') == 'vanilla_dqn']
-    return hypothesis_comparison_from_cells(
-        ddqn_h_typed, ddqn, vanilla,
+    cells = [r.as_dict() for r in runs]
+    return paired_comparison.fn(
+        cells,
+        treatment_arm=ddqn_h.arm_key(),
+        baseline_arm=vanilla_h.arm_key(),
         outcome_path=outcome_path, pair_by=('seed',),
-        group_by='env_name', baseline_h=vanilla_h,
+        group_by='env_name',
+        predicted_direction='a_gt_b',
     )
 
 
-def _print_per_group(label: str, comp: HypothesisComparisonRow) -> None:
+def _print_per_group(label: str, comp: PairedComparisonResult) -> None:
     print(f'  --- {label} ---')
     for gs in sorted(comp.per_group, key=lambda g: str(g.group_value)):
         env = str(gs.group_value)

@@ -251,7 +251,7 @@ def test_arm_key_matches(
     ]],
     h_name: str,
 ) -> None:
-    """Pairing key for HypothesisComparisonRow. Drift here would
+    """Pairing key for paired_comparison. Drift here would
     place YAML and Python rows in different arms."""
     yaml_h, py_h = hypothesis_pairs[h_name]
     assert yaml_h.arm_key() == py_h.arm_key()

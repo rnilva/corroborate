@@ -13,7 +13,7 @@ A `HypothesisVerdict` carries:
   INVARIANT_VIOLATION) preserving full resolution that the
   graph's evidentiary_level field collapses ('refuted' /
   'correlational' / 'causal_one_sided' / 'causal_bridged').
-- `comparison_rows: Mapping[str, HypothesisComparisonRow]` —
+- `comparison_rows: Mapping[str, PairedComparisonResult]` —
   rich per-edge detail (per_group, pooled) for *intervention*
   edges, keyed by target path. Coupling edges' rho/pvalue/n live
   on the BridgeEdge directly.
@@ -21,9 +21,11 @@ A `HypothesisVerdict` carries:
 Verdict logic per edge category:
 
 - Intervention edges (`bridge.intervention is not None`) —
-  paired comparison via `hypothesis_comparison_from_cells`,
+  paired comparison via `analyses.paired_comparison`,
   stratified by `group_by`, reading the edge's `target` as the
-  outcome path. Verdict comes from the random-effects PI test.
+  outcome path. Verdict reconstituted from the per-row stats via
+  `verdict_from_paired_stats` (Phase 2 bridge — Phase 5 will
+  replace this with `bridge.evaluate(b, cells)`).
 - Coupling edges (`bridge.intervention is None`) — Pearson r
   over the per-group effect sizes of the edge's `source` and
   `target` intervention comparisons. Requires that an
@@ -41,7 +43,10 @@ from dataclasses import dataclass
 
 import scipy.stats as ss
 
-from corroborate.corpus.aggregate import hypothesis_comparison_from_cells
+from corroborate.analyses.paired_comparison import (
+    PairedComparisonResult,
+    paired_comparison,
+)
 from corroborate.graph.causal import (
     BridgeEdge,
     CausalGraph,
@@ -53,7 +58,7 @@ from corroborate.graph.causal import (
 from corroborate.bridge.bridge import Bridge as ClaimBridge
 from corroborate.graph import Graph
 from corroborate.core.hypothesis import Hypothesis
-from corroborate.corpus.schema import HypothesisComparisonRow, RunRow
+from corroborate.corpus.schema import RunRow
 from corroborate.bridge.verdict import Verdict
 from corroborate.stats.effect_size import verdict_from_paired_stats
 
@@ -74,7 +79,7 @@ class HypothesisVerdict[R: Mapping[str, object]]:
     hypothesis: Hypothesis[R]
     graph: CausalGraph
     edge_verdicts: Mapping[tuple[str, str], Verdict]
-    comparison_rows: Mapping[str, HypothesisComparisonRow]
+    comparison_rows: Mapping[str, PairedComparisonResult]
 
     def edge_verdict(self, edge: ClaimBridge) -> Verdict:
         """Verdict for a specific claimed edge — looked up via
@@ -117,7 +122,7 @@ class HypothesisVerdict[R: Mapping[str, object]]:
 
 def _intervention_edge(
     edge: ClaimBridge,
-    row: HypothesisComparisonRow,
+    row: PairedComparisonResult,
     *,
     alpha: float,
     power: float,
@@ -127,7 +132,7 @@ def _intervention_edge(
     `ate` sign; tier/level inferred from corroboration status.
 
     Verdict is reconstituted on-demand via
-    `verdict_from_paired_stats` — `HypothesisComparisonRow` no
+    `verdict_from_paired_stats` — `PairedComparisonResult` no
     longer carries a baked verdict (Phase 2). Phase 5 will replace
     this whole helper with `bridge.evaluate(b, cells)` so the
     bridge author's `holds_when` body controls the threshold
@@ -173,8 +178,8 @@ def _intervention_edge(
 
 def _coupling_edge(
     edge: ClaimBridge,
-    source_row: HypothesisComparisonRow,
-    target_row: HypothesisComparisonRow,
+    source_row: PairedComparisonResult,
+    target_row: PairedComparisonResult,
     *,
     alpha: float,
 ) -> tuple[BridgeEdge, Verdict]:
@@ -258,7 +263,7 @@ def hypothesis_subgraph_verdict(
 
     Two passes:
     1. Intervention edges (`bridge.intervention is not None`) —
-       paired comparison via `hypothesis_comparison_from_cells`,
+       paired comparison via `analyses.paired_comparison`,
        stratified by `group_by`, reading the edge's `target` as
        outcome_path. Per-edge `predicted_direction` (when set)
        overrides the hypothesis-level prior in the sign test.
@@ -286,19 +291,28 @@ def hypothesis_subgraph_verdict(
 
     edges_built: dict[tuple[str, str], BridgeEdge] = {}
     edge_verdicts: dict[tuple[str, str], Verdict] = {}
-    comparison_rows: dict[str, HypothesisComparisonRow] = {}
+    comparison_rows: dict[str, PairedComparisonResult] = {}
+
+    treatment_arm = h.arm_key()
+    baseline_arm = (
+        baseline_h.arm_key() if baseline_h is not None else 'baseline'
+    )
+    cells = [r.as_dict() for r in treatment_runs] + [
+        r.as_dict() for r in baseline_runs
+    ]
 
     from corroborate.core.intervention import DoEffect
     # Pass 1: intervention edges (rung-2 paired contrasts).
     for edge in h.edges:
         if not isinstance(edge.source, DoEffect):
             continue
-        row = hypothesis_comparison_from_cells(
-            h, treatment_runs, baseline_runs,
+        row = paired_comparison.fn(
+            cells,
+            treatment_arm=treatment_arm,
+            baseline_arm=baseline_arm,
             outcome_path=edge.target_name,
             pair_by=pair_by,
             group_by=group_by,
-            baseline_h=baseline_h,
             predicted_direction=edge.predicted_direction,
         )
         comparison_rows[edge.target_name] = row

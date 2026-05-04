@@ -285,9 +285,8 @@ def test_yaml_arm_key_matches_python(
 ) -> None:
     """`arm_key()` is the canonical fingerprint of intervention_arms.
     If YAML and Python paths disagree on it, downstream pairing in
-    `HypothesisComparisonRow.from_cells` lands rows in different
-    arms — silently, not loudly. Asserting equality up front
-    prevents that drift."""
+    `paired_comparison` lands rows in different arms — silently,
+    not loudly. Asserting equality up front prevents that drift."""
     h_yaml = load_hypothesis(expectile_yaml_path, reg=reg)
     h_python = _expectile_python()
     assert h_yaml.arm_key() == h_python.arm_key()

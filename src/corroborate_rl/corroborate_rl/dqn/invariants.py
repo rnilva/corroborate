@@ -18,7 +18,7 @@ Three roles consume each gap differently (see `invariant.py`
 module docstring):
 
 - Intervention: read the scalar into RunRow.measurements; the
-  paired comparison surface (`HypothesisComparisonRow.from_cells`)
+  paired comparison surface (`analyses.paired_comparison`)
   computes Δ-gap across (treatment, baseline) pairs. NaN means
   "no data" — different from "gap = 0" (which means "data
   confirmed compliance").

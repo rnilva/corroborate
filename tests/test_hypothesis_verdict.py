@@ -112,7 +112,7 @@ def test_three_edge_subgraph_produces_per_edge_bridge_results() -> None:
     q is better) and outcome (larger r is better). The verdict
     carries:
     - one BridgeResult per edge keyed by (source, target).
-    - one HypothesisComparisonRow per non-link edge keyed by target.
+    - one PairedComparisonResult per non-link edge keyed by target.
     - a typed CausalGraph with one BridgeEdge per (source, target).
     `pattern()` returns the canonical (mechanism, outcome, link)
     chain."""
@@ -183,7 +183,7 @@ def test_per_edge_predicted_direction_drives_sign_test() -> None:
     HELD when treatment_minus_baseline is negative; flip the sign
     by declaring `'a_gt_b'` and the same data should refute. Per-
     edge override flows through `hypothesis_subgraph_verdict` →
-    `hypothesis_comparison_from_cells` → `_per_group_stats` →
+    `paired_comparison.fn` → `_per_group_stats` →
     `verdict_from_paired_stats`."""
     treatment: list[RunRow] = []
     baseline: list[RunRow] = []
