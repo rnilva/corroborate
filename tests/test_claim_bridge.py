@@ -93,7 +93,7 @@ def test_paired_g_analysis_runs_directly() -> None:
 def test_analysis_registered_globally() -> None:
     """Importing `corroborate.analyses` registers `paired_g` under
     its function name — the lookup the bridge resolver uses."""
-    from corroborate.runner.analysis import (
+    from corroborate.bridge.analysis import (
         get_registered, registered_names,
     )
     assert 'paired_g' in registered_names()
@@ -323,7 +323,7 @@ def test_evaluate_forwards_predicted_direction_to_analyses() -> None:
     same channel as `source`/`target`/`tier`."""
     captured: dict[str, object] = {}
 
-    from corroborate.runner.analysis import analysis
+    from corroborate.bridge.analysis import analysis
 
     @analysis
     def _captures_pd(

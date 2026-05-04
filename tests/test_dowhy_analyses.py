@@ -164,5 +164,5 @@ def test_multi_fixture_bridge_consumes_three_analyses() -> None:
 def test_dowhy_analyses_registered(analysis_name: str) -> None:
     """All three DoWhy analyses populate the registry on
     `corroborate.analyses` import."""
-    from corroborate.runner.analysis import get_registered
+    from corroborate.bridge.analysis import get_registered
     assert get_registered(analysis_name) is not None

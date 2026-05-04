@@ -27,7 +27,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from corroborate.runner.analysis import analysis
+from corroborate.bridge.analysis import analysis
 from corroborate.graph.discovery import stratified_spearman_rho
 
 

@@ -36,7 +36,7 @@ import numpy.typing as npt
 from corroborate.analyses.paired_g_per_burst import (
     DEFAULT_PER_BURST_SOURCE, paired_g_per_burst,
 )
-from corroborate.runner.analysis import analysis
+from corroborate.bridge.analysis import analysis
 from corroborate.measurables import Measurable
 from corroborate.stats import (
     MetaRegressionResult, Pool, meta_regress_panel,

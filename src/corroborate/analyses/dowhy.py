@@ -29,7 +29,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from corroborate.runner.analysis import analysis
+from corroborate.bridge.analysis import analysis
 from corroborate.analyses._dowhy_internal import (
     DAGLike,
     _build_causal_model,

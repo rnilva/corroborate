@@ -25,7 +25,7 @@ import math
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
-from corroborate.runner.analysis import analysis
+from corroborate.bridge.analysis import analysis
 from corroborate.stats import hedges_g_paired
 
 

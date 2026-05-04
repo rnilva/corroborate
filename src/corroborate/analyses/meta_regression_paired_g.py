@@ -20,7 +20,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 
 from corroborate.analyses.paired_g import per_env_paired_g_panel
-from corroborate.runner.analysis import analysis
+from corroborate.bridge.analysis import analysis
 from corroborate.stats import (
     MetaRegressionResult, Pool, meta_regress_panel,
 )

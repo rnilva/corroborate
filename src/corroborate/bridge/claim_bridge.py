@@ -56,10 +56,11 @@ from typing import cast
 import polars as pl
 
 from corroborate._internals.introspection import get_param_default
+from corroborate.bridge.analysis import resolve_for_holds_when
+from corroborate.bridge.verdict import Verdict
 from corroborate.core.hypothesis import PredictedDirection
 from corroborate.core.intervention import DoEffect
 from corroborate.measurables import Measurable, register
-from corroborate.bridge.verdict import Verdict
 
 
 # Direction and Tier are the canonical edge-metadata enums used
@@ -672,12 +673,6 @@ def evaluate(
     if contrast is not None:
         bridge_params['treatment_arm'] = contrast.treatment_arm
         bridge_params['baseline_arm'] = contrast.baseline_arm
-    # Lazy import: `runner.analysis` lives in the `runner`
-    # subpackage which transitively imports `bridge.claim_bridge`
-    # (via `runner.runner` which consumes Bridge / evaluate). The
-    # cycle resolves cleanly when this import happens at call time
-    # rather than module-load time.
-    from corroborate.runner.analysis import resolve_for_holds_when
     analysis_results = resolve_for_holds_when(
         bridge.holds_when, filtered_cells, bridge_params,
     )
