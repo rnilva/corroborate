@@ -13,11 +13,11 @@ from pathlib import Path
 
 import pytest
 
-from corroborate.runner.config_loader import (
-    HypothesisConfig, load_hypothesis, resolve,
-)
 from corroborate.core.intervention import Intervention
 from corroborate.runner.registry import Registry
+from corroborate_rl.dqn.config_loader import (
+    HypothesisConfig, load_hypothesis, resolve,
+)
 from corroborate.core.signature import claim_graph_signature
 
 

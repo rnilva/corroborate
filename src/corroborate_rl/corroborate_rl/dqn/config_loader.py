@@ -1,4 +1,13 @@
-"""YAML → Hypothesis builder, registry-resolved.
+"""YAML → HypothesisConfig builder, registry-resolved.
+
+Substrate-coupled: the YAML schema (`name`, `intervention`,
+`intervention_arms`, `predicted_direction`) is a substrate-
+authoring convention, not a framework typed contract. The
+framework's hypothesis surface is the `Hypothesis` Protocol
+(`INTERVENTION: DoEffect`, `BRIDGES: tuple[Bridge, ...]`);
+`HypothesisConfig` is the intermediate the substrate's
+`dispatch_sweep` decomposes into a Protocol-conformer + a `base`
+callable.
 
 Two recursive value forms are recognised; everything else is a
 leaf (passes through unchanged for scalars, recurses element-wise
@@ -16,22 +25,20 @@ authors never need string-prefix sigils. List literals tuple-ify
 to match `frozen=True, slots=True` config-bundle fields like
 `MLP.hidden: tuple[int, ...]`.
 
-Round-trip contract: a YAML-loaded Hypothesis's slot values are
-structurally equal (frozen-dataclass `==` on config bundles,
+Round-trip contract: a YAML-loaded HypothesisConfig's slot values
+are structurally equal (frozen-dataclass `==` on config bundles,
 identity on FnClaim references) to the equivalent Python-authored
-Hypothesis.
+HypothesisConfig.
 The smokes assert this; drift means the YAML schema diverged from
 the Python authoring shape and the loader should refuse before
 the sweep launches."""
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
 from typing import TypeIs
-
-from collections.abc import Mapping as _Mapping
-from dataclasses import dataclass, field
 
 from corroborate._internals.yaml import safe_load as _yaml_load
 from corroborate.core.hypothesis import PredictedDirection
@@ -58,7 +65,7 @@ class HypothesisConfig:
       `Bridge.predicted_direction` is the canonical home, but
       substrate authors can default it here for legacy YAML configs."""
     name: str
-    intervention: _Mapping[str, object]
+    intervention: Mapping[str, object]
     predicted_direction: PredictedDirection | None = None
     intervention_arms: tuple[Intervention, ...] = field(default_factory=tuple)
 
@@ -223,7 +230,7 @@ def _resolve_fn(
 def load_hypothesis(
     path: Path, *, reg: Registry,
 ) -> HypothesisConfig:
-    """Build a Hypothesis from a YAML file. The file is one
+    """Build a HypothesisConfig from a YAML file. The file is one
     hypothesis per `path`; multi-hypothesis sweeps are loaded
     by the substrate's own dispatcher."""
     with path.open() as f:
@@ -244,7 +251,7 @@ def build_hypothesis_from_mapping(
 ) -> HypothesisConfig:
     """Public path-into-loader for callers (e.g. the RL sweep
     dispatcher) that already have the parsed mapping in hand and
-    just need it turned into a Hypothesis. `load_hypothesis`
+    just need it turned into a HypothesisConfig. `load_hypothesis`
     delegates here after `yaml.safe_load`.
 
     `env_attrs` is forwarded to `resolve` so the loader can
@@ -329,6 +336,7 @@ def _build_arm(
 
 
 __all__ = [
+    'HypothesisConfig',
     'build_hypothesis_from_mapping',
     'is_str_keyed_mapping',
     'load_hypothesis',

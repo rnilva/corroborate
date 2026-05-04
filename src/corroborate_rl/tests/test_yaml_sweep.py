@@ -16,10 +16,10 @@ from pathlib import Path
 
 import pytest
 
-from corroborate.runner.config_loader import HypothesisConfig
 from corroborate.core.intervention import Intervention
-from corroborate_rl.dqn.collect import EnvConfig
 from corroborate.runner.registry import Registry
+from corroborate_rl.dqn.collect import EnvConfig
+from corroborate_rl.dqn.config_loader import HypothesisConfig
 from corroborate_rl.dqn.yaml_sweep import (
     DQNSweep, default_dqn_registry, load_sweep,
 )

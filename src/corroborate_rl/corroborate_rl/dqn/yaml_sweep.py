@@ -26,12 +26,12 @@ from typing import Literal, TypeIs
 
 import yaml
 
-from corroborate.runner.config_loader import (
+from corroborate.runner.registry import Registry
+from corroborate_rl.dqn.config_loader import (
     HypothesisConfig,
     build_hypothesis_from_mapping,
     is_str_keyed_mapping,
 )
-from corroborate.runner.registry import Registry
 from corroborate_rl.dqn.collect import EnvConfig
 from corroborate_rl.env_catalogue import EnvWrapper
 from corroborate_rl.dqn.invariants import DQNTrajectoryRecord
