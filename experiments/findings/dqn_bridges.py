@@ -45,7 +45,7 @@ from corroborate.analyses.paired_g_per_burst import (
 from corroborate.analyses.paired_g_pooled import (
     PooledPairedGResult,
 )
-from corroborate_rl.env_solve_thresholds import SOLVE_THRESHOLDS
+from corroborate_rl.env_catalogue import SOLVE_THRESHOLDS
 from corroborate.analyses.tautology_audit import AuditResult
 from corroborate.analyses.verdict_distribution import (
     VerdictDistributionResult,
@@ -542,30 +542,112 @@ def ddqn_link_to_outcome_null__converged_subset(
 # the framework's resolver instantiates separately per bridge.
 
 
-# ============ Eleventh revision: n-step refutes variance-reduction ===
+# ============ Eleventh revision: n-step attenuates DDQN ============
 #
-# REMOVED in the Phase-6 typed-DoEffect migration. The four
-# bridges previously here authored
-# `DoEffect(treatment_arm='ddqn_3step', baseline_arm='ddqn_1step')` —
-# a within-DDQN n_step contrast. Under the typed-Intervention
-# DoEffect contract, both arms collapse to the same canonical
-# arm_key (both apply `DDQN_SWAP`); only the n_step HP differs.
-# An HP-cleavage on a single canonical arm is NOT a `do()`
-# contrast — it's a moderator analysis on a covariate.
+# Bias-compounding theory predicts: as `n_step` grows, the
+# bootstrap-target's bias contribution shrinks (because the MC
+# component dominates), so DDQN — which exists to cut the
+# overestimation in the bootstrap target — has less to fix.
+# Equivalently: DDQN-vs-vanilla's |g_jensen| should be *larger*
+# at n=1 than at n=3.
 #
-# The principled migration is `meta_regression_paired_g` (or a
-# panel built on per-n_step DDQN-vs-vanilla strata): assert
-# "DDQN's bias-reduction effect attenuates monotonically with
-# n_step." That re-authoring requires a corpus-aware threshold
-# choice and a different bridge body shape; deferred until the
-# substrate scientist re-runs the n-step probe under the new
-# arm-key shape.
+# The original rev-11 bridges authored a within-DDQN HP-cleavage
+# (`ddqn_3step` vs `ddqn_1step`); under the Phase-6 typed-
+# Intervention contract, both arms collapse to the same canonical
+# arm_key (both apply `DDQN_SWAP`) and the contrast is no longer
+# expressible as a DoEffect. The principled cross-arm form is
+# DDQN-vs-vanilla scoped to each `n_step` value — the four
+# bridges below capture the same scientific story:
 #
-# Finding stays documented in `findings_nstep_falsification.md`:
-#   "as n-step replaces bootstrap with MC backup, DDQN advantage
-#    collapses monotonically Δ=+0.087 (n=1) → +0.002 (n=3) on
-#    FourRooms" — the slope-form claim a meta-regression bridge
-# would canonicalise.
+#   - bias HELD at n=1 (DDQN reduces big bootstrap bias)
+#   - bias ATTENUATED at n=3 (DDQN has less to reduce; |g|
+#     should land in the null-band)
+#   - outcome NO_EFFECT at n=1 (the rev-1 link-null story)
+#   - outcome NO_EFFECT at n=3 (n-step doesn't rescue the link)
+#
+# Together they assert the slope: |g_jensen(n=1)| > |g_jensen(n=3)|
+# AND |g_outcome| stays small everywhere. Per
+# `findings_nstep_falsification.md`, the corpus collapses
+# monotonically Δ=+0.087 (n=1) → +0.002 (n=3) on FourRooms;
+# the four bridges encode the endpoints of that slope.
+
+
+@claim_bridge(
+    source=INTERVENTION,
+    target='jensen_gap',
+    direction=Direction.INVERSE,
+    tier=Tier.INTERVENTIONAL,
+    scope=pl.col('n_step') == 1,
+)
+def ddqn_reduces_jensen_gap__pool_n1(
+    paired_g_pooled: PooledPairedGResult,
+) -> Verdict:
+    """rev 11 reframed: at full bootstrap (n=1), DDQN-vs-vanilla
+    pooled g(jensen_gap) is strongly negative — DDQN cuts the
+    bootstrap-bias just as theory predicts. HELD when pooled
+    g < -0.5 with ≥3 envs."""
+    return _pooled_negative_holds_when(
+        paired_g_pooled, g_threshold=0.5, min_envs=3,
+    )
+
+
+@claim_bridge(
+    source=INTERVENTION,
+    target='jensen_gap',
+    direction=Direction.INVERSE,
+    tier=Tier.INTERVENTIONAL,
+    scope=pl.col('n_step') == 3,
+)
+def ddqn_attenuates_jensen_gap__pool_n3(
+    paired_g_pooled: PooledPairedGResult,
+) -> Verdict:
+    """rev 11 reframed: at n=3, the MC component reduces the
+    bootstrap-bias so DDQN has less to fix. The attenuation
+    prediction: pooled |g(jensen_gap)| should land in the null
+    band. NO_EFFECT (the attenuation reading) when |g| < 0.3;
+    HELD-strong-negative would refute the attenuation prediction."""
+    return _pooled_null_holds_when(
+        paired_g_pooled, null_band=0.3, min_envs=3,
+    )
+
+
+@claim_bridge(
+    source=INTERVENTION,
+    target='eval_final_mean',
+    direction=Direction.DIRECT,
+    tier=Tier.INTERVENTIONAL,
+    scope=pl.col('n_step') == 1,
+)
+def ddqn_outcome_null__pool_n1(
+    paired_g_pooled: PooledPairedGResult,
+) -> Verdict:
+    """rev 11 reframed: at n=1, DDQN reduces bias but the link
+    to outcome stays empirically broken across the rev-11 sparse-
+    reward envs (the rev-1 mech-HELD-but-link-null story
+    reproduces at this corpus). NO_EFFECT when |g(outcome)| <
+    0.3."""
+    return _pooled_null_holds_when(
+        paired_g_pooled, null_band=0.3, min_envs=3,
+    )
+
+
+@claim_bridge(
+    source=INTERVENTION,
+    target='eval_final_mean',
+    direction=Direction.DIRECT,
+    tier=Tier.INTERVENTIONAL,
+    scope=pl.col('n_step') == 3,
+)
+def ddqn_outcome_null__pool_n3(
+    paired_g_pooled: PooledPairedGResult,
+) -> Verdict:
+    """rev 11 reframed: at n=3, DDQN's outcome benefit also
+    stays in the null band. The variance-reduction prediction
+    (n-step rescues the link) is refuted: the link is null at
+    both endpoints. NO_EFFECT when |g(outcome)| < 0.3."""
+    return _pooled_null_holds_when(
+        paired_g_pooled, null_band=0.3, min_envs=3,
+    )
 
 
 # ============ Twelfth revision: 2×2 factorial ========================
@@ -807,12 +889,17 @@ DDQN_200K_BRIDGES = (
 (`experiments/data/ddqn/runs.parquet`, total_steps=200000)."""
 
 
-NSTEP_INTERVENTION_BRIDGES: tuple = ()
-"""Empty under Phase-6: the rev-11 n-step bridges authored a
-within-DDQN HP-cleavage contrast that the typed-Intervention
-DoEffect contract no longer admits. See the comment block above
-the eleventh-revision section for the principled migration shape
-(meta-regression on `n_step` covariate)."""
+NSTEP_INTERVENTION_BRIDGES = (
+    ddqn_reduces_jensen_gap__pool_n1,
+    ddqn_attenuates_jensen_gap__pool_n3,
+    ddqn_outcome_null__pool_n1,
+    ddqn_outcome_null__pool_n3,
+)
+"""Bridges asserted on the nstep_intervention corpus (rev 11).
+Re-authored under Phase-6 as DDQN-vs-vanilla scoped by `n_step`;
+the slope across n_step encodes the bias-compounding theory's
+attenuation prediction. See the comment block above the
+eleventh-revision section for the rationale."""
 
 
 NSTEP_FACTORIAL_BRIDGES = (
