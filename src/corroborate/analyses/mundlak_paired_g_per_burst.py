@@ -51,7 +51,7 @@ def _per_env_burst_predictor_mean(
     for c in cells:
         if c.get('env_name') != env_name:
             continue
-        if arm_filter is not None and c.get('intervention_name') != arm_filter:
+        if arm_filter is not None and c.get('arm_key') != arm_filter:
             continue
         cell_id = c.get('id')
         if not isinstance(cell_id, str):
