@@ -19,6 +19,7 @@ artifact the architecture promises.
 from __future__ import annotations
 
 import math
+from functools import partial
 
 import polars as pl
 
@@ -52,16 +53,36 @@ from corroborate.analyses.verdict_distribution import (
 from corroborate.bridge.bridge import (
     Direction, Tier, claim_bridge,
 )
-from corroborate.core.intervention import DoEffect
+from corroborate.core.intervention import DoEffect, Intervention
 from corroborate.stats import MetaRegressionResult
 from corroborate.bridge.verdict import Verdict
+from corroborate_rl.dqn.claims.bootstrap import (
+    bootstrap, double_greedify, expectile_greedify,
+)
 
 
-# File-level intervention: most bridges in this zoo test
-# `do(arm=ddqn) → effect`. Bridges that test a DIFFERENT
-# intervention (n-step variants, expectile, etc.) override
-# via decorator `source = DoEffect(...)`.
-INTERVENTION = DoEffect(treatment_arm='ddqn', baseline_arm='vanilla_dqn')
+# Typed structural deltas used across bridges in this zoo. Each
+# `Intervention` is a single-slot replacement on the claim graph;
+# `DoEffect` composes them into treatment / baseline arms.
+DDQN_SWAP = Intervention(
+    slot_path='bootstrap',
+    replacement=partial(bootstrap, greedification=double_greedify),
+)
+EXPECTILE_SWAP = Intervention(
+    slot_path='bootstrap',
+    replacement=partial(
+        bootstrap,
+        greedification=partial(expectile_greedify, tau=0.7),
+    ),
+)
+
+
+# File-level intervention: most bridges in this zoo test the
+# DDQN-vs-vanilla contrast (`do(bootstrap = ddqn-style) →
+# effect`). Bridges that test a different mechanism contrast
+# (expectile-vs-DDQN, expectile-vs-vanilla) override via the
+# per-decorator `source = DoEffect(...)` kwarg.
+INTERVENTION = DoEffect(treatment=(DDQN_SWAP,), baseline=())
 
 
 # ============ Eighth revision (action_dim_sweep) ============
@@ -523,127 +544,28 @@ def ddqn_link_to_outcome_null__converged_subset(
 
 # ============ Eleventh revision: n-step refutes variance-reduction ===
 #
-# Strategy 1 from the intervention design: hold DDQN fixed; vary
-# n_step ∈ {1, 3}. Variance-reduction theory predicts 3-step
-# return reduces bootstrap-variance on top of DDQN's bias-
-# correction, so outcome should improve. Data refutes:
+# REMOVED in the Phase-6 typed-DoEffect migration. The four
+# bridges previously here authored
+# `DoEffect(treatment_arm='ddqn_3step', baseline_arm='ddqn_1step')` —
+# a within-DDQN n_step contrast. Under the typed-Intervention
+# DoEffect contract, both arms collapse to the same canonical
+# arm_key (both apply `DDQN_SWAP`); only the n_step HP differs.
+# An HP-cleavage on a single canonical arm is NOT a `do()`
+# contrast — it's a moderator analysis on a covariate.
 #
-#   Mechanism (pooled paired g(jensen_gap), 4 envs):
-#     pooled g=-0.91, I²=0.96 → HELD (3-step DOES reduce bias)
-#   Outcome (pooled paired g(eval_final_mean)):
-#     pooled g=-0.27, I²=0.96 → NO_EFFECT (no average benefit;
-#     I² shows env-heterogeneity, not a clean null)
-#   Catch-bsuite outcome:           g=-2.14 → 3-step HURTS
-#   DiscountingChain-bsuite outcome: g=+1.20 → 3-step helps (only
-#     env where the variance-reduction prediction lands)
+# The principled migration is `meta_regression_paired_g` (or a
+# panel built on per-n_step DDQN-vs-vanilla strata): assert
+# "DDQN's bias-reduction effect attenuates monotonically with
+# n_step." That re-authoring requires a corpus-aware threshold
+# choice and a different bridge body shape; deferred until the
+# substrate scientist re-runs the n-step probe under the new
+# arm-key shape.
 #
-# Mechanism activates exactly as theory predicts; link fails to
-# follow. The residual `bootstrap_fraction → g_link | g_mech`
-# (rev 10's ATE=+0.88) is NOT carried by the variance axis.
-
-
-@claim_bridge(
-    source=DoEffect(treatment_arm='ddqn_3step', baseline_arm='ddqn_1step'),
-    target='jensen_gap',
-    direction=Direction.INVERSE,
-    tier=Tier.INTERVENTIONAL,
-)
-def nstep_3step_reduces_bias_on_top_of_ddqn(
-    paired_g_pooled: PooledPairedGResult,
-    *,
-    total_steps_filter: int = 200000,
-) -> Verdict:
-    """rev 11: pooled g(jensen_gap) over 4 sparse-reward envs is
-    -0.91 → HELD. n-step return DOES additionally reduce
-    overestimation bias on top of DDQN's mechanism, exactly as
-    variance-reduction theory predicts at the bias level."""
-    del total_steps_filter
-    return _pooled_negative_holds_when(
-        paired_g_pooled, g_threshold=0.5, min_envs=3,
-    )
-
-
-@claim_bridge(
-    source=DoEffect(treatment_arm='ddqn_3step', baseline_arm='ddqn_1step'),
-    target='eval_final_mean',
-    direction=Direction.DIRECT,
-    tier=Tier.INTERVENTIONAL,
-)
-def nstep_3step_does_not_help_outcome__pool(
-    paired_g_pooled: PooledPairedGResult,
-    *,
-    total_steps_filter: int = 200000,
-) -> Verdict:
-    """rev 11: pooled paired g(eval_final_mean) over 4 envs is
-    -0.27 with I²=0.96 — variance-reduction predicted positive g,
-    pool sits null-or-mildly-negative. Verdict NO_EFFECT encodes
-    the falsified prediction; the I² hides env-specific harm
-    (Catch g=-2.14) and help (DiscountingChain g=+1.20) cancelling
-    in the pool."""
-    del total_steps_filter
-    return _pooled_null_holds_when(
-        paired_g_pooled, null_band=0.5, min_envs=3,
-    )
-
-
-def _per_env_harm_holds_when(paired_g: PairedGResult) -> Verdict:
-    """HELD when treatment significantly REDUCES outcome —
-    the inverse of `_ddqn_reduces_gap_holds_when`. Predicted
-    direction is INVERSE: treatment is claimed to reduce the
-    outcome (i.e. HURT relative to baseline)."""
-    if paired_g.n_pairs < 20:
-        return Verdict.POWER_INSUFFICIENT
-    if math.isnan(paired_g.g):
-        return Verdict.POWER_INSUFFICIENT
-    if paired_g.g >= 0:
-        return Verdict.POWER_INSUFFICIENT  # sign opposes prediction
-    if paired_g.g < -0.5 and paired_g.p_value < 0.05:
-        return Verdict.HELD
-    return Verdict.NO_EFFECT
-
-
-@claim_bridge(
-    source=DoEffect(treatment_arm='ddqn_3step', baseline_arm='ddqn_1step'),
-    target='eval_final_mean',
-    direction=Direction.INVERSE,
-    tier=Tier.INTERVENTIONAL,
-    scope=(pl.col('env_name') == 'Catch-bsuite'),
-)
-def nstep_3step_hurts_outcome__catch(
-    paired_g: PairedGResult,
-) -> Verdict:
-    """rev 11: 3-step on top of DDQN strongly HURTS outcome on
-    Catch-bsuite (g=-2.14, n=30). Catch is short-episode +
-    saturating-reward — long rollouts dilute the rare positive
-    signal, so n-step's variance trade is net negative."""
-    return _per_env_harm_holds_when(paired_g)
-
-
-@claim_bridge(
-    source=DoEffect(treatment_arm='ddqn_3step', baseline_arm='ddqn_1step'),
-    target='eval_final_mean',
-    direction=Direction.DIRECT,
-    tier=Tier.INTERVENTIONAL,
-    scope=(pl.col('env_name') == 'DiscountingChain-bsuite'),
-)
-def nstep_3step_helps_outcome__discounting_chain(
-    paired_g: PairedGResult,
-) -> Verdict:
-    """rev 11: DiscountingChain is the one env where 3-step
-    actually helps outcome on top of DDQN (g=+1.20). |A|=5
-    + chain structure means the env has enough action-margin AND
-    long horizons for the variance-reduction prediction to land.
-    Sole positive on this corpus — the heterogeneity that drives
-    the pool's high I²."""
-    if paired_g.n_pairs < 20:
-        return Verdict.POWER_INSUFFICIENT
-    if math.isnan(paired_g.g):
-        return Verdict.POWER_INSUFFICIENT
-    if paired_g.g <= 0:
-        return Verdict.POWER_INSUFFICIENT
-    if paired_g.g > 0.5 and paired_g.p_value < 0.05:
-        return Verdict.HELD
-    return Verdict.NO_EFFECT
+# Finding stays documented in `findings_nstep_falsification.md`:
+#   "as n-step replaces bootstrap with MC backup, DDQN advantage
+#    collapses monotonically Δ=+0.087 (n=1) → +0.002 (n=3) on
+#    FourRooms" — the slope-form claim a meta-regression bridge
+# would canonicalise.
 
 
 # ============ Twelfth revision: 2×2 factorial ========================
@@ -885,13 +807,12 @@ DDQN_200K_BRIDGES = (
 (`experiments/data/ddqn/runs.parquet`, total_steps=200000)."""
 
 
-NSTEP_INTERVENTION_BRIDGES = (
-    nstep_3step_reduces_bias_on_top_of_ddqn,
-    nstep_3step_does_not_help_outcome__pool,
-    nstep_3step_hurts_outcome__catch,
-    nstep_3step_helps_outcome__discounting_chain,
-)
-"""Bridges asserted on the nstep_intervention corpus (rev 11)."""
+NSTEP_INTERVENTION_BRIDGES: tuple = ()
+"""Empty under Phase-6: the rev-11 n-step bridges authored a
+within-DDQN HP-cleavage contrast that the typed-Intervention
+DoEffect contract no longer admits. See the comment block above
+the eleventh-revision section for the principled migration shape
+(meta-regression on `n_step` covariate)."""
 
 
 NSTEP_FACTORIAL_BRIDGES = (
@@ -1221,7 +1142,7 @@ def _expectile_reduces_gap_holds_when(paired_g: PairedGResult) -> Verdict:
 
 
 @claim_bridge(
-    source=DoEffect(treatment_arm='expectile_dqn', baseline_arm='ddqn'),
+    source=DoEffect(treatment=(EXPECTILE_SWAP,), baseline=(DDQN_SWAP,)),
     target='jensen_gap',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
@@ -1237,7 +1158,7 @@ def expectile_reduces_jensen_gap_more_than_ddqn__fourrooms(
 
 
 @claim_bridge(
-    source=DoEffect(treatment_arm='expectile_dqn', baseline_arm='ddqn'),
+    source=DoEffect(treatment=(EXPECTILE_SWAP,), baseline=(DDQN_SWAP,)),
     target='eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
@@ -1259,7 +1180,7 @@ def ddqn_outperforms_expectile_on_outcome__fourrooms(
 
 
 @claim_bridge(
-    source=DoEffect(treatment_arm='expectile_dqn', baseline_arm='vanilla_dqn'),
+    source=DoEffect(treatment=(EXPECTILE_SWAP,), baseline=()),
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
