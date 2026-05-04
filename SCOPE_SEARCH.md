@@ -245,11 +245,13 @@ def at_most_gap_verdict(
     return 'held' if gap <= 0.0 else 'invariant_violation'
 ```
 
-After registration, the substrate adds the verdict measurable to
-`Hypothesis.measurables` and cell_runner persists the per-cell
-verdict on every RunRow. Bridges that test "≥X% of cells fire
-the predicted verdict" consume the column name directly via the
-`source` field of an `@claim_bridge`.
+After registration, the substrate includes the verdict measurable
+in the sweep's `MEASURABLES` argument to `run_intervention`
+(`MEASURABLES` is sweep-time, not on the `Hypothesis` Protocol),
+and cell_runner persists the per-cell verdict on every RunRow.
+Bridges that test "≥X% of cells fire the predicted verdict"
+consume the column name directly via the `source` field of an
+`@claim_bridge`.
 
 ### Step 9. Re-evaluate
 
@@ -300,8 +302,9 @@ Three terminating outcomes:
 
 1. **Scope corroborated**: a covariate threshold reproduces the
    link. Commit as a verdict measurable (step 8); pre-register
-   it on `Hypothesis.measurables`. The mechanism's scope is now
-   part of the substrate's persisted columns.
+   it via the substrate's `@measurable` decorator and include it
+   in the sweep's `MEASURABLES` argument. The mechanism's scope
+   is now part of the substrate's persisted columns.
 2. **No covariate corroborates**: every candidate's
    meta-regression β has CI bracketing zero AND/OR fails dowhy
    validation. Either the upstream chain has edges we haven't
@@ -316,14 +319,19 @@ Three terminating outcomes:
 
 ## Worked example
 
-`experiments/analyze.py` is the canonical scope-search:
+The procedure is composed by chaining framework primitives — the
+substrate-side analysis is bridge-authoring (substrate composes
+the primitives in `corroborate.analyses.*`) plus optional CLI
+glue. `scripts/run_hypothesis.py` evaluates the bridge module
+end-to-end:
 
 ```
-uv run python experiments/analyze.py \
-    --corpus action_dim_wide \
-    --treatment-arm ddqn --baseline-arm vanilla_dqn \
-    --stages paired_g,meta_reg,pc
+uv run python scripts/run_hypothesis.py experiments.findings.dqn_bridges \
+    --data experiments/data/action_dim_wide
 ```
 
-Stages 4 + 6 of the procedure correspond to `meta_reg` and `pc`
-in `analyze.py`'s pipeline.
+Each bridge is a typed `@claim_bridge` decorator + `holds_when`
+body composing analyses (`paired_g`, `meta_regression_paired_g`,
+`discover_adjacency`, etc.). Stages 4 + 6 of the procedure are
+realised through bridges that consume `MetaRegressionResult` and
+the framework's `discover_adjacency` primitive respectively.

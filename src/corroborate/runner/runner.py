@@ -34,12 +34,12 @@ is needed but missing.
 
 Hypothesis surface — every bridges module / class satisfies the
 `Hypothesis` Protocol (`corroborate.core.hypothesis.Hypothesis`)
-by declaring `INTERVENTION: DoEffect` + `BRIDGES:
-tuple[Bridge, ...]`. The cache file is keyed off
-`getattr(h, '__name__', 'unnamed').split('.')[-1]` — there is no
-override surface; if the cache lives in a non-default location,
-write a thin script that calls `run(..., cache_path=...)`
-directly (the kwarg exists for that purpose).
+by declaring `INTERVENTION: DoEffect`, `BRIDGES:
+tuple[Bridge, ...]`, `__name__: str`. The cache file is keyed
+off `h.__name__.split('.')[-1]` — there is no override surface;
+if the cache lives in a non-default location, write a thin
+script that calls `run(..., cache_path=...)` directly (the
+kwarg exists for that purpose).
 
 This module is library-only — no argparse, no `if __name__ ==
 '__main__'`. The CLI thin-wrapper lives at
@@ -81,14 +81,14 @@ def _validate_hypothesis(h: object) -> Hypothesis:
     `BRIDGES` element is a `Bridge`. Raises `TypeError` on shape
     errors. Both Python modules and class-based hypotheses
     satisfy the Protocol structurally as long as they expose
-    `INTERVENTION: DoEffect` + `BRIDGES: tuple[Bridge, ...]`."""
-    name = getattr(h, '__name__', '<unnamed>')
+    `INTERVENTION: DoEffect`, `BRIDGES: tuple[Bridge, ...]`, and
+    `__name__: str`."""
     if not isinstance(h, Hypothesis):
         raise TypeError(
-            f'{name} does not satisfy the Hypothesis Protocol: '
-            f'missing `INTERVENTION: DoEffect` and / or '
-            f'`BRIDGES: tuple[Bridge, ...]` at the module / class '
-            f'level.',
+            f'{type(h).__name__} does not satisfy the Hypothesis '
+            f'Protocol: missing one of `INTERVENTION: DoEffect`, '
+            f'`BRIDGES: tuple[Bridge, ...]`, `__name__: str` at the '
+            f'module / class level.',
         )
     # `runtime_checkable.__instancecheck__` only validates attribute
     # *presence*, so a defensive element-type check defends against
@@ -97,7 +97,7 @@ def _validate_hypothesis(h: object) -> Hypothesis:
     for b in h.BRIDGES:
         if not isinstance(b, Bridge):  # pyright: ignore[reportUnnecessaryIsInstance]
             raise TypeError(
-                f'{name}.BRIDGES contains non-Bridge: '
+                f'{h.__name__}.BRIDGES contains non-Bridge: '
                 f'{type(b).__name__}',
             )
     return h
@@ -107,10 +107,8 @@ def _default_cache_path(h: Hypothesis) -> Path:
     """Per-hypothesis cache file at
     `experiments/data/cache/<short>.parquet`. For modules, `<short>`
     is the last segment of the dotted path; for classes, it's the
-    class's `__name__`. Hypotheses without a discoverable `__name__`
-    fall back to `'unnamed'`."""
-    name = getattr(h, '__name__', 'unnamed')
-    short = name.split('.')[-1] if isinstance(name, str) else 'unnamed'
+    class's bare `__name__`."""
+    short = h.__name__.split('.')[-1]
     return Path('experiments/data/cache') / f'{short}.parquet'
 
 
@@ -263,9 +261,8 @@ def run(
     )
 
     if cells.height == 0:
-        h_name = getattr(h, '__name__', '<unnamed>')
         raise SystemExit(
-            f'{h_name}: no cells available — pass --data to '
+            f'{h.__name__}: no cells available — pass --data to '
             f'ingest a corpus, or check the cache at {resolved_cache}',
         )
 

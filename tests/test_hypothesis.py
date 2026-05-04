@@ -3,7 +3,7 @@ fingerprinting + combined_arm_key.
 
 After Phase 6 the Hypothesis dataclass is gone — the framework's
 verdict-time contract is a runtime_checkable Protocol with three
-attributes (INTERVENTION + BRIDGES + MEASURABLES). Substrate
+attributes (INTERVENTION + BRIDGES + __name__). Substrate
 authoring uses module-level constants OR class-with-ClassVars
 to satisfy it. These tests cover:
 - The Protocol's runtime_checkable shape.
@@ -12,7 +12,11 @@ to satisfy it. These tests cover:
   perturb arm identity)."""
 from __future__ import annotations
 
+from dataclasses import dataclass
+from typing import ClassVar
+
 from corroborate._internals.canonical import canonical_str
+from corroborate.bridge.bridge import Bridge
 from corroborate.core.claim import claim
 from corroborate.core.hypothesis import Hypothesis
 from corroborate.core.intervention import (
@@ -148,13 +152,47 @@ def test_combined_arm_key_distinguishes_different_replacements() -> None:
 
 # ============ Hypothesis Protocol shape ============
 
-def test_module_satisfies_protocol() -> None:
-    """A module-level INTERVENTION + BRIDGES + MEASURABLES makes
-    the module conform structurally — this test imports the
-    framework's `core.hypothesis` module which doesn't have those
-    attrs, so it should NOT be a Hypothesis."""
+def test_module_lacking_attrs_is_not_hypothesis() -> None:
+    """A module without INTERVENTION / BRIDGES doesn't conform.
+    The framework's `core.hypothesis` module is a counter-example —
+    it defines the Protocol but doesn't carry it."""
     import corroborate.core.hypothesis as mod
     assert not isinstance(mod, Hypothesis)
+
+
+def test_class_with_classvars_satisfies_protocol() -> None:
+    """A frozen dataclass with ClassVar fields conforms — the
+    canonical class-based authoring shape. Module-shape conformance
+    is exercised by the substrate's bridge-zoo files (`dqn_bridges.py`,
+    `ddqn_universe.py`) at production load time."""
+    @dataclass(frozen=True)
+    class MyHypothesis:
+        INTERVENTION: ClassVar[DoEffect] = DoEffect(
+            treatment=(
+                Intervention(slot_path='bootstrap', replacement=_alt_a),
+            ),
+            baseline=(),
+        )
+        BRIDGES: ClassVar[tuple[Bridge, ...]] = ()
+    assert isinstance(MyHypothesis, Hypothesis)
+
+
+def test_class_missing_intervention_is_not_hypothesis() -> None:
+    """A class without INTERVENTION → fails Protocol check."""
+    @dataclass(frozen=True)
+    class Broken:
+        BRIDGES: ClassVar[tuple[Bridge, ...]] = ()
+    assert not isinstance(Broken, Hypothesis)
+
+
+def test_class_missing_bridges_is_not_hypothesis() -> None:
+    """A class without BRIDGES → fails Protocol check."""
+    @dataclass(frozen=True)
+    class Broken:
+        INTERVENTION: ClassVar[DoEffect] = DoEffect(
+            treatment=(), baseline=(),
+        )
+    assert not isinstance(Broken, Hypothesis)
 
 
 def test_doeffect_arm_keys() -> None:
@@ -166,3 +204,25 @@ def test_doeffect_arm_keys() -> None:
     )
     assert de.treatment_arm_key() == 'bootstrap=Claim:_alt_a'
     assert de.baseline_arm_key() == 'baseline'
+
+
+def test_doeffect_empty_treatment_collides_with_baseline() -> None:
+    """Empty treatment tuple yields the same canonical key as the
+    empty baseline ('baseline'). Authors using a treatment-vs-
+    baseline contrast must pass a non-empty treatment tuple; the
+    framework would reject the self-vs-self comparison at
+    paired_g time."""
+    de = DoEffect(treatment=(), baseline=())
+    assert de.treatment_arm_key() == 'baseline'
+    assert de.baseline_arm_key() == 'baseline'
+
+
+def test_doeffect_multi_intervention_treatment() -> None:
+    """Multiple Interventions in treatment compose into a
+    sorted-joined arm key (order-invariant fingerprint)."""
+    iv1 = Intervention(slot_path='bootstrap', replacement=_alt_a)
+    iv2 = Intervention(slot_path='action_select', replacement=_alt_b)
+    de_a = DoEffect(treatment=(iv1, iv2), baseline=())
+    de_b = DoEffect(treatment=(iv2, iv1), baseline=())
+    assert de_a.treatment_arm_key() == de_b.treatment_arm_key()
+    assert '+' in de_a.treatment_arm_key()  # joined with '+'

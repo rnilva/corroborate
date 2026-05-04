@@ -468,19 +468,23 @@ def claim_bridge(
             ...
 
     Interventional bridges declare the do-contrast via
-    `source = DoEffect(treatment_arm=..., baseline_arm=...)`.
-    The framework extracts treatment/baseline arms from
-    `bridge.source` at evaluate() time and threads them into the
-    analysis's kwargs. When `source` is a string/Measurable, no
-    contrast is set and the analysis runs without arm-pairing
-    (correlation-style or pre-paired bridges).
+    `source = DoEffect(treatment=(Intervention(...),), baseline=())`.
+    The framework derives `treatment_arm` / `baseline_arm` strings
+    via `DoEffect.treatment_arm_key()` / `baseline_arm_key()` (the
+    canonical_str fingerprints of the typed Intervention tuples)
+    at evaluate() time and threads them into the analysis's kwargs.
+    When `source` is a string/Measurable, no contrast is set and
+    the analysis runs without arm-pairing (correlation-style or
+    pre-paired bridges).
 
     A common idiom is to define `INTERVENTION = DoEffect(...)`
     once at the top of the bridge file and reference it as
     `source=INTERVENTION` in each interventional bridge — the
     constant lives in the file's namespace, not in framework
-    auto-resolution. Per-bridge variants (e.g. HP-encoded arms)
-    declare their own DoEffect inline.
+    auto-resolution. HP-cleaved variants of the same structural
+    contrast (γ-stratified, n_step-stratified, etc.) reuse the
+    file-level `INTERVENTION` and add an HP scope predicate via
+    `scope=pl.col('gamma') == 0.999` on the per-bridge decorator.
     """
     # Validate decorator args at module-import time (early failure).
     source_validated = _require_endpoint(

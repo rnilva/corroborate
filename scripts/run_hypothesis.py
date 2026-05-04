@@ -16,7 +16,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import cast
 
-from corroborate.claim_bridge import BridgeEvaluation
+from corroborate.bridge import BridgeEvaluation
 from corroborate.runner import run
 
 

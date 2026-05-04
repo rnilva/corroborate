@@ -36,15 +36,15 @@ Bridges that consume measurables import them by name (typed
 chained dependencies; the Protocol doesn't need to repeat what
 bridges already carry.
 
-`name` is NOT part of the Protocol — modules and classes carry
-`__name__` from Python for free; the framework reads it
-opportunistically (`getattr(h, '__name__', None)`) for cache
-paths or display, but the Protocol does not require it. Arm
-identity flows exclusively through `canonical_str` of the
-underlying Intervention tuples (via
-`DoEffect.treatment_arm_key()` / `baseline_arm_key()`); substrate-
-chosen short labels are no longer part of the framework's
-identity surface."""
+`__name__: str` is on the Protocol so the runner's typed access
+(cache-path defaults / display) doesn't have to fall back to
+`getattr` — both Python modules and classes carry `__name__: str`
+for free, so requiring it costs no Hypothesis author anything.
+Arm *identity*, distinct from `__name__`, flows exclusively
+through `canonical_str` of the underlying Intervention tuples
+(via `DoEffect.treatment_arm_key()` / `baseline_arm_key()`);
+substrate-chosen short labels are no longer part of the
+framework's identity surface."""
 from __future__ import annotations
 
 from typing import (
@@ -80,17 +80,22 @@ INVERSE) inferred post-hoc from a stat's value."""
 class Hypothesis(Protocol):
     """The framework's typed verdict-time hypothesis contract.
 
-    Conforming objects expose two read-only attributes:
+    Conforming objects expose three read-only attributes:
 
     - `INTERVENTION: DoEffect` — the typed contrast (treatment +
       baseline arms as Intervention tuples).
     - `BRIDGES: tuple[Bridge, ...]` — the authored verdict
       declarations.
+    - `__name__: str` — the Python identity attribute. Modules
+      carry their dotted path; classes carry their bare name. The
+      runner uses it for cache-path defaults and display; both
+      module and class shapes carry it for free.
 
     Modules and classes both satisfy the Protocol structurally
     via attribute access. The framework's verdict-time runner
     reads `BRIDGES`; the substrate's sweep glue reads
     `INTERVENTION` to drive paired sweep iteration."""
 
+    __name__: str
     INTERVENTION: DoEffect
     BRIDGES: 'tuple[Bridge, ...]'
