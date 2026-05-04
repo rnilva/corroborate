@@ -23,9 +23,9 @@ from __future__ import annotations
 
 import math
 import random
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Literal, Protocol
+from typing import Literal, Protocol
 
 import numpy as np
 import numpy.typing as npt
@@ -37,9 +37,6 @@ precision only (w_i = 1/v_i). `'random'` adds between-stratum
 heterogeneity τ² to the variance (w_i = 1/(v_i + τ²)) — the
 honest treatment when strata draw from a population of effects
 rather than realizing one shared effect."""
-
-if TYPE_CHECKING:
-    from corroborate.corpus.schema import HypothesisComparisonRow
 
 
 class StratumGProtocol[K](Protocol):
@@ -327,54 +324,6 @@ def meta_regression(
         i_squared=i_squared,
         pool=pool,
     )
-
-
-def meta_regress_comparison(
-    row: 'HypothesisComparisonRow',
-    covariate_for: Callable[[object], Mapping[str, float]],
-    *,
-    alpha: float = 0.05,
-    pool: Pool = 'random',
-) -> MetaRegressionResult:
-    """Run meta-regression on a stratified HypothesisComparisonRow.
-
-    Builds one `StratumObservation` per `GroupStats` in
-    `row.per_group`, with `g` from `gs.effect_size_g`, `se` from
-    `gs.se`, and `covariates` from `covariate_for(gs.group_value)`.
-
-    Strata where `effect_size_g` or `se` is `None`/NaN are
-    silently skipped — those are degenerate strata that the
-    aggregation already flagged as unsuitable for pooling. The
-    skip is silent because the caller already saw the per-group
-    verdicts; a separate filter at this boundary would be a
-    second voice on the same call.
-
-    Raises:
-    - `ValueError` when the row's `per_group` is empty (caller
-      passed a non-stratified row).
-    - `ValueError` from `meta_regression` when remaining strata
-      can't satisfy OLS preconditions."""
-    if not row.per_group:
-        raise ValueError(
-            'meta_regress_comparison: row.per_group is empty — '
-            'this row is not stratified. Re-aggregate with '
-            'group_by set, or use meta_regression directly.',
-        )
-    observations: list[StratumObservation] = []
-    for gs in row.per_group:
-        if gs.effect_size_g is None or gs.se is None:
-            continue
-        if math.isnan(gs.effect_size_g) or math.isnan(gs.se):
-            continue
-        if gs.se <= 0.0:
-            continue
-        observations.append(StratumObservation(
-            stratum_id=gs.group_value,
-            g=gs.effect_size_g,
-            se=gs.se,
-            covariates=covariate_for(gs.group_value),
-        ))
-    return meta_regression(observations, alpha=alpha, pool=pool)
 
 
 # ============ Cross-validation ============
