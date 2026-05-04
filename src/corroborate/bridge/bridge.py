@@ -214,15 +214,18 @@ class Bridge:
     `to_invariant_measurable()` to synthesize the per-cell verdict
     Measurable that the cache builder evaluates and persists.
 
-    `scope: pl.Expr | None = None` filters the cell-set the
-    framework hands to the analysis. The cache flows as a
-    `pl.DataFrame`; `evaluate()` applies `df.filter(scope)` (with
-    missing-column null-padding via `_filter_with_missing_cols`)
-    before converting to dicts and forwarding. `None` means
-    "match all". Replaces the legacy `env_name` /
-    `extra_filters` / `extra_min_pairs` / `extra_max_pairs` /
-    `cell_predicate` kwargs that used to live in the holds_when
-    params bag — scope is structural metadata, not body argument.
+    `cell_filter: pl.Expr | None = None` filters the cell-set
+    the framework hands to the analysis. The cache flows as a
+    `pl.DataFrame`; `evaluate()` applies `df.filter(cell_filter)`
+    (with missing-column null-padding via
+    `_filter_with_missing_cols`) before converting to dicts and
+    forwarding. `None` means "match all". Replaces the legacy
+    `env_name` / `extra_filters` / `extra_min_pairs` /
+    `extra_max_pairs` / `cell_predicate` kwargs that used to
+    live in the holds_when params bag — `cell_filter` is
+    structural metadata, not body argument. (Renamed from
+    `scope` to disambiguate from the analytical `Scope` claim
+    in `bridge.scope`.)
 
     `pair_by: tuple[str, ...] = ('seed',)` is the pairing-axis
     tuple forwarded to analyses that compute paired contrasts.
@@ -235,7 +238,7 @@ class Bridge:
     direction: Direction = Direction.DIRECT
     tier: Tier = Tier.ASSOCIATIONAL
     pair_by: tuple[str, ...] = ('seed',)
-    scope: pl.Expr | None = None
+    cell_filter: pl.Expr | None = None
     params: Mapping[str, object] = field(
         default_factory=lambda: MappingProxyType({}),
     )
@@ -379,18 +382,19 @@ def _require_tier(value: object, fn_name: str) -> Tier:
     return value
 
 
-def _require_scope(value: object, fn_name: str) -> pl.Expr | None:
-    """Validate `scope` decorator arg. `None` → no filter; a
-    `pl.Expr` is accepted as the polars-native cell predicate. Any
-    other value is an authoring mistake — fail loudly at import."""
+def _require_cell_filter(value: object, fn_name: str) -> pl.Expr | None:
+    """Validate `cell_filter` decorator arg. `None` → no filter;
+    a `pl.Expr` is accepted as the polars-native cell predicate.
+    Any other value is an authoring mistake — fail loudly at
+    import."""
     if value is None:
         return None
     if isinstance(value, pl.Expr):
         return value
     raise TypeError(
-        f'@claim_bridge {fn_name!r}: default for `scope` must be a '
-        f'pl.Expr (e.g. `pl.col(\'env_name\') == \'X\'`) or None; '
-        f'got {type(value).__name__}',
+        f'@claim_bridge {fn_name!r}: default for `cell_filter` '
+        f'must be a pl.Expr (e.g. `pl.col(\'env_name\') == \'X\'`) '
+        f'or None; got {type(value).__name__}',
     )
 
 
@@ -442,7 +446,7 @@ def claim_bridge(
     direction: Direction = Direction.DIRECT,
     tier: Tier = Tier.ASSOCIATIONAL,
     pair_by: tuple[str, ...] = ('seed',),
-    scope: pl.Expr | None = None,
+    cell_filter: pl.Expr | None = None,
     predicted_direction: PredictedDirection | None = None,
 ) -> Callable[[Callable[..., Verdict]], Bridge]:
     """Decorator factory: wraps a function into a `Bridge`
@@ -456,7 +460,7 @@ def claim_bridge(
             direction=Direction.DIRECT,
             tier=Tier.INTERVENTIONAL,
             pair_by=('seed',),
-            scope=(
+            cell_filter=(
                 (pl.col('env_name') == 'Acrobot-v1')
                 & (pl.col('reward_scale') == 0.1)
             ),
@@ -498,8 +502,8 @@ def claim_bridge(
     pair_by_validated = _require_pair_by(
         pair_by, '<claim_bridge decorator>',
     )
-    scope_validated = _require_scope(
-        scope, '<claim_bridge decorator>',
+    cell_filter_validated = _require_cell_filter(
+        cell_filter, '<claim_bridge decorator>',
     )
     predicted_direction_validated = _require_predicted_direction(
         predicted_direction, '<claim_bridge decorator>',
@@ -539,7 +543,7 @@ def claim_bridge(
             direction=direction_validated,
             tier=tier_validated,
             pair_by=pair_by_validated,
-            scope=scope_validated,
+            cell_filter=cell_filter_validated,
             params=MappingProxyType(params),
             holds_when=fn,
             predicted_direction=predicted_direction_validated,
@@ -558,9 +562,10 @@ def _filter_with_missing_cols(
       it per-cell (with shared dep memoisation via
       `evaluate_with_measurables`) and add it as a column. This
       is the "bridges-verify-against-raw-traces" path: when a
-      bridge declares `scope = pl.col('jensen_dormancy_gap') >= 0`
-      and the input DataFrame is a raw `runs.parquet` without
-      that measurable yet, the framework computes it on the fly.
+      bridge declares `cell_filter = pl.col('jensen_dormancy_gap')
+      >= 0` and the input DataFrame is a raw `runs.parquet`
+      without that measurable yet, the framework computes it on
+      the fly.
     - Otherwise, pre-fill as null. Universal-cache schema
       heterogeneity (corpus A has `reward_scale`, corpus B
       doesn't, neither corpus computed it) lands here — null
@@ -592,8 +597,8 @@ def evaluate(
     bridge: Bridge,
     cells: pl.DataFrame | Iterable[Mapping[str, object]],
 ) -> BridgeEvaluation:
-    """Run a bridge against a cell-set: apply `bridge.scope` as a
-    polars filter, resolve each fixture (a `holds_when` parameter
+    """Run a bridge against a cell-set: apply `bridge.cell_filter`
+    as a polars filter, resolve each fixture (a `holds_when` parameter
     without a default) by looking up the matching `@analysis`,
     parameterise from the bridge's structural fields + params,
     run on the filtered cells, inject results, return verdict +
@@ -623,15 +628,15 @@ def evaluate(
             f'not carry a threshold to evaluate against a cell-set.',
         )
     filtered_cells: list[dict[str, object]]
-    if bridge.scope is None:
-        # No scope filter — skip the DataFrame round-trip. Convert
+    if bridge.cell_filter is None:
+        # No cell filter — skip the DataFrame round-trip. Convert
         # to list[dict] so the analysis fn can re-iterate.
         if isinstance(cells, pl.DataFrame):
             filtered_cells = cast(list[dict[str, object]], cells.to_dicts())
         else:
             filtered_cells = [dict(c) for c in cells]
     else:
-        # Scope filter — materialise to DataFrame (if not already),
+        # Cell filter — materialise to DataFrame (if not already),
         # filter, convert back to list[dict] for the analysis.
         df: pl.DataFrame
         if isinstance(cells, pl.DataFrame):
@@ -640,7 +645,7 @@ def evaluate(
             cells_list = list(cells)
             df = pl.from_dicts(cells_list) if cells_list else pl.DataFrame()
         if df.height > 0:
-            df = _filter_with_missing_cols(df, bridge.scope)
+            df = _filter_with_missing_cols(df, bridge.cell_filter)
         filtered_cells = (
             cast(list[dict[str, object]], df.to_dicts())
             if df.height > 0 else []

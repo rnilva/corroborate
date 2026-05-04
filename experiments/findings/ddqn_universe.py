@@ -167,7 +167,7 @@ INTERVENTION = DoEffect(treatment_arm='ddqn', baseline_arm='vanilla_dqn')
     # in polars's filter context, unlike IEEE-754 semantics). Cells
     # with NaN `jensen_dormancy_gap` are "couldn't evaluate" and
     # should drop, not pass.
-    scope=(
+    cell_filter=(
         pl.col('jensen_dormancy_gap').is_finite()
         & (pl.col('jensen_dormancy_gap') >= 1e-9)
     ),
@@ -232,7 +232,7 @@ def ddqn_refuted_when_dormancy_fires(
     # at eval_mean=2.74 vs. expectile_3way at 0.56), inflating
     # `mean_diff` by an order of magnitude and silently
     # misclassifying a refutation as no_effect.
-    scope=(
+    cell_filter=(
         (pl.col('env_name') == 'FourRooms-misc')
         & pl.col('corpus').is_in(
             ('adaptive_dqn_fourrooms_sweep', 'expectile_3way'),
@@ -289,7 +289,7 @@ def adaptive_dqn_recovers_ddqn_benefit__fourrooms_factor_0p5(
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
     pair_by=('seed', 'env_name'),
-    scope=(
+    cell_filter=(
         (pl.col('log_obs_dim') >= 5.0)
         & (pl.col('total_steps') >= 1000000.0)
         & pl.col('reward_clip_min').is_null()
@@ -333,7 +333,7 @@ def ddqn_helps_at_early_bursts__pixel_envs(
     # corpora was an accident of the implementation. Each sweep
     # contributes its own valid paired set.
     pair_by=('seed', 'corpus'),
-    scope=(
+    cell_filter=(
         (pl.col('env_name') == 'SpaceInvaders-MinAtar')
         & (pl.col('total_steps') >= 1000000.0)
         & pl.col('reward_clip_min').is_null()
@@ -427,7 +427,7 @@ def ddqn_attenuates_at_late_bursts__spaceinvaders(
     # at different `total_steps` regimes (50k in `ddqn`, 200k in
     # `ddqn_effective_cohort`) which `pair_by=('seed',)` would
     # silently pool with the 1M cells.
-    scope=(
+    cell_filter=(
         (pl.col('env_name') == 'SpaceInvaders-MinAtar')
         & pl.col('corpus').is_in(
             ('adaptive_dqn_spaceinvaders_1m', 'minatar_1M_spaceinvaders'),
@@ -508,7 +508,7 @@ def adaptive_dqn_fails_to_avoid_attenuation__spaceinvaders_1m(
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
-    scope=(
+    cell_filter=(
         (pl.col('env_name') == 'FourRooms-misc')
         & (pl.col('corpus') == 'gamma_sweep')
         & (pl.col('effective_horizon') >= 50.0)
@@ -585,7 +585,7 @@ def ddqn_benefit_scales_with_effective_horizon__fourrooms(
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
-    scope=(
+    cell_filter=(
         (pl.col('env_name') == 'MetaMaze-misc')
         & (pl.col('corpus') == 'gamma_sweep_metamaze_high')
         & (pl.col('effective_horizon') >= 18.0)
@@ -629,7 +629,7 @@ def ddqn_benefit_scales_with_effective_horizon__metamaze_high_gamma(
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
-    scope=(
+    cell_filter=(
         (pl.col('env_name') == 'DiscountingChain-bsuite')
         & (pl.col('corpus') == 'gamma_sweep_more')
         & (pl.col('gamma') >= 0.985)
@@ -937,7 +937,7 @@ def mc_variance_attenuates_g_link__between_env(
     target='outcome_native',
     direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
-    scope=(
+    cell_filter=(
         (pl.col('env_name') == 'FourRooms-misc')
         & (pl.col('reward_scale') == 0.1)
     ),
@@ -956,9 +956,9 @@ def ddqn_rescues_underlearning_vanilla__fourrooms_rs_0p1(
     `target='outcome_native'` (the registered measurable
     `eval_best_burst_mean / reward_scale`) under
     `source=INTERVENTION` (do(ddqn) − do(vanilla_dqn) contrast)
-    and `scope=(env_name == 'FourRooms-misc') & (reward_scale ==
-    0.1)` to filter the corpus. No bespoke analysis — the bridge
-    supplies the measurable name + scope, the framework runs
+    and `cell_filter=(env_name == 'FourRooms-misc') & (reward_scale
+    == 0.1)` to filter the corpus. No bespoke analysis — the bridge
+    supplies the measurable name + cell_filter, the framework runs
     `paired_g` and injects the result.
 
     HELD when `paired_g.mean_diff ≥ threshold_diff (=+0.4)` AND
@@ -1012,7 +1012,7 @@ def ddqn_rescues_underlearning_vanilla__fourrooms_rs_0p1(
     target='outcome_native',
     direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
-    scope=(
+    cell_filter=(
         (pl.col('env_name') == 'FourRooms-misc')
         & (pl.col('reward_scale') == 0.3)
     ),
@@ -1109,7 +1109,7 @@ def ddqn_dominates_vanilla_response_curve__fourrooms_rs_0p3(
     target='mc_return[per_burst]',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
-    scope=(
+    cell_filter=(
         (pl.col('env_name') == 'SpaceInvaders-MinAtar')
         & (pl.col('total_steps') == 1_000_000)
         & pl.col('reward_clip_min').is_null()
@@ -1231,7 +1231,7 @@ def ddqn_curve_crosses_vanilla_late__spaceinvaders(
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
-    scope=(pl.col('env_name') == 'FourRooms-misc'),
+    cell_filter=(pl.col('env_name') == 'FourRooms-misc'),
 )
 def ddqn_helps_at_full_bootstrap__fourrooms_n1(
     paired_g: PairedGResult,
@@ -1263,7 +1263,7 @@ def ddqn_helps_at_full_bootstrap__fourrooms_n1(
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
-    scope=(pl.col('env_name') == 'FourRooms-misc'),
+    cell_filter=(pl.col('env_name') == 'FourRooms-misc'),
 )
 def ddqn_null_under_monte_carlo__fourrooms_n10(
     paired_g: PairedGResult,
@@ -1331,7 +1331,7 @@ def ddqn_null_under_monte_carlo__fourrooms_n10(
     target='mc_return',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
-    scope=(pl.col('env_name') == 'Acrobot-v1'),
+    cell_filter=(pl.col('env_name') == 'Acrobot-v1'),
 )
 def acrobot_per_burst_link_active__gamma_0999(
     paired_link_per_burst: PerBurstLinkResult,
@@ -1369,7 +1369,7 @@ def acrobot_per_burst_link_active__gamma_0999(
     target='outcome.eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
-    scope=(
+    cell_filter=(
         (pl.col('env_name') == 'Acrobot-v1')
         & (pl.col('gamma') == 0.999)
     ),
@@ -1411,7 +1411,7 @@ def acrobot_link_backdoor_ate_negative__gamma_0999(
     target='outcome.eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
-    scope=(
+    cell_filter=(
         (pl.col('env_name') == 'Acrobot-v1')
         & (pl.col('gamma') == 0.999)
     ),
@@ -1454,7 +1454,7 @@ def acrobot_link_placebo_refuted__gamma_0999(
     target='outcome.eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
-    scope=(
+    cell_filter=(
         (pl.col('env_name') == 'Acrobot-v1')
         & (pl.col('gamma') == 0.999)
     ),
@@ -1527,7 +1527,7 @@ def acrobot_link_rcc_robust__gamma_0999(
     target='outcome.eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
-    scope=(pl.col('total_steps') == 1_000_000),
+    cell_filter=(pl.col('total_steps') == 1_000_000),
 )
 def extreme_q_divergence_attenuates_link__binary(
     link_attenuation_dowhy: LinkAttenuationDowhyResult,
@@ -1567,7 +1567,7 @@ def extreme_q_divergence_attenuates_link__binary(
     target='outcome.eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
-    scope=(pl.col('total_steps') == 1_000_000),
+    cell_filter=(pl.col('total_steps') == 1_000_000),
 )
 def extreme_q_divergence_attenuates_link__placebo_refuted(
     link_attenuation_dowhy: LinkAttenuationDowhyResult,
@@ -1607,7 +1607,7 @@ def extreme_q_divergence_attenuates_link__placebo_refuted(
     target='outcome.eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
-    scope=(pl.col('total_steps') == 1_000_000),
+    cell_filter=(pl.col('total_steps') == 1_000_000),
 )
 def extreme_q_divergence_attenuates_link__rcc_robust(
     link_attenuation_dowhy: LinkAttenuationDowhyResult,
