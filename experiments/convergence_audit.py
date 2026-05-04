@@ -144,9 +144,12 @@ def _print_verdict(
         role_label = (
             'mechanism' if edge.target == _MECHANISM else 'outcome'
         )
+        edge_verdict = verdict.edge_verdicts.get(
+            (edge.source_name, edge.target_name), Verdict.POWER_INSUFFICIENT,
+        )
         print(
             f'    {role_label:<10} → {edge.target!r:<35} '
-            f'verdict={row.verdict.value:<22} '
+            f'verdict={edge_verdict.value:<22} '
             f'g={g:+.3f}  I²={i2:.3f}'
         )
 

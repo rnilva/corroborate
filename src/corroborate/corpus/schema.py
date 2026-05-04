@@ -63,7 +63,7 @@ from corroborate._internals.narrow import (
 )
 from corroborate.core.hypothesis import PredictedDirection
 from corroborate.stats import PooledStats
-from corroborate.bridge.verdict import RefutationClass, Verdict
+from corroborate.bridge.verdict import Verdict
 
 
 # ============ Measurement leaf type ============
@@ -351,14 +351,21 @@ type PerBurstStratum = StratumG[tuple[str, int]]
 
 @dataclass(frozen=True, slots=True)
 class GroupStats:
-    """Per-stratum (paired Hedges' g + se + verdict) summary, one
+    """Per-stratum (paired Hedges' g + se + count) summary, one
     per `group_by`-value when `HypothesisComparisonRow.from_cells`
     runs in stratified mode.
 
     `group_value` carries whatever value the `group_by` column had
     for this stratum (e.g. `'CartPole-v1'` when `group_by=
     'env_name'`). Heterogeneous Python types are intentional —
-    different substrates use different group identities."""
+    different substrates use different group identities.
+
+    Verdict-deriving fields (`verdict`, `refutation_class`,
+    `derived_q`, `delta_i`, `adequately_powered`) live on
+    bridge-evaluations now: bridges author the threshold logic
+    via `holds_when` and consume `paired_comparison` as a
+    fixture. The aggregate row carries the raw stats; the
+    verdict is bridge-author-controlled."""
     group_value: object
     n_pairs: int
     arm_a_mean: float | None
@@ -367,11 +374,6 @@ class GroupStats:
     arm_b_sd: float | None
     effect_size_g: float | None
     se: float | None
-    derived_q: float | None
-    delta_i: float
-    verdict: Verdict
-    refutation_class: RefutationClass | None
-    adequately_powered: bool
 
 
 # ============ HypothesisComparisonRow — canonical aggregator ============
@@ -414,11 +416,6 @@ class HypothesisComparisonRow:
     arm_b_sd: float | None
     effect_size_g: float | None
     se: float | None
-    derived_q: float | None
-    delta_i_population: float
-    adequately_powered: bool
-    verdict: Verdict
-    refutation_class: RefutationClass | None
 
     # Stratified mode (empty / None when group_by is None).
     per_group: tuple[GroupStats, ...]
@@ -437,8 +434,6 @@ class HypothesisComparisonRow:
         outcome_path: str,
         pair_by: tuple[str, ...],
         group_by: str | None = None,
-        alpha: float = 0.05,
-        power: float = 0.8,
         cycle_id: str | None = None,
         timestamp: str | None = None,
         baseline_h: 'Hypothesis[Mapping[str, object]] | None' = None,
@@ -463,7 +458,6 @@ class HypothesisComparisonRow:
             h, treatment_runs, baseline_runs,
             outcome_path=outcome_path,
             pair_by=pair_by, group_by=group_by,
-            alpha=alpha, power=power,
             cycle_id=cycle_id, timestamp=timestamp,
             baseline_h=baseline_h,
         )

@@ -131,9 +131,12 @@ def test_from_cells_single_group_paired_hedges_g() -> None:
     assert row.effect_size_g is not None and row.effect_size_g > 0
 
 
-def test_from_cells_single_group_no_pairs_returns_underpowered_row() -> None:
+def test_from_cells_single_group_no_pairs_returns_empty_stats() -> None:
     """Treatment + baseline at disjoint seeds → 0 pairs survive →
-    POWER_INSUFFICIENT verdict, all stats None."""
+    empty stats. The aggregate row no longer carries a baked
+    verdict (Phase 2); bridges author the verdict via `holds_when`
+    against the underpowered shape (`effect_size_g is None` /
+    `arm_a_n == 0`)."""
     treatment = [_run('t0', intervention_name='ddqn', seed=0,
                       env='X', outcome=1.0)]
     baseline = [_run('b1', intervention_name='vanilla', seed=1,
@@ -143,8 +146,9 @@ def test_from_cells_single_group_no_pairs_returns_underpowered_row() -> None:
         h, treatment, baseline,
         outcome_path='outcome.value', pair_by=('seed',),
     )
-    assert row.verdict is Verdict.POWER_INSUFFICIENT
     assert row.effect_size_g is None
+    assert row.se is None
+    assert row.arm_a_n == 0
     assert row.n_dropped_unpaired == 2
 
 

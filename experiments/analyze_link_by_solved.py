@@ -155,7 +155,7 @@ def _print_per_group(label: str, comp: HypothesisComparisonRow) -> None:
         )
         print(
             f'    {env:<25} |A|={n_a:<3} n={gs.n_pairs:<3} '
-            f'g={g_str:<8} se={se_str:<5} {gs.verdict.value}'
+            f'g={g_str:<8} se={se_str:<5}'
         )
     if comp.pooled is not None:
         v, _ = random_effects_verdict(comp.pooled, predicted_direction='a_gt_b')

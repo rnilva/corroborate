@@ -55,6 +55,7 @@ from corroborate.graph import Graph
 from corroborate.core.hypothesis import Hypothesis
 from corroborate.corpus.schema import HypothesisComparisonRow, RunRow
 from corroborate.bridge.verdict import Verdict
+from corroborate.stats.effect_size import verdict_from_paired_stats
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,12 +116,33 @@ class HypothesisVerdict[R: Mapping[str, object]]:
 # ============ Edge constructors ============
 
 def _intervention_edge(
-    edge: ClaimBridge, row: HypothesisComparisonRow,
+    edge: ClaimBridge,
+    row: HypothesisComparisonRow,
+    *,
+    alpha: float,
+    power: float,
 ) -> tuple[BridgeEdge, Verdict]:
     """Build a `BridgeEdge` + raw `Verdict` for an intervention
     edge from its paired-comparison row. Direction inferred from
-    `ate` sign; tier/level inferred from corroboration status."""
-    raw_verdict = row.verdict
+    `ate` sign; tier/level inferred from corroboration status.
+
+    Verdict is reconstituted on-demand via
+    `verdict_from_paired_stats` — `HypothesisComparisonRow` no
+    longer carries a baked verdict (Phase 2). Phase 5 will replace
+    this whole helper with `bridge.evaluate(b, cells)` so the
+    bridge author's `holds_when` body controls the threshold
+    directly."""
+    g = row.effect_size_g
+    se = row.se
+    if (g is None or se is None
+            or math.isnan(g) or math.isnan(se)):
+        raw_verdict = Verdict.POWER_INSUFFICIENT
+    else:
+        raw_verdict, _, _ = verdict_from_paired_stats(
+            g, se, row.arm_a_n,
+            predicted_direction=row.predicted_direction,
+            alpha=alpha, power=power,
+        )
     is_held = raw_verdict.is_corroboration()
     ate: float | None = (
         float(row.effect_size_g)
@@ -276,13 +298,11 @@ def hypothesis_subgraph_verdict(
             outcome_path=edge.target_name,
             pair_by=pair_by,
             group_by=group_by,
-            alpha=alpha,
-            power=power,
             baseline_h=baseline_h,
             predicted_direction=edge.predicted_direction,
         )
         comparison_rows[edge.target_name] = row
-        be, v = _intervention_edge(edge, row)
+        be, v = _intervention_edge(edge, row, alpha=alpha, power=power)
         edges_built[(edge.source_name, edge.target_name)] = be
         edge_verdicts[(edge.source_name, edge.target_name)] = v
 
