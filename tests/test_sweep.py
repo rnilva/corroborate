@@ -126,8 +126,9 @@ def test_run_intervention_pairs_arms_at_each_grid_point(
     (treatment, baseline). Each grid point has a paired
     (treatment, baseline) cell with matching grid keys."""
     runs_path, _ = run_intervention(
-        _StubHypothesis,
+        _StubHypothesis.INTERVENTION,
         base=_base_theory,
+        measurables=_StubHypothesis.MEASURABLES,
         grid_points=[{'replicate': 0}, {'replicate': 1}],
         runner=_stub_runner,
         out_dir=tmp_path,
@@ -154,8 +155,9 @@ def test_run_intervention_arm_keys_from_canonical_str(
     structural delta's fingerprint; baseline (empty tuple) is
     `'baseline'`."""
     runs_path, _ = run_intervention(
-        _StubHypothesis,
+        _StubHypothesis.INTERVENTION,
         base=_base_theory,
+        measurables=_StubHypothesis.MEASURABLES,
         grid_points=[{}],
         runner=_stub_runner,
         out_dir=tmp_path,
@@ -175,8 +177,9 @@ def test_run_intervention_single_empty_grid_point_runs_once_per_arm(
     """`grid_points=[{}]` → one cell per arm = 2 cells (treatment +
     baseline)."""
     runs_path, _ = run_intervention(
-        _StubHypothesis,
+        _StubHypothesis.INTERVENTION,
         base=_base_theory,
+        measurables=_StubHypothesis.MEASURABLES,
         grid_points=[{}],
         runner=_stub_runner,
         out_dir=tmp_path,

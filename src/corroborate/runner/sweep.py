@@ -1,27 +1,24 @@
 """Sweep — paired-intervention exogenous-grid runner.
 
-Substrate-agnostic primitive: takes a `Hypothesis` (the
-Protocol's `INTERVENTION` + `MEASURABLES` are read), a substrate-
-provided `base` Callable (the substrate's theory pre-bound with
-HPs), an exogenous-variable grid (substrate-named keys × value
-lists), and a `Runner` that knows how to execute one cell. The
-framework composes treatment + baseline claims via
+Substrate-agnostic primitive: takes a `DoEffect` (the typed
+contrast), a substrate-provided `base` Callable (the substrate's
+theory pre-bound with HPs), an optional `measurables` tuple (for
+eager per-cell scalar persistence), a discrete `grid_points`
+sequence, and a `Runner` that knows how to execute one cell.
+The framework composes treatment + baseline claims via
 `apply_interventions(base, intervention_tuple)`, iterates the
-Cartesian product of the grid, and dispatches both arms to the
-runner per grid point.
+grid, and dispatches both arms to the runner per grid point.
 
 **Paired-sweep-per-intervention.** Each call to `run_intervention`
 runs both arms of one `DoEffect` in lockstep. Treatment and
-baseline cells share the same exogenous-grid point — pairing is
-intrinsic to the sweep, not reconstructed post-hoc via arm_key
-match. This catches a class of bugs where authoring slips left
-treatment and baseline at different HP values.
+baseline cells share the same `grid_point` — pairing is
+intrinsic, not reconstructed post-hoc via arm_key match.
 
 Multi-arm sweeps (3-way, factorial) are expressed as multiple
-Hypothesis-Protocol objects, each with its own DoEffect. The
-substrate calls `run_intervention` per Hypothesis. Vanilla cells
-appear in each baseline-shared sweep — that's the cost of the
-self-contained-contrast discipline.
+calls to `run_intervention`, each with its own DoEffect. Vanilla
+cells appear in each baseline-shared sweep — that's the cost of
+the self-contained-contrast discipline (see
+`project_multi_arm_intervention_primitive` memory).
 
 The framework knows nothing about RL concepts (`env`, `seed`,
 `total_steps`). Those are exogenous *names the substrate chose*.
@@ -46,8 +43,7 @@ from typing import Protocol
 
 import polars as pl
 
-from corroborate.core.hypothesis import Hypothesis
-from corroborate.core.intervention import apply_interventions
+from corroborate.core.intervention import DoEffect, apply_interventions
 from corroborate.corpus.persistence import (
     apply_trace_reductions,
     stream_concat_parquets,
@@ -141,9 +137,10 @@ def empty_graph() -> ComputationGraph:
 # ============ run_intervention — the framework's `do()` operator ============
 
 def run_intervention[R: Mapping[str, object]](
-    h: Hypothesis,
+    intervention: DoEffect,
     *,
     base: Callable[..., R],
+    measurables: tuple[Measurable[R, object], ...] = (),
     grid_points: Sequence[Mapping[str, object]],
     runner: Runner[R],
     out_dir: Path,
@@ -152,20 +149,20 @@ def run_intervention[R: Mapping[str, object]](
     trace_reductions: Sequence[pl.Expr] = (),
     trace_drops: Sequence[str] = (),
 ) -> tuple[Path, Path]:
-    """Execute the typed contrast `h.INTERVENTION` against `base`
+    """Execute the typed contrast `intervention` against `base`
     over the discrete sequence `grid_points`; persist per-cell
     parquets; merge to a corpus.
 
     This is the framework's rung-2 `do()` operator at the corpus
-    level: a Hypothesis (Protocol-conforming, carries
-    `INTERVENTION: DoEffect` + `MEASURABLES`) + a substrate-
-    supplied `base` callable + a discrete sequence of grid points
-    → materialised RunRow / TraceRow corpus.
+    level. It's a sweep-time primitive — its inputs are sweep-
+    time inputs (intervention + measurables + base + grid_points
+    + runner). Bridges are NOT consumed here; bridges are
+    verdict-time concerns (`runner.run_module`).
 
     Per grid point, the runner is invoked twice — once for the
-    treatment claim (`apply_interventions(base, INTERVENTION.treatment)`)
+    treatment claim (`apply_interventions(base, intervention.treatment)`)
     and once for the baseline claim
-    (`apply_interventions(base, INTERVENTION.baseline)`). Pairing
+    (`apply_interventions(base, intervention.baseline)`). Pairing
     is intrinsic: treatment and baseline cells at the same
     `grid_point` ARE matched by construction.
 
@@ -173,8 +170,14 @@ def run_intervention[R: Mapping[str, object]](
     `partial(dqn, gamma=0.99, lr=1e-3, total_steps=200_000, ...)`).
     The framework does not introspect or modify it; it just
     threads it through `apply_interventions`. HPs are substrate-
-    side; they live on `base` — never on the Hypothesis's
-    `INTERVENTION`, per the leaves-as-covariates discipline.
+    side; they live on `base` — never on the
+    `intervention` tuple, per the leaves-as-covariates discipline.
+
+    `measurables` is the (typically empty) tuple of pre-registered
+    Measurable instances the substrate's runner persists per cell.
+    Substrates that compute mediators post-sweep from raw traces
+    leave this empty; substrates that want eagerly-computed
+    scalars per cell pass them here.
 
     `grid_points` is a discrete sequence of grid_point dicts —
     NOT a Cartesian-product mapping. Substrates that want
@@ -200,10 +203,10 @@ def run_intervention[R: Mapping[str, object]](
     final_runs = out_dir / 'runs.parquet'
     final_traces = out_dir / 'traces.parquet'
 
-    treatment_claim = apply_interventions(base, h.INTERVENTION.treatment)
-    baseline_claim = apply_interventions(base, h.INTERVENTION.baseline)
-    treatment_arm_key = h.INTERVENTION.treatment_arm_key()
-    baseline_arm_key = h.INTERVENTION.baseline_arm_key()
+    treatment_claim = apply_interventions(base, intervention.treatment)
+    baseline_claim = apply_interventions(base, intervention.baseline)
+    treatment_arm_key = intervention.treatment_arm_key()
+    baseline_arm_key = intervention.baseline_arm_key()
     arms: tuple[
         tuple[Callable[..., R], str], tuple[Callable[..., R], str],
     ] = (
@@ -300,7 +303,7 @@ def run_intervention[R: Mapping[str, object]](
             )
             try:
                 cell_result = runner(
-                    claim, arm_key, h.MEASURABLES, grid_point,
+                    claim, arm_key, measurables, grid_point,
                 )
             except Exception as exc:  # noqa: BLE001
                 failures.append(CellFailure(

@@ -349,7 +349,6 @@ def dispatch_sweep(sweep: DQNSweep) -> tuple[Path, Path]:
     `Q_TRACE_REDUCTIONS`, env catalogue, `dqn` theory)."""
     from collections.abc import Callable, Sequence
     from functools import partial
-    from types import SimpleNamespace
 
     from corroborate.corpus.persistence import stream_concat_parquets
     from corroborate.core.intervention import DoEffect
@@ -404,13 +403,9 @@ def dispatch_sweep(sweep: DQNSweep) -> tuple[Path, Path]:
             if k not in arm_slot_paths
         }
         base: Callable[..., object] = partial(dqn, **hp_kwargs)
-        h_proto = SimpleNamespace(
-            INTERVENTION=DoEffect(
-                treatment=cfg.intervention_arms,
-                baseline=(),
-            ),
-            BRIDGES=(),
-            MEASURABLES=(),
+        intervention = DoEffect(
+            treatment=cfg.intervention_arms,
+            baseline=(),
         )
         # Flat grid_points: env × chunk × wrappers.
         grid_points: list[Mapping[str, object]] = [
@@ -424,7 +419,7 @@ def dispatch_sweep(sweep: DQNSweep) -> tuple[Path, Path]:
         ]
         h_out_dir = sweep.out_dir / cfg.name
         rp, tp = run_intervention(
-            h_proto,
+            intervention,
             base=base,
             grid_points=grid_points,
             runner=runner,
