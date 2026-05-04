@@ -32,7 +32,6 @@ from corroborate.core.claim import (
 )
 from corroborate.core.hypothesis import (
     Hypothesis,
-    LegacyHypothesis,
     PredictedDirection,
 )
 from corroborate.core.intervention import (
@@ -64,7 +63,6 @@ __all__ = [
     'FnClaim',
     'Hypothesis',
     'Intervention',
-    'LegacyHypothesis',
     'KwargInfo',
     'Loop',
     'PredictedDirection',

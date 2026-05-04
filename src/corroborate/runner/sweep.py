@@ -38,7 +38,6 @@ this value. HPs baked into `base` thus do NOT distinguish arms
 discipline."""
 from __future__ import annotations
 
-import itertools
 import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -145,7 +144,7 @@ def run_intervention[R: Mapping[str, object]](
     h: Hypothesis,
     *,
     base: Callable[..., R],
-    exogenous_grid: Mapping[str, Sequence[object]],
+    grid_points: Sequence[Mapping[str, object]],
     runner: Runner[R],
     out_dir: Path,
     archive_remote: str | None = None,
@@ -154,34 +153,38 @@ def run_intervention[R: Mapping[str, object]](
     trace_drops: Sequence[str] = (),
 ) -> tuple[Path, Path]:
     """Execute the typed contrast `h.INTERVENTION` against `base`
-    over the Cartesian product of `exogenous_grid`; persist
-    per-cell parquets; merge to a corpus.
+    over the discrete sequence `grid_points`; persist per-cell
+    parquets; merge to a corpus.
 
     This is the framework's rung-2 `do()` operator at the corpus
     level: a Hypothesis (Protocol-conforming, carries
     `INTERVENTION: DoEffect` + `MEASURABLES`) + a substrate-
-    supplied `base` callable + an exogenous-variable grid →
-    materialised RunRow / TraceRow corpus. The corpus IS the
-    evidence produced by the intervention.
+    supplied `base` callable + a discrete sequence of grid points
+    → materialised RunRow / TraceRow corpus.
 
     Per grid point, the runner is invoked twice — once for the
     treatment claim (`apply_interventions(base, INTERVENTION.treatment)`)
     and once for the baseline claim
     (`apply_interventions(base, INTERVENTION.baseline)`). Pairing
     is intrinsic: treatment and baseline cells at the same
-    `grid_point` ARE matched by construction; downstream paired
-    analyses don't need to reconstruct the pairing via arm_key
-    match (they still verify, but the framework guarantees it).
+    `grid_point` ARE matched by construction.
 
     `base` is the substrate's theory pre-bound with HPs (e.g.
     `partial(dqn, gamma=0.99, lr=1e-3, total_steps=200_000, ...)`).
     The framework does not introspect or modify it; it just
     threads it through `apply_interventions`. HPs are substrate-
-    side; they live on `base` (sweep-time grid axes for
-    HP-variation runs) — never on the Hypothesis's
+    side; they live on `base` — never on the Hypothesis's
     `INTERVENTION`, per the leaves-as-covariates discipline.
 
-    `arm_tag` produces the filename suffix for each arm's
+    `grid_points` is a discrete sequence of grid_point dicts —
+    NOT a Cartesian-product mapping. Substrates that want
+    Cartesian product compose `itertools.product` themselves;
+    substrates with heterogeneous-shape grids (e.g. different
+    chunk_sizes per env) emit the flat list directly. Empty
+    sequence runs zero cells; `[{}]` runs one cell per arm with
+    an empty grid_point.
+
+    `arm_tag` produces the filename suffix for each cell's
     parquets. Default: `f'{arm_key}'` — caller usually overrides
     to encode grid_point keys (e.g. `env_name`).
 
@@ -220,19 +223,10 @@ def run_intervention[R: Mapping[str, object]](
     else:
         effective_arm_tag = arm_tag
 
-    keys = list(exogenous_grid.keys())
-    value_lists = [list(exogenous_grid[k]) for k in keys]
-    if not keys:
-        grid_points: list[dict[str, object]] = [{}]
-    else:
-        grid_points = [
-            {k: v for k, v in zip(keys, point, strict=True)}
-            for point in itertools.product(*value_lists)
-        ]
-
-    n_cells = len(grid_points) * len(arms)
+    grid_point_list = list(grid_points)
+    n_cells = len(grid_point_list) * len(arms)
     print(f'sweep: {n_cells} cells '
-          f'({len(grid_points)} grid points × {len(arms)} arms)',
+          f'({len(grid_point_list)} grid points × {len(arms)} arms)',
           flush=True)
 
     runs_paths: list[Path] = []
@@ -245,7 +239,7 @@ def run_intervention[R: Mapping[str, object]](
     t_start = time.monotonic()
 
     cell_idx = 0
-    for grid_point in grid_points:
+    for grid_point in grid_point_list:
         for claim, arm_key in arms:
             t_cell = time.monotonic()
             tag = effective_arm_tag(arm_key, grid_point)

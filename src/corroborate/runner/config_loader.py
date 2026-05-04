@@ -30,10 +30,37 @@ from functools import partial
 from pathlib import Path
 from typing import TypeIs
 
+from collections.abc import Mapping as _Mapping
+from dataclasses import dataclass, field
+
 from corroborate._internals.yaml import safe_load as _yaml_load
-from corroborate.core.hypothesis import LegacyHypothesis, PredictedDirection
+from corroborate.core.hypothesis import PredictedDirection
 from corroborate.core.intervention import Intervention, is_replacement
 from corroborate.runner.registry import Registry
+
+
+@dataclass(frozen=True, slots=True)
+class HypothesisConfig:
+    """YAML-loaded hypothesis configuration. A substrate-coupled
+    intermediate — the substrate's `dispatch_sweep` decomposes it
+    into a Hypothesis Protocol-conformer + a `base` Callable.
+
+    Carries:
+    - `name`: substrate-chosen short label (for arm_tag output naming).
+    - `intervention`: HP scalars + slot-Claim swaps, as a flat dict.
+      The substrate splits HPs (slot paths NOT in `intervention_arms`)
+      into the `base` callable's bound kwargs; mechanism swaps come
+      via `intervention_arms`.
+    - `intervention_arms`: typed structural deltas (mechanism swaps
+      only). Becomes `DoEffect.treatment` on the substrate's
+      Hypothesis Protocol-conformer.
+    - `predicted_direction`: optional sign-prior; per-bridge
+      `Bridge.predicted_direction` is the canonical home, but
+      substrate authors can default it here for legacy YAML configs."""
+    name: str
+    intervention: _Mapping[str, object]
+    predicted_direction: PredictedDirection | None = None
+    intervention_arms: tuple[Intervention, ...] = field(default_factory=tuple)
 
 
 _CLASS_KEY = 'class'
@@ -186,7 +213,7 @@ def _resolve_fn(
 
 def load_hypothesis(
     path: Path, *, reg: Registry,
-) -> LegacyHypothesis[Mapping[str, object]]:
+) -> HypothesisConfig:
     """Build a Hypothesis from a YAML file. The file is one
     hypothesis per `path`; multi-hypothesis sweeps are loaded
     by the substrate's own dispatcher."""
@@ -205,7 +232,7 @@ def build_hypothesis_from_mapping(
     *,
     reg: Registry,
     env_attrs: Mapping[str, object] | None = None,
-) -> LegacyHypothesis[Mapping[str, object]]:
+) -> HypothesisConfig:
     """Public path-into-loader for callers (e.g. the RL sweep
     dispatcher) that already have the parsed mapping in hand and
     just need it turned into a Hypothesis. `load_hypothesis`
@@ -256,7 +283,7 @@ def build_hypothesis_from_mapping(
         for a in arms_typed
     )
 
-    return LegacyHypothesis(
+    return HypothesisConfig(
         name=name,
         intervention=intervention,
         predicted_direction=direction,

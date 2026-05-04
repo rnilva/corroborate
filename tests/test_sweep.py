@@ -128,7 +128,7 @@ def test_run_intervention_pairs_arms_at_each_grid_point(
     runs_path, _ = run_intervention(
         _StubHypothesis,
         base=_base_theory,
-        exogenous_grid={'replicate': (0, 1)},
+        grid_points=[{'replicate': 0}, {'replicate': 1}],
         runner=_stub_runner,
         out_dir=tmp_path,
     )
@@ -156,7 +156,7 @@ def test_run_intervention_arm_keys_from_canonical_str(
     runs_path, _ = run_intervention(
         _StubHypothesis,
         base=_base_theory,
-        exogenous_grid={},  # one cell per arm
+        grid_points=[{}],
         runner=_stub_runner,
         out_dir=tmp_path,
     )
@@ -169,14 +169,15 @@ def test_run_intervention_arm_keys_from_canonical_str(
     ])
 
 
-def test_run_intervention_empty_grid_runs_once_per_arm(
+def test_run_intervention_single_empty_grid_point_runs_once_per_arm(
     tmp_path: Path,
 ) -> None:
-    """Empty grid → one cell per arm = 2 cells (treatment + baseline)."""
+    """`grid_points=[{}]` → one cell per arm = 2 cells (treatment +
+    baseline)."""
     runs_path, _ = run_intervention(
         _StubHypothesis,
         base=_base_theory,
-        exogenous_grid={},
+        grid_points=[{}],
         runner=_stub_runner,
         out_dir=tmp_path,
     )
