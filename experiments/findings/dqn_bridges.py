@@ -19,7 +19,9 @@ artifact the architecture promises.
 from __future__ import annotations
 
 import math
+from collections.abc import Iterable, Mapping, Sequence
 from functools import partial
+from typing import Literal
 
 import polars as pl
 
@@ -50,11 +52,15 @@ from corroborate.analyses.tautology_audit import AuditResult
 from corroborate.analyses.verdict_distribution import (
     VerdictDistributionResult,
 )
+from corroborate.analyses.panel import per_stratum_panel
+from corroborate.bridge.analysis import analysis
 from corroborate.bridge.bridge import (
     Direction, Tier, claim_bridge,
 )
 from corroborate.core.intervention import DoEffect, Intervention
+from corroborate.corpus.schema import StratumG
 from corroborate.stats import MetaRegressionResult
+from corroborate.stats.meta_regression import Pool, meta_regress_panel
 from corroborate.bridge.verdict import Verdict
 from corroborate_rl.dqn.claims.bootstrap import (
     bootstrap, double_greedify, expectile_greedify,
@@ -696,6 +702,165 @@ def ddqn_outcome_attenuates__fourrooms_n3(
     return _attenuated_holds_when(paired_g, null_band=0.3)
 
 
+# ============ N-step slope: meta-regression over n_step ============
+#
+# Form (C) per ANALYSIS_RECIPE.md §2: the slope-form companion to
+# the (n=1, n=3) endpoint bridges above. Stratifies cells by
+# `n_step ∈ {1, 2, 3, 5, 10}`, computes per-stratum paired g of
+# DDQN-vs-vanilla on the chosen target, then meta-regresses the
+# stratum panel on `log(n_step)`.
+#
+# Tier.ASSOCIATIONAL is the honest acknowledgement that `n_step`
+# is currently a hyperparameter scalar, not a typed Intervention.
+# A negative `log_n_step` slope on `eval_best_burst_mean` means
+# DDQN's outcome benefit attenuates as the bootstrap target shifts
+# toward MC — the bias-compounding theory's slope-form prediction.
+
+@analysis
+def meta_regression_paired_g_by_nstep(
+    cells: Iterable[Mapping[str, object]],
+    *,
+    treatment_arm: str,
+    baseline_arm: str,
+    pair_by: tuple[str, ...],
+    source: str,
+    arm_field: str = 'arm_key',
+    pool: Pool = 'random',
+) -> MetaRegressionResult:
+    """Per-`n_step` paired-g panel + meta-regression on
+    `log(n_step)`. Substrate-specific stratifier (n_step is an
+    RL-substrate hyperparameter); the framework's
+    `meta_regression_paired_g` hardcodes `env_name`-stratification,
+    which doesn't fit a single-env n-step sweep.
+
+    For each `n_step` value present in `cells`, runs paired_g on
+    the (treatment, baseline) cells; packs the per-stratum results
+    into `StratumG[int]`; calls `meta_regress_panel` with
+    `{n_step: {'log_n_step': log(n_step)}}` covariates. The slope
+    on `log_n_step` is the moderator-direction estimate."""
+    cells_list = list(cells)
+
+    def _stratify(cell: Mapping[str, object]) -> int | None:
+        n = cell.get('n_step')
+        return n if isinstance(n, int) else None
+
+    def _analyze(subset: Sequence[Mapping[str, object]]) -> PairedGResult:
+        from corroborate.analyses.paired_g import paired_g
+        return paired_g.fn(
+            subset,
+            treatment_arm=treatment_arm,
+            baseline_arm=baseline_arm,
+            source=source,
+            pair_by=pair_by,
+            arm_field=arm_field,
+        )
+
+    panel_raw = per_stratum_panel(
+        cells_list, stratify_by=_stratify, analysis=_analyze,
+        min_cells_per_stratum=2,
+    )
+    panel = tuple(
+        StratumG[int](
+            stratum_id=n,
+            g=r.g,
+            se=r.se,
+            n_pairs=r.n_pairs,
+        )
+        for n, r in panel_raw
+    )
+    covariates: dict[int, Mapping[str, float]] = {
+        n: {'log_n_step': math.log(n)} for n, _ in panel_raw
+    }
+    return meta_regress_panel(
+        panel,
+        covariates_per_stratum=covariates,
+        pool=pool,
+    )
+
+
+def _slope_holds_when(
+    meta: MetaRegressionResult, *,
+    covariate: str = 'log_n_step',
+    sign: Literal['negative', 'positive'] = 'negative',
+    min_strata: int = 3,
+) -> Verdict:
+    """HELD when the meta-regression coefficient on `covariate`
+    has the predicted sign AND its CI excludes zero. Underpowered
+    panels (fewer strata than `min_strata`) return
+    POWER_INSUFFICIENT."""
+    if meta.n_strata < min_strata:
+        return Verdict.POWER_INSUFFICIENT
+    coef = next(
+        (c for c in meta.coefficients if c.name == covariate), None,
+    )
+    if coef is None:
+        return Verdict.POWER_INSUFFICIENT
+    if math.isnan(coef.coefficient):
+        return Verdict.POWER_INSUFFICIENT
+    if sign == 'negative':
+        if coef.coefficient >= 0:
+            return Verdict.POWER_INSUFFICIENT  # sign opposes prediction
+        if coef.ci_hi < 0:  # CI strictly below zero
+            return Verdict.HELD
+    else:
+        if coef.coefficient <= 0:
+            return Verdict.POWER_INSUFFICIENT
+        if coef.ci_lo > 0:
+            return Verdict.HELD
+    return Verdict.NO_EFFECT
+
+
+@claim_bridge(
+    source=INTERVENTION,
+    target='eval_best_burst_mean',
+    direction=Direction.INVERSE,
+    tier=Tier.ASSOCIATIONAL,
+    scope=pl.col('env_name') == 'FourRooms-misc',
+    pair_by=('seed',),
+)
+def ddqn_outcome_slope_attenuates_with_log_nstep__fourrooms(
+    meta_regression_paired_g_by_nstep: MetaRegressionResult,
+) -> Verdict:
+    """The slope form of the bias-compounding prediction on
+    FourRooms. As `n_step` grows, the bootstrap-target shifts
+    toward MC and DDQN has less bias to fix; the per-stratum g
+    of DDQN-vs-vanilla on `eval_best_burst_mean` should attenuate
+    monotonically. HELD when the `log_n_step` coefficient is
+    significantly negative (CI strictly below zero) across at
+    least 3 of the 5 strata (n ∈ {1, 2, 3, 5, 10})."""
+    return _slope_holds_when(
+        meta_regression_paired_g_by_nstep,
+        covariate='log_n_step',
+        sign='negative',
+        min_strata=3,
+    )
+
+
+@claim_bridge(
+    source=INTERVENTION,
+    target='jensen_gap',
+    direction=Direction.INVERSE,
+    tier=Tier.ASSOCIATIONAL,
+    scope=pl.col('env_name') == 'FourRooms-misc',
+    pair_by=('seed',),
+)
+def ddqn_jensen_slope_attenuates_with_log_nstep__fourrooms(
+    meta_regression_paired_g_by_nstep: MetaRegressionResult,
+) -> Verdict:
+    """The slope form on the mechanism (jensen_gap). Theory:
+    `|g_jensen|` should shrink as `n_step` grows because the
+    bootstrap-bias compounds less under MC-leaning targets. HELD
+    when the `log_n_step` slope is significantly positive
+    (g(jensen) is negative; growing toward zero is a positive
+    slope)."""
+    return _slope_holds_when(
+        meta_regression_paired_g_by_nstep,
+        covariate='log_n_step',
+        sign='positive',
+        min_strata=3,
+    )
+
+
 # ============ Twelfth revision: 2×2 factorial ========================
 #
 # Complete (greedification × n_step) factorial on 5 sparse-reward
@@ -940,13 +1105,15 @@ NSTEP_INTERVENTION_BRIDGES = (
     ddqn_attenuates_jensen_gap__fourrooms_n3,
     ddqn_helps_outcome__fourrooms_n1,
     ddqn_outcome_attenuates__fourrooms_n3,
+    ddqn_outcome_slope_attenuates_with_log_nstep__fourrooms,
+    ddqn_jensen_slope_attenuates_with_log_nstep__fourrooms,
 )
 """Bridges asserted on the `nstep_lambda_fourrooms` corpus
 (FourRooms-misc, n_step ∈ {1, 2, 3, 5, 10} × {vanilla, ddqn} × 30
-seeds). Re-authored under Phase-6 as DDQN-vs-vanilla scoped by
-`n_step`; the (n=1, n=3) endpoints encode the bias-compounding
-theory's attenuation prediction. See the comment block above the
-eleventh-revision section for the rationale."""
+seeds). The (n=1, n=3) endpoint bridges + slope-form
+meta-regression bridges together encode the bias-compounding
+theory's attenuation prediction. The slope form (last two) is
+the higher-power test using all 5 n_step strata."""
 
 
 NSTEP_FACTORIAL_BRIDGES = (
