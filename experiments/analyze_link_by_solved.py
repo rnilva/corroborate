@@ -33,7 +33,7 @@ from corroborate.analyses.paired_comparison import (
     PairedComparisonResult,
     paired_comparison,
 )
-from corroborate.core.hypothesis import Hypothesis
+from corroborate.core.hypothesis import LegacyHypothesis as Hypothesis
 from corroborate.core.intervention import Intervention
 from corroborate_rl.dqn.claims.bootstrap import bootstrap, double_greedify
 from corroborate_rl.dqn.claims.optimizer import Adam, WarmedUpdate

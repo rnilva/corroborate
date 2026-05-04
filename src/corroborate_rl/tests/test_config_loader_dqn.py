@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 from corroborate.runner.config_loader import load_hypothesis, resolve
-from corroborate.core.hypothesis import Hypothesis
+from corroborate.core.hypothesis import LegacyHypothesis as Hypothesis
 from corroborate.core.intervention import Intervention
 from corroborate.runner.registry import Registry
 from corroborate.core.signature import claim_graph_signature

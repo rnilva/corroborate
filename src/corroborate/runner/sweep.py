@@ -1,6 +1,6 @@
 """Sweep — exogenous-grid runner.
 
-Substrate-agnostic primitive: takes a `Hypothesis[R]`, an
+Substrate-agnostic primitive: takes a `LegacyHypothesis[R]`, an
 exogenous-variable grid (substrate-named keys × value lists), and
 a `Runner[R]` that knows how to execute one cell. The framework
 iterates the Cartesian product of the grid, collects per-cell
@@ -44,7 +44,7 @@ import polars as pl
 
 from corroborate.graph.computation import ComputationGraph
 from corroborate.graph import Graph
-from corroborate.core.hypothesis import Hypothesis
+from corroborate.core.hypothesis import LegacyHypothesis
 from corroborate.corpus.persistence import (
     apply_trace_reductions,
     stream_concat_parquets,
@@ -119,13 +119,13 @@ class Runner[R: Mapping[str, object]](Protocol):
     substrate; not worth the cost."""
     def __call__(
         self,
-        h: Hypothesis[R],
+        h: LegacyHypothesis[R],
         grid_point: Mapping[str, object],
     ) -> SweepCellResult: ...
 
 
 def sweep[R: Mapping[str, object]](
-    h: Hypothesis[R],
+    h: LegacyHypothesis[R],
     *,
     exogenous_grid: Mapping[str, Sequence[object]],
     runner: Runner[R],
@@ -186,12 +186,12 @@ def empty_graph() -> ComputationGraph:
 # ============ run_hypotheses — the framework's `do()` operator ============
 
 def run_hypotheses[R: Mapping[str, object]](
-    arms: Sequence[tuple[Hypothesis[R], Mapping[str, object]]],
+    arms: Sequence[tuple[LegacyHypothesis[R], Mapping[str, object]]],
     *,
     runner: Runner[R],
     out_dir: Path,
     archive_remote: str | None = None,
-    arm_tag: Callable[[Hypothesis[R], Mapping[str, object]], str] | None = None,
+    arm_tag: Callable[[LegacyHypothesis[R], Mapping[str, object]], str] | None = None,
     trace_reductions: Sequence[pl.Expr] = (),
     trace_drops: Sequence[str] = (),
 ) -> tuple[Path, Path]:
@@ -246,12 +246,12 @@ def run_hypotheses[R: Mapping[str, object]](
 
     if arm_tag is None:
         def arm_tag_default(
-            h: Hypothesis[R], grid_point: Mapping[str, object],
+            h: LegacyHypothesis[R], grid_point: Mapping[str, object],
         ) -> str:
             del grid_point
             return f'{h.name}'
         effective_arm_tag: Callable[
-            [Hypothesis[R], Mapping[str, object]], str,
+            [LegacyHypothesis[R], Mapping[str, object]], str,
         ] = arm_tag_default
     else:
         effective_arm_tag = arm_tag

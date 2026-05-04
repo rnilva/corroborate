@@ -17,7 +17,7 @@ from functools import partial
 import pytest
 
 from corroborate.corpus.leaf_signature import leaf_signature
-from corroborate.core.hypothesis import Hypothesis
+from corroborate.core.hypothesis import LegacyHypothesis as Hypothesis
 from corroborate_rl.cell_runner import run_dqn_cell
 from corroborate_rl.dqn.claims.bootstrap import bootstrap, double_greedify
 from functools import partial as _partial

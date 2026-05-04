@@ -1,53 +1,72 @@
-"""Hypothesis — (intervention, measurables) over a record schema R.
+"""Hypothesis — the framework's typed verdict-time contract.
 
-A Hypothesis names a CHANGE to the theory and a SET of pre-
-registered measurables. Generic in `R: Mapping[str, object]` —
-the (single) record schema all measurables are typed against.
+A Hypothesis is anything structurally exposing three attributes:
 
-Components:
+- `INTERVENTION: DoEffect` — the typed contrast (treatment +
+  baseline arms as Intervention tuples on the claim graph).
+- `BRIDGES: tuple[Bridge, ...]` — the authored verdict
+  declarations the framework evaluates against a corpus.
+- `MEASURABLES: tuple[Measurable, ...]` — typed Measurable
+  instances the substrate's cell_runner pre-registers / persists
+  as scalar columns on every RunRow.
 
-- `intervention: Mapping[str, object]` — runtime kwargs passed to
-  `functools.partial(theory, **intervention)`. Mixes HP scalars
-  (γ, lr, batch_size, total_steps), config-bundle slots (Replay,
-  WarmedUpdate), and mechanism swaps (`partial(bootstrap,
-  greedification=double_greedify)`). The dict is the *executable*
-  shape; identity at this layer is type-erased on purpose.
-- `intervention_arms: tuple[Intervention, ...]` — the *typed*
-  identity of mechanism swaps only. HPs are NOT here; HPs are
-  cell covariates that downstream meta-regression cleaves on.
-  Empty tuple → baseline arm; non-empty tuple → treatment arm
-  whose `arm_key()` is the canonical fingerprint.
-- `measurables: tuple[Measurable[R, object], ...]` — pre-
-  registered measurables cell_runner persists as scalar columns.
-- `predicted_direction: PredictedDirection | None` — author-declared
-  sign of the predicted treatment-vs-baseline effect.
+Both shapes satisfy the Protocol structurally:
 
-Bridges live at module level (`module.BRIDGES: tuple[Bridge, ...]`),
-not on the Hypothesis. The verdict path is `runner.run_module` →
-`evaluate(b, cells)` per bridge.
+- **Module as hypothesis:** a Python module declaring module-level
+  `INTERVENTION`, `BRIDGES`, `MEASURABLES`. Modules are Python
+  objects; `getattr(module, 'INTERVENTION')` lands on the
+  module-level constant.
+- **Class as hypothesis:** a frozen dataclass (or any class) with
+  `ClassVar` fields:
+  ```python
+  @dataclass(frozen=True)
+  class DDQNvsVanilla:
+      INTERVENTION: ClassVar[DoEffect] = DoEffect(...)
+      BRIDGES: ClassVar[tuple[Bridge, ...]] = (...)
+      MEASURABLES: ClassVar[tuple[Measurable, ...]] = (...)
+  ```
+  Multiple hypotheses can live in one file as separate classes.
 
-Arm identity flows exclusively through `intervention_arms` — two
-hypotheses with the same arms but different HP grid points share
-an `arm_key()` and pair as same-arm cells; the HP difference is a
-covariate, not an arm distinguisher.
+`name` is NOT part of the Protocol — modules and classes carry
+`__name__` from Python for free; the framework reads it
+opportunistically (`getattr(h, '__name__', None)`) for cache
+paths or display, but the Protocol does not require it. Arm
+identity flows exclusively through `canonical_str` of the
+underlying Intervention tuples (via
+`DoEffect.treatment_arm_key()` / `baseline_arm_key()`); substrate-
+chosen short labels are no longer part of the framework's
+identity surface.
 
-Structural identity beyond arm key is recoverable from the
-measurements a run produces — leaf values land at dotted topology
-paths via `signature.walk_paths`, and `corpus.leaf_signature`
-projects a `RunRow.measurements` to the configurational subset
-suitable as a group-by key."""
+The legacy `LegacyHypothesis` dataclass coexists during the
+Phase 6 migration — substrate-side sweep glue still constructs
+it. Subsequent commits migrate substrate authoring to the
+Protocol-conforming shape; LegacyHypothesis disappears once no
+consumers remain."""
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Literal, override
+from typing import (
+    TYPE_CHECKING,
+    Literal,
+    Protocol,
+    override,
+    runtime_checkable,
+)
 
 from corroborate._internals.canonical import canonical_str
-from corroborate.core.intervention import Intervention, combined_arm_key
+from corroborate.core.intervention import DoEffect, Intervention, combined_arm_key
 
 if TYPE_CHECKING:
+    from corroborate.bridge.bridge import Bridge
     from corroborate.measurables import Measurable
 
-__all__ = ['Hypothesis', 'PredictedDirection', 'canonical_str']
+
+__all__ = [
+    'Hypothesis',
+    'LegacyHypothesis',
+    'PredictedDirection',
+    'canonical_str',
+]
 
 
 type PredictedDirection = Literal['a_gt_b', 'a_lt_b', 'two_sided']
@@ -55,54 +74,51 @@ type PredictedDirection = Literal['a_gt_b', 'a_lt_b', 'two_sided']
 baseline effect on the primary outcome. `'a_gt_b'` predicts the
 intervention's arm exceeds the baseline; `'a_lt_b'` predicts
 below; `'two_sided'` predicts non-zero in either direction.
-None on Hypothesis means direction is unstated (downstream
-infers from a `held` flag if available).
 
-Distinct from `causal_graph.Direction` — that's the *observed*
-sign (DIRECT / INVERSE) inferred post-hoc from a stat's value.
+Per-bridge metadata: `Bridge.predicted_direction` carries it for
+the analysis the bridge consumes. Distinct from
+`graph.causal.Direction` — that's the *observed* sign (DIRECT /
+INVERSE) inferred post-hoc from a stat's value.
 PredictedDirection is the prior; Direction is the posterior."""
 
 
-class Hypothesis[R: Mapping[str, object]]:
-    """A research hypothesis: an intervention plus pre-registered
-    measurables.
+@runtime_checkable
+class Hypothesis(Protocol):
+    """The framework's typed verdict-time hypothesis contract.
 
-    Generic in `R: Mapping[str, object]` — the (single) record
-    schema all measurables are typed against. Authors using
-    TypedDict for their record get typed bridge bodies (no
-    narrowing); authors using plain `Mapping[str, object]`
-    continue to narrow at use site.
+    Conforming objects expose three read-only attributes:
 
-    `measurables: tuple[Measurable[R, object], ...]` is the
-    sweep-time pre-registration channel — measurables the author
-    wants computed and persisted as scalar columns on every
-    RunRow without having to author a per-record body for each.
-    Each entry produces a column at the measurable's bare `.name`
-    in `RunRow.measurements`; the substrate controls the column-
-    name namespace.
+    - `INTERVENTION: DoEffect` — the typed contrast (treatment +
+      baseline arms as Intervention tuples).
+    - `BRIDGES: tuple[Bridge, ...]` — the authored verdict
+      declarations.
+    - `MEASURABLES: tuple[Measurable, ...]` — typed Measurable
+      instances pre-registered for cell-runner.
 
-    Bridges live at module level (`module.BRIDGES: tuple[Bridge, ...]`).
-    The verdict path is `runner.run_module` → `evaluate(b, cells)`
-    per bridge; the framework no longer has a "subgraph verdict"
-    surface.
+    Modules and classes both satisfy the Protocol structurally
+    via attribute access. The framework's verdict-time runner
+    reads only `BRIDGES`; the substrate's sweep glue reads
+    `INTERVENTION` (to drive paired sweep iteration) and
+    `MEASURABLES` (to pre-register them on each cell)."""
 
-    The framework treats a cell as producing ONE record, even
-    when the underlying machinery has internal sub-passes (RL's
-    eval bursts during training, etc.). Sub-pass results are
-    additional fields on the same record dict — possibly with
-    different shapes (`(T,)` per-step training fields,
-    `(n_bursts, K)` per-burst eval fields). Bridges read whichever
-    keys they care about; the record's structure is the substrate
-    author's call.
+    INTERVENTION: DoEffect
+    BRIDGES: 'tuple[Bridge, ...]'
+    MEASURABLES: 'tuple[Measurable[Mapping[str, object], object], ...]'
 
-    **Variance.** Field access is via `@property` (not bare
-    dataclass attrs) so PEP 695 inference lands `R` contravariant
-    — `Measurable[R, object]` is contravariant in R (post the
-    Measurable refactor), and the recursive `tuple` field is
-    covariant in element. A `Hypothesis[Mapping[str, object]]`
-    (framework-built generic) is therefore assignable to a slot
-    expecting `Hypothesis[DQNTrajectoryRecord]` (substrate-typed),
-    no `cast` needed at the substrate boundary."""
+
+class LegacyHypothesis[R: Mapping[str, object]]:
+    """**DEPRECATED** — sweep-time configuration object kept during
+    the Phase 6 Hypothesis-Protocol migration. Substrate authoring
+    will migrate to Protocol-conforming class/module declarations;
+    this dataclass is removed once no consumers remain.
+
+    Carries (name, intervention dict, intervention_arms tuple,
+    measurables, predicted_direction). Today's substrate
+    cell_runner reads these fields; the framework's
+    `runner/sweep.py` and `runner/config_loader.py` consume them
+    too. After the substrate migration, the framework's
+    sweep primitive takes a `Hypothesis` Protocol-conforming
+    object + the substrate's `BASE` callable directly."""
 
     __slots__ = (
         '_name', '_intervention', '_predicted_direction',
@@ -113,7 +129,7 @@ class Hypothesis[R: Mapping[str, object]]:
     _intervention: Mapping[str, object]
     _predicted_direction: PredictedDirection | None
     _intervention_arms: tuple[Intervention, ...]
-    _measurables: tuple[Measurable[R, object], ...]
+    _measurables: tuple['Measurable[R, object]', ...]
 
     def __init__(
         self,
@@ -121,7 +137,7 @@ class Hypothesis[R: Mapping[str, object]]:
         intervention: Mapping[str, object],
         predicted_direction: PredictedDirection | None = None,
         intervention_arms: tuple[Intervention, ...] = (),
-        measurables: tuple[Measurable[R, object], ...] = (),
+        measurables: tuple['Measurable[R, object]', ...] = (),
     ) -> None:
         self._name = name
         self._intervention = intervention
@@ -146,23 +162,17 @@ class Hypothesis[R: Mapping[str, object]]:
         return self._intervention_arms
 
     @property
-    def measurables(self) -> tuple[Measurable[R, object], ...]:
+    def measurables(self) -> tuple['Measurable[R, object]', ...]:
         return self._measurables
 
     def arm_key(self) -> str:
-        """Canonical fingerprint of the typed `intervention_arms`.
-
-        Empty `intervention_arms` → `'baseline'`; non-empty →
-        `'+'`-joined slot=replacement keys (sorted by slot_path).
-        Two hypotheses with same arms but different HP grid
-        points share one `arm_key()`; HP variation is a covariate,
-        not an arm distinguisher."""
+        """Canonical fingerprint of the typed `intervention_arms`."""
         return combined_arm_key(self._intervention_arms)
 
     @override
     def __repr__(self) -> str:
         return (
-            f'Hypothesis(name={self._name!r}, '
+            f'LegacyHypothesis(name={self._name!r}, '
             f'intervention={self._intervention!r}, '
             f'predicted_direction={self._predicted_direction!r}, '
             f'intervention_arms={self._intervention_arms!r}, '
@@ -171,7 +181,7 @@ class Hypothesis[R: Mapping[str, object]]:
 
     @override
     def __eq__(self, other: object) -> bool:
-        if not isinstance(other, Hypothesis):
+        if not isinstance(other, LegacyHypothesis):
             return NotImplemented
         return (
             self._name == other._name

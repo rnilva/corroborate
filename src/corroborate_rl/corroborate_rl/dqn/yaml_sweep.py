@@ -30,7 +30,7 @@ from corroborate.runner.config_loader import (
     build_hypothesis_from_mapping,
     is_str_keyed_mapping,
 )
-from corroborate.core.hypothesis import Hypothesis
+from corroborate.core.hypothesis import LegacyHypothesis as Hypothesis
 from corroborate.runner.registry import Registry
 from corroborate_rl.dqn.collect import EnvConfig
 from corroborate_rl.env_catalogue import EnvWrapper

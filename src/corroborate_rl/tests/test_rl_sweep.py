@@ -18,7 +18,7 @@ from functools import partial
 
 import pytest
 
-from corroborate.core.hypothesis import Hypothesis
+from corroborate.core.hypothesis import LegacyHypothesis as Hypothesis
 from corroborate.core.intervention import Intervention
 from corroborate_rl.dqn.claims.bootstrap import bootstrap, double_greedify
 from functools import partial as _partial

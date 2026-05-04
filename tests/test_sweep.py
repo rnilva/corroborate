@@ -13,7 +13,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Mapping
 
-from corroborate.core.hypothesis import Hypothesis
+from corroborate.core.hypothesis import LegacyHypothesis as Hypothesis
 from corroborate.corpus.schema import RunRow, TraceRow
 from corroborate.runner.sweep import (
     SweepCellResult,

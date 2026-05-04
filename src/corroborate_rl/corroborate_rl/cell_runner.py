@@ -38,7 +38,7 @@ import numpy as np
 from corroborate import trace_context
 from corroborate.core import canonical_str
 from corroborate.graph.computation import ComputationGraph, build_computation_graph
-from corroborate.core.hypothesis import Hypothesis
+from corroborate.core.hypothesis import LegacyHypothesis as Hypothesis
 from corroborate_rl.dqn.dqn import default_state_hash, dqn
 from corroborate_rl.dqn.invariants import DQNTrajectoryRecord
 from corroborate_rl.env_catalogue import EnvSpec, EnvWrapper

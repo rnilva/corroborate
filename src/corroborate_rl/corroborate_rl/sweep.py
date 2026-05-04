@@ -34,7 +34,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import TypeIs
 
-from corroborate.core.hypothesis import Hypothesis
+from corroborate.core.hypothesis import LegacyHypothesis as Hypothesis
 from corroborate_rl.cell_runner import run_dqn_arm
 from corroborate_rl.dqn.invariants import DQNTrajectoryRecord
 from corroborate_rl.env_catalogue import EnvSpec

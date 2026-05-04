@@ -31,7 +31,7 @@ from pathlib import Path
 from typing import TypeIs
 
 from corroborate._internals.yaml import safe_load as _yaml_load
-from corroborate.core.hypothesis import Hypothesis, PredictedDirection
+from corroborate.core.hypothesis import LegacyHypothesis, PredictedDirection
 from corroborate.core.intervention import Intervention, is_replacement
 from corroborate.runner.registry import Registry
 
@@ -186,7 +186,7 @@ def _resolve_fn(
 
 def load_hypothesis(
     path: Path, *, reg: Registry,
-) -> Hypothesis[Mapping[str, object]]:
+) -> LegacyHypothesis[Mapping[str, object]]:
     """Build a Hypothesis from a YAML file. The file is one
     hypothesis per `path`; multi-hypothesis sweeps are loaded
     by the substrate's own dispatcher."""
@@ -205,7 +205,7 @@ def build_hypothesis_from_mapping(
     *,
     reg: Registry,
     env_attrs: Mapping[str, object] | None = None,
-) -> Hypothesis[Mapping[str, object]]:
+) -> LegacyHypothesis[Mapping[str, object]]:
     """Public path-into-loader for callers (e.g. the RL sweep
     dispatcher) that already have the parsed mapping in hand and
     just need it turned into a Hypothesis. `load_hypothesis`
@@ -256,7 +256,7 @@ def build_hypothesis_from_mapping(
         for a in arms_typed
     )
 
-    return Hypothesis(
+    return LegacyHypothesis(
         name=name,
         intervention=intervention,
         predicted_direction=direction,

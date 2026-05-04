@@ -12,7 +12,7 @@ from collections.abc import Mapping
 
 from corroborate._internals.canonical import canonical_str
 from corroborate.core.claim import claim
-from corroborate.core.hypothesis import Hypothesis
+from corroborate.core.hypothesis import LegacyHypothesis as Hypothesis
 from corroborate.core.intervention import Intervention
 
 

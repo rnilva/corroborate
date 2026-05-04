@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from corroborate.core.hypothesis import Hypothesis
+from corroborate.core.hypothesis import LegacyHypothesis as Hypothesis
 from corroborate.core.intervention import Intervention
 from corroborate.runner.registry import Registry
 from corroborate_rl.dqn.collect import EnvConfig

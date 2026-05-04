@@ -44,7 +44,7 @@ def test_graph_capture_on_run_dqn_arm_with_real_run() -> None:
     os.environ.setdefault('XLA_PYTHON_CLIENT_PREALLOCATE', 'false')
 
     from corroborate.graph import Graph
-    from corroborate.core.hypothesis import Hypothesis
+    from corroborate.core.hypothesis import LegacyHypothesis as Hypothesis
     from corroborate_rl.cell_runner import run_dqn_arm
     from corroborate_rl.env_catalogue import get
 

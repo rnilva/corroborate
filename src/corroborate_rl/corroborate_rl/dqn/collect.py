@@ -16,7 +16,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
-from corroborate.core.hypothesis import Hypothesis
+from corroborate.core.hypothesis import LegacyHypothesis as Hypothesis
 from corroborate_rl.dqn.invariants import DQNTrajectoryRecord
 from corroborate_rl.env_catalogue import EnvWrapper
 
