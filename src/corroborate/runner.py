@@ -56,7 +56,7 @@ from typing import Protocol, cast, runtime_checkable
 import polars as pl
 
 from corroborate.analysis import get_registered as _get_analysis
-from corroborate.claim_bridge import (
+from corroborate.bridge.claim_bridge import (
     Bridge,
     BridgeEvaluation,
     evaluate,
@@ -287,7 +287,7 @@ def _error_evaluation(name: str, e: Exception) -> BridgeEvaluation:
     pseudo-evidence."""
     from types import MappingProxyType
 
-    from corroborate.verdict import Verdict
+    from corroborate.bridge.verdict import Verdict
     return BridgeEvaluation(
         bridge_name=name,
         verdict=Verdict.POWER_INSUFFICIENT,

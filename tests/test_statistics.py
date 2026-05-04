@@ -20,7 +20,7 @@ from corroborate.stats import (
     mde_paired,
     verdict_from_paired_stats,
 )
-from corroborate.verdict import RefutationClass, Verdict
+from corroborate.bridge.verdict import RefutationClass, Verdict
 
 
 # ============ hedges_g_paired ============

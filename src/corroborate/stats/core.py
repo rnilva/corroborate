@@ -33,7 +33,7 @@ import scipy.stats as ss
 from statsmodels.stats.power import TTestPower
 
 from corroborate.core.hypothesis import PredictedDirection
-from corroborate.verdict import RefutationClass, Verdict
+from corroborate.bridge.verdict import RefutationClass, Verdict
 
 
 # ============ Effect-size + power primitives ============

@@ -14,7 +14,7 @@ from corroborate.persistence import (
     write_runrows,
 )
 from corroborate.schema import RunRow
-from corroborate.verdict import Verdict
+from corroborate.bridge.verdict import Verdict
 
 
 # ============ Fixtures ============

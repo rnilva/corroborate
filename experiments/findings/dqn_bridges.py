@@ -49,12 +49,12 @@ from corroborate.analyses.tautology_audit import AuditResult
 from corroborate.analyses.verdict_distribution import (
     VerdictDistributionResult,
 )
-from corroborate.claim_bridge import (
+from corroborate.bridge.claim_bridge import (
     Direction, Tier, claim_bridge,
 )
 from corroborate.core.intervention import DoEffect
 from corroborate.stats import MetaRegressionResult
-from corroborate.verdict import Verdict
+from corroborate.bridge.verdict import Verdict
 
 
 # File-level intervention: most bridges in this zoo test

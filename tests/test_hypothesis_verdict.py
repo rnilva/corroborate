@@ -24,15 +24,15 @@ from corroborate.graph.causal import (
     promote_bridged_evidence,
 )
 from corroborate.core.claim import claim
-from corroborate.claim_bridge import Bridge as ClaimBridge
+from corroborate.bridge.claim_bridge import Bridge as ClaimBridge
 from corroborate.core.hypothesis import Hypothesis, PredictedDirection
-from corroborate.hypothesis_verdict import (
+from corroborate.bridge.hypothesis_verdict import (
     HypothesisVerdict,
     hypothesis_subgraph_verdict,
 )
 from corroborate.core.intervention import DoEffect, Intervention
 from corroborate.schema import RunRow
-from corroborate.verdict import Verdict
+from corroborate.bridge.verdict import Verdict
 
 
 # Stub claim so the test Hypothesis has non-empty intervention_arms,

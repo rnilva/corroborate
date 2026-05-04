@@ -47,7 +47,7 @@ from corroborate.graph.graph import Edge, Graph
 if TYPE_CHECKING:
     # Forward import: `claim_bridge` depends on `causal_graph`
     # transitively via verdict; lazy-typed to avoid the cycle.
-    from corroborate.claim_bridge import Bridge as ClaimBridge
+    from corroborate.bridge.claim_bridge import Bridge as ClaimBridge
 
 
 # ============ Direction — sign or predicate of an edge ============

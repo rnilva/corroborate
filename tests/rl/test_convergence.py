@@ -10,7 +10,7 @@ from corroborate.rl.convergence import (
 )
 from corroborate.rl.env_solve_thresholds import SolveThreshold
 from corroborate.schema import RunRow
-from corroborate.verdict import Verdict
+from corroborate.bridge.verdict import Verdict
 
 
 def _run(

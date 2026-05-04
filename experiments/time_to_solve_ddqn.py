@@ -52,7 +52,7 @@ from corroborate.schema import RunRow
 from corroborate.stats import (
     PooledStats, random_effects_summary, random_effects_verdict,
 )
-from corroborate.verdict import Verdict
+from corroborate.bridge.verdict import Verdict
 
 
 _RUNS = Path('experiments/data/ddqn/runs_with_mediators.parquet')

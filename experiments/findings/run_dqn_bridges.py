@@ -17,7 +17,7 @@ from pathlib import Path
 
 import polars as pl
 
-from corroborate.claim_bridge import Bridge, evaluate
+from corroborate.bridge.claim_bridge import Bridge, evaluate
 from experiments.findings.dqn_bridges import (
     ACTION_DIM_BRIDGES, CARTPOLE_HP_AUDIT_BRIDGES,
     CHAIN_DECOMPOSITION_BRIDGES,

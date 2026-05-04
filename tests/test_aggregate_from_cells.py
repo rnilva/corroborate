@@ -45,7 +45,7 @@ from corroborate.schema import (
     HypothesisComparisonRow,
     RunRow,
 )
-from corroborate.verdict import Verdict
+from corroborate.bridge.verdict import Verdict
 
 
 def _run(

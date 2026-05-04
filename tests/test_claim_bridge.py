@@ -27,11 +27,11 @@ import pytest
 import corroborate.analyses  # noqa: F401  # pyright: ignore[reportUnusedImport]
 
 from corroborate.analyses.paired_g import PairedGResult
-from corroborate.claim_bridge import (
+from corroborate.bridge.claim_bridge import (
     Bridge, Direction, Tier, claim_bridge, evaluate,
 )
 from corroborate.core.intervention import DoEffect
-from corroborate.verdict import Verdict
+from corroborate.bridge.verdict import Verdict
 
 
 # Module-level contrast for the top-level bridges in this file.

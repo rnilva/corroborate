@@ -15,7 +15,7 @@ from collections.abc import Mapping
 from typing import TypeIs
 
 from corroborate.core.hypothesis import PredictedDirection
-from corroborate.verdict import RefutationClass, Verdict
+from corroborate.bridge.verdict import RefutationClass, Verdict
 
 
 # ============ TypeIs predicates ============

@@ -26,7 +26,7 @@ from functools import partial
 from corroborate.rl.dqn.claims.optimizer import adam, warmed_update
 from corroborate.rl.dqn.invariants import DQNTrajectoryRecord
 from corroborate.schema import RunRow
-from corroborate.verdict import Verdict
+from corroborate.bridge.verdict import Verdict
 
 
 # Compact HP bundle reused across cell-runner tests. Authors spread

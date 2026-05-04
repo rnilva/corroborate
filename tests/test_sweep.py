@@ -20,7 +20,7 @@ from corroborate.sweep import (
     empty_graph,
     sweep,
 )
-from corroborate.verdict import Verdict
+from corroborate.bridge.verdict import Verdict
 
 
 def _make_run(name: str, **measurements: object) -> RunRow:

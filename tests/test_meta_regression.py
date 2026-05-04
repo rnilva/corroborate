@@ -26,7 +26,7 @@ from corroborate.stats import (
     meta_regression,
 )
 from corroborate.schema import GroupStats, HypothesisComparisonRow
-from corroborate.verdict import Verdict
+from corroborate.bridge.verdict import Verdict
 
 
 # ============ Recovery on synthetic-known-effect data ============

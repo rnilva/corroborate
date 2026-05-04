@@ -26,9 +26,9 @@ from functools import partial
 from pathlib import Path
 
 from corroborate.graph.causal import Direction, Tier
-from corroborate.claim_bridge import Bridge as ClaimBridge
+from corroborate.bridge.claim_bridge import Bridge as ClaimBridge
 from corroborate.core.hypothesis import Hypothesis
-from corroborate.hypothesis_verdict import (
+from corroborate.bridge.hypothesis_verdict import (
     HypothesisVerdict, hypothesis_subgraph_verdict,
 )
 from corroborate.core.intervention import DoEffect, Intervention
@@ -38,7 +38,7 @@ from corroborate.rl.convergence import (
 )
 from corroborate.rl.dqn.claims.bootstrap import bootstrap, double_greedify
 from corroborate.rl.dqn.measurables import dqn_default_measurables
-from corroborate.verdict import Verdict
+from corroborate.bridge.verdict import Verdict
 
 
 _DEFAULT_RUNS = Path(

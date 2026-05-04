@@ -2,7 +2,7 @@
 level invariants the rest of the framework relies on."""
 from __future__ import annotations
 
-from corroborate.verdict import RefutationClass, Verdict
+from corroborate.bridge.verdict import RefutationClass, Verdict
 
 
 # ============ Verdict ============

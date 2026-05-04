@@ -21,9 +21,9 @@ import pytest
 import corroborate.analyses  # noqa: F401  # pyright: ignore[reportUnusedImport]
 
 from corroborate.analyses.paired_g import PairedGResult
-from corroborate.claim_bridge import Bridge, evaluate
+from corroborate.bridge.claim_bridge import Bridge, evaluate
 from corroborate.stats import MetaRegressionResult
-from corroborate.verdict import Verdict
+from corroborate.bridge.verdict import Verdict
 from experiments.findings.dqn_bridges import (
     ddqn_reduces_jensen_gap__acrobot,
     ddqn_reduces_jensen_gap__cartpole,

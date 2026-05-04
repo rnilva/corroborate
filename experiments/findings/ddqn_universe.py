@@ -87,7 +87,7 @@ from corroborate.analyses.paired_g_per_burst import PerBurstResult
 from corroborate.analyses.paired_link_per_burst import (
     PerBurstLinkResult, phase_link_consistency,
 )
-from corroborate.claim_bridge import (
+from corroborate.bridge.claim_bridge import (
     Direction, Tier, claim_bridge,
 )
 from corroborate.core.intervention import DoEffect
@@ -95,7 +95,7 @@ from corroborate.measurables import Measurable
 from corroborate.stats import MetaRegressionResult
 from corroborate.measurables.reductions import from_key, reduce_axis
 from corroborate.rl.dqn.measurables import jensen_bias_per_eps
-from corroborate.verdict import Verdict
+from corroborate.bridge.verdict import Verdict
 
 
 # Composed per-burst reductions consumed by bridges below. Module-

@@ -48,7 +48,7 @@ from corroborate.stats import (
     random_effects_verdict,
     verdict_from_paired_stats,
 )
-from corroborate.verdict import Verdict
+from corroborate.bridge.verdict import Verdict
 
 
 # ============ Leaf-signature projection ============

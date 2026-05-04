@@ -60,7 +60,7 @@ from corroborate.analysis import resolve_for_holds_when
 from corroborate.core.hypothesis import PredictedDirection
 from corroborate.core.intervention import DoEffect
 from corroborate.measurables import Measurable, register
-from corroborate.verdict import Verdict
+from corroborate.bridge.verdict import Verdict
 
 
 # Direction and Tier are the canonical edge-metadata enums used

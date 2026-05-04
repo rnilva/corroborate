@@ -50,11 +50,11 @@ from corroborate.graph.causal import (
     Tier,
     promote_bridged_evidence,
 )
-from corroborate.claim_bridge import Bridge as ClaimBridge
+from corroborate.bridge.claim_bridge import Bridge as ClaimBridge
 from corroborate.graph import Graph
 from corroborate.core.hypothesis import Hypothesis
 from corroborate.schema import HypothesisComparisonRow, RunRow
-from corroborate.verdict import Verdict
+from corroborate.bridge.verdict import Verdict
 
 
 @dataclass(frozen=True, slots=True)

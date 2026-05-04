@@ -11,7 +11,7 @@ from corroborate.measurables.redundancy_check import (
     is_outcome_tautological, jaccard, reads_overlap,
 )
 from corroborate.schema import RunRow
-from corroborate.verdict import Verdict
+from corroborate.bridge.verdict import Verdict
 
 
 # ============ jaccard ============

@@ -56,7 +56,7 @@ if TYPE_CHECKING:
     # because `claim_bridge` depends on `hypothesis.PredictedDirection`.
     # The field annotation resolves through `from __future__ import
     # annotations`.
-    from corroborate.claim_bridge import Bridge as ClaimBridge
+    from corroborate.bridge.claim_bridge import Bridge as ClaimBridge
 
 __all__ = ['Hypothesis', 'PredictedDirection', 'canonical_str']
 

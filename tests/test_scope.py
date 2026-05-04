@@ -19,15 +19,15 @@ import pytest
 
 from corroborate.graph.causal import Direction, Tier
 from corroborate.core.claim import claim
-from corroborate.claim_bridge import Bridge as ClaimBridge
+from corroborate.bridge.claim_bridge import Bridge as ClaimBridge
 from corroborate.graph import Graph
 from corroborate.core.hypothesis import Hypothesis, PredictedDirection
-from corroborate.hypothesis_verdict import hypothesis_subgraph_verdict
+from corroborate.bridge.hypothesis_verdict import hypothesis_subgraph_verdict
 from corroborate.core.intervention import DoEffect, Intervention
 from corroborate.stats import MetaRegressionResult
 from corroborate.schema import RunRow
-from corroborate.scope import Scope, build_scope
-from corroborate.verdict import Verdict
+from corroborate.bridge.scope import Scope, build_scope
+from corroborate.bridge.verdict import Verdict
 
 
 @claim

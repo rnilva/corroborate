@@ -63,7 +63,7 @@ from corroborate._internals.narrow import (
 )
 from corroborate.core.hypothesis import PredictedDirection
 from corroborate.stats import PooledStats
-from corroborate.verdict import RefutationClass, Verdict
+from corroborate.bridge.verdict import RefutationClass, Verdict
 
 
 # ============ Measurement leaf type ============

@@ -44,7 +44,7 @@ from corroborate.rl.dqn.invariants import DQNTrajectoryRecord
 from corroborate.rl.env_catalogue import EnvSpec, EnvWrapper, HasN
 from corroborate.schema import MeasurementLeaf, RunRow, TraceLeaf, TraceRow
 from corroborate.core.signature import walk, walk_paths
-from corroborate.verdict import Verdict
+from corroborate.bridge.verdict import Verdict
 
 
 class CellResult(NamedTuple):

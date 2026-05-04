@@ -9,7 +9,7 @@ not cast or `# type: ignore`."""
 from __future__ import annotations
 
 from corroborate.schema import RunRow
-from corroborate.verdict import Verdict
+from corroborate.bridge.verdict import Verdict
 
 
 # ============ RunRow round-trip ============
