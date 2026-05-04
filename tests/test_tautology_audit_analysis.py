@@ -82,7 +82,7 @@ def test_synthetic_audit_runs_and_returns_per_measurable() -> None:
 
 def test_audit_registered() -> None:
     """`tautology_audit` populates the registry on import."""
-    from corroborate.analysis import get_registered
+    from corroborate.runner.analysis import get_registered
     assert get_registered('tautology_audit') is not None
 
 

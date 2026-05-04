@@ -42,7 +42,7 @@ from corroborate.analyses.dowhy import (
 from corroborate.analyses.paired_link_per_burst import (
     paired_link_per_burst,
 )
-from corroborate.analysis import analysis
+from corroborate.runner.analysis import analysis
 from corroborate.measurables import Measurable
 
 

@@ -38,7 +38,7 @@ from corroborate.core.hypothesis import Hypothesis
 from corroborate.rl.cell_runner import run_dqn_arm
 from corroborate.rl.dqn.invariants import DQNTrajectoryRecord
 from corroborate.rl.env_catalogue import EnvSpec
-from corroborate.sweep import (
+from corroborate.runner.sweep import (
     CellFailure,
     Runner,
     SweepCellResult,

@@ -41,7 +41,7 @@ import numpy as np
 import numpy.typing as npt
 import scipy.stats as ss
 
-from corroborate.analysis import analysis
+from corroborate.runner.analysis import analysis
 
 
 @dataclass(frozen=True, slots=True)

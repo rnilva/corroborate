@@ -19,7 +19,7 @@ import pytest
 from corroborate.core.hypothesis import Hypothesis
 from corroborate.core.intervention import Intervention
 from corroborate.rl.dqn.collect import EnvConfig
-from corroborate.registry import Registry
+from corroborate.runner.registry import Registry
 from corroborate.rl.dqn.yaml_sweep import (
     DQNSweep, default_dqn_registry, load_sweep,
 )

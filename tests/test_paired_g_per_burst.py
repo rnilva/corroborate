@@ -173,7 +173,7 @@ def test_per_burst_via_explicit_from_key() -> None:
 
 def test_analysis_registered() -> None:
     """`paired_g_per_burst` populates the registry on import."""
-    from corroborate.analysis import get_registered
+    from corroborate.runner.analysis import get_registered
     assert get_registered('paired_g_per_burst') is not None
 
 

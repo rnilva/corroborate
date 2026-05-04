@@ -16,7 +16,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
-from corroborate.analysis import analysis
+from corroborate.runner.analysis import analysis
 
 
 @dataclass(frozen=True, slots=True)

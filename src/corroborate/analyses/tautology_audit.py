@@ -30,7 +30,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 
-from corroborate.analysis import analysis
+from corroborate.runner.analysis import analysis
 from corroborate.measurables.redundancy_check import (
     TautologyReport, audit_mediator_panel,
 )

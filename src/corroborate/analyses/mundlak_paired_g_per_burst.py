@@ -32,7 +32,7 @@ from corroborate.analyses.mundlak_decomposition import (
 from corroborate.analyses.paired_g_per_burst import (
     DEFAULT_PER_BURST_SOURCE, paired_g_per_burst,
 )
-from corroborate.analysis import analysis
+from corroborate.runner.analysis import analysis
 from corroborate.measurables import Measurable
 
 

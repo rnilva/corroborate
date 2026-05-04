@@ -31,7 +31,7 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 
 from corroborate.analyses._panel import per_stratum_panel
-from corroborate.analysis import analysis
+from corroborate.runner.analysis import analysis
 from corroborate.corpus.stratum import StratumG
 
 

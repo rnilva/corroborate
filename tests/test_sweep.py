@@ -15,7 +15,7 @@ from collections.abc import Mapping
 
 from corroborate.core.hypothesis import Hypothesis
 from corroborate.corpus.schema import RunRow, TraceRow
-from corroborate.sweep import (
+from corroborate.runner.sweep import (
     SweepCellResult,
     empty_graph,
     sweep,

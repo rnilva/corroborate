@@ -30,7 +30,7 @@ from dataclasses import dataclass
 import numpy as np
 import numpy.typing as npt
 
-from corroborate.analysis import analysis
+from corroborate.runner.analysis import analysis
 from corroborate.measurables import Measurable
 from corroborate.measurables.reductions import from_key, reduce_axis
 

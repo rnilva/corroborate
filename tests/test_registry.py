@@ -15,7 +15,7 @@ import pytest
 from dataclasses import dataclass
 
 from corroborate.core.claim import FnClaim
-from corroborate.registry import Registry
+from corroborate.runner.registry import Registry
 
 
 # Module set every DQN sweep script transitively binds.

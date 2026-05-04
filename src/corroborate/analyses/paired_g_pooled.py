@@ -19,7 +19,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
 from corroborate.analyses.paired_g import per_env_paired_g_panel
-from corroborate.analysis import analysis
+from corroborate.runner.analysis import analysis
 from corroborate.stats import (
     PooledStats, random_effects_summary,
 )

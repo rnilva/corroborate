@@ -26,12 +26,12 @@ from typing import Literal, TypeIs
 
 import yaml
 
-from corroborate.config_loader import (
+from corroborate.runner.config_loader import (
     build_hypothesis_from_mapping,
     is_str_keyed_mapping,
 )
 from corroborate.core.hypothesis import Hypothesis
-from corroborate.registry import Registry
+from corroborate.runner.registry import Registry
 from corroborate.rl.dqn.collect import EnvConfig
 from corroborate.rl.env_catalogue import EnvWrapper
 from corroborate.rl.dqn.invariants import DQNTrajectoryRecord
@@ -349,7 +349,7 @@ def dispatch_sweep(sweep: DQNSweep) -> tuple[Path, Path]:
     )
     from corroborate.rl.env_catalogue import get as get_env_spec
     from corroborate.rl.sweep import DQNRunner
-    from corroborate.sweep import run_hypotheses
+    from corroborate.runner.sweep import run_hypotheses
 
     reg = default_dqn_registry()
     if sweep.arms_shape == 'chunked':
