@@ -48,7 +48,7 @@ from corroborate.analyses.paired_g import paired_g
 from corroborate.rl.env_solve_thresholds import (
     SOLVE_THRESHOLDS, envs_with_threshold,
 )
-from corroborate.schema import RunRow
+from corroborate.corpus.schema import RunRow
 from corroborate.stats import (
     PooledStats, random_effects_summary, random_effects_verdict,
 )

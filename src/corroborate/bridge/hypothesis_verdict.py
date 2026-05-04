@@ -41,7 +41,7 @@ from dataclasses import dataclass
 
 import scipy.stats as ss
 
-from corroborate.aggregate import hypothesis_comparison_from_cells
+from corroborate.corpus.aggregate import hypothesis_comparison_from_cells
 from corroborate.graph.causal import (
     BridgeEdge,
     CausalGraph,
@@ -53,7 +53,7 @@ from corroborate.graph.causal import (
 from corroborate.bridge.claim_bridge import Bridge as ClaimBridge
 from corroborate.graph import Graph
 from corroborate.core.hypothesis import Hypothesis
-from corroborate.schema import HypothesisComparisonRow, RunRow
+from corroborate.corpus.schema import HypothesisComparisonRow, RunRow
 from corroborate.bridge.verdict import Verdict
 
 

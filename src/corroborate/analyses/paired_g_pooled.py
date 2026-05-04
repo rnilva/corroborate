@@ -23,7 +23,7 @@ from corroborate.analysis import analysis
 from corroborate.stats import (
     PooledStats, random_effects_summary,
 )
-from corroborate.stratum import StratumG
+from corroborate.corpus.stratum import StratumG
 
 
 # Backward-compatible alias for substrate code that imports the

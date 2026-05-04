@@ -52,7 +52,7 @@ from typing import Protocol
 import numpy as np
 
 from corroborate.graph.discovery import stratified_spearman_rho
-from corroborate.schema import RunRow
+from corroborate.corpus.schema import RunRow
 
 
 class _NameReadsProtocol(Protocol):

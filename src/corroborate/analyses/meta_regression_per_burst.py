@@ -41,7 +41,7 @@ from corroborate.measurables import Measurable
 from corroborate.stats import (
     MetaRegressionResult, Pool, meta_regress_panel,
 )
-from corroborate.stratum import StratumG
+from corroborate.corpus.stratum import StratumG
 
 
 @analysis

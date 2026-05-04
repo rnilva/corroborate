@@ -13,7 +13,7 @@ Use:
     from corroborate.rl.dqn.compute_mediators import (
         compute_mediator_panel, DEFAULT_PANEL,
     )
-    from corroborate.persistence import read_runrows
+    from corroborate.corpus.persistence import read_runrows
     runs = read_runrows(Path('experiments/data/X/runs.parquet'))
     enriched = compute_mediator_panel(
         runs,
@@ -34,7 +34,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from corroborate.measurables import Measurable
-from corroborate.persistence import iter_trace_records
+from corroborate.corpus.persistence import iter_trace_records
 from corroborate.rl.dqn.measurables import (
     greedy_match_late,
     learning_curve_auc,
@@ -50,7 +50,7 @@ from corroborate.rl.dqn.measurables import (
     time_to_threshold,
     v_vs_max_delta_late,
 )
-from corroborate.schema import RunRow
+from corroborate.corpus.schema import RunRow
 
 
 # All record-only measurables (not requiring leaf injection).
@@ -111,7 +111,7 @@ def compute_mediator_panel(
             # bound at the panel-element type), which is one of the
             # `MeasurementLeaf` arms — type the dict accordingly so
             # `replace(run, measurements=...)` lands without a cast.
-            from corroborate.schema import MeasurementLeaf
+            from corroborate.corpus.schema import MeasurementLeaf
             new_meas: dict[str, MeasurementLeaf] = dict(run.measurements)
             for m in panel:
                 new_meas[f'mediator.{m.name}'] = m.fn(record)

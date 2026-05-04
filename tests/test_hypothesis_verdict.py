@@ -31,7 +31,7 @@ from corroborate.bridge.hypothesis_verdict import (
     hypothesis_subgraph_verdict,
 )
 from corroborate.core.intervention import DoEffect, Intervention
-from corroborate.schema import RunRow
+from corroborate.corpus.schema import RunRow
 from corroborate.bridge.verdict import Verdict
 
 

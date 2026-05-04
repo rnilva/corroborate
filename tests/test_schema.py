@@ -8,7 +8,7 @@ from_row_dict happens via TypeIs predicates and isinstance checks,
 not cast or `# type: ignore`."""
 from __future__ import annotations
 
-from corroborate.schema import RunRow
+from corroborate.corpus.schema import RunRow
 from corroborate.bridge.verdict import Verdict
 
 

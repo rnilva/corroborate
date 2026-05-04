@@ -10,7 +10,7 @@ from corroborate.measurables.redundancy_check import (
     TautologyReport, audit_mediator_panel, is_hp_tautological,
     is_outcome_tautological, jaccard, reads_overlap,
 )
-from corroborate.schema import RunRow
+from corroborate.corpus.schema import RunRow
 from corroborate.bridge.verdict import Verdict
 
 

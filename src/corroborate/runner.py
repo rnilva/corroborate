@@ -62,8 +62,8 @@ from corroborate.bridge.claim_bridge import (
     evaluate,
     measurable_names_for_bridges,
 )
-from corroborate.cloud import RemoteManifest
-from corroborate.schema import LINEAGE_FIELDS
+from corroborate.corpus.cloud import RemoteManifest
+from corroborate.corpus.schema import LINEAGE_FIELDS
 from corroborate.measurables import (
     compute_missing_columns,
     get_registered,
@@ -708,7 +708,7 @@ def _load_directory(
             )
             if need_restore:
                 if restore_from_cloud:
-                    from corroborate.cloud import restore
+                    from corroborate.corpus.cloud import restore
                     print(
                         f'runner: restoring {sub.name} from cloud '
                         f'({need_restore})...',

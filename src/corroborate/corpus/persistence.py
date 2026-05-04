@@ -59,7 +59,7 @@ from corroborate.graph.computation import (
     ComputationGraph,
 )
 from corroborate.graph import Graph
-from corroborate.schema import (
+from corroborate.corpus.schema import (
     RunRow,
     TraceRow,
 )

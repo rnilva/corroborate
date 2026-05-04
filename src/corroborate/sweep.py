@@ -45,7 +45,7 @@ import polars as pl
 from corroborate.graph.computation import ComputationGraph
 from corroborate.graph import Graph
 from corroborate.core.hypothesis import Hypothesis
-from corroborate.persistence import (
+from corroborate.corpus.persistence import (
     apply_trace_reductions,
     stream_concat_parquets,
     read_graphs_sidecar,
@@ -53,7 +53,7 @@ from corroborate.persistence import (
     write_runrows,
     write_tracerows,
 )
-from corroborate.schema import RunRow, TraceRow
+from corroborate.corpus.schema import RunRow, TraceRow
 
 
 @dataclass(frozen=True, slots=True)
@@ -283,7 +283,7 @@ def run_hypotheses[R: Mapping[str, object]](
         # relaunch after a partial crash pick up where it left
         # off without redoing finished arms.
         if archive_remote is not None:
-            from corroborate.cloud import archived_uri, is_archived
+            from corroborate.corpus.cloud import archived_uri, is_archived
             if (
                 is_archived(out_dir, rp_rel)
                 and is_archived(out_dir, tp_rel)
@@ -343,7 +343,7 @@ def run_hypotheses[R: Mapping[str, object]](
         traces_paths.append(traces_path)
         graph_paths.append(graph_path)
         if archive_remote is not None:
-            from corroborate.cloud import archive
+            from corroborate.corpus.cloud import archive
             archive(
                 out_dir, archive_remote,
                 files=[rp_rel, tp_rel], purge_local=True,
@@ -371,7 +371,7 @@ def run_hypotheses[R: Mapping[str, object]](
         stream_concat_parquets(
             [str(u) for u in archived_traces_uris], final_traces,
         )
-        from corroborate.cloud import archive as _archive_merged
+        from corroborate.corpus.cloud import archive as _archive_merged
         _archive_merged(
             out_dir, archive_remote,
             files=[

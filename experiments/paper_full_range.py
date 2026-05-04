@@ -66,7 +66,7 @@ from corroborate.stats import (
     cross_validate_meta_regression,
     meta_regression,
 )
-from corroborate.persistence import read_runrows
+from corroborate.corpus.persistence import read_runrows
 from corroborate.rl.dqn.claims.bootstrap import bootstrap, double_greedify
 from corroborate.rl.dqn.measurables import dqn_default_measurables
 from corroborate.rl.env_catalogue import (
@@ -75,7 +75,7 @@ from corroborate.rl.env_catalogue import (
     EnvSpec,
     RewardRegime,
 )
-from corroborate.schema import RunRow
+from corroborate.corpus.schema import RunRow
 from corroborate.bridge.verdict import Verdict
 
 

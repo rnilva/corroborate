@@ -432,7 +432,7 @@ class HypothesisComparisonRow:
 
         See `hypothesis_comparison_from_cells` for parameter
         semantics."""
-        from corroborate.aggregate import (
+        from corroborate.corpus.aggregate import (
             hypothesis_comparison_from_cells,
         )
         return hypothesis_comparison_from_cells(

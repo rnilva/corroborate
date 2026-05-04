@@ -39,7 +39,7 @@ from corroborate.stats import (
     StratumObservation,
     meta_regression,
 )
-from corroborate.schema import MeasurementLeaf, RunRow
+from corroborate.corpus.schema import MeasurementLeaf, RunRow
 
 
 @dataclass(frozen=True, slots=True)

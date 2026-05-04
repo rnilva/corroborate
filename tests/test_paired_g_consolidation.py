@@ -21,7 +21,7 @@ from collections.abc import Mapping
 
 from corroborate.analyses.paired_g import paired_g, per_env_paired_g_panel
 from corroborate.stats import meta_regress_panel
-from corroborate.stratum import StratumG
+from corroborate.corpus.stratum import StratumG
 
 
 def _cell(env: str, arm: str, seed: int, value: float) -> Mapping[str, object]:

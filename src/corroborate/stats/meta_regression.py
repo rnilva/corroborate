@@ -39,7 +39,7 @@ honest treatment when strata draw from a population of effects
 rather than realizing one shared effect."""
 
 if TYPE_CHECKING:
-    from corroborate.schema import HypothesisComparisonRow
+    from corroborate.corpus.schema import HypothesisComparisonRow
 
 
 class StratumGProtocol[K](Protocol):

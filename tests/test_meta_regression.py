@@ -25,7 +25,7 @@ from corroborate.stats import (
     meta_regress_comparison,
     meta_regression,
 )
-from corroborate.schema import GroupStats, HypothesisComparisonRow
+from corroborate.corpus.schema import GroupStats, HypothesisComparisonRow
 from corroborate.bridge.verdict import Verdict
 
 

@@ -33,7 +33,7 @@ from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 
 from corroborate.core.hypothesis import Hypothesis, PredictedDirection
-from corroborate.schema import (
+from corroborate.corpus.schema import (
     GroupStats,
     HypothesisComparisonRow,
     MeasurementLeaf,

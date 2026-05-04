@@ -27,7 +27,7 @@ import polars as pl
 from corroborate.stats import (
     StratumObservation, meta_regression,
 )
-from corroborate.persistence import read_runrows
+from corroborate.corpus.persistence import read_runrows
 from corroborate.rl.convergence import classify_envs
 from corroborate.rl.env_catalogue import get as _get_env_spec
 from corroborate.stats import hedges_g_paired

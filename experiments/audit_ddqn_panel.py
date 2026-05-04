@@ -59,7 +59,7 @@ from corroborate.rl.dqn.measurables import (
     time_to_threshold,
     v_vs_max_delta_late,
 )
-from corroborate.schema import RunRow
+from corroborate.corpus.schema import RunRow
 
 _RUNS = Path('experiments/data/ddqn/runs_with_mediators.parquet')
 _OUTCOME_PATH = 'eval_best_burst_mean'

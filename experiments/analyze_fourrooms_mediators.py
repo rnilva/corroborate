@@ -38,7 +38,7 @@ from corroborate.graph.discovery import partial_spearman_rho
 from corroborate.rl.dqn.compute_mediators import (
     DEFAULT_PANEL, compute_mediator_panel,
 )
-from corroborate.schema import RunRow
+from corroborate.corpus.schema import RunRow
 
 
 def _paired_deltas_by_seed(

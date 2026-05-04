@@ -9,7 +9,7 @@ from corroborate.rl.convergence import (
     mediator_differential,
 )
 from corroborate.rl.env_solve_thresholds import SolveThreshold
-from corroborate.schema import RunRow
+from corroborate.corpus.schema import RunRow
 from corroborate.bridge.verdict import Verdict
 
 

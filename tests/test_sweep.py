@@ -14,7 +14,7 @@ import uuid
 from collections.abc import Mapping
 
 from corroborate.core.hypothesis import Hypothesis
-from corroborate.schema import RunRow, TraceRow
+from corroborate.corpus.schema import RunRow, TraceRow
 from corroborate.sweep import (
     SweepCellResult,
     empty_graph,

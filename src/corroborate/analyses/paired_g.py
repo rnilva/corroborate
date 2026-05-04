@@ -32,7 +32,7 @@ from dataclasses import dataclass
 
 from corroborate.analyses._panel import per_stratum_panel
 from corroborate.analysis import analysis
-from corroborate.stratum import StratumG
+from corroborate.corpus.stratum import StratumG
 
 
 @dataclass(frozen=True, slots=True)

@@ -35,7 +35,7 @@ from typing import Literal
 from corroborate.rl.env_solve_thresholds import (
     SOLVE_THRESHOLDS, SolveThreshold,
 )
-from corroborate.schema import MeasurementLeaf, RunRow
+from corroborate.corpus.schema import MeasurementLeaf, RunRow
 
 
 type ConvergenceClass = Literal[

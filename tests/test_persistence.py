@@ -9,11 +9,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from corroborate.persistence import (
+from corroborate.corpus.persistence import (
     read_runrows,
     write_runrows,
 )
-from corroborate.schema import RunRow
+from corroborate.corpus.schema import RunRow
 from corroborate.bridge.verdict import Verdict
 
 
@@ -174,7 +174,7 @@ def test_tighten_trace_dtypes_casts_list_columns(tmp_path: Path) -> None:
     unchanged."""
     import polars as pl
 
-    from corroborate.persistence import tighten_trace_dtypes
+    from corroborate.corpus.persistence import tighten_trace_dtypes
 
     src = pl.DataFrame({
         'id': ['a', 'b'],
@@ -204,7 +204,7 @@ def test_iter_trace_records_streams_one_dict_per_cell(
     Memory-bounded by batch_size, not corpus size."""
     import polars as pl
 
-    from corroborate.persistence import iter_trace_records
+    from corroborate.corpus.persistence import iter_trace_records
 
     src = pl.DataFrame({
         'id': ['a', 'b', 'c', 'd', 'e'],
@@ -241,7 +241,7 @@ def test_graphs_sidecar_round_trips_topology(tmp_path: Path) -> None:
         ComputationEdge, ComputationGraph,
     )
     from corroborate.graph import Graph
-    from corroborate.persistence import (
+    from corroborate.corpus.persistence import (
         read_graphs_sidecar, write_graphs_sidecar,
     )
 
@@ -284,6 +284,6 @@ def test_graphs_sidecar_absent_file_returns_empty(
     """Missing sidecar isn't an error — substrates that don't
     capture a graph (or didn't persist one) should return an
     empty mapping cleanly."""
-    from corroborate.persistence import read_graphs_sidecar
+    from corroborate.corpus.persistence import read_graphs_sidecar
     out = read_graphs_sidecar(tmp_path / 'absent.json')
     assert out == {}

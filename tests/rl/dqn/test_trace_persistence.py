@@ -24,13 +24,13 @@ import jax
 import pytest
 
 from corroborate._internals.canonical import canonical_str
-from corroborate.persistence import read_tracerows, write_tracerows
+from corroborate.corpus.persistence import read_tracerows, write_tracerows
 from functools import partial as _partial
 
 from corroborate.rl.dqn.claims.optimizer import adam, warmed_update
 from corroborate.rl.dqn.dqn import default_state_hash, dqn
 from corroborate.rl.env_catalogue import HasN, HasShape
-from corroborate.schema import TraceLeaf, TraceRow
+from corroborate.corpus.schema import TraceLeaf, TraceRow
 from corroborate.core.signature import KwargInfo, walk, walk_paths
 
 # Real DQN rollouts on CartPole — both tests run training to

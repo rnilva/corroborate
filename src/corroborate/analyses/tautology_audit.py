@@ -34,7 +34,7 @@ from corroborate.analysis import analysis
 from corroborate.measurables.redundancy_check import (
     TautologyReport, audit_mediator_panel,
 )
-from corroborate.schema import RunRow
+from corroborate.corpus.schema import RunRow
 
 
 @dataclass(frozen=True, slots=True)

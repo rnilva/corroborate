@@ -21,8 +21,8 @@ from pathlib import Path
 
 import pytest
 
-from corroborate.persistence import read_tracerows, write_tracerows
-from corroborate.schema import TraceRow
+from corroborate.corpus.persistence import read_tracerows, write_tracerows
+from corroborate.corpus.schema import TraceRow
 
 
 def test_as_dict_flattens_leaves_to_top_level() -> None:
@@ -178,7 +178,7 @@ def test_unsupported_leaf_type_raises() -> None:
 
 def test_apply_trace_reductions_noop_when_empty() -> None:
     """No exprs + no drops → traces returned unchanged."""
-    from corroborate.persistence import apply_trace_reductions
+    from corroborate.corpus.persistence import apply_trace_reductions
     rows = [
         TraceRow(
             id='r1', cycle_id=None,
@@ -194,7 +194,7 @@ def test_apply_trace_reductions_adds_polars_expr_column() -> None:
     """An `add` expr produces a new column that lands as a
     TraceRow leaf."""
     import polars as pl
-    from corroborate.persistence import apply_trace_reductions
+    from corroborate.corpus.persistence import apply_trace_reductions
     rows = [
         TraceRow(
             id='r1', cycle_id=None,
@@ -214,7 +214,7 @@ def test_apply_trace_reductions_drops_named_columns() -> None:
     """A `drop` list removes those columns from the trace.
     Provenance fields are NOT droppable (they're TraceRow's typed
     fields, not leaves) — but a leaf can be."""
-    from corroborate.persistence import apply_trace_reductions
+    from corroborate.corpus.persistence import apply_trace_reductions
     rows = [
         TraceRow(
             id='r1', cycle_id=None,
@@ -232,7 +232,7 @@ def test_apply_trace_reductions_subsample_via_polars_expr() -> None:
     user's suggested unification of subsample + reduce under one
     declarative polars-expr surface."""
     import polars as pl
-    from corroborate.persistence import apply_trace_reductions
+    from corroborate.corpus.persistence import apply_trace_reductions
     rows = [
         TraceRow(
             id='r1', cycle_id=None,
@@ -261,7 +261,7 @@ def test_apply_trace_reductions_collapse_3d_to_1d() -> None:
     arbitrary nesting cleanly. Either is a polars expression and
     works through `apply_trace_reductions`."""
     import polars as pl
-    from corroborate.persistence import apply_trace_reductions
+    from corroborate.corpus.persistence import apply_trace_reductions
     # 3-D shape: (2 outer, 2 inner-batch, 3 actions)
     online_q = [
         [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]],   # step 0

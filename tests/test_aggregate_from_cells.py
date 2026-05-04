@@ -41,7 +41,7 @@ _STUB_INTERVENTION = Intervention(
     slot_path='stub', replacement=_stub_treatment_op,
 )
 _TREATMENT_ARM_KEY = _STUB_INTERVENTION.arm_key()
-from corroborate.schema import (
+from corroborate.corpus.schema import (
     HypothesisComparisonRow,
     RunRow,
 )

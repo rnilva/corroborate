@@ -32,7 +32,7 @@ from corroborate.bridge.hypothesis_verdict import (
     HypothesisVerdict, hypothesis_subgraph_verdict,
 )
 from corroborate.core.intervention import DoEffect, Intervention
-from corroborate.persistence import read_runrows
+from corroborate.corpus.persistence import read_runrows
 from corroborate.rl.convergence import (
     classify_envs, envs_in_class, filter_to_classes,
 )

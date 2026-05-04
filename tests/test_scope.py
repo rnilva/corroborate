@@ -25,7 +25,7 @@ from corroborate.core.hypothesis import Hypothesis, PredictedDirection
 from corroborate.bridge.hypothesis_verdict import hypothesis_subgraph_verdict
 from corroborate.core.intervention import DoEffect, Intervention
 from corroborate.stats import MetaRegressionResult
-from corroborate.schema import RunRow
+from corroborate.corpus.schema import RunRow
 from corroborate.bridge.scope import Scope, build_scope
 from corroborate.bridge.verdict import Verdict
 

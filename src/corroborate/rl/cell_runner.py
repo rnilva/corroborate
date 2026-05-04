@@ -42,7 +42,7 @@ from corroborate.core.hypothesis import Hypothesis
 from corroborate.rl.dqn.dqn import default_state_hash, dqn
 from corroborate.rl.dqn.invariants import DQNTrajectoryRecord
 from corroborate.rl.env_catalogue import EnvSpec, EnvWrapper, HasN
-from corroborate.schema import MeasurementLeaf, RunRow, TraceLeaf, TraceRow
+from corroborate.corpus.schema import MeasurementLeaf, RunRow, TraceLeaf, TraceRow
 from corroborate.core.signature import walk, walk_paths
 from corroborate.bridge.verdict import Verdict
 

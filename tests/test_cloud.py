@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from corroborate import cloud
+from corroborate.corpus import cloud
 
 
 # ============ Fixtures ============

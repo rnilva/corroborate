@@ -226,7 +226,7 @@ def cartpole_hp_mediator_cells() -> list[dict[str, object]]:
     if absent locally."""
     if not CARTPOLE_HP_MEDIATORS.exists():
         try:
-            from corroborate.cloud import restore
+            from corroborate.corpus.cloud import restore
             _ = restore(CARTPOLE_HP_MEDIATORS.parent)
         except Exception as exc:
             pytest.skip(

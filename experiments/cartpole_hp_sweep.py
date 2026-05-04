@@ -45,7 +45,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 from corroborate.core.hypothesis import Hypothesis
-from corroborate.persistence import (
+from corroborate.corpus.persistence import (
     apply_trace_reductions,
     write_runrows,
     write_tracerows,

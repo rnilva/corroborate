@@ -18,14 +18,14 @@ from collections.abc import Mapping
 import jax.numpy as jnp
 import pytest
 
-from corroborate.aggregate import leaf_signature
+from corroborate.corpus.aggregate import leaf_signature
 from corroborate.core.hypothesis import Hypothesis
 from corroborate.rl.cell_runner import run_dqn_cell
 from functools import partial
 
 from corroborate.rl.dqn.claims.optimizer import adam, warmed_update
 from corroborate.rl.dqn.invariants import DQNTrajectoryRecord
-from corroborate.schema import RunRow
+from corroborate.corpus.schema import RunRow
 from corroborate.bridge.verdict import Verdict
 
 
