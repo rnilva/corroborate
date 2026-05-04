@@ -2,21 +2,19 @@
 producing the four within-pair Hedges' g's plus the interaction
 contrast.
 
-The shape FINDINGS revision 12 consumes: complete a 2×2 factorial
-across two binary axes (greedification × n_step) on a panel of
-envs. For each env, four arms paired by `pair_by` produce four
-Hedges' g's:
+A 2×2 factorial across two binary axes on a panel of envs. For
+each env, four arms paired by `pair_by` produce four Hedges' g's:
 
-  - (B−A): treatment-2 effect on baseline-1 (e.g. n-step on vanilla)
-  - (D−C): treatment-2 effect on treatment-1 (e.g. n-step on DDQN)
-  - (C−A): treatment-1 effect at baseline-2 (e.g. DDQN at n=1)
-  - (D−B): treatment-1 effect at treatment-2 (e.g. DDQN at n=3)
+  - (B−A): treatment-2 effect at baseline-1
+  - (D−C): treatment-2 effect at treatment-1
+  - (C−A): treatment-1 effect at baseline-2
+  - (D−B): treatment-1 effect at treatment-2
   - INT  : (D−B) − (C−A) — interaction contrast on the
            treatment-1 axis. Negative INT discriminates two
-           readings: (a) over-correction (treatment-1 + treatment-2
-           compounds harm) OR (b) attenuation (treatment-1's
-           marginal benefit shrinks where treatment-2 already
-           covers part of the same axis).
+           readings: (a) over-correction (treatment-1 +
+           treatment-2 compounds harm) OR (b) attenuation
+           (treatment-1's marginal benefit shrinks where
+           treatment-2 already covers part of the same axis).
 
 The discriminator between (a) and (b) requires inspecting the
 (B−A) and (D−C) signs/magnitudes alongside the interaction —

@@ -195,14 +195,14 @@ def apply_trace_reductions(
     """Apply polars exprs to a batch of TraceRows; optionally
     drop named source columns after.
 
-    Use case: a sweep produces 3-D record arrays (e.g.
-    `online_q_values` shape `(steps, batch, n_actions)`) that
-    dominate trace-store disk usage. Authors who want only
-    derived summaries (e.g. per-step max-Q, online-target
-    correlation) declare the reductions as polars exprs +
-    explicitly drop the source 3-D arrays. The reduced traces
-    are dramatically smaller; the same exprs work post-hoc on
-    persisted full traces, so the analysis intent is portable.
+    Use case: a sweep produces high-rank record arrays (e.g. a
+    per-step `(steps, batch, action_dim)` tensor) that dominate
+    trace-store disk usage. Authors who want only derived
+    summaries (per-step reductions, pairwise correlations)
+    declare the reductions as polars exprs + explicitly drop
+    the source arrays. The reduced traces are dramatically
+    smaller; the same exprs work post-hoc on persisted full
+    traces, so the analysis intent is portable.
 
     `add`: polars exprs that produce new columns (one per expr).
     Each expr's output becomes a new leaf in the trace.
@@ -247,12 +247,12 @@ def stream_concat_parquets(
     fsspec for URI inputs. Mixing both in one call is allowed.
 
     `diagonal_relaxed` is necessary because per-arm parquets in
-    a sweep can disagree on column SET (DDQN arms emit
-    `at_most[jensen_dormancy_gap<=0].*` that vanilla
-    arms don't). The strict `vertical_relaxed` errors on column-
-    set mismatches; the merge primitive at the parquet boundary
-    has to handle the realistic case where two arms authored
-    different intervention_arms / different invariants.
+    a sweep can disagree on column SET (some arms emit invariant-
+    bridge columns the others don't). The strict
+    `vertical_relaxed` errors on column-set mismatches; the merge
+    primitive at the parquet boundary has to handle the realistic
+    case where two arms authored different intervention_arms /
+    different invariants.
 
     `type_widening=True` (default) uses `diagonal_relaxed`. Set
     False for strict diagonal concat that errors on type

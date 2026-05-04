@@ -63,8 +63,8 @@ def _safe_pearson(
 ) -> float:
     """Pearson's r with safe handling: NaN when either series is
     constant (zero std), or has fewer than 2 samples, or the two
-    series have mismatched lengths (e.g. train-step vs eval-burst
-    cadences in the same record dict)."""
+    series have mismatched lengths (e.g. record fields collected
+    at different observation cadences)."""
     if len(a) < 2 or len(a) != len(b):
         return float('nan')
     s1 = float(np.std(a))
@@ -268,9 +268,9 @@ def diff_against_claim_graph(
     axis as a typed structural element would convert these to
     `EXPLAINED`.
 
-    `column_roles` is the substrate's bridge mapping. For RL,
-    typically supplied by the rl-substrate module (e.g.,
-    `corroborate.rl.dqn.column_roles.DDQN_COLUMN_ROLES`).
+    `column_roles` is the substrate's bridge mapping; typically
+    supplied by the substrate-side module that authored the
+    columns.
 
     Edges are normalized to `(min, max)` ordering."""
     out: list[DiffEdge] = []

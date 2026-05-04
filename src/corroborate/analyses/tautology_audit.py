@@ -19,8 +19,8 @@ whether it's a *real* mediator or a false positive:
 Returns one tag per measurable: `clean` | `OUTCOME` | `HP` |
 `SHADOW` (or any union when a mediator fails multiple checks).
 Bridges consume the per-measurable verdict and assert claims
-like "jensen_gap is the strongest within-env signal" or
-"state_coverage_kl_uniform_late doesn't generalize to DDQN."
+about which mediator candidates survive the audit and which
+get unmasked as artifacts of HP shadow / outcome leakage.
 
 Wraps `corroborate.redundancy_check.audit_mediator_panel`. The
 analysis converts the cell collection to `RunRow` objects at
@@ -92,9 +92,9 @@ def tautology_audit(
     which the mediator is computed; the audit's structural
     check compares this against `outcome_reads`.
 
-    `arm_filter`, when supplied, restricts the audit to one arm
-    (e.g. `arm_filter='ddqn'` produces the DDQN-only audit
-    FINDINGS revision 5 reports separately from vanilla)."""
+    `arm_filter`, when supplied, restricts the audit to one
+    arm — the audit then reports mediator quality conditional
+    on that arm's data only."""
     spec_list: list[_MeasurableSpec] = []
     for m in measurables:
         name_v = m.get('name')

@@ -634,11 +634,11 @@ def _analysis_reads_for_bridges(
     names ARE the analysis names — so we walk those.
 
     These reads are columns the analyses touch off the cell record
-    DIRECTLY (e.g. `cell['mc_return']` in `paired_link_per_burst`),
-    bypassing the @measurable resolver. The runner unions them
-    with the measurables' transitive reads to decide what to load
-    from `traces.parquet`, AND keeps them through the per-corpus
-    drop step so the analyses can find them at evaluate time."""
+    DIRECTLY (i.e. `cell['<key>']`-style), bypassing the
+    @measurable resolver. The runner unions them with the
+    measurables' transitive reads to decide what to load from
+    `traces.parquet`, AND keeps them through the per-corpus drop
+    step so the analyses can find them at evaluate time."""
     import inspect as _inspect
 
     from corroborate._introspection_boundary import get_param_default
@@ -699,9 +699,8 @@ def _load_directory(
         # we need traces (any required measurable / analysis read)
         # and traces.parquet is missing/stub locally but listed in
         # the remote manifest. Without (b), corpora with local
-        # runs.parquet but cloud-only traces.parquet (e.g. the
-        # original `ddqn` 200k corpus) silently lose their trace-
-        # reading measurables to NaN.
+        # runs.parquet but cloud-only traces.parquet silently lose
+        # their trace-reading measurables to NaN.
         just_restored_traces = False
         if manifest.exists():
             need_restore = _missing_for_restore(
@@ -833,10 +832,9 @@ def _join_required_traces(
 ) -> pl.DataFrame:
     """Left-join the trace columns the required measurables need
     (`required_reads`, intersected with what `traces.parquet`
-    actually carries). Per-burst columns (`mc_return`, …) and
-    per-step columns (`done`, `online_std_q_per_step`, …) flow
-    through the same path; the caller drops them after the
-    measurable evaluator runs.
+    actually carries). Both per-burst columns and per-step
+    columns flow through the same path; the caller drops them
+    after the measurable evaluator runs.
 
     Tolerates stub / corrupt traces.parquet — some corpora carry
     a 0-byte placeholder."""

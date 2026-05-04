@@ -46,7 +46,7 @@ def _per_env_burst_predictor_mean(
     """Average a precomputed per-burst array across the cells of
     `env_name` at `burst_index`. `per_cell_array` is keyed by
     cell `id`. `arm_filter` restricts the average to a single
-    arm (e.g., baseline `vanilla_dqn`)."""
+    arm (e.g., the baseline arm name)."""
     vals: list[float] = []
     for c in cells:
         if c.get('env_name') != env_name:
@@ -95,10 +95,10 @@ def mundlak_paired_g_per_burst(
     averages across cells at each burst index to build the
     per-(env, burst) predictor column.
 
-    `predictor_arm_filter='vanilla_dqn'` restricts the per-cell
-    predictor average to baseline cells — for predictors that
-    should reflect baseline-only state (e.g. baseline mc_variance,
-    baseline σ_Q).
+    `predictor_arm_filter='<baseline_arm_name>'` restricts the
+    per-cell predictor average to baseline cells — for predictors
+    that should reflect baseline-only state (e.g. baseline-only
+    statistics computed from the baseline trajectory).
 
     `cluster_robust` defaults to **True** — bursts within an env
     share the agent's training trajectory and the env's

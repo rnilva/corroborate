@@ -99,12 +99,13 @@ class Tier(IntEnum):
     for substrate-axiom claims that are NOT on the rung.
 
     - `INVARIANT` (numeric 0) = substrate-author axiom expressed
-      as a self-loop bridge with a threshold predicate (e.g.
-      `jensen_dormancy_gap ≤ 0` is the Hasselt-2010 premise
-      check). Pre-statistical: a structural constraint the
-      substrate declares as the precondition under which the
-      mechanism's causal-chain bites. Never appears in cross-node
-      chains — `chain_tier` skips it.
+      as a self-loop bridge with a threshold predicate (e.g. the
+      substrate's invariance-gap measurable falling on the side
+      of its theorem's precondition). Pre-statistical: a
+      structural constraint the substrate declares as the
+      precondition under which the mechanism's causal-chain
+      bites. Never appears in cross-node chains — `chain_tier`
+      skips it.
     - `ASSOCIATIONAL` (rung 1) = observational coupling. PC
       adjacency, Spearman correlation, mediator-features within-
       env Pearson — all rung 1.

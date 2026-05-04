@@ -11,9 +11,9 @@ in `corroborate.causal_discovery`).
 Within a single stratum the indicator has only two values, so the
 per-stratum ρ is point-biserial-equivalent (sign of "treatment
 mean − baseline mean" within that stratum). Fisher-z pooling
-gives a rank-based test of whether DDQN systematically out-ranks
-or under-ranks vanilla across strata, robust to scale variation
-across corpora.
+gives a rank-based test of whether the treatment systematically
+out-ranks or under-ranks the baseline across strata, robust to
+scale variation across corpora.
 
 Used in bridges that previously consumed `paired_g` but where the
 scope captured multiple cells per `(arm, pair_by)` — the M2M case

@@ -7,21 +7,16 @@ paired seeds. This IS the empirical link from mediator to
 outcome, evaluated burst-by-burst.
 
 Why a separate primitive: scalar mech-link analyses (pair the
-trajectory-averaged Δ_jens with trajectory-averaged Δ_out) silently
-combine causally opposite phases. SpaceInvaders has Phase 1
-(early bursts: bias correction → outcome, link active) and
-Phase 2 (late bursts: Q-explosion → outcome reversal, link
-flipped). The trajectory-averaged scalar slope ≈ 0 because the
-two phases cancel. Per-burst link unmasks this.
+trajectory-averaged Δ_predictor with trajectory-averaged Δ_target)
+silently combine causally opposite phases when training has a
+phase transition. The trajectory-averaged scalar slope ≈ 0
+because the two phases cancel. Per-burst link unmasks this.
 
-The empirical lesson generalizes — see `findings_fourrooms_time_series.md`
-and `findings_per_burst_canonical.md`. Per-burst is the canonical
-form for any env where Q dynamics aren't monotone (Q-explosion-
-prone / phase-transition envs).
-
-The strata returned (env, burst → r, p, n_pairs) feed bridges
-that assert claims like "link is active in Phase 1 (bursts ≤
-n_phase) and reversed in Phase 2" — the per-burst panel makes
+Per-burst is the canonical form for any substrate where the
+mediator's dynamics aren't monotone across training (phase-
+transition-prone runs). The strata returned (env, burst → r,
+p, n_pairs) feed bridges that assert phase-structured claims
+("link is active early and reversed late") — the panel makes
 the temporal structure typed and corroborable.
 """
 from __future__ import annotations
@@ -39,13 +34,13 @@ from corroborate.measurable import Measurable
 
 @dataclass(frozen=True, slots=True)
 class PerBurstLinkStratum:
-    """One (env, burst) stratum: paired link statistics across paired
-    seeds. `r` is correlation (link structure); `slope` is OLS β
-    of Δ_target on Δ_predictor (conversion efficiency: outcome
-    units per unit bias reduction); `mean_d_predictor` and
-    `mean_d_target` give the headroom DDQN exploited and the
-    outcome change observed; `sd_d_target` is the per-seed
-    Δ_target dispersion (outcome noise floor at this burst)."""
+    """One (env, burst) stratum: paired link statistics across
+    paired seeds. `r` is correlation (link structure); `slope`
+    is OLS β of Δ_target on Δ_predictor (conversion efficiency:
+    outcome units per unit predictor change); `mean_d_predictor`
+    and `mean_d_target` give the per-seed mean Δ on each axis;
+    `sd_d_target` is the per-seed Δ_target dispersion (outcome
+    noise floor at this burst)."""
     env_name: str
     burst_index: int
     r: float
@@ -121,19 +116,19 @@ def paired_link_per_burst(
     Pearson r between them.
 
     Both `target` and `predictor` are typed Measurables returning
-    per-burst NDArrays. The canonical mech → outcome link uses:
-      target = reduce_axis(from_key('mc_return'), axis=-1, op='mean')
-      predictor = reduce_axis(jensen_bias_per_eps, axis=-1, op='mean')
-    — per-burst-mean of the outcome and per-burst-mean of the
-    Jensen-bias proxy (Q − MC).
+    per-burst NDArrays. The canonical mediator → outcome link
+    composes a per-burst-mean of the outcome key against a per-
+    burst-mean of a substrate-named mediator-residual measurable:
+
+        target = reduce_axis(from_key('<outcome_key>'), axis=-1, op='mean')
+        predictor = reduce_axis(<mediator_per_eps>, axis=-1, op='mean')
 
     `r` is computed against the *negated* predictor so the value
-    reads "active link = positive r" (matches the bias-correction
-    framing in the DDQN literature: more reduction → more outcome
-    gain). Positive r at burst b means: at this point in training,
-    more bias reduction by DDQN translates to bigger outcome
-    benefit (the textbook story). Negative r means the
-    relationship has flipped (Q-explosion-induced anti-link).
+    reads "active link = positive r" — the convention is "more
+    mediator reduction → more outcome gain." Positive r at burst
+    b means: at this training stage, the predicted causal arrow
+    holds. Negative r means the relationship has flipped
+    (substrate-specific phase-transition).
 
     `env_name`, when supplied, restricts the analysis to one env.
 
@@ -269,14 +264,11 @@ def paired_link_per_burst(
             d_t = d_target[finite]
             d_p = d_predictor[finite]
             # Convention: link strength is positive when active.
-            # The natural primitive is "bias reduction → outcome
-            # gain": more reduction (i.e., more *negative* Δ_jens
-            # under DDQN's mc_minus_q) correlates with more positive
-            # Δ_outcome. We negate Δ_predictor so the reported r and
-            # slope read positive-when-active, matching the
-            # bias-correction framing in the DDQN literature
-            # (Hasselt 2010 et seq.) and the docstring conventions in
-            # the bridge zoo (`g_link = +0.34, link works`).
+            # The natural primitive is "more mediator reduction →
+            # more outcome gain": more reduction (more *negative*
+            # Δ_predictor) correlates with more positive Δ_target.
+            # We negate Δ_predictor so the reported r and slope
+            # read positive-when-active.
             r, p, slope = _pearson_r_p_slope(-d_p, d_t)
             mean_p = float(d_p.mean()) if d_p.size else float('nan')
             mean_t = float(d_t.mean()) if d_t.size else float('nan')

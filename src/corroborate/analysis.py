@@ -17,15 +17,15 @@ the claim's `holds_when` body consumes:
     ) -> PairedGResult: ...
 
     @claim_bridge
-    def ddqn_helps_outcome(
+    def treatment_helps_outcome(
         paired_g: PairedGResult,
         *,
-        source: str = 'eval_best_burst_mean',
-        target: str = 'eval_best_burst_mean',
+        source: str = '<outcome_metric>',
+        target: str = '<outcome_metric>',
         direction: Direction = Direction.DIRECT,
         tier: Tier = Tier.ASSOCIATIONAL,
-        treatment_arm: str = 'ddqn',
-        baseline_arm: str = 'vanilla_dqn',
+        treatment_arm: str = 'treatment',
+        baseline_arm: str = 'baseline',
     ) -> Verdict:
         if paired_g.g > 0.3 and paired_g.p_value < 0.05:
             return Verdict.HELD
@@ -61,7 +61,7 @@ class Analysis[R: Mapping[str, object], O]:
     lookup key (= `fn.__name__`).
 
     `reads` declares record-key columns the analysis touches off
-    the cell record directly (i.e. `cell['mc_return']`-style),
+    the cell record directly (i.e. `cell['<key>']`-style),
     BYPASSING the @measurable resolver. The runner unions these
     with bridge measurables' transitive_reads so the trace-column
     join + the no-drop set know what to bring in. Scalar fields
@@ -122,7 +122,7 @@ def analysis[R: Mapping[str, object] = Mapping[str, object], O = object](
         @analysis
         def paired_g(cells, *, ...) -> PairedGResult: ...
 
-        @analysis(reads=('mc_return', 'predicted_q_at_start'))
+        @analysis(reads=('<key_a>', '<key_b>'))
         def paired_link_per_burst(cells, *, ...) -> ...: ...
 
     `reads` declares trace-store record-keys the analysis touches

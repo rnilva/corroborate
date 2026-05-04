@@ -26,17 +26,17 @@ fixtures, but with the test's metadata sitting as keyword
 defaults.
 
     @claim_bridge
-    def ddqn_helps_outcome_acrobot(
+    def treatment_helps_outcome(
         paired_g: PairedGResult,
         *,
-        source: str = 'eval_best_burst_mean',
-        target: str = 'eval_best_burst_mean',
+        source: str = '<outcome_metric>',
+        target: str = '<outcome_metric>',
         direction: Direction = Direction.DIRECT,
         tier: Tier = Tier.ASSOCIATIONAL,
-        treatment_arm: str = 'ddqn',
-        baseline_arm: str = 'vanilla_dqn',
+        treatment_arm: str = 'treatment',
+        baseline_arm: str = 'baseline',
         pair_by: tuple[str, ...] = ('seed',),
-        env_name: str = 'Acrobot-v1',
+        env_name: str = '<env>',
     ) -> Verdict:
         if paired_g.g > 0.3 and paired_g.p_value < 0.05:
             return Verdict.HELD

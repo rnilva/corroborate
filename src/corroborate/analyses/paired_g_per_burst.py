@@ -1,29 +1,26 @@
 """`paired_g_per_burst` — per-(env, burst) paired Hedges' g panel.
 
-The shape FINDINGS revisions 9, 11, 12 consume: per-cell trace
-data has burst-level arrays (`predicted_q_at_start`, `mc_return`,
-shape `(n_bursts, n_episodes)`); for each (env, burst_index) we
-compute paired-g across seeds on a typed per-burst measurable
-(`source: Measurable[Mapping, NDArray]`).
-
-The analysis returns a panel keyed by `(env_name, burst_index)`
-with per-(env, burst) Hedges' g + SE + n_pairs. Bridges consume
-this panel and assert claims like "DDQN's mechanism operates
-early; r(Δbias, Δret) is negative at every burst on FourRooms"
-(revision 9).
+Per-cell trace data has burst-level arrays of shape
+`(n_bursts, n_episodes)`; for each (env, burst_index) we compute
+paired-g across seeds on a typed per-burst measurable
+(`source: Measurable[Mapping, NDArray]`). The analysis returns
+a panel keyed by `(env_name, burst_index)` with per-(env, burst)
+Hedges' g + SE + n_pairs. Bridges consume this panel and assert
+phase-structured claims about when in training the treatment
+effect activates.
 
 `source` is a typed Measurable returning a per-burst NDArray
-(shape `(n_bursts,)`). Compose via `reduce_axis(from_key('X'),
-axis=-1, op='mean')` for "per-burst-mean of column X", or
-`reduce_axis(jensen_bias_per_eps, axis=-1, op='mean')` for the
-per-burst Jensen-bias mean. The substrate's named per-eps
-measurables (e.g. `jensen_bias_per_eps`) compose with the
+(shape `(n_bursts,)`). Compose via `reduce_axis(from_key('<key>'),
+axis=-1, op='mean')` for "per-burst-mean of column <key>", or
+e.g. `reduce_axis(<substrate-named-measurable>, axis=-1,
+op='mean')` for a per-burst-mean of a substrate-defined per-
+episode measurable. Substrate-side measurables compose with the
 generic reduction primitives (`reduce_axis`, `slice_axis`) to
 parameterise this shape end-to-end.
 
-Bursts are 1-step apart in `eval_step_index` (typically
-`eval_every` steps); the analysis doesn't assume any particular
-spacing.
+Bursts are 1-step apart along the substrate's burst axis
+(typically every `eval_every` training steps); the analysis
+doesn't assume any particular spacing.
 """
 from __future__ import annotations
 

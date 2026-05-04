@@ -15,13 +15,13 @@ The post-hoc analytical primitive. Three layers in this module:
 
 3. *Outcome projections.* The schema-row `primary_outcome_summary`
    is just a measurable applied to a per-step record. Step 4's
-   `late_window_mean(record_key='ep_return', fraction=0.1)` is
-   `mean_window(from_key('ep_return'), 0.9, 1.0)` — same primitive
+   `late_window_mean(record_key='<key>', fraction=0.1)` is
+   `mean_window(from_key('<key>'), 0.9, 1.0)` — same primitive
    used at a different framing level.
 
-Composition is by value. `max_abs(from_key('q_max'))` is a
-`Measurable[R, float]` whose `name` is `'q_max__max_abs'` and
-whose `reads` is `('q_max',)`. No name-keyed registry, no
+Composition is by value. `max_abs(from_key('<key>'))` is a
+`Measurable[R, float]` whose `name` is `'<key>__max_abs'` and
+whose `reads` is `('<key>',)`. No name-keyed registry, no
 `inspect.signature` injection — typed end-to-end."""
 from __future__ import annotations
 
@@ -118,10 +118,9 @@ def max_abs[R: Mapping[str, object]](
 ) -> Measurable[R, float]:
     """Max of `|·|` over the operand array. Returns scalar.
 
-    Used by Banach-contraction invariants: `bounded(max_abs(
-    from_key('max_q')), threshold=1e3)` asserts |Q| stays
-    bounded — Q-divergence (deadly-triad signature) trips the
-    INVARIANT_VIOLATION verdict."""
+    Use: bound a record-key's L∞ norm via `bounded(max_abs(
+    from_key('<key>')), threshold=...)`. Magnitude excursion
+    above the threshold trips the INVARIANT_VIOLATION verdict."""
     name = f'{of.name}__max_abs'
 
     def fn(record: R) -> float:
@@ -182,11 +181,10 @@ def growth_window[R: Mapping[str, object]](
     """Ratio of late-window mean over early-window mean. Late /
     max(|early|, 1e-9).
 
-    Geometric-decay invariants want this < 1 (e.g. Bellman
-    residual decays under contraction). Overestimation-bound
-    invariants want this < some threshold > 1 (e.g. max_q's drift
-    under vanilla DQN's Jensen bias is bounded). The threshold
-    is the caller's call, parameterised on `bounded`."""
+    Geometric-decay invariants want this < 1 (the operand
+    decays late vs early). Bounded-drift invariants want this
+    < some threshold > 1. The threshold is the caller's call,
+    parameterised on `bounded`."""
     early_m = mean_window(of, *early)
     late_m = mean_window(of, *late)
     name = (f'{of.name}__growth_'
@@ -217,14 +215,14 @@ def late_window_mean(
     """Schema-row outcome projection: mean over the last `fraction`
     of `record[key]`. Convenience wrapper around `mean_window`.
 
-    NOTE: when the trajectory carries a cumulative-within-episode
-    sawtooth (e.g. RL's ep_return signal that resets on episode
-    terminations), a plain `late_window_mean` averages over the
-    sawtooth — NOT the per-episode quantity. Use
+    NOTE: when the trajectory carries a cumulative-within-segment
+    sawtooth (a per-step accumulator that resets on segment
+    boundaries), a plain `late_window_mean` averages over the
+    sawtooth — NOT the per-segment quantity. Use
     `masked_window_mean(value_key, mask_key, fraction)` to filter
-    to mask-positive entries (e.g. terminal steps) before
-    averaging. `late_window_mean` is correct for genuinely-
-    per-step quantities (loss, td_error, max_q)."""
+    to mask-positive entries (e.g. segment-boundary steps) before
+    averaging. `late_window_mean` is correct for genuinely
+    per-step quantities."""
     if not (0.0 < fraction <= 1.0):
         raise ValueError(
             f'late_window_mean: need 0 < fraction ≤ 1; got {fraction}',
@@ -244,17 +242,16 @@ def masked_window_mean(
     `fraction`, restrict to indices whose mask flag is set, mean
     the surviving values. Substrate-neutral.
 
-    Use case: in RL, `record['ep_return']` is per-step cumulative
-    return that *resets on done* (a sawtooth); the per-episode
-    return appears on terminal steps where `record['done'] > 0.5`.
-    `masked_window_mean('ep_return', 'done', 0.1)` averages the
-    last 10% of episode-end returns. For non-RL substrates, mask
-    is whatever binary indicator the experiment defines.
+    Use case: when a per-step record key is a cumulative
+    accumulator that resets on segment boundaries, the per-
+    segment-end value appears at boundary indices marked by a
+    binary `mask_key`. `masked_window_mean(value_key, mask_key,
+    0.1)` averages the last 10% of boundary-marked values. The
+    binary indicator is whatever the substrate defines.
 
     Returns NaN if no element survives the mask in the window —
-    `0.0` would collide with a legitimate `value_key` of zero
-    (e.g. RL envs with reward range crossing zero). Downstream
-    consumers must handle NaN explicitly."""
+    `0.0` would collide with a legitimate `value_key` of zero.
+    Downstream consumers must handle NaN explicitly."""
     if not (0.0 < fraction <= 1.0):
         raise ValueError(
             f'masked_window_mean: need 0 < fraction ≤ 1; '

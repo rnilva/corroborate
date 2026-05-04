@@ -1,15 +1,13 @@
 """`mundlak_decomposition` — proper within/between regression for
 panel-data moderator hypotheses.
 
-Codifies the methodology lesson from the DDQN `log_mc_variance`
-analysis (`findings_chain_bottlenecks.md` 2026-05-02 second
-correction): claiming a within/between effect requires
-decomposing **the same variable** into its env-mean component
-and its env-mean-removed deviation, then regressing the target
-on both. Joining two *different* aggregations of the same
-quantity (e.g., pooled-over-everything vs averaged-within-burst)
-and labelling them "between" and "within" is a misspecification
-that produces spurious Simpson-paradox-shaped artifacts.
+Claiming a within/between effect requires decomposing **the same
+variable** into its env-mean component and its env-mean-removed
+deviation, then regressing the target on both. Joining two
+*different* aggregations of the same quantity (e.g., pooled-
+over-everything vs averaged-within-burst) and labelling them
+"between" and "within" is a misspecification that produces
+spurious Simpson-paradox-shaped artifacts.
 
 The Mundlak (1978) device:
 

@@ -428,7 +428,7 @@ class HypothesisComparisonRow:
         arm. Default is None → baseline arm key is `'baseline'`
         (the empty `intervention_arms` arm). Pass a Hypothesis
         when the baseline is itself a treatment (e.g. comparing
-        DDQN vs PER, both non-baseline).
+        two non-baseline arms).
 
         See `hypothesis_comparison_from_cells` for parameter
         semantics."""
