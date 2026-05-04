@@ -34,6 +34,7 @@ from typing import TYPE_CHECKING, Protocol
 
 import jax
 import optax
+from gymnax import EnvState as EnvState
 
 # Re-exported for back-compat. Concrete Q-function implementations
 # define their own `Params` shapes; dqn threads the opaque pytree.
@@ -163,10 +164,10 @@ class TargetSync(Protocol):
 type StepRecord = dict[str, jax.Array]
 
 
-# Public alias for the env-handle pytree threaded through the
-# step. gymnax envs are opaque structurally; `object` is honest
-# (the framework cannot constrain a third-party env's pytree shape).
-type EnvState = object
+# `EnvState` is re-exported from `gymnax` (the typed opaque base).
+# Substrate threads it through `DQNState.env_state` without
+# inspecting; the framework cannot constrain a third-party env's
+# pytree shape further than "opaque base class typed by gymnax".
 
 
 # Optax optimizer state — opaque pytree at runtime; re-export

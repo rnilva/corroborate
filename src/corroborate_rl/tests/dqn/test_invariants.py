@@ -40,12 +40,9 @@ def _run_short_trajectory() -> Mapping[str, jnp.ndarray]:
     """Run DQN on CartPole for 100 steps and return the stacked
     record."""
     import gymnax
-    from corroborate_rl.env_catalogue import HasN, HasShape
     env, env_params = gymnax.make('CartPole-v1')
     obs_space = env.observation_space(env_params)
     act_space = env.action_space(env_params)
-    assert isinstance(obs_space, HasShape)
-    assert isinstance(act_space, HasN)
     obs_shape = tuple(int(d) for d in obs_space.shape)
     n_actions = int(act_space.n)
 

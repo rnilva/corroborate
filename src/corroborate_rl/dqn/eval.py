@@ -25,10 +25,11 @@ bursts (PPO, SAC, etc.)."""
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import NamedTuple, cast
+from typing import TYPE_CHECKING, NamedTuple, cast
 
 import jax
 import jax.numpy as jnp
+from gymnax import EnvParams, EnvState
 
 from corroborate import claim
 from corroborate.core.loop import Loop, iterate
@@ -36,7 +37,10 @@ from corroborate_rl.loop import scan_loop
 from corroborate_rl.dqn.state import DQNState
 from corroborate_rl.dqn.claims.q_network import QFunction
 from corroborate_rl.dqn.types import StepRecord
-from corroborate_rl.env_catalogue import GymnaxEnvLike
+
+if TYPE_CHECKING:
+    # Stub-only Protocol — see env_catalogue.py for the rationale.
+    from gymnax import Env
 
 
 # ============ Eval per-episode and per-burst record shapes ============
@@ -61,8 +65,8 @@ class EvalBurstOut(NamedTuple):
 def eval_episode(
     *,
     online_params: dict[str, jax.Array],
-    env: GymnaxEnvLike,
-    env_params: object,
+    env: Env,
+    env_params: EnvParams,
     rng_key: jax.Array,
     q_network: QFunction,
     gamma: float,
@@ -86,7 +90,7 @@ def eval_episode(
 
     class Carry(NamedTuple):
         obs: jax.Array
-        env_state: object
+        env_state: EnvState
         done: jax.Array
         rng: jax.Array
         cumulative_return: jax.Array
@@ -149,8 +153,8 @@ def eval_episode(
 def eval_burst(
     *,
     online_params: dict[str, jax.Array],
-    env: GymnaxEnvLike,
-    env_params: object,
+    env: Env,
+    env_params: EnvParams,
     rng_key: jax.Array,
     q_network: QFunction,
     gamma: float,
