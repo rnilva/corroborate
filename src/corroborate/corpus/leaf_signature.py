@@ -18,9 +18,13 @@ from collections.abc import Mapping
 from corroborate.corpus.schema import MeasurementLeaf
 
 
-# Always-excluded framework-typed metadata. These are
-# substrate-AGNOSTIC: every RunRow carries `intervention_name`
-# (the Hypothesis name), so it's never a configurational leaf.
+# Legacy-corpus exclusion. Pre-Phase-6 RunRows carried an
+# `intervention_name` column (the old substrate-chosen arm-name
+# string); new corpora use the framework-typed `arm_key`
+# attribute on `RunRow` instead, and `arm_key` lives outside
+# `measurements` so it never reaches `leaf_signature`. This
+# exclusion stays as a guard for legacy parquets that still
+# carry the column inside `measurements`.
 _FRAMEWORK_EXCLUDED_KEYS: frozenset[str] = frozenset({
     'intervention_name',
 })
@@ -39,7 +43,8 @@ def leaf_signature(
     - Every registered-measurable name (the registry is the
       single source of truth post-Phase-5; substrate-paper-
       narrative prefixes are gone).
-    - The framework-typed `intervention_name` (always excluded).
+    - Legacy `intervention_name` (excluded for old parquets that
+      still carry the column; new corpora use `arm_key`).
     - Substrate-supplied exogenous keys: keys the substrate
       declared via `Annotated[T, Exogenous]` on its `@claim`'s
       kwargs. Caller passes those names as `exogenous_keys` (e.g.

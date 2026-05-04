@@ -158,13 +158,16 @@ def paired_g(
     """Compute paired Hedges' g + raw mean-diff at `source` across
     matched (T, B) pairs in `cells`.
 
-    Pairing is by string match on `arm_field` (typically
-    `intervention_name`). `treatment_arm` and `baseline_arm` come
-    from the bridge's `DoEffect` — either via per-bridge
-    `source = DoEffect(...)` decorator override or via file-level
-    `INTERVENTION = DoEffect(...)` resolved at decoration time.
-    `claim_bridge.evaluate()` extracts the contrast and forwards
-    the arm strings into this analysis's kwargs.
+    Pairing is by string match on `arm_field` (defaults to
+    `'arm_key'`; the `canonical_str` fingerprint the substrate's
+    cell runner stamps on each cell). `treatment_arm` and
+    `baseline_arm` come from the bridge's `DoEffect` — either via
+    per-bridge `source = DoEffect(...)` decorator override or via
+    file-level `INTERVENTION = DoEffect(...)` resolved at
+    decoration time. `claim_bridge.evaluate()` derives the
+    canonical arm strings via `DoEffect.treatment_arm_key()` /
+    `baseline_arm_key()` and forwards them into this analysis's
+    kwargs.
 
     `source` resolves through the measurable registry (preferred)
     or as a field-path read on the cell record.

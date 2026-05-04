@@ -264,8 +264,8 @@ def paired_comparison(
 
     `treatment_arm` / `baseline_arm` are matched against
     `cell[arm_field]` to partition the corpus. `arm_field`
-    defaults to `'arm_key'`; substrates that still emit
-    `intervention_name` can override.
+    defaults to `'arm_key'`; legacy parquets keyed on the older
+    `'intervention_name'` column can pass that explicitly.
 
     `predicted_direction` is recorded on the result for downstream
     consumers' sign tests.

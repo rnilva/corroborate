@@ -217,13 +217,13 @@ class RunRow:
     dotted topology paths, bridge/invariant results under
     `bridge.<name>.*` / `invariant.<name>.*`, outcome reductions
     under substrate-named keys (e.g. `late_window_mean`),
-    and substrate metadata (`env_name`, `seed`, `total_steps`,
-    `intervention_name`).
+    and substrate metadata (`env_name`, `seed`, `total_steps`).
 
     `arm_key` defaults to `'baseline'` so hand-constructed
     fixtures and old parquets without the column read as the
     baseline arm. Production write paths populate it from
-    `Hypothesis.arm_key()`.
+    `canonical_str(claim)` of the per-arm composition (the
+    substrate's cell runner).
 
     Older parquets may carry a `claim_graph_signature` column
     (legacy program-structural fingerprint); `from_row_dict`
