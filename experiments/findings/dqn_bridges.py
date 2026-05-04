@@ -861,6 +861,42 @@ def ddqn_jensen_slope_attenuates_with_log_nstep__fourrooms(
     )
 
 
+@claim_bridge(
+    source=INTERVENTION,
+    target='eval_final_mean',
+    direction=Direction.INVERSE,
+    tier=Tier.ASSOCIATIONAL,
+    scope=pl.col('env_name') == 'FourRooms-misc',
+    pair_by=('seed',),
+)
+def ddqn_final_outcome_slope_attenuates_with_log_nstep__fourrooms(
+    meta_regression_paired_g_by_nstep: MetaRegressionResult,
+) -> Verdict:
+    """Sibling of the `eval_best_burst_mean` slope on the
+    `eval_final_mean` (steady-state) target. Best-burst is a peak
+    metric that compresses long-run differences once both arms hit
+    their per-arm ceiling; final-mean is sensitive to long-run
+    learning quality and exposes the bias-compounding attenuation
+    more cleanly. On `nstep_lambda_fourrooms`: β≈−0.27 per
+    log(n_step), CI strictly below zero, p≈0.025 → HELD. n=10
+    even crosses (vanilla beats DDQN on final mean), consistent
+    with bias-compounding theory's prediction that DDQN's edge
+    inverts when bootstrap-bias is no longer the dominant
+    failure mode.
+
+    Documents the eval_best_burst_mean / eval_final_mean
+    dissociation: peak = no slope-significance,
+    steady-state = clear attenuation. Per memory
+    `findings_l2_acrobot_goldilocks`, scalar best-burst can hide
+    effects the time-resolved metrics expose."""
+    return _slope_holds_when(
+        meta_regression_paired_g_by_nstep,
+        covariate='log_n_step',
+        sign='negative',
+        min_strata=3,
+    )
+
+
 # ============ Twelfth revision: 2×2 factorial ========================
 #
 # Complete (greedification × n_step) factorial on 5 sparse-reward
@@ -1107,6 +1143,7 @@ NSTEP_INTERVENTION_BRIDGES = (
     ddqn_outcome_attenuates__fourrooms_n3,
     ddqn_outcome_slope_attenuates_with_log_nstep__fourrooms,
     ddqn_jensen_slope_attenuates_with_log_nstep__fourrooms,
+    ddqn_final_outcome_slope_attenuates_with_log_nstep__fourrooms,
 )
 """Bridges asserted on the `nstep_lambda_fourrooms` corpus
 (FourRooms-misc, n_step ∈ {1, 2, 3, 5, 10} × {vanilla, ddqn} × 30
