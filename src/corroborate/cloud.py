@@ -99,6 +99,18 @@ class RemoteManifest:
             'files': [dict(f.as_dict()) for f in self.files],
         }
 
+    def relpaths(self) -> frozenset[str]:
+        """All archived relpaths, as a hashable set for membership
+        / set-arithmetic queries — saves consumers the
+        `{f.relpath for f in m.files}` boilerplate."""
+        return frozenset(f.relpath for f in self.files)
+
+    def has(self, relpath: str) -> bool:
+        """Whether this manifest archives `relpath`. Equivalent to
+        `relpath in self.relpaths()` but avoids materialising the
+        set when the caller only needs one membership check."""
+        return any(f.relpath == relpath for f in self.files)
+
     @classmethod
     def from_dict(cls, d: Mapping[str, object]) -> Self:
         files_raw = d.get('files')

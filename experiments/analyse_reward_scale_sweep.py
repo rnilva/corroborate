@@ -33,7 +33,9 @@ import numpy as np
 import polars as pl
 import statsmodels.api as sm
 
-from corroborate.analyses.paired_g_per_burst import paired_g_per_burst
+from corroborate.analyses.paired_g_per_burst import (
+    DEFAULT_PER_BURST_SOURCE, paired_g_per_burst,
+)
 
 
 def main() -> None:
@@ -80,8 +82,7 @@ def main() -> None:
             res = paired_g_per_burst.fn(
                 cells, treatment_arm='ddqn',
                 baseline_arm='vanilla_dqn',
-                pair_by=('seed',), source='mc_return',
-                reduction='mean',
+                pair_by=('seed',), source=DEFAULT_PER_BURST_SOURCE,
             )
             for s in res.strata:
                 if s.n_pairs < 2 or math.isnan(s.g) or math.isnan(s.se) \

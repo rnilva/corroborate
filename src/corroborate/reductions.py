@@ -26,7 +26,7 @@ whose `reads` is `('q_max',)`. No name-keyed registry, no
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Literal, cast
+from typing import Literal, Protocol, cast
 
 import numpy as np
 import numpy.typing as npt
@@ -35,6 +35,53 @@ from corroborate.measurable import Measurable
 
 
 type _AxisOp = Literal['mean', 'var', 'std', 'max', 'min', 'sum']
+
+
+# ============ Reduction Protocol — typed factory contract ============
+#
+# Every factory that lifts `Measurable[R, T_in]` to
+# `Measurable[R, T_out]` via parametric arguments satisfies this
+# Protocol structurally. `max_abs`, `mean_window`, `growth_window`,
+# `mean_peak_window`, `peak_centered_window`, `reduce_axis`,
+# `slice_axis`, `log_safe`, `cv_safe` — all conform without
+# inheritance (Python's structural Protocol matching).
+#
+# The Protocol formalises the substrate-authoring contract: new
+# reductions written outside this module (e.g. for a non-RL
+# substrate's domain-specific shape) get type-checked against this
+# shape. Deviation from `(of: Measurable[R, T_in], *params) ->
+# Measurable[R, T_out]` fails pyright at the factory's call site.
+#
+# `from_key`, `late_window_mean`, `masked_window_mean` are NOT
+# Reductions — they take primitive args (`key: str`, `fraction:
+# float`) rather than another Measurable. They are leaf-Measurable
+# factories; reductions lift existing measurables.
+
+class Reduction[
+    R: Mapping[str, object], T_in, T_out, **P,
+](Protocol):
+    """Typed factory contract: lift `Measurable[R, T_in]` to
+    `Measurable[R, T_out]` via parametric arguments.
+
+    Substrate-authoring contract for "what is a reduction". Every
+    factory in this module that takes a `Measurable` as its first
+    positional argument and returns a `Measurable` conforms
+    structurally — no explicit subclassing needed.
+
+    Example:
+        my_reduce: Reduction[
+            Mapping[str, object],
+            npt.NDArray[np.floating],
+            npt.NDArray[np.floating],
+            [int],
+        ] = reduce_axis  # type-checks via structural conformance
+    """
+    def __call__(
+        self,
+        of: Measurable[R, T_in],
+        *args: P.args,
+        **kwargs: P.kwargs,
+    ) -> Measurable[R, T_out]: ...
 
 
 # ============ Leaf: lift a record key to a Measurable ============
@@ -83,7 +130,12 @@ def max_abs[R: Mapping[str, object]](
         # returns dtype[Any] for arbitrary inputs.
         arr = of(record)
         return float(max(abs(np.max(arr)), abs(np.min(arr))))
-    return Measurable(fn=fn, name=name, reads=of.reads)
+    return Measurable(
+        fn=fn, name=name, reads=of.reads,
+        compose_of=(cast(
+            'Measurable[Mapping[str, object], object]', of,
+        ),),
+    )
 
 
 def mean_window[R: Mapping[str, object]](
@@ -113,7 +165,12 @@ def mean_window[R: Mapping[str, object]](
         if i_hi <= i_lo:
             i_hi = i_lo + 1
         return float(np.mean(arr[i_lo:i_hi]))
-    return Measurable(fn=fn, name=name, reads=of.reads)
+    return Measurable(
+        fn=fn, name=name, reads=of.reads,
+        compose_of=(cast(
+            'Measurable[Mapping[str, object], object]', of,
+        ),),
+    )
 
 
 def growth_window[R: Mapping[str, object]](
@@ -139,7 +196,17 @@ def growth_window[R: Mapping[str, object]](
         e = early_m(record)
         l = late_m(record)
         return l / max(abs(e), 1e-9)
-    return Measurable(fn=fn, name=name, reads=of.reads)
+    return Measurable(
+        fn=fn, name=name, reads=of.reads,
+        compose_of=(
+            cast(
+                'Measurable[Mapping[str, object], object]', early_m,
+            ),
+            cast(
+                'Measurable[Mapping[str, object], object]', late_m,
+            ),
+        ),
+    )
 
 
 # ============ Outcome projections (schema-row helpers) ============
@@ -271,7 +338,12 @@ def mean_peak_window[R: Mapping[str, object]](
         if peak_idx <= lo:
             return float('nan')
         return float(np.mean(arr[lo:peak_idx]))
-    return Measurable(fn=fn, name=name, reads=reads)
+    return Measurable(
+        fn=fn, name=name, reads=reads,
+        compose_of=(cast(
+            'Measurable[Mapping[str, object], object]', of,
+        ),),
+    )
 
 
 def peak_centered_window[R: Mapping[str, object]](
@@ -311,7 +383,12 @@ def peak_centered_window[R: Mapping[str, object]](
         if hi - lo < 2:
             return float('nan')
         return float(np.mean(arr[lo:hi]))
-    return Measurable(fn=fn, name=name, reads=reads)
+    return Measurable(
+        fn=fn, name=name, reads=reads,
+        compose_of=(cast(
+            'Measurable[Mapping[str, object], object]', of,
+        ),),
+    )
 
 
 # ============ Axis-aware reductions for N-D operands ============
@@ -377,7 +454,12 @@ def reduce_axis[R: Mapping[str, object]](
         if op == 'min':
             return cast(npt.NDArray[np.floating], arr.min(axis=axis))
         return cast(npt.NDArray[np.floating], arr.sum(axis=axis))
-    return Measurable(fn=fn, name=name, reads=of.reads)
+    return Measurable(
+        fn=fn, name=name, reads=of.reads,
+        compose_of=(cast(
+            'Measurable[Mapping[str, object], object]', of,
+        ),),
+    )
 
 
 def slice_axis[R: Mapping[str, object]](
@@ -411,7 +493,12 @@ def slice_axis[R: Mapping[str, object]](
         idx: list[slice | int] = [slice(None)] * arr.ndim
         idx[axis] = slice(i_lo, i_hi)
         return arr[tuple(idx)]
-    return Measurable(fn=fn, name=name, reads=of.reads)
+    return Measurable(
+        fn=fn, name=name, reads=of.reads,
+        compose_of=(cast(
+            'Measurable[Mapping[str, object], object]', of,
+        ),),
+    )
 
 
 # ============ Element-wise unary lifts ============
@@ -434,7 +521,12 @@ def log_safe[R: Mapping[str, object]](
         mask = arr > 0
         out[mask] = np.log(arr[mask])
         return out
-    return Measurable(fn=fn, name=name, reads=of.reads)
+    return Measurable(
+        fn=fn, name=name, reads=of.reads,
+        compose_of=(cast(
+            'Measurable[Mapping[str, object], object]', of,
+        ),),
+    )
 
 
 def cv_safe[R: Mapping[str, object]](
@@ -458,7 +550,17 @@ def cv_safe[R: Mapping[str, object]](
         mask = np.abs(m) > 0
         out[mask] = s[mask] / np.abs(m[mask])
         return out
-    return Measurable(fn=fn, name=name, reads=of.reads)
+    return Measurable(
+        fn=fn, name=name, reads=of.reads,
+        compose_of=(
+            cast(
+                'Measurable[Mapping[str, object], object]', mean_m,
+            ),
+            cast(
+                'Measurable[Mapping[str, object], object]', std_m,
+            ),
+        ),
+    )
 
 
 

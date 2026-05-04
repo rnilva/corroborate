@@ -37,8 +37,10 @@ this for fingerprinting."""
 from __future__ import annotations
 
 import inspect
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from typing import cast, overload, override
+
+import polars as pl
 
 from corroborate._registry import Registry
 
@@ -84,12 +86,15 @@ class Measurable[R: Mapping[str, object], T]:
     contravariant input position; the read-only property form is
     the variance-friendly shape."""
 
-    __slots__ = ('_fn', '_name', '_reads', '_fallbacks')
+    __slots__ = (
+        '_fn', '_name', '_reads', '_fallbacks', '_compose_of',
+    )
 
     _fn: Callable[..., T]
     _name: str
     _reads: tuple[str, ...]
     _fallbacks: tuple['Measurable[R, T]', ...]
+    _compose_of: tuple['Measurable[Mapping[str, object], object]', ...]
 
     def __init__(
         self,
@@ -97,11 +102,24 @@ class Measurable[R: Mapping[str, object], T]:
         name: str,
         reads: tuple[str, ...] = (),
         fallbacks: tuple['Measurable[R, T]', ...] = (),
+        compose_of: tuple[
+            'Measurable[Mapping[str, object], object]', ...,
+        ] = (),
     ) -> None:
         self._fn = fn
         self._name = name
         self._reads = reads
         self._fallbacks = fallbacks
+        # Closure-captured operand measurables. Reduction factories
+        # (`reduce_axis(of, ...)`, `slice_axis(of, ...)`,
+        # `mean_window(of, ...)`, etc.) pass `compose_of=(of,)` so
+        # `signature()` can walk into the operand recursively. The
+        # parameter-name dependency walk (`_measurable_param_names`)
+        # only sees explicit-parameter deps; closures are invisible
+        # to it. Without `compose_of`, editing the source measurable
+        # of a composition wouldn't invalidate the composed
+        # measurable's signature — a real cache-staleness bug.
+        self._compose_of = compose_of
 
     @property
     def fn(self) -> Callable[..., T]:
@@ -119,8 +137,79 @@ class Measurable[R: Mapping[str, object], T]:
     def fallbacks(self) -> tuple['Measurable[R, T]', ...]:
         return self._fallbacks
 
+    @property
+    def compose_of(
+        self,
+    ) -> tuple['Measurable[Mapping[str, object], object]', ...]:
+        """Closure-captured operand measurables (factory-recorded).
+        `()` for plain `@measurable`-decorated leaves and explicit
+        `Measurable(...)` constructions; non-empty for outputs of
+        reduction factories (`reduce_axis(of, ...)`, etc.)."""
+        return self._compose_of
+
     def __call__(self, record: R, **deps: object) -> T:
         return self.dispatch(record).fn(record, **deps)
+
+    def signature(self) -> str:
+        """Closure hash: SHA-256 of this Measurable's bytecode plus
+        the sorted bytecode hashes of every transitive measurable
+        dependency. Detects "user edited a measurable's body, cache
+        is stale" — changing any function in the closure flips the
+        resulting hex. 16-hex-char output; collisions are irrelevant
+        against the user-edit baseline.
+
+        Walks two dependency channels:
+
+        - **Parameter-name registered deps** (the
+          `pytest-fixture-style` resolution graph traced by
+          `transitive_measurables`). Captures explicit `def
+          foo(record, q_max, q_min)` style deps.
+        - **Closure-captured operands** (`compose_of`). Captures
+          deps that factories like `reduce_axis(of, ...)` hold via
+          their generated `fn`'s closure. Without this, editing a
+          source measurable wouldn't invalidate composed
+          downstreams — a real cache-staleness bug.
+
+        Cache-invalidation lives on the Measurable itself rather
+        than in the runner because the closure IS a property of the
+        function (its bytecode + dep bytecodes), not of the run.
+        Runner-side logic that wants to detect stale columns just
+        calls `m.signature()` and compares to a stored hex."""
+        import hashlib
+        seen: set[str] = set()
+        parts: list[str] = []
+
+        def _walk(m: 'Measurable[Mapping[str, object], object]') -> None:
+            if m._name in seen:
+                return
+            seen.add(m._name)
+            bc = bytes(m._fn.__code__.co_code)
+            parts.append(f'{m._name}:{hashlib.sha256(bc).hexdigest()[:16]}')
+            # Closure-captured operands.
+            for sub in m._compose_of:
+                _walk(sub)
+
+        _walk(cast(
+            'Measurable[Mapping[str, object], object]', self,
+        ))
+        # Parameter-name registered deps. `transitive_measurables`
+        # raises KeyError if `self.name` isn't registered; for
+        # ad-hoc measurables that the caller built but never
+        # registered, the closure walk above is the only signal.
+        try:
+            for d in sorted(transitive_measurables(self._name)):
+                if d in seen:
+                    continue
+                m = get_registered(d)
+                if m is None:
+                    parts.append(f'{d}:unregistered')
+                    continue
+                _walk(m)
+        except KeyError:
+            pass
+        return hashlib.sha256(
+            '\n'.join(sorted(parts)).encode(),
+        ).hexdigest()[:16]
 
     def dispatch(self, record: R) -> 'Measurable[R, T]':
         """Pick the Measurable whose `reads` are present in
@@ -147,9 +236,10 @@ class Measurable[R: Mapping[str, object], T]:
         # Field-wise equality (mirrors the prior frozen-dataclass
         # behavior). Two Measurables are equal iff they wrap the
         # same fn (identity) under the same name + reads +
-        # fallbacks. Diverging fn at the same name compares unequal
-        # — that's how `test_measurable_inequality_on_different_fn`
-        # catches accidental fixture redefinition.
+        # fallbacks + compose_of. Diverging fn at the same name
+        # compares unequal — that's how
+        # `test_measurable_inequality_on_different_fn` catches
+        # accidental fixture redefinition.
         if not isinstance(other, Measurable):
             return NotImplemented
         return (
@@ -157,11 +247,15 @@ class Measurable[R: Mapping[str, object], T]:
             and self._name == other._name
             and self._reads == other._reads
             and self._fallbacks == other._fallbacks
+            and self._compose_of == other._compose_of
         )
 
     @override
     def __hash__(self) -> int:
-        return hash((self._fn, self._name, self._reads, self._fallbacks))
+        return hash((
+            self._fn, self._name, self._reads,
+            self._fallbacks, self._compose_of,
+        ))
 
 
 # ============ Name-keyed registry + resolver ============
@@ -345,6 +439,87 @@ def evaluate_with_measurables[T](
     dep_names = _measurable_param_names(fn)
     deps = {d: _resolve_one(d, record, cache) for d in dep_names}
     return fn(record, **deps)
+
+
+def compute_missing_columns(
+    df: pl.DataFrame,
+    names: Iterable[str],
+) -> pl.DataFrame:
+    """For each name in `names` that's not already a column of
+    `df` and resolves in the @measurable registry, compute the
+    measurable per-cell and add it as a column. Names that don't
+    resolve (or aren't registered) are silently skipped — callers
+    that need null-padding for unresolvable names handle that
+    themselves.
+
+    Single source of truth for the "raw cells → cached scalars"
+    transform: the runner uses this to populate the per-module
+    cache; `claim_bridge.evaluate()` uses the same path when a
+    bridge's `scope` references a measurable column the input
+    DataFrame doesn't carry yet (raw runs.parquet, no cache).
+
+    Per-cell evaluator caches transitive measurables across
+    same-cell calls (one pass populates all `names` for one cell
+    before moving on), so dep-shared measurables compute once per
+    cell."""
+    if df.height == 0:
+        return df
+    have = set(df.columns)
+    pending: list[tuple[str, Measurable[Mapping[str, object], object]]] = []
+    for name in names:
+        if name in have:
+            continue
+        m = get_registered(name)
+        if m is None:
+            continue
+        pending.append((name, m))
+    if not pending:
+        return df
+
+    cells = cast(list[dict[str, object]], df.to_dicts())
+    new_cols: dict[str, list[object]] = {n: [] for n, _ in pending}
+    for cell in cells:
+        per_cell_cache: dict[str, object] = {}
+        for name, m in pending:
+            try:
+                v = evaluate_with_measurables(
+                    m.fn, cell, cache=per_cell_cache,
+                )
+            except Exception:  # noqa: BLE001
+                # Record-level evaluation failure (missing inputs,
+                # etc.) maps to None for this cell + measurable.
+                # Downstream analyses NaN-skip these cells.
+                v = None
+            new_cols[name].append(v)
+
+    return df.with_columns(
+        [_to_polars_series(name, vals) for name, vals in new_cols.items()],
+    )
+
+
+def _to_polars_series(name: str, vals: list[object]) -> pl.Series:
+    """Construct a polars Series from a heterogeneous-shape value
+    list, tolerating None entries for measurables that return
+    list/array types.
+
+    polars's default dtype inference treats `[None, [1, 2], [3, 4]]`
+    as needing-uniform-length sequences and crashes on `len(None)`.
+    For sequence-typed measurables, replace None with an empty list
+    so the constructor sees a uniform List shape; downstream
+    consumers null-check the per-row length anyway."""
+    import polars as pl
+    has_seq = any(
+        v is not None and not isinstance(
+            v, (str, bytes, int, float, bool),
+        )
+        for v in vals
+    )
+    if not has_seq:
+        return pl.Series(name, vals)
+    normalized: list[object] = [
+        v if v is not None else [] for v in vals
+    ]
+    return pl.Series(name, normalized)
 
 
 # ============ Decorator ============

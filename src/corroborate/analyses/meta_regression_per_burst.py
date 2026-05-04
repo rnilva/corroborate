@@ -30,31 +30,42 @@ from __future__ import annotations
 import math
 from collections.abc import Iterable, Mapping, Sequence
 
-from corroborate.analyses.paired_g_per_burst import paired_g_per_burst
+import numpy as np
+import numpy.typing as npt
+
+from corroborate.analyses.paired_g_per_burst import (
+    DEFAULT_PER_BURST_SOURCE, paired_g_per_burst,
+)
 from corroborate.analysis import analysis
+from corroborate.measurable import Measurable
 from corroborate.meta_regression import (
     MetaRegressionResult, Pool, meta_regress_panel,
 )
 from corroborate.stratum import StratumG
 
 
-@analysis(reads=('mc_return', 'predicted_q_at_start'))
+@analysis
 def meta_regression_per_burst(
     cells: Iterable[Mapping[str, object]],
     *,
     treatment_arm: str,
     baseline_arm: str,
     pair_by: tuple[str, ...] = ('seed',),
-    source: str = 'mc_return',
-    reduction: str = 'mean',
+    source: Measurable[
+        Mapping[str, object], npt.NDArray[np.floating],
+    ] = DEFAULT_PER_BURST_SOURCE,
     covariates: tuple[str, ...] = (),
     covariates_per_env: Mapping[str, Mapping[str, float]] | None = None,
     alpha: float = 0.05,
     pool: Pool = 'random',
+    dedupe_strategy: str = 'raise',
 ) -> MetaRegressionResult:
-    """Per-(env, burst) panel: paired g on `source`/`reduction`
-    for each (env, burst), then meta-regression on env-level
-    covariates.
+    """Per-(env, burst) panel: paired g on `source` for each
+    (env, burst), then meta-regression on env-level covariates.
+
+    `source` is a typed Measurable returning a per-burst NDArray.
+    Default: per-burst-mean of `mc_return`. See
+    `paired_g_per_burst` for composition shapes.
 
     Two paths for supplying covariates:
 
@@ -80,7 +91,7 @@ def meta_regression_per_burst(
         baseline_arm=baseline_arm,
         pair_by=pair_by,
         source=source,
-        reduction=reduction,
+        dedupe_strategy=dedupe_strategy,
     )
     # Resolve per-env covariates from either the explicit
     # `covariates_per_env` mapping or by averaging the named

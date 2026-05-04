@@ -41,7 +41,7 @@ from pathlib import Path
 import polars as pl
 
 from corroborate.analyses.paired_g_per_burst import (
-    PerBurstResult, paired_g_per_burst,
+    DEFAULT_PER_BURST_SOURCE, PerBurstResult, paired_g_per_burst,
 )
 
 
@@ -166,13 +166,13 @@ def main() -> None:
     default_r = paired_g_per_burst.fn(
         default,
         treatment_arm='ddqn', baseline_arm='vanilla_dqn',
-        pair_by=('seed',), source='mc_return', reduction='mean',
+        pair_by=('seed',), source=DEFAULT_PER_BURST_SOURCE,
         env_name='SpaceInvaders-MinAtar',
     )
     clipped_r = paired_g_per_burst.fn(
         clipped,
         treatment_arm='ddqn', baseline_arm='vanilla_dqn',
-        pair_by=('seed',), source='mc_return', reduction='mean',
+        pair_by=('seed',), source=DEFAULT_PER_BURST_SOURCE,
         env_name='SpaceInvaders-MinAtar',
     )
     _print_strata('default (with -1 hit penalty)', default_r)

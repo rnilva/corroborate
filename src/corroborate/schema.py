@@ -50,7 +50,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from corroborate.hypothesis import Hypothesis
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from typing import Self
 
 import numpy as np
@@ -159,12 +159,9 @@ class TraceRow:
         set is treated as a leaf. Null-padded columns (paths the
         row didn't carry — polars fills missing columns with None
         when rows have heterogeneous keys) are skipped."""
-        provenance: frozenset[str] = frozenset(
-            ('id', 'cycle_id', 'timestamp')
-        )
         leaves: dict[str, TraceLeaf] = {}
         for k, v in d.items():
-            if k in provenance:
+            if k in _TRACE_ROW_TYPED_FIELDS:
                 continue
             if v is None:
                 # Polars null-pads columns this row didn't write.
@@ -275,13 +272,9 @@ class RunRow:
 
     @classmethod
     def from_row_dict(cls, d: Mapping[str, object]) -> Self:
-        provenance: frozenset[str] = frozenset(
-            ('id', 'parent_id', 'cycle_id', 'timestamp', 'verdict',
-             'arm_key', 'claim_graph_signature')
-        )
         measurements: dict[str, MeasurementLeaf] = {}
         for k, v in d.items():
-            if k in provenance:
+            if k in _RUN_ROW_TYPED_FIELDS or k == 'claim_graph_signature':
                 continue
             if v is None:
                 continue
@@ -305,6 +298,29 @@ class RunRow:
             arm_key=arm_key,
             measurements=measurements,
         )
+
+
+# ============ Lineage / typed-field constants ============
+
+# Typed dataclass field names on each row class. Auto-derived
+# (single source of truth — adding a typed field to RunRow / TraceRow
+# automatically updates the `from_row_dict` skip set, the runner's
+# content-equality dedup, and any downstream consumer that imports
+# these constants).
+_TRACE_ROW_TYPED_FIELDS: frozenset[str] = frozenset(
+    f.name for f in fields(TraceRow) if f.name != 'leaves'
+)
+_RUN_ROW_TYPED_FIELDS: frozenset[str] = frozenset(
+    f.name for f in fields(RunRow) if f.name != 'measurements'
+)
+
+# Lineage subset across both row classes — UUIDs, lineage IDs,
+# timestamp. Provenance bookkeeping that the runner ignores when
+# checking whether two rows describe the same scientific cell
+# (`runner._dedup_by_content`).
+LINEAGE_FIELDS: frozenset[str] = (
+    _TRACE_ROW_TYPED_FIELDS | _RUN_ROW_TYPED_FIELDS
+) - {'verdict', 'arm_key'}
 
 
 # ============ GroupStats — per-stratum summary ============

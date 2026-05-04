@@ -29,8 +29,11 @@ import numpy.typing as npt
 from corroborate.analyses.mundlak_decomposition import (
     MundlakResult, mundlak_decomposition,
 )
-from corroborate.analyses.paired_g_per_burst import paired_g_per_burst
+from corroborate.analyses.paired_g_per_burst import (
+    DEFAULT_PER_BURST_SOURCE, paired_g_per_burst,
+)
 from corroborate.analysis import analysis
+from corroborate.measurable import Measurable
 
 
 def _per_env_burst_predictor_mean(
@@ -62,22 +65,28 @@ def _per_env_burst_predictor_mean(
     return float(np.mean(vals)) if vals else float('nan')
 
 
-@analysis(reads=('mc_return', 'predicted_q_at_start'))
+@analysis
 def mundlak_paired_g_per_burst(
     cells: Iterable[Mapping[str, object]],
     *,
     treatment_arm: str,
     baseline_arm: str,
     pair_by: tuple[str, ...] = ('seed',),
-    source: str = 'mc_return',
-    reduction: str = 'mean',
+    source: Measurable[
+        Mapping[str, object], npt.NDArray[np.floating],
+    ] = DEFAULT_PER_BURST_SOURCE,
     predictor_name: str = 'log_mc_variance_per_burst',
     predictor_arm_filter: str | None = None,
     alpha: float = 0.05,
     cluster_robust: bool = True,
+    dedupe_strategy: str = 'raise',
 ) -> MundlakResult:
     """Per-(env, burst) Hedges' g panel + Mundlak decomposition
     of a per-burst measurable.
+
+    `source` is a typed Measurable returning a per-burst NDArray
+    (the Hedges' g panel target). Default: per-burst-mean of
+    `mc_return`. See `paired_g_per_burst` for composition shapes.
 
     `predictor_name` resolves a registered `@measurable` whose
     `__call__(record)` returns a `(n_bursts,)` array (e.g.
@@ -101,7 +110,8 @@ def mundlak_paired_g_per_burst(
     per_burst_g = paired_g_per_burst.fn(
         cells_list, treatment_arm=treatment_arm,
         baseline_arm=baseline_arm, pair_by=pair_by,
-        source=source, reduction=reduction,
+        source=source,
+        dedupe_strategy=dedupe_strategy,
     )
 
     # Resolve the named measurable; apply once per cell with

@@ -67,8 +67,10 @@ envs structurally.
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping
 
 import numpy as np
+import numpy.typing as npt
 import polars as pl
 
 import corroborate.analyses  # pyright: ignore[reportUnusedImport]  # populate registry
@@ -89,8 +91,24 @@ from corroborate.claim_bridge import (
     Direction, Tier, claim_bridge,
 )
 from corroborate.intervention import DoEffect
+from corroborate.measurable import Measurable
 from corroborate.meta_regression import MetaRegressionResult
+from corroborate.reductions import from_key, reduce_axis
+from corroborate.rl.dqn.measurables import jensen_bias_per_eps
 from corroborate.verdict import Verdict
+
+
+# Composed per-burst reductions consumed by bridges below. Module-
+# level so each bridge that wants the canonical "per-burst-mean"
+# shape can reference the same Measurable instance (auto-registered
+# at @claim_bridge decode time, so the runner's transitive_reads
+# walks pick up `mc_return` / `predicted_q_at_start` for free).
+_MC_RETURN_PER_BURST_MEAN: Measurable[
+    Mapping[str, object], npt.NDArray[np.floating],
+] = reduce_axis(from_key('mc_return'), axis=-1, op='mean')
+_JENSEN_BIAS_PER_BURST_MEAN: Measurable[
+    Mapping[str, object], npt.NDArray[np.floating],
+] = reduce_axis(jensen_bias_per_eps, axis=-1, op='mean')
 
 
 # File-level intervention: every bridge in this module tests
@@ -156,6 +174,8 @@ INTERVENTION = DoEffect(treatment_arm='ddqn', baseline_arm='vanilla_dqn')
 )
 def ddqn_refuted_when_dormancy_fires(
     paired_g: PairedGResult,
+    *,
+    dedupe_strategy: str = 'mean',
 ) -> Verdict:
     """Necessary-condition claim. The framework's-own Jensen
     dormancy invariant operationalizes the Hasselt-2010 structural
@@ -173,6 +193,7 @@ def ddqn_refuted_when_dormancy_fires(
     actionable: a runtime controller using a per-batch dormancy
     proxy (max_Q − mean_Q vs σ_Q × √(2 log |A|)) recovers DDQN's
     outcome benefit on FourRooms (g=+0.78 vs vanilla, p<0.001)."""
+    del dedupe_strategy  # forwarded to paired_g
     if paired_g.n_pairs < 50:
         return Verdict.POWER_INSUFFICIENT
     if math.isnan(paired_g.helped_fraction):
@@ -271,6 +292,8 @@ def adaptive_dqn_recovers_ddqn_benefit__fourrooms_factor_0p5(
     scope=(
         (pl.col('log_obs_dim') >= 5.0)
         & (pl.col('total_steps') >= 1000000.0)
+        & pl.col('reward_clip_min').is_null()
+        & (pl.col('sync_period') == 100)
     ),
 )
 def ddqn_helps_at_early_bursts__pixel_envs(
@@ -308,17 +331,21 @@ def ddqn_helps_at_early_bursts__pixel_envs(
     scope=(
         (pl.col('env_name') == 'SpaceInvaders-MinAtar')
         & (pl.col('total_steps') >= 1000000.0)
+        & pl.col('reward_clip_min').is_null()
+        & (pl.col('sync_period') == 100)
     ),
 )
 def ddqn_attenuates_at_late_bursts__spaceinvaders(
     paired_g_per_burst: PerBurstResult,
     *,
-    source: str = 'mc_return',
-    reduction: str = 'mean',
+    source: Measurable[
+        Mapping[str, object], npt.NDArray[np.floating],
+    ] = _MC_RETURN_PER_BURST_MEAN,
     burst_floor: int = 3,
     helped_ceiling: float = 0.40,
     g_ceiling: float = -0.30,
     n_pairs_floor: int = 50,
+    dedupe_strategy: str = 'mean',
 ) -> Verdict:
     """TIER A2 existence proof: on SpaceInvaders-MinAtar at 1M
     training steps, in the last quarter of training bursts,
@@ -351,7 +378,7 @@ def ddqn_attenuates_at_late_bursts__spaceinvaders(
     `adaptive_dqn_fails_to_avoid_attenuation__spaceinvaders_1m`
     runs the dormancy controller on this regime; it tracks DDQN
     (g≈0) and inherits the attenuation (g=−0.46 vs vanilla)."""
-    del source, reduction
+    del source, dedupe_strategy  # forwarded to paired_g_per_burst
     late = [
         s for s in paired_g_per_burst.strata
         if s.env_name == 'SpaceInvaders-MinAtar'
@@ -664,21 +691,22 @@ def ddqn_benefit_scales_with_gamma__discountingchain(
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
+    pair_by=('seed', 'total_steps', 'eval_every'),
 )
 def bootstrap_fraction_drives_g_link__net_of_dormancy(
     meta_regression_per_burst: MetaRegressionResult,
     *,
-    # `source` here pins the per-burst measurable the underlying
-    # `paired_g_per_burst` projects each cell to (a 2-D
-    # `(n_bursts, n_episodes)` array). The decorator's
+    # `source` pins the per-burst measurable that the underlying
+    # `paired_g_per_burst` projects each cell to. The decorator's
     # `source=INTERVENTION` carries the do-contrast (treatment /
     # baseline arms); the bridge's `target='eval_best_burst_mean'`
     # would otherwise be auto-injected as the analysis source
     # (a scalar, no per-burst structure). The body default below
     # routes the panel computation back onto `mc_return` per the
     # claim's g_link reading.
-    source: str = 'mc_return',
-    reduction: str = 'mean',
+    source: Measurable[
+        Mapping[str, object], npt.NDArray[np.floating],
+    ] = _MC_RETURN_PER_BURST_MEAN,
     # Column-name covariates: each is materialised per-cell by the
     # @measurable cache, then averaged to env-level inside the
     # analysis. Replaces the inline `_DDQN_UNIVERSE_COVARIATES_PER_ENV`
@@ -695,6 +723,7 @@ def bootstrap_fraction_drives_g_link__net_of_dormancy(
         'bootstrap_fraction',
         'jensen_dormancy_gap',
     ),
+    dedupe_strategy: str = 'mean',
 ) -> Verdict:
     """Independent link-side scope predicate. The (env, burst)
     panel meta-regression of g_link on the 5-covariate set
@@ -719,7 +748,7 @@ def bootstrap_fraction_drives_g_link__net_of_dormancy(
     covariate set itself: dormancy_env_mean is in the model, so
     a surviving β(bootstrap_fraction) is a partial coefficient,
     not a marginal one."""
-    del source, reduction, covariates
+    del source, covariates, dedupe_strategy
     coef = next(
         (c for c in meta_regression_per_burst.coefficients
          if c.name == 'bootstrap_fraction'),
@@ -770,6 +799,7 @@ def bootstrap_fraction_drives_g_link__net_of_dormancy(
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
+    pair_by=('seed', 'total_steps', 'eval_every'),
 )
 def mc_variance_attenuates_g_link__between_env(
     mundlak_paired_g_per_burst: MundlakResult,
@@ -780,10 +810,12 @@ def mc_variance_attenuates_g_link__between_env(
     # cell onto. The decorator's `source=INTERVENTION` carries
     # the do-contrast; the body default below routes the panel
     # computation back onto `mc_return` per the g_link reading.
-    source: str = 'mc_return',
-    reduction: str = 'mean',
+    source: Measurable[
+        Mapping[str, object], npt.NDArray[np.floating],
+    ] = _MC_RETURN_PER_BURST_MEAN,
     predictor_name: str = 'log_mc_variance_per_burst',
     predictor_arm_filter: str = 'vanilla_dqn',
+    dedupe_strategy: str = 'mean',
 ) -> Verdict:
     """Single-level (between-env) attenuator. The Mundlak
     decomposition of `log_mc_variance` over the (env, burst)
@@ -802,7 +834,7 @@ def mc_variance_attenuates_g_link__between_env(
 
     Pearl-rung-2 corroboration comes from `reward_scale_sweep`
     (causal probe via reward × k intervention)."""
-    del source, reduction, predictor_name, predictor_arm_filter
+    del source, predictor_name, predictor_arm_filter, dedupe_strategy
     coef = mundlak_paired_g_per_burst.between
     if not coef.p_value < 0.05:
         if coef.coefficient < -0.01:
@@ -1070,7 +1102,12 @@ def ddqn_dominates_vanilla_response_curve__fourrooms_rs_0p3(
     target='mc_return[per_burst]',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
-    scope=(pl.col('env_name') == 'SpaceInvaders-MinAtar'),
+    scope=(
+        (pl.col('env_name') == 'SpaceInvaders-MinAtar')
+        & (pl.col('total_steps') == 1_000_000)
+        & pl.col('reward_clip_min').is_null()
+        & (pl.col('sync_period') == 100)
+    ),
 )
 def ddqn_curve_crosses_vanilla_late__spaceinvaders(
     paired_g_per_burst: PerBurstResult,
@@ -1081,12 +1118,14 @@ def ddqn_curve_crosses_vanilla_late__spaceinvaders(
     # cells by the raw per-burst column `mc_return`. The body
     # default routes the per-burst projection back onto the
     # underlying 2-D `mc_return` array.
-    source: str = 'mc_return',
+    source: Measurable[
+        Mapping[str, object], npt.NDArray[np.floating],
+    ] = _MC_RETURN_PER_BURST_MEAN,
     env_name: str = 'SpaceInvaders-MinAtar',
-    reduction: str = 'mean',
     crossover_burst_min: int = 3,
     crossover_burst_max: int = 10,
     late_negative_floor: float = -0.3,
+    dedupe_strategy: str = 'mean',
 ) -> Verdict:
     """Per-burst crossover detection on SpaceInvaders 1M.
 
@@ -1108,7 +1147,7 @@ def ddqn_curve_crosses_vanilla_late__spaceinvaders(
     g) — within env, the SD-scaling is ~constant so sign
     detection is invariant. The bridge is a SHAPE claim about
     the per-burst-index curve, not a single aggregate effect."""
-    del source, reduction
+    del source, dedupe_strategy
     env_strata = sorted(
         (s for s in paired_g_per_burst.strata if s.env_name == env_name),
         key=lambda s: s.burst_index,
@@ -1290,9 +1329,12 @@ def ddqn_null_under_monte_carlo__fourrooms_n10(
 def acrobot_per_burst_link_active__gamma_0999(
     paired_link_per_burst: PerBurstLinkResult,
     *,
-    target_reduction: str = 'mean',
-    predictor: str = 'mc_return',
-    predictor_reduction: str = 'mc_minus_q',
+    target: Measurable[
+        Mapping[str, object], npt.NDArray[np.floating],
+    ] = _MC_RETURN_PER_BURST_MEAN,
+    predictor: Measurable[
+        Mapping[str, object], npt.NDArray[np.floating],
+    ] = _JENSEN_BIAS_PER_BURST_MEAN,
     env_name: str = 'Acrobot-v1',
     consistency_floor: float = 0.7,
 ) -> Verdict:
@@ -1300,7 +1342,7 @@ def acrobot_per_burst_link_active__gamma_0999(
     least `consistency_floor` of bursts on Acrobot γ=0.999. HELD when
     `phase_link_consistency >= consistency_floor`. Empirical 1.000
     (every burst significant) at the corroborating regime."""
-    del target_reduction, predictor, predictor_reduction
+    del target, predictor
     plc = phase_link_consistency(
         paired_link_per_burst, env_name=env_name,
     )
@@ -1314,18 +1356,26 @@ def acrobot_per_burst_link_active__gamma_0999(
 
 
 @claim_bridge(
-    source=INTERVENTION,
+    source=DoEffect(
+        treatment_arm='ddqn_g0999', baseline_arm='vanilla_dqn_g0999',
+    ),
     target='outcome.eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
+    scope=(
+        (pl.col('env_name') == 'Acrobot-v1')
+        & (pl.col('gamma') == 0.999)
+    ),
 )
 def acrobot_link_backdoor_ate_negative__gamma_0999(
     paired_delta_link_dowhy: PairedDeltaLinkDowhyResult,
     *,
-    link_predictor: str = 'mc_return',
-    link_predictor_reduction: str = 'mc_minus_q',
-    link_target: str = 'mc_return',
-    link_target_reduction: str = 'mean',
+    link_target: Measurable[
+        Mapping[str, object], npt.NDArray[np.floating],
+    ] = _MC_RETURN_PER_BURST_MEAN,
+    link_predictor: Measurable[
+        Mapping[str, object], npt.NDArray[np.floating],
+    ] = _JENSEN_BIAS_PER_BURST_MEAN,
     env_filter: tuple[str, ...] = ('Acrobot-v1',),
     ate_ceiling: float = -0.1,
 ) -> Verdict:
@@ -1334,8 +1384,7 @@ def acrobot_link_backdoor_ate_negative__gamma_0999(
     burst dummies) on Acrobot γ=0.999 yields a NEGATIVE ATE
     bigger than `ate_ceiling` (i.e. ATE <= -0.1). HELD when
     identified AND ATE <= ceiling. Empirical -0.6312."""
-    del link_predictor, link_predictor_reduction
-    del link_target, link_target_reduction, env_filter
+    del link_predictor, link_target, env_filter
     b = paired_delta_link_dowhy.backdoor
     if not b.identified:
         return Verdict.POWER_INSUFFICIENT
@@ -1349,18 +1398,26 @@ def acrobot_link_backdoor_ate_negative__gamma_0999(
 
 
 @claim_bridge(
-    source=INTERVENTION,
+    source=DoEffect(
+        treatment_arm='ddqn_g0999', baseline_arm='vanilla_dqn_g0999',
+    ),
     target='outcome.eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
+    scope=(
+        (pl.col('env_name') == 'Acrobot-v1')
+        & (pl.col('gamma') == 0.999)
+    ),
 )
 def acrobot_link_placebo_refuted__gamma_0999(
     paired_delta_link_dowhy: PairedDeltaLinkDowhyResult,
     *,
-    link_predictor: str = 'mc_return',
-    link_predictor_reduction: str = 'mc_minus_q',
-    link_target: str = 'mc_return',
-    link_target_reduction: str = 'mean',
+    link_target: Measurable[
+        Mapping[str, object], npt.NDArray[np.floating],
+    ] = _MC_RETURN_PER_BURST_MEAN,
+    link_predictor: Measurable[
+        Mapping[str, object], npt.NDArray[np.floating],
+    ] = _JENSEN_BIAS_PER_BURST_MEAN,
     env_filter: tuple[str, ...] = ('Acrobot-v1',),
     placebo_max_ratio: float = 0.2,
 ) -> Verdict:
@@ -1369,8 +1426,7 @@ def acrobot_link_placebo_refuted__gamma_0999(
     < placebo_max_ratio AND real ATE is non-zero. Confirms the
     bias-correction effect is treatment-specific (not noise).
     Empirical: real -0.6312, placebo 0.0000, ratio 0%."""
-    del link_predictor, link_predictor_reduction
-    del link_target, link_target_reduction, env_filter
+    del link_predictor, link_target, env_filter
     p = paired_delta_link_dowhy.placebo
     real = p.real_ate
     placebo = p.refuted_ate
@@ -1385,18 +1441,26 @@ def acrobot_link_placebo_refuted__gamma_0999(
 
 
 @claim_bridge(
-    source=INTERVENTION,
+    source=DoEffect(
+        treatment_arm='ddqn_g0999', baseline_arm='vanilla_dqn_g0999',
+    ),
     target='outcome.eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
+    scope=(
+        (pl.col('env_name') == 'Acrobot-v1')
+        & (pl.col('gamma') == 0.999)
+    ),
 )
 def acrobot_link_rcc_robust__gamma_0999(
     paired_delta_link_dowhy: PairedDeltaLinkDowhyResult,
     *,
-    link_predictor: str = 'mc_return',
-    link_predictor_reduction: str = 'mc_minus_q',
-    link_target: str = 'mc_return',
-    link_target_reduction: str = 'mean',
+    link_target: Measurable[
+        Mapping[str, object], npt.NDArray[np.floating],
+    ] = _MC_RETURN_PER_BURST_MEAN,
+    link_predictor: Measurable[
+        Mapping[str, object], npt.NDArray[np.floating],
+    ] = _JENSEN_BIAS_PER_BURST_MEAN,
     env_filter: tuple[str, ...] = ('Acrobot-v1',),
     rcc_max_drift_ratio: float = 0.1,
 ) -> Verdict:
@@ -1405,8 +1469,7 @@ def acrobot_link_rcc_robust__gamma_0999(
     of the real ATE on Acrobot γ=0.999. HELD when |refuted -
     real| / |real| < rcc_max_drift_ratio. Confirms robustness to
     spurious-confound vulnerability. Empirical drift = 0.000."""
-    del link_predictor, link_predictor_reduction
-    del link_target, link_target_reduction, env_filter
+    del link_predictor, link_target, env_filter
     r = paired_delta_link_dowhy.random_common_cause
     real = r.real_ate
     refuted = r.refuted_ate
@@ -1457,20 +1520,29 @@ def acrobot_link_rcc_robust__gamma_0999(
     target='outcome.eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
+    scope=(pl.col('total_steps') == 1_000_000),
 )
 def extreme_q_divergence_attenuates_link__binary(
     link_attenuation_dowhy: LinkAttenuationDowhyResult,
     *,
     attenuator: str = 'q_divergence_score',
     binary_threshold: float = 1000.0,
+    link_target: Measurable[
+        Mapping[str, object], npt.NDArray[np.floating],
+    ] = _MC_RETURN_PER_BURST_MEAN,
+    link_predictor: Measurable[
+        Mapping[str, object], npt.NDArray[np.floating],
+    ] = _JENSEN_BIAS_PER_BURST_MEAN,
     ate_ceiling: float = -0.10,
+    dedupe_strategy: str = 'mean',
 ) -> Verdict:
     """Binary form: cells with `q_divergence_score > 1000` have
     per-(env, burst) link strength attenuated by ≥ 0.10 compared
     to band-cells (0.02 < score < 1000), after backdoor
     adjustment for env family. HELD when ATE ≤ -0.10 AND
     identified=True. Empirical: ATE = -0.21."""
-    del attenuator, binary_threshold
+    del attenuator, binary_threshold, link_target, link_predictor
+    del dedupe_strategy
     b = link_attenuation_dowhy.backdoor
     if not b.identified:
         return Verdict.POWER_INSUFFICIENT
@@ -1488,19 +1560,28 @@ def extreme_q_divergence_attenuates_link__binary(
     target='outcome.eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
+    scope=(pl.col('total_steps') == 1_000_000),
 )
 def extreme_q_divergence_attenuates_link__placebo_refuted(
     link_attenuation_dowhy: LinkAttenuationDowhyResult,
     *,
     attenuator: str = 'q_divergence_score',
     binary_threshold: float = 1000.0,
+    link_target: Measurable[
+        Mapping[str, object], npt.NDArray[np.floating],
+    ] = _MC_RETURN_PER_BURST_MEAN,
+    link_predictor: Measurable[
+        Mapping[str, object], npt.NDArray[np.floating],
+    ] = _JENSEN_BIAS_PER_BURST_MEAN,
     placebo_max_ratio: float = 0.2,
+    dedupe_strategy: str = 'mean',
 ) -> Verdict:
     """Placebo refutation shrinks the binary above-1000 ATE to ≤
     `placebo_max_ratio` of the real value, confirming the
     attenuation is treatment-specific (not noise). Empirical:
     real -0.21, placebo 0, ratio 0%."""
-    del attenuator, binary_threshold
+    del attenuator, binary_threshold, link_target, link_predictor
+    del dedupe_strategy
     p = link_attenuation_dowhy.placebo
     real = p.real_ate
     placebo = p.refuted_ate
@@ -1519,19 +1600,28 @@ def extreme_q_divergence_attenuates_link__placebo_refuted(
     target='outcome.eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
+    scope=(pl.col('total_steps') == 1_000_000),
 )
 def extreme_q_divergence_attenuates_link__rcc_robust(
     link_attenuation_dowhy: LinkAttenuationDowhyResult,
     *,
     attenuator: str = 'q_divergence_score',
     binary_threshold: float = 1000.0,
+    link_target: Measurable[
+        Mapping[str, object], npt.NDArray[np.floating],
+    ] = _MC_RETURN_PER_BURST_MEAN,
+    link_predictor: Measurable[
+        Mapping[str, object], npt.NDArray[np.floating],
+    ] = _JENSEN_BIAS_PER_BURST_MEAN,
     rcc_max_drift_ratio: float = 0.15,
+    dedupe_strategy: str = 'mean',
 ) -> Verdict:
     """RCC refutation: adding a noise covariate to the adjustment
     set leaves the binary above-1000 ATE within
     `rcc_max_drift_ratio` of real. Confirms robustness to
     spurious-confound vulnerability. Empirical: drift ratio ≈ 5%."""
-    del attenuator, binary_threshold
+    del attenuator, binary_threshold, link_target, link_predictor
+    del dedupe_strategy
     r = link_attenuation_dowhy.random_common_cause
     real = r.real_ate
     refuted = r.refuted_ate

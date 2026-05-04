@@ -572,34 +572,14 @@ def _filter_with_missing_cols(
     if not missing:
         return df.filter(expr)
 
-    from corroborate.measurable import (
-        evaluate_with_measurables, get_registered,
-    )
-    measurable_missing: list[str] = []
-    truly_missing: list[str] = []
-    for col in missing:
-        if get_registered(col) is not None:
-            measurable_missing.append(col)
-        else:
-            truly_missing.append(col)
-
-    if measurable_missing:
-        cells = cast(list[dict[str, object]], df.to_dicts())
-        computed: dict[str, list[object]] = {
-            col: [] for col in measurable_missing
-        }
-        for cell in cells:
-            cache: dict[str, object] = {}
-            for col in measurable_missing:
-                m = get_registered(col)
-                assert m is not None  # checked above
-                computed[col].append(
-                    evaluate_with_measurables(m.fn, cell, cache=cache),
-                )
-        df = df.with_columns(
-            [pl.Series(c, v) for c, v in computed.items()],
-        )
-
+    from corroborate.measurable import compute_missing_columns
+    # `compute_missing_columns` resolves whichever names are
+    # registered measurables and adds them as columns; names that
+    # aren't registered remain absent and get null-padded so the
+    # filter excludes them naturally (matching the legacy
+    # `_matches_filters` "missing key → False" semantics).
+    df = compute_missing_columns(df, missing)
+    truly_missing = [c for c in missing if c not in df.columns]
     if truly_missing:
         df = df.with_columns(
             [pl.lit(None).alias(c) for c in truly_missing],

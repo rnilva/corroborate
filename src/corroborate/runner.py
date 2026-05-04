@@ -45,7 +45,6 @@ This module is library-only — no argparse, no `if __name__ ==
 `scripts/run_hypothesis.py`."""
 from __future__ import annotations
 
-import hashlib
 import importlib
 import json
 import sys
@@ -63,10 +62,11 @@ from corroborate.claim_bridge import (
     evaluate,
     measurable_names_for_bridges,
 )
+from corroborate.cloud import RemoteManifest
+from corroborate.schema import LINEAGE_FIELDS
 from corroborate.measurable import (
-    evaluate_with_measurables,
+    compute_missing_columns,
     get_registered,
-    transitive_measurables,
     transitive_reads,
 )
 
@@ -132,28 +132,13 @@ def _default_cache_path(mod: HypothesisModule) -> Path:
 
 
 def _measurable_signature(name: str) -> str | None:
-    """Closure hash of a registered measurable: `sha256` of its own
-    bytecode plus the sorted bytecode hashes of every transitive
-    measurable dep. Returns None if `name` isn't registered (e.g.
-    a column already in the cache that doesn't belong to a current
-    measurable — those are left untouched).
-
-    This is what makes "edited a measurable's body, cache is now
-    stale" detectable: changing any function in the closure flips
-    the resulting hex. Hex is short (16 chars) — collisions are
-    irrelevant against the user-edit baseline."""
-    if get_registered(name) is None:
-        return None
-    deps = sorted(transitive_measurables(name))
-    parts: list[str] = []
-    for d in deps:
-        m = get_registered(d)
-        if m is None:
-            parts.append(f'{d}:unregistered')
-            continue
-        bc = bytes(m.fn.__code__.co_code)
-        parts.append(f'{d}:{hashlib.sha256(bc).hexdigest()[:16]}')
-    return hashlib.sha256('\n'.join(parts).encode()).hexdigest()[:16]
+    """Closure hash for a registered measurable, or None when the
+    name isn't currently registered (e.g. a column already in the
+    cache that doesn't belong to a current measurable — those are
+    left untouched). Forwards to `Measurable.signature()`; the
+    actual hash logic lives on the Measurable itself."""
+    m = get_registered(name)
+    return None if m is None else m.signature()
 
 
 def _manifest_path(cache_path: Path) -> Path:
@@ -418,10 +403,61 @@ def _signatures_for(
     return out
 
 
+# Provenance / lineage tags that don't define a cell's scientific
+# identity. Two cells differing ONLY by these are the same physical
+# experiment surfaced under different bookkeeping (e.g. one corpus
+# was assembled by merging another — same RunRow, different `corpus`
+# tag). UUID isn't a scientific-identity column either: a fresh
+# `uuid.uuid4()` gets minted at run time per cell, so independent
+# re-runs of the same `(env, arm, seed, HPs)` get distinct ids
+# despite being scientifically equivalent — content equality is the
+# right check, not UUID equality.
+_PROVENANCE_TAGS: frozenset[str] = LINEAGE_FIELDS | {'corpus'}
+
+
+def _dedup_by_content(df: pl.DataFrame, *, source: str) -> pl.DataFrame:
+    """Drop rows whose non-provenance columns are all equal — i.e.
+    cells that differ only in `id`/`corpus`/`timestamp` / lineage
+    tags. The merge artifacts (same physical run surfaced under two
+    `corpus` tags) collapse to one row; truly distinct runs are
+    preserved (their measurement columns differ).
+
+    Polars' `unique(subset=...)` handles primitive columns natively;
+    list/object columns get coerced via `hash` first so the equality
+    check is value-based even on heterogeneous shapes."""
+    if df.height == 0:
+        return df
+    content_cols = [c for c in df.columns if c not in _PROVENANCE_TAGS]
+    if not content_cols:
+        return df
+    before = df.height
+    try:
+        deduped = df.unique(subset=content_cols, keep='first')
+    except pl.exceptions.InvalidOperationError:
+        # Some content columns may be list/object dtypes that
+        # `unique` can't compare directly; hash them first.
+        hash_expr = pl.struct(content_cols).hash().alias('_content_hash')
+        deduped = (
+            df.with_columns(hash_expr)
+            .unique(subset=['_content_hash'], keep='first')
+            .drop('_content_hash')
+        )
+    dropped = before - deduped.height
+    if dropped:
+        print(
+            f'runner: deduped {dropped} content-identical cell(s) '
+            f'from {source} (same scientific cell surfaced under '
+            f'multiple {sorted(_PROVENANCE_TAGS & set(df.columns))} '
+            f'tags)',
+            file=sys.stderr,
+        )
+    return deduped
+
+
 def _load_cache(path: Path | None) -> pl.DataFrame:
     if path is None or not path.exists():
         return pl.DataFrame()
-    return pl.read_parquet(path)
+    return _dedup_by_content(pl.read_parquet(path), source='cache')
 
 
 def _dedup_against_cache(
@@ -443,62 +479,10 @@ def _compute_measurables(
     required: Sequence[str],
 ) -> pl.DataFrame:
     """For each required measurable not yet in df.columns, compute
-    per-cell and add as a column. Existing columns are preserved."""
-    if df.height == 0:
-        return df
-    missing = [m for m in required if m not in df.columns]
-    if not missing:
-        return df
-
-    # Heterogeneous return types — build per-column lists then
-    # construct Series. Per-cell evaluator caches transitive
-    # measurables across calls, but only within a single cell.
-    cells = df.to_dicts()
-    new_cols: dict[str, list[object]] = {m: [] for m in missing}
-    for cell in cells:
-        per_cell_cache: dict[str, object] = {}
-        for m in missing:
-            mobj = get_registered(m)
-            if mobj is None:
-                new_cols[m].append(None)
-                continue
-            try:
-                v = evaluate_with_measurables(
-                    mobj.fn, cell, cache=per_cell_cache,
-                )
-            except Exception:  # noqa: BLE001
-                # Record-level evaluation failure (missing inputs,
-                # etc.) maps to None for this cell + measurable.
-                # Downstream analyses NaN-skip these cells.
-                v = None
-            new_cols[m].append(v)
-
-    return df.with_columns(
-        [_to_series(name, vals) for name, vals in new_cols.items()],
-    )
-
-
-def _to_series(name: str, vals: list[object]) -> pl.Series:
-    """Construct a polars Series from a heterogeneous-shape value
-    list, tolerating None entries for measurables that return
-    list/array types.
-
-    Polars's default dtype inference treats `[None, [1, 2], [3, 4]]`
-    as needing-uniform-length sequences and crashes on `len(None)`.
-    For sequence-typed measurables, replace None with an empty list
-    so the constructor sees a uniform List shape; downstream
-    consumers null-check the per-row length anyway."""
-    has_seq = any(
-        v is not None and not isinstance(v, (str, bytes, int, float, bool))
-        for v in vals
-    )
-    if not has_seq:
-        return pl.Series(name, vals)
-    normalized = [
-        v if v is not None else []
-        for v in vals
-    ]
-    return pl.Series(name, normalized)
+    per-cell and add as a column. Thin forwarder to
+    `corroborate.measurable.compute_missing_columns` — the per-cell
+    eval loop lives there as the single source of truth."""
+    return compute_missing_columns(df, required)
 
 
 # ============ Data loading ============
@@ -553,34 +537,73 @@ def _missing_for_restore(
     if not _file_present(runs_path):
         targets.append('runs.parquet')
     if trace_reads and not _file_present(traces_path):
-        # Only ask for `traces.parquet` if the manifest has it.
-        try:
-            raw = cast(object, json.loads(manifest_path.read_text()))
-        except (OSError, ValueError):
-            raw = {}
-        if isinstance(raw, dict):
-            files = raw.get('files', [])
-            if isinstance(files, list):
-                relpaths: set[str] = set()
-                for f in files:
-                    if isinstance(f, dict):
-                        rp = f.get('relpath')
-                        if isinstance(rp, str):
-                            relpaths.add(rp)
-                if 'traces.parquet' in relpaths:
-                    targets.append('traces.parquet')
+        # Two manifest shapes count as carrying trace data:
+        # (a) a top-level `traces.parquet` entry (canonical), or
+        # (b) per-arm `tmp/*_traces.parquet` shards (older sweeps
+        # that archived before the per-corpus merge step ran). For
+        # (b), `_merge_shard_traces` stitches the shards into a
+        # canonical `traces.parquet` after restore so downstream
+        # code sees one shape.
+        manifest = _read_remote_manifest(manifest_path)
+        if manifest is not None:
+            if manifest.has('traces.parquet'):
+                targets.append('traces.parquet')
+            else:
+                shards = sorted(
+                    rp for rp in manifest.relpaths()
+                    if rp.startswith('tmp/')
+                    and rp.endswith('_traces.parquet')
+                )
+                targets.extend(shards)
     return targets or None
 
 
+def _read_remote_manifest(manifest_path: Path) -> RemoteManifest | None:
+    """Parse a `_remote.json` into a typed `RemoteManifest`.
+    Returns None on any I/O or shape error — caller treats that as
+    "manifest not consultable" and proceeds without restore."""
+    try:
+        raw = cast(object, json.loads(manifest_path.read_text()))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(raw, dict):
+        return None
+    typed: Mapping[str, object] = cast(Mapping[str, object], raw)
+    try:
+        return RemoteManifest.from_dict(typed)
+    except (TypeError, KeyError):
+        return None
+
+
 def _file_present(path: Path, *, min_size: int = 1024) -> bool:
-    """A file 'counts' only if it exists AND is at least
-    `min_size` bytes (skips zero-byte placeholders)."""
+    """A file 'counts' only if it exists, is at least `min_size`
+    bytes, AND (if it's a parquet) has a valid PAR1 footer.
+    Corrupt parquets — partial downloads, killed-mid-write files
+    — would otherwise pass the size check but fail later when
+    polars tries to parse them. Treating them as missing here
+    triggers a clean re-restore from cloud rather than silently
+    skipping the trace join."""
     if not path.exists():
         return False
     try:
-        return path.stat().st_size >= min_size
+        size = path.stat().st_size
     except OSError:
         return False
+    if size < min_size:
+        return False
+    if path.suffix == '.parquet':
+        # Parquet files end with the 4-byte magic 'PAR1'. Cheap
+        # integrity check — far cheaper than full schema parse,
+        # catches truncated downloads and write-killed files.
+        try:
+            with path.open('rb') as fh:
+                fh.seek(-4, 2)
+                magic = fh.read(4)
+        except OSError:
+            return False
+        if magic != b'PAR1':
+            return False
+    return True
 
 
 def _required_record_keys(required: Sequence[str]) -> frozenset[str]:
@@ -694,6 +717,11 @@ def _load_directory(
                     )
                     restore(sub, files=need_restore, overwrite=True)
                     just_restored_traces = 'traces.parquet' in need_restore
+                    # Per-arm shard archives — merge into canonical
+                    # traces.parquet so `_join_required_traces` reads
+                    # one shape regardless of how the sweep archived.
+                    if _merge_shard_traces(sub):
+                        just_restored_traces = True
                 else:
                     print(
                         f'runner: WARNING — {sub.name} needs '
@@ -750,7 +778,53 @@ def _load_directory(
         frames.append(df)
     if not frames:
         return pl.DataFrame()
-    return pl.concat(frames, how='diagonal_relaxed')
+    return _dedup_by_content(
+        pl.concat(frames, how='diagonal_relaxed'),
+        source='loaded directory',
+    )
+
+
+def _merge_shard_traces(corpus_dir: Path) -> bool:
+    """Stitch per-arm `tmp/*_traces.parquet` shards into a single
+    canonical `traces.parquet` at the corpus root.
+
+    No-op when `traces.parquet` already exists or no shards are
+    present. Two-pass row-group-streaming merge:
+
+    1. **Scan schemas** of all shards (cheap — metadata only) and
+       compute their union via `pa.unify_schemas`. Sweeps that
+       record per-arm-specific columns (e.g. `dampened_alpha_envs`'
+       wrapper-tagged columns) produce heterogeneous shards; the
+       unified schema null-pads each shard's missing columns.
+    2. **Stream-write** each shard's row groups through a
+       `ParquetWriter` initialised with the unified schema. Each
+       row group is cast (missing columns added as null arrays,
+       columns reordered) before write. Shards are `unlink`-ed
+       after their final row group is consumed.
+
+    RAM stays bounded to one row group at a time — load-bearing
+    for the multi-GB minatar shards. polars' `sink_parquet` of a
+    diagonal_relaxed concat materialises the full panel before
+    write and OOMs on those.
+
+    Returns True when a merge happened (so the caller can flag the
+    merged file for post-load eviction, matching the behaviour for
+    a just-restored top-level `traces.parquet`)."""
+    dest = corpus_dir / 'traces.parquet'
+    if _file_present(dest):
+        return False
+    shards = sorted((corpus_dir / 'tmp').glob('*_traces.parquet'))
+    if not shards:
+        return False
+
+    from corroborate._pyarrow_shard_merge import merge_parquet_shards
+    merge_parquet_shards(shards, dest)
+    print(
+        f'runner: merged {len(shards)} trace shard(s) in '
+        f'{corpus_dir.name}/ into traces.parquet',
+        file=sys.stderr,
+    )
+    return True
 
 
 def _join_required_traces(

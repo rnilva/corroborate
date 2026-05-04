@@ -721,6 +721,50 @@ def eval_best_burst_step(record: Mapping[str, object]) -> float:
 
 # ============ Lifted from cell_runner._mechanism_measurements (Phase 3B) ============
 
+def _jensen_bias_per_eps_fn(
+    record: Mapping[str, object],
+) -> npt.NDArray[np.floating]:
+    """Per-(burst, episode) Jensen-bias proxy: Q − MC. Positive →
+    Q overestimates; the per-episode quantity *before* any reduction.
+
+    Shape `(n_bursts, n_episodes)` — identical to the raw inputs.
+    Per-burst analyses compose this with `reduce_axis(_, axis=-1,
+    op='mean')` to get the per-burst gap; trajectory-level analyses
+    compose with two reductions to get the scalar `jensen_gap`
+    (clipped at 0 in `jensen_gap` for the structural-floor
+    convention).
+
+    Linearity of mean: `mean(Q − MC) = mean(Q) − mean(MC)`, so
+    declaring the per-eps quantity once and reducing later
+    produces the same result as reducing first and subtracting.
+    Composing first is the cleaner shape — one reduction wraps
+    the whole thing, and non-linear reductions (variance) get the
+    *paired-difference* answer rather than the (potentially
+    negative) `var(Q) − var(MC)` artefact."""
+    q = np.asarray(record['predicted_q_at_start'], dtype=np.float64)
+    mc = np.asarray(record['mc_return'], dtype=np.float64)
+    return q - mc
+
+
+# Explicit Measurable construction (rather than @measurable
+# decorator) so the generic record-type parameter `R` lands as
+# `Mapping[str, object]` for downstream reduction composition. The
+# decorator's PEP 695 inference leaves R unbound when there's no
+# call-site context, which makes `reduce_axis(jensen_bias_per_eps,
+# ...)` partially-unknown at downstream consumers (e.g. bridges
+# composing the per-burst-mean form). Explicit construction +
+# `register(_)` is the same shape `mc_variance_per_burst` and the
+# other NDArray-returning measurables in this module use.
+jensen_bias_per_eps: Measurable[
+    Mapping[str, object], npt.NDArray[np.floating],
+] = Measurable(
+    fn=_jensen_bias_per_eps_fn,
+    name='jensen_bias_per_eps',
+    reads=('predicted_q_at_start', 'mc_return'),
+)
+register(jensen_bias_per_eps)
+
+
 @measurable(
     name='jensen_gap',
     reads=('predicted_q_at_start', 'mc_return'),

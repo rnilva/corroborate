@@ -31,6 +31,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 
 import numpy as np
+import numpy.typing as npt
 
 from corroborate.analyses.dowhy import (
     BackdoorResult,
@@ -39,8 +40,11 @@ from corroborate.analyses.dowhy import (
     placebo_refutation,
     random_common_cause_refutation,
 )
-from corroborate.analyses.paired_g_per_burst import cell_burst_values
+from corroborate.analyses.paired_g_per_burst import (
+    evaluate_per_burst_source,
+)
 from corroborate.analysis import analysis
+from corroborate.measurable import Measurable
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,10 +72,12 @@ def _build_panel(
     treatment_arm: str,
     baseline_arm: str,
     pair_by: tuple[str, ...],
-    link_predictor: str,
-    link_predictor_reduction: str,
-    link_target: str,
-    link_target_reduction: str,
+    link_predictor: Measurable[
+        Mapping[str, object], npt.NDArray[np.floating],
+    ],
+    link_target: Measurable[
+        Mapping[str, object], npt.NDArray[np.floating],
+    ],
     env_filter: tuple[str, ...],
     arm_field: str,
 ) -> tuple[
@@ -102,12 +108,8 @@ def _build_panel(
             continue
         if arm not in (treatment_arm, baseline_arm):
             continue
-        target_v = cell_burst_values(
-            cell, link_target, link_target_reduction,
-        )
-        predictor_v = cell_burst_values(
-            cell, link_predictor, link_predictor_reduction,
-        )
+        target_v = evaluate_per_burst_source(link_target, cell)
+        predictor_v = evaluate_per_burst_source(link_predictor, cell)
         if target_v.size == 0 or predictor_v.size == 0:
             continue
         if target_v.shape[0] != predictor_v.shape[0]:
@@ -200,17 +202,19 @@ def _nan_refutation(
     )
 
 
-@analysis(reads=('mc_return', 'predicted_q_at_start'))
+@analysis
 def paired_delta_link_dowhy(
     cells: Iterable[Mapping[str, object]],
     *,
     treatment_arm: str,
     baseline_arm: str,
+    link_predictor: Measurable[
+        Mapping[str, object], npt.NDArray[np.floating],
+    ],
+    link_target: Measurable[
+        Mapping[str, object], npt.NDArray[np.floating],
+    ],
     pair_by: tuple[str, ...] = ('seed',),
-    link_predictor: str = 'mc_return',
-    link_predictor_reduction: str = 'mc_minus_q',
-    link_target: str = 'mc_return',
-    link_target_reduction: str = 'mean',
     env_filter: tuple[str, ...] = (),
     arm_field: str = 'intervention_name',
     method_name: str = 'backdoor.linear_regression',
@@ -225,6 +229,11 @@ def paired_delta_link_dowhy(
     each burst column to both treatment + outcome, plus the
     treatment → outcome edge under test.
 
+    `link_target` and `link_predictor` are typed Measurables
+    returning per-burst NDArrays. The canonical mech → outcome
+    link uses per-burst-mean of `mc_return` for the target and
+    per-burst-mean of `jensen_bias_per_eps` for the predictor.
+
     Empty panel (no env survives filter, or no paired seeds)
     yields a NaN-everywhere result. Bridges consuming this check
     `n_pairs` for power and `backdoor.identified` before reading
@@ -236,9 +245,7 @@ def paired_delta_link_dowhy(
         baseline_arm=baseline_arm,
         pair_by=pair_by,
         link_predictor=link_predictor,
-        link_predictor_reduction=link_predictor_reduction,
         link_target=link_target,
-        link_target_reduction=link_target_reduction,
         env_filter=env_filter,
         arm_field=arm_field,
     )

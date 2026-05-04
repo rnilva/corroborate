@@ -30,9 +30,11 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
 import numpy as np
+import numpy.typing as npt
 
+from corroborate.analyses.paired_g_per_burst import evaluate_per_burst_source
 from corroborate.analysis import analysis
-from corroborate.analyses.paired_g_per_burst import cell_burst_values
+from corroborate.measurable import Measurable
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,9 +64,7 @@ class PerBurstLinkResult:
     bridge to introspect."""
     strata: tuple[PerBurstLinkStratum, ...]
     target: str
-    target_reduction: str
     predictor: str
-    predictor_reduction: str
     treatment_arm: str
     baseline_arm: str
     pair_by: tuple[str, ...]
@@ -96,31 +96,36 @@ def _pearson_r_p_slope(
     return r, p, slope
 
 
-@analysis(reads=('mc_return', 'predicted_q_at_start'))
+@analysis
 def paired_link_per_burst(
     cells: Iterable[Mapping[str, object]],
     *,
     treatment_arm: str,
     baseline_arm: str,
+    target: Measurable[
+        Mapping[str, object], npt.NDArray[np.floating],
+    ],
+    predictor: Measurable[
+        Mapping[str, object], npt.NDArray[np.floating],
+    ],
     pair_by: tuple[str, ...] = ('seed',),
-    target: str = 'mc_return',
-    target_reduction: str = 'mean',
-    predictor: str = 'mc_return',
-    predictor_reduction: str = 'mc_minus_q',
     env_name: str | None = None,
     arm_field: str = 'intervention_name',
+    dedupe_strategy: str = 'raise',
 ) -> PerBurstLinkResult:
     """Per-(env, burst) paired link r(Δ_target, Δ_predictor) panel.
 
-    For each cell, project both `target` and `predictor` to per-
-    burst vectors. For each (env, burst), pair treatment ↔
-    baseline on `pair_by`, compute Δ_target and Δ_predictor across
-    seeds, then Pearson r between them.
+    For each cell, evaluate `target` and `predictor` to per-burst
+    vectors. For each (env, burst), pair treatment ↔ baseline on
+    `pair_by`, compute Δ_target and Δ_predictor across seeds, then
+    Pearson r between them.
 
-    Default config tests the **mech → outcome link**:
-      target = mc_return with reduction='mean' (per-burst outcome)
-      predictor = mc_return with reduction='mc_minus_q'
-                  (per-burst Jensen bias = E[Q] - E[MC])
+    Both `target` and `predictor` are typed Measurables returning
+    per-burst NDArrays. The canonical mech → outcome link uses:
+      target = reduce_axis(from_key('mc_return'), axis=-1, op='mean')
+      predictor = reduce_axis(jensen_bias_per_eps, axis=-1, op='mean')
+    — per-burst-mean of the outcome and per-burst-mean of the
+    Jensen-bias proxy (Q − MC).
 
     `r` is computed against the *negated* predictor so the value
     reads "active link = positive r" (matches the bias-correction
@@ -130,9 +135,29 @@ def paired_link_per_burst(
     benefit (the textbook story). Negative r means the
     relationship has flipped (Q-explosion-induced anti-link).
 
-    `env_name`, when supplied, restricts the analysis to one env."""
+    `env_name`, when supplied, restricts the analysis to one env.
+
+    `dedupe_strategy` mirrors `paired_g`: when multiple cells
+    share the same `(env, arm, pair_by)` tuple,
+    - `'raise'` (default) errors loudly so the bridge author
+      tightens scope or opts into aggregation;
+    - `'mean'` averages the per-burst (target, predictor) vectors
+      element-wise within each duplicate bucket."""
+    if dedupe_strategy not in ('raise', 'mean'):
+        raise ValueError(
+            f'paired_link_per_burst: unknown dedupe_strategy '
+            f'{dedupe_strategy!r}; expected "raise" or "mean"',
+        )
+
+    from corroborate.analyses._dedup_diagnostics import (
+        _distinguishing_columns, format_diff,
+    )
+
+    # Carry the cell mapping with each (target, predictor) pair so
+    # duplicate detection can introspect distinguishing columns.
     by_env_arm: dict[tuple[str, str], dict[
-        tuple[object, ...], tuple[np.ndarray, np.ndarray],
+        tuple[object, ...],
+        list[tuple[Mapping[str, object], np.ndarray, np.ndarray]],
     ]] = {}
     for cell in cells:
         env = cell.get('env_name')
@@ -143,21 +168,83 @@ def paired_link_per_burst(
             continue
         if arm not in (treatment_arm, baseline_arm):
             continue
-        target_v = cell_burst_values(cell, target, target_reduction)
-        predictor_v = cell_burst_values(cell, predictor, predictor_reduction)
+        target_v = evaluate_per_burst_source(target, cell)
+        predictor_v = evaluate_per_burst_source(predictor, cell)
         if target_v.size == 0 or predictor_v.size == 0:
             continue
         if target_v.shape[0] != predictor_v.shape[0]:
             continue
         bucket = by_env_arm.setdefault((env, arm), {})
         key = tuple(cell[k] for k in pair_by)
-        bucket[key] = (target_v, predictor_v)
+        existing = bucket.setdefault(key, [])
+        if existing and dedupe_strategy == 'raise':
+            prior_cells = [c for c, _, _ in existing]
+            diff = _distinguishing_columns(
+                [*prior_cells, cell],
+                skip=frozenset(pair_by) | {'env_name', arm_field},
+            )
+            if not diff:
+                raise ValueError(
+                    f'paired_link_per_burst: replicate cells at '
+                    f'(env={env!r}, arm={arm!r}, '
+                    f'{tuple(pair_by)}={key}) differ only on '
+                    f'provenance tags. Pass '
+                    f'dedupe_strategy="mean" to aggregate them.',
+                )
+            raise ValueError(
+                f'paired_link_per_burst: cells at (env={env!r}, '
+                f'arm={arm!r}, {tuple(pair_by)}={key}) are not '
+                f'replicates — they differ on: {format_diff(diff)}. '
+                f'Add the regime-defining column(s) to pair_by so '
+                f'each regime is its own stratum, or scope the '
+                f'bridge to a single regime.',
+            )
+        existing.append((cell, target_v, predictor_v))
+
+    # Collapse via element-wise mean. Shape mismatch → not
+    # replicates; raise with the regime-mismatch report.
+    collapsed: dict[tuple[str, str], dict[
+        tuple[object, ...], tuple[np.ndarray, np.ndarray],
+    ]] = {}
+    for env_arm, kvs in by_env_arm.items():
+        out: dict[tuple[object, ...], tuple[np.ndarray, np.ndarray]] = {}
+        for k, items in kvs.items():
+            if len(items) == 1:
+                _, ts0, ps0 = items[0]
+                out[k] = (ts0, ps0)
+                continue
+            target_arrays = [t for _, t, _ in items]
+            predictor_arrays = [p for _, _, p in items]
+            shapes = {t.shape for t in target_arrays} | {
+                p.shape for p in predictor_arrays
+            }
+            if len({t.shape for t in target_arrays}) > 1 or len(
+                {p.shape for p in predictor_arrays},
+            ) > 1:
+                cells_with_dup = [c for c, _, _ in items]
+                diff = _distinguishing_columns(
+                    cells_with_dup,
+                    skip=frozenset(pair_by) | {'env_name', arm_field},
+                )
+                raise ValueError(
+                    f'paired_link_per_burst: cannot mean-aggregate '
+                    f'cells at (env={env_arm[0]!r}, '
+                    f'arm={env_arm[1]!r}, {tuple(pair_by)}={k}) — '
+                    f'per-burst array shapes differ ({sorted(shapes)}). '
+                    f'The cells are not replicates; they differ on: '
+                    f'{format_diff(diff)}. Add these to pair_by.',
+                )
+            ts = np.mean(np.stack(target_arrays, axis=0), axis=0)
+            ps = np.mean(np.stack(predictor_arrays, axis=0), axis=0)
+            out[k] = (ts, ps)
+        collapsed[env_arm] = out
+    by_env_arm_final = collapsed
 
     strata: list[PerBurstLinkStratum] = []
-    envs = {env for (env, _) in by_env_arm.keys()}
+    envs = {env for (env, _) in by_env_arm_final.keys()}
     for env in sorted(envs):
-        treat = by_env_arm.get((env, treatment_arm), {})
-        base = by_env_arm.get((env, baseline_arm), {})
+        treat = by_env_arm_final.get((env, treatment_arm), {})
+        base = by_env_arm_final.get((env, baseline_arm), {})
         paired_keys = sorted(set(treat) & set(base))
         if not paired_keys:
             continue
@@ -205,10 +292,8 @@ def paired_link_per_burst(
 
     return PerBurstLinkResult(
         strata=tuple(strata),
-        target=target,
-        target_reduction=target_reduction,
-        predictor=predictor,
-        predictor_reduction=predictor_reduction,
+        target=target.name,
+        predictor=predictor.name,
         treatment_arm=treatment_arm,
         baseline_arm=baseline_arm,
         pair_by=pair_by,

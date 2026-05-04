@@ -16,8 +16,10 @@ import pytest
 import corroborate.analyses  # noqa: F401  # pyright: ignore[reportUnusedImport]
 
 from corroborate.analyses.paired_g_per_burst import (
-    panel_for_env, paired_g_per_burst,
+    DEFAULT_PER_BURST_SOURCE, panel_for_env, paired_g_per_burst,
 )
+from corroborate.reductions import from_key, reduce_axis
+from corroborate.rl.dqn.measurables import jensen_bias_per_eps
 
 
 def _synthetic_burst_cells(
@@ -69,8 +71,7 @@ def test_per_burst_synthetic_strong_signal() -> None:
         treatment_arm='treatment',
         baseline_arm='baseline',
         pair_by=('seed',),
-        source='mc_return',
-        reduction='mean',
+        source=DEFAULT_PER_BURST_SOURCE,
     )
     assert result.n_strata == 5
     panel = panel_for_env(result, 'TestEnv')
@@ -93,16 +94,18 @@ def test_per_burst_synthetic_no_signal() -> None:
         treatment_arm='treatment',
         baseline_arm='baseline',
         pair_by=('seed',),
-        source='mc_return',
-        reduction='mean',
+        source=DEFAULT_PER_BURST_SOURCE,
     )
     panel = panel_for_env(result, 'TestEnv')
     for s in panel:
         assert abs(s.g) < 1.0, f'expected g ≈ 0, got {s.g}'
 
 
-def test_mc_minus_q_reduction() -> None:
-    """`reduction='mc_minus_q'` computes Jensen-bias-style proxy."""
+def test_jensen_bias_per_eps_reduction() -> None:
+    """Composing the named `jensen_bias_per_eps` measurable with
+    `reduce_axis(_, axis=-1, op='mean')` produces the Jensen-bias
+    per-burst gap (Q − MC), the same quantity the old
+    `reduction='mc_minus_q'` string-dispatch did."""
     rng = random.Random(0)
     cells: list[dict[str, object]] = []
     for s in range(20):
@@ -123,20 +126,49 @@ def test_mc_minus_q_reduction() -> None:
                     for _ in range(4)
                 ],
             })
+    bias_per_burst_mean = reduce_axis(
+        jensen_bias_per_eps, axis=-1, op='mean',
+    )
     result = paired_g_per_burst.fn(
         cells,
         treatment_arm='treatment',
         baseline_arm='baseline',
         pair_by=('seed',),
-        source='predicted_q_at_start',
-        reduction='mc_minus_q',
+        source=bias_per_burst_mean,
     )
     panel = panel_for_env(result, 'TestEnv')
-    assert result.reduction == 'mc_minus_q'
+    assert result.measurable == bias_per_burst_mean.name
     # treatment bias = 0.5 (q=1.0, mc=0.5), baseline bias = 1.0
     # Δ = -0.5 per burst → g should be strongly negative.
     for s in panel:
         assert s.g < -3.0, f'expected strongly negative g, got {s.g}'
+
+
+def test_per_burst_via_explicit_from_key() -> None:
+    """The default `DEFAULT_PER_BURST_SOURCE` and an explicit
+    `reduce_axis(from_key('mc_return'), axis=-1, op='mean')` give
+    the same per-burst panel — sanity that the default is just
+    the canonical composition."""
+    cells = _synthetic_burst_cells(
+        treatment_burst_means=[0.0, 1.0, 2.0],
+        baseline_burst_means=[0.0, 0.0, 0.0],
+    )
+    explicit = reduce_axis(from_key('mc_return'), axis=-1, op='mean')
+    a = paired_g_per_burst.fn(
+        cells, treatment_arm='treatment', baseline_arm='baseline',
+        source=DEFAULT_PER_BURST_SOURCE,
+    )
+    b = paired_g_per_burst.fn(
+        cells, treatment_arm='treatment', baseline_arm='baseline',
+        source=explicit,
+    )
+    assert a.n_strata == b.n_strata
+    for sa, sb in zip(
+        sorted(a.strata, key=lambda s: s.burst_index),
+        sorted(b.strata, key=lambda s: s.burst_index),
+        strict=True,
+    ):
+        assert abs(sa.g - sb.g) < 1e-9
 
 
 def test_analysis_registered() -> None:
@@ -191,8 +223,7 @@ def test_real_corpus_catch_bsuite_zero_across_bursts(
         treatment_arm='ddqn',
         baseline_arm='vanilla_dqn',
         pair_by=('seed',),
-        source='mc_return',
-        reduction='mean',
+        source=DEFAULT_PER_BURST_SOURCE,
     )
     catch_panel = panel_for_env(result, 'Catch-bsuite')
     assert len(catch_panel) > 0
@@ -217,8 +248,7 @@ def test_real_corpus_fourrooms_positive_across_bursts(
         treatment_arm='ddqn',
         baseline_arm='vanilla_dqn',
         pair_by=('seed',),
-        source='mc_return',
-        reduction='mean',
+        source=DEFAULT_PER_BURST_SOURCE,
     )
     fr_panel = panel_for_env(result, 'FourRooms-misc')
     assert len(fr_panel) > 0

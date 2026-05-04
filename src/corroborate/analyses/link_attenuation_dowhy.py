@@ -29,6 +29,9 @@ import math
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 
+import numpy as np
+import numpy.typing as npt
+
 from corroborate.analyses.dowhy import (
     BackdoorResult,
     RefutationResult,
@@ -40,6 +43,7 @@ from corroborate.analyses.paired_link_per_burst import (
     paired_link_per_burst,
 )
 from corroborate.analysis import analysis
+from corroborate.measurable import Measurable
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,13 +99,16 @@ def _build_panel(
     treatment_arm: str,
     baseline_arm: str,
     pair_by: tuple[str, ...],
-    link_target: str,
-    link_target_reduction: str,
-    link_predictor: str,
-    link_predictor_reduction: str,
+    link_target: Measurable[
+        Mapping[str, object], npt.NDArray[np.floating],
+    ],
+    link_predictor: Measurable[
+        Mapping[str, object], npt.NDArray[np.floating],
+    ],
     attenuator: str,
     binary_threshold: float,
     confounder: str,
+    dedupe_strategy: str = 'raise',
 ) -> tuple[
     list[Mapping[str, object]],
     list[tuple[str, str]],
@@ -121,9 +128,8 @@ def _build_panel(
         baseline_arm=baseline_arm,
         pair_by=pair_by,
         target=link_target,
-        target_reduction=link_target_reduction,
         predictor=link_predictor,
-        predictor_reduction=link_predictor_reduction,
+        dedupe_strategy=dedupe_strategy,
     )
     env_attenuator = _env_means(
         cells, confounder=confounder, attenuator=attenuator,
@@ -201,21 +207,24 @@ def _nan_refutation(
     )
 
 
-@analysis(reads=('mc_return', 'predicted_q_at_start'))
+@analysis
 def link_attenuation_dowhy(
     cells: Iterable[Mapping[str, object]],
     *,
     treatment_arm: str,
     baseline_arm: str,
-    pair_by: tuple[str, ...] = ('seed',),
-    link_target: str = 'mc_return',
-    link_target_reduction: str = 'mean',
-    link_predictor: str = 'mc_return',
-    link_predictor_reduction: str = 'mc_minus_q',
+    link_target: Measurable[
+        Mapping[str, object], npt.NDArray[np.floating],
+    ],
+    link_predictor: Measurable[
+        Mapping[str, object], npt.NDArray[np.floating],
+    ],
     attenuator: str,
     binary_threshold: float,
+    pair_by: tuple[str, ...] = ('seed',),
     confounder: str = 'env_name',
     method_name: str = 'backdoor.linear_regression',
+    dedupe_strategy: str = 'raise',
 ) -> LinkAttenuationDowhyResult:
     """Test whether `attenuator > binary_threshold` attenuates
     per-(env, burst) link strength via dowhy backdoor +
@@ -239,12 +248,11 @@ def link_attenuation_dowhy(
         baseline_arm=baseline_arm,
         pair_by=pair_by,
         link_target=link_target,
-        link_target_reduction=link_target_reduction,
         link_predictor=link_predictor,
-        link_predictor_reduction=link_predictor_reduction,
         attenuator=attenuator,
         binary_threshold=binary_threshold,
         confounder=confounder,
+        dedupe_strategy=dedupe_strategy,
     )
     if not rows:
         return LinkAttenuationDowhyResult(
