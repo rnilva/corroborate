@@ -97,6 +97,8 @@ def optional_direction(
         return 'a_lt_b'
     if v == 'two_sided':
         return 'two_sided'
+    if v == 'null':
+        return 'null'
     raise TypeError(f'{key!r} must be a PredictedDirection or None, got {v!r}')
 
 

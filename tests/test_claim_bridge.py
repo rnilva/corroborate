@@ -331,6 +331,43 @@ def test_bridge_predicted_direction_defaults_to_none() -> None:
     assert no_predicted_direction.predicted_direction is None
 
 
+def test_bridge_predicted_direction_null_is_admitted() -> None:
+    """The xfail-style `predicted_direction='null'` declares "I
+    expect no effect"; the bridge body returns HELD when the null
+    is observed (small |g|), NO_EFFECT when an effect was observed
+    (the unexpected-pass / xpass analog). The framework admits
+    the literal at decoration time."""
+    @claim_bridge(
+        source='A',
+        target='B',
+        predicted_direction='null',
+    )
+    def predicts_null(
+        paired_g: PairedGResult,
+    ) -> Verdict:
+        del paired_g
+        return Verdict.HELD
+
+    assert predicts_null.predicted_direction == 'null'
+
+
+def test_bridge_predicted_direction_unknown_literal_rejected() -> None:
+    """An unrecognised `predicted_direction` literal raises
+    TypeError at decoration time (early failure, not silent
+    pass-through)."""
+    import pytest as _pytest
+
+    with _pytest.raises(TypeError, match='predicted_direction'):
+        @claim_bridge(
+            source='A',
+            target='B',
+            predicted_direction='wrong_literal',  # pyright: ignore[reportArgumentType]
+        )
+        def _bad(paired_g: PairedGResult) -> Verdict:
+            del paired_g
+            return Verdict.HELD
+
+
 def test_bridge_rejects_invalid_predicted_direction() -> None:
     """Only `'a_gt_b' | 'a_lt_b' | 'two_sided' | None` accepted —
     typed validation at decoration."""

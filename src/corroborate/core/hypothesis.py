@@ -64,11 +64,28 @@ if TYPE_CHECKING:
 __all__ = ['Hypothesis', 'PredictedDirection', 'canonical_str']
 
 
-type PredictedDirection = Literal['a_gt_b', 'a_lt_b', 'two_sided']
+type PredictedDirection = Literal['a_gt_b', 'a_lt_b', 'two_sided', 'null']
 """Author-declared *prior* sign of the predicted treatment-vs-
-baseline effect. `'a_gt_b'` predicts the intervention's arm
-exceeds the baseline; `'a_lt_b'` predicts below; `'two_sided'`
-predicts non-zero in either direction.
+baseline effect.
+
+- `'a_gt_b'` predicts the intervention's arm exceeds the baseline.
+- `'a_lt_b'` predicts below.
+- `'two_sided'` predicts non-zero in either direction.
+- `'null'` predicts no effect — the pytest-`xfail` analog. The
+  bridge author declares "I expect the data NOT to show an
+  effect"; HELD then means the null prediction was confirmed
+  (small |g|, no detectable arm effect). NO_EFFECT means an
+  effect WAS observed when none was predicted (the unexpected-
+  pass / xpass analog). This is the canonical encoding for
+  link-broken bridges (mech HELD ↛ outcome HELD) and for
+  mechanism-attenuation bridges (e.g., DDQN no longer reduces
+  bias when n_step → MC).
+
+Convention: `HELD` always means "prediction confirmed" — the
+mapping between `(predicted_direction, observed g)` and Verdict
+is uniform across all four directions. The reader scanning
+HELD/NO_EFFECT doesn't have to track which-prediction-which-
+direction; the bridge body's threshold logic encodes it once.
 
 Per-bridge metadata: `Bridge.predicted_direction` carries it for
 the analysis the bridge consumes. Distinct from

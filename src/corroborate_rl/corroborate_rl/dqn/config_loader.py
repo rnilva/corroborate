@@ -95,7 +95,7 @@ def is_str_keyed_mapping(v: object) -> TypeIs[Mapping[str, object]]:
 
 def _is_predicted_direction(v: object) -> TypeIs[PredictedDirection]:
     return isinstance(v, str) and v in (
-        'a_gt_b', 'a_lt_b', 'two_sided',
+        'a_gt_b', 'a_lt_b', 'two_sided', 'null',
     )
 
 
@@ -283,8 +283,12 @@ def build_hypothesis_from_mapping(
         direction = direction_raw
     else:
         raise ValueError(
-            f'predicted_direction must be null/a_gt_b/a_lt_b/'
-            f'two_sided; got {direction_raw!r}',
+            f'predicted_direction must be one of: YAML null (no '
+            f'prediction declared), or one of the strings '
+            f"'a_gt_b' / 'a_lt_b' / 'two_sided' / 'null' (the "
+            f'last is the xfail-style predicted-no-effect — note '
+            f"the quotes; bare YAML `null` is the no-prediction "
+            f'sentinel). Got {direction_raw!r}',
         )
 
     arms_raw = node.get('intervention_arms', [])

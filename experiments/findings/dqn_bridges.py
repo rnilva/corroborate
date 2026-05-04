@@ -473,23 +473,32 @@ def _pooled_negative_holds_when(
     return Verdict.NO_EFFECT
 
 
-def _pooled_null_holds_when(
+def _pooled_null_prediction_holds_when(
     pooled: PooledPairedGResult,
     *,
     null_band: float,
     min_envs: int,
 ) -> Verdict:
-    """NO_EFFECT (the rev 1 outcome reading) when |pooled g| <
-    null_band — small effect, link is empirically broken;
-    otherwise the prediction-of-no-effect is refuted."""
+    """For bridges with `predicted_direction='null'` (xfail-style):
+    HELD when |pooled g| < null_band — the no-effect prediction
+    is confirmed (small effect, link/outcome empirically null);
+    NO_EFFECT when |pooled g| >= null_band — the no-effect
+    prediction is REFUTED (an effect was observed when none was
+    predicted; the unexpected-pass / xpass analog).
+
+    Verdict semantics are uniform across all four
+    `predicted_direction` values: HELD = prediction confirmed.
+    Pair this body with `predicted_direction='null'` on the
+    decorator so the (verdict, predicted_direction) tuple at the
+    report layer reads unambiguously."""
     if pooled.n_envs < min_envs:
         return Verdict.POWER_INSUFFICIENT
     g = pooled.pooled.pooled_g
     if math.isnan(g):
         return Verdict.POWER_INSUFFICIENT
     if abs(g) < null_band:
-        return Verdict.NO_EFFECT
-    return Verdict.HELD
+        return Verdict.HELD
+    return Verdict.NO_EFFECT
 
 
 @claim_bridge(
@@ -517,6 +526,7 @@ def ddqn_reduces_jensen_gap__converged_subset(
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
+    predicted_direction='null',
     scope=pl.col('env_name').is_in(list(_CONVERGED_ENVS_DDQN_200K)),
 )
 def ddqn_link_to_outcome_null__converged_subset(
@@ -525,19 +535,23 @@ def ddqn_link_to_outcome_null__converged_subset(
     total_steps_filter: int = 200000,
 ) -> Verdict:
     """rev 1: pooled paired g(eval_best_burst_mean) on the
-    converged subset is essentially zero (~-0.03). The literature-
-    predicted outcome benefit fails — link broken on this corpus.
-    Verdict NO_EFFECT encodes that null-link reading directly.
+    converged subset is essentially zero (~-0.03). The
+    literature-predicted outcome benefit fails — link broken on
+    this corpus. Authored with `predicted_direction='null'`
+    (xfail-style); HELD encodes "the null prediction was
+    confirmed" — the link is empirically broken at the
+    converged-subset scope.
 
     `source` is the measured column (the analysis's input); the
     conceptual edge is `jensen_gap → outcome.eval_best_
     burst_mean`, but the paired-g consumes only the target column
-    + arm. The 'link broken' reading lives in the bridge's
-    NO_EFFECT verdict combined with the mechanism HELD on
-    `ddqn_reduces_jensen_gap__converged_subset` — same scope,
-    same arm, mechanism activates but outcome doesn't move."""
+    + arm. The 'link broken' reading lives in the bridge's HELD
+    verdict (under predicted_direction='null') combined with the
+    mechanism HELD on `ddqn_reduces_jensen_gap__converged_subset`
+    — same scope, same arm, mechanism activates but outcome
+    doesn't move."""
     del total_steps_filter
-    return _pooled_null_holds_when(
+    return _pooled_null_prediction_holds_when(
         paired_g_pooled, null_band=0.15, min_envs=3,
     )
 
@@ -647,6 +661,7 @@ def ddqn_reduces_jensen_gap__fourrooms_n1(
     target='jensen_gap',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
+    predicted_direction='null',
     scope=(
         (pl.col('env_name') == 'FourRooms-misc')
         & (pl.col('n_step') == 3)
@@ -687,6 +702,7 @@ def ddqn_helps_outcome__fourrooms_n1(
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
+    predicted_direction='null',
     scope=(
         (pl.col('env_name') == 'FourRooms-misc')
         & (pl.col('n_step') == 3)
@@ -1053,6 +1069,7 @@ _TIME_TO_SOLVE_HIGH_SOLVE_ENVS: tuple[str, ...] = (
     target='eval_best_burst_step',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
+    predicted_direction='null',
 )
 def time_to_solve_link_null__pooled(
     paired_g_among_solvers: PooledPairedGResult,
@@ -1065,9 +1082,12 @@ def time_to_solve_link_null__pooled(
     """rev 6: replacing the steady-state outcome with a sample-
     efficiency proxy doesn't rescue DDQN. Pooled across 5
     non-degenerate high-solve envs, predicted-direction effect
-    averages zero with PI bracketing zero — NO_EFFECT."""
+    averages zero with PI bracketing zero. Authored with
+    `predicted_direction='null'`; HELD encodes "the null
+    prediction was confirmed — sample-efficiency-as-outcome
+    doesn't break the rev-1 link-null."""
     del gate_column, gate_thresholds, env_filter, total_steps_filter
-    return _pooled_null_holds_when(
+    return _pooled_null_prediction_holds_when(
         paired_g_among_solvers, null_band=0.15, min_envs=4,
     )
 

@@ -109,7 +109,7 @@ def endpoint_name(e: BridgeEndpoint) -> str:
 
 
 _PREDICTED_DIRECTION_VALUES: frozenset[str] = frozenset(
-    {'a_gt_b', 'a_lt_b', 'two_sided'},
+    {'a_gt_b', 'a_lt_b', 'two_sided', 'null'},
 )
 
 
@@ -428,6 +428,8 @@ def _require_predicted_direction(
         return 'a_lt_b'
     if value == 'two_sided':
         return 'two_sided'
+    if value == 'null':
+        return 'null'
     raise TypeError(
         f'@claim_bridge {fn_name!r}: default for '
         f'`predicted_direction` must be one of '
