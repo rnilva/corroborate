@@ -57,7 +57,7 @@ from corroborate.bridge.analysis import analysis
 from corroborate.bridge.bridge import (
     Direction, Tier, claim_bridge,
 )
-from corroborate.core.intervention import DoEffect, Intervention
+from corroborate.core.intervention import ArmRole, DoEffect, Intervention
 from corroborate.corpus.schema import StratumG
 from corroborate.stats import MetaRegressionResult
 from corroborate.stats.meta_regression import Pool, meta_regress_panel
@@ -277,7 +277,7 @@ def _premise_holds_when(
 def jensen_premise_active__acrobot(
     verdict_distribution_per_env: VerdictDistributionResult,
     *,
-    arm_filter: str = 'ddqn',
+    arm_filter: ArmRole = ArmRole.TREATMENT,
     verdict_column: str = _DORMANCY_VERDICT_COLUMN,
 ) -> Verdict:
     del arm_filter, verdict_column
@@ -296,7 +296,7 @@ def jensen_premise_active__acrobot(
 def jensen_premise_active__cartpole(
     verdict_distribution_per_env: VerdictDistributionResult,
     *,
-    arm_filter: str = 'ddqn',
+    arm_filter: ArmRole = ArmRole.TREATMENT,
     verdict_column: str = _DORMANCY_VERDICT_COLUMN,
 ) -> Verdict:
     del arm_filter, verdict_column
@@ -315,7 +315,7 @@ def jensen_premise_active__cartpole(
 def jensen_premise_dormant__catch(
     verdict_distribution_per_env: VerdictDistributionResult,
     *,
-    arm_filter: str = 'ddqn',
+    arm_filter: ArmRole = ArmRole.TREATMENT,
     verdict_column: str = _DORMANCY_VERDICT_COLUMN,
 ) -> Verdict:
     """Catch is the structural counterexample: |A|=3 but σ_Q is
@@ -340,7 +340,7 @@ def jensen_premise_dormant__catch(
 def jensen_premise_active__discounting_chain(
     verdict_distribution_per_env: VerdictDistributionResult,
     *,
-    arm_filter: str = 'ddqn',
+    arm_filter: ArmRole = ArmRole.TREATMENT,
     verdict_column: str = _DORMANCY_VERDICT_COLUMN,
 ) -> Verdict:
     del arm_filter, verdict_column
@@ -1222,7 +1222,7 @@ def jensen_gap_outcome_borderline(
         'optimizer.inner.lr', 'sync_period',
     ),
     hp_stratum_axis: str = 'env_name',
-    arm_filter: str = 'ddqn',
+    arm_filter: ArmRole = ArmRole.TREATMENT,
 ) -> Verdict:
     """FINDINGS revision 5: 'jensen_gap is the strongest within-
     env signal in the predicted direction (ρ=-0.27, p<0.001),
@@ -1342,7 +1342,7 @@ def state_coverage_kl_clean_mediator__cartpole_hp(
     outcome_reads: tuple[str, ...] = ('mc_return',),
     hp_axes: tuple[str, ...] = _CARTPOLE_HP_AUDIT_HP_AXES,
     hp_stratum_axis: str = 'replay.capacity',
-    arm_filter: str = 'vanilla_dqn',
+    arm_filter: ArmRole = ArmRole.BASELINE,
 ) -> Verdict:
     """rev 3: state_coverage_kl_uniform_late is the lone mediator
     that survives all three audit checks AND retains a
@@ -1378,7 +1378,7 @@ def learning_curve_auc_outcome_tautological__cartpole_hp(
     outcome_reads: tuple[str, ...] = ('mc_return',),
     hp_axes: tuple[str, ...] = _CARTPOLE_HP_AUDIT_HP_AXES,
     hp_stratum_axis: str = 'replay.capacity',
-    arm_filter: str = 'vanilla_dqn',
+    arm_filter: ArmRole = ArmRole.BASELINE,
 ) -> Verdict:
     """rev 3: learning_curve_auc reads from `mc_return` directly,
     which IS the outcome's source column → jaccard=1.0,
@@ -1410,7 +1410,7 @@ def greedy_match_late_hp_shadow__cartpole_hp(
     outcome_reads: tuple[str, ...] = ('mc_return',),
     hp_axes: tuple[str, ...] = _CARTPOLE_HP_AUDIT_HP_AXES,
     hp_stratum_axis: str = 'replay.capacity',
-    arm_filter: str = 'vanilla_dqn',
+    arm_filter: ArmRole = ArmRole.BASELINE,
 ) -> Verdict:
     """rev 3: greedy_match_late's marginal correlation with
     outcome is HP-mediated — within each capacity stratum,
