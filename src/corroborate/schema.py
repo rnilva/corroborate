@@ -56,7 +56,7 @@ from typing import Self
 import numpy as np
 import numpy.typing as npt
 
-from corroborate._narrow import (
+from corroborate._internals.narrow import (
     optional_str,
     require_str,
     require_verdict,

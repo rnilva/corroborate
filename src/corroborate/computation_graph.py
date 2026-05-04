@@ -56,7 +56,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import override
 
-from corroborate._introspection_boundary import (
+from corroborate._internals.introspection import (
     get_attr_obj,
     get_bound_arguments,
 )

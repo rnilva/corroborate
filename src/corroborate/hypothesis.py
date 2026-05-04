@@ -46,7 +46,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Literal, override
 
-from corroborate._canonical import canonical_str
+from corroborate._internals.canonical import canonical_str
 from corroborate.intervention import Intervention, combined_arm_key
 from corroborate.measurable import Measurable
 

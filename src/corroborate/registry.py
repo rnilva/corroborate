@@ -41,7 +41,7 @@ from dataclasses import dataclass, field
 from importlib import import_module
 from types import ModuleType
 
-from corroborate._registry import Registry as _Registry
+from corroborate._internals.registry import Registry as _Registry
 from corroborate.claim import FnClaim
 
 

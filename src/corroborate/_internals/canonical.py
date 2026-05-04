@@ -15,7 +15,7 @@ import functools
 import types
 from dataclasses import fields, is_dataclass
 
-from corroborate._introspection_boundary import (
+from corroborate._internals.introspection import (
     get_attr_obj,
     get_partial_args,
     get_partial_keywords,

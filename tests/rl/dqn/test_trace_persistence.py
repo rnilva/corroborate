@@ -23,7 +23,7 @@ import gymnax
 import jax
 import pytest
 
-from corroborate._canonical import canonical_str
+from corroborate._internals.canonical import canonical_str
 from corroborate.persistence import read_tracerows, write_tracerows
 from functools import partial as _partial
 

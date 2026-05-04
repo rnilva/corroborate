@@ -42,7 +42,7 @@ from typing import cast, overload, override
 
 import polars as pl
 
-from corroborate._registry import Registry
+from corroborate._internals.registry import Registry
 
 
 class Measurable[R: Mapping[str, object], T]:

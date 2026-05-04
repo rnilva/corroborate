@@ -208,7 +208,7 @@ def test_module_claim_slots_equal(
     instances don't define value-equality (`partial(f, x=1) !=
     partial(f, x=1)`); the framework's canonical-string fingerprint
     IS the value-equality contract for partial-baked claims."""
-    from corroborate._canonical import canonical_str
+    from corroborate._internals.canonical import canonical_str
     yaml_h, py_h = hypothesis_pairs[h_name]
     for k in ('q_network', 'optimizer', 'replay'):
         assert canonical_str(yaml_h.intervention[k]) == canonical_str(

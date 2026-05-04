@@ -255,7 +255,7 @@ def test_yaml_module_claim_slots_equal_python_constructions(
     # Slot equality compared via `canonical_str` — `functools
     # .partial` instances don't define value equality, but the
     # canonical-string fingerprint does, by construction.
-    from corroborate._canonical import canonical_str
+    from corroborate._internals.canonical import canonical_str
     for k in ('q_network', 'optimizer', 'replay'):
         assert canonical_str(h_yaml.intervention[k]) == canonical_str(
             h_python.intervention[k],

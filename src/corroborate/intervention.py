@@ -32,7 +32,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import TypeIs
 
-from corroborate._canonical import canonical_str
+from corroborate._internals.canonical import canonical_str
 from corroborate.claim import FnClaim
 
 type Replacement = (

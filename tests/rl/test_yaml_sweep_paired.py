@@ -218,7 +218,7 @@ def test_minatar_1M_per_env_contract(
 
     # `partial` lacks value equality; `canonical_str` is the
     # framework's value-equality contract for partial-baked claims.
-    from corroborate._canonical import canonical_str
+    from corroborate._internals.canonical import canonical_str
     for k in ('q_network', 'optimizer', 'replay'):
         assert canonical_str(yaml_h.intervention[k]) == canonical_str(
             py_h.intervention[k],
@@ -255,7 +255,7 @@ def test_ddqn_effective_per_env_contract(
     assert yaml_h.arm_key() == py_h.arm_key()
     # `partial` lacks value equality; `canonical_str` is the
     # framework's value-equality contract for partial-baked claims.
-    from corroborate._canonical import canonical_str
+    from corroborate._internals.canonical import canonical_str
     for k in ('q_network', 'optimizer', 'replay'):
         assert canonical_str(yaml_h.intervention[k]) == canonical_str(
             py_h.intervention[k],

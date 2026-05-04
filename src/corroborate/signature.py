@@ -48,7 +48,7 @@ from typing import (
     get_origin, runtime_checkable,
 )
 
-from corroborate._introspection_boundary import (
+from corroborate._internals.introspection import (
     get_attr_obj,
     get_field_default,
     get_field_default_factory,

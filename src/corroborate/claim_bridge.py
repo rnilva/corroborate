@@ -55,7 +55,7 @@ from typing import cast
 
 import polars as pl
 
-from corroborate._introspection_boundary import get_param_default
+from corroborate._internals.introspection import get_param_default
 from corroborate.analysis import resolve_for_holds_when
 from corroborate.hypothesis import PredictedDirection
 from corroborate.intervention import DoEffect

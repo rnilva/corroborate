@@ -48,8 +48,8 @@ from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import cast, overload
 
-from corroborate._introspection_boundary import get_param_default
-from corroborate._registry import Registry
+from corroborate._internals.introspection import get_param_default
+from corroborate._internals.registry import Registry
 
 
 @dataclass(frozen=True, slots=True)

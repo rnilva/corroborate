@@ -11,7 +11,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
-from corroborate._canonical import canonical_str
+from corroborate._internals.canonical import canonical_str
 from corroborate.claim import claim
 from corroborate.hypothesis import Hypothesis
 from corroborate.intervention import Intervention

@@ -33,7 +33,7 @@ import numpy as np
 import polars as pl
 import scipy.stats as ss
 
-from corroborate._polars_boundary import to_dicts as _to_dicts
+from corroborate._internals.polars_boundary import to_dicts as _to_dicts
 from corroborate.causal_discovery import partial_spearman_rho
 from corroborate.rl.dqn.compute_mediators import (
     DEFAULT_PANEL, compute_mediator_panel,

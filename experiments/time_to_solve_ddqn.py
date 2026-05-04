@@ -43,7 +43,7 @@ from pathlib import Path
 
 import polars as pl
 
-from corroborate._polars_boundary import to_dicts as _to_dicts
+from corroborate._internals.polars_boundary import to_dicts as _to_dicts
 from corroborate.analyses.paired_g import paired_g
 from corroborate.rl.env_solve_thresholds import (
     SOLVE_THRESHOLDS, envs_with_threshold,

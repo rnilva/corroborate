@@ -42,7 +42,7 @@ from typing import (
     runtime_checkable,
 )
 
-from corroborate._introspection_boundary import get_attr_obj
+from corroborate._internals.introspection import get_attr_obj
 
 # ============ Protocol — the structural contract ============
 

@@ -641,7 +641,7 @@ def _analysis_reads_for_bridges(
     step so the analyses can find them at evaluate time."""
     import inspect as _inspect
 
-    from corroborate._introspection_boundary import get_param_default
+    from corroborate._internals.introspection import get_param_default
 
     out: set[str] = set()
     for b in bridges:
@@ -816,7 +816,7 @@ def _merge_shard_traces(corpus_dir: Path) -> bool:
     if not shards:
         return False
 
-    from corroborate._pyarrow_shard_merge import merge_parquet_shards
+    from corroborate._internals.pyarrow_shard_merge import merge_parquet_shards
     merge_parquet_shards(shards, dest)
     print(
         f'runner: merged {len(shards)} trace shard(s) in '
