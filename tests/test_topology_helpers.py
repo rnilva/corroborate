@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from corroborate.computation_graph import (
+from corroborate.graph.computation import (
     ComputationEdge,
     ComputationGraph,
     ScopeInfo,

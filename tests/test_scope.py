@@ -17,7 +17,7 @@ from collections.abc import Mapping
 
 import pytest
 
-from corroborate.causal_graph import Direction, Tier
+from corroborate.graph.causal import Direction, Tier
 from corroborate.claim import claim
 from corroborate.claim_bridge import Bridge as ClaimBridge
 from corroborate.graph import Graph

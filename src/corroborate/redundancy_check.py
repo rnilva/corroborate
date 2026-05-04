@@ -51,7 +51,7 @@ from typing import Protocol
 
 import numpy as np
 
-from corroborate.causal_discovery import stratified_spearman_rho
+from corroborate.graph.discovery import stratified_spearman_rho
 from corroborate.schema import RunRow
 
 

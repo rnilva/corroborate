@@ -38,8 +38,8 @@ from typing import override
 import numpy as np
 import numpy.typing as npt
 
-from corroborate.computation_graph import ComputationGraph
-from corroborate.graph import Graph
+from corroborate.graph.computation import ComputationGraph
+from corroborate.graph.graph import Graph
 
 
 @dataclass(frozen=True, slots=True)

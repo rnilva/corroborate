@@ -58,7 +58,7 @@ from corroborate.analyses.dowhy import (
     placebo_refutation as placebo_refutation_analysis,
     random_common_cause_refutation as random_common_cause_refutation_analysis,
 )
-from corroborate.causal_discovery import discover_adjacency
+from corroborate.graph.discovery import discover_adjacency
 from corroborate.stats import (
     StratumObservation, meta_regression,
 )

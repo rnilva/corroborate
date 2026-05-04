@@ -16,7 +16,7 @@ from collections.abc import Mapping
 
 import pytest
 
-from corroborate.causal_graph import (
+from corroborate.graph.causal import (
     CausalGraph,
     Direction,
     Tier,
@@ -425,7 +425,7 @@ def test_promote_bridged_runs_when_two_interventional_admits() -> None:
     `causal_bridged`. The Hypothesis surface doesn't naturally
     produce duplicates, but the post-pass should hand off
     correctly when given them. Sanity-only test of the wiring."""
-    from corroborate.causal_graph import BridgeEdge, Direction
+    from corroborate.graph.causal import BridgeEdge, Direction
     from corroborate.graph import Graph
     e1 = BridgeEdge(
         bridge_name='estimate',

@@ -28,7 +28,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from corroborate.analysis import analysis
-from corroborate.causal_discovery import stratified_spearman_rho
+from corroborate.graph.discovery import stratified_spearman_rho
 
 
 @dataclass(frozen=True, slots=True)

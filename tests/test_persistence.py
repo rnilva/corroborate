@@ -237,7 +237,7 @@ def test_graphs_sidecar_round_trips_topology(tmp_path: Path) -> None:
     the same nodes + edges + edge metadata. Provenance survives
     a sweep — post-hoc consumers reconstruct the static call
     topology without re-running the trace pass."""
-    from corroborate.computation_graph import (
+    from corroborate.graph.computation import (
         ComputationEdge, ComputationGraph,
     )
     from corroborate.graph import Graph

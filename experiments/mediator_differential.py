@@ -40,7 +40,7 @@ from pathlib import Path
 
 import polars as pl
 
-from corroborate.causal_discovery import discover_adjacency
+from corroborate.graph.discovery import discover_adjacency
 from corroborate.persistence import read_runrows
 from corroborate.rl.convergence import (
     classify_envs, envs_in_class, mediator_differential,

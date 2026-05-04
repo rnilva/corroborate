@@ -12,7 +12,7 @@ import pytest
 from scipy.stats import spearmanr
 
 from corroborate._internals.polars_boundary import series_std_float
-from corroborate.causal_discovery import (
+from corroborate.graph.discovery import (
     VariableScope,
     assert_stratification_admissible,
     classify_variable_scope,
@@ -299,7 +299,7 @@ def test_compare_pc_depths_kills_chain_edge_at_depth_1() -> None:
     `xy_edge in low_only` exactly. Same diff shape as depth-1 vs
     depth-2 catching a confounded edge that needs |Z|=2; the
     chain example just exercises the primitive cheaply."""
-    from corroborate.causal_discovery import compare_pc_depths
+    from corroborate.graph.discovery import compare_pc_depths
     rng = np.random.default_rng(0)
     n = 500
     x = rng.standard_normal(n)
@@ -322,7 +322,7 @@ def test_compare_pc_depths_chain_unaffected_by_depth_increase() -> None:
     """X → M → Y: depth-1 already kills X-Y via {M}. Depth-2
     can only confirm. Diff: low_only and high_only both empty;
     common == both edge sets."""
-    from corroborate.causal_discovery import compare_pc_depths
+    from corroborate.graph.discovery import compare_pc_depths
     rng = np.random.default_rng(0)
     n = 500
     x = rng.standard_normal(n)
@@ -341,7 +341,7 @@ def test_compare_pc_depths_chain_unaffected_by_depth_increase() -> None:
 
 def test_compare_pc_depths_rejects_descending_depths() -> None:
     """Depths must be (low, high) with low < high."""
-    from corroborate.causal_discovery import compare_pc_depths
+    from corroborate.graph.discovery import compare_pc_depths
     df = _df_from_columns(
         x=np.array([1.0, 2.0, 3.0]),
         y=np.array([1.0, 2.0, 3.0]),
@@ -358,7 +358,7 @@ def test_discover_chain_removes_marginal_independence_pair() -> None:
     """3-variable chain X → M → Y. PC at depth 1 should:
     - Keep X−M and M−Y (direct dependence)
     - Remove X−Y at depth 1, conditioning on M (X⫫Y | M)."""
-    from corroborate.causal_discovery import discover_adjacency
+    from corroborate.graph.discovery import discover_adjacency
     rng = np.random.default_rng(0)
     n = 500
     x = rng.standard_normal(n)
@@ -384,7 +384,7 @@ def test_discover_collider_keeps_marginal_independence() -> None:
     """3-variable collider X → Z ← Y. X⫫Y marginally (no direct
     edge, no path through Z without conditioning). PC should keep
     X⫫Y at depth 0 (Berkson-bias example)."""
-    from corroborate.causal_discovery import discover_adjacency
+    from corroborate.graph.discovery import discover_adjacency
     rng = np.random.default_rng(0)
     n = 500
     x = rng.standard_normal(n)
@@ -408,7 +408,7 @@ def test_discover_with_jci_stratification() -> None:
     """JCI stratification on a categorical context: edges that
     look correlated when pooled are within-stratum independent.
     Stratified PC removes them; unstratified keeps them."""
-    from corroborate.causal_discovery import discover_adjacency
+    from corroborate.graph.discovery import discover_adjacency
     rng = np.random.default_rng(0)
     n_per = 200
     # Stratum A: X and Y both shifted up (creates pooled correlation
@@ -447,7 +447,7 @@ def test_discover_with_jci_stratification() -> None:
 def test_orient_v_structure_collider() -> None:
     """Unshielded X − Z − Y with Z NOT in sepset(X, Y) → orient
     X → Z ← Y (definite collider)."""
-    from corroborate.causal_discovery import (
+    from corroborate.graph.discovery import (
         DiscoveredAdjacency, orient_adjacency,
     )
     adj = DiscoveredAdjacency(
@@ -469,7 +469,7 @@ def test_orient_v_structure_collider() -> None:
 def test_orient_non_collider_when_z_in_sepset() -> None:
     """Unshielded X − Z − Y with Z IN sepset(X, Y) → Z is a
     non-collider; the X−Z and Y−Z edges stay undirected."""
-    from corroborate.causal_discovery import (
+    from corroborate.graph.discovery import (
         DiscoveredAdjacency, orient_adjacency,
     )
     adj = DiscoveredAdjacency(
@@ -492,7 +492,7 @@ def test_orient_meek_r1_propagation() -> None:
     """A → B and B − C undirected, A not adjacent to C → R1
     propagates orientation B → C (else A → B ← C would be a new
     v-structure that v-structure detection would have caught)."""
-    from corroborate.causal_discovery import (
+    from corroborate.graph.discovery import (
         DiscoveredAdjacency, orient_adjacency,
     )
     # We need: A → B (already directed), B − C undirected, A and C
@@ -549,7 +549,7 @@ def test_orient_meek_r1_propagation() -> None:
 def test_orient_ambiguous_triple_skipped() -> None:
     """Triple where Z is in SOME but not ALL separating sets →
     ambiguous; not oriented in conservative mode."""
-    from corroborate.causal_discovery import (
+    from corroborate.graph.discovery import (
         DiscoveredAdjacency, orient_adjacency,
     )
     adj = DiscoveredAdjacency(
@@ -594,7 +594,7 @@ def test_pc_dqn_smoke_holds_on_migrated_corpus() -> None:
         import pytest
         pytest.skip(f'{runs_path} not on disk')
 
-    from corroborate.causal_discovery import discover_adjacency
+    from corroborate.graph.discovery import discover_adjacency
 
     df = pl.read_parquet(runs_path)
     df = df.with_columns(
@@ -658,7 +658,7 @@ def test_per_env_pc_dqn_smoke_finds_within_env_arm_edges() -> None:
         import pytest
         pytest.skip(f'{runs_path} not on disk')
 
-    from corroborate.causal_discovery import discover_adjacency
+    from corroborate.graph.discovery import discover_adjacency
 
     df = pl.read_parquet(runs_path)
     df = df.with_columns(
@@ -721,7 +721,7 @@ def test_per_env_mediator_pc_smoke_finds_outcome_neighbours() -> None:
         import pytest
         pytest.skip(f'{enriched_path} not on disk')
 
-    from corroborate.causal_discovery import discover_adjacency
+    from corroborate.graph.discovery import discover_adjacency
 
     df = pl.read_parquet(enriched_path)
     df = df.with_columns(

@@ -54,7 +54,7 @@ from corroborate._internals.polars_boundary import (
     scalar_int as _scalar_int,
     to_dicts as _to_dicts,
 )
-from corroborate.computation_graph import (
+from corroborate.graph.computation import (
     ComputationEdge,
     ComputationGraph,
 )

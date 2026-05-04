@@ -42,7 +42,7 @@ from dataclasses import dataclass
 import scipy.stats as ss
 
 from corroborate.aggregate import hypothesis_comparison_from_cells
-from corroborate.causal_graph import (
+from corroborate.graph.causal import (
     BridgeEdge,
     CausalGraph,
     Direction,

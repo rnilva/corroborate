@@ -223,7 +223,7 @@ def test_hypothesis_default_edges_empty() -> None:
 def _intervention_edge(
     *, target: str, predicted_direction: 'PredictedDirection',
 ) -> 'ClaimBridge':
-    from corroborate.causal_graph import Direction, Tier
+    from corroborate.graph.causal import Direction, Tier
     from corroborate.claim_bridge import Bridge as ClaimBridge
     from corroborate.intervention import DoEffect
     do = DoEffect(treatment_arm='a', baseline_arm='b')
@@ -238,7 +238,7 @@ def _intervention_edge(
 def _coupling_edge(
     *, source: str, target: str, predicted_direction: 'PredictedDirection',
 ) -> 'ClaimBridge':
-    from corroborate.causal_graph import Direction, Tier
+    from corroborate.graph.causal import Direction, Tier
     from corroborate.claim_bridge import Bridge as ClaimBridge
     return ClaimBridge(
         name=f'{source}->{target}',

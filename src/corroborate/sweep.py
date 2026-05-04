@@ -42,7 +42,7 @@ from typing import Protocol
 
 import polars as pl
 
-from corroborate.computation_graph import ComputationGraph
+from corroborate.graph.computation import ComputationGraph
 from corroborate.graph import Graph
 from corroborate.hypothesis import Hypothesis
 from corroborate.persistence import (

@@ -32,7 +32,7 @@ import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
-from corroborate.causal_graph import CausalGraph
+from corroborate.graph.causal import CausalGraph
 from corroborate.hypothesis_verdict import HypothesisVerdict
 from corroborate.stats import (
     MetaRegressionResult,

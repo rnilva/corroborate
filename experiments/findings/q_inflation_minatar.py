@@ -29,7 +29,7 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 
-from corroborate.causal_discovery import discover_adjacency
+from corroborate.graph.discovery import discover_adjacency
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]

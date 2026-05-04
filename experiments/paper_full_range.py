@@ -52,8 +52,8 @@ import numpy as np
 import polars as pl
 import scipy.stats as ss
 
-from corroborate.causal_discovery import compare_pc_depths, discover_adjacency
-from corroborate.causal_graph import Direction, Tier
+from corroborate.graph.discovery import compare_pc_depths, discover_adjacency
+from corroborate.graph.causal import Direction, Tier
 from corroborate.claim_bridge import Bridge as ClaimBridge
 from corroborate.hypothesis import Hypothesis
 from corroborate.hypothesis_verdict import (

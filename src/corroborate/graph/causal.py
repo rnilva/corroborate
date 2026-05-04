@@ -42,7 +42,7 @@ from dataclasses import dataclass, replace
 from enum import Enum, IntEnum
 from typing import TYPE_CHECKING, Literal, override
 
-from corroborate.graph import Edge, Graph
+from corroborate.graph.graph import Edge, Graph
 
 if TYPE_CHECKING:
     # Forward import: `claim_bridge` depends on `causal_graph`

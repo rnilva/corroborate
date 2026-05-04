@@ -62,7 +62,7 @@ from corroborate._internals.introspection import (
 )
 
 from corroborate.claim import CallRecord, Claim
-from corroborate.graph import Graph
+from corroborate.graph.graph import Graph
 
 
 _NON_REGISTERABLE_PRIMITIVES = (int, float, bool, type(None), str, bytes)

@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     import pandas as pd
     from dowhy import CausalModel
 
-    from corroborate.causal_graph import CausalGraph
+    from corroborate.graph.causal import CausalGraph
 
 
 # Type alias — DAG accepted shapes. Coerced to `nx.DiGraph[str]`

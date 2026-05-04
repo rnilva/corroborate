@@ -45,7 +45,7 @@ import jax.numpy as jnp
 import numpy as np
 import numpy.typing as npt
 
-from corroborate.causal_graph import Direction, Tier
+from corroborate.graph.causal import Direction, Tier
 from corroborate.claim_bridge import Bridge
 from corroborate.measurable import Measurable, measurable, register
 from corroborate.reductions import (

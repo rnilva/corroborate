@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from functools import partial
 
 from corroborate.claim import claim, trace_context
-from corroborate.computation_graph import (
+from corroborate.graph.computation import (
     ComputationEdge,
     build_computation_graph,
     signature,

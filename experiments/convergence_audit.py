@@ -25,7 +25,7 @@ from collections.abc import Mapping
 from functools import partial
 from pathlib import Path
 
-from corroborate.causal_graph import Direction, Tier
+from corroborate.graph.causal import Direction, Tier
 from corroborate.claim_bridge import Bridge as ClaimBridge
 from corroborate.hypothesis import Hypothesis
 from corroborate.hypothesis_verdict import (

@@ -68,7 +68,7 @@ from corroborate.verdict import Verdict
 # than redefined to keep the two layers' types unified — the
 # graph builder reads `bridge.tier` / `bridge.direction` directly
 # without conversion.
-from corroborate.causal_graph import Direction, Tier  # noqa: E402
+from corroborate.graph.causal import Direction, Tier  # noqa: E402
 
 
 # A bridge endpoint is one of:
@@ -283,8 +283,8 @@ class Bridge:
 
         Caller must register the returned Measurable (typically
         as part of a substrate's default measurable panel)."""
-        from corroborate.causal_graph import Direction as _D
-        from corroborate.causal_graph import Tier as _T
+        from corroborate.graph.causal import Direction as _D
+        from corroborate.graph.causal import Tier as _T
         if self.tier is not _T.INVARIANT:
             raise ValueError(
                 f'to_invariant_measurable: bridge {self.name!r} has '
