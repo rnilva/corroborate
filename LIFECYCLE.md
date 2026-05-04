@@ -97,7 +97,7 @@ arm distinguisher.
    │       └────────┐                       ┌────────────────────┘            │
    │                │                       │                                 │
    │                ▼ PER-BRIDGE VERDICT (8) ▼                                │
-   │           runner.run_module(<bridges_module>, data=corpus)               │
+   │           runner.run(<bridges_module>, data=corpus)                      │
    │           → dict[bridge_name, BridgeEvaluation]                          │
    │           Each bridge: evaluate(b, cells) → holds_when(...) → Verdict    │
    │                                                                          │
@@ -359,7 +359,7 @@ per-bridge `evaluate(b, cells)` driven by the bridge author's
 `graph/causal.py` as a post-walk graph-promotion helper for
 substrates that build a `CausalGraph` over their bridges.
 
-**Modules**: `runner/runner.py:run_module`,
+**Modules**: `runner/runner.py:run`,
 `bridge/bridge.py:evaluate`,
 `graph/causal.py.{Direction, Tier, BridgeEdge,
 promote_bridged_evidence}`.

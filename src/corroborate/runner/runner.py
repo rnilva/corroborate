@@ -32,13 +32,14 @@ runner pulls raw from s3 unless `restore_from_cloud=False`. The
 warning surface is loud when restore is unavailable and a corpus
 is needed but missing.
 
-Module surface — every bridges module satisfies `HypothesisModule`
-by declaring (at least) `BRIDGES: tuple[Bridge, ...]`. The cache
-file is keyed off the module's dotted-path leaf
-(`mod.__name__.split('.')[-1]`) — there is no override surface; if
-the cache lives in a non-default location, write a thin script
-that calls `run_module(..., cache_path=...)` directly (the kwarg
-exists for that purpose).
+Hypothesis surface — every bridges module / class satisfies the
+`Hypothesis` Protocol (`corroborate.core.hypothesis.Hypothesis`)
+by declaring `INTERVENTION: DoEffect` + `BRIDGES:
+tuple[Bridge, ...]`. The cache file is keyed off
+`getattr(h, '__name__', 'unnamed').split('.')[-1]` — there is no
+override surface; if the cache lives in a non-default location,
+write a thin script that calls `run(..., cache_path=...)`
+directly (the kwarg exists for that purpose).
 
 This module is library-only — no argparse, no `if __name__ ==
 '__main__'`. The CLI thin-wrapper lives at
@@ -50,8 +51,7 @@ import json
 import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from types import ModuleType
-from typing import Protocol, cast, runtime_checkable
+from typing import cast
 
 import polars as pl
 
@@ -62,6 +62,7 @@ from corroborate.bridge.bridge import (
     evaluate,
     measurable_names_for_bridges,
 )
+from corroborate.core.hypothesis import Hypothesis
 from corroborate.corpus.cloud import RemoteManifest
 from corroborate.corpus.schema import LINEAGE_FIELDS
 from corroborate.measurables import (
@@ -71,60 +72,45 @@ from corroborate.measurables import (
 )
 
 
-# ============ Module Protocol ============
+# ============ Hypothesis validation ============
 
 
-@runtime_checkable
-class HypothesisModule(Protocol):
-    """Module-level Protocol: any module exporting `BRIDGES` (a
-    tuple of `Bridge` instances) satisfies it. The runner uses
-    `isinstance(mod, HypothesisModule)` for the structural check;
-    pyright narrows accordingly inside the if-block.
-
-    `runtime_checkable` only validates attribute *presence* (not
-    element types) — `_validate_module` adds the element-type
-    check on top so a malformed BRIDGES tuple fails loudly at
-    runner-dispatch time.
-
-    `__name__` is the module's dotted path (every Python module
-    has it, but the Protocol declares it explicitly so pyright
-    can narrow attribute access through the protocol type)."""
-
-    BRIDGES: tuple[Bridge, ...]
-    __name__: str
-
-
-def _validate_module(mod: ModuleType) -> HypothesisModule:
-    """Narrow `mod` to `HypothesisModule` via the Protocol's
-    `__instancecheck__`, then verify each `BRIDGES` element is a
-    `Bridge` (Protocol's runtime check doesn't validate element
-    types). Raises `TypeError` on shape errors."""
-    if not isinstance(mod, HypothesisModule):
+def _validate_hypothesis(h: object) -> Hypothesis:
+    """Narrow `h` to the framework's `Hypothesis` Protocol via
+    `__instancecheck__` (`runtime_checkable`), then verify each
+    `BRIDGES` element is a `Bridge`. Raises `TypeError` on shape
+    errors. Both Python modules and class-based hypotheses
+    satisfy the Protocol structurally as long as they expose
+    `INTERVENTION: DoEffect` + `BRIDGES: tuple[Bridge, ...]`."""
+    name = getattr(h, '__name__', '<unnamed>')
+    if not isinstance(h, Hypothesis):
         raise TypeError(
-            f'{mod.__name__} is not a HypothesisModule: missing '
-            f'`BRIDGES: tuple[Bridge, ...]` at module level. '
-            f'Bridges files must export the canonical name '
-            f'`BRIDGES` (alias `BRIDGES = LEGACY_NAME` is fine).',
+            f'{name} does not satisfy the Hypothesis Protocol: '
+            f'missing `INTERVENTION: DoEffect` and / or '
+            f'`BRIDGES: tuple[Bridge, ...]` at the module / class '
+            f'level.',
         )
-    # Protocol typing has narrowed `mod.BRIDGES` to tuple[Bridge,
-    # ...] for the static checker. `runtime_checkable.__instancecheck__`
-    # only validates attribute *presence*, so a defensive element-
-    # type check defends against malformed authoring (e.g. a non-
-    # Bridge slipped into the tuple via a copy-paste mistake).
-    for b in mod.BRIDGES:
+    # `runtime_checkable.__instancecheck__` only validates attribute
+    # *presence*, so a defensive element-type check defends against
+    # malformed authoring (e.g. a non-Bridge slipped into the tuple
+    # via a copy-paste mistake).
+    for b in h.BRIDGES:
         if not isinstance(b, Bridge):  # pyright: ignore[reportUnnecessaryIsInstance]
             raise TypeError(
-                f'{mod.__name__}.BRIDGES contains non-Bridge: '
+                f'{name}.BRIDGES contains non-Bridge: '
                 f'{type(b).__name__}',
             )
-    return mod
+    return h
 
 
-def _default_cache_path(mod: HypothesisModule) -> Path:
-    """Per-module cache file at
-    `experiments/data/cache/<short>.parquet`, where `<short>` is
-    the last segment of the module's dotted path."""
-    short = mod.__name__.split('.')[-1]
+def _default_cache_path(h: Hypothesis) -> Path:
+    """Per-hypothesis cache file at
+    `experiments/data/cache/<short>.parquet`. For modules, `<short>`
+    is the last segment of the dotted path; for classes, it's the
+    class's `__name__`. Hypotheses without a discoverable `__name__`
+    fall back to `'unnamed'`."""
+    name = getattr(h, '__name__', 'unnamed')
+    short = name.split('.')[-1] if isinstance(name, str) else 'unnamed'
     return Path('experiments/data/cache') / f'{short}.parquet'
 
 
@@ -203,8 +189,8 @@ def _invalidate_drifted(
 # ============ Public surface ============
 
 
-def run_module(
-    module_name: str,
+def run(
+    h: Hypothesis | str,
     *,
     data: pl.DataFrame | Path | str | None = None,
     use_cache: bool = True,
@@ -213,18 +199,27 @@ def run_module(
     restore_from_cloud: bool = True,
     cache_path: Path | None = None,
 ) -> dict[str, BridgeEvaluation]:
-    """Run a bridges module on `data`, returning per-bridge verdicts.
+    """Run a hypothesis's bridges on `data`, returning per-bridge
+    verdicts.
+
+    `h` may be:
+    - a Python module satisfying the `Hypothesis` Protocol
+      (`INTERVENTION: DoEffect` + `BRIDGES: tuple[Bridge, ...]`),
+    - a class-based hypothesis (frozen dataclass with `ClassVar`
+      fields of the same shape),
+    - a string dotted module path (the CLI's input form);
+      imported via `importlib.import_module` then validated.
 
     Cache lifecycle:
 
-    - `use_cache=True` (default): read+write the per-module cache.
-      Cells already in cache with all required measurables skip
-      recomputation. New cells from `data` get measurables computed
-      and appended.
+    - `use_cache=True` (default): read+write the per-hypothesis
+      cache. Cells already in cache with all required measurables
+      skip recomputation. New cells from `data` get measurables
+      computed and appended.
     - `use_cache=False`: pure compute path; no cache read or write.
     - `write_cache=False` + `use_cache=True`: read cache, run, but
       don't persist updates.
-    - `rebuild=True`: invalidate the per-module cache before
+    - `rebuild=True`: invalidate the per-hypothesis cache before
       running. Implies `use_cache=True`.
 
     `restore_from_cloud=True` (default): when ingesting a corpus
@@ -234,7 +229,9 @@ def run_module(
 
     `cache_path`: explicit override for the cache file. When None
     and `use_cache=True`, defaults to
-    `experiments/data/cache/<module-leaf>.parquet`.
+    `experiments/data/cache/<short>.parquet` where `<short>` is
+    the last segment of `h.__name__` (modules) or the class's
+    `__name__`.
 
     `data` may be:
     - `None`: run on whatever's already in the cache.
@@ -243,12 +240,15 @@ def run_module(
     - a path to a directory: walk its subdirs for per-corpus
       `runs.parquet` (with auto-restore), concat via
       `diagonal_relaxed`."""
-    mod = _validate_module(importlib.import_module(module_name))
-    bridges = mod.BRIDGES
+    if isinstance(h, str):
+        h = _validate_hypothesis(importlib.import_module(h))
+    else:
+        h = _validate_hypothesis(h)
+    bridges = h.BRIDGES
 
     resolved_cache: Path | None = None
     if use_cache:
-        resolved_cache = cache_path if cache_path is not None else _default_cache_path(mod)
+        resolved_cache = cache_path if cache_path is not None else _default_cache_path(h)
         resolved_cache.parent.mkdir(parents=True, exist_ok=True)
         if rebuild:
             resolved_cache.unlink(missing_ok=True)
@@ -263,8 +263,9 @@ def run_module(
     )
 
     if cells.height == 0:
+        h_name = getattr(h, '__name__', '<unnamed>')
         raise SystemExit(
-            f'{module_name}: no cells available — pass --data to '
+            f'{h_name}: no cells available — pass --data to '
             f'ingest a corpus, or check the cache at {resolved_cache}',
         )
 
@@ -855,6 +856,5 @@ def _join_required_traces(
 
 
 __all__ = [
-    'HypothesisModule',
-    'run_module',
+    'run',
 ]

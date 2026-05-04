@@ -2,9 +2,9 @@
 
 Three sub-modules:
 
-- `runner.runner` — `run_module` end-to-end driver +
-  `HypothesisModule` Protocol. Authors invoke this from sweep
-  scripts.
+- `runner.runner` — `run` end-to-end driver. Authors invoke this
+  from sweep scripts; consumes the `Hypothesis` Protocol
+  (`corroborate.core.hypothesis.Hypothesis`).
 - `runner.sweep` — `Runner[R]` Protocol, `run_intervention`
   paired-sweep driver, `SweepResult`, `SweepCellResult`,
   `CellFailure`.
@@ -21,10 +21,7 @@ intermediate that decomposes into a Hypothesis Protocol-conformer
 hypothesis surface is the `Hypothesis` Protocol in
 `corroborate.core.hypothesis`."""
 from corroborate.runner.registry import Registry
-from corroborate.runner.runner import (
-    HypothesisModule,
-    run_module,
-)
+from corroborate.runner.runner import run
 from corroborate.runner.sweep import (
     CellFailure,
     Runner,
@@ -35,11 +32,10 @@ from corroborate.runner.sweep import (
 
 __all__ = [
     'CellFailure',
-    'HypothesisModule',
     'Registry',
     'Runner',
     'SweepCellResult',
     'SweepResult',
+    'run',
     'run_intervention',
-    'run_module',
 ]

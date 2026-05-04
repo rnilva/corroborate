@@ -209,7 +209,7 @@ analysis triple authored as `@claim_bridge`s:
 # module via @claim_bridge; consume `analyses.dowhy.backdoor_ate`,
 # `analyses.dowhy.placebo_refutation`,
 # `analyses.dowhy.random_common_cause_refutation` as fixtures.
-# `runner.run_module(<bridges_module>, data=corpus)` evaluates
+# `runner.run(<bridges_module>, data=corpus)` evaluates
 # every bridge via `bridge.evaluate(b, cells)` → holds_when →
 # Verdict. The substrate can build a CausalGraph over the
 # resulting BridgeEvaluations and pass through

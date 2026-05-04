@@ -1,7 +1,8 @@
-"""CLI thin-wrapper around `corroborate.runner.run_module`.
+"""CLI thin-wrapper around `corroborate.runner.run`.
 
 Run any bridges-module-as-hypothesis (`experiments/findings/<X>.py`
-exporting `BRIDGES`) on a data input, with the per-module cache:
+exporting `INTERVENTION` + `BRIDGES`) on a data input, with the
+per-hypothesis cache:
 
     python scripts/run_hypothesis.py experiments.findings.ddqn_universe \\
         --data experiments/data/
@@ -16,7 +17,7 @@ from pathlib import Path
 from typing import cast
 
 from corroborate.claim_bridge import BridgeEvaluation
-from corroborate.runner import run_module
+from corroborate.runner import run
 
 
 def main(argv: Sequence[str] | None = None) -> None:
@@ -35,7 +36,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser.add_argument(
         '--cache-path', type=Path, default=None,
         help='explicit cache path; defaults to '
-             'experiments/data/cache/<module-leaf>.parquet',
+             'experiments/data/cache/<short>.parquet',
     )
     parser.add_argument(
         '--no-cache', action='store_true',
@@ -47,7 +48,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
     parser.add_argument(
         '--rebuild', action='store_true',
-        help='invalidate the per-module cache before running',
+        help='invalidate the per-hypothesis cache before running',
     )
     parser.add_argument(
         '--no-restore', action='store_true',
@@ -55,7 +56,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
     args = parser.parse_args(argv)
 
-    results = run_module(
+    results = run(
         cast(str, args.module),
         data=cast(Path | None, args.data),
         cache_path=cast(Path | None, args.cache_path),

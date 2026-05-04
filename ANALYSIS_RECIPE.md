@@ -48,7 +48,7 @@ class directly: `scope=pl.col('_cell_class') == 'solved'`.
 
 The framework's verdict primitive is `bridge.evaluate(b, cells)`.
 Author one bridge per causal chain edge and run them via
-`runner.run_module(<module_name>)`:
+`runner.run(<module_name>)`:
 
 ```python
 @claim_bridge(
@@ -323,7 +323,7 @@ intervening on.
 ## Recipe summary
 
 1. Classify cells (`with_cell_class`) → exclude saturated.
-2. Run bridges (`runner.run_module`) → mech/outcome/link verdicts.
+2. Run bridges (`runner.run`) → mech/outcome/link verdicts.
 3. If HELD_WITH_SCOPE_FLAG → meta-regression for scope axis.
 3a. Partial-ρ to disambiguate candidate mediators from the canonical one.
 4. PC for moderator candidates (depth-1, then depth-2 robustness).

@@ -11,7 +11,7 @@ in subpackages and is imported via the explicit qualified path:
     from corroborate.bridge import Verdict
     from corroborate.measurables import Measurable, register
     from corroborate.corpus import RunRow, TraceRow
-    from corroborate.runner import run_module, sweep
+    from corroborate.runner import run, sweep
     from corroborate.stats import hedges_g_paired
     from corroborate.graph import CausalGraph
 """
