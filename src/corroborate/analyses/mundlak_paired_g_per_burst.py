@@ -116,9 +116,11 @@ def mundlak_paired_g_per_burst(
 
     # Resolve the named measurable; apply once per cell with
     # transitive dep resolution via `evaluate_with_measurables`,
-    # cache the array.
-    import corroborate.rl.dqn.measurables as _m  # noqa: F401
-    _ = _m
+    # cache the array. Substrate consumers register their
+    # measurables via the substrate's `__init__.py` side effect
+    # (e.g. importing `corroborate.rl.dqn` triggers DQN
+    # measurable registration); this analysis is substrate-
+    # neutral and does not register anything itself.
     from corroborate.measurable import (
         get_registered, evaluate_with_measurables,
     )
@@ -127,7 +129,9 @@ def mundlak_paired_g_per_burst(
         raise RuntimeError(
             f'measurable {predictor_name!r} is not registered; '
             f'declare it via `@measurable` and ensure the '
-            f'declaring module is imported.',
+            f'declaring module is imported (substrate consumers '
+            f'usually import the substrate package, which '
+            f'registers its measurables in its `__init__.py`).',
         )
     per_cell_array: dict[str, npt.NDArray[np.float64]] = {}
     for c in cells_list:
