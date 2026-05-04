@@ -47,8 +47,8 @@ import numpy.typing as npt
 
 from corroborate.graph.causal import Direction, Tier
 from corroborate.claim_bridge import Bridge
-from corroborate.measurable import Measurable, measurable, register
-from corroborate.reductions import (
+from corroborate.measurables import Measurable, measurable, register
+from corroborate.measurables.reductions import (
     cv_safe,
     from_key,
     log_safe,

@@ -59,7 +59,7 @@ from corroborate._internals.introspection import get_param_default
 from corroborate.analysis import resolve_for_holds_when
 from corroborate.hypothesis import PredictedDirection
 from corroborate.intervention import DoEffect
-from corroborate.measurable import Measurable, register
+from corroborate.measurables import Measurable, register
 from corroborate.verdict import Verdict
 
 
@@ -572,7 +572,7 @@ def _filter_with_missing_cols(
     if not missing:
         return df.filter(expr)
 
-    from corroborate.measurable import compute_missing_columns
+    from corroborate.measurables import compute_missing_columns
     # `compute_missing_columns` resolves whichever names are
     # registered measurables and adds them as columns; names that
     # aren't registered remain absent and get null-padded so the
@@ -719,7 +719,7 @@ def measurable_names_for_bridges(
     measurable, but `'eval_best_burst_mean'` as a raw field is
     not).
     """
-    from corroborate.measurable import (
+    from corroborate.measurables import (
         get_registered, transitive_measurables,
     )
     out: set[str] = set()

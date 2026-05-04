@@ -359,7 +359,7 @@ def measurables_by_attachment(
     substrate's paper-narrative scope (mechanism / outcome / link)
     is a substrate-side reading on top of this structural
     attachment, not a framework-level type."""
-    from corroborate.measurable import get_registered, registered_names
+    from corroborate.measurables import get_registered, registered_names
     paths = producing_paths(g, claim_name)
     if not paths:
         return ()
@@ -403,7 +403,7 @@ def measurable_scope(
     Loud `KeyError` when `measurable_name` isn't registered —
     the measurable name is the framework's authority, asking
     about an unknown name is a substrate bug."""
-    from corroborate.measurable import get_registered, registered_names
+    from corroborate.measurables import get_registered, registered_names
     m = get_registered(measurable_name)
     if m is None:
         raise KeyError(

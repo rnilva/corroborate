@@ -111,7 +111,7 @@ def test_late_window_measurables_registered_under_their_function_names() -> None
     """`@measurable` registers each late-window scalar under its
     declared name in the global registry; lookup via
     `get_registered` returns the same instance."""
-    from corroborate.measurable import get_registered
+    from corroborate.measurables import get_registered
 
     for name in (
         'q_gap_late', 'q_gap_growth', 'q_max_growth',
@@ -142,7 +142,7 @@ def test_fill_ratio_late_is_measurable_with_extra_kwarg() -> None:
     """fill_ratio_late wraps as Measurable but takes an extra
     `capacity` kwarg the framework's auto-resolver doesn't fill.
     Caller must pass capacity directly."""
-    from corroborate.measurable import Measurable
+    from corroborate.measurables import Measurable
 
     assert isinstance(fill_ratio_late, Measurable)
     record = {'buf_size': np.array([0, 100, 500, 1000])}

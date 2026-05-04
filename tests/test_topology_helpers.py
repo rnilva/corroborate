@@ -21,7 +21,7 @@ from corroborate.graph.computation import (
     producing_paths,
 )
 from corroborate.graph import Graph
-from corroborate.measurable import measurable
+from corroborate.measurables import measurable
 
 
 # A graph that mirrors a tiny substrate: `bootstrap` emits

@@ -31,7 +31,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 
 from corroborate.analysis import analysis
-from corroborate.redundancy_check import (
+from corroborate.measurables.redundancy_check import (
     TautologyReport, audit_mediator_panel,
 )
 from corroborate.schema import RunRow

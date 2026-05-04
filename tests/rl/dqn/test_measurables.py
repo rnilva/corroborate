@@ -8,7 +8,7 @@ from collections.abc import Mapping
 
 import numpy as np
 
-from corroborate.measurable import (
+from corroborate.measurables import (
     evaluate_with_measurables,
     get_registered,
 )

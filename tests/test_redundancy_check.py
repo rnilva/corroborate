@@ -5,8 +5,8 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping
 
-from corroborate.measurable import measurable
-from corroborate.redundancy_check import (
+from corroborate.measurables import measurable
+from corroborate.measurables.redundancy_check import (
     TautologyReport, audit_mediator_panel, is_hp_tautological,
     is_outcome_tautological, jaccard, reads_overlap,
 )

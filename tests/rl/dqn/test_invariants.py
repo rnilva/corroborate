@@ -23,7 +23,7 @@ import pytest
 # Side-effect import: registers pearson_r_online_target etc. in
 # the measurable registry so resolved gap evaluation works.
 import corroborate.rl.dqn.measurables  # noqa: F401  # pyright: ignore[reportUnusedImport]
-from corroborate.measurable import Measurable
+from corroborate.measurables import Measurable
 from corroborate.rl.dqn.dqn import dqn_step, init_state
 from corroborate.rl.dqn.invariants import (
     fqi_decay_gap,
@@ -170,7 +170,7 @@ def _eval_gap[R: Mapping[str, object]](
     measurables have substrate-specific record types
     (`DQNTrajectoryRecord`); the resolver consumes the record
     structurally and is independent of R's nominal identity."""
-    from corroborate.measurable import evaluate_with_measurables
+    from corroborate.measurables import evaluate_with_measurables
     return float(evaluate_with_measurables(gap.fn, dict(record)))
 
 

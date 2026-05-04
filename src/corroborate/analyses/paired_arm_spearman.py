@@ -66,7 +66,7 @@ def paired_arm_spearman(
     # the @measurable resolver if needed. Mirrors paired_g's
     # `_resolve_value`; private-cross-module imports break pyright,
     # so we duplicate the 6-line shape here.
-    from corroborate.measurable import (
+    from corroborate.measurables import (
         evaluate_with_measurables, get_registered,
     )
 

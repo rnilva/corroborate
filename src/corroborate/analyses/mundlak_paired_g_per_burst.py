@@ -33,7 +33,7 @@ from corroborate.analyses.paired_g_per_burst import (
     DEFAULT_PER_BURST_SOURCE, paired_g_per_burst,
 )
 from corroborate.analysis import analysis
-from corroborate.measurable import Measurable
+from corroborate.measurables import Measurable
 
 
 def _per_env_burst_predictor_mean(
@@ -121,7 +121,7 @@ def mundlak_paired_g_per_burst(
     # (e.g. importing `corroborate.rl.dqn` triggers DQN
     # measurable registration); this analysis is substrate-
     # neutral and does not register anything itself.
-    from corroborate.measurable import (
+    from corroborate.measurables import (
         get_registered, evaluate_with_measurables,
     )
     predictor_m = get_registered(predictor_name)

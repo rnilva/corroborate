@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from corroborate.measurable import Measurable, measurable
+from corroborate.measurables import Measurable, measurable
 
 
 # ============ Construction + basic call ============
@@ -201,7 +201,7 @@ def test_measurable_reads_via_direct_construction() -> None:
 def test_registry_indexes_by_name() -> None:
     """`@measurable` registers the instance in `_REGISTRY` keyed
     by the resolved name."""
-    from corroborate.measurable import get_registered
+    from corroborate.measurables import get_registered
 
     @measurable
     def _reg_demo_q(record: Mapping[str, object]) -> float:
@@ -215,7 +215,7 @@ def test_registry_indexes_by_name() -> None:
 def test_evaluate_with_measurables_no_deps() -> None:
     """A function with NO measurable params resolves trivially —
     the resolver passes the record through unchanged."""
-    from corroborate.measurable import evaluate_with_measurables
+    from corroborate.measurables import evaluate_with_measurables
 
     def f(record: Mapping[str, object]) -> str:
         return 'ok'
@@ -226,7 +226,7 @@ def test_evaluate_with_measurables_no_deps() -> None:
 def test_evaluate_with_measurables_one_dep() -> None:
     """A function declaring one measurable as a parameter gets
     that measurable's value injected."""
-    from corroborate.measurable import evaluate_with_measurables
+    from corroborate.measurables import evaluate_with_measurables
 
     @measurable
     def base_value(record: Mapping[str, object]) -> int:
@@ -246,7 +246,7 @@ def test_evaluate_with_measurables_transitive() -> None:
     """Measurable A depends on measurable B; B depends on the
     record. Resolver walks the dep tree and computes B once,
     then A."""
-    from corroborate.measurable import evaluate_with_measurables
+    from corroborate.measurables import evaluate_with_measurables
 
     @measurable
     def _trans_x(record: Mapping[str, object]) -> int:
@@ -272,7 +272,7 @@ def test_evaluate_memoizes_within_one_record() -> None:
     """A measurable is computed exactly once per record even when
     multiple dependents read it. The cache is shared across all
     deps in one `evaluate_with_measurables` call."""
-    from corroborate.measurable import evaluate_with_measurables
+    from corroborate.measurables import evaluate_with_measurables
 
     call_count = {'n': 0}
 
@@ -312,7 +312,7 @@ def test_evaluate_unknown_measurable_param_passes_through() -> None:
     """A param name that isn't a registered measurable is left
     for the caller to supply. Python will raise TypeError if the
     caller doesn't pass it (normal function-call semantics)."""
-    from corroborate.measurable import evaluate_with_measurables
+    from corroborate.measurables import evaluate_with_measurables
 
     def f(record: Mapping[str, object], not_a_measurable: int) -> int:
         del record
@@ -335,7 +335,7 @@ def test_unknown_dep_in_intermediate_raises_typeerror() -> None:
     `evaluate_with_measurables` only auto-injecting registered
     names — unknowns pass through, the caller must supply or it
     errors."""
-    from corroborate.measurable import evaluate_with_measurables
+    from corroborate.measurables import evaluate_with_measurables
 
     @measurable
     def _ku_intermediate(record: Mapping[str, object], not_registered: int) -> int:

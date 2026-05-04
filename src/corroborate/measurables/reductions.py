@@ -31,7 +31,7 @@ from typing import Literal, Protocol, cast
 import numpy as np
 import numpy.typing as npt
 
-from corroborate.measurable import Measurable
+from corroborate.measurables.core import Measurable
 
 
 type _AxisOp = Literal['mean', 'var', 'std', 'max', 'min', 'sum']

@@ -85,7 +85,7 @@ def leaf_signature(
     topology paths. "Leaf" rather than "HP": a leaf-regime kwarg
     is a non-recursive scalar claim of the configured composition,
     observed at composition time."""
-    from corroborate.measurable import registered_names
+    from corroborate.measurables import registered_names
     excluded = (
         _FRAMEWORK_EXCLUDED_KEYS
         | exogenous_keys

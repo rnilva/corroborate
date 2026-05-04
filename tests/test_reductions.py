@@ -15,8 +15,8 @@ from collections.abc import Mapping
 import jax.numpy as jnp
 import pytest
 
-from corroborate.measurable import Measurable
-from corroborate.reductions import (
+from corroborate.measurables import Measurable
+from corroborate.measurables.reductions import (
     from_key,
     growth_window,
     late_window_mean,

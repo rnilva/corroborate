@@ -48,9 +48,9 @@ from typing import TYPE_CHECKING, Literal, override
 
 from corroborate._internals.canonical import canonical_str
 from corroborate.intervention import Intervention, combined_arm_key
-from corroborate.measurable import Measurable
 
 if TYPE_CHECKING:
+    from corroborate.measurables import Measurable
     # `claim_bridge.Bridge` is the typed-edge surface for the
     # Hypothesis subgraph claim; imported under TYPE_CHECKING
     # because `claim_bridge` depends on `hypothesis.PredictedDirection`.

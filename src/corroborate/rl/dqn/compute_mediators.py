@@ -33,7 +33,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from pathlib import Path
 
-from corroborate.measurable import Measurable
+from corroborate.measurables import Measurable
 from corroborate.persistence import iter_trace_records
 from corroborate.rl.dqn.measurables import (
     greedy_match_late,

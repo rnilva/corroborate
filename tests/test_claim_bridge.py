@@ -357,10 +357,10 @@ def test_bridge_accepts_measurable_as_source() -> None:
     value (typically a value-composed reduction). The decorator
     auto-registers it so the cache walker finds it; analyses see
     `bridge.source_name` (the auto-generated column name)."""
-    from corroborate.measurable import (
+    from corroborate.measurables import (
         Measurable, get_registered, registered_names,
     )
-    from corroborate.reductions import from_key, mean_window
+    from corroborate.measurables.reductions import from_key, mean_window
 
     q_max_late = mean_window(
         from_key('online_max_q_per_step'), 0.5, 1.0,

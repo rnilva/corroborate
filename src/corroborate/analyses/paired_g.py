@@ -122,7 +122,7 @@ def _resolve_value(record: Mapping[str, object], source: str) -> float:
         if isinstance(v, (int, float)):
             return float(v)
         return float('nan')
-    from corroborate.measurable import get_registered as _get_m
+    from corroborate.measurables import get_registered as _get_m
     m = _get_m(source)
     if m is not None:
         computed: object = m(record)

@@ -91,9 +91,9 @@ from corroborate.claim_bridge import (
     Direction, Tier, claim_bridge,
 )
 from corroborate.intervention import DoEffect
-from corroborate.measurable import Measurable
+from corroborate.measurables import Measurable
 from corroborate.stats import MetaRegressionResult
-from corroborate.reductions import from_key, reduce_axis
+from corroborate.measurables.reductions import from_key, reduce_axis
 from corroborate.rl.dqn.measurables import jensen_bias_per_eps
 from corroborate.verdict import Verdict
 

@@ -41,7 +41,7 @@ from collections.abc import Mapping
 
 import jax.numpy as jnp
 
-from corroborate.measurable import Measurable
+from corroborate.measurables import Measurable
 
 
 # Convenience alias. Bridge / Measurable accept Mapping[str,

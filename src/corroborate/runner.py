@@ -64,7 +64,7 @@ from corroborate.claim_bridge import (
 )
 from corroborate.cloud import RemoteManifest
 from corroborate.schema import LINEAGE_FIELDS
-from corroborate.measurable import (
+from corroborate.measurables import (
     compute_missing_columns,
     get_registered,
     transitive_reads,

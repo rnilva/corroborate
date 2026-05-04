@@ -43,7 +43,7 @@ from corroborate.analyses.paired_link_per_burst import (
     paired_link_per_burst,
 )
 from corroborate.analysis import analysis
-from corroborate.measurable import Measurable
+from corroborate.measurables import Measurable
 
 
 @dataclass(frozen=True, slots=True)

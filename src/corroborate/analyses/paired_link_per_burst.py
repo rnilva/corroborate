@@ -29,7 +29,7 @@ import numpy.typing as npt
 
 from corroborate.analyses.paired_g_per_burst import evaluate_per_burst_source
 from corroborate.analysis import analysis
-from corroborate.measurable import Measurable
+from corroborate.measurables import Measurable
 
 
 @dataclass(frozen=True, slots=True)

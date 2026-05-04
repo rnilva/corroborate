@@ -123,7 +123,7 @@ def test_run_dqn_cell_pre_registered_measurables_persist_at_their_name() -> None
     (Phase 2 of the Bridge-collapse refactor) so authors can
     declare summary scalars without authoring a per-record
     `Bridge[R]` for each."""
-    from corroborate.measurable import Measurable
+    from corroborate.measurables import Measurable
     from corroborate.rl.env_catalogue import get
     env_spec = get('CartPole-v1')
 

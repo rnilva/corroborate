@@ -18,7 +18,7 @@ import corroborate.analyses  # noqa: F401  # pyright: ignore[reportUnusedImport]
 from corroborate.analyses.paired_g_per_burst import (
     DEFAULT_PER_BURST_SOURCE, panel_for_env, paired_g_per_burst,
 )
-from corroborate.reductions import from_key, reduce_axis
+from corroborate.measurables.reductions import from_key, reduce_axis
 from corroborate.rl.dqn.measurables import jensen_bias_per_eps
 
 

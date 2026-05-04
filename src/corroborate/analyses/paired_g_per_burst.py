@@ -31,8 +31,8 @@ import numpy as np
 import numpy.typing as npt
 
 from corroborate.analysis import analysis
-from corroborate.measurable import Measurable
-from corroborate.reductions import from_key, reduce_axis
+from corroborate.measurables import Measurable
+from corroborate.measurables.reductions import from_key, reduce_axis
 
 
 DEFAULT_PER_BURST_SOURCE: Measurable[
