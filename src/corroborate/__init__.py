@@ -20,7 +20,7 @@ qualified path:
 from corroborate._internals.canonical import canonical_str
 from corroborate.bridge.claim_bridge import claim_bridge
 from corroborate.core.claim import claim, trace_context
-from corroborate.measurables.core import measurable
+from corroborate.measurables.measurable import measurable
 
 __version__ = '0.0.1'
 

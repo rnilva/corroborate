@@ -18,7 +18,7 @@ import numpy as np
 
 from corroborate.graph.computation import ComputationEdge
 from corroborate.graph import Graph
-from corroborate.graph.measurable import (
+from corroborate.graph.correlation import (
     Correlation,
     correlation_matrix_table,
     explained_by_claim_graph,

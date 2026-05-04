@@ -18,7 +18,7 @@ Three sub-modules:
 
 Consumers `from corroborate.measurables import X` for the public
 surface."""
-from corroborate.measurables.core import (
+from corroborate.measurables.measurable import (
     Measurable,
     compute_missing_columns,
     evaluate_with_measurables,

@@ -14,7 +14,7 @@ The decomposition mirrors the file boundary:
 
 Consumers import from `corroborate.stats` (this module) — both
 sub-modules' public surface re-exported here."""
-from corroborate.stats.core import (
+from corroborate.stats.effect_size import (
     I2_THRESHOLD,
     PooledStats,
     adequately_powered_paired,

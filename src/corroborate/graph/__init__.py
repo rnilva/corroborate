@@ -52,7 +52,7 @@ from corroborate.graph.graph import (
     Graph,
     GraphDiff,
 )
-from corroborate.graph.measurable import (
+from corroborate.graph.correlation import (
     ColumnRole,
     Correlation,
     DiffCategory,
