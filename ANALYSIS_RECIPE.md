@@ -39,8 +39,8 @@ df = with_cell_class(df, outcome_path='eval_best_burst_mean')
 # `df['_cell_class']` carries the per-cell label.
 ```
 
-Bridges that authored a `cell_filter` predicate can subset by
-class directly: `cell_filter=pl.col('_cell_class') == 'solved'`.
+Bridges that authored a `scope` predicate can subset by
+class directly: `scope=pl.col('_cell_class') == 'solved'`.
 
 ---
 
@@ -106,7 +106,7 @@ result = meta_regression_paired_g.fn(
 
 Each significant coefficient is a numeric scope claim:
 "mechanism activates where covariate X exceeds threshold T."
-Author the threshold as a `Bridge.cell_filter` for the next
+Author the threshold as a `Bridge.scope` for the next
 sweep.
 
 ---

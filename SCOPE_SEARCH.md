@@ -209,10 +209,12 @@ analysis triple authored as `@claim_bridge`s:
 # module via @claim_bridge; consume `analyses.dowhy.backdoor_ate`,
 # `analyses.dowhy.placebo_refutation`,
 # `analyses.dowhy.random_common_cause_refutation` as fixtures.
-# `hypothesis_subgraph_verdict(h, runs, baseline_runs)` walks
-# the Hypothesis's edges and produces a CausalGraph where pairs
-# with ≥2 INTERVENTIONAL HELDs promote to causal_bridged via
-# `promote_bridged_evidence`.
+# `runner.run_module(<bridges_module>, data=corpus)` evaluates
+# every bridge via `bridge.evaluate(b, cells)` → holds_when →
+# Verdict. The substrate can build a CausalGraph over the
+# resulting BridgeEvaluations and pass through
+# `promote_bridged_evidence` to upgrade pairs with ≥2
+# INTERVENTIONAL HELDs to causal_bridged.
 ```
 
 When the dowhy triple HELDs *and* the meta-regression β is

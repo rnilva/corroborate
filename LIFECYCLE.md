@@ -96,11 +96,10 @@ arm distinguisher.
    │                                                             │            │
    │       └────────┐                       ┌────────────────────┘            │
    │                │                       │                                 │
-   │                ▼ PROMOTE (8, rung 1+2) ▼                                 │
-   │           hypothesis_subgraph_verdict(h, runs)                           │
-   │           → CausalGraph[BridgeEdge] + edge_verdicts                      │
-   │           promote_bridged_evidence(graph)                                │
-   │           → 'causal_bridged' upgrade when ≥2 paired admits               │
+   │                ▼ PER-BRIDGE VERDICT (8) ▼                                │
+   │           runner.run_module(<bridges_module>, data=corpus)               │
+   │           → dict[bridge_name, BridgeEvaluation]                          │
+   │           Each bridge: evaluate(b, cells) → holds_when(...) → Verdict    │
    │                                                                          │
    │                ┌────────────────────────────────┐                        │
    │                │                                │                        │
@@ -166,21 +165,26 @@ content naming the mechanism, OR (b) discovery output from
 stages 7/9 proposing candidate mechanisms, OR (c) register
 output from stage 12 selecting an under-tested candidate.
 
-**Outputs**: a typed `Hypothesis[R]` carrying:
-- `intervention_arms: tuple[Intervention, ...]` — the typed
-  identity of mechanism swaps. Defines `arm_key` via canonical
-  fingerprint.
-- `edges: tuple[claim_bridge.Bridge, ...]` — typed-edge subgraph
-  claim. Each `Bridge` carries `source` / `target`,
-  `intervention: DoEffect | None`, `tier`, `direction`, and
-  per-edge `predicted_direction`. Body-less for the verdict-walk
-  path; `holds_when` populated for the file-protocol path.
-- `measurables: tuple[Measurable[R, object], ...]` — pre-
-  registered measurables cell_runner persists as scalar columns
-  on every RunRow.
+**Outputs**: a Hypothesis Protocol-conformer (a Python module
+or class) carrying:
+- `INTERVENTION: DoEffect` — the typed contrast (treatment +
+  baseline arms as `tuple[Intervention, ...]`). Arm identity
+  derives from `combined_arm_key(intervention_arms)` =
+  canonical_str of the typed structural deltas.
+- `BRIDGES: tuple[Bridge, ...]` — verdict declarations. Each
+  `Bridge` carries `source` / `target`, `direction`, `tier`,
+  `predicted_direction`, `cell_filter` (polars `pl.Expr`
+  predicate), `pair_by`, and `holds_when` (the threshold body).
+  Bridges are AUTHORED with `holds_when` populated — body-less
+  bridges are no longer a thing post-Phase-5.
 
-**Modules**: `hypothesis.py`, `intervention.py`,
-`claim_bridge.py`.
+A substrate-side `MEASURABLES` constant (or per-call kwarg
+on `run_intervention`) holds pre-registered measurables for
+sweep-time persistence. NOT on the Hypothesis Protocol — the
+Protocol is the verdict-time contract.
+
+**Modules**: `core/hypothesis.py` (Protocol),
+`core/intervention.py`, `bridge/bridge.py`.
 
 **Status**: **live**.
 
@@ -331,30 +335,34 @@ discovery-first research a closed loop.
 
 ---
 
-### Stage 8 — PROMOTE (rung 1 + rung 2 typed)
+### Stage 8 — VERDICT (per-bridge)
 
-**Inputs**: `Hypothesis` + treatment / baseline RunRows.
+**Inputs**: a Hypothesis Protocol-conformer (a Python module or
+class exposing `INTERVENTION` + `BRIDGES`) + a corpus
+(`runs.parquet`).
 
-**Outputs**: `HypothesisVerdict[R]` carrying:
-- `graph: CausalGraph` — `BridgeEdge` per claimed edge keyed by
-  `(source, target)`, with Pearl tier × direction ×
-  evidentiary_level + per-edge stats (`ate`, `rho`, `pvalue`,
-  `n_observations`).
-- `edge_verdicts: Mapping[(s, t), Verdict]` — raw 4-bucket
-  verdicts.
-- `comparison_rows: Mapping[str, HypothesisComparisonRow]` —
-  rich per-edge detail for intervention edges.
+**Outputs**: `dict[str, BridgeEvaluation]` — one
+`BridgeEvaluation` per bridge in `BRIDGES`. Each
+`BridgeEvaluation` carries:
+- `verdict: Verdict` — the bridge author's `holds_when` body
+  decision.
+- `analysis_results: Mapping[str, object]` — the typed analysis
+  fixtures the body consumed (audit trail).
+- `bridge_name: str`.
 
-After `promote_bridged_evidence`: pairs with ≥2
-`causal_one_sided` edges upgrade to `causal_bridged`.
+The verdict-walk surface (`hypothesis_subgraph_verdict`,
+`HypothesisVerdict`, `_intervention_edge`, `_coupling_edge`)
+was retired in Phase 5 of the verdict-consolidation refactor.
+The framework's verdict-time contract is now exclusively
+per-bridge `evaluate(b, cells)` driven by the bridge author's
+`holds_when` body. `promote_bridged_evidence` survives in
+`graph/causal.py` as a post-walk graph-promotion helper for
+substrates that build a `CausalGraph` over their bridges.
 
-**Modules**: `hypothesis_verdict.hypothesis_subgraph_verdict`,
-`causal_graph.{Direction, Tier, BridgeEdge, authored_graph,
-compose_direction, chain_tier, promote_bridged_evidence}`.
-Topology helpers in `computation_graph.{producing_paths,
-measurables_by_attachment, measurable_scope, ScopeInfo}` let
-substrates derive paper-narrative scope (mechanism / outcome /
-link) from claim-graph attachment.
+**Modules**: `runner/runner.py:run_module`,
+`bridge/bridge.py:evaluate`,
+`graph/causal.py.{Direction, Tier, BridgeEdge,
+promote_bridged_evidence}`.
 
 **Status**: **live**.
 

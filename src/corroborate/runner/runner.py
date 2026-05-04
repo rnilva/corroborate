@@ -273,26 +273,20 @@ def run_module(
         try:
             out[b.name] = evaluate(b, cells)
         except Exception as e:  # noqa: BLE001
-            # Rather than crash the whole module on one bad bridge,
-            # surface the failure as a marker. The CLI prints them
-            # alongside successful verdicts.
-            out[b.name] = _error_evaluation(b.name, e)
+            # An authoring bug in a bridge's `holds_when` body
+            # (e.g. typo'd column name, malformed analysis call)
+            # raises here. Print the error to stderr and skip
+            # this bridge — DO NOT synthesise a fake verdict.
+            # Conflating evaluation errors with the POWER_INSUFFICIENT
+            # verdict would smuggle authoring bugs past the reader,
+            # exactly what the framework's verdict layer refuses
+            # (see verdict.Verdict docstring + CLAUDE.md §verdict).
+            print(
+                f'  [bridge {b.name!r} raised during evaluation: '
+                f'{type(e).__name__}: {e}]',
+                file=sys.stderr,
+            )
     return out
-
-
-def _error_evaluation(name: str, e: Exception) -> BridgeEvaluation:
-    """Synthesize an error verdict so a single bad bridge doesn't
-    abort the module run. Verdict is POWER_INSUFFICIENT — analyses
-    that depend on this bridge will treat it as no-data, not
-    pseudo-evidence."""
-    from types import MappingProxyType
-
-    from corroborate.bridge.verdict import Verdict
-    return BridgeEvaluation(
-        bridge_name=name,
-        verdict=Verdict.POWER_INSUFFICIENT,
-        analysis_results=MappingProxyType({'error': repr(e)}),
-    )
 
 
 # ============ Cache + ingest ============
