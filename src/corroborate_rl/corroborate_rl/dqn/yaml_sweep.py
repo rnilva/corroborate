@@ -27,10 +27,10 @@ from typing import Literal, TypeIs
 import yaml
 
 from corroborate.runner.config_loader import (
+    HypothesisConfig,
     build_hypothesis_from_mapping,
     is_str_keyed_mapping,
 )
-from corroborate.core.hypothesis import LegacyHypothesis as Hypothesis
 from corroborate.runner.registry import Registry
 from corroborate_rl.dqn.collect import EnvConfig
 from corroborate_rl.env_catalogue import EnvWrapper
@@ -67,7 +67,7 @@ class DQNSweep:
         *,
         reg: Registry,
         env_attrs: Mapping[str, object] | None = None,
-    ) -> tuple[Hypothesis[Mapping[str, object]], ...]:
+    ) -> tuple[HypothesisConfig, ...]:
         """Resolve every template against `reg` and return the
         built Hypothesis tuple. Pass `env_attrs=None` for chunked
         mode (any `{from_env: <attr>}` placeholder raises);
@@ -306,7 +306,7 @@ def default_dqn_registry() -> Registry:
 def build_paired(
     sweep: DQNSweep, *, reg: Registry,
 ) -> tuple[
-    tuple[Hypothesis[Mapping[str, object]], ...],
+    tuple[HypothesisConfig, ...],
     tuple[EnvConfig, ...],
 ]:
     """Resolve a paired sweep's templates against each env's
@@ -323,7 +323,7 @@ def build_paired(
         )
     from corroborate_rl.env_catalogue import get as get_env_spec
 
-    hypotheses: list[Hypothesis[Mapping[str, object]]] = []
+    hypotheses: list[HypothesisConfig] = []
     envs_aligned: list[EnvConfig] = []
     for ec in sweep.envs:
         spec = get_env_spec(ec.env_name)
@@ -335,51 +335,113 @@ def build_paired(
 
 
 def dispatch_sweep(sweep: DQNSweep) -> tuple[Path, Path]:
-    """Run the sweep end-to-end: build arms + env_specs + runner,
-    forward to `run_hypotheses`. Returns the merged
-    `(runs.parquet, traces.parquet)` paths.
+    """Run the sweep end-to-end. For each YAML-loaded
+    `HypothesisConfig`, decompose into a Hypothesis Protocol-
+    conformer + `base` Callable (`partial(dqn, **HPs)`), build a
+    discrete grid_points list (env × seed_chunk × wrappers), and
+    dispatch to the framework's `run_intervention` paired-sweep
+    primitive. Each Hypothesis produces its own per-arm parquet
+    pair under `<out_dir>/<name>/`; the per-Hypothesis corpora
+    are concatenated to `<out_dir>/runs.parquet` /
+    `<out_dir>/traces.parquet`.
 
     Substrate-coupled by design (knows about `DQNRunner`,
-    `Q_TRACE_REDUCTIONS`, env catalogue)."""
-    from corroborate_rl.dqn.collect import (
-        chunked_arms, env_arm_tag, paired_arms,
-    )
+    `Q_TRACE_REDUCTIONS`, env catalogue, `dqn` theory)."""
+    from collections.abc import Callable, Sequence
+    from functools import partial
+    from types import SimpleNamespace
+
+    from corroborate.corpus.persistence import stream_concat_parquets
+    from corroborate.core.intervention import DoEffect
+    from corroborate.runner.sweep import run_intervention
+    from corroborate_rl.dqn.collect import _chunks
+    from corroborate_rl.dqn.dqn import dqn
     from corroborate_rl.dqn.trace_reductions import (
         Q_TRACE_DROPS, Q_TRACE_REDUCTIONS,
     )
-    from corroborate_rl.env_catalogue import get as get_env_spec
+    from corroborate_rl.env_catalogue import (
+        get as get_env_spec, wrappers_canonical_str,
+    )
     from corroborate_rl.sweep import DQNRunner
-    from corroborate.runner.sweep import run_hypotheses
 
     reg = default_dqn_registry()
     if sweep.arms_shape == 'chunked':
-        # `build_hypotheses` returns `Hypothesis[Mapping[str,
-        # object]]` (framework-generic); the substrate slot wants
-        # `Hypothesis[DQNTrajectoryRecord]`. Hypothesis.R is
-        # contravariant (regular-class + @property form), so the
-        # wider-R framework-generic IS assignable to the narrower-R
-        # substrate type without a `cast`.
-        hypotheses_dqn: list[Hypothesis[DQNTrajectoryRecord]] = list(
+        configs: list[HypothesisConfig] = list(
             sweep.build_hypotheses(reg=reg),
         )
-        arms = chunked_arms(hypotheses_dqn, sweep.envs)
+        envs_per_h: list[Sequence[EnvConfig]] = [
+            list(sweep.envs)
+        ] * len(configs)
     else:
         built_paired, envs_aligned = build_paired(sweep, reg=reg)
-        hypotheses_dqn = list(built_paired)
-        arms = paired_arms(hypotheses_dqn, envs_aligned)
+        configs = list(built_paired)
+        envs_per_h = [[ec] for ec in envs_aligned]
 
     env_specs = {
         ec.env_name: get_env_spec(ec.env_name) for ec in sweep.envs
     }
-    return run_hypotheses(
-        arms,
-        runner=DQNRunner(env_specs),
-        out_dir=sweep.out_dir,
-        archive_remote=sweep.archive_remote,
-        arm_tag=env_arm_tag,
-        trace_reductions=Q_TRACE_REDUCTIONS,
-        trace_drops=Q_TRACE_DROPS,
-    )
+    runner = DQNRunner(env_specs)
+
+    def _arm_tag(arm_key: str, gp: Mapping[str, object]) -> str:
+        env_name = gp.get('env_name', '')
+        wrappers = gp.get('wrappers', ())
+        suffix = (
+            f'__wrap[{wrappers_canonical_str(wrappers)}]'
+            if isinstance(wrappers, tuple) and wrappers
+            else ''
+        )
+        return f'{env_name}__{arm_key}{suffix}'
+
+    sub_runs: list[Path] = []
+    sub_traces: list[Path] = []
+    for cfg, env_configs in zip(configs, envs_per_h, strict=True):
+        # Split HPs from intervention_arms slots: HPs go into
+        # `base` as pre-bound kwargs; mechanism swaps come via
+        # the DoEffect.
+        arm_slot_paths = {iv.slot_path for iv in cfg.intervention_arms}
+        hp_kwargs = {
+            k: v for k, v in cfg.intervention.items()
+            if k not in arm_slot_paths
+        }
+        base: Callable[..., object] = partial(dqn, **hp_kwargs)
+        h_proto = SimpleNamespace(
+            INTERVENTION=DoEffect(
+                treatment=cfg.intervention_arms,
+                baseline=(),
+            ),
+            BRIDGES=(),
+            MEASURABLES=(),
+        )
+        # Flat grid_points: env × chunk × wrappers.
+        grid_points: list[Mapping[str, object]] = [
+            {
+                'env_name': ec.env_name,
+                'seeds': chunk,
+                'wrappers': ec.wrappers,
+            }
+            for ec in env_configs
+            for chunk in _chunks(ec)
+        ]
+        h_out_dir = sweep.out_dir / cfg.name
+        rp, tp = run_intervention(
+            h_proto,
+            base=base,
+            grid_points=grid_points,
+            runner=runner,
+            out_dir=h_out_dir,
+            archive_remote=sweep.archive_remote,
+            arm_tag=_arm_tag,
+            trace_reductions=Q_TRACE_REDUCTIONS,
+            trace_drops=Q_TRACE_DROPS,
+        )
+        sub_runs.append(rp)
+        sub_traces.append(tp)
+
+    final_runs = sweep.out_dir / 'runs.parquet'
+    final_traces = sweep.out_dir / 'traces.parquet'
+    stream_concat_parquets(sub_runs, final_runs)
+    stream_concat_parquets(sub_traces, final_traces)
+    return final_runs, final_traces
 
 
 __all__ = [
