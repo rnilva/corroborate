@@ -59,6 +59,18 @@ type BenchmarkFamily = Literal[
 type ActionType = Literal['discrete', 'continuous']
 type ObservationType = Literal['vector', 'image', 'structured']
 
+type ThresholdConfidence = Literal[
+    'literature', 'derived', 'sample_relative', 'absent',
+]
+"""Provenance tier for a per-env solve threshold:
+- `literature` — converted from gymnasium / bsuite / paper-canonical
+  raw thresholds via the discount-factor formula.
+- `derived` — chosen as a fraction of a literature DQN baseline
+  (MinAtar envs use 50% of Young & Tian 2019), then converted.
+- `sample_relative` — defined relative to the corpus.
+- `absent` — no defensible threshold; the env exists but
+  `is_solved` returns `None` (caller decides what to do)."""
+
 type StateHash = Callable[[jax.Array], jax.Array]
 """(obs,) → integer bucket id. Single-obs (not batched). Used by
 the Watkins (s, a)-coverage gap; image envs ship `None` because
@@ -258,15 +270,24 @@ class RewardClippedEnv:
     `[clip_min, clip_max]`. Either bound may be None to disable
     that side.
 
-    Causal-probe lever for envs with stochastic mixed-sign
-    reward (e.g. SpaceInvaders-MinAtar's +1-kill / −1-hit). Tests
-    whether DDQN's bias-correction attenuation in such envs is
-    driven by the negative-reward stochasticity: with
-    `clip_min=0`, the negative tail vanishes; the optimal policy
-    changes (no longer needs to weigh hit-cost against kill
-    reward), but the test isolates whether DDQN's behaviour
-    inherits the same attenuation pattern under positive-only
-    reward."""
+    Causal-probe lever for envs with genuinely mixed-sign
+    reward — e.g. `Catch-bsuite` (+1 catch / −1 miss), classic-
+    control envs that emit `−1` per step (MountainCar, Acrobot).
+    Tests whether DDQN's bias-correction attenuation depends on
+    the negative-tail stochasticity: `clip_min=0` removes the
+    negative tail, the optimal policy under the clipped reward
+    differs from the unclipped one, but the test isolates whether
+    DDQN's behaviour inherits the same attenuation pattern under
+    positive-only reward.
+
+    **Caveat: gymnax's MinAtar suite (Asterix, Breakout, Freeway,
+    SpaceInvaders) emits kill-only `+1` reward** — collisions
+    terminate the episode but never emit a negative reward — so
+    `clip_min=0` is a no-op on every MinAtar env. (Classic Atari
+    SpaceInvaders is a different env with different reward
+    semantics; do not confuse the two.) Pick a genuinely mixed-
+    sign env when authoring sweeps that intervene on this
+    wrapper."""
     inner: Env
     clip_min: float | None = None
     clip_max: float | None = None
@@ -371,7 +392,19 @@ class EnvSpec:
 
     Author-declared (registered via `_register`): `r_min`, `r_max`,
     `reward_regime`, `benchmark_family`, optional `state_hash` +
-    `state_hash_cardinality`."""
+    `state_hash_cardinality`, optional `solve_threshold` +
+    `solve_threshold_source` + `solve_threshold_confidence` +
+    `solve_threshold_outcome_path`.
+
+    **Solve thresholds.** A canonical-literature outcome value at
+    or above which a cell counts as solved. The framework's eval
+    records *discounted* MC return (`mc_return = Σ_t γ^t r_t`),
+    so threshold values are stored in discounted units at γ=0.99
+    — see env_catalogue source for per-env conversion notes.
+    `solve_threshold=None` + `solve_threshold_confidence='absent'`
+    means the env was considered and judged unthresholdable;
+    `is_solved()` returns `None` for those, distinct from
+    KeyError on unregistered envs."""
     name: str
     action_type: ActionType
     n_actions: int
@@ -387,6 +420,10 @@ class EnvSpec:
     benchmark_params: Mapping[str, object] = field(
         default_factory=lambda: MappingProxyType({}),
     )
+    solve_threshold: float | None = None
+    solve_threshold_source: str | None = None
+    solve_threshold_confidence: ThresholdConfidence = 'absent'
+    solve_threshold_outcome_path: str = 'eval_final_mean'
 
     @property
     def obs_dim(self) -> int:
@@ -507,6 +544,10 @@ def _register(
     state_hash: StateHash | None = None,
     state_hash_cardinality: int | None = None,
     benchmark_params: dict[str, object] | None = None,
+    solve_threshold: float | None = None,
+    solve_threshold_source: str | None = None,
+    solve_threshold_confidence: ThresholdConfidence = 'absent',
+    solve_threshold_outcome_path: str = 'eval_final_mean',
 ) -> None:
     """Register an env with the catalogue. Auto-introspects
     gymnax-derivable fields; the call site only specifies the
@@ -526,6 +567,10 @@ def _register(
         state_hash=state_hash,
         state_hash_cardinality=state_hash_cardinality,
         benchmark_params=MappingProxyType(benchmark_params or {}),
+        solve_threshold=solve_threshold,
+        solve_threshold_source=solve_threshold_source,
+        solve_threshold_confidence=solve_threshold_confidence,
+        solve_threshold_outcome_path=solve_threshold_outcome_path,
     )
 
 
@@ -551,6 +596,34 @@ _MOUNTAINCAR_HASH, _MOUNTAINCAR_CARD = bucket_hash(
 )
 
 
+# Solve threshold provenance — see ThresholdConfidence docstring.
+# All values are in **discounted units at γ=0.99** so they align
+# with the framework's eval (`mc_return = Σ_t γ^t r_t`).
+#
+# Classic control — exact conversion from gymnasium docs raw
+# thresholds via `R * (1 - γ^T) / (1 - γ)`:
+#   CartPole-v1: raw 475 → 100 * (1 - 0.99^475) ≈ 99.16
+#   Acrobot-v1: raw -100 → -100 * (1 - 0.99^100) ≈ -63.40
+#   MountainCar-v0: raw -110 → -100 * (1 - 0.99^110) ≈ -67.33
+#
+# bsuite — sparse terminal reward, γ^L attenuation small for
+# short episodes; conservative downward adjustment from raw 0.5
+# (Osband 2019 `score=0.5` convention). DiscountingChain has its
+# own internal discount that compounds with the framework's, so
+# threshold left at the env's near-max raw value.
+#
+# MinAtar — derived from Young & Tian 2019's DQN baselines at
+# 50% (the "decent" threshold), then approximate-converted via
+#   discounted ≈ raw × (1 - γ^L_avg) / (L_avg * (1 - γ))
+# at typical episode length L_avg ≈ 500 (factor ≈ 0.199 at γ=0.99):
+#   Asterix raw 6.8 → discounted ≈ 1.35
+#   Breakout raw 6.2 → discounted ≈ 1.23
+#   Freeway raw 12.9 → discounted ≈ 2.57
+#   SpaceInvaders raw 3.7 → discounted ≈ 0.74
+# Variable-per-step-reward envs don't have an exact raw→discounted
+# formula without knowing the within-episode reward timing, so
+# these are documented as approximate.
+
 # Classic-control: vector obs, dense per-step reward.
 _register(
     'CartPole-v1',
@@ -559,6 +632,9 @@ _register(
     benchmark_family='classic_control',
     state_hash=_CARTPOLE_HASH,
     state_hash_cardinality=_CARTPOLE_CARD,
+    solve_threshold=99.0,
+    solve_threshold_source='gymnasium-docs-475-discounted-gamma-0.99',
+    solve_threshold_confidence='literature',
 )
 _register(
     'Acrobot-v1',
@@ -567,6 +643,9 @@ _register(
     benchmark_family='classic_control',
     state_hash=_ACROBOT_HASH,
     state_hash_cardinality=_ACROBOT_CARD,
+    solve_threshold=-63.4,
+    solve_threshold_source='gymnasium-docs-(-100)-discounted-gamma-0.99',
+    solve_threshold_confidence='literature',
 )
 _register(
     'MountainCar-v0',
@@ -575,6 +654,9 @@ _register(
     benchmark_family='classic_control',
     state_hash=_MOUNTAINCAR_HASH,
     state_hash_cardinality=_MOUNTAINCAR_CARD,
+    solve_threshold=-67.3,
+    solve_threshold_source='gymnasium-docs-(-110)-discounted-gamma-0.99',
+    solve_threshold_confidence='literature',
 )
 
 # bsuite — small-scale theoretical benchmarks. Vector obs;
@@ -586,36 +668,54 @@ _register(
     r_min=-1.0, r_max=1.0,
     reward_regime='terminal_only',
     benchmark_family='bsuite',
+    solve_threshold=0.45,
+    solve_threshold_source='osband-2019-score-0.5-discounted-approx',
+    solve_threshold_confidence='literature',
 )
 _register(
     'DeepSea-bsuite',
     r_min=-0.01, r_max=1.0,
     reward_regime='event_triggered',
     benchmark_family='bsuite',
+    solve_threshold=0.45,
+    solve_threshold_source='osband-2019-score-0.5-discounted-approx',
+    solve_threshold_confidence='literature',
 )
 _register(
     'MemoryChain-bsuite',
     r_min=-1.0, r_max=1.0,
     reward_regime='terminal_only',
     benchmark_family='bsuite',
+    solve_threshold=0.45,
+    solve_threshold_source='osband-2019-score-0.5-discounted-approx',
+    solve_threshold_confidence='literature',
 )
 _register(
     'UmbrellaChain-bsuite',
     r_min=-1.0, r_max=1.0,
     reward_regime='shaped',
     benchmark_family='bsuite',
+    solve_threshold=0.45,
+    solve_threshold_source='osband-2019-score-0.5-discounted-approx',
+    solve_threshold_confidence='literature',
 )
 _register(
     'DiscountingChain-bsuite',
     r_min=0.0, r_max=1.1,
     reward_regime='event_triggered',
     benchmark_family='bsuite',
+    solve_threshold=1.0,
+    solve_threshold_source='osband-2019-near-max-1.1-env-internal-discount',
+    solve_threshold_confidence='literature',
 )
 _register(
     'MNISTBandit-bsuite',
     r_min=-1.0, r_max=1.0,
     reward_regime='terminal_only',
     benchmark_family='bsuite',
+    solve_threshold=0.5,
+    solve_threshold_source='osband-2019-score-0.5-bandit-no-discount',
+    solve_threshold_confidence='literature',
 )
 
 # Minatar — image obs (10×10×n_channels). state_hash skipped:
@@ -627,58 +727,77 @@ _register(
     r_min=0.0, r_max=1.0,
     reward_regime='event_triggered',
     benchmark_family='minatar',
+    solve_threshold=1.35,
+    solve_threshold_source='young-tian-2019-50pct-discounted-approx',
+    solve_threshold_confidence='derived',
 )
 _register(
     'Breakout-MinAtar',
     r_min=0.0, r_max=1.0,
     reward_regime='event_triggered',
     benchmark_family='minatar',
+    solve_threshold=1.23,
+    solve_threshold_source='young-tian-2019-50pct-discounted-approx',
+    solve_threshold_confidence='derived',
 )
 _register(
     'Freeway-MinAtar',
     r_min=0.0, r_max=1.0,
     reward_regime='event_triggered',
     benchmark_family='minatar',
+    solve_threshold=2.57,
+    solve_threshold_source='young-tian-2019-50pct-discounted-approx',
+    solve_threshold_confidence='derived',
 )
 _register(
     'SpaceInvaders-MinAtar',
     r_min=0.0, r_max=1.0,
     reward_regime='event_triggered',
     benchmark_family='minatar',
+    solve_threshold=0.74,
+    solve_threshold_source='young-tian-2019-50pct-discounted-approx',
+    solve_threshold_confidence='derived',
 )
 
-# Misc — small-scale theoretical / pedagogical envs.
+# Misc — small-scale theoretical / pedagogical envs. No canonical
+# literature thresholds; ship as 'absent' so analyses skip rather
+# than miss them by accident.
 _register(
     'FourRooms-misc',
     r_min=0.0, r_max=1.0,
     reward_regime='terminal_only',
     benchmark_family='misc',
+    solve_threshold_source='no-canonical-criterion',
 )
 _register(
     'MetaMaze-misc',
     r_min=0.0, r_max=10.0,
     reward_regime='event_triggered',
     benchmark_family='misc',
+    solve_threshold_source='no-canonical-criterion',
 )
 _register(
     'Pong-misc',
     r_min=0.0, r_max=1.0,
     reward_regime='per_step',
     benchmark_family='misc',
+    solve_threshold_source='no-canonical-criterion',
 )
 
-# Bandits — single-state, action-only.
+# Bandits — single-state, action-only. No canonical solve criterion.
 _register(
     'BernoulliBandit-misc',
     r_min=0.0, r_max=1.0,
     reward_regime='per_step',
     benchmark_family='bandit',
+    solve_threshold_source='no-canonical-criterion',
 )
 _register(
     'GaussianBandit-misc',
     r_min=-5.0, r_max=5.0,
     reward_regime='per_step',
     benchmark_family='bandit',
+    solve_threshold_source='no-canonical-criterion',
 )
 
 
@@ -707,3 +826,71 @@ def envs_in_family(family: BenchmarkFamily) -> tuple[EnvSpec, ...]:
 def all_envs() -> tuple[EnvSpec, ...]:
     """All registered envs, in registration order."""
     return tuple(ENV_REGISTRY.values())
+
+
+# ============ Solve-threshold record + accessors ============
+
+
+@dataclass(frozen=True, slots=True)
+class SolveThreshold:
+    """Per-env solve threshold + provenance — a flat view of the
+    EnvSpec's threshold fields. Materialised for the
+    `SOLVE_THRESHOLDS` mapping below; convergence-audit consumers
+    consume this shape directly. New code should prefer reading
+    `EnvSpec.solve_threshold*` off the registry; this view exists
+    for callers that hold a per-env record without the rest of
+    the EnvSpec metadata."""
+    env_name: str
+    threshold: float | None
+    source: str
+    confidence: ThresholdConfidence
+    outcome_path_assumed: str = 'eval_final_mean'
+
+
+SOLVE_THRESHOLDS: Mapping[str, SolveThreshold] = MappingProxyType({
+    name: SolveThreshold(
+        env_name=name,
+        threshold=spec.solve_threshold,
+        source=(
+            spec.solve_threshold_source
+            if spec.solve_threshold_source is not None
+            else 'no-canonical-criterion'
+        ),
+        confidence=spec.solve_threshold_confidence,
+        outcome_path_assumed=spec.solve_threshold_outcome_path,
+    )
+    for name, spec in ENV_REGISTRY.items()
+})
+"""Per-env solve thresholds, derived from the registry. Read-only;
+authoring is via `_register(...)` calls. 18 envs total in v0."""
+
+
+def is_solved(
+    env_name: str, outcome_value: float,
+) -> bool | None:
+    """Did this cell solve the env, given its registered solve
+    threshold?
+
+    Returns:
+    - `True` if `outcome_value >= spec.solve_threshold`.
+    - `False` if `outcome_value < spec.solve_threshold`.
+    - `None` when `spec.solve_threshold is None` (the env was
+      considered and judged unthresholdable — caller decides what
+      to do, e.g. exclude or treat as unknown).
+    - Raises `KeyError` when `env_name` isn't registered, so
+      consumers can't silently mis-classify."""
+    spec = get(env_name)
+    if spec.solve_threshold is None:
+        return None
+    return outcome_value >= spec.solve_threshold
+
+
+def envs_with_threshold() -> tuple[str, ...]:
+    """Env names where a defensible solve threshold exists
+    (`solve_threshold_confidence` is `'literature'` or
+    `'derived'`). Excludes `'absent'` and `'sample_relative'`
+    envs so analyses can default to a sound subset."""
+    return tuple(sorted(
+        name for name, spec in ENV_REGISTRY.items()
+        if spec.solve_threshold_confidence in ('literature', 'derived')
+    ))

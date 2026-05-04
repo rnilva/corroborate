@@ -45,7 +45,7 @@ import polars as pl
 
 from corroborate._internals.polars import to_dicts as _to_dicts
 from corroborate.analyses.paired_g import paired_g
-from corroborate_rl.env_solve_thresholds import (
+from corroborate_rl.env_catalogue import (
     SOLVE_THRESHOLDS, envs_with_threshold,
 )
 from corroborate.corpus.schema import RunRow

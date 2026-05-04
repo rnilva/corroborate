@@ -8,7 +8,7 @@ from corroborate_rl.convergence import (
     classify_envs, envs_in_class, filter_to_classes,
     mediator_differential,
 )
-from corroborate_rl.env_solve_thresholds import SolveThreshold
+from corroborate_rl.env_catalogue import SolveThreshold
 from corroborate.corpus.schema import RunRow
 from corroborate.bridge.verdict import Verdict
 

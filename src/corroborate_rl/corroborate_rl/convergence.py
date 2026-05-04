@@ -1,6 +1,6 @@
 """Per-env convergence classification on an RL corpus.
 
-Layered on top of `env_solve_thresholds.SOLVE_THRESHOLDS`. Given
+Layered on top of `env_catalogue.SOLVE_THRESHOLDS`. Given
 a corpus of `RunRow`s + an outcome path, classifies each env into
 `solved` / `partial` / `unsolved` / `absent` based on the fraction
 of cells (within an arm) that meet the env's solve threshold.
@@ -32,7 +32,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Literal
 
-from corroborate_rl.env_solve_thresholds import (
+from corroborate_rl.env_catalogue import (
     SOLVE_THRESHOLDS, SolveThreshold,
 )
 from corroborate.corpus.schema import MeasurementLeaf, RunRow

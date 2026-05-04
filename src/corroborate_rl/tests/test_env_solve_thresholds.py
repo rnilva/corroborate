@@ -5,8 +5,8 @@ from __future__ import annotations
 import pytest
 
 from corroborate_rl.env_catalogue import ENV_REGISTRY
-from corroborate_rl.env_solve_thresholds import (
-    SOLVE_THRESHOLDS, SolveThreshold,
+from corroborate_rl.env_catalogue import (
+    SOLVE_THRESHOLDS,
     envs_with_threshold, is_solved,
 )
 
@@ -86,7 +86,7 @@ def test_is_solved_returns_none_when_threshold_absent() -> None:
 def test_is_solved_unknown_env_raises() -> None:
     """Unregistered envs raise KeyError loudly — silent False
     would mis-classify cells from those envs."""
-    with pytest.raises(KeyError, match='not in SOLVE_THRESHOLDS'):
+    with pytest.raises(KeyError, match='not registered'):
         _ = is_solved('NotAnEnv', 0.0)
 
 
@@ -108,19 +108,7 @@ def test_envs_with_threshold_count() -> None:
     assert len(envs_with_threshold()) == 13
 
 
-# ============ Custom table override ============
-
-def test_is_solved_accepts_custom_table() -> None:
-    """Caller can override the default SOLVE_THRESHOLDS — used by
-    sensitivity analyses (e.g. testing alternative thresholds)."""
-    custom = {
-        'CartPole-v1': SolveThreshold(
-            env_name='CartPole-v1', threshold=100.0,
-            source='custom-test', confidence='derived',
-        ),
-    }
-    # Under the custom table, 98 is below 100 → False; under
-    # the default (475), 98 is also False, but the comparison
-    # *thresholds* differ.
-    assert is_solved('CartPole-v1', 98.0, table=custom) is False
-    assert is_solved('CartPole-v1', 150.0, table=custom) is True
+# Custom-table override: removed in the env_catalogue
+# consolidation. No production caller used it; sensitivity
+# analyses can read `EnvSpec.solve_threshold` directly off the
+# registry and apply their own comparison.

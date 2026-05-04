@@ -11,7 +11,7 @@ Lifted from the deprecated `experiments/analyze_link_by_solved.py`
   measurement degeneracy from washing out signal.
 - `solved` — `is_solved(env, best) is True` AND not saturated.
   Cell crossed the env's canonical threshold (per
-  `env_solve_thresholds.SOLVE_THRESHOLDS`) with headroom.
+  `env_catalogue.SOLVE_THRESHOLDS`) with headroom.
 - `unsolved` — `is_solved(env, best) is False`.
 - `no_threshold` — env has no canonical solve threshold.
 
@@ -33,7 +33,7 @@ from typing import Literal
 
 import polars as pl
 
-from corroborate_rl.env_solve_thresholds import SOLVE_THRESHOLDS, is_solved
+from corroborate_rl.env_catalogue import SOLVE_THRESHOLDS, is_solved
 
 
 type CellClass = Literal[
