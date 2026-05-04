@@ -35,7 +35,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from corroborate._canonical import canonical_str
+from corroborate import canonical_str
 from corroborate.claim import trace_context
 from corroborate.computation_graph import ComputationGraph, build_computation_graph
 from corroborate.hypothesis import Hypothesis

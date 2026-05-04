@@ -32,7 +32,8 @@ wraps `run_dqn_sweep` for that."""
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from corroborate._narrow import is_tuple_of_int
+from typing import TypeIs
+
 from corroborate.hypothesis import Hypothesis
 from corroborate.rl.cell_runner import run_dqn_arm
 from corroborate.rl.dqn.invariants import DQNTrajectoryRecord
@@ -44,6 +45,17 @@ from corroborate.sweep import (
     SweepResult,
     sweep,
 )
+
+
+def _is_tuple_of_int(v: object) -> TypeIs[tuple[int, ...]]:
+    """TypeIs narrowing `object` to `tuple[int, ...]`. Excludes
+    `bool` per `int`-vs-`bool` subclass relationship — `True`/
+    `False` would otherwise pass an `isinstance(_, int)` check
+    and corrupt seed-int consumers."""
+    return (
+        isinstance(v, tuple)
+        and all(isinstance(s, int) and not isinstance(s, bool) for s in v)
+    )
 
 
 class DQNRunner:
@@ -78,7 +90,7 @@ class DQNRunner:
                 f"got {type(env_name).__name__}",
             )
         seeds_v = grid_point['seeds']
-        if not is_tuple_of_int(seeds_v):
+        if not _is_tuple_of_int(seeds_v):
             raise TypeError(
                 f"DQNRunner: grid_point['seeds'] must be tuple[int, ...], "
                 f"got {type(seeds_v).__name__}",
