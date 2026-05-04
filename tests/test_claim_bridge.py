@@ -70,7 +70,7 @@ def _synthetic_cells(
 
 def test_paired_g_analysis_runs_directly() -> None:
     """The analysis is callable on its own — no bridge needed.
-    Cell-level filtering lives upstream on `Bridge.cell_filter`;
+    Cell-level filtering lives upstream on `Bridge.scope`;
     when calling paired_g.fn directly the test pre-filters cells."""
     from corroborate.analyses.paired_g import paired_g
     cells = [
@@ -105,7 +105,7 @@ def test_analysis_registered_globally() -> None:
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
-    cell_filter=pl.col('env_name') == 'TestEnv',
+    scope=pl.col('env_name') == 'TestEnv',
 )
 def treatment_helps_outcome(
     paired_g: PairedGResult,
@@ -141,7 +141,7 @@ def test_bridge_no_effect_when_signal_absent() -> None:
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
-    cell_filter=pl.col('env_name') == 'TestEnv',
+    scope=pl.col('env_name') == 'TestEnv',
 )
 def want_30_pairs(
     paired_g: PairedGResult,

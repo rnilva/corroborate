@@ -97,7 +97,7 @@ def _ddqn_reduces_gap_holds_when(paired_g: PairedGResult) -> Verdict:
     target='jensen_gap',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
-    cell_filter=(pl.col('env_name') == 'Acrobot-v1'),
+    scope=(pl.col('env_name') == 'Acrobot-v1'),
 )
 def ddqn_reduces_jensen_gap__acrobot(
     paired_g: PairedGResult,
@@ -110,7 +110,7 @@ def ddqn_reduces_jensen_gap__acrobot(
     target='jensen_gap',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
-    cell_filter=(pl.col('env_name') == 'Catch-bsuite'),
+    scope=(pl.col('env_name') == 'Catch-bsuite'),
 )
 def ddqn_reduces_jensen_gap__catch(
     paired_g: PairedGResult,
@@ -123,7 +123,7 @@ def ddqn_reduces_jensen_gap__catch(
     target='jensen_gap',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
-    cell_filter=(pl.col('env_name') == 'DiscountingChain-bsuite'),
+    scope=(pl.col('env_name') == 'DiscountingChain-bsuite'),
 )
 def ddqn_reduces_jensen_gap__discounting_chain(
     paired_g: PairedGResult,
@@ -136,7 +136,7 @@ def ddqn_reduces_jensen_gap__discounting_chain(
     target='jensen_gap',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
-    cell_filter=(pl.col('env_name') == 'CartPole-v1'),
+    scope=(pl.col('env_name') == 'CartPole-v1'),
 )
 def ddqn_reduces_jensen_gap__cartpole(
     paired_g: PairedGResult,
@@ -245,7 +245,7 @@ def _premise_holds_when(
     target='jensen_dormancy_premise_active',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
-    cell_filter=(pl.col('env_name') == 'Acrobot-v1'),
+    scope=(pl.col('env_name') == 'Acrobot-v1'),
 )
 def jensen_premise_active__acrobot(
     verdict_distribution_per_env: VerdictDistributionResult,
@@ -264,7 +264,7 @@ def jensen_premise_active__acrobot(
     target='jensen_dormancy_premise_active',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
-    cell_filter=(pl.col('env_name') == 'CartPole-v1'),
+    scope=(pl.col('env_name') == 'CartPole-v1'),
 )
 def jensen_premise_active__cartpole(
     verdict_distribution_per_env: VerdictDistributionResult,
@@ -283,7 +283,7 @@ def jensen_premise_active__cartpole(
     target='jensen_dormancy_premise_active',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
-    cell_filter=(pl.col('env_name') == 'Catch-bsuite'),
+    scope=(pl.col('env_name') == 'Catch-bsuite'),
 )
 def jensen_premise_dormant__catch(
     verdict_distribution_per_env: VerdictDistributionResult,
@@ -308,7 +308,7 @@ def jensen_premise_dormant__catch(
     target='jensen_dormancy_premise_active',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
-    cell_filter=(pl.col('env_name') == 'DiscountingChain-bsuite'),
+    scope=(pl.col('env_name') == 'DiscountingChain-bsuite'),
 )
 def jensen_premise_active__discounting_chain(
     verdict_distribution_per_env: VerdictDistributionResult,
@@ -340,7 +340,7 @@ def jensen_premise_active__discounting_chain(
     target='mc_return',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
-    cell_filter=(pl.col('env_name') == 'FourRooms-misc'),
+    scope=(pl.col('env_name') == 'FourRooms-misc'),
 )
 def ddqn_outcome_stable_across_bursts__fourrooms(
     paired_g_per_burst: PerBurstResult,
@@ -366,7 +366,7 @@ def ddqn_outcome_stable_across_bursts__fourrooms(
     target='mc_return',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
-    cell_filter=(pl.col('env_name') == 'Catch-bsuite'),
+    scope=(pl.col('env_name') == 'Catch-bsuite'),
 )
 def ddqn_outcome_zero_across_bursts__catch(
     paired_g_per_burst: PerBurstResult,
@@ -470,7 +470,7 @@ def _pooled_null_holds_when(
     target='jensen_gap',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
-    cell_filter=pl.col('env_name').is_in(list(_CONVERGED_ENVS_DDQN_200K)),
+    scope=pl.col('env_name').is_in(list(_CONVERGED_ENVS_DDQN_200K)),
 )
 def ddqn_reduces_jensen_gap__converged_subset(
     paired_g_pooled: PooledPairedGResult,
@@ -490,7 +490,7 @@ def ddqn_reduces_jensen_gap__converged_subset(
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
-    cell_filter=pl.col('env_name').is_in(list(_CONVERGED_ENVS_DDQN_200K)),
+    scope=pl.col('env_name').is_in(list(_CONVERGED_ENVS_DDQN_200K)),
 )
 def ddqn_link_to_outcome_null__converged_subset(
     paired_g_pooled: PooledPairedGResult,
@@ -607,7 +607,7 @@ def _per_env_harm_holds_when(paired_g: PairedGResult) -> Verdict:
     target='eval_final_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
-    cell_filter=(pl.col('env_name') == 'Catch-bsuite'),
+    scope=(pl.col('env_name') == 'Catch-bsuite'),
 )
 def nstep_3step_hurts_outcome__catch(
     paired_g: PairedGResult,
@@ -624,7 +624,7 @@ def nstep_3step_hurts_outcome__catch(
     target='eval_final_mean',
     direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
-    cell_filter=(pl.col('env_name') == 'DiscountingChain-bsuite'),
+    scope=(pl.col('env_name') == 'DiscountingChain-bsuite'),
 )
 def nstep_3step_helps_outcome__discounting_chain(
     paired_g: PairedGResult,
@@ -673,7 +673,7 @@ def nstep_3step_helps_outcome__discounting_chain(
     target='eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
-    cell_filter=(pl.col('env_name') == 'FourRooms-misc'),
+    scope=(pl.col('env_name') == 'FourRooms-misc'),
 )
 def factorial_ddqn_attenuation__fourrooms(
     factorial_2x2_interaction: Factorial2x2Result,
@@ -721,7 +721,7 @@ def factorial_ddqn_attenuation__fourrooms(
     target='eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
-    cell_filter=(pl.col('env_name') == 'Catch-bsuite'),
+    scope=(pl.col('env_name') == 'Catch-bsuite'),
 )
 def factorial_variance_amplification__catch(
     factorial_2x2_interaction: Factorial2x2Result,
@@ -1225,7 +1225,7 @@ def _expectile_reduces_gap_holds_when(paired_g: PairedGResult) -> Verdict:
     target='jensen_gap',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
-    cell_filter=(pl.col('env_name') == 'FourRooms-misc'),
+    scope=(pl.col('env_name') == 'FourRooms-misc'),
 )
 def expectile_reduces_jensen_gap_more_than_ddqn__fourrooms(
     paired_g: PairedGResult,
@@ -1241,7 +1241,7 @@ def expectile_reduces_jensen_gap_more_than_ddqn__fourrooms(
     target='eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
-    cell_filter=(pl.col('env_name') == 'FourRooms-misc'),
+    scope=(pl.col('env_name') == 'FourRooms-misc'),
 )
 def ddqn_outperforms_expectile_on_outcome__fourrooms(
     paired_g: PairedGResult,
@@ -1263,7 +1263,7 @@ def ddqn_outperforms_expectile_on_outcome__fourrooms(
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
-    cell_filter=(pl.col('env_name') == 'FourRooms-misc'),
+    scope=(pl.col('env_name') == 'FourRooms-misc'),
 )
 def expectile_reproduces_mechanism_link_disconnect__fourrooms(
     paired_g: PairedGResult,

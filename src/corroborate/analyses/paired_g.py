@@ -20,7 +20,7 @@ derived) become resolvable by name through one resolver,
 and analyses are generic over what they consume.
 
 Cell-set scoping (env, HP equality, threshold gates, arbitrary
-predicates) lives upstream on `Bridge.cell_filter` as a polars
+predicates) lives upstream on `Bridge.scope` as a polars
 `pl.Expr`; `claim_bridge.evaluate()` filters before this analysis
 sees the cells. Analyses pair, never scope.
 """
@@ -170,7 +170,7 @@ def paired_g(
     or as a field-path read on the cell record.
 
     Cell-level scoping (env, HP equality, threshold gates,
-    arbitrary predicates) lives on `Bridge.cell_filter` as a polars
+    arbitrary predicates) lives on `Bridge.scope` as a polars
     `pl.Expr`; `claim_bridge.evaluate()` filters before this
     analysis sees the cells. The analysis itself does not scope.
 

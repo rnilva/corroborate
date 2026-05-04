@@ -7,7 +7,7 @@ Two entry points to exercise:
   StratumG[K] panel → MetaRegressionResult bridge.
 
 Cell-level scope (env_name / extra_filters / extra_min_pairs /
-cell_predicate) lives upstream on `Bridge.cell_filter` as a polars
+cell_predicate) lives upstream on `Bridge.scope` as a polars
 Expr; analyses themselves no longer accept those kwargs. Tests
 that need scoped cell-sets pre-filter the input.
 
@@ -49,7 +49,7 @@ def _filter_env(
     cells: list[Mapping[str, object]], env: str,
 ) -> list[Mapping[str, object]]:
     """Pre-filter cells by env. Bridges express this via
-    `cell_filter=pl.col('env_name') == env`; tests calling
+    `scope=pl.col('env_name') == env`; tests calling
     paired_g.fn directly handle it inline."""
     return [c for c in cells if c.get('env_name') == env]
 
