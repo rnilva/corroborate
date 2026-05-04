@@ -25,6 +25,13 @@ dowhy = [
     "networkx>=3.0",
 ]
 
+[tool.uv.workspace]
+# `corroborate_rl` is the RL substrate (DQN + gymnax envs +
+# sweep dispatcher). It depends on the framework but the
+# framework does not depend on it — substrate-neutrality
+# enforced by package boundary, not just by author discipline.
+members = ["src/corroborate_rl"]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
@@ -70,11 +77,12 @@ reportExplicitAny = "error"
 # roots FIRST so the broader `src/corroborate` block doesn't
 # shadow them.
 #
-# RL subtree: full relaxation. JAX leaks Any through jnp.* return
-# types (under real stubs); the rl/ subtree is the boundary where
-# stub looseness is unavoidable.
+# Sibling RL package: full relaxation. JAX leaks Any through
+# jnp.* return types under stubs; the substrate package is the
+# boundary where stub looseness is unavoidable. Mirrors the
+# block that previously lived under `src/corroborate/rl`.
 [[tool.pyright.executionEnvironments]]
-root = "src/corroborate/rl"
+root = "src/corroborate_rl"
 reportAny = "none"
 reportUnknownMemberType = "none"
 reportUnknownArgumentType = "none"
@@ -82,10 +90,10 @@ reportUnknownVariableType = "none"
 reportUnknownParameterType = "none"
 reportUnknownLambdaType = "none"
 
-# Analyses subtree: like the rl/ subtree, this is the post-hoc
-# numerical-array boundary. numpy / scipy / pandas stubs leak Any
-# through .mean()/.shape/etc.; the analyses package is the layer
-# where that's expected. Relax fully here.
+# Analyses subtree: this is the post-hoc numerical-array boundary.
+# numpy / scipy / pandas stubs leak Any through .mean()/.shape/
+# etc.; the analyses package is the layer where that's expected.
+# Relax fully here.
 [[tool.pyright.executionEnvironments]]
 root = "src/corroborate/analyses"
 reportAny = "none"
@@ -109,14 +117,8 @@ reportUnknownArgumentType = "none"
 reportUnknownVariableType = "none"
 reportUnknownParameterType = "none"
 
-[[tool.pyright.executionEnvironments]]
-root = "tests/rl"
-reportAny = "none"
-reportUnknownMemberType = "none"
-reportUnknownArgumentType = "none"
-reportUnknownVariableType = "none"
-reportUnknownParameterType = "none"
-reportUnknownLambdaType = "none"
+# (The former `tests/rl` execution-environment block moved to
+# `src/corroborate_rl/pyproject.toml` with the substrate's tests.)
 
 # Framework tests that exercise reductions / measurables on jax
 # arrays touch jax.numpy directly (jnp.arange, jnp.asarray); the

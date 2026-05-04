@@ -3,7 +3,7 @@ every Claim and Module class round-trips by name, and that the
 resolved handles are the *same objects* the existing sweep scripts
 import directly. The contract: YAML referring to `'double_greedify'`
 must produce the identical `FnClaim` that
-`from corroborate.rl.dqn.claims.bootstrap import double_greedify`
+`from corroborate_rl.dqn.claims.bootstrap import double_greedify`
 yields, otherwise the YAML path silently diverges from the
 hand-authored Python path."""
 from __future__ import annotations
@@ -20,13 +20,13 @@ from corroborate.runner.registry import Registry
 
 # Module set every DQN sweep script transitively binds.
 DQN_CLAIM_MODULES = (
-    'corroborate.rl.dqn.claims.bootstrap',
-    'corroborate.rl.dqn.claims.action_select',
-    'corroborate.rl.dqn.claims.replay',
-    'corroborate.rl.dqn.claims.q_network',
-    'corroborate.rl.dqn.claims.optimizer',
-    'corroborate.rl.dqn.claims.target_sync',
-    'corroborate.rl.dqn.claims.loss',
+    'corroborate_rl.dqn.claims.bootstrap',
+    'corroborate_rl.dqn.claims.action_select',
+    'corroborate_rl.dqn.claims.replay',
+    'corroborate_rl.dqn.claims.q_network',
+    'corroborate_rl.dqn.claims.optimizer',
+    'corroborate_rl.dqn.claims.target_sync',
+    'corroborate_rl.dqn.claims.loss',
 )
 
 
@@ -91,7 +91,7 @@ def test_resolved_fn_is_identical_to_imported_handle(
     same memoization in `@claim` (`_FN_CACHE`) makes
     `claim(f) is claim(f)`; the registry must store *those* same
     instances, not fresh wrappers."""
-    from corroborate.rl.dqn.claims.bootstrap import (
+    from corroborate_rl.dqn.claims.bootstrap import (
         bootstrap, double_greedify, expectile_greedify,
         max_greedify,
     )
@@ -104,9 +104,9 @@ def test_resolved_fn_is_identical_to_imported_handle(
 def test_resolved_class_is_identical_to_imported_class(
     dqn_registry: Registry,
 ) -> None:
-    from corroborate.rl.dqn.claims.optimizer import adam, warmed_update
-    from corroborate.rl.dqn.claims.q_network import MLP
-    from corroborate.rl.dqn.claims.replay import Replay
+    from corroborate_rl.dqn.claims.optimizer import adam, warmed_update
+    from corroborate_rl.dqn.claims.q_network import MLP
+    from corroborate_rl.dqn.claims.replay import Replay
     assert dqn_registry.fn('adam') is adam
     assert dqn_registry.fn('warmed_update') is warmed_update
     assert dqn_registry.cls('MLP') is MLP
@@ -128,7 +128,7 @@ def test_round_trip_reconstructs_expectile_intervention(
         bootstrap, greedification=partial(expectile, tau=0.7),
     )
 
-    from corroborate.rl.dqn.claims.bootstrap import (
+    from corroborate_rl.dqn.claims.bootstrap import (
         bootstrap as bootstrap_direct,
         expectile_greedify as expectile_direct,
     )
@@ -184,7 +184,7 @@ def test_idempotent_re_add_is_a_noop(dqn_registry: Registry) -> None:
     """Re-walking the same module twice doesn't raise — the
     second pass sees the same objects and skips."""
     dqn_registry.add_modules(DQN_CLAIM_MODULES)
-    from corroborate.rl.dqn.claims.bootstrap import double_greedify
+    from corroborate_rl.dqn.claims.bootstrap import double_greedify
     assert dqn_registry.fn('double_greedify') is double_greedify
 
 

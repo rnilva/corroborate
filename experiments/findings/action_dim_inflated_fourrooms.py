@@ -35,7 +35,7 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 
-import corroborate.rl.dqn.measurables as _m  # registers measurables
+import corroborate_rl.dqn.measurables as _m  # registers measurables
 from corroborate.analyses.paired_g import paired_g
 
 assert _m

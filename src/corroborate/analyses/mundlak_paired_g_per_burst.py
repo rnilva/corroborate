@@ -118,7 +118,7 @@ def mundlak_paired_g_per_burst(
     # transitive dep resolution via `evaluate_with_measurables`,
     # cache the array. Substrate consumers register their
     # measurables via the substrate's `__init__.py` side effect
-    # (e.g. importing `corroborate.rl.dqn` triggers DQN
+    # (e.g. importing `corroborate_rl.dqn` triggers DQN
     # measurable registration); this analysis is substrate-
     # neutral and does not register anything itself.
     from corroborate.measurables import (

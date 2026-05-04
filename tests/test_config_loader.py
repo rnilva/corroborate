@@ -21,13 +21,13 @@ from corroborate.core.signature import claim_graph_signature
 
 
 DQN_CLAIM_MODULES = (
-    'corroborate.rl.dqn.claims.bootstrap',
-    'corroborate.rl.dqn.claims.action_select',
-    'corroborate.rl.dqn.claims.replay',
-    'corroborate.rl.dqn.claims.q_network',
-    'corroborate.rl.dqn.claims.optimizer',
-    'corroborate.rl.dqn.claims.target_sync',
-    'corroborate.rl.dqn.claims.loss',
+    'corroborate_rl.dqn.claims.bootstrap',
+    'corroborate_rl.dqn.claims.action_select',
+    'corroborate_rl.dqn.claims.replay',
+    'corroborate_rl.dqn.claims.q_network',
+    'corroborate_rl.dqn.claims.optimizer',
+    'corroborate_rl.dqn.claims.target_sync',
+    'corroborate_rl.dqn.claims.loss',
 )
 
 
@@ -56,13 +56,13 @@ def test_resolve_tuple_ifies_list(reg: Registry) -> None:
 
 
 def test_resolve_class_instantiates_module(reg: Registry) -> None:
-    from corroborate.rl.dqn.claims.q_network import MLP
+    from corroborate_rl.dqn.claims.q_network import MLP
     out = resolve({'class': 'MLP', 'hidden': [128]}, reg=reg)
     assert out == MLP(hidden=(128,))
 
 
 def test_resolve_class_instantiates_container(reg: Registry) -> None:
-    from corroborate.rl.dqn.claims.replay import Replay
+    from corroborate_rl.dqn.claims.replay import Replay
     out = resolve(
         {'class': 'Replay', 'capacity': 50000, 'batch_size': 32},
         reg=reg,
@@ -76,7 +76,7 @@ def test_resolve_fn_no_kwargs_returns_bare_fnclaim(
     """Bare `{fn: name}` resolves to the FnClaim itself, not a
     partial. Identity holds (registry returns the cached
     instance)."""
-    from corroborate.rl.dqn.claims.bootstrap import double_greedify
+    from corroborate_rl.dqn.claims.bootstrap import double_greedify
     out = resolve({'fn': 'double_greedify'}, reg=reg)
     assert out is double_greedify
 
@@ -84,7 +84,7 @@ def test_resolve_fn_no_kwargs_returns_bare_fnclaim(
 def test_resolve_fn_with_kwargs_returns_partial(
     reg: Registry,
 ) -> None:
-    from corroborate.rl.dqn.claims.bootstrap import expectile_greedify
+    from corroborate_rl.dqn.claims.bootstrap import expectile_greedify
     out = resolve(
         {'fn': 'expectile_greedify', 'tau': 0.7}, reg=reg,
     )
@@ -98,7 +98,7 @@ def test_resolve_nested_fn_in_fn_kwargs(reg: Registry) -> None:
     factory as a kwarg. Real example:
     `partial(warmed_update, inner=partial(adam, lr=...), warmup_steps=100)`
     — same shape but at factory-of-factories depth."""
-    from corroborate.rl.dqn.claims.optimizer import adam, warmed_update
+    from corroborate_rl.dqn.claims.optimizer import adam, warmed_update
     out = resolve(
         {
             'fn': 'warmed_update',
@@ -122,7 +122,7 @@ def test_resolve_partial_of_fn_with_partial_kwarg(
     """The expectile_3way intervention's bootstrap binding:
     `partial(bootstrap, greedification=partial(expectile_greedify,
     tau=0.7))`. Two-level nested partial."""
-    from corroborate.rl.dqn.claims.bootstrap import (
+    from corroborate_rl.dqn.claims.bootstrap import (
         bootstrap, expectile_greedify,
     )
     out = resolve(
@@ -184,12 +184,12 @@ intervention_arms:
 def _expectile_python() -> Hypothesis[Mapping[str, object]]:
     """Canonical Python recipe for the expectile arm — the
     reference the YAML loader must match."""
-    from corroborate.rl.dqn.claims.bootstrap import (
+    from corroborate_rl.dqn.claims.bootstrap import (
         bootstrap, expectile_greedify,
     )
-    from corroborate.rl.dqn.claims.optimizer import adam, warmed_update
-    from corroborate.rl.dqn.claims.q_network import MLP
-    from corroborate.rl.dqn.claims.replay import Replay
+    from corroborate_rl.dqn.claims.optimizer import adam, warmed_update
+    from corroborate_rl.dqn.claims.q_network import MLP
+    from corroborate_rl.dqn.claims.replay import Replay
     boot = partial(
         bootstrap,
         greedification=partial(expectile_greedify, tau=0.7),

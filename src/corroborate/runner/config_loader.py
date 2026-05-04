@@ -189,7 +189,7 @@ def load_hypothesis(
 ) -> Hypothesis[Mapping[str, object]]:
     """Build a Hypothesis from a YAML file. The file is one
     hypothesis per `path`; multi-hypothesis sweeps are loaded
-    by the substrate dispatcher (e.g. `corroborate.rl.dqn.yaml_sweep
+    by the substrate dispatcher (e.g. `corroborate_rl.dqn.yaml_sweep
     .load_sweep`)."""
     with path.open() as f:
         raw = _yaml_load(f)

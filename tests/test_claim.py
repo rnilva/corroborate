@@ -317,7 +317,7 @@ def test_pickle_round_trip_function_claim() -> None:
     be module-level (which the substrate's `@claim`'d functions
     are)."""
     import pickle
-    from corroborate.rl.dqn.claims.bootstrap import bootstrap as vanilla_bootstrap
+    from corroborate_rl.dqn.claims.bootstrap import bootstrap as vanilla_bootstrap
 
     blob = pickle.dumps(vanilla_bootstrap)
     restored = pickle.loads(blob)
@@ -329,7 +329,7 @@ def test_pickle_round_trip_partial_over_claim() -> None:
     """`functools.partial` over a claim pickles natively."""
     import pickle
     from functools import partial
-    from corroborate.rl.dqn.claims.bootstrap import bootstrap as vanilla_bootstrap
+    from corroborate_rl.dqn.claims.bootstrap import bootstrap as vanilla_bootstrap
 
     baked = partial(vanilla_bootstrap, gamma=0.95)
     blob = pickle.dumps(baked)

@@ -74,7 +74,7 @@ import numpy.typing as npt
 import polars as pl
 
 import corroborate.analyses  # pyright: ignore[reportUnusedImport]  # populate registry
-import corroborate.rl.dqn.measurables  # pyright: ignore[reportUnusedImport]  # populate measurable registry
+import corroborate_rl.dqn.measurables  # pyright: ignore[reportUnusedImport]  # populate measurable registry
 from corroborate.analyses.link_attenuation_dowhy import (
     LinkAttenuationDowhyResult,
 )
@@ -94,7 +94,7 @@ from corroborate.core.intervention import DoEffect
 from corroborate.measurables import Measurable
 from corroborate.stats import MetaRegressionResult
 from corroborate.measurables.reductions import from_key, reduce_axis
-from corroborate.rl.dqn.measurables import jensen_bias_per_eps
+from corroborate_rl.dqn.measurables import jensen_bias_per_eps
 from corroborate.bridge.verdict import Verdict
 
 

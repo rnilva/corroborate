@@ -35,7 +35,7 @@ from pathlib import Path
 import polars as pl
 
 from corroborate.core.intervention import Intervention
-from corroborate.rl.dqn.claims.bootstrap import bootstrap, double_greedify
+from corroborate_rl.dqn.claims.bootstrap import bootstrap, double_greedify
 
 
 def ddqn_arm_key() -> str:

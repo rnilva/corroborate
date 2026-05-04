@@ -62,7 +62,7 @@ from corroborate.graph.discovery import discover_adjacency
 from corroborate.stats import (
     StratumObservation, meta_regression,
 )
-from corroborate.rl.env_catalogue import get as _get_env_spec
+from corroborate_rl.env_catalogue import get as _get_env_spec
 from corroborate.stats import hedges_g_paired
 
 

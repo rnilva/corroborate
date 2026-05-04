@@ -33,11 +33,11 @@ from corroborate.bridge.hypothesis_verdict import (
 )
 from corroborate.core.intervention import DoEffect, Intervention
 from corroborate.corpus.persistence import read_runrows
-from corroborate.rl.convergence import (
+from corroborate_rl.convergence import (
     classify_envs, envs_in_class, filter_to_classes,
 )
-from corroborate.rl.dqn.claims.bootstrap import bootstrap, double_greedify
-from corroborate.rl.dqn.measurables import dqn_default_measurables
+from corroborate_rl.dqn.claims.bootstrap import bootstrap, double_greedify
+from corroborate_rl.dqn.measurables import dqn_default_measurables
 from corroborate.bridge.verdict import Verdict
 
 

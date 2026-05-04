@@ -35,7 +35,7 @@ from pathlib import Path
 
 import polars as pl
 
-import corroborate.rl.dqn.measurables as _m  # registers outcome_native
+import corroborate_rl.dqn.measurables as _m  # registers outcome_native
 from corroborate.analyses.paired_g import paired_g
 
 assert _m  # keep registration import live for type checker

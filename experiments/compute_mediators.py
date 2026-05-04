@@ -24,7 +24,7 @@ import polars as pl
 import numpy as np
 
 from corroborate.corpus.persistence import iter_trace_records
-from corroborate.rl.dqn.measurables import (
+from corroborate_rl.dqn.measurables import (
     fill_ratio_late,
     greedy_match_late,
     learning_curve_auc,

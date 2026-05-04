@@ -43,7 +43,7 @@ from corroborate._internals.polars import to_dicts as _to_dicts
 from corroborate.measurables.redundancy_check import (
     TautologyReport, audit_mediator_panel,
 )
-from corroborate.rl.dqn.measurables import (
+from corroborate_rl.dqn.measurables import (
     fill_ratio_late,
     greedy_match_late,
     learning_curve_auc,

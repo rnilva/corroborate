@@ -7,7 +7,7 @@ A `Loop[C, T, Idx]` is the iteration-backend contract: run
 substrates pick the form that fits their backend:
 
 - `int` for substrate-agnostic Python (`python_loop` here).
-- `jax.Array` for jax-flavored backends (`corroborate.rl.loop
+- `jax.Array` for jax-flavored backends (`corroborate_rl.loop
   .scan_loop` and the rl-flavored `python_loop`).
 
 The aggregation contract (list, stacked pytree, generator, ...)
@@ -56,10 +56,10 @@ class Loop[C, T, Idx](Protocol):
     Implementations:
     - `python_loop` (this module): `Loop[C, T, int]`, returns
       `tuple[C, list[T]]`.
-    - `corroborate.rl.loop.scan_loop`: `Loop[C, T, jax.Array]`,
+    - `corroborate_rl.loop.scan_loop`: `Loop[C, T, jax.Array]`,
       returns `tuple[C, T]` with each T-leaf stacked to leading
       `(length, ...)` axis.
-    - `corroborate.rl.loop.python_loop`: `Loop[C, T, jax.Array]`,
+    - `corroborate_rl.loop.python_loop`: `Loop[C, T, jax.Array]`,
       returns `tuple[C, T]` (jax-stacked to match scan's shape).
 
     All structurally satisfy this Protocol with their respective

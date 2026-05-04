@@ -31,7 +31,7 @@ import corroborate.analyses  # noqa: F401  # pyright: ignore[reportUnusedImport]
 # this, the runner's measurable-signature manifest is empty
 # because `get_registered(name)` returns None for every required
 # name.
-import corroborate.rl.dqn.measurables  # noqa: F401  # pyright: ignore[reportUnusedImport]
+import corroborate_rl.dqn.measurables  # noqa: F401  # pyright: ignore[reportUnusedImport]
 
 from corroborate.analyses.dowhy import (
     BackdoorResult, RefutationResult,
@@ -44,7 +44,7 @@ from corroborate.analyses.paired_g_per_burst import (
 from corroborate.analyses.paired_g_pooled import (
     PooledPairedGResult,
 )
-from corroborate.rl.env_solve_thresholds import SOLVE_THRESHOLDS
+from corroborate_rl.env_solve_thresholds import SOLVE_THRESHOLDS
 from corroborate.analyses.tautology_audit import AuditResult
 from corroborate.analyses.verdict_distribution import (
     VerdictDistributionResult,

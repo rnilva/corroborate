@@ -136,7 +136,7 @@ def test_walk_paths_surfaces_nested_leaves_at_dotted_paths() -> None:
     WarmedUpdate(inner=Adam(...))) — not the flat `lr`."""
     from functools import partial
 
-    from corroborate.rl.dqn.dqn import dqn
+    from corroborate_rl.dqn.dqn import dqn
     from corroborate.core.signature import walk, walk_paths
 
     configured = partial(dqn, optimizer=_make_warmed_adam())
@@ -155,7 +155,7 @@ def test_walk_paths_surfaces_nested_leaves_at_dotted_paths() -> None:
 def _make_warmed_adam() -> object:
     from functools import partial
 
-    from corroborate.rl.dqn.claims.optimizer import adam, warmed_update
+    from corroborate_rl.dqn.claims.optimizer import adam, warmed_update
     return partial(
         warmed_update, inner=partial(adam, lr=1e-3), warmup_steps=100,
     )

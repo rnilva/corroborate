@@ -67,9 +67,9 @@ from corroborate.stats import (
     meta_regression,
 )
 from corroborate.corpus.persistence import read_runrows
-from corroborate.rl.dqn.claims.bootstrap import bootstrap, double_greedify
-from corroborate.rl.dqn.measurables import dqn_default_measurables
-from corroborate.rl.env_catalogue import (
+from corroborate_rl.dqn.claims.bootstrap import bootstrap, double_greedify
+from corroborate_rl.dqn.measurables import dqn_default_measurables
+from corroborate_rl.env_catalogue import (
     BenchmarkFamily,
     ENV_REGISTRY,
     EnvSpec,

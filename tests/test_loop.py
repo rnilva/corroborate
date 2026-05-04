@@ -76,7 +76,7 @@ def test_rl_scan_loop_satisfies_loop_protocol() -> None:
     is traced (jit elides Python int conversion)."""
     import jax
 
-    from corroborate.rl.loop import scan_loop
+    from corroborate_rl.loop import scan_loop
 
     holder: Loop[object, object, jax.Array] = scan_loop
     assert holder is scan_loop
@@ -88,7 +88,7 @@ def test_rl_python_loop_satisfies_loop_protocol() -> None:
     signature as `scan_loop` so authors write the theory once."""
     import jax
 
-    from corroborate.rl.loop import python_loop as rl_python_loop
+    from corroborate_rl.loop import python_loop as rl_python_loop
 
     holder: Loop[object, object, jax.Array] = rl_python_loop
     assert holder is rl_python_loop
@@ -126,8 +126,8 @@ def test_graph_capture_on_run_dqn_arm_with_real_run() -> None:
 
     from corroborate.graph import Graph
     from corroborate.core.hypothesis import Hypothesis
-    from corroborate.rl.cell_runner import run_dqn_arm
-    from corroborate.rl.env_catalogue import get
+    from corroborate_rl.cell_runner import run_dqn_arm
+    from corroborate_rl.env_catalogue import get
 
     intervention = {
         'total_steps': 100, 'eval_every': 50, 'n_episodes': 2,

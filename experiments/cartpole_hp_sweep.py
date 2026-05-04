@@ -50,9 +50,9 @@ from corroborate.corpus.persistence import (
     write_runrows,
     write_tracerows,
 )
-from corroborate.rl.dqn.claims.optimizer import Adam, WarmedUpdate
-from corroborate.rl.dqn.claims.replay import Replay
-from corroborate.rl.dqn.invariants import DQNTrajectoryRecord
+from corroborate_rl.dqn.claims.optimizer import Adam, WarmedUpdate
+from corroborate_rl.dqn.claims.replay import Replay
+from corroborate_rl.dqn.invariants import DQNTrajectoryRecord
 
 
 # ============ HP grid ============
@@ -97,7 +97,7 @@ def _intervention_for(
 def _make_hypothesis(
     grid_point: dict[str, Any],
 ) -> Hypothesis[DQNTrajectoryRecord]:
-    from corroborate.rl.dqn.measurables import dqn_default_measurables
+    from corroborate_rl.dqn.measurables import dqn_default_measurables
     return Hypothesis(
         name='vanilla_dqn',
         intervention=_intervention_for(**grid_point),
@@ -173,8 +173,8 @@ def _run_one_config(
     tmp_dir: Path,
     cfg_idx: int,
 ) -> tuple[Path, Path]:
-    from corroborate.rl.cell_runner import run_dqn_arm
-    from corroborate.rl.env_catalogue import get
+    from corroborate_rl.cell_runner import run_dqn_arm
+    from corroborate_rl.env_catalogue import get
 
     cfg_tag = f'cfg{cfg_idx:03d}__{_grid_tag(grid_point)}'
     runs_path = tmp_dir / f'{cfg_tag}__runs.parquet'

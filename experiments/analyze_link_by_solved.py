@@ -32,12 +32,12 @@ from corroborate._internals.polars import to_dicts as _to_dicts
 from corroborate.corpus.aggregate import hypothesis_comparison_from_cells
 from corroborate.core.hypothesis import Hypothesis
 from corroborate.core.intervention import Intervention
-from corroborate.rl.dqn.claims.bootstrap import bootstrap, double_greedify
-from corroborate.rl.dqn.claims.optimizer import Adam, WarmedUpdate
-from corroborate.rl.dqn.claims.replay import Replay
-from corroborate.rl.dqn.invariants import DQNTrajectoryRecord
-from corroborate.rl.env_catalogue import get
-from corroborate.rl.env_solve_thresholds import SOLVE_THRESHOLDS, is_solved
+from corroborate_rl.dqn.claims.bootstrap import bootstrap, double_greedify
+from corroborate_rl.dqn.claims.optimizer import Adam, WarmedUpdate
+from corroborate_rl.dqn.claims.replay import Replay
+from corroborate_rl.dqn.invariants import DQNTrajectoryRecord
+from corroborate_rl.env_catalogue import get
+from corroborate_rl.env_solve_thresholds import SOLVE_THRESHOLDS, is_solved
 from corroborate.corpus.schema import HypothesisComparisonRow, RunRow
 from corroborate.stats import random_effects_summary, random_effects_verdict
 

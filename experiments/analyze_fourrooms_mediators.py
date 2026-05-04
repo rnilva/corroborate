@@ -35,7 +35,7 @@ import scipy.stats as ss
 
 from corroborate._internals.polars import to_dicts as _to_dicts
 from corroborate.graph.discovery import partial_spearman_rho
-from corroborate.rl.dqn.compute_mediators import (
+from corroborate_rl.dqn.compute_mediators import (
     DEFAULT_PANEL, compute_mediator_panel,
 )
 from corroborate.corpus.schema import RunRow
