@@ -26,11 +26,11 @@ def _sample_runrow() -> RunRow:
         cycle_id='cycle-7',
         timestamp='2026-04-27T10:00:00Z',
         verdict=Verdict.HELD,
+        arm_key='dqn_with_double_greedify',
         measurements={
             'env_name': 'CartPole-v1',
             'seed': 42,
             'total_steps': 30_000,
-            'intervention_name': 'dqn_with_double_greedify',
             'gamma': 0.99,
             'optimizer.inner.lr': 0.001,
             'late_window_mean': 120.5,
@@ -87,21 +87,20 @@ def test_runrow_parquet_with_no_measurements(tmp_path: Path) -> None:
 
 def test_runrow_parquet_arm_key_round_trip(tmp_path: Path) -> None:
     """`arm_key` is a typed framework-surface column; explicit
-    values round-trip and the field stays distinct from the
-    `intervention_name` measurement."""
+    values round-trip distinct from any open-surface measurement."""
     row = RunRow(
         id='r-1', parent_id=None,
         cycle_id=None, timestamp='t',
         verdict=Verdict.HELD,
         arm_key='bootstrap=Claim:double_greedify',
-        measurements={'intervention_name': 'ddqn'},
+        measurements={'env_name': 'TestEnv'},
     )
     path = tmp_path / 'runs.parquet'
     write_runrows([row], path)
     loaded = read_runrows(path)
     assert len(loaded) == 1
     assert loaded[0].arm_key == 'bootstrap=Claim:double_greedify'
-    assert loaded[0].measurements['intervention_name'] == 'ddqn'
+    assert loaded[0].measurements['env_name'] == 'TestEnv'
     assert loaded[0] == row
 
 

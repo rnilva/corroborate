@@ -127,7 +127,7 @@ def paired_g_per_burst(
         Mapping[str, object], npt.NDArray[np.floating],
     ] = DEFAULT_PER_BURST_SOURCE,
     env_name: str | None = None,
-    arm_field: str = 'intervention_name',
+    arm_field: str = 'arm_key',
     dedupe_strategy: str = 'raise',
 ) -> PerBurstResult:
     """Per-(env, burst) paired Hedges' g panel.

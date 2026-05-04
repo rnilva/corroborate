@@ -146,25 +146,44 @@ def combined_arm_key(interventions: tuple[Intervention, ...]) -> str:
 
 @dataclass(frozen=True, slots=True)
 class DoEffect:
-    """Annotation on a Bridge: this bridge measures a do() contrast
-    between two named hypothesis arms.
+    """The typed contrast carried on a Bridge: two arms expressed
+    as Intervention tuples on the claim graph.
 
     Pearl-rung-2 edges in the causal graph have an *intervention*
     as the source node, NOT a measurable. `DoEffect` carries the
-    treatment / baseline arm names so the graph builder can emit
-    a `do(treatment|vs=baseline) → target_measurable` edge.
+    treatment / baseline as `tuple[Intervention, ...]` — typed
+    structural deltas on the claim graph. Arm identity for cell
+    matching derives from `combined_arm_key` (canonical_str of
+    each tuple), accessible via the `treatment_arm_key()` /
+    `baseline_arm_key()` methods.
 
-    `treatment_arm` and `baseline_arm` are arm keys (or hypothesis
-    names) — the same strings analyses like `paired_g` use to
-    select which cells get paired. Distinct from the underlying
-    `Intervention` tuples (`Hypothesis.intervention_arms`); this
-    is a graph-level annotation that summarises which arms the
-    contrast crosses without recapitulating the swap details."""
-    treatment_arm: str
-    baseline_arm: str
+    The empty tuple is the baseline arm by convention (no
+    structural deltas applied = the substrate's vanilla
+    composition). A non-empty `baseline` is a treatment-vs-treatment
+    contrast (e.g. DDQN-3step vs DDQN-1step).
+
+    The `Intervention` tuple shape unifies with
+    `Hypothesis.intervention_arms` — DoEffect IS the
+    contrast specification; what was previously two type-erased
+    arm-name strings is now structurally connected to the typed
+    claim graph."""
+    treatment: tuple[Intervention, ...]
+    baseline: tuple[Intervention, ...] = ()
+
+    def treatment_arm_key(self) -> str:
+        """Canonical fingerprint of the treatment arm. Empty tuple
+        → `'baseline'`; non-empty → `'+'`-joined slot=replacement
+        keys."""
+        return combined_arm_key(self.treatment)
+
+    def baseline_arm_key(self) -> str:
+        """Canonical fingerprint of the baseline arm. Empty tuple
+        → `'baseline'`; non-empty → `'+'`-joined slot=replacement
+        keys."""
+        return combined_arm_key(self.baseline)
 
     def node_key(self) -> str:
         """Canonical string identity for the do-node in
         `CausalGraph`. `'do(treatment|vs=baseline)'` form makes
         the contrast explicit when the graph is rendered."""
-        return f'do({self.treatment_arm}|vs={self.baseline_arm})'
+        return f'do({self.treatment_arm_key()}|vs={self.baseline_arm_key()})'

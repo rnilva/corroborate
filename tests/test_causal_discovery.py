@@ -598,7 +598,7 @@ def test_pc_dqn_smoke_holds_on_migrated_corpus() -> None:
 
     df = pl.read_parquet(runs_path)
     df = df.with_columns(
-        (pl.col('intervention_name') == 'ddqn')
+        (pl.col('arm_key') == 'ddqn')
         .cast(pl.Int64).alias('arm_ddqn'),
     )
     variables = [
@@ -662,7 +662,7 @@ def test_per_env_pc_dqn_smoke_finds_within_env_arm_edges() -> None:
 
     df = pl.read_parquet(runs_path)
     df = df.with_columns(
-        (pl.col('intervention_name') == 'ddqn')
+        (pl.col('arm_key') == 'ddqn')
         .cast(pl.Int64).alias('arm_ddqn'),
     )
     variables = [
@@ -725,7 +725,7 @@ def test_per_env_mediator_pc_smoke_finds_outcome_neighbours() -> None:
 
     df = pl.read_parquet(enriched_path)
     df = df.with_columns(
-        (pl.col('intervention_name') == 'ddqn')
+        (pl.col('arm_key') == 'ddqn')
         .cast(pl.Int64).alias('arm_ddqn'),
     )
     # Drop epsilon_late and fill_ratio_late — corpus-wide constants.

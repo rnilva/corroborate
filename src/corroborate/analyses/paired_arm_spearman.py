@@ -58,7 +58,7 @@ def paired_arm_spearman(
     treatment_arm: str,
     baseline_arm: str,
     stratify_by: tuple[str, ...] = ('seed',),
-    arm_field: str = 'intervention_name',
+    arm_field: str = 'arm_key',
 ) -> PairedArmSpearmanResult:
     """Compute stratified Spearman ρ(arm, source). See module
     docstring for semantics."""

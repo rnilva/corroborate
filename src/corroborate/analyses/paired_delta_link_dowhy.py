@@ -220,7 +220,7 @@ def paired_delta_link_dowhy(
     ],
     pair_by: tuple[str, ...] = ('seed',),
     env_filter: tuple[str, ...] = (),
-    arm_field: str = 'intervention_name',
+    arm_field: str = 'arm_key',
     method_name: str = 'backdoor.linear_regression',
 ) -> PairedDeltaLinkDowhyResult:
     """Test `Δ_predictor → Δ_target` after burst adjustment via

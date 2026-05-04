@@ -152,7 +152,7 @@ def paired_g(
     treatment_arm: str,
     baseline_arm: str,
     pair_by: tuple[str, ...] = ('seed',),
-    arm_field: str = 'intervention_name',
+    arm_field: str = 'arm_key',
     dedupe_strategy: str = 'raise',
 ) -> PairedGResult:
     """Compute paired Hedges' g + raw mean-diff at `source` across
@@ -292,7 +292,7 @@ def per_env_paired_g_panel(
     source: str,
     env_filter: tuple[str, ...] = (),
     pair_by: tuple[str, ...] = ('seed',),
-    arm_field: str = 'intervention_name',
+    arm_field: str = 'arm_key',
 ) -> tuple[StratumG[str], ...]:
     """Per-env paired-g panel — one `StratumG[str]` per env in
     `env_filter` (or every env present in `cells` when empty).

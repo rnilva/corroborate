@@ -671,8 +671,8 @@ def evaluate(
         **dict(bridge.params),
     }
     if contrast is not None:
-        bridge_params['treatment_arm'] = contrast.treatment_arm
-        bridge_params['baseline_arm'] = contrast.baseline_arm
+        bridge_params['treatment_arm'] = contrast.treatment_arm_key()
+        bridge_params['baseline_arm'] = contrast.baseline_arm_key()
     analysis_results = resolve_for_holds_when(
         bridge.holds_when, filtered_cells, bridge_params,
     )

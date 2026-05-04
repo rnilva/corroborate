@@ -105,7 +105,7 @@ def paired_link_per_burst(
     ],
     pair_by: tuple[str, ...] = ('seed',),
     env_name: str | None = None,
-    arm_field: str = 'intervention_name',
+    arm_field: str = 'arm_key',
     dedupe_strategy: str = 'raise',
 ) -> PerBurstLinkResult:
     """Per-(env, burst) paired link r(Δ_target, Δ_predictor) panel.

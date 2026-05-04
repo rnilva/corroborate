@@ -52,7 +52,7 @@ def _synthetic_burst_cells(
                 for m in means
             ]
             out.append({
-                'intervention_name': arm,
+                'arm_key': arm,
                 'env_name': 'TestEnv',
                 'seed': s,
                 'mc_return': mc,
@@ -125,7 +125,7 @@ def test_named_measurable_composes_with_reduce_axis() -> None:
             ('baseline', 1.5, 0.5),
         ):
             cells.append({
-                'intervention_name': arm,
+                'arm_key': arm,
                 'env_name': 'TestEnv',
                 'seed': s,
                 'series_a': [
@@ -207,7 +207,7 @@ def expectile_3way_cells() -> list[dict[str, object]]:
         pytest.skip('expectile_3way corpus not available')
     runs = pl.read_parquet(
         EXPECTILE_RUNS,
-        columns=['id', 'intervention_name', 'env_name', 'seed'],
+        columns=['id', 'arm_key', 'env_name', 'seed'],
     )
     traces = pl.read_parquet(
         EXPECTILE_TRACES,

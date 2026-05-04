@@ -27,7 +27,7 @@ from corroborate.corpus.schema import StratumG
 def _cell(env: str, arm: str, seed: int, value: float) -> Mapping[str, object]:
     return {
         'env_name': env,
-        'intervention_name': arm,
+        'arm_key': arm,
         'seed': seed,
         'eval_best_burst_mean': value,
     }

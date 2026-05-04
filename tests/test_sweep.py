@@ -25,7 +25,7 @@ from corroborate.bridge.verdict import Verdict
 
 def _make_run(name: str, **measurements: object) -> RunRow:
     leaf_measurements: dict[str, str | int | float | bool] = {
-        'intervention_name': name,
+        'arm_key': name,
     }
     for k, v in measurements.items():
         if isinstance(v, (str, int, float, bool)):
@@ -174,7 +174,7 @@ def test_sweep_runner_stamps_grid_point_into_measurements() -> None:
     [row] = result.all_runs
     assert row.measurements['group_id'] == 'alpha'
     assert row.measurements['replicate'] == 42
-    assert row.measurements['intervention_name'] == 'h'
+    assert row.measurements['arm_key'] == 'h'
 
 
 # ============ Runner-as-Protocol: class-based runner satisfies ============
