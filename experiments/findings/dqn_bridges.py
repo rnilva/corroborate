@@ -113,6 +113,34 @@ EXPECTILE_SWAP = Intervention(
 INTERVENTION = DoEffect(treatment=(DDQN_SWAP,), baseline=())
 
 
+# ============ Canonical training-regime envelopes ============
+#
+# Substrate corpora explore different HP regimes for different
+# scientific questions; a bridge scoped only by env pools cells
+# from EVERY corpus that has that env — including non-canonical-
+# HP cells the bridge author didn't intend. The principled
+# scope-axis is endogenous (cf. ANALYSIS_RECIPE.md §0); until
+# those are authored, these HP envelopes are the minimal-disambiguating
+# subset that recovers the bridge's intended pool.
+#
+# Empirically minimal:
+#   - `_FOURROOMS_REGIME`: just `lr==1e-4`. The contaminating
+#     corpora at FourRooms (`ddqn`, `cartpole_hp`-style) all use
+#     lr=1e-3; this single filter excludes them.
+#   - `_ACTION_DIM_SWEEP_REGIME`: `lr==1e-3 & capacity==50000`.
+#     `lr==1e-3` excludes lr=1e-4 corpora; `capacity==50000`
+#     excludes the `ddqn`-200k corpus (cap=10000) which shares
+#     lr=1e-3 but reaches Q-explosion regime on Acrobot
+#     (mean_jensen=1232).
+
+_FOURROOMS_REGIME: pl.Expr = pl.col('optimizer.inner.lr') == 0.0001
+
+_ACTION_DIM_SWEEP_REGIME: pl.Expr = (
+    (pl.col('optimizer.inner.lr') == 0.001)
+    & (pl.col('replay.capacity') == 50000)
+)
+
+
 # ============ Eighth revision (action_dim_sweep) ============
 #
 # "DDQN reduces jensen_gap on |A|≥3 envs (paired g, n=60 seeds);
@@ -146,7 +174,7 @@ def _ddqn_reduces_gap_holds_when(paired_g: PairedGResult) -> Verdict:
     target='jensen_gap',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
-    scope=(pl.col('env_name') == 'Acrobot-v1'),
+    scope=_ACTION_DIM_SWEEP_REGIME & (pl.col('env_name') == 'Acrobot-v1'),
 )
 def ddqn_reduces_jensen_gap__acrobot(
     paired_g: PairedGResult,
@@ -159,7 +187,7 @@ def ddqn_reduces_jensen_gap__acrobot(
     target='jensen_gap',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
-    scope=(pl.col('env_name') == 'Catch-bsuite'),
+    scope=_ACTION_DIM_SWEEP_REGIME & (pl.col('env_name') == 'Catch-bsuite'),
 )
 def ddqn_reduces_jensen_gap__catch(
     paired_g: PairedGResult,
@@ -172,7 +200,7 @@ def ddqn_reduces_jensen_gap__catch(
     target='jensen_gap',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
-    scope=(pl.col('env_name') == 'DiscountingChain-bsuite'),
+    scope=_ACTION_DIM_SWEEP_REGIME & (pl.col('env_name') == 'DiscountingChain-bsuite'),
 )
 def ddqn_reduces_jensen_gap__discounting_chain(
     paired_g: PairedGResult,
@@ -185,7 +213,7 @@ def ddqn_reduces_jensen_gap__discounting_chain(
     target='jensen_gap',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
-    scope=(pl.col('env_name') == 'CartPole-v1'),
+    scope=_ACTION_DIM_SWEEP_REGIME & (pl.col('env_name') == 'CartPole-v1'),
 )
 def ddqn_reduces_jensen_gap__cartpole(
     paired_g: PairedGResult,
@@ -674,7 +702,8 @@ def _ddqn_helps_outcome_holds_when(
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
     scope=(
-        (pl.col('env_name') == 'FourRooms-misc')
+        _FOURROOMS_REGIME
+        & (pl.col('env_name') == 'FourRooms-misc')
         & (pl.col('n_step') == 1)
     ),
 )
@@ -695,7 +724,8 @@ def ddqn_reduces_jensen_gap__fourrooms_n1(
     tier=Tier.INTERVENTIONAL,
     predicted_direction='null',
     scope=(
-        (pl.col('env_name') == 'FourRooms-misc')
+        _FOURROOMS_REGIME
+        & (pl.col('env_name') == 'FourRooms-misc')
         & (pl.col('n_step') == 3)
     ),
 )
@@ -716,7 +746,8 @@ def ddqn_attenuates_jensen_gap__fourrooms_n3(
     direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
     scope=(
-        (pl.col('env_name') == 'FourRooms-misc')
+        _FOURROOMS_REGIME
+        & (pl.col('env_name') == 'FourRooms-misc')
         & (pl.col('n_step') == 1)
     ),
 )
@@ -736,7 +767,8 @@ def ddqn_helps_outcome__fourrooms_n1(
     tier=Tier.INTERVENTIONAL,
     predicted_direction='null',
     scope=(
-        (pl.col('env_name') == 'FourRooms-misc')
+        _FOURROOMS_REGIME
+        & (pl.col('env_name') == 'FourRooms-misc')
         & (pl.col('n_step') == 3)
     ),
 )
@@ -863,7 +895,7 @@ def _slope_holds_when(
     target='eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
-    scope=pl.col('env_name') == 'FourRooms-misc',
+    scope=_FOURROOMS_REGIME & (pl.col('env_name') == 'FourRooms-misc'),
     pair_by=('seed',),
 )
 def ddqn_outcome_slope_attenuates_with_log_nstep__fourrooms(
@@ -889,7 +921,7 @@ def ddqn_outcome_slope_attenuates_with_log_nstep__fourrooms(
     target='jensen_gap',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
-    scope=pl.col('env_name') == 'FourRooms-misc',
+    scope=_FOURROOMS_REGIME & (pl.col('env_name') == 'FourRooms-misc'),
     pair_by=('seed',),
 )
 def ddqn_jensen_slope_attenuates_with_log_nstep__fourrooms(
@@ -914,7 +946,7 @@ def ddqn_jensen_slope_attenuates_with_log_nstep__fourrooms(
     target='eval_final_mean',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
-    scope=pl.col('env_name') == 'FourRooms-misc',
+    scope=_FOURROOMS_REGIME & (pl.col('env_name') == 'FourRooms-misc'),
     pair_by=('seed',),
 )
 def ddqn_final_outcome_slope_attenuates_with_log_nstep__fourrooms(
