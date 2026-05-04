@@ -22,8 +22,9 @@ from collections.abc import Iterable, Mapping
 from corroborate.analyses.paired_g import per_env_paired_g_panel
 from corroborate.bridge.analysis import analysis
 from corroborate.stats import (
-    MetaRegressionResult, Pool, meta_regress_panel,
+    MetaRegressionResult, meta_regress_panel,
 )
+from corroborate.stats.meta_regression import Pool
 
 
 @analysis

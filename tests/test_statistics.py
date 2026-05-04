@@ -12,11 +12,11 @@ from __future__ import annotations
 import math
 import pytest
 
-from corroborate.stats import (
+from corroborate.stats import hedges_g_paired
+from corroborate.stats.effect_size import (
     adequately_powered_paired,
     delta_i_from_q,
     derived_q_from_g_se,
-    hedges_g_paired,
     mde_paired,
     verdict_from_paired_stats,
 )
@@ -260,10 +260,10 @@ def test_random_effects_verdict_held_with_scope_flag_high_heterogeneity() -> Non
     verdict logic, not on the synthesis-via-`random_effects_summary`
     path (which couples PI width to τ²)."""
     from corroborate.stats import (
-        I2_THRESHOLD,
         PooledStats,
         random_effects_verdict,
     )
+    from corroborate.stats.effect_size import I2_THRESHOLD
     p = PooledStats(
         pooled_g=4.0, se_pooled=0.05,
         tau2=0.5, I2=0.6, Q=10.0,
@@ -283,10 +283,10 @@ def test_random_effects_verdict_held_with_scope_flag_high_heterogeneity() -> Non
 def test_random_effects_verdict_held_uniform_low_heterogeneity() -> None:
     """Same effect across strata → low I² → plain HELD."""
     from corroborate.stats import (
-        I2_THRESHOLD,
         random_effects_summary,
         random_effects_verdict,
     )
+    from corroborate.stats.effect_size import I2_THRESHOLD
     # Five identical-effect strata → I² ≈ 0.
     p = random_effects_summary([(1.5, 0.05)] * 5)
     assert p.I2 < I2_THRESHOLD
@@ -323,10 +323,8 @@ def test_random_effects_verdict_held_with_scope_flag_predicted_negative() -> Non
 def test_recommended_n_paired_inverts_mde_paired() -> None:
     """If observed g equals the MDE at n=10, the recommended n
     should be ~10 (round-trip consistency)."""
-    from corroborate.stats import (
-        mde_paired,
-        recommended_n_paired,
-    )
+    from corroborate.stats import recommended_n_paired
+    from corroborate.stats.effect_size import mde_paired
     mde_at_10 = mde_paired(10, alpha=0.05, power=0.8)
     rec_n = recommended_n_paired(mde_at_10, alpha=0.05, power=0.8)
     assert rec_n == pytest.approx(10.0, rel=0.05)

@@ -7,22 +7,22 @@ Four sub-modules:
   scripts.
 - `runner.sweep` — `Runner[R]` Protocol, `sweep` driver,
   `run_hypotheses`, `SweepResult`, `SweepCellResult`,
-  `CellFailure`, `empty_graph`.
+  `CellFailure`.
 - `runner.registry` — substrate-facing string→handle
   `Registry` (FnClaim + frozen-dataclass auto-discovery).
-- `runner.config_loader` — YAML → Hypothesis loader +
-  `resolve`, `is_str_keyed_mapping`,
-  `build_hypothesis_from_mapping`.
+- `runner.config_loader` — YAML → Hypothesis loader.
 
-The `@analysis` decorator + `resolve_for_holds_when` fixture
-injection live in `corroborate.bridge.analysis` — they are the
-fixture-injection glue for `claim_bridge`, not a runner concern.
+`@analysis` + fixture injection live in
+`corroborate.bridge.analysis` — they're the glue for
+`claim_bridge`, not a runner concern.
 
-Consumers `from corroborate.runner import X`."""
+Public surface re-exported here: the corpus runner entry
+points, `Registry`, the sweep types. Internal sweep helpers
+(`empty_graph`), config-loader helpers (`resolve`,
+`build_hypothesis_from_mapping`, `is_str_keyed_mapping`) live
+on the submodule path."""
 from corroborate.runner.config_loader import (
-    build_hypothesis_from_mapping,
     load_hypothesis,
-    resolve,
 )
 from corroborate.runner.registry import Registry
 from corroborate.runner.runner import (
@@ -34,7 +34,6 @@ from corroborate.runner.sweep import (
     Runner,
     SweepCellResult,
     SweepResult,
-    empty_graph,
     run_hypotheses,
     sweep,
 )
@@ -46,10 +45,7 @@ __all__ = [
     'Runner',
     'SweepCellResult',
     'SweepResult',
-    'build_hypothesis_from_mapping',
-    'empty_graph',
     'load_hypothesis',
-    'resolve',
     'run_hypotheses',
     'run_module',
     'sweep',

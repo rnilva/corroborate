@@ -21,9 +21,11 @@ import pytest
 
 from corroborate.stats import (
     StratumObservation,
+    meta_regression,
+)
+from corroborate.stats.meta_regression import (
     cross_validate_meta_regression,
     meta_regress_comparison,
-    meta_regression,
 )
 from corroborate.corpus.schema import GroupStats, HypothesisComparisonRow
 from corroborate.bridge.verdict import Verdict

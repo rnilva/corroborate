@@ -2,66 +2,45 @@
 verdicts from corpus measurements.
 
 Hedges' g (paired and pooled), random-effects pooling, meta-
-regression, MDE / power computation. All substrate-neutral —
-operates on numeric arrays and stratum keys, doesn't know what
-the substrate's measurables mean.
+regression. All substrate-neutral — operates on numeric arrays
+and stratum keys, doesn't know what the substrate's
+measurables mean.
 
-The decomposition mirrors the file boundary:
-- `stats.core` — Hedges' g, PooledStats, random-effects, MDE,
-  paired power tools.
+Two sub-modules:
+- `stats.effect_size` — Hedges' g (paired), PooledStats,
+  random-effects pooling, MDE / power.
 - `stats.meta_regression` — single- and panel-meta-regression
   with covariate coefficients and cross-validation.
 
-Consumers import from `corroborate.stats` (this module) — both
-sub-modules' public surface re-exported here."""
+Public surface re-exported here: the canonical effect-size
+primitives, the pooling result type, meta-regression entry
+points + result types. Internal constants (`I2_THRESHOLD`),
+power-checking helpers, and verdict-derivation utilities live
+on the submodule path."""
 from corroborate.stats.effect_size import (
-    I2_THRESHOLD,
     PooledStats,
-    adequately_powered_paired,
-    derived_q_from_g_se,
-    delta_i_from_q,
     hedges_g_paired,
-    mde_paired,
     random_effects_summary,
     random_effects_verdict,
     recommended_n_paired,
-    verdict_from_paired_stats,
 )
 from corroborate.stats.meta_regression import (
     CovariateCoefficient,
-    CrossValResult,
-    FoldResult,
     MetaRegressionResult,
-    Pool,
-    StratumGProtocol,
     StratumObservation,
-    cross_validate_meta_regression,
-    meta_regress_comparison,
     meta_regress_panel,
     meta_regression,
 )
 
 __all__ = [
     'CovariateCoefficient',
-    'CrossValResult',
-    'FoldResult',
-    'I2_THRESHOLD',
     'MetaRegressionResult',
-    'Pool',
     'PooledStats',
-    'StratumGProtocol',
     'StratumObservation',
-    'adequately_powered_paired',
-    'cross_validate_meta_regression',
-    'delta_i_from_q',
-    'derived_q_from_g_se',
     'hedges_g_paired',
-    'mde_paired',
-    'meta_regress_comparison',
     'meta_regress_panel',
     'meta_regression',
     'random_effects_summary',
     'random_effects_verdict',
     'recommended_n_paired',
-    'verdict_from_paired_stats',
 ]

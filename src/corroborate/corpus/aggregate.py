@@ -40,12 +40,14 @@ from corroborate.corpus.schema import (
     RunRow,
 )
 from corroborate.stats import (
-    adequately_powered_paired,
-    delta_i_from_q,
-    derived_q_from_g_se,
     hedges_g_paired,
     random_effects_summary,
     random_effects_verdict,
+)
+from corroborate.stats.effect_size import (
+    adequately_powered_paired,
+    delta_i_from_q,
+    derived_q_from_g_se,
     verdict_from_paired_stats,
 )
 from corroborate.bridge.verdict import Verdict

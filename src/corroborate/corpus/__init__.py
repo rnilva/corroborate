@@ -1,43 +1,27 @@
 """Corpus — typed persistence + cross-arm aggregation.
 
-The corpus is the framework's per-cell evidence store + the
-typed schemas that flow through it. Five sub-modules:
+Five sub-modules:
 
-- `corpus.schema` — `RunRow`, `TraceRow`, `HypothesisComparisonRow`,
-  `GroupStats`, the leaf-type aliases.
+- `corpus.schema` — `RunRow`, `TraceRow`,
+  `HypothesisComparisonRow`, `GroupStats`, leaf-type aliases.
 - `corpus.persistence` — parquet read/write, dtype tightening,
   trace-record streaming, polars-expr trace reductions.
 - `corpus.cloud` — fsspec-backed archive / restore for remote
   parquet stores; `RemoteManifest` typed accessor.
-- `corpus.aggregate` — per-arm aggregation and the
+- `corpus.aggregate` — per-arm aggregation +
   `hypothesis_comparison_from_cells` builder; `leaf_signature`
   configurational fingerprint.
 - `corpus.stratum` — `StratumG[K]` typed effect-size container.
 
-Consumers `from corroborate.corpus import X`."""
+Public surface re-exported here: typed schemas (`RunRow`,
+`TraceRow`, `HypothesisComparisonRow`), the corpus builder, the
+fingerprint, and the leaf-type aliases. Parquet I/O helpers,
+cloud archive primitives, and `RemoteManifest` accessors live
+on the submodule path (`corroborate.corpus.persistence.X`,
+`corroborate.corpus.cloud.X`)."""
 from corroborate.corpus.aggregate import (
     hypothesis_comparison_from_cells,
     leaf_signature,
-)
-from corroborate.corpus.cloud import (
-    RemoteFile,
-    RemoteManifest,
-    archive,
-    archived_uri,
-    is_archived,
-    ls,
-    purge,
-    restore,
-)
-from corroborate.corpus.persistence import (
-    apply_trace_reductions,
-    iter_trace_records,
-    read_runrows,
-    read_tracerows,
-    stream_concat_parquets,
-    tighten_trace_dtypes,
-    write_runrows,
-    write_tracerows,
 )
 from corroborate.corpus.schema import (
     GroupStats,
@@ -55,26 +39,10 @@ __all__ = [
     'GroupStats',
     'HypothesisComparisonRow',
     'MeasurementLeaf',
-    'RemoteFile',
-    'RemoteManifest',
     'RunRow',
     'StratumG',
     'TraceLeaf',
     'TraceRow',
-    'apply_trace_reductions',
-    'archive',
-    'archived_uri',
     'hypothesis_comparison_from_cells',
-    'is_archived',
-    'iter_trace_records',
     'leaf_signature',
-    'ls',
-    'purge',
-    'read_runrows',
-    'read_tracerows',
-    'restore',
-    'stream_concat_parquets',
-    'tighten_trace_dtypes',
-    'write_runrows',
-    'write_tracerows',
 ]
