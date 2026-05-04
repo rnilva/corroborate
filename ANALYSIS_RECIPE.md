@@ -135,6 +135,28 @@ horizon, reward_scale) are part of the variable set. Pooling
 across envs without stratification produces spurious edges
 (per memory `findings_dowhy_three_probes`).
 
+### 3a. Partial-ρ to disambiguate from an established mediator
+
+When a canonical mediator exists (e.g. `jensen_gap` for the DDQN
+study), candidate mediators may either carry **independent**
+outcome-predictive signal or be **collinear** with the canonical
+one. `partial_spearman_rho` separates them:
+
+```python
+from corroborate.graph.discovery import partial_spearman_rho
+
+# Δ_outcome ⊥ Δ_candidate | Δ_jensen_gap?
+rho, p = partial_spearman_rho(
+    delta_outcome, delta_candidate, delta_jensen_gap,
+)
+# rho significantly non-zero → candidate carries independent signal
+# rho ≈ 0 → candidate is collinear with jensen_gap (restatement)
+```
+
+A candidate surviving the partial-ρ test is a bona-fide separate
+intervention target; one that collapses is a redundant restatement
+of the canonical mediator's mechanism.
+
 ---
 
 ## 4. Robustness checks
@@ -196,6 +218,32 @@ Per memory `findings_fourrooms_time_series`, scalar mech-link
 slopes silently combine causally opposite phases — per-burst
 unmasks them.
 
+### 5a. Cross-burst lag correlation (causal-precedence diagnostic)
+
+When per-burst panels exist, the **temporal direction** of the
+mech↔outcome relation is testable by cross-burst lag correlation:
+
+```python
+import scipy.stats as ss
+
+# For each (env, pair), compute r(Δ_mediator[k], Δ_outcome[k+τ])
+# pooled over (seed, k) for τ ∈ {-3, -2, -1, 0, +1, +2, +3}.
+for tau in (-3, -2, -1, 0, 1, 2, 3):
+    xs, ys = [], []
+    for k in range(n_bursts):
+        if 0 <= k + tau < n_bursts:
+            xs.extend(delta_mediator[:, k])
+            ys.extend(delta_outcome[:, k + tau])
+    r = ss.pearsonr(xs, ys)
+    print(f'τ={tau:>+2}: r={r.statistic:+.3f}')
+```
+
+**Forward asymmetry** (`r(τ=+1) > r(τ=-1)`) → mediator precedes
+outcome → causal direction consistent. **Symmetric** lag profile
+→ no temporal precedence; the relation may be confounded by a
+common cause. Use as a **diagnostic** sanity check; PC + DoWhy
+refutations remain the verdict primitives.
+
 ---
 
 ## 6. Tautology audit for cleavage candidates
@@ -215,17 +263,78 @@ methodological artifacts.
 
 ---
 
+## 7. Data-driven intervention selection
+
+When the mech/outcome/link verdicts surface a scope ("DDQN works
+on solved-converged envs but not unsolved"), the next question is
+*"what should the next sweep target?"* The data-driven companion
+to literature pattern-matching:
+
+1. **Classify envs by convergence on the BASELINE arm** — we want
+   the natural failure-mode signature, not one induced by an
+   intervention.
+   ```python
+   from corroborate_rl.convergence import (
+       classify_envs, envs_in_class, mediator_differential,
+   )
+   classes = classify_envs(baseline_runs)
+   solved_envs = envs_in_class(classes, 'solved')
+   unsolved_envs = envs_in_class(classes, 'unsolved')
+   ```
+
+2. **Mediator differential** — Hedges' g of each candidate
+   mediator's value across solved-vs-unsolved baselines. Top-|g|
+   mediators are the empirical failure-mode signatures.
+   ```python
+   diff = mediator_differential(
+       baseline_runs, mediator_paths=MEDIATOR_PATHS,
+       solved_envs=solved_envs, unsolved_envs=unsolved_envs,
+   )
+   ```
+
+3. **PC adjacency on the panel** — for each top-|g| mediator,
+   list its neighbours on the conservative-PC graph (depth-1,
+   stratified by env).
+   ```python
+   adj = discover_adjacency(
+       df, variables=PC_VARIABLES,
+       alpha=0.05, max_conditioning=1, stratify_by='env_name',
+   )
+   for path in top_mediators:
+       neighbours = [edge.other(path) for edge in adj.edges if path in edge]
+   ```
+
+4. **Adjacency = candidate intervention targets.** Each PC
+   neighbour of a high-differential mediator is a variable the
+   substrate author can construct an intervention against. The
+   author's job stays — translating the named neighbour into a
+   slot Claim swap from the literature — but the candidate set
+   is no longer literature pattern-matching; it's empirically
+   ranked from the corpus.
+
+This pipeline is the framework's answer to "where do we go next?"
+The scope claim says where the mechanism doesn't work; the
+mediator differential says what's different there; PC adjacency
+says which upstream variables are causally adjacent and worth
+intervening on.
+
+---
+
 ## Recipe summary
 
 1. Classify cells (`with_cell_class`) → exclude saturated.
 2. Run bridges (`runner.run_module`) → mech/outcome/link verdicts.
 3. If HELD_WITH_SCOPE_FLAG → meta-regression for scope axis.
+3a. Partial-ρ to disambiguate candidate mediators from the canonical one.
 4. PC for moderator candidates (depth-1, then depth-2 robustness).
 5. K-fold CV the meta-regression coefficients for sign stability.
 6. Per-burst probes if scalar verdicts are null.
+6a. Cross-burst lag correlation as a causal-precedence diagnostic.
 7. Tautology audit on cleavage candidates.
+8. Mediator differential + PC adjacency → next-sweep targets.
 
-Steps 1-2 are required; 3-7 are conditional on the verdicts.
+Steps 1-2 are required; 3-8 are conditional on the verdicts /
+the question being asked.
 
 ---
 
