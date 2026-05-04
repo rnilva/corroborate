@@ -7,10 +7,8 @@ requires-python = ">=3.13"
 license = { text = "MIT" }
 dependencies = [
     "polars>=1.0",
-    "jax[cuda12]>=0.4.30",
-    "jaxlib>=0.4.30",
-    "optax>=0.2.0",
-    "gymnax>=0.0.8",
+    "numpy>=1.26",
+    "pyyaml>=6.0",          # YAML config loader for hypothesis manifests
     "scipy>=1.10",          # distribution quantiles + cdf for stats module
     "statsmodels>=0.14",    # noncentral-t-aware MDE / power machinery
     "pyarrow>=24.0.0",      # incremental Parquet writer for streaming merges

@@ -8,8 +8,11 @@ g≈0.00 across bursts" observation."""
 from __future__ import annotations
 
 import random
+from collections.abc import Mapping
 from pathlib import Path
 
+import numpy as np
+import numpy.typing as npt
 import polars as pl
 import pytest
 
@@ -18,8 +21,29 @@ import corroborate.analyses  # noqa: F401  # pyright: ignore[reportUnusedImport]
 from corroborate.analyses.paired_g_per_burst import (
     DEFAULT_PER_BURST_SOURCE, panel_for_env, paired_g_per_burst,
 )
+from corroborate.measurables.measurable import Measurable
 from corroborate.measurables.reductions import from_key, reduce_axis
-from corroborate_rl.dqn.measurables import jensen_bias_per_eps
+
+
+def _q_minus_mc_fn(
+    record: Mapping[str, object],
+) -> npt.NDArray[np.floating]:
+    """Per-(burst, episode) Q − MC; same shape as the substrate's
+    `jensen_bias_per_eps`. Synthetic so this test stays
+    framework-pure (and exercises the Measurable + reduce_axis
+    composition without depending on a substrate measurable)."""
+    q = np.asarray(record['predicted_q_at_start'], dtype=np.float64)
+    mc = np.asarray(record['mc_return'], dtype=np.float64)
+    return q - mc
+
+
+_q_minus_mc: Measurable[
+    Mapping[str, object], npt.NDArray[np.floating],
+] = Measurable(
+    fn=_q_minus_mc_fn,
+    name='q_minus_mc',
+    reads=('predicted_q_at_start', 'mc_return'),
+)
 
 
 def _synthetic_burst_cells(
@@ -101,11 +125,13 @@ def test_per_burst_synthetic_no_signal() -> None:
         assert abs(s.g) < 1.0, f'expected g ≈ 0, got {s.g}'
 
 
-def test_jensen_bias_per_eps_reduction() -> None:
-    """Composing the named `jensen_bias_per_eps` measurable with
-    `reduce_axis(_, axis=-1, op='mean')` produces the Jensen-bias
-    per-burst gap (Q − MC), the same quantity the old
-    `reduction='mc_minus_q'` string-dispatch did."""
+def test_q_minus_mc_per_burst_reduction() -> None:
+    """Composing a Q − MC `Measurable` with `reduce_axis(_,
+    axis=-1, op='mean')` produces the per-burst gap. This is the
+    same shape the substrate's `jensen_bias_per_eps` follows; the
+    framework only needs to verify that
+    `Measurable -> reduce_axis -> paired_g_per_burst.fn` composes
+    correctly, without binding to a substrate measurable."""
     rng = random.Random(0)
     cells: list[dict[str, object]] = []
     for s in range(20):
@@ -127,7 +153,7 @@ def test_jensen_bias_per_eps_reduction() -> None:
                 ],
             })
     bias_per_burst_mean = reduce_axis(
-        jensen_bias_per_eps, axis=-1, op='mean',
+        _q_minus_mc, axis=-1, op='mean',
     )
     result = paired_g_per_burst.fn(
         cells,

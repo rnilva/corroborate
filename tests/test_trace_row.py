@@ -13,7 +13,10 @@ Tests cover:
    cleanly — rows that don't carry a path don't gain a spurious
    None entry on read.
 4. List-typed leaves (trajectories) round-trip as Python lists.
-5. signature.walk_paths surfaces nested HPs at dotted paths."""
+
+The substrate-side `walk_paths` test on a DQN-configured
+intervention lives in
+`src/corroborate_rl/tests/test_trace_row_dqn.py`."""
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -128,37 +131,6 @@ def test_heterogeneous_leaf_paths_null_pad(tmp_path: Path) -> None:
     assert 'optimizer.inner.lr' in rows_out[1].leaves
     assert 'gamma' not in rows_out[1].leaves
     assert 'reward' not in rows_out[1].leaves
-
-
-def test_walk_paths_surfaces_nested_leaves_at_dotted_paths() -> None:
-    """`signature.walk_paths` must produce dotted topology paths
-    keyed at each leaf — `optimizer.inner.lr` (nested leaf under
-    WarmedUpdate(inner=Adam(...))) — not the flat `lr`."""
-    from functools import partial
-
-    from corroborate_rl.dqn.dqn import dqn
-    from corroborate.core.signature import walk, walk_paths
-
-    configured = partial(dqn, optimizer=_make_warmed_adam())
-    paths = walk_paths(walk(configured), regime='leaf')
-
-    # Top-level leaves (gamma is dqn's direct kwarg).
-    assert 'gamma' in paths
-    # Nested: optimizer is a Module field, inner is its inner
-    # Module, lr is Adam's leaf.
-    assert 'optimizer.inner.lr' in paths
-    # Sibling at the same depth resolves to its own path —
-    # NOT colliding with optimizer.inner.lr.
-    assert 'optimizer.warmup_steps' in paths
-
-
-def _make_warmed_adam() -> object:
-    from functools import partial
-
-    from corroborate_rl.dqn.claims.optimizer import adam, warmed_update
-    return partial(
-        warmed_update, inner=partial(adam, lr=1e-3), warmup_steps=100,
-    )
 
 
 def test_unsupported_leaf_type_raises() -> None:
