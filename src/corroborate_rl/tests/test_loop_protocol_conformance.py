@@ -43,25 +43,26 @@ def test_graph_capture_on_run_dqn_arm_with_real_run() -> None:
     import os
     os.environ.setdefault('XLA_PYTHON_CLIENT_PREALLOCATE', 'false')
 
+    from functools import partial
+
     from corroborate.graph import Graph
-    from corroborate.core.hypothesis import LegacyHypothesis as Hypothesis
     from corroborate_rl.cell_runner import run_dqn_arm
+    from corroborate_rl.dqn.dqn import dqn
     from corroborate_rl.env_catalogue import get
 
-    intervention = {
-        'total_steps': 100, 'eval_every': 50, 'n_episodes': 2,
-        'gamma': 0.99, 'sync_period': 25,
-    }
-    h = Hypothesis(
-        name='vanilla', intervention=intervention, predicted_direction=None,
+    claim = partial(
+        dqn,
+        total_steps=100, eval_every=50, n_episodes=2,
+        gamma=0.99, sync_period=25,
     )
-    arm = run_dqn_arm(get('CartPole-v1'), (0,), hypothesis=h)
+    arm = run_dqn_arm(
+        get('CartPole-v1'), (0,), claim=claim, arm_key='baseline',
+        measurables=(),
+    )
 
     assert isinstance(arm.graph, Graph)
     assert len(arm.graph.nodes) > 0
     assert len(arm.graph.edges) > 0
-    # The DQN claim hierarchy must include rollout / train / sync
-    # phases + the dqn outermost claim itself. Check by claim name.
     node_names = set(arm.graph.nodes)
     assert 'dqn' in node_names
     assert 'dqn_step' in node_names

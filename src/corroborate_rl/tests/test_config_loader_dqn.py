@@ -13,8 +13,9 @@ from pathlib import Path
 
 import pytest
 
-from corroborate.runner.config_loader import load_hypothesis, resolve
-from corroborate.core.hypothesis import LegacyHypothesis as Hypothesis
+from corroborate.runner.config_loader import (
+    HypothesisConfig, load_hypothesis, resolve,
+)
 from corroborate.core.intervention import Intervention
 from corroborate.runner.registry import Registry
 from corroborate.core.signature import claim_graph_signature
@@ -181,7 +182,7 @@ intervention_arms:
 """.strip()
 
 
-def _expectile_python() -> Hypothesis[Mapping[str, object]]:
+def _expectile_python() -> HypothesisConfig:
     """Canonical Python recipe for the expectile arm — the
     reference the YAML loader must match."""
     from corroborate_rl.dqn.claims.bootstrap import (
@@ -209,7 +210,7 @@ def _expectile_python() -> Hypothesis[Mapping[str, object]]:
         'q_network': MLP(hidden=(64, 64)),
         'bootstrap': boot,
     }
-    return Hypothesis(
+    return HypothesisConfig(
         name='expectile_dqn',
         intervention=intervention,
         predicted_direction='a_gt_b',

@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from corroborate.core.hypothesis import LegacyHypothesis as Hypothesis
+from corroborate.runner.config_loader import HypothesisConfig
 from corroborate.core.intervention import Intervention
 from corroborate_rl.dqn.collect import EnvConfig
 from corroborate.runner.registry import Registry
@@ -36,7 +36,7 @@ MANIFEST_PATH = (
 
 def _python_hypothesis(
     name: str,
-) -> Hypothesis[Mapping[str, object]]:
+) -> HypothesisConfig:
     """Canonical Python recipe for the expectile_3way cohort —
     the reference that `expectile_3way.yaml` must match
     structurally."""
@@ -61,14 +61,14 @@ def _python_hypothesis(
         'q_network': MLP(hidden=(64, 64)),
     }
     if name == 'vanilla_dqn':
-        return Hypothesis(
+        return HypothesisConfig(
             name='vanilla_dqn', intervention=base, predicted_direction=None,
             intervention_arms=(),
         )
     if name == 'ddqn':
         boot = partial(bootstrap, greedification=double_greedify)
         base['bootstrap'] = boot
-        return Hypothesis(
+        return HypothesisConfig(
             name='ddqn', intervention=base, predicted_direction='a_gt_b',
             intervention_arms=(
                 Intervention(slot_path='bootstrap', replacement=boot),
@@ -80,7 +80,7 @@ def _python_hypothesis(
             greedification=partial(expectile_greedify, tau=0.7),
         )
         base['bootstrap'] = boot
-        return Hypothesis(
+        return HypothesisConfig(
             name='expectile_dqn', intervention=base, predicted_direction='a_gt_b',
             intervention_arms=(
                 Intervention(slot_path='bootstrap', replacement=boot),
@@ -106,7 +106,7 @@ def sweep(reg: Registry) -> DQNSweep:
 @pytest.fixture
 def yaml_hypotheses(
     sweep: DQNSweep, reg: Registry,
-) -> tuple[Hypothesis[Mapping[str, object]], ...]:
+) -> tuple[HypothesisConfig, ...]:
     return sweep.build_hypotheses(reg=reg)
 
 
@@ -133,7 +133,7 @@ def test_sweep_envs_tuple_matches(sweep: DQNSweep) -> None:
 
 
 def test_sweep_hypothesis_count(
-    yaml_hypotheses: tuple[Hypothesis[Mapping[str, object]], ...],
+    yaml_hypotheses: tuple[HypothesisConfig, ...],
 ) -> None:
     assert len(yaml_hypotheses) == 3
     assert [h.name for h in yaml_hypotheses] == [
@@ -145,10 +145,10 @@ def test_sweep_hypothesis_count(
 
 @pytest.fixture
 def hypothesis_pairs(
-    yaml_hypotheses: tuple[Hypothesis[Mapping[str, object]], ...],
+    yaml_hypotheses: tuple[HypothesisConfig, ...],
 ) -> dict[str, tuple[
-    Hypothesis[Mapping[str, object]],
-    Hypothesis[Mapping[str, object]],
+    HypothesisConfig,
+    HypothesisConfig,
 ]]:
     yaml_by_name = {h.name: h for h in yaml_hypotheses}
     return {
@@ -162,8 +162,8 @@ def hypothesis_pairs(
 )
 def test_predicted_direction_matches(
     hypothesis_pairs: dict[str, tuple[
-        Hypothesis[Mapping[str, object]],
-        Hypothesis[Mapping[str, object]],
+        HypothesisConfig,
+        HypothesisConfig,
     ]],
     h_name: str,
 ) -> None:
@@ -176,8 +176,8 @@ def test_predicted_direction_matches(
 )
 def test_intervention_leaves_match(
     hypothesis_pairs: dict[str, tuple[
-        Hypothesis[Mapping[str, object]],
-        Hypothesis[Mapping[str, object]],
+        HypothesisConfig,
+        HypothesisConfig,
     ]],
     h_name: str,
 ) -> None:
@@ -198,8 +198,8 @@ def test_intervention_leaves_match(
 )
 def test_module_claim_slots_equal(
     hypothesis_pairs: dict[str, tuple[
-        Hypothesis[Mapping[str, object]],
-        Hypothesis[Mapping[str, object]],
+        HypothesisConfig,
+        HypothesisConfig,
     ]],
     h_name: str,
 ) -> None:
@@ -221,8 +221,8 @@ def test_module_claim_slots_equal(
 )
 def test_bootstrap_signature_matches(
     hypothesis_pairs: dict[str, tuple[
-        Hypothesis[Mapping[str, object]],
-        Hypothesis[Mapping[str, object]],
+        HypothesisConfig,
+        HypothesisConfig,
     ]],
     h_name: str,
 ) -> None:
@@ -246,8 +246,8 @@ def test_bootstrap_signature_matches(
 )
 def test_arm_key_matches(
     hypothesis_pairs: dict[str, tuple[
-        Hypothesis[Mapping[str, object]],
-        Hypothesis[Mapping[str, object]],
+        HypothesisConfig,
+        HypothesisConfig,
     ]],
     h_name: str,
 ) -> None:
@@ -258,7 +258,7 @@ def test_arm_key_matches(
 
 
 def test_signatures_distinct_across_arms(
-    yaml_hypotheses: tuple[Hypothesis[Mapping[str, object]], ...],
+    yaml_hypotheses: tuple[HypothesisConfig, ...],
 ) -> None:
     """The signature is not constant — it actually distinguishes
     the three arms. ddqn != expectile_dqn at the bootstrap slot,

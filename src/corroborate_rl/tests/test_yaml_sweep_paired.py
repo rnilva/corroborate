@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from corroborate.core.hypothesis import LegacyHypothesis as Hypothesis
+from corroborate.runner.config_loader import HypothesisConfig
 from corroborate.core.intervention import Intervention
 from corroborate.runner.registry import Registry
 from corroborate_rl.dqn.collect import EnvConfig
@@ -40,7 +40,7 @@ DDQN_EFFECTIVE_PATH = (
 
 def _python_minatar_1M_hypothesis(
     name: str, env_name: str,
-) -> Hypothesis[Mapping[str, object]]:
+) -> HypothesisConfig:
     """Canonical Python recipe for the minatar_1M cohort. Used as
     the reference the YAML sweep must match structurally."""
     from corroborate_rl.dqn.claims.bootstrap import (
@@ -68,14 +68,14 @@ def _python_minatar_1M_hypothesis(
         ),
     }
     if name == 'vanilla_dqn':
-        return Hypothesis(
+        return HypothesisConfig(
             name='vanilla_dqn', intervention=base, predicted_direction=None,
             intervention_arms=(),
         )
     if name == 'ddqn':
         boot = partial(bootstrap, greedification=double_greedify)
         base['bootstrap'] = boot
-        return Hypothesis(
+        return HypothesisConfig(
             name='ddqn', intervention=base, predicted_direction='a_gt_b',
             intervention_arms=(
                 Intervention(slot_path='bootstrap', replacement=boot),
@@ -86,7 +86,7 @@ def _python_minatar_1M_hypothesis(
 
 def _python_ddqn_effective_hypothesis(
     name: str, env_name: str,
-) -> Hypothesis[Mapping[str, object]]:
+) -> HypothesisConfig:
     """Canonical Python recipe for the ddqn_effective cohort
     (200k steps). Reference for the matching YAML sweep."""
     from corroborate_rl.dqn.claims.bootstrap import (
@@ -114,14 +114,14 @@ def _python_ddqn_effective_hypothesis(
         ),
     }
     if name == 'vanilla_dqn':
-        return Hypothesis(
+        return HypothesisConfig(
             name='vanilla_dqn', intervention=base, predicted_direction=None,
             intervention_arms=(),
         )
     if name == 'ddqn':
         boot = partial(bootstrap, greedification=double_greedify)
         base['bootstrap'] = boot
-        return Hypothesis(
+        return HypothesisConfig(
             name='ddqn', intervention=base, predicted_direction='a_gt_b',
             intervention_arms=(
                 Intervention(slot_path='bootstrap', replacement=boot),
@@ -322,11 +322,11 @@ def test_from_env_in_chunked_mode_raises(reg: Registry) -> None:
 # ---------- helpers ----------
 
 def _pick(
-    built: tuple[Hypothesis[Mapping[str, object]], ...],
+    built: tuple[HypothesisConfig, ...],
     envs_aligned: tuple[EnvConfig, ...],
     env_name: str,
     h_name: str,
-) -> Hypothesis[Mapping[str, object]]:
+) -> HypothesisConfig:
     """Find the (env, hypothesis-name) pair in the expanded
     paired tuples."""
     for h, ec in zip(built, envs_aligned, strict=True):

@@ -62,6 +62,15 @@ class HypothesisConfig:
     predicted_direction: PredictedDirection | None = None
     intervention_arms: tuple[Intervention, ...] = field(default_factory=tuple)
 
+    def arm_key(self) -> str:
+        """Canonical fingerprint of `intervention_arms`. Empty tuple →
+        `'baseline'`. Substrate's `dispatch_sweep` derives the same
+        value via `DoEffect(treatment=intervention_arms,
+        baseline=()).treatment_arm_key()` — both flow through
+        `combined_arm_key`."""
+        from corroborate.core.intervention import combined_arm_key
+        return combined_arm_key(self.intervention_arms)
+
 
 _CLASS_KEY = 'class'
 _FN_KEY = 'fn'
