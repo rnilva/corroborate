@@ -30,7 +30,7 @@ import math
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 
-from corroborate.analyses._panel import per_stratum_panel
+from corroborate.analyses.panel import per_stratum_panel
 from corroborate.bridge.analysis import analysis
 from corroborate.corpus.schema import StratumG
 
