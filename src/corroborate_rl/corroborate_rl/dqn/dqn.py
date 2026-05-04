@@ -19,11 +19,12 @@ who want to hide an HP from intervention bake it in via
 from __future__ import annotations
 
 from functools import partial
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 import jax
 import jax.numpy as jnp
 import optax
+from gymnax import EnvParams
 
 from corroborate import claim
 from corroborate_rl.dqn.claims import (
@@ -53,8 +54,15 @@ from corroborate_rl.dqn.types import (
     StepRecord,
     TargetSync,
 )
-from corroborate_rl.env_catalogue import GymnaxEnvLike, StateHash
+from corroborate_rl.env_catalogue import StateHash
 from corroborate.core.signature import Exogenous
+
+if TYPE_CHECKING:
+    # Stub-only Protocol — gymnax doesn't export `Env` at runtime
+    # (the real class is `gymnax.environments.environment.Environment`).
+    # `from __future__ import annotations` stringifies all annotations
+    # below, so this TYPE_CHECKING import is sufficient for pyright.
+    from gymnax import Env
 
 
 def default_state_hash(obs: jax.Array) -> jax.Array:
@@ -70,8 +78,8 @@ def default_state_hash(obs: jax.Array) -> jax.Array:
 
 def init_state(
     *,
-    env: GymnaxEnvLike,
-    env_params: object,
+    env: Env,
+    env_params: EnvParams,
     obs_shape: tuple[int, ...],
     n_actions: int,
     rng_key: jax.Array,
@@ -118,8 +126,8 @@ def dqn_step(
     state: DQNState,
     idx: jax.Array,
     *,
-    env: GymnaxEnvLike,
-    env_params: object,
+    env: Env,
+    env_params: EnvParams,
     n_actions: int,
     optimizer: optax.GradientTransformation,
     state_hash: StateHash = default_state_hash,
@@ -207,8 +215,8 @@ def dqn(
     *,
     # Exogenous: per-cell conditions we generalize *over*.
     rng_key: Annotated[jax.Array, Exogenous],
-    env: Annotated[GymnaxEnvLike, Exogenous],
-    env_params: Annotated[object, Exogenous],
+    env: Annotated[Env, Exogenous],
+    env_params: Annotated[EnvParams, Exogenous],
     obs_shape: Annotated[tuple[int, ...], Exogenous],
     n_actions: Annotated[int, Exogenous],
     eval_episode_cap: Annotated[int, Exogenous] = 500,

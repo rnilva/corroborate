@@ -23,9 +23,12 @@ inside the `@claim`'d implementations under `claims/`. The theory
 layer (`dqn.py`) composes phases; this layer composes slots."""
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import jax
 import jax.numpy as jnp
 import optax
+from gymnax import EnvParams
 
 from corroborate import claim
 from corroborate_rl.dqn.claims.replay import (
@@ -39,7 +42,11 @@ from corroborate_rl.dqn.types import (
     LossFn,
     TargetSync,
 )
-from corroborate_rl.env_catalogue import GymnaxEnvLike, StateHash
+from corroborate_rl.env_catalogue import StateHash
+
+if TYPE_CHECKING:
+    # Stub-only Protocol — see env_catalogue.py for the rationale.
+    from gymnax import Env
 
 
 # ============ Rollout ============
@@ -48,8 +55,8 @@ from corroborate_rl.env_catalogue import GymnaxEnvLike, StateHash
 def rollout_phase(
     state: DQNState,
     *,
-    env: GymnaxEnvLike,
-    env_params: object,
+    env: Env,
+    env_params: EnvParams,
     n_actions: int,
     replay: Replay,
     q_network: QFunction,

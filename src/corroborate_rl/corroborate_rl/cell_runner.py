@@ -41,7 +41,7 @@ from corroborate.graph.computation import ComputationGraph, build_computation_gr
 from corroborate.core.hypothesis import Hypothesis
 from corroborate_rl.dqn.dqn import default_state_hash, dqn
 from corroborate_rl.dqn.invariants import DQNTrajectoryRecord
-from corroborate_rl.env_catalogue import EnvSpec, EnvWrapper, HasN
+from corroborate_rl.env_catalogue import EnvSpec, EnvWrapper
 from corroborate.corpus.schema import MeasurementLeaf, RunRow, TraceLeaf, TraceRow
 from corroborate.core.signature import walk, walk_paths
 from corroborate.bridge.verdict import Verdict
@@ -205,13 +205,9 @@ def run_dqn_arm(
     # Read n_actions from the wrapped env's action_space, not the
     # static catalogue, so wrappers like ActionDuplicate that
     # inflate |A| are reflected in the Q-network output dim and
-    # the epsilon-greedy sampling range.
+    # the epsilon-greedy sampling range. `action_space` returns
+    # `gymnax.Discrete` (typed via the stub), so `.n` is direct.
     wrapped_action_space = env.action_space(env_params)
-    if not isinstance(wrapped_action_space, HasN):
-        raise TypeError(
-            f"wrapped env action_space lacks `.n` (Discrete); "
-            f'got {type(wrapped_action_space).__name__}',
-        )
     n_actions = int(wrapped_action_space.n)
     cell_kwargs: dict[str, object] = {
         'env': env, 'env_params': env_params,

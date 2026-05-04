@@ -16,12 +16,14 @@ Verifies:
 from __future__ import annotations
 
 from functools import partial
+from typing import TYPE_CHECKING
 
 import gymnax
 import jax
 import jax.numpy as jnp
 import optax
 import pytest
+from gymnax import EnvParams
 
 from corroborate_rl.dqn.claims.bootstrap import (
     bootstrap as bootstrap_claim,
@@ -33,25 +35,26 @@ from corroborate_rl.dqn.claims.optimizer import adam, warmed_update
 from corroborate_rl.dqn.claims.q_network import MLP, mlp_q
 from corroborate_rl.dqn.claims.replay import Replay
 from corroborate_rl.dqn.dqn import dqn_step, init_state
-from corroborate_rl.env_catalogue import GymnaxEnvLike, HasN, HasShape
 from corroborate_rl.loop import python_loop, scan_loop
+
+if TYPE_CHECKING:
+    # Stub-only Protocol — see env_catalogue.py for the rationale.
+    from gymnax import Env
 
 
 # ============ Fixtures ============
 
-def _make_env() -> tuple[GymnaxEnvLike, object, tuple[int, ...], int]:
+def _make_env() -> tuple[Env, EnvParams, tuple[int, ...], int]:
     env, env_params = gymnax.make('CartPole-v1')
     obs_space = env.observation_space(env_params)
     act_space = env.action_space(env_params)
-    assert isinstance(obs_space, HasShape)
-    assert isinstance(act_space, HasN)
     obs_shape = tuple(int(d) for d in obs_space.shape)
     n_actions = int(act_space.n)
     return env, env_params, obs_shape, n_actions
 
 
 def _build_step_fn(
-    env: GymnaxEnvLike, env_params: object, n_actions: int,
+    env: Env, env_params: EnvParams, n_actions: int,
     optimizer: optax.GradientTransformation,
     *, bootstrap_swap: bool = False,
 ):

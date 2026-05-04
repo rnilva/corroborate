@@ -12,11 +12,14 @@ Verifies:
    plumbing here)."""
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import gymnax
 import jax
 import jax.numpy as jnp
 import optax
 import pytest
+from gymnax import EnvParams
 
 from corroborate_rl.dqn.claims.q_network import mlp_q
 from corroborate_rl.dqn.claims.replay import Replay
@@ -25,19 +28,20 @@ from corroborate_rl.dqn.eval import (
     eval_burst,
     eval_episode,
 )
-from corroborate_rl.env_catalogue import GymnaxEnvLike, HasN, HasShape
+
+if TYPE_CHECKING:
+    # Stub-only Protocol — see env_catalogue.py for the rationale.
+    from gymnax import Env
 
 # Eval primitives all run real CartPole rollouts under jit/vmap;
 # ~1.5 s each. Skipped by default; opt in via `-m slow`.
 pytestmark = pytest.mark.slow
 
 
-def _make_env() -> tuple[GymnaxEnvLike, object, tuple[int, ...], int]:
+def _make_env() -> tuple[Env, EnvParams, tuple[int, ...], int]:
     env, env_params = gymnax.make('CartPole-v1')
     obs_space = env.observation_space(env_params)
     act_space = env.action_space(env_params)
-    assert isinstance(obs_space, HasShape)
-    assert isinstance(act_space, HasN)
     obs_shape = tuple(int(d) for d in obs_space.shape)
     n_actions = int(act_space.n)
     return env, env_params, obs_shape, n_actions

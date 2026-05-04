@@ -26,12 +26,28 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import Literal, Protocol, TypedDict, runtime_checkable
+from typing import TYPE_CHECKING, Literal, Protocol, TypedDict, runtime_checkable
 
 import gymnax
 import jax
 import jax.numpy as jnp
 import numpy as np
+from gymnax import EnvParams, EnvState
+from gymnax.environments import spaces
+
+if TYPE_CHECKING:
+    # `Env` / `Box` / `Discrete` are stub-only typed surfaces —
+    # gymnax's runtime exposes `Environment` (not `Env`) via
+    # `gymnax.environments.environment`, and `Box` / `Discrete` via
+    # `gymnax.environments.spaces` (the runtime `spaces` module
+    # imported above). With `from __future__ import annotations`
+    # enabled, the substrate's annotations referencing these names
+    # are stringified — never resolved at runtime — so the
+    # TYPE_CHECKING import is the right tool: pyright sees the
+    # typed Protocol surface from the stub, the runtime never
+    # tries to import a name that doesn't exist on the live
+    # gymnax module.
+    from gymnax import Box, Discrete, Env
 
 
 type RewardRegime = Literal[
@@ -50,41 +66,22 @@ the bucket cardinality is astronomical and KL-against-uniform
 has no useful signal there."""
 
 
-# ============ Structural Protocols for gymnax-side typing ============
-
-@runtime_checkable
-class GymnaxEnvLike(Protocol):
-    """Structural Protocol for the env surface `corroborate_rl`
-    consumes. gymnax `Env` instances satisfy structurally; any
-    alternative env library matching this shape works too. Used
-    to type `env` parameters in `dqn_step` / `rollout_phase` /
-    `eval_episode` without importing `gymnax.Env` everywhere."""
-    def reset(
-        self, rng: jax.Array, params: object,
-    ) -> tuple[jax.Array, object]: ...
-
-    def step(
-        self,
-        rng: jax.Array,
-        state: object,
-        action: jax.Array,
-        params: object,
-    ) -> tuple[
-        jax.Array, object, jax.Array, jax.Array, dict[str, object],
-    ]: ...
-
-    def observation_space(self, params: object) -> object: ...
-    def action_space(self, params: object) -> object: ...
+# Substrate-side env / space / params types come straight from the
+# gymnax stub — `Env` (Protocol) / `Box` / `Discrete` / `EnvParams`
+# / `EnvState`. Wrapper envs below match `Env` structurally; spaces
+# returned from `env.action_space(params)` are already typed
+# `Discrete`, so the prior `HasN` / `HasShape` / `MaxStepsParams`
+# self-Protocols are redundant and have been dropped.
 
 
 @runtime_checkable
 class EnvWrapper(Protocol):
-    """Anything that wraps a gymnax-style env in another
-    `GymnaxEnvLike`. Frozen-dataclass implementations carry
-    their config + a `wrap(inner)` method that returns the
-    wrapped env. Composable: `cell_runner` applies a tuple of
-    wrappers in order, so `(RewardScale(0.5), RewardClip(0.0,
-    None))` first scales then clips.
+    """Anything that wraps a gymnax-style `Env` in another `Env`.
+    Frozen-dataclass implementations carry their config + a
+    `wrap(inner)` method that returns the wrapped env. Composable:
+    `cell_runner` applies a tuple of wrappers in order, so
+    `(RewardScale(0.5), RewardClip(0.0, None))` first scales then
+    clips.
 
     Each wrapper also declares its own `measurement_keys()` —
     the per-cell scalar columns it contributes to the persisted
@@ -101,7 +98,7 @@ class EnvWrapper(Protocol):
 
     No 7-place plumbing per wrapper — the wrapper class is the
     only surface that grows."""
-    def wrap(self, inner: 'GymnaxEnvLike') -> 'GymnaxEnvLike': ...
+    def wrap(self, inner: Env) -> Env: ...
     def measurement_keys(self) -> Mapping[str, float]: ...
 
 
@@ -110,7 +107,7 @@ class RewardScale:
     """Wrapper config: multiply step reward by `scale`."""
     scale: float
 
-    def wrap(self, inner: 'GymnaxEnvLike') -> 'GymnaxEnvLike':
+    def wrap(self, inner: Env) -> Env:
         return RewardScaledEnv(inner=inner, scale=self.scale)
 
     def measurement_keys(self) -> Mapping[str, float]:
@@ -124,7 +121,7 @@ class RewardClip:
     clip_min: float | None = None
     clip_max: float | None = None
 
-    def wrap(self, inner: 'GymnaxEnvLike') -> 'GymnaxEnvLike':
+    def wrap(self, inner: Env) -> Env:
         return RewardClippedEnv(
             inner=inner, clip_min=self.clip_min, clip_max=self.clip_max,
         )
@@ -146,7 +143,7 @@ class ActionDuplicate:
     `|A|` changes — Hasselt floor scales as √(2 log(k * inner_n))."""
     k: int
 
-    def wrap(self, inner: 'GymnaxEnvLike') -> 'GymnaxEnvLike':
+    def wrap(self, inner: Env) -> Env:
         return ActionDuplicatedEnv(inner=inner, k=self.k)
 
     def measurement_keys(self) -> Mapping[str, float]:
@@ -219,39 +216,39 @@ class RewardScaledEnv:
     g_link associations are causal (vary the moderator
     interventionally) vs spurious (proxy for something correlated).
 
-    Implements `GymnaxEnvLike` structurally — reset/step/spaces
+    Implements `gymnax.Env` structurally — reset/step/spaces
     delegate to `inner`; only `step` is overridden to multiply
     reward by `scale`. The optimal Q* under the scaled reward is
     `scale * Q*_original`, so DDQN's Jensen gap (in Q-units)
     scales with `scale` while standardized comparisons (Hedges' g)
     are mostly invariant — the deviation from invariance is the
     causal signature."""
-    inner: 'GymnaxEnvLike'
+    inner: Env
     scale: float
 
     def reset(
-        self, rng: jax.Array, params: object,
-    ) -> tuple[jax.Array, object]:
+        self, rng: jax.Array, params: EnvParams,
+    ) -> tuple[jax.Array, EnvState]:
         return self.inner.reset(rng, params)
 
     def step(
         self,
         rng: jax.Array,
-        state: object,
+        state: EnvState,
         action: jax.Array,
-        params: object,
+        params: EnvParams,
     ) -> tuple[
-        jax.Array, object, jax.Array, jax.Array, dict[str, object],
+        jax.Array, EnvState, jax.Array, jax.Array, dict[str, object],
     ]:
         next_obs, next_state, reward, done, info = self.inner.step(
             rng, state, action, params,
         )
         return next_obs, next_state, reward * self.scale, done, info
 
-    def observation_space(self, params: object) -> object:
+    def observation_space(self, params: EnvParams) -> Box:
         return self.inner.observation_space(params)
 
-    def action_space(self, params: object) -> object:
+    def action_space(self, params: EnvParams) -> Discrete:
         return self.inner.action_space(params)
 
 
@@ -270,23 +267,23 @@ class RewardClippedEnv:
     reward), but the test isolates whether DDQN's behaviour
     inherits the same attenuation pattern under positive-only
     reward."""
-    inner: 'GymnaxEnvLike'
+    inner: Env
     clip_min: float | None = None
     clip_max: float | None = None
 
     def reset(
-        self, rng: jax.Array, params: object,
-    ) -> tuple[jax.Array, object]:
+        self, rng: jax.Array, params: EnvParams,
+    ) -> tuple[jax.Array, EnvState]:
         return self.inner.reset(rng, params)
 
     def step(
         self,
         rng: jax.Array,
-        state: object,
+        state: EnvState,
         action: jax.Array,
-        params: object,
+        params: EnvParams,
     ) -> tuple[
-        jax.Array, object, jax.Array, jax.Array, dict[str, object],
+        jax.Array, EnvState, jax.Array, jax.Array, dict[str, object],
     ]:
         next_obs, next_state, reward, done, info = self.inner.step(
             rng, state, action, params,
@@ -297,10 +294,10 @@ class RewardClippedEnv:
             reward = jnp.minimum(reward, self.clip_max)
         return next_obs, next_state, reward, done, info
 
-    def observation_space(self, params: object) -> object:
+    def observation_space(self, params: EnvParams) -> Box:
         return self.inner.observation_space(params)
 
-    def action_space(self, params: object) -> object:
+    def action_space(self, params: EnvParams) -> Discrete:
         return self.inner.action_space(params)
 
 
@@ -318,68 +315,33 @@ class ActionDuplicatedEnv:
     grow with k. If DDQN's outcome benefit is bottlenecked by
     Hasselt floor, varying k cleanly resolves whether |A|∈{3,4}
     is a true sweet spot or a corpus-specific artifact."""
-    inner: 'GymnaxEnvLike'
+    inner: Env
     k: int
 
     def reset(
-        self, rng: jax.Array, params: object,
-    ) -> tuple[jax.Array, object]:
+        self, rng: jax.Array, params: EnvParams,
+    ) -> tuple[jax.Array, EnvState]:
         return self.inner.reset(rng, params)
 
     def step(
         self,
         rng: jax.Array,
-        state: object,
+        state: EnvState,
         action: jax.Array,
-        params: object,
+        params: EnvParams,
     ) -> tuple[
-        jax.Array, object, jax.Array, jax.Array, dict[str, object],
+        jax.Array, EnvState, jax.Array, jax.Array, dict[str, object],
     ]:
         inner_space = self.inner.action_space(params)
-        if not isinstance(inner_space, HasN):
-            raise TypeError(
-                'ActionDuplicatedEnv requires inner action_space '
-                'with `.n` (Discrete); got '
-                f'{type(inner_space).__name__}',
-            )
         inner_action = action % inner_space.n
         return self.inner.step(rng, state, inner_action, params)
 
-    def observation_space(self, params: object) -> object:
+    def observation_space(self, params: EnvParams) -> Box:
         return self.inner.observation_space(params)
 
-    def action_space(self, params: object) -> object:
-        from gymnax.environments import spaces
+    def action_space(self, params: EnvParams) -> Discrete:
         inner_space = self.inner.action_space(params)
-        if not isinstance(inner_space, HasN):
-            raise TypeError(
-                'ActionDuplicatedEnv requires inner action_space '
-                'with `.n` (Discrete); got '
-                f'{type(inner_space).__name__}',
-            )
         return spaces.Discrete(inner_space.n * self.k)
-
-
-@runtime_checkable
-class MaxStepsParams(Protocol):
-    """Marker Protocol — env params that declare a per-episode
-    horizon. `isinstance` narrows to the typed attribute access,
-    sidestepping `getattr(..., default)` discipline violation."""
-    max_steps_in_episode: int
-
-
-@runtime_checkable
-class HasShape(Protocol):
-    """Observation / action space surface — exposes `shape` (and
-    optionally `n` for discrete spaces). `isinstance` narrows
-    after `env.observation_space(params)` returns `object`."""
-    shape: tuple[int, ...]
-
-
-@runtime_checkable
-class HasN(Protocol):
-    """Discrete action space — `.n` is the action cardinality."""
-    n: int
 
 
 # ============ TypedDict for introspect_env return ============
@@ -460,38 +422,22 @@ def introspect_env(name: str) -> IntrospectedEnv:
     """Extract auto-derivable fields from gymnax's env+params.
 
     Returns a typed `IntrospectedEnv` so `_register` consumes
-    fields without `# type: ignore`. Narrowing for action and
-    observation spaces is via runtime-checkable Protocols
-    (`HasShape`, `HasN`, `MaxStepsParams`) — no `getattr`."""
+    fields without `# type: ignore`. Spaces and params are typed
+    end-to-end via the gymnax stub — `obs_space` is `Box`,
+    `act_space` is `Discrete`, and `env_params.max_steps_in_episode`
+    reads directly off the typed `EnvParams` (the gymnax runtime
+    declares the field with a default of `1`, so every concrete
+    env's params inherits it; the stub's `EnvParams` exposes it
+    as `int` accordingly)."""
     env_obj, env_params = gymnax.make(name)
     act_space = env_obj.action_space(env_params)
     obs_space = env_obj.observation_space(env_params)
 
-    if isinstance(obs_space, HasShape):
-        shape = tuple(obs_space.shape)
-    else:
-        raise TypeError(
-            f"env '{name}' observation_space lacks `shape`; "
-            f'cannot introspect.',
-        )
+    shape = tuple(int(d) for d in obs_space.shape)
+    action_dim = int(act_space.n)
+    is_discrete = True
 
-    if isinstance(act_space, HasN):
-        is_discrete = True
-        action_dim = int(act_space.n)
-    elif isinstance(act_space, HasShape):
-        is_discrete = False
-        action_dim = int(np.prod(act_space.shape))
-    else:
-        raise TypeError(
-            f"env '{name}' action_space has neither `.n` nor "
-            f'`.shape`; cannot introspect.',
-        )
-
-    horizon: int | None = (
-        env_params.max_steps_in_episode
-        if isinstance(env_params, MaxStepsParams)
-        else None
-    )
+    horizon: int | None = int(env_params.max_steps_in_episode)
 
     obs_type: ObservationType = (
         'vector' if len(shape) == 1
