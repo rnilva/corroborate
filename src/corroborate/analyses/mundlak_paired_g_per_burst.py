@@ -76,10 +76,9 @@ def mundlak_paired_g_per_burst(
         Mapping[str, object], npt.NDArray[np.floating],
     ] = DEFAULT_PER_BURST_SOURCE,
     predictor_name: str = 'log_mc_variance_per_burst',
-    predictor_arm_filter: str | None = None,
     alpha: float = 0.05,
     cluster_robust: bool = True,
-    dedupe_strategy: str = 'raise',
+    dedupe_strategy: str = 'mean',
 ) -> MundlakResult:
     """Per-(env, burst) Hedges' g panel + Mundlak decomposition
     of a per-burst measurable.
@@ -92,13 +91,15 @@ def mundlak_paired_g_per_burst(
     `__call__(record)` returns a `(n_bursts,)` array (e.g.
     `log_mc_variance_per_burst`, `mc_variance_per_burst`). The
     analysis applies it once per cell, caches the array, then
-    averages across cells at each burst index to build the
-    per-(env, burst) predictor column.
-
-    `predictor_arm_filter='<baseline_arm_name>'` restricts the
-    per-cell predictor average to baseline cells — for predictors
-    that should reflect baseline-only state (e.g. baseline-only
-    statistics computed from the baseline trajectory).
+    averages across cells at each burst index across the
+    *baseline arm only* to build the per-(env, burst) predictor
+    column. Restricting to the baseline keeps the predictor a
+    covariate of the regime (env + HPs as the unmodified
+    composition runs them) instead of contaminating it with the
+    treatment effect — which is exactly what Mundlak then
+    decomposes the g_link panel against. The runner-injected
+    `baseline_arm` is used directly; bridge authors do not write
+    arm_key strings.
 
     `cluster_robust` defaults to **True** — bursts within an env
     share the agent's training trajectory and the env's
@@ -169,7 +170,7 @@ def mundlak_paired_g_per_burst(
             continue
         x = _per_env_burst_predictor_mean(
             cells_list, s.burst_index, per_cell_array,
-            s.env_name, predictor_arm_filter,
+            s.env_name, baseline_arm,
         )
         if math.isnan(x):
             continue

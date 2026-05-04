@@ -153,7 +153,7 @@ def paired_g(
     baseline_arm: str,
     pair_by: tuple[str, ...] = ('seed',),
     arm_field: str = 'arm_key',
-    dedupe_strategy: str = 'raise',
+    dedupe_strategy: str = 'mean',
 ) -> PairedGResult:
     """Compute paired Hedges' g + raw mean-diff at `source` across
     matched (T, B) pairs in `cells`.

@@ -59,7 +59,7 @@ from corroborate._internals.introspection import get_param_default
 from corroborate.bridge.analysis import resolve_for_holds_when
 from corroborate.bridge.verdict import Verdict
 from corroborate.core.hypothesis import PredictedDirection
-from corroborate.core.intervention import DoEffect
+from corroborate.core.intervention import ArmRole, DoEffect
 from corroborate.measurables import Measurable, register
 
 
@@ -679,6 +679,13 @@ def evaluate(
     if contrast is not None:
         bridge_params['treatment_arm'] = contrast.treatment_arm_key()
         bridge_params['baseline_arm'] = contrast.baseline_arm_key()
+        # Resolve any ArmRole-typed sentinels in the bridge's
+        # defaulted kwargs to the canonical arm_key string for
+        # this contrast. Bridge authors write `ArmRole.BASELINE` /
+        # `ArmRole.TREATMENT`; analyses see only resolved strings.
+        for k, v in bridge_params.items():
+            if isinstance(v, ArmRole):
+                bridge_params[k] = contrast.role_arm_key(v)
     analysis_results = resolve_for_holds_when(
         bridge.holds_when, filtered_cells, bridge_params,
     )

@@ -35,6 +35,7 @@ from corroborate.core.hypothesis import (
     PredictedDirection,
 )
 from corroborate.core.intervention import (
+    ArmRole,
     DoEffect,
     Intervention,
     Replacement,
@@ -55,6 +56,7 @@ from corroborate.core.signature import (
 )
 
 __all__ = [
+    'ArmRole',
     'CallRecord',
     'Claim',
     'ClaimSignature',

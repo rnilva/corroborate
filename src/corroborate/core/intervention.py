@@ -30,10 +30,24 @@ from __future__ import annotations
 import functools
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import TypeIs
 
 from corroborate._internals.canonical import canonical_str
 from corroborate.core.claim import FnClaim
+
+
+class ArmRole(StrEnum):
+    """Typed sentinel for "which side of the DoEffect contrast" —
+    bridge authors use this in place of literal arm_key strings,
+    so the bridge body stays decoupled from the persistence-side
+    canonical fingerprint of the unmodified or treatment arm.
+
+    The runner resolves an `ArmRole` value to the actual arm_key
+    string via `DoEffect.role_arm_key(role)` before forwarding to
+    analyses; analyses themselves see only resolved strings."""
+    BASELINE = 'baseline'
+    TREATMENT = 'treatment'
 
 type Replacement = (
     FnClaim[..., object]
@@ -181,6 +195,15 @@ class DoEffect:
         → `'baseline'`; non-empty → `'+'`-joined slot=replacement
         keys."""
         return combined_arm_key(self.baseline)
+
+    def role_arm_key(self, role: ArmRole) -> str:
+        """Resolve an ArmRole sentinel to the canonical arm_key
+        string for that side of the contrast. Lets bridge authors
+        write typed `ArmRole.BASELINE` / `ArmRole.TREATMENT`
+        instead of stringifying the persistence fingerprint."""
+        if role is ArmRole.BASELINE:
+            return self.baseline_arm_key()
+        return self.treatment_arm_key()
 
     def node_key(self) -> str:
         """Canonical string identity for the do-node in

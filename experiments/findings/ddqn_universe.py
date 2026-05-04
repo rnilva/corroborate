@@ -855,7 +855,6 @@ def mc_variance_attenuates_g_link__between_env(
         Mapping[str, object], npt.NDArray[np.floating],
     ] = _MC_RETURN_PER_BURST_MEAN,
     predictor_name: str = 'log_mc_variance_per_burst',
-    predictor_arm_filter: str = 'vanilla_dqn',
     dedupe_strategy: str = 'mean',
 ) -> Verdict:
     """Single-level (between-env) attenuator. The Mundlak
@@ -875,7 +874,7 @@ def mc_variance_attenuates_g_link__between_env(
 
     Pearl-rung-2 corroboration comes from `reward_scale_sweep`
     (causal probe via reward × k intervention)."""
-    del source, predictor_name, predictor_arm_filter, dedupe_strategy
+    del source, predictor_name, dedupe_strategy
     coef = mundlak_paired_g_per_burst.between
     if not coef.p_value < 0.05:
         if coef.coefficient < -0.01:
