@@ -184,7 +184,7 @@ def paired_g(
       values. The intended use is M2M scenarios where the user
       genuinely wants to pool across e.g. multiple corpora at the
       same `(seed, env)`."""
-    from corroborate.statistics import hedges_g_paired
+    from corroborate.stats import hedges_g_paired
 
     if dedupe_strategy not in ('raise', 'mean'):
         raise ValueError(

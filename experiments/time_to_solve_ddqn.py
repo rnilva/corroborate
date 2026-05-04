@@ -49,7 +49,7 @@ from corroborate.rl.env_solve_thresholds import (
     SOLVE_THRESHOLDS, envs_with_threshold,
 )
 from corroborate.schema import RunRow
-from corroborate.statistics import (
+from corroborate.stats import (
     PooledStats, random_effects_summary, random_effects_verdict,
 )
 from corroborate.verdict import Verdict

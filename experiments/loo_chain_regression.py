@@ -25,11 +25,11 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 
-from corroborate.meta_regression import (
+from corroborate.stats import (
     StratumObservation, meta_regression,
 )
 from corroborate.rl.env_catalogue import get as _get_env_spec
-from corroborate.statistics import hedges_g_paired
+from corroborate.stats import hedges_g_paired
 
 
 _RUNS = Path('experiments/data/ddqn/runs.parquet')

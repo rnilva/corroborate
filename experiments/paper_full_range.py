@@ -61,7 +61,7 @@ from corroborate.hypothesis_verdict import (
     hypothesis_subgraph_verdict,
 )
 from corroborate.intervention import DoEffect, Intervention
-from corroborate.meta_regression import (
+from corroborate.stats import (
     StratumObservation,
     cross_validate_meta_regression,
     meta_regression,

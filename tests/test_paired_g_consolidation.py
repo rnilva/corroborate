@@ -20,7 +20,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from corroborate.analyses.paired_g import paired_g, per_env_paired_g_panel
-from corroborate.meta_regression import meta_regress_panel
+from corroborate.stats import meta_regress_panel
 from corroborate.stratum import StratumG
 
 

@@ -36,7 +36,7 @@ from corroborate._internals.polars_boundary import to_dicts as _to_dicts
 from corroborate.analyses.paired_g import paired_g
 from corroborate.rl.env_catalogue import get
 from corroborate.schema import RunRow
-from corroborate.statistics import (
+from corroborate.stats import (
     PooledStats, random_effects_summary, random_effects_verdict,
 )
 from corroborate.verdict import Verdict

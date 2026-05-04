@@ -21,7 +21,7 @@ from collections.abc import Iterable, Mapping
 
 from corroborate.analyses.paired_g import per_env_paired_g_panel
 from corroborate.analysis import analysis
-from corroborate.meta_regression import (
+from corroborate.stats import (
     MetaRegressionResult, Pool, meta_regress_panel,
 )
 

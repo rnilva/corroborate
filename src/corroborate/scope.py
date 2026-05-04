@@ -34,7 +34,7 @@ from dataclasses import dataclass
 
 from corroborate.causal_graph import CausalGraph
 from corroborate.hypothesis_verdict import HypothesisVerdict
-from corroborate.meta_regression import (
+from corroborate.stats import (
     MetaRegressionResult,
     StratumObservation,
     meta_regression,

@@ -20,7 +20,7 @@ from dataclasses import dataclass
 
 from corroborate.analyses.paired_g import per_env_paired_g_panel
 from corroborate.analysis import analysis
-from corroborate.statistics import (
+from corroborate.stats import (
     PooledStats, random_effects_summary,
 )
 from corroborate.stratum import StratumG

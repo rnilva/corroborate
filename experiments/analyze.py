@@ -59,11 +59,11 @@ from corroborate.analyses.dowhy import (
     random_common_cause_refutation as random_common_cause_refutation_analysis,
 )
 from corroborate.causal_discovery import discover_adjacency
-from corroborate.meta_regression import (
+from corroborate.stats import (
     StratumObservation, meta_regression,
 )
 from corroborate.rl.env_catalogue import get as _get_env_spec
-from corroborate.statistics import hedges_g_paired
+from corroborate.stats import hedges_g_paired
 
 
 # ============ Pair specification ============

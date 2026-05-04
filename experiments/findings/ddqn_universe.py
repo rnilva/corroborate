@@ -92,7 +92,7 @@ from corroborate.claim_bridge import (
 )
 from corroborate.intervention import DoEffect
 from corroborate.measurable import Measurable
-from corroborate.meta_regression import MetaRegressionResult
+from corroborate.stats import MetaRegressionResult
 from corroborate.reductions import from_key, reduce_axis
 from corroborate.rl.dqn.measurables import jensen_bias_per_eps
 from corroborate.verdict import Verdict
@@ -328,6 +328,11 @@ def ddqn_helps_at_early_bursts__pixel_envs(
     target='mc_return',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
+    # `corpus` is in pair_by because seed=N has different RNG
+    # realizations across independent sweeps; pairing across
+    # corpora was an accident of the implementation. Each sweep
+    # contributes its own valid paired set.
+    pair_by=('seed', 'corpus'),
     scope=(
         (pl.col('env_name') == 'SpaceInvaders-MinAtar')
         & (pl.col('total_steps') >= 1000000.0)
@@ -345,21 +350,23 @@ def ddqn_attenuates_at_late_bursts__spaceinvaders(
     helped_ceiling: float = 0.40,
     g_ceiling: float = -0.30,
     n_pairs_floor: int = 50,
-    dedupe_strategy: str = 'mean',
 ) -> Verdict:
     """TIER A2 existence proof: on SpaceInvaders-MinAtar at 1M
     training steps, in the last quarter of training bursts,
-    DDQN's outcome is reliably WORSE than vanilla. Per-cell-burst
-    helped=36.5%, g=−0.42, n=510 in the original analysis (30
-    seeds × 17 bursts after `burst_index ≥ 3`).
+    DDQN's outcome is reliably WORSE than vanilla.
 
     Consumes `paired_g_per_burst` — a per-(env, burst) panel where
     each stratum holds (g, n_pairs, helped_fraction) computed from
-    the seed-paired Δ in that burst. The bridge filters strata to
-    `env_name == 'SpaceInvaders-MinAtar'` AND `burst_index >=
-    burst_floor`, then aggregates: `n_pairs_total = Σ n_pairs`
-    (the cell-burst count, ≈ 510 at the 1M corpus), and
-    sample-size-weighted means for `helped_fraction` and `g`.
+    seed-paired Δ in that burst. With `pair_by=('seed', 'corpus')`,
+    independent sweeps probing the same nominal regime
+    (SpaceInvaders 1M, sync=100, no reward clip) contribute
+    distinct paired observations rather than being silently
+    averaged: each sweep's seed=N is its own RNG realization.
+
+    Filters strata to `env_name == 'SpaceInvaders-MinAtar'` AND
+    `burst_index >= burst_floor`, then aggregates: `n_pairs_total
+    = Σ n_pairs` and sample-size-weighted means for
+    `helped_fraction` and `g`.
 
     HELD when (a) cell-burst total ≥ `n_pairs_floor` (=50), AND
     (b) pooled helped_fraction ≤ `helped_ceiling` (=0.40), AND
@@ -378,7 +385,7 @@ def ddqn_attenuates_at_late_bursts__spaceinvaders(
     `adaptive_dqn_fails_to_avoid_attenuation__spaceinvaders_1m`
     runs the dormancy controller on this regime; it tracks DDQN
     (g≈0) and inherits the attenuation (g=−0.46 vs vanilla)."""
-    del source, dedupe_strategy  # forwarded to paired_g_per_burst
+    del source  # forwarded to paired_g_per_burst
     late = [
         s for s in paired_g_per_burst.strata
         if s.env_name == 'SpaceInvaders-MinAtar'

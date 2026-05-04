@@ -27,7 +27,7 @@ from corroborate.analyses.paired_g_pooled import (
     PerEnvG, PooledPairedGResult,
 )
 from corroborate.analysis import analysis
-from corroborate.statistics import random_effects_summary
+from corroborate.stats import random_effects_summary
 
 
 @analysis

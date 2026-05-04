@@ -39,7 +39,7 @@ from corroborate.schema import (
     MeasurementLeaf,
     RunRow,
 )
-from corroborate.statistics import (
+from corroborate.stats import (
     adequately_powered_paired,
     delta_i_from_q,
     derived_q_from_g_se,

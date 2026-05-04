@@ -53,7 +53,7 @@ from corroborate.claim_bridge import (
     Direction, Tier, claim_bridge,
 )
 from corroborate.intervention import DoEffect
-from corroborate.meta_regression import MetaRegressionResult
+from corroborate.stats import MetaRegressionResult
 from corroborate.verdict import Verdict
 
 

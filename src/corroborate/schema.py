@@ -62,7 +62,7 @@ from corroborate._internals.narrow import (
     require_verdict,
 )
 from corroborate.hypothesis import PredictedDirection
-from corroborate.statistics import PooledStats
+from corroborate.stats import PooledStats
 from corroborate.verdict import RefutationClass, Verdict
 
 

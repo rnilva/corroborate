@@ -243,22 +243,33 @@ def paired_link_per_burst(
         paired_keys = sorted(set(treat) & set(base))
         if not paired_keys:
             continue
-        n_bursts = treat[paired_keys[0]][0].shape[0]
+        # Per-key arm-shape match — the real invariant. Cross-key
+        # uniformity is NOT required: multi-regime corpora can
+        # legitimately have different burst counts at different
+        # `pair_by` keys (e.g. cells from total_steps=200k vs 1M).
         for k in paired_keys:
             if (
-                treat[k][0].shape[0] != n_bursts
-                or base[k][0].shape[0] != n_bursts
+                treat[k][0].shape[0] != base[k][0].shape[0]
+                or treat[k][1].shape[0] != base[k][1].shape[0]
+                or treat[k][0].shape[0] != treat[k][1].shape[0]
             ):
                 raise ValueError(
-                    f'{env}: per-burst vector length mismatch across pairs',
+                    f'{env}: arm/operand shape mismatch at pair_by '
+                    f'key {k}',
                 )
 
-        for b in range(n_bursts):
+        # Walk the union of burst indices; each burst pools only
+        # the keys whose arrays extend that far.
+        max_bursts = max(treat[k][0].shape[0] for k in paired_keys)
+        for b in range(max_bursts):
+            contributors = [
+                k for k in paired_keys if treat[k][0].shape[0] > b
+            ]
             d_target = np.array([
-                treat[k][0][b] - base[k][0][b] for k in paired_keys
+                treat[k][0][b] - base[k][0][b] for k in contributors
             ], dtype=np.float64)
             d_predictor = np.array([
-                treat[k][1][b] - base[k][1][b] for k in paired_keys
+                treat[k][1][b] - base[k][1][b] for k in contributors
             ], dtype=np.float64)
             finite = np.isfinite(d_target) & np.isfinite(d_predictor)
             d_t = d_target[finite]

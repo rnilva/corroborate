@@ -130,14 +130,18 @@ def _build_panel(
         paired_keys = sorted(set(treat) & set(base))
         if not paired_keys:
             continue
-        n_bursts = treat[paired_keys[0]][0].shape[0]
+        # Per-key arm-shape match — the real invariant. Cross-key
+        # uniformity is NOT required: multi-regime corpora can have
+        # different burst counts per pair_by key.
         for k in paired_keys:
             if (
-                treat[k][0].shape[0] != n_bursts
-                or base[k][0].shape[0] != n_bursts
+                treat[k][0].shape[0] != base[k][0].shape[0]
+                or treat[k][1].shape[0] != base[k][1].shape[0]
+                or treat[k][0].shape[0] != treat[k][1].shape[0]
             ):
-                continue
-            for b in range(n_bursts):
+                continue  # arm-shape mismatch — skip the key
+            n_b = treat[k][0].shape[0]
+            for b in range(n_b):
                 d_t = float(treat[k][0][b] - base[k][0][b])
                 d_p = float(treat[k][1][b] - base[k][1][b])
                 if not (math.isfinite(d_t) and math.isfinite(d_p)):

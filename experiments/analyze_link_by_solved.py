@@ -39,7 +39,7 @@ from corroborate.rl.dqn.invariants import DQNTrajectoryRecord
 from corroborate.rl.env_catalogue import get
 from corroborate.rl.env_solve_thresholds import SOLVE_THRESHOLDS, is_solved
 from corroborate.schema import HypothesisComparisonRow, RunRow
-from corroborate.statistics import random_effects_summary, random_effects_verdict
+from corroborate.stats import random_effects_summary, random_effects_verdict
 
 
 _CORPORA: tuple[Path, ...] = (

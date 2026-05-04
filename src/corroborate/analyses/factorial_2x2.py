@@ -26,7 +26,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
 from corroborate.analysis import analysis
-from corroborate.statistics import hedges_g_paired
+from corroborate.stats import hedges_g_paired
 
 
 @dataclass(frozen=True, slots=True)

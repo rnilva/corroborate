@@ -12,7 +12,7 @@ from __future__ import annotations
 import math
 import pytest
 
-from corroborate.statistics import (
+from corroborate.stats import (
     adequately_powered_paired,
     delta_i_from_q,
     derived_q_from_g_se,
@@ -176,7 +176,7 @@ def test_verdict_held_for_no_predicted_direction() -> None:
 
 def test_random_effects_summary_too_few_cells_returns_nan() -> None:
     """n<2 → all NaN."""
-    from corroborate.statistics import random_effects_summary
+    from corroborate.stats import random_effects_summary
     p = random_effects_summary([(0.5, 0.2)])
     assert math.isnan(p.pooled_g)
     assert p.n_cells == 1
@@ -185,7 +185,7 @@ def test_random_effects_summary_too_few_cells_returns_nan() -> None:
 def test_random_effects_summary_homogeneous_cells_zero_tau2() -> None:
     """All cells with same g + same SE → tau² = 0 (no
     between-cell heterogeneity), pooled_g = common value."""
-    from corroborate.statistics import random_effects_summary
+    from corroborate.stats import random_effects_summary
     p = random_effects_summary([(0.5, 0.2)] * 5)
     assert p.n_cells == 5
     assert p.pooled_g == pytest.approx(0.5, abs=1e-6)
@@ -197,7 +197,7 @@ def test_random_effects_summary_homogeneous_cells_zero_tau2() -> None:
 def test_random_effects_summary_heterogeneous_cells_positive_tau2() -> None:
     """Wildly different g across cells → tau² > 0; pooled estimate
     near the mean of the cells."""
-    from corroborate.statistics import random_effects_summary
+    from corroborate.stats import random_effects_summary
     g_se = [(-0.5, 0.2), (1.5, 0.2), (0.0, 0.2), (2.0, 0.2)]
     p = random_effects_summary(g_se)
     assert p.n_cells == 4
@@ -210,7 +210,7 @@ def test_random_effects_summary_heterogeneous_cells_positive_tau2() -> None:
 # ============ random_effects_verdict ============
 
 def test_random_effects_verdict_underpowered_below_three_cells() -> None:
-    from corroborate.statistics import (
+    from corroborate.stats import (
         random_effects_summary,
         random_effects_verdict,
     )
@@ -223,7 +223,7 @@ def test_random_effects_verdict_underpowered_below_three_cells() -> None:
 
 
 def test_random_effects_verdict_held_for_pi_strictly_positive() -> None:
-    from corroborate.statistics import (
+    from corroborate.stats import (
         random_effects_summary,
         random_effects_verdict,
     )
@@ -236,7 +236,7 @@ def test_random_effects_verdict_held_for_pi_strictly_positive() -> None:
 
 
 def test_random_effects_verdict_no_effect_when_pi_brackets_zero() -> None:
-    from corroborate.statistics import (
+    from corroborate.stats import (
         random_effects_summary,
         random_effects_verdict,
     )
@@ -259,7 +259,7 @@ def test_random_effects_verdict_held_with_scope_flag_high_heterogeneity() -> Non
     Constructed via direct PooledStats so the test asserts on the
     verdict logic, not on the synthesis-via-`random_effects_summary`
     path (which couples PI width to τ²)."""
-    from corroborate.statistics import (
+    from corroborate.stats import (
         I2_THRESHOLD,
         PooledStats,
         random_effects_verdict,
@@ -282,7 +282,7 @@ def test_random_effects_verdict_held_with_scope_flag_high_heterogeneity() -> Non
 
 def test_random_effects_verdict_held_uniform_low_heterogeneity() -> None:
     """Same effect across strata → low I² → plain HELD."""
-    from corroborate.statistics import (
+    from corroborate.stats import (
         I2_THRESHOLD,
         random_effects_summary,
         random_effects_verdict,
@@ -301,7 +301,7 @@ def test_random_effects_verdict_held_with_scope_flag_predicted_negative() -> Non
     """Symmetric case: a_lt_b with PI strictly negative + high I²
     → HELD_WITH_SCOPE_FLAG (the corroborated direction is
     negative, but heterogeneous in magnitude)."""
-    from corroborate.statistics import (
+    from corroborate.stats import (
         PooledStats,
         random_effects_verdict,
     )
@@ -323,7 +323,7 @@ def test_random_effects_verdict_held_with_scope_flag_predicted_negative() -> Non
 def test_recommended_n_paired_inverts_mde_paired() -> None:
     """If observed g equals the MDE at n=10, the recommended n
     should be ~10 (round-trip consistency)."""
-    from corroborate.statistics import (
+    from corroborate.stats import (
         mde_paired,
         recommended_n_paired,
     )
@@ -335,13 +335,13 @@ def test_recommended_n_paired_inverts_mde_paired() -> None:
 def test_recommended_n_paired_zero_g_returns_nan() -> None:
     """Detecting a true zero effect with positive power is
     impossible — no finite n works."""
-    from corroborate.statistics import recommended_n_paired
+    from corroborate.stats import recommended_n_paired
     assert math.isnan(recommended_n_paired(0.0))
 
 
 def test_recommended_n_paired_smaller_g_needs_larger_n() -> None:
     """Detecting a smaller effect needs a larger sample."""
-    from corroborate.statistics import recommended_n_paired
+    from corroborate.stats import recommended_n_paired
     n_big_effect = recommended_n_paired(1.0)
     n_small_effect = recommended_n_paired(0.2)
     assert n_small_effect > n_big_effect

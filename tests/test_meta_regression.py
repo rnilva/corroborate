@@ -19,7 +19,7 @@ from collections.abc import Mapping
 
 import pytest
 
-from corroborate.meta_regression import (
+from corroborate.stats import (
     StratumObservation,
     cross_validate_meta_regression,
     meta_regress_comparison,

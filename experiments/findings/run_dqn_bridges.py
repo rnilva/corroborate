@@ -78,7 +78,7 @@ def _format_paired_g(result: object) -> str:
 
 
 def _format_meta_regression(result: object) -> str:
-    from corroborate.meta_regression import MetaRegressionResult
+    from corroborate.stats import MetaRegressionResult
     if not isinstance(result, MetaRegressionResult):
         return str(result)
     return (
@@ -188,7 +188,7 @@ def _format_analysis_result(result: object) -> str:
     from corroborate.analyses.verdict_distribution import (
         VerdictDistributionResult,
     )
-    from corroborate.meta_regression import MetaRegressionResult
+    from corroborate.stats import MetaRegressionResult
     if isinstance(result, PairedGResult):
         return _format_paired_g(result)
     if isinstance(result, PerBurstResult):

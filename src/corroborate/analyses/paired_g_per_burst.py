@@ -158,7 +158,7 @@ def paired_g_per_burst(
       each duplicate bucket. Intended for M2M scopes that
       legitimately combine repeated experiments (multiple
       corpora supplying the same `(env, arm, seed)`)."""
-    from corroborate.statistics import hedges_g_paired
+    from corroborate.stats import hedges_g_paired
 
     if dedupe_strategy not in ('raise', 'mean'):
         raise ValueError(
@@ -264,21 +264,32 @@ def paired_g_per_burst(
         paired_keys = sorted(set(treat) & set(base))
         if not paired_keys:
             continue
-        # Verify burst-vector lengths match across pairs.
-        n_bursts = treat[paired_keys[0]].shape[0]
+        # Per-key arm-shape match — the real invariant. The same
+        # configuration (same `pair_by` tuple) must produce the
+        # same per-burst length across both arms; otherwise some
+        # data integrity is broken upstream.
         for k in paired_keys:
-            if (
-                treat[k].shape[0] != n_bursts
-                or base[k].shape[0] != n_bursts
-            ):
+            if treat[k].shape[0] != base[k].shape[0]:
                 raise ValueError(
-                    f'{env}: per-burst vector length mismatch '
-                    f'across pairs',
+                    f'{env}: arm shape mismatch at pair_by key '
+                    f'{k} (treat={treat[k].shape}, '
+                    f'base={base[k].shape})',
                 )
-        # For each burst, compute paired g.
-        for b in range(n_bursts):
+        # Walk the union of burst indices. At each burst, only
+        # keys whose arrays extend that far contribute. Multi-
+        # regime corpora (e.g. cells from total_steps=200k AND
+        # 1M sharing one (env, arm) bucket) are accommodated:
+        # the 200k keys contribute to bursts 0..9, the 1M keys
+        # contribute to bursts 0..49. `n_pairs` per stratum
+        # naturally reflects the regime overlap; downstream
+        # bridges that need uniform power can post-filter.
+        max_bursts = max(treat[k].shape[0] for k in paired_keys)
+        for b in range(max_bursts):
+            contributors = [
+                k for k in paired_keys if treat[k].shape[0] > b
+            ]
             deltas = [
-                float(treat[k][b] - base[k][b]) for k in paired_keys
+                float(treat[k][b] - base[k][b]) for k in contributors
             ]
             n_pairs = len(deltas)
             g, se = (

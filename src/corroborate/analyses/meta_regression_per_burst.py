@@ -38,7 +38,7 @@ from corroborate.analyses.paired_g_per_burst import (
 )
 from corroborate.analysis import analysis
 from corroborate.measurable import Measurable
-from corroborate.meta_regression import (
+from corroborate.stats import (
     MetaRegressionResult, Pool, meta_regress_panel,
 )
 from corroborate.stratum import StratumG
