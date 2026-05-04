@@ -54,12 +54,20 @@ markers = [
 
 [tool.pyright]
 include = ["src", "tests"]
+# `src/corroborate_rl/` is the sibling RL substrate package with
+# its own `pyproject.toml` + `[tool.basedpyright]` block. Framework
+# pyright runs do NOT type-check substrate code; the substrate
+# enforces its own discipline. Without this exclude, `include =
+# ["src", ...]` globs substrate files because `corroborate_rl`
+# lives under `src/`.
+#
 # `experiments/` excluded from the strict-Any contract — those
 # scripts are ad-hoc analysis runners that consume the framework
 # at the polars / numpy / pandas iter_rows boundary; the
 # framework's type discipline is for the framework itself, not
 # for one-off corpus consumers. Many of those scripts will be
 # deleted rather than typed.
+exclude = ["src/corroborate_rl"]
 extraPaths = ["."]
 stubPath = "stubs"
 pythonVersion = "3.13"
