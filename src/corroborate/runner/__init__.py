@@ -5,8 +5,8 @@ Four sub-modules:
 - `runner.runner` — `run_module` end-to-end driver +
   `HypothesisModule` Protocol. Authors invoke this from sweep
   scripts.
-- `runner.sweep` — `Runner[R]` Protocol, `sweep` driver,
-  `run_hypotheses`, `SweepResult`, `SweepCellResult`,
+- `runner.sweep` — `Runner[R]` Protocol, `run_intervention`
+  paired-sweep driver, `SweepResult`, `SweepCellResult`,
   `CellFailure`.
 - `runner.registry` — substrate-facing string→handle
   `Registry` (FnClaim + frozen-dataclass auto-discovery).
@@ -34,8 +34,7 @@ from corroborate.runner.sweep import (
     Runner,
     SweepCellResult,
     SweepResult,
-    run_hypotheses,
-    sweep,
+    run_intervention,
 )
 
 __all__ = [
@@ -46,7 +45,6 @@ __all__ = [
     'SweepCellResult',
     'SweepResult',
     'load_hypothesis',
-    'run_hypotheses',
+    'run_intervention',
     'run_module',
-    'sweep',
 ]
