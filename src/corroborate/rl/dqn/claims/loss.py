@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import jax
 
-from corroborate.core.claim import claim
+from corroborate import claim
 
 
 @claim

@@ -17,7 +17,7 @@ from __future__ import annotations
 import jax
 import jax.numpy as jnp
 
-from corroborate.core.claim import claim
+from corroborate import claim
 from corroborate.rl.dqn.types import Params
 
 

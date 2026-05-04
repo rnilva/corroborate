@@ -47,7 +47,7 @@ from typing import NamedTuple
 import jax
 import jax.numpy as jnp
 
-from corroborate.core.claim import claim
+from corroborate import claim
 
 
 # ============ Replay-state shape ============

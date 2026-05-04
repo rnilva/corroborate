@@ -48,7 +48,7 @@ from typing import Protocol, runtime_checkable
 import jax
 import jax.numpy as jnp
 
-from corroborate.core.claim import claim
+from corroborate import claim
 
 
 type Params = dict[str, jax.Array]

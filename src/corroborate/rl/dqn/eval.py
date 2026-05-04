@@ -30,7 +30,7 @@ from typing import NamedTuple, cast
 import jax
 import jax.numpy as jnp
 
-from corroborate.core.claim import claim
+from corroborate import claim
 from corroborate.core.loop import Loop, iterate
 from corroborate.rl.loop import scan_loop
 from corroborate.rl.dqn.state import DQNState

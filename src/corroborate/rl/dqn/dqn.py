@@ -25,7 +25,7 @@ import jax
 import jax.numpy as jnp
 import optax
 
-from corroborate.core.claim import claim
+from corroborate import claim
 from corroborate.rl.dqn.claims import (
     bootstrap as default_bootstrap,
     epsilon_greedy,
