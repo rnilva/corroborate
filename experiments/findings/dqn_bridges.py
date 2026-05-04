@@ -49,7 +49,7 @@ from corroborate.analyses.tautology_audit import AuditResult
 from corroborate.analyses.verdict_distribution import (
     VerdictDistributionResult,
 )
-from corroborate.bridge.claim_bridge import (
+from corroborate.bridge.bridge import (
     Direction, Tier, claim_bridge,
 )
 from corroborate.core.intervention import DoEffect

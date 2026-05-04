@@ -20,7 +20,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from corroborate.corpus import cloud
-from corroborate._internals.argparse_boundary import to_mapping
+from corroborate._internals.argparse import to_mapping
 from corroborate._internals.narrow import (
     optional_str_list,
     require_bool,

@@ -1,8 +1,26 @@
-"""Framework analyses — registered by import.
+"""Framework analyses — typed `@analysis`-decorated primitives
+consumed by Bridges via fixture-injection (see
+`corroborate.bridge.analysis`).
 
-Each submodule registers one or more analyses via `@analysis`.
-Importing `corroborate.analyses` (or any submodule) populates
-the registry; bridges consume by parameter name."""
+**This module exists for its import side effect only.** Each
+submodule below registers one or more analyses with the global
+analysis registry; importing `corroborate.analyses` (or any
+specific analysis submodule) populates the registry.
+`__all__ = []` because consumers do NOT `from corroborate.analyses
+import X` — they reference analyses by name via Bridge
+parameter declarations:
+
+    @claim_bridge
+    def my_bridge(paired_g: PairedGResult, ...) -> Verdict:
+        ...
+
+The framework's fixture-injection in `bridge.analysis` looks up
+the parameter name (`paired_g`) against the registry that this
+import populates. The `_*` aliases and `pyright: ignore` comments
+suppress unused-import warnings on the side-effect imports.
+
+Available analyses are discoverable via
+`corroborate.bridge.analysis.registered_names()`."""
 from corroborate.analyses import (  # noqa: F401
     dowhy as _dowhy,  # pyright: ignore[reportUnusedImport]
     factorial_2x2 as _factorial,  # pyright: ignore[reportUnusedImport]

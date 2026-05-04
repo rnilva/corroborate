@@ -27,7 +27,7 @@ from corroborate.bridge.analysis import (
     Analysis,
     analysis,
 )
-from corroborate.bridge.claim_bridge import (
+from corroborate.bridge.bridge import (
     Bridge,
     BridgeEvaluation,
     claim_bridge,

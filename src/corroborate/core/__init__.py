@@ -20,6 +20,7 @@ walker / Hypothesis / Intervention / Loop. Internal helpers
 (`apply_interventions`, `combined_arm_key`, `is_replacement`,
 `canonical`, `Regime`) and the lower-level walker primitives
 live on the submodule path."""
+from corroborate._internals.canonical import canonical_str
 from corroborate.core.claim import (
     CallRecord,
     Claim,
@@ -66,6 +67,7 @@ __all__ = [
     'Loop',
     'PredictedDirection',
     'Replacement',
+    'canonical_str',
     'claim',
     'flatten_exogenous',
     'flatten_leaves',

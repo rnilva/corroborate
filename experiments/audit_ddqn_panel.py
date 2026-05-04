@@ -39,7 +39,7 @@ from pathlib import Path
 import polars as pl
 
 from corroborate.measurables import measurable
-from corroborate._internals.polars_boundary import to_dicts as _to_dicts
+from corroborate._internals.polars import to_dicts as _to_dicts
 from corroborate.measurables.redundancy_check import (
     TautologyReport, audit_mediator_panel,
 )

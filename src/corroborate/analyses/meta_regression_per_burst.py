@@ -42,7 +42,7 @@ from corroborate.stats import (
     MetaRegressionResult, meta_regress_panel,
 )
 from corroborate.stats.meta_regression import Pool
-from corroborate.corpus.stratum import StratumG
+from corroborate.corpus.schema import StratumG
 
 
 @analysis

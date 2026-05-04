@@ -47,9 +47,9 @@ ParquetCompression = Literal[
     'lz4', 'uncompressed', 'snappy', 'gzip', 'brotli', 'zstd',
 ]
 
-from corroborate._internals.json_boundary import loads as _json_loads
+from corroborate._internals.json import loads as _json_loads
 from corroborate._internals.narrow import is_mapping_str_object
-from corroborate._internals.polars_boundary import (
+from corroborate._internals.polars import (
     iter_dicts as _iter_dicts,
     scalar_int as _scalar_int,
     to_dicts as _to_dicts,

@@ -87,7 +87,7 @@ from corroborate.analyses.paired_g_per_burst import PerBurstResult
 from corroborate.analyses.paired_link_per_burst import (
     PerBurstLinkResult, phase_link_consistency,
 )
-from corroborate.bridge.claim_bridge import (
+from corroborate.bridge.bridge import (
     Direction, Tier, claim_bridge,
 )
 from corroborate.core.intervention import DoEffect
@@ -1673,7 +1673,22 @@ DDQN_UNIVERSE_BRIDGES = (
     ddqn_null_under_monte_carlo__fourrooms_n10,
     # TIER A2 existence proofs (per-burst, env-conditional).
     ddqn_helps_at_early_bursts__pixel_envs,
-    ddqn_attenuates_at_late_bursts__spaceinvaders,
+    # ddqn_attenuates_at_late_bursts__spaceinvaders — DISABLED.
+    # The two SpaceInvaders 1M sweeps that match this bridge's scope
+    # (`minatar_1M_spaceinvaders`, Apr 30; `spaceinvaders_no_hit_penalty`
+    # default arm, May 1) trained on substantially different substrate
+    # commits — env-wrapper plumbing was refactored, RewardClippedEnv
+    # introduced, and 9 other commits landed between the two trainings.
+    # Same nominal HPs, same seeds (0..29), but seed=0 trajectories
+    # diverge from burst 0 — the cells are observations of different
+    # code, not replications of the same experiment. Cross-corpus
+    # pooling shifts pooled g from -0.42 (Apr 30 single-corpus) to
+    # -0.07 (May 1 single-corpus), or -0.28 averaged. The shape
+    # sister bridge (`ddqn_curve_crosses_vanilla_late__spaceinvaders`,
+    # HELD) carries the late-attenuation claim more robustly without
+    # committing to a magnitude threshold under substrate drift.
+    # Re-enable after re-running spaceinvaders_no_hit_penalty under
+    # the current substrate (or pinning substrate version per cell).
     # CLAIM 10 — link IS bias-correction on Acrobot γ=0.999, causally
     # corroborated. Per-burst link panel + DoWhy backdoor + placebo
     # refutation + RCC refutation all hold. Corrects the prior

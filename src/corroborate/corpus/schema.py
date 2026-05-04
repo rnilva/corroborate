@@ -323,6 +323,30 @@ LINEAGE_FIELDS: frozenset[str] = (
 ) - {'verdict', 'arm_key'}
 
 
+# ============ StratumG[K] — parametric per-stratum effect size ============
+
+@dataclass(frozen=True, slots=True)
+class StratumG[K]:
+    """Per-stratum paired Hedges' g result. `K` is the stratum-id
+    type — `str` for env-strata, `tuple[str, int]` for (env,
+    burst), or whatever the substrate uses.
+
+    Per-stratum analyses (`paired_g_pooled`, `paired_g_per_burst`,
+    panel meta-regression) produce sequences of these. The
+    sibling `StratumObservation` in `corroborate.stats.meta_regression`
+    extends the shape with a `covariates: Mapping[str, float]`
+    field for covariate-bearing meta-regression."""
+    stratum_id: K
+    g: float
+    se: float
+    n_pairs: int
+
+
+# Convenience aliases for the two common shapes.
+type PerEnvG = StratumG[str]
+type PerBurstStratum = StratumG[tuple[str, int]]
+
+
 # ============ GroupStats — per-stratum summary ============
 
 @dataclass(frozen=True, slots=True)

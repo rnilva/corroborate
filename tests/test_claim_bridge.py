@@ -27,7 +27,7 @@ import pytest
 import corroborate.analyses  # noqa: F401  # pyright: ignore[reportUnusedImport]
 
 from corroborate.analyses.paired_g import PairedGResult
-from corroborate.bridge.claim_bridge import (
+from corroborate.bridge.bridge import (
     Bridge, Direction, Tier, claim_bridge, evaluate,
 )
 from corroborate.core.intervention import DoEffect

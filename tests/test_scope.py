@@ -19,7 +19,7 @@ import pytest
 
 from corroborate.graph.causal import Direction, Tier
 from corroborate.core.claim import claim
-from corroborate.bridge.claim_bridge import Bridge as ClaimBridge
+from corroborate.bridge.bridge import Bridge as ClaimBridge
 from corroborate.graph import Graph
 from corroborate.core.hypothesis import Hypothesis, PredictedDirection
 from corroborate.bridge.hypothesis_verdict import hypothesis_subgraph_verdict

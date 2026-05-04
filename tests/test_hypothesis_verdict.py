@@ -24,7 +24,7 @@ from corroborate.graph.causal import (
     promote_bridged_evidence,
 )
 from corroborate.core.claim import claim
-from corroborate.bridge.claim_bridge import Bridge as ClaimBridge
+from corroborate.bridge.bridge import Bridge as ClaimBridge
 from corroborate.core.hypothesis import Hypothesis, PredictedDirection
 from corroborate.bridge.hypothesis_verdict import (
     HypothesisVerdict,

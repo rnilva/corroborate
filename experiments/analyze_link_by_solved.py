@@ -28,7 +28,7 @@ from pathlib import Path
 
 import polars as pl
 
-from corroborate._internals.polars_boundary import to_dicts as _to_dicts
+from corroborate._internals.polars import to_dicts as _to_dicts
 from corroborate.corpus.aggregate import hypothesis_comparison_from_cells
 from corroborate.core.hypothesis import Hypothesis
 from corroborate.core.intervention import Intervention

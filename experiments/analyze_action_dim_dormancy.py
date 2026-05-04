@@ -32,7 +32,7 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 
-from corroborate._internals.polars_boundary import to_dicts as _to_dicts
+from corroborate._internals.polars import to_dicts as _to_dicts
 from corroborate.analyses.paired_g import paired_g
 from corroborate.rl.env_catalogue import get
 from corroborate.corpus.schema import RunRow

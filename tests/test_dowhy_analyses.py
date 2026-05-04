@@ -28,7 +28,7 @@ import corroborate.analyses  # noqa: F401  # pyright: ignore[reportUnusedImport]
 from corroborate.analyses.dowhy import (
     BackdoorResult, RefutationResult,
 )
-from corroborate.bridge.claim_bridge import (
+from corroborate.bridge.bridge import (
     Direction, Tier, claim_bridge, evaluate,
 )
 from corroborate.bridge.verdict import Verdict

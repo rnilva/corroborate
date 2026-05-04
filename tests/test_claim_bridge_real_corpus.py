@@ -21,7 +21,7 @@ import pytest
 import corroborate.analyses  # noqa: F401  # pyright: ignore[reportUnusedImport]
 
 from corroborate.analyses.paired_g import PairedGResult
-from corroborate.bridge.claim_bridge import Bridge, evaluate
+from corroborate.bridge.bridge import Bridge, evaluate
 from corroborate.stats import MetaRegressionResult
 from corroborate.bridge.verdict import Verdict
 from experiments.findings.dqn_bridges import (

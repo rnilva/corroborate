@@ -50,7 +50,7 @@ from corroborate.graph.causal import (
     Tier,
     promote_bridged_evidence,
 )
-from corroborate.bridge.claim_bridge import Bridge as ClaimBridge
+from corroborate.bridge.bridge import Bridge as ClaimBridge
 from corroborate.graph import Graph
 from corroborate.core.hypothesis import Hypothesis
 from corroborate.corpus.schema import HypothesisComparisonRow, RunRow

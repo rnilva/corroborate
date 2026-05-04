@@ -17,7 +17,7 @@ from corroborate.core.hypothesis import Hypothesis
 from corroborate.core.intervention import Intervention
 
 if TYPE_CHECKING:
-    from corroborate.bridge.claim_bridge import Bridge as ClaimBridge
+    from corroborate.bridge.bridge import Bridge as ClaimBridge
     from corroborate.core.hypothesis import PredictedDirection
 
 
@@ -224,7 +224,7 @@ def _intervention_edge(
     *, target: str, predicted_direction: 'PredictedDirection',
 ) -> 'ClaimBridge':
     from corroborate.graph.causal import Direction, Tier
-    from corroborate.bridge.claim_bridge import Bridge as ClaimBridge
+    from corroborate.bridge.bridge import Bridge as ClaimBridge
     from corroborate.core.intervention import DoEffect
     do = DoEffect(treatment_arm='a', baseline_arm='b')
     return ClaimBridge(
@@ -239,7 +239,7 @@ def _coupling_edge(
     *, source: str, target: str, predicted_direction: 'PredictedDirection',
 ) -> 'ClaimBridge':
     from corroborate.graph.causal import Direction, Tier
-    from corroborate.bridge.claim_bridge import Bridge as ClaimBridge
+    from corroborate.bridge.bridge import Bridge as ClaimBridge
     return ClaimBridge(
         name=f'{source}->{target}',
         source=source, target=target,

@@ -11,7 +11,7 @@ import polars as pl
 import pytest
 from scipy.stats import spearmanr
 
-from corroborate._internals.polars_boundary import series_std_float
+from corroborate._internals.polars import series_std_float
 from corroborate.graph.discovery import (
     VariableScope,
     assert_stratification_admissible,

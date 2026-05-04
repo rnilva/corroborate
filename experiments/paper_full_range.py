@@ -54,7 +54,7 @@ import scipy.stats as ss
 
 from corroborate.graph.discovery import compare_pc_depths, discover_adjacency
 from corroborate.graph.causal import Direction, Tier
-from corroborate.bridge.claim_bridge import Bridge as ClaimBridge
+from corroborate.bridge.bridge import Bridge as ClaimBridge
 from corroborate.core.hypothesis import Hypothesis
 from corroborate.bridge.hypothesis_verdict import (
     HypothesisVerdict,

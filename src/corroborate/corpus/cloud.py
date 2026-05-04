@@ -41,8 +41,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Self
 
-from corroborate._internals import fsspec_boundary as _fs
-from corroborate._internals.json_boundary import loads as _json_loads
+from corroborate._internals import fsspec as _fs
+from corroborate._internals.json import loads as _json_loads
 from corroborate._internals.narrow import (
     is_list_of_object,
     is_mapping_str_object,

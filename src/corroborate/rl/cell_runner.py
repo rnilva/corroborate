@@ -35,8 +35,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from corroborate import canonical_str
 from corroborate import trace_context
+from corroborate.core import canonical_str
 from corroborate.graph.computation import ComputationGraph, build_computation_graph
 from corroborate.core.hypothesis import Hypothesis
 from corroborate.rl.dqn.dqn import default_state_hash, dqn

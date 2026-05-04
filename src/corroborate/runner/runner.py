@@ -56,7 +56,7 @@ from typing import Protocol, cast, runtime_checkable
 import polars as pl
 
 from corroborate.bridge.analysis import get_registered as _get_analysis
-from corroborate.bridge.claim_bridge import (
+from corroborate.bridge.bridge import (
     Bridge,
     BridgeEvaluation,
     evaluate,
