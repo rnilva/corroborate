@@ -59,7 +59,7 @@ def meta_regression_per_burst(
     covariates_per_env: Mapping[str, Mapping[str, float]] | None = None,
     alpha: float = 0.05,
     pool: Pool = 'random',
-    dedupe_strategy: str = 'raise',
+    dedupe_strategy: str = 'mean',
 ) -> MetaRegressionResult:
     """Per-(env, burst) panel: paired g on `source` for each
     (env, burst), then meta-regression on env-level covariates.

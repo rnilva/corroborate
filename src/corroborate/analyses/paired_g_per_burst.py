@@ -128,7 +128,7 @@ def paired_g_per_burst(
     ] = DEFAULT_PER_BURST_SOURCE,
     env_name: str | None = None,
     arm_field: str = 'arm_key',
-    dedupe_strategy: str = 'raise',
+    dedupe_strategy: str = 'mean',
 ) -> PerBurstResult:
     """Per-(env, burst) paired Hedges' g panel.
 

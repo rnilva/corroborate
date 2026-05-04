@@ -59,12 +59,34 @@ from corroborate.bridge.bridge import (
 )
 from corroborate.core.intervention import ArmRole, DoEffect, Intervention
 from corroborate.corpus.schema import StratumG
+from corroborate.measurables import Measurable
+from corroborate.measurables.reductions import from_key, reduce_axis
 from corroborate.stats import MetaRegressionResult
 from corroborate.stats.meta_regression import Pool, meta_regress_panel
 from corroborate.bridge.verdict import Verdict
 from corroborate_rl.dqn.claims.bootstrap import (
     bootstrap, double_greedify, expectile_greedify,
 )
+from corroborate_rl.dqn.measurables import jensen_bias_per_eps
+
+import numpy as np
+import numpy.typing as npt
+from collections.abc import Mapping as _Mapping
+
+
+# Typed per-burst reductions consumed by the bridges below that
+# pass `source` to `paired_g_per_burst` / `meta_regression_per_burst`.
+# `_MC_RETURN_PER_BURST_MEAN` is the link-side projection (per-eps
+# mean of the actual sampled return); `_JENSEN_BIAS_PER_BURST_MEAN`
+# is the mech-side (per-eps mean of `mc_return − predicted_q_at_start`,
+# the structural Jensen-bias signal). These mirror the typed
+# reductions in `ddqn_universe.py`.
+_MC_RETURN_PER_BURST_MEAN: Measurable[
+    _Mapping[str, object], npt.NDArray[np.floating],
+] = reduce_axis(from_key('mc_return'), axis=-1, op='mean')
+_JENSEN_BIAS_PER_BURST_MEAN: Measurable[
+    _Mapping[str, object], npt.NDArray[np.floating],
+] = reduce_axis(jensen_bias_per_eps, axis=-1, op='mean')
 
 
 # Typed structural deltas used across bridges in this zoo. Each
@@ -367,17 +389,25 @@ def jensen_premise_active__discounting_chain(
     target='mc_return',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
-    scope=(pl.col('env_name') == 'FourRooms-misc'),
+    # Pin n_step to the default DDQN-1step regime — n=3/5/10 cells
+    # from `nstep_*` corpora at FourRooms otherwise pool into the
+    # same (env, seed) bucket as different intervention regimes.
+    scope=(
+        (pl.col('env_name') == 'FourRooms-misc')
+        & (pl.col('n_step').is_null() | (pl.col('n_step') == 1))
+    ),
 )
 def ddqn_outcome_stable_across_bursts__fourrooms(
     paired_g_per_burst: PerBurstResult,
     *,
-    reduction: str = 'mean',
+    source: Measurable[
+        _Mapping[str, object], npt.NDArray[np.floating],
+    ] = _MC_RETURN_PER_BURST_MEAN,
 ) -> Verdict:
     """DDQN's outcome benefit on FourRooms is stable across every
     eval burst. HELD when (a) at least 9/10 bursts have positive
     g and (b) the per-burst mean g exceeds 0.3."""
-    del reduction
+    del source  # forwarded to paired_g_per_burst
     panel = panel_for_env(paired_g_per_burst, 'FourRooms-misc')
     if not panel:
         return Verdict.POWER_INSUFFICIENT
@@ -398,13 +428,15 @@ def ddqn_outcome_stable_across_bursts__fourrooms(
 def ddqn_outcome_zero_across_bursts__catch(
     paired_g_per_burst: PerBurstResult,
     *,
-    reduction: str = 'mean',
+    source: Measurable[
+        _Mapping[str, object], npt.NDArray[np.floating],
+    ] = _MC_RETURN_PER_BURST_MEAN,
 ) -> Verdict:
     """Catch-bsuite saturates near-optimal under both arms;
     DDQN at n=1 has zero per-burst effect. NO_EFFECT when
     every burst's |g| is below 0.1; HELD-shaped verdicts are
     impossible since the prediction is null."""
-    del reduction
+    del source  # forwarded to paired_g_per_burst
     panel = panel_for_env(paired_g_per_burst, 'Catch-bsuite')
     if not panel:
         return Verdict.POWER_INSUFFICIENT
@@ -1678,11 +1710,26 @@ def _chain_coef_holds_when(
     target='jensen_gap',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
+    # FINDINGS rev-10 panel was the original 200k DDQN cohort.
+    # Pin the HP fingerprint so cells from intervention sweeps
+    # at different (sync, lr, capacity, n_step, gamma) regimes
+    # don't pool into the same (env, seed) bucket.
+    scope=(
+        (pl.col('total_steps') == 200_000)
+        & (pl.col('eval_every') == 20_000)
+        & (pl.col('gamma') == 0.99)
+        & (pl.col('sync_period') == 100)
+        & (pl.col('replay.capacity') == 10_000)
+        & (pl.col('replay.batch_size') == 32)
+        & (pl.col('n_step').is_null() | (pl.col('n_step') == 1))
+    ),
 )
 def log_action_dim_drives_g_mech(
     meta_regression_per_burst: MetaRegressionResult,
     *,
-    reduction: str = 'mc_minus_q',
+    source: Measurable[
+        _Mapping[str, object], npt.NDArray[np.floating],
+    ] = _JENSEN_BIAS_PER_BURST_MEAN,
     covariates_per_env: dict[str, dict[str, float]] = (
         _CHAIN_COVARIATES_PER_ENV
     ),
@@ -1693,7 +1740,7 @@ def log_action_dim_drives_g_mech(
 
     Bridge HELD when β(log_action_dim) on g_mech is significantly
     negative."""
-    del reduction, covariates_per_env
+    del source, covariates_per_env  # source forwarded
     return _chain_coef_holds_when(
         meta_regression_per_burst,
         coef_name='log_action_dim',
@@ -1706,11 +1753,18 @@ def log_action_dim_drives_g_mech(
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
+    # Same FINDINGS rev-10 cohort pinning as the g_mech sibling.
+    scope=(
+        (pl.col('n_step').is_null() | (pl.col('n_step') == 1))
+        & (pl.col('replay.capacity') == 10_000)
+    ),
 )
 def log_obs_dim_drives_g_link(
     meta_regression_per_burst: MetaRegressionResult,
     *,
-    reduction: str = 'mean',
+    source: Measurable[
+        _Mapping[str, object], npt.NDArray[np.floating],
+    ] = _MC_RETURN_PER_BURST_MEAN,
     covariates_per_env: dict[str, dict[str, float]] = (
         _CHAIN_COVARIATES_PER_ENV
     ),
@@ -1723,7 +1777,7 @@ def log_obs_dim_drives_g_link(
     non-null. Sign isn't pinned in the original (the magnitude
     is small either way); we accept either positive or negative
     significant β as confirming the moderator-bottleneck."""
-    del reduction, covariates_per_env
+    del source, covariates_per_env  # source forwarded
     coef = next(
         (c for c in meta_regression_per_burst.coefficients
          if c.name == 'log_obs_dim'),
