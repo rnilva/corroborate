@@ -24,8 +24,9 @@ The DQN algorithm itself lives entirely in the `dqn` claim
 step semantics; it's a generic vmap-and-build-records harness."""
 from __future__ import annotations
 
+import functools
 import uuid
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
 from functools import partial
 from typing import NamedTuple
@@ -38,13 +39,13 @@ import numpy as np
 from corroborate import trace_context
 from corroborate.core import canonical_str
 from corroborate.graph.computation import ComputationGraph, build_computation_graph
-from corroborate.core.hypothesis import LegacyHypothesis as Hypothesis
-from corroborate_rl.dqn.dqn import default_state_hash, dqn
+from corroborate_rl.dqn.dqn import default_state_hash
 from corroborate_rl.dqn.invariants import DQNTrajectoryRecord
 from corroborate_rl.env_catalogue import EnvSpec, EnvWrapper
 from corroborate.corpus.schema import MeasurementLeaf, RunRow, TraceLeaf, TraceRow
 from corroborate.core.signature import walk, walk_paths
 from corroborate.bridge.verdict import Verdict
+from corroborate.measurables import Measurable
 
 
 class CellResult(NamedTuple):
@@ -78,24 +79,28 @@ class ArmResult(NamedTuple):
 
 
 # `total_steps` default — must match `dqn`'s default. Read from
-# intervention when present, fall back to this when absent.
+# the composed claim's bound kwargs when present, fall back to
+# this when absent.
 _DEFAULT_TOTAL_STEPS: int = 50_000
 
 
-def _read_total_steps(intervention: Mapping[str, object]) -> int:
-    """Read `total_steps` from intervention, defaulting when absent.
-    Used only to populate the `total_steps` measurement — the
-    value also flows to `dqn` itself via `**intervention` if the
-    author set it. Loud error on wrong-typed override."""
-    if 'total_steps' not in intervention:
-        return _DEFAULT_TOTAL_STEPS
-    v = intervention['total_steps']
-    if isinstance(v, bool) or not isinstance(v, int):
-        raise TypeError(
-            f"intervention['total_steps'] must be int, "
-            f"got {type(v).__name__}",
-        )
-    return v
+def _read_total_steps_from_claim(claim: Callable[..., object]) -> int:
+    """Walk the partial chain of `claim` to find `total_steps`.
+    Returns the bound value if any wrapping `partial` carries it
+    in `.keywords`; otherwise the default. Loud error on wrong-
+    typed override."""
+    cur: object = claim
+    while isinstance(cur, functools.partial):
+        v = cur.keywords.get('total_steps')
+        if v is not None:
+            if isinstance(v, bool) or not isinstance(v, int):
+                raise TypeError(
+                    f"claim's bound 'total_steps' must be int, "
+                    f"got {type(v).__name__}",
+                )
+            return v
+        cur = cur.func
+    return _DEFAULT_TOTAL_STEPS
 
 
 def _leaf_scalar(value: object) -> MeasurementLeaf:
@@ -151,42 +156,45 @@ def _trajectory_leaves(
 def run_dqn_arm(
     env_spec: EnvSpec,
     seeds: tuple[int, ...],
-    hypothesis: Hypothesis[DQNTrajectoryRecord],
+    claim: Callable[..., DQNTrajectoryRecord],
+    arm_key: str,
+    measurables: tuple[Measurable[DQNTrajectoryRecord, object], ...],
     *,
     cycle_id: str | None = None,
     wrappers: tuple[EnvWrapper, ...] = (),
 ) -> ArmResult:
-    """Run one (env, hypothesis) arm across `seeds` in parallel via
-    `jax.vmap` of the `dqn` outermost claim. Returns
+    """Run one (env, arm) arm across `seeds` in parallel via
+    `jax.vmap` of the composed `claim`. Returns
     `ArmResult(cells, graph)` — per-seed `CellResult`s plus the
-    `ComputationGraph` captured from the bound hypothesis.
+    `ComputationGraph` captured from the bound claim.
+
+    `claim` is the substrate's theory composed with one arm's
+    Intervention tuple — typically `apply_interventions(base,
+    intervention.treatment)` where `base = partial(dqn, **HPs)`.
+    The framework's `run_intervention` builds it; substrate
+    callers pass it through.
+
+    `arm_key` is the framework-derived canonical fingerprint of
+    the Intervention tuple (`combined_arm_key`). Cells are tagged
+    with this; arm identity flows from the typed structural
+    deltas, not from substrate-chosen short labels.
+
+    `measurables` are the typed Measurable instances from the
+    Hypothesis Protocol's `MEASURABLES` tuple. The runner
+    computes each per cell and persists the scalar at the
+    measurable's `.name`.
 
     Graph capture: the vmap call is wrapped in `trace_context()`,
     so JAX's first-call abstract-trace pass fires `@claim` records
     once. `build_computation_graph(records)` derives the static
-    call graph from those records. This is structurally constant
-    across seeds (vmap traces the body once); the graph is a
-    property of the bound hypothesis, not of any single seed.
-
-    Substrate-internal knobs (optimizer, outcome window fraction,
-    etc.) are NOT runner kwargs. `dqn`'s signature carries its
-    own defaults; experiments that want to override them put the
-    override in `Hypothesis.intervention`. Keeping the runner
-    surface to (env_spec, seeds, hypothesis, cycle_id) makes
-    Hypothesis the sole experiment specification."""
+    call graph. Structurally constant across seeds (vmap traces
+    the body once)."""
     if not seeds:
         raise ValueError('seeds must be non-empty')
 
-    intervention = hypothesis.intervention
-    total_steps = _read_total_steps(intervention)
+    total_steps = _read_total_steps_from_claim(claim)
 
     env, env_params = gymnax.make(env_spec.name)
-    # Apply wrappers in order. Each is a frozen-dataclass with a
-    # `wrap(inner)` method (the `EnvWrapper` Protocol). Tuple
-    # parameter is statically typed `tuple[EnvWrapper, ...]` so
-    # the runtime check is defensive against caller errors that
-    # bypass the type system — drop in favour of trusting the
-    # contract.
     for w in wrappers:
         env = w.wrap(env)
     state_hash = (
@@ -195,18 +203,10 @@ def run_dqn_arm(
         else default_state_hash
     )
 
-    # Compose cell-level exogenous + intervention into dqn via
-    # `functools.partial`. The walker / `collect_invariants` /
-    # `canonical_str` all unwrap partials, so intervention
-    # overrides shadow defaults in every downstream consumer:
-    # `collect_invariants(configured)` sees only the effective
-    # sub-claims (no leakage from defaults that intervention
-    # swapped out).
-    # Read n_actions from the wrapped env's action_space, not the
-    # static catalogue, so wrappers like ActionDuplicate that
-    # inflate |A| are reflected in the Q-network output dim and
-    # the epsilon-greedy sampling range. `action_space` returns
-    # `gymnax.Discrete` (typed via the stub), so `.n` is direct.
+    # Compose cell-level exogenous on top of the already-bound
+    # `claim`. Read n_actions from the wrapped env's action_space
+    # so wrappers like ActionDuplicate that inflate |A| reflect
+    # in the Q-network output dim.
     wrapped_action_space = env.action_space(env_params)
     n_actions = int(wrapped_action_space.n)
     cell_kwargs: dict[str, object] = {
@@ -215,7 +215,7 @@ def run_dqn_arm(
         'eval_episode_cap': env_spec.eval_episode_cap,
         'state_hash': state_hash,
     }
-    configured = partial(dqn, **{**cell_kwargs, **intervention})
+    configured = partial(claim, **cell_kwargs)
 
     # Configurational fingerprint — the leaf measurements that
     # `aggregate.leaf_signature` projects to as the group-by key.
@@ -256,30 +256,23 @@ def run_dqn_arm(
         # compute once per cell.
         cache: dict[str, object] = {}
 
-        # Pre-registered measurables: walk `hypothesis.measurables`
-        # and persist each at its bare measurable name as the
-        # column key. Phase 5 of the Bridge-collapse refactor
-        # normalised the substrate-paper-narrative prefixes
-        # (`outcome.` / `mechanism.` / `invariant.`) — measurable
-        # names are now bare (`eval_final_mean`, `jensen_gap`,
-        # `late_window_mean`).
+        # Pre-registered measurables: walk the typed `measurables`
+        # tuple from the Hypothesis Protocol and persist each at
+        # its bare measurable name. Names are bare (`jensen_gap`,
+        # `eval_final_mean`, etc.) — substrate-paper-narrative
+        # prefixes were normalised earlier.
         measurable_cols: dict[str, MeasurementLeaf] = {}
-        for m in hypothesis.measurables:
+        for m in measurables:
             value = evaluate_with_measurables(
                 m.fn, per_seed_record, cache=cache,
             )
             scalar = _leaf_scalar(value)
             measurable_cols[m.name] = scalar
 
-        # Each wrapper declares its own measurement keys via
-        # `measurement_keys()` — no central isinstance chain.
-        # Adding a new wrapper just adds the method; cell_runner
-        # is invariant under wrapper-type extension.
         wrapper_cols: dict[str, MeasurementLeaf] = {}
         for w in wrappers:
             wrapper_cols.update(w.measurement_keys())
         measurements: dict[str, MeasurementLeaf] = {
-            'intervention_name': hypothesis.name,
             'env_name': env_spec.name,
             'seed': seed,
             'total_steps': total_steps,
@@ -304,7 +297,7 @@ def run_dqn_arm(
         run = RunRow(
             id=cell_id, parent_id=None,
             cycle_id=cycle_id, timestamp=timestamp,
-            verdict=verdict, arm_key=hypothesis.arm_key(),
+            verdict=verdict, arm_key=arm_key,
             measurements=measurements,
         )
         # Trace leaves: configurational leaves (shared with the
@@ -325,17 +318,19 @@ def run_dqn_arm(
 def run_dqn_cell(
     env_spec: EnvSpec,
     seed: int,
-    hypothesis: Hypothesis[DQNTrajectoryRecord],
+    claim: Callable[..., DQNTrajectoryRecord],
+    arm_key: str,
+    measurables: tuple[Measurable[DQNTrajectoryRecord, object], ...],
     *,
     cycle_id: str | None = None,
 ) -> CellResult:
-    """Run one (env, seed, hypothesis) cell. Thin convenience
-    wrapper around `run_dqn_arm` for the single-seed case;
-    multi-seed callers should use `run_dqn_arm` directly to avoid
-    per-call vmap re-compilation. Discards the graph; callers
-    that want it should use `run_dqn_arm` directly."""
+    """Run one (env, seed, claim) cell. Thin convenience wrapper
+    around `run_dqn_arm` for the single-seed case; multi-seed
+    callers should use `run_dqn_arm` directly to avoid per-call
+    vmap re-compilation. Discards the graph; callers that want
+    it should use `run_dqn_arm` directly."""
     arm = run_dqn_arm(
-        env_spec, (seed,), hypothesis,
+        env_spec, (seed,), claim, arm_key, measurables,
         cycle_id=cycle_id,
     )
     return arm.cells[0]
