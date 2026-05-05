@@ -838,6 +838,55 @@ def test_compare_pc_depths_chain_unaffected_by_depth_increase() -> None:
     assert diff.common == diff.edges_low == diff.edges_high
 
 
+def test_discover_adjacency_stratified_depth_1_path_propagates() -> None:
+    """When `stratify_by` is set AND `max_conditioning >= 1`,
+    discover_adjacency must call `stratified_partial_spearman_rho`
+    with (columns[x], columns[y], columns[z], strata_arr).
+
+    Pin the call against argument-replacement mutants (None for
+    x, y, z, or strata) and the `k == 1` branch selector.
+
+    Construct: 3-node x-z-y chain with stratification on env.
+    At depth 0 stratified: x and y marginally dependent (both
+    via z's mean shift across strata). At depth 1 stratified
+    (conditioning on z): x and y conditionally independent
+    within stratum → x-y edge removed. Mutant arg replacement
+    breaks the partial test → x-y edge stays."""
+    rng = np.random.default_rng(0)
+    n_per = 50
+    z_a = rng.standard_normal(n_per)
+    x_a = z_a + 0.3 * rng.standard_normal(n_per)
+    y_a = z_a + 0.3 * rng.standard_normal(n_per)
+    z_b = rng.standard_normal(n_per) + 5    # different env mean
+    x_b = z_b + 0.3 * rng.standard_normal(n_per)
+    y_b = z_b + 0.3 * rng.standard_normal(n_per)
+    x = np.concatenate([x_a, x_b])
+    y = np.concatenate([y_a, y_b])
+    z = np.concatenate([z_a, z_b])
+    env = ['A'] * n_per + ['B'] * n_per
+    df = _df_from_columns(x=x, y=y, z=z)
+    df = df.with_columns(pl.Series('env', env))
+
+    # Without stratification, depth-1 conditioning on z should
+    # remove x-y. Sanity check.
+    from corroborate.graph.discovery import discover_adjacency
+    adj_unstrat = discover_adjacency(
+        df, variables=['x', 'y', 'z'],
+        alpha=0.05, max_conditioning=1,
+        stratify_by=None,
+    )
+    assert frozenset({'x', 'y'}) not in adj_unstrat.edges
+    # With stratification, the stratified-partial call must work
+    # and remove x-y. Mutant arg-replacement → broken call →
+    # x-y survives.
+    adj_strat = discover_adjacency(
+        df, variables=['x', 'y', 'z'],
+        alpha=0.05, max_conditioning=1,
+        stratify_by='env',
+    )
+    assert frozenset({'x', 'y'}) not in adj_strat.edges
+
+
 def test_discover_adjacency_n_observations_matches_dataframe_height() -> None:
     """`adj.n_observations` must equal `data.height`. Pin
     `n_obs = data.height` against `n_obs = None` mutant
