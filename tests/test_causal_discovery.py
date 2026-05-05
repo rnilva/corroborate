@@ -798,6 +798,132 @@ def test_discover_with_jci_stratification() -> None:
 
 # ============ Orientation — v-structures + Meek rules ============
 
+# ============ PC graph helpers — direct ============
+
+def test_adjacent_self_loop_returns_false() -> None:
+    """`_adjacent(a, a, ...)` returns False — no edge between a
+    node and itself. Pin `a == b` against `a != b` mutant
+    (would invert) and the `return False` against `return True`
+    mutant."""
+    from corroborate.graph.discovery import _adjacent
+    assert _adjacent('x', 'x', set(), set()) is False
+    # Even if a self-loop edge somehow exists, _adjacent still
+    # returns False at the first guard.
+    assert _adjacent(
+        'x', 'x',
+        directed={('x', 'x')},
+        undirected={frozenset({'x'})},
+    ) is False
+
+
+def test_adjacent_undirected_edge_returns_true() -> None:
+    """An undirected edge between a and b → True. Pin the
+    `return True` for the undirected branch against `return False`
+    mutant."""
+    from corroborate.graph.discovery import _adjacent
+    assert _adjacent(
+        'x', 'y',
+        directed=set(),
+        undirected={frozenset({'x', 'y'})},
+    ) is True
+
+
+def test_adjacent_directed_in_either_direction_returns_true() -> None:
+    """A directed edge (a, b) OR (b, a) → True. Pin `or` against
+    `and` mutant which would only return True when BOTH (a,b) AND
+    (b,a) are directed (impossible by orientation semantics)."""
+    from corroborate.graph.discovery import _adjacent
+    # Only (x, y) in directed:
+    assert _adjacent(
+        'x', 'y',
+        directed={('x', 'y')},
+        undirected=set(),
+    ) is True
+    # Only (y, x) in directed:
+    assert _adjacent(
+        'x', 'y',
+        directed={('y', 'x')},
+        undirected=set(),
+    ) is True
+
+
+def test_adjacent_no_edge_returns_false() -> None:
+    """No edge in either direction → False (sanity)."""
+    from corroborate.graph.discovery import _adjacent
+    assert _adjacent('x', 'y', set(), set()) is False
+
+
+def test_neighbors_directed_outgoing_picks_up_target() -> None:
+    """For a directed edge (z, t), z's neighbor is t. Pin
+    `if src == z: out.add(tgt)` against:
+    - `src != z` mutant (would add tgt for edges NOT touching z)
+    - `out.add(None)` mutant (would add None to the set)"""
+    from corroborate.graph.discovery import _neighbors
+    nbrs = _neighbors(
+        'z',
+        directed={('z', 'a'), ('b', 'c')},  # only first edge touches z
+        undirected=set(),
+    )
+    assert nbrs == {'a'}
+
+
+def test_neighbors_directed_incoming_picks_up_source() -> None:
+    """For a directed edge (s, z), z's neighbor is s. Pin
+    `out.add(src)` against `out.add(None)` mutant."""
+    from corroborate.graph.discovery import _neighbors
+    nbrs = _neighbors(
+        'z',
+        directed={('a', 'z'), ('b', 'c')},
+        undirected=set(),
+    )
+    assert nbrs == {'a'}
+
+
+def test_orient_returns_false_on_conflict_target_source() -> None:
+    """Conflict: (target, source) is already directed → don't
+    flip, return False. Pin `return False` against `return True`
+    mutant."""
+    from corroborate.graph.discovery import _orient
+    directed: set[tuple[str, str]] = {('y', 'x')}
+    undirected: set[frozenset[str]] = set()
+    result = _orient('x', 'y', directed, undirected)
+    assert result is False
+    # State unchanged.
+    assert directed == {('y', 'x')}
+
+
+def test_orient_returns_false_on_idempotent_already_directed() -> None:
+    """Already (source, target) directed → return False (no new
+    work). Pin against `return True` mutant."""
+    from corroborate.graph.discovery import _orient
+    directed: set[tuple[str, str]] = {('x', 'y')}
+    undirected: set[frozenset[str]] = set()
+    result = _orient('x', 'y', directed, undirected)
+    assert result is False
+
+
+def test_orient_returns_false_when_edge_not_undirected() -> None:
+    """No undirected edge between source and target → can't
+    orient → return False. Pin against `return True` mutant."""
+    from corroborate.graph.discovery import _orient
+    directed: set[tuple[str, str]] = set()
+    undirected: set[frozenset[str]] = set()
+    result = _orient('x', 'y', directed, undirected)
+    assert result is False
+
+
+def test_orient_returns_true_and_mutates_on_clean_orient() -> None:
+    """Undirected x-y, no conflict → orient x → y. Returns True,
+    moves edge from undirected to directed."""
+    from corroborate.graph.discovery import _orient
+    directed: set[tuple[str, str]] = set()
+    undirected: set[frozenset[str]] = {frozenset({'x', 'y'})}
+    result = _orient('x', 'y', directed, undirected)
+    assert result is True
+    assert ('x', 'y') in directed
+    assert frozenset({'x', 'y'}) not in undirected
+
+
 def test_orient_v_structure_collider() -> None:
     """Unshielded X − Z − Y with Z NOT in sepset(X, Y) → orient
     X → Z ← Y (definite collider)."""
