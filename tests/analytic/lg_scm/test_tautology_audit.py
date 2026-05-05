@@ -82,7 +82,13 @@ def _hp_correlated_value(*, mu_x: float, seed: int, env_name: str) -> float:
     within-stratum dependence with the outcome. random.Random
     seeded by (env, seed) makes the noise reproducible across test
     runs while staying independent of any signal."""
-    rng = random.Random(hash(('hp_correlated', env_name, seed)) & 0xFFFF_FFFF)
+    # `hash()` on tuples uses Python's per-process randomization
+    # (PYTHONHASHSEED=random); using zlib.adler32 (deterministic
+    # CRC) gives reproducible noise across processes so the test
+    # outcome is stable across pytest invocations.
+    import zlib
+    seed_key = f'hp_correlated|{env_name}|{seed}'.encode()
+    rng = random.Random(zlib.adler32(seed_key) & 0xFFFF_FFFF)
     return mu_x + rng.gauss(0.0, 0.5)
 
 

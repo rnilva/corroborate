@@ -114,6 +114,34 @@ def _cells() -> Sequence[Mapping[str, object]]:
 
 # ============ backdoor_ate ============
 
+def test_backdoor_ate_returns_unidentified_when_no_directed_path() -> None:
+    """When the supplied DAG has no directed path from treatment
+    to outcome (e.g., common-cause structure z → x, z → y with
+    no x → y), DoWhy reports unidentified. The framework returns
+    `BackdoorResult(identified=False, ate=NaN, …)`.
+
+    Pin the unidentified-branch construction:
+    - `proceed_when_unidentifiable=False` (vs True / None mutants
+      that would request DoWhy continue past unidentified)
+    - `getattr(identified, 'no_directed_path', False)` (vs the
+      string mutations 'NO_DIRECTED_PATH' / 'XXno_directed_pathXX'
+      / default value mutations)
+
+    Construct a corpus with z confounding x and y; pass DAG that
+    has the confounder structure but no direct x → y edge."""
+    cells = [
+        {'x_mean': float(i), 'y_mean': float(i * 2), 'z': 0.0}
+        for i in range(20)
+    ]
+    result = backdoor_ate.fn(
+        cells, treatment='x_mean', outcome='y_mean',
+        dag=[('z', 'x_mean'), ('z', 'y_mean')],    # no x→y path
+    )
+    assert result.identified is False
+    assert math.isnan(result.ate)
+    assert result.n_rows == 20
+
+
 def test_backdoor_ate_recovers_structural_total_effect() -> None:
     """ATE matches `beta_xz * beta_zy = 0.75` within 5%.
 
