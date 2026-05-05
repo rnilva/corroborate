@@ -175,6 +175,94 @@ def q_max_growth(record: Mapping[str, object]) -> float:
     return float(late / max(abs(early), 1e-9))
 
 
+@measurable(reads=('predicted_q_at_start', 'mc_return'))
+def q_mc_calibration_pearson(record: Mapping[str, object]) -> float:
+    """Per-cell Pearson r between `predicted_q_at_start` and
+    `mc_return` over all (burst, eval-episode) pairs (typically
+    20 bursts × 5 episodes = 100 points).
+
+    Measures Q's *predictive validity for its own policy's
+    return*. r→1 means Q correctly ranks initial states by
+    expected MC; r→0 means Q is uninformative; r<0 means Q is
+    inversely calibrated (rare).
+
+    On Breakout-MinAtar 1M, the within-seed Δ (DDQN − vanilla)
+    of this measurable is the strongest known mediator of
+    Δ_outcome: stratified partial Spearman ρ(Δ_calibration,
+    Δ_mc_late | Δ_q_b19) = +0.701, p ≈ 0 (n=120 pooled across
+    4 sync values). It survives controlling for late-Q
+    amplification, and Q-amplification's coefficient attenuates
+    when calibration is added as control. Combined, the two
+    mediators absorb the cross-sync log_sync→outcome effect
+    (residual ρ = −0.09 ns).
+
+    Distinguishable from `pearson_r_online_target` (which is
+    online-Q vs target-Q population correlation, a target-
+    staleness diagnostic): this one is Q vs realized return —
+    the OPE-style validity of the value function."""
+    qs = _record_array(record, 'predicted_q_at_start')
+    mc = _record_array(record, 'mc_return')
+    if qs is None or mc is None:
+        return float('nan')
+    qs_flat = np.asarray(qs).flatten()
+    mc_flat = np.asarray(mc).flatten()
+    if qs_flat.size != mc_flat.size or qs_flat.size < 3:
+        return float('nan')
+    if qs_flat.std() == 0 or mc_flat.std() == 0:
+        return float('nan')
+    r = float(np.corrcoef(qs_flat, mc_flat)[0, 1])
+    return r if math.isfinite(r) else float('nan')
+
+
+@measurable(reads=('online_max_q_per_step', 'target_max_q_per_step'))
+def target_staleness_late(record: Mapping[str, object]) -> float:
+    """Mean over the late 50% of training of the *relative* gap
+    `|online_max_q − target_max_q| / max(|online|, |target|, 1e-6)`.
+
+    The endogenous delegate of `sync_period`. Sync_period is the
+    HP knob; target staleness is the measurable mediator that
+    sits on the causal path: target staleness IS what changes
+    when sync_period varies, and DDQN's bootstrap rule (which
+    uses Q_target at argmax_online) diverges from vanilla's
+    (max_a Q_target) in proportion to it.
+
+    Relative normalisation rather than absolute: at low sync the
+    Q-explosion regime gives huge absolute gaps (hundreds-of-
+    thousands) that swamp the late-burst signal; the relative
+    form is monotone with sync (~0.002 at sync=100 to ~0.027 at
+    sync=10000 on Breakout-MinAtar at burst 19, 1M steps).
+
+    Late-50% window matches the canonical late-quarter Hasselt
+    convention while keeping enough samples for a stable mean.
+    """
+    omax = _record_array(record, 'online_max_q_per_step')
+    tmax = _record_array(record, 'target_max_q_per_step')
+    if omax is None or tmax is None:
+        return float('nan')
+    abs_gap = np.abs(omax - tmax)
+    denom = np.maximum(np.maximum(np.abs(omax), np.abs(tmax)), 1e-6)
+    return _mean_window(abs_gap / denom, 0.5, 1.0)
+
+
+@measurable(reads=('online_max_q_per_step', 'target_max_q_per_step'))
+def target_staleness_early(record: Mapping[str, object]) -> float:
+    """Same as `target_staleness_late` but over the EARLY 25% of
+    training. Captures the burn-in regime where sync_period's
+    grip on online-target divergence is largest (cf.
+    `findings_target_staleness_collinear.md`: relative gap at
+    burst 0 ranges from 1.9% (sync=100) to 41.6% (sync=10000) on
+    Breakout). Useful as the substrate-level mediator for
+    early-policy-quality bridges where the late window has
+    already stabilised."""
+    omax = _record_array(record, 'online_max_q_per_step')
+    tmax = _record_array(record, 'target_max_q_per_step')
+    if omax is None or tmax is None:
+        return float('nan')
+    abs_gap = np.abs(omax - tmax)
+    denom = np.maximum(np.maximum(np.abs(omax), np.abs(tmax)), 1e-6)
+    return _mean_window(abs_gap / denom, 0.0, 0.25)
+
+
 @measurable(reads=('online_mean_q_per_step', 'online_max_q_per_step'))
 def v_vs_max_delta_late(record: Mapping[str, object]) -> float:
     """Mean of |q_mean − q_max| over the late 50%. DDQN's

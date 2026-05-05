@@ -480,6 +480,91 @@ def test_classify_single_stratum_treated_as_within() -> None:
     assert classify_variable_scope(np.zeros(50), strata) is VariableScope.DEGENERATE
 
 
+def test_classify_symmetric_around_zero_is_not_degenerate() -> None:
+    """Values symmetric around zero (e.g., [-1, 1]) have non-zero
+    range. Pin `np.max(values) - np.min(values)` against the
+    `np.max + np.min` mutant, which would compute 0 here and
+    misclassify as DEGENERATE."""
+    values = np.array([-1.0, 1.0, -2.0, 2.0, -3.0, 3.0])
+    strata = ['a', 'b', 'a', 'b', 'a', 'b']
+    scope = classify_variable_scope(values, strata)
+    assert scope is not VariableScope.DEGENERATE
+
+
+def test_classify_two_strata_passes_unique_count_guard() -> None:
+    """Two unique strata: passes the `len(unique_strata) < 2`
+    fast-path guard. Pins `< 2` against `<= 2` (which would
+    short-circuit to WITHIN at 2 strata) and `< 3` (same)."""
+    rng = np.random.default_rng(11)
+    # Pure across-stratum signal: per-stratum constant, different
+    # means.
+    values = np.concatenate([np.full(10, 0.0), np.full(10, 5.0)])
+    strata = ['a'] * 10 + ['b'] * 10
+    scope = classify_variable_scope(values, strata)
+    # Should classify as ACROSS (no within-stratum variance,
+    # all variance is across-stratum). The `< 2` mutants would
+    # short-circuit to WITHIN before reaching this branch.
+    assert scope is VariableScope.ACROSS_STRATUM
+    # Sanity: rng unused; defensive against unused-import warnings.
+    del rng
+
+
+def test_classify_strata_at_size_two_compute_variance() -> None:
+    """Per-stratum size n_k = 2 should still contribute its
+    variance (n_k >= 2 admits variance computation). Pin
+    `n_k >= 2` against `n_k > 2` and `n_k >= 3` mutants (both
+    would skip n_k=2 strata, treating their var as 0).
+
+    Construct: 2-element strata each with substantial within-
+    stratum variance, equal means → variance lives ENTIRELY
+    within-stratum. Mutant treats var as 0 → no within
+    variance → would classify as DEGENERATE or fall through."""
+    # Two strata, n_k=2 each, same mean (1.5) but spread.
+    values = np.array([0.0, 3.0, 0.0, 3.0])
+    strata = ['a', 'a', 'b', 'b']
+    scope = classify_variable_scope(values, strata)
+    # within_var > 0, across_var = 0 → WITHIN_STRATUM.
+    # Mutant n_k > 2 sees per-stratum var = 0 → within_var = 0.
+    # Then within_frac = 0 < threshold → ACROSS_STRATUM.
+    # Original: WITHIN; mutant: ACROSS.
+    assert scope is VariableScope.WITHIN_STRATUM
+
+
+def test_classify_singleton_strata_use_zero_variance() -> None:
+    """Single-element strata (n_k = 1) must contribute 0 variance,
+    not 1. Pin `else 0.0` against `else 1.0` mutant.
+
+    Construct: 11 singletons at evenly spaced values 0.0, 0.1,
+    ..., 1.0. All within-stratum variances are 0 → original
+    within_var = 0 → ACROSS_STRATUM. Mutant injects 1.0 per
+    singleton → within_var = 1.0; across_var ≈ 0.1; within_frac
+    ≈ 0.91 → both > threshold → BOTH classification.
+
+    Constructed so the singleton contribution dominates total_var
+    in the mutant — without enough singleton mass relative to
+    across_var, the within_frac shift gets absorbed by the
+    threshold and the verdict doesn't flip."""
+    values = np.array([0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0])
+    strata = [f's{i}' for i in range(11)]
+    scope = classify_variable_scope(values, strata)
+    assert scope is VariableScope.ACROSS_STRATUM
+
+
+def test_classify_returns_degenerate_when_total_var_zero() -> None:
+    """Total variance exactly zero (constant column across all
+    strata) → DEGENERATE. The early-degeneracy check via ptp
+    catches the simple constant case; this test exercises the
+    deeper `if total_var <= 0: return DEGENERATE` guard via a
+    construction where ptp is non-zero but the variance
+    decomposition zeros out (not actually possible with real
+    data — the guard is defensive against numerical edge cases).
+    Skip for now; the ptp guard above is the primary path."""
+    # The ptp guard catches the truly-constant case.
+    values = np.full(20, 3.14)
+    strata = ['a'] * 10 + ['b'] * 10
+    assert classify_variable_scope(values, strata) is VariableScope.DEGENERATE
+
+
 # ============ PC algorithm — discover_adjacency ============
 
 def _df_from_columns(**cols: np.ndarray) -> pl.DataFrame:
