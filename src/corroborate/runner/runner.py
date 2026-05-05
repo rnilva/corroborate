@@ -292,10 +292,18 @@ def run(
             f'ingest a corpus, or check the cache at {resolved_cache}',
         )
 
+    # Optional substrate-side outermost claim for endogeneity
+    # gating. Threaded to `evaluate` via the kw-only `claim`
+    # parameter; gates that need it (exogenous_source /
+    # exogenous_scope) close over the leaf set, gates that don't
+    # ignore it. Hypotheses without CLAIM fall back to None →
+    # endogeneity gates short-circuit.
+    claim = getattr(h, 'CLAIM', None)
+
     out: dict[str, BridgeEvaluation] = {}
     for b in bridges:
         try:
-            out[b.name] = evaluate(b, cells)
+            out[b.name] = evaluate(b, cells, claim=claim)
         except Exception as e:  # noqa: BLE001
             # An authoring bug in a bridge's `holds_when` body
             # (e.g. typo'd column name, malformed analysis call)

@@ -54,7 +54,7 @@ from corroborate_rl.dqn.types import (
     StepRecord,
     TargetSync,
 )
-from corroborate_rl.env_catalogue import StateHash
+from corroborate_rl.env_catalogue import EnvWrapper, StateHash
 from corroborate.core.signature import Exogenous
 
 if TYPE_CHECKING:
@@ -213,8 +213,18 @@ def dqn_step(
 @claim
 def dqn(
     *,
-    # Exogenous: per-cell conditions we generalize *over*.
-    rng_key: Annotated[jax.Array, Exogenous],
+    # Per-cell author primitives — what the experimenter generalizes
+    # OVER across cells. `env_name`/`seed`/`wrappers` are author-set
+    # at design time but vary per cell (the grid-loop dimension);
+    # `env`/`env_params`/`n_actions`/etc. are framework-derived from
+    # them by the cell_runner. All seven are `Annotated[..., Exogenous]`
+    # — the framework's "we generalize over this, not intervene on
+    # it" marker. The endogeneity gate consumes leaf ∪ exogenous as
+    # the substrate's author-primitive set
+    # (cf. ENDOGENEITY_TOPOLOGY.md).
+    env_name: Annotated[str, Exogenous],
+    seed: Annotated[int, Exogenous] = 0,
+    wrappers: Annotated[tuple[EnvWrapper, ...], Exogenous] = (),
     env: Annotated[Env, Exogenous],
     env_params: Annotated[EnvParams, Exogenous],
     obs_shape: Annotated[tuple[int, ...], Exogenous],
@@ -310,6 +320,13 @@ def dqn(
 
     Raises `ValueError` if `total_steps` isn't a multiple of
     `eval_every`."""
+    # `env_name` and `wrappers` are structural markers — author
+    # primitives the cell_runner consumed Python-side to build
+    # `env` and `env_params`. They appear in `walk_paths(dqn).leaves`
+    # so the framework's endogeneity gate can classify them
+    # (cf. ENDOGENEITY_TOPOLOGY.md); the dqn body itself only sees
+    # the resolved env.
+    del env_name, wrappers
     if total_steps % eval_every != 0:
         raise ValueError(
             f'total_steps ({total_steps}) must be a multiple of '
@@ -328,6 +345,12 @@ def dqn(
     # GradientTransformation is what dqn_step needs internally.
     optax_handle = optimizer()
 
+    # Derive rng_key from seed JAX-side so vmap-over-seeds threads
+    # cleanly through PRNGKey. Replaces the previous
+    # `Annotated[jax.Array, Exogenous] rng_key` kwarg — the runner
+    # used to vmap over pre-built rng_keys; now seeds are the
+    # vmap dimension and PRNGKey moves into the trace.
+    rng_key = jax.random.PRNGKey(seed)
     init_key, run_key = jax.random.split(rng_key, 2)
     state = init_state(
         env=env, env_params=env_params,

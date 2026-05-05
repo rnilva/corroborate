@@ -24,7 +24,6 @@ The DQN algorithm itself lives entirely in the `dqn` claim
 step semantics; it's a generic vmap-and-build-records harness."""
 from __future__ import annotations
 
-import functools
 import uuid
 from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
@@ -76,31 +75,6 @@ class ArmResult(NamedTuple):
     redundancy / register / mechanism-key consumers)."""
     cells: tuple[CellResult, ...]
     graph: ComputationGraph
-
-
-# `total_steps` default — must match `dqn`'s default. Read from
-# the composed claim's bound kwargs when present, fall back to
-# this when absent.
-_DEFAULT_TOTAL_STEPS: int = 50_000
-
-
-def _read_total_steps_from_claim(claim: Callable[..., object]) -> int:
-    """Walk the partial chain of `claim` to find `total_steps`.
-    Returns the bound value if any wrapping `partial` carries it
-    in `.keywords`; otherwise the default. Loud error on wrong-
-    typed override."""
-    cur: object = claim
-    while isinstance(cur, functools.partial):
-        v = cur.keywords.get('total_steps')
-        if v is not None:
-            if isinstance(v, bool) or not isinstance(v, int):
-                raise TypeError(
-                    f"claim's bound 'total_steps' must be int, "
-                    f"got {type(v).__name__}",
-                )
-            return v
-        cur = cur.func
-    return _DEFAULT_TOTAL_STEPS
 
 
 def _leaf_scalar(value: object) -> MeasurementLeaf:
@@ -192,8 +166,6 @@ def run_dqn_arm(
     if not seeds:
         raise ValueError('seeds must be non-empty')
 
-    total_steps = _read_total_steps_from_claim(claim)
-
     env, env_params = gymnax.make(env_spec.name)
     for w in wrappers:
         env = w.wrap(env)
@@ -207,9 +179,19 @@ def run_dqn_arm(
     # `claim`. Read n_actions from the wrapped env's action_space
     # so wrappers like ActionDuplicate that inflate |A| reflect
     # in the Q-network output dim.
+    #
+    # `env_name` and `wrappers` are bound here as **author
+    # primitives** of dqn (post-Phase-A0 refactor — they're plain
+    # kwargs, not Annotated[Exogenous]); `walk_paths` surfaces them
+    # as topology leaves in `_leaf_measurements(configured)` below.
+    # `env`, `env_params`, `obs_shape`, `n_actions`,
+    # `eval_episode_cap`, `state_hash` are framework-injected
+    # (Annotated[Exogenous]) — the runner builds them Python-side.
     wrapped_action_space = env.action_space(env_params)
     n_actions = int(wrapped_action_space.n)
     cell_kwargs: dict[str, object] = {
+        'env_name': env_spec.name,
+        'wrappers': wrappers,
         'env': env, 'env_params': env_params,
         'obs_shape': env_spec.observation_shape, 'n_actions': n_actions,
         'eval_episode_cap': env_spec.eval_episode_cap,
@@ -220,22 +202,27 @@ def run_dqn_arm(
     # Configurational fingerprint — the leaf measurements that
     # `aggregate.leaf_signature` projects to as the group-by key.
     # Walks the BOUND `configured` so intervention overrides
-    # surface at their dotted topology paths.
+    # surface at their dotted topology paths. Post-Phase-A0
+    # includes `env_name`, `seed` (default 0; per-cell value is
+    # restamped below), `wrappers`, and `total_steps` alongside
+    # the HP/slot-Claim leaves.
     leaf_measurements = _leaf_measurements(configured)
 
-    def by_key(rng_key: jax.Array) -> dict[str, jax.Array]:
-        return configured(rng_key=rng_key)
+    # vmap over seeds (uint32 → dqn derives PRNGKey internally
+    # post-Phase-A0). `seed` is the sole vmap dimension; all other
+    # kwargs (env_name, wrappers, env, ...) are bound in
+    # `configured`.
+    def by_seed(seed: jax.Array) -> dict[str, jax.Array]:
+        return configured(seed=seed)
 
-    keys = jax.vmap(jax.random.PRNGKey)(
-        jnp.asarray(seeds, dtype=jnp.uint32),
-    )
+    seeds_arr = jnp.asarray(seeds, dtype=jnp.uint32)
     # Wrap the vmap call in trace_context so JAX's first-call
     # abstract-trace pass fires @claim records once; that single
     # pass IS the structural graph (per-(theory, intervention),
     # constant across seeds). build_computation_graph derives the
     # static call graph from the records.
     with trace_context() as records:
-        batched_record = jax.vmap(by_key)(keys)
+        batched_record = jax.vmap(by_seed)(seeds_arr)
     graph = build_computation_graph(records)
 
     # Side-effect import: registers DDQN measurables (q_mean,
@@ -272,12 +259,17 @@ def run_dqn_arm(
         wrapper_cols: dict[str, MeasurementLeaf] = {}
         for w in wrappers:
             wrapper_cols.update(w.measurement_keys())
+        # Post-Phase-A0: `env_name`, `seed`, `wrappers`,
+        # `total_steps` are surfaced by `walk_paths` and live in
+        # `leaf_measurements`. The per-cell `seed` value is
+        # re-stamped here to override the partial's default-0
+        # (vmap binds seed at call-time, not partial-bind-time, so
+        # walk_paths sees the default; we restate the actual
+        # per-cell value for the persisted column).
         measurements: dict[str, MeasurementLeaf] = {
-            'env_name': env_spec.name,
-            'seed': seed,
-            'total_steps': total_steps,
-            **wrapper_cols,
             **leaf_measurements,
+            'seed': seed,
+            **wrapper_cols,
             **measurable_cols,
         }
         # Per-cell verdict: a successfully-completed cell is HELD;

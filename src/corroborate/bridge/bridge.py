@@ -65,6 +65,7 @@ from corroborate.bridge.admission import (
 )
 from corroborate.bridge.analysis import resolve_for_holds_when
 from corroborate.bridge.verdict import Verdict
+from corroborate.core.claim import Claim
 from corroborate.core.hypothesis import PredictedDirection
 from corroborate.core.intervention import ArmRole, DoEffect
 from corroborate.measurables import Measurable, register
@@ -639,6 +640,8 @@ def _filter_with_missing_cols(
 def evaluate(
     bridge: Bridge,
     cells: pl.DataFrame | Iterable[Mapping[str, object]],
+    *,
+    claim: Claim[..., object] | None = None,
 ) -> BridgeEvaluation:
     """Run a bridge against a cell-set: apply `bridge.scope`
     as a polars filter, resolve each fixture (a `holds_when` parameter
@@ -658,6 +661,16 @@ def evaluate(
     before reaching analyses — analyses always see the column-name
     string regardless of whether the bridge declared the endpoint
     as a string or a `Measurable` instance.
+
+    `claim` (kw-only) is the substrate's outermost @claim — the
+    structural source of truth for endogeneity gating
+    (`exogenous_source`, `exogenous_scope`). When None, those
+    gates short-circuit with `gate-doesn't-apply` semantics; the
+    framework remains usable in tests and synthetic-corpus
+    contexts that have no substrate composition. Substrate
+    runners (cell_runner, scripts/run_hypothesis.py) thread
+    `claim=dqn` (or the substrate-level entry-point claim) so
+    the gates fire.
 
     Raises `TypeError` if the Bridge has no `holds_when` body —
     `@claim_bridge` always populates it; this guard catches direct
@@ -699,7 +712,7 @@ def evaluate(
     all_gates: tuple[AdmissionGate, ...] = AUTO_GATES + bridge.gates
     warnings: list[GateResult] = []
     for gate in all_gates:
-        result = gate(bridge, filtered_cells)
+        result = gate(bridge, filtered_cells, claim=claim)
         if result is None or result.passed:
             continue
         if result.level is GateLevel.BLOCK:

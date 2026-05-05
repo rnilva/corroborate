@@ -10,7 +10,7 @@ Three severity tiers per `ADMISSION_GATES_DESIGN.md`:
   etc.). Warning surfaces on `BridgeEvaluation.warnings`.
 - **INFO** — diagnostic note; not normally surfaced.
 
-A gate is a plain callable: `(bridge, filtered_cells) ->
+A gate is a plain callable: `(bridge, filtered_cells, *, claim) ->
 GateResult | None`. Returning None means "this gate doesn't
 apply to this bridge"; returning a `GateResult` with
 `passed=True` is informational; with `passed=False` triggers
@@ -20,23 +20,85 @@ The framework's auto-gates (`AUTO_GATES`) are unconditionally
 prepended to every bridge's `gates` tuple at `evaluate()`-time.
 Per-bridge `gates=(...)` declarations on `@claim_bridge`
 add to the auto-gate list.
+
+Endogeneity gating (`exogenous_source`, `exogenous_scope`)
+consumes the substrate's claim chain via the `claim` kwarg
+threaded by `evaluate()` — `is_endogenous(name, claim)` keys on
+`walk_paths(claim, regime='leaf')`. When `claim` is None
+(framework-only tests, synthetic-corpus contexts), those gates
+short-circuit. See `ENDOGENEITY_TOPOLOGY.md` for the three
+structural rules.
 """
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
+import functools
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 
+from corroborate.core.claim import Claim
 from corroborate.core.intervention import DoEffect
-from corroborate.measurables import registered_names
+from corroborate.core.signature import walk, walk_paths
+from corroborate.measurables import registered_names, transitive_reads
 
 
-def _endogenous_pool() -> frozenset[str]:
-    """Substrate-extensible endogenous frontier: registered
-    measurables ∪ framework-controlled metadata. Tuple →
-    frozenset so the gate's set-test stays O(1) amortised."""
-    return frozenset(registered_names()) | _STANDARD_METADATA
+@functools.cache
+def _claim_leaves(claim: Claim[..., object]) -> frozenset[str]:
+    """Cached union of `walk_paths(claim, regime='leaf')` and
+    `walk_paths(claim, regime='exogenous')` keys — every name the
+    walker recognises as a configurational primitive of the
+    substrate's outermost claim. Both regimes are author-set at
+    design time:
+
+    - `regime='leaf'`: arm-level config (`gamma`, `replay.capacity`,
+      `optimizer.inner.lr`, …).
+    - `regime='exogenous'`: per-cell framework-injected values
+      (`env`, `env_params`, `n_actions`, …) plus per-cell author
+      grid dimensions (`env_name`, `seed`, `wrappers`).
+
+    Both are exogenous from the gate's perspective — neither is
+    "produced by the cell running" — so the endogeneity classifier
+    needs the union. (Note: in current substrates with `Env` under
+    `TYPE_CHECKING`, the runtime regime detection collapses
+    everything to 'leaf' due to unresolved forward refs, so this
+    union is currently equal to `walk_paths(regime='leaf')`. The
+    union shape stays correct if forward-ref handling improves.)
+
+    FnClaim is hashable (frozen dataclass), so functools.cache
+    keys cleanly."""
+    sig = walk(claim)
+    leaves = frozenset(walk_paths(sig, regime='leaf').keys())
+    exogenous = frozenset(walk_paths(sig, regime='exogenous').keys())
+    return leaves | exogenous
+
+
+def is_endogenous(name: str, claim: Claim[..., object]) -> bool:
+    """Topological endogeneity test (cf. ENDOGENEITY_TOPOLOGY.md).
+
+    Three structural rules:
+
+    1. Leaf of `claim` → exogenous (author chose at design time).
+    2. Registered `@measurable` → recurse via `transitive_reads`;
+       endogenous iff any base case is itself outside `claim`'s
+       leaves.
+    3. Otherwise → cell-controlled primitive by elimination
+       (trajectory output) → endogenous.
+
+    A measurable closing only over leaves classifies as exogenous
+    — this catches the Phase-1 `effective_horizon = 1/(1-γ)`
+    loophole (closure was just `{gamma}`, all in leaves). The
+    redefinition `1/(1-γ·bf)` adds `bootstrap_fraction` to the
+    closure; that measurable reads `done` (a trajectory key, not
+    in leaves) → endogenous → bridges sourced through
+    `effective_horizon` clear the gate."""
+    leaves = _claim_leaves(claim)
+    if name in leaves:
+        return False
+    if name not in registered_names():
+        return True
+    return any(r not in leaves for r in transitive_reads(name))
+
 
 if TYPE_CHECKING:
     from corroborate.bridge.bridge import Bridge
@@ -67,31 +129,23 @@ class GateResult:
     message: str
 
 
-# Plain-callable Protocol for admission gates. A gate is just a
-# function; tuple-of-gates composes via `+`. No combinator class.
-type AdmissionGate = Callable[
-    ['Bridge', Sequence[Mapping[str, object]]],
-    GateResult | None,
-]
-
-
-# Framework-controlled provenance / metadata columns shared
-# across substrates. Always counted as endogenous for
-# scope/source admission. Substrates extend the endogenous
-# frontier by registering more `@measurable` columns.
-_STANDARD_METADATA: frozenset[str] = frozenset({
-    'env_name',
-    'seed',
-    'id',
-    'arm_key',
-    'corpus',
-    'cycle_id',
-    'parent_id',
-    'timestamp',
-    'verdict',
-    'intervention_name',  # legacy column kept for back-compat
-    'parent_cycle_id',
-})
+# Protocol for admission gates. `claim` is the substrate's
+# outermost @claim threaded through evaluate() — endogeneity
+# gates close over its leaf set; gates that don't need it
+# ignore the kwarg. We use Protocol (not Callable) so the
+# kw-only `claim` parameter is part of the typed contract.
+class AdmissionGate(Protocol):
+    """Typed callable: a gate runs against (bridge, cells) plus
+    the substrate's outermost claim, returns a `GateResult` (with
+    `passed=True/False` for a fired/silent verdict) or `None`
+    when the gate doesn't apply to this bridge."""
+    def __call__(
+        self,
+        bridge: 'Bridge',
+        cells: Sequence[Mapping[str, object]],
+        *,
+        claim: Claim[..., object] | None = None,
+    ) -> GateResult | None: ...
 
 
 # ============ Auto-gates ============
@@ -100,12 +154,14 @@ _STANDARD_METADATA: frozenset[str] = frozenset({
 def distinct_arms(
     bridge: 'Bridge',
     cells: Sequence[Mapping[str, object]],
+    *,
+    claim: Claim[..., object] | None = None,
 ) -> GateResult | None:
     """BLOCK: a `DoEffect`-sourced bridge whose treatment and
     baseline arms produce identical canonical_str is structurally
     self-vs-self. Replaces today's `paired_g` runtime ValueError
     with a clean Verdict.INADMISSIBLE."""
-    del cells  # not consulted
+    del cells, claim  # not consulted
     if not isinstance(bridge.source, DoEffect):
         return None
     if bridge.source.treatment_arm_key() == bridge.source.baseline_arm_key():
@@ -124,17 +180,60 @@ def distinct_arms(
     return None
 
 
+def resolved_source(
+    bridge: 'Bridge',
+    cells: Sequence[Mapping[str, object]],
+    *,
+    claim: Claim[..., object] | None = None,
+) -> GateResult | None:
+    """BLOCK: Bridge.source string references a column not
+    present in the filtered cells. Catches typo'd source names
+    (e.g. `'mc_returns'` for `'mc_return'`) at gate time with a
+    clear message; orthogonal to `EXOGENOUS_SOURCE`. DoEffect
+    sources don't apply (no string column to validate)."""
+    del claim
+    source = bridge.source
+    if isinstance(source, DoEffect):
+        return None
+    name = source if isinstance(source, str) else source.name
+    if not cells:
+        return None  # empty corpus — let downstream surface the issue
+    available = frozenset(cells[0].keys())
+    if name in available:
+        return None
+    return GateResult(
+        gate_name='resolved_source',
+        level=GateLevel.BLOCK,
+        passed=False,
+        message=(
+            f'Bridge {bridge.name!r} sources on column {name!r} '
+            f'which is not in the filtered cells. Likely a typo '
+            f'or a measurable not materialised in this corpus; '
+            f'first 20 available columns: '
+            f'{sorted(available)[:20]}.'
+        ),
+    )
+
+
 def exogenous_source(
     bridge: 'Bridge',
     cells: Sequence[Mapping[str, object]],
+    *,
+    claim: Claim[..., object] | None = None,
 ) -> GateResult | None:
     """BLOCK: `Tier.INTERVENTIONAL` (Pearl rung-2) bridges
-    require an *endogenous* source — a registered measurable or
-    standard metadata, OR a DoEffect of Claim-shaped
-    Interventions. HP knobs (`gamma`, `n_step`, etc.) sourced
-    directly into a causal claim are blocked; the substrate
-    must surface the endogenous delegate (`effective_horizon`,
-    `q_divergence_score`) and source the bridge through it.
+    require an *endogenous* source — a registered measurable
+    whose closure transitively touches a non-leaf, OR a
+    DoEffect of Claim-shaped Interventions. HP knobs (`gamma`,
+    `n_step`, etc.) sourced directly into a causal claim are
+    blocked; the substrate must surface the endogenous delegate
+    (`effective_horizon`, `q_divergence_score`) and source the
+    bridge through it.
+
+    Endogeneity is keyed on `walk_paths(claim, regime='leaf')`;
+    when `claim` is None (framework-only tests, synthetic
+    contexts), the gate short-circuits — substrates that want
+    the rule enforced thread `claim=` through `evaluate()`.
 
     Per ADMISSION_GATES_DESIGN.md § Principle (exogenous vs
     endogenous)."""
@@ -169,10 +268,11 @@ def exogenous_source(
                 ),
             )
         return None
-    # str / Measurable source: must reference a registered
-    # measurable or standard metadata.
+    # str / Measurable source: needs claim to test endogeneity.
+    if claim is None:
+        return None  # gate doesn't apply without substrate context
     name = source if isinstance(source, str) else source.name
-    if name in _endogenous_pool():
+    if is_endogenous(name, claim):
         return None
     return GateResult(
         gate_name='exogenous_source',
@@ -180,10 +280,13 @@ def exogenous_source(
         passed=False,
         message=(
             f'Tier.INTERVENTIONAL bridge {bridge.name!r} sourced '
-            f'on {name!r} which is not a registered measurable '
-            f'nor standard metadata. Causal claims require an '
-            f'endogenous source — find the delegate. See '
-            f'ADMISSION_GATES_DESIGN.md § Principle.'
+            f'on {name!r}, which is a leaf of the outermost '
+            f'claim (author-controlled at design time, not '
+            f'produced by the cell). Causal claims require an '
+            f'endogenous source — find the delegate (e.g., '
+            f'`effective_horizon` for γ, `q_divergence_score` '
+            f'for sync_period). See ADMISSION_GATES_DESIGN.md § '
+            f'Principle.'
         ),
     )
 
@@ -191,33 +294,37 @@ def exogenous_source(
 def exogenous_scope(
     bridge: 'Bridge',
     cells: Sequence[Mapping[str, object]],
+    *,
+    claim: Claim[..., object] | None = None,
 ) -> GateResult | None:
-    """WARN: `Bridge.scope` references only exogenous (HP-leaf)
-    columns. The principled scope-axis is endogenous; HP envelopes
-    (`_FOURROOMS_REGIME = lr == 1e-4`) are a temporary substitute
-    until the substrate ships an endogenous predicate.
+    """WARN: `Bridge.scope` references only exogenous columns
+    (leaves of the substrate's outermost claim). The principled
+    scope-axis is endogenous; HP envelopes (`_FOURROOMS_REGIME =
+    lr == 1e-4`) are a temporary substitute until the substrate
+    ships an endogenous predicate.
 
-    Detection is free: walks the polars expression's referenced
-    column names and cross-references against the substrate's
-    registered measurables + standard metadata."""
+    Endogeneity is keyed on `walk_paths(claim, regime='leaf')`;
+    when `claim` is None, the gate short-circuits."""
     del cells
     if bridge.scope is None:
         return None
+    if claim is None:
+        return None
     referenced = set(bridge.scope.meta.root_names())
-    pool = _endogenous_pool()
-    endogenous = referenced & pool
-    exogenous = referenced - pool
+    endogenous = {n for n in referenced if is_endogenous(n, claim)}
+    exogenous = referenced - endogenous
     if exogenous and not endogenous:
         return GateResult(
             gate_name='exogenous_scope',
             level=GateLevel.WARN,
             passed=False,
             message=(
-                f'Bridge.scope references only exogenous (HP-leaf) '
-                f'columns: {sorted(exogenous)!r}. The principled '
-                f'scope-axis is endogenous (cf. ANALYSIS_RECIPE.md '
-                f'§0); HP envelopes are a temporary substitute. '
-                f'See FUTURE_WORKS "Endogenous-variable scope '
+                f'Bridge.scope references only exogenous (leaves '
+                f"of the outermost claim) columns: "
+                f'{sorted(exogenous)!r}. The principled scope-axis '
+                f'is endogenous (cf. ANALYSIS_RECIPE.md §0); HP '
+                f'envelopes are a temporary substitute. See '
+                f'FUTURE_WORKS "Endogenous-variable scope '
                 f'predicates".'
             ),
         )
@@ -227,13 +334,15 @@ def exogenous_scope(
 def no_predicted_direction(
     bridge: 'Bridge',
     cells: Sequence[Mapping[str, object]],
+    *,
+    claim: Claim[..., object] | None = None,
 ) -> GateResult | None:
     """INFO: bridge didn't declare `predicted_direction`. The
     verdict can't distinguish "wrong sign" from "small effect"
     via `verdict_from_paired_stats`; sign-flip refutations are
     silently absorbed as NO_EFFECT. Author-friendly diagnostic;
     not a bug."""
-    del cells
+    del cells, claim
     if bridge.predicted_direction is not None:
         return None
     return GateResult(
@@ -254,8 +363,13 @@ def no_predicted_direction(
 
 # Auto-gates run on every bridge before its body. Per-bridge
 # `gates=(...)` are appended to this tuple at evaluate-time.
+# `resolved_source` runs first so a typo'd source surfaces with
+# the column-existence message before `exogenous_source`'s
+# leaf-test, which would otherwise classify the absent name as
+# endogenous-by-elimination and silently pass.
 AUTO_GATES: tuple[AdmissionGate, ...] = (
     distinct_arms,
+    resolved_source,
     exogenous_source,
     exogenous_scope,
     no_predicted_direction,
@@ -270,5 +384,7 @@ __all__ = [
     'distinct_arms',
     'exogenous_scope',
     'exogenous_source',
+    'is_endogenous',
     'no_predicted_direction',
+    'resolved_source',
 ]

@@ -311,8 +311,11 @@ with the matching `name` from the `warnings` field.
 `DISTINCT_ARMS` and `RESOLVED_FIXTURES` are ports of existing
 runtime checks; `EXOGENOUS_SOURCE`, `EXOGENOUS_SCOPE` and
 `NO_PREDICTED_DIRECTION` are new. `EXOGENOUS_SOURCE` and
-`EXOGENOUS_SCOPE` consume the substrate's endogenous-column
-registry (see § Substrate registry, below).
+`EXOGENOUS_SCOPE` consume the topological endogeneity test —
+`is_endogenous(name, leaves)` where `leaves =
+walk_paths(substrate.outermost_claim).leaves` (see
+§ Endogeneity from topology, below; full design in
+`ENDOGENEITY_TOPOLOGY.md`).
 
 ### L4 (per-bridge declarations) — substrate-shipped gates
 
@@ -329,11 +332,9 @@ registry (see § Substrate registry, below).
 def check(bridge: Bridge, cells: ...) -> GateResult | None:
     if bridge.scope is None:
         return None
+    leaves = _substrate_leaves()  # walk_paths(outermost_claim).leaves, cached
     referenced = set(bridge.scope.meta.root_names())
-    endogenous = referenced & (
-        registered_names()           # @measurable-registered columns
-        | _STANDARD_METADATA         # 'env_name', 'seed', 'id', ...
-    )
+    endogenous = {n for n in referenced if is_endogenous(n, leaves)}
     exogenous = referenced - endogenous
     if exogenous and not endogenous:
         return GateResult(
@@ -341,12 +342,12 @@ def check(bridge: Bridge, cells: ...) -> GateResult | None:
             level=GateLevel.WARN,
             passed=False,
             message=(
-                f'Bridge.scope references only exogenous (HP-leaf) '
-                f'columns: {sorted(exogenous)}. The principled '
-                f'scope-axis is endogenous (cf. ANALYSIS_RECIPE.md '
-                f'§0); HP envelopes are a temporary substitute. '
-                f'See FUTURE_WORKS "Endogenous-variable scope '
-                f'predicates".'
+                f'Bridge.scope references only exogenous (leaves of '
+                f'the outermost claim): {sorted(exogenous)}. The '
+                f'principled scope-axis is endogenous (cf. '
+                f'ANALYSIS_RECIPE.md §0); HP envelopes are a temporary '
+                f'substitute. See FUTURE_WORKS "Endogenous-variable '
+                f'scope predicates".'
             ),
         )
     return None
@@ -386,7 +387,8 @@ def check(bridge: Bridge, cells: ...) -> GateResult | None:
         return None
     # str / Measurable source: must reference an endogenous column.
     name = source if isinstance(source, str) else source.name
-    if name in (registered_names() | _STANDARD_METADATA):
+    leaves = _substrate_leaves()
+    if is_endogenous(name, leaves):
         return None
     return GateResult(
         gate_name='exogenous_source',
@@ -394,43 +396,17 @@ def check(bridge: Bridge, cells: ...) -> GateResult | None:
         passed=False,
         message=(
             f'Tier.INTERVENTIONAL bridge {bridge.name!r} sourced on '
-            f'{name!r} which is not a registered measurable nor '
-            f'standard metadata. Causal claims require an endogenous '
-            f'source — find the delegate. See § Principle.'
+            f'{name!r}, which is a leaf of the outermost claim '
+            f'(author-controlled at design time, not produced by the '
+            f'cell). Causal claims require an endogenous source — '
+            f'find the delegate (e.g., effective_horizon for γ, '
+            f'q_divergence_score for sync_period). See § Principle.'
         ),
     )
 ```
 
 `NO_PREDICTED_DIRECTION` is even simpler: check
 `bridge.predicted_direction is None`.
-
-## Substrate registry (L2)
-
-Both `EXOGENOUS_SOURCE` and `EXOGENOUS_SCOPE` need to know what
-counts as "endogenous." The framework can't decide on its own —
-that distinction is substrate-specific (RL substrate's
-`q_divergence_score` is endogenous; an NLP substrate's columns
-will differ). The framework provides:
-
-- `registered_names() -> frozenset[str]` — every
-  `@measurable`-decorated column the substrate has registered.
-- `_STANDARD_METADATA: frozenset[str] = frozenset({
-    'env_name', 'seed', 'id', 'arm_key', 'corpus', 'cycle_id',
-    'parent_id', 'timestamp', ...})` — framework-controlled
-  provenance columns; same on every substrate.
-
-The substrate populates `registered_names()` by importing its
-measurable modules (the existing
-`import corroborate_rl.dqn.measurables  # populate registry`
-pattern). When the cache materialises a column produced by a
-registered measurable, the gate accepts it.
-
-This means the substrate's "endogenous frontier" widens by adding
-new `@measurable`-decorated functions. To promote `gamma` from
-exogenous-HP to endogenous-mediator, the substrate authors a
-measurable like `effective_horizon` (which already exists) and
-sources causal bridges through it. The HP-leaf `gamma` itself
-stays exogenous.
 
 `DISTINCT_ARMS` for DoEffect:
 
@@ -452,6 +428,66 @@ def check(bridge: Bridge, cells: ...) -> GateResult | None:
         )
     return None
 ```
+
+## Endogeneity from topology
+
+What counts as "endogenous" is derived from substrate topology,
+not a separately-curated registry. Full design:
+`ENDOGENEITY_TOPOLOGY.md`. Summary:
+
+The substrate's outermost claim function — the function the
+runner ultimately calls to produce one cell — IS the substrate's
+full structural composition. Its leaves are the author-controlled
+primitives: every value the experimenter set at design time (HP
+leaves AND grid dimensions, in one source of truth).
+
+The framework provides `is_endogenous(name, leaves)`:
+
+```python
+@functools.cache
+def is_endogenous(name: str, leaves: frozenset[str]) -> bool:
+    """Three structural rules:
+    1. Leaf of the outermost claim → exogenous (author chose).
+    2. Registered measurable → recurse over `transitive_reads`;
+       endogenous iff any base case is itself endogenous.
+    3. Otherwise → cell-controlled primitive by elimination
+       (trajectory output) → endogenous.
+    """
+    if name in leaves:
+        return False
+    if name not in registered_names():
+        return True
+    closure = transitive_reads(name)
+    return any(r not in leaves for r in closure)
+```
+
+The substrate registers its outermost claim once at module load
+(matching how `@measurable` populates the measurable registry):
+
+```python
+from corroborate.bridge.admission import register_outermost_claim
+from corroborate_rl.dqn.experiment import experiment
+register_outermost_claim(experiment)
+```
+
+`_substrate_leaves()` caches `walk_paths(experiment).leaves` for
+the gates. Adding a new HP knob → new leaf → new exogenous
+primitive automatically. Adding a new grid dimension → likewise.
+No registry to keep in sync.
+
+The substrate's "endogenous frontier" widens by writing new
+measurables. A measurable whose `reads=` declaration touches a
+trajectory key (directly or transitively) is endogenous; one
+that closes over only leaves of the outermost claim is exogenous.
+The author's lever is the `reads=` declaration; topology decides.
+
+There is no `_STANDARD_METADATA` constant. Framework provenance
+columns (`id`, `arm_key`, `corpus`, …) classify as endogenous by
+elimination (rule 3) — they're neither leaves nor measurables —
+but no real bridge sources on them. If one accidentally does, a
+separate `RESOLVED_SOURCE` gate (Q2 in
+`ENDOGENEITY_TOPOLOGY.md`) catches the column-validity question
+at evaluate time.
 
 ## Reporting integration
 
@@ -596,16 +632,18 @@ until cross-bridge constraints have a concrete consumer.
   bridge can still produce a verdict on a non-principled axis),
   an INTERVENTIONAL claim sourced on an HP knob has no clean
   causal interpretation; the gate refuses to admit it.
-- **Registry location.** Substrate-side. The framework provides
-  `registered_names()` (built from `@measurable`-decorated
-  columns the substrate registers via import) plus
-  `_STANDARD_METADATA` (framework-controlled). The substrate
-  doesn't ship a separate "admitted leaves" list — the
-  endogenous frontier IS the registered-measurable set. To
-  elevate a leaf scalar to causal-claim sourcing, the substrate
-  authors a measurable that delegates the leaf (e.g.,
-  `effective_horizon` for γ, `q_divergence_score` for
-  `sync_period`).
+- **Registry location.** None — endogeneity is derived from
+  substrate topology (`ENDOGENEITY_TOPOLOGY.md`). The substrate
+  registers its outermost claim function via
+  `register_outermost_claim(experiment)`; the framework computes
+  leaves once via `walk_paths` and uses
+  `is_endogenous(name, leaves)` at gate time. No
+  `_STANDARD_METADATA` constant; no separate "admitted leaves"
+  list. To elevate a leaf scalar to causal-claim sourcing, the
+  substrate authors a measurable whose `reads=` closure
+  transitively touches trajectory data (e.g., `effective_horizon
+  = 1/(1−γ·bf)` whose closure includes `done` via
+  `bootstrap_fraction`).
 - **Why no `LeafIntervention` typing widening.** The principle
   ("INTERVENTIONAL → endogenous source") is enforced at the gate
   level, not via type system. Widening

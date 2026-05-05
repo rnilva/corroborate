@@ -102,8 +102,18 @@ from corroborate.measurables.reductions import from_key, reduce_axis
 from corroborate_rl.dqn.claims.bootstrap import (
     adaptive_dormancy_greedify, bootstrap, double_greedify,
 )
+from corroborate_rl.dqn.dqn import dqn
 from corroborate_rl.dqn.measurables import jensen_bias_per_eps
 from corroborate.bridge.verdict import Verdict
+
+
+# Outermost claim for endogeneity gating (cf. ENDOGENEITY_TOPOLOGY.md).
+# The runner threads this to `evaluate(..., claim=CLAIM)` so the
+# admission gates (`exogenous_source`, `exogenous_scope`) consult
+# `walk_paths(CLAIM, regime='leaf')` for the substrate's author-
+# primitive set — leaves like `gamma`, `replay.capacity`,
+# `env_name`, `seed`, ...
+CLAIM = dqn
 
 
 # Composed per-burst reductions consumed by bridges below. Module-

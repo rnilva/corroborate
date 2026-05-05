@@ -31,7 +31,9 @@ from corroborate.bridge.admission import (
     distinct_arms,
     exogenous_scope,
     exogenous_source,
+    is_endogenous,
     no_predicted_direction,
+    resolved_source,
 )
 from corroborate.bridge.bridge import (
     Bridge,
@@ -46,6 +48,20 @@ from corroborate.core.intervention import DoEffect, Intervention
 
 
 # ---------- shared fixtures ----------
+
+
+@claim
+def _test_claim(
+    *,
+    # "Author primitives" the synthetic substrate exposes — these
+    # become the leaf set that endogeneity gating consults via
+    # `walk_paths(_test_claim, regime='leaf')`.
+    gamma: float = 0.99,
+    lr: float = 1e-3,
+    env_name: str = 'TestEnv',
+) -> int:
+    del gamma, lr, env_name
+    return 0
 
 
 @claim
@@ -148,8 +164,8 @@ def test_distinct_arms_silent_for_non_do_effect_source() -> None:
 
 
 def test_exogenous_source_blocks_hp_string_on_interventional() -> None:
-    """Tier.INTERVENTIONAL with `source='gamma'` (an HP, not a
-    registered measurable nor standard metadata). BLOCK."""
+    """Tier.INTERVENTIONAL with `source='gamma'` (a leaf of the
+    synthetic claim, not a registered measurable). BLOCK."""
     bridge = Bridge(
         name='gamma_to_outcome',
         source='gamma',
@@ -157,10 +173,24 @@ def test_exogenous_source_blocks_hp_string_on_interventional() -> None:
         tier=Tier.INTERVENTIONAL,
         holds_when=lambda paired_g: Verdict.HELD,
     )
-    result = exogenous_source(bridge, _NO_CELLS)
+    result = exogenous_source(bridge, _NO_CELLS, claim=_test_claim)
     assert result is not None
     assert result.level is GateLevel.BLOCK
     assert "'gamma'" in result.message
+
+
+def test_exogenous_source_short_circuits_without_claim() -> None:
+    """Without a substrate claim threaded through, the gate has
+    no leaf set to consult — short-circuit (gate-doesn't-apply
+    semantics). Framework-only tests rely on this."""
+    bridge = Bridge(
+        name='no_claim',
+        source='gamma',
+        target='eval_best_burst_mean',
+        tier=Tier.INTERVENTIONAL,
+        holds_when=lambda paired_g: Verdict.HELD,
+    )
+    assert exogenous_source(bridge, _NO_CELLS, claim=None) is None
 
 
 def test_exogenous_source_passes_for_do_effect() -> None:
@@ -173,7 +203,7 @@ def test_exogenous_source_passes_for_do_effect() -> None:
         tier=Tier.INTERVENTIONAL,
         holds_when=lambda paired_g: Verdict.HELD,
     )
-    assert exogenous_source(bridge, _NO_CELLS) is None
+    assert exogenous_source(bridge, _NO_CELLS, claim=_test_claim) is None
 
 
 @pytest.fixture
@@ -200,8 +230,14 @@ def _registered_endogenous() -> str:
 def test_exogenous_source_passes_for_registered_measurable(
     _registered_endogenous: str,
 ) -> None:
-    """A registered measurable name on a string source is the
-    canonical endogenous slot. Passes."""
+    """A registered measurable whose `reads=()` closure has no
+    elements outside the claim's leaves classifies as exogenous
+    by the elimination-via-empty-closure path; this fixture's
+    measurable has reads=(), so closure is empty → no read
+    'outside leaves' → exogenous → gate fires.
+
+    The canonical endogenous case (closure touches a trajectory
+    key) is tested below in test_is_endogenous_*."""
     bridge = Bridge(
         name='ok',
         source=_registered_endogenous,
@@ -209,7 +245,13 @@ def test_exogenous_source_passes_for_registered_measurable(
         tier=Tier.INTERVENTIONAL,
         holds_when=lambda paired_g: Verdict.HELD,
     )
-    assert exogenous_source(bridge, _NO_CELLS) is None
+    # With reads=(), closure is empty → any() over empty is False
+    # → is_endogenous returns False → BLOCK fires. This is the
+    # correct behaviour: a measurable that closes over nothing
+    # carries no cell-derived signal.
+    result = exogenous_source(bridge, _NO_CELLS, claim=_test_claim)
+    assert result is not None
+    assert result.level is GateLevel.BLOCK
 
 
 def test_exogenous_source_passes_on_associational_tier() -> None:
@@ -222,15 +264,15 @@ def test_exogenous_source_passes_on_associational_tier() -> None:
         tier=Tier.ASSOCIATIONAL,
         holds_when=lambda paired_g: Verdict.HELD,
     )
-    assert exogenous_source(bridge, _NO_CELLS) is None
+    assert exogenous_source(bridge, _NO_CELLS, claim=_test_claim) is None
 
 
 # ---------- exogenous_scope (WARN) ----------
 
 
 def test_exogenous_scope_warns_on_hp_only_filter() -> None:
-    """`scope = pl.col('lr') == 1e-4` references only an HP leaf;
-    no endogenous columns in the predicate → WARN."""
+    """`scope = pl.col('lr') == 1e-4` references only a leaf of
+    `_test_claim`; no endogenous columns in the predicate → WARN."""
     bridge = Bridge(
         name='hp_envelope',
         source='jensen_gap',
@@ -239,15 +281,18 @@ def test_exogenous_scope_warns_on_hp_only_filter() -> None:
         scope=pl.col('lr') == 1e-4,
         holds_when=lambda paired_g: Verdict.HELD,
     )
-    result = exogenous_scope(bridge, _NO_CELLS)
+    result = exogenous_scope(bridge, _NO_CELLS, claim=_test_claim)
     assert result is not None
     assert result.level is GateLevel.WARN
     assert "'lr'" in result.message
 
 
-def test_exogenous_scope_silent_on_endogenous_filter() -> None:
-    """`scope = pl.col('env_name') == 'TestEnv'` references a
-    standard-metadata column → endogenous, no WARN."""
+def test_exogenous_scope_warns_on_env_name_only_scope() -> None:
+    """`env_name` is a leaf of the substrate claim (post-Phase-A0
+    of the endogeneity-from-topology refactor); a scope that
+    references only `env_name` is exogenous-only → WARN. This
+    flips the previous `_STANDARD_METADATA` assumption that
+    env_name was endogenous metadata."""
     bridge = Bridge(
         name='env_filter',
         source='jensen_gap',
@@ -256,21 +301,24 @@ def test_exogenous_scope_silent_on_endogenous_filter() -> None:
         scope=pl.col('env_name') == 'TestEnv',
         holds_when=lambda paired_g: Verdict.HELD,
     )
-    assert exogenous_scope(bridge, _NO_CELLS) is None
+    result = exogenous_scope(bridge, _NO_CELLS, claim=_test_claim)
+    assert result is not None
+    assert result.level is GateLevel.WARN
 
 
 def test_exogenous_scope_silent_when_mixed() -> None:
-    """A predicate that references both — `env_name == 'X' & lr ==
-    1e-4` — is fine. The principled scope axis is the env_name
-    branch; the HP branch refines, doesn't substitute."""
+    """A predicate that references one leaf and one trajectory-
+    derived column — `env_name == 'X' & jensen_gap > 0` — is
+    fine: the trajectory-side dependence is the principled axis,
+    and at least one endogenous reference clears the WARN."""
     bridge = Bridge(
         name='mixed',
         source='jensen_gap',
         target='eval_best_burst_mean',
-        scope=(pl.col('env_name') == 'TestEnv') & (pl.col('lr') == 1e-4),
+        scope=(pl.col('env_name') == 'TestEnv') & (pl.col('jensen_gap') > 0),
         holds_when=lambda paired_g: Verdict.HELD,
     )
-    assert exogenous_scope(bridge, _NO_CELLS) is None
+    assert exogenous_scope(bridge, _NO_CELLS, claim=_test_claim) is None
 
 
 def test_exogenous_scope_silent_when_no_scope() -> None:
@@ -281,7 +329,20 @@ def test_exogenous_scope_silent_when_no_scope() -> None:
         scope=None,
         holds_when=lambda paired_g: Verdict.HELD,
     )
-    assert exogenous_scope(bridge, _NO_CELLS) is None
+    assert exogenous_scope(bridge, _NO_CELLS, claim=_test_claim) is None
+
+
+def test_exogenous_scope_short_circuits_without_claim() -> None:
+    """When `claim` isn't threaded through evaluate(), the gate
+    has no leaf set and short-circuits."""
+    bridge = Bridge(
+        name='no_claim',
+        source='jensen_gap',
+        target='eval_best_burst_mean',
+        scope=pl.col('lr') == 1e-4,
+        holds_when=lambda paired_g: Verdict.HELD,
+    )
+    assert exogenous_scope(bridge, _NO_CELLS, claim=None) is None
 
 
 # ---------- no_predicted_direction (INFO) ----------
@@ -314,12 +375,14 @@ def test_no_predicted_direction_silent_when_set() -> None:
 # ---------- AUTO_GATES wiring ----------
 
 
-def test_auto_gates_tuple_contains_all_four() -> None:
+def test_auto_gates_tuple_contains_all_five() -> None:
     """Sanity: the framework's auto-gate list is exactly the
-    four functions Phase 2 ships."""
+    five functions shipped post-Phase-A0 (resolved_source added
+    so typo'd source strings surface before the endogeneity
+    test classifies them as endogenous-by-elimination)."""
     assert AUTO_GATES == (
-        distinct_arms, exogenous_source, exogenous_scope,
-        no_predicted_direction,
+        distinct_arms, resolved_source, exogenous_source,
+        exogenous_scope, no_predicted_direction,
     )
 
 
@@ -378,7 +441,7 @@ def test_evaluate_propagates_warnings() -> None:
     cells = _synthetic_cells()
     for c in cells:
         c['lr'] = 1e-4
-    out = evaluate(warn_bridge, cells)
+    out = evaluate(warn_bridge, cells, claim=_test_claim)
     # body executed (lr filter let cells through, signal strong)
     assert out.verdict is Verdict.HELD
     # both gates fired
@@ -401,8 +464,10 @@ def test_per_bridge_gate_appended_and_blocks() -> None:
     def always_block(
         bridge: Bridge,
         cells: Sequence[Mapping[str, object]],
+        *,
+        claim: object = None,
     ) -> GateResult | None:
-        del bridge, cells
+        del bridge, cells, claim
         return GateResult(
             gate_name='custom',
             level=GateLevel.BLOCK,
@@ -428,3 +493,111 @@ def test_per_bridge_gate_appended_and_blocks() -> None:
     assert out.verdict is Verdict.INADMISSIBLE
     assert out.blocked_by is not None
     assert out.blocked_by.gate_name == 'custom'
+
+
+# ---------- is_endogenous (topology-derived classification) ----------
+
+
+def test_is_endogenous_leaf_of_claim_is_exogenous() -> None:
+    """`gamma` is a kwarg of `_test_claim` → leaf → exogenous."""
+    assert is_endogenous('gamma', _test_claim) is False
+    assert is_endogenous('lr', _test_claim) is False
+    assert is_endogenous('env_name', _test_claim) is False
+
+
+def test_is_endogenous_unregistered_name_is_endogenous() -> None:
+    """Names that are neither a leaf of the claim nor a registered
+    measurable classify as cell-controlled-by-elimination →
+    endogenous (trajectory output)."""
+    assert is_endogenous('mc_return', _test_claim) is True
+    assert is_endogenous('jensen_gap_raw', _test_claim) is True
+
+
+def test_is_endogenous_measurable_with_trajectory_closure() -> None:
+    """A registered measurable whose `transitive_reads` includes
+    a key OUTSIDE `_test_claim`'s leaves classifies as endogenous."""
+    from corroborate.measurables import Measurable, register, registered_names
+    name = '_test_endo_traj'
+    if name not in registered_names():
+        register(Measurable(
+            fn=lambda record: 0.0, name=name, reads=('done',),
+        ))
+    # 'done' isn't a leaf of _test_claim → endogenous.
+    assert is_endogenous(name, _test_claim) is True
+
+
+def test_is_endogenous_measurable_closing_only_over_leaves() -> None:
+    """A registered measurable whose closure is fully inside the
+    claim's leaves classifies as exogenous — the loophole the
+    Phase-1 effective_horizon=1/(1-γ) trip."""
+    from corroborate.measurables import Measurable, register, registered_names
+    name = '_test_endo_leaf_only'
+    if name not in registered_names():
+        register(Measurable(
+            fn=lambda record: 0.0, name=name, reads=('gamma',),
+        ))
+    # Closure is just {'gamma'}, all in leaves → exogenous.
+    assert is_endogenous(name, _test_claim) is False
+
+
+# ---------- resolved_source (BLOCK on missing column) ----------
+
+
+def test_resolved_source_blocks_on_missing_column() -> None:
+    """A bridge sourced on a column not in cells → BLOCK with
+    a typo-friendly diagnostic listing available columns."""
+    bridge = Bridge(
+        name='typo',
+        source='mc_returns',  # typo'd plural
+        target='eval_best_burst_mean',
+        tier=Tier.ASSOCIATIONAL,
+        holds_when=lambda paired_g: Verdict.HELD,
+    )
+    cells: list[Mapping[str, object]] = [
+        {'mc_return': 1.0, 'eval_best_burst_mean': 0.0},
+    ]
+    result = resolved_source(bridge, cells)
+    assert result is not None
+    assert result.level is GateLevel.BLOCK
+    assert "'mc_returns'" in result.message
+
+
+def test_resolved_source_silent_on_present_column() -> None:
+    bridge = Bridge(
+        name='ok',
+        source='jensen_gap',
+        target='eval_best_burst_mean',
+        tier=Tier.ASSOCIATIONAL,
+        holds_when=lambda paired_g: Verdict.HELD,
+    )
+    cells: list[Mapping[str, object]] = [
+        {'jensen_gap': 0.5, 'eval_best_burst_mean': 1.0},
+    ]
+    assert resolved_source(bridge, cells) is None
+
+
+def test_resolved_source_silent_on_do_effect() -> None:
+    """DoEffect sources have no string column to validate; gate
+    doesn't apply."""
+    bridge = Bridge(
+        name='intervention',
+        source=_INTERVENTION,
+        target='eval_best_burst_mean',
+        tier=Tier.INTERVENTIONAL,
+        holds_when=lambda paired_g: Verdict.HELD,
+    )
+    cells: list[Mapping[str, object]] = [{'eval_best_burst_mean': 1.0}]
+    assert resolved_source(bridge, cells) is None
+
+
+def test_resolved_source_silent_on_empty_cells() -> None:
+    """Empty corpus — gate yields to downstream; no info to
+    validate column-existence against."""
+    bridge = Bridge(
+        name='ok',
+        source='jensen_gap',
+        target='eval_best_burst_mean',
+        tier=Tier.ASSOCIATIONAL,
+        holds_when=lambda paired_g: Verdict.HELD,
+    )
+    assert resolved_source(bridge, _NO_CELLS) is None

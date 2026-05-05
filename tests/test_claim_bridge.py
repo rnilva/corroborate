@@ -192,7 +192,10 @@ def test_unknown_fixture_raises() -> None:
         del not_a_real_analysis
         return Verdict.HELD
 
-    cells: list[Mapping[str, object]] = [{'env_name': 'X'}]
+    # `x` and `y` columns must exist in cells so RESOLVED_SOURCE
+    # passes — the test exercises the fixture-resolution path,
+    # not gate behaviour.
+    cells: list[Mapping[str, object]] = [{'x': 0.0, 'y': 0.0, 'env_name': 'X'}]
     with pytest.raises(KeyError, match='not_a_real_analysis'):
         _ = evaluate(broken, cells)
 
@@ -414,7 +417,9 @@ def test_evaluate_forwards_predicted_direction_to_analyses() -> None:
         del _captures_pd
         return Verdict.HELD
 
-    cells: list[Mapping[str, object]] = [{'env_name': 'X'}]
+    cells: list[Mapping[str, object]] = [
+        {'A': 0.0, 'B': 0.0, 'env_name': 'X'},
+    ]
     _ = evaluate(consumer, cells)
     assert captured['predicted_direction'] == 'a_lt_b'
 

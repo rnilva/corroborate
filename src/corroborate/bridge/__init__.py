@@ -31,7 +31,9 @@ from corroborate.bridge.admission import (
     distinct_arms,
     exogenous_scope,
     exogenous_source,
+    is_endogenous,
     no_predicted_direction,
+    resolved_source,
 )
 from corroborate.bridge.analysis import (
     Analysis,
@@ -78,6 +80,8 @@ __all__ = [
     'finite_gt',
     'finite_le',
     'finite_lt',
+    'is_endogenous',
     'no_predicted_direction',
     'partition_aggregate',
+    'resolved_source',
 ]
