@@ -649,6 +649,25 @@ def test_compare_pc_depths_chain_unaffected_by_depth_increase() -> None:
     assert diff.common == diff.edges_low == diff.edges_high
 
 
+def test_discover_adjacency_n_observations_matches_dataframe_height() -> None:
+    """`adj.n_observations` must equal `data.height`. Pin
+    `n_obs = data.height` against `n_obs = None` mutant
+    (which would store None in the typed dataclass field)."""
+    from corroborate.graph.discovery import discover_adjacency
+    rng = np.random.default_rng(0)
+    n = 137  # picked to be distinctive
+    df = _df_from_columns(
+        x=rng.standard_normal(n),
+        y=rng.standard_normal(n),
+        z=rng.standard_normal(n),
+    )
+    adj = discover_adjacency(
+        df, variables=['x', 'y', 'z'],
+        alpha=0.05, max_conditioning=1,
+    )
+    assert adj.n_observations == 137
+
+
 def test_compare_pc_depths_rejects_descending_depths() -> None:
     """Depths must be (low, high) with low < high."""
     from corroborate.graph.discovery import compare_pc_depths
@@ -718,6 +737,74 @@ def test_discover_adjacency_keeps_edge_when_p_at_boundary_alpha() -> None:
     )
     # Strong correlation → small p → keep edge.
     assert frozenset({'x', 'y'}) in adj.edges
+
+
+def test_compare_pc_depths_propagates_stratify_by_to_both_calls() -> None:
+    """`compare_pc_depths` must pass `stratify_by` through to both
+    inner `discover_adjacency` calls (low and high). Pin
+    `stratify_by=stratify_by` against the `stratify_by=None`
+    mutants on either call.
+
+    Construct: x and y are MARGINALLY dependent (within-stratum
+    independent, across-stratum mean-shifted) — Simpson's case.
+    Without stratification, both depths see x-y dependent and
+    keep the edge. With stratification, both depths see them
+    conditionally independent and remove the edge.
+
+    A mutant that drops stratify_by on either inner call would
+    keep the edge at that depth, producing a non-empty
+    `low_only` or `high_only` set."""
+    from corroborate.graph.discovery import compare_pc_depths
+    rng = np.random.default_rng(0)
+    n_per = 40
+    # Stratum A: x ~ N(0, 1), y ~ N(0, 1) — independent.
+    xa = rng.standard_normal(n_per)
+    ya = rng.standard_normal(n_per)
+    # Stratum B: x and y both shifted by +5 — mean shift creates
+    # marginal correlation, but within-stratum still independent.
+    xb = rng.standard_normal(n_per) + 5
+    yb = rng.standard_normal(n_per) + 5
+    x = np.concatenate([xa, xb])
+    y = np.concatenate([ya, yb])
+    env = ['A'] * n_per + ['B'] * n_per
+    df = _df_from_columns(x=x, y=y)
+    df = df.with_columns(pl.Series('env', env))
+    diff = compare_pc_depths(
+        df, variables=['x', 'y'],
+        alpha=0.05, depths=(0, 1),
+        stratify_by='env',
+    )
+    # With stratify_by propagated to BOTH calls, both depths
+    # remove x-y → empty edges_low, empty edges_high.
+    assert frozenset({'x', 'y'}) not in diff.edges_low
+    assert frozenset({'x', 'y'}) not in diff.edges_high
+
+
+def test_compare_pc_depths_propagates_high_max_conditioning() -> None:
+    """`max_conditioning=high` must propagate to the high call.
+    Pin against the kwarg-drop mutant which would default to 1.
+
+    Construct: 4-variable diamond (x → m1, x → m2, m1 → y, m2 → y).
+    At depth 1, conditioning on m1 alone or m2 alone may not
+    sever x-y entirely. At depth 2, conditioning on {m1, m2}
+    severs x-y. Use depths=(1, 2): the mutant would call high
+    with default max_conditioning=1 instead of 2, missing the
+    x-y removal at depth 2."""
+    from corroborate.graph.discovery import compare_pc_depths
+    rng = np.random.default_rng(7)
+    n = 300
+    x = rng.standard_normal(n)
+    m1 = x + rng.standard_normal(n) * 0.5
+    m2 = x + rng.standard_normal(n) * 0.5
+    y = m1 + m2 + rng.standard_normal(n) * 0.3
+    df = _df_from_columns(x=x, m1=m1, m2=m2, y=y)
+    diff = compare_pc_depths(
+        df, variables=['x', 'm1', 'm2', 'y'],
+        alpha=0.05, depths=(1, 2),
+    )
+    # x-y at depth 2 should be conditionally independent given
+    # {m1, m2} → removed. Mutant high=1 default would miss this.
+    assert frozenset({'x', 'y'}) not in diff.edges_high
 
 
 def test_compare_pc_depths_rejects_equal_depths() -> None:
