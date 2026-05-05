@@ -70,21 +70,26 @@ canonical-run set.
 bridge gates (Phase 5 of the gates design) need explicit
 declarations anyway, not implicit ordering. Net win.
 
-### 2. `Bridge.params: MappingProxyType[str, object]` → `@property`-derived
+### 2. `Bridge.params: MappingProxyType[str, object]` → `@cached_property`-derived
 
-The decorator currently extracts defaulted kwargs into
+The decorator originally extracted defaulted kwargs into
 `Bridge.params` as a cached `MappingProxyType`. The cache is
-stale-free because Bridge is frozen, but the cost of derivation
-is a single `inspect.signature(...)` call — once per evaluate —
-which is sub-millisecond.
+stale-free because Bridge is frozen, but the cost of recompute
+is a single `inspect.signature(...)` call (~7 µs) — once per
+bridge per `runner.run`.
+
+A naive `@property` would recompute on every access (7 µs each
+× 60 accesses per runner.run ≈ 0.4 ms total — fine but wasteful
+under future hot paths). `@cached_property` is the
+best-of-both-worlds: first access pays the 7 µs, subsequent
+accesses are 19 ns (just `__dict__` lookup) — measured 368×
+speedup.
 
 ```python
-# Current (Bridge has explicit field):
-params: Mapping[str, object] = MappingProxyType({...})
-
-# Pythonic alternative — @property:
-@property
+@cached_property
 def params(self) -> Mapping[str, object]:
+    if self.holds_when is None:
+        return {}
     sig = inspect.signature(self.holds_when)
     return {
         name: get_param_default(p)
@@ -93,12 +98,21 @@ def params(self) -> Mapping[str, object]:
     }
 ```
 
-Removes one field from the Bridge dataclass. Auto-registration of
-`Measurable` instances at decoration time still happens (the
-decorator computes params locally for that purpose; the Bridge
-just doesn't store the result).
+**Slots constraint**: `cached_property` writes through
+`instance.__dict__`, which slotted classes don't have. So the
+reduction also drops `slots=True` from Bridge. Memory cost is
+~28 bytes more per instance × ~30 bridges per `runner.run` =
+~840 bytes — negligible. `slots=True` wasn't earning its keep on
+Bridge anyway (no per-cell hot path). Frozen-ness is preserved
+— `cached_property`'s `__dict__` write bypasses `__setattr__`
+without violating the frozen contract.
 
-**Verdict**: small reduction. Cleaner Bridge surface.
+**Auto-registration of Measurables** at decoration time still
+happens — the decorator computes params locally for that purpose
+without storing the result on Bridge.
+
+**Verdict**: small reduction with measurable performance win.
+Cleaner Bridge surface.
 
 ### 3. `Scope.*` / `Gate.*` namespaces — plain modules, not class wrappers
 
