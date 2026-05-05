@@ -46,3 +46,9 @@ experiments/data/**
 
 # Claude Code local state
 .claude/
+
+# Mutation testing scratch — `mutmut` copies the source tree into
+# `mutants/` and runs each mutant's pytest there; gigabytes of
+# transient state, never committed.
+mutants/
+.mutmut-cache

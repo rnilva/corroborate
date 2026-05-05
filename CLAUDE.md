@@ -413,6 +413,18 @@ write/read CONTRACT (round-trip equality on hand-built rows);
 **closed-form analyses still recover the structural answer**
 after a real parquet round-trip. Both shapes are needed.
 
+**Empirical coverage check.** `mutmut` is wired in
+`pyproject.toml [tool.mutmut]` to mutate framework analysis
+primitives and run only the analytic suite. Surviving mutants
+are coverage gaps (closed-form bound too loose, or the line
+isn't exercised). Run with `uv run mutmut run`; triage with
+`uv run mutmut results` / `uv run mutmut show <name>`. **Sharp
+edge:** mutmut wraps each function with a trampoline that
+materializes default-arg values at the wrapper level, so
+mutations of parameter defaults (e.g., `arm_field='arm_key'` →
+`'XX...XX'`) never propagate through the call. Treat default-arg
+mutations as wrap-broken, not real survivors.
+
 ## Acceptance criteria
 
 `v0` is acceptance-tested by reproducing the DDQN study in

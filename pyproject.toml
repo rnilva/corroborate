@@ -43,6 +43,7 @@ packages = ["src/corroborate"]
 dev = [
     "pytest>=8",
     "basedpyright>=1.18",
+    "mutmut>=3.5.0",
 ]
 
 [tool.pytest.ini_options]
@@ -141,3 +142,58 @@ reportUnknownVariableType = "none"
 reportUnknownParameterType = "none"
 reportUnknownLambdaType = "none"
 reportUnusedFunction = "none"
+
+
+# ============ Mutation testing (mutmut) ============
+#
+# Mutates the analysis primitives covered by the analytic suite
+# (tests/analytic/lg_scm/). Surviving mutants are gaps in the
+# closed-form bounds — either the bound is too loose or a code
+# path lacks coverage. Equivalent mutants need human triage.
+#
+# Default scope is narrow: framework primitives our analytic
+# suite directly targets. Override at the CLI for a broader
+# scan (`uv run mutmut run --paths-to-mutate src/corroborate/`).
+#
+# Test scope mirrors: only the analytic-suite tests run per
+# mutant. The full unit-test suite would catch many mutants by
+# accident (synthetic-input tests pass on small numerical
+# perturbations); restricting to analytic-only tests focuses
+# the signal on whether the closed-form bounds bite.
+#
+# Run: `uv run mutmut run`
+# Triage results: `uv run mutmut results` or `uv run mutmut browse`.
+[tool.mutmut]
+# `paths_to_mutate`: framework primitives the analytic suite
+# directly targets. Surviving mutants are gaps in the closed-form
+# bounds — either the bound is too loose or a code path lacks
+# coverage.
+paths_to_mutate = [
+    "src/corroborate/analyses/paired_g.py",
+    "src/corroborate/analyses/paired_g_per_burst.py",
+    "src/corroborate/analyses/paired_link_per_burst.py",
+    "src/corroborate/analyses/factorial_2x2.py",
+    "src/corroborate/analyses/meta_regression_paired_g.py",
+    "src/corroborate/analyses/meta_regression_per_burst.py",
+    "src/corroborate/analyses/mundlak_paired_g_per_burst.py",
+    "src/corroborate/analyses/mundlak_decomposition.py",
+    "src/corroborate/analyses/tautology_audit.py",
+    "src/corroborate/analyses/dowhy.py",
+    "src/corroborate/analyses/verdict_distribution.py",
+    "src/corroborate/stats/effect_size.py",
+    "src/corroborate/measurables/redundancy_check.py",
+    "src/corroborate/graph/discovery.py",
+]
+# `also_copy`: mutmut copies `paths_to_mutate` + `also_copy` into
+# `mutants/`. Framework imports from `corroborate.bridge`,
+# `corroborate.core`, `corroborate.measurables`, etc. — copy the
+# whole `src/` tree so those resolve. Non-mutated files stay at
+# their original content; mutants only generate for `paths_to_mutate`.
+also_copy = [
+    "src/",
+    # Build needs `README.md` (pyproject `readme = "README.md"`)
+    # — without it the per-mutant build fails before pytest even
+    # collects, and every mutant is silently marked "survived".
+    "README.md",
+]
+tests_dir = ["tests/analytic/"]
