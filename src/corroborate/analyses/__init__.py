@@ -37,6 +37,7 @@ from corroborate.analyses import (  # noqa: F401
     link_attenuation_dowhy as _link_attenuation_dowhy,  # pyright: ignore[reportUnusedImport]
     paired_arm_spearman as _paired_arm_spearman,  # pyright: ignore[reportUnusedImport]
     paired_delta_link_dowhy as _paired_delta_link_dowhy,  # pyright: ignore[reportUnusedImport]
+    proportion_mediated as _proportion_mediated,  # pyright: ignore[reportUnusedImport]
     tautology_audit as _audit,  # pyright: ignore[reportUnusedImport]
     verdict_distribution as _verdict_dist,  # pyright: ignore[reportUnusedImport]
 )

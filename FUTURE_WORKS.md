@@ -124,47 +124,56 @@ is settled — but the framing needs settling first.
 
 ---
 
-## Mediation analysis + JCI discoverability
+## Counterfactual mediation primitive (Pearl NDE/NIE)
 
-**Status:** LIVE. Mediation primitives are the missing analysis;
-JCI exists but is hard to find.
+**Status:** LIVE. Linear mediation now shipped as
+`proportion_mediated`; counterfactual decomposition still
+deferred.
 
-**Description.** Two related gaps:
+**Description.** Linear-mediation decomposition (treatment ×
+mediator additive, single-slope assumption) is sufficient for
+most bridge claims; `proportion_mediated` (added 2026-05-05)
+returns the indirect / total share with an `in_unit_interval`
+diagnostic flag. The *counterfactual* decomposition — Pearl's
+natural-direct (NDE) and natural-indirect (NIE) effects —
+re-simulates the mediator's distribution under the
+counterfactual treatment, identifying treatment×mediator
+interactions and nonlinearity that linear-mediation can't.
 
-1. **Mediation analysis primitive missing.** The framework has
-   PC adjacency (`discover_adjacency`) + DoWhy backdoor
-   (`backdoor_ate`, `placebo_refutation`,
-   `random_common_cause_refutation`) but no Pearl-style natural-
-   direct / natural-indirect effect decomposition. Claims like
-   "DDQN's bias-reduction is *causally mediated* by Q-amplification"
-   currently ride on PC's conditional-independence structure
-   plus DoWhy's backdoor ATE — short of formal mediation.
+**Lift gate is empirical, not a-priori.** Per ANALYSIS_RECIPE.md
+§3a, three diagnostic signals indicate linear-mediation has
+broken:
 
-2. **JCI discoverability.** Joint Causal Inference is already
-   supported via `discover_adjacency(..., stratify_by='env_name')`
-   — see memory `findings_dowhy_three_probes` and
-   ANALYSIS_RECIPE.md §3. But JCI is documented as a side note
-   ("JCI: don't pool across envs") rather than as a first-class
-   analysis primitive in CLAUDE.md's "Canonical analyses" table.
-   A substrate author scanning the canonical analyses won't find
-   "JCI"; they have to know to look for it.
+1. `proportion_mediated.in_unit_interval == False` (suppressor
+   or overshoot).
+2. Per-stratum partial-ρ heterogeneity across mediator-binned
+   strata (treatment×mediator interaction).
+3. LOESS RMSE materially smaller than linear-fit RMSE on
+   Δ_M → Δ_Y (nonlinear functional form).
 
-**What's needed.**
-- **Discoverability fix (small):** add JCI to CLAUDE.md's
-  canonical-analyses table; cross-reference from
-  ANALYSIS_RECIPE.md §3a; expose `stratified_partial_spearman_rho`
-  as a first-class registered analysis (it's there but lower-
-  visibility than `partial_spearman_rho`).
-- **Mediation primitive (medium):** an `@analysis def
-  mediation_paired(...)` returning `MediationResult` with NDE,
-  NIE, and `proportion_mediated`. Implementable on top of the
-  existing per-pair Δ extraction + the linear/non-linear
-  mediator-regression structure DoWhy already supports.
+When a bridge's data fires one of these on real corpora, that's
+the cue to author the counterfactual primitive. Until then,
+linear is the right tool.
 
-**Lift when:** a bridge claim explicitly distinguishes
-"correlation along the chain" (current PC-and-DoWhy form) from
-"causal mediation" (Pearl NDE/NIE) — i.e., the proportion-
-mediated number becomes load-bearing for the bridge's verdict.
+**Likely first triggers** (per the substrate's known findings):
+- Per-burst link panels (memory `findings_minatar_link_attenuation`,
+  `findings_fourrooms_time_series`) show non-stationary mech-link
+  slope across phases — candidate for signal #1.
+- Q-explosion regimes (`findings_q_amplification_cartpole`):
+  jensen_gap blows up faster than outcome — clearly nonlinear
+  M → Y, candidate for #3.
+- Underlearning rescue (`findings_underlearning_rescue`):
+  reward-scale-dependent suppressor effects — candidate for #2.
+
+**What it would look like.** An `@analysis def
+mediation_counterfactual(...)` returning a `MediationResult`
+with NDE, NIE, and bootstrap CIs — implementable on top of
+DoWhy's `mediation_estimand` (which exists in DoWhy but isn't
+wrapped in `corroborate.analyses.dowhy`).
+
+**Lift when:** a bridge author runs `proportion_mediated` on real
+data and sees one of the three diagnostic signals fire, AND the
+bridge's verdict needs the decomposition to be load-bearing.
 
 ---
 

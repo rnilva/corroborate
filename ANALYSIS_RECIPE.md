@@ -135,12 +135,33 @@ horizon, reward_scale) are part of the variable set. Pooling
 across envs without stratification produces spurious edges
 (per memory `findings_dowhy_three_probes`).
 
-### 3a. Partial-ρ to disambiguate from an established mediator
+### 3a. Mediation analysis: linear (default) vs counterfactual
 
-When a canonical mediator exists (e.g. `jensen_gap` for the DDQN
-study), candidate mediators may either carry **independent**
-outcome-predictive signal or be **collinear** with the canonical
-one. `partial_spearman_rho` separates them:
+The framework's mediation primitives operate on the per-pair Δ
+form. Two distinct decompositions, each appropriate to a
+different bridge claim shape.
+
+#### Linear mediation — proportion of effect mediated
+
+For a (treatment, baseline) contrast and a candidate mediator,
+**`proportion_mediated`** decomposes per-pair Δ_target into
+direct + indirect components:
+
+```python
+from corroborate.analyses.proportion_mediated import proportion_mediated
+
+result = proportion_mediated.fn(
+    cells, target='eval_best_burst_mean', mediator='jensen_gap',
+    treatment_arm=..., baseline_arm=..., pair_by=('seed',),
+)
+# result.proportion ∈ [0, 1] under linear-mediation assumptions:
+#   1.0 = fully mediated (Δ_Y carried entirely by β·Δ_M)
+#   0.0 = no mediation (direct effect only)
+# result.in_unit_interval=False signals assumption failure.
+```
+
+The Spearman-rank companion is `partial_spearman_rho` (and its
+JCI form `stratified_partial_spearman_rho`):
 
 ```python
 from corroborate.graph.discovery import partial_spearman_rho
@@ -149,13 +170,79 @@ from corroborate.graph.discovery import partial_spearman_rho
 rho, p = partial_spearman_rho(
     delta_outcome, delta_candidate, delta_jensen_gap,
 )
-# rho significantly non-zero → candidate carries independent signal
-# rho ≈ 0 → candidate is collinear with jensen_gap (restatement)
+# rho near zero → candidate is collinear with jensen_gap
+#   (restatement, not a separate mediator).
+# rho significantly non-zero → candidate carries independent
+#   signal — the partial-correlation analog of "direct effect"
+#   under the same linear-mediation assumptions.
 ```
 
-A candidate surviving the partial-ρ test is a bona-fide separate
-intervention target; one that collapses is a redundant restatement
-of the canonical mediator's mechanism.
+#### When linear mediation is enough
+
+The linear decomposition assumes:
+
+1. No treatment × mediator interaction.
+2. Linear M → Y functional form.
+3. Mediator's distribution doesn't depend on treatment in
+   nonlinear ways.
+
+Three diagnostic signals that linear has broken:
+
+- **`proportion ∉ [0, 1]`** — `in_unit_interval=False`. Suppressor
+  (proportion < 0) or overshoot (> 1) indicates the additive
+  decomposition is unstable.
+- **Per-stratum partial-ρ heterogeneity.** Bin the data by
+  mediator level and run `stratified_partial_spearman_rho`. If
+  per-stratum ρ varies materially across bins, the partial-r
+  isn't a single direct effect — there's a treatment×mediator
+  interaction.
+- **Nonlinear M → Y functional form.** Scatter Δ_M vs Δ_Y; if
+  LOESS RMSE materially beats linear-fit RMSE on the residuals,
+  the linear decomposition is misestimating.
+
+When NONE of these fire, linear is the right primitive and
+counterfactual decomposition won't tell you anything new.
+
+#### When to escalate to counterfactual mediation (Pearl NDE/NIE)
+
+Pearl's natural-direct / natural-indirect effects re-simulate
+the mediator's distribution under the counterfactual treatment
+— different math from partial-correlation, identifies treatment×
+mediator interactions and nonlinearity. Use when:
+
+- A diagnostic above fires positive AND the bridge's claim
+  cares about the decomposition (proportion-mediated is
+  load-bearing for the verdict).
+- The scientific question is specifically about manipulability:
+  "what would happen if we forced the mediator to value M\*?"
+- Multiple mediators interact (linear decomposition assumes
+  additive paths).
+
+The framework does NOT yet ship a counterfactual mediation
+primitive. The DoWhy substrate (`corroborate.analyses.dowhy`)
+exposes backdoor + refutation primitives that are the ingredients
+for one. Authoring is deferred per FUTURE_WORKS.md; the lift gate
+is "a bridge's diagnostic fires positive on real data."
+
+#### JCI (joint causal inference) — the canonical env adjustment
+
+Both `partial_spearman_rho` and `proportion_mediated` admit a
+**stratified** form when env-level heterogeneity is present:
+
+```python
+from corroborate.graph.discovery import stratified_partial_spearman_rho
+
+# Per-env partial Spearman, Fisher-z-pooled — the JCI form.
+rho_pooled, p = stratified_partial_spearman_rho(
+    deltas_y, deltas_candidate, deltas_canonical, env_strata,
+)
+```
+
+JCI is the canonical adjustment for the framework's "pool across
+envs" question (memory `findings_dowhy_three_probes`). When env-
+level features (action_dim, horizon, reward_scale) are part of
+the analysis, stratify; otherwise pooled correlations introduce
+spurious edges.
 
 ---
 

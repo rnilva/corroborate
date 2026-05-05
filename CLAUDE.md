@@ -296,6 +296,9 @@ different verdicts — the framework refuses to collapse them.
 | `meta_regression_paired_g` | per-stratum Δ regressed on covariates |
 | `meta_regression_per_burst` | per-(stratum, burst) panel meta-regression |
 | `mundlak_paired_g_per_burst` | per-cell mediator + per-burst g (composite for moderator probes) |
+| `proportion_mediated` | linear-mediation decomposition: indirect / total share of Δ_target carried by `mediator` |
+| `partial_spearman_rho` (graph.discovery) | linear-mediation Spearman form — partial-r of (X, Y) given Z; the Spearman analog of `proportion_mediated`'s direct effect |
+| `stratified_partial_spearman_rho` (graph.discovery) | **JCI form**: per-env partial Spearman, Fisher-z-pooled — the canonical adjustment when env is a confound |
 | `dowhy` | DoWhy backdoor / refutation on a typed causal graph |
 | `factorial_2x2` | 2×2 factorial interaction Δ |
 | `tautology_audit` | three-check audit (HP shadow / partial-correlation / convergence) |
