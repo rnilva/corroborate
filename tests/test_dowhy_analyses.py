@@ -74,7 +74,13 @@ def test_backdoor_ate_runs_directly() -> None:
         source='treatment_var',
         target='outcome_var',
         direction=Direction.DIRECT,
-        tier=Tier.INTERVENTIONAL,
+        # ASSOCIATIONAL: the test exercises the analysis-injection
+        # machinery on synthetic columns, not a Pearl-rung-2 claim
+        # on a registered measurable. INTERVENTIONAL would
+        # (correctly) trip the EXOGENOUS_SOURCE BLOCK gate since
+        # `treatment_var` is a synthetic column not in
+        # `registered_names() | _STANDARD_METADATA`.
+        tier=Tier.ASSOCIATIONAL,
     )
     def claim(
         backdoor_ate: BackdoorResult,
@@ -108,7 +114,13 @@ def test_multi_fixture_bridge_consumes_three_analyses() -> None:
         source='treatment_var',
         target='outcome_var',
         direction=Direction.DIRECT,
-        tier=Tier.INTERVENTIONAL,
+        # ASSOCIATIONAL: the test exercises the analysis-injection
+        # machinery on synthetic columns, not a Pearl-rung-2 claim
+        # on a registered measurable. INTERVENTIONAL would
+        # (correctly) trip the EXOGENOUS_SOURCE BLOCK gate since
+        # `treatment_var` is a synthetic column not in
+        # `registered_names() | _STANDARD_METADATA`.
+        tier=Tier.ASSOCIATIONAL,
     )
     def claim(
         backdoor_ate: BackdoorResult,

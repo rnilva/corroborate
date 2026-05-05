@@ -1636,7 +1636,18 @@ def acrobot_link_rcc_robust__gamma_0999(
     target='outcome.eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
-    scope=(pl.col('total_steps') == 1_000_000),
+    # Endogenous touch (`q_divergence_score.is_finite()`) added
+    # alongside the run-length filter so EXOGENOUS_SCOPE doesn't
+    # WARN: the bridge's actual interest IS the q_divergence
+    # regime, which the analysis (`link_attenuation_dowhy`) drives
+    # via its `attenuator='q_divergence_score'` param. The cell
+    # set is a strict subset of the prior — only cells with
+    # populated q_div are kept, which the analysis was already
+    # filtering internally. Verdict-preserving.
+    scope=(
+        (pl.col('total_steps') == 1_000_000)
+        & finite('q_divergence_score')
+    ),
 )
 def extreme_q_divergence_attenuates_link__binary(
     link_attenuation_dowhy: LinkAttenuationDowhyResult,
@@ -1676,7 +1687,18 @@ def extreme_q_divergence_attenuates_link__binary(
     target='outcome.eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
-    scope=(pl.col('total_steps') == 1_000_000),
+    # Endogenous touch (`q_divergence_score.is_finite()`) added
+    # alongside the run-length filter so EXOGENOUS_SCOPE doesn't
+    # WARN: the bridge's actual interest IS the q_divergence
+    # regime, which the analysis (`link_attenuation_dowhy`) drives
+    # via its `attenuator='q_divergence_score'` param. The cell
+    # set is a strict subset of the prior — only cells with
+    # populated q_div are kept, which the analysis was already
+    # filtering internally. Verdict-preserving.
+    scope=(
+        (pl.col('total_steps') == 1_000_000)
+        & finite('q_divergence_score')
+    ),
 )
 def extreme_q_divergence_attenuates_link__placebo_refuted(
     link_attenuation_dowhy: LinkAttenuationDowhyResult,
@@ -1716,7 +1738,18 @@ def extreme_q_divergence_attenuates_link__placebo_refuted(
     target='outcome.eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
-    scope=(pl.col('total_steps') == 1_000_000),
+    # Endogenous touch (`q_divergence_score.is_finite()`) added
+    # alongside the run-length filter so EXOGENOUS_SCOPE doesn't
+    # WARN: the bridge's actual interest IS the q_divergence
+    # regime, which the analysis (`link_attenuation_dowhy`) drives
+    # via its `attenuator='q_divergence_score'` param. The cell
+    # set is a strict subset of the prior — only cells with
+    # populated q_div are kept, which the analysis was already
+    # filtering internally. Verdict-preserving.
+    scope=(
+        (pl.col('total_steps') == 1_000_000)
+        & finite('q_divergence_score')
+    ),
 )
 def extreme_q_divergence_attenuates_link__rcc_robust(
     link_attenuation_dowhy: LinkAttenuationDowhyResult,
