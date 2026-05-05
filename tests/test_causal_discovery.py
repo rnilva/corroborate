@@ -399,6 +399,35 @@ def test_stratified_returns_nan_when_no_eligible_strata() -> None:
 
 # ============ stratified_partial_spearman_rho ============
 
+def test_stratified_partial_skips_at_exactly_min_stratum_size_minus_one() -> None:
+    """Stratum at exactly `min_stratum_size` for the partial
+    version is INCLUDED. Pin `n_k < min_stratum_size` against
+    `<= min_stratum_size` mutant on the partial-Spearman path
+    (default min_stratum_size=5, distinct from the marginal
+    version's default of 4)."""
+    rng = np.random.default_rng(41)
+    # Stratum A at exactly n=5 (= default min), kept.
+    # Stratum B at n=2, skipped.
+    n_a, n_b = 5, 2
+    za = rng.standard_normal(n_a)
+    xa = za + 0.3 * rng.standard_normal(n_a)
+    ya = 0.6 * xa + 0.3 * rng.standard_normal(n_a)
+    zb = rng.standard_normal(n_b)
+    xb = rng.standard_normal(n_b)
+    yb = rng.standard_normal(n_b)
+    x = np.concatenate([xa, xb])
+    y = np.concatenate([ya, yb])
+    z = np.concatenate([za, zb])
+    strata = ['A'] * n_a + ['B'] * n_b
+    rho, _ = stratified_partial_spearman_rho(
+        x, y, z, strata, min_stratum_size=5,
+    )
+    # Stratum A contributes (boundary kept). With strong residual
+    # X-Y signal even after partialling out Z, rho should be
+    # finite and positive.
+    assert math.isfinite(rho)
+
+
 def test_stratified_partial_pooled_matches_fisher_z_closed_form() -> None:
     """Same closed-form pooled Fisher-z check as
     `stratified_spearman_rho`'s, but on the partial version where
