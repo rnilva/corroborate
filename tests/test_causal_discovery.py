@@ -8,7 +8,8 @@ import math
 
 import numpy as np
 import polars as pl
-from scipy.stats import spearmanr
+import pytest
+from scipy.stats import norm, spearmanr
 
 from corroborate._internals.polars import series_std_float
 from corroborate.graph.discovery import (
@@ -96,6 +97,95 @@ def test_partial_multi_with_two_z_columns() -> None:
     rho, p = partial_spearman_rho_multi(x, y, np.column_stack([z1, z2]))
     assert abs(rho) < 0.15
     assert p > 0.05
+
+
+def _expected_p_from_rho_df(rho: float, df: int) -> float:
+    """Closed-form Fisher-z two-sided p for a given rho + df."""
+    rho_clamped = max(-0.999999, min(0.999999, rho))
+    z_stat = 0.5 * math.log((1 + rho_clamped) / (1 - rho_clamped)) * math.sqrt(df)
+    return 2 * (1.0 - float(norm.cdf(abs(z_stat))))
+
+
+def test_partial_multi_p_value_matches_fisher_z_at_k_equals_2() -> None:
+    """The reported p-value must equal the Fisher-z formula at
+    df = n − 3 − k. Pin every term in the df expression and the k
+    computation against off-by-one mutants:
+
+      df = n − 3 − k  vs  n − 3 + k  vs  n + 3 − k  vs  n − 4 − k
+      k  = z.shape[1] when ndim==2  vs  always 1  vs  always 2
+
+    Constructed so rho lands in the moderate regime (~0.23 here)
+    where p is around 0.2 — a one-unit shift in df shifts p by
+    ~9e-3, well above the assertion tolerance. At higher rho the
+    p-value falls into the 1e-13 regime where df-shifts produce
+    sub-tolerance differences."""
+    rng = np.random.default_rng(7)
+    n = 30
+    z1 = rng.standard_normal(n)
+    z2 = rng.standard_normal(n)
+    # Substantial residual noise → moderate rho.
+    x = z1 + 0.5 * z2 + 1.5 * rng.standard_normal(n)
+    y = 0.4 * z1 + z2 + 0.2 * x + 1.5 * rng.standard_normal(n)
+    rho, p_reported = partial_spearman_rho_multi(
+        x, y, np.column_stack([z1, z2]),
+    )
+    df_expected = n - 3 - 2  # k = 2
+    p_expected = _expected_p_from_rho_df(rho, df_expected)
+    assert p_reported == pytest.approx(p_expected, abs=1e-9)
+
+
+def test_partial_multi_with_1d_z_uses_k_equals_1() -> None:
+    """Passing a 1D `z_matrix` triggers the `ndim != 2 → k = 1`
+    branch AND the `z_matrix.reshape(-1, 1)` line. Pin:
+
+      k computation: 1D ndim → k=1 (correct) vs k=z.shape[1] crash
+      reshape line: `z = z.reshape(-1, 1)` vs `z = None` (next
+        access crashes)
+
+    Asserts the closed-form p at df = n − 3 − 1, which exercises
+    both the k branch and the reshape branch end-to-end."""
+    rng = np.random.default_rng(11)
+    n = 60
+    z = rng.standard_normal(n)  # 1D
+    x = z + 0.5 * rng.standard_normal(n)
+    y = 0.7 * z + 0.4 * x + 0.5 * rng.standard_normal(n)
+    rho, p_reported = partial_spearman_rho_multi(x, y, z)  # 1D z passed
+    df_expected = n - 3 - 1
+    p_expected = _expected_p_from_rho_df(rho, df_expected)
+    assert math.isfinite(rho)
+    assert p_reported == pytest.approx(p_expected, abs=1e-9)
+
+
+def test_partial_multi_returns_finite_at_df_equals_one() -> None:
+    """The lower bound on df is 1 (not 2). At df=1 (n=5, k=1) the
+    function still computes a finite rho + p. Pins `df < 1` against
+    `df <= 1` (which would NaN at df=1) and against `df < 2` (which
+    would NaN at df=1 AND df=2).
+
+    A second probe at df=2 (n=6, k=1) distinguishes `df < 2`
+    (NaN at df=2) from `df <= 1` (passes df=2)."""
+    rng = np.random.default_rng(13)
+    # df=1: n=5, k=1.
+    n = 5
+    z = rng.standard_normal(n)
+    x = rng.standard_normal(n)
+    y = rng.standard_normal(n)
+    rho, p = partial_spearman_rho_multi(x, y, z.reshape(-1, 1))
+    assert math.isfinite(rho)
+    assert math.isfinite(p)
+
+
+def test_partial_multi_returns_nan_below_df_one() -> None:
+    """At df=0 (n=4, k=1) the original returns NaN. Pins the
+    early-return path."""
+    rng = np.random.default_rng(17)
+    n = 4  # df = n-3-1 = 0
+    z = rng.standard_normal(n)
+    x = rng.standard_normal(n)
+    y = rng.standard_normal(n)
+    rho, p = partial_spearman_rho_multi(x, y, z.reshape(-1, 1))
+    assert math.isnan(rho)
+    assert math.isnan(p)
 
 
 # ============ stratified_spearman_rho — JCI / Simpson's paradox ============
