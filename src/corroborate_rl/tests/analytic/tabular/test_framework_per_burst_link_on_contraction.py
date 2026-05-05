@@ -176,9 +176,12 @@ def test_per_burst_link_recovers_closed_form_r_curve() -> None:
     by_burst = {s.burst_index: s for s in result.strata}
     for t in range(_N_BURSTS):
         expected = _expected_r(t)
-        # SE inflates for low n; floor at 0.05 guards against
-        # the t=0 case where expected r=0 → SE = 1/√78 ≈ 0.113.
-        bound = 4.0 * max(_expected_r_se(expected, _N_PAIRS), 0.05)
+        # 4·SE on the closed-form Pearson r SE = (1−r²)/√(n−2).
+        # At r=0 (t=0): SE = 1/√78 ≈ 0.113; at r=0.67 (peak):
+        # SE ≈ 0.063. SE is bounded above by 1/√78 across all
+        # bursts, so no floor needed — the formula's monotone-in-r
+        # behaviour gives an honest 4·SE band at every burst.
+        bound = 4.0 * _expected_r_se(expected, _N_PAIRS)
         actual = by_burst[t].r
         assert abs(actual - expected) < bound, (
             f'burst {t}: r = {actual:.4f}, closed-form = '

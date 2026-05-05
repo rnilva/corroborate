@@ -51,7 +51,13 @@ def _det_seed(*parts: object) -> int:
 
 
 _GAMMA_GRID: tuple[float, ...] = (0.5, 0.6, 0.7, 0.8, 0.9)
-_N_SEEDS_PER_ENV = 30
+# At fixed γ, per-stratum SE(ρ) ≈ 1/√(n−2). With Fisher-z
+# pooling across 5 strata, SE_pooled = 1/√(5·(n−3)). The
+# `< 0.1` bound on gamma_shadow's stratified ρ should sit
+# at ≥ 2·SE_pooled to keep false-fail rate < 5%:
+#   n=30  → SE_pooled = 0.086 → 0.1 sits at 1.16·SE  (~25% FP)
+#   n=75  → SE_pooled = 0.054 → 0.1 sits at 1.85·SE  (~7% FP)
+_N_SEEDS_PER_ENV = 75
 _SIGMA_X0 = 1.0
 _SIGMA_OUTCOME_NOISE = 0.1
 # Wide enough to drop R²(γ_shadow on γ) well below 0.95 while
@@ -210,6 +216,28 @@ def test_audit_flags_gamma_shadow_via_stratified_rho() -> None:
     # |ρ| should be well below the 0.1 threshold (within-stratum
     # signal is pure noise).
     assert abs(rep.outcome_stratified_rho) < 0.1
+
+
+def test_audit_does_not_flag_outcome_shadow_via_stratified_rho() -> None:
+    """Within-stratum, `outcome_shadow ≈ outcome` so ρ → 1 — the
+    OPPOSITE of the no-residual-signal flag's structural trigger.
+    Pin that the audit doesn't double-flag outcome_shadow as
+    BOTH outcome-jaccard and no-residual: a regression that
+    OR'd the per-check failures inappropriately would silently
+    fire both.
+    """
+    result = _audit_result()
+    rep = result.by_name('mediator.outcome_shadow')
+    assert rep is not None
+    assert rep.flagged_no_residual_signal is False, (
+        f'outcome_shadow.flagged_no_residual_signal = '
+        f'{rep.flagged_no_residual_signal}; structurally ρ ≈ 1 '
+        f'within stratum (rho = '
+        f'{rep.outcome_stratified_rho:.4f}), so the no-residual-'
+        f'signal flag should NOT fire.'
+    )
+    # Within-stratum ρ ≈ 1 (outcome_shadow ≈ outcome).
+    assert rep.outcome_stratified_rho > 0.9
 
 
 def test_audit_does_not_flag_clean_via_stratified_rho() -> None:
