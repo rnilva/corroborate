@@ -308,7 +308,6 @@ def test_stream_concat_scratch_defaults_to_out_parent(
     filesystem the output is provisioned on. This test checks
     the placement contract: the scratch dir is created inside
     `out.parent`, not in the system tempfile dir."""
-    import os
     from corroborate.corpus.persistence import stream_concat_parquets
 
     src_dir = tmp_path / 'src'
@@ -331,13 +330,13 @@ def test_stream_concat_scratch_defaults_to_out_parent(
     import tempfile
     monkey = tempfile
     orig = monkey.mkdtemp
-    monkey.mkdtemp = spy_mkdtemp  # pyright: ignore[reportAttributeAccessIssue]
+    monkey.mkdtemp = spy_mkdtemp
     try:
         stream_concat_parquets(
             inputs, out_dir / 'merged.parquet', chunk_size=3,
         )
     finally:
-        monkey.mkdtemp = orig  # pyright: ignore[reportAttributeAccessIssue]
+        monkey.mkdtemp = orig
 
     # 8 inputs at chunk_size=3 → ceil(8/3) = 3 chunks → recursive
     # call with 3 chunks ≤ 3 hits the small case (no temp dir).
@@ -374,14 +373,14 @@ def test_stream_concat_explicit_scratch_dir_honored(
         seen_dirs.append(str(dir))
         return orig(prefix=prefix, dir=dir)
 
-    tempfile.mkdtemp = spy_mkdtemp  # pyright: ignore[reportAttributeAccessIssue]
+    tempfile.mkdtemp = spy_mkdtemp
     try:
         stream_concat_parquets(
             inputs, out_dir / 'merged.parquet',
             chunk_size=3, scratch_dir=scratch_dir,
         )
     finally:
-        tempfile.mkdtemp = orig  # pyright: ignore[reportAttributeAccessIssue]
+        tempfile.mkdtemp = orig
 
     assert seen_dirs == [str(scratch_dir)], seen_dirs
     assert scratch_dir.exists(), 'scratch_dir auto-created if missing'

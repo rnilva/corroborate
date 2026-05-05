@@ -466,12 +466,20 @@ def compute_missing_columns(
         return df
     have = set(df.columns)
     pending: list[tuple[str, Measurable[Mapping[str, object], object]]] = []
+    seen: set[str] = set()
+    # Dedupe `names` — `pl.Expr.meta.root_names()` returns one entry
+    # per reference in the expression, so a scope that mentions
+    # `q_divergence_score` six times yields six duplicates here.
+    # Without dedup the inner loop appends the same value six
+    # times per cell, blowing the column up to 6 × df.height and
+    # tripping a polars ShapeError at `with_columns` time.
     for name in names:
-        if name in have:
+        if name in have or name in seen:
             continue
         m = get_registered(name)
         if m is None:
             continue
+        seen.add(name)
         pending.append((name, m))
     if not pending:
         return df

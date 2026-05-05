@@ -1077,10 +1077,11 @@ def bootstrap_fraction(record: Mapping[str, object]) -> float:
 def q_divergence_score(
     record: Mapping[str, object],
     r_max: float,  # injected via @measurable name resolution
+    r_min: float,  # injected via @measurable name resolution
 ) -> float:
-    """`jensen_gap / (r_max / (1 - gamma))` — the overestimation-
-    bias gap normalised by the Bellman fixed-point Q-bound.
-    Per-cell scalar.
+    """`jensen_gap / (R / (1 - gamma))` — the overestimation-bias
+    gap normalised by the L∞ Bellman fixed-point Q-bound,
+    `R = max(|r_min|, |r_max|)`. Per-cell scalar.
 
     Reading: scores below ~1 mean Q stays within the theoretical
     bound and DDQN's correction translates to outcome; scores
@@ -1088,14 +1089,18 @@ def q_divergence_score(
     the bound and DDQN's link to outcome attenuates (CLAIM 11
     in `findings_minatar_link_attenuation.md`).
 
-    Composes the env-driven `r_max` measurable with the cell's
-    runs.parquet `jensen_gap` and `gamma` columns —
-    transitive_reads(`q_divergence_score`) closes over
-    `{jensen_gap, gamma, env_name}`. NaN on degenerate inputs
-    (gamma >= 1, missing fields, r_max non-positive).
+    Uses `max(|r_min|, |r_max|)` rather than just `r_max` so the
+    bound is well-defined on envs with non-positive `r_max`
+    (Acrobot, MountainCar — `r_min=-1, r_max=0` → bound=1/(1-γ)).
+    Reduces to the textbook `r_max / (1-γ)` whenever `r_max ≥
+    |r_min|`, including all positive-reward envs (CartPole,
+    Catch-bsuite, MinAtar). NaN on degenerate inputs (gamma ≥ 1,
+    missing fields, both r_max and r_min ≤ 0 in absolute value).
 
-    Post-Phase-5: reads bare-named `jensen_gap` (was
-    `mechanism.jensen_gap` pre-migration)."""
+    Composes the env-driven `r_max` + `r_min` measurables with
+    the cell's runs.parquet `jensen_gap` and `gamma` columns —
+    transitive_reads(`q_divergence_score`) closes over
+    `{jensen_gap, gamma, env_name}`."""
     jens = record.get('jensen_gap')
     gamma = record.get('gamma')
     if not isinstance(jens, (int, float)):
@@ -1105,7 +1110,10 @@ def q_divergence_score(
     g = float(gamma)
     if g >= 1.0 or g < 0.0:
         return float('nan')
-    if math.isnan(r_max) or r_max <= 0.0:
+    if math.isnan(r_max) or math.isnan(r_min):
         return float('nan')
-    bound = r_max / (1.0 - g)
+    r_abs = max(abs(r_max), abs(r_min))
+    if r_abs <= 0.0:
+        return float('nan')
+    bound = r_abs / (1.0 - g)
     return float(jens) / bound
