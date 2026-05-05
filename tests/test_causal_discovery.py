@@ -456,6 +456,40 @@ def test_stratified_returns_nan_when_no_eligible_strata() -> None:
 
 # ============ stratified_partial_spearman_rho ============
 
+def test_stratified_partial_skips_too_small_stratum_then_continues() -> None:
+    """Mirror of the marginal stratified test, applied to the
+    partial version. A too-small stratum in the middle of the
+    iteration is skipped (continue) without breaking out of
+    the loop. Pin against `break` mutant.
+
+    Construct: A (positive partial rho), B (n=2, skipped),
+    C (negative partial rho)."""
+    rng = np.random.default_rng(0)
+    n_per = 30
+    # A: strong positive partial rho ≈ +0.90.
+    za = rng.standard_normal(n_per)
+    xa = za + 0.3 * rng.standard_normal(n_per)
+    ya = 0.3 * za + 0.7 * xa + 0.1 * rng.standard_normal(n_per)
+    # B: too-small stratum (n=2).
+    zb = np.array([0.0, 1.0])
+    xb = np.array([0.0, 1.0])
+    yb = np.array([0.0, 1.0])
+    # C: strong NEGATIVE partial rho ≈ -0.80.
+    zc = rng.standard_normal(n_per)
+    xc = zc + 0.3 * rng.standard_normal(n_per)
+    yc = 0.3 * zc - 0.7 * xc + 0.1 * rng.standard_normal(n_per)
+    x = np.concatenate([xa, xb, xc])
+    y = np.concatenate([ya, yb, yc])
+    z = np.concatenate([za, zb, zc])
+    strata = ['A'] * n_per + ['B'] * 2 + ['C'] * n_per
+    rho, _ = stratified_partial_spearman_rho(
+        x, y, z, strata, min_stratum_size=5,
+    )
+    # Original pool over A+C → near zero (opposite signs).
+    # Mutant break → only A processed → strongly positive.
+    assert abs(rho) < 0.5
+
+
 def test_stratified_partial_skips_at_exactly_min_stratum_size_minus_one() -> None:
     """Stratum at exactly `min_stratum_size` for the partial
     version is INCLUDED. Pin `n_k < min_stratum_size` against
