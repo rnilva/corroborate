@@ -117,7 +117,7 @@ def test_meta_regression_intercept_recovers_constant_hedges_g() -> None:
     structural constant:
 
         g ≈ -1 / (√π · √(2 - 1/π)) · c_4(n_pairs)
-          ≈ -0.4622 · 0.9962  ≈  -0.4604        (n_pairs=200)
+          ≈ -0.4316 · 0.9962  ≈  -0.4334        (n_pairs=200)
 
     Meta-regression on σ should recover an intercept matching
     this closed-form constant within sampling SE. The slope on
@@ -126,7 +126,7 @@ def test_meta_regression_intercept_recovers_constant_hedges_g() -> None:
     Per-env g SE ≈ √(1/n_pairs + g²/(2·n_pairs)) ≈ √(1/200 +
     0.21/400) ≈ 0.075. Across 5 envs the pooled intercept SE
     is √(0.075²/5) ≈ 0.034. 4·SE bound = 0.14, easily separates
-    the structural -0.46 from -0 or -σ/√π.
+    the structural -0.43 from -0 or -σ/√π.
     """
     cells = _generate_sigma_grid_cells()
     covariates = _covariates_per_env()

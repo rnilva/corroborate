@@ -153,8 +153,14 @@ def test_per_burst_panel_recovers_phase_structured_g_curve() -> None:
         stratum = by_burst[t]
         expected = _expected_per_burst_g(t)
         actual = stratum.g
-        # 4·SE bound. Per-burst SE on g ≈ 0.14 in this setup.
-        bound = max(0.55, 0.25 * abs(expected))
+        # Per-burst Hedges' g SE under the construction:
+        # MC-empirical sd_g ≈ 0.13-0.14 across bursts → 4·SE ≈ 0.55.
+        # We use 0.30 as the floor — at 2.1·SE, false-fail rate
+        # under sampling is < 4%. The 0.25·|expected| rel-err
+        # only kicks in at |g| > 1.2 (peak ≈ 1.0 here, never
+        # triggered) — kept for safety against future fixture
+        # edits that grow the signal.
+        bound = max(0.30, 0.25 * abs(expected))
         assert abs(actual - expected) < bound, (
             f'burst {t}: g = {actual:.4f}, closed-form = '
             f'{expected:.4f} (bound = {bound:.4f}). The framework '
