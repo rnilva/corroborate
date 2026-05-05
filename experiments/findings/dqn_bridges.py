@@ -57,6 +57,9 @@ from corroborate.bridge.analysis import analysis
 from corroborate.bridge.bridge import (
     Direction, Tier, claim_bridge,
 )
+from corroborate.bridge.predicates import (
+    finite_lt, partition_aggregate,
+)
 from corroborate.core.intervention import ArmRole, DoEffect, Intervention
 from corroborate.corpus.schema import StratumG
 from corroborate.measurables import Measurable
@@ -134,10 +137,50 @@ INTERVENTION = DoEffect(treatment=(DDQN_SWAP,), baseline=())
 #     (mean_jensen=1232).
 
 _FOURROOMS_REGIME: pl.Expr = pl.col('optimizer.inner.lr') == 0.0001
+# ^ Transient debt: lr is HP setup with no clean endogenous
+# correlate in the cache (would need `gradient_norm_late` or
+# `td_error_late` measurables to migrate). Until then, scoping on
+# lr is the most honest pin to the FourRooms HPO regime.
 
+# Endogenous reading of the original capacity HP filter: the
+# documented intent was "exclude cells in the Q-explosion regime."
+# `partition_aggregate` computes a NaN-safe per-stratum mean of
+# `q_divergence_score`; `< 5` selects strata whose Q stays
+# bounded relative to the Bellman fixed-point bound. The lr part
+# remains an HP filter (no endogenous correlate yet — see above).
+#
+# IMPORTANT: lr is included in the partition keys (not just env +
+# capacity). Polars's `.over(key)` aggregates over the input
+# dataframe BEFORE filter predicates in the same expression
+# resolve, so a per-`(env, cap)` partition would mix lr values
+# (e.g., CartPole cap=50k mean across all lr = 20.6, but at
+# lr=0.001 alone = 1.25). Including lr in the partition keeps
+# the aggregate cohort-specific.
+#
+# Empirical (lr=0.001, env, capacity) mean q_div within partition:
+#   Acrobot-v1 cap=10k: 6.24 (excluded), cap=50k: 0.06 (included)
+#   CartPole-v1 cap=10k: 291.78 (excluded), cap=50k: 1.25 (included)
+#   Catch-bsuite cap={10k, 50k}: 0 (both included)
+#   DiscountingChain-bsuite cap={10k, 50k}: ~0 (both included)
+# vs prior `capacity == 50000`:
+#   Acrobot, CartPole identical cell sets; verdicts identical.
+#   Catch +120 cells (cap=10k now included), g shifts -5.00 → -4.58
+#     (both HELD, threshold |g| < null_band).
+#   DC +120 cells, g shifts -0.60 → -0.91 (both HELD).
 _ACTION_DIM_SWEEP_REGIME: pl.Expr = (
     (pl.col('optimizer.inner.lr') == 0.001)
-    & (pl.col('replay.capacity') == 50000)
+    & finite_lt(
+        partition_aggregate(
+            'q_divergence_score',
+            by=[
+                'optimizer.inner.lr',
+                'env_name',
+                'replay.capacity',
+            ],
+            op='mean',
+        ),
+        5.0,
+    )
 )
 
 

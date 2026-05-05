@@ -115,6 +115,33 @@ def partition_aggregate(
                 op='mean',
               ) > 1.0)
         )
+
+    **Sharp edge — over() vs other filter predicates:** polars's
+    `.over(by)` aggregates over the input dataframe *before* other
+    predicates in the same `df.filter(...)` expression resolve.
+    If a sibling predicate restricts to a sub-cohort (e.g.,
+    `lr == 0.001`), `partition_aggregate` does NOT see that
+    restriction — its mean spans all values of `lr` for matching
+    `(env, capacity, ...)` groups. Symptom: the helper's
+    partition-mean comes back surprisingly high (or low), and
+    `> threshold` filters drop cells you expected to keep.
+
+    **Two workarounds:**
+
+    1. Add the restricting columns to `by`. If a bridge filters
+       `lr == 0.001` and partition-aggregates Q-divergence, set
+       `by=['optimizer.inner.lr', 'env_name', 'replay.capacity']`
+       — each (lr, env, capacity) gets its own mean, so the lr
+       restriction is honored automatically.
+    2. Apply the restricting filter in a separate `.filter(...)`
+       call upstream (e.g., chain `df.filter(...).filter(...)`).
+       Polars evaluates filters sequentially, so the second
+       filter's `over()` sees the first filter's output. Bridge
+       authors pinned to `Bridge.scope: pl.Expr` (single
+       expression) should prefer (1).
+
+    Both work; (1) is more explicit and survives scope expression
+    composition.
     """
     col = _coerce(source).fill_nan(None)
     match op:
