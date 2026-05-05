@@ -1297,6 +1297,27 @@ def test_orient_non_collider_when_z_in_sepset() -> None:
     assert frozenset({'y', 'z'}) in oriented.undirected_edges
 
 
+def test_apply_meek_r2_orients_a_to_c_in_chain() -> None:
+    """Direct test of Meek R2 via `_apply_meek_rules`. Setup:
+    directed = {(a, b), (b, c)}; undirected = {(a, c)}. R2 fires:
+    A → B → C with A − C undirected → orient A → C.
+
+    Pin `if b != b2: continue` against `if b == b2: continue`
+    mutant which would invert the chain-detection (skip matching
+    chains, process non-matching ones)."""
+    from corroborate.graph.discovery import _apply_meek_rules
+    directed: set[tuple[str, str]] = {('a', 'b'), ('b', 'c')}
+    undirected: set[frozenset[str]] = {frozenset({'a', 'c'})}
+    _apply_meek_rules(
+        directed, undirected,
+        variables=frozenset({'a', 'b', 'c'}),
+        ambiguous_triples=frozenset(),
+    )
+    # R2: a → c oriented; a-c removed from undirected.
+    assert ('a', 'c') in directed
+    assert frozenset({'a', 'c'}) not in undirected
+
+
 def test_orient_meek_r1_propagation() -> None:
     """A → B and B − C undirected, A not adjacent to C → R1
     propagates orientation B → C (else A → B ← C would be a new
