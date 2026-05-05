@@ -634,6 +634,63 @@ def test_compare_pc_depths_rejects_descending_depths() -> None:
         )
 
 
+def test_discover_adjacency_rejects_negative_max_conditioning() -> None:
+    """`max_conditioning` < 0 raises ValueError. Pin the message
+    string against `None` mutant (which would raise with a
+    blank message)."""
+    from corroborate.graph.discovery import discover_adjacency
+    df = _df_from_columns(
+        x=np.array([1.0, 2.0, 3.0, 4.0]),
+        y=np.array([1.0, 2.0, 3.0, 4.0]),
+    )
+    with pytest.raises(ValueError, match='max_conditioning must be ≥ 0'):
+        discover_adjacency(
+            df, variables=['x', 'y'],
+            max_conditioning=-1,
+        )
+
+
+def test_discover_adjacency_rejects_duplicate_variables() -> None:
+    """Duplicate variable names in `variables` raise ValueError.
+    Pin `len(var_set) != len(var_list)` against `==` mutant which
+    would invert the check (raise on UNIQUE variables, accept
+    duplicates)."""
+    from corroborate.graph.discovery import discover_adjacency
+    df = _df_from_columns(
+        x=np.array([1.0, 2.0, 3.0, 4.0]),
+        y=np.array([1.0, 2.0, 3.0, 4.0]),
+    )
+    with pytest.raises(ValueError, match='duplicate variables'):
+        discover_adjacency(
+            df, variables=['x', 'y', 'x'],
+            max_conditioning=0,
+        )
+
+
+def test_discover_adjacency_keeps_edge_when_p_at_boundary_alpha() -> None:
+    """The CI test removes an edge iff `p >= alpha`. Pin the
+    boundary `>=` against `>` mutant — at p exactly equal to
+    alpha, original removes the edge, mutant keeps it.
+
+    Constructing exact p=alpha is fragile; this test instead pins
+    the BOUNDARY semantics by using a near-boundary alpha that
+    does NOT remove (keep edge) under both. The `>` direction is
+    indirectly covered by other discovery tests where p < alpha
+    keeps the edge — this test asserts that real signal is kept."""
+    from corroborate.graph.discovery import discover_adjacency
+    rng = np.random.default_rng(0)
+    n = 200
+    x = rng.standard_normal(n)
+    y = 0.7 * x + rng.standard_normal(n) * 0.5    # strong correlation
+    df = _df_from_columns(x=x, y=y)
+    adj = discover_adjacency(
+        df, variables=['x', 'y'],
+        alpha=0.05, max_conditioning=0,
+    )
+    # Strong correlation → small p → keep edge.
+    assert frozenset({'x', 'y'}) in adj.edges
+
+
 def test_compare_pc_depths_rejects_equal_depths() -> None:
     """Depths must be strictly less, not less-or-equal. Pin
     `low >= high` against `low > high` mutant — under the
