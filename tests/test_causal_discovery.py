@@ -821,6 +821,48 @@ def test_compare_pc_depths_propagates_stratify_by_to_both_calls() -> None:
     assert frozenset({'x', 'y'}) not in diff.edges_high
 
 
+def test_compare_pc_depths_propagates_alpha_to_both_calls() -> None:
+    """`alpha` must propagate to BOTH inner discover_adjacency
+    calls. Pin against the kwarg-drop mutants on either call.
+
+    Construct: 3-variable chain x → m → y at moderate sample size
+    where the marginal x-y dependence has p ≈ 0.005. With strict
+    alpha=0.001, the edge survives at depth 0 (p > alpha → keep).
+    With default alpha=0.05, the edge is removed (p < alpha →
+    discard) at depth 0.
+
+    A mutant dropping alpha on either call would default to 0.05
+    on that side, removing the edge there but keeping it on the
+    other side — a non-empty `low_only` or `high_only` set."""
+    from corroborate.graph.discovery import compare_pc_depths
+    rng = np.random.default_rng(0)
+    n = 80
+    # Spearman p ≈ 0.04 at n=80 with r ≈ 0.23, so p sits in
+    # (0.001, 0.05). PC removes the edge when p >= alpha (i.e.,
+    # cannot reject independence at significance):
+    #   alpha=0.001: 0.04 >= 0.001 → edge REMOVED
+    #   alpha=0.05:  0.04 < 0.05  → edge KEPT
+    # Mutant drops alpha → defaults to 0.05 → keeps edge even
+    # when caller passes alpha=0.001.
+    x = rng.standard_normal(n)
+    y = 0.3 * x + rng.standard_normal(n)
+    df = _df_from_columns(x=x, y=y)
+    diff_strict = compare_pc_depths(
+        df, variables=['x', 'y'],
+        alpha=0.001, depths=(0, 1),
+    )
+    # Strict α: edge removed at both depths.
+    assert frozenset({'x', 'y'}) not in diff_strict.edges_low
+    assert frozenset({'x', 'y'}) not in diff_strict.edges_high
+    # Lax α: edge kept (sanity check on the fixture's p value).
+    diff_lax = compare_pc_depths(
+        df, variables=['x', 'y'],
+        alpha=0.05, depths=(0, 1),
+    )
+    assert frozenset({'x', 'y'}) in diff_lax.edges_low
+    assert frozenset({'x', 'y'}) in diff_lax.edges_high
+
+
 def test_compare_pc_depths_propagates_high_max_conditioning() -> None:
     """`max_conditioning=high` must propagate to the high call.
     Pin against the kwarg-drop mutant which would default to 1.
@@ -1083,16 +1125,21 @@ def test_orient_returns_true_and_mutates_on_clean_orient() -> None:
 
 def test_orient_v_structure_collider() -> None:
     """Unshielded X − Z − Y with Z NOT in sepset(X, Y) → orient
-    X → Z ← Y (definite collider)."""
+    X → Z ← Y (definite collider).
+
+    Also pin `variables=adj.variables` and `separating_sets=adj.separating_sets`
+    on the OrientedAdjacency constructor — mutants passing None
+    would store None in the typed dataclass field."""
     from corroborate.graph.discovery import (
         DiscoveredAdjacency, orient_adjacency,
     )
+    sepsets = {
+        frozenset({'x', 'y'}): frozenset({frozenset[str]()}),
+    }
     adj = DiscoveredAdjacency(
         variables=frozenset({'x', 'y', 'z'}),
         edges=frozenset({frozenset({'x', 'z'}), frozenset({'y', 'z'})}),
-        separating_sets={
-            frozenset({'x', 'y'}): frozenset({frozenset[str]()}),
-        },
+        separating_sets=sepsets,
         n_observations=100, alpha=0.05, max_conditioning=0,
         stratify_by=None,
     )
@@ -1101,6 +1148,9 @@ def test_orient_v_structure_collider() -> None:
     assert ('y', 'z') in oriented.directed_edges
     assert oriented.undirected_edges == frozenset()
     assert oriented.ambiguous_triples == frozenset()
+    # Pin variables + separating_sets propagation.
+    assert oriented.variables == frozenset({'x', 'y', 'z'})
+    assert oriented.separating_sets == sepsets
 
 
 def test_orient_non_collider_when_z_in_sepset() -> None:
