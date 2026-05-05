@@ -118,6 +118,8 @@ def require_verdict(d: Mapping[str, object], key: str) -> Verdict:
         return Verdict.POWER_INSUFFICIENT
     if v == Verdict.INVARIANT_VIOLATION.value:
         return Verdict.INVARIANT_VIOLATION
+    if v == Verdict.INADMISSIBLE.value:
+        return Verdict.INADMISSIBLE
     raise TypeError(f'{key!r} must be a Verdict value, got {v!r}')
 
 

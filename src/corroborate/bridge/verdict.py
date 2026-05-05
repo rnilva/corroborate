@@ -40,13 +40,14 @@ class Verdict(Enum):
     NO_EFFECT = 'no_effect'
     POWER_INSUFFICIENT = 'power_insufficient'
     INVARIANT_VIOLATION = 'invariant_violation'
+    INADMISSIBLE = 'inadmissible'
 
     def is_terminal(self) -> bool:
         """True iff the verdict doesn't require more data to
         resolve. HELD / HELD_WITH_SCOPE_FLAG / NO_EFFECT /
-        INVARIANT_VIOLATION are terminal; POWER_INSUFFICIENT is
-        the only verdict that explicitly says 'rerun at higher
-        n'."""
+        INVARIANT_VIOLATION / INADMISSIBLE are terminal;
+        POWER_INSUFFICIENT is the only verdict that explicitly
+        says 'rerun at higher n'."""
         return self is not Verdict.POWER_INSUFFICIENT
 
     def is_corroboration(self) -> bool:

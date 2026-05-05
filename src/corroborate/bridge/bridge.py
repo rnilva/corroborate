@@ -57,6 +57,12 @@ from typing import cast
 import polars as pl
 
 from corroborate._internals.introspection import get_param_default
+from corroborate.bridge.admission import (
+    AUTO_GATES,
+    AdmissionGate,
+    GateLevel,
+    GateResult,
+)
 from corroborate.bridge.analysis import resolve_for_holds_when
 from corroborate.bridge.verdict import Verdict
 from corroborate.core.hypothesis import PredictedDirection
@@ -240,6 +246,7 @@ class Bridge:
     predicted_direction: PredictedDirection | None = None
     holds_when: Callable[..., Verdict] | None = None
     threshold: float | None = None
+    gates: tuple['AdmissionGate', ...] = ()
 
     @cached_property
     def params(self) -> Mapping[str, object]:
@@ -345,10 +352,21 @@ class Bridge:
 class BridgeEvaluation:
     """One bridge evaluated against one cell-set: the verdict the
     `holds_when` body returned + the analysis results that
-    produced it (the audit trail)."""
+    produced it (the audit trail).
+
+    `warnings`: WARN-level / INFO-level admission-gate results
+    that fired but didn't block. Bridge author can scan these to
+    surface non-principled authoring (HP-envelope scope, missing
+    predicted_direction, etc.). Per
+    `ADMISSION_GATES_DESIGN.md`.
+
+    `blocked_by`: set when `verdict == INADMISSIBLE` — the first
+    BLOCK-level gate that vetoed the bridge. Body did not run."""
     bridge_name: str
     verdict: Verdict
     analysis_results: Mapping[str, object]
+    warnings: tuple['GateResult', ...] = ()
+    blocked_by: 'GateResult | None' = None
 
 
 def _require_endpoint(
@@ -470,6 +488,7 @@ def claim_bridge(
     pair_by: tuple[str, ...] = ('seed',),
     scope: pl.Expr | None = None,
     predicted_direction: PredictedDirection | None = None,
+    gates: tuple[AdmissionGate, ...] = (),
 ) -> Callable[[Callable[..., Verdict]], Bridge]:
     """Decorator factory: wraps a function into a `Bridge`
     declaration. Bridge metadata lives in the decorator args; the
@@ -570,6 +589,7 @@ def claim_bridge(
             scope=scope_validated,
             holds_when=fn,
             predicted_direction=predicted_direction_validated,
+            gates=gates,
         )
 
     return _decorator
@@ -671,6 +691,26 @@ def evaluate(
             cast(list[dict[str, object]], df.to_dicts())
             if df.height > 0 else []
         )
+    # Run admission gates BEFORE the bridge body. Auto-gates
+    # (typed-contract guards, exogenous-source/scope, etc.) are
+    # always-on; per-bridge `gates=(...)` are appended. BLOCK-level
+    # failures short-circuit the bridge with `Verdict.INADMISSIBLE`;
+    # WARN/INFO results accumulate on `BridgeEvaluation.warnings`.
+    all_gates: tuple[AdmissionGate, ...] = AUTO_GATES + bridge.gates
+    warnings: list[GateResult] = []
+    for gate in all_gates:
+        result = gate(bridge, filtered_cells)
+        if result is None or result.passed:
+            continue
+        if result.level is GateLevel.BLOCK:
+            return BridgeEvaluation(
+                bridge_name=bridge.name,
+                verdict=Verdict.INADMISSIBLE,
+                analysis_results=MappingProxyType({}),
+                warnings=tuple(warnings),
+                blocked_by=result,
+            )
+        warnings.append(result)
     # Contrast resolution:
     #   - `source = DoEffect(...)` → contrast = the DoEffect, and
     #     the analysis's `source` slot maps to bridge.target_name
@@ -714,6 +754,7 @@ def evaluate(
         bridge_name=bridge.name,
         verdict=verdict,
         analysis_results=MappingProxyType(dict(analysis_results)),
+        warnings=tuple(warnings),
     )
 
 
