@@ -579,6 +579,47 @@ def test_classify_singleton_strata_use_zero_variance() -> None:
     assert scope is VariableScope.ACROSS_STRATUM
 
 
+def test_classify_within_frac_uses_division_not_multiplication() -> None:
+    """`within_frac = within_var / total_var`. Pin against
+    `within_var * total_var` mutant.
+
+    Construct: total_var = ~5, within_var = ~0.2 →
+      orig within_frac = 0.04 < 0.05 → ACROSS_STRATUM
+      mutant within_frac = 0.2 * 5 = 1.0 → not ACROSS → falls
+      to check 2 → across_frac = 0.96 → BOTH.
+
+    Two 2-element strata with identical small spread (within
+    var = 0.2025) and means separated by ~4.4 (across var = 4.8)."""
+    M = 4.38
+    values = np.array([
+        -0.45, 0.45,             # stratum A: mean=0
+        M - 0.45, M + 0.45,      # stratum B: mean=M
+    ])
+    strata = ['a', 'a', 'b', 'b']
+    scope = classify_variable_scope(values, strata)
+    assert scope is VariableScope.ACROSS_STRATUM
+
+
+def test_classify_across_frac_uses_division_not_multiplication() -> None:
+    """`across_frac = across_var / total_var`. Pin against
+    `across_var * total_var` mutant.
+
+    Construct: total_var = ~1.5, across_var = ~0.06 →
+      orig across_frac = 0.04 < 0.05 → WITHIN_STRATUM
+      mutant across_frac = 0.06 * 1.5 = 0.09 → not WITHIN → BOTH.
+
+    Two 2-element strata with large spread (within var = 1.44)
+    and means separated by ~0.49 (across var = 0.06)."""
+    diff = 0.49
+    values = np.array([
+        -1.2, 1.2,                       # stratum A: mean=0,    var=1.44
+        diff - 1.2, diff + 1.2,          # stratum B: mean=0.49, var=1.44
+    ])
+    strata = ['a', 'a', 'b', 'b']
+    scope = classify_variable_scope(values, strata)
+    assert scope is VariableScope.WITHIN_STRATUM
+
+
 def test_classify_returns_degenerate_when_total_var_zero() -> None:
     """Total variance exactly zero (constant column across all
     strata) → DEGENERATE. The early-degeneracy check via ptp
