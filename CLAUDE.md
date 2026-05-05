@@ -417,13 +417,32 @@ after a real parquet round-trip. Both shapes are needed.
 `pyproject.toml [tool.mutmut]` to mutate framework analysis
 primitives and run only the analytic suite. Surviving mutants
 are coverage gaps (closed-form bound too loose, or the line
-isn't exercised). Run with `uv run mutmut run`; triage with
-`uv run mutmut results` / `uv run mutmut show <name>`. **Sharp
-edge:** mutmut wraps each function with a trampoline that
-materializes default-arg values at the wrapper level, so
+isn't exercised). Run with `uv run mutmut run`; list all results
+with `uv run mutmut results --all true` (default omits killed);
+inspect a single mutant with `uv run mutmut show <name>`.
+
+**Sharp edge:** mutmut wraps each function with a trampoline
+that materializes default-arg values at the wrapper level, so
 mutations of parameter defaults (e.g., `arm_field='arm_key'` →
 `'XX...XX'`) never propagate through the call. Treat default-arg
 mutations as wrap-broken, not real survivors.
+
+**Workflow.** When fixing surfaced gaps:
+
+1. Sample survivors per file: `uv run mutmut results --all true |
+   grep "<file>.*survived" | head`.
+2. Inspect each: `uv run mutmut show <name>`. Categorize as
+   wrap-broken / equivalent / real-gap.
+3. For real-gap clusters (e.g., Fisher-z formula never reached
+   because tests give r=±1 short-circuit; IVW weighting never
+   exercised because tests use uniform SE), add a closed-form
+   test that **specifically constructs cells putting the
+   framework on the unexercised code path**. Examples:
+   `tests/analytic/lg_scm/test_paired_link_fisher_z.py` (moderate-r
+   construction with independent ε per arm), `test_random_effects_ivw.py`
+   (heterogeneous SE via varied n_pairs + mu_x extremes).
+4. Re-run `uv run mutmut run`; verify the targeted mutants flip
+   from `survived` to `killed`.
 
 ## Acceptance criteria
 
