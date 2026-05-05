@@ -325,11 +325,27 @@ def adaptive_dqn_recovers_ddqn_benefit__fourrooms_factor_0p5(
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
     pair_by=('seed', 'env_name'),
+    # Endogenous scope: per-(env, total_steps) mean of
+    # `q_divergence_score` exceeds the Bellman fixed-point bound
+    # (jensen > r_max/(1−γ)) — the regime where the bridge claims
+    # DDQN's early-burst benefit operates. Replaces the prior
+    # `sync_period == 100` HP-knob scope. The multi-key partition
+    # `over(['env_name', 'total_steps'])` keeps the regime-specific
+    # signal: Freeway-MinAtar's full-cache env-mean is 0.74 (mixing
+    # 50k/200k/1M cells), but its 1M-only env×total_steps mean is
+    # 2.76 — so Freeway 1M passes. `fill_nan(None)` makes the mean
+    # NaN-safe (polars `.mean()` propagates NaN otherwise).
+    # Pairing-safe: env-level aggregate is the same for vanilla
+    # and DDQN cells of the same (env, seed).
     scope=(
         (pl.col('log_obs_dim') >= 5.0)
         & (pl.col('total_steps') >= 1000000.0)
         & pl.col('reward_clip_min').is_null()
-        & (pl.col('sync_period') == 100)
+        & pl.col('q_divergence_score').is_finite()
+        & (
+            pl.col('q_divergence_score').fill_nan(None).mean()
+            .over(['env_name', 'total_steps']) > 1.0
+        )
     ),
 )
 def ddqn_helps_at_early_bursts__pixel_envs(
