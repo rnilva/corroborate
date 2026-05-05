@@ -91,6 +91,35 @@ def test_derived_q_one_for_large_g_over_se() -> None:
     assert q > 0.99
 
 
+def test_derived_q_nan_g_returns_nan() -> None:
+    """NaN g → NaN. Pin `or` chain in early-return: under the
+    `or → and` mutants between conditions, NaN g alone wouldn't
+    short-circuit and would compute float(NaN/se) = NaN anyway,
+    BUT `float(None)` mutant on NaN-return would raise TypeError."""
+    assert math.isnan(derived_q_from_g_se(float('nan'), 0.5))
+
+
+def test_derived_q_nan_se_returns_nan() -> None:
+    """NaN se → NaN."""
+    assert math.isnan(derived_q_from_g_se(1.0, float('nan')))
+
+
+def test_derived_q_zero_se_returns_nan() -> None:
+    """se=0 → NaN (avoids division by zero in g/se). Pin
+    `se == 0.0` against `se == 1.0` mutant (which would NaN at
+    se=1 and divide-by-zero at se=0)."""
+    assert math.isnan(derived_q_from_g_se(1.0, 0.0))
+
+
+def test_derived_q_uses_division_not_multiplication() -> None:
+    """Φ(g / se) — pin against `g * se` mutant. With g=2, se=0.5:
+    g/se = 4 → Φ(4) ≈ 0.99997
+    g*se = 1 → Φ(1) ≈ 0.84
+    Different by ~0.16 — easily distinguished."""
+    q = derived_q_from_g_se(2.0, 0.5)
+    assert q == pytest.approx(0.99997, abs=1e-4)
+
+
 def test_delta_i_zero_at_q_half() -> None:
     """q=0.5 → H_2(0.5) = 1 → ΔI = 0 (no information)."""
     assert delta_i_from_q(0.5) == pytest.approx(0.0)
