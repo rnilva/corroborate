@@ -1,0 +1,242 @@
+"""Framework-as-instrument: `meta_regression_per_burst` recovers
+the structural slope on an env-level covariate over the
+Banach-contraction per-(env, burst) panel.
+
+Setup: 5 envs differing in `μ_env` (the per-cell initial-scale
+mean). Per env, 80 paired cells contracting under γ_a=0.95
+(slow) vs γ_b=0.5 (fast). 12 bursts per cell.
+
+Per-(env, burst) Hedges' g:
+
+    g(t, μ_env) = μ_env · K_t                    (structural)
+
+    where K_t = (γ_a^t − γ_b^t)
+              / √(σ_x² · (γ_a^t − γ_b^t)² + 2 σ_obs²)
+              · c_4(n_pairs)
+
+The per-(env, burst) panel has 5 × 12 = 60 strata. Meta-regressing
+g on the env-level covariate `μ_env` (broadcast across bursts):
+
+    slope ≈ mean_t(K_t)                           (under equal IVW weights)
+    intercept ≈ 0                                 (μ_env-grid centered at 0)
+    R² > 0                                        (μ_env is structurally predictive)
+
+For the contraction parameters here:
+    K_t at t=0..11 = (0, 0.62, 0.88, 0.98, 1.00, 0.99, 0.97,
+                     0.93, 0.90, 0.86, 0.82, 0.78)
+    mean_t K_t ≈ 0.808
+
+The framework's `meta_regression_per_burst` flattens the
+per-(env, burst) panel into 60 strata and fits a single
+random-effects meta-regression. THIS is the framework-as-
+instrument question: given a panel where the structural slope
+on the env covariate is closed-form, does the framework
+recover it within sampling SE?
+
+A regression that mishandled the per-stratum covariate
+broadcast (e.g., averaging g across bursts before regressing,
+or dropping bursts) would breach the slope bound; one that
+mishandled the IVW pooling would shift the slope away from
+the closed form.
+"""
+from __future__ import annotations
+
+import math
+import zlib
+
+import numpy as np
+
+from corroborate.analyses.meta_regression_per_burst import (
+    meta_regression_per_burst,
+)
+from corroborate.measurables.reductions import from_key, reduce_axis
+
+
+def _det_seed(*parts: object) -> int:
+    return zlib.adler32(repr(parts).encode()) & 0xFFFF_FFFF
+
+
+_GAMMA_A = 0.95     # slow contraction (treatment)
+_GAMMA_B = 0.5      # fast contraction (baseline)
+_SIGMA_X = 0.3      # per-seed initial-scale dispersion within env
+_SIGMA_OBS = 0.5    # per-burst observation noise
+_N_PAIRS = 80
+_N_BURSTS = 12
+
+# Centered grid → intercept ≈ 0 closed form. Spread spans 5 envs.
+_MU_GRID: tuple[float, ...] = (-2.0, -1.0, 0.0, 1.0, 2.0)
+
+_PER_BURST_KEY = 'contraction_trace'
+_PER_BURST_SOURCE = reduce_axis(
+    from_key(_PER_BURST_KEY), axis=-1, op='mean',
+)
+
+
+def _c4(n: int) -> float:
+    return 1.0 - 3.0 / (4 * n - 5)
+
+
+def _expected_per_burst_K(t: int) -> float:
+    """K_t = (γ_a^t − γ_b^t) / sd(Δ_t) · c_4. The per-burst
+    "g per unit μ" — the meta-regression's slope on μ_env should
+    converge to mean_t(K_t) under equal weighting."""
+    diff = _GAMMA_A ** t - _GAMMA_B ** t
+    var = _SIGMA_X ** 2 * diff ** 2 + 2.0 * _SIGMA_OBS ** 2
+    return diff / math.sqrt(var) * _c4(_N_PAIRS)
+
+
+def _expected_slope_on_mu_env() -> float:
+    """Closed-form slope ≈ mean_t(K_t) — the average per-burst
+    "g per unit μ" across the 12-burst trajectory."""
+    return sum(_expected_per_burst_K(t) for t in range(_N_BURSTS)) / _N_BURSTS
+
+
+def _generate_per_burst_panel_cells() -> list[dict[str, object]]:
+    """Per-cell per-burst contraction trace, with μ_env as an
+    env-level mean-x_0 covariate."""
+    cells: list[dict[str, object]] = []
+    for mu in _MU_GRID:
+        env_name = f'mu_{mu:g}'
+        for s in range(_N_PAIRS):
+            rng = np.random.default_rng(
+                seed=_det_seed('mr_per_burst', mu, s),
+            )
+            x_0 = float(mu + _SIGMA_X * rng.standard_normal())
+            traj_slow = np.array([
+                [x_0 * (_GAMMA_A ** t)
+                 + _SIGMA_OBS * float(rng.standard_normal())]
+                for t in range(_N_BURSTS)
+            ], dtype=np.float64)
+            traj_fast = np.array([
+                [x_0 * (_GAMMA_B ** t)
+                 + _SIGMA_OBS * float(rng.standard_normal())]
+                for t in range(_N_BURSTS)
+            ], dtype=np.float64)
+            cells.append({
+                'arm_key': 'slow',
+                'seed': s,
+                'env_name': env_name,
+                'mu_env': mu,
+                _PER_BURST_KEY: traj_slow,
+            })
+            cells.append({
+                'arm_key': 'fast',
+                'seed': s,
+                'env_name': env_name,
+                'mu_env': mu,
+                _PER_BURST_KEY: traj_fast,
+            })
+    return cells
+
+
+# ============ Slope: structural recovery on env-level covariate ============
+
+def test_meta_regression_per_burst_recovers_mu_env_slope() -> None:
+    """Slope on `μ_env` matches `mean_t(K_t) ≈ 0.808` within
+    4·SE.
+
+    Sampling SE on the slope (60 strata, 5 envs, Var(μ_grid)=2):
+    SE_slope ≈ sd_residual / √(n_strata · Var(μ_env))
+            ≈ 0.20 / √(60 · 2.0)         (residual sd ≈ 0.2)
+            ≈ 0.018
+    4·SE ≈ 0.07. Bound 0.10 leaves margin for IVW-vs-equal
+    weighting variation across the per-burst SE spectrum.
+    """
+    cells = _generate_per_burst_panel_cells()
+    result = meta_regression_per_burst.fn(
+        cells,
+        treatment_arm='slow',
+        baseline_arm='fast',
+        pair_by=('seed',),
+        source=_PER_BURST_SOURCE,
+        covariates=('mu_env',),
+    )
+    by_name = {c.name: c for c in result.coefficients}
+    assert 'mu_env' in by_name
+    expected = _expected_slope_on_mu_env()
+    actual = by_name['mu_env'].coefficient
+    bound = 0.10
+    assert abs(actual - expected) < bound, (
+        f'slope on μ_env = {actual:.4f}, closed-form '
+        f'mean_t(K_t) = {expected:.4f} (bound = {bound:.4f}). '
+        f'The framework s per-(env, burst) panel build + IVW '
+        f'meta-regression must recover the structural slope.'
+    )
+    assert by_name['mu_env'].is_significant
+
+
+# ============ Intercept: centered covariate → ~0 ============
+
+def test_meta_regression_per_burst_intercept_near_zero_on_centered_grid() -> None:
+    """μ_env grid is centered at 0 (∈ {-2, -1, 0, 1, 2}), so the
+    meta-regression intercept (= pooled g at μ_env=0) should be
+    ≈ 0 within sampling SE.
+
+    A regression that miscentered the covariate (e.g., used the
+    wrong intercept formulation) would shift this away from 0.
+    """
+    cells = _generate_per_burst_panel_cells()
+    result = meta_regression_per_burst.fn(
+        cells,
+        treatment_arm='slow',
+        baseline_arm='fast',
+        pair_by=('seed',),
+        source=_PER_BURST_SOURCE,
+        covariates=('mu_env',),
+    )
+    # Intercept SE on centered covariate: sd_residual / √n_strata.
+    # ≈ 0.2 / √60 ≈ 0.026. 4·SE ≈ 0.10.
+    bound = 0.10
+    assert abs(result.intercept) < bound, (
+        f'intercept = {result.intercept:.4f}, expected ≈ 0 '
+        f'(bound = {bound:.4f}). μ_env grid is centered at 0.'
+    )
+
+
+# ============ Panel structure ============
+
+def test_meta_regression_per_burst_panel_size() -> None:
+    """The per-(env, burst) panel has `5 envs × 12 bursts = 60`
+    strata. Pin against a regression that silently dropped envs
+    or bursts during the panel build.
+    """
+    cells = _generate_per_burst_panel_cells()
+    result = meta_regression_per_burst.fn(
+        cells,
+        treatment_arm='slow',
+        baseline_arm='fast',
+        pair_by=('seed',),
+        source=_PER_BURST_SOURCE,
+        covariates=('mu_env',),
+    )
+    assert result.n_strata == len(_MU_GRID) * _N_BURSTS, (
+        f'n_strata = {result.n_strata}, expected '
+        f'{len(_MU_GRID) * _N_BURSTS}'
+    )
+
+
+# ============ R²: covariate is structurally predictive ============
+
+def test_meta_regression_per_burst_r_squared_high() -> None:
+    """μ_env IS the structural axis driving per-(env, burst) g
+    (modulo per-burst K_t). A meta-regression that correctly
+    builds the panel and fits should report a substantial R²
+    (> 0.5).
+
+    A regression returning a stub R² ≈ 0 (covariate ignored)
+    would breach.
+    """
+    cells = _generate_per_burst_panel_cells()
+    result = meta_regression_per_burst.fn(
+        cells,
+        treatment_arm='slow',
+        baseline_arm='fast',
+        pair_by=('seed',),
+        source=_PER_BURST_SOURCE,
+        covariates=('mu_env',),
+    )
+    assert result.r_squared > 0.5, (
+        f'R² = {result.r_squared:.4f}, expected > 0.5. μ_env '
+        f'is the structural slope axis; low R² indicates the '
+        f'covariate is not entering the regression.'
+    )
