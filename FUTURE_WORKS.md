@@ -244,7 +244,7 @@ completion-order semantics turn out to be wrong.
 
 ## Theorem-gap measurables that need richer logging
 
-**Status:** LIVE. Multiple gaps blocked on data the v0 StepRecord
+**Status:** LIVE. Some gaps blocked on data the v0 StepRecord
 doesn't carry.
 
 **Background.** Invariants in `corroborate` measure *gap
@@ -253,15 +253,37 @@ tests. Several DQN-claim gaps aren't computable from the v0
 record.
 
 **Currently shipped:** `fqi_decay_gap`, `hasselt_covariance_gap`,
-`action_coverage_gap`, `jensen_overestimation_gap`,
-`state_action_coverage_gap`.
+`jensen_overestimation_gap`, `state_action_coverage_gap`,
+`jensen_dormancy_gap`, `jensen_floor_late`,
+`banach_contraction_gap_coarse` (eval-burst probe — added
+2026-05-05).
 
 | Gap | Theorem | Data needed | Lift gate |
 |-----|---------|-------------|-----------|
-| Banach contraction rate | Bertsekas-Tsitsiklis 1996 §6.3 — `r_emp = ‖Q_{t+1} − Q_t‖ / ‖Q_t − Q_{t−1}‖` should ≤ γ | Q-evaluation on a fixed probe set per step | Probe-set hook in `dqn_step` (could compose with `_value_probe`) |
+| Banach contraction rate (strict) | Bertsekas-Tsitsiklis 1996 §6.3 — per-step `r_emp = ‖Q_{t+1} − Q_t‖_∞ / ‖Q_t − Q_{t−1}‖_∞` should ≤ γ | Per-step Q-evaluation on a *designed* probe set (currently the eval-rollout's init states are the probe; the probe isn't coverage-balanced and the iteration spans `eval_every` TD updates, not one) | Probe-set hook in `dqn_step` + designed probe-set construction |
 
-**Lift when:** an experiment in §3-§5 needs the contraction-rate
-gap as a measured outcome.
+**Coarse version shipped.**
+`banach_contraction_gap_coarse` reads the existing burst-spaced
+`predicted_q_at_start` array and computes a geometric-mean ratio
+over consecutive bursts — the same shape `fqi_decay_gap` uses
+for FQI's multiplicative decay. Returns `max(0, geomean_ratio −
+γ)`; non-zero gap means Banach is empirically violated on
+average across bursts.
+
+**Why the strict version is still LIVE.** The coarse measurable
+trades two coarse-grainings for the textbook gap:
+1. Probe set is the eval-rollout init states (K per burst), not
+   a designed coverage-balanced sample. For envs with
+   `resample_init_pos=False` the probe collapses to a single
+   state.
+2. The "iteration" in the ratio spans `eval_every` TD updates,
+   not a single update. The actual Bellman-step contraction
+   rate is undermeasured at this granularity.
+
+**Lift when:** an experiment needs the strict per-step Banach gap
+(coverage-balanced probe set, single-step ratio). The probe-set
+hook can compose with the existing `_value_probe` in
+`train_phase`.
 
 ---
 

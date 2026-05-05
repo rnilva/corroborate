@@ -337,6 +337,78 @@ def jensen_dormancy_gap() -> Measurable[DQNTrajectoryRecord, float]:
     )
 
 
+# ============ Banach contraction gap (coarse — eval-burst probe) ============
+
+def banach_contraction_gap_coarse(
+    *,
+    gamma: float = 0.99,
+) -> Measurable[DQNTrajectoryRecord, float]:
+    """Coarse Banach γ-contraction gap, measured at eval-burst
+    boundaries.
+
+    Bertsekas-Tsitsiklis 1996 §6.3: the optimal Bellman operator
+    is a γ-contraction in sup-norm — for every iteration t after
+    burn-in,
+
+        ‖Q_{t+1} − Q_t‖_∞ ≤ γ · ‖Q_t − Q_{t−1}‖_∞.
+
+    Equivalently, the per-iteration ratio
+    `r_emp[t] = ‖Q_{t+1} − Q_t‖ / ‖Q_t − Q_{t−1}‖` should bound
+    by γ. Ratios > γ are violations.
+
+    The coarse version uses `predicted_q_at_start` (per-eval
+    `max_a Q_online(s_0, a)`, shape `(n_bursts, K)`) over
+    consecutive burst boundaries. The probe set is the K eval-
+    rollout init states (varying for `resample_init_pos=True`
+    envs, fixed for deterministic-init envs). The "iteration"
+    spans `eval_every` TD updates per burst, not a single update.
+    Both are coarse-grainings of the textbook quantity (per-step,
+    full L_∞ over a designed probe set); the strict version is
+    deferred until a probe-set hook lands in `dqn_step`
+    (FUTURE_WORKS.md "Theorem-gap measurables").
+
+    Returns the geometric-mean ratio's excess over γ:
+    `max(0, geomean_ratio − γ)`. Geometric mean matches the
+    multiplicative-decay convention `fqi_decay_gap` uses;
+    non-zero gap signals contraction is empirically violated on
+    average across bursts. NaN sentinel when fewer than 3 bursts
+    or when all denominator diffs are below epsilon (no signal
+    to bound)."""
+    name = f'banach_contraction_gap_coarse[γ={gamma:g}]'
+
+    def fn(record: DQNTrajectoryRecord) -> float:
+        predicted = jnp.asarray(record['predicted_q_at_start'])
+        # `predicted` shape: `(n_bursts, K)` — K eval episodes per
+        # burst. Average across K to get one Q-value per burst.
+        if predicted.ndim != 2:
+            return float('nan')
+        q_per_burst = jnp.mean(predicted, axis=-1)
+        n_bursts = int(q_per_burst.shape[0])
+        if n_bursts < 3:
+            # Need ≥3 bursts to compute one r_emp = diff[1] / diff[0].
+            return float('nan')
+        diffs = jnp.abs(jnp.diff(q_per_burst))  # (n_bursts - 1,)
+        # ratio[t] = diffs[t+1] / diffs[t]; skip near-zero
+        # denominators (no signal to decay from).
+        denom = diffs[:-1]
+        log_ratios: list[float] = []
+        for t in range(int(denom.shape[0])):
+            d_prev = float(denom[t])
+            d_next = float(diffs[t + 1])
+            if d_prev < 1e-9:
+                continue
+            ratio = d_next / d_prev
+            log_ratios.append(float(jnp.log(jnp.maximum(ratio, 1e-12))))
+        if not log_ratios:
+            return float('nan')
+        geomean_ratio = float(jnp.exp(sum(log_ratios) / len(log_ratios)))
+        return float(max(0.0, geomean_ratio - gamma))
+
+    return Measurable(
+        fn=fn, name=name, reads=('predicted_q_at_start',),
+    )
+
+
 # ============ Watkins (s, a)-coverage gap (env-parameterised) ============
 
 def state_action_coverage_gap(
@@ -403,6 +475,7 @@ def state_action_coverage_gap(
 # / scope).
 __all__ = [
     'DQNTrajectoryRecord',
+    'banach_contraction_gap_coarse',
     'fqi_decay_gap',
     'hasselt_covariance_gap',
     'jensen_dormancy_gap',
