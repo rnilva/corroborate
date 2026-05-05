@@ -396,7 +396,14 @@ def test_random_effects_summary_or_in_filter_keeps_only_full_pairs() -> None:
 
 def test_random_effects_summary_homogeneous_cells_zero_tau2() -> None:
     """All cells with same g + same SE → tau² = 0 (no
-    between-cell heterogeneity), pooled_g = common value."""
+    between-cell heterogeneity), pooled_g = common value.
+
+    Closed-form se_pooled = sqrt(1 / sum(1/v_i)). With 5 cells
+    at se=0.2: vs=0.04, sum_w=5/0.04=125, var_pooled=1/125=0.008,
+    se_pooled=sqrt(0.008)≈0.0894.
+
+    Pin `var_pooled = 1.0 / sum_w_rand` against `2.0 / sum_w_rand`
+    mutant which would double var_pooled → se_pooled ≈ 0.126."""
     from corroborate.stats import random_effects_summary
     p = random_effects_summary([(0.5, 0.2)] * 5)
     assert p.n_cells == 5
@@ -404,6 +411,8 @@ def test_random_effects_summary_homogeneous_cells_zero_tau2() -> None:
     assert p.tau2 == pytest.approx(0.0, abs=1e-6)
     # PI brackets the common value at low heterogeneity.
     assert p.pi_lo < 0.5 < p.pi_hi
+    # Closed-form se_pooled = sqrt(1 / (5/0.04)) = sqrt(0.008).
+    assert p.se_pooled == pytest.approx(math.sqrt(0.008), rel=1e-6)
 
 
 def test_random_effects_summary_heterogeneous_cells_positive_tau2() -> None:
