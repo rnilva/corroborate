@@ -1,469 +1,232 @@
 # Future works
 
-Backlog of deferrable improvements surfaced during code reviews.
-Each entry has: status, the rationale for deferral, and the
-condition that should lift it.
+Backlog of deferrable improvements. Each entry has: status, the
+rationale for deferral, and the condition that lifts it.
 
-Entries are ordered by *forcing function*: the higher up, the
-sooner they're likely to bind.
+Triage convention:
+- **LIVE** — still deferred, lift condition unmet.
+- **DOABLE** — lift condition fired or close; ready to revisit.
+- **RESOLVED** — kept as history pointer (delete after a release).
 
-## Refuter semantics — `is_refuter` flag deferred (2026-05-02)
+Ordered by *forcing function*: higher up = sooner to bind.
 
-**Status:** removed without replacement during Phase 1 of the
-Bridge-collapse refactor. The `BridgeRole` enum's `'refuter'`
-member, plus the `refuter_edge` factory, were deleted along with
-the rest of `claimed_edge.py`.
+---
 
-**Why deferred:** the only consumer of refuter-as-Hypothesis-edge-
-role was `tests/test_claimed_edge.py` (also deleted). No
-experiment, smoke, or analysis currently authors a refuter edge.
-The plan called out the `is_refuter: bool` distinction
-(HELD-flips-interpretation: a HELD refuter *contradicts* the
-hypothesis) as the one piece of role-enum semantics worth
-preserving, but with zero current consumers there's nothing for
-the flag to drive.
+## Endogenous-variable scope predicates
 
-**Lift condition:** when a substrate authors a refuter edge —
-i.e. an intervention-shaped Bridge whose HELD verdict should
-flip the hypothesis-level interpretation. At that point: add
-`is_refuter: bool = False` to `claim_bridge.Bridge`, have
-`hypothesis_subgraph_verdict` invert the verdict for refuter
-edges before assembling the Hypothesis-level pattern.
+**Status:** LIVE. Active design tension; HP envelopes are the
+current placeholder.
 
-(Note: `bridges_dowhy.py` uses `'role': 'refuter'` strings
-inside DoWhy refutation analyses — those are stats-dict labels
-on placebo / random-common-cause refutations, unrelated to the
-Hypothesis-edge role taxonomy. They stay untouched.)
+**Description:** Bridges authored with only `pl.col('env_name') == X`
+scope pool cells across every corpus that has that env, mixing
+different sweeps' HPs. The current minimal substitute is per-bridge-
+family HP envelopes (e.g. `_FOURROOMS_REGIME = lr == 1e-4`,
+`_ACTION_DIM_SWEEP_REGIME = lr == 1e-3 & capacity == 50000`) — see
+`experiments/findings/dqn_bridges.py`. These work but enumerate
+HP regimes by name, not the principled axis.
 
-## v10 `redundancy.py` port — explicitly deferred (2026-05-01)
+The principled scope is **endogenous variables** — features
+observed/computed from the cell's own state, not metadata about
+which sweep produced it. Examples:
+- `jensen_dormancy_premise_active == 'held'` — cells where the
+  bias-compounding mechanism's premise is active.
+- Convergence-class membership (`with_cell_class` in
+  `corroborate_rl.cell_classification`).
+- Effective-horizon thresholds (`effective_horizon >= 20`).
 
-**Status:** not blocking active work; deferred until the
-authoring layer (file protocol + analyses + bridges) has settled
-enough that R(h) over a register of authored claims is the
-natural next consumer.
+Per ANALYSIS_RECIPE.md §0, classification is the canonical
+pre-flight; bridges should consume the classification verdict
+in their scope predicate.
 
-**Why deferred:** the file protocol shipped 32 authored claim_
-bridges (~1565 LoC) and is producing real verdicts; the bottleneck
-right now is *authoring ergonomics* (per-env factory, threshold
-helpers, structural-field plumbing), not the absence of an axiom-
-19 reward signal. A redundancy primitive built before the register
-shape stabilises would have to be re-fitted afterwards — a worse
-order of operations than the reverse.
+**Lift when:** a substrate author writes endogenous-scope bridges
+on a real claim and demonstrates the contamination-free pool. The
+HP-envelope helpers can then migrate one-by-one as their
+endogenous equivalent is authored.
 
-**Lift condition:** the authoring layer settles AND a register/
-cycle persistence path lands. At that point `compute_R_info(h,
-register)` has its inputs typed and its consumer named. See item
-#5 (`redundancy.py — ΔI_redundancy primitive`) in the v10 audit
-section below for the implementation specs.
+---
 
-## Type-discipline refactorings (framework-types pass, 2026-05-03)
+## Wrapper-as-intervention gap
 
-Surfaced during the strict-Any cleanup. Listed by structural
-significance, not by typing severity — the framework now passes
-pyright cleanly; these are design quirks the cleanup made visible.
+**Status:** LIVE. Memory: `project_wrapper_intervention_gap`.
 
-### Module Claims → pure-functional
+**Description:** The substrate's env-wrappers (`RewardClippedEnv`,
+the n-step bootstrap target, etc.) AREN'T proper Claims. Wrapping
+IS structurally an intervention — installing a wrapper changes
+the claim graph topology — but the framework's typed `Intervention`
+contract requires a slot-Claim swap, which wrappers currently
+aren't. Consequence: bridges that want to test `do(wrapper=X)
+vs do(no_wrapper)` can't express it as a `DoEffect`; n_step
+attenuation has to ride as a moderator (the slope bridges) or
+within-arm HP cleavage rather than a Pearl-rung-2 contrast.
 
-**Status:** deferred (user-flagged during review).
+**Lift when:** the substrate refactors wrappers into slot Claims
+(or the framework grows an `Intervention.wrap_with` shape). At
+that point the n-step bridges can promote from
+`Tier.ASSOCIATIONAL` to `Tier.INTERVENTIONAL`, and the slope
+bridges become true `do()` contrasts.
 
-**Description:** `ClaimBase` subclasses with `__call__` + manual
-`record_call` inside duplicate the `@claim` / `FnClaim` decorator
-path. The Three-way claim taxonomy in CLAUDE.md (Module Claim /
-Free Claim / Config bundle) collapses to two if Module Claims are
-expressed as a config bundle (frozen dataclass, no `__call__`)
-plus a top-level `@claim`'d function taking the bundle as a
-kwarg. `record_call` becomes the framework's responsibility
-universally; authors stop writing it.
+---
 
-**Why deferred:** ripples through every `ClaimBase` subclass in
-`rl/dqn/claims/*` and the walker in `signature.py`. Bigger than
-the type cleanup wanted to scope.
+## v10 `redundancy.py` port — toward v1 acceptance
 
-**Lift when:** the substrate-extension pass starts (so a second
-substrate's Module-shaped claims are designed pure-functional
-from the start), or a Claim Protocol mismatch surfaces a third
-time.
+**Status:** LIVE. Authoring layer mostly settled (32 bridges
+stable across two zoo files); register/cycle persistence still
+missing.
 
-### Bridge / Verdict / Direction surface still in flux
-
-**Status:** main is iterating actively (`drop Bridge.intervention`
-2026-05-03, `INVARIANT bridges`, `INTERVENTION auto-resolution`,
-`bridges-on-raw`).
-
-**Description:** `Bridge.source` accepts `str | Measurable[...] |
-DoEffect | INTERVENTION` — wide tape suggesting two distinct
-shapes ("interventional contrast" vs "measurement coupling")
-collapsed into one type. `intervention_edges` /
-`coupling_edges` was just refactored from a field-check to an
-`isinstance(e.source, DoEffect)` check (post-merge in
-hypothesis.py). Suggests the surface wants two Bridge subtypes,
-or a sealed `BridgeKind` discriminator.
-
-**Why deferred:** ongoing iteration; another design pass while
-main is mid-refactor would conflict.
-
-**Lift when:** `claim_bridge.py` settles (no significant changes
-for a sweep cycle).
-
-### `iterate` / `Loop[C, T, Idx]` / record_call interaction
-
-**Status:** deferred.
-
-**Description:** `iterate` exists primarily so the loop boundary
-appears as one node in the computation graph. The mechanism is
-heavyweight: every substrate that wants graph capture wraps
-loops in `iterate`, which forces parametric Loop typing
-gymnastics (3 casts in `rl/dqn/eval.py` for T re-binding +
-aggregation narrow). Alternative: graph-extraction-time
-post-processor that recognises loop boundaries from records,
-without the wrapping primitive. Eliminates `iterate` and the
-`Loop[C, T, Idx]` Protocol; substrates use plain `for` /
-`jax.lax.scan`.
-
-**Why deferred:** rl is the only substrate exercising graph
-capture; the graph extractor's current shape works.
-
-**Lift when:** a non-RL substrate adopts `iterate` (cost
-becomes visible) or graph extraction gains new requirements
-(the post-processor design becomes the natural home).
-
-### Phantom `Analysis[R]` parameter
-
-**Status:** deferred.
-
-**Description:** `Analysis[R: Mapping[str, object], O]` declares
-`R` but never uses it in any field — pure documentation as
-type. Either drop `R` to `Analysis[O]`, or wire it through to
-a method (`def __call__(self, corpus: Iterable[R], **deps) ->
-O`) so it has structural meaning. Currently, the registry cast
-at `analysis.py:103` exists because `R` invariance + phantom
-status forces the upper-bound erasure.
-
-**Why deferred:** documentation value of `R` is real; removing
-it loses the substrate-record-shape signal at the analysis
-type. Wiring it through requires settling on an
-`Iterable[R]` / `Sequence[Mapping[str, object]]` shape for the
-corpus argument across all `@analysis` impls.
-
-**Lift when:** a substrate has multiple distinct record shapes
-that need analyses keyed by R, OR the corpus shape stabilises
-across analyses (currently varies).
-
-### Substrate extension contract not formalised
-
-**Status:** deferred.
-
-**Description:** `rl/` is the only substrate. Framework hooks
-(`Hypothesis.measurables`, `Bridge.source`, `Loop[C, T, Idx]`,
-`Claim` Protocol) are implicitly substrate-extension points,
-but no documentation says so and no test exercises the
-framework with a non-RL substrate. RL-isms could be baked into
-the framework root by accident.
-
-**Why deferred:** YAGNI until a second substrate is real.
-
-**Lift when:** a second substrate (supervised learning,
-optimization, evolutionary search) is in play. Add: a
-"to add a substrate, implement X / Y / Z" doc + a tiny
-non-RL substrate as test fixture.
-
-### Registry consolidation
-
-**Status:** deferred.
-
-**Description:** Three independent `_REGISTRY` globals
-(`measurable._REGISTRY`, `analysis._REGISTRY`, `claim._FN_CACHE`),
-each a `Registry[T]` singleton. Could consolidate to
-`corroborate.registries` with explicit handles —
-simplifies introspection ("what's registered globally?") and
-testing (mocking).
-
-**Why deferred:** isolation has worked; consolidation is
-ergonomic, not load-bearing.
-
-**Lift when:** registry introspection becomes a first-class
-need (a debug command, a registry-diff tool) — or a registry
-collision bug appears.
-
-### `analyses/__init__.py` 14 side-effect imports
-
-**Status:** deferred (small).
-
-**Description:** `from .X import Y as _Y  # pyright: ignore
-[reportUnusedImport]` × 14. Function-scoped imports inside a
-`_register_default_analyses()` function don't trigger
-`reportUnusedImport`. Same pattern fits `cell_runner.py`'s
-`import corroborate_rl.dqn.measurables` side-effect.
-
-**Why deferred:** 14 ignores are bounded; the function-scope
-move is a stylistic choice that doesn't affect behaviour.
-
-**Lift when:** doing another pass on `analyses/`'s public
-API surface.
-
-### `signature.py` walker functional refactor
-
-**Status:** deferred (cosmetic).
-
-**Description:** the recursive walker (200+ lines) uses mutable
-`kwargs_out: list[KwargInfo]` state through helpers. Could be
-expressed functionally — each helper returns a tuple, no
-mutation. The `_introspection_boundary` already wraps the
-Any-leaks; the walker on top is bookkeeping.
-
-**Lift when:** signature.py needs other changes (extending the
-regime taxonomy, supporting new claim shapes, etc.).
-
-### Stubs maintenance procedure
-
-**Status:** deferred.
-
-**Description:** 5 hand-written stubs (`gymnax`, `optax`,
-`scipy`, `statsmodels`, `dowhy`). On upstream API drift, stubs
-silently rot. Cheap remediation: a smoke test that exercises
-the stub'd surface against the real installed library; a
-note documenting which version each stub matches.
-
-**Lift when:** a dep upgrade trips a runtime AttributeError
-that pyright would have caught with up-to-date stubs.
-
-### Numpy axis-aware reduction helper
-
-**Status:** deferred (cosmetic).
-
-**Description:** 5 nearly-identical `cast(npt.NDArray[np
-.floating], arr.X(axis=axis))` lines in `reductions.py
-:reduce_axis`. A single helper collapses to one cast.
-
-**Lift when:** more axis-aware reductions are added (the
-duplication forcing function bites).
-
-## Open primitives bundled toward v1 acceptance
-
-v0 acceptance (§3 DDQN three-way verdict) is closed by the
-typed-edge / verdict-walk path. v1 acceptance (closed dialectic
-loop with axiom-19 reward) needs three primitives still
-missing:
+**Description:** v1 acceptance (closed dialectic loop with
+axiom-19 reward) needs three primitives:
 
 1. **`redundancy.py` — ΔI_redundancy primitive** (~240 LoC).
    4-factor jaccard·concord·intervention·identity overlap.
-2. **`register.py` — append-only G register** (~120 LoC).
-   Past comparisons + latest-wins fact projection.
-3. **`compute_R_info` aggregator** (~80 LoC). Combines per-
-   bridge ΔI with the redundancy term into `R(h)`.
+2. **`register.py` — append-only G register** (~120 LoC). Past
+   comparisons + latest-wins fact projection.
+3. **`compute_R_info` aggregator** (~80 LoC). Combines
+   per-bridge ΔI with the redundancy term into `R(h)`.
 
-**HPO-smuggle gate** is deferred: `computation_graph.signature(g)`
-is the principled form (two interventions producing the same
-structural signature ARE the same mechanism). Lift only if a
-counterexample appears where signatures match but mechanisms
-differ in a way that matters for the dialectic loop.
+**HPO-smuggle gate** is deferred: `signature(g_treatment) -
+signature(g_baseline)` is the principled form (two interventions
+producing the same structural signature ARE the same mechanism).
+Lift only if a counterexample appears.
 
 **Lift when:** v1 design starts; the authoring layer is settled
 enough that the register's typing is forced by real consumers.
 
+---
+
+## Substrate extension contract not formalised
+
+**Status:** LIVE, but more doable post-Phase-6.
+
+**Description:** `corroborate_rl` is the only substrate. Framework
+extension points (`Hypothesis` Protocol, `Bridge.source`,
+`Loop[C, T, Idx]`, `Claim` Protocol, `Runner[R]` Protocol) are
+implicitly substrate-extension surfaces, but no document says so
+and no test exercises the framework with a non-RL substrate. The
+verdict-consolidation refactor cleaned the substrate boundary
+(typed contracts in framework, substrate-coupled YAML loaders
+substrate-side); adding the formal contract is straightforward
+now.
+
+**Lift when:** a second substrate (supervised learning,
+optimization, evolutionary search) is in play. Add: a "to add a
+substrate, implement X / Y / Z" doc + a tiny non-RL substrate as
+test fixture.
+
+---
+
 ## Vectorised env support (n_envs > 1)
 
-**Status:** deferred — modern DRL feature, not v0 blocker.
+**Status:** LIVE — modern DRL feature, not v0 blocker.
 
-**Description:** Modern DRL (SB3, CleanRL, v9) parallelises M envs
-per cell via `vmap(env.step)` — buffer adds M transitions per
-step, one batched gradient step per cycle. Wall-clock benefit is
-M× on slow envs (Atari ~1 ms/step). gymnax envs are
-microsecond-fast so the benefit at v0 scale is marginal.
-
-Mnih 2015 / Hasselt 2016 (DDQN) used single-env per cell; v0
-matches that for paper fidelity.
-
-**Why deferred:** v0's gymnax sweep at 50k steps doesn't need it.
-Adding before a forcing function risks complicating dqn-step
-structure (two-level vmap: seeds × envs) without payoff. v9
-ships with `NUM_ENVS=64` because their sweep is at higher step
-budgets where env-step throughput dominates.
+**Description:** Modern DRL (SB3, CleanRL, v9) parallelises M
+envs per cell via `vmap(env.step)` — buffer adds M transitions
+per step. Wall-clock benefit is M× on slow envs (Atari ~1
+ms/step). gymnax envs are microsecond-fast so the benefit at v0
+scale is marginal.
 
 **Lift when:** an Atari-grade env enters the sweep, OR step
-budgets per cell exceed ~500k and env-step throughput becomes
-the bottleneck.
+budgets per cell exceed ~500k.
 
-**Insertion point when needed:**
+**Insertion point:**
 - `n_envs: Annotated[int, Exogenous] = 1` on `dqn` kwargs.
 - `rollout_phase` vmaps over an n_envs axis.
 - `Replay.add` accepts a vector of M transitions.
 - `DQNState.env_state` / `obs` become `(n_envs, ...)`-batched.
-- ~150 LoC of structural change; clean extension that doesn't
-  break n_envs=1 semantics.
 
-## Replay-as-Claim Protocol mismatch — RESOLVED (2026-04-28)
+---
 
-**Status:** resolved. Replay is no longer a `ClaimBase` subclass.
+## Type-discipline refactorings (framework-types pass)
 
-**Resolution.** None of the three Protocol-design alternatives
-were taken. Instead, the principled-but-overengineered detour
-(making Replay a Claim somehow) was abandoned in favour of
-acknowledging that `Replay` simply isn't a framework Claim — it's
-a config bundle. The Lin 1992 theoretical claim is about the
-*sampling distribution*, which lives in the `sample` slot
-(an `@claim` free function: `uniform_sample`,
-`prioritised_sample`, …). The slot's FnClaim records itself; the
-Replay dataclass owns HPs + mechanics methods (`init`, `add`,
-`sample_batch`); none of those methods are theoretical claims.
+The framework now passes pyright cleanly; these are design
+quirks the cleanup made visible.
 
-5 LoC change:
-- Drop `ClaimBase` from `Replay`.
-- Drop `record_call(self, ...)` from `Replay.add` (mechanics, not
-  a Claim — append-to-FIFO has no paper reference).
-- `sample_batch` stays as a binding wrapper around `self.sample`;
-  the slot records the call.
+### `iterate` / `Loop[C, T, Idx]` / record_call interaction
 
-The walker still surfaces `replay.capacity`, `replay.batch_size`,
-`replay.sample` as topology leaves regardless of Claim status.
-Pyright clean, no Protocol mismatch.
+**Status:** LIVE.
 
-**Principle that survived:** *every theoretically-meaningful
-operation is a Claim, but not every callable needs to be one.*
-The framework supports both Module Claims (single `__call__`) and
-free-function Claims (FnClaim), plus config bundles (frozen
-dataclasses with no Claim status). Mechanics methods on a config
-bundle are just methods.
+**Description:** `iterate` exists primarily so the loop boundary
+appears as one node in the computation graph. The mechanism is
+heavyweight: every substrate that wants graph capture wraps loops
+in `iterate`, which forces parametric `Loop` typing gymnastics.
+Alternative: graph-extraction-time post-processor that recognises
+loop boundaries from records, without the wrapping primitive.
 
-**PER infrastructure** (post_train_update slot at the dqn-step
-level, prioritised_sample, update_priorities, no_priority_update)
-deferred until PER actually lands. Design without a use site is
-what almost dragged this fix into a +60 LoC bundle-of-claims
-rewrite — the lesson from the audit thread.
+**Lift when:** a non-RL substrate adopts `iterate` (cost becomes
+visible) or graph extraction gains new requirements.
 
-## Deferred from second-pass external review
+### Phantom `Analysis[R]` parameter
 
-### Typed `Powered` record on HypothesisComparisonRow
+**Status:** LIVE.
 
-**Status:** deferred.
+**Description:** `Analysis[R: Mapping[str, object], O]` declares
+`R` but never uses it in any field — pure documentation as type.
+Either drop `R` to `Analysis[O]`, or wire it through to
+`__call__(self, corpus: Iterable[R], **deps) -> O`.
 
-**Description:** `HypothesisComparisonRow.adequately_powered:
-bool` collapses the gradient that derived it (n + sd + observed
-g + MDE). A typed `Powered(mde_d, observed_g, achieved_power)`
-would carry the inputs so two stat implementations can't
-disagree about what "adequately" means.
+**Lift when:** a substrate has multiple distinct record shapes
+that need analyses keyed by R, OR the corpus shape stabilises
+across analyses.
 
-**Why deferred:** the bool tracks the gate result; richer
-power-curve diagnostics aren't a current consumer demand.
+### Registry consolidation
 
-**Lift when:** a consumer needs to log per-env power-curve
-diagnostics (recording WHY each cell fell HELD vs
-POWER_INSUFFICIENT).
+**Status:** LIVE.
 
-### Vector outcomes (`primary_outcome_summary: float` → `tuple[float, ...]`)
+**Description:** Three independent `_REGISTRY` globals
+(`measurable._REGISTRY`, `analysis._REGISTRY`,
+`claim._FN_CACHE`). Could consolidate to `corroborate.registries`
+with explicit handles — simplifies introspection ("what's
+registered globally?") and testing.
 
-**Status:** deferred.
+**Lift when:** registry introspection becomes a first-class need
+(a debug command, a registry-diff tool) — or a registry collision
+bug appears.
 
-**Description:** `RunRow.primary_outcome_summary` is one float
-per cell. Sample-efficiency-to-threshold and AUC-of-learning-curve
-outcomes need the per-step trajectory; the current scalar
-collapses them.
+### `analyses/__init__.py` 14 side-effect imports
 
-**Why deferred:** PAPER_NOTES.md §3 acceptance test uses
-`final_return` (one scalar per cell). §3.9 caveat 5 explicitly
-flags richer outcomes as out-of-v0-scope. v9 and v10 both store
-scalar-per-cell.
+**Status:** LIVE (small).
 
-**Lift when:** a paper section needs richer outcome shapes
-(probably §3.9 follow-on or step 6's CorpusBridge widening).
+**Description:** `from .X import Y as _Y  # pyright: ignore
+[reportUnusedImport]` × 14. Function-scoped imports inside a
+`_register_default_analyses()` would avoid the ignores.
 
-### `CycleRef(index, id, parent_id)` for verdict-evolution tracking
+**Lift when:** doing another pass on `analyses/`'s public API.
 
-**Status:** deferred.
+### `signature.py` walker functional refactor
 
-**Description:** `cycle_id: str | None` on every row groups but
-doesn't order or support typed queries like "did this hypothesis's
-verdict shift HELD→NO_EFFECT between cycles 4 and 5?" A typed
-`CycleRef` with integer index and parent reference is the right
-primitive when the redundancy register cares about cycle
-sequencing.
+**Status:** LIVE (cosmetic).
 
-**Why deferred:** no dialectic loop yet exists in corroborate;
-nothing populates `cycle_index` or `parent_cycle`. Speculative
-until a loop consumes it.
+**Description:** the recursive walker (200+ lines) uses mutable
+state through helpers. Could be expressed functionally — each
+helper returns a tuple, no mutation.
 
-**Lift when:** the dialectic-loop orchestrator lands (probably
-post-step-7 acceptance test) AND verdict-evolution diagnostics
-become a feature.
+**Lift when:** signature.py needs other changes.
 
-### `CorpusBridge[CorpusRow]` primitive widening for link bridges
+### Stubs maintenance procedure
 
-**Status:** deferred.
+**Status:** LIVE.
 
-**Description:** `BridgeResult.targets: tuple[str, ...]` is a flat
-tuple of record keys. PAPER_NOTES.md §3.5's link bridge
-(`Pearson r(stat_q, stat_f)` across envs) operates on PAIRS in a
-corpus, not a record. Need either widened targets
-(`tuple[tuple[str, str], ...]` carrying direction) or a sister
-type `CorpusBridge[CorpusRow]`.
+**Description:** 5 hand-written stubs (`gymnax`, `optax`, `scipy`,
+`statsmodels`, `dowhy`). On upstream API drift, stubs silently rot.
 
-**Why deferred:** step 6 (verdict + corpus layer) is the natural
-place to design the corpus-bridge call site. Pre-building shape
-without a use site risks designing the wrong primitive.
+**Lift when:** a dep upgrade trips a runtime AttributeError that
+pyright would have caught with up-to-date stubs.
 
-**Lift when:** step 6 starts. The §3.5 link bridge is the first
-concrete consumer.
+### Numpy axis-aware reduction helper
 
-### Theorem-gap measurables that need richer logging
+**Status:** LIVE (cosmetic).
 
-**Status:** deferred — multiple gaps blocked on data the v0
-StepRecord doesn't carry.
+**Description:** 5 nearly-identical `cast(npt.NDArray[np.floating],
+arr.X(axis=axis))` lines in `reductions.py:reduce_axis`. A single
+helper collapses to one cast.
 
-**Background.** Invariants in `corroborate` measure *gap
-magnitude* from theorem conditions, not threshold-bounded
-boolean tests (`invariant.py` module docstring; memory
-`feedback_invariant_three_roles.md`). Several of the gaps the
-DQN claim set should report aren't computable from the v0
-record. Each needs a specific data extension before the gap
-measurable can be implemented honestly.
-
-**Currently shipped (v0 + step 4):** `fqi_decay_gap`,
-`hasselt_covariance_gap` (Pearson r over kept
-Q-values), `action_coverage_gap` (caveated Watkins floor),
-`jensen_overestimation_gap` (reads EvalRecord — step 4.4 lifted
-this from "needs separate eval pass" via the `train_with_eval`
-infrastructure), `state_action_coverage_gap(env_spec)` (reads
-per-step `state_hash` — step 4.4 lifted via `EnvSpec.state_hash`
-+ rollout-phase logging).
-
-| Gap | Theorem | Data needed | Lift gate |
-|-----|---------|-------------|-----------|
-| Banach contraction rate | Bertsekas-Tsitsiklis 1996 §6.3 — `r_emp = ‖Q_{t+1} − Q_t‖ / ‖Q_t − Q_{t−1}‖` should ≤ γ | Q-evaluation on a fixed probe set per step (or online_params snapshots, much more memory) | Probe-set hook in `dqn_step` (could compose with `_value_probe`); needs probe-set design |
-
-**Banach gap remaining:** the `corroborate` discipline is to log
-raw values and reduce post-hoc. Banach contraction rate needs
-*more raw data* — Q-evaluations on a fixed probe set per step,
-or per-step parameter snapshots. Either is a probe pass
-extension to the training loop, not a logging change.
-
-**Lift when:** an experiment in §3-§5 needs the contraction-rate
-gap as a measured outcome. The probe-set hook can compose with
-the existing `_value_probe` in `train_phase`.
-
-## Cosmetic / micro-cleanups
-
-### `signature.py` reportAny errors — RESOLVED (2026-05-03)
-
-**Status:** resolved via `_introspection_boundary.py`
-(framework-types branch). The principled-adapter option (a)
-above was taken: typed wrappers `get_type_hints_obj`,
-`get_param_default`, `get_param_annotation`,
-`get_field_default{_factory}`, `get_typing_args`,
-`get_partial_args`, `get_partial_keywords`, `get_attr_obj`,
-`get_bound_arguments` narrow `Any` → `object` /
-`Mapping[str, object]` at one site. `signature.py`,
-`_canonical.py`, and `computation_graph.py` route through it.
+**Lift when:** more axis-aware reductions are added.
 
 ### `pytest.raises` over try/raise/except
 
-**Status:** deferred.
+**Status:** LIVE (cosmetic).
 
-**Description:** `tests/test_schema.py:84-95` and similar
-use `try: raise AssertionError; except TypeError: pass` instead
-of `pytest.raises(TypeError)`. Cosmetic style fix.
-
-**Why deferred:** behaviorally equivalent; not blocking any
-gate.
+**Description:** `tests/test_schema.py:84-95` and similar use
+`try: raise; except: pass` instead of `pytest.raises(...)`.
 
 **Lift when:** a test refactor pass cleans up idioms.
 
@@ -472,13 +235,102 @@ gate.
 **Status:** documented (claim.py).
 
 **Description:** `Claim.__call__` appends `self` to the trace
-*after* the underlying fn runs, so `f(g())` traces as
-`[g, f]`. Documented in the new `trace_context` docstring.
-
-**Why deferred:** behavior unchanged; the documentation is the
-fix. Functional-claim graph derivation will need to handle
-completion-order traces (or switch to a stack-based recording
-if start-order matters).
+*after* the underlying fn runs, so `f(g())` traces as `[g, f]`.
 
 **Lift when:** functional-claim graph derivation lands and
-completion-order semantics turn out to be wrong for the use case.
+completion-order semantics turn out to be wrong.
+
+---
+
+## Theorem-gap measurables that need richer logging
+
+**Status:** LIVE. Multiple gaps blocked on data the v0 StepRecord
+doesn't carry.
+
+**Background.** Invariants in `corroborate` measure *gap
+magnitude* from theorem conditions, not threshold-bounded boolean
+tests. Several DQN-claim gaps aren't computable from the v0
+record.
+
+**Currently shipped:** `fqi_decay_gap`, `hasselt_covariance_gap`,
+`action_coverage_gap`, `jensen_overestimation_gap`,
+`state_action_coverage_gap`.
+
+| Gap | Theorem | Data needed | Lift gate |
+|-----|---------|-------------|-----------|
+| Banach contraction rate | Bertsekas-Tsitsiklis 1996 §6.3 — `r_emp = ‖Q_{t+1} − Q_t‖ / ‖Q_t − Q_{t−1}‖` should ≤ γ | Q-evaluation on a fixed probe set per step | Probe-set hook in `dqn_step` (could compose with `_value_probe`) |
+
+**Lift when:** an experiment in §3-§5 needs the contraction-rate
+gap as a measured outcome.
+
+---
+
+## Resolved (kept as history pointers)
+
+- **Replay-as-Claim Protocol mismatch** — RESOLVED 2026-04-28.
+  Replay is a config bundle, not a Claim. Lin 1992's claim
+  attaches to the `sample` slot Claim, not to Replay itself.
+- **`signature.py` reportAny errors** — RESOLVED 2026-05-03 via
+  `_introspection_boundary.py`. Typed wrappers narrow `Any` →
+  `object` at one site.
+- **Refuter semantics (`is_refuter` flag)** — RESOLVED 2026-05-04.
+  The Phase-6 verdict-consolidation refactor deleted
+  `hypothesis_subgraph_verdict`, removing the only call site
+  that would have flipped HELD for refuter edges. The
+  xfail-style `predicted_direction='null'` (commit 6770abc) is
+  the natural successor for "this should be null" claims —
+  HELD now uniformly means "prediction confirmed" regardless of
+  whether the prediction is positive/negative/null. Refuter
+  intent rides on `predicted_direction='null'` (or the future
+  alternative directions); no separate flag needed.
+- **Bridge / Verdict / Direction surface in flux** — RESOLVED
+  2026-05-04 by the verdict-consolidation refactor.
+  `Bridge.source: str | Measurable | DoEffect` is the typed
+  surface; the `intervention_edges` / `coupling_edges` two-path
+  ambiguity dissolved when `hypothesis_subgraph_verdict` was
+  deleted in favour of per-bridge `evaluate`. No
+  `BridgeKind`-discriminator needed.
+- **Module Claims → pure-functional** — RESOLVED 2026-05-04.
+  `ClaimBase` no longer exists in the codebase. The substrate
+  uses Free Claims (`@claim` on functions) + config bundles
+  (frozen dataclasses, no `__call__`). The class-based-Claim
+  escape hatch is documented in `claim.py` but unused. The
+  duplication this entry warned about isn't present.
+- **Typed `Powered` record on HypothesisComparisonRow** —
+  OBSOLETE 2026-05-04. `HypothesisComparisonRow` was renamed
+  `PairedComparisonResult` in the verdict-consolidation refactor;
+  verdict-deriving fields including `adequately_powered: bool`
+  were dropped. `verdict_from_paired_stats` in `stats/effect_size.py`
+  still has `adequately_powered_paired` as a function — that
+  surface is unchanged.
+- **Vector outcomes (`primary_outcome_summary` widening)** —
+  OBSOLETE 2026-05-04. `primary_outcome_summary` doesn't exist
+  as a column. Bridges target outcome columns directly via
+  `target='eval_best_burst_mean'` etc.; vector outcomes are
+  expressed as substrate-side per-burst trajectories
+  (`paired_g_per_burst`, `paired_link_per_burst`) — not by
+  widening a single field.
+- **`CorpusBridge[CorpusRow]`** — OBSOLETE 2026-05-04. The
+  framework's analyses (`paired_g`, `meta_regression_paired_g`,
+  `paired_link_per_burst`) already operate cross-cell. The
+  speculative `CorpusBridge` design never had a concrete
+  consumer; bridges now use analysis fixtures that consume the
+  cell-level corpus directly.
+
+---
+
+## Speculative / dialectic-loop adjacent
+
+### `CycleRef(index, id, parent_id)` for verdict-evolution tracking
+
+**Status:** LIVE.
+
+**Description:** `cycle_id: str | None` on every row groups but
+doesn't order or support typed queries like "did this hypothesis's
+verdict shift HELD→NO_EFFECT between cycles 4 and 5?". A typed
+`CycleRef` with integer index and parent reference is the right
+primitive when the redundancy register cares about cycle
+sequencing.
+
+**Lift when:** the dialectic-loop orchestrator lands AND
+verdict-evolution diagnostics become a feature.
