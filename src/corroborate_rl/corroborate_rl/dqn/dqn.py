@@ -253,47 +253,60 @@ def dqn(
     diagnostic = adding a key in the owning phase's dict
     (rollout / train / eval).
 
-    Hypothesis intervention names this claim's kwargs directly:
-    `partial(dqn, **intervention)`. `Annotated[..., Exogenous]`
-    markers declare which kwargs are NOT intervention surface
-    (env, rng_key, etc.); everything else is interventionable.
+    Each kwarg of `dqn` is a Claim-graph slot the substrate may
+    intervene on. `Annotated[..., Exogenous]` markers declare which
+    kwargs are NOT intervention surface (env, rng_key, etc.);
+    everything else is interventionable.
 
-    **Intervention cookbook.** Each kwarg's value-shape depends
-    on whether the slot is a config bundle or a Free Claim — but
-    the substitution syntax is always "name the kwarg, supply the
-    alternative." Five canonical patterns:
+    **Intervention cookbook.** Wrap each substitution in
+    `Intervention(slot_path=..., replacement=...)` and assemble
+    `DoEffect(treatment=tuple, baseline=tuple)`. Five canonical
+    patterns for the `replacement`:
 
         # 1. Cross-cutting scalar HP — pass the value directly.
-        intervention = {'gamma': 0.95}
+        Intervention(slot_path='gamma', replacement=0.95)
 
         # 2. Config bundle — instantiate with the new field.
         # `MLP`, `CNN`, `Replay` are frozen dataclasses; pass an
         # instance. `replace(MLP(), hidden=...)` is equivalent.
-        intervention = {'q_network': MLP(hidden=(128,))}
-        intervention = {'replay': Replay(capacity=50_000)}
+        Intervention(slot_path='q_network',
+                     replacement=MLP(hidden=(128,)))
+        Intervention(slot_path='replay',
+                     replacement=Replay(capacity=50_000))
 
         # 3. Free Claim with sub-slot — bake the sub-slot via
         # `partial`. The walker recurses into the partial and
         # surfaces the sub-leaf at composition time.
-        intervention = {'bootstrap': partial(
-            bootstrap, greedification=double_greedify)}
-        intervention = {'action_select': partial(
-            epsilon_greedy, schedule=cosine_epsilon)}
+        Intervention(slot_path='bootstrap', replacement=partial(
+            bootstrap, greedification=double_greedify))
+        Intervention(slot_path='action_select', replacement=partial(
+            epsilon_greedy, schedule=cosine_epsilon))
 
         # 4. Free Claim factory — `partial(factory, **leaves)`.
         # Same pattern as (3); the factory returns a runtime
         # handle (e.g. `optax.GradientTransformation`).
-        intervention = {'optimizer': partial(rmsprop, lr=2.5e-4)}
+        Intervention(slot_path='optimizer',
+                     replacement=partial(rmsprop, lr=2.5e-4))
 
         # 5. Wholesale Free Claim swap — supply a different
         # `@claim` function. Loss / target_sync / etc. are pure
         # Free Claims; just hand over a sibling.
-        intervention = {'loss_fn': huber_loss}
-        intervention = {'target_sync': polyak_average}
+        Intervention(slot_path='loss_fn', replacement=huber_loss)
+        Intervention(slot_path='target_sync',
+                     replacement=polyak_average)
 
-    Combine freely: `Hypothesis(name='ddqn_lower_gamma',
-    intervention={'bootstrap': partial(bootstrap, greedification=
-    double_greedify), 'gamma': 0.95}, ...)`.
+    Combine freely. The DDQN-vs-vanilla contrast at γ=0.95:
+
+        DoEffect(
+            treatment=(
+                Intervention(slot_path='bootstrap', replacement=partial(
+                    bootstrap, greedification=double_greedify)),
+                Intervention(slot_path='gamma', replacement=0.95),
+            ),
+            baseline=(
+                Intervention(slot_path='gamma', replacement=0.95),
+            ),
+        )
 
     Raises `ValueError` if `total_steps` isn't a multiple of
     `eval_every`."""
