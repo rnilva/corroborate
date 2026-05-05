@@ -175,11 +175,75 @@ def test_verdict_held_for_no_predicted_direction() -> None:
 # ============ random_effects_summary ============
 
 def test_random_effects_summary_too_few_cells_returns_nan() -> None:
-    """n<2 → all NaN."""
+    """n<2 → all NaN. Pin every NaN-filled field on the early
+    return — `float('nan')` mutations to `None` would store None
+    in the PooledStats field, and `math.isnan(None)` raises
+    TypeError. Pin the n<2 guard against `n<=2` (which would
+    short-circuit at n=2 too) and `n<3`."""
     from corroborate.stats import random_effects_summary
     p = random_effects_summary([(0.5, 0.2)])
     assert math.isnan(p.pooled_g)
+    assert math.isnan(p.se_pooled)
+    assert math.isnan(p.tau2)
+    assert math.isnan(p.I2)
+    assert math.isnan(p.Q)
+    assert math.isnan(p.pi_lo)
+    assert math.isnan(p.pi_hi)
+    assert math.isnan(p.empirical_min_g)
+    assert math.isnan(p.empirical_max_g)
     assert p.n_cells == 1
+
+
+def test_random_effects_summary_at_n_equals_2_returns_pooled() -> None:
+    """n=2 valid cells: passes the n<2 guard, returns a real
+    pooled estimate (not NaN-filled). Pin `n < 2` against
+    `n <= 2` and `n < 3` (both would NaN at n=2)."""
+    from corroborate.stats import random_effects_summary
+    p = random_effects_summary([(0.5, 0.1), (0.7, 0.1)])
+    assert p.n_cells == 2
+    assert math.isfinite(p.pooled_g)
+    assert math.isfinite(p.se_pooled)
+
+
+def test_random_effects_summary_drops_zero_se_cell() -> None:
+    """A cell with se=0 must be dropped (DL needs `var > 0`).
+    Pin `se > 0` against `se >= 0` mutant — keeping a zero-SE
+    cell would inject `1/0` into the inverse-variance weight.
+
+    Construct: 2 valid cells + 1 zero-SE cell. After filtering,
+    n=2 → real pooled estimate. With the mutant, the zero-SE
+    cell stays in → `1/var = inf` → pooled_g blows up or NaN."""
+    from corroborate.stats import random_effects_summary
+    p = random_effects_summary([
+        (0.5, 0.1), (0.7, 0.1), (1.0, 0.0),
+    ])
+    assert p.n_cells == 2
+    assert math.isfinite(p.pooled_g)
+    # The zero-SE cell would have dominated if kept (∞ weight).
+    # Pooled g should sit around the average of the two valid
+    # cells (~0.6), not be 1.0.
+    assert 0.4 < p.pooled_g < 0.8
+
+
+def test_random_effects_summary_or_in_filter_keeps_only_full_pairs() -> None:
+    """The filter requires BOTH g AND se to be finite (and se>0).
+    Pin `not isnan(g) and not isnan(se)` against the `or` mutant
+    that would keep cells with one NaN field.
+
+    Construct: 1 NaN-g cell + 1 NaN-se cell + 2 valid cells.
+    Original drops both NaN-bearing → n=2 valid → real pooled.
+    Mutant `g_ok or se_ok` keeps the NaN-bearing cells (one
+    side is True for each), then computes vs from NaN-se →
+    NaN var → NaN pooled."""
+    from corroborate.stats import random_effects_summary
+    p = random_effects_summary([
+        (float('nan'), 0.1),
+        (0.5, float('nan')),
+        (0.5, 0.1),
+        (0.7, 0.1),
+    ])
+    assert p.n_cells == 2
+    assert math.isfinite(p.pooled_g)
 
 
 def test_random_effects_summary_homogeneous_cells_zero_tau2() -> None:

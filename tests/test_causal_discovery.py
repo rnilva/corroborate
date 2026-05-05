@@ -69,6 +69,82 @@ def test_partial_returns_nan_on_constant_z() -> None:
     assert math.isnan(p)
 
 
+def test_partial_returns_finite_at_n_equals_5() -> None:
+    """n=5 is the lower bound (df = n - 4 = 1). Pin `n < 5`
+    against `n <= 5` (which would NaN at n=5) and `n < 6`
+    (which would also NaN at n=5)."""
+    rng = np.random.default_rng(3)
+    n = 5
+    x = rng.standard_normal(n)
+    y = rng.standard_normal(n)
+    z = rng.standard_normal(n)
+    rho, p = partial_spearman_rho(x, y, z)
+    assert math.isfinite(rho)
+    assert math.isfinite(p)
+
+
+def test_partial_returns_nan_below_n_equals_5() -> None:
+    """n=4 (df = 0) → returns NaN. Pin the early-return branch
+    actually fires AND that the NaN-tuple it returns is well-
+    formed (`float('nan')` mutations like `float(None)` would
+    raise TypeError here)."""
+    rng = np.random.default_rng(5)
+    n = 4
+    x = rng.standard_normal(n)
+    y = rng.standard_normal(n)
+    z = rng.standard_normal(n)
+    rho, p = partial_spearman_rho(x, y, z)
+    assert math.isnan(rho)
+    assert math.isnan(p)
+
+
+def test_partial_p_value_matches_fisher_z_at_df_n_minus_4() -> None:
+    """The reported p-value must equal the Fisher-z formula at
+    df = n − 4. Construction lands rho in the moderate regime
+    (~0.2-0.4) so a wrong df shifts p detectably."""
+    rng = np.random.default_rng(7)
+    n = 30
+    z = rng.standard_normal(n)
+    # X and Y both partially depend on Z plus residual coupling.
+    x = z + 1.0 * rng.standard_normal(n)
+    y = 0.8 * z + 0.4 * x + 1.0 * rng.standard_normal(n)
+    rho, p_reported = partial_spearman_rho(x, y, z)
+    p_expected = _expected_p_from_rho_df(rho, n - 4)
+    assert p_reported == pytest.approx(p_expected, abs=1e-9)
+
+
+def test_partial_rho_matches_closed_form_partial_correlation_formula() -> None:
+    """The returned rho must equal:
+        rho = (rxy − rxz·ryz) / sqrt((1 − rxz²) · (1 − ryz²))
+    where r* are pairwise Spearman correlations on the input.
+
+    Pins the rxz**2 / ryz**2 powers in the denominator (vs **3
+    mutants — those shift rho without changing the rho/p
+    relationship, so the Fisher-z p-value test above can't catch
+    them). Compute the three pairwise Spearmans independently
+    and reconstruct rho from the closed-form formula."""
+    rng = np.random.default_rng(99)
+    n = 50
+    z = rng.standard_normal(n)
+    # Substantial rxz, ryz (~0.5+) so the **2 vs **3 difference
+    # in the denom is detectable.
+    x = 0.6 * z + rng.standard_normal(n)
+    y = 0.5 * z + 0.3 * x + rng.standard_normal(n)
+    rho_returned, _ = partial_spearman_rho(x, y, z)
+
+    rxy, _ = spearmanr(x, y)
+    rxz, _ = spearmanr(x, z)
+    ryz, _ = spearmanr(y, z)
+    denom = math.sqrt(
+        max(1 - float(rxz) ** 2, 0.0) * max(1 - float(ryz) ** 2, 0.0),
+    )
+    rho_expected = (float(rxy) - float(rxz) * float(ryz)) / denom
+    rho_expected = max(-0.999999, min(0.999999, rho_expected))
+    assert rho_returned == pytest.approx(rho_expected, abs=1e-9)
+
+
+
+
 # ============ partial_spearman_rho_multi — residual regression ============
 
 def test_partial_multi_matches_single_z_to_within_tolerance() -> None:
