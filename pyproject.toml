@@ -196,4 +196,21 @@ also_copy = [
     # collects, and every mutant is silently marked "survived".
     "README.md",
 ]
-tests_dir = ["tests/analytic/"]
+# `tests_dir`: both the framework-side analytic suite AND the RL
+# substrate's analytic suite (tabular MDP / deadly-triad). The
+# RL-side `tabular/test_framework_detects_hasselt_correction.py`
+# exercises `paired_g` + `verdict_from_paired_stats` from a
+# different angle (closed-form Hasselt cells) than `lg_scm/`, so
+# it tightens the bound on those primitives independently.
+tests_dir = [
+    "tests/analytic/",
+    "src/corroborate_rl/tests/analytic/",
+]
+# `pytest_add_cli_args`: `--import-mode=importlib` is required
+# because both `tests/` (framework) and
+# `src/corroborate_rl/tests/` (RL substrate) declare a top-level
+# `tests` package via `__init__.py`. Pytest's default `prepend`
+# import mode would refuse to load both — `importlib` mode
+# resolves modules by file path, sidestepping the package-name
+# collision.
+pytest_add_cli_args = ["--import-mode=importlib"]
