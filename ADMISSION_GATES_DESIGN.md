@@ -26,6 +26,60 @@ The proposal: lift admission criteria to first-class declarations
 on the bridge decorator, with three severity tiers and a layered
 authoring discipline.
 
+## Principle — exogenous vs endogenous
+
+The load-bearing axis for what counts as a causal source is
+**exogenous vs endogenous**, not "leaf scalar vs structural slot."
+
+- **Endogenous columns** are features computed from the cell's
+  own state: registered `@measurable`-decorated columns
+  (`jensen_gap`, `q_divergence_score`, `bootstrap_fraction`,
+  `effective_horizon`, …), framework metadata (`env_name`,
+  `seed`, `id`), and claim-graph slot identities (the typed
+  `DoEffect` contrast on `Intervention(slot_path, replacement)`
+  for *Claim* swaps).
+- **Exogenous columns** are author choices that vary per cell
+  but are not produced by the cell's dynamics: HP leaves
+  (`gamma`, `n_step`, `reward_scale`, `optimizer.inner.lr`,
+  `replay.capacity`, `total_steps`, `eval_every`).
+
+`Tier.INTERVENTIONAL` (Pearl rung-2 causal claim) **requires an
+endogenous source.** A bridge that wants `do(γ=0.999) → outcome`
+must find the endogenous *delegate* (`effective_horizon`,
+`q_divergence_score`) and source the bridge through that. The
+exogenous knob is the upstream cause; the endogenous delegate is
+where the causal claim attaches.
+
+Why this rule is BLOCK-strength (rather than WARN):
+
+- Pearl's `do()` is a SCM operation on variables observed/produced
+  in the system. HPs are the SCM's parameters, not its variables;
+  causal language about HP swaps without an endogenous delegate
+  blurs structural-vs-parametric and invites HPO-shopping.
+- The recent migration work (`q_divergence_score > 1`,
+  `effective_horizon >= 50`, etc.) demonstrated that the
+  endogenous delegate is usually right there — the substrate just
+  has to surface it. Forcing the delegate is a forcing function
+  for principled bridge authoring.
+
+`Tier.ASSOCIATIONAL` and `Tier.INVARIANT` are unaffected:
+observational HP × measurable bridges (slope claims via
+`meta_regression_paired_g_by_nstep`, etc.) remain valid; they
+just don't claim causality.
+
+This principle is enforced by `EXOGENOUS_SOURCE` (BLOCK, L1
+auto-gate). It's the source-side counterpart to `EXOGENOUS_SCOPE`
+(WARN); together they police the exogenous-vs-endogenous axis at
+the two surfaces (`Bridge.scope` and `Bridge.source`) where
+authors can sneak HP-knobs into causal claims.
+
+**The framework keeps `Intervention(slot_path, replacement)` with
+`replacement: Replacement = FnClaim | partial | Callable` —
+Claims only. The gate makes the typing's intent explicit; we do
+NOT widen `Intervention[T]` to accept leaf scalars.** A future
+"LeafIntervention" or `Intervention[T<:object]` shape would
+require revoking this principle and isn't on the roadmap.
+
 ## Audit: v9 / v10 / current corroborate
 
 **v9** (`poc_v8/framework/graph/admissibility.py`) shipped 25+
@@ -57,6 +111,7 @@ admission checks are scattered:
 | `EmpiricallyDistinct` | nothing |
 | `FusedCouplingDetector` | nothing |
 | `ChainSignCoheres` | `Direction` enum carries data; no compose check |
+| (new) HP-as-causal-source | `Bridge.tier == INTERVENTIONAL` is author-trust; nothing checks the source is endogenous |
 
 The middle path: **a small set of well-named gates declared at
 the bridge decorator, with three severity tiers**.
@@ -249,12 +304,15 @@ with the matching `name` from the `warnings` field.
 |---|---|---|
 | `DISTINCT_ARMS` | BLOCK | Universal invariant of `DoEffect`-sourced bridges; today's runtime `ValueError` becomes a clean verdict |
 | `RESOLVED_FIXTURES` | BLOCK | Catches typo'd analysis-fixture parameter names at evaluate-time with a clear message |
+| `EXOGENOUS_SOURCE` | BLOCK | Enforces the "endogenous source for `Tier.INTERVENTIONAL`" principle (cf. § Principle); blocks causal claims sourced on HP leaves like `gamma`, `n_step`, `reward_scale` |
 | `EXOGENOUS_SCOPE` | WARN | Free detection (polars expr meta) signals HP-envelope bridges that haven't migrated to endogenous predicates |
 | `NO_PREDICTED_DIRECTION` | INFO | Surfaces "this bridge can't detect sign-flip refutations" without blocking |
 
 `DISTINCT_ARMS` and `RESOLVED_FIXTURES` are ports of existing
-runtime checks; `EXOGENOUS_SCOPE` and `NO_PREDICTED_DIRECTION` are
-new and free.
+runtime checks; `EXOGENOUS_SOURCE`, `EXOGENOUS_SCOPE` and
+`NO_PREDICTED_DIRECTION` are new. `EXOGENOUS_SOURCE` and
+`EXOGENOUS_SCOPE` consume the substrate's endogenous-column
+registry (see § Substrate registry, below).
 
 ### L4 (per-bridge declarations) — substrate-shipped gates
 
@@ -294,8 +352,85 @@ def check(bridge: Bridge, cells: ...) -> GateResult | None:
     return None
 ```
 
+`EXOGENOUS_SOURCE` algorithm:
+
+```python
+def check(bridge: Bridge, cells: ...) -> GateResult | None:
+    if bridge.tier is not Tier.INTERVENTIONAL:
+        return None  # principle only applies to causal claims
+    source = bridge.source
+    # DoEffect source: every Intervention.replacement must be a
+    # Claim-shaped swap (callable). LeafIntervention-shaped entries
+    # would fire here. Today the type system already enforces this
+    # (`Replacement = FnClaim | partial | Callable`); this gate is
+    # belt-and-braces in case the typing relaxes.
+    if isinstance(source, DoEffect):
+        offenders = [
+            iv.slot_path for iv in source.treatment + source.baseline
+            if not callable(iv.replacement)
+        ]
+        if offenders:
+            return GateResult(
+                gate_name='exogenous_source',
+                level=GateLevel.BLOCK,
+                passed=False,
+                message=(
+                    f'Tier.INTERVENTIONAL bridge {bridge.name!r} has '
+                    f'non-Claim Intervention(s) on slot(s) {offenders}. '
+                    f'Causal claims require an endogenous source — find '
+                    f'the delegate (e.g., effective_horizon for γ, '
+                    f'q_divergence_score for sync_period) and route the '
+                    f'bridge through it. See § Principle.'
+                ),
+            )
+        return None
+    # str / Measurable source: must reference an endogenous column.
+    name = source if isinstance(source, str) else source.name
+    if name in (registered_names() | _STANDARD_METADATA):
+        return None
+    return GateResult(
+        gate_name='exogenous_source',
+        level=GateLevel.BLOCK,
+        passed=False,
+        message=(
+            f'Tier.INTERVENTIONAL bridge {bridge.name!r} sourced on '
+            f'{name!r} which is not a registered measurable nor '
+            f'standard metadata. Causal claims require an endogenous '
+            f'source — find the delegate. See § Principle.'
+        ),
+    )
+```
+
 `NO_PREDICTED_DIRECTION` is even simpler: check
 `bridge.predicted_direction is None`.
+
+## Substrate registry (L2)
+
+Both `EXOGENOUS_SOURCE` and `EXOGENOUS_SCOPE` need to know what
+counts as "endogenous." The framework can't decide on its own —
+that distinction is substrate-specific (RL substrate's
+`q_divergence_score` is endogenous; an NLP substrate's columns
+will differ). The framework provides:
+
+- `registered_names() -> frozenset[str]` — every
+  `@measurable`-decorated column the substrate has registered.
+- `_STANDARD_METADATA: frozenset[str] = frozenset({
+    'env_name', 'seed', 'id', 'arm_key', 'corpus', 'cycle_id',
+    'parent_id', 'timestamp', ...})` — framework-controlled
+  provenance columns; same on every substrate.
+
+The substrate populates `registered_names()` by importing its
+measurable modules (the existing
+`import corroborate_rl.dqn.measurables  # populate registry`
+pattern). When the cache materialises a column produced by a
+registered measurable, the gate accepts it.
+
+This means the substrate's "endogenous frontier" widens by adding
+new `@measurable`-decorated functions. To promote `gamma` from
+exogenous-HP to endogenous-mediator, the substrate authors a
+measurable like `effective_horizon` (which already exists) and
+sources causal bridges through it. The HP-leaf `gamma` itself
+stays exogenous.
 
 `DISTINCT_ARMS` for DoEffect:
 
@@ -339,8 +474,11 @@ frequency to its summary.
    `GateResult`, `AdmissionGate` Protocol, `Bridge.gates`,
    `BridgeEvaluation.warnings`, `Verdict.INADMISSIBLE`. ~120 LoC,
    one PR.
-2. **Phase 2: 3 high-value auto-gates** — `DISTINCT_ARMS`,
-   `EXOGENOUS_SCOPE`, `NO_PREDICTED_DIRECTION`. ~50 LoC each.
+2. **Phase 2: 4 high-value auto-gates** — `DISTINCT_ARMS`,
+   `EXOGENOUS_SOURCE`, `EXOGENOUS_SCOPE`, `NO_PREDICTED_DIRECTION`.
+   ~50 LoC each. `EXOGENOUS_SOURCE` is the BLOCK-strength source-side
+   counterpart to `EXOGENOUS_SCOPE`'s WARN; together they enforce
+   the principle.
 3. **Phase 3: substrate `scope.*` / `gate.*` namespaces** —
    `corroborate_rl.bridges_lib` exposes `scope.PREMISE_ACTIVE`,
    `gate.MIN_PAIRS(n)`, etc. Substrate-coupled, no framework
@@ -444,7 +582,34 @@ Defer until Phase 5 when an actual cross-bridge gate is needed.
 
 ## Decision
 
-Proceed with Phase 1 + Phase 2 (framework infrastructure + 3
+Proceed with Phase 1 + Phase 2 (framework infrastructure + 4
 auto-gates) as one focused PR. Phases 3-4 follow as small
 substrate-side and acknowledge-mechanism PRs. Phase 5 deferred
 until cross-bridge constraints have a concrete consumer.
+
+### Decisions on previously-open questions
+
+- **BLOCK vs WARN for HP-as-causal-source.** `EXOGENOUS_SOURCE`
+  is BLOCK. The bridge is asserting `Tier.INTERVENTIONAL`, which
+  is a typed claim that an exogenous-source bridge cannot
+  meaningfully satisfy. Unlike `EXOGENOUS_SCOPE` (WARN — the
+  bridge can still produce a verdict on a non-principled axis),
+  an INTERVENTIONAL claim sourced on an HP knob has no clean
+  causal interpretation; the gate refuses to admit it.
+- **Registry location.** Substrate-side. The framework provides
+  `registered_names()` (built from `@measurable`-decorated
+  columns the substrate registers via import) plus
+  `_STANDARD_METADATA` (framework-controlled). The substrate
+  doesn't ship a separate "admitted leaves" list — the
+  endogenous frontier IS the registered-measurable set. To
+  elevate a leaf scalar to causal-claim sourcing, the substrate
+  authors a measurable that delegates the leaf (e.g.,
+  `effective_horizon` for γ, `q_divergence_score` for
+  `sync_period`).
+- **Why no `LeafIntervention` typing widening.** The principle
+  ("INTERVENTIONAL → endogenous source") is enforced at the gate
+  level, not via type system. Widening
+  `Intervention[T<:object]` to accept leaf scalars would invite
+  HPO-shopping disguised as designed intervention; the BLOCK
+  gate is the cleaner answer. `Intervention` keeps its
+  Callable-only `Replacement` constraint.
