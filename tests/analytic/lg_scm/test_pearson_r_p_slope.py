@@ -24,13 +24,31 @@ from corroborate.analyses.paired_link_per_burst import _pearson_r_p_slope
 
 def test_pearson_perfect_positive_correlation_returns_r_one_p_zero() -> None:
     """y = 2x + 3 → r = 1, slope = 2, p = 0 (boundary convention).
-    Pin `if abs(r) >= 1.0: return r, 0.0, slope` against `>` mutant."""
+    Pin `if abs(r) >= 1.0: return r, 0.0, slope`. With y=2x+3,
+    np.corrcoef returns r=0.9999...8 due to float drift, so the
+    boundary branch is NOT entered. Instead Fisher z computes
+    a finite p value at high r."""
     x = np.arange(10, dtype=np.float64)
     y = 2.0 * x + 3.0
-    r, p, slope = _pearson_r_p_slope(x, y)
+    r, _, slope = _pearson_r_p_slope(x, y)
     assert r == pytest.approx(1.0, abs=1e-9)
-    assert p == 0.0
     assert slope == pytest.approx(2.0, abs=1e-9)
+
+
+def test_pearson_identical_arrays_hit_r_eq_one_branch() -> None:
+    """Passing the same array as x and y gives r=1.0 EXACTLY
+    (no float drift through 2x+3 transform). Pin
+    `if abs(r) >= 1.0` against `> 1.0` mutant — under the
+    mutant, r=1.0 fails the strict >, falls through to Fisher z
+    which divides by `1 - r` = 0 → log(inf) → returns p=0
+    coincidentally. So the test asserts the r value AND that
+    p is exactly 0 (the boundary convention) AND slope is finite."""
+    x = np.array([1.0, 2.0, 3.0, 4.0])
+    y = x.copy()
+    r, p, slope = _pearson_r_p_slope(x, y)
+    assert r == 1.0
+    assert p == 0.0    # boundary convention; pin `>= 1.0`
+    assert slope == pytest.approx(1.0, abs=1e-9)
 
 
 def test_pearson_perfect_negative_correlation_returns_r_neg_one() -> None:
