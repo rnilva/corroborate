@@ -116,6 +116,54 @@ probably needs redesign before adding the ignore.
 - Docstrings explain WHY, not WHAT — well-named identifiers do
   the WHAT.
 
+## When to introduce a framework primitive
+
+The framework's contribution is logical strictness applied to
+scientific claims. Each typed primitive should earn its keep
+against plain Python composition. See `PRIMITIVES_AUDIT.md` for
+the full audit + meta-pattern; the four-question test before
+adding a new one:
+
+A primitive (typed dataclass, decorator, Protocol, enum) is the
+right answer when it:
+
+1. **Encodes a typed contract** the substrate / bridge author
+   should obey — `Hypothesis` Protocol, `Bridge`, `Intervention`.
+2. **Provides runtime narrowing** that gives pyright real
+   information — `runtime_checkable` Protocols, `TypeIs[T]`,
+   frozen dataclasses with typed fields.
+3. **Does real work beyond labeling** — extracts signature
+   metadata, registers in a typed registry, walks the partial
+   tree (`@claim_bridge`, `@analysis`, `walk_paths`).
+4. **Hits a performance floor** Python composition can't reach —
+   polars expressions for parquet-column filters.
+
+A primitive is unnecessary ceremony when it:
+
+1. **Wraps a tuple-of-tuples without adding behavior.** A
+   would-be `DoEffect`-like wrapper around already-meaningful
+   data — the tuple IS the structure.
+2. **Re-exports constants under a class namespace.**
+   `class Foo: BAR = ...` is enum-mimicry without enum-purpose.
+   Use a plain module file (`foo.py` with `BAR = ...`).
+3. **Caches a derived value that's cheap to recompute.**
+   `Bridge.params` was the canonical example —
+   `inspect.signature` is sub-ms; `@property` is honest.
+4. **Expresses composition where Python operators already do
+   it.** `And(check_a, check_b)` is what `(check_a, check_b)`
+   (tuple) or `expr_a & expr_b` (polars / numpy) already are.
+
+The patterns to **prefer**: tuple-`+` and polars-`&` for
+composition; free functions over methods when there's no shared
+state; `runtime_checkable` Protocols for substrate-extensible
+shapes; module-level constants composed via operators
+(the `_FOURROOMS_REGIME` pattern in
+`experiments/findings/dqn_bridges.py`); frozen dataclasses with
+`@property` for derived access.
+
+If a candidate primitive doesn't pass the four-question test,
+the answer is to leave it as plain Python.
+
 ## Vocabulary (framework-honest, not domain-borrowed)
 
 The framework speaks of two kinds of measurables:

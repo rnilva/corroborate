@@ -70,7 +70,7 @@ class GateLevel(Enum):
     BLOCK = 'block'  # Bridge → Verdict.INADMISSIBLE; body never runs
     WARN = 'warn'    # Bridge proceeds; warning recorded on
                      # BridgeEvaluation; suppressible via
-                     # Gate.acknowledge(name)
+                     # gate.acknowledge(name)
     INFO = 'info'    # Bridge proceeds; informational note for the
                      # report; not normally surfaced unless asked
 ```
@@ -95,9 +95,12 @@ hierarchy:
   `DISTINCT_ARMS` for `DoEffect`-sourced bridges,
   `RESOLVED_FIXTURES`, `EXOGENOUS_SCOPE` (auto-WARN).
 - **L2** — substrate-author conventions, exposed as discoverable
-  named constants. Bridge authors `from corroborate_rl.bridges_lib
-  import Scope, Gate`. Examples: `Scope.PREMISE_ACTIVE`,
-  `Gate.MIN_PAIRS(n)`.
+  named constants in **plain module files** (not class-wrapped
+  namespaces — see PRIMITIVES_AUDIT.md, reduction #3). Bridge
+  authors `from corroborate_rl import scope, gate`. Examples:
+  `scope.PREMISE_ACTIVE`, `gate.MIN_PAIRS(n)`. The lower-case
+  module name signals "this is a discoverable namespace, not a
+  class-as-namespace smell".
 - **L3** — module-level shared tuples for repetition reduction.
   Bridge authors hoist common gate-tuples / scope-expressions
   into a module constant. Examples: `_DEFAULT_GATES`,
@@ -116,7 +119,7 @@ emerge from plain Python tuple composition (`+`) and polars `&`
 - **L4 is the open-ended growth surface** — substrate / module /
   bridge gates all flow through `gates=(...)`.
 - **L2 is the substrate's contribution** — discoverable namespaces
-  (`Scope.PREMISE_ACTIVE`, `Gate.MIN_PAIRS`) ship as plain
+  (`scope.PREMISE_ACTIVE`, `gate.MIN_PAIRS`) ship as plain
   constants from substrate libraries. Substrate-coupled but
   framework-independent.
 - **L3 falls out of Python** — module-level constants composed
@@ -218,7 +221,7 @@ def evaluate(bridge: Bridge, cells: ...) -> BridgeEvaluation:
     )
 ```
 
-### `Gate.acknowledge`
+### `gate.acknowledge`
 
 A bridge author who knowingly violates a WARN-level gate can
 suppress its warning explicitly:
@@ -227,12 +230,12 @@ suppress its warning explicitly:
 @claim_bridge(
     source=INTERVENTION,
     scope=_FOURROOMS_REGIME & ...,
-    gates=(Gate.acknowledge('exogenous_scope'),),
+    gates=(gate.acknowledge('exogenous_scope'),),
 )
 def known_hp_envelope_bridge(...): ...
 ```
 
-`Gate.acknowledge(name)` returns an `AdmissionGate` whose
+`gate.acknowledge(name)` returns an `AdmissionGate` whose
 `check()` always returns `GateResult(passed=True, level=INFO,
 message=f'acknowledged: {name}')` AND whose presence on the
 bridge causes the framework to filter out any WARN-level gate
@@ -257,8 +260,8 @@ new and free.
 
 | Gate | Level | What it replaces |
 |---|---|---|
-| `Gate.MIN_PAIRS(n)` | BLOCK | The `if paired_g.n_pairs < 30: return POWER_INSUFFICIENT` boilerplate every paired-g bridge currently writes |
-| `Gate.SOLVED_BY_BASELINE` | WARN | Bridges scoped to envs where the baseline arm already saturates the outcome (memory: `feedback_canonical_analyses` mention of saturation masking) |
+| `gate.MIN_PAIRS(n)` | BLOCK | The `if paired_g.n_pairs < 30: return POWER_INSUFFICIENT` boilerplate every paired-g bridge currently writes |
+| `gate.SOLVED_BY_BASELINE` | WARN | Bridges scoped to envs where the baseline arm already saturates the outcome (memory: `feedback_canonical_analyses` mention of saturation masking) |
 
 ### Detection rules
 
@@ -338,17 +341,17 @@ frequency to its summary.
    one PR.
 2. **Phase 2: 3 high-value auto-gates** — `DISTINCT_ARMS`,
    `EXOGENOUS_SCOPE`, `NO_PREDICTED_DIRECTION`. ~50 LoC each.
-3. **Phase 3: substrate `Scope.*` / `Gate.*` namespaces** —
-   `corroborate_rl.bridges_lib` exposes `Scope.PREMISE_ACTIVE`,
-   `Gate.MIN_PAIRS(n)`, etc. Substrate-coupled, no framework
+3. **Phase 3: substrate `scope.*` / `gate.*` namespaces** —
+   `corroborate_rl.bridges_lib` exposes `scope.PREMISE_ACTIVE`,
+   `gate.MIN_PAIRS(n)`, etc. Substrate-coupled, no framework
    changes.
-4. **Phase 4: `Gate.acknowledge(name)` + warning suppression** —
+4. **Phase 4: `gate.acknowledge(name)` + warning suppression** —
    the explicit "I know" surface.
 5. **Phase 5: optional gates as use-cases bite** —
-   `Gate.PRIOR_RUNG_VERIFIED(needs=...)` (cross-bridge
+   `gate.PRIOR_RUNG_VERIFIED(needs=...)` (cross-bridge
    constraint, depends on FUTURE_WORKS "cross-bridge constraint
-   declarations"), `Gate.SIGN_COHERES(chain=...)`,
-   `Gate.SOLVED_BY_BASELINE`.
+   declarations"), `gate.SIGN_COHERES(chain=...)`,
+   `gate.SOLVED_BY_BASELINE`.
 
 ## Open questions
 
@@ -359,10 +362,10 @@ shipped the endogenous predicate yet for that claim). Auto-WARN
 on `EXOGENOUS_SCOPE` would emit a warning every run for those
 bridges. Two approaches:
 
-- **Always warn, suppress via `Gate.acknowledge('exogenous_scope')`**
+- **Always warn, suppress via `gate.acknowledge('exogenous_scope')`**
   — explicit per-bridge opt-out. Migration-friendly: warnings stay
   visible until the author handles them.
-- **Opt-in via `gates=(Gate.EXOGENOUS_SCOPE,)`** — default off,
+- **Opt-in via `gates=(gate.EXOGENOUS_SCOPE,)`** — default off,
   bridges that want the warning add it. Quieter but reduces
   discoverability of the smell.
 
@@ -392,7 +395,7 @@ tiers (BLOCK + WARN) may be enough.
 
 ### Cross-bridge gates (Phase 5)
 
-`Gate.PRIOR_RUNG_VERIFIED(needs=mech_bridge)` requires evaluating
+`gate.PRIOR_RUNG_VERIFIED(needs=mech_bridge)` requires evaluating
 ONE bridge before another. The current `runner.run` evaluates
 bridges in `BRIDGES`-tuple order; cross-bridge gates need either:
 - A topological-sort step in `runner.run` (lift the dependency
@@ -426,14 +429,14 @@ Defer until Phase 5 when an actual cross-bridge gate is needed.
 
 - **Warning fatigue.** If WARN gates fire on too many bridges,
   authors will tune them out. Mitigation: ship only 2-3
-  high-signal warnings in Phase 1; `Gate.acknowledge` lets
+  high-signal warnings in Phase 1; `gate.acknowledge` lets
   explicit-bridge-level opt-out without tuning out the gate
   globally.
 - **Performance.** Auto-gates run on every bridge every
   evaluation. Mitigation: gates run on metadata + filtered cells
   only (after scope), not on full corpus; should be O(scope
   cardinality) at most.
-- **Substrate coupling.** `Scope.*` / `Gate.*` namespaces are
+- **Substrate coupling.** `scope.*` / `gate.*` namespaces are
   substrate-specific (the substrate decides what's endogenous).
   Mitigation: namespaces ship as substrate-library modules
   (`corroborate_rl.bridges_lib`); the framework doesn't import

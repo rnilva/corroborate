@@ -72,7 +72,33 @@ from corroborate.measurables import (
 )
 
 
-# ============ Hypothesis validation ============
+# ============ Hypothesis validation + bridge auto-collection ============
+
+
+def collect_bridges(
+    namespace: Mapping[str, object],
+) -> tuple[Bridge, ...]:
+    """Auto-collect every module-level `Bridge` instance from a
+    namespace. Substitute for hand-curating `BRIDGES` tuples.
+
+    Usage at the bottom of a bridges file:
+
+        BRIDGES = collect_bridges(globals())
+
+    Replaces the explicit `BRIDGES = (*GROUP_A, *GROUP_B, ...)`
+    boilerplate when the author just wants "every bridge in this
+    file." Named subgroups (`NSTEP_INTERVENTION_BRIDGES`,
+    `ACTION_DIM_BRIDGES`) stay as deliberately-curated tuples for
+    partial-evaluation use cases — they're documentation, not the
+    canonical-run set.
+
+    Order is module-definition order (the order Python populates
+    `globals()`); cross-bridge dependencies should be declared
+    explicitly via per-bridge gates, not relied on through
+    ordering."""
+    return tuple(
+        v for v in namespace.values() if isinstance(v, Bridge)
+    )
 
 
 def _validate_hypothesis(h: object) -> Hypothesis:
@@ -853,5 +879,6 @@ def _join_required_traces(
 
 
 __all__ = [
+    'collect_bridges',
     'run',
 ]

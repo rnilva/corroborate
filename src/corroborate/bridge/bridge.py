@@ -49,7 +49,7 @@ from __future__ import annotations
 import inspect
 import math
 from collections.abc import Callable, Iterable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from types import MappingProxyType
 from typing import cast
 
@@ -236,12 +236,25 @@ class Bridge:
     tier: Tier = Tier.ASSOCIATIONAL
     pair_by: tuple[str, ...] = ('seed',)
     scope: pl.Expr | None = None
-    params: Mapping[str, object] = field(
-        default_factory=lambda: MappingProxyType({}),
-    )
     predicted_direction: PredictedDirection | None = None
     holds_when: Callable[..., Verdict] | None = None
     threshold: float | None = None
+
+    @property
+    def params(self) -> Mapping[str, object]:
+        """Defaulted kwargs of `holds_when`, derived on access via
+        `inspect.signature`. Caches nothing — Bridge is frozen, so
+        the property's result is stable; recomputing on each access
+        is sub-millisecond and trades a Bridge field for one less
+        cached state."""
+        if self.holds_when is None:
+            return {}
+        sig = inspect.signature(self.holds_when)
+        return {
+            name: get_param_default(p)
+            for name, p in sig.parameters.items()
+            if get_param_default(p) is not inspect.Parameter.empty
+        }
 
     @property
     def source_name(self) -> str:
@@ -521,23 +534,21 @@ def claim_bridge(
                 f'signature: {exc}',
             ) from exc
 
-        # Defaulted kwargs become `Bridge.params`; non-defaulted
-        # parameters are fixtures resolved at evaluate time.
-        params: dict[str, object] = {}
-        for param_name, param in sig.parameters.items():
-            default = get_param_default(param)
-            if default is inspect.Parameter.empty:
-                continue
-            params[param_name] = default
-
-        # Auto-register Measurable instances passed by value.
+        # Auto-register Measurable instances passed by value as
+        # source / target / defaulted-kwargs. `Bridge.params` is a
+        # `@property` derived from `inspect.signature` on demand,
+        # but Measurable-registration happens at decoration time so
+        # the registry is populated before the first bridge runs.
         if isinstance(source_validated, Measurable):
             register(source_validated)
         if isinstance(target_validated, Measurable):
             register(target_validated)
-        for v in params.values():
-            if isinstance(v, Measurable):
-                register(v)
+        for param in sig.parameters.values():
+            default = get_param_default(param)
+            if default is inspect.Parameter.empty:
+                continue
+            if isinstance(default, Measurable):
+                register(default)
 
         return Bridge(
             name=fn.__name__,
@@ -547,7 +558,6 @@ def claim_bridge(
             tier=tier_validated,
             pair_by=pair_by_validated,
             scope=scope_validated,
-            params=MappingProxyType(params),
             holds_when=fn,
             predicted_direction=predicted_direction_validated,
         )
