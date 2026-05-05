@@ -84,6 +84,42 @@ def _build_dominance_corpus() -> list[Mapping[str, object]]:
 
 # ============ Dominant logic — the real classification work ============
 
+def test_dominant_returns_power_insufficient_string_when_dominant() -> None:
+    """A corpus where POWER_INSUFFICIENT is the dominant verdict
+    must report exactly the lowercase enum string `'power_insufficient'`.
+    Pin the literal string in `_dominant`'s tuple — mutations to
+    `'POWER_INSUFFICIENT'` (uppercase) or `'XXpower_insufficientXX'`
+    (mangled) would break round-trip with the enum value."""
+    pi = Verdict.POWER_INSUFFICIENT.value
+    held = Verdict.HELD.value
+    rows = run_arm(
+        _scm(), seeds=range(_N_PER_ENV),
+        arm_key='single', env_name='env_pi_dominant',
+    )
+    rows = _stamp(rows, [pi] * 24 + [held] * 6)
+    cells: list[Mapping[str, object]] = [r.as_dict() for r in rows]
+    result = verdict_distribution_per_env.fn(
+        cells, arm_filter='single', verdict_column=_VERDICT_COLUMN,
+    )
+    assert result.per_env['env_pi_dominant'].dominant == 'power_insufficient'
+
+
+def test_dominant_returns_other_string_when_other_bucket_wins() -> None:
+    """The 'other' bucket holds unknown verdict strings. When
+    that bucket dominates, the returned label must be the literal
+    `'other'`. Pin against `'OTHER'` / `'XXotherXX'` mutations."""
+    rows = run_arm(
+        _scm(), seeds=range(_N_PER_ENV),
+        arm_key='single', env_name='env_other_dominant',
+    )
+    rows = _stamp(rows, ['unknown_verdict'] * 24 + [Verdict.HELD.value] * 6)
+    cells: list[Mapping[str, object]] = [r.as_dict() for r in rows]
+    result = verdict_distribution_per_env.fn(
+        cells, arm_filter='single', verdict_column=_VERDICT_COLUMN,
+    )
+    assert result.per_env['env_other_dominant'].dominant == 'other'
+
+
 def test_dominant_resolves_strict_majority_tie_and_unanimous() -> None:
     """`dominant` returns:
       - the strict-majority bucket name when one is highest
