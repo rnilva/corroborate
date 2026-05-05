@@ -15,6 +15,9 @@ Sub-modules:
 - `bridge.analysis` — `@analysis` decorator, `Analysis`
   wrapper, analysis registry, `resolve_for_holds_when`
   fixture-injection.
+- `bridge.predicates` — NaN-safe polars expression helpers
+  for `Bridge.scope=` (encapsulates polars's NaN-comparison
+  and NaN-propagation gotchas).
 
 Consumers `from corroborate.bridge import X`."""
 from corroborate.bridge.analysis import (
@@ -26,6 +29,15 @@ from corroborate.bridge.bridge import (
     BridgeEvaluation,
     claim_bridge,
     evaluate,
+)
+from corroborate.bridge.predicates import (
+    finite,
+    finite_between,
+    finite_ge,
+    finite_gt,
+    finite_le,
+    finite_lt,
+    partition_aggregate,
 )
 from corroborate.bridge.verdict import (
     RefutationClass,
@@ -41,4 +53,11 @@ __all__ = [
     'analysis',
     'claim_bridge',
     'evaluate',
+    'finite',
+    'finite_between',
+    'finite_ge',
+    'finite_gt',
+    'finite_le',
+    'finite_lt',
+    'partition_aggregate',
 ]

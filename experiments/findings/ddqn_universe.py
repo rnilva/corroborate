@@ -92,6 +92,9 @@ from functools import partial
 from corroborate.bridge.bridge import (
     Direction, Tier, claim_bridge,
 )
+from corroborate.bridge.predicates import (
+    finite, finite_gt, partition_aggregate,
+)
 from corroborate.core.intervention import DoEffect, Intervention
 from corroborate.measurables import Measurable
 from corroborate.stats import MetaRegressionResult
@@ -328,23 +331,26 @@ def adaptive_dqn_recovers_ddqn_benefit__fourrooms_factor_0p5(
     # Endogenous scope: per-(env, total_steps) mean of
     # `q_divergence_score` exceeds the Bellman fixed-point bound
     # (jensen > r_max/(1−γ)) — the regime where the bridge claims
-    # DDQN's early-burst benefit operates. Replaces the prior
-    # `sync_period == 100` HP-knob scope. The multi-key partition
-    # `over(['env_name', 'total_steps'])` keeps the regime-specific
-    # signal: Freeway-MinAtar's full-cache env-mean is 0.74 (mixing
-    # 50k/200k/1M cells), but its 1M-only env×total_steps mean is
-    # 2.76 — so Freeway 1M passes. `fill_nan(None)` makes the mean
-    # NaN-safe (polars `.mean()` propagates NaN otherwise).
-    # Pairing-safe: env-level aggregate is the same for vanilla
-    # and DDQN cells of the same (env, seed).
+    # DDQN's early-burst benefit operates. The multi-key partition
+    # keeps the regime-specific signal: Freeway-MinAtar's
+    # full-cache env-mean is 0.74 (mixing 50k/200k/1M cells), but
+    # its 1M-only (env, total_steps) mean is 2.76 — so Freeway 1M
+    # passes. Two predicates: `finite('q_divergence_score')` drops
+    # per-cell NaN (no_hit_penalty wrapper cells with null
+    # jensen_gap); `partition_aggregate(...) > 1.0` selects the
+    # Q-explosion regime via NaN-safe partition mean.
     scope=(
         (pl.col('log_obs_dim') >= 5.0)
         & (pl.col('total_steps') >= 1000000.0)
         & pl.col('reward_clip_min').is_null()
-        & pl.col('q_divergence_score').is_finite()
+        & finite('q_divergence_score')
         & (
-            pl.col('q_divergence_score').fill_nan(None).mean()
-            .over(['env_name', 'total_steps']) > 1.0
+            partition_aggregate(
+                'q_divergence_score',
+                by=['env_name', 'total_steps'],
+                op='mean',
+            )
+            > 1.0
         )
     ),
 )
@@ -398,8 +404,7 @@ def ddqn_helps_at_early_bursts__pixel_envs(
         (pl.col('env_name') == 'SpaceInvaders-MinAtar')
         & (pl.col('total_steps') >= 1000000.0)
         & pl.col('reward_clip_min').is_null()
-        & pl.col('q_divergence_score').is_finite()
-        & (pl.col('q_divergence_score') > 1.0)
+        & finite_gt('q_divergence_score', 1.0)
     ),
 )
 def ddqn_attenuates_at_late_bursts__spaceinvaders(
@@ -1214,8 +1219,7 @@ def ddqn_dominates_vanilla_response_curve__fourrooms_rs_0p3(
         (pl.col('env_name') == 'SpaceInvaders-MinAtar')
         & (pl.col('total_steps') == 1_000_000)
         & pl.col('reward_clip_min').is_null()
-        & pl.col('q_divergence_score').is_finite()
-        & (pl.col('q_divergence_score') > 1.0)
+        & finite_gt('q_divergence_score', 1.0)
     ),
 )
 def ddqn_curve_crosses_vanilla_late__spaceinvaders(
