@@ -1180,6 +1180,71 @@ def test_orient_returns_true_and_mutates_on_clean_orient() -> None:
     assert frozenset({'x', 'y'}) not in undirected
 
 
+def test_orient_v_structure_with_missing_sepset_uses_empty_default() -> None:
+    """When the discovered adjacency lacks a separating-set entry
+    for an unshielded pair (X, Y), `_detect_v_structures` uses
+    the default `frozenset([frozenset()])` (i.e., X⫫Y under empty
+    conditioning set). Pin against `None` and `frozenset(None)`
+    mutants on the default-sepsets line.
+
+    Construct: X − Z − Y unshielded. X-Y NOT in edges, AND not
+    in separating_sets dict. The function should still detect
+    the collider (empty conditioning means Z not in sepset →
+    collider) and orient X → Z ← Y."""
+    from corroborate.graph.discovery import (
+        DiscoveredAdjacency, orient_adjacency,
+    )
+    adj = DiscoveredAdjacency(
+        variables=frozenset({'x', 'y', 'z'}),
+        edges=frozenset({frozenset({'x', 'z'}), frozenset({'y', 'z'})}),
+        separating_sets={},    # NO separating set for x-y!
+        n_observations=100, alpha=0.05, max_conditioning=0,
+        stratify_by=None,
+    )
+    oriented = orient_adjacency(adj)
+    # Default sepset = frozenset([frozenset()]) → z not in
+    # empty set → z_in_none=True → orient as collider.
+    assert ('x', 'z') in oriented.directed_edges
+    assert ('y', 'z') in oriented.directed_edges
+
+
+def test_orient_standard_pc_orients_ambiguous_as_collider() -> None:
+    """Under conservative=False (standard PC), an ambiguous triple
+    (z in SOME but NOT ALL sepsets) is oriented as a collider:
+    X → Z and Y → Z. Pin both `_orient(x, z, ...)` and
+    `_orient(y, z, ...)` calls in the standard-PC branch.
+
+    Construct: 4 nodes x, y, z, w. x-y has two separating sets:
+    {z} (contains z) and {w} (does not). → z is in some but
+    not all → ambiguous. Conservative skips; standard orients."""
+    from corroborate.graph.discovery import (
+        DiscoveredAdjacency, orient_adjacency,
+    )
+    adj = DiscoveredAdjacency(
+        variables=frozenset({'x', 'y', 'z'}),
+        edges=frozenset({frozenset({'x', 'z'}), frozenset({'y', 'z'})}),
+        separating_sets={
+            # x ⫫ y under empty conditioning OR given {z}: z is
+            # in some sepsets ({z}) but not all (empty doesn't).
+            frozenset({'x', 'y'}): frozenset({
+                frozenset[str](),
+                frozenset({'z'}),
+            }),
+        },
+        n_observations=100, alpha=0.05, max_conditioning=1,
+        stratify_by=None,
+    )
+    oriented_std = orient_adjacency(adj, conservative=False)
+    # Standard PC: orient X → Z AND Y → Z (both calls fire).
+    assert ('x', 'z') in oriented_std.directed_edges
+    assert ('y', 'z') in oriented_std.directed_edges
+    # Conservative: ambiguous triple recorded, NOT oriented.
+    oriented_cons = orient_adjacency(adj, conservative=True)
+    assert ('x', 'z') not in oriented_cons.directed_edges
+    assert ('y', 'z') not in oriented_cons.directed_edges
+    assert oriented_cons.ambiguous_triples != frozenset()
+
+
 def test_orient_v_structure_collider() -> None:
     """Unshielded X − Z − Y with Z NOT in sepset(X, Y) → orient
     X → Z ← Y (definite collider).
