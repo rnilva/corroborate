@@ -370,6 +370,49 @@ CartPole are marked `@pytest.mark.slow`. Defaults:
 `addopts = "-q --strict-markers -m 'not slow'"` in pyproject. The
 empty `-m ''` overrides addopts to include both.
 
+## Test principle
+
+Tests assert framework output against an **analytical closed
+form** within a **sampling-distribution-derived bound**. Four
+rules, in order of importance:
+
+1. **Closed-form, not arbitrary**. The expected value is computed
+   from substrate parameters (`expected_g = mu_x · sqrt(n_steps) /
+   sigma_x · c_4(n_pairs)`), not plucked. Bound size names what
+   it absorbs (sample-SD CV at n=30 → 15%; cluster-robust SE
+   inflation → t-critical at df=n-p; etc.). `g > 0.8` when
+   structural g is 28 is a 35× slack — no.
+
+2. **Substrate-grounded over synthetic-input**. Cells flow through
+   `RunRow.as_dict()` → analysis (the production data path). The
+   `tests/analytic/lg_scm/` substrate (Linear-Gaussian SCM with
+   `@claim` Free Claims + frozen-dataclass config bundles) and
+   `src/corroborate_rl/tests/analytic/deadly_triad/` (FQI / Q-
+   divergence) make closed-form expectations possible without
+   mocks. Synthetic-input tests (hand-built dicts → primitive →
+   assertion) are unit-level coverage of internals only.
+
+3. **Z-score bounds replace "doesn't reject null"**.
+   `|coef / SE| < 2.5` against the framework's reported SE catches
+   both inflated estimates AND collapsed SEs; `p > alpha + CI
+   covers zero` passes garbage estimators with overconfident CIs.
+   When framework SE comes from a CI (no `.se` field), invert
+   with the framework's own t-critical (`scipy.stats.t.ppf(1-α/2,
+   df=n-p)`), not `1.96`.
+
+4. **No substrate-redundant assertions**. If a test reads back
+   what it stamped (count of stamped verdicts, sum of stamped
+   values), the assertion is tautological. The framework's logic
+   isn't being verified. Either delete or replace with an
+   assertion on transformation logic the framework actually does
+   (case-folding, classification, dominance resolution).
+
+Persistence tests pair: `tests/test_persistence.py` covers the
+write/read CONTRACT (round-trip equality on hand-built rows);
+`tests/analytic/lg_scm/test_parquet_round_trip.py` proves
+**closed-form analyses still recover the structural answer**
+after a real parquet round-trip. Both shapes are needed.
+
 ## Acceptance criteria
 
 `v0` is acceptance-tested by reproducing the DDQN study in
