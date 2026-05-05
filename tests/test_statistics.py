@@ -535,6 +535,291 @@ def test_verdict_held_for_small_negative_g_when_negative_predicted() -> None:
     assert refutation is None
 
 
+# ============ random_effects_verdict — gap-fill ============
+
+def test_random_effects_verdict_n_equals_3_passes_power_guard() -> None:
+    """n_cells=3 (boundary): passes the n_cells<3 power guard.
+    Pin `n_cells < 3` against `n_cells <= 3` and `n_cells < 4`
+    (both would force POWER_INSUFFICIENT at n=3)."""
+    from corroborate.stats import (
+        PooledStats, random_effects_verdict,
+    )
+    p = PooledStats(
+        pooled_g=1.0, se_pooled=0.1,
+        tau2=0.0, I2=0.0, Q=1.0,
+        pi_lo=0.5, pi_hi=1.5,
+        empirical_min_g=0.8, empirical_max_g=1.2,
+        n_cells=3,
+    )
+    verdict, refutation = random_effects_verdict(
+        p, predicted_direction='a_gt_b',
+    )
+    assert verdict is not Verdict.POWER_INSUFFICIENT
+    assert verdict is Verdict.HELD
+    assert refutation is None
+
+
+def test_random_effects_verdict_pi_strictly_positive_at_a_gt_b_is_held() -> None:
+    """PI strictly above 0 (pi_lo > 0) with predicted='a_gt_b'
+    → HELD. Pin:
+
+    - `or` in pi_excludes_zero (vs `and` mutant which would
+      always be False — both can't be true simultaneously)
+    - `pi_lo > 0` (vs `pi_lo >= 0`, `pi_lo > 1`)
+    - `_held_or_scope_flag(pooled)` (vs `_held_or_scope_flag(None)`
+      which would raise AttributeError on `pooled.I2`)"""
+    from corroborate.stats import (
+        PooledStats, random_effects_verdict,
+    )
+    p = PooledStats(
+        pooled_g=2.0, se_pooled=0.1,
+        tau2=0.0, I2=0.0, Q=1.0,
+        pi_lo=1.5, pi_hi=2.5,    # strictly positive
+        empirical_min_g=1.8, empirical_max_g=2.2,
+        n_cells=5,
+    )
+    verdict, refutation = random_effects_verdict(
+        p, predicted_direction='a_gt_b',
+    )
+    assert verdict is Verdict.HELD
+    assert refutation is None
+
+
+def test_random_effects_verdict_pi_strictly_negative_at_a_lt_b_is_held() -> None:
+    """Mirror of the positive case: PI strictly below 0 with
+    predicted='a_lt_b' → HELD. Pins `pi_hi < 0` against
+    `<= 0` / `< 1` mutants and `pi_negative` derived branch."""
+    from corroborate.stats import (
+        PooledStats, random_effects_verdict,
+    )
+    p = PooledStats(
+        pooled_g=-2.0, se_pooled=0.1,
+        tau2=0.0, I2=0.0, Q=1.0,
+        pi_lo=-2.5, pi_hi=-1.5,    # strictly negative
+        empirical_min_g=-2.2, empirical_max_g=-1.8,
+        n_cells=5,
+    )
+    verdict, refutation = random_effects_verdict(
+        p, predicted_direction='a_lt_b',
+    )
+    assert verdict is Verdict.HELD
+    assert refutation is None
+
+
+def test_random_effects_verdict_pi_lo_zero_is_null_under_two_sided() -> None:
+    """pi_lo=0, pi_hi>0 with predicted='two_sided': PI touches
+    zero from above → NOT strictly excluded → NULL_EFFECT.
+
+    Pin `pi_lo > 0.0` (in pi_excludes_zero) against `pi_lo >= 0.0`
+    mutant — under two_sided, the mutant would route to HELD
+    instead of NULL_EFFECT (because the mutant's pi_excludes_zero
+    becomes True, and two_sided takes _held_or_scope_flag without
+    checking pi_positive)."""
+    from corroborate.stats import (
+        PooledStats, random_effects_verdict,
+    )
+    p = PooledStats(
+        pooled_g=1.0, se_pooled=0.1,
+        tau2=0.0, I2=0.0, Q=1.0,
+        pi_lo=0.0, pi_hi=2.0,
+        empirical_min_g=0.5, empirical_max_g=1.5,
+        n_cells=5,
+    )
+    verdict, refutation = random_effects_verdict(
+        p, predicted_direction='two_sided',
+    )
+    assert verdict is Verdict.NO_EFFECT
+    assert refutation is RefutationClass.NULL_EFFECT
+
+
+def test_random_effects_verdict_pi_hi_zero_is_null_under_two_sided() -> None:
+    """Mirror: pi_lo<0, pi_hi=0 → not strictly excluded → NULL_EFFECT
+    under two_sided. Pin `pi_hi < 0.0` against `pi_hi <= 0.0`
+    and `pi_hi < 1.0` mutants (the latter would let pi_hi in
+    (-, 1) be classified as 'negative' inappropriately)."""
+    from corroborate.stats import (
+        PooledStats, random_effects_verdict,
+    )
+    p = PooledStats(
+        pooled_g=-1.0, se_pooled=0.1,
+        tau2=0.0, I2=0.0, Q=1.0,
+        pi_lo=-2.0, pi_hi=0.0,
+        empirical_min_g=-1.5, empirical_max_g=-0.5,
+        n_cells=5,
+    )
+    verdict, refutation = random_effects_verdict(
+        p, predicted_direction='two_sided',
+    )
+    assert verdict is Verdict.NO_EFFECT
+    assert refutation is RefutationClass.NULL_EFFECT
+
+
+def test_random_effects_verdict_pi_in_zero_to_one_routes_correctly() -> None:
+    """pi_lo=0.5, pi_hi=0.8 (PI strictly positive, fully inside
+    (0, 1)): under predicted='a_gt_b' must HELD. Pin `pi_lo > 0`
+    against `pi_lo > 1` mutant (which would not see this PI as
+    excluding zero — pi_lo=0.5 > 1 is False — and `pi_hi < 0` is
+    False, so pi_excludes_zero=False → NULL_EFFECT). Also pins
+    `pi_hi < 0` against `pi_hi < 1` mutant (which would set
+    pi_negative=True for pi_hi=0.8 → route to SIGN_FLIP under
+    a_gt_b instead of HELD)."""
+    from corroborate.stats import (
+        PooledStats, random_effects_verdict,
+    )
+    p = PooledStats(
+        pooled_g=0.6, se_pooled=0.05,
+        tau2=0.0, I2=0.0, Q=1.0,
+        pi_lo=0.5, pi_hi=0.8,
+        empirical_min_g=0.55, empirical_max_g=0.75,
+        n_cells=5,
+    )
+    verdict, refutation = random_effects_verdict(
+        p, predicted_direction='a_gt_b',
+    )
+    assert verdict is Verdict.HELD
+    assert refutation is None
+
+
+def test_random_effects_verdict_pi_in_zero_to_one_under_a_lt_b_is_null() -> None:
+    """pi_lo=0.5, pi_hi=0.8 with predicted='a_lt_b': PI strictly
+    positive but predicted negative → SIGN_FLIP.
+
+    Specifically pins `pi_negative = pi_hi < 0` against
+    `pi_negative = pi_hi < 1` mutant — under the mutant pi_hi=0.8
+    < 1 → pi_negative=True → routes the a_lt_b branch to HELD,
+    swallowing what should be a sign-flip refutation."""
+    from corroborate.stats import (
+        PooledStats, random_effects_verdict,
+    )
+    p = PooledStats(
+        pooled_g=0.6, se_pooled=0.05,
+        tau2=0.0, I2=0.0, Q=1.0,
+        pi_lo=0.5, pi_hi=0.8,
+        empirical_min_g=0.55, empirical_max_g=0.75,
+        n_cells=5,
+    )
+    verdict, refutation = random_effects_verdict(
+        p, predicted_direction='a_lt_b',
+    )
+    assert verdict is Verdict.NO_EFFECT
+    assert refutation is RefutationClass.SIGN_FLIP
+
+
+def test_random_effects_verdict_pi_at_exactly_zero_lo_is_null_effect() -> None:
+    """pi_lo = 0 exactly: PI does NOT strictly exclude zero (the
+    inequality is strict `>`, not `>=`). Routes to NULL_EFFECT,
+    not HELD. Pin `pi_lo > 0.0` against `pi_lo >= 0.0` mutant
+    (which would HELD at pi_lo=0)."""
+    from corroborate.stats import (
+        PooledStats, random_effects_verdict,
+    )
+    p = PooledStats(
+        pooled_g=1.0, se_pooled=0.1,
+        tau2=0.0, I2=0.0, Q=1.0,
+        pi_lo=0.0, pi_hi=2.0,    # touches zero
+        empirical_min_g=0.5, empirical_max_g=1.5,
+        n_cells=5,
+    )
+    verdict, refutation = random_effects_verdict(
+        p, predicted_direction='a_gt_b',
+    )
+    assert verdict is Verdict.NO_EFFECT
+    assert refutation is RefutationClass.NULL_EFFECT
+
+
+def test_random_effects_verdict_sign_flip_on_a_gt_b_with_pi_negative() -> None:
+    """PI strictly negative when predicted='a_gt_b' (positive
+    expected) → SIGN_FLIP. Pin the sign-flip branch on the
+    a_gt_b path and the `pi_negative = pi_hi < 0` derivation."""
+    from corroborate.stats import (
+        PooledStats, random_effects_verdict,
+    )
+    p = PooledStats(
+        pooled_g=-1.5, se_pooled=0.1,
+        tau2=0.0, I2=0.0, Q=1.0,
+        pi_lo=-2.0, pi_hi=-1.0,    # strictly negative
+        empirical_min_g=-1.8, empirical_max_g=-1.2,
+        n_cells=5,
+    )
+    verdict, refutation = random_effects_verdict(
+        p, predicted_direction='a_gt_b',
+    )
+    assert verdict is Verdict.NO_EFFECT
+    assert refutation is RefutationClass.SIGN_FLIP
+
+
+def test_random_effects_verdict_sign_flip_on_a_lt_b_with_pi_positive() -> None:
+    """Mirror: PI strictly positive when predicted='a_lt_b' →
+    SIGN_FLIP. Symmetric to the a_gt_b sign-flip case; pins
+    that the a_lt_b branch routes positive-PI to SIGN_FLIP and
+    that 'a_lt_b' is the literal string match (vs 'A_LT_B' or
+    'XXa_lt_bXX' string mutations that would not match → fall
+    through to defensive NULL_EFFECT)."""
+    from corroborate.stats import (
+        PooledStats, random_effects_verdict,
+    )
+    p = PooledStats(
+        pooled_g=1.5, se_pooled=0.1,
+        tau2=0.0, I2=0.0, Q=1.0,
+        pi_lo=1.0, pi_hi=2.0,    # strictly positive
+        empirical_min_g=1.2, empirical_max_g=1.8,
+        n_cells=5,
+    )
+    verdict, refutation = random_effects_verdict(
+        p, predicted_direction='a_lt_b',
+    )
+    assert verdict is Verdict.NO_EFFECT
+    assert refutation is RefutationClass.SIGN_FLIP
+
+
+def test_random_effects_verdict_two_sided_held_with_pi_positive() -> None:
+    """predicted='two_sided' admits PI in either direction
+    (excluding zero). Pin the 'two_sided' string match — mutants
+    that change the literal ('TWO_SIDED', 'XXtwo_sidedXX') would
+    fall through to the a_gt_b/a_lt_b branches and produce the
+    same verdict by coincidence; mutating the comparison operator
+    (`==` → `!=`) would route two_sided to the wrong branch."""
+    from corroborate.stats import (
+        PooledStats, random_effects_verdict,
+    )
+    p = PooledStats(
+        pooled_g=1.5, se_pooled=0.1,
+        tau2=0.0, I2=0.0, Q=1.0,
+        pi_lo=1.0, pi_hi=2.0,
+        empirical_min_g=1.2, empirical_max_g=1.8,
+        n_cells=5,
+    )
+    verdict, refutation = random_effects_verdict(
+        p, predicted_direction='two_sided',
+    )
+    assert verdict is Verdict.HELD
+    assert refutation is None
+
+
+def test_random_effects_verdict_a_gt_b_string_literal_routes_correctly() -> None:
+    """Pin the literal 'a_gt_b' string match: a mutation to
+    'XXa_gt_bXX' would skip the a_gt_b branch entirely → fall
+    through to a_lt_b check (also fails for 'a_gt_b' input) →
+    defensive NULL_EFFECT.
+
+    Construct: predicted='a_gt_b' with PI strictly positive →
+    HELD under original. Mutant string-mismatch → NULL_EFFECT."""
+    from corroborate.stats import (
+        PooledStats, random_effects_verdict,
+    )
+    p = PooledStats(
+        pooled_g=1.5, se_pooled=0.1,
+        tau2=0.0, I2=0.0, Q=1.0,
+        pi_lo=1.0, pi_hi=2.0,
+        empirical_min_g=1.2, empirical_max_g=1.8,
+        n_cells=5,
+    )
+    verdict, _ = random_effects_verdict(
+        p, predicted_direction='a_gt_b',
+    )
+    assert verdict is Verdict.HELD
+
+
 def test_verdict_alpha_power_kwargs_propagate_to_mde_check() -> None:
     """`alpha` and `power` kwargs must reach `adequately_powered_paired`
     intact. With strict `power=0.99` and `alpha=0.001`, MDE goes up
