@@ -296,6 +296,63 @@ def test_stratified_finds_within_stratum_correlation_masked_by_pooling() -> None
     assert abs(float(pooled_rho) - strat_rho) > 0.05
 
 
+def test_stratified_skips_too_small_stratum_then_continues() -> None:
+    """A too-small stratum in the MIDDLE of the iteration order
+    must be skipped (continue) without breaking out of the
+    stratum loop. Pin against `break` mutant: under break, all
+    strata after the skipped one are dropped from the pool.
+
+    Construct: 3 strata in order A (n=10), B (n=2, skipped), C
+    (n=10). C must contribute. With construction tuned so A and
+    C have OPPOSITE-sign per-stratum rho, the pooled rho
+    differs from A-alone substantially under the mutant."""
+    rng = np.random.default_rng(11)
+    n_a, n_c = 10, 10
+    # Stratum A: positive rho
+    xa = rng.standard_normal(n_a)
+    ya = 0.8 * xa + 0.3 * rng.standard_normal(n_a)
+    # Stratum B (size 2, skipped):
+    xb = np.array([0.0, 1.0])
+    yb = np.array([0.0, 1.0])
+    # Stratum C: NEGATIVE rho
+    xc = rng.standard_normal(n_c)
+    yc = -0.8 * xc + 0.3 * rng.standard_normal(n_c)
+    x = np.concatenate([xa, xb, xc])
+    y = np.concatenate([ya, yb, yc])
+    strata = ['A'] * n_a + ['B'] * 2 + ['C'] * n_c
+
+    rho, _ = stratified_spearman_rho(x, y, strata, min_stratum_size=4)
+    # Original pools A (positive) + C (negative) → near zero.
+    # Mutant break: only A processed → strongly positive.
+    assert abs(rho) < 0.5    # near-zero pool, NOT A-only's ~+0.85
+
+
+def test_stratified_skips_zero_variance_stratum_then_continues() -> None:
+    """A stratum with zero within-stratum x or y variance is
+    skipped (continue), not break. Pin `if std==0: continue`
+    against `break` mutant.
+
+    Construct: A (normal), B (constant x), C (normal). Original
+    skips B and pools A+C. Mutant break: drops C."""
+    rng = np.random.default_rng(13)
+    n_per = 10
+    # A: positive rho.
+    xa = rng.standard_normal(n_per)
+    ya = 0.8 * xa + 0.3 * rng.standard_normal(n_per)
+    # B: constant x → std(x)=0 → skipped.
+    xb = np.full(n_per, 5.0)
+    yb = rng.standard_normal(n_per)
+    # C: NEGATIVE rho.
+    xc = rng.standard_normal(n_per)
+    yc = -0.8 * xc + 0.3 * rng.standard_normal(n_per)
+    x = np.concatenate([xa, xb, xc])
+    y = np.concatenate([ya, yb, yc])
+    strata = ['A'] * n_per + ['B'] * n_per + ['C'] * n_per
+    rho, _ = stratified_spearman_rho(x, y, strata, min_stratum_size=4)
+    # Pool of A+C → near zero. Mutant break-at-B → A-only.
+    assert abs(rho) < 0.5
+
+
 def test_stratified_skips_too_small_strata() -> None:
     """Strata with n < min_stratum_size are dropped — they don't
     contribute to the Fisher-z pool."""
