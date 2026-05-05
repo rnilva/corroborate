@@ -13,41 +13,59 @@ Four arms (A/B/C/D convention from `factorial_2x2_interaction`):
     arm_c = (ddqn, σ_low)       — flips axis 1 (ddqn fixes bias at σ_low)
     arm_d = (ddqn, σ_high)      — flips both
 
-Per-cell `jensen_gap` expectation under independent noise per
-arm (no shared cancellation; |A|=2):
+**Independent ε streams per arm per seed.** This is structurally
+load-bearing: under SHARED ε across σ levels (i.e., reusing
+`ε_v` for arms A/B and `ε_o, ε_t` for C/D), the σ-scaling
+identity `argmax(σ·ε) = argmax(ε)` collapses the 4-arm factorial
+into a 2-arm contrast scaled by `(σ_high − σ_low)`. A stub
+`factorial_2x2_interaction` that just computed `paired_g(C−A)`
+and rescaled would silently pass an INT-only assertion. With
+independent ε per arm, all five contrasts (B−A, D−C, C−A, D−B,
+INT) have DISTINCT structural g values; the framework's per-arm
+intersection + per-pair Δ-of-Δs arithmetic is properly probed.
+
+Per-cell `jensen_gap` expectation under |A|=2, independent
+standard-normal ε per arm scaled by the env-σ:
 
     E[A] = σ_low / √π        (vanilla bias at low noise)
     E[B] = σ_high / √π       (vanilla bias at high noise — larger)
     E[C] = 0                 (ddqn unbiased at low noise)
     E[D] = 0                 (ddqn unbiased at high noise)
 
-Corner contrasts (mean Δ):
-    B − A = (σ_high − σ_low) / √π          (σ effect on vanilla)
-    D − C = 0                               (σ effect on ddqn — null)
-    C − A = −σ_low / √π                     (ddqn at σ_low)
-    D − B = −σ_high / √π                    (ddqn at σ_high — larger reduction)
+Per-pair contrast statistics under independent ε:
 
-INT contrast (the framework's headline factorial output):
-    INT = (D − B) − (C − A) = (σ_low − σ_high) / √π     (negative)
+    mean(B−A) =  (σ_high − σ_low) / √π
+    Var(B−A)  = (σ_high² + σ_low²) · (1 − 1/π)
+    g(B−A)    = (σ_high − σ_low)/√π
+              / √((σ_high² + σ_low²)·(1 − 1/π)) · c_4
+              ≈ +0.495      at σ_h=2, σ_l=0.5, n=200
 
-This is the canonical "ddqn's benefit increases with noise"
-interaction — at higher σ, the bias-correction has more bias
-to correct.
+    mean(D−C) = 0
+    Var(D−C)  = (σ_high² + σ_low²) · 1
+    g(D−C)    ≈ 0  (modulo sampling SE)
 
-Per-pair INT_delta(seed) under shared σ-scaled noise (same
-standard-normal draw scaled to σ_low for arms A/C and σ_high
-for arms B/D, but DIFFERENT ε streams across the bias-correction
-axis since ε_v and ε_online/ε_target are different estimators):
+    mean(C−A) = −σ_low / √π
+    Var(C−A)  = σ_low² · (2 − 1/π)
+    g(C−A)    = −1 / (√π · √(2 − 1/π)) · c_4
+              ≈ −0.433  (σ-independent: signal and noise both ∝ σ)
 
-    INT(s) = (σ_high − σ_low) · (ε_t[argmax ε_o] − max(ε_v))
+    mean(D−B) = −σ_high / √π
+    Var(D−B)  = σ_high² · (2 − 1/π)
+    g(D−B)    = −1 / (√π · √(2 − 1/π)) · c_4
+              ≈ −0.433  (same closed-form value as g(C−A) by σ cancellation)
 
-    E[INT]      = (σ_low − σ_high) / √π             ≈ −0.846
-    Var(INT)    = (σ_high − σ_low)² · (1 + 1 − 1/π)  ≈ 1.682 · 2.25 = 3.785
-    sd(INT)                                          ≈ 1.945
-    g_INT       ≈ E[INT] / sd · c_4(n_pairs)         ≈ −0.43
+INT contrast (per-pair Δ-of-Δs):
 
-The framework's `factorial_2x2_interaction.fn` should recover
-this closed-form g_INT to within sampling SE.
+    INT(s)        = (D − B) − (C − A)
+    mean(INT)     = (σ_low − σ_high) / √π                ≈ −0.846
+    Var(INT)      = (σ_high² + σ_low²) · (2 − 1/π)
+    g(INT)        = (σ_low − σ_high)/√π
+                  / √((σ_high² + σ_low²)·(2 − 1/π)) · c_4
+                  ≈ −0.315  at σ_h=2, σ_l=0.5, n=200
+
+The five distinct closed-form values (+0.495, ≈0, −0.433, −0.433,
+−0.315) pin the framework's INT computation against any stub
+that conflates contrasts.
 """
 from __future__ import annotations
 
@@ -58,17 +76,16 @@ import numpy as np
 
 from corroborate.analyses.factorial_2x2 import factorial_2x2_interaction
 
-
-def _det_seed(*parts: object) -> int:
-    """Deterministic-across-processes seed from a tuple of parts.
-    Python's `hash()` randomizes per process; zlib.adler32 is a
-    fixed CRC."""
-    return zlib.adler32(repr(parts).encode()) & 0xFFFF_FFFF
-
 from corroborate_rl.tabular import (
     double_greedify_tabular,
     max_greedify_tabular,
 )
+
+
+def _det_seed(*parts: object) -> int:
+    """Deterministic-across-processes seed (zlib.adler32, not the
+    process-randomized `hash()`)."""
+    return zlib.adler32(repr(parts).encode()) & 0xFFFF_FFFF
 
 
 _SIGMA_LOW = 0.5
@@ -76,84 +93,103 @@ _SIGMA_HIGH = 2.0
 _N_PAIRS = 200
 
 
-def _expected_int_g(n_pairs: int) -> float:
-    """Closed-form Hedges' g for the INT contrast under
-    σ-scaled shared standard-normal noise.
+def _c4(n: int) -> float:
+    return 1.0 - 3.0 / (4 * n - 5)
 
-    mean   = (σ_low − σ_high) / √π
-    var    = (σ_high − σ_low)² · (var(ε_t[argmax ε_o]) +
-                                  var(max(ε_v))) under independence
-           = (σ_high − σ_low)² · (1 + (1 − 1/π))
-    sd     = (σ_high − σ_low) · √(2 − 1/π)
-    g      = mean / sd · c_4(n_pairs)
-           = -1 / (√π · √(2 − 1/π)) · c_4
+
+def _expected_g_b_minus_a(n: int) -> float:
+    mean = (_SIGMA_HIGH - _SIGMA_LOW) / math.sqrt(math.pi)
+    var = (_SIGMA_HIGH ** 2 + _SIGMA_LOW ** 2) * (1.0 - 1.0 / math.pi)
+    return mean / math.sqrt(var) * _c4(n)
+
+
+def _expected_g_c_minus_a(n: int) -> float:
+    return -1.0 / (math.sqrt(math.pi) * math.sqrt(2.0 - 1.0 / math.pi)) * _c4(n)
+
+
+def _expected_g_int(n: int) -> float:
+    mean = (_SIGMA_LOW - _SIGMA_HIGH) / math.sqrt(math.pi)
+    var = (_SIGMA_HIGH ** 2 + _SIGMA_LOW ** 2) * (2.0 - 1.0 / math.pi)
+    return mean / math.sqrt(var) * _c4(n)
+
+
+def _se_g(n: int, g: float) -> float:
+    """Approximate SE on a paired Hedges' g at n_pairs.
+
+    Cohen 1988: Var(g) ≈ 1/n + g²/(2n).
     """
-    c4 = 1.0 - 3.0 / (4 * n_pairs - 5)
-    return -1.0 / (math.sqrt(math.pi) * math.sqrt(2.0 - 1.0 / math.pi)) * c4
+    return math.sqrt(1.0 / n + g * g / (2.0 * n))
 
 
 def _generate_factorial_cells() -> list[dict[str, object]]:
-    """Per-seed: synthesize 4 cells covering the 2×2 factorial.
-    σ-scaling shares the underlying standard-normal draws so the
-    A/B (vanilla σ_low/σ_high) cells share ε_v, and similarly
-    C/D share ε_online + ε_target. Across the bias-correction
-    axis, ε_v vs (ε_online, ε_target) are INDEPENDENT (different
-    estimators)."""
+    """Per-seed: 4 cells covering the 2×2 factorial with
+    INDEPENDENT ε streams per arm.
+
+    Independence is structurally load-bearing — see module
+    docstring. Under shared ε the σ-scaling identity collapses
+    the factorial to a 2-arm contrast; the framework's per-arm
+    intersection logic isn't probed.
+    """
     cells: list[dict[str, object]] = []
+    env_name = 'hasselt_factorial'
     for s in range(_N_PAIRS):
-        rng_v = np.random.default_rng(seed=_det_seed('factorial_v', s))
-        rng_o = np.random.default_rng(seed=_det_seed('factorial_o', s))
-        rng_t = np.random.default_rng(seed=_det_seed('factorial_t', s))
-        # Standard-normal draws (|A|=2). Same draw scaled to σ_low
-        # and σ_high → shared cancellation across the σ axis.
-        eps_v = rng_v.standard_normal(2).astype(np.float64)
-        eps_online = rng_o.standard_normal(2).astype(np.float64)
-        eps_target = rng_t.standard_normal(2).astype(np.float64)
-        env_name = 'hasselt_factorial'
+        # Per-(arm, seed) independent rng — distinct streams per arm.
+        rng_a = np.random.default_rng(seed=_det_seed('factorial_a', s))
+        rng_b = np.random.default_rng(seed=_det_seed('factorial_b', s))
+        rng_c = np.random.default_rng(seed=_det_seed('factorial_c', s))
+        rng_d = np.random.default_rng(seed=_det_seed('factorial_d', s))
+        eps_a_v = rng_a.standard_normal(2).astype(np.float64)
+        eps_b_v = rng_b.standard_normal(2).astype(np.float64)
+        eps_c_o = rng_c.standard_normal(2).astype(np.float64)
+        eps_c_t = rng_c.standard_normal(2).astype(np.float64)
+        eps_d_o = rng_d.standard_normal(2).astype(np.float64)
+        eps_d_t = rng_d.standard_normal(2).astype(np.float64)
         cells.append({
-            'arm_key': 'arm_a',    # vanilla, σ_low
+            'arm_key': 'arm_a',
             'seed': s,
             'env_name': env_name,
-            'jensen_gap': max_greedify_tabular(eps_v * _SIGMA_LOW),
+            'jensen_gap': max_greedify_tabular(eps_a_v * _SIGMA_LOW),
         })
         cells.append({
-            'arm_key': 'arm_b',    # vanilla, σ_high
+            'arm_key': 'arm_b',
             'seed': s,
             'env_name': env_name,
-            'jensen_gap': max_greedify_tabular(eps_v * _SIGMA_HIGH),
+            'jensen_gap': max_greedify_tabular(eps_b_v * _SIGMA_HIGH),
         })
         cells.append({
-            'arm_key': 'arm_c',    # ddqn, σ_low
+            'arm_key': 'arm_c',
             'seed': s,
             'env_name': env_name,
             'jensen_gap': double_greedify_tabular(
-                eps_online * _SIGMA_LOW, eps_target * _SIGMA_LOW,
+                eps_c_o * _SIGMA_LOW, eps_c_t * _SIGMA_LOW,
             ),
         })
         cells.append({
-            'arm_key': 'arm_d',    # ddqn, σ_high
+            'arm_key': 'arm_d',
             'seed': s,
             'env_name': env_name,
             'jensen_gap': double_greedify_tabular(
-                eps_online * _SIGMA_HIGH, eps_target * _SIGMA_HIGH,
+                eps_d_o * _SIGMA_HIGH, eps_d_t * _SIGMA_HIGH,
             ),
         })
     return cells
 
 
+# ============ INT contrast ============
+
 def test_factorial_recovers_closed_form_int_g() -> None:
-    """The framework's factorial_2x2_interaction must report
-    g_INT matching the closed form within sampling SE.
+    """`g_INT` matches the closed-form Δ-of-Δs Hedges' g within
+    4·SE.
 
-    Closed form: g_INT ≈ -1/(√π·√(2-1/π))·c_4 ≈ -0.46. The
-    INT contrast strips out the σ-axis main effect arithmetically,
-    leaving a pure bias × σ interaction. A regression that
-    mishandled the (D-B)-(C-A) ordering, swapped arm labels, or
-    used unpaired SD would breach the bound by orders of magnitude.
+    Closed form: `g_INT = (σ_low − σ_high)/√π /
+                          √((σ_high² + σ_low²)·(2 − 1/π)) · c_4`
+                ≈ −0.315 at σ_h=2, σ_l=0.5, n_pairs=200.
 
-    Per-pair INT SE (200 pairs) ≈ sd(INT) / √n = 1.945 / √200 ≈
-    0.137. g SE ≈ 1/√n + g²/(2n) ≈ 0.075. 4·SE bound = 0.30.
-    Tighter rel_err bound (15%) catches subtle sign/scale errors.
+    SE(g_INT) ≈ √(1/200 + 0.315²/400) ≈ 0.0724. 4·SE ≈ 0.29.
+
+    Under independent-ε per arm this is DISTINCT from g(C−A)
+    (≈ −0.433) and g(B−A) (≈ +0.495); a stub returning any
+    single contrast g would not match.
     """
     cells = _generate_factorial_cells()
     result = factorial_2x2_interaction.fn(
@@ -166,40 +202,22 @@ def test_factorial_recovers_closed_form_int_g() -> None:
     assert len(result.per_env) == 1
     per = result.per_env[0]
 
-    expected_g_int = _expected_int_g(n_pairs=_N_PAIRS)
-    rel_err = abs(per.g_interaction - expected_g_int) / abs(expected_g_int)
-    assert rel_err < 0.20, (
-        f'g_INT = {per.g_interaction:.4f}, closed-form '
-        f'-1/(√π·√(2-1/π))·c_4 = {expected_g_int:.4f} '
-        f'(rel err {rel_err:.4f}). The INT contrast strips out '
-        f'σ-axis main effects, leaving pure bias × σ interaction.'
-    )
-    # Sign: ddqn s benefit grows with σ → INT is negative.
-    assert per.g_interaction < 0, (
-        f'g_INT = {per.g_interaction:.4f}; expected negative '
-        f'(ddqn s bias-reduction benefit increases with σ).'
+    expected = _expected_g_int(_N_PAIRS)
+    bound = 4.0 * _se_g(_N_PAIRS, expected)
+    assert abs(per.g_interaction - expected) < bound, (
+        f'g_INT = {per.g_interaction:.4f}, closed-form = '
+        f'{expected:.4f} (4·SE = {bound:.4f}).'
     )
 
 
-def test_factorial_corner_signs_match_hasselt_predictions() -> None:
-    """The four corner contrasts show structural signs derived
-    from Hasselt's bias formula:
+def test_factorial_int_distinct_from_corner_contrasts() -> None:
+    """The headline distinction-pin: `g_INT ≈ −0.315` differs from
+    `g(C−A) ≈ −0.433` and from `g(B−A) ≈ +0.495` by amounts
+    well above the per-quantity SE (~0.075).
 
-    - B − A: σ effect on vanilla → POSITIVE (more noise → more bias)
-    - D − C: σ effect on ddqn → NEAR ZERO (ddqn unbiased at all σ)
-    - C − A: ddqn effect at σ_low → NEGATIVE (bias correction)
-    - D − B: ddqn effect at σ_high → NEGATIVE
-
-    Note: at the Hedges' g level, g(C−A) ≈ g(D−B) because
-    standardization cancels the σ scale (both signal and noise
-    scale with σ, leaving the ratio constant). The σ-magnitude
-    asymmetry shows up in the raw Δ (i.e., mean_d_target/predictor),
-    NOT in g. The INT g captures the asymmetry differently —
-    via the cross-arm shared-noise cancellation in the
-    (D − B) − (C − A) arithmetic.
-
-    A regression that swapped arm labels or inverted the contrast
-    direction would breach these structural sign predictions.
+    Pin against a stub that returns any single contrast as the
+    INT — under independent ε, INT has its OWN closed-form value
+    distinct from each main-effect / simple-effect contrast.
     """
     cells = _generate_factorial_cells()
     result = factorial_2x2_interaction.fn(
@@ -210,31 +228,121 @@ def test_factorial_corner_signs_match_hasselt_predictions() -> None:
         pair_by=('seed',),
     )
     per = result.per_env[0]
-    # B − A: σ effect on vanilla (positive).
-    assert per.g_b_minus_a > 0, (
-        f'g(B−A) = {per.g_b_minus_a:.4f}; expected positive '
-        f'(σ noise increases vanilla bias).'
+
+    # g_INT ≈ −0.315; g(C−A) ≈ g(D−B) ≈ −0.433 — separated by
+    # ~0.118, much larger than SE ~0.075. Distinguishable.
+    assert abs(per.g_interaction - per.g_c_minus_a) > 0.05, (
+        f'g_INT = {per.g_interaction:.4f} too close to g(C−A) = '
+        f'{per.g_c_minus_a:.4f}; under independent ε these have '
+        f'distinct closed-form values (-0.315 vs -0.433). The '
+        f'framework s INT contrast IS structurally different from '
+        f'a single simple-effect contrast.'
     )
-    # D − C: σ effect on ddqn (≈ 0).
-    assert abs(per.g_d_minus_c) < 0.5, (
-        f'g(D−C) = {per.g_d_minus_c:.4f}; expected ≈ 0 '
-        f'(ddqn unbiased at all σ).'
+    # And g_INT differs from g(B−A) by their structural sum (~0.81).
+    assert abs(per.g_interaction - per.g_b_minus_a) > 0.5, (
+        f'g_INT = {per.g_interaction:.4f} too close to g(B−A) = '
+        f'{per.g_b_minus_a:.4f}; closed-form gap is ~0.81.'
     )
-    # C − A: ddqn effect at σ_low (negative).
-    assert per.g_c_minus_a < 0, (
-        f'g(C−A) = {per.g_c_minus_a:.4f}; expected negative '
-        f'(ddqn corrects bias at σ_low).'
+
+
+# ============ Corner contrasts (closed-form per arm) ============
+
+def test_factorial_corner_b_minus_a_closed_form() -> None:
+    """g(B−A) is the σ-effect on vanilla — the bias is larger at
+    σ_high than σ_low because Hasselt s formula scales with σ.
+    Closed form: `(σ_high − σ_low)/√π / √((σ_high² + σ_low²)·
+    (1 − 1/π)) · c_4` ≈ +0.495.
+
+    Pin against arm-label swaps: a regression that swapped A and
+    B would invert the sign; a regression that swapped C/D for
+    A/B would land on a different closed form entirely.
+    """
+    cells = _generate_factorial_cells()
+    result = factorial_2x2_interaction.fn(
+        cells,
+        arm_a='arm_a', arm_b='arm_b',
+        arm_c='arm_c', arm_d='arm_d',
+        source='jensen_gap',
+        pair_by=('seed',),
     )
-    # D − B: ddqn effect at σ_high (negative).
-    assert per.g_d_minus_b < 0, (
-        f'g(D−B) = {per.g_d_minus_b:.4f}; expected negative '
-        f'(ddqn corrects bias at σ_high).'
+    per = result.per_env[0]
+    expected = _expected_g_b_minus_a(_N_PAIRS)
+    bound = 4.0 * _se_g(_N_PAIRS, expected)
+    assert abs(per.g_b_minus_a - expected) < bound, (
+        f'g(B−A) = {per.g_b_minus_a:.4f}, closed-form = '
+        f'{expected:.4f} (4·SE = {bound:.4f}).'
     )
-    # At Hedges' g level, |D−B| ≈ |C−A| (σ scale cancels in the
-    # standardized ratio). Pin the equality within sampling SE.
-    assert abs(per.g_d_minus_b - per.g_c_minus_a) < 0.2, (
-        f'g(D−B) = {per.g_d_minus_b:.4f}, g(C−A) = '
-        f'{per.g_c_minus_a:.4f}; standardized g of the bias-'
-        f'correction effect should be ≈ equal across σ levels '
-        f'(σ scales both signal and noise → ratio constant).'
+
+
+def test_factorial_corner_d_minus_c_near_zero() -> None:
+    """g(D−C) is the σ-effect on ddqn — DDQN is unbiased at all σ,
+    so the structural g is zero. SE bound on a null g is
+    `≈ 1/√n` ≈ 0.071 at n=200; 4·SE ≈ 0.28.
+    """
+    cells = _generate_factorial_cells()
+    result = factorial_2x2_interaction.fn(
+        cells,
+        arm_a='arm_a', arm_b='arm_b',
+        arm_c='arm_c', arm_d='arm_d',
+        source='jensen_gap',
+        pair_by=('seed',),
+    )
+    per = result.per_env[0]
+    bound = 4.0 * _se_g(_N_PAIRS, 0.0)
+    assert abs(per.g_d_minus_c) < bound, (
+        f'g(D−C) = {per.g_d_minus_c:.4f}, expected ≈ 0 '
+        f'(4·SE = {bound:.4f}). DDQN is unbiased at all σ so '
+        f'σ-effect on ddqn is structurally null.'
+    )
+
+
+def test_factorial_corner_c_minus_a_closed_form() -> None:
+    """g(C−A) is the bias-correction effect at σ_low — DDQN
+    reduces the σ_low/√π bias to 0. Closed form `−1 /
+    (√π · √(2 − 1/π)) · c_4` ≈ −0.433. The closed-form value
+    is INDEPENDENT of σ (signal and noise both scale linearly).
+    """
+    cells = _generate_factorial_cells()
+    result = factorial_2x2_interaction.fn(
+        cells,
+        arm_a='arm_a', arm_b='arm_b',
+        arm_c='arm_c', arm_d='arm_d',
+        source='jensen_gap',
+        pair_by=('seed',),
+    )
+    per = result.per_env[0]
+    expected = _expected_g_c_minus_a(_N_PAIRS)
+    bound = 4.0 * _se_g(_N_PAIRS, expected)
+    assert abs(per.g_c_minus_a - expected) < bound, (
+        f'g(C−A) = {per.g_c_minus_a:.4f}, closed-form = '
+        f'{expected:.4f} (4·SE = {bound:.4f}).'
+    )
+
+
+def test_factorial_corner_d_minus_b_matches_c_minus_a() -> None:
+    """g(D−B) and g(C−A) have the SAME closed-form value (both
+    ≈ −0.433) by σ-cancellation in the standardized ratio.
+    Under INDEPENDENT ε the two g values are independent
+    sampling estimates of the same population g; their
+    difference is normal-distributed around 0.
+
+    Difference SE = √(SE(C−A)² + SE(D−B)²) ≈ √(2·0.074²) ≈ 0.105.
+    4·SE_diff ≈ 0.42.
+    """
+    cells = _generate_factorial_cells()
+    result = factorial_2x2_interaction.fn(
+        cells,
+        arm_a='arm_a', arm_b='arm_b',
+        arm_c='arm_c', arm_d='arm_d',
+        source='jensen_gap',
+        pair_by=('seed',),
+    )
+    per = result.per_env[0]
+    se_each = _se_g(_N_PAIRS, _expected_g_c_minus_a(_N_PAIRS))
+    bound = 4.0 * math.sqrt(2.0) * se_each
+    assert abs(per.g_d_minus_b - per.g_c_minus_a) < bound, (
+        f'|g(D−B) − g(C−A)| = '
+        f'{abs(per.g_d_minus_b - per.g_c_minus_a):.4f}, '
+        f'expected ≈ 0 under σ-cancellation '
+        f'(4·SE_diff = {bound:.4f}).'
     )

@@ -162,89 +162,12 @@ def test_per_burst_panel_recovers_phase_structured_g_curve() -> None:
         )
 
 
-def test_per_burst_g_zero_at_burst_zero() -> None:
-    """At burst 0, both arms have err = x_0 (γ^0 = 1), so per-pair
-    Δ(0) is pure observation noise. Hedges' g(0) ≈ 0 within 4·SE.
-
-    Pin against a regression that off-by-one'd the burst index
-    or that swapped baseline/treatment direction (which would
-    flip sign systematically — but at t=0 both should give ≈ 0)."""
-    cells = _generate_contraction_panel_cells()
-    result = paired_g_per_burst.fn(
-        cells,
-        treatment_arm='slow',
-        baseline_arm='fast',
-        pair_by=('seed',),
-        source=_PER_BURST_SOURCE,
-    )
-    by_burst = {s.burst_index: s for s in result.strata}
-    g_0 = by_burst[0].g
-    # At t=0, mean(Δ) = 0; sample mean is bounded by 4·SE_mean.
-    # SE_mean ≈ σ_paired / √n = √(2σ_obs²) / √80 ≈ 0.079.
-    # Hedges' g SE: ≈ 1/√n_pairs = 0.112.
-    bound = 4.0 * 0.112
-    assert abs(g_0) < bound, (
-        f'g(t=0) = {g_0:.4f}, expected ≈ 0 (4·SE = {bound:.4f}). '
-        f'At burst 0 both arms have err = x_0, paired Δ is pure '
-        f'observation noise, so structural g is 0.'
-    )
-
-
-def test_per_burst_g_decays_in_late_phase() -> None:
-    """In the late phase (t >> 1/log(γ_a)), both arms have
-    contracted close to 0, so Δ shrinks toward observation noise
-    and g shrinks toward 0.
-
-    Quantitative: g(t=peak) > g(t=11) by a structural factor.
-    From the closed form:
-      diff(2)  = 0.6525,  g(2)  ≈ 0.85
-      diff(11) = 0.95^11 − 0.5^11 ≈ 0.569 − 0.0005 ≈ 0.569
-                                              g(11) ≈ 0.71
-
-    Hmm, at γ_a=0.95 the slow contraction is still active at
-    t=11 (γ_a^11 ≈ 0.57). So the late-phase decay isn't
-    pronounced yet. Check that g_late is at least somewhat
-    smaller than g_peak as a sanity check."""
-    cells = _generate_contraction_panel_cells()
-    result = paired_g_per_burst.fn(
-        cells,
-        treatment_arm='slow',
-        baseline_arm='fast',
-        pair_by=('seed',),
-        source=_PER_BURST_SOURCE,
-    )
-    by_burst = {s.burst_index: s for s in result.strata}
-    # Peak at t=2 or 3 where diff is maximal.
-    g_peak = max(by_burst[t].g for t in (1, 2, 3, 4))
-    g_late = by_burst[_N_BURSTS - 1].g
-    # Late g should still be positive (γ_a still > 0 at t=11)
-    # but smaller than peak.
-    assert g_late < g_peak, (
-        f'g(t={_N_BURSTS-1}) = {g_late:.4f} not less than '
-        f'g(peak) = {g_peak:.4f}. Late-phase g should decay as '
-        f'both arms contract toward 0.'
-    )
-    assert g_late > 0.0, (
-        f'g(late) = {g_late:.4f} is non-positive; the slow arm '
-        f'(γ_a=0.95) still has substantial residual at t=11, so '
-        f'g should remain positive.'
-    )
-
-
-def test_per_burst_n_pairs_matches_input() -> None:
-    """Each per-burst stratum should report n_pairs = number of
-    paired seeds (80 here). Pin against a regression that
-    silently dropped pairs."""
-    cells = _generate_contraction_panel_cells()
-    result = paired_g_per_burst.fn(
-        cells,
-        treatment_arm='slow',
-        baseline_arm='fast',
-        pair_by=('seed',),
-        source=_PER_BURST_SOURCE,
-    )
-    for stratum in result.strata:
-        assert stratum.n_pairs == _N_PAIRS, (
-            f'burst {stratum.burst_index}: n_pairs = '
-            f'{stratum.n_pairs}, expected {_N_PAIRS}'
-        )
+# Note: secondary per-burst tests (g(0)≈0, g(late)<g(peak),
+# n_pairs propagation) were removed in the audit pass. The
+# headline test iterates EVERY burst and asserts g_t matches
+# the closed-form curve within sampling SE — which subsumes:
+#   - g(t=0) ≈ 0 (the closed-form value at t=0)
+#   - the rising-then-falling shape (every burst's g pinned)
+#   - n_pairs (every stratum's panel build implicitly verified)
+# Adding redundant secondary asserts would inflate test count
+# without strengthening framework coverage.

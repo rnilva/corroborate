@@ -198,11 +198,14 @@ def test_meta_regression_low_r_squared_on_null_covariate() -> None:
     """When the covariate is structurally orthogonal to the
     response (σ at fixed |A|=2), R² should be near zero.
 
-    Pin against a spurious-high-R² regression bug: a regression
-    that mishandled the inverse-variance weights or that
-    over-fit the residuals would inflate R². The 5-env panel's
-    null R² is bounded above by sampling fluctuation alone —
-    expect R² < 0.5 with very high probability.
+    Sampling-distribution-derived bound: under H_0 (no covariate
+    effect) with 5 strata and 1 covariate (df_resid=3), the null
+    distribution of R² is `Beta(p−1, n−p)/2 = Beta(1, 3)`. The
+    75th percentile of Beta(1, 3) is ≈ 0.16; the 99th is ≈ 0.79.
+    Use `R² < 0.20` as a tight bound that catches the typical
+    spurious-inflation case (any framework bug that doubles the
+    null R² breaches it). A naive `R² < 0.5` accepts ~95% of
+    the null distribution and would miss meaningful inflation.
     """
     cells = _generate_sigma_grid_cells()
     covariates = _covariates_per_env()
@@ -214,8 +217,9 @@ def test_meta_regression_low_r_squared_on_null_covariate() -> None:
         source='jensen_gap',
         covariates_per_env=covariates,
     )
-    assert result.r_squared < 0.5, (
-        f'R² = {result.r_squared:.4f}, expected < 0.5 (covariate '
+    assert result.r_squared < 0.20, (
+        f'R² = {result.r_squared:.4f}, expected < 0.20 (Beta(1, 3) '
+        f'null sampling distribution, 75th percentile ≈ 0.16). '
         f'σ is structurally orthogonal to g at |A|=2; high R² '
-        f'would indicate the regression invented signal).'
+        f'would indicate the regression invented signal.'
     )
