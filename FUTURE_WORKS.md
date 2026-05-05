@@ -25,9 +25,11 @@ family HP envelopes (e.g. `_FOURROOMS_REGIME = lr == 1e-4`,
 `experiments/findings/dqn_bridges.py`. These work but enumerate
 HP regimes by name, not the principled axis.
 
-The principled scope is **endogenous variables** — features
-observed/computed from the cell's own state, not metadata about
-which sweep produced it. Examples:
+This is **the first admission gate** in `corroborate` — v9 / v10
+shipped with plenty of them and the pattern is well-known from
+those versions. The principled scope is **endogenous variables**
+— features observed/computed from the cell's own state, not
+metadata about which sweep produced it. Examples:
 - `jensen_dormancy_premise_active == 'held'` — cells where the
   bias-compounding mechanism's premise is active.
 - Convergence-class membership (`with_cell_class` in
@@ -37,6 +39,11 @@ which sweep produced it. Examples:
 Per ANALYSIS_RECIPE.md §0, classification is the canonical
 pre-flight; bridges should consume the classification verdict
 in their scope predicate.
+
+**What's needed:** a small `Scope.*` namespace of named
+admission-gate polars expressions that bridges import and AND
+into their scopes. Each named gate is a one-liner; the value is
+naming + discoverability, not new computation.
 
 **Lift when:** a substrate author writes endogenous-scope bridges
 on a real claim and demonstrates the contamination-free pool. The
@@ -64,6 +71,100 @@ within-arm HP cleavage rather than a Pearl-rung-2 contrast.
 that point the n-step bridges can promote from
 `Tier.ASSOCIATIONAL` to `Tier.INTERVENTIONAL`, and the slope
 bridges become true `do()` contrasts.
+
+---
+
+## HP-as-intervention + n-way contrasts
+
+**Status:** LIVE. Real but difficult — the HP/Intervention
+distinction is load-bearing in the framework.
+
+**Description.** Two coupled framing problems:
+
+1. **HPs are technically interventions.** `do(γ=0.999)` IS a
+   Pearl rung-2 manipulation if γ is treated as a manipulable
+   variable. The framework currently splits HPs (cell covariates)
+   from Interventions (slot Claim swaps) on the principle that
+   HPs don't change the claim graph topology, only leaf scalar
+   values. But the tracer's `walk_paths` already exposes HPs as
+   leaf claims at composition time — the typed surface to lift
+   them to Pearl rung-2 is half-built.
+
+2. **N-way contrasts.** `DoEffect` is single-treatment-vs-single-
+   baseline. Multi-arm sweeps (`expectile_3way` with 3 arms,
+   `dampened_alpha_envs` with 5 α values, n-step grid with 5 n
+   values) are authored as N pairwise bridges; the omnibus
+   "any arm differs" or "monotone trend" claim has no first-class
+   form.
+
+**Coupling.** N-way HP-cleavage IS the n-way intervention
+case once HPs are lifted to typed Interventions. A
+`MultiDoEffect(arms: tuple[Intervention | LeafIntervention, ...])`
+where `LeafIntervention(leaf_path: str, value: object)` carries
+HP swaps would unify both. The slope/meta-regression bridges
+already express the panel form for one HP axis; what's missing
+is the typed-DoEffect-of-arms shape so the analyses can detect
+n-way rather than being told it's a single contrast.
+
+**Risks.**
+- Blurs the structural-vs-parametric distinction the framework
+  currently leans on (memory: HP swap ≠ structural change).
+- Pearl's `do()` makes most sense for variables in the SCM;
+  HPs are exogenous parameters of the SCM, not variables in it.
+  Lifting them changes the formal interpretation.
+- The existing "predicted_direction is for arm contrasts; HP
+  cleavage rides on slope/meta-regression" convention has to
+  be revisited.
+
+**Lift when:** a substrate scientist needs the omnibus / monotone
+claim form for a multi-arm sweep AND has a clear answer for the
+HP-vs-Intervention boundary in their domain. Both `LeafIntervention`
+and `MultiDoEffect` are smaller-than-they-look once the framing
+is settled — but the framing needs settling first.
+
+---
+
+## Mediation analysis + JCI discoverability
+
+**Status:** LIVE. Mediation primitives are the missing analysis;
+JCI exists but is hard to find.
+
+**Description.** Two related gaps:
+
+1. **Mediation analysis primitive missing.** The framework has
+   PC adjacency (`discover_adjacency`) + DoWhy backdoor
+   (`backdoor_ate`, `placebo_refutation`,
+   `random_common_cause_refutation`) but no Pearl-style natural-
+   direct / natural-indirect effect decomposition. Claims like
+   "DDQN's bias-reduction is *causally mediated* by Q-amplification"
+   currently ride on PC's conditional-independence structure
+   plus DoWhy's backdoor ATE — short of formal mediation.
+
+2. **JCI discoverability.** Joint Causal Inference is already
+   supported via `discover_adjacency(..., stratify_by='env_name')`
+   — see memory `findings_dowhy_three_probes` and
+   ANALYSIS_RECIPE.md §3. But JCI is documented as a side note
+   ("JCI: don't pool across envs") rather than as a first-class
+   analysis primitive in CLAUDE.md's "Canonical analyses" table.
+   A substrate author scanning the canonical analyses won't find
+   "JCI"; they have to know to look for it.
+
+**What's needed.**
+- **Discoverability fix (small):** add JCI to CLAUDE.md's
+  canonical-analyses table; cross-reference from
+  ANALYSIS_RECIPE.md §3a; expose `stratified_partial_spearman_rho`
+  as a first-class registered analysis (it's there but lower-
+  visibility than `partial_spearman_rho`).
+- **Mediation primitive (medium):** an `@analysis def
+  mediation_paired(...)` returning `MediationResult` with NDE,
+  NIE, and `proportion_mediated`. Implementable on top of the
+  existing per-pair Δ extraction + the linear/non-linear
+  mediator-regression structure DoWhy already supports.
+
+**Lift when:** a bridge claim explicitly distinguishes
+"correlation along the chain" (current PC-and-DoWhy form) from
+"causal mediation" (Pearl NDE/NIE) — i.e., the proportion-
+mediated number becomes load-bearing for the bridge's verdict.
 
 ---
 
