@@ -376,6 +376,197 @@ def test_audit_panel_clean_property() -> None:
     assert r.flagged_hp == ()
 
 
+def test_audit_panel_outcome_jaccard_at_exactly_threshold_flags() -> None:
+    """A mediator whose `reads` jaccard with `outcome_reads` is
+    EXACTLY the threshold (0.5 by default) must be flagged. Pin
+    `oj >= outcome_jaccard_threshold` against `oj > threshold`
+    mutant — original True at boundary, mutant False.
+
+    Construct: mediator reads = {a, b}, outcome reads = {a, c}.
+    Jaccard = 1/3 with default threshold? Let me re-derive:
+    - intersection = {a}
+    - union = {a, b, c}
+    - jaccard = 1/3 ≈ 0.333
+
+    Need exact 0.5: mediator reads = {a, b}, outcome reads = {a}.
+    - intersection = {a} (size 1)
+    - union = {a, b} (size 2)
+    - jaccard = 1/2 = 0.5 EXACTLY."""
+    @measurable(reads=('a', 'b'))
+    def m(record: Mapping[str, object]) -> float:
+        del record
+        return 1.0
+
+    runs = [_row(
+        f'c{i}', capacity=10000 + i * 1000, batch_size=32,
+        mediator_outcome_taut=0.0, mediator_hp_taut=0.0,
+        mediator_clean=float(i),
+    ) for i in range(4)]
+    reports = audit_mediator_panel(
+        [m], runs,
+        outcome_reads=frozenset({'a'}),
+        hp_axes=('replay.capacity',),
+    )
+    assert reports[0].outcome_jaccard == pytest.approx(0.5)
+    assert reports[0].flagged_outcome is True
+
+
+def test_audit_panel_skips_bool_hp_values() -> None:
+    """HP values that are bool must be skipped (Python bool is int
+    subclass; the `not isinstance(..., (int, float)) or isinstance(..., bool)`
+    guard catches it). Pin `or` against `and` mutant — under
+    `and`, bool would pass through and be converted to 1.0/0.0
+    instead of being rejected.
+
+    Cells with bool HP value should produce an empty mediator_vals
+    list → flagged_hp empty for that axis."""
+    @measurable(reads=('online_argmax',))
+    def m(record: Mapping[str, object]) -> float:
+        del record
+        return 1.0
+
+    runs: list[RunRow] = []
+    for i in range(8):
+        runs.append(RunRow(
+            id=f'c{i}', parent_id=None, cycle_id=None,
+            timestamp='ts', verdict=Verdict.HELD, arm_key='baseline',
+            measurements={
+                'replay.capacity': True if i % 2 else False,    # bool!
+                'mediator.test': float(i),
+            },
+        ))
+    reports = audit_mediator_panel(
+        [m], runs,
+        outcome_reads=frozenset({'mc_return'}),
+        hp_axes=('replay.capacity',),
+        mediator_path_for={'m': 'mediator.test'},
+    )
+    # Bool HP values rejected → no mediator/HP pairs collected →
+    # _r_squared returns NaN → flagged_hp empty.
+    r = reports[0]
+    assert 'replay.capacity' not in r.flagged_hp
+    assert math.isnan(r.hp_r_squared['replay.capacity'])
+
+
+def test_audit_panel_default_path_resolves_to_mediator_dot_name() -> None:
+    """When `mediator_path_for` is not provided AND the measurable
+    name has no dot, the default path is `f'mediator.{m.name}'`.
+    Pin against the `path = None` mutant (which would prevent
+    mediator value lookup → flagged_hp empty even for a
+    deterministic mediator).
+
+    Construct: a deterministic mediator whose values are stored
+    at `mediator.clean` (matches default path). HP-deterministic
+    construction (mediator = capacity / 2) → R² = 1 → flagged_hp
+    contains 'replay.capacity'. Mutant path=None → no values
+    collected → flagged_hp empty."""
+    @measurable(reads=('online_argmax',))
+    def clean(record: Mapping[str, object]) -> float:
+        del record
+        return 1.0
+
+    runs: list[RunRow] = []
+    for i in range(8):
+        cap = 10000 + i * 5000
+        runs.append(_row(
+            f'c{i}', capacity=cap, batch_size=32,
+            mediator_outcome_taut=0.0,
+            mediator_hp_taut=0.0,
+            # Store under the DEFAULT-derived key 'mediator.clean'
+            # (since the helper _row stores in 'mediator.independent',
+            # we have to add it manually).
+            mediator_clean=cap / 2,
+        ))
+    # Augment cell measurements to ALSO have 'mediator.clean'
+    # matching the default path lookup.
+    augmented: list[RunRow] = []
+    from dataclasses import replace
+    for r in runs:
+        m_dict = dict(r.measurements)
+        m_dict['mediator.clean'] = m_dict['mediator.independent']
+        augmented.append(replace(r, measurements=m_dict))
+    reports = audit_mediator_panel(
+        [clean], augmented,
+        outcome_reads=frozenset({'mc_return'}),
+        hp_axes=('replay.capacity',),
+        # NO mediator_path_for — exercise the default path branch.
+    )
+    r = reports[0]
+    # Mediator values = capacity / 2 → linear in capacity → R² = 1 → flagged.
+    assert 'replay.capacity' in r.flagged_hp
+
+
+def test_audit_panel_no_residual_signal_default_false_when_outcome_path_missing() -> None:
+    """When `outcome_path` isn't provided, the stratified-residual
+    check is skipped and `flagged_no_residual_signal` stays False.
+    Pin `flagged_no_residual = False` initial against the `True`
+    mutant — under the mutant it would default to True without
+    ever reaching the conditional that sets it."""
+    @measurable(reads=('online_argmax',))
+    def m(record: Mapping[str, object]) -> float:
+        del record
+        return 1.0
+
+    runs = [_row(
+        f'c{i}', capacity=10000 + i * 1000, batch_size=32,
+        mediator_outcome_taut=0.0, mediator_hp_taut=0.0,
+        mediator_clean=float(i),
+    ) for i in range(16)]
+    reports = audit_mediator_panel(
+        [m], runs,
+        outcome_reads=frozenset({'mc_return'}),
+        hp_axes=('replay.capacity',),
+        # NO outcome_path — stratified check skipped.
+        mediator_path_for={'m': 'mediator.independent'},
+    )
+    assert reports[0].flagged_no_residual_signal is False
+
+
+def test_audit_panel_uses_first_hp_axis_as_default_stratum() -> None:
+    """When `hp_stratum_axis` is None, the function falls back to
+    `hp_axes[0]`. Pin `hp_axes[0]` against the `hp_axes[1]` mutant.
+
+    Construct: hp_axes = ('strat_axis', 'other_axis'). 'strat_axis'
+    is the HP-shadow axis; 'other_axis' has no signal. Default
+    stratum is hp_axes[0] = 'strat_axis' → flagged_no_residual
+    fires on HP-shadow. Mutant uses hp_axes[1] = 'other_axis'
+    which doesn't form a useful stratification → flagged_no_residual
+    behavior shifts."""
+    import random
+    rng = random.Random(7)
+
+    @measurable(reads=('online_argmax',))
+    def hp_shadow(record: Mapping[str, object]) -> float:
+        del record
+        return 1.0
+
+    runs: list[RunRow] = []
+    cap_values = [5000, 10000, 15000, 20000, 30000, 40000, 50000, 70000]
+    for i, cap in enumerate(cap_values * 8):
+        runs.append(RunRow(
+            id=f'c{i}', parent_id=None, cycle_id=None,
+            timestamp='ts', verdict=Verdict.HELD, arm_key='baseline',
+            measurements={
+                'strat_axis': cap,    # the discriminating HP
+                'other_axis': float(i),  # noisy second axis (no useful strata)
+                'mediator.test': cap * 0.001 + rng.gauss(0.0, 1.0),
+                'outcome.return': cap * 0.0005 + rng.gauss(0.0, 1.0),
+            },
+        ))
+    reports = audit_mediator_panel(
+        [hp_shadow], runs,
+        outcome_reads=frozenset({'mc_return'}),
+        hp_axes=('strat_axis', 'other_axis'),    # 0 = strat_axis
+        outcome_path='outcome.return',
+        mediator_path_for={'hp_shadow': 'mediator.test'},
+        # No hp_stratum_axis → defaults to hp_axes[0] = 'strat_axis'.
+    )
+    r = reports[0]
+    # Default stratification on strat_axis (good HP grid) reveals
+    # HP-shadow → flagged.
+    assert r.flagged_no_residual_signal
+
+
 def test_audit_panel_returns_typed_dataclass() -> None:
     @measurable(reads=('mc_return',))
     def m(record: Mapping[str, object]) -> float:
