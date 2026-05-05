@@ -150,8 +150,9 @@ def test_per_burst_panel_recovers_phase_structured_g_curve() -> None:
         f'panel has {len(by_burst)} bursts, expected {_N_BURSTS}'
     )
     for t in range(_N_BURSTS):
+        stratum = by_burst[t]
         expected = _expected_per_burst_g(t)
-        actual = by_burst[t].g
+        actual = stratum.g
         # 4·SE bound. Per-burst SE on g ≈ 0.14 in this setup.
         bound = max(0.55, 0.25 * abs(expected))
         assert abs(actual - expected) < bound, (
@@ -159,6 +160,15 @@ def test_per_burst_panel_recovers_phase_structured_g_curve() -> None:
             f'{expected:.4f} (bound = {bound:.4f}). The framework '
             f's per-burst pairing must recover the structural '
             f'phase curve.'
+        )
+        # Pin n_pairs propagation: a regression that silently
+        # dropped half the seeds per stratum would inflate the
+        # SE bound width and pass the closed-form test by
+        # widening, not by computing correctly. Asserting
+        # n_pairs == _N_PAIRS at every stratum forecloses that.
+        assert stratum.n_pairs == _N_PAIRS, (
+            f'burst {t}: n_pairs = {stratum.n_pairs}, expected '
+            f'{_N_PAIRS}'
         )
 
 

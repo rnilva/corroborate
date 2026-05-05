@@ -199,13 +199,22 @@ def test_meta_regression_low_r_squared_on_null_covariate() -> None:
     response (σ at fixed |A|=2), R² should be near zero.
 
     Sampling-distribution-derived bound: under H_0 (no covariate
-    effect) with 5 strata and 1 covariate (df_resid=3), the null
-    distribution of R² is `Beta(p−1, n−p)/2 = Beta(1, 3)`. The
-    75th percentile of Beta(1, 3) is ≈ 0.16; the 99th is ≈ 0.79.
-    Use `R² < 0.20` as a tight bound that catches the typical
-    spurious-inflation case (any framework bug that doubles the
-    null R² breaches it). A naive `R² < 0.5` accepts ~95% of
-    the null distribution and would miss meaningful inflation.
+    effect) with `p_explained=1` covariate and `n−p=3` residual
+    degrees of freedom on a 5-stratum panel, the null distribution
+    of R² is `Beta(p_explained/2, (n−p)/2) = Beta(0.5, 1.5)`
+    (Anderson 1958, OLS theory). Percentiles:
+      50th : 0.163        — null median
+      55th : 0.20         — the bound
+      75th : 0.403
+      95th : 0.772
+
+    `R² < 0.20` accepts the bottom ~55% of the null distribution.
+    The empirical realization on this fixture lands at R² ≈ 0.12,
+    well below the bound. A regression bug that doubled the null
+    R² (e.g., 0.12 → 0.24) would breach. A naive `R² < 0.5`
+    bound (the prior cut) accepts ~80% of the null and would miss
+    meaningful inflation; `< 0.20` is the tighter sampling-aware
+    cut.
     """
     cells = _generate_sigma_grid_cells()
     covariates = _covariates_per_env()
@@ -218,8 +227,8 @@ def test_meta_regression_low_r_squared_on_null_covariate() -> None:
         covariates_per_env=covariates,
     )
     assert result.r_squared < 0.20, (
-        f'R² = {result.r_squared:.4f}, expected < 0.20 (Beta(1, 3) '
-        f'null sampling distribution, 75th percentile ≈ 0.16). '
+        f'R² = {result.r_squared:.4f}, expected < 0.20 '
+        f'(Beta(0.5, 1.5) null, 55th percentile = 0.20). '
         f'σ is structurally orthogonal to g at |A|=2; high R² '
         f'would indicate the regression invented signal.'
     )

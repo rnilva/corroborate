@@ -142,7 +142,9 @@ def test_paired_g_recovers_closed_form_hasselt_bias_correction() -> None:
     assert result.n_pairs == n_pairs
 
     expected_mean_diff = -hasselt_n2_max_bias(sigma)  # = -σ/√π
-    assert abs(expected_mean_diff + sigma / math.sqrt(math.pi)) < 1e-12
+    # (`hasselt_n2_max_bias(σ) == σ/√π` is the substrate's own
+    # invariant; covered by `test_hasselt_max_bias.py`. Don't
+    # re-assert it here.)
 
     se = _closed_form_paired_delta_se(sigma=sigma, n_pairs=n_pairs)
     bound = 4.0 * se
