@@ -314,6 +314,79 @@ def test_stratified_skips_too_small_strata() -> None:
     assert rho > 0.5
 
 
+def test_stratified_spearman_pooled_matches_fisher_z_closed_form() -> None:
+    """The pooled (rho, p) must match the Fisher-z closed form:
+
+      z_k       = 0.5 · ln((1 + r_k) / (1 − r_k))   per stratum
+      w_k       = n_k − 3                            per stratum
+      z_pooled  = Σ(w_k · z_k) / Σw_k
+      rho       = tanh(z_pooled)
+      z_stat    = z_pooled · sqrt(Σw_k)
+      p         = 2 · (1 − Φ(|z_stat|))
+
+    Pin every coefficient: 0.5 in z_k (vs 1.5 mutant), n_k − 3
+    in w_k (vs n_k + 3), the / vs * in z_pooled normalization,
+    and z_stat = z_pooled · sqrt(Σw_k) (vs `z_stat = None` mutant).
+
+    Construct asymmetric strata (different size + different r)
+    so each weight and each per-stratum z_k pulls the pool in a
+    different direction — symmetric strata would silently absorb
+    formula errors."""
+    rng = np.random.default_rng(2026)
+    # Stratum A: large, moderate r; Stratum B: small, near-zero r.
+    n_a, n_b = 30, 15
+    xa = rng.standard_normal(n_a)
+    ya = 0.6 * xa + 0.5 * rng.standard_normal(n_a)
+    xb = rng.standard_normal(n_b)
+    yb = 0.05 * xb + rng.standard_normal(n_b)
+    x = np.concatenate([xa, xb])
+    y = np.concatenate([ya, yb])
+    strata = ['A'] * n_a + ['B'] * n_b
+    rho_pooled, p_pooled = stratified_spearman_rho(
+        x, y, strata, min_stratum_size=4,
+    )
+
+    # Closed-form pool from per-stratum Spearman r's.
+    r_a, _ = spearmanr(xa, ya)
+    r_b, _ = spearmanr(xb, yb)
+    z_a = 0.5 * math.log((1 + float(r_a)) / (1 - float(r_a)))
+    z_b = 0.5 * math.log((1 + float(r_b)) / (1 - float(r_b)))
+    w_a, w_b = n_a - 3, n_b - 3
+    z_pool_expected = (w_a * z_a + w_b * z_b) / (w_a + w_b)
+    rho_expected = math.tanh(z_pool_expected)
+    z_stat_expected = z_pool_expected * math.sqrt(w_a + w_b)
+    p_expected = 2 * (1.0 - float(norm.cdf(abs(z_stat_expected))))
+    assert rho_pooled == pytest.approx(rho_expected, abs=1e-9)
+    assert p_pooled == pytest.approx(p_expected, abs=1e-9)
+
+
+def test_stratified_skips_at_exactly_min_stratum_size_minus_one() -> None:
+    """Stratum at exactly `min_stratum_size` is INCLUDED. Pin
+    `n_k < min_stratum_size` against `n_k <= min_stratum_size`
+    mutant (which would skip strata at the boundary).
+
+    Construct: one stratum at n=4 (= min_stratum_size default)
+    that's NOT skipped, plus a tiny-n stratum that IS skipped."""
+    rng = np.random.default_rng(31)
+    # Strata: n=4 (boundary, kept) and n=2 (skipped).
+    xa = rng.standard_normal(4)
+    ya = 0.7 * xa + 0.3 * rng.standard_normal(4)
+    xb = rng.standard_normal(2)
+    yb = rng.standard_normal(2)
+    x = np.concatenate([xa, xb])
+    y = np.concatenate([ya, yb])
+    strata = ['A'] * 4 + ['B'] * 2
+    rho, _ = stratified_spearman_rho(
+        x, y, strata, min_stratum_size=4,
+    )
+    # Only stratum A contributes (B too small, A at boundary).
+    # Fisher-z is well-defined at n=4 (w_a = 4-3 = 1).
+    assert math.isfinite(rho)
+    # The single contributing stratum has positive rho → pooled
+    # tanh(z_a) is positive.
+    assert rho > 0.0
+
+
 def test_stratified_returns_nan_when_no_eligible_strata() -> None:
     """All strata too small → NaN."""
     x = np.arange(6, dtype=np.float64)
@@ -325,6 +398,45 @@ def test_stratified_returns_nan_when_no_eligible_strata() -> None:
 
 
 # ============ stratified_partial_spearman_rho ============
+
+def test_stratified_partial_pooled_matches_fisher_z_closed_form() -> None:
+    """Same closed-form pooled Fisher-z check as
+    `stratified_spearman_rho`'s, but on the partial version where
+    the per-stratum statistic is `partial_spearman_rho(x, y, z)`
+    and the weight is `n_k - 4` (one extra df eaten by Z).
+
+    Pin the partial-version coefficients (n_k − 4 vs n_k − 3,
+    n_k + 4) and the pooled-z formula. Asymmetric strata
+    construction (different n, different per-stratum partial r)
+    so each weight pulls the pool differently."""
+    rng = np.random.default_rng(2027)
+    n_a, n_b = 30, 15
+    za = rng.standard_normal(n_a)
+    xa = 0.5 * za + 0.7 * rng.standard_normal(n_a)
+    ya = 0.4 * za + 0.3 * xa + 0.5 * rng.standard_normal(n_a)
+    zb = rng.standard_normal(n_b)
+    xb = rng.standard_normal(n_b)
+    yb = 0.05 * xb + rng.standard_normal(n_b)
+    x = np.concatenate([xa, xb])
+    y = np.concatenate([ya, yb])
+    z = np.concatenate([za, zb])
+    strata = ['A'] * n_a + ['B'] * n_b
+    rho_pooled, p_pooled = stratified_partial_spearman_rho(
+        x, y, z, strata, min_stratum_size=5,
+    )
+
+    r_a, _ = partial_spearman_rho(xa, ya, za)
+    r_b, _ = partial_spearman_rho(xb, yb, zb)
+    z_a = 0.5 * math.log((1 + r_a) / (1 - r_a))
+    z_b = 0.5 * math.log((1 + r_b) / (1 - r_b))
+    w_a, w_b = n_a - 4, n_b - 4
+    z_pool_expected = (w_a * z_a + w_b * z_b) / (w_a + w_b)
+    rho_expected = math.tanh(z_pool_expected)
+    z_stat_expected = z_pool_expected * math.sqrt(w_a + w_b)
+    p_expected = 2 * (1.0 - float(norm.cdf(abs(z_stat_expected))))
+    assert rho_pooled == pytest.approx(rho_expected, abs=1e-9)
+    assert p_pooled == pytest.approx(p_expected, abs=1e-9)
+
 
 def test_stratified_partial_recovers_within_stratum_partial() -> None:
     """Each stratum has Y = f(Z) + noise, X independent of Z.
