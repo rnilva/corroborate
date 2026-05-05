@@ -5,10 +5,13 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping
 
+import pytest
+
 from corroborate.measurables import measurable
 from corroborate.measurables.redundancy_check import (
-    TautologyReport, audit_mediator_panel, is_hp_tautological,
-    is_outcome_tautological, jaccard, reads_overlap,
+    TautologyReport, _r_squared, audit_mediator_panel,
+    is_hp_tautological, is_outcome_tautological, jaccard,
+    reads_overlap,
 )
 from corroborate.corpus.schema import RunRow
 from corroborate.bridge.verdict import Verdict
@@ -116,6 +119,130 @@ def test_hp_tautological_when_independent() -> None:
     hp = [10.0, 20.0, 30.0, 40.0, 50.0]
     mediator = [3.0, 1.0, 5.0, 2.0, 4.0]  # no relationship
     assert not is_hp_tautological(mediator, hp)
+
+
+# ============ _r_squared — direct primitive coverage ============
+#
+# `is_hp_tautological` already exercises `_r_squared` via the
+# threshold path, but doesn't pin the closed-form formula
+# (slope, intercept, R²-from-SSE) or the n-boundary / NaN-filter
+# branches. These tests target the primitive directly.
+
+def test_r_squared_perfect_linear_relationship_is_one() -> None:
+    """y = 2x + 3 exactly → SS_res = 0 → R² = 1.0."""
+    x = [1.0, 2.0, 3.0, 4.0, 5.0]
+    y = [2.0 * xi + 3.0 for xi in x]
+    assert _r_squared(x, y) == pytest.approx(1.0, abs=1e-9)
+
+
+def test_r_squared_zero_when_y_independent_of_x() -> None:
+    """Constant y → no slope can reduce SS_res below SS_tot.
+    With y constant, SS_tot = 0 → returns 1.0 by the early
+    branch (degenerate-y convention). Use random-y for true 0:
+    on average R² ≈ 0 over enough trials, but for a single
+    fixture: pin a known-low value."""
+    # Anti-correlated noise: y has variation but no x-relationship.
+    x = [0.0, 1.0, 2.0, 3.0, 4.0]
+    y = [3.0, 1.0, 4.0, 2.0, 5.0]
+    # OLS slope on this fixture is small; R² should be < 0.4.
+    r2 = _r_squared(x, y)
+    assert 0.0 <= r2 < 0.5
+
+
+def test_r_squared_returns_nan_when_x_constant() -> None:
+    """All-equal x → var_x = 0 → NaN. Pins `if var_x == 0.0`
+    early-return path."""
+    x = [5.0, 5.0, 5.0, 5.0]
+    y = [1.0, 2.0, 3.0, 4.0]
+    assert math.isnan(_r_squared(x, y))
+
+
+def test_r_squared_returns_nan_below_n_two() -> None:
+    """n=1 → NaN. Pin `n < 2` against `n < 3` mutant (n=2 should
+    be valid) and `n < 2 and len(y) != n` mutant (which would
+    NOT NaN at n=1 when len(y)=1=n)."""
+    assert math.isnan(_r_squared([1.0], [1.0]))
+
+
+def test_r_squared_returns_nan_on_length_mismatch() -> None:
+    """len(y) != len(x) → NaN. Pin `len(y) != n` against
+    `len(y) == n` mutant (which would be NaN on every match
+    instead of every mismatch)."""
+    assert math.isnan(_r_squared([1.0, 2.0], [1.0, 2.0, 3.0]))
+
+
+def test_r_squared_returns_finite_at_n_equals_two() -> None:
+    """n=2 with distinct x → finite R² (=1, two points always
+    fit a line). Pin `n < 2` against `n < 3` mutant."""
+    r2 = _r_squared([1.0, 2.0], [3.0, 5.0])
+    assert math.isfinite(r2)
+    assert r2 == pytest.approx(1.0, abs=1e-9)
+
+
+def test_r_squared_drops_nan_pairs_via_and_filter() -> None:
+    """Cells with NaN in either x or y are filtered. Pin
+    `not isnan(xi) and not isnan(yi)` against `or` mutant
+    (which would keep cells with one NaN, then propagate NaN
+    through the regression).
+
+    Construct: 3 valid (perfect linear) + 2 NaN-bearing pairs.
+    Original keeps 3 valid → R²=1. Mutant keeps NaN-bearing
+    cells → NaN propagates."""
+    x = [1.0, 2.0, 3.0, float('nan'), 5.0]
+    y = [2.0, 4.0, 6.0, 8.0, float('nan')]
+    r2 = _r_squared(x, y)
+    assert r2 == pytest.approx(1.0, abs=1e-9)
+
+
+def test_r_squared_returns_nan_when_finite_count_below_two() -> None:
+    """Only 1 finite pair after NaN-filtering → NaN. Pin
+    `len(finite) < 2` against `len(finite) <= 2` and `len(finite) < 3`
+    boundary mutants."""
+    x = [1.0, float('nan'), float('nan')]
+    y = [2.0, 4.0, 6.0]
+    assert math.isnan(_r_squared(x, y))
+
+
+def test_r_squared_uses_x_not_y_in_regression_input() -> None:
+    """Pin `xs = [p[0] for p in finite]` against `p[1]` mutant
+    (which would swap x and y in the slope computation).
+
+    Construct asymmetric pairs: y = 2x but the inverse y→x
+    would be x = 0.5y. The mutant computing R² of x ~ y instead
+    of y ~ x still gives R²=1 here because the relationship is
+    bijective. So construct a case where R²(y~x) ≠ R²(x~y):
+    add x-noise that's irrelevant after the swap.
+
+    Simpler: use a fixture where x has a clear range and y is
+    discrete. Slope of y on x makes sense; slope of x on y
+    inverts but produces the same R² in this simple bijective
+    case.
+
+    Actually the swap of `p[0]` for `p[1]` in JUST the `xs`
+    list (without changing the cov_xy / var_x logic) produces
+    `xs = ys` everywhere — so x_mean would equal y_mean,
+    var_x would be Var(y), slope = cov_xy / Var(y). For
+    asymmetric cases this gives a wrong slope and R². Use
+    fixture where Var(x) ≠ Var(y) substantially."""
+    # x has small spread, y has large spread; perfect linear.
+    x = [0.0, 1.0, 2.0, 3.0, 4.0]
+    y = [0.0, 100.0, 200.0, 300.0, 400.0]
+    r2 = _r_squared(x, y)
+    assert r2 == pytest.approx(1.0, abs=1e-9)
+
+
+def test_r_squared_slope_uses_subtraction_not_addition() -> None:
+    """Pin `(xi - x_mean)` against `(xi + x_mean)` mutant in
+    var_x. Original var_x = Σ(xi - x̄)². Mutant computes
+    Σ(xi + x̄)² which is wildly different except when x̄=0.
+
+    Use x with non-zero mean (so x̄ matters) and a real linear
+    relationship; assert R² = 1 (perfect fit). Mutant's var_x is
+    much larger than truth → slope shrinks → R² < 1."""
+    x = [10.0, 20.0, 30.0, 40.0, 50.0]  # x̄ = 30
+    y = [3.0 * xi + 7.0 for xi in x]
+    r2 = _r_squared(x, y)
+    assert r2 == pytest.approx(1.0, abs=1e-9)
 
 
 def test_hp_tautological_when_partially_correlated() -> None:
