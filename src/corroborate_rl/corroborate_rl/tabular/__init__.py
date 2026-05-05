@@ -26,6 +26,12 @@ Two roles:
 The `@claim` Free Claims (`bellman_backup`, `policy_evaluation`,
 `q_backup`, `greedy_policy`) carry their theorem references in
 docstrings; the `TabularMDP` config bundle holds the dynamics."""
+from corroborate_rl.tabular.bias import (
+    double_greedify_tabular,
+    hasselt_max_bias_asymptotic,
+    hasselt_n2_max_bias,
+    max_greedify_tabular,
+)
 from corroborate_rl.tabular.mdp import (
     TabularMDP,
     bellman_backup,
@@ -42,7 +48,11 @@ from corroborate_rl.tabular.examples import (
 __all__ = [
     'TabularMDP',
     'bellman_backup',
+    'double_greedify_tabular',
     'greedy_policy',
+    'hasselt_max_bias_asymptotic',
+    'hasselt_n2_max_bias',
+    'max_greedify_tabular',
     'policy_evaluation',
     'q_backup',
     'random_walk',
