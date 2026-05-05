@@ -369,11 +369,21 @@ def ddqn_helps_at_early_bursts__pixel_envs(
     # corpora was an accident of the implementation. Each sweep
     # contributes its own valid paired set.
     pair_by=('seed', 'corpus'),
+    # Endogenous scope: `q_divergence_score > 1` (jensen_gap exceeds
+    # the Bellman fixed-point bound r_max/(1-γ)) replaces the prior
+    # `sync_period == 100` HP-knob scope. SI 1M cells at sync=100
+    # all have q_div in (2.7, 1002), so the regime is preserved;
+    # cells with NaN q_div (no_hit_penalty wrapper, jensen_gap null)
+    # had null mc_return too and contributed nothing. The endogenous
+    # form expresses the bridge's actual interest — Q-explosion
+    # regime, not standard sync — and will admit future cells from
+    # other syncs that happen to land in the same regime.
     scope=(
         (pl.col('env_name') == 'SpaceInvaders-MinAtar')
         & (pl.col('total_steps') >= 1000000.0)
         & pl.col('reward_clip_min').is_null()
-        & (pl.col('sync_period') == 100)
+        & pl.col('q_divergence_score').is_finite()
+        & (pl.col('q_divergence_score') > 1.0)
     ),
 )
 def ddqn_attenuates_at_late_bursts__spaceinvaders(
@@ -537,10 +547,13 @@ def adaptive_dqn_fails_to_avoid_attenuation__spaceinvaders_1m(
 
 
 @claim_bridge(
-    # The structural mechanism contrast is the same DDQN-vs-
-    # vanilla swap; the γ-specific subset is captured as an HP
-    # scope predicate (`gamma == 0.99` corresponds to the high-
-    # effective-horizon cohort in `gamma_sweep`).
+    # `effective_horizon >= 50` is the endogenous selector — within
+    # the `gamma_sweep` corpus (γ ∈ {0.90, 0.95, 0.99} → eff_h ∈
+    # {10, 20, 100}) it selects exactly the γ=0.99 cohort. Prior
+    # `gamma == 0.99` HP predicate dropped as redundant: the
+    # endogenous `effective_horizon = 1/(1−γ)` measurable subsumes
+    # the HP knob within this corpus, so dropping it doesn't change
+    # the cell set.
     source=INTERVENTION,
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
@@ -548,7 +561,6 @@ def adaptive_dqn_fails_to_avoid_attenuation__spaceinvaders_1m(
     scope=(
         (pl.col('env_name') == 'FourRooms-misc')
         & (pl.col('corpus') == 'gamma_sweep')
-        & (pl.col('gamma') == 0.99)
         & (pl.col('effective_horizon') >= 50.0)
     ),
 )
@@ -613,9 +625,12 @@ def ddqn_benefit_scales_with_effective_horizon__fourrooms(
 
 
 @claim_bridge(
-    # γ=0.999 cohort selected via the `gamma == 0.999` HP scope
-    # predicate; the structural mechanism contrast stays the
-    # file-level DDQN-vs-vanilla swap.
+    # `effective_horizon >= 500` is the endogenous selector. Within
+    # the `gamma_sweep_metamaze_high` corpus (γ ∈ {0.995, 0.999} →
+    # eff_h ∈ {200, 1000}), the threshold isolates the γ=0.999
+    # cohort. Prior `gamma == 0.999` HP predicate dropped, and the
+    # weaker `eff_h >= 18` floor (which both γ values cleared)
+    # raised to the actual selector threshold.
     source=INTERVENTION,
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
@@ -623,8 +638,7 @@ def ddqn_benefit_scales_with_effective_horizon__fourrooms(
     scope=(
         (pl.col('env_name') == 'MetaMaze-misc')
         & (pl.col('corpus') == 'gamma_sweep_metamaze_high')
-        & (pl.col('gamma') == 0.999)
-        & (pl.col('effective_horizon') >= 18.0)
+        & (pl.col('effective_horizon') >= 500.0)
     ),
 )
 def ddqn_benefit_scales_with_effective_horizon__metamaze_high_gamma(
@@ -1385,9 +1399,11 @@ def ddqn_null_under_monte_carlo__fourrooms_n10(
 
 @claim_bridge(
     # Runs against the `l2_x_gamma_acrobot` corpus's
-    # γ=0.999 × wd=1e-4 cohort. Mechanism contrast is the same
-    # DDQN-vs-vanilla swap; the cell selector is HP scope
-    # (γ + corpus + weight_decay).
+    # γ=0.999 × wd=1e-4 cohort. `effective_horizon >= 500` is the
+    # endogenous selector — Acrobot has γ ∈ {0.9, 0.95, 0.99, 0.999}
+    # → eff_h ∈ {10, 20, 100, 1000}, so the threshold isolates only
+    # the γ=0.999 cohort. Prior `gamma == 0.999` HP predicate
+    # dropped as redundant.
     source=INTERVENTION,
     target='mc_return',
     direction=Direction.INVERSE,
@@ -1395,7 +1411,7 @@ def ddqn_null_under_monte_carlo__fourrooms_n10(
     scope=(
         (pl.col('env_name') == 'Acrobot-v1')
         & (pl.col('corpus') == 'l2_x_gamma_acrobot')
-        & (pl.col('gamma') == 0.999)
+        & (pl.col('effective_horizon') >= 500.0)
         & (pl.col('optimizer.inner.weight_decay') == 0.0001)
     ),
 )
@@ -1435,7 +1451,7 @@ def acrobot_per_burst_link_active__gamma_0999(
     tier=Tier.INTERVENTIONAL,
     scope=(
         (pl.col('env_name') == 'Acrobot-v1')
-        & (pl.col('gamma') == 0.999)
+        & (pl.col('effective_horizon') >= 500.0)
     ),
 )
 def acrobot_link_backdoor_ate_negative__gamma_0999(
@@ -1475,7 +1491,7 @@ def acrobot_link_backdoor_ate_negative__gamma_0999(
     tier=Tier.INTERVENTIONAL,
     scope=(
         (pl.col('env_name') == 'Acrobot-v1')
-        & (pl.col('gamma') == 0.999)
+        & (pl.col('effective_horizon') >= 500.0)
     ),
 )
 def acrobot_link_placebo_refuted__gamma_0999(
@@ -1516,7 +1532,7 @@ def acrobot_link_placebo_refuted__gamma_0999(
     tier=Tier.INTERVENTIONAL,
     scope=(
         (pl.col('env_name') == 'Acrobot-v1')
-        & (pl.col('gamma') == 0.999)
+        & (pl.col('effective_horizon') >= 500.0)
     ),
 )
 def acrobot_link_rcc_robust__gamma_0999(
