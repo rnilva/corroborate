@@ -472,6 +472,27 @@ def test_random_effects_verdict_no_effect_when_pi_brackets_zero() -> None:
     assert refutation is RefutationClass.NULL_EFFECT
 
 
+def test_held_or_scope_flag_at_exactly_i2_threshold_is_scope_flag() -> None:
+    """I² exactly at I2_THRESHOLD (0.5) → HELD_WITH_SCOPE_FLAG.
+    Pin `I2 >= I2_THRESHOLD` against `I2 > I2_THRESHOLD` mutant
+    that would route the boundary to plain HELD."""
+    from corroborate.stats import (
+        PooledStats, random_effects_verdict,
+    )
+    from corroborate.stats.effect_size import I2_THRESHOLD
+    p = PooledStats(
+        pooled_g=4.0, se_pooled=0.05,
+        tau2=0.1, I2=I2_THRESHOLD, Q=10.0,    # exactly at threshold
+        pi_lo=2.0, pi_hi=6.0,
+        empirical_min_g=3.0, empirical_max_g=5.0,
+        n_cells=5,
+    )
+    verdict, _ = random_effects_verdict(
+        p, predicted_direction='a_gt_b',
+    )
+    assert verdict is Verdict.HELD_WITH_SCOPE_FLAG
+
+
 def test_random_effects_verdict_held_with_scope_flag_high_heterogeneity() -> None:
     """Heterogeneous-but-positive: PI excludes zero in predicted
     direction AND I² is high → HELD_WITH_SCOPE_FLAG. Discovery's
