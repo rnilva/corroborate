@@ -119,6 +119,47 @@ def test_adequately_powered_weak_effect_n10() -> None:
     assert not adequately_powered_paired(0.1, 10, alpha=0.05, power=0.8)
 
 
+def test_adequately_powered_nan_g_returns_false() -> None:
+    """NaN g must short-circuit to False. Pin:
+    - `math.isnan(g) or n < 2` early-return (vs `and` mutant)
+    - `return False` on that branch (vs `return True` mutant)"""
+    assert adequately_powered_paired(float('nan'), 100) is False
+
+
+def test_adequately_powered_n_below_2_returns_false() -> None:
+    """n=1 → not enough data for any power. Pin the early-return
+    branch returns False (vs True mutant)."""
+    assert adequately_powered_paired(5.0, 1) is False
+
+
+def test_adequately_powered_passes_alternative_kwarg_to_mde() -> None:
+    """`alternative` kwarg must propagate to `mde_paired`. With
+    `alternative='two-sided'` MDE is larger than `'larger'` at the
+    same alpha+power, so a g near the boundary flips powered/not.
+    Pin `alternative=alternative` against the kwarg-drop mutant
+    (which would default to 'two-sided' inside `mde_paired`)."""
+    # MDE at n=10, alpha=0.05, power=0.8:
+    #   alternative='larger':    ~0.853
+    #   alternative='two-sided': ~0.996
+    # g=0.9 lies in (0.853, 0.996) — powered as 'larger', not as
+    # 'two-sided'. The kwarg drop would change verdict.
+    assert adequately_powered_paired(
+        0.9, 10, alpha=0.05, power=0.8, alternative='larger',
+    )
+    assert not adequately_powered_paired(
+        0.9, 10, alpha=0.05, power=0.8, alternative='two-sided',
+    )
+
+
+def test_adequately_powered_at_exactly_mde_is_true() -> None:
+    """g exactly equal to MDE counts as adequately powered (the
+    `>= mde` boundary). Pin `>= mde` against `> mde` mutant."""
+    from corroborate.stats.effect_size import mde_paired
+    n = 20
+    mde = mde_paired(n, alpha=0.05, power=0.8)
+    assert adequately_powered_paired(mde, n, alpha=0.05, power=0.8)
+
+
 def test_verdict_held_for_strong_positive_with_predicted_positive() -> None:
     """Strong positive g + predicted_direction='a_gt_b' → HELD."""
     g, se = 1.5, 0.4
