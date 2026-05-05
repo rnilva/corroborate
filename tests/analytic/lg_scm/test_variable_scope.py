@@ -229,6 +229,27 @@ def test_admissibility_raises_on_across_stratum_variable() -> None:
     )
 
 
+def test_admissibility_message_uses_comma_separator_for_multiple() -> None:
+    """When multiple variables are blocked, the message joins
+    them with `', '`. Pin against `'XX, XX'.join(...)` mutant
+    that would emit a mangled separator."""
+    cells = _build_multi_env_corpus()
+    df = pl.DataFrame([dict(c) for c in cells])
+    with pytest.raises(ValueError) as exc_info:
+        _ = assert_stratification_admissible(
+            df, variables=['mu_x', 'beta_xz'],
+            stratify_by='env_name',
+        )
+    msg = str(exc_info.value)
+    # Both blocked variables present.
+    assert 'mu_x' in msg
+    assert 'beta_xz' in msg
+    # The literal separator ', ' connects them in the details.
+    assert 'XX' not in msg, (
+        f'separator should be ", " not contain "XX"; got: {msg}'
+    )
+
+
 def test_admissibility_raises_on_degenerate_variable() -> None:
     """A constant column (no variance anywhere) is unusable for
     any analysis. The framework must refuse it loudly rather than
