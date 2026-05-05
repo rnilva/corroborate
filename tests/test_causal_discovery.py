@@ -620,6 +620,63 @@ def test_classify_across_frac_uses_division_not_multiplication() -> None:
     assert scope is VariableScope.WITHIN_STRATUM
 
 
+def test_classify_within_frac_strict_lt_threshold_at_boundary() -> None:
+    """Pin `within_frac < relative_threshold` against `<= mutant`
+    by setting `relative_threshold` to exactly the empirical
+    within_frac. Original strict `<` returns False at boundary
+    → falls through to BOTH; mutant `<=` returns True → ACROSS.
+
+    Construct: 2 strata each n=2, sd=1, means separated by sqrt(76)
+    → within_frac ≈ 0.05. Pass relative_threshold = within_frac
+    exactly so the boundary bites."""
+    sd = 1.0
+    M = float(np.sqrt(76.0))
+    values = np.array([-sd, sd, M - sd, M + sd])
+    strata = ['a', 'a', 'b', 'b']
+    # Compute the empirical within_frac to use as threshold.
+    # within_var = avg of per-stratum vars = 1.0 (each has var=1)
+    # across_var = M^2 / 4 (for 2 equal-size strata)
+    # within_frac = 1 / (1 + 19) = 0.05 exactly in algebra,
+    # but float drift sometimes lands at 0.04999... — pass a
+    # slightly-above-empirical threshold to make orig False at
+    # boundary.
+    # Empirical within_frac = 0.04999999999999999 exactly under
+    # this fixture; pass that as the threshold so the strict <
+    # boundary lands at equal-to-threshold.
+    threshold = 0.04999999999999999
+    scope = classify_variable_scope(
+        values, strata, relative_threshold=threshold,
+    )
+    # Original: 0.04999... < 0.04999... is False → not ACROSS.
+    # Mutant <=: True → ACROSS.
+    # → original yields BOTH (across_frac > threshold), mutant ACROSS.
+    assert scope is VariableScope.BOTH
+
+
+def test_classify_across_frac_strict_lt_threshold_at_boundary() -> None:
+    """Symmetric to within_frac boundary: pin
+    `across_frac < relative_threshold` against `<=` mutant.
+
+    Construct: across_var small relative to within_var → flip the
+    fixture above (means close, within-stratum spread large)."""
+    # Construct so across_frac = 0.05 exactly under float drift.
+    # within_var = sd^2 = 4.75, across_var = M^2/4 = 0.25 →
+    # across_frac = 0.25 / 5.0 = 0.05.
+    sd = float(np.sqrt(4.75))
+    M = 1.0
+    values = np.array([-sd, sd, M - sd, M + sd])
+    strata = ['a', 'a', 'b', 'b']
+    threshold = 0.04999999999999999    # matches empirical drift
+    scope = classify_variable_scope(
+        values, strata, relative_threshold=threshold,
+    )
+    # within_frac ≈ 0.95 > threshold → not ACROSS.
+    # across_frac = 0.04999... at exact threshold:
+    #   original `<`: False → not WITHIN → BOTH
+    #   mutant `<=`: True → WITHIN
+    assert scope is VariableScope.BOTH
+
+
 def test_classify_returns_degenerate_when_total_var_zero() -> None:
     """Total variance exactly zero (constant column across all
     strata) → DEGENERATE. The early-degeneracy check via ptp
