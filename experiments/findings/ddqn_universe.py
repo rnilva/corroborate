@@ -679,10 +679,14 @@ def ddqn_benefit_scales_with_effective_horizon__metamaze_high_gamma(
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
+    # `effective_horizon >= 50` is the endogenous selector — within
+    # the `gamma_sweep_more` corpus (γ ∈ {0.90, 0.95, 0.99} → eff_h
+    # ∈ {10, 20, 100}) it selects exactly the γ=0.99 cohort. Prior
+    # `gamma >= 0.985` HP predicate dropped as redundant.
     scope=(
         (pl.col('env_name') == 'DiscountingChain-bsuite')
         & (pl.col('corpus') == 'gamma_sweep_more')
-        & (pl.col('gamma') >= 0.985)
+        & (pl.col('effective_horizon') >= 50.0)
     ),
 )
 def ddqn_benefit_scales_with_gamma__discountingchain(
@@ -1182,11 +1186,20 @@ def ddqn_dominates_vanilla_response_curve__fourrooms_rs_0p3(
     target='mc_return[per_burst]',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
+    # Endogenous scope: `q_divergence_score > 1` (jensen_gap exceeds
+    # the Bellman fixed-point bound r_max/(1−γ)) replaces the prior
+    # `sync_period == 100` HP-knob scope. SI 1M cells at sync=100
+    # all have q_div in (2.7, 1002), so the regime is preserved;
+    # the 60 cells with NaN q_div (no_hit_penalty wrapper, null
+    # jensen_gap) had null mc_return too and contributed nothing.
+    # The endogenous form expresses the bridge's real interest —
+    # the Q-explosion regime where the late-burst crossover happens.
     scope=(
         (pl.col('env_name') == 'SpaceInvaders-MinAtar')
         & (pl.col('total_steps') == 1_000_000)
         & pl.col('reward_clip_min').is_null()
-        & (pl.col('sync_period') == 100)
+        & pl.col('q_divergence_score').is_finite()
+        & (pl.col('q_divergence_score') > 1.0)
     ),
 )
 def ddqn_curve_crosses_vanilla_late__spaceinvaders(
