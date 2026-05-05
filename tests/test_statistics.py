@@ -295,6 +295,64 @@ def test_random_effects_summary_drops_zero_se_cell() -> None:
     assert 0.4 < p.pooled_g < 0.8
 
 
+def test_random_effects_summary_empirical_min_max_g_match_input() -> None:
+    """`empirical_min_g` / `empirical_max_g` must equal min/max
+    of the input g values. Pin against `None` mutants which
+    would store None in the typed dataclass field (math.isnan
+    on None raises TypeError).
+
+    Construct: g values [-2, -1, 0, 1, 3] → min=-2, max=3."""
+    from corroborate.stats import random_effects_summary
+    g_se = [(-2.0, 0.5), (-1.0, 0.5), (0.0, 0.5), (1.0, 0.5), (3.0, 0.5)]
+    p = random_effects_summary(g_se)
+    assert p.empirical_min_g == pytest.approx(-2.0)
+    assert p.empirical_max_g == pytest.approx(3.0)
+
+
+def test_random_effects_summary_pi_hi_uses_addition_not_division() -> None:
+    """`pi_hi = g_pooled + t_crit * pi_se`. Pin against
+    `+ t_crit / pi_se` mutant — addition vs division produces
+    wildly different pi_hi.
+
+    Verify pi_hi ≈ pooled_g + t_crit·pi_se by reconstructing
+    from the returned fields. The mutant would shift pi_hi
+    by ~t_crit/pi_se - t_crit*pi_se."""
+    from corroborate.stats import random_effects_summary
+    p = random_effects_summary([(0.5, 0.1), (0.7, 0.1), (0.9, 0.1)])
+    # PI must straddle pooled_g symmetrically (±t_crit·pi_se).
+    half_width_lo = p.pooled_g - p.pi_lo
+    half_width_hi = p.pi_hi - p.pooled_g
+    # Symmetric prediction interval.
+    assert half_width_hi == pytest.approx(half_width_lo, rel=1e-9)
+    # And the upper half-width is positive (mutant might break this).
+    assert half_width_hi > 0.0
+
+
+def test_random_effects_summary_i2_bounded_at_zero() -> None:
+    """When Q < df (homogeneous cells), I² = max(0, (Q-df)/Q) = 0.
+    Pin `max(0.0, ...)` against `max(1.0, ...)` mutant which
+    would lift the I² floor to 1."""
+    from corroborate.stats import random_effects_summary
+    # Homogeneous: identical (g, se) → Q = 0 < df → I² = 0.
+    p = random_effects_summary([(0.5, 0.2)] * 5)
+    assert p.I2 == pytest.approx(0.0, abs=1e-9)
+
+
+def test_random_effects_summary_i2_uses_division_not_multiplication() -> None:
+    """`I2 = (Q - df) / Q`. Pin against `(Q - df) * Q` and
+    `(Q + df) / Q` mutants. Constructed with heterogeneous cells
+    so Q is large enough to compute a non-trivial I²."""
+    from corroborate.stats import random_effects_summary
+    g_se = [(-1.0, 0.2), (1.5, 0.2), (-0.5, 0.2), (2.0, 0.2)]
+    p = random_effects_summary(g_se)
+    assert p.I2 > 0.0
+    assert p.I2 <= 1.0    # I² is a fraction
+    # Reconstruct expected I² from Q.
+    df = p.n_cells - 1
+    expected_i2 = max(0.0, (p.Q - df) / p.Q)
+    assert p.I2 == pytest.approx(expected_i2, abs=1e-9)
+
+
 def test_random_effects_summary_or_in_filter_keeps_only_full_pairs() -> None:
     """The filter requires BOTH g AND se to be finite (and se>0).
     Pin `not isnan(g) and not isnan(se)` against the `or` mutant
