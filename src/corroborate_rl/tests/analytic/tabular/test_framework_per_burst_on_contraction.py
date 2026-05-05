@@ -39,8 +39,15 @@ either flatten the curve or drift away from the closed form.
 from __future__ import annotations
 
 import math
+import zlib
 
 import numpy as np
+
+
+def _det_seed(*parts: object) -> int:
+    """Deterministic-across-processes seed via zlib.adler32 —
+    Python's `hash()` randomizes per process under PYTHONHASHSEED=random."""
+    return zlib.adler32(repr(parts).encode()) & 0xFFFF_FFFF
 
 from corroborate.analyses.paired_g_per_burst import (
     paired_g_per_burst,
@@ -91,11 +98,11 @@ def _generate_contraction_panel_cells() -> list[dict[str, object]]:
     observation noise per arm."""
     cells: list[dict[str, object]] = []
     for s in range(_N_PAIRS):
-        rng_seed = np.random.default_rng(seed=hash(('contract_seed', s)) & 0xFFFF_FFFF)
+        rng_seed = np.random.default_rng(seed=_det_seed('contract_seed', s))
         x_0 = float(_MU_X0 + _SIGMA_X0 * rng_seed.standard_normal())
 
-        rng_a = np.random.default_rng(seed=hash(('contract_a', s)) & 0xFFFF_FFFF)
-        rng_b = np.random.default_rng(seed=hash(('contract_b', s)) & 0xFFFF_FFFF)
+        rng_a = np.random.default_rng(seed=_det_seed('contract_a', s))
+        rng_b = np.random.default_rng(seed=_det_seed('contract_b', s))
         traj_a = np.array([
             [x_0 * (_GAMMA_A ** t) + _SIGMA_OBS * rng_a.standard_normal()]
             for t in range(_N_BURSTS)

@@ -50,8 +50,15 @@ exercises `paired_g_per_burst` on the Banach γ-contraction rate.
 from __future__ import annotations
 
 import math
+import zlib
 
 import numpy as np
+
+
+def _det_seed(*parts: object) -> int:
+    """Deterministic-across-processes seed via zlib.adler32 —
+    Python's `hash()` randomizes per process under PYTHONHASHSEED=random."""
+    return zlib.adler32(repr(parts).encode()) & 0xFFFF_FFFF
 
 from corroborate.analyses.meta_regression_paired_g import (
     meta_regression_paired_g,
@@ -78,9 +85,7 @@ def _generate_sigma_grid_cells() -> list[dict[str, object]]:
     cells: list[dict[str, object]] = []
     for sigma in _SIGMA_VALUES:
         for s in range(_N_PAIRS_PER_ENV):
-            rng = np.random.default_rng(
-                seed=hash(('sigma_grid', sigma, s)) & 0xFFFF_FFFF,
-            )
+            rng = np.random.default_rng(seed=_det_seed('sigma_grid', sigma, s))
             eps_v = (rng.standard_normal(2) * sigma).astype(np.float64)
             eps_online = (rng.standard_normal(2) * sigma).astype(np.float64)
             eps_target = (rng.standard_normal(2) * sigma).astype(np.float64)
