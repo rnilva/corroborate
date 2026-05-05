@@ -627,11 +627,27 @@ def test_compare_pc_depths_rejects_descending_depths() -> None:
         x=np.array([1.0, 2.0, 3.0]),
         y=np.array([1.0, 2.0, 3.0]),
     )
-    import pytest
     with pytest.raises(ValueError, match='low < high'):
         compare_pc_depths(
             df, variables=['x', 'y'],
             alpha=0.05, depths=(2, 1),
+        )
+
+
+def test_compare_pc_depths_rejects_equal_depths() -> None:
+    """Depths must be strictly less, not less-or-equal. Pin
+    `low >= high` against `low > high` mutant — under the
+    mutant, equal depths would be accepted (and then run PC
+    twice with the same depth, returning a degenerate diff)."""
+    from corroborate.graph.discovery import compare_pc_depths
+    df = _df_from_columns(
+        x=np.array([1.0, 2.0, 3.0]),
+        y=np.array([1.0, 2.0, 3.0]),
+    )
+    with pytest.raises(ValueError, match='low < high'):
+        compare_pc_depths(
+            df, variables=['x', 'y'],
+            alpha=0.05, depths=(1, 1),
         )
 
 
