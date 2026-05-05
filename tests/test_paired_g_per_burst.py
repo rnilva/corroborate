@@ -1,16 +1,21 @@
-"""Smoke for the per-burst paired-g panel analysis.
+"""Real-corpus reproduction smoke for the per-burst paired-g panel
+analysis.
 
-Synthetic corpus + a real-corpus sanity check on
-expectile_3way. The synthetic test verifies the analysis returns
-the expected per-burst structure; the real-corpus test confirms
-qualitative reproduction of FINDINGS revision 12's "Catch
-g≈0.00 across bursts" observation."""
+The synthetic-input + composition tests previously living here
+were superseded by the closed-form analytic substrate at
+`tests/analytic/lg_scm/test_paired_g_per_burst.py`, which exercises
+the full `Measurable → reduce_axis → paired_g_per_burst` pipeline
+on real LG-SCM cells with `rel_err` bounds against
+`mu_x · sqrt(n_steps) / sigma_x · c_4`.
+
+What stays here: registry probe + corpus-binding smokes that
+reproduce specific FINDINGS observations on real DDQN data.
+Those tests are NOT analytical — they're regression guards
+against shifts in the persisted corpus + analysis path."""
 from __future__ import annotations
 
-import random
 from pathlib import Path
 
-import numpy as np
 import polars as pl
 import pytest
 
@@ -19,165 +24,6 @@ import corroborate.analyses  # noqa: F401  # pyright: ignore[reportUnusedImport]
 from corroborate.analyses.paired_g_per_burst import (
     DEFAULT_PER_BURST_SOURCE, panel_for_env, paired_g_per_burst,
 )
-from corroborate.measurables.measurable import Measurable
-from corroborate.measurables.reductions import from_key, reduce_axis
-
-
-def _synthetic_burst_cells(
-    *,
-    n_seeds: int = 30,
-    n_bursts: int = 5,
-    n_episodes: int = 3,
-    treatment_burst_means: list[float] | None = None,
-    baseline_burst_means: list[float] | None = None,
-    noise: float = 0.05,
-) -> list[dict[str, object]]:
-    """Build a corpus where each cell carries a (n_bursts, n_episodes)
-    `mc_return` array. `treatment_burst_means` lists the per-burst
-    expected mean for the treatment arm; baseline mirrors. Different
-    means → non-zero g per burst."""
-    if treatment_burst_means is None:
-        treatment_burst_means = [1.0] * n_bursts
-    if baseline_burst_means is None:
-        baseline_burst_means = [0.0] * n_bursts
-    rng = random.Random(0)
-    out: list[dict[str, object]] = []
-    for s in range(n_seeds):
-        for arm, means in (
-            ('treatment', treatment_burst_means),
-            ('baseline', baseline_burst_means),
-        ):
-            mc = [
-                [m + rng.gauss(0, noise) for _ in range(n_episodes)]
-                for m in means
-            ]
-            out.append({
-                'arm_key': arm,
-                'env_name': 'TestEnv',
-                'seed': s,
-                'mc_return': mc,
-            })
-    return out
-
-
-def test_per_burst_synthetic_strong_signal() -> None:
-    """Per-burst means [+0.0, +0.5, +1.0, +1.5, +2.0] should
-    produce monotonically growing |g| across bursts."""
-    cells = _synthetic_burst_cells(
-        treatment_burst_means=[0.0, 0.5, 1.0, 1.5, 2.0],
-        baseline_burst_means=[0.0, 0.0, 0.0, 0.0, 0.0],
-    )
-    result = paired_g_per_burst.fn(
-        cells,
-        treatment_arm='treatment',
-        baseline_arm='baseline',
-        pair_by=('seed',),
-        source=DEFAULT_PER_BURST_SOURCE,
-    )
-    assert result.n_strata == 5
-    panel = panel_for_env(result, 'TestEnv')
-    # First burst: g ≈ 0 (no signal). Last: g large.
-    assert abs(panel[0].g) < 1.0, panel[0].g
-    assert panel[-1].g > 5.0, panel[-1].g
-    # Monotone growth in g.
-    gs = [s.g for s in panel]
-    assert gs == sorted(gs), f'expected monotone g across bursts: {gs}'
-
-
-def test_per_burst_synthetic_no_signal() -> None:
-    """Equal means → g ≈ 0 across all bursts."""
-    cells = _synthetic_burst_cells(
-        treatment_burst_means=[1.0] * 5,
-        baseline_burst_means=[1.0] * 5,
-    )
-    result = paired_g_per_burst.fn(
-        cells,
-        treatment_arm='treatment',
-        baseline_arm='baseline',
-        pair_by=('seed',),
-        source=DEFAULT_PER_BURST_SOURCE,
-    )
-    panel = panel_for_env(result, 'TestEnv')
-    for s in panel:
-        assert abs(s.g) < 1.0, f'expected g ≈ 0, got {s.g}'
-
-
-def test_named_measurable_composes_with_reduce_axis() -> None:
-    """Composition contract: a two-input `Measurable` reduced via
-    `reduce_axis(_, axis=-1, op='mean')` plugs cleanly into
-    `paired_g_per_burst.fn` as `source=`, and the resulting
-    panel.measurable matches the composed name. Verifies the
-    Measurable -> reduce_axis -> paired_g_per_burst pipeline
-    without binding to a substrate-authored measurable."""
-    delta = Measurable(
-        fn=lambda r: (
-            np.asarray(r['series_a'], dtype=np.float64)
-            - np.asarray(r['series_b'], dtype=np.float64)
-        ),
-        name='a_minus_b',
-        reads=('series_a', 'series_b'),
-    )
-    rng = random.Random(0)
-    cells: list[dict[str, object]] = []
-    for s in range(20):
-        for arm, a_mean, b_mean in (
-            ('treatment', 1.0, 0.5),
-            ('baseline', 1.5, 0.5),
-        ):
-            cells.append({
-                'arm_key': arm,
-                'env_name': 'TestEnv',
-                'seed': s,
-                'series_a': [
-                    [a_mean + rng.gauss(0, 0.01) for _ in range(3)]
-                    for _ in range(4)
-                ],
-                'series_b': [
-                    [b_mean + rng.gauss(0, 0.01) for _ in range(3)]
-                    for _ in range(4)
-                ],
-            })
-    delta_per_burst_mean = reduce_axis(delta, axis=-1, op='mean')
-    result = paired_g_per_burst.fn(
-        cells,
-        treatment_arm='treatment',
-        baseline_arm='baseline',
-        pair_by=('seed',),
-        source=delta_per_burst_mean,
-    )
-    panel = panel_for_env(result, 'TestEnv')
-    assert result.measurable == delta_per_burst_mean.name
-    # Δ_treatment = 0.5, Δ_baseline = 1.0 → paired difference -0.5
-    # per burst with tight noise → strongly negative g per burst.
-    for s in panel:
-        assert s.g < -3.0, f'expected strongly negative g, got {s.g}'
-
-
-def test_per_burst_via_explicit_from_key() -> None:
-    """The default `DEFAULT_PER_BURST_SOURCE` and an explicit
-    `reduce_axis(from_key('mc_return'), axis=-1, op='mean')` give
-    the same per-burst panel — sanity that the default is just
-    the canonical composition."""
-    cells = _synthetic_burst_cells(
-        treatment_burst_means=[0.0, 1.0, 2.0],
-        baseline_burst_means=[0.0, 0.0, 0.0],
-    )
-    explicit = reduce_axis(from_key('mc_return'), axis=-1, op='mean')
-    a = paired_g_per_burst.fn(
-        cells, treatment_arm='treatment', baseline_arm='baseline',
-        source=DEFAULT_PER_BURST_SOURCE,
-    )
-    b = paired_g_per_burst.fn(
-        cells, treatment_arm='treatment', baseline_arm='baseline',
-        source=explicit,
-    )
-    assert a.n_strata == b.n_strata
-    for sa, sb in zip(
-        sorted(a.strata, key=lambda s: s.burst_index),
-        sorted(b.strata, key=lambda s: s.burst_index),
-        strict=True,
-    ):
-        assert abs(sa.g - sb.g) < 1e-9
 
 
 def test_analysis_registered() -> None:

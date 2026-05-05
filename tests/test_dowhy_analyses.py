@@ -68,40 +68,14 @@ SYNTHETIC_DAG: list[tuple[str, str]] = [
 ]
 
 
-def test_backdoor_ate_runs_directly() -> None:
-    """Single-fixture: bridge consuming only backdoor_ate."""
-    @claim_bridge(
-        source='treatment_var',
-        target='outcome_var',
-        direction=Direction.DIRECT,
-        # ASSOCIATIONAL: the test exercises the analysis-injection
-        # machinery on synthetic columns, not a Pearl-rung-2 claim
-        # on a registered measurable. INTERVENTIONAL would
-        # (correctly) trip the EXOGENOUS_SOURCE BLOCK gate since
-        # `treatment_var` is a synthetic column not in
-        # `registered_names() | _STANDARD_METADATA`.
-        tier=Tier.ASSOCIATIONAL,
-    )
-    def claim(
-        backdoor_ate: BackdoorResult,
-        *,
-        treatment: str = 'treatment_var',
-        outcome: str = 'outcome_var',
-        dag: list[tuple[str, str]] = SYNTHETIC_DAG,
-    ) -> Verdict:
-        del treatment, outcome, dag
-        if not backdoor_ate.identified:
-            return Verdict.POWER_INSUFFICIENT
-        if backdoor_ate.ate > 1.0:
-            return Verdict.HELD
-        return Verdict.NO_EFFECT
-
-    out = evaluate(claim, _linear_corpus())
-    bd = cast(BackdoorResult, out.analysis_results['backdoor_ate'])
-    assert out.verdict == Verdict.HELD
-    assert bd.identified is True
-    assert bd.ate > 1.5, f'expected ATE near +2, got {bd.ate}'
-    assert bd.n_rows == 100
+# NOTE: `test_backdoor_ate_runs_directly` was deleted in the
+# analytic-suite redundancy pass. Its single-fixture bridge
+# composition path is exercised by `test_multi_fixture_bridge_
+# consumes_three_analyses` below (which consumes backdoor_ate
+# as one of three fixtures via the same `@claim_bridge` +
+# `evaluate` surface). The closed-form ATE recovery is now
+# tested at `tests/analytic/lg_scm/test_dowhy.py` against
+# `beta_xz · beta_zy = 0.75` with rel_err < 0.05.
 
 
 def test_multi_fixture_bridge_consumes_three_analyses() -> None:
