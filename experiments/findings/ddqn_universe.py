@@ -93,7 +93,7 @@ from corroborate.bridge.bridge import (
     Direction, Tier, claim_bridge,
 )
 from corroborate.bridge.predicates import (
-    finite, finite_gt, partition_aggregate,
+    finite, finite_ge, finite_gt, partition_aggregate,
 )
 from corroborate.core.intervention import DoEffect, Intervention
 from corroborate.measurables import Measurable
@@ -568,13 +568,13 @@ def adaptive_dqn_fails_to_avoid_attenuation__spaceinvaders_1m(
 
 
 @claim_bridge(
-    # `effective_horizon >= 50` is the endogenous selector — within
-    # the `gamma_sweep` corpus (γ ∈ {0.90, 0.95, 0.99} → eff_h ∈
-    # {10, 20, 100}) it selects exactly the γ=0.99 cohort. Prior
-    # `gamma == 0.99` HP predicate dropped as redundant: the
-    # endogenous `effective_horizon = 1/(1−γ)` measurable subsumes
-    # the HP knob within this corpus, so dropping it doesn't change
-    # the cell set.
+    # `effective_horizon >= 25` is the endogenous selector. Within
+    # the `gamma_sweep` corpus (FourRooms-misc, γ ∈ {0.90, 0.95,
+    # 0.99} with realised bf ≈ 0.97-0.99 → eff_h ∈ {8, 13, ~30+})
+    # it selects the γ=0.99 cohort. eff_h is now `1/(1−γ·bf)` —
+    # the chain-depth amplifier mediated by realised episode
+    # termination — so values are smaller than the textbook
+    # `1/(1−γ)`. Threshold recalibrated from 50 to 25.
     source=INTERVENTION,
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
@@ -582,7 +582,7 @@ def adaptive_dqn_fails_to_avoid_attenuation__spaceinvaders_1m(
     scope=(
         (pl.col('env_name') == 'FourRooms-misc')
         & (pl.col('corpus') == 'gamma_sweep')
-        & (pl.col('effective_horizon') >= 50.0)
+        & finite_ge('effective_horizon', 25.0)
     ),
 )
 def ddqn_benefit_scales_with_effective_horizon__fourrooms(
@@ -646,12 +646,13 @@ def ddqn_benefit_scales_with_effective_horizon__fourrooms(
 
 
 @claim_bridge(
-    # `effective_horizon >= 500` is the endogenous selector. Within
-    # the `gamma_sweep_metamaze_high` corpus (γ ∈ {0.995, 0.999} →
-    # eff_h ∈ {200, 1000}), the threshold isolates the γ=0.999
-    # cohort. Prior `gamma == 0.999` HP predicate dropped, and the
-    # weaker `eff_h >= 18` floor (which both γ values cleared)
-    # raised to the actual selector threshold.
+    # `effective_horizon >= 150` is the endogenous selector. Within
+    # the `gamma_sweep_metamaze_high` corpus (MetaMaze γ ∈ {0.995,
+    # 0.999} with realised bf ≈ 0.995 → eff_h ≈ {99, 165}) the
+    # threshold isolates the γ=0.999 cohort. eff_h is now
+    # `1/(1−γ·bf)` — values much smaller than the textbook
+    # `1/(1−γ)` because MetaMaze episodes terminate. Threshold
+    # recalibrated from 500 to 150.
     source=INTERVENTION,
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
@@ -659,7 +660,7 @@ def ddqn_benefit_scales_with_effective_horizon__fourrooms(
     scope=(
         (pl.col('env_name') == 'MetaMaze-misc')
         & (pl.col('corpus') == 'gamma_sweep_metamaze_high')
-        & (pl.col('effective_horizon') >= 500.0)
+        & finite_ge('effective_horizon', 150.0)
     ),
 )
 def ddqn_benefit_scales_with_effective_horizon__metamaze_high_gamma(
@@ -701,13 +702,14 @@ def ddqn_benefit_scales_with_effective_horizon__metamaze_high_gamma(
     direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
     # `effective_horizon >= 50` is the endogenous selector — within
-    # the `gamma_sweep_more` corpus (γ ∈ {0.90, 0.95, 0.99} → eff_h
-    # ∈ {10, 20, 100}) it selects exactly the γ=0.99 cohort. Prior
-    # `gamma >= 0.985` HP predicate dropped as redundant.
+    # the `gamma_sweep_more` corpus on DiscountingChain (γ ∈
+    # {0.90, 0.95, 0.99} with bf ≈ 0.99 → eff_h ≈ {9, 17, 50})
+    # it selects the γ=0.99 cohort at the boundary. eff_h is
+    # `1/(1−γ·bf)`; threshold ≥ 50 captures γ=0.99 only.
     scope=(
         (pl.col('env_name') == 'DiscountingChain-bsuite')
         & (pl.col('corpus') == 'gamma_sweep_more')
-        & (pl.col('effective_horizon') >= 50.0)
+        & finite_ge('effective_horizon', 50.0)
     ),
 )
 def ddqn_benefit_scales_with_gamma__discountingchain(
@@ -1432,11 +1434,11 @@ def ddqn_null_under_monte_carlo__fourrooms_n10(
 
 @claim_bridge(
     # Runs against the `l2_x_gamma_acrobot` corpus's
-    # γ=0.999 × wd=1e-4 cohort. `effective_horizon >= 500` is the
-    # endogenous selector — Acrobot has γ ∈ {0.9, 0.95, 0.99, 0.999}
-    # → eff_h ∈ {10, 20, 100, 1000}, so the threshold isolates only
-    # the γ=0.999 cohort. Prior `gamma == 0.999` HP predicate
-    # dropped as redundant.
+    # γ=0.999 × wd=1e-4 cohort. `effective_horizon >= 80` is the
+    # endogenous selector — Acrobot's realised bf ≈ 0.99 means
+    # γ=0.999 → eff_h ≈ 86-141 and γ=0.99 → eff_h ≈ 49-61, so the
+    # threshold isolates the γ=0.999 cohort. eff_h is now
+    # `1/(1−γ·bf)`; threshold recalibrated from 500.
     source=INTERVENTION,
     target='mc_return',
     direction=Direction.INVERSE,
@@ -1444,7 +1446,7 @@ def ddqn_null_under_monte_carlo__fourrooms_n10(
     scope=(
         (pl.col('env_name') == 'Acrobot-v1')
         & (pl.col('corpus') == 'l2_x_gamma_acrobot')
-        & (pl.col('effective_horizon') >= 500.0)
+        & finite_ge('effective_horizon', 80.0)
         & (pl.col('optimizer.inner.weight_decay') == 0.0001)
     ),
 )
@@ -1484,7 +1486,7 @@ def acrobot_per_burst_link_active__gamma_0999(
     tier=Tier.INTERVENTIONAL,
     scope=(
         (pl.col('env_name') == 'Acrobot-v1')
-        & (pl.col('effective_horizon') >= 500.0)
+        & finite_ge('effective_horizon', 80.0)
     ),
 )
 def acrobot_link_backdoor_ate_negative__gamma_0999(
@@ -1524,7 +1526,7 @@ def acrobot_link_backdoor_ate_negative__gamma_0999(
     tier=Tier.INTERVENTIONAL,
     scope=(
         (pl.col('env_name') == 'Acrobot-v1')
-        & (pl.col('effective_horizon') >= 500.0)
+        & finite_ge('effective_horizon', 80.0)
     ),
 )
 def acrobot_link_placebo_refuted__gamma_0999(
@@ -1565,7 +1567,7 @@ def acrobot_link_placebo_refuted__gamma_0999(
     tier=Tier.INTERVENTIONAL,
     scope=(
         (pl.col('env_name') == 'Acrobot-v1')
-        & (pl.col('effective_horizon') >= 500.0)
+        & finite_ge('effective_horizon', 80.0)
     ),
 )
 def acrobot_link_rcc_robust__gamma_0999(

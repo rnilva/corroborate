@@ -569,17 +569,51 @@ register(mc_return_last_quarter)
 
 
 @measurable(reads=('gamma',))
-def effective_horizon(record: Mapping[str, object]) -> float:
-    """Geometric-series sum `1 / (1 - gamma)` — the effective
-    horizon over which discounted returns accumulate. NaN when
-    gamma is missing, non-numeric, or ≥ 1.0 (degenerate)."""
+def effective_horizon(
+    record: Mapping[str, object],
+    bootstrap_fraction: float,  # injected via @measurable name resolution
+) -> float:
+    """Chain-depth amplifier `1 / (1 − γ · bf)` — the geometric
+    expected discount over the bootstrap chain, where `bf =
+    1 - mean(done)` is the realised per-step non-termination
+    probability.
+
+    Derivation: under per-step termination probability
+    `p_term = 1 − bf`, the effective per-step discount is
+    `γ · (1 - p_term) = γ · bf`; the geometric series of these
+    sums to `1 / (1 − γ · bf)`. Any per-step quantity (a DDQN
+    bias correction, a reward) integrates to that times the
+    amplifier along the bootstrap chain.
+
+    Reads `gamma` (HP) directly; `bootstrap_fraction` injected
+    by name from the measurable registry, which closes over
+    `done` (trajectory). The closure therefore touches realised
+    cell dynamics — eff_h IS truly endogenous per the topological
+    check (cf. ENDOGENEITY_TOPOLOGY.md), unlike the prior
+    γ-only form which was a pure HP transform.
+
+    Caveat: γ is still an HP knob. `eff_h = γ · bf`-driven means
+    cell-trajectory dependence enters via `bf`; the formula is
+    half-synthetic in the sense that γ is author-chosen. A fully
+    trajectory-derived amplifier would estimate the discount
+    factor from observed returns; not currently needed.
+
+    NaN propagates from invalid `gamma` (≥1, <0, missing) or
+    from `bootstrap_fraction` itself (no `done` data). Denominator
+    ≤ 0 is impossible for valid γ < 1 and bf ∈ [0, 1] but
+    handled defensively."""
     gamma = record.get('gamma')
     if not isinstance(gamma, (int, float)):
         return float('nan')
     g = float(gamma)
     if math.isnan(g) or g >= 1.0 or g < 0.0:
         return float('nan')
-    return 1.0 / (1.0 - g)
+    if math.isnan(bootstrap_fraction):
+        return float('nan')
+    denom = 1.0 - g * bootstrap_fraction
+    if denom <= 0.0:
+        return float('nan')
+    return 1.0 / denom
 
 
 # Per-burst variance / CV / log: variance over the inner
