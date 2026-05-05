@@ -1388,6 +1388,36 @@ def test_orient_non_collider_when_z_in_sepset() -> None:
     assert frozenset({'y', 'z'}) in oriented.undirected_edges
 
 
+def test_apply_meek_r1_skips_when_a_is_adjacent_to_c() -> None:
+    """Meek R1 propagates A → B → C only when A is NOT adjacent
+    to C (else the orientation would create a new v-structure
+    A → B ← C). Pin `_adjacent(a, c, directed, undirected)`
+    against `_adjacent(None, c, ...)` and `_adjacent(a, None, ...)`
+    mutants — under None-arguments _adjacent returns False
+    (nothing adjacent to None) → R1 wrongly proceeds to orient
+    B → C even when A is already adjacent to C.
+
+    Setup: directed = {(a, b), (a, c)}; undirected = {(b, c)}.
+    A is adjacent to C (directly via a → c). R1 should skip
+    orienting B → C. Original: undirected stays. Mutant: orients
+    b → c (creating a chain a → b → c with a → c → cycle risk)."""
+    from corroborate.graph.discovery import _apply_meek_rules
+    directed: set[tuple[str, str]] = {('a', 'b'), ('a', 'c')}
+    undirected: set[frozenset[str]] = {frozenset({'b', 'c'})}
+    _apply_meek_rules(
+        directed, undirected,
+        variables=frozenset({'a', 'b', 'c'}),
+        ambiguous_triples=frozenset(),
+    )
+    # R2 SHOULD fire here: a → b → c chain with a − c... wait
+    # a-c is already directed (a, c), so a−c not undirected
+    # → R2 doesn't apply. R1 with a adjacent to c → skip.
+    # Result: b-c stays undirected.
+    assert frozenset({'b', 'c'}) in undirected
+    assert ('b', 'c') not in directed
+    assert ('c', 'b') not in directed
+
+
 def test_apply_meek_r2_orients_a_to_c_in_chain() -> None:
     """Direct test of Meek R2 via `_apply_meek_rules`. Setup:
     directed = {(a, b), (b, c)}; undirected = {(a, c)}. R2 fires:
