@@ -231,6 +231,16 @@ def test_r_squared_uses_x_not_y_in_regression_input() -> None:
     assert r2 == pytest.approx(1.0, abs=1e-9)
 
 
+def test_r_squared_returns_one_when_y_constant_and_x_varies() -> None:
+    """When y is constant (ss_tot = 0) but x varies (ss_res = 0),
+    the function returns 1.0 by convention — perfect fit
+    trivially achieved by intercept = y_mean. Pin `return 1.0`
+    against `return 2.0` mutant."""
+    x = [1.0, 2.0, 3.0, 4.0, 5.0]
+    y = [3.5] * 5
+    assert _r_squared(x, y) == pytest.approx(1.0, abs=1e-9)
+
+
 def test_r_squared_slope_uses_subtraction_not_addition() -> None:
     """Pin `(xi - x_mean)` against `(xi + x_mean)` mutant in
     var_x. Original var_x = Σ(xi - x̄)². Mutant computes
