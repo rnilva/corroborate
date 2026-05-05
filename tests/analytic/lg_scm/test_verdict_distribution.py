@@ -104,6 +104,27 @@ def test_dominant_returns_power_insufficient_string_when_dominant() -> None:
     assert result.per_env['env_pi_dominant'].dominant == 'power_insufficient'
 
 
+def test_dominant_returns_label_when_top_count_is_one() -> None:
+    """When the highest bucket count is exactly 1 (e.g., a
+    single-cell env), `_dominant` must still return the label
+    of that bucket, not ''. Pin
+    `if sorted_pairs[0][1] == 0: return ''` against
+    `== 1` mutant which would also short-circuit at top=1."""
+    held = Verdict.HELD.value
+    rows = run_arm(
+        _scm(), seeds=range(1),
+        arm_key='single', env_name='env_single_cell',
+    )
+    rows = _stamp(rows, [held])
+    cells: list[Mapping[str, object]] = [r.as_dict() for r in rows]
+    result = verdict_distribution_per_env.fn(
+        cells, arm_filter='single', verdict_column=_VERDICT_COLUMN,
+    )
+    counts = result.for_env('env_single_cell')
+    assert counts is not None
+    assert counts.dominant == 'held'
+
+
 def test_dominant_returns_other_string_when_other_bucket_wins() -> None:
     """The 'other' bucket holds unknown verdict strings. When
     that bucket dominates, the returned label must be the literal

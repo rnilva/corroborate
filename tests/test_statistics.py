@@ -136,6 +136,26 @@ def test_delta_i_zero_at_boundary() -> None:
     assert delta_i_from_q(1.0) == 0.0
 
 
+def test_delta_i_quarter_matches_closed_form() -> None:
+    """Pin the binary entropy formula
+        h = -q · log₂(q) - (1-q) · log₂(1-q)
+    against `(1-q) / log₂(1-q)` mutant in the second term.
+
+    At q=0.5 the mutant happens to coincide with the original
+    (h=1 either way); at q=0.25 the formulas diverge sharply:
+
+    - log₂(0.25) = -2; log₂(0.75) ≈ -0.415
+    - orig h = -0.25·(-2) - 0.75·(-0.415) = 0.5 + 0.311 = 0.811
+    - delta_i_orig = 1 - 0.811 = 0.189
+    - mutant h = 0.5 + 0.75/0.415 ≈ 2.308 → delta_i_mut = -1.308
+    """
+    expected = 1.0 - (
+        -0.25 * math.log2(0.25) - 0.75 * math.log2(0.75)
+    )
+    assert delta_i_from_q(0.25) == pytest.approx(expected, abs=1e-9)
+    assert delta_i_from_q(0.25) > 0.15
+
+
 # ============ adequately_powered + verdict_from_paired_stats ============
 
 def test_adequately_powered_strong_effect_n10() -> None:
