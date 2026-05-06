@@ -36,13 +36,22 @@ htmlcov/
 # Experiment data / sweep outputs — never commit binary parquets.
 # `experiments/data/` is a generated cache from `collect_*.py`
 # scripts; reproduce by re-running, don't push the binaries.
-# Exception: `_remote.json` cloud-archive manifests are tiny
-# pointers that make `corroborate restore` discoverable from a
-# clean checkout — track them.
+# Exceptions:
+# - `_remote.json` cloud-archive manifests are tiny pointers that
+#   make `corroborate restore` discoverable from a clean checkout.
+# - `experiments/data/cache/` per-hypothesis caches are small
+#   (single-digit MB) and committed alongside the snapshot reports
+#   so the regression sentinel test (`test_run_report_snapshot_
+#   regression`) can re-run hypotheses on a clean CI checkout
+#   without restoring the multi-GB raw corpus from cloud.
 experiments/data/**
 !experiments/data/**/
 !experiments/data/**/_remote.json
+!experiments/data/cache/
+!experiments/data/cache/*.parquet
+!experiments/data/cache/*.hashes.json
 *.parquet
+!experiments/data/cache/*.parquet
 
 # Claude Code local state
 .claude/
