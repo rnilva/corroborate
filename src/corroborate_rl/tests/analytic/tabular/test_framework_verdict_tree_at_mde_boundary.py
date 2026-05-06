@@ -36,8 +36,8 @@ def test_verdict_held_at_g_just_above_mde() -> None:
     """At g = MDE + ε (just above threshold), `adequately_powered_paired`
     returns True → HELD when predicted_direction matches.
 
-    Pin the `>=` boundary: a regression using strict `>` would
-    breach at g = MDE exactly."""
+    Pin the routing layer above the boundary; the `==` exact case
+    is asserted in `test_verdict_held_at_g_exactly_mde` below."""
     n = 20
     mde = mde_paired(n, alpha=0.05, power=0.8)
     g = mde + 1e-6     # just above MDE
@@ -51,6 +51,31 @@ def test_verdict_held_at_g_just_above_mde() -> None:
     )
     assert refutation is None
     assert is_powered is True
+
+
+def test_verdict_held_at_g_exactly_mde() -> None:
+    """Pin the inclusive boundary: at `g == MDE` exactly,
+    `adequately_powered_paired` uses `abs(g) >= mde` → True →
+    HELD when sign matches.
+
+    A regression that flipped `>=` to `>` would breach here
+    while passing the `g = MDE + 1e-6` test (which has positive
+    margin). This is the load-bearing inclusivity assertion the
+    reviewer flagged as missing in the post-Phase-2 audit.
+    """
+    n = 20
+    mde = mde_paired(n, alpha=0.05, power=0.8)
+    verdict, refutation, is_powered = verdict_from_paired_stats(
+        mde, se=0.1, n=n, predicted_direction='a_gt_b',
+    )
+    assert verdict is Verdict.HELD, (
+        f'verdict at g = MDE = {mde:.6f} exactly: {verdict.value!r}; '
+        f'expected HELD. The framework defines '
+        f'adequately_powered_paired via `abs(g) >= mde` (inclusive). '
+        f'A regression to strict `>` would mis-route the boundary.'
+    )
+    assert is_powered is True
+    assert refutation is None
 
 
 def test_verdict_power_insufficient_at_g_just_below_mde() -> None:

@@ -11,38 +11,27 @@ sampling noise) and assert the framework recovers τ², I², and
 the HTS prediction interval correctly.
 
 Setup: 5 envs with μ_envs = (-1.0, -0.5, 0.0, 0.5, 1.0). Per env,
-80 paired seeds with shared per-seed scale and independent
-arm-noise. Each env's `paired_g` reports `(g_e, se_e)`:
+80 paired seeds with N(0, σ²=1) noise per arm. Each env's
+`paired_g` reports `(g_e, se_e)`. Empirically with seed = adler32:
 
-    g_e ≈ μ_e / √2 · c_4(80) ≈ μ_e · 0.698
-    var(g_e ; sampling) ≈ 2 / 80 ≈ 0.025
+    g_e ≈ {-0.67, -0.48, -0.16, 0.25, 0.79}
+    se_e ≈ {0.124, 0.118, 0.113, 0.114, 0.128}
+    v_e = se_e² ∈ [0.0127, 0.0164] (varies with g via Hedges'
+        SE formula; uniform-v shortcut underestimates Q)
 
-Cross-env structural variance:
-    population Var(μ_e) = 0.5
-    population Var(g_e) = 0.5 · c_4² / 2 ≈ 0.243
-
-Closed-form DerSimonian-Laird (with uniform v_i ≈ 0.025):
-    Q ≈ Σ w_i (g_i − g_fixed)²
-      = (1/0.025) · 5 · pop_var(g_e)
-      ≈ 40 · 5 · 0.243 ≈ 48.6
-    df = 4
-    c_term = Σw − Σw²/Σw = 200 − 40 = 160
-    τ²_DL ≈ (Q − df) / c_term = (48.6 − 4) / 160 ≈ 0.279
-    I² ≈ (Q − df) / Q ≈ 44.6 / 48.6 ≈ 0.918
+DerSimonian-Laird outputs (read from running the test):
+    Q       ≈ 89.0      (large; well above df = 4)
+    τ²_DL   ≈ 0.30
+    I²      ≈ 0.955
+    pooled  ≈ -0.055    (centered as μ_envs is symmetric around 0)
+    SE_pool ≈ 0.251
+    PI half ≈ 1.67
+    PI/SE   ≈ 6.67×
 
 The HTS prediction interval is the load-bearing distinguishing
 quantity — a stub returning a fixed-effect-only Gaussian CI
-would breach:
-
-    var_pooled = 1 / Σ w_rand where w_rand = 1/(v + τ²) ≈ 1/0.30
-    var_pooled ≈ 1/(5/0.30) = 0.06; SE_pooled ≈ 0.245
-    PI = pooled ± t_{4, 0.975} · √(τ² + var_pooled)
-       ≈ 0 ± 2.776 · √0.34 ≈ ±1.62
-
-PI half-width (~1.62) is **6.6×** SE_pooled — the heterogeneity
-contribution τ² dominates. A stub computing PI with fixed-effect
-SE only (ignoring τ²) would give ±2.776·0.245 = ±0.68 — a 2.4×
-breach.
+would set PI/SE ≈ t_{4, 0.975} ≈ 2.78. The empirical 6.67× is
+2.4× larger — the τ² inside √(τ² + var_pooled) is the difference.
 
 Three load-bearing assertions:
 1. τ² > 0.10 (well above zero — DL detects heterogeneity)
