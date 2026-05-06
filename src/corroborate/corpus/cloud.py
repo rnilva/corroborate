@@ -233,22 +233,34 @@ def _save_manifest(sweep_dir: Path, manifest: RemoteManifest) -> None:
 
 # ============ Helpers ============
 
-def _sniff_row_ids(path: Path) -> tuple[str, ...]:
-    """Read the `id` column from a parquet file if present;
+def _sniff_row_ids(source: Path | str) -> tuple[str, ...]:
+    """Read the `id` column from a parquet file or URI if present;
     return empty tuple otherwise. The provenance breadcrumb for
     invariant I5: per-shard `RunRow.id` lists land in the manifest
     so a merged-corpus row can be traced back to its source shard.
+
+    Accepts either a local `Path` or an fsspec URI string
+    (e.g. `s3://bucket/sweeps/.../runs.parquet`). Polars' parquet
+    reader handles both transparently via fsspec, with column
+    projection pushdown — only the `id` column's pages are
+    fetched on remote reads.
 
     Quietly returns `()` for non-parquet inputs, parquets without
     an `id` column, and parquets whose `id` column doesn't contain
     strings — the framework is robust to non-row-shaped parquets
     in the manifest (e.g. graph sidecars when those eventually
     land in the same archive)."""
-    if path.suffix != '.parquet':
-        return ()
+    if isinstance(source, Path):
+        if source.suffix != '.parquet':
+            return ()
+        target: Path | str = source
+    else:
+        if not source.endswith('.parquet'):
+            return ()
+        target = source
     import polars as pl
     try:
-        df = pl.read_parquet(path, columns=['id'])
+        df = pl.read_parquet(target, columns=['id'])
     except (pl.exceptions.ColumnNotFoundError, pl.exceptions.ComputeError):
         return ()
     except FileNotFoundError:
@@ -494,6 +506,66 @@ def archived_uri(remote_root: str, relpath: str) -> str:
     resume uses this to record archived URIs for the merge step
     when skipping a run-the-arm step."""
     return _join_remote(remote_root, relpath)
+
+
+def backfill_row_ids(sweep_dir: Path) -> int:
+    """One-shot upgrade for manifests that predate I5: populate
+    `row_ids` on every entry whose field is empty by reading the
+    `id` column from the remote parquet.
+
+    Provenance breadcrumb backfill (`SWEEP_PERSISTENCY.md` I5).
+    Manifests written before the I5 schema bump have empty
+    `row_ids` tuples; this function fetches just the `id` column
+    from each remote shard and rewrites the manifest in place.
+
+    Polars' parquet reader uses column-projection pushdown over
+    fsspec, so only the `id` column's pages are fetched per
+    shard — cheap even on S3.
+
+    Skips entries whose:
+      - `row_ids` is already populated (idempotent — running
+        twice is a no-op);
+      - relpath ends in something other than `.parquet`
+        (no `id` column to read);
+      - read fails (object absent, network error, schema mismatch)
+        — those entries stay empty and can be retried later.
+
+    Returns the count of entries successfully updated. Use as:
+
+        n = backfill_row_ids(Path('experiments/data/my_sweep'))
+        print(f'updated {n} manifest entries')
+    """
+    manifest = _load_manifest(sweep_dir)
+    if manifest is None:
+        return 0
+    updated_count = 0
+    new_files: list[RemoteFile] = []
+    for entry in manifest.files:
+        if entry.row_ids or not entry.relpath.endswith('.parquet'):
+            new_files.append(entry)
+            continue
+        remote_uri = _join_remote(manifest.remote_root, entry.relpath)
+        ids = _sniff_row_ids(remote_uri)
+        if not ids:
+            new_files.append(entry)
+            continue
+        new_files.append(RemoteFile(
+            relpath=entry.relpath,
+            size_bytes=entry.size_bytes,
+            sha256=entry.sha256,
+            pushed_at=entry.pushed_at,
+            row_ids=ids,
+        ))
+        updated_count += 1
+    if updated_count > 0:
+        _save_manifest(
+            sweep_dir,
+            RemoteManifest(
+                remote_root=manifest.remote_root,
+                files=tuple(_sorted_by_relpath(new_files)),
+            ),
+        )
+    return updated_count
 
 
 def archived_shard_uris(

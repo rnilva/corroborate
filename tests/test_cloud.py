@@ -242,6 +242,77 @@ def test_remotefile_round_trip_legacy_manifest_without_row_ids() -> None:
     assert 'row_ids' not in f.as_dict()
 
 
+# ============ I5 backfill ============
+
+
+def test_backfill_row_ids_populates_legacy_manifest_entries(
+    tmp_path: Path,
+) -> None:
+    """**Backfill helper for I5**: a manifest written before I5
+    landed has empty `row_ids` on every entry. `backfill_row_ids`
+    reads the `id` column from each remote parquet and rewrites
+    the manifest in place. Idempotent — running twice is a no-op."""
+    from corroborate.bridge.verdict import Verdict
+    from corroborate.corpus.persistence import write_runrows
+    from corroborate.corpus.schema import RunRow
+
+    sweep_dir = tmp_path / 'sweep'
+    sweep_dir.mkdir()
+    rows = [
+        RunRow(
+            id=f'legacy-{i}',
+            parent_id=None, cycle_id=None,
+            timestamp='2026-05-06T00:00:00Z',
+            verdict=Verdict.HELD,
+            arm_key='baseline',
+            measurements={},
+        )
+        for i in range(3)
+    ]
+    write_runrows(rows, sweep_dir / 'runs.parquet')
+    remote_root = f'file://{tmp_path / "remote"}'
+
+    # Archive normally, then SIMULATE a legacy manifest by
+    # rewriting the manifest with row_ids stripped — this is the
+    # state of corpora archived before I5 landed.
+    cloud.archive(sweep_dir, remote_root)
+    import json
+    manifest_path = sweep_dir / cloud.MANIFEST_NAME
+    raw = json.loads(manifest_path.read_text())
+    for f in raw['files']:
+        f.pop('row_ids', None)
+    manifest_path.write_text(json.dumps(raw, indent=2))
+
+    # Confirm manifest is now legacy-style.
+    legacy = cloud.ls(sweep_dir)
+    assert all(f.row_ids == () for f in legacy.files)
+
+    # Run backfill.
+    n_updated = cloud.backfill_row_ids(sweep_dir)
+    assert n_updated == 1, (
+        f'expected 1 entry updated (runs.parquet); got {n_updated}'
+    )
+
+    # Verify row_ids populated.
+    upgraded = cloud.ls(sweep_dir)
+    runs_entry = next(
+        f for f in upgraded.files if f.relpath == 'runs.parquet'
+    )
+    assert runs_entry.row_ids == ('legacy-0', 'legacy-1', 'legacy-2')
+
+    # Idempotent: running again returns 0 (nothing left to backfill).
+    assert cloud.backfill_row_ids(sweep_dir) == 0
+
+
+def test_backfill_row_ids_no_op_when_manifest_absent(
+    tmp_path: Path,
+) -> None:
+    """Returns 0 cleanly when there's no manifest to backfill."""
+    sweep_dir = tmp_path / 'empty'
+    sweep_dir.mkdir()
+    assert cloud.backfill_row_ids(sweep_dir) == 0
+
+
 def test_restore_skips_files_already_present_with_matching_sha(
     sweep_dir: Path, remote_root: str,
 ) -> None:

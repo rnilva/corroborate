@@ -139,6 +139,86 @@ def empty_graph() -> ComputationGraph:
     return Graph()
 
 
+class MergeIntegrityError(RuntimeError):
+    """Invariant I3 cross-check (SWEEP_PERSISTENCY.md): the merged
+    parquet's row count disagreed with the sum of `row_ids`
+    across the cell-shard manifest entries. Indicates either a
+    regression in `archived_shard_uris` (manifest filter dropped
+    shards) or a regression in `stream_concat_parquets` (rows
+    lost / duplicated during concat). Raised before the corrupt
+    output is uploaded so cloud state stays consistent with the
+    manifest's provenance record."""
+
+    def __init__(
+        self,
+        kind: str,
+        *,
+        merged_path: Path,
+        actual_rows: int,
+        expected_rows: int,
+        n_shards: int,
+    ) -> None:
+        super().__init__(
+            f'merge integrity check failed for {kind!r}: '
+            f'merged {merged_path} has {actual_rows} rows, '
+            f'manifest cell-shard row_ids sum to {expected_rows} '
+            f'across {n_shards} shards. Either `archived_shard_uris` '
+            f'silently dropped shards from the merge input, or '
+            f'`stream_concat_parquets` lost / duplicated rows. The '
+            f'merged file is NOT uploaded — cloud state is '
+            f'unchanged.',
+        )
+        self.kind = kind
+        self.merged_path = merged_path
+        self.actual_rows = actual_rows
+        self.expected_rows = expected_rows
+        self.n_shards = n_shards
+
+
+def _check_merge_integrity(
+    out_dir: Path,
+    final_runs: Path,
+    final_traces: Path,
+) -> None:
+    """Cross-check merged row counts against manifest provenance.
+
+    No-op when row_ids are absent on every shard (legacy manifest
+    predating I5). Run `cloud.backfill_row_ids` to populate them
+    and re-enable the check on existing corpora."""
+    from corroborate.corpus.cloud import ls
+    try:
+        manifest = ls(out_dir)
+    except FileNotFoundError:
+        return
+    for kind, suffix, merged_path in (
+        ('runs', '__runs.parquet', final_runs),
+        ('traces', '__traces.parquet', final_traces),
+    ):
+        shards = [
+            f for f in manifest.files
+            if f.relpath.startswith('tmp/')
+            and f.relpath.endswith(suffix)
+        ]
+        # Only check when at least one shard has provenance —
+        # legacy manifests (all empty row_ids) skip this branch.
+        if not any(f.row_ids for f in shards):
+            continue
+        expected_rows = sum(len(f.row_ids) for f in shards)
+        actual_rows = pl.scan_parquet(merged_path).select(
+            pl.len(),
+        ).collect().item()
+        if not isinstance(actual_rows, int):
+            actual_rows = int(actual_rows)
+        if actual_rows != expected_rows:
+            raise MergeIntegrityError(
+                kind,
+                merged_path=merged_path,
+                actual_rows=actual_rows,
+                expected_rows=expected_rows,
+                n_shards=len(shards),
+            )
+
+
 # ============ run_intervention — the framework's `do()` operator ============
 
 def run_intervention[R: Mapping[str, object]](
@@ -372,6 +452,21 @@ def run_intervention[R: Mapping[str, object]](
         )
         stream_concat_parquets(runs_uris, final_runs)
         stream_concat_parquets(traces_uris, final_traces)
+        # Integrity cross-check: the merged parquet's row count
+        # should equal the sum of `row_ids` across the cell-shard
+        # manifest entries we merged. Pre-fix, a regression in
+        # `archived_shard_uris` (manifest filter regex breaks,
+        # subset of shards returned) would silently produce a
+        # corpus with fewer rows than expected; `force=True` on the
+        # merged-output upload would propagate the corruption to
+        # cloud. Post-fix, mismatch raises before upload.
+        #
+        # Skipped when row_ids are absent on every shard (legacy
+        # manifest predating I5). Run `cloud.backfill_row_ids`
+        # to populate them and re-enable the check.
+        _check_merge_integrity(
+            out_dir, final_runs, final_traces,
+        )
         # The merged output is INTENTIONALLY a function of the
         # manifest — it grows as more cells are added across
         # multiple `run_intervention` calls into the same `out_dir`

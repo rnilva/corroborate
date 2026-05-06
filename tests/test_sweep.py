@@ -27,6 +27,7 @@ from corroborate.corpus.persistence import read_runrows
 from corroborate.corpus.schema import RunRow, TraceRow
 from corroborate.measurables import Measurable
 from corroborate.runner.sweep import (
+    MergeIntegrityError,
     SweepCellResult,
     empty_graph,
     run_intervention,
@@ -278,3 +279,87 @@ def test_two_run_intervention_calls_share_out_dir_merge_includes_all_cells(
         assert {r.arm_key for r in rep_rows} == {
             treatment_key, baseline_key,
         }
+
+
+# ============ Merge integrity cross-check ============
+
+
+def test_merge_integrity_check_raises_when_manifest_filter_drops_shards(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """**Cross-check for I3 + force=True risk**: if
+    `archived_shard_uris` returns a SUBSET of the manifest's
+    cell shards (e.g., a regression in the prefix/suffix filter),
+    the merged parquet has fewer rows than the manifest's
+    `row_ids` would predict. The integrity check must raise
+    BEFORE the corrupt merged output is uploaded.
+
+    Simulate the bug by monkeypatching `archived_shard_uris` to
+    return only HALF the URIs. The merge produces a smaller-
+    than-expected parquet; `_check_merge_integrity` catches the
+    discrepancy via the manifest's `row_ids` provenance.
+
+    Pre-fix: silent corruption uploaded via force=True. Post-fix:
+    MergeIntegrityError before upload.
+    """
+    archive_remote = (tmp_path / 'remote').as_uri()
+
+    def _replicate_tag(arm_key: str, gp: Mapping[str, object]) -> str:
+        rep = gp.get('replicate', '?')
+        return f'{arm_key}__rep{rep}'
+
+    # Run a 4-cell sweep to populate the manifest.
+    run_intervention(
+        _StubHypothesis.INTERVENTION,
+        base=_base_theory,
+        measurables=_StubHypothesis.MEASURABLES,
+        grid_points=[{'replicate': 0}, {'replicate': 1}],
+        runner=_stub_runner,
+        out_dir=tmp_path,
+        archive_remote=archive_remote,
+        arm_tag=_replicate_tag,
+    )
+
+    # Now simulate a `archived_shard_uris` regression: monkeypatch
+    # the cloud-module function to return only the FIRST half of
+    # URIs. The next merge will produce a parquet with HALF the
+    # expected rows.
+    import corroborate.corpus.cloud as cloud_mod
+    real_archived_shard_uris = cloud_mod.archived_shard_uris
+
+    def buggy_archived_shard_uris(
+        out_dir, *, prefix, suffix,
+    ):
+        full = real_archived_shard_uris(
+            out_dir, prefix=prefix, suffix=suffix,
+        )
+        # Drop half — simulating a manifest filter regression.
+        return full[: len(full) // 2]
+
+    monkeypatch.setattr(
+        cloud_mod,
+        'archived_shard_uris',
+        buggy_archived_shard_uris,
+    )
+
+    # Re-run with two NEW grid_points (extends the manifest).
+    # The integrity check should fire on the merge step.
+    import pytest
+    with pytest.raises(MergeIntegrityError) as exc_info:
+        run_intervention(
+            _StubHypothesis.INTERVENTION,
+            base=_base_theory,
+            measurables=_StubHypothesis.MEASURABLES,
+            grid_points=[{'replicate': 2}, {'replicate': 3}],
+            runner=_stub_runner,
+            out_dir=tmp_path,
+            archive_remote=archive_remote,
+            arm_tag=_replicate_tag,
+        )
+    err = exc_info.value
+    assert err.actual_rows < err.expected_rows, (
+        f'integrity check should detect FEWER rows than expected; '
+        f'got actual={err.actual_rows}, expected={err.expected_rows}'
+    )
+    assert err.kind in ('runs', 'traces')
