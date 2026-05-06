@@ -561,6 +561,13 @@ def compute_missing_columns(
         seen.add(name)
         pending.append((name, m))
     if not pending:
+        # **C3 fast-path** (CACHE_BUILD.md): no measurables to
+        # compute → return the input frame WITHOUT materialising
+        # `to_dicts()`. The repeated-cache-load case lands here:
+        # a cache that already has every required column should
+        # not pay the cost of converting hundreds-of-cells × tens-
+        # of-columns into Python dicts just to discover there's
+        # nothing to do.
         return df
 
     cells = cast(list[dict[str, object]], df.to_dicts())

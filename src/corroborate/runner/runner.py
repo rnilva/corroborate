@@ -68,6 +68,7 @@ from corroborate.corpus.schema import LINEAGE_FIELDS
 from corroborate.measurables import (
     compute_missing_columns,
     get_registered,
+    registered_names,
     transitive_reads,
 )
 
@@ -184,8 +185,37 @@ def _read_manifest(path: Path) -> dict[str, str]:
     return out
 
 
+def _atomic_write_parquet(df: pl.DataFrame, path: Path) -> None:
+    """tmp+rename parquet write (C2 invariant in CACHE_BUILD.md).
+    A killed-mid-write process leaves no `.partial` file at the
+    consumer's path; consumers either see the pre-write state or
+    the fully-written new state, never a torn parquet."""
+    partial = path.with_suffix(path.suffix + '.partial')
+    if partial.exists():
+        partial.unlink()
+    df.write_parquet(partial)
+    partial.replace(path)
+
+
+def _atomic_write_text(path: Path, content: str) -> None:
+    """Same atomicity guarantee for text payloads (JSON sidecars).
+    Order matters at the call site: write the parquet ATOMICALLY
+    first, then the sidecar — a half-updated state then has a
+    stale sidecar pointing at a fresh parquet (drift detection
+    on next run self-heals via column invalidation), rather than
+    a fresh sidecar pointing at a torn parquet (consumer reads
+    garbage)."""
+    partial = path.with_suffix(path.suffix + '.partial')
+    if partial.exists():
+        partial.unlink()
+    _ = partial.write_text(content)
+    partial.replace(path)
+
+
 def _write_manifest(path: Path, sigs: Mapping[str, str]) -> None:
-    path.write_text(json.dumps(dict(sigs), indent=2, sort_keys=True))
+    _atomic_write_text(
+        path, json.dumps(dict(sigs), indent=2, sort_keys=True),
+    )
 
 
 def _invalidate_drifted(
@@ -194,12 +224,25 @@ def _invalidate_drifted(
     required: Sequence[str],
 ) -> pl.DataFrame:
     """Drop columns whose stored signature doesn't match the
-    current closure hash. The dropped columns then fall through
-    `_compute_measurables`'s "missing column → fill" path so the
-    user sees fresh values without a manual `--rebuild`.
+    current closure hash AND drop orphans (registered measurables
+    that are no longer required by the current bridge set).
 
-    Loud warning lists what drifted so the user knows where the
-    recompute time went."""
+    **Two-way drift detection** (CACHE_BUILD.md C4):
+    - Drifted: column IS required, but its closure hash differs
+      from the manifest. Recomputed on the next pass.
+    - Orphan: column is a registered measurable but the current
+      bridges no longer ask for it. Persists forever pre-fix —
+      growing the cache, slowing every read, eventually carrying
+      values computed by code that may have been deleted.
+
+    Preserves: provenance / lineage tags (id, arm_key, env_name,
+    etc. — captured by `LINEAGE_FIELDS`), raw record columns
+    (anything not in the measurable registry), and analysis-side
+    `.reads` columns (those aren't measurables and aren't
+    registered as such).
+
+    Loud warning lists what was dropped on each axis so the user
+    knows where any rebuild time went."""
     drifted: list[str] = []
     for name in required:
         if name not in cache.columns:
@@ -210,14 +253,32 @@ def _invalidate_drifted(
         stored = manifest.get(name)
         if stored is not None and stored != current:
             drifted.append(name)
-    if not drifted:
-        return cache
-    print(
-        f'runner: invalidating {len(drifted)} drifted measurable '
-        f'column(s): {drifted}',
-        file=sys.stderr,
+    # Orphan detection: registered measurables in cache.columns
+    # that aren't in `required`. Non-registered columns (raw
+    # record fields, lineage tags) are NEVER orphan candidates.
+    required_set = set(required)
+    all_registered = set(registered_names())
+    orphans = sorted(
+        c for c in cache.columns
+        if c in all_registered and c not in required_set
     )
-    return cache.drop(drifted)
+    if not drifted and not orphans:
+        return cache
+    if drifted:
+        print(
+            f'runner: invalidating {len(drifted)} drifted measurable '
+            f'column(s): {drifted}',
+            file=sys.stderr,
+        )
+    if orphans:
+        print(
+            f'runner: dropping {len(orphans)} orphan measurable '
+            f'column(s) (registered but not required by current '
+            f'bridges): {orphans}',
+            file=sys.stderr,
+        )
+    to_drop = drifted + orphans
+    return cache.drop(to_drop)
 
 
 # ============ Public surface ============
@@ -436,7 +497,7 @@ def _ingest_and_compute(
         ) if enriched_new.height > 0 else cache_enriched
 
     if cache_path is not None and write_cache:
-        merged.write_parquet(cache_path)
+        _atomic_write_parquet(merged, cache_path)
         if manifest_path is not None:
             _write_manifest(manifest_path, _signatures_for(required, merged))
     return merged
@@ -461,7 +522,7 @@ def _enrich_cache_in_place(
         and write_cache
         and enriched.columns != cache.columns
     ):
-        enriched.write_parquet(cache_path)
+        _atomic_write_parquet(enriched, cache_path)
         if manifest_path is not None:
             _write_manifest(
                 manifest_path, _signatures_for(required, enriched),
@@ -788,13 +849,27 @@ def _load_directory(
     The drop step is load-bearing: per-step trace columns
     (`done`, `online_std_q_per_step`, …) can be GBs per cell, so
     keeping them across the diagonal_relaxed concat would OOM."""
+    import time as _time
     measurable_reads = _required_record_keys(required)
     analysis_reads = _analysis_reads_for_bridges(bridges)
     trace_reads = measurable_reads | analysis_reads
+    # **C5 progress** (CACHE_BUILD.md): pre-walk the subdirs so
+    # we know N up front for an `[i/N] <corpus>` prefix. The
+    # observability rule is "user can tell at a glance how far
+    # in we are and which corpus is the slow one."
+    sub_dirs = sorted(p for p in root.iterdir() if p.is_dir())
+    n_total = len(sub_dirs)
+    print(
+        f'runner: ingesting {n_total} corpora from {root}',
+        file=sys.stderr,
+        flush=True,
+    )
+    t_walk_start = _time.monotonic()
     frames: list[pl.DataFrame] = []
-    for sub in sorted(root.iterdir()):
-        if not sub.is_dir():
-            continue
+    n_skipped = 0
+    n_loaded = 0
+    for i, sub in enumerate(sub_dirs):
+        t_corpus = _time.monotonic()
         runs_path = sub / 'runs.parquet'
         traces_path = sub / 'traces.parquet'
         manifest = sub / '_remote.json'
@@ -805,6 +880,7 @@ def _load_directory(
         # runs.parquet but cloud-only traces.parquet silently lose
         # their trace-reading measurables to NaN.
         just_restored_traces = False
+        prefix = f'  [{i+1:>{len(str(n_total))}}/{n_total}] {sub.name}'
         if manifest.exists():
             need_restore = _missing_for_restore(
                 runs_path, traces_path, trace_reads, manifest,
@@ -813,9 +889,10 @@ def _load_directory(
                 if restore_from_cloud:
                     from corroborate.corpus.cloud import restore
                     print(
-                        f'runner: restoring {sub.name} from cloud '
-                        f'({need_restore})...',
+                        f'{prefix}: restoring '
+                        f'{[Path(p).name for p in need_restore]}...',
                         file=sys.stderr,
+                        flush=True,
                     )
                     restore(sub, files=need_restore, overwrite=True)
                     just_restored_traces = 'traces.parquet' in need_restore
@@ -826,13 +903,21 @@ def _load_directory(
                         just_restored_traces = True
                 else:
                     print(
-                        f'runner: WARNING — {sub.name} needs '
+                        f'{prefix}: WARNING — needs '
                         f'{need_restore} from cloud; restore disabled',
                         file=sys.stderr,
+                        flush=True,
                     )
                     if not runs_path.exists():
+                        n_skipped += 1
                         continue
         if not runs_path.exists():
+            print(
+                f'{prefix}: SKIPPED (no runs.parquet)',
+                file=sys.stderr,
+                flush=True,
+            )
+            n_skipped += 1
             continue
         df = pl.read_parquet(runs_path)
         runs_columns = set(df.columns)
@@ -865,25 +950,44 @@ def _load_directory(
         if just_restored_traces and traces_path.exists():
             try:
                 traces_path.unlink()
-                print(
-                    f'runner: evicted {sub.name}/traces.parquet '
-                    f'(restored just-in-time, scalar measurables '
-                    f'persisted in cache)',
-                    file=sys.stderr,
-                )
             except OSError as e:
                 print(
-                    f'runner: WARNING — could not evict '
-                    f'{sub.name}/traces.parquet: {e}',
+                    f'{prefix}: WARNING — could not evict '
+                    f'traces.parquet: {e}',
                     file=sys.stderr,
+                    flush=True,
                 )
         frames.append(df)
+        elapsed = _time.monotonic() - t_corpus
+        n_loaded += 1
+        print(
+            f'{prefix}: {df.height} cells × {len(df.columns)} cols'
+            + (' (traces evicted)' if just_restored_traces else '')
+            + f' in {elapsed:.1f}s',
+            file=sys.stderr,
+            flush=True,
+        )
+    walk_elapsed = _time.monotonic() - t_walk_start
     if not frames:
+        print(
+            f'runner: NO corpora loaded ({n_skipped} skipped) in '
+            f'{walk_elapsed:.1f}s',
+            file=sys.stderr,
+            flush=True,
+        )
         return pl.DataFrame()
-    return _dedup_by_content(
+    merged = _dedup_by_content(
         pl.concat(frames, how='diagonal_relaxed'),
         source='loaded directory',
     )
+    print(
+        f'runner: ingested {n_loaded}/{n_total} corpora '
+        f'({n_skipped} skipped) → {merged.height} cells × '
+        f'{len(merged.columns)} cols in {walk_elapsed/60:.1f} min',
+        file=sys.stderr,
+        flush=True,
+    )
+    return merged
 
 
 def _merge_shard_traces(corpus_dir: Path) -> bool:
