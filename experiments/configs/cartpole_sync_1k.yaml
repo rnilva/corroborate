@@ -1,0 +1,50 @@
+name: cartpole_sync_1k
+out_dir: experiments/data/cartpole_sync_1k
+arms_shape: paired
+
+# Intermediate sync_period to test the clean prediction:
+# - sync=100: Q-divergent, mech HELD scalar (vanilla overestimates by 132)
+# - sync=1000: Q bounded but premise still active → ideal regime
+# - sync=10000: Q stable but BOTH arms enter dormancy
+#
+# Predicts: at sync=1000 vanilla still overestimates moderately, DDQN reduces
+# bias, link active per-burst with stronger β than at sync=100 (where
+# Q-amplification dilutes signal).
+
+envs:
+  - {name: CartPole-v1, n_seeds: 30, chunk_size: 30}
+
+base_intervention:
+  total_steps: 200000
+  eval_every:  20000
+  n_episodes:  5
+  gamma:       0.99
+  sync_period: 1000
+  replay:
+    class: Replay
+    capacity: 50000
+    batch_size: 32
+  optimizer:
+    class: WarmedUpdate
+    inner: {class: Adam, lr: 0.0001}
+    warmup_steps: 100
+  q_network:
+    class: MLP
+    hidden: [64, 64]
+
+hypotheses:
+  - name: vanilla_dqn_sync1k
+    predicted_direction: null
+    intervention: {}
+
+  - name: ddqn_sync1k
+    predicted_direction: a_gt_b
+    intervention:
+      bootstrap:
+        fn: bootstrap
+        greedification: {fn: double_greedify}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement:
+          fn: bootstrap
+          greedification: {fn: double_greedify}

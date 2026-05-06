@@ -1,0 +1,120 @@
+name: capacity_sweep_fourrooms
+out_dir: experiments/data/capacity_sweep_fourrooms
+arms_shape: chunked
+archive_remote: s3://corroborate-archive/capacity_sweep_fourrooms
+
+# Pearl-rung-2 designed test of the link-edge moderator found
+# observationally on 2026-05-04 (memory: findings_residual_unexplained.md):
+# bootstrap_fraction → g_link survives at replay.capacity=10k
+# (β=+2.57, p=0.004 across 4 corpora) and collapses to β≈-0.2,
+# p>0.4 at HPO-discovered capacities (20k, 50k). Plausible
+# mechanism: a larger replay buffer dilutes bootstrap-target
+# staleness, damping the per-step bias-amplification chain that
+# bootstrap_fraction proxies.
+#
+# Prediction: g(ddqn − vanilla, FourRooms) decreases monotonically
+# as capacity grows from 10k → 20k → 50k. Capacity is *the*
+# moderator on the link edge, independent of dormancy (which
+# moderates the mechanism edge).
+#
+# 1 env × 3 capacities × 2 arms × 30 seeds = 180 cells, ~30 min
+# on GPU. Holds all other HPs at the original DDQN-200k cohort
+# fingerprint so capacity is the only axis the contrast varies.
+
+envs:
+  - {name: FourRooms-misc, n_seeds: 30, chunk_size: 30}
+
+base_intervention:
+  total_steps: 200000
+  eval_every:  20000
+  n_episodes:  5
+  gamma:       0.99
+  sync_period: 100
+  replay:
+    class: Replay
+    capacity: 10000
+    batch_size: 32
+  # Original DDQN cohort optimizer: warmed Adam at lr=1e-3 with
+  # 100-step warmup. Distinct from the post-HPO lr=1e-4 regime
+  # used by gamma_sweep / minatar_1M; that change tracks
+  # capacity HPO and would confound the test.
+  optimizer:
+    fn: warmed_update
+    inner: {fn: adam, lr: 0.001}
+    warmup_steps: 100
+  q_network:
+    class: MLP
+    hidden: [64, 64]
+
+hypotheses:
+  # capacity = 10000 (original cohort — signal expected positive)
+  - name: vanilla_cap10k
+    predicted_direction: null
+    intervention:
+      replay:
+        class: Replay
+        capacity: 10000
+        batch_size: 32
+  - name: ddqn_cap10k
+    predicted_direction: a_gt_b
+    intervention:
+      replay:
+        class: Replay
+        capacity: 10000
+        batch_size: 32
+      bootstrap:
+        fn: bootstrap
+        greedification: {fn: double_greedify}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement:
+          fn: bootstrap
+          greedification: {fn: double_greedify}
+
+  # capacity = 20000 (intermediate — predicted attenuation)
+  - name: vanilla_cap20k
+    predicted_direction: null
+    intervention:
+      replay:
+        class: Replay
+        capacity: 20000
+        batch_size: 32
+  - name: ddqn_cap20k
+    predicted_direction: a_gt_b
+    intervention:
+      replay:
+        class: Replay
+        capacity: 20000
+        batch_size: 32
+      bootstrap:
+        fn: bootstrap
+        greedification: {fn: double_greedify}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement:
+          fn: bootstrap
+          greedification: {fn: double_greedify}
+
+  # capacity = 50000 (HPO-discovered — predicted near-null)
+  - name: vanilla_cap50k
+    predicted_direction: null
+    intervention:
+      replay:
+        class: Replay
+        capacity: 50000
+        batch_size: 32
+  - name: ddqn_cap50k
+    predicted_direction: a_gt_b
+    intervention:
+      replay:
+        class: Replay
+        capacity: 50000
+        batch_size: 32
+      bootstrap:
+        fn: bootstrap
+        greedification: {fn: double_greedify}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement:
+          fn: bootstrap
+          greedification: {fn: double_greedify}

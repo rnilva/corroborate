@@ -1,0 +1,85 @@
+name: minatar_sync_curve
+out_dir: experiments/data/minatar_sync_curve
+arms_shape: paired
+archive_remote: s3://corroborate-archive/minatar_sync_curve
+
+# Fills in the intermediate sync points missing from the existing
+# minatar 1M cohort: sync=100 (`minatar_1M`) and sync=10000
+# (`minatar_sync_intervention`) bracket the Q-explosion transition;
+# Asterix at total_steps=100k has the full 4-point curve via
+# `asterix_sync_1k_3k`, but SpaceInvaders / Breakout / Freeway only
+# have the {100, 10000} binary contrast.
+#
+# Hypothesis: Q-explosion confounds the per-burst link effect on
+# MinAtar 1M (cf. `findings_minatar_link_attenuation.md`'s β
+# collapse from phase 1 → phase 3). The sync curve should reveal
+# how Q-explosion magnitude tracks link attenuation across sync ∈
+# {100, 1000, 3000, 10000} on all four MinAtar envs (Asterix
+# transition shape from sync_1k_3k @ 100k steps, full transition
+# at 1M steps from this sweep).
+#
+# 3 envs × 2 sync values × 2 arms × 30 seeds = 360 cells at 1M
+# steps with CNN. ~2-4h on GPU.
+
+envs:
+  - {name: Breakout-MinAtar,       n_seeds: 30, chunk_size: 15}
+  - {name: Freeway-MinAtar,        n_seeds: 30, chunk_size: 15}
+  - {name: SpaceInvaders-MinAtar,  n_seeds: 30, chunk_size: 15}
+
+base_intervention:
+  total_steps: 1000000
+  eval_every:  50000
+  n_episodes:  5
+  gamma:       0.99
+  sync_period: 1000
+  replay:
+    class: Replay
+    capacity: 50000
+    batch_size: 32
+  optimizer:
+    fn: warmed_update
+    inner: {fn: adam, lr: 0.0001}
+    warmup_steps: 100
+  q_network:
+    class: CNN
+    obs_shape: {from_env: observation_shape}
+    channels: [16, 32]
+    kernel_size: 3
+    hidden: [128]
+
+hypotheses:
+  - name: vanilla_sync1k
+    predicted_direction: null
+    intervention:
+      sync_period: 1000
+
+  - name: ddqn_sync1k
+    predicted_direction: a_gt_b
+    intervention:
+      sync_period: 1000
+      bootstrap:
+        fn: bootstrap
+        greedification: {fn: double_greedify}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement:
+          fn: bootstrap
+          greedification: {fn: double_greedify}
+
+  - name: vanilla_sync3k
+    predicted_direction: null
+    intervention:
+      sync_period: 3000
+
+  - name: ddqn_sync3k
+    predicted_direction: a_gt_b
+    intervention:
+      sync_period: 3000
+      bootstrap:
+        fn: bootstrap
+        greedification: {fn: double_greedify}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement:
+          fn: bootstrap
+          greedification: {fn: double_greedify}
