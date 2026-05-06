@@ -45,6 +45,47 @@ import polars as pl
 from corroborate._internals.registry import Registry
 
 
+def _hash_code(code: object) -> str:
+    """Hash a CodeType across the fields that affect behavior:
+    `co_code` (opcodes), `co_consts` (literals + nested code
+    objects), `co_names` (external name references). Recurses into
+    nested code objects in `co_consts` so a constant edit inside a
+    lambda / comprehension / inner def still flips the hash.
+
+    Returns a 16-hex-char SHA-256 prefix. Used by
+    `Measurable.signature()` per-function and itself recursively
+    for nested code.
+
+    Why these three fields: `co_code` alone misses constant-only
+    edits (`return 1.0` → `return 2.0` produces identical opcode
+    streams; the literal lives in `co_consts` indexed by an opcode
+    arg). `co_names` misses changes to external references
+    (`np.mean` → `np.nanmean`). Local var renames live in
+    `co_varnames` and are deliberately NOT hashed — cosmetic edits
+    shouldn't bust cache."""
+    import hashlib
+    from types import CodeType
+    if not isinstance(code, CodeType):
+        # Defensive: unexpected. Hash repr so the signature still
+        # changes if `co_consts` carries something we don't model.
+        return hashlib.sha256(repr(code).encode()).hexdigest()[:16]
+    h = hashlib.sha256()
+    h.update(code.co_code)
+    h.update(b'|names=')
+    h.update('\x00'.join(code.co_names).encode())
+    h.update(b'|consts=')
+    for const in code.co_consts:
+        if isinstance(const, CodeType):
+            h.update(b'<code:' + _hash_code(const).encode() + b'>')
+        else:
+            # `repr` is stable across Python versions for the
+            # primitives that show up in `co_consts` (numbers,
+            # strings, tuples, frozensets, None, bytes).
+            h.update(repr(const).encode())
+        h.update(b'\x00')
+    return h.hexdigest()[:16]
+
+
 class Measurable[R: Mapping[str, object], T]:
     """Typed generic wrapper. Behaves as `Callable[..., T]` over
     `(record, **deps)`; carries `name` and `reads` as typed
@@ -151,12 +192,29 @@ class Measurable[R: Mapping[str, object], T]:
         return self.dispatch(record).fn(record, **deps)
 
     def signature(self) -> str:
-        """Closure hash: SHA-256 of this Measurable's bytecode plus
-        the sorted bytecode hashes of every transitive measurable
-        dependency. Detects "user edited a measurable's body, cache
-        is stale" — changing any function in the closure flips the
-        resulting hex. 16-hex-char output; collisions are irrelevant
-        against the user-edit baseline.
+        """Closure hash: SHA-256 over each Measurable's bytecode
+        + literal constants + referenced names, including every
+        transitive dependency. Detects "user edited a measurable's
+        body, cache is stale" — changing any function in the
+        closure flips the resulting hex. 16-hex-char output;
+        collisions are irrelevant against the user-edit baseline.
+
+        Hashes three CodeType fields per function:
+        - `co_code`: opcode stream (control flow + operations).
+        - `co_consts`: literal table — numbers, strings, nested
+          code objects from comprehensions / lambdas. Nested code
+          objects are recursively walked (their consts + names
+          + opcodes also hashed) so a constant-only edit inside an
+          inner lambda still invalidates the outer signature.
+        - `co_names`: external name references (globals,
+          attributes, free names) — changes when the body switches
+          which `np.nanmean` vs `np.mean` it calls, etc.
+
+        Deliberately NOT hashed:
+        - `co_varnames` (local variable names) — renaming a local
+          shouldn't bust cache.
+        - `co_argcount` / signature info — captured indirectly via
+          opcodes when the args are referenced.
 
         Walks two dependency channels:
 
@@ -183,8 +241,7 @@ class Measurable[R: Mapping[str, object], T]:
             if m._name in seen:
                 return
             seen.add(m._name)
-            bc = bytes(m._fn.__code__.co_code)
-            parts.append(f'{m._name}:{hashlib.sha256(bc).hexdigest()[:16]}')
+            parts.append(f'{m._name}:{_hash_code(m._fn.__code__)}')
             # Closure-captured operands.
             for sub in m._compose_of:
                 _walk(sub)

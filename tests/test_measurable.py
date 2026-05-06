@@ -245,30 +245,106 @@ def test_register_idempotent_on_signature_equal_distinct_instances() -> None:
     assert get_registered('_idempotent_dup_test') is first
 
 
+def test_signature_flips_on_constant_change() -> None:
+    """Constant-only edit must change the signature so the cache
+    invalidates. Was a real bug pre-2026-05-06: `co_code` alone
+    doesn't capture literal values (they live in `co_consts`)."""
+    from corroborate.measurables.measurable import Measurable
+
+    def _v1(record: Mapping[str, object]) -> float:
+        del record
+        return 0.5  # threshold v1
+
+    def _v2(record: Mapping[str, object]) -> float:
+        del record
+        return 0.7  # threshold v2 — same opcodes, different const
+
+    m1 = Measurable(name='_const_test', reads=(), fn=_v1)
+    m2 = Measurable(name='_const_test', reads=(), fn=_v2)
+    assert m1.signature() != m2.signature(), (
+        'constant edit (0.5 → 0.7) must flip signature'
+    )
+
+
+def test_signature_flips_on_external_name_change() -> None:
+    """Switching from `np.mean` to `np.nanmean` flips co_names but
+    leaves co_code identical at the call site (LOAD_ATTR uses an
+    index into co_names). Cache must invalidate."""
+    import numpy as np
+    from corroborate.measurables.measurable import Measurable
+
+    def _uses_mean(record: Mapping[str, object]) -> float:
+        x = record.get('x')
+        return float(np.mean(x))  # type: ignore[arg-type]
+
+    def _uses_nanmean(record: Mapping[str, object]) -> float:
+        x = record.get('x')
+        return float(np.nanmean(x))  # type: ignore[arg-type]
+
+    m1 = Measurable(name='_name_test', reads=('x',), fn=_uses_mean)
+    m2 = Measurable(name='_name_test', reads=('x',), fn=_uses_nanmean)
+    assert m1.signature() != m2.signature(), (
+        'np.mean → np.nanmean must flip signature'
+    )
+
+
+def test_signature_does_not_flip_on_local_var_rename() -> None:
+    """Cosmetic local-var rename should NOT bust cache. `co_varnames`
+    is deliberately excluded from the signature."""
+    from corroborate.measurables.measurable import Measurable
+
+    def _v1(record: Mapping[str, object]) -> float:
+        x = record.get('count')
+        return float(x or 0)  # type: ignore[arg-type]
+
+    def _v2(record: Mapping[str, object]) -> float:
+        n = record.get('count')  # renamed local x → n
+        return float(n or 0)  # type: ignore[arg-type]
+
+    m1 = Measurable(name='_rename_test', reads=('count',), fn=_v1)
+    m2 = Measurable(name='_rename_test', reads=('count',), fn=_v2)
+    assert m1.signature() == m2.signature(), (
+        'local var rename should NOT flip signature'
+    )
+
+
+def test_signature_flips_on_constant_inside_nested_lambda() -> None:
+    """Nested code objects (lambdas, comprehensions) live in
+    `co_consts`; `_hash_code` recurses into them. A const edit
+    inside a lambda body must propagate to the outer signature."""
+    from corroborate.measurables.measurable import Measurable
+
+    def _v1(record: Mapping[str, object]) -> float:
+        xs = record.get('xs', ())
+        return float(sum(map(lambda v: v * 2.0, xs)))  # type: ignore[arg-type]
+
+    def _v2(record: Mapping[str, object]) -> float:
+        xs = record.get('xs', ())
+        return float(sum(map(lambda v: v * 3.0, xs)))  # type: ignore[arg-type]
+
+    m1 = Measurable(name='_nested_test', reads=('xs',), fn=_v1)
+    m2 = Measurable(name='_nested_test', reads=('xs',), fn=_v2)
+    assert m1.signature() != m2.signature(), (
+        'constant edit inside nested lambda (× 2.0 → × 3.0) '
+        'must flip outer signature'
+    )
+
+
 def test_register_raises_on_signature_mismatch() -> None:
     """Different closures with the same name still raise — that's a
     real authoring conflict, NOT covered by the idempotency rule.
-
-    Note: `Measurable.signature()` hashes `co_code` (the opcode
-    stream), not `co_consts`. Two bodies differing ONLY in a literal
-    constant (`return 1.0` vs `return 2.0`) hash identically; this
-    test uses bodies with distinct opcode streams to actually
-    exercise the mismatch path."""
+    Constant-only edits (`return 1.0` vs `return 2.0`) now flip
+    the signature thanks to the `co_consts` term in `_hash_code`."""
     from corroborate.measurables import register
     from corroborate.measurables.measurable import Measurable
 
     def _fn_a(record: Mapping[str, object]) -> float:
-        x = record.get('x')
-        return float(x) if isinstance(x, (int, float)) else float('nan')
+        del record
+        return 1.0
 
     def _fn_b(record: Mapping[str, object]) -> float:
-        x = record.get('x')
-        if x is None:
-            return 0.0
-        try:
-            return float(x)  # type: ignore[arg-type]
-        except (TypeError, ValueError):
-            return float('nan')
+        del record
+        return 2.0  # constant-only edit
 
     a = Measurable(name='_conflict_test', reads=('x',), fn=_fn_a)
     b = Measurable(name='_conflict_test', reads=('x',), fn=_fn_b)
