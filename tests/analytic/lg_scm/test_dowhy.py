@@ -226,6 +226,16 @@ def test_placebo_refutation_destroys_structural_estimate() -> None:
         f'|real_ate| ≈ {_EXPECTED_ATE:.4f} since the placebo '
         f'destroys the structural signal'
     )
+    # Pin success-path metadata: a regression replacing any of
+    # method_name / refuter_name / treatment / outcome / n_rows
+    # with `None` (or the wrong literal) on the success branch
+    # would breach. mutmut surfaces these as a 5-mutant cluster
+    # on `_run_refuter`.
+    assert result.method_name == 'backdoor.linear_regression'
+    assert result.refuter_name == 'placebo_treatment_refuter'
+    assert result.treatment == 'x_mean'
+    assert result.outcome == 'y_mean'
+    assert result.n_rows == n_cells
 
 
 # ============ random common cause refutation ============
@@ -259,3 +269,78 @@ def test_random_common_cause_preserves_structural_estimate() -> None:
         f'|real_ate| ({_EXPECTED_ATE:.4f}) suggests the synthetic '
         f'confounder leaked into the regression'
     )
+    # Pin success-path metadata (parallels placebo test above);
+    # `refuter_name` differs between RCC and placebo, so this
+    # also catches refuter-name swap mutations.
+    assert result.method_name == 'backdoor.linear_regression'
+    assert result.refuter_name == 'random_common_cause'
+    assert result.treatment == 'x_mean'
+    assert result.outcome == 'y_mean'
+    assert result.n_rows == len(_MU_X_GRID) * _N_PER_ENV
+
+
+# ============ Unidentified-branch fallback (refuters) ============
+
+def test_placebo_refutation_returns_nan_when_unidentified() -> None:
+    """When `_backdoor_estimate` returns `estimate=None` (no
+    directed treatment→outcome path under the supplied DAG),
+    `_run_refuter` must short-circuit and emit a `RefutationResult`
+    with NaN-filled effect fields and the request metadata
+    (method_name, refuter_name, treatment, outcome) preserved.
+
+    Pin the unidentified-branch CONSTRUCTOR — this is the
+    `_run_refuter` cluster mutmut surfaced (real_ate=NaN→None,
+    refuter_name=refuter_method→None, treatment=treatment→None
+    field replacements all survive when no test reaches the
+    `if estimate is None` branch).
+
+    Construction: same DAG as `test_backdoor_ate_returns_unidentified
+    _when_no_directed_path` — z→x, z→y, no x→y edge.
+    """
+    cells = [
+        {'x_mean': float(i), 'y_mean': float(i * 2), 'z': 0.0}
+        for i in range(20)
+    ]
+    result = placebo_refutation.fn(
+        cells, treatment='x_mean', outcome='y_mean',
+        dag=[('z', 'x_mean'), ('z', 'y_mean')],
+    )
+    assert math.isnan(result.real_ate), (
+        f'real_ate = {result.real_ate!r}; expected NaN on '
+        f'unidentified DAG. A regression replacing the NaN '
+        f'fallback with `None` would breach.'
+    )
+    assert math.isnan(result.refuted_ate)
+    assert math.isnan(result.drift)
+    # Request metadata must round-trip through the unidentified
+    # branch — pins the field replacements (method_name=method_name
+    # → None, etc.).
+    assert result.method_name == 'backdoor.linear_regression'
+    assert result.refuter_name == 'placebo_treatment_refuter'
+    assert result.treatment == 'x_mean'
+    assert result.outcome == 'y_mean'
+    assert result.n_rows == 20
+
+
+def test_random_common_cause_returns_nan_when_unidentified() -> None:
+    """Same fallback behavior as placebo when the DAG fails to
+    identify. Distinct test pins that the `refuter_method` constant
+    differs between placebo and RCC paths — a regression that
+    confused the two refuter names would breach the assertion on
+    `refuter_name`."""
+    cells = [
+        {'x_mean': float(i), 'y_mean': float(i * 2), 'z': 0.0}
+        for i in range(20)
+    ]
+    result = random_common_cause_refutation.fn(
+        cells, treatment='x_mean', outcome='y_mean',
+        dag=[('z', 'x_mean'), ('z', 'y_mean')],
+    )
+    assert math.isnan(result.real_ate)
+    assert math.isnan(result.refuted_ate)
+    assert math.isnan(result.drift)
+    assert result.refuter_name == 'random_common_cause'
+    assert result.method_name == 'backdoor.linear_regression'
+    assert result.treatment == 'x_mean'
+    assert result.outcome == 'y_mean'
+    assert result.n_rows == 20
