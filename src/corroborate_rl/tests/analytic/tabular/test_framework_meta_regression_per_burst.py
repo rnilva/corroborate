@@ -17,9 +17,24 @@ Per-(env, burst) Hedges' g:
 The per-(env, burst) panel has 5 × 12 = 60 strata. Meta-regressing
 g on the env-level covariate `μ_env` (broadcast across bursts):
 
-    slope ≈ mean_t(K_t)                           (under equal IVW weights)
+    slope ≈ mean_t(K_t)                           (random-effects pooling)
     intercept ≈ 0                                 (μ_env-grid centered at 0)
-    R² > 0                                        (μ_env is structurally predictive)
+    R² ≈ 0.88 (structural / (structural + residual))
+
+The "≈ mean_t(K_t)" claim deserves explanation: per-(env, burst)
+SE varies with t (the K_t denominator changes), so naive IVW
+weights would NOT be equal across bursts. Fixed-effect IVW would
+predict slope ≈ 0.724 (down-weighting low-|K_t| bursts). But
+under DerSimonian-Laird random-effects, between-stratum
+heterogeneity drives `τ² ≈ 0.19` while per-stratum `v_i ≈ 0.025`
+in median; the random-effects weights `w_i = 1/(v_i + τ²)`
+collapse toward UNIFORM (τ² dominates). With uniform weighting
+across the 60-stratum panel, OLS slope = `mean_t(K_t) = 0.808`
+exactly under the structural form `g = μ_env · K_t + ε`.
+MC verification (40 reps): empirical slope mean = 0.812 ± 0.020,
+matching equal-weight closed-form (Δ=+0.004) not fixed-IVW
+(Δ=+0.088). This is the load-bearing structural prediction the
+framework must reproduce.
 
 For the contraction parameters here:
     K_t at t=0..11 = (0, 0.62, 0.88, 0.98, 1.00, 0.99, 0.97,
@@ -162,7 +177,16 @@ def test_meta_regression_per_burst_recovers_mu_env_slope() -> None:
         f'The framework s per-(env, burst) panel build + IVW '
         f'meta-regression must recover the structural slope.'
     )
-    assert by_name['mu_env'].is_significant
+    # Slope is statistically overdetermined here (|t| ≈ 20 at
+    # df=58); the `is_significant` flag is non-discriminating
+    # for stub regressions. Pin a tight p-value instead so a
+    # framework that returned a wildly wrong p-value (e.g.,
+    # `p = 0.5` constant) would still breach.
+    assert by_name['mu_env'].p_value < 1e-10, (
+        f'slope p-value = {by_name["mu_env"].p_value:.2e}; '
+        f'closed-form |t| ≈ 20 at df=58 → p < 1e-10. A non-tight '
+        f'p-value here suggests the t-test pipeline is broken.'
+    )
 
 
 # ============ Intercept: centered covariate → ~0 ============
@@ -217,14 +241,22 @@ def test_meta_regression_per_burst_panel_size() -> None:
 
 # ============ R²: covariate is structurally predictive ============
 
-def test_meta_regression_per_burst_r_squared_high() -> None:
-    """μ_env IS the structural axis driving per-(env, burst) g
-    (modulo per-burst K_t). A meta-regression that correctly
-    builds the panel and fits should report a substantial R²
-    (> 0.5).
+def test_meta_regression_per_burst_r_squared_in_closed_form_band() -> None:
+    """Closed-form weighted R² ≈ structural-variance /
+    (structural + residual variance). Under the construction:
 
-    A regression returning a stub R² ≈ 0 (covariate ignored)
-    would breach.
+        Var(μ_env · K_t) over panel = Var(μ_env) · mean_t(K_t²)
+                                    ≈ 2.0 · 0.71 = 1.42
+        Residual Var ≈ Var(g − μ_env·K_t) over panel ≈ 0.20
+
+        R²_pop ≈ 1.42 / (1.42 + 0.20) ≈ 0.88
+
+    Empirical R² (40-rep MC) lands in [0.86, 0.90]. The bound
+    `0.80 < R² < 0.95` accepts the structural value within a
+    ~5% band on either side and rules out:
+    - stub R² ≈ 0 (covariate ignored)
+    - stub R² ≈ 1 (perfect fit, would mean residual variance
+      is being underestimated)
     """
     cells = _generate_per_burst_panel_cells()
     result = meta_regression_per_burst.fn(
@@ -235,8 +267,10 @@ def test_meta_regression_per_burst_r_squared_high() -> None:
         source=_PER_BURST_SOURCE,
         covariates=('mu_env',),
     )
-    assert result.r_squared > 0.5, (
-        f'R² = {result.r_squared:.4f}, expected > 0.5. μ_env '
-        f'is the structural slope axis; low R² indicates the '
-        f'covariate is not entering the regression.'
+    assert 0.80 < result.r_squared < 0.95, (
+        f'R² = {result.r_squared:.4f}, expected 0.80 < R² < 0.95 '
+        f'(closed-form ≈ 0.88). μ_env explains ~88% of panel '
+        f'variance; deviation outside the band suggests either '
+        f'the covariate is not entering (low R²) or residual '
+        f'variance is being miscomputed (high R²).'
     )
