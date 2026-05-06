@@ -306,3 +306,85 @@ def test_clean_names_returns_only_the_clean_mediator() -> None:
         f"only ('mediator.clean',). Three of the four mediator "
         f'candidates were engineered to fail one check each.'
     )
+
+
+# ============ mediator_path_for forwarding ============
+
+
+def test_tautology_audit_forwards_mediator_path_for_to_audit_panel() -> None:
+    """Regression: `mediator_path_for` is a kwarg that the public
+    `tautology_audit` analysis must forward verbatim to
+    `audit_mediator_panel`. A typo or dropped argument would
+    silently break the explicit name → key override.
+
+    The default path resolution looks up each mediator's value at
+    `record[f'mediator.{name}']` (or `record[name]` when name has
+    a dot). Substrate authors whose cells expose mediator scalars
+    under BARE names (no `mediator.` prefix and no dots) would
+    silently get all-NaN audits without the forwarding kwarg.
+
+    Construction: clone the standard audit corpus but RENAME the
+    `mediator.clean` key to a bare `clean_z`. Without
+    `mediator_path_for`, the audit looks at `mediator.clean_z` →
+    not found → degenerate result. With the forwarding, the audit
+    looks at `clean_z` → finds it → returns real verdicts."""
+    cells = _build_audit_corpus()
+    # Replace `mediator.clean` with a bare-name key.
+    bare_cells: list[Mapping[str, object]] = []
+    for c in cells:
+        new = dict(c)
+        if 'mediator.clean' in new:
+            new['clean_z'] = new.pop('mediator.clean')
+        bare_cells.append(new)
+
+    bare_specs: tuple[Mapping[str, object], ...] = (
+        {'name': 'clean_z', 'reads': ('z_per_episode',)},
+    )
+
+    # Without forwarding: audit looks at `mediator.clean_z`, finds
+    # nothing, returns degenerate report (all NaN signals).
+    no_forward = tautology_audit.fn(
+        bare_cells,
+        measurables=bare_specs,
+        outcome_path='y_mean',
+        outcome_reads=('y_per_episode',),
+        hp_axes=('mu_x',),
+        hp_stratum_axis='mu_x',
+        stratified_rho_threshold=_STRATIFIED_RHO_THRESHOLD,
+    )
+    no_fwd = no_forward.reports[0]
+    # When mediator_path_for is not provided AND the cell-key
+    # convention doesn't match, audit_mediator_panel produces a
+    # NaN stratified-ρ — the metric can't be computed without
+    # the column.
+    import math as _math
+    assert _math.isnan(no_fwd.outcome_stratified_rho), (
+        f'without mediator_path_for, audit should NOT find the '
+        f'bare-name mediator and the stratified-ρ should be NaN; '
+        f'got {no_fwd.outcome_stratified_rho:.4f}'
+    )
+
+    # With forwarding: audit reads at `clean_z` directly. Real
+    # verdicts come back; the structural mediator passes all
+    # three checks (matches the `mediator.clean` case in the
+    # existing test_clean_mediator_passes_all_three_checks test).
+    forwarded = tautology_audit.fn(
+        bare_cells,
+        measurables=bare_specs,
+        outcome_path='y_mean',
+        outcome_reads=('y_per_episode',),
+        hp_axes=('mu_x',),
+        hp_stratum_axis='mu_x',
+        stratified_rho_threshold=_STRATIFIED_RHO_THRESHOLD,
+        mediator_path_for={'clean_z': 'clean_z'},
+    )
+    fwd = forwarded.reports[0]
+    assert not _math.isnan(fwd.outcome_stratified_rho), (
+        f'with mediator_path_for, audit should find the bare-name '
+        f'mediator and compute real stratified-ρ; got NaN. The '
+        f'kwarg forwarding contract is broken.'
+    )
+    # Sanity: the structural mediator (z_mean) should show strong
+    # within-stratum correlation with y_mean. Same as the
+    # `mediator.clean` case.
+    assert fwd.outcome_stratified_rho > 0.5
