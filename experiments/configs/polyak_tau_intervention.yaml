@@ -1,0 +1,125 @@
+name: polyak_tau_intervention
+out_dir: experiments/data/polyak_tau_intervention
+arms_shape: paired
+archive_remote: s3://corroborate-archive/polyak_tau_intervention
+
+# Pearl-rung-2 do(τ) sweep: directly intervene on target staleness via
+# Polyak averaging at FIXED sync_period, decoupling the staleness knob
+# from the sync_period confound (ρ(log_sync, staleness_rel) = +0.95-0.97
+# per `findings_target_staleness_collinear.md`).
+#
+# Hypothesis to test (CLAIM 13 causal closure):
+#   target_staleness_late mediates DDQN's outcome benefit at 27%-66%
+#   under mech-HELD conditioning (3/4 envs HELD across FourRooms,
+#   MountainCar, Breakout sync=100; null on Acrobot).
+#
+# Polyak update: `target ← (1−τ)·target + τ·online` every step.
+#   τ = 1.0    → target = online → staleness ≈ 0 (most aggressive)
+#   τ = 0.1    → target ≈ recent online, low staleness
+#   τ = 0.01   → moderate staleness (default in DDPG-style)
+#   τ = 0.001  → high staleness (target lags significantly)
+#
+# Predicted dose-response if staleness IS the mediator:
+#   eval_best_burst_mean monotone in τ (with diminishing returns at τ→1)
+#   or matches the FQI sweet-spot (some intermediate τ, since τ=1 also
+#   loses target stability).
+#
+# Envs cover the existing target_staleness panel + the Acrobot null:
+#   - FourRooms-misc       (HELD prop=0.27, GOAL polarity)
+#   - MountainCar-v0       (HELD prop=0.66, GOAL polarity)
+#   - Breakout-MinAtar     (HELD prop=0.65, SURVIVAL polarity, Q-explosion)
+#   - Acrobot-v1           (NULL prop=0.07, GOAL polarity — staleness
+#                           non-mediator hypothesis under control)
+#   - SpaceInvaders-MinAtar (SURVIVAL polarity, no prior audit data)
+#   - Asterix-MinAtar       (SURVIVAL polarity, sync=100 traces local)
+#
+# Both DDQN and vanilla baseline arms run at each τ — paired-g with
+# τ as the intervention. The DDQN-vs-vanilla comparison stays as the
+# primary outcome contrast; τ is the moderator.
+
+envs:
+  - {name: Acrobot-v1,             n_seeds: 30, chunk_size: 30}
+  - {name: FourRooms-misc,         n_seeds: 30, chunk_size: 30}
+  - {name: MountainCar-v0,         n_seeds: 30, chunk_size: 30}
+  - {name: Breakout-MinAtar,       n_seeds: 30, chunk_size: 10}
+  - {name: SpaceInvaders-MinAtar,  n_seeds: 30, chunk_size: 10}
+  - {name: Asterix-MinAtar,        n_seeds: 30, chunk_size: 10}
+
+base_intervention:
+  total_steps: 200000   # 200k matches the canonical DDQN sweep horizon
+  eval_every:  20000
+  n_episodes:  5
+  gamma:       0.99
+  sync_period: 100      # nominal — Polyak ignores it but the field is required by the protocol
+  replay:
+    class: Replay
+    capacity: 50000
+    batch_size: 32
+  optimizer:
+    fn: warmed_update
+    inner: {fn: adam, lr: 0.0001}
+    warmup_steps: 100
+  # q_network: substrate auto-resolves MLP/CNN per env — see env catalogue.
+
+# Four hypotheses, one per τ value. Each runs paired (vanilla + DDQN)
+# with target_sync swapped to polyak_update at the specified τ.
+hypotheses:
+  - name: polyak_tau_1p0
+    predicted_direction: a_gt_b
+    intervention:
+      target_sync:
+        fn: polyak_update
+        tau: 1.0
+      bootstrap:
+        fn: bootstrap
+        greedification: {fn: double_greedify}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement:
+          fn: bootstrap
+          greedification: {fn: double_greedify}
+
+  - name: polyak_tau_0p1
+    predicted_direction: a_gt_b
+    intervention:
+      target_sync:
+        fn: polyak_update
+        tau: 0.1
+      bootstrap:
+        fn: bootstrap
+        greedification: {fn: double_greedify}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement:
+          fn: bootstrap
+          greedification: {fn: double_greedify}
+
+  - name: polyak_tau_0p01
+    predicted_direction: a_gt_b
+    intervention:
+      target_sync:
+        fn: polyak_update
+        tau: 0.01
+      bootstrap:
+        fn: bootstrap
+        greedification: {fn: double_greedify}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement:
+          fn: bootstrap
+          greedification: {fn: double_greedify}
+
+  - name: polyak_tau_0p001
+    predicted_direction: a_gt_b
+    intervention:
+      target_sync:
+        fn: polyak_update
+        tau: 0.001
+      bootstrap:
+        fn: bootstrap
+        greedification: {fn: double_greedify}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement:
+          fn: bootstrap
+          greedification: {fn: double_greedify}
