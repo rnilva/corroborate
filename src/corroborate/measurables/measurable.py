@@ -629,6 +629,14 @@ def compute_missing_columns(
                 # - ValueError: shape mismatch / numpy-derived
                 # - ZeroDivisionError: degenerate-input arithmetic
                 # Map to None for this cell; downstream NaN-skips.
+                #
+                # Anything else (AttributeError, RuntimeError,
+                # NameError, etc.) propagates with full traceback
+                # — those are authoring bugs that should fail
+                # loudly with a line number, not silently map to
+                # None and rely on a stderr warning at session
+                # end. Pinned by
+                # `test_unrelated_exception_propagates`.
                 v = None
                 fail_counts[name] += 1
                 last_exception[name] = e

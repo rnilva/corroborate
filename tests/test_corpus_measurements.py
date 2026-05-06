@@ -282,6 +282,110 @@ def test_build_measurements_validates_id_column(tmp_path: Path) -> None:
         )
 
 
+# ============ Idempotent-skip ID validation (post-#2 roast fix) ============
+
+
+def test_build_measurements_idempotent_skip_rejects_disjoint_ids(
+    tmp_path: Path,
+) -> None:
+    """**#2 roast fix**: the idempotent fast-path checked row
+    count but not ID-set membership. A caller passing a runs_df
+    with disjoint IDs but identical height + pre-populated
+    measurable cols got a no-op build — the persisted store
+    retained the old cells' values keyed under the OLD IDs,
+    silently leaking obsolete data.
+
+    Probe: build for IDs `[a, b, c]` first; then call again with
+    `runs_df` for IDs `[d, e, f]` (same height, pre-stamped
+    measurable col). The store after the second call must
+    contain `[d, e, f]`'s values, NOT `[a, b, c]`'s — proving
+    the skip rejected the disjoint-ID case and a real rebuild
+    fired.
+    """
+    runs_df_first = pl.DataFrame({
+        'id': ['a', 'b', 'c'],
+        'x': [1.0, 2.0, 3.0],
+        'y': [10.0, 20.0, 30.0],
+    })
+    build_measurements(
+        tmp_path, required=['double_x'], runs_df=runs_df_first,
+    )
+
+    # Second call: same row count, disjoint IDs, pre-stamped
+    # measurable col with values that DIFFER from the framework
+    # would compute for x=[100, 200, 300] (which would be 200,
+    # 400, 600).
+    runs_df_disjoint = pl.DataFrame({
+        'id': ['d', 'e', 'f'],
+        'x': [100.0, 200.0, 300.0],
+        'y': [1000.0, 2000.0, 3000.0],
+        'double_x': [42.0, 42.0, 42.0],
+    })
+    build_measurements(
+        tmp_path, required=['double_x'], runs_df=runs_df_disjoint,
+    )
+    df = load_measurements(tmp_path)
+    ids_after = sorted(df['id'].to_list())
+    assert ids_after == ['d', 'e', 'f'], (
+        f'expected store to be rebuilt under disjoint IDs; '
+        f'got {ids_after}. If [a, b, c] persisted, the skip '
+        f'fired and the runs_df was silently ignored.'
+    )
+    vals_after = df.sort('id')['double_x'].to_list()
+    assert vals_after == [42.0, 42.0, 42.0], (
+        f'expected substrate-stamped values to win on rebuild; '
+        f'got {vals_after}'
+    )
+
+
+# ============ Drift detection: None-signature anomaly (post-#4) ============
+
+
+def test_build_measurements_drops_column_when_signature_fn_returns_none(
+    tmp_path: Path,
+) -> None:
+    """**#4 roast fix**: when `sig_fn(col)` returns None for a
+    column that IS registered, drift coverage is unavailable.
+    Pre-fix the column was silently kept (mask transient
+    registration races as silent staleness). Post-fix the
+    column is dropped — the conservative move when we can't
+    prove non-drift.
+
+    Probe: build canonically; corrupt the persisted column;
+    then build with a signature fn that returns None for
+    `double_x`. The corrupted values must not survive — a real
+    drop+recompute fired.
+    """
+    runs_df = _runs_df(3)
+    build_measurements(
+        tmp_path, required=['double_x'], runs_df=runs_df,
+    )
+    # Corrupt the persisted column.
+    corrupted = pl.DataFrame({
+        'id': ['cell-0', 'cell-1', 'cell-2'],
+        'double_x': [-99.0, -99.0, -99.0],
+    })
+    corrupted.write_parquet(tmp_path / MEASUREMENTS_FILENAME)
+
+    def _none_sig(name: str) -> str | None:
+        # `double_x` IS registered (the @measurable decorator at
+        # module import) but our injected fn pretends signature
+        # lookup is unavailable for it.
+        del name
+        return None
+
+    build_measurements(
+        tmp_path, required=['double_x'], runs_df=runs_df,
+        measurable_signature_fn=_none_sig,
+    )
+    vals = load_measurements(tmp_path).sort('id')['double_x'].to_list()
+    assert vals == [0.0, 2.0, 4.0], (
+        f'expected drop+recompute when signature unavailable; '
+        f'got {vals}. If [-99, -99, -99] survived, the column '
+        f'was silently kept despite missing drift coverage.'
+    )
+
+
 # ============ Phase 3 collision (post-#1 roast fix) ============
 
 

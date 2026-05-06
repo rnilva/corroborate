@@ -35,6 +35,20 @@ floating-point edge (reductions in `apply_trace_reductions`,
 sums across non-sorted iterables) which lurks but hasn't bitten
 yet.
 
+**Substrate-stamp vs post-hoc-recompute consistency** (related to
+Phase 3): when `runs_df` carries a measurable column natively
+(substrate stamped at sweep time via `RunRow.measurements`) AND
+`measurements.parquet` has the same column from a prior post-hoc
+build, the framework explicitly prefers the substrate stamp —
+existing-store value is dropped at the join. See
+`build_measurements`'s overlap-drop step. This makes the
+authoritative source unambiguous: substrate ≻ post-hoc-recompute.
+Floating-point disagreement between the two sources is therefore
+NOT a determinism violation — it's an explicit precedence rule.
+Substrate authors should know that mixing sweep-time stamp with
+post-hoc compute for the same measurable name will quietly
+prefer the stamp on every rebuild.
+
 ### C2. Atomicity — a crashed build leaves either old or new state
 
 The cache parquet (`<cache>.parquet`) and the closure-hash

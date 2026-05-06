@@ -185,11 +185,21 @@ def build_measurements(
                 continue
             current_hash = sig_fn(col)
             stored = stored_sigs.get(col)
-            if (
-                current_hash is not None
-                and stored is not None
-                and stored != current_hash
-            ):
+            if current_hash is None:
+                # Anomalous: column passed `col in all_registered`
+                # but the signature fn returned None. Either the
+                # registry was mutated mid-loop (race) or the
+                # measurable's `signature()` returned None (which
+                # should never happen for the canonical
+                # `_default_sig` — only via injected sig fns in
+                # tests). Drop the column rather than silently
+                # keep it: drift coverage requires a real current
+                # hash, and the conservative move is to recompute.
+                # Post-roast-#4 fix.
+                if stored is not None:
+                    drop_cols.append(col)
+                continue
+            if stored is not None and stored != current_hash:
                 drop_cols.append(col)
         if drop_cols:
             existing = existing.drop(drop_cols)
@@ -257,6 +267,15 @@ def build_measurements(
     # partial nulls), then `compute_missing_columns` would be a
     # no-op — skip the rewrite. Computing this BEFORE the call
     # means we don't pay for `to_dicts()` on the no-work path.
+    #
+    # Post-roast-#2 fix: also require ID-set membership. Pre-fix,
+    # a caller passing a runs_df with disjoint IDs but identical
+    # row count and pre-populated measurable cols would skip the
+    # rebuild — the persisted store would retain old cells' values
+    # keyed under the OLD IDs. Production paths (Phase 2.1's
+    # `_load_one_corpus`) always pass the corpus's own runs_df, so
+    # this didn't fire — but the contract should explicitly reject
+    # the disjoint-ID case rather than silently corrupt the store.
     no_partial_nulls = all(
         n not in joined.columns
         or not joined[n].is_null().any()
@@ -265,11 +284,15 @@ def build_measurements(
     all_required_present = all(
         n in joined.columns for n in to_compute_full
     )
+    ids_match = (
+        existing.height > 0
+        and existing.height == runs_df.height
+        and set(existing['id'].to_list()) == set(runs_df['id'].to_list())
+    )
     if (
         not drop_cols
         and not overlap_dropped
-        and existing.height > 0
-        and existing.height == runs_df.height
+        and ids_match
         and all_required_present
         and no_partial_nulls
     ):
