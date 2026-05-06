@@ -259,12 +259,27 @@ gut `_ingest_and_compute` to be a pure projection.
    `measurements.parquet`s by partitioning on `corpus` column.
    One-time op.
 
-**Phase 3 — sweep-time measurement** (optional):
-move measurable computation to sweep dispatch time, recording
-results into the sweep's archived shards. The cache layer then
-becomes pure read. This is the long-term destination but
-requires the substrate to know which measurables are "always
-needed" — not a trivial design question.
+**Phase 3 — sweep-time measurement** (optional, substrate-side):
+Phase 3 is **not** a framework change. The existing
+`run_intervention(..., measurables: tuple[Measurable[R, object],
+...] = (), ...)` parameter is already the sweep-time hook: the
+substrate's per-cell runner evaluates these `Measurable`
+instances against the cell result `R` and stamps them onto
+`RunRow.measurements`. They ship inside `runs.parquet` as
+path-keyed columns at archive time. The "Phase 3 destination" is
+substrate authors using this hook more aggressively — registering
+the scalars they know they'll need analysed before each run —
+rather than relying on Phase 2.1 to compute them lazily on the
+first analysis pass.
+
+Why no framework change: the user-facing decision ("which
+measurables are 'always needed' for this study") is intrinsic to
+the substrate / study design. Adding a framework-level
+`eager_measurables` parameter would duplicate the existing hook
+without earning its keep against the four-question test
+(CLAUDE.md § "When to introduce a framework primitive"). The
+framework's role here is to keep the path open and correct,
+which Phases 0-2 do.
 
 ## Migration
 
