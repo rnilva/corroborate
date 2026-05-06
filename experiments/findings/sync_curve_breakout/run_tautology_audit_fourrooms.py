@@ -65,18 +65,15 @@ def main() -> None:
     print('Computing short-list measurables...', flush=True)
     short = compute_short_list_measurables(runs)
 
-    # The audit's default path resolution is `mediator.<name>` for
-    # bare names. Prefix our cell-dict keys to match.
+    # Cells expose mediator scalars under bare names (e.g.
+    # `target_staleness_late`, not `mediator.target_staleness_late`).
+    # Pass `mediator_path_for` to the audit so it reads them at the
+    # bare key rather than synthesising a prefixed lookup path.
     extra: list[pl.Series] = []
     for k, v in per_step.items():
-        extra.append(pl.Series(name=f'mediator.{k}', values=v.tolist()))
+        extra.append(pl.Series(name=k, values=v.tolist()))
     for k, v in short.items():
-        # Outcome (eval_best_burst_mean) and upstream (jensen_gap) keep
-        # bare names; only mediator-candidate keys get the prefix.
-        if k in SCALAR_TARGETS:
-            extra.append(pl.Series(name=k, values=v))
-        else:
-            extra.append(pl.Series(name=f'mediator.{k}', values=v))
+        extra.append(pl.Series(name=k, values=v))
     small = runs.with_columns(extra)
     cells = small.to_dicts()
     print(f'cells: {len(cells)} (sample keys: {sorted(cells[0].keys())[:6]}...)', flush=True)
@@ -99,6 +96,10 @@ def main() -> None:
     print('Running tautology_audit (DDQN arm only)...', flush=True)
     # Audit on the DDQN arm — the mediator's behavior under the
     # treatment is what bridges claim about.
+    # Bare-name mediator keys (vs the audit's default
+    # `mediator.<name>`); pass mediator_path_for so the audit
+    # reads them in place.
+    bare_paths = {spec['name']: spec['name'] for spec in measurable_specs}
     result = tautology_audit(
         cells=cells,
         measurables=measurable_specs,
@@ -107,6 +108,7 @@ def main() -> None:
         hp_axes=HP_AXES,
         hp_stratum_axis=HP_AXES[0],
         arm_filter=DDQN,
+        mediator_path_for=bare_paths,
     )
 
     print()

@@ -83,6 +83,7 @@ def tautology_audit(
     hp_r_squared_threshold: float = 0.95,
     stratified_rho_threshold: float = 0.1,
     stratified_alpha: float = 0.05,
+    mediator_path_for: Mapping[str, str] | None = None,
 ) -> AuditResult:
     """Three-check tautology audit on a panel of mediators.
 
@@ -94,7 +95,18 @@ def tautology_audit(
 
     `arm_filter`, when supplied, restricts the audit to one
     arm — the audit then reports mediator quality conditional
-    on that arm's data only."""
+    on that arm's data only.
+
+    `mediator_path_for` is an optional `name → cell-dict-key`
+    override. By default `audit_mediator_panel` looks up each
+    mediator's value at `RunRow.measurements[f'mediator.{name}']`
+    (or at `name` when `name` already contains a dot). When the
+    cells expose mediator scalars under a different key
+    convention — e.g. bare names like `target_staleness_late`
+    rather than `mediator.target_staleness_late` — pass an
+    explicit map so the audit reads them without forcing the
+    caller to rename keys. Forwarded verbatim to
+    `audit_mediator_panel`."""
     spec_list: list[_MeasurableSpec] = []
     for m in measurables:
         name_v = m.get('name')
@@ -126,6 +138,7 @@ def tautology_audit(
         hp_axes=hp_axes,
         outcome_path=outcome_path,
         hp_stratum_axis=hp_stratum_axis,
+        mediator_path_for=mediator_path_for,
         outcome_jaccard_threshold=outcome_jaccard_threshold,
         hp_r_squared_threshold=hp_r_squared_threshold,
         stratified_rho_threshold=stratified_rho_threshold,
