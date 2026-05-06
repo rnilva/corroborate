@@ -63,14 +63,16 @@ from corroborate.bridge.predicates import (
 from corroborate.core.intervention import ArmRole, DoEffect, Intervention
 from corroborate.corpus.schema import StratumG
 from corroborate.measurables import Measurable
-from corroborate.measurables.reductions import from_key, reduce_axis
 from corroborate.stats import MetaRegressionResult
 from corroborate.stats.meta_regression import Pool, meta_regress_panel
 from corroborate.bridge.verdict import Verdict
 from corroborate_rl.dqn.claims.bootstrap import (
     bootstrap, double_greedify, expectile_greedify,
 )
-from corroborate_rl.dqn.measurables import jensen_bias_per_eps
+from corroborate_rl.dqn.measurables import (
+    jensen_bias_per_burst_mean,
+    mc_return_per_burst_mean,
+)
 
 import numpy as np
 import numpy.typing as npt
@@ -82,14 +84,11 @@ from collections.abc import Mapping as _Mapping
 # `_MC_RETURN_PER_BURST_MEAN` is the link-side projection (per-eps
 # mean of the actual sampled return); `_JENSEN_BIAS_PER_BURST_MEAN`
 # is the mech-side (per-eps mean of `mc_return − predicted_q_at_start`,
-# the structural Jensen-bias signal). These mirror the typed
-# reductions in `ddqn_universe.py`.
-_MC_RETURN_PER_BURST_MEAN: Measurable[
-    _Mapping[str, object], npt.NDArray[np.floating],
-] = reduce_axis(from_key('mc_return'), axis=-1, op='mean')
-_JENSEN_BIAS_PER_BURST_MEAN: Measurable[
-    _Mapping[str, object], npt.NDArray[np.floating],
-] = reduce_axis(jensen_bias_per_eps, axis=-1, op='mean')
+# the structural Jensen-bias signal). Canonical instances live in
+# the substrate (`corroborate_rl.dqn.measurables`); local aliases
+# preserve the existing call-site names.
+_MC_RETURN_PER_BURST_MEAN = mc_return_per_burst_mean
+_JENSEN_BIAS_PER_BURST_MEAN = jensen_bias_per_burst_mean
 
 
 # Typed structural deltas used across bridges in this zoo. Each

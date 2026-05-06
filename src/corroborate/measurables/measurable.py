@@ -274,8 +274,8 @@ def get_registered(
 def register[R: Mapping[str, object], T](
     m: Measurable[R, T],
 ) -> Measurable[R, T]:
-    """Register `m` in the global name-keyed registry, idempotent
-    on (name, identity). Returns the same instance.
+    """Register `m` in the global name-keyed registry. Returns the
+    same instance.
 
     Two registration paths converge here:
 
@@ -287,12 +287,34 @@ def register[R: Mapping[str, object], T](
       cache-buildable without the author writing a separate
       `@measurable` wrapper).
 
-    Same-name re-registration with the same identity is a no-op;
-    same-name with a *different* instance raises `ValueError` to
-    catch authoring mistakes (two reductions colliding on an
-    auto-generated name)."""
-    # Same-identity re-entry is idempotent; same-name with a
-    # different instance raises `ValueError` via `Registry.register`.
+    Idempotency rules:
+
+    - Same-name re-registration with the *same identity* is a
+      no-op (the historical case — same module imported twice).
+    - Same-name re-registration with a *different identity but
+      equal `signature()`* is also a no-op. This catches the
+      common authoring pattern where two findings modules each
+      compose the same reduction by value (each call to
+      `reduce_axis(from_key('mc_return'), axis=-1, op='mean')`
+      mints a fresh `Measurable` instance with auto-name
+      `mc_return__mean_axis_-1` but identical closure semantics).
+      The closure hash is the same authority that powers cache-
+      drift detection — if it's good enough to detect "formula
+      changed, invalidate cache", it's good enough to detect
+      "same formula, two instances".
+    - Same-name with a *different signature* raises `ValueError`
+      — that's a real conflict that needs an author rename.
+    """
+    existing = _REGISTRY.get(m.name)
+    if existing is not None and existing is not m:
+        if existing.signature() == m.signature():
+            # Same closure, distinct instances — accept silently.
+            # Don't replace: keep the first-registered identity
+            # so downstream `is`-checks against the existing
+            # reference stay valid.
+            return m
+        # Fall through to `Registry.register`, which will raise
+        # ValueError with the existing-vs-new mismatch surfaced.
     _REGISTRY.register(
         m.name,
         cast('Measurable[Mapping[str, object], object]', m),

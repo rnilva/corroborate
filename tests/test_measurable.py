@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
+import pytest
+
 from corroborate.measurables import Measurable, measurable
 
 
@@ -210,6 +212,71 @@ def test_registry_indexes_by_name() -> None:
 
     looked_up = get_registered('_reg_demo_q')
     assert looked_up is _reg_demo_q
+
+
+def test_register_idempotent_on_signature_equal_distinct_instances() -> None:
+    """Two distinct `Measurable` instances with the same name +
+    matching `signature()` must NOT raise — re-registration is
+    accepted silently. Catches the cross-findings-module pattern
+    where each module composes the same reduction by value
+    (`reduce_axis(...)`) and gets a fresh Measurable instance with
+    auto-name `mc_return__mean_axis_-1` on each call."""
+    from corroborate.measurables import register
+    from corroborate.measurables.measurable import Measurable, get_registered
+
+    def _make() -> Measurable[Mapping[str, object], float]:
+        # Same closure body, distinct identity each call.
+        def _fn(record: Mapping[str, object]) -> float:
+            del record
+            return 1.0
+        return Measurable(
+            name='_idempotent_dup_test', reads=('x',), fn=_fn,
+        )
+
+    first = _make()
+    second = _make()
+    assert first is not second  # distinct instances
+    assert first.signature() == second.signature()  # same closure hash
+
+    register(first)
+    register(second)  # must not raise
+
+    # First-registered identity wins (no last-write-wins replacement).
+    assert get_registered('_idempotent_dup_test') is first
+
+
+def test_register_raises_on_signature_mismatch() -> None:
+    """Different closures with the same name still raise — that's a
+    real authoring conflict, NOT covered by the idempotency rule.
+
+    Note: `Measurable.signature()` hashes `co_code` (the opcode
+    stream), not `co_consts`. Two bodies differing ONLY in a literal
+    constant (`return 1.0` vs `return 2.0`) hash identically; this
+    test uses bodies with distinct opcode streams to actually
+    exercise the mismatch path."""
+    from corroborate.measurables import register
+    from corroborate.measurables.measurable import Measurable
+
+    def _fn_a(record: Mapping[str, object]) -> float:
+        x = record.get('x')
+        return float(x) if isinstance(x, (int, float)) else float('nan')
+
+    def _fn_b(record: Mapping[str, object]) -> float:
+        x = record.get('x')
+        if x is None:
+            return 0.0
+        try:
+            return float(x)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return float('nan')
+
+    a = Measurable(name='_conflict_test', reads=('x',), fn=_fn_a)
+    b = Measurable(name='_conflict_test', reads=('x',), fn=_fn_b)
+    assert a.signature() != b.signature()
+
+    register(a)
+    with pytest.raises(ValueError, match='already registered'):
+        register(b)
 
 
 def test_evaluate_with_measurables_no_deps() -> None:

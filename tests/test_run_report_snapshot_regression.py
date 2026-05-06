@@ -1,10 +1,10 @@
 """DRIFT SENTINEL — explicitly NOT a correctness oracle.
 
 Each committed `experiments/findings/<short>.run.json` is loaded,
-its hypothesis re-run in a subprocess, and per-bridge verdicts
-asserted to match the snapshot. This catches accidental bridge
-edits that flip HELD ↔ NO_EFFECT on the existing corpus — a real
-failure mode the framework needs guarded.
+its hypothesis re-run inline, and per-bridge verdicts asserted to
+match the snapshot. This catches accidental bridge edits that flip
+HELD ↔ NO_EFFECT on the existing corpus — a real failure mode the
+framework needs guarded.
 
 What this test does NOT do:
 - It does NOT verify that the snapshotted verdict is the
@@ -27,24 +27,25 @@ Skipped when the referenced cache parquet is absent locally and
 cloud restore is disabled (CI-friendly when caches aren't shipped
 with the repo).
 
-Subprocess isolation is load-bearing: hypothesis modules
-auto-register their measurables via `claim_bridge` decoration, and
-two findings modules can author distinct `Measurable` instances with
-the same name (e.g., both compute `reduce_axis('mc_return',
-axis=-1, op='mean')`). Importing both into the same Python process
-trips the registry's identity check. Re-running each in a fresh
-subprocess matches the production invocation pattern (separate
-`scripts/run_hypothesis.py` processes).
+Inline (no subprocess): the registry now treats two distinct
+`Measurable` instances with the same name + signature as
+idempotent registrations (see `corroborate.measurables.measurable.
+register`), and the canonical per-burst reductions live in the
+substrate (`corroborate_rl.dqn.measurables.{mc_return_per_burst_mean,
+jensen_bias_per_burst_mean}`) so both `ddqn_universe` and
+`dqn_bridges` import the same instance. Module-registration
+collisions across findings modules are no longer possible — no
+need for subprocess isolation. CI: ~16s → ~2s.
 """
 from __future__ import annotations
 
+import importlib
 import json
-import os
-import subprocess
-import sys
 from pathlib import Path
 
 import pytest
+
+from corroborate.runner.runner import _default_cache_path, run
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -57,24 +58,14 @@ def _committed_reports() -> list[Path]:
     return sorted(p for p in FINDINGS_DIR.glob('*.run.json'))
 
 
-# Subprocess child script: import the named hypothesis, re-run via
-# runner.run (no cache write, no report write, no cloud restore),
-# print verdicts as JSON to stdout. Allows clean module-registration
-# state per test case.
-_CHILD_SCRIPT = r'''
-import json
-import sys
-
-from corroborate.runner.runner import _default_cache_path, run
-
-
-def _main(module_name: str) -> int:
-    import importlib
+def _rerun_hypothesis(module_name: str) -> dict[str, str] | None:
+    """Re-run the named hypothesis inline. Returns
+    dict[bridge_name, verdict_value] on success, or None when the
+    cache is absent (skip signal)."""
     module = importlib.import_module(module_name)
     cache_path = _default_cache_path(module)
     if not cache_path.exists():
-        sys.stdout.write(json.dumps({'_skip': str(cache_path)}))
-        return 0
+        return None
     fresh = run(
         module_name,
         use_cache=True,
@@ -82,38 +73,7 @@ def _main(module_name: str) -> int:
         restore_from_cloud=False,
         write_report=False,
     )
-    payload = {name: ev.verdict.value for name, ev in fresh.items()}
-    sys.stdout.write(json.dumps(payload))
-    return 0
-
-
-if __name__ == '__main__':
-    sys.exit(_main(sys.argv[1]))
-'''
-
-
-def _run_in_subprocess(module_name: str) -> dict[str, str] | None:
-    """Run the hypothesis in a fresh Python subprocess.
-    Returns dict[bridge_name, verdict_value] on success, or None
-    when the cache is absent (skip signal). Raises on subprocess
-    failure."""
-    env = os.environ.copy()
-    env.setdefault('JAX_PLATFORMS', 'cpu')
-    env['PYTHONPATH'] = str(REPO_ROOT) + ':' + env.get('PYTHONPATH', '')
-    proc = subprocess.run(
-        [sys.executable, '-c', _CHILD_SCRIPT, module_name],
-        capture_output=True, text=True, env=env, cwd=str(REPO_ROOT),
-        check=False, timeout=300,
-    )
-    if proc.returncode != 0:
-        raise RuntimeError(
-            f'subprocess for {module_name!r} exited {proc.returncode}; '
-            f'stderr:\n{proc.stderr}',
-        )
-    payload = json.loads(proc.stdout)
-    if isinstance(payload, dict) and '_skip' in payload:
-        return None
-    return payload
+    return {name: ev.verdict.value for name, ev in fresh.items()}
 
 
 @pytest.mark.parametrize('report_path', _committed_reports(),
@@ -130,7 +90,7 @@ def test_snapshot_verdict_drift_sentinel(report_path: Path) -> None:
     Skipped when the referenced cache parquet is absent."""
     snapshot = json.loads(report_path.read_text())
     module_name = snapshot['hypothesis_module']
-    fresh_verdicts = _run_in_subprocess(module_name)
+    fresh_verdicts = _rerun_hypothesis(module_name)
     if fresh_verdicts is None:
         pytest.skip(
             f'cache for {module_name!r} absent — snapshot regression '

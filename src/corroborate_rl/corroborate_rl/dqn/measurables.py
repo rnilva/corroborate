@@ -933,6 +933,27 @@ jensen_bias_per_eps: Measurable[
 register(jensen_bias_per_eps)
 
 
+# ============ Canonical per-burst-mean reductions (substrate-shared) ============
+# Both `experiments.findings.ddqn_universe` and
+# `experiments.findings.dqn_bridges` need per-burst-mean reductions over
+# `mc_return` (link-side outcome projection) and `jensen_bias_per_eps`
+# (mech-side bias projection). When each module composed these inline
+# via `reduce_axis(...)`, the registry tripped on the second module's
+# import — same name (`mc_return__mean_axis_-1`), distinct fresh
+# `Measurable` instances. Authoring once here, importing in both
+# findings modules, gives one canonical Measurable instance per name —
+# no registration collision possible.
+from corroborate.measurables.reductions import from_key, reduce_axis as _reduce_axis  # noqa: E402
+
+mc_return_per_burst_mean: Measurable[
+    Mapping[str, object], npt.NDArray[np.floating],
+] = _reduce_axis(from_key('mc_return'), axis=-1, op='mean')
+
+jensen_bias_per_burst_mean: Measurable[
+    Mapping[str, object], npt.NDArray[np.floating],
+] = _reduce_axis(jensen_bias_per_eps, axis=-1, op='mean')
+
+
 @measurable(
     name='jensen_gap',
     reads=('predicted_q_at_start', 'mc_return'),

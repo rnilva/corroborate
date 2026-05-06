@@ -99,12 +99,14 @@ from corroborate.bridge.predicates import (
 from corroborate.core.intervention import DoEffect, Intervention
 from corroborate.measurables import Measurable
 from corroborate.stats import MetaRegressionResult
-from corroborate.measurables.reductions import from_key, reduce_axis
 from corroborate_rl.dqn.claims.bootstrap import (
     adaptive_dormancy_greedify, bootstrap, double_greedify,
 )
 from corroborate_rl.dqn.dqn import dqn
-from corroborate_rl.dqn.measurables import jensen_bias_per_eps
+from corroborate_rl.dqn.measurables import (
+    jensen_bias_per_burst_mean,
+    mc_return_per_burst_mean,
+)
 from corroborate.bridge.verdict import Verdict
 
 
@@ -117,17 +119,14 @@ from corroborate.bridge.verdict import Verdict
 CLAIM = dqn
 
 
-# Composed per-burst reductions consumed by bridges below. Module-
-# level so each bridge that wants the canonical "per-burst-mean"
-# shape can reference the same Measurable instance (auto-registered
-# at @claim_bridge decode time, so the runner's transitive_reads
-# walks pick up `mc_return` / `predicted_q_at_start` for free).
-_MC_RETURN_PER_BURST_MEAN: Measurable[
-    Mapping[str, object], npt.NDArray[np.floating],
-] = reduce_axis(from_key('mc_return'), axis=-1, op='mean')
-_JENSEN_BIAS_PER_BURST_MEAN: Measurable[
-    Mapping[str, object], npt.NDArray[np.floating],
-] = reduce_axis(jensen_bias_per_eps, axis=-1, op='mean')
+# Composed per-burst reductions used as bridge defaults. Both this
+# module and `dqn_bridges.py` need the same two reductions; the
+# canonical instances live in the substrate (`corroborate_rl.dqn.
+# measurables`) so each name registers exactly once across all
+# findings modules. Local aliases keep the existing call-site
+# names readable.
+_MC_RETURN_PER_BURST_MEAN = mc_return_per_burst_mean
+_JENSEN_BIAS_PER_BURST_MEAN = jensen_bias_per_burst_mean
 
 
 # Typed structural deltas reused across bridges in this universe.
