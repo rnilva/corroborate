@@ -622,7 +622,15 @@ def _filter_with_missing_cols(
       rows fail the predicate naturally (polars filter excludes
       null-result rows), matching the legacy `_matches_filters`
       "missing key → False" semantics."""
-    referenced = expr.meta.root_names()
+    # `expr.meta.root_names()` returns one entry per `pl.col(...)`
+    # reference, so a predicate like
+    # `(pl.col('n_step') == 1) | (pl.col('n_step') == 3)` yields
+    # `['n_step', 'n_step']`. Deduplicate before threading through
+    # the missing-column resolution so the downstream
+    # `df.with_columns([pl.lit(None).alias(c) for c in ...])` can't
+    # emit two `pl.lit(None).alias('n_step')` expressions (which
+    # polars rejects with a duplicate-name ComputeError).
+    referenced = list(dict.fromkeys(expr.meta.root_names()))
     missing = [c for c in referenced if c not in df.columns]
     if not missing:
         return df.filter(expr)

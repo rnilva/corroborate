@@ -84,6 +84,16 @@ def expectile_3way_cells() -> list[dict[str, object]]:
     )
 
 
+# DDQN arm in the canonical-arm-key naming used by the current
+# `expectile_3way` corpus (post-Phase-6 typed-contract migration).
+# Pre-migration tests passed `treatment_arm='ddqn'` / `'vanilla_dqn'`;
+# the corpus stores the `combined_arm_key`-derived canonical string.
+_DDQN_ARM = (
+    'bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)'
+)
+_VANILLA_ARM = 'baseline'
+
+
 def test_real_corpus_catch_bsuite_zero_across_bursts(
     expectile_3way_cells: list[dict[str, object]],
 ) -> None:
@@ -95,8 +105,8 @@ def test_real_corpus_catch_bsuite_zero_across_bursts(
     """
     result = paired_g_per_burst.fn(
         expectile_3way_cells,
-        treatment_arm='ddqn',
-        baseline_arm='vanilla_dqn',
+        treatment_arm=_DDQN_ARM,
+        baseline_arm=_VANILLA_ARM,
         pair_by=('seed',),
         source=DEFAULT_PER_BURST_SOURCE,
     )
@@ -120,8 +130,8 @@ def test_real_corpus_fourrooms_positive_across_bursts(
     FourRooms (DDQN improves outcome relative to vanilla)."""
     result = paired_g_per_burst.fn(
         expectile_3way_cells,
-        treatment_arm='ddqn',
-        baseline_arm='vanilla_dqn',
+        treatment_arm=_DDQN_ARM,
+        baseline_arm=_VANILLA_ARM,
         pair_by=('seed',),
         source=DEFAULT_PER_BURST_SOURCE,
     )

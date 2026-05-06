@@ -79,6 +79,7 @@ def test_trace_row_round_trip_for_real_dqn_run(tmp_path: Path) -> None:
     # captured at depth (optimizer.inner.lr).
     configured = partial(
         dqn,
+        env_name='CartPole-v1',
         env=env, env_params=env_params,
         obs_shape=obs_shape, n_actions=n_actions,
         eval_episode_cap=200,
@@ -89,7 +90,10 @@ def test_trace_row_round_trip_for_real_dqn_run(tmp_path: Path) -> None:
         ),
     )
 
-    record = configured(rng_key=jax.random.PRNGKey(0))
+    # `dqn` derives rng_key from `seed` internally (line 348 of
+    # dqn.py: "Derive rng_key from seed JAX-side so vmap-over-seeds
+    # threads"). Pass `seed=0` for deterministic reproduction.
+    record = configured(seed=0)
 
     # Step 1: leaf values from the topology walk.
     leaf_values = _leaf_values(configured)
@@ -142,13 +146,14 @@ def test_leaf_and_trajectory_namespaces_do_not_collide(tmp_path: Path) -> None:
 
     configured = partial(
         dqn,
+        env_name='CartPole-v1',
         env=env, env_params=env_params,
         obs_shape=obs_shape, n_actions=n_actions,
         total_steps=100, eval_every=100, n_episodes=1,
     )
 
     leaf_values = _leaf_values(configured)
-    record = configured(rng_key=jax.random.PRNGKey(0))
+    record = configured(seed=0)
     traj_leaves = _trajectory_leaves(record)
 
     # Nested leaf keys contain a '.' iff they live below the top
@@ -160,4 +165,15 @@ def test_leaf_and_trajectory_namespaces_do_not_collide(tmp_path: Path) -> None:
     assert flat_traj_keys, 'expected at least one flat trajectory key'
 
     overlap = set(leaf_values) & set(traj_leaves)
+    # `state_hash` is a known intentional collision: it's BOTH
+    # the configurational Claim function (kwarg of `dqn`, surfaces
+    # via `walk_paths` as a leaf) AND the per-step record column
+    # (emitted by `phases.py:138` as `'state_hash': obs_hash`).
+    # The substrate uses one name for both because they're
+    # logically the same — the function and its emitted value at
+    # each step. Persistence dispatches on the value's type
+    # (callable → leaf serialization, ndarray → trajectory).
+    # Other framework conventions (`replay.batch_size`, `loss`,
+    # etc.) are not allowed to collide.
+    overlap -= {'state_hash'}
     assert not overlap, f'leaf and trajectory keys collide: {overlap}'

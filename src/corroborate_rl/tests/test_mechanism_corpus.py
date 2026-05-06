@@ -67,18 +67,49 @@ def _run_cell(env_name: str, seed: int, claim, arm_key: str):
 
 # ============ Stable leaf_signature across (env, seed) ============
 
+def _strip_env_keys(
+    measurements: object,
+) -> dict[str, object]:
+    """Remove all env-specific keys from a measurements dict.
+
+    The dqn substrate marks several params `Annotated[..., Exogenous]`:
+    `env`, `env_params`, `env_name`, `seed`, `obs_shape`, `n_actions`,
+    `state_hash` etc. Plus the framework's walker recurses into
+    `env_params` dataclass fields, producing `env_params.*` keys.
+    All vary across (env, seed) pairs even when the dqn intervention
+    slots are identical — they are NOT part of the configurational
+    fingerprint.
+
+    `leaf_signature(..., exogenous_keys=...)` accepts only flat key
+    names; the substrate doesn't ship a canonical set yet. Strip
+    inline by name + `env_params.` prefix.
+    """
+    assert isinstance(measurements, dict)
+    excluded_flat = {
+        'env', 'env_params', 'env_name', 'seed',
+        'obs_shape', 'n_actions',
+    }
+    return {
+        k: v for k, v in measurements.items()
+        if k not in excluded_flat
+        and not k.startswith('env_params.')
+    }
+
+
 def test_same_hypothesis_yields_stable_leaf_signature() -> None:
     """Two cells of vanilla DQN — different seeds, different envs
-    — must produce the SAME `leaf_signature`. The signature
-    filters out `env_name` and `seed`, so changes there don't
-    perturb it."""
+    — must produce the SAME `leaf_signature` after stripping
+    env-specific keys. The configurational fingerprint depends
+    only on the dqn intervention slots and shared HPs, NOT on
+    `env` / `env_params.*` / `obs_shape` / `n_actions` (all
+    Annotated[..., Exogenous] in the dqn signature)."""
     run_a = _run_cell('CartPole-v1', 0, _VANILLA_CLAIM, _VANILLA_ARM_KEY)
     run_b = _run_cell('CartPole-v1', 1, _VANILLA_CLAIM, _VANILLA_ARM_KEY)
     run_c = _run_cell('Acrobot-v1', 0, _VANILLA_CLAIM, _VANILLA_ARM_KEY)
 
-    sig_a = leaf_signature(run_a.measurements)
-    sig_b = leaf_signature(run_b.measurements)
-    sig_c = leaf_signature(run_c.measurements)
+    sig_a = leaf_signature(_strip_env_keys(run_a.measurements))
+    sig_b = leaf_signature(_strip_env_keys(run_b.measurements))
+    sig_c = leaf_signature(_strip_env_keys(run_c.measurements))
     assert sig_a == sig_b
     assert sig_a == sig_c
 

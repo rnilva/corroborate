@@ -102,7 +102,7 @@ def test_vanilla_dqn_runs_on_cartpole_via_python_loop() -> None:
     scalar_keys = {
         'reward', 'done', 'max_q',
         'ep_return', 'action', 'state_hash', 'buf_size',
-        'loss', 'td_error',
+        'loss', 'td_error', 'td_error_within_batch_std',
     }
     # Per-step Q reductions: per-action vectors (n_actions,) and
     # 5-tuple Pearson sum-stats. Replaces the full

@@ -30,6 +30,7 @@ from corroborate_rl.dqn.claims.optimizer import adam, warmed_update
 from corroborate_rl.dqn.claims.replay import Replay
 from corroborate_rl.dqn.dqn import dqn
 from corroborate_rl.dqn.invariants import DQNTrajectoryRecord
+from corroborate_rl.dqn.measurables import late_window_mean
 
 
 # Every test runs DQN end-to-end on CartPole — ~3 s each. Skipped
@@ -66,7 +67,11 @@ def test_run_dqn_cell_produces_runrow_on_cartpole() -> None:
 
     run_row = run_dqn_cell(
         env_spec, seed=0, claim=claim, arm_key=arm_key,
-        measurables=(),
+        # `run_dqn_cell` only computes the measurables passed in;
+        # the registry is queried per-bridge later, not at cell
+        # production. Pass `late_window_mean` explicitly so the
+        # measurement assertion below can read it.
+        measurables=(late_window_mean,),
     ).run
     assert isinstance(run_row, RunRow)
     assert run_row.arm_key == 'baseline'

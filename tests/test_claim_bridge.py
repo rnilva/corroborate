@@ -182,6 +182,50 @@ def test_bridge_power_insufficient_with_few_seeds() -> None:
     assert out.verdict == Verdict.POWER_INSUFFICIENT
 
 
+def test_scope_with_repeated_column_reference_in_predicate() -> None:
+    """Regression: `_filter_with_missing_cols` must dedupe
+    `expr.meta.root_names()` before resolving missing columns.
+
+    A bridge predicate like `(pl.col('n_step') == 1) | (pl.col('n_step') == 3)`
+    references the same column TWICE — `root_names()` returns
+    `['n_step', 'n_step']`. If the column is truly missing (not
+    a registered measurable, not in the cell DataFrame), the
+    pre-fix code emitted `[pl.lit(None).alias('n_step'),
+    pl.lit(None).alias('n_step')]` which polars rejects with:
+        ComputeError: the name 'n_step' passed to
+        `LazyFrame.with_columns` is duplicate.
+
+    After the fix (`list(dict.fromkeys(...))`), the duplicate is
+    collapsed before the missing-column resolution runs.
+
+    Construction: cells WITHOUT an `n_step` column; bridge's scope
+    references `n_step` twice. The bridge should evaluate without
+    crashing. The filtered cell-set is empty (n_step is missing
+    everywhere → null → predicate False), so the verdict routes
+    through whatever the bridge body returns on n_pairs=0.
+    """
+    @claim_bridge(
+        source=INTERVENTION,
+        target='eval_best_burst_mean',
+        scope=(pl.col('n_step') == 1) | (pl.col('n_step') == 3),
+    )
+    def repeats_n_step(
+        paired_g: PairedGResult,
+    ) -> Verdict:
+        if paired_g.n_pairs == 0:
+            return Verdict.POWER_INSUFFICIENT
+        return Verdict.HELD
+
+    cells = _synthetic_cells()    # no n_step column
+    # Pre-fix: this `evaluate` call raised polars ComputeError.
+    out = evaluate(repeats_n_step, cells)
+    assert out.verdict == Verdict.POWER_INSUFFICIENT
+    # n_step missing → all rows null on that column → both branches
+    # of the disjunction are null → predicate is null → polars
+    # `filter` excludes them → 0 cells in scope.
+    assert out.n_cells_in_scope == 0
+
+
 def test_unknown_fixture_raises() -> None:
     """A fixture parameter (no default) that doesn't match a
     registered analysis fails fast at evaluation."""

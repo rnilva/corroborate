@@ -172,7 +172,14 @@ def expectile_per_burst_cells() -> list[dict[str, object]]:
         pytest.skip('expectile_3way corpus not available')
     runs = pl.read_parquet(
         EXPECTILE_RUNS,
-        columns=['id', 'intervention_name', 'env_name', 'seed'],
+        # The bridge dispatches `paired_g_per_burst` via
+        # INTERVENTION.treatment_arm_key() → the canonical
+        # `combined_arm_key`-derived string. The corpus stores
+        # this in the `arm_key` column. Loading only the legacy
+        # `intervention_name` column (an aliased semantic name)
+        # leaves cells without the arm key the analysis filters
+        # on → empty panel → spurious POWER_INSUFFICIENT.
+        columns=['id', 'arm_key', 'env_name', 'seed'],
     )
     traces = pl.read_parquet(
         EXPECTILE_TRACES,
