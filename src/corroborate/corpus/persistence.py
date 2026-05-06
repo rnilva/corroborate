@@ -33,6 +33,8 @@ sweep consumers reconstruct the static call topology
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from pathlib import Path
 from typing import Literal
@@ -235,14 +237,35 @@ def atomic_write_parquet(df: pl.DataFrame, path: Path) -> None:
     uses internally for the merged output. C2 / I4 invariant
     (CACHE_BUILD.md / SWEEP_PERSISTENCY.md).
 
-    A killed-mid-write process leaves no `.partial` file at the
+    A killed-mid-write process leaves no torn file at the
     consumer's path; consumers either see the pre-write state
-    or the fully-written new state, never a torn parquet."""
-    partial = path.with_suffix(path.suffix + '.partial')
-    if partial.exists():
-        partial.unlink()
-    df.write_parquet(partial)
-    partial.replace(path)
+    or the fully-written new state.
+
+    **Concurrency**: the tmp file uses a unique suffix
+    (`tempfile.mkstemp` in the destination directory). Two
+    concurrent writes against the same `path` produce two
+    different tmp inodes; whichever `replace`s last wins for
+    the destination, but neither writer's content is silently
+    truncated by the other — eliminating the fixed-`.partial`-
+    suffix TOCTOU race where writer B unlinking writer A's
+    in-progress partial would silently lose A's content. On
+    failure the tmp file is unlinked (no `.partial`-flavored
+    breadcrumbs left behind to grow into stale clutter)."""
+    fd, tmp_str = tempfile.mkstemp(
+        prefix=path.name + '.', suffix='.partial', dir=path.parent,
+    )
+    os.close(fd)  # polars opens its own writer
+    tmp = Path(tmp_str)
+    try:
+        df.write_parquet(tmp)
+        tmp.replace(path)
+    except BaseException:
+        if tmp.exists():
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
+        raise
 
 
 def atomic_write_text(path: Path, content: str) -> None:
@@ -252,12 +275,25 @@ def atomic_write_text(path: Path, content: str) -> None:
     half-updated state then has a stale sidecar pointing at a
     fresh parquet (drift detection on next run self-heals via
     column invalidation), rather than a fresh sidecar pointing
-    at a torn parquet (consumer reads garbage)."""
-    partial = path.with_suffix(path.suffix + '.partial')
-    if partial.exists():
-        partial.unlink()
-    _ = partial.write_text(content)
-    partial.replace(path)
+    at a torn parquet (consumer reads garbage).
+
+    Concurrency: same unique-suffix tmp pattern as
+    `atomic_write_parquet`."""
+    fd, tmp_str = tempfile.mkstemp(
+        prefix=path.name + '.', suffix='.partial', dir=path.parent,
+    )
+    tmp = Path(tmp_str)
+    try:
+        with os.fdopen(fd, 'w') as fh:
+            _ = fh.write(content)
+        tmp.replace(path)
+    except BaseException:
+        if tmp.exists():
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
+        raise
 
 
 def stream_concat_parquets(

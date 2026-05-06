@@ -216,13 +216,38 @@ def build_measurements(
     to_compute_full = [
         n for n in required if get_registered(n) is not None
     ]
+    overlap_dropped: list[str] = []
     if existing.height > 0:
-        # Bring forward any still-current columns by joining on id.
-        # The runs_df may have more rows than existing (new cells
-        # added); left-join keeps all runs cells. Cells in runs_df
-        # not yet in existing carry NULL for measurable cols —
+        # Collision dedup (post-#1 roast fix): when `runs_df` ALREADY
+        # carries a measurable column whose name matches one in
+        # `existing` (Phase 3 substrate-side stamp via
+        # `RunRow.measurements`), polars' default left-join would
+        # produce a `<col>_right` suffix on the existing-store
+        # version. The right-suffixed column is then orphaned at
+        # `select(measurable_cols)` (line ~257) — the existing-store
+        # values are silently dropped without any merge logic
+        # consulting them.
+        #
+        # Substrate-stamped values are authoritative per Phase 3;
+        # explicitly drop the overlapping columns from `existing`
+        # before the join so the semantics are clear: runs_df wins
+        # on collision. `compute_missing_columns`'s partial-nullity
+        # branch still fires for cells where runs_df's column is
+        # null — the framework recomputes those, NOT consulting the
+        # existing-store value (would be wrong if existing is stale
+        # from a drifted closure that hadn't been hash-flipped yet).
+        overlap_dropped = [
+            c for c in existing.columns
+            if c != 'id' and c in runs_df.columns
+        ]
+        if overlap_dropped:
+            existing = existing.drop(overlap_dropped)
+        # Bring forward still-current columns by joining on id. The
+        # runs_df may have more rows than existing (new cells); left-
+        # join keeps all runs cells. Cells in runs_df not yet in
+        # existing carry NULL for measurable cols —
         # `compute_missing_columns`'s partial-nullity branch then
-        # fills them while preserving the existing non-null values.
+        # fills them while preserving existing non-null values.
         joined = runs_df.join(existing, on='id', how='left')
     else:
         joined = runs_df
@@ -242,6 +267,7 @@ def build_measurements(
     )
     if (
         not drop_cols
+        and not overlap_dropped
         and existing.height > 0
         and existing.height == runs_df.height
         and all_required_present

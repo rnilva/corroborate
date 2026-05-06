@@ -91,23 +91,38 @@ def test_atomic_write_parquet_no_partial_remains_after_success(
     assert out.exists()
     loaded = pl.read_parquet(out)
     assert loaded.height == 3
-    # No `.partial` sibling left over.
-    assert not out.with_suffix(out.suffix + '.partial').exists()
+    # No `.partial`-flavored sibling left over (unique-suffix tmp
+    # files are cleaned up by `replace`; failure path unlinks them).
+    leftover = list(tmp_path.glob('*.partial'))
+    assert leftover == [], f'unexpected .partial files: {leftover}'
 
 
-def test_atomic_write_parquet_simulated_crash_leaves_no_torn_file(
+def test_atomic_write_parquet_simulated_crash_preserves_existing_content(
     tmp_path: Path,
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Simulate a crash between write and rename. The `.partial`
-    file is left in place (recovery breadcrumb); `<out>` is NOT
-    created. Consumers see the pre-write state — empty in this
-    test."""
+    """**C2 invariant** (CACHE_BUILD.md): a killed-mid-write
+    consumer sees the PRE-WRITE state. The previous test created
+    `out` for the first time, so "doesn't exist after crash" was
+    the expected state regardless of atomicity — it never
+    actually tested that an existing file's contents are
+    preserved.
+
+    Substrate-grounded probe: pre-stage `out` with content X,
+    monkey-patch `Path.replace` to fail, attempt to write
+    content Y, assert content X is still readable. The atomicity
+    contract is "old state preserved on failed write," not "no
+    partial file lingers."
+    """
     import polars as pl
     from corroborate.runner.runner import _atomic_write_parquet
 
-    df = pl.DataFrame({'id': ['a', 'b', 'c']})
     out = tmp_path / 'cache.parquet'
+
+    # Pre-stage with content X (3 rows).
+    content_x = pl.DataFrame({'id': ['a', 'b', 'c'], 'val': [1, 2, 3]})
+    content_x.write_parquet(out)
+    assert out.exists()
 
     real_replace = Path.replace
 
@@ -115,16 +130,66 @@ def test_atomic_write_parquet_simulated_crash_leaves_no_torn_file(
         raise RuntimeError('simulated crash mid-rename')
 
     monkeypatch.setattr(Path, 'replace', fake_replace)
-    import pytest as _pytest
-    with _pytest.raises(RuntimeError, match='simulated crash'):
+
+    # Attempt to overwrite with content Y (5 rows). Replace fails.
+    content_y = pl.DataFrame({
+        'id': ['p', 'q', 'r', 's', 't'], 'val': [10, 20, 30, 40, 50],
+    })
+    with pytest.raises(RuntimeError, match='simulated crash'):
+        _atomic_write_parquet(content_y, out)
+    monkeypatch.setattr(Path, 'replace', real_replace)
+
+    # **The actual atomicity assertion**: `out` still has X.
+    after_crash = pl.read_parquet(out)
+    assert after_crash.height == 3, (
+        f'expected pre-crash content X (3 rows) preserved; '
+        f'got {after_crash.height} rows — content Y leaked through'
+    )
+    assert after_crash['id'].to_list() == ['a', 'b', 'c'], (
+        f'pre-crash IDs not preserved: got {after_crash["id"].to_list()}'
+    )
+    assert after_crash['val'].to_list() == [1, 2, 3], (
+        f'pre-crash values not preserved: got {after_crash["val"].to_list()}'
+    )
+
+
+def test_atomic_write_parquet_failure_cleans_up_tmp_file(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """**Concurrency invariant** (post-#11 roast fix): two
+    concurrent writers against the same destination must NOT
+    collide on a fixed `.partial` suffix. The unique-suffix
+    `tempfile.mkstemp` design eliminates the TOCTOU race where
+    writer B unlinks writer A's in-progress partial. The
+    failure path must unlink its OWN tmp file so it can't grow
+    into stale clutter that re-enters via a future build's
+    `partial.exists()` short-circuit (the bug-shape pre-#11).
+
+    Probe: monkeypatch `Path.replace` to fail, attempt a write,
+    verify NO `.partial`-flavored file remains in the directory.
+    """
+    import polars as pl
+    from corroborate.runner.runner import _atomic_write_parquet
+
+    df = pl.DataFrame({'id': ['a'], 'x': [1]})
+    out = tmp_path / 'cache.parquet'
+
+    real_replace = Path.replace
+
+    def fake_replace(self: Path, target: Path) -> Path:
+        raise RuntimeError('simulated rename failure')
+
+    monkeypatch.setattr(Path, 'replace', fake_replace)
+    with pytest.raises(RuntimeError, match='simulated rename failure'):
         _atomic_write_parquet(df, out)
     monkeypatch.setattr(Path, 'replace', real_replace)
 
-    assert not out.exists(), (
-        'consumer-facing cache path must NOT exist on crash; '
-        'it would expose a torn parquet to readers'
+    leftover = list(tmp_path.glob('*.partial'))
+    assert leftover == [], (
+        f'failure path leaked tmp files: {leftover} — concurrent '
+        f'retries would accumulate clutter'
     )
-    assert out.with_suffix(out.suffix + '.partial').exists()
 
 
 def test_atomic_write_text_writes_via_partial(tmp_path: Path) -> None:
@@ -427,3 +492,49 @@ def test_ingest_and_compute_directory_path_writes_cache_and_unlinks_legacy_manif
     assert not cache_path.with_suffix(
         cache_path.suffix + '.partial'
     ).exists()
+
+
+def test_ingest_and_compute_directory_path_unlinks_legacy_manifest_even_when_empty(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """**#5 roast fix**: the legacy-manifest unlink was previously
+    gated on `merged.height > 0`. An empty-corpora directory
+    walk (every corpus skipped, every restore failed, the
+    directory genuinely empty) would leave a stale
+    `<cache>.hashes.json` next to a stale cache parquet — any
+    reader consulting the manifest would see "cache + manifest
+    both present, looks consistent" but be reading drift hashes
+    that no longer correspond to the (now-absent) data.
+    Post-fix: unlink fires on every directory-path write,
+    regardless of merge size."""
+    monkeypatch.setenv('CORROBORATE_CACHE_WORKERS', '1')
+
+    from corroborate.runner.runner import (
+        _ingest_and_compute,
+        _manifest_path,
+    )
+
+    # An empty `data_dir` — no subdirs, so the walk loads zero corpora.
+    data_dir = tmp_path / 'corpora_empty'
+    data_dir.mkdir()
+
+    cache_path = tmp_path / 'h.parquet'
+    legacy_manifest = _manifest_path(cache_path)
+    legacy_manifest.write_text('{"stale": "hash"}')
+    assert legacy_manifest.exists()
+
+    merged = _ingest_and_compute(
+        bridges=(),
+        data=data_dir,
+        cache_path=cache_path,
+        write_cache=True,
+        restore_from_cloud=False,
+    )
+
+    assert merged.height == 0
+    assert not legacy_manifest.exists(), (
+        f'empty-corpora directory walk left stale legacy manifest; '
+        f'pre-fix: unlink was gated on `merged.height > 0`. '
+        f'Post-fix: unlink should be unconditional.'
+    )

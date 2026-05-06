@@ -471,18 +471,26 @@ def _ingest_and_compute(
         merged = (
             new_data if new_data is not None else pl.DataFrame()
         )
-        if cache_path is not None and write_cache and merged.height > 0:
-            _atomic_write_parquet(merged, cache_path)
+        if cache_path is not None and write_cache:
             # Closure-hash sidecar is no longer authoritative;
             # per-corpus `measurements.hashes.json` files are. Unlink
-            # the legacy manifest to avoid a stale snapshot misleading
-            # any reader still consulting it.
+            # the legacy manifest UNCONDITIONALLY on every
+            # directory-path write so a stale snapshot can't survive
+            # an empty-corpora walk and mislead any reader still
+            # consulting it (post-#5 roast fix: the unlink was
+            # previously gated on `merged.height > 0`).
             legacy_manifest = _manifest_path(cache_path)
             if legacy_manifest.exists():
                 try:
                     legacy_manifest.unlink()
                 except OSError:
                     pass
+            # Cache parquet only written when there's actual data —
+            # polars rejects zero-row writes for some schemas, and a
+            # stale snapshot with no rows isn't more useful than an
+            # absent file.
+            if merged.height > 0:
+                _atomic_write_parquet(merged, cache_path)
         return merged
 
     # Legacy DataFrame/file path — incremental cache merge.
