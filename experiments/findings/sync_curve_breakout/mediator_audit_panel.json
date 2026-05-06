@@ -1,0 +1,142 @@
+[
+  {
+    "mediator": "effective_horizon",
+    "pool": "GOAL",
+    "proportion": 0.11628133873339654,
+    "in_unit_interval": true,
+    "indirect": 0.05469149479381554,
+    "direct": 0.41564618268347253,
+    "total": 0.47033767747728805,
+    "n_pairs": 657
+  },
+  {
+    "mediator": "effective_horizon",
+    "pool": "SURVIVAL",
+    "proportion": 0.15982155345088606,
+    "in_unit_interval": true,
+    "indirect": 0.02197193218110891,
+    "direct": 0.11550597181048877,
+    "total": 0.13747790399159768,
+    "n_pairs": 263
+  },
+  {
+    "mediator": "bootstrap_fraction",
+    "pool": "GOAL",
+    "proportion": -0.0973696187456295,
+    "in_unit_interval": false,
+    "indirect": -0.045796600337668386,
+    "direct": 0.5161342778149565,
+    "total": 0.47033767747728805,
+    "n_pairs": 657
+  },
+  {
+    "mediator": "bootstrap_fraction",
+    "pool": "SURVIVAL",
+    "proportion": 0.2511688906803985,
+    "in_unit_interval": true,
+    "indirect": 0.03453017263863592,
+    "direct": 0.10294773135296176,
+    "total": 0.13747790399159768,
+    "n_pairs": 263
+  },
+  {
+    "mediator": "jensen_dormancy_gap",
+    "pool": "GOAL",
+    "proportion": -0.09559881266605633,
+    "in_unit_interval": false,
+    "indirect": -0.03971697711759027,
+    "direct": 0.45517168842586503,
+    "total": 0.41545471130827477,
+    "n_pairs": 600
+  },
+  {
+    "mediator": "jensen_dormancy_gap",
+    "pool": "SURVIVAL",
+    "proportion": 0.07833843504964734,
+    "in_unit_interval": true,
+    "indirect": 0.011541521600681677,
+    "direct": 0.13578745674011855,
+    "total": 0.14732897834080022,
+    "n_pairs": 205
+  },
+  {
+    "mediator": "mc_return_first_quarter",
+    "pool": "GOAL",
+    "proportion": 0.0645105129521626,
+    "in_unit_interval": true,
+    "indirect": 0.03034172483478867,
+    "direct": 0.43999595264249936,
+    "total": 0.47033767747728805,
+    "n_pairs": 657
+  },
+  {
+    "mediator": "mc_return_first_quarter",
+    "pool": "SURVIVAL",
+    "proportion": 0.08365737503966986,
+    "in_unit_interval": true,
+    "indirect": 0.011501040573892812,
+    "direct": 0.12597686341770487,
+    "total": 0.13747790399159768,
+    "n_pairs": 263
+  },
+  {
+    "mediator": "log_horizon",
+    "pool": "GOAL",
+    "proportion": NaN,
+    "in_unit_interval": false,
+    "indirect": NaN,
+    "direct": NaN,
+    "total": NaN,
+    "n_pairs": 657
+  },
+  {
+    "mediator": "log_horizon",
+    "pool": "SURVIVAL",
+    "proportion": NaN,
+    "in_unit_interval": false,
+    "indirect": NaN,
+    "direct": NaN,
+    "total": NaN,
+    "n_pairs": 263
+  },
+  {
+    "mediator": "log_action_dim",
+    "pool": "GOAL",
+    "proportion": NaN,
+    "in_unit_interval": false,
+    "indirect": NaN,
+    "direct": NaN,
+    "total": NaN,
+    "n_pairs": 657
+  },
+  {
+    "mediator": "log_action_dim",
+    "pool": "SURVIVAL",
+    "proportion": NaN,
+    "in_unit_interval": false,
+    "indirect": NaN,
+    "direct": NaN,
+    "total": NaN,
+    "n_pairs": 263
+  },
+  {
+    "mediator": "log_obs_dim",
+    "pool": "GOAL",
+    "proportion": NaN,
+    "in_unit_interval": false,
+    "indirect": NaN,
+    "direct": NaN,
+    "total": NaN,
+    "n_pairs": 657
+  },
+  {
+    "mediator": "log_obs_dim",
+    "pool": "SURVIVAL",
+    "proportion": NaN,
+    "in_unit_interval": false,
+    "indirect": NaN,
+    "direct": NaN,
+    "total": NaN,
+    "n_pairs": 263
+  }
+]

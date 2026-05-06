@@ -1,0 +1,109 @@
+[
+  {
+    "mediator": "q_max_growth",
+    "jaccard": 0.0,
+    "hp_r_squared": {
+      "replay.capacity": 0.010803545505407741
+    },
+    "stratified_rho": 0.09090189192541023,
+    "stratified_p": 0.41199855880963243,
+    "tags": [
+      "SHADOW"
+    ],
+    "is_clean": false
+  },
+  {
+    "mediator": "target_staleness_late",
+    "jaccard": 0.0,
+    "hp_r_squared": {
+      "replay.capacity": 0.15763341845601786
+    },
+    "stratified_rho": -0.60445499992954,
+    "stratified_p": 2.95279800610615e-10,
+    "tags": [],
+    "is_clean": true
+  },
+  {
+    "mediator": "target_staleness_early",
+    "jaccard": 0.0,
+    "hp_r_squared": {
+      "replay.capacity": 0.000516036749711013
+    },
+    "stratified_rho": 0.29231805460094884,
+    "stratified_p": 0.0067305265014816484,
+    "tags": [],
+    "is_clean": true
+  },
+  {
+    "mediator": "v_vs_max_delta_late",
+    "jaccard": 0.0,
+    "hp_r_squared": {
+      "replay.capacity": 0.010803128660643702
+    },
+    "stratified_rho": 0.16817340480026108,
+    "stratified_p": 0.12649347838281977,
+    "tags": [],
+    "is_clean": true
+  },
+  {
+    "mediator": "td_residual_late",
+    "jaccard": 0.0,
+    "hp_r_squared": {
+      "replay.capacity": 0.010803630782351803
+    },
+    "stratified_rho": -0.46832059736590903,
+    "stratified_p": 4.8481760854812705e-06,
+    "tags": [],
+    "is_clean": true
+  },
+  {
+    "mediator": "greedy_match_late",
+    "jaccard": 0.0,
+    "hp_r_squared": {
+      "replay.capacity": 0.0038630204973970628
+    },
+    "stratified_rho": 0.12801604005125808,
+    "stratified_p": 0.2466597245561193,
+    "tags": [],
+    "is_clean": true
+  },
+  {
+    "mediator": "q_mc_calibration_pearson",
+    "jaccard": 0.5,
+    "hp_r_squared": {
+      "replay.capacity": 0.09673180454007957
+    },
+    "stratified_rho": 0.11024806777075136,
+    "stratified_p": 0.3191130207675337,
+    "tags": [
+      "OUTCOME"
+    ],
+    "is_clean": false
+  },
+  {
+    "mediator": "learning_curve_auc",
+    "jaccard": 1.0,
+    "hp_r_squared": {
+      "replay.capacity": 0.1266923172069463
+    },
+    "stratified_rho": 0.7591643450361056,
+    "stratified_p": 0.0,
+    "tags": [
+      "OUTCOME"
+    ],
+    "is_clean": false
+  },
+  {
+    "mediator": "return_at_25pct_steps",
+    "jaccard": 1.0,
+    "hp_r_squared": {
+      "replay.capacity": 0.0874865890056814
+    },
+    "stratified_rho": 0.4146334037370504,
+    "stratified_p": 7.16487635568086e-05,
+    "tags": [
+      "OUTCOME"
+    ],
+    "is_clean": false
+  }
+]
