@@ -434,36 +434,66 @@ def _ingest_and_compute(
     write_cache: bool,
     restore_from_cloud: bool,
 ) -> pl.DataFrame:
-    """Load cache (if any), append new data after computing missing
-    measurables, persist, return the merged DataFrame.
+    """Resolve `data` into the per-hypothesis cache.
 
-    Lifecycle:
-    1. Read parquet + sidecar manifest (`<cache>.hashes.json`).
-    2. Drop columns whose closure hash drifted vs. manifest — this
-       is the "measurable formula changed" detection path.
-    3. Existing cells fall through `_compute_measurables` to fill
-       missing columns (drifted ones are now missing, plus any
-       brand-new required measurables).
-    4. New cells from `data` get measurables computed and merged.
-    5. Persist parquet + updated manifest with current signatures.
+    **Phase 2.2** (CACHE_BUILD.md): when `data` is a directory,
+    per-corpus `measurements.parquet` stores are the source of
+    truth. The directory walk's output (each corpus's runs joined
+    with its measurements) IS the projection — no cache-side
+    merge, drift check, or per-cell recompute. The merged cache
+    parquet is written as a backward-compat snapshot for callers
+    that read it directly; `<cache>.hashes.json` is unlinked
+    (per-corpus sidecars are authoritative).
 
-    The manifest is written for all currently-required measurables
-    that have a column — so on the next run, anything edited in
-    the meantime gets caught by step 2."""
+    Legacy DataFrame/file path keeps the old shape — load cache,
+    drift-invalidate against `<cache>.hashes.json`, dedup new vs
+    cache, concat — for incremental adds where `data` is a single
+    parquet or DataFrame to be merged into an existing cache.
+    Tests exercise this path directly; substrate code paths a
+    directory."""
     required = sorted(measurable_names_for_bridges(bridges))
+
+    is_directory_walk = (
+        data is not None
+        and not isinstance(data, pl.DataFrame)
+        and Path(data).is_dir()
+    )
+
+    new_data = _load_data(
+        data, restore_from_cloud=restore_from_cloud,
+        required=required, bridges=bridges,
+    )
+
+    if is_directory_walk:
+        # Phase 2.2: per-corpus stores already filled in measurables
+        # via Phase 2.1's `build_measurements` call inside
+        # `_load_one_corpus`. The walk output IS the projection.
+        merged = (
+            new_data if new_data is not None else pl.DataFrame()
+        )
+        if cache_path is not None and write_cache and merged.height > 0:
+            _atomic_write_parquet(merged, cache_path)
+            # Closure-hash sidecar is no longer authoritative;
+            # per-corpus `measurements.hashes.json` files are. Unlink
+            # the legacy manifest to avoid a stale snapshot misleading
+            # any reader still consulting it.
+            legacy_manifest = _manifest_path(cache_path)
+            if legacy_manifest.exists():
+                try:
+                    legacy_manifest.unlink()
+                except OSError:
+                    pass
+        return merged
+
+    # Legacy DataFrame/file path — incremental cache merge.
     manifest_path = (
         _manifest_path(cache_path) if cache_path is not None else None
     )
     stored_manifest = (
         _read_manifest(manifest_path) if manifest_path is not None else {}
     )
-
     cache = _load_cache(cache_path)
     cache = _invalidate_drifted(cache, stored_manifest, required)
-    new_data = _load_data(
-        data, restore_from_cloud=restore_from_cloud,
-        required=required, bridges=bridges,
-    )
 
     if new_data is None or new_data.height == 0:
         return _enrich_cache_in_place(

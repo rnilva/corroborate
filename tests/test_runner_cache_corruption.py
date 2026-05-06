@@ -13,6 +13,8 @@ import sys
 from io import StringIO
 from pathlib import Path
 
+import pytest
+
 from corroborate.runner.runner import _load_cache
 
 
@@ -358,3 +360,70 @@ def test_invalidate_drifted_keeps_unregistered_columns(
         f'unregistered columns should be preserved; '
         f'got {invalidated.columns} vs {cache.columns}'
     )
+
+
+# ============ Phase 2.2: directory walk skips legacy manifest ============
+
+
+def test_ingest_and_compute_directory_path_writes_cache_and_unlinks_legacy_manifest(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """**Phase 2.2 invariant** (CACHE_BUILD.md): when `data` is a
+    directory, the per-corpus `measurements.parquet` stores are
+    authoritative; the per-hypothesis cache becomes a backward-
+    compat snapshot. The legacy `<cache>.hashes.json` is
+    unlinked on every directory-path write so a stale snapshot
+    never misleads a reader still consulting it.
+    """
+    # Force sequential walk — `fork`-based ProcessPoolExecutor
+    # under pytest can deadlock on inherited file descriptors.
+    monkeypatch.setenv('CORROBORATE_CACHE_WORKERS', '1')
+
+    import polars as pl
+    from corroborate.runner.runner import (
+        _ingest_and_compute,
+        _manifest_path,
+    )
+
+    # Two corpora as subdirs of `data_dir`. Each cell carries a
+    # distinct `seed` so `_dedup_by_content` doesn't collapse
+    # content-equal rows.
+    data_dir = tmp_path / 'corpora'
+    data_dir.mkdir()
+    for name, env in (('corpA', 'EnvA'), ('corpB', 'EnvB')):
+        sub = data_dir / name
+        sub.mkdir()
+        df = pl.DataFrame({
+            'id': [f'{name}-cell-0', f'{name}-cell-1'],
+            'arm_key': ['baseline', 'baseline'],
+            'env_name': [env, env],
+            'seed': [0, 1],
+        })
+        df.write_parquet(sub / 'runs.parquet')
+
+    cache_path = tmp_path / 'h.parquet'
+    legacy_manifest = _manifest_path(cache_path)
+    legacy_manifest.write_text('{"stale": "hash"}')
+    assert legacy_manifest.exists()
+
+    merged = _ingest_and_compute(
+        bridges=(),
+        data=data_dir,
+        cache_path=cache_path,
+        write_cache=True,
+        restore_from_cloud=False,
+    )
+
+    assert merged.height == 4, (
+        f'expected 4 cells (2 corpora × 2 cells); got {merged.height}'
+    )
+    assert cache_path.exists()
+    assert not legacy_manifest.exists(), (
+        f'legacy `{legacy_manifest.name}` should be unlinked '
+        f'on directory-path writes (Phase 2.2)'
+    )
+    # Atomic-write invariant still holds.
+    assert not cache_path.with_suffix(
+        cache_path.suffix + '.partial'
+    ).exists()
