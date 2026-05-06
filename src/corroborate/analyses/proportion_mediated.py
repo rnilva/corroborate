@@ -122,6 +122,9 @@ def proportion_mediated(
     baseline_arm: str,
     pair_by: tuple[str, ...] = ('seed',),
     arm_field: str = 'arm_key',
+    upstream_source: str | None = None,
+    upstream_max_delta: float | None = None,
+    upstream_min_delta: float | None = None,
 ) -> ProportionMediatedResult:
     """Linear proportion of the treatment effect on `target` that
     is mediated by `mediator`.
@@ -136,13 +139,46 @@ def proportion_mediated(
     registry first, falling back to field-path reads on the cell
     record (same convention as `paired_g.source`).
 
+    `upstream_source` enables **conditioning on the upstream step
+    of a mediation chain**. When the chain is
+    `do(treatment) → upstream → mediator → target`, pairs where
+    the treatment-induced Δ_upstream did not move in the predicted
+    direction are not part of the active link — pooling them
+    dilutes the mediator's measured contribution. Pass the
+    upstream measurable's name (e.g. `'jensen_gap'` for
+    DDQN's bias-correction step) and one of:
+
+      `upstream_max_delta`: keep pairs where Δ_upstream < this
+        (e.g. `0.0` to keep only pairs where DDQN reduced bias);
+      `upstream_min_delta`: keep pairs where Δ_upstream > this
+        (e.g. `0.0` to keep pairs where the upstream step
+        increased — Q-amplification regimes).
+
+    The two are mutually exclusive — pass at most one. When
+    both are None (default), no upstream conditioning is applied
+    and the analysis reduces to the standard 2-variable form.
+
     The result's `in_unit_interval` flag is the diagnostic for
     linear-mediation assumption failure — see ANALYSIS_RECIPE.md
     §3a for when to escalate to counterfactual mediation."""
+    if upstream_max_delta is not None and upstream_min_delta is not None:
+        raise ValueError(
+            'proportion_mediated: pass at most one of '
+            '`upstream_max_delta` / `upstream_min_delta`',
+        )
+    if (upstream_max_delta is not None or upstream_min_delta is not None) \
+            and upstream_source is None:
+        raise ValueError(
+            'proportion_mediated: `upstream_max_delta` / '
+            '`upstream_min_delta` require `upstream_source`',
+        )
+
     treatment_y: dict[tuple[object, ...], float] = {}
     treatment_m: dict[tuple[object, ...], float] = {}
+    treatment_u: dict[tuple[object, ...], float] = {}
     baseline_y: dict[tuple[object, ...], float] = {}
     baseline_m: dict[tuple[object, ...], float] = {}
+    baseline_u: dict[tuple[object, ...], float] = {}
     for cell in cells:
         arm = cell.get(arm_field)
         if arm not in (treatment_arm, baseline_arm):
@@ -152,14 +188,39 @@ def proportion_mediated(
         m = _resolve_value(cell, mediator)
         if math.isnan(y) or math.isnan(m):
             continue
+        u = (
+            _resolve_value(cell, upstream_source)
+            if upstream_source is not None else 0.0
+        )
+        if upstream_source is not None and math.isnan(u):
+            continue
         if arm == treatment_arm:
             treatment_y[key] = y
             treatment_m[key] = m
+            treatment_u[key] = u
         else:
             baseline_y[key] = y
             baseline_m[key] = m
+            baseline_u[key] = u
 
-    paired_keys = sorted(set(treatment_y) & set(baseline_y))
+    paired_keys_all = sorted(set(treatment_y) & set(baseline_y))
+
+    # Apply upstream conditioning per pair.
+    paired_keys: list[tuple[object, ...]]
+    if upstream_source is not None and (
+        upstream_max_delta is not None or upstream_min_delta is not None
+    ):
+        paired_keys = []
+        for k in paired_keys_all:
+            d_u = treatment_u[k] - baseline_u[k]
+            if upstream_max_delta is not None and d_u >= upstream_max_delta:
+                continue
+            if upstream_min_delta is not None and d_u <= upstream_min_delta:
+                continue
+            paired_keys.append(k)
+    else:
+        paired_keys = paired_keys_all
+
     n_pairs = len(paired_keys)
     if n_pairs < 3:
         return _nan_result(
