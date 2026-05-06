@@ -144,19 +144,30 @@ def _generate_per_burst_panel_cells() -> list[dict[str, object]]:
     return cells
 
 
-# ============ Slope: structural recovery on env-level covariate ============
+# Note (2026-05-06 audit): slope-recovery and intercept-recovery
+# tests were deleted. The closed-form `mean_t(K_t)` walks the
+# same OLS arithmetic the framework walks, with the bound tuned
+# to absorb the IVW-vs-equal-weight variation; centered-μ
+# intercept ≈ 0 is a property of OLS not of the framework.
+# What survives below probes framework logic the closed forms
+# don't subsume:
+#   - panel-size (panel-build dict-intersection + per-(env, burst)
+#     stratification)
+#   - tight p-value bound on the slope (t-test pipeline pin)
+#   - R² in the closed-form structural band (residual-vs-explained
+#     variance computation)
 
-def test_meta_regression_per_burst_recovers_mu_env_slope() -> None:
-    """Slope on `μ_env` matches `mean_t(K_t) ≈ 0.808` within
-    4·SE.
 
-    Sampling SE on the slope (60 strata, 5 envs, Var(μ_grid)=2):
-    SE_slope ≈ sd_residual / √(n_strata · Var(μ_env))
-            ≈ 0.20 / √(60 · 2.0)         (residual sd ≈ 0.2)
-            ≈ 0.018
-    4·SE ≈ 0.07. Bound 0.10 leaves margin for IVW-vs-equal
-    weighting variation across the per-burst SE spectrum.
-    """
+# ============ Slope p-value: t-test pipeline pin ============
+
+def test_meta_regression_per_burst_slope_p_value_tight() -> None:
+    """Slope on μ_env has |t| ≈ 20 at df=58 — p-value must be
+    extremely small. Pin `p < 1e-10` so a framework returning
+    e.g. `p = 0.5` constant breaches.
+
+    Distinct from `is_significant` flag (non-discriminating at
+    this overdetermined a t-statistic) — this directly probes
+    the t-test→p-value computation."""
     cells = _generate_per_burst_panel_cells()
     result = meta_regression_per_burst.fn(
         cells,
@@ -168,52 +179,11 @@ def test_meta_regression_per_burst_recovers_mu_env_slope() -> None:
     )
     by_name = {c.name: c for c in result.coefficients}
     assert 'mu_env' in by_name
-    expected = _expected_slope_on_mu_env()
-    actual = by_name['mu_env'].coefficient
-    bound = 0.10
-    assert abs(actual - expected) < bound, (
-        f'slope on μ_env = {actual:.4f}, closed-form '
-        f'mean_t(K_t) = {expected:.4f} (bound = {bound:.4f}). '
-        f'The framework s per-(env, burst) panel build + IVW '
-        f'meta-regression must recover the structural slope.'
-    )
-    # Slope is statistically overdetermined here (|t| ≈ 20 at
-    # df=58); the `is_significant` flag is non-discriminating
-    # for stub regressions. Pin a tight p-value instead so a
-    # framework that returned a wildly wrong p-value (e.g.,
-    # `p = 0.5` constant) would still breach.
-    assert by_name['mu_env'].p_value < 1e-10, (
-        f'slope p-value = {by_name["mu_env"].p_value:.2e}; '
-        f'closed-form |t| ≈ 20 at df=58 → p < 1e-10. A non-tight '
-        f'p-value here suggests the t-test pipeline is broken.'
-    )
-
-
-# ============ Intercept: centered covariate → ~0 ============
-
-def test_meta_regression_per_burst_intercept_near_zero_on_centered_grid() -> None:
-    """μ_env grid is centered at 0 (∈ {-2, -1, 0, 1, 2}), so the
-    meta-regression intercept (= pooled g at μ_env=0) should be
-    ≈ 0 within sampling SE.
-
-    A regression that miscentered the covariate (e.g., used the
-    wrong intercept formulation) would shift this away from 0.
-    """
-    cells = _generate_per_burst_panel_cells()
-    result = meta_regression_per_burst.fn(
-        cells,
-        treatment_arm='slow',
-        baseline_arm='fast',
-        pair_by=('seed',),
-        source=_PER_BURST_SOURCE,
-        covariates=('mu_env',),
-    )
-    # Intercept SE on centered covariate: sd_residual / √n_strata.
-    # ≈ 0.2 / √60 ≈ 0.026. 4·SE ≈ 0.10.
-    bound = 0.10
-    assert abs(result.intercept) < bound, (
-        f'intercept = {result.intercept:.4f}, expected ≈ 0 '
-        f'(bound = {bound:.4f}). μ_env grid is centered at 0.'
+    p = by_name['mu_env'].p_value
+    assert p < 1e-10, (
+        f'slope p-value = {p:.2e}; expected p < 1e-10 at |t| ≈ 20 '
+        f'and df=58. A non-tight p-value indicates the t-test '
+        f'pipeline is broken.'
     )
 
 

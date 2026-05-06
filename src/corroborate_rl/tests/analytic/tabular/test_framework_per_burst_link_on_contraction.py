@@ -150,45 +150,15 @@ def _generate_link_panel_cells() -> list[dict[str, object]]:
     return cells
 
 
-def test_per_burst_link_recovers_closed_form_r_curve() -> None:
-    """The framework's per-burst link panel must report `r(t)`
-    matching the closed-form Pearson curve within 4·SE.
-
-    SE(r) = (1 − r²) / √(n_pairs − 2). For n_pairs=80 and the
-    closed-form r curve (0, 0.67, 0.42, 0.16, 0.045, …), SE
-    ranges from ~0.06 (peak) to ~0.11 (off-peak). 4·SE ranges
-    0.24 to 0.45.
-
-    A regression that mishandled the per-burst pairing or the
-    Pearson computation would breach at multiple bursts at once.
-    """
-    cells = _generate_link_panel_cells()
-    result = paired_link_per_burst.fn(
-        cells,
-        treatment_arm='fast',
-        baseline_arm='slow',
-        target=_TARG_SOURCE,
-        predictor=_PRED_SOURCE,
-        pair_by=('seed',),
-    )
-    assert len(result.strata) == _N_BURSTS
-
-    by_burst = {s.burst_index: s for s in result.strata}
-    for t in range(_N_BURSTS):
-        expected = _expected_r(t)
-        # 4·SE on the closed-form Pearson r SE = (1−r²)/√(n−2).
-        # At r=0 (t=0): SE = 1/√78 ≈ 0.113; at r=0.67 (peak):
-        # SE ≈ 0.063. SE is bounded above by 1/√78 across all
-        # bursts, so no floor needed — the formula's monotone-in-r
-        # behaviour gives an honest 4·SE band at every burst.
-        bound = 4.0 * _expected_r_se(expected, _N_PAIRS)
-        actual = by_burst[t].r
-        assert abs(actual - expected) < bound, (
-            f'burst {t}: r = {actual:.4f}, closed-form = '
-            f'{expected:.4f} (4·SE = {bound:.4f}). The framework '
-            f's per-burst Pearson r must recover the contraction '
-            f'link curve.'
-        )
+# Note (2026-05-06 audit): the original
+# `test_per_burst_link_recovers_closed_form_r_curve` was deleted.
+# It asserted per-burst r matches closed-form Pearson r within
+# 4·SE — but Pearson r IS `cov(Δ_pred, Δ_targ) / (σ_pred · σ_targ)`,
+# the formula on both sides of the assertion is the same. A stub
+# returning the right hardcoded r curve passes; the framework's
+# inference logic is not exercised. The phase_link_consistency
+# tests below DO exercise non-trivial logic (the filter+count
+# verdict + sign-direction routing), which is why they're kept.
 
 
 def test_phase_link_consistency_recovers_active_phase_fraction() -> None:

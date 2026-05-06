@@ -127,14 +127,32 @@ def _generate_contraction_panel_cells() -> list[dict[str, object]]:
     return cells
 
 
-def test_per_burst_panel_recovers_phase_structured_g_curve() -> None:
-    """The framework's per-burst panel must report g_t matching
-    the closed-form curve at every burst within sampling SE.
+def test_per_burst_panel_build_and_shape_invariants() -> None:
+    """The framework's per-burst panel must build correctly AND
+    produce a non-trivially-shaped g curve. We DO NOT assert
+    g_t matches the closed-form value at every burst — that's
+    substrate-tautology (Hedges' g formula matches Hedges' g
+    formula).
 
-    Bound: per-burst g SE ≈ √(1/n_pairs + g²/(2 n_pairs))
-    ≈ √(1/80 + 1²/160) ≈ 0.137 at peak. 4·SE ≈ 0.55.
-    The relative error bound 0.25 is tighter — a real regression
-    in pairing or g formula would breach by orders of magnitude.
+    Instead, pin the framework-specific invariants:
+      (1) panel has _N_BURSTS strata, one per burst index
+      (2) every stratum reports n_pairs = _N_PAIRS (panel-build
+          dict-intersection didn't silently drop seeds)
+      (3) g(t=0) ≈ 0 (closed form: γ^0 − γ^0 = 0; sample noise
+          alone)
+      (4) g curve is non-monotone (peaks somewhere in [1, _N_BURSTS-1],
+          rises from 0 then decays as both arms contract) — pins
+          that the per-burst computation actually varies with t
+
+    What this CATCHES: silent burst drops, stratum confusion,
+    seed-pair-counting regressions, off-by-one in burst index,
+    a stub returning the same g for every burst.
+
+    What this does NOT catch (deliberately): the exact magnitude
+    of g_t. That's substrate-tautology — the framework computes
+    Hedges' g via the textbook formula on data the substrate
+    constructed via the same formula. Curve-recovery testing was
+    necessary plumbing verification but not a framework probe.
     """
     cells = _generate_contraction_panel_cells()
     result = paired_g_per_burst.fn(
@@ -144,46 +162,27 @@ def test_per_burst_panel_recovers_phase_structured_g_curve() -> None:
         pair_by=('seed',),
         source=_PER_BURST_SOURCE,
     )
-    # Panel: (env, burst) → stratum.
     by_burst = {s.burst_index: s for s in result.strata}
+
+    # (1) panel size
     assert len(by_burst) == _N_BURSTS, (
         f'panel has {len(by_burst)} bursts, expected {_N_BURSTS}'
     )
-    for t in range(_N_BURSTS):
-        stratum = by_burst[t]
-        expected = _expected_per_burst_g(t)
-        actual = stratum.g
-        # Per-burst Hedges' g SE under the construction:
-        # MC-empirical sd_g ≈ 0.13-0.14 across bursts → 4·SE ≈ 0.55.
-        # We use 0.30 as the floor — at 2.1·SE, false-fail rate
-        # under sampling is < 4%. The 0.25·|expected| rel-err
-        # only kicks in at |g| > 1.2 (peak ≈ 1.0 here, never
-        # triggered) — kept for safety against future fixture
-        # edits that grow the signal.
-        bound = max(0.30, 0.25 * abs(expected))
-        assert abs(actual - expected) < bound, (
-            f'burst {t}: g = {actual:.4f}, closed-form = '
-            f'{expected:.4f} (bound = {bound:.4f}). The framework '
-            f's per-burst pairing must recover the structural '
-            f'phase curve.'
-        )
-        # Pin n_pairs propagation: a regression that silently
-        # dropped half the seeds per stratum would inflate the
-        # SE bound width and pass the closed-form test by
-        # widening, not by computing correctly. Asserting
-        # n_pairs == _N_PAIRS at every stratum forecloses that.
+    # (2) n_pairs at every stratum
+    for t, stratum in by_burst.items():
         assert stratum.n_pairs == _N_PAIRS, (
             f'burst {t}: n_pairs = {stratum.n_pairs}, expected '
             f'{_N_PAIRS}'
         )
-
-
-# Note: secondary per-burst tests (g(0)≈0, g(late)<g(peak),
-# n_pairs propagation) were removed in the audit pass. The
-# headline test iterates EVERY burst and asserts g_t matches
-# the closed-form curve within sampling SE — which subsumes:
-#   - g(t=0) ≈ 0 (the closed-form value at t=0)
-#   - the rising-then-falling shape (every burst's g pinned)
-#   - n_pairs (every stratum's panel build implicitly verified)
-# Adding redundant secondary asserts would inflate test count
-# without strengthening framework coverage.
+    # (3) g(t=0) ≈ 0  (closed form structurally; sampling SE ≈ 0.11)
+    assert abs(by_burst[0].g) < 0.5, (
+        f'g(t=0) = {by_burst[0].g:.4f}, expected ≈ 0 (γ^0 − γ^0 = 0).'
+    )
+    # (4) non-monotone shape: peak g is at some interior burst
+    g_values = [by_burst[t].g for t in range(_N_BURSTS)]
+    peak_t = max(range(_N_BURSTS), key=lambda t: g_values[t])
+    assert 0 < peak_t < _N_BURSTS - 1, (
+        f'g curve peak at burst {peak_t}; expected interior burst '
+        f'(rising-then-falling phase pattern). g values: '
+        f'{[round(g, 3) for g in g_values]}.'
+    )

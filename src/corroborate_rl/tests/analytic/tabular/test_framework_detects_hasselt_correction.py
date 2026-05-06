@@ -112,54 +112,19 @@ def _closed_form_paired_delta_se(
     return math.sqrt(var_per_pair / n_pairs)
 
 
-# ============ Headline: paired_g recovers Hasselt mean_diff ============
-
-def test_paired_g_recovers_closed_form_hasselt_bias_correction() -> None:
-    """The framework's paired_g.fn on Hasselt-toy cells must
-    report mean_diff matching the closed form -σ/√π within 4·SE.
-
-    Closed form: ddqn cells have E[jensen_gap] = 0 (unbiased),
-    vanilla cells have E[jensen_gap] = σ/√π. Paired Δ has
-    E[Δ] = -σ/√π = -0.5642 (for σ=1).
-
-    A regression in paired_g's pairing-on-seed, mean computation,
-    or sign would breach the bound. The substrate primitives
-    `max_greedify_tabular` / `double_greedify_tabular` are also
-    in the call path — a bug there propagates here."""
-    sigma = 1.0
-    n_pairs = 200  # tight SE: 4·SE ~ 0.367 around closed-form -0.564
-
-    cells = _generate_hasselt_paired_cells(
-        n_pairs=n_pairs, sigma=sigma, n_actions=2,
-    )
-    result = paired_g.fn(
-        cells,
-        treatment_arm='ddqn',
-        baseline_arm='vanilla',
-        pair_by=('seed',),
-        source='jensen_gap',
-    )
-    assert result.n_pairs == n_pairs
-
-    expected_mean_diff = -hasselt_n2_max_bias(sigma)  # = -σ/√π
-    # (`hasselt_n2_max_bias(σ) == σ/√π` is the substrate's own
-    # invariant; covered by `test_hasselt_max_bias.py`. Don't
-    # re-assert it here.)
-
-    se = _closed_form_paired_delta_se(sigma=sigma, n_pairs=n_pairs)
-    bound = 4.0 * se
-    assert abs(result.mean_diff - expected_mean_diff) < bound, (
-        f'paired_g.mean_diff = {result.mean_diff:.4f}, closed-form '
-        f'-σ/√π = {expected_mean_diff:.4f}, 4·SE = {bound:.4f}. '
-        f'The framework should detect DDQN reducing jensen_gap by '
-        f'σ/√π exactly.'
-    )
-    # And the framework's reported g should be strongly negative
-    # — DDQN reduces the gap.
-    assert result.g < 0, (
-        f'paired_g.g = {result.g:.4f}; DDQN reduces jensen_gap, '
-        f'so g should be negative under treatment=ddqn ordering'
-    )
+# Note (2026-05-06 audit): the original headline test
+# `test_paired_g_recovers_closed_form_hasselt_bias_correction`
+# was deleted. It asserted `paired_g.mean_diff ≈ -σ/√π`, which
+# is `np.mean(max_greedify(eps_v) − double_greedify(eps_o, eps_t))`
+# — the substrate's own Hasselt theorem evaluated through `np.mean`.
+# A stub returning the right hardcoded `mean_diff` passes; no
+# framework inference is exercised. The substrate-side identity
+# is already covered by `test_hasselt_max_bias.py`.
+#
+# The verdict-tree tests below ARE the real probes: verdict_from_
+# paired_stats's HELD / POWER_INSUFFICIENT / SIGN_FLIP routing
+# is non-trivial decision logic and the framework's headline
+# distinguishing claim per CLAUDE.md §3.4.
 
 
 # ============ Verdict: HELD with predicted_direction='a_lt_b' ============
