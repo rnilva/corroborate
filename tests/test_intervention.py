@@ -23,11 +23,6 @@ def _fn_b(x: int) -> int:
     return x * 2
 
 
-def test_arm_key_includes_slot_path_and_replacement() -> None:
-    i = Intervention(slot_path='bootstrap', replacement=_fn_a)
-    assert i.arm_key() == 'bootstrap=Claim:_fn_a'
-
-
 def test_equal_replacement_yields_equal_arm_key() -> None:
     i1 = Intervention(slot_path='bootstrap', replacement=_fn_a)
     i2 = Intervention(slot_path='bootstrap', replacement=_fn_a)

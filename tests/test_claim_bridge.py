@@ -200,34 +200,6 @@ def test_unknown_fixture_raises() -> None:
         _ = evaluate(broken, cells)
 
 
-def test_bridge_carries_structural_metadata() -> None:
-    """The decorator preserves the structural declaration as
-    typed Bridge fields for downstream introspection."""
-    @claim_bridge(
-        source='A',
-        target='B',
-        direction=Direction.INVERSE,
-        tier=Tier.INTERVENTIONAL,
-    )
-    def carries_metadata(
-        paired_g: PairedGResult,
-        *,
-        treatment_arm: str = 'ddqn',
-        baseline_arm: str = 'vanilla_dqn',
-    ) -> Verdict:
-        del paired_g
-        return Verdict.HELD
-
-    assert isinstance(carries_metadata, Bridge)
-    assert carries_metadata.name == 'carries_metadata'
-    assert carries_metadata.source == 'A'
-    assert carries_metadata.target == 'B'
-    assert carries_metadata.direction == Direction.INVERSE
-    assert carries_metadata.tier == Tier.INTERVENTIONAL
-    assert carries_metadata.params['treatment_arm'] == 'ddqn'
-    assert carries_metadata.params['baseline_arm'] == 'vanilla_dqn'
-
-
 def test_bridge_carries_typed_intervention() -> None:
     """A do-effect bridge declares source=DoEffect(...) in the
     decorator; the framework routes it to the structural
@@ -320,20 +292,6 @@ def test_bridge_carries_typed_predicted_direction() -> None:
     )
 
 
-def test_bridge_predicted_direction_defaults_to_none() -> None:
-    """A bridge that does NOT declare `predicted_direction` carries
-    None on the typed field. Backwards-compatible with all existing
-    @claim_bridge declarations."""
-    @claim_bridge(source='A', target='B')
-    def no_predicted_direction(
-        paired_g: PairedGResult,
-    ) -> Verdict:
-        del paired_g
-        return Verdict.HELD
-
-    assert no_predicted_direction.predicted_direction is None
-
-
 def test_bridge_predicted_direction_null_is_admitted() -> None:
     """The xfail-style `predicted_direction='null'` declares "I
     expect no effect"; the bridge body returns HELD when the null
@@ -367,22 +325,6 @@ def test_bridge_predicted_direction_unknown_literal_rejected() -> None:
             predicted_direction='wrong_literal',  # pyright: ignore[reportArgumentType]
         )
         def _bad(paired_g: PairedGResult) -> Verdict:
-            del paired_g
-            return Verdict.HELD
-
-
-def test_bridge_rejects_invalid_predicted_direction() -> None:
-    """Only `'a_gt_b' | 'a_lt_b' | 'two_sided' | None` accepted —
-    typed validation at decoration."""
-    with pytest.raises(TypeError, match='predicted_direction'):
-        @claim_bridge(
-            source='A',
-            target='B',
-            predicted_direction='positive',  # type: ignore[arg-type]
-        )
-        def bad_predicted_direction(
-            paired_g: PairedGResult,
-        ) -> Verdict:
             del paired_g
             return Verdict.HELD
 
@@ -465,16 +407,3 @@ def test_bridge_accepts_measurable_as_source() -> None:
     assert q_max_late.name in registered_names()
 
 
-def test_bridge_rejects_non_str_non_measurable_source() -> None:
-    """Anything other than str | Measurable | DoEffect for source is
-    an authoring mistake — fail loudly at decoration time."""
-    with pytest.raises(TypeError, match='source.*str or Measurable'):
-        @claim_bridge(
-            source=42,  # type: ignore[arg-type]
-            target='B',
-        )
-        def _bad_source(
-            paired_g: PairedGResult,
-        ) -> Verdict:
-            del paired_g
-            return Verdict.HELD

@@ -26,10 +26,30 @@ from corroborate.analyses.paired_g_per_burst import (
 )
 
 
-def test_analysis_registered() -> None:
-    """`paired_g_per_burst` populates the registry on import."""
+def test_analysis_registered_with_bridge_required_signature() -> None:
+    """`paired_g_per_burst` populates the registry on import AND
+    its callable signature exposes the parameters that bridges
+    rely on (`treatment_arm`, `baseline_arm`, `pair_by`, `source`).
+
+    The `assert get_registered(...) is not None` check alone passes
+    for ANY function decorated with `@analysis` — a stub-passable
+    D-class assertion. Pin the four parameter names that bridges
+    in the registry actually inject; renaming any of them in
+    `paired_g_per_burst.fn` would silently break bridge dispatch
+    while leaving the registry probe green.
+    """
+    import inspect
     from corroborate.bridge.analysis import get_registered
-    assert get_registered('paired_g_per_burst') is not None
+    registered = get_registered('paired_g_per_burst')
+    assert registered is not None
+    sig = inspect.signature(registered.fn)
+    required = {'treatment_arm', 'baseline_arm', 'pair_by', 'source'}
+    missing = required - set(sig.parameters)
+    assert not missing, (
+        f'paired_g_per_burst.fn missing parameters: {missing}. '
+        f'Bridges inject these by name; renaming silently breaks '
+        f'dispatch.'
+    )
 
 
 # ============ Real-corpus reproduction smoke ============

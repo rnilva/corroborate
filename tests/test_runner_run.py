@@ -104,3 +104,32 @@ def test_default_cache_path_bare_class_name() -> None:
         BRIDGES: ClassVar[tuple[Bridge, ...]] = ()
     p = _default_cache_path(DDQNvsVanilla)
     assert p == Path('experiments/data/cache/DDQNvsVanilla.parquet')
+
+
+def test_default_cache_path_dotted_module_name_uses_last_segment() -> None:
+    """Module-style names with dots: `<short>` is the LAST segment.
+    The hypothesis runner uses `__name__.split('.')[-1]` so a module
+    `experiments.findings.dqn_bridges` resolves to `dqn_bridges.parquet`,
+    NOT to `experiments.findings.dqn_bridges.parquet`.
+
+    Pin the dotted-path-stripping branch — the bare-name test above
+    only exercises the `[-1]` fallback when there's no dot. A
+    regression to `__name__` (no split) would pass the bare test
+    and breach this one."""
+    # Module-style __name__: the runner accepts anything with
+    # `__name__: str + INTERVENTION + BRIDGES`. ModuleType is a
+    # natural surrogate; types.ModuleType lets us set `__name__`
+    # directly. Cast for the typed Hypothesis Protocol.
+    import types
+    from typing import cast
+    from corroborate.core.hypothesis import Hypothesis
+    mod = types.ModuleType('experiments.findings.dqn_bridges')
+    # Module attribute writes via setattr — direct assignment trips
+    # pyright's strict module-attribute-access mode.
+    setattr(mod, 'INTERVENTION', _trivial_doeffect())
+    setattr(mod, 'BRIDGES', ())
+    p = _default_cache_path(cast(Hypothesis, mod))
+    assert p == Path('experiments/data/cache/dqn_bridges.parquet'), (
+        f'cache_path = {p}; expected the last-segment short name '
+        f'`dqn_bridges.parquet`, not the full dotted name.'
+    )

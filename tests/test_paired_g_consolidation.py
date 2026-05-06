@@ -64,10 +64,50 @@ def test_meta_regress_panel_drops_underpowered_strata() -> None:
     # 4 valid strata contributed; underpowered env_e dropped.
     assert result.n_strata == 4
 
+    # Closed-form WLS recovery on the 4 surviving strata.
+    # w_i = 1/se_i² = [100, 69.4, 82.6, 59.2]; Σw = 311.2.
+    # x   = [1, 2, 3, 4]; g = [0.5, 0.6, 0.55, 0.7].
+    # Σwx = 723.4; Σwx² = 2068.2; Σwg = 178.51; Σwxg = 435.33.
+    # β   = (Σw·Σwxg − Σwx·Σwg) / (Σw·Σwx² − (Σwx)²) ≈ 0.0525
+    # α   = (Σwg − β·Σwx) / Σw                       ≈ 0.4516
+    #
+    # Without these closed-form bounds, a stub returning
+    # `n_strata=4, coefficients=[]` would pass `n_strata == 4` AND
+    # is the dominant theatre risk (the regression's actual fit
+    # was never verified). Pin both the structural intercept AND
+    # the x slope on the dropped-stratum panel so a stub that
+    # silently kept env_e's NaN row would breach via slope drift
+    # toward the include-NaN OLS.
+    assert abs(result.intercept - 0.4516) < 0.001, (
+        f'intercept = {result.intercept:.4f}, closed-form ≈ 0.4516 '
+        f'(WLS on the 4 surviving strata). A regression that '
+        f'silently included the underpowered env_e (NaN) row would '
+        f'shift the intercept.'
+    )
+    by_name = {c.name: c for c in result.coefficients}
+    assert 'x' in by_name, (
+        f'x covariate missing from coefficients = {list(by_name)}'
+    )
+    assert abs(by_name['x'].coefficient - 0.0525) < 0.001, (
+        f'x coef = {by_name["x"].coefficient:.4f}, closed-form '
+        f'WLS slope ≈ 0.0525. A stub returning empty/zero '
+        f'coefficients would fail this.'
+    )
+
 
 def test_meta_regress_panel_no_covariates_for_stratum_uses_empty() -> None:
     """Strata absent from covariates_per_stratum get an empty
-    covariate vector — they contribute via intercept only."""
+    covariate vector — they contribute via intercept only.
+
+    With only 'a' carrying a covariate {x: 1.0}, all 3 strata are
+    kept (n_strata=3). Pin the intercept to the WLS-pooled g across
+    the three:
+        w   = [100, 69.4, 82.6]; Σw  = 252.0
+        Σwg = [50, 41.64, 45.43] →   137.07
+        intercept ≈ Σwg / Σw         = 0.5439
+
+    A stub returning the unweighted mean (0.55) would breach by 0.006.
+    """
     panel: tuple[StratumG[str], ...] = (
         StratumG[str](stratum_id='a', g=0.5, se=0.1, n_pairs=8),
         StratumG[str](stratum_id='b', g=0.6, se=0.12, n_pairs=8),
