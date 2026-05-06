@@ -1,0 +1,120 @@
+{
+  "g_panel": {
+    "100": {
+      "g": -0.01546395708938391,
+      "se": 0.18258510043122642,
+      "n_pairs": 30,
+      "p_value": 0.9325042542488613
+    },
+    "1000": {
+      "g": 0.2864118253569356,
+      "se": 0.18628077972531554,
+      "n_pairs": 30,
+      "p_value": 0.12416418109013083
+    },
+    "3000": {
+      "g": 0.14818115444649874,
+      "se": 0.1835736752429887,
+      "n_pairs": 30,
+      "p_value": 0.419549747651377
+    },
+    "10000": {
+      "g": -0.40857127100868174,
+      "se": 0.19004080629756204,
+      "n_pairs": 30,
+      "p_value": 0.031562067567499776
+    }
+  },
+  "sync_covariates": {
+    "100": {
+      "log_sync": 4.605170185988092,
+      "mean_staleness_rel_b0": 0.019542639939249252,
+      "mean_staleness_rel_late": 0.0018897558480088722,
+      "mean_staleness_rel_mean": 0.0040106812334655614,
+      "mean_q_b0_ratio": 0.8325919037323599
+    },
+    "1000": {
+      "log_sync": 6.907755278982137,
+      "mean_staleness_rel_b0": 0.08532735003135766,
+      "mean_staleness_rel_late": 0.007550042121327478,
+      "mean_staleness_rel_mean": 0.012280134293209293,
+      "mean_q_b0_ratio": 0.8270734792067548
+    },
+    "3000": {
+      "log_sync": 8.006367567650246,
+      "mean_staleness_rel_b0": 0.20000144154963148,
+      "mean_staleness_rel_late": 0.01582968662429136,
+      "mean_staleness_rel_mean": 0.026750235607378207,
+      "mean_q_b0_ratio": 0.8475266004598785
+    },
+    "10000": {
+      "log_sync": 9.210340371976184,
+      "mean_staleness_rel_b0": 0.39477600719905237,
+      "mean_staleness_rel_late": 0.029869458685029014,
+      "mean_staleness_rel_mean": 0.06573636403077883,
+      "mean_q_b0_ratio": 0.06832165172029231
+    }
+  },
+  "meta_regression": {
+    "staleness_rel_b0": {
+      "mean_staleness_rel_b0": {
+        "coefficient": -1.3303785830262844,
+        "ci_lo": -5.120250123884829,
+        "ci_hi": 2.4594929578322597,
+        "p_value": 0.27003601864874116
+      }
+    },
+    "staleness_rel_late": {
+      "mean_staleness_rel_late": {
+        "coefficient": -17.517361887338787,
+        "ci_lo": -70.29220566043338,
+        "ci_hi": 35.25748188575581,
+        "p_value": 0.2894313177741834
+      }
+    },
+    "staleness_rel_mean": {
+      "mean_staleness_rel_mean": {
+        "coefficient": -8.685103061575038,
+        "ci_lo": -29.05606858178893,
+        "ci_hi": 11.685862458638855,
+        "p_value": 0.20802708960586047
+      }
+    },
+    "q_b0_ratio + staleness_late": {
+      "mean_q_b0_ratio": {
+        "coefficient": 0.9354153284564207,
+        "ci_lo": -6.89856470448406,
+        "ci_hi": 8.769395361396901,
+        "p_value": 0.3709948050961409
+      },
+      "mean_staleness_rel_late": {
+        "coefficient": 8.135683681104862,
+        "ci_lo": -237.73140864859582,
+        "ci_hi": 254.00277601080555,
+        "p_value": 0.7466212205637732
+      }
+    }
+  },
+  "partial_spearman": {
+    "staleness_marg_pooled": {
+      "rho": -0.01724124703739778,
+      "p": 0.860416237667986
+    },
+    "staleness_given_qb19": {
+      "rho": -0.009335297540557043,
+      "p": 0.9241524002428965
+    },
+    "qb19_given_staleness": {
+      "rho": -0.36793167110980307,
+      "p": 8.259704415647384e-05
+    },
+    "log_sync_given_staleness": {
+      "rho": 0.01795646642128325,
+      "p": 0.8466317354854604
+    },
+    "log_sync_given_qb19_and_staleness": {
+      "rho": 0.028198608078622907,
+      "p": 0.7622887902180306
+    }
+  }
+}

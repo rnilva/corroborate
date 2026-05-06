@@ -1,0 +1,46 @@
+{
+  "per_env": [
+    {
+      "env": "Acrobot-v1",
+      "n_baseline": 30,
+      "mean_p": -0.9482779874748304,
+      "sd_p": 0.04684905105685428,
+      "cat": -1
+    },
+    {
+      "env": "Asterix-MinAtar",
+      "n_baseline": 30,
+      "mean_p": 0.4721820046609299,
+      "sd_p": 0.09093918375578676,
+      "cat": 1
+    },
+    {
+      "env": "Breakout-MinAtar",
+      "n_baseline": 30,
+      "mean_p": 0.9909515221027675,
+      "sd_p": 0.004041975187463397,
+      "cat": 1
+    },
+    {
+      "env": "FourRooms-misc",
+      "n_baseline": 570,
+      "mean_p": -0.9026663274476393,
+      "sd_p": 0.03174610964867202,
+      "cat": -1
+    },
+    {
+      "env": "MountainCar-v0",
+      "n_baseline": 10,
+      "mean_p": -0.9960205145289003,
+      "sd_p": 0.0026918184450026392,
+      "cat": -1
+    },
+    {
+      "env": "SpaceInvaders-MinAtar",
+      "n_baseline": 30,
+      "mean_p": 0.26595035280100177,
+      "sd_p": 0.31690249838521856,
+      "cat": 1
+    }
+  ]
+}
