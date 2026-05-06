@@ -940,7 +940,39 @@ def _load_one_corpus(
     df = _join_required_traces(
         df, sub / 'traces.parquet', trace_reads,
     )
-    df = _compute_measurables(df, required)
+    # **Phase 2.1** (CACHE_BUILD.md): route per-cell measurable
+    # computation through `build_measurements` so the per-corpus
+    # `measurements.parquet` store is populated as a side effect.
+    # The store carries `id` + measurable cols only; trace cols
+    # are dropped at persistence boundary (see `build_measurements`
+    # body). We then `load_measurements` back to keep the
+    # downstream shape (runs + traces + measurables) unchanged.
+    if 'id' in df.columns:
+        from corroborate.corpus.measurements import (
+            build_measurements,
+            load_measurements,
+        )
+        build_measurements(
+            sub, required=required, runs_df=df,
+            measurable_signature_fn=_measurable_signature,
+        )
+        loaded = load_measurements(sub, columns=list(required))
+        present_required = [c for c in required if c in loaded.columns]
+        if present_required:
+            # Drop any pre-existing required-measurable columns on
+            # df (rare — only when the input runs.parquet already
+            # carried them) to avoid join-side collisions.
+            collide = [c for c in present_required if c in df.columns]
+            if collide:
+                df = df.drop(collide)
+            df = df.join(
+                loaded.select(['id', *present_required]),
+                on='id', how='left',
+            )
+    else:
+        # Edge case: legacy runs.parquet without `id` column.
+        # Fall back to the inline path so older corpora still work.
+        df = _compute_measurables(df, required)
     joined_trace_cols = [
         c for c in df.columns
         if c in trace_reads
