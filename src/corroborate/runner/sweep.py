@@ -372,6 +372,13 @@ def run_intervention[R: Mapping[str, object]](
         )
         stream_concat_parquets(runs_uris, final_runs)
         stream_concat_parquets(traces_uris, final_traces)
+        # The merged output is INTENTIONALLY a function of the
+        # manifest — it grows as more cells are added across
+        # multiple `run_intervention` calls into the same `out_dir`
+        # (invariant I3). Each merge produces a new sha256 by
+        # design; pass `force=True` so I2's conflict check (which
+        # is the right behavior for IMMUTABLE cell shards) doesn't
+        # mistake intentional regeneration for content drift.
         _archive_merged(
             out_dir, archive_remote,
             files=[
@@ -379,6 +386,7 @@ def run_intervention[R: Mapping[str, object]](
                 final_traces.relative_to(out_dir).as_posix(),
             ],
             purge_local=False,
+            force=True,
         )
     else:
         stream_concat_parquets(runs_paths, final_runs)

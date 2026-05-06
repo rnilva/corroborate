@@ -99,6 +99,149 @@ def test_archive_idempotent_same_content(
     assert pushed_at_before == pushed_at_after
 
 
+# ============ I2: ConflictingArchive on sha256 mismatch ============
+
+
+def test_archive_raises_conflicting_archive_on_sha256_mismatch(
+    sweep_dir: Path, remote_root: str,
+) -> None:
+    """**Invariant I2** (SWEEP_PERSISTENCY.md): when the local
+    file's sha256 differs from the manifest's prior entry for the
+    same relpath, archive() must raise ConflictingArchive instead
+    of silently overwriting. The user opts into overwrite via
+    `force=True`.
+
+    Pre-fix: silent last-writer-wins. Post-fix: explicit error
+    naming the relpath, both sha256s, and the remote URI.
+    """
+    # First archive populates the manifest.
+    cloud.archive(sweep_dir, remote_root)
+
+    # Modify the local file → different sha256 vs manifest.
+    p = sweep_dir / 'runs.parquet'
+    original = p.read_bytes()
+    p.write_bytes(original + b'\x00')   # one-byte mutation
+
+    import pytest
+    with pytest.raises(cloud.ConflictingArchive) as exc_info:
+        cloud.archive(sweep_dir, remote_root)
+
+    err = exc_info.value
+    assert err.relpath == 'runs.parquet'
+    assert err.local_sha256 != err.prior_sha256
+    assert remote_root in err.remote_uri
+
+
+def test_archive_force_true_overwrites_on_sha256_mismatch(
+    sweep_dir: Path, remote_root: str,
+) -> None:
+    """`force=True` is the explicit overwrite opt-in. Manifest's
+    prior entry is replaced with the new sha256 + pushed_at."""
+    first = cloud.archive(sweep_dir, remote_root)
+    prior_sha = {f.relpath: f.sha256 for f in first.files}['runs.parquet']
+
+    p = sweep_dir / 'runs.parquet'
+    p.write_bytes(p.read_bytes() + b'\x00')
+
+    second = cloud.archive(sweep_dir, remote_root, force=True)
+    new_sha = {f.relpath: f.sha256 for f in second.files}['runs.parquet']
+
+    assert new_sha != prior_sha, (
+        'force=True should have replaced the manifest entry '
+        'with the new content sha256.'
+    )
+
+
+# ============ I5: row_ids provenance breadcrumb ============
+
+
+def test_archive_records_row_ids_for_runrow_parquet(
+    tmp_path: Path,
+) -> None:
+    """**Invariant I5** (SWEEP_PERSISTENCY.md): when a parquet
+    archived via `archive()` carries an `id` column (RunRow or
+    TraceRow shards), the manifest entry records the per-shard
+    list of IDs. Enables `id → shard → cell address` traceability
+    when investigating anomalous rows in a merged corpus."""
+    from corroborate.bridge.verdict import Verdict
+    from corroborate.corpus.persistence import write_runrows
+    from corroborate.corpus.schema import RunRow
+
+    sweep_dir = tmp_path / 'sweep'
+    sweep_dir.mkdir()
+    rows = [
+        RunRow(
+            id=f'run-{i}',
+            parent_id=None, cycle_id=None,
+            timestamp='2026-05-06T00:00:00Z',
+            verdict=Verdict.HELD,
+            arm_key='baseline',
+            measurements={},
+        )
+        for i in range(3)
+    ]
+    write_runrows(rows, sweep_dir / 'runs.parquet')
+    remote_root = f'file://{tmp_path / "remote"}'
+
+    manifest = cloud.archive(sweep_dir, remote_root)
+    by_relpath = {f.relpath: f for f in manifest.files}
+    assert 'runs.parquet' in by_relpath
+    entry = by_relpath['runs.parquet']
+    assert entry.row_ids == ('run-0', 'run-1', 'run-2'), (
+        f'expected row_ids to record RunRow.id list; got '
+        f'{entry.row_ids!r}'
+    )
+
+
+def test_archive_omits_row_ids_for_non_runrow_parquet(
+    sweep_dir: Path, remote_root: str,
+) -> None:
+    """Negative control: for a parquet WITHOUT an `id` column,
+    `row_ids` is the empty tuple — the I5 sniffer is robust to
+    non-row parquets and doesn't fabricate IDs."""
+    # The fixture's `runs.parquet` is fake bytes (not a real
+    # parquet); the sniffer should return () via the
+    # ColumnNotFoundError / ComputeError branch.
+    manifest = cloud.archive(sweep_dir, remote_root)
+    for f in manifest.files:
+        assert f.row_ids == (), (
+            f'fake-bytes parquet {f.relpath!r} produced spurious '
+            f'row_ids = {f.row_ids!r}'
+        )
+
+
+def test_remotefile_round_trip_with_row_ids() -> None:
+    """RemoteFile.from_dict / as_dict round-trip preserves
+    row_ids when present."""
+    f = cloud.RemoteFile(
+        relpath='tmp/cell001__runs.parquet',
+        size_bytes=100, sha256='deadbeef',
+        pushed_at='2026-05-06T00:00:00Z',
+        row_ids=('a', 'b', 'c'),
+    )
+    d = f.as_dict()
+    assert d['row_ids'] == ['a', 'b', 'c']
+    f2 = cloud.RemoteFile.from_dict(d)
+    assert f2 == f
+
+
+def test_remotefile_round_trip_legacy_manifest_without_row_ids() -> None:
+    """Backward-compat: manifests written before I5 landed don't
+    have a `row_ids` field. `from_dict` defaults to empty tuple."""
+    legacy_dict = {
+        'relpath': 'runs.parquet',
+        'size_bytes': 100,
+        'sha256': 'deadbeef',
+        'pushed_at': '2026-05-06T00:00:00Z',
+        # no row_ids
+    }
+    f = cloud.RemoteFile.from_dict(legacy_dict)
+    assert f.row_ids == ()
+    # Re-serializing omits the empty row_ids — manifests stay
+    # byte-identical post-rewrite.
+    assert 'row_ids' not in f.as_dict()
+
+
 def test_restore_skips_files_already_present_with_matching_sha(
     sweep_dir: Path, remote_root: str,
 ) -> None:

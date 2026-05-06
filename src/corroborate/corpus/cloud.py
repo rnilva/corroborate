@@ -54,33 +54,100 @@ from corroborate._internals.narrow import (
 MANIFEST_NAME = '_remote.json'
 
 
+class ConflictingArchive(RuntimeError):
+    """Invariant I2 (SWEEP_PERSISTENCY.md): an upload would
+    overwrite a previously-archived object with different content.
+
+    Raised by `archive()` when the local file's sha256 differs
+    from the manifest's prior entry for the same relpath. The
+    user must explicitly opt into overwrite by passing
+    `force=True` (the existing parameter); otherwise a re-run
+    that produced different bytes (substrate code change, RNG
+    drift, deliberate corpus refresh) silently last-writer-wins.
+
+    `relpath`, `prior_sha256`, and `local_sha256` are surfaced so
+    the user can decide whether the new bytes should replace the
+    old, or whether they ran the wrong code."""
+
+    def __init__(
+        self,
+        relpath: str,
+        *,
+        prior_sha256: str,
+        local_sha256: str,
+        remote_uri: str,
+    ) -> None:
+        super().__init__(
+            f'archive conflict at {relpath!r}: '
+            f'manifest sha256={prior_sha256[:12]}…, '
+            f'local sha256={local_sha256[:12]}… '
+            f'(remote={remote_uri}). Pass force=True to '
+            f'explicitly overwrite, or investigate the '
+            f'content drift.',
+        )
+        self.relpath = relpath
+        self.prior_sha256 = prior_sha256
+        self.local_sha256 = local_sha256
+        self.remote_uri = remote_uri
+
+
 @dataclass(frozen=True, slots=True)
 class RemoteFile:
     """One archived file's manifest entry. `relpath` is relative
     to the sweep directory; `size_bytes` and `sha256` are
     computed pre-upload from the local file; `pushed_at` is
-    ISO-8601 UTC."""
+    ISO-8601 UTC.
+
+    `row_ids` (invariant I5 in SWEEP_PERSISTENCY.md): when the
+    archived file is a parquet carrying an `id` column (RunRow
+    or TraceRow shards), the list of IDs it contains. Empty for
+    non-parquet files OR parquets without an `id` column.
+    Enables `id → shard → cell address` traceability when
+    debugging anomalous rows in a merged corpus. JSON-omitted
+    when empty to keep older manifests round-trippable."""
 
     relpath: str
     size_bytes: int
     sha256: str
     pushed_at: str
+    row_ids: tuple[str, ...] = ()
 
     def as_dict(self) -> Mapping[str, object]:
-        return {
+        out: dict[str, object] = {
             'relpath': self.relpath,
             'size_bytes': self.size_bytes,
             'sha256': self.sha256,
             'pushed_at': self.pushed_at,
         }
+        # Omit empty `row_ids` so manifests for non-parquet shards
+        # don't carry an empty list, and so old manifests written
+        # before this field existed remain byte-identical post-rewrite.
+        if self.row_ids:
+            out['row_ids'] = list(self.row_ids)
+        return out
 
     @classmethod
     def from_dict(cls, d: Mapping[str, object]) -> Self:
+        # row_ids is optional for backward compatibility with
+        # manifests written before invariant I5 landed.
+        raw_ids = d.get('row_ids')
+        if raw_ids is None:
+            row_ids: tuple[str, ...] = ()
+        elif isinstance(raw_ids, list):
+            row_ids = tuple(
+                str(item) for item in raw_ids if isinstance(item, str)
+            )
+        else:
+            raise TypeError(
+                f"manifest 'row_ids' must be list or absent, got "
+                f"{type(raw_ids).__name__}",
+            )
         return cls(
             relpath=require_str(d, 'relpath'),
             size_bytes=require_int(d, 'size_bytes'),
             sha256=require_str(d, 'sha256'),
             pushed_at=require_str(d, 'pushed_at'),
+            row_ids=row_ids,
         )
 
 
@@ -165,6 +232,32 @@ def _save_manifest(sweep_dir: Path, manifest: RemoteManifest) -> None:
 
 
 # ============ Helpers ============
+
+def _sniff_row_ids(path: Path) -> tuple[str, ...]:
+    """Read the `id` column from a parquet file if present;
+    return empty tuple otherwise. The provenance breadcrumb for
+    invariant I5: per-shard `RunRow.id` lists land in the manifest
+    so a merged-corpus row can be traced back to its source shard.
+
+    Quietly returns `()` for non-parquet inputs, parquets without
+    an `id` column, and parquets whose `id` column doesn't contain
+    strings — the framework is robust to non-row-shaped parquets
+    in the manifest (e.g. graph sidecars when those eventually
+    land in the same archive)."""
+    if path.suffix != '.parquet':
+        return ()
+    import polars as pl
+    try:
+        df = pl.read_parquet(path, columns=['id'])
+    except (pl.exceptions.ColumnNotFoundError, pl.exceptions.ComputeError):
+        return ()
+    except FileNotFoundError:
+        return ()
+    if df.height == 0:
+        return ()
+    raw = df['id'].to_list()
+    return tuple(str(x) for x in raw if isinstance(x, str))
+
 
 def _sha256_file(path: Path, *, chunk_size: int = 1 << 20) -> str:
     """Compute sha256 of a local file. Streamed in 1 MiB chunks
@@ -255,14 +348,27 @@ def archive(
 
         sha256 = _sha256_file(local)
         prior = by_relpath.get(relpath)
+        remote_uri = _join_remote(remote_root, relpath)
         if prior is not None and prior.sha256 == sha256 and not force:
             # Already archived, content matches; idempotent skip.
             # Local file is still eligible for purge — the remote
             # is verified by sha256 equality with the manifest.
             purge_targets.append(local)
             continue
-
-        remote_uri = _join_remote(remote_root, relpath)
+        if prior is not None and prior.sha256 != sha256 and not force:
+            # Invariant I2 (SWEEP_PERSISTENCY.md): the manifest
+            # records a prior archive of this relpath with
+            # DIFFERENT content. Silently overwriting would
+            # last-writer-wins, the very pattern that lost data
+            # in the minatar_sync_curve_resume incident. Raise
+            # loudly so the user investigates — pass force=True
+            # to opt into overwrite.
+            raise ConflictingArchive(
+                relpath,
+                prior_sha256=prior.sha256,
+                local_sha256=sha256,
+                remote_uri=remote_uri,
+            )
         _fs.put_file(local, remote_uri)
         local_size = local.stat().st_size
         try:
@@ -282,6 +388,7 @@ def archive(
             size_bytes=local_size,
             sha256=sha256,
             pushed_at=datetime.now(UTC).isoformat(timespec='seconds'),
+            row_ids=_sniff_row_ids(local),
         )
         by_relpath[relpath] = entry
         # Save after every successful file — partial archives
