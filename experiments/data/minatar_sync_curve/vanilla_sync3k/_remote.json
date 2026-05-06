@@ -1,0 +1,65 @@
+{
+  "remote_root": "s3://corroborate-archive/minatar_sync_curve",
+  "files": [
+    {
+      "relpath": "runs.parquet",
+      "size_bytes": 24323,
+      "sha256": "046110e826c67a07dc53dd2cb588ce8b1239363ca2208ad4ddf2c49be40ba4ea",
+      "pushed_at": "2026-05-04T21:41:25+00:00"
+    },
+    {
+      "relpath": "tmp/cell000__Breakout-MinAtar__baseline__runs.parquet",
+      "size_bytes": 23219,
+      "sha256": "d80472512958479c98825a33694a689b772c99a6becc4b6e46450573ae7e5543",
+      "pushed_at": "2026-05-04T20:27:49+00:00"
+    },
+    {
+      "relpath": "tmp/cell000__Breakout-MinAtar__baseline__traces.parquet",
+      "size_bytes": 903327644,
+      "sha256": "c3b937d70a5b2a6f7cabc60ccb8a2cd051b09a415f2733457015b8aa898cea90",
+      "pushed_at": "2026-05-04T20:28:06+00:00"
+    },
+    {
+      "relpath": "tmp/cell001__Breakout-MinAtar__baseline__runs.parquet",
+      "size_bytes": 23222,
+      "sha256": "974145bee05d3d49e8bfd3ab19917fe616e82e71df4984180e3604e0dd20788d",
+      "pushed_at": "2026-05-04T20:51:57+00:00"
+    },
+    {
+      "relpath": "tmp/cell001__Breakout-MinAtar__baseline__traces.parquet",
+      "size_bytes": 903327647,
+      "sha256": "331e964a0a0b68e1a2f9b8b6007fa7bc606289efc1fb744458e07f2b8e6fdcd2",
+      "pushed_at": "2026-05-04T20:52:12+00:00"
+    },
+    {
+      "relpath": "tmp/cell002__Breakout-MinAtar__baseline__runs.parquet",
+      "size_bytes": 23238,
+      "sha256": "6e695cb027e82703aaa4af544007919dfeee83affe38ac6484458489af52b290",
+      "pushed_at": "2026-05-04T21:15:57+00:00"
+    },
+    {
+      "relpath": "tmp/cell002__Breakout-MinAtar__baseline__traces.parquet",
+      "size_bytes": 903307237,
+      "sha256": "32b82adf5ba8f21a791b0be27b6bf36ececb5c9e39349aa50111dec7bd95a949",
+      "pushed_at": "2026-05-04T21:16:15+00:00"
+    },
+    {
+      "relpath": "tmp/cell003__Breakout-MinAtar__baseline__runs.parquet",
+      "size_bytes": 23243,
+      "sha256": "ce46211a486b209da7be215492ae803d4e1a55716195ce8188f6f21f4411c2a6",
+      "pushed_at": "2026-05-04T21:40:05+00:00"
+    },
+    {
+      "relpath": "tmp/cell003__Breakout-MinAtar__baseline__traces.parquet",
+      "size_bytes": 903307242,
+      "sha256": "55196def9b126c6d41e0bb9e5263b00cc555cb140522d5b91a362023420dee70",
+      "pushed_at": "2026-05-04T21:40:16+00:00"
+    },
+    {
+      "relpath": "traces.parquet",
+      "size_bytes": 3613170109,
+      "sha256": "7d5cb618c531660672a331af6f68e9dbccf1d6720f864a6d20e4024aba3c46bb",
+      "pushed_at": "2026-05-04T21:42:18+00:00"
+    }
+  ]
+}
