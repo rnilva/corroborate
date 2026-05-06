@@ -78,6 +78,7 @@ class BridgeReportEntry:
     analysis_results: Mapping[str, Mapping[str, object]]
     warnings: tuple[Mapping[str, object], ...]
     blocked_by: Mapping[str, object] | None
+    assumption_violations: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -389,6 +390,7 @@ def _build_bridge_entry(
         analysis_results=MappingProxyType(analysis_results_dict),
         warnings=tuple(warnings_list),
         blocked_by=blocked_by_dict,
+        assumption_violations=evaluation.assumption_violations,
     )
 
 

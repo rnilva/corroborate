@@ -367,13 +367,22 @@ class BridgeEvaluation:
     `n_cells_in_scope`: row count after `bridge.scope` was applied.
     Equal to the input cell-count when `bridge.scope is None`. Used
     by the post-run report to surface sample-size diagnostics
-    without re-running the scope filter."""
+    without re-running the scope filter.
+
+    `assumption_violations`: flat tuple of distributional /
+    sample-size flags collected from each analysis result's
+    `.assumption_violations` field (when present). Each string
+    is prefixed with `<fixture_name>:` so the audit reader can
+    trace which fixture surfaced which warning. Empty when no
+    fixture's result carried any flags. Propagates through the
+    runner report into the run.json audit trail."""
     bridge_name: str
     verdict: Verdict
     analysis_results: Mapping[str, object]
     warnings: tuple['GateResult', ...] = ()
     blocked_by: 'GateResult | None' = None
     n_cells_in_scope: int = -1
+    assumption_violations: tuple[str, ...] = ()
 
 
 def _require_endpoint(
@@ -779,12 +788,27 @@ def evaluate(
         bridge.holds_when, filtered_cells, bridge_params,
     )
     verdict = bridge.holds_when(**analysis_results)
+    # Collect assumption_violations from each fixture's result.
+    # Analyses author opt into this by exposing an
+    # `assumption_violations: tuple[str, ...]` attribute on their
+    # Result dataclass (paired_g, random_effects_summary do today).
+    # The bridge layer prefixes each string with `<fixture>:` so
+    # the audit trail tells substrate authors WHICH fixture
+    # surfaced which flag.
+    assumption_flags: list[str] = []
+    for fixture_name, result in analysis_results.items():
+        flags = getattr(result, 'assumption_violations', None)
+        if isinstance(flags, tuple):
+            for flag in flags:
+                if isinstance(flag, str):
+                    assumption_flags.append(f'{fixture_name}: {flag}')
     return BridgeEvaluation(
         bridge_name=bridge.name,
         verdict=verdict,
         analysis_results=MappingProxyType(dict(analysis_results)),
         warnings=tuple(warnings),
         n_cells_in_scope=n_cells_in_scope,
+        assumption_violations=tuple(assumption_flags),
     )
 
 
