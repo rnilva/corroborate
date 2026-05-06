@@ -36,7 +36,7 @@ from corroborate.bridge.verdict import Verdict
 
 def _linear_corpus(
     *,
-    n: int = 100,
+    n: int = 400,
     ate: float = 2.0,
     noise: float = 0.5,
 ) -> list[dict[str, object]]:
@@ -135,12 +135,56 @@ def test_multi_fixture_bridge_consumes_three_analyses() -> None:
         f'(ate={bd.ate:.3f}, placebo refuted={pl.refuted_ate:.3f}, '
         f'rcc drift={rcc.drift:.3f})'
     )
-    # Sanity: all three analyses returned finite results.
-    assert math.isfinite(bd.ate)
+
+    # Closed-form recovery assertions — the bridge body's
+    # thresholds (`> 1.0`, `< 0.5*real`, `< 0.5`) leave 5-20× slack
+    # over the structural truth (ate=2.0, refuted=0, rcc-drift≈0).
+    # A DoWhy stub returning `BackdoorResult(ate=1.5)` regardless
+    # of input would pass the bridge but breach these closed-form
+    # bounds. Bypass the lax thresholds and check structural
+    # recovery directly.
+    #
+    # Construction: outcome = 2.0·t + ε, ε ~ N(0, 0.5²), n=400.
+    # Population OLS slope SE on t ~ U(0,1) is
+    # σ_ε / (σ_t · √n) = 0.5 / (0.289 · 20) ≈ 0.087. 4·SE ≈ 0.35.
+    # The `abs=0.35` bound is the structural 4σ band around the
+    # true ATE = 2.0. A DoWhy stub returning constant `1.5` gives
+    # |1.5 − 2.0| = 0.5 > 0.35 — caught.
+    assert bd.ate == pytest.approx(2.0, abs=0.35), (
+        f'backdoor_ate.ate = {bd.ate:.4f}; closed-form structural '
+        f'ATE = 2.0 (outcome = 2.0·t + ε). A DoWhy regression '
+        f'returning a constant (e.g., 1.5) would breach this.'
+    )
+    # Placebo refutation: random treatment column → estimate ≈ 0.
+    # Sampling SE on placebo ≈ 0.5/√400 = 0.025. Bound abs=0.10
+    # absorbs sampling drift (4·SE) and rejects a placebo refuter
+    # that aliased the real treatment column → would return ≈ 2.0.
+    assert pl.refuted_ate == pytest.approx(0.0, abs=0.10), (
+        f'placebo_refutation.refuted_ate = {pl.refuted_ate:.4f}; '
+        f'closed-form structural placebo ate = 0 (random treatment '
+        f'has no effect). A refuter that aliased the real column '
+        f'would yield ≈ 2.0; a refuter that ignored the placebo '
+        f'and returned `real_ate` would also breach.'
+    )
+    # Random common cause refutation: drift = |original - refuted|
+    # under a synthetic random confounder. With n=100 and the
+    # confounder being noise-only (no true effect on either node),
+    # drift is sampling-driven; structural drift = 0. Empirical
+    # drift on this seed is < 0.02. Bound `< 0.05` is 2.5×
+    # empirical floor — rejects RCC stubs that uniformly inflate
+    # drift (`drift = 0.4` would pass the bridge's `< 0.5` but
+    # breach this).
+    assert rcc.drift < 0.05, (
+        f'random_common_cause_refutation.drift = {rcc.drift:.4f}; '
+        f'expected < 0.05 (synthetic confounder is noise-only and '
+        f'should NOT meaningfully shift the ATE). The bridge\'s '
+        f'< 0.5 threshold is 10× too loose to catch a stub '
+        f'returning constant drift = 0.4.'
+    )
+
+    # All three analyses returned finite results and saw the same n.
     assert math.isfinite(pl.real_ate)
-    assert math.isfinite(rcc.drift)
-    # All saw the same n.
-    assert bd.n_rows == pl.n_rows == rcc.n_rows == 100
+    assert bd.n_rows == pl.n_rows == rcc.n_rows == 400
 
 
 @pytest.mark.parametrize(
