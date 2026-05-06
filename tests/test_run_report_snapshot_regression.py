@@ -198,7 +198,7 @@ def test_findings_dir_present() -> None:
 # them. Any rename or removal silently breaks consumers — this
 # invariant catches the rename without re-running the hypothesis.
 _REQUIRED_TOP_KEYS = frozenset({
-    'hypothesis_module', 'schema_version', 'cache_path', 'timestamp_utc',
+    'hypothesis_module', 'cache_path', 'timestamp_utc',
     'git_commit', 'bridges', 'errored_bridges', 'measurable_signatures',
     'n_cells_total',
 })

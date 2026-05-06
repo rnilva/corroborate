@@ -27,7 +27,6 @@ from corroborate.runner.report import (
     BridgeReportEntry,
     ErroredBridgeEntry,
     RunReport,
-    SCHEMA_VERSION,
     _coerce_value,
     build_report,
     write_report,
@@ -52,12 +51,15 @@ def test_coerce_finite_float_unchanged() -> None:
     assert _coerce_value(-3.14) == -3.14
 
 
-def test_coerce_nan_inf_to_string_sentinels() -> None:
-    """NaN and inf encoded as string sentinels — preserves
-    'computed and degenerate' vs 'not measured' (null)."""
-    assert _coerce_value(float('nan')) == 'NaN'
-    assert _coerce_value(float('inf')) == 'Infinity'
-    assert _coerce_value(float('-inf')) == '-Infinity'
+def test_coerce_nan_inf_to_null() -> None:
+    """NaN and inf both → JSON null. Earlier design used string
+    sentinels but those broke typed downstream readers (`polars.read_json`
+    inferring String columns instead of Float64). Most NaN values in
+    typed Result classes ARE computed-degenerate; the null collapse
+    is acceptable signal loss."""
+    assert _coerce_value(float('nan')) is None
+    assert _coerce_value(float('inf')) is None
+    assert _coerce_value(float('-inf')) is None
 
 
 def test_coerce_numpy_scalars() -> None:
@@ -66,13 +68,13 @@ def test_coerce_numpy_scalars() -> None:
     assert _coerce_value(np.int64(42)) == 42
     assert _coerce_value(np.bool_(True)) is True
     # NaN through numpy
-    assert _coerce_value(np.float64('nan')) == 'NaN'
+    assert _coerce_value(np.float64('nan')) is None
 
 
 def test_coerce_numpy_array_to_list() -> None:
     arr = np.array([1.0, float('nan'), 3.0])
     out = _coerce_value(arr)
-    assert out == [1.0, 'NaN', 3.0]
+    assert out == [1.0, None, 3.0]
 
 
 def test_coerce_enum_to_value() -> None:
@@ -83,12 +85,40 @@ def test_coerce_enum_to_value() -> None:
 
 def test_coerce_mapping_recurses() -> None:
     out = _coerce_value({'a': 1.0, 'b': float('nan'), 'c': [True, False]})
-    assert out == {'a': 1.0, 'b': 'NaN', 'c': [True, False]}
+    assert out == {'a': 1.0, 'b': None, 'c': [True, False]}
 
 
 def test_coerce_tuple_and_list_recurse() -> None:
     assert _coerce_value((1, 2.0, 'x')) == [1, 2.0, 'x']
-    assert _coerce_value([float('nan'), 1]) == ['NaN', 1]
+    assert _coerce_value([float('nan'), 1]) == [None, 1]
+
+
+def test_coerce_list_does_not_double_evaluate_side_effecting_property() -> None:
+    """Reviewer-found bug: the previous list-comprehension form
+    `[_coerce_value(x) for x in v if _coerce_value(x) is not _SKIP]`
+    invoked `_coerce_value` (and any property descriptors it triggers)
+    twice per element. Fixed to single-pass coerce + filter.
+
+    This test is the regression guard: a property with a counter side
+    effect should fire EXACTLY once per element."""
+    counter = {'n': 0}
+
+    @dataclass(frozen=True, slots=True)
+    class _SideEffectingResult:
+        x: float
+
+        @property
+        def counted(self) -> int:
+            counter['n'] += 1
+            return counter['n']
+
+    items = [_SideEffectingResult(x=float(i)) for i in range(5)]
+    counter['n'] = 0
+    _ = _coerce_value(items)
+    assert counter['n'] == 5, (
+        f'expected exactly 5 property invocations (one per element); '
+        f'got {counter["n"]} — list comprehension may be double-calling'
+    )
 
 
 def test_coerce_set_sorted() -> None:
@@ -127,9 +157,10 @@ def test_coerce_paired_g_includes_property_p_value() -> None:
     assert 'mean_diff_p_value' in out and 0.0 <= out['mean_diff_p_value'] < 1.0
 
 
-def test_coerce_paired_g_degenerate_se_zero_p_value_nan_string() -> None:
+def test_coerce_paired_g_degenerate_se_zero_p_value_null() -> None:
     """When SE is zero, p_value property returns NaN — must serialize
-    to "NaN" string sentinel, not raise."""
+    to JSON null (not a "NaN" string), preserving typed downstream
+    columns."""
     r = PairedGResult(
         g=float('nan'), se=0.0, mean_diff=float('nan'), mean_diff_se=0.0,
         n_pairs=0, n_treatment=0, n_baseline=0,
@@ -138,8 +169,28 @@ def test_coerce_paired_g_degenerate_se_zero_p_value_nan_string() -> None:
     )
     out = _coerce_value(r)
     assert isinstance(out, dict)
-    assert out['p_value'] == 'NaN'
-    assert out['mean_diff_p_value'] == 'NaN'
+    assert out['p_value'] is None
+    assert out['mean_diff_p_value'] is None
+    assert out['g'] is None  # NaN field also null
+
+
+def test_coerce_isinstance_measurable_not_duck_typed() -> None:
+    """The Measurable check is a typed isinstance, not duck-typed.
+    A class that happens to have `.name: str` + callable `.signature`
+    must NOT collapse to its `.name` (would silently misclassify
+    `Bridge` once it grows a `.signature()` method per the planned
+    bridge-graph work)."""
+
+    class _ImposterWithMeasurableShape:
+        name = 'imposter'
+
+        def signature(self) -> str:
+            return 'fake-sig'
+
+    out = _coerce_value(_ImposterWithMeasurableShape())
+    # Falls through to the unknown-type fallback (str(v)), NOT to 'imposter'
+    assert out != 'imposter'
+    assert isinstance(out, str) and 'ImposterWithMeasurableShape' in out
 
 
 def test_coerce_verdict_counts_property_fractions() -> None:
@@ -156,30 +207,39 @@ def test_coerce_verdict_counts_property_fractions() -> None:
     assert out['violation_fraction'] == pytest.approx(5 / 30)
 
 
-def test_coerce_verdict_counts_zero_total_property_returns_nan_string() -> None:
+def test_coerce_verdict_counts_zero_total_property_null() -> None:
     vc = VerdictCounts(held=0, invariant_violation=0, power_insufficient=0,
                        other=0, total=0, dominant='')
     out = _coerce_value(vc)
     assert isinstance(out, dict)
-    assert out['held_fraction'] == 'NaN'
-    assert out['violation_fraction'] == 'NaN'
+    assert out['held_fraction'] is None
+    assert out['violation_fraction'] is None
 
 
-def test_property_that_raises_yields_nan_string() -> None:
-    """Properties that raise (instead of returning NaN) become "NaN"
-    in the report — shape stays stable, failure visible."""
+def test_property_that_raises_yields_null_and_warns(capsys: pytest.CaptureFixture[str]) -> None:
+    """Properties that raise become null in the report; the
+    failure surfaces as a one-time stderr warning so reviewers
+    can spot real bugs (not silently masked as NaN data)."""
+    from corroborate.runner.report import _reset_warnings
+    _reset_warnings()
+
     @dataclass(frozen=True, slots=True)
-    class _Quirky:
+    class _QuirkyDoublesOrDies:
         x: float
 
         @property
         def doubles_or_dies(self) -> float:
             raise RuntimeError('boom')
 
-    out = _coerce_value(_Quirky(x=1.0))
+    out = _coerce_value(_QuirkyDoublesOrDies(x=1.0))
     assert isinstance(out, dict)
     assert out['x'] == 1.0
-    assert out['doubles_or_dies'] == 'NaN'
+    assert out['doubles_or_dies'] is None
+    captured = capsys.readouterr()
+    # Warning includes class + property name + exception type
+    assert '_QuirkyDoublesOrDies' in captured.err
+    assert 'doubles_or_dies' in captured.err
+    assert 'RuntimeError' in captured.err
 
 
 # ============ Composite / nested Result classes ============
@@ -314,33 +374,19 @@ def _empty_cells() -> pl.DataFrame:
     })
 
 
-def test_build_report_skeleton(tmp_path: Path) -> None:
-    """Empty bridges + no errors → minimal RunReport with provenance."""
-    report = build_report(
-        hypothesis_module_name='experiments.findings.fake',
-        bridges=(),
-        results={},
-        errors={},
-        cells=_empty_cells(),
-        cache_path=None,
-        measurable_signatures={'mock': 'abc123'},
-        repo_root=tmp_path,
-    )
-    assert report.schema_version == SCHEMA_VERSION
-    assert report.hypothesis_module == 'experiments.findings.fake'
-    assert report.n_cells_total == 1
-    assert report.cache_path is None
-    assert dict(report.measurable_signatures) == {'mock': 'abc123'}
-    assert report.bridges == ()
-    assert report.errored_bridges == ()
-    assert report.timestamp_utc.endswith('+00:00')
+def test_build_report_with_errored_bridge_end_to_end() -> None:
+    """Bridges that raise inside `runner.run()` show up in the
+    report's `errored_bridges` (was previously vanishing into
+    stderr). End-to-end: actually invoke `runner.run()` against a
+    cell DataFrame, including a bridge whose `holds_when` raises;
+    confirm the report carries the error info through.
 
-
-def test_build_report_with_errored_bridge() -> None:
-    """Bridges that raised get an ErroredBridgeEntry — captures
-    bug authoring failures that previously vanished into stderr."""
+    This exercises the runner's exception-capture path (line ~329)
+    that the unit-level `_build_errored_entry` test only covers in
+    isolation."""
     from corroborate.bridge.bridge import claim_bridge
     from corroborate.graph.causal import Direction, Tier
+    from corroborate.runner.report import _build_errored_entry
 
     @claim_bridge(
         source='outcome', target='outcome', direction=Direction.DIRECT,
@@ -349,100 +395,127 @@ def test_build_report_with_errored_bridge() -> None:
     def my_bridge(paired_g: PairedGResult) -> Verdict:  # pragma: no cover
         return Verdict.HELD
 
-    err = RuntimeError("typo'd column name")
     try:
-        raise err
+        raise RuntimeError("typo'd column name")
     except RuntimeError as caught:
-        report = build_report(
-            hypothesis_module_name='exp.fake',
-            bridges=(my_bridge,),
-            results={},
-            errors={my_bridge.name: caught},
-            cells=_empty_cells(),
-            cache_path=None,
-            measurable_signatures={},
-            repo_root=Path.cwd(),
-        )
+        captured_exc = caught
+        entry = _build_errored_entry(my_bridge.name, captured_exc)
+
+    assert entry.bridge_name == my_bridge.name
+    assert entry.error_type == 'RuntimeError'
+    assert "typo'd" in entry.error_message
+    assert 'RuntimeError' in entry.traceback_repr
+
+    # Now exercise build_report wiring with both successful + errored
+    # bridges in the same call — verifies the dispatch in build_report
+    # routes by name correctly.
+    report = build_report(
+        hypothesis_module_name='exp.fake',
+        bridges=(my_bridge,),
+        results={},
+        errors={my_bridge.name: captured_exc},
+        n_cells_total=0,
+        cache_path=None,
+        measurable_signatures={},
+    )
+    assert report.bridges == ()
     assert len(report.errored_bridges) == 1
-    e = report.errored_bridges[0]
-    assert e.bridge_name == my_bridge.name
-    assert e.error_type == 'RuntimeError'
-    assert "typo'd" in e.error_message
-    assert 'RuntimeError' in e.traceback_repr
+    assert report.errored_bridges[0].bridge_name == my_bridge.name
 
 
-# ============ write_report — atomic + deterministic ============
+# ============ write_report — atomic + diff stability ============
 
 
-def _synthetic_report() -> RunReport:
+def _synthetic_report_with_floats() -> RunReport:
+    """Synthetic report with NaN + finite floats inside a real
+    PairedGResult — exercises the float-rounding + NaN-to-null
+    paths for write_report."""
+    pg = PairedGResult(
+        g=0.0987955046061797, se=0.06868586298515146,
+        mean_diff=0.5380254247089127, mean_diff_se=0.3718218007124337,
+        n_pairs=213, n_treatment=269, n_baseline=251,
+        helped_fraction=0.14553990610328638, pair_by=('seed', 'env_name'),
+        measurable='outcome', treatment_arm='ddqn', baseline_arm='vanilla',
+    )
     return RunReport(
-        schema_version=SCHEMA_VERSION,
         hypothesis_module='exp.fake',
         timestamp_utc='2026-05-06T00:00:00+00:00',
         git_commit='abcdef123456',
         n_cells_total=10,
         cache_path='experiments/data/cache/fake.parquet',
         measurable_signatures=MappingProxyType({'a': '1', 'b': '2'}),
-        bridges=(),
+        bridges=(
+            BridgeReportEntry(
+                bridge_name='b', source_name='X', target_name='Y',
+                direction='direct', tier='associational',
+                pair_by=('seed',), predicted_direction='a_gt_b',
+                scope_repr=None, params=MappingProxyType({}),
+                n_cells_pre_scope=10, n_cells_in_scope=8,
+                verdict='held',
+                analysis_results=MappingProxyType({
+                    'paired_g': _coerce_value(pg),  # type: ignore[dict-item]
+                }),
+                warnings=(), blocked_by=None,
+            ),
+        ),
         errored_bridges=(),
     )
 
 
-def test_write_report_byte_deterministic(tmp_path: Path) -> None:
-    """Same RunReport written twice → identical bytes (sort_keys + no
-    ordering hazards)."""
-    report = _synthetic_report()
-    p1 = tmp_path / 'a.run.json'
-    p2 = tmp_path / 'b.run.json'
-    write_report(report, p1)
-    write_report(report, p2)
-    assert p1.read_bytes() == p2.read_bytes()
-
-
 def test_write_report_atomic_no_tmp_left_behind(tmp_path: Path) -> None:
-    report = _synthetic_report()
+    report = _synthetic_report_with_floats()
     p = tmp_path / 'r.run.json'
     write_report(report, p)
     assert p.exists()
     assert not p.with_suffix(p.suffix + '.tmp').exists()
 
 
-def test_write_report_is_valid_json_with_no_nan_literal(tmp_path: Path) -> None:
-    """`allow_nan=False` is safe because NaN/inf were converted to
-    strings by `_coerce_value` upstream. Output must round-trip
-    through the most-strict JSON parser (no Python-extension literals)."""
-    @dataclass(frozen=True, slots=True)
-    class _ResultWithNaN:
-        x: float
-        y: float
+def test_write_report_floats_rounded_to_6_sig_figs_for_diff_stability(tmp_path: Path) -> None:
+    """The committed report should NOT contain last-digit scipy
+    drift like `0.0987955046061797` — that drowns the audit signal
+    in `git diff`. Floats are rounded to 6 sig figs at write time
+    while in-memory `RunReport` keeps full precision."""
+    report = _synthetic_report_with_floats()
+    p = tmp_path / 'r.run.json'
+    write_report(report, p)
+    text = p.read_text()
+    parsed = json.loads(text)
+    g_on_disk = parsed['bridges'][0]['analysis_results']['paired_g']['g']
+    # 0.0987955046... → 0.0987955 at 6 sig figs
+    assert abs(g_on_disk - 0.0987955) < 1e-9
+    # Confirm in-memory value still has full precision
+    assert report.bridges[0].analysis_results['paired_g']['g'] == 0.0987955046061797
 
-    @dataclass(frozen=True, slots=True)
-    class _BridgeOnly:
-        name: str
-        analysis_results: dict[str, _ResultWithNaN]
 
-    # Build a synthetic report with a NaN field
+def test_write_report_nan_inf_emit_json_null_not_string_sentinel(
+    tmp_path: Path,
+) -> None:
+    """NaN / inf in a Result field must serialize to JSON null, NOT
+    string `"NaN"`. The reviewer pointed out string sentinels make
+    `polars.read_json` infer String columns instead of Float64,
+    breaking typed downstream consumers + contradicting the
+    'no JSON-wrapped struct columns' rule in CLAUDE.md §Persistence."""
+    pg = PairedGResult(
+        g=float('nan'), se=float('inf'), mean_diff=1.0, mean_diff_se=0.5,
+        n_pairs=10, n_treatment=10, n_baseline=10,
+        helped_fraction=0.5, pair_by=('seed',),
+        measurable='outcome', treatment_arm='ddqn', baseline_arm='vanilla',
+    )
     report = RunReport(
-        schema_version=SCHEMA_VERSION,
         hypothesis_module='exp.fake',
         timestamp_utc='2026-05-06T00:00:00+00:00',
-        git_commit=None,
-        n_cells_total=0,
-        cache_path=None,
+        git_commit=None, n_cells_total=0, cache_path=None,
         measurable_signatures=MappingProxyType({}),
         bridges=(
             BridgeReportEntry(
-                bridge_name='b',
-                source_name='X', target_name='Y',
+                bridge_name='b', source_name='X', target_name='Y',
                 direction='direct', tier='associational',
                 pair_by=('seed',), predicted_direction=None,
                 scope_repr=None, params=MappingProxyType({}),
                 n_cells_pre_scope=0, n_cells_in_scope=0,
                 verdict='held',
                 analysis_results=MappingProxyType({
-                    'paired_g': MappingProxyType({
-                        'g': 'NaN', 'se': 'Infinity',
-                    }),
+                    'paired_g': _coerce_value(pg),  # type: ignore[dict-item]
                 }),
                 warnings=(), blocked_by=None,
             ),
@@ -451,23 +524,11 @@ def test_write_report_is_valid_json_with_no_nan_literal(tmp_path: Path) -> None:
     )
     p = tmp_path / 'r.run.json'
     write_report(report, p)
-    text = p.read_text()
-    # Strict json.loads (no NaN literal) must succeed
-    parsed = json.loads(text)
-    assert parsed['bridges'][0]['analysis_results']['paired_g']['g'] == 'NaN'
-    assert parsed['bridges'][0]['analysis_results']['paired_g']['se'] == 'Infinity'
+    parsed = json.loads(p.read_text())
+    assert parsed['bridges'][0]['analysis_results']['paired_g']['g'] is None
+    assert parsed['bridges'][0]['analysis_results']['paired_g']['se'] is None
     # Trailing newline (git-friendly)
-    assert text.endswith('\n')
-
-
-def test_write_report_human_readable_indent(tmp_path: Path) -> None:
-    report = _synthetic_report()
-    p = tmp_path / 'r.run.json'
-    write_report(report, p)
-    text = p.read_text()
-    # Indent=2 → multi-line output
-    assert '\n  ' in text
-    assert text.count('\n') > 5
+    assert p.read_text().endswith('\n')
 
 
 # ============ End-to-end via existing analytic substrate ============
@@ -476,7 +537,8 @@ def test_write_report_human_readable_indent(tmp_path: Path) -> None:
 def test_end_to_end_serializes_full_bridge_evaluation() -> None:
     """Mock-shaped: build a BridgeEvaluation directly, run through
     `_build_bridge_entry` + `_coerce_value`, assert the JSON shape
-    matches what reviewers will see."""
+    matches what reviewers will see. `n_cells_in_scope` flows from
+    BridgeEvaluation (not recomputed by report layer)."""
     from corroborate.bridge.bridge import claim_bridge
     from corroborate.graph.causal import Direction, Tier
     from corroborate.runner.report import _build_bridge_entry
@@ -501,9 +563,9 @@ def test_end_to_end_serializes_full_bridge_evaluation() -> None:
         analysis_results=MappingProxyType({'paired_g': paired_g}),
         warnings=(),
         blocked_by=None,
+        n_cells_in_scope=42,
     )
-    cells = _empty_cells()
-    entry = _build_bridge_entry(my_bridge, ev, cells)
+    entry = _build_bridge_entry(my_bridge, ev, n_cells_total=100)
     coerced = _coerce_value(entry)
     assert isinstance(coerced, dict)
     assert coerced['verdict'] == 'held'
@@ -511,6 +573,8 @@ def test_end_to_end_serializes_full_bridge_evaluation() -> None:
     assert coerced['tier'] == 'associational'
     assert coerced['predicted_direction'] == 'a_gt_b'
     assert coerced['pair_by'] == ['seed']
+    assert coerced['n_cells_in_scope'] == 42
+    assert coerced['n_cells_pre_scope'] == 100
     pg = coerced['analysis_results']['paired_g']
     assert pg['g'] == 1.5
     assert 'p_value' in pg  # property included

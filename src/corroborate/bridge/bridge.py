@@ -362,12 +362,18 @@ class BridgeEvaluation:
     `ADMISSION_GATES_DESIGN.md`.
 
     `blocked_by`: set when `verdict == INADMISSIBLE` — the first
-    BLOCK-level gate that vetoed the bridge. Body did not run."""
+    BLOCK-level gate that vetoed the bridge. Body did not run.
+
+    `n_cells_in_scope`: row count after `bridge.scope` was applied.
+    Equal to the input cell-count when `bridge.scope is None`. Used
+    by the post-run report to surface sample-size diagnostics
+    without re-running the scope filter."""
     bridge_name: str
     verdict: Verdict
     analysis_results: Mapping[str, object]
     warnings: tuple['GateResult', ...] = ()
     blocked_by: 'GateResult | None' = None
+    n_cells_in_scope: int = -1
 
 
 def _require_endpoint(
@@ -704,6 +710,7 @@ def evaluate(
             cast(list[dict[str, object]], df.to_dicts())
             if df.height > 0 else []
         )
+    n_cells_in_scope = len(filtered_cells)
     # Run admission gates BEFORE the bridge body. Auto-gates
     # (typed-contract guards, exogenous-source/scope, etc.) are
     # always-on; per-bridge `gates=(...)` are appended. BLOCK-level
@@ -722,6 +729,7 @@ def evaluate(
                 analysis_results=MappingProxyType({}),
                 warnings=tuple(warnings),
                 blocked_by=result,
+                n_cells_in_scope=n_cells_in_scope,
             )
         warnings.append(result)
     # Contrast resolution:
@@ -768,6 +776,7 @@ def evaluate(
         verdict=verdict,
         analysis_results=MappingProxyType(dict(analysis_results)),
         warnings=tuple(warnings),
+        n_cells_in_scope=n_cells_in_scope,
     )
 
 

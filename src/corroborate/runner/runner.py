@@ -233,7 +233,7 @@ def run(
     restore_from_cloud: bool = True,
     cache_path: Path | None = None,
     report_path: Path | None = None,
-    write_report: bool = True,
+    write_report: bool = False,
 ) -> dict[str, BridgeEvaluation]:
     """Run a hypothesis's bridges on `data`, returning per-bridge
     verdicts.
@@ -269,14 +269,18 @@ def run(
     the last segment of `h.__name__` (modules) or the class's
     `__name__`.
 
-    `report_path` / `write_report`: post-run audit report. When
-    `write_report=True` (default), serializes a JSON report at
-    `report_path` (or `experiments/findings/<short>.run.json` if
-    None) capturing per-bridge verdict + every typed analysis
-    result + admission gates + provenance (timestamp, git commit,
-    measurable signatures). The report is the load-bearing audit
-    artifact — small, diffable, deterministic, committed alongside
-    the bridges that produced it. See `corroborate.runner.report`.
+    `report_path` / `write_report`: post-run audit report. Default
+    is `write_report=False` (library use shouldn't silently mutate
+    `experiments/findings/`); the CLI in `scripts/run_hypothesis.py`
+    flips this to True so committed-baseline regeneration is the
+    default for `run_hypothesis.py` invocations. When enabled,
+    serializes a JSON report at `report_path` (or
+    `experiments/findings/<short>.run.json` if None) capturing
+    per-bridge verdict + every typed analysis result + admission
+    gates + provenance (timestamp, git commit, measurable
+    signatures). The report is the load-bearing audit artifact —
+    small, diffable, deterministic, committed alongside the
+    bridges that produced it. See `corroborate.runner.report`.
 
     `data` may be:
     - `None`: run on whatever's already in the cache.
@@ -361,10 +365,13 @@ def run(
             bridges=bridges,
             results=out,
             errors=errors,
-            cells=cells,
+            n_cells_total=cells.height,
             cache_path=resolved_cache,
             measurable_signatures=sigs,
-            repo_root=Path.cwd(),
+            # `repo_root=None` lets `build_report` walk up from the
+            # report module's own location looking for `.git`. More
+            # robust than `Path.cwd()` (notebooks running outside
+            # the repo would have lost git_commit silently).
         )
         _write_report(report, resolved_report)
     return out

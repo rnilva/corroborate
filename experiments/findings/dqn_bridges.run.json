@@ -4,20 +4,20 @@
       "analysis_results": {
         "paired_g": {
           "baseline_arm": "baseline",
-          "g": -0.5959534990755747,
+          "g": -0.595953,
           "helped_fraction": 0.3,
-          "mean_diff": -2.630100605885188,
-          "mean_diff_p_value": 1.7478159110684288e-05,
-          "mean_diff_se": 0.5624766323267709,
+          "mean_diff": -2.6301,
+          "mean_diff_p_value": 1.74782e-05,
+          "mean_diff_se": 0.562477,
           "measurable": "jensen_gap",
           "n_baseline": 60,
           "n_pairs": 60,
           "n_treatment": 60,
-          "p_value": 2.100289568077362e-05,
+          "p_value": 2.10029e-05,
           "pair_by": [
             "seed"
           ],
-          "se": 0.14009403309504956,
+          "se": 0.140094,
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
         }
       },
@@ -49,20 +49,20 @@
       "analysis_results": {
         "paired_g": {
           "baseline_arm": "baseline",
-          "g": -4.583834639048249,
+          "g": -4.58383,
           "helped_fraction": 0.0,
-          "mean_diff": -0.027384952286092813,
+          "mean_diff": -0.027385,
           "mean_diff_p_value": 0.0,
-          "mean_diff_se": 0.0007614257221147354,
+          "mean_diff_se": 0.000761426,
           "measurable": "jensen_gap",
           "n_baseline": 60,
           "n_pairs": 60,
           "n_treatment": 60,
-          "p_value": 1.217013412005145e-25,
+          "p_value": 1.21701e-25,
           "pair_by": [
             "seed"
           ],
-          "se": 0.43790733416765426,
+          "se": 0.437907,
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
         }
       },
@@ -94,20 +94,20 @@
       "analysis_results": {
         "paired_g": {
           "baseline_arm": "baseline",
-          "g": -0.9097929891916866,
-          "helped_fraction": 0.18333333333333332,
-          "mean_diff": -0.24934092347199718,
-          "mean_diff_p_value": 1.5774412887026301e-09,
-          "mean_diff_se": 0.03492974982952809,
+          "g": -0.909793,
+          "helped_fraction": 0.183333,
+          "mean_diff": -0.249341,
+          "mean_diff_p_value": 1.57744e-09,
+          "mean_diff_se": 0.0349297,
           "measurable": "jensen_gap",
           "n_baseline": 60,
           "n_pairs": 60,
           "n_treatment": 60,
-          "p_value": 3.090364072571044e-09,
+          "p_value": 3.09036e-09,
           "pair_by": [
             "seed"
           ],
-          "se": 0.15350687506814215,
+          "se": 0.153507,
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
         }
       },
@@ -139,20 +139,20 @@
       "analysis_results": {
         "paired_g": {
           "baseline_arm": "baseline",
-          "g": 0.04755508618208043,
-          "helped_fraction": 0.38333333333333336,
-          "mean_diff": 20.159154878240646,
-          "mean_diff_p_value": 0.710393849363895,
-          "mean_diff_se": 54.02811875924549,
+          "g": 0.0475551,
+          "helped_fraction": 0.383333,
+          "mean_diff": 20.1592,
+          "mean_diff_p_value": 0.710394,
+          "mean_diff_se": 54.0281,
           "measurable": "jensen_gap",
           "n_baseline": 60,
           "n_pairs": 60,
           "n_treatment": 60,
-          "p_value": 0.7127598768828591,
+          "p_value": 0.71276,
           "pair_by": [
             "seed"
           ],
-          "se": 0.1291724134061973,
+          "se": 0.129172,
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
         }
       },
@@ -186,25 +186,25 @@
           "cleavage_axes": [],
           "coefficients": [
             {
-              "ci_hi": 0.5046805037283273,
-              "ci_lo": -1.955592816387066,
-              "coefficient": -0.7254561563293693,
+              "ci_hi": 0.504681,
+              "ci_lo": -1.95559,
+              "coefficient": -0.725456,
               "is_significant": false,
               "name": "log_action_dim",
-              "p_value": 0.2292085260137129
+              "p_value": 0.229209
             }
           ],
-          "i_squared": 0.9367882897220975,
-          "intercept": -0.3786967060990832,
-          "intercept_ci_hi": 0.2836392198042765,
-          "intercept_ci_lo": -1.0410326320024428,
-          "intercept_p_value": 0.2430792046742989,
-          "intercept_se": 0.31243656315528257,
+          "i_squared": 0.936788,
+          "intercept": -0.378697,
+          "intercept_ci_hi": 0.283639,
+          "intercept_ci_lo": -1.04103,
+          "intercept_p_value": 0.243079,
+          "intercept_se": 0.312437,
           "n_strata": 18,
           "pool": "random",
-          "q_statistic": 253.11765699200308,
-          "r_squared": 0.08899195897192047,
-          "tau_sq": 0.4227936263044958
+          "q_statistic": 253.118,
+          "r_squared": 0.088992,
+          "tau_sq": 0.422794
         }
       },
       "blocked_by": null,
@@ -218,16 +218,16 @@
       "params": {
         "covariates_per_env": {
           "Acrobot-v1": {
-            "log_action_dim": 1.0986122886681098
+            "log_action_dim": 1.09861
           },
           "CartPole-v1": {
-            "log_action_dim": 0.6931471805599453
+            "log_action_dim": 0.693147
           },
           "Catch-bsuite": {
-            "log_action_dim": 1.0986122886681098
+            "log_action_dim": 1.09861
           },
           "DiscountingChain-bsuite": {
-            "log_action_dim": 1.6094379124341003
+            "log_action_dim": 1.60944
           }
         }
       },
@@ -386,53 +386,53 @@
           "n_envs": 6,
           "per_env": [
             {
-              "g": 0.12474181615048653,
+              "g": 0.124742,
               "n_pairs": 60,
-              "se": 0.1296006854629674,
+              "se": 0.129601,
               "stratum_id": "Acrobot-v1"
             },
             {
-              "g": -0.12178116758659813,
+              "g": -0.121781,
               "n_pairs": 30,
-              "se": 0.18324985915314074,
+              "se": 0.18325,
               "stratum_id": "Breakout-MinAtar"
             },
             {
-              "g": -4.550075839622326,
+              "g": -4.55008,
               "n_pairs": 60,
-              "se": 0.4349635056177588,
+              "se": 0.434964,
               "stratum_id": "Catch-bsuite"
             },
             {
-              "g": -0.13059891956544384,
+              "g": -0.130599,
               "n_pairs": 30,
-              "se": 0.1833510329846213,
+              "se": 0.183351,
               "stratum_id": "DeepSea-bsuite"
             },
             {
-              "g": -0.6980999869961729,
+              "g": -0.6981,
               "n_pairs": 60,
-              "se": 0.14397174467709675,
+              "se": 0.143972,
               "stratum_id": "DiscountingChain-bsuite"
             },
             {
-              "g": -1.0437154622481317,
+              "g": -1.04372,
               "n_pairs": 30,
-              "se": 0.2269119493744887,
+              "se": 0.226912,
               "stratum_id": "UmbrellaChain-bsuite"
             }
           ],
           "pooled": {
-            "I2": 0.9597483845992729,
-            "Q": 124.21861707219037,
-            "empirical_max_g": 0.12474181615048653,
-            "empirical_min_g": -4.550075839622326,
+            "I2": 0.959748,
+            "Q": 124.219,
+            "empirical_max_g": 0.124742,
+            "empirical_min_g": -4.55008,
             "n_cells": 6,
-            "pi_hi": 1.515689058468456,
-            "pi_lo": -3.457260043030761,
-            "pooled_g": -0.9707854922811525,
-            "se_pooled": 0.3759602395579444,
-            "tau2": 0.7942861168007805
+            "pi_hi": 1.51569,
+            "pi_lo": -3.45726,
+            "pooled_g": -0.970785,
+            "se_pooled": 0.37596,
+            "tau2": 0.794286
           },
           "total_steps_filter": 200000,
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
@@ -472,53 +472,53 @@
           "n_envs": 4,
           "per_env": [
             {
-              "g": 0.15542044743045597,
+              "g": 0.15542,
               "n_pairs": 60,
-              "se": 0.12987672088944843,
+              "se": 0.129877,
               "stratum_id": "Acrobot-v1"
             },
             {
-              "g": 0.3152039042528183,
+              "g": 0.315204,
               "n_pairs": 30,
-              "se": 0.18705406977913364,
+              "se": 0.187054,
               "stratum_id": "Breakout-MinAtar"
             },
             {
               "g": 0.0,
               "n_pairs": 60,
-              "se": "NaN",
+              "se": null,
               "stratum_id": "Catch-bsuite"
             },
             {
-              "g": -0.2416344896754558,
+              "g": -0.241634,
               "n_pairs": 30,
-              "se": 0.18522001451430306,
+              "se": 0.18522,
               "stratum_id": "DeepSea-bsuite"
             },
             {
-              "g": 0.30497093789672736,
+              "g": 0.304971,
               "n_pairs": 60,
-              "se": 0.13206713169702777,
+              "se": 0.132067,
               "stratum_id": "DiscountingChain-bsuite"
             },
             {
               "g": 0.0,
               "n_pairs": 30,
-              "se": "NaN",
+              "se": null,
               "stratum_id": "UmbrellaChain-bsuite"
             }
           ],
           "pooled": {
-            "I2": 0.5449925911851677,
-            "Q": 6.593299233993059,
-            "empirical_max_g": 0.3152039042528183,
-            "empirical_min_g": -0.2416344896754558,
+            "I2": 0.544993,
+            "Q": 6.5933,
+            "empirical_max_g": 0.315204,
+            "empirical_min_g": -0.241634,
             "n_cells": 4,
-            "pi_hi": 0.7990416089685027,
-            "pi_lo": -0.5028101895087626,
-            "pooled_g": 0.14811570972987007,
-            "se_pooled": 0.11517824283317683,
-            "tau2": 0.02856908415029457
+            "pi_hi": 0.799042,
+            "pi_lo": -0.50281,
+            "pooled_g": 0.148116,
+            "se_pooled": 0.115178,
+            "tau2": 0.0285691
           },
           "total_steps_filter": 200000,
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
@@ -551,59 +551,59 @@
           "n_envs": 5,
           "per_env": [
             {
-              "g": -0.24393036047690494,
+              "g": -0.24393,
               "n_pairs": 60,
-              "se": 0.13100578933652746,
+              "se": 0.131006,
               "stratum_id": "Acrobot-v1"
             },
             {
-              "g": -0.2983595486924672,
+              "g": -0.29836,
               "n_pairs": 30,
-              "se": 0.18659306973089743,
+              "se": 0.186593,
               "stratum_id": "Breakout-MinAtar"
             },
             {
               "g": 0.0,
               "n_pairs": 60,
-              "se": "NaN",
+              "se": null,
               "stratum_id": "Catch-bsuite"
             },
             {
-              "g": -0.36920677067070357,
+              "g": -0.369207,
               "n_pairs": 60,
-              "se": 0.1334264353963477,
+              "se": 0.133426,
               "stratum_id": "DiscountingChain-bsuite"
             },
             {
-              "g": 0.16431725394860613,
+              "g": 0.164317,
               "n_pairs": 30,
-              "se": 0.18380243741334565,
+              "se": 0.183802,
               "stratum_id": "MemoryChain-bsuite"
             },
             {
-              "g": -0.017355464031552113,
+              "g": -0.0173555,
               "n_pairs": 30,
-              "se": 0.1825879337073761,
+              "se": 0.182588,
               "stratum_id": "SpaceInvaders-MinAtar"
             },
             {
               "g": 0.0,
               "n_pairs": 30,
-              "se": "NaN",
+              "se": null,
               "stratum_id": "UmbrellaChain-bsuite"
             }
           ],
           "pooled": {
-            "I2": 0.42185290313622625,
-            "Q": 6.9186544768597225,
-            "empirical_max_g": 0.16431725394860613,
-            "empirical_min_g": -0.36920677067070357,
+            "I2": 0.421853,
+            "Q": 6.91865,
+            "empirical_max_g": 0.164317,
+            "empirical_min_g": -0.369207,
             "n_cells": 5,
-            "pi_hi": 0.28391953626062677,
-            "pi_lo": -0.6350573535468653,
-            "pooled_g": -0.1755689086431193,
-            "se_pooled": 0.09419065711258888,
-            "tau2": 0.018516794083267153
+            "pi_hi": 0.28392,
+            "pi_lo": -0.635057,
+            "pooled_g": -0.175569,
+            "se_pooled": 0.0941907,
+            "tau2": 0.0185168
           },
           "total_steps_filter": 200000,
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
@@ -661,23 +661,23 @@
           "n_envs": 1,
           "per_env": [
             {
-              "g": -0.017355464031552113,
+              "g": -0.0173555,
               "n_pairs": 30,
-              "se": 0.1825879337073761,
+              "se": 0.182588,
               "stratum_id": "SpaceInvaders-MinAtar"
             }
           ],
           "pooled": {
-            "I2": "NaN",
-            "Q": "NaN",
-            "empirical_max_g": "NaN",
-            "empirical_min_g": "NaN",
+            "I2": null,
+            "Q": null,
+            "empirical_max_g": null,
+            "empirical_min_g": null,
             "n_cells": 1,
-            "pi_hi": "NaN",
-            "pi_lo": "NaN",
-            "pooled_g": "NaN",
-            "se_pooled": "NaN",
-            "tau2": "NaN"
+            "pi_hi": null,
+            "pi_lo": null,
+            "pooled_g": null,
+            "se_pooled": null,
+            "tau2": null
           },
           "total_steps_filter": 200000,
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
@@ -732,20 +732,20 @@
       "analysis_results": {
         "paired_g": {
           "baseline_arm": "baseline",
-          "g": -3.255928766974758,
+          "g": -3.25593,
           "helped_fraction": 0.0,
-          "mean_diff": -0.433007728015202,
+          "mean_diff": -0.433008,
           "mean_diff_p_value": 0.0,
-          "mean_diff_se": 0.02364723174458291,
+          "mean_diff_se": 0.0236472,
           "measurable": "jensen_gap",
           "n_baseline": 30,
           "n_pairs": 30,
           "n_treatment": 30,
-          "p_value": 1.2056951692447377e-12,
+          "p_value": 1.2057e-12,
           "pair_by": [
             "seed"
           ],
-          "se": 0.4582770656784999,
+          "se": 0.458277,
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
         }
       },
@@ -777,20 +777,20 @@
       "analysis_results": {
         "paired_g": {
           "baseline_arm": "baseline",
-          "g": -0.4939216514852851,
-          "helped_fraction": 0.36666666666666664,
-          "mean_diff": -0.029085097143736978,
-          "mean_diff_p_value": 0.009496181320743036,
-          "mean_diff_se": 0.010470610619563732,
+          "g": -0.493922,
+          "helped_fraction": 0.366667,
+          "mean_diff": -0.0290851,
+          "mean_diff_p_value": 0.00949618,
+          "mean_diff_se": 0.0104706,
           "measurable": "jensen_gap",
           "n_baseline": 30,
           "n_pairs": 30,
           "n_treatment": 30,
-          "p_value": 0.010648358619446931,
+          "p_value": 0.0106484,
           "pair_by": [
             "seed"
           ],
-          "se": 0.19338901200283465,
+          "se": 0.193389,
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
         }
       },
@@ -815,20 +815,20 @@
       "analysis_results": {
         "paired_g": {
           "baseline_arm": "baseline",
-          "g": 3.292628651378435,
+          "g": 3.29263,
           "helped_fraction": 1.0,
-          "mean_diff": 0.1250313702253335,
+          "mean_diff": 0.125031,
           "mean_diff_p_value": 0.0,
-          "mean_diff_se": 0.006752052223435283,
+          "mean_diff_se": 0.00675205,
           "measurable": "eval_best_burst_mean",
           "n_baseline": 30,
           "n_pairs": 30,
           "n_treatment": 30,
-          "p_value": 1.101028285596105e-12,
+          "p_value": 1.10103e-12,
           "pair_by": [
             "seed"
           ],
-          "se": 0.46262662115140923,
+          "se": 0.462627,
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
         }
       },
@@ -860,20 +860,20 @@
       "analysis_results": {
         "paired_g": {
           "baseline_arm": "baseline",
-          "g": 0.08819485558013555,
-          "helped_fraction": 0.5666666666666667,
-          "mean_diff": 0.0018232365449269612,
-          "mean_diff_p_value": 0.6236312051052368,
-          "mean_diff_se": 0.003675863017035027,
+          "g": 0.0881949,
+          "helped_fraction": 0.566667,
+          "mean_diff": 0.00182324,
+          "mean_diff_p_value": 0.623631,
+          "mean_diff_se": 0.00367586,
           "measurable": "eval_best_burst_mean",
           "n_baseline": 30,
           "n_pairs": 30,
           "n_treatment": 30,
-          "p_value": 0.6297160905211112,
+          "p_value": 0.629716,
           "pair_by": [
             "seed"
           ],
-          "se": 0.1829288719944996,
+          "se": 0.182929,
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
         }
       },
@@ -900,25 +900,25 @@
           "cleavage_axes": [],
           "coefficients": [
             {
-              "ci_hi": 0.8184312253619241,
-              "ci_lo": -2.947752461782721,
-              "coefficient": -1.0646606182103984,
+              "ci_hi": 0.818431,
+              "ci_lo": -2.94775,
+              "coefficient": -1.06466,
               "is_significant": false,
               "name": "log_n_step",
-              "p_value": 0.16980089295986356
+              "p_value": 0.169801
             }
           ],
-          "i_squared": 0.9076514431880774,
-          "intercept": 1.9667740693887903,
-          "intercept_ci_hi": 4.6502998944967935,
-          "intercept_ci_lo": -0.7167517557192133,
-          "intercept_p_value": 0.10192124362551813,
-          "intercept_se": 0.8432273690376604,
+          "i_squared": 0.907651,
+          "intercept": 1.96677,
+          "intercept_ci_hi": 4.6503,
+          "intercept_ci_lo": -0.716752,
+          "intercept_p_value": 0.101921,
+          "intercept_se": 0.843227,
           "n_strata": 5,
           "pool": "random",
-          "q_statistic": 32.48561865573938,
-          "r_squared": 0.5190333441905753,
-          "tau_sq": 0.4319913340261475
+          "q_statistic": 32.4856,
+          "r_squared": 0.519033,
+          "tau_sq": 0.431991
         }
       },
       "blocked_by": null,
@@ -951,25 +951,25 @@
           "cleavage_axes": [],
           "coefficients": [
             {
-              "ci_hi": 2.418973312125003,
-              "ci_lo": -0.2246043668592459,
-              "coefficient": 1.0971844726328785,
+              "ci_hi": 2.41897,
+              "ci_lo": -0.224604,
+              "coefficient": 1.09718,
               "is_significant": false,
               "name": "log_n_step",
-              "p_value": 0.07754485387380194
+              "p_value": 0.0775449
             }
           ],
-          "i_squared": 0.8364122150556635,
-          "intercept": -2.3158195782865674,
-          "intercept_ci_hi": -0.40111772688343494,
-          "intercept_ci_lo": -4.2305214296897,
-          "intercept_p_value": 0.03095802592545205,
-          "intercept_se": 0.6016446681988689,
+          "i_squared": 0.836412,
+          "intercept": -2.31582,
+          "intercept_ci_hi": -0.401118,
+          "intercept_ci_lo": -4.23052,
+          "intercept_p_value": 0.030958,
+          "intercept_se": 0.601645,
           "n_strata": 5,
           "pool": "random",
-          "q_statistic": 18.338777562278263,
-          "r_squared": 0.6993513016331364,
-          "tau_sq": 0.2574042347437411
+          "q_statistic": 18.3388,
+          "r_squared": 0.699351,
+          "tau_sq": 0.257404
         }
       },
       "blocked_by": null,
@@ -1002,25 +1002,25 @@
           "cleavage_axes": [],
           "coefficients": [
             {
-              "ci_hi": 0.3274027795389467,
-              "ci_lo": -1.8482553675889102,
-              "coefficient": -0.7604262940249817,
+              "ci_hi": 0.327403,
+              "ci_lo": -1.84826,
+              "coefficient": -0.760426,
               "is_significant": false,
               "name": "log_n_step",
-              "p_value": 0.11255727110870883
+              "p_value": 0.112557
             }
           ],
-          "i_squared": 0.8323094444938931,
-          "intercept": 1.3546468352236896,
-          "intercept_ci_hi": 2.8981605358971345,
-          "intercept_ci_lo": -0.1888668654497554,
-          "intercept_p_value": 0.06824635632912557,
-          "intercept_se": 0.4850085602735234,
+          "i_squared": 0.832309,
+          "intercept": 1.35465,
+          "intercept_ci_hi": 2.89816,
+          "intercept_ci_lo": -0.188867,
+          "intercept_p_value": 0.0682464,
+          "intercept_se": 0.485009,
           "n_strata": 5,
           "pool": "random",
-          "q_statistic": 17.890095187207766,
-          "r_squared": 0.6225927620823497,
-          "tau_sq": 0.19843059534806498
+          "q_statistic": 17.8901,
+          "r_squared": 0.622593,
+          "tau_sq": 0.198431
         }
       },
       "blocked_by": null,
@@ -1057,17 +1057,17 @@
           "per_env": [
             {
               "env_name": "FourRooms-misc",
-              "g_b_minus_a": "NaN",
-              "g_c_minus_a": "NaN",
-              "g_d_minus_b": "NaN",
-              "g_d_minus_c": "NaN",
-              "g_interaction": "NaN",
+              "g_b_minus_a": null,
+              "g_c_minus_a": null,
+              "g_d_minus_b": null,
+              "g_d_minus_c": null,
+              "g_interaction": null,
               "n_pairs": 0,
-              "se_b_minus_a": "NaN",
-              "se_c_minus_a": "NaN",
-              "se_d_minus_b": "NaN",
-              "se_d_minus_c": "NaN",
-              "se_interaction": "NaN"
+              "se_b_minus_a": null,
+              "se_c_minus_a": null,
+              "se_d_minus_b": null,
+              "se_d_minus_c": null,
+              "se_interaction": null
             }
           ],
           "source": "eval_best_burst_mean"
@@ -1116,17 +1116,17 @@
           "per_env": [
             {
               "env_name": "Catch-bsuite",
-              "g_b_minus_a": "NaN",
-              "g_c_minus_a": "NaN",
-              "g_d_minus_b": "NaN",
-              "g_d_minus_c": "NaN",
-              "g_interaction": "NaN",
+              "g_b_minus_a": null,
+              "g_c_minus_a": null,
+              "g_d_minus_b": null,
+              "g_d_minus_c": null,
+              "g_interaction": null,
               "n_pairs": 0,
-              "se_b_minus_a": "NaN",
-              "se_c_minus_a": "NaN",
-              "se_d_minus_b": "NaN",
-              "se_d_minus_c": "NaN",
-              "se_interaction": "NaN"
+              "se_b_minus_a": null,
+              "se_c_minus_a": null,
+              "se_d_minus_b": null,
+              "se_d_minus_c": null,
+              "se_interaction": null
             }
           ],
           "source": "eval_best_burst_mean"
@@ -1181,7 +1181,7 @@
               "g": 0.0,
               "helped_fraction": 0.0,
               "n_pairs": 60,
-              "se": "NaN"
+              "se": null
             },
             {
               "burst_index": 1,
@@ -1189,7 +1189,7 @@
               "g": 0.0,
               "helped_fraction": 0.0,
               "n_pairs": 60,
-              "se": "NaN"
+              "se": null
             },
             {
               "burst_index": 2,
@@ -1197,7 +1197,7 @@
               "g": 0.0,
               "helped_fraction": 0.0,
               "n_pairs": 60,
-              "se": "NaN"
+              "se": null
             },
             {
               "burst_index": 3,
@@ -1205,7 +1205,7 @@
               "g": 0.0,
               "helped_fraction": 0.0,
               "n_pairs": 60,
-              "se": "NaN"
+              "se": null
             },
             {
               "burst_index": 4,
@@ -1213,7 +1213,7 @@
               "g": 0.0,
               "helped_fraction": 0.0,
               "n_pairs": 60,
-              "se": "NaN"
+              "se": null
             },
             {
               "burst_index": 5,
@@ -1221,7 +1221,7 @@
               "g": 0.0,
               "helped_fraction": 0.0,
               "n_pairs": 60,
-              "se": "NaN"
+              "se": null
             },
             {
               "burst_index": 6,
@@ -1229,7 +1229,7 @@
               "g": 0.0,
               "helped_fraction": 0.0,
               "n_pairs": 60,
-              "se": "NaN"
+              "se": null
             },
             {
               "burst_index": 7,
@@ -1237,7 +1237,7 @@
               "g": 0.0,
               "helped_fraction": 0.0,
               "n_pairs": 60,
-              "se": "NaN"
+              "se": null
             },
             {
               "burst_index": 8,
@@ -1245,7 +1245,7 @@
               "g": 0.0,
               "helped_fraction": 0.0,
               "n_pairs": 60,
-              "se": "NaN"
+              "se": null
             },
             {
               "burst_index": 9,
@@ -1253,7 +1253,7 @@
               "g": 0.0,
               "helped_fraction": 0.0,
               "n_pairs": 60,
-              "se": "NaN"
+              "se": null
             }
           ],
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
@@ -1577,20 +1577,20 @@
       "analysis_results": {
         "paired_g": {
           "baseline_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)",
-          "g": -0.2753928905959086,
+          "g": -0.275393,
           "helped_fraction": 0.0,
-          "mean_diff": -75.97069853733638,
-          "mean_diff_p_value": 0.13227691374726525,
-          "mean_diff_se": 49.05157425180655,
+          "mean_diff": -75.9707,
+          "mean_diff_p_value": 0.132277,
+          "mean_diff_se": 49.0516,
           "measurable": "jensen_gap",
           "n_baseline": 60,
           "n_pairs": 30,
           "n_treatment": 30,
-          "p_value": 0.13871907090402857,
+          "p_value": 0.138719,
           "pair_by": [
             "seed"
           ],
-          "se": 0.18600363993708877,
+          "se": 0.186004,
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=partial(Claim:expectile_greedify;tau=0.7))"
         }
       },
@@ -1622,20 +1622,20 @@
       "analysis_results": {
         "paired_g": {
           "baseline_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)",
-          "g": 1.5916831028448328,
-          "helped_fraction": 0.9333333333333333,
-          "mean_diff": 0.04993569014748678,
-          "mean_diff_p_value": 7.651117517326611e-10,
-          "mean_diff_se": 0.00557845591864548,
+          "g": 1.59168,
+          "helped_fraction": 0.933333,
+          "mean_diff": 0.0499357,
+          "mean_diff_p_value": 7.65112e-10,
+          "mean_diff_se": 0.00557846,
           "measurable": "eval_best_burst_mean",
           "n_baseline": 60,
           "n_pairs": 30,
           "n_treatment": 30,
-          "p_value": 7.016880998356132e-09,
+          "p_value": 7.01688e-09,
           "pair_by": [
             "seed"
           ],
-          "se": 0.274877399940463,
+          "se": 0.274877,
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=partial(Claim:expectile_greedify;tau=0.7))"
         }
       },
@@ -1667,20 +1667,20 @@
       "analysis_results": {
         "paired_g": {
           "baseline_arm": "baseline",
-          "g": 3.754882578534489,
+          "g": 3.75488,
           "helped_fraction": 1.0,
-          "mean_diff": 0.20205300413360686,
+          "mean_diff": 0.202053,
           "mean_diff_p_value": 0.0,
-          "mean_diff_se": 0.009568161705772476,
+          "mean_diff_se": 0.00956816,
           "measurable": "eval_best_burst_mean",
           "n_baseline": 60,
           "n_pairs": 30,
           "n_treatment": 30,
-          "p_value": 4.20247838884996e-13,
+          "p_value": 4.20248e-13,
           "pair_by": [
             "seed"
           ],
-          "se": 0.5179952248586501,
+          "se": 0.517995,
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=partial(Claim:expectile_greedify;tau=0.7))"
         }
       },
@@ -1716,33 +1716,33 @@
           ],
           "coefficients": [
             {
-              "ci_hi": 0.27058063431628904,
-              "ci_lo": -0.2168533576253774,
-              "coefficient": 0.026863638345455822,
+              "ci_hi": 0.270581,
+              "ci_lo": -0.216853,
+              "coefficient": 0.0268636,
               "is_significant": false,
               "name": "log_action_dim",
-              "p_value": 0.8279959462388597
+              "p_value": 0.827996
             },
             {
-              "ci_hi": -0.020122263474112542,
-              "ci_lo": -0.24090569764110686,
-              "coefficient": -0.1305139805576097,
+              "ci_hi": -0.0201223,
+              "ci_lo": -0.240906,
+              "coefficient": -0.130514,
               "is_significant": true,
               "name": "log_obs_dim",
-              "p_value": 0.02077879959089346
+              "p_value": 0.0207788
             }
           ],
-          "i_squared": 0.8067731322995131,
-          "intercept": -0.20891215911991404,
-          "intercept_ci_hi": -0.11696975228144416,
-          "intercept_ci_lo": -0.3008545659583839,
-          "intercept_p_value": 1.3458377836172986e-05,
-          "intercept_se": 0.046570308149026435,
+          "i_squared": 0.806773,
+          "intercept": -0.208912,
+          "intercept_ci_hi": -0.11697,
+          "intercept_ci_lo": -0.300855,
+          "intercept_p_value": 1.34584e-05,
+          "intercept_se": 0.0465703,
           "n_strata": 170,
           "pool": "random",
-          "q_statistic": 864.2690428479121,
-          "r_squared": 0.08914880117548252,
-          "tau_sq": 0.1560280733663664
+          "q_statistic": 864.269,
+          "r_squared": 0.0891488,
+          "tau_sq": 0.156028
         }
       },
       "blocked_by": null,
@@ -1756,24 +1756,24 @@
       "params": {
         "covariates_per_env": {
           "Acrobot-v1": {
-            "log_action_dim": 1.0986122886681098,
-            "log_obs_dim": 1.791759469228055
+            "log_action_dim": 1.09861,
+            "log_obs_dim": 1.79176
           },
           "Catch-bsuite": {
-            "log_action_dim": 1.0986122886681098,
-            "log_obs_dim": 3.912023005428146
+            "log_action_dim": 1.09861,
+            "log_obs_dim": 3.91202
           },
           "DiscountingChain-bsuite": {
-            "log_action_dim": 1.6094379124341003,
-            "log_obs_dim": 1.6094379124341003
+            "log_action_dim": 1.60944,
+            "log_obs_dim": 1.60944
           },
           "FourRooms-misc": {
-            "log_action_dim": 1.6094379124341003,
-            "log_obs_dim": 4.394449154672439
+            "log_action_dim": 1.60944,
+            "log_obs_dim": 4.39445
           },
           "MountainCar-v0": {
-            "log_action_dim": 1.0986122886681098,
-            "log_obs_dim": 0.6931471805599453
+            "log_action_dim": 1.09861,
+            "log_obs_dim": 0.693147
           }
         },
         "source": "jensen_bias_per_eps__mean_axis_-1"
@@ -1802,33 +1802,33 @@
           ],
           "coefficients": [
             {
-              "ci_hi": -0.3133878634535341,
-              "ci_lo": -0.5816121549390492,
-              "coefficient": -0.4475000091962916,
+              "ci_hi": -0.313388,
+              "ci_lo": -0.581612,
+              "coefficient": -0.4475,
               "is_significant": true,
               "name": "log_action_dim",
-              "p_value": 7.302287663435436e-10
+              "p_value": 7.30229e-10
             },
             {
-              "ci_hi": 0.5575230162089425,
-              "ci_lo": 0.4012763947544026,
-              "coefficient": 0.47939970548167254,
+              "ci_hi": 0.557523,
+              "ci_lo": 0.401276,
+              "coefficient": 0.4794,
               "is_significant": true,
               "name": "log_obs_dim",
               "p_value": 0.0
             }
           ],
-          "i_squared": 0.40114904519874406,
-          "intercept": -0.05259590848278947,
-          "intercept_ci_hi": -0.007044588716649786,
-          "intercept_ci_lo": -0.09814722824892916,
-          "intercept_p_value": 0.023935199881867986,
-          "intercept_se": 0.02304825558234731,
+          "i_squared": 0.401149,
+          "intercept": -0.0525959,
+          "intercept_ci_hi": -0.00704459,
+          "intercept_ci_lo": -0.0981472,
+          "intercept_p_value": 0.0239352,
+          "intercept_se": 0.0230483,
           "n_strata": 149,
           "pool": "random",
-          "q_statistic": 243.800229137906,
-          "r_squared": 0.5826444561826913,
-          "tau_sq": 0.023613814043155993
+          "q_statistic": 243.8,
+          "r_squared": 0.582644,
+          "tau_sq": 0.0236138
         }
       },
       "blocked_by": null,
@@ -1842,24 +1842,24 @@
       "params": {
         "covariates_per_env": {
           "Acrobot-v1": {
-            "log_action_dim": 1.0986122886681098,
-            "log_obs_dim": 1.791759469228055
+            "log_action_dim": 1.09861,
+            "log_obs_dim": 1.79176
           },
           "Catch-bsuite": {
-            "log_action_dim": 1.0986122886681098,
-            "log_obs_dim": 3.912023005428146
+            "log_action_dim": 1.09861,
+            "log_obs_dim": 3.91202
           },
           "DiscountingChain-bsuite": {
-            "log_action_dim": 1.6094379124341003,
-            "log_obs_dim": 1.6094379124341003
+            "log_action_dim": 1.60944,
+            "log_obs_dim": 1.60944
           },
           "FourRooms-misc": {
-            "log_action_dim": 1.6094379124341003,
-            "log_obs_dim": 4.394449154672439
+            "log_action_dim": 1.60944,
+            "log_obs_dim": 4.39445
           },
           "MountainCar-v0": {
-            "log_action_dim": 1.0986122886681098,
-            "log_obs_dim": 0.6931471805599453
+            "log_action_dim": 1.09861,
+            "log_obs_dim": 0.693147
           }
         },
         "source": "mc_return__mean_axis_-1"
@@ -1884,12 +1884,12 @@
   "errored_bridges": [
     {
       "bridge_name": "ddqn_outcome_stable_across_bursts__fourrooms",
-      "error_message": "paired_g_per_burst: cannot mean-aggregate cells at (env='FourRooms-misc', arm='bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)', ('seed',)=(19,)) — per-burst array shapes differ ([(10,), (20,)]). The cells are not replicates; they differ on: action_duplicate_k=['1.0', '2.0', '3.0', '4.0', 'None']; action_select=[\"'Claim:epsilon_greedy'\", \"'dataclass:EpsilonGreedy(schedule=Claim:linear_epsilon)'\"]; claim_graph_signature=[\"'3001a37f2196e6eb'\", 'None']; env=[\"'<gymnax.environments.misc.rooms.FourRooms object at 0x77d49cf562c0>'\", \"'<gymnax.environments.misc.rooms.FourRooms object at 0x77d714b46470>'\", \"'<gymnax.environments.misc.rooms.FourRooms object at 0x77db800f8500>'\", 'None']; env_params=[\"'dataclass:EnvParams(fail_prob=0.3333333333333333,max_steps_in_episode=500,resample_goal_pos=False,resample_init_pos=False)'\", 'None']; env_params.fail_prob=['0.3333333333333333', 'None']; env_params.max_steps_in_episode=['500', 'None']; env_params.resample_goal_pos=['False', 'None']; env_params.resample_init_pos=['False', 'None']; eval_best_burst_mean=['0.0002309915580553934', '0.0003865692706312984', '0.0017876721685752273', '0.0026279122103005648', '0.01262840535491705'], …(28 total); eval_best_burst_step=['100000.0', '120000.0', '140000.0', '15000.0', '160000.0'], …(13 total); eval_episode_cap=['500', 'None']; eval_every=['10000', '20000', '2500', '25000', '5000'], …(6 total); eval_final_mean=['0.0', '0.005874688271433115', '0.006910125259310007', '0.014862599782645702', '0.06978630274534225'], …(18 total); gamma=['0.5', '0.8', '0.9', '0.95', '0.99']; intervention_name=[\"'ddqn'\", \"'ddqn_100k'\", \"'ddqn_1step'\", \"'ddqn_200k'\", \"'ddqn_25k'\"], …(14 total); jensen_bias_per_eps__mean_axis_-1=['[-0.04585413336753845, -0.04732726812362671, 0.2302372097969055, 0.746498167514801, 0.005870342254638672, 0.04412558078765869, 0.1842695355415344, 0.10585546791553498, -0.012885487079620362, -0.05410624742507934, -0.021362817287445067, -0.04166477918624878, -0.029021012783050536, -0.01064997911453247, -0.0055056452751159664, -0.03886251449584961, 0.014496839046478272, -0.0179388165473938, -0.013630044460296632, 0.059553390741348265]', '[-0.04627019490591451, 0.05233407304797888, -0.006401704542804509, 0.051634636055678126, 0.02943596988916397, 0.06293489932741067, 0.02719298262150005, -0.015386345237493515, -0.02484562397003174, -0.05494652390480041]', '[0.011352825351059437, -0.07221753895282745, 0.12749515026807784, 0.004734998941421509, 0.10009471345692873, 0.0841107115149498, -0.0036095112562179567, -0.022109454870223998, -0.06631581038236618, -0.085750812292099]', '[0.013712391257286072, 0.005569842178374529, 0.004439586166458298, 0.021899116337144593, 0.016924895346164703, -0.0002989717970590999, 0.003218509832822747, 0.0009198779884172836, 0.002782965022026371, 0.003703142889078137]', '[0.024339858442544937, 0.0018694410100579262, 0.016228530555963516, 0.0031710858456790447, 0.022196929901838303, 0.005579403135925531, 0.008136212825775146, 0.0053945439867675304, 0.004901643376797438, 0.0026744741480737135]'], …(28 total); jensen_dormancy_gap=['0.0', '0.0038544457723045577', '0.006785320708403812', '0.0105041625454424', 'nan']; jensen_dormancy_premise_active=[\"'held'\", \"'invariant_violation'\", \"'power_insufficient'\"]; jensen_gap=['0.007287134882062674', '0.007568215951323509', '0.007778525352478027', '0.00944921188056469', '0.023704186379909516'], …(28 total); late_window_mean=['0.0', '0.0004400000034365803', '0.0013529411517083645', '0.0030434783548116684', '0.00416666641831398'], …(13 total); mc_return__mean_axis_-1=['[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 5.169878828456423e-27, 0.0, 6.039613592774033e-15]', '[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.00023099155951058492, 0.0, 0.0, 0.0]', '[0.0, 0.0, 0.0, 0.0, 0.02883494714042172, 0.0, 0.004416017234325409, 0.025737155601382254, 0.007953750807791949, 0.006910124840214848]', '[0.0, 0.0, 0.0, 0.00038656924589304255, 0.0, 0.0, 0.0, 5.0630257464945314e-05, 0.000138321693520993, 0.0]', '[0.0, 0.0, 0.007381160091608763, 0.08044453151524067, 0.03138949275016785, 0.1497552663087845, 0.12859502509236337, 0.13371990919113158, 0.22753269076347352, 0.19288676381111144]'], …(28 total); n_actions=['4', 'None']; n_step=['1', 'None']; obs_shape=[\"'(4)'\", 'None']; optimizer=[\"'dataclass:WarmedUpdate(inner=dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.0001),warmup_steps=100)'\", \"'dataclass:WarmedUpdate(inner=dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.0001,weight_decay=0.0),warmup_steps=100)'\", \"'dataclass:WarmedUpdate(inner=dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.001),warmup_steps=100)'\", \"'partial(Claim:warmed_update;inner=partial(Claim:adam;lr=0.001),warmup_steps=100)'\"]; optimizer.inner=[\"'dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.0001)'\", \"'dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.0001,weight_decay=0.0)'\", \"'dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.001)'\", \"'partial(Claim:adam;lr=0.001)'\"]; optimizer.inner.lr=['0.0001', '0.001']; optimizer.inner.weight_decay=['0.0', 'None']; replay=[\"'dataclass:Replay(batch_size=32,capacity=10000,sample=Claim:uniform_sample)'\", \"'dataclass:Replay(batch_size=32,capacity=20000,sample=Claim:uniform_sample)'\", \"'dataclass:Replay(batch_size=32,capacity=50000,sample=Claim:uniform_sample)'\"]; replay.capacity=['10000', '20000', '50000']; reward_scale=['0.001', '0.003', '0.01', '0.03', '0.1'], …(8 total); rng_key=[\"'type:_empty'\", 'None']; state_hash=[\"'callable:default_state_hash'\", 'None']; total_steps=['100000', '1000000', '200000', '25000', '50000'], …(6 total); verdict=[\"'held'\", \"'invariant_violation'\", \"'power_insufficient'\"]. Add these to pair_by so each regime is its own stratum.",
+      "error_message": "paired_g_per_burst: cannot mean-aggregate cells at (env='FourRooms-misc', arm='baseline', ('seed',)=(29,)) — per-burst array shapes differ ([(10,), (20,)]). The cells are not replicates; they differ on: action_duplicate_k=['1.0', '2.0', '3.0', '4.0', 'None']; action_select=[\"'Claim:epsilon_greedy'\", \"'dataclass:EpsilonGreedy(schedule=Claim:linear_epsilon)'\"]; claim_graph_signature=[\"'5eff4233fbe5e487'\", 'None']; env=[\"'<gymnax.environments.misc.rooms.FourRooms object at 0x77d46ff11150>'\", \"'<gymnax.environments.misc.rooms.FourRooms object at 0x77d46ff12250>'\", \"'<gymnax.environments.misc.rooms.FourRooms object at 0x77d49bbb2ea0>'\", \"'<gymnax.environments.misc.rooms.FourRooms object at 0x77d49c057a10>'\", \"'<gymnax.environments.misc.rooms.FourRooms object at 0x77d49c779250>'\"], …(10 total); env_params=[\"'dataclass:EnvParams(fail_prob=0.3333333333333333,max_steps_in_episode=500,resample_goal_pos=False,resample_init_pos=False)'\", 'None']; env_params.fail_prob=['0.3333333333333333', 'None']; env_params.max_steps_in_episode=['500', 'None']; env_params.resample_goal_pos=['False', 'None']; env_params.resample_init_pos=['False', 'None']; eval_best_burst_mean=['0.0', '0.00036685881786979735', '0.0006044631591066718', '0.0008103234576992691', '0.0035345726646482944'], …(25 total); eval_best_burst_step=['100000.0', '1000000.0', '120000.0', '140000.0', '160000.0'], …(13 total); eval_episode_cap=['500', 'None']; eval_every=['10000', '20000', '2500', '25000', '5000'], …(6 total); eval_final_mean=['0.0', '0.0035345726646482944', '0.005189884454011917', '0.032015204429626465', '0.04007507115602493'], …(17 total); gamma=['0.5', '0.8', '0.9', '0.95', '0.99']; intervention_name=[\"'vanilla_100k'\", \"'vanilla_200k'\", \"'vanilla_25k'\", \"'vanilla_500k'\", \"'vanilla_50k'\"], …(13 total); jensen_bias_per_eps__mean_axis_-1=['[0.01996520906686783, 0.01450934074819088, 0.014302361756563187, 0.024180330336093903, 0.006725999526679516, 0.003628793638199568, 0.015205280855298042, 0.003690753597766161, 0.005944728851318359, 0.0130878034979105]', '[0.028533846139907837, 0.47266865223646165, 0.15618699193000793, 0.1940958619117737, 0.05052878856658936, 0.12425631880760193, -0.03805699348449707, -0.04578722715377807, 0.007538890838623047, -0.0019702792167663576, -0.02687755823135376, -0.02172853946685791, 0.20284108966588973, -0.0539246916770935, 0.10763429403305054, 0.09557805061340333, 0.253362637758255, -0.036578142642974855, -0.016360366344451906, -0.06161179542541504]', '[0.035812169313430786, 0.032747832213831776, 0.044146452099084854, 0.04920862030301104, 0.019577874473263153, 0.031480178236961365, 0.06400438398122787, 0.04340716431979763, 0.05348817646334273, 0.040006820091607234]', '[0.08642527461051941, 0.09087509661881614, 0.10011211159953745, 0.10834787926742769, 0.08593585342168808, 0.08993829041719437, 0.0833134739762775, 0.03601539236484541, 0.022087761759757997, -0.027803802257403733]', '[0.16028981125788705, 0.12354715019464493, 0.17619328219443559, 0.08569124387577176, 0.2630417287349701, 0.13563806338386258, -0.04880584720522165, 0.19731420911848546, 0.04651388674974442, 0.17877128683030605]'], …(28 total); jensen_dormancy_gap=['0.0', 'nan']; jensen_dormancy_premise_active=[\"'held'\", \"'power_insufficient'\", 'None']; jensen_gap=['0.012124059721827507', '0.04138796776533127', '0.0675247311592102', '0.06951649487018585', '0.1318194717168808'], …(28 total); late_window_mean=['0.0', '0.0004883721121586859', '0.0011627905769273639', '0.0014634146355092525', '0.00731707364320755'], …(16 total); mc_return__mean_axis_-1=['[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]', '[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.003761680610477924, 0.0006122043239884078, 0.0]', '[0.0, 0.0, 0.0, 0.0, 0.0, 7.941000803839416e-05, 0.0, 0.0006958619691431522, 0.0015347271924838423, 0.0035345727927051486]', '[0.0, 0.0, 0.0, 0.019622796773910524, 0.0014677166007459163, 0.0, 0.11253817826509475, 0.0, 0.02825663909316063, 0.0]', '[0.0, 0.0, 0.0, 0.02472585588693619, 0.011696873605251313, 0.2770636573433876, 0.08597787022590637, 0.16706777848303317, 0.00610427800565958, 0.0]'], …(25 total); n_actions=['4', 'None']; n_step=['1', 'None']; obs_shape=[\"'(4)'\", 'None']; optimizer=[\"'dataclass:WarmedUpdate(inner=dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.0001),warmup_steps=100)'\", \"'dataclass:WarmedUpdate(inner=dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.0001,weight_decay=0.0),warmup_steps=100)'\", \"'dataclass:WarmedUpdate(inner=dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.001),warmup_steps=100)'\", \"'partial(Claim:warmed_update;inner=partial(Claim:adam;lr=0.001),warmup_steps=100)'\"]; optimizer.inner=[\"'dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.0001)'\", \"'dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.0001,weight_decay=0.0)'\", \"'dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.001)'\", \"'partial(Claim:adam;lr=0.001)'\"]; optimizer.inner.lr=['0.0001', '0.001']; optimizer.inner.weight_decay=['0.0', 'None']; replay=[\"'dataclass:Replay(batch_size=32,capacity=10000,sample=Claim:uniform_sample)'\", \"'dataclass:Replay(batch_size=32,capacity=20000,sample=Claim:uniform_sample)'\", \"'dataclass:Replay(batch_size=32,capacity=50000,sample=Claim:uniform_sample)'\"]; replay.capacity=['10000', '20000', '50000']; reward_scale=['0.001', '0.003', '0.01', '0.03', '0.1'], …(8 total); rng_key=[\"'type:_empty'\", 'None']; state_hash=[\"'callable:default_state_hash'\", 'None']; total_steps=['100000', '1000000', '200000', '25000', '50000'], …(6 total); verdict=[\"'held'\", \"'power_insufficient'\"]. Add these to pair_by so each regime is its own stratum.",
       "error_type": "ValueError",
-      "traceback_repr": "Traceback (most recent call last):\n  File \"/workspace/corroborate/src/corroborate/runner/runner.py\", line 328, in run\n    out[b.name] = evaluate(b, cells, claim=claim)\n                  ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/corroborate/src/corroborate/bridge/bridge.py\", line 762, in evaluate\n    analysis_results = resolve_for_holds_when(\n        bridge.holds_when, filtered_cells, bridge_params,\n    )\n  File \"/workspace/corroborate/src/corroborate/bridge/analysis.py\", line 232, in resolve_for_holds_when\n    out[param_name] = run_for(\n                      ~~~~~~~^\n        analysis_obj, cells_list, bridge_params,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/workspace/corroborate/src/corroborate/bridge/analysis.py\", line 190, in run_for\n    return analysis_obj.fn(cells, **kwargs)\n           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^\n  File \"/workspace/corroborate/src/corroborate/analyses/paired_g_per_burst.py\", line 246, in paired_g_per_burst\n    raise ValueError(\n    ...<7 lines>...\n    )\nValueError: paired_g_per_burst: cannot mean-aggregate cells at (env='FourRooms-misc', arm='bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)', ('seed',)=(19,)) — per-burst array shapes differ ([(10,), (20,)]). The cells are not replicates; they differ on: action_duplicate_k=['1.0', '2.0', '3.0', '4.0', 'None']; action_select=[\"'Claim:epsilon_greedy'\", \"'dataclass:EpsilonGreedy(schedule=Claim:linear_epsilon)'\"]; claim_graph_signature=[\"'3001a37f2196e6eb'\", 'None']; env=[\"'<gymnax.environments.misc.rooms.FourRooms object at 0x77d49cf562c0>'\", \"'<gymnax.environments.misc.rooms.FourRooms object at 0x77d714b46470>'\", \"'<gymnax.environments.misc.rooms.FourRooms object at 0x77db800f8500>'\", 'None']; env_params=[\"'dataclass:EnvParams(fail_prob=0.3333333333333333,max_steps_in_episode=500,resample_goal_pos=False,resample_init_pos=False)'\", 'None']; env_params.fail_prob=['0.3333333333333333', 'None']; env_params.max_steps_in_episode=['500', 'None']; env_params.resample_goal_pos=['False', 'None']; env_params.resample_init_pos=['False', 'None']; eval_best_burst_mean=['0.0002309915580553934', '0.0003865692706312984', '0.0017876721685752273', '0.0026279122103005648', '0.01262840535491705'], …(28 total); eval_best_burst_step=['100000.0', '120000.0', '140000.0', '15000.0', '160000.0'], …(13 total); eval_episode_cap=['500', 'None']; eval_every=['10000', '20000', '2500', '25000', '5000'], …(6 total); eval_final_mean=['0.0', '0.005874688271433115', '0.006910125259310007', '0.014862599782645702', '0.06978630274534225'], …(18 total); gamma=['0.5', '0.8', '0.9', '0.95', '0.99']; intervention_name=[\"'ddqn'\", \"'ddqn_100k'\", \"'ddqn_1step'\", \"'ddqn_200k'\", \"'ddqn_25k'\"], …(14 total); jensen_bias_per_eps__mean_axis_-1=['[-0.04585413336753845, -0.04732726812362671, 0.2302372097969055, 0.746498167514801, 0.005870342254638672, 0.04412558078765869, 0.1842695355415344, 0.10585546791553498, -0.012885487079620362, -0.05410624742507934, -0.021362817287445067, -0.04166477918624878, -0.029021012783050536, -0.01064997911453247, -0.0055056452751159664, -0.03886251449584961, 0.014496839046478272, -0.0179388165473938, -0.013630044460296632, 0.059553390741348265]', '[-0.04627019490591451, 0.05233407304797888, -0.006401704542804509, 0.051634636055678126, 0.02943596988916397, 0.06293489932741067, 0.02719298262150005, -0.015386345237493515, -0.02484562397003174, -0.05494652390480041]', '[0.011352825351059437, -0.07221753895282745, 0.12749515026807784, 0.004734998941421509, 0.10009471345692873, 0.0841107115149498, -0.0036095112562179567, -0.022109454870223998, -0.06631581038236618, -0.085750812292099]', '[0.013712391257286072, 0.005569842178374529, 0.004439586166458298, 0.021899116337144593, 0.016924895346164703, -0.0002989717970590999, 0.003218509832822747, 0.0009198779884172836, 0.002782965022026371, 0.003703142889078137]', '[0.024339858442544937, 0.0018694410100579262, 0.016228530555963516, 0.0031710858456790447, 0.022196929901838303, 0.005579403135925531, 0.008136212825775146, 0.0053945439867675304, 0.004901643376797438, 0.0026744741480737135]'], …(28 total); jensen_dormancy_gap=['0.0', '0.0038544457723045577', '0.006785320708403812', '0.0105041625454424', 'nan']; jensen_dormancy_premise_active=[\"'held'\", \"'invariant_violation'\", \"'power_insufficient'\"]; jensen_gap=['0.007287134882062674', '0.007568215951323509', '0.007778525352478027', '0.00944921188056469', '0.023704186379909516'], …(28 total); late_window_mean=['0.0', '0.0004400000034365803', '0.0013529411517083645', '0.0030434783548116684', '0.00416666641831398'], …(13 total); mc_return__mean_axis_-1=['[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 5.169878828456423e-27, 0.0, 6.039613592774033e-15]', '[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.00023099155951058492, 0.0, 0.0, 0.0]', '[0.0, 0.0, 0.0, 0.0, 0.02883494714042172, 0.0, 0.004416017234325409, 0.025737155601382254, 0.007953750807791949, 0.006910124840214848]', '[0.0, 0.0, 0.0, 0.00038656924589304255, 0.0, 0.0, 0.0, 5.0630257464945314e-05, 0.000138321693520993, 0.0]', '[0.0, 0.0, 0.007381160091608763, 0.08044453151524067, 0.03138949275016785, 0.1497552663087845, 0.12859502509236337, 0.13371990919113158, 0.22753269076347352, 0.19288676381111144]'], …(28 total); n_actions=['4', 'None']; n_step=['1', 'None']; obs_shape=[\"'(4)'\", 'None']; optimizer=[\"'dataclass:WarmedUpdate(inner=dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.0001),warmup_steps=100)'\", \"'dataclass:WarmedUpdate(inner=dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.0001,weight_decay=0.0),warmup_steps=100)'\", \"'dataclass:WarmedUpdate(inner=dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.001),warmup_steps=100)'\", \"'partial(Claim:warmed_update;inner=partial(Claim:adam;lr=0.001),warmup_steps=100)'\"]; optimizer.inner=[\"'dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.0001)'\", \"'dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.0001,weight_decay=0.0)'\", \"'dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.001)'\", \"'partial(Claim:adam;lr=0.001)'\"]; optimizer.inner.lr=['0.0001', '0.001']; optimizer.inner.weight_decay=['0.0', 'None']; replay=[\"'dataclass:Replay(batch_size=32,capacity=10000,sample=Claim:uniform_sample)'\", \"'dataclass:Replay(batch_size=32,capacity=20000,sample=Claim:uniform_sample)'\", \"'dataclass:Replay(batch_size=32,capacity=50000,sample=Claim:uniform_sample)'\"]; replay.capacity=['10000', '20000', '50000']; reward_scale=['0.001', '0.003', '0.01', '0.03', '0.1'], …(8 total); rng_key=[\"'type:_empty'\", 'None']; state_hash=[\"'callable:default_state_hash'\", 'None']; total_steps=['100000', '1000000', '200000', '25000', '50000'], …(6 total); verdict=[\"'held'\", \"'invariant_violation'\", \"'power_insufficient'\"]. Add these to pair_by so each regime is its own stratum.\n"
+      "traceback_repr": "Traceback (most recent call last):\n  File \"/workspace/corroborate/src/corroborate/runner/runner.py\", line 332, in run\n    out[b.name] = evaluate(b, cells, claim=claim)\n                  ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/corroborate/src/corroborate/bridge/bridge.py\", line 770, in evaluate\n    analysis_results = resolve_for_holds_when(\n        bridge.holds_when, filtered_cells, bridge_params,\n    )\n  File \"/workspace/corroborate/src/corroborate/bridge/analysis.py\", line 232, in resolve_for_holds_when\n    out[param_name] = run_for(\n                      ~~~~~~~^\n        analysis_obj, cells_list, bridge_params,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/workspace/corroborate/src/corroborate/bridge/analysis.py\", line 190, in run_for\n    return analysis_obj.fn(cells, **kwargs)\n           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^\n  File \"/workspace/corroborate/src/corroborate/analyses/paired_g_per_burst.py\", line 246, in paired_g_per_burst\n    raise ValueError(\n    ...<7 lines>...\n    )\nValueError: paired_g_per_burst: cannot mean-aggregate cells at (env='FourRooms-misc', arm='baseline', ('seed',)=(29,)) — per-burst array shapes differ ([(10,), (20,)]). The cells are not replicates; they differ on: action_duplicate_k=['1.0', '2.0', '3.0', '4.0', 'None']; action_select=[\"'Claim:epsilon_greedy'\", \"'dataclass:EpsilonGreedy(schedule=Claim:linear_epsilon)'\"]; claim_graph_signature=[\"'5eff4233fbe5e487'\", 'None']; env=[\"'<gymnax.environments.misc.rooms.FourRooms object at 0x77d46ff11150>'\", \"'<gymnax.environments.misc.rooms.FourRooms object at 0x77d46ff12250>'\", \"'<gymnax.environments.misc.rooms.FourRooms object at 0x77d49bbb2ea0>'\", \"'<gymnax.environments.misc.rooms.FourRooms object at 0x77d49c057a10>'\", \"'<gymnax.environments.misc.rooms.FourRooms object at 0x77d49c779250>'\"], …(10 total); env_params=[\"'dataclass:EnvParams(fail_prob=0.3333333333333333,max_steps_in_episode=500,resample_goal_pos=False,resample_init_pos=False)'\", 'None']; env_params.fail_prob=['0.3333333333333333', 'None']; env_params.max_steps_in_episode=['500', 'None']; env_params.resample_goal_pos=['False', 'None']; env_params.resample_init_pos=['False', 'None']; eval_best_burst_mean=['0.0', '0.00036685881786979735', '0.0006044631591066718', '0.0008103234576992691', '0.0035345726646482944'], …(25 total); eval_best_burst_step=['100000.0', '1000000.0', '120000.0', '140000.0', '160000.0'], …(13 total); eval_episode_cap=['500', 'None']; eval_every=['10000', '20000', '2500', '25000', '5000'], …(6 total); eval_final_mean=['0.0', '0.0035345726646482944', '0.005189884454011917', '0.032015204429626465', '0.04007507115602493'], …(17 total); gamma=['0.5', '0.8', '0.9', '0.95', '0.99']; intervention_name=[\"'vanilla_100k'\", \"'vanilla_200k'\", \"'vanilla_25k'\", \"'vanilla_500k'\", \"'vanilla_50k'\"], …(13 total); jensen_bias_per_eps__mean_axis_-1=['[0.01996520906686783, 0.01450934074819088, 0.014302361756563187, 0.024180330336093903, 0.006725999526679516, 0.003628793638199568, 0.015205280855298042, 0.003690753597766161, 0.005944728851318359, 0.0130878034979105]', '[0.028533846139907837, 0.47266865223646165, 0.15618699193000793, 0.1940958619117737, 0.05052878856658936, 0.12425631880760193, -0.03805699348449707, -0.04578722715377807, 0.007538890838623047, -0.0019702792167663576, -0.02687755823135376, -0.02172853946685791, 0.20284108966588973, -0.0539246916770935, 0.10763429403305054, 0.09557805061340333, 0.253362637758255, -0.036578142642974855, -0.016360366344451906, -0.06161179542541504]', '[0.035812169313430786, 0.032747832213831776, 0.044146452099084854, 0.04920862030301104, 0.019577874473263153, 0.031480178236961365, 0.06400438398122787, 0.04340716431979763, 0.05348817646334273, 0.040006820091607234]', '[0.08642527461051941, 0.09087509661881614, 0.10011211159953745, 0.10834787926742769, 0.08593585342168808, 0.08993829041719437, 0.0833134739762775, 0.03601539236484541, 0.022087761759757997, -0.027803802257403733]', '[0.16028981125788705, 0.12354715019464493, 0.17619328219443559, 0.08569124387577176, 0.2630417287349701, 0.13563806338386258, -0.04880584720522165, 0.19731420911848546, 0.04651388674974442, 0.17877128683030605]'], …(28 total); jensen_dormancy_gap=['0.0', 'nan']; jensen_dormancy_premise_active=[\"'held'\", \"'power_insufficient'\", 'None']; jensen_gap=['0.012124059721827507', '0.04138796776533127', '0.0675247311592102', '0.06951649487018585', '0.1318194717168808'], …(28 total); late_window_mean=['0.0', '0.0004883721121586859', '0.0011627905769273639', '0.0014634146355092525', '0.00731707364320755'], …(16 total); mc_return__mean_axis_-1=['[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]', '[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.003761680610477924, 0.0006122043239884078, 0.0]', '[0.0, 0.0, 0.0, 0.0, 0.0, 7.941000803839416e-05, 0.0, 0.0006958619691431522, 0.0015347271924838423, 0.0035345727927051486]', '[0.0, 0.0, 0.0, 0.019622796773910524, 0.0014677166007459163, 0.0, 0.11253817826509475, 0.0, 0.02825663909316063, 0.0]', '[0.0, 0.0, 0.0, 0.02472585588693619, 0.011696873605251313, 0.2770636573433876, 0.08597787022590637, 0.16706777848303317, 0.00610427800565958, 0.0]'], …(25 total); n_actions=['4', 'None']; n_step=['1', 'None']; obs_shape=[\"'(4)'\", 'None']; optimizer=[\"'dataclass:WarmedUpdate(inner=dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.0001),warmup_steps=100)'\", \"'dataclass:WarmedUpdate(inner=dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.0001,weight_decay=0.0),warmup_steps=100)'\", \"'dataclass:WarmedUpdate(inner=dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.001),warmup_steps=100)'\", \"'partial(Claim:warmed_update;inner=partial(Claim:adam;lr=0.001),warmup_steps=100)'\"]; optimizer.inner=[\"'dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.0001)'\", \"'dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.0001,weight_decay=0.0)'\", \"'dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.001)'\", \"'partial(Claim:adam;lr=0.001)'\"]; optimizer.inner.lr=['0.0001', '0.001']; optimizer.inner.weight_decay=['0.0', 'None']; replay=[\"'dataclass:Replay(batch_size=32,capacity=10000,sample=Claim:uniform_sample)'\", \"'dataclass:Replay(batch_size=32,capacity=20000,sample=Claim:uniform_sample)'\", \"'dataclass:Replay(batch_size=32,capacity=50000,sample=Claim:uniform_sample)'\"]; replay.capacity=['10000', '20000', '50000']; reward_scale=['0.001', '0.003', '0.01', '0.03', '0.1'], …(8 total); rng_key=[\"'type:_empty'\", 'None']; state_hash=[\"'callable:default_state_hash'\", 'None']; total_steps=['100000', '1000000', '200000', '25000', '50000'], …(6 total); verdict=[\"'held'\", \"'power_insufficient'\"]. Add these to pair_by so each regime is its own stratum.\n"
     }
   ],
-  "git_commit": "ffcaaa7c6a14",
+  "git_commit": "07fd3e4b7652",
   "hypothesis_module": "experiments.findings.dqn_bridges",
   "measurable_signatures": {
     "eval_best_burst_mean": "73fcacede9b81e9b",
@@ -1902,6 +1902,5 @@
     "mc_return__mean_axis_-1": "21d9d87899d9e9ef"
   },
   "n_cells_total": 12451,
-  "schema_version": 1,
-  "timestamp_utc": "2026-05-06T03:48:59+00:00"
+  "timestamp_utc": "2026-05-06T04:35:00+00:00"
 }
