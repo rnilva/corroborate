@@ -825,6 +825,164 @@ def _analysis_reads_for_bridges(
     return frozenset(out)
 
 
+def _estimate_max_workers(
+    sub_dirs: list[Path],
+    root: Path,
+    *,
+    safety_factor: float = 4.0,
+    hard_cap: int = 4,
+) -> int:
+    """Bound the worker count so K workers each holding one
+    corpus's traces.parquet on disk fits within the local
+    storage budget.
+
+    Reads each manifest's `size_bytes` for any `traces.parquet`
+    entry (or `tmp/*_traces.parquet` shards if that's how the
+    sweep archived). Takes the MAX as the per-worker budget.
+    Available disk = `shutil.disk_usage(root).free` minus a
+    `safety_factor` headroom (default 4× — three of the four
+    parts go to the workers, one part remains free for other
+    in-flight writes / OS overhead).
+
+    Returns at least 1, at most `hard_cap` (default 4 — fork
+    overhead per worker is non-trivial and beyond ~4 workers
+    Python's GIL within `_compute_measurables` becomes the
+    bottleneck rather than I/O).
+
+    Falls back to `hard_cap` when no manifests exist (no traces
+    to budget; cache build is CPU-bound — full parallelism).
+    Falls back to 1 when available disk can't fit even one
+    worker's largest trace (e.g. minatar 1M shards exceed the
+    overlay size). The user can override via env var
+    CORROBORATE_CACHE_WORKERS to force a specific value."""
+    import os
+    import shutil
+    forced = os.environ.get('CORROBORATE_CACHE_WORKERS')
+    if forced is not None:
+        try:
+            return max(1, int(forced))
+        except ValueError:
+            pass
+
+    largest_trace_bytes = 0
+    for sub in sub_dirs:
+        m_path = sub / '_remote.json'
+        if not m_path.exists():
+            continue
+        manifest = _read_remote_manifest(m_path)
+        if manifest is None:
+            continue
+        for f in manifest.files:
+            # Match any traces parquet — top-level or per-arm
+            # shard. tmp/cell{NNN}__{tag}__traces.parquet style
+            # included.
+            if f.relpath.endswith('.parquet') and 'traces' in f.relpath:
+                if f.size_bytes > largest_trace_bytes:
+                    largest_trace_bytes = f.size_bytes
+
+    if largest_trace_bytes == 0:
+        return hard_cap
+
+    try:
+        avail = shutil.disk_usage(root).free
+    except OSError:
+        return 1
+    safe_avail = avail / safety_factor
+    by_disk = int(safe_avail / largest_trace_bytes)
+    return max(1, min(hard_cap, by_disk))
+
+
+def _load_one_corpus(
+    sub: Path,
+    *,
+    i: int,
+    n_total: int,
+    digit_width: int,
+    restore_from_cloud: bool,
+    required: Sequence[str],
+    trace_reads: frozenset[str],
+    analysis_reads: frozenset[str],
+) -> tuple[pl.DataFrame | None, list[str]]:
+    """Per-corpus pipeline: restore + load + join traces +
+    compute measurables + drop trace cols + evict.
+
+    Returns (DataFrame, log_lines) where DataFrame is None if
+    the corpus was skipped. Log lines are returned (not printed)
+    so the parent process can interleave them in input order
+    when running in parallel.
+
+    Each call holds at most one corpus's traces.parquet on disk
+    — the worker evicts before returning. Memory budget is one
+    corpus's runs+traces in scope plus the typed-trace projection.
+    """
+    import time as _time
+    log_lines: list[str] = []
+    t_corpus = _time.monotonic()
+    runs_path = sub / 'runs.parquet'
+    traces_path = sub / 'traces.parquet'
+    manifest = sub / '_remote.json'
+    just_restored_traces = False
+    prefix = f'  [{i+1:>{digit_width}}/{n_total}] {sub.name}'
+    if manifest.exists():
+        need_restore = _missing_for_restore(
+            runs_path, traces_path, trace_reads, manifest,
+        )
+        if need_restore:
+            if restore_from_cloud:
+                from corroborate.corpus.cloud import restore
+                log_lines.append(
+                    f'{prefix}: restoring '
+                    f'{[Path(p).name for p in need_restore]}...',
+                )
+                restore(sub, files=need_restore, overwrite=True)
+                just_restored_traces = (
+                    'traces.parquet' in need_restore
+                )
+                if _merge_shard_traces(sub):
+                    just_restored_traces = True
+            else:
+                log_lines.append(
+                    f'{prefix}: WARNING — needs '
+                    f'{need_restore} from cloud; restore disabled',
+                )
+                if not runs_path.exists():
+                    return None, log_lines
+    if not runs_path.exists():
+        log_lines.append(f'{prefix}: SKIPPED (no runs.parquet)')
+        return None, log_lines
+    df = pl.read_parquet(runs_path)
+    runs_columns = set(df.columns)
+    df = _join_required_traces(
+        df, sub / 'traces.parquet', trace_reads,
+    )
+    df = _compute_measurables(df, required)
+    joined_trace_cols = [
+        c for c in df.columns
+        if c in trace_reads
+        and c not in runs_columns
+        and c not in analysis_reads
+    ]
+    if joined_trace_cols:
+        df = df.drop(joined_trace_cols)
+    if 'corpus' not in df.columns:
+        df = df.with_columns(pl.lit(sub.name).alias('corpus'))
+    if just_restored_traces and traces_path.exists():
+        try:
+            traces_path.unlink()
+        except OSError as e:
+            log_lines.append(
+                f'{prefix}: WARNING — could not evict '
+                f'traces.parquet: {e}',
+            )
+    elapsed = _time.monotonic() - t_corpus
+    log_lines.append(
+        f'{prefix}: {df.height} cells × {len(df.columns)} cols'
+        + (' (traces evicted)' if just_restored_traces else '')
+        + f' in {elapsed:.1f}s',
+    )
+    return df, log_lines
+
+
 def _load_directory(
     root: Path,
     *,
@@ -854,119 +1012,100 @@ def _load_directory(
     analysis_reads = _analysis_reads_for_bridges(bridges)
     trace_reads = measurable_reads | analysis_reads
     # **C5 progress** (CACHE_BUILD.md): pre-walk the subdirs so
-    # we know N up front for an `[i/N] <corpus>` prefix. The
-    # observability rule is "user can tell at a glance how far
-    # in we are and which corpus is the slow one."
+    # we know N up front for an `[i/N] <corpus>` prefix.
     sub_dirs = sorted(p for p in root.iterdir() if p.is_dir())
     n_total = len(sub_dirs)
+    if n_total == 0:
+        print(
+            f'runner: NO subdirs under {root}', file=sys.stderr,
+            flush=True,
+        )
+        return pl.DataFrame()
+    # **Per-corpus parallelism** (CACHE_BUILD.md Phase 0 #5):
+    # bound K workers by available local disk. Each worker holds
+    # one corpus's traces.parquet on disk during compute; K × max-
+    # trace-size must fit. `_estimate_max_workers` reads each
+    # manifest's `size_bytes` for traces, takes the max as the
+    # per-worker budget, divides into available disk minus a
+    # safety headroom.
+    max_workers = _estimate_max_workers(sub_dirs, root)
     print(
-        f'runner: ingesting {n_total} corpora from {root}',
+        f'runner: ingesting {n_total} corpora from {root} '
+        f'(parallelism: {max_workers} worker{"s" if max_workers > 1 else ""})',
         file=sys.stderr,
         flush=True,
     )
     t_walk_start = _time.monotonic()
-    frames: list[pl.DataFrame] = []
-    n_skipped = 0
-    n_loaded = 0
-    for i, sub in enumerate(sub_dirs):
-        t_corpus = _time.monotonic()
-        runs_path = sub / 'runs.parquet'
-        traces_path = sub / 'traces.parquet'
-        manifest = sub / '_remote.json'
-        # Restore from cloud if (a) runs.parquet is missing OR (b)
-        # we need traces (any required measurable / analysis read)
-        # and traces.parquet is missing/stub locally but listed in
-        # the remote manifest. Without (b), corpora with local
-        # runs.parquet but cloud-only traces.parquet silently lose
-        # their trace-reading measurables to NaN.
-        just_restored_traces = False
-        prefix = f'  [{i+1:>{len(str(n_total))}}/{n_total}] {sub.name}'
-        if manifest.exists():
-            need_restore = _missing_for_restore(
-                runs_path, traces_path, trace_reads, manifest,
-            )
-            if need_restore:
-                if restore_from_cloud:
-                    from corroborate.corpus.cloud import restore
-                    print(
-                        f'{prefix}: restoring '
-                        f'{[Path(p).name for p in need_restore]}...',
-                        file=sys.stderr,
-                        flush=True,
-                    )
-                    restore(sub, files=need_restore, overwrite=True)
-                    just_restored_traces = 'traces.parquet' in need_restore
-                    # Per-arm shard archives — merge into canonical
-                    # traces.parquet so `_join_required_traces` reads
-                    # one shape regardless of how the sweep archived.
-                    if _merge_shard_traces(sub):
-                        just_restored_traces = True
-                else:
-                    print(
-                        f'{prefix}: WARNING — needs '
-                        f'{need_restore} from cloud; restore disabled',
-                        file=sys.stderr,
-                        flush=True,
-                    )
-                    if not runs_path.exists():
-                        n_skipped += 1
-                        continue
-        if not runs_path.exists():
-            print(
-                f'{prefix}: SKIPPED (no runs.parquet)',
-                file=sys.stderr,
-                flush=True,
-            )
-            n_skipped += 1
-            continue
-        df = pl.read_parquet(runs_path)
-        runs_columns = set(df.columns)
-        df = _join_required_traces(
-            df, sub / 'traces.parquet', trace_reads,
-        )
-        # Compute measurables NOW, while the joined trace columns
-        # are in scope. Subsequent calls on the merged frame are
-        # no-ops because the scalar columns are already filled.
-        df = _compute_measurables(df, required)
-        # Drop the heavy trace columns we joined ONLY for
-        # measurable computation. Columns analyses declared via
-        # `Analysis.reads` survive — those analyses read off the
-        # cell record at evaluate time, after the cache load.
-        joined_trace_cols = [
-            c for c in df.columns
-            if c in trace_reads
-            and c not in runs_columns
-            and c not in analysis_reads
+    digit_width = len(str(n_total))
+
+    # Worker results map subdir name → (frame_or_None, log_lines)
+    # so the parent can print log lines in completion order while
+    # still emitting the canonical `[i/N] <corpus>` prefix in the
+    # input ordering.
+    if max_workers == 1:
+        # Sequential path — preserves backward-compatible ordering
+        # for runs that opt out of parallelism (e.g. tests that
+        # capture stderr).
+        results: list[tuple[pl.DataFrame | None, list[str]]] = []
+        for i, sub in enumerate(sub_dirs):
+            results.append(_load_one_corpus(
+                sub, i=i, n_total=n_total,
+                digit_width=digit_width,
+                restore_from_cloud=restore_from_cloud,
+                required=required,
+                trace_reads=trace_reads,
+                analysis_reads=analysis_reads,
+            ))
+            for line in results[-1][1]:
+                print(line, file=sys.stderr, flush=True)
+    else:
+        # Parallel path — `fork` start method on Linux inherits the
+        # parent's measurable registry via copy-on-write; no
+        # per-worker re-import needed. Each worker is one
+        # ProcessPoolExecutor task per subdir.
+        import concurrent.futures as _cf
+        import multiprocessing as _mp
+        ctx = _mp.get_context('fork')
+        results = [
+            (None, []) for _ in sub_dirs
         ]
-        if joined_trace_cols:
-            df = df.drop(joined_trace_cols)
-        if 'corpus' not in df.columns:
-            df = df.with_columns(pl.lit(sub.name).alias('corpus'))
-        # Disk-evict traces.parquet — but ONLY if we ourselves
-        # restored it on this run. Pre-existing local traces are
-        # left alone so users with full local copies aren't
-        # silently losing data. Total traces in cloud sum to ~60 GB;
-        # this keeps peak local-disk usage at one-corpus-worth.
-        if just_restored_traces and traces_path.exists():
-            try:
-                traces_path.unlink()
-            except OSError as e:
-                print(
-                    f'{prefix}: WARNING — could not evict '
-                    f'traces.parquet: {e}',
-                    file=sys.stderr,
-                    flush=True,
+        with _cf.ProcessPoolExecutor(
+            max_workers=max_workers, mp_context=ctx,
+        ) as pool:
+            futures: dict[_cf.Future[
+                tuple[pl.DataFrame | None, list[str]]
+            ], int] = {}
+            for i, sub in enumerate(sub_dirs):
+                fut = pool.submit(
+                    _load_one_corpus,
+                    sub, i=i, n_total=n_total,
+                    digit_width=digit_width,
+                    restore_from_cloud=restore_from_cloud,
+                    required=required,
+                    trace_reads=trace_reads,
+                    analysis_reads=analysis_reads,
                 )
-        frames.append(df)
-        elapsed = _time.monotonic() - t_corpus
-        n_loaded += 1
-        print(
-            f'{prefix}: {df.height} cells × {len(df.columns)} cols'
-            + (' (traces evicted)' if just_restored_traces else '')
-            + f' in {elapsed:.1f}s',
-            file=sys.stderr,
-            flush=True,
-        )
+                futures[fut] = i
+            for fut in _cf.as_completed(futures):
+                idx = futures[fut]
+                try:
+                    results[idx] = fut.result()
+                except Exception as exc:  # noqa: BLE001
+                    sub = sub_dirs[idx]
+                    msg = (
+                        f'  [{idx+1:>{digit_width}}/{n_total}] '
+                        f'{sub.name}: ERROR — '
+                        f'{type(exc).__name__}: {exc}'
+                    )
+                    results[idx] = (None, [msg])
+                # Print in completion order so the user sees
+                # progress as workers finish, not after all are done.
+                for line in results[idx][1]:
+                    print(line, file=sys.stderr, flush=True)
+
+    frames = [df for df, _ in results if df is not None]
+    n_loaded = len(frames)
+    n_skipped = n_total - n_loaded
     walk_elapsed = _time.monotonic() - t_walk_start
     if not frames:
         print(

@@ -214,6 +214,127 @@ def test_invalidate_drifted_drops_orphan_measurable_columns(
     assert 'arm_key' in invalidated.columns
 
 
+# ============ Per-corpus parallelism + disk budget ============
+
+
+def test_estimate_max_workers_caps_by_largest_trace_size(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    """**Disk-budget bound** (Phase 0 #5): worker count divides
+    `(available_disk / safety_factor) // largest_trace_bytes`.
+    A 4 GB trace + 12 GB available + safety_factor=4 → 12/4 = 3 GB
+    safe_avail / 4 GB per worker = 0 → returned 1 (the floor)."""
+    import json
+    from corroborate.runner.runner import _estimate_max_workers
+
+    sub = tmp_path / 'corpus_a'
+    sub.mkdir()
+    manifest = {
+        'remote_root': 'file:///fake',
+        'files': [
+            {
+                'relpath': 'tmp/cell001__traces.parquet',
+                'size_bytes': 4 * 1024**3,   # 4 GB
+                'sha256': 'a' * 64,
+                'pushed_at': '2026-05-06T00:00:00Z',
+            },
+        ],
+    }
+    (sub / '_remote.json').write_text(json.dumps(manifest))
+
+    # Fake `shutil.disk_usage` to return 12 GB free.
+    import shutil
+    real_disk_usage = shutil.disk_usage
+
+    class _FakeUsage:
+        def __init__(self, free: int) -> None:
+            self.total = free * 2
+            self.used = free
+            self.free = free
+
+    def fake_disk_usage(path: object) -> _FakeUsage:
+        return _FakeUsage(12 * 1024**3)
+
+    monkeypatch.setattr(shutil, 'disk_usage', fake_disk_usage)
+    monkeypatch.delenv('CORROBORATE_CACHE_WORKERS', raising=False)
+    n = _estimate_max_workers([sub], tmp_path, safety_factor=4.0)
+    monkeypatch.setattr(shutil, 'disk_usage', real_disk_usage)
+    # 12 GB / 4 = 3 GB safe; 3 GB / 4 GB per worker = 0; floor 1.
+    assert n == 1, (
+        f'expected n=1 (largest trace exceeds safe budget); got {n}'
+    )
+
+
+def test_estimate_max_workers_caps_at_hard_limit(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    """**Hard cap** (Phase 0 #5): even with infinite disk and tiny
+    traces, the estimator returns at most `hard_cap` (default 4)
+    — beyond that, GIL + fork overhead degrade returns."""
+    import json
+    from corroborate.runner.runner import _estimate_max_workers
+
+    sub = tmp_path / 'corpus_a'
+    sub.mkdir()
+    (sub / '_remote.json').write_text(json.dumps({
+        'remote_root': 'file:///fake',
+        'files': [{
+            'relpath': 'traces.parquet',
+            'size_bytes': 1024,   # 1 KB
+            'sha256': 'b' * 64,
+            'pushed_at': '2026-05-06T00:00:00Z',
+        }],
+    }))
+
+    # Plenty of disk: 1 TB free.
+    import shutil
+
+    class _FakeUsage:
+        def __init__(self, free: int) -> None:
+            self.total = free * 2
+            self.used = free
+            self.free = free
+
+    monkeypatch.setattr(
+        shutil, 'disk_usage',
+        lambda path: _FakeUsage(1024**4),
+    )
+    monkeypatch.delenv('CORROBORATE_CACHE_WORKERS', raising=False)
+    n = _estimate_max_workers([sub], tmp_path)
+    assert n == 4, (
+        f'expected hard cap n=4; got {n} (1 TB free / tiny traces '
+        f'would suggest unbounded workers without the cap)'
+    )
+
+
+def test_estimate_max_workers_respects_env_override(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    """`CORROBORATE_CACHE_WORKERS` env var bypasses the disk-budget
+    calculation. Useful when the user knows their environment
+    better than the heuristic."""
+    from corroborate.runner.runner import _estimate_max_workers
+    monkeypatch.setenv('CORROBORATE_CACHE_WORKERS', '7')
+    sub = tmp_path / 'corpus_a'
+    sub.mkdir()
+    n = _estimate_max_workers([sub], tmp_path)
+    assert n == 7
+
+
+def test_estimate_max_workers_no_manifests_returns_hard_cap(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    """No manifests → no traces to budget → returns hard_cap.
+    Cache build is purely CPU-bound; disk-budget bound doesn't
+    apply."""
+    from corroborate.runner.runner import _estimate_max_workers
+    monkeypatch.delenv('CORROBORATE_CACHE_WORKERS', raising=False)
+    sub = tmp_path / 'no_manifest'
+    sub.mkdir()
+    n = _estimate_max_workers([sub], tmp_path)
+    assert n == 4
+
+
 def test_invalidate_drifted_keeps_unregistered_columns(
     tmp_path: Path,
 ) -> None:
