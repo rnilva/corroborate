@@ -565,6 +565,13 @@ def compute_missing_columns(
 
     cells = cast(list[dict[str, object]], df.to_dicts())
     new_cols: dict[str, list[object]] = {n: [] for n, _ in pending}
+    # Track measurables that ALWAYS failed across all cells — those
+    # are authoring bugs, not "missing inputs," and should surface
+    # as a stderr warning so the substrate author sees them. Per-cell
+    # failures (legitimately missing inputs on subset of cells)
+    # remain silent NaN-mapped via the existing path.
+    fail_counts: dict[str, int] = {n: 0 for n, _ in pending}
+    last_exception: dict[str, BaseException] = {}
     for cell in cells:
         per_cell_cache: dict[str, object] = {}
         for name, m in pending:
@@ -572,12 +579,32 @@ def compute_missing_columns(
                 v = evaluate_with_measurables(
                     m.fn, cell, cache=per_cell_cache,
                 )
-            except Exception:  # noqa: BLE001
-                # Record-level evaluation failure (missing inputs,
-                # etc.) maps to None for this cell + measurable.
-                # Downstream analyses NaN-skip these cells.
+            except (KeyError, TypeError, ValueError, ZeroDivisionError) as e:
+                # Expected per-cell failure modes:
+                # - KeyError: required record key absent on this cell
+                # - TypeError: wrong shape / type passed to numpy op
+                # - ValueError: shape mismatch / numpy-derived
+                # - ZeroDivisionError: degenerate-input arithmetic
+                # Map to None for this cell; downstream NaN-skips.
                 v = None
+                fail_counts[name] += 1
+                last_exception[name] = e
             new_cols[name].append(v)
+    # If a measurable failed for EVERY cell, that's an authoring bug
+    # (typo in measurable.fn body, broken signature, etc.) — not
+    # "missing inputs on a subset." Emit a stderr warning so it
+    # doesn't disappear into a silent all-null column.
+    if cells:
+        import sys as _sys
+        for name, count in fail_counts.items():
+            if count == len(cells):
+                exc = last_exception.get(name, RuntimeError('unknown'))
+                _sys.stderr.write(
+                    f'WARNING: measurable {name!r} raised '
+                    f'{type(exc).__name__} on ALL {count} cells '
+                    f'({exc}); column will be all-null. Authoring '
+                    f'bug or schema mismatch?\n',
+                )
 
     return df.with_columns(
         [_to_polars_series(name, vals) for name, vals in new_cols.items()],

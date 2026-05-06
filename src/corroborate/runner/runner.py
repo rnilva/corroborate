@@ -539,7 +539,28 @@ def _dedup_by_content(df: pl.DataFrame, *, source: str) -> pl.DataFrame:
 def _load_cache(path: Path | None) -> pl.DataFrame:
     if path is None or not path.exists():
         return pl.DataFrame()
-    return _dedup_by_content(pl.read_parquet(path), source='cache')
+    # Gate the parquet read on the same integrity check used for
+    # restored trace files (`_file_present` validates min size +
+    # PAR1 magic footer). The runner writes `merged.write_parquet`
+    # non-atomically, so a killed-mid-write cache leaves a
+    # truncated file on disk; rebuilding from scratch beats
+    # crashing with a polars ComputeError on every subsequent run.
+    if not _file_present(path):
+        sys.stderr.write(
+            f'WARNING: cache at {path} is present but truncated / '
+            f'invalid parquet; treating as missing. Re-run will '
+            f'rebuild from scratch.\n',
+        )
+        return pl.DataFrame()
+    try:
+        df = pl.read_parquet(path)
+    except (pl.exceptions.ComputeError, OSError) as e:
+        sys.stderr.write(
+            f'WARNING: cache at {path} could not be read '
+            f'({type(e).__name__}: {e}); treating as missing.\n',
+        )
+        return pl.DataFrame()
+    return _dedup_by_content(df, source='cache')
 
 
 def _dedup_against_cache(

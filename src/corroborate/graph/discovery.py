@@ -266,11 +266,40 @@ def partial_spearman_rho_multi(
     if df < 1:
         return float('nan'), float('nan')
 
+    # Tie-handling MUST match `_spearman_marginal` (scipy's
+    # spearmanr uses average ranks for ties). The previous
+    # argsort-only implementation gave arbitrary tie-breaking
+    # based on input order, producing Spearman correlations that
+    # diverged from the marginal by up to ~0.15 on heavily-tied
+    # data (e.g., HP-grid columns with values in {10000, 50000}).
+    # Inline `rankdata(method='average')`: argsort, then average
+    # ranks within runs of equal values. Inlined here because
+    # pyright's scipy.stats stub bundle is missing rankdata.
     def _rank(a: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
+        n = len(a)
         order = np.argsort(a, kind='mergesort')
-        ranks = np.empty_like(order, dtype=np.float64)
-        ranks[order] = np.arange(len(a))
-        return ranks
+        sorted_a = a[order]
+        # Position-1-based ranks before tie-handling.
+        ranks_pos = np.arange(1, n + 1, dtype=np.float64)
+        # Identify runs of equal values; for each run, replace
+        # ranks with the average. `equal[i]` is True iff
+        # sorted_a[i] == sorted_a[i+1].
+        if n > 1:
+            equal = sorted_a[1:] == sorted_a[:-1]
+            # Walk runs: for each maximal run of equal values,
+            # set ranks to their mean.
+            i = 0
+            while i < n:
+                j = i
+                while j + 1 < n and equal[j]:
+                    j += 1
+                if j > i:
+                    avg = (ranks_pos[i] + ranks_pos[j]) / 2.0
+                    ranks_pos[i:j + 1] = avg
+                i = j + 1
+        out = np.empty(n, dtype=np.float64)
+        out[order] = ranks_pos
+        return out
 
     rx = _rank(x)
     ry = _rank(y)

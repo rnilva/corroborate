@@ -307,7 +307,16 @@ def _walk_dataclass(instance: object, *, depth: int) -> ClaimSignature:
             try:
                 sig_default = factory()
                 is_at_default = value is sig_default or bool(value == sig_default)
-            except (TypeError, ValueError, Exception):
+            except (TypeError, ValueError):
+                # Narrow to the equality-comparison failure modes
+                # we actually expect (TypeError on non-comparable
+                # types, ValueError on numpy-array shape mismatch).
+                # A bare `Exception` here would silently mask
+                # authoring bugs in the factory itself
+                # (ZeroDivisionError, ImportError, AttributeError);
+                # those should propagate so canonical-form
+                # fingerprints don't silently diverge for
+                # structurally-equal claims.
                 is_at_default = False
         else:
             is_at_default = False
