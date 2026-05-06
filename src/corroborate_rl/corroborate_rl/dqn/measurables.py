@@ -175,6 +175,52 @@ def q_max_growth(record: Mapping[str, object]) -> float:
     return float(late / max(abs(early), 1e-9))
 
 
+@measurable(reads=('episode_length', 'mc_return'))
+def env_reward_polarity(record: Mapping[str, object]) -> float:
+    """Per-cell Pearson r between `episode_length` and `mc_return`
+    over all (burst, eval-episode) pairs. The endogenous proxy for
+    env reward polarity:
+
+    - r → +1: longer episodes ⇒ higher return ('survival' polarity).
+      The env rewards being alive longer (per-step rewards
+      accumulate; episode terminates on death). Examples:
+      CartPole, Breakout, SpaceInvaders, Asterix.
+
+    - r → −1: longer episodes ⇒ lower return ('goal' polarity).
+      The env rewards reaching a target quickly (per-step penalty
+      until terminal reward). Examples: Acrobot, FourRooms,
+      MountainCar, DiscountingChain.
+
+    - r ≈ 0: episode length and return decoupled. Either fixed-
+      length episodes (Freeway), bandits (1-step), or saturated
+      outcomes (Catch).
+
+    Empirical (vanilla baseline cells, cross-env): ρ_pool of this
+    measurable matches the hand-coded categorical polarity at
+    Spearman = +0.88 (n_envs=6, p=0.02), with 6/6 sign-match.
+
+    Used as the moderator for the eff_h-mediator bridges that
+    would otherwise need a hand-coded env catalogue (cf. the env-
+    polarity formal proof in `findings_polarity_mediator.md`):
+    GOAL envs (polarity < 0) have negative slope coupling between
+    Δ_eff_h and Δ_outcome; SURVIVAL envs (polarity > 0) have
+    positive slope coupling. The pool ρ values were −0.798 and
+    +0.240 respectively (formal proof n_envs=8, binomial p=0.004).
+    """
+    el = _record_array(record, 'episode_length')
+    mc = _record_array(record, 'mc_return')
+    if el is None or mc is None:
+        return float('nan')
+    el_arr = np.asarray(el, dtype=np.float64).flatten()
+    mc_arr = np.asarray(mc, dtype=np.float64).flatten()
+    if el_arr.shape != mc_arr.shape or el_arr.size < 3:
+        return float('nan')
+    if el_arr.std() == 0 or mc_arr.std() == 0:
+        return float('nan')
+    r = float(np.corrcoef(el_arr, mc_arr)[0, 1])
+    return r if math.isfinite(r) else float('nan')
+
+
 @measurable(reads=('predicted_q_at_start', 'mc_return'))
 def q_mc_calibration_pearson(record: Mapping[str, object]) -> float:
     """Per-cell Pearson r between `predicted_q_at_start` and

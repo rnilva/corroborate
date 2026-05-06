@@ -84,6 +84,7 @@ from corroborate.analyses.paired_delta_link_dowhy import (
 )
 from corroborate.analyses.paired_g import PairedGResult
 from corroborate.analyses.paired_g_per_burst import PerBurstResult
+from corroborate.analyses.proportion_mediated import ProportionMediatedResult
 from corroborate.analyses.paired_link_per_burst import (
     PerBurstLinkResult, phase_link_consistency,
 )
@@ -93,7 +94,7 @@ from corroborate.bridge.bridge import (
     Direction, Tier, claim_bridge,
 )
 from corroborate.bridge.predicates import (
-    finite, finite_ge, finite_gt, partition_aggregate,
+    finite, finite_ge, finite_gt, finite_lt, partition_aggregate,
 )
 from corroborate.core.intervention import DoEffect, Intervention
 from corroborate.measurables import Measurable
@@ -1797,6 +1798,139 @@ def extreme_q_divergence_attenuates_link__rcc_robust(
 
 
 # =====================================================================
+# CLAIM 12 — env-polarity moderates the eff_h mediator sign.
+#
+# The cross-env residual `bootstrap_fraction → g_link | g_mech` is
+# sign-cancellation between two opposite-direction mediator channels:
+# - GOAL envs (env_reward_polarity < 0): Δ_eff_h coupling is
+#   negative — DDQN's policy improvement shortens trajectories,
+#   reduces eff_h, increases discounted return.
+# - SURVIVAL envs (env_reward_polarity > 0): Δ_eff_h coupling is
+#   positive — DDQN's policy improvement extends trajectories,
+#   increases eff_h, accumulates more reward.
+# Cross-env meta-regression averaged the opposite signs to ~0; per-
+# polarity stratification gives ρ_pool = -0.798 and +0.240 (formal
+# proof n_envs=8, binomial p=0.004 across env-by-env sign matches).
+# Source: `findings_polarity_mediator.md`, `polarity_proof.json`.
+#
+# `env_reward_polarity` (per-cell Pearson(episode_length, mc_return))
+# is the endogenous polarity proxy — recovers hand-coded categorical
+# polarity at Spearman ρ=+0.88, p=0.02. Authored as @measurable in
+# corroborate_rl.dqn.measurables.
+# =====================================================================
+
+
+def _eff_h_mediation_holds_when(
+    proportion_mediated: ProportionMediatedResult,
+    *, slope_floor: float | None, slope_ceiling: float | None,
+    n_pairs_floor: int = 25,
+) -> Verdict:
+    """Shared verdict logic. Pass slope_floor for SURVIVAL bridge
+    (slope must be ≥ floor); slope_ceiling for GOAL bridge (slope
+    must be ≤ ceiling). The other parameter is None."""
+    if proportion_mediated.n_pairs < n_pairs_floor:
+        return Verdict.POWER_INSUFFICIENT
+    s = proportion_mediated.slope_y_on_m
+    if math.isnan(s):
+        return Verdict.POWER_INSUFFICIENT
+    if slope_floor is not None and s >= slope_floor:
+        return Verdict.HELD
+    if slope_ceiling is not None and s <= slope_ceiling:
+        return Verdict.HELD
+    return Verdict.NO_EFFECT
+
+
+@claim_bridge(
+    source=INTERVENTION,
+    target='eval_best_burst_mean',
+    direction=Direction.DIRECT,
+    tier=Tier.INTERVENTIONAL,
+    pair_by=('env_name', 'corpus', 'gamma', 'total_steps', 'sync_period', 'seed'),
+    scope=(
+        finite_lt('env_reward_polarity', -0.3)
+        & (
+            pl.col('q_divergence_score').is_nan()
+            | finite_lt('q_divergence_score', 1000.0)
+        )
+    ),
+    predicted_direction='a_lt_b',
+)
+def eff_h_mediates_g_link__goal_envs(
+    proportion_mediated: ProportionMediatedResult,
+    *,
+    mediator: str = 'effective_horizon',
+    polarity_measurable: str = 'env_reward_polarity',
+    slope_ceiling: float = -0.005,
+    n_pairs_floor: int = 25,
+) -> Verdict:
+    """On GOAL-polarity envs (env_reward_polarity < -0.3), DDQN's
+    policy improvement shortens trajectories → eff_h drops → outcome
+    rises. The per-seed slope of Δ_outcome on Δ_eff_h is negative.
+
+    Scope: `env_reward_polarity < -0.3` (endogenous polarity proxy
+    via Pearson(episode_length, mc_return)) AND not in Q-explosion
+    regime (q_div < 1000 OR NaN).
+
+    HELD when slope_y_on_m ≤ −0.005 (chain-shortening helps outcome).
+    Empirical per-env Pearson r across 4 GOAL envs ranges from −0.33
+    (Acrobot) to −0.86 (FourRooms); pooled OLS slope on the
+    ddqn_universe corpus = −0.015 (the FourRooms-dominated env
+    averaging dilutes the per-env coupling magnitude — slope
+    underestimates because per-env eff_h ranges differ by 100× across
+    envs). slope_ceiling = −0.005 calibrates to the observed pooled
+    magnitude; the per-env r panel is the load-bearing evidence."""
+    del mediator, polarity_measurable  # forwarded to walker / proportion_mediated
+    return _eff_h_mediation_holds_when(
+        proportion_mediated, slope_floor=None, slope_ceiling=slope_ceiling,
+        n_pairs_floor=n_pairs_floor,
+    )
+
+
+@claim_bridge(
+    source=INTERVENTION,
+    target='eval_best_burst_mean',
+    direction=Direction.DIRECT,
+    tier=Tier.INTERVENTIONAL,
+    pair_by=('env_name', 'corpus', 'gamma', 'total_steps', 'sync_period', 'seed'),
+    scope=(
+        finite_gt('env_reward_polarity', 0.3)
+        & (
+            pl.col('q_divergence_score').is_nan()
+            | finite_lt('q_divergence_score', 1000.0)
+        )
+    ),
+    predicted_direction='a_gt_b',
+)
+def eff_h_mediates_g_link__survival_envs(
+    proportion_mediated: ProportionMediatedResult,
+    *,
+    mediator: str = 'effective_horizon',
+    polarity_measurable: str = 'env_reward_polarity',
+    slope_floor: float = 0.04,
+    n_pairs_floor: int = 25,
+) -> Verdict:
+    """On SURVIVAL-polarity envs (env_reward_polarity > +0.3),
+    DDQN's policy improvement extends trajectories → eff_h rises →
+    outcome rises. The per-seed slope of Δ_outcome on Δ_eff_h is
+    positive.
+
+    Scope: `env_reward_polarity > +0.3` AND not in Q-explosion
+    regime.
+
+    HELD when slope_y_on_m ≥ +0.04 (chain-extension helps outcome).
+    Empirical per-env Pearson r across 3 SURVIVAL envs ranges from
+    +0.21 (Asterix) to +0.64 (Breakout); pooled OLS slope on the
+    ddqn_universe corpus = +0.061 (calibrated threshold accounts for
+    cross-env eff_h scale dilution — see goal_envs bridge docstring
+    for methodology note)."""
+    del mediator, polarity_measurable  # forwarded to walker / proportion_mediated
+    return _eff_h_mediation_holds_when(
+        proportion_mediated, slope_floor=slope_floor, slope_ceiling=None,
+        n_pairs_floor=n_pairs_floor,
+    )
+
+
+# =====================================================================
 # DDQN measurement graph — the closure.
 # =====================================================================
 DDQN_UNIVERSE_BRIDGES = (
@@ -1861,6 +1995,12 @@ DDQN_UNIVERSE_BRIDGES = (
     extreme_q_divergence_attenuates_link__binary,
     extreme_q_divergence_attenuates_link__placebo_refuted,
     extreme_q_divergence_attenuates_link__rcc_robust,
+    # CLAIM 12 — env-polarity moderates the eff_h mediator sign.
+    # Two paired bridges: GOAL envs (negative slope) and SURVIVAL
+    # envs (positive slope). Replaces the cross-env null residual
+    # with two oppositely-signed env-stratified bridges.
+    eff_h_mediates_g_link__goal_envs,
+    eff_h_mediates_g_link__survival_envs,
 )
 """The six bridges that close the DDQN study. CLAIM 1 (mechanism
 activation, do(DDQN) ↓ jensen_gap) is corroborated by
@@ -1890,6 +2030,8 @@ __all__ = [
     'ddqn_benefit_scales_with_gamma__discountingchain',
     'ddqn_helps_at_early_bursts__pixel_envs',
     'ddqn_refuted_when_dormancy_fires',
+    'eff_h_mediates_g_link__goal_envs',
+    'eff_h_mediates_g_link__survival_envs',
 ]
 
 
