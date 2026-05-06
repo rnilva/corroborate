@@ -26,15 +26,15 @@ API:
     measurements.parquet atomically. Idempotent.
   - `load_measurements(corpus_dir, *, columns) -> DataFrame`:
     pure read.
-  - `current_signatures(corpus_dir) -> Mapping[str, str]`:
-    return the closure-hash sidecar contents (empty mapping if
+  - `current_signatures(corpus_dir) -> dict[str, str]`:
+    return the closure-hash sidecar contents (empty dict if
     absent).
 """
 from __future__ import annotations
 
 import json
 import sys
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 import polars as pl
@@ -64,9 +64,11 @@ def _sidecar_path(corpus_dir: Path) -> Path:
     return corpus_dir / SIDECAR_FILENAME
 
 
-def current_signatures(corpus_dir: Path) -> Mapping[str, str]:
-    """Read the closure-hash sidecar; return empty mapping when
-    absent or unparseable."""
+def current_signatures(corpus_dir: Path) -> dict[str, str]:
+    """Read the closure-hash sidecar; return empty dict when
+    absent or unparseable. Returns a fresh `dict` (not `Mapping`)
+    so the caller can mutate without copying — the function
+    builds a new dict each call regardless."""
     path = _sidecar_path(corpus_dir)
     if not path.exists():
         return {}
@@ -163,7 +165,7 @@ def build_measurements(
             f'build_measurements({corpus_dir}): runs_df is missing '
             f'the `id` column — required as the per-cell key',
         )
-    stored_sigs = dict(current_signatures(corpus_dir))
+    stored_sigs = current_signatures(corpus_dir)
 
     # Drop drifted + orphan columns from the existing store. Same
     # two-axis logic as the runner's `_invalidate_drifted` (C4).
@@ -308,6 +310,14 @@ def build_measurements(
     ]
     out_df = enriched.select(measurable_cols)
 
+    # Skip pointless writes (post-roast-#3 fix): when no measurable
+    # cols are computed AND no existing store needs to be updated,
+    # writing an id-only parquet + empty sidecar wastes I/O and
+    # creates artifacts the framework didn't need. The first build
+    # with `required=()` against an empty corpus dir hits this.
+    if len(measurable_cols) == 1 and not out_path.exists():
+        return out_path
+
     # Sidecar: closure hashes for every column actually present.
     new_sigs: dict[str, str] = {}
     for col in out_df.columns:
@@ -322,9 +332,11 @@ def build_measurements(
         sidecar_path,
         json.dumps(new_sigs, indent=2, sort_keys=True),
     )
+    n_measurable_cols = len(out_df.columns) - 1
     sys.stderr.write(
         f'measurements: wrote {out_df.height} cells × '
-        f'{len(out_df.columns) - 1} measurable cols to {out_path}\n',
+        f'{n_measurable_cols} measurable col'
+        f'{"s" if n_measurable_cols != 1 else ""} to {out_path}\n',
     )
     return out_path
 

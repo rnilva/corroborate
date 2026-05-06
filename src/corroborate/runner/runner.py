@@ -55,6 +55,7 @@ from typing import cast
 
 import polars as pl
 
+from corroborate._internals.json import loads as _json_loads
 from corroborate.bridge.analysis import get_registered as _get_analysis
 from corroborate.bridge.bridge import (
     Bridge,
@@ -173,9 +174,7 @@ def _read_manifest(path: Path) -> dict[str, str]:
     triggers a full rebuild rather than aborting the runner."""
     if not path.exists():
         return {}
-    # `json.loads` is typed `Any`; cast to `object` so the
-    # isinstance below actually narrows.
-    parsed = cast(object, json.loads(path.read_text()))
+    parsed = _json_loads(path.read_text())
     if not isinstance(parsed, dict):
         return {}
     out: dict[str, str] = {}
@@ -233,9 +232,18 @@ def _invalidate_drifted(
         if name not in cache.columns:
             continue
         current = _measurable_signature(name)
-        if current is None:
-            continue
         stored = manifest.get(name)
+        if current is None:
+            # Anomalous: column is in `required` (so the bridge
+            # graph asked for it) but the registry doesn't know it.
+            # Either the registry was mutated mid-loop or a
+            # required name was never registered. If we have a
+            # stored hash, drop the column — the conservative move
+            # when drift coverage is unavailable. Mirror of the
+            # roast-#4 fix in `corpus/measurements.py`.
+            if stored is not None:
+                drifted.append(name)
+            continue
         if stored is not None and stored != current:
             drifted.append(name)
     # Orphan detection: registered measurables in cache.columns
@@ -750,7 +758,7 @@ def _read_remote_manifest(manifest_path: Path) -> RemoteManifest | None:
     Returns None on any I/O or shape error — caller treats that as
     "manifest not consultable" and proceeds without restore."""
     try:
-        raw = cast(object, json.loads(manifest_path.read_text()))
+        raw = _json_loads(manifest_path.read_text())
     except (OSError, ValueError):
         return None
     if not isinstance(raw, dict):

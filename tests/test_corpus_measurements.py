@@ -156,7 +156,7 @@ def test_build_measurements_drops_drifted_column(tmp_path: Path) -> None:
     # Pin the canonical pre-corrupt values.
     canonical = load_measurements(tmp_path).sort('id')['double_x'].to_list()
     assert canonical == [0.0, 2.0, 4.0]
-    sigs_before = dict(current_signatures(tmp_path))
+    sigs_before = current_signatures(tmp_path)
 
     # Corrupt the stored column with a sentinel — the framework
     # would never produce these for `double_x = 2 * x`.
@@ -194,7 +194,7 @@ def test_build_measurements_drops_drifted_column(tmp_path: Path) -> None:
     )
 
     # Sidecar updated to the new closure hash.
-    sigs_after = dict(current_signatures(tmp_path))
+    sigs_after = current_signatures(tmp_path)
     assert sigs_after['double_x'] == 'NEWHASH-' + sigs_before['double_x']
 
 
@@ -507,14 +507,21 @@ def test_build_measurements_recomputes_null_cells_in_existing_column(
     runs_df = _runs_df(3)
     out_path = tmp_path / MEASUREMENTS_FILENAME
 
-    # First build populates double_x for all 3 cells.
+    # First build populates double_x for all 3 cells AND writes
+    # the sidecar with the canonical closure hash.
     build_measurements(
         tmp_path, required=['double_x'], runs_df=runs_df,
     )
+    sigs_canonical = current_signatures(tmp_path)
+    assert 'double_x' in sigs_canonical, (
+        'first build should have written sidecar entry'
+    )
 
-    # Simulate "transient failure on cell 1" — write a manifest
-    # with cell 1 nulled out. Sidecar still claims this is the
-    # current closure-hash (no drift).
+    # Simulate "transient failure on cell 1" — overwrite the
+    # parquet with cell 1 nulled out, but DO NOT touch the
+    # sidecar. The sidecar still claims the canonical closure
+    # hash (no drift signal); the partial-nullity branch is the
+    # only path that can fix this — disambiguation post-roast-#15.
     df_with_null = pl.DataFrame({
         'id': ['cell-0', 'cell-1', 'cell-2'],
         'double_x': [0.0, None, 4.0],   # cell 1 is null
@@ -531,4 +538,18 @@ def test_build_measurements_recomputes_null_cells_in_existing_column(
         f'partial-nullity recompute failed: cell 1 should be '
         f'2.0 (recomputed), got {vals[1]}. cell 0 / 2 should '
         f'be preserved as 0.0 / 4.0.'
+    )
+
+    # Disambiguation (post-roast-#15): the sidecar still carries
+    # the same canonical hash. If drift detection had fired
+    # instead of partial-nullity, the sidecar would have been
+    # rewritten with the same value but the path that produced
+    # the answer would be different. Pin that the sidecar
+    # entry is unchanged and that drift was NOT the trigger.
+    sigs_after = current_signatures(tmp_path)
+    assert sigs_after['double_x'] == sigs_canonical['double_x'], (
+        f'sidecar hash should be unchanged across the partial-'
+        f'nullity recompute (no drift signal was emitted); '
+        f'before={sigs_canonical["double_x"]}, '
+        f'after={sigs_after["double_x"]}'
     )
