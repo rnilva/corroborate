@@ -94,6 +94,61 @@ HELD_WITH_SCOPE_FLAG silently.
 - `n_cells < 5` → `'dl_small_g_unreliable_inference'`
 - `0 < tau2 < 0.02` AND `n_cells < 10` → `'dl_clip_artifact_possible'`
 
+### `discover_adjacency` (PC) — faithfulness violations
+
+**Probe**: `tests/analytic/robustness/test_pc_faithfulness_violation.py`
+
+PC assumes faithfulness: distribution-level conditional
+independence ↔ graph-level d-separation. **Cancelling paths
+break this**. Construction with X → Y (direct, +1) + X → Z (+1)
++ Z → Y (-1):
+
+| Quantity | Value |
+|---|---|
+| Marginal cor(X, Y) | ≈ 0 (structurally exact, paths cancel) |
+| Partial cor(X, Y \| Z) | ≈ 0.82 (real direct edge unmasked) |
+| PC adjacency at α=0.05 | X-Z, Z-Y (X-Y MISSING) |
+| PC adjacency at α=1e-6 | identical to α=0.05 |
+
+**Tightening alpha does NOT fix this** — the marginal
+independence is structurally exact, not borderline. Faithfulness
+violations are a fundamental identifiability gap; PC has no way
+to detect them from observational data alone. Substrate authors
+must validate the DAG against domain knowledge.
+
+**Threshold for `assumption_violations` flag**:
+- No automated heuristic catches faithfulness violations
+  reliably (you'd need to know the true DAG to detect that PC's
+  output disagrees with it — circular). The framework cannot
+  flag this; only the substrate author can.
+
+### `backdoor_ate` (DoWhy) — DAG misspecification
+
+**Probe**: `tests/analytic/robustness/test_dowhy_dag_misspecification.py`
+
+DoWhy requires the user to author the DAG. **The framework cannot
+verify DAG correctness**; misspecified DAGs produce silently-biased
+ATEs with `identified=True`. Bias map on the LG-SCM substrate
+(structural ATE = β_xz · β_zy = 0.75):
+
+| DAG variant | ate | identified | Bias |
+|---|---|---|---|
+| Correct (`X → Y`) | 0.75 | True | 0 |
+| **Mediator-as-confounder** (`Z → X, Z → Y, X → Y`) | **0.012** | **True** | **−0.74** |
+| Mediator-as-collider (`X → Z, Y → Z, X → Y`) | 0.75 | True | 0 |
+| Reversed (`Y → X`) | NaN | False | n/a |
+
+**Mediator-as-confounder is a silent wrong verdict**: the user
+mistakes the mediator for a confounder, DoWhy adjusts for it,
+and the total effect is removed. ATE ≈ 0 with confident-looking
+output. The downstream bridge body interprets this as
+`NO_EFFECT` — completely wrong.
+
+**Asymmetry in DAG-error severity**: collider-direction errors
+are safe; mediator-direction errors are catastrophic.
+Substrate-author guidance: validate that NO node downstream of
+the treatment in the true DAG is in the adjustment set.
+
 ### Other primitives
 
 The robustness suite is being built up incrementally. Probes
@@ -101,16 +156,14 @@ planned:
 - `paired_link_per_burst` Pearson-r normality assumption
 - `mundlak_decomposition` β_b/β_w multicollinearity at low
   within-stratum variance
-- `discover_adjacency` (PC) faithfulness violations + Spearman
-  rank-transform bias
 - `meta_regression_per_burst` IVW-vs-equal-weight under stratum
   imbalance
 - `proportion_mediated` linear-mediation assumption
 
 Each follow-up probe is structurally similar: pick the
-primitive's load-bearing distributional assumption, perturb it,
-MC-pin the bias, decide whether a complementary primitive is
-warranted vs. a documented robustness range.
+primitive's load-bearing distributional or epistemic assumption,
+perturb it, MC-pin the bias, decide whether a complementary
+primitive is warranted vs. a documented robustness range.
 
 ## How to read the probes
 
