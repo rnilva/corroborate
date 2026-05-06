@@ -418,13 +418,24 @@ def dispatch_sweep(sweep: DQNSweep) -> tuple[Path, Path]:
             for chunk in _chunks(ec)
         ]
         h_out_dir = sweep.out_dir / cfg.name
+        # Mirror the local out_dir composition on the remote
+        # (invariant I1 in SWEEP_PERSISTENCY.md). The local path is
+        # already arm-config-namespaced via `sweep.out_dir / cfg.name`;
+        # without mirroring, two arm-configs share the same
+        # `<archive_remote>/tmp/cell{NNN}__{tag}` URI on S3 and the
+        # second upload silently overwrites the first. Per-arm-config
+        # remote prefix closes the collision.
+        h_archive_remote: str | None = (
+            f'{sweep.archive_remote.rstrip("/")}/{cfg.name}'
+            if sweep.archive_remote is not None else None
+        )
         rp, tp = run_intervention(
             intervention,
             base=base,
             grid_points=grid_points,
             runner=runner,
             out_dir=h_out_dir,
-            archive_remote=sweep.archive_remote,
+            archive_remote=h_archive_remote,
             arm_tag=_arm_tag,
             trace_reductions=Q_TRACE_REDUCTIONS,
             trace_drops=Q_TRACE_DROPS,

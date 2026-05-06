@@ -353,13 +353,25 @@ def run_intervention[R: Mapping[str, object]](
     print()
     print('merging per-cell parquets ...', flush=True)
     if archive_remote is not None:
-        stream_concat_parquets(
-            [str(u) for u in archived_runs_uris], final_runs,
+        # Manifest-driven merge (invariant I3 in SWEEP_PERSISTENCY.md):
+        # Read the URI list from the manifest at `<out_dir>/_remote.json`
+        # rather than from `archived_*_uris` collected this call.
+        # When multiple `run_intervention` calls target the same
+        # `out_dir` (paired sweeps), the manifest accumulates entries
+        # from all calls; using it ensures the final merge contains
+        # every cell, not just this call's iteration.
+        from corroborate.corpus.cloud import (
+            archive as _archive_merged,
+            archived_shard_uris,
         )
-        stream_concat_parquets(
-            [str(u) for u in archived_traces_uris], final_traces,
+        runs_uris = archived_shard_uris(
+            out_dir, prefix='tmp/', suffix='__runs.parquet',
         )
-        from corroborate.corpus.cloud import archive as _archive_merged
+        traces_uris = archived_shard_uris(
+            out_dir, prefix='tmp/', suffix='__traces.parquet',
+        )
+        stream_concat_parquets(runs_uris, final_runs)
+        stream_concat_parquets(traces_uris, final_traces)
         _archive_merged(
             out_dir, archive_remote,
             files=[

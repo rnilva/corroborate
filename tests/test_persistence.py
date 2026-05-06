@@ -385,3 +385,87 @@ def test_stream_concat_explicit_scratch_dir_honored(
     assert seen_dirs == [str(scratch_dir)], seen_dirs
     assert scratch_dir.exists(), 'scratch_dir auto-created if missing'
     assert (out_dir / 'merged.parquet').exists()
+
+
+# ============ I4: tmp+rename atomicity ============
+
+
+def test_stream_concat_atomicity_partial_file_absent_after_success(
+    tmp_path: Path,
+) -> None:
+    """**Invariant I4** (SWEEP_PERSISTENCY.md): writes to a
+    `<out>.partial` sibling and rename atomically to `<out>` after
+    the parquet write completes. After a successful merge, no
+    `.partial` should remain at the consumer's path.
+
+    Pre-fix: `stream_concat_parquets` wrote directly to `out`. A
+    process crash mid-write left a torn parquet that downstream
+    `pl.read_parquet` would fail on with `ComputeError`. Post-fix:
+    the rename is filesystem-atomic; consumers either see the
+    pre-merge state (`out` absent / pre-existing) or the
+    post-merge state (`out` present, fully written), never the
+    half-written intermediate."""
+    import polars as pl
+    from corroborate.corpus.persistence import stream_concat_parquets
+
+    inputs = []
+    for i in range(3):
+        p = tmp_path / f'input_{i}.parquet'
+        pl.DataFrame({'x': [i, i + 1]}).write_parquet(p)
+        inputs.append(p)
+    out = tmp_path / 'merged.parquet'
+    stream_concat_parquets(inputs, out)
+
+    # Final output exists and is readable.
+    assert out.exists()
+    df = pl.read_parquet(out)
+    assert df.height == 6
+    # No `.partial` sibling left over.
+    assert not out.with_suffix(out.suffix + '.partial').exists(), (
+        'Stale .partial file present after successful concat — '
+        'tmp+rename cleanup broken.'
+    )
+
+
+def test_stream_concat_atomicity_simulated_crash_leaves_no_torn_parquet(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Simulate a crash mid-write by monkeypatching `replace` to
+    raise BEFORE the rename. The `.partial` file is left in place;
+    `out` is NOT created. A subsequent reader of `out` sees the
+    pre-merge state (in this test: nothing), not a torn parquet.
+    """
+    import polars as pl
+    from corroborate.corpus.persistence import stream_concat_parquets
+
+    inputs = []
+    for i in range(3):
+        p = tmp_path / f'input_{i}.parquet'
+        pl.DataFrame({'x': [i, i + 1]}).write_parquet(p)
+        inputs.append(p)
+    out = tmp_path / 'merged.parquet'
+
+    # Stub the rename to raise — simulates a crash between write
+    # and rename (e.g., process killed by oom-killer).
+    real_replace = Path.replace
+
+    def fake_replace(self: Path, target: Path) -> Path:
+        raise RuntimeError('simulated crash mid-write')
+
+    monkeypatch.setattr(Path, 'replace', fake_replace)
+    import pytest as _pytest
+    with _pytest.raises(RuntimeError, match='simulated crash'):
+        stream_concat_parquets(inputs, out)
+
+    monkeypatch.setattr(Path, 'replace', real_replace)
+    # Consumer's path is empty — no torn parquet visible.
+    assert not out.exists(), (
+        'Consumer-facing `out` should not exist when rename '
+        'failed; it would expose a torn parquet to readers.'
+    )
+    # The .partial file IS present (recovery breadcrumb): a future
+    # tooling pass can detect it and either retry or clean up. The
+    # framework guarantees consumers don t see torn data, NOT that
+    # disk is left tidy on crash.
+    assert out.with_suffix(out.suffix + '.partial').exists()

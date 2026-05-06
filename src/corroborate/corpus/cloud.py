@@ -389,6 +389,40 @@ def archived_uri(remote_root: str, relpath: str) -> str:
     return _join_remote(remote_root, relpath)
 
 
+def archived_shard_uris(
+    sweep_dir: Path,
+    *,
+    prefix: str,
+    suffix: str,
+) -> list[str]:
+    """Return sorted remote URIs for every manifest entry whose
+    `relpath` starts with `prefix` and ends with `suffix`.
+
+    The I3 primitive (per `SWEEP_PERSISTENCY.md`): the merge step
+    in `run_intervention` MUST be a pure function of the manifest,
+    not call-local state. Without this, paired-sweep dispatches
+    that target the same `out_dir` across multiple `run_intervention`
+    calls have each call's merge clobber the prior one's
+    `<out_dir>/runs.parquet` with a SUBSET of the corpus's cells.
+    Reading from the manifest accumulates cells across all calls.
+
+    Returns an empty list when no manifest exists for `sweep_dir`
+    (the all-local-no-cloud path; caller falls back to
+    `runs_paths` / `traces_paths` collected during iteration).
+    Sorted by relpath for deterministic concat order — important
+    so re-merging from the same manifest produces byte-identical
+    output."""
+    manifest = _load_manifest(sweep_dir)
+    if manifest is None:
+        return []
+    matches = [
+        f for f in manifest.files
+        if f.relpath.startswith(prefix) and f.relpath.endswith(suffix)
+    ]
+    matches.sort(key=lambda f: f.relpath)
+    return [_join_remote(manifest.remote_root, f.relpath) for f in matches]
+
+
 def ls(sweep_dir: Path) -> RemoteManifest:
     """Read and return the per-sweep manifest. Raises
     `FileNotFoundError` if no archive yet exists for

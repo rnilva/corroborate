@@ -294,6 +294,15 @@ def stream_concat_parquets(
     # producing "expanded paths were empty" on S3 URIs. Each input
     # is a single concrete path, never a glob — so disable globbing.
     inputs_list = [str(p) for p in inputs]
+    # Atomicity (invariant I4 in SWEEP_PERSISTENCY.md): write to a
+    # `<out>.partial` sibling and rename to `out` only after a
+    # successful write. A crashed mid-write process leaves no
+    # `.partial` file at the consumer's path; consumers never see
+    # torn parquets. Atomic rename on POSIX; on Windows
+    # `Path.replace` provides equivalent semantics.
+    out_partial = out.with_suffix(out.suffix + '.partial')
+    if out_partial.exists():
+        out_partial.unlink()
     if len(inputs_list) <= chunk_size:
         # Small case: load+concat+write directly. No temp files.
         eager_frames = [
@@ -301,9 +310,10 @@ def stream_concat_parquets(
         ]
         merged = pl.concat(eager_frames, how=how)
         merged.write_parquet(
-            str(out),
+            str(out_partial),
             compression=compression, compression_level=compression_level,
         )
+        out_partial.replace(out)
         return
 
     # Large case: chunked recursive merge. Pass 1 — write
