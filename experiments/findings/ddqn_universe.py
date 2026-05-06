@@ -2186,6 +2186,108 @@ def target_staleness_late_mediates_outcome__breakout_sync100(
 
 
 # =====================================================================
+# CLAIM 14 — env-polarity predicts the link sign per env (soft tautology).
+#
+# Cross-env, the within-env paired link r(Δ_eff_h, Δ_outcome) tracks
+# `env_reward_polarity` at slope ≈ +0.5 (Fisher-z), R² ≈ 0.83 (n_envs=8
+# polarity-defined envs from the canonical ddqn corpus).
+#
+# This bridge encodes the "polarity predicts link sign" observation
+# from the original CLAIM 12 motivation as a SOFT TAUTOLOGY claim:
+# the relationship holds because polarity is by definition the
+# within-cell r(L, return), and `effective_horizon` is L-derived; the
+# paired-Δ link inherits the env's L→outcome map. The empirical premise
+# is just "DDQN walks along the env's L→outcome curve" rather than
+# fundamentally re-shaping the env. Empirically true (β=+0.61,
+# p=0.0017) but mechanism-blind — the same pattern would hold for any
+# RL algorithm that improves outcome via length-channel.
+#
+# Bridge predicts `'a_gt_b'`: the polarity coefficient is positive and
+# substantive. HELD confirms the soft tautology operates as expected.
+# Companion to `eff_h_mediates_g_link__{goal,survival}_envs` which both
+# stay HELD under `predicted_direction='null'` — eff_h is structurally
+# tied to polarity (this bridge) but is NOT a dominant mediator (those
+# bridges). The two readings together are the explicit form of the
+# polarity finding.
+#
+# Source: `experiments/findings/sync_curve_breakout/run_polarity_tautology_demo.py`,
+# `polarity_tautology_findings.md`.
+# =====================================================================
+
+
+@claim_bridge(
+    source=INTERVENTION,
+    target='eval_best_burst_mean',
+    direction=Direction.DIRECT,
+    tier=Tier.ASSOCIATIONAL,
+    pair_by=('seed',),
+    scope=(
+        finite('env_reward_polarity')
+        & finite('effective_horizon')
+        & finite('eval_best_burst_mean')
+    ),
+    predicted_direction='a_gt_b',
+)
+def link_r_predictable_from_polarity__soft_tautology(
+    paired_link_per_env: MetaRegressionResult,
+    *,
+    target: str = 'eval_best_burst_mean',
+    predictor: str = 'effective_horizon',
+    moderator: str = 'env_reward_polarity',
+    slope_threshold: float = 0.4,
+    r_squared_threshold: float = 0.5,
+    min_envs: int = 5,
+    alpha: float = 0.05,
+) -> Verdict:
+    """The soft tautology: per env, paired link r(Δ_eff_h, Δ_outcome)
+    is predictable from `env_reward_polarity` because eff_h IS L-derived
+    and polarity IS the env's r(L, return) by definition.
+
+    Bridge body: read the polarity coefficient from the meta-regression.
+
+      HELD when β(polarity) ≥ `slope_threshold` AND coefficient is
+      significant AND R² ≥ `r_squared_threshold` AND n_strata ≥
+      `min_envs`. Confirms the soft-tautology prediction holds.
+
+      NO_EFFECT when β is below threshold or insignificant — would
+      refute the soft tautology, suggesting the L→outcome map is NOT
+      stable under DDQN intervention. (Strong negative finding if
+      ever fires.)
+
+      POWER_INSUFFICIENT when fewer than `min_envs` envs surface in
+      the panel.
+
+    Empirical (canonical ddqn corpus, 8 polarity-defined envs):
+      β(env_reward_polarity) = +0.614, CI [+0.34, +0.89],
+      p = 1.7×10⁻³, R² = 0.83, n_strata = 8 → HELD.
+
+    Note: the soft tautology is a structural consequence of how
+    polarity and eff_h are defined; HELD here does NOT imply eff_h
+    carries DDQN's mechanism. The companion bridges
+    `eff_h_mediates_g_link__{goal,survival}_envs` are HELD under
+    `predicted_direction='null'` (eff_h is NOT a dominant mediator).
+    Together: polarity predicts link SHAPE (this bridge); but eff_h
+    carries < 20% of the total effect (those bridges)."""
+    del target, predictor
+    if paired_link_per_env.n_strata < min_envs:
+        return Verdict.POWER_INSUFFICIENT
+    coef = next(
+        (c for c in paired_link_per_env.coefficients
+         if c.name == moderator),
+        None,
+    )
+    if coef is None:
+        return Verdict.POWER_INSUFFICIENT
+    if not coef.is_significant:
+        return Verdict.NO_EFFECT
+    if coef.coefficient < slope_threshold:
+        return Verdict.NO_EFFECT
+    if paired_link_per_env.r_squared < r_squared_threshold:
+        return Verdict.NO_EFFECT
+    return Verdict.HELD
+
+
+# =====================================================================
 # DDQN measurement graph — the closure.
 # =====================================================================
 DDQN_UNIVERSE_BRIDGES = (
@@ -2264,6 +2366,14 @@ DDQN_UNIVERSE_BRIDGES = (
     # suppression downstream of bias correction.
     target_staleness_late_mediates_outcome__fourrooms,
     target_staleness_late_mediates_outcome__breakout_sync100,
+    # CLAIM 14 — soft tautology: env-polarity predicts the link sign
+    # per env at slope ≈ +0.5 (Fisher-z), R² ≈ 0.83. Companion to
+    # CLAIM 12's eff_h_mediates_g_link__{goal,survival}_envs:
+    # polarity predicts link SHAPE (CLAIM 14 HELD), but eff_h is NOT
+    # a dominant mediator (CLAIM 12 HELD under predicted_direction=
+    # 'null'). The two together are the explicit form of the
+    # polarity finding.
+    link_r_predictable_from_polarity__soft_tautology,
 )
 """The six bridges that close the DDQN study. CLAIM 1 (mechanism
 activation, do(DDQN) ↓ jensen_gap) is corroborated by
@@ -2297,6 +2407,7 @@ __all__ = [
     'eff_h_mediates_g_link__survival_envs',
     'target_staleness_late_mediates_outcome__fourrooms',
     'target_staleness_late_mediates_outcome__breakout_sync100',
+    'link_r_predictable_from_polarity__soft_tautology',
 ]
 
 

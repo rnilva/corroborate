@@ -1,0 +1,83 @@
+[
+  {
+    "env": "Acrobot-v1",
+    "polarity": -0.9326601088681781,
+    "n_pairs": 120,
+    "n_cells_v": 60,
+    "r_within_eff_h": -0.46810890230054675,
+    "r_pair_eff_h": -0.40057760593011876,
+    "r_pair_bf": -0.40587606931422504
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "polarity": 0.5236458825265067,
+    "n_pairs": 120,
+    "n_cells_v": 60,
+    "r_within_eff_h": -0.15629033310898552,
+    "r_pair_eff_h": -0.11427826482658948,
+    "r_pair_bf": -0.12030608700739363
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "polarity": 0.9916265807246699,
+    "n_pairs": 120,
+    "n_cells_v": 60,
+    "r_within_eff_h": 0.34658595308693685,
+    "r_pair_eff_h": 0.33140793721410544,
+    "r_pair_bf": 0.3481568162462099
+  },
+  {
+    "env": "CartPole-v1",
+    "polarity": 0.9213591242037119,
+    "n_pairs": 120,
+    "n_cells_v": 60,
+    "r_within_eff_h": 0.4492108550410033,
+    "r_pair_eff_h": 0.4017509438419393,
+    "r_pair_bf": 0.4159704364362366
+  },
+  {
+    "env": "FourRooms-misc",
+    "polarity": -0.9018489349511395,
+    "n_pairs": 120,
+    "n_cells_v": 60,
+    "r_within_eff_h": -0.8346472011143066,
+    "r_pair_eff_h": -0.7799152587776103,
+    "r_pair_bf": -0.6015657668576058
+  },
+  {
+    "env": "MetaMaze-misc",
+    "polarity": -0.3286257225415204,
+    "n_pairs": 120,
+    "n_cells_v": 60,
+    "r_within_eff_h": -0.10119075034906191,
+    "r_pair_eff_h": -0.10000733326724329,
+    "r_pair_bf": -0.1000530018802105
+  },
+  {
+    "env": "MountainCar-v0",
+    "polarity": -0.9928383304015946,
+    "n_pairs": 120,
+    "n_cells_v": 60,
+    "r_within_eff_h": -0.8334848268643699,
+    "r_pair_eff_h": -0.7798851551321059,
+    "r_pair_bf": -0.7678006730282201
+  },
+  {
+    "env": "Pong-misc",
+    "polarity": 0.968662760187328,
+    "n_pairs": 120,
+    "n_cells_v": 60,
+    "r_within_eff_h": NaN,
+    "r_pair_eff_h": NaN,
+    "r_pair_bf": NaN
+  },
+  {
+    "env": "SpaceInvaders-MinAtar",
+    "polarity": 0.1600005950683085,
+    "n_pairs": 120,
+    "n_cells_v": 60,
+    "r_within_eff_h": -0.16868644643954114,
+    "r_pair_eff_h": -0.20674548208178295,
+    "r_pair_bf": -0.10513187211279452
+  }
+]
