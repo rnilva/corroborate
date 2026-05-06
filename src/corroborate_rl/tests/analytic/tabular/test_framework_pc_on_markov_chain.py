@@ -187,6 +187,67 @@ def test_pc_separating_sets_match_markov_property() -> None:
     assert frozenset({'x_2'}) in sepset_13
 
 
+def test_pc_collects_multiple_valid_sepsets() -> None:
+    """Conservative-PC must collect ALL valid sepsets per edge,
+    not just the first one found.
+
+    In the chain x_0 → x_1 → x_2 → x_3, the non-edge (x_0, x_3)
+    has TWO depth-1 sepsets: {x_1} and {x_2}. Each independently
+    d-separates the endpoints (x_1 blocks the path at x_0 → x_1
+    → x_2; x_2 blocks at x_2 → x_3). The framework's depth-1
+    loop tries every singleton in `var_list \\ {x_0, x_3}` =
+    {x_1, x_2}, and the conservative-PC contract requires BOTH
+    successful Z-sets to appear in the separating-sets entry.
+
+    A regression that returned only the first valid sepset (the
+    'orientation-rule shortcut' style some PC implementations
+    take) would breach. The framework's docstring explicitly
+    says "all minimal separating sets at depth k" — this test
+    is the assertion that backs that claim.
+
+    Negative-control checks within the same edge:
+    - sepset(x_1, x_3) is a SINGLE-sepset case ({x_2} only;
+      conditioning on x_0 does NOT d-separate x_1 from x_3
+      since x_0 is not on the path). That establishes that the
+      multi-sepset assertion isn't trivially true (i.e., the
+      framework isn't just stuffing every variable into the
+      sepset entry).
+    """
+    df = _generate_markov_chain_dataframe()
+    adj = discover_adjacency(
+        df, variables=_VARIABLES,
+        alpha=_PC_ALPHA, max_conditioning=1,
+    )
+    sepset_03 = adj.separating_sets.get(frozenset({'x_0', 'x_3'}))
+    assert sepset_03 is not None, (
+        'no separating set recorded for (x_0, x_3); expected '
+        'BOTH {x_1} and {x_2} (each is a Markov barrier on the '
+        'path).'
+    )
+    assert frozenset({'x_1'}) in sepset_03, (
+        f'sepset(x_0, x_3) = {sepset_03}, missing {{x_1}}. '
+        f'Conservative-PC must record both Markov barriers.'
+    )
+    assert frozenset({'x_2'}) in sepset_03, (
+        f'sepset(x_0, x_3) = {sepset_03}, missing {{x_2}}. '
+        f'Conservative-PC must record both Markov barriers.'
+    )
+    # Negative control on the same `separating_sets` payload:
+    # sepset(x_1, x_3) has only ONE valid singleton sepset ({x_2})
+    # — conditioning on x_0 does NOT separate (x_0 not on path).
+    # If this contained {x_0} or {x_2, x_0}, the multi-sepset
+    # assertion above would be trivially satisfied by any
+    # implementation that over-reported.
+    sepset_13 = adj.separating_sets.get(frozenset({'x_1', 'x_3'}))
+    assert sepset_13 is not None
+    assert frozenset({'x_0'}) not in sepset_13, (
+        f'sepset(x_1, x_3) = {sepset_13}, contains {{x_0}}; '
+        f'x_0 is NOT a Markov barrier between x_1 and x_3 (not '
+        f'on the chain path). The multi-sepset assertion above '
+        f'is meaningless if the framework over-reports.'
+    )
+
+
 # ============ Panel structure: n_observations ============
 
 def test_pc_n_observations_matches_dataframe_height() -> None:
