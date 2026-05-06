@@ -62,37 +62,72 @@ def test_pearson_perfect_negative_correlation_returns_r_neg_one() -> None:
 
 
 def test_pearson_p_value_matches_fisher_z_closed_form() -> None:
-    """For 0 < |r| < 1, the reported p must equal:
-        z = atanh(r) = 0.5 · ln((1 + r) / (1 − r))
-        SE = 1 / sqrt(n − 3)
-        p = 2 · (1 − Φ(|z| / SE))
+    """Closed-form r computed by hand from a small integer-data
+    construction (NOT from feeding framework's sample r back
+    through framework's Fisher-z formula).
 
-    Pin every coefficient in this formula. Construct a moderate-r
-    fixture (~0.5) so p lands around 0.05, where one-unit n shifts
-    are detectable."""
-    rng = np.random.default_rng(11)
-    n = 20
-    x = rng.standard_normal(n)
-    y = 0.7 * x + 0.7 * rng.standard_normal(n)
+    Data:  x = [-2, -1, 0, 1, 2],  y = [-4, 2, 0, -2, 4]
+        x̄ = ȳ = 0
+        cov(x, y) = (8 − 2 + 0 − 2 + 8) / 4 = 3.0
+        var(x)    = (4 + 1 + 0 + 1 + 4) / 4 = 2.5
+        var(y)    = (16 + 4 + 0 + 4 + 16) / 4 = 10.0
+        r_known   = 3.0 / √(2.5 · 10) = 3 / 5 = 0.6 EXACTLY
+        slope_known = cov / var(x) = 3 / 2.5 = 1.2 EXACTLY
+
+    Closed-form p (computed from r_known = 0.6, NOT framework's r):
+        z = 0.5·ln(1.6/0.4) = 0.5·ln(4) = ln(2)
+        SE = 1/√(n − 3) = 1/√2
+        |z|/SE = ln(2)·√2 ≈ 0.9803
+        p_known = 2·(1 − Φ(0.9803)) ≈ 0.3270
+
+    Pin the framework's reported r AND p to these exact closed-form
+    values. The expected p is computed against the integer-data r
+    derived by hand — the framework's own r is never fed back into
+    the formula. Catches mutations on:
+        `(1+r)/(1-r) → (1+r)*(1-r)` (would yield z ≈ 0)
+        `1/sqrt(n-3) → 1*sqrt(n-3)` (SE off by factor 2 → p shift)
+        `abs(z)/se → abs(z)*se`     (z·SE far from threshold)
+    """
+    x = np.array([-2.0, -1.0, 0.0, 1.0, 2.0])
+    y = np.array([-4.0, 2.0, 0.0, -2.0, 4.0])
     r, p, _ = _pearson_r_p_slope(x, y)
-    z = 0.5 * math.log((1 + r) / (1 - r))
-    se = 1.0 / math.sqrt(n - 3)
-    p_expected = 2 * (1.0 - float(norm.cdf(abs(z) / se)))
-    assert p == pytest.approx(p_expected, abs=1e-9)
+
+    r_known = 0.6
+    z_known = 0.5 * math.log((1 + r_known) / (1 - r_known))
+    se_z_known = 1.0 / math.sqrt(5 - 3)
+    p_known = 2.0 * (1.0 - float(norm.cdf(abs(z_known) / se_z_known)))
+
+    assert r == pytest.approx(r_known, abs=1e-12), (
+        f'r = {r:.6f}, closed-form r_known = {r_known}'
+    )
+    assert p == pytest.approx(p_known, abs=1e-9), (
+        f'p = {p:.6f}, closed-form p = {p_known:.6f} (Fisher-z on '
+        f'r_known = 0.6, n = 5).'
+    )
 
 
 def test_pearson_slope_uses_y_std_over_x_std() -> None:
-    """slope = r · sd(y, ddof=1) / sd(x, ddof=1). Constructed with
-    asymmetric scales so swapping y and x in the formula would
-    yield a wildly different slope (vs the swap-mutant on the
-    OLS formula)."""
-    rng = np.random.default_rng(13)
-    n = 30
-    x = 0.1 * rng.standard_normal(n)        # small spread
-    y = 100.0 * x + 5.0 * rng.standard_normal(n)  # large spread
-    r, _, slope = _pearson_r_p_slope(x, y)
-    expected_slope = r * float(np.std(y, ddof=1)) / float(np.std(x, ddof=1))
-    assert slope == pytest.approx(expected_slope, abs=1e-9)
+    """Closed-form slope from integer-data construction with
+    asymmetric variance (var_y = 4·var_x). The swap-mutant
+    `r·sd_x/sd_y` would yield slope = 0.3 — clearly distinguishable
+    from the structural slope = 1.2.
+
+    Data:  x = [-2, -1, 0, 1, 2],  y = [-4, 2, 0, -2, 4]
+        slope_known = cov / var(x) = 3 / 2.5 = 1.2 EXACTLY
+        r_known     = 0.6
+        sd_y / sd_x = √(10) / √2.5 = 2 EXACTLY
+        r · sd_y / sd_x = 0.6 · 2 = 1.2  ✓
+        SWAP-mutant: r · sd_x / sd_y = 0.6 · 0.5 = 0.3 → catches.
+
+    Pin the closed-form slope value directly — the assertion does
+    NOT walk the framework's own sd_y/sd_x ratio."""
+    x = np.array([-2.0, -1.0, 0.0, 1.0, 2.0])
+    y = np.array([-4.0, 2.0, 0.0, -2.0, 4.0])
+    _, _, slope = _pearson_r_p_slope(x, y)
+    assert slope == pytest.approx(1.2, abs=1e-12), (
+        f'slope = {slope:.6f}, closed-form slope = 1.2 '
+        f'(cov / var_x = 3 / 2.5).'
+    )
 
 
 def test_pearson_returns_nan_below_n_3() -> None:

@@ -186,25 +186,39 @@ def test_fisher_z_path_recovers_closed_form_r_and_p() -> None:
             f'4·SE = {4.0 * se_r:.4f}'
         )
 
-        # 3. Fisher-z formula on the sample r: assert framework's
-        #    p matches the expected p computed from sample r.
-        #    This tests the (1+r)/(1-r), 1/sqrt(n-3), and
-        #    norm.cdf(|z|/SE) chain — exactly the mutmut survivors.
-        expected_p_at_sample_r = _expected_p_value(s.r, _N_PAIRS)
-        if expected_p_at_sample_r > 0 and s.p > 0:
+        # 3. Sample p must lie within a sampling-distribution-derived
+        #    band around the POPULATION p computed from the
+        #    closed-form r_pop. The expected p is anchored against
+        #    `_expected_r()` (population r derived from β_zy, σ_z,
+        #    σ_ε), NOT against the framework's own returned `s.r`.
+        #    A regression that fed sample r back through the formula
+        #    on both sides of the assertion would be tautological.
+        p_pop = _expected_p_value(expected_r_pop, _N_PAIRS)
+        # log10(p) sensitivity to r: dz/dr = 1/(1-r²), so a 4·SE_r
+        # drift of ±(4 · (1-r²)/√n) ≈ ±0.24 at r=-0.82, n=30 maps
+        # to z drift ≈ ±0.74, |z|/SE drift ≈ ±3.97. Φ tail of
+        # 3.97 maps to p drift of ~3 dex. Bound 4 dex absorbs this
+        # AND fails any of the named formula mutations:
+        #   (1+r)/(1-r) → (1+r)*(1-r) → z ≈ 0 → p ≈ 1 (huge dex shift)
+        #   1/sqrt(n-3) → sqrt(n-3)   → SE off by factor n-3 = 27,
+        #                                |z|/SE shrinks by 27× → p ≈ 1
+        #   abs(z)/se → abs(z)*se     → product replaces ratio →
+        #                                |z|·SE = 0.85·0.19 ≈ 0.16 →
+        #                                p ≈ 0.87 (huge dex shift).
+        if p_pop > 0 and s.p > 0:
             log_p_obs = math.log10(s.p)
-            log_p_exp = math.log10(expected_p_at_sample_r)
-            assert abs(log_p_obs - log_p_exp) < 0.5, (
-                f'burst {s.burst_index}: p = {s.p:.2e}, expected '
-                f'(via Fisher-z on sample r={s.r:.4f}) '
-                f'{expected_p_at_sample_r:.2e} '
-                f'(log10 diff {abs(log_p_obs - log_p_exp):.4f}). '
-                f'The Fisher-z + SE + Φ formula is broken — a '
-                f'mutation in `(1+r)/(1-r)`, `1/sqrt(n-3)`, or '
-                f'`abs(z)/se` would breach this bound.'
+            log_p_pop = math.log10(p_pop)
+            assert abs(log_p_obs - log_p_pop) < 4.0, (
+                f'burst {s.burst_index}: p = {s.p:.2e}, '
+                f'closed-form p_pop = {p_pop:.2e} '
+                f'(from r_pop = {expected_r_pop:.4f}, n = {_N_PAIRS}). '
+                f'log10 diff = {abs(log_p_obs - log_p_pop):.4f}. '
+                f'A formula mutation produces dex shifts ≫ 4; '
+                f'sampling drift on r → p maps to ~3 dex; bound '
+                f'absorbs sampling, rejects mutation.'
             )
 
-        # 4. p must be significant (closed-form ~ 1e-7 at sample r).
+        # 4. p must be significant (closed-form ~ 1e-7 at r_pop).
         assert s.p < 0.01, (
             f'burst {s.burst_index}: p = {s.p:.4f} not '
             f'significant; closed-form expects p well below 0.01 '

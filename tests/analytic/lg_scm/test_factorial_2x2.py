@@ -281,10 +281,12 @@ def test_factorial_interaction_is_null_when_axes_have_no_joint_effect() -> None:
     Closed-form: INT_delta = (D - B) - (C - A) = 0 exactly under
     shared seeds — D == C and B == A by construction.
 
-    The framework should report `g_interaction == NaN` (zero
-    deltas → zero SD → Hedges' g undefined under shared-seed
-    cancellation) OR a near-zero g; we accept either form of
-    'no detected interaction'.
+    Shared-seed cancellation makes EVERY per-pair INT_delta
+    EXACTLY zero. `hedges_g_paired`'s zero-variance convention
+    returns `(g=0.0, se=NaN)` — pin to exact 0.0, not "0 OR NaN".
+    A `NaN OR 0` permissive bound has half the discriminating
+    power; the construction is deterministic, so the expected
+    value is determinable.
     """
     rows: list[RunRow] = []
     # axis A flips beta_xz; axis B is null (no-op).
@@ -309,15 +311,18 @@ def test_factorial_interaction_is_null_when_axes_have_no_joint_effect() -> None:
         pair_by=('seed',),
     )
     per = result.per_env[0]
-    # NaN OR exact zero are both acceptable — Hedges' g of an
-    # all-zero delta vector is "0 / 0" which the implementation
-    # handles by returning (0.0, NaN) (see hedges_g_paired).
-    assert (
-        math.isnan(per.g_interaction) or per.g_interaction == 0.0
-    ), (
+    # Shared-seed identical-arm pairs make every per-pair INT_delta
+    # EXACTLY zero. `hedges_g_paired` returns `(g=0.0, se=NaN)` on
+    # zero-variance deltas — pin g_interaction to exact 0.0.
+    assert per.g_interaction == 0.0, (
         f'g_interaction = {per.g_interaction} on a structurally-null '
-        f'interaction; expected NaN or 0.0 (shared-seed identical-arm '
-        f'pairs make every per-pair INT_delta exactly zero)'
+        f'interaction; closed-form is exact 0.0 (every per-pair '
+        f'INT_delta is zero by shared-seed cancellation; '
+        f'hedges_g_paired returns g=0.0 on zero-variance).'
+    )
+    assert math.isnan(per.se_interaction), (
+        f'se_interaction = {per.se_interaction}; expected NaN '
+        f'(zero-variance delta vector → undefined SE).'
     )
 
 
