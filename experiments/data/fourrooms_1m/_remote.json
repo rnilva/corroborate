@@ -1,0 +1,29 @@
+{
+  "remote_root": "s3://corroborate-archive/fourrooms_1m",
+  "files": [
+    {
+      "relpath": "per_burst_arrays.parquet",
+      "size_bytes": 14125,
+      "sha256": "f4f9ddfb52003778ee1c8da97dc9403e520688c3b6b0d61ff01aae4db80e4fb3",
+      "pushed_at": "2026-05-01T05:38:48+00:00"
+    },
+    {
+      "relpath": "per_burst_scalars.parquet",
+      "size_bytes": 7068,
+      "sha256": "a939ac6c8badef973b9c381e5efcd603ce4f34f982199dd78c6b11d585da9d73",
+      "pushed_at": "2026-05-01T05:38:49+00:00"
+    },
+    {
+      "relpath": "runs.parquet",
+      "size_bytes": 28433,
+      "sha256": "598f7aab78d12f2daa00950ba54425de83dd5e64e157b573aa169eb0c8ba0b92",
+      "pushed_at": "2026-05-01T05:38:49+00:00"
+    },
+    {
+      "relpath": "traces.parquet",
+      "size_bytes": 3342019440,
+      "sha256": "82e7fe39d9ff4c086c52ac64dc5e4022cb90c469fae40e5958035c62f4cdfb9a",
+      "pushed_at": "2026-05-01T05:39:56+00:00"
+    }
+  ]
+}

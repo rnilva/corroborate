@@ -1,0 +1,23 @@
+{
+  "remote_root": "s3://corroborate-archive/adaptive_dqn_fourrooms_sweep",
+  "files": [
+    {
+      "relpath": "runs.parquet",
+      "size_bytes": 24949,
+      "sha256": "fe66545df06ab44db87e8669b3f2e05b83c29219588969dc86c53d92eebc5130",
+      "pushed_at": "2026-05-03T03:22:12+00:00"
+    },
+    {
+      "relpath": "runs_with_bridge_cache.parquet",
+      "size_bytes": 42516,
+      "sha256": "9a8638834525dc0bba03176a68c15fe22529bf76418baae86ad1a3fd0ffc5800",
+      "pushed_at": "2026-05-03T03:22:12+00:00"
+    },
+    {
+      "relpath": "traces.parquet",
+      "size_bytes": 1020219810,
+      "sha256": "779a2df5a8da7d12e11dfa1b6bf0d906b496eaac76a33d9f31451ba95296a40e",
+      "pushed_at": "2026-05-03T03:22:27+00:00"
+    }
+  ]
+}

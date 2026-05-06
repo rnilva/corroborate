@@ -1,0 +1,29 @@
+{
+  "remote_root": "s3://corroborate-archive/ddqn_effective_cohort",
+  "files": [
+    {
+      "relpath": "per_burst_arrays.parquet",
+      "size_bytes": 31215,
+      "sha256": "0f60a1caa54dea5841e274c64898c87909d3a0ef80aa7e26829b8a591d1d3c68",
+      "pushed_at": "2026-05-01T05:37:21+00:00"
+    },
+    {
+      "relpath": "per_burst_scalars.parquet",
+      "size_bytes": 16738,
+      "sha256": "7794741a954c941de2a8a669d8aaf9eec4d0cb11128fd917857b3e6023dee612",
+      "pushed_at": "2026-05-01T05:33:59+00:00"
+    },
+    {
+      "relpath": "runs.parquet",
+      "size_bytes": 37045,
+      "sha256": "77a4933059417baeeb96277ef98e6f7d02cf4fd266137eb7fdc490dcf32d2bd6",
+      "pushed_at": "2026-05-01T04:37:51+00:00"
+    },
+    {
+      "relpath": "traces.parquet",
+      "size_bytes": 2831820747,
+      "sha256": "28c3fb970d17402db7e8a7eabfa21d3f5880e4b887f9fb1fab9c1727193530ff",
+      "pushed_at": "2026-05-01T04:38:30+00:00"
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "remote_root": "s3://corroborate-archive/nstep_intervention",
+  "files": [
+    {
+      "relpath": "runs.parquet",
+      "size_bytes": 36542,
+      "sha256": "1d8056dc03eeaa6d92a5e109153a0d685ef48b919ea860c5c4220664bd82d533",
+      "pushed_at": "2026-05-01T04:37:04+00:00"
+    },
+    {
+      "relpath": "traces.parquet",
+      "size_bytes": 2882202593,
+      "sha256": "c672740e92f59f782fd51279e42f26a2e9c56c597a5bfe8be81f6cd60b65f731",
+      "pushed_at": "2026-05-01T04:37:47+00:00"
+    }
+  ]
+}

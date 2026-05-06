@@ -1,0 +1,221 @@
+{
+  "remote_root": "s3://corroborate-archive/gamma_sweep",
+  "files": [
+    {
+      "relpath": "tmp/arm000__FourRooms-misc__vanilla_dqn_g099__runs.parquet",
+      "size_bytes": 21262,
+      "sha256": "362786783da3a71c3ca666f2105dc1026f1a9e988e1af100786d1694f67aa2f8",
+      "pushed_at": "2026-05-01T06:04:52+00:00"
+    },
+    {
+      "relpath": "tmp/arm000__FourRooms-misc__vanilla_dqn_g099__traces.parquet",
+      "size_bytes": 334352034,
+      "sha256": "dc793b7d34b2b69bba37f2ca1891e439bd14e5a34ba1c9e41d35ad9d29a9f8cc",
+      "pushed_at": "2026-05-01T06:04:59+00:00"
+    },
+    {
+      "relpath": "tmp/arm001__Catch-bsuite__vanilla_dqn_g099__runs.parquet",
+      "size_bytes": 20965,
+      "sha256": "3fb189ca390114caeb9b81e36861ce56cfe691fa445732dd58d08e5242f8dee6",
+      "pushed_at": "2026-05-01T06:07:19+00:00"
+    },
+    {
+      "relpath": "tmp/arm001__Catch-bsuite__vanilla_dqn_g099__traces.parquet",
+      "size_bytes": 350580073,
+      "sha256": "8510f06e099ab9599d67cd2222a57832e06b8d4eae58f2ed634d4bf60944d780",
+      "pushed_at": "2026-05-01T06:07:25+00:00"
+    },
+    {
+      "relpath": "tmp/arm002__Acrobot-v1__vanilla_dqn_g099__runs.parquet",
+      "size_bytes": 21365,
+      "sha256": "ead31f5ba6d245fad7e51b357dc75590f185da29c976f0950b000fe20ce034a3",
+      "pushed_at": "2026-05-01T06:09:44+00:00"
+    },
+    {
+      "relpath": "tmp/arm002__Acrobot-v1__vanilla_dqn_g099__traces.parquet",
+      "size_bytes": 364870408,
+      "sha256": "51fbdba278d03a82ce81e581eaa80eae0479dc0150ad396e99894eb0eed055d4",
+      "pushed_at": "2026-05-01T06:09:50+00:00"
+    },
+    {
+      "relpath": "tmp/arm003__FourRooms-misc__ddqn_g099__runs.parquet",
+      "size_bytes": 27438,
+      "sha256": "f36c1269cf84aa45fe6bb1d4359e5f238d35da5a17c44c00c7d070a2e6e50d2c",
+      "pushed_at": "2026-05-01T06:12:10+00:00"
+    },
+    {
+      "relpath": "tmp/arm003__FourRooms-misc__ddqn_g099__traces.parquet",
+      "size_bytes": 340162754,
+      "sha256": "e5709952e31c394374a85d988486c1d793189bccf2673a59ebac68fb0ea8c1d4",
+      "pushed_at": "2026-05-01T06:12:18+00:00"
+    },
+    {
+      "relpath": "tmp/arm004__Catch-bsuite__ddqn_g099__runs.parquet",
+      "size_bytes": 27653,
+      "sha256": "808416d85efa7408124b119137f7ca4046375d4c4941f563c3ec43bb9b836184",
+      "pushed_at": "2026-05-01T06:14:35+00:00"
+    },
+    {
+      "relpath": "tmp/arm004__Catch-bsuite__ddqn_g099__traces.parquet",
+      "size_bytes": 353542549,
+      "sha256": "23a290f2e499adbcbb71089bf5c69ac81d1357e1d8f516b4a34ac54417b67a15",
+      "pushed_at": "2026-05-01T06:14:49+00:00"
+    },
+    {
+      "relpath": "tmp/arm005__Acrobot-v1__ddqn_g099__runs.parquet",
+      "size_bytes": 27332,
+      "sha256": "9989e00f7b0ce390be7f1e87c32f384607f3395058bfdf1530d78cfc64a99f94",
+      "pushed_at": "2026-05-01T06:17:06+00:00"
+    },
+    {
+      "relpath": "tmp/arm005__Acrobot-v1__ddqn_g099__traces.parquet",
+      "size_bytes": 365756889,
+      "sha256": "1aa84aecee5027c8b2423e138707b26c33a9d8d14825b799ca0c1d79e9f7beec",
+      "pushed_at": "2026-05-01T06:17:17+00:00"
+    },
+    {
+      "relpath": "tmp/arm006__FourRooms-misc__vanilla_dqn_g095__runs.parquet",
+      "size_bytes": 21228,
+      "sha256": "9a016e644f79b6b42cad7ba56ac2064127b985c13767aa1197dd5ec24bbf269d",
+      "pushed_at": "2026-05-01T06:19:35+00:00"
+    },
+    {
+      "relpath": "tmp/arm006__FourRooms-misc__vanilla_dqn_g095__traces.parquet",
+      "size_bytes": 359222922,
+      "sha256": "3ce40209ecc6950680aca8028015c72ea45edc0b520fdac9be136676318753da",
+      "pushed_at": "2026-05-01T06:19:44+00:00"
+    },
+    {
+      "relpath": "tmp/arm007__Catch-bsuite__vanilla_dqn_g095__runs.parquet",
+      "size_bytes": 20958,
+      "sha256": "a7d4e5f2d793708f412d6a38bfcbf1abb05192fd47aded23f2e140e14be4d370",
+      "pushed_at": "2026-05-01T06:22:01+00:00"
+    },
+    {
+      "relpath": "tmp/arm007__Catch-bsuite__vanilla_dqn_g095__traces.parquet",
+      "size_bytes": 356218634,
+      "sha256": "4e70d3b1ae4cb601c6052648201e7394b40d5bac75eca18c26594338d18b6b2b",
+      "pushed_at": "2026-05-01T06:22:08+00:00"
+    },
+    {
+      "relpath": "tmp/arm008__Acrobot-v1__vanilla_dqn_g095__runs.parquet",
+      "size_bytes": 21326,
+      "sha256": "a1dfcd86398533c128fc27925f7aa5c352d79bdfbbffbfc33e61fae5dac6028b",
+      "pushed_at": "2026-05-01T06:24:24+00:00"
+    },
+    {
+      "relpath": "tmp/arm008__Acrobot-v1__vanilla_dqn_g095__traces.parquet",
+      "size_bytes": 352029466,
+      "sha256": "ea761edd05fcf48f42e38e9181d4eba63809da2e361cd8c2e2fccdf2175cb9b3",
+      "pushed_at": "2026-05-01T06:24:33+00:00"
+    },
+    {
+      "relpath": "tmp/arm009__FourRooms-misc__ddqn_g095__runs.parquet",
+      "size_bytes": 27686,
+      "sha256": "0ab3d78b8de58cd75e706913a871ebfbb7e38485c95b3620733708bdc8088a74",
+      "pushed_at": "2026-05-01T06:26:52+00:00"
+    },
+    {
+      "relpath": "tmp/arm009__FourRooms-misc__ddqn_g095__traces.parquet",
+      "size_bytes": 361463658,
+      "sha256": "a4f756ea9e93a9f0ff2a6a470845b3a4fc6d11b1d59f2a3470f2e6f7e1469bf1",
+      "pushed_at": "2026-05-01T06:27:03+00:00"
+    },
+    {
+      "relpath": "tmp/arm010__Catch-bsuite__ddqn_g095__runs.parquet",
+      "size_bytes": 27649,
+      "sha256": "3346f6d305dd233668dc4e2dc0b50f88ca4f3142ff17455e81e11e41afc29a09",
+      "pushed_at": "2026-05-01T06:29:20+00:00"
+    },
+    {
+      "relpath": "tmp/arm010__Catch-bsuite__ddqn_g095__traces.parquet",
+      "size_bytes": 358759822,
+      "sha256": "ad6c2fd45c256994661a9ac09eae9304b0d94a915d8ba87f8624b30c4993d7c8",
+      "pushed_at": "2026-05-01T06:29:27+00:00"
+    },
+    {
+      "relpath": "tmp/arm011__Acrobot-v1__ddqn_g095__runs.parquet",
+      "size_bytes": 27316,
+      "sha256": "c5a9569dd78445c98d366eb1f769b3e0c2d912ea38156692d06477fcefaa5212",
+      "pushed_at": "2026-05-01T06:31:43+00:00"
+    },
+    {
+      "relpath": "tmp/arm011__Acrobot-v1__ddqn_g095__traces.parquet",
+      "size_bytes": 352703673,
+      "sha256": "7a8fdba24b15e6251a58be0b568d0abec0cda33034d8f878e9487eae119651d1",
+      "pushed_at": "2026-05-01T06:31:49+00:00"
+    },
+    {
+      "relpath": "tmp/arm012__FourRooms-misc__vanilla_dqn_g090__runs.parquet",
+      "size_bytes": 21237,
+      "sha256": "724d9871586431fb05aced983fcec36202ad62c625fc661b44eac4b57de189bc",
+      "pushed_at": "2026-05-01T06:34:08+00:00"
+    },
+    {
+      "relpath": "tmp/arm012__FourRooms-misc__vanilla_dqn_g090__traces.parquet",
+      "size_bytes": 370253182,
+      "sha256": "3d36297378ecb81d0c146df15b283f4e47f5fa3734a22eaacac57f6ddb2aa756",
+      "pushed_at": "2026-05-01T06:34:24+00:00"
+    },
+    {
+      "relpath": "tmp/arm013__Catch-bsuite__vanilla_dqn_g090__runs.parquet",
+      "size_bytes": 20978,
+      "sha256": "04df89299e9260cce241b8aa4e4b166ef78fc4c3a6c4670dedf8c0badc484d86",
+      "pushed_at": "2026-05-01T06:36:41+00:00"
+    },
+    {
+      "relpath": "tmp/arm013__Catch-bsuite__vanilla_dqn_g090__traces.parquet",
+      "size_bytes": 360068257,
+      "sha256": "e0427e78b014ca92c27bea4d8d4fa2cf852fae2d9e9712a9c056b57cb1ee726e",
+      "pushed_at": "2026-05-01T06:36:45+00:00"
+    },
+    {
+      "relpath": "tmp/arm014__Acrobot-v1__vanilla_dqn_g090__runs.parquet",
+      "size_bytes": 21136,
+      "sha256": "8e7d0773e05c57936e0f7302c8d02f587481ef80e9b61856d14e09ad5f3982f8",
+      "pushed_at": "2026-05-01T06:39:01+00:00"
+    },
+    {
+      "relpath": "tmp/arm014__Acrobot-v1__vanilla_dqn_g090__traces.parquet",
+      "size_bytes": 341442088,
+      "sha256": "2214c0641881ecc39e316d5649d4e4f6868a1f132920973a76dcfce84aa9136a",
+      "pushed_at": "2026-05-01T06:39:08+00:00"
+    },
+    {
+      "relpath": "tmp/arm015__FourRooms-misc__ddqn_g090__runs.parquet",
+      "size_bytes": 27725,
+      "sha256": "92cd283c3b7d433081322a5cd96fe667c729072d6f854f8da10a4c3f42fc074a",
+      "pushed_at": "2026-05-01T06:41:28+00:00"
+    },
+    {
+      "relpath": "tmp/arm015__FourRooms-misc__ddqn_g090__traces.parquet",
+      "size_bytes": 372055044,
+      "sha256": "fa2456bdece5e40fe7fca21abef6239b970771b735d654f7733a040be44dbd30",
+      "pushed_at": "2026-05-01T06:41:33+00:00"
+    },
+    {
+      "relpath": "tmp/arm016__Catch-bsuite__ddqn_g090__runs.parquet",
+      "size_bytes": 27668,
+      "sha256": "73cf11ae61807bc2abf0f93dcc3ccd891067849bd46026f71effe68dba1775e8",
+      "pushed_at": "2026-05-01T06:43:52+00:00"
+    },
+    {
+      "relpath": "tmp/arm016__Catch-bsuite__ddqn_g090__traces.parquet",
+      "size_bytes": 363716837,
+      "sha256": "e71c25f2f72acd67a17751a2770d184c9540f6eba304f09359120fec83591627",
+      "pushed_at": "2026-05-01T06:43:59+00:00"
+    },
+    {
+      "relpath": "tmp/arm017__Acrobot-v1__ddqn_g090__runs.parquet",
+      "size_bytes": 27110,
+      "sha256": "53525779652073997d31fddc37d538913c095fd7018b4d02eaae2f4cbd0f8f1c",
+      "pushed_at": "2026-05-01T06:46:17+00:00"
+    },
+    {
+      "relpath": "tmp/arm017__Acrobot-v1__ddqn_g090__traces.parquet",
+      "size_bytes": 342579365,
+      "sha256": "c24674d0dc6697087fa58b6b4277564083955f03b0a6800ce17c64d84fee5b04",
+      "pushed_at": "2026-05-01T06:46:24+00:00"
+    }
+  ]
+}

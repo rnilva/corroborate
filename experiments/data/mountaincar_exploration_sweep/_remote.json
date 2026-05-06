@@ -1,0 +1,89 @@
+{
+  "remote_root": "s3://corroborate-archive/mountaincar_exploration_sweep",
+  "files": [
+    {
+      "relpath": "runs.parquet",
+      "size_bytes": 32257,
+      "sha256": "b12d68ed30ca5515994556e0e9582c4fbe350b9f4d96a8813a092856364b6d52",
+      "pushed_at": "2026-05-02T05:29:04+00:00"
+    },
+    {
+      "relpath": "tmp/arm000__MountainCar-v0__vanilla_eps0p1_slow__runs.parquet",
+      "size_bytes": 22006,
+      "sha256": "fb83d6a88d45c0f1a19c1b75e5e28e51d47d43a40789b8c329a29b997e82f3b2",
+      "pushed_at": "2026-05-02T05:16:23+00:00"
+    },
+    {
+      "relpath": "tmp/arm000__MountainCar-v0__vanilla_eps0p1_slow__traces.parquet",
+      "size_bytes": 329431150,
+      "sha256": "265fa5109fe4e2b707eef5254264a6ba451a7562f1985ef6435ecc21592f737b",
+      "pushed_at": "2026-05-02T05:16:30+00:00"
+    },
+    {
+      "relpath": "tmp/arm001__MountainCar-v0__ddqn_eps0p1_slow__runs.parquet",
+      "size_bytes": 28023,
+      "sha256": "955ac25f9e1fdbdf16f820353b5a114d58643aa52553cb61f7cee1ce7fc94f5b",
+      "pushed_at": "2026-05-02T05:18:45+00:00"
+    },
+    {
+      "relpath": "tmp/arm001__MountainCar-v0__ddqn_eps0p1_slow__traces.parquet",
+      "size_bytes": 329613430,
+      "sha256": "046886f2e48f8472da5c2f8f7f9a81a492fae1d24b383aa0a1c58898617f2185",
+      "pushed_at": "2026-05-02T05:18:49+00:00"
+    },
+    {
+      "relpath": "tmp/arm002__MountainCar-v0__vanilla_eps0p2_fast__runs.parquet",
+      "size_bytes": 22066,
+      "sha256": "3b24239711226f80870dc739070bf5467c4bfaadb6d4d7f0fc6b85655b3f97f4",
+      "pushed_at": "2026-05-02T05:20:59+00:00"
+    },
+    {
+      "relpath": "tmp/arm002__MountainCar-v0__vanilla_eps0p2_fast__traces.parquet",
+      "size_bytes": 332255642,
+      "sha256": "4b3bc85902c3502013fe6be725f81c1205b905292a2ac7d386bdce7d9b2bf190",
+      "pushed_at": "2026-05-02T05:21:04+00:00"
+    },
+    {
+      "relpath": "tmp/arm003__MountainCar-v0__ddqn_eps0p2_fast__runs.parquet",
+      "size_bytes": 28101,
+      "sha256": "6909a8e882dd48de484464e3ce1efc1a080f6ab5296a7b33d4ec92f0b1173a48",
+      "pushed_at": "2026-05-02T05:23:15+00:00"
+    },
+    {
+      "relpath": "tmp/arm003__MountainCar-v0__ddqn_eps0p2_fast__traces.parquet",
+      "size_bytes": 332127247,
+      "sha256": "2f5a31bab6d4571bc99f43d94dd58745b29bb2f7a5a8f62c6dbea0474339de66",
+      "pushed_at": "2026-05-02T05:23:19+00:00"
+    },
+    {
+      "relpath": "tmp/arm004__MountainCar-v0__vanilla_eps0p3_slow__runs.parquet",
+      "size_bytes": 21982,
+      "sha256": "c25f55e76293ad584a88337bbe3d211fae20f190ace0232e89539183a4df0e86",
+      "pushed_at": "2026-05-02T05:25:28+00:00"
+    },
+    {
+      "relpath": "tmp/arm004__MountainCar-v0__vanilla_eps0p3_slow__traces.parquet",
+      "size_bytes": 330416970,
+      "sha256": "9a62398c6e261e15e27e2a281c0fece35995a233ef013c717b2cbeed004285a0",
+      "pushed_at": "2026-05-02T05:25:33+00:00"
+    },
+    {
+      "relpath": "tmp/arm005__MountainCar-v0__ddqn_eps0p3_slow__runs.parquet",
+      "size_bytes": 27978,
+      "sha256": "f023f0ab8daec51e14f019a8dd342fa84550655cfe045e27e75801c4a326bc31",
+      "pushed_at": "2026-05-02T05:27:52+00:00"
+    },
+    {
+      "relpath": "tmp/arm005__MountainCar-v0__ddqn_eps0p3_slow__traces.parquet",
+      "size_bytes": 330295634,
+      "sha256": "a4641c0ab6137b8a5ada87f9fb4c66bad316d4aaec243a540ae144ed90ff8933",
+      "pushed_at": "2026-05-02T05:27:56+00:00"
+    },
+    {
+      "relpath": "traces.parquet",
+      "size_bytes": 1984010279,
+      "sha256": "845e0ce56e7c2c9fb87ddcda52ffb35aa78c6f80933471e4d1a260c3003d557d",
+      "pushed_at": "2026-05-02T05:29:29+00:00"
+    }
+  ]
+}

@@ -1,0 +1,65 @@
+{
+  "remote_root": "s3://corroborate-archive/gamma_sweep_metamaze_high",
+  "files": [
+    {
+      "relpath": "runs.parquet",
+      "size_bytes": 31297,
+      "sha256": "b6bbbf097456d700098056cf4bb75cb69893e502c83acfb5f1076543864a20e2",
+      "pushed_at": "2026-05-01T08:40:44+00:00"
+    },
+    {
+      "relpath": "tmp/arm000__MetaMaze-misc__vanilla_dqn_g0995__runs.parquet",
+      "size_bytes": 21417,
+      "sha256": "84030eb7555d016de8fa4e9bdafa1b62013d09b52286f98ede1b6d64b894e0d7",
+      "pushed_at": "2026-05-01T08:32:37+00:00"
+    },
+    {
+      "relpath": "tmp/arm000__MetaMaze-misc__vanilla_dqn_g0995__traces.parquet",
+      "size_bytes": 357206942,
+      "sha256": "6dd997a79e517d692247cccd68d38d0d5156165b989d23d0a617a1a99257a08f",
+      "pushed_at": "2026-05-01T08:32:42+00:00"
+    },
+    {
+      "relpath": "tmp/arm001__MetaMaze-misc__ddqn_g0995__runs.parquet",
+      "size_bytes": 27670,
+      "sha256": "af5e924c5f0d9834ff657aa898d93ca281e649b59260e73769d1bb5512b57def",
+      "pushed_at": "2026-05-01T08:35:14+00:00"
+    },
+    {
+      "relpath": "tmp/arm001__MetaMaze-misc__ddqn_g0995__traces.parquet",
+      "size_bytes": 360514257,
+      "sha256": "1859275719db1fefd22555170520883eaadeb61a51d80bf2d107d05344a2ff2b",
+      "pushed_at": "2026-05-01T08:35:18+00:00"
+    },
+    {
+      "relpath": "tmp/arm002__MetaMaze-misc__vanilla_dqn_g0999__runs.parquet",
+      "size_bytes": 21414,
+      "sha256": "97d43eeb643c4fa36870c28982b4645808a21bc6fa14e266570f081d3112aa1e",
+      "pushed_at": "2026-05-01T08:37:44+00:00"
+    },
+    {
+      "relpath": "tmp/arm002__MetaMaze-misc__vanilla_dqn_g0999__traces.parquet",
+      "size_bytes": 358651877,
+      "sha256": "95229308ad6f2afb7e6b78fbc7e853d40c44232b002c0928567709aaf2267633",
+      "pushed_at": "2026-05-01T08:37:49+00:00"
+    },
+    {
+      "relpath": "tmp/arm003__MetaMaze-misc__ddqn_g0999__runs.parquet",
+      "size_bytes": 27681,
+      "sha256": "ddcb65d0f753c8a23fe81e25c14b50f5f5804594c08022d8fd0a46cd9df5929c",
+      "pushed_at": "2026-05-01T08:40:08+00:00"
+    },
+    {
+      "relpath": "tmp/arm003__MetaMaze-misc__ddqn_g0999__traces.parquet",
+      "size_bytes": 360673777,
+      "sha256": "504b5f0a9c94e3d1e1a1fa1313b706970a0fd8c24462d56c9a0a581e96dfac6e",
+      "pushed_at": "2026-05-01T08:40:14+00:00"
+    },
+    {
+      "relpath": "traces.parquet",
+      "size_bytes": 1436971577,
+      "sha256": "0c6cd0c577ec65b9d7f215b228d5a3d82b2fef0dcc0263ce594353edc1e4bb89",
+      "pushed_at": "2026-05-01T08:41:05+00:00"
+    }
+  ]
+}

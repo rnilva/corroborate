@@ -1,0 +1,35 @@
+{
+  "remote_root": "s3://corroborate-archive/reward_scale_sweep",
+  "files": [
+    {
+      "relpath": "per_burst_arrays.parquet",
+      "size_bytes": 139699,
+      "sha256": "abde2326ecf2c89ad782ae689bc4542f33c84781175e95bae06bda3f3d88e743",
+      "pushed_at": "2026-05-03T03:24:08+00:00"
+    },
+    {
+      "relpath": "per_burst_scalars.parquet",
+      "size_bytes": 32531,
+      "sha256": "9cf534b7f079f374146dc88053cbb15269915c751cdbe9a85845f1595286a44b",
+      "pushed_at": "2026-05-03T03:24:09+00:00"
+    },
+    {
+      "relpath": "runs.parquet",
+      "size_bytes": 40737,
+      "sha256": "bb1aad0df74ef9ef9e195d899ed77170c5e20b34a762a51d12562bddb09f9800",
+      "pushed_at": "2026-05-03T03:24:09+00:00"
+    },
+    {
+      "relpath": "runs_with_bridge_cache.parquet",
+      "size_bytes": 53887,
+      "sha256": "6f2c22a4256b9a0cb8d10b6ef45d7c283acf858fb1bfccda7f5f5feaa22378aa",
+      "pushed_at": "2026-05-03T03:24:09+00:00"
+    },
+    {
+      "relpath": "traces.parquet",
+      "size_bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "pushed_at": "2026-05-03T03:24:10+00:00"
+    }
+  ]
+}

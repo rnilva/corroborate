@@ -1,0 +1,221 @@
+{
+  "remote_root": "s3://corroborate-archive/gamma_sweep_more",
+  "files": [
+    {
+      "relpath": "tmp/arm000__DiscountingChain-bsuite__vanilla_dqn_g099__runs.parquet",
+      "size_bytes": 21127,
+      "sha256": "c3bebb955d13950223af0f7156781aae08e38e222a944d80a70f596858fefa6e",
+      "pushed_at": "2026-05-01T07:08:07+00:00"
+    },
+    {
+      "relpath": "tmp/arm000__DiscountingChain-bsuite__vanilla_dqn_g099__traces.parquet",
+      "size_bytes": 367492379,
+      "sha256": "7b1d51b85a92f16355927791a895bee0c4dbe2fe70dba0833048d61c613dd902",
+      "pushed_at": "2026-05-01T07:08:12+00:00"
+    },
+    {
+      "relpath": "tmp/arm001__MountainCar-v0__vanilla_dqn_g099__runs.parquet",
+      "size_bytes": 21115,
+      "sha256": "878668cd721626229f61a7857c947213522853571aca52fed7b30c454f2f09a0",
+      "pushed_at": "2026-05-01T07:10:25+00:00"
+    },
+    {
+      "relpath": "tmp/arm001__MountainCar-v0__vanilla_dqn_g099__traces.parquet",
+      "size_bytes": 335190924,
+      "sha256": "9459bc8f2efd0001348e3136cfbdf7b598d685367c3ba98fcd1f8790d80f1e63",
+      "pushed_at": "2026-05-01T07:10:29+00:00"
+    },
+    {
+      "relpath": "tmp/arm002__CartPole-v1__vanilla_dqn_g099__runs.parquet",
+      "size_bytes": 21288,
+      "sha256": "44666c6f004778ccd0460e3a86798b7e37f0672fcfe526d52d5cb88ff671fdde",
+      "pushed_at": "2026-05-01T07:12:31+00:00"
+    },
+    {
+      "relpath": "tmp/arm002__CartPole-v1__vanilla_dqn_g099__traces.parquet",
+      "size_bytes": 326924665,
+      "sha256": "7e75a5b35d1e9b8ea381414d4a00286e5fdac0fc5dfb99e6fe191e064641dd4b",
+      "pushed_at": "2026-05-01T07:12:35+00:00"
+    },
+    {
+      "relpath": "tmp/arm003__DiscountingChain-bsuite__ddqn_g099__runs.parquet",
+      "size_bytes": 27058,
+      "sha256": "2f56e019d9436ffd6fc6d285797deb5c2a495fc3caeddcc1806e094767df2ad7",
+      "pushed_at": "2026-05-01T07:14:56+00:00"
+    },
+    {
+      "relpath": "tmp/arm003__DiscountingChain-bsuite__ddqn_g099__traces.parquet",
+      "size_bytes": 377359261,
+      "sha256": "d461c48d589cf39617bb97b285844c33ec48ba48ce7566e09619d706940a96ca",
+      "pushed_at": "2026-05-01T07:15:01+00:00"
+    },
+    {
+      "relpath": "tmp/arm004__MountainCar-v0__ddqn_g099__runs.parquet",
+      "size_bytes": 27018,
+      "sha256": "dee21a97912cb196ec932537fd8c057329c0d56adbe6feab2bf5d5a07e979892",
+      "pushed_at": "2026-05-01T07:17:11+00:00"
+    },
+    {
+      "relpath": "tmp/arm004__MountainCar-v0__ddqn_g099__traces.parquet",
+      "size_bytes": 335223789,
+      "sha256": "214696d72c6c8c9cc415ce4cf49993157e2a43fdb24b09fdfcaf585edf1f50a3",
+      "pushed_at": "2026-05-01T07:17:15+00:00"
+    },
+    {
+      "relpath": "tmp/arm005__CartPole-v1__ddqn_g099__runs.parquet",
+      "size_bytes": 27290,
+      "sha256": "6063fb844755167825eb6fe412aabb324c77d9d766ca0cb54d2611ebf46e2347",
+      "pushed_at": "2026-05-01T07:19:16+00:00"
+    },
+    {
+      "relpath": "tmp/arm005__CartPole-v1__ddqn_g099__traces.parquet",
+      "size_bytes": 326901543,
+      "sha256": "0d9b487dd555eea60c562118937ebb778ef266bcb17c60ce1cb36ae2d61fbfda",
+      "pushed_at": "2026-05-01T07:19:29+00:00"
+    },
+    {
+      "relpath": "tmp/arm006__DiscountingChain-bsuite__vanilla_dqn_g095__runs.parquet",
+      "size_bytes": 21156,
+      "sha256": "64505c2ace48506cd182034fed0f3a09780f4f802e1e632bea4649b482ebcb3b",
+      "pushed_at": "2026-05-01T07:21:50+00:00"
+    },
+    {
+      "relpath": "tmp/arm006__DiscountingChain-bsuite__vanilla_dqn_g095__traces.parquet",
+      "size_bytes": 379243298,
+      "sha256": "7ab608f6799dec20ffc87e33a3e7dbe10c9959268e65a3f225b4a561d00524d9",
+      "pushed_at": "2026-05-01T07:21:55+00:00"
+    },
+    {
+      "relpath": "tmp/arm007__MountainCar-v0__vanilla_dqn_g095__runs.parquet",
+      "size_bytes": 20981,
+      "sha256": "a957daf6349a63feea0561fef9ba3efd681f83816fe045fa044cfe2a9f899c32",
+      "pushed_at": "2026-05-01T07:24:08+00:00"
+    },
+    {
+      "relpath": "tmp/arm007__MountainCar-v0__vanilla_dqn_g095__traces.parquet",
+      "size_bytes": 326513497,
+      "sha256": "3040473dfff7a3bab6dbd1ad2bfb3bfc92400c265b444d5661e70885b7e9c825",
+      "pushed_at": "2026-05-01T07:24:13+00:00"
+    },
+    {
+      "relpath": "tmp/arm008__CartPole-v1__vanilla_dqn_g095__runs.parquet",
+      "size_bytes": 21292,
+      "sha256": "8cb23d670c0f45e51039241879f22fac982cead39c652cc8e1d28028c6c7b646",
+      "pushed_at": "2026-05-01T07:26:15+00:00"
+    },
+    {
+      "relpath": "tmp/arm008__CartPole-v1__vanilla_dqn_g095__traces.parquet",
+      "size_bytes": 323461552,
+      "sha256": "af06b7af771129e7cd6a65262e4769b2da42c8a6f1aff06855990072ab890ddc",
+      "pushed_at": "2026-05-01T07:26:21+00:00"
+    },
+    {
+      "relpath": "tmp/arm009__DiscountingChain-bsuite__ddqn_g095__runs.parquet",
+      "size_bytes": 27376,
+      "sha256": "a39d57b2d3f40b72130026937968665422c9870b874ff784135674af1fc93757",
+      "pushed_at": "2026-05-01T07:28:59+00:00"
+    },
+    {
+      "relpath": "tmp/arm009__DiscountingChain-bsuite__ddqn_g095__traces.parquet",
+      "size_bytes": 382391855,
+      "sha256": "a1876ab39e62710d80ae3436e3f987cedbece3af2d23b8be5a09fac6e68be547",
+      "pushed_at": "2026-05-01T07:29:05+00:00"
+    },
+    {
+      "relpath": "tmp/arm010__MountainCar-v0__ddqn_g095__runs.parquet",
+      "size_bytes": 27001,
+      "sha256": "7ea30ceffa06a6f17ee07267aa6b754e79b92fd04ae62a98f1e7d164715655f8",
+      "pushed_at": "2026-05-01T07:31:24+00:00"
+    },
+    {
+      "relpath": "tmp/arm010__MountainCar-v0__ddqn_g095__traces.parquet",
+      "size_bytes": 328738759,
+      "sha256": "f2e01847d6c2c1d388fe73b215e6acf173ef52cb1cc4b1203d871eac8d38f9a6",
+      "pushed_at": "2026-05-01T07:31:37+00:00"
+    },
+    {
+      "relpath": "tmp/arm011__CartPole-v1__ddqn_g095__runs.parquet",
+      "size_bytes": 27266,
+      "sha256": "e6f498aa11f4b4e82655ccd97664bb6bdc93cb4d3429863545e1ae359a142c20",
+      "pushed_at": "2026-05-01T07:33:46+00:00"
+    },
+    {
+      "relpath": "tmp/arm011__CartPole-v1__ddqn_g095__traces.parquet",
+      "size_bytes": 323429301,
+      "sha256": "8d1f14c2a6c7ff7bed6bc5f39aed97e8ee36161bd158b0b4986dbbdd30d264fb",
+      "pushed_at": "2026-05-01T07:33:50+00:00"
+    },
+    {
+      "relpath": "tmp/arm012__DiscountingChain-bsuite__vanilla_dqn_g090__runs.parquet",
+      "size_bytes": 21086,
+      "sha256": "2d949ba138371516dc167bc61dcdd1584c9c394e2d5f05b795b26f71a377572b",
+      "pushed_at": "2026-05-01T07:36:18+00:00"
+    },
+    {
+      "relpath": "tmp/arm012__DiscountingChain-bsuite__vanilla_dqn_g090__traces.parquet",
+      "size_bytes": 380719278,
+      "sha256": "efe284a4c29ab91a21328e661e41b4f5c44e0d3c8eef28bb6b518e3f582c5f97",
+      "pushed_at": "2026-05-01T07:36:24+00:00"
+    },
+    {
+      "relpath": "tmp/arm013__MountainCar-v0__vanilla_dqn_g090__runs.parquet",
+      "size_bytes": 21006,
+      "sha256": "2b1739dfb61190690fad430e4efe1e659dd27ec2a9a29ce78151cd258a36ed73",
+      "pushed_at": "2026-05-01T07:38:36+00:00"
+    },
+    {
+      "relpath": "tmp/arm013__MountainCar-v0__vanilla_dqn_g090__traces.parquet",
+      "size_bytes": 326701149,
+      "sha256": "c6a314f73f8ce05e079be551e58f0eef6d63be3e799ce0c735b3d54ac8f1f7ad",
+      "pushed_at": "2026-05-01T07:38:42+00:00"
+    },
+    {
+      "relpath": "tmp/arm014__CartPole-v1__vanilla_dqn_g090__runs.parquet",
+      "size_bytes": 21077,
+      "sha256": "2359fdf6fc4240ad2ba7dda30ef662ffb83a40c218263ad9c8ae8ceb1c116574",
+      "pushed_at": "2026-05-01T07:40:43+00:00"
+    },
+    {
+      "relpath": "tmp/arm014__CartPole-v1__vanilla_dqn_g090__traces.parquet",
+      "size_bytes": 320275947,
+      "sha256": "fcb0bc326159a7d9e6e377ebe124f2c9339e5d3ac0b9c1dc10dad07cb0e74de2",
+      "pushed_at": "2026-05-01T07:40:48+00:00"
+    },
+    {
+      "relpath": "tmp/arm015__DiscountingChain-bsuite__ddqn_g090__runs.parquet",
+      "size_bytes": 27645,
+      "sha256": "49c820ddcee25cdeb9fdac3ee50f7cf95d1c7b3ef97dda65cf0e1cbb126037e6",
+      "pushed_at": "2026-05-01T07:43:15+00:00"
+    },
+    {
+      "relpath": "tmp/arm015__DiscountingChain-bsuite__ddqn_g090__traces.parquet",
+      "size_bytes": 383743835,
+      "sha256": "f46e2d0c62dbc4e30198ee326cb1354d74a352dea1bc250d7f8381f5f78d0214",
+      "pushed_at": "2026-05-01T07:43:22+00:00"
+    },
+    {
+      "relpath": "tmp/arm016__MountainCar-v0__ddqn_g090__runs.parquet",
+      "size_bytes": 26941,
+      "sha256": "af1ae84e1573f1072668e9c5ca0505e5e7b551501f91eb2b043c6e2d538e9e6e",
+      "pushed_at": "2026-05-01T07:45:33+00:00"
+    },
+    {
+      "relpath": "tmp/arm016__MountainCar-v0__ddqn_g090__traces.parquet",
+      "size_bytes": 328890392,
+      "sha256": "e4d97c33dc36f7787fc1e812c837e9087acc7bf187d1267a1bff3d0a4a748cde",
+      "pushed_at": "2026-05-01T07:45:38+00:00"
+    },
+    {
+      "relpath": "tmp/arm017__CartPole-v1__ddqn_g090__runs.parquet",
+      "size_bytes": 27025,
+      "sha256": "90de788276a35eda45ecc168e8b9cd3eb83aa05c4544eda2cf1072c6a0069992",
+      "pushed_at": "2026-05-01T07:47:38+00:00"
+    },
+    {
+      "relpath": "tmp/arm017__CartPole-v1__ddqn_g090__traces.parquet",
+      "size_bytes": 320289677,
+      "sha256": "1f123584a931e4dff5247621b4ad03c5522b6482f63b763e18013c3238b6d78d",
+      "pushed_at": "2026-05-01T07:47:44+00:00"
+    }
+  ]
+}

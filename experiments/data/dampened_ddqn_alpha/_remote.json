@@ -1,0 +1,77 @@
+{
+  "remote_root": "s3://corroborate-archive/dampened_ddqn_alpha",
+  "files": [
+    {
+      "relpath": "runs.parquet",
+      "size_bytes": 27352,
+      "sha256": "b3f62bf4cca2fe2780f9013a30b5dadf079809b298a986b3c2075776f2ca189e",
+      "pushed_at": "2026-05-01T07:37:07+00:00"
+    },
+    {
+      "relpath": "tmp/arm000__FourRooms-misc__dampened_a000__runs.parquet",
+      "size_bytes": 22917,
+      "sha256": "e12bd035f2a47334111d918e3dcc54d416d844dae462900238e03c86cef6c68e",
+      "pushed_at": "2026-05-01T07:26:11+00:00"
+    },
+    {
+      "relpath": "tmp/arm000__FourRooms-misc__dampened_a000__traces.parquet",
+      "size_bytes": 334353174,
+      "sha256": "1ac89051db5633daefbde65f831363089479dd80bc6fd3c6a2e8df702234adad",
+      "pushed_at": "2026-05-01T07:26:15+00:00"
+    },
+    {
+      "relpath": "tmp/arm001__FourRooms-misc__dampened_a025__runs.parquet",
+      "size_bytes": 22948,
+      "sha256": "84bbcb16982b66b6ec2092e1c97bc1d4d464115c973936c8946f9873e485555d",
+      "pushed_at": "2026-05-01T07:28:50+00:00"
+    },
+    {
+      "relpath": "tmp/arm001__FourRooms-misc__dampened_a025__traces.parquet",
+      "size_bytes": 336302893,
+      "sha256": "b836b4b7c6248eee35f79b5ac6405f6ddc195306fa181f6bfac0cd3fd8f6d3bd",
+      "pushed_at": "2026-05-01T07:28:55+00:00"
+    },
+    {
+      "relpath": "tmp/arm002__FourRooms-misc__dampened_a050__runs.parquet",
+      "size_bytes": 22910,
+      "sha256": "4175b71eae452a6a114c1adc690873fe78d23af2778708bbe017a305884c20be",
+      "pushed_at": "2026-05-01T07:31:22+00:00"
+    },
+    {
+      "relpath": "tmp/arm002__FourRooms-misc__dampened_a050__traces.parquet",
+      "size_bytes": 337397288,
+      "sha256": "77d749abf42859072147cc4d5a627d39b5f63ce6253a026eb77c14532c0960f8",
+      "pushed_at": "2026-05-01T07:31:28+00:00"
+    },
+    {
+      "relpath": "tmp/arm003__FourRooms-misc__dampened_a075__runs.parquet",
+      "size_bytes": 22935,
+      "sha256": "cea81ff304b36d3d15039caf36c1589ecabb7b11a341e19dcf35a7f8dd8d5996",
+      "pushed_at": "2026-05-01T07:33:56+00:00"
+    },
+    {
+      "relpath": "tmp/arm003__FourRooms-misc__dampened_a075__traces.parquet",
+      "size_bytes": 338639711,
+      "sha256": "421ed79bc796b63632b8ec141711439990b3d0ce015c7aba2fd25dbaf07a315f",
+      "pushed_at": "2026-05-01T07:34:00+00:00"
+    },
+    {
+      "relpath": "tmp/arm004__FourRooms-misc__dampened_a100__runs.parquet",
+      "size_bytes": 22900,
+      "sha256": "58f3210e736a984bfced704519ca06d37372ab432fc79b2e83a3b9eda2a5c4e7",
+      "pushed_at": "2026-05-01T07:36:24+00:00"
+    },
+    {
+      "relpath": "tmp/arm004__FourRooms-misc__dampened_a100__traces.parquet",
+      "size_bytes": 340163474,
+      "sha256": "b563633acc769d9e691d17a476804194d773749da485ce894a4ac77444312c4b",
+      "pushed_at": "2026-05-01T07:36:30+00:00"
+    },
+    {
+      "relpath": "traces.parquet",
+      "size_bytes": 1686752429,
+      "sha256": "389453bba6ac66d943425ca527cd3097febe004ef86f22cd6f51f998a1909a6b",
+      "pushed_at": "2026-05-01T07:37:31+00:00"
+    }
+  ]
+}

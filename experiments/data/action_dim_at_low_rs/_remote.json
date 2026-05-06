@@ -1,0 +1,413 @@
+{
+  "remote_root": "s3://corroborate-archive/action_dim_at_low_rs",
+  "files": [
+    {
+      "relpath": "runs.parquet",
+      "size_bytes": 42693,
+      "sha256": "989b691e63847b78df50defaf12783e08f32c6c970856f372d13e2eb1a0acdfa",
+      "pushed_at": "2026-05-01T15:12:56+00:00"
+    },
+    {
+      "relpath": "tmp/arm000__DeepSea-bsuite__vanilla_dqn__wrap[reward_scale(scale=0.1)]__runs.parquet",
+      "size_bytes": 21323,
+      "sha256": "4cb354f7e7b6689fbcb6e27ae6cf3078943e854508bad991eee8f10d3d8dc9a1",
+      "pushed_at": "2026-05-01T14:05:19+00:00"
+    },
+    {
+      "relpath": "tmp/arm000__DeepSea-bsuite__vanilla_dqn__wrap[reward_scale(scale=0.1)]__traces.parquet",
+      "size_bytes": 342620177,
+      "sha256": "9e957787f6bf0a720fe01f95b26b779f30dd73667234798d50364d58e65e4331",
+      "pushed_at": "2026-05-01T14:05:25+00:00"
+    },
+    {
+      "relpath": "tmp/arm001__DeepSea-bsuite__vanilla_dqn__runs.parquet",
+      "size_bytes": 21364,
+      "sha256": "256cc9916651a9867f4c4d5dfd026e56635fa4e362123de6267b2dcec7d639ad",
+      "pushed_at": "2026-05-01T14:07:39+00:00"
+    },
+    {
+      "relpath": "tmp/arm001__DeepSea-bsuite__vanilla_dqn__traces.parquet",
+      "size_bytes": 340671561,
+      "sha256": "d9cd4d3ae76fe7f74cbfe28bb42561ff4cb8d98a3b366883cd28527c0ee0344d",
+      "pushed_at": "2026-05-01T14:07:44+00:00"
+    },
+    {
+      "relpath": "tmp/arm001__DeepSea-bsuite__vanilla_dqn__wrap[reward_scale(scale=1.0)]__runs.parquet",
+      "size_bytes": 21336,
+      "sha256": "e4e795cd4d33e8917f2ebec35173151c0737079465286a2aeb0a1c30f455d813",
+      "pushed_at": "2026-05-01T14:47:30+00:00"
+    },
+    {
+      "relpath": "tmp/arm001__DeepSea-bsuite__vanilla_dqn__wrap[reward_scale(scale=1.0)]__traces.parquet",
+      "size_bytes": 340671533,
+      "sha256": "49fa2c62ffe852d36077887cabab7a84adba33c7c8936bf6cc9446b9ddda734a",
+      "pushed_at": "2026-05-01T14:47:35+00:00"
+    },
+    {
+      "relpath": "tmp/arm002__FourRooms-misc__vanilla_dqn__wrap[reward_scale(scale=0.1)]__runs.parquet",
+      "size_bytes": 21590,
+      "sha256": "b340771f0fdcf2887efd63f00ba631cf9a7373fa76f09a6dd84e8a492fa5afa5",
+      "pushed_at": "2026-05-01T14:10:08+00:00"
+    },
+    {
+      "relpath": "tmp/arm002__FourRooms-misc__vanilla_dqn__wrap[reward_scale(scale=0.1)]__traces.parquet",
+      "size_bytes": 326857516,
+      "sha256": "a07b6e4c9972502805964dd2fcd95cb7325a2c5b713326f308043fc8b17b436a",
+      "pushed_at": "2026-05-01T14:10:13+00:00"
+    },
+    {
+      "relpath": "tmp/arm003__FourRooms-misc__vanilla_dqn__runs.parquet",
+      "size_bytes": 21543,
+      "sha256": "fc309e1f414987ff99acb7168c9e2268a661de4b67025839196335d9a9486b3d",
+      "pushed_at": "2026-05-01T14:12:29+00:00"
+    },
+    {
+      "relpath": "tmp/arm003__FourRooms-misc__vanilla_dqn__traces.parquet",
+      "size_bytes": 334352012,
+      "sha256": "d015826fc5ab489aaa372e5a1f5ce7897452eecba12c06ac7d2ae41fb07309d7",
+      "pushed_at": "2026-05-01T14:12:35+00:00"
+    },
+    {
+      "relpath": "tmp/arm003__FourRooms-misc__vanilla_dqn__wrap[reward_scale(scale=1.0)]__runs.parquet",
+      "size_bytes": 21536,
+      "sha256": "705f2e2fc6bdff9882b214dca849859bd604d804d51fafbe64191d5758d78594",
+      "pushed_at": "2026-05-01T14:49:59+00:00"
+    },
+    {
+      "relpath": "tmp/arm003__FourRooms-misc__vanilla_dqn__wrap[reward_scale(scale=1.0)]__traces.parquet",
+      "size_bytes": 334540982,
+      "sha256": "5728ae9411db5f5b954e3d36e34f96d37b3c36e6919aa9a89bc461aa4df46736",
+      "pushed_at": "2026-05-01T14:50:05+00:00"
+    },
+    {
+      "relpath": "tmp/arm004__DiscountingChain-bsuite__vanilla_dqn__wrap[reward_scale(scale=0.1)]__runs.parquet",
+      "size_bytes": 21494,
+      "sha256": "e964fce1b382aeb6e50a5e72f6322789768d7d25f510915275a36054c1ff81e0",
+      "pushed_at": "2026-05-01T14:14:58+00:00"
+    },
+    {
+      "relpath": "tmp/arm004__DiscountingChain-bsuite__vanilla_dqn__wrap[reward_scale(scale=0.1)]__traces.parquet",
+      "size_bytes": 365720620,
+      "sha256": "3b068413d0945146d0ea573a7946ad0ea56a4224ac72c93102792a9311d6f95c",
+      "pushed_at": "2026-05-01T14:15:04+00:00"
+    },
+    {
+      "relpath": "tmp/arm005__DiscountingChain-bsuite__vanilla_dqn__runs.parquet",
+      "size_bytes": 21452,
+      "sha256": "8a1ff58e20b3e76bce2a94fab7f2802c24d5c2b643ad8e6dd1270092accd464f",
+      "pushed_at": "2026-05-01T14:17:24+00:00"
+    },
+    {
+      "relpath": "tmp/arm005__DiscountingChain-bsuite__vanilla_dqn__traces.parquet",
+      "size_bytes": 367276817,
+      "sha256": "8b84134353df3b7ad5fa5089bf2e12b2343a2f86907d2aeb4b64c4227adb3758",
+      "pushed_at": "2026-05-01T14:17:29+00:00"
+    },
+    {
+      "relpath": "tmp/arm005__DiscountingChain-bsuite__vanilla_dqn__wrap[reward_scale(scale=1.0)]__runs.parquet",
+      "size_bytes": 21457,
+      "sha256": "84f8380f3caa7cf0a4e603bf26f935b4ec47f13c0c63554909e6f5f2ad61bf9a",
+      "pushed_at": "2026-05-01T14:52:28+00:00"
+    },
+    {
+      "relpath": "tmp/arm005__DiscountingChain-bsuite__vanilla_dqn__wrap[reward_scale(scale=1.0)]__traces.parquet",
+      "size_bytes": 367276822,
+      "sha256": "63e1c0777618ac7bbb0792fc827c6c7d505e3bab79870497717c173a9cadd9a7",
+      "pushed_at": "2026-05-01T14:52:34+00:00"
+    },
+    {
+      "relpath": "tmp/arm006__MNISTBandit-bsuite__vanilla_dqn__wrap[reward_scale(scale=0.1)]__runs.parquet",
+      "size_bytes": 20758,
+      "sha256": "12bcd605bf4e766e4e1bbf22fdf518b1064b312a5a04498fcfdecdad6e222dd7",
+      "pushed_at": "2026-05-01T14:18:51+00:00"
+    },
+    {
+      "relpath": "tmp/arm006__MNISTBandit-bsuite__vanilla_dqn__wrap[reward_scale(scale=0.1)]__traces.parquet",
+      "size_bytes": 122086213,
+      "sha256": "83eeeaeb986cd64f5b68605d75197a8c519324bc47d8459dfc8af7622c6f5380",
+      "pushed_at": "2026-05-01T14:18:54+00:00"
+    },
+    {
+      "relpath": "tmp/arm007__MNISTBandit-bsuite__vanilla_dqn__wrap[reward_scale(scale=0.1)]__runs.parquet",
+      "size_bytes": 20761,
+      "sha256": "35384a219c6e0c80c88fbc8dee5604dc59b7869da9855b0449b1e41708233818",
+      "pushed_at": "2026-05-01T14:20:10+00:00"
+    },
+    {
+      "relpath": "tmp/arm007__MNISTBandit-bsuite__vanilla_dqn__wrap[reward_scale(scale=0.1)]__traces.parquet",
+      "size_bytes": 122245860,
+      "sha256": "86ec01b68f3be2abac6bed3a63ed8b8bbf87b62ef99245d516000a4a0afd9a25",
+      "pushed_at": "2026-05-01T14:20:13+00:00"
+    },
+    {
+      "relpath": "tmp/arm008__MNISTBandit-bsuite__vanilla_dqn__wrap[reward_scale(scale=0.1)]__runs.parquet",
+      "size_bytes": 20762,
+      "sha256": "b5f5f5dbf3aeb8dba979c36dddb816528e39637ff8d893ba372f7116a19e2cbc",
+      "pushed_at": "2026-05-01T14:21:31+00:00"
+    },
+    {
+      "relpath": "tmp/arm008__MNISTBandit-bsuite__vanilla_dqn__wrap[reward_scale(scale=0.1)]__traces.parquet",
+      "size_bytes": 122044945,
+      "sha256": "9a9c347a0051523386c945ec92e1034b08445801e1f4005c3f5aee59f2f21cd2",
+      "pushed_at": "2026-05-01T14:21:35+00:00"
+    },
+    {
+      "relpath": "tmp/arm009__MNISTBandit-bsuite__vanilla_dqn__runs.parquet",
+      "size_bytes": 20771,
+      "sha256": "1f9f72664565432fdcb781b2c3d358aed5bad86636c06a98df1f32b39efb33a5",
+      "pushed_at": "2026-05-01T14:22:53+00:00"
+    },
+    {
+      "relpath": "tmp/arm009__MNISTBandit-bsuite__vanilla_dqn__traces.parquet",
+      "size_bytes": 123435570,
+      "sha256": "49e31bc34153cceb75402ef43630df10c2e250cbe9a0894a0862206af820629e",
+      "pushed_at": "2026-05-01T14:22:56+00:00"
+    },
+    {
+      "relpath": "tmp/arm009__MNISTBandit-bsuite__vanilla_dqn__wrap[reward_scale(scale=1.0)]__runs.parquet",
+      "size_bytes": 20764,
+      "sha256": "e123a4c6fcb9ccddd87f97b3ac7969b0751982173b61d4c162e0b8a1a9dc2205",
+      "pushed_at": "2026-05-01T14:53:58+00:00"
+    },
+    {
+      "relpath": "tmp/arm009__MNISTBandit-bsuite__vanilla_dqn__wrap[reward_scale(scale=1.0)]__traces.parquet",
+      "size_bytes": 123435561,
+      "sha256": "b043e5e3a4f311463f5ae0a46e4e901016464aaefeefaa0607a1963abf2bd564",
+      "pushed_at": "2026-05-01T14:54:03+00:00"
+    },
+    {
+      "relpath": "tmp/arm010__MNISTBandit-bsuite__vanilla_dqn__runs.parquet",
+      "size_bytes": 20761,
+      "sha256": "1cf29cf43a4dafc337e109a6d50b59ef17ce9810c429085139e1ce28aaac8718",
+      "pushed_at": "2026-05-01T14:24:13+00:00"
+    },
+    {
+      "relpath": "tmp/arm010__MNISTBandit-bsuite__vanilla_dqn__traces.parquet",
+      "size_bytes": 123534500,
+      "sha256": "2bd1a17a313446bdfcae9ad322afe2b5a22502a6d9f6393f293b0600717fd5ff",
+      "pushed_at": "2026-05-01T14:24:17+00:00"
+    },
+    {
+      "relpath": "tmp/arm010__MNISTBandit-bsuite__vanilla_dqn__wrap[reward_scale(scale=1.0)]__runs.parquet",
+      "size_bytes": 20744,
+      "sha256": "b0a22a5f357c133522434d62a9d54349ea3d084b752f2665c91c0bcbbec02c69",
+      "pushed_at": "2026-05-01T14:55:22+00:00"
+    },
+    {
+      "relpath": "tmp/arm010__MNISTBandit-bsuite__vanilla_dqn__wrap[reward_scale(scale=1.0)]__traces.parquet",
+      "size_bytes": 123534509,
+      "sha256": "0b74562078939703b0b6a41700ba7c7dbad0225a04ff12c8ca4e9742744e18de",
+      "pushed_at": "2026-05-01T14:55:26+00:00"
+    },
+    {
+      "relpath": "tmp/arm011__MNISTBandit-bsuite__vanilla_dqn__runs.parquet",
+      "size_bytes": 20746,
+      "sha256": "3a2f3426932d98811b27d3ca952cfbae65aa43878704acee1784a72471c242cb",
+      "pushed_at": "2026-05-01T14:25:35+00:00"
+    },
+    {
+      "relpath": "tmp/arm011__MNISTBandit-bsuite__vanilla_dqn__traces.parquet",
+      "size_bytes": 123396241,
+      "sha256": "0fad6cce858444c16c7f399ea36c9c18d654f09b3d257b0a8492f5bd5f800ae6",
+      "pushed_at": "2026-05-01T14:25:39+00:00"
+    },
+    {
+      "relpath": "tmp/arm011__MNISTBandit-bsuite__vanilla_dqn__wrap[reward_scale(scale=1.0)]__runs.parquet",
+      "size_bytes": 20765,
+      "sha256": "7091e733d5ff19a6971fbd8dc1311591e4819f8c7aa0a11811af1e4b47c77177",
+      "pushed_at": "2026-05-01T14:56:43+00:00"
+    },
+    {
+      "relpath": "tmp/arm011__MNISTBandit-bsuite__vanilla_dqn__wrap[reward_scale(scale=1.0)]__traces.parquet",
+      "size_bytes": 123396549,
+      "sha256": "c86a57bef6eed5eda6af4360bbe341143b39e2d4f6c9baeaaabfb03f84238219",
+      "pushed_at": "2026-05-01T14:56:46+00:00"
+    },
+    {
+      "relpath": "tmp/arm012__DeepSea-bsuite__ddqn__wrap[reward_scale(scale=0.1)]__runs.parquet",
+      "size_bytes": 27824,
+      "sha256": "e14fc22e80916aac46040e3356a46ca6d5f65dde7ff9276c0b2cfd899428ee43",
+      "pushed_at": "2026-05-01T14:27:52+00:00"
+    },
+    {
+      "relpath": "tmp/arm012__DeepSea-bsuite__ddqn__wrap[reward_scale(scale=0.1)]__traces.parquet",
+      "size_bytes": 340352272,
+      "sha256": "f35cbfe9538f731038fcdd287978cbf1685640eac097b2c5555a6b6cfade5a6b",
+      "pushed_at": "2026-05-01T14:27:58+00:00"
+    },
+    {
+      "relpath": "tmp/arm013__DeepSea-bsuite__ddqn__runs.parquet",
+      "size_bytes": 28017,
+      "sha256": "4907d8b76ce89e7ef8168f678263ec39e07a26dd9fa146441c0f2b0408ace2e8",
+      "pushed_at": "2026-05-01T14:30:09+00:00"
+    },
+    {
+      "relpath": "tmp/arm013__DeepSea-bsuite__ddqn__traces.parquet",
+      "size_bytes": 340059638,
+      "sha256": "bc3a038c0770badad9a1f4b26ce265d13f53e04284a64e2748b82cc52e378dbf",
+      "pushed_at": "2026-05-01T14:30:14+00:00"
+    },
+    {
+      "relpath": "tmp/arm013__DeepSea-bsuite__ddqn__wrap[reward_scale(scale=1.0)]__runs.parquet",
+      "size_bytes": 28011,
+      "sha256": "0c81e4a218b48ac000e3bdcf5fbcac5c061149db149f00df780f4e39ff2c6889",
+      "pushed_at": "2026-05-01T14:58:58+00:00"
+    },
+    {
+      "relpath": "tmp/arm013__DeepSea-bsuite__ddqn__wrap[reward_scale(scale=1.0)]__traces.parquet",
+      "size_bytes": 340059632,
+      "sha256": "4128ac308c3ced74a378fe46894cbf44503d213d53e15602cce14e7fc4c41c7d",
+      "pushed_at": "2026-05-01T14:59:02+00:00"
+    },
+    {
+      "relpath": "tmp/arm014__FourRooms-misc__ddqn__wrap[reward_scale(scale=0.1)]__runs.parquet",
+      "size_bytes": 27568,
+      "sha256": "aadf61e8a56a3c3f5f99442ba4f395428f89941187ada6366659ac29ee6ad90a",
+      "pushed_at": "2026-05-01T14:32:38+00:00"
+    },
+    {
+      "relpath": "tmp/arm014__FourRooms-misc__ddqn__wrap[reward_scale(scale=0.1)]__traces.parquet",
+      "size_bytes": 351344370,
+      "sha256": "96bcb8ae67a339e98b898217dbbd33d461f026c31e82cbd9db74ab995d639578",
+      "pushed_at": "2026-05-01T14:32:44+00:00"
+    },
+    {
+      "relpath": "tmp/arm015__FourRooms-misc__ddqn__runs.parquet",
+      "size_bytes": 27765,
+      "sha256": "709b689b1fd3bb96e47af70f7148c6ff13be41c400b4deb4c8c4737bb42bda51",
+      "pushed_at": "2026-05-01T14:35:13+00:00"
+    },
+    {
+      "relpath": "tmp/arm015__FourRooms-misc__ddqn__traces.parquet",
+      "size_bytes": 340162774,
+      "sha256": "23a235917de4401f900c397a6a193c17d3ca2e4b3091ab4745f79d4cef506286",
+      "pushed_at": "2026-05-01T14:35:21+00:00"
+    },
+    {
+      "relpath": "tmp/arm015__FourRooms-misc__ddqn__wrap[reward_scale(scale=1.0)]__runs.parquet",
+      "size_bytes": 27741,
+      "sha256": "bba3c4b302b1dfff2b819f7cba0f86ad092d4b80b7d60d3680af76b75299de2d",
+      "pushed_at": "2026-05-01T15:01:23+00:00"
+    },
+    {
+      "relpath": "tmp/arm015__FourRooms-misc__ddqn__wrap[reward_scale(scale=1.0)]__traces.parquet",
+      "size_bytes": 340465026,
+      "sha256": "d8fe69fa1edf235cce256a7130d0a627480e6366c0ef4b78a8e1b16333b163f0",
+      "pushed_at": "2026-05-01T15:01:29+00:00"
+    },
+    {
+      "relpath": "tmp/arm016__DiscountingChain-bsuite__ddqn__wrap[reward_scale(scale=0.1)]__runs.parquet",
+      "size_bytes": 27465,
+      "sha256": "7ca8916c8858c9cb66e40842b8573a3bf4d5c1e7a15fbae8ab9371b8ff3cfc8d",
+      "pushed_at": "2026-05-01T14:37:46+00:00"
+    },
+    {
+      "relpath": "tmp/arm016__DiscountingChain-bsuite__ddqn__wrap[reward_scale(scale=0.1)]__traces.parquet",
+      "size_bytes": 379046586,
+      "sha256": "2062e746658560487961ee9673cfeee76fd26f0874556dcc5e75dfcdae2e9d6c",
+      "pushed_at": "2026-05-01T14:37:50+00:00"
+    },
+    {
+      "relpath": "tmp/arm017__DiscountingChain-bsuite__ddqn__runs.parquet",
+      "size_bytes": 27364,
+      "sha256": "349da32ea65390fca9b2c4f0bdf88eb791ddab5b909cd7c8ac0d80af687e91d3",
+      "pushed_at": "2026-05-01T14:40:14+00:00"
+    },
+    {
+      "relpath": "tmp/arm017__DiscountingChain-bsuite__ddqn__traces.parquet",
+      "size_bytes": 377359261,
+      "sha256": "a6da54a8fd7d375cd2a302fac4842766a9f92ac4f5d1e5546da5069be29df28d",
+      "pushed_at": "2026-05-01T14:40:20+00:00"
+    },
+    {
+      "relpath": "tmp/arm017__DiscountingChain-bsuite__ddqn__wrap[reward_scale(scale=1.0)]__runs.parquet",
+      "size_bytes": 27388,
+      "sha256": "b74db2cbca6c08e56bb433c5af45c445ad0c8d0a679d9008228d72ddf28a93ad",
+      "pushed_at": "2026-05-01T15:03:53+00:00"
+    },
+    {
+      "relpath": "tmp/arm017__DiscountingChain-bsuite__ddqn__wrap[reward_scale(scale=1.0)]__traces.parquet",
+      "size_bytes": 377359284,
+      "sha256": "95c838797f16c393cb52044f7609c58000bd03847b932da7fcc9b3480bc70229",
+      "pushed_at": "2026-05-01T15:04:06+00:00"
+    },
+    {
+      "relpath": "tmp/arm018__MNISTBandit-bsuite__ddqn__wrap[reward_scale(scale=0.1)]__runs.parquet",
+      "size_bytes": 27035,
+      "sha256": "56c7f4b5caf2715090768aad4c211b86855052199252ba5ea716ac6620a0c62f",
+      "pushed_at": "2026-05-01T14:41:39+00:00"
+    },
+    {
+      "relpath": "tmp/arm018__MNISTBandit-bsuite__ddqn__wrap[reward_scale(scale=0.1)]__traces.parquet",
+      "size_bytes": 122086670,
+      "sha256": "6cd87702c9c0d3cf139016129fc54d5def42bff457686fa67381e45555a66da4",
+      "pushed_at": "2026-05-01T14:41:41+00:00"
+    },
+    {
+      "relpath": "tmp/arm019__MNISTBandit-bsuite__ddqn__wrap[reward_scale(scale=0.1)]__runs.parquet",
+      "size_bytes": 26980,
+      "sha256": "816c50261ff02708da86660dee72e53fb50cb9550abae0b9a672d28cd4e25109",
+      "pushed_at": "2026-05-01T14:42:58+00:00"
+    },
+    {
+      "relpath": "tmp/arm019__MNISTBandit-bsuite__ddqn__wrap[reward_scale(scale=0.1)]__traces.parquet",
+      "size_bytes": 122246309,
+      "sha256": "b241ddb1158930b696e6df94262352127809cdd25428f70cc371c792eb5fd032",
+      "pushed_at": "2026-05-01T14:43:02+00:00"
+    },
+    {
+      "relpath": "tmp/arm020__MNISTBandit-bsuite__ddqn__wrap[reward_scale(scale=0.1)]__runs.parquet",
+      "size_bytes": 27069,
+      "sha256": "cdfc63883e5634e8673dcaa42ceb00bdb99f0ae41af73fb8ee1f96799051ed10",
+      "pushed_at": "2026-05-01T14:44:20+00:00"
+    },
+    {
+      "relpath": "tmp/arm020__MNISTBandit-bsuite__ddqn__wrap[reward_scale(scale=0.1)]__traces.parquet",
+      "size_bytes": 122045389,
+      "sha256": "def8a493caf8f837449b525c2ca0591a032db5e65fdf1e2d982883033cc709e9",
+      "pushed_at": "2026-05-01T14:44:23+00:00"
+    },
+    {
+      "relpath": "tmp/arm021__MNISTBandit-bsuite__ddqn__wrap[reward_scale(scale=1.0)]__runs.parquet",
+      "size_bytes": 27064,
+      "sha256": "f119255d34d0d44f98bd3e874ad5e029a1a704b760060f52a4ca8e8fd2a082d3",
+      "pushed_at": "2026-05-01T15:05:25+00:00"
+    },
+    {
+      "relpath": "tmp/arm021__MNISTBandit-bsuite__ddqn__wrap[reward_scale(scale=1.0)]__traces.parquet",
+      "size_bytes": 123436010,
+      "sha256": "4a09731cfcd3fcf9c197e273c4ac110fef78071d5c8aed859a4f2076b50f71cf",
+      "pushed_at": "2026-05-01T15:05:28+00:00"
+    },
+    {
+      "relpath": "tmp/arm022__MNISTBandit-bsuite__ddqn__wrap[reward_scale(scale=1.0)]__runs.parquet",
+      "size_bytes": 27041,
+      "sha256": "23042f8302f754e0ca208b047ba5f91f69c9217ec5250cb53e66fc305012b80a",
+      "pushed_at": "2026-05-01T15:06:46+00:00"
+    },
+    {
+      "relpath": "tmp/arm022__MNISTBandit-bsuite__ddqn__wrap[reward_scale(scale=1.0)]__traces.parquet",
+      "size_bytes": 123534954,
+      "sha256": "00da78de3bc8617662bc0610422463b35a87c701c6ba81491d9fe4824b81abd9",
+      "pushed_at": "2026-05-01T15:06:49+00:00"
+    },
+    {
+      "relpath": "tmp/arm023__MNISTBandit-bsuite__ddqn__wrap[reward_scale(scale=1.0)]__runs.parquet",
+      "size_bytes": 27061,
+      "sha256": "9b8ac1b71f3e684be4039b8d0facee2f260c2b3880c34f7cd0a23933ddc353ef",
+      "pushed_at": "2026-05-01T15:08:07+00:00"
+    },
+    {
+      "relpath": "tmp/arm023__MNISTBandit-bsuite__ddqn__wrap[reward_scale(scale=1.0)]__traces.parquet",
+      "size_bytes": 123396972,
+      "sha256": "c7da1d51df47d38c979a00d90c839dae29dcf201f18be3f3d7fe157ef11eaf29",
+      "pushed_at": "2026-05-01T15:08:11+00:00"
+    },
+    {
+      "relpath": "traces.parquet",
+      "size_bytes": 5679219915,
+      "sha256": "5def0d2a850f064b38e639e6c982f92510f975252adec2039aa5746a6727664b",
+      "pushed_at": "2026-05-01T15:14:39+00:00"
+    }
+  ]
+}

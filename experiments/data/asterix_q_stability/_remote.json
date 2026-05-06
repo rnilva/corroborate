@@ -1,0 +1,23 @@
+{
+  "remote_root": "s3://corroborate-archive/asterix_q_stability",
+  "files": [
+    {
+      "relpath": "runs.parquet",
+      "size_bytes": 32322,
+      "sha256": "220b7a6eb1ac97e6807c54578a7126513dc6ef349b1c52f0cfcfed6e18ab997c",
+      "pushed_at": "2026-05-03T03:22:43+00:00"
+    },
+    {
+      "relpath": "runs_with_bridge_cache.parquet",
+      "size_bytes": 104539,
+      "sha256": "8a02b609017dbc764bd811c261d74827d3a5c4eef9a8fb3082ae21f9e0754298",
+      "pushed_at": "2026-05-03T03:22:43+00:00"
+    },
+    {
+      "relpath": "traces.parquet",
+      "size_bytes": 1478487955,
+      "sha256": "85e963826dcab04f8f605653a24fbc79207bc8661e30d0edcf370c07789e753d",
+      "pushed_at": "2026-05-03T03:23:02+00:00"
+    }
+  ]
+}

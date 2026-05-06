@@ -1,0 +1,23 @@
+{
+  "remote_root": "s3://corroborate-archive/adaptive_dqn_acrobot",
+  "files": [
+    {
+      "relpath": "runs.parquet",
+      "size_bytes": 23047,
+      "sha256": "883ab2af8e674d7a05f5fda9be9febe97974c4516b4b8ad1f2e828ef6120fc5c",
+      "pushed_at": "2026-05-03T03:21:33+00:00"
+    },
+    {
+      "relpath": "runs_with_bridge_cache.parquet",
+      "size_bytes": 39956,
+      "sha256": "1fc6b3a2cb988d06d4d0a3cbcf6a07b648e4605fa0fe796a8f8ed7060ba8fab8",
+      "pushed_at": "2026-05-03T03:21:33+00:00"
+    },
+    {
+      "relpath": "traces.parquet",
+      "size_bytes": 365509243,
+      "sha256": "eea10cc6c624da478f0381631aca1915ea4d63f88353e6d3f87904c4dcd3194e",
+      "pushed_at": "2026-05-03T03:21:38+00:00"
+    }
+  ]
+}

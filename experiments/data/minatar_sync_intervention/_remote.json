@@ -1,0 +1,203 @@
+{
+  "remote_root": "s3://corroborate-archive/minatar_sync_intervention",
+  "files": [
+    {
+      "relpath": "tmp/arm000__Asterix-MinAtar__vanilla_dqn__runs.parquet",
+      "size_bytes": 22772,
+      "sha256": "989576680560fb314b815230fac62b3f50808e97266c825857ca043ac0b1343e",
+      "pushed_at": "2026-05-02T04:30:08+00:00"
+    },
+    {
+      "relpath": "tmp/arm000__Asterix-MinAtar__vanilla_dqn__traces.parquet",
+      "size_bytes": 897156877,
+      "sha256": "8452b4f732d5569a218af31c319e122a6b4deaa2184d1d2203924b1821b620c8",
+      "pushed_at": "2026-05-02T04:30:18+00:00"
+    },
+    {
+      "relpath": "tmp/arm001__Asterix-MinAtar__vanilla_dqn__runs.parquet",
+      "size_bytes": 22756,
+      "sha256": "955e3d27866c7c4dc82782122fc789eb0caee0b02651e3fb6cb7e93453e23cea",
+      "pushed_at": "2026-05-02T04:56:16+00:00"
+    },
+    {
+      "relpath": "tmp/arm001__Asterix-MinAtar__vanilla_dqn__traces.parquet",
+      "size_bytes": 901125365,
+      "sha256": "252a806844bba2bd2b268ffafbfa3afd48a5597199f34f380365f821f02d18be",
+      "pushed_at": "2026-05-02T04:56:32+00:00"
+    },
+    {
+      "relpath": "tmp/arm002__Asterix-MinAtar__ddqn__runs.parquet",
+      "size_bytes": 28754,
+      "sha256": "a2419737bd1dafec487a6058abb29009dfa7052f9b67fc48a0602a33ad4b7178",
+      "pushed_at": "2026-05-02T05:23:21+00:00"
+    },
+    {
+      "relpath": "tmp/arm002__Asterix-MinAtar__ddqn__traces.parquet",
+      "size_bytes": 904980993,
+      "sha256": "7acec0c09994b6d8e77371afa8f985e8474124bb4838254d5857d8d338bd2b93",
+      "pushed_at": "2026-05-02T05:23:32+00:00"
+    },
+    {
+      "relpath": "tmp/arm003__Asterix-MinAtar__ddqn__runs.parquet",
+      "size_bytes": 28737,
+      "sha256": "26e11333bad29a7fc4708d9d31702fea3df45caab08a729c3b1ab299ece6e528",
+      "pushed_at": "2026-05-02T05:50:12+00:00"
+    },
+    {
+      "relpath": "tmp/arm003__Asterix-MinAtar__ddqn__traces.parquet",
+      "size_bytes": 908666481,
+      "sha256": "1129c689697f95173ad66d69a2bfd6f89e867b9ad45e7cf63f7783d3e9f2f960",
+      "pushed_at": "2026-05-02T05:50:22+00:00"
+    },
+    {
+      "relpath": "tmp/arm004__Breakout-MinAtar__vanilla_dqn__runs.parquet",
+      "size_bytes": 22789,
+      "sha256": "f7e0212d64a31c455c311d87ca7df26b913568ffaa284217c090c45b9015844d",
+      "pushed_at": "2026-05-02T06:14:17+00:00"
+    },
+    {
+      "relpath": "tmp/arm004__Breakout-MinAtar__vanilla_dqn__traces.parquet",
+      "size_bytes": 910462378,
+      "sha256": "b27d02a5c0a447be9ba292b53eb462a1edb70e0dae9df263738c86fa08d8d4f4",
+      "pushed_at": "2026-05-02T06:14:30+00:00"
+    },
+    {
+      "relpath": "tmp/arm005__Breakout-MinAtar__vanilla_dqn__runs.parquet",
+      "size_bytes": 22786,
+      "sha256": "0614d2ad2b1df0819fa9976c73a6506c084bbf676bd7f3ba5fc1d83aed629f0f",
+      "pushed_at": "2026-05-02T06:38:36+00:00"
+    },
+    {
+      "relpath": "tmp/arm005__Breakout-MinAtar__vanilla_dqn__traces.parquet",
+      "size_bytes": 911265756,
+      "sha256": "a459ca0408bb66f1e3bcc387642959577ab769162208a0c5f033f972423001bc",
+      "pushed_at": "2026-05-02T06:38:46+00:00"
+    },
+    {
+      "relpath": "tmp/arm006__Breakout-MinAtar__ddqn__runs.parquet",
+      "size_bytes": 28755,
+      "sha256": "ab5789e0fd34eff8d38378015de4a075c5dcead30176246ddbdb4998d6ed95fd",
+      "pushed_at": "2026-05-02T07:02:38+00:00"
+    },
+    {
+      "relpath": "tmp/arm006__Breakout-MinAtar__ddqn__traces.parquet",
+      "size_bytes": 912507145,
+      "sha256": "9a6c5c2a7b571585a7a0f8704e0b73011b494739982310b8d2d77c15ce688d4a",
+      "pushed_at": "2026-05-02T07:02:51+00:00"
+    },
+    {
+      "relpath": "tmp/arm007__Breakout-MinAtar__ddqn__runs.parquet",
+      "size_bytes": 28719,
+      "sha256": "57bd6102f5dfdfd3e590646ba46bf2ea5a1020f1d7549193fa404d948a51998e",
+      "pushed_at": "2026-05-02T07:27:01+00:00"
+    },
+    {
+      "relpath": "tmp/arm007__Breakout-MinAtar__ddqn__traces.parquet",
+      "size_bytes": 913377837,
+      "sha256": "545c1ce3a7e34e9d28d42b097536379e6b79856a26672d3974d8604a9057b4bc",
+      "pushed_at": "2026-05-02T07:27:17+00:00"
+    },
+    {
+      "relpath": "tmp/arm008__Freeway-MinAtar__vanilla_dqn__runs.parquet",
+      "size_bytes": 22736,
+      "sha256": "b5c6f93e19c3f5d6fd044a6ee22147714f0c2ab7586dcd9403f54f99e1d80649",
+      "pushed_at": "2026-05-02T07:55:01+00:00"
+    },
+    {
+      "relpath": "tmp/arm008__Freeway-MinAtar__vanilla_dqn__traces.parquet",
+      "size_bytes": 921220713,
+      "sha256": "d0fe5a9c33baea9425256212684d600ae016bf690caeaa3cccb3fb766baeb4db",
+      "pushed_at": "2026-05-02T07:55:12+00:00"
+    },
+    {
+      "relpath": "tmp/arm009__Freeway-MinAtar__vanilla_dqn__runs.parquet",
+      "size_bytes": 22766,
+      "sha256": "5e639ec9770ff239429eb8a02ebc3ad1af75d5c23aa30b43d3f47abbae57cb80",
+      "pushed_at": "2026-05-02T08:22:50+00:00"
+    },
+    {
+      "relpath": "tmp/arm009__Freeway-MinAtar__vanilla_dqn__traces.parquet",
+      "size_bytes": 923232373,
+      "sha256": "21356784fbac15c9beee3f992bed5846dac487abfd6542aab328cb76cd73eeae",
+      "pushed_at": "2026-05-02T08:23:13+00:00"
+    },
+    {
+      "relpath": "tmp/arm010__Freeway-MinAtar__ddqn__runs.parquet",
+      "size_bytes": 29008,
+      "sha256": "94732c11f778452a7387eff6e65a30146ad6a827e1f59745edf50205913b0951",
+      "pushed_at": "2026-05-02T08:50:54+00:00"
+    },
+    {
+      "relpath": "tmp/arm010__Freeway-MinAtar__ddqn__traces.parquet",
+      "size_bytes": 925449794,
+      "sha256": "c82612f58a60d34e7e6eb74b4d3ae80abe0da8f9ba7a678bf81be8f7f516aa17",
+      "pushed_at": "2026-05-02T08:51:14+00:00"
+    },
+    {
+      "relpath": "tmp/arm011__Freeway-MinAtar__ddqn__runs.parquet",
+      "size_bytes": 28730,
+      "sha256": "f4feac6ce82c8e3ac7db8da6320f07c50cf4daf3615f694774a9170031b728e6",
+      "pushed_at": "2026-05-02T09:18:54+00:00"
+    },
+    {
+      "relpath": "tmp/arm011__Freeway-MinAtar__ddqn__traces.parquet",
+      "size_bytes": 922214246,
+      "sha256": "12e4da41ffe21c3ab0c57840c27f3f2778a398e2ca23a2dc5f6e3a11bc370274",
+      "pushed_at": "2026-05-02T09:19:06+00:00"
+    },
+    {
+      "relpath": "tmp/arm012__SpaceInvaders-MinAtar__vanilla_dqn__runs.parquet",
+      "size_bytes": 22810,
+      "sha256": "45be5c4b42d163402cd89fa9e8c8906bfbfc994175efe0dedfb9ca85daaeda58",
+      "pushed_at": "2026-05-02T09:43:50+00:00"
+    },
+    {
+      "relpath": "tmp/arm012__SpaceInvaders-MinAtar__vanilla_dqn__traces.parquet",
+      "size_bytes": 881361755,
+      "sha256": "d7e8a973ddc98f7b6027e690d6762bdfa89454729867912789fea72b56ef74fb",
+      "pushed_at": "2026-05-02T09:44:01+00:00"
+    },
+    {
+      "relpath": "tmp/arm013__SpaceInvaders-MinAtar__vanilla_dqn__runs.parquet",
+      "size_bytes": 20281,
+      "sha256": "ed0bb74d3067a683173d205d46b3d7caf89a97be0409b40474748ce425db024d",
+      "pushed_at": "2026-05-02T12:38:14+00:00"
+    },
+    {
+      "relpath": "tmp/arm013__SpaceInvaders-MinAtar__vanilla_dqn__traces.parquet",
+      "size_bytes": 883100464,
+      "sha256": "1cf705f9f2c83db5a263d4b496d899b8aba062d5cddc4377a3b47f8da0b7922f",
+      "pushed_at": "2026-05-02T12:38:25+00:00"
+    },
+    {
+      "relpath": "tmp/arm014__SpaceInvaders-MinAtar__ddqn__runs.parquet",
+      "size_bytes": 21189,
+      "sha256": "eaddc3783bd0c96269813d8c0476f0bdaf259f43941dde531cb2381f36cc2e5d",
+      "pushed_at": "2026-05-02T13:03:17+00:00"
+    },
+    {
+      "relpath": "tmp/arm014__SpaceInvaders-MinAtar__ddqn__traces.parquet",
+      "size_bytes": 883139304,
+      "sha256": "3515c750de23f83237a8dbcfd4ff3b2b6cb0e0f75c3153995653ef5381ea95bf",
+      "pushed_at": "2026-05-02T13:03:28+00:00"
+    },
+    {
+      "relpath": "tmp/arm015__SpaceInvaders-MinAtar__ddqn__runs.parquet",
+      "size_bytes": 21187,
+      "sha256": "7396aa093212c958932cc072ecc77d7c848b910809137e35473781efd121d80a",
+      "pushed_at": "2026-05-02T13:28:05+00:00"
+    },
+    {
+      "relpath": "tmp/arm015__SpaceInvaders-MinAtar__ddqn__traces.parquet",
+      "size_bytes": 882797855,
+      "sha256": "90d87dd24954906c40c012b91db7658da0634ca0eb73a3a41165d3ecbc8b82ca",
+      "pushed_at": "2026-05-02T13:28:17+00:00"
+    },
+    {
+      "relpath": "traces.parquet",
+      "size_bytes": 14820112234,
+      "sha256": "3d5f9b36802a257f8a95e47451103317f16f7deaa86a9b9dde1a5cbc9c41647c",
+      "pushed_at": "2026-05-03T08:25:59+00:00"
+    }
+  ]
+}

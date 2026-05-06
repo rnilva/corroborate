@@ -1,0 +1,89 @@
+{
+  "remote_root": "s3://corroborate-archive/l2_x_gamma_acrobot",
+  "files": [
+    {
+      "relpath": "runs.parquet",
+      "size_bytes": 33927,
+      "sha256": "81d420c3d323b396d4f7442652a47786f075f31304dc8ae50622df01f0638ba1",
+      "pushed_at": "2026-05-01T20:43:47+00:00"
+    },
+    {
+      "relpath": "tmp/arm000__Acrobot-v1__vanilla_g099_wd1em4__runs.parquet",
+      "size_bytes": 21948,
+      "sha256": "d93b0a9cf38beeaf22a434690802fab7264770c602b29ea355e8d1e55c05316d",
+      "pushed_at": "2026-05-01T20:03:11+00:00"
+    },
+    {
+      "relpath": "tmp/arm000__Acrobot-v1__vanilla_g099_wd1em4__traces.parquet",
+      "size_bytes": 364589697,
+      "sha256": "e8715dea8176e3725fe3eb210f676e9319698e9ef2eee98ece505e0dc687de22",
+      "pushed_at": "2026-05-01T20:03:28+00:00"
+    },
+    {
+      "relpath": "tmp/arm001__Acrobot-v1__ddqn_g099_wd1em4__runs.parquet",
+      "size_bytes": 27956,
+      "sha256": "fc2aa97bf0b8dfcb10f91838ca9f2d98587a8a9d1d803191f64c25618b7165ca",
+      "pushed_at": "2026-05-01T20:10:27+00:00"
+    },
+    {
+      "relpath": "tmp/arm001__Acrobot-v1__ddqn_g099_wd1em4__traces.parquet",
+      "size_bytes": 365541118,
+      "sha256": "86552aa40e1c07f1d8086a5dd016a6568e5e31c44053d58a47fc1120d09c73ac",
+      "pushed_at": "2026-05-01T20:10:33+00:00"
+    },
+    {
+      "relpath": "tmp/arm002__Acrobot-v1__vanilla_g0999_wd1em4__runs.parquet",
+      "size_bytes": 21968,
+      "sha256": "c703f732b4649aa8f299ee4d300cb75a1f212052bc9afb8620e9db89fcbcffb5",
+      "pushed_at": "2026-05-01T20:19:28+00:00"
+    },
+    {
+      "relpath": "tmp/arm002__Acrobot-v1__vanilla_g0999_wd1em4__traces.parquet",
+      "size_bytes": 368480845,
+      "sha256": "95ab6016655d73766b41121cee91139e5fedb2da9f46770b28d5234478759d9a",
+      "pushed_at": "2026-05-01T20:19:34+00:00"
+    },
+    {
+      "relpath": "tmp/arm003__Acrobot-v1__ddqn_g0999_wd1em4__runs.parquet",
+      "size_bytes": 28205,
+      "sha256": "ac03cbfb4e1e6bac0629113331b8f067fb8c7b0550e9f104513f3bfc3d453bfc",
+      "pushed_at": "2026-05-01T20:26:28+00:00"
+    },
+    {
+      "relpath": "tmp/arm003__Acrobot-v1__ddqn_g0999_wd1em4__traces.parquet",
+      "size_bytes": 368400824,
+      "sha256": "84c503d4348a2256381c97f7fe63d36ef792b07639fde37caf2f4b3f6afd4854",
+      "pushed_at": "2026-05-01T20:26:35+00:00"
+    },
+    {
+      "relpath": "tmp/arm004__Acrobot-v1__vanilla_g0999_wd1em3__runs.parquet",
+      "size_bytes": 21950,
+      "sha256": "37f545cd0cf012723cc12b0ce6d9ad9be28fa7f7aeb55a26abbca9e801df351c",
+      "pushed_at": "2026-05-01T20:35:50+00:00"
+    },
+    {
+      "relpath": "tmp/arm004__Acrobot-v1__vanilla_g0999_wd1em3__traces.parquet",
+      "size_bytes": 368233510,
+      "sha256": "b8a9c1e76eec1019c7cf1b14f4d7fc4b695c80bb391d0a68265824f68583f165",
+      "pushed_at": "2026-05-01T20:35:55+00:00"
+    },
+    {
+      "relpath": "tmp/arm005__Acrobot-v1__ddqn_g0999_wd1em3__runs.parquet",
+      "size_bytes": 27988,
+      "sha256": "4d5c1e261a9c23b92de9402e699bf1e42e88b87ca8b98cf7c1bde5c51e0d5e8b",
+      "pushed_at": "2026-05-01T20:42:55+00:00"
+    },
+    {
+      "relpath": "tmp/arm005__Acrobot-v1__ddqn_g0999_wd1em3__traces.parquet",
+      "size_bytes": 368159511,
+      "sha256": "983437de05b7e3ca36460f00f2068c2acb54e8701795bde3ccaa8dfd53a3d11b",
+      "pushed_at": "2026-05-01T20:43:00+00:00"
+    },
+    {
+      "relpath": "traces.parquet",
+      "size_bytes": 2203276627,
+      "sha256": "fa86f95376de73c14c50db41b93072ec7065037c285c0f4f08c09482f47b99ee",
+      "pushed_at": "2026-05-01T20:44:34+00:00"
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "remote_root": "s3://corroborate-archive/action_dim_inflated_fourrooms",
+  "files": [
+    {
+      "relpath": "runs.parquet",
+      "size_bytes": 30738,
+      "sha256": "1609bd4237e76bb17ef575467610572537e832faee8ae4b381dc2a0b85779348",
+      "pushed_at": "2026-05-03T03:23:29+00:00"
+    },
+    {
+      "relpath": "runs_with_bridge_cache.parquet",
+      "size_bytes": 89739,
+      "sha256": "010ea75cfcc2e90f82aba5794dbc07db0459d03da1f3fa3d0844b0fe3a150ac8",
+      "pushed_at": "2026-05-03T03:23:29+00:00"
+    },
+    {
+      "relpath": "traces.parquet",
+      "size_bytes": 2677571547,
+      "sha256": "fbd86555182161dbaa9d728be9c4ed904f461aab7ac891caba8bb4f56a0b2424",
+      "pushed_at": "2026-05-03T03:24:04+00:00"
+    }
+  ]
+}

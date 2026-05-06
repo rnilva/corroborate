@@ -1,0 +1,23 @@
+{
+  "remote_root": "s3://corroborate-archive/adaptive_dqn_spaceinvaders_1m",
+  "files": [
+    {
+      "relpath": "runs.parquet",
+      "size_bytes": 24700,
+      "sha256": "cb99c673e965ce15421f1a9ff53f43e240bbeead1ecd6b118419f8802bd64c07",
+      "pushed_at": "2026-05-03T03:23:03+00:00"
+    },
+    {
+      "relpath": "runs_with_bridge_cache.parquet",
+      "size_bytes": 36463,
+      "sha256": "adfa47524a1e3a7101b6c407d3946a2a15179a4b6894d64e05710e5fc9db499e",
+      "pushed_at": "2026-05-03T03:23:03+00:00"
+    },
+    {
+      "relpath": "traces.parquet",
+      "size_bytes": 1740995462,
+      "sha256": "e30571c80172c1fab52ead95a4f87b7a7bf464de365c5dd6f71a11d40c5cf1f8",
+      "pushed_at": "2026-05-03T03:23:29+00:00"
+    }
+  ]
+}

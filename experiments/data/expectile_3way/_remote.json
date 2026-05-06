@@ -1,0 +1,17 @@
+{
+  "remote_root": "s3://corroborate-archive/expectile_3way",
+  "files": [
+    {
+      "relpath": "runs.parquet",
+      "size_bytes": 42885,
+      "sha256": "f7becffcf3446da311f08046dabb2cdd9c508dfecb1ad6c9cc6afe3d94ee35c2",
+      "pushed_at": "2026-05-01T11:29:00+00:00"
+    },
+    {
+      "relpath": "traces.parquet",
+      "size_bytes": 5332015813,
+      "sha256": "adc9187a56e7078f41750be39d420bfd5267dd6ed60130871e4da1f8e5e530c6",
+      "pushed_at": "2026-05-01T11:30:06+00:00"
+    }
+  ]
+}

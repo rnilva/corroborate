@@ -1,0 +1,23 @@
+{
+  "remote_root": "s3://corroborate-archive/adaptive_dqn_fourrooms",
+  "files": [
+    {
+      "relpath": "runs.parquet",
+      "size_bytes": 22969,
+      "sha256": "8857cb51e54ee8207806f5e9fe9b0651f9d37cc9aa48c3edd6ce42fa48a8fadc",
+      "pushed_at": "2026-05-03T03:19:40+00:00"
+    },
+    {
+      "relpath": "runs_with_bridge_cache.parquet",
+      "size_bytes": 36182,
+      "sha256": "d97636027102610cad507c9f25b40be60c3124aeb7bd116121d2a7ae638d042f",
+      "pushed_at": "2026-05-03T03:19:41+00:00"
+    },
+    {
+      "relpath": "traces.parquet",
+      "size_bytes": 334337715,
+      "sha256": "21817fa7c6cb0fb2b4980ca1b482c341bca0c6517d9e9f51f67eeaae02a57a4f",
+      "pushed_at": "2026-05-03T03:19:46+00:00"
+    }
+  ]
+}
