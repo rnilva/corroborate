@@ -1,0 +1,289 @@
+"""Per-corpus measurement store — the Phase 1 layer from
+CACHE_BUILD.md.
+
+A `<corpus_dir>/measurements.parquet` file holds every measurable
+ever computed for that corpus, keyed by `RunRow.id`. The matching
+`<corpus_dir>/measurements.hashes.json` sidecar records the
+closure hash per column so drift detection works the same way
+as the per-hypothesis cache layer.
+
+The two-level architecture this enables:
+  - Per-hypothesis cache becomes a cheap **projection** over
+    in-scope corpora's `measurements.parquet`s + a column subset.
+  - Multiple hypotheses sharing corpora + measurables compute
+    each measurable ONCE (in this layer), not once per hypothesis.
+
+Phase 1 wires the new layer alongside the existing
+`_load_one_corpus` path: the runner consults
+`measurements.parquet` and skips the in-loop measurable
+computation when all required columns are present + current.
+Phase 2 (separate commit) gut-renovates `_ingest_and_compute` to
+be a pure projection over per-corpus measurement stores.
+
+API:
+  - `build_measurements(corpus_dir, *, required, runs_df, traces_path)
+    -> Path`: compute missing/drifted measurables, write
+    measurements.parquet atomically. Idempotent.
+  - `load_measurements(corpus_dir, *, columns) -> DataFrame`:
+    pure read.
+  - `current_signatures(corpus_dir) -> Mapping[str, str]`:
+    return the closure-hash sidecar contents (empty mapping if
+    absent).
+"""
+from __future__ import annotations
+
+import json
+import sys
+from collections.abc import Callable, Mapping, Sequence
+from pathlib import Path
+
+import polars as pl
+
+from corroborate._internals.json import loads as _json_loads
+from corroborate._internals.narrow import is_mapping_str_object
+from corroborate.corpus.persistence import (
+    atomic_write_parquet,
+    atomic_write_text,
+)
+from corroborate.measurables import (
+    compute_missing_columns,
+    get_registered,
+    registered_names,
+)
+
+
+MEASUREMENTS_FILENAME = 'measurements.parquet'
+SIDECAR_FILENAME = 'measurements.hashes.json'
+
+
+def _measurements_path(corpus_dir: Path) -> Path:
+    return corpus_dir / MEASUREMENTS_FILENAME
+
+
+def _sidecar_path(corpus_dir: Path) -> Path:
+    return corpus_dir / SIDECAR_FILENAME
+
+
+def current_signatures(corpus_dir: Path) -> Mapping[str, str]:
+    """Read the closure-hash sidecar; return empty mapping when
+    absent or unparseable."""
+    path = _sidecar_path(corpus_dir)
+    if not path.exists():
+        return {}
+    try:
+        raw = _json_loads(path.read_text())
+    except (OSError, ValueError):
+        return {}
+    if not is_mapping_str_object(raw):
+        return {}
+    out: dict[str, str] = {}
+    for k, v in raw.items():
+        if isinstance(v, str):
+            out[k] = v
+    return out
+
+
+def load_measurements(
+    corpus_dir: Path,
+    *,
+    columns: Sequence[str] | None = None,
+) -> pl.DataFrame:
+    """Pure read of the per-corpus measurement store. Returns
+    an empty DataFrame when the file doesn't exist.
+
+    `columns`, when given, is the projection to read — polars'
+    column-projection pushdown means only the requested columns'
+    pages are decompressed (cheap on the typical wide-but-sparse
+    measurements table). `id` is always included.
+    """
+    path = _measurements_path(corpus_dir)
+    if not path.exists():
+        return pl.DataFrame()
+    if columns is None:
+        return pl.read_parquet(path)
+    cols = ['id'] + [c for c in columns if c != 'id']
+    # `pl.read_parquet` raises if a requested column is absent;
+    # narrow to existing columns first.
+    schema = pl.scan_parquet(path).collect_schema()
+    available = set(schema.names())
+    cols_present = [c for c in cols if c in available]
+    if not cols_present:
+        return pl.DataFrame()
+    return pl.read_parquet(path, columns=cols_present)
+
+
+def build_measurements(
+    corpus_dir: Path,
+    *,
+    required: Sequence[str],
+    runs_df: pl.DataFrame,
+    traces_path: Path | None = None,
+    measurable_signature_fn: Callable[[str], str | None] | None = None,
+) -> Path:
+    """Compute missing + drifted measurables for `corpus_dir`,
+    write `measurements.parquet` atomically, update sidecar.
+
+    `runs_df` is the cell-level DataFrame from `runs.parquet`
+    (PLUS any joined trace columns the caller already attached).
+    Required measurables that read trace columns expect those
+    columns to be on `runs_df` already — the caller is
+    responsible for the join (the runner does this via
+    `_join_required_traces`).
+
+    `traces_path` is informational only (logged in progress
+    output); the actual trace columns must be on `runs_df`.
+
+    `measurable_signature_fn` is the closure-hash function. The
+    runner's `_measurable_signature` is the canonical
+    implementation; we accept it as a parameter so callers can
+    inject a stub in tests. Defaults to looking up the
+    measurable in the registry and calling `.signature()`.
+
+    Idempotency: if every required measurable is already in
+    `measurements.parquet` with a matching closure hash, this is
+    a no-op (no parquet rewrite). Drift detection drops drifted
+    columns + recomputes them.
+
+    Returns the path to `measurements.parquet`.
+    """
+    if measurable_signature_fn is None:
+        def _default_sig(name: str) -> str | None:
+            m = get_registered(name)
+            return None if m is None else m.signature()
+        sig_fn: Callable[[str], str | None] = _default_sig
+    else:
+        sig_fn = measurable_signature_fn
+
+    out_path = _measurements_path(corpus_dir)
+    sidecar_path = _sidecar_path(corpus_dir)
+
+    existing = load_measurements(corpus_dir)
+    if 'id' not in runs_df.columns:
+        raise ValueError(
+            f'build_measurements({corpus_dir}): runs_df is missing '
+            f'the `id` column — required as the per-cell key',
+        )
+    stored_sigs = dict(current_signatures(corpus_dir))
+
+    # Drop drifted + orphan columns from the existing store. Same
+    # two-axis logic as the runner's `_invalidate_drifted` (C4).
+    drop_cols: list[str] = []
+    if existing.height > 0:
+        all_registered = set(registered_names())
+        required_set = set(required)
+        for col in existing.columns:
+            if col == 'id':
+                continue
+            if col not in all_registered:
+                # Non-measurable column shouldn't be in this store
+                # at all — drop defensively.
+                drop_cols.append(col)
+                continue
+            if col not in required_set:
+                # Orphan: no longer required.
+                drop_cols.append(col)
+                continue
+            current_hash = sig_fn(col)
+            stored = stored_sigs.get(col)
+            if (
+                current_hash is not None
+                and stored is not None
+                and stored != current_hash
+            ):
+                drop_cols.append(col)
+        if drop_cols:
+            existing = existing.drop(drop_cols)
+            for c in drop_cols:
+                stored_sigs.pop(c, None)
+
+    # Compute. Pass the runs_df + (optional already-existing
+    # measurements joined on id) to compute_missing_columns,
+    # which:
+    #   - Fills entirely-missing columns for every cell.
+    #   - **Partial-nullity recompute**: for columns that ARE
+    #     present in `joined` but contain any null cells,
+    #     recomputes ONLY the null cells (`measurable.py`'s
+    #     `existing_values` per-pending entry). Non-null cells
+    #     pass through unchanged.
+    #   - Returns `joined` unchanged when no pending work
+    #     (every required column present + no nulls).
+    #
+    # Importantly we pass the FULL `required` list (not a
+    # subset of "missing names") so the partial-nullity branch
+    # fires on present-but-null columns. A naive
+    # `[n for n in required if n not in existing.columns]`
+    # filter would silently skip the recompute for nulls.
+    to_compute_full = [
+        n for n in required if get_registered(n) is not None
+    ]
+    if existing.height > 0:
+        # Bring forward any still-current columns by joining on id.
+        # The runs_df may have more rows than existing (new cells
+        # added); left-join keeps all runs cells. Cells in runs_df
+        # not yet in existing carry NULL for measurable cols —
+        # `compute_missing_columns`'s partial-nullity branch then
+        # fills them while preserving the existing non-null values.
+        joined = runs_df.join(existing, on='id', how='left')
+    else:
+        joined = runs_df
+
+    # Idempotent skip: if nothing drifted, no orphans, no new
+    # cells, AND every required column is fully populated (no
+    # partial nulls), then `compute_missing_columns` would be a
+    # no-op — skip the rewrite. Computing this BEFORE the call
+    # means we don't pay for `to_dicts()` on the no-work path.
+    no_partial_nulls = all(
+        n not in joined.columns
+        or not joined[n].is_null().any()
+        for n in to_compute_full
+    )
+    all_required_present = all(
+        n in joined.columns for n in to_compute_full
+    )
+    if (
+        not drop_cols
+        and existing.height > 0
+        and existing.height == runs_df.height
+        and all_required_present
+        and no_partial_nulls
+    ):
+        return out_path
+
+    enriched = compute_missing_columns(joined, to_compute_full)
+
+    # Project to id + measurable columns only (drop any joined
+    # trace cols / raw record fields the caller passed in).
+    measurable_cols = [
+        c for c in enriched.columns
+        if c == 'id' or c in registered_names()
+    ]
+    out_df = enriched.select(measurable_cols)
+
+    # Sidecar: closure hashes for every column actually present.
+    new_sigs: dict[str, str] = {}
+    for col in out_df.columns:
+        if col == 'id':
+            continue
+        sig = sig_fn(col)
+        if sig is not None:
+            new_sigs[col] = sig
+
+    atomic_write_parquet(out_df, out_path)
+    atomic_write_text(
+        sidecar_path,
+        json.dumps(new_sigs, indent=2, sort_keys=True),
+    )
+    sys.stderr.write(
+        f'measurements: wrote {out_df.height} cells × '
+        f'{len(out_df.columns) - 1} measurable cols to {out_path}\n',
+    )
+    return out_path
+
+
+__all__ = [
+    'MEASUREMENTS_FILENAME',
+    'SIDECAR_FILENAME',
+    'build_measurements',
+    'current_signatures',
+    'load_measurements',
+]

@@ -185,31 +185,16 @@ def _read_manifest(path: Path) -> dict[str, str]:
     return out
 
 
-def _atomic_write_parquet(df: pl.DataFrame, path: Path) -> None:
-    """tmp+rename parquet write (C2 invariant in CACHE_BUILD.md).
-    A killed-mid-write process leaves no `.partial` file at the
-    consumer's path; consumers either see the pre-write state or
-    the fully-written new state, never a torn parquet."""
-    partial = path.with_suffix(path.suffix + '.partial')
-    if partial.exists():
-        partial.unlink()
-    df.write_parquet(partial)
-    partial.replace(path)
-
-
-def _atomic_write_text(path: Path, content: str) -> None:
-    """Same atomicity guarantee for text payloads (JSON sidecars).
-    Order matters at the call site: write the parquet ATOMICALLY
-    first, then the sidecar — a half-updated state then has a
-    stale sidecar pointing at a fresh parquet (drift detection
-    on next run self-heals via column invalidation), rather than
-    a fresh sidecar pointing at a torn parquet (consumer reads
-    garbage)."""
-    partial = path.with_suffix(path.suffix + '.partial')
-    if partial.exists():
-        partial.unlink()
-    _ = partial.write_text(content)
-    partial.replace(path)
+# Local aliases — re-export the public atomic-write helpers from
+# `corpus/persistence.py` under the underscore-prefixed names this
+# module previously used. The originals live in persistence.py so
+# both runner-side caches and the new per-corpus
+# `measurements.parquet` builder share one implementation; aliasing
+# keeps the existing call sites untouched.
+from corroborate.corpus.persistence import (
+    atomic_write_parquet as _atomic_write_parquet,
+    atomic_write_text as _atomic_write_text,
+)
 
 
 def _write_manifest(path: Path, sigs: Mapping[str, str]) -> None:

@@ -228,6 +228,38 @@ def apply_trace_reductions(
 
 # ============ Streaming concat across many per-arm parquets ============
 
+def atomic_write_parquet(df: pl.DataFrame, path: Path) -> None:
+    """tmp+rename parquet write. Lives here so both runner-side
+    cache writes and corpus-side measurements writes share one
+    implementation; mirrors the pattern `stream_concat_parquets`
+    uses internally for the merged output. C2 / I4 invariant
+    (CACHE_BUILD.md / SWEEP_PERSISTENCY.md).
+
+    A killed-mid-write process leaves no `.partial` file at the
+    consumer's path; consumers either see the pre-write state
+    or the fully-written new state, never a torn parquet."""
+    partial = path.with_suffix(path.suffix + '.partial')
+    if partial.exists():
+        partial.unlink()
+    df.write_parquet(partial)
+    partial.replace(path)
+
+
+def atomic_write_text(path: Path, content: str) -> None:
+    """Same atomicity guarantee for text payloads (JSON sidecars,
+    closure-hash manifests). Order matters at the call site:
+    write the parquet ATOMICALLY first, THEN the sidecar — a
+    half-updated state then has a stale sidecar pointing at a
+    fresh parquet (drift detection on next run self-heals via
+    column invalidation), rather than a fresh sidecar pointing
+    at a torn parquet (consumer reads garbage)."""
+    partial = path.with_suffix(path.suffix + '.partial')
+    if partial.exists():
+        partial.unlink()
+    _ = partial.write_text(content)
+    partial.replace(path)
+
+
 def stream_concat_parquets(
     inputs: Sequence[Path | str], out: Path, *,
     type_widening: bool = True,

@@ -524,12 +524,22 @@ def compute_missing_columns(
     df: pl.DataFrame,
     names: Iterable[str],
 ) -> pl.DataFrame:
-    """For each name in `names` that's not already a column of
-    `df` and resolves in the @measurable registry, compute the
-    measurable per-cell and add it as a column. Names that don't
-    resolve (or aren't registered) are silently skipped — callers
-    that need null-padding for unresolvable names handle that
-    themselves.
+    """For each name in `names` that resolves in the @measurable
+    registry, compute the measurable per-cell. Two cases:
+
+    - **Column missing** from `df`: compute for every cell, add as
+      a new column.
+    - **Column present but partially null** (some cells null,
+      others filled): compute only for the null cells, preserve
+      existing values, replace the column. This handles the
+      diagonal_relaxed-concat-of-corpora case where some
+      corpora's runs.parquet pre-computes a measurable and others
+      don't — without per-cell fill, the null subset stays null
+      because the column-level "have it / don't" check skips it.
+
+    Names that don't resolve (or aren't registered) are silently
+    skipped — callers that need null-padding for unresolvable
+    names handle that themselves.
 
     Single source of truth for the "raw cells → cached scalars"
     transform: the runner uses this to populate the per-module
@@ -544,7 +554,15 @@ def compute_missing_columns(
     if df.height == 0:
         return df
     have = set(df.columns)
-    pending: list[tuple[str, Measurable[Mapping[str, object], object]]] = []
+    # `pending` items: (name, measurable, existing_values).
+    # `existing_values` is None when the column is fully missing
+    # (compute every cell); a list[object | None] when partially
+    # null (compute only for cells where the entry is None).
+    pending: list[tuple[
+        str,
+        Measurable[Mapping[str, object], object],
+        list[object] | None,
+    ]] = []
     seen: set[str] = set()
     # Dedupe `names` — `pl.Expr.meta.root_names()` returns one entry
     # per reference in the expression, so a scope that mentions
@@ -553,13 +571,23 @@ def compute_missing_columns(
     # times per cell, blowing the column up to 6 × df.height and
     # tripping a polars ShapeError at `with_columns` time.
     for name in names:
-        if name in have or name in seen:
+        if name in seen:
             continue
         m = get_registered(name)
         if m is None:
             continue
+        if name not in have:
+            seen.add(name)
+            pending.append((name, m, None))
+            continue
+        # Column already present — recompute null cells only. The
+        # `df[name].is_null()` check is cheap (column-level) and
+        # short-circuits the to_dicts pass when no nulls exist.
+        col = df[name]
+        if not col.is_null().any():
+            continue
         seen.add(name)
-        pending.append((name, m))
+        pending.append((name, m, col.to_list()))
     if not pending:
         # **C3 fast-path** (CACHE_BUILD.md): no measurables to
         # compute → return the input frame WITHOUT materialising
@@ -571,17 +599,25 @@ def compute_missing_columns(
         return df
 
     cells = cast(list[dict[str, object]], df.to_dicts())
-    new_cols: dict[str, list[object]] = {n: [] for n, _ in pending}
+    new_cols: dict[str, list[object]] = {n: [] for n, _, _ in pending}
     # Track measurables that ALWAYS failed across all cells — those
     # are authoring bugs, not "missing inputs," and should surface
     # as a stderr warning so the substrate author sees them. Per-cell
     # failures (legitimately missing inputs on subset of cells)
     # remain silent NaN-mapped via the existing path.
-    fail_counts: dict[str, int] = {n: 0 for n, _ in pending}
+    # Counts denominator is per-measurable (full set for added cols,
+    # null-cell subset for partial cols).
+    fail_counts: dict[str, int] = {n: 0 for n, _, _ in pending}
+    eval_counts: dict[str, int] = {n: 0 for n, _, _ in pending}
     last_exception: dict[str, BaseException] = {}
-    for cell in cells:
+    for i, cell in enumerate(cells):
         per_cell_cache: dict[str, object] = {}
-        for name, m in pending:
+        for name, m, existing in pending:
+            if existing is not None and existing[i] is not None:
+                # Already filled — preserve.
+                new_cols[name].append(existing[i])
+                continue
+            eval_counts[name] += 1
             try:
                 v = evaluate_with_measurables(
                     m.fn, cell, cache=per_cell_cache,
@@ -604,7 +640,8 @@ def compute_missing_columns(
     if cells:
         import sys as _sys
         for name, count in fail_counts.items():
-            if count == len(cells):
+            denom = eval_counts[name]
+            if denom > 0 and count == denom:
                 exc = last_exception.get(name, RuntimeError('unknown'))
                 _sys.stderr.write(
                     f'WARNING: measurable {name!r} raised '
