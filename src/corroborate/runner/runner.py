@@ -586,7 +586,15 @@ def _signatures_for(
 # re-runs of the same `(env, arm, seed, HPs)` get distinct ids
 # despite being scientifically equivalent — content equality is the
 # right check, not UUID equality.
-_PROVENANCE_TAGS: frozenset[str] = LINEAGE_FIELDS | {'corpus'}
+#
+# `env` is the env-object's `__repr__` string (e.g.
+# `<gymnax.environments.misc.rooms.FourRooms object at 0x77d49bbb2ea0>`)
+# — different memory addresses across separate ingests of the same
+# scientific cell, so it acts as accidental run-time noise rather
+# than a scientific-identity column. `env_name` is the real
+# identifier; treat `env` as provenance so dedup-by-content works
+# across ingest runs.
+_PROVENANCE_TAGS: frozenset[str] = LINEAGE_FIELDS | {'corpus', 'env'}
 
 
 def _dedup_by_content(df: pl.DataFrame, *, source: str) -> pl.DataFrame:
@@ -1019,11 +1027,20 @@ def _load_one_corpus(
         # Edge case: legacy runs.parquet without `id` column.
         # Fall back to the inline path so older corpora still work.
         df = _compute_measurables(df, required)
+    # Drop trace-derived intermediates (per-step / per-burst arrays
+    # joined from traces.parquet to feed measurable evaluation). Don't
+    # drop columns that are themselves in `required` — those ARE the
+    # bridge-consumed values, even if they happen to also appear in
+    # `trace_reads` because OTHER measurables list them as a `reads`
+    # dependency (e.g. `jensen_dormancy_gap.reads=('jensen_gap',)` —
+    # `jensen_gap` is both a required scalar AND an intermediate).
+    required_set = set(required)
     joined_trace_cols = [
         c for c in df.columns
         if c in trace_reads
         and c not in runs_columns
         and c not in analysis_reads
+        and c not in required_set
     ]
     if joined_trace_cols:
         df = df.drop(joined_trace_cols)

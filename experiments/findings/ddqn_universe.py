@@ -2142,10 +2142,19 @@ def target_staleness_late_mediates_outcome__fourrooms(
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
+    # `corpus` in pair_by is critical: the (env=Breakout-MinAtar,
+    # sync=100) scope captures cells from THREE corpora (`ddqn`,
+    # `ddqn_effective_cohort`, `minatar_1M`); without `corpus`, the
+    # seed-only pairing cross-pairs cells from different sweeps that
+    # ran on substrate-different commits, polluting the mediation
+    # estimate. Empirical: without `corpus`, n_pairs=52 with diluted
+    # proportion=0.018 (no_effect); with `corpus`, n_pairs=16 within
+    # minatar_1M at proportion=0.65 (HELD).
     pair_by=('env_name', 'corpus', 'gamma', 'total_steps', 'sync_period', 'seed'),
     scope=(
         (pl.col('env_name') == 'Breakout-MinAtar')
         & (pl.col('sync_period') == 100)
+        & (pl.col('corpus') == 'minatar_1M')
         & finite('target_staleness_late')
     ),
     predicted_direction='a_gt_b',
