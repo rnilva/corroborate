@@ -52,7 +52,17 @@ class PairedGResult:
     `n_pairs == 0`.
 
     All other quantities are NaN if `n_pairs < 2` or per-pair Δ
-    has zero spread."""
+    has zero spread.
+
+    `assumption_violations` carries one entry per detected
+    distributional concern (skew, heavy tails, etc.). Empty when
+    the input passes all calibrated checks; populated from
+    heuristics whose thresholds are derived from the empirical
+    bias map at `tests/analytic/robustness/test_paired_g_skew_robustness.py`.
+    Each string carries the diagnostic + the predicted bias
+    magnitude so a reader can decide whether it matters at their
+    effect-size scale. Bridges should propagate these into the
+    BridgeReportEntry audit trail."""
     g: float
     se: float
     mean_diff: float
@@ -65,6 +75,7 @@ class PairedGResult:
     measurable: str
     treatment_arm: str
     baseline_arm: str
+    assumption_violations: tuple[str, ...] = ()
 
     @property
     def p_value(self) -> float:
@@ -186,7 +197,22 @@ def paired_g(
       `(arm, pair_by)` bucket, then run paired-g on the aggregated
       values. The intended use is M2M scenarios where the user
       genuinely wants to pool across e.g. multiple corpora at the
-      same `(seed, env)`."""
+      same `(seed, env)`.
+
+    **Robustness.** Hedges' c_4 small-sample correction is exact
+    only under NORMAL Δ. Under skewed/heavy-tailed Δ:
+      - `g` is OVERESTIMATED (skew/heavy-tail inflates mean more
+        than sd in the small-n regime).
+      - `se` is ANTI-CONSERVATIVE at large n (Pearson formula
+        misses heavy-tail contribution to g's sampling SD).
+    Empirical bias map (`tests/analytic/robustness/test_paired_g_skew_robustness.py`):
+      - log-normal Δ (skew ≈ 1.86): bias = +0.33 at n=10,
+        +0.13 at n=30, +0.07 at n=100.
+      - t(df=5) Δ: bias = +0.18 at n=10, +0.06 at n=30.
+    Substrate-author guidance: pair with `bootstrap_paired_g` or
+    `cliff_delta_paired` (when available) on small-n skewed-Δ
+    corpora. `result.assumption_violations` flags inputs that
+    cross the empirically-derived skew/kurtosis thresholds."""
     from corroborate.stats import hedges_g_paired
 
     if dedupe_strategy not in ('raise', 'mean'):
@@ -282,7 +308,70 @@ def paired_g(
         measurable=source,
         treatment_arm=treatment_arm,
         baseline_arm=baseline_arm,
+        assumption_violations=_paired_g_assumption_violations(deltas),
     )
+
+
+def _paired_g_assumption_violations(
+    deltas: list[float],
+) -> tuple[str, ...]:
+    """Heuristic distributional checks on the per-pair Δ.
+
+    Thresholds are calibrated from the empirical probe at
+    `tests/analytic/robustness/test_paired_g_skew_robustness.py`:
+      - At |skew(Δ)| ≈ 1.86 (log-normal σ_log=0.7), n=30 bias
+        is +12% relative. `|skew| > 1.0` flags the regime where
+        bias exceeds ~5%.
+      - At kurtosis(Δ) > 5.0 (heavy tails), the framework's
+        Pearson-based SE is anti-conservative; CIs under-cover.
+      - At n < 10, even normal Δ has wide MC sampling SD
+        (CV ≈ 70%); estimate is unreliable for inference.
+
+    Each violation string includes the measured value AND the
+    predicted bias magnitude so the reader can decide whether
+    it matters at their effect-size scale.
+    """
+    violations: list[str] = []
+    n = len(deltas)
+    if n < 2:
+        return ()
+    if n < 10:
+        violations.append(
+            f'small_n_unreliable (n_pairs={n}, MC_CV~70% even on normal Δ)'
+        )
+    if n < 4:
+        # Sample skew/kurtosis are undefined / unstable below n=4.
+        return tuple(violations)
+    import numpy as _np
+    arr = _np.asarray(deltas, dtype=_np.float64)
+    mean = float(arr.mean())
+    centered = arr - mean
+    m2 = float((centered ** 2).mean())
+    if m2 == 0.0:
+        return tuple(violations)
+    m3 = float((centered ** 3).mean())
+    m4 = float((centered ** 4).mean())
+    # Fisher-Pearson sample skewness with bias correction (G_1).
+    g1 = m3 / (m2 ** 1.5)
+    skew_d = g1 * (n * n) / ((n - 1) * (n - 2))
+    # Bias-corrected sample excess kurtosis (G_2).
+    g2 = m4 / (m2 ** 2) - 3.0
+    kurt_d = ((n - 1) / ((n - 2) * (n - 3))) * ((n + 1) * g2 + 6.0)
+    if abs(skew_d) > 1.0:
+        # Predicted relative inflation at this skew + n; rough
+        # interpolation of the probe's empirical map.
+        approx_pct = round(min(30.0, abs(skew_d) * 12.0 * 30.0 / max(n, 30)))
+        violations.append(
+            f'skew_bias_likely (skew={skew_d:+.2f}, predicted '
+            f'paired_g inflation ~{approx_pct}% at n={n})'
+        )
+    if kurt_d > 5.0:
+        violations.append(
+            f'heavy_tail_se_anti_conservative '
+            f'(excess_kurtosis={kurt_d:.2f}, framework_se will '
+            f'under-cover by ~10-25% at this kurtosis)'
+        )
+    return tuple(violations)
 
 
 # ============ per-env panel helper ============

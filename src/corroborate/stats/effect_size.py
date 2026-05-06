@@ -213,7 +213,11 @@ class PooledStats:
       max-g serve as honest backstops when the Gaussian-fit PI
       extrapolates past observed data.
     `empirical_min_g`, `empirical_max_g` — observed range.
-    `n_cells` — number of valid cells used in pooling."""
+    `n_cells` — number of valid cells used in pooling.
+    `assumption_violations` — distributional / sample-size flags
+    derived from the empirical probe at `tests/analytic/robustness/
+    test_dl_small_g_robustness.py`. Empty when DL is in its
+    well-calibrated regime."""
     pooled_g: float
     se_pooled: float
     tau2: float
@@ -224,6 +228,7 @@ class PooledStats:
     empirical_min_g: float
     empirical_max_g: float
     n_cells: int
+    assumption_violations: tuple[str, ...] = ()
 
 
 def random_effects_summary(
@@ -239,7 +244,26 @@ def random_effects_summary(
     interval.
 
     `g_se_pairs` — one (g, SE) per cell. NaN-bearing or
-    zero-SE cells are filtered out (DL needs `var > 0`)."""
+    zero-SE cells are filtered out (DL needs `var > 0`).
+
+    **Robustness.** DerSimonian-Laird's well-known small-G
+    limitations (Veroniki et al. 2016, Langan et al. 2019):
+      - Point estimate is approximately UNBIASED at any G ≥ 5
+        (within ±0.06 in empirical probe), but the **sampling
+        variance is enormous at small G**: at G=3 with structural
+        τ²=0.5, MC sampling SD ≈ 0.52 (CV ≈ 105%) — the point
+        estimate is unusable for inference.
+      - The `max(0, ·)` clip introduces a **small POSITIVE bias
+        when true τ²=0**, decaying as 1/G (≈0.011 at G=3, ≈0.002
+        at G=20).
+      - **I² detection power fails below G=10**: structural
+        τ²=0.05 (population I² = 0.667) yields sample I² < 0.5
+        at G ≤ 5 → `HELD_WITH_SCOPE_FLAG` silently fails to
+        trigger.
+    Empirical bias map: `tests/analytic/robustness/test_dl_small_g_robustness.py`.
+    Substrate-author guidance: at G ≤ 5, prefer `reml_random_effects_summary`
+    (when available) over DL. The framework currently exposes
+    only DL — the probe documents the gap."""
     valid: list[tuple[float, float]] = [
         (g, se) for g, se in g_se_pairs
         if not math.isnan(g) and not math.isnan(se) and se > 0.0
@@ -282,7 +306,41 @@ def random_effects_summary(
         empirical_min_g=min(gs),
         empirical_max_g=max(gs),
         n_cells=n,
+        assumption_violations=_dl_assumption_violations(n_cells=n, tau2=tau2),
     )
+
+
+def _dl_assumption_violations(
+    *,
+    n_cells: int,
+    tau2: float,
+) -> tuple[str, ...]:
+    """Heuristic checks on the DL pool, calibrated from the
+    empirical probe at `tests/analytic/robustness/test_dl_small_g_robustness.py`.
+
+    - n_cells < 5: MC sampling SD on τ² is comparable to τ²
+      itself (CV ≈ 100%). Point estimate is unusable for
+      inference. Prefer REML.
+    - 0 < tau2 < 0.02 AND n_cells < 10: DL's max(0, ·) clip
+      produces a small positive bias at true τ²=0; below this
+      threshold and at small G, the reading is consistent with
+      "no real heterogeneity" rather than "modest heterogeneity."
+    """
+    violations: list[str] = []
+    if n_cells < 5:
+        violations.append(
+            f'dl_small_g_unreliable_inference (n_cells={n_cells}, '
+            f'τ² CV ≈ {round(105 / max(1, n_cells / 3))}% — point '
+            f'estimate not interpretable; prefer REML when '
+            f'available)'
+        )
+    if 0.0 < tau2 < 0.02 and n_cells < 10:
+        violations.append(
+            f'dl_clip_artifact_possible (τ²={tau2:.4f}, '
+            f'n_cells={n_cells}; consistent with true τ²=0 '
+            f'inflated by max(0, ·) clip)'
+        )
+    return tuple(violations)
 
 
 I2_THRESHOLD: float = 0.5
