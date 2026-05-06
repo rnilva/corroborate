@@ -17,15 +17,16 @@ pins it; if these numbers drift the test fails.
 | If your data... | Use | Don't use | Reason |
 |---|---|---|---|
 | Δ is approximately normal, n ≥ 30 | `paired_g` | — | Trustworthy; bias within ±0.05 |
-| Δ is right-skewed (\|skew\| > 1) | `bootstrap_paired_g`† or `cliff_delta_paired`† | `paired_g` alone | At skew ≈ 1.86, n=30: g inflated +12% |
-| Δ is heavy-tailed, n ≤ 30 | `bootstrap_paired_g`† | `paired_g` alone | At t(df=5), n=30: g inflated +7% |
+| Δ is right-skewed (\|skew\| > 1) | `cliff_delta_paired` (point) + `bootstrap_paired_g` (CI) | `paired_g` alone | At skew ≈ 1.86, n=30: g inflated +12% |
+| Δ is heavy-tailed, n ≤ 30 | `bootstrap_paired_g` (asymmetric CIs) | `paired_g` alone | At t(df=5), n=30: g inflated +7% |
+| Bridge claim is "treatment helps in MOST pairs" (sign-only, magnitude-independent) | `cliff_delta_paired` | `paired_g` | δ ∈ [-1, 1]; depends only on Δ sign |
 | Pooling across G ≤ 5 envs | `reml_random_effects_summary`† | `random_effects_summary` (DL) | DL CV ≈ 100% at G=3 |
 | Pooling across G = 6–10 envs | DL with `assumption_violations` flagged | DL silently | I² detection fails at modest τ² |
 | Pooling across G ≥ 10 envs | `random_effects_summary` (DL) | — | Standard regime |
 | Cell scope-predicate references same column twice | safe (post-fix) | — | `bridge.py:625` deduplicates |
 
-† = complementary primitive proposed; not yet implemented at the time
-of writing. See `tests/analytic/robustness/` for the empirical case.
+† = complementary primitive proposed; not yet implemented. See
+`tests/analytic/robustness/` for the empirical case.
 
 ## Per-primitive maps
 
@@ -133,26 +134,53 @@ If the test fails:
   changed or the number-of-replicates changed; if neither, the
   primitive's sampling distribution shape changed.
 
-## Complementary primitives in flight
+## Complementary primitives
 
-The probe data identifies three concrete gaps where the framework
-could provide a structurally-distinct alternative:
+### `cliff_delta_paired` — IMPLEMENTED
 
-1. **`bootstrap_paired_g`** — non-parametric bootstrap CIs for
-   paired Hedges' g. Doesn't assume normality of `g`'s sampling
-   distribution; closes the SE-anti-conservativeness gap on
-   heavy-tailed Δ. ~200 LoC.
+Source: `src/corroborate/analyses/cliff_delta_paired.py`. Probe:
+`tests/analytic/lg_scm/test_cliff_delta_paired.py` +
+`tests/analytic/robustness/test_cliff_delta_skew_robust.py`.
 
-2. **`cliff_delta_paired`** — rank-based effect size (Cliff's δ
-   ∈ [-1, 1]). Skew-robust by construction; gives a sanity-check
-   alongside `paired_g` on suspected non-normal Δ. ~150 LoC.
+Rank-based effect size: `δ = P(Δ > 0) - P(Δ < 0) ∈ [-1, 1]`.
+Skew-robust by construction (depends only on signs of Δ, not
+magnitudes). Use as a complement to `paired_g` when Δ is
+non-normal AND the bridge's claim is direction- or sign-based
+("helps in most pairs") rather than magnitude-based ("g > 0.5").
 
-3. **`reml_random_effects_summary`** — REML τ² estimator. Better
-   small-G properties than DL (literature consensus); preferred
-   for G ≤ 10 meta-analyses. ~250 LoC + the closed-form
-   reference implementation.
+The headline cross-primitive comparison
+(`test_cliff_delta_unbiased_under_lognormal_where_paired_g_inflates`)
+shows: under log-normal Δ at n=30, paired_g overestimates by +0.13
+while Cliff's δ stays exactly at 1.0 (every Δ positive by
+construction).
 
-Each is a separate primitive (per CLAUDE.md "framework-subtraction
-discipline" — new primitives only when they earn their keep).
-The empirical case for each is in the corresponding probe file
-above.
+### `bootstrap_paired_g` — IMPLEMENTED
+
+Source: `src/corroborate/analyses/bootstrap_paired_g.py`. Probe:
+`tests/analytic/lg_scm/test_bootstrap_paired_g.py`.
+
+Percentile bootstrap CIs for paired Hedges' g. **Honest scope**:
+the bootstrap is structurally non-parametric (no normality
+assumption on g's sampling distribution) and produces asymmetric
+CIs that capture skew in the sampling distribution. But
+percentile bootstrap on small-n heavy-tailed Δ inherits the
+sample's tail-truncation — at n=50 log-normal, mean(bootstrap_se)
+≈ 0.73·MC_sd_g vs paired_g.se's 0.69·MC_sd_g. Both anti-
+conservative; bootstrap modestly better.
+
+Best used as `bootstrap_paired_g` (asymmetric CIs) +
+`cliff_delta_paired` (skew-robust point magnitude) layered
+together on heavy-tailed Δ corpora.
+
+Future extensions: BCa (bias-corrected accelerated) bootstrap
+or studentized-t bootstrap would close the remaining
+anti-conservativeness gap; deferred to follow-up work when the
+need is concrete.
+
+### `reml_random_effects_summary` — NOT YET IMPLEMENTED
+
+REML τ² estimator (the literature consensus alternative to DL
+for small-G meta-analyses; better bias and coverage at G ≤ 10).
+~250 LoC including the iterative MLE machinery; deferred until
+a substrate use case demands it. The DL probe and ROBUSTNESS.md
+section above document the gap.

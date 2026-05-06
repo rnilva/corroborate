@@ -22,6 +22,8 @@ suppress unused-import warnings on the side-effect imports.
 Available analyses are discoverable via
 `corroborate.bridge.analysis.registered_names()`."""
 from corroborate.analyses import (  # noqa: F401
+    bootstrap_paired_g as _bootstrap_pg,  # pyright: ignore[reportUnusedImport]
+    cliff_delta_paired as _cliff_delta,  # pyright: ignore[reportUnusedImport]
     dowhy as _dowhy,  # pyright: ignore[reportUnusedImport]
     factorial_2x2 as _factorial,  # pyright: ignore[reportUnusedImport]
     meta_regression_paired_g as _mr,  # pyright: ignore[reportUnusedImport]

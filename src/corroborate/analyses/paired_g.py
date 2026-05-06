@@ -102,7 +102,7 @@ class PairedGResult:
         return float(2.0 * (1.0 - _t.cdf(t_stat, df=self.n_pairs - 1)))
 
 
-def _resolve_value(record: Mapping[str, object], source: str) -> float:
+def resolve_value(record: Mapping[str, object], source: str) -> float:
     """Resolve `source` from a cell record. Tries the persisted
     field-path read first; falls back to the measurable registry.
 
@@ -149,7 +149,7 @@ def _resolve_value(record: Mapping[str, object], source: str) -> float:
     )
 
 
-def _key_tuple(
+def key_tuple(
     record: Mapping[str, object], pair_by: tuple[str, ...],
 ) -> tuple[object, ...]:
     return tuple(record[k] for k in pair_by)
@@ -225,7 +225,7 @@ def paired_g(
     for cell in cells:
         arm = cell.get(arm_field)
         if arm == treatment_arm:
-            key = _key_tuple(cell, pair_by)
+            key = key_tuple(cell, pair_by)
             bucket = treatment_buckets.setdefault(key, [])
             if bucket and dedupe_strategy == 'raise':
                 raise ValueError(
@@ -237,9 +237,9 @@ def paired_g(
                     f'cells, or use an M2M-friendly analysis '
                     f'(e.g. stratified Spearman) instead.',
                 )
-            bucket.append(_resolve_value(cell, source))
+            bucket.append(resolve_value(cell, source))
         elif arm == baseline_arm:
-            key = _key_tuple(cell, pair_by)
+            key = key_tuple(cell, pair_by)
             bucket = baseline_buckets.setdefault(key, [])
             if bucket and dedupe_strategy == 'raise':
                 raise ValueError(
@@ -251,7 +251,7 @@ def paired_g(
                     f'cells, or use an M2M-friendly analysis '
                     f'(e.g. stratified Spearman) instead.',
                 )
-            bucket.append(_resolve_value(cell, source))
+            bucket.append(resolve_value(cell, source))
 
     treatment: dict[tuple[object, ...], float] = {
         k: (
@@ -271,7 +271,7 @@ def paired_g(
     paired_keys = sorted(set(treatment) & set(baseline))
     # NaN-skip pairs where either side is missing (e.g. cells from
     # corpora that didn't carry the source column, surfacing as
-    # NaN through `_resolve_value`'s present-but-None path). The
+    # NaN through `resolve_value`'s present-but-None path). The
     # statistics primitives reject NaN-containing inputs; better
     # to filter at the analysis boundary than to crash.
     deltas = [
