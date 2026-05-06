@@ -355,6 +355,7 @@ def dispatch_sweep(sweep: DQNSweep) -> tuple[Path, Path]:
     from corroborate.runner.sweep import run_intervention
     from corroborate_rl.dqn.collect import _chunks
     from corroborate_rl.dqn.dqn import dqn
+    from corroborate_rl.dqn.measurables import dqn_default_measurables
     from corroborate_rl.dqn.trace_reductions import (
         Q_TRACE_DROPS, Q_TRACE_REDUCTIONS,
     )
@@ -432,6 +433,7 @@ def dispatch_sweep(sweep: DQNSweep) -> tuple[Path, Path]:
         rp, tp = run_intervention(
             intervention,
             base=base,
+            measurables=dqn_default_measurables(),
             grid_points=grid_points,
             runner=runner,
             out_dir=h_out_dir,

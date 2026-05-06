@@ -113,9 +113,12 @@ def _mean_window(
     arr: npt.NDArray[np.float64], lo: float, hi: float,
 ) -> float:
     """Mean over the fractional window [lo, hi] of `arr`'s
-    leading axis. Returns NaN for empty input. Inlined from
-    `corroborate.reductions.mean_window` to keep the per-cell
-    numpy hot path direct (no `Measurable` indirection)."""
+    leading axis. Returns NaN for empty or 0-d input (e.g. a null
+    trace cell that `_record_array` decoded as a scalar ndarray).
+    Inlined from `corroborate.reductions.mean_window` to keep the
+    per-cell numpy hot path direct (no `Measurable` indirection)."""
+    if arr.ndim == 0:
+        return float('nan')
     n = arr.shape[0]
     if n == 0:
         return float('nan')
@@ -1108,6 +1111,15 @@ def dqn_default_measurables() -> tuple[
         jensen_gap,
         jensen_dormancy_gap_measurable,
         jensen_dormancy_premise_active,
+        # CLAIM 13 mediator (cf. `findings_target_staleness_mediator.md`):
+        # target_staleness_{late,early} carries the dominant share of
+        # DDQN's outcome benefit (3/4 envs HELD: FourRooms 0.27,
+        # MountainCar 0.66, Breakout sync=100 0.65). Pre-registered
+        # so future sweeps persist these scalars at cell-write time
+        # — avoids the "trace-dependent measurables need backfill"
+        # rebuild gap (cf. `feedback_cache_trace_dependent_measurables`).
+        target_staleness_late,
+        target_staleness_early,
     )
 
 

@@ -36,7 +36,7 @@ from corroborate_rl.dqn.claims.replay import (
     Transition,
     uniform_sample,
 )
-from corroborate_rl.dqn.claims.target_sync import periodic_copy
+from corroborate_rl.dqn.claims.target_sync import periodic_copy, polyak_update
 
 __all__ = [
     'Batch',
@@ -52,6 +52,7 @@ __all__ = [
     'max_greedify',
     'mlp_q',
     'periodic_copy',
+    'polyak_update',
     'semi_gradient',
     'squared_error',
     'uniform_sample',
