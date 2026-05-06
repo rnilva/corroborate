@@ -1,0 +1,1907 @@
+{
+  "bridges": [
+    {
+      "analysis_results": {
+        "paired_g": {
+          "baseline_arm": "baseline",
+          "g": -0.5959534990755747,
+          "helped_fraction": 0.3,
+          "mean_diff": -2.630100605885188,
+          "mean_diff_p_value": 1.7478159110684288e-05,
+          "mean_diff_se": 0.5624766323267709,
+          "measurable": "jensen_gap",
+          "n_baseline": 60,
+          "n_pairs": 60,
+          "n_treatment": 60,
+          "p_value": 2.100289568077362e-05,
+          "pair_by": [
+            "seed"
+          ],
+          "se": 0.14009403309504956,
+          "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
+        }
+      },
+      "blocked_by": null,
+      "bridge_name": "ddqn_reduces_jensen_gap__acrobot",
+      "direction": "inverse",
+      "n_cells_in_scope": 120,
+      "n_cells_pre_scope": 12451,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {},
+      "predicted_direction": null,
+      "scope_repr": "[([([(col(\"optimizer.inner.lr\")) == (dyn float: 0.001)]) & ([(.when([(col(\"q_divergence_score\").is_not_nan()) | (col(\"q_divergence_score\").is_null())]).then(col(\"q_divergence_score\")).otherwise(null).mean().over([col(\"optimizer.inner.lr\"), col(\"env_name\"), col(\"replay.capacity\")]).is_finite()) & ([(.when([(col(\"q_divergence_score\").is_not_nan()) | (col(\"q_divergence_score\").is_null())]).then(col(\"q_divergence_score\")).otherwise(null).mean().over([col(\"optimizer.inner.lr\"), col(\"env_name\"), col(\"replay.capacity\")])) < (dyn float: 5)])])]) & ([(col(\"env_name\")) == (\"Acrobot-v1\")])]",
+      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "target_name": "jensen_gap",
+      "tier": "associational",
+      "verdict": "held",
+      "warnings": [
+        {
+          "gate_name": "no_predicted_direction",
+          "level": "info",
+          "message": "Bridge 'ddqn_reduces_jensen_gap__acrobot' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
+          "passed": false
+        }
+      ]
+    },
+    {
+      "analysis_results": {
+        "paired_g": {
+          "baseline_arm": "baseline",
+          "g": -4.583834639048249,
+          "helped_fraction": 0.0,
+          "mean_diff": -0.027384952286092813,
+          "mean_diff_p_value": 0.0,
+          "mean_diff_se": 0.0007614257221147354,
+          "measurable": "jensen_gap",
+          "n_baseline": 60,
+          "n_pairs": 60,
+          "n_treatment": 60,
+          "p_value": 1.217013412005145e-25,
+          "pair_by": [
+            "seed"
+          ],
+          "se": 0.43790733416765426,
+          "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
+        }
+      },
+      "blocked_by": null,
+      "bridge_name": "ddqn_reduces_jensen_gap__catch",
+      "direction": "inverse",
+      "n_cells_in_scope": 300,
+      "n_cells_pre_scope": 12451,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {},
+      "predicted_direction": null,
+      "scope_repr": "[([([(col(\"optimizer.inner.lr\")) == (dyn float: 0.001)]) & ([(.when([(col(\"q_divergence_score\").is_not_nan()) | (col(\"q_divergence_score\").is_null())]).then(col(\"q_divergence_score\")).otherwise(null).mean().over([col(\"optimizer.inner.lr\"), col(\"env_name\"), col(\"replay.capacity\")]).is_finite()) & ([(.when([(col(\"q_divergence_score\").is_not_nan()) | (col(\"q_divergence_score\").is_null())]).then(col(\"q_divergence_score\")).otherwise(null).mean().over([col(\"optimizer.inner.lr\"), col(\"env_name\"), col(\"replay.capacity\")])) < (dyn float: 5)])])]) & ([(col(\"env_name\")) == (\"Catch-bsuite\")])]",
+      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "target_name": "jensen_gap",
+      "tier": "associational",
+      "verdict": "held",
+      "warnings": [
+        {
+          "gate_name": "no_predicted_direction",
+          "level": "info",
+          "message": "Bridge 'ddqn_reduces_jensen_gap__catch' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
+          "passed": false
+        }
+      ]
+    },
+    {
+      "analysis_results": {
+        "paired_g": {
+          "baseline_arm": "baseline",
+          "g": -0.9097929891916866,
+          "helped_fraction": 0.18333333333333332,
+          "mean_diff": -0.24934092347199718,
+          "mean_diff_p_value": 1.5774412887026301e-09,
+          "mean_diff_se": 0.03492974982952809,
+          "measurable": "jensen_gap",
+          "n_baseline": 60,
+          "n_pairs": 60,
+          "n_treatment": 60,
+          "p_value": 3.090364072571044e-09,
+          "pair_by": [
+            "seed"
+          ],
+          "se": 0.15350687506814215,
+          "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
+        }
+      },
+      "blocked_by": null,
+      "bridge_name": "ddqn_reduces_jensen_gap__discounting_chain",
+      "direction": "inverse",
+      "n_cells_in_scope": 240,
+      "n_cells_pre_scope": 12451,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {},
+      "predicted_direction": null,
+      "scope_repr": "[([([(col(\"optimizer.inner.lr\")) == (dyn float: 0.001)]) & ([(.when([(col(\"q_divergence_score\").is_not_nan()) | (col(\"q_divergence_score\").is_null())]).then(col(\"q_divergence_score\")).otherwise(null).mean().over([col(\"optimizer.inner.lr\"), col(\"env_name\"), col(\"replay.capacity\")]).is_finite()) & ([(.when([(col(\"q_divergence_score\").is_not_nan()) | (col(\"q_divergence_score\").is_null())]).then(col(\"q_divergence_score\")).otherwise(null).mean().over([col(\"optimizer.inner.lr\"), col(\"env_name\"), col(\"replay.capacity\")])) < (dyn float: 5)])])]) & ([(col(\"env_name\")) == (\"DiscountingChain-bsuite\")])]",
+      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "target_name": "jensen_gap",
+      "tier": "associational",
+      "verdict": "held",
+      "warnings": [
+        {
+          "gate_name": "no_predicted_direction",
+          "level": "info",
+          "message": "Bridge 'ddqn_reduces_jensen_gap__discounting_chain' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
+          "passed": false
+        }
+      ]
+    },
+    {
+      "analysis_results": {
+        "paired_g": {
+          "baseline_arm": "baseline",
+          "g": 0.04755508618208043,
+          "helped_fraction": 0.38333333333333336,
+          "mean_diff": 20.159154878240646,
+          "mean_diff_p_value": 0.710393849363895,
+          "mean_diff_se": 54.02811875924549,
+          "measurable": "jensen_gap",
+          "n_baseline": 60,
+          "n_pairs": 60,
+          "n_treatment": 60,
+          "p_value": 0.7127598768828591,
+          "pair_by": [
+            "seed"
+          ],
+          "se": 0.1291724134061973,
+          "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
+        }
+      },
+      "blocked_by": null,
+      "bridge_name": "ddqn_reduces_jensen_gap__cartpole",
+      "direction": "inverse",
+      "n_cells_in_scope": 225,
+      "n_cells_pre_scope": 12451,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {},
+      "predicted_direction": null,
+      "scope_repr": "[([([(col(\"optimizer.inner.lr\")) == (dyn float: 0.001)]) & ([(.when([(col(\"q_divergence_score\").is_not_nan()) | (col(\"q_divergence_score\").is_null())]).then(col(\"q_divergence_score\")).otherwise(null).mean().over([col(\"optimizer.inner.lr\"), col(\"env_name\"), col(\"replay.capacity\")]).is_finite()) & ([(.when([(col(\"q_divergence_score\").is_not_nan()) | (col(\"q_divergence_score\").is_null())]).then(col(\"q_divergence_score\")).otherwise(null).mean().over([col(\"optimizer.inner.lr\"), col(\"env_name\"), col(\"replay.capacity\")])) < (dyn float: 5)])])]) & ([(col(\"env_name\")) == (\"CartPole-v1\")])]",
+      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "target_name": "jensen_gap",
+      "tier": "associational",
+      "verdict": "power_insufficient",
+      "warnings": [
+        {
+          "gate_name": "no_predicted_direction",
+          "level": "info",
+          "message": "Bridge 'ddqn_reduces_jensen_gap__cartpole' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
+          "passed": false
+        }
+      ]
+    },
+    {
+      "analysis_results": {
+        "meta_regression_paired_g": {
+          "cleavage_axes": [],
+          "coefficients": [
+            {
+              "ci_hi": 0.5046805037283273,
+              "ci_lo": -1.955592816387066,
+              "coefficient": -0.7254561563293693,
+              "is_significant": false,
+              "name": "log_action_dim",
+              "p_value": 0.2292085260137129
+            }
+          ],
+          "i_squared": 0.9367882897220975,
+          "intercept": -0.3786967060990832,
+          "intercept_ci_hi": 0.2836392198042765,
+          "intercept_ci_lo": -1.0410326320024428,
+          "intercept_p_value": 0.2430792046742989,
+          "intercept_se": 0.31243656315528257,
+          "n_strata": 18,
+          "pool": "random",
+          "q_statistic": 253.11765699200308,
+          "r_squared": 0.08899195897192047,
+          "tau_sq": 0.4227936263044958
+        }
+      },
+      "blocked_by": null,
+      "bridge_name": "log_action_dim_drives_jensen_gap_reduction",
+      "direction": "inverse",
+      "n_cells_in_scope": 12451,
+      "n_cells_pre_scope": 12451,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "covariates_per_env": {
+          "Acrobot-v1": {
+            "log_action_dim": 1.0986122886681098
+          },
+          "CartPole-v1": {
+            "log_action_dim": 0.6931471805599453
+          },
+          "Catch-bsuite": {
+            "log_action_dim": 1.0986122886681098
+          },
+          "DiscountingChain-bsuite": {
+            "log_action_dim": 1.6094379124341003
+          }
+        }
+      },
+      "predicted_direction": null,
+      "scope_repr": null,
+      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "target_name": "jensen_gap",
+      "tier": "associational",
+      "verdict": "power_insufficient",
+      "warnings": [
+        {
+          "gate_name": "no_predicted_direction",
+          "level": "info",
+          "message": "Bridge 'log_action_dim_drives_jensen_gap_reduction' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
+          "passed": false
+        }
+      ]
+    },
+    {
+      "analysis_results": {
+        "verdict_distribution_per_env": {
+          "per_env": {}
+        }
+      },
+      "blocked_by": null,
+      "bridge_name": "jensen_premise_active__acrobot",
+      "direction": "direct",
+      "n_cells_in_scope": 1080,
+      "n_cells_pre_scope": 12451,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "arm_filter": "treatment",
+        "verdict_column": "jensen_dormancy_premise_active"
+      },
+      "predicted_direction": null,
+      "scope_repr": "[(col(\"env_name\")) == (\"Acrobot-v1\")]",
+      "source_name": "jensen_dormancy_premise_active",
+      "target_name": "jensen_dormancy_premise_active",
+      "tier": "associational",
+      "verdict": "power_insufficient",
+      "warnings": [
+        {
+          "gate_name": "no_predicted_direction",
+          "level": "info",
+          "message": "Bridge 'jensen_premise_active__acrobot' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
+          "passed": false
+        }
+      ]
+    },
+    {
+      "analysis_results": {
+        "verdict_distribution_per_env": {
+          "per_env": {}
+        }
+      },
+      "blocked_by": null,
+      "bridge_name": "jensen_premise_active__cartpole",
+      "direction": "direct",
+      "n_cells_in_scope": 1070,
+      "n_cells_pre_scope": 12451,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "arm_filter": "treatment",
+        "verdict_column": "jensen_dormancy_premise_active"
+      },
+      "predicted_direction": null,
+      "scope_repr": "[(col(\"env_name\")) == (\"CartPole-v1\")]",
+      "source_name": "jensen_dormancy_premise_active",
+      "target_name": "jensen_dormancy_premise_active",
+      "tier": "associational",
+      "verdict": "power_insufficient",
+      "warnings": [
+        {
+          "gate_name": "no_predicted_direction",
+          "level": "info",
+          "message": "Bridge 'jensen_premise_active__cartpole' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
+          "passed": false
+        }
+      ]
+    },
+    {
+      "analysis_results": {
+        "verdict_distribution_per_env": {
+          "per_env": {}
+        }
+      },
+      "blocked_by": null,
+      "bridge_name": "jensen_premise_dormant__catch",
+      "direction": "direct",
+      "n_cells_in_scope": 690,
+      "n_cells_pre_scope": 12451,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "arm_filter": "treatment",
+        "verdict_column": "jensen_dormancy_premise_active"
+      },
+      "predicted_direction": null,
+      "scope_repr": "[(col(\"env_name\")) == (\"Catch-bsuite\")]",
+      "source_name": "jensen_dormancy_premise_active",
+      "target_name": "jensen_dormancy_premise_active",
+      "tier": "associational",
+      "verdict": "power_insufficient",
+      "warnings": [
+        {
+          "gate_name": "no_predicted_direction",
+          "level": "info",
+          "message": "Bridge 'jensen_premise_dormant__catch' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
+          "passed": false
+        }
+      ]
+    },
+    {
+      "analysis_results": {
+        "verdict_distribution_per_env": {
+          "per_env": {}
+        }
+      },
+      "blocked_by": null,
+      "bridge_name": "jensen_premise_active__discounting_chain",
+      "direction": "direct",
+      "n_cells_in_scope": 900,
+      "n_cells_pre_scope": 12451,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "arm_filter": "treatment",
+        "verdict_column": "jensen_dormancy_premise_active"
+      },
+      "predicted_direction": null,
+      "scope_repr": "[(col(\"env_name\")) == (\"DiscountingChain-bsuite\")]",
+      "source_name": "jensen_dormancy_premise_active",
+      "target_name": "jensen_dormancy_premise_active",
+      "tier": "associational",
+      "verdict": "power_insufficient",
+      "warnings": [
+        {
+          "gate_name": "no_predicted_direction",
+          "level": "info",
+          "message": "Bridge 'jensen_premise_active__discounting_chain' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
+          "passed": false
+        }
+      ]
+    },
+    {
+      "analysis_results": {
+        "paired_g_pooled": {
+          "baseline_arm": "baseline",
+          "measurable": "jensen_gap",
+          "n_envs": 6,
+          "per_env": [
+            {
+              "g": 0.12474181615048653,
+              "n_pairs": 60,
+              "se": 0.1296006854629674,
+              "stratum_id": "Acrobot-v1"
+            },
+            {
+              "g": -0.12178116758659813,
+              "n_pairs": 30,
+              "se": 0.18324985915314074,
+              "stratum_id": "Breakout-MinAtar"
+            },
+            {
+              "g": -4.550075839622326,
+              "n_pairs": 60,
+              "se": 0.4349635056177588,
+              "stratum_id": "Catch-bsuite"
+            },
+            {
+              "g": -0.13059891956544384,
+              "n_pairs": 30,
+              "se": 0.1833510329846213,
+              "stratum_id": "DeepSea-bsuite"
+            },
+            {
+              "g": -0.6980999869961729,
+              "n_pairs": 60,
+              "se": 0.14397174467709675,
+              "stratum_id": "DiscountingChain-bsuite"
+            },
+            {
+              "g": -1.0437154622481317,
+              "n_pairs": 30,
+              "se": 0.2269119493744887,
+              "stratum_id": "UmbrellaChain-bsuite"
+            }
+          ],
+          "pooled": {
+            "I2": 0.9597483845992729,
+            "Q": 124.21861707219037,
+            "empirical_max_g": 0.12474181615048653,
+            "empirical_min_g": -4.550075839622326,
+            "n_cells": 6,
+            "pi_hi": 1.515689058468456,
+            "pi_lo": -3.457260043030761,
+            "pooled_g": -0.9707854922811525,
+            "se_pooled": 0.3759602395579444,
+            "tau2": 0.7942861168007805
+          },
+          "total_steps_filter": 200000,
+          "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
+        }
+      },
+      "blocked_by": null,
+      "bridge_name": "ddqn_reduces_jensen_gap__converged_subset",
+      "direction": "inverse",
+      "n_cells_in_scope": 3480,
+      "n_cells_pre_scope": 12451,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "total_steps_filter": 200000
+      },
+      "predicted_direction": null,
+      "scope_repr": "col(\"env_name\").is_in([[\"Acrobot-v1\", \"Breakout-MinAtar\", … \"UmbrellaChain-bsuite\"]])",
+      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "target_name": "jensen_gap",
+      "tier": "associational",
+      "verdict": "held",
+      "warnings": [
+        {
+          "gate_name": "no_predicted_direction",
+          "level": "info",
+          "message": "Bridge 'ddqn_reduces_jensen_gap__converged_subset' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
+          "passed": false
+        }
+      ]
+    },
+    {
+      "analysis_results": {
+        "paired_g_pooled": {
+          "baseline_arm": "baseline",
+          "measurable": "eval_best_burst_mean",
+          "n_envs": 4,
+          "per_env": [
+            {
+              "g": 0.15542044743045597,
+              "n_pairs": 60,
+              "se": 0.12987672088944843,
+              "stratum_id": "Acrobot-v1"
+            },
+            {
+              "g": 0.3152039042528183,
+              "n_pairs": 30,
+              "se": 0.18705406977913364,
+              "stratum_id": "Breakout-MinAtar"
+            },
+            {
+              "g": 0.0,
+              "n_pairs": 60,
+              "se": "NaN",
+              "stratum_id": "Catch-bsuite"
+            },
+            {
+              "g": -0.2416344896754558,
+              "n_pairs": 30,
+              "se": 0.18522001451430306,
+              "stratum_id": "DeepSea-bsuite"
+            },
+            {
+              "g": 0.30497093789672736,
+              "n_pairs": 60,
+              "se": 0.13206713169702777,
+              "stratum_id": "DiscountingChain-bsuite"
+            },
+            {
+              "g": 0.0,
+              "n_pairs": 30,
+              "se": "NaN",
+              "stratum_id": "UmbrellaChain-bsuite"
+            }
+          ],
+          "pooled": {
+            "I2": 0.5449925911851677,
+            "Q": 6.593299233993059,
+            "empirical_max_g": 0.3152039042528183,
+            "empirical_min_g": -0.2416344896754558,
+            "n_cells": 4,
+            "pi_hi": 0.7990416089685027,
+            "pi_lo": -0.5028101895087626,
+            "pooled_g": 0.14811570972987007,
+            "se_pooled": 0.11517824283317683,
+            "tau2": 0.02856908415029457
+          },
+          "total_steps_filter": 200000,
+          "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
+        }
+      },
+      "blocked_by": null,
+      "bridge_name": "ddqn_link_to_outcome_null__converged_subset",
+      "direction": "direct",
+      "n_cells_in_scope": 3480,
+      "n_cells_pre_scope": 12451,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "total_steps_filter": 200000
+      },
+      "predicted_direction": "null",
+      "scope_repr": "col(\"env_name\").is_in([[\"Acrobot-v1\", \"Breakout-MinAtar\", … \"UmbrellaChain-bsuite\"]])",
+      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "target_name": "eval_best_burst_mean",
+      "tier": "associational",
+      "verdict": "held",
+      "warnings": []
+    },
+    {
+      "analysis_results": {
+        "paired_g_among_solvers": {
+          "baseline_arm": "baseline",
+          "measurable": "eval_best_burst_step",
+          "n_envs": 5,
+          "per_env": [
+            {
+              "g": -0.24393036047690494,
+              "n_pairs": 60,
+              "se": 0.13100578933652746,
+              "stratum_id": "Acrobot-v1"
+            },
+            {
+              "g": -0.2983595486924672,
+              "n_pairs": 30,
+              "se": 0.18659306973089743,
+              "stratum_id": "Breakout-MinAtar"
+            },
+            {
+              "g": 0.0,
+              "n_pairs": 60,
+              "se": "NaN",
+              "stratum_id": "Catch-bsuite"
+            },
+            {
+              "g": -0.36920677067070357,
+              "n_pairs": 60,
+              "se": 0.1334264353963477,
+              "stratum_id": "DiscountingChain-bsuite"
+            },
+            {
+              "g": 0.16431725394860613,
+              "n_pairs": 30,
+              "se": 0.18380243741334565,
+              "stratum_id": "MemoryChain-bsuite"
+            },
+            {
+              "g": -0.017355464031552113,
+              "n_pairs": 30,
+              "se": 0.1825879337073761,
+              "stratum_id": "SpaceInvaders-MinAtar"
+            },
+            {
+              "g": 0.0,
+              "n_pairs": 30,
+              "se": "NaN",
+              "stratum_id": "UmbrellaChain-bsuite"
+            }
+          ],
+          "pooled": {
+            "I2": 0.42185290313622625,
+            "Q": 6.9186544768597225,
+            "empirical_max_g": 0.16431725394860613,
+            "empirical_min_g": -0.36920677067070357,
+            "n_cells": 5,
+            "pi_hi": 0.28391953626062677,
+            "pi_lo": -0.6350573535468653,
+            "pooled_g": -0.1755689086431193,
+            "se_pooled": 0.09419065711258888,
+            "tau2": 0.018516794083267153
+          },
+          "total_steps_filter": 200000,
+          "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
+        }
+      },
+      "blocked_by": null,
+      "bridge_name": "time_to_solve_link_null__pooled",
+      "direction": "inverse",
+      "n_cells_in_scope": 12451,
+      "n_cells_pre_scope": 12451,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "env_filter": [
+          "Acrobot-v1",
+          "Breakout-MinAtar",
+          "Catch-bsuite",
+          "DiscountingChain-bsuite",
+          "MemoryChain-bsuite",
+          "SpaceInvaders-MinAtar",
+          "UmbrellaChain-bsuite"
+        ],
+        "gate_column": "eval_best_burst_mean",
+        "gate_thresholds": {
+          "Acrobot-v1": -63.4,
+          "Asterix-MinAtar": 1.35,
+          "Breakout-MinAtar": 1.23,
+          "CartPole-v1": 99.0,
+          "Catch-bsuite": 0.45,
+          "DeepSea-bsuite": 0.45,
+          "DiscountingChain-bsuite": 1.0,
+          "Freeway-MinAtar": 2.57,
+          "MNISTBandit-bsuite": 0.5,
+          "MemoryChain-bsuite": 0.45,
+          "MountainCar-v0": -67.3,
+          "SpaceInvaders-MinAtar": 0.74,
+          "UmbrellaChain-bsuite": 0.45
+        },
+        "total_steps_filter": 200000
+      },
+      "predicted_direction": "null",
+      "scope_repr": null,
+      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "target_name": "eval_best_burst_step",
+      "tier": "associational",
+      "verdict": "no_effect",
+      "warnings": []
+    },
+    {
+      "analysis_results": {
+        "paired_g_among_solvers": {
+          "baseline_arm": "baseline",
+          "measurable": "eval_best_burst_step",
+          "n_envs": 1,
+          "per_env": [
+            {
+              "g": -0.017355464031552113,
+              "n_pairs": 30,
+              "se": 0.1825879337073761,
+              "stratum_id": "SpaceInvaders-MinAtar"
+            }
+          ],
+          "pooled": {
+            "I2": "NaN",
+            "Q": "NaN",
+            "empirical_max_g": "NaN",
+            "empirical_min_g": "NaN",
+            "n_cells": 1,
+            "pi_hi": "NaN",
+            "pi_lo": "NaN",
+            "pooled_g": "NaN",
+            "se_pooled": "NaN",
+            "tau2": "NaN"
+          },
+          "total_steps_filter": 200000,
+          "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
+        }
+      },
+      "blocked_by": null,
+      "bridge_name": "ddqn_solves_faster__spaceinvaders",
+      "direction": "inverse",
+      "n_cells_in_scope": 12451,
+      "n_cells_pre_scope": 12451,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "env_filter": [
+          "SpaceInvaders-MinAtar"
+        ],
+        "gate_column": "eval_best_burst_mean",
+        "gate_thresholds": {
+          "Acrobot-v1": -63.4,
+          "Asterix-MinAtar": 1.35,
+          "Breakout-MinAtar": 1.23,
+          "CartPole-v1": 99.0,
+          "Catch-bsuite": 0.45,
+          "DeepSea-bsuite": 0.45,
+          "DiscountingChain-bsuite": 1.0,
+          "Freeway-MinAtar": 2.57,
+          "MNISTBandit-bsuite": 0.5,
+          "MemoryChain-bsuite": 0.45,
+          "MountainCar-v0": -67.3,
+          "SpaceInvaders-MinAtar": 0.74,
+          "UmbrellaChain-bsuite": 0.45
+        },
+        "total_steps_filter": 200000
+      },
+      "predicted_direction": null,
+      "scope_repr": null,
+      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "target_name": "eval_best_burst_step",
+      "tier": "associational",
+      "verdict": "no_effect",
+      "warnings": [
+        {
+          "gate_name": "no_predicted_direction",
+          "level": "info",
+          "message": "Bridge 'ddqn_solves_faster__spaceinvaders' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
+          "passed": false
+        }
+      ]
+    },
+    {
+      "analysis_results": {
+        "paired_g": {
+          "baseline_arm": "baseline",
+          "g": -3.255928766974758,
+          "helped_fraction": 0.0,
+          "mean_diff": -0.433007728015202,
+          "mean_diff_p_value": 0.0,
+          "mean_diff_se": 0.02364723174458291,
+          "measurable": "jensen_gap",
+          "n_baseline": 30,
+          "n_pairs": 30,
+          "n_treatment": 30,
+          "p_value": 1.2056951692447377e-12,
+          "pair_by": [
+            "seed"
+          ],
+          "se": 0.4582770656784999,
+          "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
+        }
+      },
+      "blocked_by": null,
+      "bridge_name": "ddqn_reduces_jensen_gap__fourrooms_n1",
+      "direction": "inverse",
+      "n_cells_in_scope": 2591,
+      "n_cells_pre_scope": 12451,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {},
+      "predicted_direction": null,
+      "scope_repr": "[([([(col(\"optimizer.inner.lr\")) == (dyn float: 0.0001)]) & ([(col(\"env_name\")) == (\"FourRooms-misc\")])]) & ([(col(\"n_step\")) == (dyn int: 1)])]",
+      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "target_name": "jensen_gap",
+      "tier": "interventional",
+      "verdict": "held",
+      "warnings": [
+        {
+          "gate_name": "no_predicted_direction",
+          "level": "info",
+          "message": "Bridge 'ddqn_reduces_jensen_gap__fourrooms_n1' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
+          "passed": false
+        }
+      ]
+    },
+    {
+      "analysis_results": {
+        "paired_g": {
+          "baseline_arm": "baseline",
+          "g": -0.4939216514852851,
+          "helped_fraction": 0.36666666666666664,
+          "mean_diff": -0.029085097143736978,
+          "mean_diff_p_value": 0.009496181320743036,
+          "mean_diff_se": 0.010470610619563732,
+          "measurable": "jensen_gap",
+          "n_baseline": 30,
+          "n_pairs": 30,
+          "n_treatment": 30,
+          "p_value": 0.010648358619446931,
+          "pair_by": [
+            "seed"
+          ],
+          "se": 0.19338901200283465,
+          "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
+        }
+      },
+      "blocked_by": null,
+      "bridge_name": "ddqn_attenuates_jensen_gap__fourrooms_n3",
+      "direction": "inverse",
+      "n_cells_in_scope": 120,
+      "n_cells_pre_scope": 12451,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {},
+      "predicted_direction": "null",
+      "scope_repr": "[([([(col(\"optimizer.inner.lr\")) == (dyn float: 0.0001)]) & ([(col(\"env_name\")) == (\"FourRooms-misc\")])]) & ([(col(\"n_step\")) == (dyn int: 3)])]",
+      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "target_name": "jensen_gap",
+      "tier": "interventional",
+      "verdict": "no_effect",
+      "warnings": []
+    },
+    {
+      "analysis_results": {
+        "paired_g": {
+          "baseline_arm": "baseline",
+          "g": 3.292628651378435,
+          "helped_fraction": 1.0,
+          "mean_diff": 0.1250313702253335,
+          "mean_diff_p_value": 0.0,
+          "mean_diff_se": 0.006752052223435283,
+          "measurable": "eval_best_burst_mean",
+          "n_baseline": 30,
+          "n_pairs": 30,
+          "n_treatment": 30,
+          "p_value": 1.101028285596105e-12,
+          "pair_by": [
+            "seed"
+          ],
+          "se": 0.46262662115140923,
+          "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
+        }
+      },
+      "blocked_by": null,
+      "bridge_name": "ddqn_helps_outcome__fourrooms_n1",
+      "direction": "direct",
+      "n_cells_in_scope": 2591,
+      "n_cells_pre_scope": 12451,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {},
+      "predicted_direction": null,
+      "scope_repr": "[([([(col(\"optimizer.inner.lr\")) == (dyn float: 0.0001)]) & ([(col(\"env_name\")) == (\"FourRooms-misc\")])]) & ([(col(\"n_step\")) == (dyn int: 1)])]",
+      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "target_name": "eval_best_burst_mean",
+      "tier": "interventional",
+      "verdict": "held",
+      "warnings": [
+        {
+          "gate_name": "no_predicted_direction",
+          "level": "info",
+          "message": "Bridge 'ddqn_helps_outcome__fourrooms_n1' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
+          "passed": false
+        }
+      ]
+    },
+    {
+      "analysis_results": {
+        "paired_g": {
+          "baseline_arm": "baseline",
+          "g": 0.08819485558013555,
+          "helped_fraction": 0.5666666666666667,
+          "mean_diff": 0.0018232365449269612,
+          "mean_diff_p_value": 0.6236312051052368,
+          "mean_diff_se": 0.003675863017035027,
+          "measurable": "eval_best_burst_mean",
+          "n_baseline": 30,
+          "n_pairs": 30,
+          "n_treatment": 30,
+          "p_value": 0.6297160905211112,
+          "pair_by": [
+            "seed"
+          ],
+          "se": 0.1829288719944996,
+          "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
+        }
+      },
+      "blocked_by": null,
+      "bridge_name": "ddqn_outcome_attenuates__fourrooms_n3",
+      "direction": "direct",
+      "n_cells_in_scope": 120,
+      "n_cells_pre_scope": 12451,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {},
+      "predicted_direction": "null",
+      "scope_repr": "[([([(col(\"optimizer.inner.lr\")) == (dyn float: 0.0001)]) & ([(col(\"env_name\")) == (\"FourRooms-misc\")])]) & ([(col(\"n_step\")) == (dyn int: 3)])]",
+      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "target_name": "eval_best_burst_mean",
+      "tier": "interventional",
+      "verdict": "held",
+      "warnings": []
+    },
+    {
+      "analysis_results": {
+        "meta_regression_paired_g_by_nstep": {
+          "cleavage_axes": [],
+          "coefficients": [
+            {
+              "ci_hi": 0.8184312253619241,
+              "ci_lo": -2.947752461782721,
+              "coefficient": -1.0646606182103984,
+              "is_significant": false,
+              "name": "log_n_step",
+              "p_value": 0.16980089295986356
+            }
+          ],
+          "i_squared": 0.9076514431880774,
+          "intercept": 1.9667740693887903,
+          "intercept_ci_hi": 4.6502998944967935,
+          "intercept_ci_lo": -0.7167517557192133,
+          "intercept_p_value": 0.10192124362551813,
+          "intercept_se": 0.8432273690376604,
+          "n_strata": 5,
+          "pool": "random",
+          "q_statistic": 32.48561865573938,
+          "r_squared": 0.5190333441905753,
+          "tau_sq": 0.4319913340261475
+        }
+      },
+      "blocked_by": null,
+      "bridge_name": "ddqn_outcome_slope_attenuates_with_log_nstep__fourrooms",
+      "direction": "inverse",
+      "n_cells_in_scope": 2891,
+      "n_cells_pre_scope": 12451,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {},
+      "predicted_direction": null,
+      "scope_repr": "[([(col(\"optimizer.inner.lr\")) == (dyn float: 0.0001)]) & ([(col(\"env_name\")) == (\"FourRooms-misc\")])]",
+      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "target_name": "eval_best_burst_mean",
+      "tier": "associational",
+      "verdict": "no_effect",
+      "warnings": [
+        {
+          "gate_name": "no_predicted_direction",
+          "level": "info",
+          "message": "Bridge 'ddqn_outcome_slope_attenuates_with_log_nstep__fourrooms' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
+          "passed": false
+        }
+      ]
+    },
+    {
+      "analysis_results": {
+        "meta_regression_paired_g_by_nstep": {
+          "cleavage_axes": [],
+          "coefficients": [
+            {
+              "ci_hi": 2.418973312125003,
+              "ci_lo": -0.2246043668592459,
+              "coefficient": 1.0971844726328785,
+              "is_significant": false,
+              "name": "log_n_step",
+              "p_value": 0.07754485387380194
+            }
+          ],
+          "i_squared": 0.8364122150556635,
+          "intercept": -2.3158195782865674,
+          "intercept_ci_hi": -0.40111772688343494,
+          "intercept_ci_lo": -4.2305214296897,
+          "intercept_p_value": 0.03095802592545205,
+          "intercept_se": 0.6016446681988689,
+          "n_strata": 5,
+          "pool": "random",
+          "q_statistic": 18.338777562278263,
+          "r_squared": 0.6993513016331364,
+          "tau_sq": 0.2574042347437411
+        }
+      },
+      "blocked_by": null,
+      "bridge_name": "ddqn_jensen_slope_attenuates_with_log_nstep__fourrooms",
+      "direction": "inverse",
+      "n_cells_in_scope": 2891,
+      "n_cells_pre_scope": 12451,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {},
+      "predicted_direction": null,
+      "scope_repr": "[([(col(\"optimizer.inner.lr\")) == (dyn float: 0.0001)]) & ([(col(\"env_name\")) == (\"FourRooms-misc\")])]",
+      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "target_name": "jensen_gap",
+      "tier": "associational",
+      "verdict": "no_effect",
+      "warnings": [
+        {
+          "gate_name": "no_predicted_direction",
+          "level": "info",
+          "message": "Bridge 'ddqn_jensen_slope_attenuates_with_log_nstep__fourrooms' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
+          "passed": false
+        }
+      ]
+    },
+    {
+      "analysis_results": {
+        "meta_regression_paired_g_by_nstep": {
+          "cleavage_axes": [],
+          "coefficients": [
+            {
+              "ci_hi": 0.3274027795389467,
+              "ci_lo": -1.8482553675889102,
+              "coefficient": -0.7604262940249817,
+              "is_significant": false,
+              "name": "log_n_step",
+              "p_value": 0.11255727110870883
+            }
+          ],
+          "i_squared": 0.8323094444938931,
+          "intercept": 1.3546468352236896,
+          "intercept_ci_hi": 2.8981605358971345,
+          "intercept_ci_lo": -0.1888668654497554,
+          "intercept_p_value": 0.06824635632912557,
+          "intercept_se": 0.4850085602735234,
+          "n_strata": 5,
+          "pool": "random",
+          "q_statistic": 17.890095187207766,
+          "r_squared": 0.6225927620823497,
+          "tau_sq": 0.19843059534806498
+        }
+      },
+      "blocked_by": null,
+      "bridge_name": "ddqn_final_outcome_slope_attenuates_with_log_nstep__fourrooms",
+      "direction": "inverse",
+      "n_cells_in_scope": 2891,
+      "n_cells_pre_scope": 12451,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {},
+      "predicted_direction": null,
+      "scope_repr": "[([(col(\"optimizer.inner.lr\")) == (dyn float: 0.0001)]) & ([(col(\"env_name\")) == (\"FourRooms-misc\")])]",
+      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "target_name": "eval_final_mean",
+      "tier": "associational",
+      "verdict": "no_effect",
+      "warnings": [
+        {
+          "gate_name": "no_predicted_direction",
+          "level": "info",
+          "message": "Bridge 'ddqn_final_outcome_slope_attenuates_with_log_nstep__fourrooms' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
+          "passed": false
+        }
+      ]
+    },
+    {
+      "analysis_results": {
+        "factorial_2x2_interaction": {
+          "arm_a": "vanilla_1step",
+          "arm_b": "vanilla_3step",
+          "arm_c": "ddqn_1step",
+          "arm_d": "ddqn_3step",
+          "per_env": [
+            {
+              "env_name": "FourRooms-misc",
+              "g_b_minus_a": "NaN",
+              "g_c_minus_a": "NaN",
+              "g_d_minus_b": "NaN",
+              "g_d_minus_c": "NaN",
+              "g_interaction": "NaN",
+              "n_pairs": 0,
+              "se_b_minus_a": "NaN",
+              "se_c_minus_a": "NaN",
+              "se_d_minus_b": "NaN",
+              "se_d_minus_c": "NaN",
+              "se_interaction": "NaN"
+            }
+          ],
+          "source": "eval_best_burst_mean"
+        }
+      },
+      "blocked_by": null,
+      "bridge_name": "factorial_ddqn_attenuation__fourrooms",
+      "direction": "inverse",
+      "n_cells_in_scope": 3491,
+      "n_cells_pre_scope": 12451,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "arm_a": "vanilla_1step",
+        "arm_b": "vanilla_3step",
+        "arm_c": "ddqn_1step",
+        "arm_d": "ddqn_3step",
+        "env_filter": [
+          "FourRooms-misc"
+        ],
+        "total_steps_filter": 200000
+      },
+      "predicted_direction": null,
+      "scope_repr": "[(col(\"env_name\")) == (\"FourRooms-misc\")]",
+      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "target_name": "eval_best_burst_mean",
+      "tier": "interventional",
+      "verdict": "power_insufficient",
+      "warnings": [
+        {
+          "gate_name": "no_predicted_direction",
+          "level": "info",
+          "message": "Bridge 'factorial_ddqn_attenuation__fourrooms' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
+          "passed": false
+        }
+      ]
+    },
+    {
+      "analysis_results": {
+        "factorial_2x2_interaction": {
+          "arm_a": "vanilla_1step",
+          "arm_b": "vanilla_3step",
+          "arm_c": "ddqn_1step",
+          "arm_d": "ddqn_3step",
+          "per_env": [
+            {
+              "env_name": "Catch-bsuite",
+              "g_b_minus_a": "NaN",
+              "g_c_minus_a": "NaN",
+              "g_d_minus_b": "NaN",
+              "g_d_minus_c": "NaN",
+              "g_interaction": "NaN",
+              "n_pairs": 0,
+              "se_b_minus_a": "NaN",
+              "se_c_minus_a": "NaN",
+              "se_d_minus_b": "NaN",
+              "se_d_minus_c": "NaN",
+              "se_interaction": "NaN"
+            }
+          ],
+          "source": "eval_best_burst_mean"
+        }
+      },
+      "blocked_by": null,
+      "bridge_name": "factorial_variance_amplification__catch",
+      "direction": "inverse",
+      "n_cells_in_scope": 690,
+      "n_cells_pre_scope": 12451,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "arm_a": "vanilla_1step",
+        "arm_b": "vanilla_3step",
+        "arm_c": "ddqn_1step",
+        "arm_d": "ddqn_3step",
+        "env_filter": [
+          "Catch-bsuite"
+        ],
+        "total_steps_filter": 200000
+      },
+      "predicted_direction": null,
+      "scope_repr": "[(col(\"env_name\")) == (\"Catch-bsuite\")]",
+      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "target_name": "eval_best_burst_mean",
+      "tier": "interventional",
+      "verdict": "power_insufficient",
+      "warnings": [
+        {
+          "gate_name": "no_predicted_direction",
+          "level": "info",
+          "message": "Bridge 'factorial_variance_amplification__catch' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
+          "passed": false
+        }
+      ]
+    },
+    {
+      "analysis_results": {
+        "paired_g_per_burst": {
+          "baseline_arm": "baseline",
+          "measurable": "mc_return__mean_axis_-1",
+          "n_strata": 10,
+          "pair_by": [
+            "seed"
+          ],
+          "strata": [
+            {
+              "burst_index": 0,
+              "env_name": "Catch-bsuite",
+              "g": 0.0,
+              "helped_fraction": 0.0,
+              "n_pairs": 60,
+              "se": "NaN"
+            },
+            {
+              "burst_index": 1,
+              "env_name": "Catch-bsuite",
+              "g": 0.0,
+              "helped_fraction": 0.0,
+              "n_pairs": 60,
+              "se": "NaN"
+            },
+            {
+              "burst_index": 2,
+              "env_name": "Catch-bsuite",
+              "g": 0.0,
+              "helped_fraction": 0.0,
+              "n_pairs": 60,
+              "se": "NaN"
+            },
+            {
+              "burst_index": 3,
+              "env_name": "Catch-bsuite",
+              "g": 0.0,
+              "helped_fraction": 0.0,
+              "n_pairs": 60,
+              "se": "NaN"
+            },
+            {
+              "burst_index": 4,
+              "env_name": "Catch-bsuite",
+              "g": 0.0,
+              "helped_fraction": 0.0,
+              "n_pairs": 60,
+              "se": "NaN"
+            },
+            {
+              "burst_index": 5,
+              "env_name": "Catch-bsuite",
+              "g": 0.0,
+              "helped_fraction": 0.0,
+              "n_pairs": 60,
+              "se": "NaN"
+            },
+            {
+              "burst_index": 6,
+              "env_name": "Catch-bsuite",
+              "g": 0.0,
+              "helped_fraction": 0.0,
+              "n_pairs": 60,
+              "se": "NaN"
+            },
+            {
+              "burst_index": 7,
+              "env_name": "Catch-bsuite",
+              "g": 0.0,
+              "helped_fraction": 0.0,
+              "n_pairs": 60,
+              "se": "NaN"
+            },
+            {
+              "burst_index": 8,
+              "env_name": "Catch-bsuite",
+              "g": 0.0,
+              "helped_fraction": 0.0,
+              "n_pairs": 60,
+              "se": "NaN"
+            },
+            {
+              "burst_index": 9,
+              "env_name": "Catch-bsuite",
+              "g": 0.0,
+              "helped_fraction": 0.0,
+              "n_pairs": 60,
+              "se": "NaN"
+            }
+          ],
+          "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
+        }
+      },
+      "blocked_by": null,
+      "bridge_name": "ddqn_outcome_zero_across_bursts__catch",
+      "direction": "direct",
+      "n_cells_in_scope": 690,
+      "n_cells_pre_scope": 12451,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "source": "mc_return__mean_axis_-1"
+      },
+      "predicted_direction": null,
+      "scope_repr": "[(col(\"env_name\")) == (\"Catch-bsuite\")]",
+      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "target_name": "mc_return",
+      "tier": "associational",
+      "verdict": "no_effect",
+      "warnings": [
+        {
+          "gate_name": "no_predicted_direction",
+          "level": "info",
+          "message": "Bridge 'ddqn_outcome_zero_across_bursts__catch' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
+          "passed": false
+        }
+      ]
+    },
+    {
+      "analysis_results": {},
+      "blocked_by": {
+        "gate_name": "resolved_source",
+        "level": "block",
+        "message": "Bridge 'state_coverage_kl_clean_mediator__cartpole_hp' sources on column 'mediator.state_coverage_kl_uniform_late' which is not in the filtered cells. Likely a typo or a measurable not materialised in this corpus; first 20 available columns: ['action_duplicate_k', 'action_select', 'action_select.schedule', 'action_select.schedule.anneal_steps', 'action_select.schedule.eps_final', 'action_select.schedule.eps_init', 'arm_key', 'bootstrap', 'bootstrap.gradient_rule', 'bootstrap.greedification', 'bootstrap.greedification.alpha', 'bootstrap.greedification.n_iters', 'bootstrap.greedification.sigma_floor_factor', 'bootstrap.greedification.tau', 'bootstrap.n_step', 'claim_graph_signature', 'corpus', 'cycle_id', 'env', 'env_name'].",
+        "passed": false
+      },
+      "bridge_name": "state_coverage_kl_clean_mediator__cartpole_hp",
+      "direction": "direct",
+      "n_cells_in_scope": 12451,
+      "n_cells_pre_scope": 12451,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "arm_filter": "baseline",
+        "hp_axes": [
+          "replay.capacity",
+          "replay.batch_size",
+          "optimizer.inner.lr",
+          "sync_period"
+        ],
+        "hp_stratum_axis": "replay.capacity",
+        "measurables": [
+          {
+            "name": "mediator.learning_curve_auc",
+            "reads": [
+              "mc_return"
+            ]
+          },
+          {
+            "name": "mediator.plateau_slope_late",
+            "reads": [
+              "mc_return"
+            ]
+          },
+          {
+            "name": "mediator.return_at_25pct_steps",
+            "reads": [
+              "mc_return"
+            ]
+          },
+          {
+            "name": "mediator.greedy_match_late",
+            "reads": [
+              "online_argmax_per_step",
+              "target_argmax_per_step"
+            ]
+          },
+          {
+            "name": "mediator.q_gap_late",
+            "reads": [
+              "online_max_q_per_step",
+              "online_min_q_per_step"
+            ]
+          },
+          {
+            "name": "mediator.q_max_growth",
+            "reads": [
+              "online_max_q_per_step"
+            ]
+          },
+          {
+            "name": "mediator.v_vs_max_delta_late",
+            "reads": [
+              "online_mean_q_per_step",
+              "online_max_q_per_step"
+            ]
+          },
+          {
+            "name": "mediator.td_residual_late",
+            "reads": [
+              "td_error"
+            ]
+          },
+          {
+            "name": "mediator.state_coverage_kl_uniform_late",
+            "reads": [
+              "state_hash"
+            ]
+          }
+        ],
+        "outcome_path": "eval_final_mean",
+        "outcome_reads": [
+          "mc_return"
+        ]
+      },
+      "predicted_direction": null,
+      "scope_repr": null,
+      "source_name": "mediator.state_coverage_kl_uniform_late",
+      "target_name": "eval_final_mean",
+      "tier": "associational",
+      "verdict": "inadmissible",
+      "warnings": []
+    },
+    {
+      "analysis_results": {},
+      "blocked_by": {
+        "gate_name": "resolved_source",
+        "level": "block",
+        "message": "Bridge 'learning_curve_auc_outcome_tautological__cartpole_hp' sources on column 'mediator.learning_curve_auc' which is not in the filtered cells. Likely a typo or a measurable not materialised in this corpus; first 20 available columns: ['action_duplicate_k', 'action_select', 'action_select.schedule', 'action_select.schedule.anneal_steps', 'action_select.schedule.eps_final', 'action_select.schedule.eps_init', 'arm_key', 'bootstrap', 'bootstrap.gradient_rule', 'bootstrap.greedification', 'bootstrap.greedification.alpha', 'bootstrap.greedification.n_iters', 'bootstrap.greedification.sigma_floor_factor', 'bootstrap.greedification.tau', 'bootstrap.n_step', 'claim_graph_signature', 'corpus', 'cycle_id', 'env', 'env_name'].",
+        "passed": false
+      },
+      "bridge_name": "learning_curve_auc_outcome_tautological__cartpole_hp",
+      "direction": "direct",
+      "n_cells_in_scope": 12451,
+      "n_cells_pre_scope": 12451,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "arm_filter": "baseline",
+        "hp_axes": [
+          "replay.capacity",
+          "replay.batch_size",
+          "optimizer.inner.lr",
+          "sync_period"
+        ],
+        "hp_stratum_axis": "replay.capacity",
+        "measurables": [
+          {
+            "name": "mediator.learning_curve_auc",
+            "reads": [
+              "mc_return"
+            ]
+          },
+          {
+            "name": "mediator.plateau_slope_late",
+            "reads": [
+              "mc_return"
+            ]
+          },
+          {
+            "name": "mediator.return_at_25pct_steps",
+            "reads": [
+              "mc_return"
+            ]
+          },
+          {
+            "name": "mediator.greedy_match_late",
+            "reads": [
+              "online_argmax_per_step",
+              "target_argmax_per_step"
+            ]
+          },
+          {
+            "name": "mediator.q_gap_late",
+            "reads": [
+              "online_max_q_per_step",
+              "online_min_q_per_step"
+            ]
+          },
+          {
+            "name": "mediator.q_max_growth",
+            "reads": [
+              "online_max_q_per_step"
+            ]
+          },
+          {
+            "name": "mediator.v_vs_max_delta_late",
+            "reads": [
+              "online_mean_q_per_step",
+              "online_max_q_per_step"
+            ]
+          },
+          {
+            "name": "mediator.td_residual_late",
+            "reads": [
+              "td_error"
+            ]
+          },
+          {
+            "name": "mediator.state_coverage_kl_uniform_late",
+            "reads": [
+              "state_hash"
+            ]
+          }
+        ],
+        "outcome_path": "eval_final_mean",
+        "outcome_reads": [
+          "mc_return"
+        ]
+      },
+      "predicted_direction": null,
+      "scope_repr": null,
+      "source_name": "mediator.learning_curve_auc",
+      "target_name": "eval_final_mean",
+      "tier": "associational",
+      "verdict": "inadmissible",
+      "warnings": []
+    },
+    {
+      "analysis_results": {},
+      "blocked_by": {
+        "gate_name": "resolved_source",
+        "level": "block",
+        "message": "Bridge 'greedy_match_late_hp_shadow__cartpole_hp' sources on column 'mediator.greedy_match_late' which is not in the filtered cells. Likely a typo or a measurable not materialised in this corpus; first 20 available columns: ['action_duplicate_k', 'action_select', 'action_select.schedule', 'action_select.schedule.anneal_steps', 'action_select.schedule.eps_final', 'action_select.schedule.eps_init', 'arm_key', 'bootstrap', 'bootstrap.gradient_rule', 'bootstrap.greedification', 'bootstrap.greedification.alpha', 'bootstrap.greedification.n_iters', 'bootstrap.greedification.sigma_floor_factor', 'bootstrap.greedification.tau', 'bootstrap.n_step', 'claim_graph_signature', 'corpus', 'cycle_id', 'env', 'env_name'].",
+        "passed": false
+      },
+      "bridge_name": "greedy_match_late_hp_shadow__cartpole_hp",
+      "direction": "direct",
+      "n_cells_in_scope": 12451,
+      "n_cells_pre_scope": 12451,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "arm_filter": "baseline",
+        "hp_axes": [
+          "replay.capacity",
+          "replay.batch_size",
+          "optimizer.inner.lr",
+          "sync_period"
+        ],
+        "hp_stratum_axis": "replay.capacity",
+        "measurables": [
+          {
+            "name": "mediator.learning_curve_auc",
+            "reads": [
+              "mc_return"
+            ]
+          },
+          {
+            "name": "mediator.plateau_slope_late",
+            "reads": [
+              "mc_return"
+            ]
+          },
+          {
+            "name": "mediator.return_at_25pct_steps",
+            "reads": [
+              "mc_return"
+            ]
+          },
+          {
+            "name": "mediator.greedy_match_late",
+            "reads": [
+              "online_argmax_per_step",
+              "target_argmax_per_step"
+            ]
+          },
+          {
+            "name": "mediator.q_gap_late",
+            "reads": [
+              "online_max_q_per_step",
+              "online_min_q_per_step"
+            ]
+          },
+          {
+            "name": "mediator.q_max_growth",
+            "reads": [
+              "online_max_q_per_step"
+            ]
+          },
+          {
+            "name": "mediator.v_vs_max_delta_late",
+            "reads": [
+              "online_mean_q_per_step",
+              "online_max_q_per_step"
+            ]
+          },
+          {
+            "name": "mediator.td_residual_late",
+            "reads": [
+              "td_error"
+            ]
+          },
+          {
+            "name": "mediator.state_coverage_kl_uniform_late",
+            "reads": [
+              "state_hash"
+            ]
+          }
+        ],
+        "outcome_path": "eval_final_mean",
+        "outcome_reads": [
+          "mc_return"
+        ]
+      },
+      "predicted_direction": null,
+      "scope_repr": null,
+      "source_name": "mediator.greedy_match_late",
+      "target_name": "eval_final_mean",
+      "tier": "associational",
+      "verdict": "inadmissible",
+      "warnings": []
+    },
+    {
+      "analysis_results": {
+        "paired_g": {
+          "baseline_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)",
+          "g": -0.2753928905959086,
+          "helped_fraction": 0.0,
+          "mean_diff": -75.97069853733638,
+          "mean_diff_p_value": 0.13227691374726525,
+          "mean_diff_se": 49.05157425180655,
+          "measurable": "jensen_gap",
+          "n_baseline": 60,
+          "n_pairs": 30,
+          "n_treatment": 30,
+          "p_value": 0.13871907090402857,
+          "pair_by": [
+            "seed"
+          ],
+          "se": 0.18600363993708877,
+          "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=partial(Claim:expectile_greedify;tau=0.7))"
+        }
+      },
+      "blocked_by": null,
+      "bridge_name": "expectile_reduces_jensen_gap_more_than_ddqn__fourrooms",
+      "direction": "inverse",
+      "n_cells_in_scope": 3491,
+      "n_cells_pre_scope": 12451,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {},
+      "predicted_direction": null,
+      "scope_repr": "[(col(\"env_name\")) == (\"FourRooms-misc\")]",
+      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=partial(Claim:expectile_greedify;tau=0.7))|vs=bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify))",
+      "target_name": "jensen_gap",
+      "tier": "associational",
+      "verdict": "no_effect",
+      "warnings": [
+        {
+          "gate_name": "no_predicted_direction",
+          "level": "info",
+          "message": "Bridge 'expectile_reduces_jensen_gap_more_than_ddqn__fourrooms' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
+          "passed": false
+        }
+      ]
+    },
+    {
+      "analysis_results": {
+        "paired_g": {
+          "baseline_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)",
+          "g": 1.5916831028448328,
+          "helped_fraction": 0.9333333333333333,
+          "mean_diff": 0.04993569014748678,
+          "mean_diff_p_value": 7.651117517326611e-10,
+          "mean_diff_se": 0.00557845591864548,
+          "measurable": "eval_best_burst_mean",
+          "n_baseline": 60,
+          "n_pairs": 30,
+          "n_treatment": 30,
+          "p_value": 7.016880998356132e-09,
+          "pair_by": [
+            "seed"
+          ],
+          "se": 0.274877399940463,
+          "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=partial(Claim:expectile_greedify;tau=0.7))"
+        }
+      },
+      "blocked_by": null,
+      "bridge_name": "ddqn_outperforms_expectile_on_outcome__fourrooms",
+      "direction": "inverse",
+      "n_cells_in_scope": 3491,
+      "n_cells_pre_scope": 12451,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {},
+      "predicted_direction": null,
+      "scope_repr": "[(col(\"env_name\")) == (\"FourRooms-misc\")]",
+      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=partial(Claim:expectile_greedify;tau=0.7))|vs=bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify))",
+      "target_name": "eval_best_burst_mean",
+      "tier": "associational",
+      "verdict": "no_effect",
+      "warnings": [
+        {
+          "gate_name": "no_predicted_direction",
+          "level": "info",
+          "message": "Bridge 'ddqn_outperforms_expectile_on_outcome__fourrooms' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
+          "passed": false
+        }
+      ]
+    },
+    {
+      "analysis_results": {
+        "paired_g": {
+          "baseline_arm": "baseline",
+          "g": 3.754882578534489,
+          "helped_fraction": 1.0,
+          "mean_diff": 0.20205300413360686,
+          "mean_diff_p_value": 0.0,
+          "mean_diff_se": 0.009568161705772476,
+          "measurable": "eval_best_burst_mean",
+          "n_baseline": 60,
+          "n_pairs": 30,
+          "n_treatment": 30,
+          "p_value": 4.20247838884996e-13,
+          "pair_by": [
+            "seed"
+          ],
+          "se": 0.5179952248586501,
+          "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=partial(Claim:expectile_greedify;tau=0.7))"
+        }
+      },
+      "blocked_by": null,
+      "bridge_name": "expectile_reproduces_mechanism_link_disconnect__fourrooms",
+      "direction": "direct",
+      "n_cells_in_scope": 3491,
+      "n_cells_pre_scope": 12451,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {},
+      "predicted_direction": null,
+      "scope_repr": "[(col(\"env_name\")) == (\"FourRooms-misc\")]",
+      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=partial(Claim:expectile_greedify;tau=0.7))|vs=baseline)",
+      "target_name": "eval_best_burst_mean",
+      "tier": "associational",
+      "verdict": "held",
+      "warnings": [
+        {
+          "gate_name": "no_predicted_direction",
+          "level": "info",
+          "message": "Bridge 'expectile_reproduces_mechanism_link_disconnect__fourrooms' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
+          "passed": false
+        }
+      ]
+    },
+    {
+      "analysis_results": {
+        "meta_regression_per_burst": {
+          "cleavage_axes": [
+            "log_obs_dim"
+          ],
+          "coefficients": [
+            {
+              "ci_hi": 0.27058063431628904,
+              "ci_lo": -0.2168533576253774,
+              "coefficient": 0.026863638345455822,
+              "is_significant": false,
+              "name": "log_action_dim",
+              "p_value": 0.8279959462388597
+            },
+            {
+              "ci_hi": -0.020122263474112542,
+              "ci_lo": -0.24090569764110686,
+              "coefficient": -0.1305139805576097,
+              "is_significant": true,
+              "name": "log_obs_dim",
+              "p_value": 0.02077879959089346
+            }
+          ],
+          "i_squared": 0.8067731322995131,
+          "intercept": -0.20891215911991404,
+          "intercept_ci_hi": -0.11696975228144416,
+          "intercept_ci_lo": -0.3008545659583839,
+          "intercept_p_value": 1.3458377836172986e-05,
+          "intercept_se": 0.046570308149026435,
+          "n_strata": 170,
+          "pool": "random",
+          "q_statistic": 864.2690428479121,
+          "r_squared": 0.08914880117548252,
+          "tau_sq": 0.1560280733663664
+        }
+      },
+      "blocked_by": null,
+      "bridge_name": "log_action_dim_drives_g_mech",
+      "direction": "inverse",
+      "n_cells_in_scope": 1285,
+      "n_cells_pre_scope": 12451,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "covariates_per_env": {
+          "Acrobot-v1": {
+            "log_action_dim": 1.0986122886681098,
+            "log_obs_dim": 1.791759469228055
+          },
+          "Catch-bsuite": {
+            "log_action_dim": 1.0986122886681098,
+            "log_obs_dim": 3.912023005428146
+          },
+          "DiscountingChain-bsuite": {
+            "log_action_dim": 1.6094379124341003,
+            "log_obs_dim": 1.6094379124341003
+          },
+          "FourRooms-misc": {
+            "log_action_dim": 1.6094379124341003,
+            "log_obs_dim": 4.394449154672439
+          },
+          "MountainCar-v0": {
+            "log_action_dim": 1.0986122886681098,
+            "log_obs_dim": 0.6931471805599453
+          }
+        },
+        "source": "jensen_bias_per_eps__mean_axis_-1"
+      },
+      "predicted_direction": null,
+      "scope_repr": "[([([([([([([(col(\"total_steps\")) == (dyn int: 200000)]) & ([(col(\"eval_every\")) == (dyn int: 20000)])]) & ([(col(\"gamma\")) == (dyn float: 0.99)])]) & ([(col(\"sync_period\")) == (dyn int: 100)])]) & ([(col(\"replay.capacity\")) == (dyn int: 10000)])]) & ([(col(\"replay.batch_size\")) == (dyn int: 32)])]) & ([(col(\"n_step\").is_null()) | ([(col(\"n_step\")) == (dyn int: 1)])])]",
+      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "target_name": "jensen_gap",
+      "tier": "associational",
+      "verdict": "power_insufficient",
+      "warnings": [
+        {
+          "gate_name": "no_predicted_direction",
+          "level": "info",
+          "message": "Bridge 'log_action_dim_drives_g_mech' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
+          "passed": false
+        }
+      ]
+    },
+    {
+      "analysis_results": {
+        "meta_regression_per_burst": {
+          "cleavage_axes": [
+            "log_action_dim",
+            "log_obs_dim"
+          ],
+          "coefficients": [
+            {
+              "ci_hi": -0.3133878634535341,
+              "ci_lo": -0.5816121549390492,
+              "coefficient": -0.4475000091962916,
+              "is_significant": true,
+              "name": "log_action_dim",
+              "p_value": 7.302287663435436e-10
+            },
+            {
+              "ci_hi": 0.5575230162089425,
+              "ci_lo": 0.4012763947544026,
+              "coefficient": 0.47939970548167254,
+              "is_significant": true,
+              "name": "log_obs_dim",
+              "p_value": 0.0
+            }
+          ],
+          "i_squared": 0.40114904519874406,
+          "intercept": -0.05259590848278947,
+          "intercept_ci_hi": -0.007044588716649786,
+          "intercept_ci_lo": -0.09814722824892916,
+          "intercept_p_value": 0.023935199881867986,
+          "intercept_se": 0.02304825558234731,
+          "n_strata": 149,
+          "pool": "random",
+          "q_statistic": 243.800229137906,
+          "r_squared": 0.5826444561826913,
+          "tau_sq": 0.023613814043155993
+        }
+      },
+      "blocked_by": null,
+      "bridge_name": "log_obs_dim_drives_g_link",
+      "direction": "direct",
+      "n_cells_in_scope": 2485,
+      "n_cells_pre_scope": 12451,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "covariates_per_env": {
+          "Acrobot-v1": {
+            "log_action_dim": 1.0986122886681098,
+            "log_obs_dim": 1.791759469228055
+          },
+          "Catch-bsuite": {
+            "log_action_dim": 1.0986122886681098,
+            "log_obs_dim": 3.912023005428146
+          },
+          "DiscountingChain-bsuite": {
+            "log_action_dim": 1.6094379124341003,
+            "log_obs_dim": 1.6094379124341003
+          },
+          "FourRooms-misc": {
+            "log_action_dim": 1.6094379124341003,
+            "log_obs_dim": 4.394449154672439
+          },
+          "MountainCar-v0": {
+            "log_action_dim": 1.0986122886681098,
+            "log_obs_dim": 0.6931471805599453
+          }
+        },
+        "source": "mc_return__mean_axis_-1"
+      },
+      "predicted_direction": null,
+      "scope_repr": "[([(col(\"n_step\").is_null()) | ([(col(\"n_step\")) == (dyn int: 1)])]) & ([(col(\"replay.capacity\")) == (dyn int: 10000)])]",
+      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "target_name": "eval_best_burst_mean",
+      "tier": "associational",
+      "verdict": "held",
+      "warnings": [
+        {
+          "gate_name": "no_predicted_direction",
+          "level": "info",
+          "message": "Bridge 'log_obs_dim_drives_g_link' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
+          "passed": false
+        }
+      ]
+    }
+  ],
+  "cache_path": "experiments/data/cache/dqn_bridges.parquet",
+  "errored_bridges": [
+    {
+      "bridge_name": "ddqn_outcome_stable_across_bursts__fourrooms",
+      "error_message": "paired_g_per_burst: cannot mean-aggregate cells at (env='FourRooms-misc', arm='bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)', ('seed',)=(19,)) — per-burst array shapes differ ([(10,), (20,)]). The cells are not replicates; they differ on: action_duplicate_k=['1.0', '2.0', '3.0', '4.0', 'None']; action_select=[\"'Claim:epsilon_greedy'\", \"'dataclass:EpsilonGreedy(schedule=Claim:linear_epsilon)'\"]; claim_graph_signature=[\"'3001a37f2196e6eb'\", 'None']; env=[\"'<gymnax.environments.misc.rooms.FourRooms object at 0x77d49cf562c0>'\", \"'<gymnax.environments.misc.rooms.FourRooms object at 0x77d714b46470>'\", \"'<gymnax.environments.misc.rooms.FourRooms object at 0x77db800f8500>'\", 'None']; env_params=[\"'dataclass:EnvParams(fail_prob=0.3333333333333333,max_steps_in_episode=500,resample_goal_pos=False,resample_init_pos=False)'\", 'None']; env_params.fail_prob=['0.3333333333333333', 'None']; env_params.max_steps_in_episode=['500', 'None']; env_params.resample_goal_pos=['False', 'None']; env_params.resample_init_pos=['False', 'None']; eval_best_burst_mean=['0.0002309915580553934', '0.0003865692706312984', '0.0017876721685752273', '0.0026279122103005648', '0.01262840535491705'], …(28 total); eval_best_burst_step=['100000.0', '120000.0', '140000.0', '15000.0', '160000.0'], …(13 total); eval_episode_cap=['500', 'None']; eval_every=['10000', '20000', '2500', '25000', '5000'], …(6 total); eval_final_mean=['0.0', '0.005874688271433115', '0.006910125259310007', '0.014862599782645702', '0.06978630274534225'], …(18 total); gamma=['0.5', '0.8', '0.9', '0.95', '0.99']; intervention_name=[\"'ddqn'\", \"'ddqn_100k'\", \"'ddqn_1step'\", \"'ddqn_200k'\", \"'ddqn_25k'\"], …(14 total); jensen_bias_per_eps__mean_axis_-1=['[-0.04585413336753845, -0.04732726812362671, 0.2302372097969055, 0.746498167514801, 0.005870342254638672, 0.04412558078765869, 0.1842695355415344, 0.10585546791553498, -0.012885487079620362, -0.05410624742507934, -0.021362817287445067, -0.04166477918624878, -0.029021012783050536, -0.01064997911453247, -0.0055056452751159664, -0.03886251449584961, 0.014496839046478272, -0.0179388165473938, -0.013630044460296632, 0.059553390741348265]', '[-0.04627019490591451, 0.05233407304797888, -0.006401704542804509, 0.051634636055678126, 0.02943596988916397, 0.06293489932741067, 0.02719298262150005, -0.015386345237493515, -0.02484562397003174, -0.05494652390480041]', '[0.011352825351059437, -0.07221753895282745, 0.12749515026807784, 0.004734998941421509, 0.10009471345692873, 0.0841107115149498, -0.0036095112562179567, -0.022109454870223998, -0.06631581038236618, -0.085750812292099]', '[0.013712391257286072, 0.005569842178374529, 0.004439586166458298, 0.021899116337144593, 0.016924895346164703, -0.0002989717970590999, 0.003218509832822747, 0.0009198779884172836, 0.002782965022026371, 0.003703142889078137]', '[0.024339858442544937, 0.0018694410100579262, 0.016228530555963516, 0.0031710858456790447, 0.022196929901838303, 0.005579403135925531, 0.008136212825775146, 0.0053945439867675304, 0.004901643376797438, 0.0026744741480737135]'], …(28 total); jensen_dormancy_gap=['0.0', '0.0038544457723045577', '0.006785320708403812', '0.0105041625454424', 'nan']; jensen_dormancy_premise_active=[\"'held'\", \"'invariant_violation'\", \"'power_insufficient'\"]; jensen_gap=['0.007287134882062674', '0.007568215951323509', '0.007778525352478027', '0.00944921188056469', '0.023704186379909516'], …(28 total); late_window_mean=['0.0', '0.0004400000034365803', '0.0013529411517083645', '0.0030434783548116684', '0.00416666641831398'], …(13 total); mc_return__mean_axis_-1=['[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 5.169878828456423e-27, 0.0, 6.039613592774033e-15]', '[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.00023099155951058492, 0.0, 0.0, 0.0]', '[0.0, 0.0, 0.0, 0.0, 0.02883494714042172, 0.0, 0.004416017234325409, 0.025737155601382254, 0.007953750807791949, 0.006910124840214848]', '[0.0, 0.0, 0.0, 0.00038656924589304255, 0.0, 0.0, 0.0, 5.0630257464945314e-05, 0.000138321693520993, 0.0]', '[0.0, 0.0, 0.007381160091608763, 0.08044453151524067, 0.03138949275016785, 0.1497552663087845, 0.12859502509236337, 0.13371990919113158, 0.22753269076347352, 0.19288676381111144]'], …(28 total); n_actions=['4', 'None']; n_step=['1', 'None']; obs_shape=[\"'(4)'\", 'None']; optimizer=[\"'dataclass:WarmedUpdate(inner=dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.0001),warmup_steps=100)'\", \"'dataclass:WarmedUpdate(inner=dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.0001,weight_decay=0.0),warmup_steps=100)'\", \"'dataclass:WarmedUpdate(inner=dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.001),warmup_steps=100)'\", \"'partial(Claim:warmed_update;inner=partial(Claim:adam;lr=0.001),warmup_steps=100)'\"]; optimizer.inner=[\"'dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.0001)'\", \"'dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.0001,weight_decay=0.0)'\", \"'dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.001)'\", \"'partial(Claim:adam;lr=0.001)'\"]; optimizer.inner.lr=['0.0001', '0.001']; optimizer.inner.weight_decay=['0.0', 'None']; replay=[\"'dataclass:Replay(batch_size=32,capacity=10000,sample=Claim:uniform_sample)'\", \"'dataclass:Replay(batch_size=32,capacity=20000,sample=Claim:uniform_sample)'\", \"'dataclass:Replay(batch_size=32,capacity=50000,sample=Claim:uniform_sample)'\"]; replay.capacity=['10000', '20000', '50000']; reward_scale=['0.001', '0.003', '0.01', '0.03', '0.1'], …(8 total); rng_key=[\"'type:_empty'\", 'None']; state_hash=[\"'callable:default_state_hash'\", 'None']; total_steps=['100000', '1000000', '200000', '25000', '50000'], …(6 total); verdict=[\"'held'\", \"'invariant_violation'\", \"'power_insufficient'\"]. Add these to pair_by so each regime is its own stratum.",
+      "error_type": "ValueError",
+      "traceback_repr": "Traceback (most recent call last):\n  File \"/workspace/corroborate/src/corroborate/runner/runner.py\", line 328, in run\n    out[b.name] = evaluate(b, cells, claim=claim)\n                  ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/corroborate/src/corroborate/bridge/bridge.py\", line 762, in evaluate\n    analysis_results = resolve_for_holds_when(\n        bridge.holds_when, filtered_cells, bridge_params,\n    )\n  File \"/workspace/corroborate/src/corroborate/bridge/analysis.py\", line 232, in resolve_for_holds_when\n    out[param_name] = run_for(\n                      ~~~~~~~^\n        analysis_obj, cells_list, bridge_params,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/workspace/corroborate/src/corroborate/bridge/analysis.py\", line 190, in run_for\n    return analysis_obj.fn(cells, **kwargs)\n           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^\n  File \"/workspace/corroborate/src/corroborate/analyses/paired_g_per_burst.py\", line 246, in paired_g_per_burst\n    raise ValueError(\n    ...<7 lines>...\n    )\nValueError: paired_g_per_burst: cannot mean-aggregate cells at (env='FourRooms-misc', arm='bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)', ('seed',)=(19,)) — per-burst array shapes differ ([(10,), (20,)]). The cells are not replicates; they differ on: action_duplicate_k=['1.0', '2.0', '3.0', '4.0', 'None']; action_select=[\"'Claim:epsilon_greedy'\", \"'dataclass:EpsilonGreedy(schedule=Claim:linear_epsilon)'\"]; claim_graph_signature=[\"'3001a37f2196e6eb'\", 'None']; env=[\"'<gymnax.environments.misc.rooms.FourRooms object at 0x77d49cf562c0>'\", \"'<gymnax.environments.misc.rooms.FourRooms object at 0x77d714b46470>'\", \"'<gymnax.environments.misc.rooms.FourRooms object at 0x77db800f8500>'\", 'None']; env_params=[\"'dataclass:EnvParams(fail_prob=0.3333333333333333,max_steps_in_episode=500,resample_goal_pos=False,resample_init_pos=False)'\", 'None']; env_params.fail_prob=['0.3333333333333333', 'None']; env_params.max_steps_in_episode=['500', 'None']; env_params.resample_goal_pos=['False', 'None']; env_params.resample_init_pos=['False', 'None']; eval_best_burst_mean=['0.0002309915580553934', '0.0003865692706312984', '0.0017876721685752273', '0.0026279122103005648', '0.01262840535491705'], …(28 total); eval_best_burst_step=['100000.0', '120000.0', '140000.0', '15000.0', '160000.0'], …(13 total); eval_episode_cap=['500', 'None']; eval_every=['10000', '20000', '2500', '25000', '5000'], …(6 total); eval_final_mean=['0.0', '0.005874688271433115', '0.006910125259310007', '0.014862599782645702', '0.06978630274534225'], …(18 total); gamma=['0.5', '0.8', '0.9', '0.95', '0.99']; intervention_name=[\"'ddqn'\", \"'ddqn_100k'\", \"'ddqn_1step'\", \"'ddqn_200k'\", \"'ddqn_25k'\"], …(14 total); jensen_bias_per_eps__mean_axis_-1=['[-0.04585413336753845, -0.04732726812362671, 0.2302372097969055, 0.746498167514801, 0.005870342254638672, 0.04412558078765869, 0.1842695355415344, 0.10585546791553498, -0.012885487079620362, -0.05410624742507934, -0.021362817287445067, -0.04166477918624878, -0.029021012783050536, -0.01064997911453247, -0.0055056452751159664, -0.03886251449584961, 0.014496839046478272, -0.0179388165473938, -0.013630044460296632, 0.059553390741348265]', '[-0.04627019490591451, 0.05233407304797888, -0.006401704542804509, 0.051634636055678126, 0.02943596988916397, 0.06293489932741067, 0.02719298262150005, -0.015386345237493515, -0.02484562397003174, -0.05494652390480041]', '[0.011352825351059437, -0.07221753895282745, 0.12749515026807784, 0.004734998941421509, 0.10009471345692873, 0.0841107115149498, -0.0036095112562179567, -0.022109454870223998, -0.06631581038236618, -0.085750812292099]', '[0.013712391257286072, 0.005569842178374529, 0.004439586166458298, 0.021899116337144593, 0.016924895346164703, -0.0002989717970590999, 0.003218509832822747, 0.0009198779884172836, 0.002782965022026371, 0.003703142889078137]', '[0.024339858442544937, 0.0018694410100579262, 0.016228530555963516, 0.0031710858456790447, 0.022196929901838303, 0.005579403135925531, 0.008136212825775146, 0.0053945439867675304, 0.004901643376797438, 0.0026744741480737135]'], …(28 total); jensen_dormancy_gap=['0.0', '0.0038544457723045577', '0.006785320708403812', '0.0105041625454424', 'nan']; jensen_dormancy_premise_active=[\"'held'\", \"'invariant_violation'\", \"'power_insufficient'\"]; jensen_gap=['0.007287134882062674', '0.007568215951323509', '0.007778525352478027', '0.00944921188056469', '0.023704186379909516'], …(28 total); late_window_mean=['0.0', '0.0004400000034365803', '0.0013529411517083645', '0.0030434783548116684', '0.00416666641831398'], …(13 total); mc_return__mean_axis_-1=['[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 5.169878828456423e-27, 0.0, 6.039613592774033e-15]', '[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.00023099155951058492, 0.0, 0.0, 0.0]', '[0.0, 0.0, 0.0, 0.0, 0.02883494714042172, 0.0, 0.004416017234325409, 0.025737155601382254, 0.007953750807791949, 0.006910124840214848]', '[0.0, 0.0, 0.0, 0.00038656924589304255, 0.0, 0.0, 0.0, 5.0630257464945314e-05, 0.000138321693520993, 0.0]', '[0.0, 0.0, 0.007381160091608763, 0.08044453151524067, 0.03138949275016785, 0.1497552663087845, 0.12859502509236337, 0.13371990919113158, 0.22753269076347352, 0.19288676381111144]'], …(28 total); n_actions=['4', 'None']; n_step=['1', 'None']; obs_shape=[\"'(4)'\", 'None']; optimizer=[\"'dataclass:WarmedUpdate(inner=dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.0001),warmup_steps=100)'\", \"'dataclass:WarmedUpdate(inner=dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.0001,weight_decay=0.0),warmup_steps=100)'\", \"'dataclass:WarmedUpdate(inner=dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.001),warmup_steps=100)'\", \"'partial(Claim:warmed_update;inner=partial(Claim:adam;lr=0.001),warmup_steps=100)'\"]; optimizer.inner=[\"'dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.0001)'\", \"'dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.0001,weight_decay=0.0)'\", \"'dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.001)'\", \"'partial(Claim:adam;lr=0.001)'\"]; optimizer.inner.lr=['0.0001', '0.001']; optimizer.inner.weight_decay=['0.0', 'None']; replay=[\"'dataclass:Replay(batch_size=32,capacity=10000,sample=Claim:uniform_sample)'\", \"'dataclass:Replay(batch_size=32,capacity=20000,sample=Claim:uniform_sample)'\", \"'dataclass:Replay(batch_size=32,capacity=50000,sample=Claim:uniform_sample)'\"]; replay.capacity=['10000', '20000', '50000']; reward_scale=['0.001', '0.003', '0.01', '0.03', '0.1'], …(8 total); rng_key=[\"'type:_empty'\", 'None']; state_hash=[\"'callable:default_state_hash'\", 'None']; total_steps=['100000', '1000000', '200000', '25000', '50000'], …(6 total); verdict=[\"'held'\", \"'invariant_violation'\", \"'power_insufficient'\"]. Add these to pair_by so each regime is its own stratum.\n"
+    }
+  ],
+  "git_commit": "ffcaaa7c6a14",
+  "hypothesis_module": "experiments.findings.dqn_bridges",
+  "measurable_signatures": {
+    "eval_best_burst_mean": "73fcacede9b81e9b",
+    "eval_best_burst_step": "5c9a7e384dc5f666",
+    "eval_final_mean": "2cd2ba6641d4abda",
+    "jensen_bias_per_eps__mean_axis_-1": "f9e52b7bf47f5020",
+    "jensen_dormancy_gap": "401ca81099067abe",
+    "jensen_dormancy_premise_active": "d952dab78a30c9d0",
+    "jensen_gap": "c87195e28602c23a",
+    "mc_return__mean_axis_-1": "21d9d87899d9e9ef"
+  },
+  "n_cells_total": 12451,
+  "schema_version": 1,
+  "timestamp_utc": "2026-05-06T03:48:59+00:00"
+}

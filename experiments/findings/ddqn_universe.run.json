@@ -1,0 +1,1597 @@
+{
+  "bridges": [
+    {
+      "analysis_results": {
+        "paired_g": {
+          "baseline_arm": "baseline",
+          "g": 0.0987955046061797,
+          "helped_fraction": 0.14553990610328638,
+          "mean_diff": 0.5380254247089127,
+          "mean_diff_p_value": 0.14937446920893627,
+          "mean_diff_se": 0.3718218007124337,
+          "measurable": "eval_best_burst_mean",
+          "n_baseline": 251,
+          "n_pairs": 213,
+          "n_treatment": 269,
+          "p_value": 0.15032984372199015,
+          "pair_by": [
+            "seed",
+            "env_name"
+          ],
+          "se": 0.06868586298515146,
+          "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
+        }
+      },
+      "blocked_by": null,
+      "bridge_name": "ddqn_refuted_when_dormancy_fires",
+      "direction": "inverse",
+      "n_cells_in_scope": 1726,
+      "n_cells_pre_scope": 12571,
+      "pair_by": [
+        "seed",
+        "env_name"
+      ],
+      "params": {
+        "dedupe_strategy": "mean"
+      },
+      "predicted_direction": null,
+      "scope_repr": "[(col(\"jensen_dormancy_gap\").is_finite()) & ([(col(\"jensen_dormancy_gap\")) >= (dyn float: 0.000000001)])]",
+      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "target_name": "eval_best_burst_mean",
+      "tier": "associational",
+      "verdict": "held",
+      "warnings": [
+        {
+          "gate_name": "no_predicted_direction",
+          "level": "info",
+          "message": "Bridge 'ddqn_refuted_when_dormancy_fires' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
+          "passed": false
+        }
+      ]
+    },
+    {
+      "analysis_results": {
+        "paired_g": {
+          "baseline_arm": "baseline",
+          "g": 0.7779926561328315,
+          "helped_fraction": 0.8333333333333334,
+          "mean_diff": 0.18737140148878098,
+          "mean_diff_p_value": 0.00014320289940794595,
+          "mean_diff_se": 0.042824013046385286,
+          "measurable": "eval_final_mean",
+          "n_baseline": 30,
+          "n_pairs": 30,
+          "n_treatment": 30,
+          "p_value": 0.00018878314189946338,
+          "pair_by": [
+            "seed"
+          ],
+          "se": 0.2083775648910977,
+          "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=partial(Claim:adaptive_dormancy_greedify;sigma_floor_factor=0.5))"
+        }
+      },
+      "blocked_by": null,
+      "bridge_name": "adaptive_dqn_recovers_ddqn_benefit__fourrooms_factor_0p5",
+      "direction": "direct",
+      "n_cells_in_scope": 180,
+      "n_cells_pre_scope": 12571,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {},
+      "predicted_direction": null,
+      "scope_repr": "[([(col(\"env_name\")) == (\"FourRooms-misc\")]) & (col(\"corpus\").is_in([[\"adaptive_dqn_fourrooms_sweep\", \"expectile_3way\"]]))]",
+      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=partial(Claim:adaptive_dormancy_greedify;sigma_floor_factor=0.5))|vs=baseline)",
+      "target_name": "eval_final_mean",
+      "tier": "interventional",
+      "verdict": "held",
+      "warnings": [
+        {
+          "gate_name": "no_predicted_direction",
+          "level": "info",
+          "message": "Bridge 'adaptive_dqn_recovers_ddqn_benefit__fourrooms_factor_0p5' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
+          "passed": false
+        }
+      ]
+    },
+    {
+      "analysis_results": {
+        "paired_g": {
+          "baseline_arm": "baseline",
+          "g": -0.46429299894293813,
+          "helped_fraction": 0.36666666666666664,
+          "mean_diff": -1.60800594886144,
+          "mean_diff_p_value": 0.014138295591560546,
+          "mean_diff_se": 0.615821817373129,
+          "measurable": "eval_final_mean",
+          "n_baseline": 30,
+          "n_pairs": 30,
+          "n_treatment": 30,
+          "p_value": 0.015685280136104072,
+          "pair_by": [
+            "seed"
+          ],
+          "se": 0.19216173695038888,
+          "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=partial(Claim:adaptive_dormancy_greedify;sigma_floor_factor=0.5))"
+        }
+      },
+      "blocked_by": null,
+      "bridge_name": "adaptive_dqn_fails_to_avoid_attenuation__spaceinvaders_1m",
+      "direction": "inverse",
+      "n_cells_in_scope": 90,
+      "n_cells_pre_scope": 12571,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {},
+      "predicted_direction": null,
+      "scope_repr": "[([(col(\"env_name\")) == (\"SpaceInvaders-MinAtar\")]) & (col(\"corpus\").is_in([[\"adaptive_dqn_spaceinvaders_1m\", \"minatar_1M_spaceinvaders\"]]))]",
+      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=partial(Claim:adaptive_dormancy_greedify;sigma_floor_factor=0.5))|vs=baseline)",
+      "target_name": "eval_final_mean",
+      "tier": "interventional",
+      "verdict": "held",
+      "warnings": [
+        {
+          "gate_name": "no_predicted_direction",
+          "level": "info",
+          "message": "Bridge 'adaptive_dqn_fails_to_avoid_attenuation__spaceinvaders_1m' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
+          "passed": false
+        }
+      ]
+    },
+    {
+      "analysis_results": {
+        "meta_regression_per_burst": {
+          "cleavage_axes": [
+            "bootstrap_fraction",
+            "log_action_dim",
+            "log_horizon",
+            "log_obs_dim"
+          ],
+          "coefficients": [
+            {
+              "ci_hi": 4.694509894930202,
+              "ci_lo": 0.5158222276287825,
+              "coefficient": 2.6051660612794922,
+              "is_significant": true,
+              "name": "bootstrap_fraction",
+              "p_value": 0.014897261473091783
+            },
+            {
+              "ci_hi": 602.9395251208622,
+              "ci_lo": -1104.7771168298864,
+              "coefficient": -250.91879585451215,
+              "is_significant": false,
+              "name": "jensen_dormancy_gap",
+              "p_value": 0.5622356903503656
+            },
+            {
+              "ci_hi": 0.4956996822127913,
+              "ci_lo": 0.051383746259647534,
+              "coefficient": 0.2735417142362194,
+              "is_significant": true,
+              "name": "log_action_dim",
+              "p_value": 0.016170743186039394
+            },
+            {
+              "ci_hi": 0.3394589663439166,
+              "ci_lo": 0.0863654783098883,
+              "coefficient": 0.21291222232690243,
+              "is_significant": true,
+              "name": "log_horizon",
+              "p_value": 0.0011207000301427517
+            },
+            {
+              "ci_hi": -0.05641209597520755,
+              "ci_lo": -0.14592088207037004,
+              "coefficient": -0.1011664890227888,
+              "is_significant": true,
+              "name": "log_obs_dim",
+              "p_value": 1.5914500449243363e-05
+            }
+          ],
+          "i_squared": 0.6886825705881454,
+          "intercept": -3.7649204645951055,
+          "intercept_ci_hi": -1.2945937524224873,
+          "intercept_ci_lo": -6.235247176767723,
+          "intercept_p_value": 0.0030642822174684614,
+          "intercept_se": 1.2497275573606283,
+          "n_strata": 149,
+          "pool": "random",
+          "q_statistic": 459.33823965512534,
+          "r_squared": 0.15290415388246703,
+          "tau_sq": 0.0782344957734409
+        }
+      },
+      "blocked_by": null,
+      "bridge_name": "bootstrap_fraction_drives_g_link__net_of_dormancy",
+      "direction": "direct",
+      "n_cells_in_scope": 1405,
+      "n_cells_pre_scope": 12571,
+      "pair_by": [
+        "seed",
+        "total_steps",
+        "eval_every"
+      ],
+      "params": {
+        "covariates": [
+          "log_action_dim",
+          "log_obs_dim",
+          "log_horizon",
+          "bootstrap_fraction",
+          "jensen_dormancy_gap"
+        ],
+        "dedupe_strategy": "mean",
+        "source": "mc_return__mean_axis_-1"
+      },
+      "predicted_direction": null,
+      "scope_repr": "[([([(col(\"total_steps\")) == (dyn int: 200000)]) & ([(col(\"eval_every\")) == (dyn int: 20000)])]) & ([(col(\"replay.capacity\")) == (dyn int: 10000)])]",
+      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "target_name": "eval_best_burst_mean",
+      "tier": "associational",
+      "verdict": "held",
+      "warnings": [
+        {
+          "gate_name": "exogenous_scope",
+          "level": "warn",
+          "message": "Bridge.scope references only exogenous (leaves of the outermost claim) columns: ['eval_every', 'replay.capacity', 'total_steps']. The principled scope-axis is endogenous (cf. ANALYSIS_RECIPE.md §0); HP envelopes are a temporary substitute. See FUTURE_WORKS \"Endogenous-variable scope predicates\".",
+          "passed": false
+        },
+        {
+          "gate_name": "no_predicted_direction",
+          "level": "info",
+          "message": "Bridge 'bootstrap_fraction_drives_g_link__net_of_dormancy' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
+          "passed": false
+        }
+      ]
+    },
+    {
+      "analysis_results": {
+        "paired_g": {
+          "baseline_arm": "baseline",
+          "g": 1.1141046848386873,
+          "helped_fraction": 1.0,
+          "mean_diff": 0.0909940113623937,
+          "mean_diff_p_value": 7.705234368327041e-07,
+          "mean_diff_se": 0.014522666534028138,
+          "measurable": "eval_best_burst_mean",
+          "n_baseline": 30,
+          "n_pairs": 30,
+          "n_treatment": 30,
+          "p_value": 1.6395042228062273e-06,
+          "pair_by": [
+            "seed"
+          ],
+          "se": 0.23242307862959416,
+          "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
+        }
+      },
+      "blocked_by": null,
+      "bridge_name": "ddqn_benefit_scales_with_effective_horizon__fourrooms",
+      "direction": "direct",
+      "n_cells_in_scope": 60,
+      "n_cells_pre_scope": 12571,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {},
+      "predicted_direction": null,
+      "scope_repr": "[([([(col(\"env_name\")) == (\"FourRooms-misc\")]) & ([(col(\"corpus\")) == (\"gamma_sweep\")])]) & ([(col(\"effective_horizon\").is_finite()) & ([(col(\"effective_horizon\")) >= (dyn float: 25)])])]",
+      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "target_name": "eval_best_burst_mean",
+      "tier": "interventional",
+      "verdict": "held",
+      "warnings": [
+        {
+          "gate_name": "no_predicted_direction",
+          "level": "info",
+          "message": "Bridge 'ddqn_benefit_scales_with_effective_horizon__fourrooms' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
+          "passed": false
+        }
+      ]
+    },
+    {
+      "analysis_results": {
+        "paired_g": {
+          "baseline_arm": "baseline",
+          "g": 0.4010382435667092,
+          "helped_fraction": 0.7,
+          "mean_diff": 8.286252625783284,
+          "mean_diff_p_value": 0.03182531978847547,
+          "mean_diff_se": 3.673938947805418,
+          "measurable": "eval_best_burst_mean",
+          "n_baseline": 30,
+          "n_pairs": 30,
+          "n_treatment": 30,
+          "p_value": 0.034579347251345684,
+          "pair_by": [
+            "seed"
+          ],
+          "se": 0.18977318359922332,
+          "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
+        }
+      },
+      "blocked_by": null,
+      "bridge_name": "ddqn_benefit_scales_with_effective_horizon__metamaze_high_gamma",
+      "direction": "direct",
+      "n_cells_in_scope": 60,
+      "n_cells_pre_scope": 12571,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {},
+      "predicted_direction": null,
+      "scope_repr": "[([([(col(\"env_name\")) == (\"MetaMaze-misc\")]) & ([(col(\"corpus\")) == (\"gamma_sweep_metamaze_high\")])]) & ([(col(\"effective_horizon\").is_finite()) & ([(col(\"effective_horizon\")) >= (dyn float: 150)])])]",
+      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "target_name": "eval_best_burst_mean",
+      "tier": "interventional",
+      "verdict": "held",
+      "warnings": [
+        {
+          "gate_name": "no_predicted_direction",
+          "level": "info",
+          "message": "Bridge 'ddqn_benefit_scales_with_effective_horizon__metamaze_high_gamma' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
+          "passed": false
+        }
+      ]
+    },
+    {
+      "analysis_results": {
+        "paired_g": {
+          "baseline_arm": "baseline",
+          "g": 0.412689428162094,
+          "helped_fraction": 0.26666666666666666,
+          "mean_diff": 0.030196072657903035,
+          "mean_diff_p_value": 0.027523578137341298,
+          "mean_diff_se": 0.01301028088750122,
+          "measurable": "eval_best_burst_mean",
+          "n_baseline": 30,
+          "n_pairs": 30,
+          "n_treatment": 30,
+          "p_value": 0.030015139083193365,
+          "pair_by": [
+            "seed"
+          ],
+          "se": 0.19018905349312984,
+          "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
+        }
+      },
+      "blocked_by": null,
+      "bridge_name": "ddqn_benefit_scales_with_gamma__discountingchain",
+      "direction": "direct",
+      "n_cells_in_scope": 60,
+      "n_cells_pre_scope": 12571,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {},
+      "predicted_direction": null,
+      "scope_repr": "[([([(col(\"env_name\")) == (\"DiscountingChain-bsuite\")]) & ([(col(\"corpus\")) == (\"gamma_sweep_more\")])]) & ([(col(\"effective_horizon\").is_finite()) & ([(col(\"effective_horizon\")) >= (dyn float: 50)])])]",
+      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "target_name": "eval_best_burst_mean",
+      "tier": "interventional",
+      "verdict": "held",
+      "warnings": [
+        {
+          "gate_name": "no_predicted_direction",
+          "level": "info",
+          "message": "Bridge 'ddqn_benefit_scales_with_gamma__discountingchain' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
+          "passed": false
+        }
+      ]
+    },
+    {
+      "analysis_results": {
+        "mundlak_paired_g_per_burst": {
+          "between": {
+            "ci_hi": -0.01471486911437652,
+            "ci_lo": -0.10855572587037812,
+            "coefficient": -0.061635297492377325,
+            "component": "between",
+            "p_value": 0.010368046351411309,
+            "se": 0.023753721012771675
+          },
+          "hausman_p": 0.72149228890904,
+          "intercept": 0.05711534735800588,
+          "n_obs": 159,
+          "n_strata": 12,
+          "r_squared": 0.4800848341493029,
+          "within": {
+            "ci_hi": -0.011259318403667257,
+            "ci_lo": -0.15289145249424796,
+            "coefficient": -0.08207538544895761,
+            "component": "within",
+            "p_value": 0.023400369049523695,
+            "se": 0.03585101751978579
+          }
+        }
+      },
+      "blocked_by": null,
+      "bridge_name": "mc_variance_attenuates_g_link__between_env",
+      "direction": "direct",
+      "n_cells_in_scope": 12571,
+      "n_cells_pre_scope": 12571,
+      "pair_by": [
+        "seed",
+        "total_steps",
+        "eval_every"
+      ],
+      "params": {
+        "dedupe_strategy": "mean",
+        "predictor_name": "log_mc_variance_per_burst",
+        "source": "mc_return__mean_axis_-1"
+      },
+      "predicted_direction": null,
+      "scope_repr": null,
+      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "target_name": "eval_best_burst_mean",
+      "tier": "associational",
+      "verdict": "held",
+      "warnings": [
+        {
+          "gate_name": "no_predicted_direction",
+          "level": "info",
+          "message": "Bridge 'mc_variance_attenuates_g_link__between_env' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
+          "passed": false
+        }
+      ]
+    },
+    {
+      "analysis_results": {
+        "paired_g": {
+          "baseline_arm": "baseline",
+          "g": 3.14879018477854,
+          "helped_fraction": 1.0,
+          "mean_diff": 0.4870412742295432,
+          "mean_diff_p_value": 0.0,
+          "mean_diff_se": 0.027503096899612535,
+          "measurable": "outcome_native",
+          "n_baseline": 30,
+          "n_pairs": 30,
+          "n_treatment": 30,
+          "p_value": 1.5944686916766496e-12,
+          "pair_by": [
+            "seed"
+          ],
+          "se": 0.44562464825152404,
+          "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
+        }
+      },
+      "blocked_by": null,
+      "bridge_name": "ddqn_rescues_underlearning_vanilla__fourrooms_rs_0p1",
+      "direction": "direct",
+      "n_cells_in_scope": 307,
+      "n_cells_pre_scope": 12571,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "dedupe_strategy": "mean",
+        "threshold_diff": 0.4
+      },
+      "predicted_direction": null,
+      "scope_repr": "[([(col(\"env_name\")) == (\"FourRooms-misc\")]) & ([(col(\"reward_scale\")) == (dyn float: 0.1)])]",
+      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "target_name": "outcome_native",
+      "tier": "interventional",
+      "verdict": "held",
+      "warnings": [
+        {
+          "gate_name": "no_predicted_direction",
+          "level": "info",
+          "message": "Bridge 'ddqn_rescues_underlearning_vanilla__fourrooms_rs_0p1' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
+          "passed": false
+        }
+      ]
+    },
+    {
+      "analysis_results": {
+        "paired_g": {
+          "baseline_arm": "baseline",
+          "g": 2.545638120903028,
+          "helped_fraction": 1.0,
+          "mean_diff": 0.49689458082947463,
+          "mean_diff_p_value": 1.1102230246251565e-14,
+          "mean_diff_se": 0.03470780504771625,
+          "measurable": "outcome_native",
+          "n_baseline": 30,
+          "n_pairs": 30,
+          "n_treatment": 30,
+          "p_value": 1.276948759645955e-11,
+          "pair_by": [
+            "seed"
+          ],
+          "se": 0.3759493193369442,
+          "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
+        }
+      },
+      "blocked_by": null,
+      "bridge_name": "ddqn_dominates_vanilla_response_curve__fourrooms_rs_0p3",
+      "direction": "direct",
+      "n_cells_in_scope": 60,
+      "n_cells_pre_scope": 12571,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "threshold_diff": 0.4
+      },
+      "predicted_direction": null,
+      "scope_repr": "[([(col(\"env_name\")) == (\"FourRooms-misc\")]) & ([(col(\"reward_scale\")) == (dyn float: 0.3)])]",
+      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "target_name": "outcome_native",
+      "tier": "interventional",
+      "verdict": "held",
+      "warnings": [
+        {
+          "gate_name": "no_predicted_direction",
+          "level": "info",
+          "message": "Bridge 'ddqn_dominates_vanilla_response_curve__fourrooms_rs_0p3' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
+          "passed": false
+        }
+      ]
+    },
+    {
+      "analysis_results": {
+        "paired_g_per_burst": {
+          "baseline_arm": "baseline",
+          "measurable": "mc_return__mean_axis_-1",
+          "n_strata": 20,
+          "pair_by": [
+            "seed"
+          ],
+          "strata": [
+            {
+              "burst_index": 0,
+              "env_name": "SpaceInvaders-MinAtar",
+              "g": 1.5328822950886278,
+              "helped_fraction": 0.9333333333333333,
+              "n_pairs": 30,
+              "se": 0.269249826078439
+            },
+            {
+              "burst_index": 1,
+              "env_name": "SpaceInvaders-MinAtar",
+              "g": 2.2952531646611334,
+              "helped_fraction": 0.9666666666666667,
+              "n_pairs": 30,
+              "se": 0.3480466225926001
+            },
+            {
+              "burst_index": 2,
+              "env_name": "SpaceInvaders-MinAtar",
+              "g": 1.372290357397229,
+              "helped_fraction": 0.9333333333333333,
+              "n_pairs": 30,
+              "se": 0.25440062974913585
+            },
+            {
+              "burst_index": 3,
+              "env_name": "SpaceInvaders-MinAtar",
+              "g": 0.5444981415519372,
+              "helped_fraction": 0.8333333333333334,
+              "n_pairs": 30,
+              "se": 0.19563904800054246
+            },
+            {
+              "burst_index": 4,
+              "env_name": "SpaceInvaders-MinAtar",
+              "g": 0.4135284593020756,
+              "helped_fraction": 0.6333333333333333,
+              "n_pairs": 30,
+              "se": 0.19021942534227626
+            },
+            {
+              "burst_index": 5,
+              "env_name": "SpaceInvaders-MinAtar",
+              "g": 0.030141608360422793,
+              "helped_fraction": 0.5,
+              "n_pairs": 30,
+              "se": 0.18261564904440478
+            },
+            {
+              "burst_index": 6,
+              "env_name": "SpaceInvaders-MinAtar",
+              "g": -0.24584134423928242,
+              "helped_fraction": 0.43333333333333335,
+              "n_pairs": 30,
+              "se": 0.1853122574888746
+            },
+            {
+              "burst_index": 7,
+              "env_name": "SpaceInvaders-MinAtar",
+              "g": -0.17990827743126628,
+              "helped_fraction": 0.5,
+              "n_pairs": 30,
+              "se": 0.18404560070302708
+            },
+            {
+              "burst_index": 8,
+              "env_name": "SpaceInvaders-MinAtar",
+              "g": -0.30328095851308773,
+              "helped_fraction": 0.43333333333333335,
+              "n_pairs": 30,
+              "se": 0.1867252589499975
+            },
+            {
+              "burst_index": 9,
+              "env_name": "SpaceInvaders-MinAtar",
+              "g": -0.191114214750196,
+              "helped_fraction": 0.43333333333333335,
+              "n_pairs": 30,
+              "se": 0.1842337574513958
+            },
+            {
+              "burst_index": 10,
+              "env_name": "SpaceInvaders-MinAtar",
+              "g": -0.5842091252939728,
+              "helped_fraction": 0.23333333333333334,
+              "n_pairs": 30,
+              "se": 0.1975390384234953
+            },
+            {
+              "burst_index": 11,
+              "env_name": "SpaceInvaders-MinAtar",
+              "g": -0.6523743791297968,
+              "helped_fraction": 0.26666666666666666,
+              "n_pairs": 30,
+              "se": 0.201063519422138
+            },
+            {
+              "burst_index": 12,
+              "env_name": "SpaceInvaders-MinAtar",
+              "g": -0.41884975342199676,
+              "helped_fraction": 0.26666666666666666,
+              "n_pairs": 30,
+              "se": 0.19041337120160737
+            },
+            {
+              "burst_index": 13,
+              "env_name": "SpaceInvaders-MinAtar",
+              "g": -0.43591938766272037,
+              "helped_fraction": 0.43333333333333335,
+              "n_pairs": 30,
+              "se": 0.1910508532886921
+            },
+            {
+              "burst_index": 14,
+              "env_name": "SpaceInvaders-MinAtar",
+              "g": -0.40956576149135815,
+              "helped_fraction": 0.3,
+              "n_pairs": 30,
+              "se": 0.19007648079067174
+            },
+            {
+              "burst_index": 15,
+              "env_name": "SpaceInvaders-MinAtar",
+              "g": -0.5645022397057058,
+              "helped_fraction": 0.3333333333333333,
+              "n_pairs": 30,
+              "se": 0.19658173781885058
+            },
+            {
+              "burst_index": 16,
+              "env_name": "SpaceInvaders-MinAtar",
+              "g": -0.6289508726353902,
+              "helped_fraction": 0.3333333333333333,
+              "n_pairs": 30,
+              "se": 0.19981571510556165
+            },
+            {
+              "burst_index": 17,
+              "env_name": "SpaceInvaders-MinAtar",
+              "g": -0.32369303695835916,
+              "helped_fraction": 0.4,
+              "n_pairs": 30,
+              "se": 0.1872955410652429
+            },
+            {
+              "burst_index": 18,
+              "env_name": "SpaceInvaders-MinAtar",
+              "g": -0.441439898563388,
+              "helped_fraction": 0.36666666666666664,
+              "n_pairs": 30,
+              "se": 0.19126200110684358
+            },
+            {
+              "burst_index": 19,
+              "env_name": "SpaceInvaders-MinAtar",
+              "g": -0.4135716253688961,
+              "helped_fraction": 0.43333333333333335,
+              "n_pairs": 30,
+              "se": 0.19022098943554533
+            }
+          ],
+          "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
+        }
+      },
+      "blocked_by": null,
+      "bridge_name": "ddqn_curve_crosses_vanilla_late__spaceinvaders",
+      "direction": "inverse",
+      "n_cells_in_scope": 210,
+      "n_cells_pre_scope": 12571,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "crossover_burst_max": 10,
+        "crossover_burst_min": 3,
+        "dedupe_strategy": "mean",
+        "env_name": "SpaceInvaders-MinAtar",
+        "late_negative_floor": -0.3,
+        "source": "mc_return__mean_axis_-1"
+      },
+      "predicted_direction": null,
+      "scope_repr": "[([([([(col(\"env_name\")) == (\"SpaceInvaders-MinAtar\")]) & ([(col(\"total_steps\")) == (dyn int: 1000000)])]) & (col(\"reward_clip_min\").is_null())]) & ([(col(\"q_divergence_score\").is_finite()) & ([(col(\"q_divergence_score\")) > (dyn float: 1)])])]",
+      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "target_name": "mc_return[per_burst]",
+      "tier": "associational",
+      "verdict": "held",
+      "warnings": [
+        {
+          "gate_name": "no_predicted_direction",
+          "level": "info",
+          "message": "Bridge 'ddqn_curve_crosses_vanilla_late__spaceinvaders' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
+          "passed": false
+        }
+      ]
+    },
+    {
+      "analysis_results": {
+        "paired_g": {
+          "baseline_arm": "baseline",
+          "g": 3.292628651378435,
+          "helped_fraction": 1.0,
+          "mean_diff": 0.1250313702253335,
+          "mean_diff_p_value": 0.0,
+          "mean_diff_se": 0.006752052223435283,
+          "measurable": "eval_best_burst_mean",
+          "n_baseline": 30,
+          "n_pairs": 30,
+          "n_treatment": 30,
+          "p_value": 1.101028285596105e-12,
+          "pair_by": [
+            "seed"
+          ],
+          "se": 0.46262662115140923,
+          "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
+        }
+      },
+      "blocked_by": null,
+      "bridge_name": "ddqn_helps_at_full_bootstrap__fourrooms_n1",
+      "direction": "direct",
+      "n_cells_in_scope": 2951,
+      "n_cells_pre_scope": 12571,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "threshold_diff": 0.05
+      },
+      "predicted_direction": null,
+      "scope_repr": "[([(col(\"env_name\")) == (\"FourRooms-misc\")]) & ([(col(\"n_step\")) == (dyn int: 1)])]",
+      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "target_name": "eval_best_burst_mean",
+      "tier": "interventional",
+      "verdict": "held",
+      "warnings": [
+        {
+          "gate_name": "exogenous_scope",
+          "level": "warn",
+          "message": "Bridge.scope references only exogenous (leaves of the outermost claim) columns: ['env_name', 'n_step']. The principled scope-axis is endogenous (cf. ANALYSIS_RECIPE.md §0); HP envelopes are a temporary substitute. See FUTURE_WORKS \"Endogenous-variable scope predicates\".",
+          "passed": false
+        },
+        {
+          "gate_name": "no_predicted_direction",
+          "level": "info",
+          "message": "Bridge 'ddqn_helps_at_full_bootstrap__fourrooms_n1' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
+          "passed": false
+        }
+      ]
+    },
+    {
+      "analysis_results": {
+        "paired_g": {
+          "baseline_arm": "baseline",
+          "g": 0.12687201759580988,
+          "helped_fraction": 0.5333333333333333,
+          "mean_diff": 0.004488976796468099,
+          "mean_diff_p_value": 0.4812271106508361,
+          "mean_diff_se": 0.006291309766526334,
+          "measurable": "eval_best_burst_mean",
+          "n_baseline": 30,
+          "n_pairs": 30,
+          "n_treatment": 30,
+          "p_value": 0.4888575558787118,
+          "pair_by": [
+            "seed"
+          ],
+          "se": 0.18330741523684704,
+          "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
+        }
+      },
+      "blocked_by": null,
+      "bridge_name": "ddqn_null_under_monte_carlo__fourrooms_n10",
+      "direction": "direct",
+      "n_cells_in_scope": 60,
+      "n_cells_pre_scope": 12571,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "null_ceiling": 0.02
+      },
+      "predicted_direction": null,
+      "scope_repr": "[([(col(\"env_name\")) == (\"FourRooms-misc\")]) & ([(col(\"n_step\")) == (dyn int: 10)])]",
+      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "target_name": "eval_best_burst_mean",
+      "tier": "interventional",
+      "verdict": "held",
+      "warnings": [
+        {
+          "gate_name": "exogenous_scope",
+          "level": "warn",
+          "message": "Bridge.scope references only exogenous (leaves of the outermost claim) columns: ['env_name', 'n_step']. The principled scope-axis is endogenous (cf. ANALYSIS_RECIPE.md §0); HP envelopes are a temporary substitute. See FUTURE_WORKS \"Endogenous-variable scope predicates\".",
+          "passed": false
+        },
+        {
+          "gate_name": "no_predicted_direction",
+          "level": "info",
+          "message": "Bridge 'ddqn_null_under_monte_carlo__fourrooms_n10' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
+          "passed": false
+        }
+      ]
+    },
+    {
+      "analysis_results": {
+        "paired_g": {
+          "baseline_arm": "baseline",
+          "g": 0.5204080216337128,
+          "helped_fraction": 0.75,
+          "mean_diff": 0.7127978039621764,
+          "mean_diff_p_value": 7.469776597268662e-08,
+          "mean_diff_se": 0.12424534799002979,
+          "measurable": "mc_return_first_quarter",
+          "n_baseline": 120,
+          "n_pairs": 120,
+          "n_treatment": 120,
+          "p_value": 8.793007971424551e-08,
+          "pair_by": [
+            "seed",
+            "env_name"
+          ],
+          "se": 0.09727162375235465,
+          "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
+        }
+      },
+      "blocked_by": null,
+      "bridge_name": "ddqn_helps_at_early_bursts__pixel_envs",
+      "direction": "direct",
+      "n_cells_in_scope": 390,
+      "n_cells_pre_scope": 12571,
+      "pair_by": [
+        "seed",
+        "env_name"
+      ],
+      "params": {
+        "dedupe_strategy": "mean"
+      },
+      "predicted_direction": null,
+      "scope_repr": "[([([([([(col(\"log_obs_dim\")) >= (dyn float: 5)]) & ([(col(\"total_steps\")) >= (dyn float: 1000000)])]) & (col(\"reward_clip_min\").is_null())]) & (col(\"q_divergence_score\").is_finite())]) & ([(.when([(col(\"q_divergence_score\").is_not_nan()) | (col(\"q_divergence_score\").is_null())]).then(col(\"q_divergence_score\")).otherwise(null).mean().over([col(\"env_name\"), col(\"total_steps\")])) > (dyn float: 1)])]",
+      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "target_name": "mc_return_first_quarter",
+      "tier": "associational",
+      "verdict": "held",
+      "warnings": [
+        {
+          "gate_name": "no_predicted_direction",
+          "level": "info",
+          "message": "Bridge 'ddqn_helps_at_early_bursts__pixel_envs' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
+          "passed": false
+        }
+      ]
+    },
+    {
+      "analysis_results": {
+        "paired_link_per_burst": {
+          "baseline_arm": "baseline",
+          "n_strata": 10,
+          "pair_by": [
+            "seed"
+          ],
+          "predictor": "jensen_bias_per_eps__mean_axis_-1",
+          "strata": [
+            {
+              "burst_index": 0,
+              "env_name": "Acrobot-v1",
+              "mean_d_predictor": -14.3598868560791,
+              "mean_d_target": 13.92994122823079,
+              "n_pairs": 30,
+              "p": 0.0,
+              "r": 0.997734039887064,
+              "sd_d_target": 127.20514200852725,
+              "slope": 1.01192733571196
+            },
+            {
+              "burst_index": 1,
+              "env_name": "Acrobot-v1",
+              "mean_d_predictor": -19.708933995564774,
+              "mean_d_target": 21.258183924357102,
+              "n_pairs": 30,
+              "p": 0.0,
+              "r": 0.9819284321937636,
+              "sd_d_target": 88.87722416811967,
+              "slope": 1.1148627281370054
+            },
+            {
+              "burst_index": 2,
+              "env_name": "Acrobot-v1",
+              "mean_d_predictor": 1.0775224558512368,
+              "mean_d_target": 0.11245979309081898,
+              "n_pairs": 30,
+              "p": 0.03391653332680522,
+              "r": 0.3869421392209719,
+              "sd_d_target": 13.024137331508744,
+              "slope": 0.21838521720804246
+            },
+            {
+              "burst_index": 3,
+              "env_name": "Acrobot-v1",
+              "mean_d_predictor": -10.352109120686853,
+              "mean_d_target": 4.390883076985676,
+              "n_pairs": 30,
+              "p": 0.0,
+              "r": 0.9285701822139855,
+              "sd_d_target": 26.9497802044265,
+              "slope": 0.8070805336811746
+            },
+            {
+              "burst_index": 4,
+              "env_name": "Acrobot-v1",
+              "mean_d_predictor": -8.47219741185506,
+              "mean_d_target": 0.68155771891276,
+              "n_pairs": 30,
+              "p": 2.3025147120936396e-05,
+              "r": 0.6721779461376861,
+              "sd_d_target": 14.65609380103278,
+              "slope": 0.28082187920150764
+            },
+            {
+              "burst_index": 5,
+              "env_name": "Acrobot-v1",
+              "mean_d_predictor": -24.620961875915523,
+              "mean_d_target": 13.538027165730796,
+              "n_pairs": 30,
+              "p": 0.0,
+              "r": 0.9388358336838356,
+              "sd_d_target": 60.489997025011874,
+              "slope": 0.7603911135788216
+            },
+            {
+              "burst_index": 6,
+              "env_name": "Acrobot-v1",
+              "mean_d_predictor": -18.07889630635579,
+              "mean_d_target": 8.758913294474285,
+              "n_pairs": 30,
+              "p": 1.4584663832195588e-07,
+              "r": 0.7665261415929997,
+              "sd_d_target": 34.18569574181335,
+              "slope": 0.4941810942215132
+            },
+            {
+              "burst_index": 7,
+              "env_name": "Acrobot-v1",
+              "mean_d_predictor": -19.01534205118815,
+              "mean_d_target": 8.237521387736003,
+              "n_pairs": 30,
+              "p": 3.755817878925427e-11,
+              "r": 0.8545412979898251,
+              "sd_d_target": 28.492179687360043,
+              "slope": 0.33240858394510564
+            },
+            {
+              "burst_index": 8,
+              "env_name": "Acrobot-v1",
+              "mean_d_predictor": -14.50512339274089,
+              "mean_d_target": 0.96701072692871,
+              "n_pairs": 30,
+              "p": 5.595524044110789e-14,
+              "r": 0.8950412481426544,
+              "sd_d_target": 34.951469103638615,
+              "slope": 0.32177615156577416
+            },
+            {
+              "burst_index": 9,
+              "env_name": "Acrobot-v1",
+              "mean_d_predictor": -22.8640226872762,
+              "mean_d_target": 5.530933914184573,
+              "n_pairs": 30,
+              "p": 0.0,
+              "r": 0.93844680992454,
+              "sd_d_target": 39.13485470370883,
+              "slope": 0.3033646100161961
+            }
+          ],
+          "target": "mc_return__mean_axis_-1",
+          "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
+        }
+      },
+      "blocked_by": null,
+      "bridge_name": "acrobot_per_burst_link_active__gamma_0999",
+      "direction": "inverse",
+      "n_cells_in_scope": 60,
+      "n_cells_pre_scope": 12571,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "consistency_floor": 0.7,
+        "env_name": "Acrobot-v1",
+        "predictor": "jensen_bias_per_eps__mean_axis_-1",
+        "target": "mc_return__mean_axis_-1"
+      },
+      "predicted_direction": null,
+      "scope_repr": "[([([([(col(\"env_name\")) == (\"Acrobot-v1\")]) & ([(col(\"corpus\")) == (\"l2_x_gamma_acrobot\")])]) & ([(col(\"effective_horizon\").is_finite()) & ([(col(\"effective_horizon\")) >= (dyn float: 80)])])]) & ([(col(\"optimizer.inner.weight_decay\")) == (dyn float: 0.0001)])]",
+      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "target_name": "mc_return",
+      "tier": "associational",
+      "verdict": "held",
+      "warnings": [
+        {
+          "gate_name": "no_predicted_direction",
+          "level": "info",
+          "message": "Bridge 'acrobot_per_burst_link_active__gamma_0999' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
+          "passed": false
+        }
+      ]
+    },
+    {
+      "analysis_results": {
+        "paired_delta_link_dowhy": {
+          "backdoor": {
+            "ate": -0.2037214062763475,
+            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__7,__burst__8,__burst__3,__burst__9,__burst__6,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __1,__burst__4,__burst__2,__burst__5])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__7,__burst__8,__burst__3,__burst__9,__burst__6,__burst__1,__burst__4,__burst__2,__burst__5,U) = P(dout|djens,__burst__7,__burst__8,__burst__3,__burst__9,__burst__6,__burst__1,__burst__4,__burst__2,__burst__5)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__7,__burst__8,__burst__3,__burst__9,__burst__6,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __1,__burst__4,__burst__2,__burst__5])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__7,__burst__8,__burst__3,__burst__9,__burst__6,__burst__1,__burst__4,__burst__2,__burst__5,U) = P(dout|djens,__burst__7,__burst__8,__burst__3,__burst__9,__burst__6,__burst__1,__burst__4,__burst__2,__burst__5)\n",
+            "identified": true,
+            "method_name": "backdoor.linear_regression",
+            "n_rows": 300,
+            "outcome": "dout",
+            "treatment": "djens"
+          },
+          "n_pairs": 300,
+          "outcome_col": "dout",
+          "placebo": {
+            "drift": 0.2037214062763475,
+            "method_name": "backdoor.linear_regression",
+            "n_rows": 300,
+            "outcome": "dout",
+            "real_ate": -0.2037214062763475,
+            "refuted_ate": 0.0,
+            "refuter_name": "placebo_treatment_refuter",
+            "treatment": "djens"
+          },
+          "random_common_cause": {
+            "drift": 2.575905992782679e-05,
+            "method_name": "backdoor.linear_regression",
+            "n_rows": 300,
+            "outcome": "dout",
+            "real_ate": -0.2037214062763475,
+            "refuted_ate": -0.20374716533627532,
+            "refuter_name": "random_common_cause",
+            "treatment": "djens"
+          },
+          "treatment_col": "djens"
+        }
+      },
+      "blocked_by": null,
+      "bridge_name": "acrobot_link_backdoor_ate_negative__gamma_0999",
+      "direction": "inverse",
+      "n_cells_in_scope": 180,
+      "n_cells_pre_scope": 12571,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "ate_ceiling": -0.1,
+        "env_filter": [
+          "Acrobot-v1"
+        ],
+        "link_predictor": "jensen_bias_per_eps__mean_axis_-1",
+        "link_target": "mc_return__mean_axis_-1"
+      },
+      "predicted_direction": null,
+      "scope_repr": "[([(col(\"env_name\")) == (\"Acrobot-v1\")]) & ([(col(\"effective_horizon\").is_finite()) & ([(col(\"effective_horizon\")) >= (dyn float: 80)])])]",
+      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "target_name": "outcome.eval_best_burst_mean",
+      "tier": "interventional",
+      "verdict": "held",
+      "warnings": [
+        {
+          "gate_name": "no_predicted_direction",
+          "level": "info",
+          "message": "Bridge 'acrobot_link_backdoor_ate_negative__gamma_0999' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
+          "passed": false
+        }
+      ]
+    },
+    {
+      "analysis_results": {
+        "paired_delta_link_dowhy": {
+          "backdoor": {
+            "ate": -0.2037214062763475,
+            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__7,__burst__8,__burst__3,__burst__9,__burst__6,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __1,__burst__4,__burst__2,__burst__5])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__7,__burst__8,__burst__3,__burst__9,__burst__6,__burst__1,__burst__4,__burst__2,__burst__5,U) = P(dout|djens,__burst__7,__burst__8,__burst__3,__burst__9,__burst__6,__burst__1,__burst__4,__burst__2,__burst__5)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__7,__burst__8,__burst__3,__burst__9,__burst__6,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __1,__burst__4,__burst__2,__burst__5])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__7,__burst__8,__burst__3,__burst__9,__burst__6,__burst__1,__burst__4,__burst__2,__burst__5,U) = P(dout|djens,__burst__7,__burst__8,__burst__3,__burst__9,__burst__6,__burst__1,__burst__4,__burst__2,__burst__5)\n",
+            "identified": true,
+            "method_name": "backdoor.linear_regression",
+            "n_rows": 300,
+            "outcome": "dout",
+            "treatment": "djens"
+          },
+          "n_pairs": 300,
+          "outcome_col": "dout",
+          "placebo": {
+            "drift": 0.2037214062763475,
+            "method_name": "backdoor.linear_regression",
+            "n_rows": 300,
+            "outcome": "dout",
+            "real_ate": -0.2037214062763475,
+            "refuted_ate": 0.0,
+            "refuter_name": "placebo_treatment_refuter",
+            "treatment": "djens"
+          },
+          "random_common_cause": {
+            "drift": 0.00013387133789138916,
+            "method_name": "backdoor.linear_regression",
+            "n_rows": 300,
+            "outcome": "dout",
+            "real_ate": -0.2037214062763475,
+            "refuted_ate": -0.20385527761423888,
+            "refuter_name": "random_common_cause",
+            "treatment": "djens"
+          },
+          "treatment_col": "djens"
+        }
+      },
+      "blocked_by": null,
+      "bridge_name": "acrobot_link_placebo_refuted__gamma_0999",
+      "direction": "inverse",
+      "n_cells_in_scope": 180,
+      "n_cells_pre_scope": 12571,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "env_filter": [
+          "Acrobot-v1"
+        ],
+        "link_predictor": "jensen_bias_per_eps__mean_axis_-1",
+        "link_target": "mc_return__mean_axis_-1",
+        "placebo_max_ratio": 0.2
+      },
+      "predicted_direction": null,
+      "scope_repr": "[([(col(\"env_name\")) == (\"Acrobot-v1\")]) & ([(col(\"effective_horizon\").is_finite()) & ([(col(\"effective_horizon\")) >= (dyn float: 80)])])]",
+      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "target_name": "outcome.eval_best_burst_mean",
+      "tier": "interventional",
+      "verdict": "held",
+      "warnings": [
+        {
+          "gate_name": "no_predicted_direction",
+          "level": "info",
+          "message": "Bridge 'acrobot_link_placebo_refuted__gamma_0999' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
+          "passed": false
+        }
+      ]
+    },
+    {
+      "analysis_results": {
+        "paired_delta_link_dowhy": {
+          "backdoor": {
+            "ate": -0.2037214062763475,
+            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__7,__burst__8,__burst__3,__burst__9,__burst__6,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __1,__burst__4,__burst__2,__burst__5])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__7,__burst__8,__burst__3,__burst__9,__burst__6,__burst__1,__burst__4,__burst__2,__burst__5,U) = P(dout|djens,__burst__7,__burst__8,__burst__3,__burst__9,__burst__6,__burst__1,__burst__4,__burst__2,__burst__5)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__7,__burst__8,__burst__3,__burst__9,__burst__6,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __1,__burst__4,__burst__2,__burst__5])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__7,__burst__8,__burst__3,__burst__9,__burst__6,__burst__1,__burst__4,__burst__2,__burst__5,U) = P(dout|djens,__burst__7,__burst__8,__burst__3,__burst__9,__burst__6,__burst__1,__burst__4,__burst__2,__burst__5)\n",
+            "identified": true,
+            "method_name": "backdoor.linear_regression",
+            "n_rows": 300,
+            "outcome": "dout",
+            "treatment": "djens"
+          },
+          "n_pairs": 300,
+          "outcome_col": "dout",
+          "placebo": {
+            "drift": 0.2037214062763475,
+            "method_name": "backdoor.linear_regression",
+            "n_rows": 300,
+            "outcome": "dout",
+            "real_ate": -0.2037214062763475,
+            "refuted_ate": 0.0,
+            "refuter_name": "placebo_treatment_refuter",
+            "treatment": "djens"
+          },
+          "random_common_cause": {
+            "drift": 3.629708359922934e-05,
+            "method_name": "backdoor.linear_regression",
+            "n_rows": 300,
+            "outcome": "dout",
+            "real_ate": -0.2037214062763475,
+            "refuted_ate": -0.20375770335994672,
+            "refuter_name": "random_common_cause",
+            "treatment": "djens"
+          },
+          "treatment_col": "djens"
+        }
+      },
+      "blocked_by": null,
+      "bridge_name": "acrobot_link_rcc_robust__gamma_0999",
+      "direction": "inverse",
+      "n_cells_in_scope": 180,
+      "n_cells_pre_scope": 12571,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "env_filter": [
+          "Acrobot-v1"
+        ],
+        "link_predictor": "jensen_bias_per_eps__mean_axis_-1",
+        "link_target": "mc_return__mean_axis_-1",
+        "rcc_max_drift_ratio": 0.1
+      },
+      "predicted_direction": null,
+      "scope_repr": "[([(col(\"env_name\")) == (\"Acrobot-v1\")]) & ([(col(\"effective_horizon\").is_finite()) & ([(col(\"effective_horizon\")) >= (dyn float: 80)])])]",
+      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "target_name": "outcome.eval_best_burst_mean",
+      "tier": "interventional",
+      "verdict": "held",
+      "warnings": [
+        {
+          "gate_name": "no_predicted_direction",
+          "level": "info",
+          "message": "Bridge 'acrobot_link_rcc_robust__gamma_0999' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
+          "passed": false
+        }
+      ]
+    },
+    {
+      "analysis_results": {
+        "link_attenuation_dowhy": {
+          "attenuator": "q_divergence_score",
+          "backdoor": {
+            "ate": -0.17655414725307136,
+            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n                  d                                                            ↪\n──────────────────────────────────────(E[g_link|__env__Breakout-MinAtar,__env_ ↪\nd[q_divergence_score_threshold__above]                                         ↪\n\n↪                                                                      \n↪ _Freeway-MinAtar,__env__FourRooms-misc,__env__SpaceInvaders-MinAtar])\n↪                                                                      \nEstimand assumption 1, Unconfoundedness: If U→{q_divergence_score__above_threshold} and U→g_link then P(g_link|q_divergence_score__above_threshold,__env__Breakout-MinAtar,__env__Freeway-MinAtar,__env__FourRooms-misc,__env__SpaceInvaders-MinAtar,U) = P(g_link|q_divergence_score__above_threshold,__env__Breakout-MinAtar,__env__Freeway-MinAtar,__env__FourRooms-misc,__env__SpaceInvaders-MinAtar)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n                  d                                                            ↪\n──────────────────────────────────────(E[g_link|__env__Breakout-MinAtar,__env_ ↪\nd[q_divergence_score_threshold__above]                                         ↪\n\n↪                                                                      \n↪ _Freeway-MinAtar,__env__FourRooms-misc,__env__SpaceInvaders-MinAtar])\n↪                                                                      \nEstimand assumption 1, Unconfoundedness: If U→{q_divergence_score__above_threshold} and U→g_link then P(g_link|q_divergence_score__above_threshold,__env__Breakout-MinAtar,__env__Freeway-MinAtar,__env__FourRooms-misc,__env__SpaceInvaders-MinAtar,U) = P(g_link|q_divergence_score__above_threshold,__env__Breakout-MinAtar,__env__Freeway-MinAtar,__env__FourRooms-misc,__env__SpaceInvaders-MinAtar)\n",
+            "identified": true,
+            "method_name": "backdoor.linear_regression",
+            "n_rows": 100,
+            "outcome": "g_link",
+            "treatment": "q_divergence_score__above_threshold"
+          },
+          "binary_threshold": 1000.0,
+          "n_above": 20,
+          "n_below": 80,
+          "n_strata": 100,
+          "outcome_col": "g_link",
+          "placebo": {
+            "drift": 0.17655414725307125,
+            "method_name": "backdoor.linear_regression",
+            "n_rows": 100,
+            "outcome": "g_link",
+            "real_ate": -0.17655414725307136,
+            "refuted_ate": -1.1102230246251565e-16,
+            "refuter_name": "placebo_treatment_refuter",
+            "treatment": "q_divergence_score__above_threshold"
+          },
+          "random_common_cause": {
+            "drift": 0.00042180356783216855,
+            "method_name": "backdoor.linear_regression",
+            "n_rows": 100,
+            "outcome": "g_link",
+            "real_ate": -0.17655414725307136,
+            "refuted_ate": -0.17697595082090353,
+            "refuter_name": "random_common_cause",
+            "treatment": "q_divergence_score__above_threshold"
+          },
+          "treatment_col": "q_divergence_score__above_threshold"
+        }
+      },
+      "blocked_by": null,
+      "bridge_name": "extreme_q_divergence_attenuates_link__binary",
+      "direction": "inverse",
+      "n_cells_in_scope": 510,
+      "n_cells_pre_scope": 12571,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "ate_ceiling": -0.1,
+        "attenuator": "q_divergence_score",
+        "binary_threshold": 1000.0,
+        "dedupe_strategy": "mean",
+        "link_predictor": "jensen_bias_per_eps__mean_axis_-1",
+        "link_target": "mc_return__mean_axis_-1"
+      },
+      "predicted_direction": null,
+      "scope_repr": "[([(col(\"total_steps\")) == (dyn int: 1000000)]) & (col(\"q_divergence_score\").is_finite())]",
+      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "target_name": "outcome.eval_best_burst_mean",
+      "tier": "interventional",
+      "verdict": "held",
+      "warnings": [
+        {
+          "gate_name": "no_predicted_direction",
+          "level": "info",
+          "message": "Bridge 'extreme_q_divergence_attenuates_link__binary' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
+          "passed": false
+        }
+      ]
+    },
+    {
+      "analysis_results": {
+        "link_attenuation_dowhy": {
+          "attenuator": "q_divergence_score",
+          "backdoor": {
+            "ate": -0.17655414725307136,
+            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n                  d                                                            ↪\n──────────────────────────────────────(E[g_link|__env__Breakout-MinAtar,__env_ ↪\nd[q_divergence_score_threshold__above]                                         ↪\n\n↪                                                                      \n↪ _Freeway-MinAtar,__env__FourRooms-misc,__env__SpaceInvaders-MinAtar])\n↪                                                                      \nEstimand assumption 1, Unconfoundedness: If U→{q_divergence_score__above_threshold} and U→g_link then P(g_link|q_divergence_score__above_threshold,__env__Breakout-MinAtar,__env__Freeway-MinAtar,__env__FourRooms-misc,__env__SpaceInvaders-MinAtar,U) = P(g_link|q_divergence_score__above_threshold,__env__Breakout-MinAtar,__env__Freeway-MinAtar,__env__FourRooms-misc,__env__SpaceInvaders-MinAtar)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n                  d                                                            ↪\n──────────────────────────────────────(E[g_link|__env__Breakout-MinAtar,__env_ ↪\nd[q_divergence_score_threshold__above]                                         ↪\n\n↪                                                                      \n↪ _Freeway-MinAtar,__env__FourRooms-misc,__env__SpaceInvaders-MinAtar])\n↪                                                                      \nEstimand assumption 1, Unconfoundedness: If U→{q_divergence_score__above_threshold} and U→g_link then P(g_link|q_divergence_score__above_threshold,__env__Breakout-MinAtar,__env__Freeway-MinAtar,__env__FourRooms-misc,__env__SpaceInvaders-MinAtar,U) = P(g_link|q_divergence_score__above_threshold,__env__Breakout-MinAtar,__env__Freeway-MinAtar,__env__FourRooms-misc,__env__SpaceInvaders-MinAtar)\n",
+            "identified": true,
+            "method_name": "backdoor.linear_regression",
+            "n_rows": 100,
+            "outcome": "g_link",
+            "treatment": "q_divergence_score__above_threshold"
+          },
+          "binary_threshold": 1000.0,
+          "n_above": 20,
+          "n_below": 80,
+          "n_strata": 100,
+          "outcome_col": "g_link",
+          "placebo": {
+            "drift": 0.17655414725307125,
+            "method_name": "backdoor.linear_regression",
+            "n_rows": 100,
+            "outcome": "g_link",
+            "real_ate": -0.17655414725307136,
+            "refuted_ate": -1.1102230246251565e-16,
+            "refuter_name": "placebo_treatment_refuter",
+            "treatment": "q_divergence_score__above_threshold"
+          },
+          "random_common_cause": {
+            "drift": 8.821462788294321e-05,
+            "method_name": "backdoor.linear_regression",
+            "n_rows": 100,
+            "outcome": "g_link",
+            "real_ate": -0.17655414725307136,
+            "refuted_ate": -0.1766423618809543,
+            "refuter_name": "random_common_cause",
+            "treatment": "q_divergence_score__above_threshold"
+          },
+          "treatment_col": "q_divergence_score__above_threshold"
+        }
+      },
+      "blocked_by": null,
+      "bridge_name": "extreme_q_divergence_attenuates_link__placebo_refuted",
+      "direction": "inverse",
+      "n_cells_in_scope": 510,
+      "n_cells_pre_scope": 12571,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "attenuator": "q_divergence_score",
+        "binary_threshold": 1000.0,
+        "dedupe_strategy": "mean",
+        "link_predictor": "jensen_bias_per_eps__mean_axis_-1",
+        "link_target": "mc_return__mean_axis_-1",
+        "placebo_max_ratio": 0.2
+      },
+      "predicted_direction": null,
+      "scope_repr": "[([(col(\"total_steps\")) == (dyn int: 1000000)]) & (col(\"q_divergence_score\").is_finite())]",
+      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "target_name": "outcome.eval_best_burst_mean",
+      "tier": "interventional",
+      "verdict": "held",
+      "warnings": [
+        {
+          "gate_name": "no_predicted_direction",
+          "level": "info",
+          "message": "Bridge 'extreme_q_divergence_attenuates_link__placebo_refuted' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
+          "passed": false
+        }
+      ]
+    },
+    {
+      "analysis_results": {
+        "link_attenuation_dowhy": {
+          "attenuator": "q_divergence_score",
+          "backdoor": {
+            "ate": -0.17655414725307136,
+            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n                  d                                                            ↪\n──────────────────────────────────────(E[g_link|__env__Breakout-MinAtar,__env_ ↪\nd[q_divergence_score_threshold__above]                                         ↪\n\n↪                                                                      \n↪ _Freeway-MinAtar,__env__FourRooms-misc,__env__SpaceInvaders-MinAtar])\n↪                                                                      \nEstimand assumption 1, Unconfoundedness: If U→{q_divergence_score__above_threshold} and U→g_link then P(g_link|q_divergence_score__above_threshold,__env__Breakout-MinAtar,__env__Freeway-MinAtar,__env__FourRooms-misc,__env__SpaceInvaders-MinAtar,U) = P(g_link|q_divergence_score__above_threshold,__env__Breakout-MinAtar,__env__Freeway-MinAtar,__env__FourRooms-misc,__env__SpaceInvaders-MinAtar)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n                  d                                                            ↪\n──────────────────────────────────────(E[g_link|__env__Breakout-MinAtar,__env_ ↪\nd[q_divergence_score_threshold__above]                                         ↪\n\n↪                                                                      \n↪ _Freeway-MinAtar,__env__FourRooms-misc,__env__SpaceInvaders-MinAtar])\n↪                                                                      \nEstimand assumption 1, Unconfoundedness: If U→{q_divergence_score__above_threshold} and U→g_link then P(g_link|q_divergence_score__above_threshold,__env__Breakout-MinAtar,__env__Freeway-MinAtar,__env__FourRooms-misc,__env__SpaceInvaders-MinAtar,U) = P(g_link|q_divergence_score__above_threshold,__env__Breakout-MinAtar,__env__Freeway-MinAtar,__env__FourRooms-misc,__env__SpaceInvaders-MinAtar)\n",
+            "identified": true,
+            "method_name": "backdoor.linear_regression",
+            "n_rows": 100,
+            "outcome": "g_link",
+            "treatment": "q_divergence_score__above_threshold"
+          },
+          "binary_threshold": 1000.0,
+          "n_above": 20,
+          "n_below": 80,
+          "n_strata": 100,
+          "outcome_col": "g_link",
+          "placebo": {
+            "drift": 0.17655414725307125,
+            "method_name": "backdoor.linear_regression",
+            "n_rows": 100,
+            "outcome": "g_link",
+            "real_ate": -0.17655414725307136,
+            "refuted_ate": -1.1102230246251565e-16,
+            "refuter_name": "placebo_treatment_refuter",
+            "treatment": "q_divergence_score__above_threshold"
+          },
+          "random_common_cause": {
+            "drift": 0.00011033958097292351,
+            "method_name": "backdoor.linear_regression",
+            "n_rows": 100,
+            "outcome": "g_link",
+            "real_ate": -0.17655414725307136,
+            "refuted_ate": -0.1766644868340443,
+            "refuter_name": "random_common_cause",
+            "treatment": "q_divergence_score__above_threshold"
+          },
+          "treatment_col": "q_divergence_score__above_threshold"
+        }
+      },
+      "blocked_by": null,
+      "bridge_name": "extreme_q_divergence_attenuates_link__rcc_robust",
+      "direction": "inverse",
+      "n_cells_in_scope": 510,
+      "n_cells_pre_scope": 12571,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "attenuator": "q_divergence_score",
+        "binary_threshold": 1000.0,
+        "dedupe_strategy": "mean",
+        "link_predictor": "jensen_bias_per_eps__mean_axis_-1",
+        "link_target": "mc_return__mean_axis_-1",
+        "rcc_max_drift_ratio": 0.15
+      },
+      "predicted_direction": null,
+      "scope_repr": "[([(col(\"total_steps\")) == (dyn int: 1000000)]) & (col(\"q_divergence_score\").is_finite())]",
+      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "target_name": "outcome.eval_best_burst_mean",
+      "tier": "interventional",
+      "verdict": "held",
+      "warnings": [
+        {
+          "gate_name": "no_predicted_direction",
+          "level": "info",
+          "message": "Bridge 'extreme_q_divergence_attenuates_link__rcc_robust' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
+          "passed": false
+        }
+      ]
+    },
+    {
+      "analysis_results": {
+        "proportion_mediated": {
+          "baseline_arm": "baseline",
+          "direct": 0.2043413688211058,
+          "in_unit_interval": true,
+          "indirect": 0.12670333123115848,
+          "mediator": "effective_horizon",
+          "n_pairs": 793,
+          "pair_by": [
+            "env_name",
+            "corpus",
+            "gamma",
+            "total_steps",
+            "sync_period",
+            "seed"
+          ],
+          "proportion": 0.3827378333232792,
+          "slope_y_on_m": -0.018360932985741426,
+          "target": "eval_best_burst_mean",
+          "total": 0.3310447000522643,
+          "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
+        }
+      },
+      "blocked_by": null,
+      "bridge_name": "eff_h_mediates_g_link__goal_envs",
+      "direction": "direct",
+      "n_cells_in_scope": 4010,
+      "n_cells_pre_scope": 12571,
+      "pair_by": [
+        "env_name",
+        "corpus",
+        "gamma",
+        "total_steps",
+        "sync_period",
+        "seed"
+      ],
+      "params": {
+        "mediator": "effective_horizon",
+        "n_pairs_floor": 25,
+        "polarity_measurable": "env_reward_polarity",
+        "slope_ceiling": -0.005
+      },
+      "predicted_direction": "a_lt_b",
+      "scope_repr": "[([(col(\"env_reward_polarity\").is_finite()) & ([(col(\"env_reward_polarity\")) < (dyn float: -0.3)])]) & ([(col(\"q_divergence_score\").is_nan()) | ([(col(\"q_divergence_score\").is_finite()) & ([(col(\"q_divergence_score\")) < (dyn float: 1000)])])])]",
+      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "target_name": "eval_best_burst_mean",
+      "tier": "interventional",
+      "verdict": "held",
+      "warnings": []
+    },
+    {
+      "analysis_results": {
+        "proportion_mediated": {
+          "baseline_arm": "baseline",
+          "direct": -0.025075895180937544,
+          "in_unit_interval": true,
+          "indirect": -0.015371739397467422,
+          "mediator": "effective_horizon",
+          "n_pairs": 547,
+          "pair_by": [
+            "env_name",
+            "corpus",
+            "gamma",
+            "total_steps",
+            "sync_period",
+            "seed"
+          ],
+          "proportion": 0.3800405031762824,
+          "slope_y_on_m": 0.0620684546536827,
+          "target": "eval_best_burst_mean",
+          "total": -0.040447634578404966,
+          "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
+        }
+      },
+      "blocked_by": null,
+      "bridge_name": "eff_h_mediates_g_link__survival_envs",
+      "direction": "direct",
+      "n_cells_in_scope": 1611,
+      "n_cells_pre_scope": 12571,
+      "pair_by": [
+        "env_name",
+        "corpus",
+        "gamma",
+        "total_steps",
+        "sync_period",
+        "seed"
+      ],
+      "params": {
+        "mediator": "effective_horizon",
+        "n_pairs_floor": 25,
+        "polarity_measurable": "env_reward_polarity",
+        "slope_floor": 0.04
+      },
+      "predicted_direction": "a_gt_b",
+      "scope_repr": "[([(col(\"env_reward_polarity\").is_finite()) & ([(col(\"env_reward_polarity\")) > (dyn float: 0.3)])]) & ([(col(\"q_divergence_score\").is_nan()) | ([(col(\"q_divergence_score\").is_finite()) & ([(col(\"q_divergence_score\")) < (dyn float: 1000)])])])]",
+      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "target_name": "eval_best_burst_mean",
+      "tier": "interventional",
+      "verdict": "held",
+      "warnings": []
+    }
+  ],
+  "cache_path": "experiments/data/cache/ddqn_universe.parquet",
+  "errored_bridges": [],
+  "git_commit": "ffcaaa7c6a14",
+  "hypothesis_module": "experiments.findings.ddqn_universe",
+  "measurable_signatures": {
+    "bootstrap_fraction": "e774505dd6ad3938",
+    "effective_horizon": "0b4600a889ab5da1",
+    "env_reward_polarity": "ac869d59dd0ddadc",
+    "eval_best_burst_mean": "73fcacede9b81e9b",
+    "eval_final_mean": "2cd2ba6641d4abda",
+    "jensen_bias_per_eps__mean_axis_-1": "f9e52b7bf47f5020",
+    "jensen_dormancy_gap": "401ca81099067abe",
+    "log_action_dim": "c43e302ac5a48e3d",
+    "log_horizon": "ec0a273a2e46e348",
+    "log_mc_variance_per_burst": "8d8c8c9c08791aa6",
+    "log_obs_dim": "4cfca86163085914",
+    "mc_return__mean_axis_-1": "21d9d87899d9e9ef",
+    "mc_return_first_quarter": "2bbc70001ebbb1b7",
+    "outcome_native": "a9cfb5f2c60ee4e9",
+    "q_divergence_score": "99e77bc0f99b6292",
+    "r_max": "e7400132c5fa404f",
+    "r_min": "10b740101ce8981b"
+  },
+  "n_cells_total": 12571,
+  "schema_version": 1,
+  "timestamp_utc": "2026-05-06T03:48:54+00:00"
+}

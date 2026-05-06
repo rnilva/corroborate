@@ -52,3 +52,8 @@ experiments/data/**
 # transient state, never committed.
 mutants/
 .mutmut-cache
+
+# Post-run JSON report write tempfiles (atomic-write via tmp + rename).
+# The committed reports themselves live at experiments/findings/<short>.run.json
+# and ARE tracked.
+*.run.json.tmp

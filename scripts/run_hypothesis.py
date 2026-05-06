@@ -54,6 +54,15 @@ def main(argv: Sequence[str] | None = None) -> None:
         '--no-restore', action='store_true',
         help='don\'t restore archived corpora from cloud on miss',
     )
+    parser.add_argument(
+        '--no-report', action='store_true',
+        help='skip writing the post-run JSON audit report',
+    )
+    parser.add_argument(
+        '--report-path', type=Path, default=None,
+        help='explicit JSON report path; defaults to '
+             'experiments/findings/<short>.run.json',
+    )
     args = parser.parse_args(argv)
 
     results = run(
@@ -64,6 +73,8 @@ def main(argv: Sequence[str] | None = None) -> None:
         write_cache=not cast(bool, args.no_write_cache),
         rebuild=cast(bool, args.rebuild),
         restore_from_cloud=not cast(bool, args.no_restore),
+        report_path=cast(Path | None, args.report_path),
+        write_report=not cast(bool, args.no_report),
     )
     _print_verdicts(results)
 

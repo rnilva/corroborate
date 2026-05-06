@@ -138,6 +138,16 @@ def _default_cache_path(h: Hypothesis) -> Path:
     return Path('experiments/data/cache') / f'{short}.parquet'
 
 
+def _default_report_path(h: Hypothesis) -> Path:
+    """Per-hypothesis post-run JSON report at
+    `experiments/findings/<short>.run.json`. Mirrors the cache-path
+    convention so the report sits next to the FINDINGS doc that
+    references it. The file is committed alongside the bridges
+    (audit baseline)."""
+    short = h.__name__.split('.')[-1]
+    return Path('experiments/findings') / f'{short}.run.json'
+
+
 # ============ Measurable signature + manifest ============
 
 
@@ -222,6 +232,8 @@ def run(
     rebuild: bool = False,
     restore_from_cloud: bool = True,
     cache_path: Path | None = None,
+    report_path: Path | None = None,
+    write_report: bool = True,
 ) -> dict[str, BridgeEvaluation]:
     """Run a hypothesis's bridges on `data`, returning per-bridge
     verdicts.
@@ -256,6 +268,15 @@ def run(
     `experiments/data/cache/<short>.parquet` where `<short>` is
     the last segment of `h.__name__` (modules) or the class's
     `__name__`.
+
+    `report_path` / `write_report`: post-run audit report. When
+    `write_report=True` (default), serializes a JSON report at
+    `report_path` (or `experiments/findings/<short>.run.json` if
+    None) capturing per-bridge verdict + every typed analysis
+    result + admission gates + provenance (timestamp, git commit,
+    measurable signatures). The report is the load-bearing audit
+    artifact — small, diffable, deterministic, committed alongside
+    the bridges that produced it. See `corroborate.runner.report`.
 
     `data` may be:
     - `None`: run on whatever's already in the cache.
@@ -301,6 +322,7 @@ def run(
     claim = getattr(h, 'CLAIM', None)
 
     out: dict[str, BridgeEvaluation] = {}
+    errors: dict[str, BaseException] = {}
     for b in bridges:
         try:
             out[b.name] = evaluate(b, cells, claim=claim)
@@ -313,11 +335,38 @@ def run(
             # verdict would smuggle authoring bugs past the reader,
             # exactly what the framework's verdict layer refuses
             # (see verdict.Verdict docstring + CLAUDE.md §verdict).
+            # The exception is captured for the post-run report so
+            # the audit trail surfaces what stderr would lose.
+            errors[b.name] = e
             print(
                 f'  [bridge {b.name!r} raised during evaluation: '
                 f'{type(e).__name__}: {e}]',
                 file=sys.stderr,
             )
+
+    if write_report:
+        from corroborate.runner.report import (
+            build_report as _build_report,
+            write_report as _write_report,
+        )
+        resolved_report = (
+            report_path if report_path is not None
+            else _default_report_path(h)
+        )
+        resolved_report.parent.mkdir(parents=True, exist_ok=True)
+        required_for_sigs = sorted(measurable_names_for_bridges(bridges))
+        sigs = _signatures_for(required_for_sigs, cells)
+        report = _build_report(
+            hypothesis_module_name=h.__name__,
+            bridges=bridges,
+            results=out,
+            errors=errors,
+            cells=cells,
+            cache_path=resolved_cache,
+            measurable_signatures=sigs,
+            repo_root=Path.cwd(),
+        )
+        _write_report(report, resolved_report)
     return out
 
 
