@@ -1,0 +1,37 @@
+[
+  {
+    "env": "Acrobot-v1",
+    "r_min": -1,
+    "polarity": -0.94,
+    "q_late_mean_vanilla": -35.498009819903864,
+    "q_regime_sign": "NEGATIVE"
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "r_min": 0,
+    "polarity": 0.5,
+    "q_late_mean_vanilla": 5.724673827099838,
+    "q_regime_sign": "POSITIVE"
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "r_min": 0,
+    "polarity": 0.99,
+    "q_late_mean_vanilla": 15.953450197367008,
+    "q_regime_sign": "POSITIVE"
+  },
+  {
+    "env": "FourRooms-misc",
+    "r_min": 0,
+    "polarity": -0.92,
+    "q_late_mean_vanilla": 0.8207067942555414,
+    "q_regime_sign": "POSITIVE"
+  },
+  {
+    "env": "MountainCar-v0",
+    "r_min": -1,
+    "polarity": -1.0,
+    "q_late_mean_vanilla": -57.3453362602735,
+    "q_regime_sign": "NEGATIVE"
+  }
+]

@@ -166,6 +166,38 @@ def q_gap_growth(record: Mapping[str, object]) -> float:
 
 
 @measurable(reads=('online_max_q_per_step',))
+def q_late_mean(record: Mapping[str, object]) -> float:
+    """Mean of `online_max_q_per_step` over the late 50% of
+    training — a scalar summary of where the value function ends
+    up.
+
+    Sign of `q_late_mean` reflects the env's Q-regime, which is
+    determined exogenously by `r_min`:
+
+    - `r_min ≥ 0` (sparse-terminal-positive, e.g. FourRooms):
+      Q* ∈ [0, R_max/(1−γ)] is positive bounded above. Vanilla
+      DQN's max-bootstrap pushes Q ABOVE the true value — wrong
+      actions get inflated values, policy degenerates. DDQN's
+      argmax/max separation corrects upward bias.
+      `q_late_mean > 0` per-cell.
+
+    - `r_min < 0` (dense-penalty, e.g. Acrobot, MountainCar):
+      Q* ∈ [−|r_min|/(1−γ), 0] is negative bounded below.
+      Vanilla overestimation pushes Q LESS NEGATIVE than truth
+      (mild optimism aiding exploration through the penalty
+      floor). DDQN's correction removes this optimism — sometimes
+      hurts. `q_late_mean < 0` per-cell.
+
+    The endogenous downstream of `r_min`. Used as a regime-
+    selector predicate in bridges that test claims dependent on
+    the sign of Hasselt's bias direction."""
+    arr = _record_array(record, 'online_max_q_per_step')
+    if arr is None:
+        return float('nan')
+    return _mean_window(arr, 0.5, 1.0)
+
+
+@measurable(reads=('online_max_q_per_step',))
 def q_max_growth(record: Mapping[str, object]) -> float:
     """late_quarter / max(|early_quarter|, 1e-9) of online_max_q.
     Value-curve growth — vanilla DQN's Jensen bias typically
@@ -1120,12 +1152,14 @@ def dqn_default_measurables() -> tuple[
         # rebuild gap (cf. `feedback_cache_trace_dependent_measurables`).
         target_staleness_late,
         target_staleness_early,
-        # CLAIM 15 substrate variable: log10 of the Polyak τ target-
-        # update rate. NaN when target_sync.tau isn't set (most
-        # periodic_copy sweeps). Consumed by
-        # `paired_continuous_do_dowhy` in the staleness-amplification
-        # bridges (`staleness_amplifies_ddqn_outcome__*_polyak`).
+        # CLAIM 15 substrate variables.
         log_tau,
+        # `q_late_mean` is the endogenous Q-regime indicator:
+        # sign(q_late_mean) > 0 ⇔ r_min ≥ 0 ⇔ vanilla bias direction
+        # is upward (sparse-terminal-positive); sign < 0 ⇔
+        # dense-penalty. Used as bridge scope predicate to select
+        # the regime where Hasselt's bias has a specific sign.
+        q_late_mean,
     )
 
 

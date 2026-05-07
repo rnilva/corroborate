@@ -2355,16 +2355,17 @@ def link_r_predictable_from_polarity__soft_tautology(
         & finite_lt('q_divergence_score', 100.0)
         & finite('target_staleness_late')
         & finite('eval_best_burst_mean')
-        # SPARSE-TERMINAL-POSITIVE reward structure: r_min ≥ 0
-        # (no per-step penalty floor). Distinguishes FourRooms
-        # (terminal +1 at goal, 0 elsewhere) from Acrobot /
-        # MountainCar (dense per-step penalty until terminal).
-        # Both polarity classes are GOAL, but in the dense-penalty
-        # case the bias dynamics is governed by penalty
-        # accumulation rather than sparse-reward bootstrap chains,
-        # and staleness's role on Δ_outcome inverts (Acrobot in
-        # the polyak corpus shows ATE = −349 — opposite sign).
-        & finite_ge('r_min', 0.0)
+        # POSITIVE Q-regime: vanilla's late-window mean Q > 0,
+        # equivalent to "r_min ≥ 0 + bounded Q + GOAL". This is
+        # the ENDOGENOUS downstream of r_min — captures the
+        # actual sign of Hasselt's bias direction in the cell's
+        # trajectory. r_min is the structural cause; q_late_mean
+        # is the per-cell observable. Predicate routes around
+        # `r_min` (exogenous env-structural) by testing what
+        # actually matters: where vanilla's Q ends up.
+        # See `polyak_q_regime_findings.md` for the empirical
+        # mechanism trace.
+        & finite_gt('q_late_mean', 0.0)
     ),
     predicted_direction='a_lt_b',
 )
