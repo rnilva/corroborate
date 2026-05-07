@@ -165,6 +165,46 @@ def q_gap_growth(record: Mapping[str, object]) -> float:
     return float(late - early)
 
 
+@measurable(reads=('target_max_q_per_step', 'target_q_at_online_argmax_per_step'))
+def ddqn_bootstrap_gap_late(record: Mapping[str, object]) -> float:
+    """Mean of `target_max_q − target_q_at_online_argmax` over the
+    late 50% of training. The DDQN-correction magnitude per step:
+
+      vanilla bootstrap value  =  max_a Q_target(s', a)
+      DDQN bootstrap value     =  Q_target(s', argmax_a Q_online(s', a))
+      gap                      =  vanilla_value  −  DDQN_value  ≥ 0
+
+    The gap is non-negative by construction (max ≥ value at any
+    specific argmax). Larger gap → DDQN deviates more from vanilla
+    on this step → bigger correction.
+
+    Sign-aware interpretation by Q-regime (cf. `q_late_mean`):
+    - Q > 0 (sparse-positive): vanilla's max-bias inflates Q
+      ABOVE truth. Gap is the inflated-Q amount. DDQN removes
+      the inflation. Mechanism beneficial.
+    - Q < 0 (dense-penalty): vanilla's max picks the LEAST
+      negative Q. DDQN at online's argmax picks a MORE negative
+      Q (online's argmax may not align with target's max in this
+      regime). Gap is the "less optimism" amount. DDQN removes
+      the optimism. Mechanism harmful (per the Q-regime story).
+
+    Used to decompose the algorithmic mechanism behind the ATE
+    sign-flip: bridge `staleness_amplifies_ddqn_outcome__sparse_
+    goal_polyak` predicts gap × Q-sign correlates with
+    Δ_outcome."""
+    target_max = _record_array(record, 'target_max_q_per_step')
+    target_at_online = _record_array(
+        record, 'target_q_at_online_argmax_per_step',
+    )
+    if target_max is None or target_at_online is None:
+        return float('nan')
+    n = min(target_max.shape[0], target_at_online.shape[0])
+    if n == 0:
+        return float('nan')
+    gap = target_max[:n] - target_at_online[:n]
+    return _mean_window(gap, 0.5, 1.0)
+
+
 @measurable(reads=('online_max_q_per_step',))
 def q_late_mean(record: Mapping[str, object]) -> float:
     """Mean of `online_max_q_per_step` over the late 50% of
@@ -1160,6 +1200,13 @@ def dqn_default_measurables() -> tuple[
         # dense-penalty. Used as bridge scope predicate to select
         # the regime where Hasselt's bias has a specific sign.
         q_late_mean,
+        # `ddqn_bootstrap_gap_late` decomposes the algorithmic
+        # mechanism behind the Q-regime sign-flip in
+        # `staleness_amplifies_ddqn_outcome__sparse_goal_polyak`:
+        # the per-step difference between vanilla's bootstrap
+        # value (max Q_target) and DDQN's (Q_target at online's
+        # argmax). Sign-aware effect on outcome by Q-regime.
+        ddqn_bootstrap_gap_late,
     )
 
 

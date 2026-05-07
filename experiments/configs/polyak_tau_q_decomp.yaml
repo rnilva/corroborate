@@ -1,0 +1,100 @@
+name: polyak_tau_q_decomp
+out_dir: experiments/data/polyak_tau_q_decomp
+arms_shape: paired
+archive_remote: s3://corroborate-archive/polyak_tau_q_decomp
+
+# Focused polyak τ sweep on the two Q-regimes that matter for the
+# algorithmic decomposition:
+#   - FourRooms-misc  (Q > 0, sparse-terminal-positive — staleness
+#                      amplifies DDQN's outcome benefit)
+#   - Acrobot-v1      (Q < 0, dense-penalty — staleness reverses)
+#
+# Picks up the new trace column `target_q_at_online_argmax_per_step`
+# (added to `corroborate_rl.dqn.trace_reductions`) so the
+# measurable `ddqn_bootstrap_gap_late` is computable. The bridge
+# `staleness_amplifies_ddqn_outcome__sparse_goal_polyak` operates
+# on the FourRooms cells; the Acrobot cells are the regime control.
+#
+# CPU-runnable in reasonable time: 2 envs × 30 seeds × 2 arms × 4 τ
+# = 480 cells × 200k steps. FourRooms is fast (small obs, tabular
+# state); Acrobot is fast (continuous obs but small dim, MLP).
+
+envs:
+  - {name: FourRooms-misc, n_seeds: 30, chunk_size: 30}
+  - {name: Acrobot-v1,     n_seeds: 30, chunk_size: 30}
+
+base_intervention:
+  total_steps: 200000
+  eval_every:  20000
+  n_episodes:  5
+  gamma:       0.99
+  sync_period: 100
+  replay:
+    class: Replay
+    capacity: 50000
+    batch_size: 32
+  optimizer:
+    fn: warmed_update
+    inner: {fn: adam, lr: 0.0001}
+    warmup_steps: 100
+
+hypotheses:
+  - name: polyak_tau_1p0
+    predicted_direction: a_gt_b
+    intervention:
+      target_sync:
+        fn: polyak_update
+        tau: 1.0
+      bootstrap:
+        fn: bootstrap
+        greedification: {fn: double_greedify}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement:
+          fn: bootstrap
+          greedification: {fn: double_greedify}
+
+  - name: polyak_tau_0p1
+    predicted_direction: a_gt_b
+    intervention:
+      target_sync:
+        fn: polyak_update
+        tau: 0.1
+      bootstrap:
+        fn: bootstrap
+        greedification: {fn: double_greedify}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement:
+          fn: bootstrap
+          greedification: {fn: double_greedify}
+
+  - name: polyak_tau_0p01
+    predicted_direction: a_gt_b
+    intervention:
+      target_sync:
+        fn: polyak_update
+        tau: 0.01
+      bootstrap:
+        fn: bootstrap
+        greedification: {fn: double_greedify}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement:
+          fn: bootstrap
+          greedification: {fn: double_greedify}
+
+  - name: polyak_tau_0p001
+    predicted_direction: a_gt_b
+    intervention:
+      target_sync:
+        fn: polyak_update
+        tau: 0.001
+      bootstrap:
+        fn: bootstrap
+        greedification: {fn: double_greedify}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement:
+          fn: bootstrap
+          greedification: {fn: double_greedify}

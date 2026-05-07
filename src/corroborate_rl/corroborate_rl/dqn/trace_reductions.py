@@ -54,6 +54,30 @@ def _per_step_mean_q(s: pl.Series) -> list[float]:
     ]
 
 
+def _per_step_target_q_at_online_argmax(s: object) -> list[float]:
+    """Per-step DDQN bootstrap value: `target_q_per_action[
+    argmax_a online_q_per_action[a]]`. Operates on a row-level
+    struct of `{online_q_per_action: list[list[float]],
+    target_q_per_action: list[list[float]]}`."""
+    if not isinstance(s, dict):
+        return []
+    online = s.get('online_q_per_action')
+    target = s.get('target_q_per_action')
+    if online is None or target is None:
+        return []
+    out: list[float] = []
+    for o_step, t_step in zip(online, target):
+        if not o_step or not t_step:
+            out.append(float('nan'))
+            continue
+        argmax_o = max(range(len(o_step)), key=lambda i: o_step[i])
+        if argmax_o < len(t_step):
+            out.append(float(t_step[argmax_o]))
+        else:
+            out.append(float('nan'))
+    return out
+
+
 def _per_step_argmax_q(s: pl.Series) -> list[int]:
     return [
         int(max(range(len(p)), key=lambda i: p[i])) if p else -1
@@ -93,6 +117,15 @@ Q_TRACE_REDUCTIONS: tuple[pl.Expr, ...] = (
     pl.col('target_q_per_action').map_elements(
         _per_step_argmax_q, return_dtype=pl.List(pl.Int64),
     ).alias('target_argmax_per_step'),
+    # DDQN's bootstrap value per step: target Q at online's argmax.
+    # Vanilla's bootstrap value is `target_max_q_per_step` (above).
+    # The difference per step is the "DDQN-correction magnitude" —
+    # used for the algorithmic decomposition of why Q-regime sign
+    # inverts DDQN's effect.
+    pl.struct(['online_q_per_action', 'target_q_per_action']).map_elements(
+        _per_step_target_q_at_online_argmax,
+        return_dtype=pl.List(pl.Float64),
+    ).alias('target_q_at_online_argmax_per_step'),
 )
 
 Q_TRACE_DROPS: tuple[str, ...] = (
