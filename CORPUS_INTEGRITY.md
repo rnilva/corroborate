@@ -248,7 +248,7 @@ runner falls back to no-traces.
 | **CI4** Content-dedup strips volatile | YES (Phase 2 — env hardcoded + dynamic object-repr detection) | — |
 | **CI5** Archive refuses trivial files | YES (Phase 1) | — |
 | **CI6** Stores in sync with parent | YES (Phase 2) | — |
-| **CI7** Disk-pressure reclaim | PARTIAL — only just-restored | Extend to all cloud-recoverable traces |
+| **CI7** Disk-pressure reclaim | YES (Phase 3) | — |
 | **CI8** Traces id-subset | YES (Phase 2 extension) | — |
 
 ## Implementation order

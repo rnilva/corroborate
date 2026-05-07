@@ -492,3 +492,85 @@ def test_assert_traces_subset_of_runs_raises_on_violation(
     msg = str(exc_info.value)
     assert 'CI8' in msg
     assert 'spurious' in msg.lower() or 'absent' in msg.lower()
+
+
+# ============ CI7 — broader trace eviction ============
+
+
+def test_trace_is_cloud_recoverable_with_matching_sha(
+    tmp_path: Path,
+) -> None:
+    """**CI7**: a locally-cached trace file IS cloud-recoverable
+    when the manifest's sha256 matches the local file's sha256.
+    The runner can safely evict the local copy.
+    """
+    from corroborate.corpus.cloud import _sha256_file
+    from corroborate.runner.runner import _trace_is_cloud_recoverable
+
+    corpus = tmp_path / 'corp'
+    corpus.mkdir()
+    traces = corpus / 'traces.parquet'
+    _write_traces(traces, ['a', 'b', 'c'])
+    sha = _sha256_file(traces)
+
+    # Stamp a manifest claiming the file at this sha256.
+    m = RemoteManifest(
+        remote_root='s3://bucket/corp',
+        files=(RemoteFile(
+            relpath='traces.parquet',
+            sha256=sha, size_bytes=traces.stat().st_size,
+            pushed_at='2026-05-07T00:00:00+00:00',
+            row_ids=(),
+        ),),
+    )
+    from corroborate.corpus.cloud import _save_manifest
+    _save_manifest(corpus, m)
+
+    assert _trace_is_cloud_recoverable(corpus, traces) is True
+
+
+def test_trace_is_cloud_recoverable_when_no_manifest(
+    tmp_path: Path,
+) -> None:
+    """**CI7**: local-only corpus (no `_remote.json`) is NOT
+    cloud-recoverable. Eviction would lose the data
+    permanently. The runner must skip eviction."""
+    from corroborate.runner.runner import _trace_is_cloud_recoverable
+    corpus = tmp_path / 'corp'
+    corpus.mkdir()
+    traces = corpus / 'traces.parquet'
+    _write_traces(traces, ['a'])
+
+    assert _trace_is_cloud_recoverable(corpus, traces) is False
+
+
+def test_trace_is_cloud_recoverable_when_sha_mismatches(
+    tmp_path: Path,
+) -> None:
+    """**CI7**: local file's sha256 differs from the manifest's
+    (local drift — partial recovery, mid-write modification, or
+    different upload state). NOT recoverable from cloud at the
+    *current* local state — eviction would lose the divergent
+    local content."""
+    from corroborate.runner.runner import _trace_is_cloud_recoverable
+
+    corpus = tmp_path / 'corp'
+    corpus.mkdir()
+    traces = corpus / 'traces.parquet'
+    _write_traces(traces, ['a', 'b'])
+
+    # Manifest claims a DIFFERENT sha256.
+    m = RemoteManifest(
+        remote_root='s3://bucket/corp',
+        files=(RemoteFile(
+            relpath='traces.parquet',
+            sha256='different' + 'x' * 56,
+            size_bytes=traces.stat().st_size,
+            pushed_at='2026-05-07T00:00:00+00:00',
+            row_ids=(),
+        ),),
+    )
+    from corroborate.corpus.cloud import _save_manifest
+    _save_manifest(corpus, m)
+
+    assert _trace_is_cloud_recoverable(corpus, traces) is False

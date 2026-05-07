@@ -992,6 +992,58 @@ def _estimate_max_workers(
     return max(1, min(hard_cap, by_disk))
 
 
+def _trace_is_cloud_recoverable(
+    corpus_dir: Path, traces_path: Path,
+) -> bool:
+    """**CORPUS_INTEGRITY.md CI7** helper. Returns True iff the
+    local `traces_path` can be re-restored from cloud:
+    - `_remote.json` exists at `corpus_dir`,
+    - manifest lists `traces.parquet`,
+    - manifest's sha256 matches the local file's sha256.
+
+    Equality of sha256 is the integrity signal. Without it, a
+    local file matching size only could be drift (e.g., a partial
+    recovery with the same byte count but different content);
+    eviction would silently lose the local-canonical version.
+
+    sha256 of a multi-GB file is ~5 sec on modern hardware —
+    cheap relative to the disk pressure we save by evicting."""
+    manifest_path = corpus_dir / '_remote.json'
+    if not manifest_path.exists():
+        return False
+    manifest = _read_remote_manifest(manifest_path)
+    if manifest is None:
+        return False
+    entry = next(
+        (f for f in manifest.files if f.relpath == 'traces.parquet'),
+        None,
+    )
+    if entry is None:
+        return False
+    try:
+        from corroborate.corpus.cloud import _sha256_file
+        local_sha = _sha256_file(traces_path)
+    except OSError:
+        return False
+    return local_sha == entry.sha256
+
+
+def _try_unlink(
+    path: Path, log_lines: list[str], prefix: str,
+) -> bool:
+    """Attempt to evict `path`; record any error in `log_lines`.
+    Returns True on success."""
+    try:
+        path.unlink()
+        return True
+    except OSError as e:
+        log_lines.append(
+            f'{prefix}: WARNING — could not evict '
+            f'{path.name}: {e}',
+        )
+        return False
+
+
 def _load_one_corpus(
     sub: Path,
     *,
@@ -1139,18 +1191,29 @@ def _load_one_corpus(
         df = df.drop(joined_trace_cols)
     if 'corpus' not in df.columns:
         df = df.with_columns(pl.lit(sub.name).alias('corpus'))
-    if just_restored_traces and traces_path.exists():
-        try:
-            traces_path.unlink()
-        except OSError as e:
-            log_lines.append(
-                f'{prefix}: WARNING — could not evict '
-                f'traces.parquet: {e}',
-            )
+    # **CORPUS_INTEGRITY.md CI7**: evict locally-cached trace
+    # files when they're cloud-recoverable, not just when
+    # downloaded THIS session. Pre-fix, pre-existing local
+    # traces accumulated forever (`ddqn_better_hp` 3.4 GB,
+    # `fourrooms_1m` 3.2 GB, three `polyak_tau_intervention_*`
+    # at 2.7 GB each — 14 GB unreclaimed). Subsequent rebuilds
+    # held the 14 GB while restoring more, hitting disk-full
+    # at corpus 22.
+    #
+    # The cloud-recoverable check: manifest exists AND lists
+    # traces.parquet AND its sha256 matches the local file's.
+    # Skip eviction for local-only traces (no manifest = no
+    # recovery path; deletion would lose data permanently).
+    evicted = False
+    if traces_path.exists():
+        if just_restored_traces:
+            evicted = _try_unlink(traces_path, log_lines, prefix)
+        elif _trace_is_cloud_recoverable(sub, traces_path):
+            evicted = _try_unlink(traces_path, log_lines, prefix)
     elapsed = _time.monotonic() - t_corpus
     log_lines.append(
         f'{prefix}: {df.height} cells × {len(df.columns)} cols'
-        + (' (traces evicted)' if just_restored_traces else '')
+        + (' (traces evicted)' if evicted else '')
         + f' in {elapsed:.1f}s',
     )
     return df, log_lines
