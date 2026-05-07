@@ -205,6 +205,92 @@ def ddqn_bootstrap_gap_late(record: Mapping[str, object]) -> float:
     return _mean_window(gap, 0.5, 1.0)
 
 
+@measurable(reads=('online_argmax_per_step',))
+def argmax_entropy_late(record: Mapping[str, object]) -> float:
+    """Shannon entropy (nats) of `online_argmax_per_step`'s
+    distribution over the late 50% of training.
+
+    H = -Σ p_a log p_a where p_a is the empirical fraction of
+    late-training steps where the online network's argmax was
+    action a.
+
+    Low entropy: policy decisively prefers a small set of
+    actions (committed / converged on a strategy).
+    High entropy: policy distributes argmax broadly across
+    actions (uncertain / exploratory / Q-flat).
+
+    Connection to DDQN mechanism: in regimes where vanilla's
+    Q-values flatten across actions (rescue regime, sparse-
+    reward + low rs), the argmax distribution becomes dispersed
+    not because the policy is good but because the policy is
+    indecisive. DDQN's bias correction can either:
+      (a) Sharpen the policy further if it has signal to commit
+          on (g_link via decisive-policy improvement), OR
+      (b) Maintain higher entropy by avoiding spurious
+          commitment to wrong actions when Q is flat (rescue
+          regime: keeps exploring until reward signal arrives).
+
+    Per-cell measurable; bridge body computes paired difference
+    DDQN_entropy − vanilla_entropy. Sign of the difference
+    distinguishes (a) vs (b) regimes.
+
+    Returns nan if `online_argmax_per_step` is missing or empty."""
+    arr = record.get('online_argmax_per_step')
+    if arr is None:
+        return float('nan')
+    try:
+        a = list(arr)
+    except TypeError:
+        return float('nan')
+    if not a:
+        return float('nan')
+    import numpy as np_
+    arr_np = np_.asarray(a, dtype=np_.int64)
+    n = len(arr_np)
+    if n < 2:
+        return float('nan')
+    late = arr_np[n // 2:]
+    if len(late) == 0:
+        return float('nan')
+    counts = np_.bincount(late)
+    p = counts / len(late)
+    p_pos = p[p > 0]
+    return float(-(p_pos * np_.log(p_pos)).sum())
+
+
+@measurable(reads=('online_argmax_per_step',))
+def argmax_mode_freq_late(record: Mapping[str, object]) -> float:
+    """Fraction of late-training steps where `online_argmax_
+    per_step` equals the mode action.
+
+    Range [1/|A|, 1.0]. 1.0 = always picks the same action
+    (fully committed). 1/|A| = uniform across actions
+    (fully indecisive). Companion to `argmax_entropy_late`;
+    different scaling, same underlying signal.
+
+    Per-cell measurable. Bridge body computes paired
+    DDQN_mode_freq − vanilla_mode_freq."""
+    arr = record.get('online_argmax_per_step')
+    if arr is None:
+        return float('nan')
+    try:
+        a = list(arr)
+    except TypeError:
+        return float('nan')
+    if not a:
+        return float('nan')
+    import numpy as np_
+    arr_np = np_.asarray(a, dtype=np_.int64)
+    n = len(arr_np)
+    if n < 2:
+        return float('nan')
+    late = arr_np[n // 2:]
+    if len(late) == 0:
+        return float('nan')
+    counts = np_.bincount(late)
+    return float(counts.max()) / float(len(late))
+
+
 @measurable(reads=('online_std_q_per_step',))
 def q_action_std_late(record: Mapping[str, object]) -> float:
     """Mean of `online_std_q_per_step` over the late 50% of
