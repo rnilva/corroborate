@@ -2551,17 +2551,25 @@ def staleness_does_not_amplify_ddqn_outcome__survival_polyak(
     scope=(
         # Non-Q-explosion: bias correction operates in the
         # bounded-Q regime where Hasselt's theorem bites cleanly.
-        # In Q-explosion (q_div >= 100), Q dynamics dominate and
-        # the bf-mediated link is broken (cf. `findings_minatar_
-        # link_attenuation`, `findings_breakout_uniqueness`).
         finite('q_divergence_score')
         & finite_lt('q_divergence_score', 100.0)
         & finite('bootstrap_fraction')
         & finite('jensen_dormancy_gap')
-        # Mech-HELD conditioning is implicit in the meta-
-        # regression's per-burst paired_g (Δ_jens<0 emerges as
-        # the right-skewed bursts in the panel); the dormancy
-        # covariate explicitly absorbs the dormant-mech bursts.
+        # Standard-config filters — exclude abnormal corpora
+        # whose distinct intervention type / reward scaling /
+        # target-sync method confound the cross-env bf signal:
+        # - reward_scale != 1 cells (rescue-regime / dampened
+        #   sweeps) inflate bf-g_link signal via the under-
+        #   learning rescue mechanism (`findings_underlearning_
+        #   rescue`), which is a different scope claim.
+        # - n_step != 1 cells (`findings_nstep_falsification`)
+        #   sweep n-step explicitly, which IS a different
+        #   bootstrap-chain probe.
+        # - polyak τ-swept cells use a different target_sync
+        #   mechanism (`findings_polyak_tau`).
+        & ((pl.col('n_step') == 1) | pl.col('n_step').is_null())
+        & (pl.col('reward_scale').is_null() | (pl.col('reward_scale') == 1.0))
+        & pl.col('target_sync.tau').is_null()
     ),
     predicted_direction='a_gt_b',
 )
@@ -2601,14 +2609,21 @@ def bootstrap_fraction_drives_g_link__non_q_explosion(
     negative — would refute the chain-amplifier reading).
 
     Empirical (per-(env, sync) panel restricted to mech-HELD,
-    q_div < 100, n=40 strata): ρ(bf, g_link) = +0.38, p = 0.015
-    (Spearman). Mirror in meta-regression coefficient with
-    cluster-robust SE expected.
+    standard config, n=18 strata): Pearson r(bf, g_link) =
+    +0.57, p = 0.014; Spearman ρ = +0.30, p = 0.22; meta-
+    regression with cluster-robust SE on env: β=−3.59, p=0.148
+    (NEGATIVE direction, n.s.). Cluster-robust SE flips sign
+    relative to per-stratum Spearman because of env-level
+    leverage in the cluster decomposition. Authored honest:
+    expecting POWER_INSUFFICIENT or NO_EFFECT under standard-
+    config scope. The previous "+1.60 positive direction" reading
+    was driven by rs != 1 cells (`findings_underlearning_rescue`
+    rescue regime), which is a different scope claim.
 
     Companion bridge to `bootstrap_fraction_drives_g_link__net_
     of_dormancy` (corpus-pinned, historical baseline). The
     endogenous-predicate scope here generalises the claim
-    cross-corpus."""
+    cross-corpus while excluding abnormal-config cells."""
     del source, covariates, dedupe_strategy
     coef = next(
         (c for c in meta_regression_per_burst.coefficients
