@@ -1,0 +1,90 @@
+name: polyak_tau_asterix
+out_dir: experiments/data/polyak_tau_asterix
+arms_shape: paired
+archive_remote: s3://corroborate-archive/polyak_tau_asterix
+
+# Polyak-τ do(τ) sweep on Asterix-MinAtar specifically — the missing
+# env from the original `polyak_tau_intervention` sweep, which crashed
+# at the τ=1.0 trace-concat boundary before getting to Asterix.
+# Asterix is the SURVIVAL-polarity Q-explosion env where staleness
+# observational mediation HELD on `asterix_q_stability` corpus
+# (sync=100, prop ≈ 0.6).
+
+envs:
+  - {name: Asterix-MinAtar, n_seeds: 30, chunk_size: 10}
+
+base_intervention:
+  total_steps: 200000
+  eval_every:  20000
+  n_episodes:  5
+  gamma:       0.99
+  sync_period: 100      # nominal — Polyak ignores it but the field is required by the protocol
+  replay:
+    class: Replay
+    capacity: 50000
+    batch_size: 32
+  optimizer:
+    fn: warmed_update
+    inner: {fn: adam, lr: 0.0001}
+    warmup_steps: 100
+
+hypotheses:
+  - name: polyak_tau_1p0
+    predicted_direction: a_gt_b
+    intervention:
+      target_sync:
+        fn: polyak_update
+        tau: 1.0
+      bootstrap:
+        fn: bootstrap
+        greedification: {fn: double_greedify}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement:
+          fn: bootstrap
+          greedification: {fn: double_greedify}
+
+  - name: polyak_tau_0p1
+    predicted_direction: a_gt_b
+    intervention:
+      target_sync:
+        fn: polyak_update
+        tau: 0.1
+      bootstrap:
+        fn: bootstrap
+        greedification: {fn: double_greedify}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement:
+          fn: bootstrap
+          greedification: {fn: double_greedify}
+
+  - name: polyak_tau_0p01
+    predicted_direction: a_gt_b
+    intervention:
+      target_sync:
+        fn: polyak_update
+        tau: 0.01
+      bootstrap:
+        fn: bootstrap
+        greedification: {fn: double_greedify}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement:
+          fn: bootstrap
+          greedification: {fn: double_greedify}
+
+  - name: polyak_tau_0p001
+    predicted_direction: a_gt_b
+    intervention:
+      target_sync:
+        fn: polyak_update
+        tau: 0.001
+      bootstrap:
+        fn: bootstrap
+        greedification: {fn: double_greedify}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement:
+          fn: bootstrap
+          greedification: {fn: double_greedify}
