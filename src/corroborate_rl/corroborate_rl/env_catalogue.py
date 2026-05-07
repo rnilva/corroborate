@@ -162,10 +162,58 @@ class ActionDuplicate:
         return {'action_duplicate_k': float(self.k)}
 
 
+@dataclass(frozen=True, slots=True)
+class RewardSparsify:
+    """Wrapper config: zero per-step reward; optionally add
+    `terminal_bonus` to terminal-step reward.
+
+    Causal-probe lever for the action-selection mechanism:
+    `findings_action_selection_fourrooms_specific` showed DDQN
+    concentrates argmax distribution only on FourRooms (sparse-
+    positive-terminal reward). Sparsifying a dense-reward env
+    (e.g., Acrobot) tests whether converting that env to FR-shape
+    activates the same entropy-concentration mechanism — i.e.
+    whether reward shape is sufficient.
+
+    Implementation: per-step reward → 0; if `done`, reward →
+    inner_reward + terminal_bonus. Original terminal reward is
+    preserved so reward direction (positive bonus / negative
+    penalty) is determined by the inner env."""
+    terminal_bonus: float = 0.0
+
+    def wrap(self, inner: Env) -> Env:
+        return RewardSparsifiedEnv(
+            inner=inner, terminal_bonus=self.terminal_bonus,
+        )
+
+    def measurement_keys(self) -> Mapping[str, float]:
+        return {'reward_sparsify_terminal_bonus': float(self.terminal_bonus)}
+
+
+@dataclass(frozen=True, slots=True)
+class RewardDensify:
+    """Wrapper config: add `per_step` constant to every step
+    reward (typically negative for penalty-shaping).
+
+    Symmetric counterpart to `RewardSparsify`. Densifying a
+    sparse-reward env (FourRooms with `per_step=-0.01`) tests
+    whether removing FR-shape attenuates the action-selection
+    mechanism — i.e. whether reward shape is necessary."""
+    per_step: float = 0.0
+
+    def wrap(self, inner: Env) -> Env:
+        return RewardDensifiedEnv(inner=inner, per_step=self.per_step)
+
+    def measurement_keys(self) -> Mapping[str, float]:
+        return {'reward_densify_per_step': float(self.per_step)}
+
+
 _WRAPPER_REGISTRY: dict[str, type[EnvWrapper]] = {
     'reward_scale': RewardScale,
     'reward_clip': RewardClip,
     'action_duplicate': ActionDuplicate,
+    'reward_sparsify': RewardSparsify,
+    'reward_densify': RewardDensify,
 }
 """Name → wrapper class. YAML's `wrappers: [{type: <name>, ...}]`
 parses each entry by looking up `<name>` here and instantiating
@@ -363,6 +411,85 @@ class ActionDuplicatedEnv:
     def action_space(self, params: EnvParams) -> Discrete:
         inner_space = self.inner.action_space(params)
         return spaces.Discrete(inner_space.n * self.k)
+
+
+@dataclass(frozen=True, slots=True)
+class RewardSparsifiedEnv:
+    """Wraps a gymnax-style env, zeroing per-step reward and
+    optionally adding `terminal_bonus` on terminal-step reward.
+
+    Use for testing whether sparsifying a dense-reward env to FR-
+    shape activates DDQN's argmax-concentration mechanism."""
+    inner: Env
+    terminal_bonus: float
+
+    def reset(
+        self, rng: jax.Array, params: EnvParams,
+    ) -> tuple[jax.Array, EnvState]:
+        return self.inner.reset(rng, params)
+
+    def step(
+        self,
+        rng: jax.Array,
+        state: EnvState,
+        action: jax.Array,
+        params: EnvParams,
+    ) -> tuple[
+        jax.Array, EnvState, jax.Array, jax.Array, dict[str, object],
+    ]:
+        next_obs, next_state, reward, done, info = self.inner.step(
+            rng, state, action, params,
+        )
+        # Zero per-step; on terminal, keep inner's terminal reward
+        # AND add bonus. Inner env's terminal-only reward is
+        # preserved (e.g., MountainCar's 0 at terminal stays 0).
+        new_reward = jnp.where(
+            done, reward + self.terminal_bonus, jnp.zeros_like(reward),
+        )
+        return next_obs, next_state, new_reward, done, info
+
+    def observation_space(self, params: EnvParams) -> Box:
+        return self.inner.observation_space(params)
+
+    def action_space(self, params: EnvParams) -> Discrete:
+        return self.inner.action_space(params)
+
+
+@dataclass(frozen=True, slots=True)
+class RewardDensifiedEnv:
+    """Wraps a gymnax-style env, adding `per_step` constant to
+    every step reward.
+
+    Symmetric to `RewardSparsifiedEnv`. Use for testing whether
+    densifying FR with per-step penalty attenuates DDQN's
+    argmax-concentration mechanism."""
+    inner: Env
+    per_step: float
+
+    def reset(
+        self, rng: jax.Array, params: EnvParams,
+    ) -> tuple[jax.Array, EnvState]:
+        return self.inner.reset(rng, params)
+
+    def step(
+        self,
+        rng: jax.Array,
+        state: EnvState,
+        action: jax.Array,
+        params: EnvParams,
+    ) -> tuple[
+        jax.Array, EnvState, jax.Array, jax.Array, dict[str, object],
+    ]:
+        next_obs, next_state, reward, done, info = self.inner.step(
+            rng, state, action, params,
+        )
+        return next_obs, next_state, reward + self.per_step, done, info
+
+    def observation_space(self, params: EnvParams) -> Box:
+        return self.inner.observation_space(params)
+
+    def action_space(self, params: EnvParams) -> Discrete:
+        return self.inner.action_space(params)
 
 
 # ============ TypedDict for introspect_env return ============

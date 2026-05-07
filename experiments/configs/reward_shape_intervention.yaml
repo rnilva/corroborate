@@ -1,0 +1,62 @@
+name: reward_shape_intervention
+out_dir: experiments/data/reward_shape_intervention
+arms_shape: chunked
+
+# Pearl-rung-2 do(reward_shape) probe of the action-selection
+# mechanism. `findings_action_selection_fourrooms_specific`
+# showed DDQN concentrates argmax distribution (lowers entropy
+# of late-training argmax) on FourRooms but not on Acrobot or
+# MetaMaze. Hypothesis: reward shape (sparse-positive-terminal)
+# is sufficient to activate the mechanism.
+#
+# Three intervention arms:
+#   1. Sparsified Acrobot: zero per-step penalty, +1 terminal
+#      → tests if Acrobot-with-FR-shape gains entropy concentration.
+#   2. Sparsified MetaMaze: zero per-step shaping (negligible),
+#      +1 terminal — doesn't change much from native MetaMaze
+#      since it's already sparse-positive. Sanity check arm.
+#   3. Densified FourRooms: -0.01 per-step + native +1 terminal
+#      → tests if FR-with-densification loses entropy concentration.
+#
+# Each at γ=0.99, sync=100, n_seeds=30. ~12 cells × 2 arms × 30
+# seeds. ~30 min GPU.
+#
+# Author predictions in bridges:
+#   - sparsified Acrobot: ΔH(DDQN-vanilla) < 0 if reward-shape sufficient (CLAIM 7g)
+#   - densified FourRooms: ΔH(DDQN-vanilla) ≈ 0 if reward-shape necessary (CLAIM 7h)
+
+envs:
+  - {name: Acrobot-v1, n_seeds: 30, chunk_size: 30, wrappers: [{type: reward_sparsify, terminal_bonus: 1.0}]}
+  - {name: MetaMaze-misc, n_seeds: 30, chunk_size: 30, wrappers: [{type: reward_sparsify, terminal_bonus: 1.0}]}
+  - {name: FourRooms-misc, n_seeds: 30, chunk_size: 30, wrappers: [{type: reward_densify, per_step: -0.01}]}
+
+base_intervention:
+  total_steps: 200000
+  eval_every:  20000
+  n_episodes:  5
+  gamma:       0.99
+  sync_period: 100
+  replay:
+    class: Replay
+    capacity: 50000
+    batch_size: 32
+  optimizer:
+    fn: warmed_update
+    inner: {fn: adam, lr: 0.0001}
+    warmup_steps: 100
+  q_network:
+    class: MLP
+    hidden: [64, 64]
+
+hypotheses:
+  - name: ddqn
+    predicted_direction: a_gt_b
+    intervention:
+      bootstrap:
+        fn: bootstrap
+        greedification: {fn: double_greedify}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement:
+          fn: bootstrap
+          greedification: {fn: double_greedify}

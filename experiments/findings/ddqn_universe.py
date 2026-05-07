@@ -1223,6 +1223,104 @@ def ddqn_does_not_rescue__cartpole_rs_0p1(
 
 
 # =====================================================================
+# CLAIM 7g/7h — Reward-shape intervention probe of action-selection
+#               mechanism.
+#
+# `findings_action_selection_fourrooms_specific`: DDQN concentrates
+# argmax distribution (lowers entropy) on FourRooms but not on
+# Acrobot or MetaMaze. Caveat: MetaMaze has FR-shape but doesn't
+# show entropy effect, so reward-shape is necessary-but-not-
+# sufficient. Pearl-rung-2 do(reward_shape) intervention to test
+# the reward-shape claim:
+#
+#   (7g) Sparsified Acrobot (zero per-step penalty + +1 terminal
+#        bonus) — converts Acrobot to FR-shape. Predicted: DDQN
+#        entropy drops below vanilla, like FR.
+#   (7h) Densified FourRooms (-0.01 per-step + native +1 terminal)
+#        — converts FR to Acrobot-shape. Predicted: DDQN entropy
+#        no longer drops below vanilla.
+#
+# corpus: reward_shape_intervention.
+# =====================================================================
+
+
+@claim_bridge(
+    source=INTERVENTION,
+    target='argmax_entropy_late',
+    direction=Direction.INVERSE,
+    tier=Tier.INTERVENTIONAL,
+    scope=(
+        (pl.col('env_name') == 'Acrobot-v1')
+        & finite('reward_sparsify_terminal_bonus')
+    ),
+    predicted_direction='a_lt_b',
+)
+def ddqn_concentrates_argmax__sparsified_acrobot(
+    paired_g: PairedGResult,
+    *,
+    threshold_diff: float = 0.05,
+) -> Verdict:
+    """Sparsified Acrobot (FR-shape via zero per-step + +1
+    terminal bonus): does DDQN concentrate argmax distribution
+    relative to vanilla, as it does on native FourRooms?
+
+    HELD when paired_g.mean_diff ≤ −threshold_diff AND p < 0.05
+    (DDQN entropy significantly lower than vanilla).
+    HELD ⟹ reward-shape is sufficient to activate the entropy
+    concentration mechanism.
+    NO_EFFECT ⟹ Acrobot has additional structural property
+    blocking the mechanism beyond reward shape."""
+    diff = paired_g.mean_diff
+    p = paired_g.mean_diff_p_value
+    if math.isnan(diff) or math.isnan(p):
+        return Verdict.POWER_INSUFFICIENT
+    if diff > 0.0:
+        return Verdict.NO_EFFECT
+    significant = p < 0.05
+    above_threshold = abs(diff) >= threshold_diff
+    if significant and above_threshold:
+        return Verdict.HELD
+    if above_threshold or significant:
+        return Verdict.POWER_INSUFFICIENT
+    return Verdict.NO_EFFECT
+
+
+@claim_bridge(
+    source=INTERVENTION,
+    target='argmax_entropy_late',
+    direction=Direction.DIRECT,
+    tier=Tier.INTERVENTIONAL,
+    scope=(
+        (pl.col('env_name') == 'FourRooms-misc')
+        & finite('reward_densify_per_step')
+    ),
+    predicted_direction='null',
+)
+def ddqn_does_not_concentrate_argmax__densified_fourrooms(
+    paired_g: PairedGResult,
+    *,
+    null_ceiling: float = 0.05,
+) -> Verdict:
+    """Densified FourRooms (-0.01 per-step + native +1 terminal,
+    Acrobot-shape): does DDQN's entropy concentration disappear?
+
+    HELD when |paired_g.mean_diff| ≤ null_ceiling AND p > 0.05
+    (no significant entropy difference). HELD ⟹ reward-shape
+    is necessary; densifying breaks the mechanism."""
+    diff = paired_g.mean_diff
+    p = paired_g.mean_diff_p_value
+    if math.isnan(diff) or math.isnan(p):
+        return Verdict.POWER_INSUFFICIENT
+    is_small = abs(diff) <= null_ceiling
+    is_ns = p > 0.05
+    if is_small and is_ns:
+        return Verdict.HELD
+    if is_small or is_ns:
+        return Verdict.POWER_INSUFFICIENT
+    return Verdict.NO_EFFECT
+
+
+# =====================================================================
 # CLAIM 7e/7f — DDQN's rescue mechanism is action-selection-level.
 #
 # rs_sweep_with_traces probe: at FourRooms rs=0.1, DDQN's argmax
@@ -2870,6 +2968,9 @@ DDQN_UNIVERSE_BRIDGES = (
     # CLAIM 7e/7f — rescue mechanism is exploration-maintenance.
     ddqn_increases_argmax_entropy__fourrooms_rs_0p1,
     ddqn_entropy_matches_vanilla__fourrooms_rs_1p0,
+    # CLAIM 7g/7h — reward-shape intervention probes.
+    ddqn_concentrates_argmax__sparsified_acrobot,
+    ddqn_does_not_concentrate_argmax__densified_fourrooms,
     # CLAIM 8 — per-burst crossover shape on SpaceInvaders 1M.
     ddqn_curve_crosses_vanilla_late__spaceinvaders,
     # CLAIM 9 — n-step falsification of bootstrap-bias-compounding
@@ -2986,6 +3087,8 @@ __all__ = [
     'ddqn_does_not_rescue__cartpole_rs_0p1',
     'ddqn_increases_argmax_entropy__fourrooms_rs_0p1',
     'ddqn_entropy_matches_vanilla__fourrooms_rs_1p0',
+    'ddqn_concentrates_argmax__sparsified_acrobot',
+    'ddqn_does_not_concentrate_argmax__densified_fourrooms',
 ]
 
 
