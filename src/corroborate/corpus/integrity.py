@@ -33,6 +33,31 @@ from pathlib import Path
 import polars as pl
 
 
+# ============ Sentinel — sweep-in-progress marker ============
+
+IN_PROGRESS_SENTINEL = '.in_progress'
+"""Filename of the sentinel a sweep dispatcher drops at corpus
+root to signal "this corpus is mid-flight, the runner / CI1
+should ignore it." Removed on successful merge.
+
+Behavior when present at `<corpus_dir>/.in_progress`:
+- `assert_no_nested_corpora`: skips the corpus's subtree audit.
+- `runner._load_directory`: skips the corpus entirely (no
+  ingest, no SKIPPED-no-runs-parquet noise).
+
+Hidden filename so it doesn't clutter `ls`. The dispatcher is
+expected to:
+  1. Create the sentinel before writing per-arm sub-dirs.
+  2. Remove the sentinel after the merge step finalizes.
+A killed-mid-merge sweep leaves the sentinel in place — next
+ingest skips the corpus, user investigates + fixes."""
+
+
+def is_in_progress(corpus_dir: Path) -> bool:
+    """Cheap sentinel check — used by both CI1 and the runner."""
+    return (corpus_dir / IN_PROGRESS_SENTINEL).exists()
+
+
 # ============ CI1 — corpora are leaves ============
 
 
@@ -88,6 +113,15 @@ def assert_no_nested_corpora(root: Path) -> None:
     (`mv parent/sub/ parent_sub/`) or by removing the parent
     entirely if the inner data has been promoted elsewhere.
 
+    **Sentinel escape hatch**: a corpus dir carrying a
+    `.in_progress` marker file (typically dropped by a sweep
+    dispatcher mid-execution and removed on successful merge)
+    is skipped by both this audit AND the runner's directory
+    walk. The "nested per-arm subdirs during sweep" pattern is
+    legitimate and shouldn't trigger CI1. Once the sweep
+    completes and removes the sentinel, the next ingest
+    enforces CI1 normally.
+
     `root` is `experiments/data/` (or whatever the analysis is
     pointing at). The check is one-shot at ingest entry.
     """
@@ -98,6 +132,8 @@ def assert_no_nested_corpora(root: Path) -> None:
     for sub in sorted(root.iterdir()):
         if not sub.is_dir():
             continue
+        if (sub / IN_PROGRESS_SENTINEL).exists():
+            continue  # sentinel: sweep mid-flight, ignore this subtree
         # Search this candidate corpus's subtree for any nested
         # `runs.parquet`. `rglob` walks all depths.
         for p in sub.rglob('runs.parquet'):
@@ -358,6 +394,7 @@ def assert_traces_subset_of_runs(corpus_dir: Path) -> None:
 
 
 __all__ = [
+    'IN_PROGRESS_SENTINEL',
     'ArchivePrecondition',
     'NestedCorpusError',
     'NestedCorpusViolation',
@@ -369,4 +406,5 @@ __all__ = [
     'assert_traces_subset_of_runs',
     'assert_unique_remote_root',
     'audit_trace_contamination',
+    'is_in_progress',
 ]

@@ -71,6 +71,26 @@ ddqn_sync1k/`, `minatar_sync_curve_resume/ddqn_sync3k/`,
 `polyak_tau_intervention/{polyak_tau_X}/`, `polyak_tau_asterix/
 {polyak_tau_X}/`. All silently dropped pre-fix.
 
+**Sentinel escape hatch — `.in_progress`**. Sweep dispatchers
+legitimately produce nested per-arm sub-dirs DURING execution
+(`<corpus>/<arm>/runs.parquet`, etc.); they're merged to the
+top-level `<corpus>/runs.parquet` post-sweep. CI1 was firing
+on these in-flight states and blocking the user's mid-sweep
+analysis runs. Solution: the dispatcher drops a
+`<corpus>/.in_progress` sentinel file at the start of the
+sweep and removes it on successful merge. Both
+`assert_no_nested_corpora` and `_load_directory` skip any
+corpus subtree that carries the sentinel — no CI1 audit, no
+ingest. The runner emits a clear `SKIPPING <corpus>/ —
+.in_progress sentinel present (sweep mid-flight)` line so the
+user can see what's being held back. Killed-mid-merge sweeps
+leave the sentinel in place; subsequent ingest still skips
+them, prompting investigation.
+
+The sentinel is the manual escape hatch that lets the user
+restart their sweep dispatcher with confidence, then drop the
+file when they're done.
+
 ### CI2. Cell `id`s are unique within a corpus's stores
 
 In a corpus's `runs.parquet` and `measurements.parquet`, every

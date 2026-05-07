@@ -17,6 +17,7 @@ import pytest
 
 from corroborate.corpus.cloud import RemoteFile, RemoteManifest
 from corroborate.corpus.integrity import (
+    IN_PROGRESS_SENTINEL,
     ArchivePrecondition,
     NestedCorpusError,
     RemoteRootCollision,
@@ -26,6 +27,7 @@ from corroborate.corpus.integrity import (
     assert_traces_subset_of_runs,
     assert_unique_remote_root,
     audit_trace_contamination,
+    is_in_progress,
 )
 
 
@@ -145,6 +147,40 @@ def test_assert_no_nested_corpora_handles_missing_root(
     not-a-dir error path handles it)."""
     assert_no_nested_corpora(tmp_path / 'does_not_exist')
     # No exception expected.
+
+
+def test_assert_no_nested_corpora_respects_in_progress_sentinel(
+    tmp_path: Path,
+) -> None:
+    """**Sentinel escape hatch**: a corpus dir marked with
+    `.in_progress` (sweep mid-flight) is skipped by CI1 even
+    though it has nested per-arm sub-corpora. This is the
+    legitimate "sweep dispatcher producing per-arm sub-dirs
+    before the merge step" pattern — nesting is transient,
+    user knows about it, the runner shouldn't refuse.
+    """
+    root = tmp_path / 'data'
+    root.mkdir()
+    parent = root / 'sweep_in_flight'
+    _make_corpus(parent / 'arm_a')
+    _make_corpus(parent / 'arm_b')
+    # Without the sentinel: violation.
+    with pytest.raises(NestedCorpusError):
+        assert_no_nested_corpora(root)
+    # With the sentinel: silent skip.
+    (parent / IN_PROGRESS_SENTINEL).touch()
+    assert_no_nested_corpora(root)
+
+
+def test_is_in_progress_helper(tmp_path: Path) -> None:
+    """Trivial cheap helper, but worth pinning so future
+    refactors don't accidentally change the sentinel filename."""
+    corpus = tmp_path / 'corp'
+    corpus.mkdir()
+    assert is_in_progress(corpus) is False
+    (corpus / IN_PROGRESS_SENTINEL).touch()
+    assert is_in_progress(corpus) is True
+    assert IN_PROGRESS_SENTINEL == '.in_progress'
 
 
 # ============ CI3 — cloud-root uniqueness ============

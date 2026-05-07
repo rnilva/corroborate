@@ -1264,7 +1264,11 @@ def _load_directory(
     # CORPUS_INTEGRITY.md CI1: refuse nested corpora at ingest
     # rather than silently drop the inner ones (the runner walks
     # one level deep). Caller fixes the layout, then retries.
-    from corroborate.corpus.integrity import assert_no_nested_corpora
+    # Corpus dirs marked with `.in_progress` (sweep mid-flight)
+    # are skipped by both the audit and the walk.
+    from corroborate.corpus.integrity import (
+        IN_PROGRESS_SENTINEL, assert_no_nested_corpora, is_in_progress,
+    )
     assert_no_nested_corpora(root)
     import time as _time
     measurable_reads = _required_record_keys(required)
@@ -1272,7 +1276,17 @@ def _load_directory(
     trace_reads = measurable_reads | analysis_reads
     # **C5 progress** (CACHE_BUILD.md): pre-walk the subdirs so
     # we know N up front for an `[i/N] <corpus>` prefix.
-    sub_dirs = sorted(p for p in root.iterdir() if p.is_dir())
+    sub_dirs_all = sorted(p for p in root.iterdir() if p.is_dir())
+    in_progress_dirs = [p for p in sub_dirs_all if is_in_progress(p)]
+    if in_progress_dirs:
+        for p in in_progress_dirs:
+            print(
+                f'runner: SKIPPING {p.name}/ — '
+                f'`{IN_PROGRESS_SENTINEL}` sentinel present '
+                f'(sweep mid-flight)',
+                file=sys.stderr, flush=True,
+            )
+    sub_dirs = [p for p in sub_dirs_all if not is_in_progress(p)]
     n_total = len(sub_dirs)
     if n_total == 0:
         print(
