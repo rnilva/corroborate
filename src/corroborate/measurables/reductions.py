@@ -435,6 +435,20 @@ def reduce_axis[R: Mapping[str, object]](
         arr = of(record)
         if arr.size == 0:
             return arr
+        # **Old-protocol shim**: some legacy corpora stored
+        # what's now an N-dim array (e.g. `mc_return` shape
+        # `(n_bursts, n_episodes)`) as a 0-d numpy scalar — the
+        # substrate's writer at the time collapsed via
+        # `np.squeeze`-like behavior. Modern sweeps preserve the
+        # full shape. Promote 0-d back to 1-d so `axis=-1`
+        # reductions don't AxisError; the math semantics are
+        # preserved (mean of a 1-element array is the element).
+        # Statistical caveat: cells from the old protocol carry
+        # N=1 effective sample size on the reduced axis vs the
+        # full panel from new sweeps — analyses pooling across
+        # corpus generations should know this.
+        if arr.ndim == 0:
+            arr = np.atleast_1d(arr)
         # `ndarray.mean(axis=...)` and friends are typed `Any` in
         # numpy's stubs (the return is value-dependent: scalar for
         # 1-D + axis=0, ndarray for N-D + axis<N). Cast at the
