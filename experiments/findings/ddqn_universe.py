@@ -2520,6 +2520,111 @@ def staleness_does_not_amplify_ddqn_outcome__survival_polyak(
 
 
 # =====================================================================
+# CLAIM 16 — bootstrap_fraction → g_link, conditional on
+#            non-Q-explosion regime.
+#
+# Updates `bootstrap_fraction_drives_g_link__net_of_dormancy` with
+# the endogenous-predicate scope discovered via per-(env, sync)
+# panel analysis (`non_qexp_link_panel.json`):
+#
+#   ρ(bf, g_link | mech HELD, q_div < 100):
+#     ALL strata (n=40):     +0.38, p=0.015
+#     GOAL polarity (n=16):  +0.40, p=0.13
+#     SURVIVAL (n=19):       +0.48, p=0.039
+#
+# bf is universal across polarity classes ONCE Q-explosion is
+# excluded. The earlier `__net_of_dormancy` bridge pinned to
+# corpus-specific HPs (replay.capacity=10000) — replaced here
+# with the endogenous q_divergence_score predicate.
+#
+# Companion bridge to the existing `__net_of_dormancy` (which
+# stays as-is for historical baseline tracking).
+# =====================================================================
+
+
+@claim_bridge(
+    source=INTERVENTION,
+    target='eval_best_burst_mean',
+    direction=Direction.DIRECT,
+    tier=Tier.ASSOCIATIONAL,
+    pair_by=('seed', 'total_steps', 'eval_every'),
+    scope=(
+        # Non-Q-explosion: bias correction operates in the
+        # bounded-Q regime where Hasselt's theorem bites cleanly.
+        # In Q-explosion (q_div >= 100), Q dynamics dominate and
+        # the bf-mediated link is broken (cf. `findings_minatar_
+        # link_attenuation`, `findings_breakout_uniqueness`).
+        finite('q_divergence_score')
+        & finite_lt('q_divergence_score', 100.0)
+        & finite('bootstrap_fraction')
+        & finite('jensen_dormancy_gap')
+        # Mech-HELD conditioning is implicit in the meta-
+        # regression's per-burst paired_g (Δ_jens<0 emerges as
+        # the right-skewed bursts in the panel); the dormancy
+        # covariate explicitly absorbs the dormant-mech bursts.
+    ),
+    predicted_direction='a_gt_b',
+)
+def bootstrap_fraction_drives_g_link__non_q_explosion(
+    meta_regression_per_burst: MetaRegressionResult,
+    *,
+    source: Measurable[
+        Mapping[str, object], npt.NDArray[np.floating],
+    ] = _MC_RETURN_PER_BURST_MEAN,
+    covariates: tuple[str, ...] = (
+        'log_action_dim',
+        'log_horizon',
+        'bootstrap_fraction',
+        'jensen_dormancy_gap',
+    ),
+    dedupe_strategy: str = 'mean',
+    bf_threshold: float = 0.5,
+) -> Verdict:
+    """In non-Q-explosion strata (q_div < 100), the meta-
+    regression's `bootstrap_fraction` coefficient on g_link is
+    POSITIVE and significant. Captures the cross-strata link
+    predictor that survives across both GOAL and SURVIVAL
+    polarity classes.
+
+    Theoretical reading (per `findings_chain_bottlenecks`,
+    `findings_residual_unexplained`, `findings_nstep_falsification`,
+    `findings_polyak_tau`): in envs where most updates bootstrap
+    (long episodes / sparse termination), the chain of bootstrapped
+    Q-values amplifies the per-step max-bias, so DDQN's bias
+    correction yields a larger downstream outcome benefit. The
+    Q-explosion regime breaks this — extreme Q-divergence
+    overwhelms the per-step bias signal (cf. CLAIM 11).
+
+    HELD when β(bootstrap_fraction) ≥ `bf_threshold` AND
+    significant. POWER_INSUFFICIENT when not significant.
+    NO_EFFECT when significant but below magnitude floor (or
+    negative — would refute the chain-amplifier reading).
+
+    Empirical (per-(env, sync) panel restricted to mech-HELD,
+    q_div < 100, n=40 strata): ρ(bf, g_link) = +0.38, p = 0.015
+    (Spearman). Mirror in meta-regression coefficient with
+    cluster-robust SE expected.
+
+    Companion bridge to `bootstrap_fraction_drives_g_link__net_
+    of_dormancy` (corpus-pinned, historical baseline). The
+    endogenous-predicate scope here generalises the claim
+    cross-corpus."""
+    del source, covariates, dedupe_strategy
+    coef = next(
+        (c for c in meta_regression_per_burst.coefficients
+         if c.name == 'bootstrap_fraction'),
+        None,
+    )
+    if coef is None:
+        return Verdict.POWER_INSUFFICIENT
+    if not coef.is_significant:
+        return Verdict.POWER_INSUFFICIENT
+    if coef.coefficient >= bf_threshold:
+        return Verdict.HELD
+    return Verdict.NO_EFFECT
+
+
+# =====================================================================
 # DDQN measurement graph — the closure.
 # =====================================================================
 DDQN_UNIVERSE_BRIDGES = (
@@ -2615,6 +2720,10 @@ DDQN_UNIVERSE_BRIDGES = (
     # in the polyak regime, the staleness-mediation chain is
     # BROKEN. Empirical |ATE| < null_band on Asterix → HELD null.
     staleness_does_not_amplify_ddqn_outcome__survival_polyak,
+    # CLAIM 16 — bf → g_link in non-Q-explosion regime, both
+    # polarity classes (universal). Endogenous-predicate update
+    # to the corpus-pinned `__net_of_dormancy` bridge.
+    bootstrap_fraction_drives_g_link__non_q_explosion,
 )
 """The six bridges that close the DDQN study. CLAIM 1 (mechanism
 activation, do(DDQN) ↓ jensen_gap) is corroborated by
@@ -2651,6 +2760,7 @@ __all__ = [
     'link_r_predictable_from_polarity__soft_tautology',
     'staleness_amplifies_ddqn_outcome__sparse_goal_polyak',
     'staleness_does_not_amplify_ddqn_outcome__survival_polyak',
+    'bootstrap_fraction_drives_g_link__non_q_explosion',
 ]
 
 
