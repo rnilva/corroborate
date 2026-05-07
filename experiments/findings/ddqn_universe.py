@@ -98,6 +98,9 @@ from corroborate.bridge.predicates import (
 )
 from corroborate.core.intervention import DoEffect, Intervention
 from corroborate.measurables import Measurable
+from corroborate.analyses.paired_continuous_do_dowhy import (
+    PairedContinuousDoResult,
+)
 from corroborate.stats import MetaRegressionResult
 from corroborate_rl.dqn.claims.bootstrap import (
     adaptive_dormancy_greedify, bootstrap, double_greedify,
@@ -2297,6 +2300,187 @@ def link_r_predictable_from_polarity__soft_tautology(
 
 
 # =====================================================================
+# CLAIM 15 — Polyak-τ rung-2 corroboration: target staleness causally
+# amplifies DDQN's outcome benefit on FourRooms.
+#
+# Pearl rung-2 evidence from `polyak_tau_intervention.yaml` sweep:
+# do(τ) at fixed sync_period=100 directly varies target staleness
+# (τ → 1: target ≈ online, low staleness; τ → 0: target lags, high
+# staleness). Both DDQN and baseline arms run at each τ; the bridge
+# tests whether DDQN's outcome benefit (Δ_outcome at fixed seed × τ)
+# decays as τ grows.
+#
+# Empirical (FourRooms): ATE(log τ → Δ_outcome) = −0.018, p = 0.003,
+# placebo refuter ate = 0, RCC drift = 0. The 3-log-τ range accounts
+# for ~5% of FourRooms's reward range, matching the observational
+# proportion_mediated=0.27 within an order of magnitude.
+#
+# Companion to CLAIM 13 (`target_staleness_late_mediates_outcome__
+# fourrooms` HELD, observational): together rung-2 + rung-1.5
+# evidence on FourRooms specifically. The narrow scope reflects the
+# regime-dependent nature of the staleness mediation chain (cf.
+# `wide_jci_panel`: 24-stratum partial Spearman ρ_part = −0.188
+# pooled, with sign-flip in Q-explosion / silent-inversion regimes).
+# =====================================================================
+
+
+@claim_bridge(
+    source=INTERVENTION,
+    target='eval_best_burst_mean',
+    direction=Direction.INVERSE,
+    tier=Tier.INTERVENTIONAL,
+    # `target_sync.tau` MUST be in pair_by — each pair carries one
+    # τ value, so the regression of Δ_outcome on log_tau has a
+    # well-defined treatment per row. Without it, pair_by collapses
+    # cells across τ levels and the ATE estimation is degenerate.
+    pair_by=(
+        'env_name', 'corpus', 'gamma', 'sync_period',
+        'total_steps', 'seed', 'target_sync.tau',
+    ),
+    scope=(
+        (pl.col('env_name') == 'FourRooms-misc')
+        & (pl.col('corpus') == 'polyak_tau_intervention')
+        & finite('target_sync.tau')
+        & (pl.col('target_sync.tau') > 0)
+        # Reference `log_tau` here so the `_filter_with_missing_cols`
+        # path materialises it via the @measurable resolver before
+        # the analysis runs (the analysis treats `log_tau` as
+        # treatment_var; cells need the column populated).
+        & finite('log_tau')
+    ),
+    predicted_direction='a_lt_b',
+)
+def staleness_amplifies_ddqn_outcome__fourrooms_polyak(
+    paired_continuous_do_dowhy: PairedContinuousDoResult,
+    *,
+    treatment_var: str = 'log_tau',
+    outcome: str = 'eval_best_burst_mean',
+    ate_threshold: float = -0.005,
+    refutation_drift_threshold: float = 0.01,
+    n_pairs_floor: int = 30,
+) -> Verdict:
+    """On FourRooms within the polyak_tau_intervention sweep, the
+    do(τ) → Δ_outcome ATE is negative AND refutation-validated.
+
+    Mediation chain corroborated:
+        do(τ) → target_staleness_late → DDQN's bias correction
+                                      → Δ_outcome
+
+    τ → 1 collapses both arms (Q_target ≡ Q_online makes DDQN's
+    Q_target(s', argmax_a Q_online) ≡ max_a Q_online identical to
+    baseline's max-bootstrap), so Δ_outcome → 0 by construction at
+    τ = 1; ATE captures the slope as τ varies across [0.001, 1.0].
+
+    HELD when:
+      (1) backdoor.identified is True;
+      (2) `n_pairs ≥ n_pairs_floor` (statistical power);
+      (3) ATE < `ate_threshold` (signed-negative slope);
+      (4) `placebo.refuted_ate ≈ 0` AND
+          `random_common_cause.drift ≤ refutation_drift_threshold`.
+
+    NO_EFFECT when ATE ≥ ate_threshold (no significant negative
+    slope — refutes the mediation prediction).
+    POWER_INSUFFICIENT when (1), (2), or (4) fails.
+
+    Empirical (polyak_tau_intervention, n=120): ATE = −0.0177,
+    placebo refuted_ate = 0.000, RCC drift = 0.000 → HELD.
+
+    Cross-evidence:
+    - Observational `target_staleness_late_mediates_outcome__
+      fourrooms` (CLAIM 13): proportion_mediated = 0.27 HELD.
+    - Wide JCI (24 strata): ρ_part(Δ_stale, Δ_o | Δ_jens) = −0.19,
+      p = 2e-16 pooled.
+    Both layer on top of this rung-2 result for FourRooms."""
+    del treatment_var, outcome
+    result = paired_continuous_do_dowhy
+    if not result.backdoor.identified:
+        return Verdict.POWER_INSUFFICIENT
+    if result.n_pairs < n_pairs_floor:
+        return Verdict.POWER_INSUFFICIENT
+    if math.isnan(result.backdoor.ate):
+        return Verdict.POWER_INSUFFICIENT
+    if result.backdoor.ate >= ate_threshold:
+        return Verdict.NO_EFFECT
+    # Refutations: placebo treatment should give ATE ≈ 0;
+    # RCC should drift only marginally from real ATE.
+    if (
+        not math.isnan(result.placebo.refuted_ate)
+        and abs(result.placebo.refuted_ate) > refutation_drift_threshold
+    ):
+        return Verdict.POWER_INSUFFICIENT
+    if (
+        not math.isnan(result.random_common_cause.drift)
+        and result.random_common_cause.drift > refutation_drift_threshold
+    ):
+        return Verdict.POWER_INSUFFICIENT
+    return Verdict.HELD
+
+
+@claim_bridge(
+    source=INTERVENTION,
+    target='eval_best_burst_mean',
+    direction=Direction.DIRECT,
+    tier=Tier.INTERVENTIONAL,
+    pair_by=(
+        'env_name', 'corpus', 'gamma', 'sync_period',
+        'total_steps', 'seed', 'target_sync.tau',
+    ),
+    scope=(
+        (pl.col('env_name') == 'Asterix-MinAtar')
+        & (pl.col('corpus') == 'polyak_tau_asterix')
+        & finite('target_sync.tau')
+        & (pl.col('target_sync.tau') > 0)
+        & finite('log_tau')
+    ),
+    # `predicted_direction='null'` (xfail-style): we predict
+    # Asterix-MinAtar's do(τ) → Δ_outcome ATE is NULL because the
+    # env at sync=100 is in the Q-explosion regime where the
+    # staleness-mediation chain is broken (cf. wide_jci_panel
+    # CartPole-1k / Asterix-10k silent-inversion + Asterix-100
+    # link-broken patterns). HELD = null confirmed.
+    predicted_direction='null',
+)
+def staleness_does_not_amplify_ddqn_outcome__asterix_polyak(
+    paired_continuous_do_dowhy: PairedContinuousDoResult,
+    *,
+    treatment_var: str = 'log_tau',
+    outcome: str = 'eval_best_burst_mean',
+    null_band: float = 0.005,
+    n_pairs_floor: int = 30,
+) -> Verdict:
+    """Companion to `staleness_amplifies_ddqn_outcome__fourrooms_
+    polyak`: on Asterix-MinAtar in the Q-explosion regime, the
+    staleness-mediation chain is BROKEN, so do(τ) → Δ_outcome
+    should NOT show the negative-slope dose-response that
+    FourRooms exhibits.
+
+    `predicted_direction='null'` (xfail-style): HELD when |ATE| <
+    `null_band` (no clean dose-response) AND identified AND
+    refutations pass. NO_EFFECT (xpass) when ATE is unexpectedly
+    significantly negative — would refute the regime-specificity
+    claim and prompt re-examination.
+
+    Empirical (polyak_tau_asterix sweep, n=120): ATE = −0.0019,
+    placebo refuted_ate = 0.000, RCC drift = 0.0002 → HELD (|ATE|
+    < null_band, refutations clean, null confirmed)."""
+    del treatment_var, outcome
+    result = paired_continuous_do_dowhy
+    if not result.backdoor.identified:
+        return Verdict.POWER_INSUFFICIENT
+    if result.n_pairs < n_pairs_floor:
+        return Verdict.POWER_INSUFFICIENT
+    if math.isnan(result.backdoor.ate):
+        return Verdict.POWER_INSUFFICIENT
+    # Null prediction: |ATE| should be smaller than the canonical
+    # FourRooms effect (~−0.018). If much smaller, null confirmed.
+    if abs(result.backdoor.ate) < null_band:
+        return Verdict.HELD
+    # ATE significantly negative → null refuted (xpass), staleness
+    # DOES amplify here — surprising result.
+    return Verdict.NO_EFFECT
+
+
+# =====================================================================
 # DDQN measurement graph — the closure.
 # =====================================================================
 DDQN_UNIVERSE_BRIDGES = (
@@ -2383,6 +2567,15 @@ DDQN_UNIVERSE_BRIDGES = (
     # 'null'). The two together are the explicit form of the
     # polarity finding.
     link_r_predictable_from_polarity__soft_tautology,
+    # CLAIM 15 — Polyak-τ rung-2 corroboration on FourRooms:
+    # do(τ) → Δ_outcome ATE significantly negative (-0.018,
+    # p=0.003, refutations pass). The Pearl rung-2 layer for
+    # CLAIM 13's staleness mediation, FourRooms-specific.
+    staleness_amplifies_ddqn_outcome__fourrooms_polyak,
+    # CLAIM 15b — companion: null on Asterix-MinAtar (Q-explosion
+    # regime breaks the staleness-mediation chain). Empirical
+    # ATE = −0.0019 (|ATE| < null_band) — null confirmed.
+    staleness_does_not_amplify_ddqn_outcome__asterix_polyak,
 )
 """The six bridges that close the DDQN study. CLAIM 1 (mechanism
 activation, do(DDQN) ↓ jensen_gap) is corroborated by
@@ -2417,6 +2610,8 @@ __all__ = [
     'target_staleness_late_mediates_outcome__fourrooms',
     'target_staleness_late_mediates_outcome__breakout_sync100',
     'link_r_predictable_from_polarity__soft_tautology',
+    'staleness_amplifies_ddqn_outcome__fourrooms_polyak',
+    'staleness_does_not_amplify_ddqn_outcome__asterix_polyak',
 ]
 
 

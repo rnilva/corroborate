@@ -1120,6 +1120,12 @@ def dqn_default_measurables() -> tuple[
         # rebuild gap (cf. `feedback_cache_trace_dependent_measurables`).
         target_staleness_late,
         target_staleness_early,
+        # CLAIM 15 substrate variable: log10 of the Polyak τ target-
+        # update rate. NaN when target_sync.tau isn't set (most
+        # periodic_copy sweeps). Consumed by
+        # `paired_continuous_do_dowhy` in the staleness-amplification
+        # bridges (`staleness_amplifies_ddqn_outcome__*_polyak`).
+        log_tau,
     )
 
 
@@ -1148,6 +1154,26 @@ def _env_spec_for(record: Mapping[str, object]) -> object:
         return env_catalogue.get(name)
     except KeyError:
         return None
+
+
+@measurable(reads=('target_sync.tau',))
+def log_tau(record: Mapping[str, object]) -> float:
+    """`log10(target_sync.tau)` — the Polyak target-update rate on
+    log scale. NaN-propagates when `target_sync.tau` is missing (HP
+    not set, e.g. periodic_copy regimes) or non-positive.
+
+    Used as the continuous treatment variable in the polyak-τ
+    intervention bridges (`paired_continuous_do_dowhy` consumes
+    cells with this column). Log-space matches the geometric
+    mixing semantics: τ → 0 is "very stale" (1/τ-step memory),
+    τ → 1 is "no staleness". The 3-log-decade sweep
+    [0.001, 0.01, 0.1, 1.0] gives log_tau ∈ [-3, -2, -1, 0]."""
+    tau = record.get('target_sync.tau')
+    if not isinstance(tau, (int, float)):
+        return float('nan')
+    if tau <= 0:
+        return float('nan')
+    return math.log10(float(tau))
 
 
 @measurable(reads=('env_name',))

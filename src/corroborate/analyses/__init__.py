@@ -37,6 +37,7 @@ from corroborate.analyses import (  # noqa: F401
     paired_g_pooled as _pooled,  # pyright: ignore[reportUnusedImport]
     paired_link_per_burst as _link_per_burst,  # pyright: ignore[reportUnusedImport]
     paired_link_per_env as _link_per_env,  # pyright: ignore[reportUnusedImport]
+    paired_continuous_do_dowhy as _paired_continuous_do_dowhy,  # pyright: ignore[reportUnusedImport]
     link_attenuation_dowhy as _link_attenuation_dowhy,  # pyright: ignore[reportUnusedImport]
     paired_arm_spearman as _paired_arm_spearman,  # pyright: ignore[reportUnusedImport]
     paired_delta_link_dowhy as _paired_delta_link_dowhy,  # pyright: ignore[reportUnusedImport]
