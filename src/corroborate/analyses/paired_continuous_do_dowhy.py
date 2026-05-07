@@ -67,10 +67,18 @@ def _pair_and_extract(
     outcome_field: str,
     pair_by: tuple[str, ...],
     arm_field: str,
+    treatment_var_arm: str = 'baseline',
 ) -> list[dict[str, float]]:
     """Pair (treatment_arm, baseline_arm) on `pair_by`. Returns a
     list of dict rows with `{treatment_var, 'delta_outcome'}` per
-    pair. `treatment_var` is read from the treatment-arm cell."""
+    pair.
+
+    `treatment_var_arm` selects which arm the per-pair treatment
+    value is read from: `'baseline'` (default — for endogenous
+    mediator treatments where baseline's value represents the
+    per-pair pre-DDQN exposure level) or `'treatment'`. For
+    HP-style treatments where both arms share the value, either
+    works."""
     keyed: dict[
         tuple[object, ...],
         dict[str, Mapping[str, object]],
@@ -91,7 +99,8 @@ def _pair_and_extract(
         b = arms.get(baseline_arm)
         if t is None or b is None:
             continue
-        treat_val = t.get(treatment_var)
+        treat_source = b if treatment_var_arm == 'baseline' else t
+        treat_val = treat_source.get(treatment_var)
         if treat_val is None:
             continue
         if not isinstance(treat_val, (int, float)):
@@ -151,6 +160,7 @@ def paired_continuous_do_dowhy(
     outcome: str,
     pair_by: tuple[str, ...] = ('seed',),
     arm_field: str = 'arm_key',
+    treatment_var_arm: str = 'baseline',
     method_name: str = 'backdoor.linear_regression',
 ) -> PairedContinuousDoResult:
     """Test `do(treatment_var) → Δ_outcome` via DoWhy backdoor +
@@ -183,6 +193,7 @@ def paired_continuous_do_dowhy(
         outcome_field=outcome,
         pair_by=pair_by,
         arm_field=arm_field,
+        treatment_var_arm=treatment_var_arm,
     )
     if not rows:
         return PairedContinuousDoResult(
