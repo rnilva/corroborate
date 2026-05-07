@@ -665,6 +665,7 @@ def evaluate(
     cells: pl.DataFrame | Iterable[Mapping[str, object]],
     *,
     claim: Claim[..., object] | None = None,
+    module_scope: pl.Expr | None = None,
 ) -> BridgeEvaluation:
     """Run a bridge against a cell-set: apply `bridge.scope`
     as a polars filter, resolve each fixture (a `holds_when` parameter
@@ -695,6 +696,17 @@ def evaluate(
     `claim=dqn` (or the substrate-level entry-point claim) so
     the gates fire.
 
+    `module_scope` (kw-only) is the hypothesis-module-level scope
+    filter (e.g., "every cross-env bridge in this file excludes
+    bsuite diagnostic envs"). The runner reads it via
+    `getattr(h, 'MODULE_SCOPE', None)` and threads it here. AND-
+    combined with `bridge.scope` before filtering — so a bridge
+    that already filters to a specific bsuite env will have its
+    cell-set zeroed out by an exclusion module_scope, and a
+    bridge with `scope=None` will pick up the module_scope alone.
+    Bridges that intentionally violate the module-level filter
+    must move to a different hypothesis module.
+
     Raises `TypeError` if the Bridge has no `holds_when` body —
     `@claim_bridge` always populates it; this guard catches direct
     `Bridge(...)` construction with `holds_when=None`."""
@@ -704,8 +716,20 @@ def evaluate(
             f'body — @claim_bridge always populates it; constructing '
             f'a Bridge directly with holds_when=None is unsupported.',
         )
+    # Effective scope = bridge.scope ∧ module_scope (either may
+    # be None). Polars' `&` is the framework-honest composition.
+    effective_scope: pl.Expr | None
+    if bridge.scope is None and module_scope is None:
+        effective_scope = None
+    elif bridge.scope is None:
+        effective_scope = module_scope
+    elif module_scope is None:
+        effective_scope = bridge.scope
+    else:
+        effective_scope = bridge.scope & module_scope
+
     filtered_cells: list[dict[str, object]]
-    if bridge.scope is None:
+    if effective_scope is None:
         # No cell filter — skip the DataFrame round-trip. Convert
         # to list[dict] so the analysis fn can re-iterate.
         if isinstance(cells, pl.DataFrame):
@@ -722,7 +746,7 @@ def evaluate(
             cells_list = list(cells)
             df = pl.from_dicts(cells_list) if cells_list else pl.DataFrame()
         if df.height > 0:
-            df = _filter_with_missing_cols(df, bridge.scope)
+            df = _filter_with_missing_cols(df, effective_scope)
         filtered_cells = (
             cast(list[dict[str, object]], df.to_dicts())
             if df.height > 0 else []

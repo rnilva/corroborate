@@ -380,11 +380,21 @@ def run(
     # endogeneity gates short-circuit.
     claim = getattr(h, 'CLAIM', None)
 
+    # Optional hypothesis-module-level scope filter. AND-combined
+    # with each bridge's own `scope=` inside `evaluate`. Used to
+    # encode universe-level exclusions (e.g., "this file's
+    # cross-env analyses exclude bsuite diagnostic envs").
+    # Hypotheses without MODULE_SCOPE pass None → bridge.scope
+    # alone determines the filter.
+    module_scope = getattr(h, 'MODULE_SCOPE', None)
+
     out: dict[str, BridgeEvaluation] = {}
     errors: dict[str, BaseException] = {}
     for b in bridges:
         try:
-            out[b.name] = evaluate(b, cells, claim=claim)
+            out[b.name] = evaluate(
+                b, cells, claim=claim, module_scope=module_scope,
+            )
         except Exception as e:  # noqa: BLE001
             # An authoring bug in a bridge's `holds_when` body
             # (e.g. typo'd column name, malformed analysis call)

@@ -451,3 +451,137 @@ def test_bridge_accepts_measurable_as_source() -> None:
     assert q_max_late.name in registered_names()
 
 
+# ============ MODULE_SCOPE — file-level scope filter ============
+
+
+def test_evaluate_module_scope_intersects_with_bridge_scope() -> None:
+    """`evaluate(..., module_scope=expr)` AND-combines with the
+    bridge's own `scope=` — a hypothesis-module-level filter.
+    Cells matching bridge.scope but NOT module_scope are excluded.
+    """
+    cells = _synthetic_cells(n_seeds=30)
+    # Half the cells get an 'excluded'-tagged env so module_scope
+    # can reject them at the file level.
+    for c in cells[:30]:  # first 30 → 15 pairs
+        c['env_class'] = 'excluded'
+    for c in cells[30:]:
+        c['env_class'] = 'included'
+
+    # No module_scope: all 30 pairs visible → HELD.
+    out_full = evaluate(treatment_helps_outcome, cells)
+    assert out_full.verdict == Verdict.HELD
+    assert out_full.n_cells_in_scope == 60
+
+    # With module_scope: only 'included' cells survive → 15 pairs.
+    # treatment_helps_outcome's body keeps HELD if g > 0.3 sig
+    # AND n_pairs ≥ 10, which 15 pairs still satisfies.
+    out_filtered = evaluate(
+        treatment_helps_outcome, cells,
+        module_scope=pl.col('env_class') == 'included',
+    )
+    assert out_filtered.n_cells_in_scope == 30
+    # Cells halved → still enough power.
+    assert out_filtered.verdict == Verdict.HELD
+
+
+def test_evaluate_module_scope_can_zero_a_bridge() -> None:
+    """When bridge.scope is incompatible with module_scope (e.g.
+    bridge filters to env=A, module_scope excludes A), the
+    intersection is empty and the bridge sees zero cells.
+    """
+    cells = _synthetic_cells(n_seeds=30)
+    out = evaluate(
+        # treatment_helps_outcome.scope is `env_name == 'TestEnv'`.
+        # module_scope says `env_name != 'TestEnv'` → no overlap.
+        treatment_helps_outcome, cells,
+        module_scope=pl.col('env_name') != 'TestEnv',
+    )
+    assert out.n_cells_in_scope == 0
+    assert out.verdict == Verdict.POWER_INSUFFICIENT
+
+
+def test_evaluate_module_scope_alone_when_bridge_scope_none() -> None:
+    """A bridge with `scope=None` picks up the module_scope alone.
+    Without module_scope, all cells flow through; with it, only
+    the matching subset reaches the analysis.
+    """
+    @claim_bridge(
+        source=INTERVENTION,
+        target='eval_best_burst_mean',
+        direction=Direction.DIRECT,
+        tier=Tier.ASSOCIATIONAL,
+        # No scope= — bridge.scope is None.
+    )
+    def unscoped_bridge(paired_g: PairedGResult) -> Verdict:
+        if paired_g.n_pairs < 10:
+            return Verdict.POWER_INSUFFICIENT
+        if paired_g.g > 0.3 and paired_g.p_value < 0.05:
+            return Verdict.HELD
+        return Verdict.NO_EFFECT
+
+    cells = _synthetic_cells(n_seeds=30)
+    for c in cells[:30]:
+        c['kind'] = 'A'
+    for c in cells[30:]:
+        c['kind'] = 'B'
+
+    # With module_scope filtering to half the cells — fewer pairs,
+    # but enough to still yield a verdict.
+    out = evaluate(
+        unscoped_bridge, cells,
+        module_scope=pl.col('kind') == 'B',
+    )
+    assert out.n_cells_in_scope == 30
+
+
+def test_evaluate_no_module_scope_preserves_legacy_behavior() -> None:
+    """Default (kwarg unset) → bridge.scope alone. Existing
+    callers don't see behavior change."""
+    cells = _synthetic_cells(n_seeds=30)
+    out = evaluate(treatment_helps_outcome, cells)
+    assert out.n_cells_in_scope == 60
+    assert out.verdict == Verdict.HELD
+
+
+def test_module_scope_via_hypothesis_attribute() -> None:
+    """The runner reads `MODULE_SCOPE` via `getattr(h, ..., None)`
+    and forwards to `evaluate`. Simulating that path: a hypothesis-
+    shaped object exposes `MODULE_SCOPE`; pulling it via
+    `getattr(..., None)` and threading to `evaluate` gives the
+    expected end-to-end behavior.
+    """
+    import types
+
+    h = types.SimpleNamespace(
+        __name__='test_hypothesis',
+        INTERVENTION=INTERVENTION,
+        BRIDGES=(treatment_helps_outcome,),
+        MODULE_SCOPE=pl.col('env_name') != 'TestEnv',  # excludes ALL
+    )
+    cells = _synthetic_cells(n_seeds=30)
+    df = pl.from_dicts(cells)
+    module_scope = getattr(h, 'MODULE_SCOPE', None)
+    out = evaluate(treatment_helps_outcome, df, module_scope=module_scope)
+    assert out.n_cells_in_scope == 0
+    assert out.verdict == Verdict.POWER_INSUFFICIENT
+
+
+def test_module_scope_attribute_absent_means_none() -> None:
+    """Hypotheses without `MODULE_SCOPE` → `getattr` falls back to
+    None → bridge.scope alone determines the filter (legacy
+    behavior preserved)."""
+    import types
+
+    h = types.SimpleNamespace(
+        __name__='test_hypothesis_legacy',
+        INTERVENTION=INTERVENTION,
+        BRIDGES=(treatment_helps_outcome,),
+        # No MODULE_SCOPE attribute.
+    )
+    cells = _synthetic_cells(n_seeds=30)
+    df = pl.from_dicts(cells)
+    module_scope = getattr(h, 'MODULE_SCOPE', None)
+    assert module_scope is None
+    out = evaluate(treatment_helps_outcome, df, module_scope=module_scope)
+    assert out.n_cells_in_scope == 60
+    assert out.verdict == Verdict.HELD

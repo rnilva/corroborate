@@ -122,7 +122,23 @@ class Hypothesis(Protocol):
     endogeneity check (still correct for typo/contract-shape
     gates). New substrate hypothesis modules should declare
     `CLAIM = dqn` (or their substrate's outermost claim) at
-    module level."""
+    module level.
+
+    Optional `MODULE_SCOPE` attribute (`pl.Expr | None`): a
+    hypothesis-module-level scope filter that AND-combines with
+    each bridge's own `scope=` at evaluation time. Used to
+    encode universe-level exclusions — e.g., "every cross-env
+    bridge in this file excludes bsuite diagnostic chains
+    (DiscountingChain bandit-by-step-0, DeepSea one-arrow
+    optimum, etc.) because the chain-amplifier theory doesn't
+    apply to those env shapes". The runner reads it via
+    `getattr(h, 'MODULE_SCOPE', None)` and threads to
+    `evaluate(..., module_scope=...)`. Hypotheses that omit it
+    pass None → each bridge's scope stands alone. Bridges that
+    legitimately violate the module-level filter must live in a
+    different hypothesis module — there's no per-bridge opt-out
+    by design (a hypothesis module's scope universe is
+    file-level, not bridge-level)."""
 
     __name__: str
     INTERVENTION: DoEffect

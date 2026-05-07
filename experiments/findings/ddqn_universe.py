@@ -169,6 +169,26 @@ ADAPTIVE_DQN_FACTOR_0P5_SWAP = Intervention(
 INTERVENTION = DoEffect(treatment=(DDQN_SWAP,), baseline=())
 
 
+# Hypothesis-module-level scope: bsuite envs are *diagnostic*
+# probes, not RL benchmarks. Each bsuite env is engineered to
+# expose a single property (DiscountingChain locks decision at
+# step 0 → bandit under the hood; DeepSea has a one-arrow
+# optimal policy → zero chain branching; MNISTBandit is pure
+# bandit; Catch saturates fast; MemoryChain / UmbrellaChain
+# test memory). Cross-env scope claims (chain-amplifier theory,
+# polarity moderators, jointly-cross-env attenuators) treat
+# them as if they were chain MDPs — they're not, and including
+# them imports leverage from a structural class the theory
+# doesn't apply to (cf. earlier bandit-tail leverage findings).
+#
+# `MODULE_SCOPE` is read by the runner via `getattr(h,
+# 'MODULE_SCOPE', None)` and AND-combined into every bridge's
+# `scope=` inside `evaluate`. By design there's no per-bridge
+# opt-out; a bridge that intentionally probes bsuite must live
+# in a different hypothesis module (e.g., `dqn_bridges.py`).
+MODULE_SCOPE: pl.Expr = ~pl.col('env_name').str.ends_with('-bsuite')
+
+
 # =====================================================================
 # Per-env covariate table for the DDQN 200k corpus's 18 envs.
 #
@@ -2556,13 +2576,11 @@ def staleness_does_not_amplify_ddqn_outcome__survival_polyak(
         # Bootstrap-using envs: the chain-amplifier theory
         # requires that updates DO bootstrap. Bandit envs
         # (bf~0) lack the chain entirely, so DDQN's chain-
-        # amplifier mechanism can't operate — including them
-        # gives leverage to a pseudo-signal driven by the
-        # bandit/RL split rather than chain depth among RL
-        # envs (cf. earlier bandit-tail-driven cross-env
-        # findings on staleness).
+        # amplifier mechanism can't operate.
         & finite_gt('bootstrap_fraction', 0.5)
         & finite('jensen_dormancy_gap')
+        # bsuite diagnostic chains (DC, DeepSea, ...) excluded
+        # by file-level MODULE_SCOPE.
     ),
     predicted_direction='a_gt_b',
 )
