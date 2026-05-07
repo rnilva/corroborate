@@ -21,11 +21,25 @@ def _write(p: Path, data: bytes) -> None:
     _ = p.write_bytes(data)
 
 
+def _write_real_parquet(p: Path, n_rows: int = 1000) -> None:
+    """Write a real parquet file (PAR1 footer + > 1 KiB) so the
+    cloud archive's CI5 precondition check passes. Tests that
+    care about archive transport mechanics rather than parquet
+    content shape use these fixtures."""
+    import polars as pl
+    p.parent.mkdir(parents=True, exist_ok=True)
+    df = pl.DataFrame({
+        'id': [f'cell-{i}' for i in range(n_rows)],
+        'x': list(range(n_rows)),
+    })
+    df.write_parquet(p)
+
+
 @pytest.fixture
 def sweep_dir(tmp_path: Path) -> Path:
     d = tmp_path / 'sweep'
-    _write(d / 'runs.parquet', b'runs-payload')
-    _write(d / 'traces.parquet', b'traces-payload-with-more-bytes')
+    _write_real_parquet(d / 'runs.parquet')
+    _write_real_parquet(d / 'traces.parquet', n_rows=500)
     return d
 
 
@@ -118,9 +132,10 @@ def test_archive_raises_conflicting_archive_on_sha256_mismatch(
     cloud.archive(sweep_dir, remote_root)
 
     # Modify the local file → different sha256 vs manifest.
+    # Rewrite as a different valid parquet (preserves CI5
+    # archive-precondition pass; only sha256 changes).
     p = sweep_dir / 'runs.parquet'
-    original = p.read_bytes()
-    p.write_bytes(original + b'\x00')   # one-byte mutation
+    _write_real_parquet(p, n_rows=1500)  # different content, different sha
 
     import pytest
     with pytest.raises(cloud.ConflictingArchive) as exc_info:
@@ -141,7 +156,7 @@ def test_archive_force_true_overwrites_on_sha256_mismatch(
     prior_sha = {f.relpath: f.sha256 for f in first.files}['runs.parquet']
 
     p = sweep_dir / 'runs.parquet'
-    p.write_bytes(p.read_bytes() + b'\x00')
+    _write_real_parquet(p, n_rows=1500)  # different content, different sha
 
     second = cloud.archive(sweep_dir, remote_root, force=True)
     new_sha = {f.relpath: f.sha256 for f in second.files}['runs.parquet']
@@ -194,18 +209,24 @@ def test_archive_records_row_ids_for_runrow_parquet(
 
 
 def test_archive_omits_row_ids_for_non_runrow_parquet(
-    sweep_dir: Path, remote_root: str,
+    tmp_path: Path, remote_root: str,
 ) -> None:
     """Negative control: for a parquet WITHOUT an `id` column,
     `row_ids` is the empty tuple — the I5 sniffer is robust to
     non-row parquets and doesn't fabricate IDs."""
-    # The fixture's `runs.parquet` is fake bytes (not a real
-    # parquet); the sniffer should return () via the
-    # ColumnNotFoundError / ComputeError branch.
-    manifest = cloud.archive(sweep_dir, remote_root)
+    import polars as pl
+    sweep = tmp_path / 'sweep'
+    sweep.mkdir()
+    # Real parquet (passes CI5) but no `id` column → sniffer
+    # should return () via the ColumnNotFoundError /
+    # ComputeError branch.
+    df = pl.DataFrame({'x': list(range(1000)), 'y': list(range(1000))})
+    df.write_parquet(sweep / 'runs.parquet')
+
+    manifest = cloud.archive(sweep, remote_root)
     for f in manifest.files:
         assert f.row_ids == (), (
-            f'fake-bytes parquet {f.relpath!r} produced spurious '
+            f'no-id parquet {f.relpath!r} produced spurious '
             f'row_ids = {f.row_ids!r}'
         )
 
@@ -407,9 +428,9 @@ def test_archive_default_excludes_tmp_subdir(
     tmp_path: Path,
 ) -> None:
     sweep = tmp_path / 'sweep'
-    _write(sweep / 'traces.parquet', b'merged')
-    _write(sweep / 'tmp' / 'arm000.parquet', b'shard0')
-    _write(sweep / 'tmp' / 'arm001.parquet', b'shard1')
+    _write_real_parquet(sweep / 'traces.parquet')
+    _write_real_parquet(sweep / 'tmp' / 'arm000.parquet')
+    _write_real_parquet(sweep / 'tmp' / 'arm001.parquet')
 
     manifest = cloud.archive(sweep, f'file://{tmp_path / "remote"}')
     relpaths = {f.relpath for f in manifest.files}

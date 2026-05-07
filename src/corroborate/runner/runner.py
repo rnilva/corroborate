@@ -1087,6 +1087,11 @@ def _load_directory(
     The drop step is load-bearing: per-step trace columns
     (`done`, `online_std_q_per_step`, …) can be GBs per cell, so
     keeping them across the diagonal_relaxed concat would OOM."""
+    # CORPUS_INTEGRITY.md CI1: refuse nested corpora at ingest
+    # rather than silently drop the inner ones (the runner walks
+    # one level deep). Caller fixes the layout, then retries.
+    from corroborate.corpus.integrity import assert_no_nested_corpora
+    assert_no_nested_corpora(root)
     import time as _time
     measurable_reads = _required_record_keys(required)
     analysis_reads = _analysis_reads_for_bridges(bridges)

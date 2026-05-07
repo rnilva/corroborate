@@ -313,6 +313,7 @@ def archive(
     files: Sequence[str] | None = None,
     force: bool = False,
     purge_local: bool = False,
+    validate: bool = True,
 ) -> RemoteManifest:
     """Upload `files` from `sweep_dir` to `remote_root/<relpath>`,
     update the per-sweep manifest, optionally delete local
@@ -328,6 +329,12 @@ def archive(
     after size verification. Default false (safer two-step
     lifecycle: archive → verify → purge).
 
+    `validate`: run CORPUS_INTEGRITY.md CI5 archive-eligibility
+    check on each local file (min size + PAR1 footer for
+    parquets) before uploading. Default true. Pass `False` only
+    when the local files are deliberately small / non-standard
+    (test fixtures using opaque byte payloads, etc.).
+
     Manifest is saved atomically after EACH file. Returns the
     final updated manifest."""
     if not sweep_dir.is_dir():
@@ -340,6 +347,16 @@ def archive(
             f'{existing.remote_root!r}; refusing to retarget to '
             f'{remote_root!r}. Restore + re-archive if intentional.',
         )
+
+    # CORPUS_INTEGRITY.md CI3: refuse if a sibling corpus already
+    # claims this `remote_root`. Two local corpora pushing to the
+    # same s3 prefix silently overwrite each other on every
+    # archive call. Check only fires when this corpus is NEW (no
+    # existing manifest) — re-archiving the same sweep_dir to its
+    # own remote_root is always fine.
+    if existing is None:
+        from corroborate.corpus.integrity import assert_unique_remote_root
+        assert_unique_remote_root(sweep_dir, remote_root)
 
     selected = list(files) if files is not None else _default_files(sweep_dir)
     if not selected:
@@ -357,6 +374,18 @@ def archive(
         local = sweep_dir / relpath
         if not local.is_file():
             raise FileNotFoundError(f'{local}: not a file')
+
+        # CORPUS_INTEGRITY.md CI5: refuse to push a file that
+        # fails the archive precondition (too small, missing
+        # PAR1 footer, etc.). The check fires BEFORE we hash or
+        # touch the cloud — a 0-byte placeholder from an
+        # interrupted sweep merge gets caught here rather than
+        # silently overwriting the cloud's authoritative copy.
+        if validate:
+            from corroborate.corpus.integrity import (
+                assert_archive_eligible,
+            )
+            assert_archive_eligible(local)
 
         sha256 = _sha256_file(local)
         prior = by_relpath.get(relpath)
