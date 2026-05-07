@@ -2346,26 +2346,29 @@ def link_r_predictable_from_polarity__soft_tautology(
         # leave it null. NOT corpus-tagged.
         finite('target_sync.tau')
         & (pl.col('target_sync.tau') > 0)
-        # Endogenous regime predicates: GOAL polarity (FourRooms-
-        # like reward formula), bounded Q (no Q-explosion), mech
-        # indicator (target_staleness_late computable).
+        # GOAL polarity (length and return inversely correlated).
         & finite_lt('env_reward_polarity', -0.5)
+        # Bounded Q (no Q-explosion). Polyak smoothing keeps q_div
+        # low here in practice; the predicate excludes any future
+        # corpus where it doesn't.
         & finite('q_divergence_score')
         & finite_lt('q_divergence_score', 100.0)
         & finite('target_staleness_late')
         & finite('eval_best_burst_mean')
-        # Restrict to FourRooms specifically — Acrobot / MountainCar
-        # are also GOAL+bounded-Q in the polyak sweep but show null
-        # ATE. The endogenous distinguisher between them and
-        # FourRooms (where DDQN substantially helps and staleness
-        # mediation operates) hasn't been characterised yet — TODO
-        # replace `env_name` predicate with the missing endogenous
-        # feature once identified.
-        & (pl.col('env_name') == 'FourRooms-misc')
+        # SPARSE-TERMINAL-POSITIVE reward structure: r_min ≥ 0
+        # (no per-step penalty floor). Distinguishes FourRooms
+        # (terminal +1 at goal, 0 elsewhere) from Acrobot /
+        # MountainCar (dense per-step penalty until terminal).
+        # Both polarity classes are GOAL, but in the dense-penalty
+        # case the bias dynamics is governed by penalty
+        # accumulation rather than sparse-reward bootstrap chains,
+        # and staleness's role on Δ_outcome inverts (Acrobot in
+        # the polyak corpus shows ATE = −349 — opposite sign).
+        & finite_ge('r_min', 0.0)
     ),
     predicted_direction='a_lt_b',
 )
-def staleness_amplifies_ddqn_outcome__fourrooms_polyak(
+def staleness_amplifies_ddqn_outcome__sparse_goal_polyak(
     paired_continuous_do_dowhy: PairedContinuousDoResult,
     *,
     treatment_var: str = 'target_staleness_late',
@@ -2376,12 +2379,11 @@ def staleness_amplifies_ddqn_outcome__fourrooms_polyak(
     n_pairs_floor: int = 30,
 ) -> Verdict:
     """In the polyak-do(τ) regime (endogenous indicator:
-    `target_sync.tau` finite > 0), in GOAL-polarity bounded-Q envs
-    (FourRooms-like — `env_reward_polarity < −0.5`,
-    `q_divergence_score < 100`), the per-pair baseline target
-    staleness CAUSALLY amplifies DDQN's outcome benefit
-    (Δ_outcome): pairs with higher baseline staleness show
-    larger DDQN benefit.
+    `target_sync.tau` finite > 0), under SPARSE-TERMINAL-POSITIVE
+    GOAL polarity (env_reward_polarity < −0.5, r_min ≥ 0,
+    q_divergence_score < 100), per-pair baseline target staleness
+    CAUSALLY amplifies DDQN's outcome benefit (Δ_outcome): pairs
+    with higher baseline staleness show larger DDQN benefit.
 
     Causal logic. The polyak sweep exogenously varies τ across
     pairs; both DDQN and baseline arms in a pair share the same
@@ -2607,7 +2609,7 @@ DDQN_UNIVERSE_BRIDGES = (
     # do(τ) → Δ_outcome ATE significantly negative (-0.018,
     # p=0.003, refutations pass). The Pearl rung-2 layer for
     # CLAIM 13's staleness mediation, FourRooms-specific.
-    staleness_amplifies_ddqn_outcome__fourrooms_polyak,
+    staleness_amplifies_ddqn_outcome__sparse_goal_polyak,
     # CLAIM 15b — companion null bridge: under SURVIVAL polarity
     # in the polyak regime, the staleness-mediation chain is
     # BROKEN. Empirical |ATE| < null_band on Asterix → HELD null.
@@ -2646,7 +2648,7 @@ __all__ = [
     'target_staleness_late_mediates_outcome__fourrooms',
     'target_staleness_late_mediates_outcome__breakout_sync100',
     'link_r_predictable_from_polarity__soft_tautology',
-    'staleness_amplifies_ddqn_outcome__fourrooms_polyak',
+    'staleness_amplifies_ddqn_outcome__sparse_goal_polyak',
     'staleness_does_not_amplify_ddqn_outcome__survival_polyak',
 ]
 
