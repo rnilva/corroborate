@@ -5,73 +5,217 @@
       "relpath": "tmp/arm000__SpaceInvaders-MinAtar__vanilla_dqn__runs.parquet",
       "size_bytes": 19486,
       "sha256": "9258f65d2728c282852f1c03fabffd487ac2069e7c943fd0e03b755a1b56a167",
-      "pushed_at": "2026-05-04T06:12:25+00:00"
+      "pushed_at": "2026-05-04T06:12:25+00:00",
+      "row_ids": [
+        "72698c33-80a5-439b-896c-77e210223b05",
+        "5a00fe06-2f9f-47c0-adc9-e80aee112b9d",
+        "d990063f-4d0a-4557-a366-e5ca9f85ea47",
+        "f5c71a3d-9484-45d8-848b-6389e9438e85",
+        "49f860cd-a4f2-47aa-8528-922f28101b9e",
+        "34538ce4-536d-44af-b9e7-99d412db2247",
+        "bab6a0b5-54d2-455a-97a7-cd1e7b597ac2",
+        "76cecbc1-b1a7-4ece-80b3-995260dc05f5",
+        "a6d0b6ed-79f3-4b41-b0a9-73cc16909a71",
+        "1250a1f4-9f12-4c32-a635-ba1844d7f357"
+      ]
     },
     {
       "relpath": "tmp/arm000__SpaceInvaders-MinAtar__vanilla_dqn__traces.parquet",
       "size_bytes": 580935653,
       "sha256": "29c35672945e6372bd2aec633ab5ffe4759decb6ffb5881a1b7e609114878d56",
-      "pushed_at": "2026-05-04T06:12:36+00:00"
+      "pushed_at": "2026-05-04T06:12:36+00:00",
+      "row_ids": [
+        "72698c33-80a5-439b-896c-77e210223b05",
+        "5a00fe06-2f9f-47c0-adc9-e80aee112b9d",
+        "d990063f-4d0a-4557-a366-e5ca9f85ea47",
+        "f5c71a3d-9484-45d8-848b-6389e9438e85",
+        "49f860cd-a4f2-47aa-8528-922f28101b9e",
+        "34538ce4-536d-44af-b9e7-99d412db2247",
+        "bab6a0b5-54d2-455a-97a7-cd1e7b597ac2",
+        "76cecbc1-b1a7-4ece-80b3-995260dc05f5",
+        "a6d0b6ed-79f3-4b41-b0a9-73cc16909a71",
+        "1250a1f4-9f12-4c32-a635-ba1844d7f357"
+      ]
     },
     {
       "relpath": "tmp/arm001__SpaceInvaders-MinAtar__vanilla_dqn__runs.parquet",
       "size_bytes": 19485,
       "sha256": "02527dd0e1e930e7dbbaff7e9d048397841a892ab17dac94c0f85a1e30a17346",
-      "pushed_at": "2026-05-04T06:31:23+00:00"
+      "pushed_at": "2026-05-04T06:31:23+00:00",
+      "row_ids": [
+        "2626eac3-bae9-4e5c-a549-31cb28c9f932",
+        "80cb3de7-309d-4544-92a1-447701b844bd",
+        "b0e3b7e0-b3a0-4844-b8f9-5ca17cfb1854",
+        "93e1ab6e-0805-45a2-9330-a9f3c08ed3d2",
+        "c62a6392-8b42-4a5b-bb42-afd1da2ad06b",
+        "1494bb12-d4fe-4e05-a4b1-4800d12c98cf",
+        "659d5557-c84f-4ed2-8d29-7f40cf5a34c0",
+        "fa72d886-6db5-4dc2-8e42-65e0ed3d6250",
+        "3539dabc-9596-440e-9485-cc54989c47d7",
+        "648255e2-0c70-449a-818a-917e0db98f92"
+      ]
     },
     {
       "relpath": "tmp/arm001__SpaceInvaders-MinAtar__vanilla_dqn__traces.parquet",
       "size_bytes": 582380750,
       "sha256": "d73ffbd6db7e4edcdaa98cf3e7643ab07570211d40e333f2a542648481f3111c",
-      "pushed_at": "2026-05-04T06:31:32+00:00"
+      "pushed_at": "2026-05-04T06:31:32+00:00",
+      "row_ids": [
+        "2626eac3-bae9-4e5c-a549-31cb28c9f932",
+        "80cb3de7-309d-4544-92a1-447701b844bd",
+        "b0e3b7e0-b3a0-4844-b8f9-5ca17cfb1854",
+        "93e1ab6e-0805-45a2-9330-a9f3c08ed3d2",
+        "c62a6392-8b42-4a5b-bb42-afd1da2ad06b",
+        "1494bb12-d4fe-4e05-a4b1-4800d12c98cf",
+        "659d5557-c84f-4ed2-8d29-7f40cf5a34c0",
+        "fa72d886-6db5-4dc2-8e42-65e0ed3d6250",
+        "3539dabc-9596-440e-9485-cc54989c47d7",
+        "648255e2-0c70-449a-818a-917e0db98f92"
+      ]
     },
     {
       "relpath": "tmp/arm002__SpaceInvaders-MinAtar__vanilla_dqn__runs.parquet",
       "size_bytes": 19499,
       "sha256": "098219e880d58c3894bcc1a3519743e5be576abd50234ebafa9f341b3c1cc710",
-      "pushed_at": "2026-05-04T06:50:19+00:00"
+      "pushed_at": "2026-05-04T06:50:19+00:00",
+      "row_ids": [
+        "ee538b36-756c-42b4-94c6-aad533ff5cff",
+        "09d7da64-6c40-4829-9fe5-bbedfb9eea2c",
+        "a54d51fb-cb28-4944-bda6-5948a63e47d1",
+        "1c0c0f6d-695d-4a6b-a7b7-e6fe4766ee0a",
+        "82fad16c-df86-4d21-a6c1-c54f195e2b1f",
+        "6756bc61-f745-40b2-ab62-4844217ff5c7",
+        "69c2318b-0272-4316-b7fe-44c1852aa9f4",
+        "5b4c0322-e887-46e0-b33f-31527d5ca6bb",
+        "287a45d9-9daf-4e78-ae69-c046dc1dc870",
+        "36936f8f-cdb2-4807-ba53-bb92642e2a03"
+      ]
     },
     {
       "relpath": "tmp/arm002__SpaceInvaders-MinAtar__vanilla_dqn__traces.parquet",
       "size_bytes": 581940142,
       "sha256": "0f95746599f73873b88936ec5c993ae1134b91b3d1e0174492dd055bb48b00d7",
-      "pushed_at": "2026-05-04T06:50:31+00:00"
+      "pushed_at": "2026-05-04T06:50:31+00:00",
+      "row_ids": [
+        "ee538b36-756c-42b4-94c6-aad533ff5cff",
+        "09d7da64-6c40-4829-9fe5-bbedfb9eea2c",
+        "a54d51fb-cb28-4944-bda6-5948a63e47d1",
+        "1c0c0f6d-695d-4a6b-a7b7-e6fe4766ee0a",
+        "82fad16c-df86-4d21-a6c1-c54f195e2b1f",
+        "6756bc61-f745-40b2-ab62-4844217ff5c7",
+        "69c2318b-0272-4316-b7fe-44c1852aa9f4",
+        "5b4c0322-e887-46e0-b33f-31527d5ca6bb",
+        "287a45d9-9daf-4e78-ae69-c046dc1dc870",
+        "36936f8f-cdb2-4807-ba53-bb92642e2a03"
+      ]
     },
     {
       "relpath": "tmp/arm003__SpaceInvaders-MinAtar__ddqn__runs.parquet",
       "size_bytes": 20385,
       "sha256": "d350253d10c03cdfa56068f05f71ab8fd99200be437112e7ea3e1011a020cd36",
-      "pushed_at": "2026-05-04T07:09:23+00:00"
+      "pushed_at": "2026-05-04T07:09:23+00:00",
+      "row_ids": [
+        "a1a3c740-830b-411a-8562-0d9091aba72a",
+        "0f84cca2-b1f7-47af-969c-94fd310abb11",
+        "49f3cc57-0bb2-480a-a5c7-a540db994c38",
+        "3c8e2df4-fb18-4f4d-a217-82757569028b",
+        "b6333426-2884-42ce-80db-d7613b51eb1b",
+        "dc6a46e7-105a-49a4-9789-106170809a03",
+        "fedfec4e-176c-4266-b2a0-c965ff0130dc",
+        "f2cd390c-294b-4c77-98e9-d7d81318e2da",
+        "ccabd685-ab27-4c52-8d7c-2ea8ac767bde",
+        "0bd0e3d9-83f4-4186-a30b-1a86ee0589c2"
+      ]
     },
     {
       "relpath": "tmp/arm003__SpaceInvaders-MinAtar__ddqn__traces.parquet",
       "size_bytes": 579723672,
       "sha256": "c85fb806c1c09c59ad484faca73b60521a65fce4610edaa621da75533854fa36",
-      "pushed_at": "2026-05-04T07:09:31+00:00"
+      "pushed_at": "2026-05-04T07:09:31+00:00",
+      "row_ids": [
+        "a1a3c740-830b-411a-8562-0d9091aba72a",
+        "0f84cca2-b1f7-47af-969c-94fd310abb11",
+        "49f3cc57-0bb2-480a-a5c7-a540db994c38",
+        "3c8e2df4-fb18-4f4d-a217-82757569028b",
+        "b6333426-2884-42ce-80db-d7613b51eb1b",
+        "dc6a46e7-105a-49a4-9789-106170809a03",
+        "fedfec4e-176c-4266-b2a0-c965ff0130dc",
+        "f2cd390c-294b-4c77-98e9-d7d81318e2da",
+        "ccabd685-ab27-4c52-8d7c-2ea8ac767bde",
+        "0bd0e3d9-83f4-4186-a30b-1a86ee0589c2"
+      ]
     },
     {
       "relpath": "tmp/arm004__SpaceInvaders-MinAtar__ddqn__runs.parquet",
       "size_bytes": 20386,
       "sha256": "361bbb3c41973d64a84dc11dab66457da76bdf7c634139fad9b73b16487486cb",
-      "pushed_at": "2026-05-04T07:28:22+00:00"
+      "pushed_at": "2026-05-04T07:28:22+00:00",
+      "row_ids": [
+        "c781fc2e-e6fa-4c48-8f95-46565058db89",
+        "f3e46fb7-83e3-4461-ad52-f7169604037c",
+        "b3b6a220-b327-407f-9bcd-748044320d7d",
+        "8429984e-13e3-4a89-9fb2-11900aca0dd7",
+        "1194e563-b6da-437a-a424-7d7904329d83",
+        "95107a11-fd87-4399-abb1-7c6d89093b7d",
+        "81cdf4c2-b1d1-4958-888d-2f3e78ee1d48",
+        "37382d3a-2a52-4126-b2d2-cebdcef1b83e",
+        "5c54f8ba-7b0b-49db-8ec9-6976ad9976f2",
+        "196b5c5b-60ca-427a-8fbd-6dc2e410e61c"
+      ]
     },
     {
       "relpath": "tmp/arm004__SpaceInvaders-MinAtar__ddqn__traces.parquet",
       "size_bytes": 581314290,
       "sha256": "f25e7412fe98c7c56a1a9bc502dd813b5eaef2fdc8dc6b94c0a1bbea91531279",
-      "pushed_at": "2026-05-04T07:28:32+00:00"
+      "pushed_at": "2026-05-04T07:28:32+00:00",
+      "row_ids": [
+        "c781fc2e-e6fa-4c48-8f95-46565058db89",
+        "f3e46fb7-83e3-4461-ad52-f7169604037c",
+        "b3b6a220-b327-407f-9bcd-748044320d7d",
+        "8429984e-13e3-4a89-9fb2-11900aca0dd7",
+        "1194e563-b6da-437a-a424-7d7904329d83",
+        "95107a11-fd87-4399-abb1-7c6d89093b7d",
+        "81cdf4c2-b1d1-4958-888d-2f3e78ee1d48",
+        "37382d3a-2a52-4126-b2d2-cebdcef1b83e",
+        "5c54f8ba-7b0b-49db-8ec9-6976ad9976f2",
+        "196b5c5b-60ca-427a-8fbd-6dc2e410e61c"
+      ]
     },
     {
       "relpath": "tmp/arm005__SpaceInvaders-MinAtar__ddqn__runs.parquet",
       "size_bytes": 20402,
       "sha256": "0666a7414fd46de038d922384105fc059ba30d50fae15248d398e8a44b868b37",
-      "pushed_at": "2026-05-04T07:47:16+00:00"
+      "pushed_at": "2026-05-04T07:47:16+00:00",
+      "row_ids": [
+        "28e0ee0c-6cea-48e1-b9d5-4db16154a9dc",
+        "db81610a-b2ee-42e1-97cf-d85bca959be7",
+        "3fb511a9-8714-4826-9045-0344ca524790",
+        "e7b56797-4ef3-421c-8628-b87dab80c304",
+        "08fe9634-088f-4b3c-a8f9-ec1c45fc0524",
+        "909e2b54-7002-49ef-b32a-deba817ba4c4",
+        "6bd5c6a9-0dac-4c4b-a276-d5a3a70f3b70",
+        "a40e6cfd-a2c4-4073-9ec6-7fbedcd05028",
+        "21c447f0-5d5f-4784-91f3-1b98ca73e694",
+        "e3e26ac1-a81e-43cb-87f0-e306ca09bc4c"
+      ]
     },
     {
       "relpath": "tmp/arm005__SpaceInvaders-MinAtar__ddqn__traces.parquet",
       "size_bytes": 580624282,
       "sha256": "9ac34749c018ba431c10cac6c93577fffad26fbf70db430aa4d2d63e999f8968",
-      "pushed_at": "2026-05-04T07:47:26+00:00"
+      "pushed_at": "2026-05-04T07:47:26+00:00",
+      "row_ids": [
+        "28e0ee0c-6cea-48e1-b9d5-4db16154a9dc",
+        "db81610a-b2ee-42e1-97cf-d85bca959be7",
+        "3fb511a9-8714-4826-9045-0344ca524790",
+        "e7b56797-4ef3-421c-8628-b87dab80c304",
+        "08fe9634-088f-4b3c-a8f9-ec1c45fc0524",
+        "909e2b54-7002-49ef-b32a-deba817ba4c4",
+        "6bd5c6a9-0dac-4c4b-a276-d5a3a70f3b70",
+        "a40e6cfd-a2c4-4073-9ec6-7fbedcd05028",
+        "21c447f0-5d5f-4784-91f3-1b98ca73e694",
+        "e3e26ac1-a81e-43cb-87f0-e306ca09bc4c"
+      ]
     },
     {
       "relpath": "tmp/arm006__SpaceInvaders-MinAtar__vanilla_dqn__wrap[reward_clip(clip_min=0.0,clip_max=None)]__runs.parquet",
