@@ -164,8 +164,9 @@ class ActionDuplicate:
 
 @dataclass(frozen=True, slots=True)
 class RewardSparsify:
-    """Wrapper config: zero per-step reward; optionally add
-    `terminal_bonus` to terminal-step reward.
+    """Wrapper config: zero per-step reward; emit `terminal_bonus`
+    only at SUCCESS-terminal steps (distinguished from timeout-
+    terminal by `success_threshold`).
 
     Causal-probe lever for the action-selection mechanism:
     `findings_action_selection_fourrooms_specific` showed DDQN
@@ -175,19 +176,44 @@ class RewardSparsify:
     activates the same entropy-concentration mechanism — i.e.
     whether reward shape is sufficient.
 
-    Implementation: per-step reward → 0; if `done`, reward →
-    inner_reward + terminal_bonus. Original terminal reward is
-    preserved so reward direction (positive bonus / negative
-    penalty) is determined by the inner env."""
-    terminal_bonus: float = 0.0
+    `success_threshold` distinguishes success-terminal from
+    timeout-terminal by inner reward at the terminal step:
+
+      - Acrobot: success has inner reward = 0 (not swung up = -1).
+        Set `success_threshold=0.0` to treat r≥0 at terminal as
+        success.
+      - FourRooms / MetaMaze: success has inner reward = +1
+        (timeout = 0). Set `success_threshold=0.5` (or 1.0)
+        to require positive reward.
+
+    Required parameter (no default) to force authors to commit
+    to an env-specific success criterion. The earlier "no
+    threshold, just inner_reward + bonus" formulation was
+    fragile: it relied on Acrobot's −1/step exactly cancelling
+    the bonus on timeout, which doesn't hold for FR/MetaMaze
+    where timeout inner reward is 0 (so they'd also receive the
+    bonus, losing the success-only property).
+
+    Implementation:
+      per-step (not done): reward → 0
+      done & inner_reward ≥ success_threshold (success): bonus
+      done & inner_reward < success_threshold (timeout): 0
+    """
+    terminal_bonus: float
+    success_threshold: float
 
     def wrap(self, inner: Env) -> Env:
         return RewardSparsifiedEnv(
-            inner=inner, terminal_bonus=self.terminal_bonus,
+            inner=inner,
+            terminal_bonus=self.terminal_bonus,
+            success_threshold=self.success_threshold,
         )
 
     def measurement_keys(self) -> Mapping[str, float]:
-        return {'reward_sparsify_terminal_bonus': float(self.terminal_bonus)}
+        return {
+            'reward_sparsify_terminal_bonus': float(self.terminal_bonus),
+            'reward_sparsify_success_threshold': float(self.success_threshold),
+        }
 
 
 @dataclass(frozen=True, slots=True)
@@ -415,13 +441,15 @@ class ActionDuplicatedEnv:
 
 @dataclass(frozen=True, slots=True)
 class RewardSparsifiedEnv:
-    """Wraps a gymnax-style env, zeroing per-step reward and
-    optionally adding `terminal_bonus` on terminal-step reward.
+    """Wraps a gymnax-style env, zeroing per-step reward; emits
+    `terminal_bonus` only at SUCCESS-terminal steps, distinguished
+    from timeout-terminal by `success_threshold` on inner reward.
 
     Use for testing whether sparsifying a dense-reward env to FR-
     shape activates DDQN's argmax-concentration mechanism."""
     inner: Env
     terminal_bonus: float
+    success_threshold: float
 
     def reset(
         self, rng: jax.Array, params: EnvParams,
@@ -440,11 +468,14 @@ class RewardSparsifiedEnv:
         next_obs, next_state, reward, done, info = self.inner.step(
             rng, state, action, params,
         )
-        # Zero per-step; on terminal, keep inner's terminal reward
-        # AND add bonus. Inner env's terminal-only reward is
-        # preserved (e.g., MountainCar's 0 at terminal stays 0).
+        # Per-step (not done) → 0.
+        # done & reward ≥ success_threshold (success) → terminal_bonus.
+        # done & reward < success_threshold (timeout) → 0.
+        success = done & (reward >= self.success_threshold)
         new_reward = jnp.where(
-            done, reward + self.terminal_bonus, jnp.zeros_like(reward),
+            success,
+            jnp.full_like(reward, self.terminal_bonus),
+            jnp.zeros_like(reward),
         )
         return next_obs, next_state, new_reward, done, info
 

@@ -26,8 +26,12 @@ arms_shape: chunked
 #   - densified FourRooms: ΔH(DDQN-vanilla) ≈ 0 if reward-shape necessary (CLAIM 7h)
 
 envs:
-  - {name: Acrobot-v1, n_seeds: 30, chunk_size: 30, wrappers: [{type: reward_sparsify, terminal_bonus: 1.0}]}
-  - {name: MetaMaze-misc, n_seeds: 30, chunk_size: 30, wrappers: [{type: reward_sparsify, terminal_bonus: 1.0}]}
+  # Acrobot success terminal: inner reward = 0 (vs −1/step otherwise);
+  # success_threshold=0.0 admits r=0 as success, rejects r=−1 timeout.
+  - {name: Acrobot-v1, n_seeds: 30, chunk_size: 30, wrappers: [{type: reward_sparsify, terminal_bonus: 1.0, success_threshold: 0.0}]}
+  # MetaMaze success terminal: inner reward = +1 (default params);
+  # success_threshold=0.5 admits r=1 success, rejects r=0 timeout.
+  - {name: MetaMaze-misc, n_seeds: 30, chunk_size: 30, wrappers: [{type: reward_sparsify, terminal_bonus: 1.0, success_threshold: 0.5}]}
   - {name: FourRooms-misc, n_seeds: 30, chunk_size: 30, wrappers: [{type: reward_densify, per_step: -0.01}]}
 
 base_intervention:
