@@ -8,21 +8,21 @@
             "heavy_tail_se_anti_conservative (excess_kurtosis=16.15, framework_se will under-cover by ~10-25% at this kurtosis)"
           ],
           "baseline_arm": "baseline",
-          "g": 0.161666,
+          "g": 0.161707,
           "helped_fraction": 0.392593,
-          "mean_diff": 1.14883,
-          "mean_diff_p_value": 0.0610554,
-          "mean_diff_se": 0.608172,
+          "mean_diff": 1.1491,
+          "mean_diff_p_value": 0.0609909,
+          "mean_diff_se": 0.608166,
           "measurable": "eval_best_burst_mean",
           "n_baseline": 162,
           "n_pairs": 135,
           "n_treatment": 160,
-          "p_value": 0.0620085,
+          "p_value": 0.0619435,
           "pair_by": [
             "seed",
             "env_name"
           ],
-          "se": 0.0866268,
+          "se": 0.0866271,
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
         }
       },
@@ -33,7 +33,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_refuted_when_dormancy_fires",
       "direction": "inverse",
-      "n_cells_in_scope": 1018,
+      "n_cells_in_scope": 1017,
       "n_cells_pre_scope": 15061,
       "pair_by": [
         "seed",
@@ -166,57 +166,57 @@
           ],
           "coefficients": [
             {
-              "ci_hi": -11.9961,
-              "ci_lo": -47.6981,
-              "coefficient": -29.8471,
+              "ci_hi": -8.87672,
+              "ci_lo": -42.2624,
+              "coefficient": -25.5696,
               "is_significant": true,
               "name": "bootstrap_fraction",
-              "p_value": 0.00124219
+              "p_value": 0.00298837
             },
             {
-              "ci_hi": 2736.71,
-              "ci_lo": 561.132,
-              "coefficient": 1648.92,
+              "ci_hi": 2423.23,
+              "ci_lo": 392.807,
+              "coefficient": 1408.02,
               "is_significant": true,
               "name": "jensen_dormancy_gap",
-              "p_value": 0.00329027
+              "p_value": 0.00698638
             },
             {
-              "ci_hi": 0.843256,
-              "ci_lo": 0.236804,
-              "coefficient": 0.54003,
+              "ci_hi": 0.764932,
+              "ci_lo": 0.203226,
+              "coefficient": 0.484079,
               "is_significant": true,
               "name": "log_action_dim",
-              "p_value": 0.000605652
+              "p_value": 0.000887435
             },
             {
-              "ci_hi": 0.209367,
-              "ci_lo": -0.101401,
-              "coefficient": 0.0539833,
+              "ci_hi": 0.200756,
+              "ci_lo": -0.0874457,
+              "coefficient": 0.0566553,
               "is_significant": false,
               "name": "log_horizon",
-              "p_value": 0.492675
+              "p_value": 0.43765
             },
             {
-              "ci_hi": -0.0513909,
-              "ci_lo": -0.148948,
-              "coefficient": -0.100169,
+              "ci_hi": -0.0467155,
+              "ci_lo": -0.136894,
+              "coefficient": -0.0918047,
               "is_significant": true,
               "name": "log_obs_dim",
-              "p_value": 8.794e-05
+              "p_value": 0.000100072
             }
           ],
-          "i_squared": 0.727655,
-          "intercept": 29.0293,
-          "intercept_ci_hi": 46.9014,
-          "intercept_ci_lo": 11.1572,
-          "intercept_p_value": 0.0016848,
-          "intercept_se": 9.02094,
+          "i_squared": 0.704083,
+          "intercept": 24.8049,
+          "intercept_ci_hi": 41.5151,
+          "intercept_ci_lo": 8.09477,
+          "intercept_p_value": 0.0039703,
+          "intercept_se": 8.43446,
           "n_strata": 119,
           "pool": "random",
-          "q_statistic": 414.914,
-          "r_squared": 0.263681,
-          "tau_sq": 0.0957876
+          "q_statistic": 381.864,
+          "r_squared": 0.247351,
+          "tau_sq": 0.0848039
         }
       },
       "assumption_violations": [],
@@ -938,112 +938,112 @@
             {
               "burst_index": 0,
               "env_name": "FourRooms-misc",
-              "mean_d_predictor": -0.378149,
-              "mean_d_target": 0.123033,
+              "mean_d_predictor": -0.379441,
+              "mean_d_target": 0.122472,
               "n_pairs": 329,
               "p": 0.0,
-              "r": 0.693915,
-              "sd_d_target": 0.220965,
-              "slope": 0.380992
+              "r": 0.692303,
+              "sd_d_target": 0.220884,
+              "slope": 0.378837
             },
             {
               "burst_index": 1,
               "env_name": "FourRooms-misc",
-              "mean_d_predictor": -0.306175,
-              "mean_d_target": 0.167706,
+              "mean_d_predictor": -0.306946,
+              "mean_d_target": 0.167878,
               "n_pairs": 329,
               "p": 0.0,
-              "r": 0.75197,
-              "sd_d_target": 0.257575,
-              "slope": 0.59836
+              "r": 0.752742,
+              "sd_d_target": 0.257231,
+              "slope": 0.598616
             },
             {
               "burst_index": 2,
               "env_name": "FourRooms-misc",
-              "mean_d_predictor": -0.251234,
-              "mean_d_target": 0.142342,
+              "mean_d_predictor": -0.25526,
+              "mean_d_target": 0.143107,
               "n_pairs": 329,
               "p": 0.0,
-              "r": 0.723801,
-              "sd_d_target": 0.245364,
-              "slope": 0.567845
+              "r": 0.724073,
+              "sd_d_target": 0.246679,
+              "slope": 0.564181
             },
             {
               "burst_index": 3,
               "env_name": "FourRooms-misc",
-              "mean_d_predictor": -0.273723,
-              "mean_d_target": 0.176979,
+              "mean_d_predictor": -0.280876,
+              "mean_d_target": 0.176267,
               "n_pairs": 329,
               "p": 0.0,
-              "r": 0.745766,
-              "sd_d_target": 0.250868,
-              "slope": 0.590679
+              "r": 0.689773,
+              "sd_d_target": 0.249887,
+              "slope": 0.496306
             },
             {
               "burst_index": 4,
               "env_name": "FourRooms-misc",
-              "mean_d_predictor": -0.228438,
-              "mean_d_target": 0.142103,
+              "mean_d_predictor": -0.23434,
+              "mean_d_target": 0.141718,
               "n_pairs": 329,
               "p": 0.0,
-              "r": 0.713123,
-              "sd_d_target": 0.238073,
-              "slope": 0.524294
+              "r": 0.667692,
+              "sd_d_target": 0.238154,
+              "slope": 0.460365
             },
             {
               "burst_index": 5,
               "env_name": "FourRooms-misc",
-              "mean_d_predictor": -0.230661,
-              "mean_d_target": 0.155782,
+              "mean_d_predictor": -0.250011,
+              "mean_d_target": 0.154855,
               "n_pairs": 329,
               "p": 0.0,
-              "r": 0.75241,
-              "sd_d_target": 0.237718,
-              "slope": 0.570828
+              "r": 0.498779,
+              "sd_d_target": 0.237335,
+              "slope": 0.252034
             },
             {
               "burst_index": 6,
               "env_name": "FourRooms-misc",
-              "mean_d_predictor": -0.253696,
-              "mean_d_target": 0.14965,
+              "mean_d_predictor": -0.23875,
+              "mean_d_target": 0.148483,
               "n_pairs": 329,
-              "p": 1.10259e-07,
-              "r": 0.285845,
-              "sd_d_target": 0.22758,
-              "slope": 0.0820899
+              "p": 0.0,
+              "r": 0.460378,
+              "sd_d_target": 0.228025,
+              "slope": 0.196607
             },
             {
               "burst_index": 7,
               "env_name": "FourRooms-misc",
-              "mean_d_predictor": -0.304177,
-              "mean_d_target": 0.169767,
+              "mean_d_predictor": -0.251181,
+              "mean_d_target": 0.169316,
               "n_pairs": 329,
-              "p": 4.48282e-07,
-              "r": 0.272479,
-              "sd_d_target": 0.237269,
-              "slope": 0.0569203
+              "p": 0.0,
+              "r": 0.496732,
+              "sd_d_target": 0.237202,
+              "slope": 0.230484
             },
             {
               "burst_index": 8,
               "env_name": "FourRooms-misc",
-              "mean_d_predictor": -0.296911,
-              "mean_d_target": 0.139558,
+              "mean_d_predictor": -0.266411,
+              "mean_d_target": 0.140125,
               "n_pairs": 329,
-              "p": 0.000246647,
-              "r": 0.200281,
-              "sd_d_target": 0.23699,
-              "slope": 0.0311833
+              "p": 1.4547e-05,
+              "r": 0.235607,
+              "sd_d_target": 0.237056,
+              "slope": 0.0539284
             },
             {
               "burst_index": 9,
               "env_name": "FourRooms-misc",
-              "mean_d_predictor": -0.3362,
-              "mean_d_target": 0.14066,
+              "mean_d_predictor": -0.427103,
+              "mean_d_target": 0.138193,
               "n_pairs": 329,
-              "p": 0.000589193,
-              "r": 0.188067,
-              "sd_d_target": 0.252278,
-              "slope": 0.0255791
+              "p": 0.121384,
+              "r": 0.0855808,
+              "sd_d_target": 0.251348,
+              "slope": 0.00639549
             },
             {
               "burst_index": 10,
@@ -1824,7 +1824,7 @@
       "blocked_by": null,
       "bridge_name": "chain_amplifier_link_active_in_bounded_q",
       "direction": "inverse",
-      "n_cells_in_scope": 4637,
+      "n_cells_in_scope": 4634,
       "n_cells_pre_scope": 15061,
       "pair_by": [
         "seed",
@@ -1950,25 +1950,25 @@
       "analysis_results": {
         "mundlak_paired_g_per_burst": {
           "between": {
-            "ci_hi": -4.26288e-05,
-            "ci_lo": -0.104765,
-            "coefficient": -0.0524039,
+            "ci_hi": 0.000230678,
+            "ci_lo": -0.106212,
+            "coefficient": -0.0529908,
             "component": "between",
-            "p_value": 0.0498164,
-            "se": 0.0264795
+            "p_value": 0.0509873,
+            "se": 0.0269145
           },
-          "hausman_p": 0.298219,
-          "intercept": 0.0965498,
+          "hausman_p": 0.296244,
+          "intercept": 0.0982514,
           "n_obs": 140,
           "n_strata": 10,
-          "r_squared": 0.464089,
+          "r_squared": 0.454282,
           "within": {
-            "ci_hi": -0.0375969,
-            "ci_lo": -0.206577,
-            "coefficient": -0.122087,
+            "ci_hi": -0.038233,
+            "ci_lo": -0.209767,
+            "coefficient": -0.124,
             "component": "within",
-            "p_value": 0.00493881,
-            "se": 0.0427273
+            "p_value": 0.00491581,
+            "se": 0.0433728
           }
         }
       },
@@ -1993,7 +1993,7 @@
       "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
       "target_name": "eval_best_burst_mean",
       "tier": "associational",
-      "verdict": "held",
+      "verdict": "power_insufficient",
       "warnings": [
         {
           "gate_name": "no_predicted_direction",
@@ -2397,20 +2397,20 @@
         "paired_g": {
           "assumption_violations": [],
           "baseline_arm": "baseline",
-          "g": 3.82285,
+          "g": 3.43783,
           "helped_fraction": 1.0,
-          "mean_diff": 0.115413,
+          "mean_diff": 0.115595,
           "mean_diff_p_value": 0.0,
-          "mean_diff_se": 0.00536815,
+          "mean_diff_se": 0.00597882,
           "measurable": "eval_best_burst_mean",
           "n_baseline": 30,
           "n_pairs": 30,
           "n_treatment": 30,
-          "p_value": 3.736e-13,
+          "p_value": 7.86288e-13,
           "pair_by": [
             "seed"
           ],
-          "se": 0.526216,
+          "se": 0.479907,
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
         }
       },
@@ -2718,8 +2718,8 @@
       "analysis_results": {
         "paired_delta_link_dowhy": {
           "backdoor": {
-            "ate": -0.95145,
-            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__3,__burst__2,__burst__9,__burst__5,__burst__1,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __4,__burst__8,__burst__7,__burst__6])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__3,__burst__2,__burst__9,__burst__5,__burst__1,__burst__4,__burst__8,__burst__7,__burst__6,U) = P(dout|djens,__burst__3,__burst__2,__burst__9,__burst__5,__burst__1,__burst__4,__burst__8,__burst__7,__burst__6)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__3,__burst__2,__burst__9,__burst__5,__burst__1,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __4,__burst__8,__burst__7,__burst__6])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__3,__burst__2,__burst__9,__burst__5,__burst__1,__burst__4,__burst__8,__burst__7,__burst__6,U) = P(dout|djens,__burst__3,__burst__2,__burst__9,__burst__5,__burst__1,__burst__4,__burst__8,__burst__7,__burst__6)\n",
+            "ate": -1.40667,
+            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__7,__burst__2,__burst__4,__burst__5,__burst__8,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __3,__burst__9,__burst__1,__burst__6])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__7,__burst__2,__burst__4,__burst__5,__burst__8,__burst__3,__burst__9,__burst__1,__burst__6,U) = P(dout|djens,__burst__7,__burst__2,__burst__4,__burst__5,__burst__8,__burst__3,__burst__9,__burst__1,__burst__6)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__7,__burst__2,__burst__4,__burst__5,__burst__8,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __3,__burst__9,__burst__1,__burst__6])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__7,__burst__2,__burst__4,__burst__5,__burst__8,__burst__3,__burst__9,__burst__1,__burst__6,U) = P(dout|djens,__burst__7,__burst__2,__burst__4,__burst__5,__burst__8,__burst__3,__burst__9,__burst__1,__burst__6)\n",
             "identified": true,
             "method_name": "backdoor.linear_regression",
             "n_rows": 300,
@@ -2729,22 +2729,22 @@
           "n_pairs": 300,
           "outcome_col": "dout",
           "placebo": {
-            "drift": 0.95145,
+            "drift": 1.40667,
             "method_name": "backdoor.linear_regression",
             "n_rows": 300,
             "outcome": "dout",
-            "real_ate": -0.95145,
-            "refuted_ate": -3.55271e-15,
+            "real_ate": -1.40667,
+            "refuted_ate": 1.77636e-15,
             "refuter_name": "placebo_treatment_refuter",
             "treatment": "djens"
           },
           "random_common_cause": {
-            "drift": 0.000251756,
+            "drift": 0.00118458,
             "method_name": "backdoor.linear_regression",
             "n_rows": 300,
             "outcome": "dout",
-            "real_ate": -0.95145,
-            "refuted_ate": -0.951198,
+            "real_ate": -1.40667,
+            "refuted_ate": -1.40785,
             "refuter_name": "random_common_cause",
             "treatment": "djens"
           },
@@ -2787,8 +2787,8 @@
       "analysis_results": {
         "paired_delta_link_dowhy": {
           "backdoor": {
-            "ate": -0.95145,
-            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__3,__burst__2,__burst__9,__burst__5,__burst__1,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __4,__burst__8,__burst__7,__burst__6])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__3,__burst__2,__burst__9,__burst__5,__burst__1,__burst__4,__burst__8,__burst__7,__burst__6,U) = P(dout|djens,__burst__3,__burst__2,__burst__9,__burst__5,__burst__1,__burst__4,__burst__8,__burst__7,__burst__6)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__3,__burst__2,__burst__9,__burst__5,__burst__1,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __4,__burst__8,__burst__7,__burst__6])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__3,__burst__2,__burst__9,__burst__5,__burst__1,__burst__4,__burst__8,__burst__7,__burst__6,U) = P(dout|djens,__burst__3,__burst__2,__burst__9,__burst__5,__burst__1,__burst__4,__burst__8,__burst__7,__burst__6)\n",
+            "ate": -1.40667,
+            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__7,__burst__2,__burst__4,__burst__5,__burst__8,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __3,__burst__9,__burst__1,__burst__6])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__7,__burst__2,__burst__4,__burst__5,__burst__8,__burst__3,__burst__9,__burst__1,__burst__6,U) = P(dout|djens,__burst__7,__burst__2,__burst__4,__burst__5,__burst__8,__burst__3,__burst__9,__burst__1,__burst__6)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__7,__burst__2,__burst__4,__burst__5,__burst__8,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __3,__burst__9,__burst__1,__burst__6])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__7,__burst__2,__burst__4,__burst__5,__burst__8,__burst__3,__burst__9,__burst__1,__burst__6,U) = P(dout|djens,__burst__7,__burst__2,__burst__4,__burst__5,__burst__8,__burst__3,__burst__9,__burst__1,__burst__6)\n",
             "identified": true,
             "method_name": "backdoor.linear_regression",
             "n_rows": 300,
@@ -2798,22 +2798,22 @@
           "n_pairs": 300,
           "outcome_col": "dout",
           "placebo": {
-            "drift": 0.95145,
+            "drift": 1.40667,
             "method_name": "backdoor.linear_regression",
             "n_rows": 300,
             "outcome": "dout",
-            "real_ate": -0.95145,
-            "refuted_ate": -3.55271e-15,
+            "real_ate": -1.40667,
+            "refuted_ate": 1.77636e-15,
             "refuter_name": "placebo_treatment_refuter",
             "treatment": "djens"
           },
           "random_common_cause": {
-            "drift": 2.58762e-05,
+            "drift": 0.000171357,
             "method_name": "backdoor.linear_regression",
             "n_rows": 300,
             "outcome": "dout",
-            "real_ate": -0.95145,
-            "refuted_ate": -0.951424,
+            "real_ate": -1.40667,
+            "refuted_ate": -1.40684,
             "refuter_name": "random_common_cause",
             "treatment": "djens"
           },
@@ -2856,8 +2856,8 @@
       "analysis_results": {
         "paired_delta_link_dowhy": {
           "backdoor": {
-            "ate": -0.95145,
-            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__3,__burst__2,__burst__9,__burst__5,__burst__1,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __4,__burst__8,__burst__7,__burst__6])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__3,__burst__2,__burst__9,__burst__5,__burst__1,__burst__4,__burst__8,__burst__7,__burst__6,U) = P(dout|djens,__burst__3,__burst__2,__burst__9,__burst__5,__burst__1,__burst__4,__burst__8,__burst__7,__burst__6)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__3,__burst__2,__burst__9,__burst__5,__burst__1,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __4,__burst__8,__burst__7,__burst__6])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__3,__burst__2,__burst__9,__burst__5,__burst__1,__burst__4,__burst__8,__burst__7,__burst__6,U) = P(dout|djens,__burst__3,__burst__2,__burst__9,__burst__5,__burst__1,__burst__4,__burst__8,__burst__7,__burst__6)\n",
+            "ate": -1.40667,
+            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__7,__burst__2,__burst__4,__burst__5,__burst__8,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __3,__burst__9,__burst__1,__burst__6])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__7,__burst__2,__burst__4,__burst__5,__burst__8,__burst__3,__burst__9,__burst__1,__burst__6,U) = P(dout|djens,__burst__7,__burst__2,__burst__4,__burst__5,__burst__8,__burst__3,__burst__9,__burst__1,__burst__6)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__7,__burst__2,__burst__4,__burst__5,__burst__8,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __3,__burst__9,__burst__1,__burst__6])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__7,__burst__2,__burst__4,__burst__5,__burst__8,__burst__3,__burst__9,__burst__1,__burst__6,U) = P(dout|djens,__burst__7,__burst__2,__burst__4,__burst__5,__burst__8,__burst__3,__burst__9,__burst__1,__burst__6)\n",
             "identified": true,
             "method_name": "backdoor.linear_regression",
             "n_rows": 300,
@@ -2867,22 +2867,22 @@
           "n_pairs": 300,
           "outcome_col": "dout",
           "placebo": {
-            "drift": 0.95145,
+            "drift": 1.40667,
             "method_name": "backdoor.linear_regression",
             "n_rows": 300,
             "outcome": "dout",
-            "real_ate": -0.95145,
-            "refuted_ate": -3.55271e-15,
+            "real_ate": -1.40667,
+            "refuted_ate": 1.77636e-15,
             "refuter_name": "placebo_treatment_refuter",
             "treatment": "djens"
           },
           "random_common_cause": {
-            "drift": 0.000124658,
+            "drift": 0.000648345,
             "method_name": "backdoor.linear_regression",
             "n_rows": 300,
             "outcome": "dout",
-            "real_ate": -0.95145,
-            "refuted_ate": -0.951575,
+            "real_ate": -1.40667,
+            "refuted_ate": -1.40602,
             "refuter_name": "random_common_cause",
             "treatment": "djens"
           },
@@ -2927,7 +2927,7 @@
           "attenuator": "q_divergence_score",
           "backdoor": {
             "ate": -0.221164,
-            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n                  d                                                            ↪\n──────────────────────────────────────(E[g_link|__env__Freeway-MinAtar,__env__ ↪\nd[q_divergence_score_threshold__above]                                         ↪\n\n↪                                                                      \n↪ FourRooms-misc,__env__SpaceInvaders-MinAtar,__env__Breakout-MinAtar])\n↪                                                                      \nEstimand assumption 1, Unconfoundedness: If U→{q_divergence_score__above_threshold} and U→g_link then P(g_link|q_divergence_score__above_threshold,__env__Freeway-MinAtar,__env__FourRooms-misc,__env__SpaceInvaders-MinAtar,__env__Breakout-MinAtar,U) = P(g_link|q_divergence_score__above_threshold,__env__Freeway-MinAtar,__env__FourRooms-misc,__env__SpaceInvaders-MinAtar,__env__Breakout-MinAtar)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n                  d                                                            ↪\n──────────────────────────────────────(E[g_link|__env__Freeway-MinAtar,__env__ ↪\nd[q_divergence_score_threshold__above]                                         ↪\n\n↪                                                                      \n↪ FourRooms-misc,__env__SpaceInvaders-MinAtar,__env__Breakout-MinAtar])\n↪                                                                      \nEstimand assumption 1, Unconfoundedness: If U→{q_divergence_score__above_threshold} and U→g_link then P(g_link|q_divergence_score__above_threshold,__env__Freeway-MinAtar,__env__FourRooms-misc,__env__SpaceInvaders-MinAtar,__env__Breakout-MinAtar,U) = P(g_link|q_divergence_score__above_threshold,__env__Freeway-MinAtar,__env__FourRooms-misc,__env__SpaceInvaders-MinAtar,__env__Breakout-MinAtar)\n",
+            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n                  d                                                            ↪\n──────────────────────────────────────(E[g_link|__env__Breakout-MinAtar,__env_ ↪\nd[q_divergence_score_threshold__above]                                         ↪\n\n↪                                                                      \n↪ _Freeway-MinAtar,__env__SpaceInvaders-MinAtar,__env__FourRooms-misc])\n↪                                                                      \nEstimand assumption 1, Unconfoundedness: If U→{q_divergence_score__above_threshold} and U→g_link then P(g_link|q_divergence_score__above_threshold,__env__Breakout-MinAtar,__env__Freeway-MinAtar,__env__SpaceInvaders-MinAtar,__env__FourRooms-misc,U) = P(g_link|q_divergence_score__above_threshold,__env__Breakout-MinAtar,__env__Freeway-MinAtar,__env__SpaceInvaders-MinAtar,__env__FourRooms-misc)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n                  d                                                            ↪\n──────────────────────────────────────(E[g_link|__env__Breakout-MinAtar,__env_ ↪\nd[q_divergence_score_threshold__above]                                         ↪\n\n↪                                                                      \n↪ _Freeway-MinAtar,__env__SpaceInvaders-MinAtar,__env__FourRooms-misc])\n↪                                                                      \nEstimand assumption 1, Unconfoundedness: If U→{q_divergence_score__above_threshold} and U→g_link then P(g_link|q_divergence_score__above_threshold,__env__Breakout-MinAtar,__env__Freeway-MinAtar,__env__SpaceInvaders-MinAtar,__env__FourRooms-misc,U) = P(g_link|q_divergence_score__above_threshold,__env__Breakout-MinAtar,__env__Freeway-MinAtar,__env__SpaceInvaders-MinAtar,__env__FourRooms-misc)\n",
             "identified": true,
             "method_name": "backdoor.linear_regression",
             "n_rows": 100,
@@ -2945,17 +2945,17 @@
             "n_rows": 100,
             "outcome": "g_link",
             "real_ate": -0.221164,
-            "refuted_ate": 0.0,
+            "refuted_ate": -5.55112e-17,
             "refuter_name": "placebo_treatment_refuter",
             "treatment": "q_divergence_score__above_threshold"
           },
           "random_common_cause": {
-            "drift": 0.000181567,
+            "drift": 0.000150343,
             "method_name": "backdoor.linear_regression",
             "n_rows": 100,
             "outcome": "g_link",
             "real_ate": -0.221164,
-            "refuted_ate": -0.221345,
+            "refuted_ate": -0.221314,
             "refuter_name": "random_common_cause",
             "treatment": "q_divergence_score__above_threshold"
           },
@@ -3000,7 +3000,7 @@
           "attenuator": "q_divergence_score",
           "backdoor": {
             "ate": -0.221164,
-            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n                  d                                                            ↪\n──────────────────────────────────────(E[g_link|__env__Freeway-MinAtar,__env__ ↪\nd[q_divergence_score_threshold__above]                                         ↪\n\n↪                                                                      \n↪ FourRooms-misc,__env__SpaceInvaders-MinAtar,__env__Breakout-MinAtar])\n↪                                                                      \nEstimand assumption 1, Unconfoundedness: If U→{q_divergence_score__above_threshold} and U→g_link then P(g_link|q_divergence_score__above_threshold,__env__Freeway-MinAtar,__env__FourRooms-misc,__env__SpaceInvaders-MinAtar,__env__Breakout-MinAtar,U) = P(g_link|q_divergence_score__above_threshold,__env__Freeway-MinAtar,__env__FourRooms-misc,__env__SpaceInvaders-MinAtar,__env__Breakout-MinAtar)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n                  d                                                            ↪\n──────────────────────────────────────(E[g_link|__env__Freeway-MinAtar,__env__ ↪\nd[q_divergence_score_threshold__above]                                         ↪\n\n↪                                                                      \n↪ FourRooms-misc,__env__SpaceInvaders-MinAtar,__env__Breakout-MinAtar])\n↪                                                                      \nEstimand assumption 1, Unconfoundedness: If U→{q_divergence_score__above_threshold} and U→g_link then P(g_link|q_divergence_score__above_threshold,__env__Freeway-MinAtar,__env__FourRooms-misc,__env__SpaceInvaders-MinAtar,__env__Breakout-MinAtar,U) = P(g_link|q_divergence_score__above_threshold,__env__Freeway-MinAtar,__env__FourRooms-misc,__env__SpaceInvaders-MinAtar,__env__Breakout-MinAtar)\n",
+            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n                  d                                                            ↪\n──────────────────────────────────────(E[g_link|__env__Breakout-MinAtar,__env_ ↪\nd[q_divergence_score_threshold__above]                                         ↪\n\n↪                                                                      \n↪ _Freeway-MinAtar,__env__SpaceInvaders-MinAtar,__env__FourRooms-misc])\n↪                                                                      \nEstimand assumption 1, Unconfoundedness: If U→{q_divergence_score__above_threshold} and U→g_link then P(g_link|q_divergence_score__above_threshold,__env__Breakout-MinAtar,__env__Freeway-MinAtar,__env__SpaceInvaders-MinAtar,__env__FourRooms-misc,U) = P(g_link|q_divergence_score__above_threshold,__env__Breakout-MinAtar,__env__Freeway-MinAtar,__env__SpaceInvaders-MinAtar,__env__FourRooms-misc)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n                  d                                                            ↪\n──────────────────────────────────────(E[g_link|__env__Breakout-MinAtar,__env_ ↪\nd[q_divergence_score_threshold__above]                                         ↪\n\n↪                                                                      \n↪ _Freeway-MinAtar,__env__SpaceInvaders-MinAtar,__env__FourRooms-misc])\n↪                                                                      \nEstimand assumption 1, Unconfoundedness: If U→{q_divergence_score__above_threshold} and U→g_link then P(g_link|q_divergence_score__above_threshold,__env__Breakout-MinAtar,__env__Freeway-MinAtar,__env__SpaceInvaders-MinAtar,__env__FourRooms-misc,U) = P(g_link|q_divergence_score__above_threshold,__env__Breakout-MinAtar,__env__Freeway-MinAtar,__env__SpaceInvaders-MinAtar,__env__FourRooms-misc)\n",
             "identified": true,
             "method_name": "backdoor.linear_regression",
             "n_rows": 100,
@@ -3018,17 +3018,17 @@
             "n_rows": 100,
             "outcome": "g_link",
             "real_ate": -0.221164,
-            "refuted_ate": 0.0,
+            "refuted_ate": -5.55112e-17,
             "refuter_name": "placebo_treatment_refuter",
             "treatment": "q_divergence_score__above_threshold"
           },
           "random_common_cause": {
-            "drift": 0.000565202,
+            "drift": 0.000986309,
             "method_name": "backdoor.linear_regression",
             "n_rows": 100,
             "outcome": "g_link",
             "real_ate": -0.221164,
-            "refuted_ate": -0.221729,
+            "refuted_ate": -0.220177,
             "refuter_name": "random_common_cause",
             "treatment": "q_divergence_score__above_threshold"
           },
@@ -3073,7 +3073,7 @@
           "attenuator": "q_divergence_score",
           "backdoor": {
             "ate": -0.221164,
-            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n                  d                                                            ↪\n──────────────────────────────────────(E[g_link|__env__Freeway-MinAtar,__env__ ↪\nd[q_divergence_score_threshold__above]                                         ↪\n\n↪                                                                      \n↪ FourRooms-misc,__env__SpaceInvaders-MinAtar,__env__Breakout-MinAtar])\n↪                                                                      \nEstimand assumption 1, Unconfoundedness: If U→{q_divergence_score__above_threshold} and U→g_link then P(g_link|q_divergence_score__above_threshold,__env__Freeway-MinAtar,__env__FourRooms-misc,__env__SpaceInvaders-MinAtar,__env__Breakout-MinAtar,U) = P(g_link|q_divergence_score__above_threshold,__env__Freeway-MinAtar,__env__FourRooms-misc,__env__SpaceInvaders-MinAtar,__env__Breakout-MinAtar)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n                  d                                                            ↪\n──────────────────────────────────────(E[g_link|__env__Freeway-MinAtar,__env__ ↪\nd[q_divergence_score_threshold__above]                                         ↪\n\n↪                                                                      \n↪ FourRooms-misc,__env__SpaceInvaders-MinAtar,__env__Breakout-MinAtar])\n↪                                                                      \nEstimand assumption 1, Unconfoundedness: If U→{q_divergence_score__above_threshold} and U→g_link then P(g_link|q_divergence_score__above_threshold,__env__Freeway-MinAtar,__env__FourRooms-misc,__env__SpaceInvaders-MinAtar,__env__Breakout-MinAtar,U) = P(g_link|q_divergence_score__above_threshold,__env__Freeway-MinAtar,__env__FourRooms-misc,__env__SpaceInvaders-MinAtar,__env__Breakout-MinAtar)\n",
+            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n                  d                                                            ↪\n──────────────────────────────────────(E[g_link|__env__Breakout-MinAtar,__env_ ↪\nd[q_divergence_score_threshold__above]                                         ↪\n\n↪                                                                      \n↪ _Freeway-MinAtar,__env__SpaceInvaders-MinAtar,__env__FourRooms-misc])\n↪                                                                      \nEstimand assumption 1, Unconfoundedness: If U→{q_divergence_score__above_threshold} and U→g_link then P(g_link|q_divergence_score__above_threshold,__env__Breakout-MinAtar,__env__Freeway-MinAtar,__env__SpaceInvaders-MinAtar,__env__FourRooms-misc,U) = P(g_link|q_divergence_score__above_threshold,__env__Breakout-MinAtar,__env__Freeway-MinAtar,__env__SpaceInvaders-MinAtar,__env__FourRooms-misc)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n                  d                                                            ↪\n──────────────────────────────────────(E[g_link|__env__Breakout-MinAtar,__env_ ↪\nd[q_divergence_score_threshold__above]                                         ↪\n\n↪                                                                      \n↪ _Freeway-MinAtar,__env__SpaceInvaders-MinAtar,__env__FourRooms-misc])\n↪                                                                      \nEstimand assumption 1, Unconfoundedness: If U→{q_divergence_score__above_threshold} and U→g_link then P(g_link|q_divergence_score__above_threshold,__env__Breakout-MinAtar,__env__Freeway-MinAtar,__env__SpaceInvaders-MinAtar,__env__FourRooms-misc,U) = P(g_link|q_divergence_score__above_threshold,__env__Breakout-MinAtar,__env__Freeway-MinAtar,__env__SpaceInvaders-MinAtar,__env__FourRooms-misc)\n",
             "identified": true,
             "method_name": "backdoor.linear_regression",
             "n_rows": 100,
@@ -3091,17 +3091,17 @@
             "n_rows": 100,
             "outcome": "g_link",
             "real_ate": -0.221164,
-            "refuted_ate": 0.0,
+            "refuted_ate": -5.55112e-17,
             "refuter_name": "placebo_treatment_refuter",
             "treatment": "q_divergence_score__above_threshold"
           },
           "random_common_cause": {
-            "drift": 3.13744e-05,
+            "drift": 0.000180792,
             "method_name": "backdoor.linear_regression",
             "n_rows": 100,
             "outcome": "g_link",
             "real_ate": -0.221164,
-            "refuted_ate": -0.221132,
+            "refuted_ate": -0.221344,
             "refuter_name": "random_common_cause",
             "treatment": "q_divergence_score__above_threshold"
           },
@@ -3144,11 +3144,11 @@
       "analysis_results": {
         "proportion_mediated": {
           "baseline_arm": "baseline",
-          "direct": 0.506341,
+          "direct": 0.51599,
           "in_unit_interval": true,
-          "indirect": 0.0589135,
+          "indirect": 0.0588629,
           "mediator": "effective_horizon",
-          "n_pairs": 1000,
+          "n_pairs": 1033,
           "pair_by": [
             "env_name",
             "corpus",
@@ -3157,10 +3157,10 @@
             "sync_period",
             "seed"
           ],
-          "proportion": 0.104225,
-          "slope_y_on_m": -0.00658221,
+          "proportion": 0.102396,
+          "slope_y_on_m": -0.00656422,
           "target": "eval_best_burst_mean",
-          "total": 0.565254,
+          "total": 0.574853,
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
         }
       },
@@ -3168,7 +3168,7 @@
       "blocked_by": null,
       "bridge_name": "eff_h_mediates_g_link__goal_envs",
       "direction": "direct",
-      "n_cells_in_scope": 5161,
+      "n_cells_in_scope": 5341,
       "n_cells_pre_scope": 15061,
       "pair_by": [
         "env_name",
@@ -3198,9 +3198,9 @@
       "analysis_results": {
         "proportion_mediated": {
           "baseline_arm": "baseline",
-          "direct": 0.0712204,
+          "direct": 0.0762064,
           "in_unit_interval": true,
-          "indirect": 0.014753,
+          "indirect": 0.0125019,
           "mediator": "effective_horizon",
           "n_pairs": 367,
           "pair_by": [
@@ -3211,10 +3211,10 @@
             "sync_period",
             "seed"
           ],
-          "proportion": 0.1716,
-          "slope_y_on_m": 0.053351,
+          "proportion": 0.140933,
+          "slope_y_on_m": 0.053195,
           "target": "eval_best_burst_mean",
-          "total": 0.0859734,
+          "total": 0.0887084,
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
         }
       },
@@ -3252,11 +3252,11 @@
       "analysis_results": {
         "proportion_mediated": {
           "baseline_arm": "baseline",
-          "direct": null,
-          "in_unit_interval": false,
-          "indirect": null,
+          "direct": 0.233054,
+          "in_unit_interval": true,
+          "indirect": 0.046666,
           "mediator": "target_staleness_late",
-          "n_pairs": 0,
+          "n_pairs": 88,
           "pair_by": [
             "env_name",
             "corpus",
@@ -3266,10 +3266,10 @@
             "seed",
             "replay.capacity"
           ],
-          "proportion": null,
-          "slope_y_on_m": null,
+          "proportion": 0.166831,
+          "slope_y_on_m": -40.8359,
           "target": "eval_best_burst_mean",
-          "total": null,
+          "total": 0.27972,
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
         }
       },
@@ -3277,7 +3277,7 @@
       "blocked_by": null,
       "bridge_name": "target_staleness_late_mediates_outcome__fourrooms",
       "direction": "direct",
-      "n_cells_in_scope": 0,
+      "n_cells_in_scope": 180,
       "n_cells_pre_scope": 15061,
       "pair_by": [
         "env_name",
@@ -3300,7 +3300,7 @@
       "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
       "target_name": "eval_best_burst_mean",
       "tier": "interventional",
-      "verdict": "power_insufficient",
+      "verdict": "no_effect",
       "warnings": []
     },
     {
@@ -3364,32 +3364,32 @@
           ],
           "coefficients": [
             {
-              "ci_hi": 2.25608,
-              "ci_lo": 0.252987,
-              "coefficient": 1.25454,
+              "ci_hi": 2.51519,
+              "ci_lo": 0.320362,
+              "coefficient": 1.41778,
               "is_significant": true,
               "name": "env_reward_polarity",
-              "p_value": 0.0220833
+              "p_value": 0.0195347
             }
           ],
-          "i_squared": 0.958251,
-          "intercept": 0.332976,
-          "intercept_ci_hi": 1.09685,
-          "intercept_ci_lo": -0.430893,
-          "intercept_p_value": 0.327167,
-          "intercept_se": 0.312177,
+          "i_squared": 0.965568,
+          "intercept": 0.209967,
+          "intercept_ci_hi": 1.04701,
+          "intercept_ci_lo": -0.627078,
+          "intercept_p_value": 0.561887,
+          "intercept_se": 0.342082,
           "n_strata": 8,
           "pool": "random",
-          "q_statistic": 143.717,
-          "r_squared": 0.610242,
-          "tau_sq": 0.644478
+          "q_statistic": 174.254,
+          "r_squared": 0.624844,
+          "tau_sq": 0.787404
         }
       },
       "assumption_violations": [],
       "blocked_by": null,
       "bridge_name": "link_r_predictable_from_polarity__soft_tautology",
       "direction": "direct",
-      "n_cells_in_scope": 8009,
+      "n_cells_in_scope": 8189,
       "n_cells_pre_scope": 15061,
       "pair_by": [
         "seed"
@@ -3415,7 +3415,7 @@
       "analysis_results": {
         "paired_continuous_do_dowhy": {
           "backdoor": {
-            "ate": 7.60215,
+            "ate": 8.49478,
             "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n           d                         \n───────────────────────(E[δ_outcome])\nd[targetₛₜₐₗₑₙₑₛₛ ₗₐₜₑ]              \nEstimand assumption 1, Unconfoundedness: If U→{target_staleness_late} and U→delta_outcome then P(delta_outcome|target_staleness_late,,U) = P(delta_outcome|target_staleness_late,)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n           d                         \n───────────────────────(E[δ_outcome])\nd[targetₛₜₐₗₑₙₑₛₛ ₗₐₜₑ]              \nEstimand assumption 1, Unconfoundedness: If U→{target_staleness_late} and U→delta_outcome then P(delta_outcome|target_staleness_late,,U) = P(delta_outcome|target_staleness_late,)\n",
             "identified": true,
             "method_name": "backdoor.linear_regression",
@@ -3426,22 +3426,22 @@
           "n_pairs": 120,
           "outcome": "delta_outcome",
           "placebo": {
-            "drift": 7.60215,
+            "drift": 8.49478,
             "method_name": "backdoor.linear_regression",
             "n_rows": 120,
             "outcome": "delta_outcome",
-            "real_ate": 7.60215,
+            "real_ate": 8.49478,
             "refuted_ate": 0.0,
             "refuter_name": "placebo_treatment_refuter",
             "treatment": "target_staleness_late"
           },
           "random_common_cause": {
-            "drift": 0.00688547,
+            "drift": 0.0418138,
             "method_name": "backdoor.linear_regression",
             "n_rows": 120,
             "outcome": "delta_outcome",
-            "real_ate": 7.60215,
-            "refuted_ate": 7.60904,
+            "real_ate": 8.49478,
+            "refuted_ate": 8.45297,
             "refuter_name": "random_common_cause",
             "treatment": "target_staleness_late"
           },
@@ -3503,12 +3503,12 @@
             "treatment": "target_staleness_late"
           },
           "random_common_cause": {
-            "drift": 0.044047,
+            "drift": 0.0698831,
             "method_name": "backdoor.linear_regression",
             "n_rows": 232,
             "outcome": "delta_outcome",
             "real_ate": 1.28989,
-            "refuted_ate": 1.33394,
+            "refuted_ate": 1.35977,
             "refuter_name": "random_common_cause",
             "treatment": "target_staleness_late"
           },
@@ -3547,7 +3547,7 @@
   ],
   "cache_path": "experiments/data/cache/ddqn_universe.parquet",
   "errored_bridges": [],
-  "git_commit": "ec4ab1b06349",
+  "git_commit": "c4ee6de7abab",
   "hypothesis_module": "experiments.findings.ddqn_universe",
   "measurable_signatures": {
     "bootstrap_fraction": "5c7cc97efa79e56c",
@@ -3572,5 +3572,5 @@
     "target_staleness_late": "14b90395c7aabd2e"
   },
   "n_cells_total": 15061,
-  "timestamp_utc": "2026-05-07T13:48:31+00:00"
+  "timestamp_utc": "2026-05-07T15:47:31+00:00"
 }
