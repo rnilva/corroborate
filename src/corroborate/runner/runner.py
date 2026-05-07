@@ -66,6 +66,7 @@ from corroborate.bridge.bridge import (
 )
 from corroborate.core.hypothesis import Hypothesis
 from corroborate.corpus.cloud import RemoteManifest
+from corroborate.corpus.measurements import DriftReport, check_drift
 from corroborate.corpus.schema import LINEAGE_FIELDS
 from corroborate.measurables import (
     compute_missing_columns,
@@ -489,6 +490,39 @@ def run(
         )
         _write_report(report, resolved_report)
     return out
+
+
+def check(
+    h: Hypothesis | str,
+    *,
+    root: Path | str = Path('experiments/data'),
+) -> DriftReport:
+    """**CACHE_ADDITIVITY.md CA5** drift visibility without work.
+
+    Read each corpus's `measurements.hashes.json` sidecar under
+    `root` and compare against the current registry's closure
+    hashes for `h.BRIDGES`'s required measurables. Reports per-
+    corpus drift + missing columns. NOT an analysis run — does
+    not load runs.parquet, does not compute, does not touch
+    cloud, does not run bridges. Useful for:
+
+    - "Did my substrate edit drift any column?" — yes if drift
+      report is non-empty.
+    - "Which corpora do I need to `--ingest`?" — affected names
+      are listed.
+
+    Designed to be cheap enough to run before every `--ingest`
+    decision; the actual cost is a `json.loads` per corpus."""
+    if isinstance(h, str):
+        h = _validate_hypothesis(importlib.import_module(h))
+    else:
+        h = _validate_hypothesis(h)
+    required = sorted(measurable_names_for_bridges(h.BRIDGES))
+    return check_drift(
+        Path(root),
+        required=required,
+        measurable_signature_fn=_measurable_signature,
+    )
 
 
 # ============ Cache + ingest ============

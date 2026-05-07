@@ -21,7 +21,7 @@ intermediate that decomposes into a Hypothesis Protocol-conformer
 hypothesis surface is the `Hypothesis` Protocol in
 `corroborate.core.hypothesis`."""
 from corroborate.runner.registry import Registry
-from corroborate.runner.runner import collect_bridges, run
+from corroborate.runner.runner import check, collect_bridges, run
 from corroborate.runner.sweep import (
     CellFailure,
     Runner,
@@ -36,6 +36,7 @@ __all__ = [
     'Runner',
     'SweepCellResult',
     'SweepResult',
+    'check',
     'collect_bridges',
     'run',
     'run_intervention',

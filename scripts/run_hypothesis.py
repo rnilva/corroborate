@@ -17,10 +17,10 @@ from pathlib import Path
 from typing import cast
 
 from corroborate.bridge import BridgeEvaluation
-from corroborate.runner import run
+from corroborate.runner import check, run
 
 
-def main(argv: Sequence[str] | None = None) -> None:
+def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog='run_hypothesis',
         description='Run a hypothesis-module on a data input, with cache.',
@@ -88,7 +88,19 @@ def main(argv: Sequence[str] | None = None) -> None:
              'shape). Run only bridges whose name contains the '
              'pattern. Faster iteration when debugging one bridge.',
     )
+    parser.add_argument(
+        '--check', action='store_true',
+        help='**CACHE_ADDITIVITY.md Phase 2** drift-visibility '
+             'mode. Reports per-corpus drift / missing columns '
+             'vs the current registry, no compute / no ingest. '
+             'Exits 0 if cache is current, 2 if drift detected.',
+    )
     args = parser.parse_args(argv)
+
+    # CACHE_ADDITIVITY.md Phase 2: --check mode — drift report,
+    # no run.
+    if cast(bool, args.check):
+        return _check_and_report(cast(str, args.module))
 
     # CACHE_ADDITIVITY.md CA2/CA3: resolve ingest mode from flags.
     # Mutually exclusive: at most one of {--ingest, --ingest-all,
@@ -165,6 +177,42 @@ def main(argv: Sequence[str] | None = None) -> None:
         bridge_filter=bridge_filter,
     )
     _print_verdicts(results)
+    return 0
+
+
+def _check_and_report(module: str) -> int:
+    """**CACHE_ADDITIVITY.md Phase 2** drift report. Calls
+    `runner.check(module)`, prints per-corpus drift / missing
+    summary + a pasteable `--ingest` command for the affected
+    corpora. Exits 0 when clean, 2 when drift detected — usable
+    in shell pipelines (`run_hypothesis.py <m> --check &&
+    run_hypothesis.py <m>`)."""
+    report = check(module)
+    if not report.per_corpus:
+        print('check: no corpora found under experiments/data/')
+        return 0
+    if report.is_clean:
+        print(
+            f'check: {len(report.per_corpus)} corpora — all current. '
+            f'No drift, no missing required columns.',
+        )
+        return 0
+    affected = report.affected_corpus_names()
+    print(f'check: drift detected across {len(affected)} corpora')
+    for c in report.per_corpus:
+        if c.is_clean:
+            continue
+        bits: list[str] = []
+        if c.drifted:
+            bits.append(f'drifted=[{", ".join(c.drifted)}]')
+        if c.missing:
+            bits.append(f'missing=[{", ".join(c.missing)}]')
+        print(f'  {c.corpus_dir.name:50s}  {" ".join(bits)}')
+    print()
+    print(f'  → refresh affected corpora with:')
+    print(f'     --ingest {",".join(affected)}')
+    print(f'     OR --ingest-all experiments/data')
+    return 2
 
 
 def _print_verdicts(results: dict[str, BridgeEvaluation]) -> None:
@@ -194,4 +242,5 @@ def _summarize(result: object) -> str:
 
 
 if __name__ == '__main__':
-    main()
+    import sys
+    sys.exit(main())

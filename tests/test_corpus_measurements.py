@@ -24,6 +24,7 @@ import pytest
 from corroborate.corpus.measurements import (
     MEASUREMENTS_FILENAME,
     build_measurements,
+    check_drift,
     current_signatures,
     load_measurements,
 )
@@ -647,3 +648,100 @@ def test_build_measurements_recomputes_null_cells_in_existing_column(
         f'before={sigs_canonical["double_x"]}, '
         f'after={sigs_after["double_x"]}'
     )
+
+
+# ============ CACHE_ADDITIVITY.md Phase 2 — check_drift =========
+
+
+def test_check_drift_clean_corpus_returns_clean_report(
+    tmp_path: Path,
+) -> None:
+    """**Phase 2**: a corpus whose measurements.parquet was just
+    built against the current registry is clean — no drift,
+    no missing columns. The report's `is_clean` is True."""
+    runs = _runs_df(3)
+    corpus = tmp_path / 'corp_a'
+    corpus.mkdir()
+    (corpus / 'runs.parquet').write_bytes(b'')   # touch — sentinel
+    runs.write_parquet(corpus / 'runs.parquet')
+    build_measurements(corpus, required=['double_x'], runs_df=runs)
+
+    report = check_drift(tmp_path, required=['double_x'])
+    assert len(report.per_corpus) == 1
+    assert report.is_clean
+    assert report.affected_corpus_names() == ()
+
+
+def test_check_drift_detects_drifted_column(tmp_path: Path) -> None:
+    """**Phase 2**: when a measurable's signature changes (substrate
+    edit) but the per-corpus sidecar still carries the old hash,
+    the report flags the column as drifted."""
+    runs = _runs_df(3)
+    corpus = tmp_path / 'corp_a'
+    corpus.mkdir()
+    runs.write_parquet(corpus / 'runs.parquet')
+    build_measurements(corpus, required=['double_x'], runs_df=runs)
+
+    # Inject a drifted sig fn — pretends double_x's closure
+    # changed since the per-corpus sidecar was written.
+    def _drifted(name: str) -> str | None:
+        return 'NEWHASH-' + name if name == 'double_x' else None
+
+    report = check_drift(
+        tmp_path, required=['double_x'],
+        measurable_signature_fn=_drifted,
+    )
+    assert not report.is_clean
+    assert report.n_corpora_drifted == 1
+    assert report.per_corpus[0].drifted == ('double_x',)
+    assert report.per_corpus[0].missing == ()
+
+
+def test_check_drift_detects_missing_column(tmp_path: Path) -> None:
+    """**Phase 2**: a required measurable that was never computed
+    for a corpus shows up as missing (different from drifted)."""
+    runs = _runs_df(3)
+    corpus = tmp_path / 'corp_a'
+    corpus.mkdir()
+    runs.write_parquet(corpus / 'runs.parquet')
+    # Build with double_x only; later we'll require a 2nd col.
+    build_measurements(corpus, required=['double_x'], runs_df=runs)
+
+    report = check_drift(
+        tmp_path, required=['double_x', 'x_plus_y'],
+    )
+    assert not report.is_clean
+    assert report.n_corpora_missing == 1
+    assert report.per_corpus[0].drifted == ()
+    assert report.per_corpus[0].missing == ('x_plus_y',)
+
+
+def test_check_drift_skips_in_progress_corpora(tmp_path: Path) -> None:
+    """**Phase 2**: a corpus marked with `.in_progress` (sweep mid-
+    flight) is silently excluded from the audit. Same convention
+    as the runner's `_load_directory`."""
+    runs = _runs_df(3)
+    corpus = tmp_path / 'corp_a'
+    corpus.mkdir()
+    runs.write_parquet(corpus / 'runs.parquet')
+    (corpus / '.in_progress').touch()
+
+    report = check_drift(tmp_path, required=['double_x'])
+    assert len(report.per_corpus) == 0
+
+
+def test_check_drift_skips_non_corpus_subdirs(tmp_path: Path) -> None:
+    """**Phase 2**: subdirs without `runs.parquet` aren't corpora
+    and don't appear in the report."""
+    (tmp_path / 'cache').mkdir()  # no runs.parquet — not a corpus
+    (tmp_path / 'cache' / 'arbitrary.json').write_text('{}')
+
+    runs = _runs_df(3)
+    corpus = tmp_path / 'corp_a'
+    corpus.mkdir()
+    runs.write_parquet(corpus / 'runs.parquet')
+    build_measurements(corpus, required=['double_x'], runs_df=runs)
+
+    report = check_drift(tmp_path, required=['double_x'])
+    assert len(report.per_corpus) == 1
+    assert report.per_corpus[0].corpus_dir.name == 'corp_a'

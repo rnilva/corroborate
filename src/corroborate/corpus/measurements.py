@@ -384,10 +384,125 @@ def build_measurements(
     return out_path
 
 
+# ============ CACHE_ADDITIVITY.md Phase 2: --check mode ============
+
+
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True, slots=True)
+class CorpusDriftReport:
+    """Per-corpus drift summary: which required columns are
+    missing from the per-corpus sidecar (never computed) vs.
+    drifted (stored hash differs from current registry hash).
+    A corpus is `is_clean` iff both lists are empty."""
+    corpus_dir: Path
+    drifted: tuple[str, ...]
+    missing: tuple[str, ...]
+
+    @property
+    def is_clean(self) -> bool:
+        return not self.drifted and not self.missing
+
+
+@dataclass(frozen=True, slots=True)
+class DriftReport:
+    """**CACHE_ADDITIVITY.md CA5** report shape. Aggregates per-
+    corpus drift / missing across the data root. Pure read, no
+    compute, no walk of `runs.parquet`."""
+    per_corpus: tuple[CorpusDriftReport, ...]
+
+    @property
+    def is_clean(self) -> bool:
+        return all(c.is_clean for c in self.per_corpus)
+
+    @property
+    def n_corpora_drifted(self) -> int:
+        return sum(1 for c in self.per_corpus if c.drifted)
+
+    @property
+    def n_corpora_missing(self) -> int:
+        return sum(1 for c in self.per_corpus if c.missing)
+
+    def affected_corpus_names(self) -> tuple[str, ...]:
+        """Names of corpora that need refreshing (any drift OR
+        missing column). Suitable for direct splat into
+        `--ingest <names>`."""
+        return tuple(
+            c.corpus_dir.name
+            for c in self.per_corpus if not c.is_clean
+        )
+
+
+def check_drift(
+    root: Path,
+    *,
+    required: Sequence[str],
+    measurable_signature_fn: Callable[[str], str | None] | None = None,
+) -> DriftReport:
+    """Walk subdirs of `root`, audit each corpus's
+    `measurements.hashes.json` against the current registry's
+    closure hashes for `required` measurables. Returns a
+    `DriftReport`. Pure read — does NOT load `runs.parquet`,
+    does NOT compute measurables, does NOT touch cloud.
+
+    Skips:
+    - Subdirs without `runs.parquet` (not a corpus).
+    - Subdirs with `.in_progress` sentinel (sweep mid-flight,
+      same convention as the runner).
+    - `required` names that don't resolve in the current
+      registry (`signature_fn` returns None) — those would be
+      caller-side authoring bugs, not drift.
+    """
+    if measurable_signature_fn is None:
+        def _default_sig(name: str) -> str | None:
+            m = get_registered(name)
+            return None if m is None else m.signature()
+        sig_fn: Callable[[str], str | None] = _default_sig
+    else:
+        sig_fn = measurable_signature_fn
+
+    if not root.is_dir():
+        return DriftReport(per_corpus=())
+
+    # Lazy import to avoid circular dep.
+    from corroborate.corpus.integrity import is_in_progress
+
+    per: list[CorpusDriftReport] = []
+    for sub in sorted(root.iterdir()):
+        if not sub.is_dir():
+            continue
+        if not (sub / 'runs.parquet').exists():
+            continue
+        if is_in_progress(sub):
+            continue
+        stored = current_signatures(sub)
+        drifted: list[str] = []
+        missing: list[str] = []
+        for name in required:
+            current = sig_fn(name)
+            if current is None:
+                continue   # measurable unknown to registry; not drift
+            stored_hash = stored.get(name)
+            if stored_hash is None:
+                missing.append(name)
+            elif stored_hash != current:
+                drifted.append(name)
+        per.append(CorpusDriftReport(
+            corpus_dir=sub,
+            drifted=tuple(drifted),
+            missing=tuple(missing),
+        ))
+    return DriftReport(per_corpus=tuple(per))
+
+
 __all__ = [
     'MEASUREMENTS_FILENAME',
     'SIDECAR_FILENAME',
+    'CorpusDriftReport',
+    'DriftReport',
     'build_measurements',
+    'check_drift',
     'current_signatures',
     'load_measurements',
 ]

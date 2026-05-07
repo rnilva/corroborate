@@ -184,19 +184,21 @@ so this phase is purely CLI-side.
    `'cache: <N> cells, <M> measurable cols, last updated <ts>'`.
    Then run bridges. No walk.
 
-**Phase 2 — `--check` mode (~1 hour, optional)**
+**Phase 2 — `--check` mode (DONE)**
 
 Drift visibility without work, sourced from per-corpus
 `measurements.hashes.json` files (the per-hypothesis manifest
-no longer exists post-Phase-2.2). Reports:
-- For each in-scope corpus: which columns drifted (current
-  closure hash ≠ stored), which required columns are missing.
-- A union summary: "12 corpora have drifted columns; refresh
-  with `--ingest-all`" or "3 corpora carry only stale columns;
-  refresh with `--ingest a,b,c`".
-
-Skip if Phase 1 + the side-effect drift logging in `--ingest`
-turns out to handle 95% of the use case (most likely outcome).
+no longer exists post-Phase-2.2). Implemented in
+`corpus.measurements:check_drift` + `runner.check`:
+- For each in-scope corpus: per-column drift (current closure
+  hash ≠ stored) + missing-required-column detection.
+- Returns a typed `DriftReport` with `is_clean`,
+  `affected_corpus_names()` for direct splat into `--ingest`.
+- CLI: `--check` exits 0 when clean, 2 when drift detected.
+  Usable in shell pipelines (`run_hypothesis.py <m> --check &&
+  run_hypothesis.py <m>`).
+- No `runs.parquet` reads, no compute, no cloud. ~json.loads
+  per corpus, milliseconds total.
 
 **Phase 3 — Per-corpus mtime tracking (deferred)**
 
@@ -252,9 +254,9 @@ that matters is the new flag names.
 **Existing flags worth preserving but not numbered as CACHE_ADDITIVITY
 invariants:** `--rebuild` is the explicit-nuke flag (wipes the
 per-hypothesis projection only — per-corpus stores survive their
-own drift detection); `--check` for drift visibility without
-work is a Phase 2 future feature, mostly redundant with the
-side-effect drift logging that `--ingest` already produces.
+own drift detection); `--check` is the drift-visibility mode
+(Phase 2, implemented) — exits 0 clean / 2 on drift, prints a
+pasteable `--ingest` line for affected corpora.
 
 This doc shouldn't duplicate any of those — only the
 **default-is-additive** principle that they collectively make
