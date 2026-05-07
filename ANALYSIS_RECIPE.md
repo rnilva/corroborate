@@ -333,6 +333,92 @@ refutations remain the verdict primitives.
 
 ---
 
+## 5b. Endogenous-discriminator search when narrow scope is empirically forced
+
+When per-env analysis surfaces a single env where a claim holds
+(or where the sign is opposite the others), the temptation is to
+scope the bridge on `env_name`. Per `feedback_endogenous_scope_
+predicates`, env-name scoping is lazy science. The right move is
+finding the **endogenous predicate** that distinguishes the
+holding-env regime from the others.
+
+The discriminator-search loop:
+
+1. **Per-env diagnostic panel**: compute candidate measurables
+   per env (mean Q at late window, mean Δ_jens, σ Δ_outcome,
+   r_max/r_min, mean baseline outcome, mech-firing rate, etc.).
+2. **Find a feature that splits the held vs null envs cleanly.**
+   Both env-structural (`r_max`, `r_min`, `n_actions`) and
+   trajectory-derived (`q_late_mean`, `q_divergence_score`,
+   `target_staleness_late`) are admissible — env-structural
+   features are exogenous, trajectory features are endogenous.
+3. **Prefer the endogenous downstream**: if `r_min ≥ 0`
+   determines `q_late_mean > 0` per cell, scope on
+   `q_late_mean > 0` (the per-cell measurable) rather than the
+   exogenous structural property. This makes the bridge
+   generalize to any env whose trajectory ends up in the
+   target regime.
+
+### Interaction-term test for regime-dependent effects
+
+When the discriminator is found, verify it's not just
+correlation-by-env via the **interaction-term regression**:
+
+```python
+import numpy as np
+
+# Δ_outcome = β₀ + β_T·treatment + β_M·moderator
+#               + β_int·(treatment × moderator) + ε
+X = np.column_stack([np.ones(n), treatment, moderator,
+                     treatment * moderator])
+beta, _, rank, _ = np.linalg.lstsq(X, delta_outcome, rcond=None)
+# β_int significantly nonzero ⇒ moderator's regime modulates
+# treatment's effect direction. Sign tells you the polarity.
+```
+
+The interaction coefficient `β_int` directly tests "does the
+treatment's effect depend on the moderator's regime?" If
+significant, the discriminator IS modulating the effect causally,
+not just labeling envs.
+
+Pair with **per-stratum DoWhy backdoor + refutations**:
+
+```python
+for regime_label, mask in [('moderator > 0', cells_pos),
+                            ('moderator < 0', cells_neg)]:
+    r = backdoor_ate.fn(cells.filter(mask), ...)
+    pl = placebo_refutation.fn(cells.filter(mask), ...)
+    rcc = random_common_cause_refutation.fn(cells.filter(mask), ...)
+```
+
+Per-stratum ATEs that flip sign across regimes, both
+refutation-validated, are direct rung-2 evidence for the
+discriminator.
+
+### When the discriminator is exogenous
+
+`r_min`, `r_max`, `n_actions`, `env_name` are exogenous structural
+features (set by the env's specification). They're not bad as
+predicates but they don't generalize — a future env with novel
+structure won't fit the existing buckets.
+
+The fix is to find the **endogenous downstream**: the per-cell
+trajectory feature that the exogenous structural property
+*causes*. For r_min: `q_late_mean = mean(online_max_q over late
+50%)` is the endogenous trajectory-side counterpart. The bridge
+scopes on `q_late_mean > 0` (works on any future cell) instead
+of `r_min ≥ 0` (works only on envs whose r_min is in the
+catalogue).
+
+A worked example lives in `experiments/findings/sync_curve_
+breakout/polyak_q_regime_findings.md`: r_min causally determines
+sign(q_late_mean), which determines the direction of Hasselt's
+overestimation bias, which inverts ATE(stale → Δ_outcome). Bridge
+`staleness_amplifies_ddqn_outcome__sparse_goal_polyak` scopes on
+the endogenous `q_late_mean > 0`.
+
+---
+
 ## 6. Tautology audit for cleavage candidates
 
 Before publishing a cleavage axis, run the three-check audit
@@ -418,6 +504,7 @@ intervening on.
 6. Per-burst probes if scalar verdicts are null.
 6a. Cross-burst lag correlation as a causal-precedence diagnostic.
 7. Tautology audit on cleavage candidates.
+5b. Endogenous-discriminator search via interaction-term + per-stratum DoWhy.
 8. Mediator differential + PC adjacency → next-sweep targets.
 
 Steps 1-2 are required; 3-8 are conditional on the verdicts /

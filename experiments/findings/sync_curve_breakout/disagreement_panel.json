@@ -1,0 +1,6722 @@
+[
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 0,
+    "disagreement_late": 0.15144
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 1,
+    "disagreement_late": 0.11237
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 2,
+    "disagreement_late": 0.18229
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 3,
+    "disagreement_late": 0.13377
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 4,
+    "disagreement_late": 0.13727
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 5,
+    "disagreement_late": 0.13175
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 6,
+    "disagreement_late": 0.23071
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 7,
+    "disagreement_late": 0.31114
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 8,
+    "disagreement_late": 0.19339
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 9,
+    "disagreement_late": 0.25697
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 10,
+    "disagreement_late": 0.3739
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 11,
+    "disagreement_late": 0.14675
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 12,
+    "disagreement_late": 0.49305
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 13,
+    "disagreement_late": 0.1711
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 14,
+    "disagreement_late": 0.13858
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 15,
+    "disagreement_late": 0.17029
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 16,
+    "disagreement_late": 0.16024
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 17,
+    "disagreement_late": 0.10197
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 18,
+    "disagreement_late": 0.18718
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 19,
+    "disagreement_late": 0.2326
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 20,
+    "disagreement_late": 0.18542
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 21,
+    "disagreement_late": 0.14669
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 22,
+    "disagreement_late": 0.18581
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 23,
+    "disagreement_late": 0.18521
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 24,
+    "disagreement_late": 0.2949
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 25,
+    "disagreement_late": 0.14584
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 26,
+    "disagreement_late": 0.1529
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 27,
+    "disagreement_late": 0.38553
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 28,
+    "disagreement_late": 0.16853
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 29,
+    "disagreement_late": 0.15005
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 0,
+    "disagreement_late": 0.07826
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 1,
+    "disagreement_late": 0.0633
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 2,
+    "disagreement_late": 0.09536
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 3,
+    "disagreement_late": 0.07708
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 4,
+    "disagreement_late": 0.06249
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 5,
+    "disagreement_late": 0.09176
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 6,
+    "disagreement_late": 0.08229
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 7,
+    "disagreement_late": 0.07687
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 8,
+    "disagreement_late": 0.05651
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 9,
+    "disagreement_late": 0.06586
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 0,
+    "disagreement_late": 0.30511
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 1,
+    "disagreement_late": 0.37783
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 2,
+    "disagreement_late": 0.34539
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 3,
+    "disagreement_late": 0.26302
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 4,
+    "disagreement_late": 0.38905
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 5,
+    "disagreement_late": 0.33986
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 6,
+    "disagreement_late": 0.38934
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 7,
+    "disagreement_late": 0.39191
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 8,
+    "disagreement_late": 0.40128
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 9,
+    "disagreement_late": 0.36493
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 10,
+    "disagreement_late": 0.28183
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 11,
+    "disagreement_late": 0.32322
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 12,
+    "disagreement_late": 0.43405
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 13,
+    "disagreement_late": 0.31716
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 14,
+    "disagreement_late": 0.28047
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 15,
+    "disagreement_late": 0.34609
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 16,
+    "disagreement_late": 0.31412
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 17,
+    "disagreement_late": 0.32467
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 18,
+    "disagreement_late": 0.40737
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 19,
+    "disagreement_late": 0.20831
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 20,
+    "disagreement_late": 0.3452
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 21,
+    "disagreement_late": 0.35817
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 22,
+    "disagreement_late": 0.17858
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 23,
+    "disagreement_late": 0.34479
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 24,
+    "disagreement_late": 0.34156
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 25,
+    "disagreement_late": 0.4118
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 26,
+    "disagreement_late": 0.23174
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 27,
+    "disagreement_late": 0.37172
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 28,
+    "disagreement_late": 0.23762
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 29,
+    "disagreement_late": 0.38533
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 0,
+    "disagreement_late": 0.51787
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 1,
+    "disagreement_late": 0.42725
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 2,
+    "disagreement_late": 0.44536
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 3,
+    "disagreement_late": 0.45388
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 4,
+    "disagreement_late": 0.4295
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 5,
+    "disagreement_late": 0.45299
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 6,
+    "disagreement_late": 0.54985
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 7,
+    "disagreement_late": 0.49715
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 8,
+    "disagreement_late": 0.4835
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 9,
+    "disagreement_late": 0.25219
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 10,
+    "disagreement_late": 0.41971
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 11,
+    "disagreement_late": 0.51247
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 12,
+    "disagreement_late": 0.50795
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 13,
+    "disagreement_late": 0.50789
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 14,
+    "disagreement_late": 0.54269
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 15,
+    "disagreement_late": 0.37784
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 16,
+    "disagreement_late": 0.55315
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 17,
+    "disagreement_late": 0.48791
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 18,
+    "disagreement_late": 0.45013
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 19,
+    "disagreement_late": 0.33419
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 20,
+    "disagreement_late": 0.20318
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 21,
+    "disagreement_late": 0.49912
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 22,
+    "disagreement_late": 0.32853
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 23,
+    "disagreement_late": 0.25642
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 24,
+    "disagreement_late": 0.42555
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 25,
+    "disagreement_late": 0.46836
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 26,
+    "disagreement_late": 0.48293
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 27,
+    "disagreement_late": 0.49063
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 28,
+    "disagreement_late": 0.31972
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 29,
+    "disagreement_late": 0.45782
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 0,
+    "disagreement_late": 0.25746
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 1,
+    "disagreement_late": 0.14968
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 2,
+    "disagreement_late": 0.13674
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 3,
+    "disagreement_late": 0.14928
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 4,
+    "disagreement_late": 0.08993
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 5,
+    "disagreement_late": 0.1302
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 6,
+    "disagreement_late": 0.30451
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 7,
+    "disagreement_late": 0.46988
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 8,
+    "disagreement_late": 0.21529
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 9,
+    "disagreement_late": 0.27651
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 10,
+    "disagreement_late": 0.15576
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 11,
+    "disagreement_late": 0.11699
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 12,
+    "disagreement_late": 0.15859
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 13,
+    "disagreement_late": 0.16788
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 14,
+    "disagreement_late": 0.28974
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 15,
+    "disagreement_late": 0.18168
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 16,
+    "disagreement_late": 0.21047
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 17,
+    "disagreement_late": 0.12293
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 18,
+    "disagreement_late": 0.23235
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 19,
+    "disagreement_late": 0.1168
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 20,
+    "disagreement_late": 0.24125
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 21,
+    "disagreement_late": 0.15656
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 22,
+    "disagreement_late": 0.13149
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 23,
+    "disagreement_late": 0.38225
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 24,
+    "disagreement_late": 0.20249
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 25,
+    "disagreement_late": 0.15586
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 26,
+    "disagreement_late": 0.10659
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 27,
+    "disagreement_late": 0.203
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 28,
+    "disagreement_late": 0.37381
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 29,
+    "disagreement_late": 0.14191
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 0,
+    "disagreement_late": 0.06935
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 1,
+    "disagreement_late": 0.05711
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 2,
+    "disagreement_late": 0.08251
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 3,
+    "disagreement_late": 0.06787
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 4,
+    "disagreement_late": 0.05102
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 5,
+    "disagreement_late": 0.08502
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 6,
+    "disagreement_late": 0.06561
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 7,
+    "disagreement_late": 0.06977
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 8,
+    "disagreement_late": 0.06549
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 9,
+    "disagreement_late": 0.07328
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 0,
+    "disagreement_late": 0.39167
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 1,
+    "disagreement_late": 0.3136
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 2,
+    "disagreement_late": 0.23465
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 3,
+    "disagreement_late": 0.43609
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 4,
+    "disagreement_late": 0.25921
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 5,
+    "disagreement_late": 0.34012
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 6,
+    "disagreement_late": 0.49
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 7,
+    "disagreement_late": 0.3506
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 8,
+    "disagreement_late": 0.4577
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 9,
+    "disagreement_late": 0.5496
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 10,
+    "disagreement_late": 0.38829
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 11,
+    "disagreement_late": 0.30088
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 12,
+    "disagreement_late": 0.41393
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 13,
+    "disagreement_late": 0.36647
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 14,
+    "disagreement_late": 0.30989
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 15,
+    "disagreement_late": 0.50508
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 16,
+    "disagreement_late": 0.26811
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 17,
+    "disagreement_late": 0.33545
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 18,
+    "disagreement_late": 0.3184
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 19,
+    "disagreement_late": 0.23295
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 20,
+    "disagreement_late": 0.44835
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 21,
+    "disagreement_late": 0.42528
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 22,
+    "disagreement_late": 0.2473
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 23,
+    "disagreement_late": 0.30085
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 24,
+    "disagreement_late": 0.33446
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 25,
+    "disagreement_late": 0.36769
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 26,
+    "disagreement_late": 0.41133
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 27,
+    "disagreement_late": 0.44147
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 28,
+    "disagreement_late": 0.35871
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 29,
+    "disagreement_late": 0.41482
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 0,
+    "disagreement_late": 0.54714
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 1,
+    "disagreement_late": 0.37749
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 2,
+    "disagreement_late": 0.2826
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 3,
+    "disagreement_late": 0.46784
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 4,
+    "disagreement_late": 0.28044
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 5,
+    "disagreement_late": 0.52069
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 6,
+    "disagreement_late": 0.45944
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 7,
+    "disagreement_late": 0.5327
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 8,
+    "disagreement_late": 0.26108
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 9,
+    "disagreement_late": 0.25462
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 10,
+    "disagreement_late": 0.49344
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 11,
+    "disagreement_late": 0.37782
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 12,
+    "disagreement_late": 0.45041
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 13,
+    "disagreement_late": 0.45657
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 14,
+    "disagreement_late": 0.47678
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 15,
+    "disagreement_late": 0.54848
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 16,
+    "disagreement_late": 0.52879
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 17,
+    "disagreement_late": 0.47242
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 18,
+    "disagreement_late": 0.51774
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 19,
+    "disagreement_late": 0.55666
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 20,
+    "disagreement_late": 0.39531
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 21,
+    "disagreement_late": 0.53593
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 22,
+    "disagreement_late": 0.55532
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 23,
+    "disagreement_late": 0.44083
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 24,
+    "disagreement_late": 0.43542
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 25,
+    "disagreement_late": 0.45231
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 26,
+    "disagreement_late": 0.41841
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 27,
+    "disagreement_late": 0.51091
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 28,
+    "disagreement_late": 0.50283
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 29,
+    "disagreement_late": 0.23331
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 10,
+    "disagreement_late": 0.05293
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 11,
+    "disagreement_late": 0.07998
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 12,
+    "disagreement_late": 0.06183
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 13,
+    "disagreement_late": 0.06254
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 14,
+    "disagreement_late": 0.06968
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 15,
+    "disagreement_late": 0.07957
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 16,
+    "disagreement_late": 0.05169
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 17,
+    "disagreement_late": 0.0593
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 18,
+    "disagreement_late": 0.06984
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 19,
+    "disagreement_late": 0.07359
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 10,
+    "disagreement_late": 0.06294
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 11,
+    "disagreement_late": 0.06299
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 12,
+    "disagreement_late": 0.08927
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 13,
+    "disagreement_late": 0.08105
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 14,
+    "disagreement_late": 0.0741
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 15,
+    "disagreement_late": 0.08791
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 16,
+    "disagreement_late": 0.06007
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 17,
+    "disagreement_late": 0.06729
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 18,
+    "disagreement_late": 0.06229
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 19,
+    "disagreement_late": 0.07039
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 20,
+    "disagreement_late": 0.06523
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 21,
+    "disagreement_late": 0.06338
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 22,
+    "disagreement_late": 0.06805
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 23,
+    "disagreement_late": 0.05843
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 24,
+    "disagreement_late": 0.06974
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 25,
+    "disagreement_late": 0.06043
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 26,
+    "disagreement_late": 0.05875
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 27,
+    "disagreement_late": 0.0639
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 28,
+    "disagreement_late": 0.07124
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 29,
+    "disagreement_late": 0.0659
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 20,
+    "disagreement_late": 0.07119
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 21,
+    "disagreement_late": 0.06396
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 22,
+    "disagreement_late": 0.06746
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 23,
+    "disagreement_late": 0.07269
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 24,
+    "disagreement_late": 0.0686
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 25,
+    "disagreement_late": 0.05719
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 26,
+    "disagreement_late": 0.05344
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 27,
+    "disagreement_late": 0.05656
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 28,
+    "disagreement_late": 0.06518
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 29,
+    "disagreement_late": 0.05291
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 0,
+    "disagreement_late": 0.13475
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 1,
+    "disagreement_late": 0.12758
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 2,
+    "disagreement_late": 0.12489
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 3,
+    "disagreement_late": 0.1051
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 4,
+    "disagreement_late": 0.15632
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 5,
+    "disagreement_late": 0.14352
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 6,
+    "disagreement_late": 0.1426
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 7,
+    "disagreement_late": 0.15903
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 8,
+    "disagreement_late": 0.2005
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 9,
+    "disagreement_late": 0.1402
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 10,
+    "disagreement_late": 0.17153
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 11,
+    "disagreement_late": 0.09676
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 12,
+    "disagreement_late": 0.11702
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 13,
+    "disagreement_late": 0.19628
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 14,
+    "disagreement_late": 0.16663
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 15,
+    "disagreement_late": 0.11928
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 16,
+    "disagreement_late": 0.14684
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 17,
+    "disagreement_late": 0.16198
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 18,
+    "disagreement_late": 0.16356
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 19,
+    "disagreement_late": 0.11111
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 20,
+    "disagreement_late": 0.11489
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 21,
+    "disagreement_late": 0.18183
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 22,
+    "disagreement_late": 0.15682
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 23,
+    "disagreement_late": 0.13266
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 24,
+    "disagreement_late": 0.35404
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 25,
+    "disagreement_late": 0.16493
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 26,
+    "disagreement_late": 0.15972
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 27,
+    "disagreement_late": 0.17827
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 28,
+    "disagreement_late": 0.11636
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 29,
+    "disagreement_late": 0.08101
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 0,
+    "disagreement_late": 0.06433
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 1,
+    "disagreement_late": 0.0785
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 2,
+    "disagreement_late": 0.05405
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 3,
+    "disagreement_late": 0.06991
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 4,
+    "disagreement_late": 0.06642
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 5,
+    "disagreement_late": 0.08521
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 6,
+    "disagreement_late": 0.07708
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 7,
+    "disagreement_late": 0.05362
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 8,
+    "disagreement_late": 0.08429
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 9,
+    "disagreement_late": 0.0631
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 0,
+    "disagreement_late": 0.35644
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 1,
+    "disagreement_late": 0.39204
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 2,
+    "disagreement_late": 0.39509
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 3,
+    "disagreement_late": 0.35902
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 4,
+    "disagreement_late": 0.39659
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 5,
+    "disagreement_late": 0.33369
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 6,
+    "disagreement_late": 0.41867
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 7,
+    "disagreement_late": 0.29027
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 8,
+    "disagreement_late": 0.35317
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 9,
+    "disagreement_late": 0.37658
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 10,
+    "disagreement_late": 0.40101
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 11,
+    "disagreement_late": 0.37421
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 12,
+    "disagreement_late": 0.40712
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 13,
+    "disagreement_late": 0.35681
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 14,
+    "disagreement_late": 0.40378
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 15,
+    "disagreement_late": 0.37318
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 16,
+    "disagreement_late": 0.3442
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 17,
+    "disagreement_late": 0.33859
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 18,
+    "disagreement_late": 0.36514
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 19,
+    "disagreement_late": 0.39741
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 20,
+    "disagreement_late": 0.37814
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 21,
+    "disagreement_late": 0.34707
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 22,
+    "disagreement_late": 0.38746
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 23,
+    "disagreement_late": 0.36455
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 24,
+    "disagreement_late": 0.33599
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 25,
+    "disagreement_late": 0.39623
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 26,
+    "disagreement_late": 0.42692
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 27,
+    "disagreement_late": 0.38898
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 28,
+    "disagreement_late": 0.3828
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 29,
+    "disagreement_late": 0.4182
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 0,
+    "disagreement_late": 0.35235
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 1,
+    "disagreement_late": 0.22006
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 2,
+    "disagreement_late": 0.26112
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 3,
+    "disagreement_late": 0.15028
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 4,
+    "disagreement_late": 0.35533
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 5,
+    "disagreement_late": 0.21229
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 6,
+    "disagreement_late": 0.31002
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 7,
+    "disagreement_late": 0.26052
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 8,
+    "disagreement_late": 0.31744
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 9,
+    "disagreement_late": 0.14587
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 10,
+    "disagreement_late": 0.31338
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 11,
+    "disagreement_late": 0.23299
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 12,
+    "disagreement_late": 0.34698
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 13,
+    "disagreement_late": 0.1653
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 14,
+    "disagreement_late": 0.34413
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 15,
+    "disagreement_late": 0.304
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 16,
+    "disagreement_late": 0.27934
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 17,
+    "disagreement_late": 0.31997
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 18,
+    "disagreement_late": 0.31055
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 19,
+    "disagreement_late": 0.31344
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 20,
+    "disagreement_late": 0.16727
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 21,
+    "disagreement_late": 0.35458
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 22,
+    "disagreement_late": 0.3687
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 23,
+    "disagreement_late": 0.35568
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 24,
+    "disagreement_late": 0.22009
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 25,
+    "disagreement_late": 0.21747
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 26,
+    "disagreement_late": 0.16467
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 27,
+    "disagreement_late": 0.34504
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 28,
+    "disagreement_late": 0.18694
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 29,
+    "disagreement_late": 0.32239
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 0,
+    "disagreement_late": 0.12322
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 1,
+    "disagreement_late": 0.13737
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 2,
+    "disagreement_late": 0.11644
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 3,
+    "disagreement_late": 0.16535
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 4,
+    "disagreement_late": 0.12494
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 5,
+    "disagreement_late": 0.16413
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 6,
+    "disagreement_late": 0.15572
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 7,
+    "disagreement_late": 0.12417
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 8,
+    "disagreement_late": 0.15244
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 9,
+    "disagreement_late": 0.14174
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 10,
+    "disagreement_late": 0.18241
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 11,
+    "disagreement_late": 0.10731
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 12,
+    "disagreement_late": 0.1659
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 13,
+    "disagreement_late": 0.07118
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 14,
+    "disagreement_late": 0.15268
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 15,
+    "disagreement_late": 0.14893
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 16,
+    "disagreement_late": 0.18862
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 17,
+    "disagreement_late": 0.11903
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 18,
+    "disagreement_late": 0.14142
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 19,
+    "disagreement_late": 0.12065
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 20,
+    "disagreement_late": 0.14814
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 21,
+    "disagreement_late": 0.17069
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 22,
+    "disagreement_late": 0.15106
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 23,
+    "disagreement_late": 0.13986
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 24,
+    "disagreement_late": 0.21438
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 25,
+    "disagreement_late": 0.12964
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 26,
+    "disagreement_late": 0.17652
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 27,
+    "disagreement_late": 0.15562
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 28,
+    "disagreement_late": 0.13216
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 29,
+    "disagreement_late": 0.11534
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 0,
+    "disagreement_late": 0.0702
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 1,
+    "disagreement_late": 0.07637
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 2,
+    "disagreement_late": 0.07248
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 3,
+    "disagreement_late": 0.06422
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 4,
+    "disagreement_late": 0.07575
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 5,
+    "disagreement_late": 0.08191
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 6,
+    "disagreement_late": 0.0753
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 7,
+    "disagreement_late": 0.05625
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 8,
+    "disagreement_late": 0.06567
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 9,
+    "disagreement_late": 0.06177
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 0,
+    "disagreement_late": 0.36554
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 1,
+    "disagreement_late": 0.42785
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 2,
+    "disagreement_late": 0.4576
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 3,
+    "disagreement_late": 0.41084
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 4,
+    "disagreement_late": 0.4379
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 5,
+    "disagreement_late": 0.40723
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 6,
+    "disagreement_late": 0.42006
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 7,
+    "disagreement_late": 0.35679
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 8,
+    "disagreement_late": 0.43159
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 9,
+    "disagreement_late": 0.45036
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 10,
+    "disagreement_late": 0.41321
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 11,
+    "disagreement_late": 0.41493
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 12,
+    "disagreement_late": 0.38573
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 13,
+    "disagreement_late": 0.344
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 14,
+    "disagreement_late": 0.42125
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 15,
+    "disagreement_late": 0.38636
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 16,
+    "disagreement_late": 0.36131
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 17,
+    "disagreement_late": 0.38149
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 18,
+    "disagreement_late": 0.39963
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 19,
+    "disagreement_late": 0.43485
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 20,
+    "disagreement_late": 0.38578
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 21,
+    "disagreement_late": 0.37001
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 22,
+    "disagreement_late": 0.39097
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 23,
+    "disagreement_late": 0.43807
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 24,
+    "disagreement_late": 0.38876
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 25,
+    "disagreement_late": 0.44832
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 26,
+    "disagreement_late": 0.43256
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 27,
+    "disagreement_late": 0.42763
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 28,
+    "disagreement_late": 0.3792
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 29,
+    "disagreement_late": 0.44336
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 0,
+    "disagreement_late": 0.34107
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 1,
+    "disagreement_late": 0.23154
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 2,
+    "disagreement_late": 0.33848
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 3,
+    "disagreement_late": 0.30992
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 4,
+    "disagreement_late": 0.38291
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 5,
+    "disagreement_late": 0.29864
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 6,
+    "disagreement_late": 0.35089
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 7,
+    "disagreement_late": 0.13932
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 8,
+    "disagreement_late": 0.2271
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 9,
+    "disagreement_late": 0.12636
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 10,
+    "disagreement_late": 0.31002
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 11,
+    "disagreement_late": 0.25213
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 12,
+    "disagreement_late": 0.35273
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 13,
+    "disagreement_late": 0.27592
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 14,
+    "disagreement_late": 0.3197
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 15,
+    "disagreement_late": 0.23662
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 16,
+    "disagreement_late": 0.20101
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 17,
+    "disagreement_late": 0.33755
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 18,
+    "disagreement_late": 0.33743
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 19,
+    "disagreement_late": 0.38008
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 20,
+    "disagreement_late": 0.20795
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 21,
+    "disagreement_late": 0.37611
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 22,
+    "disagreement_late": 0.35971
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 23,
+    "disagreement_late": 0.16504
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 24,
+    "disagreement_late": 0.33008
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 25,
+    "disagreement_late": 0.10741
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 26,
+    "disagreement_late": 0.2632
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 27,
+    "disagreement_late": 0.31419
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 28,
+    "disagreement_late": 0.21603
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 29,
+    "disagreement_late": 0.36111
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 10,
+    "disagreement_late": 0.05988
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 11,
+    "disagreement_late": 0.06187
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 12,
+    "disagreement_late": 0.07508
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 13,
+    "disagreement_late": 0.05727
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 14,
+    "disagreement_late": 0.05516
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 15,
+    "disagreement_late": 0.07398
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 16,
+    "disagreement_late": 0.06275
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 17,
+    "disagreement_late": 0.03361
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 18,
+    "disagreement_late": 0.06128
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 19,
+    "disagreement_late": 0.04572
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 10,
+    "disagreement_late": 0.06098
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 11,
+    "disagreement_late": 0.06185
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 12,
+    "disagreement_late": 0.06641
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 13,
+    "disagreement_late": 0.07473
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 14,
+    "disagreement_late": 0.0605
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 15,
+    "disagreement_late": 0.09307
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 16,
+    "disagreement_late": 0.06955
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 17,
+    "disagreement_late": 0.06411
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 18,
+    "disagreement_late": 0.07517
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 19,
+    "disagreement_late": 0.05692
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 20,
+    "disagreement_late": 0.07973
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 21,
+    "disagreement_late": 0.05283
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 22,
+    "disagreement_late": 0.0582
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 23,
+    "disagreement_late": 0.07906
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 24,
+    "disagreement_late": 0.05286
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 25,
+    "disagreement_late": 0.0677
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 26,
+    "disagreement_late": 0.04861
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 27,
+    "disagreement_late": 0.05461
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 28,
+    "disagreement_late": 0.07256
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 29,
+    "disagreement_late": 0.0765
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 20,
+    "disagreement_late": 0.07461
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 21,
+    "disagreement_late": 0.05366
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 22,
+    "disagreement_late": 0.05846
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 23,
+    "disagreement_late": 0.06185
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 24,
+    "disagreement_late": 0.05493
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 25,
+    "disagreement_late": 0.05935
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 26,
+    "disagreement_late": 0.05804
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 27,
+    "disagreement_late": 0.07471
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 28,
+    "disagreement_late": 0.05733
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 29,
+    "disagreement_late": 0.07206
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 0,
+    "disagreement_late": 0.07594
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 1,
+    "disagreement_late": 0.0406
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 2,
+    "disagreement_late": 0.07703
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 3,
+    "disagreement_late": 0.09251
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 4,
+    "disagreement_late": 0.08634
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 5,
+    "disagreement_late": 0.06874
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 6,
+    "disagreement_late": 0.07816
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 7,
+    "disagreement_late": 0.06486
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 8,
+    "disagreement_late": 0.07841
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 9,
+    "disagreement_late": 0.06325
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 10,
+    "disagreement_late": 0.06867
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 11,
+    "disagreement_late": 0.06076
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 12,
+    "disagreement_late": 0.05875
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 13,
+    "disagreement_late": 0.07638
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 14,
+    "disagreement_late": 0.08964
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 15,
+    "disagreement_late": 0.07905
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 16,
+    "disagreement_late": 0.08649
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 17,
+    "disagreement_late": 0.05553
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 18,
+    "disagreement_late": 0.08569
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 19,
+    "disagreement_late": 0.06989
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 20,
+    "disagreement_late": 0.05804
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 21,
+    "disagreement_late": 0.05925
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 22,
+    "disagreement_late": 0.04407
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 23,
+    "disagreement_late": 0.08108
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 24,
+    "disagreement_late": 0.06559
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 25,
+    "disagreement_late": 0.07935
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 26,
+    "disagreement_late": 0.10057
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 27,
+    "disagreement_late": 0.07543
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 28,
+    "disagreement_late": 0.07321
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 29,
+    "disagreement_late": 0.05715
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 0,
+    "disagreement_late": 0.06164
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 1,
+    "disagreement_late": 0.04153
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 2,
+    "disagreement_late": 0.04844
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 3,
+    "disagreement_late": 0.04828
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 4,
+    "disagreement_late": 0.03257
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 5,
+    "disagreement_late": 0.07143
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 6,
+    "disagreement_late": 0.02995
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 7,
+    "disagreement_late": 0.04455
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 8,
+    "disagreement_late": 0.07037
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 9,
+    "disagreement_late": 0.03274
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 0,
+    "disagreement_late": 0.34826
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 1,
+    "disagreement_late": 0.33787
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 2,
+    "disagreement_late": 0.32986
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 3,
+    "disagreement_late": 0.30729
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 4,
+    "disagreement_late": 0.37129
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 5,
+    "disagreement_late": 0.3208
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 6,
+    "disagreement_late": 0.37082
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 7,
+    "disagreement_late": 0.31696
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 8,
+    "disagreement_late": 0.33664
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 9,
+    "disagreement_late": 0.31712
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 10,
+    "disagreement_late": 0.33118
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 11,
+    "disagreement_late": 0.36184
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 12,
+    "disagreement_late": 0.36989
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 13,
+    "disagreement_late": 0.34378
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 14,
+    "disagreement_late": 0.3535
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 15,
+    "disagreement_late": 0.3299
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 16,
+    "disagreement_late": 0.31072
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 17,
+    "disagreement_late": 0.35712
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 18,
+    "disagreement_late": 0.39295
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 19,
+    "disagreement_late": 0.35857
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 20,
+    "disagreement_late": 0.29062
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 21,
+    "disagreement_late": 0.33629
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 22,
+    "disagreement_late": 0.30971
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 23,
+    "disagreement_late": 0.29118
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 24,
+    "disagreement_late": 0.31302
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 25,
+    "disagreement_late": 0.3517
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 26,
+    "disagreement_late": 0.4197
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 27,
+    "disagreement_late": 0.3486
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 28,
+    "disagreement_late": 0.30817
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 29,
+    "disagreement_late": 0.35048
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 0,
+    "disagreement_late": 0.10497
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 1,
+    "disagreement_late": 0.08309
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 2,
+    "disagreement_late": 0.09318
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 3,
+    "disagreement_late": 0.06227
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 4,
+    "disagreement_late": 0.08118
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 5,
+    "disagreement_late": 0.1056
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 6,
+    "disagreement_late": 0.09177
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 7,
+    "disagreement_late": 0.09576
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 8,
+    "disagreement_late": 0.10008
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 9,
+    "disagreement_late": 0.0544
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 10,
+    "disagreement_late": 0.09578
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 11,
+    "disagreement_late": 0.06217
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 12,
+    "disagreement_late": 0.09622
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 13,
+    "disagreement_late": 0.10286
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 14,
+    "disagreement_late": 0.08721
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 15,
+    "disagreement_late": 0.10372
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 16,
+    "disagreement_late": 0.0573
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 17,
+    "disagreement_late": 0.09713
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 18,
+    "disagreement_late": 0.07263
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 19,
+    "disagreement_late": 0.1124
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 20,
+    "disagreement_late": 0.02963
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 21,
+    "disagreement_late": 0.0893
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 22,
+    "disagreement_late": 0.10112
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 23,
+    "disagreement_late": 0.05424
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 24,
+    "disagreement_late": 0.10259
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 25,
+    "disagreement_late": 0.11409
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 26,
+    "disagreement_late": 0.06605
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 27,
+    "disagreement_late": 0.09586
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 28,
+    "disagreement_late": 0.05976
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 29,
+    "disagreement_late": 0.07662
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 0,
+    "disagreement_late": 0.08644
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 1,
+    "disagreement_late": 0.06647
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 2,
+    "disagreement_late": 0.08728
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 3,
+    "disagreement_late": 0.0825
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 4,
+    "disagreement_late": 0.08731
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 5,
+    "disagreement_late": 0.06354
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 6,
+    "disagreement_late": 0.07738
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 7,
+    "disagreement_late": 0.05349
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 8,
+    "disagreement_late": 0.06955
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 9,
+    "disagreement_late": 0.08686
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 10,
+    "disagreement_late": 0.06848
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 11,
+    "disagreement_late": 0.0538
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 12,
+    "disagreement_late": 0.0768
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 13,
+    "disagreement_late": 0.08403
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 14,
+    "disagreement_late": 0.05504
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 15,
+    "disagreement_late": 0.04716
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 16,
+    "disagreement_late": 0.08634
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 17,
+    "disagreement_late": 0.08979
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 18,
+    "disagreement_late": 0.06691
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 19,
+    "disagreement_late": 0.09491
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 20,
+    "disagreement_late": 0.05052
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 21,
+    "disagreement_late": 0.06249
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 22,
+    "disagreement_late": 0.04518
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 23,
+    "disagreement_late": 0.0944
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 24,
+    "disagreement_late": 0.07198
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 25,
+    "disagreement_late": 0.08354
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 26,
+    "disagreement_late": 0.10562
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 27,
+    "disagreement_late": 0.08325
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 28,
+    "disagreement_late": 0.07901
+  },
+  {
+    "env": "Acrobot-v1",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 29,
+    "disagreement_late": 0.05701
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 0,
+    "disagreement_late": 0.05967
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 1,
+    "disagreement_late": 0.05106
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 2,
+    "disagreement_late": 0.05446
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 3,
+    "disagreement_late": 0.0494
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 4,
+    "disagreement_late": 0.04569
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 5,
+    "disagreement_late": 0.06915
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 6,
+    "disagreement_late": 0.0333
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 7,
+    "disagreement_late": 0.0403
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 8,
+    "disagreement_late": 0.05527
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 9,
+    "disagreement_late": 0.0511
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 0,
+    "disagreement_late": 0.39592
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 1,
+    "disagreement_late": 0.35304
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 2,
+    "disagreement_late": 0.35878
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 3,
+    "disagreement_late": 0.32504
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 4,
+    "disagreement_late": 0.36792
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 5,
+    "disagreement_late": 0.33638
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 6,
+    "disagreement_late": 0.37535
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 7,
+    "disagreement_late": 0.26788
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 8,
+    "disagreement_late": 0.33701
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 9,
+    "disagreement_late": 0.37785
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 10,
+    "disagreement_late": 0.3561
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 11,
+    "disagreement_late": 0.41072
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 12,
+    "disagreement_late": 0.35748
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 13,
+    "disagreement_late": 0.35949
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 14,
+    "disagreement_late": 0.34911
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 15,
+    "disagreement_late": 0.35978
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 16,
+    "disagreement_late": 0.37434
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 17,
+    "disagreement_late": 0.35156
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 18,
+    "disagreement_late": 0.40281
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 19,
+    "disagreement_late": 0.34426
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 20,
+    "disagreement_late": 0.27927
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 21,
+    "disagreement_late": 0.36566
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 22,
+    "disagreement_late": 0.36008
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 23,
+    "disagreement_late": 0.31426
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 24,
+    "disagreement_late": 0.30113
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 25,
+    "disagreement_late": 0.39735
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 26,
+    "disagreement_late": 0.46929
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 27,
+    "disagreement_late": 0.35665
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 28,
+    "disagreement_late": 0.33173
+  },
+  {
+    "env": "FourRooms-misc",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 29,
+    "disagreement_late": 0.35594
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 0,
+    "disagreement_late": 0.10986
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 1,
+    "disagreement_late": 0.08199
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 2,
+    "disagreement_late": 0.08716
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 3,
+    "disagreement_late": 0.04496
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 4,
+    "disagreement_late": 0.09904
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 5,
+    "disagreement_late": 0.1026
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 6,
+    "disagreement_late": 0.09928
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 7,
+    "disagreement_late": 0.11099
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 8,
+    "disagreement_late": 0.07092
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 9,
+    "disagreement_late": 0.06782
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 10,
+    "disagreement_late": 0.09727
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 11,
+    "disagreement_late": 0.07777
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 12,
+    "disagreement_late": 0.08211
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 13,
+    "disagreement_late": 0.10136
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 14,
+    "disagreement_late": 0.09778
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 15,
+    "disagreement_late": 0.05084
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 16,
+    "disagreement_late": 0.06666
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 17,
+    "disagreement_late": 0.11256
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 18,
+    "disagreement_late": 0.03801
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 19,
+    "disagreement_late": 0.10823
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 20,
+    "disagreement_late": 0.07261
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 21,
+    "disagreement_late": 0.05238
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 22,
+    "disagreement_late": 0.10662
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 23,
+    "disagreement_late": 0.04373
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 24,
+    "disagreement_late": 0.09056
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 25,
+    "disagreement_late": 0.08897
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 26,
+    "disagreement_late": 0.07425
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 27,
+    "disagreement_late": 0.09497
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 28,
+    "disagreement_late": 0.07015
+  },
+  {
+    "env": "MountainCar-v0",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 29,
+    "disagreement_late": 0.09808
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 10,
+    "disagreement_late": 0.05933
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 11,
+    "disagreement_late": 0.04376
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 12,
+    "disagreement_late": 0.06003
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 13,
+    "disagreement_late": 0.044
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 14,
+    "disagreement_late": 0.05816
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 15,
+    "disagreement_late": 0.07062
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 16,
+    "disagreement_late": 0.04197
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 17,
+    "disagreement_late": 0.05184
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 18,
+    "disagreement_late": 0.04637
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 19,
+    "disagreement_late": 0.03389
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 10,
+    "disagreement_late": 0.05078
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 11,
+    "disagreement_late": 0.04705
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 12,
+    "disagreement_late": 0.04535
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 13,
+    "disagreement_late": 0.05387
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 14,
+    "disagreement_late": 0.05499
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 15,
+    "disagreement_late": 0.0572
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 16,
+    "disagreement_late": 0.04252
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 17,
+    "disagreement_late": 0.03815
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 18,
+    "disagreement_late": 0.05176
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 19,
+    "disagreement_late": 0.03668
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 20,
+    "disagreement_late": 0.05257
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 21,
+    "disagreement_late": 0.05198
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 22,
+    "disagreement_late": 0.04286
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 23,
+    "disagreement_late": 0.04431
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 24,
+    "disagreement_late": 0.04497
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 25,
+    "disagreement_late": 0.0557
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 26,
+    "disagreement_late": 0.04227
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 27,
+    "disagreement_late": 0.03911
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 28,
+    "disagreement_late": 0.05337
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 29,
+    "disagreement_late": 0.06164
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 20,
+    "disagreement_late": 0.04562
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 21,
+    "disagreement_late": 0.05347
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 22,
+    "disagreement_late": 0.05192
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 23,
+    "disagreement_late": 0.04516
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 24,
+    "disagreement_late": 0.05054
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 25,
+    "disagreement_late": 0.0527
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 26,
+    "disagreement_late": 0.04194
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 27,
+    "disagreement_late": 0.03071
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 28,
+    "disagreement_late": 0.04656
+  },
+  {
+    "env": "Breakout-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 29,
+    "disagreement_late": 0.05846
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 0,
+    "disagreement_late": 0.18189
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 1,
+    "disagreement_late": 0.18672
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 2,
+    "disagreement_late": 0.18817
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 3,
+    "disagreement_late": 0.132
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 4,
+    "disagreement_late": 0.22755
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 5,
+    "disagreement_late": 0.03549
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 6,
+    "disagreement_late": 0.13891
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 7,
+    "disagreement_late": 0.09525
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 8,
+    "disagreement_late": 0.21695
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 9,
+    "disagreement_late": 0.04829
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 0,
+    "disagreement_late": 0.18327
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 1,
+    "disagreement_late": 0.02976
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 2,
+    "disagreement_late": 0.10627
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 3,
+    "disagreement_late": 0.11837
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 4,
+    "disagreement_late": 0.09375
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 5,
+    "disagreement_late": 0.08373
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 6,
+    "disagreement_late": 0.0558
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 7,
+    "disagreement_late": 0.18857
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 8,
+    "disagreement_late": 0.15654
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 9,
+    "disagreement_late": 0.09773
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 10,
+    "disagreement_late": 0.08065
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 11,
+    "disagreement_late": 0.13236
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 12,
+    "disagreement_late": 0.21507
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 13,
+    "disagreement_late": 0.06513
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 14,
+    "disagreement_late": 0.23096
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 15,
+    "disagreement_late": 0.18906
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 16,
+    "disagreement_late": 0.0863
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 17,
+    "disagreement_late": 0.11298
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 18,
+    "disagreement_late": 0.11595
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 19,
+    "disagreement_late": 0.2063
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 10,
+    "disagreement_late": 0.05942
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 11,
+    "disagreement_late": 0.10432
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 12,
+    "disagreement_late": 0.04903
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 13,
+    "disagreement_late": 0.31461
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 14,
+    "disagreement_late": 0.08344
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 15,
+    "disagreement_late": 0.18416
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 16,
+    "disagreement_late": 0.07695
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 17,
+    "disagreement_late": 0.14289
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 18,
+    "disagreement_late": 0.18595
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 19,
+    "disagreement_late": 0.02714
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 20,
+    "disagreement_late": 0.18838
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 21,
+    "disagreement_late": 0.1879
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 22,
+    "disagreement_late": 0.17832
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 23,
+    "disagreement_late": 0.15708
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 24,
+    "disagreement_late": 0.05738
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 25,
+    "disagreement_late": 0.20961
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 26,
+    "disagreement_late": 0.09186
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 27,
+    "disagreement_late": 0.12155
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 28,
+    "disagreement_late": 0.09035
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.001,
+    "seed": 29,
+    "disagreement_late": 0.1677
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 20,
+    "disagreement_late": 0.12427
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 21,
+    "disagreement_late": 0.10952
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 22,
+    "disagreement_late": 0.13208
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 23,
+    "disagreement_late": 0.10938
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 24,
+    "disagreement_late": 0.20601
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 25,
+    "disagreement_late": 0.10805
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 26,
+    "disagreement_late": 0.16658
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 27,
+    "disagreement_late": 0.18483
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 28,
+    "disagreement_late": 0.10674
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.001,
+    "seed": 29,
+    "disagreement_late": 0.08149
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 0,
+    "disagreement_late": 0.06506
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 1,
+    "disagreement_late": 0.05115
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 2,
+    "disagreement_late": 0.0192
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 3,
+    "disagreement_late": 0.10135
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 4,
+    "disagreement_late": 0.00833
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 5,
+    "disagreement_late": 0.01676
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 6,
+    "disagreement_late": 0.04401
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 7,
+    "disagreement_late": 0.0133
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 8,
+    "disagreement_late": 0.07787
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 9,
+    "disagreement_late": 0.05164
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 0,
+    "disagreement_late": 0.13261
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 1,
+    "disagreement_late": 0.00795
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 2,
+    "disagreement_late": 0.09555
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 3,
+    "disagreement_late": 0.01609
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 4,
+    "disagreement_late": 0.0379
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 5,
+    "disagreement_late": 0.02266
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 6,
+    "disagreement_late": 0.00907
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 7,
+    "disagreement_late": 0.01356
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 8,
+    "disagreement_late": 0.00272
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 9,
+    "disagreement_late": 0.04334
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 10,
+    "disagreement_late": 0.07215
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 11,
+    "disagreement_late": 0.0361
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 12,
+    "disagreement_late": 0.01058
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 13,
+    "disagreement_late": 0.08269
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 14,
+    "disagreement_late": 0.02084
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 15,
+    "disagreement_late": 0.05849
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 16,
+    "disagreement_late": 0.0092
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 17,
+    "disagreement_late": 0.01051
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 18,
+    "disagreement_late": 0.00398
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 19,
+    "disagreement_late": 0.02864
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 10,
+    "disagreement_late": 0.03166
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 11,
+    "disagreement_late": 0.05192
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 12,
+    "disagreement_late": 0.13016
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 13,
+    "disagreement_late": 0.02188
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 14,
+    "disagreement_late": 0.03518
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 15,
+    "disagreement_late": 0.15213
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 16,
+    "disagreement_late": 0.01694
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 17,
+    "disagreement_late": 0.03445
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 18,
+    "disagreement_late": 0.01414
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 19,
+    "disagreement_late": 0.01102
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 20,
+    "disagreement_late": 0.04376
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 21,
+    "disagreement_late": 0.04721
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 22,
+    "disagreement_late": 0.06828
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 23,
+    "disagreement_late": 0.01505
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 24,
+    "disagreement_late": 0.00907
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 25,
+    "disagreement_late": 0.03997
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 26,
+    "disagreement_late": 0.01186
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 27,
+    "disagreement_late": 0.02812
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 28,
+    "disagreement_late": 0.13121
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.01,
+    "seed": 29,
+    "disagreement_late": 0.02315
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 20,
+    "disagreement_late": 0.11768
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 21,
+    "disagreement_late": 0.02288
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 22,
+    "disagreement_late": 0.03252
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 23,
+    "disagreement_late": 0.05399
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 24,
+    "disagreement_late": 0.00472
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 25,
+    "disagreement_late": 0.00939
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 26,
+    "disagreement_late": 0.0184
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 27,
+    "disagreement_late": 0.01702
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 28,
+    "disagreement_late": 0.07003
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.01,
+    "seed": 29,
+    "disagreement_late": 0.01454
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 0,
+    "disagreement_late": 0.02661
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 1,
+    "disagreement_late": 0.02926
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 2,
+    "disagreement_late": 0.0172
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 3,
+    "disagreement_late": 0.02718
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 4,
+    "disagreement_late": 0.0301
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 5,
+    "disagreement_late": 0.01723
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 6,
+    "disagreement_late": 0.01355
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 7,
+    "disagreement_late": 0.00717
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 8,
+    "disagreement_late": 0.01705
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 9,
+    "disagreement_late": 0.03381
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 0,
+    "disagreement_late": 0.02544
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 1,
+    "disagreement_late": 0.05543
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 2,
+    "disagreement_late": 0.00654
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 3,
+    "disagreement_late": 0.02464
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 4,
+    "disagreement_late": 0.00405
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 5,
+    "disagreement_late": 0.01008
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 6,
+    "disagreement_late": 0.04978
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 7,
+    "disagreement_late": 0.00382
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 8,
+    "disagreement_late": 0.05609
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 9,
+    "disagreement_late": 0.00934
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 10,
+    "disagreement_late": 0.0044
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 11,
+    "disagreement_late": 0.02167
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 12,
+    "disagreement_late": 0.01261
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 13,
+    "disagreement_late": 0.00513
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 14,
+    "disagreement_late": 0.02999
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 15,
+    "disagreement_late": 0.02651
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 16,
+    "disagreement_late": 0.00789
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 17,
+    "disagreement_late": 0.03101
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 18,
+    "disagreement_late": 0.0235
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 19,
+    "disagreement_late": 0.06517
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 10,
+    "disagreement_late": 0.04903
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 11,
+    "disagreement_late": 0.00813
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 12,
+    "disagreement_late": 0.04168
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 13,
+    "disagreement_late": 0.01209
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 14,
+    "disagreement_late": 0.01406
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 15,
+    "disagreement_late": 0.00898
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 16,
+    "disagreement_late": 0.00129
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 17,
+    "disagreement_late": 0.01649
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 18,
+    "disagreement_late": 0.02302
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 19,
+    "disagreement_late": 0.01539
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 20,
+    "disagreement_late": 0.0066
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 21,
+    "disagreement_late": 0.00626
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 22,
+    "disagreement_late": 0.00565
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 23,
+    "disagreement_late": 0.00634
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 24,
+    "disagreement_late": 0.04829
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 25,
+    "disagreement_late": 0.01164
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 26,
+    "disagreement_late": 0.03583
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 27,
+    "disagreement_late": 0.01522
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 28,
+    "disagreement_late": 0.00586
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 0.1,
+    "seed": 29,
+    "disagreement_late": 0.0341
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 20,
+    "disagreement_late": 0.00774
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 21,
+    "disagreement_late": 0.00448
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 22,
+    "disagreement_late": 0.00929
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 23,
+    "disagreement_late": 0.02064
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 24,
+    "disagreement_late": 0.02703
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 25,
+    "disagreement_late": 0.0381
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 26,
+    "disagreement_late": 0.02079
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 27,
+    "disagreement_late": 0.03047
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 28,
+    "disagreement_late": 0.05718
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 0.1,
+    "seed": 29,
+    "disagreement_late": 0.00455
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 1.0,
+    "seed": 0,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 1.0,
+    "seed": 1,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 1.0,
+    "seed": 2,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 1.0,
+    "seed": 3,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 1.0,
+    "seed": 4,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 1.0,
+    "seed": 5,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 1.0,
+    "seed": 6,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 1.0,
+    "seed": 7,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 1.0,
+    "seed": 8,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 1.0,
+    "seed": 9,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 1.0,
+    "seed": 0,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 1.0,
+    "seed": 1,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 1.0,
+    "seed": 2,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 1.0,
+    "seed": 3,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 1.0,
+    "seed": 4,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 1.0,
+    "seed": 5,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 1.0,
+    "seed": 6,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 1.0,
+    "seed": 7,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 1.0,
+    "seed": 8,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 1.0,
+    "seed": 9,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 1.0,
+    "seed": 10,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 1.0,
+    "seed": 11,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 1.0,
+    "seed": 12,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 1.0,
+    "seed": 13,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 1.0,
+    "seed": 14,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 1.0,
+    "seed": 15,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 1.0,
+    "seed": 16,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 1.0,
+    "seed": 17,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 1.0,
+    "seed": 18,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 1.0,
+    "seed": 19,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 1.0,
+    "seed": 10,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 1.0,
+    "seed": 11,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 1.0,
+    "seed": 12,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 1.0,
+    "seed": 13,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 1.0,
+    "seed": 14,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 1.0,
+    "seed": 15,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 1.0,
+    "seed": 16,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 1.0,
+    "seed": 17,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 1.0,
+    "seed": 18,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 1.0,
+    "seed": 19,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 1.0,
+    "seed": 20,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 1.0,
+    "seed": 21,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 1.0,
+    "seed": 22,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 1.0,
+    "seed": 23,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 1.0,
+    "seed": 24,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 1.0,
+    "seed": 25,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 1.0,
+    "seed": 26,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 1.0,
+    "seed": 27,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 1.0,
+    "seed": 28,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "ddqn",
+    "tau": 1.0,
+    "seed": 29,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 1.0,
+    "seed": 20,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 1.0,
+    "seed": 21,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 1.0,
+    "seed": 22,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 1.0,
+    "seed": 23,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 1.0,
+    "seed": 24,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 1.0,
+    "seed": 25,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 1.0,
+    "seed": 26,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 1.0,
+    "seed": 27,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 1.0,
+    "seed": 28,
+    "disagreement_late": 0.0
+  },
+  {
+    "env": "Asterix-MinAtar",
+    "arm": "baseline",
+    "tau": 1.0,
+    "seed": 29,
+    "disagreement_late": 0.0
+  }
+]

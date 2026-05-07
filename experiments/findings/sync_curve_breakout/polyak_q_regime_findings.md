@@ -108,12 +108,79 @@ cell.
    r_min  →  sign(Q̄_late_vanilla)  →  direction(Hasselt bias)  →  sign(ATE(stale → Δ_o))
    ─────       ───────────────         ─────────────────           ────────────────
  exogenous     endogenous              algorithmic                  observable
+ [verified]    [verified]              [hypothesised]              [verified]
 ```
 
 The exogenous structural property (env's reward range) determines
-an endogenous trajectory property (Q-regime sign), which
-determines the algorithmic bias direction, which inverts the
-observable ATE sign.
+an endogenous trajectory property (Q-regime sign — verified
+1:1), which **putatively** determines the algorithmic bias
+direction (theoretical, no per-step probe), which inverts the
+observable ATE sign (verified by per-stratum DoWhy +
+interaction-term).
+
+## Open: why exactly does negative Q harm DDQN?
+
+The fully-decomposed algorithmic mechanism is unresolved by
+current data. Two candidate explanations remain on the table:
+
+### Candidate 1: bias-direction asymmetry
+
+In r_min ≥ 0, vanilla's max-bias pushes Q ABOVE truth → policy
+chases inflated values → DDQN's correction unblocks. In r_min < 0,
+vanilla's max-bias pushes Q LESS NEGATIVE than truth (mild
+optimism); DDQN's correction makes Q more negative → kills the
+exploration optimism that helps escape penalty floors.
+
+**Status**: theoretical, plausible, but not directly tested
+(would need per-step decomposition of Q_target at argmax_online
+vs max_Q_target).
+
+### Candidate 2: Q-magnitude vs argmax-rank disagreement
+
+The new disagreement-rate test surfaced a surprising regime
+split:
+
+```
+ρ(τ, argmax_disagreement_late):
+  Acrobot, MountainCar, Asterix:  ≈ −0.8  (strong)
+  Breakout:                        −0.60  (moderate)
+  FourRooms:                       −0.07  (FLAT)
+```
+
+In FourRooms, online and target argmax disagree ~36% of steps
+regardless of τ. The DDQN-vs-vanilla effect can't be "more
+staleness → more disagreement → bigger DDQN bite" — disagreement
+is constant. The active variable must be the *magnitude* of
+Q_target − Q_online at disagreement moments (which scales with
+staleness).
+
+In dense-penalty envs (Acrobot, MountainCar), disagreement IS
+staleness-dependent but the per-step DDQN-vs-vanilla effect
+fails to translate to outcome — because the policy's response to
+correction is governed by penalty-floor dynamics that the
+correction doesn't help navigate.
+
+**Status**: pattern observed, mechanism conjectural.
+
+### What would resolve it
+
+Per-step probes that aren't currently in the trace schema:
+- `Q_target(s, argmax_a Q_online(s, a))` per step (the DDQN
+  bootstrap value, vs `max_a Q_target(s, a)` which is vanilla's).
+- The DIFFERENCE of these two per step is the "DDQN-correction
+  magnitude per step". Decomposing it by Q-regime would give
+  the algorithmic-level proof.
+- Currently we have `online_max_q_per_step`, `target_max_q_per_
+  step`, `online_argmax_per_step`, `target_argmax_per_step` —
+  but not `target_q_at_online_argmax`. Adding this trace column
+  to the substrate is the missing ingredient.
+
+The findings as-stand: the regime split is causally robust at
+the ATE level (rung-2 evidence with refutations); the
+algorithmic-level mechanism is best characterised as "Hasselt's
+bias direction is sign-flipped by Q-regime sign" but the
+intermediate decomposition requires additional substrate
+instrumentation.
 
 ## Reproduction
 
