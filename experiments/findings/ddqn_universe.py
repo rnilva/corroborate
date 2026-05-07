@@ -1269,7 +1269,13 @@ def ddqn_concentrates_argmax__sparsified_acrobot(
     HELD ⟹ reward-shape is sufficient to activate the entropy
     concentration mechanism.
     NO_EFFECT ⟹ Acrobot has additional structural property
-    blocking the mechanism beyond reward shape."""
+    blocking the mechanism beyond reward shape.
+
+    Empirical (reward_shape_intervention corpus, n=30 paired):
+      ΔH = −0.011, g = −0.29, p = 0.11 → NO_EFFECT.
+      Reward-shape conversion is NOT sufficient to activate the
+      mechanism on Acrobot. The FR-specificity of the entropy
+      concentration mechanism isn't reward-shape-driven."""
     diff = paired_g.mean_diff
     p = paired_g.mean_diff_p_value
     if math.isnan(diff) or math.isnan(p):
@@ -1306,7 +1312,21 @@ def ddqn_does_not_concentrate_argmax__densified_fourrooms(
 
     HELD when |paired_g.mean_diff| ≤ null_ceiling AND p > 0.05
     (no significant entropy difference). HELD ⟹ reward-shape
-    is necessary; densifying breaks the mechanism."""
+    is necessary; densifying breaks the mechanism.
+
+    Empirical (reward_shape_intervention corpus, n=30 paired):
+      ΔH = −0.076, g = −0.84, p = 0.0001 → NO_EFFECT.
+      The entropy concentration mechanism PERSISTS under
+      densification (just attenuated from −0.115 native to
+      −0.076 densified). Reward-shape is NOT necessary —
+      densifying FR doesn't break the mechanism, only weakens it.
+
+      Combined with 7g's NO_EFFECT (sparsifying Acrobot doesn't
+      activate it): the FR-specific entropy concentration
+      mechanism is driven by something more structural than
+      reward shape — likely state-space density or initial Q-
+      flatness in regions of the state space FR's small grid
+      revisits frequently."""
     diff = paired_g.mean_diff
     p = paired_g.mean_diff_p_value
     if math.isnan(diff) or math.isnan(p):
