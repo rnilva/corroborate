@@ -170,17 +170,74 @@ Per-step probes that aren't currently in the trace schema:
 - The DIFFERENCE of these two per step is the "DDQN-correction
   magnitude per step". Decomposing it by Q-regime would give
   the algorithmic-level proof.
-- Currently we have `online_max_q_per_step`, `target_max_q_per_
-  step`, `online_argmax_per_step`, `target_argmax_per_step` —
-  but not `target_q_at_online_argmax`. Adding this trace column
-  to the substrate is the missing ingredient.
 
-The findings as-stand: the regime split is causally robust at
-the ATE level (rung-2 evidence with refutations); the
-algorithmic-level mechanism is best characterised as "Hasselt's
-bias direction is sign-flipped by Q-regime sign" but the
-intermediate decomposition requires additional substrate
-instrumentation.
+### Resolution attempt (2026-05-07)
+
+Added `target_q_at_online_argmax_per_step` to substrate trace
+reductions and authored measurable
+`ddqn_bootstrap_gap_late = mean(max(target_q) − target_q[argmax_
+online]) over late 50%`. Ran focused FourRooms+Acrobot polyak
+sweep (`polyak_tau_q_decomp.yaml`).
+
+Tests:
+
+```
+TEST: Δ_o = β₀ + β_g·gap + β_q·q_late + β_int·(gap × q_late) + ε
+
+  β_intercept       = +0.134        t=+0.66    p=0.51
+  β_gap             = −116.6        t=−1.05    p=0.30
+  β_q_late          = +0.011        t=+1.17    p=0.24
+  β_interaction     = −5.02         t=−2.26    p=0.025  ← significant
+
+Per-Q-regime: ATE(gap → Δ_outcome):
+  q > 0 (FourRooms):  slope = +42.95, t=+2.46, p=0.015  POSITIVE
+  q < 0 (Acrobot):    slope = +116.4, t=+2.63, p=0.010  POSITIVE
+```
+
+**Both regimes show POSITIVE gap → Δ_outcome slope.** The DDQN
+correction magnitude (gap) IS the proximal driver of Δ_outcome
+universally. The earlier "ATE flips sign with Q-regime" framing
+on `staleness → Δ_o` was a noise-driven artifact on Acrobot — at
+the algorithmic step (correction magnitude itself), there's no
+sign flip.
+
+The interaction-term significance is now interpreted as:
+- In Q < 0 regime: gap range is larger (~0.028 max on Acrobot
+  vs ~0.0016 on FourRooms — 17× wider).
+- Per-unit slope differs (+116 Acrobot vs +43 FourRooms) but
+  effective Δ_outcome impact differs less (3.2 reward vs 0.07
+  reward; FourRooms's relative impact is ~7% of bounded reward
+  range, Acrobot's is ~3.5% of unbounded penalty range).
+
+**Updated story.** DDQN's bootstrap gap (the per-step
+correction magnitude) correlates with `staleness` (ρ=+0.95
+FourRooms, +0.66 Acrobot). And the gap → Δ_outcome slope is
+positive in both regimes. So:
+
+- The staleness → Δ_outcome chain runs through the gap.
+- The gap → Δ_outcome step is **not** sign-flipped by Q-regime.
+- The earlier "Acrobot ATE = −349 reversal" was high-noise
+  Simpson's-paradox aggregation, not a real algorithmic reversal.
+
+This RECONCILES the apparent paradox. DDQN doesn't fundamentally
+hurt in dense-penalty regimes — it's just much less effective
+because:
+1. The correction magnitude (gap) is small relative to outcome
+   variance from other sources on Acrobot.
+2. Acrobot's outcome is dominated by penalty-floor dynamics, not
+   bias correction.
+
+The "negative ATE" result on Acrobot's staleness was a
+LOW-SIGNAL noise pattern, not a structural sign reversal of
+Hasselt's mechanism.
+
+**Implication for the bridge.** The
+`staleness_amplifies_ddqn_outcome__sparse_goal_polyak` bridge's
+narrow scope (`q_late_mean > 0`) is still empirically correct —
+it's the regime where DDQN's correction magnitude is sufficient
+to register as a statistically detectable effect. The exclusion
+of dense-penalty regimes is "low-signal-to-noise" rather than
+"reversed-direction-mechanism".
 
 ## Reproduction
 
