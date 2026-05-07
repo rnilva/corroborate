@@ -2482,6 +2482,127 @@ def staleness_does_not_amplify_ddqn_outcome__survival_polyak(
 
 
 # =====================================================================
+# CLAIM 17 — Chain-amplifier link is active in the bounded-Q regime.
+#
+# Substantive claim: when Q stays within the L∞ Bellman bound
+# (per-cell q_div < 1) on a bootstrap-using non-bsuite env with
+# active mech premise (jdg < 0.05), the per-burst paired link
+# r(Δ_jens, Δ_outcome) is significantly negative (link active) on
+# a majority of bursts within each env (plc ≥ floor), and across
+# the panel of in-scope envs.
+#
+# Bounded-Q is achieved by EITHER:
+#   - Env structure (FourRooms, MetaMaze, Acrobot inherently
+#     stay within bound throughout training); OR
+#   - Stabilizing intervention (large sync_period brings MinAtar
+#     Asterix/Breakout/SpaceInvaders/Freeway into the bounded
+#     regime — sync sweep findings_sync_curve_breakout).
+# This bridge corroborates the chain-amplifier theory across env
+# families, treating Q-stability as the load-bearing scope axis
+# rather than an env-name list.
+#
+# Empirical (per-(env, sync) panel restricted to scope):
+#   Acrobot sync=100:    plc=0.50
+#   Breakout sync=10k:   plc=0.85
+#   Freeway sync=10k:    plc=0.55
+#   FourRooms sync=100:  plc=0.85
+#   MetaMaze sync=100:   plc=1.00
+#   SpaceInvaders 3k:    plc=0.75 (n=30)
+#   ... (full panel via scripts)
+# Most in-scope (env, sync) cells show plc ≥ 0.50.
+# =====================================================================
+
+
+@claim_bridge(
+    source=INTERVENTION,
+    target=_MC_RETURN_PER_BURST_MEAN,
+    direction=Direction.INVERSE,
+    tier=Tier.ASSOCIATIONAL,
+    pair_by=('seed', 'gamma', 'total_steps', 'sync_period'),
+    scope=(
+        # Bounded Q at the per-cell level — q_div < 1 = bias gap
+        # within the L∞ Bellman fixed-point bound. This is the
+        # docstring-correct "bounded Q" semantic (q_div < 100 was
+        # 100x-over-bound, admitted Q-explosion regimes).
+        finite('q_divergence_score')
+        & finite_lt('q_divergence_score', 1.0)
+        # Bootstrap-using envs: the chain-amplifier theory needs
+        # updates that bootstrap. Excludes bandit-structured envs
+        # (MNISTBandit bf=0).
+        & finite_gt('bootstrap_fraction', 0.5)
+        # Mech premise active: vanilla Q has positive bias to
+        # correct (jdg ≈ 0). Excludes silent-inversion regimes
+        # (sync=10k MinAtar where DDQN flips bias direction
+        # cf. findings_sync_curve_goldilocks, findings_inverted_
+        # mediator) and CartPole-Q-amplification (jdg > 0.2).
+        & finite('jensen_dormancy_gap')
+        & finite_lt('jensen_dormancy_gap', 0.05)
+        # Standard-config filters: this bridge corroborates
+        # the chain-amplifier link in the canonical DDQN-vs-
+        # vanilla contrast. Cells from n-step / action-dim /
+        # reward-scale / polyak-τ sweeps are different
+        # interventions tested in their own bridges.
+        & ((pl.col('n_step') == 1) | pl.col('n_step').is_null())
+        & pl.col('action_duplicate_k').is_null()
+        & (pl.col('reward_scale').is_null() | (pl.col('reward_scale') == 1.0))
+        & pl.col('target_sync.tau').is_null()
+    ),
+    predicted_direction='a_lt_b',
+)
+def chain_amplifier_link_active_in_bounded_q(
+    paired_link_per_burst: PerBurstLinkResult,
+    *,
+    target: Measurable[
+        Mapping[str, object], npt.NDArray[np.floating],
+    ] = _MC_RETURN_PER_BURST_MEAN,
+    predictor: Measurable[
+        Mapping[str, object], npt.NDArray[np.floating],
+    ] = _JENSEN_BIAS_PER_BURST_MEAN,
+    dedupe_strategy: str = 'mean',
+    consistency_floor: float = 0.5,
+    env_majority_fraction: float = 0.6,
+    min_envs: int = 3,
+) -> Verdict:
+    """Cross-env corroboration of the chain-amplifier link in the
+    bounded-Q regime. HELD when ≥ `env_majority_fraction` of in-
+    scope envs have phase_link_consistency ≥ `consistency_floor`.
+
+    The bridge encodes "where the theory's preconditions hold,
+    the link is active". Distinct from the deleted CLAIM 16 (bf
+    as cross-env predictor, structurally untestable on this
+    corpus): here the predictor IS the per-burst link itself,
+    aggregated across in-scope envs into a panel verdict.
+
+    Bounded-Q regime captures TWO routes to Q-stability:
+      - Inherent (FourRooms, MetaMaze, Acrobot)
+      - Sync-stabilized (Breakout / SI / Asterix / Freeway at
+        large sync_period — `findings_sync_curve_breakout`)
+
+    The mech-active filter (jdg < 0.05) drops silent-inversion
+    cells (sync=10k MinAtar where DDQN inverts bias —
+    `findings_inverted_mediator`), keeping only the regime where
+    Hasselt's overestimation theorem operates.
+    """
+    del target, predictor, dedupe_strategy
+    envs = sorted(set(s.env_name for s in paired_link_per_burst.strata))
+    if len(envs) < min_envs:
+        return Verdict.POWER_INSUFFICIENT
+    plcs = [
+        phase_link_consistency(paired_link_per_burst, env_name=e)
+        for e in envs
+    ]
+    finite_plcs = [p for p in plcs if not math.isnan(p)]
+    if len(finite_plcs) < min_envs:
+        return Verdict.POWER_INSUFFICIENT
+    fraction_active = sum(
+        1 for p in finite_plcs if p >= consistency_floor
+    ) / len(finite_plcs)
+    if fraction_active >= env_majority_fraction:
+        return Verdict.HELD
+    return Verdict.NO_EFFECT
+
+
+# =====================================================================
 # CLAIM 16 — DELETED.
 #
 # `bootstrap_fraction_drives_g_link__non_q_explosion` was the
@@ -2520,6 +2641,8 @@ DDQN_UNIVERSE_BRIDGES = (
     adaptive_dqn_fails_to_avoid_attenuation__spaceinvaders_1m,
     # CLAIM 4 — independent link-side scope (residual after dormancy).
     bootstrap_fraction_drives_g_link__net_of_dormancy,
+    # CLAIM 17 — chain-amplifier link active in bounded-Q regime.
+    chain_amplifier_link_active_in_bounded_q,
     # CLAIM 5 — effective-horizon scope (Pearl rung-2 do(γ) sweep).
     ddqn_benefit_scales_with_effective_horizon__fourrooms,
     ddqn_benefit_scales_with_effective_horizon__metamaze_high_gamma,
@@ -2646,6 +2769,7 @@ __all__ = [
     'link_r_predictable_from_polarity__soft_tautology',
     'staleness_amplifies_ddqn_outcome__sparse_goal_polyak',
     'staleness_does_not_amplify_ddqn_outcome__survival_polyak',
+    'chain_amplifier_link_active_in_bounded_q',
 ]
 
 
