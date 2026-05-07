@@ -191,7 +191,7 @@ Trade-offs:
 |---|---|---|
 | **C1 Determinism** | mostly (cell ordering by `id`; FP-reduction-order isn't pinned but rarely bites) | document, add regression test on a known-determinable corpus |
 | **C2 Atomicity** | broken — `merged.write_parquet(cache_path)` direct write | tmp+rename in cache write + manifest write |
-| **C3 Incrementality** | partial — `pending`-empty case still materializes `to_dicts()` | early-out when `pending` is empty (5 LoC) |
+| **C3 Incrementality** | YES — early-out at `measurable.py:611-619` when `pending` is empty (no per-cell `to_dicts()`) | — |
 | **C4 Orphan eviction** | broken — orphans persist forever | extend `_invalidate_drifted` to drop unregistered cache columns |
 | **C5 Observability** | minimal — one line per corpus on restore | structured per-corpus progress + final summary |
 
