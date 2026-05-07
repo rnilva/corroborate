@@ -1,0 +1,31 @@
+{
+  "cross_env_filters": [
+    {
+      "filter": "all_13_envs",
+      "n": 13,
+      "spearman_rho": -0.407,
+      "pearson_r": -0.289,
+      "p": 0.17
+    },
+    {
+      "filter": "excl_bandit_tail_3_envs",
+      "n": 10,
+      "spearman_rho": -0.079,
+      "pearson_r": -0.276,
+      "p": 0.83
+    },
+    {
+      "filter": "bf_ge_0.95",
+      "n": 11,
+      "spearman_rho": -0.255,
+      "pearson_r": -0.306,
+      "p": 0.45
+    }
+  ],
+  "bandit_tail_envs": [
+    "MemoryChain-bsuite",
+    "DeepSea-bsuite",
+    "GaussianBandit-misc"
+  ],
+  "reading": "cross-env negative \u03c1 was bandit-tail outlier leverage; removing them gives null. The within-env positive stale \u2192 DDQN benefit (polyak rung-2) is the real causal effect. No sign inversion."
+}
