@@ -73,6 +73,14 @@ def ddqn_reduces_jensen_gap(
 the three verdicts MUST be authored independently. Never collapse
 "link null" with "mechanism dormant" — different verdicts.
 
+**File-level exclusions go on `MODULE_SCOPE`** at the hypothesis
+module (e.g., `MODULE_SCOPE = ~pl.col('env_name').str.ends_with(
+'-bsuite')`); per-bridge `scope=` is for claim-specific filters.
+The runner reads `MODULE_SCOPE` via `getattr(h, ..., None)` and
+AND-combines into every bridge's scope at evaluation time. Use
+when the entire hypothesis universe excludes a class of cells
+(diagnostic envs, abnormal config corpora, etc.).
+
 Run:
 ```bash
 uv run scripts/run_hypothesis.py <module_path> --data <corpus_dir>
@@ -108,6 +116,15 @@ Each significant coefficient is a numeric scope claim:
 "mechanism activates where covariate X exceeds threshold T."
 Author the threshold as a `Bridge.scope` for the next
 sweep.
+
+**Per-env vs per-cell weighting matters for cross-env claims.**
+`meta_regression_paired_g` (one paired-g per env, equal
+weighting) is the right default. Per-cell forms
+(`meta_regression_per_burst` cell-weighted) silently amplify
+the env with the most cells (FourRooms = 27% of cells in the
+DDQN universe corpus) — apparent cross-env signals can be
+single-env-domination artifacts. Cf. `findings_per_env_vs_per_
+cell_weighting`.
 
 ---
 
@@ -277,6 +294,18 @@ every fold — that's the robustness signal. Sign consistency below
 ~0.7 means the cleavage axis depends on which strata are in the
 training set; the scope claim is fragile.
 
+### 4c. Drop-one-env / drop-one-stratum sensitivity
+
+Cross-env regressions can be single-env-leveraged: one outlier
+env (typically a bandit / tail env structurally different from
+the rest) anchors the slope. Drop one env at a time and re-fit;
+if the coefficient flips sign or loses significance after
+removing a single env, the cross-env claim is leverage-driven,
+not population-level. Apply after k-fold CV — k-fold randomly
+splits seeds, drop-one-env tests structural sensitivity to the
+strata themselves. Cf. `findings_staleness_causal_inference`,
+deletion of CLAIM 16's bf bridge.
+
 ---
 
 ## 5. Per-burst probes when scalar mediator returns null
@@ -304,6 +333,17 @@ in the predicted direction.
 Per memory `findings_fourrooms_time_series`, scalar mech-link
 slopes silently combine causally opposite phases — per-burst
 unmasks them.
+
+**Per-burst plc as Q-stability scope predicate.** When phase
+transitions exist (Q-explosion-prone envs: MinAtar sync=100,
+high-γ Acrobot, etc.), pooled `q_divergence_score` *cannot*
+capture per-burst Q-stability — it averages bounded-early
+bursts with exploded-late ones, and the cell passes any
+threshold. The "bounded Q regime where Hasselt's theorem
+bites cleanly" is `phase_link_consistency >= floor` per env,
+not `q_div < threshold` per cell. Cf. `findings_q_div_threshold_
+too_loose`. (And note: q_div<100 is "extreme outliers excluded";
+the *bounded* semantic per the docstring is q_div<1.)
 
 ### 5a. Cross-burst lag correlation (causal-precedence diagnostic)
 
@@ -497,18 +537,62 @@ intervening on.
 
 1. Classify cells (`with_cell_class`) → exclude saturated.
 2. Run bridges (`runner.run`) → mech/outcome/link verdicts.
+   File-level exclusions on `MODULE_SCOPE`.
 3. If HELD_WITH_SCOPE_FLAG → meta-regression for scope axis.
+   Per-env weighting (`meta_regression_paired_g`) for cross-env claims.
 3a. Partial-ρ to disambiguate candidate mediators from the canonical one.
 4. PC for moderator candidates (depth-1, then depth-2 robustness).
-5. K-fold CV the meta-regression coefficients for sign stability.
-6. Per-burst probes if scalar verdicts are null.
+5. K-fold CV + drop-one-env sensitivity on the meta-regression.
+6. Per-burst probes if scalar verdicts are null. Use `phase_link_
+   consistency` as the Q-stability scope predicate, not pooled
+   `q_div`.
 6a. Cross-burst lag correlation as a causal-precedence diagnostic.
 7. Tautology audit on cleavage candidates.
 5b. Endogenous-discriminator search via interaction-term + per-stratum DoWhy.
 8. Mediator differential + PC adjacency → next-sweep targets.
+9. Stopping rule: delete the bridge if iterations confirm the
+   cross-env variation doesn't exist (predictor too constant,
+   single-env leverage, or different variable surfacing in
+   per-burst panel).
 
-Steps 1-2 are required; 3-8 are conditional on the verdicts /
+Steps 1-2 are required; 3-9 are conditional on the verdicts /
 the question being asked.
+
+---
+
+## Stopping rules: when to delete the bridge
+
+`POWER_INSUFFICIENT` is a verdict, not a fix-the-scope prompt.
+When a bridge returns POWER_INSUFFICIENT across multiple
+iterations (different scope, different analysis primitive,
+different threshold), the cross-env / cross-corpus variation
+the claim presupposes may genuinely not exist on this corpus.
+The framework refuses to smuggle "no signal" past the reader
+as HELD or NO_EFFECT; the iteration should end with bridge
+deletion (the claim is structurally untestable here) or a
+substantively different claim (different predictor, different
+unit of analysis, different scope). Iterating the bridge
+indefinitely against the verdict signal is the failure mode
+the framework is designed to prevent.
+
+Concrete tells that the claim is dead, not the scope:
+
+- The predictor doesn't vary cross-env in the corpus (e.g.,
+  `bootstrap_fraction` cluster at [0.98, 1.00] across true
+  chain MDPs after bandit-tail exclusion).
+- After per-env weighting + drop-one-env sensitivity, the
+  signal vanishes.
+- The phase-aware view (per-burst plc) reveals a different
+  variable as the actual cross-env predictor (e.g., Q-stability
+  rather than the original predictor).
+
+When two of those tells fire, the bridge should be deleted and
+the post-mortem documented as a memory note. The historical
+companion bridge (corpus-pinned baseline, if any) can stay as a
+record of the artifact-shaped finding.
+
+Cf. CLAIM 16 deletion (`findings_residual_unexplained` final
+update + `findings_q_div_threshold_too_loose`).
 
 ---
 
