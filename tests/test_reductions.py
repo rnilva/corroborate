@@ -227,41 +227,10 @@ def test_peak_centered_window_rejects_bad_half_width() -> None:
 # ============ reduce_axis old-protocol shim ============
 
 
-def test_reduce_axis_handles_zero_dim_legacy_input() -> None:
-    """**Old-protocol shim**: legacy corpora stored what's now an
-    N-dim array (e.g. `mc_return` shape `(n_bursts, n_episodes)`)
-    as a 0-d numpy scalar. `reduce_axis(of, axis=-1)` must
-    promote 0-d to 1-d so the reduction produces a scalar
-    rather than raising AxisError.
-
-    Probe: a measurable returning `np.float64(2.5)` (0-d) under
-    `reduce_axis(axis=-1, op='mean')` should yield 2.5 (the
-    reduction of a single-element array). Pre-fix:
-    `axis -1 is out of bounds for array of dimension 0`.
-    """
-    # `np.asarray(2.5)` produces a 0-d numpy array — equivalent
-    # in shape to `np.float64(2.5)` for our purposes (size 1,
-    # ndim 0) but typed as NDArray, satisfying `Measurable[R,
-    # NDArray[floating]]` without a cast.
-    legacy_scalar = Measurable[
-        Mapping[str, object], npt.NDArray[np.floating],
-    ](
-        fn=lambda r: np.asarray(2.5),
-        name='legacy_scalar',
-        reads=(),
-    )
-    reduced = reduce_axis(legacy_scalar, axis=-1, op='mean')
-    out = reduced({})
-    assert float(out) == pytest.approx(2.5), (
-        f'old-protocol shim failed: 0-d → axis=-1 mean should '
-        f'yield the scalar; got {out!r}'
-    )
-
-
-def test_reduce_axis_preserves_modern_2d_protocol() -> None:
-    """**Negative control**: modern (n_bursts, n_episodes) input
-    reduces normally to a (n_bursts,) array. The shim must not
-    accidentally affect non-degenerate inputs."""
+def test_reduce_axis_modern_2d_protocol() -> None:
+    """Standard (n_bursts, n_episodes) → (n_bursts,) reduction
+    along the inner axis. The canonical chain shape — bridges
+    expect this."""
     modern_2d = Measurable[
         Mapping[str, object], npt.NDArray[np.floating],
     ](
@@ -273,3 +242,27 @@ def test_reduce_axis_preserves_modern_2d_protocol() -> None:
     out = reduced({})
     assert out.shape == (2,)
     assert np.allclose(out, [2.0, 3.0])
+
+
+def test_reduce_axis_zero_dim_legacy_raises_axiserror() -> None:
+    """**Documented behavior**: 0-d input (legacy "scalar
+    mc_return" protocol) raises `numpy.exceptions.AxisError`.
+    `compute_missing_columns`'s per-cell `except (KeyError,
+    TypeError, ValueError, ZeroDivisionError)` catches AxisError
+    via the ValueError branch (`AxisError extends ValueError`)
+    and stores None for that cell. The "Old-protocol shim"
+    attempted earlier is reverted because input shapes across
+    affected corpora are heterogeneous (0-d, 1-d, 2-d, 3-d) and
+    a uniform promotion broke the downstream `mean_window` chain.
+    Cells with non-2-d `mc_return` consistently null-store —
+    honest, even if it costs n_pairs."""
+    legacy_scalar = Measurable[
+        Mapping[str, object], npt.NDArray[np.floating],
+    ](
+        fn=lambda r: np.asarray(2.5),
+        name='legacy_scalar',
+        reads=(),
+    )
+    reduced = reduce_axis(legacy_scalar, axis=-1, op='mean')
+    with pytest.raises(np.exceptions.AxisError):
+        _ = reduced({})
