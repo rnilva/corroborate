@@ -58,7 +58,7 @@ from corroborate.bridge.bridge import (
     Direction, Tier, claim_bridge,
 )
 from corroborate.bridge.predicates import (
-    finite_lt, partition_aggregate,
+    finite_ge, finite_lt, partition_aggregate,
 )
 from corroborate.core.intervention import ArmRole, DoEffect, Intervention
 from corroborate.corpus.schema import StratumG
@@ -440,6 +440,84 @@ def jensen_premise_active__discounting_chain(
         verdict_distribution_per_env, 'DiscountingChain-bsuite',
         expected='held',
     )
+
+
+# ============ do(γ) on DiscountingChain (γ-shrinks-bias regime) ====
+#
+# Pearl-rung-2 do(γ) probe specifically on DC. Moved here from
+# ddqn_universe.py because DC is a bsuite diagnostic chain
+# (bandit-by-step-0, no real chain decision branching) — it lives
+# outside the cross-env DDQN universe, but the env-specific
+# γ-shrinkage finding is still authored as a bridge.
+#
+# Reference verdict:
+#   γ=0.99 cohort (eff_h≈50): g_link=+0.41 (p=.03), g_mech=−1.03
+#   (p<.0001) — DDQN's mechanism HELDS strongly AND benefits
+#   outcome at high γ.
+#
+# γ shrinks bias itself (Lan et al. 2022; Amit et al. 2020): low γ
+# truncates the chain at the per-step level so the bias has no
+# opportunity to compound. Distinct from FourRooms's chain-depth-
+# amplifier signature where the mechanism stays strong but the
+# link weakens with γ.
+
+
+@claim_bridge(
+    # γ≥0.985 (i.e. γ=0.99) cohort selected via HP scope; the
+    # structural mechanism contrast stays the file-level DDQN-vs-
+    # vanilla swap.
+    source=INTERVENTION,
+    target='eval_best_burst_mean',
+    direction=Direction.DIRECT,
+    tier=Tier.INTERVENTIONAL,
+    # `effective_horizon >= 50` is the endogenous selector — within
+    # the `gamma_sweep_more` corpus on DiscountingChain (γ ∈
+    # {0.90, 0.95, 0.99} with bf ≈ 0.99 → eff_h ≈ {9, 17, 50})
+    # it selects the γ=0.99 cohort at the boundary. eff_h is
+    # `1/(1−γ·bf)`; threshold ≥ 50 captures γ=0.99 only.
+    scope=(
+        (pl.col('env_name') == 'DiscountingChain-bsuite')
+        & (pl.col('corpus') == 'gamma_sweep_more')
+        & finite_ge('effective_horizon', 50.0)
+    ),
+)
+def ddqn_benefit_scales_with_gamma__discountingchain(
+    paired_g: PairedGResult,
+) -> Verdict:
+    """Pearl-rung-2 do(γ) bridge on DiscountingChain. Filters
+    gamma_sweep_more's DiscountingChain cells to γ=0.99 only and
+    asserts DDQN's benefit is positive there. The companion γ<0.99
+    cells show null effect.
+
+    Empirical (n=30 per γ on DiscountingChain):
+      γ=0.99: g_link=+0.41 (p=.03), g_mech=−1.03 (p<.0001)
+      γ=0.95: g_link=0,  g_mech=−0.19 (p=.30)
+      γ=0.90: g_link=0,  g_mech=−0.08 (p=.67)
+
+    Different from FourRooms: BOTH the mechanism AND the link
+    weaken with γ here. Consistent with the published
+    "γ shrinks bias itself" story (Lan et al. 2022; Amit et al.
+    2020): low γ truncates the chain at the *per-step* level so
+    the bias has no opportunity to compound, and DDQN's
+    correction has nothing to bite on. FourRooms's pattern is
+    different (mechanism stays strong, link weakens) — the
+    chain-depth-as-amplifier reading.
+
+    HELD when g ≥ 0.30 AND helped_fraction ≥ 0.20 on the
+    high-γ subset. helped threshold is lower than other bridges
+    because DC is sparse-reward bimodal: many seeds score 0
+    (never find goal), so helped_fraction undershoots even when
+    the mean effect is significant."""
+    if paired_g.n_pairs < 20:
+        return Verdict.POWER_INSUFFICIENT
+    if math.isnan(paired_g.helped_fraction):
+        return Verdict.POWER_INSUFFICIENT
+    if (
+        paired_g.helped_fraction >= 0.20
+        and paired_g.g >= 0.30
+    ):
+        return Verdict.HELD
+    return Verdict.NO_EFFECT
 
 
 # ============ Per-burst panel claims (revisions 9, 12) ============
@@ -1252,6 +1330,16 @@ ACTION_DIM_BRIDGES = (
 (`experiments/data/action_dim_sweep/runs.parquet`)."""
 
 
+DC_GAMMA_BRIDGES = (
+    ddqn_benefit_scales_with_gamma__discountingchain,
+)
+"""Bridges asserted on the gamma_sweep_more corpus restricted to
+DiscountingChain. Moved from `ddqn_universe.py` because DC is a
+bsuite diagnostic chain (excluded by ddqn_universe's
+MODULE_SCOPE) — the do(γ) finding is env-specific, not a cross-
+env scope claim."""
+
+
 DDQN_200K_BRIDGES = (
     ddqn_reduces_jensen_gap__converged_subset,
     ddqn_link_to_outcome_null__converged_subset,
@@ -1879,6 +1967,7 @@ decomposition. Run against a per-(env, burst)-panel-able corpus
 # call sites that route specific corpora to specific subsets.
 BRIDGES = (
     *ACTION_DIM_BRIDGES,
+    *DC_GAMMA_BRIDGES,
     *DDQN_200K_BRIDGES,
     *NSTEP_INTERVENTION_BRIDGES,
     *NSTEP_FACTORIAL_BRIDGES,
@@ -1893,9 +1982,11 @@ __all__ = [
     'ACTION_DIM_BRIDGES',
     'BRIDGES',
     'CHAIN_DECOMPOSITION_BRIDGES',
+    'DC_GAMMA_BRIDGES',
     'DDQN_200K_BRIDGES',
     'EXPECTILE_PER_BURST_BRIDGES',
     'EXPECTILE_STRATEGY_2_BRIDGES',
+    'ddqn_benefit_scales_with_gamma__discountingchain',
     'ddqn_link_to_outcome_null__converged_subset',
     'ddqn_outcome_stable_across_bursts__fourrooms',
     'ddqn_outcome_zero_across_bursts__catch',

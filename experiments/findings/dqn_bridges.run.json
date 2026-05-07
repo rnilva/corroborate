@@ -3,6 +3,7 @@
     {
       "analysis_results": {
         "paired_g": {
+          "assumption_violations": [],
           "baseline_arm": "baseline",
           "g": -0.595953,
           "helped_fraction": 0.3,
@@ -21,11 +22,12 @@
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
         }
       },
+      "assumption_violations": [],
       "blocked_by": null,
       "bridge_name": "ddqn_reduces_jensen_gap__acrobot",
       "direction": "inverse",
       "n_cells_in_scope": 120,
-      "n_cells_pre_scope": 12451,
+      "n_cells_pre_scope": 15110,
       "pair_by": [
         "seed"
       ],
@@ -48,6 +50,7 @@
     {
       "analysis_results": {
         "paired_g": {
+          "assumption_violations": [],
           "baseline_arm": "baseline",
           "g": -4.58383,
           "helped_fraction": 0.0,
@@ -66,11 +69,12 @@
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
         }
       },
+      "assumption_violations": [],
       "blocked_by": null,
       "bridge_name": "ddqn_reduces_jensen_gap__catch",
       "direction": "inverse",
       "n_cells_in_scope": 300,
-      "n_cells_pre_scope": 12451,
+      "n_cells_pre_scope": 15110,
       "pair_by": [
         "seed"
       ],
@@ -93,6 +97,7 @@
     {
       "analysis_results": {
         "paired_g": {
+          "assumption_violations": [],
           "baseline_arm": "baseline",
           "g": -0.909793,
           "helped_fraction": 0.183333,
@@ -111,11 +116,12 @@
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
         }
       },
+      "assumption_violations": [],
       "blocked_by": null,
       "bridge_name": "ddqn_reduces_jensen_gap__discounting_chain",
       "direction": "inverse",
       "n_cells_in_scope": 240,
-      "n_cells_pre_scope": 12451,
+      "n_cells_pre_scope": 15110,
       "pair_by": [
         "seed"
       ],
@@ -138,6 +144,10 @@
     {
       "analysis_results": {
         "paired_g": {
+          "assumption_violations": [
+            "skew_bias_likely (skew=+2.81, predicted paired_g inflation ~17% at n=60)",
+            "heavy_tail_se_anti_conservative (excess_kurtosis=16.69, framework_se will under-cover by ~10-25% at this kurtosis)"
+          ],
           "baseline_arm": "baseline",
           "g": 0.0475551,
           "helped_fraction": 0.383333,
@@ -156,11 +166,15 @@
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
         }
       },
+      "assumption_violations": [
+        "paired_g: skew_bias_likely (skew=+2.81, predicted paired_g inflation ~17% at n=60)",
+        "paired_g: heavy_tail_se_anti_conservative (excess_kurtosis=16.69, framework_se will under-cover by ~10-25% at this kurtosis)"
+      ],
       "blocked_by": null,
       "bridge_name": "ddqn_reduces_jensen_gap__cartpole",
       "direction": "inverse",
       "n_cells_in_scope": 225,
-      "n_cells_pre_scope": 12451,
+      "n_cells_pre_scope": 15110,
       "pair_by": [
         "seed"
       ],
@@ -186,32 +200,33 @@
           "cleavage_axes": [],
           "coefficients": [
             {
-              "ci_hi": 0.504681,
-              "ci_lo": -1.95559,
-              "coefficient": -0.725456,
+              "ci_hi": 0.497197,
+              "ci_lo": -1.94522,
+              "coefficient": -0.72401,
               "is_significant": false,
               "name": "log_action_dim",
-              "p_value": 0.229209
+              "p_value": 0.226859
             }
           ],
-          "i_squared": 0.936788,
-          "intercept": -0.378697,
-          "intercept_ci_hi": 0.283639,
-          "intercept_ci_lo": -1.04103,
-          "intercept_p_value": 0.243079,
-          "intercept_se": 0.312437,
+          "i_squared": 0.93552,
+          "intercept": -0.372916,
+          "intercept_ci_hi": 0.284335,
+          "intercept_ci_lo": -1.03017,
+          "intercept_p_value": 0.246548,
+          "intercept_se": 0.310038,
           "n_strata": 18,
           "pool": "random",
-          "q_statistic": 253.118,
-          "r_squared": 0.088992,
-          "tau_sq": 0.422794
+          "q_statistic": 248.141,
+          "r_squared": 0.0898534,
+          "tau_sq": 0.412239
         }
       },
+      "assumption_violations": [],
       "blocked_by": null,
       "bridge_name": "log_action_dim_drives_jensen_gap_reduction",
       "direction": "inverse",
-      "n_cells_in_scope": 12451,
-      "n_cells_pre_scope": 12451,
+      "n_cells_in_scope": 15110,
+      "n_cells_pre_scope": 15110,
       "pair_by": [
         "seed"
       ],
@@ -252,11 +267,12 @@
           "per_env": {}
         }
       },
+      "assumption_violations": [],
       "blocked_by": null,
       "bridge_name": "jensen_premise_active__acrobot",
       "direction": "direct",
-      "n_cells_in_scope": 1080,
-      "n_cells_pre_scope": 12451,
+      "n_cells_in_scope": 2010,
+      "n_cells_pre_scope": 15110,
       "pair_by": [
         "seed"
       ],
@@ -285,11 +301,12 @@
           "per_env": {}
         }
       },
+      "assumption_violations": [],
       "blocked_by": null,
       "bridge_name": "jensen_premise_active__cartpole",
       "direction": "direct",
       "n_cells_in_scope": 1070,
-      "n_cells_pre_scope": 12451,
+      "n_cells_pre_scope": 15110,
       "pair_by": [
         "seed"
       ],
@@ -318,11 +335,12 @@
           "per_env": {}
         }
       },
+      "assumption_violations": [],
       "blocked_by": null,
       "bridge_name": "jensen_premise_dormant__catch",
       "direction": "direct",
       "n_cells_in_scope": 690,
-      "n_cells_pre_scope": 12451,
+      "n_cells_pre_scope": 15110,
       "pair_by": [
         "seed"
       ],
@@ -351,11 +369,12 @@
           "per_env": {}
         }
       },
+      "assumption_violations": [],
       "blocked_by": null,
       "bridge_name": "jensen_premise_active__discounting_chain",
       "direction": "direct",
       "n_cells_in_scope": 900,
-      "n_cells_pre_scope": 12451,
+      "n_cells_pre_scope": 15110,
       "pair_by": [
         "seed"
       ],
@@ -380,19 +399,66 @@
     },
     {
       "analysis_results": {
+        "paired_g": {
+          "assumption_violations": [],
+          "baseline_arm": "baseline",
+          "g": 0.412689,
+          "helped_fraction": 0.266667,
+          "mean_diff": 0.0301961,
+          "mean_diff_p_value": 0.0275236,
+          "mean_diff_se": 0.0130103,
+          "measurable": "eval_best_burst_mean",
+          "n_baseline": 30,
+          "n_pairs": 30,
+          "n_treatment": 30,
+          "p_value": 0.0300151,
+          "pair_by": [
+            "seed"
+          ],
+          "se": 0.190189,
+          "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
+        }
+      },
+      "assumption_violations": [],
+      "blocked_by": null,
+      "bridge_name": "ddqn_benefit_scales_with_gamma__discountingchain",
+      "direction": "direct",
+      "n_cells_in_scope": 60,
+      "n_cells_pre_scope": 15110,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {},
+      "predicted_direction": null,
+      "scope_repr": "[([([(col(\"env_name\")) == (\"DiscountingChain-bsuite\")]) & ([(col(\"corpus\")) == (\"gamma_sweep_more\")])]) & ([(col(\"effective_horizon\").is_finite()) & ([(col(\"effective_horizon\")) >= (dyn float: 50)])])]",
+      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "target_name": "eval_best_burst_mean",
+      "tier": "interventional",
+      "verdict": "held",
+      "warnings": [
+        {
+          "gate_name": "no_predicted_direction",
+          "level": "info",
+          "message": "Bridge 'ddqn_benefit_scales_with_gamma__discountingchain' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
+          "passed": false
+        }
+      ]
+    },
+    {
+      "analysis_results": {
         "paired_g_pooled": {
           "baseline_arm": "baseline",
           "measurable": "jensen_gap",
           "n_envs": 6,
           "per_env": [
             {
-              "g": 0.124742,
+              "g": 0.123801,
               "n_pairs": 60,
-              "se": 0.129601,
+              "se": 0.129593,
               "stratum_id": "Acrobot-v1"
             },
             {
-              "g": -0.121781,
+              "g": -0.121837,
               "n_pairs": 30,
               "se": 0.18325,
               "stratum_id": "Breakout-MinAtar"
@@ -423,26 +489,28 @@
             }
           ],
           "pooled": {
-            "I2": 0.959748,
-            "Q": 124.219,
-            "empirical_max_g": 0.124742,
+            "I2": 0.959729,
+            "Q": 124.16,
+            "assumption_violations": [],
+            "empirical_max_g": 0.123801,
             "empirical_min_g": -4.55008,
             "n_cells": 6,
-            "pi_hi": 1.51569,
-            "pi_lo": -3.45726,
-            "pooled_g": -0.970785,
-            "se_pooled": 0.37596,
-            "tau2": 0.794286
+            "pi_hi": 1.51492,
+            "pi_lo": -3.45675,
+            "pooled_g": -0.970916,
+            "se_pooled": 0.375869,
+            "tau2": 0.793875
           },
           "total_steps_filter": 200000,
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
         }
       },
+      "assumption_violations": [],
       "blocked_by": null,
       "bridge_name": "ddqn_reduces_jensen_gap__converged_subset",
       "direction": "inverse",
-      "n_cells_in_scope": 3480,
-      "n_cells_pre_scope": 12451,
+      "n_cells_in_scope": 4770,
+      "n_cells_pre_scope": 15110,
       "pair_by": [
         "seed"
       ],
@@ -472,15 +540,15 @@
           "n_envs": 4,
           "per_env": [
             {
-              "g": 0.15542,
+              "g": 0.207249,
               "n_pairs": 60,
-              "se": 0.129877,
+              "se": 0.130478,
               "stratum_id": "Acrobot-v1"
             },
             {
-              "g": 0.315204,
+              "g": 0.026465,
               "n_pairs": 30,
-              "se": 0.187054,
+              "se": 0.182606,
               "stratum_id": "Breakout-MinAtar"
             },
             {
@@ -509,26 +577,30 @@
             }
           ],
           "pooled": {
-            "I2": 0.544993,
-            "Q": 6.5933,
-            "empirical_max_g": 0.315204,
+            "I2": 0.534943,
+            "Q": 6.45082,
+            "assumption_violations": [
+              "dl_small_g_unreliable_inference (n_cells=4, τ² CV ≈ 79% — point estimate not interpretable; prefer REML when available)"
+            ],
+            "empirical_max_g": 0.304971,
             "empirical_min_g": -0.241634,
             "n_cells": 4,
-            "pi_hi": 0.799042,
-            "pi_lo": -0.50281,
-            "pooled_g": 0.148116,
-            "se_pooled": 0.115178,
-            "tau2": 0.0285691
+            "pi_hi": 0.740302,
+            "pi_lo": -0.533958,
+            "pooled_g": 0.103172,
+            "se_pooled": 0.113405,
+            "tau2": 0.0272199
           },
           "total_steps_filter": 200000,
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
         }
       },
+      "assumption_violations": [],
       "blocked_by": null,
       "bridge_name": "ddqn_link_to_outcome_null__converged_subset",
       "direction": "direct",
-      "n_cells_in_scope": 3480,
-      "n_cells_pre_scope": 12451,
+      "n_cells_in_scope": 4770,
+      "n_cells_pre_scope": 15110,
       "pair_by": [
         "seed"
       ],
@@ -551,15 +623,15 @@
           "n_envs": 5,
           "per_env": [
             {
-              "g": -0.24393,
+              "g": -0.203713,
               "n_pairs": 60,
-              "se": 0.131006,
+              "se": 0.130432,
               "stratum_id": "Acrobot-v1"
             },
             {
-              "g": -0.29836,
+              "g": -0.331229,
               "n_pairs": 30,
-              "se": 0.186593,
+              "se": 0.187515,
               "stratum_id": "Breakout-MinAtar"
             },
             {
@@ -594,26 +666,30 @@
             }
           ],
           "pooled": {
-            "I2": 0.421853,
-            "Q": 6.91865,
+            "I2": 0.427703,
+            "Q": 6.98938,
+            "assumption_violations": [
+              "dl_clip_artifact_possible (τ²=0.0190, n_cells=5; consistent with true τ²=0 inflated by max(0, ·) clip)"
+            ],
             "empirical_max_g": 0.164317,
             "empirical_min_g": -0.369207,
             "n_cells": 5,
-            "pi_hi": 0.28392,
-            "pi_lo": -0.635057,
-            "pooled_g": -0.175569,
-            "se_pooled": 0.0941907,
-            "tau2": 0.0185168
+            "pi_hi": 0.293234,
+            "pi_lo": -0.634628,
+            "pooled_g": -0.170697,
+            "se_pooled": 0.0946753,
+            "tau2": 0.0189575
           },
           "total_steps_filter": 200000,
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
         }
       },
+      "assumption_violations": [],
       "blocked_by": null,
       "bridge_name": "time_to_solve_link_null__pooled",
       "direction": "inverse",
-      "n_cells_in_scope": 12451,
-      "n_cells_pre_scope": 12451,
+      "n_cells_in_scope": 15110,
+      "n_cells_pre_scope": 15110,
       "pair_by": [
         "seed"
       ],
@@ -670,6 +746,7 @@
           "pooled": {
             "I2": null,
             "Q": null,
+            "assumption_violations": [],
             "empirical_max_g": null,
             "empirical_min_g": null,
             "n_cells": 1,
@@ -683,11 +760,12 @@
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
         }
       },
+      "assumption_violations": [],
       "blocked_by": null,
       "bridge_name": "ddqn_solves_faster__spaceinvaders",
       "direction": "inverse",
-      "n_cells_in_scope": 12451,
-      "n_cells_pre_scope": 12451,
+      "n_cells_in_scope": 15110,
+      "n_cells_pre_scope": 15110,
       "pair_by": [
         "seed"
       ],
@@ -731,29 +809,37 @@
     {
       "analysis_results": {
         "paired_g": {
+          "assumption_violations": [
+            "skew_bias_likely (skew=+5.76, predicted paired_g inflation ~30% at n=30)",
+            "heavy_tail_se_anti_conservative (excess_kurtosis=29.96, framework_se will under-cover by ~10-25% at this kurtosis)"
+          ],
           "baseline_arm": "baseline",
-          "g": -3.25593,
-          "helped_fraction": 0.0,
-          "mean_diff": -0.433008,
-          "mean_diff_p_value": 0.0,
-          "mean_diff_se": 0.0236472,
+          "g": 0.0994027,
+          "helped_fraction": 0.0333333,
+          "mean_diff": 0.456124,
+          "mean_diff_p_value": 0.58043,
+          "mean_diff_se": 0.815914,
           "measurable": "jensen_gap",
           "n_baseline": 30,
           "n_pairs": 30,
           "n_treatment": 30,
-          "p_value": 1.2057e-12,
+          "p_value": 0.587053,
           "pair_by": [
             "seed"
           ],
-          "se": 0.458277,
+          "se": 0.183025,
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
         }
       },
+      "assumption_violations": [
+        "paired_g: skew_bias_likely (skew=+5.76, predicted paired_g inflation ~30% at n=30)",
+        "paired_g: heavy_tail_se_anti_conservative (excess_kurtosis=29.96, framework_se will under-cover by ~10-25% at this kurtosis)"
+      ],
       "blocked_by": null,
       "bridge_name": "ddqn_reduces_jensen_gap__fourrooms_n1",
       "direction": "inverse",
-      "n_cells_in_scope": 2591,
-      "n_cells_pre_scope": 12451,
+      "n_cells_in_scope": 3120,
+      "n_cells_pre_scope": 15110,
       "pair_by": [
         "seed"
       ],
@@ -763,7 +849,7 @@
       "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
       "target_name": "jensen_gap",
       "tier": "interventional",
-      "verdict": "held",
+      "verdict": "power_insufficient",
       "warnings": [
         {
           "gate_name": "no_predicted_direction",
@@ -776,6 +862,7 @@
     {
       "analysis_results": {
         "paired_g": {
+          "assumption_violations": [],
           "baseline_arm": "baseline",
           "g": -0.493922,
           "helped_fraction": 0.366667,
@@ -794,11 +881,12 @@
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
         }
       },
+      "assumption_violations": [],
       "blocked_by": null,
       "bridge_name": "ddqn_attenuates_jensen_gap__fourrooms_n3",
       "direction": "inverse",
       "n_cells_in_scope": 120,
-      "n_cells_pre_scope": 12451,
+      "n_cells_pre_scope": 15110,
       "pair_by": [
         "seed"
       ],
@@ -814,29 +902,31 @@
     {
       "analysis_results": {
         "paired_g": {
+          "assumption_violations": [],
           "baseline_arm": "baseline",
-          "g": 3.29263,
+          "g": 2.90139,
           "helped_fraction": 1.0,
-          "mean_diff": 0.125031,
-          "mean_diff_p_value": 0.0,
-          "mean_diff_se": 0.00675205,
+          "mean_diff": 0.0930884,
+          "mean_diff_p_value": 4.44089e-16,
+          "mean_diff_se": 0.00570491,
           "measurable": "eval_best_burst_mean",
           "n_baseline": 30,
           "n_pairs": 30,
           "n_treatment": 30,
-          "p_value": 1.10103e-12,
+          "p_value": 3.33411e-12,
           "pair_by": [
             "seed"
           ],
-          "se": 0.462627,
+          "se": 0.416695,
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
         }
       },
+      "assumption_violations": [],
       "blocked_by": null,
       "bridge_name": "ddqn_helps_outcome__fourrooms_n1",
       "direction": "direct",
-      "n_cells_in_scope": 2591,
-      "n_cells_pre_scope": 12451,
+      "n_cells_in_scope": 3120,
+      "n_cells_pre_scope": 15110,
       "pair_by": [
         "seed"
       ],
@@ -859,6 +949,7 @@
     {
       "analysis_results": {
         "paired_g": {
+          "assumption_violations": [],
           "baseline_arm": "baseline",
           "g": 0.0881949,
           "helped_fraction": 0.566667,
@@ -877,11 +968,12 @@
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
         }
       },
+      "assumption_violations": [],
       "blocked_by": null,
       "bridge_name": "ddqn_outcome_attenuates__fourrooms_n3",
       "direction": "direct",
       "n_cells_in_scope": 120,
-      "n_cells_pre_scope": 12451,
+      "n_cells_pre_scope": 15110,
       "pair_by": [
         "seed"
       ],
@@ -900,32 +992,33 @@
           "cleavage_axes": [],
           "coefficients": [
             {
-              "ci_hi": 0.818431,
-              "ci_lo": -2.94775,
-              "coefficient": -1.06466,
+              "ci_hi": 0.686487,
+              "ci_lo": -2.58341,
+              "coefficient": -0.94846,
               "is_significant": false,
               "name": "log_n_step",
-              "p_value": 0.169801
+              "p_value": 0.162037
             }
           ],
-          "i_squared": 0.907651,
-          "intercept": 1.96677,
-          "intercept_ci_hi": 4.6503,
-          "intercept_ci_lo": -0.716752,
-          "intercept_p_value": 0.101921,
-          "intercept_se": 0.843227,
+          "i_squared": 0.895647,
+          "intercept": 1.77161,
+          "intercept_ci_hi": 4.09654,
+          "intercept_ci_lo": -0.553319,
+          "intercept_p_value": 0.0937447,
+          "intercept_se": 0.730548,
           "n_strata": 5,
           "pool": "random",
-          "q_statistic": 32.4856,
-          "r_squared": 0.519033,
-          "tau_sq": 0.431991
+          "q_statistic": 28.7485,
+          "r_squared": 0.531866,
+          "tau_sq": 0.368041
         }
       },
+      "assumption_violations": [],
       "blocked_by": null,
       "bridge_name": "ddqn_outcome_slope_attenuates_with_log_nstep__fourrooms",
       "direction": "inverse",
-      "n_cells_in_scope": 2891,
-      "n_cells_pre_scope": 12451,
+      "n_cells_in_scope": 3420,
+      "n_cells_pre_scope": 15110,
       "pair_by": [
         "seed"
       ],
@@ -951,32 +1044,33 @@
           "cleavage_axes": [],
           "coefficients": [
             {
-              "ci_hi": 2.41897,
-              "ci_lo": -0.224604,
-              "coefficient": 1.09718,
+              "ci_hi": 0.944589,
+              "ci_lo": -1.00828,
+              "coefficient": -0.0318429,
               "is_significant": false,
               "name": "log_n_step",
-              "p_value": 0.0775449
+              "p_value": 0.92389
             }
           ],
-          "i_squared": 0.836412,
-          "intercept": -2.31582,
-          "intercept_ci_hi": -0.401118,
-          "intercept_ci_lo": -4.23052,
-          "intercept_p_value": 0.030958,
-          "intercept_se": 0.601645,
+          "i_squared": 0.841677,
+          "intercept": -0.407087,
+          "intercept_ci_hi": 0.952918,
+          "intercept_ci_lo": -1.76709,
+          "intercept_p_value": 0.411072,
+          "intercept_se": 0.427346,
           "n_strata": 5,
           "pool": "random",
-          "q_statistic": 18.3388,
-          "r_squared": 0.699351,
-          "tau_sq": 0.257404
+          "q_statistic": 18.9486,
+          "r_squared": 0.00357755,
+          "tau_sq": 0.212888
         }
       },
+      "assumption_violations": [],
       "blocked_by": null,
       "bridge_name": "ddqn_jensen_slope_attenuates_with_log_nstep__fourrooms",
       "direction": "inverse",
-      "n_cells_in_scope": 2891,
-      "n_cells_pre_scope": 12451,
+      "n_cells_in_scope": 3420,
+      "n_cells_pre_scope": 15110,
       "pair_by": [
         "seed"
       ],
@@ -986,7 +1080,7 @@
       "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
       "target_name": "jensen_gap",
       "tier": "associational",
-      "verdict": "no_effect",
+      "verdict": "power_insufficient",
       "warnings": [
         {
           "gate_name": "no_predicted_direction",
@@ -1002,32 +1096,33 @@
           "cleavage_axes": [],
           "coefficients": [
             {
-              "ci_hi": 0.327403,
-              "ci_lo": -1.84826,
-              "coefficient": -0.760426,
+              "ci_hi": 0.22618,
+              "ci_lo": -1.52831,
+              "coefficient": -0.651063,
               "is_significant": false,
               "name": "log_n_step",
-              "p_value": 0.112557
+              "p_value": 0.0992276
             }
           ],
-          "i_squared": 0.832309,
-          "intercept": 1.35465,
-          "intercept_ci_hi": 2.89816,
-          "intercept_ci_lo": -0.188867,
-          "intercept_p_value": 0.0682464,
-          "intercept_se": 0.485009,
+          "i_squared": 0.776103,
+          "intercept": 1.17098,
+          "intercept_ci_hi": 2.4153,
+          "intercept_ci_lo": -0.073332,
+          "intercept_p_value": 0.0579041,
+          "intercept_se": 0.390994,
           "n_strata": 5,
           "pool": "random",
-          "q_statistic": 17.8901,
-          "r_squared": 0.622593,
-          "tau_sq": 0.198431
+          "q_statistic": 13.399,
+          "r_squared": 0.650294,
+          "tau_sq": 0.134162
         }
       },
+      "assumption_violations": [],
       "blocked_by": null,
       "bridge_name": "ddqn_final_outcome_slope_attenuates_with_log_nstep__fourrooms",
       "direction": "inverse",
-      "n_cells_in_scope": 2891,
-      "n_cells_pre_scope": 12451,
+      "n_cells_in_scope": 3420,
+      "n_cells_pre_scope": 15110,
       "pair_by": [
         "seed"
       ],
@@ -1073,11 +1168,12 @@
           "source": "eval_best_burst_mean"
         }
       },
+      "assumption_violations": [],
       "blocked_by": null,
       "bridge_name": "factorial_ddqn_attenuation__fourrooms",
       "direction": "inverse",
-      "n_cells_in_scope": 3491,
-      "n_cells_pre_scope": 12451,
+      "n_cells_in_scope": 3840,
+      "n_cells_pre_scope": 15110,
       "pair_by": [
         "seed"
       ],
@@ -1132,11 +1228,12 @@
           "source": "eval_best_burst_mean"
         }
       },
+      "assumption_violations": [],
       "blocked_by": null,
       "bridge_name": "factorial_variance_amplification__catch",
       "direction": "inverse",
       "n_cells_in_scope": 690,
-      "n_cells_pre_scope": 12451,
+      "n_cells_pre_scope": 15110,
       "pair_by": [
         "seed"
       ],
@@ -1180,7 +1277,7 @@
               "env_name": "Catch-bsuite",
               "g": 0.0,
               "helped_fraction": 0.0,
-              "n_pairs": 60,
+              "n_pairs": 30,
               "se": null
             },
             {
@@ -1188,7 +1285,7 @@
               "env_name": "Catch-bsuite",
               "g": 0.0,
               "helped_fraction": 0.0,
-              "n_pairs": 60,
+              "n_pairs": 30,
               "se": null
             },
             {
@@ -1196,7 +1293,7 @@
               "env_name": "Catch-bsuite",
               "g": 0.0,
               "helped_fraction": 0.0,
-              "n_pairs": 60,
+              "n_pairs": 30,
               "se": null
             },
             {
@@ -1204,7 +1301,7 @@
               "env_name": "Catch-bsuite",
               "g": 0.0,
               "helped_fraction": 0.0,
-              "n_pairs": 60,
+              "n_pairs": 30,
               "se": null
             },
             {
@@ -1212,7 +1309,7 @@
               "env_name": "Catch-bsuite",
               "g": 0.0,
               "helped_fraction": 0.0,
-              "n_pairs": 60,
+              "n_pairs": 30,
               "se": null
             },
             {
@@ -1220,7 +1317,7 @@
               "env_name": "Catch-bsuite",
               "g": 0.0,
               "helped_fraction": 0.0,
-              "n_pairs": 60,
+              "n_pairs": 30,
               "se": null
             },
             {
@@ -1228,7 +1325,7 @@
               "env_name": "Catch-bsuite",
               "g": 0.0,
               "helped_fraction": 0.0,
-              "n_pairs": 60,
+              "n_pairs": 30,
               "se": null
             },
             {
@@ -1236,7 +1333,7 @@
               "env_name": "Catch-bsuite",
               "g": 0.0,
               "helped_fraction": 0.0,
-              "n_pairs": 60,
+              "n_pairs": 30,
               "se": null
             },
             {
@@ -1244,7 +1341,7 @@
               "env_name": "Catch-bsuite",
               "g": 0.0,
               "helped_fraction": 0.0,
-              "n_pairs": 60,
+              "n_pairs": 30,
               "se": null
             },
             {
@@ -1252,18 +1349,19 @@
               "env_name": "Catch-bsuite",
               "g": 0.0,
               "helped_fraction": 0.0,
-              "n_pairs": 60,
+              "n_pairs": 30,
               "se": null
             }
           ],
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
         }
       },
+      "assumption_violations": [],
       "blocked_by": null,
       "bridge_name": "ddqn_outcome_zero_across_bursts__catch",
       "direction": "direct",
       "n_cells_in_scope": 690,
-      "n_cells_pre_scope": 12451,
+      "n_cells_pre_scope": 15110,
       "pair_by": [
         "seed"
       ],
@@ -1287,16 +1385,17 @@
     },
     {
       "analysis_results": {},
+      "assumption_violations": [],
       "blocked_by": {
         "gate_name": "resolved_source",
         "level": "block",
-        "message": "Bridge 'state_coverage_kl_clean_mediator__cartpole_hp' sources on column 'mediator.state_coverage_kl_uniform_late' which is not in the filtered cells. Likely a typo or a measurable not materialised in this corpus; first 20 available columns: ['action_duplicate_k', 'action_select', 'action_select.schedule', 'action_select.schedule.anneal_steps', 'action_select.schedule.eps_final', 'action_select.schedule.eps_init', 'arm_key', 'bootstrap', 'bootstrap.gradient_rule', 'bootstrap.greedification', 'bootstrap.greedification.alpha', 'bootstrap.greedification.n_iters', 'bootstrap.greedification.sigma_floor_factor', 'bootstrap.greedification.tau', 'bootstrap.n_step', 'claim_graph_signature', 'corpus', 'cycle_id', 'env', 'env_name'].",
+        "message": "Bridge 'state_coverage_kl_clean_mediator__cartpole_hp' sources on column 'mediator.state_coverage_kl_uniform_late' which is not in the filtered cells. Likely a typo or a measurable not materialised in this corpus; first 20 available columns: ['action_duplicate_k', 'action_select', 'action_select.schedule', 'action_select.schedule.anneal_steps', 'action_select.schedule.eps_final', 'action_select.schedule.eps_init', 'arm_key', 'bootstrap', 'bootstrap.gradient_rule', 'bootstrap.greedification', 'bootstrap.greedification.alpha', 'bootstrap.greedification.n_iters', 'bootstrap.greedification.sigma_floor_factor', 'bootstrap.greedification.tau', 'bootstrap.n_step', 'bootstrap_fraction', 'chain_depth_mediator', 'claim_graph_signature', 'corpus', 'cycle_id'].",
         "passed": false
       },
       "bridge_name": "state_coverage_kl_clean_mediator__cartpole_hp",
       "direction": "direct",
-      "n_cells_in_scope": 12451,
-      "n_cells_pre_scope": 12451,
+      "n_cells_in_scope": 15110,
+      "n_cells_pre_scope": 15110,
       "pair_by": [
         "seed"
       ],
@@ -1383,16 +1482,17 @@
     },
     {
       "analysis_results": {},
+      "assumption_violations": [],
       "blocked_by": {
         "gate_name": "resolved_source",
         "level": "block",
-        "message": "Bridge 'learning_curve_auc_outcome_tautological__cartpole_hp' sources on column 'mediator.learning_curve_auc' which is not in the filtered cells. Likely a typo or a measurable not materialised in this corpus; first 20 available columns: ['action_duplicate_k', 'action_select', 'action_select.schedule', 'action_select.schedule.anneal_steps', 'action_select.schedule.eps_final', 'action_select.schedule.eps_init', 'arm_key', 'bootstrap', 'bootstrap.gradient_rule', 'bootstrap.greedification', 'bootstrap.greedification.alpha', 'bootstrap.greedification.n_iters', 'bootstrap.greedification.sigma_floor_factor', 'bootstrap.greedification.tau', 'bootstrap.n_step', 'claim_graph_signature', 'corpus', 'cycle_id', 'env', 'env_name'].",
+        "message": "Bridge 'learning_curve_auc_outcome_tautological__cartpole_hp' sources on column 'mediator.learning_curve_auc' which is not in the filtered cells. Likely a typo or a measurable not materialised in this corpus; first 20 available columns: ['action_duplicate_k', 'action_select', 'action_select.schedule', 'action_select.schedule.anneal_steps', 'action_select.schedule.eps_final', 'action_select.schedule.eps_init', 'arm_key', 'bootstrap', 'bootstrap.gradient_rule', 'bootstrap.greedification', 'bootstrap.greedification.alpha', 'bootstrap.greedification.n_iters', 'bootstrap.greedification.sigma_floor_factor', 'bootstrap.greedification.tau', 'bootstrap.n_step', 'bootstrap_fraction', 'chain_depth_mediator', 'claim_graph_signature', 'corpus', 'cycle_id'].",
         "passed": false
       },
       "bridge_name": "learning_curve_auc_outcome_tautological__cartpole_hp",
       "direction": "direct",
-      "n_cells_in_scope": 12451,
-      "n_cells_pre_scope": 12451,
+      "n_cells_in_scope": 15110,
+      "n_cells_pre_scope": 15110,
       "pair_by": [
         "seed"
       ],
@@ -1479,16 +1579,17 @@
     },
     {
       "analysis_results": {},
+      "assumption_violations": [],
       "blocked_by": {
         "gate_name": "resolved_source",
         "level": "block",
-        "message": "Bridge 'greedy_match_late_hp_shadow__cartpole_hp' sources on column 'mediator.greedy_match_late' which is not in the filtered cells. Likely a typo or a measurable not materialised in this corpus; first 20 available columns: ['action_duplicate_k', 'action_select', 'action_select.schedule', 'action_select.schedule.anneal_steps', 'action_select.schedule.eps_final', 'action_select.schedule.eps_init', 'arm_key', 'bootstrap', 'bootstrap.gradient_rule', 'bootstrap.greedification', 'bootstrap.greedification.alpha', 'bootstrap.greedification.n_iters', 'bootstrap.greedification.sigma_floor_factor', 'bootstrap.greedification.tau', 'bootstrap.n_step', 'claim_graph_signature', 'corpus', 'cycle_id', 'env', 'env_name'].",
+        "message": "Bridge 'greedy_match_late_hp_shadow__cartpole_hp' sources on column 'mediator.greedy_match_late' which is not in the filtered cells. Likely a typo or a measurable not materialised in this corpus; first 20 available columns: ['action_duplicate_k', 'action_select', 'action_select.schedule', 'action_select.schedule.anneal_steps', 'action_select.schedule.eps_final', 'action_select.schedule.eps_init', 'arm_key', 'bootstrap', 'bootstrap.gradient_rule', 'bootstrap.greedification', 'bootstrap.greedification.alpha', 'bootstrap.greedification.n_iters', 'bootstrap.greedification.sigma_floor_factor', 'bootstrap.greedification.tau', 'bootstrap.n_step', 'bootstrap_fraction', 'chain_depth_mediator', 'claim_graph_signature', 'corpus', 'cycle_id'].",
         "passed": false
       },
       "bridge_name": "greedy_match_late_hp_shadow__cartpole_hp",
       "direction": "direct",
-      "n_cells_in_scope": 12451,
-      "n_cells_pre_scope": 12451,
+      "n_cells_in_scope": 15110,
+      "n_cells_pre_scope": 15110,
       "pair_by": [
         "seed"
       ],
@@ -1576,29 +1677,37 @@
     {
       "analysis_results": {
         "paired_g": {
+          "assumption_violations": [
+            "skew_bias_likely (skew=-3.97, predicted paired_g inflation ~30% at n=30)",
+            "heavy_tail_se_anti_conservative (excess_kurtosis=13.89, framework_se will under-cover by ~10-25% at this kurtosis)"
+          ],
           "baseline_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)",
-          "g": -0.275393,
+          "g": -0.277794,
           "helped_fraction": 0.0,
-          "mean_diff": -75.9707,
-          "mean_diff_p_value": 0.132277,
-          "mean_diff_se": 49.0516,
+          "mean_diff": -62.5637,
+          "mean_diff_p_value": 0.129066,
+          "mean_diff_se": 40.0459,
           "measurable": "jensen_gap",
           "n_baseline": 60,
           "n_pairs": 30,
           "n_treatment": 30,
-          "p_value": 0.138719,
+          "p_value": 0.135435,
           "pair_by": [
             "seed"
           ],
-          "se": 0.186004,
+          "se": 0.186063,
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=partial(Claim:expectile_greedify;tau=0.7))"
         }
       },
+      "assumption_violations": [
+        "paired_g: skew_bias_likely (skew=-3.97, predicted paired_g inflation ~30% at n=30)",
+        "paired_g: heavy_tail_se_anti_conservative (excess_kurtosis=13.89, framework_se will under-cover by ~10-25% at this kurtosis)"
+      ],
       "blocked_by": null,
       "bridge_name": "expectile_reduces_jensen_gap_more_than_ddqn__fourrooms",
       "direction": "inverse",
-      "n_cells_in_scope": 3491,
-      "n_cells_pre_scope": 12451,
+      "n_cells_in_scope": 3840,
+      "n_cells_pre_scope": 15110,
       "pair_by": [
         "seed"
       ],
@@ -1621,29 +1730,35 @@
     {
       "analysis_results": {
         "paired_g": {
+          "assumption_violations": [
+            "skew_bias_likely (skew=-1.88, predicted paired_g inflation ~23% at n=30)"
+          ],
           "baseline_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)",
-          "g": 1.59168,
+          "g": 1.63908,
           "helped_fraction": 0.933333,
-          "mean_diff": 0.0499357,
-          "mean_diff_p_value": 7.65112e-10,
-          "mean_diff_se": 0.00557846,
+          "mean_diff": 0.0618538,
+          "mean_diff_p_value": 4.0482e-10,
+          "mean_diff_se": 0.00671007,
           "measurable": "eval_best_burst_mean",
           "n_baseline": 60,
           "n_pairs": 30,
           "n_treatment": 30,
-          "p_value": 7.01688e-09,
+          "p_value": 4.49899e-09,
           "pair_by": [
             "seed"
           ],
-          "se": 0.274877,
+          "se": 0.279481,
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=partial(Claim:expectile_greedify;tau=0.7))"
         }
       },
+      "assumption_violations": [
+        "paired_g: skew_bias_likely (skew=-1.88, predicted paired_g inflation ~23% at n=30)"
+      ],
       "blocked_by": null,
       "bridge_name": "ddqn_outperforms_expectile_on_outcome__fourrooms",
       "direction": "inverse",
-      "n_cells_in_scope": 3491,
-      "n_cells_pre_scope": 12451,
+      "n_cells_in_scope": 3840,
+      "n_cells_pre_scope": 15110,
       "pair_by": [
         "seed"
       ],
@@ -1666,29 +1781,35 @@
     {
       "analysis_results": {
         "paired_g": {
+          "assumption_violations": [
+            "skew_bias_likely (skew=-1.80, predicted paired_g inflation ~22% at n=30)"
+          ],
           "baseline_arm": "baseline",
-          "g": 3.75488,
+          "g": 3.3789,
           "helped_fraction": 1.0,
-          "mean_diff": 0.202053,
+          "mean_diff": 0.17468,
           "mean_diff_p_value": 0.0,
-          "mean_diff_se": 0.00956816,
+          "mean_diff_se": 0.00919238,
           "measurable": "eval_best_burst_mean",
           "n_baseline": 60,
           "n_pairs": 30,
           "n_treatment": 30,
-          "p_value": 4.20248e-13,
+          "p_value": 8.97628e-13,
           "pair_by": [
             "seed"
           ],
-          "se": 0.517995,
+          "se": 0.472881,
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=partial(Claim:expectile_greedify;tau=0.7))"
         }
       },
+      "assumption_violations": [
+        "paired_g: skew_bias_likely (skew=-1.80, predicted paired_g inflation ~22% at n=30)"
+      ],
       "blocked_by": null,
       "bridge_name": "expectile_reproduces_mechanism_link_disconnect__fourrooms",
       "direction": "direct",
-      "n_cells_in_scope": 3491,
-      "n_cells_pre_scope": 12451,
+      "n_cells_in_scope": 3840,
+      "n_cells_pre_scope": 15110,
       "pair_by": [
         "seed"
       ],
@@ -1716,40 +1837,41 @@
           ],
           "coefficients": [
             {
-              "ci_hi": 0.270581,
-              "ci_lo": -0.216853,
-              "coefficient": 0.0268636,
+              "ci_hi": 0.269784,
+              "ci_lo": -0.212362,
+              "coefficient": 0.0287111,
               "is_significant": false,
               "name": "log_action_dim",
-              "p_value": 0.827996
+              "p_value": 0.814396
             },
             {
-              "ci_hi": -0.0201223,
-              "ci_lo": -0.240906,
-              "coefficient": -0.130514,
+              "ci_hi": -0.0241128,
+              "ci_lo": -0.242436,
+              "coefficient": -0.133274,
               "is_significant": true,
               "name": "log_obs_dim",
-              "p_value": 0.0207788
+              "p_value": 0.0170222
             }
           ],
-          "i_squared": 0.806773,
-          "intercept": -0.208912,
-          "intercept_ci_hi": -0.11697,
-          "intercept_ci_lo": -0.300855,
-          "intercept_p_value": 1.34584e-05,
-          "intercept_se": 0.0465703,
+          "i_squared": 0.80367,
+          "intercept": -0.208389,
+          "intercept_ci_hi": -0.117474,
+          "intercept_ci_lo": -0.299303,
+          "intercept_p_value": 1.1409e-05,
+          "intercept_se": 0.0460496,
           "n_strata": 170,
           "pool": "random",
-          "q_statistic": 864.269,
-          "r_squared": 0.0891488,
-          "tau_sq": 0.156028
+          "q_statistic": 850.607,
+          "r_squared": 0.0939794,
+          "tau_sq": 0.152882
         }
       },
+      "assumption_violations": [],
       "blocked_by": null,
       "bridge_name": "log_action_dim_drives_g_mech",
       "direction": "inverse",
-      "n_cells_in_scope": 1285,
-      "n_cells_pre_scope": 12451,
+      "n_cells_in_scope": 1225,
+      "n_cells_pre_scope": 15110,
       "pair_by": [
         "seed"
       ],
@@ -1802,40 +1924,41 @@
           ],
           "coefficients": [
             {
-              "ci_hi": -0.313388,
-              "ci_lo": -0.581612,
-              "coefficient": -0.4475,
+              "ci_hi": -0.328705,
+              "ci_lo": -0.599961,
+              "coefficient": -0.464333,
               "is_significant": true,
               "name": "log_action_dim",
-              "p_value": 7.30229e-10
+              "p_value": 2.97932e-10
             },
             {
-              "ci_hi": 0.557523,
-              "ci_lo": 0.401276,
-              "coefficient": 0.4794,
+              "ci_hi": 0.575795,
+              "ci_lo": 0.416953,
+              "coefficient": 0.496374,
               "is_significant": true,
               "name": "log_obs_dim",
               "p_value": 0.0
             }
           ],
-          "i_squared": 0.401149,
-          "intercept": -0.0525959,
-          "intercept_ci_hi": -0.00704459,
-          "intercept_ci_lo": -0.0981472,
-          "intercept_p_value": 0.0239352,
-          "intercept_se": 0.0230483,
+          "i_squared": 0.410292,
+          "intercept": -0.052773,
+          "intercept_ci_hi": -0.00683097,
+          "intercept_ci_lo": -0.098715,
+          "intercept_p_value": 0.024659,
+          "intercept_se": 0.0232459,
           "n_strata": 149,
           "pool": "random",
-          "q_statistic": 243.8,
-          "r_squared": 0.582644,
-          "tau_sq": 0.0236138
+          "q_statistic": 247.58,
+          "r_squared": 0.589888,
+          "tau_sq": 0.0245564
         }
       },
+      "assumption_violations": [],
       "blocked_by": null,
       "bridge_name": "log_obs_dim_drives_g_link",
       "direction": "direct",
-      "n_cells_in_scope": 2485,
-      "n_cells_pre_scope": 12451,
+      "n_cells_in_scope": 2425,
+      "n_cells_pre_scope": 15110,
       "pair_by": [
         "seed"
       ],
@@ -1884,14 +2007,16 @@
   "errored_bridges": [
     {
       "bridge_name": "ddqn_outcome_stable_across_bursts__fourrooms",
-      "error_message": "paired_g_per_burst: cannot mean-aggregate cells at (env='FourRooms-misc', arm='baseline', ('seed',)=(2,)) — per-burst array shapes differ ([(10,), (20,)]). The cells are not replicates; they differ on: action_duplicate_k=['1.0', '2.0', '3.0', '4.0', 'None']; action_select=[\"'Claim:epsilon_greedy'\", \"'dataclass:EpsilonGreedy(schedule=Claim:linear_epsilon)'\"]; claim_graph_signature=[\"'b791117e1b9d598f'\", 'None']; env=[\"'<gymnax.environments.misc.rooms.FourRooms object at 0x77d46ff11150>'\", \"'<gymnax.environments.misc.rooms.FourRooms object at 0x77d46ff12250>'\", \"'<gymnax.environments.misc.rooms.FourRooms object at 0x77d49bbb2ea0>'\", \"'<gymnax.environments.misc.rooms.FourRooms object at 0x77d49c057a10>'\", \"'<gymnax.environments.misc.rooms.FourRooms object at 0x77d49c779250>'\"], …(10 total); env_params=[\"'dataclass:EnvParams(fail_prob=0.3333333333333333,max_steps_in_episode=500,resample_goal_pos=False,resample_init_pos=False)'\", 'None']; env_params.fail_prob=['0.3333333333333333', 'None']; env_params.max_steps_in_episode=['500', 'None']; env_params.resample_goal_pos=['False', 'None']; env_params.resample_init_pos=['False', 'None']; eval_best_burst_mean=['0.00017047223809640855', '0.0004874158767051995', '0.000821869180072099', '0.002496367087587714', '0.0025482717901468277'], …(28 total); eval_best_burst_step=['100000.0', '120000.0', '125000.0', '140000.0', '15000.0'], …(14 total); eval_episode_cap=['500', 'None']; eval_every=['10000', '20000', '2500', '25000', '5000'], …(6 total); eval_final_mean=['0.0', '0.0007005494553595781', '0.002496367087587714', '0.0040912114083766936', '0.007270425092428923'], …(22 total); gamma=['0.5', '0.8', '0.9', '0.95', '0.99']; intervention_name=[\"'vanilla_100k'\", \"'vanilla_200k'\", \"'vanilla_25k'\", \"'vanilla_500k'\", \"'vanilla_50k'\"], …(13 total); jensen_bias_per_eps__mean_axis_-1=['[0.011321742087602615, 0.02380855195224285, 0.026628453283773678, 0.0009358320385217667, 0.025103025138378143, 0.004126587882637978, 0.010174991562871582, 0.006554215215146542, 0.005022977478802204, 0.012675526551902294]', '[0.05341451242566109, 0.03945648670196533, 0.06312277168035504, 0.031655719326226975, 0.051607745124685335, 0.0543848723039642, 0.035072722051427266, 0.0195562017876251, 0.023927051573990867, 0.027545786217405065]', '[0.15079185366630554, 0.07789039786439389, 0.0419366754591465, 0.029897035891190173, 0.04619982759759296, 0.0747948482632637, 0.10527958065376879, 0.03484294041991234, 0.04214636012911797, -0.02308335416018963]', '[0.1628924377906012, 0.14724884612023742, 0.1443063508719206, 0.01013564020395279, 0.14779300056397915, 0.04080585241317749, 0.05473383516073227, 0.003501519560813904, 0.020821166038513184, -0.036266627907752993]', '[0.6731424808502198, 0.0474072515964508, -0.00010876655578613281, 0.04887529015541077, 0.03063819408416748, 0.1790156841278076, 0.007448387145996094, 0.05226557850837708, -0.0503846287727356, -0.06166560649871826, -0.009263432025909424, 0.02231837511062622, 0.08713933825492859, -0.04607539176940918, 0.004375970363616944, -0.04855884313583374, -0.07088170051574708, 0.0907983124256134, -0.0052211999893188475, -0.06142873764038086]'], …(28 total); jensen_dormancy_gap=['0.0', 'nan']; jensen_dormancy_premise_active=[\"'held'\", \"'power_insufficient'\", 'None']; jensen_gap=['0.012635190039873123', '0.039974384009838104', '0.04449182748794556', '0.058069612830877304', '0.06959719955921173'], …(28 total); late_window_mean=['0.0004339622682891786', '0.001500000013038516', '0.0019137931521981955', '0.0024444442242383957', '0.005471698008477688'], …(18 total); mc_return__mean_axis_-1=['[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.00017047224100679158, 2.5002111215144396e-05]', '[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0025482717901468277, 0.0]', '[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0016066653653979302, 0.030292872339487076, 0.017047224938869475, 0.007270425092428923]', '[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.868088475021068e-06, 0.0, 0.0, 4.009796612081118e-06]', '[0.0, 0.0, 0.0, 0.0, 0.0, 0.004163604043424129, 0.003928830474615097, 0.0, 0.013264260068535805, 0.0]'], …(28 total); n_actions=['4', 'None']; n_step=['1', 'None']; obs_shape=[\"'(4)'\", 'None']; optimizer=[\"'dataclass:WarmedUpdate(inner=dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.0001),warmup_steps=100)'\", \"'dataclass:WarmedUpdate(inner=dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.0001,weight_decay=0.0),warmup_steps=100)'\", \"'dataclass:WarmedUpdate(inner=dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.001),warmup_steps=100)'\", \"'partial(Claim:warmed_update;inner=partial(Claim:adam;lr=0.001),warmup_steps=100)'\"]; optimizer.inner=[\"'dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.0001)'\", \"'dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.0001,weight_decay=0.0)'\", \"'dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.001)'\", \"'partial(Claim:adam;lr=0.001)'\"]; optimizer.inner.lr=['0.0001', '0.001']; optimizer.inner.weight_decay=['0.0', 'None']; replay=[\"'dataclass:Replay(batch_size=32,capacity=10000,sample=Claim:uniform_sample)'\", \"'dataclass:Replay(batch_size=32,capacity=20000,sample=Claim:uniform_sample)'\", \"'dataclass:Replay(batch_size=32,capacity=50000,sample=Claim:uniform_sample)'\"]; replay.capacity=['10000', '20000', '50000']; reward_scale=['0.001', '0.003', '0.01', '0.03', '0.1'], …(8 total); rng_key=[\"'type:_empty'\", 'None']; state_hash=[\"'callable:default_state_hash'\", 'None']; total_steps=['100000', '1000000', '200000', '25000', '50000'], …(6 total); verdict=[\"'held'\", \"'power_insufficient'\"]. Add these to pair_by so each regime is its own stratum.",
+      "error_message": "paired_g_per_burst: cannot mean-aggregate cells at (env='FourRooms-misc', arm='bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)', ('seed',)=(14,)) — per-burst array shapes differ ([(10,), (20,)]). The cells are not replicates; they differ on: action_select=[\"'Claim:epsilon_greedy'\", \"'dataclass:EpsilonGreedy(schedule=Claim:linear_epsilon)'\"]; bootstrap_fraction=['0.969832', '0.97194', '0.97216', '0.973865', '0.97434'], …(33 total); claim_graph_signature=[\"'06765dc090076f8b'\", 'None']; ddqn_bootstrap_gap_late=['None', 'nan']; effective_horizon=['1.9925776482602306', '13.045123080736271', '25.083830160396037', '26.62293406031694', '27.87561343771823'], …(33 total); env=[\"'<gymnax.environments.misc.rooms.FourRooms object at 0x7413788fc290>'\", \"'<gymnax.environments.misc.rooms.FourRooms object at 0x7416fc751e50>'\", \"'<gymnax.environments.misc.rooms.FourRooms object at 0x74170e863df0>'\", \"'<gymnax.environments.misc.rooms.FourRooms object at 0x741727dffce0>'\", \"'<gymnax.environments.misc.rooms.FourRooms object at 0x77d49cf562c0>'\"], …(12 total); env_params=[\"'dataclass:EnvParams(fail_prob=0.3333333333333333,max_steps_in_episode=500,resample_goal_pos=False,resample_init_pos=False)'\", 'None']; env_params.fail_prob=['0.3333333333333333', 'None']; env_params.max_steps_in_episode=['500', 'None']; env_params.resample_goal_pos=['False', 'None']; env_params.resample_init_pos=['False', 'None']; eval_best_burst_mean=['0.00011255722347414121', '0.0004348205984570086', '0.001051193568855524', '0.003178117796778679', '0.004209338687360287'], …(33 total); eval_best_burst_step=['100000.0', '140000.0', '160000.0', '17500.0', '180000.0'], …(14 total); eval_episode_cap=['500', 'None']; eval_every=['10000', '20000', '2500', '25000', '5000'], …(6 total); eval_final_mean=['0.0', '0.0006381088169291615', '0.0017343213548883796', '0.006554462946951389', '0.01178504154086113'], …(29 total); gamma=['0.5', '0.8', '0.9', '0.95', '0.99']; intervention_name=[\"'ddqn'\", \"'ddqn_100k'\", \"'ddqn_1step'\", \"'ddqn_200k'\", \"'ddqn_25k'\"], …(14 total); jensen_bias_per_eps__mean_axis_-1=['[-0.02542145848274231, -0.005468428134918213, 0.7318022495135665, 0.01469341516494751, 0.330112099647522, 0.0073352217674255375, -0.015537738800048828, 0.013653206825256347, 0.05621694326400757, -0.04439102411270142, 7.38382339477539e-05, -0.017678380012512207, -0.04650171995162964, -0.015983736515045165, 0.02470414638519287, -0.02737083435058594, -0.02384634017944336, -0.027378201484680176, 0.026139605045318603, 0.01129242181777954]', '[0.007647331804037094, 0.009404772892594337, 0.03315631300210953, -0.00551569415256381, 0.00963808966898796, 0.0009638965129852295, 0.006389119662344456, 0.015390432439744473, 0.0009581027552485466, 0.014359291642904282]', '[0.010625222697854042, 0.025156292684932986, -0.014890654012560844, 0.02698472695192322, 0.0749076196932718, 0.04251740602776408, -0.03340905830264092, 0.020186985249165446, 0.030476185167208313, 0.055729556612845954]', '[0.03546129763126373, 0.31604601014405487, 0.682989239692688, 0.5631888419389725, 0.05423774123191834, 0.06661017537117005, 0.00037296414375305177, 0.3346526026725769, 0.18022798895835876, -0.021133565902709962]', '[0.03662315756082289, 0.016373218968510628, -0.0009713234836489715, 0.020780640277369856, -5.971941091352795e-05, -0.0017440032967965258, 0.0009910053217662479, 0.02235456369817257, 0.002883046228030882, 0.011389173567295074]'], …(33 total); jensen_dormancy_gap=['0.0', '0.00016530743839619604', 'nan']; jensen_dormancy_premise_active=[\"'held'\", \"'invariant_violation'\", \"'power_insufficient'\"]; jensen_gap=['0.009239165112376213', '0.010861976072192192', '0.023828430101275444', '0.030923064798116684', '0.03435027457773685'], …(33 total); late_window_mean=['0.00034693878842517734', '0.0017586206085979939', '0.007096773944795132', '0.008648648858070374', '0.028434783220291138'], …(12 total); log_tau=['None', 'nan']; mc_return__mean_axis_-1=['[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.3875791072845459, 0.0, 0.13499577790498735, 0.01570677887648344]', '[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 3.355014487169683e-05, 0.0, 4.902508590021171e-06, 0.0]', '[0.0, 0.0, 0.0, 0.0, 1.7644197214394807e-11, 0.0, 0.0, 0.0, 4.0389678347315807e-29, 0.0]', '[0.0, 0.0, 0.0, 0.004209338268265128, 0.001302271243184805, 0.002282544248737395, 0.0007960993680171669, 0.0, 0.0, 0.0017343213956337422]', '[0.0, 0.0, 0.0, 0.034051123261451724, 0.0, 0.0, 0.7319321155548095, 0.0639210907742381, 0.30442487746477126, 0.1891862690448761]'], …(33 total); n_actions=['4', 'None']; n_step=['1', 'None']; obs_shape=[\"'(4)'\", 'None']; optimizer=[\"'dataclass:WarmedUpdate(inner=dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.0001),warmup_steps=100)'\", \"'dataclass:WarmedUpdate(inner=dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.0001,weight_decay=0.0),warmup_steps=100)'\", \"'dataclass:WarmedUpdate(inner=dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.001),warmup_steps=100)'\", \"'partial(Claim:warmed_update;inner=partial(Claim:adam;lr=0.0001),warmup_steps=100)'\", \"'partial(Claim:warmed_update;inner=partial(Claim:adam;lr=0.001),warmup_steps=100)'\"]; optimizer.inner=[\"'dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.0001)'\", \"'dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.0001,weight_decay=0.0)'\", \"'dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.001)'\", \"'partial(Claim:adam;lr=0.0001)'\", \"'partial(Claim:adam;lr=0.001)'\"]; optimizer.inner.lr=['0.0001', '0.001']; optimizer.inner.weight_decay=['0.0', 'None']; q_divergence_score=['0.0003435027457773688', '0.00048322267830371897', '0.0004964779317379002', '0.0005904758721590048', '0.0006368243694305425'], …(33 total); q_late_mean=['None', 'nan']; replay=[\"'dataclass:Replay(batch_size=32,capacity=10000,sample=Claim:uniform_sample)'\", \"'dataclass:Replay(batch_size=32,capacity=20000,sample=Claim:uniform_sample)'\", \"'dataclass:Replay(batch_size=32,capacity=50000,sample=Claim:uniform_sample)'\"]; replay.capacity=['10000', '20000', '50000']; reward_scale=['0.001', '0.003', '0.01', '0.03', '0.1'], …(8 total); rng_key=[\"'type:_empty'\", 'None']; state_hash=[\"'callable:default_state_hash'\", 'None']; target_staleness_early=['None', 'nan']; target_staleness_late=['None', 'nan']; target_sync=[\"'Claim:periodic_copy'\", \"'partial(Claim:polyak_update;tau=0.001)'\", \"'partial(Claim:polyak_update;tau=0.01)'\", \"'partial(Claim:polyak_update;tau=0.1)'\", \"'partial(Claim:polyak_update;tau=1.0)'\"]; target_sync.sync_period=['100', 'None']; target_sync.tau=['0.001', '0.01', '0.1', '1.0', 'None']; total_steps=['100000', '1000000', '200000', '25000', '50000'], …(6 total); verdict=[\"'held'\", \"'invariant_violation'\", \"'power_insufficient'\"]; wrappers=[\"'()'\", 'None']. Add these to pair_by so each regime is its own stratum.",
       "error_type": "ValueError",
-      "traceback_repr": "Traceback (most recent call last):\n  File \"/workspace/corroborate/src/corroborate/runner/runner.py\", line 332, in run\n    out[b.name] = evaluate(b, cells, claim=claim)\n                  ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/corroborate/src/corroborate/bridge/bridge.py\", line 770, in evaluate\n    analysis_results = resolve_for_holds_when(\n        bridge.holds_when, filtered_cells, bridge_params,\n    )\n  File \"/workspace/corroborate/src/corroborate/bridge/analysis.py\", line 232, in resolve_for_holds_when\n    out[param_name] = run_for(\n                      ~~~~~~~^\n        analysis_obj, cells_list, bridge_params,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/workspace/corroborate/src/corroborate/bridge/analysis.py\", line 190, in run_for\n    return analysis_obj.fn(cells, **kwargs)\n           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^\n  File \"/workspace/corroborate/src/corroborate/analyses/paired_g_per_burst.py\", line 246, in paired_g_per_burst\n    raise ValueError(\n    ...<7 lines>...\n    )\nValueError: paired_g_per_burst: cannot mean-aggregate cells at (env='FourRooms-misc', arm='baseline', ('seed',)=(2,)) — per-burst array shapes differ ([(10,), (20,)]). The cells are not replicates; they differ on: action_duplicate_k=['1.0', '2.0', '3.0', '4.0', 'None']; action_select=[\"'Claim:epsilon_greedy'\", \"'dataclass:EpsilonGreedy(schedule=Claim:linear_epsilon)'\"]; claim_graph_signature=[\"'b791117e1b9d598f'\", 'None']; env=[\"'<gymnax.environments.misc.rooms.FourRooms object at 0x77d46ff11150>'\", \"'<gymnax.environments.misc.rooms.FourRooms object at 0x77d46ff12250>'\", \"'<gymnax.environments.misc.rooms.FourRooms object at 0x77d49bbb2ea0>'\", \"'<gymnax.environments.misc.rooms.FourRooms object at 0x77d49c057a10>'\", \"'<gymnax.environments.misc.rooms.FourRooms object at 0x77d49c779250>'\"], …(10 total); env_params=[\"'dataclass:EnvParams(fail_prob=0.3333333333333333,max_steps_in_episode=500,resample_goal_pos=False,resample_init_pos=False)'\", 'None']; env_params.fail_prob=['0.3333333333333333', 'None']; env_params.max_steps_in_episode=['500', 'None']; env_params.resample_goal_pos=['False', 'None']; env_params.resample_init_pos=['False', 'None']; eval_best_burst_mean=['0.00017047223809640855', '0.0004874158767051995', '0.000821869180072099', '0.002496367087587714', '0.0025482717901468277'], …(28 total); eval_best_burst_step=['100000.0', '120000.0', '125000.0', '140000.0', '15000.0'], …(14 total); eval_episode_cap=['500', 'None']; eval_every=['10000', '20000', '2500', '25000', '5000'], …(6 total); eval_final_mean=['0.0', '0.0007005494553595781', '0.002496367087587714', '0.0040912114083766936', '0.007270425092428923'], …(22 total); gamma=['0.5', '0.8', '0.9', '0.95', '0.99']; intervention_name=[\"'vanilla_100k'\", \"'vanilla_200k'\", \"'vanilla_25k'\", \"'vanilla_500k'\", \"'vanilla_50k'\"], …(13 total); jensen_bias_per_eps__mean_axis_-1=['[0.011321742087602615, 0.02380855195224285, 0.026628453283773678, 0.0009358320385217667, 0.025103025138378143, 0.004126587882637978, 0.010174991562871582, 0.006554215215146542, 0.005022977478802204, 0.012675526551902294]', '[0.05341451242566109, 0.03945648670196533, 0.06312277168035504, 0.031655719326226975, 0.051607745124685335, 0.0543848723039642, 0.035072722051427266, 0.0195562017876251, 0.023927051573990867, 0.027545786217405065]', '[0.15079185366630554, 0.07789039786439389, 0.0419366754591465, 0.029897035891190173, 0.04619982759759296, 0.0747948482632637, 0.10527958065376879, 0.03484294041991234, 0.04214636012911797, -0.02308335416018963]', '[0.1628924377906012, 0.14724884612023742, 0.1443063508719206, 0.01013564020395279, 0.14779300056397915, 0.04080585241317749, 0.05473383516073227, 0.003501519560813904, 0.020821166038513184, -0.036266627907752993]', '[0.6731424808502198, 0.0474072515964508, -0.00010876655578613281, 0.04887529015541077, 0.03063819408416748, 0.1790156841278076, 0.007448387145996094, 0.05226557850837708, -0.0503846287727356, -0.06166560649871826, -0.009263432025909424, 0.02231837511062622, 0.08713933825492859, -0.04607539176940918, 0.004375970363616944, -0.04855884313583374, -0.07088170051574708, 0.0907983124256134, -0.0052211999893188475, -0.06142873764038086]'], …(28 total); jensen_dormancy_gap=['0.0', 'nan']; jensen_dormancy_premise_active=[\"'held'\", \"'power_insufficient'\", 'None']; jensen_gap=['0.012635190039873123', '0.039974384009838104', '0.04449182748794556', '0.058069612830877304', '0.06959719955921173'], …(28 total); late_window_mean=['0.0004339622682891786', '0.001500000013038516', '0.0019137931521981955', '0.0024444442242383957', '0.005471698008477688'], …(18 total); mc_return__mean_axis_-1=['[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.00017047224100679158, 2.5002111215144396e-05]', '[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0025482717901468277, 0.0]', '[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0016066653653979302, 0.030292872339487076, 0.017047224938869475, 0.007270425092428923]', '[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.868088475021068e-06, 0.0, 0.0, 4.009796612081118e-06]', '[0.0, 0.0, 0.0, 0.0, 0.0, 0.004163604043424129, 0.003928830474615097, 0.0, 0.013264260068535805, 0.0]'], …(28 total); n_actions=['4', 'None']; n_step=['1', 'None']; obs_shape=[\"'(4)'\", 'None']; optimizer=[\"'dataclass:WarmedUpdate(inner=dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.0001),warmup_steps=100)'\", \"'dataclass:WarmedUpdate(inner=dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.0001,weight_decay=0.0),warmup_steps=100)'\", \"'dataclass:WarmedUpdate(inner=dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.001),warmup_steps=100)'\", \"'partial(Claim:warmed_update;inner=partial(Claim:adam;lr=0.001),warmup_steps=100)'\"]; optimizer.inner=[\"'dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.0001)'\", \"'dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.0001,weight_decay=0.0)'\", \"'dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.001)'\", \"'partial(Claim:adam;lr=0.001)'\"]; optimizer.inner.lr=['0.0001', '0.001']; optimizer.inner.weight_decay=['0.0', 'None']; replay=[\"'dataclass:Replay(batch_size=32,capacity=10000,sample=Claim:uniform_sample)'\", \"'dataclass:Replay(batch_size=32,capacity=20000,sample=Claim:uniform_sample)'\", \"'dataclass:Replay(batch_size=32,capacity=50000,sample=Claim:uniform_sample)'\"]; replay.capacity=['10000', '20000', '50000']; reward_scale=['0.001', '0.003', '0.01', '0.03', '0.1'], …(8 total); rng_key=[\"'type:_empty'\", 'None']; state_hash=[\"'callable:default_state_hash'\", 'None']; total_steps=['100000', '1000000', '200000', '25000', '50000'], …(6 total); verdict=[\"'held'\", \"'power_insufficient'\"]. Add these to pair_by so each regime is its own stratum.\n"
+      "traceback_repr": "Traceback (most recent call last):\n  File \"/workspace/corroborate/src/corroborate/runner/runner.py\", line 395, in run\n    out[b.name] = evaluate(\n                  ~~~~~~~~^\n        b, cells, claim=claim, module_scope=module_scope,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/workspace/corroborate/src/corroborate/bridge/bridge.py\", line 811, in evaluate\n    analysis_results = resolve_for_holds_when(\n        bridge.holds_when, filtered_cells, bridge_params,\n    )\n  File \"/workspace/corroborate/src/corroborate/bridge/analysis.py\", line 232, in resolve_for_holds_when\n    out[param_name] = run_for(\n                      ~~~~~~~^\n        analysis_obj, cells_list, bridge_params,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/workspace/corroborate/src/corroborate/bridge/analysis.py\", line 190, in run_for\n    return analysis_obj.fn(cells, **kwargs)\n           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^\n  File \"/workspace/corroborate/src/corroborate/analyses/paired_g_per_burst.py\", line 246, in paired_g_per_burst\n    raise ValueError(\n    ...<7 lines>...\n    )\nValueError: paired_g_per_burst: cannot mean-aggregate cells at (env='FourRooms-misc', arm='bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)', ('seed',)=(14,)) — per-burst array shapes differ ([(10,), (20,)]). The cells are not replicates; they differ on: action_select=[\"'Claim:epsilon_greedy'\", \"'dataclass:EpsilonGreedy(schedule=Claim:linear_epsilon)'\"]; bootstrap_fraction=['0.969832', '0.97194', '0.97216', '0.973865', '0.97434'], …(33 total); claim_graph_signature=[\"'06765dc090076f8b'\", 'None']; ddqn_bootstrap_gap_late=['None', 'nan']; effective_horizon=['1.9925776482602306', '13.045123080736271', '25.083830160396037', '26.62293406031694', '27.87561343771823'], …(33 total); env=[\"'<gymnax.environments.misc.rooms.FourRooms object at 0x7413788fc290>'\", \"'<gymnax.environments.misc.rooms.FourRooms object at 0x7416fc751e50>'\", \"'<gymnax.environments.misc.rooms.FourRooms object at 0x74170e863df0>'\", \"'<gymnax.environments.misc.rooms.FourRooms object at 0x741727dffce0>'\", \"'<gymnax.environments.misc.rooms.FourRooms object at 0x77d49cf562c0>'\"], …(12 total); env_params=[\"'dataclass:EnvParams(fail_prob=0.3333333333333333,max_steps_in_episode=500,resample_goal_pos=False,resample_init_pos=False)'\", 'None']; env_params.fail_prob=['0.3333333333333333', 'None']; env_params.max_steps_in_episode=['500', 'None']; env_params.resample_goal_pos=['False', 'None']; env_params.resample_init_pos=['False', 'None']; eval_best_burst_mean=['0.00011255722347414121', '0.0004348205984570086', '0.001051193568855524', '0.003178117796778679', '0.004209338687360287'], …(33 total); eval_best_burst_step=['100000.0', '140000.0', '160000.0', '17500.0', '180000.0'], …(14 total); eval_episode_cap=['500', 'None']; eval_every=['10000', '20000', '2500', '25000', '5000'], …(6 total); eval_final_mean=['0.0', '0.0006381088169291615', '0.0017343213548883796', '0.006554462946951389', '0.01178504154086113'], …(29 total); gamma=['0.5', '0.8', '0.9', '0.95', '0.99']; intervention_name=[\"'ddqn'\", \"'ddqn_100k'\", \"'ddqn_1step'\", \"'ddqn_200k'\", \"'ddqn_25k'\"], …(14 total); jensen_bias_per_eps__mean_axis_-1=['[-0.02542145848274231, -0.005468428134918213, 0.7318022495135665, 0.01469341516494751, 0.330112099647522, 0.0073352217674255375, -0.015537738800048828, 0.013653206825256347, 0.05621694326400757, -0.04439102411270142, 7.38382339477539e-05, -0.017678380012512207, -0.04650171995162964, -0.015983736515045165, 0.02470414638519287, -0.02737083435058594, -0.02384634017944336, -0.027378201484680176, 0.026139605045318603, 0.01129242181777954]', '[0.007647331804037094, 0.009404772892594337, 0.03315631300210953, -0.00551569415256381, 0.00963808966898796, 0.0009638965129852295, 0.006389119662344456, 0.015390432439744473, 0.0009581027552485466, 0.014359291642904282]', '[0.010625222697854042, 0.025156292684932986, -0.014890654012560844, 0.02698472695192322, 0.0749076196932718, 0.04251740602776408, -0.03340905830264092, 0.020186985249165446, 0.030476185167208313, 0.055729556612845954]', '[0.03546129763126373, 0.31604601014405487, 0.682989239692688, 0.5631888419389725, 0.05423774123191834, 0.06661017537117005, 0.00037296414375305177, 0.3346526026725769, 0.18022798895835876, -0.021133565902709962]', '[0.03662315756082289, 0.016373218968510628, -0.0009713234836489715, 0.020780640277369856, -5.971941091352795e-05, -0.0017440032967965258, 0.0009910053217662479, 0.02235456369817257, 0.002883046228030882, 0.011389173567295074]'], …(33 total); jensen_dormancy_gap=['0.0', '0.00016530743839619604', 'nan']; jensen_dormancy_premise_active=[\"'held'\", \"'invariant_violation'\", \"'power_insufficient'\"]; jensen_gap=['0.009239165112376213', '0.010861976072192192', '0.023828430101275444', '0.030923064798116684', '0.03435027457773685'], …(33 total); late_window_mean=['0.00034693878842517734', '0.0017586206085979939', '0.007096773944795132', '0.008648648858070374', '0.028434783220291138'], …(12 total); log_tau=['None', 'nan']; mc_return__mean_axis_-1=['[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.3875791072845459, 0.0, 0.13499577790498735, 0.01570677887648344]', '[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 3.355014487169683e-05, 0.0, 4.902508590021171e-06, 0.0]', '[0.0, 0.0, 0.0, 0.0, 1.7644197214394807e-11, 0.0, 0.0, 0.0, 4.0389678347315807e-29, 0.0]', '[0.0, 0.0, 0.0, 0.004209338268265128, 0.001302271243184805, 0.002282544248737395, 0.0007960993680171669, 0.0, 0.0, 0.0017343213956337422]', '[0.0, 0.0, 0.0, 0.034051123261451724, 0.0, 0.0, 0.7319321155548095, 0.0639210907742381, 0.30442487746477126, 0.1891862690448761]'], …(33 total); n_actions=['4', 'None']; n_step=['1', 'None']; obs_shape=[\"'(4)'\", 'None']; optimizer=[\"'dataclass:WarmedUpdate(inner=dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.0001),warmup_steps=100)'\", \"'dataclass:WarmedUpdate(inner=dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.0001,weight_decay=0.0),warmup_steps=100)'\", \"'dataclass:WarmedUpdate(inner=dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.001),warmup_steps=100)'\", \"'partial(Claim:warmed_update;inner=partial(Claim:adam;lr=0.0001),warmup_steps=100)'\", \"'partial(Claim:warmed_update;inner=partial(Claim:adam;lr=0.001),warmup_steps=100)'\"]; optimizer.inner=[\"'dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.0001)'\", \"'dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.0001,weight_decay=0.0)'\", \"'dataclass:Adam(b1=0.9,b2=0.999,eps=1e-08,lr=0.001)'\", \"'partial(Claim:adam;lr=0.0001)'\", \"'partial(Claim:adam;lr=0.001)'\"]; optimizer.inner.lr=['0.0001', '0.001']; optimizer.inner.weight_decay=['0.0', 'None']; q_divergence_score=['0.0003435027457773688', '0.00048322267830371897', '0.0004964779317379002', '0.0005904758721590048', '0.0006368243694305425'], …(33 total); q_late_mean=['None', 'nan']; replay=[\"'dataclass:Replay(batch_size=32,capacity=10000,sample=Claim:uniform_sample)'\", \"'dataclass:Replay(batch_size=32,capacity=20000,sample=Claim:uniform_sample)'\", \"'dataclass:Replay(batch_size=32,capacity=50000,sample=Claim:uniform_sample)'\"]; replay.capacity=['10000', '20000', '50000']; reward_scale=['0.001', '0.003', '0.01', '0.03', '0.1'], …(8 total); rng_key=[\"'type:_empty'\", 'None']; state_hash=[\"'callable:default_state_hash'\", 'None']; target_staleness_early=['None', 'nan']; target_staleness_late=['None', 'nan']; target_sync=[\"'Claim:periodic_copy'\", \"'partial(Claim:polyak_update;tau=0.001)'\", \"'partial(Claim:polyak_update;tau=0.01)'\", \"'partial(Claim:polyak_update;tau=0.1)'\", \"'partial(Claim:polyak_update;tau=1.0)'\"]; target_sync.sync_period=['100', 'None']; target_sync.tau=['0.001', '0.01', '0.1', '1.0', 'None']; total_steps=['100000', '1000000', '200000', '25000', '50000'], …(6 total); verdict=[\"'held'\", \"'invariant_violation'\", \"'power_insufficient'\"]; wrappers=[\"'()'\", 'None']. Add these to pair_by so each regime is its own stratum.\n"
     }
   ],
-  "git_commit": "6d4ad59551d7",
+  "git_commit": "fb83b55dcbc1",
   "hypothesis_module": "experiments.findings.dqn_bridges",
   "measurable_signatures": {
+    "bootstrap_fraction": "5c7cc97efa79e56c",
+    "effective_horizon": "a4610d696d3eec35",
     "eval_best_burst_mean": "bd74ed4e1d64a859",
     "eval_best_burst_step": "cadba3a0776aff77",
     "eval_final_mean": "8627debcf00b6a3e",
@@ -1899,8 +2024,11 @@
     "jensen_dormancy_gap": "12502f5ce2171f73",
     "jensen_dormancy_premise_active": "2b32fea2006ecb2e",
     "jensen_gap": "afe907c1c8204d7f",
-    "mc_return__mean_axis_-1": "d898ffb433c73799"
+    "mc_return__mean_axis_-1": "d898ffb433c73799",
+    "q_divergence_score": "fec5bd72d1fb6609",
+    "r_max": "409ed3da1f32e66e",
+    "r_min": "5717682c68a0f956"
   },
-  "n_cells_total": 12451,
-  "timestamp_utc": "2026-05-06T06:20:07+00:00"
+  "n_cells_total": 15110,
+  "timestamp_utc": "2026-05-07T10:47:27+00:00"
 }

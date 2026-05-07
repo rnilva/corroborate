@@ -892,6 +892,20 @@ def measurable_names_for_bridges(
                         candidates.append(item)
                     elif isinstance(item, Measurable):
                         candidates.append(item.name)
+        # `bridge.scope` may reference measurable columns that
+        # aren't named in source/target/params (e.g. an endogenous
+        # selector like `finite_ge('effective_horizon', 50)`).
+        # `expr.meta.root_names()` extracts every column referenced
+        # by the polars expression — exactly the set we need to
+        # ensure those measurables are computed at ingest.
+        if b.scope is not None:
+            try:
+                candidates.extend(b.scope.meta.root_names())
+            except Exception:  # noqa: BLE001
+                # If polars metadata extraction fails, fall through
+                # — the missing-column path in `_filter_with_missing_cols`
+                # will surface the error at evaluate-time instead.
+                pass
         for name in candidates:
             if get_registered(name) is None:
                 continue

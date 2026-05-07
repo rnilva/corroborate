@@ -726,64 +726,6 @@ def ddqn_benefit_scales_with_effective_horizon__metamaze_high_gamma(
     return Verdict.NO_EFFECT
 
 
-@claim_bridge(
-    # γ≥0.985 (i.e. γ=0.99) cohort selected via HP scope; the
-    # structural mechanism contrast stays the file-level DDQN-vs-
-    # vanilla swap.
-    source=INTERVENTION,
-    target='eval_best_burst_mean',
-    direction=Direction.DIRECT,
-    tier=Tier.INTERVENTIONAL,
-    # `effective_horizon >= 50` is the endogenous selector — within
-    # the `gamma_sweep_more` corpus on DiscountingChain (γ ∈
-    # {0.90, 0.95, 0.99} with bf ≈ 0.99 → eff_h ≈ {9, 17, 50})
-    # it selects the γ=0.99 cohort at the boundary. eff_h is
-    # `1/(1−γ·bf)`; threshold ≥ 50 captures γ=0.99 only.
-    scope=(
-        (pl.col('env_name') == 'DiscountingChain-bsuite')
-        & (pl.col('corpus') == 'gamma_sweep_more')
-        & finite_ge('effective_horizon', 50.0)
-    ),
-)
-def ddqn_benefit_scales_with_gamma__discountingchain(
-    paired_g: PairedGResult,
-) -> Verdict:
-    """Pearl-rung-2 do(γ) bridge on DiscountingChain. Filters
-    gamma_sweep_more's DiscountingChain cells to γ=0.99 only and
-    asserts DDQN's benefit is positive there. The companion γ<0.99
-    cells show null effect.
-
-    Empirical (n=30 per γ on DiscountingChain):
-      γ=0.99: g_link=+0.41 (p=.03), g_mech=−1.03 (p<.0001)
-      γ=0.95: g_link=0,  g_mech=−0.19 (p=.30)
-      γ=0.90: g_link=0,  g_mech=−0.08 (p=.67)
-
-    Different from FourRooms: BOTH the mechanism AND the link
-    weaken with γ here. Consistent with the published
-    "γ shrinks bias itself" story (Lan et al. 2022; Amit et al.
-    2020): low γ truncates the chain at the *per-step* level so
-    the bias has no opportunity to compound, and DDQN's
-    correction has nothing to bite on. FourRooms's pattern is
-    different (mechanism stays strong, link weakens) — the
-    chain-depth-as-amplifier reading.
-
-    HELD when g ≥ 0.30 AND helped_fraction ≥ 0.20 on the
-    high-γ subset. helped threshold is lower than other bridges
-    because DC is sparse-reward bimodal: many seeds score 0
-    (never find goal), so helped_fraction undershoots even when
-    the mean effect is significant."""
-    if paired_g.n_pairs < 20:
-        return Verdict.POWER_INSUFFICIENT
-    if math.isnan(paired_g.helped_fraction):
-        return Verdict.POWER_INSUFFICIENT
-    if (
-        paired_g.helped_fraction >= 0.20
-        and paired_g.g >= 0.30
-    ):
-        return Verdict.HELD
-    return Verdict.NO_EFFECT
-
-
 # =====================================================================
 # CLAIM 4 — Independent link-side scope predicate (bootstrap_fraction).
 #
@@ -2684,7 +2626,10 @@ DDQN_UNIVERSE_BRIDGES = (
     # CLAIM 5 — effective-horizon scope (Pearl rung-2 do(γ) sweep).
     ddqn_benefit_scales_with_effective_horizon__fourrooms,
     ddqn_benefit_scales_with_effective_horizon__metamaze_high_gamma,
-    ddqn_benefit_scales_with_gamma__discountingchain,
+    # ddqn_benefit_scales_with_gamma__discountingchain MOVED to
+    # `dqn_bridges.py` — DiscountingChain is bsuite (excluded by
+    # MODULE_SCOPE), and the do(γ) bridge is an env-specific
+    # finding rather than a cross-env scope claim.
     # CLAIM 6 — between-env mc_variance attenuates g_link
     #           (POWER_INSUFFICIENT under CR1; SHADOW of CLAIM 7).
     mc_variance_attenuates_g_link__between_env,
@@ -2796,7 +2741,6 @@ __all__ = [
     'ddqn_attenuates_at_late_bursts__spaceinvaders',
     'ddqn_benefit_scales_with_effective_horizon__fourrooms',
     'ddqn_benefit_scales_with_effective_horizon__metamaze_high_gamma',
-    'ddqn_benefit_scales_with_gamma__discountingchain',
     'ddqn_helps_at_early_bursts__pixel_envs',
     'ddqn_refuted_when_dormancy_fires',
     'eff_h_mediates_g_link__goal_envs',
