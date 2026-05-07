@@ -1261,7 +1261,20 @@ def ddqn_concentrates_argmax__noisy_acrobot(
 
     HELD ⟹ action stochasticity is sufficient to activate the
     FR-specific mechanism. NO_EFFECT ⟹ stochasticity isn't the
-    discriminator; some other FR property remains."""
+    discriminator; some other FR property remains.
+
+    Empirical (action_noise_intervention corpus, n=30 paired):
+      ΔH = +0.007, g = +0.08, p = 0.68 → NO_EFFECT.
+      Stochasticity does NOT activate the entropy concentration
+      mechanism on Acrobot. Combined with 7g (sparsified Acrobot
+      NO_EFFECT) and 7h (densified FR retains effect), the
+      action-selection-level mechanism is not driven by
+      reward-shape or action-stochasticity. Reframing per
+      session synthesis: argmax concentration is a downstream
+      side effect of FR's small state/action structure, not
+      the load-bearing causal mechanism. DDQN's outcome
+      benefit goes through Q-bias correction directly; argmax
+      reshaping is a downstream artifact specific to FR."""
     diff = paired_g.mean_diff
     p = paired_g.mean_diff_p_value
     if math.isnan(diff) or math.isnan(p):
@@ -1296,7 +1309,19 @@ def ddqn_concentrates_argmax__noisy_metamaze(
     """Stochastified MetaMaze (action randomized 44% per step):
     does DDQN concentrate argmax distribution like on native FR?
     Companion to noisy_acrobot — independent test on a different
-    chain MDP."""
+    chain MDP.
+
+    Empirical (action_noise_intervention corpus, n=30 paired):
+      ΔH = −0.006, g = −0.18, p = 0.34 → NO_EFFECT.
+      Stochasticity does NOT activate concentration on MetaMaze.
+
+      *Substantive side-finding*: DDQN's outcome benefit on noisy
+      MetaMaze is +0.53 (Δeval) and bias reduction is −3.60
+      (Δjens), DESPITE no argmax concentration. This decouples
+      the two mechanisms: DDQN's outcome benefit goes through Q-
+      bias correction WITHOUT requiring argmax reshaping. The
+      argmax-concentration observed on FR is a side-effect of
+      FR's small state/action structure, not the causal pathway."""
     diff = paired_g.mean_diff
     p = paired_g.mean_diff_p_value
     if math.isnan(diff) or math.isnan(p):
