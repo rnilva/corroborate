@@ -63,18 +63,49 @@ def main(argv: Sequence[str] | None = None) -> None:
         help='explicit JSON report path; defaults to '
              'experiments/findings/<short>.run.json',
     )
+    parser.add_argument(
+        '-k', '--filter', dest='bridge_filter', type=str, default=None,
+        help='substring match against bridge names (pytest\'s -k '
+             'shape). Run only bridges whose name contains the '
+             'pattern. Faster iteration when debugging one bridge.',
+    )
     args = parser.parse_args(argv)
+
+    bridge_filter = cast(str | None, args.bridge_filter)
+    write_cache = not cast(bool, args.no_write_cache)
+    write_report = not cast(bool, args.no_report)
+    if bridge_filter is not None:
+        # Filter mode runs a subset of bridges → measurable
+        # computation is the filtered subset's deps, not the full
+        # bridges file's. Writing back to the canonical cache /
+        # `<module>.run.json` would overwrite the full-run baseline
+        # with a partial slice. Force-disable both writes; user
+        # gets a single-shot read-only debug iteration. Pass
+        # `--report-path /tmp/foo.json` if a partial report is
+        # actually wanted at a non-canonical path.
+        if write_cache or write_report:
+            import sys
+            print(
+                f'run_hypothesis: bridge_filter={bridge_filter!r} '
+                f'set → forcing write_cache=False, '
+                f'write_report=False (avoid overwriting canonical '
+                f'cache / run.json with a partial slice).',
+                file=sys.stderr,
+            )
+        write_cache = False
+        write_report = False
 
     results = run(
         cast(str, args.module),
         data=cast(Path | None, args.data),
         cache_path=cast(Path | None, args.cache_path),
         use_cache=not cast(bool, args.no_cache),
-        write_cache=not cast(bool, args.no_write_cache),
+        write_cache=write_cache,
         rebuild=cast(bool, args.rebuild),
         restore_from_cloud=not cast(bool, args.no_restore),
         report_path=cast(Path | None, args.report_path),
-        write_report=not cast(bool, args.no_report),
+        write_report=write_report,
+        bridge_filter=bridge_filter,
     )
     _print_verdicts(results)
 

@@ -289,6 +289,7 @@ def run(
     cache_path: Path | None = None,
     report_path: Path | None = None,
     write_report: bool = False,
+    bridge_filter: str | None = None,
 ) -> dict[str, BridgeEvaluation]:
     """Run a hypothesis's bridges on `data`, returning per-bridge
     verdicts.
@@ -349,6 +350,23 @@ def run(
     else:
         h = _validate_hypothesis(h)
     bridges = h.BRIDGES
+
+    # Optional bridge-name substring filter (pytest's `-k` shape).
+    # When set, only bridges whose name contains the pattern run;
+    # measurable computation downstream uses just THIS subset's
+    # required-measurable union — much faster iteration during
+    # debugging single bridges. When empty filter matches no
+    # bridge, fail loud rather than silently running zero
+    # bridges.
+    if bridge_filter is not None:
+        matched = tuple(b for b in bridges if bridge_filter in b.name)
+        if not matched:
+            raise SystemExit(
+                f'{h.__name__}: bridge_filter {bridge_filter!r} '
+                f'matched no bridges. Available: '
+                f'{sorted(b.name for b in bridges)[:5]}{" ..." if len(bridges) > 5 else ""}',
+            )
+        bridges = matched
 
     resolved_cache: Path | None = None
     if use_cache:
