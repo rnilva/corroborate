@@ -282,6 +282,54 @@ def test_build_measurements_validates_id_column(tmp_path: Path) -> None:
         )
 
 
+# ============ Duplicate-id defense (post-rebuild incident) ============
+
+
+def test_build_measurements_rebuilds_from_scratch_on_duplicate_ids(
+    tmp_path: Path,
+) -> None:
+    """**Defense against id-duplicate corruption**: a stale
+    `measurements.parquet` with duplicate `id` rows (legacy from
+    pre-Phase-1 builds or accumulated cross-sweep merges without
+    dedup) would cause the runs_df → existing left-join to
+    Cartesian-multiply on the next rebuild, doubling row count
+    each call. Detected in the wild on
+    `minatar_sync_curve_resume` (245760 rows / 120 unique ids =
+    2048× duplication). Post-fix: build_measurements detects
+    `existing.height != existing['id'].n_unique()` and rebuilds
+    from scratch with a stderr warning.
+
+    Probe: pre-stage a measurements.parquet with the same id
+    repeated 4×, run build_measurements. Output should have one
+    row per id (matching runs_df), not 4× duplication.
+    """
+    runs_df = _runs_df(3)
+    out_path = tmp_path / MEASUREMENTS_FILENAME
+
+    # Hand-stage a corrupt store: 12 rows, 3 unique ids.
+    corrupt = pl.DataFrame({
+        'id': [
+            'cell-0', 'cell-0', 'cell-0', 'cell-0',
+            'cell-1', 'cell-1', 'cell-1', 'cell-1',
+            'cell-2', 'cell-2', 'cell-2', 'cell-2',
+        ],
+        'double_x': [99.0] * 12,
+    })
+    corrupt.write_parquet(out_path)
+    assert load_measurements(tmp_path).height == 12
+
+    build_measurements(
+        tmp_path, required=['double_x'], runs_df=runs_df,
+    )
+    df = load_measurements(tmp_path)
+    assert df.height == 3, (
+        f'expected 3 rows after rebuild from corrupt store; '
+        f'got {df.height}. The duplicate-id defense did not fire.'
+    )
+    assert df['id'].n_unique() == 3
+    assert df.sort('id')['double_x'].to_list() == [0.0, 2.0, 4.0]
+
+
 # ============ Idempotent-skip ID validation (post-#2 roast fix) ============
 
 

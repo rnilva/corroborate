@@ -165,6 +165,28 @@ def build_measurements(
             f'build_measurements({corpus_dir}): runs_df is missing '
             f'the `id` column — required as the per-cell key',
         )
+    # Defend against id-duplicate corruption: each `id` should
+    # appear exactly once in the per-corpus store. A stale store
+    # with duplicate ids (legacy from pre-Phase-1 cache builds, or
+    # accumulated across multiple sweep merges without dedup)
+    # causes the runs_df → existing left-join below to Cartesian-
+    # multiply: with K duplicates per id, runs_df.height × K rows
+    # come out. The next `compute_missing_columns` + write doubles
+    # again on subsequent rebuilds. Detect + rebuild from scratch
+    # when corruption is observed; the per-cell measurable
+    # computation is the same shape, just the join input is now
+    # sane.
+    if (
+        existing.height > 0
+        and existing.height != existing['id'].n_unique()
+    ):
+        sys.stderr.write(
+            f'measurements: WARNING — {out_path} carries '
+            f'{existing.height} rows but only '
+            f'{existing["id"].n_unique()} unique ids; rebuilding '
+            f'from scratch.\n',
+        )
+        existing = pl.DataFrame()
     stored_sigs = current_signatures(corpus_dir)
 
     # Drop drifted + orphan columns from the existing store. Same
