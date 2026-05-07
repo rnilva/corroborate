@@ -1,249 +1,130 @@
-# Why r_min discriminates: Q-regime sign sets the direction of Hasselt's bias
+# Polyak Q-regime decomposition — and what was already known
 
 **Date:** 2026-05-07
 **Followup to:** `polyak_tau_findings.md`, `polyak_causal_panel.json`
 
-## TL;DR
+## Context: most of this rediscovers established findings
 
-The exogenous predicate `r_min ≥ 0` (no per-step penalty floor)
-discriminates FourRooms from Acrobot/MountainCar because it
-determines the **sign of vanilla DQN's late-window Q**, which sets
-the **direction of Hasselt's overestimation bias**, which inverts
-the sign of `ATE(target_staleness → Δ_outcome)`.
+Before claiming this as a new mechanism story, the relevant
+already-documented knowledge:
 
-The endogenous downstream of `r_min` is the new measurable
-`q_late_mean` (mean of `online_max_q_per_step` over the late 50%
-of training). Bridges now use `q_late_mean > 0` directly as the
-regime predicate instead of `r_min ≥ 0`.
+- **`findings_ddqn_scope_synthesis`** — the DDQN scope is a
+  conjunction of (Q-divergence, mech dormancy, bandit-tail,
+  saturation, power) confounds, each env-level. There IS no
+  single-variable scope predicate; cross-env partition reflects
+  multi-feature env structure.
+- **`findings_q_amplification_cartpole`** — already walks the
+  multi-mediator (q_std, q_mag, q_cv) dead end, then collapses
+  to "the existing dormancy bridge predicts everything".
+- **`findings_dampened_alpha_envs`** — already documents
+  `mech HELD ↛ link HELD` on DiscountingChain and similar.
+- **`findings_target_staleness_mediator`** — Acrobot is "the
+  lone NULL despite GOAL polarity", with mech-HELD frac only
+  63% on Acrobot.
+- **`findings_l2_acrobot_goldilocks`** — Acrobot mech fires
+  strongly at γ=0.999 (jens 29→14) but γ=0.99 is below the
+  amplifier-active range.
+- Bridge `ddqn_refuted_when_dormancy_fires` already encodes the
+  "premise dormant ⇒ DDQN doesn't help" reading.
 
-## Empirical signature
+The polyak sweep ran at γ=0.99, sync=100, where Acrobot's
+mechanism is documented as marginal/dormant. The "Acrobot
+ATE = −349 reversal" was rediscovering this.
 
-Polyak corpus, vanilla baseline arm only, late-window mean Q:
+## What was actually verified by the polyak sweep
 
-| env                 | r_min | polarity | Q̄ vanilla | regime    |
-|---------------------|------:|---------:|----------:|-----------|
-| FourRooms-misc      |     0 |   −0.92  |    +0.82  | POSITIVE  |
-| Asterix-MinAtar     |     0 |   +0.50  |    +5.73  | POSITIVE  |
-| Breakout-MinAtar    |     0 |   +0.99  |   +15.95  | POSITIVE  |
-| Acrobot-v1          |    −1 |   −0.94  |   −35.50  | NEGATIVE  |
-| MountainCar-v0      |    −1 |   −1.00  |   −57.35  | NEGATIVE  |
+1. **Per-stratum Q-regime split holds**:
+   - r_min ≥ 0 envs ⇒ Q̄_late > 0 (1:1 in 8/8 envs from ddqn corpus)
+   - r_min < 0 envs ⇒ Q̄_late < 0 (1:1 in 2/2 dense-penalty envs)
+   - This is a structural identity, not a discovery — but a useful
+     **endogenous predicate** (`q_late_mean > 0`) replacing the
+     env-name-or-r_min predicate.
 
-`r_min` perfectly determines `sign(Q̄_vanilla)`. The Q-regime sign
-in turn explains the staleness-ATE sign:
+2. **Bridge scope refactored to portable predicates**:
+   `staleness_amplifies_ddqn_outcome__sparse_goal_polyak` now
+   scopes on `finite('target_sync.tau') & q_late_mean > 0 &
+   env_reward_polarity < -0.5 & q_divergence_score < 100`.
+   No corpus tag, no env_name. Generalizes to any future polyak
+   sweep on a sparse-positive GOAL env.
 
-| env             | r_min | regime    | DDQN g | ATE(stale → Δ_o) |
-|-----------------|:-----:|-----------|:------:|-----------------:|
-| FourRooms       |   0   | POSITIVE  | +0.26  | **+39.83 (HELD)** |
-| Asterix (SURV)  |   0   | POSITIVE  | +0.08  | +0.11 (~null)     |
-| Breakout (SURV) |   0   | POSITIVE  | −0.15  | +39.5             |
-| Acrobot         |  −1   | NEGATIVE  | −0.05  | **−349 (REVERSED)** |
-| MountainCar     |  −1   | NEGATIVE  | −0.06  | +205 (n=12 small) |
+3. **New trace instrumentation added**:
+   `target_q_at_online_argmax_per_step` reduction in
+   `corroborate_rl.dqn.trace_reductions`. Enables direct
+   measurement of DDQN's per-step bootstrap value (vs vanilla's
+   `max(target_q)`). The new measurable
+   `ddqn_bootstrap_gap_late = mean(max(target_q) − target_q[
+   argmax_online]) over late 50%` quantifies DDQN's
+   per-step correction magnitude as a per-cell scalar.
 
-## Mechanism
+## What the gap-decomposition test added
 
-**Sparse-terminal-positive (`r_min ≥ 0`):**
-- `Q* ∈ [0, R_max/(1−γ)]` — true Q values are **positive bounded
-  above**.
-- Vanilla DQN's max-bootstrap pushes Q **above** the true value
-  (Hasselt). Wrong actions get inflated values; the policy
-  becomes confidently wrong on non-goal-reaching actions.
-- DDQN's argmax/max separation removes the upward bias →
-  bigger benefit when there's more bias to correct.
-- **Higher staleness → more accumulated upward bias in the
-  target → DDQN's correction has more bite → ATE positive.**
-
-**Dense-penalty (`r_min < 0`):**
-- `Q* ∈ [−|r_min|/(1−γ), 0]` — true Q values are **negative
-  bounded below**.
-- Vanilla's max-bootstrap pushes Q **less negative than true**
-  (still negative, just inflated). This is mild "optimism" that
-  helps the policy explore through the long-horizon penalty
-  floor.
-- DDQN's correction makes Q **more negative** (closer to true).
-  Removes exploration optimism → can hurt.
-- **Higher staleness → vanilla's optimism advantage grows →
-  DDQN's relative deficit grows → ATE reversed.**
-
-In both cases staleness amplifies whatever bias direction vanilla
-has — but the SIGN of that bias's effect on outcome flips with
-the Q-regime.
-
-## Why polarity isn't enough
-
-GOAL polarity (within-cell `r(L, return) < 0`) holds for both
-FourRooms and Acrobot. But the reward-formula difference
-distinguishes them:
-- FourRooms terminal +1 at goal, 0 elsewhere.
-- Acrobot per-step −1 until terminal, terminal 0.
-
-Both encode "shorter episode = better outcome" (GOAL polarity).
-But Q-trajectories differ in sign. Polarity captures the
-length→return correlation; `r_min` captures the reward
-distribution's location relative to zero. They're orthogonal
-features in the cross-env panel.
-
-## Endogenous downstream: `q_late_mean`
-
-New measurable in `corroborate_rl.dqn.measurables`:
-
-```python
-@measurable(reads=('online_max_q_per_step',))
-def q_late_mean(record) -> float:
-    """Mean of online_max_q over the late 50% of training."""
-    arr = _record_array(record, 'online_max_q_per_step')
-    if arr is None:
-        return float('nan')
-    return _mean_window(arr, 0.5, 1.0)
-```
-
-The bridge `staleness_amplifies_ddqn_outcome__sparse_goal_polyak`
-now uses `finite_gt('q_late_mean', 0.0)` as the regime predicate.
-The exogenous `r_min` is no longer needed — `q_late_mean` is the
-endogenous observable that captures the same regime split per
-cell.
-
-## Causal chain summary
+Mediation regression `Δ_o = α + β_s·stale + β_g·gap + ε` on the
+new q_decomp data:
 
 ```
-   r_min  →  sign(Q̄_late_vanilla)  →  direction(Hasselt bias)  →  sign(ATE(stale → Δ_o))
-   ─────       ───────────────         ─────────────────           ────────────────
- exogenous     endogenous              algorithmic                  observable
- [verified]    [verified]              [hypothesised]              [verified]
+                   β_stale (direct)   p_s     β_gap     p_g
+Acrobot           −299    n.s.        0.31    +157     0.009
+FourRooms         +18     n.s.        0.26    −18      0.75 (collinear)
 ```
 
-The exogenous structural property (env's reward range) determines
-an endogenous trajectory property (Q-regime sign — verified
-1:1), which **putatively** determines the algorithmic bias
-direction (theoretical, no per-step probe), which inverts the
-observable ATE sign (verified by per-stratum DoWhy +
-interaction-term).
-
-## Open: why exactly does negative Q harm DDQN?
-
-The fully-decomposed algorithmic mechanism is unresolved by
-current data. Two candidate explanations remain on the table:
-
-### Candidate 1: bias-direction asymmetry
-
-In r_min ≥ 0, vanilla's max-bias pushes Q ABOVE truth → policy
-chases inflated values → DDQN's correction unblocks. In r_min < 0,
-vanilla's max-bias pushes Q LESS NEGATIVE than truth (mild
-optimism); DDQN's correction makes Q more negative → kills the
-exploration optimism that helps escape penalty floors.
-
-**Status**: theoretical, plausible, but not directly tested
-(would need per-step decomposition of Q_target at argmax_online
-vs max_Q_target).
-
-### Candidate 2: Q-magnitude vs argmax-rank disagreement
-
-The new disagreement-rate test surfaced a surprising regime
-split:
-
 ```
-ρ(τ, argmax_disagreement_late):
-  Acrobot, MountainCar, Asterix:  ≈ −0.8  (strong)
-  Breakout:                        −0.60  (moderate)
-  FourRooms:                       −0.07  (FLAT)
+α-sweep on dense-penalty (n=30 each, total 300 cells):
+  α → jensen_gap (MECHANISM):
+    Acrobot:      slope = +0.44 ± 0.83, t=+0.53, p=0.60   NULL & non-monotone
+    MountainCar:  slope = −2.22 ± 0.93, t=−2.40, p=0.018  HELD
+
+  α → outcome (LINK):
+    Acrobot:      slope = +0.32 ± 0.53, t=+0.60, p=0.55   NULL
+    MountainCar:  slope = −0.62 ± 1.20, t=−0.52, p=0.61   NULL
 ```
 
-In FourRooms, online and target argmax disagree ~36% of steps
-regardless of τ. The DDQN-vs-vanilla effect can't be "more
-staleness → more disagreement → bigger DDQN bite" — disagreement
-is constant. The active variable must be the *magnitude* of
-Q_target − Q_online at disagreement moments (which scales with
-staleness).
+**Three-class taxonomy** (already implicit in `findings_ddqn_scope_
+synthesis`'s confound table — making it explicit per env):
 
-In dense-penalty envs (Acrobot, MountainCar), disagreement IS
-staleness-dependent but the per-step DDQN-vs-vanilla effect
-fails to translate to outcome — because the policy's response to
-correction is governed by penalty-floor dynamics that the
-correction doesn't help navigate.
+| env | r_min | mech | link | already-documented diagnosis |
+|---|---:|:---:|:---:|---|
+| FourRooms-misc | 0 | HELD | HELD | sparse-positive GOAL, in-rescue band — chain fires |
+| MountainCar-v0 | −1 | HELD | NULL | mech fires (α→jens slope significant) but bias correction doesn't translate to outcome (`mech HELD ↛ link HELD` pattern from `findings_dampened_alpha_envs`, just on a different env) |
+| Acrobot-v1 | −1 | NULL | n/a | mech dormant at γ=0.99 (matches `findings_l2_acrobot_goldilocks`'s γ=0.999 finding inverted: γ=0.99 is BELOW the chain-amplifier-active range, so Acrobot's premise is dormant here) |
 
-**Status**: pattern observed, mechanism conjectural.
+## What's NEW (small contribution)
 
-### What would resolve it
+- The `ddqn_bootstrap_gap_late` measurable is a per-step DDQN-
+  correction-magnitude probe that didn't exist before. It
+  decomposes the algorithmic step (vanilla bootstrap value vs
+  DDQN bootstrap value at fixed τ).
+- The bridge `staleness_amplifies_ddqn_outcome__sparse_goal_polyak`
+  with `q_late_mean > 0` endogenous predicate is a new portable
+  formulation. Earlier scope used corpus or env_name.
 
-Per-step probes that aren't currently in the trace schema:
-- `Q_target(s, argmax_a Q_online(s, a))` per step (the DDQN
-  bootstrap value, vs `max_a Q_target(s, a)` which is vanilla's).
-- The DIFFERENCE of these two per step is the "DDQN-correction
-  magnitude per step". Decomposing it by Q-regime would give
-  the algorithmic-level proof.
+## What's NOT new
 
-### Resolution attempt (2026-05-07)
+- The "mech vs link" distinction (CLAUDE.md vocabulary).
+- The "DDQN scope is multi-feature conjunction" reading (`findings_
+  ddqn_scope_synthesis`).
+- The "Acrobot mech is dormant at low γ" pattern (`findings_l2_
+  acrobot_goldilocks`).
+- The "MountainCar mech HELD link NULL" pattern (`findings_target_
+  staleness_mediator` panel).
+- The "Hasselt's premise dormant ⇒ DDQN doesn't help" framing
+  (`ddqn_refuted_when_dormancy_fires` bridge).
 
-Added `target_q_at_online_argmax_per_step` to substrate trace
-reductions and authored measurable
-`ddqn_bootstrap_gap_late = mean(max(target_q) − target_q[argmax_
-online]) over late 50%`. Ran focused FourRooms+Acrobot polyak
-sweep (`polyak_tau_q_decomp.yaml`).
+## Methodological lesson
 
-Tests:
-
-```
-TEST: Δ_o = β₀ + β_g·gap + β_q·q_late + β_int·(gap × q_late) + ε
-
-  β_intercept       = +0.134        t=+0.66    p=0.51
-  β_gap             = −116.6        t=−1.05    p=0.30
-  β_q_late          = +0.011        t=+1.17    p=0.24
-  β_interaction     = −5.02         t=−2.26    p=0.025  ← significant
-
-Per-Q-regime: ATE(gap → Δ_outcome):
-  q > 0 (FourRooms):  slope = +42.95, t=+2.46, p=0.015  POSITIVE
-  q < 0 (Acrobot):    slope = +116.4, t=+2.63, p=0.010  POSITIVE
-```
-
-**Both regimes show POSITIVE gap → Δ_outcome slope.** The DDQN
-correction magnitude (gap) IS the proximal driver of Δ_outcome
-universally. The earlier "ATE flips sign with Q-regime" framing
-on `staleness → Δ_o` was a noise-driven artifact on Acrobot — at
-the algorithmic step (correction magnitude itself), there's no
-sign flip.
-
-The interaction-term significance is now interpreted as:
-- In Q < 0 regime: gap range is larger (~0.028 max on Acrobot
-  vs ~0.0016 on FourRooms — 17× wider).
-- Per-unit slope differs (+116 Acrobot vs +43 FourRooms) but
-  effective Δ_outcome impact differs less (3.2 reward vs 0.07
-  reward; FourRooms's relative impact is ~7% of bounded reward
-  range, Acrobot's is ~3.5% of unbounded penalty range).
-
-**Updated story.** DDQN's bootstrap gap (the per-step
-correction magnitude) correlates with `staleness` (ρ=+0.95
-FourRooms, +0.66 Acrobot). And the gap → Δ_outcome slope is
-positive in both regimes. So:
-
-- The staleness → Δ_outcome chain runs through the gap.
-- The gap → Δ_outcome step is **not** sign-flipped by Q-regime.
-- The earlier "Acrobot ATE = −349 reversal" was high-noise
-  Simpson's-paradox aggregation, not a real algorithmic reversal.
-
-This RECONCILES the apparent paradox. DDQN doesn't fundamentally
-hurt in dense-penalty regimes — it's just much less effective
-because:
-1. The correction magnitude (gap) is small relative to outcome
-   variance from other sources on Acrobot.
-2. Acrobot's outcome is dominated by penalty-floor dynamics, not
-   bias correction.
-
-The "negative ATE" result on Acrobot's staleness was a
-LOW-SIGNAL noise pattern, not a structural sign reversal of
-Hasselt's mechanism.
-
-**Implication for the bridge.** The
-`staleness_amplifies_ddqn_outcome__sparse_goal_polyak` bridge's
-narrow scope (`q_late_mean > 0`) is still empirically correct —
-it's the regime where DDQN's correction magnitude is sufficient
-to register as a statistically detectable effect. The exclusion
-of dense-penalty regimes is "low-signal-to-noise" rather than
-"reversed-direction-mechanism".
+Read the existing memory before launching new analyses. Almost
+every "gotcha" in this session was already documented — the
+multi-mediator dead end, the per-env mech-vs-link decomposition,
+the Acrobot dormancy, the |A|/r_min/polarity discriminator
+search dead-ends. The corroborate framework is *designed* to
+accumulate scope-and-mechanism knowledge in memory + bridges
+specifically so future investigations don't re-walk the same
+paths.
 
 ## Reproduction
 
 ```bash
 JAX_PLATFORMS=cpu PYTHONPATH=. uv run python \
-    experiments/findings/sync_curve_breakout/run_rmin_mechanism_analysis.py
+    experiments/findings/sync_curve_breakout/run_q_decomp_mechanism.py
+JAX_PLATFORMS=cpu PYTHONPATH=. uv run python \
+    experiments/findings/sync_curve_breakout/run_alpha_dense_penalty_analysis.py
 ```
-
-Output: `rmin_q_regime_panel.json` (Q regime per env in polyak data).
