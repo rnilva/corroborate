@@ -580,14 +580,34 @@ def compute_missing_columns(
             seen.add(name)
             pending.append((name, m, None))
             continue
-        # Column already present — recompute null cells only. The
-        # `df[name].is_null()` check is cheap (column-level) and
-        # short-circuits the to_dicts pass when no nulls exist.
+        # Column already present — recompute cells with missing
+        # values (null OR NaN). NaN ≠ null in polars but both
+        # signal "no real value for this cell"; an all-NaN column
+        # (e.g. trace-dependent measurable was added to defaults
+        # AFTER a sweep ran with no traces — sweep persistence
+        # writes NaN for cells that couldn't be computed) should
+        # be re-evaluated when the data is now available, not
+        # kept as fossilised NaN. Float dtypes get the
+        # null|NaN check; non-float dtypes (Int / Bool / String)
+        # only support is_null.
         col = df[name]
-        if not col.is_null().any():
+        if col.dtype.is_float():
+            missing_mask = col.is_null() | col.is_nan()
+        else:
+            missing_mask = col.is_null()
+        if not missing_mask.any():
             continue
         seen.add(name)
-        pending.append((name, m, col.to_list()))
+        # `existing_values` per-cell entry is None where missing
+        # (so the eval loop recomputes), original value where
+        # present. NaN counts as "missing" for the recompute
+        # decision; we set those entries to None so the same
+        # branch fires per-cell.
+        existing_vals: list[object] = [
+            None if missing else v
+            for v, missing in zip(col.to_list(), missing_mask.to_list())
+        ]
+        pending.append((name, m, existing_vals))
     if not pending:
         # **C3 fast-path** (CACHE_BUILD.md): no measurables to
         # compute → return the input frame WITHOUT materialising
