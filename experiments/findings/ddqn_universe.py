@@ -1125,6 +1125,104 @@ def ddqn_dominates_vanilla_response_curve__fourrooms_rs_0p3(
 
 
 # =====================================================================
+# CLAIM 7c / 7d — rescue regime is FourRooms-specific.
+#
+# The reward-scale-response curve dominance from CLAIM 7 (FourRooms
+# rs=0.1 → DDQN do-effect +0.49) does NOT generalize to Acrobot or
+# CartPole. The reward_scale_sweep corpus has rs=0.1 cells on both:
+#
+#   Acrobot rs=0.1, γ=0.99: g_out = −0.17 (DDQN slightly HURTS)
+#   CartPole rs=0.1, γ=0.99: g_out = +0.09 (effectively null)
+#
+# Refutation of the "rs<<1 → big DDQN benefit" universal reading.
+# The rescue mechanism is sparse-positive-terminal-reward specific
+# (FourRooms's structure), not a universal rs effect. Authored as
+# predicted_direction='null' bridges — HELD when the rs=0.1 effect
+# is small + n.s., i.e. the rescue does NOT activate.
+# =====================================================================
+
+
+@claim_bridge(
+    source=INTERVENTION,
+    target='eval_best_burst_mean',
+    direction=Direction.DIRECT,
+    tier=Tier.INTERVENTIONAL,
+    scope=(
+        (pl.col('env_name') == 'Acrobot-v1')
+        & (pl.col('reward_scale') == 0.1)
+        & ((pl.col('n_step') == 1) | pl.col('n_step').is_null())
+    ),
+    predicted_direction='null',
+)
+def ddqn_does_not_rescue__acrobot_rs_0p1(
+    paired_g: PairedGResult,
+    *,
+    null_ceiling: float = 0.3,
+) -> Verdict:
+    """Acrobot at rs=0.1 does NOT show the FourRooms rescue.
+    Empirical paired_g(eval_best_burst_mean) on Acrobot rs=0.1
+    γ=0.99: |g| = 0.17, p > 0.05 — small + non-significant.
+    HELD encodes "rescue does not activate on Acrobot at low
+    reward scale". Refutes universal rs<<1 → DDQN benefit
+    reading.
+
+    Different mechanism than FourRooms: Acrobot's dense per-step
+    penalty doesn't have the "vanilla under-learns sparse
+    positive reward" failure mode that the rescue mechanism
+    addresses. rs=0.1 just shrinks Q's scale without changing
+    the learning regime."""
+    g = paired_g.g
+    p = paired_g.p_value
+    if math.isnan(g) or math.isnan(p):
+        return Verdict.POWER_INSUFFICIENT
+    is_small = abs(g) <= null_ceiling
+    is_ns = p > 0.05
+    if is_small and is_ns:
+        return Verdict.HELD
+    if is_small or is_ns:
+        return Verdict.POWER_INSUFFICIENT
+    return Verdict.NO_EFFECT
+
+
+@claim_bridge(
+    source=INTERVENTION,
+    target='eval_best_burst_mean',
+    direction=Direction.DIRECT,
+    tier=Tier.INTERVENTIONAL,
+    scope=(
+        (pl.col('env_name') == 'CartPole-v1')
+        & (pl.col('reward_scale') == 0.1)
+        & ((pl.col('n_step') == 1) | pl.col('n_step').is_null())
+    ),
+    predicted_direction='null',
+)
+def ddqn_does_not_rescue__cartpole_rs_0p1(
+    paired_g: PairedGResult,
+    *,
+    null_ceiling: float = 0.3,
+) -> Verdict:
+    """CartPole at rs=0.1 does NOT show the FourRooms rescue.
+    Empirical paired_g on CartPole rs=0.1 γ=0.99: |g| ≈ 0.09,
+    n.s. — effectively null. HELD encodes "rescue does not
+    activate on CartPole at low reward scale".
+
+    Different mechanism: CartPole has dense per-step alive bonus
+    and saturates fast at any rs ≥ 0.1. Vanilla doesn't have the
+    "can't find reward" failure mode that the rescue addresses."""
+    g = paired_g.g
+    p = paired_g.p_value
+    if math.isnan(g) or math.isnan(p):
+        return Verdict.POWER_INSUFFICIENT
+    is_small = abs(g) <= null_ceiling
+    is_ns = p > 0.05
+    if is_small and is_ns:
+        return Verdict.HELD
+    if is_small or is_ns:
+        return Verdict.POWER_INSUFFICIENT
+    return Verdict.NO_EFFECT
+
+
+# =====================================================================
 # CLAIM 8 — Per-burst learning-curve crossover on SpaceInvaders.
 # =====================================================================
 # Per-burst analysis on minatar_1M (paired across 30 seeds, env=
@@ -2658,6 +2756,9 @@ DDQN_UNIVERSE_BRIDGES = (
     ddqn_rescues_underlearning_vanilla__fourrooms_rs_0p1,
     # CLAIM 7b — same dominance at rs=0.3 (rescue-regime peak).
     ddqn_dominates_vanilla_response_curve__fourrooms_rs_0p3,
+    # CLAIM 7c/7d — rescue does NOT generalize to Acrobot/CartPole.
+    ddqn_does_not_rescue__acrobot_rs_0p1,
+    ddqn_does_not_rescue__cartpole_rs_0p1,
     # CLAIM 8 — per-burst crossover shape on SpaceInvaders 1M.
     ddqn_curve_crosses_vanilla_late__spaceinvaders,
     # CLAIM 9 — n-step falsification of bootstrap-bias-compounding
@@ -2770,6 +2871,8 @@ __all__ = [
     'staleness_amplifies_ddqn_outcome__sparse_goal_polyak',
     'staleness_does_not_amplify_ddqn_outcome__survival_polyak',
     'chain_amplifier_link_active_in_bounded_q',
+    'ddqn_does_not_rescue__acrobot_rs_0p1',
+    'ddqn_does_not_rescue__cartpole_rs_0p1',
 ]
 
 
