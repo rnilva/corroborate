@@ -30,8 +30,27 @@ def main(argv: Sequence[str] | None = None) -> None:
         help='dotted module path, e.g. experiments.findings.ddqn_universe',
     )
     parser.add_argument(
+        '--ingest', type=str, default=None, metavar='CORPUS[,CORPUS...]',
+        help='ingest specific named corpora (CACHE_ADDITIVITY.md '
+             'CA3). Names are resolved relative to '
+             'experiments/data/<name>/ unless absolute. Use this '
+             'when you know what new data to load — much faster '
+             'than --ingest-all.',
+    )
+    parser.add_argument(
+        '--ingest-all', type=Path, default=None, metavar='ROOT',
+        help='walk every corpus under ROOT and append new cells '
+             'to the cache. The "I don\'t know what\'s new" path. '
+             'Today\'s --data <root> behavior, renamed for honesty.',
+    )
+    parser.add_argument(
+        '--ingest-file', type=Path, default=None, metavar='PATH',
+        help='ingest a single .parquet file as the data source '
+             '(no directory walk).',
+    )
+    parser.add_argument(
         '--data', type=Path, default=None,
-        help='parquet file or directory of corpora to ingest',
+        help=argparse.SUPPRESS,  # deprecated alias for --ingest-all
     )
     parser.add_argument(
         '--cache-path', type=Path, default=None,
@@ -71,6 +90,44 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
     args = parser.parse_args(argv)
 
+    # CACHE_ADDITIVITY.md CA2/CA3: resolve ingest mode from flags.
+    # Mutually exclusive: at most one of {--ingest, --ingest-all,
+    # --ingest-file, --data}. No flag → cache-only.
+    ingest_arg = cast(str | None, args.ingest)
+    ingest_all = cast(Path | None, args.ingest_all)
+    ingest_file = cast(Path | None, args.ingest_file)
+    legacy_data = cast(Path | None, args.data)
+    set_count = sum(
+        1 for v in (ingest_arg, ingest_all, ingest_file, legacy_data)
+        if v is not None
+    )
+    if set_count > 1:
+        raise SystemExit(
+            'choose at most one of --ingest, --ingest-all, '
+            '--ingest-file, --data',
+        )
+    if legacy_data is not None:
+        import sys
+        print(
+            'run_hypothesis: --data is deprecated; use '
+            '--ingest-all <root> for the same behavior.',
+            file=sys.stderr,
+        )
+    data: Path | str | list[Path] | None = None
+    if ingest_arg is not None:
+        names = [n.strip() for n in ingest_arg.split(',') if n.strip()]
+        data = [
+            Path(n) if Path(n).is_absolute()
+            else Path('experiments/data') / n
+            for n in names
+        ]
+    elif ingest_all is not None:
+        data = ingest_all
+    elif ingest_file is not None:
+        data = ingest_file
+    elif legacy_data is not None:
+        data = legacy_data
+
     bridge_filter = cast(str | None, args.bridge_filter)
     write_cache = not cast(bool, args.no_write_cache)
     write_report = not cast(bool, args.no_report)
@@ -97,7 +154,7 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     results = run(
         cast(str, args.module),
-        data=cast(Path | None, args.data),
+        data=data,
         cache_path=cast(Path | None, args.cache_path),
         use_cache=not cast(bool, args.no_cache),
         write_cache=write_cache,

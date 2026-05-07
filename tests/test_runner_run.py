@@ -133,3 +133,85 @@ def test_default_cache_path_dotted_module_name_uses_last_segment() -> None:
         f'cache_path = {p}; expected the last-segment short name '
         f'`dqn_bridges.parquet`, not the full dotted name.'
     )
+
+
+# ============ CACHE_ADDITIVITY.md CA1-CA3 ============
+
+
+def test_load_data_returns_none_when_data_is_none() -> None:
+    """**CA2**: `_load_data(None, ...)` returns None — no walk,
+    no DataFrame construction. The cache-only default path
+    relies on this."""
+    from corroborate.runner.runner import _load_data
+    out = _load_data(
+        None, restore_from_cloud=False, required=(), bridges=(),
+    )
+    assert out is None
+
+
+def test_load_data_dispatches_sequence_path_to_named_corpora(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """**CA3**: passing `Sequence[Path]` routes to the
+    named-corpora ingest (via `_load_directory(corpus_dirs=...)`),
+    not the directory-walk path. Pin by constructing two real
+    corpus dirs and verifying both flow through."""
+    # Force sequential processing — the parallel ProcessPoolExecutor
+    # path uses fork() and stalls under pytest's stderr capture.
+    monkeypatch.setenv('CORROBORATE_CACHE_WORKERS', '1')
+
+    import polars as pl
+    from corroborate.runner.runner import _load_data
+
+    root = tmp_path / 'data'
+    for i, name in enumerate(('a', 'b', 'unrelated')):
+        d = root / name
+        d.mkdir(parents=True)
+        # Distinct env_name per corpus so CI4 content-dedup
+        # doesn't collapse them.
+        df = pl.DataFrame({
+            'id': [f'{name}-0', f'{name}-1'],
+            'env_name': [f'Env_{name}'] * 2,
+            'arm_key': ['baseline'] * 2,
+            'seed': [0, 1],
+            'reward_scale': [float(i)] * 2,
+        })
+        df.write_parquet(d / 'runs.parquet')
+
+    # Ingest just `a` and `b`; `unrelated` should not contribute.
+    out = _load_data(
+        [root / 'a', root / 'b'],
+        restore_from_cloud=False, required=(), bridges=(),
+    )
+    assert out is not None
+    ids = sorted(out['id'].to_list())
+    assert ids == ['a-0', 'a-1', 'b-0', 'b-1'], (
+        f'expected only a + b cells; got {ids}. CA3 may have '
+        f'fallen through to a directory walk.'
+    )
+
+
+def test_load_data_named_corpora_empty_sequence_is_noop(
+    tmp_path: Path,
+) -> None:
+    """**CA3 edge case**: empty list — return None, don't walk
+    any default root."""
+    from corroborate.runner.runner import _load_data
+    out = _load_data(
+        [], restore_from_cloud=False, required=(), bridges=(),
+    )
+    assert out is None
+
+
+def test_load_data_named_corpora_missing_dir_raises(
+    tmp_path: Path,
+) -> None:
+    """**CA3 edge case**: a named dir that doesn't exist raises
+    FileNotFoundError loudly. No silent skip — the user typed
+    the name explicitly."""
+    from corroborate.runner.runner import _load_data
+    with pytest.raises(FileNotFoundError, match='--ingest dir not found'):
+        _load_data(
+            [tmp_path / 'does_not_exist'],
+            restore_from_cloud=False, required=(), bridges=(),
+        )

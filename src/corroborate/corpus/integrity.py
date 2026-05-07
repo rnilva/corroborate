@@ -96,6 +96,46 @@ class NestedCorpusError(RuntimeError):
         return '\n'.join(lines)
 
 
+def _check_corpus_no_nested(
+    sub: Path,
+) -> list[NestedCorpusViolation]:
+    """Return any nested-corpus violations within `sub`. Returns
+    `[]` when sentinel'd (sweep mid-flight) or genuinely clean.
+    Shared between root-level walk and named-corpora ingest paths
+    so both produce the same shape of error."""
+    if not sub.is_dir():
+        return []
+    if (sub / IN_PROGRESS_SENTINEL).exists():
+        return []
+    out: list[NestedCorpusViolation] = []
+    for p in sub.rglob('runs.parquet'):
+        if p.parent == sub:
+            continue
+        try:
+            rel_parts = p.parent.relative_to(sub).parts
+        except ValueError:
+            rel_parts = ()
+        if 'tmp' in rel_parts:
+            continue
+        out.append(NestedCorpusViolation(
+            parent=sub, nested=p.parent,
+        ))
+    return out
+
+
+def assert_named_corpora_no_nested(
+    corpus_dirs: Sequence[Path],
+) -> None:
+    """CI1 check for the named-corpora ingest path. Same semantics
+    as `assert_no_nested_corpora` but operates on an explicit list
+    of corpus dirs rather than walking a root."""
+    violations: list[NestedCorpusViolation] = []
+    for sub in corpus_dirs:
+        violations.extend(_check_corpus_no_nested(sub))
+    if violations:
+        raise NestedCorpusError(violations)
+
+
 def assert_no_nested_corpora(root: Path) -> None:
     """Scan `root` for CI1 violations: a top-level corpus dir
     (one whose subtree contains `runs.parquet` at any depth)
@@ -130,30 +170,7 @@ def assert_no_nested_corpora(root: Path) -> None:
 
     violations: list[NestedCorpusViolation] = []
     for sub in sorted(root.iterdir()):
-        if not sub.is_dir():
-            continue
-        if (sub / IN_PROGRESS_SENTINEL).exists():
-            continue  # sentinel: sweep mid-flight, ignore this subtree
-        # Search this candidate corpus's subtree for any nested
-        # `runs.parquet`. `rglob` walks all depths.
-        for p in sub.rglob('runs.parquet'):
-            if p.parent == sub:
-                continue   # the parent's own runs.parquet — fine
-            # Exclude `tmp/` shards (per-arm `cell***__...__runs.parquet`
-            # files inside a `tmp/` directory are un-merged sweep
-            # shards, not corpora). Check `tmp` only in the path
-            # FROM `sub` to `p.parent` — using `p.parent.parts`
-            # would catch the system tmpdir ('/tmp/...') and
-            # generate false negatives in tests.
-            try:
-                rel_parts = p.parent.relative_to(sub).parts
-            except ValueError:
-                rel_parts = ()
-            if 'tmp' in rel_parts:
-                continue
-            violations.append(NestedCorpusViolation(
-                parent=sub, nested=p.parent,
-            ))
+        violations.extend(_check_corpus_no_nested(sub))
 
     if violations:
         raise NestedCorpusError(violations)
@@ -402,6 +419,7 @@ __all__ = [
     'TraceContaminationError',
     'TraceContaminationStats',
     'assert_archive_eligible',
+    'assert_named_corpora_no_nested',
     'assert_no_nested_corpora',
     'assert_traces_subset_of_runs',
     'assert_unique_remote_root',

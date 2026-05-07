@@ -281,7 +281,7 @@ def _invalidate_drifted(
 def run(
     h: Hypothesis | str,
     *,
-    data: pl.DataFrame | Path | str | None = None,
+    data: pl.DataFrame | Path | str | Sequence[Path] | None = None,
     use_cache: bool = True,
     write_cache: bool = True,
     rebuild: bool = False,
@@ -376,6 +376,36 @@ def run(
             resolved_cache.unlink(missing_ok=True)
             _manifest_path(resolved_cache).unlink(missing_ok=True)
 
+    # CACHE_ADDITIVITY.md CA2: when running cache-only (data=None
+    # AND a cache file already exists), print a one-line state
+    # so the user sees what they're about to evaluate against.
+    # Skip when ingest is happening (the ingest path emits its
+    # own progress lines).
+    if (
+        data is None
+        and resolved_cache is not None
+        and resolved_cache.exists()
+    ):
+        try:
+            from datetime import UTC, datetime
+            schema = pl.scan_parquet(resolved_cache).collect_schema()
+            n_cells = cast(int, pl.scan_parquet(resolved_cache).select(
+                pl.len(),
+            ).collect().item())
+            n_cols = len(schema.names())
+            mtime = datetime.fromtimestamp(
+                resolved_cache.stat().st_mtime, UTC,
+            ).isoformat(timespec='seconds')
+            print(
+                f'cache: {n_cells} cells × {n_cols} cols, '
+                f'last updated {mtime}',
+                file=sys.stderr, flush=True,
+            )
+        except (OSError, pl.exceptions.ComputeError):
+            # Cache unreadable — `_load_cache` will produce a
+            # warning shortly; don't double-warn here.
+            pass
+
     cells = _ingest_and_compute(
         bridges=bridges,
         data=data,
@@ -386,8 +416,9 @@ def run(
 
     if cells.height == 0:
         raise SystemExit(
-            f'{h.__name__}: no cells available — pass --data to '
-            f'ingest a corpus, or check the cache at {resolved_cache}',
+            f'{h.__name__}: no cells available — pass '
+            f'--ingest <corpus> or --ingest-all <root> to ingest '
+            f'data, or check the cache at {resolved_cache}',
         )
 
     # Optional substrate-side outermost claim for endogeneity
@@ -466,7 +497,7 @@ def run(
 def _ingest_and_compute(
     *,
     bridges: tuple[Bridge, ...],
-    data: pl.DataFrame | Path | str | None,
+    data: pl.DataFrame | Path | str | Sequence[Path] | None,
     cache_path: Path | None,
     write_cache: bool,
     restore_from_cloud: bool,
@@ -490,11 +521,14 @@ def _ingest_and_compute(
     directory."""
     required = sorted(measurable_names_for_bridges(bridges))
 
-    is_directory_walk = (
-        data is not None
-        and not isinstance(data, pl.DataFrame)
-        and Path(data).is_dir()
-    )
+    is_directory_walk: bool
+    if data is None or isinstance(data, pl.DataFrame):
+        is_directory_walk = False
+    elif isinstance(data, (Path, str)):
+        # `--ingest-all <root>` or `--ingest-file <path.parquet>`
+        is_directory_walk = Path(data).is_dir()
+    else:
+        is_directory_walk = True   # named-corpora ingest (CA3)
 
     new_data = _load_data(
         data, restore_from_cloud=restore_from_cloud,
@@ -771,18 +805,49 @@ def _compute_measurables(
 
 
 def _load_data(
-    data: pl.DataFrame | Path | str | None,
+    data: pl.DataFrame | Path | str | Sequence[Path] | None,
     *,
     restore_from_cloud: bool,
     required: Sequence[str],
     bridges: tuple[Bridge, ...],
 ) -> pl.DataFrame | None:
     """Resolve data into a DataFrame, with auto-restore on missing-
-    raw corpora when given a directory."""
+    raw corpora when given a directory.
+
+    Five shapes accepted (CACHE_ADDITIVITY.md CA1-CA3):
+    - `None`: cache-only mode, caller skips ingest entirely.
+    - `pl.DataFrame`: in-memory cells (substrate-side build).
+    - `Path` to a single `.parquet` file: read directly.
+    - `Path` to a directory: walk all corpus subdirs (full
+      `--ingest-all` behavior).
+    - `Sequence[Path]`: named corpus dirs to ingest selectively
+      (`--ingest <name>[,<name>...]`). The disk-budget calculation
+      uses the first dir's parent as the volume reference.
+    """
     if data is None:
         return None
     if isinstance(data, pl.DataFrame):
         return data
+    if not isinstance(data, (Path, str)):
+        # Sequence[Path] — named-corpora ingest. Each entry must
+        # be a directory at this point (CLI resolves names; tests
+        # pass Paths directly).
+        corpus_paths = tuple(Path(p) for p in data)
+        if not corpus_paths:
+            return None
+        for cp in corpus_paths:
+            if not cp.is_dir():
+                raise FileNotFoundError(
+                    f'--ingest dir not found or not a directory: {cp}',
+                )
+        # Use the first corpus's parent as the disk-budget root.
+        # All named corpora share a filesystem in practice.
+        root = corpus_paths[0].parent
+        return _load_directory(
+            root, restore_from_cloud=restore_from_cloud,
+            required=required, bridges=bridges,
+            corpus_dirs=corpus_paths,
+        )
     p = Path(data)
     if not p.exists() and (
         not p.is_absolute() and (Path.cwd() / p).exists()
@@ -1243,6 +1308,7 @@ def _load_directory(
     restore_from_cloud: bool,
     required: Sequence[str],
     bridges: tuple[Bridge, ...],
+    corpus_dirs: Sequence[Path] | None = None,
 ) -> pl.DataFrame:
     """Walk subdirs of `root`; for each subdir's `runs.parquet`,
     load it, join the trace columns required by:
@@ -1260,23 +1326,34 @@ def _load_directory(
 
     The drop step is load-bearing: per-step trace columns
     (`done`, `online_std_q_per_step`, …) can be GBs per cell, so
-    keeping them across the diagonal_relaxed concat would OOM."""
+    keeping them across the diagonal_relaxed concat would OOM.
+
+    `corpus_dirs` (CACHE_ADDITIVITY.md CA3): when provided, walk
+    only those named corpus dirs instead of `root.iterdir()`. CI1
+    fires per-corpus rather than across the root. The
+    disk-budget calculation still uses `root` as the volume
+    reference (the named dirs share a filesystem)."""
     # CORPUS_INTEGRITY.md CI1: refuse nested corpora at ingest
     # rather than silently drop the inner ones (the runner walks
     # one level deep). Caller fixes the layout, then retries.
     # Corpus dirs marked with `.in_progress` (sweep mid-flight)
     # are skipped by both the audit and the walk.
     from corroborate.corpus.integrity import (
-        IN_PROGRESS_SENTINEL, assert_no_nested_corpora, is_in_progress,
+        IN_PROGRESS_SENTINEL,
+        assert_named_corpora_no_nested,
+        assert_no_nested_corpora,
+        is_in_progress,
     )
-    assert_no_nested_corpora(root)
+    if corpus_dirs is None:
+        assert_no_nested_corpora(root)
+        sub_dirs_all = sorted(p for p in root.iterdir() if p.is_dir())
+    else:
+        assert_named_corpora_no_nested(corpus_dirs)
+        sub_dirs_all = list(corpus_dirs)
     import time as _time
     measurable_reads = _required_record_keys(required)
     analysis_reads = _analysis_reads_for_bridges(bridges)
     trace_reads = measurable_reads | analysis_reads
-    # **C5 progress** (CACHE_BUILD.md): pre-walk the subdirs so
-    # we know N up front for an `[i/N] <corpus>` prefix.
-    sub_dirs_all = sorted(p for p in root.iterdir() if p.is_dir())
     in_progress_dirs = [p for p in sub_dirs_all if is_in_progress(p)]
     if in_progress_dirs:
         for p in in_progress_dirs:
