@@ -205,6 +205,91 @@ def ddqn_bootstrap_gap_late(record: Mapping[str, object]) -> float:
     return _mean_window(gap, 0.5, 1.0)
 
 
+@measurable(reads=('online_std_q_per_step',))
+def q_action_std_late(record: Mapping[str, object]) -> float:
+    """Mean of `online_std_q_per_step` over the late 50% of
+    training — the cross-action Q-stdev at non-terminal states,
+    averaged over late training.
+
+    Hasselt 2010's overestimation theorem says the per-step
+    max-bias is approximately `c · σ_action` where σ_action is
+    the cross-action Q-stdev (noise level across action choices)
+    and `c = √(2 ln(|A|)/π)`. So this is the operationally-
+    measured local noise that drives Hasselt's overestimation.
+
+    Distinct from `q_late_mean` (mean Q level): SNR = |q_late_
+    mean| / q_action_std_late captures whether action-noise is
+    small relative to true value differences (high SNR, max-bias
+    benign) or comparable (low SNR, max-bias dominates). Reward
+    scaling shifts q_late_mean but doesn't necessarily shift
+    σ_action proportionally — hence the rs-coupling of DDQN's
+    benefit may operate through SNR rather than through
+    accumulated bias / chain depth.
+
+    Returns nan if `online_std_q_per_step` is absent (cache
+    lacking trace column) or if the late window is empty."""
+    arr = _record_array(record, 'online_std_q_per_step')
+    if arr is None:
+        return float('nan')
+    return _mean_window(arr, 0.5, 1.0)
+
+
+@measurable(reads=('n_actions',))
+def hasselt_implied_per_step_bias(
+    record: Mapping[str, object],
+    q_action_std_late: float,  # injected via @measurable name resolution
+) -> float:
+    """Theoretical per-step max-bias `c · σ_action` where
+    `c = √(2 ln(|A|) / π)` — the closed-form Hasselt 2010
+    overestimation under iid-normal-noise assumption on Q
+    estimates across actions.
+
+    This is what the chain-amplifier's accumulated bias is built
+    from: per-step bias × effective_horizon ≈ jensen_gap. So if
+    the chain-amplifier story is right, jensen_gap should track
+    `hasselt_implied_per_step_bias × effective_horizon` cross-env.
+
+    NaN propagates from missing/invalid inputs (n_actions ≤ 1,
+    σ_action non-finite)."""
+    n_actions = record.get('n_actions')
+    if not isinstance(n_actions, (int, float)) or n_actions <= 1:
+        return float('nan')
+    if not math.isfinite(q_action_std_late) or q_action_std_late < 0.0:
+        return float('nan')
+    c = math.sqrt(2.0 * math.log(float(n_actions)) / math.pi)
+    return c * q_action_std_late
+
+
+@measurable(reads=())
+def q_signal_to_noise_late(
+    record: Mapping[str, object],
+    q_late_mean: float,            # injected
+    q_action_std_late: float,      # injected
+) -> float:
+    """`|q_late_mean| / q_action_std_late` — Q-value signal-to-
+    noise at non-terminal states, late training.
+
+    High SNR: Q values are large relative to cross-action stdev
+    → max-bias is small relative to value differences → DDQN's
+    correction is marginal.
+    Low SNR: σ_action comparable to or larger than mean(Q) →
+    max-bias dominates the signal → DDQN's correction matters.
+
+    The cross-env interpretive frame for the rs-coupling
+    finding (FourRooms rs=0.1 g_out=+3.0 vs Acrobot rs=0.1 g_out=
+    -0.17): if rs scales mean(Q) but not σ_action proportionally,
+    SNR drops at small rs. Where SNR drops AND env structure has
+    chain depth, DDQN's relative benefit grows. Tests the
+    'reward scale interacts with noise structure' hypothesis.
+
+    NaN propagates from invalid inputs (σ_action ≤ 0)."""
+    if not math.isfinite(q_late_mean) or not math.isfinite(q_action_std_late):
+        return float('nan')
+    if q_action_std_late <= 0.0:
+        return float('nan')
+    return abs(q_late_mean) / q_action_std_late
+
+
 @measurable(reads=('online_max_q_per_step',))
 def q_late_mean(record: Mapping[str, object]) -> float:
     """Mean of `online_max_q_per_step` over the late 50% of
@@ -823,6 +908,47 @@ def effective_horizon(
     if denom <= 0.0:
         return float('nan')
     return 1.0 / denom
+
+
+@measurable(reads=('jensen_gap', 'effective_horizon'))
+def per_step_max_bias(record: Mapping[str, object]) -> float:
+    """Per-step max-bias = `jensen_gap / effective_horizon`.
+
+    Hasselt 2010's overestimation theorem bounds the per-step
+    max-action bias `ε`. The framework's `jensen_gap` measures
+    the *accumulated* bias over the bootstrap chain — under the
+    chain-amplifier reading,
+        accumulated_bias ≈ ε × effective_horizon
+    where `effective_horizon = 1/(1−γ·bf)` is the geometric chain
+    depth. So `jensen_gap / effective_horizon` is the
+    operationally-defined per-step bias under this model — the
+    direct analogue of the per-step quantity the theorem
+    constrains.
+
+    This decomposes the chain-amplifier into its two factors:
+    the per-step bias (Hasselt's quantity) and the chain-depth
+    multiplier. Bridges that test the multiplicative structure
+    `g_outcome ≈ −β · g_per_step_bias · effective_horizon`
+    cross-env need this measurable as a scope-discriminator and
+    as the regression's per-step covariate.
+
+    Reads `effective_horizon` from the record (cached column)
+    rather than via the measurable resolver, so the framework
+    doesn't try to re-derive it from missing trace data when
+    only the cache parquet is available.
+
+    NaN propagates from invalid inputs: jensen_gap or
+    effective_horizon non-finite, or eff_horizon ≤ 0."""
+    jens = record.get('jensen_gap')
+    eff_h = record.get('effective_horizon')
+    if not isinstance(jens, (int, float)):
+        return float('nan')
+    if not isinstance(eff_h, (int, float)):
+        return float('nan')
+    j, h = float(jens), float(eff_h)
+    if not math.isfinite(j) or not math.isfinite(h) or h <= 0.0:
+        return float('nan')
+    return j / h
 
 
 # Per-burst variance / CV / log: variance over the inner
