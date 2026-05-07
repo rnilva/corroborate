@@ -298,3 +298,90 @@ def test_assert_archive_eligible_missing_file_raises(
     function is robust to bad inputs.)"""
     with pytest.raises(ArchivePrecondition):
         assert_archive_eligible(tmp_path / 'nope.parquet')
+
+
+# ============ CI4 — content-dedup ignores volatile object reprs ============
+
+
+def test_dedup_excludes_object_repr_string_columns() -> None:
+    """**CI4**: a string column whose values look like Python
+    object reprs (`<...\\sobject\\sat\\s0x[0-9a-f]+>`) carries
+    process-volatile memory addresses and should be EXCLUDED
+    from `_dedup_by_content` content comparison.
+
+    Two cells with identical scientific content but different
+    repr addresses should collapse to one row, not survive as
+    two — that's the inflation pattern that hit the
+    `vanilla_sync*` corpora pre-fix.
+    """
+    from corroborate.runner.runner import _dedup_by_content
+
+    # Two rows with same content, different `claim_repr` repr
+    # addresses (simulates `<Claim:foo object at 0x...>` reprs
+    # that vary per Python session).
+    df = pl.DataFrame({
+        'id': ['a', 'b'],
+        'arm_key': ['baseline', 'baseline'],
+        'env_name': ['CartPole-v1', 'CartPole-v1'],
+        'gamma': [0.99, 0.99],
+        'seed': [0, 0],
+        'claim_repr': [
+            '<corroborate.Claim:double_greedify object at 0x77d49bbb2ea0>',
+            '<corroborate.Claim:double_greedify object at 0x71a8845ddc10>',
+        ],
+    })
+
+    out = _dedup_by_content(df, source='test')
+    assert out.height == 1, (
+        f'expected dedup to collapse 2 content-equal rows; got {out.height}. '
+        f'CI4 dynamic-volatile-string exclusion did not fire — claim_repr '
+        f'differing memory addresses kept the rows distinct.'
+    )
+
+
+def test_dedup_keeps_distinct_content_rows() -> None:
+    """**Negative control**: rows with the SAME object-repr
+    column but DIFFERENT non-volatile content stay distinct.
+    The volatile exclusion must not over-collapse legitimate
+    distinct cells."""
+    from corroborate.runner.runner import _dedup_by_content
+
+    df = pl.DataFrame({
+        'id': ['a', 'b'],
+        'arm_key': ['baseline', 'baseline'],
+        'env_name': ['CartPole-v1', 'CartPole-v1'],
+        'gamma': [0.99, 0.95],   # ← differs
+        'seed': [0, 0],
+        'claim_repr': [
+            '<C object at 0x1>',
+            '<C object at 0x2>',
+        ],
+    })
+
+    out = _dedup_by_content(df, source='test')
+    assert out.height == 2, (
+        f'expected both distinct rows preserved; got {out.height}. '
+        f'CI4 over-collapsed despite content difference (gamma).'
+    )
+
+
+def test_dedup_volatile_detection_skips_non_repr_strings() -> None:
+    """A normal string column (e.g. `arm_key='baseline'`) is
+    NOT treated as volatile — only the specific object-repr
+    pattern triggers exclusion."""
+    from corroborate.runner.runner import _volatile_object_repr_columns
+
+    df = pl.DataFrame({
+        'id': ['a', 'b'],
+        'arm_key': ['baseline', 'baseline'],   # plain string — NOT a repr
+        'env_name': ['CartPole-v1', 'CartPole-v1'],
+        'env_repr': [
+            '<gymnax.E object at 0x1>',
+            '<gymnax.E object at 0x2>',
+        ],
+    })
+
+    volatile = _volatile_object_repr_columns(df)
+    assert 'env_repr' in volatile
+    assert 'arm_key' not in volatile
+    assert 'env_name' not in volatile

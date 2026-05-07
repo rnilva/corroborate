@@ -330,6 +330,52 @@ def test_build_measurements_rebuilds_from_scratch_on_duplicate_ids(
     assert df.sort('id')['double_x'].to_list() == [0.0, 2.0, 4.0]
 
 
+# ============ CI6 — row-level orphan eviction ============
+
+
+def test_build_measurements_drops_orphan_rows_not_in_runs(
+    tmp_path: Path,
+) -> None:
+    """**CORPUS_INTEGRITY.md CI6**: rows in `measurements.parquet`
+    whose `id` is no longer in `runs.parquet` are orphans —
+    dropped on every rebuild. Sweep extensions or partial
+    reruns that removed cells from runs.parquet would
+    otherwise leave stale measurement rows accumulating
+    forever.
+
+    Probe: pre-stage measurements.parquet with 3 rows for ids
+    [a, b, c]. Run build_measurements with runs_df containing
+    only [a, b]. Output should have 2 rows (c dropped as
+    orphan), and the canonical recompute fires.
+    """
+    runs_df = pl.DataFrame({
+        'id': ['cell-0', 'cell-1'],
+        'x': [1.0, 2.0],
+        'y': [10.0, 20.0],
+    })
+    out_path = tmp_path / MEASUREMENTS_FILENAME
+
+    # Pre-stage: 3 rows. cell-2 will be orphan once runs_df
+    # comes in with only cell-0 and cell-1.
+    pre_existing = pl.DataFrame({
+        'id': ['cell-0', 'cell-1', 'cell-2'],
+        'double_x': [99.0, 99.0, 99.0],
+    })
+    pre_existing.write_parquet(out_path)
+
+    build_measurements(
+        tmp_path, required=['double_x'], runs_df=runs_df,
+    )
+    df = load_measurements(tmp_path)
+
+    ids = sorted(df['id'].to_list())
+    assert ids == ['cell-0', 'cell-1'], (
+        f'CI6 orphan eviction failed: expected ids [cell-0, cell-1]; '
+        f'got {ids}. Stale `cell-2` row should have been dropped.'
+    )
+    assert df.height == 2
+
+
 # ============ Idempotent-skip ID validation (post-#2 roast fix) ============
 
 

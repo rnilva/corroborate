@@ -187,6 +187,26 @@ def build_measurements(
             f'from scratch.\n',
         )
         existing = pl.DataFrame()
+    # **CORPUS_INTEGRITY.md CI6**: row-level orphan eviction.
+    # `existing` may contain rows whose `id` is no longer in
+    # `runs_df['id']` — sweep extensions or partial reruns that
+    # dropped cells from runs.parquet leave stale orphans in
+    # measurements.parquet. Without this drop, every subsequent
+    # rebuild keeps recomputing measurables for cells that no
+    # longer exist scientifically. Reconcile to a strict subset.
+    orphan_rows_dropped = False
+    if existing.height > 0:
+        runs_ids = set(runs_df['id'].to_list())
+        existing_ids = set(existing['id'].to_list())
+        orphan_ids = existing_ids - runs_ids
+        if orphan_ids:
+            sys.stderr.write(
+                f'measurements: dropping {len(orphan_ids)} orphan '
+                f'row(s) from {out_path} (id no longer in '
+                f'runs.parquet)\n',
+            )
+            existing = existing.filter(pl.col('id').is_in(list(runs_ids)))
+            orphan_rows_dropped = True
     stored_sigs = current_signatures(corpus_dir)
 
     # Drop drifted + orphan columns from the existing store. Same
@@ -316,6 +336,7 @@ def build_measurements(
     if (
         not drop_cols
         and not overlap_dropped
+        and not orphan_rows_dropped
         and ids_match
         and all_required_present
         and no_partial_nulls

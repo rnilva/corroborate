@@ -48,6 +48,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import re
 import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -597,6 +598,46 @@ def _signatures_for(
 _PROVENANCE_TAGS: frozenset[str] = LINEAGE_FIELDS | {'corpus', 'env'}
 
 
+_OBJECT_REPR_PATTERN = re.compile(r'<.+\sobject\sat\s0x[0-9a-f]+>')
+
+
+def _volatile_object_repr_columns(df: pl.DataFrame) -> list[str]:
+    """**CORPUS_INTEGRITY.md CI4** dynamic complement to
+    `_PROVENANCE_TAGS`. Returns string columns whose first
+    non-null value matches the Python-object-repr pattern
+    `<...\\sobject\\sat\\s0x[0-9a-f]+>` (e.g. `<gymnax.envs.…
+    object at 0x77d49bbb2ea0>`). The hex memory address is
+    process-volatile — different across re-ingests of the same
+    scientific cell — so it acts as accidental run-time noise
+    rather than a content-identity column.
+
+    `env` is the historical canonical case (already hardcoded
+    in `_PROVENANCE_TAGS`); this dynamic detection generalizes
+    so a future substrate column carrying e.g. `<Claim:…>`
+    reprs gets caught the same way without a manual hardcode.
+    Columns already in `_PROVENANCE_TAGS` are skipped to avoid
+    redundant work."""
+    out: list[str] = []
+    for col in df.columns:
+        if col in _PROVENANCE_TAGS:
+            continue
+        if df.schema[col] != pl.String:
+            continue
+        # Probe the first non-null value. Cheaper than scanning
+        # the whole column and just as accurate — the repr
+        # pattern is structural, not per-row.
+        s = df[col].drop_nulls()
+        if s.len() == 0:
+            continue
+        # `polars.Series[String][0]` returns `Any` in the stubs;
+        # narrow via cast(object) so the `isinstance` check
+        # actually narrows.
+        v = cast(object, s[0])
+        if isinstance(v, str) and _OBJECT_REPR_PATTERN.match(v):
+            out.append(col)
+    return out
+
+
 def _dedup_by_content(df: pl.DataFrame, *, source: str) -> pl.DataFrame:
     """Drop rows whose non-provenance columns are all equal — i.e.
     cells that differ only in `id`/`corpus`/`timestamp` / lineage
@@ -606,10 +647,20 @@ def _dedup_by_content(df: pl.DataFrame, *, source: str) -> pl.DataFrame:
 
     Polars' `unique(subset=...)` handles primitive columns natively;
     list/object columns get coerced via `hash` first so the equality
-    check is value-based even on heterogeneous shapes."""
+    check is value-based even on heterogeneous shapes.
+
+    **CI4** (CORPUS_INTEGRITY.md): in addition to static
+    `_PROVENANCE_TAGS`, dynamically excludes string columns
+    carrying Python object reprs (process-volatile memory
+    addresses). Without this, two re-ingests of the same
+    scientific cell with different `<…\\sobject\\sat\\s0x…>`
+    addresses look like distinct rows and survive dedup —
+    inflating sample counts."""
     if df.height == 0:
         return df
-    content_cols = [c for c in df.columns if c not in _PROVENANCE_TAGS]
+    volatile = _volatile_object_repr_columns(df)
+    excluded = _PROVENANCE_TAGS | set(volatile)
+    content_cols = [c for c in df.columns if c not in excluded]
     if not content_cols:
         return df
     before = df.height
