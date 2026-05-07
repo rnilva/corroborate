@@ -1052,9 +1052,41 @@ def _load_one_corpus(
         return None, log_lines
     df = pl.read_parquet(runs_path)
     runs_columns = set(df.columns)
-    df = _join_required_traces(
-        df, sub / 'traces.parquet', trace_reads,
+    # **CORPUS_INTEGRITY.md CI8**: refuse a contaminated
+    # `traces.parquet` (cloud-collision residue from pre-CI3 era
+    # that overwrote distinct corpora's archives at the same
+    # remote_root). The runner falls back to "no cloud traces"
+    # for the offending corpus rather than producing all-null
+    # join output — honest partial-coverage instead of silent
+    # nullification.
+    from corroborate.corpus.integrity import (
+        TraceContaminationError, assert_traces_subset_of_runs,
     )
+    try:
+        assert_traces_subset_of_runs(sub)
+    except TraceContaminationError as e:
+        log_lines.append(
+            f'{prefix}: WARNING — CI8 contamination detected; '
+            f'skipping trace join '
+            f'(spurious={e.stats.spurious_count}, '
+            f'overlap={e.stats.overlap_count}, '
+            f'runs={e.stats.runs_count}). Trace-dependent '
+            f'measurables will be null for this corpus.',
+        )
+        # Evict the bogus local traces.parquet so the next
+        # restore-from-cloud doesn't keep re-validating the same
+        # contamination. The cloud copy stays untouched (cleanup
+        # is a separate manual step — manifest fix).
+        if just_restored_traces:
+            try:
+                (sub / 'traces.parquet').unlink(missing_ok=True)
+                just_restored_traces = False
+            except OSError:
+                pass
+    else:
+        df = _join_required_traces(
+            df, sub / 'traces.parquet', trace_reads,
+        )
     # **Phase 2.1** (CACHE_BUILD.md): route per-cell measurable
     # computation through `build_measurements` so the per-corpus
     # `measurements.parquet` store is populated as a side effect.

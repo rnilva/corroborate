@@ -20,9 +20,12 @@ from corroborate.corpus.integrity import (
     ArchivePrecondition,
     NestedCorpusError,
     RemoteRootCollision,
+    TraceContaminationError,
     assert_archive_eligible,
     assert_no_nested_corpora,
+    assert_traces_subset_of_runs,
     assert_unique_remote_root,
+    audit_trace_contamination,
 )
 
 
@@ -385,3 +388,107 @@ def test_dedup_volatile_detection_skips_non_repr_strings() -> None:
     assert 'env_repr' in volatile
     assert 'arm_key' not in volatile
     assert 'env_name' not in volatile
+
+
+# ============ CI8 — traces.id ⊆ runs.id ============
+
+
+def _write_runs(p: Path, ids: list[str]) -> None:
+    p.parent.mkdir(parents=True, exist_ok=True)
+    pl.DataFrame({'id': ids, 'env_name': ['Env'] * len(ids)}).write_parquet(p)
+
+
+def _write_traces(p: Path, ids: list[str]) -> None:
+    p.parent.mkdir(parents=True, exist_ok=True)
+    pl.DataFrame({'id': ids, 'reward': [0.0] * len(ids)}).write_parquet(p)
+
+
+def test_audit_trace_contamination_healthy(tmp_path: Path) -> None:
+    """`traces.id == runs.id` is the canonical healthy state.
+    No contamination."""
+    _write_runs(tmp_path / 'runs.parquet', ['a', 'b', 'c'])
+    _write_traces(tmp_path / 'traces.parquet', ['a', 'b', 'c'])
+    stats = audit_trace_contamination(tmp_path)
+    assert stats is not None
+    assert not stats.is_contaminated
+    assert stats.spurious_count == 0
+
+
+def test_audit_trace_contamination_partial_coverage_ok(
+    tmp_path: Path,
+) -> None:
+    """Partial trace coverage (`traces.id ⊂ runs.id`) is
+    legitimate — some cells didn't get traces archived. Not a
+    contamination."""
+    _write_runs(tmp_path / 'runs.parquet', ['a', 'b', 'c', 'd'])
+    _write_traces(tmp_path / 'traces.parquet', ['a', 'b'])  # only 2 of 4
+    stats = audit_trace_contamination(tmp_path)
+    assert stats is not None
+    assert not stats.is_contaminated
+    assert stats.spurious_count == 0
+    assert stats.overlap_count == 2
+
+
+def test_audit_trace_contamination_zero_overlap(tmp_path: Path) -> None:
+    """**The canonical CI8 violation**: cloud-archive collision
+    leaves traces.parquet with ids from a DIFFERENT sweep.
+    `traces.id ∩ runs.id == ∅`. Mirrors the in-the-wild
+    `minatar_sync_curve_pt2_ddqn_sync1k` shape."""
+    _write_runs(tmp_path / 'runs.parquet', ['a', 'b', 'c'])
+    _write_traces(tmp_path / 'traces.parquet', ['x', 'y', 'z'])
+    stats = audit_trace_contamination(tmp_path)
+    assert stats is not None
+    assert stats.is_contaminated
+    assert stats.spurious_count == 3
+    assert stats.overlap_count == 0
+
+
+def test_audit_trace_contamination_partial_overlap(
+    tmp_path: Path,
+) -> None:
+    """Mixed: traces has some legitimate ids AND some spurious
+    ones. Even one spurious id contaminates the file — we can't
+    selectively trust the matching subset because there's no way
+    to distinguish "valid-and-archived" from "happens-to-share-
+    UUID with a different sweep."
+    """
+    _write_runs(tmp_path / 'runs.parquet', ['a', 'b', 'c'])
+    _write_traces(tmp_path / 'traces.parquet', ['a', 'b', 'spurious'])
+    stats = audit_trace_contamination(tmp_path)
+    assert stats is not None
+    assert stats.is_contaminated
+    assert stats.spurious_count == 1
+    assert stats.overlap_count == 2
+
+
+def test_audit_trace_contamination_missing_files(
+    tmp_path: Path,
+) -> None:
+    """Either file absent → silent None (caller decides). The
+    audit doesn't fabricate a violation when there's nothing
+    to compare."""
+    # Neither file
+    assert audit_trace_contamination(tmp_path) is None
+    # Only runs
+    _write_runs(tmp_path / 'runs.parquet', ['a'])
+    assert audit_trace_contamination(tmp_path) is None
+
+
+def test_assert_traces_subset_of_runs_raises_on_violation(
+    tmp_path: Path,
+) -> None:
+    """`assert_traces_subset_of_runs` is the assert-form of the
+    audit — raises `TraceContaminationError` when contaminated,
+    silent otherwise."""
+    _write_runs(tmp_path / 'runs.parquet', ['a', 'b'])
+    _write_traces(tmp_path / 'traces.parquet', ['a', 'b'])
+    # Healthy: no exception.
+    assert_traces_subset_of_runs(tmp_path)
+
+    # Contaminate.
+    _write_traces(tmp_path / 'traces.parquet', ['a', 'b', 'spurious'])
+    with pytest.raises(TraceContaminationError) as exc_info:
+        assert_traces_subset_of_runs(tmp_path)
+    msg = str(exc_info.value)
+    assert 'CI8' in msg
+    assert 'spurious' in msg.lower() or 'absent' in msg.lower()

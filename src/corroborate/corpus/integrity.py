@@ -1,24 +1,25 @@
 """Defensive primitives at the corpus boundary
 (CORPUS_INTEGRITY.md).
 
-Each invariant CI1-CI7 has a check function that surfaces
+Each invariant CI1-CI8 has a check function that surfaces
 violations as a typed exception. Called at the boundaries
 where corpora enter the framework: `_load_directory` for
-ingest, `cloud.archive` for outbound writes.
+ingest, `cloud.archive` for outbound writes, trace restore
+inside `_load_one_corpus`.
 
 Currently implemented:
 - CI1 nested-corpus detection (`assert_no_nested_corpora`).
-
-Planned (Phase 1 continuation):
-- CI3 cloud-root collision (`assert_unique_remote_roots`).
+- CI3 cloud-root collision (`assert_unique_remote_root`).
+- CI4 dedup-volatile-strip (`_volatile_object_repr_columns`
+  in `runner.py`).
 - CI5 archive precondition (`assert_archive_eligible`).
+- CI6 row-level orphan eviction (in
+  `corpus/measurements.py:build_measurements`).
+- CI8 trace-id subset check (`assert_traces_subset_of_runs`).
 
-Phase 2:
-- CI4 dedup-volatile-strip helper.
-- CI6 row-level orphan eviction in build_measurements.
-
-Phase 3:
-- CI7 broader trace eviction.
+CI2 (per-corpus measurements id uniqueness) lives in
+`corpus/measurements.py` because it needs the polars frame
+post-load. CI7 (broader trace eviction) is Phase 3, deferred.
 
 Each check produces a list of violators (not just the first)
 so a single `find/fix` pass surfaces everything in one error.
@@ -28,6 +29,8 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
+
+import polars as pl
 
 
 # ============ CI1 — corpora are leaves ============
@@ -256,12 +259,114 @@ def assert_unique_remote_root(
             )
 
 
+# ============ CI8 — traces.id ⊆ runs.id ============
+
+
+@dataclass(frozen=True, slots=True)
+class TraceContaminationStats:
+    """Summary of CI8 audit on a single corpus."""
+    corpus_dir: Path
+    runs_count: int
+    traces_count: int
+    spurious_count: int
+    overlap_count: int
+
+    @property
+    def is_contaminated(self) -> bool:
+        """traces.parquet has at least one id absent from runs."""
+        return self.spurious_count > 0
+
+
+class TraceContaminationError(RuntimeError):
+    """Raised when `traces.parquet` carries ids not present in
+    `runs.parquet` — the cloud-collision residue pattern from
+    CORPUS_INTEGRITY.md.
+
+    Two corpora pushed to the same cloud root pre-CI3 silently
+    overwrite each other; the survivor's traces.parquet contains
+    a different sweep's UUIDs while the local runs.parquet still
+    records the original sweep. The runner's left-join would
+    produce all-null trace columns for every cell, and
+    trace-dependent measurables fail per-cell with AxisError.
+
+    Refusing the contaminated traces upfront — with the runner
+    falling back to "no cloud traces" — produces honest null
+    measurables for cells without traces, rather than silently
+    null-everywhere from a join collision."""
+
+    def __init__(self, stats: TraceContaminationStats) -> None:
+        self.stats = stats
+        super().__init__(
+            f'CORPUS_INTEGRITY.md CI8 — '
+            f'{stats.corpus_dir.name}/traces.parquet contains '
+            f'{stats.spurious_count} id(s) absent from '
+            f'runs.parquet (traces={stats.traces_count} ids, '
+            f'runs={stats.runs_count} cells, overlap='
+            f'{stats.overlap_count}). The cloud archive is from a '
+            f'different sweep (cloud-collision residue). Either '
+            f'remove `traces.parquet` from the manifest, or '
+            f'restore from a clean source.'
+        )
+
+
+def audit_trace_contamination(
+    corpus_dir: Path,
+) -> TraceContaminationStats | None:
+    """Scan `corpus_dir/runs.parquet` and `corpus_dir/traces.parquet`
+    (local copies — no cloud read), compute the id-set relation.
+
+    Returns `None` when either file is absent (caller decides
+    whether absence is OK). Returns a stats record otherwise;
+    the caller can check `stats.is_contaminated` for CI8 violation.
+    """
+    runs_p = corpus_dir / 'runs.parquet'
+    traces_p = corpus_dir / 'traces.parquet'
+    if not runs_p.exists() or not traces_p.exists():
+        return None
+    try:
+        runs_ids = set(
+            pl.read_parquet(runs_p, columns=['id'])['id'].to_list(),
+        )
+        traces_ids = set(
+            pl.read_parquet(traces_p, columns=['id'])['id'].to_list(),
+        )
+    except (pl.exceptions.ComputeError, OSError, ValueError):
+        # Caller's other integrity paths (`_file_present`, etc.)
+        # handle parse errors; CI8 just doesn't audit when the
+        # files are unreadable.
+        return None
+    spurious = traces_ids - runs_ids
+    overlap = traces_ids & runs_ids
+    return TraceContaminationStats(
+        corpus_dir=corpus_dir,
+        runs_count=len(runs_ids),
+        traces_count=len(traces_ids),
+        spurious_count=len(spurious),
+        overlap_count=len(overlap),
+    )
+
+
+def assert_traces_subset_of_runs(corpus_dir: Path) -> None:
+    """Run `audit_trace_contamination` and raise
+    `TraceContaminationError` when `traces.parquet` has spurious
+    ids. Caller decides where to surface this — typically inside
+    the runner's per-corpus restore path, after a fresh download
+    and BEFORE the join with runs.parquet."""
+    stats = audit_trace_contamination(corpus_dir)
+    if stats is not None and stats.is_contaminated:
+        raise TraceContaminationError(stats)
+
+
 __all__ = [
     'ArchivePrecondition',
     'NestedCorpusError',
     'NestedCorpusViolation',
     'RemoteRootCollision',
+    'TraceContaminationError',
+    'TraceContaminationStats',
     'assert_archive_eligible',
     'assert_no_nested_corpora',
+    'assert_traces_subset_of_runs',
     'assert_unique_remote_root',
+    'audit_trace_contamination',
 ]

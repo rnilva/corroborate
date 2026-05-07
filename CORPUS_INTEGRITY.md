@@ -197,17 +197,59 @@ the rebuild.
 each) — 14 GB unreclaimed, contributing to disk-full failures
 at corpus 22-23 in three consecutive rebuilds.
 
+### CI8. `traces.parquet` ids are a subset of `runs.parquet` ids
+
+`runs.parquet` is the canonical cell index — it defines what
+cells exist in the corpus. `traces.parquet`, when present, is a
+side-table indexed by the same `id`. Every id in
+`traces.parquet` MUST appear in `runs.parquet`; spurious trace
+ids are the cloud-collision residue pattern.
+
+**Rule.** At runner trace-restore time, `audit_trace_contamination`
+reads both files' id sets. If `traces.id - runs.id` is non-empty,
+raise `TraceContaminationError`. The runner catches and falls
+back to "no cloud traces" for that corpus — produces honest
+null trace-dep measurables for ALL its cells rather than
+silently null-everywhere from a join collision (every cell's
+join misses).
+
+**Why.** Pre-CI3, two local corpora pushing to the same cloud
+root silently overwrote each other. The survivor's
+`traces.parquet` carries a different sweep's UUIDs while the
+defeated corpus's local `runs.parquet` is intact. Restoring
+that traces.parquet and joining produces all-null trace columns
+(no id matches), which then surfaces as
+`np.asarray(None) → 0-d → AxisError` per cell — looking like a
+substrate-side data shape bug when it's actually identity drift
+between two files of a single corpus's archive. CI8 catches it
+upfront with a clear error.
+
+Partial trace coverage (`traces.id ⊂ runs.id` — some cells
+didn't get traces archived) is **legitimate** and explicitly
+allowed; only spurious additions trigger the violation.
+
+**Failure caught.** `minatar_sync_curve_pt2_ddqn_sync1k`:
+`runs.parquet` 60 cells, `traces.parquet` 60 cells, intersection
+**0**. The cloud archive at
+`s3://corroborate-archive/minatar_sync_curve_pt2/traces.parquet`
+was overwritten by a different sub-corpus's archive at the
+same root before CI3 was in place; restoring on a fresh rebuild
+produces 60 spurious trace ids and AxisError on every cell.
+Repaired by removing `traces.parquet` from the manifest;
+runner falls back to no-traces.
+
 ## Audit table — current vs. target
 
 | Invariant | Held by current code? | Gap |
 |---|---|---|
-| **CI1** Corpora are leaves | NO — silent skip on nested | Refuse loudly at ingest |
-| **CI2** Per-corpus id uniqueness | YES (Phase 0, just landed) | Promote warning to error after cleanup |
-| **CI3** Cloud-root uniqueness | NO — silent overwrite | Global remote_root registry; raise `RemoteRootCollision` |
-| **CI4** Content-dedup strips volatile | NO — `env` repr defeats dedup | Extend `_PROVENANCE_TAGS`; dtype-aware exclusion |
-| **CI5** Archive refuses trivial files | NO — 0-byte pushes succeed | Pre-upload `_file_present` check in `archive()` |
-| **CI6** Stores in sync with parent | PARTIAL — column-level orphan eviction (C4 in CACHE_BUILD.md), no row-level | Add row-level orphan drop in `build_measurements` |
+| **CI1** Corpora are leaves | YES (Phase 1) | — |
+| **CI2** Per-corpus id uniqueness | YES (Phase 0) | Promote warning to error after cleanup |
+| **CI3** Cloud-root uniqueness | YES (Phase 1) | — |
+| **CI4** Content-dedup strips volatile | YES (Phase 2 — env hardcoded + dynamic object-repr detection) | — |
+| **CI5** Archive refuses trivial files | YES (Phase 1) | — |
+| **CI6** Stores in sync with parent | YES (Phase 2) | — |
 | **CI7** Disk-pressure reclaim | PARTIAL — only just-restored | Extend to all cloud-recoverable traces |
+| **CI8** Traces id-subset | YES (Phase 2 extension) | — |
 
 ## Implementation order
 
