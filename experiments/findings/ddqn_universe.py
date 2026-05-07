@@ -2482,134 +2482,31 @@ def staleness_does_not_amplify_ddqn_outcome__survival_polyak(
 
 
 # =====================================================================
-# CLAIM 16 — bootstrap_fraction → g_link, conditional on
-#            non-Q-explosion regime.
+# CLAIM 16 — DELETED.
 #
-# Updates `bootstrap_fraction_drives_g_link__net_of_dormancy` with
-# the endogenous-predicate scope discovered via per-(env, sync)
-# panel analysis (`non_qexp_link_panel.json`):
+# `bootstrap_fraction_drives_g_link__non_q_explosion` was the
+# corpus-general successor to `__net_of_dormancy`, intended to
+# encode "bf is the cross-env link predictor once Q-explosion is
+# excluded". After multiple debug rounds the claim is dead:
+#   - Per-cell signal: FourRooms-domination artifact (27% cell
+#     share) — `findings_per_env_vs_per_cell_weighting`.
+#   - Per-env signal: bandit-tail leverage (MNISTBandit bf=0,
+#     DeepSea bf=0.875). Drop them, β collapses.
+#   - q_div<100 doesn't actually exclude Q-explosion (pooled
+#     trajectory mean masks per-burst divergence on MinAtar
+#     sync=100). Filter to per-burst plc≥0.3 and bf signal flips
+#     sign or vanishes — n=4-6, all p>0.18.
+#   - bf clusters at [0.98, 1.00] across true chain MDPs. No
+#     meaningful cross-env variance to test against.
 #
-#   ρ(bf, g_link | mech HELD, q_div < 100):
-#     ALL strata (n=40):     +0.38, p=0.015
-#     GOAL polarity (n=16):  +0.40, p=0.13
-#     SURVIVAL (n=19):       +0.48, p=0.039
-#
-# bf is universal across polarity classes ONCE Q-explosion is
-# excluded. The earlier `__net_of_dormancy` bridge pinned to
-# corpus-specific HPs (replay.capacity=10000) — replaced here
-# with the endogenous q_divergence_score predicate.
-#
-# Companion bridge to the existing `__net_of_dormancy` (which
-# stays as-is for historical baseline tracking).
+# The chain-amplifier theory survives substantively, but its
+# cross-env signature is "Q-stable envs (high plc) keep the
+# link active per-burst" (`findings_minatar_link_attenuation`)
+# — not bf cross-env. The historical baseline bridge
+# `bootstrap_fraction_drives_g_link__net_of_dormancy` stays as
+# corpus-pinned record of what the original residual looked like
+# before the artifact was diagnosed.
 # =====================================================================
-
-
-@claim_bridge(
-    source=INTERVENTION,
-    target='eval_best_burst_mean',
-    direction=Direction.DIRECT,
-    tier=Tier.ASSOCIATIONAL,
-    pair_by=('seed', 'total_steps', 'eval_every'),
-    scope=(
-        # Non-Q-explosion: bias correction operates in the
-        # bounded-Q regime where Hasselt's theorem bites cleanly.
-        finite('q_divergence_score')
-        & finite_lt('q_divergence_score', 100.0)
-        # Bootstrap-using envs: the chain-amplifier theory
-        # requires that updates DO bootstrap. Bandit envs
-        # (bf~0) lack the chain entirely, so DDQN's chain-
-        # amplifier mechanism can't operate.
-        & finite_gt('bootstrap_fraction', 0.5)
-        & finite('jensen_dormancy_gap')
-        # bsuite diagnostic chains (DC, DeepSea, ...) excluded
-        # by file-level MODULE_SCOPE.
-    ),
-    predicted_direction='a_gt_b',
-)
-def bootstrap_fraction_drives_g_link__non_q_explosion(
-    meta_regression_per_burst: MetaRegressionResult,
-    *,
-    source: Measurable[
-        Mapping[str, object], npt.NDArray[np.floating],
-    ] = _MC_RETURN_PER_BURST_MEAN,
-    covariates: tuple[str, ...] = (
-        'log_action_dim',
-        'log_horizon',
-        'bootstrap_fraction',
-        'jensen_dormancy_gap',
-    ),
-    dedupe_strategy: str = 'mean',
-    bf_threshold: float = 0.5,
-) -> Verdict:
-    """In non-Q-explosion strata (q_div < 100), the meta-
-    regression's `bootstrap_fraction` coefficient on g_link is
-    POSITIVE and significant. Captures the cross-strata link
-    predictor that survives across both GOAL and SURVIVAL
-    polarity classes.
-
-    Theoretical reading (per `findings_chain_bottlenecks`,
-    `findings_residual_unexplained`, `findings_nstep_falsification`,
-    `findings_polyak_tau`): in envs where most updates bootstrap
-    (long episodes / sparse termination), the chain of bootstrapped
-    Q-values amplifies the per-step max-bias, so DDQN's bias
-    correction yields a larger downstream outcome benefit. The
-    Q-explosion regime breaks this — extreme Q-divergence
-    overwhelms the per-step bias signal (cf. CLAIM 11).
-
-    HELD when β(bootstrap_fraction) ≥ `bf_threshold` AND
-    significant. POWER_INSUFFICIENT when not significant.
-    NO_EFFECT when significant but below magnitude floor (or
-    negative — would refute the chain-amplifier reading).
-
-    Empirical readings across analysis units (bf > 0.5 scope,
-    excludes MNISTBandit):
-      Per-env all 11 envs:           β = +0.226  p = 0.028
-      Per-env drop DeepSea:          β = +0.012  p = 0.91
-      Per-env drop FourRooms:        β = +0.220  p = 0.004
-      Per-env drop both outliers:    β = +0.059  p = 0.36
-      Per-burst cell-weighted CR1:   (verdict-determining)
-
-    The per-env signal among bootstrap-using envs is driven
-    almost entirely by DeepSea (bf=0.875, the only RL env
-    below ~0.98). All other RL envs cluster bf ∈ [0.98, 1.00]
-    — a 2% range that doesn't carry meaningful cross-env
-    variance. So the cross-env "bf chain-amplifier" claim is
-    really untestable on this corpus: bf is too constant among
-    standard RL envs once bandits are excluded.
-
-    The bf > 0.5 scope filter is theory-motivated (Hasselt's
-    chain-amplifier requires that updates bootstrap) and
-    blocks the structural pseudo-signal from MNISTBandit
-    (bf=0). It does NOT fix the within-RL constancy problem
-    — that's a measurement-power limit of this corpus.
-
-    Bridge uses `meta_regression_per_burst` (cell-weighted,
-    cluster-robust SE on env_name) — the per-env primitive
-    requires pre-computed static `covariates_per_env`, which
-    isn't natural for cell-derived predictors like bf. The
-    scope filters that the previous version added (n_step=1,
-    rs=1, polyak.tau is null) are now removed: per-env
-    weighting absorbs the cell-share imbalance those were
-    defensively guarding against (cf. `findings_per_env_vs_
-    per_cell_weighting`); the cell-weighted bridge form is
-    less robust to those imbalances but the bf > 0.5
-    structural filter is the load-bearing exclusion.
-
-    Companion bridge to `bootstrap_fraction_drives_g_link__net_
-    of_dormancy` (corpus-pinned, historical baseline)."""
-    del source, covariates, dedupe_strategy
-    coef = next(
-        (c for c in meta_regression_per_burst.coefficients
-         if c.name == 'bootstrap_fraction'),
-        None,
-    )
-    if coef is None:
-        return Verdict.POWER_INSUFFICIENT
-    if not coef.is_significant:
-        return Verdict.POWER_INSUFFICIENT
-    if coef.coefficient >= bf_threshold:
-        return Verdict.HELD
-    return Verdict.NO_EFFECT
 
 
 # =====================================================================
@@ -2714,7 +2611,6 @@ DDQN_UNIVERSE_BRIDGES = (
     # CLAIM 16 — bf → g_link in non-Q-explosion regime, both
     # polarity classes (universal). Endogenous-predicate update
     # to the corpus-pinned `__net_of_dormancy` bridge.
-    bootstrap_fraction_drives_g_link__non_q_explosion,
 )
 """The six bridges that close the DDQN study. CLAIM 1 (mechanism
 activation, do(DDQN) ↓ jensen_gap) is corroborated by
@@ -2750,7 +2646,6 @@ __all__ = [
     'link_r_predictable_from_polarity__soft_tautology',
     'staleness_amplifies_ddqn_outcome__sparse_goal_polyak',
     'staleness_does_not_amplify_ddqn_outcome__survival_polyak',
-    'bootstrap_fraction_drives_g_link__non_q_explosion',
 ]
 
 
