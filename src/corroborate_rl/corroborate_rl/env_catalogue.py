@@ -217,6 +217,35 @@ class RewardSparsify:
 
 
 @dataclass(frozen=True, slots=True)
+class ActionNoise:
+    """Wrapper config: with probability `prob`, replace agent's
+    action with a uniformly-random action before passing to the
+    inner env's step.
+
+    Causal-probe lever for the action-selection mechanism.
+    `findings_action_selection_fourrooms_specific`: DDQN's
+    argmax-concentration mechanism is FR-specific. Reward-shape
+    interventions (CLAIM 7g/7h) didn't transfer it. Last-
+    standing candidate: FR's native `fail_prob=0.333` (action
+    randomized ~44% of the time) makes Q values across actions
+    converge toward similar values, so DDQN's denoising matters
+    as the only signal in a noise-dominated env.
+
+    Tests sufficiency: stochastify Acrobot/MetaMaze (deterministic-
+    action envs that don't show the mechanism) and check whether
+    DDQN now concentrates argmax. If yes → action stochasticity
+    is sufficient, FR-specificity explained. If no → some other
+    structural property of FR remains."""
+    prob: float
+
+    def wrap(self, inner: Env) -> Env:
+        return ActionNoisedEnv(inner=inner, prob=self.prob)
+
+    def measurement_keys(self) -> Mapping[str, float]:
+        return {'action_noise_prob': float(self.prob)}
+
+
+@dataclass(frozen=True, slots=True)
 class RewardDensify:
     """Wrapper config: add `per_step` constant to every step
     reward (typically negative for penalty-shaping).
@@ -240,6 +269,7 @@ _WRAPPER_REGISTRY: dict[str, type[EnvWrapper]] = {
     'action_duplicate': ActionDuplicate,
     'reward_sparsify': RewardSparsify,
     'reward_densify': RewardDensify,
+    'action_noise': ActionNoise,
 }
 """Name → wrapper class. YAML's `wrappers: [{type: <name>, ...}]`
 parses each entry by looking up `<name>` here and instantiating
@@ -478,6 +508,44 @@ class RewardSparsifiedEnv:
             jnp.zeros_like(reward),
         )
         return next_obs, next_state, new_reward, done, info
+
+    def observation_space(self, params: EnvParams) -> Box:
+        return self.inner.observation_space(params)
+
+    def action_space(self, params: EnvParams) -> Discrete:
+        return self.inner.action_space(params)
+
+
+@dataclass(frozen=True, slots=True)
+class ActionNoisedEnv:
+    """Wraps a gymnax-style env, replacing agent's action with
+    a uniformly-random action with probability `prob`. Otherwise
+    passes the agent's action through unchanged.
+
+    Mirrors FourRooms's native `fail_prob` mechanism (which
+    randomizes action with prob `fail_prob * 4/3`)."""
+    inner: Env
+    prob: float
+
+    def reset(
+        self, rng: jax.Array, params: EnvParams,
+    ) -> tuple[jax.Array, EnvState]:
+        return self.inner.reset(rng, params)
+
+    def step(
+        self,
+        rng: jax.Array,
+        state: EnvState,
+        action: jax.Array,
+        params: EnvParams,
+    ) -> tuple[
+        jax.Array, EnvState, jax.Array, jax.Array, dict[str, object],
+    ]:
+        key_random, key_action, key_step = jax.random.split(rng, 3)
+        choose_random = jax.random.uniform(key_random, ()) < self.prob
+        random_action = self.inner.action_space(params).sample(key_action)
+        effective_action = jax.lax.select(choose_random, random_action, action)
+        return self.inner.step(key_step, state, effective_action, params)
 
     def observation_space(self, params: EnvParams) -> Box:
         return self.inner.observation_space(params)

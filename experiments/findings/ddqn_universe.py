@@ -1223,6 +1223,96 @@ def ddqn_does_not_rescue__cartpole_rs_0p1(
 
 
 # =====================================================================
+# CLAIM 7i/7j — Action-stochasticity intervention probe.
+#
+# After CLAIM 7g/7h refuted reward-shape as the discriminator,
+# the last-standing candidate for FR-specificity is action
+# stochasticity: FR's native fail_prob=0.333 randomizes the
+# agent's action ~44% of the time, driving Q-flatness across
+# actions. DDQN's denoising disproportionately matters when
+# stochasticity-induced Q-flatness is the dominant signal source.
+#
+# Sufficiency test: stochastify Acrobot/MetaMaze (deterministic-
+# action envs) with prob=0.44 and check if DDQN's argmax-
+# concentration mechanism activates.
+#
+# corpus: action_noise_intervention.
+# =====================================================================
+
+
+@claim_bridge(
+    source=INTERVENTION,
+    target='argmax_entropy_late',
+    direction=Direction.INVERSE,
+    tier=Tier.INTERVENTIONAL,
+    scope=(
+        (pl.col('env_name') == 'Acrobot-v1')
+        & finite('action_noise_prob')
+    ),
+    predicted_direction='a_lt_b',
+)
+def ddqn_concentrates_argmax__noisy_acrobot(
+    paired_g: PairedGResult,
+    *,
+    threshold_diff: float = 0.05,
+) -> Verdict:
+    """Stochastified Acrobot (action randomized 44% per step):
+    does DDQN concentrate argmax distribution like on native FR?
+
+    HELD ⟹ action stochasticity is sufficient to activate the
+    FR-specific mechanism. NO_EFFECT ⟹ stochasticity isn't the
+    discriminator; some other FR property remains."""
+    diff = paired_g.mean_diff
+    p = paired_g.mean_diff_p_value
+    if math.isnan(diff) or math.isnan(p):
+        return Verdict.POWER_INSUFFICIENT
+    if diff > 0.0:
+        return Verdict.NO_EFFECT
+    significant = p < 0.05
+    above_threshold = abs(diff) >= threshold_diff
+    if significant and above_threshold:
+        return Verdict.HELD
+    if above_threshold or significant:
+        return Verdict.POWER_INSUFFICIENT
+    return Verdict.NO_EFFECT
+
+
+@claim_bridge(
+    source=INTERVENTION,
+    target='argmax_entropy_late',
+    direction=Direction.INVERSE,
+    tier=Tier.INTERVENTIONAL,
+    scope=(
+        (pl.col('env_name') == 'MetaMaze-misc')
+        & finite('action_noise_prob')
+    ),
+    predicted_direction='a_lt_b',
+)
+def ddqn_concentrates_argmax__noisy_metamaze(
+    paired_g: PairedGResult,
+    *,
+    threshold_diff: float = 0.05,
+) -> Verdict:
+    """Stochastified MetaMaze (action randomized 44% per step):
+    does DDQN concentrate argmax distribution like on native FR?
+    Companion to noisy_acrobot — independent test on a different
+    chain MDP."""
+    diff = paired_g.mean_diff
+    p = paired_g.mean_diff_p_value
+    if math.isnan(diff) or math.isnan(p):
+        return Verdict.POWER_INSUFFICIENT
+    if diff > 0.0:
+        return Verdict.NO_EFFECT
+    significant = p < 0.05
+    above_threshold = abs(diff) >= threshold_diff
+    if significant and above_threshold:
+        return Verdict.HELD
+    if above_threshold or significant:
+        return Verdict.POWER_INSUFFICIENT
+    return Verdict.NO_EFFECT
+
+
+# =====================================================================
 # CLAIM 7g/7h — Reward-shape intervention probe of action-selection
 #               mechanism.
 #
@@ -2991,6 +3081,9 @@ DDQN_UNIVERSE_BRIDGES = (
     # CLAIM 7g/7h — reward-shape intervention probes.
     ddqn_concentrates_argmax__sparsified_acrobot,
     ddqn_does_not_concentrate_argmax__densified_fourrooms,
+    # CLAIM 7i/7j — action-stochasticity intervention probes.
+    ddqn_concentrates_argmax__noisy_acrobot,
+    ddqn_concentrates_argmax__noisy_metamaze,
     # CLAIM 8 — per-burst crossover shape on SpaceInvaders 1M.
     ddqn_curve_crosses_vanilla_late__spaceinvaders,
     # CLAIM 9 — n-step falsification of bootstrap-bias-compounding
@@ -3109,6 +3202,8 @@ __all__ = [
     'ddqn_entropy_matches_vanilla__fourrooms_rs_1p0',
     'ddqn_concentrates_argmax__sparsified_acrobot',
     'ddqn_does_not_concentrate_argmax__densified_fourrooms',
+    'ddqn_concentrates_argmax__noisy_acrobot',
+    'ddqn_concentrates_argmax__noisy_metamaze',
 ]
 
 

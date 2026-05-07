@@ -1,0 +1,55 @@
+name: action_noise_intervention
+out_dir: experiments/data/action_noise_intervention
+arms_shape: chunked
+
+# Pearl-rung-2 do(action_stochasticity) probe of FR-specificity
+# of the action-selection mechanism.
+#
+# `findings_action_selection_fourrooms_specific`: DDQN concentrates
+# argmax distribution only on FourRooms. Reward-shape
+# interventions (CLAIM 7g/7h) didn't transfer it. Last-standing
+# candidate: FR's native fail_prob=0.333 (action randomized ~44%
+# of the time) drives Q-flatness across actions; DDQN's
+# denoising matters as the only signal in noise-dominated env.
+#
+# Sufficiency test: stochastify Acrobot/MetaMaze with prob=0.44
+# (matching FR's effective replacement rate). If DDQN now
+# concentrates argmax on these envs, action stochasticity is
+# sufficient → FR-specificity explained.
+#
+# 2 envs × 2 arms × 30 seeds × 200K steps. ~12 min on GPU.
+
+envs:
+  - {name: Acrobot-v1, n_seeds: 30, chunk_size: 30, wrappers: [{type: action_noise, prob: 0.44}]}
+  - {name: MetaMaze-misc, n_seeds: 30, chunk_size: 30, wrappers: [{type: action_noise, prob: 0.44}]}
+
+base_intervention:
+  total_steps: 200000
+  eval_every:  20000
+  n_episodes:  5
+  gamma:       0.99
+  sync_period: 100
+  replay:
+    class: Replay
+    capacity: 50000
+    batch_size: 32
+  optimizer:
+    fn: warmed_update
+    inner: {fn: adam, lr: 0.0001}
+    warmup_steps: 100
+  q_network:
+    class: MLP
+    hidden: [64, 64]
+
+hypotheses:
+  - name: ddqn
+    predicted_direction: a_gt_b
+    intervention:
+      bootstrap:
+        fn: bootstrap
+        greedification: {fn: double_greedify}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement:
+          fn: bootstrap
+          greedification: {fn: double_greedify}
