@@ -205,68 +205,6 @@ def ddqn_bootstrap_gap_late(record: Mapping[str, object]) -> float:
     return _mean_window(gap, 0.5, 1.0)
 
 
-@measurable(reads=('gamma', 'bootstrap_fraction', 'target_staleness_late'))
-def chain_depth_mediator(
-    record: Mapping[str, object],
-) -> float:
-    """Single scalar capturing the chain-depth mediator that
-    governs DDQN's link to outcome.
-
-    Combines two cell-level operationalizations of "how much
-    bias the bootstrap chain accumulates":
-
-    1. `effective_horizon = 1/(1 − γ·bf)` — the geometric
-       expected discount horizon under per-step termination
-       probability `1 − bf`. Captures HOW LONG the bootstrap
-       chain extends before MC truncation.
-
-    2. `target_staleness_late` — the late-window mean
-       online-target Q gap. Captures HOW MUCH the target
-       lags online, i.e. per-step bias magnitude available
-       for compounding.
-
-    Definition: `chain_depth_mediator = effective_horizon ×
-    target_staleness_late`. Higher value → more bias has more
-    chain steps to compound through before any truncation.
-    DDQN's correction has correspondingly more bite.
-
-    Hypothesis (from `findings_chain_bottlenecks` shared-
-    moderator finding + `findings_polyak_tau` rung-2
-    corroboration + `findings_nstep_falsification`): this
-    composite predicts DDQN's outcome benefit (g_link) within
-    a regime where mech HELD. Cross-env, bf and stale are
-    nearly collinear (ρ=−0.98 per `link_moderator_per_burst`),
-    so they manifest the same latent variable; the product
-    operationalizes the joint construct.
-
-    Reads `gamma` directly + injects `bootstrap_fraction` and
-    `target_staleness_late` via the registry. NaN-propagates
-    from any input.
-
-    Caveat: not directly comparable across envs with different
-    reward scales — `target_staleness_late` is in Q-units
-    (depends on env's reward range). Use the bridge with
-    standardized predictors when comparing across envs."""
-    gamma = record.get('gamma')
-    bf = record.get('bootstrap_fraction')
-    stale = record.get('target_staleness_late')
-    if not (
-        isinstance(gamma, (int, float))
-        and isinstance(bf, (int, float))
-        and isinstance(stale, (int, float))
-    ):
-        return float('nan')
-    if math.isnan(bf) or math.isnan(stale):
-        return float('nan')
-    if gamma >= 1.0 or gamma < 0.0:
-        return float('nan')
-    denom = 1.0 - float(gamma) * float(bf)
-    if denom <= 0.0:
-        return float('nan')
-    eff_h = 1.0 / denom
-    return float(eff_h * float(stale))
-
-
 @measurable(reads=('online_max_q_per_step',))
 def q_late_mean(record: Mapping[str, object]) -> float:
     """Mean of `online_max_q_per_step` over the late 50% of
@@ -1269,12 +1207,6 @@ def dqn_default_measurables() -> tuple[
         # value (max Q_target) and DDQN's (Q_target at online's
         # argmax). Sign-aware effect on outcome by Q-regime.
         ddqn_bootstrap_gap_late,
-        # `chain_depth_mediator = effective_horizon ×
-        # target_staleness_late` — single scalar for the
-        # link-side mediator. Captures bf-stale joint construct
-        # that governs DDQN's bias-compounding-through-the-chain
-        # benefit.
-        chain_depth_mediator,
     )
 
 
