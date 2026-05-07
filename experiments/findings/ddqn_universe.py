@@ -1223,6 +1223,114 @@ def ddqn_does_not_rescue__cartpole_rs_0p1(
 
 
 # =====================================================================
+# CLAIM 7e/7f — DDQN's rescue mechanism is action-selection-level.
+#
+# rs_sweep_with_traces probe: at FourRooms rs=0.1, DDQN's argmax
+# distribution is MORE diverse (higher entropy, lower mode_freq)
+# than vanilla. At rs=1.0+, the two arms have nearly identical
+# argmax distributions. This suggests DDQN's benefit at low rs
+# is via maintained exploration (not premature commitment when
+# Q is flat), not via decisive policy selection.
+#
+# Empirical (rs_sweep_with_traces, FourRooms, n=30 per arm × rs):
+#   rs=0.1: vanilla H≈1.14, DDQN H≈1.30 (DDQN higher entropy)
+#   rs=1.0: vanilla H≈1.04, DDQN H≈1.04 (identical)
+#
+# Two complementary bridges encode this:
+#   (7e) DDQN INCREASES argmax entropy at rescue-regime rs.
+#        Predicted direction: a_gt_b (DDQN entropy > vanilla).
+#   (7f) DDQN's argmax entropy matches vanilla at standard rs.
+#        Predicted direction: null (no entropy difference).
+# =====================================================================
+
+
+@claim_bridge(
+    source=INTERVENTION,
+    target='argmax_entropy_late',
+    direction=Direction.DIRECT,
+    tier=Tier.INTERVENTIONAL,
+    scope=(
+        (pl.col('env_name') == 'FourRooms-misc')
+        & (pl.col('reward_scale') == 0.1)
+        & ((pl.col('n_step') == 1) | pl.col('n_step').is_null())
+    ),
+    predicted_direction='a_gt_b',
+)
+def ddqn_increases_argmax_entropy__fourrooms_rs_0p1(
+    paired_g: PairedGResult,
+    *,
+    threshold_diff: float = 0.05,
+) -> Verdict:
+    """At FourRooms rs=0.1 (rescue regime), DDQN's argmax
+    distribution is MORE diverse than vanilla's — DDQN maintains
+    exploration when Q-values are flat, while vanilla prematurely
+    commits to wrong actions. Empirical Δ_entropy ≈ +0.16 nats.
+
+    HELD when paired_g.mean_diff ≥ `threshold_diff` AND p < 0.05
+    AND positive sign. POWER_INSUFFICIENT when only one of the
+    two thresholds passes. NO_EFFECT when neither.
+
+    Refines CLAIM 7's "DDQN rescues at rs=0.1" finding by
+    identifying the action-selection-level mechanism: it's not
+    that DDQN's policy is more decisive (it's less so), it's
+    that DDQN avoids premature commitment to wrong actions when
+    Q is uninformative."""
+    diff = paired_g.mean_diff
+    p = paired_g.mean_diff_p_value
+    if math.isnan(diff) or math.isnan(p):
+        return Verdict.POWER_INSUFFICIENT
+    if diff < 0.0:
+        return Verdict.NO_EFFECT
+    significant = p < 0.05
+    above_threshold = diff >= threshold_diff
+    if significant and above_threshold:
+        return Verdict.HELD
+    if above_threshold or significant:
+        return Verdict.POWER_INSUFFICIENT
+    return Verdict.NO_EFFECT
+
+
+@claim_bridge(
+    source=INTERVENTION,
+    target='argmax_entropy_late',
+    direction=Direction.DIRECT,
+    tier=Tier.INTERVENTIONAL,
+    scope=(
+        (pl.col('env_name') == 'FourRooms-misc')
+        & (pl.col('reward_scale') == 1.0)
+        & ((pl.col('n_step') == 1) | pl.col('n_step').is_null())
+    ),
+    predicted_direction='null',
+)
+def ddqn_entropy_matches_vanilla__fourrooms_rs_1p0(
+    paired_g: PairedGResult,
+    *,
+    null_ceiling: float = 0.05,
+) -> Verdict:
+    """At FourRooms rs=1.0 (standard reward scale), DDQN's argmax
+    distribution matches vanilla's — both arms reach similar
+    entropy because the reward signal is strong enough that both
+    arms converge to similar action preferences. Empirical
+    |Δ_entropy| ≈ 0.
+
+    HELD encodes "DDQN's exploration-maintenance mechanism is
+    inactive at standard rs". Refutes a possible reading where
+    DDQN universally has higher entropy than vanilla; the effect
+    is regime-specific (low rs only)."""
+    diff = paired_g.mean_diff
+    p = paired_g.mean_diff_p_value
+    if math.isnan(diff) or math.isnan(p):
+        return Verdict.POWER_INSUFFICIENT
+    is_small = abs(diff) <= null_ceiling
+    is_ns = p > 0.05
+    if is_small and is_ns:
+        return Verdict.HELD
+    if is_small or is_ns:
+        return Verdict.POWER_INSUFFICIENT
+    return Verdict.NO_EFFECT
+
+
+# =====================================================================
 # CLAIM 8 — Per-burst learning-curve crossover on SpaceInvaders.
 # =====================================================================
 # Per-burst analysis on minatar_1M (paired across 30 seeds, env=
@@ -2759,6 +2867,9 @@ DDQN_UNIVERSE_BRIDGES = (
     # CLAIM 7c/7d — rescue does NOT generalize to Acrobot/CartPole.
     ddqn_does_not_rescue__acrobot_rs_0p1,
     ddqn_does_not_rescue__cartpole_rs_0p1,
+    # CLAIM 7e/7f — rescue mechanism is exploration-maintenance.
+    ddqn_increases_argmax_entropy__fourrooms_rs_0p1,
+    ddqn_entropy_matches_vanilla__fourrooms_rs_1p0,
     # CLAIM 8 — per-burst crossover shape on SpaceInvaders 1M.
     ddqn_curve_crosses_vanilla_late__spaceinvaders,
     # CLAIM 9 — n-step falsification of bootstrap-bias-compounding
@@ -2873,6 +2984,8 @@ __all__ = [
     'chain_amplifier_link_active_in_bounded_q',
     'ddqn_does_not_rescue__acrobot_rs_0p1',
     'ddqn_does_not_rescue__cartpole_rs_0p1',
+    'ddqn_increases_argmax_entropy__fourrooms_rs_0p1',
+    'ddqn_entropy_matches_vanilla__fourrooms_rs_1p0',
 ]
 
 
