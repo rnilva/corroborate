@@ -37,7 +37,10 @@ import os
 import tempfile
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
+
+if TYPE_CHECKING:
+    import pyarrow as pa  # noqa: F401
 
 import polars as pl
 
@@ -348,6 +351,89 @@ def _adaptive_chunk_size(
     return min(requested_chunk_size, safe)
 
 
+def _streaming_merge_unified(
+    inputs: Sequence[str], out: Path, *,
+    type_widening: bool,
+    compression: ParquetCompression,
+    compression_level: int,
+) -> None:
+    """Pyarrow-backed streaming merge for the chunk_size=1 edge
+    case. Computes a unified schema from all inputs up-front,
+    then writes the output one input file at a time, processing
+    each via row-group iteration so peak RAM stays bounded by
+    the largest single row group rather than the largest whole
+    file.
+
+    Schema unification handles `diagonal_relaxed` semantics: the
+    union of input columns, type-widened where two inputs disagree
+    (int → float, list-of-int → list-of-float, etc.). Inputs
+    missing a column receive null-padded values for that column.
+
+    Atomicity: writes to `<out>.partial`, renames on success."""
+    import pyarrow.parquet as pq
+    out_partial = out.with_suffix(out.suffix + '.partial')
+    if out_partial.exists():
+        out_partial.unlink()
+    # Pass 1: collect all schemas, compute unified schema via
+    # polars (which knows diagonal_relaxed type-widening).
+    polars_frames_for_schema: list[pl.DataFrame] = []
+    for p in inputs:
+        try:
+            polars_frames_for_schema.append(
+                pl.scan_parquet(p, glob=False).limit(0).collect(),
+            )
+        except Exception:
+            continue
+    if not polars_frames_for_schema:
+        raise ValueError(
+            f'_streaming_merge_unified: no readable inputs in {inputs}',
+        )
+    how = 'diagonal_relaxed' if type_widening else 'diagonal'
+    unified_polars = pl.concat(polars_frames_for_schema, how=how)
+    unified_arrow_schema = unified_polars.to_arrow().schema
+    # Pass 2: stream each input row-group at a time, project onto
+    # the unified schema, append.
+    writer = pq.ParquetWriter(
+        str(out_partial),
+        unified_arrow_schema,
+        compression=str(compression),
+        compression_level=compression_level,
+    )
+    try:
+        for p in inputs:
+            pq_file = pq.ParquetFile(str(p))
+            for rg_idx in range(pq_file.num_row_groups):
+                table = pq_file.read_row_group(rg_idx)
+                # Project + null-pad missing columns.
+                table = _project_to_unified(table, unified_arrow_schema)
+                writer.write_table(table)
+    finally:
+        writer.close()
+    out_partial.replace(out)
+
+
+def _project_to_unified(
+    table: 'pa.Table', target: 'pa.Schema',
+) -> 'pa.Table':
+    """Return `table` rewritten to have exactly `target.names`,
+    in `target` order, with null-padded columns for names absent
+    from `table` and casts where types differ. The unified target
+    schema comes from polars' diagonal_relaxed concat, which has
+    already resolved type-widening across inputs."""
+    import pyarrow as pa
+    target_arrays: list[pa.Array | pa.ChunkedArray] = []
+    n_rows = table.num_rows
+    for field in target:
+        if field.name in table.column_names:
+            col = table.column(field.name)
+            if not col.type.equals(field.type):
+                col = col.cast(field.type, safe=False)
+            target_arrays.append(col)
+        else:
+            target_arrays.append(pa.nulls(n_rows, type=field.type))
+    return pa.Table.from_arrays(target_arrays, schema=target)
+
+
 def stream_concat_parquets(
     inputs: Sequence[Path | str], out: Path, *,
     type_widening: bool = True,
@@ -446,6 +532,23 @@ def stream_concat_parquets(
             compression=compression, compression_level=compression_level,
         )
         out_partial.replace(out)
+        return
+
+    # **Pathological case**: when adaptive chunk_size lands at 1 AND
+    # there are multiple inputs, the chunked-recursive path would
+    # write N single-input temp files and recurse on them — same
+    # adaptive computation lands at 1 again → infinite recursion.
+    # Forward-progress guarantee: when chunk_size=1, route through
+    # the streaming pyarrow merge path instead. Schema unification
+    # is computed up-front from all input schemas; each input is
+    # then read one row-group at a time, projected onto the
+    # unified schema, and appended.
+    if chunk_size == 1:
+        _streaming_merge_unified(
+            inputs_list, out, type_widening=type_widening,
+            compression=compression,
+            compression_level=compression_level,
+        )
         return
 
     # Large case: chunked recursive merge. Pass 1 — write
