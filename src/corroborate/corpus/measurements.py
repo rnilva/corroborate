@@ -278,24 +278,49 @@ def build_measurements(
         # `RunRow.measurements`), polars' default left-join would
         # produce a `<col>_right` suffix on the existing-store
         # version. The right-suffixed column is then orphaned at
-        # `select(measurable_cols)` (line ~257) — the existing-store
-        # values are silently dropped without any merge logic
-        # consulting them.
+        # `select(measurable_cols)` — the existing-store values
+        # are silently dropped without any merge logic consulting
+        # them.
         #
-        # Substrate-stamped values are authoritative per Phase 3;
-        # explicitly drop the overlapping columns from `existing`
-        # before the join so the semantics are clear: runs_df wins
-        # on collision. `compute_missing_columns`'s partial-nullity
-        # branch still fires for cells where runs_df's column is
-        # null — the framework recomputes those, NOT consulting the
-        # existing-store value (would be wrong if existing is stale
-        # from a drifted closure that hadn't been hash-flipped yet).
-        overlap_dropped = [
+        # Substrate-stamped values are authoritative per Phase 3
+        # **only when the substrate had the inputs to compute
+        # them**. Trace-dependent measurables (`reads` references
+        # per-step trace columns like `online_max_q_per_step`) are
+        # stamped NaN at sweep time because traces don't exist yet
+        # — runner adds them as a post-sweep reduction. For those,
+        # runs_df's NaN stamp is NOT authoritative; the prior
+        # per-corpus store's value (computed once traces were
+        # restored) is. Drop only when the substrate had all
+        # inputs — preserve existing for trace-dependent stamps
+        # the substrate couldn't have computed.
+        runs_cols = set(runs_df.columns)
+        overlap_dropped = []
+        for c in existing.columns:
+            if c == 'id' or c not in runs_cols:
+                continue
+            m = get_registered(c)
+            if m is None:
+                # Non-registered overlap (shouldn't happen post-CI6
+                # orphan eviction); fall back to old "runs_df wins"
+                # so the join doesn't produce `_right`-suffixed
+                # garbage.
+                overlap_dropped.append(c)
+                continue
+            substrate_could_compute = all(r in runs_cols for r in m.reads)
+            if substrate_could_compute:
+                overlap_dropped.append(c)
+        if overlap_dropped:
+            existing = existing.drop(overlap_dropped)
+        # Where existing wins (kept above), runs_df's NaN-stamped
+        # column is itself the collision target — drop from
+        # runs_df so the join doesn't produce `<col>_right`. The
+        # existing-store value flows through unsuffixed.
+        runs_dropped = [
             c for c in existing.columns
             if c != 'id' and c in runs_df.columns
         ]
-        if overlap_dropped:
-            existing = existing.drop(overlap_dropped)
+        if runs_dropped:
+            runs_df = runs_df.drop(runs_dropped)
         # Bring forward still-current columns by joining on id. The
         # runs_df may have more rows than existing (new cells); left-
         # join keeps all runs cells. Cells in runs_df not yet in
@@ -343,7 +368,25 @@ def build_measurements(
     ):
         return out_path
 
-    enriched = compute_missing_columns(joined, to_compute_full)
+    # Skip-recompute for unsatisfiable measurables. A measurable
+    # whose `reads` aren't all in `joined.columns` will silently
+    # return NaN per cell (the measurable itself NaN-propagates
+    # when `_record_array` returns None for a missing key), and
+    # `compute_missing_columns`'s partial-null branch will then
+    # OVERWRITE existing finite values in `joined` with the fresh
+    # NaN — turning a previously-good per-corpus store into stale
+    # NaN. The defensive contract: only recompute measurables
+    # whose inputs are actually available in this invocation.
+    # Pre-existing finite values from `existing` flow through
+    # unmodified via the join.
+    to_compute_satisfied: list[str] = []
+    for n in to_compute_full:
+        m = get_registered(n)
+        if m is None:
+            continue
+        if all(r in joined.columns for r in m.reads):
+            to_compute_satisfied.append(n)
+    enriched = compute_missing_columns(joined, to_compute_satisfied)
 
     # Project to id + measurable columns only (drop any joined
     # trace cols / raw record fields the caller passed in).
