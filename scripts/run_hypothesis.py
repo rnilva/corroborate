@@ -244,18 +244,33 @@ def _check_and_report(module: str) -> int:
 
 def _print_verdicts(results: dict[str, BridgeEvaluation]) -> None:
     counts: dict[str, int] = {}
+    refutation_counts: dict[tuple[str, str], int] = {}
     for name, ev in results.items():
         v = ev.verdict.value
         counts[v] = counts.get(v, 0) + 1
+        if ev.refutation_class is not None:
+            key = (v, ev.refutation_class.value)
+            refutation_counts[key] = refutation_counts.get(key, 0) + 1
         bits: list[str] = []
         for ar in ev.analysis_results.values():
             bits.append(_summarize(ar))
         suffix = ' | '.join(bits) if bits else ''
-        print(f'{name:60s}  {v:24s}  {suffix}')
+        cls = (
+            f' ({ev.refutation_class.value})'
+            if ev.refutation_class is not None else ''
+        )
+        print(f'{name:60s}  {v:24s}{cls}  {suffix}')
     print()
     print('verdict counts:')
     for k in sorted(counts):
+        # Indented sub-classification breakdown when present.
+        sub = sorted(
+            (cls, n) for (verdict, cls), n in refutation_counts.items()
+            if verdict == k
+        )
         print(f'  {k:24s}  {counts[k]}')
+        for cls, n in sub:
+            print(f'    └── {cls:20s}  {n}')
 
 
 def _summarize(result: object) -> str:

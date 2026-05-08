@@ -64,7 +64,7 @@ from corroborate.bridge.admission import (
     GateResult,
 )
 from corroborate.bridge.analysis import resolve_for_holds_when
-from corroborate.bridge.verdict import Verdict
+from corroborate.bridge.verdict import RefutationClass, Verdict
 from corroborate.core.claim import Claim
 from corroborate.core.hypothesis import PredictedDirection
 from corroborate.core.intervention import ArmRole, DoEffect
@@ -205,7 +205,7 @@ class Bridge:
     `random_effects`, etc.) — keeping it inside the params bag
     forced every analysis to fish it out by name.
 
-    `holds_when: Callable[..., Verdict] | None` carries the
+    `holds_when: Callable[..., 'Verdict | tuple[Verdict, RefutationClass | None]'] | None` carries the
     threshold body. `@claim_bridge` always populates it from the
     decorated function; constructing a body-less Bridge directly
     is a programming error. `evaluate` raises `TypeError` if
@@ -245,7 +245,7 @@ class Bridge:
     pair_by: tuple[str, ...] = ('seed',)
     scope: pl.Expr | None = None
     predicted_direction: PredictedDirection | None = None
-    holds_when: Callable[..., Verdict] | None = None
+    holds_when: Callable[..., 'Verdict | tuple[Verdict, RefutationClass | None]'] | None = None
     threshold: float | None = None
     gates: tuple['AdmissionGate', ...] = ()
 
@@ -383,6 +383,20 @@ class BridgeEvaluation:
     blocked_by: 'GateResult | None' = None
     n_cells_in_scope: int = -1
     assumption_violations: tuple[str, ...] = ()
+    refutation_class: 'RefutationClass | None' = None
+    """**Sub-classification of NO_EFFECT** (or, more rarely, of
+    POWER_INSUFFICIENT). Bridge bodies that distinguish "predicted
+    direction, observed opposite" (`SIGN_FLIP`) from "predicted
+    direction, observed near-zero" (`NULL_EFFECT`) — or "predicted
+    null, observed significant" (`SIGN_FLIP` again, by symmetry) —
+    return `(Verdict, RefutationClass)` instead of bare `Verdict`.
+    Default `None` means no class was author-attached.
+
+    Surfacing this distinction matters because NO_EFFECT lumps two
+    different scientific outcomes — same shape as the framework's
+    POWER_INSUFFICIENT-vs-NO_EFFECT distinction (PAPER_NOTES.md
+    §3.4): silently absorbing the difference smuggles a stronger
+    refutation past the reader as merely 'no effect.'"""
 
 
 def _require_endpoint(
@@ -505,7 +519,7 @@ def claim_bridge(
     scope: pl.Expr | None = None,
     predicted_direction: PredictedDirection | None = None,
     gates: tuple[AdmissionGate, ...] = (),
-) -> Callable[[Callable[..., Verdict]], Bridge]:
+) -> Callable[[Callable[..., 'Verdict | tuple[Verdict, RefutationClass | None]']], Bridge]:
     """Decorator factory: wraps a function into a `Bridge`
     declaration. Bridge metadata lives in the decorator args; the
     function signature carries only fixture parameters (analyses)
@@ -570,7 +584,7 @@ def claim_bridge(
         predicted_direction, '<claim_bridge decorator>',
     )
 
-    def _decorator(fn: Callable[..., Verdict]) -> Bridge:
+    def _decorator(fn: Callable[..., 'Verdict | tuple[Verdict, RefutationClass | None]']) -> Bridge:
         try:
             sig = inspect.signature(fn)
         except (TypeError, ValueError) as exc:
@@ -811,7 +825,17 @@ def evaluate(
     analysis_results = resolve_for_holds_when(
         bridge.holds_when, filtered_cells, bridge_params,
     )
-    verdict = bridge.holds_when(**analysis_results)
+    holds_result = bridge.holds_when(**analysis_results)
+    # Bridges may return either bare `Verdict` (legacy) or
+    # `(Verdict, RefutationClass | None)` (new path, lets bridges
+    # mark sign-flip vs null-effect refutations explicitly).
+    # Runtime isinstance guards remain even though pyright sees
+    # the unioned return type — the `Bridge.holds_when` field is
+    # typed as a callable but Python wouldn't enforce the contract
+    # without these checks.
+    verdict, refutation_class = _unpack_holds_result(
+        holds_result, bridge_name=bridge.name,
+    )
     # Collect assumption_violations from each fixture's result.
     # Analyses author opt into this by exposing an
     # `assumption_violations: tuple[str, ...]` attribute on their
@@ -833,6 +857,46 @@ def evaluate(
         warnings=tuple(warnings),
         n_cells_in_scope=n_cells_in_scope,
         assumption_violations=tuple(assumption_flags),
+        refutation_class=refutation_class,
+    )
+
+
+def _unpack_holds_result(
+    result: object, *, bridge_name: str,
+) -> tuple[Verdict, RefutationClass | None]:
+    """Validate + unpack a bridge body's return value into the
+    (Verdict, RefutationClass | None) shape `BridgeEvaluation`
+    expects. Bridges may return bare `Verdict` (legacy path) or
+    `(Verdict, RefutationClass | None)` (new path)."""
+    if isinstance(result, Verdict):
+        return result, None
+    if isinstance(result, tuple):
+        if len(result) != 2:
+            raise TypeError(
+                f'Bridge {bridge_name!r} `holds_when` returned a '
+                f'{len(result)}-tuple; expected '
+                f'(Verdict, RefutationClass | None).',
+            )
+        verdict_obj, refutation_obj = result
+        if not isinstance(verdict_obj, Verdict):
+            raise TypeError(
+                f'Bridge {bridge_name!r} `holds_when` returned '
+                f'{type(verdict_obj).__name__} as the first tuple '
+                f'element; expected Verdict.',
+            )
+        if refutation_obj is not None and not isinstance(
+            refutation_obj, RefutationClass,
+        ):
+            raise TypeError(
+                f'Bridge {bridge_name!r} `holds_when` returned '
+                f'{type(refutation_obj).__name__} as the second '
+                f'tuple element; expected RefutationClass | None.',
+            )
+        return verdict_obj, refutation_obj
+    raise TypeError(
+        f'Bridge {bridge_name!r} `holds_when` returned '
+        f'{type(result).__name__}; expected Verdict '
+        f'or (Verdict, RefutationClass | None).',
     )
 
 

@@ -110,7 +110,7 @@ from corroborate_rl.dqn.measurables import (
     jensen_bias_per_burst_mean,
     mc_return_per_burst_mean,
 )
-from corroborate.bridge.verdict import Verdict
+from corroborate.bridge.verdict import RefutationClass, Verdict
 
 
 # Outermost claim for endogeneity gating (cf. ENDOGENEITY_TOPOLOGY.md).
@@ -1255,7 +1255,7 @@ def ddqn_concentrates_argmax__noisy_acrobot(
     paired_g: PairedGResult,
     *,
     threshold_diff: float = 0.05,
-) -> Verdict:
+) -> tuple[Verdict, RefutationClass | None]:
     """Stochastified Acrobot (action randomized 44% per step):
     does DDQN concentrate argmax distribution like on native FR?
 
@@ -1278,16 +1278,19 @@ def ddqn_concentrates_argmax__noisy_acrobot(
     diff = paired_g.mean_diff
     p = paired_g.mean_diff_p_value
     if math.isnan(diff) or math.isnan(p):
-        return Verdict.POWER_INSUFFICIENT
+        return Verdict.POWER_INSUFFICIENT, None
+    # Predicted direction: a_lt_b (DDQN concentrates ⟹ negative ΔH).
     if diff > 0.0:
-        return Verdict.NO_EFFECT
+        # Wrong sign — predicted negative, observed positive.
+        return Verdict.NO_EFFECT, RefutationClass.SIGN_FLIP
     significant = p < 0.05
     above_threshold = abs(diff) >= threshold_diff
     if significant and above_threshold:
-        return Verdict.HELD
+        return Verdict.HELD, None
     if above_threshold or significant:
-        return Verdict.POWER_INSUFFICIENT
-    return Verdict.NO_EFFECT
+        return Verdict.POWER_INSUFFICIENT, RefutationClass.UNDERPOWERED
+    # Right sign but null-effect magnitude.
+    return Verdict.NO_EFFECT, RefutationClass.NULL_EFFECT
 
 
 @claim_bridge(
@@ -1305,7 +1308,7 @@ def ddqn_concentrates_argmax__noisy_metamaze(
     paired_g: PairedGResult,
     *,
     threshold_diff: float = 0.05,
-) -> Verdict:
+) -> tuple[Verdict, RefutationClass | None]:
     """Stochastified MetaMaze (action randomized 44% per step):
     does DDQN concentrate argmax distribution like on native FR?
     Companion to noisy_acrobot — independent test on a different
@@ -1325,16 +1328,16 @@ def ddqn_concentrates_argmax__noisy_metamaze(
     diff = paired_g.mean_diff
     p = paired_g.mean_diff_p_value
     if math.isnan(diff) or math.isnan(p):
-        return Verdict.POWER_INSUFFICIENT
+        return Verdict.POWER_INSUFFICIENT, None
     if diff > 0.0:
-        return Verdict.NO_EFFECT
+        return Verdict.NO_EFFECT, RefutationClass.SIGN_FLIP
     significant = p < 0.05
     above_threshold = abs(diff) >= threshold_diff
     if significant and above_threshold:
-        return Verdict.HELD
+        return Verdict.HELD, None
     if above_threshold or significant:
-        return Verdict.POWER_INSUFFICIENT
-    return Verdict.NO_EFFECT
+        return Verdict.POWER_INSUFFICIENT, RefutationClass.UNDERPOWERED
+    return Verdict.NO_EFFECT, RefutationClass.NULL_EFFECT
 
 
 # =====================================================================
@@ -1374,7 +1377,7 @@ def ddqn_concentrates_argmax__sparsified_acrobot(
     paired_g: PairedGResult,
     *,
     threshold_diff: float = 0.05,
-) -> Verdict:
+) -> tuple[Verdict, RefutationClass | None]:
     """Sparsified Acrobot (FR-shape via zero per-step + +1
     terminal bonus): does DDQN concentrate argmax distribution
     relative to vanilla, as it does on native FourRooms?
@@ -1394,16 +1397,16 @@ def ddqn_concentrates_argmax__sparsified_acrobot(
     diff = paired_g.mean_diff
     p = paired_g.mean_diff_p_value
     if math.isnan(diff) or math.isnan(p):
-        return Verdict.POWER_INSUFFICIENT
+        return Verdict.POWER_INSUFFICIENT, None
     if diff > 0.0:
-        return Verdict.NO_EFFECT
+        return Verdict.NO_EFFECT, RefutationClass.SIGN_FLIP
     significant = p < 0.05
     above_threshold = abs(diff) >= threshold_diff
     if significant and above_threshold:
-        return Verdict.HELD
+        return Verdict.HELD, None
     if above_threshold or significant:
-        return Verdict.POWER_INSUFFICIENT
-    return Verdict.NO_EFFECT
+        return Verdict.POWER_INSUFFICIENT, RefutationClass.UNDERPOWERED
+    return Verdict.NO_EFFECT, RefutationClass.NULL_EFFECT
 
 
 @claim_bridge(
@@ -1421,7 +1424,7 @@ def ddqn_does_not_concentrate_argmax__densified_fourrooms(
     paired_g: PairedGResult,
     *,
     null_ceiling: float = 0.05,
-) -> Verdict:
+) -> tuple[Verdict, RefutationClass | None]:
     """Densified FourRooms (-0.01 per-step + native +1 terminal,
     Acrobot-shape): does DDQN's entropy concentration disappear?
 
@@ -1445,14 +1448,18 @@ def ddqn_does_not_concentrate_argmax__densified_fourrooms(
     diff = paired_g.mean_diff
     p = paired_g.mean_diff_p_value
     if math.isnan(diff) or math.isnan(p):
-        return Verdict.POWER_INSUFFICIENT
+        return Verdict.POWER_INSUFFICIENT, None
     is_small = abs(diff) <= null_ceiling
     is_ns = p > 0.05
+    # Predicted null: small-AND-ns confirms it (HELD).
     if is_small and is_ns:
-        return Verdict.HELD
+        return Verdict.HELD, None
     if is_small or is_ns:
-        return Verdict.POWER_INSUFFICIENT
-    return Verdict.NO_EFFECT
+        return Verdict.POWER_INSUFFICIENT, RefutationClass.UNDERPOWERED
+    # Predicted-null but observed significant + above ceiling →
+    # the null prediction is REFUTED (a sign-flip in the
+    # predicted-null sense: framework saw a real effect).
+    return Verdict.NO_EFFECT, RefutationClass.SIGN_FLIP
 
 
 # =====================================================================
@@ -1493,7 +1500,7 @@ def ddqn_increases_argmax_entropy__fourrooms_rs_0p1(
     paired_g: PairedGResult,
     *,
     threshold_diff: float = 0.05,
-) -> Verdict:
+) -> tuple[Verdict, RefutationClass | None]:
     """At FourRooms rs=0.1 (rescue regime), DDQN's argmax
     distribution is MORE diverse than vanilla's — DDQN maintains
     exploration when Q-values are flat, while vanilla prematurely
@@ -1511,16 +1518,17 @@ def ddqn_increases_argmax_entropy__fourrooms_rs_0p1(
     diff = paired_g.mean_diff
     p = paired_g.mean_diff_p_value
     if math.isnan(diff) or math.isnan(p):
-        return Verdict.POWER_INSUFFICIENT
+        return Verdict.POWER_INSUFFICIENT, None
+    # Predicted direction: a_gt_b (positive ΔH).
     if diff < 0.0:
-        return Verdict.NO_EFFECT
+        return Verdict.NO_EFFECT, RefutationClass.SIGN_FLIP
     significant = p < 0.05
     above_threshold = diff >= threshold_diff
     if significant and above_threshold:
-        return Verdict.HELD
+        return Verdict.HELD, None
     if above_threshold or significant:
-        return Verdict.POWER_INSUFFICIENT
-    return Verdict.NO_EFFECT
+        return Verdict.POWER_INSUFFICIENT, RefutationClass.UNDERPOWERED
+    return Verdict.NO_EFFECT, RefutationClass.NULL_EFFECT
 
 
 @claim_bridge(
@@ -1539,7 +1547,7 @@ def ddqn_entropy_matches_vanilla__fourrooms_rs_1p0(
     paired_g: PairedGResult,
     *,
     null_ceiling: float = 0.05,
-) -> Verdict:
+) -> tuple[Verdict, RefutationClass | None]:
     """At FourRooms rs=1.0 (standard reward scale), DDQN's argmax
     distribution matches vanilla's — both arms reach similar
     entropy because the reward signal is strong enough that both
@@ -1553,14 +1561,17 @@ def ddqn_entropy_matches_vanilla__fourrooms_rs_1p0(
     diff = paired_g.mean_diff
     p = paired_g.mean_diff_p_value
     if math.isnan(diff) or math.isnan(p):
-        return Verdict.POWER_INSUFFICIENT
+        return Verdict.POWER_INSUFFICIENT, None
     is_small = abs(diff) <= null_ceiling
     is_ns = p > 0.05
     if is_small and is_ns:
-        return Verdict.HELD
+        return Verdict.HELD, None
     if is_small or is_ns:
-        return Verdict.POWER_INSUFFICIENT
-    return Verdict.NO_EFFECT
+        return Verdict.POWER_INSUFFICIENT, RefutationClass.UNDERPOWERED
+    # Predicted null but observed significant effect → null
+    # refuted; classify as SIGN_FLIP (a real effect when none
+    # was predicted).
+    return Verdict.NO_EFFECT, RefutationClass.SIGN_FLIP
 
 
 # =====================================================================
