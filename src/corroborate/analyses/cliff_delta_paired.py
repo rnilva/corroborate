@@ -97,9 +97,11 @@ def cliff_delta_paired(
     """Compute Cliff's δ paired across matched (T, B) pairs.
 
     The pairing surface mirrors `paired_g`: same `pair_by`,
-    `arm_field`, `dedupe_strategy` semantics. Bridges authored to
-    consume both primitives can swap kwargs between them without
-    further translation.
+    `arm_field`, `dedupe_strategy` semantics (defaults to `'mean'`
+    aggregation; pass `'raise'` to error on duplicate
+    `(arm, pair_by)` cells). Bridges authored to consume both
+    primitives can swap kwargs between them without further
+    translation.
 
     See module docstring for when to use Cliff's δ vs paired_g."""
     if dedupe_strategy not in ('raise', 'mean'):

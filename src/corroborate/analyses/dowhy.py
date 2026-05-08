@@ -64,8 +64,22 @@ class BackdoorResult:
 class RefutationResult:
     """Output of a refutation analysis (placebo or random-common-
     cause). `real_ate` is the unrefuted ATE; `refuted_ate` is the
-    ATE under the refuter's perturbation; `drift` is `|refuted -
-    real|`. A bridge typically asserts `drift < tolerance`."""
+    ATE under the refuter's perturbation; `drift` is
+    `|refuted_ate - real_ate|`.
+
+    **Field to gate on depends on the refuter** — `drift` is
+    NOT a uniform robustness signal:
+    - **Random-common-cause** (`random_common_cause_refutation`):
+      a robust estimate is invariant to the synthetic confounder,
+      so `refuted_ate ≈ real_ate` and `drift ≈ 0`. Bridge gate:
+      `drift < tolerance` → robust.
+    - **Placebo** (`placebo_refutation`): a randomized treatment
+      should yield no effect, so `refuted_ate ≈ 0` and
+      `drift ≈ |real_ate|`. Bridge gate: `abs(refuted_ate) <
+      tolerance` → robust. The framework intentionally exposes
+      both fields so each refuter is gated on the one that reads
+      "robust" in its own semantics; do NOT gate placebo on
+      `drift`."""
     real_ate: float
     refuted_ate: float
     drift: float
@@ -230,8 +244,14 @@ def placebo_refutation(
     method_name: str = 'backdoor.linear_regression',
 ) -> RefutationResult:
     """Refute the ATE by replacing the treatment with a placebo
-    (random permutation). The real ATE should not survive — a
-    HELD bridge requires placebo drift below tolerance."""
+    (random permutation). A robust estimate yields
+    `refuted_ate ≈ 0` (the placebo has no causal channel to the
+    outcome). Bridge gate: `abs(result.refuted_ate) < tolerance`
+    → HELD; do NOT gate on `drift` here (drift ≈ |real_ate|
+    when the model is correct, so a `drift < tolerance` gate
+    would only fire when the real ATE is itself near zero, which
+    is the opposite of robustness). See `RefutationResult`'s
+    docstring for the per-refuter gate convention."""
     return _run_refuter(
         cells, treatment, outcome, dag, method_name,
         refuter_method='placebo_treatment_refuter',
@@ -248,8 +268,9 @@ def random_common_cause_refutation(
     method_name: str = 'backdoor.linear_regression',
 ) -> RefutationResult:
     """Refute the ATE by adding a random synthetic common cause
-    of treatment and outcome. The real ATE should be robust — a
-    HELD bridge requires drift below tolerance."""
+    of treatment and outcome. A robust estimate is invariant to
+    the synthetic confounder: `refuted_ate ≈ real_ate` and
+    `drift ≈ 0`. Bridge gate: `result.drift < tolerance` → HELD."""
     return _run_refuter(
         cells, treatment, outcome, dag, method_name,
         refuter_method='random_common_cause',

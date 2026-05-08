@@ -172,6 +172,21 @@ def paired_link_per_env(
     result; the bridge reads `coefficients[moderator]` for the
     cross-env relationship.
 
+    **Sign convention (NOT the same as `paired_link_per_burst`).**
+    Per-env r is computed on RAW Δ vectors — `Δ_predictor` is NOT
+    negated. The sign of r therefore depends on which direction
+    the substrate author named as `predictor` and `target`:
+    - if `predictor` is "lower-is-better mediator residual" (e.g.
+      `jensen_gap`) and `target` is "higher-is-better outcome", an
+      *active* link reads NEGATIVE r (more reduction → more gain
+      = Δ_predictor↓ ⇒ Δ_target↑).
+    - if both are oriented the same way, an active link reads
+      POSITIVE r.
+    `paired_link_per_burst` flips `Δ_predictor` so positive-r
+    always reads "active link"; this primitive does not. Bridge
+    authors gating on `coefficients[moderator]` must commit
+    explicitly to which sign they predict.
+
     Fisher-z projection: each env's link r is mapped to atanh(r)
     with se = 1 / sqrt(n_pairs − 3). r values within ±1e-6 of ±1
     clamp to ±0.999999 before atanh to avoid `inf`. Envs with

@@ -106,7 +106,12 @@ def mundlak_paired_g_per_burst(
     structural noise, so per-burst residuals are correlated
     within env. OLS-style SEs would overstate significance.
     Forwarded to `mundlak_decomposition` as the Liang-Zeger CR1
-    sandwich (clusters by env)."""
+    sandwich (clusters by env).
+
+    `dedupe_strategy` is forwarded to `paired_g_per_burst`:
+    defaults to `'mean'` (per-cell aggregation within each
+    `(env, arm, pair_by)` bucket); pass `'raise'` to error on
+    duplicates."""
     cells_list = [dict(c) for c in cells]
     per_burst_g = paired_g_per_burst.fn(
         cells_list, treatment_arm=treatment_arm,

@@ -190,14 +190,21 @@ def paired_g(
 
     `dedupe_strategy` controls the policy when multiple cells share
     the same `(arm, pair_by)` tuple:
-    - `'raise'` (default): error loudly. The dict-overwrite would
-      silently drop data; force the bridge author to either tighten
-      `pair_by` or opt into aggregation.
-    - `'mean'`: average the per-cell `source` values within each
-      `(arm, pair_by)` bucket, then run paired-g on the aggregated
-      values. The intended use is M2M scenarios where the user
-      genuinely wants to pool across e.g. multiple corpora at the
-      same `(seed, env)`.
+    - `'mean'` (default): average the per-cell `source` values
+      within each `(arm, pair_by)` bucket, then run paired-g on
+      the aggregated values. Suits M2M scopes that legitimately
+      pool across multiple corpora at the same `(seed, env)`. The
+      aggregated value is the per-cell mean, NOT the underlying
+      raw cells; downstream SE / df reflect the post-aggregation
+      n_pairs.
+    - `'raise'`: error loudly on any `(arm, pair_by)` bucket with
+      more than one cell. Use when the corpus shouldn't have
+      duplicates and silent averaging would hide a regime split —
+      e.g. a sweep that meant to produce one cell per
+      `(env, seed, sync_period)` but `pair_by=('seed',)` collapses
+      sync regimes into one bucket. The error message names the
+      duplicate key so the author can either tighten `pair_by` or
+      explicitly opt into the `'mean'` aggregation.
 
     **Robustness.** Hedges' c_4 small-sample correction is exact
     only under NORMAL Δ. Under skewed/heavy-tailed Δ:

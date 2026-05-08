@@ -150,6 +150,10 @@ def bootstrap_paired_g(
     output for fixed seed. Distinct from substrate seeds (the
     bootstrap is a post-hoc resample of the existing Δ vector).
 
+    `dedupe_strategy` mirrors `paired_g`: defaults to `'mean'`
+    (per-cell aggregation within each `(arm, pair_by)` bucket
+    before bootstrap); pass `'raise'` to error on duplicates.
+
     See module docstring for when to use vs paired_g."""
     if dedupe_strategy not in ('raise', 'mean'):
         raise ValueError(
