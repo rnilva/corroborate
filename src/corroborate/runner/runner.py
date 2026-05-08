@@ -697,9 +697,21 @@ def _enrich_cache_in_place(
     """When no new data is supplied, still pass the cache through
     `_compute_measurables` so that newly-added required measurables
     get filled in for existing cells. Persist the manifest if
-    columns changed (added / drifted)."""
+    columns changed (added / drifted).
+
+    **Trace-dependent gap diagnostic**: required measurables whose
+    transitive `reads` aren't all in the cache (typical when a new
+    measurable reading per-step trace columns is added — traces
+    are evicted post-ingest per CI7) can't be filled in cache-only
+    mode. Pre-fix, `compute_missing_columns` would silently produce
+    NaN + emit a cryptic `KeyError on ALL N cells` warning. Now we
+    surface the actionable instruction: "rerun with --ingest-all to
+    fill in" — distinguishes the no-data-needed case (HP-only
+    measurables, fillable from cache) from the needs-trace-restore
+    case."""
     if cache.height == 0:
         return cache
+    _warn_trace_dep_unfillable_in_cache(cache, required)
     enriched = _compute_measurables(cache, required)
     if (
         cache_path is not None
@@ -712,6 +724,47 @@ def _enrich_cache_in_place(
                 manifest_path, _signatures_for(required, enriched),
             )
     return enriched
+
+
+def _warn_trace_dep_unfillable_in_cache(
+    cache: pl.DataFrame, required: Sequence[str],
+) -> None:
+    """For each required measurable not yet present in the cache,
+    check whether its transitive reads are satisfied by the cache's
+    columns. Print a single actionable message naming all the
+    measurables that need a `--ingest-all` walk to be filled —
+    rather than the per-measurable cryptic `KeyError on ALL N
+    cells` warnings that compute_missing_columns emits later."""
+    from corroborate.measurables.measurable import (
+        get_registered, transitive_reads,
+    )
+    cache_cols = set(cache.columns)
+    needs_ingest: list[str] = []
+    for name in required:
+        if name in cache_cols:
+            continue
+        m = get_registered(name)
+        if m is None:
+            continue
+        try:
+            reads = transitive_reads(name)
+        except KeyError:
+            continue
+        if not all(r in cache_cols for r in reads):
+            needs_ingest.append(name)
+    if needs_ingest:
+        import sys
+        sys.stderr.write(
+            f'runner: WARNING — {len(needs_ingest)} required '
+            f"measurable(s) can't be filled in cache-only mode "
+            f'(transitive reads not in cache, typically per-step '
+            f'or per-burst trace columns). The cache will be '
+            f'written with NaN for these columns and bridges '
+            f'scope-filtering on them will silently drop cells:\n'
+            + '\n'.join(f'  - {n}' for n in needs_ingest)
+            + '\n  → rerun with `--ingest-all experiments/data/` '
+            f'to restore traces and fill these properly.\n',
+        )
 
 
 def _signatures_for(
