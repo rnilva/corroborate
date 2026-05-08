@@ -525,6 +525,62 @@ def check(
     )
 
 
+def evict(
+    h: Hypothesis | str,
+    corpora: Sequence[str],
+    *,
+    cache_path: Path | str | None = None,
+) -> tuple[int, dict[str, int]]:
+    """Filter the per-hypothesis cache parquet to drop all rows
+    whose `corpus` column matches any name in `corpora`. The
+    per-corpus `measurements.parquet` stores under
+    `experiments/data/<corpus>/` are NOT touched — this is a
+    cache-only eviction, useful when a corpus's analyses should
+    be excluded temporarily without losing the underlying data.
+
+    Returns `(total_dropped, per_corpus_counts)` where
+    `per_corpus_counts` maps each requested corpus name to the
+    number of cells dropped. A name not present in the cache
+    contributes 0; the call doesn't raise.
+
+    The eviction survives cache reads but NOT a subsequent
+    `--ingest-all` walk: that walk re-projects every per-corpus
+    store under `experiments/data/`, including ones whose data
+    you just evicted from the cache. To prevent re-inclusion,
+    delete the corpus directory or add an `.in_progress` sentinel.
+    """
+    if isinstance(h, str):
+        h = _validate_hypothesis(importlib.import_module(h))
+    else:
+        h = _validate_hypothesis(h)
+    cp = (
+        Path(cache_path) if cache_path is not None
+        else _default_cache_path(h)
+    )
+    if not cp.exists():
+        return 0, dict.fromkeys(corpora, 0)
+    df = pl.read_parquet(cp)
+    if 'corpus' not in df.columns:
+        # Pre-corpus-stamping cache (very legacy); nothing to filter.
+        return 0, dict.fromkeys(corpora, 0)
+    counts: dict[str, int] = {}
+    for c in corpora:
+        counts[c] = int(
+            df.filter(pl.col('corpus') == c).height,
+        )
+    total = sum(counts.values())
+    if total == 0:
+        return 0, counts
+    keep = df.filter(~pl.col('corpus').is_in(list(corpora)))
+    if keep.height > 0:
+        _atomic_write_parquet(keep, cp)
+    else:
+        # Avoid writing a 0-row parquet (polars rejects some schemas);
+        # delete the cache file when nothing remains.
+        cp.unlink()
+    return total, counts
+
+
 # ============ Cache + ingest ============
 
 
@@ -1164,16 +1220,24 @@ def _try_unlink(
 def _measurements_sidecar_current(
     sub: Path, required: Sequence[str],
 ) -> bool:
-    """True iff `measurements.parquet` exists and the sidecar's
+    """True iff `measurements.parquet` exists, the sidecar's
     closure-hash for every required measurable matches the current
-    registry. Used by `_load_one_corpus` to skip cloud restore +
-    trace join when there's demonstrably nothing to recompute.
+    registry, AND no required measurable has any NaN cells in the
+    per-corpus store. Used by `_load_one_corpus` to skip cloud
+    restore + trace join when there's demonstrably nothing to
+    recompute.
+
+    Hash-match alone isn't enough: a column whose hash matches but
+    has NaN cells (e.g. `effective_horizon` left partial-null by a
+    half-completed prior ingest) needs the partial-null recompute
+    branch in `build_measurements` to fire. We check NaN-emptiness
+    at the column granularity to cover that case.
 
     Mirrors the per-column check in `corpus.measurements:
-    check_drift` but at corpus granularity (any drift / any
-    missing → False). Pure read; no side effects."""
+    check_drift` but extends with the partial-null guard. Pure
+    read; no side effects."""
     from corroborate.corpus.measurements import (
-        MEASUREMENTS_FILENAME, current_signatures,
+        MEASUREMENTS_FILENAME, current_signatures, load_measurements,
     )
     if not (sub / MEASUREMENTS_FILENAME).exists():
         return False
@@ -1187,6 +1251,19 @@ def _measurements_sidecar_current(
             # null-padded at projection. Don't gate restore on it.
             continue
         if stored.get(name) != live:
+            return False
+    # Hash-match check passed; now check no NaN cells in any
+    # required measurable. A partial-null column is a recompute
+    # opportunity that the fast-path would silently skip.
+    loaded = load_measurements(sub, columns=list(required))
+    for name in required:
+        if name not in loaded.columns:
+            continue
+        col = loaded[name]
+        if col.dtype.is_float():
+            if (col.is_null() | col.is_nan()).any():
+                return False
+        elif col.is_null().any():
             return False
     return True
 
@@ -1245,8 +1322,6 @@ def _load_one_corpus(
                 just_restored_traces = (
                     'traces.parquet' in need_restore
                 )
-                if _merge_shard_traces(sub):
-                    just_restored_traces = True
             else:
                 log_lines.append(
                     f'{prefix}: WARNING — needs '
@@ -1254,6 +1329,16 @@ def _load_one_corpus(
                 )
                 if not runs_path.exists():
                     return None, log_lines
+    # Stitch per-cell trace shards (`tmp/*_traces.parquet`) into a
+    # single `traces.parquet` regardless of cloud-archive presence.
+    # Pre-fix this only fired inside the `manifest.exists()` block,
+    # so local-only sweeps whose merge step never completed (only
+    # tmp/ shards present) silently fell back to a no-traces ingest
+    # — the dependent measurables stamped NaN and the bridge
+    # silently dropped those cells. Now we always attempt the
+    # stitch when there's no consolidated traces.parquet.
+    if _merge_shard_traces(sub):
+        just_restored_traces = True
     if not runs_path.exists():
         log_lines.append(f'{prefix}: SKIPPED (no runs.parquet)')
         return None, log_lines

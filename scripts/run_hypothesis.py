@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import cast
 
 from corroborate.bridge import BridgeEvaluation
-from corroborate.runner import check, run
+from corroborate.runner import check, evict, run
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -95,7 +95,34 @@ def main(argv: Sequence[str] | None = None) -> int:
              'vs the current registry, no compute / no ingest. '
              'Exits 0 if cache is current, 2 if drift detected.',
     )
+    parser.add_argument(
+        '--evict', type=str, default=None, metavar='CORPUS[,CORPUS...]',
+        help='filter the cache parquet to drop all cells from the '
+             'named corpora. Per-corpus stores under '
+             'experiments/data/<corpus>/ are NOT touched. Useful '
+             'to temporarily exclude a corpus from analysis '
+             'without rm-ing its data. NOTE: a subsequent '
+             '--ingest-all walk re-projects all per-corpus stores '
+             'and will re-include the evicted ones; for permanent '
+             'exclusion, delete the corpus directory.',
+    )
     args = parser.parse_args(argv)
+
+    # --evict: cache-only eviction, no bridge eval.
+    evict_arg = cast(str | None, args.evict)
+    if evict_arg is not None:
+        names = [n.strip() for n in evict_arg.split(',') if n.strip()]
+        if not names:
+            raise SystemExit('--evict needs at least one corpus name')
+        total, counts = evict(cast(str, args.module), names)
+        for name in names:
+            n = counts.get(name, 0)
+            mark = '✓' if n > 0 else '·'
+            print(f'  {mark} {name}: dropped {n} cells')
+        print(f'evict: {total} cells removed from cache.')
+        if total == 0:
+            return 0
+        return 0
 
     # CACHE_ADDITIVITY.md Phase 2: --check mode — drift report,
     # no run.

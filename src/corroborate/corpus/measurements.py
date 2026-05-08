@@ -293,6 +293,7 @@ def build_measurements(
         # restored) is. Drop only when the substrate had all
         # inputs — preserve existing for trace-dependent stamps
         # the substrate couldn't have computed.
+        from corroborate.measurables.measurable import transitive_reads
         runs_cols = set(runs_df.columns)
         overlap_dropped = []
         for c in existing.columns:
@@ -306,7 +307,14 @@ def build_measurements(
                 # garbage.
                 overlap_dropped.append(c)
                 continue
-            substrate_could_compute = all(r in runs_cols for r in m.reads)
+            # Substrate "could compute" iff its transitive leaf
+            # reads are all in runs_df (pre-trace-join). Direct
+            # reads alone miss param-injected dependencies (e.g.
+            # `effective_horizon` directly reads `gamma`, but
+            # transitively also needs `done` via injected
+            # `bootstrap_fraction`).
+            leaf_reads = transitive_reads(c)
+            substrate_could_compute = all(r in runs_cols for r in leaf_reads)
             if substrate_could_compute:
                 overlap_dropped.append(c)
         if overlap_dropped:
@@ -369,22 +377,28 @@ def build_measurements(
         return out_path
 
     # Skip-recompute for unsatisfiable measurables. A measurable
-    # whose `reads` aren't all in `joined.columns` will silently
-    # return NaN per cell (the measurable itself NaN-propagates
-    # when `_record_array` returns None for a missing key), and
-    # `compute_missing_columns`'s partial-null branch will then
-    # OVERWRITE existing finite values in `joined` with the fresh
-    # NaN — turning a previously-good per-corpus store into stale
-    # NaN. The defensive contract: only recompute measurables
-    # whose inputs are actually available in this invocation.
-    # Pre-existing finite values from `existing` flow through
-    # unmodified via the join.
+    # whose **transitive** record-key reads aren't all in
+    # `joined.columns` will silently return NaN per cell (the
+    # measurable itself NaN-propagates when `_record_array` returns
+    # None for a missing key), and `compute_missing_columns`'s
+    # partial-null branch will then OVERWRITE existing finite
+    # values in `joined` with the fresh NaN — turning a previously-
+    # good per-corpus store into stale NaN.
+    #
+    # `m.reads` alone isn't enough: a measurable like `effective_
+    # horizon` declares `reads=('gamma',)` but takes a parameter-
+    # injected `bootstrap_fraction` whose own `reads=('done',)`
+    # depends on per-step trace data. `transitive_reads(name)`
+    # walks the dependency closure to surface the true leaf-key
+    # set the cell record needs to carry.
+    from corroborate.measurables.measurable import transitive_reads
     to_compute_satisfied: list[str] = []
     for n in to_compute_full:
         m = get_registered(n)
         if m is None:
             continue
-        if all(r in joined.columns for r in m.reads):
+        leaf_reads = transitive_reads(n)
+        if all(r in joined.columns for r in leaf_reads):
             to_compute_satisfied.append(n)
     enriched = compute_missing_columns(joined, to_compute_satisfied)
 
