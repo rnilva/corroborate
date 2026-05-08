@@ -1220,24 +1220,24 @@ def _try_unlink(
 def _measurements_sidecar_current(
     sub: Path, required: Sequence[str],
 ) -> bool:
-    """True iff `measurements.parquet` exists, the sidecar's
+    """True iff `measurements.parquet` exists and the sidecar's
     closure-hash for every required measurable matches the current
-    registry, AND no required measurable has any NaN cells in the
-    per-corpus store. Used by `_load_one_corpus` to skip cloud
-    restore + trace join when there's demonstrably nothing to
-    recompute.
+    registry. Used by `_load_one_corpus` to skip cloud restore +
+    trace join when there's demonstrably nothing to recompute.
 
-    Hash-match alone isn't enough: a column whose hash matches but
-    has NaN cells (e.g. `effective_horizon` left partial-null by a
-    half-completed prior ingest) needs the partial-null recompute
-    branch in `build_measurements` to fire. We check NaN-emptiness
-    at the column granularity to cover that case.
+    Hash-match is the contract: a value is current if its closure
+    matches what produced it. NaN cells in a hash-current store
+    represent "framework already computed that and got NaN with
+    the inputs available at compute time" — re-running with the
+    same inputs would just produce NaN again. Users who want to
+    retry after restoring missing inputs (e.g. fresh traces) can
+    `rm <corpus>/measurements.parquet` to invalidate the sidecar.
 
     Mirrors the per-column check in `corpus.measurements:
-    check_drift` but extends with the partial-null guard. Pure
-    read; no side effects."""
+    check_drift` (any drift / any missing → False). Pure read;
+    no side effects."""
     from corroborate.corpus.measurements import (
-        MEASUREMENTS_FILENAME, current_signatures, load_measurements,
+        MEASUREMENTS_FILENAME, current_signatures,
     )
     if not (sub / MEASUREMENTS_FILENAME).exists():
         return False
@@ -1251,19 +1251,6 @@ def _measurements_sidecar_current(
             # null-padded at projection. Don't gate restore on it.
             continue
         if stored.get(name) != live:
-            return False
-    # Hash-match check passed; now check no NaN cells in any
-    # required measurable. A partial-null column is a recompute
-    # opportunity that the fast-path would silently skip.
-    loaded = load_measurements(sub, columns=list(required))
-    for name in required:
-        if name not in loaded.columns:
-            continue
-        col = loaded[name]
-        if col.dtype.is_float():
-            if (col.is_null() | col.is_nan()).any():
-                return False
-        elif col.is_null().any():
             return False
     return True
 
