@@ -1,6 +1,6 @@
 name: survive_sync_intermediate_cartpole
 out_dir: experiments/data/survive_sync_intermediate_cartpole
-arms_shape: paired
+arms_shape: chunked
 
 # CartPole companion to survive_sync_intermediate_minatar — uses MLP
 # instead of CNN. Same purpose: populate more strict-mech-HELD

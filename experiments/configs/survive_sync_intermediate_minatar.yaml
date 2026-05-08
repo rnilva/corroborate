@@ -1,6 +1,6 @@
 name: survive_sync_intermediate_minatar
 out_dir: experiments/data/survive_sync_intermediate_minatar
-arms_shape: paired
+arms_shape: chunked
 
 # Intermediate-sync sweep on MinAtar SURVIVE-class envs to populate
 # more strict-mech-HELD configs in CLAIM 17 scope. Existing data:
