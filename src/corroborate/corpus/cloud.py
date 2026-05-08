@@ -300,6 +300,70 @@ def _default_files(sweep_dir: Path) -> list[str]:
     )
 
 
+def _warn_if_trace_schema_incomplete(traces_path: Path) -> None:
+    """Warn if `traces.parquet` is missing trace columns currently
+    declared as `reads` by registered measurables.
+
+    The cloud archive is the durable record. If a sweep archives
+    traces lacking columns that future ingests will need (e.g. a
+    new reduction was added to the substrate after this sweep
+    ran), those ingests will produce all-NaN values on this
+    corpus's cells without ever surfacing why. The check makes the
+    gap loud at archive time so the substrate author can decide:
+    re-archive after fixing, or accept the partial schema (some
+    measurables won't compute on this corpus).
+
+    Walks the registered measurable graph for `transitive_reads`
+    that look like trace columns (per-step / per-burst arrays —
+    heuristically: not `gamma`, `seed`, `env_name`, etc.) and
+    diffs against the trace's actual schema.
+
+    Skips silently if polars schema read fails (the file is
+    already past CI5 validation but compute_schema can hit
+    edge-cases on certain compression formats); the warning is
+    advisory."""
+    try:
+        import polars as pl
+        present = set(pl.scan_parquet(traces_path).collect_schema().names())
+    except Exception:
+        return
+    from corroborate.measurables.measurable import (
+        registered_names, transitive_reads,
+    )
+    needed: set[str] = set()
+    for name in registered_names():
+        try:
+            needed.update(transitive_reads(name))
+        except KeyError:
+            continue
+    # Heuristic: HP-only reads (gamma, n_actions, env_name, …) are
+    # in runs.parquet, not traces.parquet. Filter to columns that
+    # at least one of: live in `present` already (we know they're
+    # trace cols on this corpus), or look like a per-step
+    # reduction (`*_per_step`, `*_per_burst`).
+    trace_like = {
+        c for c in needed
+        if c in present
+        or '_per_step' in c
+        or '_per_burst' in c
+        or c in ('mc_return', 'predicted_q_at_start',
+                 'episode_length', 'done', 'reward', 'loss',
+                 'td_error')
+    }
+    missing = trace_like - present
+    if missing:
+        import sys
+        sorted_missing = sorted(missing)
+        sys.stderr.write(
+            f'archive: WARNING — {traces_path} is missing trace '
+            f'columns declared by registered measurables: '
+            f'{sorted_missing}. Future ingests will produce '
+            f'all-NaN for measurables that depend on these. '
+            f're-run the sweep with the current substrate if you '
+            f'want full schema, or accept partial coverage.\n',
+        )
+
+
 def _sorted_by_relpath(items: Iterable[RemoteFile]) -> list[RemoteFile]:
     return sorted(items, key=lambda f: f.relpath)
 
@@ -386,6 +450,10 @@ def archive(
                 assert_archive_eligible,
             )
             assert_archive_eligible(local)
+            if relpath == 'traces.parquet' or relpath.endswith(
+                '/traces.parquet',
+            ):
+                _warn_if_trace_schema_incomplete(local)
 
         sha256 = _sha256_file(local)
         prior = by_relpath.get(relpath)

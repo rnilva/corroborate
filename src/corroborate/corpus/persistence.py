@@ -296,6 +296,58 @@ def atomic_write_text(path: Path, content: str) -> None:
         raise
 
 
+def _estimated_decompressed_bytes(path: Path | str) -> int:
+    """Sum of `total_uncompressed_size` across the parquet's row
+    groups. Falls back to 4× the on-disk size when metadata read
+    fails (zstd typical compression ratio for trace data). Used
+    by the adaptive chunk-sizer to keep peak merge RAM under a
+    target budget rather than blindly trusting the static
+    `chunk_size` default — which OOMs on multi-GB-decompressed
+    trace shards."""
+    try:
+        import pyarrow.parquet as _pq
+        meta = _pq.ParquetFile(str(path)).metadata
+        total = 0
+        for i in range(meta.num_row_groups):
+            total += meta.row_group(i).total_byte_size
+        if total > 0:
+            return total
+    except Exception:
+        pass
+    try:
+        from pathlib import Path as _Path
+        return _Path(path).stat().st_size * 4
+    except Exception:
+        return 0
+
+
+def _adaptive_chunk_size(
+    inputs: Sequence[Path | str],
+    *,
+    requested_chunk_size: int,
+    target_ram_gb: float,
+) -> int:
+    """Lower the requested `chunk_size` when the per-file
+    decompressed estimates suggest peak RAM would exceed
+    `target_ram_gb`. Pessimistic toward the largest file: peak
+    RAM during eager concat is roughly `chunk_size × max(
+    decompressed_size)`; we solve for `chunk_size` that keeps it
+    under the target.
+
+    Never raises chunk_size above `requested_chunk_size` — the
+    static default is a ceiling, the adaptive computation is a
+    floor."""
+    if not inputs:
+        return requested_chunk_size
+    sizes = [_estimated_decompressed_bytes(p) for p in inputs]
+    max_size = max(sizes) if sizes else 0
+    if max_size <= 0:
+        return requested_chunk_size
+    target_bytes = int(target_ram_gb * (1 << 30))
+    safe = max(1, target_bytes // max_size)
+    return min(requested_chunk_size, safe)
+
+
 def stream_concat_parquets(
     inputs: Sequence[Path | str], out: Path, *,
     type_widening: bool = True,
@@ -303,6 +355,7 @@ def stream_concat_parquets(
     compression_level: int = 3,
     chunk_size: int = 4,
     scratch_dir: Path | None = None,
+    target_ram_gb: float = 8.0,
 ) -> None:
     """Concatenate `inputs` to `out` via polars'
     `concat(how='diagonal_relaxed')` — null-pads missing columns
@@ -354,6 +407,17 @@ def stream_concat_parquets(
         raise ValueError('stream_concat_parquets: no inputs')
     if chunk_size < 1:
         raise ValueError(f'chunk_size must be ≥ 1, got {chunk_size}')
+    # **OOM mitigation**: adaptive chunk-size based on per-file
+    # decompressed-size estimates. Static `chunk_size=4` blindly
+    # holds 4× max(decomp_size) in RAM during the eager concat;
+    # for 5GB-decomp trace shards that's 20GB peak. The adaptive
+    # path reads parquet metadata to estimate decomp sizes and
+    # lowers `chunk_size` so peak stays under `target_ram_gb`.
+    chunk_size = _adaptive_chunk_size(
+        inputs,
+        requested_chunk_size=chunk_size,
+        target_ram_gb=target_ram_gb,
+    )
     if out.exists():
         out.unlink()
     how = 'diagonal_relaxed' if type_widening else 'diagonal'
@@ -421,6 +485,7 @@ def stream_concat_parquets(
             compression_level=compression_level,
             chunk_size=chunk_size,
             scratch_dir=scratch_dir,
+            target_ram_gb=target_ram_gb,
         )
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)

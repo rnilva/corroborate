@@ -392,8 +392,18 @@ def dispatch_sweep(sweep: DQNSweep) -> tuple[Path, Path]:
         )
         return f'{env_name}__{arm_key}{suffix}'
 
+    # **CORPUS_INTEGRITY.md CI1 + sentinel discipline**: write
+    # `.in_progress` at sweep start so an `--ingest-all` walk in
+    # parallel skips the half-built corpus. Removed in the
+    # `try/finally` after `dispatch_sweep` returns / errors so the
+    # sentinel matches actual sweep state.
+    from corroborate.corpus.integrity import IN_PROGRESS_SENTINEL
+    sweep.out_dir.mkdir(parents=True, exist_ok=True)
+    sentinel = sweep.out_dir / IN_PROGRESS_SENTINEL
+    sentinel.touch()
     sub_runs: list[Path] = []
     sub_traces: list[Path] = []
+    sub_arm_dirs: list[Path] = []
     for cfg, env_configs in zip(configs, envs_per_h, strict=True):
         # Split HPs from intervention_arms slots: HPs go into
         # `base` as pre-bound kwargs; mechanism swaps come via
@@ -444,11 +454,34 @@ def dispatch_sweep(sweep: DQNSweep) -> tuple[Path, Path]:
         )
         sub_runs.append(rp)
         sub_traces.append(tp)
+        sub_arm_dirs.append(h_out_dir)
 
     final_runs = sweep.out_dir / 'runs.parquet'
     final_traces = sweep.out_dir / 'traces.parquet'
+    # If either merge raises, the sentinel stays — subsequent
+    # `--ingest-all` walks see "still in progress" and skip the
+    # corpus rather than ingest a half-merged parent.
     stream_concat_parquets(sub_runs, final_runs)
     stream_concat_parquets(sub_traces, final_traces)
+    # **Scratch cleanup**: per-arm sub-corpora are scratch — the
+    # parent runs.parquet + traces.parquet now have everything.
+    # Pre-fix this was documented as a manual `rm -rf` step,
+    # which created CORPUS_INTEGRITY.md CI1 nested-corpus
+    # violations on every subsequent `--ingest-all` walk. Auto-
+    # clean now: each per-arm `<out_dir>/<arm>/` directory
+    # (containing the unconcatenated runs/traces used as merge
+    # inputs) gets removed once the parent merge is durable.
+    import shutil
+    for arm_dir in sub_arm_dirs:
+        if arm_dir.exists() and arm_dir.is_dir():
+            shutil.rmtree(arm_dir)
+    # Sentinel removed only on successful completion (atomicity:
+    # crash → sentinel stays → ingest skips).
+    if sentinel.exists():
+        try:
+            sentinel.unlink()
+        except OSError:
+            pass
     return final_runs, final_traces
 
 
