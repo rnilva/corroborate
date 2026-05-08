@@ -85,6 +85,9 @@ from corroborate.analyses.paired_delta_link_dowhy import (
 from corroborate.analyses.paired_g import PairedGResult
 from corroborate.analyses.paired_g_per_burst import PerBurstResult
 from corroborate.analyses.proportion_mediated import ProportionMediatedResult
+from corroborate.analyses.cross_config_paired_slope import (
+    CrossConfigPairedSlopeResult,
+)
 from corroborate.analyses.paired_link_per_burst import (
     PerBurstLinkResult, phase_link_consistency,
 )
@@ -2625,6 +2628,233 @@ def target_staleness_late_mediates_outcome__breakout_sync100(
     )
 
 
+@claim_bridge(
+    source=INTERVENTION,
+    target='eval_best_burst_mean',
+    direction=Direction.DIRECT,
+    tier=Tier.INTERVENTIONAL,
+    pair_by=('env_name', 'corpus', 'gamma', 'total_steps', 'sync_period', 'seed'),
+    scope=(
+        pl.col('corpus').is_in(
+            ['asterix_intermediate_sync', 'breakout_intermediate_sync'],
+        )
+        & finite('target_staleness_late')
+        & finite('jensen_dormancy_gap') & finite_lt('jensen_dormancy_gap', 0.05)
+        & finite('q_divergence_score') & finite_lt('q_divergence_score', 1.0)
+    ),
+    predicted_direction='a_gt_b',
+)
+def target_staleness_late_mediates_outcome__minatar_intermediate_sync(
+    proportion_mediated: ProportionMediatedResult,
+    *,
+    mediator: str = 'target_staleness_late',
+    upstream_source: str = 'jensen_gap',
+    upstream_max_delta: float = 0.0,
+    dominance_floor: float = 0.2,
+    n_pairs_floor: int = 50,
+) -> tuple[Verdict, RefutationClass | None]:
+    """Tests whether target_staleness_late within-cell mediates
+    DDQN's outcome benefit on the MinAtar SURVIVE intermediate-
+    sync corpora (Asterix sync ∈ {500, 1500, 3000} + Breakout sync
+    ∈ {500, 1500}, after the dormancy filter excludes the cells
+    where DDQN's Q crosses below MC).
+
+    Empirical (2026-05-08, n_pairs=114): proportion = 0.069 →
+    NO_EFFECT (null_effect). Within-cell linear mediation does
+    NOT replicate the strong cross-config structural pattern.
+
+    Cross-config aggregate finding (n=11 in-scope (env, sync)
+    cells, NOT what this bridge tests):
+    - marginal Spearman ρ(Δ_target_staleness, Δ_y_best) = -0.86
+      (p=0.001)
+    - partial Spearman | log_sync = -0.64 (p=0.044)
+    - other Δ candidates (jens, q_late, argmax_ent, eff_h) all
+      explained away by log_sync; only Δ_target_staleness retains
+      residual mediator power.
+
+    Reading: the cross-config relationship is real (staleness
+    reductions order DDQN benefit across configs) but the within-
+    cell per-seed mediation channel is weak — Δ_target_staleness
+    doesn't carry per-seed outcome variance. This matches the
+    polarity-mediator pattern documented in
+    `findings_target_staleness_mediator.md`: linear mediation breaks
+    on Asterix/Breakout's bounded-Q SURVIVE regime; counterfactual
+    mediation or cross-config slope tests are the appropriate
+    surface, not within-cell linear share."""
+    del mediator, upstream_source, upstream_max_delta
+    return _staleness_mediation_holds_when(
+        proportion_mediated,
+        dominance_floor=dominance_floor,
+        n_pairs_floor=n_pairs_floor,
+    )
+
+
+# =====================================================================
+# CLAIM 21 — Polarity-stratified cross-config staleness slope.
+#
+# At the CONFIG level (1 row per (env, sync, corpus) or (env, tau,
+# corpus)), the relationship between mean Δ_target_staleness_late
+# and mean Δ_eval_best_burst_mean is polarity-conditional.
+#
+# Empirical (2026-05-08, ddqn_universe cache, strict mech-HELD
+# (paired-t p<0.05 ∧ frac<0 ≥ 0.65) per config):
+#
+#   SURVIVE (n=5: Asterix sync ∈ {500,1500,3000} + Breakout
+#   sync ∈ {500,1500} from intermediate-sync corpora):
+#     ρ(mean_d_stale, mean_d_y_best) = -0.900 (p=0.037)
+#
+#   REACH (n=3: FourRooms tau ∈ {0.001, 0.01, 0.1} from
+#   polyak_tau_intervention corpora; SURVIVE polyak fails strict
+#   mech-HELD per `findings_polyak_makes_mech_dormant_survive`):
+#     ρ(mean_d_stale, mean_d_y_best) = +1.000 (p=0.000, n=3 trivial)
+#
+# Sign FLIPS by polarity. Two bridges below capture the polarity-
+# conditional relationship; both are STARTING-POINT given the small
+# n per polarity class. Authored at Tier.ASSOCIATIONAL because the
+# cross-config slope is a SCOPE-level descriptive pattern, not a
+# within-cell mediation channel (`proportion_mediated` returns ~0.07
+# on the same SURVIVE scope; mediation breaks at the cell level).
+#
+# The cross-config slope cannot identify causation — sync_period
+# drives Δ_jens, Δ_q_late, Δ_target_staleness, AND Δ_y all at
+# once. After conditioning on log_sync, only target_staleness retains
+# residual cross-config slope. But identification at fixed-sync
+# requires varying staleness via an independent lever; polyak
+# provides that on REACH (mech survives) but preempts mech on
+# SURVIVE.
+# =====================================================================
+
+
+@claim_bridge(
+    source=INTERVENTION,
+    target='eval_best_burst_mean',
+    direction=Direction.DIRECT,
+    tier=Tier.ASSOCIATIONAL,
+    pair_by=('seed',),
+    scope=(
+        finite('q_divergence_score') & finite_lt('q_divergence_score', 1.0)
+        & finite('jensen_dormancy_gap') & finite_lt('jensen_dormancy_gap', 0.05)
+        & finite('env_reward_polarity')
+        & finite_gt('env_reward_polarity', 0.3)  # SURVIVE
+        & finite('target_staleness_late')
+        & ((pl.col('n_step') == 1) | pl.col('n_step').is_null())
+        & pl.col('action_duplicate_k').is_null()
+        & (pl.col('reward_scale').is_null() | (pl.col('reward_scale') == 1.0))
+        & pl.col('target_sync.tau').is_null()
+    ),
+    predicted_direction='a_lt_b',
+)
+def cross_config_staleness_slope_negative__survive(
+    cross_config_paired_slope: CrossConfigPairedSlopeResult,
+    *,
+    target: str = 'eval_best_burst_mean',
+    predictor: str = 'target_staleness_late',
+    config_keys: tuple[str, ...] = (
+        'env_name', 'sync_period', 'total_steps', 'corpus',
+    ),
+    rho_threshold: float = -0.5,
+    p_threshold: float = 0.1,
+    min_configs: int = 3,
+) -> tuple[Verdict, RefutationClass | None]:
+    """Cross-config bridge on SURVIVE polarity:
+    ρ(mean Δ_target_staleness_late, mean Δ_y_best) ≤ -0.5
+    across configs in CLAIM 17 mech-active scope.
+
+    Empirical (n=5, periodic_copy / sync-period sweep on Asterix
+    + Breakout intermediate-sync): ρ = -0.90 (p=0.037).
+
+    HELD when ρ ≤ rho_threshold AND p ≤ p_threshold AND
+    n_configs ≥ min_configs.
+
+    STARTING POINT — n=5 is borderline. Within-cell linear
+    mediation gives proportion ≈ 0.07 on the same scope (mediation
+    breaks). The cross-config slope captures a SCOPE-level
+    descriptive pattern: configs where DDQN reduces staleness more
+    are also configs where DDQN harms outcome more (Δ_stale > 0
+    means DDQN INCREASES staleness; bigger increase → worse Δ_y).
+
+    Cannot identify causation: sync_period confounds Δ_stale and
+    Δ_y. Polyak-τ intervention can't disentangle on SURVIVE
+    because polyak preempts mech (Δ_jens ≈ 0). Awaiting more
+    in-scope SURVIVE configs (PacMan + Freeway/SI intermediate-
+    sync sweeps) for power."""
+    del target, predictor, config_keys
+    if cross_config_paired_slope.n_configs < min_configs:
+        return Verdict.POWER_INSUFFICIENT, None
+    rho = cross_config_paired_slope.rho
+    p = cross_config_paired_slope.p_value
+    if math.isnan(rho) or math.isnan(p):
+        return Verdict.POWER_INSUFFICIENT, None
+    if rho <= rho_threshold and p <= p_threshold:
+        return Verdict.HELD, None
+    if rho > 0.0:
+        return Verdict.NO_EFFECT, RefutationClass.SIGN_FLIP
+    return Verdict.NO_EFFECT, RefutationClass.NULL_EFFECT
+
+
+@claim_bridge(
+    source=INTERVENTION,
+    target='eval_best_burst_mean',
+    direction=Direction.DIRECT,
+    tier=Tier.ASSOCIATIONAL,
+    pair_by=('seed',),
+    scope=(
+        finite('q_divergence_score') & finite_lt('q_divergence_score', 1.0)
+        & finite('jensen_dormancy_gap') & finite_lt('jensen_dormancy_gap', 0.05)
+        & finite('env_reward_polarity')
+        & finite_lt('env_reward_polarity', -0.3)  # REACH
+        & finite('target_staleness_late')
+        & ((pl.col('n_step') == 1) | pl.col('n_step').is_null())
+        & pl.col('action_duplicate_k').is_null()
+        & (pl.col('reward_scale').is_null() | (pl.col('reward_scale') == 1.0))
+    ),
+    predicted_direction='a_gt_b',
+)
+def cross_config_staleness_slope_positive__reach_polyak(
+    cross_config_paired_slope: CrossConfigPairedSlopeResult,
+    *,
+    target: str = 'eval_best_burst_mean',
+    predictor: str = 'target_staleness_late',
+    config_keys: tuple[str, ...] = (
+        'env_name', 'sync_period', 'total_steps', 'corpus', 'target_sync.tau',
+    ),
+    rho_threshold: float = 0.5,
+    p_threshold: float = 0.1,
+    min_configs: int = 3,
+) -> tuple[Verdict, RefutationClass | None]:
+    """Cross-config bridge on REACH polarity:
+    ρ(mean Δ_target_staleness_late, mean Δ_y_best) ≥ +0.5
+    across configs in CLAIM 17 mech-active scope.
+
+    Empirical (n=3, polyak_tau on FourRooms τ ∈ {0.001, 0.01,
+    0.1}): ρ = +1.000. SURVIVE polyak fails strict mech-HELD per
+    `findings_polyak_makes_mech_dormant_survive`, so polyak data
+    is REACH-only here.
+
+    Sign FLIPS from the SURVIVE bridge: on REACH, configs where
+    DDQN allows more staleness (or the env has more staleness
+    naturally) get bigger DDQN benefit. Reading: REACH amplifies
+    via vanilla over-bootstrapping from stale targets; DDQN's
+    correction has more bias to remove → more outcome benefit.
+
+    STARTING POINT — n=3 is too small to be sure (Spearman ρ=+1.0
+    with n=3 has p=0.0 by exact permutation but is fragile). Need
+    additional REACH+intervention configs (Acrobot polyak,
+    MountainCar gamma sweeps in-scope, MetaMaze) to corroborate."""
+    del target, predictor, config_keys
+    if cross_config_paired_slope.n_configs < min_configs:
+        return Verdict.POWER_INSUFFICIENT, None
+    rho = cross_config_paired_slope.rho
+    p = cross_config_paired_slope.p_value
+    if math.isnan(rho) or math.isnan(p):
+        return Verdict.POWER_INSUFFICIENT, None
+    if rho >= rho_threshold and p <= p_threshold:
+        return Verdict.HELD, None
+    if rho < 0.0:
+        return Verdict.NO_EFFECT, RefutationClass.SIGN_FLIP
+    return Verdict.NO_EFFECT, RefutationClass.NULL_EFFECT
+
+
 # =====================================================================
 # CLAIM 14 — env-polarity predicts the link sign per env (soft tautology).
 #
@@ -3480,6 +3710,9 @@ DDQN_UNIVERSE_BRIDGES = (
     # suppression downstream of bias correction.
     target_staleness_late_mediates_outcome__fourrooms,
     target_staleness_late_mediates_outcome__breakout_sync100,
+    target_staleness_late_mediates_outcome__minatar_intermediate_sync,
+    cross_config_staleness_slope_negative__survive,
+    cross_config_staleness_slope_positive__reach_polyak,
     # CLAIM 14 — soft tautology: env-polarity predicts the link sign
     # per env at slope ≈ +0.5 (Fisher-z), R² ≈ 0.83. Companion to
     # CLAIM 12's eff_h_mediates_g_link__{goal,survival}_envs:
@@ -3546,6 +3779,9 @@ __all__ = [
     'eff_h_mediates_g_link__survival_envs',
     'target_staleness_late_mediates_outcome__fourrooms',
     'target_staleness_late_mediates_outcome__breakout_sync100',
+    'target_staleness_late_mediates_outcome__minatar_intermediate_sync',
+    'cross_config_staleness_slope_negative__survive',
+    'cross_config_staleness_slope_positive__reach_polyak',
     'link_r_predictable_from_polarity__soft_tautology',
     'staleness_amplifies_ddqn_outcome__sparse_goal_polyak',
     'staleness_does_not_amplify_ddqn_outcome__survival_polyak',
