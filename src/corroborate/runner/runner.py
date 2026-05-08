@@ -1161,6 +1161,36 @@ def _try_unlink(
         return False
 
 
+def _measurements_sidecar_current(
+    sub: Path, required: Sequence[str],
+) -> bool:
+    """True iff `measurements.parquet` exists and the sidecar's
+    closure-hash for every required measurable matches the current
+    registry. Used by `_load_one_corpus` to skip cloud restore +
+    trace join when there's demonstrably nothing to recompute.
+
+    Mirrors the per-column check in `corpus.measurements:
+    check_drift` but at corpus granularity (any drift / any
+    missing → False). Pure read; no side effects."""
+    from corroborate.corpus.measurements import (
+        MEASUREMENTS_FILENAME, current_signatures,
+    )
+    if not (sub / MEASUREMENTS_FILENAME).exists():
+        return False
+    stored = current_signatures(sub)
+    if not stored:
+        return False
+    for name in required:
+        live = _measurable_signature(name)
+        if live is None:
+            # Substrate doesn't define this measurable — it'll be
+            # null-padded at projection. Don't gate restore on it.
+            continue
+        if stored.get(name) != live:
+            return False
+    return True
+
+
 def _load_one_corpus(
     sub: Path,
     *,
@@ -1192,7 +1222,15 @@ def _load_one_corpus(
     manifest = sub / '_remote.json'
     just_restored_traces = False
     prefix = f'  [{i+1:>{digit_width}}/{n_total}] {sub.name}'
-    if manifest.exists():
+    # **CACHE_ADDITIVITY.md fast-path**: if every required measurable
+    # has a current closure-hash sidecar entry AND
+    # `measurements.parquet` exists, `build_measurements` will
+    # idempotent-skip — so traces aren't actually needed. Avoid the
+    # cloud restore (~7-30s/corpus) by force-skipping when
+    # measurements are demonstrably current. This turns a
+    # full-walk re-run from N×restore-time into N×idempotent-skip.
+    measurements_current = _measurements_sidecar_current(sub, required)
+    if manifest.exists() and not measurements_current:
         need_restore = _missing_for_restore(
             runs_path, traces_path, trace_reads, manifest,
         )
@@ -1268,10 +1306,21 @@ def _load_one_corpus(
             build_measurements,
             load_measurements,
         )
-        build_measurements(
-            sub, required=required, runs_df=df,
-            measurable_signature_fn=_measurable_signature,
-        )
+        # **CACHE_ADDITIVITY.md fast-path** (cont.): when the sidecar
+        # is current we already short-circuited the cloud restore.
+        # Now also skip `build_measurements` itself — runs.parquet
+        # may carry sweep-time NaN-stamped trace-dependent
+        # measurables that would trip `compute_missing_columns`'s
+        # partial-nullity branch into recomputing without traces
+        # (since restore was skipped), silently overwriting the
+        # previously-finite values in measurements.parquet with
+        # NaN. The per-corpus store is the source of truth in this
+        # branch — load it directly into df.
+        if not measurements_current:
+            build_measurements(
+                sub, required=required, runs_df=df,
+                measurable_signature_fn=_measurable_signature,
+            )
         loaded = load_measurements(sub, columns=list(required))
         present_required = [c for c in required if c in loaded.columns]
         if present_required:
