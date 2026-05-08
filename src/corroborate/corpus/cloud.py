@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import tempfile
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -52,6 +53,10 @@ from corroborate._internals.narrow import (
 
 
 MANIFEST_NAME = '_remote.json'
+REMOTE_MANIFEST_RELPATH = 'MANIFEST.json'
+"""Cloud-side mirror of `_remote.json`. Lives at
+`<remote_root>/MANIFEST.json` so consumers can fetch it without
+prior local state. Same JSON shape as the local manifest."""
 
 
 class ConflictingArchive(RuntimeError):
@@ -229,6 +234,113 @@ def _save_manifest(sweep_dir: Path, manifest: RemoteManifest) -> None:
     tmp = p.with_suffix(p.suffix + '.tmp')
     _ = tmp.write_text(payload)
     tmp.replace(p)
+
+
+def _save_remote_manifest(
+    remote_root: str, manifest: RemoteManifest,
+) -> None:
+    """Mirror the manifest to `<remote_root>/MANIFEST.json`. Used
+    after `archive()` completes to expose cell-level metadata
+    without requiring local manifest state.
+
+    Streams via a tempfile so the upload reuses the same fsspec
+    transport `archive()` already validated. Failure to mirror is
+    non-fatal — caller catches and warns."""
+    payload = json.dumps(manifest.as_dict(), indent=2)
+    remote_uri = _join_remote(remote_root, REMOTE_MANIFEST_RELPATH)
+    with tempfile.NamedTemporaryFile(
+        mode='w', suffix='.json', delete=False,
+    ) as f:
+        _ = f.write(payload)
+        tmp_path = Path(f.name)
+    try:
+        _fs.put_file(tmp_path, remote_uri)
+    finally:
+        try:
+            tmp_path.unlink()
+        except OSError:
+            pass
+
+
+def fetch_remote_manifest(remote_root: str) -> RemoteManifest | None:
+    """Fetch `<remote_root>/MANIFEST.json` from cloud and return
+    a `RemoteManifest`. Returns None if the blob doesn't exist
+    (e.g. corpus archived before the cloud-mirror feature, or
+    archive failed mid-mirror).
+
+    Used for cell-level discovery without downloading parquets:
+    `manifest.files[i].row_ids` lists exactly which cells are in
+    each archived file. Recovery use-case: the local
+    `_remote.json` was lost but the cloud archive is intact —
+    fetch the manifest, write it back as `_remote.json`, and the
+    framework can `restore()` again."""
+    remote_uri = _join_remote(remote_root, REMOTE_MANIFEST_RELPATH)
+    with tempfile.NamedTemporaryFile(
+        mode='wb', suffix='.json', delete=False,
+    ) as f:
+        tmp_path = Path(f.name)
+    try:
+        try:
+            _fs.get_file(remote_uri, tmp_path)
+        except FileNotFoundError:
+            return None
+        raw = _json_loads(tmp_path.read_text())
+    finally:
+        try:
+            tmp_path.unlink()
+        except OSError:
+            pass
+    if not is_mapping_str_object(raw):
+        return None
+    return RemoteManifest.from_dict(raw)
+
+
+def recover_local_manifest(
+    sweep_dir: Path, remote_root: str, *, overwrite: bool = False,
+) -> bool:
+    """Fetch `<remote_root>/MANIFEST.json` and write it as
+    `<sweep_dir>/_remote.json`. Closes the manifest-loss recovery
+    loop: cloud archive intact + local manifest gone → run this →
+    `restore()` works again.
+
+    `overwrite` controls behavior when a local manifest already
+    exists. Default False refuses to overwrite (the local manifest
+    is authoritative when present).
+
+    Returns True on successful recovery, False when the cloud
+    blob doesn't exist."""
+    p = _manifest_path(sweep_dir)
+    if p.exists() and not overwrite:
+        raise FileExistsError(
+            f'{p}: local manifest already exists. Pass '
+            f'overwrite=True to replace it.',
+        )
+    manifest = fetch_remote_manifest(remote_root)
+    if manifest is None:
+        return False
+    _save_manifest(sweep_dir, manifest)
+    return True
+
+
+def list_archives(remote_prefix: str) -> list[str]:
+    """List remote_root URIs under `remote_prefix` whose
+    `MANIFEST.json` blobs exist. Cloud-side discovery: ask "which
+    corpora are archived under this bucket prefix?" without
+    knowing local state.
+
+    `remote_prefix` is an fsspec URI like
+    `s3://corroborate-archive/`. Returns the list of full
+    `remote_root` URIs (the prefix + each subdirectory whose
+    MANIFEST.json is reachable)."""
+    if not remote_prefix.endswith('/'):
+        remote_prefix = remote_prefix + '/'
+    listing = _fs.remote_list_dir(remote_prefix)
+    out: list[str] = []
+    for entry in listing:
+        candidate = _join_remote(entry, REMOTE_MANIFEST_RELPATH)
+        if _fs.remote_exists(candidate):
+            out.append(entry.rstrip('/'))
+    return out
 
 
 # ============ Helpers ============
@@ -515,6 +627,32 @@ def archive(
         remote_root=remote_root,
         files=tuple(_sorted_by_relpath(by_relpath.values())),
     )
+
+    # **Cloud-side manifest mirror**: upload the freshly-saved
+    # local manifest as `<remote_root>/MANIFEST.json` so the
+    # cloud carries cell-level accountability without anyone
+    # downloading the parquets. Recovery becomes "fetch
+    # MANIFEST.json + restore from there"; discovery becomes "list
+    # buckets/MANIFEST.json blobs". Pre-fix, the local
+    # `_remote.json` was the only linkage from corpus to cloud
+    # data — losing it (rm -rf, untracked git, layout reorg)
+    # orphaned the data even though the cloud copy was intact
+    # (the `minatar_sync_curve_*` incident from the
+    # 2026-05-08 session).
+    try:
+        _save_remote_manifest(remote_root, final)
+    except Exception as e:
+        # Cloud-mirror failure shouldn't undo a successful
+        # archive; the local `_remote.json` is the canonical
+        # store. Warn loudly so the user knows the cloud-side
+        # recovery path is missing.
+        import sys
+        sys.stderr.write(
+            f'archive: WARNING — failed to mirror manifest to '
+            f'{_join_remote(remote_root, "MANIFEST.json")} ({e}). '
+            f'Archive is otherwise complete; cloud-side recovery '
+            f'won\'t work for this corpus until re-archived.\n',
+        )
 
     if purge_local:
         for p in purge_targets:

@@ -111,6 +111,30 @@ def remote_exists(remote_uri: str) -> bool:
     return fs.exists(path)
 
 
+def remote_list_dir(remote_uri: str) -> list[str]:
+    """List immediate children of a remote directory URI.
+
+    Returns full URIs (scheme + path) for each child, or an empty
+    list when the directory doesn't exist. Used by `cloud.list_archives`
+    for cloud-side discovery.
+
+    fsspec's `ls()` returns paths without the scheme; we re-attach
+    the scheme so callers can pass the result back to other
+    `_fs.*` functions."""
+    fs, path = _resolve(remote_uri)
+    try:
+        children = fs.ls(path, detail=False)  # pyright: ignore[reportAttributeAccessIssue]
+    except FileNotFoundError:
+        return []
+    scheme = remote_uri.split('://', 1)[0] if '://' in remote_uri else ''
+    out: list[str] = []
+    for c in children:
+        if not isinstance(c, str):
+            continue
+        out.append(f'{scheme}://{c}' if scheme else c)
+    return out
+
+
 def remote_delete(remote_uri: str) -> None:
     """Delete a single remote object."""
     fs, path = _resolve(remote_uri)
