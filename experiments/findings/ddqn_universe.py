@@ -248,7 +248,7 @@ def ddqn_refuted_when_dormancy_fires(
     paired_g: PairedGResult,
     *,
     dedupe_strategy: str = 'mean',
-) -> Verdict:
+) -> tuple[Verdict, RefutationClass | None]:
     """Necessary-condition claim. The framework's-own Jensen
     dormancy invariant operationalizes the Hasselt-2010 structural
     floor `σ_Q × √(2 log |A|)` against observed bias. When the gap
@@ -267,17 +267,20 @@ def ddqn_refuted_when_dormancy_fires(
     outcome benefit on FourRooms (g=+0.78 vs vanilla, p<0.001)."""
     del dedupe_strategy  # forwarded to paired_g
     if paired_g.n_pairs < 50:
-        return Verdict.POWER_INSUFFICIENT
+        return Verdict.POWER_INSUFFICIENT, None
     if math.isnan(paired_g.helped_fraction):
-        return Verdict.POWER_INSUFFICIENT
+        return Verdict.POWER_INSUFFICIENT, None
+    # The bridge predicts a NULL outcome on dormant cells.
     if (
         paired_g.helped_fraction <= 0.15
         and abs(paired_g.g) <= 0.20
     ):
-        return Verdict.HELD
+        return Verdict.HELD, None
     if paired_g.helped_fraction > 0.40:
-        return Verdict.INVARIANT_VIOLATION
-    return Verdict.NO_EFFECT
+        return Verdict.INVARIANT_VIOLATION, None
+    # Predicted null but observed |g| > 0.20 OR helped in
+    # (0.15, 0.40] — null prediction refuted.
+    return Verdict.NO_EFFECT, RefutationClass.SIGN_FLIP
 
 
 # =====================================================================
@@ -391,7 +394,7 @@ def ddqn_helps_at_early_bursts__pixel_envs(
     paired_g: PairedGResult,
     *,
     dedupe_strategy: str = 'mean',
-) -> Verdict:
+) -> tuple[Verdict, RefutationClass | None]:
     """TIER A2 existence proof: at the first eval-burst quarter
     on long-horizon high-obs-dim envs (MinAtar 1M), DDQN's
     outcome delta is positive in the majority of cells with
@@ -403,15 +406,20 @@ def ddqn_helps_at_early_bursts__pixel_envs(
     see K1 LOO + four-MinAtar comparison)."""
     del dedupe_strategy  # forwarded to paired_g
     if paired_g.n_pairs < 30:
-        return Verdict.POWER_INSUFFICIENT
+        return Verdict.POWER_INSUFFICIENT, None
     if math.isnan(paired_g.helped_fraction):
-        return Verdict.POWER_INSUFFICIENT
+        return Verdict.POWER_INSUFFICIENT, None
+    # Predicted direction: positive g + helped majority.
     if (
         paired_g.helped_fraction >= 0.55
         and paired_g.g >= 0.20
     ):
-        return Verdict.HELD
-    return Verdict.NO_EFFECT
+        return Verdict.HELD, None
+    # Sign-flip when observed g is negative (opposite direction);
+    # otherwise null-effect (positive but small).
+    if paired_g.g < 0.0:
+        return Verdict.NO_EFFECT, RefutationClass.SIGN_FLIP
+    return Verdict.NO_EFFECT, RefutationClass.NULL_EFFECT
 
 
 @claim_bridge(
@@ -807,7 +815,7 @@ def bootstrap_fraction_drives_g_link__net_of_dormancy(
         'jensen_dormancy_gap',
     ),
     dedupe_strategy: str = 'mean',
-) -> Verdict:
+) -> tuple[Verdict, RefutationClass | None]:
     """Independent link-side scope predicate. The (env, burst)
     panel meta-regression of g_link on the 5-covariate set
     {log_action_dim, log_obs_dim, log_horizon, bootstrap_fraction,
@@ -844,12 +852,15 @@ def bootstrap_fraction_drives_g_link__net_of_dormancy(
     # That's a data-availability gap, not "no signal", so call
     # POWER_INSUFFICIENT rather than silently NO_EFFECT.
     if coef is None:
-        return Verdict.POWER_INSUFFICIENT
+        return Verdict.POWER_INSUFFICIENT, None
     if not coef.is_significant:
-        return Verdict.POWER_INSUFFICIENT
+        return Verdict.POWER_INSUFFICIENT, None
+    # Predicted direction: β ≥ +1.0 (positive coefficient).
     if coef.coefficient >= 1.0:
-        return Verdict.HELD
-    return Verdict.NO_EFFECT
+        return Verdict.HELD, None
+    if coef.coefficient < 0.0:
+        return Verdict.NO_EFFECT, RefutationClass.SIGN_FLIP
+    return Verdict.NO_EFFECT, RefutationClass.NULL_EFFECT
 
 
 # =====================================================================
@@ -2462,7 +2473,7 @@ def _staleness_mediation_holds_when(
     proportion_mediated: ProportionMediatedResult,
     *, dominance_floor: float = 0.2,
     n_pairs_floor: int = 25,
-) -> Verdict:
+) -> tuple[Verdict, RefutationClass | None]:
     """Shared verdict logic for the target_staleness-mediates-outcome
     bridges. Sister of `_eff_h_mediation_holds_when` with the
     inverse semantics: HELD when the mediator carries a NON-trivial
@@ -2479,15 +2490,20 @@ def _staleness_mediation_holds_when(
       (3) `proportion` ≥ `dominance_floor` (mediator carries the
           share)."""
     if proportion_mediated.n_pairs < n_pairs_floor:
-        return Verdict.POWER_INSUFFICIENT
+        return Verdict.POWER_INSUFFICIENT, None
     p = proportion_mediated.proportion
     if math.isnan(p):
-        return Verdict.POWER_INSUFFICIENT
+        return Verdict.POWER_INSUFFICIENT, None
     if not proportion_mediated.in_unit_interval:
-        return Verdict.POWER_INSUFFICIENT
+        return Verdict.POWER_INSUFFICIENT, None
     if p >= dominance_floor:
-        return Verdict.HELD
-    return Verdict.NO_EFFECT
+        return Verdict.HELD, None
+    # Predicted-direction proportion ≥ dominance_floor; observed
+    # below the floor. Negative proportion (mediator carries
+    # opposite sign) → SIGN_FLIP; small-positive → NULL_EFFECT.
+    if p < 0.0:
+        return Verdict.NO_EFFECT, RefutationClass.SIGN_FLIP
+    return Verdict.NO_EFFECT, RefutationClass.NULL_EFFECT
 
 
 @claim_bridge(
@@ -2519,7 +2535,7 @@ def target_staleness_late_mediates_outcome__fourrooms(
     upstream_max_delta: float = 0.0,
     dominance_floor: float = 0.2,
     n_pairs_floor: int = 25,
-) -> Verdict:
+) -> tuple[Verdict, RefutationClass | None]:
     """On FourRooms (capacity_sweep), `target_staleness_late` mediates
     DDQN's outcome benefit at ~27% under mech-HELD conditioning.
 
@@ -2582,7 +2598,7 @@ def target_staleness_late_mediates_outcome__breakout_sync100(
     upstream_max_delta: float = 0.0,
     dominance_floor: float = 0.2,
     n_pairs_floor: int = 10,
-) -> Verdict:
+) -> tuple[Verdict, RefutationClass | None]:
     """On Breakout-MinAtar at sync=100 (the canonical Q-explosion
     regime), `target_staleness_late` mediates DDQN's outcome benefit
     at ~65% under mech-HELD conditioning — 2.4× stronger than on
