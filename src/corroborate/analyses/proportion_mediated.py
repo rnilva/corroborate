@@ -1,50 +1,64 @@
-"""`proportion_mediated` — linear-mediation decomposition for paired
-intervention claims.
+"""`proportion_mediated` — DEPRECATED linear-mediation summary.
 
-For a (treatment, baseline) contrast and a candidate `mediator`,
-this analysis decomposes the per-pair Δ on `target` into
-direct + indirect components and reports the proportion that's
-*mediated* by the candidate. The standard Baron-Kenny / Sobel
-form, adapted to the framework's per-pair-Δ idiom:
+**DEPRECATED — DO NOT GATE LOAD-BEARING BRIDGES ON THIS RESULT.**
 
-    Δ_Y_pair  = direct + indirect
-    indirect  = β_YM · Δ_M_pair    (the part of Δ_Y "carried by" Δ_M)
-    direct    = Δ_Y_pair − indirect
+For new code, prefer:
+- `corroborate.graph.discovery.partial_spearman_rho(X, Y, Z)` —
+  non-parametric "does conditioning on Z kill the X→Y
+  association?" test. Has an honest SE (Fisher-z, df = n − 4),
+  no functional-form assumption, and rank-based so robust to
+  saturation / heavy tails.
+- `stratified_partial_spearman_rho` (same module) for the JCI
+  per-stratum Fisher-z-pooled form when env is a confounder.
+- DoWhy's `mediation` estimator (not yet wrapped) when an
+  explicit causal-mediation NDE/NIE is needed.
 
-where β_YM is the slope of `target` on `mediator` fit across all
-pairs (the linear-mediation assumption: M's effect on Y is a
-single linear coefficient that doesn't depend on treatment level
-or other covariates).
+This module is kept for back-compat reads of past `RunRow.measurements`
+columns that stored a `proportion_mediated` scalar. Calling the
+function emits a `DeprecationWarning` and the result should be
+treated as a **descriptive heuristic only**, not a verdict input.
 
-Aggregating to the population:
+---
 
-    proportion_mediated = β_YM · mean(Δ_M) / mean(Δ_Y)
+**Why deprecated.** Three structural problems:
 
-The framework's existing `partial_spearman_rho` family expresses
-the Spearman-rank-correlation form of the same decomposition; this
-analysis returns the *raw* point estimate so bridges can author
-threshold logic like `proportion_mediated > 0.5 → HELD` directly.
+1. **Ratio explodes near the denominator zero.** `proportion =
+   indirect / mean(ΔY)`. When the total effect's magnitude is
+   small but nonzero, a noisy slope estimate produces a wildly
+   variable proportion. The existing `<1e-12` guard catches
+   exact zero; everything between zero and `SE(mean(ΔY))` is
+   essentially noise. The result has NO SE, so bridges cannot
+   tell signal from noise on the ratio.
 
-**Linear-mediation assumptions** (per ANALYSIS_RECIPE.md §3a):
+2. **Can land outside `[0, 1]` without action.** Direct/indirect
+   with opposite signs (suppression) or sampling noise produces
+   `proportion ∈ (-∞, ∞)`. The `in_unit_interval` flag REPORTS
+   the failure but doesn't change the verdict — bridges can
+   still gate on a number that's structurally meaningless.
 
-1. No treatment × mediator interaction (single β_YM works for all
-   cells).
-2. Linear M → Y functional form (no saturation, threshold).
-3. Mediator's distribution doesn't depend on treatment in
-   nonlinear ways.
+3. **First-difference identification ≠ population M→Y slope.**
+   The estimator `β_YM = Cov(ΔY, ΔM) / Var(ΔM)` recovers the
+   structural M→Y slope only if M→Y is linear AND homogeneous
+   across pairs. The Q-explosion regimes the framework regularly
+   visits (Asterix sync=100, Breakout late bursts) are exactly
+   where M→outcome is non-monotone — the very scenario where
+   per-burst link analyses replaced scalar slopes because the
+   scalar form silently combines causally-opposite phases.
 
-When these break, the linear proportion can land outside [0, 1] —
-the diagnostic is captured on the result via `in_unit_interval`.
-A bridge that gets `in_unit_interval=False` should escalate to
-counterfactual mediation (Pearl NDE/NIE; deferred per
-FUTURE_WORKS.md).
+The `partial_spearman_rho` family doesn't share these problems
+(non-parametric, has SE, doesn't conflate phases under sign
+flip — though signing requires per-burst stratification). It is
+the framework's recommended primitive for "is M a mediator?"
+verdicts.
 """
 from __future__ import annotations
 
 import math
+import warnings
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
+from corroborate.analyses.paired_g import resolve_value as _paired_g_resolve_value
 from corroborate.bridge.analysis import analysis
 
 
@@ -92,24 +106,19 @@ def _key_tuple(
 
 
 def _resolve_value(record: Mapping[str, object], source: str) -> float:
-    """Same resolution rule as `paired_g._resolve_value`: registry
-    lookup first, then field-path on the record."""
-    from corroborate.measurables import get_registered
-    raw = record.get(source)
-    if raw is not None:
-        if isinstance(raw, bool):
-            return float('nan')  # bool is not a numeric scalar
-        if isinstance(raw, (int, float)):
-            return float(raw)
+    """Wrap `paired_g.resolve_value` with NaN-on-error semantics.
+
+    `paired_g.resolve_value` raises `KeyError` when `source` is
+    absent and no measurable is registered, and `TypeError` when
+    a measurable returns a non-scalar. `proportion_mediated` is
+    deprecated and prefers to NaN-skip such pairs rather than
+    crash; catch the canonical errors here. This keeps the
+    resolution rule (record-first, registry-fallback) DRY with
+    the canonical implementation."""
+    try:
+        return _paired_g_resolve_value(record, source)
+    except (KeyError, TypeError):
         return float('nan')
-    m = get_registered(source)
-    if m is not None:
-        computed = m.fn(record)
-        if isinstance(computed, bool):
-            return float('nan')
-        if isinstance(computed, (int, float)):
-            return float(computed)
-    return float('nan')
 
 
 @analysis
@@ -139,6 +148,14 @@ def proportion_mediated(
     registry first, falling back to field-path reads on the cell
     record (same convention as `paired_g.source`).
 
+    **DEPRECATED.** Emits `DeprecationWarning` on call. Prefer
+    `corroborate.graph.discovery.partial_spearman_rho(target,
+    mediator, conditioning=treatment_indicator)` for
+    "does conditioning on M kill T→Y?" verdicts; see this
+    module's docstring for the rationale and alternatives. The
+    function is kept for back-compat reads of past corpora that
+    persisted a `proportion_mediated` scalar.
+
     `upstream_source` enables **conditioning on the upstream step
     of a mediation chain**. When the chain is
     `do(treatment) → upstream → mediator → target`, pairs where
@@ -159,8 +176,19 @@ def proportion_mediated(
     and the analysis reduces to the standard 2-variable form.
 
     The result's `in_unit_interval` flag is the diagnostic for
-    linear-mediation assumption failure — see ANALYSIS_RECIPE.md
-    §3a for when to escalate to counterfactual mediation."""
+    linear-mediation assumption failure — see this module's
+    docstring §"Why deprecated" item 2."""
+    warnings.warn(
+        'proportion_mediated is deprecated and structurally '
+        'fragile (ratio-of-noisy-means; can land outside [0, 1]; '
+        'first-difference identification ≠ population slope). '
+        'Use `corroborate.graph.discovery.partial_spearman_rho` '
+        'for mediation hypothesis tests; see '
+        '`corroborate.analyses.proportion_mediated`\'s module '
+        'docstring for the full alternatives list.',
+        DeprecationWarning,
+        stacklevel=2,
+    )
     if upstream_max_delta is not None and upstream_min_delta is not None:
         raise ValueError(
             'proportion_mediated: pass at most one of '

@@ -197,6 +197,14 @@ def paired_g(
       aggregated value is the per-cell mean, NOT the underlying
       raw cells; downstream SE / df reflect the post-aggregation
       n_pairs.
+
+      **WARNING:** when the duplicate cells differ on regime-
+      defining fields (γ, total_steps, sync_period, …) NOT in
+      `pair_by`, `'mean'` silently averages causally distinct
+      experiments. Pass `'raise'` to detect this — it reports
+      which columns differ between the duplicates so the author
+      can tighten `pair_by`.
+
     - `'raise'`: error loudly on any `(arm, pair_by)` bucket with
       more than one cell. Use when the corpus shouldn't have
       duplicates and silent averaging would hide a regime split —

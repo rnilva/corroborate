@@ -154,13 +154,13 @@ def paired_g_per_burst(
     share the same `(env, arm, pair_by)` tuple,
     - `'mean'` (default) averages the per-burst vectors
       element-wise within each duplicate bucket. Suits M2M scopes
-      that combine repeated experiments (multiple corpora supplying
-      the same `(env, arm, seed)`). Element-wise mean requires
-      matching per-burst array shapes within the bucket; mismatch
-      raises with a regime-mismatch report.
-    - `'raise'` errors loudly on duplicates so the bridge author
-      tightens scope (extend `pair_by` with the regime-defining
-      column) or explicitly opts into the `'mean'` aggregation."""
+      that combine repeated experiments. **WARNING**: when the
+      duplicate cells differ on regime-defining fields not in
+      `pair_by`, `'mean'` silently averages causally distinct
+      experiments — pass `'raise'` to detect this.
+    - `'raise'` errors loudly on duplicates AND reports which
+      columns differ between them so the bridge author tightens
+      scope (extend `pair_by`) or explicitly opts into `'mean'`."""
     from corroborate.stats import hedges_g_paired
 
     if dedupe_strategy not in ('raise', 'mean'):

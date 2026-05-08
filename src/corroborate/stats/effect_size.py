@@ -293,16 +293,30 @@ def random_effects_summary(
     var_pooled = 1.0 / sum_w_rand
     se_pooled = math.sqrt(var_pooled)
     I2 = max(0.0, (Q - df) / Q) if Q > 0.0 else 0.0
-    t_crit = float(ss.t.ppf(0.975, df=df))
+    # Higgins-Thompson-Spiegelhalter 2009 §3 prediction interval:
+    # `μ̂ ± t_{k-2}^{α/2} · √(τ̂² + Var(μ̂))`. The t-critical uses
+    # `k-2` degrees of freedom (NOT `k-1`, which is df for Q's
+    # chi-square and the pooled CI). At k=2 the PI is undefined
+    # (df=0); k=2 corpora get NaN PI bounds, which the
+    # `random_effects_verdict` POWER_INSUFFICIENT-at-n<3 gate
+    # catches downstream anyway.
+    pi_df = n - 2
     pi_se = math.sqrt(tau2 + var_pooled)
+    if pi_df >= 1:
+        t_crit = float(ss.t.ppf(0.975, df=pi_df))
+        pi_lo = g_pooled - t_crit * pi_se
+        pi_hi = g_pooled + t_crit * pi_se
+    else:
+        pi_lo = float('nan')
+        pi_hi = float('nan')
     return PooledStats(
         pooled_g=g_pooled,
         se_pooled=se_pooled,
         tau2=tau2,
         I2=I2,
         Q=Q,
-        pi_lo=g_pooled - t_crit * pi_se,
-        pi_hi=g_pooled + t_crit * pi_se,
+        pi_lo=pi_lo,
+        pi_hi=pi_hi,
         empirical_min_g=min(gs),
         empirical_max_g=max(gs),
         n_cells=n,
