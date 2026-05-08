@@ -55,9 +55,11 @@ type RewardRegime = Literal[
 ]
 type BenchmarkFamily = Literal[
     'classic_control', 'minatar', 'bsuite', 'bandit', 'misc',
+    'jumanji',
 ]
 type ActionType = Literal['discrete', 'continuous']
 type ObservationType = Literal['vector', 'image', 'structured']
+type EnvBackend = Literal['gymnax', 'jumanji']
 
 type ThresholdConfidence = Literal[
     'literature', 'derived', 'sample_relative', 'absent',
@@ -650,6 +652,7 @@ class EnvSpec:
     solve_threshold_source: str | None = None
     solve_threshold_confidence: ThresholdConfidence = 'absent'
     solve_threshold_outcome_path: str = 'eval_final_mean'
+    backend: EnvBackend = 'gymnax'
 
     @property
     def obs_dim(self) -> int:
@@ -677,6 +680,23 @@ class EnvSpec:
             'r_min': self.r_min,
             'r_max': self.r_max,
         }
+
+
+# ============ Jumanji per-env factories ============
+#
+# Each registered jumanji env defines a factory closure that builds
+# a typed `JumanjiEnv` adapter at call time. Factories live in
+# their own module (`jumanji_envs.py`) where per-env Observation
+# imports are local — keeps env_catalogue.py free of jumanji-
+# backend code paths and preserves typing on the obs-extract closure.
+#
+# Factory signature returns `tuple[Env, EnvParams]` matching the
+# gymnax surface that `cell_runner` consumes; the registry maps
+# our internal env name (e.g., "Snake-jumanji") to that factory.
+
+type JumanjiFactory = Callable[[], 'tuple[Env, EnvParams]']
+
+_JUMANJI_FACTORIES: dict[str, JumanjiFactory] = {}
 
 
 # ============ Introspection: read gymnax's spaces ============
@@ -797,7 +817,83 @@ def _register(
         solve_threshold_source=solve_threshold_source,
         solve_threshold_confidence=solve_threshold_confidence,
         solve_threshold_outcome_path=solve_threshold_outcome_path,
+        backend='gymnax',
     )
+
+
+def _register_jumanji(
+    name: str,
+    *,
+    factory: JumanjiFactory,
+    r_min: float,
+    r_max: float,
+    reward_regime: RewardRegime,
+    state_hash: StateHash | None = None,
+    state_hash_cardinality: int | None = None,
+    solve_threshold: float | None = None,
+    solve_threshold_source: str | None = None,
+    solve_threshold_confidence: ThresholdConfidence = 'absent',
+    solve_threshold_outcome_path: str = 'eval_final_mean',
+) -> None:
+    """Register a jumanji-backed env with the catalogue.
+
+    Auto-introspects shape / action-dim / horizon by calling the
+    factory once and reading the typed `Discrete` / `Box` spaces
+    off the constructed `JumanjiEnv` adapter (same shape gymnax
+    introspection uses, just routed through the adapter). The
+    factory itself is stashed in `_JUMANJI_FACTORIES` for later
+    `make_env` calls — the substrate runs N seeds against the same
+    EnvSpec and we want one freshly-constructed jumanji env per
+    cell, not a shared singleton."""
+    env_obj, env_params = factory()
+    act_space = env_obj.action_space(env_params)
+    obs_space = env_obj.observation_space(env_params)
+    shape = tuple(int(d) for d in obs_space.shape)
+    obs_type: ObservationType = (
+        'vector' if len(shape) == 1
+        else 'image' if len(shape) == 3
+        else 'structured'
+    )
+    horizon: int | None = int(env_params.max_steps_in_episode)
+
+    _JUMANJI_FACTORIES[name] = factory
+    ENV_REGISTRY[name] = EnvSpec(
+        name=name,
+        action_type='discrete',
+        n_actions=int(act_space.n),
+        observation_shape=shape,
+        observation_type=obs_type,
+        horizon=horizon,
+        r_min=r_min,
+        r_max=r_max,
+        reward_regime=reward_regime,
+        benchmark_family='jumanji',
+        state_hash=state_hash,
+        state_hash_cardinality=state_hash_cardinality,
+        benchmark_params=MappingProxyType({}),
+        solve_threshold=solve_threshold,
+        solve_threshold_source=solve_threshold_source,
+        solve_threshold_confidence=solve_threshold_confidence,
+        solve_threshold_outcome_path=solve_threshold_outcome_path,
+        backend='jumanji',
+    )
+
+
+def make_env(env_spec: EnvSpec) -> 'tuple[Env, EnvParams]':
+    """Construct an `(env, env_params)` pair routed by backend.
+
+    The runtime entry point that `cell_runner` calls. Replaces a
+    direct `gymnax.make(name)` so jumanji-backed envs flow through
+    the same code path."""
+    if env_spec.backend == 'jumanji':
+        factory = _JUMANJI_FACTORIES.get(env_spec.name)
+        if factory is None:
+            raise KeyError(
+                f"Jumanji env '{env_spec.name}' has no registered "
+                f"factory in _JUMANJI_FACTORIES",
+            )
+        return factory()
+    return gymnax.make(env_spec.name)
 
 
 # Vector-obs envs with author-declared bounds for the bucket-
@@ -1071,6 +1167,14 @@ class SolveThreshold:
     source: str
     confidence: ThresholdConfidence
     outcome_path_assumed: str = 'eval_final_mean'
+
+
+# Trigger jumanji registrations BEFORE SOLVE_THRESHOLDS is built,
+# so the snapshot mapping captures jumanji envs alongside gymnax.
+# Side-effect import — `jumanji_envs` calls `_register_jumanji`
+# at module-load time. Placed here (not at the top of this file)
+# because `_register_jumanji` must be defined first.
+from corroborate_rl import jumanji_envs as _jumanji_envs  # noqa: F401, E402
 
 
 SOLVE_THRESHOLDS: Mapping[str, SolveThreshold] = MappingProxyType({

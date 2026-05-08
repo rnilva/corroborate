@@ -13,6 +13,8 @@ dependencies = [
     "pyarrow>=24.0.0",      # incremental Parquet writer for streaming merges
     "fsspec>=2024.0",       # provider-agnostic cloud archive (S3/GCS/R2/Azure via extras)
     "s3fs>=2026.3.0",
+    "jumanji>=1.1.1",
+    "requests>=2.33.1",
 ]
 
 [project.optional-dependencies]

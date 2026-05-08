@@ -3,7 +3,9 @@ layer. One cell = one (env, seed, hypothesis) execution.
 
 The runner is thin:
 
-1. Resolves `env, env_params` from `gymnax`.
+1. Resolves `env, env_params` via `env_catalogue.make_env`
+   (gymnax for classic_control / minatar / bsuite, jumanji for
+   `*-jumanji` registered envs).
 2. Binds the cell's exogenous knobs (env, dims, eval-episode-cap,
    state_hash) and the hypothesis's intervention into `dqn` via
    `functools.partial`. Intervention mirrors `dqn`'s signature, so
@@ -30,7 +32,6 @@ from datetime import UTC, datetime
 from functools import partial
 from typing import NamedTuple
 
-import gymnax
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -40,7 +41,7 @@ from corroborate.core import canonical_str
 from corroborate.graph.computation import ComputationGraph, build_computation_graph
 from corroborate_rl.dqn.dqn import default_state_hash
 from corroborate_rl.dqn.invariants import DQNTrajectoryRecord
-from corroborate_rl.env_catalogue import EnvSpec, EnvWrapper
+from corroborate_rl.env_catalogue import EnvSpec, EnvWrapper, make_env
 from corroborate.corpus.schema import MeasurementLeaf, RunRow, TraceLeaf, TraceRow
 from corroborate.core.signature import walk, walk_paths
 from corroborate.bridge.verdict import Verdict
@@ -166,7 +167,7 @@ def run_dqn_arm(
     if not seeds:
         raise ValueError('seeds must be non-empty')
 
-    env, env_params = gymnax.make(env_spec.name)
+    env, env_params = make_env(env_spec)
     for w in wrappers:
         env = w.wrap(env)
     state_hash = (

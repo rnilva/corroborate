@@ -24,8 +24,9 @@ from corroborate_rl.env_catalogue import (
 # ============ Registration ============
 
 def test_all_v9_envs_registered() -> None:
-    """The catalogue ships v9's 17-env table verbatim."""
-    expected = {
+    """The catalogue ships v9's 17-env table verbatim, plus any
+    backend-extension envs (jumanji)."""
+    expected_gymnax = {
         'CartPole-v1', 'Acrobot-v1', 'MountainCar-v0',
         'Catch-bsuite', 'DeepSea-bsuite', 'MemoryChain-bsuite',
         'UmbrellaChain-bsuite', 'DiscountingChain-bsuite',
@@ -35,7 +36,11 @@ def test_all_v9_envs_registered() -> None:
         'FourRooms-misc', 'MetaMaze-misc', 'Pong-misc',
         'BernoulliBandit-misc', 'GaussianBandit-misc',
     }
-    assert set(ENV_REGISTRY.keys()) == expected
+    expected_jumanji = {
+        'Snake-jumanji', 'PacMan-jumanji', 'Game2048-jumanji',
+        'Maze-jumanji', 'Sokoban-jumanji', 'SlidingTilePuzzle-jumanji',
+    }
+    assert set(ENV_REGISTRY.keys()) == expected_gymnax | expected_jumanji
 
 
 def test_classic_control_envs_have_state_hash() -> None:

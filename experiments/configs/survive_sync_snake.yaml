@@ -1,0 +1,85 @@
+name: survive_sync_snake
+out_dir: experiments/data/survive_sync_snake
+arms_shape: paired
+
+# SURVIVE sweep on Snake-jumanji at intermediate sync values.
+# Pivot from PacMan after PacMan's larger 31×28×5 obs caused
+# fatal gradient-through-scan memory overflow at any chunk_size.
+# Snake's 12×12×5 obs (~6x smaller) fits cleanly.
+#
+# Same SURVIVE-class polarity (per-step +1 reward per fruit,
+# terminate on collision); 4 actions; horizon=4000. Tests the
+# argmax_entropy_van moderation hypothesis (CLAIM 20) on a new
+# env class outside gymnax-MinAtar.
+#
+# 1 env × 3 sync × 2 arms × 30 seeds = 6 hypothesis dispatches.
+envs:
+  - {name: Snake-jumanji, n_seeds: 30, chunk_size: 15}
+
+base_intervention:
+  total_steps: 100000
+  eval_every:  10000
+  n_episodes:  5
+  gamma:       0.99
+  sync_period: 1000
+  replay:
+    class: Replay
+    capacity: 50000
+    batch_size: 32
+  optimizer:
+    fn: warmed_update
+    inner: {fn: adam, lr: 0.0001}
+    warmup_steps: 100
+  q_network:
+    class: CNN
+    obs_shape: {from_env: observation_shape}
+    channels: [16, 32]
+    kernel_size: 3
+    hidden: [128]
+
+hypotheses:
+  - name: vanilla_dqn_sync500
+    predicted_direction: null
+    intervention: {sync_period: 500}
+  - name: ddqn_sync500
+    predicted_direction: a_gt_b
+    intervention:
+      sync_period: 500
+      bootstrap:
+        fn: bootstrap
+        greedification: {fn: double_greedify}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement:
+          fn: bootstrap
+          greedification: {fn: double_greedify}
+  - name: vanilla_dqn_sync1500
+    predicted_direction: null
+    intervention: {sync_period: 1500}
+  - name: ddqn_sync1500
+    predicted_direction: a_gt_b
+    intervention:
+      sync_period: 1500
+      bootstrap:
+        fn: bootstrap
+        greedification: {fn: double_greedify}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement:
+          fn: bootstrap
+          greedification: {fn: double_greedify}
+  - name: vanilla_dqn_sync3000
+    predicted_direction: null
+    intervention: {sync_period: 3000}
+  - name: ddqn_sync3000
+    predicted_direction: a_gt_b
+    intervention:
+      sync_period: 3000
+      bootstrap:
+        fn: bootstrap
+        greedification: {fn: double_greedify}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement:
+          fn: bootstrap
+          greedification: {fn: double_greedify}
