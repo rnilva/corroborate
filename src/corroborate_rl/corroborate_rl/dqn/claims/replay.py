@@ -58,15 +58,18 @@ class ReplayState(NamedTuple):
     swapping `Replay` for a different implementation (e.g. PER)
     define their own `ReplayState`-shaped substate.
 
-    Five parallel arrays + a fill counter — kept flat so the
-    pytree leaves are individually `jax.Array` (vmap-friendly).
-    Indexed by `step % capacity` for FIFO replacement."""
+    Five parallel arrays + a monotonic add-counter — kept flat so
+    the pytree leaves are individually `jax.Array` (vmap-friendly).
+    `size` is the unbounded count of `Replay.add` calls with mask=1
+    (the FIFO write head is `size % capacity`); the populated-slot
+    count for sampling is `min(size, capacity)`, computed at sample
+    time inside `uniform_sample`."""
     obs: jax.Array          # (capacity, *obs_shape)
     action: jax.Array       # (capacity,) int32
     reward: jax.Array       # (capacity,)
     next_obs: jax.Array     # (capacity, *obs_shape)
     done: jax.Array         # (capacity,) float32 (0/1)
-    size: jax.Array         # () int32 — number of transitions stored
+    size: jax.Array         # () int32 — total adds (unbounded; not slot count)
 
 
 class PendingNStepState(NamedTuple):
@@ -321,6 +324,14 @@ class Replay:
         hasn't yet emitted, we still call `add` (to keep scan's
         carry shape stable) but with mask=0.
 
+        `state.size` is a monotonic add-counter (NOT capped at
+        `capacity`); the write index wraps via `% capacity`.
+        Capping `size` at `capacity` would freeze the write head
+        at 0 once the buffer fills — every subsequent add would
+        overwrite slot 0 only, breaking the ring. Sampling
+        separately bounds the valid range via
+        `min(size, capacity)` (cf. `uniform_sample`).
+
         Mechanics — not a Claim, no theoretical content beyond
         data-structure correctness."""
         idx = state.size % self.capacity
@@ -357,9 +368,12 @@ class Replay:
             reward=state.reward.at[idx].set(new_reward_val),
             next_obs=state.next_obs.at[idx].set(new_next_obs_val),
             done=state.done.at[idx].set(new_done_val),
-            size=jnp.minimum(
-                state.size + emit.astype(jnp.int32), self.capacity,
-            ),
+            # Unbounded: the FIFO write head is `size % capacity` so
+            # capping `size` at `capacity` would freeze the head at 0
+            # after the buffer fills (every subsequent add overwriting
+            # slot 0 only). Sampling caps separately via
+            # `min(size, capacity)` in `uniform_sample`.
+            size=state.size + emit.astype(jnp.int32),
         )
 
     def sample_batch(self, state: ReplayState, rng_key: jax.Array) -> Batch:

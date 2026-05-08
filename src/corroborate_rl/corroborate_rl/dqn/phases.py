@@ -136,7 +136,15 @@ def rollout_phase(
         'ep_return': cumulative,
         'action': action.astype(jnp.int32),
         'state_hash': obs_hash,
-        'buf_size': new_replay.size.astype(jnp.int32),
+        # Populated-slot count for the diagnostic. `state.size` is a
+        # monotonic add-counter (post FIFO-fix) that grows past
+        # `capacity`; clip here so `buf_size` keeps the historical
+        # "how many slots are populated" meaning that
+        # `fill_ratio_late = mean(buf_size / capacity)` reads as a
+        # 0..1 coverage scalar.
+        'buf_size': jnp.minimum(
+            new_replay.size, replay.capacity,
+        ).astype(jnp.int32),
     }
     return new_state, diagnostics
 
