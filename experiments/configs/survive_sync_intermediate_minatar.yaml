@@ -1,0 +1,90 @@
+name: survive_sync_intermediate_minatar
+out_dir: experiments/data/survive_sync_intermediate_minatar
+arms_shape: paired
+
+# Intermediate-sync sweep on MinAtar SURVIVE-class envs to populate
+# more strict-mech-HELD configs in CLAIM 17 scope. Existing data:
+# sync=100 typically has q_div >> 1 (Q-explosion, out of CLAIM 17
+# scope); sync=10000 typically mech-dormant (DDQN doesn't reduce
+# bias). Intermediate sync (500, 1500, 3000) targets the bounded-Q
+# ∧ mech-active sweet spot — needed to corroborate CLAIM 20
+# (argmax_entropy_late_van predicts SURVIVE link power, n=5
+# starting point).
+#
+# 4 envs × 3 sync × 2 arms × 30 seeds = 720 cells with CNN.
+envs:
+  - {name: Asterix-MinAtar,        n_seeds: 30, chunk_size: 30}
+  - {name: Breakout-MinAtar,       n_seeds: 30, chunk_size: 30}
+  - {name: Freeway-MinAtar,        n_seeds: 30, chunk_size: 30}
+  - {name: SpaceInvaders-MinAtar,  n_seeds: 30, chunk_size: 30}
+
+base_intervention:
+  total_steps: 200000
+  eval_every:  20000
+  n_episodes:  20
+  gamma:       0.99
+  sync_period: 1000
+  replay:
+    class: Replay
+    capacity: 50000
+    batch_size: 32
+  optimizer:
+    class: WarmedUpdate
+    inner: {class: Adam, lr: 0.0001}
+    warmup_steps: 100
+  q_network:
+    class: CNN
+    obs_shape: {from_env: observation_shape}
+    channels: [16, 32]
+    kernel_size: 3
+    hidden: [128]
+
+hypotheses:
+  # sync = 500
+  - name: vanilla_dqn_sync500
+    predicted_direction: null
+    intervention: {sync_period: 500}
+  - name: ddqn_sync500
+    predicted_direction: a_gt_b
+    intervention:
+      sync_period: 500
+      bootstrap:
+        fn: bootstrap
+        greedification: {fn: double_greedify}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement:
+          fn: bootstrap
+          greedification: {fn: double_greedify}
+  # sync = 1500
+  - name: vanilla_dqn_sync1500
+    predicted_direction: null
+    intervention: {sync_period: 1500}
+  - name: ddqn_sync1500
+    predicted_direction: a_gt_b
+    intervention:
+      sync_period: 1500
+      bootstrap:
+        fn: bootstrap
+        greedification: {fn: double_greedify}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement:
+          fn: bootstrap
+          greedification: {fn: double_greedify}
+  # sync = 3000
+  - name: vanilla_dqn_sync3000
+    predicted_direction: null
+    intervention: {sync_period: 3000}
+  - name: ddqn_sync3000
+    predicted_direction: a_gt_b
+    intervention:
+      sync_period: 3000
+      bootstrap:
+        fn: bootstrap
+        greedification: {fn: double_greedify}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement:
+          fn: bootstrap
+          greedification: {fn: double_greedify}

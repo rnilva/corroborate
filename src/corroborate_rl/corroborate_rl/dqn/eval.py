@@ -50,6 +50,16 @@ class EvalEpisodeOut(NamedTuple):
     predicted_q_at_start: jax.Array   # () — max_a Q_online(s_0, a)
     mc_return: jax.Array              # () — Σ γ^t r_t over the episode
     episode_length: jax.Array         # () int32
+    # Per-state probes for chain-traced cumulative bias measurement.
+    # `predicted_q_per_step[t]` = max_a Q_online(s_t, a) at each
+    # visited state. `mc_return_from_step[t]` = Σ_{k≥t} γ^(k−t) r_k —
+    # the discounted realised return from state t onward (the
+    # "remaining-chain MC ground truth" at that state). Both are
+    # `(episode_cap,)` with `active_per_step[t] = 1` while the
+    # episode is still running.
+    predicted_q_per_step: jax.Array   # (episode_cap,)
+    mc_return_from_step: jax.Array    # (episode_cap,)
+    active_per_step: jax.Array        # (episode_cap,) float32 (0/1)
 
 
 class EvalBurstOut(NamedTuple):
@@ -57,6 +67,9 @@ class EvalBurstOut(NamedTuple):
     predicted_q_at_start: jax.Array   # (K,)
     mc_return: jax.Array              # (K,)
     episode_length: jax.Array         # (K,) int32
+    predicted_q_per_step: jax.Array   # (K, episode_cap)
+    mc_return_from_step: jax.Array    # (K, episode_cap)
+    active_per_step: jax.Array        # (K, episode_cap)
 
 
 # ============ Single greedy episode ============
@@ -105,9 +118,14 @@ def eval_episode(
         steps=jnp.int32(0),
     )
 
-    def step(carry: Carry, _idx: jax.Array) -> tuple[Carry, None]:
+    def step(
+        carry: Carry, _idx: jax.Array,
+    ) -> tuple[Carry, tuple[jax.Array, jax.Array, jax.Array]]:
         q_values = q_network(online_params, carry.obs)
         action = jnp.argmax(q_values).astype(jnp.int32)
+        # Per-step probes: capture max-Q at *current* state and the
+        # immediate reward / active-indicator for backward MC accumulation.
+        q_max_at_state = jnp.max(q_values)
 
         env_key, next_rng = jax.random.split(carry.rng)
         next_obs, next_env_state, reward, done, _info = env.step(
@@ -120,6 +138,7 @@ def eval_episode(
 
         already_done = carry.done
         active = jnp.logical_not(already_done)
+        active_f = active.astype(jnp.float32)
         discount = jnp.power(gamma, carry.steps.astype(jnp.float32))
         new_cumulative = carry.cumulative_return + jnp.where(
             active, reward * discount, 0.0,
@@ -127,6 +146,15 @@ def eval_episode(
         new_steps = carry.steps + jnp.where(active, jnp.int32(1), jnp.int32(0))
         new_done = jnp.logical_or(already_done, done.astype(jnp.bool_))
 
+        # Per-step output: (q_at_state, reward_if_active, active_indicator).
+        # Inactive (post-done) steps contribute 0 reward and 0 active
+        # mass — the backward MC sum will drop them, and analysis
+        # measurables filter on `active_per_step==1`.
+        per_step = (
+            q_max_at_state,
+            jnp.where(active, reward.astype(jnp.float32), jnp.float32(0.0)),
+            active_f,
+        )
         return (
             Carry(
                 obs=next_obs,
@@ -136,15 +164,37 @@ def eval_episode(
                 cumulative_return=new_cumulative,
                 steps=new_steps,
             ),
-            None,
+            per_step,
         )
 
-    final_carry, _ = jax.lax.scan(step, init_carry, jnp.arange(episode_cap))
+    final_carry, (q_per_step, reward_per_step, active_per_step) = jax.lax.scan(
+        step, init_carry, jnp.arange(episode_cap),
+    )
+
+    # Backward discounted-return scan: mc_return_from_step[t] =
+    # Σ_{k≥t} γ^(k−t) r_k. Implements the recurrence
+    # mc[t] = active[t] · (r[t] + γ · mc[t+1]). Inactive steps return 0,
+    # which is correct under our convention that post-done steps don't
+    # contribute. Use lax.scan with reverse=True.
+    def backward(
+        carry: jax.Array, x: tuple[jax.Array, jax.Array],
+    ) -> tuple[jax.Array, jax.Array]:
+        r, a = x
+        new_carry = a * (r + jnp.float32(gamma) * carry)
+        return new_carry, new_carry
+
+    _, mc_return_from_step = jax.lax.scan(
+        backward, jnp.float32(0.0), (reward_per_step, active_per_step),
+        reverse=True,
+    )
 
     return EvalEpisodeOut(
         predicted_q_at_start=predicted_q_at_start,
         mc_return=final_carry.cumulative_return,
         episode_length=final_carry.steps,
+        predicted_q_per_step=q_per_step,
+        mc_return_from_step=mc_return_from_step,
+        active_per_step=active_per_step,
     )
 
 
@@ -181,6 +231,9 @@ def eval_burst(
         predicted_q_at_start=stacked.predicted_q_at_start,
         mc_return=stacked.mc_return,
         episode_length=stacked.episode_length,
+        predicted_q_per_step=stacked.predicted_q_per_step,
+        mc_return_from_step=stacked.mc_return_from_step,
+        active_per_step=stacked.active_per_step,
     )
 
 
@@ -278,5 +331,8 @@ def train_with_eval(
         'predicted_q_at_start': eval_bursts.predicted_q_at_start,
         'mc_return': eval_bursts.mc_return,
         'episode_length': eval_bursts.episode_length,
+        'predicted_q_per_step': eval_bursts.predicted_q_per_step,
+        'mc_return_from_step': eval_bursts.mc_return_from_step,
+        'active_per_step': eval_bursts.active_per_step,
         'eval_step_index': eval_step_indices,
     }

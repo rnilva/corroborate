@@ -3069,6 +3069,294 @@ def chain_amplifier_link_active_in_bounded_q(
 
 
 # =====================================================================
+# CLAIM 19 — Cross-env: effective_horizon predicts link power on
+# REACH-polarity envs (negative env_reward_polarity, "shorter is
+# better") in the CLAIM 17 bounded-Q scope.
+#
+# Empirical (per-env mean_dY across configs that pass strict
+# mech-HELD, with ddqn_universe corpus, n_envs=4 REACH envs in
+# scope):
+#   MetaMaze γ=0.999: mean_dY=+2.13, effh=110
+#   Acrobot γ=0.99/0.95: mean_dY=+0.31, effh=32
+#   FourRooms γ=0.99: mean_dY=+0.11, effh=38
+#   MountainCar γ=0.99/0.95/0.90: mean_dY=-0.004, effh=40
+#
+# Cross-env Pearson r(mean_dY, effh) = +0.975 (p=0.025).
+# SURVIVE-polarity envs (CartPole, MinAtar) do NOT show this
+# cross-env structural relation (Pearson +0.408 ns) — link power
+# tracks observed |Δ_jens| but no env-structural predictor cleanly
+# orders them. Polarity-class is a moderator of which env-feature
+# drives cross-env link power.
+# =====================================================================
+
+
+@claim_bridge(
+    source=INTERVENTION,
+    target='eval_best_burst_mean',
+    direction=Direction.DIRECT,
+    tier=Tier.ASSOCIATIONAL,
+    pair_by=('seed', 'total_steps', 'eval_every'),
+    scope=(
+        # CLAIM 17 scope predicates
+        finite('q_divergence_score') & finite_lt('q_divergence_score', 1.0)
+        & finite_gt('bootstrap_fraction', 0.5)
+        & finite('jensen_dormancy_gap') & finite_lt('jensen_dormancy_gap', 0.05)
+        # REACH polarity: r(episode_length, mc_return) < 0 — shorter
+        # trajectories correlate with bigger return (goal-reaching).
+        # Endogenous predicate (per-cell empirical polarity).
+        & finite('env_reward_polarity')
+        & finite_lt('env_reward_polarity', -0.3)
+        # Standard config (no n-step / action-duplicate / rs-shift /
+        # polyak-τ).
+        & ((pl.col('n_step') == 1) | pl.col('n_step').is_null())
+        & pl.col('action_duplicate_k').is_null()
+        & (pl.col('reward_scale').is_null() | (pl.col('reward_scale') == 1.0))
+        & pl.col('target_sync.tau').is_null()
+    ),
+    predicted_direction='a_gt_b',
+)
+def effh_predicts_link_power__reach_envs(
+    meta_regression_per_burst: MetaRegressionResult,
+    *,
+    source: Measurable[
+        Mapping[str, object], npt.NDArray[np.floating],
+    ] = _MC_RETURN_PER_BURST_MEAN,
+    covariates: tuple[str, ...] = ('effective_horizon',),
+    dedupe_strategy: str = 'mean',
+    slope_threshold: float = 0.005,
+) -> Verdict:
+    """Cross-env REACH-polarity bridge: among REACH envs in the
+    CLAIM 17 bounded-Q scope, larger effective_horizon predicts
+    bigger DDQN outcome benefit.
+
+    Per-env paired g on `mc_return[per_burst]` regressed on env-
+    mean `effective_horizon` (auto-derived from cells). HELD when
+    β(effective_horizon) ≥ `slope_threshold` AND significant.
+
+    The chain-amplifier theory's clean-firing direction: longer
+    chain → more bias compounding → more room for DDQN's per-step
+    correction to integrate to outcome. REACH-specific because in
+    SURVIVE-polarity envs (positive r(L, return)), bias-compounding
+    relates differently to outcome — CLAIM 14's polarity-tautology
+    locks the link slope's *sign* by polarity, but only on REACH
+    envs does bigger chain straightforwardly mean bigger outcome
+    benefit at the env-mean level.
+
+    Empirical cross-env (n_envs=4 REACH after strict mech-HELD,
+    `ddqn_universe` cache 2026-05-08): Pearson r(mean_dY, effh)
+    = +0.975 (p=0.025). Companion null bridge below tests SURVIVE
+    polarity envs (predicted_direction='null')."""
+    del source, covariates, dedupe_strategy
+    coef = next(
+        (c for c in meta_regression_per_burst.coefficients
+         if c.name == 'effective_horizon'),
+        None,
+    )
+    if coef is None:
+        return Verdict.POWER_INSUFFICIENT
+    if not coef.is_significant:
+        return Verdict.POWER_INSUFFICIENT
+    if coef.coefficient >= slope_threshold:
+        return Verdict.HELD
+    return Verdict.NO_EFFECT
+
+
+# =====================================================================
+# CLAIM 20 — Cross-env: argmax_entropy_late_van predicts link power on
+# SURVIVE-polarity envs in CLAIM 17 bounded-Q scope. Companion to
+# CLAIM 19's REACH-side effh predictor; STARTING POINT — small n.
+#
+# Empirical (per-CONFIG, strict mech-HELD, ddqn_universe cache
+# 2026-05-08, n_configs=5 across 4 SURVIVE envs):
+#   SI sync=100:        mean_dY=+2.56, argmax_ent_van=1.33
+#   Asterix sync=100:   mean_dY=+0.06, argmax_ent_van=0.86 (q_stab)
+#   Breakout sync=100:  mean_dY=+0.29, argmax_ent_van=0.90
+#   Asterix sync=1k:    mean_dY=+0.08, argmax_ent_van=0.86
+#   CartPole sync=1k:   mean_dY=+0.00, argmax_ent_van=0.67 (saturated)
+#
+# Per-config Pearson r(mean_dY, argmax_ent_van) = +0.909 (p=0.033),
+# Spearman = +0.900 (p=0.037). REACH per-config (n=35): effh +0.754
+# dominates, argmax_ent only +0.323 — confirming polarity-stratified
+# predictor pattern.
+#
+# **STARTING-POINT caveats** (per tautology audit):
+# - argmax_entropy_van ↔ argmax_entropy_dd: Pearson +0.945 — argmax
+#   entropy is largely an env-structural action-distribution property
+#   (vanilla and DDQN have similar argmax entropies per env).
+#   It's not capturing DDQN's algorithmic effect specifically; rather
+#   it captures envs where many actions have similar Q-values
+#   (= more action-asymmetric Hasselt bias to fix).
+# - argmax_entropy_van ↔ mean_dJ: Pearson -0.79 — collinear with
+#   bias-reduction magnitude. argmax_ent and bias-reduction may be
+#   two manifestations of the same env-level action-redundancy.
+# - n_configs=5 is small. SURVIVE strict-mech-HELD set is hard to
+#   expand because most SURVIVE configs at sync=100 have Q-explosion
+#   (out of scope) and at sync=10k are mech-dormant. Authored as
+#   a starting point — corroborate with more configs (designed sweeps
+#   at intermediate sync periods) or refute.
+# =====================================================================
+
+
+@claim_bridge(
+    source=INTERVENTION,
+    target='eval_best_burst_mean',
+    direction=Direction.DIRECT,
+    tier=Tier.ASSOCIATIONAL,
+    pair_by=('seed', 'total_steps', 'eval_every'),
+    scope=(
+        finite('q_divergence_score') & finite_lt('q_divergence_score', 1.0)
+        & finite_gt('bootstrap_fraction', 0.5)
+        & finite('jensen_dormancy_gap') & finite_lt('jensen_dormancy_gap', 0.05)
+        # SURVIVE polarity: r(episode_length, mc_return) > 0 — longer
+        # trajectories correlate with bigger return (stay-alive).
+        & finite('env_reward_polarity')
+        & finite_gt('env_reward_polarity', 0.3)
+        & ((pl.col('n_step') == 1) | pl.col('n_step').is_null())
+        & pl.col('action_duplicate_k').is_null()
+        & (pl.col('reward_scale').is_null() | (pl.col('reward_scale') == 1.0))
+        & pl.col('target_sync.tau').is_null()
+    ),
+    predicted_direction='a_gt_b',
+)
+def argmax_entropy_predicts_link_power__survive_envs(
+    meta_regression_per_burst: MetaRegressionResult,
+    *,
+    source: Measurable[
+        Mapping[str, object], npt.NDArray[np.floating],
+    ] = _MC_RETURN_PER_BURST_MEAN,
+    covariates: tuple[str, ...] = ('argmax_entropy_late',),
+    dedupe_strategy: str = 'mean',
+    slope_threshold: float = 0.5,
+) -> Verdict:
+    """STARTING-POINT cross-env SURVIVE bridge: among SURVIVE envs in
+    CLAIM 17 bounded-Q scope, env-mean argmax_entropy_late predicts
+    bigger DDQN outcome benefit. Companion to CLAIM 19 (effh on REACH).
+
+    Per-env paired g on `mc_return[per_burst]` regressed on env-mean
+    `argmax_entropy_late`. HELD when β ≥ `slope_threshold` AND
+    significant.
+
+    Reading (provisional). SURVIVE envs (positive polarity) don't
+    show effh as a cross-env link-power predictor (REACH does).
+    Within SURVIVE, argmax_entropy_van orders mean_dY at Pearson
+    +0.909 / Spearman +0.900 across n=5 strict-mech-HELD configs.
+    Plausible mechanism: high argmax_entropy = env has many similar-
+    quality actions = more action-asymmetric Hasselt bias to correct
+    = DDQN benefits more.
+
+    **Audit caveats** (read before promoting to Tier.INTERVENTIONAL):
+    1. argmax_ent is mostly env-structural (vanilla and DDQN have
+       Pearson +0.945 across configs — not algorithm-specific).
+    2. argmax_ent_van and mean_dJ are collinear (Pearson -0.79);
+       the predictor may be a proxy for "bias-reduction-magnitude
+       availability" rather than a separate channel.
+    3. n_configs=5 is small. Spearman 0.90 has p=0.037 by exact
+       permutation. Need more SURVIVE configs to corroborate or
+       refute. SURVIVE strict-mech-HELD set is structurally hard
+       to expand (sync=100 Q-explodes, sync=10k goes dormant).
+
+    Authored as STARTING POINT. Substrate authors should design new
+    SURVIVE sweeps at intermediate sync (1k-3k typical sweet spot)
+    to populate more in-scope configs and test whether the rank
+    survives at n_configs ≥ 10."""
+    del source, covariates, dedupe_strategy
+    coef = next(
+        (c for c in meta_regression_per_burst.coefficients
+         if c.name == 'argmax_entropy_late'),
+        None,
+    )
+    if coef is None:
+        return Verdict.POWER_INSUFFICIENT
+    if not coef.is_significant:
+        return Verdict.POWER_INSUFFICIENT
+    if coef.coefficient >= slope_threshold:
+        return Verdict.HELD
+    return Verdict.NO_EFFECT
+
+
+# =====================================================================
+# CLAIM 18 — Algorithmic-activation rate as link-power mediator.
+#
+# `1 − greedy_match_late` is the rate at which DDQN's argmax/max
+# bootstrap correction actually fires per step on this cell's
+# trajectory. When online and target argmax agree, DDQN ≡ vanilla
+# at that step; when they disagree, DDQN's slot swap bites. This
+# rate is *not* polarity-locked (vs eff_h) and *not* bias-magnitude
+# (vs jensen_gap) — it captures the algorithmic side of DDQN's
+# mechanism distinct from the cumulative-bias measures.
+#
+# Bridge tests whether `greedy_match_late` mediates Δ_outcome
+# under mech-HELD conditioning in the CLAIM 17 bounded-Q scope.
+# If the rate of algorithmic activation predicts outcome benefit
+# beyond bias-reduction (Δ_jens), it would identify a
+# non-bias-summary channel for link power.
+# =====================================================================
+
+
+@claim_bridge(
+    source=INTERVENTION,
+    target='eval_best_burst_mean',
+    direction=Direction.DIRECT,
+    tier=Tier.ASSOCIATIONAL,
+    pair_by=(
+        'env_name', 'corpus', 'gamma', 'sync_period', 'total_steps', 'seed',
+    ),
+    scope=(
+        # CLAIM 17 scope: bounded Q + bootstrap-using + mech premise
+        # active + standard config. We probe the algorithmic-
+        # activation channel inside the link-active regime.
+        finite('q_divergence_score') & finite_lt('q_divergence_score', 1.0)
+        & finite_gt('bootstrap_fraction', 0.5)
+        & finite('jensen_dormancy_gap') & finite_lt('jensen_dormancy_gap', 0.05)
+        & ((pl.col('n_step') == 1) | pl.col('n_step').is_null())
+        & pl.col('action_duplicate_k').is_null()
+        & (pl.col('reward_scale').is_null() | (pl.col('reward_scale') == 1.0))
+        & pl.col('target_sync.tau').is_null()
+    ),
+    predicted_direction='a_gt_b',
+)
+def algorithmic_activation_rate_mediates_link__bounded_q(
+    proportion_mediated: ProportionMediatedResult,
+    *,
+    mediator: str = 'greedy_match_late',
+    upstream_source: str = 'jensen_gap',
+    upstream_max_delta: float = 0.0,
+    dominance_floor: float = 0.2,
+    n_pairs_floor: int = 25,
+) -> tuple[Verdict, RefutationClass | None]:
+    """In the CLAIM 17 bounded-Q regime, does the per-step
+    algorithmic-activation rate (1 − `greedy_match_late`) mediate
+    DDQN's outcome benefit under mech-HELD conditioning?
+
+    Mediation chain tested:
+        `do(DDQN) → Δ_jens<0 → Δ_greedy_match_late → Δ_outcome`
+
+    The framework's existing chain-amplifier theory says cumulative
+    bias reduction drives outcome. But cumulative bias is
+    polarity-locked at the per-pair link slope (CLAIM 14) and
+    largely captured by jensen_gap. This bridge tests whether the
+    *frequency* of DDQN's algorithmic correction firing — which
+    isn't polarity-locked because greedy_match counts argmax
+    disagreements not chain-length amplification — adds a
+    non-redundant channel.
+
+    HELD when proportion ≥ dominance_floor (default 0.2) AND
+    in_unit_interval (linear-mediation assumptions hold) AND
+    n_pairs ≥ floor. NO_EFFECT (with refutation class) when below
+    the floor.
+
+    Open-question bridge — empirical signal not yet established.
+    Authored to motivate cache materialisation of
+    `greedy_match_late` across the in-scope corpus."""
+    del mediator, upstream_source, upstream_max_delta
+    return _staleness_mediation_holds_when(
+        proportion_mediated,
+        dominance_floor=dominance_floor,
+        n_pairs_floor=n_pairs_floor,
+    )
+
+
+# =====================================================================
 # CLAIM 16 — DELETED.
 #
 # `bootstrap_fraction_drives_g_link__non_q_explosion` was the
@@ -3212,6 +3500,20 @@ DDQN_UNIVERSE_BRIDGES = (
     # CLAIM 16 — bf → g_link in non-Q-explosion regime, both
     # polarity classes (universal). Endogenous-predicate update
     # to the corpus-pinned `__net_of_dormancy` bridge.
+    # CLAIM 18 — algorithmic-activation rate (1 − greedy_match_late)
+    # as a candidate non-bias-summary mediator of link power inside
+    # CLAIM 17's bounded-Q scope.
+    algorithmic_activation_rate_mediates_link__bounded_q,
+    # CLAIM 19 — among REACH-polarity envs in CLAIM 17 scope,
+    # effective_horizon is a strong cross-env predictor of link
+    # power. Empirical: per-env mean_dY tracks effh at Pearson 0.97
+    # (p=0.025) on n=4 REACH envs.
+    effh_predicts_link_power__reach_envs,
+    # CLAIM 20 — STARTING POINT — argmax_entropy_late_van as
+    # cross-env link-power predictor on SURVIVE-polarity envs.
+    # Per-config Pearson +0.91 (n=5) but env-structural caveat;
+    # designed sweeps at intermediate sync needed to corroborate.
+    argmax_entropy_predicts_link_power__survive_envs,
 )
 """The six bridges that close the DDQN study. CLAIM 1 (mechanism
 activation, do(DDQN) ↓ jensen_gap) is corroborated by

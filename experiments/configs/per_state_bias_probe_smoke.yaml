@@ -1,0 +1,37 @@
+name: per_state_bias_probe_smoke
+out_dir: experiments/data/per_state_bias_probe_smoke
+arms_shape: chunked
+
+# Smoke test for the new per-state bias eval logging + measurable.
+# 1 env × 2 arms × 3 seeds × 20k steps. Should complete in <1 min.
+envs:
+  - {name: FourRooms-misc, n_seeds: 3, chunk_size: 3}
+
+base_intervention:
+  total_steps: 20000
+  eval_every:  4000
+  n_episodes:  3
+  gamma:       0.99
+  sync_period: 100
+  replay:
+    class: Replay
+    capacity: 50000
+    batch_size: 32
+  optimizer:
+    fn: warmed_update
+    inner: {fn: adam, lr: 0.0001}
+    warmup_steps: 100
+  q_network:
+    class: MLP
+    hidden: [64, 64]
+
+hypotheses:
+  - name: ddqn_vs_vanilla_smoke
+    predicted_direction: a_gt_b
+    intervention:
+      gamma: 0.99
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement:
+          fn: bootstrap
+          greedification: {fn: double_greedify}

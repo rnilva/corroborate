@@ -1,0 +1,40 @@
+{
+  "summary": "Per-env mediator-share panel under CLAIM 17 scope (bounded-Q + mech-HELD), n=3919 cells / 11 envs. Each env's link operates through a different dominant mediator: eff_h (Acrobot), argmax_entropy (CartPole), q_divergence (DiscountingChain, SpaceInvaders, Freeway). FourRooms has no single dominant mediator. 4/11 envs (Asterix, MountainCar, Breakout, DeepSea) violate linear-mediation assumptions on most candidates - empirical lift gate for Pearl NDE/NIE counterfactual mediation.",
+  "scope": "q_div<1 AND bf>0.5 AND jdg<0.05 AND n_step==1 AND no action_duplicate AND rs in {1.0, NaN} AND no polyak (CLAIM 17 chain_amplifier_link_active_in_bounded_q)",
+  "upstream_conditioning": "jensen_gap delta < 0 (mech-HELD per CLAUDE.md conditioning rule)",
+  "target": "eval_best_burst_mean",
+  "treatment": "ddqn (double_greedify)",
+  "baseline": "vanilla_dqn",
+  "pair_by": ["seed", "corpus", "gamma", "sync_period", "total_steps"],
+  "envs": {
+    "Acrobot-v1": {"n_pairs": 189, "dominant": ["effective_horizon: 0.50"], "linear_ok": ["target_staleness_late", "q_late_mean", "argmax_entropy_late", "effective_horizon"], "linear_fail": ["q_divergence_score", "env_reward_polarity"]},
+    "CartPole-v1": {"n_pairs": 57, "dominant": ["argmax_entropy_late: 0.53"], "partial": ["q_late_mean: 0.36"], "linear_ok": ["q_late_mean", "argmax_entropy_late", "env_reward_polarity"]},
+    "DiscountingChain-bsuite": {"n_pairs": 174, "dominant": ["q_divergence_score: 0.55"], "linear_ok": ["argmax_entropy_late", "q_divergence_score"]},
+    "SpaceInvaders-MinAtar": {"n_pairs": 30, "dominant": ["q_divergence_score: 0.51"], "partial": ["target_staleness_late: 0.44", "q_late_mean: 0.36"], "linear_ok": "5/6"},
+    "Freeway-MinAtar": {"n_pairs": 18, "partial": ["q_divergence_score: 0.22"], "linear_ok": "4/6"},
+    "MetaMaze-misc": {"n_pairs": 97, "minor": ["effective_horizon: 0.19"], "linear_ok": "2/6"},
+    "FourRooms-misc": {"n_pairs": 508, "all_minor": "max=0.05 (argmax_entropy)", "interpretation": "distributed - no single mediator carries link"},
+    "Asterix-MinAtar": {"n_pairs": 75, "all_assump_fail": true},
+    "Breakout-MinAtar": {"n_pairs": 29, "linear_ok_only": ["argmax_entropy_late: 0.10"]},
+    "MountainCar-v0": {"n_pairs": 137, "all_assump_fail": true},
+    "DeepSea-bsuite": {"n_pairs": 6, "underpowered": true}
+  },
+  "typology": {
+    "length_channel": ["Acrobot-v1"],
+    "action_selection_channel": ["CartPole-v1"],
+    "q_divergence_channel": ["DiscountingChain-bsuite", "SpaceInvaders-MinAtar", "Freeway-MinAtar"],
+    "distributed_channel": ["FourRooms-misc", "MetaMaze-misc"],
+    "linear_mediation_breaks": ["Asterix-MinAtar", "MountainCar-v0", "DeepSea-bsuite", "Breakout-MinAtar"]
+  },
+  "implications": {
+    "claim_13_staleness_regime_specific": "target_staleness_late HELD on FourRooms (capacity_sweep) and Breakout (sync=100) - but does NOT generalize to broader CLAIM 17 scope. Outside those specific corpora, staleness is MINOR / ASSUMP_FAIL across envs.",
+    "claim_10_acrobot_mediator_resolved": "Acrobot's link channel is effective_horizon (50%), not target_staleness_late. Consistent with GOAL polarity: DDQN reduces episode length, raising discounted return.",
+    "fourroom_no_single_mediator": "FourRooms with n=508 has no candidate dominating > 5%. Either irreducibly multi-channel or the actual mediator is unmeasured (gradient stability, exploration coverage, network curvature).",
+    "counterfactual_mediation_lift_gate": "4/11 envs violate linear-mediation assumptions on most mediators - empirical FUTURE_WORKS.md sec 3a lift condition. mediation_counterfactual (Pearl NDE/NIE) primitive should be authored next."
+  },
+  "next_bridges": {
+    "acrobot_eff_h_mediates": "TIER A2: effective_horizon mediates link on Acrobot at >= 50% under CLAIM 17 scope; DDQN's GOAL-polarity benefit flows through length-channel not staleness",
+    "cartpole_argmax_mediates": "TIER A2: argmax_entropy_late mediates link on CartPole at >= 50%; action-selection channel even at standard rs (extends CLAIM 7e/f beyond rs=0.1)",
+    "q_divergence_mediates_within_bounded": "TIER A1: q_divergence_score mediates link on Q-explosion-prone envs (DC, SI, Freeway) within bounded-Q scope - q_div is BOTH scope predicate AND mediator within scope"
+  }
+}

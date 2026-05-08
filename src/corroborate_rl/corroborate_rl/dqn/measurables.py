@@ -421,6 +421,175 @@ def q_max_growth(record: Mapping[str, object]) -> float:
     return float(late / max(abs(early), 1e-9))
 
 
+@measurable(reads=(
+    'predicted_q_per_step', 'mc_return_from_step', 'active_per_step',
+))
+def mean_per_state_cumulative_bias_per_burst(
+    record: Mapping[str, object],
+) -> npt.NDArray[np.float64]:
+    """Per-burst version of `mean_per_state_cumulative_bias_late`:
+    returns shape `(n_bursts,)` with each element the active-weighted
+    mean of `predicted_q_per_step − mc_return_from_step` across all
+    visited states in that burst.
+
+    Companion to `jensen_bias_per_burst_mean` (which probes only s_0
+    per burst). Use with `paired_link_per_burst` to test whether the
+    chain-traced per-state mean carries link signal beyond
+    bias-at-start at the per-burst resolution."""
+    q = record.get('predicted_q_per_step')
+    mc = record.get('mc_return_from_step')
+    active = record.get('active_per_step')
+    if q is None or mc is None or active is None:
+        return np.zeros((0,), dtype=np.float64)
+    q_arr = np.asarray(q, dtype=np.float64)
+    mc_arr = np.asarray(mc, dtype=np.float64)
+    a_arr = np.asarray(active, dtype=np.float64)
+    if q_arr.ndim < 3 or q_arr.size == 0:
+        return np.zeros((0,), dtype=np.float64)
+    bias = q_arr - mc_arr
+    weighted = bias * a_arr
+    num = weighted.sum(axis=(1, 2))
+    den = a_arr.sum(axis=(1, 2))
+    out = np.where(den > 0, num / den, np.nan)
+    return out.astype(np.float64)
+
+
+@measurable(reads=(
+    'predicted_q_per_step', 'mc_return_from_step',
+    'active_per_step', 'eval_step_index',
+))
+def mean_per_state_cumulative_bias_late(
+    record: Mapping[str, object],
+) -> float:
+    """Mean per-state cumulative bias `Q(s_t) − G(s_t)` averaged
+    across all visited states (active steps) over the late half
+    of training bursts.
+
+    `predicted_q_per_step`, `mc_return_from_step`, `active_per_step`
+    have shape `(n_bursts, K, episode_cap)` where:
+    - `predicted_q_per_step[b, k, t]` = max_a Q_online(s_t, a) at
+      state t of episode k in burst b (the agent's value prediction
+      at each visited state, NOT just the start).
+    - `mc_return_from_step[b, k, t]` = Σ_{j≥t} γ^(j−t) r_j (the
+      remaining-chain MC ground truth from state t — the bias-free
+      target that Q(s_t) is approximating).
+    - `active_per_step[b, k, t]` = 1.0 while episode k is still
+      running at step t, 0.0 after `done`.
+
+    Per-state bias = `predicted_q_per_step − mc_return_from_step`.
+    Averaged over the late-half-of-bursts × all rollouts × all
+    active steps. Inactive (post-done) steps are excluded by mask.
+
+    **Why this matters relative to `jensen_gap`**: `jensen_gap`
+    aggregates `predicted_q_at_start − mc_return` — bias measured
+    only at episode-start states (t=0), which sit at maximal chain
+    depth. Long-trajectory envs see large bias-at-start by virtue
+    of chain depth alone, not necessarily because per-step bias is
+    larger. This measurable de-confounds chain-position from
+    bias-rate by averaging across all visited states (each at its
+    own remaining-chain depth)."""
+    q = record.get('predicted_q_per_step')
+    mc = record.get('mc_return_from_step')
+    active = record.get('active_per_step')
+    if q is None or mc is None or active is None:
+        return float('nan')
+    q_arr = np.asarray(q, dtype=np.float64)
+    mc_arr = np.asarray(mc, dtype=np.float64)
+    active_arr = np.asarray(active, dtype=np.float64)
+    if q_arr.ndim < 1 or q_arr.size == 0:
+        return float('nan')
+    n_b = q_arr.shape[0]
+    if n_b < 2:
+        return float('nan')
+    late_q = q_arr[n_b // 2:]
+    late_mc = mc_arr[n_b // 2:]
+    late_active = active_arr[n_b // 2:]
+    bias = late_q - late_mc
+    weighted = bias * late_active
+    total_weight = late_active.sum()
+    if total_weight < 1.0:
+        return float('nan')
+    return float(weighted.sum() / total_weight)
+
+
+@measurable(reads=('online_argmax_per_step',))
+def argmax_persistence_late(record: Mapping[str, object]) -> float:
+    """Fraction of consecutive late-window step-pairs where the
+    online argmax is the same step-to-step. Reduces over the
+    *temporal* axis (different from `argmax_mode_freq_late`,
+    which reduces over the categorical-action axis).
+
+    Reads `online_argmax_per_step` (per-step argmax over batch-mean
+    Q values). For the late 50% of training, computes
+    `mean(argmax[t] == argmax[t-1])`.
+
+    Range: [1/|A|_eff, 1.0]. 1.0 = network's argmax never flips
+    between training steps (extremely stable). 1/|A|_eff =
+    flips at chance rate (every step is independent argmax draw).
+
+    Theoretical reading: bias correction → less Q oscillation step-
+    to-step → stable argmax → directed policy → fewer wasted
+    actions → shorter episodes. This decomposes the
+    bias-correction → length-reduction step that polarity-tautology
+    reductions like `effective_horizon` cannot — argmax persistence
+    is independent of polarity by construction.
+
+    Caveat: the argmax here is over batch-mean Q at each training
+    step, not over per-state Q at visited states. Step-to-step
+    flips reflect both real Q instability AND batch composition
+    drift. Two consecutive batches drawing very different
+    transitions can produce different argmaxes even with stable Q.
+    Read in conjunction with `argmax_entropy_late` (which captures
+    the across-action histogram) to disambiguate."""
+    arr = _record_array(record, 'online_argmax_per_step')
+    if arr is None:
+        return float('nan')
+    n = arr.shape[0]
+    if n < 4:
+        return float('nan')
+    late_start = n // 2
+    late = arr[late_start:]
+    if len(late) < 2:
+        return float('nan')
+    matches = (late[1:] == late[:-1]).astype(np.float64)
+    return float(np.mean(matches))
+
+
+@measurable(reads=('online_max_q_per_step',))
+def q_max_temporal_cv_late(record: Mapping[str, object]) -> float:
+    """Temporal coefficient of variation (std / |mean|) of
+    `online_max_q_per_step` over the late 50% of training.
+
+    Reduces *across training time*: high CV = max Q oscillates
+    in time at scale comparable to its mean; low CV = max Q is
+    stable in time. Distinct from `q_action_std_late` which
+    reduces across actions at each step.
+
+    Theoretical reading: bias correction → bounded Q-iteration →
+    stable max-Q over time → less temporal noise driving the
+    policy. A direct measurement of "is the value estimate
+    converged in time" — the assumption that Hasselt's per-step
+    bias *integrates* into a stable bias requires the underlying
+    Q to itself be temporally stable.
+
+    Returns NaN if `online_max_q_per_step` absent or if late-window
+    mean is below 1e-9 in magnitude (CV undefined)."""
+    arr = _record_array(record, 'online_max_q_per_step')
+    if arr is None:
+        return float('nan')
+    n = arr.shape[0]
+    if n < 4:
+        return float('nan')
+    late = arr[n // 2:]
+    if len(late) < 2:
+        return float('nan')
+    mu = float(np.mean(late))
+    if abs(mu) < 1e-9:
+        return float('nan')
+    sd = float(np.std(late, ddof=1))
+    return sd / abs(mu)
+
+
 @measurable(reads=('episode_length', 'mc_return'))
 def env_reward_polarity(record: Mapping[str, object]) -> float:
     """Per-cell Pearson r between `episode_length` and `mc_return`
@@ -1419,6 +1588,19 @@ def dqn_default_measurables() -> tuple[
         # value (max Q_target) and DDQN's (Q_target at online's
         # argmax). Sign-aware effect on outcome by Q-regime.
         ddqn_bootstrap_gap_late,
+        # Chain-traced cumulative bias: averages bias `Q(s_t) − G(s_t)`
+        # across all visited states (each at its own remaining-chain
+        # depth), de-confounding chain-position from bias-rate.
+        # Distinct from `jensen_gap` which only probes start states
+        # (chain-deepest endpoint).
+        mean_per_state_cumulative_bias_late,
+        # Algorithmic activation rate: 1 − greedy_match_late = rate at
+        # which DDQN's argmax/max correction fires per step on this
+        # cell's trajectory. Per-cell scalar that's *not*
+        # polarity-locked (vs eff_h) and *not* bias-magnitude
+        # (vs jensen_gap) — captures the algorithmic side of DDQN's
+        # mechanism distinct from cumulative-bias measures.
+        greedy_match_late,
     )
 
 

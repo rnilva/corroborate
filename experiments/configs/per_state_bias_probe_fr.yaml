@@ -1,0 +1,42 @@
+name: per_state_bias_probe_fr
+out_dir: experiments/data/per_state_bias_probe_fr
+arms_shape: chunked
+
+# Per-state cumulative-bias probe sweep. Single env (FR γ=0.99) +
+# vanilla/DDQN. Tests the new `mean_per_state_cumulative_bias_late`
+# measurable end-to-end with the augmented eval phase (per-step Q
+# and per-step MC return logging).
+#
+# 1 env × 2 arms × 30 seeds = 60 cells. ~5-10 min on GPU.
+
+envs:
+  - {name: FourRooms-misc, n_seeds: 30, chunk_size: 30}
+
+base_intervention:
+  total_steps: 200000
+  eval_every:  20000
+  n_episodes:  20
+  gamma:       0.99
+  sync_period: 100
+  replay:
+    class: Replay
+    capacity: 50000
+    batch_size: 32
+  optimizer:
+    fn: warmed_update
+    inner: {fn: adam, lr: 0.0001}
+    warmup_steps: 100
+  q_network:
+    class: MLP
+    hidden: [64, 64]
+
+hypotheses:
+  - name: ddqn_vs_vanilla_fr_g099
+    predicted_direction: a_gt_b
+    intervention:
+      gamma: 0.99
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement:
+          fn: bootstrap
+          greedification: {fn: double_greedify}
