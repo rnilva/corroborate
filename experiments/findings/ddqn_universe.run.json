@@ -4,37 +4,37 @@
       "analysis_results": {
         "paired_g": {
           "assumption_violations": [
-            "skew_bias_likely (skew=+4.03, predicted paired_g inflation ~14% at n=106)",
-            "heavy_tail_se_anti_conservative (excess_kurtosis=17.15, framework_se will under-cover by ~10-25% at this kurtosis)"
+            "skew_bias_likely (skew=+4.64, predicted paired_g inflation ~12% at n=138)",
+            "heavy_tail_se_anti_conservative (excess_kurtosis=23.37, framework_se will under-cover by ~10-25% at this kurtosis)"
           ],
           "baseline_arm": "baseline",
-          "g": 0.163832,
-          "helped_fraction": 0.330189,
-          "mean_diff": 1.64457,
-          "mean_diff_p_value": 0.0922956,
-          "mean_diff_se": 0.968012,
+          "g": 0.1503,
+          "helped_fraction": 0.376812,
+          "mean_diff": 1.32242,
+          "mean_diff_p_value": 0.0780586,
+          "mean_diff_se": 0.744875,
           "measurable": "eval_best_burst_mean",
-          "n_baseline": 137,
-          "n_pairs": 106,
-          "n_treatment": 135,
-          "p_value": 0.0938265,
+          "n_baseline": 192,
+          "n_pairs": 138,
+          "n_treatment": 167,
+          "p_value": 0.0791334,
           "pair_by": [
             "seed",
             "env_name"
           ],
-          "se": 0.0977782,
+          "se": 0.0856051,
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
         }
       },
       "assumption_violations": [
-        "paired_g: skew_bias_likely (skew=+4.03, predicted paired_g inflation ~14% at n=106)",
-        "paired_g: heavy_tail_se_anti_conservative (excess_kurtosis=17.15, framework_se will under-cover by ~10-25% at this kurtosis)"
+        "paired_g: skew_bias_likely (skew=+4.64, predicted paired_g inflation ~12% at n=138)",
+        "paired_g: heavy_tail_se_anti_conservative (excess_kurtosis=23.37, framework_se will under-cover by ~10-25% at this kurtosis)"
       ],
       "blocked_by": null,
       "bridge_name": "ddqn_refuted_when_dormancy_fires",
       "direction": "inverse",
-      "n_cells_in_scope": 883,
-      "n_cells_pre_scope": 15331,
+      "n_cells_in_scope": 1004,
+      "n_cells_pre_scope": 15543,
       "pair_by": [
         "seed",
         "env_name"
@@ -88,7 +88,7 @@
       "bridge_name": "adaptive_dqn_recovers_ddqn_benefit__fourrooms_factor_0p5",
       "direction": "direct",
       "n_cells_in_scope": 180,
-      "n_cells_pre_scope": 15331,
+      "n_cells_pre_scope": 15543,
       "pair_by": [
         "seed"
       ],
@@ -135,7 +135,7 @@
       "bridge_name": "adaptive_dqn_fails_to_avoid_attenuation__spaceinvaders_1m",
       "direction": "inverse",
       "n_cells_in_scope": 90,
-      "n_cells_pre_scope": 15331,
+      "n_cells_pre_scope": 15543,
       "pair_by": [
         "seed"
       ],
@@ -224,7 +224,7 @@
       "bridge_name": "bootstrap_fraction_drives_g_link__net_of_dormancy",
       "direction": "direct",
       "n_cells_in_scope": 985,
-      "n_cells_pre_scope": 15331,
+      "n_cells_pre_scope": 15543,
       "pair_by": [
         "seed",
         "total_steps",
@@ -278,222 +278,222 @@
             {
               "burst_index": 0,
               "env_name": "Acrobot-v1",
-              "mean_d_predictor": -5.7802,
-              "mean_d_target": 4.48818,
+              "mean_d_predictor": -5.79955,
+              "mean_d_target": 4.60977,
               "n_pairs": 150,
               "p": 0.0,
-              "r": 0.996193,
-              "sd_d_target": 38.2026,
-              "slope": 1.01307
+              "r": 0.99704,
+              "sd_d_target": 42.4091,
+              "slope": 1.00608
             },
             {
               "burst_index": 1,
               "env_name": "Acrobot-v1",
-              "mean_d_predictor": -2.38522,
-              "mean_d_target": 2.19446,
+              "mean_d_predictor": -2.55397,
+              "mean_d_target": 2.36318,
               "n_pairs": 150,
               "p": 0.0,
-              "r": 0.930573,
-              "sd_d_target": 16.5558,
-              "slope": 1.11012
+              "r": 0.960573,
+              "sd_d_target": 19.5752,
+              "slope": 1.14137
             },
             {
               "burst_index": 2,
               "env_name": "Acrobot-v1",
-              "mean_d_predictor": -1.49351,
-              "mean_d_target": 1.15829,
+              "mean_d_predictor": -1.72554,
+              "mean_d_target": 1.39309,
               "n_pairs": 150,
               "p": 0.0,
-              "r": 0.884512,
-              "sd_d_target": 8.79836,
-              "slope": 0.794569
+              "r": 0.899909,
+              "sd_d_target": 10.2244,
+              "slope": 0.839463
             },
             {
               "burst_index": 3,
               "env_name": "Acrobot-v1",
-              "mean_d_predictor": -2.63013,
-              "mean_d_target": 1.41861,
+              "mean_d_predictor": -2.58234,
+              "mean_d_target": 1.24221,
               "n_pairs": 150,
               "p": 0.0,
-              "r": 0.934686,
-              "sd_d_target": 9.75715,
-              "slope": 0.848001
+              "r": 0.944811,
+              "sd_d_target": 10.6347,
+              "slope": 0.864882
             },
             {
               "burst_index": 4,
               "env_name": "Acrobot-v1",
-              "mean_d_predictor": -0.869804,
-              "mean_d_target": 0.18023,
+              "mean_d_predictor": -0.662893,
+              "mean_d_target": -0.140188,
               "n_pairs": 150,
               "p": 0.0,
-              "r": 0.892441,
-              "sd_d_target": 8.44197,
-              "slope": 0.799668
+              "r": 0.849288,
+              "sd_d_target": 7.76106,
+              "slope": 0.680327
             },
             {
               "burst_index": 5,
               "env_name": "Acrobot-v1",
-              "mean_d_predictor": -1.49422,
-              "mean_d_target": 0.626428,
+              "mean_d_predictor": -1.84366,
+              "mean_d_target": 0.810441,
               "n_pairs": 150,
               "p": 0.0,
-              "r": 0.914723,
-              "sd_d_target": 9.45009,
-              "slope": 0.737846
+              "r": 0.927862,
+              "sd_d_target": 11.6632,
+              "slope": 0.747442
             },
             {
               "burst_index": 6,
               "env_name": "Acrobot-v1",
-              "mean_d_predictor": -1.24521,
-              "mean_d_target": 0.14302,
+              "mean_d_predictor": -1.50441,
+              "mean_d_target": 0.227923,
               "n_pairs": 150,
               "p": 0.0,
-              "r": 0.869412,
-              "sd_d_target": 8.22297,
-              "slope": 0.621463
+              "r": 0.861433,
+              "sd_d_target": 9.3175,
+              "slope": 0.613163
             },
             {
               "burst_index": 7,
               "env_name": "Acrobot-v1",
-              "mean_d_predictor": -2.30743,
-              "mean_d_target": 1.33968,
+              "mean_d_predictor": -2.68916,
+              "mean_d_target": 1.51288,
               "n_pairs": 150,
               "p": 0.0,
-              "r": 0.772108,
-              "sd_d_target": 7.81373,
-              "slope": 0.466827
+              "r": 0.763936,
+              "sd_d_target": 8.36796,
+              "slope": 0.459957
             },
             {
               "burst_index": 8,
               "env_name": "Acrobot-v1",
-              "mean_d_predictor": 0.169071,
-              "mean_d_target": -0.375291,
+              "mean_d_predictor": 0.153055,
+              "mean_d_target": -0.118515,
               "n_pairs": 150,
               "p": 0.0,
-              "r": 0.763212,
-              "sd_d_target": 15.4656,
-              "slope": 0.444887
+              "r": 0.674202,
+              "sd_d_target": 13.4166,
+              "slope": 0.310703
             },
             {
               "burst_index": 9,
               "env_name": "Acrobot-v1",
-              "mean_d_predictor": 0.994823,
-              "mean_d_target": 0.268606,
+              "mean_d_predictor": 1.99607,
+              "mean_d_target": 0.187693,
               "n_pairs": 150,
               "p": 0.0,
-              "r": 0.673703,
-              "sd_d_target": 5.82519,
-              "slope": 0.0851706
+              "r": 0.669098,
+              "sd_d_target": 6.66473,
+              "slope": 0.0744828
             },
             {
               "burst_index": 0,
               "env_name": "Asterix-MinAtar",
-              "mean_d_predictor": -0.809626,
-              "mean_d_target": -0.0246122,
-              "n_pairs": 132,
-              "p": 0.300872,
-              "r": 0.0908373,
-              "sd_d_target": 0.262336,
-              "slope": 0.0148468
+              "mean_d_predictor": -0.599006,
+              "mean_d_target": -0.00893704,
+              "n_pairs": 211,
+              "p": 0.0388472,
+              "r": 0.142266,
+              "sd_d_target": 0.272107,
+              "slope": 0.0293933
             },
             {
               "burst_index": 1,
               "env_name": "Asterix-MinAtar",
-              "mean_d_predictor": -1.45654,
-              "mean_d_target": -0.000254726,
-              "n_pairs": 132,
-              "p": 0.0673635,
-              "r": 0.159677,
-              "sd_d_target": 0.26832,
-              "slope": 0.0155431
+              "mean_d_predictor": -1.09895,
+              "mean_d_target": 0.00387774,
+              "n_pairs": 211,
+              "p": 0.0178103,
+              "r": 0.162835,
+              "sd_d_target": 0.326627,
+              "slope": 0.0235737
             },
             {
               "burst_index": 2,
               "env_name": "Asterix-MinAtar",
-              "mean_d_predictor": -1.82296,
-              "mean_d_target": 0.0244335,
-              "n_pairs": 132,
-              "p": 0.156121,
-              "r": 0.124224,
-              "sd_d_target": 0.295465,
-              "slope": 0.010715
+              "mean_d_predictor": -1.44217,
+              "mean_d_target": 0.0173417,
+              "n_pairs": 211,
+              "p": 0.00974289,
+              "r": 0.177331,
+              "sd_d_target": 0.32878,
+              "slope": 0.0206702
             },
             {
               "burst_index": 3,
               "env_name": "Asterix-MinAtar",
-              "mean_d_predictor": -2.10156,
-              "mean_d_target": -0.0338873,
-              "n_pairs": 132,
-              "p": 0.406479,
-              "r": 0.0729568,
-              "sd_d_target": 0.309953,
-              "slope": 0.00555737
+              "mean_d_predictor": -1.76997,
+              "mean_d_target": -0.0338696,
+              "n_pairs": 211,
+              "p": 0.183653,
+              "r": 0.0919303,
+              "sd_d_target": 0.322058,
+              "slope": 0.00881594
             },
             {
               "burst_index": 4,
               "env_name": "Asterix-MinAtar",
-              "mean_d_predictor": -2.70535,
-              "mean_d_target": 0.0283036,
-              "n_pairs": 132,
-              "p": 0.183199,
-              "r": 0.116652,
-              "sd_d_target": 0.31704,
-              "slope": 0.0072694
+              "mean_d_predictor": -2.49476,
+              "mean_d_target": 0.0300007,
+              "n_pairs": 211,
+              "p": 0.0301927,
+              "r": 0.149171,
+              "sd_d_target": 0.342883,
+              "slope": 0.011725
             },
             {
               "burst_index": 5,
               "env_name": "Asterix-MinAtar",
-              "mean_d_predictor": -3.39211,
-              "mean_d_target": -0.0476337,
-              "n_pairs": 132,
-              "p": 0.0950967,
-              "r": 0.145908,
-              "sd_d_target": 0.317066,
-              "slope": 0.0070426
+              "mean_d_predictor": -3.47183,
+              "mean_d_target": -0.0362265,
+              "n_pairs": 211,
+              "p": 0.133949,
+              "r": 0.103544,
+              "sd_d_target": 0.321673,
+              "slope": 0.0054069
             },
             {
               "burst_index": 6,
               "env_name": "Asterix-MinAtar",
-              "mean_d_predictor": -4.8743,
-              "mean_d_target": -0.0501761,
-              "n_pairs": 132,
-              "p": 0.579369,
-              "r": 0.0487652,
-              "sd_d_target": 0.371935,
-              "slope": 0.00189103
+              "mean_d_predictor": -5.42787,
+              "mean_d_target": -0.0178988,
+              "n_pairs": 211,
+              "p": 0.463467,
+              "r": 0.050791,
+              "sd_d_target": 0.34303,
+              "slope": 0.0017442
             },
             {
               "burst_index": 7,
               "env_name": "Asterix-MinAtar",
-              "mean_d_predictor": -7.57532,
-              "mean_d_target": 0.00641606,
-              "n_pairs": 132,
-              "p": 0.731413,
-              "r": -0.030212,
-              "sd_d_target": 0.353994,
-              "slope": -0.00071457
+              "mean_d_predictor": -9.05224,
+              "mean_d_target": -0.0108557,
+              "n_pairs": 211,
+              "p": 0.587692,
+              "r": -0.0375759,
+              "sd_d_target": 0.339501,
+              "slope": -0.000715797
             },
             {
               "burst_index": 8,
               "env_name": "Asterix-MinAtar",
-              "mean_d_predictor": -11.6896,
-              "mean_d_target": -0.000977651,
-              "n_pairs": 132,
-              "p": 0.568356,
-              "r": 0.0501853,
-              "sd_d_target": 0.24922,
-              "slope": 0.000541138
+              "mean_d_predictor": -14.5467,
+              "mean_d_target": 0.0226886,
+              "n_pairs": 211,
+              "p": 0.285033,
+              "r": 0.0739921,
+              "sd_d_target": 0.268945,
+              "slope": 0.000639429
             },
             {
               "burst_index": 9,
               "env_name": "Asterix-MinAtar",
-              "mean_d_predictor": -17.6296,
-              "mean_d_target": 0.0170071,
-              "n_pairs": 132,
-              "p": 0.909137,
-              "r": 0.010048,
-              "sd_d_target": 0.356442,
-              "slope": 9.94458e-05
+              "mean_d_predictor": -23.3688,
+              "mean_d_target": 0.0120888,
+              "n_pairs": 211,
+              "p": 0.937044,
+              "r": -0.00547665,
+              "sd_d_target": 0.332792,
+              "slope": -3.2998e-05
             },
             {
               "burst_index": 10,
@@ -608,112 +608,112 @@
             {
               "burst_index": 0,
               "env_name": "Breakout-MinAtar",
-              "mean_d_predictor": -0.318162,
-              "mean_d_target": 0.246635,
-              "n_pairs": 60,
+              "mean_d_predictor": -0.367209,
+              "mean_d_target": 0.0991351,
+              "n_pairs": 109,
               "p": 0.0,
-              "r": 0.83624,
-              "sd_d_target": 1.44181,
-              "slope": 0.708056
+              "r": 0.839876,
+              "sd_d_target": 1.22019,
+              "slope": 0.741629
             },
             {
               "burst_index": 1,
               "env_name": "Breakout-MinAtar",
-              "mean_d_predictor": -0.405251,
-              "mean_d_target": 0.313367,
-              "n_pairs": 60,
-              "p": 4.2288e-10,
-              "r": 0.678978,
-              "sd_d_target": 1.16844,
-              "slope": 0.568869
+              "mean_d_predictor": -0.615773,
+              "mean_d_target": 0.159235,
+              "n_pairs": 109,
+              "p": 0.0,
+              "r": 0.672124,
+              "sd_d_target": 1.09747,
+              "slope": 0.598369
             },
             {
               "burst_index": 2,
               "env_name": "Breakout-MinAtar",
-              "mean_d_predictor": -1.00271,
-              "mean_d_target": 0.0495465,
-              "n_pairs": 60,
-              "p": 2.38147e-05,
-              "r": 0.507765,
-              "sd_d_target": 0.916914,
-              "slope": 0.260823
+              "mean_d_predictor": -0.953237,
+              "mean_d_target": -0.137644,
+              "n_pairs": 109,
+              "p": 2.92446e-10,
+              "r": 0.545657,
+              "sd_d_target": 0.800479,
+              "slope": 0.294441
             },
             {
               "burst_index": 3,
               "env_name": "Breakout-MinAtar",
-              "mean_d_predictor": -2.21688,
-              "mean_d_target": 0.167946,
-              "n_pairs": 60,
-              "p": 0.000116207,
-              "r": 0.470314,
-              "sd_d_target": 1.14132,
-              "slope": 0.1578
+              "mean_d_predictor": -1.69787,
+              "mean_d_target": -0.079323,
+              "n_pairs": 109,
+              "p": 4.81343e-10,
+              "r": 0.540338,
+              "sd_d_target": 1.07103,
+              "slope": 0.212547
             },
             {
               "burst_index": 4,
               "env_name": "Breakout-MinAtar",
-              "mean_d_predictor": -4.09183,
-              "mean_d_target": 0.143542,
-              "n_pairs": 60,
-              "p": 0.0138309,
-              "r": 0.314967,
-              "sd_d_target": 1.10984,
-              "slope": 0.0592718
+              "mean_d_predictor": -2.86284,
+              "mean_d_target": -0.0338111,
+              "n_pairs": 109,
+              "p": 4.31341e-05,
+              "r": 0.3776,
+              "sd_d_target": 1.0033,
+              "slope": 0.0812042
             },
             {
               "burst_index": 5,
               "env_name": "Breakout-MinAtar",
-              "mean_d_predictor": -6.67795,
-              "mean_d_target": -0.0804327,
-              "n_pairs": 60,
-              "p": 0.00869482,
-              "r": 0.334187,
-              "sd_d_target": 1.1466,
-              "slope": 0.0391977
+              "mean_d_predictor": -4.49989,
+              "mean_d_target": -0.0590981,
+              "n_pairs": 109,
+              "p": 0.000391135,
+              "r": 0.331415,
+              "sd_d_target": 1.0873,
+              "slope": 0.0462814
             },
             {
               "burst_index": 6,
               "env_name": "Breakout-MinAtar",
-              "mean_d_predictor": -11.6592,
-              "mean_d_target": 0.0225374,
-              "n_pairs": 60,
-              "p": 0.210867,
-              "r": 0.164223,
-              "sd_d_target": 1.26731,
-              "slope": 0.012736
+              "mean_d_predictor": -7.31636,
+              "mean_d_target": -0.0825897,
+              "n_pairs": 109,
+              "p": 0.0284012,
+              "r": 0.209718,
+              "sd_d_target": 1.18962,
+              "slope": 0.0188634
             },
             {
               "burst_index": 7,
               "env_name": "Breakout-MinAtar",
-              "mean_d_predictor": -18.8779,
-              "mean_d_target": -0.13171,
-              "n_pairs": 60,
-              "p": 0.753464,
-              "r": 0.0415764,
-              "sd_d_target": 1.25381,
-              "slope": 0.00186812
+              "mean_d_predictor": -11.5041,
+              "mean_d_target": -0.144436,
+              "n_pairs": 109,
+              "p": 0.391913,
+              "r": 0.0829659,
+              "sd_d_target": 1.22107,
+              "slope": 0.00449412
             },
             {
               "burst_index": 8,
               "env_name": "Breakout-MinAtar",
-              "mean_d_predictor": -30.6708,
-              "mean_d_target": -0.263246,
-              "n_pairs": 60,
-              "p": 0.690494,
-              "r": 0.052692,
-              "sd_d_target": 1.43973,
-              "slope": 0.00159466
+              "mean_d_predictor": -18.0785,
+              "mean_d_target": -0.206639,
+              "n_pairs": 109,
+              "p": 0.629777,
+              "r": 0.0467858,
+              "sd_d_target": 1.38428,
+              "slope": 0.00168744
             },
             {
               "burst_index": 9,
               "env_name": "Breakout-MinAtar",
-              "mean_d_predictor": -49.3225,
-              "mean_d_target": -0.0732353,
-              "n_pairs": 60,
-              "p": 0.364869,
-              "r": -0.119446,
-              "sd_d_target": 1.24083,
-              "slope": -0.00177991
+              "mean_d_predictor": -28.5079,
+              "mean_d_target": -0.100926,
+              "n_pairs": 109,
+              "p": 0.513609,
+              "r": -0.0633621,
+              "sd_d_target": 1.32686,
+              "slope": -0.00126394
             },
             {
               "burst_index": 10,
@@ -938,112 +938,112 @@
             {
               "burst_index": 0,
               "env_name": "FourRooms-misc",
-              "mean_d_predictor": -0.37528,
-              "mean_d_target": 0.121683,
+              "mean_d_predictor": -0.375353,
+              "mean_d_target": 0.121576,
               "n_pairs": 329,
               "p": 0.0,
-              "r": 0.692884,
-              "sd_d_target": 0.220047,
-              "slope": 0.383561
+              "r": 0.692842,
+              "sd_d_target": 0.219788,
+              "slope": 0.382554
             },
             {
               "burst_index": 1,
               "env_name": "FourRooms-misc",
-              "mean_d_predictor": -0.305873,
-              "mean_d_target": 0.166088,
+              "mean_d_predictor": -0.305041,
+              "mean_d_target": 0.165818,
               "n_pairs": 329,
               "p": 0.0,
-              "r": 0.752459,
-              "sd_d_target": 0.255832,
-              "slope": 0.596329
+              "r": 0.752638,
+              "sd_d_target": 0.255991,
+              "slope": 0.596514
             },
             {
               "burst_index": 2,
               "env_name": "FourRooms-misc",
-              "mean_d_predictor": -0.253417,
-              "mean_d_target": 0.14125,
+              "mean_d_predictor": -0.253087,
+              "mean_d_target": 0.140956,
               "n_pairs": 329,
               "p": 0.0,
-              "r": 0.726758,
-              "sd_d_target": 0.245726,
-              "slope": 0.568645
+              "r": 0.724686,
+              "sd_d_target": 0.245038,
+              "slope": 0.565542
             },
             {
               "burst_index": 3,
               "env_name": "FourRooms-misc",
-              "mean_d_predictor": -0.27842,
-              "mean_d_target": 0.175385,
+              "mean_d_predictor": -0.278542,
+              "mean_d_target": 0.175125,
               "n_pairs": 329,
               "p": 0.0,
-              "r": 0.715474,
-              "sd_d_target": 0.250038,
-              "slope": 0.535553
+              "r": 0.708327,
+              "sd_d_target": 0.249649,
+              "slope": 0.524823
             },
             {
               "burst_index": 4,
               "env_name": "FourRooms-misc",
-              "mean_d_predictor": -0.230302,
-              "mean_d_target": 0.139688,
+              "mean_d_predictor": -0.230821,
+              "mean_d_target": 0.139637,
               "n_pairs": 329,
               "p": 0.0,
-              "r": 0.692829,
-              "sd_d_target": 0.236486,
-              "slope": 0.498023
+              "r": 0.685114,
+              "sd_d_target": 0.236062,
+              "slope": 0.486175
             },
             {
               "burst_index": 5,
               "env_name": "FourRooms-misc",
-              "mean_d_predictor": -0.241716,
-              "mean_d_target": 0.152023,
+              "mean_d_predictor": -0.243533,
+              "mean_d_target": 0.152287,
               "n_pairs": 329,
               "p": 0.0,
-              "r": 0.566183,
-              "sd_d_target": 0.235925,
-              "slope": 0.327462
+              "r": 0.544761,
+              "sd_d_target": 0.23572,
+              "slope": 0.303029
             },
             {
               "burst_index": 6,
               "env_name": "FourRooms-misc",
-              "mean_d_predictor": -0.229508,
-              "mean_d_target": 0.1464,
+              "mean_d_predictor": -0.232119,
+              "mean_d_target": 0.146961,
               "n_pairs": 329,
               "p": 0.0,
-              "r": 0.534086,
-              "sd_d_target": 0.227173,
-              "slope": 0.268799
+              "r": 0.51312,
+              "sd_d_target": 0.227345,
+              "slope": 0.246207
             },
             {
               "burst_index": 7,
               "env_name": "FourRooms-misc",
-              "mean_d_predictor": -0.241353,
-              "mean_d_target": 0.166764,
+              "mean_d_predictor": -0.24403,
+              "mean_d_target": 0.167411,
               "n_pairs": 329,
               "p": 0.0,
-              "r": 0.57112,
-              "sd_d_target": 0.236543,
-              "slope": 0.310457
+              "r": 0.54823,
+              "sd_d_target": 0.236398,
+              "slope": 0.284869
             },
             {
               "burst_index": 8,
               "env_name": "FourRooms-misc",
-              "mean_d_predictor": -0.245731,
-              "mean_d_target": 0.138655,
+              "mean_d_predictor": -0.250966,
+              "mean_d_target": 0.138484,
               "n_pairs": 329,
-              "p": 5.38432e-08,
-              "r": 0.292401,
-              "sd_d_target": 0.236512,
-              "slope": 0.0848238
+              "p": 4.88011e-07,
+              "r": 0.271645,
+              "sd_d_target": 0.236361,
+              "slope": 0.0733519
             },
             {
               "burst_index": 9,
               "env_name": "FourRooms-misc",
-              "mean_d_predictor": -0.366076,
-              "mean_d_target": 0.136696,
+              "mean_d_predictor": -0.382798,
+              "mean_d_target": 0.13684,
               "n_pairs": 329,
-              "p": 0.0752872,
-              "r": 0.0981962,
-              "sd_d_target": 0.251357,
-              "slope": 0.00952774
+              "p": 0.0862394,
+              "r": 0.0947321,
+              "sd_d_target": 0.251191,
+              "slope": 0.00848204
             },
             {
               "burst_index": 10,
@@ -1378,112 +1378,112 @@
             {
               "burst_index": 0,
               "env_name": "MetaMaze-misc",
-              "mean_d_predictor": -9.76548,
-              "mean_d_target": 0.498495,
-              "n_pairs": 134,
-              "p": 1.09705e-09,
-              "r": 0.487281,
-              "sd_d_target": 3.7713,
-              "slope": 0.169422
+              "mean_d_predictor": -9.2586,
+              "mean_d_target": 0.512098,
+              "n_pairs": 130,
+              "p": 5.0374e-10,
+              "r": 0.501833,
+              "sd_d_target": 4.43764,
+              "slope": 0.209826
             },
             {
               "burst_index": 1,
               "env_name": "MetaMaze-misc",
-              "mean_d_predictor": -9.26222,
-              "mean_d_target": 2.00782,
-              "n_pairs": 134,
+              "mean_d_predictor": -8.26042,
+              "mean_d_target": 1.7169,
+              "n_pairs": 130,
               "p": 0.0,
-              "r": 0.722043,
-              "sd_d_target": 6.91371,
-              "slope": 0.400868
+              "r": 0.715406,
+              "sd_d_target": 7.59847,
+              "slope": 0.467673
             },
             {
               "burst_index": 2,
               "env_name": "MetaMaze-misc",
-              "mean_d_predictor": -4.43158,
-              "mean_d_target": 1.00764,
-              "n_pairs": 134,
+              "mean_d_predictor": -4.62801,
+              "mean_d_target": 1.27192,
+              "n_pairs": 130,
               "p": 0.0,
-              "r": 0.917728,
-              "sd_d_target": 8.60003,
-              "slope": 0.835843
+              "r": 0.941441,
+              "sd_d_target": 11.6788,
+              "slope": 0.891585
             },
             {
               "burst_index": 3,
               "env_name": "MetaMaze-misc",
-              "mean_d_predictor": -4.0969,
-              "mean_d_target": 1.26275,
-              "n_pairs": 134,
+              "mean_d_predictor": -4.06749,
+              "mean_d_target": 1.26341,
+              "n_pairs": 130,
               "p": 0.0,
-              "r": 0.89096,
-              "sd_d_target": 6.43722,
-              "slope": 0.748285
+              "r": 0.894629,
+              "sd_d_target": 8.03415,
+              "slope": 0.811723
             },
             {
               "burst_index": 4,
               "env_name": "MetaMaze-misc",
-              "mean_d_predictor": -3.55196,
-              "mean_d_target": 1.16532,
-              "n_pairs": 134,
+              "mean_d_predictor": -3.40878,
+              "mean_d_target": 0.92474,
+              "n_pairs": 130,
               "p": 0.0,
-              "r": 0.932147,
-              "sd_d_target": 8.43294,
-              "slope": 0.85244
+              "r": 0.918007,
+              "sd_d_target": 9.01774,
+              "slope": 0.858667
             },
             {
               "burst_index": 5,
               "env_name": "MetaMaze-misc",
-              "mean_d_predictor": -3.14088,
-              "mean_d_target": 0.876003,
-              "n_pairs": 134,
+              "mean_d_predictor": -2.91226,
+              "mean_d_target": 0.692229,
+              "n_pairs": 130,
               "p": 0.0,
-              "r": 0.929673,
-              "sd_d_target": 8.17931,
-              "slope": 0.855081
+              "r": 0.939112,
+              "sd_d_target": 10.0538,
+              "slope": 0.902674
             },
             {
               "burst_index": 6,
               "env_name": "MetaMaze-misc",
-              "mean_d_predictor": -2.77455,
-              "mean_d_target": 0.634288,
-              "n_pairs": 134,
+              "mean_d_predictor": -3.51454,
+              "mean_d_target": 1.39628,
+              "n_pairs": 130,
               "p": 0.0,
-              "r": 0.92405,
-              "sd_d_target": 7.89988,
-              "slope": 0.865043
+              "r": 0.939595,
+              "sd_d_target": 10.2659,
+              "slope": 0.879081
             },
             {
               "burst_index": 7,
               "env_name": "MetaMaze-misc",
-              "mean_d_predictor": -2.45036,
-              "mean_d_target": 0.570733,
-              "n_pairs": 134,
+              "mean_d_predictor": -2.84323,
+              "mean_d_target": 0.887526,
+              "n_pairs": 130,
               "p": 0.0,
-              "r": 0.936366,
-              "sd_d_target": 8.42827,
-              "slope": 0.896788
+              "r": 0.943337,
+              "sd_d_target": 10.549,
+              "slope": 0.941518
             },
             {
               "burst_index": 8,
               "env_name": "MetaMaze-misc",
-              "mean_d_predictor": -2.98367,
-              "mean_d_target": 1.36184,
-              "n_pairs": 134,
+              "mean_d_predictor": -2.60834,
+              "mean_d_target": 0.921261,
+              "n_pairs": 130,
               "p": 0.0,
-              "r": 0.924308,
-              "sd_d_target": 7.8741,
-              "slope": 0.885331
+              "r": 0.914419,
+              "sd_d_target": 8.64177,
+              "slope": 0.864262
             },
             {
               "burst_index": 9,
               "env_name": "MetaMaze-misc",
-              "mean_d_predictor": -3.72785,
-              "mean_d_target": 2.25146,
-              "n_pairs": 134,
+              "mean_d_predictor": -4.26334,
+              "mean_d_target": 2.72923,
+              "n_pairs": 130,
               "p": 0.0,
-              "r": 0.941582,
-              "sd_d_target": 9.29001,
-              "slope": 0.899417
+              "r": 0.949794,
+              "sd_d_target": 12.2176,
+              "slope": 0.95014
             },
             {
               "burst_index": 0,
@@ -1824,8 +1824,8 @@
       "blocked_by": null,
       "bridge_name": "chain_amplifier_link_active_in_bounded_q",
       "direction": "inverse",
-      "n_cells_in_scope": 5137,
-      "n_cells_pre_scope": 15331,
+      "n_cells_in_scope": 5114,
+      "n_cells_pre_scope": 15543,
       "pair_by": [
         "seed",
         "gamma",
@@ -1879,7 +1879,7 @@
       "bridge_name": "ddqn_benefit_scales_with_effective_horizon__fourrooms",
       "direction": "direct",
       "n_cells_in_scope": 60,
-      "n_cells_pre_scope": 15331,
+      "n_cells_pre_scope": 15543,
       "pair_by": [
         "seed"
       ],
@@ -1926,7 +1926,7 @@
       "bridge_name": "ddqn_benefit_scales_with_effective_horizon__metamaze_high_gamma",
       "direction": "direct",
       "n_cells_in_scope": 60,
-      "n_cells_pre_scope": 15331,
+      "n_cells_pre_scope": 15543,
       "pair_by": [
         "seed"
       ],
@@ -1950,25 +1950,25 @@
       "analysis_results": {
         "mundlak_paired_g_per_burst": {
           "between": {
-            "ci_hi": -0.0108417,
-            "ci_lo": -0.11278,
-            "coefficient": -0.061811,
+            "ci_hi": -0.013176,
+            "ci_lo": -0.114433,
+            "coefficient": -0.0638047,
             "component": "between",
-            "p_value": 0.01783,
-            "se": 0.0257755
+            "p_value": 0.0138674,
+            "se": 0.0256188
           },
-          "hausman_p": 0.223765,
-          "intercept": 0.0597503,
-          "n_obs": 140,
-          "n_strata": 10,
-          "r_squared": 0.492432,
+          "hausman_p": 0.246926,
+          "intercept": 0.0428408,
+          "n_obs": 150,
+          "n_strata": 11,
+          "r_squared": 0.506812,
           "within": {
-            "ci_hi": -0.0539616,
-            "ci_lo": -0.243974,
-            "coefficient": -0.148968,
+            "ci_hi": -0.0557153,
+            "ci_lo": -0.227446,
+            "coefficient": -0.141581,
             "component": "within",
-            "p_value": 0.00234523,
-            "se": 0.0480453
+            "p_value": 0.00139111,
+            "se": 0.0434491
           }
         }
       },
@@ -1976,8 +1976,8 @@
       "blocked_by": null,
       "bridge_name": "mc_variance_attenuates_g_link__between_env",
       "direction": "direct",
-      "n_cells_in_scope": 12601,
-      "n_cells_pre_scope": 15331,
+      "n_cells_in_scope": 12813,
+      "n_cells_pre_scope": 15543,
       "pair_by": [
         "seed",
         "total_steps",
@@ -2030,7 +2030,7 @@
       "bridge_name": "ddqn_rescues_underlearning_vanilla__fourrooms_rs_0p1",
       "direction": "direct",
       "n_cells_in_scope": 367,
-      "n_cells_pre_scope": 15331,
+      "n_cells_pre_scope": 15543,
       "pair_by": [
         "seed"
       ],
@@ -2080,7 +2080,7 @@
       "bridge_name": "ddqn_dominates_vanilla_response_curve__fourrooms_rs_0p3",
       "direction": "direct",
       "n_cells_in_scope": 120,
-      "n_cells_pre_scope": 15331,
+      "n_cells_pre_scope": 15543,
       "pair_by": [
         "seed"
       ],
@@ -2129,7 +2129,7 @@
       "bridge_name": "ddqn_does_not_rescue__acrobot_rs_0p1",
       "direction": "direct",
       "n_cells_in_scope": 120,
-      "n_cells_pre_scope": 15331,
+      "n_cells_pre_scope": 15543,
       "pair_by": [
         "seed"
       ],
@@ -2171,7 +2171,7 @@
       "bridge_name": "ddqn_does_not_rescue__cartpole_rs_0p1",
       "direction": "direct",
       "n_cells_in_scope": 60,
-      "n_cells_pre_scope": 15331,
+      "n_cells_pre_scope": 15543,
       "pair_by": [
         "seed"
       ],
@@ -2213,7 +2213,7 @@
       "bridge_name": "ddqn_increases_argmax_entropy__fourrooms_rs_0p1",
       "direction": "direct",
       "n_cells_in_scope": 367,
-      "n_cells_pre_scope": 15331,
+      "n_cells_pre_scope": 15543,
       "pair_by": [
         "seed"
       ],
@@ -2255,7 +2255,7 @@
       "bridge_name": "ddqn_entropy_matches_vanilla__fourrooms_rs_1p0",
       "direction": "direct",
       "n_cells_in_scope": 214,
-      "n_cells_pre_scope": 15331,
+      "n_cells_pre_scope": 15543,
       "pair_by": [
         "seed"
       ],
@@ -2297,7 +2297,7 @@
       "bridge_name": "ddqn_concentrates_argmax__sparsified_acrobot",
       "direction": "inverse",
       "n_cells_in_scope": 60,
-      "n_cells_pre_scope": 15331,
+      "n_cells_pre_scope": 15543,
       "pair_by": [
         "seed"
       ],
@@ -2339,7 +2339,7 @@
       "bridge_name": "ddqn_does_not_concentrate_argmax__densified_fourrooms",
       "direction": "direct",
       "n_cells_in_scope": 60,
-      "n_cells_pre_scope": 15331,
+      "n_cells_pre_scope": 15543,
       "pair_by": [
         "seed"
       ],
@@ -2357,35 +2357,31 @@
     {
       "analysis_results": {
         "paired_g": {
-          "assumption_violations": [
-            "skew_bias_likely (skew=-1.45, predicted paired_g inflation ~17% at n=30)"
-          ],
+          "assumption_violations": [],
           "baseline_arm": "baseline",
-          "g": 0.0752673,
-          "helped_fraction": 0.533333,
-          "mean_diff": 0.00664439,
-          "mean_diff_p_value": 0.6752,
-          "mean_diff_se": 0.0156967,
+          "g": null,
+          "helped_fraction": null,
+          "mean_diff": null,
+          "mean_diff_p_value": null,
+          "mean_diff_se": null,
           "measurable": "argmax_entropy_late",
-          "n_baseline": 30,
-          "n_pairs": 30,
-          "n_treatment": 30,
-          "p_value": 0.680579,
+          "n_baseline": 0,
+          "n_pairs": 0,
+          "n_treatment": 0,
+          "p_value": null,
           "pair_by": [
             "seed"
           ],
-          "se": 0.182833,
+          "se": null,
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
         }
       },
-      "assumption_violations": [
-        "paired_g: skew_bias_likely (skew=-1.45, predicted paired_g inflation ~17% at n=30)"
-      ],
+      "assumption_violations": [],
       "blocked_by": null,
       "bridge_name": "ddqn_concentrates_argmax__noisy_acrobot",
       "direction": "inverse",
-      "n_cells_in_scope": 60,
-      "n_cells_pre_scope": 15331,
+      "n_cells_in_scope": 0,
+      "n_cells_pre_scope": 15543,
       "pair_by": [
         "seed"
       ],
@@ -2397,7 +2393,7 @@
       "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
       "target_name": "argmax_entropy_late",
       "tier": "interventional",
-      "verdict": "no_effect",
+      "verdict": "power_insufficient",
       "warnings": []
     },
     {
@@ -2405,20 +2401,20 @@
         "paired_g": {
           "assumption_violations": [],
           "baseline_arm": "baseline",
-          "g": -0.176617,
-          "helped_fraction": 0.5,
-          "mean_diff": -0.00638927,
-          "mean_diff_p_value": 0.328788,
-          "mean_diff_se": 0.00643247,
+          "g": null,
+          "helped_fraction": null,
+          "mean_diff": null,
+          "mean_diff_p_value": null,
+          "mean_diff_se": null,
           "measurable": "argmax_entropy_late",
-          "n_baseline": 30,
-          "n_pairs": 30,
-          "n_treatment": 30,
-          "p_value": 0.337098,
+          "n_baseline": 0,
+          "n_pairs": 0,
+          "n_treatment": 0,
+          "p_value": null,
           "pair_by": [
             "seed"
           ],
-          "se": 0.183992,
+          "se": null,
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
         }
       },
@@ -2426,8 +2422,8 @@
       "blocked_by": null,
       "bridge_name": "ddqn_concentrates_argmax__noisy_metamaze",
       "direction": "inverse",
-      "n_cells_in_scope": 60,
-      "n_cells_pre_scope": 15331,
+      "n_cells_in_scope": 0,
+      "n_cells_pre_scope": 15543,
       "pair_by": [
         "seed"
       ],
@@ -2439,7 +2435,7 @@
       "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
       "target_name": "argmax_entropy_late",
       "tier": "interventional",
-      "verdict": "no_effect",
+      "verdict": "power_insufficient",
       "warnings": []
     },
     {
@@ -2621,7 +2617,7 @@
       "bridge_name": "ddqn_curve_crosses_vanilla_late__spaceinvaders",
       "direction": "inverse",
       "n_cells_in_scope": 210,
-      "n_cells_pre_scope": 15331,
+      "n_cells_pre_scope": 15543,
       "pair_by": [
         "seed"
       ],
@@ -2653,20 +2649,20 @@
         "paired_g": {
           "assumption_violations": [],
           "baseline_arm": "baseline",
-          "g": 3.39748,
+          "g": 3.48191,
           "helped_fraction": 1.0,
-          "mean_diff": 0.110372,
+          "mean_diff": 0.110759,
           "mean_diff_p_value": 0.0,
-          "mean_diff_se": 0.00577646,
+          "mean_diff_se": 0.00565616,
           "measurable": "eval_best_burst_mean",
           "n_baseline": 30,
           "n_pairs": 30,
           "n_treatment": 30,
-          "p_value": 8.60412e-13,
+          "p_value": 7.14646e-13,
           "pair_by": [
             "seed"
           ],
-          "se": 0.475094,
+          "se": 0.485175,
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
         }
       },
@@ -2674,8 +2670,8 @@
       "blocked_by": null,
       "bridge_name": "ddqn_helps_at_full_bootstrap__fourrooms_n1",
       "direction": "direct",
-      "n_cells_in_scope": 3611,
-      "n_cells_pre_scope": 15331,
+      "n_cells_in_scope": 3551,
+      "n_cells_pre_scope": 15543,
       "pair_by": [
         "seed"
       ],
@@ -2736,7 +2732,7 @@
       "bridge_name": "ddqn_null_under_monte_carlo__fourrooms_n10",
       "direction": "direct",
       "n_cells_in_scope": 60,
-      "n_cells_pre_scope": 15331,
+      "n_cells_pre_scope": 15543,
       "pair_by": [
         "seed"
       ],
@@ -2792,7 +2788,7 @@
       "bridge_name": "ddqn_helps_at_early_bursts__pixel_envs",
       "direction": "direct",
       "n_cells_in_scope": 630,
-      "n_cells_pre_scope": 15331,
+      "n_cells_pre_scope": 15543,
       "pair_by": [
         "seed",
         "env_name"
@@ -2945,7 +2941,7 @@
       "bridge_name": "acrobot_per_burst_link_active__gamma_0999",
       "direction": "inverse",
       "n_cells_in_scope": 60,
-      "n_cells_pre_scope": 15331,
+      "n_cells_pre_scope": 15543,
       "pair_by": [
         "seed"
       ],
@@ -2974,8 +2970,8 @@
       "analysis_results": {
         "paired_delta_link_dowhy": {
           "backdoor": {
-            "ate": -0.523143,
-            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__6,__burst__1,__burst__5,__burst__4,__burst__2,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __7,__burst__3,__burst__9,__burst__8])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__6,__burst__1,__burst__5,__burst__4,__burst__2,__burst__7,__burst__3,__burst__9,__burst__8,U) = P(dout|djens,__burst__6,__burst__1,__burst__5,__burst__4,__burst__2,__burst__7,__burst__3,__burst__9,__burst__8)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__6,__burst__1,__burst__5,__burst__4,__burst__2,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __7,__burst__3,__burst__9,__burst__8])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__6,__burst__1,__burst__5,__burst__4,__burst__2,__burst__7,__burst__3,__burst__9,__burst__8,U) = P(dout|djens,__burst__6,__burst__1,__burst__5,__burst__4,__burst__2,__burst__7,__burst__3,__burst__9,__burst__8)\n",
+            "ate": -0.924502,
+            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__1,__burst__7,__burst__9,__burst__2,__burst__8,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __4,__burst__3,__burst__5,__burst__6])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__1,__burst__7,__burst__9,__burst__2,__burst__8,__burst__4,__burst__3,__burst__5,__burst__6,U) = P(dout|djens,__burst__1,__burst__7,__burst__9,__burst__2,__burst__8,__burst__4,__burst__3,__burst__5,__burst__6)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__1,__burst__7,__burst__9,__burst__2,__burst__8,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __4,__burst__3,__burst__5,__burst__6])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__1,__burst__7,__burst__9,__burst__2,__burst__8,__burst__4,__burst__3,__burst__5,__burst__6,U) = P(dout|djens,__burst__1,__burst__7,__burst__9,__burst__2,__burst__8,__burst__4,__burst__3,__burst__5,__burst__6)\n",
             "identified": true,
             "method_name": "backdoor.linear_regression",
             "n_rows": 300,
@@ -2985,22 +2981,22 @@
           "n_pairs": 300,
           "outcome_col": "dout",
           "placebo": {
-            "drift": 0.523143,
+            "drift": 0.924502,
             "method_name": "backdoor.linear_regression",
             "n_rows": 300,
             "outcome": "dout",
-            "real_ate": -0.523143,
-            "refuted_ate": 0.0,
+            "real_ate": -0.924502,
+            "refuted_ate": 3.66374e-15,
             "refuter_name": "placebo_treatment_refuter",
             "treatment": "djens"
           },
           "random_common_cause": {
-            "drift": 0.000177122,
+            "drift": 0.000186316,
             "method_name": "backdoor.linear_regression",
             "n_rows": 300,
             "outcome": "dout",
-            "real_ate": -0.523143,
-            "refuted_ate": -0.522966,
+            "real_ate": -0.924502,
+            "refuted_ate": -0.924688,
             "refuter_name": "random_common_cause",
             "treatment": "djens"
           },
@@ -3011,8 +3007,8 @@
       "blocked_by": null,
       "bridge_name": "acrobot_link_backdoor_ate_negative__gamma_0999",
       "direction": "inverse",
-      "n_cells_in_scope": 242,
-      "n_cells_pre_scope": 15331,
+      "n_cells_in_scope": 182,
+      "n_cells_pre_scope": 15543,
       "pair_by": [
         "seed"
       ],
@@ -3043,8 +3039,8 @@
       "analysis_results": {
         "paired_delta_link_dowhy": {
           "backdoor": {
-            "ate": -0.523143,
-            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__6,__burst__1,__burst__5,__burst__4,__burst__2,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __7,__burst__3,__burst__9,__burst__8])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__6,__burst__1,__burst__5,__burst__4,__burst__2,__burst__7,__burst__3,__burst__9,__burst__8,U) = P(dout|djens,__burst__6,__burst__1,__burst__5,__burst__4,__burst__2,__burst__7,__burst__3,__burst__9,__burst__8)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__6,__burst__1,__burst__5,__burst__4,__burst__2,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __7,__burst__3,__burst__9,__burst__8])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__6,__burst__1,__burst__5,__burst__4,__burst__2,__burst__7,__burst__3,__burst__9,__burst__8,U) = P(dout|djens,__burst__6,__burst__1,__burst__5,__burst__4,__burst__2,__burst__7,__burst__3,__burst__9,__burst__8)\n",
+            "ate": -0.924502,
+            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__1,__burst__7,__burst__9,__burst__2,__burst__8,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __4,__burst__3,__burst__5,__burst__6])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__1,__burst__7,__burst__9,__burst__2,__burst__8,__burst__4,__burst__3,__burst__5,__burst__6,U) = P(dout|djens,__burst__1,__burst__7,__burst__9,__burst__2,__burst__8,__burst__4,__burst__3,__burst__5,__burst__6)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__1,__burst__7,__burst__9,__burst__2,__burst__8,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __4,__burst__3,__burst__5,__burst__6])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__1,__burst__7,__burst__9,__burst__2,__burst__8,__burst__4,__burst__3,__burst__5,__burst__6,U) = P(dout|djens,__burst__1,__burst__7,__burst__9,__burst__2,__burst__8,__burst__4,__burst__3,__burst__5,__burst__6)\n",
             "identified": true,
             "method_name": "backdoor.linear_regression",
             "n_rows": 300,
@@ -3054,22 +3050,22 @@
           "n_pairs": 300,
           "outcome_col": "dout",
           "placebo": {
-            "drift": 0.523143,
+            "drift": 0.924502,
             "method_name": "backdoor.linear_regression",
             "n_rows": 300,
             "outcome": "dout",
-            "real_ate": -0.523143,
-            "refuted_ate": 0.0,
+            "real_ate": -0.924502,
+            "refuted_ate": 3.66374e-15,
             "refuter_name": "placebo_treatment_refuter",
             "treatment": "djens"
           },
           "random_common_cause": {
-            "drift": 4.72174e-05,
+            "drift": 2.88138e-05,
             "method_name": "backdoor.linear_regression",
             "n_rows": 300,
             "outcome": "dout",
-            "real_ate": -0.523143,
-            "refuted_ate": -0.523191,
+            "real_ate": -0.924502,
+            "refuted_ate": -0.924473,
             "refuter_name": "random_common_cause",
             "treatment": "djens"
           },
@@ -3080,8 +3076,8 @@
       "blocked_by": null,
       "bridge_name": "acrobot_link_placebo_refuted__gamma_0999",
       "direction": "inverse",
-      "n_cells_in_scope": 242,
-      "n_cells_pre_scope": 15331,
+      "n_cells_in_scope": 182,
+      "n_cells_pre_scope": 15543,
       "pair_by": [
         "seed"
       ],
@@ -3112,8 +3108,8 @@
       "analysis_results": {
         "paired_delta_link_dowhy": {
           "backdoor": {
-            "ate": -0.523143,
-            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__6,__burst__1,__burst__5,__burst__4,__burst__2,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __7,__burst__3,__burst__9,__burst__8])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__6,__burst__1,__burst__5,__burst__4,__burst__2,__burst__7,__burst__3,__burst__9,__burst__8,U) = P(dout|djens,__burst__6,__burst__1,__burst__5,__burst__4,__burst__2,__burst__7,__burst__3,__burst__9,__burst__8)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__6,__burst__1,__burst__5,__burst__4,__burst__2,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __7,__burst__3,__burst__9,__burst__8])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__6,__burst__1,__burst__5,__burst__4,__burst__2,__burst__7,__burst__3,__burst__9,__burst__8,U) = P(dout|djens,__burst__6,__burst__1,__burst__5,__burst__4,__burst__2,__burst__7,__burst__3,__burst__9,__burst__8)\n",
+            "ate": -0.924502,
+            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__1,__burst__7,__burst__9,__burst__2,__burst__8,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __4,__burst__3,__burst__5,__burst__6])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__1,__burst__7,__burst__9,__burst__2,__burst__8,__burst__4,__burst__3,__burst__5,__burst__6,U) = P(dout|djens,__burst__1,__burst__7,__burst__9,__burst__2,__burst__8,__burst__4,__burst__3,__burst__5,__burst__6)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__1,__burst__7,__burst__9,__burst__2,__burst__8,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __4,__burst__3,__burst__5,__burst__6])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__1,__burst__7,__burst__9,__burst__2,__burst__8,__burst__4,__burst__3,__burst__5,__burst__6,U) = P(dout|djens,__burst__1,__burst__7,__burst__9,__burst__2,__burst__8,__burst__4,__burst__3,__burst__5,__burst__6)\n",
             "identified": true,
             "method_name": "backdoor.linear_regression",
             "n_rows": 300,
@@ -3123,22 +3119,22 @@
           "n_pairs": 300,
           "outcome_col": "dout",
           "placebo": {
-            "drift": 0.523143,
+            "drift": 0.924502,
             "method_name": "backdoor.linear_regression",
             "n_rows": 300,
             "outcome": "dout",
-            "real_ate": -0.523143,
-            "refuted_ate": 0.0,
+            "real_ate": -0.924502,
+            "refuted_ate": 3.66374e-15,
             "refuter_name": "placebo_treatment_refuter",
             "treatment": "djens"
           },
           "random_common_cause": {
-            "drift": 5.5712e-05,
+            "drift": 4.86881e-05,
             "method_name": "backdoor.linear_regression",
             "n_rows": 300,
             "outcome": "dout",
-            "real_ate": -0.523143,
-            "refuted_ate": -0.523088,
+            "real_ate": -0.924502,
+            "refuted_ate": -0.924453,
             "refuter_name": "random_common_cause",
             "treatment": "djens"
           },
@@ -3149,8 +3145,8 @@
       "blocked_by": null,
       "bridge_name": "acrobot_link_rcc_robust__gamma_0999",
       "direction": "inverse",
-      "n_cells_in_scope": 242,
-      "n_cells_pre_scope": 15331,
+      "n_cells_in_scope": 182,
+      "n_cells_pre_scope": 15543,
       "pair_by": [
         "seed"
       ],
@@ -3183,7 +3179,7 @@
           "attenuator": "q_divergence_score",
           "backdoor": {
             "ate": -0.211098,
-            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n                  d                                                            ↪\n──────────────────────────────────────(E[g_link|__env__SpaceInvaders-MinAtar,_ ↪\nd[q_divergence_score_threshold__above]                                         ↪\n\n↪                                                                      \n↪ _env__Breakout-MinAtar,__env__Freeway-MinAtar,__env__FourRooms-misc])\n↪                                                                      \nEstimand assumption 1, Unconfoundedness: If U→{q_divergence_score__above_threshold} and U→g_link then P(g_link|q_divergence_score__above_threshold,__env__SpaceInvaders-MinAtar,__env__Breakout-MinAtar,__env__Freeway-MinAtar,__env__FourRooms-misc,U) = P(g_link|q_divergence_score__above_threshold,__env__SpaceInvaders-MinAtar,__env__Breakout-MinAtar,__env__Freeway-MinAtar,__env__FourRooms-misc)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n                  d                                                            ↪\n──────────────────────────────────────(E[g_link|__env__SpaceInvaders-MinAtar,_ ↪\nd[q_divergence_score_threshold__above]                                         ↪\n\n↪                                                                      \n↪ _env__Breakout-MinAtar,__env__Freeway-MinAtar,__env__FourRooms-misc])\n↪                                                                      \nEstimand assumption 1, Unconfoundedness: If U→{q_divergence_score__above_threshold} and U→g_link then P(g_link|q_divergence_score__above_threshold,__env__SpaceInvaders-MinAtar,__env__Breakout-MinAtar,__env__Freeway-MinAtar,__env__FourRooms-misc,U) = P(g_link|q_divergence_score__above_threshold,__env__SpaceInvaders-MinAtar,__env__Breakout-MinAtar,__env__Freeway-MinAtar,__env__FourRooms-misc)\n",
+            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n                  d                                                            ↪\n──────────────────────────────────────(E[g_link|__env__Breakout-MinAtar,__env_ ↪\nd[q_divergence_score_threshold__above]                                         ↪\n\n↪                                                                      \n↪ _Freeway-MinAtar,__env__SpaceInvaders-MinAtar,__env__FourRooms-misc])\n↪                                                                      \nEstimand assumption 1, Unconfoundedness: If U→{q_divergence_score__above_threshold} and U→g_link then P(g_link|q_divergence_score__above_threshold,__env__Breakout-MinAtar,__env__Freeway-MinAtar,__env__SpaceInvaders-MinAtar,__env__FourRooms-misc,U) = P(g_link|q_divergence_score__above_threshold,__env__Breakout-MinAtar,__env__Freeway-MinAtar,__env__SpaceInvaders-MinAtar,__env__FourRooms-misc)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n                  d                                                            ↪\n──────────────────────────────────────(E[g_link|__env__Breakout-MinAtar,__env_ ↪\nd[q_divergence_score_threshold__above]                                         ↪\n\n↪                                                                      \n↪ _Freeway-MinAtar,__env__SpaceInvaders-MinAtar,__env__FourRooms-misc])\n↪                                                                      \nEstimand assumption 1, Unconfoundedness: If U→{q_divergence_score__above_threshold} and U→g_link then P(g_link|q_divergence_score__above_threshold,__env__Breakout-MinAtar,__env__Freeway-MinAtar,__env__SpaceInvaders-MinAtar,__env__FourRooms-misc,U) = P(g_link|q_divergence_score__above_threshold,__env__Breakout-MinAtar,__env__Freeway-MinAtar,__env__SpaceInvaders-MinAtar,__env__FourRooms-misc)\n",
             "identified": true,
             "method_name": "backdoor.linear_regression",
             "n_rows": 100,
@@ -3206,12 +3202,12 @@
             "treatment": "q_divergence_score__above_threshold"
           },
           "random_common_cause": {
-            "drift": 0.00099643,
+            "drift": 0.000211491,
             "method_name": "backdoor.linear_regression",
             "n_rows": 100,
             "outcome": "g_link",
             "real_ate": -0.211098,
-            "refuted_ate": -0.212094,
+            "refuted_ate": -0.210886,
             "refuter_name": "random_common_cause",
             "treatment": "q_divergence_score__above_threshold"
           },
@@ -3223,7 +3219,7 @@
       "bridge_name": "extreme_q_divergence_attenuates_link__binary",
       "direction": "inverse",
       "n_cells_in_scope": 750,
-      "n_cells_pre_scope": 15331,
+      "n_cells_pre_scope": 15543,
       "pair_by": [
         "seed"
       ],
@@ -3256,7 +3252,7 @@
           "attenuator": "q_divergence_score",
           "backdoor": {
             "ate": -0.211098,
-            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n                  d                                                            ↪\n──────────────────────────────────────(E[g_link|__env__SpaceInvaders-MinAtar,_ ↪\nd[q_divergence_score_threshold__above]                                         ↪\n\n↪                                                                      \n↪ _env__Breakout-MinAtar,__env__Freeway-MinAtar,__env__FourRooms-misc])\n↪                                                                      \nEstimand assumption 1, Unconfoundedness: If U→{q_divergence_score__above_threshold} and U→g_link then P(g_link|q_divergence_score__above_threshold,__env__SpaceInvaders-MinAtar,__env__Breakout-MinAtar,__env__Freeway-MinAtar,__env__FourRooms-misc,U) = P(g_link|q_divergence_score__above_threshold,__env__SpaceInvaders-MinAtar,__env__Breakout-MinAtar,__env__Freeway-MinAtar,__env__FourRooms-misc)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n                  d                                                            ↪\n──────────────────────────────────────(E[g_link|__env__SpaceInvaders-MinAtar,_ ↪\nd[q_divergence_score_threshold__above]                                         ↪\n\n↪                                                                      \n↪ _env__Breakout-MinAtar,__env__Freeway-MinAtar,__env__FourRooms-misc])\n↪                                                                      \nEstimand assumption 1, Unconfoundedness: If U→{q_divergence_score__above_threshold} and U→g_link then P(g_link|q_divergence_score__above_threshold,__env__SpaceInvaders-MinAtar,__env__Breakout-MinAtar,__env__Freeway-MinAtar,__env__FourRooms-misc,U) = P(g_link|q_divergence_score__above_threshold,__env__SpaceInvaders-MinAtar,__env__Breakout-MinAtar,__env__Freeway-MinAtar,__env__FourRooms-misc)\n",
+            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n                  d                                                            ↪\n──────────────────────────────────────(E[g_link|__env__Breakout-MinAtar,__env_ ↪\nd[q_divergence_score_threshold__above]                                         ↪\n\n↪                                                                      \n↪ _Freeway-MinAtar,__env__SpaceInvaders-MinAtar,__env__FourRooms-misc])\n↪                                                                      \nEstimand assumption 1, Unconfoundedness: If U→{q_divergence_score__above_threshold} and U→g_link then P(g_link|q_divergence_score__above_threshold,__env__Breakout-MinAtar,__env__Freeway-MinAtar,__env__SpaceInvaders-MinAtar,__env__FourRooms-misc,U) = P(g_link|q_divergence_score__above_threshold,__env__Breakout-MinAtar,__env__Freeway-MinAtar,__env__SpaceInvaders-MinAtar,__env__FourRooms-misc)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n                  d                                                            ↪\n──────────────────────────────────────(E[g_link|__env__Breakout-MinAtar,__env_ ↪\nd[q_divergence_score_threshold__above]                                         ↪\n\n↪                                                                      \n↪ _Freeway-MinAtar,__env__SpaceInvaders-MinAtar,__env__FourRooms-misc])\n↪                                                                      \nEstimand assumption 1, Unconfoundedness: If U→{q_divergence_score__above_threshold} and U→g_link then P(g_link|q_divergence_score__above_threshold,__env__Breakout-MinAtar,__env__Freeway-MinAtar,__env__SpaceInvaders-MinAtar,__env__FourRooms-misc,U) = P(g_link|q_divergence_score__above_threshold,__env__Breakout-MinAtar,__env__Freeway-MinAtar,__env__SpaceInvaders-MinAtar,__env__FourRooms-misc)\n",
             "identified": true,
             "method_name": "backdoor.linear_regression",
             "n_rows": 100,
@@ -3279,12 +3275,12 @@
             "treatment": "q_divergence_score__above_threshold"
           },
           "random_common_cause": {
-            "drift": 0.000208662,
+            "drift": 0.000682015,
             "method_name": "backdoor.linear_regression",
             "n_rows": 100,
             "outcome": "g_link",
             "real_ate": -0.211098,
-            "refuted_ate": -0.211307,
+            "refuted_ate": -0.210416,
             "refuter_name": "random_common_cause",
             "treatment": "q_divergence_score__above_threshold"
           },
@@ -3296,7 +3292,7 @@
       "bridge_name": "extreme_q_divergence_attenuates_link__placebo_refuted",
       "direction": "inverse",
       "n_cells_in_scope": 750,
-      "n_cells_pre_scope": 15331,
+      "n_cells_pre_scope": 15543,
       "pair_by": [
         "seed"
       ],
@@ -3329,7 +3325,7 @@
           "attenuator": "q_divergence_score",
           "backdoor": {
             "ate": -0.211098,
-            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n                  d                                                            ↪\n──────────────────────────────────────(E[g_link|__env__SpaceInvaders-MinAtar,_ ↪\nd[q_divergence_score_threshold__above]                                         ↪\n\n↪                                                                      \n↪ _env__Breakout-MinAtar,__env__Freeway-MinAtar,__env__FourRooms-misc])\n↪                                                                      \nEstimand assumption 1, Unconfoundedness: If U→{q_divergence_score__above_threshold} and U→g_link then P(g_link|q_divergence_score__above_threshold,__env__SpaceInvaders-MinAtar,__env__Breakout-MinAtar,__env__Freeway-MinAtar,__env__FourRooms-misc,U) = P(g_link|q_divergence_score__above_threshold,__env__SpaceInvaders-MinAtar,__env__Breakout-MinAtar,__env__Freeway-MinAtar,__env__FourRooms-misc)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n                  d                                                            ↪\n──────────────────────────────────────(E[g_link|__env__SpaceInvaders-MinAtar,_ ↪\nd[q_divergence_score_threshold__above]                                         ↪\n\n↪                                                                      \n↪ _env__Breakout-MinAtar,__env__Freeway-MinAtar,__env__FourRooms-misc])\n↪                                                                      \nEstimand assumption 1, Unconfoundedness: If U→{q_divergence_score__above_threshold} and U→g_link then P(g_link|q_divergence_score__above_threshold,__env__SpaceInvaders-MinAtar,__env__Breakout-MinAtar,__env__Freeway-MinAtar,__env__FourRooms-misc,U) = P(g_link|q_divergence_score__above_threshold,__env__SpaceInvaders-MinAtar,__env__Breakout-MinAtar,__env__Freeway-MinAtar,__env__FourRooms-misc)\n",
+            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n                  d                                                            ↪\n──────────────────────────────────────(E[g_link|__env__Breakout-MinAtar,__env_ ↪\nd[q_divergence_score_threshold__above]                                         ↪\n\n↪                                                                      \n↪ _Freeway-MinAtar,__env__SpaceInvaders-MinAtar,__env__FourRooms-misc])\n↪                                                                      \nEstimand assumption 1, Unconfoundedness: If U→{q_divergence_score__above_threshold} and U→g_link then P(g_link|q_divergence_score__above_threshold,__env__Breakout-MinAtar,__env__Freeway-MinAtar,__env__SpaceInvaders-MinAtar,__env__FourRooms-misc,U) = P(g_link|q_divergence_score__above_threshold,__env__Breakout-MinAtar,__env__Freeway-MinAtar,__env__SpaceInvaders-MinAtar,__env__FourRooms-misc)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n                  d                                                            ↪\n──────────────────────────────────────(E[g_link|__env__Breakout-MinAtar,__env_ ↪\nd[q_divergence_score_threshold__above]                                         ↪\n\n↪                                                                      \n↪ _Freeway-MinAtar,__env__SpaceInvaders-MinAtar,__env__FourRooms-misc])\n↪                                                                      \nEstimand assumption 1, Unconfoundedness: If U→{q_divergence_score__above_threshold} and U→g_link then P(g_link|q_divergence_score__above_threshold,__env__Breakout-MinAtar,__env__Freeway-MinAtar,__env__SpaceInvaders-MinAtar,__env__FourRooms-misc,U) = P(g_link|q_divergence_score__above_threshold,__env__Breakout-MinAtar,__env__Freeway-MinAtar,__env__SpaceInvaders-MinAtar,__env__FourRooms-misc)\n",
             "identified": true,
             "method_name": "backdoor.linear_regression",
             "n_rows": 100,
@@ -3352,12 +3348,12 @@
             "treatment": "q_divergence_score__above_threshold"
           },
           "random_common_cause": {
-            "drift": 0.000168128,
+            "drift": 0.000795695,
             "method_name": "backdoor.linear_regression",
             "n_rows": 100,
             "outcome": "g_link",
             "real_ate": -0.211098,
-            "refuted_ate": -0.211266,
+            "refuted_ate": -0.210302,
             "refuter_name": "random_common_cause",
             "treatment": "q_divergence_score__above_threshold"
           },
@@ -3369,7 +3365,7 @@
       "bridge_name": "extreme_q_divergence_attenuates_link__rcc_robust",
       "direction": "inverse",
       "n_cells_in_scope": 750,
-      "n_cells_pre_scope": 15331,
+      "n_cells_pre_scope": 15543,
       "pair_by": [
         "seed"
       ],
@@ -3400,11 +3396,11 @@
       "analysis_results": {
         "proportion_mediated": {
           "baseline_arm": "baseline",
-          "direct": 1.13248,
-          "in_unit_interval": false,
-          "indirect": -0.0933205,
+          "direct": 0.835879,
+          "in_unit_interval": true,
+          "indirect": 0.0345478,
           "mediator": "effective_horizon",
-          "n_pairs": 1189,
+          "n_pairs": 1112,
           "pair_by": [
             "env_name",
             "corpus",
@@ -3413,10 +3409,10 @@
             "sync_period",
             "seed"
           ],
-          "proportion": -0.089804,
-          "slope_y_on_m": 0.0112432,
+          "proportion": 0.0396906,
+          "slope_y_on_m": -0.00392663,
           "target": "eval_best_burst_mean",
-          "total": 1.03916,
+          "total": 0.870427,
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
         }
       },
@@ -3424,8 +3420,8 @@
       "blocked_by": null,
       "bridge_name": "eff_h_mediates_g_link__goal_envs",
       "direction": "direct",
-      "n_cells_in_scope": 5881,
-      "n_cells_pre_scope": 15331,
+      "n_cells_in_scope": 5698,
+      "n_cells_pre_scope": 15543,
       "pair_by": [
         "env_name",
         "corpus",
@@ -3447,18 +3443,18 @@
       "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
       "target_name": "eval_best_burst_mean",
       "tier": "interventional",
-      "verdict": "power_insufficient",
+      "verdict": "held",
       "warnings": []
     },
     {
       "analysis_results": {
         "proportion_mediated": {
           "baseline_arm": "baseline",
-          "direct": 0.0719699,
-          "in_unit_interval": true,
-          "indirect": 0.0163181,
+          "direct": 0.0612735,
+          "in_unit_interval": false,
+          "indirect": -0.00392704,
           "mediator": "effective_horizon",
-          "n_pairs": 331,
+          "n_pairs": 455,
           "pair_by": [
             "env_name",
             "corpus",
@@ -3467,10 +3463,10 @@
             "sync_period",
             "seed"
           ],
-          "proportion": 0.184828,
-          "slope_y_on_m": 0.052598,
+          "proportion": -0.0684793,
+          "slope_y_on_m": 0.0533613,
           "target": "eval_best_burst_mean",
-          "total": 0.088288,
+          "total": 0.0573464,
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
         }
       },
@@ -3478,8 +3474,8 @@
       "blocked_by": null,
       "bridge_name": "eff_h_mediates_g_link__survival_envs",
       "direction": "direct",
-      "n_cells_in_scope": 1845,
-      "n_cells_pre_scope": 15331,
+      "n_cells_in_scope": 2159,
+      "n_cells_pre_scope": 15543,
       "pair_by": [
         "env_name",
         "corpus",
@@ -3501,7 +3497,7 @@
       "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
       "target_name": "eval_best_burst_mean",
       "tier": "interventional",
-      "verdict": "held",
+      "verdict": "power_insufficient",
       "warnings": []
     },
     {
@@ -3534,7 +3530,7 @@
       "bridge_name": "target_staleness_late_mediates_outcome__fourrooms",
       "direction": "direct",
       "n_cells_in_scope": 180,
-      "n_cells_pre_scope": 15331,
+      "n_cells_pre_scope": 15543,
       "pair_by": [
         "env_name",
         "corpus",
@@ -3588,7 +3584,7 @@
       "bridge_name": "target_staleness_late_mediates_outcome__breakout_sync100",
       "direction": "direct",
       "n_cells_in_scope": 60,
-      "n_cells_pre_scope": 15331,
+      "n_cells_pre_scope": 15543,
       "pair_by": [
         "env_name",
         "corpus",
@@ -3620,33 +3616,33 @@
           ],
           "coefficients": [
             {
-              "ci_hi": 1.90735,
-              "ci_lo": 0.138898,
-              "coefficient": 1.02313,
+              "ci_hi": 1.9832,
+              "ci_lo": 0.331696,
+              "coefficient": 1.15745,
               "is_significant": true,
               "name": "env_reward_polarity",
-              "p_value": 0.0299073
+              "p_value": 0.0128624
             }
           ],
-          "i_squared": 0.946053,
-          "intercept": 0.231318,
-          "intercept_ci_hi": 0.906558,
-          "intercept_ci_lo": -0.443922,
-          "intercept_p_value": 0.43401,
-          "intercept_se": 0.275956,
-          "n_strata": 8,
+          "i_squared": 0.938497,
+          "intercept": 0.150347,
+          "intercept_ci_hi": 0.745228,
+          "intercept_ci_lo": -0.444534,
+          "intercept_p_value": 0.568913,
+          "intercept_se": 0.251575,
+          "n_strata": 9,
           "pool": "random",
-          "q_statistic": 111.221,
-          "r_squared": 0.571923,
-          "tau_sq": 0.492332
+          "q_statistic": 113.815,
+          "r_squared": 0.610802,
+          "tau_sq": 0.448562
         }
       },
       "assumption_violations": [],
       "blocked_by": null,
       "bridge_name": "link_r_predictable_from_polarity__soft_tautology",
       "direction": "direct",
-      "n_cells_in_scope": 8599,
-      "n_cells_pre_scope": 15331,
+      "n_cells_in_scope": 8796,
+      "n_cells_pre_scope": 15543,
       "pair_by": [
         "seed"
       ],
@@ -3671,7 +3667,7 @@
       "analysis_results": {
         "paired_continuous_do_dowhy": {
           "backdoor": {
-            "ate": 10.1496,
+            "ate": 6.67038,
             "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n           d                         \n───────────────────────(E[δ_outcome])\nd[targetₛₜₐₗₑₙₑₛₛ ₗₐₜₑ]              \nEstimand assumption 1, Unconfoundedness: If U→{target_staleness_late} and U→delta_outcome then P(delta_outcome|target_staleness_late,,U) = P(delta_outcome|target_staleness_late,)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n           d                         \n───────────────────────(E[δ_outcome])\nd[targetₛₜₐₗₑₙₑₛₛ ₗₐₜₑ]              \nEstimand assumption 1, Unconfoundedness: If U→{target_staleness_late} and U→delta_outcome then P(delta_outcome|target_staleness_late,,U) = P(delta_outcome|target_staleness_late,)\n",
             "identified": true,
             "method_name": "backdoor.linear_regression",
@@ -3682,22 +3678,22 @@
           "n_pairs": 120,
           "outcome": "delta_outcome",
           "placebo": {
-            "drift": 10.1496,
+            "drift": 6.67038,
             "method_name": "backdoor.linear_regression",
             "n_rows": 120,
             "outcome": "delta_outcome",
-            "real_ate": 10.1496,
+            "real_ate": 6.67038,
             "refuted_ate": 0.0,
             "refuter_name": "placebo_treatment_refuter",
             "treatment": "target_staleness_late"
           },
           "random_common_cause": {
-            "drift": 0.0294438,
+            "drift": 0.0245677,
             "method_name": "backdoor.linear_regression",
             "n_rows": 120,
             "outcome": "delta_outcome",
-            "real_ate": 10.1496,
-            "refuted_ate": 10.1202,
+            "real_ate": 6.67038,
+            "refuted_ate": 6.69494,
             "refuter_name": "random_common_cause",
             "treatment": "target_staleness_late"
           },
@@ -3709,7 +3705,7 @@
       "bridge_name": "staleness_amplifies_ddqn_outcome__sparse_goal_polyak",
       "direction": "inverse",
       "n_cells_in_scope": 476,
-      "n_cells_pre_scope": 15331,
+      "n_cells_pre_scope": 15543,
       "pair_by": [
         "env_name",
         "gamma",
@@ -3759,12 +3755,12 @@
             "treatment": "target_staleness_late"
           },
           "random_common_cause": {
-            "drift": 0.145325,
+            "drift": 0.255937,
             "method_name": "backdoor.linear_regression",
             "n_rows": 120,
             "outcome": "delta_outcome",
             "real_ate": 4.39469,
-            "refuted_ate": 4.54001,
+            "refuted_ate": 4.13875,
             "refuter_name": "random_common_cause",
             "treatment": "target_staleness_late"
           },
@@ -3776,7 +3772,7 @@
       "bridge_name": "staleness_does_not_amplify_ddqn_outcome__survival_polyak",
       "direction": "direct",
       "n_cells_in_scope": 240,
-      "n_cells_pre_scope": 15331,
+      "n_cells_pre_scope": 15543,
       "pair_by": [
         "env_name",
         "gamma",
@@ -3804,11 +3800,11 @@
       "analysis_results": {
         "proportion_mediated": {
           "baseline_arm": "baseline",
-          "direct": 0.386842,
+          "direct": 0.312967,
           "in_unit_interval": true,
-          "indirect": 0.116218,
+          "indirect": 0.0864383,
           "mediator": "greedy_match_late",
-          "n_pairs": 1390,
+          "n_pairs": 1374,
           "pair_by": [
             "env_name",
             "corpus",
@@ -3817,10 +3813,10 @@
             "total_steps",
             "seed"
           ],
-          "proportion": 0.231023,
-          "slope_y_on_m": 4.18938,
+          "proportion": 0.216418,
+          "slope_y_on_m": 3.70888,
           "target": "eval_best_burst_mean",
-          "total": 0.50306,
+          "total": 0.399405,
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
         }
       },
@@ -3828,8 +3824,8 @@
       "blocked_by": null,
       "bridge_name": "algorithmic_activation_rate_mediates_link__bounded_q",
       "direction": "direct",
-      "n_cells_in_scope": 5137,
-      "n_cells_pre_scope": 15331,
+      "n_cells_in_scope": 5114,
+      "n_cells_pre_scope": 15543,
       "pair_by": [
         "env_name",
         "corpus",
@@ -3861,33 +3857,33 @@
           ],
           "coefficients": [
             {
-              "ci_hi": -0.0163241,
-              "ci_lo": -0.0232693,
-              "coefficient": -0.0197967,
+              "ci_hi": -0.0173549,
+              "ci_lo": -0.0251954,
+              "coefficient": -0.0212752,
               "is_significant": true,
               "name": "effective_horizon",
-              "p_value": 2.44249e-15
+              "p_value": 1.35447e-14
             }
           ],
-          "i_squared": 0.366459,
-          "intercept": 1.36099,
-          "intercept_ci_hi": 1.52136,
-          "intercept_ci_lo": 1.20061,
+          "i_squared": 0.390043,
+          "intercept": 1.40254,
+          "intercept_ci_hi": 1.57797,
+          "intercept_ci_lo": 1.22712,
           "intercept_p_value": 0.0,
-          "intercept_se": 0.0797637,
+          "intercept_se": 0.0872484,
           "n_strata": 50,
           "pool": "random",
-          "q_statistic": 75.7647,
-          "r_squared": 0.732413,
-          "tau_sq": 0.00997893
+          "q_statistic": 78.6941,
+          "r_squared": 0.712689,
+          "tau_sq": 0.0111463
         }
       },
       "assumption_violations": [],
       "blocked_by": null,
       "bridge_name": "effh_predicts_link_power__reach_envs",
       "direction": "direct",
-      "n_cells_in_scope": 2985,
-      "n_cells_pre_scope": 15331,
+      "n_cells_in_scope": 2796,
+      "n_cells_pre_scope": 15543,
       "pair_by": [
         "seed",
         "total_steps",
@@ -3908,11 +3904,65 @@
       "tier": "associational",
       "verdict": "no_effect",
       "warnings": []
+    },
+    {
+      "analysis_results": {
+        "meta_regression_per_burst": {
+          "cleavage_axes": [],
+          "coefficients": [
+            {
+              "ci_hi": 0.411499,
+              "ci_lo": -0.0799452,
+              "coefficient": 0.165777,
+              "is_significant": false,
+              "name": "argmax_entropy_late",
+              "p_value": 0.182694
+            }
+          ],
+          "i_squared": 0.150765,
+          "intercept": -0.236758,
+          "intercept_ci_hi": 0.0110058,
+          "intercept_ci_lo": -0.484522,
+          "intercept_p_value": 0.0607685,
+          "intercept_se": 0.124163,
+          "n_strata": 70,
+          "pool": "random",
+          "q_statistic": 80.072,
+          "r_squared": 0.0259607,
+          "tau_sq": 0.00553659
+        }
+      },
+      "assumption_violations": [],
+      "blocked_by": null,
+      "bridge_name": "argmax_entropy_predicts_link_power__survive_envs",
+      "direction": "direct",
+      "n_cells_in_scope": 990,
+      "n_cells_pre_scope": 15543,
+      "pair_by": [
+        "seed",
+        "total_steps",
+        "eval_every"
+      ],
+      "params": {
+        "covariates": [
+          "argmax_entropy_late"
+        ],
+        "dedupe_strategy": "mean",
+        "slope_threshold": 0.5,
+        "source": "mc_return__mean_axis_-1"
+      },
+      "predicted_direction": "a_gt_b",
+      "scope_repr": "[([([([([([([([([([(col(\"q_divergence_score\").is_finite()) & ([(col(\"q_divergence_score\").is_finite()) & ([(col(\"q_divergence_score\")) < (dyn float: 1)])])]) & ([(col(\"bootstrap_fraction\").is_finite()) & ([(col(\"bootstrap_fraction\")) > (dyn float: 0.5)])])]) & (col(\"jensen_dormancy_gap\").is_finite())]) & ([(col(\"jensen_dormancy_gap\").is_finite()) & ([(col(\"jensen_dormancy_gap\")) < (dyn float: 0.05)])])]) & (col(\"env_reward_polarity\").is_finite())]) & ([(col(\"env_reward_polarity\").is_finite()) & ([(col(\"env_reward_polarity\")) > (dyn float: 0.3)])])]) & ([([(col(\"n_step\")) == (dyn int: 1)]) | (col(\"n_step\").is_null())])]) & (col(\"action_duplicate_k\").is_null())]) & ([(col(\"reward_scale\").is_null()) | ([(col(\"reward_scale\")) == (dyn float: 1)])])]) & (col(\"target_sync.tau\").is_null())]",
+      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "target_name": "eval_best_burst_mean",
+      "tier": "associational",
+      "verdict": "power_insufficient",
+      "warnings": []
     }
   ],
   "cache_path": "experiments/data/cache/ddqn_universe.parquet",
   "errored_bridges": [],
-  "git_commit": "dd070d799c80",
+  "git_commit": "9e6be828edf7",
   "hypothesis_module": "experiments.findings.ddqn_universe",
   "measurable_signatures": {
     "argmax_entropy_late": "22f4c683c0bfee66",
@@ -3938,6 +3988,6 @@
     "r_min": "5717682c68a0f956",
     "target_staleness_late": "14b90395c7aabd2e"
   },
-  "n_cells_total": 15331,
-  "timestamp_utc": "2026-05-08T05:57:08+00:00"
+  "n_cells_total": 15543,
+  "timestamp_utc": "2026-05-08T15:03:53+00:00"
 }

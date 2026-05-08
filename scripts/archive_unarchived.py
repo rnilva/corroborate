@@ -32,7 +32,7 @@ from pathlib import Path
 
 os.environ.setdefault('JAX_PLATFORMS', 'cpu')
 
-from corroborate.cloud import archive  # noqa: E402
+from corroborate.corpus.cloud import archive  # noqa: E402
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
