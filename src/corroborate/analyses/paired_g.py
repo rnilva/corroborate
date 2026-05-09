@@ -235,52 +235,86 @@ def paired_g(
             f'paired_g: unknown dedupe_strategy {dedupe_strategy!r}; '
             f'expected "raise" or "mean"',
         )
-    treatment_buckets: dict[tuple[object, ...], list[float]] = {}
-    baseline_buckets: dict[tuple[object, ...], list[float]] = {}
+
+    # Collect cells alongside values so duplicate-bucket inspection
+    # can call `_distinguishing_columns` on the actual cells (not
+    # just values). Under `dedupe_strategy='raise'`, a duplicate
+    # bucket whose cells differ ONLY on framework-provenance tags
+    # / None-vs-explicit-default columns is a TRUE replicate — the
+    # raise would be a false positive. Defer the check to the
+    # post-collection pass below; pre-fix this fired on the bucket-
+    # count alone, falsely flagging cross-sub-sweep replicate
+    # aliases (cf. `findings_dqn_bridges_regime_mixing.md`).
+    from corroborate.analyses._dedup_diagnostics import (
+        _distinguishing_columns, format_diff,
+    )
+    treatment_buckets: dict[
+        tuple[object, ...], list[tuple[Mapping[str, object], float]],
+    ] = {}
+    baseline_buckets: dict[
+        tuple[object, ...], list[tuple[Mapping[str, object], float]],
+    ] = {}
     for cell in cells:
         arm = cell.get(arm_field)
         if arm == treatment_arm:
             key = key_tuple(cell, pair_by)
-            bucket = treatment_buckets.setdefault(key, [])
-            if bucket and dedupe_strategy == 'raise':
-                raise ValueError(
-                    f'paired_g: duplicate cell for {treatment_arm!r} at '
-                    f'pair_by={pair_by} key={key}. The dict-overwrite '
-                    f'silently kept the last-written value, dropping '
-                    f'data. Tighten `pair_by` to a discriminating tuple, '
-                    f'set dedupe_strategy="mean" to aggregate the '
-                    f'cells, or use an M2M-friendly analysis '
-                    f'(e.g. stratified Spearman) instead.',
-                )
-            bucket.append(resolve_value(cell, source))
+            treatment_buckets.setdefault(key, []).append(
+                (cell, resolve_value(cell, source)),
+            )
         elif arm == baseline_arm:
             key = key_tuple(cell, pair_by)
-            bucket = baseline_buckets.setdefault(key, [])
-            if bucket and dedupe_strategy == 'raise':
-                raise ValueError(
-                    f'paired_g: duplicate cell for {baseline_arm!r} at '
-                    f'pair_by={pair_by} key={key}. The dict-overwrite '
-                    f'silently kept the last-written value, dropping '
-                    f'data. Tighten `pair_by` to a discriminating tuple, '
-                    f'set dedupe_strategy="mean" to aggregate the '
-                    f'cells, or use an M2M-friendly analysis '
-                    f'(e.g. stratified Spearman) instead.',
-                )
-            bucket.append(resolve_value(cell, source))
+            baseline_buckets.setdefault(key, []).append(
+                (cell, resolve_value(cell, source)),
+            )
 
+    def _check_or_raise(
+        arm: str,
+        buckets: dict[
+            tuple[object, ...], list[tuple[Mapping[str, object], float]],
+        ],
+    ) -> None:
+        if dedupe_strategy != 'raise':
+            return
+        for key, items in buckets.items():
+            if len(items) <= 1:
+                continue
+            cells_in_bucket = [c for c, _ in items]
+            diff = _distinguishing_columns(
+                cells_in_bucket,
+                skip=frozenset(pair_by) | {arm_field},
+            )
+            if not diff:
+                # True replicates (only provenance / None-default
+                # drift) — silently fall through to mean below.
+                continue
+            raise ValueError(
+                f'paired_g: duplicate cells for {arm!r} at '
+                f'pair_by={pair_by} key={key} are not replicates — '
+                f'they differ on: {format_diff(diff)}. Tighten '
+                f'`pair_by` to a discriminating tuple, scope the '
+                f'bridge to a single regime, or pass '
+                f'`dedupe_strategy="mean"` to mean-aggregate.',
+            )
+
+    _check_or_raise(treatment_arm, treatment_buckets)
+    _check_or_raise(baseline_arm, baseline_buckets)
+
+    # Mean-aggregate (which is a no-op for size-1 buckets and the
+    # right thing for true-replicate buckets that survived the
+    # `_check_or_raise` pass).
     treatment: dict[tuple[object, ...], float] = {
         k: (
-            sum(v for v in vs if not math.isnan(v))
-            / max(1, sum(1 for v in vs if not math.isnan(v)))
-        ) if any(not math.isnan(v) for v in vs) else float('nan')
-        for k, vs in treatment_buckets.items()
+            sum(v for _, v in items if not math.isnan(v))
+            / max(1, sum(1 for _, v in items if not math.isnan(v)))
+        ) if any(not math.isnan(v) for _, v in items) else float('nan')
+        for k, items in treatment_buckets.items()
     }
     baseline: dict[tuple[object, ...], float] = {
         k: (
-            sum(v for v in vs if not math.isnan(v))
-            / max(1, sum(1 for v in vs if not math.isnan(v)))
-        ) if any(not math.isnan(v) for v in vs) else float('nan')
-        for k, vs in baseline_buckets.items()
+            sum(v for _, v in items if not math.isnan(v))
+            / max(1, sum(1 for _, v in items if not math.isnan(v)))
+        ) if any(not math.isnan(v) for _, v in items) else float('nan')
+        for k, items in baseline_buckets.items()
     }
 
     paired_keys = sorted(set(treatment) & set(baseline))

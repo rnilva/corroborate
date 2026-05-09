@@ -1782,30 +1782,26 @@
     {
       "analysis_results": {
         "paired_g": {
-          "assumption_violations": [
-            "skew_bias_likely (skew=-1.78, predicted paired_g inflation ~21% at n=30)"
-          ],
+          "assumption_violations": [],
           "baseline_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)",
-          "g": -1.82058,
-          "helped_fraction": 0.0,
-          "mean_diff": -0.054886,
-          "mean_diff_p_value": 3.85303e-11,
-          "mean_diff_se": 0.00536057,
+          "g": null,
+          "helped_fraction": null,
+          "mean_diff": null,
+          "mean_diff_p_value": null,
+          "mean_diff_se": null,
           "measurable": "jensen_gap",
           "n_baseline": 30,
-          "n_pairs": 30,
-          "n_treatment": 30,
-          "p_value": 9.52242e-10,
+          "n_pairs": 0,
+          "n_treatment": 0,
+          "p_value": null,
           "pair_by": [
             "seed"
           ],
-          "se": 0.297616,
-          "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=partial(Claim:expectile_greedify;tau=0.7))"
+          "se": null,
+          "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=partial(Claim:expectile_greedify;))"
         }
       },
-      "assumption_violations": [
-        "paired_g: skew_bias_likely (skew=-1.78, predicted paired_g inflation ~21% at n=30)"
-      ],
+      "assumption_violations": [],
       "blocked_by": null,
       "bridge_name": "expectile_reduces_jensen_gap_more_than_ddqn__fourrooms",
       "direction": "inverse",
@@ -1817,10 +1813,10 @@
       "params": {},
       "predicted_direction": null,
       "scope_repr": "[([([([([([([([([(col(\"env_name\")) == (\"FourRooms-misc\")]) & ([(col(\"optimizer.inner.lr\")) == (dyn float: 0.0001)])]) & ([(col(\"replay.capacity\")) == (dyn int: 50000)])]) & ([(col(\"gamma\")) == (dyn float: 0.99)])]) & ([(col(\"total_steps\")) == (dyn int: 200000)])]) & (col(\"action_duplicate_k\").is_null())]) & ([(col(\"reward_scale\").is_null()) | ([(col(\"reward_scale\")) == (dyn float: 1)])])]) & (col(\"target_sync.tau\").is_null())]) & ([(col(\"optimizer.inner.weight_decay\").is_null()) | ([(col(\"optimizer.inner.weight_decay\")) == (dyn float: 0)])])]",
-      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=partial(Claim:expectile_greedify;tau=0.7))|vs=bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify))",
+      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=partial(Claim:expectile_greedify;))|vs=bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify))",
       "target_name": "jensen_gap",
       "tier": "associational",
-      "verdict": "held",
+      "verdict": "power_insufficient",
       "warnings": [
         {
           "gate_name": "no_predicted_direction",
@@ -1833,32 +1829,26 @@
     {
       "analysis_results": {
         "paired_g": {
-          "assumption_violations": [
-            "skew_bias_likely (skew=-2.17, predicted paired_g inflation ~26% at n=30)",
-            "heavy_tail_se_anti_conservative (excess_kurtosis=6.20, framework_se will under-cover by ~10-25% at this kurtosis)"
-          ],
+          "assumption_violations": [],
           "baseline_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)",
-          "g": -0.781563,
-          "helped_fraction": 0.1,
-          "mean_diff": -0.0305254,
-          "mean_diff_p_value": 0.000135495,
-          "mean_diff_se": 0.00694475,
+          "g": null,
+          "helped_fraction": null,
+          "mean_diff": null,
+          "mean_diff_p_value": null,
+          "mean_diff_se": null,
           "measurable": "eval_best_burst_mean",
           "n_baseline": 30,
-          "n_pairs": 30,
-          "n_treatment": 30,
-          "p_value": 0.000179173,
+          "n_pairs": 0,
+          "n_treatment": 0,
+          "p_value": null,
           "pair_by": [
             "seed"
           ],
-          "se": 0.2086,
-          "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=partial(Claim:expectile_greedify;tau=0.7))"
+          "se": null,
+          "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=partial(Claim:expectile_greedify;))"
         }
       },
-      "assumption_violations": [
-        "paired_g: skew_bias_likely (skew=-2.17, predicted paired_g inflation ~26% at n=30)",
-        "paired_g: heavy_tail_se_anti_conservative (excess_kurtosis=6.20, framework_se will under-cover by ~10-25% at this kurtosis)"
-      ],
+      "assumption_violations": [],
       "blocked_by": null,
       "bridge_name": "ddqn_outperforms_expectile_on_outcome__fourrooms",
       "direction": "inverse",
@@ -1870,10 +1860,10 @@
       "params": {},
       "predicted_direction": null,
       "scope_repr": "[([([([([([([([([(col(\"env_name\")) == (\"FourRooms-misc\")]) & ([(col(\"optimizer.inner.lr\")) == (dyn float: 0.0001)])]) & ([(col(\"replay.capacity\")) == (dyn int: 50000)])]) & ([(col(\"gamma\")) == (dyn float: 0.99)])]) & ([(col(\"total_steps\")) == (dyn int: 200000)])]) & (col(\"action_duplicate_k\").is_null())]) & ([(col(\"reward_scale\").is_null()) | ([(col(\"reward_scale\")) == (dyn float: 1)])])]) & (col(\"target_sync.tau\").is_null())]) & ([(col(\"optimizer.inner.weight_decay\").is_null()) | ([(col(\"optimizer.inner.weight_decay\")) == (dyn float: 0)])])]",
-      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=partial(Claim:expectile_greedify;tau=0.7))|vs=bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify))",
+      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=partial(Claim:expectile_greedify;))|vs=bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify))",
       "target_name": "eval_best_burst_mean",
       "tier": "associational",
-      "verdict": "held",
+      "verdict": "power_insufficient",
       "warnings": [
         {
           "gate_name": "no_predicted_direction",
@@ -1888,21 +1878,21 @@
         "paired_g": {
           "assumption_violations": [],
           "baseline_arm": "baseline",
-          "g": 0.528013,
-          "helped_fraction": 0.766667,
-          "mean_diff": 0.027543,
-          "mean_diff_p_value": 0.00593303,
-          "mean_diff_se": 0.00927529,
+          "g": null,
+          "helped_fraction": null,
+          "mean_diff": null,
+          "mean_diff_p_value": null,
+          "mean_diff_se": null,
           "measurable": "eval_best_burst_mean",
           "n_baseline": 30,
-          "n_pairs": 30,
-          "n_treatment": 30,
-          "p_value": 0.00674127,
+          "n_pairs": 0,
+          "n_treatment": 0,
+          "p_value": null,
           "pair_by": [
             "seed"
           ],
-          "se": 0.194884,
-          "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=partial(Claim:expectile_greedify;tau=0.7))"
+          "se": null,
+          "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=partial(Claim:expectile_greedify;))"
         }
       },
       "assumption_violations": [],
@@ -1917,10 +1907,10 @@
       "params": {},
       "predicted_direction": null,
       "scope_repr": "[([([([([([([([([(col(\"env_name\")) == (\"FourRooms-misc\")]) & ([(col(\"optimizer.inner.lr\")) == (dyn float: 0.0001)])]) & ([(col(\"replay.capacity\")) == (dyn int: 50000)])]) & ([(col(\"gamma\")) == (dyn float: 0.99)])]) & ([(col(\"total_steps\")) == (dyn int: 200000)])]) & (col(\"action_duplicate_k\").is_null())]) & ([(col(\"reward_scale\").is_null()) | ([(col(\"reward_scale\")) == (dyn float: 1)])])]) & (col(\"target_sync.tau\").is_null())]) & ([(col(\"optimizer.inner.weight_decay\").is_null()) | ([(col(\"optimizer.inner.weight_decay\")) == (dyn float: 0)])])]",
-      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=partial(Claim:expectile_greedify;tau=0.7))|vs=baseline)",
+      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=partial(Claim:expectile_greedify;))|vs=baseline)",
       "target_name": "eval_best_burst_mean",
       "tier": "associational",
-      "verdict": "held",
+      "verdict": "power_insufficient",
       "warnings": [
         {
           "gate_name": "no_predicted_direction",
@@ -2106,7 +2096,7 @@
   ],
   "cache_path": "experiments/data/cache/dqn_bridges.parquet",
   "errored_bridges": [],
-  "git_commit": "caf75416daa5",
+  "git_commit": "2367a7da02cb",
   "hypothesis_module": "experiments.findings.dqn_bridges",
   "measurable_signatures": {
     "bootstrap_fraction": "5c7cc97efa79e56c",
@@ -2124,5 +2114,5 @@
     "r_min": "5717682c68a0f956"
   },
   "n_cells_total": 15110,
-  "timestamp_utc": "2026-05-09T00:12:32+00:00"
+  "timestamp_utc": "2026-05-09T01:22:40+00:00"
 }
