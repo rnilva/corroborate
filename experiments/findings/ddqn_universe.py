@@ -2228,6 +2228,168 @@ def argmax_entropy_shadowed_by_jens(
     return Verdict.NO_EFFECT
 
 
+# =====================================================================
+# CLAIM 24 — Within-MetaMaze do(γ): link slope steepens with γ.
+#
+# Strict within-env intervention: same env (MetaMaze-misc), same
+# dynamics, same MLP, same n_actions=4, same paired seeds. Only γ
+# varies. n_strata=2 (γ ∈ {0.99, 0.999}, effh ≈ {100, 1000}).
+#
+# Empirical (cache 2026-05-09):
+#                 γ=0.99    γ=0.999
+#   van jens     4.58       11.34   (premise grows 2.5×)
+#   Δ_jens      -1.64       -2.86   (DDQN's correction grows 1.7×)
+#   link slope  -1.73       -2.78   (60% steeper at higher γ)
+#   per-cell ρ  -0.57       -0.76   (tighter coupling)
+#   median Δ_o  -0.12       +2.55   (sign-aware: more seeds helped at γ=0.999)
+#
+# Pure within-env do(γ) probe of Hasselt's chain-amplification
+# argument: longer effh → more bias accumulates per bootstrap →
+# DDQN's correction translates to larger outcome change per unit
+# Δ_jens. The bridge below codifies the per-γ link verdict; the
+# slope-steepening across γ is documented in
+# `findings_metamaze_gamma_link.md` (n_strata=2 too low for a
+# formal cross-config slope test).
+# =====================================================================
+
+
+@claim_bridge(
+    source=INTERVENTION,
+    target='outcome.eval_best_burst_mean',
+    direction=Direction.INVERSE,
+    tier=Tier.ASSOCIATIONAL,
+    scope=(
+        (pl.col('env_name') == 'MetaMaze-misc')
+        & (pl.col('gamma') == 0.999)
+        & finite('jensen_gap')
+        & (pl.col('jensen_gap') > 0.05)
+        & finite('jensen_dormancy_gap')
+        & finite_lt('jensen_dormancy_gap', 0.05)
+        & ((pl.col('n_step') == 1) | pl.col('n_step').is_null())
+        & pl.col('action_duplicate_k').is_null()
+        & (pl.col('reward_scale').is_null() | (pl.col('reward_scale') == 1.0))
+        & pl.col('target_sync.tau').is_null()
+    ),
+)
+def metamaze_link_steeper_at_high_gamma(
+    paired_link_per_burst: PerBurstLinkResult,
+    *,
+    target: Measurable[
+        Mapping[str, object], npt.NDArray[np.floating],
+    ] = _MC_RETURN_PER_BURST_MEAN,
+    predictor: Measurable[
+        Mapping[str, object], npt.NDArray[np.floating],
+    ] = _JENSEN_BIAS_PER_BURST_MEAN,
+    env_name: str = 'MetaMaze-misc',
+    consistency_floor: float = 0.7,
+) -> Verdict:
+    """Per-burst link r(Δ_jens, Δ_outcome) on MetaMaze γ=0.999 is
+    significantly negative in at least `consistency_floor` of bursts.
+    HELD when phase_link_consistency >= consistency_floor.
+    Empirically (postfix n=30 seed pairs): plc=1.00 (every burst
+    significant negative).
+
+    γ=0.99 companion (effh≈100) shows shallower link slope (-1.73 vs
+    -2.78 at γ=0.999); see `findings_metamaze_gamma_link.md`. n_γ=2
+    is too low for a formal cross-config slope test, but the within-
+    env scaling is empirically clean: same env, same dynamics, only
+    γ varies, slope grows 60%."""
+    del target, predictor
+    plc = phase_link_consistency(
+        paired_link_per_burst, env_name=env_name,
+    )
+    if math.isnan(plc):
+        return Verdict.POWER_INSUFFICIENT
+    if plc >= consistency_floor:
+        return Verdict.HELD
+    if plc >= consistency_floor * 0.5:
+        return Verdict.POWER_INSUFFICIENT
+    return Verdict.NO_EFFECT
+
+
+# =====================================================================
+# CLAIM 25 — Within-FourRooms do(|A|): DDQN benefit scales 20×.
+#
+# action_duplicate(k) wraps FourRooms's |A|=4 with k duplicates of
+# each action, mapping action i ∈ [0, 4k) to inner action i mod 4.
+# Preserves dynamics, reward, optimal Q* — only |A| varies. The
+# Hasselt floor √(2 ln K) grows; DDQN's argmax/max decoupling has
+# more bias to correct as K grows.
+#
+# Empirical (postfix corpus, 4 conditions × 60 paired seeds, 200k
+# training steps per cell, FourRooms-misc):
+#   k=1 (|A|=4):  van out 0.78, ddq out 0.80, Δ +0.02
+#   k=2 (|A|=8):  van out 0.73, ddq out 0.79, Δ +0.07
+#   k=3 (|A|=12): van out 0.56, ddq out 0.79, Δ +0.22
+#   k=4 (|A|=16): van out 0.38, ddq out 0.79, Δ +0.41 (20× growth)
+#
+# Vanilla outcome HALVES from |A|=4 to |A|=16 (bias-on-argmax
+# degrades policy). DDQN outcome STAYS CONSTANT (~0.79) — bias
+# correction perfectly compensates for action-space inflation.
+# Pooled within-FourRooms ρ(Δ_jens, Δ_outcome) = -0.759, p<0.0001,
+# n=120.
+#
+# Cleanest within-env do(|A|) probe possible: cross-env scope
+# confound (env identity vs |A|) is fully controlled. Findings file:
+# `findings_action_dim_inflation_postfix.md`.
+# =====================================================================
+
+
+@claim_bridge(
+    source=INTERVENTION,
+    target='outcome.eval_best_burst_mean',
+    direction=Direction.INVERSE,
+    tier=Tier.INTERVENTIONAL,
+    scope=(
+        (pl.col('env_name') == 'FourRooms-misc')
+        & pl.col('action_duplicate_k').is_not_null()
+        & finite('jensen_gap')
+        & (pl.col('jensen_gap') > 0.05)
+        & finite('jensen_dormancy_gap')
+        & finite_lt('jensen_dormancy_gap', 0.05)
+    ),
+)
+def fourrooms_action_dim_link_active__inflated(
+    paired_link_per_burst: PerBurstLinkResult,
+    *,
+    target: Measurable[
+        Mapping[str, object], npt.NDArray[np.floating],
+    ] = _MC_RETURN_PER_BURST_MEAN,
+    predictor: Measurable[
+        Mapping[str, object], npt.NDArray[np.floating],
+    ] = _JENSEN_BIAS_PER_BURST_MEAN,
+    env_name: str = 'FourRooms-misc',
+    consistency_floor: float = 0.7,
+    pair_by: tuple[str, ...] = ('seed', 'action_duplicate_k'),
+) -> Verdict:
+    """Per-burst link r(Δ_jens, Δ_outcome) is significantly negative
+    on FourRooms with action_duplicate inflation (|A| ∈ {4, 8, 12,
+    16}). HELD when phase_link_consistency >= consistency_floor.
+
+    Empirical: pooled within-FourRooms across all k, ρ(Δ_jens,
+    Δ_outcome) = -0.759 (n=120, p<0.0001). Per-cell link slope grows
+    monotonically from -0.01 (k=1, |A|=4) to -0.61 (k=4, |A|=16),
+    saturating after k=3.
+
+    Native FourRooms (|A|=4) shows DDQN benefit only +0.02 — the
+    \"DDQN doesn't help FourRooms\" cross-env finding was a |A|=4
+    artifact. At |A|=16, DDQN benefit is +0.41 (20× larger).
+    Vanilla outcome catastrophically halves (0.78 → 0.38) while DDQN
+    stays constant (~0.79). CLAIM 25, see
+    `findings_action_dim_inflation_postfix.md`."""
+    del target, predictor
+    plc = phase_link_consistency(
+        paired_link_per_burst, env_name=env_name,
+    )
+    if math.isnan(plc):
+        return Verdict.POWER_INSUFFICIENT
+    if plc >= consistency_floor:
+        return Verdict.HELD
+    if plc >= consistency_floor * 0.5:
+        return Verdict.POWER_INSUFFICIENT
+    return Verdict.NO_EFFECT
+
+
 # ============ CLAIM 11 — extreme Q-divergence attenuates link
 #
 # Companion to CLAIM 2 (dormancy refutes mech). Where dormancy bounds the
@@ -3889,6 +4051,10 @@ DDQN_UNIVERSE_BRIDGES = (
     # bridge authors don't re-derive the same conclusion.
     q_divergence_shadowed_by_jens,
     argmax_entropy_shadowed_by_jens,
+    # CLAIM 24 — within-MetaMaze do(γ): link slope steepens.
+    metamaze_link_steeper_at_high_gamma,
+    # CLAIM 25 — within-FourRooms do(|A|): DDQN benefit scales 20×.
+    fourrooms_action_dim_link_active__inflated,
     # CLAIM 11 — extreme Q-divergence attenuates the link. Companion
     # to CLAIM 2's dormancy bridge: dormancy bounds the lower
     # attenuation (mech inactive); extreme Q-divergence bounds the
@@ -3966,6 +4132,8 @@ __all__ = [
     'reach_link_rcc_robust',
     'q_divergence_shadowed_by_jens',
     'argmax_entropy_shadowed_by_jens',
+    'metamaze_link_steeper_at_high_gamma',
+    'fourrooms_action_dim_link_active__inflated',
     'acrobot_per_burst_link_active__gamma_0999',
     'extreme_q_divergence_attenuates_link__binary',
     'extreme_q_divergence_attenuates_link__placebo_refuted',
