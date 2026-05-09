@@ -692,8 +692,18 @@ def _to_polars_series(name: str, vals: list[object]) -> pl.Series:
     as needing-uniform-length sequences and crashes on `len(None)`.
     For sequence-typed measurables, replace None with an empty list
     so the constructor sees a uniform List shape; downstream
-    consumers null-check the per-row length anyway."""
+    consumers null-check the per-row length anyway.
+
+    Multi-dimensional ndarrays (e.g. a measurable returning shape
+    `(n_bursts, n_episodes)` per cell) are converted to nested
+    Python lists before construction. Polars supports
+    `List(List(...))` natively but its inference path can't go
+    from `[ndarray2D, ndarray2D, ...]` directly — it falls back to
+    object dtype and raises. Pre-converting via `.tolist()` lets
+    the inference path see uniform nested-list shape."""
     import polars as pl
+    import numpy as np
+
     has_seq = any(
         v is not None and not isinstance(
             v, (str, bytes, int, float, bool),
@@ -702,8 +712,13 @@ def _to_polars_series(name: str, vals: list[object]) -> pl.Series:
     )
     if not has_seq:
         return pl.Series(name, vals)
+    # Convert ndarrays (any dim) to nested Python lists so polars'
+    # inference sees uniform list-of-list shape rather than a list
+    # of ndarray objects.
     normalized: list[object] = [
-        v if v is not None else [] for v in vals
+        v.tolist() if isinstance(v, np.ndarray)
+        else (v if v is not None else [])
+        for v in vals
     ]
     return pl.Series(name, normalized)
 
