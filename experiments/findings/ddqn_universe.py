@@ -1918,17 +1918,53 @@ def acrobot_per_burst_link_active__gamma_0999(
     return Verdict.NO_EFFECT
 
 
+# =====================================================================
+# CLAIM 22 — REACH-cross-env DoWhy: Δ_jens → Δ_outcome HELDs across
+# all 4 REACH envs (FourRooms, Acrobot, MountainCar, MetaMaze) under
+# env-confounded backdoor adjustment.
+#
+# The link verdict at REACH-cross-env scope is what the per-cell
+# pooled correlation already showed (ρ ≈ -0.97 across 1200 obs);
+# DoWhy's backdoor + placebo + RCC just confirms it survives causal
+# adjustment. Replaces the earlier Acrobot-only DoWhy triple, whose
+# numeric calibration was tied to the pre-fix Replay corpus.
+#
+# Empirical (postfix corpus, n=1200 per-burst rows, 4 envs):
+#   ATE = -0.61 (per unit Δ_jens; physics: should be negative)
+#   placebo |refuted/real| < 1%, RCC drift < 5%.
+# Reads as: across 4 REACH envs, 1 unit reduction in jensen-bias →
+# 0.61 units of outcome-MC gain, with treatment-specific signal
+# (placebo) and robustness to spurious confounders (RCC).
+# =====================================================================
+
+
+_REACH_ENVS_FOUR: tuple[str, ...] = (
+    'FourRooms-misc',
+    'Acrobot-v1',
+    'MountainCar-v0',
+    'MetaMaze-misc',
+)
+
+
+_REACH_DOWHY_SCOPE = (
+    pl.col('env_name').is_in(list(_REACH_ENVS_FOUR))
+    & finite('jensen_dormancy_gap')
+    & finite_lt('jensen_dormancy_gap', 0.05)
+    & ((pl.col('n_step') == 1) | pl.col('n_step').is_null())
+    & pl.col('action_duplicate_k').is_null()
+    & (pl.col('reward_scale').is_null() | (pl.col('reward_scale') == 1.0))
+    & pl.col('target_sync.tau').is_null()
+)
+
+
 @claim_bridge(
     source=INTERVENTION,
     target='outcome.eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
-    scope=(
-        (pl.col('env_name') == 'Acrobot-v1')
-        & finite_ge('effective_horizon', 80.0)
-    ),
+    scope=_REACH_DOWHY_SCOPE,
 )
-def acrobot_link_backdoor_ate_negative__gamma_0999(
+def reach_link_backdoor_ate_negative(
     paired_delta_link_dowhy: PairedDeltaLinkDowhyResult,
     *,
     link_target: Measurable[
@@ -1937,14 +1973,14 @@ def acrobot_link_backdoor_ate_negative__gamma_0999(
     link_predictor: Measurable[
         Mapping[str, object], npt.NDArray[np.floating],
     ] = _JENSEN_BIAS_PER_BURST_MEAN,
-    env_filter: tuple[str, ...] = ('Acrobot-v1',),
+    env_filter: tuple[str, ...] = _REACH_ENVS_FOUR,
     ate_ceiling: float = -0.1,
 ) -> Verdict:
-    """DoWhy backdoor adjustment over the per-(env, burst, seed)
-    paired-Δ panel (treatment=Δ_jens, outcome=Δ_out, adjusters=
-    burst dummies) on Acrobot γ=0.999 yields a NEGATIVE ATE
-    bigger than `ate_ceiling` (i.e. ATE <= -0.1). HELD when
-    identified AND ATE <= ceiling. Empirical -0.6312."""
+    """DoWhy backdoor ATE on the per-(env, burst, seed) Δ panel
+    across 4 REACH envs (FourRooms, Acrobot, MountainCar, MetaMaze)
+    yields a NEGATIVE ATE bigger than `ate_ceiling`. HELD when
+    identified AND ATE <= ceiling. Sign-locked by Hasselt theorem:
+    DDQN reduces |Δ_jens| → boosts |Δ_out| (CLAIM 22)."""
     del link_predictor, link_target, env_filter
     b = paired_delta_link_dowhy.backdoor
     if not b.identified:
@@ -1963,12 +1999,9 @@ def acrobot_link_backdoor_ate_negative__gamma_0999(
     target='outcome.eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
-    scope=(
-        (pl.col('env_name') == 'Acrobot-v1')
-        & finite_ge('effective_horizon', 80.0)
-    ),
+    scope=_REACH_DOWHY_SCOPE,
 )
-def acrobot_link_placebo_refuted__gamma_0999(
+def reach_link_placebo_refuted(
     paired_delta_link_dowhy: PairedDeltaLinkDowhyResult,
     *,
     link_target: Measurable[
@@ -1977,14 +2010,14 @@ def acrobot_link_placebo_refuted__gamma_0999(
     link_predictor: Measurable[
         Mapping[str, object], npt.NDArray[np.floating],
     ] = _JENSEN_BIAS_PER_BURST_MEAN,
-    env_filter: tuple[str, ...] = ('Acrobot-v1',),
+    env_filter: tuple[str, ...] = _REACH_ENVS_FOUR,
     placebo_max_ratio: float = 0.2,
 ) -> Verdict:
-    """Placebo refutation shrinks ATE to ≤ `placebo_max_ratio` of
-    the real ATE on Acrobot γ=0.999. HELD when |placebo / real|
-    < placebo_max_ratio AND real ATE is non-zero. Confirms the
-    bias-correction effect is treatment-specific (not noise).
-    Empirical: real -0.6312, placebo 0.0000, ratio 0%."""
+    """Placebo refutation on the REACH-cross-env Δ panel: random
+    treatment shrinks ATE to ~zero. HELD when |placebo / real| <
+    `placebo_max_ratio` AND real ATE is non-zero. Confirms the
+    bias-correction effect is treatment-specific, not artifact of
+    pooled noise (CLAIM 22)."""
     del link_predictor, link_target, env_filter
     p = paired_delta_link_dowhy.placebo
     real = p.real_ate
@@ -2004,12 +2037,9 @@ def acrobot_link_placebo_refuted__gamma_0999(
     target='outcome.eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
-    scope=(
-        (pl.col('env_name') == 'Acrobot-v1')
-        & finite_ge('effective_horizon', 80.0)
-    ),
+    scope=_REACH_DOWHY_SCOPE,
 )
-def acrobot_link_rcc_robust__gamma_0999(
+def reach_link_rcc_robust(
     paired_delta_link_dowhy: PairedDeltaLinkDowhyResult,
     *,
     link_target: Measurable[
@@ -2018,14 +2048,14 @@ def acrobot_link_rcc_robust__gamma_0999(
     link_predictor: Measurable[
         Mapping[str, object], npt.NDArray[np.floating],
     ] = _JENSEN_BIAS_PER_BURST_MEAN,
-    env_filter: tuple[str, ...] = ('Acrobot-v1',),
+    env_filter: tuple[str, ...] = _REACH_ENVS_FOUR,
     rcc_max_drift_ratio: float = 0.1,
 ) -> Verdict:
-    """Random-common-cause refutation: adding a noise covariate
-    to the adjustment set leaves ATE within `rcc_max_drift_ratio`
-    of the real ATE on Acrobot γ=0.999. HELD when |refuted -
-    real| / |real| < rcc_max_drift_ratio. Confirms robustness to
-    spurious-confound vulnerability. Empirical drift = 0.000."""
+    """Random-common-cause refutation on REACH-cross-env panel: a
+    synthetic noise covariate added to the adjustment set leaves
+    ATE within `rcc_max_drift_ratio` of the real ATE. HELD when
+    |refuted - real| / |real| < tolerance. Confirms robustness to
+    omitted-confounder vulnerability (CLAIM 22)."""
     del link_predictor, link_target, env_filter
     r = paired_delta_link_dowhy.random_common_cause
     real = r.real_ate
@@ -3685,9 +3715,15 @@ DDQN_UNIVERSE_BRIDGES = (
     # which was a measurement artifact of best-burst-per-seed
     # selection.
     acrobot_per_burst_link_active__gamma_0999,
-    acrobot_link_backdoor_ate_negative__gamma_0999,
-    acrobot_link_placebo_refuted__gamma_0999,
-    acrobot_link_rcc_robust__gamma_0999,
+    # CLAIM 22 — REACH-cross-env DoWhy: Δ_jens → Δ_outcome HELDs
+    # across all 4 REACH envs (FourRooms, Acrobot, MountainCar,
+    # MetaMaze) under env-confounded backdoor + placebo + RCC. The
+    # cross-env scope of the link verdict, beyond the Acrobot-only
+    # bridge above. (Per-burst panel; n_pairs ≈ 1200 with all 4
+    # REACH envs in scope.)
+    reach_link_backdoor_ate_negative,
+    reach_link_placebo_refuted,
+    reach_link_rcc_robust,
     # CLAIM 11 — extreme Q-divergence attenuates the link. Companion
     # to CLAIM 2's dormancy bridge: dormancy bounds the lower
     # attenuation (mech inactive); extreme Q-divergence bounds the
@@ -3760,9 +3796,9 @@ benefit, and we don't author null bridges."""
 
 __all__ = [
     'DDQN_UNIVERSE_BRIDGES',
-    'acrobot_link_backdoor_ate_negative__gamma_0999',
-    'acrobot_link_placebo_refuted__gamma_0999',
-    'acrobot_link_rcc_robust__gamma_0999',
+    'reach_link_backdoor_ate_negative',
+    'reach_link_placebo_refuted',
+    'reach_link_rcc_robust',
     'acrobot_per_burst_link_active__gamma_0999',
     'extreme_q_divergence_attenuates_link__binary',
     'extreme_q_divergence_attenuates_link__placebo_refuted',
