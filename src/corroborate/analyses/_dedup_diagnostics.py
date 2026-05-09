@@ -52,6 +52,11 @@ from collections.abc import Iterable, Mapping
 _PROVENANCE_TAGS: frozenset[str] = frozenset({
     'id', 'parent_id', 'cycle_id', 'timestamp', 'corpus',
     'intervention_name', 'claim_graph_signature',
+    # Per-cell framework-stamped verdict (RunRow.verdict). Computed
+    # from per-cell invariant evaluation; may legitimately drift
+    # across cache builds when invariant thresholds are retuned.
+    # Not regime-defining.
+    'verdict',
 })
 
 

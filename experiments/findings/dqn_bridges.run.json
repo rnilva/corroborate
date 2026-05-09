@@ -2096,7 +2096,7 @@
   ],
   "cache_path": "experiments/data/cache/dqn_bridges.parquet",
   "errored_bridges": [],
-  "git_commit": "2367a7da02cb",
+  "git_commit": "2857dd8ccf3a",
   "hypothesis_module": "experiments.findings.dqn_bridges",
   "measurable_signatures": {
     "bootstrap_fraction": "5c7cc97efa79e56c",
@@ -2114,5 +2114,5 @@
     "r_min": "5717682c68a0f956"
   },
   "n_cells_total": 15110,
-  "timestamp_utc": "2026-05-09T01:22:40+00:00"
+  "timestamp_utc": "2026-05-09T01:59:40+00:00"
 }
