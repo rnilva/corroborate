@@ -1,23 +1,32 @@
 """Per-env jumanji factories registered into the env catalogue.
 
-Each factory is a typed closure: it imports its env's per-env
-Observation NamedTuple locally (so `obs_extract` is statically
-typed) and returns `tuple[Env, EnvParams]` matching the gymnax
-surface the substrate consumes. `_register_jumanji` introspects
-shape/action-dim/horizon by calling the factory once at module
-import time.
+Each factory is a typed closure: it lazily imports `jumanji` (and
+the env's per-env `Observation` NamedTuple) inside the closure
+body so module import doesn't construct any jumanji env. Metadata
+(`n_actions`, `observation_shape`, `horizon`) is passed explicitly
+to `_register_jumanji` so registration likewise doesn't trigger
+env construction.
 
-To add a new jumanji env: write a factory `_make_<env>()`, call
-`_register_jumanji('<env>-jumanji', factory=_make_<env>, ...)`.
-The framework name '<env>-jumanji' suffix distinguishes our
-backend from gymnax names; no name collisions with the gymnax
-catalogue.
+**Why lazy.** Some jumanji envs (Sokoban-v0) trigger network
+calls on first instantiation — Sokoban downloads its level
+dataset from HuggingFace Hub via `hf_hub_download`. With the
+factory called at module-import time (the prior shape), every
+substrate import fired the HF Hub download regardless of whether
+any jumanji cell would run. The lazy form keeps substrate import
+free of jumanji's network behaviour; jumanji is only imported
+when `make_env(env_spec)` actually constructs a jumanji-backed
+env.
+
+To add a new jumanji env: write a factory `_make_<env>()` that
+lazy-imports jumanji at the top of its body, then call
+`_register_jumanji('<env>-jumanji', factory=_make_<env>,
+n_actions=K, observation_shape=(...), horizon=H, ...)`. The
+`-jumanji` suffix distinguishes our backend from gymnax names.
 """
 from __future__ import annotations
 
 import jax
 import jax.numpy as jnp
-import jumanji
 from gymnax.environments.environment import EnvParams as GymnaxEnvParams
 
 from corroborate_rl.env_catalogue import _register_jumanji
@@ -36,9 +45,7 @@ def _make_snake_v1() -> tuple[JumanjiEnv[object, object], GymnaxEnvParams]:
     or wall hit; reward is +1 per fruit eaten (per-step positive),
     so longer episodes accumulate more reward.
     """
-    # Local import — Observation type lives in the snake module
-    # and we reference it only inside this closure. Keeps env
-    # catalogue imports clean.
+    import jumanji
     from jumanji.environments.routing.snake.types import (
         Observation as SnakeObservation,
     )
@@ -65,6 +72,9 @@ def _make_snake_v1() -> tuple[JumanjiEnv[object, object], GymnaxEnvParams]:
 _register_jumanji(
     'Snake-jumanji',
     factory=_make_snake_v1,
+    n_actions=4,
+    observation_shape=(12, 12, 5),
+    horizon=4000,
     r_min=0.0,
     r_max=1.0,
     reward_regime='per_step',
@@ -99,6 +109,7 @@ def _make_pacman_v1() -> tuple[JumanjiEnv[object, object], GymnaxEnvParams]:
     reward per pellet eaten, larger reward for power-ups + scared
     ghosts. Longer episodes accumulate more reward.
     """
+    import jumanji
     from jumanji.environments.routing.pac_man.types import (
         Observation as PacManObservation,
     )
@@ -156,6 +167,9 @@ def _make_pacman_v1() -> tuple[JumanjiEnv[object, object], GymnaxEnvParams]:
 _register_jumanji(
     'PacMan-jumanji',
     factory=_make_pacman_v1,
+    n_actions=5,
+    observation_shape=(31, 28, 5),
+    horizon=1000,
     r_min=0.0,
     r_max=200.0,
     reward_regime='per_step',
@@ -180,6 +194,7 @@ def _make_game2048() -> tuple[JumanjiEnv[object, object], GymnaxEnvParams]:
     (positive). Longer games accumulate more reward. No
     time_limit — purely terminate-on-stuck.
     """
+    import jumanji
     from jumanji.environments.logic.game_2048.types import (
         Observation as Game2048Observation,
     )
@@ -207,6 +222,9 @@ def _make_game2048() -> tuple[JumanjiEnv[object, object], GymnaxEnvParams]:
 _register_jumanji(
     'Game2048-jumanji',
     factory=_make_game2048,
+    n_actions=4,
+    observation_shape=(4, 4, 1),
+    horizon=2000,
     r_min=0.0,
     r_max=4096.0,  # max merge reward in practice; theoretical
     # bound is 2^16 but rarely approached.
@@ -228,6 +246,7 @@ def _make_maze() -> tuple[JumanjiEnv[object, object], GymnaxEnvParams]:
     REACH polarity: reward +1 on reaching target, 0 otherwise.
     Episode terminates on success or `step_count >= time_limit`.
     """
+    import jumanji
     from jumanji.environments.routing.maze.types import (
         Observation as MazeObservation,
     )
@@ -262,6 +281,9 @@ def _make_maze() -> tuple[JumanjiEnv[object, object], GymnaxEnvParams]:
 _register_jumanji(
     'Maze-jumanji',
     factory=_make_maze,
+    n_actions=4,
+    observation_shape=(10, 10, 3),
+    horizon=100,
     r_min=0.0,
     r_max=1.0,
     reward_regime='terminal_only',
@@ -280,7 +302,14 @@ def _make_sokoban() -> tuple[JumanjiEnv[object, object], GymnaxEnvParams]:
 
     Reward: -0.1 per step + +1 per box pushed onto target. Episode
     terminates on all-boxes-on-target or `step_count >= time_limit`.
+
+    **Network call on first construction.** `jumanji.make('Sokoban-v0')`
+    downloads its level dataset from HuggingFace Hub. The factory
+    is intentionally lazy (called only by `make_env`); registration
+    uses explicit metadata so substrate import doesn't trigger the
+    download.
     """
+    import jumanji
     from jumanji.environments.routing.sokoban.types import (
         Observation as SokobanObservation,
     )
@@ -303,6 +332,9 @@ def _make_sokoban() -> tuple[JumanjiEnv[object, object], GymnaxEnvParams]:
 _register_jumanji(
     'Sokoban-jumanji',
     factory=_make_sokoban,
+    n_actions=4,
+    observation_shape=(10, 10, 2),
+    horizon=120,
     r_min=-12.0,  # max -0.1 × 120 steps
     r_max=10.0,
     reward_regime='shaped',
@@ -324,6 +356,7 @@ def _make_sliding_tile_puzzle() -> tuple[
     REACH polarity: +1 reward on solving, 0 otherwise. Episode
     terminates on success or `step_count >= time_limit`.
     """
+    import jumanji
     from jumanji.environments.logic.sliding_tile_puzzle.types import (
         Observation as SlidingTilePuzzleObservation,
     )
@@ -347,6 +380,9 @@ def _make_sliding_tile_puzzle() -> tuple[
 _register_jumanji(
     'SlidingTilePuzzle-jumanji',
     factory=_make_sliding_tile_puzzle,
+    n_actions=4,
+    observation_shape=(5, 5, 1),
+    horizon=500,
     r_min=0.0,
     r_max=1.0,
     reward_regime='terminal_only',

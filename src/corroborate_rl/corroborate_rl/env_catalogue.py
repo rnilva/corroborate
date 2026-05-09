@@ -825,6 +825,9 @@ def _register_jumanji(
     name: str,
     *,
     factory: JumanjiFactory,
+    n_actions: int,
+    observation_shape: tuple[int, ...],
+    horizon: int | None,
     r_min: float,
     r_max: float,
     reward_regime: RewardRegime,
@@ -837,31 +840,32 @@ def _register_jumanji(
 ) -> None:
     """Register a jumanji-backed env with the catalogue.
 
-    Auto-introspects shape / action-dim / horizon by calling the
-    factory once and reading the typed `Discrete` / `Box` spaces
-    off the constructed `JumanjiEnv` adapter (same shape gymnax
-    introspection uses, just routed through the adapter). The
-    factory itself is stashed in `_JUMANJI_FACTORIES` for later
+    Metadata (`n_actions`, `observation_shape`, `horizon`) is
+    supplied explicitly rather than introspected from the factory,
+    so registration doesn't construct the underlying jumanji env
+    at module-import time. This matters for envs whose constructor
+    triggers a network call (e.g. Sokoban-v0 downloads its level
+    dataset from HuggingFace Hub on first instantiation) — without
+    explicit metadata the import-time HF call fires for every
+    sub-process loading the substrate, even when no jumanji cells
+    will run.
+
+    The factory is stashed in `_JUMANJI_FACTORIES` for later
     `make_env` calls — the substrate runs N seeds against the same
     EnvSpec and we want one freshly-constructed jumanji env per
     cell, not a shared singleton."""
-    env_obj, env_params = factory()
-    act_space = env_obj.action_space(env_params)
-    obs_space = env_obj.observation_space(env_params)
-    shape = tuple(int(d) for d in obs_space.shape)
     obs_type: ObservationType = (
-        'vector' if len(shape) == 1
-        else 'image' if len(shape) == 3
+        'vector' if len(observation_shape) == 1
+        else 'image' if len(observation_shape) == 3
         else 'structured'
     )
-    horizon: int | None = int(env_params.max_steps_in_episode)
 
     _JUMANJI_FACTORIES[name] = factory
     ENV_REGISTRY[name] = EnvSpec(
         name=name,
         action_type='discrete',
-        n_actions=int(act_space.n),
-        observation_shape=shape,
+        n_actions=n_actions,
+        observation_shape=observation_shape,
         observation_type=obs_type,
         horizon=horizon,
         r_min=r_min,
