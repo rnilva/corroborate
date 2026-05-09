@@ -124,23 +124,50 @@ were confirmed; the predicted direction names which prediction.
 ## Running it
 
 ```bash
-# Author bridges in `experiments/findings/<X>.py`; run them
-# against a corpus via the canonical CLI:
-uv run python scripts/run_hypothesis.py experiments.findings.dqn_bridges \
-    --data experiments/data/<corpus>/runs.parquet
+# Author bridges in `experiments/findings/<X>.py`. Three CLI modes
+# (CACHE_ADDITIVITY.md):
+PYTHONPATH=. uv run python scripts/run_hypothesis.py \
+    experiments.findings.dqn_bridges                  # read-only (default)
+PYTHONPATH=. uv run python scripts/run_hypothesis.py \
+    experiments.findings.dqn_bridges --check          # drift report, no work
+PYTHONPATH=. uv run python scripts/run_hypothesis.py \
+    experiments.findings.dqn_bridges \
+    --ingest <corpus>[,<corpus>...]                   # named ingest
+PYTHONPATH=. uv run python scripts/run_hypothesis.py \
+    experiments.findings.dqn_bridges \
+    --ingest-all experiments/data/                    # walk full root
 ```
 
 `runner.run(h: Hypothesis | str, *, data, cache_path, ...)` is
-the library entry; the CLI is a thin argparse wrapper. The
-runner caches measurables per-hypothesis under
-`experiments/data/cache/<short>.parquet` so re-evaluating bridges
-on the same corpus skips recomputation.
+the library entry; the CLI is a thin argparse wrapper. Per-corpus
+`measurements.parquet` stores are the source of truth; the
+per-hypothesis cache (`experiments/data/cache/<short>.parquet`)
+is a projection.
 
-For YAML-authored sweeps:
+### Sweeps + traces
+
 ```bash
-uv run python experiments/run_yaml_sweep.py \
-    experiments/configs/<sweep_name>.yaml
+# YAML-authored sweep — writes per-arm subdirs, merges to top-
+# level `<out_dir>/{runs,traces}.parquet`, archives to cloud.
+# Drops a `.in_progress` sentinel for the duration so concurrent
+# `--ingest-all` walks skip the half-built corpus.
+set -a && . .env && set +a   # AWS creds for archive
+PYTHONPATH=. uv run python scripts/run_sweep.py \
+    experiments/configs/<sweep>.yaml
+
+# Inspect a trace's schema + which measurables it can satisfy
+# without materialising data:
+PYTHONPATH=. uv run python scripts/trace_schema.py \
+    experiments/data/<corpus>/traces.parquet \
+    experiments.findings.<bridges_module>
 ```
+
+Per-step trace columns (`online_max_q_per_step`, etc.) are the
+heavyweight part of a corpus (~MB per cell). The runner reads
+them only when computing measurables, then evicts them
+(CORPUS_INTEGRITY.md CI7). For OOM-prone cases, the opt-in
+`corpus.measurements.compute_trace_measurables_streaming`
+iterates row-groups instead of materialising the full join.
 
 ## Status
 

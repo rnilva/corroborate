@@ -287,6 +287,47 @@ registered measurables use **bare names** (`jensen_gap`,
 measurable registry itself — `aggregate.leaf_signature` excludes
 `registered_names()` from the configurational fingerprint.
 
+## Sweep + trace discipline
+
+Sweeps write per-arm sub-corpora under `<out_dir>/<arm>/` and
+merge to top-level `<out_dir>/{runs,traces}.parquet`. The merged
+corpus is what the runner ingests; per-arm subdirs are scratch
+and `scripts/run_sweep.py` removes them post-merge.
+
+- **`.in_progress` sentinel**: dropped at sweep start, removed
+  on successful completion. `--ingest-all` walks skip any corpus
+  carrying the sentinel (CORPUS_INTEGRITY.md CI1). A crashed
+  merge leaves the sentinel up so subsequent ingests don't pick
+  up a half-built parent.
+- **Cloud manifest mirror**: `archive()` mirrors `_remote.json`
+  to `<remote_root>/MANIFEST.json` so cloud-side recovery works
+  without local manifest state. `cloud.recover_local_manifest`
+  + `cloud.list_archives` are the recovery / discovery
+  primitives.
+- **Trace eviction (CI7)**: per-step / per-burst trace columns
+  are the heavyweight part (~MB per cell). The runner reads
+  them only when computing measurables, then evicts the local
+  `traces.parquet` if cloud-recoverable. CI8 refuses
+  contaminated traces (cell-id mismatches between runs and
+  traces).
+- **Trace inspection**: `scripts/trace_schema.py <traces.parquet>
+  [<bridges_module>]` lists trace columns + which measurables
+  the corpus's trace schema satisfies — no decompressed data
+  materialised. Use it to diagnose "this corpus's traces don't
+  carry what my new measurable needs" before committing to a
+  re-walk.
+- **OOM-prone trace compute**: `corpus.measurements.
+  compute_trace_measurables_streaming` is the opt-in row-group-
+  iterating variant of the measurable computation path. Drops
+  peak RAM ~10× for trace-heavy corpora; use when the default
+  full-join path won't fit.
+- **Sweep merge OOM**: `stream_concat_parquets` adapts
+  `chunk_size` based on per-file decompressed-size estimates
+  (default budget 8 GB). When chunk_size resolves to 1, routes
+  through pyarrow row-group streaming so peak RAM is bounded
+  by the largest single row group (~256 MB) rather than the
+  whole file.
+
 ## Canonical analyses (use these, don't reimplement)
 
 The framework provides typed analysis primitives that should be
