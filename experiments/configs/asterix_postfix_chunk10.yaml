@@ -1,0 +1,79 @@
+name: asterix_postfix_chunk10
+out_dir: experiments/data/asterix_postfix_chunk10
+arms_shape: paired
+
+# Asterix-only postfix sync sweep at chunk_size=10 to avoid OOM on
+# CNN sweeps. Companion to Breakout/SI postfix; closes the MinAtar
+# 4-env grid (post-FIFO-fix). The pre-fix Asterix data lives in
+# `s3://corroborate-archive/asterix_intermediate_sync` but is
+# pre-Replay-FIFO-fix; this sweep gives the post-fix counterpart.
+envs:
+  - {name: Asterix-MinAtar, n_seeds: 30, chunk_size: 10}
+
+base_intervention:
+  total_steps: 200000
+  eval_every:  20000
+  n_episodes:  5
+  gamma:       0.99
+  sync_period: 1000
+  replay:
+    class: Replay
+    capacity: 50000
+    batch_size: 32
+  optimizer:
+    fn: warmed_update
+    inner: {fn: adam, lr: 0.0001}
+    warmup_steps: 100
+  q_network:
+    class: CNN
+    obs_shape: {from_env: observation_shape}
+    channels: [16, 32]
+    kernel_size: 3
+    hidden: [128]
+
+hypotheses:
+  - name: vanilla_dqn_sync500
+    predicted_direction: null
+    intervention: {sync_period: 500}
+  - name: ddqn_sync500
+    predicted_direction: a_gt_b
+    intervention:
+      sync_period: 500
+      bootstrap:
+        fn: bootstrap
+        greedification: {fn: double_greedify}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement:
+          fn: bootstrap
+          greedification: {fn: double_greedify}
+  - name: vanilla_dqn_sync1500
+    predicted_direction: null
+    intervention: {sync_period: 1500}
+  - name: ddqn_sync1500
+    predicted_direction: a_gt_b
+    intervention:
+      sync_period: 1500
+      bootstrap:
+        fn: bootstrap
+        greedification: {fn: double_greedify}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement:
+          fn: bootstrap
+          greedification: {fn: double_greedify}
+  - name: vanilla_dqn_sync3000
+    predicted_direction: null
+    intervention: {sync_period: 3000}
+  - name: ddqn_sync3000
+    predicted_direction: a_gt_b
+    intervention:
+      sync_period: 3000
+      bootstrap:
+        fn: bootstrap
+        greedification: {fn: double_greedify}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement:
+          fn: bootstrap
+          greedification: {fn: double_greedify}
