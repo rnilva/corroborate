@@ -52,20 +52,20 @@
         "paired_g": {
           "assumption_violations": [],
           "baseline_arm": "baseline",
-          "g": -4.58383,
+          "g": -5.00491,
           "helped_fraction": 0.0,
-          "mean_diff": -0.027385,
+          "mean_diff": -0.0243104,
           "mean_diff_p_value": 0.0,
-          "mean_diff_se": 0.000761426,
+          "mean_diff_se": 0.00061907,
           "measurable": "jensen_gap",
           "n_baseline": 60,
           "n_pairs": 60,
           "n_treatment": 60,
-          "p_value": 1.21701e-25,
+          "p_value": 5.54919e-26,
           "pair_by": [
             "seed"
           ],
-          "se": 0.437907,
+          "se": 0.474773,
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
         }
       },
@@ -73,14 +73,14 @@
       "blocked_by": null,
       "bridge_name": "ddqn_reduces_jensen_gap__catch",
       "direction": "inverse",
-      "n_cells_in_scope": 300,
+      "n_cells_in_scope": 180,
       "n_cells_pre_scope": 15110,
       "pair_by": [
         "seed"
       ],
       "params": {},
       "predicted_direction": null,
-      "scope_repr": "[([([(col(\"optimizer.inner.lr\")) == (dyn float: 0.001)]) & ([(.when([(col(\"q_divergence_score\").is_not_nan()) | (col(\"q_divergence_score\").is_null())]).then(col(\"q_divergence_score\")).otherwise(null).mean().over([col(\"optimizer.inner.lr\"), col(\"env_name\"), col(\"replay.capacity\")]).is_finite()) & ([(.when([(col(\"q_divergence_score\").is_not_nan()) | (col(\"q_divergence_score\").is_null())]).then(col(\"q_divergence_score\")).otherwise(null).mean().over([col(\"optimizer.inner.lr\"), col(\"env_name\"), col(\"replay.capacity\")])) < (dyn float: 5)])])]) & ([(col(\"env_name\")) == (\"Catch-bsuite\")])]",
+      "scope_repr": "[([([([([(col(\"optimizer.inner.lr\")) == (dyn float: 0.001)]) & ([(.when([(col(\"q_divergence_score\").is_not_nan()) | (col(\"q_divergence_score\").is_null())]).then(col(\"q_divergence_score\")).otherwise(null).mean().over([col(\"optimizer.inner.lr\"), col(\"env_name\"), col(\"replay.capacity\")]).is_finite()) & ([(.when([(col(\"q_divergence_score\").is_not_nan()) | (col(\"q_divergence_score\").is_null())]).then(col(\"q_divergence_score\")).otherwise(null).mean().over([col(\"optimizer.inner.lr\"), col(\"env_name\"), col(\"replay.capacity\")])) < (dyn float: 5)])])]) & ([(col(\"env_name\")) == (\"Catch-bsuite\")])]) & ([(col(\"total_steps\")) == (dyn int: 200000)])]) & ([(col(\"replay.capacity\")) == (dyn int: 50000)])]",
       "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
       "target_name": "jensen_gap",
       "tier": "associational",
@@ -99,20 +99,20 @@
         "paired_g": {
           "assumption_violations": [],
           "baseline_arm": "baseline",
-          "g": -0.909793,
-          "helped_fraction": 0.183333,
-          "mean_diff": -0.249341,
-          "mean_diff_p_value": 1.57744e-09,
-          "mean_diff_se": 0.0349297,
+          "g": -0.600283,
+          "helped_fraction": 0.25,
+          "mean_diff": -0.179388,
+          "mean_diff_p_value": 1.54889e-05,
+          "mean_diff_se": 0.0380874,
           "measurable": "jensen_gap",
           "n_baseline": 60,
           "n_pairs": 60,
           "n_treatment": 60,
-          "p_value": 3.09036e-09,
+          "p_value": 1.86763e-05,
           "pair_by": [
             "seed"
           ],
-          "se": 0.153507,
+          "se": 0.140248,
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
         }
       },
@@ -120,14 +120,14 @@
       "blocked_by": null,
       "bridge_name": "ddqn_reduces_jensen_gap__discounting_chain",
       "direction": "inverse",
-      "n_cells_in_scope": 240,
+      "n_cells_in_scope": 120,
       "n_cells_pre_scope": 15110,
       "pair_by": [
         "seed"
       ],
       "params": {},
       "predicted_direction": null,
-      "scope_repr": "[([([(col(\"optimizer.inner.lr\")) == (dyn float: 0.001)]) & ([(.when([(col(\"q_divergence_score\").is_not_nan()) | (col(\"q_divergence_score\").is_null())]).then(col(\"q_divergence_score\")).otherwise(null).mean().over([col(\"optimizer.inner.lr\"), col(\"env_name\"), col(\"replay.capacity\")]).is_finite()) & ([(.when([(col(\"q_divergence_score\").is_not_nan()) | (col(\"q_divergence_score\").is_null())]).then(col(\"q_divergence_score\")).otherwise(null).mean().over([col(\"optimizer.inner.lr\"), col(\"env_name\"), col(\"replay.capacity\")])) < (dyn float: 5)])])]) & ([(col(\"env_name\")) == (\"DiscountingChain-bsuite\")])]",
+      "scope_repr": "[([([([([(col(\"optimizer.inner.lr\")) == (dyn float: 0.001)]) & ([(.when([(col(\"q_divergence_score\").is_not_nan()) | (col(\"q_divergence_score\").is_null())]).then(col(\"q_divergence_score\")).otherwise(null).mean().over([col(\"optimizer.inner.lr\"), col(\"env_name\"), col(\"replay.capacity\")]).is_finite()) & ([(.when([(col(\"q_divergence_score\").is_not_nan()) | (col(\"q_divergence_score\").is_null())]).then(col(\"q_divergence_score\")).otherwise(null).mean().over([col(\"optimizer.inner.lr\"), col(\"env_name\"), col(\"replay.capacity\")])) < (dyn float: 5)])])]) & ([(col(\"env_name\")) == (\"DiscountingChain-bsuite\")])]) & ([(col(\"total_steps\")) == (dyn int: 200000)])]) & ([(col(\"replay.capacity\")) == (dyn int: 50000)])]",
       "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
       "target_name": "jensen_gap",
       "tier": "associational",
@@ -145,42 +145,42 @@
       "analysis_results": {
         "paired_g": {
           "assumption_violations": [
-            "skew_bias_likely (skew=+2.81, predicted paired_g inflation ~17% at n=60)",
-            "heavy_tail_se_anti_conservative (excess_kurtosis=16.69, framework_se will under-cover by ~10-25% at this kurtosis)"
+            "skew_bias_likely (skew=+2.83, predicted paired_g inflation ~17% at n=60)",
+            "heavy_tail_se_anti_conservative (excess_kurtosis=16.82, framework_se will under-cover by ~10-25% at this kurtosis)"
           ],
           "baseline_arm": "baseline",
-          "g": 0.0475551,
-          "helped_fraction": 0.383333,
-          "mean_diff": 20.1592,
-          "mean_diff_p_value": 0.710394,
-          "mean_diff_se": 54.0281,
+          "g": 0.0425834,
+          "helped_fraction": 0.366667,
+          "mean_diff": 18.0359,
+          "mean_diff_p_value": 0.739478,
+          "mean_diff_se": 53.9811,
           "measurable": "jensen_gap",
           "n_baseline": 60,
           "n_pairs": 60,
           "n_treatment": 60,
-          "p_value": 0.71276,
+          "p_value": 0.741627,
           "pair_by": [
             "seed"
           ],
-          "se": 0.129172,
+          "se": 0.129158,
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
         }
       },
       "assumption_violations": [
-        "paired_g: skew_bias_likely (skew=+2.81, predicted paired_g inflation ~17% at n=60)",
-        "paired_g: heavy_tail_se_anti_conservative (excess_kurtosis=16.69, framework_se will under-cover by ~10-25% at this kurtosis)"
+        "paired_g: skew_bias_likely (skew=+2.83, predicted paired_g inflation ~17% at n=60)",
+        "paired_g: heavy_tail_se_anti_conservative (excess_kurtosis=16.82, framework_se will under-cover by ~10-25% at this kurtosis)"
       ],
       "blocked_by": null,
       "bridge_name": "ddqn_reduces_jensen_gap__cartpole",
       "direction": "inverse",
-      "n_cells_in_scope": 225,
+      "n_cells_in_scope": 185,
       "n_cells_pre_scope": 15110,
       "pair_by": [
         "seed"
       ],
       "params": {},
       "predicted_direction": null,
-      "scope_repr": "[([([(col(\"optimizer.inner.lr\")) == (dyn float: 0.001)]) & ([(.when([(col(\"q_divergence_score\").is_not_nan()) | (col(\"q_divergence_score\").is_null())]).then(col(\"q_divergence_score\")).otherwise(null).mean().over([col(\"optimizer.inner.lr\"), col(\"env_name\"), col(\"replay.capacity\")]).is_finite()) & ([(.when([(col(\"q_divergence_score\").is_not_nan()) | (col(\"q_divergence_score\").is_null())]).then(col(\"q_divergence_score\")).otherwise(null).mean().over([col(\"optimizer.inner.lr\"), col(\"env_name\"), col(\"replay.capacity\")])) < (dyn float: 5)])])]) & ([(col(\"env_name\")) == (\"CartPole-v1\")])]",
+      "scope_repr": "[([([([([([([(col(\"optimizer.inner.lr\")) == (dyn float: 0.001)]) & ([(.when([(col(\"q_divergence_score\").is_not_nan()) | (col(\"q_divergence_score\").is_null())]).then(col(\"q_divergence_score\")).otherwise(null).mean().over([col(\"optimizer.inner.lr\"), col(\"env_name\"), col(\"replay.capacity\")]).is_finite()) & ([(.when([(col(\"q_divergence_score\").is_not_nan()) | (col(\"q_divergence_score\").is_null())]).then(col(\"q_divergence_score\")).otherwise(null).mean().over([col(\"optimizer.inner.lr\"), col(\"env_name\"), col(\"replay.capacity\")])) < (dyn float: 5)])])]) & ([(col(\"env_name\")) == (\"CartPole-v1\")])]) & ([(col(\"total_steps\")) == (dyn int: 200000)])]) & ([(col(\"replay.capacity\")) == (dyn int: 50000)])]) & ([(col(\"replay.batch_size\")) == (dyn int: 32)])]) & ([(col(\"sync_period\")) == (dyn int: 100)])]",
       "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
       "target_name": "jensen_gap",
       "tier": "associational",
@@ -247,7 +247,7 @@
         }
       },
       "predicted_direction": null,
-      "scope_repr": "[([([(col(\"optimizer.inner.lr\")) == (dyn float: 0.001)]) & ([(.when([(col(\"q_divergence_score\").is_not_nan()) | (col(\"q_divergence_score\").is_null())]).then(col(\"q_divergence_score\")).otherwise(null).mean().over([col(\"optimizer.inner.lr\"), col(\"env_name\"), col(\"replay.capacity\")]).is_finite()) & ([(.when([(col(\"q_divergence_score\").is_not_nan()) | (col(\"q_divergence_score\").is_null())]).then(col(\"q_divergence_score\")).otherwise(null).mean().over([col(\"optimizer.inner.lr\"), col(\"env_name\"), col(\"replay.capacity\")])) < (dyn float: 5)])])]) & ([(col(\"replay.capacity\")) == (dyn int: 50000)])]",
+      "scope_repr": "[([([([(col(\"optimizer.inner.lr\")) == (dyn float: 0.001)]) & ([(.when([(col(\"q_divergence_score\").is_not_nan()) | (col(\"q_divergence_score\").is_null())]).then(col(\"q_divergence_score\")).otherwise(null).mean().over([col(\"optimizer.inner.lr\"), col(\"env_name\"), col(\"replay.capacity\")]).is_finite()) & ([(.when([(col(\"q_divergence_score\").is_not_nan()) | (col(\"q_divergence_score\").is_null())]).then(col(\"q_divergence_score\")).otherwise(null).mean().over([col(\"optimizer.inner.lr\"), col(\"env_name\"), col(\"replay.capacity\")])) < (dyn float: 5)])])]) & ([(col(\"replay.capacity\")) == (dyn int: 50000)])]) & ([(col(\"total_steps\")) == (dyn int: 200000)])]",
       "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
       "target_name": "jensen_gap",
       "tier": "associational",
@@ -449,7 +449,7 @@
         "paired_g_pooled": {
           "baseline_arm": "baseline",
           "measurable": "jensen_gap",
-          "n_envs": 5,
+          "n_envs": 3,
           "per_env": [
             {
               "g": -0.595953,
@@ -458,42 +458,32 @@
               "stratum_id": "Acrobot-v1"
             },
             {
-              "g": -5.57139,
+              "g": -5.00491,
               "n_pairs": 60,
-              "se": 0.524725,
+              "se": 0.474773,
               "stratum_id": "Catch-bsuite"
             },
             {
-              "g": -0.107936,
-              "n_pairs": 30,
-              "se": 0.183105,
-              "stratum_id": "DeepSea-bsuite"
-            },
-            {
-              "g": -0.790844,
+              "g": -0.600283,
               "n_pairs": 60,
-              "se": 0.147914,
+              "se": 0.140248,
               "stratum_id": "DiscountingChain-bsuite"
-            },
-            {
-              "g": -1.04372,
-              "n_pairs": 30,
-              "se": 0.226912,
-              "stratum_id": "UmbrellaChain-bsuite"
             }
           ],
           "pooled": {
-            "I2": 0.959863,
-            "Q": 99.6589,
-            "assumption_violations": [],
-            "empirical_max_g": -0.107936,
-            "empirical_min_g": -5.57139,
-            "n_cells": 5,
-            "pi_hi": 1.83309,
-            "pi_lo": -4.72373,
-            "pooled_g": -1.44532,
-            "se_pooled": 0.43451,
-            "tau2": 0.87242
+            "I2": 0.975774,
+            "Q": 82.5561,
+            "assumption_violations": [
+              "dl_small_g_unreliable_inference (n_cells=3, τ² CV ≈ 105% — point estimate not interpretable; prefer REML when available)"
+            ],
+            "empirical_max_g": -0.595953,
+            "empirical_min_g": -5.00491,
+            "n_cells": 3,
+            "pi_hi": 15.589,
+            "pi_lo": -19.4653,
+            "pooled_g": -1.93816,
+            "se_pooled": 0.704451,
+            "tau2": 1.40654
           },
           "total_steps_filter": 200000,
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
@@ -503,7 +493,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_reduces_jensen_gap__converged_subset",
       "direction": "inverse",
-      "n_cells_in_scope": 900,
+      "n_cells_in_scope": 420,
       "n_cells_pre_scope": 15110,
       "pair_by": [
         "seed"
@@ -512,11 +502,11 @@
         "total_steps_filter": 200000
       },
       "predicted_direction": null,
-      "scope_repr": "[([([(col(\"optimizer.inner.lr\")) == (dyn float: 0.001)]) & ([(.when([(col(\"q_divergence_score\").is_not_nan()) | (col(\"q_divergence_score\").is_null())]).then(col(\"q_divergence_score\")).otherwise(null).mean().over([col(\"optimizer.inner.lr\"), col(\"env_name\"), col(\"replay.capacity\")]).is_finite()) & ([(.when([(col(\"q_divergence_score\").is_not_nan()) | (col(\"q_divergence_score\").is_null())]).then(col(\"q_divergence_score\")).otherwise(null).mean().over([col(\"optimizer.inner.lr\"), col(\"env_name\"), col(\"replay.capacity\")])) < (dyn float: 5)])])]) & (col(\"env_name\").is_in([[\"Acrobot-v1\", \"Breakout-MinAtar\", … \"UmbrellaChain-bsuite\"]]))]",
+      "scope_repr": "[([([([([(col(\"optimizer.inner.lr\")) == (dyn float: 0.001)]) & ([(.when([(col(\"q_divergence_score\").is_not_nan()) | (col(\"q_divergence_score\").is_null())]).then(col(\"q_divergence_score\")).otherwise(null).mean().over([col(\"optimizer.inner.lr\"), col(\"env_name\"), col(\"replay.capacity\")]).is_finite()) & ([(.when([(col(\"q_divergence_score\").is_not_nan()) | (col(\"q_divergence_score\").is_null())]).then(col(\"q_divergence_score\")).otherwise(null).mean().over([col(\"optimizer.inner.lr\"), col(\"env_name\"), col(\"replay.capacity\")])) < (dyn float: 5)])])]) & (col(\"env_name\").is_in([[\"Acrobot-v1\", \"Breakout-MinAtar\", … \"UmbrellaChain-bsuite\"]]))]) & ([(col(\"total_steps\")) == (dyn int: 200000)])]) & ([(col(\"replay.capacity\")) == (dyn int: 50000)])]",
       "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
       "target_name": "jensen_gap",
       "tier": "associational",
-      "verdict": "held",
+      "verdict": "power_insufficient",
       "warnings": [
         {
           "gate_name": "no_predicted_direction",
@@ -531,7 +521,7 @@
         "paired_g_pooled": {
           "baseline_arm": "baseline",
           "measurable": "eval_best_burst_mean",
-          "n_envs": 3,
+          "n_envs": 1,
           "per_env": [
             {
               "g": 0.228794,
@@ -546,38 +536,24 @@
               "stratum_id": "Catch-bsuite"
             },
             {
-              "g": -0.177811,
-              "n_pairs": 30,
-              "se": 0.184012,
-              "stratum_id": "DeepSea-bsuite"
-            },
-            {
-              "g": -0.181791,
-              "n_pairs": 60,
-              "se": 0.130162,
-              "stratum_id": "DiscountingChain-bsuite"
-            },
-            {
               "g": 0.0,
-              "n_pairs": 30,
+              "n_pairs": 60,
               "se": null,
-              "stratum_id": "UmbrellaChain-bsuite"
+              "stratum_id": "DiscountingChain-bsuite"
             }
           ],
           "pooled": {
-            "I2": 0.660957,
-            "Q": 5.89895,
-            "assumption_violations": [
-              "dl_small_g_unreliable_inference (n_cells=3, τ² CV ≈ 105% — point estimate not interpretable; prefer REML when available)"
-            ],
-            "empirical_max_g": 0.228794,
-            "empirical_min_g": -0.181791,
-            "n_cells": 3,
-            "pi_hi": 3.14257,
-            "pi_lo": -3.20856,
-            "pooled_g": -0.032993,
-            "se_pooled": 0.145079,
-            "tau2": 0.0414132
+            "I2": null,
+            "Q": null,
+            "assumption_violations": [],
+            "empirical_max_g": null,
+            "empirical_min_g": null,
+            "n_cells": 1,
+            "pi_hi": null,
+            "pi_lo": null,
+            "pooled_g": null,
+            "se_pooled": null,
+            "tau2": null
           },
           "total_steps_filter": 200000,
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
@@ -587,7 +563,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_link_to_outcome_null__converged_subset",
       "direction": "direct",
-      "n_cells_in_scope": 900,
+      "n_cells_in_scope": 420,
       "n_cells_pre_scope": 15110,
       "pair_by": [
         "seed"
@@ -596,11 +572,11 @@
         "total_steps_filter": 200000
       },
       "predicted_direction": "null",
-      "scope_repr": "[([([(col(\"optimizer.inner.lr\")) == (dyn float: 0.001)]) & ([(.when([(col(\"q_divergence_score\").is_not_nan()) | (col(\"q_divergence_score\").is_null())]).then(col(\"q_divergence_score\")).otherwise(null).mean().over([col(\"optimizer.inner.lr\"), col(\"env_name\"), col(\"replay.capacity\")]).is_finite()) & ([(.when([(col(\"q_divergence_score\").is_not_nan()) | (col(\"q_divergence_score\").is_null())]).then(col(\"q_divergence_score\")).otherwise(null).mean().over([col(\"optimizer.inner.lr\"), col(\"env_name\"), col(\"replay.capacity\")])) < (dyn float: 5)])])]) & (col(\"env_name\").is_in([[\"Acrobot-v1\", \"Breakout-MinAtar\", … \"UmbrellaChain-bsuite\"]]))]",
+      "scope_repr": "[([([([([(col(\"optimizer.inner.lr\")) == (dyn float: 0.001)]) & ([(.when([(col(\"q_divergence_score\").is_not_nan()) | (col(\"q_divergence_score\").is_null())]).then(col(\"q_divergence_score\")).otherwise(null).mean().over([col(\"optimizer.inner.lr\"), col(\"env_name\"), col(\"replay.capacity\")]).is_finite()) & ([(.when([(col(\"q_divergence_score\").is_not_nan()) | (col(\"q_divergence_score\").is_null())]).then(col(\"q_divergence_score\")).otherwise(null).mean().over([col(\"optimizer.inner.lr\"), col(\"env_name\"), col(\"replay.capacity\")])) < (dyn float: 5)])])]) & (col(\"env_name\").is_in([[\"Acrobot-v1\", \"Breakout-MinAtar\", … \"UmbrellaChain-bsuite\"]]))]) & ([(col(\"total_steps\")) == (dyn int: 200000)])]) & ([(col(\"replay.capacity\")) == (dyn int: 50000)])]",
       "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
       "target_name": "eval_best_burst_mean",
       "tier": "associational",
-      "verdict": "held",
+      "verdict": "power_insufficient",
       "warnings": []
     },
     {
@@ -680,6 +656,7 @@
         "seed"
       ],
       "params": {
+        "dedupe_strategy": "mean",
         "env_filter": [
           "Acrobot-v1",
           "Breakout-MinAtar",
@@ -1465,7 +1442,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_outcome_zero_across_bursts__catch",
       "direction": "direct",
-      "n_cells_in_scope": 300,
+      "n_cells_in_scope": 180,
       "n_cells_pre_scope": 15110,
       "pair_by": [
         "seed"
@@ -1474,7 +1451,7 @@
         "source": "mc_return__mean_axis_-1"
       },
       "predicted_direction": null,
-      "scope_repr": "[([([(col(\"optimizer.inner.lr\")) == (dyn float: 0.001)]) & ([(.when([(col(\"q_divergence_score\").is_not_nan()) | (col(\"q_divergence_score\").is_null())]).then(col(\"q_divergence_score\")).otherwise(null).mean().over([col(\"optimizer.inner.lr\"), col(\"env_name\"), col(\"replay.capacity\")]).is_finite()) & ([(.when([(col(\"q_divergence_score\").is_not_nan()) | (col(\"q_divergence_score\").is_null())]).then(col(\"q_divergence_score\")).otherwise(null).mean().over([col(\"optimizer.inner.lr\"), col(\"env_name\"), col(\"replay.capacity\")])) < (dyn float: 5)])])]) & ([(col(\"env_name\")) == (\"Catch-bsuite\")])]",
+      "scope_repr": "[([([([([(col(\"optimizer.inner.lr\")) == (dyn float: 0.001)]) & ([(.when([(col(\"q_divergence_score\").is_not_nan()) | (col(\"q_divergence_score\").is_null())]).then(col(\"q_divergence_score\")).otherwise(null).mean().over([col(\"optimizer.inner.lr\"), col(\"env_name\"), col(\"replay.capacity\")]).is_finite()) & ([(.when([(col(\"q_divergence_score\").is_not_nan()) | (col(\"q_divergence_score\").is_null())]).then(col(\"q_divergence_score\")).otherwise(null).mean().over([col(\"optimizer.inner.lr\"), col(\"env_name\"), col(\"replay.capacity\")])) < (dyn float: 5)])])]) & ([(col(\"env_name\")) == (\"Catch-bsuite\")])]) & ([(col(\"total_steps\")) == (dyn int: 200000)])]) & ([(col(\"replay.capacity\")) == (dyn int: 50000)])]",
       "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
       "target_name": "mc_return",
       "tier": "associational",
@@ -1805,14 +1782,14 @@
       "blocked_by": null,
       "bridge_name": "expectile_reduces_jensen_gap_more_than_ddqn__fourrooms",
       "direction": "inverse",
-      "n_cells_in_scope": 1170,
+      "n_cells_in_scope": 870,
       "n_cells_pre_scope": 15110,
       "pair_by": [
         "seed"
       ],
       "params": {},
       "predicted_direction": null,
-      "scope_repr": "[([([([([([([([([(col(\"env_name\")) == (\"FourRooms-misc\")]) & ([(col(\"optimizer.inner.lr\")) == (dyn float: 0.0001)])]) & ([(col(\"replay.capacity\")) == (dyn int: 50000)])]) & ([(col(\"gamma\")) == (dyn float: 0.99)])]) & ([(col(\"total_steps\")) == (dyn int: 200000)])]) & (col(\"action_duplicate_k\").is_null())]) & ([(col(\"reward_scale\").is_null()) | ([(col(\"reward_scale\")) == (dyn float: 1)])])]) & (col(\"target_sync.tau\").is_null())]) & ([(col(\"optimizer.inner.weight_decay\").is_null()) | ([(col(\"optimizer.inner.weight_decay\")) == (dyn float: 0)])])]",
+      "scope_repr": "[([([([([([([([([([(col(\"env_name\")) == (\"FourRooms-misc\")]) & ([(col(\"optimizer.inner.lr\")) == (dyn float: 0.0001)])]) & ([(col(\"replay.capacity\")) == (dyn int: 50000)])]) & ([(col(\"gamma\")) == (dyn float: 0.99)])]) & ([(col(\"total_steps\")) == (dyn int: 200000)])]) & (col(\"action_duplicate_k\").is_null())]) & ([(col(\"reward_scale\").is_null()) | ([(col(\"reward_scale\")) == (dyn float: 1)])])]) & (col(\"target_sync.tau\").is_null())]) & ([(col(\"optimizer.inner.weight_decay\").is_null()) | ([(col(\"optimizer.inner.weight_decay\")) == (dyn float: 0)])])]) & ([(col(\"n_step\").is_null()) | ([(col(\"n_step\")) == (dyn int: 1)])])]",
       "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=partial(Claim:expectile_greedify;))|vs=bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify))",
       "target_name": "jensen_gap",
       "tier": "associational",
@@ -1852,14 +1829,14 @@
       "blocked_by": null,
       "bridge_name": "ddqn_outperforms_expectile_on_outcome__fourrooms",
       "direction": "inverse",
-      "n_cells_in_scope": 1170,
+      "n_cells_in_scope": 870,
       "n_cells_pre_scope": 15110,
       "pair_by": [
         "seed"
       ],
       "params": {},
       "predicted_direction": null,
-      "scope_repr": "[([([([([([([([([(col(\"env_name\")) == (\"FourRooms-misc\")]) & ([(col(\"optimizer.inner.lr\")) == (dyn float: 0.0001)])]) & ([(col(\"replay.capacity\")) == (dyn int: 50000)])]) & ([(col(\"gamma\")) == (dyn float: 0.99)])]) & ([(col(\"total_steps\")) == (dyn int: 200000)])]) & (col(\"action_duplicate_k\").is_null())]) & ([(col(\"reward_scale\").is_null()) | ([(col(\"reward_scale\")) == (dyn float: 1)])])]) & (col(\"target_sync.tau\").is_null())]) & ([(col(\"optimizer.inner.weight_decay\").is_null()) | ([(col(\"optimizer.inner.weight_decay\")) == (dyn float: 0)])])]",
+      "scope_repr": "[([([([([([([([([([(col(\"env_name\")) == (\"FourRooms-misc\")]) & ([(col(\"optimizer.inner.lr\")) == (dyn float: 0.0001)])]) & ([(col(\"replay.capacity\")) == (dyn int: 50000)])]) & ([(col(\"gamma\")) == (dyn float: 0.99)])]) & ([(col(\"total_steps\")) == (dyn int: 200000)])]) & (col(\"action_duplicate_k\").is_null())]) & ([(col(\"reward_scale\").is_null()) | ([(col(\"reward_scale\")) == (dyn float: 1)])])]) & (col(\"target_sync.tau\").is_null())]) & ([(col(\"optimizer.inner.weight_decay\").is_null()) | ([(col(\"optimizer.inner.weight_decay\")) == (dyn float: 0)])])]) & ([(col(\"n_step\").is_null()) | ([(col(\"n_step\")) == (dyn int: 1)])])]",
       "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=partial(Claim:expectile_greedify;))|vs=bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify))",
       "target_name": "eval_best_burst_mean",
       "tier": "associational",
@@ -1899,14 +1876,14 @@
       "blocked_by": null,
       "bridge_name": "expectile_reproduces_mechanism_link_disconnect__fourrooms",
       "direction": "direct",
-      "n_cells_in_scope": 1170,
+      "n_cells_in_scope": 870,
       "n_cells_pre_scope": 15110,
       "pair_by": [
         "seed"
       ],
       "params": {},
       "predicted_direction": null,
-      "scope_repr": "[([([([([([([([([(col(\"env_name\")) == (\"FourRooms-misc\")]) & ([(col(\"optimizer.inner.lr\")) == (dyn float: 0.0001)])]) & ([(col(\"replay.capacity\")) == (dyn int: 50000)])]) & ([(col(\"gamma\")) == (dyn float: 0.99)])]) & ([(col(\"total_steps\")) == (dyn int: 200000)])]) & (col(\"action_duplicate_k\").is_null())]) & ([(col(\"reward_scale\").is_null()) | ([(col(\"reward_scale\")) == (dyn float: 1)])])]) & (col(\"target_sync.tau\").is_null())]) & ([(col(\"optimizer.inner.weight_decay\").is_null()) | ([(col(\"optimizer.inner.weight_decay\")) == (dyn float: 0)])])]",
+      "scope_repr": "[([([([([([([([([([(col(\"env_name\")) == (\"FourRooms-misc\")]) & ([(col(\"optimizer.inner.lr\")) == (dyn float: 0.0001)])]) & ([(col(\"replay.capacity\")) == (dyn int: 50000)])]) & ([(col(\"gamma\")) == (dyn float: 0.99)])]) & ([(col(\"total_steps\")) == (dyn int: 200000)])]) & (col(\"action_duplicate_k\").is_null())]) & ([(col(\"reward_scale\").is_null()) | ([(col(\"reward_scale\")) == (dyn float: 1)])])]) & (col(\"target_sync.tau\").is_null())]) & ([(col(\"optimizer.inner.weight_decay\").is_null()) | ([(col(\"optimizer.inner.weight_decay\")) == (dyn float: 0)])])]) & ([(col(\"n_step\").is_null()) | ([(col(\"n_step\")) == (dyn int: 1)])])]",
       "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=partial(Claim:expectile_greedify;))|vs=baseline)",
       "target_name": "eval_best_burst_mean",
       "tier": "associational",
@@ -2096,7 +2073,7 @@
   ],
   "cache_path": "experiments/data/cache/dqn_bridges.parquet",
   "errored_bridges": [],
-  "git_commit": "2857dd8ccf3a",
+  "git_commit": "bdde84a31472",
   "hypothesis_module": "experiments.findings.dqn_bridges",
   "measurable_signatures": {
     "bootstrap_fraction": "5c7cc97efa79e56c",
@@ -2114,5 +2091,5 @@
     "r_min": "5717682c68a0f956"
   },
   "n_cells_total": 15110,
-  "timestamp_utc": "2026-05-09T01:59:40+00:00"
+  "timestamp_utc": "2026-05-09T02:09:57+00:00"
 }

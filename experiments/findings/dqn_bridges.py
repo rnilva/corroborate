@@ -292,7 +292,14 @@ def ddqn_reduces_jensen_gap__acrobot(
     target='jensen_gap',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
-    scope=_ACTION_DIM_SWEEP_REGIME & (pl.col('env_name') == 'Catch-bsuite'),
+    # Pin total_steps + capacity; the action-dim regime alone
+    # leaves both varying for Q-bounded envs (Catch).
+    scope=(
+        _ACTION_DIM_SWEEP_REGIME
+        & (pl.col('env_name') == 'Catch-bsuite')
+        & (pl.col('total_steps') == 200000)
+        & (pl.col('replay.capacity') == 50000)
+    ),
 )
 def ddqn_reduces_jensen_gap__catch(
     paired_g: PairedGResult,
@@ -305,7 +312,12 @@ def ddqn_reduces_jensen_gap__catch(
     target='jensen_gap',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
-    scope=_ACTION_DIM_SWEEP_REGIME & (pl.col('env_name') == 'DiscountingChain-bsuite'),
+    scope=(
+        _ACTION_DIM_SWEEP_REGIME
+        & (pl.col('env_name') == 'DiscountingChain-bsuite')
+        & (pl.col('total_steps') == 200000)
+        & (pl.col('replay.capacity') == 50000)
+    ),
 )
 def ddqn_reduces_jensen_gap__discounting_chain(
     paired_g: PairedGResult,
@@ -318,7 +330,14 @@ def ddqn_reduces_jensen_gap__discounting_chain(
     target='jensen_gap',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
-    scope=_ACTION_DIM_SWEEP_REGIME & (pl.col('env_name') == 'CartPole-v1'),
+    scope=(
+        _ACTION_DIM_SWEEP_REGIME
+        & (pl.col('env_name') == 'CartPole-v1')
+        & (pl.col('total_steps') == 200000)
+        & (pl.col('replay.capacity') == 50000)
+        & (pl.col('replay.batch_size') == 32)
+        & (pl.col('sync_period') == 100)
+    ),
 )
 def ddqn_reduces_jensen_gap__cartpole(
     paired_g: PairedGResult,
@@ -348,15 +367,17 @@ _LOG_ACTION_DIM_PER_ENV: dict[str, dict[str, float]] = {
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
     # Action-dim sweep regime — pin lr=1e-3 + Q-bounded + the
-    # canonical capacity (50000) so the per-env panel doesn't pool
-    # cells from contaminating corpora (γ-sweep, n-step sweep, L2
-    # sweep, cap=10k subsweep, etc.). `_ACTION_DIM_SWEEP_REGIME`
-    # alone allows both cap=10k and cap=50k for Q-bounded envs
-    # (Catch, DC), which `meta_regression_paired_g` then averages
-    # silently per env. Pinning capacity=50000 gives one cell per
-    # (env, arm, seed). Cf. `findings_dqn_bridges_regime_mixing.md`
-    # group B.
-    scope=_ACTION_DIM_SWEEP_REGIME & (pl.col('replay.capacity') == 50000),
+    # canonical capacity (50000) + total_steps so the per-env
+    # panel sees one cell per `(arm, seed)`. `_ACTION_DIM_SWEEP_
+    # REGIME` alone leaves total_steps and capacity varying for
+    # Q-bounded envs; meta_regression_paired_g would silently
+    # average them per env. Cf. `findings_dqn_bridges_regime_
+    # mixing.md` group B.
+    scope=(
+        _ACTION_DIM_SWEEP_REGIME
+        & (pl.col('replay.capacity') == 50000)
+        & (pl.col('total_steps') == 200000)
+    ),
 )
 def log_action_dim_drives_jensen_gap_reduction(
     meta_regression_paired_g: MetaRegressionResult,
@@ -644,10 +665,15 @@ def ddqn_outcome_stable_across_bursts__fourrooms(
     target='mc_return',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
-    # Action-dim sweep regime — pin lr=1e-3 + Q-bounded so the
-    # per-burst panel doesn't pool γ-sweep cells (γ ∈ {0.9, 0.95,
-    # 0.99}) under shared `pair_by=('seed',)` buckets.
-    scope=_ACTION_DIM_SWEEP_REGIME & (pl.col('env_name') == 'Catch-bsuite'),
+    # Action-dim sweep regime + total_steps + capacity pin so the
+    # per-burst panel has uniform array shapes and one regime per
+    # `(arm, seed)` bucket.
+    scope=(
+        _ACTION_DIM_SWEEP_REGIME
+        & (pl.col('env_name') == 'Catch-bsuite')
+        & (pl.col('total_steps') == 200000)
+        & (pl.col('replay.capacity') == 50000)
+    ),
 )
 def ddqn_outcome_zero_across_bursts__catch(
     paired_g_per_burst: PerBurstResult,
@@ -765,6 +791,8 @@ def _pooled_null_prediction_holds_when(
     scope=(
         _ACTION_DIM_SWEEP_REGIME
         & pl.col('env_name').is_in(list(_CONVERGED_ENVS_DDQN_200K))
+        & (pl.col('total_steps') == 200000)
+        & (pl.col('replay.capacity') == 50000)
     ),
 )
 def ddqn_reduces_jensen_gap__converged_subset(
@@ -789,6 +817,8 @@ def ddqn_reduces_jensen_gap__converged_subset(
     scope=(
         _ACTION_DIM_SWEEP_REGIME
         & pl.col('env_name').is_in(list(_CONVERGED_ENVS_DDQN_200K))
+        & (pl.col('total_steps') == 200000)
+        & (pl.col('replay.capacity') == 50000)
     ),
 )
 def ddqn_link_to_outcome_null__converged_subset(
@@ -1365,6 +1395,14 @@ def time_to_solve_link_null__pooled(
     gate_thresholds: dict[str, float] = _SOLVE_THRESHOLDS_FLAT,
     env_filter: tuple[str, ...] = _TIME_TO_SOLVE_HIGH_SOLVE_ENVS,
     total_steps_filter: int = 200000,
+    # Explicit opt-in to mean-aggregation: the rev6 study
+    # legitimately included both cap=10k and cap=50k cells for
+    # Acrobot/Catch/DC (the comment on `_REV6_SAMPLE_EFFICIENCY_
+    # REGIME` notes this). Within each env's per-(arm, seed)
+    # bucket the per-cell `eval_best_burst_step` is mean-
+    # aggregated across capacity regimes — same shape the
+    # original rev6 verdict was computed under.
+    dedupe_strategy: str = 'mean',
 ) -> Verdict:
     """rev 6: replacing the steady-state outcome with a sample-
     efficiency proxy doesn't rescue DDQN. Pooled across 5
@@ -1374,6 +1412,7 @@ def time_to_solve_link_null__pooled(
     prediction was confirmed — sample-efficiency-as-outcome
     doesn't break the rev-1 link-null."""
     del gate_column, gate_thresholds, env_filter, total_steps_filter
+    del dedupe_strategy
     return _pooled_null_prediction_holds_when(
         paired_g_among_solvers, null_band=0.15, min_envs=4,
     )
@@ -1807,7 +1846,15 @@ def _expectile_reduces_gap_holds_when(paired_g: PairedGResult) -> Verdict:
     target='jensen_gap',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
-    scope=_FOURROOMS_CANONICAL_REGIME,
+    # Pin n_step=1 — the expectile arm has only n=1 cells, but
+    # the canonical baseline arm shares arm_key with cells from
+    # the n-step sweep; without this filter, the baseline bucket
+    # mixes n_step ∈ {1, 2, 3, 5, 10} (cells that all canonicalise
+    # to the same `arm_key='baseline'`).
+    scope=(
+        _FOURROOMS_CANONICAL_REGIME
+        & (pl.col('n_step').is_null() | (pl.col('n_step') == 1))
+    ),
 )
 def expectile_reduces_jensen_gap_more_than_ddqn__fourrooms(
     paired_g: PairedGResult,
@@ -1823,7 +1870,12 @@ def expectile_reduces_jensen_gap_more_than_ddqn__fourrooms(
     target='eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
-    scope=_FOURROOMS_CANONICAL_REGIME,
+    # n_step=1 pin; see `expectile_reduces_jensen_gap_more_than_
+    # ddqn__fourrooms` comment for rationale.
+    scope=(
+        _FOURROOMS_CANONICAL_REGIME
+        & (pl.col('n_step').is_null() | (pl.col('n_step') == 1))
+    ),
 )
 def ddqn_outperforms_expectile_on_outcome__fourrooms(
     paired_g: PairedGResult,
@@ -1845,7 +1897,12 @@ def ddqn_outperforms_expectile_on_outcome__fourrooms(
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
-    scope=_FOURROOMS_CANONICAL_REGIME,
+    # n_step=1 pin; see `expectile_reduces_jensen_gap_more_than_
+    # ddqn__fourrooms` comment for rationale.
+    scope=(
+        _FOURROOMS_CANONICAL_REGIME
+        & (pl.col('n_step').is_null() | (pl.col('n_step') == 1))
+    ),
 )
 def expectile_reproduces_mechanism_link_disconnect__fourrooms(
     paired_g: PairedGResult,

@@ -434,6 +434,7 @@ def per_env_paired_g_panel(
     env_filter: tuple[str, ...] = (),
     pair_by: tuple[str, ...] = ('seed',),
     arm_field: str = 'arm_key',
+    dedupe_strategy: str = 'mean',
 ) -> tuple[StratumG[str], ...]:
     """Per-env paired-g panel — one `StratumG[str]` per env in
     `env_filter` (or every env present in `cells` when empty).
@@ -466,6 +467,7 @@ def per_env_paired_g_panel(
             pair_by=pair_by,
             source=source,
             arm_field=arm_field,
+            dedupe_strategy=dedupe_strategy,
         )
 
     panel = per_stratum_panel(

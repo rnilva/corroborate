@@ -202,26 +202,21 @@ def paired_g_per_burst(
                 [*prior_cells, cell],
                 skip=frozenset(pair_by) | {'env_name', arm_field},
             )
-            if not diff:
+            if diff:
                 raise ValueError(
-                    f'paired_g_per_burst: replicate cells at '
-                    f'(env={env!r}, arm={arm!r}, '
-                    f'{tuple(pair_by)}={key}) differ only on '
-                    f'provenance tags. Pass '
-                    f'dedupe_strategy="mean" to aggregate them, or '
-                    f'tighten the cache so only one replicate '
-                    f'survives.',
+                    f'paired_g_per_burst: cells at (env={env!r}, '
+                    f'arm={arm!r}, {tuple(pair_by)}={key}) are not '
+                    f'replicates — they differ on: {format_diff(diff)}. '
+                    f'Add the regime-defining column(s) to pair_by so '
+                    f'each regime is its own stratum, or scope the '
+                    f'bridge to a single regime. '
+                    f'`dedupe_strategy="mean"` only fits when the '
+                    f'duplicates are true replicates.',
                 )
-            raise ValueError(
-                f'paired_g_per_burst: cells at (env={env!r}, '
-                f'arm={arm!r}, {tuple(pair_by)}={key}) are not '
-                f'replicates — they differ on: {format_diff(diff)}. '
-                f'Add the regime-defining column(s) to pair_by so '
-                f'each regime is its own stratum, or scope the '
-                f'bridge to a single regime. '
-                f'`dedupe_strategy="mean"` only fits when the '
-                f'duplicates are true replicates.',
-            )
+            # Empty diff → true replicates (only provenance / None-
+            # default / derived-measurable drift). Fall through to
+            # mean-aggregation below; matches `paired_g.fn`'s
+            # smarter `'raise'` semantics.
         existing.append((cell, per_burst))
 
     # Collapse list[(cell, ndarray)] → ndarray via element-wise mean.

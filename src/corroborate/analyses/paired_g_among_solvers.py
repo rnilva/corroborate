@@ -44,6 +44,7 @@ def paired_g_among_solvers(
     arm_field: str = 'arm_key',
     total_steps_filter: int | None = None,
     total_steps_field: str = 'total_steps',
+    dedupe_strategy: str = 'mean',
 ) -> PooledPairedGResult:
     """Per-env paired g on `source`, restricted to (env, pair_by)
     pairs where BOTH cells satisfy `cell[gate_column] >=
@@ -105,6 +106,7 @@ def paired_g_among_solvers(
         env_filter=target,
         pair_by=pair_by,
         arm_field=arm_field,
+        dedupe_strategy=dedupe_strategy,
     )
 
     pool_obs: list[tuple[float, float]] = [
