@@ -183,6 +183,69 @@ _ACTION_DIM_SWEEP_REGIME: pl.Expr = (
 )
 
 
+# rev6 sample-efficiency envelope — 7 envs at lr=1e-3 + sync=100
+# + total_steps=200000. The MinAtar / bsuite envs the action-dim
+# sweep didn't include were sweep-specific (Breakout, MemoryChain,
+# SpaceInvaders, UmbrellaChain at cap=10000); pinning capacity
+# would drop them, so we accept the within-env capacity averaging
+# on Acrobot/Catch/DC and pin the other regime axes. Used by
+# `time_to_solve_link_null__pooled` and `ddqn_solves_faster__
+# spaceinvaders` (cf. `findings_time_to_solve.md`).
+_REV6_SAMPLE_EFFICIENCY_REGIME: pl.Expr = (
+    (pl.col('optimizer.inner.lr') == 0.001)
+    & (pl.col('sync_period') == 100)
+    & (pl.col('total_steps') == 200000)
+)
+
+
+# Canonical FourRooms regime (γ=0.99, lr=1e-4, cap=50000,
+# total_steps=200000) with the off-canonical HP knobs pinned to
+# their default values. The FourRooms cache aggregates cells from
+# many sub-sweeps (γ-sweep, n-step sweep, action-duplication, L2,
+# reward-scale, Polyak, total_steps); without this filter, every
+# bridge scoping only on `env_name == 'FourRooms-misc'` averages
+# across causally-distinct experiments under shared `pair_by=(
+# 'seed',)` buckets (cf. `findings_dqn_bridges_regime_mixing.md`,
+# group A).
+#
+# Excludes:
+#   - action_duplicate_k != null (action-duplication sweep)
+#   - reward_scale != null and != 1.0 (reward-scale sweep)
+#   - target_sync.tau != null (Polyak sweep)
+#   - optimizer.inner.weight_decay > 0 (L2/AdamW sweep)
+#
+# `n_step` is NOT pinned here — bridges that target a single
+# `n_step` value compose this with their own `n_step == k`
+# filter; the n-step-slope bridges deliberately allow `n_step`
+# to vary (their analysis is the meta-regression on log(n_step)).
+#
+# The remaining duplicates within `(arm_key, seed)` after this
+# filter are TRUE REPLICATES from independent sub-sweeps that
+# all included the canonical baseline as their control cell —
+# different `intervention_name` aliases (`'ddqn'`, `'ddqn_n1'`,
+# `'ddqn_200k'`, `'ddqn_g099'`, ...) all canonicalise to the same
+# `arm_key` because their Intervention tuple is identical.
+# `dedupe_strategy='mean'` averages these honestly (byte-for-byte
+# identical training runs).
+_FOURROOMS_CANONICAL_REGIME: pl.Expr = (
+    (pl.col('env_name') == 'FourRooms-misc')
+    & (pl.col('optimizer.inner.lr') == 0.0001)
+    & (pl.col('replay.capacity') == 50000)
+    & (pl.col('gamma') == 0.99)
+    & (pl.col('total_steps') == 200000)
+    & pl.col('action_duplicate_k').is_null()
+    & (
+        pl.col('reward_scale').is_null()
+        | (pl.col('reward_scale') == 1.0)
+    )
+    & pl.col('target_sync.tau').is_null()
+    & (
+        pl.col('optimizer.inner.weight_decay').is_null()
+        | (pl.col('optimizer.inner.weight_decay') == 0.0)
+    )
+)
+
+
 # ============ Eighth revision (action_dim_sweep) ============
 #
 # "DDQN reduces jensen_gap on |A|≥3 envs (paired g, n=60 seeds);
@@ -284,6 +347,16 @@ _LOG_ACTION_DIM_PER_ENV: dict[str, dict[str, float]] = {
     target='jensen_gap',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
+    # Action-dim sweep regime — pin lr=1e-3 + Q-bounded + the
+    # canonical capacity (50000) so the per-env panel doesn't pool
+    # cells from contaminating corpora (γ-sweep, n-step sweep, L2
+    # sweep, cap=10k subsweep, etc.). `_ACTION_DIM_SWEEP_REGIME`
+    # alone allows both cap=10k and cap=50k for Q-bounded envs
+    # (Catch, DC), which `meta_regression_paired_g` then averages
+    # silently per env. Pinning capacity=50000 gives one cell per
+    # (env, arm, seed). Cf. `findings_dqn_bridges_regime_mixing.md`
+    # group B.
+    scope=_ACTION_DIM_SWEEP_REGIME & (pl.col('replay.capacity') == 50000),
 )
 def log_action_dim_drives_jensen_gap_reduction(
     meta_regression_paired_g: MetaRegressionResult,
@@ -541,7 +614,7 @@ def ddqn_benefit_scales_with_gamma__discountingchain(
     # from `nstep_*` corpora at FourRooms otherwise pool into the
     # same (env, seed) bucket as different intervention regimes.
     scope=(
-        (pl.col('env_name') == 'FourRooms-misc')
+        _FOURROOMS_CANONICAL_REGIME
         & (pl.col('n_step').is_null() | (pl.col('n_step') == 1))
     ),
 )
@@ -571,7 +644,10 @@ def ddqn_outcome_stable_across_bursts__fourrooms(
     target='mc_return',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
-    scope=(pl.col('env_name') == 'Catch-bsuite'),
+    # Action-dim sweep regime — pin lr=1e-3 + Q-bounded so the
+    # per-burst panel doesn't pool γ-sweep cells (γ ∈ {0.9, 0.95,
+    # 0.99}) under shared `pair_by=('seed',)` buckets.
+    scope=_ACTION_DIM_SWEEP_REGIME & (pl.col('env_name') == 'Catch-bsuite'),
 )
 def ddqn_outcome_zero_across_bursts__catch(
     paired_g_per_burst: PerBurstResult,
@@ -686,7 +762,10 @@ def _pooled_null_prediction_holds_when(
     target='jensen_gap',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
-    scope=pl.col('env_name').is_in(list(_CONVERGED_ENVS_DDQN_200K)),
+    scope=(
+        _ACTION_DIM_SWEEP_REGIME
+        & pl.col('env_name').is_in(list(_CONVERGED_ENVS_DDQN_200K))
+    ),
 )
 def ddqn_reduces_jensen_gap__converged_subset(
     paired_g_pooled: PooledPairedGResult,
@@ -707,7 +786,10 @@ def ddqn_reduces_jensen_gap__converged_subset(
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
     predicted_direction='null',
-    scope=pl.col('env_name').is_in(list(_CONVERGED_ENVS_DDQN_200K)),
+    scope=(
+        _ACTION_DIM_SWEEP_REGIME
+        & pl.col('env_name').is_in(list(_CONVERGED_ENVS_DDQN_200K))
+    ),
 )
 def ddqn_link_to_outcome_null__converged_subset(
     paired_g_pooled: PooledPairedGResult,
@@ -822,8 +904,7 @@ def _ddqn_helps_outcome_holds_when(
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
     scope=(
-        _FOURROOMS_REGIME
-        & (pl.col('env_name') == 'FourRooms-misc')
+        _FOURROOMS_CANONICAL_REGIME
         & (pl.col('n_step') == 1)
     ),
 )
@@ -844,8 +925,7 @@ def ddqn_reduces_jensen_gap__fourrooms_n1(
     tier=Tier.INTERVENTIONAL,
     predicted_direction='null',
     scope=(
-        _FOURROOMS_REGIME
-        & (pl.col('env_name') == 'FourRooms-misc')
+        _FOURROOMS_CANONICAL_REGIME
         & (pl.col('n_step') == 3)
     ),
 )
@@ -866,8 +946,7 @@ def ddqn_attenuates_jensen_gap__fourrooms_n3(
     direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
     scope=(
-        _FOURROOMS_REGIME
-        & (pl.col('env_name') == 'FourRooms-misc')
+        _FOURROOMS_CANONICAL_REGIME
         & (pl.col('n_step') == 1)
     ),
 )
@@ -887,8 +966,7 @@ def ddqn_helps_outcome__fourrooms_n1(
     tier=Tier.INTERVENTIONAL,
     predicted_direction='null',
     scope=(
-        _FOURROOMS_REGIME
-        & (pl.col('env_name') == 'FourRooms-misc')
+        _FOURROOMS_CANONICAL_REGIME
         & (pl.col('n_step') == 3)
     ),
 )
@@ -1015,7 +1093,12 @@ def _slope_holds_when(
     target='eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
-    scope=_FOURROOMS_REGIME & (pl.col('env_name') == 'FourRooms-misc'),
+    # Canonical FourRooms regime; n_step deliberately allowed to
+    # vary (this bridge meta-regresses on log_n_step) — all other
+    # HP knobs pinned to canonical defaults to avoid mixing
+    # γ-/total_steps-/L2-/Polyak-/reward-scale subsweeps under
+    # shared `(arm, seed)` buckets.
+    scope=_FOURROOMS_CANONICAL_REGIME,
     pair_by=('seed',),
 )
 def ddqn_outcome_slope_attenuates_with_log_nstep__fourrooms(
@@ -1041,7 +1124,12 @@ def ddqn_outcome_slope_attenuates_with_log_nstep__fourrooms(
     target='jensen_gap',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
-    scope=_FOURROOMS_REGIME & (pl.col('env_name') == 'FourRooms-misc'),
+    # Canonical FourRooms regime; n_step deliberately allowed to
+    # vary (this bridge meta-regresses on log_n_step) — all other
+    # HP knobs pinned to canonical defaults to avoid mixing
+    # γ-/total_steps-/L2-/Polyak-/reward-scale subsweeps under
+    # shared `(arm, seed)` buckets.
+    scope=_FOURROOMS_CANONICAL_REGIME,
     pair_by=('seed',),
 )
 def ddqn_jensen_slope_attenuates_with_log_nstep__fourrooms(
@@ -1066,7 +1154,12 @@ def ddqn_jensen_slope_attenuates_with_log_nstep__fourrooms(
     target='eval_final_mean',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
-    scope=_FOURROOMS_REGIME & (pl.col('env_name') == 'FourRooms-misc'),
+    # Canonical FourRooms regime; n_step deliberately allowed to
+    # vary (this bridge meta-regresses on log_n_step) — all other
+    # HP knobs pinned to canonical defaults to avoid mixing
+    # γ-/total_steps-/L2-/Polyak-/reward-scale subsweeps under
+    # shared `(arm, seed)` buckets.
+    scope=_FOURROOMS_CANONICAL_REGIME,
     pair_by=('seed',),
 )
 def ddqn_final_outcome_slope_attenuates_with_log_nstep__fourrooms(
@@ -1124,7 +1217,7 @@ def ddqn_final_outcome_slope_attenuates_with_log_nstep__fourrooms(
     target='eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
-    scope=(pl.col('env_name') == 'FourRooms-misc'),
+    scope=_FOURROOMS_CANONICAL_REGIME,
 )
 def factorial_ddqn_attenuation__fourrooms(
     factorial_2x2_interaction: Factorial2x2Result,
@@ -1172,7 +1265,7 @@ def factorial_ddqn_attenuation__fourrooms(
     target='eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
-    scope=(pl.col('env_name') == 'Catch-bsuite'),
+    scope=_ACTION_DIM_SWEEP_REGIME & (pl.col('env_name') == 'Catch-bsuite'),
 )
 def factorial_variance_amplification__catch(
     factorial_2x2_interaction: Factorial2x2Result,
@@ -1254,6 +1347,16 @@ _TIME_TO_SOLVE_HIGH_SOLVE_ENVS: tuple[str, ...] = (
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
     predicted_direction='null',
+    # rev6 sample-efficiency envelope — pins lr=1e-3 + sync=100 +
+    # total_steps=200000 across all 7 envs in the rev6 study.
+    # `_ACTION_DIM_SWEEP_REGIME` is too narrow (excludes Breakout
+    # / SpaceInvaders / MemoryChain / UmbrellaChain since cap=10k
+    # is excluded by Q-explosion mean for the MinAtar envs);
+    # `_REV6_SAMPLE_EFFICIENCY_REGIME` keeps all 7 and accepts that
+    # Acrobot/Catch/DC have both cap=10k+50k cells averaged within
+    # env (the original rev6 study did the same; cf.
+    # `findings_time_to_solve.md`).
+    scope=_REV6_SAMPLE_EFFICIENCY_REGIME,
 )
 def time_to_solve_link_null__pooled(
     paired_g_among_solvers: PooledPairedGResult,
@@ -1281,6 +1384,12 @@ def time_to_solve_link_null__pooled(
     target='eval_best_burst_step',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
+    # SpaceInvaders rev6 sample-efficiency cell — pin the rev6
+    # envelope so the SpaceInvaders bucket is one canonical
+    # regime per (arm, seed). SpaceInvaders is in the rev6 set
+    # only at cap=10000 (so `_ACTION_DIM_SWEEP_REGIME` would
+    # drop it via the cap-pin); the rev6 envelope keeps it.
+    scope=_REV6_SAMPLE_EFFICIENCY_REGIME,
 )
 def ddqn_solves_faster__spaceinvaders(
     paired_g_among_solvers: PooledPairedGResult,
@@ -1698,7 +1807,7 @@ def _expectile_reduces_gap_holds_when(paired_g: PairedGResult) -> Verdict:
     target='jensen_gap',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
-    scope=(pl.col('env_name') == 'FourRooms-misc'),
+    scope=_FOURROOMS_CANONICAL_REGIME,
 )
 def expectile_reduces_jensen_gap_more_than_ddqn__fourrooms(
     paired_g: PairedGResult,
@@ -1714,7 +1823,7 @@ def expectile_reduces_jensen_gap_more_than_ddqn__fourrooms(
     target='eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
-    scope=(pl.col('env_name') == 'FourRooms-misc'),
+    scope=_FOURROOMS_CANONICAL_REGIME,
 )
 def ddqn_outperforms_expectile_on_outcome__fourrooms(
     paired_g: PairedGResult,
@@ -1736,7 +1845,7 @@ def ddqn_outperforms_expectile_on_outcome__fourrooms(
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
-    scope=(pl.col('env_name') == 'FourRooms-misc'),
+    scope=_FOURROOMS_CANONICAL_REGIME,
 )
 def expectile_reproduces_mechanism_link_disconnect__fourrooms(
     paired_g: PairedGResult,
