@@ -281,6 +281,72 @@ def test_two_run_intervention_calls_share_out_dir_merge_includes_all_cells(
         }
 
 
+# ============ Resume robustness: stale 0-byte tmp parquets ============
+
+
+def test_run_intervention_reruns_cell_when_tmp_parquet_is_zero_bytes(
+    tmp_path: Path,
+) -> None:
+    """When a previous sweep crashed mid-write of a cell's parquet
+    (e.g. SIGKILL during stream_concat), the leftover 0-byte file
+    poisons subsequent merges with a polars
+    `File out of specification: must contain a header and footer
+    with at least 12 bytes` ComputeError.
+
+    Pre-fix: the resume-skip check was `runs_path.exists() and
+    traces_path.exists()` — `Path.exists()` returns True on a
+    0-byte file, so the runner happily skipped the cell, then the
+    merge step tried to read the corrupt parquet and crashed.
+
+    Post-fix: the skip-cached check requires `stat().st_size > 0`
+    on both parquets. A partial leftover triggers cleanup +
+    re-run via the new `elif runs_path.exists() or
+    traces_path.exists():` branch.
+
+    Reproduces the metamaze_g099_1M_postfix incident
+    (2026-05-09): cell002 traces.parquet was 0 bytes, finalize
+    sweep crashed in merge.
+    """
+    # Run a 2-grid sweep to produce 4 cells normally.
+    run_intervention(
+        _StubHypothesis.INTERVENTION,
+        base=_base_theory,
+        measurables=_StubHypothesis.MEASURABLES,
+        grid_points=[{'replicate': 0}, {'replicate': 1}],
+        runner=_stub_runner,
+        out_dir=tmp_path,
+    )
+
+    # Simulate a crashed mid-write: truncate one cell's traces to 0.
+    # The framework writes per-cell parquets under
+    # `<out_dir>/<arm_tag>/tmp/cell<N>__<tag>__traces.parquet`.
+    tmp_files = list(tmp_path.rglob('cell*__traces.parquet'))
+    assert tmp_files, 'expected per-cell tmp traces.parquet to exist'
+    poisoned = tmp_files[0]
+    poisoned.write_bytes(b'')  # 0-byte corruption
+    assert poisoned.stat().st_size == 0
+
+    # Re-run the same sweep. The skip-cached path should detect the
+    # poisoned parquet, clean it, and re-run that cell — NOT skip
+    # and choke later in the merge.
+    runs_path, _ = run_intervention(
+        _StubHypothesis.INTERVENTION,
+        base=_base_theory,
+        measurables=_StubHypothesis.MEASURABLES,
+        grid_points=[{'replicate': 0}, {'replicate': 1}],
+        runner=_stub_runner,
+        out_dir=tmp_path,
+    )
+
+    # Merge succeeded → final runs.parquet exists and contains all
+    # 4 cells.
+    rows = read_runrows(runs_path)
+    assert len(rows) == 4
+    # And the previously-poisoned tmp file is now non-zero (re-
+    # written by the cell runner).
+    assert poisoned.stat().st_size > 0
+
+
 # ============ Merge integrity cross-check ============
 
 

@@ -441,7 +441,7 @@ def stream_concat_parquets(
     compression_level: int = 3,
     chunk_size: int = 4,
     scratch_dir: Path | None = None,
-    target_ram_gb: float = 8.0,
+    target_ram_gb: float = 3.0,
 ) -> None:
     """Concatenate `inputs` to `out` via polars'
     `concat(how='diagonal_relaxed')` — null-pads missing columns
@@ -477,6 +477,13 @@ def stream_concat_parquets(
     For 12 SpaceInvaders 1M trace shards (~580MB compressed each,
     ~5GB decompressed), `chunk_size=4` keeps peak RAM under ~20GB
     versus ~60GB for unchunked.
+
+    `target_ram_gb` default is 3.0 (conservative). Concurrent
+    sweeps share the system RAM pool; a single merge holding 8 GB
+    can OOM when other Python processes already own GBs of working
+    set (CartPole 1M MLP merge crashed under this scenario before
+    the lower default was set 2026-05-09). Pass higher values
+    explicitly when isolated runs make the bigger budget safe.
 
     `scratch_dir` controls where the per-chunk temp parquets
     land during the recursive merge. **Defaults to `out.parent`**

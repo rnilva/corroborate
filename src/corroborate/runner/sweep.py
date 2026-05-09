@@ -365,7 +365,11 @@ def run_intervention[R: Mapping[str, object]](
                     )
                     cell_idx += 1
                     continue
-            elif runs_path.exists() and traces_path.exists():
+            elif (
+                runs_path.exists() and traces_path.exists()
+                and runs_path.stat().st_size > 0
+                and traces_path.stat().st_size > 0
+            ):
                 runs_paths.append(runs_path)
                 traces_paths.append(traces_path)
                 if graph_path.exists():
@@ -377,6 +381,25 @@ def run_intervention[R: Mapping[str, object]](
                 )
                 cell_idx += 1
                 continue
+            elif runs_path.exists() or traces_path.exists():
+                # Partial / zero-byte leftover from a crashed previous
+                # run (e.g. cell002 traces.parquet at 0 bytes after a
+                # SIGKILL mid-write — observed 2026-05-09 on metamaze
+                # g099 finalize). The skip-cached check above only saw
+                # `exists()` before the size guard was added; subsequent
+                # merges then choked on the corrupt parquet
+                # (`File out of specification: must contain a header
+                # and footer with at least 12 bytes`). Delete any
+                # leftover artifacts and fall through to re-run.
+                for stale in (runs_path, traces_path, graph_path):
+                    if stale.exists():
+                        stale.unlink()
+                print(
+                    f'  [{cell_idx+1}/{n_cells}] {tag} '
+                    f'⚠ stale local parquets (0-byte / partial) '
+                    f'cleared; re-running',
+                    flush=True,
+                )
 
             print(
                 f'  [{cell_idx+1}/{n_cells}] {tag} '
