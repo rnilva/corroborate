@@ -53,6 +53,12 @@ from corroborate.measurables import (
 
 
 MEASUREMENTS_FILENAME = 'measurements.parquet'
+DEFAULT_TRACE_BATCH_SIZE = 100
+"""Default cells-per-batch for `compute_trace_measurables_streaming`.
+Tunes peak RAM during measurable computation: higher = fewer
+row-group reads but more cells × trace col size held at once.
+100 keeps peak under ~1 GB even for 1M-step MinAtar traces with
+6 per-step list cols (~10 MB per cell × 100 = 1 GB)."""
 SIDECAR_FILENAME = 'measurements.hashes.json'
 
 
@@ -489,6 +495,120 @@ class DriftReport:
             c.corpus_dir.name
             for c in self.per_corpus if not c.is_clean
         )
+
+
+def compute_trace_measurables_streaming(
+    runs_df: pl.DataFrame,
+    traces_path: Path,
+    *,
+    measurable_reads: frozenset[str],
+    required: Sequence[str],
+    batch_size: int = DEFAULT_TRACE_BATCH_SIZE,
+) -> pl.DataFrame:
+    """Row-group-streaming computation of trace-dependent
+    measurables. Returns a small DataFrame with `id` + measurable
+    scalar columns only — never holds full trace cols in memory.
+
+    For each row group of `traces_path`:
+      1. Read the cols in `measurable_reads` (intersected with
+         what the trace actually carries) plus `id` for that
+         row group only.
+      2. Inner-join with `runs_df` rows whose ids are in the
+         row group.
+      3. Run `compute_missing_columns(joined, required)` on the
+         small batch.
+      4. Project to `id` + registered measurable cols.
+      5. Concat into the scalar accumulator.
+
+    Peak RAM = `batch_size` cells' trace cols ≈ batch_size × max
+    decompressed col size. For 1M-step MinAtar traces with 6
+    per-step list cols (~10 MB / cell), batch=100 → ~1 GB peak.
+
+    The accumulator is small: only id + measurable scalars,
+    grows linearly with cell count but ~O(KB per cell), well
+    within RAM for any realistic corpus size.
+
+    No-op when the trace file is absent or carries none of the
+    requested cols — returns a `(0, 1)`-shaped frame with just
+    an empty `id` column."""
+    import pyarrow.parquet as _pq
+
+    if not traces_path.exists():
+        return pl.DataFrame({'id': []}, schema={'id': pl.Utf8})
+    try:
+        schema = pl.scan_parquet(traces_path).collect_schema()
+    except pl.exceptions.ComputeError:
+        return pl.DataFrame({'id': []}, schema={'id': pl.Utf8})
+    available = set(schema.names())
+    cols_to_load = ['id'] + sorted(measurable_reads & available)
+    if len(cols_to_load) == 1:
+        return pl.DataFrame({'id': []}, schema={'id': pl.Utf8})
+    if 'id' not in runs_df.columns:
+        raise ValueError(
+            f'compute_trace_measurables_streaming({traces_path}): '
+            f'runs_df is missing the `id` column',
+        )
+    runs_indexed = runs_df.set_sorted('id') if False else runs_df
+    pq_file = _pq.ParquetFile(str(traces_path))
+    accumulators: list[pl.DataFrame] = []
+    measurable_set = set(registered_names())
+    n_per_rg = max(1, batch_size)
+    rg_indices = list(range(pq_file.num_row_groups))
+    # Group consecutive row-groups so each batch carries ~batch_size
+    # cells. Polars / pyarrow row-group counts vary by writer; the
+    # outer loop chunks them to a stable batch size.
+    rg_groups: list[list[int]] = []
+    cur: list[int] = []
+    cur_rows = 0
+    for idx in rg_indices:
+        rg_rows = pq_file.metadata.row_group(idx).num_rows
+        if cur and cur_rows + rg_rows > n_per_rg:
+            rg_groups.append(cur)
+            cur = [idx]
+            cur_rows = rg_rows
+        else:
+            cur.append(idx)
+            cur_rows += rg_rows
+    if cur:
+        rg_groups.append(cur)
+    for group in rg_groups:
+        # `read_row_groups(...)` reads multiple consecutive row
+        # groups in one pyarrow call, more efficient than per-rg
+        # reads when the writer used many small row groups.
+        table = pq_file.read_row_groups(group, columns=cols_to_load)
+        batch_traces = pl.from_arrow(table)
+        if not isinstance(batch_traces, pl.DataFrame):
+            # `from_arrow` can return a Series for 1-col inputs;
+            # we have at least 'id' + N cols so this shouldn't
+            # fire, but guard defensively.
+            continue
+        batch_runs = runs_indexed.filter(
+            pl.col('id').is_in(batch_traces['id']),
+        )
+        if batch_runs.height == 0:
+            continue
+        # Drop trace col duplicates from runs_df (e.g. `id`-only
+        # overlap is fine; substantive overlap means runs.parquet
+        # carried a trace col which polars' join would suffix).
+        overlap = [
+            c for c in batch_traces.columns
+            if c != 'id' and c in batch_runs.columns
+        ]
+        if overlap:
+            batch_traces = batch_traces.drop(overlap)
+        joined = batch_runs.join(batch_traces, on='id', how='left')
+        enriched = compute_missing_columns(joined, list(required))
+        # Project to id + measurable cols only (drops trace cols
+        # before accumulation).
+        keep = ['id'] + [
+            c for c in enriched.columns
+            if c != 'id' and c in measurable_set
+        ]
+        accumulators.append(enriched.select(keep))
+        del table, batch_traces, joined, enriched
+    if not accumulators:
+        return pl.DataFrame({'id': []}, schema={'id': pl.Utf8})
+    return pl.concat(accumulators, how='diagonal_relaxed')
 
 
 def check_drift(
