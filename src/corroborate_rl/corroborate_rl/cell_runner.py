@@ -26,10 +26,11 @@ The DQN algorithm itself lives entirely in the `dqn` claim
 step semantics; it's a generic vmap-and-build-records harness."""
 from __future__ import annotations
 
+import subprocess
 import uuid
 from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
-from functools import partial
+from functools import lru_cache, partial
 from typing import NamedTuple
 
 import jax
@@ -46,6 +47,27 @@ from corroborate.corpus.schema import MeasurementLeaf, RunRow, TraceLeaf, TraceR
 from corroborate.core.signature import walk, walk_paths
 from corroborate.bridge.verdict import Verdict
 from corroborate.measurables import Measurable
+
+
+@lru_cache(maxsize=1)
+def _git_head_sha() -> str | None:
+    """Current substrate commit SHA, stamped on every RunRow this
+    process emits. Cached at module load — git HEAD shouldn't change
+    mid-sweep; if it did, a fresh runner invocation would re-read it.
+
+    Returns `None` when the substrate isn't in a git checkout (e.g.,
+    pip-install, source tarball). Bridges that need a specific
+    substrate fix scope by `pl.col('substrate_commit_sha').is_in([
+    sha1, sha2, ...])`; cells with `None` are pre-versioning and
+    fall outside any such scope. See `docs/SUBSTRATE_FIXES.md`."""
+    try:
+        out = subprocess.check_output(
+            ['git', 'rev-parse', 'HEAD'],
+            stderr=subprocess.DEVNULL, text=True, timeout=2,
+        ).strip()
+        return out or None
+    except (subprocess.SubprocessError, FileNotFoundError):
+        return None
 
 
 class CellResult(NamedTuple):
@@ -291,6 +313,7 @@ def run_dqn_arm(
             id=cell_id, parent_id=None,
             cycle_id=cycle_id, timestamp=timestamp,
             verdict=verdict, arm_key=arm_key,
+            substrate_commit_sha=_git_head_sha(),
             measurements=measurements,
         )
         # Trace leaves: configurational leaves (shared with the

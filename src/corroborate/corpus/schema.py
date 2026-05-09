@@ -237,6 +237,14 @@ class RunRow:
     timestamp: str
     verdict: Verdict
     arm_key: str = 'baseline'
+    # Git commit SHA the substrate was on when this cell was
+    # produced. Stamped by the runner at sweep start (one SHA shared
+    # across all cells in one runner invocation). `None` for cells
+    # produced before this field existed; bridges that care about a
+    # specific substrate fix scope by SHA via
+    # `pl.col('substrate_commit_sha').is_in([...])`. See
+    # `docs/SUBSTRATE_FIXES.md` for the SHA → fix-name catalogue.
+    substrate_commit_sha: str | None = None
     measurements: Mapping[str, MeasurementLeaf] = field(
         default_factory=lambda: {},
     )
@@ -249,6 +257,7 @@ class RunRow:
             'timestamp': self.timestamp,
             'verdict': self.verdict.value,
             'arm_key': self.arm_key,
+            'substrate_commit_sha': self.substrate_commit_sha,
         }
         _flatten_measurements(out, self.measurements)
         return out
@@ -279,6 +288,7 @@ class RunRow:
             timestamp=require_str(d, 'timestamp'),
             verdict=require_verdict(d, 'verdict'),
             arm_key=arm_key,
+            substrate_commit_sha=optional_str(d, 'substrate_commit_sha'),
             measurements=measurements,
         )
 
