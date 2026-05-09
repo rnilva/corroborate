@@ -320,6 +320,72 @@ def q_action_std_late(record: Mapping[str, object]) -> float:
     return _mean_window(arr, 0.5, 1.0)
 
 
+@measurable(reads=('online_max_q_per_step', 'online_min_q_per_step',
+                   'online_std_q_per_step'))
+def q_range_to_std_late(record: Mapping[str, object]) -> float:
+    """Mean of (max_Q − min_Q) / σ_Q over the late 50% of training,
+    averaged across non-terminal states.
+
+    **Conservative proxy for argmax-vulnerability**:
+    `(max − min) / σ` ≥ `(top1 − top2) / σ`, so when this ratio
+    is small, the *true* margin-to-noise ratio is also small →
+    argmax fragile under bias. When this ratio is large,
+    inconclusive (could still be argmax-fragile if K-1 actions
+    cluster low and 1 outlier high, but bias-vulnerability is
+    less likely on average).
+
+    Computable from existing trace columns; intended as the
+    continuous G2 predicate in the three-gate decomposition (see
+    `docs/DDQN_THREE_GATES.md`) until `q_argmax_margin_late`
+    populates from new sweeps. For binary actions (CartPole),
+    `max − min = top1 − top2` exactly, so this proxy is tight.
+
+    Returns nan when any of the trace columns is missing or the
+    late window is empty."""
+    max_arr = _record_array(record, 'online_max_q_per_step')
+    min_arr = _record_array(record, 'online_min_q_per_step')
+    std_arr = _record_array(record, 'online_std_q_per_step')
+    if max_arr is None or min_arr is None or std_arr is None:
+        return float('nan')
+    if max_arr.size != min_arr.size or max_arr.size != std_arr.size:
+        return float('nan')
+    n = max_arr.size
+    lo = int(n * 0.5)
+    if lo >= n:
+        return float('nan')
+    rng = max_arr[lo:] - min_arr[lo:]
+    sd = std_arr[lo:]
+    valid = sd > 1e-9
+    if not valid.any():
+        return float('nan')
+    return float(np.mean(rng[valid] / sd[valid]))
+
+
+@measurable(reads=('online_top12_margin_per_step',))
+def q_argmax_margin_late(record: Mapping[str, object]) -> float:
+    """Mean of `online_top12_margin_per_step` over the late 50%
+    of training — per-step (Q(top1) − Q(top2)) averaged across
+    late states. Captures **argmax-bias-sensitivity**: the
+    continuous structural variable that |A| ≥ 3 only approximates.
+
+    Reading: small margin → argmax flips easily under bias →
+    DDQN's bias-correction translates to policy improvement.
+    Large margin → argmax robust → bias is policy-irrelevant
+    (CartPole's |A|=2 + decisive states keep margin large).
+
+    Companion to `q_action_std_late` (the σ_action Hasselt floor).
+    The dimensionless ratio `q_argmax_margin_late /
+    q_action_std_late` is the natural argmax-robustness score —
+    when ratio < 1, bias differential can flip argmax; when > 1,
+    bias is below margin scale.
+
+    Returns nan if the trace column is absent."""
+    arr = _record_array(record, 'online_top12_margin_per_step')
+    if arr is None:
+        return float('nan')
+    return _mean_window(arr, 0.5, 1.0)
+
+
 @measurable(reads=('n_actions',))
 def hasselt_implied_per_step_bias(
     record: Mapping[str, object],
@@ -1405,9 +1471,74 @@ mc_return_per_burst_mean: Measurable[
     Mapping[str, object], npt.NDArray[np.floating],
 ] = _reduce_axis(from_key('mc_return'), axis=-1, op='mean')
 
+# Per-burst std across the n_episodes evaluation rollouts. Captures
+# pure environment-stochasticity at a fixed policy (same Q, K
+# independent episode rollouts → σ across rollouts). Independent of
+# algorithm choice (vanilla / DDQN / etc.) at fixed policy snapshot
+# — useful as a SCOPE predicate to distinguish "env intrinsically
+# noisy" (MetaMaze-misc CV ≈ 0.7) from "env quiet" (FourRooms CV ≈
+# 0.09), so cross-env outcome-magnitude bridges can scope on
+# detectability. See `findings_dowhy_two_mediator_chain.md` and the
+# meta-discussion of CLAIM 22's MetaMaze underpower.
+mc_return_per_burst_std: Measurable[
+    Mapping[str, object], npt.NDArray[np.floating],
+] = _reduce_axis(from_key('mc_return'), axis=-1, op='std')
+
 jensen_bias_per_burst_mean: Measurable[
     Mapping[str, object], npt.NDArray[np.floating],
 ] = _reduce_axis(jensen_bias_per_eps, axis=-1, op='mean')
+
+
+@measurable(
+    name='outcome_episode_sigma',
+    reads=('mc_return',),
+)
+def outcome_episode_sigma(record: Mapping[str, object]) -> float:
+    """Mean across bursts of σ(mc_return) across the K eval episodes
+    within each burst. Captures **pure env stochasticity at a fixed
+    policy snapshot** — independent of algorithm at any single burst
+    (same Q, K independent rollouts → σ across rollouts).
+
+    Useful as a SCOPE predicate to distinguish env-intrinsic noise
+    (MetaMaze ≈ 17, procedurally generated mazes) from quiet envs
+    (FourRooms ≈ 0.06, fixed deterministic layout). Cross-env
+    outcome-magnitude bridges should scope on this to filter cells
+    where mean-effect detection is impossible at typical n_seeds —
+    framework's POWER_INSUFFICIENT verdict gate."""
+    mc = record.get('mc_return')
+    if mc is None:
+        return float('nan')
+    arr = np.asarray(mc, dtype=np.float64)
+    if arr.ndim == 0 or arr.shape[-1] < 2:
+        return float('nan')
+    return float(np.mean(np.std(arr, axis=-1)))
+
+
+@measurable(
+    name='outcome_episode_cv',
+    reads=('mc_return',),
+)
+def outcome_episode_cv(record: Mapping[str, object]) -> float:
+    """Coefficient of variation of `outcome_episode_sigma` —
+    σ across episodes / |mean across all (burst, episode)|.
+    Reward-scale-free version of the env-stochasticity proxy;
+    comparable across envs with different reward magnitudes.
+
+    MetaMaze ≈ 0.7 (extreme), MountainCar ≈ 0.07, Acrobot ≈ 0.06,
+    FourRooms ≈ 0.09. Predicate `outcome_episode_cv < 0.15`
+    cleanly excludes envs where 30-seed mean-effect detection
+    is dramatically underpowered."""
+    mc = record.get('mc_return')
+    if mc is None:
+        return float('nan')
+    arr = np.asarray(mc, dtype=np.float64)
+    if arr.ndim == 0 or arr.shape[-1] < 2:
+        return float('nan')
+    sigma = float(np.mean(np.std(arr, axis=-1)))
+    abs_mean = abs(float(np.mean(arr)))
+    if abs_mean < 1e-9:
+        return float('nan')
+    return sigma / abs_mean
 
 
 @measurable(

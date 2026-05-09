@@ -95,6 +95,23 @@ def _per_step_std_q(s: pl.Series) -> list[float]:
     return out
 
 
+def _per_step_top1_top2_margin(s: pl.Series) -> list[float]:
+    """Per-step argmax-margin: `Q(top1) − Q(top2)` across actions.
+    Captures argmax-bias-sensitivity: small margin → argmax fragile
+    to bias differential; large margin → bias differential below
+    margin → argmax robust → DDQN's bias-correction is policy-
+    irrelevant on this state. Continuous structural variable; |A|
+    only sets an upper bound on flip-paths."""
+    out: list[float] = []
+    for p in s.to_list():
+        if p is None or len(p) < 2:
+            out.append(float('nan'))
+            continue
+        sorted_q = sorted(p, reverse=True)
+        out.append(float(sorted_q[0] - sorted_q[1]))
+    return out
+
+
 Q_TRACE_REDUCTIONS: tuple[pl.Expr, ...] = (
     pl.col('online_q_per_action').map_elements(
         _per_step_max_q, return_dtype=pl.List(pl.Float64),
@@ -111,6 +128,9 @@ Q_TRACE_REDUCTIONS: tuple[pl.Expr, ...] = (
     pl.col('online_q_per_action').map_elements(
         _per_step_std_q, return_dtype=pl.List(pl.Float64),
     ).alias('online_std_q_per_step'),
+    pl.col('online_q_per_action').map_elements(
+        _per_step_top1_top2_margin, return_dtype=pl.List(pl.Float64),
+    ).alias('online_top12_margin_per_step'),
     pl.col('online_q_per_action').map_elements(
         _per_step_argmax_q, return_dtype=pl.List(pl.Int64),
     ).alias('online_argmax_per_step'),

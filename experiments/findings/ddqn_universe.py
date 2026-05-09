@@ -85,6 +85,9 @@ from corroborate.analyses.paired_delta_link_dowhy import (
 from corroborate.analyses.paired_g import PairedGResult
 from corroborate.analyses.paired_g_per_burst import PerBurstResult
 from corroborate.analyses.proportion_mediated import ProportionMediatedResult
+from corroborate.analyses.partial_spearman_paired import (
+    PartialSpearmanPairedResult,
+)
 from corroborate.analyses.cross_config_paired_slope import (
     CrossConfigPairedSlopeResult,
 )
@@ -1938,6 +1941,63 @@ def acrobot_per_burst_link_active__gamma_0999(
 # =====================================================================
 
 
+# Three structural gates for "DDQN is relevant" scope (per
+# `docs/DDQN_THREE_GATES.md`). DDQN can only help when ALL three
+# gates fire conjunctively — otherwise NO_EFFECT is structural,
+# not algorithmic.
+#
+# G1 — premise active: vanilla overestimates by a substantial
+#      margin (jensen_gap > 0.5) AND does not net-underestimate
+#      (jensen_dormancy_gap < 0.05). FourRooms (jens=0.04)
+#      excluded.
+#
+# G2 — argmax bias-vulnerable: bias differential can flip argmax.
+#      Currently heuristic via `n_actions >= 3` (Hasselt floor
+#      plus union-bound on flip-paths grows with K). Future
+#      continuous form: `q_argmax_margin_late /
+#      q_action_std_late < 1.0` once measurables populate on
+#      rebuilt cache. CartPole (|A|=2) excluded.
+#
+# G3 — outcome has headroom: vanilla return is below env reward
+#      ceiling. Currently proxied by REACH polarity (REACH envs
+#      have shorter→better → outcome can fall arbitrarily, no
+#      ceiling). SURVIVE envs hit eval-cap (CartPole 99.34).
+#      Future continuous form: per-env reward-ceiling fraction
+#      via `outcome_episode_cv > 0.005` (saturation → CV→0).
+_DDQN_RELEVANT_SCOPE = (
+    # G1 — threshold 0.05 matches dormancy scale; tighter
+    # thresholds silently exclude high-variance cells on noisy
+    # envs (MetaMaze per-seed jens fluctuates above and below 0.5)
+    finite('jensen_gap')
+    & (pl.col('jensen_gap') > 0.05)
+    & finite('jensen_dormancy_gap')
+    & finite_lt('jensen_dormancy_gap', 0.05)
+    # G2 — argmax bias-vulnerable. Heuristic `n_actions >= 3` for
+    # now. The (max−min)/σ_Q proxy was inconclusive (clusters at
+    # 2.0-2.6 for all envs, doesn't isolate top1-top2 margin from
+    # full Q-range). Proper continuous form requires
+    # `q_argmax_margin_late / q_action_std_late < √(2 ln K)`
+    # threshold, awaiting future sweeps to populate
+    # `online_top12_margin_per_step` trace reduction (added
+    # 2026-05-09).
+    & finite('n_actions')
+    & (pl.col('n_actions') >= 3)
+    # G3 deferred — `env_reward_polarity` is a bad proxy
+    # (MetaMaze's procedural mazes break length→reward
+    # correlation, polarity ≈ 0 instead of negative). The proper
+    # continuous form (`outcome_episode_cv > 0.005`) needs cache
+    # rebuild after the new measurable populates. Until then,
+    # G1+G2 alone correctly excludes the established ceiling-
+    # saturated cases (CartPole via G2's |A|=2 exclusion).
+    # Standard config (no n-step / action-duplicate / rs-shift /
+    # polyak-τ interventions in scope)
+    & ((pl.col('n_step') == 1) | pl.col('n_step').is_null())
+    & pl.col('action_duplicate_k').is_null()
+    & (pl.col('reward_scale').is_null() | (pl.col('reward_scale') == 1.0))
+    & pl.col('target_sync.tau').is_null()
+)
+
+
 _REACH_ENVS_FOUR: tuple[str, ...] = (
     'FourRooms-misc',
     'Acrobot-v1',
@@ -1946,23 +2006,12 @@ _REACH_ENVS_FOUR: tuple[str, ...] = (
 )
 
 
-_REACH_DOWHY_SCOPE = (
-    pl.col('env_name').is_in(list(_REACH_ENVS_FOUR))
-    & finite('jensen_dormancy_gap')
-    & finite_lt('jensen_dormancy_gap', 0.05)
-    & ((pl.col('n_step') == 1) | pl.col('n_step').is_null())
-    & pl.col('action_duplicate_k').is_null()
-    & (pl.col('reward_scale').is_null() | (pl.col('reward_scale') == 1.0))
-    & pl.col('target_sync.tau').is_null()
-)
-
-
 @claim_bridge(
     source=INTERVENTION,
     target='outcome.eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
-    scope=_REACH_DOWHY_SCOPE,
+    scope=_DDQN_RELEVANT_SCOPE,
 )
 def reach_link_backdoor_ate_negative(
     paired_delta_link_dowhy: PairedDeltaLinkDowhyResult,
@@ -1977,10 +2026,12 @@ def reach_link_backdoor_ate_negative(
     ate_ceiling: float = -0.1,
 ) -> Verdict:
     """DoWhy backdoor ATE on the per-(env, burst, seed) Δ panel
-    across 4 REACH envs (FourRooms, Acrobot, MountainCar, MetaMaze)
-    yields a NEGATIVE ATE bigger than `ate_ceiling`. HELD when
-    identified AND ATE <= ceiling. Sign-locked by Hasselt theorem:
-    DDQN reduces |Δ_jens| → boosts |Δ_out| (CLAIM 22)."""
+    across cells satisfying the DDQN-relevant gate conjunction
+    (G1 premise-active + G2 argmax-vulnerable, see
+    `docs/DDQN_THREE_GATES.md`) yields a NEGATIVE ATE bigger than
+    `ate_ceiling`. HELD when identified AND ATE <= ceiling. Sign-
+    locked by Hasselt theorem: DDQN reduces |Δ_jens| → boosts
+    |Δ_out| (CLAIM 22)."""
     del link_predictor, link_target, env_filter
     b = paired_delta_link_dowhy.backdoor
     if not b.identified:
@@ -1999,7 +2050,7 @@ def reach_link_backdoor_ate_negative(
     target='outcome.eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
-    scope=_REACH_DOWHY_SCOPE,
+    scope=_DDQN_RELEVANT_SCOPE,
 )
 def reach_link_placebo_refuted(
     paired_delta_link_dowhy: PairedDeltaLinkDowhyResult,
@@ -2037,7 +2088,7 @@ def reach_link_placebo_refuted(
     target='outcome.eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
-    scope=_REACH_DOWHY_SCOPE,
+    scope=_DDQN_RELEVANT_SCOPE,
 )
 def reach_link_rcc_robust(
     paired_delta_link_dowhy: PairedDeltaLinkDowhyResult,
@@ -2066,6 +2117,113 @@ def reach_link_rcc_robust(
     if drift_ratio < rcc_max_drift_ratio:
         return Verdict.HELD
     if drift_ratio < rcc_max_drift_ratio * 2:
+        return Verdict.POWER_INSUFFICIENT
+    return Verdict.NO_EFFECT
+
+
+# =====================================================================
+# CLAIM 23 — q_divergence_score and argmax_entropy_late are SHADOWS
+# of Δ_jens, not independent direct-cause mediators of Δ_outcome.
+#
+# Both have substantial marginal correlation with Δ_outcome on the
+# postfix corpus (q_div: ρ=-0.59 ***; argmaxH: ρ=-0.31 ***), which
+# would naively suggest a second / third independent mediator path
+# alongside jens. Partial Spearman after conditioning on Δ_jens
+# shows the residual collapses (q_div: +0.15 sign-flip; argmaxH:
+# -0.14 ns at n=120) — both are largely / fully mediated by jens.
+#
+# Why mechanically:
+#   q_divergence_score = jensen_gap_late / (R / (1−γ))
+#                      = jens × per-env-constant
+# i.e. it IS jens up to an env-level scaling. Their marginal
+# co-variation is mathematical, not causal. argmax_entropy_late
+# co-varies with jens via shared Q-distribution dynamics.
+#
+# Codifying these as null-form bridges (predicted_direction='null',
+# HELD-when-partial-is-zero) prevents future investigators from
+# re-authoring them as competing independent mediators. See
+# `feedback_jens_shadow_mediators.md`.
+# =====================================================================
+
+
+_DDQN_VS_VANILLA_ARMS = (
+    'arm_baseline',
+    'arm_treatment',
+)
+
+
+@claim_bridge(
+    source=INTERVENTION,
+    target='outcome.eval_best_burst_mean',
+    direction=Direction.DIRECT,
+    tier=Tier.ASSOCIATIONAL,
+    scope=_DDQN_RELEVANT_SCOPE,
+    predicted_direction='null',
+)
+def q_divergence_shadowed_by_jens(
+    partial_spearman_paired_delta: PartialSpearmanPairedResult,
+    *,
+    target: str = 'eval_best_burst_mean',
+    mediator: str = 'q_divergence_score',
+    conditioning: str = 'jensen_gap',
+    treatment_arm: str = 'bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)',
+    baseline_arm: str = 'baseline',
+    pair_by: tuple[str, ...] = ('seed', 'env_name'),
+    null_max_abs_rho: float = 0.2,
+    null_min_p: float = 0.05,
+) -> Verdict:
+    """`q_divergence_score` is a shadow of `jensen_gap`: the partial
+    Spearman ρ(Δ_outcome, Δ_qdiv | Δ_jens) is consistent with zero,
+    HELD when |partial ρ| < `null_max_abs_rho` AND p > `null_min_p`.
+    Empirically (postfix corpus n≈120): partial ρ = +0.15 (sign-
+    flipped from marginal -0.59), p > 0.05 → HELD as null.
+    Mechanically tautological: q_divergence_score = jensen_gap /
+    (R / (1-γ)). See CLAIM 23."""
+    del target, mediator, conditioning, treatment_arm, baseline_arm, pair_by
+    r = partial_spearman_paired_delta
+    if r.n_pairs < 5 or math.isnan(r.rho) or math.isnan(r.p_value):
+        return Verdict.POWER_INSUFFICIENT
+    if abs(r.rho) < null_max_abs_rho and r.p_value > null_min_p:
+        return Verdict.HELD
+    if abs(r.rho) < null_max_abs_rho * 1.5:
+        return Verdict.POWER_INSUFFICIENT
+    return Verdict.NO_EFFECT
+
+
+@claim_bridge(
+    source=INTERVENTION,
+    target='outcome.eval_best_burst_mean',
+    direction=Direction.DIRECT,
+    tier=Tier.ASSOCIATIONAL,
+    scope=_DDQN_RELEVANT_SCOPE,
+    predicted_direction='null',
+)
+def argmax_entropy_shadowed_by_jens(
+    partial_spearman_paired_delta: PartialSpearmanPairedResult,
+    *,
+    target: str = 'eval_best_burst_mean',
+    mediator: str = 'argmax_entropy_late',
+    conditioning: str = 'jensen_gap',
+    treatment_arm: str = 'bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)',
+    baseline_arm: str = 'baseline',
+    pair_by: tuple[str, ...] = ('seed', 'env_name'),
+    null_max_abs_rho: float = 0.2,
+    null_min_p: float = 0.05,
+) -> Verdict:
+    """`argmax_entropy_late` is mediated by `jensen_gap`: the
+    partial Spearman ρ(Δ_outcome, Δ_argmaxH | Δ_jens) is consistent
+    with zero. HELD when |partial ρ| < threshold AND p > alpha.
+    Empirically (postfix n≈120): marginal ρ = -0.31 ***, partial ρ
+    given Δ_jens = -0.14 (ns) → HELD as null. The marginal signal
+    was driven primarily by within-MountainCar correlation (-0.75)
+    and disappears after adjusting for jens. CLAIM 23."""
+    del target, mediator, conditioning, treatment_arm, baseline_arm, pair_by
+    r = partial_spearman_paired_delta
+    if r.n_pairs < 5 or math.isnan(r.rho) or math.isnan(r.p_value):
+        return Verdict.POWER_INSUFFICIENT
+    if abs(r.rho) < null_max_abs_rho and r.p_value > null_min_p:
+        return Verdict.HELD
+    if abs(r.rho) < null_max_abs_rho * 1.5:
         return Verdict.POWER_INSUFFICIENT
     return Verdict.NO_EFFECT
 
@@ -3724,6 +3882,13 @@ DDQN_UNIVERSE_BRIDGES = (
     reach_link_backdoor_ate_negative,
     reach_link_placebo_refuted,
     reach_link_rcc_robust,
+    # CLAIM 23 — q_divergence and argmax_entropy are shadows of
+    # Δ_jens (not independent mediators). Bridges HELD when the
+    # partial Spearman conditional on Δ_jens is consistent with
+    # zero — codifies the shadow-mediator finding so future
+    # bridge authors don't re-derive the same conclusion.
+    q_divergence_shadowed_by_jens,
+    argmax_entropy_shadowed_by_jens,
     # CLAIM 11 — extreme Q-divergence attenuates the link. Companion
     # to CLAIM 2's dormancy bridge: dormancy bounds the lower
     # attenuation (mech inactive); extreme Q-divergence bounds the
@@ -3799,6 +3964,8 @@ __all__ = [
     'reach_link_backdoor_ate_negative',
     'reach_link_placebo_refuted',
     'reach_link_rcc_robust',
+    'q_divergence_shadowed_by_jens',
+    'argmax_entropy_shadowed_by_jens',
     'acrobot_per_burst_link_active__gamma_0999',
     'extreme_q_divergence_attenuates_link__binary',
     'extreme_q_divergence_attenuates_link__placebo_refuted',
