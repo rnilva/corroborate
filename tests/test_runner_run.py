@@ -154,8 +154,10 @@ def test_load_data_dispatches_sequence_path_to_named_corpora(
 ) -> None:
     """**CA3**: passing `Sequence[Path]` routes to the
     named-corpora ingest (via `_load_directory(corpus_dirs=...)`),
-    not the directory-walk path. Pin by constructing two real
-    corpus dirs and verifying both flow through."""
+    not the directory-walk path. `_load_data` returns just the
+    named subset; the cache-side append (preserves other
+    corpora's cells) happens in `_ingest_and_compute` —
+    separately covered by the named-append test."""
     # Force sequential processing — the parallel ProcessPoolExecutor
     # path uses fork() and stalls under pytest's stderr capture.
     monkeypatch.setenv('CORROBORATE_CACHE_WORKERS', '1')
@@ -178,7 +180,9 @@ def test_load_data_dispatches_sequence_path_to_named_corpora(
         })
         df.write_parquet(d / 'runs.parquet')
 
-    # Ingest just `a` and `b`; `unrelated` should not contribute.
+    # Ingest just `a` and `b`. `_load_data` returns just the named
+    # subset; the cache append against existing cells happens at
+    # the higher `_ingest_and_compute` layer.
     out = _load_data(
         [root / 'a', root / 'b'],
         restore_from_cloud=False, required=(), bridges=(),
@@ -201,6 +205,75 @@ def test_load_data_named_corpora_empty_sequence_is_noop(
         [], restore_from_cloud=False, required=(), bridges=(),
     )
     assert out is None
+
+
+def test_named_ingest_appends_to_existing_cache_preserving_others(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """**CA3 additivity**: `--ingest <named>` must update only the
+    named corpora's cells in the cache and leave every other
+    corpus's cells alone. Pre-fix the named-ingest path overwrote
+    the cache with just the named corpora's cells, silently
+    dropping the rest."""
+    monkeypatch.setenv('CORROBORATE_CACHE_WORKERS', '1')
+    import polars as pl
+    from corroborate.runner.runner import _ingest_and_compute
+
+    root = tmp_path / 'data'
+    cache_path = tmp_path / 'cache.parquet'
+    # Seed a cache with cells from corpora a, b, c.
+    seed = pl.DataFrame({
+        'id': ['a-0', 'b-0', 'c-0'],
+        'env_name': ['Env_a', 'Env_b', 'Env_c'],
+        'arm_key': ['baseline'] * 3,
+        'seed': [0, 0, 0],
+        'corpus': ['a', 'b', 'c'],
+    })
+    seed.write_parquet(cache_path)
+
+    # Materialise corpus `b` with NEW cell id (`b-1`) — simulating
+    # a second sweep that produced a fresh cell. Other corpora
+    # (a, c) only exist in the cache, not on disk.
+    b_dir = root / 'b'
+    b_dir.mkdir(parents=True)
+    pl.DataFrame({
+        'id': ['b-1'],
+        'env_name': ['Env_b'],
+        'arm_key': ['baseline'],
+        'seed': [1],
+    }).write_parquet(b_dir / 'runs.parquet')
+
+    # Run named-ingest of just `b`. The cache should keep `a-0`
+    # and `c-0` from the prior cache, and add `b-1` from the
+    # new walk. (`b-0` from the prior cache gets dropped because
+    # corpus `b` was rewritten.)
+    _ingest_and_compute(
+        bridges=(),
+        data=[b_dir],
+        cache_path=cache_path,
+        write_cache=True,
+        restore_from_cloud=False,
+    )
+    refreshed = pl.read_parquet(cache_path)
+    refreshed_corpora = (
+        refreshed.group_by('corpus').len().sort('corpus').to_dicts()
+    )
+    by_name = {row['corpus']: row['len'] for row in refreshed_corpora}
+    assert by_name.get('a') == 1, (
+        f'corpus a should be preserved (had 1 cell); got {by_name}'
+    )
+    assert by_name.get('c') == 1, (
+        f'corpus c should be preserved (had 1 cell); got {by_name}'
+    )
+    assert by_name.get('b') == 1, (
+        f'corpus b should have its 1 new cell; got {by_name}'
+    )
+    refreshed_ids = sorted(refreshed['id'].to_list())
+    assert refreshed_ids == ['a-0', 'b-1', 'c-0'], (
+        f'expected a-0 + c-0 preserved + b-0 replaced by b-1; '
+        f'got {refreshed_ids}'
+    )
 
 
 def test_load_data_named_corpora_missing_dir_raises(

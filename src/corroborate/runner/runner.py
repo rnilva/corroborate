@@ -629,9 +629,47 @@ def _ingest_and_compute(
         # Phase 2.2: per-corpus stores already filled in measurables
         # via Phase 2.1's `build_measurements` call inside
         # `_load_one_corpus`. The walk output IS the projection.
-        merged = (
+        new_walk = (
             new_data if new_data is not None else pl.DataFrame()
         )
+        # **CACHE_ADDITIVITY.md CA3** (additive named-ingest):
+        # `--ingest <names>` is meant to refresh ONLY the named
+        # corpora's cells in the cache, not clobber it. Pre-fix,
+        # the named-ingest path overwrote the cache with just
+        # `new_walk` — every other corpus's cells silently
+        # dropped. Now we read the existing cache (if any),
+        # filter out rows whose `corpus` column matches the
+        # newly-walked names, and concat. `--ingest-all <root>`
+        # walks every subdir → `new_walk` already covers all
+        # corpora → the filter step is a no-op. Distinguishing
+        # the two cases via the `Sequence[Path]` shape is the
+        # cleanest signal: only named ingest passes a list.
+        named_ingest = (
+            isinstance(data, Sequence)
+            and not isinstance(data, (str, Path))
+        )
+        if named_ingest and cache_path is not None and cache_path.exists():
+            existing = _load_cache(cache_path)
+            if 'corpus' in existing.columns and 'corpus' in new_walk.columns:
+                walked_corpora = (
+                    set(new_walk['corpus'].unique().to_list())
+                    if new_walk.height > 0 else set()
+                )
+                if walked_corpora:
+                    keep = existing.filter(
+                        ~pl.col('corpus').is_in(list(walked_corpora)),
+                    )
+                    merged = (
+                        pl.concat([keep, new_walk], how='diagonal_relaxed')
+                        if new_walk.height > 0 else keep
+                    )
+                else:
+                    merged = existing
+            else:
+                merged = new_walk
+        else:
+            merged = new_walk
+
         if cache_path is not None and write_cache:
             # Closure-hash sidecar is no longer authoritative;
             # per-corpus `measurements.hashes.json` files are. Unlink
