@@ -229,10 +229,16 @@ def _build_env(node: object) -> EnvConfig:
             f'env.chunk_size must be int; got '
             f'{type(chunk_size).__name__}',
         )
+    seed_offset = node.get('seed_offset', 0)
+    if not isinstance(seed_offset, int) or isinstance(seed_offset, bool):
+        raise TypeError(
+            f'env.seed_offset must be int; got '
+            f'{type(seed_offset).__name__}',
+        )
     wrappers = _build_wrappers(node)
     return EnvConfig(
         env_name=name, n_seeds=n_seeds, chunk_size=chunk_size,
-        wrappers=wrappers,
+        wrappers=wrappers, seed_offset=seed_offset,
     )
 
 

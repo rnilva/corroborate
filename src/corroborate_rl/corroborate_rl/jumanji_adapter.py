@@ -70,15 +70,28 @@ class JumanjiEnv(Generic[ObsT, StateT]):
     ) -> tuple[
         jax.Array, StateT, jax.Array, jax.Array, dict[str, object],
     ]:
-        del rng, params  # jumanji manages RNG via state.key
+        del params
         next_state, ts = self.inner.step(state, action.astype(jnp.int32))
         # dm_env step_type==2 is LAST (terminal). Jumanji also sets
         # discount to 0 on terminal — either is canonical; step_type
         # is the documented invariant.
         done = ts.step_type == 2
+        # Auto-reset on done to match gymnax env contract — jumanji
+        # itself doesn't auto-reset, so without this the env stays in
+        # a permanently-terminal state for the rest of training (the
+        # `done` flag stays 1 forever after the first episode ends,
+        # producing degenerate TD targets).
+        reset_state, reset_ts = self.inner.reset(rng)
+        final_state = jax.tree.map(
+            lambda r, n: jnp.where(done, r, n),
+            reset_state, next_state,
+        )
+        next_obs = self.obs_extract(ts.observation)
+        reset_obs = self.obs_extract(reset_ts.observation)
+        final_obs = jnp.where(done, reset_obs, next_obs)
         return (
-            self.obs_extract(ts.observation),
-            next_state,
+            final_obs,
+            final_state,
             ts.reward,
             done,
             {},

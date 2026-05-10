@@ -25,17 +25,22 @@ class EnvConfig:
     env's obs-shape × capacity blows up the f32[cap, n_seeds, obs]
     replay tensor on the GPU.
 
+    `seed_offset` lets a follow-up sweep extend an existing corpus
+    with seeds [seed_offset, seed_offset + n_seeds) without
+    colliding with already-cached cells.
+
     `wrappers` is a tuple of `EnvWrapper` instances applied in
     order to the gymnax env at sweep time."""
     env_name: str
     n_seeds: int = 30
     chunk_size: int = 30
     wrappers: tuple[EnvWrapper, ...] = ()
+    seed_offset: int = 0
 
 
 def _chunks(ec: EnvConfig) -> list[tuple[int, ...]]:
     """Seed range split into chunk_size-sized tuples."""
-    seeds = tuple(range(ec.n_seeds))
+    seeds = tuple(range(ec.seed_offset, ec.seed_offset + ec.n_seeds))
     return [
         seeds[i:i + ec.chunk_size]
         for i in range(0, ec.n_seeds, ec.chunk_size)
