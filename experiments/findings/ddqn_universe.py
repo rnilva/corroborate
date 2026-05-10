@@ -3455,7 +3455,7 @@ def ddqn_helps_under_three_gate_scope__cross_env(
     threshold_diff: float = 0.05,
     alpha: float = 0.05,
 ) -> Verdict:
-    """Cross-env paired_g of Δ_outcome (Hasselt-convention
+    """Cross-env mean-diff of Δ_outcome (Hasselt-convention
     `eval_best_burst_mean`) scoped to G1 ∧ G2 (G3 currently deferred
     per `_DDQN_RELEVANT_SCOPE` doc). HELD when DDQN's mean benefit
     exceeds `threshold_diff` with p < α.
@@ -3463,17 +3463,33 @@ def ddqn_helps_under_three_gate_scope__cross_env(
     Substantive cross-env replacement for CLAIM 26's slope-predictor
     regression. Same scope (`_DDQN_RELEVANT_SCOPE`), different
     predictand: outcome benefit at the panel level rather than per-env
-    link-slope magnitude. Slope-magnitude regression was hopeless
-    because slope is structurally pinned at -1 in scope; outcome at
-    panel level IS substantively predictable.
+    link-slope magnitude.
 
-    Empirical (postfix corpus, n=246 gate-active cells across 7 envs):
-    mean Δo = +1.33, t = 2.59, p = 0.010. Companion to CLAIM 22
+    **Why `paired_g` here, not `arm_mean_diff`** (per
+    `findings_within_stratum_primitives.md`):
+    `pair_by=('seed', 'env_name', 'sync_period', 'gamma',
+    'action_duplicate_k')` matches cells across arms by ALL those
+    keys — that's stratified-balanced pairing, NOT seed-level
+    coupling. paired_g's per-pair Δ math implicitly stratifies by
+    (env, config) so each Δ is within-stratum and the panel mean
+    weights strata by their seed-pair count. This is the right tool
+    when arm-asymmetric scope filters (G1 = jens>0.05 filters more
+    DDQN cells than vanilla because DDQN reduces jens) would bias an
+    independent-samples comparison.
+
+    For SINGLE-stratum tests where the only pair_by key is `('seed',)`
+    on a stochastic env (ρ(v,d) ≈ 0), prefer `arm_mean_diff` — see
+    its module docstring.
+
+    Empirical (postfix corpus, n≈225 cells across 7-9 envs):
+    mean Δo > 0 (cache-state-dependent: HELD or POWER_INSUFFICIENT
+    near α=0.05). Companion to CLAIM 22
     (`reach_link_backdoor_ate_negative`) which establishes the LINK
-    is causal under the gates; this bridge establishes the OUTCOME is
-    positive under the gates.
+    is causal under the gates; this bridge establishes the OUTCOME
+    is positive under the gates.
 
-    See `findings_gate_conditional_outcome_benefit.md`."""
+    See `findings_gate_conditional_outcome_benefit.md` and
+    `findings_within_stratum_primitives.md`."""
     diff = paired_g.mean_diff
     p = paired_g.mean_diff_p_value
     if math.isnan(diff) or math.isnan(p):
