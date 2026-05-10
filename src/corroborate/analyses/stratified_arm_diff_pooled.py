@@ -1,0 +1,318 @@
+"""`stratified_arm_diff_pooled` — per-stratum independent-samples
+Cohen's d + DerSimonian-Laird random-effects pooling.
+
+The principled cross-env aggregator (per `findings_within_stratum_primitives.md`):
+strata are the unit of inference, not cells. 30 seeds in MountainCar
+aren't 30 independent observations of "DDQN's effect on MountainCar"; they
+are 30 noisy measurements of the same stratum-level effect. Aggregate seeds
+first → one `(arm_mean, arm_sd, n_seeds)` per `(stratum, arm)`. Then:
+
+  1. Per stratum, compute independent-samples Cohen's d + SE (Hedges 1981
+     small-sample formula).
+  2. Apply stratum-level scope filters on VANILLA-arm aggregates (e.g.
+     `vanilla_mean_jens > 0.05`) — both arms in a stratum survive together,
+     no asymmetric filtering bias.
+  3. Pool per-stratum effects via DerSimonian-Laird random-effects
+     (existing `random_effects_summary` in `corroborate.stats.effect_size`).
+  4. Report pooled estimate + heterogeneity (τ², I²) + per-stratum panel.
+
+This is conceptually distinct from `paired_g`: paired_g pairs cells across
+arms by `pair_by` tuple, computes per-pair Δs, treats them as i.i.d.
+samples (pseudo-replication when seeds within a stratum aren't independent
+draws of "the env's effect"). This primitive treats each stratum as ONE
+observation of the effect, with within-stratum precision tracked via SE.
+
+Honest about heterogeneity: when between-stratum variance is large (I² high),
+the pooled estimate has wide CIs — that's a feature. Cross-env effects ARE
+heterogeneous; obscuring it via per-pair pooling was misleading.
+"""
+from __future__ import annotations
+
+import math
+from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass
+
+from corroborate.bridge.analysis import analysis
+from corroborate.stats.effect_size import random_effects_summary
+
+from corroborate.analyses.paired_g import resolve_value
+
+
+@dataclass(frozen=True, slots=True)
+class StratumDiff:
+    """Per-stratum independent-samples mean diff + Cohen's d.
+
+    `stratum_id` — tuple of values for the stratify_by keys.
+    `mean_diff` — `mean(treatment) - mean(baseline)` on raw scale.
+    `cohen_d` — Cohen's d (Hedges 1981 small-sample form):
+      `mean_diff / sqrt((sd_t² + sd_b²)/2)`. Standardized,
+      sign-stable across heterogeneous-scale envs.
+    `cohen_se` — Approximate SE of Cohen's d:
+      `sqrt((n_t + n_b)/(n_t * n_b) + d²/(2*(n_t + n_b - 2)))`.
+    `vanilla_predictor` — the vanilla-arm aggregate of the
+      stratum-level scope-filter predictor (e.g. mean jens). Used
+      to apply scope-at-stratum-level. NaN if not requested.
+    """
+    stratum_id: tuple[object, ...]
+    mean_diff: float
+    cohen_d: float
+    cohen_se: float
+    arm_mean_treatment: float
+    arm_mean_baseline: float
+    arm_sd_treatment: float
+    arm_sd_baseline: float
+    n_seeds_treatment: int
+    n_seeds_baseline: int
+    vanilla_predictor: float
+
+
+@dataclass(frozen=True, slots=True)
+class StratifiedArmDiffPooledResult:
+    """Output of stratified per-arm difference + DL pooling.
+
+    `pooled_d` / `pooled_se` — DerSimonian-Laird random-effects
+    pooled Cohen's d + SE (across in-scope strata). `tau2` /
+    `i_squared` / `q_statistic` — heterogeneity diagnostics.
+    `n_strata` — count of strata that contributed (post stratum-
+    level scope filter).
+
+    `per_stratum` — tuple of `StratumDiff` for every in-scope
+    stratum (sorted by `stratum_id`). Lets bridges build per-env
+    panels without re-aggregating.
+
+    `pooled_p_value` — two-sided p-value for `pooled_d != 0` from
+    `pooled_d / pooled_se` under normal approximation.
+    """
+    pooled_d: float
+    pooled_se: float
+    tau2: float
+    i_squared: float
+    q_statistic: float
+    n_strata: int
+    per_stratum: tuple[StratumDiff, ...]
+    stratify_by: tuple[str, ...]
+    measurable: str
+    treatment_arm: str
+    baseline_arm: str
+    arm_field: str
+    scope_predictor: str
+
+    @property
+    def pooled_p_value(self) -> float:
+        if (
+            math.isnan(self.pooled_d)
+            or math.isnan(self.pooled_se)
+            or self.pooled_se == 0.0
+        ):
+            return float('nan')
+        z = abs(self.pooled_d / self.pooled_se)
+        return float(math.erfc(z / math.sqrt(2)))
+
+    @property
+    def pooled_ci_lo(self) -> float:
+        if math.isnan(self.pooled_d) or math.isnan(self.pooled_se):
+            return float('nan')
+        return self.pooled_d - 1.96 * self.pooled_se
+
+    @property
+    def pooled_ci_hi(self) -> float:
+        if math.isnan(self.pooled_d) or math.isnan(self.pooled_se):
+            return float('nan')
+        return self.pooled_d + 1.96 * self.pooled_se
+
+
+def _per_stratum_aggregate(
+    cells: Iterable[Mapping[str, object]],
+    *,
+    source: str,
+    scope_predictor: str,
+    treatment_arm: str,
+    baseline_arm: str,
+    stratify_by: Sequence[str],
+    arm_field: str,
+) -> dict[tuple[object, ...], dict[str, list[float]]]:
+    """Bucket cells by (stratum, arm); return per-bucket
+    `{'source': [...], 'predictor': [...]}`. NaN values are
+    skipped. Predictor values are tracked only for the BASELINE
+    arm (used for stratum-level scope filtering)."""
+    buckets: dict[tuple[object, ...], dict[str, list[float]]] = {}
+    for cell in cells:
+        arm = cell.get(arm_field)
+        if arm not in (treatment_arm, baseline_arm):
+            continue
+        stratum_id = tuple(cell.get(k) for k in stratify_by)
+        bucket_key = stratum_id + (arm,)
+        v = resolve_value(cell, source)
+        if math.isnan(v):
+            continue
+        b = buckets.setdefault(bucket_key, {'source': [], 'predictor': []})
+        b['source'].append(v)
+        if arm == baseline_arm:
+            p = resolve_value(cell, scope_predictor)
+            if not math.isnan(p):
+                b['predictor'].append(p)
+    return buckets
+
+
+def _cohen_d_indep_samples(
+    mean_t: float, sd_t: float, n_t: int,
+    mean_b: float, sd_b: float, n_b: int,
+) -> tuple[float, float]:
+    """Independent-samples Cohen's d + Hedges 1981 SE.
+
+    `d = (mean_t - mean_b) / sqrt((sd_t² + sd_b²) / 2)`.
+    `se ≈ sqrt((n_t + n_b)/(n_t n_b) + d²/(2(n_t + n_b - 2)))`.
+    Returns (NaN, NaN) on degenerate (zero-SD or n<2) input.
+    """
+    if n_t < 2 or n_b < 2:
+        return float('nan'), float('nan')
+    pooled_var = (sd_t ** 2 + sd_b ** 2) / 2.0
+    if pooled_var <= 0:
+        return float('nan'), float('nan')
+    d = (mean_t - mean_b) / math.sqrt(pooled_var)
+    se = math.sqrt(
+        (n_t + n_b) / (n_t * n_b)
+        + d ** 2 / (2.0 * (n_t + n_b - 2))
+    )
+    return d, se
+
+
+@analysis
+def stratified_arm_diff_pooled(
+    cells: Iterable[Mapping[str, object]],
+    *,
+    source: str,
+    treatment_arm: str,
+    baseline_arm: str,
+    stratify_by: tuple[str, ...] = (
+        'env_name', 'sync_period', 'gamma', 'action_duplicate_k',
+    ),
+    arm_field: str = 'arm_key',
+    scope_predictor: str = 'jensen_gap',
+    min_vanilla_predictor: float = 0.05,
+    min_seeds_per_arm: int = 5,
+) -> StratifiedArmDiffPooledResult:
+    """Per-stratum independent-samples Cohen's d, DL-pooled.
+
+    Strata are formed by `stratify_by` tuple (default:
+    `(env_name, sync_period, gamma, action_duplicate_k)`). Per
+    stratum:
+      1. Compute per-arm `mean(source)`, `sd(source)`, n_seeds.
+      2. Compute independent-samples Cohen's d + SE.
+      3. Compute vanilla-arm `mean(scope_predictor)` (default
+         `jensen_gap`).
+
+    Stratum-level scope filter (BOTH arms in or out together):
+      - `n_seeds_treatment >= min_seeds_per_arm`
+      - `n_seeds_baseline >= min_seeds_per_arm`
+      - `vanilla_predictor > min_vanilla_predictor`
+
+    Per-bridge cell-level filters (env, config exclusions) belong
+    on `Bridge.scope` upstream; this primitive only handles
+    stratum-level filters that depend on per-arm aggregates.
+
+    DerSimonian-Laird random-effects pooling on the in-scope
+    per-stratum (cohen_d, cohen_se) pairs (existing
+    `corroborate.stats.effect_size.random_effects_summary`).
+
+    Returns pooled estimate + heterogeneity + per-stratum panel.
+    `pooled_d` is in Cohen's d units (sign-stable, scale-free).
+    NaN-pooled when fewer than 2 strata pass filters.
+    """
+    buckets = _per_stratum_aggregate(
+        cells,
+        source=source,
+        scope_predictor=scope_predictor,
+        treatment_arm=treatment_arm,
+        baseline_arm=baseline_arm,
+        stratify_by=stratify_by,
+        arm_field=arm_field,
+    )
+
+    # Group by stratum_id (drop the trailing arm dimension).
+    stratum_ids: set[tuple[object, ...]] = {
+        k[:-1] for k in buckets.keys()
+    }
+
+    per_stratum: list[StratumDiff] = []
+    for stratum_id in sorted(stratum_ids, key=str):
+        t_bucket = buckets.get(stratum_id + (treatment_arm,))
+        b_bucket = buckets.get(stratum_id + (baseline_arm,))
+        if t_bucket is None or b_bucket is None:
+            continue
+        t_vals = t_bucket['source']; b_vals = b_bucket['source']
+        n_t = len(t_vals); n_b = len(b_vals)
+        if n_t < min_seeds_per_arm or n_b < min_seeds_per_arm:
+            continue
+        # Stratum-level scope filter on vanilla aggregate
+        v_predictor_vals = b_bucket['predictor']
+        if not v_predictor_vals:
+            continue
+        v_predictor_mean = sum(v_predictor_vals) / len(v_predictor_vals)
+        if v_predictor_mean <= min_vanilla_predictor:
+            continue
+        mean_t = sum(t_vals) / n_t
+        mean_b = sum(b_vals) / n_b
+        sd_t = math.sqrt(
+            sum((v - mean_t) ** 2 for v in t_vals) / (n_t - 1)
+        ) if n_t >= 2 else float('nan')
+        sd_b = math.sqrt(
+            sum((v - mean_b) ** 2 for v in b_vals) / (n_b - 1)
+        ) if n_b >= 2 else float('nan')
+        d, se = _cohen_d_indep_samples(mean_t, sd_t, n_t, mean_b, sd_b, n_b)
+        per_stratum.append(StratumDiff(
+            stratum_id=stratum_id,
+            mean_diff=mean_t - mean_b,
+            cohen_d=d,
+            cohen_se=se,
+            arm_mean_treatment=mean_t,
+            arm_mean_baseline=mean_b,
+            arm_sd_treatment=sd_t,
+            arm_sd_baseline=sd_b,
+            n_seeds_treatment=n_t,
+            n_seeds_baseline=n_b,
+            vanilla_predictor=v_predictor_mean,
+        ))
+
+    # DL pooling on (cohen_d, cohen_se)
+    obs = [
+        (s.cohen_d, s.cohen_se) for s in per_stratum
+        if not math.isnan(s.cohen_d) and not math.isnan(s.cohen_se)
+        and s.cohen_se > 0
+    ]
+    if len(obs) >= 2:
+        pooled = random_effects_summary(obs)
+        pooled_d = pooled.pooled_g
+        pooled_se = pooled.se_pooled
+        tau2 = pooled.tau2
+        i_squared = pooled.I2
+        q_stat = pooled.Q
+    else:
+        pooled_d = float('nan')
+        pooled_se = float('nan')
+        tau2 = float('nan')
+        i_squared = float('nan')
+        q_stat = float('nan')
+
+    return StratifiedArmDiffPooledResult(
+        pooled_d=pooled_d,
+        pooled_se=pooled_se,
+        tau2=tau2,
+        i_squared=i_squared,
+        q_statistic=q_stat,
+        n_strata=len(per_stratum),
+        per_stratum=tuple(per_stratum),
+        stratify_by=stratify_by,
+        measurable=source,
+        treatment_arm=treatment_arm,
+        baseline_arm=baseline_arm,
+        arm_field=arm_field,
+        scope_predictor=scope_predictor,
+    )
+
+
+__all__ = [
+    'StratumDiff',
+    'StratifiedArmDiffPooledResult',
+    'stratified_arm_diff_pooled',
+]

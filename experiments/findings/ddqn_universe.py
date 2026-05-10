@@ -83,6 +83,9 @@ from corroborate.analyses.paired_delta_link_dowhy import (
     PairedDeltaLinkDowhyResult,
 )
 from corroborate.analyses.paired_g import PairedGResult
+from corroborate.analyses.stratified_arm_diff_pooled import (
+    StratifiedArmDiffPooledResult,
+)
 from corroborate.analyses.paired_g_per_burst import PerBurstResult
 from corroborate.analyses.proportion_mediated import ProportionMediatedResult
 from corroborate.analyses.partial_spearman_paired import (
@@ -3437,12 +3440,22 @@ def link_slope_predicted_by_g1__cross_env(
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
-    pair_by=('seed', 'env_name', 'sync_period', 'gamma', 'action_duplicate_k'),
+    # NOTE: pair_by is NOT used by stratified_arm_diff_pooled. The
+    # primitive aggregates seeds within strata defined by
+    # stratify_by; pair_by is a vestigial framework-bridge contract
+    # we forward for compatibility, but the new primitive ignores it.
+    pair_by=('seed',),
     scope=(
-        _DDQN_RELEVANT_SCOPE
-        # G3 proxy until `outcome_episode_cv` populates: explicit
-        # exclusions of cells known to be at outcome ceiling or
-        # under-bias regime where DDQN's mechanism doesn't translate.
+        # ARM-SYMMETRIC predicates only. Stratum-level scope (e.g.
+        # vanilla mean jens > 0.05) is applied INSIDE the primitive
+        # via `min_vanilla_predictor` so both arms in a stratum are
+        # included or excluded together (no asymmetric per-cell
+        # filtering bias).
+        pl.col('eval_best_burst_mean').is_finite()
+        & pl.col('jensen_gap').is_finite()
+        & pl.col('n_actions').is_finite() & (pl.col('n_actions') >= 3)
+        & ((pl.col('n_step') == 1) | pl.col('n_step').is_null())
+        & pl.col('action_duplicate_k').is_null()
         & ~((pl.col('env_name') == 'MetaMaze-misc')
             & (pl.col('gamma') == 0.999))
         & (pl.col('env_name') != 'CartPole-v1')
@@ -3450,54 +3463,59 @@ def link_slope_predicted_by_g1__cross_env(
     predicted_direction='a_gt_b',
 )
 def ddqn_helps_under_three_gate_scope__cross_env(
-    paired_g: PairedGResult,
+    stratified_arm_diff_pooled: StratifiedArmDiffPooledResult,
     *,
-    threshold_diff: float = 0.05,
+    threshold_d: float = 0.05,
     alpha: float = 0.05,
+    min_strata: int = 5,
 ) -> Verdict:
-    """Cross-env mean-diff of Δ_outcome (Hasselt-convention
-    `eval_best_burst_mean`) scoped to G1 ∧ G2 (G3 currently deferred
-    per `_DDQN_RELEVANT_SCOPE` doc). HELD when DDQN's mean benefit
-    exceeds `threshold_diff` with p < α.
+    """Cross-env DDQN benefit under [G1 ∧ G2] scope, aggregated via
+    DerSimonian-Laird random-effects on per-stratum Cohen's d.
 
-    Substantive cross-env replacement for CLAIM 26's slope-predictor
-    regression. Same scope (`_DDQN_RELEVANT_SCOPE`), different
-    predictand: outcome benefit at the panel level rather than per-env
-    link-slope magnitude.
+    Principled cross-env aggregation per
+    `findings_within_stratum_primitives.md`:
+      1. Aggregate seeds within each (env, sync, gamma) stratum →
+         per-arm mean + sd + n_seeds.
+      2. Stratum-level scope filter: vanilla aggregate jens > 0.05
+         (G1 at stratum, not per-cell). Both arms in a stratum
+         included or excluded together — no asymmetric filtering.
+      3. Per stratum, compute independent-samples Cohen's d + SE.
+      4. DerSimonian-Laird random-effects pooling.
 
-    **Why `paired_g` here, not `arm_mean_diff`** (per
-    `findings_within_stratum_primitives.md`):
-    `pair_by=('seed', 'env_name', 'sync_period', 'gamma',
-    'action_duplicate_k')` matches cells across arms by ALL those
-    keys — that's stratified-balanced pairing, NOT seed-level
-    coupling. paired_g's per-pair Δ math implicitly stratifies by
-    (env, config) so each Δ is within-stratum and the panel mean
-    weights strata by their seed-pair count. This is the right tool
-    when arm-asymmetric scope filters (G1 = jens>0.05 filters more
-    DDQN cells than vanilla because DDQN reduces jens) would bias an
-    independent-samples comparison.
+    HELD when pooled |d| > `threshold_d` AND p < α AND n_strata >=
+    min_strata. POWER_INSUFFICIENT when direction-correct but
+    p >= α. NO_EFFECT when wrong-direction or |d| < threshold_d.
 
-    For SINGLE-stratum tests where the only pair_by key is `('seed',)`
-    on a stochastic env (ρ(v,d) ≈ 0), prefer `arm_mean_diff` — see
-    its module docstring.
+    The pooled estimate is in standardized units (Cohen's d).
+    `pooled_d > 0.05` corresponds to a "small" effect by Cohen's
+    convention; bridges focused on clinically-meaningful
+    effects might want `threshold_d = 0.2` (small/medium boundary).
 
-    Empirical (postfix corpus, n≈225 cells across 7-9 envs):
-    mean Δo > 0 (cache-state-dependent: HELD or POWER_INSUFFICIENT
-    near α=0.05). Companion to CLAIM 22
-    (`reach_link_backdoor_ate_negative`) which establishes the LINK
-    is causal under the gates; this bridge establishes the OUTCOME
-    is positive under the gates.
+    Empirical (current cache, 8 strata in scope at jens > 0.05):
+    pooled d ≈ +0.34 (CI [-0.16, +0.83], p = 0.19), I² ≈ 86% — high
+    heterogeneity driven mainly by SI sync=500 outlier (per-stratum
+    d=+2.43 there). Without that single env, 7 envs give
+    d ≈ +0.18 (I² ≈ 12%, homogeneous, p ≈ 0.07 — borderline).
+
+    Replaces an earlier `paired_g`-based form which obscured this
+    structure: paired_g treated 222 per-pair Δs as i.i.d. (pseudo-
+    replication), giving "p=0.21 mean_diff=+1.86" without surfacing
+    that one env (SI sync=500) drove most of the signal AND the
+    heterogeneity.
 
     See `findings_gate_conditional_outcome_benefit.md` and
     `findings_within_stratum_primitives.md`."""
-    diff = paired_g.mean_diff
-    p = paired_g.mean_diff_p_value
-    if math.isnan(diff) or math.isnan(p):
+    n_strata = stratified_arm_diff_pooled.n_strata
+    if n_strata < min_strata:
+        return Verdict.POWER_INSUFFICIENT
+    d = stratified_arm_diff_pooled.pooled_d
+    p = stratified_arm_diff_pooled.pooled_p_value
+    if math.isnan(d) or math.isnan(p):
         return Verdict.NO_EFFECT
-    if diff < 0.0:
+    if d < 0.0:
         return Verdict.NO_EFFECT
     significant = p < alpha
-    above = diff >= threshold_diff
+    above = d >= threshold_d
     if significant and above:
         return Verdict.HELD
     if above or significant:
