@@ -1844,6 +1844,39 @@ def r_min(record: Mapping[str, object]) -> float:
 
 
 @measurable(reads=('done',))
+def train_episode_length_mean(record: Mapping[str, object]) -> float:
+    """Mean training-time episode length (steps per episode under
+    the ACTUAL TRAINING POLICY, not random nor eval).
+
+    Computed as `total_steps / max(sum(done), 1)`. This is the
+    "T" relevant for bootstrap-chain dynamics: the typical chain
+    length the agent's TD updates compound over.
+
+    Distinct from:
+      - `eval_episode_cap`: env-spec timeout (upper bound)
+      - `env_params.max_steps_in_episode`: env-spec horizon
+      - random-policy episode length: distorted by exploration
+        (REACH envs cap at horizon, SURVIVE envs die fast)
+
+    Why it matters: the random-policy probe undercounts episode
+    length on REACH envs (random never reaches → cap; trained
+    reaches in much fewer steps) and overcounts on SURVIVE envs
+    (random dies fast; trained survives much longer). Predictors
+    of v_jens that use `T × density` should use THIS quantity,
+    not random or env-spec horizon.
+
+    NaN when `done` is missing or empty."""
+    arr = record.get('done')
+    if arr is None:
+        return float('nan')
+    a = np.asarray(arr, dtype=np.float64)
+    if a.size == 0:
+        return float('nan')
+    n_episodes = max(int(a.sum()), 1)  # avoid zero-div on no-terminate
+    return float(a.size / n_episodes)
+
+
+@measurable(reads=('done',))
 def bootstrap_fraction(record: Mapping[str, object]) -> float:
     """Fraction of update steps that bootstrap (i.e. don't
     terminate). `1 - mean(done)` over the per-step trajectory.
