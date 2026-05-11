@@ -1,0 +1,142 @@
+{
+  "note": "q_divergence_score excluded \u2014 algebraic shadow of jens (qdiv = jens/(R/(1\u2212\u03b3))); within-\u03b3 \u03c1(qdiv, jens) = +0.974 per `tautology_audit.json`. Excluding it gives a clean test of the empirical is_ddqn \u2192 jens edge that the original run conflated with the algebraic shadow.",
+  "cohort": {
+    "reach_envs": [
+      "FourRooms-misc",
+      "Acrobot-v1",
+      "MountainCar-v0",
+      "MetaMaze-misc"
+    ],
+    "scope": "_DDQN_RELEVANT_SCOPE (G1 \u2227 G2 + standard config)",
+    "n_cells_total": 343,
+    "n_per_env": {
+      "Acrobot-v1": 104,
+      "FourRooms-misc": 68,
+      "MetaMaze-misc": 111,
+      "MountainCar-v0": 60
+    }
+  },
+  "method": {
+    "algorithm": "conservative-PC",
+    "alpha": 0.05,
+    "max_conditioning": 1,
+    "stratify_by": "env_name",
+    "ci_test": "stratified_partial_spearman_rho (rank-based, Fisher-z pool)"
+  },
+  "variables": [
+    "argmax_H",
+    "eff_h",
+    "is_ddqn",
+    "jens",
+    "outcome",
+    "stale"
+  ],
+  "edges_undirected_retained": [
+    [
+      "jens",
+      "outcome"
+    ],
+    [
+      "argmax_H",
+      "stale"
+    ],
+    [
+      "outcome",
+      "stale"
+    ],
+    [
+      "argmax_H",
+      "eff_h"
+    ],
+    [
+      "eff_h",
+      "jens"
+    ],
+    [
+      "is_ddqn",
+      "jens"
+    ]
+  ],
+  "edges_directed": [
+    [
+      "eff_h",
+      "argmax_H"
+    ],
+    [
+      "is_ddqn",
+      "jens"
+    ],
+    [
+      "jens",
+      "eff_h"
+    ],
+    [
+      "jens",
+      "outcome"
+    ],
+    [
+      "stale",
+      "argmax_H"
+    ],
+    [
+      "stale",
+      "outcome"
+    ]
+  ],
+  "edges_remaining_undirected": [],
+  "separating_sets": {
+    "is_ddqn|stale": [
+      []
+    ],
+    "outcome|is_ddqn": [
+      []
+    ],
+    "jens|stale": [
+      []
+    ],
+    "eff_h|stale": [
+      []
+    ],
+    "argmax_H|outcome": [
+      [
+        "eff_h"
+      ]
+    ],
+    "argmax_H|is_ddqn": [
+      [
+        "eff_h"
+      ],
+      [
+        "jens"
+      ],
+      [
+        "outcome"
+      ]
+    ],
+    "eff_h|outcome": [
+      [
+        "argmax_H"
+      ],
+      [
+        "jens"
+      ]
+    ],
+    "argmax_H|jens": [
+      [
+        "eff_h"
+      ]
+    ],
+    "eff_h|is_ddqn": [
+      [
+        "jens"
+      ]
+    ]
+  },
+  "ambiguous_triples": [
+    [
+      "eff_h",
+      "jens",
+      "outcome"
+    ]
+  ]
+}

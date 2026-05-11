@@ -35,7 +35,50 @@ conditional independence alone).
 vs. non-collider in (argmax_H, jens, q_div, outcome) chains is
 undetermined at depth-1 conservative PC.
 
-## Headline finding — `is_ddqn` is graph-disconnected
+## 2026-05-11 reviewer correction
+
+The original headline "is_ddqn graph-disconnected on REACH" was
+OVERSOLD. Two of the six removed `is_ddqn`-edges follow
+mechanically from the algebraic identity `q_div = jens/(R/(1−γ))`
+(within-γ ρ(qdiv, jens) = +0.974 per `tautology_audit.json`).
+Re-running PC with qdiv excluded from the variable set
+(`run_pc_reach_no_qdiv.py`, `pc_adjacency_no_qdiv.json`)
+recovers a clean treatment edge:
+
+**Edges retained (6 of 15 when qdiv excluded):**
+- **`is_ddqn — jens`** (the key empirical treatment edge,
+  hidden by the qdiv algebraic shadow in the original run)
+- `eff_h — jens`
+- `outcome — jens`, `outcome — stale`
+- `argmax_H — eff_h`, `argmax_H — stale`
+
+**Edges still removed:**
+- `is_ddqn ⊥ outcome | ∅` — link null on REACH preserved
+- `is_ddqn ⊥ stale | ∅` — staleness still treatment-invariant
+- `is_ddqn ⊥ {eff_h, argmax_H} | {jens}` — these channels are
+  downstream of jens, not direct treatment effects
+
+**CPDAG (qdiv excluded, manual orientation: is_ddqn → · always,
+· → outcome always):**
+
+```
+is_ddqn ──→ jens ──→ outcome
+              │
+              ↓
+            eff_h ──→ argmax_H
+                       ↑
+            stale ─────┘
+            stale ──→ outcome
+```
+
+**Revised headline:** treatment acts cleanly on jensen_gap; jens
+mediates to outcome and to eff_h/argmax_H; staleness is a
+separate non-treatment-modulated channel that also reaches
+outcome. The "link null on REACH" finding (`is_ddqn ⊥ outcome | ∅`
+at depth 0) is preserved — it's the marginal independence
+itself, not a graph-disconnection finding.
+
+## Headline finding (legacy, qdiv-included run) — `is_ddqn` is graph-disconnected
 
 PC removes every `is_ddqn → ·` edge:
 
