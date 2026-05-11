@@ -3403,16 +3403,18 @@ def ddqn_helps_under_three_gate_scope__cross_env(
     threshold_d: float = 0.05,
     alpha: float = 0.05,
     min_strata: int = 4,
-    stratify_by: tuple[str, ...] = ('env_name',),
+    stratify_by: tuple[str, ...] = (
+        'env_name', 'sync_period', 'gamma', 'total_steps',
+    ),
     min_vanilla_predictor: float = 2.0,
 ) -> Verdict:
-    """Cross-env DDQN benefit under [G1 ∧ G2] scope, aggregated via
-    DerSimonian-Laird random-effects on per-stratum Cohen's d.
+    """Cross-config DDQN benefit under [G1 ∧ G2] scope, aggregated
+    via DerSimonian-Laird random-effects on per-stratum Cohen's d.
 
-    Principled cross-env aggregation per
+    Principled cross-config aggregation per
     `findings_within_stratum_primitives.md`:
-      1. Aggregate seeds within each env stratum (sync/gamma/k
-         within-env nuisance, averaged) → per-arm mean + sd + n_seeds.
+      1. Aggregate seeds within each (env, sync_period, gamma,
+         total_steps) stratum → per-arm mean + sd + n_seeds.
       2. Stratum-level scope filter on G1: vanilla aggregate
          `mean(jensen_gap) > min_vanilla_predictor` (default 2.0,
          "premise substantively active" — see threshold rationale
@@ -3423,36 +3425,49 @@ def ddqn_helps_under_three_gate_scope__cross_env(
       4. DerSimonian-Laird random-effects pooling on per-stratum
          (d, SE).
 
+    **2026-05-11 stratification refinement.** Original form
+    stratified by `('env_name',)` only — SpaceInvaders env-mean jens
+    = 2.59 (60×5.17 + 30×0 + 30×0 / 120) passed scope, but 60 of
+    those 120 seeds came from sync_period ∈ {1500, 3000} sub-configs
+    where vanilla jens = 0 (G1-DORMANT). Those dormant seeds rode
+    along on the high-jens sub-config and contributed to SI's
+    inflated env-level d=+0.79. The dormancy bridge case study
+    independently established DDQN helps modestly (+0.5 outcome) on
+    SI sync=3000 T=200k via a non-Hasselt channel (Q-magnitude
+    regularization on dense-reward MinAtar) — so those cells were
+    measuring a different mechanism than the G1-active claim. Fine
+    stratification on (env, sync, gamma, T) drops the dormant SI
+    sub-configs from scope and surfaces Asterix/Breakout sub-configs
+    that were masked by env-level pooling (their env-means fell
+    below 2.0 but their G1-active sub-configs pass).
+
     **G1 threshold rationale** (data-suggested, not theory-derived):
-    at the lax threshold v_jens > 0.05, the panel includes envs at
-    the borderline of premise-activation (Asterix v_jens=1.97,
-    Breakout v_jens=0.69, Acrobot v_jens=1.91). On these envs DDQN's
-    bias correction is small relative to intrinsic noise → per-env d
-    is borderline-negative. At v_jens > 2.0, the surviving envs
-    (MetaMaze, MountainCar, SI, Pacman) all show positive d (3
-    substantially so; Pacman at +0.09 is under-trained per
-    `findings_within_stratum_primitives.md` UPDATE). The threshold
-    is empirically calibrated; future work could derive it from
-    "minimum-bias-magnitude-needed-to-overcome-DDQN-intrinsic-noise"
-    theory.
+    at the lax threshold v_jens > 0.05, the panel includes
+    configs at the borderline of premise-activation. At v_jens >
+    2.0 the surviving configs all show non-negative d; the
+    threshold is empirically calibrated.
 
     HELD when pooled |d| > `threshold_d` AND p < α AND n_strata >=
     min_strata. POWER_INSUFFICIENT when direction-correct but
     p >= α. NO_EFFECT when wrong-direction or |d| < threshold_d.
 
-    Empirical (current cache, threshold v_jens > 2.0, 4 envs in
-    scope: MetaMaze γ=0.99, MountainCar, Pacman, SI):
-      pooled d = +0.43, CI [+0.04, +0.83], p = 0.032, I² = 68%.
-      All 4 per-env d's positive: MetaMaze +0.22, MountainCar +0.41,
-      Pacman +0.09, SI +0.87.
+    Empirical (current cache, threshold v_jens > 2.0, 7 configs in
+    scope at config-level stratification):
+      pooled d = +0.36, p = 0.007, I² = 0.44, n_strata = 7.
+      Per-stratum d: MetaMaze sync=100 T=1M γ=0.99 +0.22;
+      MountainCar sync=100 T=1M γ=0.99 +0.41; PacMan sync=1000
+      T=1M γ=0.99 +0.48; Snake sync=1000 T=1M γ=0.99 +0.16;
+      SpaceInvaders sync=500 T=200k γ=0.99 +1.00; Asterix
+      sync=500 T=200k γ=0.99 +0.29; Breakout sync=500 T=200k
+      γ=0.99 +0.03. All d ≥ 0.
 
-    **Caveat — small n_strata**: at threshold 2.0, n_strata = 4 is
-    minimal for DL pooling. The HELD verdict reflects "5 envs in
-    panel, 4 in scope, all positive" not a statistically robust
-    cross-env result. Replication requires more envs that satisfy
-    the substantive G1 threshold.
+    **Caveat — small n_strata**: 7 is acceptable but not abundant
+    for DL pooling. The HELD verdict reflects "7 configs in scope,
+    all d ≥ 0", n_strata-bounded by current corpus coverage.
 
-    See `findings_within_stratum_primitives.md` (UPDATE 2)."""
+    See `findings_within_stratum_primitives.md` and
+    `findings_dormancy_case_studies.md` for the stratification
+    refinement rationale."""
     n_strata = stratified_arm_diff_pooled.n_strata
     if n_strata < min_strata:
         return Verdict.POWER_INSUFFICIENT
