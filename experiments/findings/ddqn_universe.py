@@ -306,6 +306,37 @@ def ddqn_refuted_when_dormancy_fires(
     via different argmax-selection sequences. The necessary-
     condition framing was too narrow.
 
+    **Concrete case studies (config-level)** — see
+    `findings_dormancy_case_studies.md`. Aggregating 30
+    seeds per config (Welch t, NOT seed-pair Δ) under
+    strict rock-solid scope (`jens_max_v == 0` across all
+    seeds in the config AND `dorm_mean_v >= 0.1`), only 4
+    configs survive in the entire corpus, and only ONE
+    shows Welch-significant DDQN benefit:
+
+      SpaceInvaders-MinAtar sync=3000 T=200k:
+        n_v=n_d=30; vanilla mean=15.81, DDQN mean=16.31;
+        Δ_o=+0.50, SE=0.15, z=+3.26 (p≈0.001).
+        Δ_q_late=−0.48 (DDQN keeps Q LOWER than vanilla
+        even though vanilla never overestimated — Hasselt
+        `min(Q_online, Q_target)` upper-bound firing as a
+        Q-magnitude regularizer on dense-reward MinAtar).
+
+    The other 3 rock-solid configs go the other direction
+    or null. Breakout sync ∈ {1500, 3000} T=200k have
+    Δ_o = −0.11 and −0.34 (not significant but signed
+    OPPOSITE). Earlier seed-pair-level enumeration counted
+    54 rock-solid seed pairs with Δ_o > 0 (16 with Δ_o ≥
+    1.0); aggregating to config level dissolves that count
+    because per-pair Δ_o noise has σ comparable to the
+    config-mean — the same pathology the seed-pairing
+    critique warns of.
+
+    The bridge's POW_INSUF is the right call: 1 substantive
+    config out of the strict rock-solid scope isn't enough
+    to flip INVARIANT_VIOLATION; per-env CIs already
+    straddle the +0.2 ceiling.
+
     Verdict POW_INSUF stays — per-env CIs straddle the +0.2
     substantive-ceiling on either side (Acrobot CI lower 0.064
     < 0.2; SI CI lower 0.025 < 0.2). The substantive bound
