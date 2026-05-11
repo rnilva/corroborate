@@ -1,0 +1,133 @@
+{
+  "cohort_size": 343,
+  "cohort_envs": [
+    "Acrobot-v1",
+    "FourRooms-misc",
+    "MetaMaze-misc",
+    "MountainCar-v0"
+  ],
+  "audit_against_jens": [
+    {
+      "name": "q_divergence_score",
+      "outcome_jaccard": 0.0,
+      "flagged_outcome": false,
+      "hp_r_squared": {
+        "gamma": 0.054291274370593556,
+        "sync_period": NaN,
+        "replay.capacity": NaN
+      },
+      "flagged_hp": [],
+      "within_gamma_rho_vs_jens": 0.9741763500703209,
+      "within_gamma_p_vs_jens": 0.0,
+      "flagged_no_residual_signal": false,
+      "is_clean": true
+    },
+    {
+      "name": "argmax_entropy_late",
+      "outcome_jaccard": 0.0,
+      "flagged_outcome": false,
+      "hp_r_squared": {
+        "gamma": 0.3231179629907899,
+        "sync_period": NaN,
+        "replay.capacity": NaN
+      },
+      "flagged_hp": [],
+      "within_gamma_rho_vs_jens": 0.2745412904273024,
+      "within_gamma_p_vs_jens": 2.3087577738500897e-07,
+      "flagged_no_residual_signal": false,
+      "is_clean": true
+    },
+    {
+      "name": "target_staleness_late",
+      "outcome_jaccard": 0.0,
+      "flagged_outcome": false,
+      "hp_r_squared": {
+        "gamma": 0.1615191085408162,
+        "sync_period": NaN,
+        "replay.capacity": NaN
+      },
+      "flagged_hp": [],
+      "within_gamma_rho_vs_jens": -0.24629206127684614,
+      "within_gamma_p_vs_jens": 3.90791394200285e-06,
+      "flagged_no_residual_signal": false,
+      "is_clean": true
+    },
+    {
+      "name": "effective_horizon",
+      "outcome_jaccard": 0.0,
+      "flagged_outcome": false,
+      "hp_r_squared": {
+        "gamma": 0.9178079214908387,
+        "sync_period": NaN,
+        "replay.capacity": NaN
+      },
+      "flagged_hp": [],
+      "within_gamma_rho_vs_jens": 0.7778821495572057,
+      "within_gamma_p_vs_jens": 0.0,
+      "flagged_no_residual_signal": false,
+      "is_clean": true
+    }
+  ],
+  "audit_against_outcome": [
+    {
+      "name": "q_divergence_score",
+      "outcome_jaccard": 0.0,
+      "flagged_outcome": false,
+      "hp_r_squared": {
+        "gamma": 0.054291274370593556,
+        "sync_period": NaN,
+        "replay.capacity": NaN
+      },
+      "flagged_hp": [],
+      "within_gamma_rho_vs_outcome": -0.8254330521888417,
+      "within_gamma_p_vs_outcome": 0.0,
+      "flagged_no_residual_signal": false,
+      "is_clean": true
+    },
+    {
+      "name": "argmax_entropy_late",
+      "outcome_jaccard": 0.0,
+      "flagged_outcome": false,
+      "hp_r_squared": {
+        "gamma": 0.3231179629907899,
+        "sync_period": NaN,
+        "replay.capacity": NaN
+      },
+      "flagged_hp": [],
+      "within_gamma_rho_vs_outcome": 0.2893012412644472,
+      "within_gamma_p_vs_outcome": 4.578560686141486e-08,
+      "flagged_no_residual_signal": false,
+      "is_clean": true
+    },
+    {
+      "name": "target_staleness_late",
+      "outcome_jaccard": 0.0,
+      "flagged_outcome": false,
+      "hp_r_squared": {
+        "gamma": 0.1615191085408162,
+        "sync_period": NaN,
+        "replay.capacity": NaN
+      },
+      "flagged_hp": [],
+      "within_gamma_rho_vs_outcome": 0.762787987472129,
+      "within_gamma_p_vs_outcome": 0.0,
+      "flagged_no_residual_signal": false,
+      "is_clean": true
+    },
+    {
+      "name": "effective_horizon",
+      "outcome_jaccard": 0.0,
+      "flagged_outcome": false,
+      "hp_r_squared": {
+        "gamma": 0.9178079214908387,
+        "sync_period": NaN,
+        "replay.capacity": NaN
+      },
+      "flagged_hp": [],
+      "within_gamma_rho_vs_outcome": -0.1370611979321204,
+      "within_gamma_p_vs_outcome": 0.011339949430771101,
+      "flagged_no_residual_signal": false,
+      "is_clean": true
+    }
+  ]
+}

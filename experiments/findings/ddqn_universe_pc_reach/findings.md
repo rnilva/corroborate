@@ -62,6 +62,34 @@ conditioning on one removes the marginal information of the
 other. PC can't disentangle which of jens/qdiv is "the cause"
 of treatment's effect — they're collinear within (env, γ).
 
+**Quantified via `tautology_audit`** (companion script
+`run_tautology_audit.py`, output `tautology_audit.json`):
+within-γ Spearman ρ on the same REACH cohort (n=343):
+
+| candidate           | ρ vs jens (within γ) | HP-R² on γ | ρ vs outcome (within γ) |
+|---|---|---|---|
+| q_divergence_score  | **+0.974** (p≈0)     | 0.054      | −0.825                  |
+| effective_horizon   | +0.778 (p≈0)         | **0.918**  | −0.137                  |
+| argmax_entropy_late | +0.275 (p=2e-7)      | 0.323      | +0.289                  |
+| target_staleness    | −0.246 (p=4e-6)      | 0.162      | +0.763                  |
+
+The audit's reads-jaccard structural check returned 0 for every
+candidate (qdiv's registered reads name `'jensen_gap'`
+symbolically but jens's own reads are `{predicted_q_at_start,
+mc_return}` — the audit doesn't traverse transitive dependencies).
+**The shadow diagnostic is the stratified ρ**: qdiv is
+near-collinear with jens within γ (ρ=0.97), consistent with
+the algebraic identity; eff_h is 92% determined by γ alone, so
+its coupling with jens via γ-shared structure is what the PC
+removal saw. argmax_H and stale carry only modest within-γ
+coupling — they're genuinely separate mediators.
+
+Caveat: the audit's `flagged_no_residual_signal` flag triggers
+on LOW within-stratum ρ (HP-shadow semantics), not HIGH (which
+would be the algebraic-shadow signature). So the audit reports
+CLEAN for qdiv even though ρ=0.97 — read the raw ρ rather than
+the flag for shadow-of-jens detection.
+
 `is_ddqn ⊥ stale | ∅` confirms cross-env that DDQN does not
 shift target staleness on average — consistent with
 `findings_target_staleness_collinear.md`: staleness is the

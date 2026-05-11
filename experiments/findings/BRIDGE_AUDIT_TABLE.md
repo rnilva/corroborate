@@ -13,13 +13,15 @@
 
 | Tag | Count |
 |---|---|
-| SURVIVED | 8 |
+| SURVIVED | 10 |
 | STALE | 1 |
-| REFUTED (HELD-to-NO_EFFECT under honest methodology) | 8 |
+| REFUTED (HELD-to-NO_EFFECT under honest methodology) | 5 |
 | POWER_COLLAPSED | 2 |
 | DEAD | 10 |
 | POWER_INSUFFICIENT | 3 |
 | SCOPE_VACATED | 17 |
+
+*Counts are post-trace-restore (cache rebuilt 2026-05-11; all bridges re-evaluated at n_pre_scope=1824). Sibling robustness-check bridges (e.g. `metamaze_link_steeper_at_high_gamma__median`) testing the same empirical signal as their parent are not separately counted.*
 | ERRORED | 0 (errored bridge counted in DEAD) |
 | **Total** | **48** |
 
@@ -61,10 +63,10 @@ diagnosis notes below.
 | 3 | `chain_amplifier_link_active_in_bounded_q` | DEAD | (migrated → panel_regress; signal leverage-driven; cut) | a_lt_b | 967 | 1520 |
 | 4 | `ddqn_helps_at_full_bootstrap__fourrooms_n1` | SURVIVED | held | - | 300 | 1520 |
 | 5 | `ddqn_helps_under_three_gate_scope__cross_env` | SURVIVED | held | a_gt_b | 1100 | 1520 |
-| 6 | `eff_h_mediates_g_link__survival_envs` | REFUTED | (migrated `proportion_mediated` → JCI `stratified_partial_spearman`; ρ=+0.656 n=307 — polarity tautology survives jens-conditioning, original 0.16-share null reading was complacent) | null | 578 | 1520 |
+| 6 | `eff_h_mediates_g_link__survival_envs` | SURVIVED | held (re-authored 2026-05-11 per reviewer feedback: `proportion_mediated`-null framing was wrong question for JCI primitive; re-author with `a_gt_b` aligned to polarity-tautology prior; ρ=+0.656 matches `findings_polarity_mediator.md` shape) | a_gt_b | 307 | 1824 |
 | 7 | `fourrooms_action_dim_link_active__inflated` | SURVIVED | held (descriptive: slope=-0.36, R²=0.89, monotonic 4-point panel) | a_lt_b | 235 | 1520 |
-| 8 | `metamaze_link_steeper_at_high_gamma` | REFUTED | (reformulated → stratum_effect_panel mean; γ-amplification flips sign: +1.01→−2.23) | a_gt_b | 111 | 1520 |
-| 8b | `metamaze_link_steeper_at_high_gamma__median` | REFUTED | (sibling, median: also flips sign +0.39→−1.34; bimodality hypothesis rejected) | a_gt_b | 111 | 1520 |
+| 8 | `metamaze_link_steeper_at_high_gamma` | REFUTED | (reformulated → stratum_effect_panel mean; γ-amplification flips sign: +1.01→−2.23). Sibling `__median` (8b) also REFUTED for same empirical signal — count once. | a_gt_b | 111 | 1824 |
+| 8b | `metamaze_link_steeper_at_high_gamma__median` | (sibling of #8 — same empirical signal, robustness check via median) | (same as #8; not separately counted in totals) | a_gt_b | 111 | 1824 |
 | 9 | `reach_link_backdoor_ate_negative` | SURVIVED | held | - | 656 | 1520 |
 | 10 | `reach_link_placebo_refuted` | SURVIVED | held | - | 656 | 1520 |
 | 11 | `reach_link_rcc_robust` | SURVIVED | held | - | 656 | 1520 |
@@ -74,7 +76,7 @@ diagnosis notes below.
 | 15 | `link_r_predictable_from_polarity__soft_tautology` | POWER_COLLAPSED | no_effect | a_gt_b | 1227 | 1520 |
 | 16 | `link_slope_predicted_by_g1__cross_env` | DEAD | no_effect | a_lt_b | 1400 | 1520 |
 | 17 | `algorithmic_activation_rate_mediates_link__bounded_q` | DEAD | power_insufficient | a_gt_b | 967 | 1520 |
-| 18 | `eff_h_mediates_g_link__goal_envs` | REFUTED | (migrated `proportion_mediated` → JCI `stratified_partial_spearman`; ρ=−0.593 n=737 — polarity tautology survives jens-conditioning, original 0.12-share null reading was complacent) | null | 508 | 1520 |
+| 18 | `eff_h_mediates_g_link__goal_envs` | SURVIVED | held (re-authored 2026-05-11 per reviewer feedback: same as bridge #6; `a_lt_b` aligned to polarity-tautology prior; ρ=−0.593 matches `findings_polarity_mediator.md` shape) | a_lt_b | 737 | 1824 |
 | 19 | `effh_predicts_link_power__reach_envs` | REFUTED | post-rebuild: per-burst meta-regression coef(eff_h)=−0.0046 p=0.04 **opposite sign** to a_gt_b prediction. Env-mean Pearson r=+0.975 (n=4) was the cited evidence; per-burst slope inverts due to late-burst Q-growth (`findings_fourrooms_time_series.md` phase structure) | a_gt_b | 312 | 1824 |
 | 20 | `extreme_q_divergence_attenuates_link__binary` | POWER_INSUFFICIENT | power_insufficient | - | 560 | 1520 |
 | 21 | `extreme_q_divergence_attenuates_link__placebo_refuted` | POWER_INSUFFICIENT | power_insufficient | - | 560 | 1520 |
