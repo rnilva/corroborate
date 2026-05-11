@@ -92,38 +92,25 @@ def _finite(col: str) -> pl.Expr:
 
 
 _ALPHA_SWEEP_SCOPE = (
-    # `effective_alpha` is the derived measurable that unifies α from
-    # three sources: dampened_double_greedify(α) cells, vanilla
-    # baseline (α=0), pure DDQN (α=1). Filtering to finite values
-    # excludes cells from action-duplicate / n-step / polyak / expectile
-    # arms (which have NaN effective_alpha).
+    # Core finite-value filters.
     _finite('eval_best_burst_mean')
     & _finite('jensen_gap')
     & _finite('effective_alpha')
-    & pl.col('env_name').is_in([
-        # MLP envs (1M steps): dampened_alpha_g1_mlp.yaml
-        'MetaMaze-misc',
-        'MountainCar-v0',
-        # MinAtar envs: 200k staging (dampened_alpha_g1_minatar_200k.yaml)
-        #              + 1M canonical (dampened_alpha_g1_cnn.yaml)
-        'Asterix-MinAtar',
-        'Breakout-MinAtar',
-        'Freeway-MinAtar',
-        'SpaceInvaders-MinAtar',
-    ])
-    # total_steps NOT pinned at scope level — both 200k MinAtar (cache
-    # + new α-sweep) and 1M MinAtar are valid scope cells. The bridge's
-    # `config_keys` includes `total_steps` so 200k and 1M get separate
-    # slope groups (not pooled).
+    # **Endogenous sweep-coverage predicate (replaces env_name allow-
+    # list).** Keep cells in envs that have ≥ 3 distinct
+    # `effective_alpha` values — this is what "actually has α-sweep
+    # data" means in the corpus. Envs with only α=0 / α=1 endpoints
+    # contribute 2-point binary contrasts that dilute "α-linearity"
+    # testing; the window predicate filters them out without naming
+    # specific envs. Per `feedback_endogenous_scope_predicates.md`:
+    # scope on data properties, not env names.
+    & (pl.col('effective_alpha').n_unique().over('env_name') >= 3)
+    # Config-level pins (NOT env names — these are intervention/
+    # protocol axes). Same configuration as where the dampened-α
+    # sweep ran, so the α-cells and endpoint-cells are protocol-
+    # matched within env.
     & pl.col('total_steps').is_in([200000, 1000000])
-    # MinAtar sync_period pinned to 500: the regime where vanilla
-    # develops Jensen overestimation (at sync=3000, jens=0 across
-    # MinAtar envs and DDQN has nothing to correct — α-sweep tests
-    # a flatline). MLP envs use sync=100, MinAtar sync=500.
     & pl.col('sync_period').is_in([100, 500])
-    # gamma matched to G1-active scope (γ=0.999 MetaMaze excluded for
-    # G3-bottom-A reasons in CLAIM 26b — keep that exclusion here)
-    & ~((pl.col('env_name') == 'MetaMaze-misc') & (pl.col('gamma') == 0.999))
     # Exclude other intervention dimensions (n-step, action-duplicate,
     # polyak, reward-scale wrappers) — only clean DDQN-vs-vanilla
     # contrast in scope.
@@ -151,7 +138,7 @@ def alpha_outcome_slope_per_env__second_layer(
     stratify_by: str = 'env_name',
     min_stratum_size: int = 5,
     rho_threshold: float = 0.3,
-    min_strata: int = 4,
+    min_strata: int = 2,
 ) -> tuple[Verdict, RefutationClass | None]:
     """P1 (pre-registered): Δ_outcome(α) is LINEAR in α per env.
 
@@ -164,15 +151,21 @@ def alpha_outcome_slope_per_env__second_layer(
     with outcome on average" (`predicted_direction='a_gt_b'`).
     HELD when ρ_pooled ≥ rho_threshold.
 
-    **Note on sign-aware semantics.** The original prediction was
-    SIGN-AWARE (positive on net-positive-DDQN envs, negative on
-    net-negative-DDQN envs). JCI's pooled ρ DILUTES opposite
-    signs. Empirical per-env (post-rebuild): Breakout ρ≈0.0
-    (null, n_α=5), SpaceInvaders ρ≈+0.34 (positive, n_α=5),
-    other 4 envs only have α=0 and α=1 anchors. Pooled across
-    all 6 envs, the per-env signal is diluted. The α-sweep is
-    under-instrumented for "per-env sign-aware" testing —
-    intermediate-α cells only exist on Breakout + SpaceInvaders."""
+    **Scope tightened 2026-05-11** via endogenous predicate
+    `effective_alpha.n_unique().over('env_name') >= 3` — only
+    envs with actual α-sweep coverage (≥3 distinct α levels)
+    enter scope. The remaining 2 strata (Breakout + SpaceInvaders)
+    are the only envs in the corpus with intermediate-α cells.
+
+    Empirical post-rebuild (n=360, 2 strata): ρ_pooled=+0.166,
+    p=0.0016 — significant tiny coupling but below the 0.3
+    threshold. Sign-aware per-env: Breakout ρ≈0.0 (null),
+    SpaceInvaders ρ≈+0.34 (positive). The pre-registered
+    "linearity per env with sign matching env's Δ_outcome sign"
+    prediction is NOT confirmable at pooled level — JCI dilutes
+    opposite signs. To corroborate the sign-aware prediction
+    would need a different primitive (per-env panel) or
+    additional α-sweep envs."""
     del x, y, stratify_by, min_stratum_size
     if stratified_spearman.n_strata < min_strata:
         return Verdict.POWER_INSUFFICIENT, None
@@ -204,7 +197,7 @@ def alpha_jens_slope_per_env__second_layer(
     stratify_by: str = 'env_name',
     min_stratum_size: int = 5,
     rho_threshold: float = -0.5,
-    min_strata: int = 4,
+    min_strata: int = 2,
 ) -> tuple[Verdict, RefutationClass | None]:
     """P2 (pre-registered): Δ_jens(α) is LINEAR in α with sign 'a_lt_b'.
 
@@ -218,11 +211,12 @@ def alpha_jens_slope_per_env__second_layer(
     is universal-negative across envs (Hasselt mechanism is
     direction-invariant), so JCI pooling is appropriate.
 
-    Empirical per-env (post-rebuild): Asterix ρ=−0.73 ***,
-    Breakout ρ=−0.85 ***, Freeway ρ=−0.10 ns, MetaMaze ρ=−0.34 **,
-    MountainCar ρ=−0.28 *, SpaceInvaders ρ=−0.90 ***. 5 of 6 envs
-    confirm negative direction; Freeway null is Q-explosion regime
-    (mech dormant). Pooled ρ should be strongly negative.
+    **Scope tightened 2026-05-11** via the same endogenous
+    predicate as P1 — only envs with ≥3 distinct α levels.
+
+    Empirical post-rebuild (n=360, 2 strata): ρ_pooled=**−0.880**,
+    p≈0, HELD. Both Breakout and SpaceInvaders strongly confirm
+    the negative α→jens slope.
 
     Refutation would mean the bias-correction mechanism doesn't
     scale linearly with α, which would also refute P1's premise."""
