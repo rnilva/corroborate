@@ -14,11 +14,11 @@
 | Tag | Count |
 |---|---|
 | SURVIVED | 11 |
-| STALE | 1 |
-| REFUTED (HELD-to-NO_EFFECT under honest methodology) | 6 |
-| POWER_COLLAPSED | 2 |
+| STALE | 0 |
+| REFUTED (HELD-to-NO_EFFECT under honest methodology) | 7 |
+| POWER_COLLAPSED | 1 |
 | DEAD | 10 |
-| POWER_INSUFFICIENT | 8 |
+| POWER_INSUFFICIENT | 9 |
 | SCOPE_VACATED | 13 |
 
 *Counts are post-trace-restore (cache rebuilt 2026-05-11; all bridges re-evaluated at n_pre_scope=1824). Sibling robustness-check bridges (e.g. `metamaze_link_steeper_at_high_gamma__median`) testing the same empirical signal as their parent are not separately counted.*
@@ -70,10 +70,10 @@ diagnosis notes below.
 | 9 | `reach_link_backdoor_ate_negative` | SURVIVED | held | - | 656 | 1520 |
 | 10 | `reach_link_placebo_refuted` | SURVIVED | held | - | 656 | 1520 |
 | 11 | `reach_link_rcc_robust` | SURVIVED | held | - | 656 | 1520 |
-| 12 | `ddqn_refuted_when_dormancy_fires` | STALE | invariant_violation | - | 553 | 1520 |
+| 12 | `ddqn_refuted_when_dormancy_fires` | POWER_INSUFFICIENT | (migrated 2026-05-11 to CI[g]-vs-null_ceiling; previous logic used `helped_fraction ≤ 0.15` which is wrong threshold — under null, helped_fraction is ~0.5 not 0. Post-fix: g=+0.09, CI[g]=[−0.09, +0.27] spans null_ceiling=0.2 → POW_INSUF, honest verdict given the data) | - | 557 | 1824 |
 | 13 | `cross_config_staleness_slope_negative__survive` | POWER_COLLAPSED | no_effect | a_lt_b | 304 | 1520 |
 | 14 | `cross_config_staleness_slope_positive__reach_polyak` | DEAD | no_effect | a_gt_b | 252 | 1520 |
-| 15 | `link_r_predictable_from_polarity__soft_tautology` | POWER_COLLAPSED | no_effect | a_gt_b | 1227 | 1520 |
+| 15 | `link_r_predictable_from_polarity__soft_tautology` | REFUTED | (post-rebuild: β collapsed +0.61→+0.37 (CI=[−0.47, +1.20]), p went sig→0.34, R² 0.83→0.11, I²=0.95. PacMan-jumanji entered panel as sign-mismatch (polarity=+0.34, r=−0.49). The "structural soft tautology" framing was overstated — fixed-length envs break the polarity-link sign-match) | a_gt_b | 1760 | 1824 |
 | 16 | `link_slope_predicted_by_g1__cross_env` | DEAD | no_effect | a_lt_b | 1400 | 1520 |
 | 17 | `algorithmic_activation_rate_mediates_link__bounded_q` | DEAD | power_insufficient | a_gt_b | 967 | 1520 |
 | 18 | `eff_h_mediates_g_link__goal_envs` | SURVIVED | held (re-authored 2026-05-11 per reviewer feedback: same as bridge #6; `a_lt_b` aligned to polarity-tautology prior; ρ=−0.593 matches `findings_polarity_mediator.md` shape) | a_lt_b | 737 | 1824 |

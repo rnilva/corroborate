@@ -251,40 +251,69 @@ MODULE_SCOPE: pl.Expr = ~pl.col('env_name').str.ends_with('-bsuite')
 def ddqn_refuted_when_dormancy_fires(
     paired_g: PairedGResult,
     *,
+    null_ceiling: float = 0.2,
     dedupe_strategy: str = 'mean',
 ) -> tuple[Verdict, RefutationClass | None]:
     """Necessary-condition claim. The framework's-own Jensen
     dormancy invariant operationalizes the Hasselt-2010 structural
     floor `σ_Q × √(2 log |A|)` against observed bias. When the gap
     fires (gap > 0, premise dormant), DDQN's bias-correction
-    mechanism has nothing to operate on.
+    mechanism has nothing to operate on, so Δ_outcome should be
+    ≈ 0 on dormant cells.
 
-    HELD when helped_fraction ≤ 0.15 AND |g| ≤ 0.20 — the
-    refutation prediction is corroborated (DDQN does NOT help
-    outcome on dormant cells). INVARIANT_VIOLATION when DDQN
-    unexpectedly helps despite dormancy (helped > 0.40).
+    **2026-05-11 migration to CI-vs-null_ceiling on Hedges' g.**
+    Previous logic combined `helped_fraction ≤ 0.15` and
+    `|g| ≤ 0.20`. The first criterion is wrong: under a true
+    null, `helped_fraction` is approximately 0.5 (random win/lose
+    on each pair), not 0. Asserting "null held ⇒ helped ≤ 0.15"
+    is much stricter than the null actually predicts — almost
+    no real data would satisfy it. The "INVARIANT_VIOLATION when
+    helped > 0.40" trigger was symmetric and also wrong: 41% vs
+    39% is well within null noise at n=123.
+
+    New verdict logic uses the 95% CI on Hedges' g (scale-
+    invariant across envs):
+    - HELD when CI[g] ⊂ [−null_ceiling, +null_ceiling] — null
+      confirmed at Cohen's-small bound (default 0.2);
+    - INVARIANT_VIOLATION when CI[g] lower > null_ceiling — data
+      confidently asserts substantive positive effect, contra-
+      dicting the necessary-condition claim;
+    - NO_EFFECT (SIGN_FLIP) when CI[g] upper < −null_ceiling —
+      strong negative effect (DDQN substantively HURTS dormant
+      cells);
+    - POWER_INSUFFICIENT when CI spans the bound.
+
+    Empirical post-rebuild: g=+0.09, se=+0.09 → CI=[−0.09, +0.27],
+    null_ceiling=0.2 — CI spans the +0.2 boundary → POW_INSUF.
+    The earlier INVARIANT_VIOLATION was a verdict-logic artifact
+    of the wrong threshold criterion.
 
     The Pearl-rung-2 corroboration via `adaptive_dqn_recovers_
-    ddqn_benefit__fourrooms_factor_0p5` validates this as
-    actionable: a runtime controller using a per-batch dormancy
-    proxy (max_Q − mean_Q vs σ_Q × √(2 log |A|)) recovers DDQN's
-    outcome benefit on FourRooms (g=+0.78 vs vanilla, p<0.001)."""
+    ddqn_benefit__fourrooms_factor_0p5` validates the underlying
+    theory: a runtime controller using a per-batch dormancy proxy
+    (max_Q − mean_Q vs σ_Q × √(2 log |A|)) recovers DDQN's outcome
+    benefit on FourRooms (g=+0.78 vs vanilla, p<0.001)."""
     del dedupe_strategy  # forwarded to paired_g
     if paired_g.n_pairs < 50:
         return Verdict.POWER_INSUFFICIENT, None
-    if math.isnan(paired_g.helped_fraction):
+    g = paired_g.g
+    se = paired_g.se
+    if math.isnan(g) or math.isnan(se):
         return Verdict.POWER_INSUFFICIENT, None
-    # The bridge predicts a NULL outcome on dormant cells.
-    if (
-        paired_g.helped_fraction <= 0.15
-        and abs(paired_g.g) <= 0.20
-    ):
+    ci_lo = g - 1.96 * se
+    ci_hi = g + 1.96 * se
+    if ci_lo >= -null_ceiling and ci_hi <= null_ceiling:
         return Verdict.HELD, None
-    if paired_g.helped_fraction > 0.40:
+    if ci_lo > null_ceiling:
+        # Data confidently asserts substantive positive effect on
+        # dormant cells — the necessary-condition claim's null
+        # prediction is contradicted by the data.
         return Verdict.INVARIANT_VIOLATION, None
-    # Predicted null but observed |g| > 0.20 OR helped in
-    # (0.15, 0.40] — null prediction refuted.
-    return Verdict.NO_EFFECT, RefutationClass.SIGN_FLIP
+    if ci_hi < -null_ceiling:
+        # Strong negative effect — DDQN substantively HURTS on
+        # dormant cells. Different refutation flavor (sign-flip).
+        return Verdict.NO_EFFECT, RefutationClass.SIGN_FLIP
+    return Verdict.POWER_INSUFFICIENT, None
 
 
 # =====================================================================
@@ -3115,17 +3144,39 @@ def link_r_predictable_from_polarity__soft_tautology(
       POWER_INSUFFICIENT when fewer than `min_envs` envs surface in
       the panel.
 
-    Empirical (canonical ddqn corpus, 8 polarity-defined envs):
+    Pre-rebuild empirical (canonical ddqn corpus, 8 envs):
       β(env_reward_polarity) = +0.614, CI [+0.34, +0.89],
       p = 1.7×10⁻³, R² = 0.83, n_strata = 8 → HELD.
 
-    Note: the soft tautology is a structural consequence of how
-    polarity and eff_h are defined; HELD here does NOT imply eff_h
-    carries DDQN's mechanism. The companion bridges
-    `eff_h_mediates_g_link__{goal,survival}_envs` are HELD under
-    `predicted_direction='null'` (eff_h is NOT a dominant mediator).
-    Together: polarity predicts link SHAPE (this bridge); but eff_h
-    carries < 20% of the total effect (those bridges)."""
+    **2026-05-11 post-rebuild: COLLAPSED.** With trace-restore
+    bringing n_strata 8 → 10:
+      β = +0.366, CI [−0.47, +1.20], p = 0.34, R² = 0.11,
+      I² = 0.95 (extreme cross-env heterogeneity).
+    Verdict: NO_EFFECT (coefficient insignificant, magnitude
+    below 0.4 threshold). Per-env check: PacMan-jumanji
+    (polarity=+0.34, r=−0.49) is a sign-mismatch. The "soft
+    tautology" framing was overstated — the structural identity
+    holds within-arm (HARD r(eff_h, O) = polarity by definition)
+    but not across the SOFT paired-Δ form once envs with policy-
+    independent length structures (PacMan-jumanji has fixed
+    episode length) enter the panel. Memory
+    `findings_polarity_soft_tautology_bridge.md` cited 8-of-8
+    sign-match before PacMan-jumanji ingest; the 10-env panel
+    has 1 hard sign-mismatch (PacMan) and 1 near-zero (Snake).
+
+    The bridge correctly returns NO_EFFECT under current data —
+    the polarity-coupling shape is not as universal as the
+    "tautology" framing implied. The companion eff_h-mediator
+    bridges (`eff_h_mediates_g_link__{goal,survival}_envs`)
+    remain HELD with directional predictions matching polarity
+    sign; per-env coupling EXISTS, but env-mean cross-env panel
+    doesn't fit a single linear β.
+
+    Note: the soft tautology was framed as a structural consequence
+    of how polarity and eff_h are defined; the post-rebuild result
+    falsifies the "structural" framing — implementation-level
+    differences (e.g., fixed-length envs) break the apparent
+    universal sign-match."""
     del target, predictor
     if paired_link_per_env.n_strata < min_envs:
         return Verdict.POWER_INSUFFICIENT
