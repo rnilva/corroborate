@@ -1560,7 +1560,10 @@ def ddqn_curve_crosses_vanilla_late__spaceinvaders(
         key=lambda s: s.burst_index,
     )
     if len(env_strata) < crossover_burst_max + 1:
-        return Verdict.NO_EFFECT
+        # Empty strata = no cells in scope = underpowered, not
+        # null-effect. Reviewer screening catch: previous NO_EFFECT
+        # for n=0 was a verdict-logic bug.
+        return Verdict.POWER_INSUFFICIENT
 
     # Find the crossover: first burst where g < 0 (after
     # potentially seeing positive g earlier — the bridge isn't
@@ -1700,7 +1703,9 @@ def ddqn_null_under_monte_carlo__fourrooms_n10(
     diff = arm_mean_diff.mean_diff
     p = arm_mean_diff.mean_diff_p_value
     if math.isnan(diff) or math.isnan(p):
-        return Verdict.NO_EFFECT
+        # NaN = no cells in scope OR degenerate stats; underpowered
+        # to assert HELD or NO_EFFECT (reviewer screening catch).
+        return Verdict.POWER_INSUFFICIENT
     is_small = abs(diff) <= null_ceiling
     is_ns = p > 0.05
     if is_small and is_ns:
@@ -2523,6 +2528,14 @@ def fourrooms_action_dim_link_active__inflated(
     scope=(
         (pl.col('total_steps') == 1_000_000)
         & finite('q_divergence_score')
+        # Pin canonical eval cadence to exclude SlidingTile big_cnn
+        # probe (eval_every=100000, q_network=(8,16)). Mixing the
+        # probe with the main sweep makes paired_link_per_burst
+        # error on per-burst array-shape mismatch (the two configs
+        # produce different trace shapes). Pre-2026-05-11 the
+        # scope didn't pin eval_every and the bridge errored
+        # post-rebuild when the probe entered scope.
+        & (pl.col('eval_every') == 50_000)
     ),
 )
 def extreme_q_divergence_attenuates_link__binary(
@@ -2574,6 +2587,14 @@ def extreme_q_divergence_attenuates_link__binary(
     scope=(
         (pl.col('total_steps') == 1_000_000)
         & finite('q_divergence_score')
+        # Pin canonical eval cadence to exclude SlidingTile big_cnn
+        # probe (eval_every=100000, q_network=(8,16)). Mixing the
+        # probe with the main sweep makes paired_link_per_burst
+        # error on per-burst array-shape mismatch (the two configs
+        # produce different trace shapes). Pre-2026-05-11 the
+        # scope didn't pin eval_every and the bridge errored
+        # post-rebuild when the probe entered scope.
+        & (pl.col('eval_every') == 50_000)
     ),
 )
 def extreme_q_divergence_attenuates_link__placebo_refuted(
@@ -2625,6 +2646,14 @@ def extreme_q_divergence_attenuates_link__placebo_refuted(
     scope=(
         (pl.col('total_steps') == 1_000_000)
         & finite('q_divergence_score')
+        # Pin canonical eval cadence to exclude SlidingTile big_cnn
+        # probe (eval_every=100000, q_network=(8,16)). Mixing the
+        # probe with the main sweep makes paired_link_per_burst
+        # error on per-burst array-shape mismatch (the two configs
+        # produce different trace shapes). Pre-2026-05-11 the
+        # scope didn't pin eval_every and the bridge errored
+        # post-rebuild when the probe entered scope.
+        & (pl.col('eval_every') == 50_000)
     ),
 )
 def extreme_q_divergence_attenuates_link__rcc_robust(

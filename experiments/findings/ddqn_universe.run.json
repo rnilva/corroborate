@@ -561,7 +561,7 @@
       "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
       "target_name": "mc_return[per_burst]",
       "tier": "associational",
-      "verdict": "no_effect",
+      "verdict": "power_insufficient",
       "warnings": [
         {
           "gate_name": "no_predicted_direction",
@@ -667,7 +667,7 @@
       "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
       "target_name": "eval_best_burst_mean",
       "tier": "interventional",
-      "verdict": "no_effect",
+      "verdict": "power_insufficient",
       "warnings": [
         {
           "gate_name": "exogenous_scope",
@@ -782,8 +782,8 @@
       "analysis_results": {
         "paired_delta_link_dowhy": {
           "backdoor": {
-            "ate": -0.744742,
-            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__9,__burst__1,__burst__7,__burst__4,__burst__3,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __2,__burst__6,__burst__5,__burst__8])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__9,__burst__1,__burst__7,__burst__4,__burst__3,__burst__2,__burst__6,__burst__5,__burst__8,U) = P(dout|djens,__burst__9,__burst__1,__burst__7,__burst__4,__burst__3,__burst__2,__burst__6,__burst__5,__burst__8)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__9,__burst__1,__burst__4,__burst__7,__burst__3,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __5,__burst__2,__burst__6,__burst__8])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__9,__burst__1,__burst__4,__burst__7,__burst__3,__burst__5,__burst__2,__burst__6,__burst__8,U) = P(dout|djens,__burst__9,__burst__1,__burst__4,__burst__7,__burst__3,__burst__5,__burst__2,__burst__6,__burst__8)\n",
+            "ate": -0.806185,
+            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__2,__burst__5,__burst__8,__burst__4,__burst__3,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __7,__burst__9,__burst__6,__burst__1])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__2,__burst__5,__burst__8,__burst__4,__burst__3,__burst__7,__burst__9,__burst__6,__burst__1,U) = P(dout|djens,__burst__2,__burst__5,__burst__8,__burst__4,__burst__3,__burst__7,__burst__9,__burst__6,__burst__1)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__2,__burst__5,__burst__4,__burst__8,__burst__3,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __7,__burst__9,__burst__6,__burst__1])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__2,__burst__5,__burst__4,__burst__8,__burst__3,__burst__7,__burst__9,__burst__6,__burst__1,U) = P(dout|djens,__burst__2,__burst__5,__burst__4,__burst__8,__burst__3,__burst__7,__burst__9,__burst__6,__burst__1)\n",
             "identified": true,
             "method_name": "backdoor.linear_regression",
             "n_rows": 1310,
@@ -793,22 +793,22 @@
           "n_pairs": 1310,
           "outcome_col": "dout",
           "placebo": {
-            "drift": 0.744742,
+            "drift": 0.806185,
             "method_name": "backdoor.linear_regression",
             "n_rows": 1310,
             "outcome": "dout",
-            "real_ate": -0.744742,
-            "refuted_ate": 4.44089e-16,
+            "real_ate": -0.806185,
+            "refuted_ate": -2.22045e-16,
             "refuter_name": "placebo_treatment_refuter",
             "treatment": "djens"
           },
           "random_common_cause": {
-            "drift": 1.9568e-06,
+            "drift": 4.77109e-06,
             "method_name": "backdoor.linear_regression",
             "n_rows": 1310,
             "outcome": "dout",
-            "real_ate": -0.744742,
-            "refuted_ate": -0.744744,
+            "real_ate": -0.806185,
+            "refuted_ate": -0.80619,
             "refuter_name": "random_common_cause",
             "treatment": "djens"
           },
@@ -854,8 +854,8 @@
       "analysis_results": {
         "paired_delta_link_dowhy": {
           "backdoor": {
-            "ate": -0.744742,
-            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__9,__burst__1,__burst__7,__burst__4,__burst__3,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __2,__burst__6,__burst__5,__burst__8])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__9,__burst__1,__burst__7,__burst__4,__burst__3,__burst__2,__burst__6,__burst__5,__burst__8,U) = P(dout|djens,__burst__9,__burst__1,__burst__7,__burst__4,__burst__3,__burst__2,__burst__6,__burst__5,__burst__8)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__9,__burst__1,__burst__4,__burst__7,__burst__3,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __5,__burst__2,__burst__6,__burst__8])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__9,__burst__1,__burst__4,__burst__7,__burst__3,__burst__5,__burst__2,__burst__6,__burst__8,U) = P(dout|djens,__burst__9,__burst__1,__burst__4,__burst__7,__burst__3,__burst__5,__burst__2,__burst__6,__burst__8)\n",
+            "ate": -0.806185,
+            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__2,__burst__5,__burst__8,__burst__4,__burst__3,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __7,__burst__9,__burst__6,__burst__1])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__2,__burst__5,__burst__8,__burst__4,__burst__3,__burst__7,__burst__9,__burst__6,__burst__1,U) = P(dout|djens,__burst__2,__burst__5,__burst__8,__burst__4,__burst__3,__burst__7,__burst__9,__burst__6,__burst__1)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__2,__burst__5,__burst__4,__burst__8,__burst__3,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __7,__burst__9,__burst__6,__burst__1])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__2,__burst__5,__burst__4,__burst__8,__burst__3,__burst__7,__burst__9,__burst__6,__burst__1,U) = P(dout|djens,__burst__2,__burst__5,__burst__4,__burst__8,__burst__3,__burst__7,__burst__9,__burst__6,__burst__1)\n",
             "identified": true,
             "method_name": "backdoor.linear_regression",
             "n_rows": 1310,
@@ -865,22 +865,22 @@
           "n_pairs": 1310,
           "outcome_col": "dout",
           "placebo": {
-            "drift": 0.744742,
+            "drift": 0.806185,
             "method_name": "backdoor.linear_regression",
             "n_rows": 1310,
             "outcome": "dout",
-            "real_ate": -0.744742,
-            "refuted_ate": 4.44089e-16,
+            "real_ate": -0.806185,
+            "refuted_ate": -2.22045e-16,
             "refuter_name": "placebo_treatment_refuter",
             "treatment": "djens"
           },
           "random_common_cause": {
-            "drift": 8.33974e-06,
+            "drift": 2.0185e-06,
             "method_name": "backdoor.linear_regression",
             "n_rows": 1310,
             "outcome": "dout",
-            "real_ate": -0.744742,
-            "refuted_ate": -0.744734,
+            "real_ate": -0.806185,
+            "refuted_ate": -0.806183,
             "refuter_name": "random_common_cause",
             "treatment": "djens"
           },
@@ -926,8 +926,8 @@
       "analysis_results": {
         "paired_delta_link_dowhy": {
           "backdoor": {
-            "ate": -0.744742,
-            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__9,__burst__1,__burst__7,__burst__4,__burst__3,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __2,__burst__6,__burst__5,__burst__8])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__9,__burst__1,__burst__7,__burst__4,__burst__3,__burst__2,__burst__6,__burst__5,__burst__8,U) = P(dout|djens,__burst__9,__burst__1,__burst__7,__burst__4,__burst__3,__burst__2,__burst__6,__burst__5,__burst__8)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__9,__burst__1,__burst__4,__burst__7,__burst__3,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __5,__burst__2,__burst__6,__burst__8])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__9,__burst__1,__burst__4,__burst__7,__burst__3,__burst__5,__burst__2,__burst__6,__burst__8,U) = P(dout|djens,__burst__9,__burst__1,__burst__4,__burst__7,__burst__3,__burst__5,__burst__2,__burst__6,__burst__8)\n",
+            "ate": -0.806185,
+            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__2,__burst__5,__burst__8,__burst__4,__burst__3,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __7,__burst__9,__burst__6,__burst__1])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__2,__burst__5,__burst__8,__burst__4,__burst__3,__burst__7,__burst__9,__burst__6,__burst__1,U) = P(dout|djens,__burst__2,__burst__5,__burst__8,__burst__4,__burst__3,__burst__7,__burst__9,__burst__6,__burst__1)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__2,__burst__5,__burst__4,__burst__8,__burst__3,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __7,__burst__9,__burst__6,__burst__1])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__2,__burst__5,__burst__4,__burst__8,__burst__3,__burst__7,__burst__9,__burst__6,__burst__1,U) = P(dout|djens,__burst__2,__burst__5,__burst__4,__burst__8,__burst__3,__burst__7,__burst__9,__burst__6,__burst__1)\n",
             "identified": true,
             "method_name": "backdoor.linear_regression",
             "n_rows": 1310,
@@ -937,22 +937,22 @@
           "n_pairs": 1310,
           "outcome_col": "dout",
           "placebo": {
-            "drift": 0.744742,
+            "drift": 0.806185,
             "method_name": "backdoor.linear_regression",
             "n_rows": 1310,
             "outcome": "dout",
-            "real_ate": -0.744742,
-            "refuted_ate": 4.44089e-16,
+            "real_ate": -0.806185,
+            "refuted_ate": -2.22045e-16,
             "refuter_name": "placebo_treatment_refuter",
             "treatment": "djens"
           },
           "random_common_cause": {
-            "drift": 6.7321e-06,
+            "drift": 5.11693e-05,
             "method_name": "backdoor.linear_regression",
             "n_rows": 1310,
             "outcome": "dout",
-            "real_ate": -0.744742,
-            "refuted_ate": -0.744749,
+            "real_ate": -0.806185,
+            "refuted_ate": -0.806134,
             "refuter_name": "random_common_cause",
             "treatment": "djens"
           },
@@ -1297,6 +1297,225 @@
     },
     {
       "analysis_results": {
+        "link_attenuation_dowhy": {
+          "attenuator": "q_divergence_score",
+          "backdoor": {
+            "ate": 0.0,
+            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n                  d                                                   \n──────────────────────────────────────(E[g_link|__env__Snake-jumanji])\nd[q_divergence_score_threshold__above]                                \nEstimand assumption 1, Unconfoundedness: If U→{q_divergence_score__above_threshold} and U→g_link then P(g_link|q_divergence_score__above_threshold,__env__Snake-jumanji,U) = P(g_link|q_divergence_score__above_threshold,__env__Snake-jumanji)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n                  d                                                   \n──────────────────────────────────────(E[g_link|__env__Snake-jumanji])\nd[q_divergence_score_threshold__above]                                \nEstimand assumption 1, Unconfoundedness: If U→{q_divergence_score__above_threshold} and U→g_link then P(g_link|q_divergence_score__above_threshold,__env__Snake-jumanji,U) = P(g_link|q_divergence_score__above_threshold,__env__Snake-jumanji)\n",
+            "identified": true,
+            "method_name": "backdoor.linear_regression",
+            "n_rows": 40,
+            "outcome": "g_link",
+            "treatment": "q_divergence_score__above_threshold"
+          },
+          "binary_threshold": 1000.0,
+          "n_above": 0,
+          "n_below": 40,
+          "n_strata": 40,
+          "outcome_col": "g_link",
+          "placebo": {
+            "drift": 0.0,
+            "method_name": "backdoor.linear_regression",
+            "n_rows": 40,
+            "outcome": "g_link",
+            "real_ate": 0.0,
+            "refuted_ate": 0.0,
+            "refuter_name": "placebo_treatment_refuter",
+            "treatment": "q_divergence_score__above_threshold"
+          },
+          "random_common_cause": {
+            "drift": 3.33067e-18,
+            "method_name": "backdoor.linear_regression",
+            "n_rows": 40,
+            "outcome": "g_link",
+            "real_ate": 0.0,
+            "refuted_ate": 3.33067e-18,
+            "refuter_name": "random_common_cause",
+            "treatment": "q_divergence_score__above_threshold"
+          },
+          "treatment_col": "q_divergence_score__above_threshold"
+        }
+      },
+      "assumption_violations": [],
+      "blocked_by": null,
+      "bridge_name": "extreme_q_divergence_attenuates_link__binary",
+      "direction": "inverse",
+      "n_cells_in_scope": 120,
+      "n_cells_pre_scope": 2064,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "ate_ceiling": -0.1,
+        "attenuator": "q_divergence_score",
+        "binary_threshold": 1000.0,
+        "dedupe_strategy": "mean",
+        "link_predictor": "jensen_bias_per_eps__mean_axis_-1",
+        "link_target": "mc_return__mean_axis_-1"
+      },
+      "predicted_direction": null,
+      "scope_repr": "[([([(col(\"total_steps\")) == (dyn int: 1000000)]) & (col(\"q_divergence_score\").is_finite())]) & ([(col(\"eval_every\")) == (dyn int: 50000)])]",
+      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "target_name": "outcome.eval_best_burst_mean",
+      "tier": "interventional",
+      "verdict": "no_effect",
+      "warnings": [
+        {
+          "gate_name": "no_predicted_direction",
+          "level": "info",
+          "message": "Bridge 'extreme_q_divergence_attenuates_link__binary' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
+          "passed": false
+        }
+      ]
+    },
+    {
+      "analysis_results": {
+        "link_attenuation_dowhy": {
+          "attenuator": "q_divergence_score",
+          "backdoor": {
+            "ate": 0.0,
+            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n                  d                                                   \n──────────────────────────────────────(E[g_link|__env__Snake-jumanji])\nd[q_divergence_score_threshold__above]                                \nEstimand assumption 1, Unconfoundedness: If U→{q_divergence_score__above_threshold} and U→g_link then P(g_link|q_divergence_score__above_threshold,__env__Snake-jumanji,U) = P(g_link|q_divergence_score__above_threshold,__env__Snake-jumanji)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n                  d                                                   \n──────────────────────────────────────(E[g_link|__env__Snake-jumanji])\nd[q_divergence_score_threshold__above]                                \nEstimand assumption 1, Unconfoundedness: If U→{q_divergence_score__above_threshold} and U→g_link then P(g_link|q_divergence_score__above_threshold,__env__Snake-jumanji,U) = P(g_link|q_divergence_score__above_threshold,__env__Snake-jumanji)\n",
+            "identified": true,
+            "method_name": "backdoor.linear_regression",
+            "n_rows": 40,
+            "outcome": "g_link",
+            "treatment": "q_divergence_score__above_threshold"
+          },
+          "binary_threshold": 1000.0,
+          "n_above": 0,
+          "n_below": 40,
+          "n_strata": 40,
+          "outcome_col": "g_link",
+          "placebo": {
+            "drift": 0.0,
+            "method_name": "backdoor.linear_regression",
+            "n_rows": 40,
+            "outcome": "g_link",
+            "real_ate": 0.0,
+            "refuted_ate": 0.0,
+            "refuter_name": "placebo_treatment_refuter",
+            "treatment": "q_divergence_score__above_threshold"
+          },
+          "random_common_cause": {
+            "drift": 6.66134e-18,
+            "method_name": "backdoor.linear_regression",
+            "n_rows": 40,
+            "outcome": "g_link",
+            "real_ate": 0.0,
+            "refuted_ate": 6.66134e-18,
+            "refuter_name": "random_common_cause",
+            "treatment": "q_divergence_score__above_threshold"
+          },
+          "treatment_col": "q_divergence_score__above_threshold"
+        }
+      },
+      "assumption_violations": [],
+      "blocked_by": null,
+      "bridge_name": "extreme_q_divergence_attenuates_link__placebo_refuted",
+      "direction": "inverse",
+      "n_cells_in_scope": 120,
+      "n_cells_pre_scope": 2064,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "attenuator": "q_divergence_score",
+        "binary_threshold": 1000.0,
+        "dedupe_strategy": "mean",
+        "link_predictor": "jensen_bias_per_eps__mean_axis_-1",
+        "link_target": "mc_return__mean_axis_-1",
+        "placebo_max_ratio": 0.2
+      },
+      "predicted_direction": null,
+      "scope_repr": "[([([(col(\"total_steps\")) == (dyn int: 1000000)]) & (col(\"q_divergence_score\").is_finite())]) & ([(col(\"eval_every\")) == (dyn int: 50000)])]",
+      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "target_name": "outcome.eval_best_burst_mean",
+      "tier": "interventional",
+      "verdict": "power_insufficient",
+      "warnings": [
+        {
+          "gate_name": "no_predicted_direction",
+          "level": "info",
+          "message": "Bridge 'extreme_q_divergence_attenuates_link__placebo_refuted' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
+          "passed": false
+        }
+      ]
+    },
+    {
+      "analysis_results": {
+        "link_attenuation_dowhy": {
+          "attenuator": "q_divergence_score",
+          "backdoor": {
+            "ate": 0.0,
+            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n                  d                                                   \n──────────────────────────────────────(E[g_link|__env__Snake-jumanji])\nd[q_divergence_score_threshold__above]                                \nEstimand assumption 1, Unconfoundedness: If U→{q_divergence_score__above_threshold} and U→g_link then P(g_link|q_divergence_score__above_threshold,__env__Snake-jumanji,U) = P(g_link|q_divergence_score__above_threshold,__env__Snake-jumanji)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n                  d                                                   \n──────────────────────────────────────(E[g_link|__env__Snake-jumanji])\nd[q_divergence_score_threshold__above]                                \nEstimand assumption 1, Unconfoundedness: If U→{q_divergence_score__above_threshold} and U→g_link then P(g_link|q_divergence_score__above_threshold,__env__Snake-jumanji,U) = P(g_link|q_divergence_score__above_threshold,__env__Snake-jumanji)\n",
+            "identified": true,
+            "method_name": "backdoor.linear_regression",
+            "n_rows": 40,
+            "outcome": "g_link",
+            "treatment": "q_divergence_score__above_threshold"
+          },
+          "binary_threshold": 1000.0,
+          "n_above": 0,
+          "n_below": 40,
+          "n_strata": 40,
+          "outcome_col": "g_link",
+          "placebo": {
+            "drift": 0.0,
+            "method_name": "backdoor.linear_regression",
+            "n_rows": 40,
+            "outcome": "g_link",
+            "real_ate": 0.0,
+            "refuted_ate": 0.0,
+            "refuter_name": "placebo_treatment_refuter",
+            "treatment": "q_divergence_score__above_threshold"
+          },
+          "random_common_cause": {
+            "drift": 2.77556e-18,
+            "method_name": "backdoor.linear_regression",
+            "n_rows": 40,
+            "outcome": "g_link",
+            "real_ate": 0.0,
+            "refuted_ate": 2.77556e-18,
+            "refuter_name": "random_common_cause",
+            "treatment": "q_divergence_score__above_threshold"
+          },
+          "treatment_col": "q_divergence_score__above_threshold"
+        }
+      },
+      "assumption_violations": [],
+      "blocked_by": null,
+      "bridge_name": "extreme_q_divergence_attenuates_link__rcc_robust",
+      "direction": "inverse",
+      "n_cells_in_scope": 120,
+      "n_cells_pre_scope": 2064,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "attenuator": "q_divergence_score",
+        "binary_threshold": 1000.0,
+        "dedupe_strategy": "mean",
+        "link_predictor": "jensen_bias_per_eps__mean_axis_-1",
+        "link_target": "mc_return__mean_axis_-1",
+        "rcc_max_drift_ratio": 0.15
+      },
+      "predicted_direction": null,
+      "scope_repr": "[([([(col(\"total_steps\")) == (dyn int: 1000000)]) & (col(\"q_divergence_score\").is_finite())]) & ([(col(\"eval_every\")) == (dyn int: 50000)])]",
+      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "target_name": "outcome.eval_best_burst_mean",
+      "tier": "interventional",
+      "verdict": "power_insufficient",
+      "warnings": [
+        {
+          "gate_name": "no_predicted_direction",
+          "level": "info",
+          "message": "Bridge 'extreme_q_divergence_attenuates_link__rcc_robust' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
+          "passed": false
+        }
+      ]
+    },
+    {
+      "analysis_results": {
         "stratified_partial_spearman": {
           "conditioning": "jensen_gap",
           "n_obs_total": 742,
@@ -1548,20 +1767,20 @@
       "analysis_results": {
         "cross_config_paired_slope": {
           "config_means_predictor": [
-            0.00290062,
+            0.000715301,
             0.000719091,
             0.00148632,
             0.000300584,
-            0.000715301,
-            0.000354758
+            0.000354758,
+            0.00290062
           ],
           "config_means_target": [
-            -0.330237,
+            -0.54841,
             0.123332,
             -0.141686,
             0.0,
-            -0.54841,
-            1.30205
+            1.30205,
+            -0.330237
           ],
           "n_configs": 6,
           "p_value": 0.396501,
@@ -1604,25 +1823,25 @@
           "cleavage_axes": [],
           "coefficients": [
             {
-              "ci_hi": 1.2263,
-              "ci_lo": -0.151845,
-              "coefficient": 0.537228,
+              "ci_hi": 1.28987,
+              "ci_lo": -0.349333,
+              "coefficient": 0.470268,
               "is_significant": false,
               "name": "env_reward_polarity",
-              "p_value": 0.109914
+              "p_value": 0.222356
             }
           ],
-          "i_squared": 0.92277,
-          "intercept": 0.09531,
-          "intercept_ci_hi": 0.611245,
-          "intercept_ci_lo": -0.420625,
-          "intercept_p_value": 0.681342,
-          "intercept_se": 0.223736,
+          "i_squared": 0.945136,
+          "intercept": 0.121351,
+          "intercept_ci_hi": 0.73336,
+          "intercept_ci_lo": -0.490659,
+          "intercept_p_value": 0.659659,
+          "intercept_se": 0.265398,
           "n_strata": 10,
           "pool": "random",
-          "q_statistic": 103.587,
-          "r_squared": 0.287766,
-          "tau_sq": 0.529493
+          "q_statistic": 145.815,
+          "r_squared": 0.179544,
+          "tau_sq": 0.76341
         }
       },
       "assumption_violations": [],
@@ -2023,27 +2242,8 @@
     }
   ],
   "cache_path": "experiments/data/cache/ddqn_universe.parquet",
-  "errored_bridges": [
-    {
-      "bridge_name": "extreme_q_divergence_attenuates_link__binary",
-      "error_message": "paired_link_per_burst: cannot mean-aggregate cells at (env='SlidingTilePuzzle-jumanji', arm='baseline', ('seed',)=(0,)) — per-burst array shapes differ ([(10,), (20,)]). The cells are not replicates; they differ on: eval_every=['100000', '50000']; gamma=['0.99', '0.999']; q_network=[\"'dataclass:CNN(channels=(32,64),hidden=(256),obs_shape=(5,5,1))'\", \"'dataclass:CNN(channels=(8,16),hidden=(64),obs_shape=(5,5,1))'\"]; q_network.channels=[\"'(32,64)'\", \"'(8,16)'\"]; q_network.hidden=[\"'(256)'\", \"'(64)'\"]; substrate_commit_sha=[\"'7372ad4c36d8b7e881876105aef956c65a8b5eff'\", \"'796ea7e8383a1dacd6fcd739a7070e7a3b5aba61'\"]. Add these to pair_by.",
-      "error_type": "ValueError",
-      "traceback_repr": "Traceback (most recent call last):\n  File \"/workspace/corroborate/src/corroborate/runner/runner.py\", line 445, in run\n    out[b.name] = evaluate(\n                  ~~~~~~~~^\n        b, cells, claim=claim, module_scope=module_scope,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/workspace/corroborate/src/corroborate/bridge/bridge.py\", line 825, in evaluate\n    analysis_results = resolve_for_holds_when(\n        bridge.holds_when, filtered_cells, bridge_params,\n    )\n  File \"/workspace/corroborate/src/corroborate/bridge/analysis.py\", line 232, in resolve_for_holds_when\n    out[param_name] = run_for(\n                      ~~~~~~~^\n        analysis_obj, cells_list, bridge_params,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/workspace/corroborate/src/corroborate/bridge/analysis.py\", line 190, in run_for\n    return analysis_obj.fn(cells, **kwargs)\n           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^\n  File \"/workspace/corroborate/src/corroborate/analyses/link_attenuation_dowhy.py\", line 245, in link_attenuation_dowhy\n    rows, dag, treatment_col, outcome_col, n_above, n_below = _build_panel(\n                                                              ~~~~~~~~~~~~^\n        cells_list,\n        ^^^^^^^^^^^\n    ...<8 lines>...\n        dedupe_strategy=dedupe_strategy,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/workspace/corroborate/src/corroborate/analyses/link_attenuation_dowhy.py\", line 125, in _build_panel\n    panel = paired_link_per_burst.fn(\n        cells,\n    ...<5 lines>...\n        dedupe_strategy=dedupe_strategy,\n    )\n  File \"/workspace/corroborate/src/corroborate/analyses/paired_link_per_burst.py\", line 224, in paired_link_per_burst\n    raise ValueError(\n    ...<6 lines>...\n    )\nValueError: paired_link_per_burst: cannot mean-aggregate cells at (env='SlidingTilePuzzle-jumanji', arm='baseline', ('seed',)=(0,)) — per-burst array shapes differ ([(10,), (20,)]). The cells are not replicates; they differ on: eval_every=['100000', '50000']; gamma=['0.99', '0.999']; q_network=[\"'dataclass:CNN(channels=(32,64),hidden=(256),obs_shape=(5,5,1))'\", \"'dataclass:CNN(channels=(8,16),hidden=(64),obs_shape=(5,5,1))'\"]; q_network.channels=[\"'(32,64)'\", \"'(8,16)'\"]; q_network.hidden=[\"'(256)'\", \"'(64)'\"]; substrate_commit_sha=[\"'7372ad4c36d8b7e881876105aef956c65a8b5eff'\", \"'796ea7e8383a1dacd6fcd739a7070e7a3b5aba61'\"]. Add these to pair_by.\n"
-    },
-    {
-      "bridge_name": "extreme_q_divergence_attenuates_link__placebo_refuted",
-      "error_message": "paired_link_per_burst: cannot mean-aggregate cells at (env='SlidingTilePuzzle-jumanji', arm='baseline', ('seed',)=(0,)) — per-burst array shapes differ ([(10,), (20,)]). The cells are not replicates; they differ on: eval_every=['100000', '50000']; gamma=['0.99', '0.999']; q_network=[\"'dataclass:CNN(channels=(32,64),hidden=(256),obs_shape=(5,5,1))'\", \"'dataclass:CNN(channels=(8,16),hidden=(64),obs_shape=(5,5,1))'\"]; q_network.channels=[\"'(32,64)'\", \"'(8,16)'\"]; q_network.hidden=[\"'(256)'\", \"'(64)'\"]; substrate_commit_sha=[\"'7372ad4c36d8b7e881876105aef956c65a8b5eff'\", \"'796ea7e8383a1dacd6fcd739a7070e7a3b5aba61'\"]. Add these to pair_by.",
-      "error_type": "ValueError",
-      "traceback_repr": "Traceback (most recent call last):\n  File \"/workspace/corroborate/src/corroborate/runner/runner.py\", line 445, in run\n    out[b.name] = evaluate(\n                  ~~~~~~~~^\n        b, cells, claim=claim, module_scope=module_scope,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/workspace/corroborate/src/corroborate/bridge/bridge.py\", line 825, in evaluate\n    analysis_results = resolve_for_holds_when(\n        bridge.holds_when, filtered_cells, bridge_params,\n    )\n  File \"/workspace/corroborate/src/corroborate/bridge/analysis.py\", line 232, in resolve_for_holds_when\n    out[param_name] = run_for(\n                      ~~~~~~~^\n        analysis_obj, cells_list, bridge_params,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/workspace/corroborate/src/corroborate/bridge/analysis.py\", line 190, in run_for\n    return analysis_obj.fn(cells, **kwargs)\n           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^\n  File \"/workspace/corroborate/src/corroborate/analyses/link_attenuation_dowhy.py\", line 245, in link_attenuation_dowhy\n    rows, dag, treatment_col, outcome_col, n_above, n_below = _build_panel(\n                                                              ~~~~~~~~~~~~^\n        cells_list,\n        ^^^^^^^^^^^\n    ...<8 lines>...\n        dedupe_strategy=dedupe_strategy,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/workspace/corroborate/src/corroborate/analyses/link_attenuation_dowhy.py\", line 125, in _build_panel\n    panel = paired_link_per_burst.fn(\n        cells,\n    ...<5 lines>...\n        dedupe_strategy=dedupe_strategy,\n    )\n  File \"/workspace/corroborate/src/corroborate/analyses/paired_link_per_burst.py\", line 224, in paired_link_per_burst\n    raise ValueError(\n    ...<6 lines>...\n    )\nValueError: paired_link_per_burst: cannot mean-aggregate cells at (env='SlidingTilePuzzle-jumanji', arm='baseline', ('seed',)=(0,)) — per-burst array shapes differ ([(10,), (20,)]). The cells are not replicates; they differ on: eval_every=['100000', '50000']; gamma=['0.99', '0.999']; q_network=[\"'dataclass:CNN(channels=(32,64),hidden=(256),obs_shape=(5,5,1))'\", \"'dataclass:CNN(channels=(8,16),hidden=(64),obs_shape=(5,5,1))'\"]; q_network.channels=[\"'(32,64)'\", \"'(8,16)'\"]; q_network.hidden=[\"'(256)'\", \"'(64)'\"]; substrate_commit_sha=[\"'7372ad4c36d8b7e881876105aef956c65a8b5eff'\", \"'796ea7e8383a1dacd6fcd739a7070e7a3b5aba61'\"]. Add these to pair_by.\n"
-    },
-    {
-      "bridge_name": "extreme_q_divergence_attenuates_link__rcc_robust",
-      "error_message": "paired_link_per_burst: cannot mean-aggregate cells at (env='SlidingTilePuzzle-jumanji', arm='baseline', ('seed',)=(0,)) — per-burst array shapes differ ([(10,), (20,)]). The cells are not replicates; they differ on: eval_every=['100000', '50000']; gamma=['0.99', '0.999']; q_network=[\"'dataclass:CNN(channels=(32,64),hidden=(256),obs_shape=(5,5,1))'\", \"'dataclass:CNN(channels=(8,16),hidden=(64),obs_shape=(5,5,1))'\"]; q_network.channels=[\"'(32,64)'\", \"'(8,16)'\"]; q_network.hidden=[\"'(256)'\", \"'(64)'\"]; substrate_commit_sha=[\"'7372ad4c36d8b7e881876105aef956c65a8b5eff'\", \"'796ea7e8383a1dacd6fcd739a7070e7a3b5aba61'\"]. Add these to pair_by.",
-      "error_type": "ValueError",
-      "traceback_repr": "Traceback (most recent call last):\n  File \"/workspace/corroborate/src/corroborate/runner/runner.py\", line 445, in run\n    out[b.name] = evaluate(\n                  ~~~~~~~~^\n        b, cells, claim=claim, module_scope=module_scope,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/workspace/corroborate/src/corroborate/bridge/bridge.py\", line 825, in evaluate\n    analysis_results = resolve_for_holds_when(\n        bridge.holds_when, filtered_cells, bridge_params,\n    )\n  File \"/workspace/corroborate/src/corroborate/bridge/analysis.py\", line 232, in resolve_for_holds_when\n    out[param_name] = run_for(\n                      ~~~~~~~^\n        analysis_obj, cells_list, bridge_params,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/workspace/corroborate/src/corroborate/bridge/analysis.py\", line 190, in run_for\n    return analysis_obj.fn(cells, **kwargs)\n           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^\n  File \"/workspace/corroborate/src/corroborate/analyses/link_attenuation_dowhy.py\", line 245, in link_attenuation_dowhy\n    rows, dag, treatment_col, outcome_col, n_above, n_below = _build_panel(\n                                                              ~~~~~~~~~~~~^\n        cells_list,\n        ^^^^^^^^^^^\n    ...<8 lines>...\n        dedupe_strategy=dedupe_strategy,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/workspace/corroborate/src/corroborate/analyses/link_attenuation_dowhy.py\", line 125, in _build_panel\n    panel = paired_link_per_burst.fn(\n        cells,\n    ...<5 lines>...\n        dedupe_strategy=dedupe_strategy,\n    )\n  File \"/workspace/corroborate/src/corroborate/analyses/paired_link_per_burst.py\", line 224, in paired_link_per_burst\n    raise ValueError(\n    ...<6 lines>...\n    )\nValueError: paired_link_per_burst: cannot mean-aggregate cells at (env='SlidingTilePuzzle-jumanji', arm='baseline', ('seed',)=(0,)) — per-burst array shapes differ ([(10,), (20,)]). The cells are not replicates; they differ on: eval_every=['100000', '50000']; gamma=['0.99', '0.999']; q_network=[\"'dataclass:CNN(channels=(32,64),hidden=(256),obs_shape=(5,5,1))'\", \"'dataclass:CNN(channels=(8,16),hidden=(64),obs_shape=(5,5,1))'\"]; q_network.channels=[\"'(32,64)'\", \"'(8,16)'\"]; q_network.hidden=[\"'(256)'\", \"'(64)'\"]; substrate_commit_sha=[\"'7372ad4c36d8b7e881876105aef956c65a8b5eff'\", \"'796ea7e8383a1dacd6fcd739a7070e7a3b5aba61'\"]. Add these to pair_by.\n"
-    }
-  ],
-  "git_commit": "b98ce5a24987",
+  "errored_bridges": [],
+  "git_commit": "1e0235fbb126",
   "hypothesis_module": "experiments.findings.ddqn_universe",
   "measurable_signatures": {
     "argmax_entropy_late": "22f4c683c0bfee66",
@@ -2066,5 +2266,5 @@
     "target_staleness_late": "14b90395c7aabd2e"
   },
   "n_cells_total": 2064,
-  "timestamp_utc": "2026-05-11T14:34:26+00:00"
+  "timestamp_utc": "2026-05-11T14:47:38+00:00"
 }
