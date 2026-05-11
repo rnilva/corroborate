@@ -3459,6 +3459,14 @@ def link_slope_predicted_by_g1__cross_env(
         & ~((pl.col('env_name') == 'MetaMaze-misc')
             & (pl.col('gamma') == 0.999))
         & (pl.col('env_name') != 'CartPole-v1')
+        # G3-bottom exclusion: SlidingTilePuzzle vanilla fails to
+        # converge at current HPs (outcome trajectory has NEGATIVE
+        # growth across bursts; vanilla Q-values grow but don't
+        # translate to solving the puzzle). See
+        # `findings_scope_density.md` "G3-bottom" predicate. With
+        # larger network + γ=0.999, vanilla MAY converge — separate
+        # probe sweep `sliding_tile_probe_big_cnn` tests this.
+        & (pl.col('env_name') != 'SlidingTilePuzzle-jumanji')
     ),
     predicted_direction='a_gt_b',
 )
