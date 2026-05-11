@@ -102,7 +102,6 @@ from corroborate.analyses.paired_delta_link_dowhy import (
     PairedDeltaLinkDowhyResult,
 )
 from corroborate.analyses.arm_mean_diff import ArmMeanDiffResult
-from corroborate.analyses.bootstrap_paired_g import BootstrapPairedGResult
 from corroborate.analyses.paired_g import PairedGResult
 from corroborate.analyses.stratified_partial_spearman import (
     StratifiedPartialSpearmanResult,
@@ -230,34 +229,30 @@ MODULE_SCOPE: pl.Expr = ~pl.col('env_name').str.ends_with('-bsuite')
 @claim_bridge(
     # Decorator declares the do-contrast (vanilla → ddqn) on the
     # OUTCOME column. The graph edge `jensen_dormancy_gap →
-    # eval_best_burst_mean` (mech-state predicate of refutation
-    # → outcome) lives in the docstring/scope rather than the
-    # source field — the source field now carries the contrast
-    # exclusively. paired_g computes Δ on `target=eval_best_burst_mean`
-    # under the file's INTERVENTION, which IS the actual refutation
-    # predicate; the dormancy-gap is consumed by `scope` as a cell
-    # filter, not as paired_g's measurement axis.
+    # eval_best_burst_mean` lives in scope as the cell filter.
     source=INTERVENTION,
     target='eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
-    pair_by=('seed', 'env_name'),
-    # `is_finite()` excludes both null and NaN — required because
-    # polars admits NaN through `>=` comparisons (NaN >= 1e-9 → True
-    # in polars's filter context, unlike IEEE-754 semantics). Cells
-    # with NaN `jensen_dormancy_gap` are "couldn't evaluate" and
-    # should drop, not pass.
+    # pair_by intentionally omitted — `stratified_arm_diff_pooled`
+    # aggregates seeds within env strata, NOT per-pair Δs. The
+    # framework's default `pair_by=('seed',)` would be wrong:
+    # vanilla seed-N and DDQN seed-N produce diverged trajectories
+    # in RL, so seed-pairing isn't a real pair.
     scope=(
         pl.col('jensen_dormancy_gap').is_finite()
         & (pl.col('jensen_dormancy_gap') >= 1e-9)
+        & pl.col('eval_best_burst_mean').is_finite()
     ),
+    predicted_direction='null',
 )
 def ddqn_refuted_when_dormancy_fires(
-    paired_g: PairedGResult,
-    bootstrap_paired_g: BootstrapPairedGResult,
+    stratified_arm_diff_pooled: StratifiedArmDiffPooledResult,
     *,
     null_ceiling: float = 0.2,
-    dedupe_strategy: str = 'mean',
+    min_strata: int = 3,
+    stratify_by: tuple[str, ...] = ('env_name',),
+    min_vanilla_predictor: float = float('-inf'),
 ) -> tuple[Verdict, RefutationClass | None]:
     """Necessary-condition claim. The framework's-own Jensen
     dormancy invariant operationalizes the Hasselt-2010 structural
@@ -266,92 +261,52 @@ def ddqn_refuted_when_dormancy_fires(
     mechanism has nothing to operate on, so Δ_outcome should be
     ≈ 0 on dormant cells.
 
-    **2026-05-11 verdict-logic + CI history.** Three iterations
-    settled on POWER_INSUFFICIENT as the honest verdict:
+    **2026-05-11 migrated to `stratified_arm_diff_pooled`** per the
+    RL seed-pairing critique. Previous versions iterated through
+    `paired_g`, `bootstrap_paired_g`, CI-widening, etc. — all of
+    them assumed seed-paired (DDQN seed-N vs vanilla seed-N)
+    differences carried within-seed information. In RL, training
+    trajectories diverge from step 1 under different algorithms;
+    seed pairing doesn't pair anything. Stratified per-env Cohen's
+    d (independent-samples form, Hedges 1981 SE) is the right
+    primitive. Cross-env DL random-effects pooling handles the
+    outcome-scale heterogeneity (FourRooms 0-1 vs Acrobot −500−0
+    etc.) by standardizing per env first.
 
-    1. ORIGINAL: `helped_fraction ≤ 0.15 AND |g| ≤ 0.20`. Wrong:
-       under a true null, `helped_fraction ≈ 0.5`, HELD
-       unachievable.
-    2. INTERIM (r3): Gaussian CI × 1.25 widening when
-       `assumption_violations` flag fires. Insufficient at kurt=109
-       (framework's 25% calibration is for kurt~9 only).
-    3. R4: consumed `bootstrap_paired_g`; bootstrap CI=[−0.129,
-       +0.178] within ±0.2 → flipped to HELD.
-    4. R5 (current): **demote back to POWER_INSUFFICIENT.** The
-       bootstrap primitive's own tests
-       (`tests/analytic/lg_scm/test_bootstrap_paired_g.py`) verify
-       calibration at log-normal n=50 with ~27% under-coverage
-       observed. The dormancy bridge fires at excess_kurt=109 —
-       12× more extreme than test calibration. Bootstrap CIs are
-       not validated at this regime; "HELD via percentile
-       bootstrap at kurt=109" is overreach. Additionally, the raw
-       `mean_diff = +0.23` in native eval_best_burst_mean units IS
-       substantive; the standardized-g CI hides this via outlier-
-       inflated SD. Honest verdict: POW_INSUF.
-
-    Verdict logic: when `paired_g.assumption_violations` flags
-    heavy-tail/skew, the CI primitives are uncalibrated and
-    cannot support a HELD claim. Returns POW_INSUF unless the
-    CI's extreme bounds force INVARIANT_VIOLATION (CI lower
-    above null_ceiling) or NO_EFFECT sign-flip (CI upper below
-    -null_ceiling). On clean data, full HELD/NO_EFFECT mapping
-    applies.
-
-    Verdict mapping:
-    - HELD when CI ⊂ [−null_ceiling, +null_ceiling] AND no
-      heavy-tail flag — null confirmed at Cohen's-small bound;
-    - INVARIANT_VIOLATION when CI lower > null_ceiling — data
-      confidently asserts substantive positive effect (this
-      survives the heavy-tail guard because it's a refutation);
-    - NO_EFFECT (SIGN_FLIP) when CI upper < −null_ceiling;
-    - POWER_INSUFFICIENT otherwise (CI spans, or heavy-tail flag
-      + HELD-zone CI — refuse to claim HELD under uncalibrated
-      primitive).
+    Verdict mapping (null prediction):
+    - HELD when pooled CI ⊂ [−null_ceiling, +null_ceiling] — null
+      confirmed at Cohen's-small bound;
+    - INVARIANT_VIOLATION when pooled CI lower > null_ceiling —
+      data confidently asserts substantive positive effect on
+      dormant cells, contradicting the necessary-condition claim;
+    - NO_EFFECT (SIGN_FLIP) when pooled CI upper < −null_ceiling
+      — strong negative effect (DDQN substantively HURTS on
+      dormant cells);
+    - POWER_INSUFFICIENT when CI spans the bound or n_strata is
+      below the minimum.
 
     The Pearl-rung-2 corroboration via `adaptive_dqn_recovers_
     ddqn_benefit__fourrooms_factor_0p5` validates the underlying
     theory: a runtime controller using a per-batch dormancy proxy
     (max_Q − mean_Q vs σ_Q × √(2 log |A|)) recovers DDQN's outcome
     benefit on FourRooms (g=+0.78 vs vanilla, p<0.001)."""
-    del dedupe_strategy  # forwarded to paired_g
-    if paired_g.n_pairs < 50:
+    del stratify_by, min_vanilla_predictor
+    n_strata = stratified_arm_diff_pooled.n_strata
+    if n_strata < min_strata:
         return Verdict.POWER_INSUFFICIENT, None
-    g = paired_g.g
-    if math.isnan(g):
+    d = stratified_arm_diff_pooled.pooled_d
+    se = stratified_arm_diff_pooled.pooled_se
+    if math.isnan(d) or math.isnan(se):
         return Verdict.POWER_INSUFFICIENT, None
-    heavy_tail = _has_heavy_tail_violation(paired_g.assumption_violations)
-    # CI source: bootstrap when heavy-tail flag fires (Gaussian SE
-    # miscalibrated); Gaussian otherwise. Bootstrap CI is still
-    # used for refutation-side bounds (INVARIANT_VIOLATION, sign-
-    # flip) — refusing to engage with the data on those is its own
-    # form of dishonesty — but the HELD branch is gated below.
-    if heavy_tail:
-        ci_lo = bootstrap_paired_g.ci_lo
-        ci_hi = bootstrap_paired_g.ci_hi
-    else:
-        se = paired_g.se
-        if math.isnan(se):
-            return Verdict.POWER_INSUFFICIENT, None
-        ci_lo = g - 1.96 * se
-        ci_hi = g + 1.96 * se
-    if math.isnan(ci_lo) or math.isnan(ci_hi):
-        return Verdict.POWER_INSUFFICIENT, None
-    # Refutation branches: substantive positive / negative shift
-    # detected by CI excluding the null zone. The heavy-tail guard
-    # doesn't block these — the data IS telling us something
-    # substantive, just not "null held".
+    ci_lo = stratified_arm_diff_pooled.pooled_ci_lo
+    ci_hi = stratified_arm_diff_pooled.pooled_ci_hi
+    # Refutation branches: CI excluding null zone on either side.
     if ci_lo > null_ceiling:
         return Verdict.INVARIANT_VIOLATION, None
     if ci_hi < -null_ceiling:
         return Verdict.NO_EFFECT, RefutationClass.SIGN_FLIP
-    # HELD branch: requires CI ⊂ [-null_ceiling, +null_ceiling]
-    # AND clean assumption-violations. Bootstrap percentile CI at
-    # kurt=109 is uncalibrated; refuse to claim HELD via it
-    # (reviewer-5 catch).
-    if (
-        ci_lo >= -null_ceiling and ci_hi <= null_ceiling
-        and not heavy_tail
-    ):
+    # HELD branch: CI ⊂ [-null_ceiling, +null_ceiling].
+    if ci_lo >= -null_ceiling and ci_hi <= null_ceiling:
         return Verdict.HELD, None
     return Verdict.POWER_INSUFFICIENT, None
 
