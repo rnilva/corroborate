@@ -1113,19 +1113,28 @@ def ddqn_increases_argmax_entropy__fourrooms_rs_0p1(
     threshold_diff: float = 0.05,
 ) -> tuple[Verdict, RefutationClass | None]:
     """At FourRooms rs=0.1 (rescue regime), DDQN's argmax
-    distribution is MORE diverse than vanilla's — DDQN maintains
-    exploration when Q-values are flat, while vanilla prematurely
-    commits to wrong actions. Empirical Δ_entropy ≈ +0.16 nats.
+    distribution is predicted MORE diverse than vanilla's — the
+    "DDQN maintains exploration when Q is flat" reading.
 
-    HELD when paired_g.mean_diff ≥ `threshold_diff` AND p < 0.05
-    AND positive sign. POWER_INSUFFICIENT when only one of the
-    two thresholds passes. NO_EFFECT when neither.
+    **2026-05-11 verdict post-rebuild: REFUTED via SIGN_FLIP.**
+    g=-2.98 (95% CI excludes 0 strongly), mean_diff=-0.232 nats,
+    p=2.6e-12, n=30. The prediction's sign is wrong: DDQN's
+    argmaxH is SUBSTANTIALLY LOWER than vanilla's (more
+    decisive policy, not more diverse).
 
-    Refines CLAIM 7's "DDQN rescues at rs=0.1" finding by
-    identifying the action-selection-level mechanism: it's not
-    that DDQN's policy is more decisive (it's less so), it's
-    that DDQN avoids premature commitment to wrong actions when
-    Q is uninformative."""
+    Revised mechanism reading: in the under-learning regime
+    (rs=0.1), vanilla can't learn — its policy stays near-uniform
+    (high argmaxH) because Q-values don't differentiate actions.
+    DDQN's bias correction unblocks learning, producing
+    differentiated Q-values and a SHARPER argmax. The under-
+    learning rescue (`findings_underlearning_rescue.md`,
+    Δ_outcome=+0.638, g=+5.05) IS via "policy sharpens after
+    rescue", not "exploration maintained".
+
+    Bridge stays as a falsifiable artifact: the original
+    "maintains exploration" reading is refuted. Don't repair the
+    prediction sign post-hoc — keep as documented refutation of
+    the explore-vs-commit alternative explanation."""
     diff = paired_g.mean_diff
     p = paired_g.mean_diff_p_value
     if math.isnan(diff) or math.isnan(p):
@@ -1160,15 +1169,28 @@ def ddqn_entropy_matches_vanilla__fourrooms_rs_1p0(
     null_ceiling: float = 0.05,
 ) -> tuple[Verdict, RefutationClass | None]:
     """At FourRooms rs=1.0 (standard reward scale), DDQN's argmax
-    distribution matches vanilla's — both arms reach similar
-    entropy because the reward signal is strong enough that both
-    arms converge to similar action preferences. Empirical
-    |Δ_entropy| ≈ 0.
+    distribution is predicted to MATCH vanilla's — the "DDQN's
+    exploration-maintenance mechanism is inactive at standard rs"
+    reading. Authored with `predicted_direction='null'`; HELD =
+    null confirmed.
 
-    HELD encodes "DDQN's exploration-maintenance mechanism is
-    inactive at standard rs". Refutes a possible reading where
-    DDQN universally has higher entropy than vanilla; the effect
-    is regime-specific (low rs only)."""
+    **2026-05-11 verdict post-rebuild: NO_EFFECT (null refuted
+    via SIGN_FLIP).** g=-1.72, mean_diff=-0.099, p=2.2e-9, n=30.
+    Null prediction refuted: there IS a substantial effect — DDQN
+    has LOWER argmaxH than vanilla even at rs=1.0. This matches
+    the rs=0.1 finding (sister bridge above): DDQN's effect on
+    argmaxH is NOT regime-specific — it produces sharper policies
+    across reward scales, not just in the rescue regime.
+
+    Both rs=0.1 and rs=1.0 bridges' "exploration-maintenance"
+    framing is wrong. The robust pattern is: DDQN's bias
+    correction yields better Q-discrimination → sharper argmax →
+    LOWER argmax entropy. The rescue effect at rs=0.1 is
+    Δ_outcome-large but the argmax-sharpening is reward-scale-
+    invariant (at FourRooms γ=0.99).
+
+    Bridge stays as a falsifiable artifact: the regime-specificity
+    reading is refuted."""
     diff = paired_g.mean_diff
     p = paired_g.mean_diff_p_value
     if math.isnan(diff) or math.isnan(p):

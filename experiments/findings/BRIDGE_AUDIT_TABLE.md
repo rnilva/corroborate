@@ -15,11 +15,11 @@
 |---|---|
 | SURVIVED | 8 |
 | STALE | 1 |
-| REFUTED (HELD-to-NO_EFFECT under honest methodology) | 6 |
+| REFUTED (HELD-to-NO_EFFECT under honest methodology) | 8 |
 | POWER_COLLAPSED | 2 |
 | DEAD | 10 |
 | POWER_INSUFFICIENT | 3 |
-| SCOPE_VACATED | 19 |
+| SCOPE_VACATED | 17 |
 | ERRORED | 0 (errored bridge counted in DEAD) |
 | **Total** | **48** |
 
@@ -94,9 +94,9 @@ diagnosis notes below.
 | 35 | `ddqn_does_not_rescue__acrobot_rs_0p1` | SCOPE_VACATED | power_insufficient | null | 0 | 1520 |
 | 36 | `ddqn_does_not_rescue__cartpole_rs_0p1` | SCOPE_VACATED | power_insufficient | null | 0 | 1520 |
 | 37 | `ddqn_dominates_vanilla_response_curve__fourrooms_rs_0p3` | SCOPE_VACATED | no_effect | - | 0 | 1520 |
-| 38 | `ddqn_entropy_matches_vanilla__fourrooms_rs_1p0` | SCOPE_VACATED | power_insufficient | null | 0 | 1520 |
+| 38 | `ddqn_entropy_matches_vanilla__fourrooms_rs_1p0` | REFUTED | post-rebuild: g=−1.72 mean_diff=−0.099 p=2.2e-9 n=30 — null refuted via SIGN_FLIP; DDQN sharpens policy at rs=1.0 too. "Regime-specific argmaxH effect" reading refuted | null | 30 | 1824 |
 | 39 | `ddqn_helps_at_early_bursts__pixel_envs` | SCOPE_VACATED | power_insufficient | - | 0 | 1520 |
-| 40 | `ddqn_increases_argmax_entropy__fourrooms_rs_0p1` | SCOPE_VACATED | power_insufficient | a_gt_b | 0 | 1520 |
+| 40 | `ddqn_increases_argmax_entropy__fourrooms_rs_0p1` | REFUTED | post-rebuild: g=−2.98 mean_diff=−0.232 p=2.6e-12 n=30 — SIGN_FLIP. DDQN DECREASES argmaxH (sharpens policy) in the rescue regime. "Maintains exploration when Q flat" reading refuted; under-learning rescue mechanism is "policy sharpens after rescue" | a_gt_b | 30 | 1824 |
 | 41 | `ddqn_null_under_monte_carlo__fourrooms_n10` | SCOPE_VACATED | no_effect | - | 0 | 1520 |
 | 42 | `ddqn_rescues_underlearning_vanilla__fourrooms_rs_0p1` | SCOPE_VACATED | no_effect | - | 0 | 1520 |
 | 43 | `staleness_amplifies_ddqn_outcome__sparse_goal_polyak` | SCOPE_VACATED | power_insufficient | a_lt_b | 0 | 1520 |
