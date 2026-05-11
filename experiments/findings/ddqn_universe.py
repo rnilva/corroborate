@@ -829,6 +829,36 @@ def ddqn_benefit_scales_with_effective_horizon__metamaze_high_gamma(
 # =====================================================================
 
 
+def _native_diff_ci_verdict(
+    md: float, se: float, threshold: float,
+) -> Verdict:
+    """CI-vs-threshold verdict for paired native-diff bridges.
+
+    Tests hypothesis `md ≥ threshold` via the 95% CI around md:
+    - `CI ⊂ [threshold, ∞)` → HELD (data confirms md ≥ threshold)
+    - `CI ⊂ (−∞, threshold)` → NO_EFFECT (data refutes md ≥
+      threshold; effect either smaller than predicted or null /
+      sign-flipped)
+    - `CI spans threshold` → POWER_INSUFFICIENT (cannot
+      discriminate)
+
+    Replaces the older "significant + above_threshold" 2×2 logic
+    that landed "significant but below threshold" in POW_INSUF —
+    a misclassification when the CI's upper bound is below the
+    threshold (data refutes the strong-effect claim with high
+    confidence, the framework should say NO_EFFECT not POW_INSUF).
+    """
+    if math.isnan(md) or math.isnan(se):
+        return Verdict.POWER_INSUFFICIENT
+    ci_lo = md - 1.96 * se
+    ci_hi = md + 1.96 * se
+    if ci_lo >= threshold:
+        return Verdict.HELD
+    if ci_hi < threshold:
+        return Verdict.NO_EFFECT
+    return Verdict.POWER_INSUFFICIENT
+
+
 @claim_bridge(
     source=INTERVENTION,
     target='outcome_native',
@@ -858,10 +888,14 @@ def ddqn_rescues_underlearning_vanilla__fourrooms_rs_0p1(
     supplies the measurable name + scope, the framework runs
     `paired_g` and injects the result.
 
-    HELD when `paired_g.mean_diff ≥ threshold_diff (=+0.4)` AND
-    `paired_g.mean_diff_p_value < 0.05`. POWER_INSUFFICIENT
-    when diff in expected direction but underpowered.
-    NO_EFFECT otherwise.
+    Verdict uses 95% CI vs `threshold_diff` (see
+    `_native_diff_ci_verdict`):
+    - HELD when CI lower ≥ +0.4 (md confidently ≥ threshold);
+    - NO_EFFECT when CI upper < +0.4 (md confidently < threshold);
+    - POWER_INSUFFICIENT when CI spans the threshold.
+
+    Empirical post-rebuild: md=+0.638 (95% CI=[+0.594, +0.682]),
+    threshold=+0.4 — CI entirely above → HELD.
 
     Asserts on `paired_g.mean_diff` (the interventional contrast
     in native units), NOT `paired_g.g` (standardized Hedges' g
@@ -877,19 +911,9 @@ def ddqn_rescues_underlearning_vanilla__fourrooms_rs_0p1(
     a CONTRAST between two independent reward-scale-response
     curves, not a causal arrow between cell outputs."""
     del dedupe_strategy  # forwarded to paired_g; not used in body
-    diff = paired_g.mean_diff
-    p = paired_g.mean_diff_p_value
-    if math.isnan(diff) or math.isnan(p):
-        return Verdict.NO_EFFECT
-    if diff < 0.0:
-        return Verdict.NO_EFFECT
-    significant = p < 0.05
-    above_threshold = diff >= threshold_diff
-    if significant and above_threshold:
-        return Verdict.HELD
-    if above_threshold or significant:
-        return Verdict.POWER_INSUFFICIENT
-    return Verdict.NO_EFFECT
+    return _native_diff_ci_verdict(
+        paired_g.mean_diff, paired_g.mean_diff_se, threshold_diff,
+    )
 
 
 # =====================================================================
@@ -920,30 +944,41 @@ def ddqn_dominates_vanilla_response_curve__fourrooms_rs_0p3(
     threshold_diff: float = 0.4,
 ) -> Verdict:
     """Sibling of CLAIM 7 at the rescue-regime peak (rs=0.3).
-    Same primitive shape (`paired_g` with measurable source +
-    extra_filters); just a different scale point. Together with
-    CLAIM 7 (rs=0.1) and the underpowered-but-direction-correct
-    rs=0.03 / rs=0.01 datapoints, establishes the rescue regime
-    as a plateau, not a knife-edge point. Generalizes the
-    reward-scale-response-curve-dominance claim across the
-    interior of the inverted-U.
+    Same primitive shape and verdict logic; just a different
+    scale point. Tests whether the +0.4-plateau claim from
+    `findings_underlearning_rescue.md` holds at the upper edge
+    of the rescue regime.
+
+    **2026-05-11 post-rebuild verdict: NO_EFFECT (claim refuted).**
+    Empirical md=+0.259 (95% CI=[+0.169, +0.349]); threshold=+0.4
+    is outside the CI's upper bound — data confidently refutes
+    "md ≥ 0.4 at rs=0.3". The +0.50 plateau cited in the older
+    findings (memory `findings_underlearning_rescue.md`, table
+    rs=0.30 → +0.497) came from an EARLIER corpus
+    `reward_scale_low_fourrooms`. The post-rebuild
+    `reward_scale_sweep_postfix` corpus shows the rs=0.3 gap has
+    narrowed to ~+0.26 — vanilla now reaches 0.52 native (was
+    0.24), DDQN reaches 0.78 native (was 0.74). The rescue regime
+    is narrower than the original plateau reading suggested.
+
+    Direction (DDQN > vanilla) is preserved at p=4e-6, but the
+    magnitude is half the claimed plateau. The bridge documents
+    this REFUTATION of the strong-effect prediction: rs=0.3 sits
+    on the upper edge of the rescue regime where vanilla recovers
+    most of its function, not in the plateau interior.
+
+    Verdict logic uses 95% CI vs threshold (see
+    `_native_diff_ci_verdict`):
+    - HELD when CI lower ≥ +0.4;
+    - NO_EFFECT when CI upper < +0.4 (current case);
+    - POWER_INSUFFICIENT when CI spans the threshold.
 
     Same defensive framing as CLAIM 7: `mean_diff` is the
     interventional contrast, not an observational edge between
     arm outputs."""
-    diff = paired_g.mean_diff
-    p = paired_g.mean_diff_p_value
-    if math.isnan(diff) or math.isnan(p):
-        return Verdict.NO_EFFECT
-    if diff < 0.0:
-        return Verdict.NO_EFFECT
-    significant = p < 0.05
-    above_threshold = diff >= threshold_diff
-    if significant and above_threshold:
-        return Verdict.HELD
-    if above_threshold or significant:
-        return Verdict.POWER_INSUFFICIENT
-    return Verdict.NO_EFFECT
+    return _native_diff_ci_verdict(
+        paired_g.mean_diff, paired_g.mean_diff_se, threshold_diff,
+    )
 
 
 # =====================================================================
