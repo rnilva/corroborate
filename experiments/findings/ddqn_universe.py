@@ -228,28 +228,24 @@ MODULE_SCOPE: pl.Expr = ~pl.col('env_name').str.ends_with('-bsuite')
 
 @claim_bridge(
     # Decorator declares the do-contrast (vanilla → ddqn) on the
-    # OUTCOME column. The graph edge `jensen_dormancy_gap →
-    # eval_best_burst_mean` lives in scope as the cell filter.
+    # OUTCOME column. The graph edge `jensen_dormancy_gap_at_best_burst
+    # → eval_best_burst_mean` lives in scope as the cell filter.
     source=INTERVENTION,
     target='eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
-    # pair_by intentionally omitted — `stratified_arm_diff_pooled`
-    # aggregates seeds within env strata, NOT per-pair Δs. The
-    # framework's default `pair_by=('seed',)` would be wrong:
-    # vanilla seed-N and DDQN seed-N produce diverged trajectories
-    # in RL, so seed-pairing isn't a real pair.
     scope=(
-        pl.col('jensen_dormancy_gap').is_finite()
-        # **Threshold tightened 2026-05-11**: previous `>= 1e-9`
-        # included border cells where the structural floor is
-        # essentially zero (e.g., Asterix v_dorm=0.038 — Q ≈ MC,
-        # not truly dormant). Substantive dormancy requires the
-        # structural floor to exceed observed bias by a non-
-        # trivial margin. 0.05 ≈ Cohen's-small effect-size
-        # margin in the gap units (consistent with the bridge's
-        # null_ceiling=0.2 on outcome Cohen's d).
-        & (pl.col('jensen_dormancy_gap') >= 0.05)
+        # **2026-05-11 dormancy measurable shifted from scalar
+        # `jensen_dormancy_gap` (all-bursts collapsed) to
+        # `jensen_dormancy_gap_at_best_burst` (dormancy AT the
+        # burst that gave the best outcome). Resolves the
+        # measurement-frame misalignment surfaced during this
+        # audit — outcome was at best burst, dormancy was at
+        # all-burst mean; cells could read "dormant on average"
+        # while best-burst was achieved during transient
+        # non-dormant phase. Per-burst alignment closes the loop.
+        pl.col('jensen_dormancy_gap_at_best_burst').is_finite()
+        & (pl.col('jensen_dormancy_gap_at_best_burst') >= 0.05)
         & pl.col('eval_best_burst_mean').is_finite()
     ),
     predicted_direction='null',
@@ -281,29 +277,46 @@ def ddqn_refuted_when_dormancy_fires(
     outcome-scale heterogeneity (FourRooms 0-1 vs Acrobot −500−0
     etc.) by standardizing per env first.
 
-    **2026-05-11 KNOWN MEASUREMENT-FRAME ARTIFACT** (per
-    CLAIM 26b authoring): `jensen_dormancy_gap` collapses ALL
-    bursts via `(predicted_q_at_start − mc_return).mean()` →
-    one scalar per cell, while `eval_best_burst_mean` picks
-    the BEST burst via `max_i(mc_return[i, :].mean())`. The
-    two measurables are at DIFFERENT aggregation windows. A
-    cell tagged "dormant on average" may have achieved its
-    best-burst outcome during a NON-dormant phase (mech
-    active at that burst, dormant on average). Per-env effects
-    like SpaceInvaders d=+0.49 may be misalignment artifacts:
-    DDQN's peak outcome captured in a burst where bias was
-    active, while the pooled dormancy reads "premise inactive".
+    **2026-05-11 MEASUREMENT-FRAME ALIGNMENT FIX**: previous
+    scope used scalar `jensen_dormancy_gap` (collapsed over
+    ALL bursts via `.mean()`), paired with `eval_best_burst_mean`
+    (best-burst outcome) — different aggregation windows. New
+    `jensen_dormancy_gap_at_best_burst` measurable computes
+    per-burst dormancy and picks the value AT the burst that
+    gave `eval_best_burst_mean` — outcome and mech state now
+    collocated.
 
-    Under this uncertainty the bridge cannot distinguish "DDQN
-    helps despite dormancy" (real refutation of the necessary-
-    condition claim) from "best-burst occurred during non-
-    dormant phase" (measurement artifact). Honest verdict is
-    POW_INSUF. Upgrade to HELD / INVARIANT_VIOLATION requires
-    a per-burst-aligned `jensen_dormancy_gap_per_burst`
-    measurable + `mc_return_per_burst_mean` outcome at the
-    same window — TODO; the per-burst dormancy measurable
-    doesn't yet exist (would need trace-dependent computation
-    of σ_Q windowed at each burst's time range).
+    **2026-05-11 EMPIRICAL UPDATE post-alignment**: the
+    substantive challenge to the necessary-condition claim
+    PERSISTS even with proper per-burst alignment:
+
+      Acrobot-v1:           d=+0.43  CI=[+0.064, +0.794]  (excludes 0)
+      Breakout-MinAtar:     d=−0.25  CI=[−0.59, +0.09]    null-ish
+      MetaMaze-misc:        d=−0.04  CI=[−0.41, +0.34]    null
+      MountainCar-v0:       d=+0.60  CI=[−0.14, +1.34]    wide
+      PacMan-jumanji:       d=+0.41  CI=[−0.70, +1.51]    very wide
+      SpaceInvaders-MinAtar: d=+0.37  CI=[+0.025, +0.722]  (excludes 0)
+
+    Pooled d=+0.19 (very close to the +0.2 substantive
+    ceiling). On Acrobot and SpaceInvaders, DDQN substantively
+    helps on cells where the Jensen-premise is dormant AT the
+    very burst best-outcome was achieved. The "misalignment
+    artifact" hypothesis (we had to validate) is REFUTED:
+    DDQN's outcome benefit appears even when mech is dormant
+    in the aligned window.
+
+    This points to DDQN operating via channels beyond the
+    Jensen-bias correction: variance reduction in the target
+    estimator, target-network stabilization, exploration drift
+    via different argmax-selection sequences. The necessary-
+    condition framing was too narrow.
+
+    Verdict POW_INSUF stays — per-env CIs straddle the +0.2
+    substantive-ceiling on either side (Acrobot CI lower 0.064
+    < 0.2; SI CI lower 0.025 < 0.2). The substantive bound
+    isn't confidently exceeded; the strict-null bound is
+    confidently excluded. Closer to "small-substantive non-
+    null" than to "null held".
 
     Verdict mapping (null prediction):
     - HELD when pooled CI ⊂ [−null_ceiling, +null_ceiling] — null

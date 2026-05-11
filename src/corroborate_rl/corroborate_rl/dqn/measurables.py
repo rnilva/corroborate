@@ -1562,9 +1562,9 @@ def jensen_gap(record: Mapping[str, object]) -> float:
     LITERATURE CONTEXT: this is the Q − MC composite (Category B
     in `findings_jensen_gap_literature_audit.md`), operationally
     identical to Hasselt 2016 / REDQ 2021 / "Revisited" 2025.
-    For the Hasselt 2010 Theorem 1 form
-    `E[max_a Q] − max_a E[Q]`, see `jensen_inequality_gap_late`
-    which is computed from `online_q_per_action` directly."""
+    For Hasselt 2010 Theorem 1's structural floor
+    `σ × √(2 ln K)`, see `jensen_dormancy_gap` (which encodes
+    this floor internally as `max(0, floor − jens_gap)`)."""
     if (
         'predicted_q_at_start' not in record
         or 'mc_return' not in record
@@ -1682,40 +1682,6 @@ def effective_alpha(record: Mapping[str, object]) -> float:
     return float('nan')
 
 
-@measurable(
-    name='jensen_inequality_gap_late',
-    reads=('jensen_inequality_gap_per_burst',),
-)
-def jensen_inequality_gap_late(record: Mapping[str, object]) -> float:
-    """Hasselt 2010 Theorem 1's Jensen-inequality form
-    `E[max_a Q(s,a)] − max_a E[Q(s,a)]`, marginalised over
-    training-step replay states. Average over the late half of
-    bursts (matches the `_late` naming pattern of other DQN
-    measurables).
-
-    Distinct from `jensen_gap` (Category B = Q − MC composite,
-    Hasselt 2016 / REDQ 2021 form). This measurable exposes the
-    argmax-noise bias directly per Theorem 1's tabular form —
-    state-marginalised over replay distribution.
-
-    REQUIRES the `jensen_inequality_gap_per_burst` trace column
-    populated by `Q_TRACE_REDUCTIONS` at trace-persistence time.
-    Existing cache cells without this column return NaN; re-run
-    sweeps to populate.
-
-    See `findings_jensen_gap_literature_audit.md`."""
-    v = record.get('jensen_inequality_gap_per_burst')
-    if v is None:
-        return float('nan')
-    arr = np.asarray(v, dtype=np.float64)
-    if arr.size == 0:
-        return float('nan')
-    late_half = arr[arr.size // 2:]
-    if late_half.size == 0 or not np.isfinite(late_half).any():
-        return float('nan')
-    return float(max(0.0, float(np.nanmean(late_half))))
-
-
 # ============ Lifted from rl/dqn/invariants.py (Phase 4A) ============
 #
 # Theorem-gap measurables that previously lived as factory-returned
@@ -1781,6 +1747,182 @@ def jensen_dormancy_gap_measurable(record: Mapping[str, object]) -> float:
         return float('nan')
     floor = sigma * math.sqrt(2.0 * math.log(n_actions))
     return float(max(0.0, floor - observed_bias))
+
+
+def _jensen_dormancy_gap_per_burst_fn(
+    record: Mapping[str, object],
+) -> npt.NDArray[np.floating]:
+    """Per-burst dormancy gap (shape (n_bursts,)).
+
+    For burst i:
+      observed_bias[i] = max(0, (predicted[i, :] - mc[i, :]).mean())
+      σ_Q[i]           = mean of online_std_q_per_step over the
+                         training-step window that produced burst i
+      floor[i]         = σ_Q[i] × √(2 log K)
+      dormancy[i]      = max(0, floor[i] - observed_bias[i])
+
+    Resolves the scalar-`jensen_dormancy_gap` / best-burst-
+    `eval_best_burst_mean` measurement-frame misalignment surfaced
+    by the dormancy bridge audit (2026-05-11). The scalar form
+    collapses ALL bursts via `.mean()`; downstream bridges then
+    pair the collapsed dormancy with `eval_best_burst_mean` (which
+    picks the BEST burst), producing artifactual "DDQN helps
+    despite dormancy" readings when the best-burst was achieved
+    during a transiently-active phase.
+
+    The per-step σ_Q trace is uniformly sampled across training;
+    we chunk it into `n_bursts` equal windows. Light approximation
+    (assumes uniform burst cadence over training steps); matches
+    the `eval_every` convention used to produce `mc_return`.
+
+    Returns shape (n_bursts,) array of NaN-or-float values.
+    Bursts where any input is degenerate (zero σ window, missing
+    n_actions) report NaN at that index; downstream reductions
+    (`reduce_axis`) skip NaN per polars semantics.
+    """
+    predicted_v = record.get('predicted_q_at_start')
+    actual_v = record.get('mc_return')
+    sigma_v = record.get('online_std_q_per_step')
+    env = record.get('env_name')
+    if predicted_v is None or actual_v is None or sigma_v is None:
+        return np.asarray([float('nan')], dtype=np.float64)
+    if not isinstance(env, str):
+        return np.asarray([float('nan')], dtype=np.float64)
+    predicted = np.asarray(predicted_v, dtype=np.float64)
+    actual = np.asarray(actual_v, dtype=np.float64)
+    sigma_per_step = np.asarray(sigma_v, dtype=np.float64)
+    if predicted.ndim != 2 or actual.ndim != 2:
+        return np.asarray([float('nan')], dtype=np.float64)
+    if predicted.shape[0] != actual.shape[0]:
+        return np.asarray([float('nan')], dtype=np.float64)
+    n_bursts = int(predicted.shape[0])
+    if n_bursts == 0 or sigma_per_step.size < n_bursts:
+        return np.asarray([float('nan')] * max(1, n_bursts), dtype=np.float64)
+    try:
+        spec = env_catalogue.get(env)
+    except KeyError:
+        return np.asarray([float('nan')] * n_bursts, dtype=np.float64)
+    n_actions = int(spec.n_actions)
+    if n_actions < 2:
+        return np.asarray([float('nan')] * n_bursts, dtype=np.float64)
+    sqrt_term = math.sqrt(2.0 * math.log(n_actions))
+    chunk = int(sigma_per_step.shape[0]) // n_bursts
+    out = np.empty(n_bursts, dtype=np.float64)
+    for i in range(n_bursts):
+        lo = i * chunk
+        hi = (i + 1) * chunk if i < n_bursts - 1 else int(sigma_per_step.shape[0])
+        sigma_i = float(sigma_per_step[lo:hi].mean()) if hi > lo else float('nan')
+        if not (sigma_i == sigma_i and abs(sigma_i) < float('inf')):
+            out[i] = float('nan')
+            continue
+        observed_i = float(max(0.0, (predicted[i, :] - actual[i, :]).mean()))
+        floor_i = sigma_i * sqrt_term
+        out[i] = max(0.0, floor_i - observed_i)
+    return out
+
+
+jensen_dormancy_gap_per_burst: Measurable[
+    Mapping[str, object], npt.NDArray[np.floating],
+] = Measurable(
+    fn=_jensen_dormancy_gap_per_burst_fn,
+    name='jensen_dormancy_gap_per_burst',
+    reads=('predicted_q_at_start', 'mc_return',
+           'online_std_q_per_step', 'env_name'),
+)
+register(jensen_dormancy_gap_per_burst)
+
+
+# Scalar reductions of the per-burst dormancy. The `_at_best_burst`
+# variant picks the dormancy gap AT the burst where the outcome's
+# best-burst-mean was selected — resolves the
+# `jensen_dormancy_gap` ⊥ `eval_best_burst_mean` window
+# misalignment by collocating both measurements at the same burst.
+def _dormancy_at_best_burst_fn(record: Mapping[str, object]) -> float:
+    """Dormancy gap at the BURST where outcome's best-mean occurred.
+
+    `eval_best_burst_mean = max_i(mc_return[i, :].mean())`. This
+    measurable returns `jensen_dormancy_gap_per_burst[argmax_i]` —
+    the dormancy at the SAME burst the outcome was scored at.
+    Use when a bridge needs "outcome and mechanism state at the
+    same window" rather than "outcome at peak burst, mech averaged
+    over training".
+    """
+    mc_v = record.get('mc_return')
+    if mc_v is None:
+        return float('nan')
+    mc = np.asarray(mc_v, dtype=np.float64)
+    if mc.ndim != 2 or mc.size == 0:
+        return float('nan')
+    best_idx = int(mc.mean(axis=1).argmax())
+    dormancy_per_burst = _jensen_dormancy_gap_per_burst_fn(record)
+    if best_idx >= dormancy_per_burst.size:
+        return float('nan')
+    v = float(dormancy_per_burst[best_idx])
+    if math.isnan(v):
+        return float('nan')
+    return v
+
+
+jensen_dormancy_gap_at_best_burst: Measurable[
+    Mapping[str, object], float,
+] = Measurable(
+    fn=_dormancy_at_best_burst_fn,
+    name='jensen_dormancy_gap_at_best_burst',
+    reads=('predicted_q_at_start', 'mc_return',
+           'online_std_q_per_step', 'env_name'),
+)
+register(jensen_dormancy_gap_at_best_burst)
+
+
+@measurable(
+    name='jensen_floor',
+    reads=('online_std_q_per_step', 'env_name'),
+)
+def jensen_floor_measurable(record: Mapping[str, object]) -> float:
+    """Hasselt 2010 Theorem 1 structural floor for argmax-noise bias:
+    `mean_t(σ_action(s_t)) × √(2 ln K)`, averaged over the FULL
+    training trajectory (not the arbitrary late-half window used by
+    `jensen_dormancy_gap`).
+
+    `σ_action` is the across-action SD of online Q at each replay
+    step. K = env's native n_actions from the catalogue (action-
+    duplicate wrappers should be handled separately via
+    `effective_n_actions`; pending).
+
+    Caveat: σ_action upper-bounds σ_noise (the strict Hasselt σ).
+    σ_action² = σ_noise² + σ_structural² where σ_structural is the
+    across-action variation in TRUE Q values. The measurement
+    overestimates argmax-noise bias by the structural component.
+    Strict isolation requires multi-pass stochastic forward or
+    cross-seed canonical-state instrumentation.
+
+    Companion to `jensen_dormancy_gap` (which uses late-half σ):
+      - This measurable: floor over FULL trajectory
+      - `jensen_dormancy_gap`: max(0, floor_late − observed_bias)
+
+    For DDQN's effect on argmax-noise, compare Δ(jensen_floor)
+    between arms (cancels structural Q variation if it's
+    arm-invariant). Absolute floor is an upper bound.
+
+    Returns NaN when inputs are missing or degenerate."""
+    sigma_v = record.get('online_std_q_per_step')
+    env = record.get('env_name')
+    if sigma_v is None or not isinstance(env, str):
+        return float('nan')
+    sigma_per_step = np.asarray(sigma_v, dtype=np.float64)
+    if sigma_per_step.size < 2:
+        return float('nan')
+    try:
+        spec = env_catalogue.get(env)
+    except KeyError:
+        return float('nan')
+    n_actions = int(spec.n_actions)
+    if n_actions < 2:
+        return float('nan')
+    sigma = float(np.nanmean(sigma_per_step))
+    if not np.isfinite(sigma):
+        return float('nan')
+    return float(sigma * math.sqrt(2.0 * math.log(n_actions)))
 
 
 # Hasselt-2010 Jensen premise as a self-loop INVARIANT bridge.
