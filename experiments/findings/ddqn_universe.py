@@ -859,6 +859,35 @@ def _native_diff_ci_verdict(
     return Verdict.POWER_INSUFFICIENT
 
 
+def _native_diff_null_verdict(
+    md: float, se: float, null_ceiling: float,
+) -> Verdict:
+    """CI-vs-ceiling verdict for null-prediction native-diff
+    bridges (`predicted_direction='null'`).
+
+    Tests hypothesis `|md| < null_ceiling` via the 95% CI:
+    - `CI ⊂ [−null_ceiling, +null_ceiling]` → HELD (null confirmed:
+      effect within ceiling)
+    - `CI ⊂ (null_ceiling, ∞)` ∪ `(−∞, −null_ceiling)` →
+      NO_EFFECT (null refuted: effect outside ceiling — sign
+      preserved by the framework via `predicted_direction`)
+    - `CI spans the boundary` → POWER_INSUFFICIENT
+
+    Counterpart to `_native_diff_ci_verdict` for positive-direction
+    bridges. Use for `does_not_X` bridges where the prediction is
+    "the effect is small (null)".
+    """
+    if math.isnan(md) or math.isnan(se):
+        return Verdict.POWER_INSUFFICIENT
+    ci_lo = md - 1.96 * se
+    ci_hi = md + 1.96 * se
+    if ci_lo >= -null_ceiling and ci_hi <= null_ceiling:
+        return Verdict.HELD
+    if ci_lo > null_ceiling or ci_hi < -null_ceiling:
+        return Verdict.NO_EFFECT
+    return Verdict.POWER_INSUFFICIENT
+
+
 @claim_bridge(
     source=INTERVENTION,
     target='outcome_native',
@@ -1001,7 +1030,7 @@ def ddqn_dominates_vanilla_response_curve__fourrooms_rs_0p3(
 
 @claim_bridge(
     source=INTERVENTION,
-    target='eval_best_burst_mean',
+    target='outcome_native',
     direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
     scope=(
@@ -1014,36 +1043,46 @@ def ddqn_dominates_vanilla_response_curve__fourrooms_rs_0p3(
 def ddqn_does_not_rescue__acrobot_rs_0p1(
     paired_g: PairedGResult,
     *,
-    null_ceiling: float = 0.3,
+    null_ceiling: float = 0.2,
 ) -> Verdict:
     """Acrobot at rs=0.1 does NOT show the FourRooms rescue.
-    Empirical paired_g(eval_best_burst_mean) on Acrobot rs=0.1
-    γ=0.99: |g| = 0.17, p > 0.05 — small + non-significant.
-    HELD encodes "rescue does not activate on Acrobot at low
-    reward scale". Refutes universal rs<<1 → DDQN benefit
-    reading.
+    HELD encodes "rescue does not activate" via CI-vs-ceiling
+    on `outcome_native` (native units).
+
+    Empirical post-rebuild: md_native = +0.229 (95% CI≈[−0.130,
+    +0.588]) — CI spans the null ceiling → POWER_INSUFFICIENT.
+
+    **2026-05-11 migration:** previous version used Hedges' g
+    on raw `eval_best_burst_mean`. At rs=0.1, raw outcomes are
+    tiny; pooled SD inflates |g| readings (and shrinks them too,
+    depending on which arm has more variance). Migrated to
+    `outcome_native` (raw / reward_scale) + CI-vs-ceiling logic
+    (`_native_diff_null_verdict`) so the rescue-or-not test is
+    reward-magnitude-invariant.
+
+    **Verdict shifted HELD → POWER_INSUFFICIENT under the honest
+    methodology.** The previous HELD reading was generous: |g|=0.10
+    with p=0.59 was "small effect, fail to reject null" — but
+    failure-to-reject is NOT confirmation. In native units the
+    CI is wide (n=30, native md spans [−0.13, +0.59]); we cannot
+    confidently say "rescue does not activate" within ceiling
+    0.2. To upgrade to HELD, either widen the ceiling (e.g. 0.6
+    would land HELD at the cost of admitting "small rescues"
+    as null) or collect more seeds.
 
     Different mechanism than FourRooms: Acrobot's dense per-step
     penalty doesn't have the "vanilla under-learns sparse
     positive reward" failure mode that the rescue mechanism
     addresses. rs=0.1 just shrinks Q's scale without changing
     the learning regime."""
-    g = paired_g.g
-    p = paired_g.p_value
-    if math.isnan(g) or math.isnan(p):
-        return Verdict.POWER_INSUFFICIENT
-    is_small = abs(g) <= null_ceiling
-    is_ns = p > 0.05
-    if is_small and is_ns:
-        return Verdict.HELD
-    if is_small or is_ns:
-        return Verdict.POWER_INSUFFICIENT
-    return Verdict.NO_EFFECT
+    return _native_diff_null_verdict(
+        paired_g.mean_diff, paired_g.mean_diff_se, null_ceiling,
+    )
 
 
 @claim_bridge(
     source=INTERVENTION,
-    target='eval_best_burst_mean',
+    target='outcome_native',
     direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
     scope=(
@@ -1056,27 +1095,24 @@ def ddqn_does_not_rescue__acrobot_rs_0p1(
 def ddqn_does_not_rescue__cartpole_rs_0p1(
     paired_g: PairedGResult,
     *,
-    null_ceiling: float = 0.3,
+    null_ceiling: float = 0.2,
 ) -> Verdict:
     """CartPole at rs=0.1 does NOT show the FourRooms rescue.
-    Empirical paired_g on CartPole rs=0.1 γ=0.99: |g| ≈ 0.09,
-    n.s. — effectively null. HELD encodes "rescue does not
-    activate on CartPole at low reward scale".
+    Sister of the Acrobot bridge; same migration to native-unit
+    CI-vs-ceiling logic.
+
+    Empirical post-rebuild: md_native = +0.212 (95% CI≈[−0.155,
+    +0.579]) — CI spans the null ceiling → POWER_INSUFFICIENT.
+    Same as Acrobot sister bridge: at n=30 with native variance,
+    the CI is wide enough to span the [−0.2, +0.2] band; we
+    cannot confidently confirm OR refute the null.
 
     Different mechanism: CartPole has dense per-step alive bonus
     and saturates fast at any rs ≥ 0.1. Vanilla doesn't have the
     "can't find reward" failure mode that the rescue addresses."""
-    g = paired_g.g
-    p = paired_g.p_value
-    if math.isnan(g) or math.isnan(p):
-        return Verdict.POWER_INSUFFICIENT
-    is_small = abs(g) <= null_ceiling
-    is_ns = p > 0.05
-    if is_small and is_ns:
-        return Verdict.HELD
-    if is_small or is_ns:
-        return Verdict.POWER_INSUFFICIENT
-    return Verdict.NO_EFFECT
+    return _native_diff_null_verdict(
+        paired_g.mean_diff, paired_g.mean_diff_se, null_ceiling,
+    )
 
 
 # =====================================================================

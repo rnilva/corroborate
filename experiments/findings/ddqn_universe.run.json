@@ -355,10 +355,10 @@
           "baseline_arm": "baseline",
           "g": 0.0979966,
           "helped_fraction": 0.666667,
-          "mean_diff": 0.022853,
+          "mean_diff": 0.22853,
           "mean_diff_p_value": 0.585768,
-          "mean_diff_se": 0.041466,
-          "measurable": "eval_best_burst_mean",
+          "mean_diff_se": 0.41466,
+          "measurable": "outcome_native",
           "n_baseline": 30,
           "n_pairs": 30,
           "n_treatment": 30,
@@ -380,14 +380,14 @@
         "seed"
       ],
       "params": {
-        "null_ceiling": 0.3
+        "null_ceiling": 0.2
       },
       "predicted_direction": "null",
       "scope_repr": "[([([(col(\"env_name\")) == (\"Acrobot-v1\")]) & ([(col(\"reward_scale\")) == (dyn float: 0.1)])]) & ([([(col(\"n_step\")) == (dyn int: 1)]) | (col(\"n_step\").is_null())])]",
       "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
-      "target_name": "eval_best_burst_mean",
+      "target_name": "outcome_native",
       "tier": "interventional",
-      "verdict": "held",
+      "verdict": "power_insufficient",
       "warnings": []
     },
     {
@@ -400,10 +400,10 @@
           "baseline_arm": "baseline",
           "g": 0.326815,
           "helped_fraction": 0.233333,
-          "mean_diff": 0.0211982,
+          "mean_diff": 0.211982,
           "mean_diff_p_value": 0.0763287,
-          "mean_diff_se": 0.0115334,
-          "measurable": "eval_best_burst_mean",
+          "mean_diff_se": 0.115334,
+          "measurable": "outcome_native",
           "n_baseline": 30,
           "n_pairs": 30,
           "n_treatment": 30,
@@ -428,12 +428,12 @@
         "seed"
       ],
       "params": {
-        "null_ceiling": 0.3
+        "null_ceiling": 0.2
       },
       "predicted_direction": "null",
       "scope_repr": "[([([(col(\"env_name\")) == (\"CartPole-v1\")]) & ([(col(\"reward_scale\")) == (dyn float: 0.1)])]) & ([([(col(\"n_step\")) == (dyn int: 1)]) | (col(\"n_step\").is_null())])]",
       "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
-      "target_name": "eval_best_burst_mean",
+      "target_name": "outcome_native",
       "tier": "interventional",
       "verdict": "power_insufficient",
       "warnings": []
@@ -778,8 +778,8 @@
       "analysis_results": {
         "paired_delta_link_dowhy": {
           "backdoor": {
-            "ate": -0.829085,
-            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__4,__burst__8,__burst__3,__burst__2,__burst__1,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __7,__burst__9,__burst__6,__burst__5])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__4,__burst__8,__burst__3,__burst__2,__burst__1,__burst__7,__burst__9,__burst__6,__burst__5,U) = P(dout|djens,__burst__4,__burst__8,__burst__3,__burst__2,__burst__1,__burst__7,__burst__9,__burst__6,__burst__5)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__4,__burst__8,__burst__3,__burst__2,__burst__1,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __7,__burst__9,__burst__6,__burst__5])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__4,__burst__8,__burst__3,__burst__2,__burst__1,__burst__7,__burst__9,__burst__6,__burst__5,U) = P(dout|djens,__burst__4,__burst__8,__burst__3,__burst__2,__burst__1,__burst__7,__burst__9,__burst__6,__burst__5)\n",
+            "ate": -0.779104,
+            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__3,__burst__9,__burst__5,__burst__7,__burst__2,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __4,__burst__8,__burst__6,__burst__1])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__3,__burst__9,__burst__5,__burst__7,__burst__2,__burst__4,__burst__8,__burst__6,__burst__1,U) = P(dout|djens,__burst__3,__burst__9,__burst__5,__burst__7,__burst__2,__burst__4,__burst__8,__burst__6,__burst__1)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__3,__burst__9,__burst__5,__burst__1,__burst__2,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __4,__burst__8,__burst__6,__burst__7])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__3,__burst__9,__burst__5,__burst__1,__burst__2,__burst__4,__burst__8,__burst__6,__burst__7,U) = P(dout|djens,__burst__3,__burst__9,__burst__5,__burst__1,__burst__2,__burst__4,__burst__8,__burst__6,__burst__7)\n",
             "identified": true,
             "method_name": "backdoor.linear_regression",
             "n_rows": 1310,
@@ -789,22 +789,22 @@
           "n_pairs": 1310,
           "outcome_col": "dout",
           "placebo": {
-            "drift": 0.829085,
+            "drift": 0.779104,
             "method_name": "backdoor.linear_regression",
             "n_rows": 1310,
             "outcome": "dout",
-            "real_ate": -0.829085,
-            "refuted_ate": -2.22045e-16,
+            "real_ate": -0.779104,
+            "refuted_ate": 0.0,
             "refuter_name": "placebo_treatment_refuter",
             "treatment": "djens"
           },
           "random_common_cause": {
-            "drift": 5.82393e-05,
+            "drift": 6.14743e-05,
             "method_name": "backdoor.linear_regression",
             "n_rows": 1310,
             "outcome": "dout",
-            "real_ate": -0.829085,
-            "refuted_ate": -0.829143,
+            "real_ate": -0.779104,
+            "refuted_ate": -0.779042,
             "refuter_name": "random_common_cause",
             "treatment": "djens"
           },
@@ -850,8 +850,8 @@
       "analysis_results": {
         "paired_delta_link_dowhy": {
           "backdoor": {
-            "ate": -0.829085,
-            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__4,__burst__8,__burst__3,__burst__2,__burst__1,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __7,__burst__9,__burst__6,__burst__5])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__4,__burst__8,__burst__3,__burst__2,__burst__1,__burst__7,__burst__9,__burst__6,__burst__5,U) = P(dout|djens,__burst__4,__burst__8,__burst__3,__burst__2,__burst__1,__burst__7,__burst__9,__burst__6,__burst__5)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__4,__burst__8,__burst__3,__burst__2,__burst__1,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __7,__burst__9,__burst__6,__burst__5])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__4,__burst__8,__burst__3,__burst__2,__burst__1,__burst__7,__burst__9,__burst__6,__burst__5,U) = P(dout|djens,__burst__4,__burst__8,__burst__3,__burst__2,__burst__1,__burst__7,__burst__9,__burst__6,__burst__5)\n",
+            "ate": -0.779104,
+            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__3,__burst__9,__burst__5,__burst__7,__burst__2,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __4,__burst__8,__burst__6,__burst__1])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__3,__burst__9,__burst__5,__burst__7,__burst__2,__burst__4,__burst__8,__burst__6,__burst__1,U) = P(dout|djens,__burst__3,__burst__9,__burst__5,__burst__7,__burst__2,__burst__4,__burst__8,__burst__6,__burst__1)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__3,__burst__9,__burst__5,__burst__1,__burst__2,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __4,__burst__8,__burst__6,__burst__7])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__3,__burst__9,__burst__5,__burst__1,__burst__2,__burst__4,__burst__8,__burst__6,__burst__7,U) = P(dout|djens,__burst__3,__burst__9,__burst__5,__burst__1,__burst__2,__burst__4,__burst__8,__burst__6,__burst__7)\n",
             "identified": true,
             "method_name": "backdoor.linear_regression",
             "n_rows": 1310,
@@ -861,22 +861,22 @@
           "n_pairs": 1310,
           "outcome_col": "dout",
           "placebo": {
-            "drift": 0.829085,
+            "drift": 0.779104,
             "method_name": "backdoor.linear_regression",
             "n_rows": 1310,
             "outcome": "dout",
-            "real_ate": -0.829085,
-            "refuted_ate": -2.22045e-16,
+            "real_ate": -0.779104,
+            "refuted_ate": 0.0,
             "refuter_name": "placebo_treatment_refuter",
             "treatment": "djens"
           },
           "random_common_cause": {
-            "drift": 9.66579e-05,
+            "drift": 1.34492e-05,
             "method_name": "backdoor.linear_regression",
             "n_rows": 1310,
             "outcome": "dout",
-            "real_ate": -0.829085,
-            "refuted_ate": -0.829181,
+            "real_ate": -0.779104,
+            "refuted_ate": -0.77909,
             "refuter_name": "random_common_cause",
             "treatment": "djens"
           },
@@ -922,8 +922,8 @@
       "analysis_results": {
         "paired_delta_link_dowhy": {
           "backdoor": {
-            "ate": -0.829085,
-            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__4,__burst__8,__burst__3,__burst__2,__burst__1,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __7,__burst__9,__burst__6,__burst__5])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__4,__burst__8,__burst__3,__burst__2,__burst__1,__burst__7,__burst__9,__burst__6,__burst__5,U) = P(dout|djens,__burst__4,__burst__8,__burst__3,__burst__2,__burst__1,__burst__7,__burst__9,__burst__6,__burst__5)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__4,__burst__8,__burst__3,__burst__2,__burst__1,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __7,__burst__9,__burst__6,__burst__5])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__4,__burst__8,__burst__3,__burst__2,__burst__1,__burst__7,__burst__9,__burst__6,__burst__5,U) = P(dout|djens,__burst__4,__burst__8,__burst__3,__burst__2,__burst__1,__burst__7,__burst__9,__burst__6,__burst__5)\n",
+            "ate": -0.779104,
+            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__3,__burst__9,__burst__5,__burst__7,__burst__2,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __4,__burst__8,__burst__6,__burst__1])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__3,__burst__9,__burst__5,__burst__7,__burst__2,__burst__4,__burst__8,__burst__6,__burst__1,U) = P(dout|djens,__burst__3,__burst__9,__burst__5,__burst__7,__burst__2,__burst__4,__burst__8,__burst__6,__burst__1)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__3,__burst__9,__burst__5,__burst__1,__burst__2,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __4,__burst__8,__burst__6,__burst__7])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__3,__burst__9,__burst__5,__burst__1,__burst__2,__burst__4,__burst__8,__burst__6,__burst__7,U) = P(dout|djens,__burst__3,__burst__9,__burst__5,__burst__1,__burst__2,__burst__4,__burst__8,__burst__6,__burst__7)\n",
             "identified": true,
             "method_name": "backdoor.linear_regression",
             "n_rows": 1310,
@@ -933,22 +933,22 @@
           "n_pairs": 1310,
           "outcome_col": "dout",
           "placebo": {
-            "drift": 0.829085,
+            "drift": 0.779104,
             "method_name": "backdoor.linear_regression",
             "n_rows": 1310,
             "outcome": "dout",
-            "real_ate": -0.829085,
-            "refuted_ate": -2.22045e-16,
+            "real_ate": -0.779104,
+            "refuted_ate": 0.0,
             "refuter_name": "placebo_treatment_refuter",
             "treatment": "djens"
           },
           "random_common_cause": {
-            "drift": 1.49197e-05,
+            "drift": 7.44804e-05,
             "method_name": "backdoor.linear_regression",
             "n_rows": 1310,
             "outcome": "dout",
-            "real_ate": -0.829085,
-            "refuted_ate": -0.82907,
+            "real_ate": -0.779104,
+            "refuted_ate": -0.779029,
             "refuter_name": "random_common_cause",
             "treatment": "djens"
           },
@@ -1544,19 +1544,19 @@
       "analysis_results": {
         "cross_config_paired_slope": {
           "config_means_predictor": [
-            0.00148632,
             0.000719091,
-            0.000715301,
-            0.000300584,
             0.00290062,
+            0.00148632,
+            0.000300584,
+            0.000715301,
             0.000354758
           ],
           "config_means_target": [
-            -0.141686,
             0.123332,
-            -0.54841,
-            0.0,
             -0.330237,
+            -0.141686,
+            0.0,
+            -0.54841,
             1.30205
           ],
           "n_configs": 6,
@@ -1600,25 +1600,25 @@
           "cleavage_axes": [],
           "coefficients": [
             {
-              "ci_hi": 1.13694,
-              "ci_lo": -0.62498,
-              "coefficient": 0.255982,
+              "ci_hi": 1.05274,
+              "ci_lo": -0.317128,
+              "coefficient": 0.367808,
               "is_significant": false,
               "name": "env_reward_polarity",
-              "p_value": 0.521689
+              "p_value": 0.250703
             }
           ],
-          "i_squared": 0.95243,
-          "intercept": 0.074058,
-          "intercept_ci_hi": 0.729855,
-          "intercept_ci_lo": -0.581739,
-          "intercept_p_value": 0.801123,
-          "intercept_se": 0.284387,
+          "i_squared": 0.921156,
+          "intercept": -0.00809127,
+          "intercept_ci_hi": 0.503726,
+          "intercept_ci_lo": -0.519908,
+          "intercept_p_value": 0.971812,
+          "intercept_se": 0.22195,
           "n_strata": 10,
           "pool": "random",
-          "q_statistic": 168.174,
-          "r_squared": 0.0531397,
-          "tau_sq": 0.887249
+          "q_statistic": 101.466,
+          "r_squared": 0.160847,
+          "tau_sq": 0.517739
         }
       },
       "assumption_violations": [],
@@ -2022,24 +2022,24 @@
   "errored_bridges": [
     {
       "bridge_name": "extreme_q_divergence_attenuates_link__binary",
-      "error_message": "paired_link_per_burst: cannot mean-aggregate cells at (env='SlidingTilePuzzle-jumanji', arm='bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)', ('seed',)=(1,)) — per-burst array shapes differ ([(10,), (20,)]). The cells are not replicates; they differ on: eval_every=['100000', '50000']; gamma=['0.99', '0.999']; q_network=[\"'dataclass:CNN(channels=(32,64),hidden=(256),obs_shape=(5,5,1))'\", \"'dataclass:CNN(channels=(8,16),hidden=(64),obs_shape=(5,5,1))'\"]; q_network.channels=[\"'(32,64)'\", \"'(8,16)'\"]; q_network.hidden=[\"'(256)'\", \"'(64)'\"]; substrate_commit_sha=[\"'7372ad4c36d8b7e881876105aef956c65a8b5eff'\", \"'796ea7e8383a1dacd6fcd739a7070e7a3b5aba61'\"]. Add these to pair_by.",
+      "error_message": "paired_link_per_burst: cannot mean-aggregate cells at (env='SlidingTilePuzzle-jumanji', arm='bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)', ('seed',)=(0,)) — per-burst array shapes differ ([(10,), (20,)]). The cells are not replicates; they differ on: eval_every=['100000', '50000']; gamma=['0.99', '0.999']; q_network=[\"'dataclass:CNN(channels=(32,64),hidden=(256),obs_shape=(5,5,1))'\", \"'dataclass:CNN(channels=(8,16),hidden=(64),obs_shape=(5,5,1))'\"]; q_network.channels=[\"'(32,64)'\", \"'(8,16)'\"]; q_network.hidden=[\"'(256)'\", \"'(64)'\"]; substrate_commit_sha=[\"'7372ad4c36d8b7e881876105aef956c65a8b5eff'\", \"'796ea7e8383a1dacd6fcd739a7070e7a3b5aba61'\"]. Add these to pair_by.",
       "error_type": "ValueError",
-      "traceback_repr": "Traceback (most recent call last):\n  File \"/workspace/corroborate/src/corroborate/runner/runner.py\", line 445, in run\n    out[b.name] = evaluate(\n                  ~~~~~~~~^\n        b, cells, claim=claim, module_scope=module_scope,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/workspace/corroborate/src/corroborate/bridge/bridge.py\", line 825, in evaluate\n    analysis_results = resolve_for_holds_when(\n        bridge.holds_when, filtered_cells, bridge_params,\n    )\n  File \"/workspace/corroborate/src/corroborate/bridge/analysis.py\", line 232, in resolve_for_holds_when\n    out[param_name] = run_for(\n                      ~~~~~~~^\n        analysis_obj, cells_list, bridge_params,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/workspace/corroborate/src/corroborate/bridge/analysis.py\", line 190, in run_for\n    return analysis_obj.fn(cells, **kwargs)\n           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^\n  File \"/workspace/corroborate/src/corroborate/analyses/link_attenuation_dowhy.py\", line 245, in link_attenuation_dowhy\n    rows, dag, treatment_col, outcome_col, n_above, n_below = _build_panel(\n                                                              ~~~~~~~~~~~~^\n        cells_list,\n        ^^^^^^^^^^^\n    ...<8 lines>...\n        dedupe_strategy=dedupe_strategy,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/workspace/corroborate/src/corroborate/analyses/link_attenuation_dowhy.py\", line 125, in _build_panel\n    panel = paired_link_per_burst.fn(\n        cells,\n    ...<5 lines>...\n        dedupe_strategy=dedupe_strategy,\n    )\n  File \"/workspace/corroborate/src/corroborate/analyses/paired_link_per_burst.py\", line 224, in paired_link_per_burst\n    raise ValueError(\n    ...<6 lines>...\n    )\nValueError: paired_link_per_burst: cannot mean-aggregate cells at (env='SlidingTilePuzzle-jumanji', arm='bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)', ('seed',)=(1,)) — per-burst array shapes differ ([(10,), (20,)]). The cells are not replicates; they differ on: eval_every=['100000', '50000']; gamma=['0.99', '0.999']; q_network=[\"'dataclass:CNN(channels=(32,64),hidden=(256),obs_shape=(5,5,1))'\", \"'dataclass:CNN(channels=(8,16),hidden=(64),obs_shape=(5,5,1))'\"]; q_network.channels=[\"'(32,64)'\", \"'(8,16)'\"]; q_network.hidden=[\"'(256)'\", \"'(64)'\"]; substrate_commit_sha=[\"'7372ad4c36d8b7e881876105aef956c65a8b5eff'\", \"'796ea7e8383a1dacd6fcd739a7070e7a3b5aba61'\"]. Add these to pair_by.\n"
+      "traceback_repr": "Traceback (most recent call last):\n  File \"/workspace/corroborate/src/corroborate/runner/runner.py\", line 445, in run\n    out[b.name] = evaluate(\n                  ~~~~~~~~^\n        b, cells, claim=claim, module_scope=module_scope,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/workspace/corroborate/src/corroborate/bridge/bridge.py\", line 825, in evaluate\n    analysis_results = resolve_for_holds_when(\n        bridge.holds_when, filtered_cells, bridge_params,\n    )\n  File \"/workspace/corroborate/src/corroborate/bridge/analysis.py\", line 232, in resolve_for_holds_when\n    out[param_name] = run_for(\n                      ~~~~~~~^\n        analysis_obj, cells_list, bridge_params,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/workspace/corroborate/src/corroborate/bridge/analysis.py\", line 190, in run_for\n    return analysis_obj.fn(cells, **kwargs)\n           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^\n  File \"/workspace/corroborate/src/corroborate/analyses/link_attenuation_dowhy.py\", line 245, in link_attenuation_dowhy\n    rows, dag, treatment_col, outcome_col, n_above, n_below = _build_panel(\n                                                              ~~~~~~~~~~~~^\n        cells_list,\n        ^^^^^^^^^^^\n    ...<8 lines>...\n        dedupe_strategy=dedupe_strategy,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/workspace/corroborate/src/corroborate/analyses/link_attenuation_dowhy.py\", line 125, in _build_panel\n    panel = paired_link_per_burst.fn(\n        cells,\n    ...<5 lines>...\n        dedupe_strategy=dedupe_strategy,\n    )\n  File \"/workspace/corroborate/src/corroborate/analyses/paired_link_per_burst.py\", line 224, in paired_link_per_burst\n    raise ValueError(\n    ...<6 lines>...\n    )\nValueError: paired_link_per_burst: cannot mean-aggregate cells at (env='SlidingTilePuzzle-jumanji', arm='bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)', ('seed',)=(0,)) — per-burst array shapes differ ([(10,), (20,)]). The cells are not replicates; they differ on: eval_every=['100000', '50000']; gamma=['0.99', '0.999']; q_network=[\"'dataclass:CNN(channels=(32,64),hidden=(256),obs_shape=(5,5,1))'\", \"'dataclass:CNN(channels=(8,16),hidden=(64),obs_shape=(5,5,1))'\"]; q_network.channels=[\"'(32,64)'\", \"'(8,16)'\"]; q_network.hidden=[\"'(256)'\", \"'(64)'\"]; substrate_commit_sha=[\"'7372ad4c36d8b7e881876105aef956c65a8b5eff'\", \"'796ea7e8383a1dacd6fcd739a7070e7a3b5aba61'\"]. Add these to pair_by.\n"
     },
     {
       "bridge_name": "extreme_q_divergence_attenuates_link__placebo_refuted",
-      "error_message": "paired_link_per_burst: cannot mean-aggregate cells at (env='SlidingTilePuzzle-jumanji', arm='bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)', ('seed',)=(1,)) — per-burst array shapes differ ([(10,), (20,)]). The cells are not replicates; they differ on: eval_every=['100000', '50000']; gamma=['0.99', '0.999']; q_network=[\"'dataclass:CNN(channels=(32,64),hidden=(256),obs_shape=(5,5,1))'\", \"'dataclass:CNN(channels=(8,16),hidden=(64),obs_shape=(5,5,1))'\"]; q_network.channels=[\"'(32,64)'\", \"'(8,16)'\"]; q_network.hidden=[\"'(256)'\", \"'(64)'\"]; substrate_commit_sha=[\"'7372ad4c36d8b7e881876105aef956c65a8b5eff'\", \"'796ea7e8383a1dacd6fcd739a7070e7a3b5aba61'\"]. Add these to pair_by.",
+      "error_message": "paired_link_per_burst: cannot mean-aggregate cells at (env='SlidingTilePuzzle-jumanji', arm='bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)', ('seed',)=(0,)) — per-burst array shapes differ ([(10,), (20,)]). The cells are not replicates; they differ on: eval_every=['100000', '50000']; gamma=['0.99', '0.999']; q_network=[\"'dataclass:CNN(channels=(32,64),hidden=(256),obs_shape=(5,5,1))'\", \"'dataclass:CNN(channels=(8,16),hidden=(64),obs_shape=(5,5,1))'\"]; q_network.channels=[\"'(32,64)'\", \"'(8,16)'\"]; q_network.hidden=[\"'(256)'\", \"'(64)'\"]; substrate_commit_sha=[\"'7372ad4c36d8b7e881876105aef956c65a8b5eff'\", \"'796ea7e8383a1dacd6fcd739a7070e7a3b5aba61'\"]. Add these to pair_by.",
       "error_type": "ValueError",
-      "traceback_repr": "Traceback (most recent call last):\n  File \"/workspace/corroborate/src/corroborate/runner/runner.py\", line 445, in run\n    out[b.name] = evaluate(\n                  ~~~~~~~~^\n        b, cells, claim=claim, module_scope=module_scope,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/workspace/corroborate/src/corroborate/bridge/bridge.py\", line 825, in evaluate\n    analysis_results = resolve_for_holds_when(\n        bridge.holds_when, filtered_cells, bridge_params,\n    )\n  File \"/workspace/corroborate/src/corroborate/bridge/analysis.py\", line 232, in resolve_for_holds_when\n    out[param_name] = run_for(\n                      ~~~~~~~^\n        analysis_obj, cells_list, bridge_params,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/workspace/corroborate/src/corroborate/bridge/analysis.py\", line 190, in run_for\n    return analysis_obj.fn(cells, **kwargs)\n           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^\n  File \"/workspace/corroborate/src/corroborate/analyses/link_attenuation_dowhy.py\", line 245, in link_attenuation_dowhy\n    rows, dag, treatment_col, outcome_col, n_above, n_below = _build_panel(\n                                                              ~~~~~~~~~~~~^\n        cells_list,\n        ^^^^^^^^^^^\n    ...<8 lines>...\n        dedupe_strategy=dedupe_strategy,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/workspace/corroborate/src/corroborate/analyses/link_attenuation_dowhy.py\", line 125, in _build_panel\n    panel = paired_link_per_burst.fn(\n        cells,\n    ...<5 lines>...\n        dedupe_strategy=dedupe_strategy,\n    )\n  File \"/workspace/corroborate/src/corroborate/analyses/paired_link_per_burst.py\", line 224, in paired_link_per_burst\n    raise ValueError(\n    ...<6 lines>...\n    )\nValueError: paired_link_per_burst: cannot mean-aggregate cells at (env='SlidingTilePuzzle-jumanji', arm='bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)', ('seed',)=(1,)) — per-burst array shapes differ ([(10,), (20,)]). The cells are not replicates; they differ on: eval_every=['100000', '50000']; gamma=['0.99', '0.999']; q_network=[\"'dataclass:CNN(channels=(32,64),hidden=(256),obs_shape=(5,5,1))'\", \"'dataclass:CNN(channels=(8,16),hidden=(64),obs_shape=(5,5,1))'\"]; q_network.channels=[\"'(32,64)'\", \"'(8,16)'\"]; q_network.hidden=[\"'(256)'\", \"'(64)'\"]; substrate_commit_sha=[\"'7372ad4c36d8b7e881876105aef956c65a8b5eff'\", \"'796ea7e8383a1dacd6fcd739a7070e7a3b5aba61'\"]. Add these to pair_by.\n"
+      "traceback_repr": "Traceback (most recent call last):\n  File \"/workspace/corroborate/src/corroborate/runner/runner.py\", line 445, in run\n    out[b.name] = evaluate(\n                  ~~~~~~~~^\n        b, cells, claim=claim, module_scope=module_scope,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/workspace/corroborate/src/corroborate/bridge/bridge.py\", line 825, in evaluate\n    analysis_results = resolve_for_holds_when(\n        bridge.holds_when, filtered_cells, bridge_params,\n    )\n  File \"/workspace/corroborate/src/corroborate/bridge/analysis.py\", line 232, in resolve_for_holds_when\n    out[param_name] = run_for(\n                      ~~~~~~~^\n        analysis_obj, cells_list, bridge_params,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/workspace/corroborate/src/corroborate/bridge/analysis.py\", line 190, in run_for\n    return analysis_obj.fn(cells, **kwargs)\n           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^\n  File \"/workspace/corroborate/src/corroborate/analyses/link_attenuation_dowhy.py\", line 245, in link_attenuation_dowhy\n    rows, dag, treatment_col, outcome_col, n_above, n_below = _build_panel(\n                                                              ~~~~~~~~~~~~^\n        cells_list,\n        ^^^^^^^^^^^\n    ...<8 lines>...\n        dedupe_strategy=dedupe_strategy,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/workspace/corroborate/src/corroborate/analyses/link_attenuation_dowhy.py\", line 125, in _build_panel\n    panel = paired_link_per_burst.fn(\n        cells,\n    ...<5 lines>...\n        dedupe_strategy=dedupe_strategy,\n    )\n  File \"/workspace/corroborate/src/corroborate/analyses/paired_link_per_burst.py\", line 224, in paired_link_per_burst\n    raise ValueError(\n    ...<6 lines>...\n    )\nValueError: paired_link_per_burst: cannot mean-aggregate cells at (env='SlidingTilePuzzle-jumanji', arm='bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)', ('seed',)=(0,)) — per-burst array shapes differ ([(10,), (20,)]). The cells are not replicates; they differ on: eval_every=['100000', '50000']; gamma=['0.99', '0.999']; q_network=[\"'dataclass:CNN(channels=(32,64),hidden=(256),obs_shape=(5,5,1))'\", \"'dataclass:CNN(channels=(8,16),hidden=(64),obs_shape=(5,5,1))'\"]; q_network.channels=[\"'(32,64)'\", \"'(8,16)'\"]; q_network.hidden=[\"'(256)'\", \"'(64)'\"]; substrate_commit_sha=[\"'7372ad4c36d8b7e881876105aef956c65a8b5eff'\", \"'796ea7e8383a1dacd6fcd739a7070e7a3b5aba61'\"]. Add these to pair_by.\n"
     },
     {
       "bridge_name": "extreme_q_divergence_attenuates_link__rcc_robust",
-      "error_message": "paired_link_per_burst: cannot mean-aggregate cells at (env='SlidingTilePuzzle-jumanji', arm='bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)', ('seed',)=(1,)) — per-burst array shapes differ ([(10,), (20,)]). The cells are not replicates; they differ on: eval_every=['100000', '50000']; gamma=['0.99', '0.999']; q_network=[\"'dataclass:CNN(channels=(32,64),hidden=(256),obs_shape=(5,5,1))'\", \"'dataclass:CNN(channels=(8,16),hidden=(64),obs_shape=(5,5,1))'\"]; q_network.channels=[\"'(32,64)'\", \"'(8,16)'\"]; q_network.hidden=[\"'(256)'\", \"'(64)'\"]; substrate_commit_sha=[\"'7372ad4c36d8b7e881876105aef956c65a8b5eff'\", \"'796ea7e8383a1dacd6fcd739a7070e7a3b5aba61'\"]. Add these to pair_by.",
+      "error_message": "paired_link_per_burst: cannot mean-aggregate cells at (env='SlidingTilePuzzle-jumanji', arm='bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)', ('seed',)=(0,)) — per-burst array shapes differ ([(10,), (20,)]). The cells are not replicates; they differ on: eval_every=['100000', '50000']; gamma=['0.99', '0.999']; q_network=[\"'dataclass:CNN(channels=(32,64),hidden=(256),obs_shape=(5,5,1))'\", \"'dataclass:CNN(channels=(8,16),hidden=(64),obs_shape=(5,5,1))'\"]; q_network.channels=[\"'(32,64)'\", \"'(8,16)'\"]; q_network.hidden=[\"'(256)'\", \"'(64)'\"]; substrate_commit_sha=[\"'7372ad4c36d8b7e881876105aef956c65a8b5eff'\", \"'796ea7e8383a1dacd6fcd739a7070e7a3b5aba61'\"]. Add these to pair_by.",
       "error_type": "ValueError",
-      "traceback_repr": "Traceback (most recent call last):\n  File \"/workspace/corroborate/src/corroborate/runner/runner.py\", line 445, in run\n    out[b.name] = evaluate(\n                  ~~~~~~~~^\n        b, cells, claim=claim, module_scope=module_scope,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/workspace/corroborate/src/corroborate/bridge/bridge.py\", line 825, in evaluate\n    analysis_results = resolve_for_holds_when(\n        bridge.holds_when, filtered_cells, bridge_params,\n    )\n  File \"/workspace/corroborate/src/corroborate/bridge/analysis.py\", line 232, in resolve_for_holds_when\n    out[param_name] = run_for(\n                      ~~~~~~~^\n        analysis_obj, cells_list, bridge_params,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/workspace/corroborate/src/corroborate/bridge/analysis.py\", line 190, in run_for\n    return analysis_obj.fn(cells, **kwargs)\n           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^\n  File \"/workspace/corroborate/src/corroborate/analyses/link_attenuation_dowhy.py\", line 245, in link_attenuation_dowhy\n    rows, dag, treatment_col, outcome_col, n_above, n_below = _build_panel(\n                                                              ~~~~~~~~~~~~^\n        cells_list,\n        ^^^^^^^^^^^\n    ...<8 lines>...\n        dedupe_strategy=dedupe_strategy,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/workspace/corroborate/src/corroborate/analyses/link_attenuation_dowhy.py\", line 125, in _build_panel\n    panel = paired_link_per_burst.fn(\n        cells,\n    ...<5 lines>...\n        dedupe_strategy=dedupe_strategy,\n    )\n  File \"/workspace/corroborate/src/corroborate/analyses/paired_link_per_burst.py\", line 224, in paired_link_per_burst\n    raise ValueError(\n    ...<6 lines>...\n    )\nValueError: paired_link_per_burst: cannot mean-aggregate cells at (env='SlidingTilePuzzle-jumanji', arm='bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)', ('seed',)=(1,)) — per-burst array shapes differ ([(10,), (20,)]). The cells are not replicates; they differ on: eval_every=['100000', '50000']; gamma=['0.99', '0.999']; q_network=[\"'dataclass:CNN(channels=(32,64),hidden=(256),obs_shape=(5,5,1))'\", \"'dataclass:CNN(channels=(8,16),hidden=(64),obs_shape=(5,5,1))'\"]; q_network.channels=[\"'(32,64)'\", \"'(8,16)'\"]; q_network.hidden=[\"'(256)'\", \"'(64)'\"]; substrate_commit_sha=[\"'7372ad4c36d8b7e881876105aef956c65a8b5eff'\", \"'796ea7e8383a1dacd6fcd739a7070e7a3b5aba61'\"]. Add these to pair_by.\n"
+      "traceback_repr": "Traceback (most recent call last):\n  File \"/workspace/corroborate/src/corroborate/runner/runner.py\", line 445, in run\n    out[b.name] = evaluate(\n                  ~~~~~~~~^\n        b, cells, claim=claim, module_scope=module_scope,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/workspace/corroborate/src/corroborate/bridge/bridge.py\", line 825, in evaluate\n    analysis_results = resolve_for_holds_when(\n        bridge.holds_when, filtered_cells, bridge_params,\n    )\n  File \"/workspace/corroborate/src/corroborate/bridge/analysis.py\", line 232, in resolve_for_holds_when\n    out[param_name] = run_for(\n                      ~~~~~~~^\n        analysis_obj, cells_list, bridge_params,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/workspace/corroborate/src/corroborate/bridge/analysis.py\", line 190, in run_for\n    return analysis_obj.fn(cells, **kwargs)\n           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^\n  File \"/workspace/corroborate/src/corroborate/analyses/link_attenuation_dowhy.py\", line 245, in link_attenuation_dowhy\n    rows, dag, treatment_col, outcome_col, n_above, n_below = _build_panel(\n                                                              ~~~~~~~~~~~~^\n        cells_list,\n        ^^^^^^^^^^^\n    ...<8 lines>...\n        dedupe_strategy=dedupe_strategy,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/workspace/corroborate/src/corroborate/analyses/link_attenuation_dowhy.py\", line 125, in _build_panel\n    panel = paired_link_per_burst.fn(\n        cells,\n    ...<5 lines>...\n        dedupe_strategy=dedupe_strategy,\n    )\n  File \"/workspace/corroborate/src/corroborate/analyses/paired_link_per_burst.py\", line 224, in paired_link_per_burst\n    raise ValueError(\n    ...<6 lines>...\n    )\nValueError: paired_link_per_burst: cannot mean-aggregate cells at (env='SlidingTilePuzzle-jumanji', arm='bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)', ('seed',)=(0,)) — per-burst array shapes differ ([(10,), (20,)]). The cells are not replicates; they differ on: eval_every=['100000', '50000']; gamma=['0.99', '0.999']; q_network=[\"'dataclass:CNN(channels=(32,64),hidden=(256),obs_shape=(5,5,1))'\", \"'dataclass:CNN(channels=(8,16),hidden=(64),obs_shape=(5,5,1))'\"]; q_network.channels=[\"'(32,64)'\", \"'(8,16)'\"]; q_network.hidden=[\"'(256)'\", \"'(64)'\"]; substrate_commit_sha=[\"'7372ad4c36d8b7e881876105aef956c65a8b5eff'\", \"'796ea7e8383a1dacd6fcd739a7070e7a3b5aba61'\"]. Add these to pair_by.\n"
     }
   ],
-  "git_commit": "aeec5a24dcc4",
+  "git_commit": "be153efc027a",
   "hypothesis_module": "experiments.findings.ddqn_universe",
   "measurable_signatures": {
     "argmax_entropy_late": "22f4c683c0bfee66",
@@ -2062,5 +2062,5 @@
     "target_staleness_late": "14b90395c7aabd2e"
   },
   "n_cells_total": 1824,
-  "timestamp_utc": "2026-05-11T10:49:29+00:00"
+  "timestamp_utc": "2026-05-11T10:57:18+00:00"
 }
