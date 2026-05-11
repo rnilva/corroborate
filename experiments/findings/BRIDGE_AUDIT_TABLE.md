@@ -15,10 +15,10 @@
 |---|---|
 | SURVIVED | 8 |
 | STALE | 1 |
-| REFUTED (HELD-to-NO_EFFECT under honest methodology) | 5 |
+| REFUTED (HELD-to-NO_EFFECT under honest methodology) | 6 |
 | POWER_COLLAPSED | 2 |
 | DEAD | 10 |
-| POWER_INSUFFICIENT | 4 |
+| POWER_INSUFFICIENT | 3 |
 | SCOPE_VACATED | 19 |
 | ERRORED | 0 (errored bridge counted in DEAD) |
 | **Total** | **48** |
@@ -75,7 +75,7 @@ diagnosis notes below.
 | 16 | `link_slope_predicted_by_g1__cross_env` | DEAD | no_effect | a_lt_b | 1400 | 1520 |
 | 17 | `algorithmic_activation_rate_mediates_link__bounded_q` | DEAD | power_insufficient | a_gt_b | 967 | 1520 |
 | 18 | `eff_h_mediates_g_link__goal_envs` | REFUTED | (migrated `proportion_mediated` → JCI `stratified_partial_spearman`; ρ=−0.593 n=737 — polarity tautology survives jens-conditioning, original 0.12-share null reading was complacent) | null | 508 | 1520 |
-| 19 | `effh_predicts_link_power__reach_envs` | POWER_INSUFFICIENT | power_insufficient | a_gt_b | 252 | 1520 |
+| 19 | `effh_predicts_link_power__reach_envs` | REFUTED | post-rebuild: per-burst meta-regression coef(eff_h)=−0.0046 p=0.04 **opposite sign** to a_gt_b prediction. Env-mean Pearson r=+0.975 (n=4) was the cited evidence; per-burst slope inverts due to late-burst Q-growth (`findings_fourrooms_time_series.md` phase structure) | a_gt_b | 312 | 1824 |
 | 20 | `extreme_q_divergence_attenuates_link__binary` | POWER_INSUFFICIENT | power_insufficient | - | 560 | 1520 |
 | 21 | `extreme_q_divergence_attenuates_link__placebo_refuted` | POWER_INSUFFICIENT | power_insufficient | - | 560 | 1520 |
 | 22 | `extreme_q_divergence_attenuates_link__rcc_robust` | POWER_INSUFFICIENT | power_insufficient | - | 560 | 1520 |

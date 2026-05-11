@@ -3444,25 +3444,34 @@ def effh_predicts_link_power__reach_envs(
 ) -> Verdict:
     """Cross-env REACH-polarity bridge: among REACH envs in the
     CLAIM 17 bounded-Q scope, larger effective_horizon predicts
-    bigger DDQN outcome benefit.
-
-    Per-env paired g on `mc_return[per_burst]` regressed on env-
-    mean `effective_horizon` (auto-derived from cells). HELD when
-    β(effective_horizon) ≥ `slope_threshold` AND significant.
+    bigger DDQN outcome benefit. Tests the per-(env, burst) meta-
+    regression slope of Δ_outcome on env-mean effective_horizon.
+    HELD when β(eff_h) ≥ `slope_threshold` AND significant in the
+    predicted direction.
 
     The chain-amplifier theory's clean-firing direction: longer
     chain → more bias compounding → more room for DDQN's per-step
-    correction to integrate to outcome. REACH-specific because in
-    SURVIVE-polarity envs (positive r(L, return)), bias-compounding
-    relates differently to outcome — CLAIM 14's polarity-tautology
-    locks the link slope's *sign* by polarity, but only on REACH
-    envs does bigger chain straightforwardly mean bigger outcome
-    benefit at the env-mean level.
+    correction to integrate to outcome.
 
-    Empirical cross-env (n_envs=4 REACH after strict mech-HELD,
-    `ddqn_universe` cache 2026-05-08): Pearson r(mean_dY, effh)
-    = +0.975 (p=0.025). Companion null bridge below tests SURVIVE
-    polarity envs (predicted_direction='null')."""
+    **2026-05-11 verdict post-rebuild:** NO_EFFECT (sign refuted).
+    Per-(env, burst) meta-regression at n_strata=49 gives
+    coef(effective_horizon) = **−0.0046, 95% CI [−0.009, −0.0002],
+    p=0.041** — significant in the OPPOSITE direction. The env-
+    mean Pearson r=+0.975 (n=4 envs, cited in earlier docstring)
+    pooled over bursts; per-burst meta-regression unmasks the
+    phase-structure inversion already documented in
+    `findings_fourrooms_time_series.md` ("DDQN reduces bias
+    early; Q grows late (success-induced)"). The env-mean
+    Pearson was cross-env aggregate evidence; per-burst slope
+    flips because late-burst Q-growth on long-eff_h envs amplifies
+    DDQN's vanilla baseline more than the early-burst correction
+    benefits.
+
+    Bridge stays as a falsifiable artifact: the per-burst slope's
+    direction is opposite to the chain-amplifier reading. The
+    cross-env scaling claim survives only at env-mean aggregation,
+    not at the per-burst level. Treat as evidence AGAINST a clean
+    "longer chain → bigger outcome benefit" reading on REACH."""
     del source, covariates, dedupe_strategy
     coef = next(
         (c for c in meta_regression_per_burst.coefficients
