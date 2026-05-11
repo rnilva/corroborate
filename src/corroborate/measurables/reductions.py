@@ -459,6 +459,80 @@ def reduce_axis[R: Mapping[str, object]](
     )
 
 
+type _ArgOp = Literal['argmax', 'argmin']
+
+
+def select_at[R: Mapping[str, object]](
+    values: Measurable[R, npt.NDArray[np.floating]],
+    indicator: Measurable[R, npt.NDArray[np.floating]],
+    *,
+    op: _ArgOp = 'argmax',
+    axis: int = -1,
+) -> Measurable[R, float]:
+    """Reduce `values` to scalar by indexing at the `argmax`/`argmin`
+    of `indicator` along `axis`. Both measurables must produce
+    arrays whose `axis`-dimension matches.
+
+    The "select-at-argmax" pattern surfaces whenever a substrate
+    needs "the value of X at the time-step / burst where Y peaked"
+    — e.g., "the mechanism state at the burst where outcome was
+    best", "the std of Q at the burst where bias was largest".
+    Generic composition of two per-axis arrays at a typed call
+    site — no domain-specific code needed.
+
+    Returns NaN when either operand is empty, axis-mismatched, or
+    the indicator is all-NaN (no valid argmax). NaN-propagation
+    matches the rest of the reduction module.
+
+    Note: not a `Reduction` (unary Protocol) — `select_at` is a
+    binary combinator. The two arms are tied through the shared
+    record `R` (read once, project twice), so `reads` is the
+    UNION of both operands' read sets.
+    """
+    name = f'{values.name}__{op}_{indicator.name}_axis_{axis}'
+
+    def fn(record: R) -> float:
+        vals = values(record)
+        ind = indicator(record)
+        if vals.size == 0 or ind.size == 0:
+            return float('nan')
+        if vals.shape[axis] != ind.shape[axis]:
+            return float('nan')
+        # `nanargmax/min` returns 0 for all-NaN, but with a runtime
+        # warning. Guard against all-NaN explicitly so the caller
+        # gets NaN-propagated, not silent index-0 fallback.
+        finite_mask = np.isfinite(ind)
+        if not finite_mask.any():
+            return float('nan')
+        try:
+            if op == 'argmax':
+                idx = int(np.nanargmax(ind))
+            else:
+                idx = int(np.nanargmin(ind))
+        except ValueError:  # all-NaN slice
+            return float('nan')
+        # `np.take` honours `axis`; for axis=-1 on 1-D, equivalent
+        # to indexing.
+        val = np.take(vals, idx, axis=axis)
+        # If `values` was N-D and we picked along axis, val may be
+        # an array (e.g., (n_bursts, n_episodes) values + per-burst
+        # indicator → val shape (n_episodes,)). For scalar return,
+        # require the result to be 0-D; otherwise NaN.
+        v = np.asarray(val)
+        if v.ndim != 0:
+            return float('nan')
+        return float(v)
+
+    return Measurable(
+        fn=fn, name=name,
+        reads=tuple(sorted(set(values.reads) | set(indicator.reads))),
+        compose_of=(
+            cast('Measurable[Mapping[str, object], object]', values),
+            cast('Measurable[Mapping[str, object], object]', indicator),
+        ),
+    )
+
+
 def slice_axis[R: Mapping[str, object]](
     of: Measurable[R, npt.NDArray[np.floating]],
     *,

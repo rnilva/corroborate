@@ -26,6 +26,7 @@ from corroborate.measurables.reductions import (
     mean_window,
     peak_centered_window,
     reduce_axis,
+    select_at,
 )
 
 
@@ -266,3 +267,78 @@ def test_reduce_axis_zero_dim_legacy_raises_axiserror() -> None:
     reduced = reduce_axis(legacy_scalar, axis=-1, op='mean')
     with pytest.raises(np.exceptions.AxisError):
         _ = reduced({})
+
+
+# ============ select_at: select value at argmax/argmin of indicator ============
+
+
+def test_select_at_picks_value_at_indicator_argmax() -> None:
+    """Generic primitive: reduce array A to scalar by indexing at
+    the argmax of array B."""
+    values_arr = np.asarray([10.0, 20.0, 30.0, 40.0])
+    indicator_arr = np.asarray([1.0, 5.0, 2.0, 3.0])
+    record: Mapping[str, npt.NDArray[np.floating]] = {
+        'values': values_arr, 'indicator': indicator_arr,
+    }
+    m = select_at(from_key('values'), from_key('indicator'), op='argmax')
+    # indicator argmax at index 1, values[1] = 20.0
+    assert m(record) == 20.0
+
+
+def test_select_at_picks_value_at_indicator_argmin() -> None:
+    values_arr = np.asarray([10.0, 20.0, 30.0, 40.0])
+    indicator_arr = np.asarray([5.0, 1.0, 3.0, 2.0])
+    record: Mapping[str, npt.NDArray[np.floating]] = {
+        'values': values_arr, 'indicator': indicator_arr,
+    }
+    m = select_at(from_key('values'), from_key('indicator'), op='argmin')
+    # indicator argmin at index 1, values[1] = 20.0
+    assert m(record) == 20.0
+
+
+def test_select_at_propagates_reads_union() -> None:
+    m = select_at(from_key('q'), from_key('mc'), op='argmax')
+    assert m.reads == ('mc', 'q')  # sorted union
+    assert m.name == 'q__argmax_mc_axis_-1'
+
+
+def test_select_at_returns_nan_on_empty() -> None:
+    import math
+    record: Mapping[str, npt.NDArray[np.floating]] = {
+        'values': np.asarray([]), 'indicator': np.asarray([1.0]),
+    }
+    m = select_at(from_key('values'), from_key('indicator'))
+    assert math.isnan(m(record))
+
+
+def test_select_at_returns_nan_on_shape_mismatch() -> None:
+    import math
+    record: Mapping[str, npt.NDArray[np.floating]] = {
+        'values': np.asarray([1.0, 2.0]),
+        'indicator': np.asarray([1.0, 2.0, 3.0]),
+    }
+    m = select_at(from_key('values'), from_key('indicator'))
+    assert math.isnan(m(record))
+
+
+def test_select_at_returns_nan_on_all_nan_indicator() -> None:
+    import math
+    record: Mapping[str, npt.NDArray[np.floating]] = {
+        'values': np.asarray([1.0, 2.0, 3.0]),
+        'indicator': np.asarray([float('nan')] * 3),
+    }
+    m = select_at(from_key('values'), from_key('indicator'))
+    assert math.isnan(m(record))
+
+
+def test_select_at_handles_nan_in_indicator() -> None:
+    """Indicator has a NaN, but other values are finite. argmax
+    should pick the largest finite value."""
+    values_arr = np.asarray([10.0, 20.0, 30.0])
+    indicator_arr = np.asarray([1.0, float('nan'), 5.0])
+    record: Mapping[str, npt.NDArray[np.floating]] = {
+        'values': values_arr, 'indicator': indicator_arr,
+    }
+    m = select_at(from_key('values'), from_key('indicator'), op='argmax')
+    # argmax (skipping NaN) at index 2 → values[2] = 30
+    assert m(record) == 30.0
