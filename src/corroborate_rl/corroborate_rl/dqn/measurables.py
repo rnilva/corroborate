@@ -1617,6 +1617,22 @@ def bias_std_across_states(record: Mapping[str, object]) -> float:
     # cells where it should be 0.0 / 1.0. The declared `reads` is
     # only `arm_key` (always present); the dampened-α leaf is read
     # opportunistically inside the function.
+    #
+    # **KNOWN GAP** (2026-05-11): this workaround sidesteps a
+    # framework limitation — `transitive_reads`/`signature()` don't
+    # support an "optional reads" axis. As a result, if a cached
+    # cell was computed when `bootstrap.greedification.alpha` was
+    # ABSENT (arm_key fallback → 1.0 or 0.0), and the column is
+    # later added with a real α value, the cached scalar will NOT
+    # invalidate: function bytecode unchanged ⇒ signature unchanged,
+    # cell value non-null ⇒ partial-nullity recompute skipped. For
+    # this corpus the dampened-α cells were materialised once with
+    # the column present, so the trap doesn't fire — but it's a
+    # latent staleness hazard for incremental cache extensions.
+    # Proper fix: framework-level `optional_reads=(...)` parameter
+    # on `@measurable` that hashes into `signature()` and is
+    # treated as soft-dependency by `transitive_reads`. Tracked as
+    # TODO; not blocking current audit.
     reads=('arm_key',),
 )
 def effective_alpha(record: Mapping[str, object]) -> float:

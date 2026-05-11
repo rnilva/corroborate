@@ -22,7 +22,7 @@
         "seed"
       ],
       "params": {
-        "min_strata": 2,
+        "min_strata": 4,
         "min_stratum_size": 5,
         "rho_threshold": 0.3,
         "stratify_by": "env_name",
@@ -34,7 +34,7 @@
       "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=partial(Claim:dampened_double_greedify;))|vs=baseline)",
       "target_name": "eval_best_burst_mean",
       "tier": "interventional",
-      "verdict": "no_effect",
+      "verdict": "power_insufficient",
       "warnings": []
     },
     {
@@ -59,7 +59,7 @@
         "seed"
       ],
       "params": {
-        "min_strata": 2,
+        "min_strata": 4,
         "min_stratum_size": 5,
         "rho_threshold": -0.5,
         "stratify_by": "env_name",
@@ -71,7 +71,7 @@
       "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=partial(Claim:dampened_double_greedify;))|vs=baseline)",
       "target_name": "jensen_gap",
       "tier": "interventional",
-      "verdict": "held",
+      "verdict": "power_insufficient",
       "warnings": []
     },
     {
@@ -98,7 +98,7 @@
       ],
       "params": {
         "conditioning": "effective_alpha",
-        "min_strata": 2,
+        "min_strata": 4,
         "min_stratum_size": 5,
         "rho_threshold": -0.3,
         "stratify_by": "env_name",
@@ -110,13 +110,13 @@
       "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=partial(Claim:dampened_double_greedify;))|vs=baseline)",
       "target_name": "eval_best_burst_mean",
       "tier": "interventional",
-      "verdict": "no_effect",
+      "verdict": "power_insufficient",
       "warnings": []
     }
   ],
   "cache_path": "experiments/data/cache/second_layer_theorem.parquet",
   "errored_bridges": [],
-  "git_commit": "1b305c7cfd62",
+  "git_commit": "5f027e0046bf",
   "hypothesis_module": "experiments.findings.second_layer_theorem",
   "measurable_signatures": {
     "ddqn_bootstrap_gap_late": "d5eb571116c4f820",
@@ -125,5 +125,5 @@
     "jensen_gap": "f89e9e73cf1ab5fa"
   },
   "n_cells_total": 2064,
-  "timestamp_utc": "2026-05-11T11:31:53+00:00"
+  "timestamp_utc": "2026-05-11T12:24:23+00:00"
 }

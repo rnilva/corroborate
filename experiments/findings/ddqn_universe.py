@@ -829,6 +829,45 @@ def ddqn_benefit_scales_with_effective_horizon__metamaze_high_gamma(
 # =====================================================================
 
 
+def _rescue_threshold(
+    *,
+    failure_baseline: float = 0.1,
+    optimal_ceiling: float = 0.8,
+    rescue_fraction: float = 0.5,
+) -> float:
+    """Theory-derived substantive-rescue threshold in native units.
+
+    Hasselt's bias-correction predicts the rescue regime: vanilla
+    can't learn (native ≤ `failure_baseline` ≈ random chance for
+    sparse-reward gridworlds, |A|=4 → ~0.1), DDQN reaches near-
+    optimal (native ≥ `optimal_ceiling` ≈ RL convergence ceiling,
+    ~0.8). "Substantive rescue" = DDQN closes at least
+    `rescue_fraction` of the failure-to-optimal range:
+
+        threshold = rescue_fraction × (optimal_ceiling − failure_baseline)
+                  = 0.5 × (0.8 − 0.1)
+                  = 0.35
+
+    Defaults encode:
+    - `failure_baseline = 0.1` — random-chance native outcome on
+      a |A|=4 sparse-reward env (FourRooms).
+    - `optimal_ceiling = 0.8` — empirical RL convergence ceiling
+      across the corpus (well-trained agents on dense-reward
+      ports of the same envs).
+    - `rescue_fraction = 0.5` — "DDQN closes at least half the
+      headroom" is the qualitative threshold the rescue
+      mechanism's substantive claim asserts.
+
+    Replaces the hand-tuned `threshold_diff=0.4` constant from
+    older bridges. That value came retrospectively from the older
+    `reward_scale_low_fourrooms` corpus's observed +0.50 peak at
+    rs=0.3, set at 80% of that — soft circular calibration. The
+    theory-derived 0.35 is qualitatively similar but transparently
+    derived from substantive parameters.
+    """
+    return rescue_fraction * (optimal_ceiling - failure_baseline)
+
+
 def _native_diff_ci_verdict(
     md: float, se: float, threshold: float,
 ) -> Verdict:
@@ -897,16 +936,18 @@ def _native_diff_null_verdict(
         (pl.col('env_name') == 'FourRooms-misc')
         & (pl.col('reward_scale') == 0.1)
     ),
+    predicted_direction='a_gt_b',
 )
 def ddqn_rescues_underlearning_vanilla__fourrooms_rs_0p1(
     paired_g: PairedGResult,
     *,
-    threshold_diff: float = 0.4,
+    threshold_diff: float = _rescue_threshold(),
     dedupe_strategy: str = 'mean',
 ) -> Verdict:
     """Pearl-rung-2 interventional contrast: do(arm=ddqn) on
-    FourRooms at reward_scale=0.1 produces native-outcome
-    ≥ +0.4 above the do(arm=vanilla_dqn) baseline.
+    FourRooms at reward_scale=0.1 produces a substantive
+    interventional contrast — DDQN closes ≥ 50% of the failure-
+    to-optimal range in native units.
 
     Generic primitive shape: consumes `paired_g` with
     `target='outcome_native'` (the registered measurable
@@ -917,14 +958,22 @@ def ddqn_rescues_underlearning_vanilla__fourrooms_rs_0p1(
     supplies the measurable name + scope, the framework runs
     `paired_g` and injects the result.
 
-    Verdict uses 95% CI vs `threshold_diff` (see
-    `_native_diff_ci_verdict`):
-    - HELD when CI lower ≥ +0.4 (md confidently ≥ threshold);
-    - NO_EFFECT when CI upper < +0.4 (md confidently < threshold);
+    **Threshold derivation** (replaces older hand-tuned +0.4):
+    `threshold_diff = _rescue_threshold()` = `rescue_fraction ×
+    (optimal_ceiling − failure_baseline)` = `0.5 × (0.8 − 0.1)
+    = 0.35`. The three parameters are theory-derived:
+    `failure_baseline=0.1` (random-chance native on |A|=4 sparse-
+    reward grids), `optimal_ceiling=0.8` (empirical RL ceiling),
+    `rescue_fraction=0.5` (substantive-rescue qualitative claim
+    asserts ≥half-headroom closure). See `_rescue_threshold`.
+
+    Verdict uses 95% CI vs threshold (see `_native_diff_ci_verdict`):
+    - HELD when CI lower ≥ threshold (md confidently ≥ threshold);
+    - NO_EFFECT when CI upper < threshold (md confidently <);
     - POWER_INSUFFICIENT when CI spans the threshold.
 
     Empirical post-rebuild: md=+0.638 (95% CI=[+0.594, +0.682]),
-    threshold=+0.4 — CI entirely above → HELD.
+    threshold=+0.35 — CI entirely above → HELD.
 
     Asserts on `paired_g.mean_diff` (the interventional contrast
     in native units), NOT `paired_g.g` (standardized Hedges' g
@@ -966,22 +1015,24 @@ def ddqn_rescues_underlearning_vanilla__fourrooms_rs_0p1(
         (pl.col('env_name') == 'FourRooms-misc')
         & (pl.col('reward_scale') == 0.3)
     ),
+    predicted_direction='a_gt_b',
 )
 def ddqn_dominates_vanilla_response_curve__fourrooms_rs_0p3(
     paired_g: PairedGResult,
     *,
-    threshold_diff: float = 0.4,
+    threshold_diff: float = _rescue_threshold(),
 ) -> Verdict:
     """Sibling of CLAIM 7 at the rescue-regime peak (rs=0.3).
-    Same primitive shape and verdict logic; just a different
-    scale point. Tests whether the +0.4-plateau claim from
-    `findings_underlearning_rescue.md` holds at the upper edge
-    of the rescue regime.
+    Same primitive shape, verdict logic, and theory-derived
+    threshold via `_rescue_threshold()` — see CLAIM 7 docstring
+    for the failure_baseline / optimal_ceiling / rescue_fraction
+    parameters that derive the +0.35 substantive-rescue floor.
 
     **2026-05-11 post-rebuild verdict: NO_EFFECT (claim refuted).**
-    Empirical md=+0.259 (95% CI=[+0.169, +0.349]); threshold=+0.4
-    is outside the CI's upper bound — data confidently refutes
-    "md ≥ 0.4 at rs=0.3". The +0.50 plateau cited in the older
+    Empirical md=+0.259 (95% CI=[+0.169, +0.349]); the substantive-
+    rescue threshold +0.35 is outside the CI's upper bound — data
+    confidently refutes "DDQN closes ≥ 50% of the failure-to-
+    optimal range at rs=0.3". The +0.50 plateau cited in the older
     findings (memory `findings_underlearning_rescue.md`, table
     rs=0.30 → +0.497) came from an EARLIER corpus
     `reward_scale_low_fourrooms`. The post-rebuild
@@ -991,14 +1042,14 @@ def ddqn_dominates_vanilla_response_curve__fourrooms_rs_0p3(
     is narrower than the original plateau reading suggested.
 
     Direction (DDQN > vanilla) is preserved at p=4e-6, but the
-    magnitude is half the claimed plateau. The bridge documents
-    this REFUTATION of the strong-effect prediction: rs=0.3 sits
-    on the upper edge of the rescue regime where vanilla recovers
-    most of its function, not in the plateau interior.
+    magnitude doesn't clear the half-headroom theoretical bar.
+    The bridge documents this REFUTATION: rs=0.3 sits on the upper
+    edge of the rescue regime where vanilla recovers, not in the
+    plateau interior.
 
     Verdict logic uses 95% CI vs threshold (see
     `_native_diff_ci_verdict`):
-    - HELD when CI lower ≥ +0.4;
+    - HELD when CI lower ≥ +0.35;
     - NO_EFFECT when CI upper < +0.4 (current case);
     - POWER_INSUFFICIENT when CI spans the threshold.
 

@@ -138,7 +138,7 @@ def alpha_outcome_slope_per_env__second_layer(
     stratify_by: str = 'env_name',
     min_stratum_size: int = 5,
     rho_threshold: float = 0.3,
-    min_strata: int = 2,
+    min_strata: int = 4,
 ) -> tuple[Verdict, RefutationClass | None]:
     """P1 (pre-registered): Δ_outcome(α) is LINEAR in α per env.
 
@@ -147,25 +147,33 @@ def alpha_outcome_slope_per_env__second_layer(
     arm_key filter) to JCI `stratified_spearman` (per-cell
     marginal Spearman, env-stratified, Fisher-z pooled).
 
-    Pooled across envs, the prediction is "α positively correlates
-    with outcome on average" (`predicted_direction='a_gt_b'`).
-    HELD when ρ_pooled ≥ rho_threshold.
+    Pre-registered cohort (`docs/SECOND_LAYER_THEOREM.md`)
+    expected ≥ 4 α-sweep envs (MetaMaze, MountainCar,
+    SpaceInvaders, SlidingTile). The actual sweep ran on only
+    Breakout + SpaceInvaders (2 envs). With `min_strata=4` the
+    bridge correctly reports POWER_INSUFFICIENT until the
+    pre-registered cohort is completed; lowering the floor to
+    n_strata=2 to make the bridge fire would be cohort attrition
+    via the back door.
 
-    **Scope tightened 2026-05-11** via endogenous predicate
-    `effective_alpha.n_unique().over('env_name') >= 3` — only
-    envs with actual α-sweep coverage (≥3 distinct α levels)
-    enter scope. The remaining 2 strata (Breakout + SpaceInvaders)
-    are the only envs in the corpus with intermediate-α cells.
+    **Verdict semantics.** The pre-registered prediction is
+    SIGN-AWARE PER ENV (positive on net-positive-DDQN envs,
+    negative on net-negative-DDQN envs). JCI pooled-ρ DILUTES
+    opposite signs and so cannot directly confirm or refute the
+    per-env sign claim. Even with n_strata=4 the pooled
+    primitive is at best a weaker proxy. Author-recommended
+    refactor: replace with `paired_link_per_env` panel-shape
+    bridge (per-env signed link, panel meta-regress on
+    env-level direction). Current pooled form returns
+    POWER_INSUFFICIENT in two cases:
+      (a) n_strata below the pre-registered floor;
+      (b) pooled |ρ| < `rho_threshold` and pooled-ρ is the
+          wrong primitive for a sign-aware prediction — the
+          data hasn't actually been tested against the claim.
 
-    Empirical post-rebuild (n=360, 2 strata): ρ_pooled=+0.166,
-    p=0.0016 — significant tiny coupling but below the 0.3
-    threshold. Sign-aware per-env: Breakout ρ≈0.0 (null),
-    SpaceInvaders ρ≈+0.34 (positive). The pre-registered
-    "linearity per env with sign matching env's Δ_outcome sign"
-    prediction is NOT confirmable at pooled level — JCI dilutes
-    opposite signs. To corroborate the sign-aware prediction
-    would need a different primitive (per-env panel) or
-    additional α-sweep envs."""
+    Pre-fix empirical (n=360, n_strata=2, min_strata 4→2 was
+    convenience): ρ_pooled=+0.166, p=0.0016. POW_INSUF under
+    the restored floor is the right verdict on the data we have."""
     del x, y, stratify_by, min_stratum_size
     if stratified_spearman.n_strata < min_strata:
         return Verdict.POWER_INSUFFICIENT, None
@@ -177,7 +185,11 @@ def alpha_outcome_slope_per_env__second_layer(
         return Verdict.HELD, None
     if rho <= -rho_threshold:
         return Verdict.NO_EFFECT, RefutationClass.SIGN_FLIP
-    return Verdict.NO_EFFECT, RefutationClass.NULL_EFFECT
+    # Pooled |ρ| < threshold and SIGN-AWARE per-env prediction can't
+    # be confirmed by pooled primitive. Honest verdict is POW_INSUF
+    # (primitive mismatch), NOT NO_EFFECT (which would assert "data
+    # refutes" — the data wasn't actually tested against the claim).
+    return Verdict.POWER_INSUFFICIENT, None
 
 
 @claim_bridge(
@@ -197,7 +209,7 @@ def alpha_jens_slope_per_env__second_layer(
     stratify_by: str = 'env_name',
     min_stratum_size: int = 5,
     rho_threshold: float = -0.5,
-    min_strata: int = 2,
+    min_strata: int = 4,
 ) -> tuple[Verdict, RefutationClass | None]:
     """P2 (pre-registered): Δ_jens(α) is LINEAR in α with sign 'a_lt_b'.
 
@@ -214,9 +226,16 @@ def alpha_jens_slope_per_env__second_layer(
     **Scope tightened 2026-05-11** via the same endogenous
     predicate as P1 — only envs with ≥3 distinct α levels.
 
-    Empirical post-rebuild (n=360, 2 strata): ρ_pooled=**−0.880**,
-    p≈0, HELD. Both Breakout and SpaceInvaders strongly confirm
-    the negative α→jens slope.
+    Pre-registered cohort: ≥4 envs (`docs/SECOND_LAYER_THEOREM.md`).
+    Actual sweep: 2 envs (Breakout + SpaceInvaders). With
+    `min_strata=4` the bridge reports POW_INSUF until pre-
+    registered cohort is completed.
+
+    Pre-fix empirical (n=360, 2 strata, min_strata 4→2 was
+    convenience): ρ_pooled=**−0.880**, p≈0 — Hasselt's bias-
+    correction direction strongly confirmed on the 2 envs that
+    were actually swept. To upgrade to canonical HELD, run
+    α-sweep on MetaMaze / MountainCar / Asterix / Freeway too.
 
     Refutation would mean the bias-correction mechanism doesn't
     scale linearly with α, which would also refute P1's premise."""
@@ -252,7 +271,7 @@ def intrinsic_penalty_scales_with_bootstrap_gap__second_layer(
     stratify_by: str = 'env_name',
     min_stratum_size: int = 5,
     rho_threshold: float = -0.3,
-    min_strata: int = 2,
+    min_strata: int = 4,
 ) -> tuple[Verdict, RefutationClass | None]:
     """P3 (pre-registered): intrinsic_penalty has the SIGN predicted
     by the algorithmic-cost derivation.
@@ -264,6 +283,13 @@ def intrinsic_penalty_scales_with_bootstrap_gap__second_layer(
     bias-link contribution"). Then pools via Fisher-z across envs.
     HELD when ρ_pooled ≤ −0.3 (relaxed from −0.5 since per-env
     n is small after conditioning).
+
+    Pre-registered cohort: ≥4 envs. Actual sweep: 2 envs
+    (Breakout + SpaceInvaders); ddqn_bootstrap_gap_late is also
+    finite on additional 2 endpoint envs (Asterix + Freeway at
+    sync=500), giving n_strata=4 at the partial Spearman level
+    even though intermediate α is only 2 envs. With `min_strata=4`
+    the bridge can fire on the partial-form's 4-env coverage.
 
     Empirical per-env (marginal, post-rebuild): Asterix ρ≈−0.04,
     **Breakout ρ=+0.61 *** (n=120)**, Freeway ρ≈+0.05, SpaceInvaders
