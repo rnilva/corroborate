@@ -17,9 +17,9 @@
 | STALE | 0 |
 | REFUTED (HELD-to-NO_EFFECT under honest methodology) | 6 |
 | POWER_COLLAPSED | 3 |
-| DEAD | 10 |
-| POWER_INSUFFICIENT | 9 |
-| NO_EFFECT (data refutes; non-HELD bridges with non-zero scope) | 1 |
+| DEAD | 11 |
+| POWER_INSUFFICIENT | 10 |
+| NO_EFFECT (data refutes; non-HELD bridges with non-zero scope) | 0 |
 | SCOPE_VACATED (pending re-run, not a verdict on the claim) | 13 |
 
 *SCOPE_VACATED bridges have 0 cells in current scope — usually because pre-fix corpora used incompatible measurables/configs. They are a holding pen for re-runs, not verdicts. Reviewer-4 flagged that mixing them into the verdict distribution is misleading; treating as a separate status keeps the audit honest.*
@@ -83,9 +83,9 @@ diagnosis notes below.
 | 17 | `algorithmic_activation_rate_mediates_link__bounded_q` | DEAD | power_insufficient | a_gt_b | 967 | 1520 |
 | 18 | `eff_h_mediates_g_link__goal_envs` | SURVIVED | held (re-authored 2026-05-11 per reviewer feedback: same as bridge #6; `a_lt_b` aligned to polarity-tautology prior; ρ=−0.593 matches `findings_polarity_mediator.md` shape) | a_lt_b | 737 | 1824 |
 | 19 | `effh_predicts_link_power__reach_envs` | REFUTED | post-rebuild: per-burst meta-regression coef(eff_h)=−0.0046 p=0.04 **opposite sign** to a_gt_b prediction. Env-mean Pearson r=+0.975 (n=4) was the cited evidence; per-burst slope inverts due to late-burst Q-growth (`findings_fourrooms_time_series.md` phase structure) | a_gt_b | 312 | 1824 |
-| 20 | `extreme_q_divergence_attenuates_link__binary` | NO_EFFECT | (2026-05-11 screening: was ERRORED on post-rebuild because SlidingTile big_cnn probe entered scope alongside main sweep — `paired_link_per_burst` rejected mean-aggregating cells with different per-burst array shapes. Scope tightened with `eval_every == 50000` to canonicalize. Bridge now produces NO_EFFECT at n=120) | - | 120 | 1824 |
-| 21 | `extreme_q_divergence_attenuates_link__placebo_refuted` | POWER_INSUFFICIENT | (was ERRORED — same fix as #20; now produces POW_INSUF) | - | 120 | 1824 |
-| 22 | `extreme_q_divergence_attenuates_link__rcc_robust` | POWER_INSUFFICIENT | (was ERRORED — same fix as #20; now produces POW_INSUF) | - | 120 | 1824 |
+| 20 | `extreme_q_divergence_attenuates_link__binary` | POWER_INSUFFICIENT | (2026-05-11 screening + refinement: was ERRORED on post-rebuild because SlidingTile big_cnn probe (q_network.channels=(32,64), 4 cells) entered scope alongside main sweep (channels=(8,16) or null). First-pass fix `eval_every == 50000` dropped MLP envs too (over-restrictive); refined to exclude only `q_network.channels='(32,64)'`, recovering n=560 (matches pre-rebuild). ATE ≈ 0 → POW_INSUF) | - | 560 | 1824 |
+| 21 | `extreme_q_divergence_attenuates_link__placebo_refuted` | POWER_INSUFFICIENT | (was ERRORED — same architecture-exclusion fix as #20; now produces POW_INSUF) | - | 560 | 1824 |
+| 22 | `extreme_q_divergence_attenuates_link__rcc_robust` | POWER_INSUFFICIENT | (was ERRORED — same architecture-exclusion fix as #20; now produces POW_INSUF) | - | 560 | 1824 |
 | 23 | `mc_variance_attenuates_g_link__between_env` | DEAD | power_insufficient | - | 1520 | 1520 |
 | 24 | `q_divergence_shadowed_by_jens` | REFUTED | (migrated `partial_spearman_paired_delta` → JCI `stratified_partial_spearman`; ρ=−0.432 n=717 across 11 envs after trace restore — γ-induced residual leaks at this stratification level; algebraic shadow holds only within fixed (env, γ)) | null | 717 | 1824 |
 | 25 | `acrobot_per_burst_link_active__gamma_0999` | SCOPE_VACATED | power_insufficient | - | 0 | 1520 |
@@ -111,7 +111,7 @@ diagnosis notes below.
 | 45 | `target_staleness_late_mediates_outcome__breakout_sync100` | SCOPE_VACATED | power_insufficient | a_gt_b | 0 | 1520 |
 | 46 | `target_staleness_late_mediates_outcome__fourrooms` | SCOPE_VACATED | power_insufficient | a_gt_b | 0 | 1520 |
 | 47 | `target_staleness_late_mediates_outcome__minatar_intermediate_sync` | SCOPE_VACATED | power_insufficient | a_gt_b | 0 | 1520 |
-| 48 | `bootstrap_fraction_drives_g_link__net_of_dormancy` | ERRORED | ERROR | - | -1 | -1 |
+| 48 | `bootstrap_fraction_drives_g_link__net_of_dormancy` | DEAD | (originally ERRORED — meta_regression empty after scope filter; cut from BRIDGES in earlier audit. Per Step-2 cut notes: CLAIM 4 banner deleted. Tag corrected 2026-05-11 — bridge isn't in BRIDGES tuple so "ERRORED" is misleading; DEAD is the right class) | - | -1 | -1 |
 | 49 | `alpha_outcome_slope_per_env__second_layer` | POWER_INSUFFICIENT | (separate module `second_layer_theorem.py`; 2026-05-11 audit migrated `cross_config_paired_slope` → JCI `stratified_spearman`; pre-registered cohort ≥4 envs but only Breakout+SpaceInvaders ran the α-sweep — POW_INSUF at n_strata=2 < min_strata=4. Pre-fix ρ_pooled=+0.166 on n_strata=2 — sign-aware per-env prediction unconfirmable by pooled primitive; returns POW_INSUF rather than NO_EFFECT per reviewer pushback) | a_gt_b | 360 | 1824 |
 | 50 | `alpha_jens_slope_per_env__second_layer` | POWER_INSUFFICIENT | (same module + migration as #49; ρ_pooled=−0.880 on n_strata=2 would be HELD at min_strata=2, but `min_strata=4` enforces pre-registered cohort. Hasselt's bias-correction direction strongly confirmed on the 2 envs that were swept; awaiting MetaMaze/MountainCar/Asterix/Freeway sweep to complete) | a_lt_b | 360 | 1824 |
 | 51 | `intrinsic_penalty_scales_with_bootstrap_gap__second_layer` | POWER_INSUFFICIENT | (same module; partial Spearman over 4 envs but Breakout's marginal ρ=+0.61 *** is OPPOSITE direction to predicted negative; awaiting full cohort to discriminate) | a_lt_b | 240 | 1824 |

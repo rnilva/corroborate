@@ -2528,14 +2528,20 @@ def fourrooms_action_dim_link_active__inflated(
     scope=(
         (pl.col('total_steps') == 1_000_000)
         & finite('q_divergence_score')
-        # Pin canonical eval cadence to exclude SlidingTile big_cnn
-        # probe (eval_every=100000, q_network=(8,16)). Mixing the
-        # probe with the main sweep makes paired_link_per_burst
-        # error on per-burst array-shape mismatch (the two configs
-        # produce different trace shapes). Pre-2026-05-11 the
-        # scope didn't pin eval_every and the bridge errored
-        # post-rebuild when the probe entered scope.
-        & (pl.col('eval_every') == 50_000)
+        # Exclude SlidingTile big_cnn probe (4 cells with
+        # q_network.channels=(32,64) — a different architecture
+        # than the (8,16)-channel main sweep). Mixing the probe
+        # with the main sweep makes paired_link_per_burst error
+        # on per-burst array-shape mismatch (the two configs
+        # produce different trace shapes). Earlier scope-fix used
+        # `eval_every == 50000` which dropped all MLP envs (which
+        # use 100000); the architecture filter keeps MLP cells
+        # (null channels) and the main CNN sweep ((8,16)) while
+        # excluding only the 4 probe cells.
+        & (
+            pl.col('q_network.channels').is_null()
+            | (pl.col('q_network.channels') != '(32,64)')
+        )
     ),
 )
 def extreme_q_divergence_attenuates_link__binary(
@@ -2564,6 +2570,12 @@ def extreme_q_divergence_attenuates_link__binary(
         return Verdict.POWER_INSUFFICIENT
     if math.isnan(b.ate):
         return Verdict.POWER_INSUFFICIENT
+    # Numerical-zero guard: when DoWhy returns an ATE at machine
+    # epsilon (e.g., 1e-16), the sign is RNG-dependent and the
+    # verdict would flip POW_INSUF / NO_EFFECT across runs. Treat
+    # as "no signal".
+    if abs(b.ate) < 1e-6:
+        return Verdict.POWER_INSUFFICIENT
     if b.ate <= ate_ceiling:
         return Verdict.HELD
     if b.ate < 0.0:
@@ -2587,14 +2599,20 @@ def extreme_q_divergence_attenuates_link__binary(
     scope=(
         (pl.col('total_steps') == 1_000_000)
         & finite('q_divergence_score')
-        # Pin canonical eval cadence to exclude SlidingTile big_cnn
-        # probe (eval_every=100000, q_network=(8,16)). Mixing the
-        # probe with the main sweep makes paired_link_per_burst
-        # error on per-burst array-shape mismatch (the two configs
-        # produce different trace shapes). Pre-2026-05-11 the
-        # scope didn't pin eval_every and the bridge errored
-        # post-rebuild when the probe entered scope.
-        & (pl.col('eval_every') == 50_000)
+        # Exclude SlidingTile big_cnn probe (4 cells with
+        # q_network.channels=(32,64) — a different architecture
+        # than the (8,16)-channel main sweep). Mixing the probe
+        # with the main sweep makes paired_link_per_burst error
+        # on per-burst array-shape mismatch (the two configs
+        # produce different trace shapes). Earlier scope-fix used
+        # `eval_every == 50000` which dropped all MLP envs (which
+        # use 100000); the architecture filter keeps MLP cells
+        # (null channels) and the main CNN sweep ((8,16)) while
+        # excluding only the 4 probe cells.
+        & (
+            pl.col('q_network.channels').is_null()
+            | (pl.col('q_network.channels') != '(32,64)')
+        )
     ),
 )
 def extreme_q_divergence_attenuates_link__placebo_refuted(
@@ -2646,14 +2664,20 @@ def extreme_q_divergence_attenuates_link__placebo_refuted(
     scope=(
         (pl.col('total_steps') == 1_000_000)
         & finite('q_divergence_score')
-        # Pin canonical eval cadence to exclude SlidingTile big_cnn
-        # probe (eval_every=100000, q_network=(8,16)). Mixing the
-        # probe with the main sweep makes paired_link_per_burst
-        # error on per-burst array-shape mismatch (the two configs
-        # produce different trace shapes). Pre-2026-05-11 the
-        # scope didn't pin eval_every and the bridge errored
-        # post-rebuild when the probe entered scope.
-        & (pl.col('eval_every') == 50_000)
+        # Exclude SlidingTile big_cnn probe (4 cells with
+        # q_network.channels=(32,64) — a different architecture
+        # than the (8,16)-channel main sweep). Mixing the probe
+        # with the main sweep makes paired_link_per_burst error
+        # on per-burst array-shape mismatch (the two configs
+        # produce different trace shapes). Earlier scope-fix used
+        # `eval_every == 50000` which dropped all MLP envs (which
+        # use 100000); the architecture filter keeps MLP cells
+        # (null channels) and the main CNN sweep ((8,16)) while
+        # excluding only the 4 probe cells.
+        & (
+            pl.col('q_network.channels').is_null()
+            | (pl.col('q_network.channels') != '(32,64)')
+        )
     ),
 )
 def extreme_q_divergence_attenuates_link__rcc_robust(
