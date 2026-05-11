@@ -99,6 +99,7 @@ from corroborate.analyses.paired_delta_link_dowhy import (
     PairedDeltaLinkDowhyResult,
 )
 from corroborate.analyses.arm_mean_diff import ArmMeanDiffResult
+from corroborate.analyses.bootstrap_paired_g import BootstrapPairedGResult
 from corroborate.analyses.paired_g import PairedGResult
 from corroborate.analyses.stratified_partial_spearman import (
     StratifiedPartialSpearmanResult,
@@ -250,6 +251,7 @@ MODULE_SCOPE: pl.Expr = ~pl.col('env_name').str.ends_with('-bsuite')
 )
 def ddqn_refuted_when_dormancy_fires(
     paired_g: PairedGResult,
+    bootstrap_paired_g: BootstrapPairedGResult,
     *,
     null_ceiling: float = 0.2,
     dedupe_strategy: str = 'mean',
@@ -261,32 +263,42 @@ def ddqn_refuted_when_dormancy_fires(
     mechanism has nothing to operate on, so Δ_outcome should be
     ≈ 0 on dormant cells.
 
-    **2026-05-11 migration to CI-vs-null_ceiling on Hedges' g.**
-    Previous logic combined `helped_fraction ≤ 0.15` and
-    `|g| ≤ 0.20`. The first criterion is wrong: under a true
-    null, `helped_fraction` is approximately 0.5 (random win/lose
-    on each pair), not 0. Asserting "null held ⇒ helped ≤ 0.15"
-    is much stricter than the null actually predicts — almost
-    no real data would satisfy it. The "INVARIANT_VIOLATION when
-    helped > 0.40" trigger was symmetric and also wrong: 41% vs
-    39% is well within null noise at n=123.
+    **2026-05-11 verdict-logic + CI history.** The bridge has
+    iterated:
+    1. ORIGINAL: `helped_fraction ≤ 0.15 AND |g| ≤ 0.20` for HELD.
+       Wrong: under a true null, `helped_fraction ≈ 0.5`, so HELD
+       was unachievable. Companion trigger `helped > 0.40 →
+       INVARIANT_VIOLATION` also wrong: 41% vs 39% is null noise.
+    2. INTERIM (reviewer-3): Gaussian CI[g] ± 1.96×se ×
+       `ci_widening_factor=1.25` when `assumption_violations`
+       flags heavy-tail/skew. But the framework's 25% under-
+       coverage warning is calibrated at excess_kurtosis~9
+       (`tests/analytic/robustness/test_paired_g_skew_robustness.py`);
+       the dormancy bridge fires at excess_kurt=109 (12× higher).
+       The 1.25× widening is grossly insufficient at this kurtosis
+       — reviewer-4 catch.
+    3. CURRENT: consume **`bootstrap_paired_g`** as a second
+       fixture; use its distribution-free percentile CI when
+       `paired_g.assumption_violations` flags heavy-tail (which
+       fires on dormant cells where DDQN's Δ has extreme kurtosis).
+       Fall back to Gaussian CI on clean data (faster, equivalent
+       under normality).
 
-    New verdict logic uses the 95% CI on Hedges' g (scale-
-    invariant across envs):
+    Bootstrap CI semantics: 1000 percentile bootstrap replicates
+    on the per-pair Δ vector. Distribution-free, robust to
+    kurtosis-induced SE miscalibration. The CI matches what the
+    Δ distribution actually supports rather than a Gaussian
+    approximation. Per Efron-Tibshirani 1993: MC SE on each
+    percentile ≈ 1.5% × CI width at B=1000.
+
+    Verdict mapping (unchanged from interim):
     - HELD when CI[g] ⊂ [−null_ceiling, +null_ceiling] — null
       confirmed at Cohen's-small bound (default 0.2);
     - INVARIANT_VIOLATION when CI[g] lower > null_ceiling — data
-      confidently asserts substantive positive effect, contra-
-      dicting the necessary-condition claim;
+      confidently asserts substantive positive effect;
     - NO_EFFECT (SIGN_FLIP) when CI[g] upper < −null_ceiling —
-      strong negative effect (DDQN substantively HURTS dormant
-      cells);
+      strong negative effect on dormant cells;
     - POWER_INSUFFICIENT when CI spans the bound.
-
-    Empirical post-rebuild: g=+0.09, se=+0.09 → CI=[−0.09, +0.27],
-    null_ceiling=0.2 — CI spans the +0.2 boundary → POW_INSUF.
-    The earlier INVARIANT_VIOLATION was a verdict-logic artifact
-    of the wrong threshold criterion.
 
     The Pearl-rung-2 corroboration via `adaptive_dqn_recovers_
     ddqn_benefit__fourrooms_factor_0p5` validates the underlying
@@ -297,21 +309,21 @@ def ddqn_refuted_when_dormancy_fires(
     if paired_g.n_pairs < 50:
         return Verdict.POWER_INSUFFICIENT, None
     g = paired_g.g
-    se = paired_g.se
-    if math.isnan(g) or math.isnan(se):
+    if math.isnan(g):
         return Verdict.POWER_INSUFFICIENT, None
-    # Heavy-tail / skew correction (reviewer-3): when paired_g
-    # flags miscalibrated SE, widen CI by 25% to match the
-    # framework's own under-coverage warning. With kurtosis>100
-    # on dormant cells (DDQN sometimes helps a lot, often not at
-    # all), this fires.
-    se_eff = (
-        se * 1.25
-        if _has_heavy_tail_violation(paired_g.assumption_violations)
-        else se
-    )
-    ci_lo = g - 1.96 * se_eff
-    ci_hi = g + 1.96 * se_eff
+    # Choose CI source: bootstrap when heavy-tail / skew flags fire
+    # (Gaussian SE is miscalibrated); Gaussian otherwise.
+    if _has_heavy_tail_violation(paired_g.assumption_violations):
+        ci_lo = bootstrap_paired_g.ci_lo
+        ci_hi = bootstrap_paired_g.ci_hi
+    else:
+        se = paired_g.se
+        if math.isnan(se):
+            return Verdict.POWER_INSUFFICIENT, None
+        ci_lo = g - 1.96 * se
+        ci_hi = g + 1.96 * se
+    if math.isnan(ci_lo) or math.isnan(ci_hi):
+        return Verdict.POWER_INSUFFICIENT, None
     if ci_lo >= -null_ceiling and ci_hi <= null_ceiling:
         return Verdict.HELD, None
     if ci_lo > null_ceiling:
