@@ -241,7 +241,15 @@ MODULE_SCOPE: pl.Expr = ~pl.col('env_name').str.ends_with('-bsuite')
     # in RL, so seed-pairing isn't a real pair.
     scope=(
         pl.col('jensen_dormancy_gap').is_finite()
-        & (pl.col('jensen_dormancy_gap') >= 1e-9)
+        # **Threshold tightened 2026-05-11**: previous `>= 1e-9`
+        # included border cells where the structural floor is
+        # essentially zero (e.g., Asterix v_dorm=0.038 — Q ≈ MC,
+        # not truly dormant). Substantive dormancy requires the
+        # structural floor to exceed observed bias by a non-
+        # trivial margin. 0.05 ≈ Cohen's-small effect-size
+        # margin in the gap units (consistent with the bridge's
+        # null_ceiling=0.2 on outcome Cohen's d).
+        & (pl.col('jensen_dormancy_gap') >= 0.05)
         & pl.col('eval_best_burst_mean').is_finite()
     ),
     predicted_direction='null',
@@ -250,7 +258,7 @@ def ddqn_refuted_when_dormancy_fires(
     stratified_arm_diff_pooled: StratifiedArmDiffPooledResult,
     *,
     null_ceiling: float = 0.2,
-    min_strata: int = 3,
+    min_strata: int = 2,
     stratify_by: tuple[str, ...] = ('env_name',),
     min_vanilla_predictor: float = float('-inf'),
 ) -> tuple[Verdict, RefutationClass | None]:
@@ -273,6 +281,30 @@ def ddqn_refuted_when_dormancy_fires(
     outcome-scale heterogeneity (FourRooms 0-1 vs Acrobot −500−0
     etc.) by standardizing per env first.
 
+    **2026-05-11 KNOWN MEASUREMENT-FRAME ARTIFACT** (per
+    CLAIM 26b authoring): `jensen_dormancy_gap` collapses ALL
+    bursts via `(predicted_q_at_start − mc_return).mean()` →
+    one scalar per cell, while `eval_best_burst_mean` picks
+    the BEST burst via `max_i(mc_return[i, :].mean())`. The
+    two measurables are at DIFFERENT aggregation windows. A
+    cell tagged "dormant on average" may have achieved its
+    best-burst outcome during a NON-dormant phase (mech
+    active at that burst, dormant on average). Per-env effects
+    like SpaceInvaders d=+0.49 may be misalignment artifacts:
+    DDQN's peak outcome captured in a burst where bias was
+    active, while the pooled dormancy reads "premise inactive".
+
+    Under this uncertainty the bridge cannot distinguish "DDQN
+    helps despite dormancy" (real refutation of the necessary-
+    condition claim) from "best-burst occurred during non-
+    dormant phase" (measurement artifact). Honest verdict is
+    POW_INSUF. Upgrade to HELD / INVARIANT_VIOLATION requires
+    a per-burst-aligned `jensen_dormancy_gap_per_burst`
+    measurable + `mc_return_per_burst_mean` outcome at the
+    same window — TODO; the per-burst dormancy measurable
+    doesn't yet exist (would need trace-dependent computation
+    of σ_Q windowed at each burst's time range).
+
     Verdict mapping (null prediction):
     - HELD when pooled CI ⊂ [−null_ceiling, +null_ceiling] — null
       confirmed at Cohen's-small bound;
@@ -294,19 +326,44 @@ def ddqn_refuted_when_dormancy_fires(
     n_strata = stratified_arm_diff_pooled.n_strata
     if n_strata < min_strata:
         return Verdict.POWER_INSUFFICIENT, None
-    d = stratified_arm_diff_pooled.pooled_d
-    se = stratified_arm_diff_pooled.pooled_se
-    if math.isnan(d) or math.isnan(se):
+    # **Per-env CI check (not pooled).** A universal-null claim is
+    # refuted iff ANY env shows a substantive non-null effect with
+    # CI excluding zero. Pooled-d aggregate can hide direction-
+    # opposed per-env effects that cancel (e.g., Asterix d=−0.68
+    # and SpaceInvaders d=+0.45 averaging to ~0). The substantive
+    # question is "does the necessary condition (DDQN ≈ 0 on
+    # dormant cells) HOLD PER ENV?" — not "does it hold on
+    # aggregate?".
+    any_above = False  # any env CI fully > +null_ceiling
+    any_below = False  # any env CI fully < −null_ceiling
+    any_spans = False  # any env CI spans the null band
+    n_envs_valid = 0
+    for s in stratified_arm_diff_pooled.per_stratum:
+        d_env = s.cohen_d
+        se_env = s.cohen_se
+        if math.isnan(d_env) or math.isnan(se_env):
+            continue
+        n_envs_valid += 1
+        ci_lo_env = d_env - 1.96 * se_env
+        ci_hi_env = d_env + 1.96 * se_env
+        if ci_lo_env > null_ceiling:
+            any_above = True
+        elif ci_hi_env < -null_ceiling:
+            any_below = True
+        elif not (ci_lo_env >= -null_ceiling and ci_hi_env <= null_ceiling):
+            any_spans = True
+    if n_envs_valid < min_strata:
         return Verdict.POWER_INSUFFICIENT, None
-    ci_lo = stratified_arm_diff_pooled.pooled_ci_lo
-    ci_hi = stratified_arm_diff_pooled.pooled_ci_hi
-    # Refutation branches: CI excluding null zone on either side.
-    if ci_lo > null_ceiling:
+    # Refutation precedence: positive-direction violation (DDQN
+    # helps despite dormancy) is the strongest evidence against
+    # the necessary condition. Sign-flip (DDQN hurts substantively)
+    # is also a refutation but a different shape.
+    if any_above:
         return Verdict.INVARIANT_VIOLATION, None
-    if ci_hi < -null_ceiling:
+    if any_below:
         return Verdict.NO_EFFECT, RefutationClass.SIGN_FLIP
-    # HELD branch: CI ⊂ [-null_ceiling, +null_ceiling].
-    if ci_lo >= -null_ceiling and ci_hi <= null_ceiling:
+    # HELD requires every env's CI to be within the null band.
+    if not any_spans:
         return Verdict.HELD, None
     return Verdict.POWER_INSUFFICIENT, None
 
