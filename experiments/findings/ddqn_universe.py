@@ -57,19 +57,17 @@ The file's claim structure after step-2 cuts:
   CLAIM 17 deletion-memo banner.
 - **REACH-cohort link** (CLAIM 22, SURVIVED). DoWhy backdoor +
   placebo + RCC refutation trio on the REACH-polarity envs.
-- **Polarity-coupling shape** (CLAIM 14, POWER_COLLAPSED).
-  `link_r_predictable_from_polarity__soft_tautology` — sign-
-  correct but CI overlaps zero at n=9 envs post-fix; structural
-  identity argument worth revisiting as a measurement-identity
-  bridge.
 
 ## Cut / retired (2026-05-11)
 
-CLAIM 4 + 16 (bf cross-env), CLAIM 21 REACH-polyak,
-CLAIM 26 (slope-predictor, superseded by 26b), CLAIM 6
-(mc_variance, refuted via CV decomposition), CLAIM 18
-(algorithmic-activation, placeholder), CLAIM 7 g/h/i/j (4
-auxiliary mechanism-route probes). Synthesis preserved as
+CLAIM 4 + 16 (bf cross-env), CLAIM 14 (soft tautology — seed-
+pairing critique + post-rebuild collapse; substance preserved
+in eff_h_mediates_g_link__{goal,survival}_envs JCI form),
+CLAIM 21 REACH-polyak, CLAIM 26 (slope-predictor, superseded
+by 26b), CLAIM 6 (mc_variance, refuted via CV decomposition),
+CLAIM 18 (algorithmic-activation, placeholder), CLAIM 7
+g/h/i/j (4 auxiliary mechanism-route probes). Synthesis
+preserved as
 deletion-memo banners below.
 
 ## RL methodology note
@@ -3276,127 +3274,43 @@ def cross_config_staleness_slope_negative__survive(
 
 
 # =====================================================================
-# CLAIM 14 — env-polarity predicts the link sign per env (soft tautology).
+# CLAIM 14 — DELETED. Bridge audit step 2 (2026-05-11).
 #
-# Cross-env, the within-env paired link r(Δ_eff_h, Δ_outcome) tracks
-# `env_reward_polarity` at slope ≈ +0.5 (Fisher-z), R² ≈ 0.83 (n_envs=8
-# polarity-defined envs from the canonical ddqn corpus).
+# `link_r_predictable_from_polarity__soft_tautology` was authored as
+# a SOFT TAUTOLOGY: per-env paired-Δ link r ≈ polarity (= within-env
+# r(L, return), and effective_horizon is L-derived). It used
+# `paired_link_per_env` which computes per-env Pearson r(Δ_target,
+# Δ_predictor) on per-pair Δs (vanilla seed-N − DDQN seed-N), then
+# meta-regresses Fisher-z(r) on env-level polarity across envs.
 #
-# This bridge encodes the "polarity predicts link sign" observation
-# from the original CLAIM 12 motivation as a SOFT TAUTOLOGY claim:
-# the relationship holds because polarity is by definition the
-# within-cell r(L, return), and `effective_horizon` is L-derived; the
-# paired-Δ link inherits the env's L→outcome map. The empirical premise
-# is just "DDQN walks along the env's L→outcome curve" rather than
-# fundamentally re-shaping the env. Empirically true (β=+0.61,
-# p=0.0017) but mechanism-blind — the same pattern would hold for any
-# RL algorithm that improves outcome via length-channel.
+# Two reasons for cutting:
 #
-# Bridge predicts `'a_gt_b'`: the polarity coefficient is positive and
-# substantive. HELD confirms the soft tautology operates as expected.
-# Companion to `eff_h_mediates_g_link__{goal,survival}_envs` which both
-# stay HELD under `predicted_direction='null'` — eff_h is structurally
-# tied to polarity (this bridge) but is NOT a dominant mediator (those
-# bridges). The two readings together are the explicit form of the
-# polarity finding.
+# 1. **Seed-pairing critique (RL substrate)**: per-pair Δs assume
+#    vanilla seed-N and DDQN seed-N share a unit through pairing.
+#    In RL, trajectories diverge from step 1 under different
+#    algorithms; seed-pairing extracts zero pair-correlation.
+#    `paired_link_per_env` therefore measures a quantity contaminated
+#    by init-distribution-induced correlation, not a treatment-effect
+#    coupling. Migration would need either:
+#       - within-arm r(eff_h, outcome) per env, meta-regressed on
+#         polarity — but this is the HARD form, which IS polarity
+#         by definition (tautological); or
+#       - cross-env Δ_outcome vs Δ_eff_h (mean-arm-diff) regression
+#         — already preserved by CLAIM 26b's stratified-DL pool.
+#    Neither preserves the original "soft tautology" question.
 #
-# Source: `experiments/findings/sync_curve_breakout/run_polarity_tautology_demo.py`,
-# `polarity_tautology_findings.md`.
+# 2. **Empirical collapse**: post-rebuild, n_strata grew 8 → 10
+#    and the polarity coefficient collapsed from β=+0.614 (sig,
+#    R²=0.83) to β=+0.366 (ns, R²=0.11, I²=0.95). The "8-of-8
+#    sign-match" framing didn't survive expansion — PacMan
+#    contributed a sign-mismatch (polarity=+0.34, r=−0.49).
+#
+# The empirical substance of the polarity-coupling shape lives in
+# `eff_h_mediates_g_link__{goal,survival}_envs` (HELD with directional
+# polarity-sign predictions, ρ_partial ≈ +0.6 × polarity from JCI).
+# Those bridges test per-env JCI partial Spearman, which doesn't
+# require seed-pairing.
 # =====================================================================
-
-
-@claim_bridge(
-    source=INTERVENTION,
-    target='eval_best_burst_mean',
-    direction=Direction.DIRECT,
-    tier=Tier.ASSOCIATIONAL,
-    pair_by=('seed',),
-    scope=(
-        finite('env_reward_polarity')
-        & finite('effective_horizon')
-        & finite('eval_best_burst_mean')
-    ),
-    predicted_direction='a_gt_b',
-)
-def link_r_predictable_from_polarity__soft_tautology(
-    paired_link_per_env: MetaRegressionResult,
-    *,
-    target: str = 'eval_best_burst_mean',
-    predictor: str = 'effective_horizon',
-    moderator: str = 'env_reward_polarity',
-    slope_threshold: float = 0.4,
-    r_squared_threshold: float = 0.5,
-    min_envs: int = 5,
-    alpha: float = 0.05,
-) -> Verdict:
-    """The soft tautology: per env, paired link r(Δ_eff_h, Δ_outcome)
-    is predictable from `env_reward_polarity` because eff_h IS L-derived
-    and polarity IS the env's r(L, return) by definition.
-
-    Bridge body: read the polarity coefficient from the meta-regression.
-
-      HELD when β(polarity) ≥ `slope_threshold` AND coefficient is
-      significant AND R² ≥ `r_squared_threshold` AND n_strata ≥
-      `min_envs`. Confirms the soft-tautology prediction holds.
-
-      NO_EFFECT when β is below threshold or insignificant — would
-      refute the soft tautology, suggesting the L→outcome map is NOT
-      stable under DDQN intervention. (Strong negative finding if
-      ever fires.)
-
-      POWER_INSUFFICIENT when fewer than `min_envs` envs surface in
-      the panel.
-
-    Pre-rebuild empirical (canonical ddqn corpus, 8 envs):
-      β(env_reward_polarity) = +0.614, CI [+0.34, +0.89],
-      p = 1.7×10⁻³, R² = 0.83, n_strata = 8 → HELD.
-
-    **2026-05-11 post-rebuild: COLLAPSED.** With trace-restore
-    bringing n_strata 8 → 10:
-      β = +0.366, CI [−0.47, +1.20], p = 0.34, R² = 0.11,
-      I² = 0.95 (extreme cross-env heterogeneity).
-    Verdict: NO_EFFECT (coefficient insignificant, magnitude
-    below 0.4 threshold). Per-env check on the 4 envs surfacing
-    with finite paired Δs: Acrobot polarity=−0.98 r=−0.27;
-    Asterix polarity=+0.62 r=+0.39; **PacMan polarity=+0.34
-    r=−0.49 (sign-mismatch)**; Snake polarity=−0.50 r=−0.04
-    (near null).
-
-    The earlier "8-of-8 sign-match is structurally forced"
-    framing (memory `findings_polarity_soft_tautology_bridge.md`,
-    pre-PacMan-ingest) does not survive the expanded panel.
-    The bridge is REFUTED on current data — the polarity-coupling
-    shape is not universal. A post-hoc rationalization ("PacMan
-    has fixed-length env") was considered and DROPPED per
-    reviewer-3 feedback: without a registered measurable
-    operationalizing "policy-independent episode length" as a
-    scope predicate, any sign-mismatch could be retro-justified
-    by inventing an env class. Honest verdict is REFUTED full
-    stop; if a principled scope predicate later identifies
-    structural exclusions, the bridge can be re-scoped.
-
-    The companion eff_h-mediator bridges
-    (`eff_h_mediates_g_link__{goal,survival}_envs`) remain HELD
-    with directional predictions matching polarity sign; per-env
-    coupling EXISTS within polarity half-planes, but the env-mean
-    cross-env panel doesn't fit a single linear β."""
-    del target, predictor
-    if paired_link_per_env.n_strata < min_envs:
-        return Verdict.POWER_INSUFFICIENT
-    coef = next(
-        (c for c in paired_link_per_env.coefficients
-         if c.name == moderator),
-        None,
-    )
-    if coef is None:
-        return Verdict.POWER_INSUFFICIENT
-    if not coef.is_significant:
-        return Verdict.NO_EFFECT
-    if coef.coefficient < slope_threshold:
-        return Verdict.NO_EFFECT
-    if paired_link_per_env.r_squared < r_squared_threshold:
-        return Verdict.NO_EFFECT
-    return Verdict.HELD
 
 
 # =====================================================================
@@ -4129,9 +4043,10 @@ DDQN_UNIVERSE_BRIDGES = (
     # CLAIM 12's eff_h_mediates_g_link__{goal,survival}_envs:
     # polarity predicts link SHAPE (CLAIM 14 HELD), but eff_h is NOT
     # a dominant mediator (CLAIM 12 HELD under predicted_direction=
-    # 'null'). The two together are the explicit form of the
-    # polarity finding.
-    link_r_predictable_from_polarity__soft_tautology,
+    # CLAIM 14 — link_r_predictable_from_polarity__soft_tautology
+    # CUT 2026-05-11 (seed-pairing critique + empirical collapse
+    # post-rebuild; substance preserved in eff_h_mediates_g_link
+    # __{goal,survival}_envs JCI form). See banner above.
     # CLAIM 26 — slope-predictor regression cut; subsumed by CLAIM
     # 26b's gate-conjunction outcome bridge below. See
     # `findings_g1_predicts_link_slope.md`.
@@ -4196,7 +4111,6 @@ __all__ = [
     'target_staleness_late_mediates_outcome__breakout_sync100',
     'target_staleness_late_mediates_outcome__minatar_intermediate_sync',
     'cross_config_staleness_slope_negative__survive',
-    'link_r_predictable_from_polarity__soft_tautology',
     'ddqn_helps_under_three_gate_scope__cross_env',
     'staleness_amplifies_ddqn_outcome__sparse_goal_polyak',
     'staleness_does_not_amplify_ddqn_outcome__survival_polyak',
