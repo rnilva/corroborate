@@ -1,0 +1,195 @@
+{
+  "cohort": {
+    "scope": "env_reward_polarity > 0.3 \u2227 q_div < 1.0 \u2227 jensen_dormancy_gap < 0.05 \u2227 standard config",
+    "n_cells_total": 304,
+    "n_per_env": {
+      "PacMan-jumanji": 11,
+      "Asterix-MinAtar": 165,
+      "SpaceInvaders-MinAtar": 34,
+      "Breakout-MinAtar": 47,
+      "CartPole-v1": 47
+    }
+  },
+  "method": {
+    "algorithm": "conservative-PC",
+    "alpha": 0.05,
+    "max_conditioning": 1,
+    "stratify_by": "env_name",
+    "ci_test": "stratified_partial_spearman_rho (rank-based, Fisher-z pool)"
+  },
+  "variables": [
+    "argmax_H",
+    "eff_h",
+    "is_ddqn",
+    "jens",
+    "outcome",
+    "q_div",
+    "stale"
+  ],
+  "edges_undirected_retained": [
+    [
+      "is_ddqn",
+      "jens"
+    ],
+    [
+      "outcome",
+      "q_div"
+    ],
+    [
+      "jens",
+      "q_div"
+    ],
+    [
+      "jens",
+      "stale"
+    ],
+    [
+      "argmax_H",
+      "is_ddqn"
+    ],
+    [
+      "jens",
+      "outcome"
+    ],
+    [
+      "is_ddqn",
+      "q_div"
+    ],
+    [
+      "q_div",
+      "stale"
+    ],
+    [
+      "is_ddqn",
+      "stale"
+    ],
+    [
+      "argmax_H",
+      "eff_h"
+    ]
+  ],
+  "edges_directed": [
+    [
+      "eff_h",
+      "argmax_H"
+    ],
+    [
+      "outcome",
+      "jens"
+    ],
+    [
+      "outcome",
+      "q_div"
+    ],
+    [
+      "is_ddqn",
+      "argmax_H"
+    ],
+    [
+      "jens",
+      "is_ddqn"
+    ],
+    [
+      "q_div",
+      "is_ddqn"
+    ],
+    [
+      "stale",
+      "is_ddqn"
+    ]
+  ],
+  "edges_remaining_undirected": [
+    [
+      "jens",
+      "stale"
+    ],
+    [
+      "jens",
+      "q_div"
+    ],
+    [
+      "q_div",
+      "stale"
+    ]
+  ],
+  "separating_sets": {
+    "eff_h|is_ddqn": [
+      []
+    ],
+    "outcome|is_ddqn": [
+      []
+    ],
+    "eff_h|jens": [
+      [
+        "stale"
+      ]
+    ],
+    "argmax_H|q_div": [
+      [
+        "stale"
+      ]
+    ],
+    "argmax_H|outcome": [
+      [
+        "is_ddqn"
+      ]
+    ],
+    "argmax_H|jens": [
+      [
+        "stale"
+      ]
+    ],
+    "eff_h|q_div": [
+      [
+        "stale"
+      ]
+    ],
+    "eff_h|outcome": [
+      [
+        "argmax_H"
+      ],
+      [
+        "is_ddqn"
+      ]
+    ],
+    "outcome|stale": [
+      [
+        "q_div"
+      ],
+      [
+        "jens"
+      ]
+    ],
+    "argmax_H|stale": [
+      [
+        "q_div"
+      ],
+      [
+        "jens"
+      ],
+      [
+        "eff_h"
+      ]
+    ],
+    "eff_h|stale": [
+      [
+        "q_div"
+      ],
+      [
+        "jens"
+      ]
+    ]
+  },
+  "ambiguous_triples": [
+    [
+      "outcome",
+      "q_div",
+      "stale"
+    ],
+    [
+      "outcome",
+      "jens",
+      "stale"
+    ]
+  ]
+}
