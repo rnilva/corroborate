@@ -300,8 +300,18 @@ def ddqn_refuted_when_dormancy_fires(
     se = paired_g.se
     if math.isnan(g) or math.isnan(se):
         return Verdict.POWER_INSUFFICIENT, None
-    ci_lo = g - 1.96 * se
-    ci_hi = g + 1.96 * se
+    # Heavy-tail / skew correction (reviewer-3): when paired_g
+    # flags miscalibrated SE, widen CI by 25% to match the
+    # framework's own under-coverage warning. With kurtosis>100
+    # on dormant cells (DDQN sometimes helps a lot, often not at
+    # all), this fires.
+    se_eff = (
+        se * 1.25
+        if _has_heavy_tail_violation(paired_g.assumption_violations)
+        else se
+    )
+    ci_lo = g - 1.96 * se_eff
+    ci_hi = g + 1.96 * se_eff
     if ci_lo >= -null_ceiling and ci_hi <= null_ceiling:
         return Verdict.HELD, None
     if ci_lo > null_ceiling:
@@ -864,62 +874,99 @@ def _rescue_threshold(
     optimal_ceiling: float = 0.8,
     rescue_fraction: float = 0.5,
 ) -> float:
-    """Theory-derived substantive-rescue threshold in native units.
+    """Substantive-rescue threshold in native units.
 
-    Hasselt's bias-correction predicts the rescue regime: vanilla
-    can't learn (native ≤ `failure_baseline` ≈ random chance for
-    sparse-reward gridworlds, |A|=4 → ~0.1), DDQN reaches near-
-    optimal (native ≥ `optimal_ceiling` ≈ RL convergence ceiling,
-    ~0.8). "Substantive rescue" = DDQN closes at least
+    The rescue claim asserts DDQN closes at least
     `rescue_fraction` of the failure-to-optimal range:
 
         threshold = rescue_fraction × (optimal_ceiling − failure_baseline)
-                  = 0.5 × (0.8 − 0.1)
-                  = 0.35
+                  = 0.5 × (0.8 − 0.1) = 0.35
 
-    Defaults encode:
-    - `failure_baseline = 0.1` — random-chance native outcome on
-      a |A|=4 sparse-reward env (FourRooms).
+    **Parameter derivation, honestly stated.** Reviewer pushback
+    flagged the earlier framing of `failure_baseline=0.1` as
+    "random chance for |A|=4 grids" — that's NOT actually
+    uniform-action chance (= 0.25 per step, but episode-level
+    native-outcome for a random policy that rarely reaches the
+    goal is empirically near 0.0-0.1). The defaults encode:
+    - `failure_baseline = 0.1` — the empirical native outcome a
+      learner gets when it can't make use of reward signal
+      (vanilla DQN at rs=0.1 on FourRooms reaches ~0.05; rounding
+      up for conservativism). This IS empirically calibrated to
+      vanilla failure, not derived from first principles.
     - `optimal_ceiling = 0.8` — empirical RL convergence ceiling
-      across the corpus (well-trained agents on dense-reward
-      ports of the same envs).
-    - `rescue_fraction = 0.5` — "DDQN closes at least half the
-      headroom" is the qualitative threshold the rescue
-      mechanism's substantive claim asserts.
+      across the canonical corpus.
+    - `rescue_fraction = 0.5` — the qualitative substantive claim
+      "DDQN closes at least half the headroom".
 
-    Replaces the hand-tuned `threshold_diff=0.4` constant from
-    older bridges. That value came retrospectively from the older
-    `reward_scale_low_fourrooms` corpus's observed +0.50 peak at
-    rs=0.3, set at 80% of that — soft circular calibration. The
-    theory-derived 0.35 is qualitatively similar but transparently
-    derived from substantive parameters.
+    **Limitation.** The threshold is calibrated using corpus data
+    (vanilla floor) plus a 50% qualitative bound. Reviewer is
+    right that it's not first-principles theory; it IS an
+    explicit empirical anchor with a justified 50% fraction,
+    which is honestly stated rather than hidden behind a single
+    magic constant. Verdicts at the threshold's exact CI
+    boundary are sensitive to within-0.1 shifts of any parameter;
+    bridges using this should report `paired_g.mean_diff_se` and
+    the CI explicitly so the reader can re-evaluate at a
+    different parameterisation.
     """
     return rescue_fraction * (optimal_ceiling - failure_baseline)
 
 
+def _has_heavy_tail_violation(
+    assumption_violations: tuple[str, ...],
+) -> bool:
+    """True when `paired_g.assumption_violations` flags heavy-tail
+    or skew-bias issues that make the Gaussian ±1.96×se CI anti-
+    conservative.
+
+    Reviewer-3 catch: `paired_g` reports
+    `heavy_tail_se_anti_conservative` and `skew_bias_likely` flags
+    when the per-pair-Δ distribution's kurtosis / skew exceeds
+    calibrated thresholds — meaning the framework's own SE is
+    under-covering by ~10-25%. The CI-vs-threshold verdict helpers
+    treat the SE as exact; if the framework knows it's
+    miscalibrated, the verdict should propagate that knowledge.
+
+    Returns True when the bridge's CI-based verdict should be
+    treated with caution (typically: widen CI or refuse to assert
+    HELD/NO_EFFECT).
+    """
+    return any(
+        'heavy_tail' in v or 'skew' in v for v in assumption_violations
+    )
+
+
 def _native_diff_ci_verdict(
     md: float, se: float, threshold: float,
+    *,
+    assumption_violations: tuple[str, ...] = (),
+    ci_widening_factor: float = 1.25,
 ) -> Verdict:
     """CI-vs-threshold verdict for paired native-diff bridges.
 
-    Tests hypothesis `md ≥ threshold` via the 95% CI around md:
-    - `CI ⊂ [threshold, ∞)` → HELD (data confirms md ≥ threshold)
-    - `CI ⊂ (−∞, threshold)` → NO_EFFECT (data refutes md ≥
-      threshold; effect either smaller than predicted or null /
-      sign-flipped)
-    - `CI spans threshold` → POWER_INSUFFICIENT (cannot
-      discriminate)
+    Tests hypothesis `md ≥ threshold` via the 95% CI around md.
+    Reviewer-3 catch: when `paired_g.assumption_violations` flags
+    heavy-tail / skew bias, the framework's own SE is under-
+    covering by ~10-25%. We widen the CI by `ci_widening_factor`
+    (default 1.25 = 25% conservative bump matching the framework's
+    own warning) to keep the verdict robust to that
+    miscalibration. When the widened CI still discriminates against
+    threshold, the verdict is honest; when it spans, POW_INSUF is
+    correct.
 
-    Replaces the older "significant + above_threshold" 2×2 logic
-    that landed "significant but below threshold" in POW_INSUF —
-    a misclassification when the CI's upper bound is below the
-    threshold (data refutes the strong-effect claim with high
-    confidence, the framework should say NO_EFFECT not POW_INSUF).
+    - `CI ⊂ [threshold, ∞)` → HELD;
+    - `CI ⊂ (−∞, threshold)` → NO_EFFECT;
+    - `CI spans threshold` → POWER_INSUFFICIENT.
     """
     if math.isnan(md) or math.isnan(se):
         return Verdict.POWER_INSUFFICIENT
-    ci_lo = md - 1.96 * se
-    ci_hi = md + 1.96 * se
+    se_eff = (
+        se * ci_widening_factor
+        if _has_heavy_tail_violation(assumption_violations)
+        else se
+    )
+    ci_lo = md - 1.96 * se_eff
+    ci_hi = md + 1.96 * se_eff
     if ci_lo >= threshold:
         return Verdict.HELD
     if ci_hi < threshold:
@@ -929,26 +976,28 @@ def _native_diff_ci_verdict(
 
 def _native_diff_null_verdict(
     md: float, se: float, null_ceiling: float,
+    *,
+    assumption_violations: tuple[str, ...] = (),
+    ci_widening_factor: float = 1.25,
 ) -> Verdict:
     """CI-vs-ceiling verdict for null-prediction native-diff
     bridges (`predicted_direction='null'`).
 
-    Tests hypothesis `|md| < null_ceiling` via the 95% CI:
-    - `CI ⊂ [−null_ceiling, +null_ceiling]` → HELD (null confirmed:
-      effect within ceiling)
-    - `CI ⊂ (null_ceiling, ∞)` ∪ `(−∞, −null_ceiling)` →
-      NO_EFFECT (null refuted: effect outside ceiling — sign
-      preserved by the framework via `predicted_direction`)
-    - `CI spans the boundary` → POWER_INSUFFICIENT
+    Same heavy-tail / skew widening as `_native_diff_ci_verdict`.
 
-    Counterpart to `_native_diff_ci_verdict` for positive-direction
-    bridges. Use for `does_not_X` bridges where the prediction is
-    "the effect is small (null)".
+    - `CI ⊂ [−null_ceiling, +null_ceiling]` → HELD;
+    - CI outside ±null_ceiling → NO_EFFECT;
+    - CI spans boundary → POWER_INSUFFICIENT.
     """
     if math.isnan(md) or math.isnan(se):
         return Verdict.POWER_INSUFFICIENT
-    ci_lo = md - 1.96 * se
-    ci_hi = md + 1.96 * se
+    se_eff = (
+        se * ci_widening_factor
+        if _has_heavy_tail_violation(assumption_violations)
+        else se
+    )
+    ci_lo = md - 1.96 * se_eff
+    ci_hi = md + 1.96 * se_eff
     if ci_lo >= -null_ceiling and ci_hi <= null_ceiling:
         return Verdict.HELD
     if ci_lo > null_ceiling or ci_hi < -null_ceiling:
@@ -1020,6 +1069,7 @@ def ddqn_rescues_underlearning_vanilla__fourrooms_rs_0p1(
     del dedupe_strategy  # forwarded to paired_g; not used in body
     return _native_diff_ci_verdict(
         paired_g.mean_diff, paired_g.mean_diff_se, threshold_diff,
+        assumption_violations=paired_g.assumption_violations,
     )
 
 
@@ -1087,6 +1137,7 @@ def ddqn_dominates_vanilla_response_curve__fourrooms_rs_0p3(
     arm outputs."""
     return _native_diff_ci_verdict(
         paired_g.mean_diff, paired_g.mean_diff_se, threshold_diff,
+        assumption_violations=paired_g.assumption_violations,
     )
 
 
@@ -1157,6 +1208,7 @@ def ddqn_does_not_rescue__acrobot_rs_0p1(
     the learning regime."""
     return _native_diff_null_verdict(
         paired_g.mean_diff, paired_g.mean_diff_se, null_ceiling,
+        assumption_violations=paired_g.assumption_violations,
     )
 
 
@@ -1192,6 +1244,7 @@ def ddqn_does_not_rescue__cartpole_rs_0p1(
     "can't find reward" failure mode that the rescue addresses."""
     return _native_diff_null_verdict(
         paired_g.mean_diff, paired_g.mean_diff_se, null_ceiling,
+        assumption_violations=paired_g.assumption_violations,
     )
 
 
@@ -3153,30 +3206,30 @@ def link_r_predictable_from_polarity__soft_tautology(
       β = +0.366, CI [−0.47, +1.20], p = 0.34, R² = 0.11,
       I² = 0.95 (extreme cross-env heterogeneity).
     Verdict: NO_EFFECT (coefficient insignificant, magnitude
-    below 0.4 threshold). Per-env check: PacMan-jumanji
-    (polarity=+0.34, r=−0.49) is a sign-mismatch. The "soft
-    tautology" framing was overstated — the structural identity
-    holds within-arm (HARD r(eff_h, O) = polarity by definition)
-    but not across the SOFT paired-Δ form once envs with policy-
-    independent length structures (PacMan-jumanji has fixed
-    episode length) enter the panel. Memory
-    `findings_polarity_soft_tautology_bridge.md` cited 8-of-8
-    sign-match before PacMan-jumanji ingest; the 10-env panel
-    has 1 hard sign-mismatch (PacMan) and 1 near-zero (Snake).
+    below 0.4 threshold). Per-env check on the 4 envs surfacing
+    with finite paired Δs: Acrobot polarity=−0.98 r=−0.27;
+    Asterix polarity=+0.62 r=+0.39; **PacMan polarity=+0.34
+    r=−0.49 (sign-mismatch)**; Snake polarity=−0.50 r=−0.04
+    (near null).
 
-    The bridge correctly returns NO_EFFECT under current data —
-    the polarity-coupling shape is not as universal as the
-    "tautology" framing implied. The companion eff_h-mediator
-    bridges (`eff_h_mediates_g_link__{goal,survival}_envs`)
-    remain HELD with directional predictions matching polarity
-    sign; per-env coupling EXISTS, but env-mean cross-env panel
-    doesn't fit a single linear β.
+    The earlier "8-of-8 sign-match is structurally forced"
+    framing (memory `findings_polarity_soft_tautology_bridge.md`,
+    pre-PacMan-ingest) does not survive the expanded panel.
+    The bridge is REFUTED on current data — the polarity-coupling
+    shape is not universal. A post-hoc rationalization ("PacMan
+    has fixed-length env") was considered and DROPPED per
+    reviewer-3 feedback: without a registered measurable
+    operationalizing "policy-independent episode length" as a
+    scope predicate, any sign-mismatch could be retro-justified
+    by inventing an env class. Honest verdict is REFUTED full
+    stop; if a principled scope predicate later identifies
+    structural exclusions, the bridge can be re-scoped.
 
-    Note: the soft tautology was framed as a structural consequence
-    of how polarity and eff_h are defined; the post-rebuild result
-    falsifies the "structural" framing — implementation-level
-    differences (e.g., fixed-length envs) break the apparent
-    universal sign-match."""
+    The companion eff_h-mediator bridges
+    (`eff_h_mediates_g_link__{goal,survival}_envs`) remain HELD
+    with directional predictions matching polarity sign; per-env
+    coupling EXISTS within polarity half-planes, but the env-mean
+    cross-env panel doesn't fit a single linear β."""
     del target, predictor
     if paired_link_per_env.n_strata < min_envs:
         return Verdict.POWER_INSUFFICIENT
