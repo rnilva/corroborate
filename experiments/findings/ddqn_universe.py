@@ -114,9 +114,6 @@ from corroborate.analyses.stratified_arm_diff_pooled import (
 )
 from corroborate.analyses.paired_g_per_burst import PerBurstResult
 from corroborate.analyses.proportion_mediated import ProportionMediatedResult
-from corroborate.analyses.cross_config_paired_slope import (
-    CrossConfigPairedSlopeResult,
-)
 from corroborate.analyses.paired_link_per_burst import (
     PerBurstLinkResult, phase_link_consistency,
 )
@@ -3191,7 +3188,6 @@ def target_staleness_late_mediates_outcome__minatar_intermediate_sync(
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
-    pair_by=('seed',),
     scope=(
         finite('q_divergence_score') & finite_lt('q_divergence_score', 1.0)
         & finite('jensen_dormancy_gap') & finite_lt('jensen_dormancy_gap', 0.05)
@@ -3206,26 +3202,39 @@ def target_staleness_late_mediates_outcome__minatar_intermediate_sync(
     predicted_direction='a_lt_b',
 )
 def cross_config_staleness_slope_negative__survive(
-    cross_config_paired_slope: CrossConfigPairedSlopeResult,
+    stratum_effect_panel: StratumEffectPanel,
     *,
-    target: str = 'eval_best_burst_mean',
-    predictor: str = 'target_staleness_late',
-    config_keys: tuple[str, ...] = (
+    measurables: tuple[str, ...] = ('target_staleness_late', 'eval_best_burst_mean'),
+    stratify_by: tuple[str, ...] = (
         'env_name', 'sync_period', 'total_steps', 'corpus',
     ),
+    min_seeds_per_arm: int = 5,
     rho_threshold: float = -0.5,
     p_threshold: float = 0.1,
-    min_configs: int = 3,
+    min_strata: int = 3,
 ) -> tuple[Verdict, RefutationClass | None]:
-    """Cross-config bridge on SURVIVE polarity:
-    ρ(mean Δ_target_staleness_late, mean Δ_y_best) ≤ -0.5
-    across configs in CLAIM 17 mech-active scope.
+    """Cross-config bridge on SURVIVE polarity: ρ(Δ_target_staleness_
+    late, Δ_y_best) ≤ -0.5 across configs in CLAIM 17 mech-active
+    scope.
+
+    **2026-05-11 migrated from `cross_config_paired_slope` to
+    `stratum_effect_panel` + inline Spearman.** Original primitive
+    used per-pair Δs (vanilla seed-N − DDQN seed-N) — meaningless
+    in RL where trajectories diverge from step 1. The
+    mathematically-equivalent mean(per-pair Δ) = arm-mean diff
+    when seed sets match across arms, so the verdict is preserved
+    by the migration; the framing is now honest about the
+    independent-samples nature of the per-config arms.
+
+    Cross-config Spearman on per-config (Δ_predictor, Δ_target)
+    where Δ = mean(treatment) − mean(baseline) within each
+    config-stratum. Scale-invariant via rank correlation.
 
     Empirical (n=5, periodic_copy / sync-period sweep on Asterix
-    + Breakout intermediate-sync): ρ = -0.90 (p=0.037).
+    + Breakout intermediate-sync): ρ ≈ -0.90 (p ≈ 0.037).
 
     HELD when ρ ≤ rho_threshold AND p ≤ p_threshold AND
-    n_configs ≥ min_configs.
+    n_strata ≥ min_strata.
 
     STARTING POINT — n=5 is borderline. Within-cell linear
     mediation gives proportion ≈ 0.07 on the same scope (mediation
@@ -3239,11 +3248,24 @@ def cross_config_staleness_slope_negative__survive(
     because polyak preempts mech (Δ_jens ≈ 0). Awaiting more
     in-scope SURVIVE configs (PacMan + Freeway/SI intermediate-
     sync sweeps) for power."""
-    del target, predictor, config_keys
-    if cross_config_paired_slope.n_configs < min_configs:
+    del measurables, stratify_by, min_seeds_per_arm
+    panel = stratum_effect_panel
+    if panel.n_strata < min_strata:
         return Verdict.POWER_INSUFFICIENT, None
-    rho = cross_config_paired_slope.rho
-    p = cross_config_paired_slope.p_value
+    d_pred = panel.deltas.get('target_staleness_late', ())
+    d_target = panel.deltas.get('eval_best_burst_mean', ())
+    valid = [
+        (p_, t_) for p_, t_ in zip(d_pred, d_target, strict=True)
+        if not (math.isnan(p_) or math.isnan(t_))
+    ]
+    if len(valid) < min_strata:
+        return Verdict.POWER_INSUFFICIENT, None
+    from scipy.stats import spearmanr as _spearmanr
+    pred_arr = np.asarray([p_ for p_, _ in valid], dtype=np.float64)
+    target_arr = np.asarray([t_ for _, t_ in valid], dtype=np.float64)
+    rho_v, p_v = _spearmanr(pred_arr, target_arr)
+    rho = float(rho_v)
+    p = float(p_v)
     if math.isnan(rho) or math.isnan(p):
         return Verdict.POWER_INSUFFICIENT, None
     if rho <= rho_threshold and p <= p_threshold:

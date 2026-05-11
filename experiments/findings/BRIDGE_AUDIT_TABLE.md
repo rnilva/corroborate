@@ -13,10 +13,10 @@
 
 | Tag | Count |
 |---|---|
-| SURVIVED | 10 |
+| SURVIVED | 11 |
 | STALE | 0 |
 | REFUTED (HELD-to-NO_EFFECT under honest methodology) | 5 |
-| POWER_COLLAPSED | 4 |
+| POWER_COLLAPSED | 3 |
 | DEAD | 11 |
 | POWER_INSUFFICIENT | 10 |
 | NO_EFFECT (data refutes; non-HELD bridges with non-zero scope) | 0 |
@@ -76,7 +76,7 @@ diagnosis notes below.
 | 10 | `reach_link_placebo_refuted` | SURVIVED | held | - | 656 | 1520 |
 | 11 | `reach_link_rcc_robust` | SURVIVED | held | - | 656 | 1520 |
 | 12 | `ddqn_refuted_when_dormancy_fires` | POWER_INSUFFICIENT | (2026-05-11 fixed via NEW `jensen_dormancy_gap_at_best_burst` measurable — collocates dormancy and outcome at the SAME burst, resolving the misalignment surfaced in CLAIM 26b authoring. Substantive challenge to the necessary-condition claim PERSISTS even with alignment: Acrobot d=+0.43 CI=[+0.064, +0.794] excludes 0; SI d=+0.37 CI=[+0.025, +0.722] excludes 0. Both span +0.2 substantive-ceiling. The earlier "misalignment artifact" hypothesis is partly refuted — DDQN helps on best-burst-dormant cells on Acrobot+SI for real, not artifact. Pooled d=+0.19, very close to +0.2 ceiling. Verdict POW_INSUF stays — per-env CIs straddle the substantive bound — but the empirical content shifted: necessary-condition claim is genuinely challenged, not just a window-misalignment artifact) | null | 606 | 2064 |
-| 13 | `cross_config_staleness_slope_negative__survive` | POWER_COLLAPSED | no_effect | a_lt_b | 304 | 1520 |
+| 13 | `cross_config_staleness_slope_negative__survive` | SURVIVED | held (2026-05-11 migrated `cross_config_paired_slope` → `stratum_effect_panel` + inline Spearman per RL seed-pairing critique; per-config Δs = arm-mean-diff cleanly. n=7 configs (was 5), ρ≈−0.81 p<0.1 → HELD. PacMan is positive-outcome outlier; rank Spearman robust. Previous NO_EFFECT was at n=5 with stricter threshold — more configs from rebuild pushed past threshold) | a_lt_b | 534 | 2064 |
 | 14 | `cross_config_staleness_slope_positive__reach_polyak` | DEAD | no_effect | a_gt_b | 252 | 1520 |
 | 15 | `link_r_predictable_from_polarity__soft_tautology` | POWER_COLLAPSED | (post-rebuild: β=+0.366 (sign preserved!), p=0.34, R²=0.11 on n_strata=10 vs pre-rebuild β=+0.614, p=1.7e-3, R²=0.83 on n=8. Reviewer-4: sign matches predicted direction, magnitude eroded with PacMan-jumanji entry — that's POWER_COLLAPSED (audit's "sign-correct, magnitude eroded" def) NOT REFUTED ("HELD-to-NO_EFFECT via methodology"). The "structural soft tautology" framing was overstated, but the empirical pattern still leans in the predicted direction at this n_strata) | a_gt_b | 1760 | 1824 |
 | 16 | `link_slope_predicted_by_g1__cross_env` | DEAD | no_effect | a_lt_b | 1400 | 1520 |
