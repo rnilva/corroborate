@@ -47,6 +47,7 @@ from corroborate.analyses import (  # noqa: F401
     cross_config_paired_slope as _ccps,  # pyright: ignore[reportUnusedImport]
     stratified_arm_diff_pooled as _stratified_arm_diff_pooled,  # pyright: ignore[reportUnusedImport]
     stratified_partial_spearman as _stratified_partial_spearman,  # pyright: ignore[reportUnusedImport]
+    stratified_spearman as _stratified_spearman,  # pyright: ignore[reportUnusedImport]
     stratum_effect_panel as _stratum_effect_panel,  # pyright: ignore[reportUnusedImport]
     within_arm_link as _within_arm_link,  # pyright: ignore[reportUnusedImport]
     tautology_audit as _audit,  # pyright: ignore[reportUnusedImport]

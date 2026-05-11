@@ -1557,7 +1557,14 @@ def jensen_gap(record: Mapping[str, object]) -> float:
     The full-named version of `jensen_overestimation_gap()` —
     same formula, registered under `mechanism.jensen_gap` so
     column names stay continuous through Phase 3 (Phase 5
-    normalises the prefix)."""
+    normalises the prefix).
+
+    LITERATURE CONTEXT: this is the Q − MC composite (Category B
+    in `findings_jensen_gap_literature_audit.md`), operationally
+    identical to Hasselt 2016 / REDQ 2021 / "Revisited" 2025.
+    For the Hasselt 2010 Theorem 1 form
+    `E[max_a Q] − max_a E[Q]`, see `jensen_inequality_gap_late`
+    which is computed from `online_q_per_action` directly."""
     if (
         'predicted_q_at_start' not in record
         or 'mc_return' not in record
@@ -1568,6 +1575,129 @@ def jensen_gap(record: Mapping[str, object]) -> float:
     if predicted.size == 0 or actual.size == 0:
         return float('nan')
     return float(max(0.0, (predicted - actual).mean()))
+
+
+@measurable(
+    name='bias_std_across_states',
+    reads=('predicted_q_at_start', 'mc_return'),
+)
+def bias_std_across_states(record: Mapping[str, object]) -> float:
+    """REDQ 2021's "std-of-bias" — the second moment of the
+    Q − MC composite across eval-episode samples within a cell.
+
+    REDQ Figure 3 reports both `mean(MC − Q)` and `std(MC − Q)`
+    over 1000 replay-buffer states every 50k steps as headline
+    figures. The framework's `jensen_gap` matches the mean; this
+    measurable matches the std for apples-to-apples comparison
+    against REDQ's reporting protocol.
+
+    See `findings_jensen_gap_literature_audit.md` for the
+    comparison study design."""
+    if (
+        'predicted_q_at_start' not in record
+        or 'mc_return' not in record
+    ):
+        return float('nan')
+    predicted = np.asarray(record['predicted_q_at_start'], dtype=np.float64)
+    actual = np.asarray(record['mc_return'], dtype=np.float64)
+    if predicted.size < 2 or actual.size < 2:
+        return float('nan')
+    diff = predicted - actual
+    return float(np.std(diff, ddof=1))
+
+
+@measurable(
+    name='effective_alpha',
+    # NOTE: `bootstrap.greedification.alpha` IS read inside the body
+    # but only when present (dampened-α cells); for vanilla / pure
+    # DDQN cells the measurable falls back to arm_key string parsing.
+    # If we declare it in `reads`, `build_measurements` gates the
+    # entire measurable on the column's presence and skips computing
+    # it for non-dampened corpora — leaving α=NaN for vanilla / DDQN
+    # cells where it should be 0.0 / 1.0. The declared `reads` is
+    # only `arm_key` (always present); the dampened-α leaf is read
+    # opportunistically inside the function.
+    reads=('arm_key',),
+)
+def effective_alpha(record: Mapping[str, object]) -> float:
+    """Derives the effective α-level for the dampened-greedify spectrum.
+
+    Maps cells from THREE distinct algorithmic arms to a unified
+    α ∈ [0, 1] continuum for cross-config slope analysis:
+      - `dampened_double_greedify(α)` cells → read α directly from
+        the leaf parameter
+      - `max_greedify` (vanilla baseline) cells → α = 0.0
+        (algebraically equivalent: `dampened_double_greedify(0.0)` =
+        `α·v_DDQN + (1−α)·v_vanilla` with α=0 returns v_vanilla)
+      - `double_greedify` (pure DDQN) cells → α = 1.0
+        (similarly, α=1 returns v_DDQN)
+
+    Used by the second-layer theorem α-sweep bridges to combine
+    existing ddqn_universe baseline + DDQN cells (the α=0 and α=1
+    endpoints) with new dampened-α sweeps (intermediate α values),
+    avoiding redundant re-runs of the endpoints. See
+    `docs/SECOND_LAYER_THEOREM.md` and
+    `experiments/findings/second_layer_theorem.py`.
+
+    Returns NaN for cells from arms outside the clean DDQN-vs-vanilla
+    contrast (action-duplicate, n-step, expectile, polyak, etc.) —
+    bridges are responsible for restricting scope to clean cells via
+    additional predicates."""
+    alpha_raw = record.get('bootstrap.greedification.alpha')
+    if alpha_raw is not None:
+        try:
+            v = float(alpha_raw)  # type: ignore[arg-type]
+            if not math.isnan(v):
+                return v
+        except (TypeError, ValueError):
+            pass
+    arm = str(record.get('arm_key', ''))
+    # Pure DDQN (not dampened, not adaptive, not expectile)
+    if (
+        'dampened' not in arm
+        and 'adaptive' not in arm
+        and 'expectile' not in arm
+        and 'double_greedify' in arm
+    ):
+        return 1.0
+    # Vanilla baseline
+    if arm == 'baseline':
+        return 0.0
+    return float('nan')
+
+
+@measurable(
+    name='jensen_inequality_gap_late',
+    reads=('jensen_inequality_gap_per_burst',),
+)
+def jensen_inequality_gap_late(record: Mapping[str, object]) -> float:
+    """Hasselt 2010 Theorem 1's Jensen-inequality form
+    `E[max_a Q(s,a)] − max_a E[Q(s,a)]`, marginalised over
+    training-step replay states. Average over the late half of
+    bursts (matches the `_late` naming pattern of other DQN
+    measurables).
+
+    Distinct from `jensen_gap` (Category B = Q − MC composite,
+    Hasselt 2016 / REDQ 2021 form). This measurable exposes the
+    argmax-noise bias directly per Theorem 1's tabular form —
+    state-marginalised over replay distribution.
+
+    REQUIRES the `jensen_inequality_gap_per_burst` trace column
+    populated by `Q_TRACE_REDUCTIONS` at trace-persistence time.
+    Existing cache cells without this column return NaN; re-run
+    sweeps to populate.
+
+    See `findings_jensen_gap_literature_audit.md`."""
+    v = record.get('jensen_inequality_gap_per_burst')
+    if v is None:
+        return float('nan')
+    arr = np.asarray(v, dtype=np.float64)
+    if arr.size == 0:
+        return float('nan')
+    late_half = arr[arr.size // 2:]
+    if late_half.size == 0 or not np.isfinite(late_half).any():
+        return float('nan')
+    return float(max(0.0, float(np.nanmean(late_half))))
 
 
 # ============ Lifted from rl/dqn/invariants.py (Phase 4A) ============
