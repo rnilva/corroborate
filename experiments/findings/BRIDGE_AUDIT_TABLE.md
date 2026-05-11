@@ -13,15 +13,17 @@
 
 | Tag | Count |
 |---|---|
-| SURVIVED | 12 |
+| SURVIVED | 11 |
 | STALE | 0 |
 | REFUTED (HELD-to-NO_EFFECT under honest methodology) | 6 |
 | POWER_COLLAPSED | 2 |
 | DEAD | 10 |
-| POWER_INSUFFICIENT | 8 |
+| POWER_INSUFFICIENT | 9 |
 | SCOPE_VACATED (pending re-run, not a verdict on the claim) | 13 |
 
 *SCOPE_VACATED bridges have 0 cells in current scope — usually because pre-fix corpora used incompatible measurables/configs. They are a holding pen for re-runs, not verdicts. Reviewer-4 flagged that mixing them into the verdict distribution is misleading; treating as a separate status keeps the audit honest.*
+
+*SCOPE_VACATED sunset clock (reviewer-5 follow-up): of the 13 SCOPE_VACATED bridges, 6 are pending the in-flight `reward_scale_sweep_postfix` family re-runs (rescue / no-rescue / argmaxH siblings) and 4 are CLAIM 7g–j auxiliary-route probes pending user decision. The remaining 3 (`acrobot_per_burst_link_active__gamma_0999`, `ddqn_curve_crosses_vanilla_late__spaceinvaders`, `ddqn_null_under_monte_carlo__fourrooms_n10`) are "wait for substrate-version-matched corpus"; if those corpora are not actively rebuilt by the next session, promote to DEAD.*
 
 *Counts are post-trace-restore (cache rebuilt 2026-05-11; all bridges re-evaluated at n_pre_scope=1824). Sibling robustness-check bridges (e.g. `metamaze_link_steeper_at_high_gamma__median`) testing the same empirical signal as their parent are not separately counted.*
 | ERRORED | 0 (errored bridge counted in DEAD) |
@@ -72,7 +74,7 @@ diagnosis notes below.
 | 9 | `reach_link_backdoor_ate_negative` | SURVIVED | held | - | 656 | 1520 |
 | 10 | `reach_link_placebo_refuted` | SURVIVED | held | - | 656 | 1520 |
 | 11 | `reach_link_rcc_robust` | SURVIVED | held | - | 656 | 1520 |
-| 12 | `ddqn_refuted_when_dormancy_fires` | SURVIVED | held (2026-05-11 reviewer-4 fix: wired `bootstrap_paired_g` because `paired_g.assumption_violations` flags excess_kurt=109, skew=+10.3 — Gaussian CI miscalibrated. Bootstrap CI=[−0.129, +0.178] ⊂ ±0.2 null_ceiling → HELD. Necessary-condition claim corroborated on the bulk of dormant cells; right-tail outliers don't shift the percentile CI above the substantive threshold) | - | 557 | 1824 |
+| 12 | `ddqn_refuted_when_dormancy_fires` | POWER_INSUFFICIENT | (2026-05-11 reviewer-5 catch: r4's bootstrap-CI HELD was overreach — `bootstrap_paired_g` is calibrated at log-normal n=50 with ~27% under-coverage; dormancy bridge fires at excess_kurt=109 (12× more extreme) and skew=+10.3, regime outside test validation. Plus raw mean_diff=+0.23 in native units IS substantive — standardized-g CI hides this via outlier-inflated SD. HELD branch now requires clean assumption-violations; INVARIANT_VIOLATION / sign-flip branches still use bootstrap CI for refutation testing) | - | 557 | 1824 |
 | 13 | `cross_config_staleness_slope_negative__survive` | POWER_COLLAPSED | no_effect | a_lt_b | 304 | 1520 |
 | 14 | `cross_config_staleness_slope_positive__reach_polyak` | DEAD | no_effect | a_gt_b | 252 | 1520 |
 | 15 | `link_r_predictable_from_polarity__soft_tautology` | POWER_COLLAPSED | (post-rebuild: β=+0.366 (sign preserved!), p=0.34, R²=0.11 on n_strata=10 vs pre-rebuild β=+0.614, p=1.7e-3, R²=0.83 on n=8. Reviewer-4: sign matches predicted direction, magnitude eroded with PacMan-jumanji entry — that's POWER_COLLAPSED (audit's "sign-correct, magnitude eroded" def) NOT REFUTED ("HELD-to-NO_EFFECT via methodology"). The "structural soft tautology" framing was overstated, but the empirical pattern still leans in the predicted direction at this n_strata) | a_gt_b | 1760 | 1824 |
