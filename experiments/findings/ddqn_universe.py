@@ -1791,32 +1791,37 @@ def q_divergence_shadowed_by_jens(
 ) -> Verdict:
     """**Migrated 2026-05-11 from `partial_spearman_paired_delta`
     (per-pair-Δ form) to JCI `stratified_partial_spearman`
-    (per-cell, env-stratified) — verdict preserved HELD.**
+    (per-cell, env-stratified) — verdict flipped HELD → NO_EFFECT
+    once trace measurables restored across all REACH envs.**
 
     Tests `ρ_partial(qdiv, outcome | jens)`, env-stratified,
     Fisher-z pooled. Authored with `predicted_direction='null'`;
     HELD when `|ρ_partial| < null_max_abs_rho`.
 
-    Empirical (ddqn_universe cache, in-scope cells only, 2026-
-    05-11): `ρ_partial = +0.059` (n=373, 6 strata, p=0.43) —
-    HELD (null confirmed).
+    Empirical (post-trace-restore ddqn_universe, in-scope cells
+    2026-05-11): `ρ_partial = -0.432` (n=717, 11 strata, p=6e-15)
+    — NO_EFFECT (null refuted).
 
-    **Methodology shift.** The per-pair-Δ form's previous reading
-    (ρ=+0.15 ns at n=120 paired Δs) was contaminated by init-
-    distribution correlation across diverged trajectories. JCI's
-    n=373 per-cell within-env form is the inferentially-honest
-    test of conditional independence given jens. Both methods
-    agree empirically: qdiv carries no incremental information
-    about outcome beyond jens within the bridge's scope.
+    **Where the algebraic shadow breaks.** `q_divergence_score =
+    jensen_gap / (R / (1−γ))` is constant scaling only within
+    fixed (env, γ). The bridge's `_DDQN_RELEVANT_SCOPE` mixes
+    γ ∈ {0.99, 0.999} within each env (MetaMaze contributes both;
+    FR/Acrobot mostly γ=0.99). Stratifying by env only doesn't
+    eliminate the γ-induced residual: qdiv carries the γ-scaled
+    structure that jens alone doesn't, surfacing as ρ≈-0.43
+    cross-env. The original per-pair-Δ "HELD null" reading
+    (ρ=+0.15 ns at n=120 paired Δs) was a small-n artifact AND
+    a scope artifact — pre-rebuild the FR/MM/MC corpora had
+    trace-dependent measurables NaN'd out, dropping the in-scope
+    n to 373 and leaving mostly γ=0.99 cells (within-γ ≈
+    constant scaling). With full scope, the leakage is visible.
 
-    Algebraic note: `q_divergence_score = jensen_gap / (R /
-    (1−γ))`. Within fixed (env, γ), qdiv is `jens × const` —
-    stratifying by (env, γ) gives degenerate ρ=NaN (perfect
-    collinearity). Stratifying by env only would mix γ ∈
-    {0.99, 0.999} cross-strata and expose the cross-γ residual
-    (ρ=-0.60 unscoped). The bridge's scope (`_DDQN_RELEVANT_SCOPE`)
-    filters to G1∧G2 standard-config cells where the γ-induced
-    leakage doesn't dominate.
+    **Implication.** Don't author qdiv as a clean shadow when γ
+    varies; treat it as a γ-modulated structural function of
+    jens. The bridge stays as a falsifiable artifact documenting
+    the cross-γ leakage. For "shadow within fixed (env, γ)",
+    stratify by (env, γ) (returns ρ=NaN — degenerate collinearity
+    confirms the algebra).
 
     HELD (null confirmed) when |ρ_partial| < `null_max_abs_rho`.
     NO_EFFECT (null refuted) when |ρ_partial| ≥ `null_max_abs_rho`.
@@ -1852,17 +1857,19 @@ def argmax_entropy_shadowed_by_jens(
     min_strata: int = 2,
 ) -> Verdict:
     """**Migrated 2026-05-11 from `partial_spearman_paired_delta`
-    to JCI `stratified_partial_spearman` — verdict preserved HELD.**
+    to JCI `stratified_partial_spearman` — verdict preserved
+    HELD across the post-trace-restore corpus.**
 
-    Empirical (ddqn_universe cache, in-scope cells only, 2026-
-    05-11): `ρ_partial = +0.125` (n=373, 6 strata, p=0.019) —
-    HELD (null confirmed at threshold 0.2).
+    Empirical (post-trace-restore ddqn_universe, in-scope cells
+    2026-05-11): `ρ_partial = +0.011` (n=717, 11 strata, p=0.78)
+    — HELD (null confirmed).
 
     `argmax_entropy_late` is conditionally independent of outcome
     given jens within the bridge's scope. Unlike
     `q_divergence_score`, argmaxH is NOT algebraically tied to
-    jens; the shadow is empirical, not structural. Both methods
-    (per-pair-Δ at n=120 and JCI per-cell at n=373) agree.
+    jens; the shadow holds at full cross-env scope (no γ-induced
+    leakage). Both methods (per-pair-Δ at n=120 and JCI per-cell
+    at n=717) agree.
 
     HELD (null confirmed) when |ρ_partial| < `null_max_abs_rho`.
     NO_EFFECT (null refuted) when |ρ_partial| ≥ `null_max_abs_rho`.

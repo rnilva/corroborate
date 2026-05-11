@@ -13,9 +13,9 @@
 
 | Tag | Count |
 |---|---|
-| SURVIVED | 9 |
+| SURVIVED | 8 |
 | STALE | 1 |
-| REFUTED (HELD-to-NO_EFFECT under honest methodology) | 4 |
+| REFUTED (HELD-to-NO_EFFECT under honest methodology) | 5 |
 | POWER_COLLAPSED | 2 |
 | DEAD | 10 |
 | POWER_INSUFFICIENT | 4 |
@@ -57,7 +57,7 @@ diagnosis notes below.
 | # | Bridge | Tag | Verdict | predicted_direction | n_in_scope | n_pre_scope |
 |---|---|---|---|---|---|---|
 | 1 | `argmax_entropy_predicts_link_power__survive_envs` | SURVIVED | held | a_gt_b | 304 | 1520 |
-| 2 | `argmax_entropy_shadowed_by_jens` | SURVIVED | held (migrated `partial_spearman_paired_delta` → JCI `stratified_partial_spearman`; ρ=+0.125 n=373 in-scope) | null | 656 | 1520 |
+| 2 | `argmax_entropy_shadowed_by_jens` | SURVIVED | held (migrated `partial_spearman_paired_delta` → JCI `stratified_partial_spearman`; ρ=+0.011 n=717 across 11 envs after trace restore) | null | 717 | 1824 |
 | 3 | `chain_amplifier_link_active_in_bounded_q` | DEAD | (migrated → panel_regress; signal leverage-driven; cut) | a_lt_b | 967 | 1520 |
 | 4 | `ddqn_helps_at_full_bootstrap__fourrooms_n1` | SURVIVED | held | - | 300 | 1520 |
 | 5 | `ddqn_helps_under_three_gate_scope__cross_env` | SURVIVED | held | a_gt_b | 1100 | 1520 |
@@ -80,7 +80,7 @@ diagnosis notes below.
 | 21 | `extreme_q_divergence_attenuates_link__placebo_refuted` | POWER_INSUFFICIENT | power_insufficient | - | 560 | 1520 |
 | 22 | `extreme_q_divergence_attenuates_link__rcc_robust` | POWER_INSUFFICIENT | power_insufficient | - | 560 | 1520 |
 | 23 | `mc_variance_attenuates_g_link__between_env` | DEAD | power_insufficient | - | 1520 | 1520 |
-| 24 | `q_divergence_shadowed_by_jens` | SURVIVED | held (migrated `partial_spearman_paired_delta` → JCI `stratified_partial_spearman`; ρ=+0.059 n=373 in-scope; cross-γ residual ρ=−0.60 unscoped — bridge's scope confines test to where algebraic shadow holds) | null | 656 | 1520 |
+| 24 | `q_divergence_shadowed_by_jens` | REFUTED | (migrated `partial_spearman_paired_delta` → JCI `stratified_partial_spearman`; ρ=−0.432 n=717 across 11 envs after trace restore — γ-induced residual leaks at this stratification level; algebraic shadow holds only within fixed (env, γ)) | null | 717 | 1824 |
 | 25 | `acrobot_per_burst_link_active__gamma_0999` | SCOPE_VACATED | power_insufficient | - | 0 | 1520 |
 | 26 | `adaptive_dqn_fails_to_avoid_attenuation__spaceinvaders_1m` | SCOPE_VACATED | power_insufficient | - | 0 | 1520 |
 | 27 | `adaptive_dqn_recovers_ddqn_benefit__fourrooms_factor_0p5` | SCOPE_VACATED | power_insufficient | - | 0 | 1520 |
