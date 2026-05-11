@@ -15,8 +15,8 @@
 |---|---|
 | SURVIVED | 10 |
 | STALE | 0 |
-| REFUTED (HELD-to-NO_EFFECT under honest methodology) | 6 |
-| POWER_COLLAPSED | 3 |
+| REFUTED (HELD-to-NO_EFFECT under honest methodology) | 5 |
+| POWER_COLLAPSED | 4 |
 | DEAD | 11 |
 | POWER_INSUFFICIENT | 10 |
 | NO_EFFECT (data refutes; non-HELD bridges with non-zero scope) | 0 |
@@ -100,12 +100,12 @@ diagnosis notes below.
 | 34 | `ddqn_does_not_concentrate_argmax__densified_fourrooms` | DEAD | power_insufficient | null | 0 | 1520 |
 | 35 | `ddqn_does_not_rescue__acrobot_rs_0p1` | POWER_INSUFFICIENT | (migrated 2026-05-11 to native-unit CI-vs-ceiling: md_native=+0.229, 95% CI=[−0.130, +0.588], null_ceiling=0.2 — CI spans ceiling. Previous Hedges'-g HELD reading was generous: failure-to-reject ≠ confirmation; n=30 inadequate for strict null at this ceiling) | null | 30 | 1824 |
 | 36 | `ddqn_does_not_rescue__cartpole_rs_0p1` | POWER_INSUFFICIENT | (migrated 2026-05-11 to native-unit CI-vs-ceiling: md_native=+0.212, 95% CI=[−0.155, +0.579], null_ceiling=0.2 — CI spans ceiling. Same shape as Acrobot sister) | null | 30 | 1824 |
-| 37 | `ddqn_dominates_vanilla_response_curve__fourrooms_rs_0p3` | REFUTED | post-rebuild: md=+0.259 (95% CI=[+0.169, +0.349]); theory-derived threshold `_rescue_threshold()`=+0.35 OUTSIDE upper CI bound. Rescue regime narrowed in new corpus — vanilla now reaches 0.52 native (was 0.24); `findings_underlearning_rescue.md` plateau at +0.50 was older `reward_scale_low_fourrooms` corpus. `predicted_direction='a_gt_b'` added per reviewer feedback. Threshold derived from `failure_baseline=0.1` (random-chance), `optimal_ceiling=0.8` (RL ceiling), `rescue_fraction=0.5` (substantive-rescue claim asserts ≥half-headroom closure) — replaces hand-tuned +0.4 | a_gt_b | 30 | 1824 |
+| 37 | `ddqn_dominates_vanilla_response_curve__fourrooms_rs_0p3` | POWER_COLLAPSED | (2026-05-11 migrated `paired_g` → `arm_mean_diff` per RL seed-pairing critique: trajectories diverge so seed-pairing isn't a real pair. md=+0.259 (sign matches a_gt_b), 95% CI=[+0.167, +0.351] just barely spans threshold +0.35 — POW_INSUF, sign correct, magnitude eroded vs older corpus +0.50 plateau. SE 0.046 (paired) vs 0.047 (arm_mean_diff) — confirms seed-pairing wasn't extracting any pair-correlation, as expected for diverged RL trajectories) | a_gt_b | 60 | 1824 |
 | 38 | `ddqn_entropy_matches_vanilla__fourrooms_rs_1p0` | REFUTED | post-rebuild: g=−1.72 mean_diff=−0.099 p=2.2e-9 n=30 — null refuted via SIGN_FLIP; DDQN sharpens policy at rs=1.0 too. "Regime-specific argmaxH effect" reading refuted | null | 30 | 1824 |
 | 39 | `ddqn_helps_at_early_bursts__pixel_envs` | SCOPE_VACATED | power_insufficient | - | 0 | 1520 |
 | 40 | `ddqn_increases_argmax_entropy__fourrooms_rs_0p1` | REFUTED | post-rebuild: g=−2.98 mean_diff=−0.232 p=2.6e-12 n=30 — SIGN_FLIP. DDQN DECREASES argmaxH (sharpens policy) in the rescue regime. "Maintains exploration when Q flat" reading refuted; under-learning rescue mechanism is "policy sharpens after rescue" | a_gt_b | 30 | 1824 |
 | 41 | `ddqn_null_under_monte_carlo__fourrooms_n10` | SCOPE_VACATED | (2026-05-11 screening: verdict-logic bug fixed — NaN mean_diff was returning NO_EFFECT instead of POW_INSUF. Now POW_INSUF when arm_mean_diff is NaN. Stays SCOPE_VACATED until n=10 post-fix corpus exists) | - | 0 | 1824 |
-| 42 | `ddqn_rescues_underlearning_vanilla__fourrooms_rs_0p1` | SURVIVED | held (post-rebuild: md=+0.638, 95% CI=[+0.594, +0.682], theory-derived threshold +0.35 fully cleared; underlearning rescue robust on FourRooms rs=0.1; `predicted_direction='a_gt_b'` added) | a_gt_b | 30 | 1824 |
+| 42 | `ddqn_rescues_underlearning_vanilla__fourrooms_rs_0p1` | SURVIVED | held (2026-05-11 migrated `paired_g` → `arm_mean_diff` per RL seed-pairing critique. md=+0.638, 95% CI=[+0.592, +0.684], threshold +0.35 fully cleared. Underlearning rescue robust; SE only moved 0.022→0.024 confirming seed-pairing was extracting nothing) | a_gt_b | 60 | 1824 |
 | 43 | `staleness_amplifies_ddqn_outcome__sparse_goal_polyak` | SCOPE_VACATED | power_insufficient | a_lt_b | 0 | 1520 |
 | 44 | `staleness_does_not_amplify_ddqn_outcome__survival_polyak` | SCOPE_VACATED | power_insufficient | null | 0 | 1520 |
 | 45 | `target_staleness_late_mediates_outcome__breakout_sync100` | SCOPE_VACATED | power_insufficient | a_gt_b | 0 | 1520 |

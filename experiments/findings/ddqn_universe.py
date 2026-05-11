@@ -1047,10 +1047,9 @@ def _native_diff_null_verdict(
     predicted_direction='a_gt_b',
 )
 def ddqn_rescues_underlearning_vanilla__fourrooms_rs_0p1(
-    paired_g: PairedGResult,
+    arm_mean_diff: ArmMeanDiffResult,
     *,
     threshold_diff: float = _rescue_threshold(),
-    dedupe_strategy: str = 'mean',
 ) -> Verdict:
     """Pearl-rung-2 interventional contrast: do(arm=ddqn) on
     FourRooms at reward_scale=0.1 produces a substantive
@@ -1088,18 +1087,26 @@ def ddqn_rescues_underlearning_vanilla__fourrooms_rs_0p1(
     pools SD that scales with reward, hiding the interventional
     effect under apparent sweet-spotting at baseline).
 
+    **2026-05-11 migration to `arm_mean_diff`** (independent-
+    samples Welch t-test) from `paired_g`. RL trajectories
+    diverge from step 1 under different algorithms — pairing
+    vanilla seed-N with DDQN seed-N is not a meaningful
+    statistical pair; the two are independent draws from
+    distinct training distributions. JCI confirms
+    `vanilla_native ⊥ ddqn_native | log_rs` (partial r ≈ −0.04).
+    `arm_mean_diff` reports the same `mean_diff` (treatment-mean
+    minus baseline-mean) but with independent-samples Welch SE
+    rather than per-pair-Δ SE. Verdict identity uses the CI-vs-
+    threshold helper as before.
+
     **Defensive note**: `mean_diff` is the do-effect of arm
-    assignment at fixed (env, rs, seed); it is NOT an
-    observational edge between vanilla and ddqn outcome nodes.
-    The two arms run as independent training trajectories under
-    different algorithms — JCI confirms vanilla_native ⊥
-    ddqn_native | log_rs (partial r ≈ −0.04). The bridge tests
-    a CONTRAST between two independent reward-scale-response
-    curves, not a causal arrow between cell outputs."""
-    del dedupe_strategy  # forwarded to paired_g; not used in body
+    assignment; it is NOT an observational edge between vanilla
+    and ddqn outcome nodes. The bridge tests a CONTRAST between
+    two independent reward-scale-response curves, not a causal
+    arrow between cell outputs."""
     return _native_diff_ci_verdict(
-        paired_g.mean_diff, paired_g.mean_diff_se, threshold_diff,
-        assumption_violations=paired_g.assumption_violations,
+        arm_mean_diff.mean_diff, arm_mean_diff.mean_diff_se,
+        threshold_diff,
     )
 
 
@@ -1127,7 +1134,7 @@ def ddqn_rescues_underlearning_vanilla__fourrooms_rs_0p1(
     predicted_direction='a_gt_b',
 )
 def ddqn_dominates_vanilla_response_curve__fourrooms_rs_0p3(
-    paired_g: PairedGResult,
+    arm_mean_diff: ArmMeanDiffResult,
     *,
     threshold_diff: float = _rescue_threshold(),
 ) -> Verdict:
@@ -1164,10 +1171,11 @@ def ddqn_dominates_vanilla_response_curve__fourrooms_rs_0p3(
 
     Same defensive framing as CLAIM 7: `mean_diff` is the
     interventional contrast, not an observational edge between
-    arm outputs."""
+    arm outputs. **2026-05-11 migrated to `arm_mean_diff`** —
+    see CLAIM 7 docstring for the seed-pairing critique."""
     return _native_diff_ci_verdict(
-        paired_g.mean_diff, paired_g.mean_diff_se, threshold_diff,
-        assumption_violations=paired_g.assumption_violations,
+        arm_mean_diff.mean_diff, arm_mean_diff.mean_diff_se,
+        threshold_diff,
     )
 
 
@@ -1202,7 +1210,7 @@ def ddqn_dominates_vanilla_response_curve__fourrooms_rs_0p3(
     predicted_direction='null',
 )
 def ddqn_does_not_rescue__acrobot_rs_0p1(
-    paired_g: PairedGResult,
+    arm_mean_diff: ArmMeanDiffResult,
     *,
     null_ceiling: float = 0.2,
 ) -> Verdict:
@@ -1235,10 +1243,13 @@ def ddqn_does_not_rescue__acrobot_rs_0p1(
     penalty doesn't have the "vanilla under-learns sparse
     positive reward" failure mode that the rescue mechanism
     addresses. rs=0.1 just shrinks Q's scale without changing
-    the learning regime."""
+    the learning regime.
+
+    **2026-05-11 migrated to `arm_mean_diff`** — RL seed pairing
+    is meaningless under arm divergence; see CLAIM 7 docstring."""
     return _native_diff_null_verdict(
-        paired_g.mean_diff, paired_g.mean_diff_se, null_ceiling,
-        assumption_violations=paired_g.assumption_violations,
+        arm_mean_diff.mean_diff, arm_mean_diff.mean_diff_se,
+        null_ceiling,
     )
 
 
@@ -1255,7 +1266,7 @@ def ddqn_does_not_rescue__acrobot_rs_0p1(
     predicted_direction='null',
 )
 def ddqn_does_not_rescue__cartpole_rs_0p1(
-    paired_g: PairedGResult,
+    arm_mean_diff: ArmMeanDiffResult,
     *,
     null_ceiling: float = 0.2,
 ) -> Verdict:
@@ -1271,10 +1282,13 @@ def ddqn_does_not_rescue__cartpole_rs_0p1(
 
     Different mechanism: CartPole has dense per-step alive bonus
     and saturates fast at any rs ≥ 0.1. Vanilla doesn't have the
-    "can't find reward" failure mode that the rescue addresses."""
+    "can't find reward" failure mode that the rescue addresses.
+
+    **2026-05-11 migrated to `arm_mean_diff`** — see CLAIM 7
+    docstring for seed-pairing critique."""
     return _native_diff_null_verdict(
-        paired_g.mean_diff, paired_g.mean_diff_se, null_ceiling,
-        assumption_violations=paired_g.assumption_violations,
+        arm_mean_diff.mean_diff, arm_mean_diff.mean_diff_se,
+        null_ceiling,
     )
 
 
@@ -1342,7 +1356,7 @@ def ddqn_does_not_rescue__cartpole_rs_0p1(
     predicted_direction='a_gt_b',
 )
 def ddqn_increases_argmax_entropy__fourrooms_rs_0p1(
-    paired_g: PairedGResult,
+    arm_mean_diff: ArmMeanDiffResult,
     *,
     threshold_diff: float = 0.05,
 ) -> tuple[Verdict, RefutationClass | None]:
@@ -1368,9 +1382,12 @@ def ddqn_increases_argmax_entropy__fourrooms_rs_0p1(
     Bridge stays as a falsifiable artifact: the original
     "maintains exploration" reading is refuted. Don't repair the
     prediction sign post-hoc — keep as documented refutation of
-    the explore-vs-commit alternative explanation."""
-    diff = paired_g.mean_diff
-    p = paired_g.mean_diff_p_value
+    the explore-vs-commit alternative explanation.
+
+    **2026-05-11 migrated to `arm_mean_diff`** — see CLAIM 7
+    docstring for seed-pairing critique."""
+    diff = arm_mean_diff.mean_diff
+    p = arm_mean_diff.mean_diff_p_value
     if math.isnan(diff) or math.isnan(p):
         return Verdict.POWER_INSUFFICIENT, None
     # Predicted direction: a_gt_b (positive ΔH).
@@ -1398,7 +1415,7 @@ def ddqn_increases_argmax_entropy__fourrooms_rs_0p1(
     predicted_direction='null',
 )
 def ddqn_entropy_matches_vanilla__fourrooms_rs_1p0(
-    paired_g: PairedGResult,
+    arm_mean_diff: ArmMeanDiffResult,
     *,
     null_ceiling: float = 0.05,
 ) -> tuple[Verdict, RefutationClass | None]:
@@ -1424,9 +1441,12 @@ def ddqn_entropy_matches_vanilla__fourrooms_rs_1p0(
     invariant (at FourRooms γ=0.99).
 
     Bridge stays as a falsifiable artifact: the regime-specificity
-    reading is refuted."""
-    diff = paired_g.mean_diff
-    p = paired_g.mean_diff_p_value
+    reading is refuted.
+
+    **2026-05-11 migrated to `arm_mean_diff`** — see CLAIM 7
+    docstring for seed-pairing critique."""
+    diff = arm_mean_diff.mean_diff
+    p = arm_mean_diff.mean_diff_p_value
     if math.isnan(diff) or math.isnan(p):
         return Verdict.POWER_INSUFFICIENT, None
     is_small = abs(diff) <= null_ceiling
