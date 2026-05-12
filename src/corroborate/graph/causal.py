@@ -15,9 +15,6 @@ Nodes are measurable / record-key names (strings). Edges are
 - `evidentiary_level: str` — the verdict-derived label
   ('refuted' / 'correlational' / 'causal_one_sided'). Lifecycle
   the bridge is in.
-- `ate` / `rho` / `pvalue` / `n_observations` — typed evidence
-  fields. Intervention edges populate `ate` + `n_observations`;
-  coupling edges populate `rho` + `pvalue` + `n_observations`.
 - `extent_hash` — frozenset-of-admitted-cell-ids hash carried
   from `BridgeEvaluation.extent_hash`. Two edges with the same
   `(source, target, extent_hash)` were evaluated against identical
@@ -30,20 +27,38 @@ Nodes are measurable / record-key names (strings). Edges are
 produce path-level direction + tier — chain composition for
 admissibility checks along paths.
 
+`evaluated_graph(bridges, post_eval)` realizes the principle's
+`evidence(E)` component: take an authored topology and stamp
+each edge with its verdict-derived `evidentiary_level` and the
+per-bridge `extent_hash`. The result IS the principle's
+"hypothesis = (V, E, evidence(E))". `clusters_by_extent` +
+`cluster_verdict` + `ClusterVerdict` are the cluster-identity
+query primitives that operate on the stamped graph.
+
 **No auto-promotion.** Refutation-cluster identity is queryable
-post-evaluation via `(source, target, extent_hash)` grouping
-(authored or in walks). Per-bridge `evidentiary_level` carries
-the Pearl-rung admit fact; cluster-level "this edge has multiple
-INTERVENTIONAL HELD bridges sharing an extent" is a structural
-query authors compose, not a central aggregator on the graph."""
+post-evaluation via `(source, target, extent_hash)` grouping.
+Per-bridge `evidentiary_level` carries the Pearl-rung admit
+fact; cluster-level "this edge has multiple INTERVENTIONAL HELD
+bridges sharing an extent" is a structural query authors
+compose, not a central aggregator on the graph.
+
+**Restoration path for effect-size on edges**: this module
+intentionally does NOT carry numeric effect summaries (ate /
+rho / pvalue / n_observations) on `BridgeEdge`. When a
+consumer materializes (DOT renderer, chain effect-size
+product, pooled cluster effect summary), restore an
+`EffectStats` dataclass + the per-edge numeric fields
+together with the consumer in the same PR — typed surface
+follows the caller, per CLAUDE.md primitive discipline."""
 from __future__ import annotations
 
-from collections.abc import Iterable
-from dataclasses import dataclass
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass, replace
 from enum import Enum, IntEnum
 from typing import TYPE_CHECKING, Literal, override
 
-from corroborate.graph.graph import Graph
+from corroborate.bridge.verdict import Verdict
+from corroborate.graph.graph import Edge, Graph
 
 if TYPE_CHECKING:
     # Forward import: `claim_bridge` depends on `causal_graph`
@@ -148,38 +163,6 @@ EvidentiaryLevel = Literal[
 ]
 
 
-# ============ EffectStats — canonical effect summary ============
-
-@dataclass(frozen=True, slots=True)
-class EffectStats:
-    """Typed effect summary committed by each analysis-result
-    class. The post-evaluation graph stamper reads the first
-    non-None `effect_stats` from a BridgeEvaluation's
-    `analysis_results` to populate the BridgeEdge's quantitative
-    fields.
-
-    Field semantics:
-    - `ate`: effect-size at interventional rung (Cohen's d /
-      Hedges' g / backdoor ATE / mean-difference). Sign carries
-      direction.
-    - `rho`: correlation at associational rung (Pearson r /
-      Spearman ρ / pooled partial-r). Sign carries direction.
-    - `pvalue`: significance p-value where the analysis primitive
-      computes one. `None` when not applicable.
-    - `n_observations`: sample size used by the primitive's
-      statistical test (n_pairs / n_strata / n_observations
-      depending on result shape).
-
-    Container/sidecar result types (StratumEffectPanel,
-    RefutationResult) commit `effect_stats=None` because they
-    don't carry a single canonical effect — see each class's
-    field-level comment for the per-class rationale."""
-    ate: float | None = None
-    rho: float | None = None
-    pvalue: float | None = None
-    n_observations: int | None = None
-
-
 # ============ BridgeEdge — graph edge metadata ============
 
 @dataclass(frozen=True, slots=True)
@@ -188,27 +171,14 @@ class BridgeEdge:
 
     `bridge_name` — the claim_bridge.Bridge.name that produced
     this edge.
-    `direction` — DIRECT or INVERSE, inferred from `ate` sign
-    (priority) or `rho` sign (fallback) at construction.
+    `direction` — DIRECT or INVERSE, declared on the bridge.
     `tier` — ASSOCIATIONAL by default; INTERVENTIONAL when the
-    edge represents an intervention contrast AND the verdict is
-    HELD.
-    `evidentiary_level` — 'refuted' for non-HELD;
+    edge's source is a DoEffect.
+    `evidentiary_level` — 'refuted' for NO_EFFECT;
     'causal_one_sided' for INTERVENTIONAL admit; 'correlational'
-    for ASSOCIATIONAL admit. No auto-promotion: cluster-level
-    corroboration is a structural query over the post-evaluated
-    graph, not a baked-in level.
-
-    `ate` — effect-size-g for intervention edges (paired Hedges'
-    g across cells in the comparison row). None for coupling
-    edges.
-    `rho` — Pearson r for coupling edges (cross-stratum on
-    per-stratum effect sizes). None for intervention edges.
-    `pvalue` — significance test p-value where defined (coupling
-    edges' Pearson p, etc.). None where not applicable.
-    `n_observations` — sample size used for the verdict's
-    statistical test (n_pairs for intervention, n_groups for
-    coupling). None where not applicable.
+    for ASSOCIATIONAL admit; 'unevaluated' otherwise. No
+    auto-promotion: cluster-level corroboration is a structural
+    query over the post-evaluated graph, not a baked-in level.
 
     `feedback` — set on edges that intentionally participate in
     cycles. Graph walks use this to break cycle traversal.
@@ -225,10 +195,6 @@ class BridgeEdge:
     direction: Direction
     tier: Tier
     evidentiary_level: EvidentiaryLevel
-    ate: float | None = None
-    rho: float | None = None
-    pvalue: float | None = None
-    n_observations: int | None = None
     feedback: bool = False
     extent_hash: int = 0
 
@@ -238,10 +204,6 @@ class BridgeEdge:
             self.bridge_name,
             f'{self.direction.value}/{self.tier.name.lower()}/{self.evidentiary_level}',
         ]
-        if self.ate is not None:
-            bits.append(f'ate={self.ate:+.3f}')
-        if self.rho is not None:
-            bits.append(f'ρ={self.rho:+.2f}')
         if self.feedback:
             bits.append('feedback')
         return ' '.join(bits)
@@ -319,8 +281,154 @@ def authored_graph(
     return g
 
 
-# Auto-promotion removed 2026-05-12: cluster-level corroboration is
-# a query over post-evaluated graphs via `(source, target,
-# extent_hash)` grouping, not a central aggregator. See
-# UNCONSUMED_PRIMITIVES_AUDIT.md Round 3 (Option B) and
-# HYPOTHESIS_AS_GRAPH.md.
+# ============ Post-evaluation evidence(E) stamper ============
+
+
+def _stamp_level(meta: BridgeEdge, verdict: Verdict) -> EvidentiaryLevel:
+    """Map `(Verdict, Tier)` → `EvidentiaryLevel`.
+
+    Dispatch via `Verdict.is_corroboration()` /
+    `Verdict.is_refutation()` — the enum's own predicates —
+    so HELD and HELD_WITH_SCOPE_FLAG both stamp as admit
+    rungs (per verdict-enum semantics: both are positive
+    evidence the claim holds at population level; the
+    scope-flag refines uniformity but not corroboration).
+    NO_EFFECT stamps as 'refuted'. POWER_INSUFFICIENT,
+    INVARIANT_VIOLATION, INADMISSIBLE all stamp as
+    'unevaluated' — per verdict.py:71, INVARIANT_VIOLATION
+    means the test was out of scope, NOT a refutation."""
+    if verdict.is_corroboration():
+        return (
+            'causal_one_sided' if meta.tier == Tier.INTERVENTIONAL
+            else 'correlational'
+        )
+    if verdict.is_refutation():
+        return 'refuted'
+    return 'unevaluated'
+
+
+def evaluated_graph(
+    bridges: 'Iterable[ClaimBridge]',
+    post_eval: Mapping[str, tuple[Verdict, int]],
+) -> CausalGraph:
+    """Realize the principle's `evidence(E)` component.
+
+    Build the authored graph topology then stamp each edge's
+    `evidentiary_level` (from verdict via `_stamp_level`) and
+    `extent_hash` (from `BridgeEvaluation.extent_hash`) from
+    the `post_eval` mapping `{bridge_name: (Verdict, extent_hash)}`.
+
+    Bridges absent from `post_eval` keep authored defaults
+    (`evidentiary_level='unevaluated'`, `extent_hash=0`).
+
+    Per HYPOTHESIS_AS_GRAPH.md: the resulting graph IS the
+    hypothesis under the principle's definition
+    `Hypothesis = (V, E, evidence(E))`. Cluster-shaped queries
+    on this graph use `clusters_by_extent` + `cluster_verdict`."""
+    g = authored_graph(bridges)
+    new_edges: list[Edge[str, BridgeEdge]] = []
+    for e in g.edges:
+        pe = post_eval.get(e.metadata.bridge_name)
+        if pe is None:
+            new_edges.append(e)
+            continue
+        verdict, ehash = pe
+        new_meta = replace(
+            e.metadata,
+            evidentiary_level=_stamp_level(e.metadata, verdict),
+            extent_hash=ehash,
+        )
+        new_edges.append(replace(e, metadata=new_meta))
+    return replace(g, edges=tuple(new_edges))
+
+
+# ============ Cluster-identity queries ============
+
+
+class ClusterVerdict(Enum):
+    """Verdict on a refutation cluster (multi-bridge edge group).
+
+    Mirrors the framework's three-verdict-not-binary discipline at
+    the cluster level: SUPPORTED / REFUTED / UNDERPOWERED, plus
+    EMPTY_EXTENT for clusters whose member bridges all admit zero
+    cells on the current cache (the framework cannot empirically
+    distinguish them)."""
+    SUPPORTED = 'supported'
+    REFUTED = 'refuted'
+    UNDERPOWERED = 'underpowered'
+    EMPTY_EXTENT = 'empty_extent'
+
+
+_EMPTY_EXTENT_HASH = hash(frozenset[str]())
+
+_ADMIT_LEVELS: frozenset[EvidentiaryLevel] = frozenset(
+    {'correlational', 'causal_one_sided'},
+)
+
+
+def clusters_by_extent(
+    g: CausalGraph,
+) -> dict[tuple[str, str, int], tuple[BridgeEdge, ...]]:
+    """Group every edge in `g` by `(source, target, extent_hash)`.
+
+    Multi-edge groups are refutation clusters (≥2 bridges
+    corroborating the same edge identity); singletons are
+    standalone bridges. Empty-extent edges all share
+    `hash(frozenset())` per the cluster-identity invariant."""
+    buckets: dict[tuple[str, str, int], list[BridgeEdge]] = {}
+    for e in g.edges:
+        key = (e.source, e.target, e.metadata.extent_hash)
+        buckets.setdefault(key, []).append(e.metadata)
+    return {k: tuple(v) for k, v in buckets.items()}
+
+
+def cluster_verdict(
+    members: tuple[BridgeEdge, ...],
+) -> ClusterVerdict:
+    """Compose member edges' evidentiary_level into a cluster
+    verdict.
+
+    Empty-extent (all members admit zero cells) is its own
+    bucket — the corpus can't test the cluster. REFUTED if any
+    member refutes. SUPPORTED if every member admits with a
+    non-empty extent. Otherwise UNDERPOWERED (mix of admits and
+    unevaluateds)."""
+    if not members:
+        return ClusterVerdict.UNDERPOWERED
+    if all(m.extent_hash == _EMPTY_EXTENT_HASH for m in members):
+        return ClusterVerdict.EMPTY_EXTENT
+    levels = {m.evidentiary_level for m in members}
+    if 'refuted' in levels:
+        return ClusterVerdict.REFUTED
+    if levels <= _ADMIT_LEVELS:
+        return ClusterVerdict.SUPPORTED
+    return ClusterVerdict.UNDERPOWERED
+
+
+def composed_verdict(
+    g: CausalGraph,
+    *,
+    bridges: 'Iterable[ClaimBridge]',
+) -> ClusterVerdict:
+    """Compose verdicts over a hand-listed set of bridges.
+
+    The Finding-walk primitive: a finding declares the `Bridge`
+    instances that support its claim (imported by Python name so
+    rename → ImportError, no stringly-typed references); this
+    helper looks them up in the post-eval graph and composes
+    their evidentiary_levels into a single cluster verdict.
+
+    Single helper for cluster- and envelope-shaped Findings —
+    cluster integrity (extent uniformity) is a separate concern
+    surfaced by the `run_hypothesis.py` cluster rollup, not
+    re-checked here. UNDERPOWERED on len-mismatch (one or more
+    declared bridges absent from graph — possible when a bridge
+    was authored but its hypothesis hasn't been re-evaluated)."""
+    expected_names = {b.name for b in bridges}
+    found = tuple(
+        e.metadata for e in g.edges
+        if e.metadata.bridge_name in expected_names
+    )
+    if len(found) != len(expected_names):
+        return ClusterVerdict.UNDERPOWERED
+    return cluster_verdict(found)

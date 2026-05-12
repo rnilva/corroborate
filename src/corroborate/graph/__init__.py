@@ -20,8 +20,13 @@ submodule path.
 from corroborate.graph.causal import (
     BridgeEdge,
     CausalGraph,
+    ClusterVerdict,
     Direction,
+    EvidentiaryLevel,
     Tier,
+    cluster_verdict,
+    clusters_by_extent,
+    evaluated_graph,
 )
 from corroborate.graph.computation import (
     ComputationGraph,
@@ -34,9 +39,14 @@ from corroborate.graph.graph import (
 __all__ = [
     'BridgeEdge',
     'CausalGraph',
+    'ClusterVerdict',
     'ComputationGraph',
     'Direction',
     'Edge',
+    'EvidentiaryLevel',
     'Graph',
     'Tier',
+    'cluster_verdict',
+    'clusters_by_extent',
+    'evaluated_graph',
 ]

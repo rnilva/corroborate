@@ -12,11 +12,15 @@ argparse + verdict-printing surface."""
 from __future__ import annotations
 
 import argparse
+import importlib
 from collections.abc import Sequence
 from pathlib import Path
 from typing import cast
 
-from corroborate.bridge import BridgeEvaluation
+from corroborate.bridge import Bridge, BridgeEvaluation
+from corroborate.graph.causal import (
+    cluster_verdict, clusters_by_extent, evaluated_graph,
+)
 from corroborate.runner import check, evict, run
 
 
@@ -191,8 +195,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         write_cache = False
         write_report = False
 
+    module_name = cast(str, args.module)
+    h_module = importlib.import_module(module_name)
+    bridges = cast(tuple[Bridge, ...], h_module.BRIDGES)
     results = run(
-        cast(str, args.module),
+        module_name,
         data=data,
         cache_path=cast(Path | None, args.cache_path),
         use_cache=not cast(bool, args.no_cache),
@@ -203,7 +210,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         write_report=write_report,
         bridge_filter=bridge_filter,
     )
-    _print_verdicts(results)
+    _print_verdicts(results, bridges)
     return 0
 
 
@@ -245,25 +252,10 @@ def _check_and_report(module: str) -> int:
 _EMPTY_EXTENT_HASH = hash(frozenset[str]())
 
 
-def _cluster_verdict_label(
-    member_verdicts: tuple[str, ...], extent_hash: int,
-) -> str:
-    """Compose a cluster-level verdict from member bridges'
-    `verdict.value` strings. Mirrors
-    `experiments/findings/ddqn/walks.py::cluster_verdict` so
-    standard-run-output labels match what walks-as-claim-queries
-    return — same vocabulary across the framework's two cluster
-    consumers."""
-    if extent_hash == _EMPTY_EXTENT_HASH:
-        return 'empty_extent'
-    if 'no_effect' in member_verdicts:
-        return 'refuted'
-    if all(v == 'held' for v in member_verdicts):
-        return 'supported'
-    return 'underpowered'
-
-
-def _print_verdicts(results: dict[str, BridgeEvaluation]) -> None:
+def _print_verdicts(
+    results: dict[str, BridgeEvaluation],
+    bridges: tuple[Bridge, ...],
+) -> None:
     counts: dict[str, int] = {}
     refutation_counts: dict[tuple[str, str], int] = {}
     # `assumption_violations` are pre-prefixed with `<fixture>: ` by
@@ -327,8 +319,15 @@ def _print_verdicts(results: dict[str, BridgeEvaluation]) -> None:
     # Extent clusters: report multi-bridge groups (refutation
     # clusters or sibling-pair patterns) and the empty-extent group
     # separately. Singletons are the default and don't need a
-    # roll-up. See `experiments/findings/ddqn/extent_clusters_smoke.py`
-    # for the design rationale.
+    # roll-up. Cluster verdict label comes from the framework's
+    # `cluster_verdict` primitive — see
+    # `experiments/findings/ddqn/walks.py` for the walks demo and
+    # `corroborate.graph.causal` for the implementation.
+    post_eval = {
+        name: (ev.verdict, ev.extent_hash) for name, ev in results.items()
+    }
+    g = evaluated_graph(bridges, post_eval)
+    graph_clusters = clusters_by_extent(g)
     multi = [(k, v) for k, v in extent_clusters.items() if len(v) >= 2]
     empty_members = [
         (name, n) for (_, _, h), members in extent_clusters.items()
@@ -343,9 +342,8 @@ def _print_verdicts(results: dict[str, BridgeEvaluation]) -> None:
         ):
             n = members[0][1]
             src_short = src if len(src) < 50 else src[:47] + '...'
-            verdict_label = _cluster_verdict_label(
-                tuple(v for _, _, v in members), h,
-            )
+            edge_members = graph_clusters.get((src, tgt, h), ())
+            verdict_label = cluster_verdict(edge_members).value
             print(
                 f'  {verdict_label:14s}  ({len(members)} bridges, '
                 f'n_cells={n})  {src_short} → {tgt}',

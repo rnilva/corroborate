@@ -30,7 +30,8 @@ post-evaluation graph.
 | Post-eval evidence label | `BridgeEdge.evidentiary_level` | `corroborate.graph.causal.EvidentiaryLevel` |
 | Graph topology (pre-eval) | `authored_graph(bridges)` | `corroborate.graph.causal` |
 | Per-bridge admitted-cell hash | `BridgeEvaluation.extent_hash` | `corroborate.bridge.bridge` |
-| Cluster query | group edges by `(source, target, extent_hash)` | walker-defined (see `experiments/findings/ddqn/walks.py`) |
+| Evidence stamper (post-eval) | `evaluated_graph(bridges, post_eval)` | `corroborate.graph.causal` |
+| Cluster query | `clusters_by_extent` + `cluster_verdict` + `ClusterVerdict` | `corroborate.graph.causal` |
 | Direction composition | `compose_direction(edges)` | multiplicative algebra |
 | Tier composition | `chain_tier(edges)` | min-tier along path |
 
@@ -196,9 +197,57 @@ cluster-level "this edge has multiple HELDs sharing extent" is a
 structural query authors compose, not a central aggregator on
 the graph.
 
-See `experiments/findings/ddqn/walks.py` for the discoverable
-helpers (`evaluated_graph`, `clusters_by_extent`,
-`cluster_verdict`) and a worked demo.
+The framework provides `evaluated_graph`, `clusters_by_extent`,
+`cluster_verdict`, and the `ClusterVerdict` enum in
+`corroborate.graph.causal`. See
+`experiments/findings/ddqn/walks.py` for a worked demo that loads
+a snapshot, builds the post-evaluated graph, and walks its
+clusters.
+
+### 3b. Scope clusters — pool bridge + meta-regression sibling
+
+A claim of the shape "this effect corroborates population-wide
+but heterogeneous along covariate C" requires a *scope cluster*:
+a pool bridge that emits HELD_WITH_SCOPE_FLAG when between-stratum
+I² ≥ 0.5, plus a meta-regression sibling whose coefficient on C
+tests the cleavage. Both bridges share a NAMED scope predicate
+(same `extent_hash` → automatic cluster on the post-evaluated
+graph).
+
+The pool side uses the `random_effects_pool` analysis primitive
+(`corroborate.analyses.random_effects_pool`), which composes
+DerSimonian-Laird random-effects pooling with the
+heterogeneity-flagged verdict (`random_effects_verdict`).
+Bridges that fixture it return the result's verdict directly:
+
+```python
+from experiments.findings.<short>._scope import SHARED_SCOPE
+
+@claim_bridge(source=INTERVENTION, target='<outcome>',
+              scope=SHARED_SCOPE, tier=Tier.ASSOCIATIONAL,
+              predicted_direction='a_gt_b')
+def effect_pools_across_envs(
+    random_effects_pool: RandomEffectsPoolResult,
+) -> tuple[Verdict, RefutationClass | None]:
+    return random_effects_pool.verdict, random_effects_pool.refutation
+
+@claim_bridge(source=INTERVENTION, target='<outcome>',
+              scope=SHARED_SCOPE, tier=Tier.ASSOCIATIONAL)
+def cleavage_at_C(meta_regression: MetaRegressionResult) -> Verdict:
+    # CI on C's coefficient excludes zero → HELD; else NO_EFFECT.
+    ...
+```
+
+The pool bridge's HELD_WITH_SCOPE_FLAG triggers the recipe:
+"which covariate predicts the per-stratum effect?", answered by
+the sibling meta-regression. The scope-cluster shape is the
+empirical scope claim's structural unit — same `(source,
+target, extent_hash)` on the post-evaluated graph → automatic
+cluster.
+
+The methodology is in `ANALYSIS_RECIPE.md` §1.5; the discipline
+against treating heterogeneous-but-pooled-positive as plain
+HELD is in `corroborate/bridge/verdict.py`.
 
 ## Anti-patterns
 

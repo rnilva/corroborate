@@ -43,6 +43,7 @@ from corroborate.analyses import (  # noqa: F401
     paired_arm_spearman as _paired_arm_spearman,  # pyright: ignore[reportUnusedImport]
     paired_delta_link_dowhy as _paired_delta_link_dowhy,  # pyright: ignore[reportUnusedImport]
     proportion_mediated as _proportion_mediated,  # pyright: ignore[reportUnusedImport]
+    random_effects_pool as _re_pool,  # pyright: ignore[reportUnusedImport]
     partial_spearman_paired as _psp,  # pyright: ignore[reportUnusedImport]
     cross_config_paired_slope as _ccps,  # pyright: ignore[reportUnusedImport]
     stratified_arm_diff_pooled as _stratified_arm_diff_pooled,  # pyright: ignore[reportUnusedImport]
