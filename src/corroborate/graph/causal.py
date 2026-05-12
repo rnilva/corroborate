@@ -384,7 +384,7 @@ class ClusterVerdict(Enum):
     EMPTY_EXTENT = 'empty_extent'
 
 
-_EMPTY_EXTENT_HASH = hash(frozenset[str]())
+EMPTY_EXTENT_HASH = hash(frozenset[str]())
 
 _ADMIT_LEVELS: frozenset[EvidentiaryLevel] = frozenset(
     {'correlational', 'causal_one_sided'},
@@ -420,7 +420,7 @@ def cluster_verdict(
     unevaluateds)."""
     if not members:
         return ClusterVerdict.UNDERPOWERED
-    if all(m.extent_hash == _EMPTY_EXTENT_HASH for m in members):
+    if all(m.extent_hash == EMPTY_EXTENT_HASH for m in members):
         return ClusterVerdict.EMPTY_EXTENT
     levels = {m.evidentiary_level for m in members}
     if 'refuted' in levels:
@@ -448,17 +448,26 @@ def composed_verdict(
     surfaced by the `run_hypothesis.py` cluster rollup, not
     re-checked here.
 
-    Len-mismatch (a declared bridge isn't in the graph) returns
-    UNDERPOWERED as a defensive fallback. In production the
+    Len-mismatch (a declared bridge isn't in the graph) raises
+    `AssertionError` — the impossible state. In production the
     `_validate_hypothesis` check at startup enforces
-    `Finding.BRIDGES ⊆ Hypothesis.BRIDGES`, so this branch
-    should never fire — but a corrupted post-eval graph could
-    in principle trigger it."""
+    `Finding.BRIDGES ⊆ Hypothesis.BRIDGES`, so reaching this
+    branch means the validator was bypassed or the graph was
+    constructed from a corrupted bridge set. Fail loud rather
+    than return a silent UNDERPOWERED that an operator could
+    misread as "data inconclusive."""
     expected_names = {b.name for b in bridges}
     found = tuple(
         e.metadata for e in g.edges
         if e.metadata.bridge_name in expected_names
     )
     if len(found) != len(expected_names):
-        return ClusterVerdict.UNDERPOWERED
+        missing = expected_names - {m.bridge_name for m in found}
+        raise AssertionError(
+            f'composed_verdict: bridges {missing!r} are in the '
+            f'declared set but not in the post-eval graph. '
+            f'_validate_hypothesis enforces Finding.BRIDGES ⊆ '
+            f'Hypothesis.BRIDGES at startup — this state should '
+            f'be unreachable in production.',
+        )
     return cluster_verdict(found)

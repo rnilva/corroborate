@@ -20,8 +20,7 @@ from typing import cast
 from corroborate.bridge import Bridge, BridgeEvaluation
 from corroborate.core.finding import Finding
 from corroborate.graph.causal import (
-    _EMPTY_EXTENT_HASH,  # pyright: ignore[reportPrivateUsage]
-    ClusterVerdict, PostEvalEntry,
+    EMPTY_EXTENT_HASH, PostEvalEntry,
     cluster_verdict, clusters_by_extent, composed_verdict, evaluated_graph,
 )
 from corroborate.runner import check, evict, run
@@ -336,7 +335,7 @@ def _print_verdicts(
     empty_members = [
         (name, n) for (_, _, h), members in extent_clusters.items()
         for name, n, _ in members
-        if h == _EMPTY_EXTENT_HASH
+        if h == EMPTY_EXTENT_HASH
     ]
     if multi or empty_members:
         print()
@@ -371,33 +370,21 @@ def _print_verdicts(
         print()
         drift_count = 0
         blocked_count = 0
-        contradiction_count = 0
-        # Terminal verdicts that shouldn't pair with BLOCKED_ON —
-        # SUPPORTED / REFUTED are author conclusions, not "pending."
-        # If a finding has both, the author has authored a
-        # contradiction (likely forgot to clear BLOCKED_ON after
-        # data landed). Surface as a structural warning.
-        _TERMINAL = {ClusterVerdict.SUPPORTED, ClusterVerdict.REFUTED}
         for f in findings:
             verdict = composed_verdict(g, bridges=f.BRIDGES)
             drift = verdict != f.EXPECTED
             blocked = f.BLOCKED_ON is not None
-            contradiction = blocked and f.EXPECTED in _TERMINAL
             if drift:
                 drift_count += 1
             if blocked:
                 blocked_count += 1
-            if contradiction:
-                contradiction_count += 1
             # `← DRIFT` = verdict CHANGED relative to author's
             # pinned state (regression or improvement — both
             # warrant attention). `[blocked]` = state matches
             # EXPECTED but the finding is intentionally pinned
             # to a sub-optimal state pending data; quiet status,
             # no investigation needed.
-            if contradiction:
-                state_marker = ' !! CONTRADICTION'
-            elif drift:
+            if drift:
                 state_marker = ' ← DRIFT'
             elif blocked:
                 state_marker = ' [blocked]'
@@ -433,19 +420,10 @@ def _print_verdicts(
                     print(f'      claim:    {doc}')
             if blocked:
                 print(f'      blocked-on: {f.BLOCKED_ON}')
-            if contradiction:
-                print(
-                    f'      warning: EXPECTED={f.EXPECTED.value} is '
-                    f'terminal but BLOCKED_ON is non-empty. Likely '
-                    f'forgot to clear BLOCKED_ON after data landed.',
-                )
-        summary = (
+        print(
             f'findings: {len(findings)} declared, '
-            f'{drift_count} drift, {blocked_count} blocked'
+            f'{drift_count} drift, {blocked_count} blocked',
         )
-        if contradiction_count:
-            summary += f', {contradiction_count} contradiction'
-        print(summary)
 
 
 def _summarize(result: object) -> str:

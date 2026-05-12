@@ -23,16 +23,13 @@ from collections.abc import Iterable, Mapping, Sequence
 from functools import partial
 from typing import Literal
 
-from typing import TYPE_CHECKING
-
 import polars as pl
 
 # Importing the analyses package populates the registry so
 # resolution by parameter name succeeds.
 import corroborate.analyses  # noqa: F401  # pyright: ignore[reportUnusedImport]
 
-if TYPE_CHECKING:
-    from corroborate.core.finding import Finding
+from corroborate.core.finding import NO_FINDINGS
 
 # Substrate measurables (jensen_gap, jensen_dormancy_*, eval_*,
 # etc.) are registered by importing the rl.dqn module — without
@@ -2147,10 +2144,10 @@ BRIDGES = (
     *CHAIN_DECOMPOSITION_BRIDGES,
 )
 
-# No findings authored against this hypothesis yet. Required on
-# the Hypothesis Protocol so pyright catches "I forgot to declare
-# FINDINGS"; populate as cluster-shaped claims emerge.
-FINDINGS: tuple['Finding', ...] = ()
+# No findings authored against this hypothesis yet. `NO_FINDINGS`
+# is the framework's empty-FINDINGS sentinel — populate as
+# cluster-shaped claims emerge.
+FINDINGS = NO_FINDINGS
 
 
 __all__ = [

@@ -18,9 +18,9 @@ import corroborate.analyses  # pyright: ignore[reportUnusedImport]  # populate r
 import corroborate_rl.dqn.measurables  # pyright: ignore[reportUnusedImport]  # populate measurable registry
 
 from experiments.findings.ddqn import (
-    finding_metamaze_gamma_amplification as _FINDING_METAMAZE,
-    finding_reach_bias_link as _FINDING_REACH,
-    finding_rs01_rescue_envelope as _FINDING_RS01,
+    finding_metamaze_gamma_amplification,
+    finding_reach_bias_link,
+    finding_rs01_rescue_envelope,
 )
 from experiments.findings.ddqn._arms import INTERVENTION as INTERVENTION
 from experiments.findings.ddqn._common import CLAIM as CLAIM
@@ -46,7 +46,7 @@ BRIDGES = (
 
 
 FINDINGS = (
-    _FINDING_REACH,
-    _FINDING_METAMAZE,
-    _FINDING_RS01,
+    finding_reach_bias_link,
+    finding_metamaze_gamma_amplification,
+    finding_rs01_rescue_envelope,
 )

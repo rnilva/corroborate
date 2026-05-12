@@ -265,7 +265,8 @@ level attributes (`EXPECTED`, `BRIDGES`, `BLOCKED_ON`, `__name__`),
 no callable. The framework derives the verdict via
 `composed_verdict(g, bridges=f.BRIDGES)` — every named bridge
 admits → SUPPORTED; any refutes → REFUTED; mix admit /
-unevaluated → UNDERPOWERED.
+unevaluated → UNDERPOWERED; all members admit zero cells →
+EMPTY_EXTENT (corpus can't distinguish them).
 
 Authoring conventions:
 - Finding lives at `experiments/findings/<hypothesis>/finding_*.py`.

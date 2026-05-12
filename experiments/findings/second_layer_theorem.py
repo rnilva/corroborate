@@ -36,15 +36,13 @@ from __future__ import annotations
 
 import math
 from functools import partial
-from typing import TYPE_CHECKING
 
 import polars as pl
 
 import corroborate.analyses  # pyright: ignore[reportUnusedImport]
 import corroborate_rl.dqn.measurables  # pyright: ignore[reportUnusedImport]
 
-if TYPE_CHECKING:
-    from corroborate.core.finding import Finding
+from corroborate.core.finding import NO_FINDINGS
 from corroborate.analyses.stratified_partial_spearman import (
     StratifiedPartialSpearmanResult,
 )
@@ -326,4 +324,4 @@ SECOND_LAYER_BRIDGES = (
 )
 BRIDGES = SECOND_LAYER_BRIDGES
 
-FINDINGS: tuple['Finding', ...] = ()
+FINDINGS = NO_FINDINGS

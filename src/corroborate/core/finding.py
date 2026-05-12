@@ -36,6 +36,14 @@ from corroborate.bridge.bridge import Bridge
 from corroborate.graph.causal import ClusterVerdict
 
 
+NO_FINDINGS: 'tuple[Finding, ...]' = ()
+"""Empty-FINDINGS sentinel for Hypothesis modules without any
+findings authored yet. Lets substrate files write
+`FINDINGS = NO_FINDINGS` instead of the six-line TYPE_CHECKING +
+forward-ref + `= ()` boilerplate. Imported as a normal value;
+type checks via the Protocol forward ref below."""
+
+
 @runtime_checkable
 class Finding(Protocol):
     """The framework's typed Finding contract.

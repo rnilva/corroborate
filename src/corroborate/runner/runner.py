@@ -66,6 +66,13 @@ from corroborate.bridge.bridge import (
 )
 from corroborate.core.hypothesis import Hypothesis
 from corroborate.corpus.cloud import RemoteManifest
+from corroborate.graph.causal import ClusterVerdict
+
+_TERMINAL_VERDICTS: frozenset[ClusterVerdict] = frozenset(
+    {ClusterVerdict.SUPPORTED, ClusterVerdict.REFUTED},
+)
+"""Terminal cluster verdicts — author conclusions that don't
+pair with BLOCKED_ON. `_validate_hypothesis` enforces this."""
 from corroborate.corpus.measurements import DriftReport, check_drift
 from corroborate.corpus.schema import LINEAGE_FIELDS
 from corroborate.measurables import (
@@ -108,10 +115,14 @@ def collect_bridges(
 def _validate_hypothesis(h: object) -> Hypothesis:
     """Narrow `h` to the framework's `Hypothesis` Protocol via
     `__instancecheck__` (`runtime_checkable`), then verify each
-    `BRIDGES` element is a `Bridge`. Raises `TypeError` on shape
-    errors. Both Python modules and class-based hypotheses
-    satisfy the Protocol structurally as long as they expose
-    `INTERVENTION: DoEffect`, `BRIDGES: tuple[Bridge, ...]`,
+    `BRIDGES` element is a `Bridge` AND each `FINDINGS` element's
+    `BRIDGES` is a subset of `h.BRIDGES` AND each Finding's
+    `EXPECTED` / `BLOCKED_ON` combination is consistent (a
+    terminal EXPECTED cannot pair with a non-None BLOCKED_ON —
+    that's author contradiction). Raises `TypeError` on any shape
+    or invariant violation. Both Python modules and class-based
+    hypotheses satisfy the Protocol structurally as long as they
+    expose `INTERVENTION: DoEffect`, `BRIDGES: tuple[Bridge, ...]`,
     `FINDINGS: tuple[Finding, ...]` (empty if no findings), and
     `__name__: str`."""
     if not isinstance(h, Hypothesis):
@@ -147,6 +158,23 @@ def _validate_hypothesis(h: object) -> Hypothesis:
                     f'BRIDGES must be a subset of its parent '
                     f'Hypothesis\'s BRIDGES.',
                 )
+        # Terminal-EXPECTED-with-BLOCKED_ON is author contradiction
+        # — SUPPORTED / REFUTED are conclusions, not "pending."
+        # Hard invariant at the validator rather than a soft
+        # renderer signal: the operator can't accidentally ship a
+        # finding where they forgot to clear BLOCKED_ON after data
+        # landed. Fail loud at startup.
+        if (
+            f.BLOCKED_ON is not None
+            and f.EXPECTED in _TERMINAL_VERDICTS
+        ):
+            raise TypeError(
+                f'{f.__name__}: BLOCKED_ON is non-None but '
+                f'EXPECTED={f.EXPECTED.value} is a terminal '
+                f'verdict. Terminal EXPECTED is an author conclusion '
+                f'and does not pair with a BLOCKED_ON gap — likely '
+                f'forgot to clear BLOCKED_ON after data landed.',
+            )
     return h
 
 

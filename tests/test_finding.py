@@ -110,6 +110,21 @@ def test_class_missing_blocked_on_is_not_finding() -> None:
     assert not isinstance(Broken, Finding)
 
 
+def test_object_missing_name_is_not_finding() -> None:
+    """`__name__` is a required Protocol attribute. Modules + classes
+    carry it for free; plain instances lacking it fail conformance."""
+    @dataclass(frozen=True)
+    class NoName:
+        EXPECTED: ClassVar[ClusterVerdict] = ClusterVerdict.SUPPORTED
+        BRIDGES: ClassVar[tuple[Bridge, ...]] = ()
+        BLOCKED_ON: ClassVar[str | None] = None
+    instance = NoName()
+    # Class HAS __name__; instance doesn't. Both are reachable from
+    # the substrate (modules and class objects). Instances aren't.
+    assert isinstance(NoName, Finding)
+    assert not isinstance(instance, Finding)
+
+
 # ============ composed_verdict over a post-eval graph ============
 
 
@@ -199,19 +214,20 @@ def test_composed_verdict_envelope_shape_admits() -> None:
     )
 
 
-def test_composed_verdict_missing_bridge_falls_back_underpowered() -> None:
-    """If a declared bridge isn't in the graph, the defensive
-    fallback returns UNDERPOWERED. The `_validate_hypothesis`
-    subset check should prevent this from firing in production —
-    this test pins the safe behaviour for corrupted graphs."""
+def test_composed_verdict_missing_bridge_raises_assertion() -> None:
+    """If a declared bridge isn't in the graph, `composed_verdict`
+    raises `AssertionError` — the impossible state.
+    `_validate_hypothesis` prevents this from firing in production
+    by enforcing `Finding.BRIDGES ⊆ Hypothesis.BRIDGES` at
+    startup. This test pins the loud failure that should fire if
+    the validator is bypassed or the graph is corrupted."""
     g = _evaluated_with(
         (_bridge_a,),
         {'_bridge_a': (Verdict.HELD, 42)},
     )
     # Ask for _bridge_b too, which isn't in the graph.
-    assert composed_verdict(g, bridges=(_bridge_a, _bridge_b)) is (
-        ClusterVerdict.UNDERPOWERED
-    )
+    with pytest.raises(AssertionError, match='_bridge_b'):
+        composed_verdict(g, bridges=(_bridge_a, _bridge_b))
 
 
 # ============ _validate_hypothesis subset invariant ============
@@ -263,4 +279,43 @@ def test_validate_empty_findings_accepts() -> None:
         INTERVENTION: ClassVar[DoEffect] = _DOEFFECT
         BRIDGES: ClassVar[tuple[Bridge, ...]] = ()
         FINDINGS: ClassVar[tuple[Finding, ...]] = ()
+    assert _validate_hypothesis(H) is H
+
+
+def test_validate_rejects_blocked_on_with_terminal_expected() -> None:
+    """Author contradiction: `BLOCKED_ON` non-None paired with a
+    terminal `EXPECTED` (SUPPORTED / REFUTED) is a hard invariant
+    violation. `_validate_hypothesis` rejects at startup so
+    operators can't accidentally ship a finding where they forgot
+    to clear BLOCKED_ON after data landed."""
+    @dataclass(frozen=True)
+    class ContradictoryFinding:
+        EXPECTED: ClassVar[ClusterVerdict] = ClusterVerdict.SUPPORTED
+        BRIDGES: ClassVar[tuple[Bridge, ...]] = (_bridge_a,)
+        BLOCKED_ON: ClassVar[str | None] = 'stale gap note'
+
+    @dataclass(frozen=True)
+    class H:
+        INTERVENTION: ClassVar[DoEffect] = _DOEFFECT
+        BRIDGES: ClassVar[tuple[Bridge, ...]] = (_bridge_a,)
+        FINDINGS: ClassVar[tuple[Finding, ...]] = (ContradictoryFinding,)
+    with pytest.raises(TypeError, match='BLOCKED_ON'):
+        _validate_hypothesis(H)
+
+
+def test_validate_accepts_blocked_on_with_non_terminal_expected() -> None:
+    """`BLOCKED_ON` paired with UNDERPOWERED or EMPTY_EXTENT is
+    legitimate — the empirical state is pinned to a non-terminal
+    verdict pending data. Validator accepts."""
+    @dataclass(frozen=True)
+    class PendingFinding:
+        EXPECTED: ClassVar[ClusterVerdict] = ClusterVerdict.UNDERPOWERED
+        BRIDGES: ClassVar[tuple[Bridge, ...]] = (_bridge_a,)
+        BLOCKED_ON: ClassVar[str | None] = 'waiting for n=240 cells'
+
+    @dataclass(frozen=True)
+    class H:
+        INTERVENTION: ClassVar[DoEffect] = _DOEFFECT
+        BRIDGES: ClassVar[tuple[Bridge, ...]] = (_bridge_a,)
+        FINDINGS: ClassVar[tuple[Finding, ...]] = (PendingFinding,)
     assert _validate_hypothesis(H) is H
