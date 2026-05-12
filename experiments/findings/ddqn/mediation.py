@@ -51,6 +51,9 @@ from experiments.findings.ddqn._common import MC_RETURN_PER_BURST_MEAN
 from experiments.findings.ddqn._scope import (
     DDQN_RELEVANT_SCOPE, VANILLA_CONFIG_Q_BOUNDED,
 )
+from experiments.findings.ddqn._verdicts import (
+    partial_spearman_null_verdict, partial_spearman_signed_verdict,
+)
 
 
 # CLAIM 23 — Δ_jens shadow tests.
@@ -74,17 +77,12 @@ def q_divergence_shadowed_by_jens(
     min_strata: int = 2,
 ) -> Verdict:
     """`ρ_partial(qdiv, outcome | jens)` env-stratified Fisher-z
-    pooled. HELD when |ρ| < `null_max_abs_rho`. Currently NO_EFFECT
-    (ρ=-0.432, n=717) — γ-scaling residual surfaces cross-env."""
+    pooled. HELD (null confirmed) when |ρ| < `null_max_abs_rho`."""
     del x, y, conditioning, stratify_by, min_stratum_size
-    if stratified_partial_spearman.n_strata < min_strata:
-        return Verdict.POWER_INSUFFICIENT
-    rho = stratified_partial_spearman.rho_pooled
-    if math.isnan(rho):
-        return Verdict.POWER_INSUFFICIENT
-    if abs(rho) < null_max_abs_rho:
-        return Verdict.HELD
-    return Verdict.NO_EFFECT
+    return partial_spearman_null_verdict(
+        stratified_partial_spearman,
+        max_abs_rho=null_max_abs_rho, min_strata=min_strata,
+    )
 
 
 @claim_bridge(
@@ -106,18 +104,13 @@ def argmax_entropy_shadowed_by_jens(
     null_max_abs_rho: float = 0.2,
     min_strata: int = 2,
 ) -> Verdict:
-    """`ρ_partial(argmax_entropy_late, outcome | jens)`. HELD when
-    |ρ| < ceiling. Currently HELD (ρ=+0.011) — argmaxH isn't
-    algebraically tied to jens."""
+    """`ρ_partial(argmax_entropy_late, outcome | jens)`. HELD
+    (null confirmed) when |ρ| < `null_max_abs_rho`."""
     del x, y, conditioning, stratify_by, min_stratum_size
-    if stratified_partial_spearman.n_strata < min_strata:
-        return Verdict.POWER_INSUFFICIENT
-    rho = stratified_partial_spearman.rho_pooled
-    if math.isnan(rho):
-        return Verdict.POWER_INSUFFICIENT
-    if abs(rho) < null_max_abs_rho:
-        return Verdict.HELD
-    return Verdict.NO_EFFECT
+    return partial_spearman_null_verdict(
+        stratified_partial_spearman,
+        max_abs_rho=null_max_abs_rho, min_strata=min_strata,
+    )
 
 
 # CLAIM 12 — env-polarity moderates the eff_h mediator sign.
@@ -147,17 +140,12 @@ def eff_h_mediates_g_link__goal_envs(
     magnitude_threshold: float = 0.3,
     min_strata: int = 2,
 ) -> Verdict:
-    """GOAL-polarity (`polarity < -0.3`). HELD when ρ ≤ -threshold.
-    Currently HELD ρ=-0.593 (n=737)."""
+    """GOAL-polarity (`polarity < -0.3`). HELD when ρ ≤ -threshold."""
     del x, y, conditioning, stratify_by, min_stratum_size
-    if stratified_partial_spearman.n_strata < min_strata:
-        return Verdict.POWER_INSUFFICIENT
-    rho = stratified_partial_spearman.rho_pooled
-    if math.isnan(rho):
-        return Verdict.POWER_INSUFFICIENT
-    if rho <= -magnitude_threshold:
-        return Verdict.HELD
-    return Verdict.NO_EFFECT
+    return partial_spearman_signed_verdict(
+        stratified_partial_spearman,
+        threshold=magnitude_threshold, sign=-1, min_strata=min_strata,
+    )
 
 
 @claim_bridge(
@@ -186,17 +174,13 @@ def eff_h_mediates_g_link__survival_envs(
     magnitude_threshold: float = 0.3,
     min_strata: int = 2,
 ) -> Verdict:
-    """SURVIVAL-polarity (`polarity > +0.3`). HELD when ρ ≥ threshold.
-    Currently HELD ρ=+0.656 (n=307)."""
+    """SURVIVAL-polarity (`polarity > +0.3`). HELD when ρ ≥
+    threshold (polarity-tautology sign)."""
     del x, y, conditioning, stratify_by, min_stratum_size
-    if stratified_partial_spearman.n_strata < min_strata:
-        return Verdict.POWER_INSUFFICIENT
-    rho = stratified_partial_spearman.rho_pooled
-    if math.isnan(rho):
-        return Verdict.POWER_INSUFFICIENT
-    if rho >= magnitude_threshold:
-        return Verdict.HELD
-    return Verdict.NO_EFFECT
+    return partial_spearman_signed_verdict(
+        stratified_partial_spearman,
+        threshold=magnitude_threshold, sign=+1, min_strata=min_strata,
+    )
 
 
 # CLAIM 13 — target_staleness_late mediator chain.
@@ -230,19 +214,12 @@ def target_staleness_late_mediates_outcome__minatar_intermediate_sync(
 ) -> Verdict:
     """`ρ_partial(staleness_late, outcome | jens)` env-stratified on
     MinAtar intermediate-sync SURVIVE cohort. HELD when ρ ≤
-    -magnitude_threshold. Currently NO_EFFECT (ρ=-0.069): cross-
-    config negative coupling does NOT survive at per-seed grain."""
+    -magnitude_threshold (predicted negative)."""
     del x, y, conditioning, stratify_by, min_stratum_size
-    if stratified_partial_spearman.n_strata < min_strata:
-        return Verdict.POWER_INSUFFICIENT
-    rho = stratified_partial_spearman.rho_pooled
-    if math.isnan(rho):
-        return Verdict.POWER_INSUFFICIENT
-    if rho <= -magnitude_threshold:
-        return Verdict.HELD
-    if abs(rho) < magnitude_threshold:
-        return Verdict.NO_EFFECT
-    return Verdict.NO_EFFECT
+    return partial_spearman_signed_verdict(
+        stratified_partial_spearman,
+        threshold=magnitude_threshold, sign=-1, min_strata=min_strata,
+    )
 
 
 # CLAIM 21 — Polarity-stratified cross-config staleness slope.

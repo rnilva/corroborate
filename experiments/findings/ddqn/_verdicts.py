@@ -3,12 +3,155 @@
 The `_native_diff_*_verdict` helpers widen the CI when
 `paired_g.assumption_violations` flags heavy-tail / skew — the
 framework's own SE under-covers ~10-25% on those distributions
-(reviewer-3 catch); the verdict propagates that knowledge."""
+(reviewer-3 catch); the verdict propagates that knowledge.
+
+DoWhy + partial-Spearman verdict deciders factor out the 6-bridge
+DoWhy refutation-trio pattern (bias_correction.py) and the
+4-bridge partial-Spearman shadow/mediator pattern (mediation.py)
+into the substrate's shared verdict-logic layer."""
 from __future__ import annotations
 
 import math
+from typing import Literal, Protocol
 
 from corroborate.bridge.verdict import Verdict
+
+
+# ============ Typed protocols for analysis-result shapes ============
+
+
+class _BackdoorResult(Protocol):
+    @property
+    def identified(self) -> bool: ...
+    @property
+    def ate(self) -> float: ...
+
+
+class _RefutationResult(Protocol):
+    @property
+    def real_ate(self) -> float: ...
+    @property
+    def refuted_ate(self) -> float: ...
+
+
+class _PartialSpearmanResult(Protocol):
+    @property
+    def n_strata(self) -> int: ...
+    @property
+    def rho_pooled(self) -> float: ...
+
+
+# ============ DoWhy result deciders ============
+
+
+def dowhy_backdoor_verdict(
+    b: _BackdoorResult,
+    *,
+    ate_ceiling: float,
+    zero_guard: bool = False,
+) -> Verdict:
+    """DoWhy backdoor ATE verdict (predicted INVERSE direction).
+
+    HELD when identified ∧ ATE ≤ `ate_ceiling`. POW_INSUF when
+    not identified / NaN / ATE in (ceiling, 0). NO_EFFECT when
+    ATE ≥ 0.
+
+    `zero_guard=True` treats |ATE| < 1e-6 as POW_INSUF — DoWhy
+    machine-epsilon signs are RNG-dependent and shouldn't flip
+    verdicts."""
+    if not b.identified:
+        return Verdict.POWER_INSUFFICIENT
+    if math.isnan(b.ate):
+        return Verdict.POWER_INSUFFICIENT
+    if zero_guard and abs(b.ate) < 1e-6:
+        return Verdict.POWER_INSUFFICIENT
+    if b.ate <= ate_ceiling:
+        return Verdict.HELD
+    if b.ate < 0.0:
+        return Verdict.POWER_INSUFFICIENT
+    return Verdict.NO_EFFECT
+
+
+def dowhy_placebo_verdict(
+    p: _RefutationResult,
+    *,
+    max_ratio: float,
+) -> Verdict:
+    """Placebo refutation verdict. HELD when |placebo/real| <
+    `max_ratio` (random treatment shrinks ATE to ≪ real).
+    NaN/zero real → POW_INSUF."""
+    real, placebo = p.real_ate, p.refuted_ate
+    if math.isnan(real) or math.isnan(placebo) or abs(real) < 1e-9:
+        return Verdict.POWER_INSUFFICIENT
+    ratio = abs(placebo / real)
+    if ratio < max_ratio:
+        return Verdict.HELD
+    if ratio < max_ratio * 2:
+        return Verdict.POWER_INSUFFICIENT
+    return Verdict.NO_EFFECT
+
+
+def dowhy_rcc_verdict(
+    r: _RefutationResult,
+    *,
+    max_drift_ratio: float,
+) -> Verdict:
+    """Random-common-cause refutation verdict. HELD when
+    |refuted-real|/|real| < `max_drift_ratio` (synthetic
+    confounder leaves ATE near-stable). NaN/zero real → POW_INSUF."""
+    real, refuted = r.real_ate, r.refuted_ate
+    if math.isnan(real) or math.isnan(refuted) or abs(real) < 1e-9:
+        return Verdict.POWER_INSUFFICIENT
+    drift_ratio = abs(refuted - real) / abs(real)
+    if drift_ratio < max_drift_ratio:
+        return Verdict.HELD
+    if drift_ratio < max_drift_ratio * 2:
+        return Verdict.POWER_INSUFFICIENT
+    return Verdict.NO_EFFECT
+
+
+# ============ Partial-Spearman deciders ============
+
+
+def partial_spearman_null_verdict(
+    result: _PartialSpearmanResult,
+    *,
+    max_abs_rho: float,
+    min_strata: int,
+) -> Verdict:
+    """Null-form partial-Spearman verdict (used when the bridge's
+    predicted_direction is 'null'). HELD when |ρ| < `max_abs_rho`
+    across ≥ `min_strata` strata."""
+    if result.n_strata < min_strata:
+        return Verdict.POWER_INSUFFICIENT
+    rho = result.rho_pooled
+    if math.isnan(rho):
+        return Verdict.POWER_INSUFFICIENT
+    if abs(rho) < max_abs_rho:
+        return Verdict.HELD
+    return Verdict.NO_EFFECT
+
+
+def partial_spearman_signed_verdict(
+    result: _PartialSpearmanResult,
+    *,
+    threshold: float,
+    sign: Literal[-1, 1],
+    min_strata: int,
+) -> Verdict:
+    """Signed-direction partial-Spearman verdict.
+    sign=-1: HELD when ρ ≤ -threshold (predicted negative);
+    sign=+1: HELD when ρ ≥ +threshold (predicted positive)."""
+    if result.n_strata < min_strata:
+        return Verdict.POWER_INSUFFICIENT
+    rho = result.rho_pooled
+    if math.isnan(rho):
+        return Verdict.POWER_INSUFFICIENT
+    if sign < 0 and rho <= -threshold:
+        return Verdict.HELD
+    if sign > 0 and rho >= threshold:
+        return Verdict.HELD
+    return Verdict.NO_EFFECT
 
 
 def rescue_threshold(

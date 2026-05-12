@@ -46,9 +46,11 @@ from experiments.findings.ddqn._common import (
 from experiments.findings.ddqn._scope import (
     DDQN_RELEVANT_SCOPE, G1_VANILLA_CONFIG_PREMISE_ACTIVE, REACH_ENVS_FOUR,
 )
+from experiments.findings.ddqn._verdicts import (
+    dowhy_backdoor_verdict, dowhy_placebo_verdict, dowhy_rcc_verdict,
+)
 
 
-# CLAIM 10 — per-burst Acrobot γ=0.999 link.
 @claim_bridge(
     source='jensen_gap',
     target='mc_return',
@@ -75,9 +77,8 @@ def acrobot_per_burst_link_active__gamma_0999(
     env_name: str = 'Acrobot-v1',
     consistency_floor: float = 0.7,
 ) -> Verdict:
-    """Per-burst r(Δ_jens, Δ_out) is significantly negative in at
-    least `consistency_floor` of bursts on Acrobot γ=0.999. HELD when
-    `phase_link_consistency >= consistency_floor`."""
+    """Per-burst r(Δ_jens, Δ_out) significantly negative in at
+    least `consistency_floor` of bursts on Acrobot γ=0.999."""
     del treatment_arm, baseline_arm, target, predictor
     plc = phase_link_consistency(paired_link_per_burst, env_name=env_name)
     if math.isnan(plc):
@@ -89,7 +90,6 @@ def acrobot_per_burst_link_active__gamma_0999(
     return Verdict.NO_EFFECT
 
 
-# CLAIM 22 — REACH cross-env DoWhy link trio.
 @claim_bridge(
     source='jensen_gap',
     target='eval_best_burst_mean',
@@ -111,20 +111,12 @@ def reach_link_backdoor_ate_negative(
     env_filter: tuple[str, ...] = REACH_ENVS_FOUR,
     ate_ceiling: float = -0.1,
 ) -> Verdict:
-    """DoWhy backdoor ATE on the per-(env, burst, seed) Δ panel
-    across REACH-cohort cells satisfying the gate conjunction.
-    HELD when identified AND ATE ≤ ceiling. Empirical: ATE=-0.61."""
+    """DoWhy backdoor ATE on per-(env, burst, seed) Δ panel across
+    REACH cohort. HELD when identified AND ATE ≤ ceiling."""
     del treatment_arm, baseline_arm, link_predictor, link_target, env_filter
-    b = paired_delta_link_dowhy.backdoor
-    if not b.identified:
-        return Verdict.POWER_INSUFFICIENT
-    if math.isnan(b.ate):
-        return Verdict.POWER_INSUFFICIENT
-    if b.ate <= ate_ceiling:
-        return Verdict.HELD
-    if b.ate < 0.0:
-        return Verdict.POWER_INSUFFICIENT
-    return Verdict.NO_EFFECT
+    return dowhy_backdoor_verdict(
+        paired_delta_link_dowhy.backdoor, ate_ceiling=ate_ceiling,
+    )
 
 
 @claim_bridge(
@@ -149,19 +141,11 @@ def reach_link_placebo_refuted(
     placebo_max_ratio: float = 0.2,
 ) -> Verdict:
     """Placebo refutation: random treatment shrinks ATE to ~zero.
-    HELD when |placebo / real| < `placebo_max_ratio`. Empirical: 0."""
+    HELD when |placebo / real| < `placebo_max_ratio`."""
     del treatment_arm, baseline_arm, link_predictor, link_target, env_filter
-    p = paired_delta_link_dowhy.placebo
-    real = p.real_ate
-    placebo = p.refuted_ate
-    if math.isnan(real) or math.isnan(placebo) or abs(real) < 1e-9:
-        return Verdict.POWER_INSUFFICIENT
-    ratio = abs(placebo / real)
-    if ratio < placebo_max_ratio:
-        return Verdict.HELD
-    if ratio < placebo_max_ratio * 2:
-        return Verdict.POWER_INSUFFICIENT
-    return Verdict.NO_EFFECT
+    return dowhy_placebo_verdict(
+        paired_delta_link_dowhy.placebo, max_ratio=placebo_max_ratio,
+    )
 
 
 @claim_bridge(
@@ -186,23 +170,14 @@ def reach_link_rcc_robust(
     rcc_max_drift_ratio: float = 0.1,
 ) -> Verdict:
     """RCC refutation: noise covariate added to adjustment set
-    leaves ATE within `rcc_max_drift_ratio` of real. Empirical:
-    drift < 5%."""
+    leaves ATE within `rcc_max_drift_ratio` of real."""
     del treatment_arm, baseline_arm, link_predictor, link_target, env_filter
-    r = paired_delta_link_dowhy.random_common_cause
-    real = r.real_ate
-    refuted = r.refuted_ate
-    if math.isnan(real) or math.isnan(refuted) or abs(real) < 1e-9:
-        return Verdict.POWER_INSUFFICIENT
-    drift_ratio = abs(refuted - real) / abs(real)
-    if drift_ratio < rcc_max_drift_ratio:
-        return Verdict.HELD
-    if drift_ratio < rcc_max_drift_ratio * 2:
-        return Verdict.POWER_INSUFFICIENT
-    return Verdict.NO_EFFECT
+    return dowhy_rcc_verdict(
+        paired_delta_link_dowhy.random_common_cause,
+        max_drift_ratio=rcc_max_drift_ratio,
+    )
 
 
-# CLAIM 25 — within-FourRooms do(|A|) chain-amplifier.
 @claim_bridge(
     source='jensen_gap',
     target='eval_best_burst_mean',
@@ -231,9 +206,8 @@ def fourrooms_action_dim_link_active__inflated(
 ) -> Verdict:
     """Within-FourRooms chain-amplifier link via `action_duplicate_k`
     panel (k ∈ {1,2,3,4}). Per-k Δ_outcome regressed on per-k
-    Δ_jens. HELD when slope ≤ slope_max AND fit clean (R² ≥ floor)
-    AND n_strata ≥ min_strata. See
-    `findings_action_dim_inflation_postfix.md`."""
+    Δ_jens. HELD when slope ≤ slope_max AND clean fit (R² ≥ floor)
+    AND n_strata ≥ min_strata."""
     del treatment_arm, baseline_arm, measurables, stratify_by, min_seeds_per_arm
     result = panel_regress(stratum_effect_panel, x=x, y=y)
     if result.n_strata < min_strata:
@@ -247,8 +221,10 @@ def fourrooms_action_dim_link_active__inflated(
     return Verdict.HELD
 
 
-# CLAIM 11 — extreme Q-divergence attenuates link (upper-bound
-# scope companion to CLAIM 2's lower-bound dormancy refutation).
+# Extreme Q-div trio: upper-bound scope companion to dormancy
+# refutation (CLAIM 2). Bridges share the same scope predicate
+# `_EXTREME_Q_DIV_SCOPE` so cluster identity is structurally
+# unified by extent_hash.
 _EXTREME_Q_DIV_SCOPE = (
     (pl.col('total_steps') == 1_000_000)
     & finite('q_divergence_score')
@@ -282,25 +258,16 @@ def extreme_q_divergence_attenuates_link__binary(
     ate_ceiling: float = -0.10,
     dedupe_strategy: str = 'mean',
 ) -> Verdict:
-    """Binary contrast: cells with `q_divergence_score > 1000` have
-    link strength attenuated by ≥ 0.10 vs in-band cells, after
-    env-family backdoor adjustment. HELD when ATE ≤ -0.10."""
+    """Binary contrast: cells with `q_divergence_score > 1000`
+    have link strength attenuated by ≥ 0.10 vs in-band cells, after
+    env-family backdoor adjustment. HELD when ATE ≤ -0.10.
+    `zero_guard` handles RNG-dependent machine-epsilon signs."""
     del treatment_arm, baseline_arm, attenuator, binary_threshold
     del link_target, link_predictor, dedupe_strategy
-    b = link_attenuation_dowhy.backdoor
-    if not b.identified:
-        return Verdict.POWER_INSUFFICIENT
-    if math.isnan(b.ate):
-        return Verdict.POWER_INSUFFICIENT
-    # Numerical-zero guard: DoWhy machine-epsilon ATE sign is RNG-
-    # dependent; treat as no signal.
-    if abs(b.ate) < 1e-6:
-        return Verdict.POWER_INSUFFICIENT
-    if b.ate <= ate_ceiling:
-        return Verdict.HELD
-    if b.ate < 0.0:
-        return Verdict.POWER_INSUFFICIENT
-    return Verdict.NO_EFFECT
+    return dowhy_backdoor_verdict(
+        link_attenuation_dowhy.backdoor,
+        ate_ceiling=ate_ceiling, zero_guard=True,
+    )
 
 
 @claim_bridge(
@@ -329,17 +296,9 @@ def extreme_q_divergence_attenuates_link__placebo_refuted(
     """Placebo refutation on the binary above-1000 ATE."""
     del treatment_arm, baseline_arm, attenuator, binary_threshold
     del link_target, link_predictor, dedupe_strategy
-    p = link_attenuation_dowhy.placebo
-    real = p.real_ate
-    placebo = p.refuted_ate
-    if math.isnan(real) or math.isnan(placebo) or abs(real) < 1e-9:
-        return Verdict.POWER_INSUFFICIENT
-    ratio = abs(placebo / real)
-    if ratio < placebo_max_ratio:
-        return Verdict.HELD
-    if ratio < placebo_max_ratio * 2:
-        return Verdict.POWER_INSUFFICIENT
-    return Verdict.NO_EFFECT
+    return dowhy_placebo_verdict(
+        link_attenuation_dowhy.placebo, max_ratio=placebo_max_ratio,
+    )
 
 
 @claim_bridge(
@@ -368,17 +327,10 @@ def extreme_q_divergence_attenuates_link__rcc_robust(
     """RCC refutation on the binary above-1000 ATE."""
     del treatment_arm, baseline_arm, attenuator, binary_threshold
     del link_target, link_predictor, dedupe_strategy
-    r = link_attenuation_dowhy.random_common_cause
-    real = r.real_ate
-    refuted = r.refuted_ate
-    if math.isnan(real) or math.isnan(refuted) or abs(real) < 1e-9:
-        return Verdict.POWER_INSUFFICIENT
-    drift_ratio = abs(refuted - real) / abs(real)
-    if drift_ratio < rcc_max_drift_ratio:
-        return Verdict.HELD
-    if drift_ratio < rcc_max_drift_ratio * 2:
-        return Verdict.POWER_INSUFFICIENT
-    return Verdict.NO_EFFECT
+    return dowhy_rcc_verdict(
+        link_attenuation_dowhy.random_common_cause,
+        max_drift_ratio=rcc_max_drift_ratio,
+    )
 
 
 BRIDGES = (
