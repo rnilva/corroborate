@@ -73,6 +73,17 @@ from experiments.findings.ddqn._verdicts import (
         (pl.col('env_name') == 'Acrobot-v1')
         & (pl.col('gamma') == 0.999)
         & finite_ge('effective_horizon', 80.0)
+        # L2 filter IS scientifically load-bearing on Acrobot γ=0.999,
+        # not tactical debt. Diagnostic 2026-05-12: with wd=0
+        # (gamma_sweep_acrobot), DDQN's mechanism INVERTS — vanilla
+        # jens ≈ 10.9, DDQN jens ≈ 12.2 (DDQN's mean bias is HIGHER
+        # than vanilla's), per-burst r flips +0.99 (Q-amplification
+        # mode per `findings_q_amplification_cartpole.md`). With
+        # wd=0.0001 (the original L2-Acrobot Goldilocks sweep),
+        # DDQN reduces jens 29→14 and link fires with r ≈ -0.93
+        # to -0.998. The L2 regime is where Hasselt's correction
+        # actually fires on Acrobot γ=0.999; removing this filter
+        # admits the inverted-mechanism regime.
         & (pl.col('optimizer.inner.weight_decay') == 0.0001)
     ),
 )
