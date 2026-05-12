@@ -126,12 +126,19 @@ causally distinct experiments. But each HPO pin is a placeholder
 for the endogenous predicate it stands in for. The bridge author's
 follow-up job is to find that endogenous downstream and migrate.
 
-**Tier C — Exogenous env-name (don't).** `pl.col('env_name') ==
-'X'` is lazy science. It doesn't communicate WHY that env is
-special; a future env with the same structural property won't
-match. Cf. `feedback_endogenous_scope_predicates`. The right
-move is finding the endogenous downstream of the env's
-structural property.
+**Tier C — Exogenous env-name OR corpus-name (don't).**
+`pl.col('env_name') == 'X'` is lazy science — doesn't communicate
+WHY that env is special; a future env with the same structural
+property won't match. Cf. `feedback_endogenous_scope_predicates`.
+`pl.col('corpus') == 'X'` is **worse**: corpus name is a
+data-collection artifact (which sweep produced these cells), not
+even a scientific property — the bridge's claim is then tied to
+the operator's filesystem layout. When a corpus is archived,
+renamed, or rebuilt, every corpus-scoped bridge silently breaks
+(historic CLAIM 5 / Polyak τ / Acrobot γ=0.999 bridges hit
+this). The right move is finding the endogenous predicate the
+corpus stood in for — usually `(env_name, gamma, sync_period,
+total_steps, reward_scale, target_sync.tau)` covers it.
 
 **Reusable envelopes** (`_FOURROOMS_REGIME`, `_ACTION_DIM_SWEEP_
 REGIME`, `_REV6_SAMPLE_EFFICIENCY_REGIME` in `dqn_bridges.py`)
@@ -154,28 +161,80 @@ within-vs-across-stratum admissibility rule today
 covers tier-B/C exogenous predicates, this discipline is
 authorial.
 
-### 1.3 Pick the rung-1 primitive by question shape
+### 1.3 Aggregation unit: stratum, not seed-pair
+
+The corollary of "strata are the unit of inference, not cells":
+**how you build the per-stratum effect size determines whether
+your test is honest at the cross-stratum question shape**.
+
+**Three legitimate aggregation patterns**, picked by question:
+
+1. **Seed-paired Δ within a stratum**, then **aggregate across
+   strata**. Used by `paired_g`, `paired_link_per_burst`,
+   `paired_delta_link_dowhy`. Per-seed Δs ARE the within-stratum
+   observations of the within-stratum effect; cross-stratum
+   tests then operate on per-stratum summaries.
+
+2. **Independent-samples Δ per stratum**, then **regress /
+   pool across strata**. Used by `stratified_arm_diff_pooled`,
+   `meta_regression_unpaired_d`, `stratum_delta_link_dowhy`,
+   `stratum_outcome_attenuation_dowhy`. No per-seed pairing —
+   stratum-mean treatment minus stratum-mean baseline. Strata
+   are the unit of inference at both stages.
+
+3. **Within-cell per-burst pairing** for phase-structured
+   claims. `paired_link_per_burst`+`phase_link_consistency`
+   computes a Pearson r at each (env, burst) across seed-pairs
+   — within-stratum sampling, not cross-stratum
+   pseudo-replication.
+
+**Anti-pattern**: pattern 1 used for a **cross-stratum** scope
+claim. `paired_g_pooled` pools N seeds × M envs as iid Δ-samples;
+each env is pseudo-replicated by N. Cross-env scope claims
+("DDQN HELDs across REACH cohort") need pattern 2 to weight
+strata equally.
+
+The CLAUDE.md `feedback_paired_g_in_rl` memory has the
+substrate-level rule of thumb:
+
+| Question shape | Pattern |
+|---|---|
+| Cross-env / cross-config pooling | 2 (independent-samples) |
+| Cross-env scaling with covariate | 2 + `meta_regression_unpaired_d` |
+| Within-cohort link strength | 3 (per-burst within-cell) |
+| Cross-env link claim | 2 (`stratum_delta_link_dowhy`) |
+| Synthetic SCM analytical test | 1 (`paired_g` — seeds ARE iid) |
+| Single-stratum smoke check | 1 (`paired_g`) — OK at one stratum |
+
+In the DDQN substrate as of 2026-05-12: pattern 1 (`paired_g`)
+is reserved for analytic tests. All cross-stratum bridges use
+pattern 2.
+
+### 1.4 Pick the rung-1 primitive by question shape
 
 The canonical-analyses table is in CLAUDE.md; this is the
 question-first index pointing at it.
 
 | Question | Primitive | When to use |
 |---|---|---|
-| Treatment shifts a single outcome? | `paired_g` | Default. |
+| Treatment shifts a single outcome (single stratum)? | `arm_mean_diff` (independent-samples Welch) OR `paired_g` (when seeds ARE iid, e.g. synthetic) | Default for one cohort; `arm_mean_diff` replaces `paired_g` when ρ(treatment, baseline by seed) ≈ 0. |
 | Heavy-tailed Δ? | `bootstrap_paired_g` (asymmetric CIs) + `cliff_delta_paired` (skew-robust point) | When `paired_g.assumption_violations` flags skew/heavy-tail. |
+| Cross-env / cross-config pooled effect? | `stratified_arm_diff_pooled` (per-stratum Cohen's d → DL random-effects pool) | **The cross-stratum primitive.** Independent-samples; strata are unit. Verdict heterogeneity-flagged (HELD / HELD_WITH_SCOPE_FLAG / NO_EFFECT / POW_INSUF). **NOT `paired_g_pooled`** — see `feedback_paired_g_in_rl`. |
+| Cross-env scaling on env-level covariate? | `meta_regression_unpaired_d` (sibling of `meta_regression_paired_g`, seed-pairing-free) | Each env contributes per-config strata; covariate slope estimated with proper SE that accounts for within-env config heterogeneity. Replaces n=3 envs Pearson r (brittle — see `findings_n3_pearson_brittle`). |
 | Per-(env, burst) g panel? | `paired_g_per_burst` | When Q dynamics are non-monotone (Q-explosion-prone envs). |
-| Per-burst link r(Δ_target, Δ_predictor)? | `paired_link_per_burst` + `phase_link_consistency` | Phase structure unmasking. |
+| Per-burst link r(Δ_target, Δ_predictor)? | `paired_link_per_burst` + `phase_link_consistency` | Phase structure unmasking. Within-stratum seed-pairing is structural here (one Pearson r per (env, burst) stratum). |
+| Cross-env link claim (mech-conditioned)? | `stratum_delta_link_dowhy` (per-(env, burst) stratum-Δ panel + DoWhy backdoor + refutations) | Replaces `paired_delta_link_dowhy` which pseudo-replicated by (env, burst, seed). Built-in mech conditioning via `min_vanilla_predictor`. |
+| Outcome attenuation by binary moderator (e.g. q_div > threshold)? | `stratum_outcome_attenuation_dowhy` (per-stratum Δ_outcome + binary attenuator + DoWhy + env one-hot) | Replaces `link_attenuation_dowhy` which used within-stratum seed-paired Pearson r as outcome. Built-in mech conditioning. |
 | Cross-env link r predicted by moderator? | `paired_link_per_env` | CLAIM 14-shaped soft-tautology / polarity tests. |
 | Cross-config moderator (sweep as lever)? | `cross_config_paired_slope` | CLAIM 21-shaped sync / Polyak slope. |
-| Per-env panel meta-regression? | `meta_regression_paired_g` | One paired-g per env, equal weighting (cf. `findings_per_env_vs_per_cell_weighting`). |
+| Per-env panel meta-regression on paired g? | `meta_regression_paired_g` | Seed-paired form. Use `meta_regression_unpaired_d` instead for the seed-pairing-free RL form. Kept for synthetic substrate tests and analytic-test usage. |
 | Within/between decomposition? | `mundlak_decomposition` / `mundlak_paired_g_per_burst` | Cluster-robust CR1 SE; Hausman test for `β_b == β_w`. |
 | Mediation: does X→Y survive conditioning on Z? | `partial_spearman_rho` (1 Z) / `partial_spearman_rho_multi` (k Z) / `stratified_partial_spearman_rho` (JCI) | The non-parametric mediation primitives. **NOT `proportion_mediated`** (deprecated; ratio-of-noisy-means with no SE; see its module docstring). |
 | Sample efficiency among solvers? | `paired_g_among_solvers` | Per-env gate by solve threshold. |
 | Verdict landscape per env? | `verdict_distribution_per_env` | Tally INVARIANT bridges' per-cell verdicts. |
 | Mediator-set tautology audit? | `tautology_audit` | HP shadow / partial-correlation collapse / convergence proxy. |
-| Pooled across envs (random-effects)? | `paired_g_pooled` (DerSimonian-Laird) | Has known small-G limitations (cf. its docstring). |
 
-### 1.4 Robustness on rung 1
+### 1.5 Robustness on rung 1
 
 - **K-fold CV on meta-regression** —
   `cross_validate_meta_regression`. `sign_consistency['<covariate>']`
@@ -185,6 +244,16 @@ question-first index pointing at it.
   removing a single env is leverage-driven, not population-level.
   Apply after k-fold (k-fold randomly splits seeds; drop-one-env
   tests structural sensitivity to strata themselves).
+- **Small-n cross-env Pearson r is structurally brittle.** At
+  n_envs ≈ 3, Pearson r has 1 dof; a 1-SE perturbation to any
+  single env's d (SE ≈ 0.15-0.18 for per-env Cohen's d at
+  n_seeds=30) can swing r between +1 and -1. The pre-ingest
+  CLAIM 19 r=+0.999 HELD verdict was a Type-I artifact; 30
+  statistically-equivalent new FR cells flipped r to -0.85 on
+  the same data quality. Use `meta_regression_unpaired_d`
+  instead — each env contributes per-config strata, the
+  covariate slope is estimated with proper SE. Cf.
+  `findings_n3_pearson_brittle`.
 - **PC depth-2 robustness** — re-run `discover_adjacency` with
   `max_conditioning=2`; vanishing edges are depth-1-fragile.
 - **Per-burst probes** when scalar mediator returns null —
@@ -193,13 +262,13 @@ question-first index pointing at it.
   `findings_l2_acrobot_goldilocks`.
 - **Tautology audit on cleavage candidates** before publishing.
 
-### 1.5 When rung 1 isn't enough
+### 1.6 When rung 1 isn't enough
 
 - A correlation surfaces but a confound is plausible → §2 (rung 2).
 - Pooled verdict is heterogeneous (`HELD_WITH_SCOPE_FLAG`) →
-  meta-regression for the cleavage axis (still rung 1; see §1.3).
+  meta-regression for the cleavage axis (still rung 1; see §1.4).
 - Phase structure suspected → per-burst probes (still rung 1).
-- Endogenous-discriminator search across envs → §1.4 robustness +
+- Endogenous-discriminator search across envs → §1.5 robustness +
   per-stratum DoWhy in §2.3.
 
 ---
@@ -246,7 +315,21 @@ def do_treatment_increases_outcome__regime(
 | Robust to synthetic confounder? | `dowhy.random_common_cause_refutation` (gate on `drift < tolerance`) |
 | 2×2 factorial interaction? | `factorial_2x2_interaction` |
 | Continuous treatment? | `paired_continuous_do_dowhy` |
-| Mediation as a do-effect? | `paired_delta_link_dowhy`, `link_attenuation_dowhy` |
+| Stratum-Δ link DoWhy (cross-env, mech-conditioned)? | `stratum_delta_link_dowhy` — per-(env, burst) stratum-Δ panel, backdoor+placebo+RCC. Sibling of `paired_delta_link_dowhy`; uses pattern-2 aggregation (independent-samples per stratum). |
+| Outcome attenuation DoWhy (binary moderator)? | `stratum_outcome_attenuation_dowhy` — per-(env, burst) stratum-Δ_outcome, binary attenuator + env one-hot. Sibling of `link_attenuation_dowhy`. |
+| Seed-paired Δ panel DoWhy? | `paired_delta_link_dowhy`, `link_attenuation_dowhy` — kept for substrates where seed pairing is structurally valid (synthetic SCMs, single-stratum analytic tests). **NOT for cross-stratum RL claims** — use the `stratum_*` siblings above. |
+
+**Composite trio verdicts.** When a single causal claim is
+corroborated by `backdoor + placebo + RCC` working together
+(the three checks always travel; placebo-passes-RCC-fails is
+not a real verdict shape), author ONE bridge with a composite
+verdict rather than three separate bridges citing the same
+extent. The framework's `dowhy_trio_verdict` helper (in
+`experiments/findings/ddqn/_verdicts.py`) takes a result
+satisfying the `_DowhyTrioResult` Protocol (any `backdoor +
+placebo + random_common_cause` carrying dataclass) and returns
+HELD iff all three sub-checks HELD; any NO_EFFECT dominates; any
+POW_INSUF (no NO_EFFECT) returns POW_INSUF.
 
 ### 2.3 Per-stratum DoWhy when env is the regime axis
 
@@ -319,11 +402,14 @@ different threshold), the cross-env / cross-corpus variation the
 claim presupposes may genuinely not exist on this corpus. The
 framework refuses to smuggle "no signal" past the reader as
 HELD or NO_EFFECT; the iteration should end with bridge
-deletion (the claim is structurally untestable here) or a
+deletion (the claim is structurally untestable here), a
 substantively different claim (different predictor, different
-unit of analysis, different scope).
+unit of analysis, different scope), or an honest
+AWAITING-DATA placeholder.
 
-Concrete tells that the claim is dead, not the scope:
+### 5.1 Structurally dead — delete
+
+Tells that the claim is dead, not the scope:
 
 - The predictor doesn't vary cross-env in the corpus (e.g.,
   `bootstrap_fraction` clusters at [0.98, 1.00] across true
@@ -339,6 +425,48 @@ as a memory post-mortem. The historical companion bridge
 (corpus-pinned baseline, if any) can stay as a record of the
 artifact-shaped finding. Cf. CLAIM 16 deletion
 (`findings_residual_unexplained` + `findings_q_div_threshold_too_loose`).
+
+### 5.2 AWAITING DATA — keep as placeholder
+
+Some POWER_INSUFFICIENT bridges are NOT dead; they're waiting
+for data the corpus doesn't yet hold. Tells:
+
+- Scope predicate gates on a config combination (γ=0.999,
+  sync=10k, Polyak τ > 0, n_step=10, ...) absent from the
+  cache, but the sub-sweep IS planned / archived / re-collectible.
+- Memory documents a finding on the dedicated corpus that
+  reproduces when ingested (cf. `findings_l2_acrobot_goldilocks`
+  documents r=-0.93 to -0.998 per-burst link on Acrobot γ=0.999
+  — the dedicated corpus had it; the universal cache doesn't).
+
+For these, **keep the bridge** with an explicit
+`AWAITING DATA: <description>` marker in the docstring (parallel
+to a Finding's `BLOCKED_ON`). The bridge fires POW_INSUF on the
+current cache; when the missing corpus reintegrates, the bridge
+activates without scope edits. The author's discipline is to
+periodically reconcile AWAITING-DATA bridges against actual data
+availability — if the planned sweep is permanently cancelled or
+the result no longer matters, downgrade to §5.1.
+
+Examples in the current substrate: `extreme_q_divergence_attenuates_link__dowhy_corroborated`
+(needs q_div > 1.0 cells from sync=10k MinAtar);
+`ddqn_benefit_scales_with_effective_horizon__fourrooms` (needs
+γ=0.999 FR cells); `acrobot_per_burst_link_active__gamma_0999`
+(needs `l2_x_gamma_acrobot` corpus); Polyak τ pair (needs
+target_sync.tau > 0 cells).
+
+### 5.3 Corpus name in scope = silent breakage
+
+A scope predicate gating on `pl.col('corpus') == 'X'` couples
+the bridge's claim to filesystem layout. When the corpus is
+archived to S3 (per CORPUS_INTEGRITY.md trace-eviction) or never
+reintegrated post-cache-rebuild, every corpus-scoped bridge
+silently flips to empty extent / POW_INSUF — without an
+AWAITING-DATA marker, this looks like §5.1 (dead) when it's
+actually §5.2 (placeholder). Replace corpus-name scopes with
+endogenous predicates (env + γ + sync + total_steps +
+reward_scale + target_sync.tau) as early as authoring; the
+endogenous form survives corpus reorganization. Cf. §1.2 tier-C.
 
 ---
 
@@ -371,21 +499,31 @@ from the corpus.
    set MODULE_SCOPE.
 2. INVARIANT bridges first — substrate preconditions for the
    downstream rungs.
-3. Rung 1 ASSOCIATIONAL bridges per the §1.3 question table.
-   Scope discipline (§1.2): tier-A endogenous predicate; tier-B
-   HPO is debt; tier-C env-name is wrong.
-4. Robustness on rung 1: k-fold CV, drop-one-env, PC depth-2,
-   per-burst probes if scalar null, tautology audit.
-5. Rung 2 INTERVENTIONAL bridges when rung 1 surfaces a
+3. Scope discipline (§1.2): tier-A endogenous predicate; tier-B
+   HPO is debt; tier-C env-name OR corpus-name is wrong.
+4. Aggregation discipline (§1.3): pick the seed-pairing pattern
+   to match question shape. Cross-stratum claims → pattern 2
+   (independent-samples Cohen's d per stratum, regress / pool
+   across). Within-cohort link → pattern 3 (per-burst within-cell).
+   Pattern 1 (per-pair paired_g) reserved for synthetic /
+   single-stratum.
+5. Rung 1 ASSOCIATIONAL bridges per the §1.4 question table.
+6. Robustness (§1.5): k-fold CV, drop-one-env, PC depth-2,
+   per-burst probes if scalar null, tautology audit. **Watch
+   for small-n Pearson r brittleness** — at n_envs=3, swap to
+   `meta_regression_unpaired_d`.
+7. Rung 2 INTERVENTIONAL bridges when rung 1 surfaces a
    confound-plausible effect. Per-stratum DoWhy when env is the
-   regime axis.
-6. Rung 3 only when linear-mediation diagnostics fire AND the
+   regime axis. Composite trio verdicts via `dowhy_trio_verdict`
+   when backdoor + placebo + RCC corroborate one causal claim.
+8. Rung 3 only when linear-mediation diagnostics fire AND the
    question is genuinely manipulability.
-7. Cross-rung: PC for moderator candidates, JCI-stratified.
-8. Stopping rules: delete the bridge after multiple
-   POWER_INSUFFICIENT iterations + matching tells.
-9. Next-sweep targeting: mediator differential + PC adjacency
-   on baseline-arm convergence classes.
+9. Cross-rung: PC for moderator candidates, JCI-stratified.
+10. Stopping rules: §5.1 structurally dead (delete), §5.2
+    AWAITING DATA (keep with marker), §5.3 corpus-name scope
+    silently breaks (migrate to endogenous).
+11. Next-sweep targeting: mediator differential + PC adjacency
+    on baseline-arm convergence classes.
 
 ---
 
