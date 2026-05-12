@@ -245,6 +245,24 @@ def _check_and_report(module: str) -> int:
 _EMPTY_EXTENT_HASH = hash(frozenset[str]())
 
 
+def _cluster_verdict_label(
+    member_verdicts: tuple[str, ...], extent_hash: int,
+) -> str:
+    """Compose a cluster-level verdict from member bridges'
+    `verdict.value` strings. Mirrors
+    `experiments/findings/ddqn/walks.py::cluster_verdict` so
+    standard-run-output labels match what walks-as-claim-queries
+    return — same vocabulary across the framework's two cluster
+    consumers."""
+    if extent_hash == _EMPTY_EXTENT_HASH:
+        return 'empty_extent'
+    if 'no_effect' in member_verdicts:
+        return 'refuted'
+    if all(v == 'held' for v in member_verdicts):
+        return 'supported'
+    return 'underpowered'
+
+
 def _print_verdicts(results: dict[str, BridgeEvaluation]) -> None:
     counts: dict[str, int] = {}
     refutation_counts: dict[tuple[str, str], int] = {}
@@ -259,7 +277,11 @@ def _print_verdicts(results: dict[str, BridgeEvaluation]) -> None:
     # extent_hash)` admit identical cell-sets — refutation-cluster
     # identity under extent-based grouping. Two bridges with the
     # same key are corroborating the same edge on the same cells.
-    extent_clusters: dict[tuple[str, str, int], list[tuple[str, int]]] = {}
+    # Track per-member verdict so we can compose a cluster-level
+    # verdict (supported / refuted / underpowered / empty_extent).
+    extent_clusters: dict[
+        tuple[str, str, int], list[tuple[str, int, str]],
+    ] = {}
     for name, ev in results.items():
         v = ev.verdict.value
         counts[v] = counts.get(v, 0) + 1
@@ -282,7 +304,7 @@ def _print_verdicts(results: dict[str, BridgeEvaluation]) -> None:
             av_inline = f' [av: {"; ".join(ev.assumption_violations)}]'
         cluster_key = (ev.source_name, ev.target_name, ev.extent_hash)
         extent_clusters.setdefault(cluster_key, []).append(
-            (name, ev.n_cells_in_scope),
+            (name, ev.n_cells_in_scope, v),
         )
         print(f'{name:60s}  {v:24s}{cls}{av_inline}  {suffix}')
     print()
@@ -309,8 +331,8 @@ def _print_verdicts(results: dict[str, BridgeEvaluation]) -> None:
     # for the design rationale.
     multi = [(k, v) for k, v in extent_clusters.items() if len(v) >= 2]
     empty_members = [
-        (name, v) for (_, _, h), members in extent_clusters.items()
-        for name, v in members
+        (name, n) for (_, _, h), members in extent_clusters.items()
+        for name, n, _ in members
         if h == _EMPTY_EXTENT_HASH
     ]
     if multi or empty_members:
@@ -321,12 +343,14 @@ def _print_verdicts(results: dict[str, BridgeEvaluation]) -> None:
         ):
             n = members[0][1]
             src_short = src if len(src) < 50 else src[:47] + '...'
-            tag = ' (empty-extent)' if h == _EMPTY_EXTENT_HASH else ''
-            print(
-                f'  ({len(members)} bridges, n_cells={n}){tag}  '
-                f'{src_short} → {tgt}',
+            verdict_label = _cluster_verdict_label(
+                tuple(v for _, _, v in members), h,
             )
-            for member_name, _ in members:
+            print(
+                f'  {verdict_label:14s}  ({len(members)} bridges, '
+                f'n_cells={n})  {src_short} → {tgt}',
+            )
+            for member_name, _, _ in members:
                 print(f'      {member_name}')
         if empty_members:
             n_empty = len(empty_members)
