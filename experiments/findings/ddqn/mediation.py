@@ -459,7 +459,7 @@ def effh_predicts_link_power__reach_envs(
     covariates_per_env: dict[str, dict[str, float]] = (
         _EFFECTIVE_HORIZON_PER_ENV
     ),
-    slope_threshold: float = 0.005,
+    slope_threshold: float = 0.01,
     min_strata: int = 3,
 ) -> Verdict:
     """Cross-env link-power via multi-stratum random-effects
@@ -468,16 +468,23 @@ def effh_predicts_link_power__reach_envs(
     coefficient tests whether DDQN's outcome benefit grows with
     eff_h across REACH envs (Acrobot/FourRooms/MountainCar).
 
-    HELD when β_eff_h ≥ `slope_threshold` AND significant.
+    `slope_threshold=0.01` calibration (post-roast issue 1):
+    observed eff_h range across REACH is ~35 units (27.6 FR →
+    62.7 MC). Threshold 0.01 = d per eff_h unit corresponds to
+    |Δd| ≥ 0.35 across the observed range — the "small but
+    detectable cross-env effect" magnitude (Hedges' g ≈ 0.3 is
+    Cohen's small-effect convention). HELD when |β| ≥ threshold
+    AND significant; a HELD verdict means the slope is at least
+    as steep as the calibrated minimum-effect-of-interest.
+
     Within-env replicates (multiple configs per env) provide
     between-stratum variance so the slope's SE is tight; n_strata
     typically 4-7 even with n=3 envs.
 
     On the current cache (n_strata=4): β=-0.009, CI=[-0.041,
-    +0.023], p=0.35 → **POW_INSUF**. CI includes zero — can't
-    distinguish "no slope" from "small positive slope" from
-    "small negative slope." Pre-refactor r=+0.999 HELD was a
-    Type-I artifact at n=3 envs; this honest verdict reveals the
+    +0.023], p=0.35 → **POW_INSUF** (CI includes zero AND
+    |β|<threshold). Pre-refactor r=+0.999 HELD was a Type-I
+    artifact at n=3 envs; this honest verdict reveals the
     true power of the cross-env scaling test. The within-env
     γ-sweep version (CLAIM 5) is the right shape for the
     chain-depth story per `findings_gamma_sweep_three_regimes.md`."""
@@ -514,7 +521,7 @@ def argmax_entropy_link_power_null__survive_envs(
     covariates_per_env: dict[str, dict[str, float]] = (
         _ARGMAX_ENTROPY_LATE_PER_ENV
     ),
-    null_slope_ceiling: float = 0.5,
+    null_slope_ceiling: float = 0.15,
     min_strata: int = 3,
 ) -> Verdict:
     """Predicted-NULL form. SURVIVE cohort
@@ -522,6 +529,14 @@ def argmax_entropy_link_power_null__survive_envs(
     meta-regression: argmax_entropy_late coefficient should be
     null (|β| < `null_slope_ceiling` AND non-significant) —
     argmaxH does NOT predict link power on SURVIVE.
+
+    `null_slope_ceiling=0.15` calibration (post-roast issue 10):
+    observed argmaxH range across SURVIVE is ~0.49 units (0.69
+    CartPole → 1.18 Asterix). Threshold 0.15 corresponds to
+    |Δd| ≤ 0.074 across the range — well below per-env d's SE
+    (~0.15), so "null" means "effect at most ½ the noise level."
+    The pre-fix `null_slope_ceiling=0.5` accepted |Δd| up to 0.25
+    — a meaningfully-sized effect mis-classified as null.
 
     HELD when null confirmed; NO_EFFECT when significantly
     nonzero slope (null refuted). Memory's n=5 starting-point
