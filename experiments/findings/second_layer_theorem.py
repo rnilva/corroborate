@@ -36,11 +36,15 @@ from __future__ import annotations
 
 import math
 from functools import partial
+from typing import TYPE_CHECKING
 
 import polars as pl
 
 import corroborate.analyses  # pyright: ignore[reportUnusedImport]
 import corroborate_rl.dqn.measurables  # pyright: ignore[reportUnusedImport]
+
+if TYPE_CHECKING:
+    from corroborate.core.finding import Finding
 from corroborate.analyses.stratified_partial_spearman import (
     StratifiedPartialSpearmanResult,
 )
@@ -321,3 +325,5 @@ SECOND_LAYER_BRIDGES = (
     intrinsic_penalty_scales_with_bootstrap_gap__second_layer,
 )
 BRIDGES = SECOND_LAYER_BRIDGES
+
+FINDINGS: tuple['Finding', ...] = ()

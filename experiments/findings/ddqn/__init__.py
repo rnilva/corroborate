@@ -36,3 +36,22 @@ BRIDGES = (
     *_BIAS_CORRECTION,
     *_MEDIATION,
 )
+
+
+# Findings — imported AFTER BRIDGES so finding-modules' lookup of
+# this package (`HYPOTHESIS.BRIDGES`) resolves to the fully-built
+# tuple. Cluster-shaped claims that this hypothesis's post-eval
+# graph carries; the framework's renderer + Finding consumer
+# iterate this tuple.
+from experiments.findings.ddqn import (  # noqa: E402
+    finding_metamaze_gamma_amplification as _FINDING_METAMAZE,
+    finding_reach_bias_link as _FINDING_REACH,
+    finding_rs01_rescue_envelope as _FINDING_RS01,
+)
+
+
+FINDINGS = (
+    _FINDING_REACH,
+    _FINDING_METAMAZE,
+    _FINDING_RS01,
+)

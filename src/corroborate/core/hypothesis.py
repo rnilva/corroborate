@@ -59,6 +59,7 @@ from corroborate.core.intervention import DoEffect
 
 if TYPE_CHECKING:
     from corroborate.bridge.bridge import Bridge
+    from corroborate.core.finding import Finding
 
 
 __all__ = ['Hypothesis', 'PredictedDirection', 'canonical_str']
@@ -143,3 +144,12 @@ class Hypothesis(Protocol):
     __name__: str
     INTERVENTION: DoEffect
     BRIDGES: 'tuple[Bridge, ...]'
+    FINDINGS: 'tuple[Finding, ...]'
+    """Cluster-shaped claims authored against the hypothesis's
+    post-evaluated graph. Each Finding declares which subset of
+    `BRIDGES` it claims about + an expected verdict; the
+    framework's `evaluate_finding(f, g)` returns the actual verdict
+    via `composed_verdict`, and drift surfaces in the
+    `run_hypothesis.py` rollup. Required on the Protocol so
+    pyright catches "I forgot to declare FINDINGS"; declare `()`
+    if the hypothesis has no findings yet."""

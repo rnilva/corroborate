@@ -18,6 +18,7 @@ from typing import ClassVar
 from corroborate._internals.canonical import canonical_str
 from corroborate.bridge.bridge import Bridge
 from corroborate.core.claim import claim
+from corroborate.core.finding import Finding
 from corroborate.core.hypothesis import Hypothesis
 from corroborate.core.intervention import (
     DoEffect, Intervention, combined_arm_key,
@@ -167,6 +168,7 @@ def test_class_with_classvars_satisfies_protocol() -> None:
     `findings/ddqn/`) at production load time."""
     @dataclass(frozen=True)
     class MyHypothesis:
+        FINDINGS: ClassVar[tuple[Finding, ...]] = ()
         INTERVENTION: ClassVar[DoEffect] = DoEffect(
             treatment=(
                 Intervention(slot_path='bootstrap', replacement=_alt_a),

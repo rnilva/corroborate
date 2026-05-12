@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import cast
 
 from corroborate.bridge import Bridge, BridgeEvaluation
+from corroborate.core.finding import Finding, evaluate_finding
 from corroborate.graph.causal import (
     PostEvalEntry,
     cluster_verdict, clusters_by_extent, evaluated_graph,
@@ -199,6 +200,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     module_name = cast(str, args.module)
     h_module = importlib.import_module(module_name)
     bridges = cast(tuple[Bridge, ...], h_module.BRIDGES)
+    findings = cast(tuple[Finding, ...], h_module.FINDINGS)
     results = run(
         module_name,
         data=data,
@@ -211,7 +213,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         write_report=write_report,
         bridge_filter=bridge_filter,
     )
-    _print_verdicts(results, bridges)
+    _print_verdicts(results, bridges, findings)
     return 0
 
 
@@ -256,6 +258,7 @@ _EMPTY_EXTENT_HASH = hash(frozenset[str]())
 def _print_verdicts(
     results: dict[str, BridgeEvaluation],
     bridges: tuple[Bridge, ...],
+    findings: tuple[Finding, ...],
 ) -> None:
     counts: dict[str, int] = {}
     refutation_counts: dict[tuple[str, str], int] = {}
@@ -359,6 +362,34 @@ def _print_verdicts(
                 f'  {n_empty} bridge(s) in empty-extent group(s) — '
                 f'scope admits zero cells on current cache.',
             )
+
+    # Findings rollup: every Hypothesis declares FINDINGS (possibly
+    # empty). For each, evaluate the cluster-shaped claim against
+    # the post-eval graph and compare to the author's EXPECTED.
+    # Drift is the operational signal — a claim flipping from
+    # SUPPORTED to REFUTED (or anywhere else) shows up here on
+    # every run.
+    if findings:
+        print()
+        drift_count = 0
+        for f in findings:
+            verdict = evaluate_finding(f, g)
+            drift = verdict != f.EXPECTED
+            if drift:
+                drift_count += 1
+            drift_marker = ' ← DRIFT' if drift else ''
+            n_bridges = len(f.BRIDGES)
+            short_name = f.__name__.rsplit('.', 1)[-1]
+            print(
+                f'  {verdict.value:14s}  ({n_bridges} bridges)  '
+                f'{short_name}{drift_marker}',
+            )
+            if drift:
+                print(f'      expected: {f.EXPECTED.value}')
+                print(f'      headline: {f.HEADLINE}')
+        print(
+            f'findings: {len(findings)} declared, {drift_count} drift',
+        )
 
 
 def _summarize(result: object) -> str:

@@ -25,6 +25,7 @@ from typing import ClassVar
 import pytest
 
 from corroborate.bridge.bridge import Bridge
+from corroborate.core.finding import Finding
 from corroborate.core.intervention import DoEffect, Intervention
 
 # `_validate_hypothesis` / `_default_cache_path` are
@@ -62,6 +63,7 @@ def test_validate_accepts_class_with_classvars() -> None:
     class H:
         INTERVENTION: ClassVar[DoEffect] = _trivial_doeffect()
         BRIDGES: ClassVar[tuple[Bridge, ...]] = ()
+        FINDINGS: ClassVar[tuple[Finding, ...]] = ()
     out = _validate_hypothesis(H)
     assert out is H
 
@@ -90,6 +92,7 @@ def test_validate_rejects_non_bridge_in_bridges() -> None:
         INTERVENTION: ClassVar[DoEffect] = _trivial_doeffect()
         # str instead of Bridge — element-type check should catch.
         BRIDGES: ClassVar[tuple[object, ...]] = ('not-a-bridge',)
+        FINDINGS: ClassVar[tuple[Finding, ...]] = ()
     with pytest.raises(TypeError, match='non-Bridge'):
         _validate_hypothesis(Malformed)
 
@@ -102,6 +105,7 @@ def test_default_cache_path_bare_class_name() -> None:
     class DDQNvsVanilla:
         INTERVENTION: ClassVar[DoEffect] = _trivial_doeffect()
         BRIDGES: ClassVar[tuple[Bridge, ...]] = ()
+        FINDINGS: ClassVar[tuple[Finding, ...]] = ()
     p = _default_cache_path(DDQNvsVanilla)
     assert p == Path('experiments/data/cache/DDQNvsVanilla.parquet')
 

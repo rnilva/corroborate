@@ -21,6 +21,7 @@ from typing import ClassVar
 from corroborate.bridge.bridge import Bridge
 from corroborate.bridge.verdict import Verdict
 from corroborate.core.claim import claim
+from corroborate.core.finding import Finding
 from corroborate.core.hypothesis import Hypothesis
 from corroborate.core.intervention import DoEffect, Intervention
 from corroborate.corpus.persistence import read_runrows
@@ -74,6 +75,7 @@ class _StubHypothesis:
         baseline=(),
     )
     BRIDGES: ClassVar[tuple[Bridge, ...]] = _BRIDGES
+    FINDINGS: ClassVar[tuple[Finding, ...]] = ()
     MEASURABLES: ClassVar[
         tuple[Measurable[Mapping[str, object], object], ...]
     ] = _MEASURABLES
