@@ -1903,14 +1903,38 @@ def acrobot_per_burst_link_active__gamma_0999(
 #      ceiling). SURVIVE envs hit eval-cap (CartPole 99.34).
 #      Future continuous form: per-env reward-ceiling fraction
 #      via `outcome_episode_cv > 0.005` (saturation → CV→0).
+# G1 filter expressed at CONFIG level, not per-cell. Earlier per-cell
+# `jensen_gap > 0.05` admitted seed-asymmetric subsets — DDQN
+# reduces jens (that IS the mechanism), so DDQN seeds failed the
+# filter at a higher rate than vanilla. On FourRooms the asymmetry
+# was 40 vanilla vs 28 DDQN admitted, and the kept DDQN seeds were
+# the ones where DDQN's mechanism worked LEAST. Pair-Δ analyses
+# downstream then ran on this biased subset. DoWhy refutations
+# (placebo / RCC) protected verdicts but the scope semantics were
+# confused. Config-level lift: admit/reject whole configs (both
+# arms together) based on VANILLA's config-mean of jens/dorm — the
+# property of vanilla cells alone.
+_DDQN_CONFIG_KEYS: tuple[str, ...] = (
+    'env_name', 'sync_period', 'gamma', 'total_steps',
+    'n_step', 'reward_scale', 'action_duplicate_k',
+)
+_VANILLA_JENS_GAP = pl.when(pl.col('arm_key') == 'baseline').then(
+    pl.col('jensen_gap'),
+).otherwise(None)
+_VANILLA_DORMANCY_GAP = pl.when(pl.col('arm_key') == 'baseline').then(
+    pl.col('jensen_dormancy_gap'),
+).otherwise(None)
+
 _DDQN_RELEVANT_SCOPE = (
-    # G1 — threshold 0.05 matches dormancy scale; tighter
-    # thresholds silently exclude high-variance cells on noisy
-    # envs (MetaMaze per-seed jens fluctuates above and below 0.5)
-    finite('jensen_gap')
-    & (pl.col('jensen_gap') > 0.05)
-    & finite('jensen_dormancy_gap')
-    & finite_lt('jensen_dormancy_gap', 0.05)
+    # G1 — config-level. partition_aggregate is NaN-safe over the
+    # vanilla-masked column: non-vanilla rows contribute null,
+    # vanilla cells contribute their jens/dormancy values. The
+    # per-row broadcast value is the vanilla-only config-mean,
+    # which then filters all rows (both arms) in the config
+    # uniformly. Threshold 0.05 unchanged — but now applied at
+    # config-mean grain instead of per-seed grain.
+    (partition_aggregate(_VANILLA_JENS_GAP, by=_DDQN_CONFIG_KEYS, op='mean') > 0.05)
+    & (partition_aggregate(_VANILLA_DORMANCY_GAP, by=_DDQN_CONFIG_KEYS, op='mean') < 0.05)
     # G2 — argmax bias-vulnerable. Heuristic `n_actions >= 3` for
     # now. The (max−min)/σ_Q proxy was inconclusive (clusters at
     # 2.0-2.6 for all envs, doesn't isolate top1-top2 margin from
@@ -1929,7 +1953,12 @@ _DDQN_RELEVANT_SCOPE = (
     # G1+G2 alone correctly excludes the established ceiling-
     # saturated cases (CartPole via G2's |A|=2 exclusion).
     # Standard config (no n-step / action-duplicate / rs-shift /
-    # polyak-τ interventions in scope)
+    # polyak-τ interventions in scope). These appear in
+    # `_DDQN_CONFIG_KEYS` AND as separate predicates: the former
+    # ensures cells from rs-shift / n-step / k-dup variants get
+    # their own config-mean (don't contaminate the standard
+    # config's mean); the latter ensures non-standard variants
+    # are excluded from scope entirely.
     & ((pl.col('n_step') == 1) | pl.col('n_step').is_null())
     & pl.col('action_duplicate_k').is_null()
     & (pl.col('reward_scale').is_null() | (pl.col('reward_scale') == 1.0))
