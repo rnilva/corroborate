@@ -206,7 +206,7 @@ def extreme_q_divergence_attenuates_link__dowhy_corroborated(
     treatment_arm: str = DDQN_ARM,
     baseline_arm: str = VANILLA_ARM,
     attenuator: str = 'q_divergence_score',
-    binary_threshold: float = 1000.0,
+    binary_threshold: float = 1.0,
     link_target: Measurable[
         Mapping[str, object], npt.NDArray[np.floating],
     ] = MC_RETURN_PER_BURST_MEAN,
@@ -218,8 +218,10 @@ def extreme_q_divergence_attenuates_link__dowhy_corroborated(
     placebo_max_ratio: float = 0.2,
     rcc_max_drift_ratio: float = 0.15,
 ) -> Verdict:
-    """Binary contrast: envs with mean `q_divergence_score > 1000`
-    have a weaker bias→outcome **link** vs in-band envs.
+    """Binary contrast: envs with mean `q_divergence_score > 1.0`
+    (Q above the Bellman bound, the "Q-divergent" semantic per
+    `findings_q_div_threshold_too_loose.md`) have a weaker
+    bias→outcome **link** vs in-band envs.
 
     Phase-4 refactor (2026-05-12): replaced `link_attenuation_dowhy`
     (within-(env, burst) Pearson r computed from seed-paired Δs as
@@ -229,12 +231,19 @@ def extreme_q_divergence_attenuates_link__dowhy_corroborated(
     mechanic. Mech conditioning via `min_vanilla_predictor=0.05`
     ensures premise active per stratum; DDQN's structural tendency
     to reduce bias means Δ_outcome attenuation in high-q_div
-    strata corresponds to a weakened mech→outcome link, not just
-    a marginal Δ_outcome effect.
+    strata corresponds to a weakened mech→outcome link.
 
     DoWhy backdoor + placebo + RCC trio under env one-hot
     adjustment. `zero_guard=True` on backdoor handles RNG-
-    dependent machine-epsilon signs."""
+    dependent machine-epsilon signs.
+
+    AWAITING DATA: the current cache's max q_divergence_score is
+    1.05 (one CartPole cell). The pre-rebuild sync=10k MinAtar
+    corpora that produced Q-explosion regimes (q_div ≫ 1) aren't
+    in the universal cache. Bridge fires POW_INSUF until those
+    corpora are reintegrated. Pre-rebuild thresholds were 1000
+    (orders-of-magnitude divergence) — these regimes are
+    well-defined empirically but not currently testable."""
     del treatment_arm, baseline_arm, attenuator, binary_threshold
     del link_target, link_predictor, min_vanilla_predictor
     return dowhy_trio_verdict(
