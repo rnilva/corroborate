@@ -583,14 +583,16 @@
         "seed"
       ],
       "params": {
+        "baseline_arm": "baseline",
         "consistency_floor": 0.7,
         "env_name": "Acrobot-v1",
         "predictor": "jensen_bias_per_eps__mean_axis_-1",
-        "target": "mc_return__mean_axis_-1"
+        "target": "mc_return__mean_axis_-1",
+        "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
       },
       "predicted_direction": null,
       "scope_repr": "[([([([(col(\"env_name\")) == (\"Acrobot-v1\")]) & ([(col(\"corpus\")) == (\"l2_x_gamma_acrobot\")])]) & ([(col(\"effective_horizon\").is_finite()) & ([(col(\"effective_horizon\")) >= (dyn float: 80)])])]) & ([(col(\"optimizer.inner.weight_decay\")) == (dyn float: 0.0001)])]",
-      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "source_name": "jensen_gap",
       "target_name": "mc_return",
       "tier": "associational",
       "verdict": "power_insufficient",
@@ -607,8 +609,8 @@
       "analysis_results": {
         "paired_delta_link_dowhy": {
           "backdoor": {
-            "ate": -0.819386,
-            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__4,__burst__8,__burst__1,__burst__3,__burst__6,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __9,__burst__2,__burst__5,__burst__7])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__4,__burst__8,__burst__1,__burst__3,__burst__6,__burst__9,__burst__2,__burst__5,__burst__7,U) = P(dout|djens,__burst__4,__burst__8,__burst__1,__burst__3,__burst__6,__burst__9,__burst__2,__burst__5,__burst__7)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__4,__burst__8,__burst__1,__burst__3,__burst__6,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __9,__burst__2,__burst__5,__burst__7])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__4,__burst__8,__burst__1,__burst__3,__burst__6,__burst__9,__burst__2,__burst__5,__burst__7,U) = P(dout|djens,__burst__4,__burst__8,__burst__1,__burst__3,__burst__6,__burst__9,__burst__2,__burst__5,__burst__7)\n",
+            "ate": -0.740483,
+            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__6,__burst__4,__burst__9,__burst__5,__burst__7,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __2,__burst__8,__burst__1,__burst__3])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__6,__burst__4,__burst__9,__burst__5,__burst__7,__burst__2,__burst__8,__burst__1,__burst__3,U) = P(dout|djens,__burst__6,__burst__4,__burst__9,__burst__5,__burst__7,__burst__2,__burst__8,__burst__1,__burst__3)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__4,__burst__9,__burst__6,__burst__5,__burst__7,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __2,__burst__8,__burst__1,__burst__3])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__4,__burst__9,__burst__6,__burst__5,__burst__7,__burst__2,__burst__8,__burst__1,__burst__3,U) = P(dout|djens,__burst__4,__burst__9,__burst__6,__burst__5,__burst__7,__burst__2,__burst__8,__burst__1,__burst__3)\n",
             "identified": true,
             "method_name": "backdoor.linear_regression",
             "n_rows": 1500,
@@ -618,22 +620,22 @@
           "n_pairs": 1500,
           "outcome_col": "dout",
           "placebo": {
-            "drift": 0.819386,
+            "drift": 0.740483,
             "method_name": "backdoor.linear_regression",
             "n_rows": 1500,
             "outcome": "dout",
-            "real_ate": -0.819386,
-            "refuted_ate": 0.0,
+            "real_ate": -0.740483,
+            "refuted_ate": -2.22045e-16,
             "refuter_name": "placebo_treatment_refuter",
             "treatment": "djens"
           },
           "random_common_cause": {
-            "drift": 1.84324e-05,
+            "drift": 6.51174e-05,
             "method_name": "backdoor.linear_regression",
             "n_rows": 1500,
             "outcome": "dout",
-            "real_ate": -0.819386,
-            "refuted_ate": -0.819368,
+            "real_ate": -0.740483,
+            "refuted_ate": -0.740548,
             "refuter_name": "random_common_cause",
             "treatment": "djens"
           },
@@ -651,6 +653,7 @@
       ],
       "params": {
         "ate_ceiling": -0.1,
+        "baseline_arm": "baseline",
         "env_filter": [
           "FourRooms-misc",
           "Acrobot-v1",
@@ -658,11 +661,12 @@
           "MetaMaze-misc"
         ],
         "link_predictor": "jensen_bias_per_eps__mean_axis_-1",
-        "link_target": "mc_return__mean_axis_-1"
+        "link_target": "mc_return__mean_axis_-1",
+        "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
       },
       "predicted_direction": null,
       "scope_repr": "[([([([([([([([(.when([(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_gap\")).otherwise(null).is_not_nan()) | (.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_gap\")).otherwise(null).is_null())]).then(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_gap\")).otherwise(null)).otherwise(null).mean().over([col(\"env_name\"), col(\"sync_period\"), col(\"gamma\"), col(\"total_steps\"), col(\"n_step\"), col(\"reward_scale\"), col(\"action_duplicate_k\")])) > (dyn float: 0.05)]) & ([(.when([(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_dormancy_gap\")).otherwise(null).is_not_nan()) | (.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_dormancy_gap\")).otherwise(null).is_null())]).then(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_dormancy_gap\")).otherwise(null)).otherwise(null).mean().over([col(\"env_name\"), col(\"sync_period\"), col(\"gamma\"), col(\"total_steps\"), col(\"n_step\"), col(\"reward_scale\"), col(\"action_duplicate_k\")])) < (dyn float: 0.05)])]) & (col(\"n_actions\").is_finite())]) & ([(col(\"n_actions\")) >= (dyn int: 3)])]) & ([([(col(\"n_step\")) == (dyn int: 1)]) | (col(\"n_step\").is_null())])]) & (col(\"action_duplicate_k\").is_null())]) & ([(col(\"reward_scale\").is_null()) | ([(col(\"reward_scale\")) == (dyn float: 1)])])]) & (col(\"target_sync.tau\").is_null())]",
-      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "source_name": "jensen_gap",
       "target_name": "eval_best_burst_mean",
       "tier": "interventional",
       "verdict": "held",
@@ -679,8 +683,8 @@
       "analysis_results": {
         "paired_delta_link_dowhy": {
           "backdoor": {
-            "ate": -0.819386,
-            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__4,__burst__8,__burst__1,__burst__3,__burst__6,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __9,__burst__2,__burst__5,__burst__7])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__4,__burst__8,__burst__1,__burst__3,__burst__6,__burst__9,__burst__2,__burst__5,__burst__7,U) = P(dout|djens,__burst__4,__burst__8,__burst__1,__burst__3,__burst__6,__burst__9,__burst__2,__burst__5,__burst__7)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__4,__burst__8,__burst__1,__burst__3,__burst__6,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __9,__burst__2,__burst__5,__burst__7])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__4,__burst__8,__burst__1,__burst__3,__burst__6,__burst__9,__burst__2,__burst__5,__burst__7,U) = P(dout|djens,__burst__4,__burst__8,__burst__1,__burst__3,__burst__6,__burst__9,__burst__2,__burst__5,__burst__7)\n",
+            "ate": -0.740483,
+            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__6,__burst__4,__burst__9,__burst__5,__burst__7,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __2,__burst__8,__burst__1,__burst__3])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__6,__burst__4,__burst__9,__burst__5,__burst__7,__burst__2,__burst__8,__burst__1,__burst__3,U) = P(dout|djens,__burst__6,__burst__4,__burst__9,__burst__5,__burst__7,__burst__2,__burst__8,__burst__1,__burst__3)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__4,__burst__9,__burst__6,__burst__5,__burst__7,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __2,__burst__8,__burst__1,__burst__3])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__4,__burst__9,__burst__6,__burst__5,__burst__7,__burst__2,__burst__8,__burst__1,__burst__3,U) = P(dout|djens,__burst__4,__burst__9,__burst__6,__burst__5,__burst__7,__burst__2,__burst__8,__burst__1,__burst__3)\n",
             "identified": true,
             "method_name": "backdoor.linear_regression",
             "n_rows": 1500,
@@ -690,22 +694,22 @@
           "n_pairs": 1500,
           "outcome_col": "dout",
           "placebo": {
-            "drift": 0.819386,
+            "drift": 0.740483,
             "method_name": "backdoor.linear_regression",
             "n_rows": 1500,
             "outcome": "dout",
-            "real_ate": -0.819386,
-            "refuted_ate": 0.0,
+            "real_ate": -0.740483,
+            "refuted_ate": -2.22045e-16,
             "refuter_name": "placebo_treatment_refuter",
             "treatment": "djens"
           },
           "random_common_cause": {
-            "drift": 3.88413e-06,
+            "drift": 4.58528e-05,
             "method_name": "backdoor.linear_regression",
             "n_rows": 1500,
             "outcome": "dout",
-            "real_ate": -0.819386,
-            "refuted_ate": -0.819382,
+            "real_ate": -0.740483,
+            "refuted_ate": -0.740529,
             "refuter_name": "random_common_cause",
             "treatment": "djens"
           },
@@ -722,6 +726,7 @@
         "seed"
       ],
       "params": {
+        "baseline_arm": "baseline",
         "env_filter": [
           "FourRooms-misc",
           "Acrobot-v1",
@@ -730,11 +735,12 @@
         ],
         "link_predictor": "jensen_bias_per_eps__mean_axis_-1",
         "link_target": "mc_return__mean_axis_-1",
-        "placebo_max_ratio": 0.2
+        "placebo_max_ratio": 0.2,
+        "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
       },
       "predicted_direction": null,
       "scope_repr": "[([([([([([([([(.when([(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_gap\")).otherwise(null).is_not_nan()) | (.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_gap\")).otherwise(null).is_null())]).then(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_gap\")).otherwise(null)).otherwise(null).mean().over([col(\"env_name\"), col(\"sync_period\"), col(\"gamma\"), col(\"total_steps\"), col(\"n_step\"), col(\"reward_scale\"), col(\"action_duplicate_k\")])) > (dyn float: 0.05)]) & ([(.when([(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_dormancy_gap\")).otherwise(null).is_not_nan()) | (.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_dormancy_gap\")).otherwise(null).is_null())]).then(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_dormancy_gap\")).otherwise(null)).otherwise(null).mean().over([col(\"env_name\"), col(\"sync_period\"), col(\"gamma\"), col(\"total_steps\"), col(\"n_step\"), col(\"reward_scale\"), col(\"action_duplicate_k\")])) < (dyn float: 0.05)])]) & (col(\"n_actions\").is_finite())]) & ([(col(\"n_actions\")) >= (dyn int: 3)])]) & ([([(col(\"n_step\")) == (dyn int: 1)]) | (col(\"n_step\").is_null())])]) & (col(\"action_duplicate_k\").is_null())]) & ([(col(\"reward_scale\").is_null()) | ([(col(\"reward_scale\")) == (dyn float: 1)])])]) & (col(\"target_sync.tau\").is_null())]",
-      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "source_name": "jensen_gap",
       "target_name": "eval_best_burst_mean",
       "tier": "interventional",
       "verdict": "held",
@@ -751,8 +757,8 @@
       "analysis_results": {
         "paired_delta_link_dowhy": {
           "backdoor": {
-            "ate": -0.819386,
-            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__4,__burst__8,__burst__1,__burst__3,__burst__6,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __9,__burst__2,__burst__5,__burst__7])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__4,__burst__8,__burst__1,__burst__3,__burst__6,__burst__9,__burst__2,__burst__5,__burst__7,U) = P(dout|djens,__burst__4,__burst__8,__burst__1,__burst__3,__burst__6,__burst__9,__burst__2,__burst__5,__burst__7)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__4,__burst__8,__burst__1,__burst__3,__burst__6,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __9,__burst__2,__burst__5,__burst__7])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__4,__burst__8,__burst__1,__burst__3,__burst__6,__burst__9,__burst__2,__burst__5,__burst__7,U) = P(dout|djens,__burst__4,__burst__8,__burst__1,__burst__3,__burst__6,__burst__9,__burst__2,__burst__5,__burst__7)\n",
+            "ate": -0.740483,
+            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__6,__burst__4,__burst__9,__burst__5,__burst__7,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __2,__burst__8,__burst__1,__burst__3])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__6,__burst__4,__burst__9,__burst__5,__burst__7,__burst__2,__burst__8,__burst__1,__burst__3,U) = P(dout|djens,__burst__6,__burst__4,__burst__9,__burst__5,__burst__7,__burst__2,__burst__8,__burst__1,__burst__3)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__4,__burst__9,__burst__6,__burst__5,__burst__7,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __2,__burst__8,__burst__1,__burst__3])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__4,__burst__9,__burst__6,__burst__5,__burst__7,__burst__2,__burst__8,__burst__1,__burst__3,U) = P(dout|djens,__burst__4,__burst__9,__burst__6,__burst__5,__burst__7,__burst__2,__burst__8,__burst__1,__burst__3)\n",
             "identified": true,
             "method_name": "backdoor.linear_regression",
             "n_rows": 1500,
@@ -762,22 +768,22 @@
           "n_pairs": 1500,
           "outcome_col": "dout",
           "placebo": {
-            "drift": 0.819386,
+            "drift": 0.740483,
             "method_name": "backdoor.linear_regression",
             "n_rows": 1500,
             "outcome": "dout",
-            "real_ate": -0.819386,
-            "refuted_ate": 0.0,
+            "real_ate": -0.740483,
+            "refuted_ate": -2.22045e-16,
             "refuter_name": "placebo_treatment_refuter",
             "treatment": "djens"
           },
           "random_common_cause": {
-            "drift": 1.47863e-05,
+            "drift": 8.74726e-05,
             "method_name": "backdoor.linear_regression",
             "n_rows": 1500,
             "outcome": "dout",
-            "real_ate": -0.819386,
-            "refuted_ate": -0.819401,
+            "real_ate": -0.740483,
+            "refuted_ate": -0.74057,
             "refuter_name": "random_common_cause",
             "treatment": "djens"
           },
@@ -794,6 +800,7 @@
         "seed"
       ],
       "params": {
+        "baseline_arm": "baseline",
         "env_filter": [
           "FourRooms-misc",
           "Acrobot-v1",
@@ -802,11 +809,12 @@
         ],
         "link_predictor": "jensen_bias_per_eps__mean_axis_-1",
         "link_target": "mc_return__mean_axis_-1",
-        "rcc_max_drift_ratio": 0.1
+        "rcc_max_drift_ratio": 0.1,
+        "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
       },
       "predicted_direction": null,
       "scope_repr": "[([([([([([([([(.when([(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_gap\")).otherwise(null).is_not_nan()) | (.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_gap\")).otherwise(null).is_null())]).then(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_gap\")).otherwise(null)).otherwise(null).mean().over([col(\"env_name\"), col(\"sync_period\"), col(\"gamma\"), col(\"total_steps\"), col(\"n_step\"), col(\"reward_scale\"), col(\"action_duplicate_k\")])) > (dyn float: 0.05)]) & ([(.when([(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_dormancy_gap\")).otherwise(null).is_not_nan()) | (.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_dormancy_gap\")).otherwise(null).is_null())]).then(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_dormancy_gap\")).otherwise(null)).otherwise(null).mean().over([col(\"env_name\"), col(\"sync_period\"), col(\"gamma\"), col(\"total_steps\"), col(\"n_step\"), col(\"reward_scale\"), col(\"action_duplicate_k\")])) < (dyn float: 0.05)])]) & (col(\"n_actions\").is_finite())]) & ([(col(\"n_actions\")) >= (dyn int: 3)])]) & ([([(col(\"n_step\")) == (dyn int: 1)]) | (col(\"n_step\").is_null())])]) & (col(\"action_duplicate_k\").is_null())]) & ([(col(\"reward_scale\").is_null()) | ([(col(\"reward_scale\")) == (dyn float: 1)])])]) & (col(\"target_sync.tau\").is_null())]",
-      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "source_name": "jensen_gap",
       "target_name": "eval_best_burst_mean",
       "tier": "interventional",
       "verdict": "held",
@@ -852,7 +860,7 @@
       },
       "predicted_direction": "null",
       "scope_repr": "[([([([([([([([(.when([(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_gap\")).otherwise(null).is_not_nan()) | (.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_gap\")).otherwise(null).is_null())]).then(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_gap\")).otherwise(null)).otherwise(null).mean().over([col(\"env_name\"), col(\"sync_period\"), col(\"gamma\"), col(\"total_steps\"), col(\"n_step\"), col(\"reward_scale\"), col(\"action_duplicate_k\")])) > (dyn float: 0.05)]) & ([(.when([(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_dormancy_gap\")).otherwise(null).is_not_nan()) | (.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_dormancy_gap\")).otherwise(null).is_null())]).then(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_dormancy_gap\")).otherwise(null)).otherwise(null).mean().over([col(\"env_name\"), col(\"sync_period\"), col(\"gamma\"), col(\"total_steps\"), col(\"n_step\"), col(\"reward_scale\"), col(\"action_duplicate_k\")])) < (dyn float: 0.05)])]) & (col(\"n_actions\").is_finite())]) & ([(col(\"n_actions\")) >= (dyn int: 3)])]) & ([([(col(\"n_step\")) == (dyn int: 1)]) | (col(\"n_step\").is_null())])]) & (col(\"action_duplicate_k\").is_null())]) & ([(col(\"reward_scale\").is_null()) | ([(col(\"reward_scale\")) == (dyn float: 1)])])]) & (col(\"target_sync.tau\").is_null())]",
-      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "source_name": "q_divergence_score",
       "target_name": "eval_best_burst_mean",
       "tier": "associational",
       "verdict": "no_effect",
@@ -891,7 +899,7 @@
       },
       "predicted_direction": "null",
       "scope_repr": "[([([([([([([([(.when([(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_gap\")).otherwise(null).is_not_nan()) | (.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_gap\")).otherwise(null).is_null())]).then(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_gap\")).otherwise(null)).otherwise(null).mean().over([col(\"env_name\"), col(\"sync_period\"), col(\"gamma\"), col(\"total_steps\"), col(\"n_step\"), col(\"reward_scale\"), col(\"action_duplicate_k\")])) > (dyn float: 0.05)]) & ([(.when([(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_dormancy_gap\")).otherwise(null).is_not_nan()) | (.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_dormancy_gap\")).otherwise(null).is_null())]).then(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_dormancy_gap\")).otherwise(null)).otherwise(null).mean().over([col(\"env_name\"), col(\"sync_period\"), col(\"gamma\"), col(\"total_steps\"), col(\"n_step\"), col(\"reward_scale\"), col(\"action_duplicate_k\")])) < (dyn float: 0.05)])]) & (col(\"n_actions\").is_finite())]) & ([(col(\"n_actions\")) >= (dyn int: 3)])]) & ([([(col(\"n_step\")) == (dyn int: 1)]) | (col(\"n_step\").is_null())])]) & (col(\"action_duplicate_k\").is_null())]) & ([(col(\"reward_scale\").is_null()) | ([(col(\"reward_scale\")) == (dyn float: 1)])])]) & (col(\"target_sync.tau\").is_null())]",
-      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "source_name": "argmax_entropy_late",
       "target_name": "eval_best_burst_mean",
       "tier": "associational",
       "verdict": "held",
@@ -1098,6 +1106,7 @@
         "seed"
       ],
       "params": {
+        "baseline_arm": "baseline",
         "measurables": [
           "jensen_gap",
           "eval_best_burst_mean"
@@ -1109,14 +1118,15 @@
         "stratify_by": [
           "action_duplicate_k"
         ],
+        "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)",
         "x": "jensen_gap",
         "y": "eval_best_burst_mean"
       },
       "predicted_direction": "a_lt_b",
       "scope_repr": "[([([(col(\"env_name\")) == (\"FourRooms-misc\")]) & (col(\"action_duplicate_k\").is_not_null())]) & ([([(.when([(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_gap\")).otherwise(null).is_not_nan()) | (.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_gap\")).otherwise(null).is_null())]).then(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_gap\")).otherwise(null)).otherwise(null).mean().over([col(\"env_name\"), col(\"sync_period\"), col(\"gamma\"), col(\"total_steps\"), col(\"n_step\"), col(\"reward_scale\"), col(\"action_duplicate_k\")])) > (dyn float: 0.05)]) & ([(.when([(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_dormancy_gap\")).otherwise(null).is_not_nan()) | (.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_dormancy_gap\")).otherwise(null).is_null())]).then(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_dormancy_gap\")).otherwise(null)).otherwise(null).mean().over([col(\"env_name\"), col(\"sync_period\"), col(\"gamma\"), col(\"total_steps\"), col(\"n_step\"), col(\"reward_scale\"), col(\"action_duplicate_k\")])) < (dyn float: 0.05)])])]",
-      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "source_name": "jensen_gap",
       "target_name": "eval_best_burst_mean",
-      "tier": "interventional",
+      "tier": "associational",
       "verdict": "held",
       "warnings": []
     },
@@ -1125,8 +1135,8 @@
         "link_attenuation_dowhy": {
           "attenuator": "q_divergence_score",
           "backdoor": {
-            "ate": -1.11022e-16,
-            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n                  d                                                            ↪\n──────────────────────────────────────(E[g_link|__env__FourRooms-misc,__env__M ↪\nd[q_divergence_score_threshold__above]                                         ↪\n\n↪                                                                              ↪\n↪ ountainCar-v0,__env__Snake-jumanji,__env__PacMan-jumanji,__env__SlidingTileP ↪\n↪                                                                              ↪\n\n↪                                                        \n↪ uzzle-jumanji,__env__CartPole-v1,__env__MetaMaze-misc])\n↪                                                        \nEstimand assumption 1, Unconfoundedness: If U→{q_divergence_score__above_threshold} and U→g_link then P(g_link|q_divergence_score__above_threshold,__env__FourRooms-misc,__env__MountainCar-v0,__env__Snake-jumanji,__env__PacMan-jumanji,__env__SlidingTilePuzzle-jumanji,__env__CartPole-v1,__env__MetaMaze-misc,U) = P(g_link|q_divergence_score__above_threshold,__env__FourRooms-misc,__env__MountainCar-v0,__env__Snake-jumanji,__env__PacMan-jumanji,__env__SlidingTilePuzzle-jumanji,__env__CartPole-v1,__env__MetaMaze-misc)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n                  d                                                            ↪\n──────────────────────────────────────(E[g_link|__env__FourRooms-misc,__env__M ↪\nd[q_divergence_score_threshold__above]                                         ↪\n\n↪                                                                              ↪\n↪ ountainCar-v0,__env__Snake-jumanji,__env__PacMan-jumanji,__env__SlidingTileP ↪\n↪                                                                              ↪\n\n↪                                                        \n↪ uzzle-jumanji,__env__CartPole-v1,__env__MetaMaze-misc])\n↪                                                        \nEstimand assumption 1, Unconfoundedness: If U→{q_divergence_score__above_threshold} and U→g_link then P(g_link|q_divergence_score__above_threshold,__env__FourRooms-misc,__env__MountainCar-v0,__env__Snake-jumanji,__env__PacMan-jumanji,__env__SlidingTilePuzzle-jumanji,__env__CartPole-v1,__env__MetaMaze-misc,U) = P(g_link|q_divergence_score__above_threshold,__env__FourRooms-misc,__env__MountainCar-v0,__env__Snake-jumanji,__env__PacMan-jumanji,__env__SlidingTilePuzzle-jumanji,__env__CartPole-v1,__env__MetaMaze-misc)\n",
+            "ate": -2.22045e-16,
+            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n                  d                                                            ↪\n──────────────────────────────────────(E[g_link|__env__SlidingTilePuzzle-juman ↪\nd[q_divergence_score_threshold__above]                                         ↪\n\n↪                                                                              ↪\n↪ ji,__env__MetaMaze-misc,__env__Snake-jumanji,__env__PacMan-jumanji,__env__Fo ↪\n↪                                                                              ↪\n\n↪                                                        \n↪ urRooms-misc,__env__CartPole-v1,__env__MountainCar-v0])\n↪                                                        \nEstimand assumption 1, Unconfoundedness: If U→{q_divergence_score__above_threshold} and U→g_link then P(g_link|q_divergence_score__above_threshold,__env__SlidingTilePuzzle-jumanji,__env__MetaMaze-misc,__env__Snake-jumanji,__env__PacMan-jumanji,__env__FourRooms-misc,__env__CartPole-v1,__env__MountainCar-v0,U) = P(g_link|q_divergence_score__above_threshold,__env__SlidingTilePuzzle-jumanji,__env__MetaMaze-misc,__env__Snake-jumanji,__env__PacMan-jumanji,__env__FourRooms-misc,__env__CartPole-v1,__env__MountainCar-v0)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n                  d                                                            ↪\n──────────────────────────────────────(E[g_link|__env__SlidingTilePuzzle-juman ↪\nd[q_divergence_score_threshold__above]                                         ↪\n\n↪                                                                              ↪\n↪ ji,__env__MetaMaze-misc,__env__Snake-jumanji,__env__PacMan-jumanji,__env__Fo ↪\n↪                                                                              ↪\n\n↪                                                        \n↪ urRooms-misc,__env__CartPole-v1,__env__MountainCar-v0])\n↪                                                        \nEstimand assumption 1, Unconfoundedness: If U→{q_divergence_score__above_threshold} and U→g_link then P(g_link|q_divergence_score__above_threshold,__env__SlidingTilePuzzle-jumanji,__env__MetaMaze-misc,__env__Snake-jumanji,__env__PacMan-jumanji,__env__FourRooms-misc,__env__CartPole-v1,__env__MountainCar-v0,U) = P(g_link|q_divergence_score__above_threshold,__env__SlidingTilePuzzle-jumanji,__env__MetaMaze-misc,__env__Snake-jumanji,__env__PacMan-jumanji,__env__FourRooms-misc,__env__CartPole-v1,__env__MountainCar-v0)\n",
             "identified": true,
             "method_name": "backdoor.linear_regression",
             "n_rows": 99,
@@ -1143,18 +1153,18 @@
             "method_name": "backdoor.linear_regression",
             "n_rows": 99,
             "outcome": "g_link",
-            "real_ate": -1.11022e-16,
-            "refuted_ate": -1.11022e-16,
+            "real_ate": -2.22045e-16,
+            "refuted_ate": -2.22045e-16,
             "refuter_name": "placebo_treatment_refuter",
             "treatment": "q_divergence_score__above_threshold"
           },
           "random_common_cause": {
-            "drift": 8.32667e-17,
+            "drift": 2.91989e-16,
             "method_name": "backdoor.linear_regression",
             "n_rows": 99,
             "outcome": "g_link",
-            "real_ate": -1.11022e-16,
-            "refuted_ate": -2.77556e-17,
+            "real_ate": -2.22045e-16,
+            "refuted_ate": 6.99441e-17,
             "refuter_name": "random_common_cause",
             "treatment": "q_divergence_score__above_threshold"
           },
@@ -1173,14 +1183,16 @@
       "params": {
         "ate_ceiling": -0.1,
         "attenuator": "q_divergence_score",
+        "baseline_arm": "baseline",
         "binary_threshold": 1000.0,
         "dedupe_strategy": "mean",
         "link_predictor": "jensen_bias_per_eps__mean_axis_-1",
-        "link_target": "mc_return__mean_axis_-1"
+        "link_target": "mc_return__mean_axis_-1",
+        "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
       },
       "predicted_direction": null,
       "scope_repr": "[([([(col(\"total_steps\")) == (dyn int: 1000000)]) & (col(\"q_divergence_score\").is_finite())]) & ([(col(\"q_network.channels\").is_null()) | ([(col(\"q_network.channels\")) != (\"(32,64)\")])])]",
-      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "source_name": "jensen_gap",
       "target_name": "eval_best_burst_mean",
       "tier": "interventional",
       "verdict": "power_insufficient",
@@ -1198,8 +1210,8 @@
         "link_attenuation_dowhy": {
           "attenuator": "q_divergence_score",
           "backdoor": {
-            "ate": -1.11022e-16,
-            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n                  d                                                            ↪\n──────────────────────────────────────(E[g_link|__env__FourRooms-misc,__env__M ↪\nd[q_divergence_score_threshold__above]                                         ↪\n\n↪                                                                              ↪\n↪ ountainCar-v0,__env__Snake-jumanji,__env__PacMan-jumanji,__env__SlidingTileP ↪\n↪                                                                              ↪\n\n↪                                                        \n↪ uzzle-jumanji,__env__CartPole-v1,__env__MetaMaze-misc])\n↪                                                        \nEstimand assumption 1, Unconfoundedness: If U→{q_divergence_score__above_threshold} and U→g_link then P(g_link|q_divergence_score__above_threshold,__env__FourRooms-misc,__env__MountainCar-v0,__env__Snake-jumanji,__env__PacMan-jumanji,__env__SlidingTilePuzzle-jumanji,__env__CartPole-v1,__env__MetaMaze-misc,U) = P(g_link|q_divergence_score__above_threshold,__env__FourRooms-misc,__env__MountainCar-v0,__env__Snake-jumanji,__env__PacMan-jumanji,__env__SlidingTilePuzzle-jumanji,__env__CartPole-v1,__env__MetaMaze-misc)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n                  d                                                            ↪\n──────────────────────────────────────(E[g_link|__env__FourRooms-misc,__env__M ↪\nd[q_divergence_score_threshold__above]                                         ↪\n\n↪                                                                              ↪\n↪ ountainCar-v0,__env__Snake-jumanji,__env__PacMan-jumanji,__env__SlidingTileP ↪\n↪                                                                              ↪\n\n↪                                                        \n↪ uzzle-jumanji,__env__CartPole-v1,__env__MetaMaze-misc])\n↪                                                        \nEstimand assumption 1, Unconfoundedness: If U→{q_divergence_score__above_threshold} and U→g_link then P(g_link|q_divergence_score__above_threshold,__env__FourRooms-misc,__env__MountainCar-v0,__env__Snake-jumanji,__env__PacMan-jumanji,__env__SlidingTilePuzzle-jumanji,__env__CartPole-v1,__env__MetaMaze-misc,U) = P(g_link|q_divergence_score__above_threshold,__env__FourRooms-misc,__env__MountainCar-v0,__env__Snake-jumanji,__env__PacMan-jumanji,__env__SlidingTilePuzzle-jumanji,__env__CartPole-v1,__env__MetaMaze-misc)\n",
+            "ate": -2.22045e-16,
+            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n                  d                                                            ↪\n──────────────────────────────────────(E[g_link|__env__SlidingTilePuzzle-juman ↪\nd[q_divergence_score_threshold__above]                                         ↪\n\n↪                                                                              ↪\n↪ ji,__env__MetaMaze-misc,__env__Snake-jumanji,__env__PacMan-jumanji,__env__Fo ↪\n↪                                                                              ↪\n\n↪                                                        \n↪ urRooms-misc,__env__CartPole-v1,__env__MountainCar-v0])\n↪                                                        \nEstimand assumption 1, Unconfoundedness: If U→{q_divergence_score__above_threshold} and U→g_link then P(g_link|q_divergence_score__above_threshold,__env__SlidingTilePuzzle-jumanji,__env__MetaMaze-misc,__env__Snake-jumanji,__env__PacMan-jumanji,__env__FourRooms-misc,__env__CartPole-v1,__env__MountainCar-v0,U) = P(g_link|q_divergence_score__above_threshold,__env__SlidingTilePuzzle-jumanji,__env__MetaMaze-misc,__env__Snake-jumanji,__env__PacMan-jumanji,__env__FourRooms-misc,__env__CartPole-v1,__env__MountainCar-v0)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n                  d                                                            ↪\n──────────────────────────────────────(E[g_link|__env__SlidingTilePuzzle-juman ↪\nd[q_divergence_score_threshold__above]                                         ↪\n\n↪                                                                              ↪\n↪ ji,__env__MetaMaze-misc,__env__Snake-jumanji,__env__PacMan-jumanji,__env__Fo ↪\n↪                                                                              ↪\n\n↪                                                        \n↪ urRooms-misc,__env__CartPole-v1,__env__MountainCar-v0])\n↪                                                        \nEstimand assumption 1, Unconfoundedness: If U→{q_divergence_score__above_threshold} and U→g_link then P(g_link|q_divergence_score__above_threshold,__env__SlidingTilePuzzle-jumanji,__env__MetaMaze-misc,__env__Snake-jumanji,__env__PacMan-jumanji,__env__FourRooms-misc,__env__CartPole-v1,__env__MountainCar-v0,U) = P(g_link|q_divergence_score__above_threshold,__env__SlidingTilePuzzle-jumanji,__env__MetaMaze-misc,__env__Snake-jumanji,__env__PacMan-jumanji,__env__FourRooms-misc,__env__CartPole-v1,__env__MountainCar-v0)\n",
             "identified": true,
             "method_name": "backdoor.linear_regression",
             "n_rows": 99,
@@ -1216,18 +1228,18 @@
             "method_name": "backdoor.linear_regression",
             "n_rows": 99,
             "outcome": "g_link",
-            "real_ate": -1.11022e-16,
-            "refuted_ate": -1.11022e-16,
+            "real_ate": -2.22045e-16,
+            "refuted_ate": -2.22045e-16,
             "refuter_name": "placebo_treatment_refuter",
             "treatment": "q_divergence_score__above_threshold"
           },
           "random_common_cause": {
-            "drift": 1.24345e-16,
+            "drift": 1.85407e-16,
             "method_name": "backdoor.linear_regression",
             "n_rows": 99,
             "outcome": "g_link",
-            "real_ate": -1.11022e-16,
-            "refuted_ate": 1.33227e-17,
+            "real_ate": -2.22045e-16,
+            "refuted_ate": -3.66374e-17,
             "refuter_name": "random_common_cause",
             "treatment": "q_divergence_score__above_threshold"
           },
@@ -1245,15 +1257,17 @@
       ],
       "params": {
         "attenuator": "q_divergence_score",
+        "baseline_arm": "baseline",
         "binary_threshold": 1000.0,
         "dedupe_strategy": "mean",
         "link_predictor": "jensen_bias_per_eps__mean_axis_-1",
         "link_target": "mc_return__mean_axis_-1",
-        "placebo_max_ratio": 0.2
+        "placebo_max_ratio": 0.2,
+        "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
       },
       "predicted_direction": null,
       "scope_repr": "[([([(col(\"total_steps\")) == (dyn int: 1000000)]) & (col(\"q_divergence_score\").is_finite())]) & ([(col(\"q_network.channels\").is_null()) | ([(col(\"q_network.channels\")) != (\"(32,64)\")])])]",
-      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "source_name": "jensen_gap",
       "target_name": "eval_best_burst_mean",
       "tier": "interventional",
       "verdict": "power_insufficient",
@@ -1271,8 +1285,8 @@
         "link_attenuation_dowhy": {
           "attenuator": "q_divergence_score",
           "backdoor": {
-            "ate": -1.11022e-16,
-            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n                  d                                                            ↪\n──────────────────────────────────────(E[g_link|__env__FourRooms-misc,__env__M ↪\nd[q_divergence_score_threshold__above]                                         ↪\n\n↪                                                                              ↪\n↪ ountainCar-v0,__env__Snake-jumanji,__env__PacMan-jumanji,__env__SlidingTileP ↪\n↪                                                                              ↪\n\n↪                                                        \n↪ uzzle-jumanji,__env__CartPole-v1,__env__MetaMaze-misc])\n↪                                                        \nEstimand assumption 1, Unconfoundedness: If U→{q_divergence_score__above_threshold} and U→g_link then P(g_link|q_divergence_score__above_threshold,__env__FourRooms-misc,__env__MountainCar-v0,__env__Snake-jumanji,__env__PacMan-jumanji,__env__SlidingTilePuzzle-jumanji,__env__CartPole-v1,__env__MetaMaze-misc,U) = P(g_link|q_divergence_score__above_threshold,__env__FourRooms-misc,__env__MountainCar-v0,__env__Snake-jumanji,__env__PacMan-jumanji,__env__SlidingTilePuzzle-jumanji,__env__CartPole-v1,__env__MetaMaze-misc)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n                  d                                                            ↪\n──────────────────────────────────────(E[g_link|__env__FourRooms-misc,__env__M ↪\nd[q_divergence_score_threshold__above]                                         ↪\n\n↪                                                                              ↪\n↪ ountainCar-v0,__env__Snake-jumanji,__env__PacMan-jumanji,__env__SlidingTileP ↪\n↪                                                                              ↪\n\n↪                                                        \n↪ uzzle-jumanji,__env__CartPole-v1,__env__MetaMaze-misc])\n↪                                                        \nEstimand assumption 1, Unconfoundedness: If U→{q_divergence_score__above_threshold} and U→g_link then P(g_link|q_divergence_score__above_threshold,__env__FourRooms-misc,__env__MountainCar-v0,__env__Snake-jumanji,__env__PacMan-jumanji,__env__SlidingTilePuzzle-jumanji,__env__CartPole-v1,__env__MetaMaze-misc,U) = P(g_link|q_divergence_score__above_threshold,__env__FourRooms-misc,__env__MountainCar-v0,__env__Snake-jumanji,__env__PacMan-jumanji,__env__SlidingTilePuzzle-jumanji,__env__CartPole-v1,__env__MetaMaze-misc)\n",
+            "ate": -2.22045e-16,
+            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n                  d                                                            ↪\n──────────────────────────────────────(E[g_link|__env__SlidingTilePuzzle-juman ↪\nd[q_divergence_score_threshold__above]                                         ↪\n\n↪                                                                              ↪\n↪ ji,__env__MetaMaze-misc,__env__Snake-jumanji,__env__PacMan-jumanji,__env__Fo ↪\n↪                                                                              ↪\n\n↪                                                        \n↪ urRooms-misc,__env__CartPole-v1,__env__MountainCar-v0])\n↪                                                        \nEstimand assumption 1, Unconfoundedness: If U→{q_divergence_score__above_threshold} and U→g_link then P(g_link|q_divergence_score__above_threshold,__env__SlidingTilePuzzle-jumanji,__env__MetaMaze-misc,__env__Snake-jumanji,__env__PacMan-jumanji,__env__FourRooms-misc,__env__CartPole-v1,__env__MountainCar-v0,U) = P(g_link|q_divergence_score__above_threshold,__env__SlidingTilePuzzle-jumanji,__env__MetaMaze-misc,__env__Snake-jumanji,__env__PacMan-jumanji,__env__FourRooms-misc,__env__CartPole-v1,__env__MountainCar-v0)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n                  d                                                            ↪\n──────────────────────────────────────(E[g_link|__env__SlidingTilePuzzle-juman ↪\nd[q_divergence_score_threshold__above]                                         ↪\n\n↪                                                                              ↪\n↪ ji,__env__MetaMaze-misc,__env__Snake-jumanji,__env__PacMan-jumanji,__env__Fo ↪\n↪                                                                              ↪\n\n↪                                                        \n↪ urRooms-misc,__env__CartPole-v1,__env__MountainCar-v0])\n↪                                                        \nEstimand assumption 1, Unconfoundedness: If U→{q_divergence_score__above_threshold} and U→g_link then P(g_link|q_divergence_score__above_threshold,__env__SlidingTilePuzzle-jumanji,__env__MetaMaze-misc,__env__Snake-jumanji,__env__PacMan-jumanji,__env__FourRooms-misc,__env__CartPole-v1,__env__MountainCar-v0,U) = P(g_link|q_divergence_score__above_threshold,__env__SlidingTilePuzzle-jumanji,__env__MetaMaze-misc,__env__Snake-jumanji,__env__PacMan-jumanji,__env__FourRooms-misc,__env__CartPole-v1,__env__MountainCar-v0)\n",
             "identified": true,
             "method_name": "backdoor.linear_regression",
             "n_rows": 99,
@@ -1289,18 +1303,18 @@
             "method_name": "backdoor.linear_regression",
             "n_rows": 99,
             "outcome": "g_link",
-            "real_ate": -1.11022e-16,
-            "refuted_ate": -1.11022e-16,
+            "real_ate": -2.22045e-16,
+            "refuted_ate": -2.22045e-16,
             "refuter_name": "placebo_treatment_refuter",
             "treatment": "q_divergence_score__above_threshold"
           },
           "random_common_cause": {
-            "drift": 1.25455e-16,
+            "drift": 1.83187e-16,
             "method_name": "backdoor.linear_regression",
             "n_rows": 99,
             "outcome": "g_link",
-            "real_ate": -1.11022e-16,
-            "refuted_ate": 1.44329e-17,
+            "real_ate": -2.22045e-16,
+            "refuted_ate": -3.88578e-17,
             "refuter_name": "random_common_cause",
             "treatment": "q_divergence_score__above_threshold"
           },
@@ -1318,15 +1332,17 @@
       ],
       "params": {
         "attenuator": "q_divergence_score",
+        "baseline_arm": "baseline",
         "binary_threshold": 1000.0,
         "dedupe_strategy": "mean",
         "link_predictor": "jensen_bias_per_eps__mean_axis_-1",
         "link_target": "mc_return__mean_axis_-1",
-        "rcc_max_drift_ratio": 0.15
+        "rcc_max_drift_ratio": 0.15,
+        "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
       },
       "predicted_direction": null,
       "scope_repr": "[([([(col(\"total_steps\")) == (dyn int: 1000000)]) & (col(\"q_divergence_score\").is_finite())]) & ([(col(\"q_network.channels\").is_null()) | ([(col(\"q_network.channels\")) != (\"(32,64)\")])])]",
-      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "source_name": "jensen_gap",
       "target_name": "eval_best_burst_mean",
       "tier": "interventional",
       "verdict": "power_insufficient",
@@ -1377,9 +1393,9 @@
       },
       "predicted_direction": "a_lt_b",
       "scope_repr": "[([(col(\"env_reward_polarity\").is_finite()) & ([(col(\"env_reward_polarity\")) < (dyn float: -0.3)])]) & ([(col(\"q_divergence_score\").is_nan()) | ([(col(\"q_divergence_score\").is_finite()) & ([(col(\"q_divergence_score\")) < (dyn float: 1000)])])])]",
-      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "source_name": "effective_horizon",
       "target_name": "eval_best_burst_mean",
-      "tier": "interventional",
+      "tier": "associational",
       "verdict": "held",
       "warnings": []
     },
@@ -1421,9 +1437,9 @@
       },
       "predicted_direction": "a_gt_b",
       "scope_repr": "[([(col(\"env_reward_polarity\").is_finite()) & ([(col(\"env_reward_polarity\")) > (dyn float: 0.3)])]) & ([(col(\"q_divergence_score\").is_nan()) | ([(col(\"q_divergence_score\").is_finite()) & ([(col(\"q_divergence_score\")) < (dyn float: 1000)])])])]",
-      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "source_name": "effective_horizon",
       "target_name": "eval_best_burst_mean",
-      "tier": "interventional",
+      "tier": "associational",
       "verdict": "held",
       "warnings": []
     },
@@ -1460,7 +1476,7 @@
       },
       "predicted_direction": "a_lt_b",
       "scope_repr": "[([([([(col(\"corpus\").is_in([[\"asterix_postfix_chunk10\", \"survive_sync_intermediate_minatar_postfix\"]])) & (col(\"target_staleness_late\").is_finite())]) & (col(\"jensen_gap\").is_finite())]) & (col(\"eval_best_burst_mean\").is_finite())]) & ([([(.when([(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_dormancy_gap\")).otherwise(null).is_not_nan()) | (.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_dormancy_gap\")).otherwise(null).is_null())]).then(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_dormancy_gap\")).otherwise(null)).otherwise(null).mean().over([col(\"env_name\"), col(\"sync_period\"), col(\"gamma\"), col(\"total_steps\"), col(\"n_step\"), col(\"reward_scale\"), col(\"action_duplicate_k\")])) < (dyn float: 0.05)]) & ([(.when([(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"q_divergence_score\")).otherwise(null).is_not_nan()) | (.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"q_divergence_score\")).otherwise(null).is_null())]).then(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"q_divergence_score\")).otherwise(null)).otherwise(null).mean().over([col(\"env_name\"), col(\"sync_period\"), col(\"gamma\"), col(\"total_steps\"), col(\"n_step\"), col(\"reward_scale\"), col(\"action_duplicate_k\")])) < (dyn float: 1)])])]",
-      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "source_name": "target_staleness_late",
       "target_name": "eval_best_burst_mean",
       "tier": "associational",
       "verdict": "no_effect",
@@ -1577,6 +1593,7 @@
         "seed"
       ],
       "params": {
+        "baseline_arm": "baseline",
         "measurables": [
           "target_staleness_late",
           "eval_best_burst_mean"
@@ -1590,11 +1607,12 @@
           "sync_period",
           "total_steps",
           "corpus"
-        ]
+        ],
+        "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
       },
       "predicted_direction": "a_lt_b",
       "scope_repr": "[([([([([([([([([([(col(\"q_divergence_score\").is_finite()) & ([(col(\"q_divergence_score\").is_finite()) & ([(col(\"q_divergence_score\")) < (dyn float: 1)])])]) & (col(\"jensen_dormancy_gap\").is_finite())]) & ([(col(\"jensen_dormancy_gap\").is_finite()) & ([(col(\"jensen_dormancy_gap\")) < (dyn float: 0.05)])])]) & (col(\"env_reward_polarity\").is_finite())]) & ([(col(\"env_reward_polarity\").is_finite()) & ([(col(\"env_reward_polarity\")) > (dyn float: 0.3)])])]) & (col(\"target_staleness_late\").is_finite())]) & ([([(col(\"n_step\")) == (dyn int: 1)]) | (col(\"n_step\").is_null())])]) & (col(\"action_duplicate_k\").is_null())]) & ([(col(\"reward_scale\").is_null()) | ([(col(\"reward_scale\")) == (dyn float: 1)])])]) & (col(\"target_sync.tau\").is_null())]",
-      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "source_name": "target_staleness_late",
       "target_name": "eval_best_burst_mean",
       "tier": "associational",
       "verdict": "held",
@@ -1815,7 +1833,7 @@
       },
       "predicted_direction": "a_gt_b",
       "scope_repr": "[([([([([(col(\"jensen_gap\").is_finite()) & ([(col(\"jensen_gap\")) < (dyn float: 0.1)])]) & (col(\"clip_wedge_polarity_aligned\").is_finite())]) & (col(\"env_reward_polarity\").is_finite())]) & ([(col(\"env_reward_polarity\").abs()) > (dyn float: 0.3)])]) & (col(\"eval_best_burst_mean\").is_finite())]",
-      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "source_name": "clip_wedge_polarity_aligned",
       "target_name": "eval_best_burst_mean",
       "tier": "associational",
       "verdict": "power_insufficient",
@@ -1874,15 +1892,17 @@
       ],
       "params": {
         "ate_threshold": 1.0,
+        "baseline_arm": "baseline",
         "n_pairs_floor": 30,
         "outcome": "eval_best_burst_mean",
         "refutation_drift_threshold": 5.0,
+        "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)",
         "treatment_var": "target_staleness_late",
         "treatment_var_arm": "baseline"
       },
       "predicted_direction": "a_lt_b",
       "scope_repr": "[([([([([([([(col(\"target_sync.tau\").is_finite()) & ([(col(\"target_sync.tau\")) > (dyn int: 0)])]) & ([(col(\"env_reward_polarity\").is_finite()) & ([(col(\"env_reward_polarity\")) < (dyn float: -0.5)])])]) & (col(\"q_divergence_score\").is_finite())]) & ([(col(\"q_divergence_score\").is_finite()) & ([(col(\"q_divergence_score\")) < (dyn float: 100)])])]) & (col(\"target_staleness_late\").is_finite())]) & (col(\"eval_best_burst_mean\").is_finite())]) & ([(col(\"q_late_mean\").is_finite()) & ([(col(\"q_late_mean\")) > (dyn float: 0)])])]",
-      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "source_name": "target_staleness_late",
       "target_name": "eval_best_burst_mean",
       "tier": "interventional",
       "verdict": "power_insufficient",
@@ -1940,15 +1960,17 @@
         "target_sync.tau"
       ],
       "params": {
+        "baseline_arm": "baseline",
         "n_pairs_floor": 30,
         "null_band": 5.0,
         "outcome": "eval_best_burst_mean",
+        "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)",
         "treatment_var": "target_staleness_late",
         "treatment_var_arm": "baseline"
       },
       "predicted_direction": "null",
       "scope_repr": "[([([([(col(\"target_sync.tau\").is_finite()) & ([(col(\"target_sync.tau\")) > (dyn int: 0)])]) & ([(col(\"env_reward_polarity\").is_finite()) & ([(col(\"env_reward_polarity\")) > (dyn float: 0.3)])])]) & (col(\"target_staleness_late\").is_finite())]) & (col(\"eval_best_burst_mean\").is_finite())]",
-      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "source_name": "target_staleness_late",
       "target_name": "eval_best_burst_mean",
       "tier": "interventional",
       "verdict": "power_insufficient",
@@ -1995,16 +2017,18 @@
         "eval_every"
       ],
       "params": {
+        "baseline_arm": "baseline",
         "covariates": [
           "effective_horizon"
         ],
         "dedupe_strategy": "mean",
         "slope_threshold": 0.005,
-        "source": "mc_return__mean_axis_-1"
+        "source": "mc_return__mean_axis_-1",
+        "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
       },
       "predicted_direction": "a_gt_b",
       "scope_repr": "[([([([([([([([([([(col(\"q_divergence_score\").is_finite()) & ([(col(\"q_divergence_score\").is_finite()) & ([(col(\"q_divergence_score\")) < (dyn float: 1)])])]) & ([(col(\"bootstrap_fraction\").is_finite()) & ([(col(\"bootstrap_fraction\")) > (dyn float: 0.5)])])]) & (col(\"jensen_dormancy_gap\").is_finite())]) & ([(col(\"jensen_dormancy_gap\").is_finite()) & ([(col(\"jensen_dormancy_gap\")) < (dyn float: 0.05)])])]) & (col(\"env_reward_polarity\").is_finite())]) & ([(col(\"env_reward_polarity\").is_finite()) & ([(col(\"env_reward_polarity\")) < (dyn float: -0.3)])])]) & ([([(col(\"n_step\")) == (dyn int: 1)]) | (col(\"n_step\").is_null())])]) & (col(\"action_duplicate_k\").is_null())]) & ([(col(\"reward_scale\").is_null()) | ([(col(\"reward_scale\")) == (dyn float: 1)])])]) & (col(\"target_sync.tau\").is_null())]",
-      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "source_name": "effective_horizon",
       "target_name": "eval_best_burst_mean",
       "tier": "associational",
       "verdict": "no_effect",
@@ -2051,16 +2075,18 @@
         "eval_every"
       ],
       "params": {
+        "baseline_arm": "baseline",
         "covariates": [
           "argmax_entropy_late"
         ],
         "dedupe_strategy": "mean",
         "slope_threshold": 0.5,
-        "source": "mc_return__mean_axis_-1"
+        "source": "mc_return__mean_axis_-1",
+        "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
       },
       "predicted_direction": "a_gt_b",
       "scope_repr": "[([([([([([([([([([(col(\"q_divergence_score\").is_finite()) & ([(col(\"q_divergence_score\").is_finite()) & ([(col(\"q_divergence_score\")) < (dyn float: 1)])])]) & ([(col(\"bootstrap_fraction\").is_finite()) & ([(col(\"bootstrap_fraction\")) > (dyn float: 0.5)])])]) & (col(\"jensen_dormancy_gap\").is_finite())]) & ([(col(\"jensen_dormancy_gap\").is_finite()) & ([(col(\"jensen_dormancy_gap\")) < (dyn float: 0.05)])])]) & (col(\"env_reward_polarity\").is_finite())]) & ([(col(\"env_reward_polarity\").is_finite()) & ([(col(\"env_reward_polarity\")) > (dyn float: 0.3)])])]) & ([([(col(\"n_step\")) == (dyn int: 1)]) | (col(\"n_step\").is_null())])]) & (col(\"action_duplicate_k\").is_null())]) & ([(col(\"reward_scale\").is_null()) | ([(col(\"reward_scale\")) == (dyn float: 1)])])]) & (col(\"target_sync.tau\").is_null())]",
-      "source_name": "do(bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)|vs=baseline)",
+      "source_name": "argmax_entropy_late",
       "target_name": "eval_best_burst_mean",
       "tier": "associational",
       "verdict": "held",
@@ -2069,7 +2095,7 @@
   ],
   "cache_path": "experiments/data/cache/ddqn_universe.parquet",
   "errored_bridges": [],
-  "git_commit": "2a57798ad104",
+  "git_commit": "619de734803b",
   "hypothesis_module": "experiments.findings.ddqn_universe",
   "measurable_signatures": {
     "argmax_entropy_late": "22f4c683c0bfee66",
@@ -2092,5 +2118,5 @@
     "target_staleness_late": "14b90395c7aabd2e"
   },
   "n_cells_total": 1824,
-  "timestamp_utc": "2026-05-12T03:04:16+00:00"
+  "timestamp_utc": "2026-05-12T03:25:11+00:00"
 }

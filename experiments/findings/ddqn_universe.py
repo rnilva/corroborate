@@ -118,6 +118,15 @@ ADAPTIVE_DQN_FACTOR_0P5_SWAP = Intervention(
 # `weight_decay` predicate to the bridge's `scope`.
 INTERVENTION = DoEffect(treatment=(DDQN_SWAP,), baseline=())
 
+# Substrate arm-key constants extracted from INTERVENTION. Used by
+# bridges whose source is a measurable (link / mediator bridges
+# testing measurable→outcome couplings) but whose analysis fixtures
+# still need `treatment_arm` / `baseline_arm` to construct per-pair Δs.
+# The bridge runner only auto-injects arm kwargs when source is a
+# DoEffect; for measurable-sourced bridges these defaults supply them.
+_DDQN_ARM = INTERVENTION.treatment_arm_key()
+_VANILLA_ARM = INTERVENTION.baseline_arm_key()
+
 
 # Hypothesis-module-level scope: bsuite envs are *diagnostic*
 # probes, not RL benchmarks. Each bsuite env is engineered to
@@ -893,7 +902,7 @@ def ddqn_null_under_monte_carlo__fourrooms_n10(
     # γ=0.999 → eff_h ≈ 86-141 and γ=0.99 → eff_h ≈ 49-61, so the
     # threshold isolates the γ=0.999 cohort. eff_h is now
     # `1/(1−γ·bf)`; threshold recalibrated from 500.
-    source=INTERVENTION,
+    source='jensen_gap',
     target='mc_return',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
@@ -907,6 +916,8 @@ def ddqn_null_under_monte_carlo__fourrooms_n10(
 def acrobot_per_burst_link_active__gamma_0999(
     paired_link_per_burst: PerBurstLinkResult,
     *,
+    treatment_arm: str = _DDQN_ARM,
+    baseline_arm: str = _VANILLA_ARM,
     target: Measurable[
         Mapping[str, object], npt.NDArray[np.floating],
     ] = _MC_RETURN_PER_BURST_MEAN,
@@ -920,7 +931,7 @@ def acrobot_per_burst_link_active__gamma_0999(
     least `consistency_floor` of bursts on Acrobot γ=0.999. HELD when
     `phase_link_consistency >= consistency_floor`. Empirical 1.000
     (every burst significant) at the corroborating regime."""
-    del target, predictor
+    del treatment_arm, baseline_arm, target, predictor
     plc = phase_link_consistency(
         paired_link_per_burst, env_name=env_name,
     )
@@ -1051,7 +1062,7 @@ _REACH_ENVS_FOUR: tuple[str, ...] = (
 
 
 @claim_bridge(
-    source=INTERVENTION,
+    source='jensen_gap',
     target='eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
@@ -1060,6 +1071,8 @@ _REACH_ENVS_FOUR: tuple[str, ...] = (
 def reach_link_backdoor_ate_negative(
     paired_delta_link_dowhy: PairedDeltaLinkDowhyResult,
     *,
+    treatment_arm: str = _DDQN_ARM,
+    baseline_arm: str = _VANILLA_ARM,
     link_target: Measurable[
         Mapping[str, object], npt.NDArray[np.floating],
     ] = _MC_RETURN_PER_BURST_MEAN,
@@ -1087,7 +1100,7 @@ def reach_link_backdoor_ate_negative(
     The per-pair-Δ form admixes init-correlation into the slope
     estimate but the refutations validate the signal isn't a
     pure data artifact."""
-    del link_predictor, link_target, env_filter
+    del treatment_arm, baseline_arm, link_predictor, link_target, env_filter
     b = paired_delta_link_dowhy.backdoor
     if not b.identified:
         return Verdict.POWER_INSUFFICIENT
@@ -1101,7 +1114,7 @@ def reach_link_backdoor_ate_negative(
 
 
 @claim_bridge(
-    source=INTERVENTION,
+    source='jensen_gap',
     target='eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
@@ -1110,6 +1123,8 @@ def reach_link_backdoor_ate_negative(
 def reach_link_placebo_refuted(
     paired_delta_link_dowhy: PairedDeltaLinkDowhyResult,
     *,
+    treatment_arm: str = _DDQN_ARM,
+    baseline_arm: str = _VANILLA_ARM,
     link_target: Measurable[
         Mapping[str, object], npt.NDArray[np.floating],
     ] = _MC_RETURN_PER_BURST_MEAN,
@@ -1124,7 +1139,7 @@ def reach_link_placebo_refuted(
     `placebo_max_ratio` AND real ATE is non-zero. Confirms the
     bias-correction effect is treatment-specific, not artifact of
     pooled noise (CLAIM 22)."""
-    del link_predictor, link_target, env_filter
+    del treatment_arm, baseline_arm, link_predictor, link_target, env_filter
     p = paired_delta_link_dowhy.placebo
     real = p.real_ate
     placebo = p.refuted_ate
@@ -1139,7 +1154,7 @@ def reach_link_placebo_refuted(
 
 
 @claim_bridge(
-    source=INTERVENTION,
+    source='jensen_gap',
     target='eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
@@ -1148,6 +1163,8 @@ def reach_link_placebo_refuted(
 def reach_link_rcc_robust(
     paired_delta_link_dowhy: PairedDeltaLinkDowhyResult,
     *,
+    treatment_arm: str = _DDQN_ARM,
+    baseline_arm: str = _VANILLA_ARM,
     link_target: Measurable[
         Mapping[str, object], npt.NDArray[np.floating],
     ] = _MC_RETURN_PER_BURST_MEAN,
@@ -1162,7 +1179,7 @@ def reach_link_rcc_robust(
     ATE within `rcc_max_drift_ratio` of the real ATE. HELD when
     |refuted - real| / |real| < tolerance. Confirms robustness to
     omitted-confounder vulnerability (CLAIM 22)."""
-    del link_predictor, link_target, env_filter
+    del treatment_arm, baseline_arm, link_predictor, link_target, env_filter
     r = paired_delta_link_dowhy.random_common_cause
     real = r.real_ate
     refuted = r.refuted_ate
@@ -1190,7 +1207,7 @@ _DDQN_VS_VANILLA_ARMS = (
 
 
 @claim_bridge(
-    source=INTERVENTION,
+    source='q_divergence_score',
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
@@ -1225,7 +1242,7 @@ def q_divergence_shadowed_by_jens(
 
 
 @claim_bridge(
-    source=INTERVENTION,
+    source='argmax_entropy_late',
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
@@ -1414,10 +1431,10 @@ def metamaze_link_steeper_at_high_gamma__median(
 
 
 @claim_bridge(
-    source=INTERVENTION,
+    source='jensen_gap',
     target='eval_best_burst_mean',
     direction=Direction.INVERSE,
-    tier=Tier.INTERVENTIONAL,
+    tier=Tier.ASSOCIATIONAL,
     scope=(
         (pl.col('env_name') == 'FourRooms-misc')
         & pl.col('action_duplicate_k').is_not_null()
@@ -1428,6 +1445,8 @@ def metamaze_link_steeper_at_high_gamma__median(
 def fourrooms_action_dim_link_active__inflated(
     stratum_effect_panel: StratumEffectPanel,
     *,
+    treatment_arm: str = _DDQN_ARM,
+    baseline_arm: str = _VANILLA_ARM,
     measurables: tuple[str, ...] = ('jensen_gap', 'eval_best_burst_mean'),
     stratify_by: tuple[str, ...] = ('action_duplicate_k',),
     min_seeds_per_arm: int = 5,
@@ -1442,7 +1461,7 @@ def fourrooms_action_dim_link_active__inflated(
     HELD when slope ≤ `slope_max` (negative — bias reduction
     translates to outcome) AND p < 0.05 AND n_strata ≥ min_strata.
     See `findings_action_dim_inflation_postfix.md`."""
-    del measurables, stratify_by, min_seeds_per_arm  # forwarded to fixture
+    del treatment_arm, baseline_arm, measurables, stratify_by, min_seeds_per_arm
     result = panel_regress(stratum_effect_panel, x=x, y=y)
     if result.n_strata < min_strata:
         return Verdict.POWER_INSUFFICIENT
@@ -1499,31 +1518,13 @@ def fourrooms_action_dim_link_active__inflated(
 
 
 @claim_bridge(
-    source=INTERVENTION,
+    source='jensen_gap',
     target='eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
-    # Endogenous touch (`q_divergence_score.is_finite()`) added
-    # alongside the run-length filter so EXOGENOUS_SCOPE doesn't
-    # WARN: the bridge's actual interest IS the q_divergence
-    # regime, which the analysis (`link_attenuation_dowhy`) drives
-    # via its `attenuator='q_divergence_score'` param. The cell
-    # set is a strict subset of the prior — only cells with
-    # populated q_div are kept, which the analysis was already
-    # filtering internally. Verdict-preserving.
     scope=(
         (pl.col('total_steps') == 1_000_000)
         & finite('q_divergence_score')
-        # Exclude SlidingTile big_cnn probe (4 cells with
-        # q_network.channels=(32,64) — a different architecture
-        # than the (8,16)-channel main sweep). Mixing the probe
-        # with the main sweep makes paired_link_per_burst error
-        # on per-burst array-shape mismatch (the two configs
-        # produce different trace shapes). Earlier scope-fix used
-        # `eval_every == 50000` which dropped all MLP envs (which
-        # use 100000); the architecture filter keeps MLP cells
-        # (null channels) and the main CNN sweep ((8,16)) while
-        # excluding only the 4 probe cells.
         & (
             pl.col('q_network.channels').is_null()
             | (pl.col('q_network.channels') != '(32,64)')
@@ -1533,6 +1534,8 @@ def fourrooms_action_dim_link_active__inflated(
 def extreme_q_divergence_attenuates_link__binary(
     link_attenuation_dowhy: LinkAttenuationDowhyResult,
     *,
+    treatment_arm: str = _DDQN_ARM,
+    baseline_arm: str = _VANILLA_ARM,
     attenuator: str = 'q_divergence_score',
     binary_threshold: float = 1000.0,
     link_target: Measurable[
@@ -1549,8 +1552,8 @@ def extreme_q_divergence_attenuates_link__binary(
     to band-cells (0.02 < score < 1000), after backdoor
     adjustment for env family. HELD when ATE ≤ -0.10 AND
     identified=True. Empirical: ATE = -0.21."""
-    del attenuator, binary_threshold, link_target, link_predictor
-    del dedupe_strategy
+    del treatment_arm, baseline_arm, attenuator, binary_threshold
+    del link_target, link_predictor, dedupe_strategy
     b = link_attenuation_dowhy.backdoor
     if not b.identified:
         return Verdict.POWER_INSUFFICIENT
@@ -1570,31 +1573,13 @@ def extreme_q_divergence_attenuates_link__binary(
 
 
 @claim_bridge(
-    source=INTERVENTION,
+    source='jensen_gap',
     target='eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
-    # Endogenous touch (`q_divergence_score.is_finite()`) added
-    # alongside the run-length filter so EXOGENOUS_SCOPE doesn't
-    # WARN: the bridge's actual interest IS the q_divergence
-    # regime, which the analysis (`link_attenuation_dowhy`) drives
-    # via its `attenuator='q_divergence_score'` param. The cell
-    # set is a strict subset of the prior — only cells with
-    # populated q_div are kept, which the analysis was already
-    # filtering internally. Verdict-preserving.
     scope=(
         (pl.col('total_steps') == 1_000_000)
         & finite('q_divergence_score')
-        # Exclude SlidingTile big_cnn probe (4 cells with
-        # q_network.channels=(32,64) — a different architecture
-        # than the (8,16)-channel main sweep). Mixing the probe
-        # with the main sweep makes paired_link_per_burst error
-        # on per-burst array-shape mismatch (the two configs
-        # produce different trace shapes). Earlier scope-fix used
-        # `eval_every == 50000` which dropped all MLP envs (which
-        # use 100000); the architecture filter keeps MLP cells
-        # (null channels) and the main CNN sweep ((8,16)) while
-        # excluding only the 4 probe cells.
         & (
             pl.col('q_network.channels').is_null()
             | (pl.col('q_network.channels') != '(32,64)')
@@ -1604,6 +1589,8 @@ def extreme_q_divergence_attenuates_link__binary(
 def extreme_q_divergence_attenuates_link__placebo_refuted(
     link_attenuation_dowhy: LinkAttenuationDowhyResult,
     *,
+    treatment_arm: str = _DDQN_ARM,
+    baseline_arm: str = _VANILLA_ARM,
     attenuator: str = 'q_divergence_score',
     binary_threshold: float = 1000.0,
     link_target: Measurable[
@@ -1619,8 +1606,8 @@ def extreme_q_divergence_attenuates_link__placebo_refuted(
     `placebo_max_ratio` of the real value, confirming the
     attenuation is treatment-specific (not noise). Empirical:
     real -0.21, placebo 0, ratio 0%."""
-    del attenuator, binary_threshold, link_target, link_predictor
-    del dedupe_strategy
+    del treatment_arm, baseline_arm, attenuator, binary_threshold
+    del link_target, link_predictor, dedupe_strategy
     p = link_attenuation_dowhy.placebo
     real = p.real_ate
     placebo = p.refuted_ate
@@ -1635,31 +1622,13 @@ def extreme_q_divergence_attenuates_link__placebo_refuted(
 
 
 @claim_bridge(
-    source=INTERVENTION,
+    source='jensen_gap',
     target='eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
-    # Endogenous touch (`q_divergence_score.is_finite()`) added
-    # alongside the run-length filter so EXOGENOUS_SCOPE doesn't
-    # WARN: the bridge's actual interest IS the q_divergence
-    # regime, which the analysis (`link_attenuation_dowhy`) drives
-    # via its `attenuator='q_divergence_score'` param. The cell
-    # set is a strict subset of the prior — only cells with
-    # populated q_div are kept, which the analysis was already
-    # filtering internally. Verdict-preserving.
     scope=(
         (pl.col('total_steps') == 1_000_000)
         & finite('q_divergence_score')
-        # Exclude SlidingTile big_cnn probe (4 cells with
-        # q_network.channels=(32,64) — a different architecture
-        # than the (8,16)-channel main sweep). Mixing the probe
-        # with the main sweep makes paired_link_per_burst error
-        # on per-burst array-shape mismatch (the two configs
-        # produce different trace shapes). Earlier scope-fix used
-        # `eval_every == 50000` which dropped all MLP envs (which
-        # use 100000); the architecture filter keeps MLP cells
-        # (null channels) and the main CNN sweep ((8,16)) while
-        # excluding only the 4 probe cells.
         & (
             pl.col('q_network.channels').is_null()
             | (pl.col('q_network.channels') != '(32,64)')
@@ -1669,6 +1638,8 @@ def extreme_q_divergence_attenuates_link__placebo_refuted(
 def extreme_q_divergence_attenuates_link__rcc_robust(
     link_attenuation_dowhy: LinkAttenuationDowhyResult,
     *,
+    treatment_arm: str = _DDQN_ARM,
+    baseline_arm: str = _VANILLA_ARM,
     attenuator: str = 'q_divergence_score',
     binary_threshold: float = 1000.0,
     link_target: Measurable[
@@ -1684,8 +1655,8 @@ def extreme_q_divergence_attenuates_link__rcc_robust(
     set leaves the binary above-1000 ATE within
     `rcc_max_drift_ratio` of real. Confirms robustness to
     spurious-confound vulnerability. Empirical: drift ratio ≈ 5%."""
-    del attenuator, binary_threshold, link_target, link_predictor
-    del dedupe_strategy
+    del treatment_arm, baseline_arm, attenuator, binary_threshold
+    del link_target, link_predictor, dedupe_strategy
     r = link_attenuation_dowhy.random_common_cause
     real = r.real_ate
     refuted = r.refuted_ate
@@ -1705,10 +1676,10 @@ def extreme_q_divergence_attenuates_link__rcc_robust(
 
 
 @claim_bridge(
-    source=INTERVENTION,
+    source='effective_horizon',
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
-    tier=Tier.INTERVENTIONAL,
+    tier=Tier.ASSOCIATIONAL,
     pair_by=('env_name', 'corpus', 'gamma', 'total_steps', 'sync_period', 'seed'),
     scope=(
         finite_lt('env_reward_polarity', -0.3)
@@ -1751,10 +1722,10 @@ def eff_h_mediates_g_link__goal_envs(
 
 
 @claim_bridge(
-    source=INTERVENTION,
+    source='effective_horizon',
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
-    tier=Tier.INTERVENTIONAL,
+    tier=Tier.ASSOCIATIONAL,
     pair_by=('env_name', 'corpus', 'gamma', 'total_steps', 'sync_period', 'seed'),
     scope=(
         finite_gt('env_reward_polarity', 0.3)
@@ -1818,7 +1789,7 @@ def eff_h_mediates_g_link__survival_envs(
 
 
 @claim_bridge(
-    source=INTERVENTION,
+    source='target_staleness_late',
     target='eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
@@ -1883,7 +1854,7 @@ def target_staleness_late_mediates_outcome__minatar_intermediate_sync(
 
 
 @claim_bridge(
-    source=INTERVENTION,
+    source='target_staleness_late',
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
@@ -1903,6 +1874,8 @@ def target_staleness_late_mediates_outcome__minatar_intermediate_sync(
 def cross_config_staleness_slope_negative__survive(
     stratum_effect_panel: StratumEffectPanel,
     *,
+    treatment_arm: str = _DDQN_ARM,
+    baseline_arm: str = _VANILLA_ARM,
     measurables: tuple[str, ...] = ('target_staleness_late', 'eval_best_burst_mean'),
     stratify_by: tuple[str, ...] = (
         'env_name', 'sync_period', 'total_steps', 'corpus',
@@ -1918,7 +1891,7 @@ def cross_config_staleness_slope_negative__survive(
     p=0.037. Cross-config descriptive (sync_period confounds);
     within-cell mediation breaks at this scope (proportion≈0.07).
     See `findings_cross_config_staleness_polarity.md`."""
-    del measurables, stratify_by, min_seeds_per_arm
+    del treatment_arm, baseline_arm, measurables, stratify_by, min_seeds_per_arm
     panel = stratum_effect_panel
     if panel.n_strata < min_strata:
         return Verdict.POWER_INSUFFICIENT, None
@@ -2037,7 +2010,7 @@ def ddqn_helps_under_three_gate_scope__cross_env(
 
 
 @claim_bridge(
-    source=INTERVENTION,
+    source='clip_wedge_polarity_aligned',
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
@@ -2103,17 +2076,10 @@ def clip_wedge_predicts_outcome__polarity_moderated__dormant_scope(
 
 
 @claim_bridge(
-    source=INTERVENTION,
+    source='target_staleness_late',
     target='eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
-    # `target_sync.tau` MUST be in pair_by so each (DDQN, baseline)
-    # pair shares a single τ value. The analysis then reads
-    # `target_staleness_late` from the BASELINE arm of each pair
-    # as the per-pair endogenous mediator level — exogenously
-    # varied via the Polyak τ sweep. log_tau is the INSTRUMENT;
-    # target_staleness_late is the proximal treatment we test the
-    # causal effect of on Δ_outcome.
     pair_by=(
         'env_name', 'gamma', 'sync_period',
         'total_steps', 'seed', 'target_sync.tau',
@@ -2121,28 +2087,14 @@ def clip_wedge_predicts_outcome__polarity_moderated__dormant_scope(
     scope=(
         # Endogenous polyak-sweep indicator: only `polyak_update`
         # carries a `target_sync.tau` field; periodic_copy regimes
-        # leave it null. NOT corpus-tagged.
+        # leave it null.
         finite('target_sync.tau')
         & (pl.col('target_sync.tau') > 0)
-        # GOAL polarity (length and return inversely correlated).
         & finite_lt('env_reward_polarity', -0.5)
-        # Bounded Q (no Q-explosion). Polyak smoothing keeps q_div
-        # low here in practice; the predicate excludes any future
-        # corpus where it doesn't.
         & finite('q_divergence_score')
         & finite_lt('q_divergence_score', 100.0)
         & finite('target_staleness_late')
         & finite('eval_best_burst_mean')
-        # POSITIVE Q-regime: vanilla's late-window mean Q > 0,
-        # equivalent to "r_min ≥ 0 + bounded Q + GOAL". This is
-        # the ENDOGENOUS downstream of r_min — captures the
-        # actual sign of Hasselt's bias direction in the cell's
-        # trajectory. r_min is the structural cause; q_late_mean
-        # is the per-cell observable. Predicate routes around
-        # `r_min` (exogenous env-structural) by testing what
-        # actually matters: where vanilla's Q ends up.
-        # See `polyak_q_regime_findings.md` for the empirical
-        # mechanism trace.
         & finite_gt('q_late_mean', 0.0)
     ),
     predicted_direction='a_lt_b',
@@ -2150,6 +2102,8 @@ def clip_wedge_predicts_outcome__polarity_moderated__dormant_scope(
 def staleness_amplifies_ddqn_outcome__sparse_goal_polyak(
     paired_continuous_do_dowhy: PairedContinuousDoResult,
     *,
+    treatment_arm: str = _DDQN_ARM,
+    baseline_arm: str = _VANILLA_ARM,
     treatment_var: str = 'target_staleness_late',
     treatment_var_arm: str = 'baseline',
     outcome: str = 'eval_best_burst_mean',
@@ -2163,7 +2117,7 @@ def staleness_amplifies_ddqn_outcome__sparse_goal_polyak(
     + placebo + RCC. HELD: identified ∧ ATE > threshold ∧ refutations
     clean. Historical: FourRooms n=120, ATE≈+5 reward units/staleness
     unit. AWAITING DATA: polyak_tau_intervention absent post-rebuild."""
-    del treatment_var, treatment_var_arm, outcome
+    del treatment_arm, baseline_arm, treatment_var, treatment_var_arm, outcome
     result = paired_continuous_do_dowhy
     if not result.backdoor.identified:
         return Verdict.POWER_INSUFFICIENT
@@ -2195,7 +2149,7 @@ def staleness_amplifies_ddqn_outcome__sparse_goal_polyak(
 
 
 @claim_bridge(
-    source=INTERVENTION,
+    source='target_staleness_late',
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
@@ -2206,24 +2160,17 @@ def staleness_amplifies_ddqn_outcome__sparse_goal_polyak(
     scope=(
         finite('target_sync.tau')
         & (pl.col('target_sync.tau') > 0)
-        # SURVIVAL polarity (Asterix-like — episode length and return
-        # positively correlated, dense per-step rewards). Endogenous
-        # regime predicate, NOT env_name.
         & finite_gt('env_reward_polarity', 0.3)
         & finite('target_staleness_late')
         & finite('eval_best_burst_mean')
     ),
-    # `predicted_direction='null'` (xfail-style): under SURVIVAL
-    # polarity in the polyak regime, the staleness-mediation chain
-    # is BROKEN (the L→outcome map is sign-flipped relative to
-    # GOAL, AND in pre-polyak periodic_copy this regime
-    # exhibited Q-explosion that disconnected mech from outcome).
-    # HELD = null confirmed.
     predicted_direction='null',
 )
 def staleness_does_not_amplify_ddqn_outcome__survival_polyak(
     paired_continuous_do_dowhy: PairedContinuousDoResult,
     *,
+    treatment_arm: str = _DDQN_ARM,
+    baseline_arm: str = _VANILLA_ARM,
     treatment_var: str = 'target_staleness_late',
     treatment_var_arm: str = 'baseline',
     outcome: str = 'eval_best_burst_mean',
@@ -2235,7 +2182,7 @@ def staleness_does_not_amplify_ddqn_outcome__survival_polyak(
     staleness mediation chain BREAKS on SURVIVE polarity per
     `findings_polyak_makes_mech_dormant_survive.md`. AWAITING DATA
     (polyak sweeps absent)."""
-    del treatment_var, treatment_var_arm, outcome
+    del treatment_arm, baseline_arm, treatment_var, treatment_var_arm, outcome
     result = paired_continuous_do_dowhy
     if not result.backdoor.identified:
         return Verdict.POWER_INSUFFICIENT
@@ -2264,23 +2211,17 @@ def staleness_does_not_amplify_ddqn_outcome__survival_polyak(
 
 
 @claim_bridge(
-    source=INTERVENTION,
+    source='effective_horizon',
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
     pair_by=('seed', 'total_steps', 'eval_every'),
     scope=(
-        # CLAIM 17 scope predicates
         finite('q_divergence_score') & finite_lt('q_divergence_score', 1.0)
         & finite_gt('bootstrap_fraction', 0.5)
         & finite('jensen_dormancy_gap') & finite_lt('jensen_dormancy_gap', 0.05)
-        # REACH polarity: r(episode_length, mc_return) < 0 — shorter
-        # trajectories correlate with bigger return (goal-reaching).
-        # Endogenous predicate (per-cell empirical polarity).
         & finite('env_reward_polarity')
         & finite_lt('env_reward_polarity', -0.3)
-        # Standard config (no n-step / action-duplicate / rs-shift /
-        # polyak-τ).
         & ((pl.col('n_step') == 1) | pl.col('n_step').is_null())
         & pl.col('action_duplicate_k').is_null()
         & (pl.col('reward_scale').is_null() | (pl.col('reward_scale') == 1.0))
@@ -2291,6 +2232,8 @@ def staleness_does_not_amplify_ddqn_outcome__survival_polyak(
 def effh_predicts_link_power__reach_envs(
     meta_regression_per_burst: MetaRegressionResult,
     *,
+    treatment_arm: str = _DDQN_ARM,
+    baseline_arm: str = _VANILLA_ARM,
     source: Measurable[
         Mapping[str, object], npt.NDArray[np.floating],
     ] = _MC_RETURN_PER_BURST_MEAN,
@@ -2304,7 +2247,7 @@ def effh_predicts_link_power__reach_envs(
     -0.0002], p=0.041 — OPPOSITE direction (per-burst slope flips
     relative to env-mean aggregate due to phase-structure inversion,
     see `findings_fourrooms_time_series.md`)."""
-    del source, covariates, dedupe_strategy
+    del treatment_arm, baseline_arm, source, covariates, dedupe_strategy
     coef = next(
         (c for c in meta_regression_per_burst.coefficients
          if c.name == 'effective_horizon'),
@@ -2326,7 +2269,7 @@ def effh_predicts_link_power__reach_envs(
 
 
 @claim_bridge(
-    source=INTERVENTION,
+    source='argmax_entropy_late',
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
@@ -2335,8 +2278,6 @@ def effh_predicts_link_power__reach_envs(
         finite('q_divergence_score') & finite_lt('q_divergence_score', 1.0)
         & finite_gt('bootstrap_fraction', 0.5)
         & finite('jensen_dormancy_gap') & finite_lt('jensen_dormancy_gap', 0.05)
-        # SURVIVE polarity: r(episode_length, mc_return) > 0 — longer
-        # trajectories correlate with bigger return (stay-alive).
         & finite('env_reward_polarity')
         & finite_gt('env_reward_polarity', 0.3)
         & ((pl.col('n_step') == 1) | pl.col('n_step').is_null())
@@ -2349,6 +2290,8 @@ def effh_predicts_link_power__reach_envs(
 def argmax_entropy_predicts_link_power__survive_envs(
     meta_regression_per_burst: MetaRegressionResult,
     *,
+    treatment_arm: str = _DDQN_ARM,
+    baseline_arm: str = _VANILLA_ARM,
     source: Measurable[
         Mapping[str, object], npt.NDArray[np.floating],
     ] = _MC_RETURN_PER_BURST_MEAN,
@@ -2361,7 +2304,7 @@ def argmax_entropy_predicts_link_power__survive_envs(
     HELD when β ≥ slope_threshold AND significant. Caveats:
     argmax_ent is mostly env-structural (van↔dd Pearson +0.95);
     collinear with mean_dJ. n=5 small."""
-    del source, covariates, dedupe_strategy
+    del treatment_arm, baseline_arm, source, covariates, dedupe_strategy
     coef = next(
         (c for c in meta_regression_per_burst.coefficients
          if c.name == 'argmax_entropy_late'),
