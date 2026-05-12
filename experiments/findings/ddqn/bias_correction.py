@@ -84,7 +84,22 @@ def acrobot_per_burst_link_active__gamma_0999(
     consistency_floor: float = 0.7,
 ) -> Verdict:
     """Per-burst r(Δ_jens, Δ_out) significantly negative in at
-    least `consistency_floor` of bursts on Acrobot γ=0.999."""
+    least `consistency_floor` of bursts on Acrobot γ=0.999.
+
+    Phase-5 audit (2026-05-12): kept as-is. Per-burst within-cell
+    seed pairing IS structural — computing a Pearson r at a single
+    (env, burst) stratum requires multiple observations within
+    that stratum, and seed-paired Δs are the only way to get
+    per-seed scalars to correlate. There's no independent-samples
+    analog at within-stratum grain. The user's "replace seed-paired
+    analyses" directive applied to cross-stratum pseudo-
+    replication (Phases 1, 3, 4) — not within-stratum estimation.
+
+    AWAITING DATA: scope gates on `corpus == 'l2_x_gamma_acrobot'`
+    which isn't in the current universal cache (similar to CLAIM 5
+    and Polyak bridges). Per `findings_l2_acrobot_goldilocks.md`,
+    per-burst r ranges ≈ -0.93 to -0.998 with plc=1.0 on that
+    corpus — when reintegrated, bridge fires HELD."""
     del treatment_arm, baseline_arm, target, predictor
     plc = phase_link_consistency(paired_link_per_burst, env_name=env_name)
     if math.isnan(plc):
