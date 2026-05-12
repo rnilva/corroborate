@@ -58,7 +58,7 @@ The file's claim structure after step-2 cuts:
 - **REACH-cohort link** (CLAIM 22, SURVIVED). DoWhy backdoor +
   placebo + RCC refutation trio on the REACH-polarity envs.
 
-## Cut / retired (2026-05-11)
+## Cut / retired (2026-05-11 to 2026-05-12)
 
 CLAIM 4 + 16 (bf cross-env), CLAIM 14 (soft tautology — seed-
 pairing critique + post-rebuild collapse; substance preserved
@@ -66,9 +66,10 @@ in eff_h_mediates_g_link__{goal,survival}_envs JCI form),
 CLAIM 21 REACH-polyak, CLAIM 26 (slope-predictor, superseded
 by 26b), CLAIM 6 (mc_variance, refuted via CV decomposition),
 CLAIM 18 (algorithmic-activation, placeholder), CLAIM 7
-g/h/i/j (4 auxiliary mechanism-route probes). Synthesis
-preserved as
-deletion-memo banners below.
+g/h/i/j (4 auxiliary mechanism-route probes), CLAIM 7d
+(`ddqn_helps_at_early_bursts__pixel_envs` — paired_g methodology
++ data orphan: MinAtar 1M missing post-rebuild). Synthesis
+preserved as deletion-memo banners below.
 
 ## RL methodology note
 
@@ -482,68 +483,25 @@ def adaptive_dqn_recovers_ddqn_benefit__fourrooms_factor_0p5(
 # =====================================================================
 
 
-@claim_bridge(
-    source=INTERVENTION,
-    target='mc_return_first_quarter',
-    direction=Direction.DIRECT,
-    tier=Tier.ASSOCIATIONAL,
-    pair_by=('seed', 'env_name'),
-    # Endogenous scope: per-(env, total_steps) mean of
-    # `q_divergence_score` exceeds the Bellman fixed-point bound
-    # (jensen > r_max/(1−γ)) — the regime where the bridge claims
-    # DDQN's early-burst benefit operates. The multi-key partition
-    # keeps the regime-specific signal: Freeway-MinAtar's
-    # full-cache env-mean is 0.74 (mixing 50k/200k/1M cells), but
-    # its 1M-only (env, total_steps) mean is 2.76 — so Freeway 1M
-    # passes. Two predicates: `finite('q_divergence_score')` drops
-    # per-cell NaN (no_hit_penalty wrapper cells with null
-    # jensen_gap); `partition_aggregate(...) > 1.0` selects the
-    # Q-explosion regime via NaN-safe partition mean.
-    scope=(
-        (pl.col('log_obs_dim') >= 5.0)
-        & (pl.col('total_steps') >= 1000000.0)
-        & pl.col('reward_clip_min').is_null()
-        & finite('q_divergence_score')
-        & (
-            partition_aggregate(
-                'q_divergence_score',
-                by=['env_name', 'total_steps'],
-                op='mean',
-            )
-            > 1.0
-        )
-    ),
-)
-def ddqn_helps_at_early_bursts__pixel_envs(
-    paired_g: PairedGResult,
-    *,
-    dedupe_strategy: str = 'mean',
-) -> tuple[Verdict, RefutationClass | None]:
-    """TIER A2 existence proof: at the first eval-burst quarter
-    on long-horizon high-obs-dim envs (MinAtar 1M), DDQN's
-    outcome delta is positive in the majority of cells with
-    substantial pooled effect. Per-cell helped=56.7%, g=+0.30,
-    n=120 in the original analysis.
-
-    Generalizes within the MinAtar 1M sample, not across all
-    high-obs-dim envs (log_obs_dim alone is not predictive —
-    see K1 LOO + four-MinAtar comparison)."""
-    del dedupe_strategy  # forwarded to paired_g
-    if paired_g.n_pairs < 30:
-        return Verdict.POWER_INSUFFICIENT, None
-    if math.isnan(paired_g.helped_fraction):
-        return Verdict.POWER_INSUFFICIENT, None
-    # Predicted direction: positive g + helped majority.
-    if (
-        paired_g.helped_fraction >= 0.55
-        and paired_g.g >= 0.20
-    ):
-        return Verdict.HELD, None
-    # Sign-flip when observed g is negative (opposite direction);
-    # otherwise null-effect (positive but small).
-    if paired_g.g < 0.0:
-        return Verdict.NO_EFFECT, RefutationClass.SIGN_FLIP
-    return Verdict.NO_EFFECT, RefutationClass.NULL_EFFECT
+# =====================================================================
+# TIER A2 — DELETED. Bridge audit step 4 (2026-05-12).
+#
+# `ddqn_helps_at_early_bursts__pixel_envs` (CLAIM 7d) is cut on
+# two grounds:
+#
+# 1. Methodology: consumes `paired_g` — per-pair-Δ in RL reflects
+#    within-init correlation, not population-of-inits variance
+#    (same critique as CLAIM 14 / 17 cuts).
+# 2. Data orphan: scope requires `log_obs_dim >= 5 AND total_steps
+#    >= 1M`. Post-rebuild cache has no MinAtar 1M (postfix rebuild
+#    dropped those corpora; MinAtar only at 200k). Cells passing
+#    scope: 0 — bridge is structurally POW_INSUF.
+#
+# Substantive content preserved by `findings_minatar_link_
+# attenuation.md` (per-burst sync-curve sweep on MinAtar) and the
+# `ddqn_curve_crosses_vanilla_late__spaceinvaders` shape bridge.
+# Re-enable when MinAtar 1M corpora return.
+# =====================================================================
 
 
 @claim_bridge(
@@ -4073,7 +4031,9 @@ DDQN_UNIVERSE_BRIDGES = (
     ddqn_helps_at_full_bootstrap__fourrooms_n1,
     ddqn_null_under_monte_carlo__fourrooms_n10,
     # TIER A2 existence proofs (per-burst, env-conditional).
-    ddqn_helps_at_early_bursts__pixel_envs,
+    # ddqn_helps_at_early_bursts__pixel_envs — CUT 2026-05-12
+    # (paired_g + data orphan: MinAtar 1M missing post-rebuild).
+    # See banner above the cut site.
     # ddqn_attenuates_at_late_bursts__spaceinvaders — DISABLED.
     # The two SpaceInvaders 1M sweeps that match this bridge's scope
     # (`minatar_1M_spaceinvaders`, Apr 30; `spaceinvaders_no_hit_penalty`
@@ -4210,7 +4170,6 @@ __all__ = [
     'ddqn_attenuates_at_late_bursts__spaceinvaders',
     'ddqn_benefit_scales_with_effective_horizon__fourrooms',
     'ddqn_benefit_scales_with_effective_horizon__metamaze_high_gamma',
-    'ddqn_helps_at_early_bursts__pixel_envs',
     'ddqn_refuted_when_dormancy_fires',
     'eff_h_mediates_g_link__goal_envs',
     'eff_h_mediates_g_link__survival_envs',
