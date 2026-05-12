@@ -19,6 +19,7 @@ from typing import cast
 
 from corroborate.bridge import Bridge, BridgeEvaluation
 from corroborate.graph.causal import (
+    PostEvalEntry,
     cluster_verdict, clusters_by_extent, evaluated_graph,
 )
 from corroborate.runner import check, evict, run
@@ -321,10 +322,12 @@ def _print_verdicts(
     # separately. Singletons are the default and don't need a
     # roll-up. Cluster verdict label comes from the framework's
     # `cluster_verdict` primitive — see
-    # `experiments/findings/ddqn/walks.py` for the walks demo and
-    # `corroborate.graph.causal` for the implementation.
+    # `corroborate.graph.causal` for the implementation; the
+    # `experiments/findings/ddqn/finding_*.py` walks show the
+    # canonical use pattern for Findings.
     post_eval = {
-        name: (ev.verdict, ev.extent_hash) for name, ev in results.items()
+        name: PostEvalEntry(verdict=ev.verdict, extent_hash=ev.extent_hash)
+        for name, ev in results.items()
     }
     g = evaluated_graph(bridges, post_eval)
     graph_clusters = clusters_by_extent(g)

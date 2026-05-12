@@ -23,6 +23,7 @@ from corroborate.graph.causal import (
     BridgeEdge,
     ClusterVerdict,
     Direction,
+    PostEvalEntry,
     Tier,
     authored_graph,
     cluster_verdict,
@@ -83,7 +84,7 @@ def _bridge_interventional(_stub_analysis: object) -> Verdict:
 def test_evaluated_graph_held_associational_correlational() -> None:
     g = evaluated_graph(
         (_bridge_assoc_a,),
-        {'_bridge_assoc_a': (Verdict.HELD, 12345)},
+        {'_bridge_assoc_a': PostEvalEntry(verdict=Verdict.HELD, extent_hash=12345)},
     )
     edges = tuple(g.edges)
     assert len(edges) == 1
@@ -94,7 +95,7 @@ def test_evaluated_graph_held_associational_correlational() -> None:
 def test_evaluated_graph_held_interventional_causal_one_sided() -> None:
     g = evaluated_graph(
         (_bridge_interventional,),
-        {'_bridge_interventional': (Verdict.HELD, 0)},
+        {'_bridge_interventional': PostEvalEntry(verdict=Verdict.HELD, extent_hash=0)},
     )
     edges = tuple(g.edges)
     assert edges[0].metadata.evidentiary_level == 'causal_one_sided'
@@ -108,7 +109,7 @@ def test_evaluated_graph_held_with_scope_flag_stamps_like_held() -> None:
     live bridge emits HELD_WITH_SCOPE_FLAG in shipped snapshots."""
     g = evaluated_graph(
         (_bridge_assoc_a,),
-        {'_bridge_assoc_a': (Verdict.HELD_WITH_SCOPE_FLAG, 99)},
+        {'_bridge_assoc_a': PostEvalEntry(verdict=Verdict.HELD_WITH_SCOPE_FLAG, extent_hash=99)},
     )
     edges = tuple(g.edges)
     assert edges[0].metadata.evidentiary_level == 'correlational'
@@ -118,7 +119,7 @@ def test_evaluated_graph_held_with_scope_flag_stamps_like_held() -> None:
 def test_evaluated_graph_no_effect_refuted() -> None:
     g = evaluated_graph(
         (_bridge_assoc_a,),
-        {'_bridge_assoc_a': (Verdict.NO_EFFECT, 7)},
+        {'_bridge_assoc_a': PostEvalEntry(verdict=Verdict.NO_EFFECT, extent_hash=7)},
     )
     edges = tuple(g.edges)
     assert edges[0].metadata.evidentiary_level == 'refuted'
@@ -130,7 +131,7 @@ def test_evaluated_graph_invariant_violation_unevaluated() -> None:
     framework's choice, documented in `_stamp_level`)."""
     g = evaluated_graph(
         (_bridge_assoc_a,),
-        {'_bridge_assoc_a': (Verdict.INVARIANT_VIOLATION, 3)},
+        {'_bridge_assoc_a': PostEvalEntry(verdict=Verdict.INVARIANT_VIOLATION, extent_hash=3)},
     )
     edges = tuple(g.edges)
     assert edges[0].metadata.evidentiary_level == 'unevaluated'
@@ -139,10 +140,25 @@ def test_evaluated_graph_invariant_violation_unevaluated() -> None:
 def test_evaluated_graph_power_insufficient_unevaluated() -> None:
     g = evaluated_graph(
         (_bridge_assoc_a,),
-        {'_bridge_assoc_a': (Verdict.POWER_INSUFFICIENT, 5)},
+        {'_bridge_assoc_a': PostEvalEntry(verdict=Verdict.POWER_INSUFFICIENT, extent_hash=5)},
     )
     edges = tuple(g.edges)
     assert edges[0].metadata.evidentiary_level == 'unevaluated'
+
+
+def test_evaluated_graph_inadmissible_unevaluated() -> None:
+    """INADMISSIBLE — bridge body did not run (admission gate
+    BLOCK-level fired). Same stamping as POWER_INSUFFICIENT and
+    INVARIANT_VIOLATION: 'unevaluated'. Neither corroboration nor
+    refutation by `Verdict.is_*()` predicates, so falls through to
+    the default branch of `_stamp_level`."""
+    g = evaluated_graph(
+        (_bridge_assoc_a,),
+        {'_bridge_assoc_a': PostEvalEntry(verdict=Verdict.INADMISSIBLE, extent_hash=11)},
+    )
+    edges = tuple(g.edges)
+    assert edges[0].metadata.evidentiary_level == 'unevaluated'
+    assert edges[0].metadata.extent_hash == 11
 
 
 def test_evaluated_graph_missing_from_post_eval_unevaluated() -> None:
@@ -161,8 +177,8 @@ def test_evaluated_graph_preserves_topology() -> None:
     post = evaluated_graph(
         bridges,
         {
-            '_bridge_assoc_a': (Verdict.HELD, 1),
-            '_bridge_other': (Verdict.NO_EFFECT, 2),
+            '_bridge_assoc_a': PostEvalEntry(verdict=Verdict.HELD, extent_hash=1),
+            '_bridge_other': PostEvalEntry(verdict=Verdict.NO_EFFECT, extent_hash=2),
         },
     )
     assert len(tuple(pre.edges)) == len(tuple(post.edges))
@@ -177,8 +193,8 @@ def test_clusters_by_extent_groups_by_triple() -> None:
     g = evaluated_graph(
         (_bridge_assoc_a, _bridge_assoc_b),
         {
-            '_bridge_assoc_a': (Verdict.HELD, 42),
-            '_bridge_assoc_b': (Verdict.HELD, 42),
+            '_bridge_assoc_a': PostEvalEntry(verdict=Verdict.HELD, extent_hash=42),
+            '_bridge_assoc_b': PostEvalEntry(verdict=Verdict.HELD, extent_hash=42),
         },
     )
     clusters = clusters_by_extent(g)
@@ -192,8 +208,8 @@ def test_clusters_by_extent_separates_distinct_extent_hashes() -> None:
     g = evaluated_graph(
         (_bridge_assoc_a, _bridge_assoc_b),
         {
-            '_bridge_assoc_a': (Verdict.HELD, 10),
-            '_bridge_assoc_b': (Verdict.HELD, 20),
+            '_bridge_assoc_a': PostEvalEntry(verdict=Verdict.HELD, extent_hash=10),
+            '_bridge_assoc_b': PostEvalEntry(verdict=Verdict.HELD, extent_hash=20),
         },
     )
     clusters = clusters_by_extent(g)
@@ -208,8 +224,8 @@ def test_clusters_by_extent_singletons_at_distinct_sources() -> None:
     g = evaluated_graph(
         (_bridge_assoc_a, _bridge_other),
         {
-            '_bridge_assoc_a': (Verdict.HELD, 1),
-            '_bridge_other': (Verdict.NO_EFFECT, 1),
+            '_bridge_assoc_a': PostEvalEntry(verdict=Verdict.HELD, extent_hash=1),
+            '_bridge_other': PostEvalEntry(verdict=Verdict.NO_EFFECT, extent_hash=1),
         },
     )
     clusters = clusters_by_extent(g)

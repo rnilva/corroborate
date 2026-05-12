@@ -284,8 +284,25 @@ def authored_graph(
 # ============ Post-evaluation evidence(E) stamper ============
 
 
-def _stamp_level(meta: BridgeEdge, verdict: Verdict) -> EvidentiaryLevel:
-    """Map `(Verdict, Tier)` → `EvidentiaryLevel`.
+@dataclass(frozen=True, slots=True)
+class PostEvalEntry:
+    """Per-bridge post-evaluation pair: the verdict the bridge's
+    `holds_when` body returned and the `extent_hash` of the
+    admitted cell-set on the cache that produced it.
+
+    Callers construct this from either a `BridgeEvaluation`
+    (`PostEvalEntry(ev.verdict, ev.extent_hash)`) or from a
+    persisted `*.run.json` snapshot. Tightening the
+    `evaluated_graph` signature with a typed record keeps the
+    shape explicit and survives the addition of a third field
+    (e.g. `refutation_class`, `assumption_violations`) without
+    breaking callers."""
+    verdict: Verdict
+    extent_hash: int
+
+
+def _stamp_level(tier: Tier, verdict: Verdict) -> EvidentiaryLevel:
+    """Map `(Tier, Verdict)` → `EvidentiaryLevel`.
 
     Dispatch via `Verdict.is_corroboration()` /
     `Verdict.is_refutation()` — the enum's own predicates —
@@ -299,7 +316,7 @@ def _stamp_level(meta: BridgeEdge, verdict: Verdict) -> EvidentiaryLevel:
     means the test was out of scope, NOT a refutation."""
     if verdict.is_corroboration():
         return (
-            'causal_one_sided' if meta.tier == Tier.INTERVENTIONAL
+            'causal_one_sided' if tier is Tier.INTERVENTIONAL
             else 'correlational'
         )
     if verdict.is_refutation():
@@ -309,14 +326,14 @@ def _stamp_level(meta: BridgeEdge, verdict: Verdict) -> EvidentiaryLevel:
 
 def evaluated_graph(
     bridges: 'Iterable[ClaimBridge]',
-    post_eval: Mapping[str, tuple[Verdict, int]],
+    post_eval: Mapping[str, PostEvalEntry],
 ) -> CausalGraph:
     """Realize the principle's `evidence(E)` component.
 
     Build the authored graph topology then stamp each edge's
     `evidentiary_level` (from verdict via `_stamp_level`) and
-    `extent_hash` (from `BridgeEvaluation.extent_hash`) from
-    the `post_eval` mapping `{bridge_name: (Verdict, extent_hash)}`.
+    `extent_hash` from the `post_eval` mapping
+    `{bridge_name: PostEvalEntry(verdict, extent_hash)}`.
 
     Bridges absent from `post_eval` keep authored defaults
     (`evidentiary_level='unevaluated'`, `extent_hash=0`).
@@ -332,11 +349,10 @@ def evaluated_graph(
         if pe is None:
             new_edges.append(e)
             continue
-        verdict, ehash = pe
         new_meta = replace(
             e.metadata,
-            evidentiary_level=_stamp_level(e.metadata, verdict),
-            extent_hash=ehash,
+            evidentiary_level=_stamp_level(e.metadata.tier, pe.verdict),
+            extent_hash=pe.extent_hash,
         )
         new_edges.append(replace(e, metadata=new_meta))
     return replace(g, edges=tuple(new_edges))
