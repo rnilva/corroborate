@@ -54,13 +54,20 @@ class HypothesisConfig:
 
     Carries:
     - `name`: substrate-chosen short label (for arm_tag output naming).
-    - `intervention`: HP scalars + slot-Claim swaps, as a flat dict.
-      The substrate splits HPs (slot paths NOT in `intervention_arms`)
-      into the `base` callable's bound kwargs; mechanism swaps come
-      via `intervention_arms`.
-    - `intervention_arms`: typed structural deltas (mechanism swaps
-      only). Becomes `DoEffect.treatment` on the substrate's
-      Hypothesis Protocol-conformer.
+    - `intervention`: HP scalars + (legacy) slot-Claim swaps, as a
+      flat dict. The substrate splits HPs (slot paths NOT in
+      `intervention_arms`) into the `base` callable's bound kwargs;
+      mechanism swaps come via `intervention_arms` or `arms`.
+    - `intervention_arms`: typed structural deltas for the binary
+      contrast (treatment-arm slot replacements). Forms
+      `DoEffect.arms = ((), intervention_arms)` at dispatch — the
+      legacy authoring surface; one hypothesis = one binary
+      contrast.
+    - `arms`: typed structural deltas for the N-arm contrast — a
+      tuple of tuples, each inner tuple being one arm's slot
+      replacements. Forms `DoEffect.arms` directly. Mutually
+      exclusive with `intervention_arms`; authors pick one or the
+      other.
     - `predicted_direction`: optional sign-prior; per-bridge
       `Bridge.predicted_direction` is the canonical home, but
       substrate authors can default it here for legacy YAML configs."""
@@ -68,15 +75,17 @@ class HypothesisConfig:
     intervention: Mapping[str, object]
     predicted_direction: PredictedDirection | None = None
     intervention_arms: tuple[Intervention, ...] = field(default_factory=tuple)
+    arms: tuple[tuple[Intervention, ...], ...] | None = None
 
-    def arm_key(self) -> str:
-        """Canonical fingerprint of `intervention_arms`. Empty tuple →
-        `'baseline'`. Substrate's `dispatch_sweep` derives the same
-        value via `DoEffect(treatment=intervention_arms,
-        baseline=()).treatment_arm_key()` — both flow through
-        `combined_arm_key`."""
-        from corroborate.core.intervention import combined_arm_key
-        return combined_arm_key(self.intervention_arms)
+    def do_effect_arms(self) -> tuple[tuple[Intervention, ...], ...]:
+        """The `DoEffect.arms` shape this config dispatches to.
+
+        Returns `arms` if explicitly authored; else translates
+        `intervention_arms` to the binary `((), intervention_arms)`
+        shape — the legacy 2-arm contrast."""
+        if self.arms is not None:
+            return self.arms
+        return ((), self.intervention_arms)
 
 
 _CLASS_KEY = 'class'
@@ -312,22 +321,53 @@ def build_hypothesis_from_mapping(
         )
 
     arms_raw = node.get('intervention_arms', [])
+    multi_arms_raw = node.get('arms')
+    if arms_raw and multi_arms_raw is not None:
+        raise ValueError(
+            'hypothesis cannot declare both `intervention_arms` '
+            '(binary contrast — legacy shape) and `arms` (N-arm '
+            'contrast — generalized shape). Pick one.',
+        )
     if not isinstance(arms_raw, list):
         raise TypeError(
             f'intervention_arms must be a list; got '
             f'{type(arms_raw).__name__}',
         )
     arms_typed: list[object] = list(arms_raw)
-    arms = tuple(
+    intervention_arms_tuple = tuple(
         _build_arm(a, reg=reg, env_attrs=env_attrs)
         for a in arms_typed
     )
+
+    multi_arms: tuple[tuple[Intervention, ...], ...] | None = None
+    if multi_arms_raw is not None:
+        if not isinstance(multi_arms_raw, list):
+            raise TypeError(
+                f'`arms` must be a list of arms (each arm a list '
+                f'of slot-replacement dicts, or [] for the empty '
+                f'control arm); got {type(multi_arms_raw).__name__}',
+            )
+        multi_arms_list: list[tuple[Intervention, ...]] = []
+        for i, arm_raw in enumerate(multi_arms_raw):
+            if not isinstance(arm_raw, list):
+                raise TypeError(
+                    f'`arms[{i}]` must be a list of slot-replacement '
+                    f'dicts (or [] for empty control); got '
+                    f'{type(arm_raw).__name__}',
+                )
+            arm = tuple(
+                _build_arm(a, reg=reg, env_attrs=env_attrs)
+                for a in arm_raw
+            )
+            multi_arms_list.append(arm)
+        multi_arms = tuple(multi_arms_list)
 
     return HypothesisConfig(
         name=name,
         intervention=intervention,
         predicted_direction=direction,
-        intervention_arms=arms,
+        intervention_arms=intervention_arms_tuple,
+        arms=multi_arms,
     )
 
 

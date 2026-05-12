@@ -41,7 +41,6 @@ from enum import StrEnum
 from typing import TypeIs
 
 from corroborate._internals.canonical import canonical_str
-from corroborate.core.claim import FnClaim
 
 
 class ArmRole(StrEnum):
@@ -65,26 +64,36 @@ class ArmRole(StrEnum):
     BASELINE = 'baseline'
     TREATMENT = 'treatment'
 
-type Replacement = (
-    FnClaim[..., object]
-    | functools.partial[object]
-    | Callable[..., object]
-)
-"""Runtime universe of slot replacements: a FnClaim free-function
-wrapper, a `functools.partial` binding, or a plain callable
-(covers config-bundle instances and class-based Claims using the
-`record_call` escape hatch — they're callable). Each canonicalises
-distinctly via `canonical_str` so two structurally-equal
-replacements produce the same fingerprint across processes."""
+type Replacement = object
+"""Runtime universe of slot replacements: any value the substrate
+admits at a `slot_path`. Two shapes are common:
+
+1. **Callable slot swaps** — `FnClaim` wrappers, `functools.partial`
+   bindings, plain callables (covers class-based Claims via the
+   `record_call` escape hatch). The canonical case the framework
+   was originally designed for; `bootstrap`, `action_select`,
+   `replay.sample` all live here.
+2. **Config-bundle slot swaps** — frozen-dataclass instances
+   (`Replay(capacity=5000)`, `MLP(hidden=[64])`, etc.). The slot
+   value carries construction-time HPs + slot-Claim refs, all in
+   one immutable record.
+
+`canonical_str` handles both — two structurally-equal
+replacements produce the same fingerprint, so arm identity is
+preserved across processes. The `Replacement` alias is `object`
+because the framework's substrate-agnostic shape can't enforce
+"this slot accepts a callable" without knowing the substrate's
+type contract; the substrate's own type-checker catches slot/
+replacement mismatches at the call site."""
 
 
 def is_replacement(v: object) -> TypeIs[Replacement]:
-    """Narrow `v` to `Replacement` when it's callable. Every union
-    arm is callable (FnClaim wrappers, partials, plain
-    callables / config bundles); a runtime `callable()` check is
-    therefore sufficient and the TypeIs is honest about the
-    narrowing."""
-    return callable(v)
+    """Narrow `v` to `Replacement`. With `Replacement = object`
+    this is trivially True — kept as a typed gate so YAML
+    parsers and other ingest sites have a single named predicate
+    to call rather than dropping the check."""
+    del v
+    return True
 
 
 @dataclass(frozen=True, slots=True)
