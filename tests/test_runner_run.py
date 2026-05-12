@@ -50,10 +50,10 @@ def _trivial_doeffect() -> DoEffect:
     def _stub(x: int) -> int:
         return x
 
-    return DoEffect(
-        treatment=(Intervention(slot_path='stub', replacement=_stub),),
-        baseline=(),
-    )
+    return DoEffect(arms=(
+        (),
+        (Intervention(slot_path='stub', replacement=_stub),),
+    ))
 
 
 # ============ _validate_hypothesis ============

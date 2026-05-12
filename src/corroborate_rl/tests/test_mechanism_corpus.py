@@ -43,17 +43,17 @@ _VANILLA_CLAIM = _BASE
 _VANILLA_ARM_KEY = combined_arm_key(())
 
 
-_DDQN_INTERVENTION = DoEffect(
-    treatment=(
+_DDQN_INTERVENTION = DoEffect(arms=(
+    (),
+    (
         Intervention(
             slot_path='bootstrap',
             replacement=partial(bootstrap, greedification=double_greedify),
         ),
     ),
-    baseline=(),
-)
-_DDQN_CLAIM = apply_interventions(_BASE, _DDQN_INTERVENTION.treatment)
-_DDQN_ARM_KEY = _DDQN_INTERVENTION.treatment_arm_key()
+))
+_DDQN_CLAIM = apply_interventions(_BASE, _DDQN_INTERVENTION.arms[1])
+_DDQN_ARM_KEY = _DDQN_INTERVENTION.arm_keys()[1]
 
 
 def _run_cell(env_name: str, seed: int, claim, arm_key: str):

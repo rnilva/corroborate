@@ -117,7 +117,7 @@ EXPECTILE_SWAP = Intervention(
 # effect`). Bridges that test a different mechanism contrast
 # (expectile-vs-DDQN, expectile-vs-vanilla) override via the
 # per-decorator `source = DoEffect(...)` kwarg.
-INTERVENTION = DoEffect(treatment=(DDQN_SWAP,), baseline=())
+INTERVENTION = DoEffect(arms=((), (DDQN_SWAP,)))
 
 
 # ============ Canonical training-regime envelopes ============
@@ -1846,7 +1846,7 @@ def _expectile_reduces_gap_holds_when(paired_g: PairedGResult) -> Verdict:
 
 
 @claim_bridge(
-    source=DoEffect(treatment=(EXPECTILE_SWAP,), baseline=(DDQN_SWAP,)),
+    source=DoEffect(arms=((DDQN_SWAP,), (EXPECTILE_SWAP,))),
     target='jensen_gap',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
@@ -1870,7 +1870,7 @@ def expectile_reduces_jensen_gap_more_than_ddqn__fourrooms(
 
 
 @claim_bridge(
-    source=DoEffect(treatment=(EXPECTILE_SWAP,), baseline=(DDQN_SWAP,)),
+    source=DoEffect(arms=((DDQN_SWAP,), (EXPECTILE_SWAP,))),
     target='eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
@@ -1897,7 +1897,7 @@ def ddqn_outperforms_expectile_on_outcome__fourrooms(
 
 
 @claim_bridge(
-    source=DoEffect(treatment=(EXPECTILE_SWAP,), baseline=()),
+    source=DoEffect(arms=((), (EXPECTILE_SWAP,))),
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,

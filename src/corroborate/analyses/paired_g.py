@@ -176,9 +176,9 @@ def paired_g(
     per-bridge `source = DoEffect(...)` decorator override or via
     file-level `INTERVENTION = DoEffect(...)` resolved at
     decoration time. `claim_bridge.evaluate()` derives the
-    canonical arm strings via `DoEffect.treatment_arm_key()` /
-    `baseline_arm_key()` and forwards them into this analysis's
-    kwargs.
+    canonical arm strings via `DoEffect.arm_keys()` (treatment =
+    `arm_keys()[1]`, baseline = `arm_keys()[0]` in the binary
+    case) and forwards them into this analysis's kwargs.
 
     `source` resolves through the measurable registry (preferred)
     or as a field-path read on the cell record.

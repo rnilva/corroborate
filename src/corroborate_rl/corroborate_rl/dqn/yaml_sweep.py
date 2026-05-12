@@ -443,10 +443,12 @@ def dispatch_sweep(sweep: DQNSweep) -> tuple[Path, Path]:
             if k not in arm_slot_paths
         }
         base: Callable[..., object] = partial(dqn, **hp_kwargs)
-        intervention = DoEffect(
-            treatment=cfg.intervention_arms,
-            baseline=(),
-        )
+        # Binary contrast in YAML's existing schema: arms[0] is
+        # the implicit empty-tuple baseline; arms[1] is the
+        # treatment specified by `intervention_arms`. N-arm
+        # support at the YAML layer (multi-entry `arms:` field)
+        # is a follow-up authoring affordance.
+        intervention = DoEffect(arms=((), cfg.intervention_arms))
         # Flat grid_points: env × chunk × wrappers.
         grid_points: list[Mapping[str, object]] = [
             {

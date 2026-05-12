@@ -42,7 +42,7 @@ bridges already carry.
 for free, so requiring it costs no Hypothesis author anything.
 Arm *identity*, distinct from `__name__`, flows exclusively
 through `canonical_str` of the underlying Intervention tuples
-(via `DoEffect.treatment_arm_key()` / `baseline_arm_key()`);
+(via `DoEffect.arm_keys()`);
 substrate-chosen short labels are no longer part of the
 framework's identity surface."""
 from __future__ import annotations

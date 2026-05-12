@@ -1,10 +1,17 @@
 """Intervention — typed structural delta to a theory.
 
-A Hypothesis describes a CHANGE to the theory; Interventions are
-the typed primitives describing each individual swap. The empty
-tuple is the baseline arm; a non-empty tuple is a treatment arm
-whose identity is derived from the canonical fingerprint of the
-swaps.
+A Hypothesis describes CHANGES to the theory; `Intervention`s are
+the typed primitives describing each individual slot swap. A
+`DoEffect` carries N arms, each a tuple of `Intervention`s — Pearl's
+`do(·)` operator for that arm. Binary contrast is the special case
+N=2, often with one empty-tuple "no intervention" arm.
+
+Pearl-coherence: each arm in `DoEffect.arms` is a joint
+intervention `do(slot_1 = v_1, slot_2 = v_2, ...)`. Multi-level
+sweeps (dose-response), factorial designs, and N-way contrasts
+are first-class — the framework dispatches one cell per arm; the
+analysis-side primitives (per-pair `paired_g`, dose-response,
+`factorial_2x2`) pick the reference structure separately.
 
 Intervention vs HP variation. HPs (γ, lr, batch_size, total_steps)
 MUST NOT appear as Interventions — they are cell covariates that
@@ -12,13 +19,13 @@ meta-regression cleaves on (cf. v9's aggregation reframing). Slot
 swaps (`bootstrap`, `replay.sample`, `action_select`) ARE
 Interventions — they describe the structural mechanism delta.
 
-Two hypotheses with the same `intervention_arms` but different HP
-grid points share an arm key and pair as same-arm cells; the HP
+Two hypotheses with the same arm contents but different HP grid
+points share an arm key and pair as same-arm cells; the HP
 difference becomes a covariate, not an arm distinguisher.
 
 Identity is via static fingerprint (`canonical_str`). The runtime
-graph-signature delta check (`signature(g_treatment) -
-signature(g_baseline)`) — the principled HPO-smuggle gate — is
+graph-signature delta check (per-arm `signature(g_arm_i) -
+signature(g_arm_j)`) — the principled HPO-smuggle gate — is
 deferred (`FUTURE_WORKS.md` line 41). A static fingerprint cannot
 distinguish "scalar-only diff to a partial's keywords" (HP smuggle
 that ought to be rejected) from "structural replacement swap"
@@ -38,14 +45,23 @@ from corroborate.core.claim import FnClaim
 
 
 class ArmRole(StrEnum):
-    """Typed sentinel for "which side of the DoEffect contrast" —
-    bridge authors use this in place of literal arm_key strings,
-    so the bridge body stays decoupled from the persistence-side
-    canonical fingerprint of the unmodified or treatment arm.
+    """Typed sentinel for "which side of a BINARY DoEffect
+    contrast" — bridge authors use this in place of literal
+    arm_key strings, so the bridge body stays decoupled from the
+    persistence-side canonical fingerprint of the unmodified or
+    treatment arm.
 
-    The runner resolves an `ArmRole` value to the actual arm_key
-    string via `DoEffect.role_arm_key(role)` before forwarding to
-    analyses; analyses themselves see only resolved strings."""
+    Binary-only by design. When `DoEffect` carries N > 2 arms,
+    bridges use `arm_keys[i]` indexing (or explicit string keys)
+    instead — the `BASELINE` / `TREATMENT` semantics don't extend
+    naturally to multi-level interventions. The bridge dispatcher
+    raises if an `ArmRole` sentinel appears in a non-binary
+    bridge's params.
+
+    Resolution lives in `bridge.py`'s evaluate path: when a
+    bridge's source is a binary DoEffect, `ArmRole.TREATMENT`
+    resolves to `arm_keys[1]` and `ArmRole.BASELINE` to
+    `arm_keys[0]`."""
     BASELINE = 'baseline'
     TREATMENT = 'treatment'
 
@@ -160,53 +176,44 @@ def combined_arm_key(interventions: tuple[Intervention, ...]) -> str:
 
 @dataclass(frozen=True, slots=True)
 class DoEffect:
-    """The typed contrast carried on a Bridge: two arms expressed
-    as Intervention tuples on the claim graph.
+    """Multi-arm contrast on the claim graph. Each arm is a tuple
+    of slot-replacement `Intervention`s; arm identity is the
+    `combined_arm_key` of that tuple.
 
     Pearl-rung-2 edges in the causal graph have an *intervention*
-    as the source node, NOT a measurable. `DoEffect` carries the
-    treatment / baseline as `tuple[Intervention, ...]` — typed
-    structural deltas on the claim graph. Arm identity for cell
-    matching derives from `combined_arm_key` (canonical_str of
-    each tuple), accessible via the `treatment_arm_key()` /
-    `baseline_arm_key()` methods.
+    as the source node, NOT a measurable. `DoEffect` carries N
+    arms — each a `do(joint_intervention)` operation in Pearl's
+    calculus. The framework dispatches one cell per (grid_point,
+    arm) and tags each `RunRow.arm_key` with the canonical
+    fingerprint of its arm.
 
-    The empty tuple is the baseline arm by convention (no
-    structural deltas applied = the substrate's vanilla
-    composition). A non-empty `baseline` is a treatment-vs-treatment
-    contrast (e.g. DDQN-3step vs DDQN-1step).
+    The empty-tuple arm (when present) is the "no intervention"
+    control — the substrate's vanilla composition. Non-empty arms
+    are interventional structural deltas. Binary contrast is the
+    special case `arms=(control, treatment)` with one tuple
+    typically empty. Multi-level (dose-response) is
+    `arms=((), (level_1,), (level_2,))`. Factorial 2×2 is
+    `arms=((), (a,), (b,), (a, b))`.
 
-    The `Intervention` tuple shape unifies with
-    `Hypothesis.intervention_arms` — DoEffect IS the
-    contrast specification; what was previously two type-erased
-    arm-name strings is now structurally connected to the typed
-    claim graph."""
-    treatment: tuple[Intervention, ...]
-    baseline: tuple[Intervention, ...] = ()
+    Pearl-coherence: each arm is a joint `do(·)` operation;
+    `DoEffect.arms` declares the structural intervention
+    conditions. Analyses (per-pair `paired_g` /
+    `stratified_arm_diff_pooled`, dose-response, factorial) pick
+    the contrast structure separately from the arm declaration.
+    The framework's job is to dispatch arms; analyses choose
+    references."""
+    arms: tuple[tuple[Intervention, ...], ...]
 
-    def treatment_arm_key(self) -> str:
-        """Canonical fingerprint of the treatment arm. Empty tuple
-        → `'baseline'`; non-empty → `'+'`-joined slot=replacement
-        keys."""
-        return combined_arm_key(self.treatment)
-
-    def baseline_arm_key(self) -> str:
-        """Canonical fingerprint of the baseline arm. Empty tuple
-        → `'baseline'`; non-empty → `'+'`-joined slot=replacement
-        keys."""
-        return combined_arm_key(self.baseline)
-
-    def role_arm_key(self, role: ArmRole) -> str:
-        """Resolve an ArmRole sentinel to the canonical arm_key
-        string for that side of the contrast. Lets bridge authors
-        write typed `ArmRole.BASELINE` / `ArmRole.TREATMENT`
-        instead of stringifying the persistence fingerprint."""
-        if role is ArmRole.BASELINE:
-            return self.baseline_arm_key()
-        return self.treatment_arm_key()
+    def arm_keys(self) -> tuple[str, ...]:
+        """Canonical fingerprint per arm. Empty tuple → `'baseline'`;
+        non-empty → `'+'`-joined slot=replacement keys. The string
+        flows to `RunRow.arm_key` per cell, and analyses filter
+        cells by string match on these keys."""
+        return tuple(combined_arm_key(a) for a in self.arms)
 
     def node_key(self) -> str:
         """Canonical string identity for the do-node in
-        `CausalGraph`. `'do(treatment|vs=baseline)'` form makes
-        the contrast explicit when the graph is rendered."""
-        return f'do({self.treatment_arm_key()}|vs={self.baseline_arm_key()})'
+        `CausalGraph`. Renders as `do(arm0|arm1|...|armN)` — the
+        multi-arm contrast made explicit at the intervention
+        node."""
+        return f"do({'|'.join(self.arm_keys())})"

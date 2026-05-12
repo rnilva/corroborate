@@ -52,11 +52,8 @@ _TREATMENT_ARMS: tuple[Intervention, ...] = (
 _BASELINE_ARMS: tuple[Intervention, ...] = (
     Intervention(slot_path='op', replacement=_baseline_op),
 )
-INTERVENTION = DoEffect(
-    treatment=_TREATMENT_ARMS, baseline=_BASELINE_ARMS,
-)
-_TREATMENT_KEY = INTERVENTION.treatment_arm_key()
-_BASELINE_KEY = INTERVENTION.baseline_arm_key()
+INTERVENTION = DoEffect(arms=(_BASELINE_ARMS, _TREATMENT_ARMS))
+_BASELINE_KEY, _TREATMENT_KEY = INTERVENTION.arm_keys()
 
 
 def _synthetic_cells(
@@ -268,15 +265,14 @@ def test_bridge_carries_typed_intervention() -> None:
 
     assert isinstance(carries_intervention, Bridge)
     assert isinstance(carries_intervention.source, DoEffect)
-    assert carries_intervention.source.treatment == _TREATMENT_ARMS
-    assert carries_intervention.source.baseline == _BASELINE_ARMS
-    assert (
-        carries_intervention.source.treatment_arm_key()
-        == _TREATMENT_KEY
+    assert carries_intervention.source.arms == (
+        _BASELINE_ARMS, _TREATMENT_ARMS,
     )
+    arm_keys = carries_intervention.source.arm_keys()
+    assert arm_keys == (_BASELINE_KEY, _TREATMENT_KEY)
     assert (
         carries_intervention.source.node_key()
-        == f'do({_TREATMENT_KEY}|vs={_BASELINE_KEY})'
+        == f'do({_BASELINE_KEY}|{_TREATMENT_KEY})'
     )
 
 

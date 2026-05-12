@@ -157,24 +157,25 @@ def distinct_arms(
     *,
     claim: Claim[..., object] | None = None,
 ) -> GateResult | None:
-    """BLOCK: a `DoEffect`-sourced bridge whose treatment and
-    baseline arms produce identical canonical_str is structurally
-    self-vs-self. Replaces today's `paired_g` runtime ValueError
-    with a clean Verdict.INADMISSIBLE."""
+    """BLOCK: a `DoEffect`-sourced bridge whose arms produce
+    duplicate canonical_str fingerprints is structurally
+    self-vs-self (binary) or has collapsed levels (N-arm).
+    Replaces today's `paired_g` runtime ValueError with a clean
+    `Verdict.INADMISSIBLE`."""
     del cells, claim  # not consulted
     if not isinstance(bridge.source, DoEffect):
         return None
-    if bridge.source.treatment_arm_key() == bridge.source.baseline_arm_key():
+    arm_keys = bridge.source.arm_keys()
+    if len(set(arm_keys)) != len(arm_keys):
         return GateResult(
             gate_name='distinct_arms',
             level=GateLevel.BLOCK,
             passed=False,
             message=(
-                f'DoEffect treatment and baseline arms produce '
-                f'identical canonical_str '
-                f'({bridge.source.treatment_arm_key()!r}). The '
-                f'contrast is self-vs-self; rebuild with a '
-                f'non-empty treatment or baseline tuple.'
+                f'DoEffect arms produce duplicate canonical_str '
+                f'fingerprints ({arm_keys!r}); contrast has '
+                f'collapsed levels. Rebuild with non-overlapping '
+                f'Intervention tuples per arm.'
             ),
         )
     return None
@@ -249,7 +250,8 @@ def exogenous_source(
         # gate is belt-and-braces for any future relaxation.
         offenders = [
             iv.slot_path
-            for iv in (*source.treatment, *source.baseline)
+            for arm in source.arms
+            for iv in arm
             if not callable(iv.replacement)
         ]
         if offenders:

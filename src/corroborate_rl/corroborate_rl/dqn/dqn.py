@@ -270,7 +270,7 @@ def dqn(
 
     **Intervention cookbook.** Wrap each substitution in
     `Intervention(slot_path=..., replacement=...)` and assemble
-    `DoEffect(treatment=tuple, baseline=tuple)`. Five canonical
+    `DoEffect(arms=tuple-of-tuples)`. Five canonical
     patterns for the `replacement`:
 
         # 1. Cross-cutting scalar HP — pass the value directly.
@@ -307,16 +307,16 @@ def dqn(
 
     Combine freely. The DDQN-vs-vanilla contrast at γ=0.95:
 
-        DoEffect(
-            treatment=(
+        DoEffect(arms=(
+            (
+                Intervention(slot_path='gamma', replacement=0.95),
+            ),
+            (
                 Intervention(slot_path='bootstrap', replacement=partial(
                     bootstrap, greedification=double_greedify)),
                 Intervention(slot_path='gamma', replacement=0.95),
             ),
-            baseline=(
-                Intervention(slot_path='gamma', replacement=0.95),
-            ),
-        )
+        ))
 
     Raises `ValueError` if `total_steps` isn't a multiple of
     `eval_every`."""

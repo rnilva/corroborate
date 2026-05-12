@@ -69,7 +69,7 @@ DAMPENED_FULL_SWAP = Intervention(
         greedification=partial(dampened_double_greedify, alpha=1.0),
     ),
 )
-INTERVENTION = DoEffect(treatment=(DAMPENED_FULL_SWAP,), baseline=())
+INTERVENTION = DoEffect(arms=((), (DAMPENED_FULL_SWAP,)))
 
 # Helper expressions (mirror ddqn sub-package's pattern)
 def _finite(col: str) -> pl.Expr:

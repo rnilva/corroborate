@@ -241,12 +241,12 @@ def run_intervention[R: Mapping[str, object]](
     parquets; merge to a corpus.
 
     The framework's rung-2 `do()` operator at the corpus level.
-    A sweep-time primitive: its job is to compose treatment +
-    baseline claims via `apply_interventions(base,
-    intervention.treatment / .baseline)` and dispatch each
-    (claim, arm_key, measurables, grid_point) to `runner`.
-    Pairing is intrinsic — treatment and baseline cells at the
-    same `grid_point` ARE matched by construction.
+    A sweep-time primitive: its job is to compose one claim per
+    arm via `apply_interventions(base, intervention.arms[i])` and
+    dispatch each (claim, arm_key, measurables, grid_point) to
+    `runner`. Pairing is intrinsic — all N arms' cells at the
+    same `grid_point` ARE matched by construction (one cell per
+    arm per grid point).
 
     `base` is the substrate's theory pre-bound with HPs (e.g.
     `partial(dqn, gamma=0.99, lr=1e-3, total_steps=200_000, ...)`).
@@ -287,15 +287,10 @@ def run_intervention[R: Mapping[str, object]](
     final_runs = out_dir / 'runs.parquet'
     final_traces = out_dir / 'traces.parquet'
 
-    treatment_claim = apply_interventions(base, intervention.treatment)
-    baseline_claim = apply_interventions(base, intervention.baseline)
-    treatment_arm_key = intervention.treatment_arm_key()
-    baseline_arm_key = intervention.baseline_arm_key()
-    arms: tuple[
-        tuple[Callable[..., R], str], tuple[Callable[..., R], str],
-    ] = (
-        (treatment_claim, treatment_arm_key),
-        (baseline_claim, baseline_arm_key),
+    arm_keys_seq = intervention.arm_keys()
+    arms: tuple[tuple[Callable[..., R], str], ...] = tuple(
+        (apply_interventions(base, arm_iv), arm_key)
+        for arm_iv, arm_key in zip(intervention.arms, arm_keys_seq, strict=True)
     )
 
     if arm_tag is None:

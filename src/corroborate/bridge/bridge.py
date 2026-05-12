@@ -845,15 +845,34 @@ def evaluate(
         **dict(bridge.params),
     }
     if contrast is not None:
-        bridge_params['treatment_arm'] = contrast.treatment_arm_key()
-        bridge_params['baseline_arm'] = contrast.baseline_arm_key()
+        arm_keys = contrast.arm_keys()
+        bridge_params['arm_keys'] = arm_keys
+        # Binary compat: when N=2, inject treatment_arm /
+        # baseline_arm so existing bridges with default kwargs
+        # `treatment_arm: str = ArmRole.TREATMENT` work unchanged.
+        # Convention: arms[0] is baseline (typically empty-tuple /
+        # control); arms[1] is treatment.
+        if len(arm_keys) == 2:
+            bridge_params['treatment_arm'] = arm_keys[1]
+            bridge_params['baseline_arm'] = arm_keys[0]
         # Resolve any ArmRole-typed sentinels in the bridge's
-        # defaulted kwargs to the canonical arm_key string for
-        # this contrast. Bridge authors write `ArmRole.BASELINE` /
-        # `ArmRole.TREATMENT`; analyses see only resolved strings.
+        # defaulted kwargs to the canonical arm_key string.
+        # ArmRole is binary-only by design — N-arm bridges access
+        # `arm_keys[i]` directly or use explicit string keys.
         for k, v in bridge_params.items():
             if isinstance(v, ArmRole):
-                bridge_params[k] = contrast.role_arm_key(v)
+                if len(arm_keys) != 2:
+                    raise ValueError(
+                        f'ArmRole sentinel {v!r} used in '
+                        f'{len(arm_keys)}-arm DoEffect on bridge '
+                        f'{bridge.name!r}; ArmRole is binary-only. '
+                        f'Use `arm_keys[i]` indexing or explicit '
+                        f'string keys for multi-arm bridges.',
+                    )
+                bridge_params[k] = (
+                    arm_keys[1] if v is ArmRole.TREATMENT
+                    else arm_keys[0]
+                )
     analysis_results = resolve_for_holds_when(
         bridge.holds_when, filtered_cells, bridge_params,
     )

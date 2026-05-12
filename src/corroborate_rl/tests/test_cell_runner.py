@@ -139,15 +139,13 @@ def test_run_dqn_cell_applies_intervention_via_slot_swap() -> None:
     env_spec = get('CartPole-v1')
 
     ddqn_swap = partial(bootstrap, greedification=double_greedify)
-    intervention = DoEffect(
-        treatment=(
-            Intervention(slot_path='bootstrap', replacement=ddqn_swap),
-        ),
-        baseline=(),
-    )
+    intervention = DoEffect(arms=(
+        (),
+        (Intervention(slot_path='bootstrap', replacement=ddqn_swap),),
+    ))
     base = partial(dqn, **_SHORT_RUN_HP_40)
-    claim = apply_interventions(base, intervention.treatment)
-    arm_key = intervention.treatment_arm_key()
+    claim = apply_interventions(base, intervention.arms[1])
+    arm_key = intervention.arm_keys()[1]
 
     run_row = run_dqn_cell(
         env_spec, seed=0, claim=claim, arm_key=arm_key,

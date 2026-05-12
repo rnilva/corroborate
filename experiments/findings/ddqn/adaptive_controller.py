@@ -26,7 +26,7 @@ from experiments.findings.ddqn._arms import ADAPTIVE_DQN_FACTOR_0P5_SWAP
 
 
 @claim_bridge(
-    source=DoEffect(treatment=(ADAPTIVE_DQN_FACTOR_0P5_SWAP,), baseline=()),
+    source=DoEffect(arms=((), (ADAPTIVE_DQN_FACTOR_0P5_SWAP,))),
     target='eval_final_mean',
     direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
@@ -53,7 +53,7 @@ def adaptive_dqn_recovers_ddqn_benefit__fourrooms_factor_0p5(
 
 
 @claim_bridge(
-    source=DoEffect(treatment=(ADAPTIVE_DQN_FACTOR_0P5_SWAP,), baseline=()),
+    source=DoEffect(arms=((), (ADAPTIVE_DQN_FACTOR_0P5_SWAP,))),
     target='eval_final_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,

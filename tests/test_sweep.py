@@ -41,6 +41,14 @@ def _treatment_op(record: Mapping[str, object]) -> Mapping[str, object]:
 
 
 @claim
+def _alt_treatment_op(record: Mapping[str, object]) -> Mapping[str, object]:
+    """Second interventional level for the 3-arm dose-response
+    smoke test — a distinct Claim so its canonical_str fingerprint
+    is distinct from `_treatment_op`."""
+    return record
+
+
+@claim
 def _base_theory(
     record: Mapping[str, object] | None = None,
 ) -> Mapping[str, object]:
@@ -68,12 +76,10 @@ _MEASURABLES: tuple[Measurable[Mapping[str, object], object], ...] = (
 @dataclass(frozen=True)
 class _StubHypothesis:
     """Class-as-Hypothesis: satisfies the Protocol via ClassVars."""
-    INTERVENTION: ClassVar[DoEffect] = DoEffect(
-        treatment=(
-            Intervention(slot_path='op', replacement=_treatment_op),
-        ),
-        baseline=(),
-    )
+    INTERVENTION: ClassVar[DoEffect] = DoEffect(arms=(
+        (),
+        (Intervention(slot_path='op', replacement=_treatment_op),),
+    ))
     BRIDGES: ClassVar[tuple[Bridge, ...]] = _BRIDGES
     FINDINGS: ClassVar[tuple[Finding, ...]] = ()
     MEASURABLES: ClassVar[
@@ -139,8 +145,7 @@ def test_run_intervention_pairs_arms_at_each_grid_point(
     rows = read_runrows(runs_path)
     assert len(rows) == 4
     arm_keys = sorted({r.arm_key for r in rows})
-    treatment_key = _StubHypothesis.INTERVENTION.treatment_arm_key()
-    baseline_key = _StubHypothesis.INTERVENTION.baseline_arm_key()
+    baseline_key, treatment_key = _StubHypothesis.INTERVENTION.arm_keys()
     assert arm_keys == sorted([treatment_key, baseline_key])
     # Pairing intrinsic: each replicate has both arms.
     for rep in (0, 1):
@@ -189,6 +194,38 @@ def test_run_intervention_single_empty_grid_point_runs_once_per_arm(
     )
     rows = read_runrows(runs_path)
     assert len(rows) == 2
+
+
+def test_run_intervention_three_arm_dose_response(tmp_path: Path) -> None:
+    """N=3 DoEffect dispatches 3 cells per grid point. Verifies
+    that `run_intervention`'s arms-loop generalizes beyond the
+    binary case. Arms: empty-tuple control + two interventional
+    levels (different replacements on the same slot)."""
+    three_arm = DoEffect(arms=(
+        (),  # baseline / control
+        (Intervention(slot_path='op', replacement=_treatment_op),),
+        (Intervention(slot_path='op', replacement=_alt_treatment_op),),
+    ))
+    runs_path, _ = run_intervention(
+        three_arm,
+        base=_base_theory,
+        measurables=(),
+        grid_points=[{'replicate': 0}, {'replicate': 1}],
+        runner=_stub_runner,
+        out_dir=tmp_path,
+    )
+    rows = read_runrows(runs_path)
+    # 2 grid points × 3 arms = 6 cells.
+    assert len(rows) == 6
+    arm_keys = {r.arm_key for r in rows}
+    expected_keys = set(three_arm.arm_keys())
+    assert arm_keys == expected_keys
+    assert len(expected_keys) == 3
+    # Pairing intrinsic: each replicate sees all 3 arms.
+    for rep in (0, 1):
+        rep_rows = [r for r in rows if r.measurements.get('replicate') == rep]
+        assert len(rep_rows) == 3
+        assert {r.arm_key for r in rep_rows} == expected_keys
 
 
 # ============ I3: manifest-driven merge across multiple calls ============
@@ -267,8 +304,7 @@ def test_two_run_intervention_calls_share_out_dir_merge_includes_all_cells(
         {r.measurements.get('replicate') for r in rows}
     )
     assert replicates == [0, 1, 2, 3]
-    treatment_key = _StubHypothesis.INTERVENTION.treatment_arm_key()
-    baseline_key = _StubHypothesis.INTERVENTION.baseline_arm_key()
+    baseline_key, treatment_key = _StubHypothesis.INTERVENTION.arm_keys()
     for rep in replicates:
         rep_rows = [
             r for r in rows

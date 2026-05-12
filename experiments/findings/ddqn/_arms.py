@@ -29,12 +29,13 @@ ADAPTIVE_DQN_FACTOR_0P5_SWAP = Intervention(
     ),
 )
 
-# File-level intervention: do(bootstrap = ddqn) → effect.
-INTERVENTION = DoEffect(treatment=(DDQN_SWAP,), baseline=())
+# File-level intervention: 2-arm `do(bootstrap = ddqn)` vs vanilla.
+# Convention: arms[0] is the empty-tuple control (vanilla);
+# arms[1] is the treatment (DDQN swap).
+INTERVENTION = DoEffect(arms=((), (DDQN_SWAP,)))
 
 # Arm-key strings derived from INTERVENTION. Used by bridges whose
 # source is a measurable (the runner only auto-injects arm kwargs
 # when source is a DoEffect; measurable-sourced bridges supply
 # defaults that flow through bridge.params).
-DDQN_ARM = INTERVENTION.treatment_arm_key()
-VANILLA_ARM = INTERVENTION.baseline_arm_key()
+VANILLA_ARM, DDQN_ARM = INTERVENTION.arm_keys()

@@ -170,10 +170,10 @@ def test_class_with_classvars_satisfies_protocol() -> None:
     class MyHypothesis:
         FINDINGS: ClassVar[tuple[Finding, ...]] = ()
         INTERVENTION: ClassVar[DoEffect] = DoEffect(
-            treatment=(
-                Intervention(slot_path='bootstrap', replacement=_alt_a),
+            arms=(
+                (),
+                (Intervention(slot_path='bootstrap', replacement=_alt_a),),
             ),
-            baseline=(),
         )
         BRIDGES: ClassVar[tuple[Bridge, ...]] = ()
     assert isinstance(MyHypothesis, Hypothesis)
@@ -191,40 +191,52 @@ def test_class_missing_bridges_is_not_hypothesis() -> None:
     """A class without BRIDGES → fails Protocol check."""
     @dataclass(frozen=True)
     class Broken:
-        INTERVENTION: ClassVar[DoEffect] = DoEffect(
-            treatment=(), baseline=(),
-        )
+        INTERVENTION: ClassVar[DoEffect] = DoEffect(arms=((), ()))
     assert not isinstance(Broken, Hypothesis)
 
 
 def test_doeffect_arm_keys() -> None:
-    """`DoEffect.treatment_arm_key()` derives from
-    `combined_arm_key(treatment)`; baseline same."""
+    """`DoEffect.arm_keys()` returns one fingerprint per arm.
+    Empty arm → `'baseline'`; non-empty → `combined_arm_key(arm)`."""
     de = DoEffect(
-        treatment=(Intervention(slot_path='bootstrap', replacement=_alt_a),),
-        baseline=(),
+        arms=(
+            (),
+            (Intervention(slot_path='bootstrap', replacement=_alt_a),),
+        ),
     )
-    assert de.treatment_arm_key() == 'bootstrap=Claim:_alt_a'
-    assert de.baseline_arm_key() == 'baseline'
+    assert de.arm_keys() == ('baseline', 'bootstrap=Claim:_alt_a')
 
 
-def test_doeffect_empty_treatment_collides_with_baseline() -> None:
-    """Empty treatment tuple yields the same canonical key as the
-    empty baseline ('baseline'). Authors using a treatment-vs-
-    baseline contrast must pass a non-empty treatment tuple; the
-    framework would reject the self-vs-self comparison at
-    paired_g time."""
-    de = DoEffect(treatment=(), baseline=())
-    assert de.treatment_arm_key() == 'baseline'
-    assert de.baseline_arm_key() == 'baseline'
+def test_doeffect_collapsed_arms_share_baseline_key() -> None:
+    """Both arms empty → both fingerprints = `'baseline'`. The
+    `distinct_arms` admission gate rejects this self-vs-self
+    contrast at evaluate time; the primitive itself doesn't
+    raise."""
+    de = DoEffect(arms=((), ()))
+    assert de.arm_keys() == ('baseline', 'baseline')
 
 
-def test_doeffect_multi_intervention_treatment() -> None:
-    """Multiple Interventions in treatment compose into a
+def test_doeffect_multi_intervention_arm_key_sorted() -> None:
+    """Multiple Interventions in one arm compose into a
     sorted-joined arm key (order-invariant fingerprint)."""
     iv1 = Intervention(slot_path='bootstrap', replacement=_alt_a)
     iv2 = Intervention(slot_path='action_select', replacement=_alt_b)
-    de_a = DoEffect(treatment=(iv1, iv2), baseline=())
-    de_b = DoEffect(treatment=(iv2, iv1), baseline=())
-    assert de_a.treatment_arm_key() == de_b.treatment_arm_key()
-    assert '+' in de_a.treatment_arm_key()  # joined with '+'
+    de_a = DoEffect(arms=((), (iv1, iv2)))
+    de_b = DoEffect(arms=((), (iv2, iv1)))
+    assert de_a.arm_keys() == de_b.arm_keys()
+    assert '+' in de_a.arm_keys()[1]  # joined with '+'
+
+
+def test_doeffect_n_arms_dose_response() -> None:
+    """N>2 arms produce N distinct arm_keys and an N-way
+    `node_key`. Dose-response shape: empty control + two
+    interventional levels."""
+    iv1 = Intervention(slot_path='replay', replacement=_alt_a)
+    iv2 = Intervention(slot_path='replay', replacement=_alt_b)
+    de = DoEffect(arms=((), (iv1,), (iv2,)))
+    keys = de.arm_keys()
+    assert len(keys) == 3
+    assert keys[0] == 'baseline'
+    assert len(set(keys)) == 3  # all distinct
+    # node_key renders all three arms separated by '|'.
+    assert de.node_key().count('|') == 2

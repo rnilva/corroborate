@@ -119,8 +119,9 @@ def test_audit_trail_carries_analysis_result(
     # Post-Phase-6: treatment/baseline arm strings are
     # canonical_str fingerprints derived from the typed
     # DoEffect's Intervention tuples.
-    assert pg.treatment_arm == INTERVENTION.treatment_arm_key()
-    assert pg.baseline_arm == INTERVENTION.baseline_arm_key()
+    _baseline_key, _treatment_key = INTERVENTION.arm_keys()
+    assert pg.treatment_arm == _treatment_key
+    assert pg.baseline_arm == _baseline_key
 
 
 # ============ Meta-regression: log_action_dim moderates g_mech ============

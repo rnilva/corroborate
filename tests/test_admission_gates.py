@@ -80,11 +80,8 @@ _TREATMENT_ARMS: tuple[Intervention, ...] = (
 _BASELINE_ARMS: tuple[Intervention, ...] = (
     Intervention(slot_path='op', replacement=_baseline_op),
 )
-_INTERVENTION = DoEffect(
-    treatment=_TREATMENT_ARMS, baseline=_BASELINE_ARMS,
-)
-_TREATMENT_KEY = _INTERVENTION.treatment_arm_key()
-_BASELINE_KEY = _INTERVENTION.baseline_arm_key()
+_INTERVENTION = DoEffect(arms=(_BASELINE_ARMS, _TREATMENT_ARMS))
+_BASELINE_KEY, _TREATMENT_KEY = _INTERVENTION.arm_keys()
 
 
 def _synthetic_cells(
@@ -117,11 +114,11 @@ _NO_CELLS: Sequence[Mapping[str, object]] = ()
 
 
 def test_distinct_arms_blocks_self_vs_self_do_effect() -> None:
-    """Both arms empty tuples → both `treatment_arm_key()` and
-    `baseline_arm_key()` resolve to `'baseline'`. The contrast is
-    structurally self-vs-self; replaces the legacy paired_g
-    runtime ValueError with a clean Verdict.INADMISSIBLE."""
-    self_vs_self = DoEffect(treatment=(), baseline=())
+    """Both arms empty tuples → both arm_keys resolve to
+    `'baseline'`. The contrast is structurally self-vs-self;
+    replaces the legacy paired_g runtime ValueError with a clean
+    Verdict.INADMISSIBLE."""
+    self_vs_self = DoEffect(arms=((), ()))
     bridge = Bridge(
         name='self_vs_self',
         source=self_vs_self,
@@ -133,7 +130,7 @@ def test_distinct_arms_blocks_self_vs_self_do_effect() -> None:
     assert result is not None
     assert result.level is GateLevel.BLOCK
     assert result.passed is False
-    assert 'self-vs-self' in result.message
+    assert 'duplicate canonical_str fingerprints' in result.message
 
 
 def test_distinct_arms_silent_when_arms_differ() -> None:
@@ -392,7 +389,7 @@ def test_auto_gates_tuple_contains_all_five() -> None:
 def test_evaluate_returns_inadmissible_on_block() -> None:
     """Self-vs-self DoEffect → INADMISSIBLE; body never runs;
     `blocked_by` carries the gate's GateResult."""
-    self_vs_self = DoEffect(treatment=(), baseline=())
+    self_vs_self = DoEffect(arms=((), ()))
 
     body_calls: list[int] = []
 
