@@ -51,7 +51,7 @@ from corroborate.measurables import Measurable
 
 from experiments.findings.ddqn._arms import DDQN_ARM, VANILLA_ARM
 from experiments.findings.ddqn._common import (
-    JENSEN_BIAS_PER_BURST_MEAN, MC_RETURN_PER_BURST_MEAN,
+    JENSEN_BIAS_PER_BURST_MEAN, MC_RETURN_RAW_PER_BURST_MEAN,
 )
 from experiments.findings.ddqn._scope import (
     DDQN_RELEVANT_SCOPE, G1_VANILLA_CONFIG_PREMISE_ACTIVE,
@@ -83,7 +83,7 @@ def acrobot_per_burst_link_active__gamma_0999(
     baseline_arm: str = VANILLA_ARM,
     target: Measurable[
         Mapping[str, object], npt.NDArray[np.floating],
-    ] = MC_RETURN_PER_BURST_MEAN,
+    ] = MC_RETURN_RAW_PER_BURST_MEAN,
     predictor: Measurable[
         Mapping[str, object], npt.NDArray[np.floating],
     ] = JENSEN_BIAS_PER_BURST_MEAN,
@@ -157,7 +157,7 @@ def acrobot_per_burst_link_active__gamma_0999(
 # `composed_verdict`.
 @claim_bridge(
     source='jensen_gap',
-    target='eval_best_burst_mean',
+    target='eval_best_burst_raw_mean',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
     scope=DDQN_RELEVANT_SCOPE,
@@ -169,7 +169,7 @@ def reach_link_backdoor_ate_negative(
     baseline_arm: str = VANILLA_ARM,
     link_target: Measurable[
         Mapping[str, object], npt.NDArray[np.floating],
-    ] = MC_RETURN_PER_BURST_MEAN,
+    ] = MC_RETURN_RAW_PER_BURST_MEAN,
     link_predictor: Measurable[
         Mapping[str, object], npt.NDArray[np.floating],
     ] = JENSEN_BIAS_PER_BURST_MEAN,
@@ -191,7 +191,7 @@ def reach_link_backdoor_ate_negative(
 
 @claim_bridge(
     source='jensen_gap',
-    target='eval_best_burst_mean',
+    target='eval_best_burst_raw_mean',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
     scope=DDQN_RELEVANT_SCOPE,
@@ -203,7 +203,7 @@ def reach_link_placebo_refuted(
     baseline_arm: str = VANILLA_ARM,
     link_target: Measurable[
         Mapping[str, object], npt.NDArray[np.floating],
-    ] = MC_RETURN_PER_BURST_MEAN,
+    ] = MC_RETURN_RAW_PER_BURST_MEAN,
     link_predictor: Measurable[
         Mapping[str, object], npt.NDArray[np.floating],
     ] = JENSEN_BIAS_PER_BURST_MEAN,
@@ -224,7 +224,7 @@ def reach_link_placebo_refuted(
 
 @claim_bridge(
     source='jensen_gap',
-    target='eval_best_burst_mean',
+    target='eval_best_burst_raw_mean',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
     scope=DDQN_RELEVANT_SCOPE,
@@ -236,7 +236,7 @@ def reach_link_rcc_robust(
     baseline_arm: str = VANILLA_ARM,
     link_target: Measurable[
         Mapping[str, object], npt.NDArray[np.floating],
-    ] = MC_RETURN_PER_BURST_MEAN,
+    ] = MC_RETURN_RAW_PER_BURST_MEAN,
     link_predictor: Measurable[
         Mapping[str, object], npt.NDArray[np.floating],
     ] = JENSEN_BIAS_PER_BURST_MEAN,
@@ -257,7 +257,7 @@ def reach_link_rcc_robust(
 
 @claim_bridge(
     source='jensen_gap',
-    target='eval_best_burst_mean',
+    target='eval_best_burst_raw_mean',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
     scope=(
@@ -319,7 +319,7 @@ _EXTREME_Q_DIV_SCOPE = (
 
 @claim_bridge(
     source='jensen_gap',
-    target='eval_best_burst_mean',
+    target='eval_best_burst_raw_mean',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
     scope=_EXTREME_Q_DIV_SCOPE,
@@ -333,7 +333,7 @@ def extreme_q_div_link_interaction_positive(
     binary_threshold: float = 1.0,
     link_target: Measurable[
         Mapping[str, object], npt.NDArray[np.floating],
-    ] = MC_RETURN_PER_BURST_MEAN,
+    ] = MC_RETURN_RAW_PER_BURST_MEAN,
     link_predictor: Measurable[
         Mapping[str, object], npt.NDArray[np.floating],
     ] = JENSEN_BIAS_PER_BURST_MEAN,
@@ -354,7 +354,7 @@ def extreme_q_div_link_interaction_positive(
 
 @claim_bridge(
     source='jensen_gap',
-    target='eval_best_burst_mean',
+    target='eval_best_burst_raw_mean',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
     scope=_EXTREME_Q_DIV_SCOPE,
@@ -368,7 +368,7 @@ def extreme_q_div_link_placebo_refuted(
     binary_threshold: float = 1.0,
     link_target: Measurable[
         Mapping[str, object], npt.NDArray[np.floating],
-    ] = MC_RETURN_PER_BURST_MEAN,
+    ] = MC_RETURN_RAW_PER_BURST_MEAN,
     link_predictor: Measurable[
         Mapping[str, object], npt.NDArray[np.floating],
     ] = JENSEN_BIAS_PER_BURST_MEAN,
@@ -388,7 +388,7 @@ def extreme_q_div_link_placebo_refuted(
 
 @claim_bridge(
     source='jensen_gap',
-    target='eval_best_burst_mean',
+    target='eval_best_burst_raw_mean',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
     scope=_EXTREME_Q_DIV_SCOPE,
@@ -402,7 +402,7 @@ def extreme_q_div_link_rcc_robust(
     binary_threshold: float = 1.0,
     link_target: Measurable[
         Mapping[str, object], npt.NDArray[np.floating],
-    ] = MC_RETURN_PER_BURST_MEAN,
+    ] = MC_RETURN_RAW_PER_BURST_MEAN,
     link_predictor: Measurable[
         Mapping[str, object], npt.NDArray[np.floating],
     ] = JENSEN_BIAS_PER_BURST_MEAN,

@@ -45,7 +45,7 @@ _FOURROOMS_EFFECTIVE_HORIZON_PER_GAMMA: dict[object, dict[str, float]] = {
 # CLAIM 5 — within-env do(γ) on FourRooms.
 @claim_bridge(
     source=INTERVENTION,
-    target='eval_best_burst_mean',
+    target='eval_best_burst_raw_mean',
     direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
     scope=(
@@ -63,7 +63,7 @@ def ddqn_benefit_scales_with_effective_horizon__fourrooms(
     *,
     treatment_arm: str = DDQN_ARM,
     baseline_arm: str = VANILLA_ARM,
-    source: str = 'eval_best_burst_mean',
+    source: str = 'eval_best_burst_raw_mean',
     stratify_by: tuple[str, ...] = (
         'gamma', 'total_steps', 'reward_scale',
     ),

@@ -14,10 +14,12 @@ from corroborate_rl.dqn.dqn import dqn
 from corroborate_rl.dqn.measurables import (
     jensen_bias_per_burst_mean,
     mc_return_per_burst_mean,
+    mc_return_raw_per_burst_mean,
 )
 
 
 CLAIM = dqn
 
 MC_RETURN_PER_BURST_MEAN = mc_return_per_burst_mean
+MC_RETURN_RAW_PER_BURST_MEAN = mc_return_raw_per_burst_mean
 JENSEN_BIAS_PER_BURST_MEAN = jensen_bias_per_burst_mean

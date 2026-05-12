@@ -60,7 +60,7 @@ from experiments.findings.ddqn._verdicts import (
 # CLAIM 23 — Δ_jens shadow tests.
 @claim_bridge(
     source='q_divergence_score',
-    target='eval_best_burst_mean',
+    target='eval_best_burst_raw_mean',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
     scope=DDQN_RELEVANT_SCOPE,
@@ -88,7 +88,7 @@ def q_divergence_shadowed_by_jens(
 
 @claim_bridge(
     source='argmax_entropy_late',
-    target='eval_best_burst_mean',
+    target='eval_best_burst_raw_mean',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
     scope=DDQN_RELEVANT_SCOPE,
@@ -117,7 +117,7 @@ def argmax_entropy_shadowed_by_jens(
 # CLAIM 12 — env-polarity moderates the eff_h mediator sign.
 @claim_bridge(
     source='effective_horizon',
-    target='eval_best_burst_mean',
+    target='eval_best_burst_raw_mean',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
     pair_by=('env_name', 'corpus', 'gamma', 'total_steps', 'sync_period', 'seed'),
@@ -151,7 +151,7 @@ def eff_h_mediates_g_link__goal_envs(
 
 @claim_bridge(
     source='effective_horizon',
-    target='eval_best_burst_mean',
+    target='eval_best_burst_raw_mean',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
     pair_by=('env_name', 'corpus', 'gamma', 'total_steps', 'sync_period', 'seed'),
@@ -187,7 +187,7 @@ def eff_h_mediates_g_link__survival_envs(
 # CLAIM 13 — target_staleness_late mediator chain.
 @claim_bridge(
     source='target_staleness_late',
-    target='eval_best_burst_mean',
+    target='eval_best_burst_raw_mean',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
     scope=(
@@ -224,7 +224,7 @@ def target_staleness_late_mediates_outcome__minatar_intermediate_sync(
 # CLAIM 21 — Polarity-stratified cross-config staleness slope.
 @claim_bridge(
     source='target_staleness_late',
-    target='eval_best_burst_mean',
+    target='eval_best_burst_raw_mean',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
     scope=(
@@ -309,7 +309,7 @@ _POLYAK_SURVIVE_SCOPE = (
 
 @claim_bridge(
     source='target_staleness_late',
-    target='eval_best_burst_mean',
+    target='eval_best_burst_raw_mean',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
     pair_by=(
@@ -361,7 +361,7 @@ def staleness_amplifies_ddqn_outcome__sparse_goal_polyak(
 
 @claim_bridge(
     source='target_staleness_late',
-    target='eval_best_burst_mean',
+    target='eval_best_burst_raw_mean',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
     pair_by=(
@@ -439,7 +439,7 @@ _ARGMAX_ENTROPY_LATE_PER_ENV: dict[str, dict[str, float]] = {
 
 @claim_bridge(
     source='effective_horizon',
-    target='eval_best_burst_mean',
+    target='eval_best_burst_raw_mean',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
     scope=(_LINK_POWER_BASE_SCOPE & pl.col('env_name').is_in(LINK_POWER_REACH_ENVS)),
@@ -450,7 +450,7 @@ def effh_predicts_link_power__reach_envs(
     *,
     treatment_arm: str = DDQN_ARM,
     baseline_arm: str = VANILLA_ARM,
-    source: str = 'eval_best_burst_mean',
+    source: str = 'eval_best_burst_raw_mean',
     stratify_by: tuple[str, ...] = (
         'env_name', 'total_steps', 'reward_scale',
     ),
@@ -501,7 +501,7 @@ def effh_predicts_link_power__reach_envs(
 
 @claim_bridge(
     source='argmax_entropy_late',
-    target='eval_best_burst_mean',
+    target='eval_best_burst_raw_mean',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
     scope=(_LINK_POWER_BASE_SCOPE & pl.col('env_name').is_in(LINK_POWER_SURVIVE_ENVS)),
@@ -512,7 +512,7 @@ def argmax_entropy_link_power_null__survive_envs(
     *,
     treatment_arm: str = DDQN_ARM,
     baseline_arm: str = VANILLA_ARM,
-    source: str = 'eval_best_burst_mean',
+    source: str = 'eval_best_burst_raw_mean',
     stratify_by: tuple[str, ...] = (
         'env_name', 'total_steps', 'reward_scale',
     ),
