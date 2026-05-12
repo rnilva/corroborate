@@ -26,9 +26,11 @@ import numpy.typing as npt
 import polars as pl
 
 from corroborate.analyses.link_attenuation_dowhy import LinkAttenuationDowhyResult
-from corroborate.analyses.paired_delta_link_dowhy import PairedDeltaLinkDowhyResult
 from corroborate.analyses.paired_link_per_burst import (
     PerBurstLinkResult, phase_link_consistency,
+)
+from corroborate.analyses.stratum_delta_link_dowhy import (
+    StratumDeltaLinkDowhyResult,
 )
 from corroborate.analyses.stratum_effect_panel import (
     StratumEffectPanel, panel_regress,
@@ -95,7 +97,7 @@ def acrobot_per_burst_link_active__gamma_0999(
     scope=DDQN_RELEVANT_SCOPE,
 )
 def reach_link_dowhy_corroborated(
-    paired_delta_link_dowhy: PairedDeltaLinkDowhyResult,
+    stratum_delta_link_dowhy: StratumDeltaLinkDowhyResult,
     *,
     treatment_arm: str = DDQN_ARM,
     baseline_arm: str = VANILLA_ARM,
@@ -106,18 +108,28 @@ def reach_link_dowhy_corroborated(
         Mapping[str, object], npt.NDArray[np.floating],
     ] = JENSEN_BIAS_PER_BURST_MEAN,
     env_filter: tuple[str, ...] = REACH_ENVS_FOUR,
+    min_vanilla_predictor: float = 0.05,
     ate_ceiling: float = -0.1,
     placebo_max_ratio: float = 0.2,
     rcc_max_drift_ratio: float = 0.1,
 ) -> Verdict:
-    """DoWhy backdoor + placebo + RCC trio on per-(env, burst, seed)
-    Δ panel across REACH cohort. HELD iff backdoor identified the
-    predicted-negative ATE AND placebo shrunk it to ~zero AND RCC
-    left it near-stable. The three checks always travel together —
-    placebo-passes-RCC-fails is not a real verdict shape."""
-    del treatment_arm, baseline_arm, link_predictor, link_target, env_filter
+    """DoWhy backdoor + placebo + RCC trio on per-(env, burst)
+    **stratum-level** Δ panel across REACH cohort
+    (Acrobot/FourRooms/MountainCar/MetaMaze). Phase-3 refactor
+    (2026-05-12): replaced `paired_delta_link_dowhy` (per-(env,
+    burst, seed) seed-paired rows) with `stratum_delta_link_dowhy`
+    (per-(env, burst) independent-samples rows; seeds pooled within
+    each arm). Mech conditioning built in via
+    `min_vanilla_predictor=0.05` — strata where vanilla mean jens <
+    0.05 (G1 dormant) never reach DoWhy.
+
+    HELD iff backdoor identified the predicted-negative ATE AND
+    placebo shrunk it to ~zero AND RCC left it near-stable. The
+    three checks always travel together."""
+    del treatment_arm, baseline_arm, link_predictor, link_target
+    del env_filter, min_vanilla_predictor
     return dowhy_trio_verdict(
-        paired_delta_link_dowhy,
+        stratum_delta_link_dowhy,
         ate_ceiling=ate_ceiling,
         placebo_max_ratio=placebo_max_ratio,
         rcc_max_drift_ratio=rcc_max_drift_ratio,
