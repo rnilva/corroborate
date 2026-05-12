@@ -2073,7 +2073,7 @@
   ],
   "cache_path": "experiments/data/cache/dqn_bridges.parquet",
   "errored_bridges": [],
-  "git_commit": "bdde84a31472",
+  "git_commit": "1584fd53bf6e",
   "hypothesis_module": "experiments.findings.dqn_bridges",
   "measurable_signatures": {
     "bootstrap_fraction": "5c7cc97efa79e56c",
@@ -2084,12 +2084,12 @@
     "jensen_bias_per_eps__mean_axis_-1": "e49f7fe16cda0a6d",
     "jensen_dormancy_gap": "12502f5ce2171f73",
     "jensen_dormancy_premise_active": "2b32fea2006ecb2e",
-    "jensen_gap": "afe907c1c8204d7f",
+    "jensen_gap": "950342c492febd27",
     "mc_return__mean_axis_-1": "d898ffb433c73799",
     "q_divergence_score": "fec5bd72d1fb6609",
     "r_max": "409ed3da1f32e66e",
     "r_min": "5717682c68a0f956"
   },
   "n_cells_total": 15110,
-  "timestamp_utc": "2026-05-09T02:09:57+00:00"
+  "timestamp_utc": "2026-05-12T04:03:46+00:00"
 }
