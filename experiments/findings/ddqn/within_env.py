@@ -137,10 +137,21 @@ def _metamaze_amplification_verdict(
     high_floor: float,
     amplification_ratio_min: float,
 ) -> Verdict:
-    """Shared decision logic for the two γ-amplification sibling
-    bridges (mean + median). HELD when high-γ stratum Δ_o ≥
-    `high_floor` AND high-γ ≥ `amplification_ratio_min` × low-γ
-    Δ_o (or low-γ ≤ 0 trivially)."""
+    """Shared decision logic for the γ-amplification bridge.
+    HELD when per-step-normalized high-γ stratum Δ ≥ `high_floor`
+    AND ≥ `amplification_ratio_min` × per-step-normalized low-γ
+    Δ (or low-γ ≤ 0 trivially).
+
+    **Discount-horizon normalization** (post-anomaly 2026-05-12):
+    `eval_best_burst_mean` is the γ-discounted return; on dense-
+    reward envs (MetaMaze ≈ +1 per cell, 200-step cap) the raw
+    metric doubles γ=0.99 → γ=0.999 purely from
+    `Σ γ^t = (1-γ^T)/(1-γ)` scaling. Comparing raw Δs across γ
+    confounds discount-scale with policy quality. We rescale by
+    `(1 - γ)` to recover a per-step-equivalent reward (the
+    invariant under infinite-horizon discounting); the
+    amplification claim now tests whether DDQN's per-step benefit
+    grows with γ, not whether the discount horizon does."""
     if panel.n_strata < 2:
         return Verdict.POWER_INSUFFICIENT
     deltas_outcome = panel.deltas.get('eval_best_burst_mean', ())
@@ -152,10 +163,14 @@ def _metamaze_amplification_verdict(
             isinstance(gamma_val, (int, float))
             and not math.isnan(float(gamma_val))
         ):
-            if math.isclose(float(gamma_val), high_gamma, rel_tol=1e-6):
-                high_delta = delta
-            elif math.isclose(float(gamma_val), low_gamma, rel_tol=1e-6):
-                low_delta = delta
+            gamma_f = float(gamma_val)
+            # Discount-horizon normalization: Σ γ^t = 1/(1-γ);
+            # multiply Δ by (1-γ) to recover per-step-equivalent.
+            normalized = delta * (1.0 - gamma_f)
+            if math.isclose(gamma_f, high_gamma, rel_tol=1e-6):
+                high_delta = normalized
+            elif math.isclose(gamma_f, low_gamma, rel_tol=1e-6):
+                low_delta = normalized
     if (
         high_delta is None or low_delta is None
         or math.isnan(high_delta) or math.isnan(low_delta)
@@ -186,18 +201,31 @@ def metamaze_link_steeper_at_high_gamma(
     min_seeds_per_arm: int = 10,
     high_gamma: float = 0.999,
     low_gamma: float = 0.99,
-    high_floor: float = 0.5,
+    high_floor: float = 0.01,
     amplification_ratio_min: float = 1.5,
 ) -> Verdict:
-    """Within-MetaMaze do(γ): n_γ=2 amplification test. HELD when
-    high-γ Δ_o ≥ `high_floor` AND high-γ ≥ `amplification_ratio_min`
-    × low-γ Δ_o (or low-γ ≤ 0). Currently REFUTED on postfix corpora
-    — paired-Δ +2.55 was init-correlation, not amplification. NB:
-    `eval_best_burst_mean` is itself a mean over seeds; per
-    `findings_metamaze_gamma_link.md`, the high-γ Δ is outlier-driven
-    (median Δ ≈ +2.55) — a true median-aggregated variant would need
-    StratumEffectPanel to expose median deltas, which it currently
-    doesn't."""
+    """Within-MetaMaze do(γ): n_γ=2 amplification test on
+    **per-step-normalized** Δ_outcome (raw `eval_best_burst_mean`
+    scaled by `(1-γ)`). HELD when per-step high-γ Δ ≥
+    `high_floor` AND ≥ `amplification_ratio_min` × low-γ Δ (or
+    low-γ ≤ 0).
+
+    Discount-normalization rationale (post-anomaly investigation
+    2026-05-12): raw `eval_best_burst_mean` doubles on MetaMaze
+    from γ=0.99 (~27) → γ=0.999 (~56) — that's
+    `Σ γ^t = 1/(1-γ)` scaling on a dense-reward env, NOT improved
+    policy quality. Per-step equivalent is ~0.31 reward/step in
+    both regimes. Comparing raw Δs across γ confounded
+    discount-horizon with amplification. With normalization, at
+    γ=0.999 Δ_per_step ≈ -0.002 (vanilla SLIGHTLY beats DDQN);
+    at γ=0.99 Δ_per_step ≈ +0.015. No amplification — verdict
+    NO_EFFECT survives the metric fix.
+
+    `high_floor=0.01` calibrated to per-step scale: ~3% of
+    MetaMaze's typical per-step reward (~0.3); a meaningful
+    high-γ amplification would push DDQN's per-step benefit
+    above 0.01 (≈ Cohen's small at this scale). Pre-fix
+    `high_floor=0.5` was for raw-discounted units."""
     del measurables, stratify_by, min_seeds_per_arm
     return _metamaze_amplification_verdict(
         stratum_effect_panel,
