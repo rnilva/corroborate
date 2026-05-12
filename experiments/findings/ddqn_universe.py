@@ -68,8 +68,15 @@ by 26b), CLAIM 6 (mc_variance, refuted via CV decomposition),
 CLAIM 18 (algorithmic-activation, placeholder), CLAIM 7
 g/h/i/j (4 auxiliary mechanism-route probes), CLAIM 7d
 (`ddqn_helps_at_early_bursts__pixel_envs` — paired_g methodology
-+ data orphan: MinAtar 1M missing post-rebuild). Synthesis
-preserved as deletion-memo banners below.
++ data orphan), CLAIM 2 Pearl-rung-2 adaptive controller pair
+(`adaptive_dqn_recovers_…__fourrooms_factor_0p5` +
+`adaptive_dqn_fails_…__spaceinvaders_1m` — paired_g + adaptive
+corpora dropped in postfix rebuild), CLAIM 5 do(γ) effective-
+horizon scope pair (`ddqn_benefit_scales_with_effective_horizon
+__{fourrooms,metamaze_high_gamma}` — paired_g + gamma_sweep
+corpora dropped; MetaMaze substance preserved by
+`metamaze_link_steeper_at_high_gamma` on current corpora).
+Synthesis preserved as deletion-memo banners below.
 
 ## RL methodology note
 
@@ -101,7 +108,6 @@ from corroborate.analyses.paired_delta_link_dowhy import (
     PairedDeltaLinkDowhyResult,
 )
 from corroborate.analyses.arm_mean_diff import ArmMeanDiffResult
-from corroborate.analyses.paired_g import PairedGResult
 from corroborate.analyses.stratified_partial_spearman import (
     StratifiedPartialSpearmanResult,
 )
@@ -131,7 +137,7 @@ from corroborate.analyses.paired_continuous_do_dowhy import (
 )
 from corroborate.stats import MetaRegressionResult
 from corroborate_rl.dqn.claims.bootstrap import (
-    adaptive_dormancy_greedify, bootstrap, double_greedify,
+    bootstrap, double_greedify,
 )
 from corroborate_rl.dqn.dqn import dqn
 from corroborate_rl.dqn.measurables import (
@@ -167,24 +173,11 @@ DDQN_SWAP = Intervention(
     slot_path='bootstrap',
     replacement=partial(bootstrap, greedification=double_greedify),
 )
-ADAPTIVE_DQN_SWAP = Intervention(
-    slot_path='bootstrap',
-    replacement=partial(
-        bootstrap,
-        greedification=partial(
-            adaptive_dormancy_greedify, sigma_floor_factor=1.0,
-        ),
-    ),
-)
-ADAPTIVE_DQN_FACTOR_0P5_SWAP = Intervention(
-    slot_path='bootstrap',
-    replacement=partial(
-        bootstrap,
-        greedification=partial(
-            adaptive_dormancy_greedify, sigma_floor_factor=0.5,
-        ),
-    ),
-)
+# ADAPTIVE_DQN_SWAP + ADAPTIVE_DQN_FACTOR_0P5_SWAP removed
+# 2026-05-12 with the adaptive controller bridge cuts. The
+# adaptive_dormancy_greedify primitive remains exported by
+# the substrate; reintroduce these Intervention values when
+# adaptive corpora return.
 
 
 # File-level intervention: every bridge in this module tests
@@ -409,70 +402,23 @@ def ddqn_refuted_when_dormancy_fires(
 
 
 # =====================================================================
-# CLAIM 2 — Pearl-rung-2 corroboration of the necessary-scope claim.
-# Designed-intervention sweep `adaptive_dqn_fourrooms_sweep` runs the
-# adaptive controller (`adaptive_dormancy_greedify` with
-# `sigma_floor_factor=0.5`) on FourRooms-misc, paired against the
-# existing `expectile_3way` FourRooms vanilla_dqn + ddqn cells.
+# CLAIM 2 corroboration (Pearl-rung-2 adaptive controller) — DELETED.
+# Bridge audit step 5 (2026-05-12).
+#
+# `adaptive_dqn_recovers_ddqn_benefit__fourrooms_factor_0p5` cut on
+# two grounds:
+# 1. Methodology: consumes paired_g (per-pair-Δ critique).
+# 2. Data orphan: scope requires corpora `adaptive_dqn_fourrooms_
+#    sweep` AND `expectile_3way` — both dropped in postfix rebuild.
+#    The adaptive arm (`adaptive_dormancy_greedify`) is absent from
+#    every corpus in the current cache.
+#
+# Substantive content (adaptive controller recovers DDQN's benefit
+# on FourRooms) preserved in `findings_dormancy_controller_scope.md`
+# memory note. CLAIM 2's necessary-condition reading is still
+# carried by the dormancy bridge directly. Re-enable when adaptive
+# sweeps return.
 # =====================================================================
-
-
-@claim_bridge(
-    source=DoEffect(treatment=(ADAPTIVE_DQN_FACTOR_0P5_SWAP,), baseline=()),
-    target='eval_final_mean',
-    direction=Direction.DIRECT,
-    tier=Tier.INTERVENTIONAL,
-    # Pearl-rung-2 pairing: adaptive_dqn cells from the
-    # designed-intervention sweep (`adaptive_dqn_fourrooms_sweep`,
-    # which carries no vanilla_dqn arm) against the existing
-    # `expectile_3way` FourRooms vanilla_dqn cohort (rs≈0.1, 200k
-    # steps, comparable eval scale). Without this corpus filter,
-    # `paired_g` pools across 7 other vanilla_dqn FourRooms-misc
-    # cohorts at unrelated reward scales (e.g. `reward_scale_sweep`
-    # at eval_mean=2.74 vs. expectile_3way at 0.56), inflating
-    # `mean_diff` by an order of magnitude and silently
-    # misclassifying a refutation as no_effect.
-    scope=(
-        (pl.col('env_name') == 'FourRooms-misc')
-        & pl.col('corpus').is_in(
-            ('adaptive_dqn_fourrooms_sweep', 'expectile_3way'),
-        )
-    ),
-)
-def adaptive_dqn_recovers_ddqn_benefit__fourrooms_factor_0p5(
-    paired_g: PairedGResult,
-) -> Verdict:
-    """Pearl-rung-2 designed-intervention bridge. The adaptive
-    controller (`adaptive_dormancy_greedify` with
-    sigma_floor_factor=0.5) dispatches per-batch between vanilla
-    `max_greedify` and DDQN `double_greedify` based on the in-
-    batch dormancy proxy `max_Q − mean_Q ≥ 0.5 × σ_Q ×
-    √(2 log |A|)`.
-
-    The claim: a runtime controller built FROM the framework's
-    own dormancy invariant recovers DDQN's outcome benefit on
-    FourRooms — corroborates the dormancy-as-necessary-condition
-    claim at Pearl rung-2.
-
-    HELD when g(adaptive − vanilla) ≥ +0.50 AND p < 0.05.
-    Empirically: g=+0.78 (final), p<0.001, n=30 paired seeds.
-    The mean_jensen on adaptive (0.074) tracks DDQN (0.084), not
-    vanilla (0.362), confirming the controller engages DDQN at
-    the right batches.
-
-    Auxiliary observation (NOT load-bearing): adaptive trends
-    slightly ABOVE pure DDQN (g(adaptive − ddqn) = +0.21 on
-    final mean), but the test underpowers at n=30 (p=0.25).
-    The trend is consistent with "occasional vanilla fallback
-    on dormant batches strictly helps", but a tighter claim
-    needs a wider seed budget. Tracked as a non-claim here."""
-    if paired_g.n_pairs < 20:
-        return Verdict.POWER_INSUFFICIENT
-    if math.isnan(paired_g.g):
-        return Verdict.POWER_INSUFFICIENT
-    if paired_g.g >= 0.50 and paired_g.p_value < 0.05:
-        return Verdict.HELD
-    return Verdict.NO_EFFECT
 
 
 # =====================================================================
@@ -605,72 +551,23 @@ def ddqn_attenuates_at_late_bursts__spaceinvaders(
 # =====================================================================
 
 
-@claim_bridge(
-    source=DoEffect(treatment=(ADAPTIVE_DQN_FACTOR_0P5_SWAP,), baseline=()),
-    target='eval_final_mean',
-    direction=Direction.INVERSE,
-    tier=Tier.INTERVENTIONAL,
-    # Pearl-rung-2 pairing: adaptive_dqn from the 1M-step
-    # designed-intervention sweep (`adaptive_dqn_spaceinvaders_1m`,
-    # which ran the dormancy controller at sigma_floor_factor=0.5
-    # — same setting as the FourRooms recovery bridge) against the
-    # existing minatar_1M SpaceInvaders vanilla_dqn cells. Other
-    # corpora carry vanilla_dqn at SpaceInvaders-MinAtar at
-    # different `total_steps` regimes (50k in `ddqn`, 200k in
-    # `ddqn_effective_cohort`) which `pair_by=('seed',)` would
-    # silently pool with the 1M cells.
-    scope=(
-        (pl.col('env_name') == 'SpaceInvaders-MinAtar')
-        & pl.col('corpus').is_in(
-            ('adaptive_dqn_spaceinvaders_1m', 'minatar_1M_spaceinvaders'),
-        )
-    ),
-)
-def adaptive_dqn_fails_to_avoid_attenuation__spaceinvaders_1m(
-    paired_g: PairedGResult,
-) -> Verdict:
-    """Pearl-rung-2 scope-limitation bridge. The same dormancy-
-    aware controller that recovers DDQN's benefit on FourRooms
-    FAILS on SpaceInvaders-MinAtar at 1M training steps — the
-    per-batch dormancy proxy at sigma_floor_factor=0.5 doesn't
-    fire on this regime, so the controller is indistinguishable
-    from pure DDQN (g ≈ 0) and inherits DDQN's late-burst
-    attenuation.
-
-    Auxiliary observation (empirical, also paired n=30):
-      g(adaptive vs ddqn) = −0.06, p=0.74  → controller ≡ DDQN
-      g(ddqn vs vanilla)  = −0.44, p=0.022 → DDQN itself hurts
-    The shape "adaptive_dqn ≡ ddqn ∧ ddqn < vanilla" implies
-    "adaptive_dqn < vanilla" by transitivity. This bridge tests
-    that downstream chain.
-
-    HELD when g(adaptive vs vanilla) ≤ −0.30 AND p < 0.05 — the
-    scope-limitation prediction is corroborated. Empirically:
-    g=−0.46, p=0.016, n=30. INVARIANT_VIOLATION when adaptive
-    unexpectedly RECOVERS the benefit (g ≥ +0.30, p<0.05) — which
-    would refute the dormancy-blind-spot reading.
-
-    Causal reading: this bridge corroborates `ddqn_attenuates_at_
-    late_bursts__spaceinvaders` from the OTHER side. Not only does
-    DDQN hurt on this regime — the dormancy invariant cannot tell
-    you to stop. The structural Hasselt floor σ_Q × √(2 log |A|)
-    is a NECESSARY condition for predicting where DDQN helps
-    (CLAIM 2) but not a SUFFICIENT one — long-horizon pixel envs
-    have late-burst failure modes the floor doesn't capture.
-
-    Together with CLAIM 2's FourRooms recovery: the controller's
-    actionable scope is "envs where dormancy fires and DDQN's
-    bias-correction has bias to bite on", not "all DDQN-hurt
-    envs"."""
-    if paired_g.n_pairs < 20:
-        return Verdict.POWER_INSUFFICIENT
-    if math.isnan(paired_g.g):
-        return Verdict.POWER_INSUFFICIENT
-    if paired_g.g <= -0.30 and paired_g.p_value < 0.05:
-        return Verdict.HELD
-    if paired_g.g >= 0.30 and paired_g.p_value < 0.05:
-        return Verdict.INVARIANT_VIOLATION
-    return Verdict.NO_EFFECT
+# =====================================================================
+# CLAIM 2 scope-limitation companion — DELETED. Bridge audit step 5
+# (2026-05-12).
+#
+# `adaptive_dqn_fails_to_avoid_attenuation__spaceinvaders_1m` cut on
+# same two grounds as the FourRooms recovery sibling above:
+# 1. Methodology: consumes paired_g (per-pair-Δ critique).
+# 2. Data orphan: scope requires `adaptive_dqn_spaceinvaders_1m`
+#    AND `minatar_1M_spaceinvaders` corpora — both dropped in
+#    postfix rebuild. Adaptive arm absent from current cache.
+#
+# Substantive content (controller fails on long-horizon pixel envs)
+# preserved in `findings_dormancy_controller_scope.md` memory note
+# and by `ddqn_curve_crosses_vanilla_late__spaceinvaders` which
+# carries the late-attenuation claim directly. Re-enable when
+# adaptive sweeps + MinAtar 1M return.
+# =====================================================================
 
 
 # =====================================================================
@@ -690,130 +587,35 @@ def adaptive_dqn_fails_to_avoid_attenuation__spaceinvaders_1m(
 # =====================================================================
 
 
-@claim_bridge(
-    # `effective_horizon >= 25` is the endogenous selector. Within
-    # the `gamma_sweep` corpus (FourRooms-misc, γ ∈ {0.90, 0.95,
-    # 0.99} with realised bf ≈ 0.97-0.99 → eff_h ∈ {8, 13, ~30+})
-    # it selects the γ=0.99 cohort. eff_h is now `1/(1−γ·bf)` —
-    # the chain-depth amplifier mediated by realised episode
-    # termination — so values are smaller than the textbook
-    # `1/(1−γ)`. Threshold recalibrated from 50 to 25.
-    source=INTERVENTION,
-    target='eval_best_burst_mean',
-    direction=Direction.DIRECT,
-    tier=Tier.INTERVENTIONAL,
-    scope=(
-        (pl.col('env_name') == 'FourRooms-misc')
-        & (pl.col('corpus') == 'gamma_sweep')
-        & finite_ge('effective_horizon', 25.0)
-    ),
-)
-def ddqn_benefit_scales_with_effective_horizon__fourrooms(
-    paired_g: PairedGResult,
-) -> Verdict:
-    """Pearl-rung-2 designed-γ-intervention bridge. Filters
-    gamma_sweep's FourRooms cells to the high-effective-horizon
-    cohort (γ=0.99, eff_h≈72) and asserts DDQN's benefit is
-    substantially positive there. Falsification companion is
-    implicit in the scope: at low effective_horizon (γ=0.90,
-    eff_h≈10) the same comparison is null, demonstrating the
-    scope predicate at the within-env level.
-
-    The within-env γ-axis variation rules out env-confounders
-    that bf-residual-on-g_link couldn't: bf ≈ 0.996 on every cell
-    here, so any monotone relationship with effective_horizon
-    must be γ-driven, hence intervention-causal under do(γ).
-
-    Causal decomposition (do(γ) on FourRooms, n=30 per γ):
-      γ=0.99: g_mech=−2.12, g_link=+1.11
-      γ=0.95: g_mech=−1.71, g_link=+0.56
-      γ=0.90: g_mech=−3.41, g_link=+0.27
-    The MECHANISM (DDQN→↓jensen_gap) is large + invariant in γ;
-    only the LINK collapses. So effective_horizon moderates the
-    amplification path from per-step bias-reduction to integrated
-    outcome — NOT the mechanism arrow itself.
-
-    Theoretical reading: V(s) = Σₖ (γ·bf)ᵏ · per_step_diff, so a
-    per-step DDQN correction ε integrates to ε/(1−γ·bf) =
-    ε · effective_horizon. The integrated link strength is
-    linearly proportional to effective_horizon. CLAIM 4
-    (bf-on-link) and CLAIM 5 (γ-on-link) thus unify as the same
-    structural moderator.
-
-    Falsification + extension probes (2026-05-01, gamma_sweep_
-    fourrooms_low + gamma_sweep_metamaze_high):
-      FourRooms γ=0.80 → eff_h=5: g_link=0.00 (ns) ✓ falsifies
-      FourRooms γ=0.50 → eff_h=2: g_link=+0.22 (ns) ✓ falsifies
-      MetaMaze γ=0.999 → eff_h=20: g_link=+0.40, p=.034 ✓ activates
-    The chain-depth amplifier IS portable across MLP-friendly
-    envs once eff_h ≥ ~20; FourRooms-specificity caveat from the
-    earlier MetaMaze-at-γ=0.99 null is retracted.
-
-    Within-env Spearman (whole per-burst dataset):
-    ρ(delta_bias, delta_mc | env) = −0.503,
-    partial ρ | mc_progress = −0.440 — mechanism→link causal
-    edge is robust to saturation control across most envs.
-
-    HELD when helped_fraction ≥ 0.55 AND g ≥ 0.30 on the
-    high-eff_h subset. NO_EFFECT or INVARIANT_VIOLATION otherwise."""
-    if paired_g.n_pairs < 20:
-        return Verdict.POWER_INSUFFICIENT
-    if math.isnan(paired_g.helped_fraction):
-        return Verdict.POWER_INSUFFICIENT
-    if (
-        paired_g.helped_fraction >= 0.55
-        and paired_g.g >= 0.30
-    ):
-        return Verdict.HELD
-    return Verdict.NO_EFFECT
-
-
-@claim_bridge(
-    # `effective_horizon >= 150` is the endogenous selector. Within
-    # the `gamma_sweep_metamaze_high` corpus (MetaMaze γ ∈ {0.995,
-    # 0.999} with realised bf ≈ 0.995 → eff_h ≈ {99, 165}) the
-    # threshold isolates the γ=0.999 cohort. eff_h is now
-    # `1/(1−γ·bf)` — values much smaller than the textbook
-    # `1/(1−γ)` because MetaMaze episodes terminate. Threshold
-    # recalibrated from 500 to 150.
-    source=INTERVENTION,
-    target='eval_best_burst_mean',
-    direction=Direction.DIRECT,
-    tier=Tier.INTERVENTIONAL,
-    scope=(
-        (pl.col('env_name') == 'MetaMaze-misc')
-        & (pl.col('corpus') == 'gamma_sweep_metamaze_high')
-        & finite_ge('effective_horizon', 150.0)
-    ),
-)
-def ddqn_benefit_scales_with_effective_horizon__metamaze_high_gamma(
-    paired_g: PairedGResult,
-) -> Verdict:
-    """Portability probe — chain-depth-amplifier activates on
-    MetaMaze when γ pushed to 0.999 (eff_h≈20). The earlier
-    MetaMaze-at-γ=0.99 null was just eff_h-too-low; pushing γ
-    higher activates the same signature, refuting the
-    FourRooms-specificity caveat.
-
-    Empirical (gamma_sweep_metamaze_high, n=30):
-      γ=0.999, eff_h≈20: g_link=+0.40, p=0.034 ✓
-      γ=0.995, eff_h≈18: g_link=+0.10 (ns)
-
-    Combined with the FourRooms low-γ truncation probe
-    (g_link=0 at eff_h<10), this brackets the operating range
-    of the chain-depth-amplifier: ~10-20 effective steps minimum.
-
-    HELD when helped_fraction ≥ 0.45 AND g ≥ 0.20."""
-    if paired_g.n_pairs < 20:
-        return Verdict.POWER_INSUFFICIENT
-    if math.isnan(paired_g.helped_fraction):
-        return Verdict.POWER_INSUFFICIENT
-    if (
-        paired_g.helped_fraction >= 0.45
-        and paired_g.g >= 0.20
-    ):
-        return Verdict.HELD
-    return Verdict.NO_EFFECT
+# =====================================================================
+# CLAIM 5 do(γ) effective-horizon scope — DELETED. Bridge audit
+# step 5 (2026-05-12).
+#
+# `ddqn_benefit_scales_with_effective_horizon__fourrooms` and
+# `ddqn_benefit_scales_with_effective_horizon__metamaze_high_gamma`
+# cut on two grounds:
+# 1. Methodology: both consume paired_g + paired_g.helped_fraction
+#    (per-pair-Δ critique).
+# 2. Data orphan: scopes require `corpus == 'gamma_sweep'` AND
+#    `corpus == 'gamma_sweep_metamaze_high'` respectively. The
+#    postfix rebuild dropped both corpora. Current cache has only
+#    γ=0.99 on FourRooms (no within-env γ variation) and γ ∈
+#    {0.99, 0.999} on MetaMaze in `metamaze_g099_1M_postfix` +
+#    `metamaze_g0999_1M_postfix`.
+#
+# Substantive content (chain-depth amplifier moderated by
+# effective horizon) preserved in:
+#  - `metamaze_link_steeper_at_high_gamma` + `__median`: same
+#    do(γ) probe on MetaMaze, currently REFUTED on the postfix
+#    corpora (γ=0.999 Δ_o < 0). The reformulation flipped the
+#    paired-Δ "amplification" reading; the deletion-memo for the
+#    cut here documents the original reading.
+#  - `findings_metamaze_gamma_link.md` for the historical slope
+#    reading; `findings_gamma_sweep_three_regimes.md` for cross-
+#    env γ effects.
+# Re-enable when gamma_sweep corpus returns OR when a γ-sweep on
+# FourRooms is re-collected.
+# =====================================================================
 
 
 # =====================================================================
@@ -4000,12 +3802,14 @@ def argmax_entropy_predicts_link_power__survive_envs(
 DDQN_UNIVERSE_BRIDGES = (
     # CLAIM 2 — load-bearing necessary scope (causal refutation).
     ddqn_refuted_when_dormancy_fires,
-    # CLAIM 2 corroborations — Pearl rung-2 designed interventions.
-    adaptive_dqn_recovers_ddqn_benefit__fourrooms_factor_0p5,
-    adaptive_dqn_fails_to_avoid_attenuation__spaceinvaders_1m,
-    # CLAIM 5 — effective-horizon scope (Pearl rung-2 do(γ) sweep).
-    ddqn_benefit_scales_with_effective_horizon__fourrooms,
-    ddqn_benefit_scales_with_effective_horizon__metamaze_high_gamma,
+    # CLAIM 2 corroborations — Pearl rung-2 adaptive controller —
+    # CUT 2026-05-12 (paired_g + data orphan: adaptive corpora
+    # dropped in postfix rebuild). See deletion-memo banners
+    # above.
+    # CLAIM 5 — effective-horizon scope (Pearl rung-2 do(γ) sweep) —
+    # CUT 2026-05-12 (paired_g + data orphan: gamma_sweep corpora
+    # dropped). Substance preserved by metamaze_link_steeper_at_
+    # high_gamma on current MetaMaze corpora (γ=0.999 + γ=0.99).
     # ddqn_benefit_scales_with_gamma__discountingchain MOVED to
     # `dqn_bridges.py` — DiscountingChain is bsuite (excluded by
     # MODULE_SCOPE), and the do(γ) bridge is an env-specific
@@ -4165,11 +3969,7 @@ __all__ = [
     'extreme_q_divergence_attenuates_link__binary',
     'extreme_q_divergence_attenuates_link__placebo_refuted',
     'extreme_q_divergence_attenuates_link__rcc_robust',
-    'adaptive_dqn_fails_to_avoid_attenuation__spaceinvaders_1m',
-    'adaptive_dqn_recovers_ddqn_benefit__fourrooms_factor_0p5',
     'ddqn_attenuates_at_late_bursts__spaceinvaders',
-    'ddqn_benefit_scales_with_effective_horizon__fourrooms',
-    'ddqn_benefit_scales_with_effective_horizon__metamaze_high_gamma',
     'ddqn_refuted_when_dormancy_fires',
     'eff_h_mediates_g_link__goal_envs',
     'eff_h_mediates_g_link__survival_envs',
