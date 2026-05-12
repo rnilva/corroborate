@@ -1,7 +1,6 @@
 """MetaMaze γ-amplification REFUTED — predicted high-γ ↑ DDQN
-benefit; both mean + median sibling walks return refuted on the
-(do(DDQN), eval_best_burst_mean) cluster under
-_METAMAZE_GAMMA_SCOPE on the postfix corpus.
+benefit; refuted on the (do(DDQN), eval_best_burst_mean) cluster
+under _METAMAZE_GAMMA_SCOPE on the postfix corpus.
 
 Hand-roll #2 — stress-tests the Finding shape under
 `EXPECTED=REFUTED`. Same Protocol surface as the SUPPORTED case,
@@ -15,7 +14,6 @@ from corroborate.graph.causal import ClusterVerdict
 
 from experiments.findings.ddqn.within_env import (
     metamaze_link_steeper_at_high_gamma,
-    metamaze_link_steeper_at_high_gamma__median,
 )
 
 
@@ -27,5 +25,4 @@ BLOCKED_ON: str | None = None
 
 BRIDGES: tuple[Bridge, ...] = (
     metamaze_link_steeper_at_high_gamma,
-    metamaze_link_steeper_at_high_gamma__median,
 )

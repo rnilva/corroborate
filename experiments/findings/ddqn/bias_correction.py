@@ -1,15 +1,14 @@
 """Hasselt bias-correction chain: jensen_gap → outcome.
 
 Link side (mech-activation half lives in `dqn_bridges.py` on a
-separate corpus). 8 bridges:
+separate corpus). 4 bridges:
 
 - `acrobot_per_burst_link_active__gamma_0999`: per-burst link r on
   Acrobot γ=0.999 (paired_link_per_burst → phase_link_consistency).
-- `reach_link_{backdoor_ate_negative,placebo_refuted,rcc_robust}`:
-  DoWhy backdoor + refutations on the per-burst Δ_jens panel,
-  REACH-cohort scope.
-- `extreme_q_divergence_attenuates_link__{binary,placebo_refuted,
-  rcc_robust}`: DoWhy backdoor + refutations on the link-attenuation
+- `reach_link_dowhy_corroborated`: composite DoWhy backdoor +
+  placebo + RCC on the per-burst Δ_jens panel, REACH-cohort scope.
+- `extreme_q_divergence_attenuates_link__dowhy_corroborated`:
+  composite DoWhy backdoor + placebo + RCC on the link-attenuation
   binary contrast (q_div > 1000 vs in-band cells).
 - `fourrooms_action_dim_link_active__inflated`: within-FourRooms
   panel_regress of Δ_outcome on Δ_jens across `action_duplicate_k`.
@@ -46,9 +45,7 @@ from experiments.findings.ddqn._common import (
 from experiments.findings.ddqn._scope import (
     DDQN_RELEVANT_SCOPE, G1_VANILLA_CONFIG_PREMISE_ACTIVE, REACH_ENVS_FOUR,
 )
-from experiments.findings.ddqn._verdicts import (
-    dowhy_backdoor_verdict, dowhy_placebo_verdict, dowhy_rcc_verdict,
-)
+from experiments.findings.ddqn._verdicts import dowhy_trio_verdict
 
 
 @claim_bridge(
@@ -97,7 +94,7 @@ def acrobot_per_burst_link_active__gamma_0999(
     tier=Tier.ASSOCIATIONAL,
     scope=DDQN_RELEVANT_SCOPE,
 )
-def reach_link_backdoor_ate_negative(
+def reach_link_dowhy_corroborated(
     paired_delta_link_dowhy: PairedDeltaLinkDowhyResult,
     *,
     treatment_arm: str = DDQN_ARM,
@@ -110,71 +107,20 @@ def reach_link_backdoor_ate_negative(
     ] = JENSEN_BIAS_PER_BURST_MEAN,
     env_filter: tuple[str, ...] = REACH_ENVS_FOUR,
     ate_ceiling: float = -0.1,
-) -> Verdict:
-    """DoWhy backdoor ATE on per-(env, burst, seed) Δ panel across
-    REACH cohort. HELD when identified AND ATE ≤ ceiling."""
-    del treatment_arm, baseline_arm, link_predictor, link_target, env_filter
-    return dowhy_backdoor_verdict(
-        paired_delta_link_dowhy.backdoor, ate_ceiling=ate_ceiling,
-    )
-
-
-@claim_bridge(
-    source='jensen_gap',
-    target='eval_best_burst_mean',
-    direction=Direction.INVERSE,
-    tier=Tier.ASSOCIATIONAL,
-    scope=DDQN_RELEVANT_SCOPE,
-)
-def reach_link_placebo_refuted(
-    paired_delta_link_dowhy: PairedDeltaLinkDowhyResult,
-    *,
-    treatment_arm: str = DDQN_ARM,
-    baseline_arm: str = VANILLA_ARM,
-    link_target: Measurable[
-        Mapping[str, object], npt.NDArray[np.floating],
-    ] = MC_RETURN_PER_BURST_MEAN,
-    link_predictor: Measurable[
-        Mapping[str, object], npt.NDArray[np.floating],
-    ] = JENSEN_BIAS_PER_BURST_MEAN,
-    env_filter: tuple[str, ...] = REACH_ENVS_FOUR,
     placebo_max_ratio: float = 0.2,
-) -> Verdict:
-    """Placebo refutation: random treatment shrinks ATE to ~zero.
-    HELD when |placebo / real| < `placebo_max_ratio`."""
-    del treatment_arm, baseline_arm, link_predictor, link_target, env_filter
-    return dowhy_placebo_verdict(
-        paired_delta_link_dowhy.placebo, max_ratio=placebo_max_ratio,
-    )
-
-
-@claim_bridge(
-    source='jensen_gap',
-    target='eval_best_burst_mean',
-    direction=Direction.INVERSE,
-    tier=Tier.ASSOCIATIONAL,
-    scope=DDQN_RELEVANT_SCOPE,
-)
-def reach_link_rcc_robust(
-    paired_delta_link_dowhy: PairedDeltaLinkDowhyResult,
-    *,
-    treatment_arm: str = DDQN_ARM,
-    baseline_arm: str = VANILLA_ARM,
-    link_target: Measurable[
-        Mapping[str, object], npt.NDArray[np.floating],
-    ] = MC_RETURN_PER_BURST_MEAN,
-    link_predictor: Measurable[
-        Mapping[str, object], npt.NDArray[np.floating],
-    ] = JENSEN_BIAS_PER_BURST_MEAN,
-    env_filter: tuple[str, ...] = REACH_ENVS_FOUR,
     rcc_max_drift_ratio: float = 0.1,
 ) -> Verdict:
-    """RCC refutation: noise covariate added to adjustment set
-    leaves ATE within `rcc_max_drift_ratio` of real."""
+    """DoWhy backdoor + placebo + RCC trio on per-(env, burst, seed)
+    Δ panel across REACH cohort. HELD iff backdoor identified the
+    predicted-negative ATE AND placebo shrunk it to ~zero AND RCC
+    left it near-stable. The three checks always travel together —
+    placebo-passes-RCC-fails is not a real verdict shape."""
     del treatment_arm, baseline_arm, link_predictor, link_target, env_filter
-    return dowhy_rcc_verdict(
-        paired_delta_link_dowhy.random_common_cause,
-        max_drift_ratio=rcc_max_drift_ratio,
+    return dowhy_trio_verdict(
+        paired_delta_link_dowhy,
+        ate_ceiling=ate_ceiling,
+        placebo_max_ratio=placebo_max_ratio,
+        rcc_max_drift_ratio=rcc_max_drift_ratio,
     )
 
 
@@ -221,28 +167,21 @@ def fourrooms_action_dim_link_active__inflated(
     return Verdict.HELD
 
 
-# Extreme Q-div trio: upper-bound scope companion to dormancy
-# refutation (CLAIM 2). Bridges share the same scope predicate
-# `_EXTREME_Q_DIV_SCOPE` so cluster identity is structurally
-# unified by extent_hash.
-_EXTREME_Q_DIV_SCOPE = (
-    (pl.col('total_steps') == 1_000_000)
-    & finite('q_divergence_score')
-    & (
-        pl.col('q_network.channels').is_null()
-        | (pl.col('q_network.channels') != '(32,64)')
-    )
-)
-
-
 @claim_bridge(
     source='jensen_gap',
     target='eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
-    scope=_EXTREME_Q_DIV_SCOPE,
+    scope=(
+        (pl.col('total_steps') == 1_000_000)
+        & finite('q_divergence_score')
+        & (
+            pl.col('q_network.channels').is_null()
+            | (pl.col('q_network.channels') != '(32,64)')
+        )
+    ),
 )
-def extreme_q_divergence_attenuates_link__binary(
+def extreme_q_divergence_attenuates_link__dowhy_corroborated(
     link_attenuation_dowhy: LinkAttenuationDowhyResult,
     *,
     treatment_arm: str = DDQN_ARM,
@@ -256,90 +195,29 @@ def extreme_q_divergence_attenuates_link__binary(
         Mapping[str, object], npt.NDArray[np.floating],
     ] = JENSEN_BIAS_PER_BURST_MEAN,
     ate_ceiling: float = -0.10,
-    dedupe_strategy: str = 'mean',
-) -> Verdict:
-    """Binary contrast: cells with `q_divergence_score > 1000`
-    have link strength attenuated by ≥ 0.10 vs in-band cells, after
-    env-family backdoor adjustment. HELD when ATE ≤ -0.10.
-    `zero_guard` handles RNG-dependent machine-epsilon signs."""
-    del treatment_arm, baseline_arm, attenuator, binary_threshold
-    del link_target, link_predictor, dedupe_strategy
-    return dowhy_backdoor_verdict(
-        link_attenuation_dowhy.backdoor,
-        ate_ceiling=ate_ceiling, zero_guard=True,
-    )
-
-
-@claim_bridge(
-    source='jensen_gap',
-    target='eval_best_burst_mean',
-    direction=Direction.INVERSE,
-    tier=Tier.ASSOCIATIONAL,
-    scope=_EXTREME_Q_DIV_SCOPE,
-)
-def extreme_q_divergence_attenuates_link__placebo_refuted(
-    link_attenuation_dowhy: LinkAttenuationDowhyResult,
-    *,
-    treatment_arm: str = DDQN_ARM,
-    baseline_arm: str = VANILLA_ARM,
-    attenuator: str = 'q_divergence_score',
-    binary_threshold: float = 1000.0,
-    link_target: Measurable[
-        Mapping[str, object], npt.NDArray[np.floating],
-    ] = MC_RETURN_PER_BURST_MEAN,
-    link_predictor: Measurable[
-        Mapping[str, object], npt.NDArray[np.floating],
-    ] = JENSEN_BIAS_PER_BURST_MEAN,
     placebo_max_ratio: float = 0.2,
-    dedupe_strategy: str = 'mean',
-) -> Verdict:
-    """Placebo refutation on the binary above-1000 ATE."""
-    del treatment_arm, baseline_arm, attenuator, binary_threshold
-    del link_target, link_predictor, dedupe_strategy
-    return dowhy_placebo_verdict(
-        link_attenuation_dowhy.placebo, max_ratio=placebo_max_ratio,
-    )
-
-
-@claim_bridge(
-    source='jensen_gap',
-    target='eval_best_burst_mean',
-    direction=Direction.INVERSE,
-    tier=Tier.ASSOCIATIONAL,
-    scope=_EXTREME_Q_DIV_SCOPE,
-)
-def extreme_q_divergence_attenuates_link__rcc_robust(
-    link_attenuation_dowhy: LinkAttenuationDowhyResult,
-    *,
-    treatment_arm: str = DDQN_ARM,
-    baseline_arm: str = VANILLA_ARM,
-    attenuator: str = 'q_divergence_score',
-    binary_threshold: float = 1000.0,
-    link_target: Measurable[
-        Mapping[str, object], npt.NDArray[np.floating],
-    ] = MC_RETURN_PER_BURST_MEAN,
-    link_predictor: Measurable[
-        Mapping[str, object], npt.NDArray[np.floating],
-    ] = JENSEN_BIAS_PER_BURST_MEAN,
     rcc_max_drift_ratio: float = 0.15,
     dedupe_strategy: str = 'mean',
 ) -> Verdict:
-    """RCC refutation on the binary above-1000 ATE."""
+    """Binary contrast: cells with `q_divergence_score > 1000` have
+    link strength attenuated by ≥ 0.10 vs in-band cells. DoWhy
+    backdoor + placebo + RCC trio under env-family adjustment.
+    `zero_guard=True` on backdoor handles RNG-dependent
+    machine-epsilon signs."""
     del treatment_arm, baseline_arm, attenuator, binary_threshold
     del link_target, link_predictor, dedupe_strategy
-    return dowhy_rcc_verdict(
-        link_attenuation_dowhy.random_common_cause,
-        max_drift_ratio=rcc_max_drift_ratio,
+    return dowhy_trio_verdict(
+        link_attenuation_dowhy,
+        ate_ceiling=ate_ceiling,
+        placebo_max_ratio=placebo_max_ratio,
+        rcc_max_drift_ratio=rcc_max_drift_ratio,
+        zero_guard=True,
     )
 
 
 BRIDGES = (
     acrobot_per_burst_link_active__gamma_0999,
-    reach_link_backdoor_ate_negative,
-    reach_link_placebo_refuted,
-    reach_link_rcc_robust,
+    reach_link_dowhy_corroborated,
     fourrooms_action_dim_link_active__inflated,
-    extreme_q_divergence_attenuates_link__binary,
-    extreme_q_divergence_attenuates_link__placebo_refuted,
-    extreme_q_divergence_attenuates_link__rcc_robust,
+    extreme_q_divergence_attenuates_link__dowhy_corroborated,
 )

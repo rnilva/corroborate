@@ -110,6 +110,48 @@ def dowhy_rcc_verdict(
     return Verdict.NO_EFFECT
 
 
+class _DowhyTrioResult(Protocol):
+    """Common shape of `PairedDeltaLinkDowhyResult` and
+    `LinkAttenuationDowhyResult` — backdoor estimate + two
+    refutations (placebo, random-common-cause)."""
+    @property
+    def backdoor(self) -> _BackdoorResult: ...
+    @property
+    def placebo(self) -> _RefutationResult: ...
+    @property
+    def random_common_cause(self) -> _RefutationResult: ...
+
+
+def dowhy_trio_verdict(
+    result: _DowhyTrioResult,
+    *,
+    ate_ceiling: float,
+    placebo_max_ratio: float,
+    rcc_max_drift_ratio: float,
+    zero_guard: bool = False,
+) -> Verdict:
+    """Composite verdict over backdoor + placebo + RCC refutations.
+    All three must HELD for the composite to HELD; any NO_EFFECT
+    dominates (a clean refutation outranks a power gap); otherwise
+    POW_INSUF."""
+    sub = (
+        dowhy_backdoor_verdict(
+            result.backdoor, ate_ceiling=ate_ceiling, zero_guard=zero_guard,
+        ),
+        dowhy_placebo_verdict(
+            result.placebo, max_ratio=placebo_max_ratio,
+        ),
+        dowhy_rcc_verdict(
+            result.random_common_cause, max_drift_ratio=rcc_max_drift_ratio,
+        ),
+    )
+    if any(v == Verdict.NO_EFFECT for v in sub):
+        return Verdict.NO_EFFECT
+    if any(v == Verdict.POWER_INSUFFICIENT for v in sub):
+        return Verdict.POWER_INSUFFICIENT
+    return Verdict.HELD
+
+
 # ============ Partial-Spearman deciders ============
 
 

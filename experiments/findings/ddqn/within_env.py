@@ -127,40 +127,13 @@ def metamaze_link_steeper_at_high_gamma(
     """Within-MetaMaze do(γ): n_γ=2 amplification test. HELD when
     high-γ Δ_o ≥ `high_floor` AND high-γ ≥ `amplification_ratio_min`
     × low-γ Δ_o (or low-γ ≤ 0). Currently REFUTED on postfix corpora
-    — paired-Δ +2.55 was init-correlation, not amplification."""
+    — paired-Δ +2.55 was init-correlation, not amplification. NB:
+    `eval_best_burst_mean` is itself a mean over seeds; per
+    `findings_metamaze_gamma_link.md`, the high-γ Δ is outlier-driven
+    (median Δ ≈ +2.55) — a true median-aggregated variant would need
+    StratumEffectPanel to expose median deltas, which it currently
+    doesn't."""
     del measurables, stratify_by, min_seeds_per_arm
-    return _metamaze_amplification_verdict(
-        stratum_effect_panel,
-        high_gamma=high_gamma, low_gamma=low_gamma,
-        high_floor=high_floor,
-        amplification_ratio_min=amplification_ratio_min,
-    )
-
-
-@claim_bridge(
-    source=INTERVENTION,
-    target='eval_best_burst_mean',
-    direction=Direction.DIRECT,
-    tier=Tier.ASSOCIATIONAL,
-    scope=_METAMAZE_GAMMA_SCOPE,
-    predicted_direction='a_gt_b',
-)
-def metamaze_link_steeper_at_high_gamma__median(
-    stratum_effect_panel: StratumEffectPanel,
-    *,
-    measurables: tuple[str, ...] = ('eval_best_burst_mean',),
-    stratify_by: tuple[str, ...] = ('gamma',),
-    min_seeds_per_arm: int = 10,
-    aggregator: str = 'median',
-    high_gamma: float = 0.999,
-    low_gamma: float = 0.99,
-    high_floor: float = 0.5,
-    amplification_ratio_min: float = 1.5,
-) -> Verdict:
-    """Median sibling of the mean-based bridge. Rules out
-    bimodal-seed-distribution explanation of the NO_EFFECT. Both
-    summaries agree DDQN HURTS at high γ on MetaMaze."""
-    del measurables, stratify_by, min_seeds_per_arm, aggregator
     return _metamaze_amplification_verdict(
         stratum_effect_panel,
         high_gamma=high_gamma, low_gamma=low_gamma,
@@ -172,5 +145,4 @@ def metamaze_link_steeper_at_high_gamma__median(
 BRIDGES = (
     ddqn_benefit_scales_with_effective_horizon__fourrooms,
     metamaze_link_steeper_at_high_gamma,
-    metamaze_link_steeper_at_high_gamma__median,
 )
