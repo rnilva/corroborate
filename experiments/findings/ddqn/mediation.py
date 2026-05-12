@@ -35,9 +35,6 @@ import polars as pl
 from corroborate.analyses.paired_continuous_do_dowhy import (
     PairedContinuousDoResult,
 )
-from corroborate.analyses.stratified_arm_diff_pooled import (
-    StratifiedArmDiffPooledResult,
-)
 from corroborate.analyses.stratified_partial_spearman import (
     StratifiedPartialSpearmanResult,
 )
@@ -47,6 +44,7 @@ from corroborate.bridge.predicates import (
     finite, finite_gt, finite_lt,
 )
 from corroborate.bridge.verdict import RefutationClass, Verdict
+from corroborate.stats import MetaRegressionResult
 
 from experiments.findings.ddqn._arms import DDQN_ARM, VANILLA_ARM
 from experiments.findings.ddqn._scope import (
@@ -54,7 +52,7 @@ from experiments.findings.ddqn._scope import (
     VANILLA_CONFIG_Q_BOUNDED,
 )
 from experiments.findings.ddqn._verdicts import (
-    env_covariate_pearson_verdict,
+    meta_regression_coefficient_verdict,
     partial_spearman_null_verdict, partial_spearman_signed_verdict,
 )
 
@@ -400,16 +398,18 @@ def staleness_does_not_amplify_ddqn_outcome__survival_polyak(
     return Verdict.NO_EFFECT
 
 
-# CLAIM 19 / 20 — cross-env link-power predictors. Phase-1 refactor
-# (2026-05-12): replaced `meta_regression_paired_g` (per-env Hedges'
-# g via seed-pairing — pseudo-replicates seeds as iid Δ-samples
-# within env) with `stratified_arm_diff_pooled` (independent-samples
-# Cohen's d per env — strata are the unit of inference, not cells).
-# Mech conditioning via `scope_predictor='jensen_gap'`,
-# `min_vanilla_predictor=0.05` — only strata where vanilla actually
-# has bias > 0.05 (premise active) contribute. The bridge body
-# extracts the per-env Cohen's d panel and computes Pearson r on the
-# env-level covariate via `env_covariate_pearson_verdict`.
+# CLAIM 19 / 20 — cross-env link-power predictors. Multi-stratum
+# random-effects refactor (2026-05-12): replaced n=3-envs Pearson r
+# (brittle at small n, per `findings_link_power_polarity.md`) with
+# `meta_regression_unpaired_d`. Each env contributes MULTIPLE strata
+# (one per (total_steps, reward_scale, ...) config); the meta-
+# regression's between-stratum variance captures within-env config
+# heterogeneity, and the env-level covariate (effective_horizon,
+# argmax_entropy_late) slope is estimated from between-env variation
+# with proper SE. The pre-refactor brittleness manifested as r flipping
+# +0.999 → -0.85 when 30 new FR cells from `nstep_lambda_fourrooms`
+# arrived — that swing was within sampling noise but enough to change
+# the Pearson r at n=3 envs entirely.
 _LINK_POWER_BASE_SCOPE = (
     finite('q_divergence_score') & finite_lt('q_divergence_score', 1.0)
     & finite_gt('bootstrap_fraction', 0.5)
@@ -420,20 +420,20 @@ _LINK_POWER_BASE_SCOPE = (
 )
 
 
-# Env-level covariate values (empirical per-env means on the current
-# ddqn cache, pinned). Scalar form for
-# `env_covariate_pearson_verdict`. Update when data shifts.
-_EFFECTIVE_HORIZON_PER_ENV: dict[str, float] = {
-    'Acrobot-v1': 48.9,
-    'FourRooms-misc': 27.6,
-    'MountainCar-v0': 62.7,
+# Env-level covariates, broadcast to all strata with that env via
+# stratum_id[0]. Per-env empirical means on the current ddqn cache;
+# pin and update on substantive data shifts.
+_EFFECTIVE_HORIZON_PER_ENV: dict[str, dict[str, float]] = {
+    'Acrobot-v1': {'effective_horizon': 48.9},
+    'FourRooms-misc': {'effective_horizon': 27.6},
+    'MountainCar-v0': {'effective_horizon': 62.7},
 }
 
 
-_ARGMAX_ENTROPY_LATE_PER_ENV: dict[str, float] = {
-    'Asterix-MinAtar': 1.18,
-    'Breakout-MinAtar': 0.84,
-    'CartPole-v1': 0.69,
+_ARGMAX_ENTROPY_LATE_PER_ENV: dict[str, dict[str, float]] = {
+    'Asterix-MinAtar': {'argmax_entropy_late': 1.18},
+    'Breakout-MinAtar': {'argmax_entropy_late': 0.84},
+    'CartPole-v1': {'argmax_entropy_late': 0.69},
 }
 
 
@@ -446,34 +446,49 @@ _ARGMAX_ENTROPY_LATE_PER_ENV: dict[str, float] = {
     predicted_direction='a_gt_b',
 )
 def effh_predicts_link_power__reach_envs(
-    stratified_arm_diff_pooled: StratifiedArmDiffPooledResult,
+    meta_regression_unpaired_d: MetaRegressionResult,
     *,
     treatment_arm: str = DDQN_ARM,
     baseline_arm: str = VANILLA_ARM,
     source: str = 'eval_best_burst_mean',
-    stratify_by: tuple[str, ...] = ('env_name',),
+    stratify_by: tuple[str, ...] = (
+        'env_name', 'total_steps', 'reward_scale',
+    ),
     scope_predictor: str = 'jensen_gap',
     min_vanilla_predictor: float = 0.05,
-    env_covariate: dict[str, float] = _EFFECTIVE_HORIZON_PER_ENV,
-    r_threshold: float = 0.7,
-    min_envs: int = 3,
+    covariates_per_env: dict[str, dict[str, float]] = (
+        _EFFECTIVE_HORIZON_PER_ENV
+    ),
+    slope_threshold: float = 0.005,
+    min_strata: int = 3,
 ) -> Verdict:
-    """Cross-env link-power: env-level Pearson r between per-env
-    independent-samples Cohen's d (DDQN vs vanilla on
-    eval_best_burst_mean) and env-mean effective_horizon. REACH
-    cohort (Acrobot/FourRooms/MountainCar). Mech-conditioning:
-    only strata with vanilla mean jensen_gap > 0.05 (premise
-    active) contribute. HELD when r ≥ `r_threshold` AND
-    significant. n=3 underpowered for now; directionally r=+0.85
-    on cache → POW_INSUF until more REACH envs ingest."""
+    """Cross-env link-power via multi-stratum random-effects
+    meta-regression: each env contributes one Cohen's d per
+    (total_steps, reward_scale) config; effective_horizon
+    coefficient tests whether DDQN's outcome benefit grows with
+    eff_h across REACH envs (Acrobot/FourRooms/MountainCar).
+
+    HELD when β_eff_h ≥ `slope_threshold` AND significant.
+    Within-env replicates (multiple configs per env) provide
+    between-stratum variance so the slope's SE is tight; n_strata
+    typically 4-7 even with n=3 envs.
+
+    On the current cache (n_strata=4): β=-0.009, CI=[-0.041,
+    +0.023], p=0.35 → **POW_INSUF**. CI includes zero — can't
+    distinguish "no slope" from "small positive slope" from
+    "small negative slope." Pre-refactor r=+0.999 HELD was a
+    Type-I artifact at n=3 envs; this honest verdict reveals the
+    true power of the cross-env scaling test. The within-env
+    γ-sweep version (CLAIM 5) is the right shape for the
+    chain-depth story per `findings_gamma_sweep_three_regimes.md`."""
     del treatment_arm, baseline_arm, source, stratify_by
-    del scope_predictor, min_vanilla_predictor
-    return env_covariate_pearson_verdict(
-        stratified_arm_diff_pooled.per_stratum,
-        env_covariate,
+    del scope_predictor, min_vanilla_predictor, covariates_per_env
+    return meta_regression_coefficient_verdict(
+        meta_regression_unpaired_d,
+        'effective_horizon',
         sign=1,
-        threshold=r_threshold,
-        min_envs=min_envs,
+        threshold=slope_threshold,
+        min_strata=min_strata,
     )
 
 
@@ -486,34 +501,40 @@ def effh_predicts_link_power__reach_envs(
     predicted_direction='null',
 )
 def argmax_entropy_link_power_null__survive_envs(
-    stratified_arm_diff_pooled: StratifiedArmDiffPooledResult,
+    meta_regression_unpaired_d: MetaRegressionResult,
     *,
     treatment_arm: str = DDQN_ARM,
     baseline_arm: str = VANILLA_ARM,
     source: str = 'eval_best_burst_mean',
-    stratify_by: tuple[str, ...] = ('env_name',),
+    stratify_by: tuple[str, ...] = (
+        'env_name', 'total_steps', 'reward_scale',
+    ),
     scope_predictor: str = 'jensen_gap',
     min_vanilla_predictor: float = 0.05,
-    env_covariate: dict[str, float] = _ARGMAX_ENTROPY_LATE_PER_ENV,
-    null_r_ceiling: float = 0.3,
-    min_envs: int = 3,
+    covariates_per_env: dict[str, dict[str, float]] = (
+        _ARGMAX_ENTROPY_LATE_PER_ENV
+    ),
+    null_slope_ceiling: float = 0.5,
+    min_strata: int = 3,
 ) -> Verdict:
-    """Predicted-NULL form. Env-level SURVIVE cohort
-    (Asterix/Breakout/CartPole). Mech-conditioning via
-    `min_vanilla_predictor=0.05`. HELD when |r| < `null_r_ceiling`
-    AND non-significant (null confirmed); NO_EFFECT when slope is
-    significantly nonzero (null refuted). Memory's n=5 starting-
-    point HELD (Pearson +0.91 in the SIGNED form) was a different
-    claim shape on a different cache snapshot; the current null
-    framing is the post-fix companion to CLAIM 19."""
+    """Predicted-NULL form. SURVIVE cohort
+    (Asterix/Breakout/CartPole). Multi-stratum random-effects
+    meta-regression: argmax_entropy_late coefficient should be
+    null (|β| < `null_slope_ceiling` AND non-significant) —
+    argmaxH does NOT predict link power on SURVIVE.
+
+    HELD when null confirmed; NO_EFFECT when significantly
+    nonzero slope (null refuted). Memory's n=5 starting-point
+    HELD (Pearson +0.91 in the SIGNED form) was on a different
+    cache snapshot."""
     del treatment_arm, baseline_arm, source, stratify_by
-    del scope_predictor, min_vanilla_predictor
-    return env_covariate_pearson_verdict(
-        stratified_arm_diff_pooled.per_stratum,
-        env_covariate,
+    del scope_predictor, min_vanilla_predictor, covariates_per_env
+    return meta_regression_coefficient_verdict(
+        meta_regression_unpaired_d,
+        'argmax_entropy_late',
         sign=0,
-        threshold=null_r_ceiling,
-        min_envs=min_envs,
+        threshold=null_slope_ceiling,
+        min_strata=min_strata,
     )
 
 

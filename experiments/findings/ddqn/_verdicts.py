@@ -280,6 +280,68 @@ def env_covariate_pearson_verdict(
     )
 
 
+class _MetaRegressionCoefficient(Protocol):
+    @property
+    def name(self) -> str: ...
+    @property
+    def coefficient(self) -> float: ...
+    @property
+    def is_significant(self) -> bool: ...
+
+
+class _MetaRegressionResultLike(Protocol):
+    @property
+    def n_strata(self) -> int: ...
+    @property
+    def coefficients(self) -> tuple[_MetaRegressionCoefficient, ...]: ...
+
+
+def meta_regression_coefficient_verdict(
+    result: _MetaRegressionResultLike,
+    coef_name: str,
+    *,
+    sign: Literal[-1, 0, 1],
+    threshold: float,
+    min_strata: int = 3,
+) -> Verdict:
+    """Verdict on a named coefficient from a `MetaRegressionResult`.
+
+    `sign=+1`: HELD when `coef ≥ threshold` AND significant;
+    sign-flipped significant → NO_EFFECT.
+    `sign=-1`: mirror of +1.
+    `sign=0`: HELD when `|coef| < threshold` AND non-significant
+    (null confirmed); significant slope → NO_EFFECT.
+
+    POW_INSUF when n_strata < min_strata, coefficient missing /
+    NaN, or signed prediction isn't significant in either
+    direction."""
+    if result.n_strata < min_strata:
+        return Verdict.POWER_INSUFFICIENT
+    coef = next(
+        (c for c in result.coefficients if c.name == coef_name),
+        None,
+    )
+    if coef is None or math.isnan(coef.coefficient):
+        return Verdict.POWER_INSUFFICIENT
+    if sign == 0:
+        if abs(coef.coefficient) < threshold and not coef.is_significant:
+            return Verdict.HELD
+        if coef.is_significant and abs(coef.coefficient) > threshold:
+            return Verdict.NO_EFFECT
+        return Verdict.POWER_INSUFFICIENT
+    if sign > 0:
+        if coef.coefficient >= threshold and coef.is_significant:
+            return Verdict.HELD
+        if coef.coefficient <= -threshold and coef.is_significant:
+            return Verdict.NO_EFFECT
+        return Verdict.POWER_INSUFFICIENT
+    if coef.coefficient <= -threshold and coef.is_significant:
+        return Verdict.HELD
+    if coef.coefficient >= threshold and coef.is_significant:
+        return Verdict.NO_EFFECT
+    return Verdict.POWER_INSUFFICIENT
+
+
 def stratum_id_scaling_verdict(
     per_stratum: Sequence[_StratumDiffLike],
     *,
