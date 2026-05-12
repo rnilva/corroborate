@@ -1268,9 +1268,11 @@ random_common_cause_refutation}` on:
 | `placebo_refutation` (permuted treatment) | placebo ATE = +0.12 (1.4% of real) | **HELD** |
 | `random_common_cause_refutation` | drift = 0.0075 (synthetic confounder doesn't move estimate) | **HELD** |
 
-CausalGraph after `promote_bridged_evidence`: all three edges
-upgrade to `INTERVENTIONAL / causal_bridged`. State_coverage_kl
-is the first mediator on the CartPole HP corpus that survives
+CausalGraph: all three edges admit at INTERVENTIONAL /
+`causal_one_sided`, and they share extent identity
+`(source, target, extent_hash)` — the refutation-cluster query
+returns `supported`. State_coverage_kl is the first mediator on
+the CartPole HP corpus that survives
 *every* check the framework currently has:
 
 1. Reads-set jaccard with outcome's source (= 0; not tautological).

@@ -212,9 +212,9 @@ analysis triple authored as `@claim_bridge`s:
 # `runner.run(<bridges_module>, data=corpus)` evaluates
 # every bridge via `bridge.evaluate(b, cells)` → holds_when →
 # Verdict. The substrate can build a CausalGraph over the
-# resulting BridgeEvaluations and pass through
-# `promote_bridged_evidence` to upgrade pairs with ≥2
-# INTERVENTIONAL HELDs to causal_bridged.
+# resulting BridgeEvaluations and group edges by
+# `(source, target, extent_hash)` to query refutation clusters
+# (≥2 INTERVENTIONAL HELDs sharing extent corroborate the edge).
 ```
 
 When the dowhy triple HELDs *and* the meta-regression β is

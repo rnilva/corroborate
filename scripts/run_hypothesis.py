@@ -242,6 +242,9 @@ def _check_and_report(module: str) -> int:
     return 2
 
 
+_EMPTY_EXTENT_HASH = hash(frozenset[str]())
+
+
 def _print_verdicts(results: dict[str, BridgeEvaluation]) -> None:
     counts: dict[str, int] = {}
     refutation_counts: dict[tuple[str, str], int] = {}
@@ -252,6 +255,11 @@ def _print_verdicts(results: dict[str, BridgeEvaluation]) -> None:
     # UNCONSUMED_PRIMITIVES_AUDIT.md Round 2.
     violation_counts: dict[str, int] = {}
     n_with_violations = 0
+    # Extent clusters: bridges keyed by `(source_name, target_name,
+    # extent_hash)` admit identical cell-sets — refutation-cluster
+    # identity under extent-based grouping. Two bridges with the
+    # same key are corroborating the same edge on the same cells.
+    extent_clusters: dict[tuple[str, str, int], list[tuple[str, int]]] = {}
     for name, ev in results.items():
         v = ev.verdict.value
         counts[v] = counts.get(v, 0) + 1
@@ -272,6 +280,10 @@ def _print_verdicts(results: dict[str, BridgeEvaluation]) -> None:
             for flag in ev.assumption_violations:
                 violation_counts[flag] = violation_counts.get(flag, 0) + 1
             av_inline = f' [av: {"; ".join(ev.assumption_violations)}]'
+        cluster_key = (ev.source_name, ev.target_name, ev.extent_hash)
+        extent_clusters.setdefault(cluster_key, []).append(
+            (name, ev.n_cells_in_scope),
+        )
         print(f'{name:60s}  {v:24s}{cls}{av_inline}  {suffix}')
     print()
     print('verdict counts:')
@@ -289,6 +301,39 @@ def _print_verdicts(results: dict[str, BridgeEvaluation]) -> None:
         print(f'assumption violations: {n_with_violations} bridge(s)')
         for flag in sorted(violation_counts):
             print(f'  └── {flag:50s}  {violation_counts[flag]}')
+
+    # Extent clusters: report multi-bridge groups (refutation
+    # clusters or sibling-pair patterns) and the empty-extent group
+    # separately. Singletons are the default and don't need a
+    # roll-up. See `experiments/findings/ddqn/extent_clusters_smoke.py`
+    # for the design rationale.
+    multi = [(k, v) for k, v in extent_clusters.items() if len(v) >= 2]
+    empty_members = [
+        (name, v) for (_, _, h), members in extent_clusters.items()
+        for name, v in members
+        if h == _EMPTY_EXTENT_HASH
+    ]
+    if multi or empty_members:
+        print()
+        print(f'extent clusters: {len(multi)} multi-bridge group(s)')
+        for (src, tgt, h), members in sorted(
+            multi, key=lambda x: (-len(x[1]), x[0][:2]),
+        ):
+            n = members[0][1]
+            src_short = src if len(src) < 50 else src[:47] + '...'
+            tag = ' (empty-extent)' if h == _EMPTY_EXTENT_HASH else ''
+            print(
+                f'  ({len(members)} bridges, n_cells={n}){tag}  '
+                f'{src_short} → {tgt}',
+            )
+            for member_name, _ in members:
+                print(f'      {member_name}')
+        if empty_members:
+            n_empty = len(empty_members)
+            print(
+                f'  {n_empty} bridge(s) in empty-extent group(s) — '
+                f'scope admits zero cells on current cache.',
+            )
 
 
 def _summarize(result: object) -> str:

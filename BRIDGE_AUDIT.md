@@ -158,7 +158,7 @@ completion against a phantom bridge set is premature.**
 | Migration history | git log + commit message |
 | Frozen empirical readings (claim warrant) | `Prediction.reason` when the bundle lands |
 | Frozen empirical readings (non-warrant) | delete |
-| Section banners describing clusters | `# CLAIM N` comment; `claim_id: str` IFF audit leaves ≥ 3 clusters with ≥ 3 bridges |
+| Section banners describing clusters | `# CLAIM N` comment; clusters are derived from extent identity at evaluation, not from author labels |
 
 "Delete to git log alone" loses content the next researcher
 needs to find by topic, not by date. Migrate to a typed

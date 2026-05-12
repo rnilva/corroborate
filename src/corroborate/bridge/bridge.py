@@ -375,7 +375,23 @@ class BridgeEvaluation:
     is prefixed with `<fixture_name>:` so the audit reader can
     trace which fixture surfaced which warning. Empty when no
     fixture's result carried any flags. Propagates through the
-    runner report into the run.json audit trail."""
+    runner report into the run.json audit trail.
+
+    `source_name` / `target_name`: mirror of `Bridge.source_name` /
+    `Bridge.target_name` carried on the evaluation result so
+    downstream consumers (extent-cluster grouping, walks) can key
+    by edge endpoints without re-loading the Bridge.
+
+    `extent_hash`: hash of the frozenset of cell IDs admitted by
+    the bridge's effective scope (`bridge.scope ∧ module_scope`).
+    Two bridges with the same `(source_name, target_name,
+    extent_hash)` admit identical cell-sets on the current cache
+    — the extent-based cluster identity proposed at the
+    findings-walk layer. Empty-scope bridges share
+    `hash(frozenset())`, honestly reflecting "framework cannot
+    distinguish these on this cache." Cluster identity is
+    therefore corpus-dependent by design (bridge verdicts already
+    are; cluster identity inherits the dependency)."""
     bridge_name: str
     verdict: Verdict
     analysis_results: Mapping[str, object]
@@ -384,6 +400,9 @@ class BridgeEvaluation:
     n_cells_in_scope: int = -1
     assumption_violations: tuple[str, ...] = ()
     refutation_class: 'RefutationClass | None' = None
+    source_name: str = ''
+    target_name: str = ''
+    extent_hash: int = 0
     """**Sub-classification of NO_EFFECT** (or, more rarely, of
     POWER_INSUFFICIENT). Bridge bodies that distinguish "predicted
     direction, observed opposite" (`SIGN_FLIP`) from "predicted
@@ -766,6 +785,16 @@ def evaluate(
             if df.height > 0 else []
         )
     n_cells_in_scope = len(filtered_cells)
+    # extent_hash: identity of the bridge's admitted cell-set on
+    # the current cache. Frozenset-of-ids hash; two bridges with
+    # identical sets get identical hashes. Empty extent → constant
+    # hash, honestly reflecting "indistinguishable on this cache."
+    admitted_ids: list[str] = []
+    for c in filtered_cells:
+        cid = c.get('id')
+        if isinstance(cid, str):
+            admitted_ids.append(cid)
+    extent_hash = hash(frozenset(admitted_ids))
     # Run admission gates BEFORE the bridge body. Auto-gates
     # (typed-contract guards, exogenous-source/scope, etc.) are
     # always-on; per-bridge `gates=(...)` are appended. BLOCK-level
@@ -785,6 +814,9 @@ def evaluate(
                 warnings=tuple(warnings),
                 blocked_by=result,
                 n_cells_in_scope=n_cells_in_scope,
+                source_name=bridge.source_name,
+                target_name=bridge.target_name,
+                extent_hash=extent_hash,
             )
         warnings.append(result)
     # Contrast resolution:
@@ -858,6 +890,9 @@ def evaluate(
         n_cells_in_scope=n_cells_in_scope,
         assumption_violations=tuple(assumption_flags),
         refutation_class=refutation_class,
+        source_name=bridge.source_name,
+        target_name=bridge.target_name,
+        extent_hash=extent_hash,
     )
 
 

@@ -19,11 +19,13 @@ claim is the substrate-author's primary commitment. See
 
 **Organizing principle**: a hypothesis is a causal graph, not a
 claim. Bridges contribute edges; the hypothesis is the graph.
-Causal-mechanism claims live at the graph level, derived from
-edge-promotion (`promote_bridged_evidence`), NOT at the
-single-bridge level. See `HYPOTHESIS_AS_GRAPH.md` for the
-authoring discipline this entails (bridge naming, refutation
-clusters, scope as edge-identity).
+Cluster-shaped causal claims (a refutation triple, a sibling
+mean/median pair) live at the graph level — queried by extent
+identity `(source, target, extent_hash)` over the post-evaluated
+graph, NOT decided by a central aggregator. See
+`HYPOTHESIS_AS_GRAPH.md` for the authoring discipline this
+entails (bridge naming, refutation clusters via shared scope
+predicates, scope-as-extent).
 
 ## Typing discipline (load-bearing)
 

@@ -13,30 +13,37 @@ Nodes are measurable / record-key names (strings). Edges are
   via `.promote()`, and only INTERVENTIONAL → ASSOCIATIONAL via
   `.demote()`.
 - `evidentiary_level: str` — the verdict-derived label
-  ('refuted' / 'correlational' / 'causal_one_sided' /
-  'causal_bridged'). Lifecycle the bridge is in.
+  ('refuted' / 'correlational' / 'causal_one_sided'). Lifecycle
+  the bridge is in.
 - `ate` / `rho` / `pvalue` / `n_observations` — typed evidence
   fields. Intervention edges populate `ate` + `n_observations`;
   coupling edges populate `rho` + `pvalue` + `n_observations`.
+- `extent_hash` — frozenset-of-admitted-cell-ids hash carried
+  from `BridgeEvaluation.extent_hash`. Two edges with the same
+  `(source, target, extent_hash)` were evaluated against identical
+  cell-sets — the cluster-identity primitive. Authors group their
+  refutation clusters by sharing scope predicates (extracted as
+  module-level constants); the framework derives cluster identity
+  empirically rather than from author labels.
 
 `compose_direction` and `chain_tier` walk an edge sequence to
 produce path-level direction + tier — chain composition for
-admissibility / promotion checks.
+admissibility checks along paths.
 
-`promote_bridged_evidence(g)` is the post-pass: for any (source,
-target) pair with ≥2 `causal_one_sided` edges (≥2 INTERVENTIONAL
-HELD bridges under the same DAG), those edges promote to
-`causal_bridged`. Reading: do-calculus inference is corroborated
-by an INDEPENDENT bridge — typically an estimate plus a refuter —
-not just an estimate matched by a correlational coupling."""
+**No auto-promotion.** Refutation-cluster identity is queryable
+post-evaluation via `(source, target, extent_hash)` grouping
+(authored or in walks). Per-bridge `evidentiary_level` carries
+the Pearl-rung admit fact; cluster-level "this edge has multiple
+INTERVENTIONAL HELD bridges sharing an extent" is a structural
+query authors compose, not a central aggregator on the graph."""
 from __future__ import annotations
 
 from collections.abc import Iterable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from enum import Enum, IntEnum
 from typing import TYPE_CHECKING, Literal, override
 
-from corroborate.graph.graph import Edge, Graph
+from corroborate.graph.graph import Graph
 
 if TYPE_CHECKING:
     # Forward import: `claim_bridge` depends on `causal_graph`
@@ -137,8 +144,40 @@ class Tier(IntEnum):
 
 EvidentiaryLevel = Literal[
     'unevaluated',
-    'refuted', 'correlational', 'causal_one_sided', 'causal_bridged',
+    'refuted', 'correlational', 'causal_one_sided',
 ]
+
+
+# ============ EffectStats — canonical effect summary ============
+
+@dataclass(frozen=True, slots=True)
+class EffectStats:
+    """Typed effect summary committed by each analysis-result
+    class. The post-evaluation graph stamper reads the first
+    non-None `effect_stats` from a BridgeEvaluation's
+    `analysis_results` to populate the BridgeEdge's quantitative
+    fields.
+
+    Field semantics:
+    - `ate`: effect-size at interventional rung (Cohen's d /
+      Hedges' g / backdoor ATE / mean-difference). Sign carries
+      direction.
+    - `rho`: correlation at associational rung (Pearson r /
+      Spearman ρ / pooled partial-r). Sign carries direction.
+    - `pvalue`: significance p-value where the analysis primitive
+      computes one. `None` when not applicable.
+    - `n_observations`: sample size used by the primitive's
+      statistical test (n_pairs / n_strata / n_observations
+      depending on result shape).
+
+    Container/sidecar result types (StratumEffectPanel,
+    RefutationResult) commit `effect_stats=None` because they
+    don't carry a single canonical effect — see each class's
+    field-level comment for the per-class rationale."""
+    ate: float | None = None
+    rho: float | None = None
+    pvalue: float | None = None
+    n_observations: int | None = None
 
 
 # ============ BridgeEdge — graph edge metadata ============
@@ -156,8 +195,9 @@ class BridgeEdge:
     HELD.
     `evidentiary_level` — 'refuted' for non-HELD;
     'causal_one_sided' for INTERVENTIONAL admit; 'correlational'
-    for ASSOCIATIONAL admit; 'causal_bridged' is set only by
-    `promote_bridged_evidence` post-pass.
+    for ASSOCIATIONAL admit. No auto-promotion: cluster-level
+    corroboration is a structural query over the post-evaluated
+    graph, not a baked-in level.
 
     `ate` — effect-size-g for intervention edges (paired Hedges'
     g across cells in the comparison row). None for coupling
@@ -172,8 +212,15 @@ class BridgeEdge:
 
     `feedback` — set on edges that intentionally participate in
     cycles. Graph walks use this to break cycle traversal.
-    `condition_desc` — optional condition annotation (e.g.
-    'when reward_scale > 0')."""
+
+    `extent_hash` — `hash(frozenset(admitted_cell_ids))` carried
+    from `BridgeEvaluation.extent_hash`. Two edges with the same
+    `(source, target, extent_hash)` admit identical cell-sets on
+    the cache that produced them — the cluster identity primitive.
+    Empty extent → all empties share `hash(frozenset())`, honestly
+    reflecting "framework cannot distinguish these on this cache."
+    Cluster identity is corpus-dependent by design (bridge verdicts
+    already are; cluster identity inherits the dependency)."""
     bridge_name: str
     direction: Direction
     tier: Tier
@@ -183,7 +230,7 @@ class BridgeEdge:
     pvalue: float | None = None
     n_observations: int | None = None
     feedback: bool = False
-    condition_desc: str | None = None
+    extent_hash: int = 0
 
     @override
     def __str__(self) -> str:
@@ -272,57 +319,8 @@ def authored_graph(
     return g
 
 
-# ============ Bridged-evidence promotion ============
-
-def promote_bridged_evidence(g: CausalGraph) -> CausalGraph:
-    """Post-pass: for each `(source, target)` pair with ≥2
-    `causal_one_sided` edges (≥2 INTERVENTIONAL HELD bridges
-    under the same DAG), promote those edges to `causal_bridged`.
-
-    Pearl-ladder reading: bridged evidence means do-calculus
-    inference is corroborated by an INDEPENDENT bridge — typically
-    an estimate (backdoor / IV) plus a refuter (placebo /
-    random-common-cause) — not just an estimate matched by a
-    correlational coupling.
-
-    Correlational edges (`Tier.ASSOCIATIONAL`) on the same pair do
-    NOT count toward bridging and stay `'correlational'`. They're
-    real evidence at a lower rung; conflating them with
-    interventional corroboration would over-promote.
-
-    Conservative wrt refutation: a `'refuted'` edge on the same
-    pair does not demote the others — refutation flows through
-    the per-result pass already (the refuted edge carries
-    `evidentiary_level='refuted'` on its own metadata)."""
-    by_pair: dict[tuple[str, str], list[BridgeEdge]] = {}
-    for e in g.edges:
-        by_pair.setdefault((e.source, e.target), []).append(e.metadata)
-
-    upgrades: set[tuple[str, str]] = set()
-    for pair, edges in by_pair.items():
-        interventional_admits = [
-            m for m in edges
-            if m.evidentiary_level == 'causal_one_sided'
-        ]
-        if len(interventional_admits) >= 2:
-            upgrades.add(pair)
-
-    if not upgrades:
-        return g
-
-    new_edges: list[Edge[str, BridgeEdge]] = []
-    for e in g.edges:
-        if (
-            (e.source, e.target) in upgrades
-            and e.metadata.evidentiary_level == 'causal_one_sided'
-        ):
-            promoted_md = replace(
-                e.metadata, evidentiary_level='causal_bridged',
-            )
-            new_edges.append(Edge(
-                source=e.source, target=e.target,
-                metadata=promoted_md,
-            ))
-        else:
-            new_edges.append(e)
-    return replace(g, edges=tuple(new_edges))
+# Auto-promotion removed 2026-05-12: cluster-level corroboration is
+# a query over post-evaluated graphs via `(source, target,
+# extent_hash)` grouping, not a central aggregator. See
+# UNCONSUMED_PRIMITIVES_AUDIT.md Round 3 (Option B) and
+# HYPOTHESIS_AS_GRAPH.md.

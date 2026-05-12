@@ -355,14 +355,18 @@ The verdict-walk surface (`hypothesis_subgraph_verdict`,
 was retired in Phase 5 of the verdict-consolidation refactor.
 The framework's verdict-time contract is now exclusively
 per-bridge `evaluate(b, cells)` driven by the bridge author's
-`holds_when` body. `promote_bridged_evidence` survives in
-`graph/causal.py` as a post-walk graph-promotion helper for
-substrates that build a `CausalGraph` over their bridges.
+`holds_when` body. `BridgeEvaluation` carries `extent_hash` =
+`hash(frozenset(admitted_cell_ids))`; substrates that build a
+`CausalGraph` over their bridges group edges by
+`(source, target, extent_hash)` to query refutation clusters.
+The auto-promote helper (`promote_bridged_evidence`) was deleted
+2026-05-12 — cluster-level corroboration is a query, not an
+aggregation.
 
 **Modules**: `runner/runner.py:run`,
 `bridge/bridge.py:evaluate`,
 `graph/causal.py.{Direction, Tier, BridgeEdge,
-promote_bridged_evidence}`.
+authored_graph}`.
 
 **Status**: **live**.
 

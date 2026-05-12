@@ -2,11 +2,17 @@
 
 ## Status
 
-Open plan. Replaces the archived `BRIDGE_PRIMITIVES_MANIFEST.md`
-(see `docs/archive/`). The archived manifest tried to add new
-primitives; the second-round review surfaced that the framework
-already has typed surfaces — they just lack downstream consumers.
-Wiring work, not new types.
+All three rounds CLOSED 2026-05-12. Replaces the archived
+`BRIDGE_PRIMITIVES_MANIFEST.md` (see `docs/archive/`). The
+archived manifest tried to add new primitives; the second-round
+review surfaced that the framework already has typed surfaces —
+they just lack downstream consumers. Wiring work, not new types.
+
+- Round 1: `scripts/audit_claim_graph.py` (commit `2a57798`).
+- Round 2: `assumption_violations` rendering (commit `a6e132b`).
+- Round 3: extent-based cluster identity (`BridgeEvaluation.
+  extent_hash` + renderer + walks). See Round 3 section for the
+  full resolution.
 
 ## Method
 
@@ -89,7 +95,7 @@ Three rounds. Each round picks one dead/under-consumed primitive
 and writes a concrete consumer. Order picked by "what surfaces the
 most useful operational signal per LOC":
 
-### Round 1 — Wire `authored_graph` into a claim-graph audit script
+### Round 1 — `authored_graph` audit script — CLOSED 2026-05-12
 
 **Where**: new `scripts/audit_claim_graph.py`.
 
@@ -117,7 +123,7 @@ becomes the second use case the manifest review was demanding).
 audit. Either no surprises (we learn the graph is structurally
 sound), or we get specific structural findings worth acting on.
 
-### Round 2 — Differentiate `assumption_violations` in the snapshot renderer
+### Round 2 — Differentiate `assumption_violations` — CLOSED 2026-05-12
 
 **Where**: `scripts/run_hypothesis.py` (the CLI verdict landscape
 printer) and the `*.run.json` schema.
@@ -141,20 +147,46 @@ schema change.
 assumption-violation flags next to relevant bridges. Snapshot drift
 test still passes (additive output).
 
-### Round 3 — Wire or prune `BridgeEdge.condition_desc`
+### Round 3 — `BridgeEdge.condition_desc` decision — CLOSED 2026-05-12
 
-**Decision point**: after rounds 1 and 2, revisit whether
-`condition_desc` has a real use. If round 1's audit needs to tag
-edges with their partition-axis (n_step=1 vs n_step=10, polarity
-GOAL vs SURVIVAL), `condition_desc` is the channel — set it from
-the bridge author or derive from scope. If not, prune the field.
+**Resolution**: Option B (drop auto-promotion) + extent-based
+cluster identity at the evaluation layer.
 
-Per the no-proliferation rule: don't add data to a dead field
-*hoping* for a use case. Either round 1 produces the use case or
-the field gets removed.
+What we deleted:
+- `promote_bridged_evidence` (zero callers outside `causal.py`)
+- `'causal_bridged'` from the `EvidentiaryLevel` literal
+- `BridgeEdge.condition_desc` (typed-but-unwired)
+- `BridgeEdge.claim_id` (typed-but-unwired)
 
-**Cost**: either 1 field-setter + audit-script consumer, or
-1 field deletion.
+What we added:
+- `BridgeEvaluation.extent_hash: int` — `hash(frozenset(
+  admitted_cell_ids))` per bridge, populated at eval time in
+  `bridge.evaluate()`.
+- `BridgeReportEntry.extent_hash` — persisted to `*.run.json`.
+- `BridgeEdge.extent_hash` — carried on the graph edge for
+  post-eval graph walks.
+- `scripts/run_hypothesis.py` extent-cluster rollup — surfaces
+  `(source, target, extent_hash)` groups in the standard run
+  output.
+
+Why the design moved: scope-stringify (`condition_desc =
+str(scope)`) was string-stability-fragile. Author-declared
+`claim_id` was magic strings + author proliferation. Extent
+identity is derived structurally from the data the scope
+admits; identical extents on the current cache form a cluster,
+the framework doesn't pre-decide intent vs extent. Empty-extent
+collapse (multiple AWAITING-DATA bridges sharing
+`hash(frozenset())`) is honest — the framework can't distinguish
+them on this cache, and the diagnostic surfaces that fact.
+
+The graph is corpus-derived anyway (verdicts depend on the
+cache); cluster identity inheriting corpus-dependence is
+consistent, not a new dynamic layer. `Graph.diff` is the
+existing tool for tracking how clusters reshape across cache
+snapshots — drop-in for cross-version analysis.
+
+**Cost**: ~110 LOC framework deletion + ~85 LOC additive renderer
++ persistence. Net: cleaner machinery.
 
 ## Out of scope
 
