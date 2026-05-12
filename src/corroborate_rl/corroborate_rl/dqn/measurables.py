@@ -2245,6 +2245,16 @@ def dqn_default_measurables() -> tuple[
         # (vs jensen_gap) — captures the algorithmic side of DDQN's
         # mechanism distinct from cumulative-bias measures.
         greedy_match_late,
+        # Raw (undiscounted) eval-return measurables — γ-invariant
+        # policy-quality metrics for cross-γ / cross-env bridges.
+        # `mc_return_raw` is the per-(burst, episode) array;
+        # `mc_return_raw__mean_axis_-1` the per-burst mean;
+        # `eval_best_burst_raw_mean` the best-burst scalar
+        # (counterparts of `mc_return`, `mc_return__mean_axis_-1`,
+        # `eval_best_burst_mean`).
+        mc_return_raw,
+        mc_return_raw_per_burst_mean,
+        eval_best_burst_raw_mean,
     )
 
 
