@@ -245,6 +245,13 @@ def _check_and_report(module: str) -> int:
 def _print_verdicts(results: dict[str, BridgeEvaluation]) -> None:
     counts: dict[str, int] = {}
     refutation_counts: dict[tuple[str, str], int] = {}
+    # `assumption_violations` are pre-prefixed with `<fixture>: ` by
+    # the bridge layer (bridge.py:846-859). Roll-up groups by the
+    # raw fixture:flag string so the operator can see both WHERE
+    # the flag fired and WHAT it was. Wiring per
+    # UNCONSUMED_PRIMITIVES_AUDIT.md Round 2.
+    violation_counts: dict[str, int] = {}
+    n_with_violations = 0
     for name, ev in results.items():
         v = ev.verdict.value
         counts[v] = counts.get(v, 0) + 1
@@ -259,7 +266,13 @@ def _print_verdicts(results: dict[str, BridgeEvaluation]) -> None:
             f' ({ev.refutation_class.value})'
             if ev.refutation_class is not None else ''
         )
-        print(f'{name:60s}  {v:24s}{cls}  {suffix}')
+        av_inline = ''
+        if ev.assumption_violations:
+            n_with_violations += 1
+            for flag in ev.assumption_violations:
+                violation_counts[flag] = violation_counts.get(flag, 0) + 1
+            av_inline = f' [av: {"; ".join(ev.assumption_violations)}]'
+        print(f'{name:60s}  {v:24s}{cls}{av_inline}  {suffix}')
     print()
     print('verdict counts:')
     for k in sorted(counts):
@@ -271,6 +284,11 @@ def _print_verdicts(results: dict[str, BridgeEvaluation]) -> None:
         print(f'  {k:24s}  {counts[k]}')
         for cls, n in sub:
             print(f'    └── {cls:20s}  {n}')
+    if n_with_violations:
+        print()
+        print(f'assumption violations: {n_with_violations} bridge(s)')
+        for flag in sorted(violation_counts):
+            print(f'  └── {flag:50s}  {violation_counts[flag]}')
 
 
 def _summarize(result: object) -> str:
