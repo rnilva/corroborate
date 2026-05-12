@@ -25,6 +25,9 @@ from experiments.findings.ddqn.within_env import (
 EXPECTED: ClusterVerdict = ClusterVerdict.REFUTED
 
 
+BLOCKED_ON: str = ''
+
+
 BRIDGES: tuple[Bridge, ...] = (
     metamaze_link_steeper_at_high_gamma,
     metamaze_link_steeper_at_high_gamma__median,

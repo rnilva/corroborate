@@ -372,25 +372,43 @@ def _print_verdicts(
     if findings:
         print()
         drift_count = 0
+        blocked_count = 0
         for f in findings:
             verdict = composed_verdict(g, bridges=f.BRIDGES)
             drift = verdict != f.EXPECTED
+            blocked = bool(f.BLOCKED_ON)
             if drift:
                 drift_count += 1
-            drift_marker = ' ← DRIFT' if drift else ''
+            if blocked:
+                blocked_count += 1
+            # `← DRIFT` = verdict CHANGED relative to author's
+            # pinned state (regression or improvement — both
+            # warrant attention). `[blocked]` = state matches
+            # EXPECTED but the finding is intentionally pinned
+            # to a sub-optimal state pending data; quiet status,
+            # no investigation needed.
+            if drift:
+                state_marker = ' ← DRIFT'
+            elif blocked:
+                state_marker = ' [blocked]'
+            else:
+                state_marker = ''
             n_bridges = len(f.BRIDGES)
             short_name = f.__name__.rsplit('.', 1)[-1]
             print(
                 f'  {verdict.value:14s}  ({n_bridges} bridges)  '
-                f'{short_name}{drift_marker}',
+                f'{short_name}{state_marker}',
             )
             if drift:
                 doc = (f.__doc__ or '').strip().split('\n', 1)[0]
                 print(f'      expected: {f.EXPECTED.value}')
                 if doc:
                     print(f'      claim:    {doc}')
+            if blocked:
+                print(f'      blocked-on: {f.BLOCKED_ON}')
         print(
-            f'findings: {len(findings)} declared, {drift_count} drift',
+            f'findings: {len(findings)} declared, '
+            f'{drift_count} drift, {blocked_count} blocked',
         )
 
 

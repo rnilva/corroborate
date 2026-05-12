@@ -45,18 +45,34 @@ class Finding(Protocol):
 
     - `EXPECTED: ClusterVerdict` — verdict the author asserts;
       drift detection compares against the actual `composed_verdict`
-      against the parent's post-eval graph.
+      result. **`EXPECTED` pins the EMPIRICAL state, not the
+      theoretical claim.** If the current cache can't decisively
+      land the theoretical claim's verdict (data still landing,
+      bridges authored but corpus thin, …), the author pins
+      `EXPECTED` to whatever the framework actually computes
+      *today* and names the gap in `BLOCKED_ON`. Drift then fires
+      iff state CHANGES — improvement OR regression — both of
+      which warrant operator attention.
     - `BRIDGES: tuple[Bridge, ...]` — the subgraph specification:
       which bridges of the parent `Hypothesis.BRIDGES` are in this
       finding. Imported by Python name so a bridge rename is an
       `ImportError` at load, not silent drift.
+    - `BLOCKED_ON: str` — non-empty when `EXPECTED` doesn't match
+      the theoretical claim because data hasn't caught up. Names
+      the gap (which corpora are missing, which CIs aren't tight
+      yet, …). Empty when `EXPECTED` matches the theoretical
+      claim directly. Renderer surfaces this so operators
+      reading drift can tell "regression-now-occurring" from
+      "permanent-state-pending-on-data."
     - `__name__: str` — Python identity (module's dotted path).
 
-    Prose claims live in the module docstring — not a Protocol
-    field, because no framework operation reads them; the renderer
-    quotes `__doc__` first line when surfacing drift."""
+    Prose claim (the theoretical assertion) lives in the module
+    docstring — not a Protocol field, because no framework
+    operation needs to compare against it; the renderer quotes
+    `__doc__` first line as context."""
     EXPECTED: ClusterVerdict
     BRIDGES: tuple[Bridge, ...]
+    BLOCKED_ON: str
     __name__: str
 
 
@@ -121,8 +137,10 @@ def run_finding(mod: ModuleType, *, repo_root: Path | None = None) -> bool:
     doc = (mod.__doc__ or '').strip().split('\n', 1)[0]
 
     print(f'{short_name}:')
-    print(f'  doc:      {doc}')
-    print(f'  verdict:  {verdict.value}')
-    print(f'  expected: {mod.EXPECTED.value}')
-    print(f'  drift:    {drift}')
+    print(f'  doc:        {doc}')
+    print(f'  verdict:    {verdict.value}')
+    print(f'  expected:   {mod.EXPECTED.value}')
+    print(f'  drift:      {drift}')
+    if mod.BLOCKED_ON:
+        print(f'  blocked-on: {mod.BLOCKED_ON}')
     return not drift

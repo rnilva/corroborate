@@ -4,13 +4,14 @@ generalize beyond the underlearning regime of FourRooms.
 
 Hand-roll #3 — asymmetric envelope across DIFFERENT scopes
 (per-env). Bridges share `(do(DDQN), outcome_native)` but not
-extent; they form an envelope, not a cluster. Same Finding
-Protocol surface as REACH and MetaMaze — `composed_verdict`
-doesn't care whether bridges happen to share extent.
+extent; they form an envelope, not a cluster.
 
-Expected SUPPORTED. Postfix cache currently has the two null
-sides at POWER_INSUFFICIENT (CIs span the ±0.2 ceiling), so the
-envelope walks UNDERPOWERED — honest drift signal."""
+Theoretical claim is SUPPORTED (positive HELD on FR + null HELDs
+on Acrobot/CartPole). `EXPECTED` is pinned to the *current
+empirical state* (UNDERPOWERED) so drift fires only on state
+change. `BLOCKED_ON` documents the gap: postfix cache has the
+two null sides at POWER_INSUFFICIENT (CIs span the ±0.2 ceiling
+at n=60); landing them at HELD needs more cells."""
 from __future__ import annotations
 
 import sys
@@ -26,7 +27,17 @@ from experiments.findings.ddqn.rs_rescue import (
 )
 
 
-EXPECTED: ClusterVerdict = ClusterVerdict.SUPPORTED
+EXPECTED: ClusterVerdict = ClusterVerdict.UNDERPOWERED
+
+
+BLOCKED_ON: str = (
+    'Acrobot/CartPole rs=0.1 null sides are POWER_INSUFFICIENT '
+    '(CIs span ±0.2 at n=60). Theoretical claim asserts SUPPORTED '
+    'envelope; data needs ~n=240 per env to land nulls at HELD. '
+    'When the cache gains those cells, this finding will drift '
+    'from UNDERPOWERED → SUPPORTED — author update: flip EXPECTED '
+    'and clear BLOCKED_ON.'
+)
 
 
 BRIDGES: tuple[Bridge, ...] = (
