@@ -5,16 +5,23 @@ Migrated from the single-file `ddqn_universe.py` (deleted
 theoretical unit; the four private files (`_arms`, `_scope`,
 `_verdicts`, `_common`) hold sub-module-shared constants.
 
-The hypothesis runner reads three module-level names from this
+The hypothesis runner reads four module-level names from this
 package: `CLAIM` (outermost claim for endogeneity gating),
-`MODULE_SCOPE` (AND-combined into every bridge's scope), and
+`MODULE_SCOPE` (AND-combined into every bridge's scope),
 `BRIDGES` (the closure of bridge declarations evaluated against
-the per-module cache `experiments/data/cache/ddqn.parquet`)."""
+the per-module cache `experiments/data/cache/ddqn.parquet`), and
+`FINDINGS` (cluster-shaped claims authored against this
+hypothesis's post-eval graph)."""
 from __future__ import annotations
 
 import corroborate.analyses  # pyright: ignore[reportUnusedImport]  # populate registry
 import corroborate_rl.dqn.measurables  # pyright: ignore[reportUnusedImport]  # populate measurable registry
 
+from experiments.findings.ddqn import (
+    finding_metamaze_gamma_amplification as _FINDING_METAMAZE,
+    finding_reach_bias_link as _FINDING_REACH,
+    finding_rs01_rescue_envelope as _FINDING_RS01,
+)
 from experiments.findings.ddqn._arms import INTERVENTION as INTERVENTION
 from experiments.findings.ddqn._common import CLAIM as CLAIM
 from experiments.findings.ddqn._scope import MODULE_SCOPE as MODULE_SCOPE
@@ -35,18 +42,6 @@ BRIDGES = (
     *_N_STEP,
     *_BIAS_CORRECTION,
     *_MEDIATION,
-)
-
-
-# Findings — imported AFTER BRIDGES so finding-modules' lookup of
-# this package (`HYPOTHESIS.BRIDGES`) resolves to the fully-built
-# tuple. Cluster-shaped claims that this hypothesis's post-eval
-# graph carries; the framework's renderer + Finding consumer
-# iterate this tuple.
-from experiments.findings.ddqn import (  # noqa: E402
-    finding_metamaze_gamma_amplification as _FINDING_METAMAZE,
-    finding_reach_bias_link as _FINDING_REACH,
-    finding_rs01_rescue_envelope as _FINDING_RS01,
 )
 
 

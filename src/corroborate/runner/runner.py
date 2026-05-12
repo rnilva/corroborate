@@ -111,13 +111,15 @@ def _validate_hypothesis(h: object) -> Hypothesis:
     `BRIDGES` element is a `Bridge`. Raises `TypeError` on shape
     errors. Both Python modules and class-based hypotheses
     satisfy the Protocol structurally as long as they expose
-    `INTERVENTION: DoEffect`, `BRIDGES: tuple[Bridge, ...]`, and
+    `INTERVENTION: DoEffect`, `BRIDGES: tuple[Bridge, ...]`,
+    `FINDINGS: tuple[Finding, ...]` (empty if no findings), and
     `__name__: str`."""
     if not isinstance(h, Hypothesis):
         raise TypeError(
             f'{type(h).__name__} does not satisfy the Hypothesis '
             f'Protocol: missing one of `INTERVENTION: DoEffect`, '
-            f'`BRIDGES: tuple[Bridge, ...]`, `__name__: str` at the '
+            f'`BRIDGES: tuple[Bridge, ...]`, '
+            f'`FINDINGS: tuple[Finding, ...]`, `__name__: str` at the '
             f'module / class level.',
         )
     # `runtime_checkable.__instancecheck__` only validates attribute

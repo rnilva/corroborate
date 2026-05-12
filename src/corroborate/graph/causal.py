@@ -366,13 +366,20 @@ class ClusterVerdict(Enum):
 
     Mirrors the framework's three-verdict-not-binary discipline at
     the cluster level: SUPPORTED / REFUTED / UNDERPOWERED, plus
-    EMPTY_EXTENT for clusters whose member bridges all admit zero
-    cells on the current cache (the framework cannot empirically
-    distinguish them)."""
+
+    - EMPTY_EXTENT for clusters whose member bridges all admit
+      zero cells on the current cache (the framework cannot
+      empirically distinguish them).
+    - SHAPE_MISMATCH when the bridges named in a Finding don't
+      all resolve to edges in the post-evaluated graph (rename,
+      delete, or scope refactor — author's declaration drifted
+      from the substrate); distinct from UNDERPOWERED so the
+      operator knows the failure mode is structural, not data."""
     SUPPORTED = 'supported'
     REFUTED = 'refuted'
     UNDERPOWERED = 'underpowered'
     EMPTY_EXTENT = 'empty_extent'
+    SHAPE_MISMATCH = 'shape_mismatch'
 
 
 _EMPTY_EXTENT_HASH = hash(frozenset[str]())
@@ -437,14 +444,18 @@ def composed_verdict(
     Single helper for cluster- and envelope-shaped Findings —
     cluster integrity (extent uniformity) is a separate concern
     surfaced by the `run_hypothesis.py` cluster rollup, not
-    re-checked here. UNDERPOWERED on len-mismatch (one or more
-    declared bridges absent from graph — possible when a bridge
-    was authored but its hypothesis hasn't been re-evaluated)."""
+    re-checked here.
+
+    SHAPE_MISMATCH (not UNDERPOWERED) on len-mismatch: a named
+    bridge missing from the graph is a structural drift signal,
+    distinct from "data inconclusive across present bridges."
+    Operators reading the rollup can tell whether the fix is
+    "rename / re-author bridge" or "wait for data to land."""
     expected_names = {b.name for b in bridges}
     found = tuple(
         e.metadata for e in g.edges
         if e.metadata.bridge_name in expected_names
     )
     if len(found) != len(expected_names):
-        return ClusterVerdict.UNDERPOWERED
+        return ClusterVerdict.SHAPE_MISMATCH
     return cluster_verdict(found)

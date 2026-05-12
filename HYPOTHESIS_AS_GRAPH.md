@@ -173,36 +173,49 @@ def bias_channel_supported(g: CausalGraph) -> bool:
 
 Cluster-shaped claims compose the same way:
 
+A claim like "the REACH bias-correction link cluster is
+corroborated" is authored as a `Finding` module — the framework's
+typed contract at `corroborate.core.finding.Finding`. The author
+declares which bridges support the claim; the framework computes
+the verdict via `composed_verdict`:
+
 ```python
-def reach_link_corroborated(g: CausalGraph) -> bool:
-    """Is the REACH bias-correction link cluster supported?
-    Cluster is the set of all edges sharing
-    (jensen_gap, eval_best_burst_mean, REACH_extent_hash)."""
-    cluster = [
-        e for e in g.edges_between('jensen_gap', 'eval_best_burst_mean')
-        # Cluster identity = same extent_hash
-        if e.metadata.extent_hash == REACH_EXTENT_HASH
-    ]
-    return (
-        len(cluster) >= 2
-        and all(e.metadata.evidentiary_level in
-                ('correlational', 'causal_one_sided') for e in cluster)
-    )
+# experiments/findings/ddqn/finding_reach_bias_link.py
+"""REACH bias-correction link is causally corroborated."""
+from corroborate.graph.causal import ClusterVerdict
+from experiments.findings.ddqn.bias_correction import (
+    reach_link_backdoor_ate_negative,
+    reach_link_placebo_refuted,
+    reach_link_rcc_robust,
+)
+
+EXPECTED = ClusterVerdict.SUPPORTED
+BRIDGES = (
+    reach_link_backdoor_ate_negative,
+    reach_link_placebo_refuted,
+    reach_link_rcc_robust,
+)
 ```
 
-Findings narratives quote which paths in the graph they're
+The parent hypothesis declares its findings in `FINDINGS`
+(required on `Hypothesis` Protocol); the `run_hypothesis.py`
+consumer iterates `hypothesis.FINDINGS`, evaluates each via
+`composed_verdict(g, bridges=f.BRIDGES)`, surfaces drift when
+`actual_verdict != f.EXPECTED`.
+
+Findings narratives quote which subgraph in the graph they're
 walking; the graph state is the canonical artifact. The
 per-bridge `evidentiary_level` gives the Pearl-rung admit fact;
-cluster-level "this edge has multiple HELDs sharing extent" is a
-structural query authors compose, not a central aggregator on
+cluster-level "do all the bridges I cite admit?" is a structural
+query the Finding declaratively asks, not a central aggregator on
 the graph.
 
 The framework provides `evaluated_graph`, `clusters_by_extent`,
-`cluster_verdict`, and the `ClusterVerdict` enum in
-`corroborate.graph.causal`. See
-`experiments/findings/ddqn/walks.py` for a worked demo that loads
-a snapshot, builds the post-evaluated graph, and walks its
-clusters.
+`cluster_verdict`, `composed_verdict`, and the `ClusterVerdict`
+enum in `corroborate.graph.causal`. See
+`experiments/findings/ddqn/finding_*.py` for hand-rolled findings
+covering cluster, refutation-with-EXPECTED=REFUTED, and
+asymmetric-envelope-across-scopes shapes.
 
 ### 3b. Scope clusters — pool bridge + meta-regression sibling
 

@@ -18,10 +18,10 @@ from pathlib import Path
 from typing import cast
 
 from corroborate.bridge import Bridge, BridgeEvaluation
-from corroborate.core.finding import Finding, evaluate_finding
+from corroborate.core.finding import Finding
 from corroborate.graph.causal import (
     PostEvalEntry,
-    cluster_verdict, clusters_by_extent, evaluated_graph,
+    cluster_verdict, clusters_by_extent, composed_verdict, evaluated_graph,
 )
 from corroborate.runner import check, evict, run
 
@@ -373,7 +373,7 @@ def _print_verdicts(
         print()
         drift_count = 0
         for f in findings:
-            verdict = evaluate_finding(f, g)
+            verdict = composed_verdict(g, bridges=f.BRIDGES)
             drift = verdict != f.EXPECTED
             if drift:
                 drift_count += 1
@@ -385,8 +385,10 @@ def _print_verdicts(
                 f'{short_name}{drift_marker}',
             )
             if drift:
+                doc = (f.__doc__ or '').strip().split('\n', 1)[0]
                 print(f'      expected: {f.EXPECTED.value}')
-                print(f'      headline: {f.HEADLINE}')
+                if doc:
+                    print(f'      claim:    {doc}')
         print(
             f'findings: {len(findings)} declared, {drift_count} drift',
         )
