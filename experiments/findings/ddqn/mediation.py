@@ -456,8 +456,8 @@ def effh_predicts_link_power__reach_envs(
     ),
     scope_predictor: str = 'jensen_gap',
     min_vanilla_predictor: float = 0.05,
-    covariates_per_env: dict[str, dict[str, float]] = (
-        _EFFECTIVE_HORIZON_PER_ENV
+    covariates_per_key: dict[object, dict[str, float]] = (
+        _EFFECTIVE_HORIZON_PER_ENV  # pyright: ignore[reportArgumentType]
     ),
     slope_threshold: float = 0.01,
     min_strata: int = 3,
@@ -489,7 +489,7 @@ def effh_predicts_link_power__reach_envs(
     γ-sweep version (CLAIM 5) is the right shape for the
     chain-depth story per `findings_gamma_sweep_three_regimes.md`."""
     del treatment_arm, baseline_arm, source, stratify_by
-    del scope_predictor, min_vanilla_predictor, covariates_per_env
+    del scope_predictor, min_vanilla_predictor, covariates_per_key
     return meta_regression_coefficient_verdict(
         meta_regression_unpaired_d,
         'effective_horizon',
@@ -518,8 +518,8 @@ def argmax_entropy_link_power_null__survive_envs(
     ),
     scope_predictor: str = 'jensen_gap',
     min_vanilla_predictor: float = 0.05,
-    covariates_per_env: dict[str, dict[str, float]] = (
-        _ARGMAX_ENTROPY_LATE_PER_ENV
+    covariates_per_key: dict[object, dict[str, float]] = (
+        _ARGMAX_ENTROPY_LATE_PER_ENV  # pyright: ignore[reportArgumentType]
     ),
     null_slope_ceiling: float = 0.15,
     min_strata: int = 3,
@@ -543,7 +543,7 @@ def argmax_entropy_link_power_null__survive_envs(
     HELD (Pearson +0.91 in the SIGNED form) was on a different
     cache snapshot."""
     del treatment_arm, baseline_arm, source, stratify_by
-    del scope_predictor, min_vanilla_predictor, covariates_per_env
+    del scope_predictor, min_vanilla_predictor, covariates_per_key
     return meta_regression_coefficient_verdict(
         meta_regression_unpaired_d,
         'argmax_entropy_late',

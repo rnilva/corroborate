@@ -49,7 +49,8 @@ def meta_regression_unpaired_d(
     treatment_arm: str,
     baseline_arm: str,
     source: str,
-    covariates_per_env: Mapping[str, Mapping[str, float]],
+    covariates_per_key: Mapping[object, Mapping[str, float]],
+    covariate_key_field: str = 'env_name',
     stratify_by: tuple[str, ...] = (
         'env_name', 'total_steps', 'reward_scale',
     ),
@@ -60,23 +61,35 @@ def meta_regression_unpaired_d(
     pool: Pool = 'random',
 ) -> MetaRegressionResult:
     """Per-stratum Cohen's d → random-effects meta-regression on
-    env-level covariates.
+    key-level covariates.
 
-    First dimension of `stratify_by` MUST be `'env_name'` — the
-    analysis broadcasts `covariates_per_env[env_name]` to all
-    strata with that env via `stratum_id[0]`. Remaining
-    dimensions (`total_steps`, `reward_scale`, etc.) just add
-    panel rows.
+    `covariate_key_field` (default `'env_name'`) names which
+    `stratify_by` dimension keys `covariates_per_key`. The
+    analysis broadcasts `covariates_per_key[stratum[i]]` to all
+    strata where `stratum_id[i]` matches a key (and `i` is the
+    position of `covariate_key_field` in `stratify_by`).
+    `covariate_key_field` MUST appear in `stratify_by`.
+
+    Common shapes:
+    - **Cross-env scaling**: `covariate_key_field='env_name'`,
+      `covariates_per_key={'Acrobot-v1': {'eff_h': 49}, ...}`.
+    - **Within-env γ scaling (CLAIM 5)**:
+      `covariate_key_field='gamma'`,
+      `covariates_per_key={0.99: {'eff_h': 28}, 0.999: {'eff_h': 70}}`,
+      `stratify_by=('gamma', 'total_steps', 'reward_scale')` (env
+      pinned by the bridge's scope predicate).
 
     Empty / underpowered panel → NaN-coefficient result (empty
     coefficients tuple, intercept=NaN). Bridges should check
     `coef is None` or `math.isnan(coef.coefficient)` for graceful
     POW_INSUF fallthrough."""
-    if not stratify_by or stratify_by[0] != 'env_name':
+    if not stratify_by or covariate_key_field not in stratify_by:
         raise ValueError(
-            "meta_regression_unpaired_d: stratify_by must start with "
-            f"'env_name'; got {stratify_by!r}"
+            f"meta_regression_unpaired_d: covariate_key_field "
+            f"{covariate_key_field!r} must appear in stratify_by; "
+            f"got {stratify_by!r}"
         )
+    key_position = stratify_by.index(covariate_key_field)
     cells_list = list(cells)
     pooled = stratified_arm_diff_pooled.fn(
         cells_list,
@@ -91,13 +104,11 @@ def meta_regression_unpaired_d(
     panel: list[StratumG[tuple[object, ...]]] = []
     cps: dict[tuple[object, ...], Mapping[str, float]] = {}
     for s in pooled.per_stratum:
-        if not s.stratum_id:
+        if not s.stratum_id or len(s.stratum_id) <= key_position:
             continue
-        env = s.stratum_id[0]
-        if not isinstance(env, str):
-            continue
-        env_covs = covariates_per_env.get(env)
-        if env_covs is None:
+        key = s.stratum_id[key_position]
+        key_covs = covariates_per_key.get(key)
+        if key_covs is None:
             continue
         if math.isnan(s.cohen_d) or math.isnan(s.cohen_se):
             continue
@@ -109,7 +120,7 @@ def meta_regression_unpaired_d(
             se=s.cohen_se,
             n_pairs=s.n_seeds_treatment + s.n_seeds_baseline,
         ))
-        cps[s.stratum_id] = env_covs
+        cps[s.stratum_id] = key_covs
     try:
         return meta_regress_panel(
             panel, covariates_per_stratum=cps, alpha=alpha, pool=pool,

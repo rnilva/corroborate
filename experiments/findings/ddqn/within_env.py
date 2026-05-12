@@ -14,18 +14,28 @@ import math
 
 import polars as pl
 
-from corroborate.analyses.stratified_arm_diff_pooled import (
-    StratifiedArmDiffPooledResult,
-)
 from corroborate.analyses.stratum_effect_panel import StratumEffectPanel
 from corroborate.bridge.bridge import Direction, Tier, claim_bridge
 from corroborate.bridge.verdict import Verdict
+from corroborate.stats import MetaRegressionResult
 
 from experiments.findings.ddqn._arms import (
     DDQN_ARM, INTERVENTION, VANILLA_ARM,
 )
 from experiments.findings.ddqn._scope import G1_VANILLA_CONFIG_PREMISE_ACTIVE
-from experiments.findings.ddqn._verdicts import stratum_id_scaling_verdict
+from experiments.findings.ddqn._verdicts import (
+    meta_regression_coefficient_verdict,
+)
+
+
+# Per-γ effective_horizon on FourRooms (empirical means at each γ
+# on the current ddqn cache). Pinned for CLAIM 5's multi-stratum
+# random-effects meta-regression on `effective_horizon` slope
+# across γ-strata.
+_FOURROOMS_EFFECTIVE_HORIZON_PER_GAMMA: dict[object, dict[str, float]] = {
+    0.99: {'effective_horizon': 27.6},
+    0.999: {'effective_horizon': 70.0},  # empirical estimate
+}
 
 
 # CLAIM 5 — within-env do(γ) on FourRooms.
@@ -41,43 +51,60 @@ from experiments.findings.ddqn._verdicts import stratum_id_scaling_verdict
     predicted_direction='a_gt_b',
 )
 def ddqn_benefit_scales_with_effective_horizon__fourrooms(
-    stratified_arm_diff_pooled: StratifiedArmDiffPooledResult,
+    meta_regression_unpaired_d: MetaRegressionResult,
     *,
     treatment_arm: str = DDQN_ARM,
     baseline_arm: str = VANILLA_ARM,
     source: str = 'eval_best_burst_mean',
-    stratify_by: tuple[str, ...] = ('gamma',),
+    stratify_by: tuple[str, ...] = (
+        'gamma', 'total_steps', 'reward_scale',
+    ),
+    covariate_key_field: str = 'gamma',
+    covariates_per_key: dict[object, dict[str, float]] = (
+        _FOURROOMS_EFFECTIVE_HORIZON_PER_GAMMA
+    ),
     scope_predictor: str = 'jensen_gap',
     min_vanilla_predictor: float = 0.05,
-    r_threshold: float = 0.7,
-    min_strata: int = 2,
+    slope_threshold: float = 0.01,
+    min_strata: int = 3,
 ) -> Verdict:
-    """Within-FR do(γ) chain-depth scaling probe. Per-γ stratum:
-    independent-samples Cohen's d on `eval_best_burst_mean` (DDQN
-    vs vanilla). Pearson r(γ, d) tests whether DDQN's outcome
-    benefit grows with γ — the chain-depth amplification claim
-    documented in `findings_gamma_sweep_three_regimes.md` (FR is
-    in the chain-depth regime; benefit grows with effective
-    horizon ≈ 1/(1-γ)).
+    """Within-FR do(γ) chain-depth scaling probe. Per-(γ, config)
+    independent-samples Cohen's d → random-effects meta-regression
+    on `effective_horizon` (env-derived from γ). HELD when β_eff_h
+    ≥ `slope_threshold` AND significant.
 
-    HELD when Pearson r(γ, d) ≥ `r_threshold` AND significant.
-    Phase-1 / corpus-scope-removal refactor (2026-05-12):
-    replaced `paired_g` (cohort-level magnitude check, did NOT
-    test scaling despite the name) with `stratified_arm_diff_pooled`
-    stratified by γ + `stratum_id_scaling_verdict` — the slope
-    test that matches the bridge name's promise. Mech conditioning
-    via `min_vanilla_predictor=0.05`.
+    Post-roast issue 7 refactor (2026-05-12): replaced
+    `stratum_id_scaling_verdict` (Pearson r on per-γ cohen_d
+    panel) with the multi-stratum meta-regression shape used by
+    CLAIM 19. The previous form inherited the n=3 envs Pearson r
+    brittleness (`findings_n3_pearson_brittle`) — at n_strata=2
+    (current cache γ=0.99 only), Pearson r is degenerate; even at
+    n=3 a 1-SE perturbation could swing r between +1 and -1. The
+    meta-regression form expands the panel via within-γ config
+    replicates (`(γ, total_steps, reward_scale)` strata), giving
+    proper SE on the slope coefficient.
 
-    Cache has only γ=0.99 FR cells → n_strata=1 → POW_INSUF until
-    γ=0.999 FR cells land. Historical g=+1.11 at γ=0.999 was the
-    high-eff_h cohort effect — the scaling claim it suggested is
-    what this bridge now formally tests."""
+    `slope_threshold=0.01` is the substrate-meaningful magnitude
+    (calibrated like CLAIM 19): observed eff_h range across FR's
+    γ values ≈ 42 units (27.6 at γ=0.99 → ~70 at γ=0.999);
+    threshold 0.01 corresponds to |Δd| ≥ 0.42 across the span —
+    Cohen's "small effect" magnitude.
+
+    Cache has only γ=0.99 FR cells in three sub-corpora →
+    n_strata ≤ 3, covariate is constant across all strata →
+    meta-regression unidentified → POW_INSUF. Once γ=0.999 FR
+    cells land, the multi-stratum form has between-γ variation
+    AND within-γ replicates → proper test of the chain-depth
+    amplification claim documented in
+    `findings_gamma_sweep_three_regimes.md`."""
     del treatment_arm, baseline_arm, source, stratify_by
+    del covariate_key_field, covariates_per_key
     del scope_predictor, min_vanilla_predictor
-    return stratum_id_scaling_verdict(
-        stratified_arm_diff_pooled.per_stratum,
+    return meta_regression_coefficient_verdict(
+        meta_regression_unpaired_d,
+        'effective_horizon',
         sign=1,
-        threshold=r_threshold,
+        threshold=slope_threshold,
         min_strata=min_strata,
     )
 
