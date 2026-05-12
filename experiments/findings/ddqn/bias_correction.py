@@ -1,20 +1,21 @@
 """Hasselt bias-correction chain: jensen_gap → outcome.
 
 Link side (mech-activation half lives in `dqn_bridges.py` on a
-separate corpus). 4 bridges:
+separate corpus). 8 bridges across 4 causal claims (the two
+DoWhy claims each split into 3 bridges per CLAUDE.md's
+cluster-shaped causal claims principle):
 
-- `acrobot_per_burst_link_active__gamma_0999`: per-burst link r on
-  Acrobot γ=0.999 (paired_link_per_burst → phase_link_consistency).
-- `reach_link_dowhy_corroborated`: composite DoWhy backdoor +
-  placebo + RCC on the per-burst Δ_jens panel, REACH-cohort scope.
-- `extreme_q_divergence_attenuates_link__dowhy_corroborated`:
-  composite DoWhy backdoor + placebo + RCC on the
-  link-attenuation binary contrast (env-mean q_div > 1000 vs
-  in-band envs). "Link" = bias-drops→outcome-rises causal arrow;
-  tested via per-(env, burst) stratum-Δ outcome under mech-active
-  conditioning (vanilla mean jens > 0.05 + DDQN's structural
-  bias-reduction tendency means Δ_outcome here proxies the
-  mech→outcome link, not just a marginal effect).
+- `acrobot_per_burst_link_active__gamma_0999`: per-burst link
+  binomial test on Acrobot γ=0.999.
+- `reach_link_{backdoor_ate_negative, placebo_refuted, rcc_robust}`:
+  DoWhy backdoor + placebo + RCC on the per-(env, burst)
+  stratum-Δ panel, REACH-cohort scope. Three logically distinct
+  robustness questions; Finding-level cluster verdict
+  AND-aggregates.
+- `extreme_q_div_link_{interaction_positive, placebo_refuted,
+  rcc_robust}`: same three-bridge cluster on the
+  Δ_predictor × 1[env above q_div threshold] interaction term
+  (link moderation by extreme Q-divergence).
 - `fourrooms_action_dim_link_active__inflated`: within-FourRooms
   panel_regress of Δ_outcome on Δ_jens across `action_duplicate_k`.
 
@@ -55,7 +56,11 @@ from experiments.findings.ddqn._common import (
 from experiments.findings.ddqn._scope import (
     DDQN_RELEVANT_SCOPE, G1_VANILLA_CONFIG_PREMISE_ACTIVE, REACH_ENVS_FOUR,
 )
-from experiments.findings.ddqn._verdicts import dowhy_trio_verdict
+from experiments.findings.ddqn._verdicts import (
+    dowhy_backdoor_verdict,
+    dowhy_placebo_verdict,
+    dowhy_rcc_verdict,
+)
 
 
 @claim_bridge(
@@ -139,6 +144,16 @@ def acrobot_per_burst_link_active__gamma_0999(
     return Verdict.NO_EFFECT
 
 
+# REACH causal trio. Post-roast issue 6 (2026-05-12): the
+# Phase-B trio collapse into one composite bridge was wrong per
+# CLAUDE.md's cluster-shaped causal claims principle. The three
+# checks test logically distinct robustness questions (backdoor =
+# adjustment-identified ATE; placebo = instrument validity; RCC =
+# omitted-confound sensitivity) and should be authored as
+# separate bridges. The Finding's cluster verdict
+# (`finding_reach_bias_link.BRIDGES`) handles AND-aggregation at
+# the graph level — SUPPORTED iff all three HELD per
+# `composed_verdict`.
 @claim_bridge(
     source='jensen_gap',
     target='eval_best_burst_mean',
@@ -146,7 +161,7 @@ def acrobot_per_burst_link_active__gamma_0999(
     tier=Tier.ASSOCIATIONAL,
     scope=DDQN_RELEVANT_SCOPE,
 )
-def reach_link_dowhy_corroborated(
+def reach_link_backdoor_ate_negative(
     stratum_delta_link_dowhy: StratumDeltaLinkDowhyResult,
     *,
     treatment_arm: str = DDQN_ARM,
@@ -160,29 +175,82 @@ def reach_link_dowhy_corroborated(
     env_filter: tuple[str, ...] = REACH_ENVS_FOUR,
     min_vanilla_predictor: float = 0.05,
     ate_ceiling: float = -0.1,
-    placebo_max_ratio: float = 0.2,
-    rcc_max_drift_ratio: float = 0.1,
 ) -> Verdict:
-    """DoWhy backdoor + placebo + RCC trio on per-(env, burst)
-    **stratum-level** Δ panel across REACH cohort
-    (Acrobot/FourRooms/MountainCar/MetaMaze). Phase-3 refactor
-    (2026-05-12): replaced `paired_delta_link_dowhy` (per-(env,
-    burst, seed) seed-paired rows) with `stratum_delta_link_dowhy`
-    (per-(env, burst) independent-samples rows; seeds pooled within
-    each arm). Mech conditioning built in via
-    `min_vanilla_predictor=0.05` — strata where vanilla mean jens <
-    0.05 (G1 dormant) never reach DoWhy.
-
-    HELD iff backdoor identified the predicted-negative ATE AND
-    placebo shrunk it to ~zero AND RCC left it near-stable. The
-    three checks always travel together."""
+    """REACH stratum-Δ link: DoWhy backdoor ATE of Δ_jens on
+    Δ_outcome is predicted-negative (more bias-reduction → more
+    outcome-gain) under env-adjustment. HELD when identified ∧
+    ATE ≤ `ate_ceiling`."""
     del treatment_arm, baseline_arm, link_predictor, link_target
     del env_filter, min_vanilla_predictor
-    return dowhy_trio_verdict(
-        stratum_delta_link_dowhy,
-        ate_threshold=ate_ceiling,
-        placebo_max_ratio=placebo_max_ratio,
-        rcc_max_drift_ratio=rcc_max_drift_ratio,
+    return dowhy_backdoor_verdict(
+        stratum_delta_link_dowhy.backdoor,
+        ate_threshold=ate_ceiling, sign=-1,
+    )
+
+
+@claim_bridge(
+    source='jensen_gap',
+    target='eval_best_burst_mean',
+    direction=Direction.INVERSE,
+    tier=Tier.ASSOCIATIONAL,
+    scope=DDQN_RELEVANT_SCOPE,
+)
+def reach_link_placebo_refuted(
+    stratum_delta_link_dowhy: StratumDeltaLinkDowhyResult,
+    *,
+    treatment_arm: str = DDQN_ARM,
+    baseline_arm: str = VANILLA_ARM,
+    link_target: Measurable[
+        Mapping[str, object], npt.NDArray[np.floating],
+    ] = MC_RETURN_PER_BURST_MEAN,
+    link_predictor: Measurable[
+        Mapping[str, object], npt.NDArray[np.floating],
+    ] = JENSEN_BIAS_PER_BURST_MEAN,
+    env_filter: tuple[str, ...] = REACH_ENVS_FOUR,
+    min_vanilla_predictor: float = 0.05,
+    placebo_max_ratio: float = 0.2,
+) -> Verdict:
+    """REACH stratum-Δ link: placebo refutation — random
+    treatment shrinks ATE near zero. HELD when |placebo/real| <
+    `placebo_max_ratio`."""
+    del treatment_arm, baseline_arm, link_predictor, link_target
+    del env_filter, min_vanilla_predictor
+    return dowhy_placebo_verdict(
+        stratum_delta_link_dowhy.placebo,
+        max_ratio=placebo_max_ratio,
+    )
+
+
+@claim_bridge(
+    source='jensen_gap',
+    target='eval_best_burst_mean',
+    direction=Direction.INVERSE,
+    tier=Tier.ASSOCIATIONAL,
+    scope=DDQN_RELEVANT_SCOPE,
+)
+def reach_link_rcc_robust(
+    stratum_delta_link_dowhy: StratumDeltaLinkDowhyResult,
+    *,
+    treatment_arm: str = DDQN_ARM,
+    baseline_arm: str = VANILLA_ARM,
+    link_target: Measurable[
+        Mapping[str, object], npt.NDArray[np.floating],
+    ] = MC_RETURN_PER_BURST_MEAN,
+    link_predictor: Measurable[
+        Mapping[str, object], npt.NDArray[np.floating],
+    ] = JENSEN_BIAS_PER_BURST_MEAN,
+    env_filter: tuple[str, ...] = REACH_ENVS_FOUR,
+    min_vanilla_predictor: float = 0.05,
+    rcc_max_drift_ratio: float = 0.1,
+) -> Verdict:
+    """REACH stratum-Δ link: random-common-cause refutation —
+    synthetic confounder leaves ATE near-stable. HELD when drift
+    < `rcc_max_drift_ratio`."""
+    del treatment_arm, baseline_arm, link_predictor, link_target
+    del env_filter, min_vanilla_predictor
+    return dowhy_rcc_verdict(
+        stratum_delta_link_dowhy.random_common_cause,
+        max_drift_ratio=rcc_max_drift_ratio,
     )
 
 
@@ -229,21 +297,33 @@ def fourrooms_action_dim_link_active__inflated(
     return Verdict.HELD
 
 
+# Extreme-Q-div link-moderation trio. Same cluster-shape
+# discipline as the REACH trio: three separate bridges testing
+# three logically distinct robustness questions on the interaction
+# coefficient β_int (link attenuation by the q_div > 1.0 binary
+# moderator). Finding-level cluster verdict handles AND-aggregation.
+# AWAITING DATA: cache's max q_divergence_score is 1.05; pre-
+# rebuild sync=10k MinAtar corpora (q_div ≫ 1) aren't in the
+# universal cache. All three bridges fire POW_INSUF until those
+# corpora reintegrate.
+_EXTREME_Q_DIV_SCOPE = (
+    (pl.col('total_steps') == 1_000_000)
+    & finite('q_divergence_score')
+    & (
+        pl.col('q_network.channels').is_null()
+        | (pl.col('q_network.channels') != '(32,64)')
+    )
+)
+
+
 @claim_bridge(
     source='jensen_gap',
     target='eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
-    scope=(
-        (pl.col('total_steps') == 1_000_000)
-        & finite('q_divergence_score')
-        & (
-            pl.col('q_network.channels').is_null()
-            | (pl.col('q_network.channels') != '(32,64)')
-        )
-    ),
+    scope=_EXTREME_Q_DIV_SCOPE,
 )
-def extreme_q_divergence_attenuates_link__dowhy_corroborated(
+def extreme_q_div_link_interaction_positive(
     stratum_link_moderation_dowhy: StratumLinkModerationDowhyResult,
     *,
     treatment_arm: str = DDQN_ARM,
@@ -258,54 +338,94 @@ def extreme_q_divergence_attenuates_link__dowhy_corroborated(
     ] = JENSEN_BIAS_PER_BURST_MEAN,
     min_vanilla_predictor: float = 0.05,
     interaction_ate_floor: float = 0.10,
-    placebo_max_ratio: float = 0.2,
-    rcc_max_drift_ratio: float = 0.15,
 ) -> Verdict:
-    """Binary contrast: envs with mean `q_divergence_score > 1.0`
-    (Q above the Bellman bound, the "Q-divergent" semantic per
-    `findings_q_div_threshold_too_loose.md`) have a weaker
-    bias→outcome **link** vs in-band envs.
-
-    Phase-4b refactor (2026-05-12, post-roast): replaced
-    `stratum_outcome_attenuation_dowhy` (outcome-only, didn't see
-    Δ_jens → faith claim that outcome-attenuation = link-attenuation)
-    with `stratum_link_moderation_dowhy` — the proper mediation-
-    aware test. The interaction coefficient
-    `Δ_predictor × 1[env above q_div threshold]` IS the link
-    moderation: β_int > 0 means above-threshold envs have a
-    less-negative slope of Δ_outcome on Δ_jens (link weakened).
-    Independent-samples per (env, burst) stratum, no seed pairing.
-
-    Identification: binary_attenuator is env-determined and would
-    be colinear with env one-hot. Resolution: only the
-    interaction term enters as the causal target; env-dummies +
-    Δ_predictor adjust. The interaction's within-env variation
-    (Δ_predictor changes across bursts within each env) makes
-    β_int identifiable.
-
-    HELD when interaction β ≥ `interaction_ate_floor` AND placebo
-    refutes AND RCC stable. Mech conditioning via
-    `min_vanilla_predictor=0.05`.
-
-    AWAITING DATA: the current cache's max q_divergence_score is
-    1.05 (one CartPole cell). The pre-rebuild sync=10k MinAtar
-    corpora that produced Q-explosion regimes (q_div ≫ 1) aren't
-    in the universal cache. Bridge fires POW_INSUF until those
-    corpora are reintegrated."""
+    """Interaction `Δ_predictor × 1[env above q_div threshold]`
+    has positive ATE on Δ_target — above-threshold envs have a
+    less-negative link slope (link attenuated). HELD when β_int
+    ≥ `interaction_ate_floor` AND identified."""
     del treatment_arm, baseline_arm, attenuator, binary_threshold
     del link_target, link_predictor, min_vanilla_predictor
-    return dowhy_trio_verdict(
-        stratum_link_moderation_dowhy,
-        ate_threshold=interaction_ate_floor,
-        sign=1,
-        placebo_max_ratio=placebo_max_ratio,
-        rcc_max_drift_ratio=rcc_max_drift_ratio,
+    return dowhy_backdoor_verdict(
+        stratum_link_moderation_dowhy.backdoor,
+        ate_threshold=interaction_ate_floor, sign=1,
+    )
+
+
+@claim_bridge(
+    source='jensen_gap',
+    target='eval_best_burst_mean',
+    direction=Direction.INVERSE,
+    tier=Tier.ASSOCIATIONAL,
+    scope=_EXTREME_Q_DIV_SCOPE,
+)
+def extreme_q_div_link_placebo_refuted(
+    stratum_link_moderation_dowhy: StratumLinkModerationDowhyResult,
+    *,
+    treatment_arm: str = DDQN_ARM,
+    baseline_arm: str = VANILLA_ARM,
+    attenuator: str = 'q_divergence_score',
+    binary_threshold: float = 1.0,
+    link_target: Measurable[
+        Mapping[str, object], npt.NDArray[np.floating],
+    ] = MC_RETURN_PER_BURST_MEAN,
+    link_predictor: Measurable[
+        Mapping[str, object], npt.NDArray[np.floating],
+    ] = JENSEN_BIAS_PER_BURST_MEAN,
+    min_vanilla_predictor: float = 0.05,
+    placebo_max_ratio: float = 0.2,
+) -> Verdict:
+    """Placebo refutation on the interaction-term ATE: random
+    treatment shrinks ATE near zero. HELD when |placebo/real| <
+    `placebo_max_ratio`."""
+    del treatment_arm, baseline_arm, attenuator, binary_threshold
+    del link_target, link_predictor, min_vanilla_predictor
+    return dowhy_placebo_verdict(
+        stratum_link_moderation_dowhy.placebo,
+        max_ratio=placebo_max_ratio,
+    )
+
+
+@claim_bridge(
+    source='jensen_gap',
+    target='eval_best_burst_mean',
+    direction=Direction.INVERSE,
+    tier=Tier.ASSOCIATIONAL,
+    scope=_EXTREME_Q_DIV_SCOPE,
+)
+def extreme_q_div_link_rcc_robust(
+    stratum_link_moderation_dowhy: StratumLinkModerationDowhyResult,
+    *,
+    treatment_arm: str = DDQN_ARM,
+    baseline_arm: str = VANILLA_ARM,
+    attenuator: str = 'q_divergence_score',
+    binary_threshold: float = 1.0,
+    link_target: Measurable[
+        Mapping[str, object], npt.NDArray[np.floating],
+    ] = MC_RETURN_PER_BURST_MEAN,
+    link_predictor: Measurable[
+        Mapping[str, object], npt.NDArray[np.floating],
+    ] = JENSEN_BIAS_PER_BURST_MEAN,
+    min_vanilla_predictor: float = 0.05,
+    rcc_max_drift_ratio: float = 0.15,
+) -> Verdict:
+    """RCC refutation on the interaction-term ATE: synthetic
+    confounder leaves it near-stable. HELD when drift <
+    `rcc_max_drift_ratio`."""
+    del treatment_arm, baseline_arm, attenuator, binary_threshold
+    del link_target, link_predictor, min_vanilla_predictor
+    return dowhy_rcc_verdict(
+        stratum_link_moderation_dowhy.random_common_cause,
+        max_drift_ratio=rcc_max_drift_ratio,
     )
 
 
 BRIDGES = (
     acrobot_per_burst_link_active__gamma_0999,
-    reach_link_dowhy_corroborated,
+    reach_link_backdoor_ate_negative,
+    reach_link_placebo_refuted,
+    reach_link_rcc_robust,
     fourrooms_action_dim_link_active__inflated,
-    extreme_q_divergence_attenuates_link__dowhy_corroborated,
+    extreme_q_div_link_interaction_positive,
+    extreme_q_div_link_placebo_refuted,
+    extreme_q_div_link_rcc_robust,
 )
