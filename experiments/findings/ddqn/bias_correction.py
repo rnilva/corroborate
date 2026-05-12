@@ -54,7 +54,8 @@ from experiments.findings.ddqn._common import (
     JENSEN_BIAS_PER_BURST_MEAN, MC_RETURN_PER_BURST_MEAN,
 )
 from experiments.findings.ddqn._scope import (
-    DDQN_RELEVANT_SCOPE, G1_VANILLA_CONFIG_PREMISE_ACTIVE, REACH_ENVS_FOUR,
+    DDQN_RELEVANT_SCOPE, G1_VANILLA_CONFIG_PREMISE_ACTIVE,
+    REACH_ENVS_FOUR, VANILLA_JENS_NOISE_FLOOR,
 )
 from experiments.findings.ddqn._verdicts import (
     dowhy_backdoor_verdict,
@@ -173,7 +174,7 @@ def reach_link_backdoor_ate_negative(
         Mapping[str, object], npt.NDArray[np.floating],
     ] = JENSEN_BIAS_PER_BURST_MEAN,
     env_filter: tuple[str, ...] = REACH_ENVS_FOUR,
-    min_vanilla_predictor: float = 0.05,
+    min_vanilla_predictor: float = VANILLA_JENS_NOISE_FLOOR,
     ate_ceiling: float = -0.1,
 ) -> Verdict:
     """REACH stratum-Δ link: DoWhy backdoor ATE of Δ_jens on
@@ -207,7 +208,7 @@ def reach_link_placebo_refuted(
         Mapping[str, object], npt.NDArray[np.floating],
     ] = JENSEN_BIAS_PER_BURST_MEAN,
     env_filter: tuple[str, ...] = REACH_ENVS_FOUR,
-    min_vanilla_predictor: float = 0.05,
+    min_vanilla_predictor: float = VANILLA_JENS_NOISE_FLOOR,
     placebo_max_ratio: float = 0.2,
 ) -> Verdict:
     """REACH stratum-Δ link: placebo refutation — random
@@ -240,7 +241,7 @@ def reach_link_rcc_robust(
         Mapping[str, object], npt.NDArray[np.floating],
     ] = JENSEN_BIAS_PER_BURST_MEAN,
     env_filter: tuple[str, ...] = REACH_ENVS_FOUR,
-    min_vanilla_predictor: float = 0.05,
+    min_vanilla_predictor: float = VANILLA_JENS_NOISE_FLOOR,
     rcc_max_drift_ratio: float = 0.1,
 ) -> Verdict:
     """REACH stratum-Δ link: random-common-cause refutation —
@@ -336,7 +337,7 @@ def extreme_q_div_link_interaction_positive(
     link_predictor: Measurable[
         Mapping[str, object], npt.NDArray[np.floating],
     ] = JENSEN_BIAS_PER_BURST_MEAN,
-    min_vanilla_predictor: float = 0.05,
+    min_vanilla_predictor: float = VANILLA_JENS_NOISE_FLOOR,
     interaction_ate_floor: float = 0.10,
 ) -> Verdict:
     """Interaction `Δ_predictor × 1[env above q_div threshold]`
@@ -371,7 +372,7 @@ def extreme_q_div_link_placebo_refuted(
     link_predictor: Measurable[
         Mapping[str, object], npt.NDArray[np.floating],
     ] = JENSEN_BIAS_PER_BURST_MEAN,
-    min_vanilla_predictor: float = 0.05,
+    min_vanilla_predictor: float = VANILLA_JENS_NOISE_FLOOR,
     placebo_max_ratio: float = 0.2,
 ) -> Verdict:
     """Placebo refutation on the interaction-term ATE: random
@@ -405,7 +406,7 @@ def extreme_q_div_link_rcc_robust(
     link_predictor: Measurable[
         Mapping[str, object], npt.NDArray[np.floating],
     ] = JENSEN_BIAS_PER_BURST_MEAN,
-    min_vanilla_predictor: float = 0.05,
+    min_vanilla_predictor: float = VANILLA_JENS_NOISE_FLOOR,
     rcc_max_drift_ratio: float = 0.15,
 ) -> Verdict:
     """RCC refutation on the interaction-term ATE: synthetic

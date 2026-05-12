@@ -49,7 +49,7 @@ from corroborate.stats import MetaRegressionResult
 from experiments.findings.ddqn._arms import DDQN_ARM, VANILLA_ARM
 from experiments.findings.ddqn._scope import (
     DDQN_RELEVANT_SCOPE, LINK_POWER_REACH_ENVS, LINK_POWER_SURVIVE_ENVS,
-    VANILLA_CONFIG_Q_BOUNDED,
+    VANILLA_CONFIG_Q_BOUNDED, VANILLA_JENS_NOISE_FLOOR,
 )
 from experiments.findings.ddqn._verdicts import (
     meta_regression_coefficient_verdict,
@@ -455,7 +455,7 @@ def effh_predicts_link_power__reach_envs(
         'env_name', 'total_steps', 'reward_scale',
     ),
     scope_predictor: str = 'jensen_gap',
-    min_vanilla_predictor: float = 0.05,
+    min_vanilla_predictor: float = VANILLA_JENS_NOISE_FLOOR,
     covariates_per_key: dict[object, dict[str, float]] = (
         _EFFECTIVE_HORIZON_PER_ENV  # pyright: ignore[reportArgumentType]
     ),
@@ -517,7 +517,7 @@ def argmax_entropy_link_power_null__survive_envs(
         'env_name', 'total_steps', 'reward_scale',
     ),
     scope_predictor: str = 'jensen_gap',
-    min_vanilla_predictor: float = 0.05,
+    min_vanilla_predictor: float = VANILLA_JENS_NOISE_FLOOR,
     covariates_per_key: dict[object, dict[str, float]] = (
         _ARGMAX_ENTROPY_LATE_PER_ENV  # pyright: ignore[reportArgumentType]
     ),

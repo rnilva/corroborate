@@ -22,7 +22,10 @@ from corroborate.stats import MetaRegressionResult
 from experiments.findings.ddqn._arms import (
     DDQN_ARM, INTERVENTION, VANILLA_ARM,
 )
-from experiments.findings.ddqn._scope import G1_VANILLA_CONFIG_PREMISE_ACTIVE
+from experiments.findings.ddqn._scope import (
+    G1_VANILLA_CONFIG_PREMISE_ACTIVE,
+    VANILLA_JENS_NOISE_FLOOR,
+)
 from experiments.findings.ddqn._verdicts import (
     meta_regression_coefficient_verdict,
 )
@@ -64,7 +67,7 @@ def ddqn_benefit_scales_with_effective_horizon__fourrooms(
         _FOURROOMS_EFFECTIVE_HORIZON_PER_GAMMA
     ),
     scope_predictor: str = 'jensen_gap',
-    min_vanilla_predictor: float = 0.05,
+    min_vanilla_predictor: float = VANILLA_JENS_NOISE_FLOOR,
     slope_threshold: float = 0.01,
     min_strata: int = 3,
 ) -> Verdict:
