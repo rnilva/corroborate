@@ -1320,6 +1320,18 @@ mc_return_last_quarter = Measurable(
 register(mc_return_last_quarter)
 
 
+# Raw-return per-burst reduction, mirroring
+# `mc_return__mean_axis_-1`: per-burst mean of undiscounted
+# episode return. Consumes the `mc_return_raw` measurable
+# (defined below) and reduces inner-axis (n_episodes) via mean.
+mc_return_raw_per_burst_mean = Measurable(
+    fn=reduce_axis(from_key('mc_return_raw'), axis=-1, op='mean').fn,
+    name='mc_return_raw__mean_axis_-1',
+    reads=('mc_return_raw',),
+)
+register(mc_return_raw_per_burst_mean)
+
+
 @measurable(reads=('gamma',))
 def effective_horizon(
     record: Mapping[str, object],
@@ -1518,6 +1530,77 @@ def eval_best_burst_mean(record: Mapping[str, object]) -> float:
     if mc.ndim != 2 or mc.size == 0:
         return float('nan')
     return float(mc.mean(axis=1).max())
+
+
+@measurable(
+    name='mc_return_raw',
+    reads=('mc_return_from_step', 'episode_length', 'gamma'),
+)
+def mc_return_raw(record: Mapping[str, object]) -> npt.NDArray[np.floating]:
+    """Per-(burst, episode) **undiscounted** episode return,
+    reconstructed from `mc_return_from_step` (the per-step
+    discounted value-to-go).
+
+    Math: at each step `t`, `mc[t] = r[t] + γ · mc[t+1]` →
+    `r[t] = mc[t] - γ · mc[t+1]`. Last-step: `r[T-1] = mc[T-1]`
+    (no future). Summing per-step rewards over actual episode
+    length gives the undiscounted episode return.
+
+    Recovers a γ-invariant policy-quality metric — crucial for
+    bridges that compare across γ values (where the discounted
+    metric scales as `(1-γ^T)/(1-γ)` on dense-reward envs) or
+    across envs with different reward scales / horizon caps.
+
+    Shape `(n_bursts, n_episodes)`, matching `mc_return`. NaN
+    when inputs are missing or shapes inconsistent."""
+    if (
+        'mc_return_from_step' not in record
+        or 'episode_length' not in record
+        or 'gamma' not in record
+    ):
+        return np.full((0, 0), float('nan'), dtype=np.float64)
+    mc_from_step = np.asarray(
+        record['mc_return_from_step'], dtype=np.float64,
+    )
+    lengths = np.asarray(record['episode_length'], dtype=np.int64)
+    gamma_v = record['gamma']
+    if not isinstance(gamma_v, (int, float)):
+        return np.full((0, 0), float('nan'), dtype=np.float64)
+    gamma = float(gamma_v)
+    if mc_from_step.ndim != 3 or lengths.ndim != 2:
+        return np.full((0, 0), float('nan'), dtype=np.float64)
+    n_bursts, n_episodes, _ = mc_from_step.shape
+    if lengths.shape != (n_bursts, n_episodes):
+        return np.full((0, 0), float('nan'), dtype=np.float64)
+    raw = np.zeros((n_bursts, n_episodes), dtype=np.float64)
+    for b in range(n_bursts):
+        for e in range(n_episodes):
+            T = int(lengths[b, e])
+            if T <= 0:
+                continue
+            v = mc_from_step[b, e, :T]
+            if T == 1:
+                raw[b, e] = float(v[0])
+                continue
+            # r[t] = v[t] - γ · v[t+1] for t < T-1; r[T-1] = v[T-1].
+            inner = v[:-1] - gamma * v[1:]
+            raw[b, e] = float(inner.sum() + v[-1])
+    return raw
+
+
+@measurable(name='eval_best_burst_raw_mean', reads=('mc_return_raw',))
+def eval_best_burst_raw_mean(record: Mapping[str, object]) -> float:
+    """Undiscounted counterpart of `eval_best_burst_mean`:
+    `max_i(mean(mc_return_raw[i, :]))`. The best-burst-seen
+    metric on the raw (undiscounted) return — γ-invariant policy
+    quality. Use for bridges that compare across γ or across
+    envs with different reward scaling."""
+    if 'mc_return_raw' not in record:
+        return float('nan')
+    raw = np.asarray(record['mc_return_raw'], dtype=np.float64)
+    if raw.ndim != 2 or raw.size == 0:
+        return float('nan')
+    return float(raw.mean(axis=1).max())
 
 
 @measurable(
