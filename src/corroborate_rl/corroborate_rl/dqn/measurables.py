@@ -1322,12 +1322,25 @@ register(mc_return_last_quarter)
 
 # Raw-return per-burst reduction, mirroring
 # `mc_return__mean_axis_-1`: per-burst mean of undiscounted
-# episode return. Consumes the `mc_return_raw` measurable
-# (defined below) and reduces inner-axis (n_episodes) via mean.
+# episode return. Computes the (n_bursts, n_episodes) raw return
+# inline from trace columns (see `_compute_mc_return_raw` below),
+# then averages over the episode axis to yield (n_bursts,). Direct
+# trace-column reads so the dependency walker sees the leaf
+# trace cols (rather than an intermediate measurable name the
+# build_measurements satisfiability check can't see).
+def _mc_return_raw_per_burst_mean(
+    record: Mapping[str, object],
+) -> npt.NDArray[np.floating]:
+    raw = _compute_mc_return_raw(record)
+    if raw.ndim != 2 or raw.size == 0:
+        return np.full((0,), float('nan'), dtype=np.float64)
+    return raw.mean(axis=1)
+
+
 mc_return_raw_per_burst_mean = Measurable(
-    fn=reduce_axis(from_key('mc_return_raw'), axis=-1, op='mean').fn,
+    fn=_mc_return_raw_per_burst_mean,
     name='mc_return_raw__mean_axis_-1',
-    reads=('mc_return_raw',),
+    reads=('mc_return_from_step', 'episode_length', 'gamma'),
 )
 register(mc_return_raw_per_burst_mean)
 
@@ -1532,27 +1545,29 @@ def eval_best_burst_mean(record: Mapping[str, object]) -> float:
     return float(mc.mean(axis=1).max())
 
 
-@measurable(
-    name='mc_return_raw',
-    reads=('mc_return_from_step', 'episode_length', 'gamma'),
-)
-def mc_return_raw(record: Mapping[str, object]) -> npt.NDArray[np.floating]:
+def _compute_mc_return_raw(
+    record: Mapping[str, object],
+) -> npt.NDArray[np.floating]:
     """Per-(burst, episode) **undiscounted** episode return,
-    reconstructed from `mc_return_from_step` (the per-step
-    discounted value-to-go).
+    reconstructed from `mc_return_from_step` (per-step discounted
+    value-to-go).
 
     Math: at each step `t`, `mc[t] = r[t] + γ · mc[t+1]` →
-    `r[t] = mc[t] - γ · mc[t+1]`. Last-step: `r[T-1] = mc[T-1]`
+    `r[t] = mc[t] - γ · mc[t+1]`. Last-step `r[T-1] = mc[T-1]`
     (no future). Summing per-step rewards over actual episode
-    length gives the undiscounted episode return.
+    length recovers the undiscounted episode return.
 
-    Recovers a γ-invariant policy-quality metric — crucial for
-    bridges that compare across γ values (where the discounted
-    metric scales as `(1-γ^T)/(1-γ)` on dense-reward envs) or
-    across envs with different reward scales / horizon caps.
-
-    Shape `(n_bursts, n_episodes)`, matching `mc_return`. NaN
-    when inputs are missing or shapes inconsistent."""
+    Free function (not a `@measurable`): both
+    `mc_return_raw__mean_axis_-1` and `eval_best_burst_raw_mean`
+    inline this so the dependency walker (`transitive_reads`)
+    sees direct trace-column reads (`mc_return_from_step`,
+    `episode_length`, `gamma`) rather than an intermediate
+    `mc_return_raw` measurable. The intermediate would require
+    the measurable graph to walk through `reads=` (it currently
+    walks only through injected-param names), so the
+    `build_measurements` `all(r in joined.columns for r in
+    leaf_reads)` check would fail and the measurable would be
+    skipped."""
     if (
         'mc_return_from_step' not in record
         or 'episode_length' not in record
@@ -1582,22 +1597,24 @@ def mc_return_raw(record: Mapping[str, object]) -> npt.NDArray[np.floating]:
             if T == 1:
                 raw[b, e] = float(v[0])
                 continue
-            # r[t] = v[t] - γ · v[t+1] for t < T-1; r[T-1] = v[T-1].
             inner = v[:-1] - gamma * v[1:]
             raw[b, e] = float(inner.sum() + v[-1])
     return raw
 
 
-@measurable(name='eval_best_burst_raw_mean', reads=('mc_return_raw',))
+@measurable(
+    name='eval_best_burst_raw_mean',
+    reads=('mc_return_from_step', 'episode_length', 'gamma'),
+)
 def eval_best_burst_raw_mean(record: Mapping[str, object]) -> float:
     """Undiscounted counterpart of `eval_best_burst_mean`:
-    `max_i(mean(mc_return_raw[i, :]))`. The best-burst-seen
-    metric on the raw (undiscounted) return — γ-invariant policy
-    quality. Use for bridges that compare across γ or across
-    envs with different reward scaling."""
-    if 'mc_return_raw' not in record:
-        return float('nan')
-    raw = np.asarray(record['mc_return_raw'], dtype=np.float64)
+    `max_i(mean(mc_return_raw[i, :]))` where `mc_return_raw` is
+    reconstructed inline from `mc_return_from_step` +
+    `episode_length` + `gamma`. The best-burst-seen metric on the
+    raw (undiscounted) return — γ-invariant policy quality. Use
+    for bridges that compare across γ or across envs with
+    different reward scaling."""
+    raw = _compute_mc_return_raw(record)
     if raw.ndim != 2 or raw.size == 0:
         return float('nan')
     return float(raw.mean(axis=1).max())
@@ -2247,12 +2264,11 @@ def dqn_default_measurables() -> tuple[
         greedy_match_late,
         # Raw (undiscounted) eval-return measurables — γ-invariant
         # policy-quality metrics for cross-γ / cross-env bridges.
-        # `mc_return_raw` is the per-(burst, episode) array;
-        # `mc_return_raw__mean_axis_-1` the per-burst mean;
-        # `eval_best_burst_raw_mean` the best-burst scalar
-        # (counterparts of `mc_return`, `mc_return__mean_axis_-1`,
-        # `eval_best_burst_mean`).
-        mc_return_raw,
+        # Both reconstruct per-(burst, episode) raw return inline
+        # from trace columns; `mc_return_raw__mean_axis_-1` then
+        # reduces to per-burst (NDArray for per-burst link bridges),
+        # `eval_best_burst_raw_mean` reduces to the best-burst
+        # scalar (counterpart of `eval_best_burst_mean`).
         mc_return_raw_per_burst_mean,
         eval_best_burst_raw_mean,
     )
