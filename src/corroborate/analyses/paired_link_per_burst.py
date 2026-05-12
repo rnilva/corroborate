@@ -26,6 +26,7 @@ from dataclasses import dataclass
 
 import numpy as np
 import numpy.typing as npt
+import scipy.stats as _stats
 
 from corroborate.analyses.paired_g_per_burst import evaluate_per_burst_source
 from corroborate.bridge.analysis import analysis
@@ -320,7 +321,11 @@ def phase_link_consistency(
     under the panel's positive-when-active convention: r > 0 means
     more bias reduction → more outcome gain.
 
-    Returns nan if the panel has no strata for the env."""
+    Returns nan if the panel has no strata for the env.
+
+    **Descriptive only — no SE / null hypothesis.** Use
+    `phase_link_consistency_binomial_p` for an inferentially
+    calibrated test."""
     panel = (
         result.strata if env_name is None
         else tuple(s for s in result.strata if s.env_name == env_name)
@@ -338,9 +343,55 @@ def phase_link_consistency(
     return sign_match / len(panel)
 
 
+def phase_link_consistency_binomial_p(
+    result: PerBurstLinkResult,
+    *,
+    env_name: str | None = None,
+    significance: float = 0.05,
+    expected_sign: int = +1,
+) -> tuple[float, int, int]:
+    """One-sided binomial test of "more bursts pass sign+significance
+    than chance." Under H0 (no link), each burst's per-burst test
+    has Type-I rate `significance / 2` for a fixed-sign one-sided
+    rejection (per-burst tests are two-sided p, sign filter halves
+    the Type-I rate). Returns `(p_value, n_signif, n_total)`:
+    p-value < α means the fraction of significant-sign-match
+    bursts is significantly above chance.
+
+    Use this for inferential gating in bridges; use the bare
+    `phase_link_consistency` only for descriptive reporting.
+
+    Returns `(nan, 0, 0)` if the panel has no strata for the env."""
+    panel = (
+        result.strata if env_name is None
+        else tuple(s for s in result.strata if s.env_name == env_name)
+    )
+    if not panel:
+        return float('nan'), 0, 0
+    n_signif = sum(
+        1 for s in panel
+        if (
+            np.isfinite(s.r) and np.isfinite(s.p)
+            and s.p < significance
+            and (s.r * expected_sign) > 0
+        )
+    )
+    n_total = len(panel)
+    null_p = significance / 2.0  # one-sided sign-match Type-I rate
+    # P(Binomial(n_total, null_p) >= n_signif) one-sided.
+    # scipy.stats.binomtest exists at runtime in scipy ≥ 1.7 but
+    # the bundled type stubs don't expose it; suppress the type-
+    # check error here rather than reach for a polyfill.
+    p_value = float(_stats.binomtest(  # type: ignore[attr-defined]
+        n_signif, n_total, p=null_p, alternative='greater',
+    ).pvalue)
+    return p_value, n_signif, n_total
+
+
 __all__ = [
     'PerBurstLinkResult',
     'PerBurstLinkStratum',
     'paired_link_per_burst',
     'phase_link_consistency',
+    'phase_link_consistency_binomial_p',
 ]

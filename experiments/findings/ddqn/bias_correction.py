@@ -31,7 +31,8 @@ import numpy.typing as npt
 import polars as pl
 
 from corroborate.analyses.paired_link_per_burst import (
-    PerBurstLinkResult, phase_link_consistency,
+    PerBurstLinkResult,
+    phase_link_consistency_binomial_p,
 )
 from corroborate.analyses.stratum_delta_link_dowhy import (
     StratumDeltaLinkDowhyResult,
@@ -81,32 +82,59 @@ def acrobot_per_burst_link_active__gamma_0999(
         Mapping[str, object], npt.NDArray[np.floating],
     ] = JENSEN_BIAS_PER_BURST_MEAN,
     env_name: str = 'Acrobot-v1',
-    consistency_floor: float = 0.7,
+    significance: float = 0.05,
+    expected_sign: int = -1,
+    binomial_alpha: float = 0.05,
+    min_bursts: int = 6,
 ) -> Verdict:
-    """Per-burst r(Δ_jens, Δ_out) significantly negative in at
-    least `consistency_floor` of bursts on Acrobot γ=0.999.
+    """Per-burst r(Δ_jens, Δ_out) significantly negative in
+    more bursts than chance on Acrobot γ=0.999. Binomial test
+    against H0 "fraction-of-significant-sign-match bursts is
+    at chance rate".
 
-    Phase-5 audit (2026-05-12): kept as-is. Per-burst within-cell
-    seed pairing IS structural — computing a Pearson r at a single
+    Phase-5 audit (2026-05-12): per-burst within-cell seed
+    pairing IS structural — computing a Pearson r at a single
     (env, burst) stratum requires multiple observations within
     that stratum, and seed-paired Δs are the only way to get
-    per-seed scalars to correlate. There's no independent-samples
-    analog at within-stratum grain. The user's "replace seed-paired
-    analyses" directive applied to cross-stratum pseudo-
-    replication (Phases 1, 3, 4) — not within-stratum estimation.
+    per-seed scalars to correlate.
 
-    AWAITING DATA: scope gates on `corpus == 'l2_x_gamma_acrobot'`
-    which isn't in the current universal cache (similar to CLAIM 5
-    and Polyak bridges). Per `findings_l2_acrobot_goldilocks.md`,
-    per-burst r ranges ≈ -0.93 to -0.998 with plc=1.0 on that
-    corpus — when reintegrated, bridge fires HELD."""
+    Post-roast (issue 5): replaced bare-fraction threshold
+    (`plc ≥ 0.7 → HELD`) with binomial-test gate. Under H0 (no
+    link), each per-burst sign-match-and-significant test has
+    Type-I rate `significance/2`; the count of such bursts ~
+    Binomial(n_bursts, significance/2). HELD when the observed
+    count is significantly above chance via
+    `phase_link_consistency_binomial_p`.
+
+    `expected_sign=-1` for the bias-correction story: r < 0
+    means more bias reduction → more outcome gain (per the
+    panel's negative-r-when-active convention for source=jens,
+    target=outcome).
+
+    AWAITING DATA: scope gates on Acrobot γ=0.999 (the
+    `l2_x_gamma_acrobot` corpus) which isn't in the current
+    universal cache (similar to CLAIM 5 and Polyak bridges). Per
+    `findings_l2_acrobot_goldilocks.md`, per-burst r ranges
+    ≈ -0.93 to -0.998 with plc=1.0 on that corpus — when
+    reintegrated, the binomial p-value will be vanishingly small
+    and the bridge fires HELD."""
     del treatment_arm, baseline_arm, target, predictor
-    plc = phase_link_consistency(paired_link_per_burst, env_name=env_name)
-    if math.isnan(plc):
+    p_value, _n_signif, n_total = phase_link_consistency_binomial_p(
+        paired_link_per_burst,
+        env_name=env_name,
+        significance=significance,
+        expected_sign=expected_sign,
+    )
+    if n_total < min_bursts:
         return Verdict.POWER_INSUFFICIENT
-    if plc >= consistency_floor:
+    if math.isnan(p_value):
+        return Verdict.POWER_INSUFFICIENT
+    if p_value < binomial_alpha:
         return Verdict.HELD
-    if plc >= consistency_floor * 0.5:
+    # Distinguish "tested, null not rejected" from "barely below
+    # rejection" — POW_INSUF only when borderline (p between
+    # α and 2α).
+    if p_value < binomial_alpha * 2:
         return Verdict.POWER_INSUFFICIENT
     return Verdict.NO_EFFECT
 
