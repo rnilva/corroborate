@@ -64,7 +64,7 @@ from experiments.findings.ddqn._verdicts import dowhy_trio_verdict
     tier=Tier.ASSOCIATIONAL,
     scope=(
         (pl.col('env_name') == 'Acrobot-v1')
-        & (pl.col('corpus') == 'l2_x_gamma_acrobot')
+        & (pl.col('gamma') == 0.999)
         & finite_ge('effective_horizon', 80.0)
         & (pl.col('optimizer.inner.weight_decay') == 0.0001)
     ),

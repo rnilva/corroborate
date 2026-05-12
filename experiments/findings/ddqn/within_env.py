@@ -33,7 +33,7 @@ from experiments.findings.ddqn._scope import G1_VANILLA_CONFIG_PREMISE_ACTIVE
     tier=Tier.INTERVENTIONAL,
     scope=(
         (pl.col('env_name') == 'FourRooms-misc')
-        & (pl.col('corpus') == 'gamma_sweep')
+        & (pl.col('gamma') == 0.999)
         & finite_ge('effective_horizon', 25.0)
     ),
 )

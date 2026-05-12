@@ -193,10 +193,8 @@ def eff_h_mediates_g_link__survival_envs(
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
     scope=(
-        pl.col('corpus').is_in(
-            ['asterix_postfix_chunk10',
-             'survive_sync_intermediate_minatar_postfix'],
-        )
+        pl.col('env_name').is_in(['Asterix-MinAtar', 'Breakout-MinAtar'])
+        & pl.col('sync_period').is_in([500, 1500, 3000])
         & finite('target_staleness_late')
         & finite('jensen_gap')
         & finite('eval_best_burst_mean')
