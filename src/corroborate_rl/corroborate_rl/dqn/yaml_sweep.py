@@ -434,19 +434,12 @@ def dispatch_sweep(sweep: DQNSweep) -> tuple[Path, Path]:
     sub_traces: list[Path] = []
     sub_arm_dirs: list[Path] = []
     for cfg, env_configs in zip(configs, envs_per_h, strict=True):
-        # Split HPs from arm slot replacements: HPs go into `base`
-        # as pre-bound kwargs; arm slot swaps come via the
-        # DoEffect's arms.
         do_arms = cfg.do_effect_arms()
-        arm_slot_paths = {
-            iv.slot_path
-            for arm in do_arms
-            for iv in arm
-        }
-        hp_kwargs = {
-            k: v for k, v in cfg.intervention.items()
-            if k not in arm_slot_paths
-        }
+        # HP/arm split — see `HypothesisConfig.base_hp_kwargs` for
+        # the two schemas. New N-arm `arms:` leaves base intact;
+        # legacy binary `intervention_arms:` strips arm-slot paths
+        # to reconstruct the vanilla baseline.
+        hp_kwargs = cfg.base_hp_kwargs()
         base: Callable[..., object] = partial(dqn, **hp_kwargs)
         intervention = DoEffect(arms=do_arms)
         # Flat grid_points: env × chunk × wrappers.

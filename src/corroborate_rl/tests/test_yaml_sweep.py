@@ -140,6 +140,52 @@ def test_do_effect_arms_nonempty_intervention_arms_yields_binary() -> None:
     assert cfg.do_effect_arms() == ((), (iv,))
 
 
+def test_base_hp_kwargs_strips_arm_slots_for_legacy_intervention_arms() -> None:
+    """Legacy binary schema: `intervention:` self-documents the
+    treatment (duplicating the arm slot). Stripping arm-slot paths
+    reconstructs the vanilla baseline. The strip is necessary so
+    the empty (baseline) arm falls through to dqn's default for
+    that slot."""
+    from corroborate_rl.dqn.claims.bootstrap import bootstrap
+
+    iv = Intervention(slot_path='bootstrap', replacement=bootstrap)
+    cfg = HypothesisConfig(
+        name='binary_template',
+        intervention={'gamma': 0.99, 'bootstrap': bootstrap},
+        intervention_arms=(iv,),
+    )
+    hp = cfg.base_hp_kwargs()
+    assert 'gamma' in hp
+    assert hp['gamma'] == 0.99
+    assert 'bootstrap' not in hp  # stripped — empty arm uses dqn default
+
+
+def test_base_hp_kwargs_keeps_arm_slots_for_new_arms_schema() -> None:
+    """New N-arm `arms:` schema: `intervention:` IS the base.
+    Even if a slot is varied per-arm, the base value is preserved
+    so the empty-tuple arm inherits it (Pearl-style "no
+    intervention" control). Closes 2026-05-12 bug where
+    `base_intervention.replay = Replay(50k)` got stripped because
+    other arms varied `replay`."""
+    from corroborate_rl.dqn.claims.replay import Replay
+
+    base_replay = Replay(capacity=50_000, batch_size=32)
+    arm_replay_small = Replay(capacity=5_000, batch_size=32)
+    arms = (
+        (),  # empty control — must inherit base_replay
+        (Intervention(slot_path='replay', replacement=arm_replay_small),),
+    )
+    cfg = HypothesisConfig(
+        name='replay_multi_arm',
+        intervention={'gamma': 0.99, 'replay': base_replay},
+        intervention_arms=(),
+        arms=arms,
+    )
+    hp = cfg.base_hp_kwargs()
+    assert hp['gamma'] == 0.99
+    assert hp['replay'] is base_replay  # NOT stripped; empty arm gets this
+
+
 def test_do_effect_arms_explicit_arms_takes_precedence() -> None:
     """When `arms:` is authored explicitly (new N-arm schema), it
     wins over the legacy translation regardless of

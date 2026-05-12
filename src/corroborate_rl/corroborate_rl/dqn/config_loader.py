@@ -96,6 +96,40 @@ class HypothesisConfig:
             return ((),)
         return ((), self.intervention_arms)
 
+    def base_hp_kwargs(self) -> dict[str, object]:
+        """Compute the HP kwargs for `partial(dqn, **kwargs)` —
+        the base configuration shared across arms.
+
+        Two schemas, two strip-behaviors:
+
+        - **New N-arm `arms:` schema** (`cfg.arms is not None`):
+          `intervention:` IS the base. NO stripping — each arm's
+          interventions override slot values via partial precedence
+          (`apply_interventions`). Empty-tuple arm = "use base
+          values" — the natural Pearl-style "no intervention"
+          control.
+
+        - **Legacy binary `intervention_arms:` schema** (`cfg.arms
+          is None`): authors traditionally duplicate the treatment
+          arm's slot swap in `intervention:` for self-documentation.
+          Strip arm-slot paths from base so the empty arm
+          reconstructs the vanilla baseline (slot falls through to
+          dqn's default), and the treatment arm overrides via
+          `apply_interventions`. This is the strip-from-base
+          behavior the framework has had since the binary days.
+
+        The split is visible in dispatch — see
+        `yaml_sweep.dispatch_sweep` for the full call site."""
+        if self.arms is not None:
+            return dict(self.intervention)
+        arm_slot_paths = {
+            iv.slot_path for iv in self.intervention_arms
+        }
+        return {
+            k: v for k, v in self.intervention.items()
+            if k not in arm_slot_paths
+        }
+
 
 _CLASS_KEY = 'class'
 _FN_KEY = 'fn'
