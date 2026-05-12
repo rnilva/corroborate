@@ -1065,7 +1065,7 @@ _REACH_ENVS_FOUR: tuple[str, ...] = (
     source='jensen_gap',
     target='eval_best_burst_mean',
     direction=Direction.INVERSE,
-    tier=Tier.INTERVENTIONAL,
+    tier=Tier.ASSOCIATIONAL,
     scope=_DDQN_RELEVANT_SCOPE,
 )
 def reach_link_backdoor_ate_negative(
@@ -1117,7 +1117,7 @@ def reach_link_backdoor_ate_negative(
     source='jensen_gap',
     target='eval_best_burst_mean',
     direction=Direction.INVERSE,
-    tier=Tier.INTERVENTIONAL,
+    tier=Tier.ASSOCIATIONAL,
     scope=_DDQN_RELEVANT_SCOPE,
 )
 def reach_link_placebo_refuted(
@@ -1157,7 +1157,7 @@ def reach_link_placebo_refuted(
     source='jensen_gap',
     target='eval_best_burst_mean',
     direction=Direction.INVERSE,
-    tier=Tier.INTERVENTIONAL,
+    tier=Tier.ASSOCIATIONAL,
     scope=_DDQN_RELEVANT_SCOPE,
 )
 def reach_link_rcc_robust(
@@ -1521,7 +1521,7 @@ def fourrooms_action_dim_link_active__inflated(
     source='jensen_gap',
     target='eval_best_burst_mean',
     direction=Direction.INVERSE,
-    tier=Tier.INTERVENTIONAL,
+    tier=Tier.ASSOCIATIONAL,
     scope=(
         (pl.col('total_steps') == 1_000_000)
         & finite('q_divergence_score')
@@ -1576,7 +1576,7 @@ def extreme_q_divergence_attenuates_link__binary(
     source='jensen_gap',
     target='eval_best_burst_mean',
     direction=Direction.INVERSE,
-    tier=Tier.INTERVENTIONAL,
+    tier=Tier.ASSOCIATIONAL,
     scope=(
         (pl.col('total_steps') == 1_000_000)
         & finite('q_divergence_score')
@@ -1625,7 +1625,7 @@ def extreme_q_divergence_attenuates_link__placebo_refuted(
     source='jensen_gap',
     target='eval_best_burst_mean',
     direction=Direction.INVERSE,
-    tier=Tier.INTERVENTIONAL,
+    tier=Tier.ASSOCIATIONAL,
     scope=(
         (pl.col('total_steps') == 1_000_000)
         & finite('q_divergence_score')
@@ -2079,7 +2079,7 @@ def clip_wedge_predicts_outcome__polarity_moderated__dormant_scope(
     source='target_staleness_late',
     target='eval_best_burst_mean',
     direction=Direction.INVERSE,
-    tier=Tier.INTERVENTIONAL,
+    tier=Tier.ASSOCIATIONAL,
     pair_by=(
         'env_name', 'gamma', 'sync_period',
         'total_steps', 'seed', 'target_sync.tau',
@@ -2152,7 +2152,7 @@ def staleness_amplifies_ddqn_outcome__sparse_goal_polyak(
     source='target_staleness_late',
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
-    tier=Tier.INTERVENTIONAL,
+    tier=Tier.ASSOCIATIONAL,
     pair_by=(
         'env_name', 'gamma', 'sync_period',
         'total_steps', 'seed', 'target_sync.tau',
