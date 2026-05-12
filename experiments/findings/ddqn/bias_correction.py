@@ -39,8 +39,8 @@ from corroborate.analyses.stratum_delta_link_dowhy import (
 from corroborate.analyses.stratum_effect_panel import (
     StratumEffectPanel, panel_regress,
 )
-from corroborate.analyses.stratum_outcome_attenuation_dowhy import (
-    StratumOutcomeAttenuationDowhyResult,
+from corroborate.analyses.stratum_link_moderation_dowhy import (
+    StratumLinkModerationDowhyResult,
 )
 from corroborate.bridge.bridge import Direction, Tier, claim_bridge
 from corroborate.bridge.predicates import finite, finite_ge
@@ -152,7 +152,7 @@ def reach_link_dowhy_corroborated(
     del env_filter, min_vanilla_predictor
     return dowhy_trio_verdict(
         stratum_delta_link_dowhy,
-        ate_ceiling=ate_ceiling,
+        ate_threshold=ate_ceiling,
         placebo_max_ratio=placebo_max_ratio,
         rcc_max_drift_ratio=rcc_max_drift_ratio,
     )
@@ -216,7 +216,7 @@ def fourrooms_action_dim_link_active__inflated(
     ),
 )
 def extreme_q_divergence_attenuates_link__dowhy_corroborated(
-    stratum_outcome_attenuation_dowhy: StratumOutcomeAttenuationDowhyResult,
+    stratum_link_moderation_dowhy: StratumLinkModerationDowhyResult,
     *,
     treatment_arm: str = DDQN_ARM,
     baseline_arm: str = VANILLA_ARM,
@@ -229,7 +229,7 @@ def extreme_q_divergence_attenuates_link__dowhy_corroborated(
         Mapping[str, object], npt.NDArray[np.floating],
     ] = JENSEN_BIAS_PER_BURST_MEAN,
     min_vanilla_predictor: float = 0.05,
-    ate_ceiling: float = -0.10,
+    interaction_ate_floor: float = 0.10,
     placebo_max_ratio: float = 0.2,
     rcc_max_drift_ratio: float = 0.15,
 ) -> Verdict:
@@ -238,35 +238,40 @@ def extreme_q_divergence_attenuates_link__dowhy_corroborated(
     `findings_q_div_threshold_too_loose.md`) have a weaker
     bias→outcome **link** vs in-band envs.
 
-    Phase-4 refactor (2026-05-12): replaced `link_attenuation_dowhy`
-    (within-(env, burst) Pearson r computed from seed-paired Δs as
-    outcome) with `stratum_outcome_attenuation_dowhy` (per-(env,
-    burst) independent-samples Δ_outcome). "Link" is the causal
-    claim "bias drops → outcome rises," not the seed-pairing
-    mechanic. Mech conditioning via `min_vanilla_predictor=0.05`
-    ensures premise active per stratum; DDQN's structural tendency
-    to reduce bias means Δ_outcome attenuation in high-q_div
-    strata corresponds to a weakened mech→outcome link.
+    Phase-4b refactor (2026-05-12, post-roast): replaced
+    `stratum_outcome_attenuation_dowhy` (outcome-only, didn't see
+    Δ_jens → faith claim that outcome-attenuation = link-attenuation)
+    with `stratum_link_moderation_dowhy` — the proper mediation-
+    aware test. The interaction coefficient
+    `Δ_predictor × 1[env above q_div threshold]` IS the link
+    moderation: β_int > 0 means above-threshold envs have a
+    less-negative slope of Δ_outcome on Δ_jens (link weakened).
+    Independent-samples per (env, burst) stratum, no seed pairing.
 
-    DoWhy backdoor + placebo + RCC trio under env one-hot
-    adjustment. `zero_guard=True` on backdoor handles RNG-
-    dependent machine-epsilon signs.
+    Identification: binary_attenuator is env-determined and would
+    be colinear with env one-hot. Resolution: only the
+    interaction term enters as the causal target; env-dummies +
+    Δ_predictor adjust. The interaction's within-env variation
+    (Δ_predictor changes across bursts within each env) makes
+    β_int identifiable.
+
+    HELD when interaction β ≥ `interaction_ate_floor` AND placebo
+    refutes AND RCC stable. Mech conditioning via
+    `min_vanilla_predictor=0.05`.
 
     AWAITING DATA: the current cache's max q_divergence_score is
     1.05 (one CartPole cell). The pre-rebuild sync=10k MinAtar
     corpora that produced Q-explosion regimes (q_div ≫ 1) aren't
     in the universal cache. Bridge fires POW_INSUF until those
-    corpora are reintegrated. Pre-rebuild thresholds were 1000
-    (orders-of-magnitude divergence) — these regimes are
-    well-defined empirically but not currently testable."""
+    corpora are reintegrated."""
     del treatment_arm, baseline_arm, attenuator, binary_threshold
     del link_target, link_predictor, min_vanilla_predictor
     return dowhy_trio_verdict(
-        stratum_outcome_attenuation_dowhy,
-        ate_ceiling=ate_ceiling,
+        stratum_link_moderation_dowhy,
+        ate_threshold=interaction_ate_floor,
+        sign=1,
         placebo_max_ratio=placebo_max_ratio,
         rcc_max_drift_ratio=rcc_max_drift_ratio,
-        zero_guard=True,
     )
 
 

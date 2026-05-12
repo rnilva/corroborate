@@ -50,14 +50,21 @@ class _PartialSpearmanResult(Protocol):
 def dowhy_backdoor_verdict(
     b: _BackdoorResult,
     *,
-    ate_ceiling: float,
+    ate_threshold: float,
+    sign: Literal[-1, 1] = -1,
     zero_guard: bool = False,
 ) -> Verdict:
-    """DoWhy backdoor ATE verdict (predicted INVERSE direction).
+    """DoWhy backdoor ATE verdict.
 
-    HELD when identified ∧ ATE ≤ `ate_ceiling`. POW_INSUF when
-    not identified / NaN / ATE in (ceiling, 0). NO_EFFECT when
-    ATE ≥ 0.
+    `sign=-1` (default, predicted-negative direction): HELD when
+    identified ∧ ATE ≤ `ate_threshold` (typically a negative
+    ceiling like -0.1); POW_INSUF when ATE in (ceiling, 0);
+    NO_EFFECT when ATE ≥ 0.
+
+    `sign=+1` (predicted-positive direction): HELD when
+    identified ∧ ATE ≥ `ate_threshold` (typically a positive
+    floor like +0.1); POW_INSUF when ATE in (0, floor);
+    NO_EFFECT when ATE ≤ 0.
 
     `zero_guard=True` treats |ATE| < 1e-6 as POW_INSUF — DoWhy
     machine-epsilon signs are RNG-dependent and shouldn't flip
@@ -68,9 +75,15 @@ def dowhy_backdoor_verdict(
         return Verdict.POWER_INSUFFICIENT
     if zero_guard and abs(b.ate) < 1e-6:
         return Verdict.POWER_INSUFFICIENT
-    if b.ate <= ate_ceiling:
+    if sign < 0:
+        if b.ate <= ate_threshold:
+            return Verdict.HELD
+        if b.ate < 0.0:
+            return Verdict.POWER_INSUFFICIENT
+        return Verdict.NO_EFFECT
+    if b.ate >= ate_threshold:
         return Verdict.HELD
-    if b.ate < 0.0:
+    if b.ate > 0.0:
         return Verdict.POWER_INSUFFICIENT
     return Verdict.NO_EFFECT
 
@@ -128,7 +141,8 @@ class _DowhyTrioResult(Protocol):
 def dowhy_trio_verdict(
     result: _DowhyTrioResult,
     *,
-    ate_ceiling: float,
+    ate_threshold: float,
+    sign: Literal[-1, 1] = -1,
     placebo_max_ratio: float,
     rcc_max_drift_ratio: float,
     zero_guard: bool = False,
@@ -136,10 +150,16 @@ def dowhy_trio_verdict(
     """Composite verdict over backdoor + placebo + RCC refutations.
     All three must HELD for the composite to HELD; any NO_EFFECT
     dominates (a clean refutation outranks a power gap); otherwise
-    POW_INSUF."""
+    POW_INSUF.
+
+    `sign=-1` for predicted-negative ATE (default; threshold is a
+    ceiling); `sign=+1` for predicted-positive ATE (threshold is
+    a floor — e.g., a positive interaction coefficient signalling
+    link attenuation in a moderation analysis)."""
     sub = (
         dowhy_backdoor_verdict(
-            result.backdoor, ate_ceiling=ate_ceiling, zero_guard=zero_guard,
+            result.backdoor, ate_threshold=ate_threshold,
+            sign=sign, zero_guard=zero_guard,
         ),
         dowhy_placebo_verdict(
             result.placebo, max_ratio=placebo_max_ratio,
