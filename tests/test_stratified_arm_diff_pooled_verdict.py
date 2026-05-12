@@ -1,23 +1,24 @@
-"""Tests for `analyses.random_effects_pool` — the discoverable
-analysis surface for the heterogeneity-flagged pool verdict.
+"""Tests for `stratified_arm_diff_pooled`'s heterogeneity-flagged
+verdict (added 2026-05-12 as the discoverable surface for the
+scope-cluster pattern in HYPOTHESIS_AS_GRAPH.md §3b).
+
+Replaces the prior `test_random_effects_pool.py`. The earlier
+primitive paired by seed via `per_env_paired_g_panel`, inheriting
+the pseudo-replication failure mode flagged in
+`stratified_arm_diff_pooled.py`'s docstring. The principled
+primitive uses **independent-samples** Cohen's d per stratum +
+DerSimonian-Laird pool + `random_effects_verdict` dispatch.
 
 Each test constructs a synthetic multi-env corpus with controlled
-per-env effect sizes, runs the analysis, and asserts on the
-resulting `(Verdict, RefutationClass)` against the framework's
-`random_effects_verdict` dispatch rules:
-
-- PI excludes zero in predicted direction + I² < 0.5 → HELD.
-- PI excludes zero in predicted direction + I² ≥ 0.5 →
-  HELD_WITH_SCOPE_FLAG.
-- PI brackets zero → NO_EFFECT/NULL_EFFECT.
-- < 3 strata → POWER_INSUFFICIENT/UNDERPOWERED.
-- PI strictly opposite to predicted → NO_EFFECT/SIGN_FLIP."""
+per-env (treatment_mean, baseline_mean) and asserts on the
+emitted verdict against the rules in
+`stats.effect_size.random_effects_verdict`."""
 from __future__ import annotations
 
 import random
 
-from corroborate.analyses.random_effects_pool import (
-    RandomEffectsPoolResult, random_effects_pool,
+from corroborate.analyses.stratified_arm_diff_pooled import (
+    StratifiedArmDiffPooledResult, stratified_arm_diff_pooled,
 )
 from corroborate.bridge.verdict import RefutationClass, Verdict
 
@@ -33,11 +34,12 @@ def _make_cells(
     noise: float = 0.1,
     seed: int = 0,
 ) -> list[dict[str, object]]:
-    """Build paired cells per env with controlled means.
+    """Build independent-samples cells per env with controlled means.
 
-    `env_effects = [(env_name, treatment_mean, baseline_mean), ...]`.
-    Each env contributes `n_seeds` treatment + `n_seeds` baseline
-    cells with Gaussian noise of `noise`."""
+    Treatment + baseline are NOT paired — `seed` is just a row
+    identifier within each (env, arm); the stratified analysis
+    aggregates per (env, arm) and treats the (g, SE) per env as
+    one observation."""
     rng = random.Random(seed)
     out: list[dict[str, object]] = []
     for env, t_mean, b_mean in env_effects:
@@ -45,10 +47,12 @@ def _make_cells(
             out.append({
                 'arm_key': _TREATMENT, 'seed': s, 'env_name': env,
                 'outcome': t_mean + rng.gauss(0, noise),
+                'jensen_gap': 1.0,
             })
             out.append({
                 'arm_key': _BASELINE, 'seed': s, 'env_name': env,
                 'outcome': b_mean + rng.gauss(0, noise),
+                'jensen_gap': 1.0,
             })
     return out
 
@@ -57,18 +61,23 @@ def _run(
     cells: list[dict[str, object]],
     *,
     predicted_direction: str | None = 'a_gt_b',
-) -> RandomEffectsPoolResult:
+) -> StratifiedArmDiffPooledResult:
     """Direct call to the analysis (bypasses bridge fixture
-    layer; tests the primitive in isolation)."""
-    result = random_effects_pool.fn(
+    layer; tests the primitive in isolation). `jensen_gap=1.0`
+    in every cell so the stratum-level scope filter never
+    excludes any strata."""
+    result = stratified_arm_diff_pooled.fn(
         cells,
+        source='outcome',
         treatment_arm=_TREATMENT,
         baseline_arm=_BASELINE,
-        source='outcome',
-        pair_by=('seed',),
+        stratify_by=('env_name',),
+        scope_predictor='jensen_gap',
+        min_vanilla_predictor=0.05,
+        min_seeds_per_arm=5,
         predicted_direction=predicted_direction,
     )
-    assert isinstance(result, RandomEffectsPoolResult)
+    assert isinstance(result, StratifiedArmDiffPooledResult)
     return result
 
 
@@ -87,11 +96,11 @@ def test_pool_held_with_scope_flag_high_heterogeneity() -> None:
     """Per-env effects spread tight enough to keep PI positive
     while wide enough relative to within-env noise to push I²
     above 0.5. Pool excludes zero in predicted direction (all
-    positive) → HELD_WITH_SCOPE_FLAG, not NO_EFFECT.
+    positive) → HELD_WITH_SCOPE_FLAG.
 
-    Construction: 6 envs with t-means linearly spaced 0.5 → 1.5
-    against b=0; noise=0.5 keeps per-env SE moderate so I² climbs
-    without τ² blowing the PI past zero."""
+    Construction tuned for independent-samples Cohen's d: 8 envs
+    with t-means 0.5 → 1.2; noise=0.5 keeps per-env SE moderate
+    so I² climbs without τ² blowing the PI past zero."""
     envs = [
         ('env_a', 0.5, 0.0),
         ('env_b', 0.6, 0.0),
@@ -127,8 +136,9 @@ def test_pool_no_effect_pi_brackets_zero() -> None:
 
 
 def test_pool_power_insufficient_n_under_three() -> None:
-    """Fewer than 3 strata with finite g/SE → POWER_INSUFFICIENT/
-    UNDERPOWERED per `random_effects_verdict`'s n_cells < 3 gate."""
+    """Fewer than 3 strata with finite Cohen's d/SE →
+    POWER_INSUFFICIENT/UNDERPOWERED per `random_effects_verdict`'s
+    n_cells < 3 gate."""
     envs = [('only_env', 1.0, 0.0), ('one_more', 1.0, 0.0)]
     cells = _make_cells(envs, n_seeds=30, noise=0.1)
     result = _run(cells)

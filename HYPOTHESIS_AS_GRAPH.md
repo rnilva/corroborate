@@ -214,10 +214,13 @@ tests the cleavage. Both bridges share a NAMED scope predicate
 (same `extent_hash` → automatic cluster on the post-evaluated
 graph).
 
-The pool side uses the `random_effects_pool` analysis primitive
-(`corroborate.analyses.random_effects_pool`), which composes
-DerSimonian-Laird random-effects pooling with the
-heterogeneity-flagged verdict (`random_effects_verdict`).
+The pool side uses the `stratified_arm_diff_pooled` analysis
+primitive (`corroborate.analyses.stratified_arm_diff_pooled`),
+which computes per-stratum **independent-samples** Cohen's d (not
+paired Hedges' g — seeds aren't matched draws across arms in an
+RL substrate, cf. the primitive's module docstring), DL-pools
+across strata, and dispatches `random_effects_verdict` to emit
+`HELD / HELD_WITH_SCOPE_FLAG / NO_EFFECT / POWER_INSUFFICIENT`.
 Bridges that fixture it return the result's verdict directly:
 
 ```python
@@ -227,9 +230,12 @@ from experiments.findings.<short>._scope import SHARED_SCOPE
               scope=SHARED_SCOPE, tier=Tier.ASSOCIATIONAL,
               predicted_direction='a_gt_b')
 def effect_pools_across_envs(
-    random_effects_pool: RandomEffectsPoolResult,
+    stratified_arm_diff_pooled: StratifiedArmDiffPooledResult,
 ) -> tuple[Verdict, RefutationClass | None]:
-    return random_effects_pool.verdict, random_effects_pool.refutation
+    return (
+        stratified_arm_diff_pooled.verdict,
+        stratified_arm_diff_pooled.refutation,
+    )
 
 @claim_bridge(source=INTERVENTION, target='<outcome>',
               scope=SHARED_SCOPE, tier=Tier.ASSOCIATIONAL)
@@ -247,7 +253,11 @@ cluster.
 
 The methodology is in `ANALYSIS_RECIPE.md` §1.5; the discipline
 against treating heterogeneous-but-pooled-positive as plain
-HELD is in `corroborate/bridge/verdict.py`.
+HELD is in `corroborate/bridge/verdict.py`. The choice of
+independent-samples Cohen's d over paired Hedges' g (rejecting
+seed-pairing for cross-env pooling) is documented in
+`corroborate/analyses/stratified_arm_diff_pooled.py`'s module
+docstring.
 
 ## Anti-patterns
 

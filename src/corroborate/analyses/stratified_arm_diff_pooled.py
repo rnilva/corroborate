@@ -33,7 +33,11 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 
 from corroborate.bridge.analysis import analysis
-from corroborate.stats.effect_size import random_effects_summary
+from corroborate.bridge.verdict import RefutationClass, Verdict
+from corroborate.stats.effect_size import (
+    PooledStats, PredictedDirection,
+    random_effects_summary, random_effects_verdict,
+)
 
 from corroborate.analyses.paired_g import resolve_value
 
@@ -80,6 +84,23 @@ class StratifiedArmDiffPooledResult:
     stratum (sorted by `stratum_id`). Lets bridges build per-env
     panels without re-aggregating.
 
+    `pooled` — full `PooledStats` carrying the prediction
+    interval (pi_lo / pi_hi) used by `random_effects_verdict`.
+    Surfaced as a field rather than recomputed from
+    `(pooled_d, pooled_se)` so bridges can inspect the
+    heterogeneity diagnostics + PI bounds without re-running
+    `random_effects_summary`.
+
+    `verdict` / `refutation` — heterogeneity-flagged verdict
+    via `random_effects_verdict`. `HELD_WITH_SCOPE_FLAG` when
+    PI excludes zero in the predicted direction AND
+    `I² ≥ I2_THRESHOLD` (default 0.5) — the scope-discovery
+    trigger documented in `verdict.py` and ANALYSIS_RECIPE.md
+    §1.5. Bridges that fixture this analysis can return
+    `(result.verdict, result.refutation)` directly to enforce
+    the heterogeneity discipline at the verdict layer rather
+    than re-implementing it in each bridge body.
+
     `pooled_p_value` — two-sided p-value for `pooled_d != 0` from
     `pooled_d / pooled_se` under normal approximation.
     """
@@ -96,6 +117,9 @@ class StratifiedArmDiffPooledResult:
     baseline_arm: str
     arm_field: str
     scope_predictor: str
+    pooled: PooledStats
+    verdict: Verdict
+    refutation: RefutationClass | None
 
     @property
     def pooled_p_value(self) -> float:
@@ -191,6 +215,7 @@ def stratified_arm_diff_pooled(
     scope_predictor: str = 'jensen_gap',
     min_vanilla_predictor: float = 0.05,
     min_seeds_per_arm: int = 5,
+    predicted_direction: PredictedDirection | None = None,
 ) -> StratifiedArmDiffPooledResult:
     """Per-stratum independent-samples Cohen's d, DL-pooled.
 
@@ -288,11 +313,22 @@ def stratified_arm_diff_pooled(
         i_squared = pooled.I2
         q_stat = pooled.Q
     else:
+        pooled = PooledStats(
+            pooled_g=float('nan'), se_pooled=float('nan'),
+            tau2=float('nan'), I2=float('nan'), Q=float('nan'),
+            pi_lo=float('nan'), pi_hi=float('nan'),
+            empirical_min_g=float('nan'), empirical_max_g=float('nan'),
+            n_cells=len(obs), assumption_violations=(),
+        )
         pooled_d = float('nan')
         pooled_se = float('nan')
         tau2 = float('nan')
         i_squared = float('nan')
         q_stat = float('nan')
+
+    verdict, refutation = random_effects_verdict(
+        pooled, predicted_direction=predicted_direction,
+    )
 
     return StratifiedArmDiffPooledResult(
         pooled_d=pooled_d,
@@ -308,6 +344,9 @@ def stratified_arm_diff_pooled(
         baseline_arm=baseline_arm,
         arm_field=arm_field,
         scope_predictor=scope_predictor,
+        pooled=pooled,
+        verdict=verdict,
+        refutation=refutation,
     )
 
 

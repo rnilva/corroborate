@@ -394,7 +394,7 @@ different verdicts — the framework refuses to collapse them.
 | `phase_link_consistency` | scalar derived from per-burst link panel: fraction of bursts with significant negative r |
 | `meta_regression_paired_g` | per-stratum Δ regressed on covariates |
 | `meta_regression_per_burst` | per-(stratum, burst) panel meta-regression |
-| `random_effects_pool` | per-stratum (g, SE) → DL random-effects pool with heterogeneity-flagged verdict (HELD / HELD_WITH_SCOPE_FLAG / NO_EFFECT / POWER_INSUFFICIENT). Pair with `meta_regression` sibling on the same scope for the scope-cluster pattern (HYPOTHESIS_AS_GRAPH.md §3b). |
+| `stratified_arm_diff_pooled` | per-stratum **independent-samples** Cohen's d → DL random-effects pool with heterogeneity-flagged verdict (HELD / HELD_WITH_SCOPE_FLAG / NO_EFFECT / POWER_INSUFFICIENT). Pair with `meta_regression` sibling on the same scope for the scope-cluster pattern (HYPOTHESIS_AS_GRAPH.md §3b). Use **this** for cross-env / cross-config pooling — NOT `paired_g_pooled`, which pseudo-replicates by seed (see its module docstring). |
 | `mundlak_paired_g_per_burst` | per-cell mediator + per-burst g (composite for moderator probes) |
 | `proportion_mediated` | linear-mediation decomposition: indirect / total share of Δ_target carried by `mediator` |
 | `partial_spearman_rho` (graph.discovery) | linear-mediation Spearman form — partial-r of (X, Y) given Z; the Spearman analog of `proportion_mediated`'s direct effect |
