@@ -1,10 +1,10 @@
-# Polarity bridges verified on ddqn_universe cache
+# Polarity bridges verified on ddqn cache
 
 Date: 2026-05-05
 
 ## Summary
 
-Two paired polarity-conditional bridges in `ddqn_universe.py` evaluate
+Two paired polarity-conditional bridges in `ddqn/` evaluate
 **HELD** on the rebuilt cache:
 
 - `eff_h_mediates_g_link__goal_envs`: HELD (slope=−0.013, n_pairs=793, proportion=0.27)

@@ -27,7 +27,7 @@ The Fisher-z transform stabilises the SE: `se = 1/sqrt(n_pairs − 3)`.
 The canonical use: testing whether `r(Δ_eff_h, Δ_outcome)` per env
 is predictable from `env_reward_polarity` — the explicit form of the
 "polarity predicts link sign" soft tautology (CLAIM 14 in
-`ddqn_universe.py`).
+`experiments/findings/ddqn/`).
 """
 from __future__ import annotations
 

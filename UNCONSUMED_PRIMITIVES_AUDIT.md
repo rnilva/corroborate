@@ -35,7 +35,7 @@ Numbers from `grep` on `src/`, `scripts/`, `experiments/`,
 
 | role | sites |
 |---|---|
-| producer | 8 in `stats/effect_size.py`; per-bridge in `ddqn_universe.py` |
+| producer | 8 in `stats/effect_size.py`; per-bridge in `ddqn/` |
 | round-trip | `_internals/narrow.py` (parquet de/encode) |
 | **consumer** | **`scripts/run_hypothesis.py` (4 lines)** — groups verdict counts by `(verdict, refutation_class.value)`, renders inline string |
 | test | 1 site asserts UNDERPOWERED |
@@ -113,7 +113,7 @@ becomes the second use case the manifest review was demanding).
 
 **Cost**: one script, ~150 LOC. Zero framework changes.
 
-**Acceptance**: script runs against `ddqn_universe`, prints the
+**Acceptance**: script runs against `ddqn`, prints the
 audit. Either no surprises (we learn the graph is structurally
 sound), or we get specific structural findings worth acting on.
 

@@ -39,7 +39,7 @@ import numpy as np
 import polars as pl
 from scipy import stats
 
-CACHE_PATH = Path('experiments/data/cache/ddqn_universe.parquet')
+CACHE_PATH = Path('experiments/data/cache/ddqn.parquet')
 DDQN = 'bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)'
 
 # From polarity_x_undamped_panel.json + the OLS fit:

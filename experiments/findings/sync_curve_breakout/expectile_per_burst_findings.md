@@ -65,7 +65,7 @@ The FourRooms case (FINDINGS.md ninth revision, lines 421-497) made the same obs
 
 **The residual `bootstrap_fraction → g_link | g_mech` at the SCALAR level may be a within-env best-burst-selection-nonalignment artifact**, not a missing causal mediator.
 
-The chain `mech → outcome` is preserved at the per-burst level across two distinct greedification rules. The framework's documented next-frontier candidates (gradient stability, network curvature, exploration coverage from `ddqn_universe_summary.md`) are still untested, but the per-burst evidence here suggests they may not be necessary — the chain may already be complete at the per-burst level on these envs, with scalar discrepancies being aggregation artifacts.
+The chain `mech → outcome` is preserved at the per-burst level across two distinct greedification rules. The framework's documented next-frontier candidates (gradient stability, network curvature, exploration coverage from `ddqn_summary.md`) are still untested, but the per-burst evidence here suggests they may not be necessary — the chain may already be complete at the per-burst level on these envs, with scalar discrepancies being aggregation artifacts.
 
 ## Open questions left after this test
 

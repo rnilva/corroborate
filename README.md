@@ -175,7 +175,7 @@ Pre-v0. The acceptance test is a DDQN-vs-vanilla study
 reproducing the `mechanism HELD ↛ outcome HELD ↛ link HELD`
 verdict pattern across the canonical 17-env corpus. Current
 state: 32 bridges across `experiments/findings/dqn_bridges.py`
-+ `ddqn_universe.py`, exercising the typed Phase-6 contract
++ `ddqn/`, exercising the typed Phase-6 contract
 (`Hypothesis` Protocol + typed `DoEffect` Interventions) end-to-
 end.
 

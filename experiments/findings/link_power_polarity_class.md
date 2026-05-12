@@ -8,7 +8,7 @@ DDQN's outcome benefit (mean_dY) across envs?
 
 ## Method
 
-- Filter `ddqn_universe` corpus to MODULE_SCOPE (no bsuite) +
+- Filter `ddqn` corpus to MODULE_SCOPE (no bsuite) +
   CLAIM 17 scope.
 - Per (env, hp_config), aggregate over seeds: paired Δ_jens,
   Δ_outcome, plus env-feature averages (effh, bf, q_div).
@@ -80,7 +80,7 @@ precariously held, not a real "mech-HELD ∧ link-failed" signal.
 
 ## Bridge
 
-`effh_predicts_link_power__reach_envs` in ddqn_universe.py.
+`effh_predicts_link_power__reach_envs` in `ddqn/`.
 Scope: CLAIM 17 + REACH (env_reward_polarity < -0.3).
 Analysis: meta_regression_per_burst with effective_horizon as
 covariate. HELD when β(effective_horizon) ≥ 0.005 AND
@@ -89,6 +89,6 @@ significant. Predicted direction `a_gt_b`.
 ## Reproduction
 
 - Cross-env analysis script (inline in conversation log).
-- Bridge: `experiments/findings/ddqn_universe.py:effh_predicts_link_power__reach_envs`.
+- Bridge: `experiments/findings/ddqn/:effh_predicts_link_power__reach_envs`.
 - Cache: `experiments/data/cache/dqn_bridges.parquet` (15110
-  cells, used while ddqn_universe cache rebuilds).
+  cells, used while ddqn cache rebuilds).

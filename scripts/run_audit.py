@@ -61,7 +61,7 @@ def categorize(b: dict[str, object]) -> str:
 
 def main() -> None:
     path = Path(sys.argv[1] if len(sys.argv) > 1
-                else 'experiments/findings/ddqn_universe.run.json')
+                else 'experiments/findings/ddqn.run.json')
     if not path.exists():
         print(f'no run.json at {path}', file=sys.stderr)
         sys.exit(1)

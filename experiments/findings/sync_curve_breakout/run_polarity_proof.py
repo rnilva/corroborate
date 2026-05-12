@@ -59,7 +59,7 @@ POLARITY: dict[str, str] = {
 
 
 def main() -> None:
-    df = pl.read_parquet('experiments/data/cache/ddqn_universe.parquet')
+    df = pl.read_parquet('experiments/data/cache/ddqn.parquet')
     treatment_substr = 'bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)'
     baseline = 'baseline'
 

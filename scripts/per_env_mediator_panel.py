@@ -6,7 +6,7 @@ mediator carries ≥ 20% of DDQN's outcome benefit, with
 in_unit_interval diagnostic for linear-mediation assumption
 failure.
 
-Reads the canonical `ddqn_universe` cache parquet; no fresh
+Reads the canonical `ddqn` cache parquet; no fresh
 training. Mediator candidates restricted to the registered
 scalar measurables that have ≥ 1 env-cell coverage in the
 in-scope subset.
@@ -33,7 +33,7 @@ DDQN = (
 BASELINE = 'baseline'
 
 # CLAIM 17 scope (bounded Q ∧ bootstrap-using ∧ mech premise active ∧
-# standard config — see ddqn_universe.py:chain_amplifier_link_active_in_bounded_q).
+# standard config — see ddqn/ sub-package:chain_amplifier_link_active_in_bounded_q).
 CLAIM_17_SCOPE = (
     pl.col('q_divergence_score').is_finite()
     & (pl.col('q_divergence_score') < 1.0)
@@ -60,7 +60,7 @@ MEDIATORS: tuple[str, ...] = (
 
 
 def main() -> None:
-    cache = REPO / 'experiments/data/cache/ddqn_universe.parquet'
+    cache = REPO / 'experiments/data/cache/ddqn.parquet'
     df = pl.read_parquet(cache)
     sub = df.filter(
         CLAIM_17_SCOPE & pl.col('arm_key').is_in([DDQN, BASELINE])

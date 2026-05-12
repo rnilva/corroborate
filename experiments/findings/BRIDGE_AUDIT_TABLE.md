@@ -1,9 +1,9 @@
 # Bridge audit — step 1 verdict table
 
-**Corpus snapshot:** `experiments/data/cache/ddqn_universe.parquet`
+**Corpus snapshot:** `experiments/data/cache/ddqn.parquet`
 (1520 cells, 15 post-fix corpora, 12 envs)
 
-**Run JSON:** `experiments/findings/ddqn_universe.run.json`
+**Run JSON:** `experiments/findings/ddqn.run.json`
 (timestamp 2026-05-11T01:51, git_commit 9d6d105)
 
 **Drift state:** 13 corpora missing `outcome_native` measurable
@@ -254,7 +254,7 @@ Verdict: NO_EFFECT at β=−0.003, CI [−0.021, +0.015], R²=0.016,
 n_strata=11 (predicted a_lt_b at slope_threshold=−0.04;
 coefficient is 80× below threshold).
 
-Comment block at `ddqn_universe.py:3420-3434` explicitly states
+Comment block in the original `ddqn_universe.py` explicitly states
 CLAIM 26b replaces CLAIM 26's slope-predictor regression
 ("structurally underdetermined: per-env link slope is pinned
 at −1 by the asymptote claim, so cross-env variance in |slope|
@@ -275,7 +275,7 @@ panel; after the scope filter + arm pairing, zero rows survive.
 Most likely cause: the bridge's scope predicate (CLAIM 4 link-
 side residual) targets cells in the cross-env panel that the
 post-fix snapshot doesn't carry. Comment block at line 4168 +
-ddqn_universe.py's "DELETED" treatment of the bf-cross-env
+`ddqn/`'s "DELETED" treatment of the bf-cross-env
 claim (CLAIM 16 deletion memo, lines 4168-4193) already notes
 the bf-cross-env claim is dead: *"bf clusters at [0.98, 1.00]
 across true chain MDPs. No meaningful cross-env variance to
@@ -315,7 +315,7 @@ Classified by why the scope filter matches zero post-fix cells:
   config `experiments/configs/reward_scale_sweep_postfix.yaml`
   authored; 5 (env, rs) × 2 arms × 30 seeds × 200K steps on CPU
   in progress at `experiments/data/reward_scale_sweep_postfix/`.
-  After completion: ingest into the ddqn_universe cache, re-run
+  After completion: ingest into the ddqn cache, re-run
   the 6 bridges, retag.
 - **Queue for re-run (10):** Pearl rung-2 corroborations
   (adaptive_dqn × 2, gamma_sweep × 2, polyak τ × 2) + per-corpus

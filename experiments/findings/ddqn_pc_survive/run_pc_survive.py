@@ -1,6 +1,6 @@
 """PC adjacency discovery on the SURVIVE cohort (per-cell, JCI by env).
 
-Sibling of `ddqn_universe_pc_reach/run_pc_reach.py` — same variable
+Sibling of `ddqn_pc_reach/run_pc_reach.py` — same variable
 set, same algorithm, different cohort (positive-polarity envs in
 the bounded-Q regime).
 
@@ -176,7 +176,7 @@ def main() -> None:
 
     out_path = (
         _REPO_ROOT / 'experiments' / 'findings' /
-        'ddqn_universe_pc_survive' / 'pc_adjacency.json'
+        'ddqn_pc_survive' / 'pc_adjacency.json'
     )
     out = {
         'cohort': {

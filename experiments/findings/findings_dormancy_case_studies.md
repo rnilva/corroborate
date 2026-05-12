@@ -124,7 +124,7 @@ honest count is **1 config out of the corpus**, with effect size
 
 ```python
 import polars as pl
-df = pl.read_parquet('experiments/data/cache/ddqn_universe.parquet')
+df = pl.read_parquet('experiments/data/cache/ddqn.parquet')
 ddqn = 'bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)'
 keys = ['env_name', 'sync_period', 'total_steps', 'eval_every']
 base = df.filter(pl.col('arm_key').is_in([ddqn, 'baseline']))

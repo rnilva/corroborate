@@ -171,7 +171,7 @@ def main() -> None:
 
     out_path = (
         _REPO_ROOT / 'experiments' / 'findings' /
-        'ddqn_universe_pc_reach' / 'pc_adjacency_no_qdiv.json'
+        'ddqn_pc_reach' / 'pc_adjacency_no_qdiv.json'
     )
     out = {
         'note': 'q_divergence_score excluded — algebraic shadow of jens (qdiv = jens/(R/(1−γ))); within-γ ρ(qdiv, jens) = +0.974 per `tautology_audit.json`. Excluding it gives a clean test of the empirical is_ddqn → jens edge that the original run conflated with the algebraic shadow.',

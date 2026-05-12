@@ -539,7 +539,7 @@ def jensen_premise_active__discounting_chain(
 # ============ do(γ) on DiscountingChain (γ-shrinks-bias regime) ====
 #
 # Pearl-rung-2 do(γ) probe specifically on DC. Moved here from
-# ddqn_universe.py because DC is a bsuite diagnostic chain
+# the `ddqn` sub-package because DC is a bsuite diagnostic chain
 # (bandit-by-step-0, no real chain decision branching) — it lives
 # outside the cross-env DDQN universe, but the env-specific
 # γ-shrinkage finding is still authored as a bridge.
@@ -1482,10 +1482,9 @@ DC_GAMMA_BRIDGES = (
     ddqn_benefit_scales_with_gamma__discountingchain,
 )
 """Bridges asserted on the gamma_sweep_more corpus restricted to
-DiscountingChain. Moved from `ddqn_universe.py` because DC is a
-bsuite diagnostic chain (excluded by ddqn_universe's
-MODULE_SCOPE) — the do(γ) finding is env-specific, not a cross-
-env scope claim."""
+DiscountingChain. Moved from the `ddqn` sub-package because DC is
+a bsuite diagnostic chain (excluded by ddqn's MODULE_SCOPE) — the
+do(γ) finding is env-specific, not a cross-env scope claim."""
 
 
 DDQN_200K_BRIDGES = (

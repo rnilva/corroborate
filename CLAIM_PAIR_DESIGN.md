@@ -292,7 +292,7 @@ Add `claim_pair.py` to `corroborate/core/`. Re-export through
 
 ### Step 2 — substrate constants migrate
 
-`experiments/findings/ddqn_universe.py`'s `DDQN_SWAP` and
+`experiments/findings/ddqn/`'s `DDQN_SWAP` and
 `INTERVENTION` constants get rewritten as `ClaimPair`. Same for
 `adaptive_dqn` variants. Adaptive_dqn / expectile siblings get
 their own `ClaimPair` instead of separate `DoEffect`s.

@@ -164,7 +164,7 @@ def test_class_with_classvars_satisfies_protocol() -> None:
     """A frozen dataclass with ClassVar fields conforms — the
     canonical class-based authoring shape. Module-shape conformance
     is exercised by the substrate's bridge-zoo files (`dqn_bridges.py`,
-    `ddqn_universe.py`) at production load time."""
+    `findings/ddqn/`) at production load time."""
     @dataclass(frozen=True)
     class MyHypothesis:
         INTERVENTION: ClassVar[DoEffect] = DoEffect(

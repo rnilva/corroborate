@@ -101,7 +101,7 @@ def _build_paired_panel(df: pl.DataFrame) -> pl.DataFrame:
 
 
 def main() -> None:
-    df = pl.read_parquet('experiments/data/cache/ddqn_universe.parquet')
+    df = pl.read_parquet('experiments/data/cache/ddqn.parquet')
     paired = _build_paired_panel(df)
     print(f'paired cells: {paired.height} across '
           f'{paired["stratum"].n_unique()} strata (env|sync|steps)', flush=True)

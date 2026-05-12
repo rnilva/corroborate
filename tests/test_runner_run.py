@@ -12,7 +12,7 @@ Coverage:
   bare class names pass through.
 
 The framework's bridge-zoo modules (`dqn_bridges.py`,
-`ddqn_universe.py`) cover module-shape conformance at production
+`findings/ddqn/`) cover module-shape conformance at production
 load time; these tests exercise the typed-Protocol contract via
 class-based hypotheses (which carry `__name__` from Python for
 free, same as modules)."""

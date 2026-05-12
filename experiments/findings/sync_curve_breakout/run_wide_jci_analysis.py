@@ -119,7 +119,7 @@ def _safe_pearson(x: np.ndarray, y: np.ndarray) -> tuple[float, float]:
 
 
 def main() -> None:
-    df = pl.read_parquet('experiments/data/cache/ddqn_universe.parquet')
+    df = pl.read_parquet('experiments/data/cache/ddqn.parquet')
 
     # 1. Per-stratum panel
     panel: list[dict] = []

@@ -5,7 +5,7 @@ to track when claims were authored vs. observed.
 
 ---
 
-## 2026-05-05 (thirteenth revision) — Env reward polarity flips the eff_h-mediator sign; the residual `bootstrap_fraction → g_link | g_mech` (eleventh revision) is sign-cancellation between two opposite-direction mediator channels. Polarity-conditional bridges HELD on full ddqn_universe cache.
+## 2026-05-05 (thirteenth revision) — Env reward polarity flips the eff_h-mediator sign; the residual `bootstrap_fraction → g_link | g_mech` (eleventh revision) is sign-cancellation between two opposite-direction mediator channels. Polarity-conditional bridges HELD on full ddqn cache.
 
 ### The unresolved residual
 
@@ -43,14 +43,14 @@ disambiguates.
 the hand-coded categorical at Spearman ρ = +0.88 across 6 envs with
 local trace data.
 
-Two paired bridges in `experiments/findings/ddqn_universe.py`:
+Two paired bridges in `experiments/findings/ddqn/`:
 
 - `eff_h_mediates_g_link__goal_envs` — scope `polarity < −0.3 AND not
   Q-explosion`, predicted slope ≤ −0.005
 - `eff_h_mediates_g_link__survival_envs` — scope `polarity > +0.3 AND
   not Q-explosion`, predicted slope ≥ +0.04
 
-Both **HELD** on the rebuilt ddqn_universe cache (n_pairs = 793 / 547,
+Both **HELD** on the rebuilt ddqn cache (n_pairs = 793 / 547,
 slope = −0.013 / +0.062, proportion mediated = 0.27 / 0.46).
 
 ### Per-env panel (load-bearing evidence)
@@ -126,7 +126,7 @@ grep env_reward_polarity src/corroborate_rl/corroborate_rl/dqn/measurables.py
 
 # Polarity bridges + verification
 PYTHONPATH=. uv run python scripts/run_hypothesis.py \
-  experiments.findings.ddqn_universe --no-restore | grep eff_h_mediates
+  experiments.findings.ddqn --no-restore | grep eff_h_mediates
 
 # Per-env panel
 PYTHONPATH=. uv run python \

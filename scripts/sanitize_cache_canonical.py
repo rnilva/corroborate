@@ -44,7 +44,7 @@ before/after.
 Usage:
   PYTHONPATH=. uv run python scripts/sanitize_cache_canonical.py \\
       experiments/data/cache/dqn_bridges.parquet \\
-      experiments/data/cache/ddqn_universe.parquet
+      experiments/data/cache/ddqn.parquet
 """
 from __future__ import annotations
 

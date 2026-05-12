@@ -23,7 +23,7 @@ import numpy as np
 import polars as pl
 from scipy import stats
 
-CACHE_PATH = Path('experiments/data/cache/ddqn_universe.parquet')
+CACHE_PATH = Path('experiments/data/cache/ddqn.parquet')
 DDQN = 'bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)'
 PAIR_KEYS = ['corpus', 'gamma', 'sync_period', 'total_steps', 'seed']
 SLOPE_POLARITY = 0.535

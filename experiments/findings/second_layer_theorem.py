@@ -24,7 +24,7 @@ penalty are accounted for.
 The bridge that reads `ddqn_bootstrap_gap_late` triggers
 automatic backfill from `target_max_q_per_step` +
 `target_q_at_online_argmax_per_step` trace columns (already
-persisted in ddqn_universe corpus).
+persisted in ddqn corpus).
 
 Scope predicates restrict to the G1-active panel envs with
 v_jens > 2.0 (substantive premise) — same scope as CLAIM 26b
@@ -67,7 +67,7 @@ DAMPENED_FULL_SWAP = Intervention(
 )
 INTERVENTION = DoEffect(treatment=(DAMPENED_FULL_SWAP,), baseline=())
 
-# Helper expressions (mirror ddqn_universe.py's pattern)
+# Helper expressions (mirror ddqn sub-package's pattern)
 def _finite(col: str) -> pl.Expr:
     return pl.col(col).is_finite()
 
@@ -86,7 +86,7 @@ def _finite(col: str) -> pl.Expr:
 # the pre-registered predictions.
 #
 # Scope: the four α-sweep envs (MetaMaze γ=0.99, MountainCar,
-# SlidingTile, Snake) at the protocols matched to their ddqn_universe
+# SlidingTile, Snake) at the protocols matched to their ddqn
 # cache cells (1M steps, env-specific sync_period and q_network).
 # =====================================================================
 

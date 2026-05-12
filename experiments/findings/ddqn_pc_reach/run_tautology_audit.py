@@ -185,7 +185,7 @@ def main() -> None:
 
     out_path = (
         _REPO_ROOT / 'experiments' / 'findings' /
-        'ddqn_universe_pc_reach' / 'tautology_audit.json'
+        'ddqn_pc_reach' / 'tautology_audit.json'
     )
     out_dict = {
         'cohort_size': len(cells),

@@ -147,7 +147,7 @@ def _env_summary(df: pl.DataFrame, env: str) -> dict:
 
 
 def main() -> None:
-    df = pl.read_parquet('experiments/data/cache/ddqn_universe.parquet')
+    df = pl.read_parquet('experiments/data/cache/ddqn.parquet')
 
     fr = _env_summary(df, 'FourRooms-misc')
     ax = _env_summary(df, 'Asterix-MinAtar')

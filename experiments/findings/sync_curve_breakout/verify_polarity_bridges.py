@@ -1,4 +1,4 @@
-"""Verify the polarity bridges in ddqn_universe.py after cache backfill.
+"""Verify the polarity bridges in experiments/findings/ddqn/ after cache backfill.
 
 Checks:
 1. Cache has finite env_reward_polarity / effective_horizon for sufficient cells.
@@ -18,7 +18,7 @@ import polars as pl
 
 from corroborate.runner.runner import run
 
-CACHE_PATH = Path('experiments/data/cache/ddqn_universe.parquet')
+CACHE_PATH = Path('experiments/data/cache/ddqn.parquet')
 
 
 def main() -> None:
@@ -79,7 +79,7 @@ def main() -> None:
     # --- Run the polarity bridges via the runner ---
     print()
     print('=== Polarity bridges via runner ===')
-    results = run('experiments.findings.ddqn_universe', use_cache=True, write_cache=False, restore_from_cloud=False)
+    results = run('experiments.findings.ddqn', use_cache=True, write_cache=False, restore_from_cloud=False)
     polarity_bridge_names = [
         'eff_h_mediates_g_link__goal_envs',
         'eff_h_mediates_g_link__survival_envs',

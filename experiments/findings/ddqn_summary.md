@@ -2,7 +2,7 @@
 
 The framework's three-verdict architecture (mechanism / link / outcome) applied
 to a 17-env corpus + ~10 designed intervention sweeps. Bridges authored in
-`ddqn_universe.py` are the typed, corroborable form of each finding below.
+`experiments/findings/ddqn/` are the typed, corroborable form of each finding below.
 
 ## Mechanism: bias correction (CLAIMs 1 & 2)
 

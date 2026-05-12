@@ -20,7 +20,7 @@ import numpy as np
 import polars as pl
 from scipy.stats import spearmanr
 
-CACHE_PATH = Path('experiments/data/cache/ddqn_universe.parquet')
+CACHE_PATH = Path('experiments/data/cache/ddqn.parquet')
 DDQN = 'bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)'
 
 

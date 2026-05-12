@@ -4,7 +4,7 @@ Run any bridges-module-as-hypothesis (`experiments/findings/<X>.py`
 exporting `INTERVENTION` + `BRIDGES`) on a data input, with the
 per-hypothesis cache:
 
-    python scripts/run_hypothesis.py experiments.findings.ddqn_universe \\
+    python scripts/run_hypothesis.py experiments.findings.ddqn \\
         --data experiments/data/
 
 Library code lives in `corroborate.runner`; this file is purely the
@@ -27,7 +27,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         'module',
-        help='dotted module path, e.g. experiments.findings.ddqn_universe',
+        help='dotted module path, e.g. experiments.findings.ddqn',
     )
     parser.add_argument(
         '--ingest', type=str, default=None, metavar='CORPUS[,CORPUS...]',

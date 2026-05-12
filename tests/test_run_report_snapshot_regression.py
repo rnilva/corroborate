@@ -32,7 +32,7 @@ Inline (no subprocess): the registry now treats two distinct
 idempotent registrations (see `corroborate.measurables.measurable.
 register`), and the canonical per-burst reductions live in the
 substrate (`corroborate_rl.dqn.measurables.{mc_return_per_burst_mean,
-jensen_bias_per_burst_mean}`) so both `ddqn_universe` and
+jensen_bias_per_burst_mean}`) so both `ddqn` and
 `dqn_bridges` import the same instance. Module-registration
 collisions across findings modules are no longer possible — no
 need for subprocess isolation. CI: ~16s → ~2s.

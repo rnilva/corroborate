@@ -21,7 +21,7 @@ materialises ~5 GB of trace lists just to inspect schema.
 Example:
     $ python scripts/trace_schema.py \\
           experiments/data/ddqn/traces.parquet \\
-          experiments.findings.ddqn_universe
+          experiments.findings.ddqn
 
     trace columns (47):
       id: Utf8
@@ -35,7 +35,7 @@ Example:
       compressed size: 3.2 GB
 
     measurables computable on this trace (with substrate
-    experiments.findings.ddqn_universe loaded):
+    experiments.findings.ddqn loaded):
       target_staleness_late: needs {online_max_q_per_step,
                                     target_max_q_per_step} ✓
       jensen_dormancy_gap: needs {predicted_q_at_start,
@@ -64,7 +64,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         'module', type=str, nargs='?', default=None,
         help='optional bridges module (e.g. '
-             'experiments.findings.ddqn_universe). When provided, '
+             'experiments.findings.ddqn). When provided, '
              'lists every registered measurable whose transitive '
              'reads are satisfied by the trace.',
     )
