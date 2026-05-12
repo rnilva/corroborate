@@ -148,8 +148,11 @@ def within_arm_link(
          treatment arm, does predictor correlate with outcome?
       2. `r_baseline` (with `r_baseline_p_value`): within baseline,
          does predictor correlate with outcome?
-      3. `r_difference` (with `r_difference_p_value`): does the
+      3. `r_moderation` (with `r_moderation_p_value`): does the
          intervention CHANGE the predictor-outcome correlation?
+         This is a MODERATION test (does the within-arm slope
+         differ?), NOT a mediation identification — mediation
+         requires partial-Spearman / do-calculus.
 
     Replaces the misleading `paired_link r(Δ_pred, Δ_out)` which
     is approximately the average of (1) and (2) and doesn't

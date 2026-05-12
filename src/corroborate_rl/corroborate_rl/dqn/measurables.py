@@ -166,8 +166,145 @@ def q_gap_growth(record: Mapping[str, object]) -> float:
 
 
 @measurable(reads=('target_max_q_per_step', 'target_q_at_online_argmax_per_step'))
+def ddqn_bootstrap_gap(record: Mapping[str, object]) -> float:
+    """Mean of `target_max_q − target_q_at_online_argmax` across ALL
+    training steps. The DDQN-correction magnitude per step,
+    integrated over the full bootstrap-update process:
+
+      vanilla bootstrap value  =  max_a Q_target(s', a)
+      DDQN bootstrap value     =  Q_target(s', argmax_a Q_online(s', a))
+      gap                      =  vanilla_value  −  DDQN_value  ≥ 0
+
+    Full-trajectory mean (no windowing) — the clip-wedge per step
+    integrated over all training. Polarity-invariant
+    (non-negative by construction).
+
+    This is the *algorithmic* clip-wedge: it fires whenever
+    `argmax_online ≠ argmax_target`, regardless of whether the
+    Hasselt bias premise is active. On dormant cells
+    (jens=0), it still produces a non-zero gap whose effect on
+    outcome is the Q-magnitude-regularization channel —
+    independent of bias correction. Use this as the predictor
+    for "DDQN helps via clip channel" bridges in dormant scope.
+
+    Sign-aware interpretation by Q-regime (uniform signed Q-shift,
+    polarity-blind statement):
+    - The clip always pulls bootstrap-target Q DOWN (less
+      positive, by construction `target_q[argmax_online] ≤
+      max_a target_q`).
+    - In envs with positive Q (r_max > 0): |Q| DECREASES.
+    - In envs with negative Q (r_max ≤ 0): |Q| INCREASES (Q
+      becomes more negative).
+    The downstream effect on outcome may depend on a separate
+    env-level property — `env_reward_polarity` (the framework's
+    Pearson(length, return) measurable, REACH/SURVIVAL axis) —
+    distinct from r_max sign. See CLAIM 3 in
+    `experiments/findings/ddqn/` for the polarity-
+    moderation test of the clip→outcome channel.
+
+    Don't use Δ_q as the predictor for the clip channel (conflates
+    with bias-reduction); use THIS quantity instead — it's the
+    clip-wedge directly.
+
+    Prefer this over the legacy `_late` variant (which used an
+    arbitrary 50% cut-off); `_late` is kept for backward compat
+    with bridges authored before the convention was reconsidered."""
+    target_max = _record_array(record, 'target_max_q_per_step')
+    target_at_online = _record_array(
+        record, 'target_q_at_online_argmax_per_step',
+    )
+    if target_max is None or target_at_online is None:
+        return float('nan')
+    n = min(target_max.shape[0], target_at_online.shape[0])
+    if n == 0:
+        return float('nan')
+    gap = target_max[:n] - target_at_online[:n]
+    return float(np.mean(gap))
+
+
+@measurable(reads=(
+    'target_max_q_per_step', 'target_q_at_online_argmax_per_step',
+    'episode_length', 'mc_return',
+))
+def clip_wedge_polarity_aligned(record: Mapping[str, object]) -> float:
+    """`ddqn_bootstrap_gap × sign(env_reward_polarity)`.
+
+    Polarity-moderation test in a single predictor: if the
+    clip-channel's effect on outcome changes sign with
+    `env_reward_polarity` (the framework's REACH/SURVIVAL axis,
+    Pearson r between episode_length and mc_return), this product
+    aligns the sign for a unified positive-direction test.
+
+    Empirical motivation (per `findings_clip_channel_polarity.md`):
+    on dormant cells, per-env partial-Spearman ρ(clip_wedge,
+    outcome | jens) was +0.33/+0.25 on Asterix/Breakout (SURVIVAL-
+    polarity) and -0.51/-0.16 on Acrobot/FourRooms (REACH-polarity).
+    Pooled it averaged to ~0 (washing out the polarity-conditional
+    structure). The polarity-aligned predictor folds that
+    interaction into a single quantity testable with the framework's
+    existing `stratified_partial_spearman` primitive.
+
+    Sign convention:
+    - polarity > 0 (SURVIVAL): aligned = +clip_wedge (predicted
+      positive r with outcome)
+    - polarity < 0 (REACH): aligned = −clip_wedge (predicted
+      positive r with outcome, since original r is negative)
+    - polarity ≈ 0: aligned = 0 (no signal in either direction)
+
+    Implementation: computes both clip-wedge and polarity inline
+    from trace columns (the framework's measurable dependency
+    system doesn't guarantee eval order for derived measurables).
+    Cheap — both underlying quantities are already O(n_steps)."""
+    # Clip wedge (full-trajectory mean of target_max - target_at_argmax)
+    target_max = _record_array(record, 'target_max_q_per_step')
+    target_at_online = _record_array(
+        record, 'target_q_at_online_argmax_per_step',
+    )
+    if target_max is None or target_at_online is None:
+        return float('nan')
+    n = min(target_max.shape[0], target_at_online.shape[0])
+    if n == 0:
+        return float('nan')
+    clip = float(np.mean(target_max[:n] - target_at_online[:n]))
+    # Polarity (Pearson r between episode_length and mc_return)
+    ep_len = record.get('episode_length')
+    mc_ret = record.get('mc_return')
+    if ep_len is None or mc_ret is None:
+        return float('nan')
+    # Flatten nested per-burst lists. `episode_length` is
+    # List[List[int]] (n_bursts × n_episodes_per_burst);
+    # `mc_return` likewise.
+    try:
+        ep_flat = np.concatenate([np.asarray(b, dtype=np.float64) for b in ep_len])
+        mc_flat = np.concatenate([np.asarray(b, dtype=np.float64) for b in mc_ret])
+    except (TypeError, ValueError):
+        return float('nan')
+    if len(ep_flat) != len(mc_flat) or len(ep_flat) < 3:
+        return float('nan')
+    ep_var = float(np.var(ep_flat))
+    mc_var = float(np.var(mc_flat))
+    if ep_var <= 0 or mc_var <= 0:
+        return 0.0  # constant series → no polarity signal
+    pol = float(np.corrcoef(ep_flat, mc_flat)[0, 1])
+    if math.isnan(pol):
+        return float('nan')
+    # Sign-align: +clip for survival, -clip for reach, 0 for null
+    if pol > 0:
+        return clip
+    elif pol < 0:
+        return -clip
+    return 0.0
+
+
+@measurable(reads=('target_max_q_per_step', 'target_q_at_online_argmax_per_step'))
 def ddqn_bootstrap_gap_late(record: Mapping[str, object]) -> float:
-    """Mean of `target_max_q − target_q_at_online_argmax` over the
+    """**LEGACY** — mean clip-wedge over the late 50% of training
+    only. Prefer `ddqn_bootstrap_gap` (full-trajectory) for new
+    bridges; this `_late` variant exists for backward compat with
+    bridges authored before the convention was reconsidered. The
+    `_late` cut-off is arbitrary.
+
+    Mean of `target_max_q − target_q_at_online_argmax` over the
     late 50% of training. The DDQN-correction magnitude per step:
 
       vanilla bootstrap value  =  max_a Q_target(s', a)
@@ -1456,7 +1593,7 @@ register(jensen_bias_per_eps)
 
 
 # ============ Canonical per-burst-mean reductions (substrate-shared) ============
-# Both `experiments.findings.ddqn_universe` and
+# Both `experiments.findings.ddqn` and
 # `experiments.findings.dqn_bridges` need per-burst-mean reductions over
 # `mc_return` (link-side outcome projection) and `jensen_bias_per_eps`
 # (mech-side bias projection). When each module composed these inline
@@ -1649,7 +1786,7 @@ def effective_alpha(record: Mapping[str, object]) -> float:
         (similarly, α=1 returns v_DDQN)
 
     Used by the second-layer theorem α-sweep bridges to combine
-    existing ddqn_universe baseline + DDQN cells (the α=0 and α=1
+    existing ddqn baseline + DDQN cells (the α=0 and α=1
     endpoints) with new dampened-α sweeps (intermediate α values),
     avoiding redundant re-runs of the endpoints. See
     `docs/SECOND_LAYER_THEOREM.md` and
@@ -2000,12 +2137,17 @@ def dqn_default_measurables() -> tuple[
         # dense-penalty. Used as bridge scope predicate to select
         # the regime where Hasselt's bias has a specific sign.
         q_late_mean,
-        # `ddqn_bootstrap_gap_late` decomposes the algorithmic
-        # mechanism behind the Q-regime sign-flip in
-        # `staleness_amplifies_ddqn_outcome__sparse_goal_polyak`:
-        # the per-step difference between vanilla's bootstrap
-        # value (max Q_target) and DDQN's (Q_target at online's
-        # argmax). Sign-aware effect on outcome by Q-regime.
+        # Clip-wedge: per-step `target_max_q − target_q_at_online_argmax`.
+        # `ddqn_bootstrap_gap` (full-trajectory) is the canonical
+        # predictor for the Q-regularization channel — fires on
+        # dormant cells (jens=0) wherever argmax_online ≠ argmax_target.
+        # `_late` is legacy (arbitrary 50% cut-off); kept for
+        # backward compat with existing bridges.
+        # `clip_wedge_polarity_aligned` = clip × sign(polarity),
+        # the moderation-aware predictor for CLAIM 3's polarity-
+        # conditional channel sign.
+        ddqn_bootstrap_gap,
+        clip_wedge_polarity_aligned,
         ddqn_bootstrap_gap_late,
         # Chain-traced cumulative bias: averages bias `Q(s_t) − G(s_t)`
         # across all visited states (each at its own remaining-chain
