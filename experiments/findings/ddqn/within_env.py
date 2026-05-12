@@ -1,13 +1,12 @@
 """Within-env do() probes — γ on FourRooms + MetaMaze.
 
 - `ddqn_benefit_scales_with_effective_horizon__fourrooms` (CLAIM 5):
-  FR γ-sweep, eff_h ≥ 25 selects the γ=0.99 cohort. Pearl rung-2
-  do(γ) probe. AWAITING DATA (gamma_sweep absent post-rebuild).
+  FR γ-sweep, per-γ stratum-Cohen's d on outcome, Pearson r against
+  γ tests chain-depth scaling. AWAITING DATA (γ=0.999 FR cells
+  absent post-rebuild).
 - `metamaze_link_steeper_at_high_gamma` (CLAIM 24): on MetaMaze n_γ=2
   ({0.99, 0.999}), Δ_outcome should AMPLIFY at high γ if chain-depth
   is the lever. Currently REFUTED — was paired-Δ init-correlation.
-- `metamaze_link_steeper_at_high_gamma__median`: median sibling rules
-  out bimodal-distribution explanation; agrees with mean (NO_EFFECT).
 """
 from __future__ import annotations
 
@@ -15,14 +14,18 @@ import math
 
 import polars as pl
 
-from corroborate.analyses.paired_g import PairedGResult
+from corroborate.analyses.stratified_arm_diff_pooled import (
+    StratifiedArmDiffPooledResult,
+)
 from corroborate.analyses.stratum_effect_panel import StratumEffectPanel
 from corroborate.bridge.bridge import Direction, Tier, claim_bridge
-from corroborate.bridge.predicates import finite_ge
 from corroborate.bridge.verdict import Verdict
 
-from experiments.findings.ddqn._arms import INTERVENTION
+from experiments.findings.ddqn._arms import (
+    DDQN_ARM, INTERVENTION, VANILLA_ARM,
+)
 from experiments.findings.ddqn._scope import G1_VANILLA_CONFIG_PREMISE_ACTIVE
+from experiments.findings.ddqn._verdicts import stratum_id_scaling_verdict
 
 
 # CLAIM 5 — within-env do(γ) on FourRooms.
@@ -33,23 +36,50 @@ from experiments.findings.ddqn._scope import G1_VANILLA_CONFIG_PREMISE_ACTIVE
     tier=Tier.INTERVENTIONAL,
     scope=(
         (pl.col('env_name') == 'FourRooms-misc')
-        & (pl.col('gamma') == 0.999)
-        & finite_ge('effective_horizon', 25.0)
+        & pl.col('gamma').is_in([0.99, 0.999])
     ),
+    predicted_direction='a_gt_b',
 )
 def ddqn_benefit_scales_with_effective_horizon__fourrooms(
-    paired_g: PairedGResult,
+    stratified_arm_diff_pooled: StratifiedArmDiffPooledResult,
+    *,
+    treatment_arm: str = DDQN_ARM,
+    baseline_arm: str = VANILLA_ARM,
+    source: str = 'eval_best_burst_mean',
+    stratify_by: tuple[str, ...] = ('gamma',),
+    scope_predictor: str = 'jensen_gap',
+    min_vanilla_predictor: float = 0.05,
+    r_threshold: float = 0.7,
+    min_strata: int = 2,
 ) -> Verdict:
-    """Pearl rung-2 do(γ) FR γ=0.99 cohort (eff_h≈72). HELD when
-    helped_fraction ≥ 0.55 AND g ≥ 0.30. Historical: g=+1.11.
-    AWAITING DATA."""
-    if paired_g.n_pairs < 20:
-        return Verdict.POWER_INSUFFICIENT
-    if math.isnan(paired_g.helped_fraction):
-        return Verdict.POWER_INSUFFICIENT
-    if paired_g.helped_fraction >= 0.55 and paired_g.g >= 0.30:
-        return Verdict.HELD
-    return Verdict.NO_EFFECT
+    """Within-FR do(γ) chain-depth scaling probe. Per-γ stratum:
+    independent-samples Cohen's d on `eval_best_burst_mean` (DDQN
+    vs vanilla). Pearson r(γ, d) tests whether DDQN's outcome
+    benefit grows with γ — the chain-depth amplification claim
+    documented in `findings_gamma_sweep_three_regimes.md` (FR is
+    in the chain-depth regime; benefit grows with effective
+    horizon ≈ 1/(1-γ)).
+
+    HELD when Pearson r(γ, d) ≥ `r_threshold` AND significant.
+    Phase-1 / corpus-scope-removal refactor (2026-05-12):
+    replaced `paired_g` (cohort-level magnitude check, did NOT
+    test scaling despite the name) with `stratified_arm_diff_pooled`
+    stratified by γ + `stratum_id_scaling_verdict` — the slope
+    test that matches the bridge name's promise. Mech conditioning
+    via `min_vanilla_predictor=0.05`.
+
+    Cache has only γ=0.99 FR cells → n_strata=1 → POW_INSUF until
+    γ=0.999 FR cells land. Historical g=+1.11 at γ=0.999 was the
+    high-eff_h cohort effect — the scaling claim it suggested is
+    what this bridge now formally tests."""
+    del treatment_arm, baseline_arm, source, stratify_by
+    del scope_predictor, min_vanilla_predictor
+    return stratum_id_scaling_verdict(
+        stratified_arm_diff_pooled.per_stratum,
+        sign=1,
+        threshold=r_threshold,
+        min_strata=min_strata,
+    )
 
 
 # CLAIM 24 — Within-MetaMaze do(γ): link slope steepens?
