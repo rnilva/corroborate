@@ -167,6 +167,52 @@ def test_empty_measurements_via_parquet(tmp_path: Path) -> None:
 
 # ============ Dtype tightening + streaming reader ============
 
+def test_write_reduced_tracerows_matches_two_step(
+    tmp_path: Path,
+) -> None:
+    """`write_reduced_tracerows` produces the same parquet as the
+    two-step `apply_trace_reductions` → `write_tracerows` path, but
+    without the typed-rebuild round-trip. Equivalence is required
+    so existing analysis code that reads back the reduced parquet
+    sees identical schemas / values."""
+    import polars as pl
+    from uuid import uuid4
+
+    from corroborate.corpus.persistence import (
+        apply_trace_reductions, write_reduced_tracerows, write_tracerows,
+    )
+    from corroborate.corpus.schema import TraceRow
+
+    rows = [
+        TraceRow(
+            id=str(uuid4()), cycle_id=str(uuid4()),
+            timestamp='2026-05-12T00:00:00+00:00',
+            leaves={'foo': [1.0, 2.0, 3.0, 4.0]},
+        )
+        for _ in range(3)
+    ]
+    reductions = (pl.col('foo').list.max().alias('foo_max'),)
+    drops = ('foo',)
+
+    p_old = tmp_path / 'old.parquet'
+    p_new = tmp_path / 'new.parquet'
+    write_tracerows(
+        apply_trace_reductions(rows, add=reductions, drop=drops), p_old,
+    )
+    write_reduced_tracerows(rows, p_new, add=reductions, drop=drops)
+    df_old = pl.read_parquet(p_old)
+    df_new = pl.read_parquet(p_new)
+    assert sorted(df_old.columns) == sorted(df_new.columns)
+    assert df_old.shape == df_new.shape
+    assert (
+        df_old['foo_max'].to_list() == df_new['foo_max'].to_list()
+        == [4.0, 4.0, 4.0]
+    )
+    # `foo` dropped in both.
+    assert 'foo' not in df_old.columns
+    assert 'foo' not in df_new.columns
+
+
 def test_tighten_trace_dtypes_casts_list_columns(tmp_path: Path) -> None:
     """`tighten_trace_dtypes` casts List(Float64) → List(Float32) and
     List(Int64) → List(Int32). Other column dtypes pass through

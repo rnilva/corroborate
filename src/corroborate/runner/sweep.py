@@ -35,7 +35,10 @@ this value. HPs baked into `base` thus do NOT distinguish arms
 discipline."""
 from __future__ import annotations
 
+import gc
+import sys
 import time
+import traceback
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -45,12 +48,11 @@ import polars as pl
 
 from corroborate.core.intervention import DoEffect, apply_interventions
 from corroborate.corpus.persistence import (
-    apply_trace_reductions,
     stream_concat_parquets,
     read_graphs_sidecar,
     write_graphs_sidecar,
+    write_reduced_tracerows,
     write_runrows,
-    write_tracerows,
 )
 from corroborate.corpus.schema import RunRow, TraceRow
 from corroborate.graph import Graph
@@ -419,31 +421,73 @@ def run_intervention[R: Mapping[str, object]](
                 ))
                 cell_idx += 1
                 continue
-            write_runrows(cell_result.runs, runs_path)
-            reduced = apply_trace_reductions(
-                list(cell_result.traces),
-                add=trace_reductions, drop=trace_drops,
-            )
-            write_tracerows(reduced, traces_path)
-            write_graphs_sidecar(
-                {arm_key: cell_result.graph}, graph_path,
-            )
-            arm_graphs[arm_key] = cell_result.graph
-            runs_paths.append(runs_path)
-            traces_paths.append(traces_path)
-            graph_paths.append(graph_path)
-            if archive_remote is not None:
-                from corroborate.corpus.cloud import archive
-                archive(
-                    out_dir, archive_remote,
-                    files=[rp_rel, tp_rel], purge_local=True,
+            # Post-runner write/reduce/archive block. Substep-tagged
+            # so a crash names the failing phase (e.g. OOM during
+            # `reduce_traces` on long-trace cells). Re-raises after
+            # logging — strict-abort default: a partial write is
+            # systemic (OOM, disk full, S3 outage), continuing
+            # silently produces thin sweeps. Runner failures (above)
+            # ARE legitimately per-cell and continue.
+            substep = 'write_runs'
+            try:
+                write_runrows(cell_result.runs, runs_path)
+                substep = 'reduce_and_write_traces'
+                write_reduced_tracerows(
+                    list(cell_result.traces), traces_path,
+                    add=trace_reductions, drop=trace_drops,
                 )
-                archived_runs_uris.append(
-                    f'{archive_remote.rstrip("/")}/{rp_rel}'
+                substep = 'write_graph'
+                write_graphs_sidecar(
+                    {arm_key: cell_result.graph}, graph_path,
                 )
-                archived_traces_uris.append(
-                    f'{archive_remote.rstrip("/")}/{tp_rel}'
+                substep = 'append_paths'
+                arm_graphs[arm_key] = cell_result.graph
+                runs_paths.append(runs_path)
+                traces_paths.append(traces_path)
+                graph_paths.append(graph_path)
+                substep = 'archive'
+                if archive_remote is not None:
+                    from corroborate.corpus.cloud import archive
+                    archive(
+                        out_dir, archive_remote,
+                        files=[rp_rel, tp_rel], purge_local=True,
+                    )
+                    archived_runs_uris.append(
+                        f'{archive_remote.rstrip("/")}/{rp_rel}'
+                    )
+                    archived_traces_uris.append(
+                        f'{archive_remote.rstrip("/")}/{tp_rel}'
+                    )
+            except BaseException as exc:
+                # Diagnostic: what's on disk + what crashed where.
+                on_disk = {
+                    'runs.parquet': runs_path.exists() and runs_path.stat().st_size,
+                    'traces.parquet': traces_path.exists() and traces_path.stat().st_size,
+                    'graph.json': graph_path.exists() and graph_path.stat().st_size,
+                }
+                print(
+                    f'    FAILED at substep={substep!r} after '
+                    f'{time.monotonic()-t_cell:.1f}s: '
+                    f'{type(exc).__name__}: {exc}',
+                    file=sys.stderr, flush=True,
                 )
+                print(
+                    f'    cell={cell_idx} tag={tag}\n'
+                    f'    on-disk: {on_disk}',
+                    file=sys.stderr, flush=True,
+                )
+                traceback.print_exc(file=sys.stderr)
+                sys.stderr.flush()
+                raise
+            finally:
+                # Memory hygiene: drop the runner output before the
+                # next cell. JAX arrays + polars buffers from
+                # `cell_result.traces` are the dominant heap. On
+                # long-trace MinAtar 1M-step sweeps, 6 sequential
+                # cells accumulated enough heap to OOM-kill the
+                # process at apply_trace_reductions of the 6th cell.
+                del cell_result
+                gc.collect()
             elapsed = time.monotonic() - t_cell
             total = time.monotonic() - t_start
             print(

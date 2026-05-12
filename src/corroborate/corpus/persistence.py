@@ -220,7 +220,14 @@ def apply_trace_reductions(
 
     Authors operate on TraceRow leaves at the polars-list level:
     a 3-D leaf is `List(List(List(Float64)))`; `list.eval(
-    pl.element().list.max())` collapses one inner dim, etc."""
+    pl.element().list.max())` collapses one inner dim, etc.
+
+    **Memory profile** — materializes a typed `list[TraceRow]`
+    via `from_row_dict` round-trip; on long-trace sweeps (MinAtar
+    1M-step CNN, ~670 MB reduced traces per cell) this doubles
+    peak heap because both the polars frame AND the typed-rebuild
+    list co-exist. Use `write_reduced_tracerows` when the next
+    step is parquet-write — it skips the typed rebuild."""
     if not add and not drop:
         return list(traces)
     df = pl.DataFrame([t.as_dict() for t in traces])
@@ -229,6 +236,33 @@ def apply_trace_reductions(
     if drop:
         df = df.drop(*drop)
     return [TraceRow.from_row_dict(d) for d in _to_dicts(df)]
+
+
+def write_reduced_tracerows(
+    traces: Sequence[TraceRow],
+    parquet_path: Path,
+    *,
+    add: Sequence[pl.Expr] = (),
+    drop: Sequence[str] = (),
+) -> None:
+    """Apply reductions + write parquet in a single op, skipping
+    the typed `list[TraceRow]` rebuild.
+
+    Functionally equivalent to:
+        write_tracerows(apply_trace_reductions(traces, add, drop), path)
+
+    but avoids the `from_row_dict` round-trip — the polars frame
+    flows straight to disk. Halves peak heap on long-trace sweeps;
+    the typed `TraceRow` rebuild is only needed by consumers that
+    want the typed shape (post-hoc analysis), NOT by sweeps which
+    just persist."""
+    rows_list = list(traces)
+    df = pl.DataFrame([t.as_dict() for t in rows_list])
+    if add:
+        df = df.with_columns(*add)
+    if drop:
+        df = df.drop(*drop)
+    df.write_parquet(parquet_path)
 
 
 # ============ Streaming concat across many per-arm parquets ============
