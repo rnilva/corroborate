@@ -7,9 +7,10 @@ separate corpus). 4 bridges:
   Acrobot γ=0.999 (paired_link_per_burst → phase_link_consistency).
 - `reach_link_dowhy_corroborated`: composite DoWhy backdoor +
   placebo + RCC on the per-burst Δ_jens panel, REACH-cohort scope.
-- `extreme_q_divergence_attenuates_link__dowhy_corroborated`:
-  composite DoWhy backdoor + placebo + RCC on the link-attenuation
-  binary contrast (q_div > 1000 vs in-band cells).
+- `extreme_q_divergence_attenuates_outcome__dowhy_corroborated`:
+  composite DoWhy backdoor + placebo + RCC on the
+  outcome-attenuation binary contrast (env-mean q_div > 1000 vs
+  in-band envs); per-(env, burst) stratum-Δ outcome.
 - `fourrooms_action_dim_link_active__inflated`: within-FourRooms
   panel_regress of Δ_outcome on Δ_jens across `action_duplicate_k`.
 
@@ -25,7 +26,6 @@ import numpy as np
 import numpy.typing as npt
 import polars as pl
 
-from corroborate.analyses.link_attenuation_dowhy import LinkAttenuationDowhyResult
 from corroborate.analyses.paired_link_per_burst import (
     PerBurstLinkResult, phase_link_consistency,
 )
@@ -34,6 +34,9 @@ from corroborate.analyses.stratum_delta_link_dowhy import (
 )
 from corroborate.analyses.stratum_effect_panel import (
     StratumEffectPanel, panel_regress,
+)
+from corroborate.analyses.stratum_outcome_attenuation_dowhy import (
+    StratumOutcomeAttenuationDowhyResult,
 )
 from corroborate.bridge.bridge import Direction, Tier, claim_bridge
 from corroborate.bridge.predicates import finite, finite_ge
@@ -193,8 +196,8 @@ def fourrooms_action_dim_link_active__inflated(
         )
     ),
 )
-def extreme_q_divergence_attenuates_link__dowhy_corroborated(
-    link_attenuation_dowhy: LinkAttenuationDowhyResult,
+def extreme_q_divergence_attenuates_outcome__dowhy_corroborated(
+    stratum_outcome_attenuation_dowhy: StratumOutcomeAttenuationDowhyResult,
     *,
     treatment_arm: str = DDQN_ARM,
     baseline_arm: str = VANILLA_ARM,
@@ -206,20 +209,30 @@ def extreme_q_divergence_attenuates_link__dowhy_corroborated(
     link_predictor: Measurable[
         Mapping[str, object], npt.NDArray[np.floating],
     ] = JENSEN_BIAS_PER_BURST_MEAN,
+    min_vanilla_predictor: float = 0.05,
     ate_ceiling: float = -0.10,
     placebo_max_ratio: float = 0.2,
     rcc_max_drift_ratio: float = 0.15,
-    dedupe_strategy: str = 'mean',
 ) -> Verdict:
-    """Binary contrast: cells with `q_divergence_score > 1000` have
-    link strength attenuated by ≥ 0.10 vs in-band cells. DoWhy
-    backdoor + placebo + RCC trio under env-family adjustment.
-    `zero_guard=True` on backdoor handles RNG-dependent
-    machine-epsilon signs."""
+    """Binary contrast: envs with mean `q_divergence_score > 1000`
+    have **per-(env, burst) stratum-Δ outcome** attenuated by ≥
+    0.10 vs in-band envs. Phase-4 refactor (2026-05-12): replaced
+    `link_attenuation_dowhy` (within-(env, burst) Pearson r over
+    seed-paired Δs as outcome) with
+    `stratum_outcome_attenuation_dowhy` (per-stratum
+    independent-samples Δ_outcome). Claim narrowed from "link
+    attenuation" → "outcome attenuation": Q-divergence reduces
+    DDQN's outcome benefit directly, no mediation framing.
+
+    DoWhy backdoor + placebo + RCC trio under env one-hot
+    adjustment. Mech conditioning built into the analysis via
+    `min_vanilla_predictor=0.05` (strata where vanilla mean jens
+    < 0.05 are dropped before DoWhy). `zero_guard=True` on
+    backdoor handles RNG-dependent machine-epsilon signs."""
     del treatment_arm, baseline_arm, attenuator, binary_threshold
-    del link_target, link_predictor, dedupe_strategy
+    del link_target, link_predictor, min_vanilla_predictor
     return dowhy_trio_verdict(
-        link_attenuation_dowhy,
+        stratum_outcome_attenuation_dowhy,
         ate_ceiling=ate_ceiling,
         placebo_max_ratio=placebo_max_ratio,
         rcc_max_drift_ratio=rcc_max_drift_ratio,
@@ -231,5 +244,5 @@ BRIDGES = (
     acrobot_per_burst_link_active__gamma_0999,
     reach_link_dowhy_corroborated,
     fourrooms_action_dim_link_active__inflated,
-    extreme_q_divergence_attenuates_link__dowhy_corroborated,
+    extreme_q_divergence_attenuates_outcome__dowhy_corroborated,
 )
