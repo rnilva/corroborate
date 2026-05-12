@@ -333,3 +333,85 @@ def _pick(
         if ec.env_name == env_name and h.name == h_name:
             return h
     raise KeyError(f'no ({env_name}, {h_name}) in built tuples')
+
+
+# ---------- dispatcher collision detection ----------
+
+def test_dispatch_sweep_raises_on_cfg_name_collision(tmp_path: Path) -> None:
+    """`arms_shape: paired` + multi-env hypothesis without a
+    `{from_env: <attr>}` substitution in `name` yields multiple
+    `HypothesisConfig`s sharing `cfg.name`. They all write to
+    `<out_dir>/<cfg.name>/runs.parquet` and the final merge silently
+    concatenates the same file N times — losing all but one env's
+    data. `dispatch_sweep` must refuse the collision pre-dispatch.
+
+    Regression test for the 2026-05-11 silent-overwrite bug in
+    reward_scale_sweep_postfix (CORPUS_INTEGRITY.md CI9)."""
+    from corroborate_rl.dqn.yaml_sweep import dispatch_sweep
+
+    cfg = tmp_path / 'colliding_paired_sweep.yaml'
+    cfg.write_text(
+        'name: colliding\n'
+        f'out_dir: {tmp_path / "out"}\n'
+        'arms_shape: paired\n'
+        'envs:\n'
+        '  - {name: FourRooms-misc, n_seeds: 2}\n'
+        '  - {name: Acrobot-v1, n_seeds: 2}\n'
+        'base_intervention:\n'
+        '  total_steps: 1000\n'
+        '  eval_every: 500\n'
+        '  n_episodes: 1\n'
+        '  gamma: 0.99\n'
+        'hypotheses:\n'
+        '  - name: ddqn_vs_vanilla\n'  # no {from_env} substitution
+        '    predicted_direction: a_gt_b\n'
+        '    intervention: {}\n'
+        '    intervention_arms:\n'
+        '      - slot_path: bootstrap\n'
+        '        replacement:\n'
+        '          fn: bootstrap\n'
+        '          greedification: {fn: double_greedify}\n'
+    )
+    sweep = load_sweep(cfg, reg=default_dqn_registry())
+    with pytest.raises(ValueError, match=r"share output paths"):
+        dispatch_sweep(sweep)
+    # No corpus should have been written.
+    assert not (tmp_path / 'out').exists() or not list(
+        (tmp_path / 'out').glob('**/runs.parquet')
+    )
+
+
+def test_dispatch_sweep_accepts_chunked_multi_env(tmp_path: Path) -> None:
+    """`arms_shape: chunked` packs all envs into a single config —
+    no name collision, no silent overwrite. The chunked path is
+    one of the two valid fixes for the collision case."""
+    from corroborate_rl.dqn.yaml_sweep import load_sweep
+    cfg = tmp_path / 'chunked_multi_env.yaml'
+    cfg.write_text(
+        'name: chunked_multi\n'
+        f'out_dir: {tmp_path / "out"}\n'
+        'arms_shape: chunked\n'
+        'envs:\n'
+        '  - {name: FourRooms-misc, n_seeds: 2}\n'
+        '  - {name: Acrobot-v1, n_seeds: 2}\n'
+        'base_intervention:\n'
+        '  total_steps: 1000\n'
+        '  eval_every: 500\n'
+        '  n_episodes: 1\n'
+        '  gamma: 0.99\n'
+        'hypotheses:\n'
+        '  - name: ddqn_vs_vanilla\n'
+        '    predicted_direction: a_gt_b\n'
+        '    intervention: {}\n'
+        '    intervention_arms:\n'
+        '      - slot_path: bootstrap\n'
+        '        replacement:\n'
+        '          fn: bootstrap\n'
+        '          greedification: {fn: double_greedify}\n'
+    )
+    sweep = load_sweep(cfg, reg=default_dqn_registry())
+    configs = list(sweep.build_hypotheses(reg=default_dqn_registry()))
+    # One config carrying all envs — no collision possible.
+    assert len(configs) == 1
+    assert configs[0].name == 'ddqn_vs_vanilla'
+    assert len(sweep.envs) == 2

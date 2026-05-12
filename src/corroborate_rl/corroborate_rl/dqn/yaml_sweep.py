@@ -383,6 +383,29 @@ def dispatch_sweep(sweep: DQNSweep) -> tuple[Path, Path]:
         configs = list(built_paired)
         envs_per_h = [[ec] for ec in envs_aligned]
 
+    # Each config writes to `sweep.out_dir / cfg.name`; two configs
+    # sharing a name silently overwrite each other's runs.parquet
+    # at merge time and the final corpus loses all but one config's
+    # data. Refuse to dispatch on collision. With `arms_shape:
+    # paired`, this fires when the hypothesis template's `name`
+    # field omits an env-attribute substitution (e.g.,
+    # `name: ddqn_vs_{from_env: env_name}`); fix the template or
+    # switch to `arms_shape: chunked`.
+    seen_names: dict[str, int] = {}
+    for cfg in configs:
+        seen_names[cfg.name] = seen_names.get(cfg.name, 0) + 1
+    collisions = {n: c for n, c in seen_names.items() if c > 1}
+    if collisions:
+        raise ValueError(
+            f'dispatch_sweep: configs share output paths — '
+            f'{collisions!r} would overwrite each other at '
+            f'`<out_dir>/<cfg.name>/runs.parquet`. '
+            f'Templating the hypothesis `name` with '
+            f"`{{from_env: env_name}}` (arms_shape='paired') or "
+            f"switching to arms_shape='chunked' resolves this. "
+            f'Sweep aborted before any data is written.',
+        )
+
     env_specs = {
         ec.env_name: get_env_spec(ec.env_name) for ec in sweep.envs
     }

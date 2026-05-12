@@ -256,13 +256,33 @@ def build_hypothesis_from_mapping(
 
     `env_attrs` is forwarded to `resolve` so the loader can
     substitute `{from_env: <attr>}` placeholders during
-    paired-mode dispatch."""
+    paired-mode dispatch.
+
+    `name` field supports string-template substitution: occurrences
+    of `{from_env: <attr>}` are replaced with the corresponding
+    env_attr value at paired-mode dispatch time. Required when
+    `arms_shape: paired` produces multiple HypothesisConfig instances
+    that would otherwise collide on `cfg.name` (one config per env).
+    Documented behavior since 2026-05-11; previously the error
+    message advertised the syntax without implementation."""
+    import re
     name = node.get('name')
     if not isinstance(name, str):
         raise TypeError(
             f'hypothesis.name must be a string; got '
             f'{type(name).__name__}',
         )
+    if env_attrs is not None and '{from_env:' in name:
+        def _sub_match(match: 're.Match[str]') -> str:
+            key = match.group(1).strip()
+            if key not in env_attrs:
+                raise KeyError(
+                    f'hypothesis.name template references env attr '
+                    f'{key!r} not in env_attrs '
+                    f'(known: {sorted(env_attrs)})',
+                )
+            return str(env_attrs[key])
+        name = re.sub(r'\{from_env:\s*([^}]+)\}', _sub_match, name)
 
     intervention_raw = node.get('intervention', {})
     if not is_str_keyed_mapping(intervention_raw):

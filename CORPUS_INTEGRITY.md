@@ -15,7 +15,7 @@ operations as sweeps evolve — extending samples, resuming
 interrupted runs, adding envs, replicating arms — and each
 operation can drift the corpus shape without the framework
 catching it. The result, observed in the wild on the
-`ddqn_universe` corpus tree:
+`ddqn` corpus tree:
 
 | Failure | What we found |
 |---|---|
@@ -47,7 +47,7 @@ the corpus-shape contract**. This document is that contract.
 - **Cloud root**: the `remote_root` field in `_remote.json`,
   e.g. `s3://corroborate-archive/minatar_sync_curve/`.
 
-## Seven invariants
+## Nine invariants
 
 ### CI1. A corpus is a leaf in the directory tree
 
@@ -258,6 +258,49 @@ produces 60 spurious trace ids and AxisError on every cell.
 Repaired by removing `traces.parquet` from the manifest;
 runner falls back to no-traces.
 
+### CI9. Dispatcher refuses configs that share output paths
+
+`dispatch_sweep` writes each `HypothesisConfig`'s per-arm corpus
+to `<out_dir>/<cfg.name>/`. Two configs sharing `cfg.name` write
+to the same directory; each `run_intervention` call overwrites
+the prior one's `runs.parquet`, and the final
+`stream_concat_parquets(sub_runs, final_runs)` reads the same
+file N times — concatenating the LAST config's data N-fold and
+silently losing all earlier configs' cells. Failure mode: the
+final corpus has N × (rows from the last config) total rows,
+N × (unique ids of the last config) unique ids, and zero
+representation of the first N−1 configs.
+
+**Rule.** At dispatch entry, after building the config list (via
+either `sweep.build_hypotheses` for chunked or `build_paired`
+for paired), check `cfg.name` uniqueness across all configs.
+Raise `ValueError` on any duplicate, naming the colliding
+config(s), the count, and the two valid fixes (templated `name`
+with `{from_env: <attr>}` substitution, or `arms_shape:
+chunked`). The check fires BEFORE any cell is written.
+
+**Why.** `arms_shape: paired` is the only path that can produce
+name collisions: `build_paired` generates one
+`HypothesisConfig` per (template × env) and uses the template's
+`name` field verbatim. Without a `{from_env: <attr>}`
+substitution differentiating per-env names, all configs share
+`cfg.name`. Pre-CI9 the failure was silent — the dispatcher
+ran for the full sweep duration, claimed success, and produced
+a corrupt parquet that subsequent ingest / analysis pipelines
+would then treat as authoritative.
+
+**Failure caught.** `reward_scale_sweep_postfix` (2026-05-11):
+`arms_shape: paired` + 5 envs (FR rs={0.1, 0.3, 1.0} + Acrobot
+rs=0.1 + CartPole rs=0.1) + single hypothesis template
+`name: ddqn_vs_vanilla` (no substitution) → `build_paired`
+produced 5 configs all named `ddqn_vs_vanilla`. 60 min CPU
+sweep completed without error; final `runs.parquet` contained
+300 rows / 60 unique ids — all CartPole rs=0.1 (the last
+config), duplicated 5×. Audit caught this only because the
+follow-up ingest report showed `env_name.n_unique() == 1`.
+Repaired by switching the YAML to `arms_shape: chunked` and
+re-running.
+
 ## Audit table — current vs. target
 
 | Invariant | Held by current code? | Gap |
@@ -270,6 +313,7 @@ runner falls back to no-traces.
 | **CI6** Stores in sync with parent | YES (Phase 2) | — |
 | **CI7** Disk-pressure reclaim | YES (Phase 3) | — |
 | **CI8** Traces id-subset | YES (Phase 2 extension) | — |
+| **CI9** Dispatcher refuses cfg.name collisions | YES (2026-05-11 fix) | — |
 
 ## Implementation order
 
