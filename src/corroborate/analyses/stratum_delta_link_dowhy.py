@@ -149,7 +149,7 @@ def _build_stratum_panel(
                 continue
             # Mech conditioning: skip stratum if vanilla's mean
             # predictor is below the premise-active floor.
-            if mean_b_pred < min_vanilla_predictor:
+            if mean_b_pred <= min_vanilla_predictor:
                 continue
             d_target = mean_t_target - mean_b_target
             d_pred = mean_t_pred - mean_b_pred

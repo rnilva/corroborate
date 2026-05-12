@@ -195,7 +195,7 @@ def _build_panel(
             mb_p = float(np.nanmean(b_pred))
             if any(math.isnan(v) for v in (mt_t, mt_p, mb_t, mb_p)):
                 continue
-            if mb_p < min_vanilla_predictor:
+            if mb_p <= min_vanilla_predictor:
                 continue
             d_pred = mt_p - mb_p
             d_target = mt_t - mb_t

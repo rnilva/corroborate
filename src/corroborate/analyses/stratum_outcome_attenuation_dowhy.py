@@ -190,7 +190,7 @@ def _build_stratum_panel(
                 continue
             if math.isnan(mean_b_pred):
                 continue
-            if mean_b_pred < min_vanilla_predictor:
+            if mean_b_pred <= min_vanilla_predictor:
                 continue
             d_outcome = mean_t_target - mean_b_target
             stratum_rows.append({

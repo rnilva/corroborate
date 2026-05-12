@@ -41,11 +41,32 @@ _VANILLA_Q_DIVERGENCE_SCORE = pl.when(pl.col('arm_key') == 'baseline').then(
 ).otherwise(None)
 
 
-# G1 (premise active) at config-mean grain: vanilla mean(jens) > 0.05
-# AND mean(dormancy) < 0.05. Both arms of an admitted config enter.
+# Noise floor for "vanilla mean jens is meaningfully positive."
+# Substrate convention (not physics-derived): per-cell vanilla
+# jens has a small near-zero distribution from sampling noise +
+# numerical drift; we require config-mean to exceed this floor
+# before counting the stratum as G1-active. Threshold 0.05 is a
+# conservative "1/20 unit reward" floor — well below all envs'
+# typical mean jens (Acrobot ≈ 1.91, MC ≈ 16.6, FR-200k ≈ 0.28),
+# trims the FR-1M saturated-vanilla case (mean jens ≈ 0.043).
+# Used by:
+#   - `G1_VANILLA_CONFIG_PREMISE_ACTIVE` (scope predicate)
+#   - `stratified_arm_diff_pooled.min_vanilla_predictor` (analysis param)
+#   - `stratum_*_dowhy.min_vanilla_predictor` (analysis param)
+# All sites apply `vanilla_mean_predictor > VANILLA_JENS_NOISE_FLOOR`
+# (admit) / `<= floor` (skip). Substrate-physical calibration to
+# σ_Q × √(2 log K) per `findings_three_gate_empirical_taxonomy.md`
+# would require per-env thresholds; deferred — the noise-floor
+# framing is the current honest stand-in.
+VANILLA_JENS_NOISE_FLOOR: float = 0.05
+
+
+# G1 (premise active) at config-mean grain: vanilla mean(jens) >
+# noise floor AND mean(dormancy) < noise floor. Both arms of an
+# admitted config enter.
 G1_VANILLA_CONFIG_PREMISE_ACTIVE = (
-    (partition_aggregate(_VANILLA_JENS_GAP, by=DDQN_CONFIG_KEYS, op='mean') > 0.05)
-    & (partition_aggregate(_VANILLA_DORMANCY_GAP, by=DDQN_CONFIG_KEYS, op='mean') < 0.05)
+    (partition_aggregate(_VANILLA_JENS_GAP, by=DDQN_CONFIG_KEYS, op='mean') > VANILLA_JENS_NOISE_FLOOR)
+    & (partition_aggregate(_VANILLA_DORMANCY_GAP, by=DDQN_CONFIG_KEYS, op='mean') < VANILLA_JENS_NOISE_FLOOR)
 )
 
 # Q-bounded regime: vanilla mean(dormancy) < 0.05 AND mean(q_div) < 1.
