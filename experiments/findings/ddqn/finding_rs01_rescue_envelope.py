@@ -14,10 +14,7 @@ two null sides at POWER_INSUFFICIENT (CIs span the ±0.2 ceiling
 at n=60); landing them at HELD needs more cells."""
 from __future__ import annotations
 
-import sys
-
 from corroborate.bridge.bridge import Bridge
-from corroborate.core.finding import run_finding
 from corroborate.graph.causal import ClusterVerdict
 
 from experiments.findings.ddqn.rs_rescue import (
@@ -30,7 +27,7 @@ from experiments.findings.ddqn.rs_rescue import (
 EXPECTED: ClusterVerdict = ClusterVerdict.UNDERPOWERED
 
 
-BLOCKED_ON: str = (
+BLOCKED_ON: str | None = (
     'Acrobot/CartPole rs=0.1 null sides are POWER_INSUFFICIENT '
     '(CIs span ±0.2 at n=60). Theoretical claim asserts SUPPORTED '
     'envelope; data needs ~n=240 per env to land nulls at HELD. '
@@ -45,7 +42,3 @@ BRIDGES: tuple[Bridge, ...] = (
     ddqn_does_not_rescue__acrobot_rs_0p1,
     ddqn_does_not_rescue__cartpole_rs_0p1,
 )
-
-
-if __name__ == '__main__':
-    run_finding(sys.modules[__name__])

@@ -20,7 +20,8 @@ from typing import cast
 from corroborate.bridge import Bridge, BridgeEvaluation
 from corroborate.core.finding import Finding
 from corroborate.graph.causal import (
-    PostEvalEntry,
+    _EMPTY_EXTENT_HASH,  # pyright: ignore[reportPrivateUsage]
+    ClusterVerdict, PostEvalEntry,
     cluster_verdict, clusters_by_extent, composed_verdict, evaluated_graph,
 )
 from corroborate.runner import check, evict, run
@@ -252,9 +253,6 @@ def _check_and_report(module: str) -> int:
     return 2
 
 
-_EMPTY_EXTENT_HASH = hash(frozenset[str]())
-
-
 def _print_verdicts(
     results: dict[str, BridgeEvaluation],
     bridges: tuple[Bridge, ...],
@@ -373,30 +371,59 @@ def _print_verdicts(
         print()
         drift_count = 0
         blocked_count = 0
+        contradiction_count = 0
+        # Terminal verdicts that shouldn't pair with BLOCKED_ON —
+        # SUPPORTED / REFUTED are author conclusions, not "pending."
+        # If a finding has both, the author has authored a
+        # contradiction (likely forgot to clear BLOCKED_ON after
+        # data landed). Surface as a structural warning.
+        _TERMINAL = {ClusterVerdict.SUPPORTED, ClusterVerdict.REFUTED}
         for f in findings:
             verdict = composed_verdict(g, bridges=f.BRIDGES)
             drift = verdict != f.EXPECTED
-            blocked = bool(f.BLOCKED_ON)
+            blocked = f.BLOCKED_ON is not None
+            contradiction = blocked and f.EXPECTED in _TERMINAL
             if drift:
                 drift_count += 1
             if blocked:
                 blocked_count += 1
+            if contradiction:
+                contradiction_count += 1
             # `← DRIFT` = verdict CHANGED relative to author's
             # pinned state (regression or improvement — both
             # warrant attention). `[blocked]` = state matches
             # EXPECTED but the finding is intentionally pinned
             # to a sub-optimal state pending data; quiet status,
             # no investigation needed.
-            if drift:
+            if contradiction:
+                state_marker = ' !! CONTRADICTION'
+            elif drift:
                 state_marker = ' ← DRIFT'
             elif blocked:
                 state_marker = ' [blocked]'
             else:
                 state_marker = ''
             n_bridges = len(f.BRIDGES)
+            # Distinct-extent count surfaces the structural shape
+            # without naming it: `N bridges, 1 extent` = cluster
+            # pattern (parallel edges, shared admitted cells);
+            # `N bridges, N extents` = envelope (per-scope sub-
+            # claims). Framework reports counts, not labels —
+            # cluster/envelope/chain interpretation lives where
+            # human prose lives (the docstring).
+            bridge_names = {b.name for b in f.BRIDGES}
+            distinct_extents = len({
+                e.metadata.extent_hash for e in g.edges
+                if e.metadata.bridge_name in bridge_names
+            })
+            extents_label = (
+                f'{distinct_extents} extents'
+                if distinct_extents != 1 else '1 extent'
+            )
             short_name = f.__name__.rsplit('.', 1)[-1]
             print(
-                f'  {verdict.value:14s}  ({n_bridges} bridges)  '
+                f'  {verdict.value:14s}  '
+                f'({n_bridges} bridges, {extents_label})  '
                 f'{short_name}{state_marker}',
             )
             if drift:
@@ -406,10 +433,19 @@ def _print_verdicts(
                     print(f'      claim:    {doc}')
             if blocked:
                 print(f'      blocked-on: {f.BLOCKED_ON}')
-        print(
+            if contradiction:
+                print(
+                    f'      warning: EXPECTED={f.EXPECTED.value} is '
+                    f'terminal but BLOCKED_ON is non-empty. Likely '
+                    f'forgot to clear BLOCKED_ON after data landed.',
+                )
+        summary = (
             f'findings: {len(findings)} declared, '
-            f'{drift_count} drift, {blocked_count} blocked',
+            f'{drift_count} drift, {blocked_count} blocked'
         )
+        if contradiction_count:
+            summary += f', {contradiction_count} contradiction'
+        print(summary)
 
 
 def _summarize(result: object) -> str:

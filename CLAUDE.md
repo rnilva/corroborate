@@ -256,6 +256,45 @@ satisfies `Claim[P, T]` without inheritance. Unused in the
 current substrate; documented in `claim.py` and tested in
 `tests/test_claim.py::test_manual_dataclass_with_record_call`.
 
+## Findings — cluster-shaped claims on the post-eval graph
+
+A `Finding` (in `corroborate.core.finding`) is a typed subgraph
+of a Hypothesis's evaluated causal graph that asserts an
+aggregate verdict. The Protocol mirrors `Hypothesis`: module-
+level attributes (`EXPECTED`, `BRIDGES`, `BLOCKED_ON`, `__name__`),
+no callable. The framework derives the verdict via
+`composed_verdict(g, bridges=f.BRIDGES)` — every named bridge
+admits → SUPPORTED; any refutes → REFUTED; mix admit /
+unevaluated → UNDERPOWERED.
+
+Authoring conventions:
+- Finding lives at `experiments/findings/<hypothesis>/finding_*.py`.
+- Parent `Hypothesis` declares `FINDINGS = (finding_*, ...)` —
+  the framework's discovery surface.
+- `EXPECTED` pins the EMPIRICAL state, not the theoretical
+  claim. If data hasn't caught up, pin to the actual current
+  verdict + set `BLOCKED_ON` to a non-`None` string naming the
+  gap. The renderer surfaces `[blocked]` for the pinned-pending
+  state and `← DRIFT` only when the verdict actually changes.
+- Prose claim lives in the module docstring (renderer quotes the
+  first line on drift).
+- `_validate_hypothesis` enforces `Finding.BRIDGES ⊆
+  Hypothesis.BRIDGES` at startup; runtime composed-verdict never
+  sees a "missing bridge" path.
+- `Finding.BLOCKED_ON` non-None paired with terminal `EXPECTED`
+  (SUPPORTED / REFUTED) is author contradiction — renderer flags
+  `!! CONTRADICTION` (the author likely forgot to clear
+  `BLOCKED_ON` after data landed).
+
+The cluster vs envelope vs chain shape distinction is NOT a
+framework primitive — the renderer surfaces structural counts
+(`N bridges, M distinct extents`) without naming the pattern.
+Cluster integrity, chain composition, etc. are queryable via the
+graph operations in `corroborate.graph.causal`; framework doesn't
+classify shape, authors don't author it, and pyright doesn't
+check shape conformance. Three hand-rolled examples at
+`experiments/findings/ddqn/finding_*.py`.
+
 ## Persistence shape (typed × open)
 
 Each row store splits into two surfaces:

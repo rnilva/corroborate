@@ -132,6 +132,21 @@ def _validate_hypothesis(h: object) -> Hypothesis:
                 f'{h.__name__}.BRIDGES contains non-Bridge: '
                 f'{type(b).__name__}',
             )
+    # Findings' subgraph invariant: every bridge a Finding cites
+    # must be in the parent's BRIDGES tuple. Catching this at
+    # validation time is the principled alternative to a runtime
+    # SHAPE_MISMATCH ClusterVerdict — programming errors should
+    # fail at startup, not silently surface as a verdict.
+    parent_bridge_names = {b.name for b in h.BRIDGES}
+    for f in h.FINDINGS:
+        for b in f.BRIDGES:
+            if b.name not in parent_bridge_names:
+                raise TypeError(
+                    f'{f.__name__}.BRIDGES cites {b.name!r}, which is '
+                    f'not in {h.__name__}.BRIDGES. A Finding\'s '
+                    f'BRIDGES must be a subset of its parent '
+                    f'Hypothesis\'s BRIDGES.',
+                )
     return h
 
 

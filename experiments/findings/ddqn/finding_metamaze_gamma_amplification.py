@@ -10,10 +10,7 @@ under negation. Substantive: see
 `findings_metamaze_gamma_link.md`."""
 from __future__ import annotations
 
-import sys
-
 from corroborate.bridge.bridge import Bridge
-from corroborate.core.finding import run_finding
 from corroborate.graph.causal import ClusterVerdict
 
 from experiments.findings.ddqn.within_env import (
@@ -25,14 +22,10 @@ from experiments.findings.ddqn.within_env import (
 EXPECTED: ClusterVerdict = ClusterVerdict.REFUTED
 
 
-BLOCKED_ON: str = ''
+BLOCKED_ON: str | None = None
 
 
 BRIDGES: tuple[Bridge, ...] = (
     metamaze_link_steeper_at_high_gamma,
     metamaze_link_steeper_at_high_gamma__median,
 )
-
-
-if __name__ == '__main__':
-    run_finding(sys.modules[__name__])

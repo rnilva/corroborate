@@ -98,12 +98,15 @@ INVERSE) inferred post-hoc from a stat's value."""
 class Hypothesis(Protocol):
     """The framework's typed verdict-time hypothesis contract.
 
-    Conforming objects expose three read-only attributes:
+    Conforming objects expose four read-only attributes:
 
     - `INTERVENTION: DoEffect` — the typed contrast (treatment +
       baseline arms as Intervention tuples).
     - `BRIDGES: tuple[Bridge, ...]` — the authored verdict
       declarations.
+    - `FINDINGS: tuple[Finding, ...]` — cluster-shaped claims
+      authored against the post-evaluated graph (empty tuple if
+      none). See `corroborate.core.finding.Finding`.
     - `__name__: str` — the Python identity attribute. Modules
       carry their dotted path; classes carry their bare name. The
       runner uses it for cache-path defaults and display; both

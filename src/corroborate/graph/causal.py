@@ -370,16 +370,18 @@ class ClusterVerdict(Enum):
     - EMPTY_EXTENT for clusters whose member bridges all admit
       zero cells on the current cache (the framework cannot
       empirically distinguish them).
-    - SHAPE_MISMATCH when the bridges named in a Finding don't
-      all resolve to edges in the post-evaluated graph (rename,
-      delete, or scope refactor — author's declaration drifted
-      from the substrate); distinct from UNDERPOWERED so the
-      operator knows the failure mode is structural, not data."""
+
+    "Named bridge missing from graph" — the case a Finding's
+    `BRIDGES` cites a Bridge not in the parent `Hypothesis.BRIDGES`
+    — is caught at `_validate_hypothesis` time as a programming
+    error, not at verdict-compose time. Runtime composed_verdict
+    can therefore assume all bridge names resolve to edges and
+    return UNDERPOWERED on the (defensive, should-never-fire)
+    len-mismatch branch."""
     SUPPORTED = 'supported'
     REFUTED = 'refuted'
     UNDERPOWERED = 'underpowered'
     EMPTY_EXTENT = 'empty_extent'
-    SHAPE_MISMATCH = 'shape_mismatch'
 
 
 _EMPTY_EXTENT_HASH = hash(frozenset[str]())
@@ -446,16 +448,17 @@ def composed_verdict(
     surfaced by the `run_hypothesis.py` cluster rollup, not
     re-checked here.
 
-    SHAPE_MISMATCH (not UNDERPOWERED) on len-mismatch: a named
-    bridge missing from the graph is a structural drift signal,
-    distinct from "data inconclusive across present bridges."
-    Operators reading the rollup can tell whether the fix is
-    "rename / re-author bridge" or "wait for data to land."""
+    Len-mismatch (a declared bridge isn't in the graph) returns
+    UNDERPOWERED as a defensive fallback. In production the
+    `_validate_hypothesis` check at startup enforces
+    `Finding.BRIDGES ⊆ Hypothesis.BRIDGES`, so this branch
+    should never fire — but a corrupted post-eval graph could
+    in principle trigger it."""
     expected_names = {b.name for b in bridges}
     found = tuple(
         e.metadata for e in g.edges
         if e.metadata.bridge_name in expected_names
     )
     if len(found) != len(expected_names):
-        return ClusterVerdict.SHAPE_MISMATCH
+        return ClusterVerdict.UNDERPOWERED
     return cluster_verdict(found)

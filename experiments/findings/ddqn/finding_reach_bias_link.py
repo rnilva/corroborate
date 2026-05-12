@@ -8,10 +8,7 @@ parent's `Hypothesis.FINDINGS` tuple; no reverse pointer to the
 parent — the import graph stays one-way."""
 from __future__ import annotations
 
-import sys
-
 from corroborate.bridge.bridge import Bridge
-from corroborate.core.finding import run_finding
 from corroborate.graph.causal import ClusterVerdict
 
 from experiments.findings.ddqn.bias_correction import (
@@ -24,7 +21,7 @@ from experiments.findings.ddqn.bias_correction import (
 EXPECTED: ClusterVerdict = ClusterVerdict.SUPPORTED
 
 
-BLOCKED_ON: str = ''
+BLOCKED_ON: str | None = None
 
 
 BRIDGES: tuple[Bridge, ...] = (
@@ -32,7 +29,3 @@ BRIDGES: tuple[Bridge, ...] = (
     reach_link_placebo_refuted,
     reach_link_rcc_robust,
 )
-
-
-if __name__ == '__main__':
-    run_finding(sys.modules[__name__])
