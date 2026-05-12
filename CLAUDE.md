@@ -17,6 +17,14 @@ compose them differently. Authoring an invariant per mechanism
 claim is the substrate-author's primary commitment. See
 `README.md`.
 
+**Organizing principle**: a hypothesis is a causal graph, not a
+claim. Bridges contribute edges; the hypothesis is the graph.
+Causal-mechanism claims live at the graph level, derived from
+edge-promotion (`promote_bridged_evidence`), NOT at the
+single-bridge level. See `HYPOTHESIS_AS_GRAPH.md` for the
+authoring discipline this entails (bridge naming, refutation
+clusters, scope as edge-identity).
+
 ## Typing discipline (load-bearing)
 
 The framework's contribution is logical strictness applied to
