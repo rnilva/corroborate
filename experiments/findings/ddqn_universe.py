@@ -1925,16 +1925,20 @@ _VANILLA_DORMANCY_GAP = pl.when(pl.col('arm_key') == 'baseline').then(
     pl.col('jensen_dormancy_gap'),
 ).otherwise(None)
 
-_DDQN_RELEVANT_SCOPE = (
-    # G1 — config-level. partition_aggregate is NaN-safe over the
-    # vanilla-masked column: non-vanilla rows contribute null,
-    # vanilla cells contribute their jens/dormancy values. The
-    # per-row broadcast value is the vanilla-only config-mean,
-    # which then filters all rows (both arms) in the config
-    # uniformly. Threshold 0.05 unchanged — but now applied at
-    # config-mean grain instead of per-seed grain.
+# Reusable G1-at-config-level predicate. partition_aggregate is
+# NaN-safe over the vanilla-masked column: non-vanilla rows
+# contribute null, vanilla cells contribute their jens/dormancy
+# values. The per-row broadcast value is the vanilla-only config-
+# mean, which then filters all rows (both arms) in the config
+# uniformly. Threshold 0.05 unchanged — applied at config-mean
+# grain instead of per-seed grain.
+_G1_VANILLA_CONFIG_PREMISE_ACTIVE = (
     (partition_aggregate(_VANILLA_JENS_GAP, by=_DDQN_CONFIG_KEYS, op='mean') > 0.05)
     & (partition_aggregate(_VANILLA_DORMANCY_GAP, by=_DDQN_CONFIG_KEYS, op='mean') < 0.05)
+)
+
+_DDQN_RELEVANT_SCOPE = (
+    _G1_VANILLA_CONFIG_PREMISE_ACTIVE
     # G2 — argmax bias-vulnerable. Heuristic `n_actions >= 3` for
     # now. The (max−min)/σ_Q proxy was inconclusive (clusters at
     # 2.0-2.6 for all envs, doesn't isolate top1-top2 margin from
@@ -2283,10 +2287,7 @@ def argmax_entropy_shadowed_by_jens(
     scope=(
         (pl.col('env_name') == 'MetaMaze-misc')
         & pl.col('gamma').is_in([0.99, 0.999])
-        & finite('jensen_gap')
-        & (pl.col('jensen_gap') > 0.05)
-        & finite('jensen_dormancy_gap')
-        & finite_lt('jensen_dormancy_gap', 0.05)
+        & _G1_VANILLA_CONFIG_PREMISE_ACTIVE
         & ((pl.col('n_step') == 1) | pl.col('n_step').is_null())
         & pl.col('action_duplicate_k').is_null()
         & (pl.col('reward_scale').is_null() | (pl.col('reward_scale') == 1.0))
@@ -2333,9 +2334,18 @@ def metamaze_link_steeper_at_high_gamma(
     correlation; this reformulation tests treatment-effect
     amplification directly.
 
-    Empirical (per CLAIM 24 banner):
-      γ=0.99:  mean Δ_outcome ≈ near-zero (median -0.12)
-      γ=0.999: mean Δ_outcome ≈ +2.55 (median)
+    Empirical (post-2026-05-12 config-level scope lift):
+      γ=0.99:  mean Δ_outcome = +1.49 (n_v=n_d=30; lifted from
+               per-cell scope's +1.01 at 29/25 asymmetric admit)
+      γ=0.999: mean Δ_outcome = **−1.65** (n_v=n_d=30; lifted
+               from per-cell scope's −2.23 at 29/28)
+    **Verdict: NO_EFFECT.** γ=0.999 fails condition (i) — Δ_o
+    is NEGATIVE (DDQN hurts at high γ on MetaMaze), well below
+    high_floor=+0.5. The reformulated bridge correctly refutes
+    the earlier paired-Δ "amplification" finding, which the
+    CLAIM 24 banner already flagged as init-correlation
+    artifact. The empirical claim of "γ-amplification on
+    MetaMaze" is REFUTED by the current corpus.
     """
     del measurables, stratify_by, min_seeds_per_arm  # forwarded to fixture
     panel = stratum_effect_panel
@@ -2390,10 +2400,7 @@ def metamaze_link_steeper_at_high_gamma(
     scope=(
         (pl.col('env_name') == 'MetaMaze-misc')
         & pl.col('gamma').is_in([0.99, 0.999])
-        & finite('jensen_gap')
-        & (pl.col('jensen_gap') > 0.05)
-        & finite('jensen_dormancy_gap')
-        & finite_lt('jensen_dormancy_gap', 0.05)
+        & _G1_VANILLA_CONFIG_PREMISE_ACTIVE
         & ((pl.col('n_step') == 1) | pl.col('n_step').is_null())
         & pl.col('action_duplicate_k').is_null()
         & (pl.col('reward_scale').is_null() | (pl.col('reward_scale') == 1.0))
@@ -2426,11 +2433,13 @@ def metamaze_link_steeper_at_high_gamma__median(
     would be POSITIVE at γ=0.999 (more seeds rescued than hurt)
     while mean is NEGATIVE (catastrophes drag mean down).
 
-    Empirical finding: median-aggregated stratum-Δ is also
-    NEGATIVE at γ=0.999 (-1.34) and positive at γ=0.99 (+0.39).
-    Both summaries agree: DDQN HELPS at γ=0.99 and HURTS at
-    γ=0.999. The γ-amplification prediction is refuted regardless
-    of aggregator.
+    Empirical (post-2026-05-12 config-level scope lift):
+      γ=0.99:  median Δ_outcome = +0.16 (n_v=n_d=30)
+      γ=0.999: median Δ_outcome = **−0.96** (n_v=n_d=30)
+    Median-aggregated stratum-Δ is also NEGATIVE at γ=0.999 and
+    positive at γ=0.99. Both summaries agree: DDQN HELPS at
+    γ=0.99 and HURTS at γ=0.999. The γ-amplification
+    prediction is REFUTED regardless of aggregator.
 
     The CLAIM 24 banner's "median +2.55 at γ=0.999" reading was
     the PAIRED median (per-seed sign-count), which inherits the
@@ -2503,10 +2512,7 @@ def metamaze_link_steeper_at_high_gamma__median(
     scope=(
         (pl.col('env_name') == 'FourRooms-misc')
         & pl.col('action_duplicate_k').is_not_null()
-        & finite('jensen_gap')
-        & (pl.col('jensen_gap') > 0.05)
-        & finite('jensen_dormancy_gap')
-        & finite_lt('jensen_dormancy_gap', 0.05)
+        & _G1_VANILLA_CONFIG_PREMISE_ACTIVE
     ),
     predicted_direction='a_lt_b',
 )
