@@ -1937,6 +1937,20 @@ _G1_VANILLA_CONFIG_PREMISE_ACTIVE = (
     & (partition_aggregate(_VANILLA_DORMANCY_GAP, by=_DDQN_CONFIG_KEYS, op='mean') < 0.05)
 )
 
+# Q-bounded regime predicate (config-level lift of `dormancy<0.05 AND
+# q_div<1.0` per-cell pair). Distinct from G1: G1 demands jens > 0
+# (mech ACTIVE), while this expresses "Q well-calibrated to MC, no
+# explosion" — admits cells where Q ≈ MC with bounded divergence,
+# regardless of jens magnitude.
+_VANILLA_Q_DIVERGENCE_SCORE = pl.when(pl.col('arm_key') == 'baseline').then(
+    pl.col('q_divergence_score'),
+).otherwise(None)
+
+_VANILLA_CONFIG_Q_BOUNDED = (
+    (partition_aggregate(_VANILLA_DORMANCY_GAP, by=_DDQN_CONFIG_KEYS, op='mean') < 0.05)
+    & (partition_aggregate(_VANILLA_Q_DIVERGENCE_SCORE, by=_DDQN_CONFIG_KEYS, op='mean') < 1.0)
+)
+
 _DDQN_RELEVANT_SCOPE = (
     _G1_VANILLA_CONFIG_PREMISE_ACTIVE
     # G2 — argmax bias-vulnerable. Heuristic `n_actions >= 3` for
@@ -3157,12 +3171,17 @@ def target_staleness_late_mediates_outcome__breakout_sync100(
     tier=Tier.INTERVENTIONAL,
     pair_by=('env_name', 'corpus', 'gamma', 'total_steps', 'sync_period', 'seed'),
     scope=(
+        # Current corpora hosting the intermediate-sync MinAtar
+        # cohort (renamed from `*_intermediate_sync` 2026 postfix
+        # rebuild). Asterix syncs ∈ {500, 1500, 3000} +
+        # Breakout syncs ∈ {500, 1500, 3000} (postfix corpus added
+        # Breakout sync=3000; original was just {500, 1500}).
         pl.col('corpus').is_in(
-            ['asterix_intermediate_sync', 'breakout_intermediate_sync'],
+            ['asterix_postfix_chunk10',
+             'survive_sync_intermediate_minatar_postfix'],
         )
         & finite('target_staleness_late')
-        & finite('jensen_dormancy_gap') & finite_lt('jensen_dormancy_gap', 0.05)
-        & finite('q_divergence_score') & finite_lt('q_divergence_score', 1.0)
+        & _VANILLA_CONFIG_Q_BOUNDED
     ),
     predicted_direction='a_gt_b',
 )
@@ -3181,9 +3200,16 @@ def target_staleness_late_mediates_outcome__minatar_intermediate_sync(
     ∈ {500, 1500}, after the dormancy filter excludes the cells
     where DDQN's Q crosses below MC).
 
-    Empirical (2026-05-08, n_pairs=114): proportion = 0.069 →
-    NO_EFFECT (null_effect). Within-cell linear mediation does
-    NOT replicate the strong cross-config structural pattern.
+    Empirical (2026-05-12 corpus rename + config-level Q-bounded
+    lift, n_pairs=92): proportion=20.73 → POWER_INSUFFICIENT
+    (`in_unit_interval=False`). Within-cell linear mediation
+    is structurally degenerate at this scope — the total Δ_outcome
+    is too small (some configs have Δ < 0; Asterix sync=1500 has
+    vanilla=2.10, DDQN=1.96 → Δ=-0.14) for the indirect-effect
+    ratio to land inside [0, 1]. Same conclusion as the
+    historical "proportion=0.069 at n=114" reading (within-cell
+    mediation fails), but now visible via the degeneracy check
+    rather than a small-positive proportion.
 
     Cross-config aggregate finding (n=11 in-scope (env, sync)
     cells, NOT what this bridge tests):
