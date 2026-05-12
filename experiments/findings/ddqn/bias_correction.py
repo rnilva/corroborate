@@ -7,10 +7,14 @@ separate corpus). 4 bridges:
   Acrobot γ=0.999 (paired_link_per_burst → phase_link_consistency).
 - `reach_link_dowhy_corroborated`: composite DoWhy backdoor +
   placebo + RCC on the per-burst Δ_jens panel, REACH-cohort scope.
-- `extreme_q_divergence_attenuates_outcome__dowhy_corroborated`:
+- `extreme_q_divergence_attenuates_link__dowhy_corroborated`:
   composite DoWhy backdoor + placebo + RCC on the
-  outcome-attenuation binary contrast (env-mean q_div > 1000 vs
-  in-band envs); per-(env, burst) stratum-Δ outcome.
+  link-attenuation binary contrast (env-mean q_div > 1000 vs
+  in-band envs). "Link" = bias-drops→outcome-rises causal arrow;
+  tested via per-(env, burst) stratum-Δ outcome under mech-active
+  conditioning (vanilla mean jens > 0.05 + DDQN's structural
+  bias-reduction tendency means Δ_outcome here proxies the
+  mech→outcome link, not just a marginal effect).
 - `fourrooms_action_dim_link_active__inflated`: within-FourRooms
   panel_regress of Δ_outcome on Δ_jens across `action_duplicate_k`.
 
@@ -196,7 +200,7 @@ def fourrooms_action_dim_link_active__inflated(
         )
     ),
 )
-def extreme_q_divergence_attenuates_outcome__dowhy_corroborated(
+def extreme_q_divergence_attenuates_link__dowhy_corroborated(
     stratum_outcome_attenuation_dowhy: StratumOutcomeAttenuationDowhyResult,
     *,
     treatment_arm: str = DDQN_ARM,
@@ -215,20 +219,22 @@ def extreme_q_divergence_attenuates_outcome__dowhy_corroborated(
     rcc_max_drift_ratio: float = 0.15,
 ) -> Verdict:
     """Binary contrast: envs with mean `q_divergence_score > 1000`
-    have **per-(env, burst) stratum-Δ outcome** attenuated by ≥
-    0.10 vs in-band envs. Phase-4 refactor (2026-05-12): replaced
-    `link_attenuation_dowhy` (within-(env, burst) Pearson r over
-    seed-paired Δs as outcome) with
-    `stratum_outcome_attenuation_dowhy` (per-stratum
-    independent-samples Δ_outcome). Claim narrowed from "link
-    attenuation" → "outcome attenuation": Q-divergence reduces
-    DDQN's outcome benefit directly, no mediation framing.
+    have a weaker bias→outcome **link** vs in-band envs.
+
+    Phase-4 refactor (2026-05-12): replaced `link_attenuation_dowhy`
+    (within-(env, burst) Pearson r computed from seed-paired Δs as
+    outcome) with `stratum_outcome_attenuation_dowhy` (per-(env,
+    burst) independent-samples Δ_outcome). "Link" is the causal
+    claim "bias drops → outcome rises," not the seed-pairing
+    mechanic. Mech conditioning via `min_vanilla_predictor=0.05`
+    ensures premise active per stratum; DDQN's structural tendency
+    to reduce bias means Δ_outcome attenuation in high-q_div
+    strata corresponds to a weakened mech→outcome link, not just
+    a marginal Δ_outcome effect.
 
     DoWhy backdoor + placebo + RCC trio under env one-hot
-    adjustment. Mech conditioning built into the analysis via
-    `min_vanilla_predictor=0.05` (strata where vanilla mean jens
-    < 0.05 are dropped before DoWhy). `zero_guard=True` on
-    backdoor handles RNG-dependent machine-epsilon signs."""
+    adjustment. `zero_guard=True` on backdoor handles RNG-
+    dependent machine-epsilon signs."""
     del treatment_arm, baseline_arm, attenuator, binary_threshold
     del link_target, link_predictor, min_vanilla_predictor
     return dowhy_trio_verdict(
@@ -244,5 +250,5 @@ BRIDGES = (
     acrobot_per_burst_link_active__gamma_0999,
     reach_link_dowhy_corroborated,
     fourrooms_action_dim_link_active__inflated,
-    extreme_q_divergence_attenuates_outcome__dowhy_corroborated,
+    extreme_q_divergence_attenuates_link__dowhy_corroborated,
 )
