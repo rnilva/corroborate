@@ -32,12 +32,13 @@ from experiments.findings.ddqn._verdicts import (
 
 
 # Per-γ effective_horizon on FourRooms (empirical means at each γ
-# on the current ddqn cache). Pinned for CLAIM 5's multi-stratum
-# random-effects meta-regression on `effective_horizon` slope
-# across γ-strata.
+# on the current ddqn cache after `gamma_sweep_fourrooms` ingest
+# 2026-05-12). Pinned for CLAIM 5's multi-stratum random-effects
+# meta-regression on `effective_horizon` slope across γ-strata.
 _FOURROOMS_EFFECTIVE_HORIZON_PER_GAMMA: dict[object, dict[str, float]] = {
-    0.99: {'effective_horizon': 27.6},
-    0.999: {'effective_horizon': 70.0},  # empirical estimate
+    0.99: {'effective_horizon': 37.3},
+    0.995: {'effective_horizon': 80.6},
+    0.999: {'effective_horizon': 235.6},
 }
 
 
@@ -49,7 +50,11 @@ _FOURROOMS_EFFECTIVE_HORIZON_PER_GAMMA: dict[object, dict[str, float]] = {
     tier=Tier.INTERVENTIONAL,
     scope=(
         (pl.col('env_name') == 'FourRooms-misc')
-        & pl.col('gamma').is_in([0.99, 0.999])
+        & pl.col('gamma').is_in([0.99, 0.995, 0.999])
+        & ((pl.col('n_step') == 1) | pl.col('n_step').is_null())
+        & pl.col('action_duplicate_k').is_null()
+        & (pl.col('reward_scale').is_null() | (pl.col('reward_scale') == 1.0))
+        & pl.col('target_sync.tau').is_null()
     ),
     predicted_direction='a_gt_b',
 )
