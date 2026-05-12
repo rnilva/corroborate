@@ -132,9 +132,6 @@ from corroborate.bridge.predicates import (
 )
 from corroborate.core.intervention import DoEffect, Intervention
 from corroborate.measurables import Measurable
-from corroborate.analyses.paired_continuous_do_dowhy import (
-    PairedContinuousDoResult,
-)
 from corroborate.stats import MetaRegressionResult
 from corroborate_rl.dqn.claims.bootstrap import (
     bootstrap, double_greedify,
@@ -1327,102 +1324,20 @@ def ddqn_entropy_matches_vanilla__fourrooms_rs_1p0(
 # =====================================================================
 
 
-@claim_bridge(
-    source=INTERVENTION,
-    target='mc_return[per_burst]',
-    direction=Direction.INVERSE,
-    tier=Tier.ASSOCIATIONAL,
-    # Endogenous scope: `q_divergence_score > 1` (jensen_gap exceeds
-    # the Bellman fixed-point bound r_max/(1−γ)) replaces the prior
-    # `sync_period == 100` HP-knob scope. SI 1M cells at sync=100
-    # all have q_div in (2.7, 1002), so the regime is preserved;
-    # the 60 cells with NaN q_div (no_hit_penalty wrapper, null
-    # jensen_gap) had null mc_return too and contributed nothing.
-    # The endogenous form expresses the bridge's real interest —
-    # the Q-explosion regime where the late-burst crossover happens.
-    scope=(
-        (pl.col('env_name') == 'SpaceInvaders-MinAtar')
-        & (pl.col('total_steps') == 1_000_000)
-        & pl.col('reward_clip_min').is_null()
-        & finite_gt('q_divergence_score', 1.0)
-    ),
-)
-def ddqn_curve_crosses_vanilla_late__spaceinvaders(
-    paired_g_per_burst: PerBurstResult,
-    *,
-    # Pin the per-burst measurable: the decorator's target
-    # `mc_return[per_burst]` is the human-readable name of what
-    # the analysis projects, but `paired_g_per_burst` indexes
-    # cells by the raw per-burst column `mc_return`. The body
-    # default routes the per-burst projection back onto the
-    # underlying 2-D `mc_return` array.
-    source: Measurable[
-        Mapping[str, object], npt.NDArray[np.floating],
-    ] = _MC_RETURN_PER_BURST_MEAN,
-    env_name: str = 'SpaceInvaders-MinAtar',
-    crossover_burst_min: int = 3,
-    crossover_burst_max: int = 10,
-    late_negative_floor: float = -0.3,
-    dedupe_strategy: str = 'mean',
-) -> Verdict:
-    """Per-burst crossover detection on SpaceInvaders 1M.
-
-    Walks `paired_g_per_burst.strata` filtered to `env_name`, in
-    burst-index order. HELD when:
-      (1) The first stratum where g < 0 lies in
-          [crossover_burst_min, crossover_burst_max] inclusive
-          (the curves cross within the expected window).
-      (2) The mean g across late bursts (index ≥ crossover) is
-          ≤ `late_negative_floor` (the late-training side of the
-          curve has a substantial negative drift, not just a
-          one-burst fluctuation).
-
-    POWER_INSUFFICIENT when (1) holds but (2) fails (crossover
-    detected, but late drift is too small to assert magnitude).
-    NO_EFFECT when no crossover or curve never goes negative.
-
-    Reads `paired_g_per_burst.strata[i].g` (standardized Hedges'
-    g) — within env, the SD-scaling is ~constant so sign
-    detection is invariant. The bridge is a SHAPE claim about
-    the per-burst-index curve, not a single aggregate effect."""
-    del source, dedupe_strategy
-    env_strata = sorted(
-        (s for s in paired_g_per_burst.strata if s.env_name == env_name),
-        key=lambda s: s.burst_index,
-    )
-    if len(env_strata) < crossover_burst_max + 1:
-        # Empty strata = no cells in scope = underpowered, not
-        # null-effect. Reviewer screening catch: previous NO_EFFECT
-        # for n=0 was a verdict-logic bug.
-        return Verdict.POWER_INSUFFICIENT
-
-    # Find the crossover: first burst where g < 0 (after
-    # potentially seeing positive g earlier — the bridge isn't
-    # strict about an early-positive prefix; the late-floor check
-    # in step (2) carries the magnitude signal).
-    crossover_idx: int | None = None
-    for s in env_strata:
-        if math.isnan(s.g):
-            continue
-        if s.g < 0.0:
-            crossover_idx = s.burst_index
-            break
-    if crossover_idx is None:
-        return Verdict.NO_EFFECT
-    if not (crossover_burst_min <= crossover_idx <= crossover_burst_max):
-        return Verdict.NO_EFFECT
-
-    # Late-side magnitude floor.
-    late_gs = [
-        s.g for s in env_strata
-        if s.burst_index >= crossover_idx and not math.isnan(s.g)
-    ]
-    if not late_gs:
-        return Verdict.NO_EFFECT
-    late_mean = float(np.mean(late_gs))
-    if late_mean > late_negative_floor:
-        return Verdict.POWER_INSUFFICIENT
-    return Verdict.HELD
+# =====================================================================
+# CLAIM 8 SI late-crossover bridge — DELETED. Bridge audit step 6
+# (2026-05-12).
+#
+# `ddqn_curve_crosses_vanilla_late__spaceinvaders` cut on data orphan:
+# scope requires SpaceInvaders-MinAtar at `total_steps == 1_000_000`.
+# Post-rebuild cache has SI only at 200k (in `survive_sync_freeway_
+# si_chunk10`). SI 1M corpora are gone.
+#
+# Substantive content (DDQN curve crosses vanilla late on SI at
+# sync=100 1M) preserved in `findings_minatar_link_attenuation.md`
+# (per-burst sync curve on MinAtar) and `findings_sync_curve_
+# breakout.md`. Re-enable when SI 1M cohort returns.
+# =====================================================================
 
 
 # =====================================================================
@@ -1504,46 +1419,22 @@ def ddqn_helps_at_full_bootstrap__fourrooms_n1(
     return Verdict.NO_EFFECT
 
 
-@claim_bridge(
-    source=INTERVENTION,
-    target='eval_best_burst_mean',
-    direction=Direction.DIRECT,
-    tier=Tier.INTERVENTIONAL,
-    scope=(
-        (pl.col('env_name') == 'FourRooms-misc')
-        & (pl.col('n_step') == 10)
-    ),
-)
-def ddqn_null_under_monte_carlo__fourrooms_n10(
-    arm_mean_diff: ArmMeanDiffResult,
-    *,
-    null_ceiling: float = 0.02,
-) -> Verdict:
-    """At n=10 (near-Monte-Carlo, bootstrap influence ≈ 0), DDQN's
-    outcome benefit on FourRooms is ≤ +0.02 AND not significant
-    (p > 0.05). HELD when both conditions hold — corroborates the
-    necessary-condition reading: removing bootstrap removes the
-    benefit. This is a HELD-as-null bridge: the verdict is HELD
-    when the difference is small (the *predicted* outcome of the
-    falsification probe). Verdict mapping is inverted vs the n=1
-    bridge by design — the theorem predicts smallness here.
-
-    Migrated from `paired_g` to `arm_mean_diff` (2026-05-11) —
-    see companion bridge `ddqn_helps_at_full_bootstrap__fourrooms_n1`
-    for the RL-methodology rationale."""
-    diff = arm_mean_diff.mean_diff
-    p = arm_mean_diff.mean_diff_p_value
-    if math.isnan(diff) or math.isnan(p):
-        # NaN = no cells in scope OR degenerate stats; underpowered
-        # to assert HELD or NO_EFFECT (reviewer screening catch).
-        return Verdict.POWER_INSUFFICIENT
-    is_small = abs(diff) <= null_ceiling
-    is_ns = p > 0.05
-    if is_small and is_ns:
-        return Verdict.HELD
-    if is_small or is_ns:
-        return Verdict.POWER_INSUFFICIENT
-    return Verdict.NO_EFFECT
+# =====================================================================
+# CLAIM 9 n=10 Monte-Carlo falsification companion — DELETED. Bridge
+# audit step 6 (2026-05-12).
+#
+# `ddqn_null_under_monte_carlo__fourrooms_n10` cut on data orphan:
+# scope requires FourRooms-misc with `n_step == 10`. Postfix corpora
+# only carry FourRooms with `n_step == 1`; the `nstep_lambda_
+# fourrooms` sweep that varied n is gone.
+#
+# Substantive content (n-step falsification curve: Δ→0 as n grows)
+# preserved by the n=1 sister bridge `ddqn_helps_at_full_bootstrap_
+# _fourrooms_n1` (HELD positive) + memory note
+# `findings_nstep_falsification.md`. The falsification curve was
+# corroborated; the n=10 null-companion is the missing endpoint.
+# Re-enable when n-step sweep returns.
+# =====================================================================
 
 
 # ============ CLAIM 10 — link IS causally bias-correction on Acrobot
@@ -2805,123 +2696,26 @@ def _staleness_mediation_holds_when(
     return Verdict.NO_EFFECT, RefutationClass.NULL_EFFECT
 
 
-@claim_bridge(
-    source=INTERVENTION,
-    target='eval_best_burst_mean',
-    direction=Direction.DIRECT,
-    tier=Tier.INTERVENTIONAL,
-    # `replay.capacity` is in pair_by because capacity_sweep_fourrooms
-    # has 3 capacities (10k, 20k, 50k) and pairs MUST share capacity
-    # for the mediation analysis to be coherent. Without it, the
-    # `(corpus, seed)` dedup collapses cells across capacities and
-    # in_unit_interval breaks (proportion goes negative).
-    pair_by=(
-        'env_name', 'corpus', 'gamma', 'total_steps', 'sync_period',
-        'seed', 'replay.capacity',
-    ),
-    scope=(
-        (pl.col('env_name') == 'FourRooms-misc')
-        & (pl.col('corpus') == 'capacity_sweep_fourrooms')
-        & finite('target_staleness_late')
-    ),
-    predicted_direction='a_gt_b',
-)
-def target_staleness_late_mediates_outcome__fourrooms(
-    proportion_mediated: ProportionMediatedResult,
-    *,
-    mediator: str = 'target_staleness_late',
-    upstream_source: str = 'jensen_gap',
-    upstream_max_delta: float = 0.0,
-    dominance_floor: float = 0.2,
-    n_pairs_floor: int = 25,
-) -> tuple[Verdict, RefutationClass | None]:
-    """On FourRooms (capacity_sweep), `target_staleness_late` mediates
-    DDQN's outcome benefit at ~27% under mech-HELD conditioning.
-
-    Mediation chain tested:
-        `do(DDQN) → Δ_jens<0 → Δ_target_staleness_late → Δ_outcome`
-
-    DDQN's bias correction → Q stays bounded near target → less
-    online-target divergence in the late training window → cleaner
-    bootstrap target values → outcome gain.
-
-    Scope: FourRooms-misc cells with finite `target_staleness_late`
-    (only computable when traces have `online_max_q_per_step` and
-    `target_max_q_per_step` columns).
-
-    HELD when:
-      (1) ≥ `n_pairs_floor` paired cells with Δ_jens<0,
-      (2) linear-mediation assumptions hold,
-      (3) `proportion` ≥ `dominance_floor` (≥ 20% of total Δ_outcome
-          routed through staleness reduction).
-
-    Empirical (capacity_sweep_fourrooms, mech-HELD): proportion =
-    0.269, n_pairs = 88. Tautology audit on the same data (DDQN arm,
-    capacity-stratified): jaccard=0, hp_r²=0.158, stratified ρ =
-    −0.604 with p = 3×10⁻¹⁰. CLEAN."""
-    del mediator, upstream_source, upstream_max_delta
-    return _staleness_mediation_holds_when(
-        proportion_mediated,
-        dominance_floor=dominance_floor,
-        n_pairs_floor=n_pairs_floor,
-    )
-
-
-@claim_bridge(
-    source=INTERVENTION,
-    target='eval_best_burst_mean',
-    direction=Direction.DIRECT,
-    tier=Tier.INTERVENTIONAL,
-    # `corpus` in pair_by is critical: the (env=Breakout-MinAtar,
-    # sync=100) scope captures cells from THREE corpora (`ddqn`,
-    # `ddqn_effective_cohort`, `minatar_1M`); without `corpus`, the
-    # seed-only pairing cross-pairs cells from different sweeps that
-    # ran on substrate-different commits, polluting the mediation
-    # estimate. Empirical: without `corpus`, n_pairs=52 with diluted
-    # proportion=0.018 (no_effect); with `corpus`, n_pairs=16 within
-    # minatar_1M at proportion=0.65 (HELD).
-    pair_by=('env_name', 'corpus', 'gamma', 'total_steps', 'sync_period', 'seed'),
-    scope=(
-        (pl.col('env_name') == 'Breakout-MinAtar')
-        & (pl.col('sync_period') == 100)
-        & (pl.col('corpus') == 'minatar_1M')
-        & finite('target_staleness_late')
-    ),
-    predicted_direction='a_gt_b',
-)
-def target_staleness_late_mediates_outcome__breakout_sync100(
-    proportion_mediated: ProportionMediatedResult,
-    *,
-    mediator: str = 'target_staleness_late',
-    upstream_source: str = 'jensen_gap',
-    upstream_max_delta: float = 0.0,
-    dominance_floor: float = 0.2,
-    n_pairs_floor: int = 10,
-) -> tuple[Verdict, RefutationClass | None]:
-    """On Breakout-MinAtar at sync=100 (the canonical Q-explosion
-    regime), `target_staleness_late` mediates DDQN's outcome benefit
-    at ~65% under mech-HELD conditioning — 2.4× stronger than on
-    FourRooms.
-
-    Mechanism is the same chain as the FourRooms sister bridge but
-    sharper: vanilla's max-bias drives explicit Q-explosion on
-    Breakout sync=100; DDQN's correction prevents the explosion;
-    the staleness suppression carries dominant share of the outcome
-    gain.
-
-    Scope: Breakout-MinAtar at sync_period=100, with finite
-    `target_staleness_late`. n_pairs_floor reduced to 10 (vs 25 on
-    FourRooms) — minatar_1M provides only ~16 mech-HELD pairs at
-    this scope.
-
-    HELD when proportion ≥ dominance_floor (default 0.2). Empirical
-    (minatar_1M, mech-HELD): proportion = 0.646, n_pairs = 16."""
-    del mediator, upstream_source, upstream_max_delta
-    return _staleness_mediation_holds_when(
-        proportion_mediated,
-        dominance_floor=dominance_floor,
-        n_pairs_floor=n_pairs_floor,
-    )
+# =====================================================================
+# CLAIM 13 mediation pair — DELETED. Bridge audit step 6 (2026-05-12).
+#
+# `target_staleness_late_mediates_outcome__fourrooms` (capacity_sweep
+# FourRooms) AND `target_staleness_late_mediates_outcome__breakout_
+# sync100` (minatar_1M Breakout sync=100) both cut on data orphan:
+# their target corpora (`capacity_sweep_fourrooms` and `minatar_1M`)
+# are gone in the postfix rebuild.
+#
+# Substantive content (per-config staleness mediation chain) is now
+# covered by:
+#  - `target_staleness_late_mediates_outcome__minatar_intermediate_
+#    sync` (audited 2026-05-12; structurally degenerate at config-
+#    level scope with current corpora — see its docstring).
+#  - `cross_config_staleness_slope_negative__survive` (cross-config
+#    correlation, HELD).
+#  - `findings_target_staleness_mediator.md` for the per-config
+#    narrative.
+# Re-enable when capacity sweep + MinAtar 1M return.
+# =====================================================================
 
 
 @claim_bridge(
@@ -3332,199 +3126,24 @@ def ddqn_helps_under_three_gate_scope__cross_env(
 # =====================================================================
 
 
-@claim_bridge(
-    source=INTERVENTION,
-    target='eval_best_burst_mean',
-    direction=Direction.INVERSE,
-    tier=Tier.INTERVENTIONAL,
-    # `target_sync.tau` MUST be in pair_by so each (DDQN, baseline)
-    # pair shares a single τ value. The analysis then reads
-    # `target_staleness_late` from the BASELINE arm of each pair
-    # as the per-pair endogenous mediator level — exogenously
-    # varied via the Polyak τ sweep. log_tau is the INSTRUMENT;
-    # target_staleness_late is the proximal treatment we test the
-    # causal effect of on Δ_outcome.
-    pair_by=(
-        'env_name', 'gamma', 'sync_period',
-        'total_steps', 'seed', 'target_sync.tau',
-    ),
-    scope=(
-        # Endogenous polyak-sweep indicator: only `polyak_update`
-        # carries a `target_sync.tau` field; periodic_copy regimes
-        # leave it null. NOT corpus-tagged.
-        finite('target_sync.tau')
-        & (pl.col('target_sync.tau') > 0)
-        # GOAL polarity (length and return inversely correlated).
-        & finite_lt('env_reward_polarity', -0.5)
-        # Bounded Q (no Q-explosion). Polyak smoothing keeps q_div
-        # low here in practice; the predicate excludes any future
-        # corpus where it doesn't.
-        & finite('q_divergence_score')
-        & finite_lt('q_divergence_score', 100.0)
-        & finite('target_staleness_late')
-        & finite('eval_best_burst_mean')
-        # POSITIVE Q-regime: vanilla's late-window mean Q > 0,
-        # equivalent to "r_min ≥ 0 + bounded Q + GOAL". This is
-        # the ENDOGENOUS downstream of r_min — captures the
-        # actual sign of Hasselt's bias direction in the cell's
-        # trajectory. r_min is the structural cause; q_late_mean
-        # is the per-cell observable. Predicate routes around
-        # `r_min` (exogenous env-structural) by testing what
-        # actually matters: where vanilla's Q ends up.
-        # See `polyak_q_regime_findings.md` for the empirical
-        # mechanism trace.
-        & finite_gt('q_late_mean', 0.0)
-    ),
-    predicted_direction='a_lt_b',
-)
-def staleness_amplifies_ddqn_outcome__sparse_goal_polyak(
-    paired_continuous_do_dowhy: PairedContinuousDoResult,
-    *,
-    treatment_var: str = 'target_staleness_late',
-    treatment_var_arm: str = 'baseline',
-    outcome: str = 'eval_best_burst_mean',
-    ate_threshold: float = 1.0,
-    refutation_drift_threshold: float = 5.0,
-    n_pairs_floor: int = 30,
-) -> Verdict:
-    """In the polyak-do(τ) regime (endogenous indicator:
-    `target_sync.tau` finite > 0), under SPARSE-TERMINAL-POSITIVE
-    GOAL polarity (env_reward_polarity < −0.5, r_min ≥ 0,
-    q_divergence_score < 100), per-pair baseline target staleness
-    CAUSALLY amplifies DDQN's outcome benefit (Δ_outcome): pairs
-    with higher baseline staleness show larger DDQN benefit.
-
-    Causal logic. The polyak sweep exogenously varies τ across
-    pairs; both DDQN and baseline arms in a pair share the same
-    τ. Baseline's `target_staleness_late` per pair is therefore
-    a τ-driven exogenous variable that captures "how much
-    staleness the algorithm experiences in this pair." DoWhy
-    backdoor_ate(target_staleness_late → Δ_outcome) under
-    DAG `[(target_staleness_late, delta_outcome)]` estimates the
-    causal slope. Refutations (placebo + RCC) validate.
-
-    The HP knob `target_sync.tau` is NOT the source — it's the
-    sweep-design instrument that exogenously varies the
-    endogenous mediator. The bridge tests the proximal causal
-    relationship `target_staleness_late → Δ_outcome`, with τ as
-    the rung-2 randomiser in the background.
-
-    HELD when:
-      (1) backdoor.identified;
-      (2) `n_pairs ≥ n_pairs_floor`;
-      (3) ATE > `ate_threshold` (positive: more staleness ⇒
-          larger Δ_outcome — DDQN benefits more from correcting
-          a bigger bias);
-      (4) refutations clean.
-
-    Empirical (polyak_tau_intervention, FourRooms, n=120, τ ∈
-    [0.001, 0.1] traces present): backdoor ATE on baseline
-    target_staleness_late ≈ +5 reward units / staleness unit;
-    placebo refuter near 0; RCC drift small."""
-    del treatment_var, treatment_var_arm, outcome
-    result = paired_continuous_do_dowhy
-    if not result.backdoor.identified:
-        return Verdict.POWER_INSUFFICIENT
-    if result.n_pairs < n_pairs_floor:
-        return Verdict.POWER_INSUFFICIENT
-    if math.isnan(result.backdoor.ate):
-        return Verdict.POWER_INSUFFICIENT
-    # Predicted direction: 'a_lt_b' means treatment_arm < baseline.
-    # Under treatment_var=baseline_staleness, the test "DDQN's
-    # paired benefit grows with baseline staleness" predicts a
-    # POSITIVE ATE (more staleness → larger Δ_outcome). The
-    # `direction=Direction.INVERSE` on the bridge encodes the
-    # τ-side inverse relationship; the body checks ATE > threshold
-    # (positive).
-    if result.backdoor.ate <= ate_threshold:
-        return Verdict.NO_EFFECT
-    # Refutations: placebo gives ATE ≈ 0; RCC drift small.
-    if (
-        not math.isnan(result.placebo.refuted_ate)
-        and abs(result.placebo.refuted_ate) > refutation_drift_threshold
-    ):
-        return Verdict.POWER_INSUFFICIENT
-    if (
-        not math.isnan(result.random_common_cause.drift)
-        and result.random_common_cause.drift > refutation_drift_threshold
-    ):
-        return Verdict.POWER_INSUFFICIENT
-    return Verdict.HELD
-
-
-@claim_bridge(
-    source=INTERVENTION,
-    target='eval_best_burst_mean',
-    direction=Direction.DIRECT,
-    tier=Tier.INTERVENTIONAL,
-    pair_by=(
-        'env_name', 'gamma', 'sync_period',
-        'total_steps', 'seed', 'target_sync.tau',
-    ),
-    scope=(
-        finite('target_sync.tau')
-        & (pl.col('target_sync.tau') > 0)
-        # SURVIVAL polarity (Asterix-like — episode length and return
-        # positively correlated, dense per-step rewards). Endogenous
-        # regime predicate, NOT env_name.
-        & finite_gt('env_reward_polarity', 0.3)
-        & finite('target_staleness_late')
-        & finite('eval_best_burst_mean')
-    ),
-    # `predicted_direction='null'` (xfail-style): under SURVIVAL
-    # polarity in the polyak regime, the staleness-mediation chain
-    # is BROKEN (the L→outcome map is sign-flipped relative to
-    # GOAL, AND in pre-polyak periodic_copy this regime
-    # exhibited Q-explosion that disconnected mech from outcome).
-    # HELD = null confirmed.
-    predicted_direction='null',
-)
-def staleness_does_not_amplify_ddqn_outcome__survival_polyak(
-    paired_continuous_do_dowhy: PairedContinuousDoResult,
-    *,
-    treatment_var: str = 'target_staleness_late',
-    treatment_var_arm: str = 'baseline',
-    outcome: str = 'eval_best_burst_mean',
-    null_band: float = 5.0,
-    n_pairs_floor: int = 30,
-) -> Verdict:
-    """Companion to `staleness_amplifies_ddqn_outcome__fourrooms_
-    polyak`. Under SURVIVAL polarity (env_reward_polarity > 0.3 —
-    Asterix, Breakout, etc.) in the polyak-do(τ) regime, the
-    staleness-mediation chain is BROKEN. The bridge predicts NULL
-    ATE on `target_staleness_late → Δ_outcome`.
-
-    Why null. SURVIVAL envs have positive L→outcome map (longer
-    episodes = better outcome). DDQN's bias correction in this
-    polarity regime doesn't translate to outcome via length-
-    mediated channels (per the wide-JCI silent-inversion finding
-    and the FourRooms-vs-Asterix Q-amplification result). The
-    polyak τ knob does drive baseline staleness variation, but
-    that variation doesn't propagate into DDQN's per-pair benefit.
-
-    HELD when |ATE| < `null_band` AND identified AND n_pairs ≥
-    floor. NO_EFFECT (xpass) when ATE is unexpectedly large —
-    would refute the regime-specificity prediction.
-
-    Empirical (polyak_tau_asterix, Asterix-MinAtar, n=120):
-    backdoor ATE on baseline staleness ≈ small (|ATE| < null_band)
-    → HELD null confirmed. Asterix doesn't reproduce FourRooms's
-    staleness amplification."""
-    del treatment_var, treatment_var_arm, outcome
-    result = paired_continuous_do_dowhy
-    if not result.backdoor.identified:
-        return Verdict.POWER_INSUFFICIENT
-    if result.n_pairs < n_pairs_floor:
-        return Verdict.POWER_INSUFFICIENT
-    if math.isnan(result.backdoor.ate):
-        return Verdict.POWER_INSUFFICIENT
-    # Null prediction: |ATE| should be smaller than the canonical
-    # FourRooms effect (~−0.018). If much smaller, null confirmed.
-    if abs(result.backdoor.ate) < null_band:
-        return Verdict.HELD
-    # ATE significantly negative → null refuted (xpass), staleness
-    # DOES amplify here — surprising result.
-    return Verdict.NO_EFFECT
+# =====================================================================
+# CLAIM 15 polyak-do(τ) staleness amplification pair — DELETED.
+# Bridge audit step 6 (2026-05-12).
+#
+# `staleness_amplifies_ddqn_outcome__sparse_goal_polyak` (FourRooms
+# polyak goal-polarity) AND `staleness_does_not_amplify_ddqn_
+# outcome__survival_polyak` (Asterix polyak survival-polarity) both
+# cut on data orphan: both require cells with `target_sync.tau`
+# finite > 0 (the polyak update regime). Postfix corpora all use
+# periodic_copy target sync (target_sync.tau is null). The
+# `polyak_tau_intervention` sweeps are gone.
+#
+# Substantive content (Polyak-τ rung-2 corroborating staleness as
+# causal driver on FourRooms; refuting it on SURVIVAL polarity)
+# preserved in `findings_polyak_tau.md` +
+# `findings_polyak_makes_mech_dormant_survive.md`. Re-enable when
+# polyak sweeps return.
+# =====================================================================
 
 
 # =====================================================================
@@ -3828,32 +3447,19 @@ DDQN_UNIVERSE_BRIDGES = (
     # CLAIM 7 g/h/i/j — DELETED (auxiliary mechanism-route probes
     # subsumed by CLAIM 26b three-gate framework; synthesis
     # preserved as deletion-memo banner above).
-    # CLAIM 8 — per-burst crossover shape on SpaceInvaders 1M.
-    ddqn_curve_crosses_vanilla_late__spaceinvaders,
+    # CLAIM 8 — per-burst crossover shape on SpaceInvaders 1M —
+    # CUT 2026-05-12 (data orphan: SI 1M missing). See banner above.
     # CLAIM 9 — n-step falsification of bootstrap-bias-compounding
     #           (the strongest mechanism corroboration: Δ→0 as n grows).
     ddqn_helps_at_full_bootstrap__fourrooms_n1,
-    ddqn_null_under_monte_carlo__fourrooms_n10,
+    # ddqn_null_under_monte_carlo__fourrooms_n10 — CUT 2026-05-12
+    # (data orphan: FR n_step=10 missing). See banner above.
     # TIER A2 existence proofs (per-burst, env-conditional).
     # ddqn_helps_at_early_bursts__pixel_envs — CUT 2026-05-12
     # (paired_g + data orphan: MinAtar 1M missing post-rebuild).
-    # See banner above the cut site.
-    # ddqn_attenuates_at_late_bursts__spaceinvaders — DISABLED.
-    # The two SpaceInvaders 1M sweeps that match this bridge's scope
-    # (`minatar_1M_spaceinvaders`, Apr 30; `spaceinvaders_no_hit_penalty`
-    # default arm, May 1) trained on substantially different substrate
-    # commits — env-wrapper plumbing was refactored, RewardClippedEnv
-    # introduced, and 9 other commits landed between the two trainings.
-    # Same nominal HPs, same seeds (0..29), but seed=0 trajectories
-    # diverge from burst 0 — the cells are observations of different
-    # code, not replications of the same experiment. Cross-corpus
-    # pooling shifts pooled g from -0.42 (Apr 30 single-corpus) to
-    # -0.07 (May 1 single-corpus), or -0.28 averaged. The shape
-    # sister bridge (`ddqn_curve_crosses_vanilla_late__spaceinvaders`,
-    # HELD) carries the late-attenuation claim more robustly without
-    # committing to a magnitude threshold under substrate drift.
-    # Re-enable after re-running spaceinvaders_no_hit_penalty under
-    # the current substrate (or pinning substrate version per cell).
+    # ddqn_attenuates_at_late_bursts__spaceinvaders — DISABLED
+    # (substrate-drift between pre-postfix SI 1M sweeps; not a
+    # current-cache cell either).
     # CLAIM 10 — link IS bias-correction on Acrobot γ=0.999, causally
     # corroborated. Per-burst link panel + DoWhy backdoor + placebo
     # refutation + RCC refutation all hold. Corrects the prior
@@ -3902,8 +3508,10 @@ DDQN_UNIVERSE_BRIDGES = (
     # on FourRooms (CLEAN). The hard-to-find "other 84%" of DDQN's
     # outcome benefit (after eff_h) is largely target staleness
     # suppression downstream of bias correction.
-    target_staleness_late_mediates_outcome__fourrooms,
-    target_staleness_late_mediates_outcome__breakout_sync100,
+    # target_staleness_late_mediates_outcome__fourrooms — CUT
+    # 2026-05-12 (data orphan: capacity_sweep_fourrooms missing).
+    # target_staleness_late_mediates_outcome__breakout_sync100 —
+    # CUT 2026-05-12 (data orphan: minatar_1M missing).
     target_staleness_late_mediates_outcome__minatar_intermediate_sync,
     cross_config_staleness_slope_negative__survive,
     # CLAIM 21 REACH-polyak half retracted post-fix: ρ=−0.10 at n=5
@@ -3926,15 +3534,10 @@ DDQN_UNIVERSE_BRIDGES = (
     # positive panel-level when the three gates fire jointly. The
     # outcome-level claim, not the slope-level one.
     ddqn_helps_under_three_gate_scope__cross_env,
-    # CLAIM 15 — Polyak-τ rung-2 corroboration on FourRooms:
-    # do(τ) → Δ_outcome ATE significantly negative (-0.018,
-    # p=0.003, refutations pass). The Pearl rung-2 layer for
-    # CLAIM 13's staleness mediation, FourRooms-specific.
-    staleness_amplifies_ddqn_outcome__sparse_goal_polyak,
-    # CLAIM 15b — companion null bridge: under SURVIVAL polarity
-    # in the polyak regime, the staleness-mediation chain is
-    # BROKEN. Empirical |ATE| < null_band on Asterix → HELD null.
-    staleness_does_not_amplify_ddqn_outcome__survival_polyak,
+    # CLAIM 15 + 15b — Polyak-τ rung-2 staleness amplification pair
+    # (sparse_goal + survival_polyak) — CUT 2026-05-12 (data
+    # orphan: polyak_tau_intervention corpora missing — target_sync.
+    # tau null in all current cells). See banner above.
     # CLAIM 19 — among REACH-polarity envs in CLAIM 17 scope,
     # effective_horizon is a strong cross-env predictor of link
     # power. Empirical: per-env mean_dY tracks effh at Pearson 0.97
@@ -3973,13 +3576,9 @@ __all__ = [
     'ddqn_refuted_when_dormancy_fires',
     'eff_h_mediates_g_link__goal_envs',
     'eff_h_mediates_g_link__survival_envs',
-    'target_staleness_late_mediates_outcome__fourrooms',
-    'target_staleness_late_mediates_outcome__breakout_sync100',
     'target_staleness_late_mediates_outcome__minatar_intermediate_sync',
     'cross_config_staleness_slope_negative__survive',
     'ddqn_helps_under_three_gate_scope__cross_env',
-    'staleness_amplifies_ddqn_outcome__sparse_goal_polyak',
-    'staleness_does_not_amplify_ddqn_outcome__survival_polyak',
     'ddqn_does_not_rescue__acrobot_rs_0p1',
     'ddqn_does_not_rescue__cartpole_rs_0p1',
     'ddqn_increases_argmax_entropy__fourrooms_rs_0p1',
