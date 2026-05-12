@@ -12,11 +12,6 @@ scope: when `jensen_dormancy_gap > 0`, the Hasselt premise is inactive and
 DDQN's mechanism cannot fire. Cross-validated on Asterix sync=10k (100% cells
 dormant), Catch (saturated), CartPole sync=10k.
 
-**Pearl-rung-2 corroboration**:
-`adaptive_dqn_recovers_ddqn_benefit__fourrooms_factor_0p5` — adaptive controller
-sweep that dispatches DDQN's bootstrap via the dormancy heuristic recovers the
-benefit on FourRooms (g=+0.78, p<0.001).
-
 ## Link: bias-correction → outcome (CLAIMs 4–10)
 
 Genuinely env-conditional. The link is prominent in a band on

@@ -25,7 +25,6 @@ from experiments.findings.ddqn import (
 from experiments.findings.ddqn._arms import INTERVENTION as INTERVENTION
 from experiments.findings.ddqn._common import CLAIM as CLAIM
 from experiments.findings.ddqn._scope import MODULE_SCOPE as MODULE_SCOPE
-from experiments.findings.ddqn.adaptive_controller import BRIDGES as _ADAPTIVE
 from experiments.findings.ddqn.bias_correction import BRIDGES as _BIAS_CORRECTION
 from experiments.findings.ddqn.mediation import BRIDGES as _MEDIATION
 from experiments.findings.ddqn.n_step import BRIDGES as _N_STEP
@@ -36,7 +35,6 @@ from experiments.findings.ddqn.within_env import BRIDGES as _WITHIN_ENV
 
 BRIDGES = (
     *_OUTCOME_SCOPE,
-    *_ADAPTIVE,
     *_WITHIN_ENV,
     *_RS_RESCUE,
     *_N_STEP,
