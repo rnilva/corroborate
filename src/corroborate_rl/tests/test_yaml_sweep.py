@@ -110,6 +110,53 @@ def yaml_hypotheses(
     return sweep.build_hypotheses(reg=reg)
 
 
+# ---------- do_effect_arms semantics ----------
+
+def test_do_effect_arms_empty_intervention_arms_yields_single_arm() -> None:
+    """Empty `intervention_arms` is the chunked-mode "this template
+    is one arm in a multi-template sweep" intent. `do_effect_arms()`
+    returns `((),)` — a single empty arm — NOT `((), ())` (the
+    legacy 2-identical-arms artifact that doubled compute and
+    fingerprint-collided to two `arm_key='baseline'` cells)."""
+    cfg = HypothesisConfig(
+        name='vanilla_template',
+        intervention={'n_step': 1},
+        intervention_arms=(),
+    )
+    assert cfg.do_effect_arms() == ((),)
+
+
+def test_do_effect_arms_nonempty_intervention_arms_yields_binary() -> None:
+    """Non-empty `intervention_arms` (legacy binary shape):
+    `((), intervention_arms)` — empty baseline vs treatment."""
+    from corroborate_rl.dqn.claims.bootstrap import bootstrap
+
+    iv = Intervention(slot_path='bootstrap', replacement=bootstrap)
+    cfg = HypothesisConfig(
+        name='binary_template',
+        intervention={},
+        intervention_arms=(iv,),
+    )
+    assert cfg.do_effect_arms() == ((), (iv,))
+
+
+def test_do_effect_arms_explicit_arms_takes_precedence() -> None:
+    """When `arms:` is authored explicitly (new N-arm schema), it
+    wins over the legacy translation regardless of
+    `intervention_arms`."""
+    from corroborate_rl.dqn.claims.bootstrap import bootstrap
+
+    iv = Intervention(slot_path='bootstrap', replacement=bootstrap)
+    arms_explicit = ((), (iv,), (iv,))  # 3 arms
+    cfg = HypothesisConfig(
+        name='triarm',
+        intervention={},
+        intervention_arms=(),
+        arms=arms_explicit,
+    )
+    assert cfg.do_effect_arms() == arms_explicit
+
+
 # ---------- envelope checks ----------
 
 def test_sweep_envelope_fields(sweep: DQNSweep) -> None:
@@ -253,8 +300,16 @@ def test_arm_key_matches(
 ) -> None:
     """Pairing key for paired_comparison. Drift here would
     place YAML and Python rows in different arms."""
+    from corroborate.core.intervention import combined_arm_key
+
     yaml_h, py_h = hypothesis_pairs[h_name]
-    assert yaml_h.arm_key() == py_h.arm_key()
+    yaml_keys = tuple(
+        combined_arm_key(arm) for arm in yaml_h.do_effect_arms()
+    )
+    py_keys = tuple(
+        combined_arm_key(arm) for arm in py_h.do_effect_arms()
+    )
+    assert yaml_keys == py_keys
 
 
 def test_signatures_distinct_across_arms(

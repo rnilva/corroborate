@@ -80,11 +80,20 @@ class HypothesisConfig:
     def do_effect_arms(self) -> tuple[tuple[Intervention, ...], ...]:
         """The `DoEffect.arms` shape this config dispatches to.
 
-        Returns `arms` if explicitly authored; else translates
-        `intervention_arms` to the binary `((), intervention_arms)`
-        shape — the legacy 2-arm contrast."""
+        Resolution order:
+        - If `arms` is explicitly authored (new N-arm schema), use it.
+        - Else if `intervention_arms` is non-empty (legacy binary
+          shape), translate to `((), intervention_arms)` — empty
+          baseline vs treatment.
+        - Else (legacy with empty `intervention_arms` — the
+          chunked-mode "this template is one arm in a multi-template
+          sweep" pattern), return `((),)` — a single empty arm. This
+          matches the chunked-mode authoring intent without the
+          duplicate-baseline-cell artifact of `((), ())`."""
         if self.arms is not None:
             return self.arms
+        if not self.intervention_arms:
+            return ((),)
         return ((), self.intervention_arms)
 
 
