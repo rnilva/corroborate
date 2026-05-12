@@ -17,7 +17,6 @@ result via `meta_regress_panel`. Both helpers are shared with
 `paired_g_pooled` and `meta_regression_per_burst`."""
 from __future__ import annotations
 
-import math
 from collections.abc import Iterable, Mapping
 
 from corroborate.analyses.paired_g import per_env_paired_g_panel
@@ -72,11 +71,23 @@ def meta_regression_paired_g(
             pool=pool,
         )
     except ValueError:
+        # NaN sentinel-prone fields so downstream readers see
+        # "unfit" not "homogeneous fit." `pool` and `i_squared`
+        # default to misleading values (`'fixed'`, `0.0`) per
+        # MetaRegressionResult's frozen-dataclass defaults.
         return MetaRegressionResult(
             n_strata=len(panel),
             intercept=float('nan'),
             coefficients=(),
             r_squared=float('nan'),
+            intercept_se=float('nan'),
+            intercept_ci_lo=float('nan'),
+            intercept_ci_hi=float('nan'),
+            intercept_p_value=float('nan'),
+            tau_sq=float('nan'),
+            q_statistic=float('nan'),
+            i_squared=float('nan'),
+            pool=pool,
         )
 
 

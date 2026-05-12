@@ -115,11 +115,24 @@ def meta_regression_unpaired_d(
             panel, covariates_per_stratum=cps, alpha=alpha, pool=pool,
         )
     except ValueError:
+        # NaN everything sensitive to "did the regression run?"
+        # so downstream readers see "unfit" not "homogeneous fit."
+        # `pool` and `i_squared` would otherwise default to misleading
+        # values (`pool='fixed'`, `i_squared=0.0`) per
+        # MetaRegressionResult's frozen-dataclass defaults.
         return MetaRegressionResult(
             n_strata=len(panel),
             intercept=float('nan'),
             coefficients=(),
             r_squared=float('nan'),
+            intercept_se=float('nan'),
+            intercept_ci_lo=float('nan'),
+            intercept_ci_hi=float('nan'),
+            intercept_p_value=float('nan'),
+            tau_sq=float('nan'),
+            q_statistic=float('nan'),
+            i_squared=float('nan'),
+            pool=pool,
         )
 
 
