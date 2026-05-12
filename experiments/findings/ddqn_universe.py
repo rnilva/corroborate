@@ -1052,7 +1052,7 @@ _REACH_ENVS_FOUR: tuple[str, ...] = (
 
 @claim_bridge(
     source=INTERVENTION,
-    target='outcome.eval_best_burst_mean',
+    target='eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
     scope=_DDQN_RELEVANT_SCOPE,
@@ -1102,7 +1102,7 @@ def reach_link_backdoor_ate_negative(
 
 @claim_bridge(
     source=INTERVENTION,
-    target='outcome.eval_best_burst_mean',
+    target='eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
     scope=_DDQN_RELEVANT_SCOPE,
@@ -1140,7 +1140,7 @@ def reach_link_placebo_refuted(
 
 @claim_bridge(
     source=INTERVENTION,
-    target='outcome.eval_best_burst_mean',
+    target='eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
     scope=_DDQN_RELEVANT_SCOPE,
@@ -1191,7 +1191,7 @@ _DDQN_VS_VANILLA_ARMS = (
 
 @claim_bridge(
     source=INTERVENTION,
-    target='outcome.eval_best_burst_mean',
+    target='eval_best_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
     scope=_DDQN_RELEVANT_SCOPE,
@@ -1226,7 +1226,7 @@ def q_divergence_shadowed_by_jens(
 
 @claim_bridge(
     source=INTERVENTION,
-    target='outcome.eval_best_burst_mean',
+    target='eval_best_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
     scope=_DDQN_RELEVANT_SCOPE,
@@ -1500,7 +1500,7 @@ def fourrooms_action_dim_link_active__inflated(
 
 @claim_bridge(
     source=INTERVENTION,
-    target='outcome.eval_best_burst_mean',
+    target='eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
     # Endogenous touch (`q_divergence_score.is_finite()`) added
@@ -1571,7 +1571,7 @@ def extreme_q_divergence_attenuates_link__binary(
 
 @claim_bridge(
     source=INTERVENTION,
-    target='outcome.eval_best_burst_mean',
+    target='eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
     # Endogenous touch (`q_divergence_score.is_finite()`) added
@@ -1636,7 +1636,7 @@ def extreme_q_divergence_attenuates_link__placebo_refuted(
 
 @claim_bridge(
     source=INTERVENTION,
-    target='outcome.eval_best_burst_mean',
+    target='eval_best_burst_mean',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
     # Endogenous touch (`q_divergence_score.is_finite()`) added
