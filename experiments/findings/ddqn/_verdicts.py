@@ -12,7 +12,10 @@ into the substrate's shared verdict-logic layer."""
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping, Sequence
 from typing import Literal, Protocol
+
+import scipy.stats as stats
 
 from corroborate.bridge.verdict import Verdict
 
@@ -194,6 +197,79 @@ def partial_spearman_signed_verdict(
     if sign > 0 and rho >= threshold:
         return Verdict.HELD
     return Verdict.NO_EFFECT
+
+
+class _StratumDiffLike(Protocol):
+    """Read-only shape of `StratumDiff` — per-stratum Cohen's d
+    panel returned by `stratified_arm_diff_pooled`."""
+    @property
+    def stratum_id(self) -> tuple[object, ...]: ...
+    @property
+    def cohen_d(self) -> float: ...
+    @property
+    def cohen_se(self) -> float: ...
+
+
+def env_covariate_pearson_verdict(
+    per_stratum: Sequence[_StratumDiffLike],
+    env_covariate: Mapping[str, float],
+    *,
+    sign: Literal[-1, 0, 1],
+    threshold: float,
+    min_envs: int = 3,
+    alpha: float = 0.05,
+) -> Verdict:
+    """Pearson r between per-env Cohen's d and env-level covariate
+    (e.g. effective_horizon, argmax_entropy_late). Each per-stratum
+    row contributes (env_covariate[env_name], cohen_d). Strata whose
+    first stratum_id element isn't a known env_name (or whose
+    cohen_d is NaN) are skipped.
+
+    `sign=+1`: predicted-POSITIVE slope. HELD when r ≥ threshold
+    AND p < alpha; sign-flipped significant result → NO_EFFECT.
+    `sign=-1`: mirror of +1.
+    `sign=0`: predicted-NULL. HELD when |r| < threshold AND
+    non-significant (no slope detected); significant slope refutes
+    the null → NO_EFFECT.
+
+    POW_INSUF when n_envs < min_envs, NaN r, or signed prediction
+    isn't significant in either direction."""
+    xs: list[float] = []
+    ys: list[float] = []
+    for s in per_stratum:
+        env = s.stratum_id[0] if s.stratum_id else None
+        if not isinstance(env, str):
+            continue
+        cov = env_covariate.get(env)
+        if cov is None:
+            continue
+        if math.isnan(s.cohen_d):
+            continue
+        xs.append(cov)
+        ys.append(s.cohen_d)
+    if len(xs) < min_envs:
+        return Verdict.POWER_INSUFFICIENT
+    r_raw, p_raw = stats.pearsonr(xs, ys)
+    r, p = float(r_raw), float(p_raw)
+    if math.isnan(r):
+        return Verdict.POWER_INSUFFICIENT
+    if sign == 0:
+        if abs(r) < threshold and p >= alpha:
+            return Verdict.HELD
+        if p < alpha:
+            return Verdict.NO_EFFECT
+        return Verdict.POWER_INSUFFICIENT
+    if sign > 0:
+        if r >= threshold and p < alpha:
+            return Verdict.HELD
+        if r <= -threshold and p < alpha:
+            return Verdict.NO_EFFECT
+        return Verdict.POWER_INSUFFICIENT
+    if r <= -threshold and p < alpha:
+        return Verdict.HELD
+    if r >= threshold and p < alpha:
+        return Verdict.NO_EFFECT
+    return Verdict.POWER_INSUFFICIENT
 
 
 def rescue_threshold(

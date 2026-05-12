@@ -78,3 +78,23 @@ REACH_ENVS_FOUR: tuple[str, ...] = (
     'MountainCar-v0',
     'MetaMaze-misc',
 )
+
+
+# Cross-env link-power cohorts (CLAIM 19/20). Per-cell
+# `env_reward_polarity` admits the mixed-polarity envs Snake /
+# MetaMaze / SI-MinAtar at their negative-polarity subset — bridge
+# names like `__reach_envs` lie about what's admitted. These tuples
+# pin env-level polarity (every cell of the env satisfies the
+# bucket): pol_max < -0.3 for REACH, pol_min > +0.3 for SURVIVE.
+LINK_POWER_REACH_ENVS: tuple[str, ...] = (
+    'Acrobot-v1',
+    'FourRooms-misc',
+    'MountainCar-v0',
+)
+
+
+LINK_POWER_SURVIVE_ENVS: tuple[str, ...] = (
+    'Asterix-MinAtar',
+    'Breakout-MinAtar',
+    'CartPole-v1',
+)

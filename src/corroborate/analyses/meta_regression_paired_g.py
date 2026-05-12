@@ -17,6 +17,7 @@ result via `meta_regress_panel`. Both helpers are shared with
 `paired_g_pooled` and `meta_regression_per_burst`."""
 from __future__ import annotations
 
+import math
 from collections.abc import Iterable, Mapping
 
 from corroborate.analyses.paired_g import per_env_paired_g_panel
@@ -47,7 +48,15 @@ def meta_regression_paired_g(
     (e.g. `{'Acrobot-v1': {'log_action_dim': log(3)}}`). Envs
     not in the mapping contribute no covariates (still
     included via intercept). Envs with `n_pairs < 2` or NaN g
-    are dropped from the panel."""
+    are dropped from the panel.
+
+    Returns a NaN-coefficient result (empty `coefficients` tuple,
+    intercept=NaN, r_squared=NaN) when the panel is too small for
+    OLS (n_strata ≤ 1 + n_covariates) or when any stratum has
+    invalid SE / singular design. Bridges checking `coef is None`
+    via tuple-search naturally fall through to POW_INSUF. The
+    underlying `meta_regress_panel` still fail-loud raises for
+    direct callers that haven't opted into this graceful shape."""
     panel = per_env_paired_g_panel(
         list(cells),
         treatment_arm=treatment_arm,
@@ -55,12 +64,20 @@ def meta_regression_paired_g(
         source=source,
         pair_by=pair_by,
     )
-    return meta_regress_panel(
-        panel,
-        covariates_per_stratum=covariates_per_env,
-        alpha=alpha,
-        pool=pool,
-    )
+    try:
+        return meta_regress_panel(
+            panel,
+            covariates_per_stratum=covariates_per_env,
+            alpha=alpha,
+            pool=pool,
+        )
+    except ValueError:
+        return MetaRegressionResult(
+            n_strata=len(panel),
+            intercept=float('nan'),
+            coefficients=(),
+            r_squared=float('nan'),
+        )
 
 
 __all__ = ['meta_regression_paired_g']

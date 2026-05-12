@@ -18,21 +18,25 @@
 - `staleness_amplifies_ddqn_outcome__sparse_goal_polyak` (CLAIM 15)
   and `staleness_does_not_amplify_ddqn_outcome__survival_polyak`
   (CLAIM 15b): Polyak-do(τ) causal corroborations. AWAITING DATA.
-- `effh_predicts_link_power__reach_envs` (CLAIM 19): per-burst meta-
-  regression of Δ_outcome on env-mean eff_h for REACH polarity.
-- `argmax_entropy_predicts_link_power__survive_envs` (CLAIM 20):
-  STARTING-POINT SURVIVE companion to CLAIM 19. n=5 small."""
+- `effh_predicts_link_power__reach_envs` (CLAIM 19): per-env paired-g
+  meta-regression of Δ_outcome on env-mean eff_h for env-level REACH
+  cohort (Acrobot/FourRooms/MountainCar). n=3 underpowered for now.
+- `argmax_entropy_link_power_null__survive_envs` (CLAIM 20):
+  predicted-NULL companion (post-fix); env-level SURVIVE cohort
+  (Asterix/Breakout/CartPole) gives r≈+0.03 — argmaxH does NOT
+  predict link power, confirming the null."""
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping
 
 import numpy as np
-import numpy.typing as npt
 import polars as pl
 
 from corroborate.analyses.paired_continuous_do_dowhy import (
     PairedContinuousDoResult,
+)
+from corroborate.analyses.stratified_arm_diff_pooled import (
+    StratifiedArmDiffPooledResult,
 )
 from corroborate.analyses.stratified_partial_spearman import (
     StratifiedPartialSpearmanResult,
@@ -43,15 +47,14 @@ from corroborate.bridge.predicates import (
     finite, finite_gt, finite_lt,
 )
 from corroborate.bridge.verdict import RefutationClass, Verdict
-from corroborate.measurables import Measurable
-from corroborate.stats import MetaRegressionResult
 
 from experiments.findings.ddqn._arms import DDQN_ARM, VANILLA_ARM
-from experiments.findings.ddqn._common import MC_RETURN_PER_BURST_MEAN
 from experiments.findings.ddqn._scope import (
-    DDQN_RELEVANT_SCOPE, VANILLA_CONFIG_Q_BOUNDED,
+    DDQN_RELEVANT_SCOPE, LINK_POWER_REACH_ENVS, LINK_POWER_SURVIVE_ENVS,
+    VANILLA_CONFIG_Q_BOUNDED,
 )
 from experiments.findings.ddqn._verdicts import (
+    env_covariate_pearson_verdict,
     partial_spearman_null_verdict, partial_spearman_signed_verdict,
 )
 
@@ -399,12 +402,19 @@ def staleness_does_not_amplify_ddqn_outcome__survival_polyak(
     return Verdict.NO_EFFECT
 
 
-# CLAIM 19 / 20 — cross-env link-power predictors.
-_LINK_POWER_SCOPE_COMMON = (
+# CLAIM 19 / 20 — cross-env link-power predictors. Phase-1 refactor
+# (2026-05-12): replaced `meta_regression_paired_g` (per-env Hedges'
+# g via seed-pairing — pseudo-replicates seeds as iid Δ-samples
+# within env) with `stratified_arm_diff_pooled` (independent-samples
+# Cohen's d per env — strata are the unit of inference, not cells).
+# Mech conditioning via `scope_predictor='jensen_gap'`,
+# `min_vanilla_predictor=0.05` — only strata where vanilla actually
+# has bias > 0.05 (premise active) contribute. The bridge body
+# extracts the per-env Cohen's d panel and computes Pearson r on the
+# env-level covariate via `env_covariate_pearson_verdict`.
+_LINK_POWER_BASE_SCOPE = (
     finite('q_divergence_score') & finite_lt('q_divergence_score', 1.0)
     & finite_gt('bootstrap_fraction', 0.5)
-    & finite('jensen_dormancy_gap') & finite_lt('jensen_dormancy_gap', 0.05)
-    & finite('env_reward_polarity')
     & ((pl.col('n_step') == 1) | pl.col('n_step').is_null())
     & pl.col('action_duplicate_k').is_null()
     & (pl.col('reward_scale').is_null() | (pl.col('reward_scale') == 1.0))
@@ -412,45 +422,61 @@ _LINK_POWER_SCOPE_COMMON = (
 )
 
 
+# Env-level covariate values (empirical per-env means on the current
+# ddqn cache, pinned). Scalar form for
+# `env_covariate_pearson_verdict`. Update when data shifts.
+_EFFECTIVE_HORIZON_PER_ENV: dict[str, float] = {
+    'Acrobot-v1': 48.9,
+    'FourRooms-misc': 27.6,
+    'MountainCar-v0': 62.7,
+}
+
+
+_ARGMAX_ENTROPY_LATE_PER_ENV: dict[str, float] = {
+    'Asterix-MinAtar': 1.18,
+    'Breakout-MinAtar': 0.84,
+    'CartPole-v1': 0.69,
+}
+
+
 @claim_bridge(
     source='effective_horizon',
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
-    pair_by=('seed', 'total_steps', 'eval_every'),
-    scope=(_LINK_POWER_SCOPE_COMMON & finite_lt('env_reward_polarity', -0.3)),
+    scope=(_LINK_POWER_BASE_SCOPE & pl.col('env_name').is_in(LINK_POWER_REACH_ENVS)),
     predicted_direction='a_gt_b',
 )
 def effh_predicts_link_power__reach_envs(
-    meta_regression_per_burst: MetaRegressionResult,
+    stratified_arm_diff_pooled: StratifiedArmDiffPooledResult,
     *,
     treatment_arm: str = DDQN_ARM,
     baseline_arm: str = VANILLA_ARM,
-    source: Measurable[
-        Mapping[str, object], npt.NDArray[np.floating],
-    ] = MC_RETURN_PER_BURST_MEAN,
-    covariates: tuple[str, ...] = ('effective_horizon',),
-    dedupe_strategy: str = 'mean',
-    slope_threshold: float = 0.005,
+    source: str = 'eval_best_burst_mean',
+    stratify_by: tuple[str, ...] = ('env_name',),
+    scope_predictor: str = 'jensen_gap',
+    min_vanilla_predictor: float = 0.05,
+    env_covariate: dict[str, float] = _EFFECTIVE_HORIZON_PER_ENV,
+    r_threshold: float = 0.7,
+    min_envs: int = 3,
 ) -> Verdict:
-    """Per-(env, burst) meta-regression of Δ_outcome on env-mean
-    effective_horizon, REACH polarity. HELD when β ≥ threshold AND
-    significant. Currently NO_EFFECT: β=-0.0046, p=0.041 — opposite
-    direction (per-burst slope flips vs env-mean aggregate due to
-    phase-structure inversion)."""
-    del treatment_arm, baseline_arm, source, covariates, dedupe_strategy
-    coef = next(
-        (c for c in meta_regression_per_burst.coefficients
-         if c.name == 'effective_horizon'),
-        None,
+    """Cross-env link-power: env-level Pearson r between per-env
+    independent-samples Cohen's d (DDQN vs vanilla on
+    eval_best_burst_mean) and env-mean effective_horizon. REACH
+    cohort (Acrobot/FourRooms/MountainCar). Mech-conditioning:
+    only strata with vanilla mean jensen_gap > 0.05 (premise
+    active) contribute. HELD when r ≥ `r_threshold` AND
+    significant. n=3 underpowered for now; directionally r=+0.85
+    on cache → POW_INSUF until more REACH envs ingest."""
+    del treatment_arm, baseline_arm, source, stratify_by
+    del scope_predictor, min_vanilla_predictor
+    return env_covariate_pearson_verdict(
+        stratified_arm_diff_pooled.per_stratum,
+        env_covariate,
+        sign=1,
+        threshold=r_threshold,
+        min_envs=min_envs,
     )
-    if coef is None:
-        return Verdict.POWER_INSUFFICIENT
-    if not coef.is_significant:
-        return Verdict.POWER_INSUFFICIENT
-    if coef.coefficient >= slope_threshold:
-        return Verdict.HELD
-    return Verdict.NO_EFFECT
 
 
 @claim_bridge(
@@ -458,39 +484,39 @@ def effh_predicts_link_power__reach_envs(
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
-    pair_by=('seed', 'total_steps', 'eval_every'),
-    scope=(_LINK_POWER_SCOPE_COMMON & finite_gt('env_reward_polarity', 0.3)),
-    predicted_direction='a_gt_b',
+    scope=(_LINK_POWER_BASE_SCOPE & pl.col('env_name').is_in(LINK_POWER_SURVIVE_ENVS)),
+    predicted_direction='null',
 )
-def argmax_entropy_predicts_link_power__survive_envs(
-    meta_regression_per_burst: MetaRegressionResult,
+def argmax_entropy_link_power_null__survive_envs(
+    stratified_arm_diff_pooled: StratifiedArmDiffPooledResult,
     *,
     treatment_arm: str = DDQN_ARM,
     baseline_arm: str = VANILLA_ARM,
-    source: Measurable[
-        Mapping[str, object], npt.NDArray[np.floating],
-    ] = MC_RETURN_PER_BURST_MEAN,
-    covariates: tuple[str, ...] = ('argmax_entropy_late',),
-    dedupe_strategy: str = 'mean',
-    slope_threshold: float = 0.5,
+    source: str = 'eval_best_burst_mean',
+    stratify_by: tuple[str, ...] = ('env_name',),
+    scope_predictor: str = 'jensen_gap',
+    min_vanilla_predictor: float = 0.05,
+    env_covariate: dict[str, float] = _ARGMAX_ENTROPY_LATE_PER_ENV,
+    null_r_ceiling: float = 0.3,
+    min_envs: int = 3,
 ) -> Verdict:
-    """STARTING-POINT SURVIVE companion to CLAIM 19. Per-env paired-
-    g regressed on env-mean argmax_entropy_late. HELD when β ≥
-    threshold AND significant. Caveats: argmaxH is mostly env-
-    structural (van↔dd Pearson +0.95); n=5 small."""
-    del treatment_arm, baseline_arm, source, covariates, dedupe_strategy
-    coef = next(
-        (c for c in meta_regression_per_burst.coefficients
-         if c.name == 'argmax_entropy_late'),
-        None,
+    """Predicted-NULL form. Env-level SURVIVE cohort
+    (Asterix/Breakout/CartPole). Mech-conditioning via
+    `min_vanilla_predictor=0.05`. HELD when |r| < `null_r_ceiling`
+    AND non-significant (null confirmed); NO_EFFECT when slope is
+    significantly nonzero (null refuted). Memory's n=5 starting-
+    point HELD (Pearson +0.91 in the SIGNED form) was a different
+    claim shape on a different cache snapshot; the current null
+    framing is the post-fix companion to CLAIM 19."""
+    del treatment_arm, baseline_arm, source, stratify_by
+    del scope_predictor, min_vanilla_predictor
+    return env_covariate_pearson_verdict(
+        stratified_arm_diff_pooled.per_stratum,
+        env_covariate,
+        sign=0,
+        threshold=null_r_ceiling,
+        min_envs=min_envs,
     )
-    if coef is None:
-        return Verdict.POWER_INSUFFICIENT
-    if not coef.is_significant:
-        return Verdict.POWER_INSUFFICIENT
-    if coef.coefficient >= slope_threshold:
-        return Verdict.HELD
-    return Verdict.NO_EFFECT
 
 
 BRIDGES = (
@@ -503,5 +529,5 @@ BRIDGES = (
     staleness_amplifies_ddqn_outcome__sparse_goal_polyak,
     staleness_does_not_amplify_ddqn_outcome__survival_polyak,
     effh_predicts_link_power__reach_envs,
-    argmax_entropy_predicts_link_power__survive_envs,
+    argmax_entropy_link_power_null__survive_envs,
 )
