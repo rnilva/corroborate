@@ -1,0 +1,98 @@
+name: polyak_tau_fr_postfix
+out_dir: experiments/data/polyak_tau_fr_postfix
+arms_shape: paired
+archive_remote: s3://corroborate-archive/polyak_tau_fr_postfix
+
+# Test the finite-training-residual / integrated-clip framing of
+# DDQN bias reduction via Polyak-τ intervention (post-buffer-fix
+# corpus, 2026-05-13). The existing polyak corpus is pre-buffer-
+# fix and deprecated.
+#
+# Polyak update: `target ← (1−τ)·target + τ·online` every step.
+# Smaller τ → larger Q_target ↔ Q_online divergence (high
+# staleness) → larger per-step clip magnitude.
+# Larger τ → tighter target tracking → smaller per-step clip.
+#
+# Unlike n-step, Polyak-τ does NOT change what Q is trained on.
+# Vanilla's jens is not dragged toward zero by the intervention,
+# so relative attenuation |Δjens| / jens_van remains a falsifiable
+# quantity.
+#
+# Predicted (integrated-clip theory, strict form):
+#   τ=1.0    : rel_attenuation small (near-zero staleness → near-zero clip)
+#   τ=0.001  : rel_attenuation large (high staleness → large clip)
+# Monotone in log(τ).
+#
+# FR γ=0.99 only — focused single-env pilot. Scale to other envs
+# if signal is real.
+
+envs:
+  - {name: FourRooms-misc, n_seeds: 30, chunk_size: 30}
+
+base_intervention:
+  total_steps: 200000
+  eval_every: 20000
+  n_episodes: 5
+  gamma: 0.99
+  sync_period: 100   # nominal — overridden by Polyak target_sync per hypothesis
+  replay:
+    class: Replay
+    capacity: 50000
+    batch_size: 32
+  optimizer:
+    fn: warmed_update
+    inner: {fn: adam, lr: 0.0001}
+    warmup_steps: 100
+
+hypotheses:
+  - name: polyak_tau_1p0
+    predicted_direction: a_gt_b
+    intervention:
+      target_sync: {fn: polyak_update, tau: 1.0}
+      bootstrap:
+        fn: bootstrap
+        greedification: {fn: double_greedify}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement:
+          fn: bootstrap
+          greedification: {fn: double_greedify}
+
+  - name: polyak_tau_0p1
+    predicted_direction: a_gt_b
+    intervention:
+      target_sync: {fn: polyak_update, tau: 0.1}
+      bootstrap:
+        fn: bootstrap
+        greedification: {fn: double_greedify}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement:
+          fn: bootstrap
+          greedification: {fn: double_greedify}
+
+  - name: polyak_tau_0p01
+    predicted_direction: a_gt_b
+    intervention:
+      target_sync: {fn: polyak_update, tau: 0.01}
+      bootstrap:
+        fn: bootstrap
+        greedification: {fn: double_greedify}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement:
+          fn: bootstrap
+          greedification: {fn: double_greedify}
+
+  - name: polyak_tau_0p001
+    predicted_direction: a_gt_b
+    intervention:
+      target_sync: {fn: polyak_update, tau: 0.001}
+      bootstrap:
+        fn: bootstrap
+        greedification: {fn: double_greedify}
+    intervention_arms:
+      - slot_path: bootstrap
+        replacement:
+          fn: bootstrap
+          greedification: {fn: double_greedify}
