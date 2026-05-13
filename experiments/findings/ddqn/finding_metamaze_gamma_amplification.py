@@ -17,10 +17,15 @@ from experiments.findings.ddqn.within_env import (
 )
 
 
-EXPECTED: ClusterVerdict = ClusterVerdict.REFUTED
+EXPECTED: ClusterVerdict = ClusterVerdict.UNDERPOWERED
 
 
-BLOCKED_ON: str | None = None
+BLOCKED_ON: str | None = (
+    'γ-sweep finding: tests γ=0.99 vs γ=0.999 amplification within '
+    'MetaMaze. Canonical pins γ=0.99, so γ=0.999 arm has 0 cells. '
+    'Belongs in `ddqn_sweeps` (deferred until within_env.py triage). '
+    'Pre-canonical fired REFUTED on the HP-mixed pool.'
+)
 
 
 BRIDGES: tuple[Bridge, ...] = (

@@ -43,10 +43,18 @@ from experiments.findings.ddqn.bias_correction import (
 )
 
 
-EXPECTED: ClusterVerdict = ClusterVerdict.REFUTED
+EXPECTED: ClusterVerdict = ClusterVerdict.UNDERPOWERED
 
 
-BLOCKED_ON: str | None = None
+BLOCKED_ON: str | None = (
+    'At canonical scope (60 cells / env), the bias_correction_clip_'
+    'predicts_outcome_{backdoor,placebo,rcc} DoWhy cluster needs '
+    'n>=30 per stratum to fire; canonical has roughly that minimum '
+    'and the cluster fires POWER_INSUFFICIENT. Pre-canonical the '
+    'finding was REFUTED on the HP-mixed pool (where the same '
+    'cluster had ~600 cells and resolved cleanly). Needs ~240 cells '
+    'per env at canonical config to recover decisive verdict.'
+)
 
 
 BRIDGES: tuple[Bridge, ...] = (

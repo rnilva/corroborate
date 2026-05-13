@@ -71,15 +71,16 @@ from experiments.findings.ddqn.bias_correction import (
 )
 
 
-# Post-rebuild (2026-05-13, expanded corpus): Stage 2 fires
-# NO_EFFECT because pooled ρ(bg, jens | env, G1) = +0.090
-# (p < 10⁻⁶) is significant but just below the Cohen's-small
-# threshold (0.1). Hasselt's theorem prediction (per-step bias
-# correlates with end-state bias within env) is qualitatively
-# corroborated by the significant p-value but quantitatively
-# weak under G1 gating — the narrow within-env scope attenuates
-# the rho. Cluster verdict: REFUTED.
-EXPECTED: ClusterVerdict = ClusterVerdict.REFUTED
+# Canonical-scope re-verification (2026-05-13,
+# `findings_canonical_scope_reverification.md`):
+# Stage 0/1/2/3 ALL admit on the 740-cell × 12-env canonical
+# panel. The earlier REFUTED state came from cross-config Stage 2
+# noise (the wider corpus mixed in HP-sweep cells that diluted
+# the bg→jens within-env ρ). Under canonical (substrate-default
+# config, 1M total_steps, no HP sweeps), the chain holds as a
+# coherent finding: bg → jens → outcome with the link conditioned
+# on the mechanism.
+EXPECTED: ClusterVerdict = ClusterVerdict.SUPPORTED
 
 
 BLOCKED_ON: str | None = None

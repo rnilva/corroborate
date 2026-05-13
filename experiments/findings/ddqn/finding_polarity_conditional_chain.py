@@ -60,17 +60,19 @@ from experiments.findings.ddqn.bias_correction import (
 )
 
 
-# Cell-level: all 3 bridges fire HELD → cluster SUPPORTED.
-# Per-burst follow-up (sibling
-# `finding_polarity_chain_aggregation_artifact`, pending per-
-# burst measurable authoring) tests whether this cell-level
-# pattern survives at finer granularity. Diagnostic 2026-05-13
-# suggests it largely doesn't — ρ(entropy_per_burst,
-# mc_per_burst) contradicts the polarity hypothesis in 2 of 4
-# within-env cohorts (Acrobot REACH-positive, SpaceInvaders
-# SURVIVE-negative). The substantive interpretation should
-# defer to the per-burst Finding once authored.
-EXPECTED: ClusterVerdict = ClusterVerdict.SUPPORTED
+# Canonical-scope re-verification (2026-05-13,
+# `findings_canonical_scope_reverification.md`):
+# At canonical scope (1M total_steps, env-class-default configs,
+# no HP sweeps), the cluster fires REFUTED. The polarity-
+# conditional entropy→outcome moderation that appeared in the
+# unscoped pool (cross-config HP-mixed cells) doesn't survive
+# at converged-canonical: both `policy_decisiveness_helps_outcome__survive`
+# and `_hurts_outcome__reach` fire NO_EFFECT, and the bg→outcome
+# polarity-disjoint cluster bridges in `bias_correction.py` both
+# fire NO_EFFECT too. The earlier SUPPORTED came from under-
+# converged cells contributing noise that matched the polarity-
+# moderation hypothesis spuriously.
+EXPECTED: ClusterVerdict = ClusterVerdict.REFUTED
 
 
 BLOCKED_ON: str | None = None
