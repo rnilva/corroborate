@@ -396,9 +396,9 @@ primitives** below.
   phases (early bias-correction vs late Q-explosion), washing
   the signal to ~0.
 
-- **Per-burst** (`paired_g_per_burst`,
-  `paired_link_per_burst`, `meta_regression_per_burst`,
-  `mundlak_paired_g_per_burst`): compute Δ per (env, burst).
+- **Per-burst stratum-Δ** (`stratum_delta_link_dowhy`,
+  `meta_regression_per_burst`): compute Δ per (env, burst) by
+  pooling seeds INDEPENDENTLY within each arm at each stratum.
   Default for any env where Q dynamics aren't monotone. The
   panel makes phase structure visible and corroborable.
 
@@ -406,6 +406,17 @@ primitives** below.
 burst attenuation history establish per-burst as the canonical
 form for any analysis on Q-explosion-prone or phase-transition
 envs. Cross-burst link cancellation is real; per-burst unmasks it.
+
+**Seed-paired analyses (`paired_g`, `paired_g_per_burst`,
+`paired_link_per_burst`, `mundlak_paired_g_per_burst`) are
+off-limits in RL substrate bridges.** They pseudo-replicate
+seeds across strata (see `feedback_paired_g_in_rl`), and on
+algebraically-related predictor/target pairs they expose
+near-tautological correlations (e.g., `corr(Δ_jens, Δ_MC)` on
+Acrobot γ=0.999 reported r ≈ +0.998 with partial r given Δ_Q
+= +1.000 — Δ_MC on both sides because `jens = Q − MC` by
+definition). Valid only in synthetic SCM analytic tests
+(`tests/analytic/lg_scm/`) and single-stratum smoke checks.
 
 ### Mech / link / outcome separation
 
@@ -428,14 +439,15 @@ different verdicts — the framework refuses to collapse them.
 
 | analysis | use for |
 |---|---|
-| `paired_g` | scalar Δ on a single measurable (outcome OR mech), pair-by seed |
-| `paired_g_per_burst` | per-burst Δ on one measurable; reductions `mean` and `mc_minus_q` |
-| `paired_link_per_burst` | per-burst r(Δ_target, Δ_predictor) — the empirical link, panel-typed |
-| `phase_link_consistency` | scalar derived from per-burst link panel: fraction of bursts with significant negative r |
+| `paired_g` | **synthetic SCM tests only** — scalar Δ pair-by seed. Off-limits in RL substrate bridges. |
+| `paired_g_per_burst` | **synthetic SCM tests only** — per-burst paired Δ. Off-limits in RL substrate bridges. |
+| `paired_link_per_burst` | **synthetic SCM tests only** — per-burst r(Δ_target, Δ_predictor). Off-limits in RL substrate; use `stratum_delta_link_dowhy` instead. |
+| `phase_link_consistency` | **synthetic SCM tests only** — derived from `paired_link_per_burst`. |
+| `stratum_delta_link_dowhy` | **canonical RL-substrate link**: per-(env, burst) Δ via independent-samples seed pooling per arm, DoWhy backdoor / placebo / RCC on the panel. Mech→outcome inference goes through this. |
 | `meta_regression_paired_g` | per-stratum Δ regressed on covariates |
 | `meta_regression_per_burst` | per-(stratum, burst) panel meta-regression |
 | `stratified_arm_diff_pooled` | per-stratum **independent-samples** Cohen's d → DL random-effects pool with heterogeneity-flagged verdict (HELD / HELD_WITH_SCOPE_FLAG / NO_EFFECT / POWER_INSUFFICIENT). Pair with `meta_regression` sibling on the same scope for the scope-cluster pattern (HYPOTHESIS_AS_GRAPH.md §3b). Use **this** for cross-env / cross-config pooling — NOT `paired_g_pooled`, which pseudo-replicates by seed (see its module docstring). |
-| `mundlak_paired_g_per_burst` | per-cell mediator + per-burst g (composite for moderator probes) |
+| `mundlak_paired_g_per_burst` | **synthetic SCM tests only** — paired form. Off-limits in RL substrate. |
 | `proportion_mediated` | linear-mediation decomposition: indirect / total share of Δ_target carried by `mediator` |
 | `partial_spearman_rho` (graph.discovery) | linear-mediation Spearman form — partial-r of (X, Y) given Z; the Spearman analog of `proportion_mediated`'s direct effect |
 | `stratified_partial_spearman_rho` (graph.discovery) | **JCI form**: per-env partial Spearman, Fisher-z-pooled — the canonical adjustment when env is a confound |

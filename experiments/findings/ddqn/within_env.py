@@ -22,6 +22,7 @@ from corroborate.stats import MetaRegressionResult
 from experiments.findings.ddqn._arms import (
     DDQN_ARM, INTERVENTION, VANILLA_ARM,
 )
+from experiments.findings.ddqn._common import JENSEN_BIAS_PER_BURST_MEAN
 from experiments.findings.ddqn._scope import (
     G1_VANILLA_CONFIG_PREMISE_ACTIVE,
     VANILLA_JENS_NOISE_FLOOR,
@@ -235,7 +236,113 @@ def metamaze_link_steeper_at_high_gamma(
     )
 
 
+# Per-env q_autocorr_late mean on vanilla canonical-config baseline
+# cells. Lag-1 autocorrelation of `online_max_q_per_step` over late
+# 50% of training — proxy for function-approximator spatial
+# coherence: how strongly the FA enforces Q(s,a) ≈ Q(s',a') for
+# consecutive trajectory states. Slow-drift envs (FR maze, CartPole
+# balancing, MetaMaze) approach 1.0; fast-dynamics envs (Acrobot
+# pendulum) approach 0. Empirical means computed 2026-05-12 from
+# post-fix vanilla cells (n_envs=8 strata); see
+# `findings_fa_coherence_bias.md` for the full panel + r=+0.71
+# cross-env correlation with log(jens/σ_Q) that motivated this
+# bridge.
+_AUTOCORR_PER_ENV: dict[object, dict[str, float]] = {
+    'FourRooms-misc':   {'q_autocorr_vanilla': 0.99},
+    'CartPole-v1':      {'q_autocorr_vanilla': 0.76},
+    'MetaMaze-misc':    {'q_autocorr_vanilla': 0.72},
+    'Breakout-MinAtar': {'q_autocorr_vanilla': 0.74},
+    'MountainCar-v0':   {'q_autocorr_vanilla': 0.59},
+    'PacMan-jumanji':   {'q_autocorr_vanilla': 0.35},
+    'Acrobot-v1':       {'q_autocorr_vanilla': 0.07},
+}
+
+
+# CLAIM 27 — Cross-env: DDQN's per-burst bias-reduction scales with FA-coherence.
+@claim_bridge(
+    source=INTERVENTION,
+    target='jensen_bias_per_eps__mean_axis_-1',
+    direction=Direction.INVERSE,
+    tier=Tier.INTERVENTIONAL,
+    scope=(
+        pl.col('env_name').is_in(tuple(_AUTOCORR_PER_ENV.keys()))
+        & (pl.col('gamma') == 0.99)
+        & ((pl.col('n_step') == 1) | pl.col('n_step').is_null())
+        & pl.col('action_duplicate_k').is_null()
+        & (pl.col('reward_scale').is_null() | (pl.col('reward_scale') == 1.0))
+    ),
+    predicted_direction='a_lt_b',
+)
+def ddqn_bias_reduction_scales_with_fa_coherence__cross_env(
+    meta_regression_per_burst: MetaRegressionResult,
+    *,
+    treatment_arm: str = DDQN_ARM,
+    baseline_arm: str = VANILLA_ARM,
+    source: object = JENSEN_BIAS_PER_BURST_MEAN,
+    covariates_per_env: dict[str, dict[str, float]] = (
+        # `_AUTOCORR_PER_ENV` is keyed by `object` (Hashable for arbitrary
+        # stratum-id values); covariates_per_env wants `dict[str, ...]`.
+        # Cast at the call site via a fresh dict literal.
+        {
+            k if isinstance(k, str) else str(k): v
+            for k, v in _AUTOCORR_PER_ENV.items()
+        }
+    ),
+    slope_threshold: float = 0.3,
+    min_strata: int = 10,
+) -> Verdict:
+    """Cross-env do(DDQN) probe at the BIAS level: per-(env, burst)
+    Δ_jens = jens_DDQN − jens_vanilla → meta-regress on
+    `q_autocorr_vanilla`. The bias-reduction grows (becomes more
+    negative) as FA-coherence increases. HELD when β_autocorr ≤
+    −`slope_threshold` AND significant.
+
+    Per-burst over per-cell: per-cell scalars collapse the bias
+    trajectory and lose the early-vs-late phase structure that the
+    FA-amplification mechanism operates through. At γ=0.99 most
+    envs are partly-mech-dormant at best-burst (jens collapses
+    late) — the per-burst panel captures the WHOLE bias trajectory
+    so the autocorr signal isn't washed out by phase mismatch
+    (cf. CLAUDE.md § per-burst-canonical rule).
+
+    Theoretical motivation: high q_autocorr means the FA enforces
+    Q(s,a) ≈ Q(s',a') for s ≈ s' along trajectory; an overestimate
+    at one state propagates spatially via shared trunk gradients,
+    amplifying argmax-bias coverage. DDQN's argmax-decorrelation
+    breaks this loop. Prediction: Δ_jens (DDQN−vanilla) should be
+    near-zero on low-autocorr envs (Acrobot 0.07) and large-
+    negative on high-autocorr envs (FR 0.99).
+
+    Empirical motivation: `findings_fa_coherence_bias.md` —
+    cross-env r(q_autocorr_late, log(jens/σ_Q)) = +0.71, p=0.003,
+    n=15 strata 8 envs at the vanilla descriptive level. This
+    bridge is the do(DDQN) interventional sibling: per-(env, burst)
+    paired-g of jens, regressed on autocorr.
+
+    `slope_threshold=0.3` is calibrated to the cross-env autocorr
+    range [0.07, 0.99] ≈ 0.92 units — a slope of −0.3 corresponds
+    to ≈ −0.28 Cohen's g shift across the full range (Cohen's
+    "small"). A meaningful FA-coherence-driven bias reduction.
+
+    The complementary OUTCOME bridge — DDQN's outcome benefit
+    scaling with autocorr — runs null cross-env at γ=0.99 (per-
+    burst β = +0.05, p = 0.67) because the bias-→-outcome
+    translation is gated by per-env G3 outcome-headroom (different
+    envs have different ceilings; CartPole sees its outcome
+    plummet at high-jens regardless of DDQN). The bias-level
+    claim is the cleaner test of the mechanism."""
+    del treatment_arm, baseline_arm, source, covariates_per_env
+    return meta_regression_coefficient_verdict(
+        meta_regression_per_burst,
+        'q_autocorr_vanilla',
+        sign=-1,
+        threshold=slope_threshold,
+        min_strata=min_strata,
+    )
+
+
 BRIDGES = (
     ddqn_benefit_scales_with_effective_horizon__fourrooms,
     metamaze_link_steeper_at_high_gamma,
+    ddqn_bias_reduction_scales_with_fa_coherence__cross_env,
 )

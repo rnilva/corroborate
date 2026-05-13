@@ -296,6 +296,40 @@ def clip_wedge_polarity_aligned(record: Mapping[str, object]) -> float:
     return 0.0
 
 
+@measurable(reads=(
+    'target_max_q_per_step', 'target_q_at_online_argmax_per_step',
+))
+def bootstrap_gap_magnitude(record: Mapping[str, object]) -> float:
+    """`mean(target_max − target_q_at_online_argmax)` per training
+    step — the per-step magnitude of DDQN's algorithmic correction.
+
+    Twin to `ddqn_bootstrap_gap` (which is currently all-NaN in
+    cache because cell_runner persists it before the trace join).
+    This sibling lives outside `dqn_default_measurables()` so it's
+    computed fresh at ingestion time when trace columns are
+    available, dodging the cell_runner stringification path.
+
+    **MC-free**: defined entirely in terms of network outputs
+    (online + target Q). Use as the bias-magnitude predictor for
+    falsification bridges that would otherwise hit the `jens = Q
+    − MC` tautology — `corr(Δ_jens, Δ_mc)` is algebraically
+    pinned even at the stratum level (partial-r given Δ_Q = 1.0
+    empirically); `bootstrap_gap_magnitude` doesn't contain MC
+    anywhere so its regression on Δ_outcome is non-tautological.
+
+    Returns NaN when trace cols are absent."""
+    target_max = _record_array(record, 'target_max_q_per_step')
+    target_at_online = _record_array(
+        record, 'target_q_at_online_argmax_per_step',
+    )
+    if target_max is None or target_at_online is None:
+        return float('nan')
+    n = min(target_max.shape[0], target_at_online.shape[0])
+    if n == 0:
+        return float('nan')
+    return float(np.mean(target_max[:n] - target_at_online[:n]))
+
+
 @measurable(reads=('target_max_q_per_step', 'target_q_at_online_argmax_per_step'))
 def ddqn_bootstrap_gap_late(record: Mapping[str, object]) -> float:
     """**LEGACY** — mean clip-wedge over the late 50% of training
@@ -622,6 +656,47 @@ def q_max_growth(record: Mapping[str, object]) -> float:
     early = _mean_window(arr, 0.0, 0.25)
     late = _mean_window(arr, 0.75, 1.0)
     return float(late / max(abs(early), 1e-9))
+
+
+@measurable(reads=('online_max_q_per_step',))
+def q_autocorr_late(record: Mapping[str, object]) -> float:
+    """Lag-1 Pearson autocorrelation of `online_max_q_per_step`
+    over the late 50% of training. Proxy for function-approximator
+    spatial coherence: how strongly the FA enforces
+    `Q(s_t, a*) ≈ Q(s_{t+1}, a*)` for consecutive trajectory
+    states. High autocorr (→ 1) means the FA is over-smoothing
+    across nearby states — a single TD update at one state shifts
+    Q at neighbors via shared trunk gradients. Low autocorr
+    (→ 0) means states discriminate cleanly under the FA.
+
+    Empirical (post-fix vanilla, n=15 strata, 8 envs):
+    cross-env r(q_autocorr_late, log(jens / σ_Q)) = +0.71 (p=0.003)
+    — single strongest predictor of σ-normalized argmax-bias,
+    beating chain depth, ep_len, and |A|. Pattern: FR/MetaMaze
+    (slow-drift maze states) autocorr ~0.7-0.999 with high jens;
+    Acrobot (fast-pendulum dynamics) autocorr ~0.06 with low
+    jens despite long chains.
+
+    Mechanism: argmax overestimate at Q(s, argmax_a) is pushed
+    through the trunk; high autocorr means that push redistributes
+    onto Q(s', a) for s' ≈ s, amplifying spatial bias coverage.
+    DDQN's argmax-decorrelation breaks this loop — should help
+    most where autocorr is high."""
+    arr = _record_array(record, 'online_max_q_per_step')
+    if arr is None:
+        return float('nan')
+    if arr.ndim == 0 or arr.shape[0] < 2:
+        return float('nan')
+    half = arr.shape[0] // 2
+    late = arr[half:]
+    if late.shape[0] < 2:
+        return float('nan')
+    x = late[:-1]
+    y = late[1:]
+    if np.std(x) == 0 or np.std(y) == 0:
+        return float('nan')
+    r = float(np.corrcoef(x, y)[0, 1])
+    return r if math.isfinite(r) else float('nan')
 
 
 @measurable(reads=(
@@ -2262,15 +2337,30 @@ def dqn_default_measurables() -> tuple[
         # (vs jensen_gap) — captures the algorithmic side of DDQN's
         # mechanism distinct from cumulative-bias measures.
         greedy_match_late,
-        # Raw (undiscounted) eval-return measurables — γ-invariant
-        # policy-quality metrics for cross-γ / cross-env bridges.
-        # Both reconstruct per-(burst, episode) raw return inline
-        # from trace columns; `mc_return_raw__mean_axis_-1` then
-        # reduces to per-burst (NDArray for per-burst link bridges),
-        # `eval_best_burst_raw_mean` reduces to the best-burst
-        # scalar (counterpart of `eval_best_burst_mean`).
-        mc_return_raw_per_burst_mean,
+        # Function-approximator coherence: lag-1 autocorrelation of
+        # online_max_q across consecutive training steps. Captures
+        # how strongly the FA enforces Q(s,a) ≈ Q(s',a') for s ≈ s' —
+        # the bias-amplification mechanism orthogonal to TD-chain
+        # depth. r=+0.71 cross-env predictor of log(jens/σ_Q),
+        # beating ep_len + chain + |A| in the post-fix panel
+        # (`findings_fa_coherence_bias`).
+        q_autocorr_late,
+        # Raw (undiscounted) eval-return scalar — γ-invariant
+        # policy-quality metric for cross-γ / cross-env bridges.
+        # Reconstructs per-(burst, episode) raw return inline from
+        # trace columns; reduces to the best-burst scalar
+        # (counterpart of `eval_best_burst_mean`).
         eval_best_burst_raw_mean,
+        # Per-burst array measurable `mc_return_raw_per_burst_mean`
+        # is intentionally NOT in this tuple. cell_runner persists
+        # scalar MeasurementLeaf only — non-scalar (NDArray) returns
+        # would be stringified via `_leaf_scalar` and break ingestion
+        # (the partial-null branch in `compute_missing_columns`
+        # preserves non-null strings instead of recomputing). The
+        # per-burst array is computed at ingestion time by
+        # `build_measurements` from the joined trace columns
+        # (`transitive_reads` walks `mc_return_from_step`,
+        # `episode_length`, `gamma` from the registered measurable).
     )
 
 

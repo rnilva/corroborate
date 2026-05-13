@@ -271,11 +271,24 @@ def run_dqn_arm(
         # its bare measurable name. Names are bare (`jensen_gap`,
         # `eval_final_mean`, etc.) — substrate-paper-narrative
         # prefixes were normalised earlier.
+        #
+        # Non-scalar (NDArray) returns are skipped: cell_runner
+        # only persists scalar `MeasurementLeaf` (per the
+        # persistence-shape rule in CLAUDE.md); array-returning
+        # measurables are computed at ingestion time via
+        # `build_measurements` from joined trace columns. Without
+        # this skip, `_leaf_scalar` stringifies the array which
+        # then traps `compute_missing_columns`'s partial-null
+        # branch — non-null strings get preserved as "already
+        # computed", silently shadowing the correct array value
+        # that build_measurements would produce.
         measurable_cols: dict[str, MeasurementLeaf] = {}
         for m in measurables:
             value = evaluate_with_measurables(
                 m.fn, per_seed_record, cache=cache,
             )
+            if isinstance(value, (np.ndarray, jax.Array)) and value.ndim > 0:
+                continue
             scalar = _leaf_scalar(value)
             measurable_cols[m.name] = scalar
 

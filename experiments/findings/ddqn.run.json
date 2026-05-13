@@ -5,24 +5,24 @@
         "stratified_arm_diff_pooled": {
           "arm_field": "arm_key",
           "baseline_arm": "baseline",
-          "i_squared": 0.3944,
+          "i_squared": 0.412308,
           "measurable": "eval_best_burst_mean",
           "n_strata": 7,
           "per_stratum": [
             {
-              "arm_mean_baseline": -59.3185,
-              "arm_mean_treatment": -58.9084,
-              "arm_sd_baseline": 8.24938,
-              "arm_sd_treatment": 8.56774,
-              "cohen_d": 0.0487635,
-              "cohen_se": 0.116268,
-              "mean_diff": 0.410104,
-              "n_seeds_baseline": 149,
-              "n_seeds_treatment": 147,
+              "arm_mean_baseline": -60.6105,
+              "arm_mean_treatment": -60.5265,
+              "arm_sd_baseline": 8.32366,
+              "arm_sd_treatment": 8.63269,
+              "cohen_d": 0.00990591,
+              "cohen_se": 0.0924514,
+              "mean_diff": 0.083998,
+              "n_seeds_baseline": 235,
+              "n_seeds_treatment": 233,
               "stratum_id": [
                 "Acrobot-v1"
               ],
-              "vanilla_predictor": 4.87403
+              "vanilla_predictor": 5.89567
             },
             {
               "arm_mean_baseline": 8.18005,
@@ -116,30 +116,30 @@
             }
           ],
           "pooled": {
-            "I2": 0.3944,
-            "Q": 8.25627,
+            "I2": 0.412308,
+            "Q": 8.50785,
             "assumption_violations": [],
             "empirical_max_g": 0.407399,
             "empirical_min_g": -0.250508,
             "n_cells": 6,
-            "pi_hi": 0.602657,
-            "pi_lo": -0.432376,
-            "pooled_g": 0.0851405,
-            "se_pooled": 0.103845,
-            "tau2": 0.0239594
+            "pi_hi": 0.577685,
+            "pi_lo": -0.436189,
+            "pooled_g": 0.0707479,
+            "se_pooled": 0.100808,
+            "tau2": 0.0231751
           },
-          "pooled_ci_hi": 0.288677,
-          "pooled_ci_lo": -0.118396,
-          "pooled_d": 0.0851405,
-          "pooled_p_value": 0.412286,
-          "pooled_se": 0.103845,
-          "q_statistic": 8.25627,
+          "pooled_ci_hi": 0.268331,
+          "pooled_ci_lo": -0.126835,
+          "pooled_d": 0.0707479,
+          "pooled_p_value": 0.482797,
+          "pooled_se": 0.100808,
+          "q_statistic": 8.50785,
           "refutation": "null_effect",
           "scope_predictor": "jensen_gap",
           "stratify_by": [
             "env_name"
           ],
-          "tau2": 0.0239594,
+          "tau2": 0.0231751,
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)",
           "verdict": "no_effect"
         }
@@ -148,9 +148,9 @@
       "blocked_by": null,
       "bridge_name": "ddqn_refuted_when_dormancy_fires",
       "direction": "inverse",
-      "extent_hash": -2009361899299744644,
-      "n_cells_in_scope": 811,
-      "n_cells_pre_scope": 2990,
+      "extent_hash": 7246833842311247987,
+      "n_cells_in_scope": 983,
+      "n_cells_pre_scope": 3770,
       "pair_by": [
         "seed"
       ],
@@ -175,63 +175,45 @@
         "stratified_arm_diff_pooled": {
           "arm_field": "arm_key",
           "baseline_arm": "baseline",
-          "i_squared": 0.897748,
+          "i_squared": 0.887738,
           "measurable": "eval_best_burst_mean",
-          "n_strata": 11,
+          "n_strata": 10,
           "per_stratum": [
             {
-              "arm_mean_baseline": -29.416,
-              "arm_mean_treatment": -29.2811,
-              "arm_sd_baseline": 24.369,
-              "arm_sd_treatment": 24.262,
-              "cohen_d": 0.0055498,
-              "cohen_se": 0.182575,
-              "mean_diff": 0.134947,
+              "arm_mean_baseline": -63.2882,
+              "arm_mean_treatment": -63.5497,
+              "arm_sd_baseline": 2.50497,
+              "arm_sd_treatment": 2.64444,
+              "cohen_d": -0.101553,
+              "cohen_se": 0.182694,
+              "mean_diff": -0.261566,
               "n_seeds_baseline": 60,
               "n_seeds_treatment": 60,
-              "stratum_id": [
-                "Acrobot-v1",
-                100,
-                0.99,
-                200000
-              ],
-              "vanilla_predictor": 2.12098
-            },
-            {
-              "arm_mean_baseline": -63.3528,
-              "arm_mean_treatment": -63.8546,
-              "arm_sd_baseline": 2.04342,
-              "arm_sd_treatment": 2.50279,
-              "cohen_d": -0.219635,
-              "cohen_se": 0.259003,
-              "mean_diff": -0.501794,
-              "n_seeds_baseline": 30,
-              "n_seeds_treatment": 30,
               "stratum_id": [
                 "Acrobot-v1",
                 100,
                 0.995,
                 200000
               ],
-              "vanilla_predictor": 5.69476
+              "vanilla_predictor": 5.93188
             },
             {
-              "arm_mean_baseline": -73.2098,
-              "arm_mean_treatment": -73.2252,
-              "arm_sd_baseline": 2.96071,
-              "arm_sd_treatment": 3.94834,
-              "cohen_d": -0.00440282,
-              "cohen_se": 0.258199,
-              "mean_diff": -0.0153643,
-              "n_seeds_baseline": 30,
-              "n_seeds_treatment": 30,
+              "arm_mean_baseline": -73.0476,
+              "arm_mean_treatment": -72.8679,
+              "arm_sd_baseline": 3.2744,
+              "arm_sd_treatment": 3.46888,
+              "cohen_d": 0.053292,
+              "cohen_se": 0.182607,
+              "mean_diff": 0.179756,
+              "n_seeds_baseline": 60,
+              "n_seeds_treatment": 60,
               "stratum_id": [
                 "Acrobot-v1",
                 100,
                 0.999,
                 200000
               ],
-              "vanilla_predictor": 10.9109
+              "vanilla_predictor": 12.7708
             },
             {
               "arm_mean_baseline": 1.72098,
@@ -270,22 +252,22 @@
               "vanilla_predictor": 2.12181
             },
             {
-              "arm_mean_baseline": 0.140954,
-              "arm_mean_treatment": 0.888577,
-              "arm_sd_baseline": 0.140591,
-              "arm_sd_treatment": 0.155362,
-              "cohen_d": 5.04605,
-              "cohen_se": 0.53495,
-              "mean_diff": 0.747624,
-              "n_seeds_baseline": 30,
-              "n_seeds_treatment": 30,
+              "arm_mean_baseline": 0.26995,
+              "arm_mean_treatment": 0.757902,
+              "arm_sd_baseline": 0.279864,
+              "arm_sd_treatment": 0.277189,
+              "cohen_d": 1.75188,
+              "cohen_se": 0.175623,
+              "mean_diff": 0.487952,
+              "n_seeds_baseline": 90,
+              "n_seeds_treatment": 90,
               "stratum_id": [
                 "FourRooms-misc",
                 100,
                 0.999,
                 200000
               ],
-              "vanilla_predictor": 9.49028
+              "vanilla_predictor": 11.4432
             },
             {
               "arm_mean_baseline": 26.3783,
@@ -379,24 +361,24 @@
             }
           ],
           "pooled": {
-            "I2": 0.897748,
-            "Q": 97.7977,
+            "I2": 0.887738,
+            "Q": 80.1696,
             "assumption_violations": [],
-            "empirical_max_g": 5.04605,
-            "empirical_min_g": -0.219635,
-            "n_cells": 11,
-            "pi_hi": 2.4057,
-            "pi_lo": -1.26199,
-            "pooled_g": 0.571857,
-            "se_pooled": 0.249078,
-            "tau2": 0.595135
+            "empirical_max_g": 1.75188,
+            "empirical_min_g": -0.101553,
+            "n_cells": 10,
+            "pi_hi": 2.00144,
+            "pi_lo": -1.13606,
+            "pooled_g": 0.432691,
+            "se_pooled": 0.218824,
+            "tau2": 0.414912
           },
-          "pooled_ci_hi": 1.06005,
-          "pooled_ci_lo": 0.0836633,
-          "pooled_d": 0.571857,
-          "pooled_p_value": 0.0216821,
-          "pooled_se": 0.249078,
-          "q_statistic": 97.7977,
+          "pooled_ci_hi": 0.861586,
+          "pooled_ci_lo": 0.00379669,
+          "pooled_d": 0.432691,
+          "pooled_p_value": 0.048002,
+          "pooled_se": 0.218824,
+          "q_statistic": 80.1696,
           "refutation": "null_effect",
           "scope_predictor": "jensen_gap",
           "stratify_by": [
@@ -405,7 +387,7 @@
             "gamma",
             "total_steps"
           ],
-          "tau2": 0.595135,
+          "tau2": 0.414912,
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)",
           "verdict": "no_effect"
         }
@@ -414,9 +396,9 @@
       "blocked_by": null,
       "bridge_name": "ddqn_helps_under_three_gate_scope__cross_env",
       "direction": "direct",
-      "extent_hash": -376208033266282276,
-      "n_cells_in_scope": 1950,
-      "n_cells_pre_scope": 2990,
+      "extent_hash": -7918745319750197162,
+      "n_cells_in_scope": 2550,
+      "n_cells_pre_scope": 3770,
       "pair_by": [
         "seed"
       ],
@@ -444,10 +426,10 @@
       "analysis_results": {
         "stratified_partial_spearman": {
           "conditioning": "jensen_gap",
-          "n_obs_total": 743,
+          "n_obs_total": 796,
           "n_strata": 6,
-          "p_value": 1.58411e-06,
-          "rho_pooled": 0.193032,
+          "p_value": 5.67825e-08,
+          "rho_pooled": 0.208835,
           "stratify_by": "env_name",
           "x": "clip_wedge_polarity_aligned",
           "y": "eval_best_burst_mean"
@@ -457,9 +439,9 @@
       "blocked_by": null,
       "bridge_name": "clip_wedge_predicts_outcome__polarity_moderated__dormant_scope",
       "direction": "direct",
-      "extent_hash": -1426739939250488733,
-      "n_cells_in_scope": 743,
-      "n_cells_pre_scope": 2990,
+      "extent_hash": -3283756234900989601,
+      "n_cells_in_scope": 796,
+      "n_cells_pre_scope": 3770,
       "pair_by": [
         "seed"
       ],
@@ -477,45 +459,43 @@
       "source_name": "clip_wedge_polarity_aligned",
       "target_name": "eval_best_burst_mean",
       "tier": "associational",
-      "verdict": "power_insufficient",
+      "verdict": "held",
       "warnings": []
     },
     {
       "analysis_results": {
         "meta_regression_unpaired_d": {
-          "cleavage_axes": [
-            "effective_horizon"
-          ],
+          "cleavage_axes": [],
           "coefficients": [
             {
-              "ci_hi": 0.039441,
-              "ci_lo": 0.0145567,
-              "coefficient": 0.0269989,
-              "is_significant": true,
+              "ci_hi": 0.022634,
+              "ci_lo": -0.00489257,
+              "coefficient": 0.00887071,
+              "is_significant": false,
               "name": "effective_horizon",
-              "p_value": 0.011278
+              "p_value": 0.109153
             }
           ],
-          "i_squared": 0.1961,
-          "intercept": -1.29359,
-          "intercept_ci_hi": -0.191833,
-          "intercept_ci_lo": -2.39534,
-          "intercept_p_value": 0.0370214,
-          "intercept_se": 0.256064,
+          "i_squared": 0.793522,
+          "intercept": -0.287693,
+          "intercept_ci_hi": 1.50953,
+          "intercept_ci_lo": -2.08491,
+          "intercept_p_value": 0.562144,
+          "intercept_se": 0.417701,
           "n_strata": 4,
           "pool": "random",
-          "q_statistic": 2.48787,
-          "r_squared": 0.977571,
-          "tau_sq": 0.0182244
+          "q_statistic": 9.68625,
+          "r_squared": 0.793609,
+          "tau_sq": 0.200126
         }
       },
       "assumption_violations": [],
       "blocked_by": null,
       "bridge_name": "ddqn_benefit_scales_with_effective_horizon__fourrooms",
       "direction": "direct",
-      "extent_hash": 2465266540841362171,
-      "n_cells_in_scope": 300,
-      "n_cells_pre_scope": 2990,
+      "extent_hash": 4487032389044966515,
+      "n_cells_in_scope": 540,
+      "n_cells_pre_scope": 3770,
       "pair_by": [
         "seed"
       ],
@@ -550,7 +530,7 @@
       "source_name": "do(baseline|bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify))",
       "target_name": "eval_best_burst_raw_mean",
       "tier": "interventional",
-      "verdict": "held",
+      "verdict": "power_insufficient",
       "warnings": []
     },
     {
@@ -594,9 +574,9 @@
       "blocked_by": null,
       "bridge_name": "metamaze_link_steeper_at_high_gamma",
       "direction": "direct",
-      "extent_hash": 7630858016136085430,
+      "extent_hash": 1048553346538547190,
       "n_cells_in_scope": 120,
-      "n_cells_pre_scope": 2990,
+      "n_cells_pre_scope": 3770,
       "pair_by": [
         "seed"
       ],
@@ -619,6 +599,83 @@
       "target_name": "eval_best_burst_mean",
       "tier": "associational",
       "verdict": "no_effect",
+      "warnings": []
+    },
+    {
+      "analysis_results": {
+        "meta_regression_per_burst": {
+          "cleavage_axes": [
+            "q_autocorr_vanilla"
+          ],
+          "coefficients": [
+            {
+              "ci_hi": -0.411909,
+              "ci_lo": -1.57649,
+              "coefficient": -0.994201,
+              "is_significant": true,
+              "name": "q_autocorr_vanilla",
+              "p_value": 0.00110682
+            }
+          ],
+          "i_squared": 0.846824,
+          "intercept": 0.0275362,
+          "intercept_ci_hi": 0.413091,
+          "intercept_ci_lo": -0.358019,
+          "intercept_p_value": 0.887094,
+          "intercept_se": 0.193215,
+          "n_strata": 70,
+          "pool": "random",
+          "q_statistic": 443.935,
+          "r_squared": 0.145814,
+          "tau_sq": 0.215866
+        }
+      },
+      "assumption_violations": [],
+      "blocked_by": null,
+      "bridge_name": "ddqn_bias_reduction_scales_with_fa_coherence__cross_env",
+      "direction": "inverse",
+      "extent_hash": -4728662542441246575,
+      "n_cells_in_scope": 1040,
+      "n_cells_pre_scope": 3770,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "baseline_arm": "baseline",
+        "covariates_per_env": {
+          "Acrobot-v1": {
+            "q_autocorr_vanilla": 0.07
+          },
+          "Breakout-MinAtar": {
+            "q_autocorr_vanilla": 0.74
+          },
+          "CartPole-v1": {
+            "q_autocorr_vanilla": 0.76
+          },
+          "FourRooms-misc": {
+            "q_autocorr_vanilla": 0.99
+          },
+          "MetaMaze-misc": {
+            "q_autocorr_vanilla": 0.72
+          },
+          "MountainCar-v0": {
+            "q_autocorr_vanilla": 0.59
+          },
+          "PacMan-jumanji": {
+            "q_autocorr_vanilla": 0.35
+          }
+        },
+        "min_strata": 10,
+        "slope_threshold": 0.3,
+        "source": "jensen_bias_per_eps__mean_axis_-1",
+        "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
+      },
+      "predicted_direction": "a_lt_b",
+      "scope_repr": "[([([([(col(\"env_name\").is_in([[\"FourRooms-misc\", \"CartPole-v1\", … \"Acrobot-v1\"]])) & ([(col(\"gamma\")) == (dyn float: 0.99)])]) & ([([(col(\"n_step\")) == (dyn int: 1)]) | (col(\"n_step\").is_null())])]) & (col(\"action_duplicate_k\").is_null())]) & ([(col(\"reward_scale\").is_null()) | ([(col(\"reward_scale\")) == (dyn float: 1)])])]",
+      "source_name": "do(baseline|bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify))",
+      "target_name": "jensen_bias_per_eps__mean_axis_-1",
+      "tier": "interventional",
+      "verdict": "held",
       "warnings": []
     },
     {
@@ -648,9 +705,9 @@
       "blocked_by": null,
       "bridge_name": "ddqn_rescues_underlearning_vanilla__fourrooms_rs_0p1",
       "direction": "direct",
-      "extent_hash": -6474901257873689904,
+      "extent_hash": -8257163820905393312,
       "n_cells_in_scope": 60,
-      "n_cells_pre_scope": 2990,
+      "n_cells_pre_scope": 3770,
       "pair_by": [
         "seed"
       ],
@@ -692,9 +749,9 @@
       "blocked_by": null,
       "bridge_name": "ddqn_dominates_vanilla_response_curve__fourrooms_rs_0p3",
       "direction": "direct",
-      "extent_hash": -8708181488169019473,
+      "extent_hash": -576538367506950711,
       "n_cells_in_scope": 60,
-      "n_cells_pre_scope": 2990,
+      "n_cells_pre_scope": 3770,
       "pair_by": [
         "seed"
       ],
@@ -714,31 +771,31 @@
         "arm_mean_diff": {
           "arm_field": "arm_key",
           "baseline_arm": "baseline",
-          "mean_baseline": -52.7025,
-          "mean_diff": 0.22853,
-          "mean_diff_p_value": 0.581375,
-          "mean_diff_se": 0.411942,
-          "mean_treatment": -52.474,
+          "mean_baseline": -52.9144,
+          "mean_diff": 0.110349,
+          "mean_diff_p_value": 0.633399,
+          "mean_diff_se": 0.231067,
+          "mean_treatment": -52.804,
           "measurable": "outcome_native",
-          "n_baseline": 30,
-          "n_paired": 30,
-          "n_treatment": 30,
-          "pairing_rho": -0.0138552,
-          "pairing_rho_se": 0.19245,
-          "sd_baseline": 1.81535,
-          "sd_treatment": 1.33992,
-          "standardized_effect": 0.143239,
+          "n_baseline": 120,
+          "n_paired": 120,
+          "n_treatment": 120,
+          "pairing_rho": 0.112912,
+          "pairing_rho_se": 0.09245,
+          "sd_baseline": 1.74072,
+          "sd_treatment": 1.83764,
+          "standardized_effect": 0.0616534,
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)",
-          "welch_df": 53.3663
+          "welch_df": 237.305
         }
       },
       "assumption_violations": [],
       "blocked_by": null,
       "bridge_name": "ddqn_does_not_rescue__acrobot_rs_0p1",
       "direction": "direct",
-      "extent_hash": -3635500149544317456,
-      "n_cells_in_scope": 60,
-      "n_cells_pre_scope": 2990,
+      "extent_hash": 2503449537746640992,
+      "n_cells_in_scope": 240,
+      "n_cells_pre_scope": 3770,
       "pair_by": [
         "seed"
       ],
@@ -758,31 +815,31 @@
         "arm_mean_diff": {
           "arm_field": "arm_key",
           "baseline_arm": "baseline",
-          "mean_baseline": 99.0943,
-          "mean_diff": 0.211982,
-          "mean_diff_p_value": 0.102085,
-          "mean_diff_se": 0.125739,
-          "mean_treatment": 99.3063,
+          "mean_baseline": 99.1678,
+          "mean_diff": 0.0941064,
+          "mean_diff_p_value": 0.0888537,
+          "mean_diff_se": 0.0550545,
+          "mean_treatment": 99.2619,
           "measurable": "outcome_native",
-          "n_baseline": 30,
-          "n_paired": 30,
-          "n_treatment": 30,
-          "pairing_rho": 0.539552,
-          "pairing_rho_se": 0.19245,
-          "sd_baseline": 0.681045,
-          "sd_treatment": 0.10239,
-          "standardized_effect": 0.435297,
+          "n_baseline": 120,
+          "n_paired": 120,
+          "n_treatment": 120,
+          "pairing_rho": 0.025277,
+          "pairing_rho_se": 0.09245,
+          "sd_baseline": 0.495713,
+          "sd_treatment": 0.343495,
+          "standardized_effect": 0.220674,
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)",
-          "welch_df": 30.3103
+          "welch_df": 211.867
         }
       },
       "assumption_violations": [],
       "blocked_by": null,
       "bridge_name": "ddqn_does_not_rescue__cartpole_rs_0p1",
       "direction": "direct",
-      "extent_hash": -5959843484668564162,
-      "n_cells_in_scope": 60,
-      "n_cells_pre_scope": 2990,
+      "extent_hash": 3955206813601047776,
+      "n_cells_in_scope": 240,
+      "n_cells_pre_scope": 3770,
       "pair_by": [
         "seed"
       ],
@@ -824,9 +881,9 @@
       "blocked_by": null,
       "bridge_name": "ddqn_increases_argmax_entropy__fourrooms_rs_0p1",
       "direction": "direct",
-      "extent_hash": -6474901257873689904,
+      "extent_hash": -8257163820905393312,
       "n_cells_in_scope": 60,
-      "n_cells_pre_scope": 2990,
+      "n_cells_pre_scope": 3770,
       "pair_by": [
         "seed"
       ],
@@ -868,9 +925,9 @@
       "blocked_by": null,
       "bridge_name": "ddqn_entropy_matches_vanilla__fourrooms_rs_1p0",
       "direction": "direct",
-      "extent_hash": 969764590042548159,
+      "extent_hash": 7411188631111770383,
       "n_cells_in_scope": 60,
-      "n_cells_pre_scope": 2990,
+      "n_cells_pre_scope": 3770,
       "pair_by": [
         "seed"
       ],
@@ -890,31 +947,31 @@
         "arm_mean_diff": {
           "arm_field": "arm_key",
           "baseline_arm": "baseline",
-          "mean_baseline": 0.508575,
-          "mean_diff": 0.187197,
-          "mean_diff_p_value": 3.9968e-15,
-          "mean_diff_se": 0.0232517,
-          "mean_treatment": 0.695772,
+          "mean_baseline": 0.503368,
+          "mean_diff": 0.185624,
+          "mean_diff_p_value": 0.0,
+          "mean_diff_se": 0.0194395,
+          "mean_treatment": 0.688992,
           "measurable": "eval_best_burst_mean",
-          "n_baseline": 330,
+          "n_baseline": 450,
           "n_paired": 30,
-          "n_treatment": 330,
-          "pairing_rho": 0.149353,
+          "n_treatment": 450,
+          "pairing_rho": 0.405271,
           "pairing_rho_se": 0.19245,
-          "sd_baseline": 0.327796,
-          "sd_treatment": 0.266385,
-          "standardized_effect": 0.626764,
+          "sd_baseline": 0.317928,
+          "sd_treatment": 0.26263,
+          "standardized_effect": 0.636586,
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)",
-          "welch_df": 631.581
+          "welch_df": 867.096
         }
       },
       "assumption_violations": [],
       "blocked_by": null,
       "bridge_name": "ddqn_helps_at_full_bootstrap__fourrooms_n1",
       "direction": "direct",
-      "extent_hash": 1513009285347464440,
-      "n_cells_in_scope": 660,
-      "n_cells_pre_scope": 2990,
+      "extent_hash": 2034162654424477778,
+      "n_cells_in_scope": 900,
+      "n_cells_pre_scope": 3770,
       "pair_by": [
         "seed"
       ],
@@ -969,9 +1026,9 @@
       "blocked_by": null,
       "bridge_name": "ddqn_null_under_monte_carlo__fourrooms_n10",
       "direction": "direct",
-      "extent_hash": -1279239930010742667,
+      "extent_hash": 7669023460200478313,
       "n_cells_in_scope": 60,
-      "n_cells_pre_scope": 2990,
+      "n_cells_pre_scope": 3770,
       "pair_by": [
         "seed"
       ],
@@ -1001,113 +1058,57 @@
     },
     {
       "analysis_results": {
-        "paired_link_per_burst": {
-          "baseline_arm": "baseline",
-          "n_strata": 0,
-          "pair_by": [
-            "seed"
-          ],
-          "predictor": "jensen_bias_per_eps__mean_axis_-1",
-          "strata": [],
-          "target": "mc_return_raw__mean_axis_-1",
-          "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
-        }
-      },
-      "assumption_violations": [],
-      "blocked_by": null,
-      "bridge_name": "acrobot_per_burst_link_active__gamma_0999",
-      "direction": "inverse",
-      "extent_hash": 133146708735736,
-      "n_cells_in_scope": 0,
-      "n_cells_pre_scope": 2990,
-      "pair_by": [
-        "seed"
-      ],
-      "params": {
-        "baseline_arm": "baseline",
-        "binomial_alpha": 0.05,
-        "env_name": "Acrobot-v1",
-        "expected_sign": -1,
-        "min_bursts": 6,
-        "predictor": "jensen_bias_per_eps__mean_axis_-1",
-        "significance": 0.05,
-        "target": "mc_return_raw__mean_axis_-1",
-        "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
-      },
-      "predicted_direction": null,
-      "scope_repr": "[([([([(col(\"env_name\")) == (\"Acrobot-v1\")]) & ([(col(\"gamma\")) == (dyn float: 0.999)])]) & ([(col(\"effective_horizon\").is_finite()) & ([(col(\"effective_horizon\")) >= (dyn float: 80)])])]) & ([(col(\"optimizer.inner.weight_decay\")) == (dyn float: 0.0001)])]",
-      "source_name": "jensen_gap",
-      "target_name": "mc_return",
-      "tier": "associational",
-      "verdict": "power_insufficient",
-      "warnings": [
-        {
-          "gate_name": "no_predicted_direction",
-          "level": "info",
-          "message": "Bridge 'acrobot_per_burst_link_active__gamma_0999' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
-          "passed": false
-        }
-      ]
-    },
-    {
-      "analysis_results": {
-        "stratum_delta_link_dowhy": {
+        "stratum_vanilla_predictor_link_dowhy": {
           "backdoor": {
-            "ate": -1.49962,
-            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__2,__burst__5,__burst__8,__burst__6,__burst__9,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __1,__burst__4,__burst__7,__burst__3])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__2,__burst__5,__burst__8,__burst__6,__burst__9,__burst__1,__burst__4,__burst__7,__burst__3,U) = P(dout|djens,__burst__2,__burst__5,__burst__8,__burst__6,__burst__9,__burst__1,__burst__4,__burst__7,__burst__3)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__2,__burst__5,__burst__8,__burst__6,__burst__9,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __1,__burst__4,__burst__7,__burst__3])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__2,__burst__5,__burst__8,__burst__6,__burst__9,__burst__1,__burst__4,__burst__7,__burst__3,U) = P(dout|djens,__burst__2,__burst__5,__burst__8,__burst__6,__burst__9,__burst__1,__burst__4,__burst__7,__burst__3)\n",
+            "ate": -0.101658,
+            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n    d                                                                          ↪\n─────────(E[d_out|__env__PacMan-jumanji,__env__SpaceInvaders-MinAtar,__env__Sl ↪\nd[v_pred]                                                                      ↪\n\n↪                                                                              ↪\n↪ idingTilePuzzle-jumanji,__env__FourRooms-misc,__env__Asterix-MinAtar,__env__ ↪\n↪                                                                              ↪\n\n↪                                                                              ↪\n↪ Snake-jumanji,__env__Breakout-MinAtar,__env__MountainCar-v0,__env__MetaMaze- ↪\n↪                                                                              ↪\n\n↪       \n↪ misc])\n↪       \nEstimand assumption 1, Unconfoundedness: If U→{v_pred} and U→d_out then P(d_out|v_pred,__env__PacMan-jumanji,__env__SpaceInvaders-MinAtar,__env__SlidingTilePuzzle-jumanji,__env__FourRooms-misc,__env__Asterix-MinAtar,__env__Snake-jumanji,__env__Breakout-MinAtar,__env__MountainCar-v0,__env__MetaMaze-misc,U) = P(d_out|v_pred,__env__PacMan-jumanji,__env__SpaceInvaders-MinAtar,__env__SlidingTilePuzzle-jumanji,__env__FourRooms-misc,__env__Asterix-MinAtar,__env__Snake-jumanji,__env__Breakout-MinAtar,__env__MountainCar-v0,__env__MetaMaze-misc)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n    d                                                                          ↪\n─────────(E[d_out|__env__PacMan-jumanji,__env__SpaceInvaders-MinAtar,__env__Sl ↪\nd[v_pred]                                                                      ↪\n\n↪                                                                              ↪\n↪ idingTilePuzzle-jumanji,__env__FourRooms-misc,__env__Snake-jumanji,__env__As ↪\n↪                                                                              ↪\n\n↪                                                                              ↪\n↪ terix-MinAtar,__env__Breakout-MinAtar,__env__MountainCar-v0,__env__MetaMaze- ↪\n↪                                                                              ↪\n\n↪       \n↪ misc])\n↪       \nEstimand assumption 1, Unconfoundedness: If U→{v_pred} and U→d_out then P(d_out|v_pred,__env__PacMan-jumanji,__env__SpaceInvaders-MinAtar,__env__SlidingTilePuzzle-jumanji,__env__FourRooms-misc,__env__Snake-jumanji,__env__Asterix-MinAtar,__env__Breakout-MinAtar,__env__MountainCar-v0,__env__MetaMaze-misc,U) = P(d_out|v_pred,__env__PacMan-jumanji,__env__SpaceInvaders-MinAtar,__env__SlidingTilePuzzle-jumanji,__env__FourRooms-misc,__env__Snake-jumanji,__env__Asterix-MinAtar,__env__Breakout-MinAtar,__env__MountainCar-v0,__env__MetaMaze-misc)\n",
             "identified": true,
             "method_name": "backdoor.linear_regression",
-            "n_rows": 40,
-            "outcome": "dout",
-            "treatment": "djens"
+            "n_rows": 20,
+            "outcome": "d_out",
+            "treatment": "v_pred"
           },
-          "n_strata": 40,
-          "outcome_col": "dout",
+          "n_strata": 20,
+          "outcome_col": "d_out",
           "placebo": {
-            "drift": 1.49962,
+            "drift": 0.101658,
             "method_name": "backdoor.linear_regression",
-            "n_rows": 40,
-            "outcome": "dout",
-            "real_ate": -1.49962,
-            "refuted_ate": 0.0,
+            "n_rows": 20,
+            "outcome": "d_out",
+            "real_ate": -0.101658,
+            "refuted_ate": 4.08562e-14,
             "refuter_name": "placebo_treatment_refuter",
-            "treatment": "djens"
+            "treatment": "v_pred"
           },
           "random_common_cause": {
-            "drift": 0.0050901,
+            "drift": 0.00744271,
             "method_name": "backdoor.linear_regression",
-            "n_rows": 40,
-            "outcome": "dout",
-            "real_ate": -1.49962,
-            "refuted_ate": -1.50471,
+            "n_rows": 20,
+            "outcome": "d_out",
+            "real_ate": -0.101658,
+            "refuted_ate": -0.0942154,
             "refuter_name": "random_common_cause",
-            "treatment": "djens"
+            "treatment": "v_pred"
           },
-          "treatment_col": "djens"
+          "treatment_col": "v_pred"
         }
       },
       "assumption_violations": [],
       "blocked_by": null,
-      "bridge_name": "reach_link_backdoor_ate_negative",
+      "bridge_name": "bias_premise_jens_predicts_outcome_backdoor",
       "direction": "inverse",
-      "extent_hash": 8499415223903089429,
-      "n_cells_in_scope": 1350,
-      "n_cells_pre_scope": 2990,
+      "extent_hash": -6905409738634385451,
+      "n_cells_in_scope": 1770,
+      "n_cells_pre_scope": 3770,
       "pair_by": [
         "seed"
       ],
       "params": {
-        "ate_ceiling": -0.1,
+        "ate_floor": 0.1,
         "baseline_arm": "baseline",
-        "env_filter": [
-          "FourRooms-misc",
-          "Acrobot-v1",
-          "MountainCar-v0",
-          "MetaMaze-misc"
-        ],
-        "link_predictor": "jensen_bias_per_eps__mean_axis_-1",
-        "link_target": "mc_return_raw__mean_axis_-1",
         "min_vanilla_predictor": 0.05,
+        "predictor_col": "jensen_gap",
+        "target_col": "eval_best_burst_raw_mean",
         "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
       },
       "predicted_direction": null,
@@ -1115,75 +1116,69 @@
       "source_name": "jensen_gap",
       "target_name": "eval_best_burst_raw_mean",
       "tier": "associational",
-      "verdict": "held",
+      "verdict": "no_effect",
       "warnings": [
         {
           "gate_name": "no_predicted_direction",
           "level": "info",
-          "message": "Bridge 'reach_link_backdoor_ate_negative' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
+          "message": "Bridge 'bias_premise_jens_predicts_outcome_backdoor' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
           "passed": false
         }
       ]
     },
     {
       "analysis_results": {
-        "stratum_delta_link_dowhy": {
+        "stratum_vanilla_predictor_link_dowhy": {
           "backdoor": {
-            "ate": -1.49962,
-            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__2,__burst__5,__burst__8,__burst__6,__burst__9,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __1,__burst__4,__burst__7,__burst__3])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__2,__burst__5,__burst__8,__burst__6,__burst__9,__burst__1,__burst__4,__burst__7,__burst__3,U) = P(dout|djens,__burst__2,__burst__5,__burst__8,__burst__6,__burst__9,__burst__1,__burst__4,__burst__7,__burst__3)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__2,__burst__5,__burst__8,__burst__6,__burst__9,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __1,__burst__4,__burst__7,__burst__3])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__2,__burst__5,__burst__8,__burst__6,__burst__9,__burst__1,__burst__4,__burst__7,__burst__3,U) = P(dout|djens,__burst__2,__burst__5,__burst__8,__burst__6,__burst__9,__burst__1,__burst__4,__burst__7,__burst__3)\n",
+            "ate": -0.101658,
+            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n    d                                                                          ↪\n─────────(E[d_out|__env__PacMan-jumanji,__env__SpaceInvaders-MinAtar,__env__Sl ↪\nd[v_pred]                                                                      ↪\n\n↪                                                                              ↪\n↪ idingTilePuzzle-jumanji,__env__FourRooms-misc,__env__Asterix-MinAtar,__env__ ↪\n↪                                                                              ↪\n\n↪                                                                              ↪\n↪ Snake-jumanji,__env__Breakout-MinAtar,__env__MountainCar-v0,__env__MetaMaze- ↪\n↪                                                                              ↪\n\n↪       \n↪ misc])\n↪       \nEstimand assumption 1, Unconfoundedness: If U→{v_pred} and U→d_out then P(d_out|v_pred,__env__PacMan-jumanji,__env__SpaceInvaders-MinAtar,__env__SlidingTilePuzzle-jumanji,__env__FourRooms-misc,__env__Asterix-MinAtar,__env__Snake-jumanji,__env__Breakout-MinAtar,__env__MountainCar-v0,__env__MetaMaze-misc,U) = P(d_out|v_pred,__env__PacMan-jumanji,__env__SpaceInvaders-MinAtar,__env__SlidingTilePuzzle-jumanji,__env__FourRooms-misc,__env__Asterix-MinAtar,__env__Snake-jumanji,__env__Breakout-MinAtar,__env__MountainCar-v0,__env__MetaMaze-misc)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n    d                                                                          ↪\n─────────(E[d_out|__env__PacMan-jumanji,__env__SpaceInvaders-MinAtar,__env__Sl ↪\nd[v_pred]                                                                      ↪\n\n↪                                                                              ↪\n↪ idingTilePuzzle-jumanji,__env__FourRooms-misc,__env__Snake-jumanji,__env__As ↪\n↪                                                                              ↪\n\n↪                                                                              ↪\n↪ terix-MinAtar,__env__Breakout-MinAtar,__env__MountainCar-v0,__env__MetaMaze- ↪\n↪                                                                              ↪\n\n↪       \n↪ misc])\n↪       \nEstimand assumption 1, Unconfoundedness: If U→{v_pred} and U→d_out then P(d_out|v_pred,__env__PacMan-jumanji,__env__SpaceInvaders-MinAtar,__env__SlidingTilePuzzle-jumanji,__env__FourRooms-misc,__env__Snake-jumanji,__env__Asterix-MinAtar,__env__Breakout-MinAtar,__env__MountainCar-v0,__env__MetaMaze-misc,U) = P(d_out|v_pred,__env__PacMan-jumanji,__env__SpaceInvaders-MinAtar,__env__SlidingTilePuzzle-jumanji,__env__FourRooms-misc,__env__Snake-jumanji,__env__Asterix-MinAtar,__env__Breakout-MinAtar,__env__MountainCar-v0,__env__MetaMaze-misc)\n",
             "identified": true,
             "method_name": "backdoor.linear_regression",
-            "n_rows": 40,
-            "outcome": "dout",
-            "treatment": "djens"
+            "n_rows": 20,
+            "outcome": "d_out",
+            "treatment": "v_pred"
           },
-          "n_strata": 40,
-          "outcome_col": "dout",
+          "n_strata": 20,
+          "outcome_col": "d_out",
           "placebo": {
-            "drift": 1.49962,
+            "drift": 0.101658,
             "method_name": "backdoor.linear_regression",
-            "n_rows": 40,
-            "outcome": "dout",
-            "real_ate": -1.49962,
-            "refuted_ate": 0.0,
+            "n_rows": 20,
+            "outcome": "d_out",
+            "real_ate": -0.101658,
+            "refuted_ate": 4.08562e-14,
             "refuter_name": "placebo_treatment_refuter",
-            "treatment": "djens"
+            "treatment": "v_pred"
           },
           "random_common_cause": {
-            "drift": 0.0109562,
+            "drift": 0.0160979,
             "method_name": "backdoor.linear_regression",
-            "n_rows": 40,
-            "outcome": "dout",
-            "real_ate": -1.49962,
-            "refuted_ate": -1.48866,
+            "n_rows": 20,
+            "outcome": "d_out",
+            "real_ate": -0.101658,
+            "refuted_ate": -0.0855603,
             "refuter_name": "random_common_cause",
-            "treatment": "djens"
+            "treatment": "v_pred"
           },
-          "treatment_col": "djens"
+          "treatment_col": "v_pred"
         }
       },
       "assumption_violations": [],
       "blocked_by": null,
-      "bridge_name": "reach_link_placebo_refuted",
+      "bridge_name": "bias_premise_jens_predicts_outcome_placebo",
       "direction": "inverse",
-      "extent_hash": 8499415223903089429,
-      "n_cells_in_scope": 1350,
-      "n_cells_pre_scope": 2990,
+      "extent_hash": -6905409738634385451,
+      "n_cells_in_scope": 1770,
+      "n_cells_pre_scope": 3770,
       "pair_by": [
         "seed"
       ],
       "params": {
         "baseline_arm": "baseline",
-        "env_filter": [
-          "FourRooms-misc",
-          "Acrobot-v1",
-          "MountainCar-v0",
-          "MetaMaze-misc"
-        ],
-        "link_predictor": "jensen_bias_per_eps__mean_axis_-1",
-        "link_target": "mc_return_raw__mean_axis_-1",
         "min_vanilla_predictor": 0.05,
         "placebo_max_ratio": 0.2,
+        "predictor_col": "jensen_gap",
+        "target_col": "eval_best_burst_raw_mean",
         "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
       },
       "predicted_direction": null,
@@ -1196,402 +1191,287 @@
         {
           "gate_name": "no_predicted_direction",
           "level": "info",
-          "message": "Bridge 'reach_link_placebo_refuted' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
+          "message": "Bridge 'bias_premise_jens_predicts_outcome_placebo' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
           "passed": false
         }
       ]
     },
     {
       "analysis_results": {
-        "stratum_delta_link_dowhy": {
+        "stratum_vanilla_predictor_link_dowhy": {
           "backdoor": {
-            "ate": -1.49962,
-            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__2,__burst__5,__burst__8,__burst__6,__burst__9,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __1,__burst__4,__burst__7,__burst__3])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__2,__burst__5,__burst__8,__burst__6,__burst__9,__burst__1,__burst__4,__burst__7,__burst__3,U) = P(dout|djens,__burst__2,__burst__5,__burst__8,__burst__6,__burst__9,__burst__1,__burst__4,__burst__7,__burst__3)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n   d                                                                           ↪\n────────(E[dout|__burst__2,__burst__5,__burst__8,__burst__6,__burst__9,__burst ↪\nd[djens]                                                                       ↪\n\n↪                                       \n↪ __1,__burst__4,__burst__7,__burst__3])\n↪                                       \nEstimand assumption 1, Unconfoundedness: If U→{djens} and U→dout then P(dout|djens,__burst__2,__burst__5,__burst__8,__burst__6,__burst__9,__burst__1,__burst__4,__burst__7,__burst__3,U) = P(dout|djens,__burst__2,__burst__5,__burst__8,__burst__6,__burst__9,__burst__1,__burst__4,__burst__7,__burst__3)\n",
+            "ate": -0.101658,
+            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n    d                                                                          ↪\n─────────(E[d_out|__env__PacMan-jumanji,__env__SpaceInvaders-MinAtar,__env__Sl ↪\nd[v_pred]                                                                      ↪\n\n↪                                                                              ↪\n↪ idingTilePuzzle-jumanji,__env__FourRooms-misc,__env__Asterix-MinAtar,__env__ ↪\n↪                                                                              ↪\n\n↪                                                                              ↪\n↪ Snake-jumanji,__env__Breakout-MinAtar,__env__MountainCar-v0,__env__MetaMaze- ↪\n↪                                                                              ↪\n\n↪       \n↪ misc])\n↪       \nEstimand assumption 1, Unconfoundedness: If U→{v_pred} and U→d_out then P(d_out|v_pred,__env__PacMan-jumanji,__env__SpaceInvaders-MinAtar,__env__SlidingTilePuzzle-jumanji,__env__FourRooms-misc,__env__Asterix-MinAtar,__env__Snake-jumanji,__env__Breakout-MinAtar,__env__MountainCar-v0,__env__MetaMaze-misc,U) = P(d_out|v_pred,__env__PacMan-jumanji,__env__SpaceInvaders-MinAtar,__env__SlidingTilePuzzle-jumanji,__env__FourRooms-misc,__env__Asterix-MinAtar,__env__Snake-jumanji,__env__Breakout-MinAtar,__env__MountainCar-v0,__env__MetaMaze-misc)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n    d                                                                          ↪\n─────────(E[d_out|__env__PacMan-jumanji,__env__SpaceInvaders-MinAtar,__env__Sl ↪\nd[v_pred]                                                                      ↪\n\n↪                                                                              ↪\n↪ idingTilePuzzle-jumanji,__env__FourRooms-misc,__env__Snake-jumanji,__env__As ↪\n↪                                                                              ↪\n\n↪                                                                              ↪\n↪ terix-MinAtar,__env__Breakout-MinAtar,__env__MountainCar-v0,__env__MetaMaze- ↪\n↪                                                                              ↪\n\n↪       \n↪ misc])\n↪       \nEstimand assumption 1, Unconfoundedness: If U→{v_pred} and U→d_out then P(d_out|v_pred,__env__PacMan-jumanji,__env__SpaceInvaders-MinAtar,__env__SlidingTilePuzzle-jumanji,__env__FourRooms-misc,__env__Snake-jumanji,__env__Asterix-MinAtar,__env__Breakout-MinAtar,__env__MountainCar-v0,__env__MetaMaze-misc,U) = P(d_out|v_pred,__env__PacMan-jumanji,__env__SpaceInvaders-MinAtar,__env__SlidingTilePuzzle-jumanji,__env__FourRooms-misc,__env__Snake-jumanji,__env__Asterix-MinAtar,__env__Breakout-MinAtar,__env__MountainCar-v0,__env__MetaMaze-misc)\n",
             "identified": true,
             "method_name": "backdoor.linear_regression",
-            "n_rows": 40,
-            "outcome": "dout",
-            "treatment": "djens"
+            "n_rows": 20,
+            "outcome": "d_out",
+            "treatment": "v_pred"
           },
-          "n_strata": 40,
-          "outcome_col": "dout",
+          "n_strata": 20,
+          "outcome_col": "d_out",
           "placebo": {
-            "drift": 1.49962,
+            "drift": 0.101658,
             "method_name": "backdoor.linear_regression",
-            "n_rows": 40,
-            "outcome": "dout",
-            "real_ate": -1.49962,
-            "refuted_ate": 0.0,
+            "n_rows": 20,
+            "outcome": "d_out",
+            "real_ate": -0.101658,
+            "refuted_ate": 4.08562e-14,
             "refuter_name": "placebo_treatment_refuter",
-            "treatment": "djens"
+            "treatment": "v_pred"
           },
           "random_common_cause": {
-            "drift": 0.00294007,
+            "drift": 0.00268524,
             "method_name": "backdoor.linear_regression",
-            "n_rows": 40,
-            "outcome": "dout",
-            "real_ate": -1.49962,
-            "refuted_ate": -1.49668,
+            "n_rows": 20,
+            "outcome": "d_out",
+            "real_ate": -0.101658,
+            "refuted_ate": -0.0989729,
             "refuter_name": "random_common_cause",
-            "treatment": "djens"
+            "treatment": "v_pred"
           },
-          "treatment_col": "djens"
+          "treatment_col": "v_pred"
         }
       },
       "assumption_violations": [],
       "blocked_by": null,
-      "bridge_name": "reach_link_rcc_robust",
+      "bridge_name": "bias_premise_jens_predicts_outcome_rcc",
       "direction": "inverse",
-      "extent_hash": 8499415223903089429,
-      "n_cells_in_scope": 1350,
-      "n_cells_pre_scope": 2990,
+      "extent_hash": -6905409738634385451,
+      "n_cells_in_scope": 1770,
+      "n_cells_pre_scope": 3770,
       "pair_by": [
         "seed"
       ],
       "params": {
         "baseline_arm": "baseline",
-        "env_filter": [
-          "FourRooms-misc",
-          "Acrobot-v1",
-          "MountainCar-v0",
-          "MetaMaze-misc"
-        ],
-        "link_predictor": "jensen_bias_per_eps__mean_axis_-1",
-        "link_target": "mc_return_raw__mean_axis_-1",
         "min_vanilla_predictor": 0.05,
-        "rcc_max_drift_ratio": 0.1,
-        "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
-      },
-      "predicted_direction": null,
-      "scope_repr": "[([([([([([([([(.when([(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_gap\")).otherwise(null).is_not_nan()) | (.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_gap\")).otherwise(null).is_null())]).then(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_gap\")).otherwise(null)).otherwise(null).mean().over([col(\"env_name\"), col(\"sync_period\"), col(\"gamma\"), col(\"total_steps\"), col(\"n_step\"), col(\"reward_scale\"), col(\"action_duplicate_k\")])) > (dyn float: 0.05)]) & ([(.when([(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_dormancy_gap\")).otherwise(null).is_not_nan()) | (.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_dormancy_gap\")).otherwise(null).is_null())]).then(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_dormancy_gap\")).otherwise(null)).otherwise(null).mean().over([col(\"env_name\"), col(\"sync_period\"), col(\"gamma\"), col(\"total_steps\"), col(\"n_step\"), col(\"reward_scale\"), col(\"action_duplicate_k\")])) < (dyn float: 0.05)])]) & (col(\"n_actions\").is_finite())]) & ([(col(\"n_actions\")) >= (dyn int: 3)])]) & ([([(col(\"n_step\")) == (dyn int: 1)]) | (col(\"n_step\").is_null())])]) & (col(\"action_duplicate_k\").is_null())]) & ([(col(\"reward_scale\").is_null()) | ([(col(\"reward_scale\")) == (dyn float: 1)])])]) & (col(\"target_sync.tau\").is_null())]",
-      "source_name": "jensen_gap",
-      "target_name": "eval_best_burst_raw_mean",
-      "tier": "associational",
-      "verdict": "held",
-      "warnings": [
-        {
-          "gate_name": "no_predicted_direction",
-          "level": "info",
-          "message": "Bridge 'reach_link_rcc_robust' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
-          "passed": false
-        }
-      ]
-    },
-    {
-      "analysis_results": {
-        "stratum_effect_panel": {
-          "aggregator": "mean",
-          "baseline_arm": "baseline",
-          "deltas": {
-            "eval_best_burst_mean": [
-              0.0191816,
-              0.0665706,
-              0.221534,
-              0.410716
-            ],
-            "jensen_gap": [
-              -0.188952,
-              -0.632545,
-              -0.949375,
-              -1.26065
-            ]
-          },
-          "measurables": [
-            "jensen_gap",
-            "eval_best_burst_mean"
-          ],
-          "n_baseline": [
-            30,
-            30,
-            30,
-            30
-          ],
-          "n_strata": 4,
-          "n_treatment": [
-            30,
-            30,
-            30,
-            30
-          ],
-          "strata": [
-            [
-              1.0
-            ],
-            [
-              2.0
-            ],
-            [
-              3.0
-            ],
-            [
-              4.0
-            ]
-          ],
-          "stratify_by": [
-            "action_duplicate_k"
-          ],
-          "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
-        }
-      },
-      "assumption_violations": [],
-      "blocked_by": null,
-      "bridge_name": "fourrooms_action_dim_link_active__inflated",
-      "direction": "inverse",
-      "extent_hash": 1585868243979404135,
-      "n_cells_in_scope": 240,
-      "n_cells_pre_scope": 2990,
-      "pair_by": [
-        "seed"
-      ],
-      "params": {
-        "baseline_arm": "baseline",
-        "measurables": [
-          "jensen_gap",
-          "eval_best_burst_mean"
-        ],
-        "min_seeds_per_arm": 5,
-        "min_strata": 3,
-        "r_squared_floor": 0.7,
-        "slope_max": -0.05,
-        "stratify_by": [
-          "action_duplicate_k"
-        ],
-        "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)",
-        "x": "jensen_gap",
-        "y": "eval_best_burst_mean"
-      },
-      "predicted_direction": "a_lt_b",
-      "scope_repr": "[([([(col(\"env_name\")) == (\"FourRooms-misc\")]) & (col(\"action_duplicate_k\").is_not_null())]) & ([([(.when([(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_gap\")).otherwise(null).is_not_nan()) | (.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_gap\")).otherwise(null).is_null())]).then(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_gap\")).otherwise(null)).otherwise(null).mean().over([col(\"env_name\"), col(\"sync_period\"), col(\"gamma\"), col(\"total_steps\"), col(\"n_step\"), col(\"reward_scale\"), col(\"action_duplicate_k\")])) > (dyn float: 0.05)]) & ([(.when([(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_dormancy_gap\")).otherwise(null).is_not_nan()) | (.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_dormancy_gap\")).otherwise(null).is_null())]).then(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_dormancy_gap\")).otherwise(null)).otherwise(null).mean().over([col(\"env_name\"), col(\"sync_period\"), col(\"gamma\"), col(\"total_steps\"), col(\"n_step\"), col(\"reward_scale\"), col(\"action_duplicate_k\")])) < (dyn float: 0.05)])])]",
-      "source_name": "jensen_gap",
-      "target_name": "eval_best_burst_raw_mean",
-      "tier": "associational",
-      "verdict": "held",
-      "warnings": []
-    },
-    {
-      "analysis_results": {
-        "stratum_link_moderation_dowhy": {
-          "attenuator": "q_divergence_score",
-          "backdoor": {
-            "ate": null,
-            "estimand_str": "",
-            "identified": false,
-            "method_name": "backdoor.linear_regression",
-            "n_rows": 0,
-            "outcome": "d_target",
-            "treatment": "d_pred_x_above"
-          },
-          "binary_threshold": 1.0,
-          "n_envs_above": 0,
-          "n_envs_below": 8,
-          "n_strata": 0,
-          "outcome_col": "d_target",
-          "placebo": {
-            "drift": null,
-            "method_name": "backdoor.linear_regression",
-            "n_rows": 0,
-            "outcome": "d_target",
-            "real_ate": null,
-            "refuted_ate": null,
-            "refuter_name": "placebo_treatment_refuter",
-            "treatment": "d_pred_x_above"
-          },
-          "random_common_cause": {
-            "drift": null,
-            "method_name": "backdoor.linear_regression",
-            "n_rows": 0,
-            "outcome": "d_target",
-            "real_ate": null,
-            "refuted_ate": null,
-            "refuter_name": "random_common_cause",
-            "treatment": "d_pred_x_above"
-          },
-          "treatment_col": "d_pred_x_above"
-        }
-      },
-      "assumption_violations": [],
-      "blocked_by": null,
-      "bridge_name": "extreme_q_div_link_interaction_positive",
-      "direction": "inverse",
-      "extent_hash": -412689277688710148,
-      "n_cells_in_scope": 650,
-      "n_cells_pre_scope": 2990,
-      "pair_by": [
-        "seed"
-      ],
-      "params": {
-        "attenuator": "q_divergence_score",
-        "baseline_arm": "baseline",
-        "binary_threshold": 1.0,
-        "interaction_ate_floor": 0.1,
-        "link_predictor": "jensen_bias_per_eps__mean_axis_-1",
-        "link_target": "mc_return_raw__mean_axis_-1",
-        "min_vanilla_predictor": 0.05,
-        "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
-      },
-      "predicted_direction": null,
-      "scope_repr": "[([([(col(\"total_steps\")) == (dyn int: 1000000)]) & (col(\"q_divergence_score\").is_finite())]) & ([(col(\"q_network.channels\").is_null()) | ([(col(\"q_network.channels\")) != (\"(32,64)\")])])]",
-      "source_name": "jensen_gap",
-      "target_name": "eval_best_burst_raw_mean",
-      "tier": "associational",
-      "verdict": "power_insufficient",
-      "warnings": [
-        {
-          "gate_name": "no_predicted_direction",
-          "level": "info",
-          "message": "Bridge 'extreme_q_div_link_interaction_positive' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
-          "passed": false
-        }
-      ]
-    },
-    {
-      "analysis_results": {
-        "stratum_link_moderation_dowhy": {
-          "attenuator": "q_divergence_score",
-          "backdoor": {
-            "ate": null,
-            "estimand_str": "",
-            "identified": false,
-            "method_name": "backdoor.linear_regression",
-            "n_rows": 0,
-            "outcome": "d_target",
-            "treatment": "d_pred_x_above"
-          },
-          "binary_threshold": 1.0,
-          "n_envs_above": 0,
-          "n_envs_below": 8,
-          "n_strata": 0,
-          "outcome_col": "d_target",
-          "placebo": {
-            "drift": null,
-            "method_name": "backdoor.linear_regression",
-            "n_rows": 0,
-            "outcome": "d_target",
-            "real_ate": null,
-            "refuted_ate": null,
-            "refuter_name": "placebo_treatment_refuter",
-            "treatment": "d_pred_x_above"
-          },
-          "random_common_cause": {
-            "drift": null,
-            "method_name": "backdoor.linear_regression",
-            "n_rows": 0,
-            "outcome": "d_target",
-            "real_ate": null,
-            "refuted_ate": null,
-            "refuter_name": "random_common_cause",
-            "treatment": "d_pred_x_above"
-          },
-          "treatment_col": "d_pred_x_above"
-        }
-      },
-      "assumption_violations": [],
-      "blocked_by": null,
-      "bridge_name": "extreme_q_div_link_placebo_refuted",
-      "direction": "inverse",
-      "extent_hash": -412689277688710148,
-      "n_cells_in_scope": 650,
-      "n_cells_pre_scope": 2990,
-      "pair_by": [
-        "seed"
-      ],
-      "params": {
-        "attenuator": "q_divergence_score",
-        "baseline_arm": "baseline",
-        "binary_threshold": 1.0,
-        "link_predictor": "jensen_bias_per_eps__mean_axis_-1",
-        "link_target": "mc_return_raw__mean_axis_-1",
-        "min_vanilla_predictor": 0.05,
-        "placebo_max_ratio": 0.2,
-        "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
-      },
-      "predicted_direction": null,
-      "scope_repr": "[([([(col(\"total_steps\")) == (dyn int: 1000000)]) & (col(\"q_divergence_score\").is_finite())]) & ([(col(\"q_network.channels\").is_null()) | ([(col(\"q_network.channels\")) != (\"(32,64)\")])])]",
-      "source_name": "jensen_gap",
-      "target_name": "eval_best_burst_raw_mean",
-      "tier": "associational",
-      "verdict": "power_insufficient",
-      "warnings": [
-        {
-          "gate_name": "no_predicted_direction",
-          "level": "info",
-          "message": "Bridge 'extreme_q_div_link_placebo_refuted' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
-          "passed": false
-        }
-      ]
-    },
-    {
-      "analysis_results": {
-        "stratum_link_moderation_dowhy": {
-          "attenuator": "q_divergence_score",
-          "backdoor": {
-            "ate": null,
-            "estimand_str": "",
-            "identified": false,
-            "method_name": "backdoor.linear_regression",
-            "n_rows": 0,
-            "outcome": "d_target",
-            "treatment": "d_pred_x_above"
-          },
-          "binary_threshold": 1.0,
-          "n_envs_above": 0,
-          "n_envs_below": 8,
-          "n_strata": 0,
-          "outcome_col": "d_target",
-          "placebo": {
-            "drift": null,
-            "method_name": "backdoor.linear_regression",
-            "n_rows": 0,
-            "outcome": "d_target",
-            "real_ate": null,
-            "refuted_ate": null,
-            "refuter_name": "placebo_treatment_refuter",
-            "treatment": "d_pred_x_above"
-          },
-          "random_common_cause": {
-            "drift": null,
-            "method_name": "backdoor.linear_regression",
-            "n_rows": 0,
-            "outcome": "d_target",
-            "real_ate": null,
-            "refuted_ate": null,
-            "refuter_name": "random_common_cause",
-            "treatment": "d_pred_x_above"
-          },
-          "treatment_col": "d_pred_x_above"
-        }
-      },
-      "assumption_violations": [],
-      "blocked_by": null,
-      "bridge_name": "extreme_q_div_link_rcc_robust",
-      "direction": "inverse",
-      "extent_hash": -412689277688710148,
-      "n_cells_in_scope": 650,
-      "n_cells_pre_scope": 2990,
-      "pair_by": [
-        "seed"
-      ],
-      "params": {
-        "attenuator": "q_divergence_score",
-        "baseline_arm": "baseline",
-        "binary_threshold": 1.0,
-        "link_predictor": "jensen_bias_per_eps__mean_axis_-1",
-        "link_target": "mc_return_raw__mean_axis_-1",
-        "min_vanilla_predictor": 0.05,
+        "predictor_col": "jensen_gap",
         "rcc_max_drift_ratio": 0.15,
+        "target_col": "eval_best_burst_raw_mean",
         "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
       },
       "predicted_direction": null,
-      "scope_repr": "[([([(col(\"total_steps\")) == (dyn int: 1000000)]) & (col(\"q_divergence_score\").is_finite())]) & ([(col(\"q_network.channels\").is_null()) | ([(col(\"q_network.channels\")) != (\"(32,64)\")])])]",
+      "scope_repr": "[([([([([([([([(.when([(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_gap\")).otherwise(null).is_not_nan()) | (.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_gap\")).otherwise(null).is_null())]).then(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_gap\")).otherwise(null)).otherwise(null).mean().over([col(\"env_name\"), col(\"sync_period\"), col(\"gamma\"), col(\"total_steps\"), col(\"n_step\"), col(\"reward_scale\"), col(\"action_duplicate_k\")])) > (dyn float: 0.05)]) & ([(.when([(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_dormancy_gap\")).otherwise(null).is_not_nan()) | (.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_dormancy_gap\")).otherwise(null).is_null())]).then(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_dormancy_gap\")).otherwise(null)).otherwise(null).mean().over([col(\"env_name\"), col(\"sync_period\"), col(\"gamma\"), col(\"total_steps\"), col(\"n_step\"), col(\"reward_scale\"), col(\"action_duplicate_k\")])) < (dyn float: 0.05)])]) & (col(\"n_actions\").is_finite())]) & ([(col(\"n_actions\")) >= (dyn int: 3)])]) & ([([(col(\"n_step\")) == (dyn int: 1)]) | (col(\"n_step\").is_null())])]) & (col(\"action_duplicate_k\").is_null())]) & ([(col(\"reward_scale\").is_null()) | ([(col(\"reward_scale\")) == (dyn float: 1)])])]) & (col(\"target_sync.tau\").is_null())]",
       "source_name": "jensen_gap",
       "target_name": "eval_best_burst_raw_mean",
       "tier": "associational",
-      "verdict": "power_insufficient",
+      "verdict": "held",
       "warnings": [
         {
           "gate_name": "no_predicted_direction",
           "level": "info",
-          "message": "Bridge 'extreme_q_div_link_rcc_robust' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
+          "message": "Bridge 'bias_premise_jens_predicts_outcome_rcc' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
+          "passed": false
+        }
+      ]
+    },
+    {
+      "analysis_results": {
+        "stratum_vanilla_predictor_link_dowhy": {
+          "backdoor": {
+            "ate": -29.3646,
+            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n    d                                                                          ↪\n─────────(E[d_out|__env__PacMan-jumanji,__env__SpaceInvaders-MinAtar,__env__Sl ↪\nd[v_pred]                                                                      ↪\n\n↪                                                                              ↪\n↪ idingTilePuzzle-jumanji,__env__FourRooms-misc,__env__Asterix-MinAtar,__env__ ↪\n↪                                                                              ↪\n\n↪                                                                              ↪\n↪ Snake-jumanji,__env__Breakout-MinAtar,__env__MountainCar-v0,__env__MetaMaze- ↪\n↪                                                                              ↪\n\n↪       \n↪ misc])\n↪       \nEstimand assumption 1, Unconfoundedness: If U→{v_pred} and U→d_out then P(d_out|v_pred,__env__PacMan-jumanji,__env__SpaceInvaders-MinAtar,__env__SlidingTilePuzzle-jumanji,__env__FourRooms-misc,__env__Asterix-MinAtar,__env__Snake-jumanji,__env__Breakout-MinAtar,__env__MountainCar-v0,__env__MetaMaze-misc,U) = P(d_out|v_pred,__env__PacMan-jumanji,__env__SpaceInvaders-MinAtar,__env__SlidingTilePuzzle-jumanji,__env__FourRooms-misc,__env__Asterix-MinAtar,__env__Snake-jumanji,__env__Breakout-MinAtar,__env__MountainCar-v0,__env__MetaMaze-misc)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n    d                                                                          ↪\n─────────(E[d_out|__env__PacMan-jumanji,__env__SpaceInvaders-MinAtar,__env__Sl ↪\nd[v_pred]                                                                      ↪\n\n↪                                                                              ↪\n↪ idingTilePuzzle-jumanji,__env__FourRooms-misc,__env__Snake-jumanji,__env__As ↪\n↪                                                                              ↪\n\n↪                                                                              ↪\n↪ terix-MinAtar,__env__Breakout-MinAtar,__env__MountainCar-v0,__env__MetaMaze- ↪\n↪                                                                              ↪\n\n↪       \n↪ misc])\n↪       \nEstimand assumption 1, Unconfoundedness: If U→{v_pred} and U→d_out then P(d_out|v_pred,__env__PacMan-jumanji,__env__SpaceInvaders-MinAtar,__env__SlidingTilePuzzle-jumanji,__env__FourRooms-misc,__env__Snake-jumanji,__env__Asterix-MinAtar,__env__Breakout-MinAtar,__env__MountainCar-v0,__env__MetaMaze-misc,U) = P(d_out|v_pred,__env__PacMan-jumanji,__env__SpaceInvaders-MinAtar,__env__SlidingTilePuzzle-jumanji,__env__FourRooms-misc,__env__Snake-jumanji,__env__Asterix-MinAtar,__env__Breakout-MinAtar,__env__MountainCar-v0,__env__MetaMaze-misc)\n",
+            "identified": true,
+            "method_name": "backdoor.linear_regression",
+            "n_rows": 20,
+            "outcome": "d_out",
+            "treatment": "v_pred"
+          },
+          "n_strata": 20,
+          "outcome_col": "d_out",
+          "placebo": {
+            "drift": 29.3646,
+            "method_name": "backdoor.linear_regression",
+            "n_rows": 20,
+            "outcome": "d_out",
+            "real_ate": -29.3646,
+            "refuted_ate": 4.08562e-14,
+            "refuter_name": "placebo_treatment_refuter",
+            "treatment": "v_pred"
+          },
+          "random_common_cause": {
+            "drift": 0.625555,
+            "method_name": "backdoor.linear_regression",
+            "n_rows": 20,
+            "outcome": "d_out",
+            "real_ate": -29.3646,
+            "refuted_ate": -29.9901,
+            "refuter_name": "random_common_cause",
+            "treatment": "v_pred"
+          },
+          "treatment_col": "v_pred"
+        }
+      },
+      "assumption_violations": [],
+      "blocked_by": null,
+      "bridge_name": "bias_correction_clip_predicts_outcome_backdoor",
+      "direction": "direct",
+      "extent_hash": -6905409738634385451,
+      "n_cells_in_scope": 1770,
+      "n_cells_pre_scope": 3770,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "ate_floor": 50.0,
+        "baseline_arm": "baseline",
+        "min_vanilla_predictor": 0.0,
+        "predictor_col": "bootstrap_gap_magnitude",
+        "target_col": "eval_best_burst_raw_mean",
+        "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
+      },
+      "predicted_direction": null,
+      "scope_repr": "[([([([([([([([(.when([(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_gap\")).otherwise(null).is_not_nan()) | (.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_gap\")).otherwise(null).is_null())]).then(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_gap\")).otherwise(null)).otherwise(null).mean().over([col(\"env_name\"), col(\"sync_period\"), col(\"gamma\"), col(\"total_steps\"), col(\"n_step\"), col(\"reward_scale\"), col(\"action_duplicate_k\")])) > (dyn float: 0.05)]) & ([(.when([(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_dormancy_gap\")).otherwise(null).is_not_nan()) | (.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_dormancy_gap\")).otherwise(null).is_null())]).then(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_dormancy_gap\")).otherwise(null)).otherwise(null).mean().over([col(\"env_name\"), col(\"sync_period\"), col(\"gamma\"), col(\"total_steps\"), col(\"n_step\"), col(\"reward_scale\"), col(\"action_duplicate_k\")])) < (dyn float: 0.05)])]) & (col(\"n_actions\").is_finite())]) & ([(col(\"n_actions\")) >= (dyn int: 3)])]) & ([([(col(\"n_step\")) == (dyn int: 1)]) | (col(\"n_step\").is_null())])]) & (col(\"action_duplicate_k\").is_null())]) & ([(col(\"reward_scale\").is_null()) | ([(col(\"reward_scale\")) == (dyn float: 1)])])]) & (col(\"target_sync.tau\").is_null())]",
+      "source_name": "bootstrap_gap_magnitude",
+      "target_name": "eval_best_burst_raw_mean",
+      "tier": "associational",
+      "verdict": "no_effect",
+      "warnings": [
+        {
+          "gate_name": "no_predicted_direction",
+          "level": "info",
+          "message": "Bridge 'bias_correction_clip_predicts_outcome_backdoor' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
+          "passed": false
+        }
+      ]
+    },
+    {
+      "analysis_results": {
+        "stratum_vanilla_predictor_link_dowhy": {
+          "backdoor": {
+            "ate": -29.3646,
+            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n    d                                                                          ↪\n─────────(E[d_out|__env__PacMan-jumanji,__env__SpaceInvaders-MinAtar,__env__Sl ↪\nd[v_pred]                                                                      ↪\n\n↪                                                                              ↪\n↪ idingTilePuzzle-jumanji,__env__FourRooms-misc,__env__Asterix-MinAtar,__env__ ↪\n↪                                                                              ↪\n\n↪                                                                              ↪\n↪ Snake-jumanji,__env__Breakout-MinAtar,__env__MountainCar-v0,__env__MetaMaze- ↪\n↪                                                                              ↪\n\n↪       \n↪ misc])\n↪       \nEstimand assumption 1, Unconfoundedness: If U→{v_pred} and U→d_out then P(d_out|v_pred,__env__PacMan-jumanji,__env__SpaceInvaders-MinAtar,__env__SlidingTilePuzzle-jumanji,__env__FourRooms-misc,__env__Asterix-MinAtar,__env__Snake-jumanji,__env__Breakout-MinAtar,__env__MountainCar-v0,__env__MetaMaze-misc,U) = P(d_out|v_pred,__env__PacMan-jumanji,__env__SpaceInvaders-MinAtar,__env__SlidingTilePuzzle-jumanji,__env__FourRooms-misc,__env__Asterix-MinAtar,__env__Snake-jumanji,__env__Breakout-MinAtar,__env__MountainCar-v0,__env__MetaMaze-misc)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n    d                                                                          ↪\n─────────(E[d_out|__env__PacMan-jumanji,__env__SpaceInvaders-MinAtar,__env__Sl ↪\nd[v_pred]                                                                      ↪\n\n↪                                                                              ↪\n↪ idingTilePuzzle-jumanji,__env__FourRooms-misc,__env__Snake-jumanji,__env__As ↪\n↪                                                                              ↪\n\n↪                                                                              ↪\n↪ terix-MinAtar,__env__Breakout-MinAtar,__env__MountainCar-v0,__env__MetaMaze- ↪\n↪                                                                              ↪\n\n↪       \n↪ misc])\n↪       \nEstimand assumption 1, Unconfoundedness: If U→{v_pred} and U→d_out then P(d_out|v_pred,__env__PacMan-jumanji,__env__SpaceInvaders-MinAtar,__env__SlidingTilePuzzle-jumanji,__env__FourRooms-misc,__env__Snake-jumanji,__env__Asterix-MinAtar,__env__Breakout-MinAtar,__env__MountainCar-v0,__env__MetaMaze-misc,U) = P(d_out|v_pred,__env__PacMan-jumanji,__env__SpaceInvaders-MinAtar,__env__SlidingTilePuzzle-jumanji,__env__FourRooms-misc,__env__Snake-jumanji,__env__Asterix-MinAtar,__env__Breakout-MinAtar,__env__MountainCar-v0,__env__MetaMaze-misc)\n",
+            "identified": true,
+            "method_name": "backdoor.linear_regression",
+            "n_rows": 20,
+            "outcome": "d_out",
+            "treatment": "v_pred"
+          },
+          "n_strata": 20,
+          "outcome_col": "d_out",
+          "placebo": {
+            "drift": 29.3646,
+            "method_name": "backdoor.linear_regression",
+            "n_rows": 20,
+            "outcome": "d_out",
+            "real_ate": -29.3646,
+            "refuted_ate": 4.08562e-14,
+            "refuter_name": "placebo_treatment_refuter",
+            "treatment": "v_pred"
+          },
+          "random_common_cause": {
+            "drift": 7.74527,
+            "method_name": "backdoor.linear_regression",
+            "n_rows": 20,
+            "outcome": "d_out",
+            "real_ate": -29.3646,
+            "refuted_ate": -21.6193,
+            "refuter_name": "random_common_cause",
+            "treatment": "v_pred"
+          },
+          "treatment_col": "v_pred"
+        }
+      },
+      "assumption_violations": [],
+      "blocked_by": null,
+      "bridge_name": "bias_correction_clip_predicts_outcome_placebo",
+      "direction": "direct",
+      "extent_hash": -6905409738634385451,
+      "n_cells_in_scope": 1770,
+      "n_cells_pre_scope": 3770,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "baseline_arm": "baseline",
+        "min_vanilla_predictor": 0.0,
+        "placebo_max_ratio": 0.2,
+        "predictor_col": "bootstrap_gap_magnitude",
+        "target_col": "eval_best_burst_raw_mean",
+        "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
+      },
+      "predicted_direction": null,
+      "scope_repr": "[([([([([([([([(.when([(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_gap\")).otherwise(null).is_not_nan()) | (.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_gap\")).otherwise(null).is_null())]).then(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_gap\")).otherwise(null)).otherwise(null).mean().over([col(\"env_name\"), col(\"sync_period\"), col(\"gamma\"), col(\"total_steps\"), col(\"n_step\"), col(\"reward_scale\"), col(\"action_duplicate_k\")])) > (dyn float: 0.05)]) & ([(.when([(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_dormancy_gap\")).otherwise(null).is_not_nan()) | (.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_dormancy_gap\")).otherwise(null).is_null())]).then(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_dormancy_gap\")).otherwise(null)).otherwise(null).mean().over([col(\"env_name\"), col(\"sync_period\"), col(\"gamma\"), col(\"total_steps\"), col(\"n_step\"), col(\"reward_scale\"), col(\"action_duplicate_k\")])) < (dyn float: 0.05)])]) & (col(\"n_actions\").is_finite())]) & ([(col(\"n_actions\")) >= (dyn int: 3)])]) & ([([(col(\"n_step\")) == (dyn int: 1)]) | (col(\"n_step\").is_null())])]) & (col(\"action_duplicate_k\").is_null())]) & ([(col(\"reward_scale\").is_null()) | ([(col(\"reward_scale\")) == (dyn float: 1)])])]) & (col(\"target_sync.tau\").is_null())]",
+      "source_name": "bootstrap_gap_magnitude",
+      "target_name": "eval_best_burst_raw_mean",
+      "tier": "associational",
+      "verdict": "held",
+      "warnings": [
+        {
+          "gate_name": "no_predicted_direction",
+          "level": "info",
+          "message": "Bridge 'bias_correction_clip_predicts_outcome_placebo' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
+          "passed": false
+        }
+      ]
+    },
+    {
+      "analysis_results": {
+        "stratum_vanilla_predictor_link_dowhy": {
+          "backdoor": {
+            "ate": -29.3646,
+            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n    d                                                                          ↪\n─────────(E[d_out|__env__PacMan-jumanji,__env__SpaceInvaders-MinAtar,__env__Sl ↪\nd[v_pred]                                                                      ↪\n\n↪                                                                              ↪\n↪ idingTilePuzzle-jumanji,__env__FourRooms-misc,__env__Asterix-MinAtar,__env__ ↪\n↪                                                                              ↪\n\n↪                                                                              ↪\n↪ Snake-jumanji,__env__Breakout-MinAtar,__env__MountainCar-v0,__env__MetaMaze- ↪\n↪                                                                              ↪\n\n↪       \n↪ misc])\n↪       \nEstimand assumption 1, Unconfoundedness: If U→{v_pred} and U→d_out then P(d_out|v_pred,__env__PacMan-jumanji,__env__SpaceInvaders-MinAtar,__env__SlidingTilePuzzle-jumanji,__env__FourRooms-misc,__env__Asterix-MinAtar,__env__Snake-jumanji,__env__Breakout-MinAtar,__env__MountainCar-v0,__env__MetaMaze-misc,U) = P(d_out|v_pred,__env__PacMan-jumanji,__env__SpaceInvaders-MinAtar,__env__SlidingTilePuzzle-jumanji,__env__FourRooms-misc,__env__Asterix-MinAtar,__env__Snake-jumanji,__env__Breakout-MinAtar,__env__MountainCar-v0,__env__MetaMaze-misc)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n    d                                                                          ↪\n─────────(E[d_out|__env__PacMan-jumanji,__env__SpaceInvaders-MinAtar,__env__Sl ↪\nd[v_pred]                                                                      ↪\n\n↪                                                                              ↪\n↪ idingTilePuzzle-jumanji,__env__FourRooms-misc,__env__Snake-jumanji,__env__As ↪\n↪                                                                              ↪\n\n↪                                                                              ↪\n↪ terix-MinAtar,__env__Breakout-MinAtar,__env__MountainCar-v0,__env__MetaMaze- ↪\n↪                                                                              ↪\n\n↪       \n↪ misc])\n↪       \nEstimand assumption 1, Unconfoundedness: If U→{v_pred} and U→d_out then P(d_out|v_pred,__env__PacMan-jumanji,__env__SpaceInvaders-MinAtar,__env__SlidingTilePuzzle-jumanji,__env__FourRooms-misc,__env__Snake-jumanji,__env__Asterix-MinAtar,__env__Breakout-MinAtar,__env__MountainCar-v0,__env__MetaMaze-misc,U) = P(d_out|v_pred,__env__PacMan-jumanji,__env__SpaceInvaders-MinAtar,__env__SlidingTilePuzzle-jumanji,__env__FourRooms-misc,__env__Snake-jumanji,__env__Asterix-MinAtar,__env__Breakout-MinAtar,__env__MountainCar-v0,__env__MetaMaze-misc)\n",
+            "identified": true,
+            "method_name": "backdoor.linear_regression",
+            "n_rows": 20,
+            "outcome": "d_out",
+            "treatment": "v_pred"
+          },
+          "n_strata": 20,
+          "outcome_col": "d_out",
+          "placebo": {
+            "drift": 29.3646,
+            "method_name": "backdoor.linear_regression",
+            "n_rows": 20,
+            "outcome": "d_out",
+            "real_ate": -29.3646,
+            "refuted_ate": 4.08562e-14,
+            "refuter_name": "placebo_treatment_refuter",
+            "treatment": "v_pred"
+          },
+          "random_common_cause": {
+            "drift": 8.94348,
+            "method_name": "backdoor.linear_regression",
+            "n_rows": 20,
+            "outcome": "d_out",
+            "real_ate": -29.3646,
+            "refuted_ate": -20.4211,
+            "refuter_name": "random_common_cause",
+            "treatment": "v_pred"
+          },
+          "treatment_col": "v_pred"
+        }
+      },
+      "assumption_violations": [],
+      "blocked_by": null,
+      "bridge_name": "bias_correction_clip_predicts_outcome_rcc",
+      "direction": "direct",
+      "extent_hash": -6905409738634385451,
+      "n_cells_in_scope": 1770,
+      "n_cells_pre_scope": 3770,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "baseline_arm": "baseline",
+        "min_vanilla_predictor": 0.0,
+        "predictor_col": "bootstrap_gap_magnitude",
+        "rcc_max_drift_ratio": 0.15,
+        "target_col": "eval_best_burst_raw_mean",
+        "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
+      },
+      "predicted_direction": null,
+      "scope_repr": "[([([([([([([([(.when([(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_gap\")).otherwise(null).is_not_nan()) | (.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_gap\")).otherwise(null).is_null())]).then(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_gap\")).otherwise(null)).otherwise(null).mean().over([col(\"env_name\"), col(\"sync_period\"), col(\"gamma\"), col(\"total_steps\"), col(\"n_step\"), col(\"reward_scale\"), col(\"action_duplicate_k\")])) > (dyn float: 0.05)]) & ([(.when([(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_dormancy_gap\")).otherwise(null).is_not_nan()) | (.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_dormancy_gap\")).otherwise(null).is_null())]).then(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_dormancy_gap\")).otherwise(null)).otherwise(null).mean().over([col(\"env_name\"), col(\"sync_period\"), col(\"gamma\"), col(\"total_steps\"), col(\"n_step\"), col(\"reward_scale\"), col(\"action_duplicate_k\")])) < (dyn float: 0.05)])]) & (col(\"n_actions\").is_finite())]) & ([(col(\"n_actions\")) >= (dyn int: 3)])]) & ([([(col(\"n_step\")) == (dyn int: 1)]) | (col(\"n_step\").is_null())])]) & (col(\"action_duplicate_k\").is_null())]) & ([(col(\"reward_scale\").is_null()) | ([(col(\"reward_scale\")) == (dyn float: 1)])])]) & (col(\"target_sync.tau\").is_null())]",
+      "source_name": "bootstrap_gap_magnitude",
+      "target_name": "eval_best_burst_raw_mean",
+      "tier": "associational",
+      "verdict": "no_effect",
+      "warnings": [
+        {
+          "gate_name": "no_predicted_direction",
+          "level": "info",
+          "message": "Bridge 'bias_correction_clip_predicts_outcome_rcc' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
           "passed": false
         }
       ]
@@ -1600,10 +1480,10 @@
       "analysis_results": {
         "stratified_partial_spearman": {
           "conditioning": "jensen_gap",
-          "n_obs_total": 1350,
+          "n_obs_total": 1770,
           "n_strata": 11,
-          "p_value": 0.000205829,
-          "rho_pooled": -0.116494,
+          "p_value": 0.893188,
+          "rho_pooled": 0.00355567,
           "stratify_by": "env_name",
           "x": "q_divergence_score",
           "y": "eval_best_burst_mean"
@@ -1613,9 +1493,9 @@
       "blocked_by": null,
       "bridge_name": "q_divergence_shadowed_by_jens",
       "direction": "direct",
-      "extent_hash": 8499415223903089429,
-      "n_cells_in_scope": 1350,
-      "n_cells_pre_scope": 2990,
+      "extent_hash": -6905409738634385451,
+      "n_cells_in_scope": 1770,
+      "n_cells_pre_scope": 3770,
       "pair_by": [
         "seed"
       ],
@@ -1640,10 +1520,10 @@
       "analysis_results": {
         "stratified_partial_spearman": {
           "conditioning": "jensen_gap",
-          "n_obs_total": 1350,
+          "n_obs_total": 1770,
           "n_strata": 11,
-          "p_value": 2.41159e-05,
-          "rho_pooled": 0.116324,
+          "p_value": 8.78913e-05,
+          "rho_pooled": 0.094119,
           "stratify_by": "env_name",
           "x": "argmax_entropy_late",
           "y": "eval_best_burst_mean"
@@ -1653,9 +1533,9 @@
       "blocked_by": null,
       "bridge_name": "argmax_entropy_shadowed_by_jens",
       "direction": "direct",
-      "extent_hash": 8499415223903089429,
-      "n_cells_in_scope": 1350,
-      "n_cells_pre_scope": 2990,
+      "extent_hash": -6905409738634385451,
+      "n_cells_in_scope": 1770,
+      "n_cells_pre_scope": 3770,
       "pair_by": [
         "seed"
       ],
@@ -1680,10 +1560,10 @@
       "analysis_results": {
         "stratified_partial_spearman": {
           "conditioning": "jensen_gap",
-          "n_obs_total": 1442,
+          "n_obs_total": 2029,
           "n_strata": 6,
           "p_value": 0.0,
-          "rho_pooled": -0.456178,
+          "rho_pooled": -0.414166,
           "stratify_by": "env_name",
           "x": "effective_horizon",
           "y": "eval_best_burst_mean"
@@ -1693,9 +1573,9 @@
       "blocked_by": null,
       "bridge_name": "eff_h_mediates_g_link__goal_envs",
       "direction": "direct",
-      "extent_hash": -2826288537296625838,
-      "n_cells_in_scope": 1442,
-      "n_cells_pre_scope": 2990,
+      "extent_hash": 6524518251928989160,
+      "n_cells_in_scope": 2029,
+      "n_cells_pre_scope": 3770,
       "pair_by": [
         "env_name",
         "corpus",
@@ -1725,10 +1605,10 @@
       "analysis_results": {
         "stratified_partial_spearman": {
           "conditioning": "jensen_gap",
-          "n_obs_total": 871,
+          "n_obs_total": 1051,
           "n_strata": 5,
           "p_value": 0.0,
-          "rho_pooled": 0.444005,
+          "rho_pooled": 0.440471,
           "stratify_by": "env_name",
           "x": "effective_horizon",
           "y": "eval_best_burst_mean"
@@ -1738,9 +1618,9 @@
       "blocked_by": null,
       "bridge_name": "eff_h_mediates_g_link__survival_envs",
       "direction": "direct",
-      "extent_hash": -5929856599875475397,
-      "n_cells_in_scope": 871,
-      "n_cells_pre_scope": 2990,
+      "extent_hash": 8576480967827510962,
+      "n_cells_in_scope": 1051,
+      "n_cells_pre_scope": 3770,
       "pair_by": [
         "env_name",
         "corpus",
@@ -1783,9 +1663,9 @@
       "blocked_by": null,
       "bridge_name": "target_staleness_late_mediates_outcome__minatar_intermediate_sync",
       "direction": "inverse",
-      "extent_hash": -2518384757636166617,
+      "extent_hash": 3057921620746573304,
       "n_cells_in_scope": 360,
-      "n_cells_pre_scope": 2990,
+      "n_cells_pre_scope": 3770,
       "pair_by": [
         "seed"
       ],
@@ -1911,9 +1791,9 @@
       "blocked_by": null,
       "bridge_name": "cross_config_staleness_slope_negative__survive",
       "direction": "direct",
-      "extent_hash": 4072704813821640396,
+      "extent_hash": -7891742038500431234,
       "n_cells_in_scope": 534,
-      "n_cells_pre_scope": 2990,
+      "n_cells_pre_scope": 3770,
       "pair_by": [
         "seed"
       ],
@@ -1986,7 +1866,7 @@
       "direction": "inverse",
       "extent_hash": 133146708735736,
       "n_cells_in_scope": 0,
-      "n_cells_pre_scope": 2990,
+      "n_cells_pre_scope": 3770,
       "pair_by": [
         "env_name",
         "gamma",
@@ -2056,7 +1936,7 @@
       "direction": "direct",
       "extent_hash": 133146708735736,
       "n_cells_in_scope": 0,
-      "n_cells_pre_scope": 2990,
+      "n_cells_pre_scope": 3770,
       "pair_by": [
         "env_name",
         "gamma",
@@ -2088,34 +1968,34 @@
           "cleavage_axes": [],
           "coefficients": [
             {
-              "ci_hi": 0.053403,
-              "ci_lo": -0.0724914,
-              "coefficient": -0.00954423,
+              "ci_hi": 0.0423876,
+              "ci_lo": -0.0505606,
+              "coefficient": -0.00408649,
               "is_significant": false,
               "name": "effective_horizon",
-              "p_value": 0.662448
+              "p_value": 0.79779
             }
           ],
-          "i_squared": 0.886454,
-          "intercept": 0.759591,
-          "intercept_ci_hi": 3.5967,
-          "intercept_ci_lo": -2.07752,
-          "intercept_p_value": 0.456803,
-          "intercept_se": 0.891488,
+          "i_squared": 0.845061,
+          "intercept": 0.456629,
+          "intercept_ci_hi": 2.53605,
+          "intercept_ci_lo": -1.62279,
+          "intercept_p_value": 0.534954,
+          "intercept_se": 0.653404,
           "n_strata": 5,
           "pool": "random",
-          "q_statistic": 26.4209,
-          "r_squared": 0.0720223,
-          "tau_sq": 0.289311
+          "q_statistic": 19.3625,
+          "r_squared": 0.0254383,
+          "tau_sq": 0.159541
         }
       },
       "assumption_violations": [],
       "blocked_by": null,
       "bridge_name": "effh_predicts_link_power__reach_envs",
       "direction": "direct",
-      "extent_hash": -8365709530885934750,
-      "n_cells_in_scope": 660,
-      "n_cells_pre_scope": 2990,
+      "extent_hash": 2116953852283803157,
+      "n_cells_in_scope": 1080,
+      "n_cells_pre_scope": 3770,
       "pair_by": [
         "seed"
       ],
@@ -2174,9 +2054,9 @@
       "blocked_by": null,
       "bridge_name": "argmax_entropy_link_power_null__survive_envs",
       "direction": "direct",
-      "extent_hash": -5697815508748610435,
+      "extent_hash": -5339234991855061191,
       "n_cells_in_scope": 539,
-      "n_cells_pre_scope": 2990,
+      "n_cells_pre_scope": 3770,
       "pair_by": [
         "seed"
       ],
@@ -2216,11 +2096,12 @@
   ],
   "cache_path": "experiments/data/cache/ddqn.parquet",
   "errored_bridges": [],
-  "git_commit": "21bbf28a2fd0",
+  "git_commit": "46a4d8891847",
   "hypothesis_module": "experiments.findings.ddqn",
   "measurable_signatures": {
     "argmax_entropy_late": "22f4c683c0bfee66",
     "bootstrap_fraction": "5c7cc97efa79e56c",
+    "bootstrap_gap_magnitude": "ce40d5b7604673a8",
     "clip_wedge_polarity_aligned": "3c70653d539f5ffc",
     "effective_horizon": "a4610d696d3eec35",
     "env_reward_polarity": "4761fcc1b08efcca",
@@ -2230,7 +2111,6 @@
     "jensen_dormancy_gap": "12502f5ce2171f73",
     "jensen_dormancy_gap_at_best_burst": "3319a3c33bc6a16b",
     "jensen_gap": "950342c492febd27",
-    "mc_return_raw__mean_axis_-1": "00f86db58d4650c8",
     "outcome_native": "e341c5547e14bb9a",
     "q_divergence_score": "fec5bd72d1fb6609",
     "q_late_mean": "2b8f0297335ad2e5",
@@ -2238,6 +2118,6 @@
     "r_min": "5717682c68a0f956",
     "target_staleness_late": "14b90395c7aabd2e"
   },
-  "n_cells_total": 2990,
-  "timestamp_utc": "2026-05-12T23:05:47+00:00"
+  "n_cells_total": 3770,
+  "timestamp_utc": "2026-05-13T01:39:23+00:00"
 }

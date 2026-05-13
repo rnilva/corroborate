@@ -12,6 +12,7 @@ import numpy as np
 from corroborate_rl.dqn.measurables import (
     fill_ratio_late,
     greedy_match_late,
+    q_autocorr_late,
     q_gap_growth,
     q_gap_late,
     q_max_growth,
@@ -65,6 +66,49 @@ def test_q_max_growth_handles_zero_early_via_floor() -> None:
     assert math.isclose(q_max_growth(record), 1e9, rel_tol=1e-6)
 
 
+def test_q_autocorr_late_perfect_smooth_returns_one() -> None:
+    """A late half that is a linear ramp has lag-1 autocorr = 1.0
+    by construction — adjacent pairs differ by a constant."""
+    record = {
+        'online_max_q_per_step': np.array(
+            [0.0, 0.0, 0.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+        ),
+    }
+    # late half (idx 5..10): [2,3,4,5,6]; pairs (2,3),(3,4),(4,5),(5,6) → r=1
+    assert math.isclose(q_autocorr_late(record), 1.0, abs_tol=1e-9)
+
+
+def test_q_autocorr_late_alternating_returns_minus_one() -> None:
+    """Alternating high-low late-window has lag-1 autocorr = -1.0
+    (perfect anti-correlation: each pair is one above-mean and one
+    below)."""
+    record = {
+        'online_max_q_per_step': np.array(
+            [0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0],
+        ),
+    }
+    assert math.isclose(q_autocorr_late(record), -1.0, abs_tol=1e-9)
+
+
+def test_q_autocorr_late_constant_returns_nan() -> None:
+    """Constant late-window has zero std → corrcoef is undefined.
+    Measurable returns NaN rather than propagate inf/divide errors."""
+    record = {
+        'online_max_q_per_step': np.array([1.0, 1.0, 1.0, 1.0]),
+    }
+    assert math.isnan(q_autocorr_late(record))
+
+
+def test_q_autocorr_late_missing_key_returns_nan() -> None:
+    assert math.isnan(q_autocorr_late({}))
+
+
+def test_q_autocorr_late_too_short_returns_nan() -> None:
+    """Late half must have at least 2 values for lag-1 pairs."""
+    record = {'online_max_q_per_step': np.array([1.0])}
+    assert math.isnan(q_autocorr_late(record))
+
+
 def test_v_vs_max_delta_late_abs_diff_late_half() -> None:
     record = {
         'online_max_q_per_step': np.array([2.0, 2.0, 4.0, 4.0]),
@@ -115,6 +159,7 @@ def test_late_window_measurables_registered_under_their_function_names() -> None
 
     for name in (
         'q_gap_late', 'q_gap_growth', 'q_max_growth',
+        'q_autocorr_late',
         'v_vs_max_delta_late', 'td_residual_late',
         'greedy_match_late', 'fill_ratio_late',
     ):
