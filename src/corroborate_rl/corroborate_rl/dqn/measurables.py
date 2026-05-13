@@ -645,6 +645,36 @@ def q_late_mean(record: Mapping[str, object]) -> float:
     return _mean_window(arr, 0.5, 1.0)
 
 
+@measurable(reads=('online_max_q_per_step', 'eval_step_index'))
+def q_per_burst(
+    record: Mapping[str, object],
+) -> npt.NDArray[np.float64]:
+    """Per-burst mean of `online_max_q_per_step`. Returns `(n_bursts,)`.
+
+    Per-burst analog of `q_late_mean` (full-trajectory late-50%
+    reduction). Chunks per-step Q into n_bursts equal training-step
+    windows, takes mean per window. The Q-magnitude channel at
+    per-burst granularity for the two-channel decomposition
+    (`findings_ddqn_reward_sign_conditional.md`):
+    `bg_per_burst → mc_per_burst` and `q_per_burst → mc_per_burst`
+    are independent direct edges in the per-burst PC graph."""
+    arr = _record_array(record, 'online_max_q_per_step')
+    eval_idx = _record_array(record, 'eval_step_index')
+    if arr is None or eval_idx is None:
+        return np.zeros((0,), dtype=np.float64)
+    n = int(arr.shape[0])
+    if n == 0:
+        return np.zeros((0,), dtype=np.float64)
+    n_bursts = int(eval_idx.shape[0])
+    if n_bursts == 0:
+        return np.zeros((0,), dtype=np.float64)
+    edges = np.linspace(0, n, n_bursts + 1, dtype=np.int64)
+    return np.array(
+        [float(arr[edges[i]:edges[i+1]].mean()) for i in range(n_bursts)],
+        dtype=np.float64,
+    )
+
+
 @measurable(reads=('online_max_q_per_step',))
 def q_max_growth(record: Mapping[str, object]) -> float:
     """late_quarter / max(|early_quarter|, 1e-9) of online_max_q.

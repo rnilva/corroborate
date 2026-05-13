@@ -54,3 +54,12 @@ FINDINGS = (
     finding_metamaze_gamma_amplification,
     finding_rs01_rescue_envelope,
 )
+
+
+# Pre-populate measurables that have no bridge consumer yet but
+# are needed for the per-burst two-channel decomposition
+# (`findings_ddqn_reward_sign_conditional.md`). Validated against
+# the @measurable registry at `_validate_hypothesis`.
+REQUIRED_MEASURABLES: tuple[str, ...] = (
+    'q_per_burst',
+)
