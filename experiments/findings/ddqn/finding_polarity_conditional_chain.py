@@ -42,14 +42,22 @@ from corroborate.bridge.bridge import Bridge
 from corroborate.graph.causal import ClusterVerdict
 
 from experiments.findings.ddqn.bias_correction import (
-    bg_link_to_outcome__survive,
-    bg_link_to_outcome_null__reach,
     intervention_predicts_policy_decisiveness__mc_free,
     policy_decisiveness_helps_outcome__survive,
     policy_decisiveness_hurts_outcome__reach,
 )
 
 
+# Cell-level: all 3 bridges fire HELD → cluster SUPPORTED.
+# Per-burst follow-up (sibling
+# `finding_polarity_chain_aggregation_artifact`, pending per-
+# burst measurable authoring) tests whether this cell-level
+# pattern survives at finer granularity. Diagnostic 2026-05-13
+# suggests it largely doesn't — ρ(entropy_per_burst,
+# mc_per_burst) contradicts the polarity hypothesis in 2 of 4
+# within-env cohorts (Acrobot REACH-positive, SpaceInvaders
+# SURVIVE-negative). The substantive interpretation should
+# defer to the per-burst Finding once authored.
 EXPECTED: ClusterVerdict = ClusterVerdict.SUPPORTED
 
 

@@ -40,8 +40,15 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping
 
+import numpy as np  # noqa: F401  # imported for bridge param type strings
+import numpy.typing as npt  # noqa: F401  # imported for bridge param type strings
 import polars as pl
 
+from corroborate.measurables import Measurable  # noqa: F401  # for bridge param type strings
+
+from corroborate.analyses.per_burst_jci_spearman import (
+    PerBurstJciSpearmanResult,
+)
 from corroborate.analyses.stratified_arm_diff_pooled import (
     StratifiedArmDiffPooledResult,
 )
@@ -63,6 +70,11 @@ from corroborate.bridge.bridge import Direction, Tier, claim_bridge
 from corroborate.bridge.verdict import Verdict
 
 from experiments.findings.ddqn._arms import DDQN_ARM, INTERVENTION, VANILLA_ARM
+from experiments.findings.ddqn._common import (
+    ARGMAX_ENTROPY_PER_BURST,
+    BOOTSTRAP_GAP_MAGNITUDE_PER_BURST,
+    MC_RETURN_RAW_PER_BURST_MEAN,
+)
 from experiments.findings.ddqn._scope import (
     DDQN_RELEVANT_SCOPE, VANILLA_JENS_NOISE_FLOOR,
 )
@@ -993,6 +1005,127 @@ def intervention_outcome_link__decoupled_envs_only(
     )
 
 
+# === Per-burst chain bridges (option-3 sub-phase C) ===
+#
+# Per-burst granular versions of the bg → entropy → outcome
+# chain. Use `bootstrap_gap_magnitude_per_burst` and
+# `argmax_entropy_per_burst` (windowed training-step measurables)
+# instead of the cell-level `bootstrap_gap_magnitude` and
+# `argmax_entropy_late`. This surfaces phase-specific causal
+# structure that cell-level aggregation averages away.
+#
+# Empirical diagnostic 2026-05-13: cell-level pooled ρ(bg, ent)
+# = +0.39 hides wild per-env per-burst heterogeneity. Acrobot
+# shows bg→ent ≈ 0 at every burst; FourRooms +0.85; Asterix
+# rises +0.27 → +0.85 with training; Breakout sign-flips. Per-
+# burst JCI (env-stratified) pools over (env, burst) rows, which
+# preserves more of this dynamic than the full-trajectory mean.
+
+
+@claim_bridge(
+    source='bootstrap_gap_magnitude_per_burst',
+    target='argmax_entropy_per_burst',
+    direction=Direction.DIRECT,
+    tier=Tier.ASSOCIATIONAL,
+    scope=DDQN_RELEVANT_SCOPE,
+    predicted_direction='a_gt_b',
+)
+def bg_per_burst_predicts_entropy_per_burst(
+    per_burst_jci_spearman: PerBurstJciSpearmanResult,
+    *,
+    x: 'Measurable[Mapping[str, object], npt.NDArray[np.floating]]' = (
+        BOOTSTRAP_GAP_MAGNITUDE_PER_BURST  # noqa: F821
+    ),
+    y: 'Measurable[Mapping[str, object], npt.NDArray[np.floating]]' = (
+        ARGMAX_ENTROPY_PER_BURST  # noqa: F821
+    ),
+    stratify_by: str = 'env_name',
+    min_stratum_size: int = 5,
+    rho_threshold: float = 0.2,
+    min_strata: int = 5,
+) -> Verdict:
+    """Per-burst bg → entropy link. Each (cell, burst) is one
+    observation; JCI Spearman with env as stratifier. Predicted
+    positive."""
+    del x, y, stratify_by, min_stratum_size
+    return partial_spearman_signed_verdict(
+        per_burst_jci_spearman,
+        threshold=rho_threshold, sign=1, min_strata=min_strata,
+    )
+
+
+@claim_bridge(
+    source='argmax_entropy_per_burst',
+    target='mc_return_raw__mean_axis_-1',
+    direction=Direction.DIRECT,
+    tier=Tier.ASSOCIATIONAL,
+    scope=DDQN_RELEVANT_SCOPE,
+    predicted_direction='null',
+)
+def entropy_per_burst_predicts_outcome_per_burst(
+    per_burst_jci_spearman: PerBurstJciSpearmanResult,
+    *,
+    x: 'Measurable[Mapping[str, object], npt.NDArray[np.floating]]' = (
+        ARGMAX_ENTROPY_PER_BURST  # noqa: F821
+    ),
+    y: 'Measurable[Mapping[str, object], npt.NDArray[np.floating]]' = (
+        MC_RETURN_RAW_PER_BURST_MEAN  # noqa: F821
+    ),
+    stratify_by: str = 'env_name',
+    min_stratum_size: int = 5,
+    null_max_abs_rho: float = 0.2,
+    min_strata: int = 5,
+) -> Verdict:
+    """Per-burst entropy → outcome link. Predicted-null: per-
+    burst diagnostic shows env-by-env sign mixed (Acrobot
+    POSITIVE despite REACH-polarity; SpaceInvaders NEGATIVE
+    despite SURVIVE-polarity); pooled rho should be near zero.
+    HELD when |ρ| < null_max_abs_rho — null prediction confirmed,
+    which UNDERCUTS the cell-level polarity-conditional chain
+    claim."""
+    del x, y, stratify_by, min_stratum_size
+    return partial_spearman_null_verdict(
+        per_burst_jci_spearman,
+        max_abs_rho=null_max_abs_rho, min_strata=min_strata,
+    )
+
+
+@claim_bridge(
+    source='bootstrap_gap_magnitude_per_burst',
+    target='mc_return_raw__mean_axis_-1',
+    direction=Direction.DIRECT,
+    tier=Tier.ASSOCIATIONAL,
+    scope=DDQN_RELEVANT_SCOPE,
+    predicted_direction='null',
+)
+def bg_per_burst_link_to_outcome(
+    per_burst_jci_spearman: PerBurstJciSpearmanResult,
+    *,
+    x: 'Measurable[Mapping[str, object], npt.NDArray[np.floating]]' = (
+        BOOTSTRAP_GAP_MAGNITUDE_PER_BURST  # noqa: F821
+    ),
+    y: 'Measurable[Mapping[str, object], npt.NDArray[np.floating]]' = (
+        MC_RETURN_RAW_PER_BURST_MEAN  # noqa: F821
+    ),
+    stratify_by: str = 'env_name',
+    min_stratum_size: int = 5,
+    null_max_abs_rho: float = 0.2,
+    min_strata: int = 5,
+) -> Verdict:
+    """Per-burst bg → outcome link. Predicted-null: per-burst
+    diagnostic on Acrobot shows strong NEGATIVE ρ(bg, mc) ≈ -0.8
+    while pooled across envs cancels. HELD when |ρ_pooled| <
+    null_max_abs_rho. A null verdict here means the cell-level
+    bg-outcome link (which we earlier showed null) ALSO doesn't
+    have a clean per-burst signature — it's environment-
+    specific, not pool-detectable."""
+    del x, y, stratify_by, min_stratum_size
+    return partial_spearman_null_verdict(
+        per_burst_jci_spearman,
+        max_abs_rho=null_max_abs_rho, min_strata=min_strata,
+    )
+
+
 BRIDGES = (
     bias_premise_jens_predicts_outcome_backdoor,
     bias_premise_jens_predicts_outcome_placebo,
@@ -1013,4 +1146,7 @@ BRIDGES = (
     policy_decisiveness_hurts_outcome__reach,
     bg_link_to_outcome__survive,
     bg_link_to_outcome_null__reach,
+    bg_per_burst_predicts_entropy_per_burst,
+    entropy_per_burst_predicts_outcome_per_burst,
+    bg_per_burst_link_to_outcome,
 )

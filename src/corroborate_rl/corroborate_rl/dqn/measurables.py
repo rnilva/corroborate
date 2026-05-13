@@ -658,6 +658,40 @@ def q_max_growth(record: Mapping[str, object]) -> float:
     return float(late / max(abs(early), 1e-9))
 
 
+@measurable(reads=('q_action_grad_overlap_per_step',))
+def q_action_grad_overlap_late(record: Mapping[str, object]) -> float:
+    """Late-window mean of per-step `q_action_grad_overlap_per_step`:
+    mean off-diagonal cosine similarity of `∂Q(s, a_i)/∂θ` for action
+    pairs (i, j) at a single sampled batch state per training step,
+    averaged over the late 50% of training.
+
+    THE theoretical intra-state α from `findings_fa_depth_within_env`:
+    when the trunk's gradient is updated, this is the cross-action
+    correlation that propagates the update into all action heads.
+
+    Closed-form references:
+      - Tabular Q (independent (s,a) entries): α = 0
+      - Linear FA `Q(s,a) = W_a · obs + b_a` (independent rows): α = 0
+      - Shared-trunk MLP: α > 0, magnitude depends on trunk
+        capacity + action-head dot products
+
+    THIS is the measurement that distinguishes FA architectures
+    in the way the FA-coherence theory specifies. The
+    `q_action_temporal_corr_at_state_late` reduction measured
+    Q-VALUE temporal correlation, which conflates this gradient-
+    overlap with limited-capacity Q-rank-deficiency and
+    trajectory-induced drift; it returns near-1 for BOTH linear
+    and deep FA. Use `q_action_grad_overlap_late` for the
+    architectural-α test; use the temporal correlation only as
+    a Q-rank-deficiency proxy."""
+    arr = _record_array(record, 'q_action_grad_overlap_per_step')
+    if arr is None:
+        return float('nan')
+    if arr.ndim == 0 or arr.shape[0] < 2:
+        return float('nan')
+    return _mean_window(arr, 0.5, 1.0)
+
+
 @measurable(reads=('online_max_q_per_step',))
 def q_autocorr_late(record: Mapping[str, object]) -> float:
     """Lag-1 Pearson autocorrelation of `online_max_q_per_step`
@@ -1100,6 +1134,84 @@ def greedy_match_per_burst(
         [match[edges[i]:edges[i+1]].mean() for i in range(n_bursts)],
         dtype=np.float64,
     )
+
+
+@measurable(reads=(
+    'target_max_q_per_step', 'target_q_at_online_argmax_per_step',
+    'eval_step_index',
+))
+def bootstrap_gap_magnitude_per_burst(
+    record: Mapping[str, object],
+) -> npt.NDArray[np.float64]:
+    """Per-burst bootstrap_gap magnitude. Returns `(n_bursts,)`.
+    Chunks the per-step `target_max − target_q_at_online_argmax`
+    into n_bursts equal training-step windows, takes mean per
+    window.
+
+    Per-burst analog of `bootstrap_gap_magnitude` (full-trajectory
+    mean). Surfaces phase-specific bg dynamics that the full-
+    trajectory reduction averages away. Critical for causal
+    analysis on training trajectories with non-monotone phases
+    (Q-explosion → convergence, rescue regimes, etc.)."""
+    target_max = _record_array(record, 'target_max_q_per_step')
+    target_argonline = _record_array(
+        record, 'target_q_at_online_argmax_per_step',
+    )
+    eval_idx = _record_array(record, 'eval_step_index')
+    if target_max is None or target_argonline is None or eval_idx is None:
+        return np.zeros((0,), dtype=np.float64)
+    n = min(target_max.shape[0], target_argonline.shape[0])
+    if n == 0:
+        return np.zeros((0,), dtype=np.float64)
+    gap = target_max[:n] - target_argonline[:n]
+    n_bursts = int(eval_idx.shape[0])
+    if n_bursts == 0:
+        return np.zeros((0,), dtype=np.float64)
+    edges = np.linspace(0, n, n_bursts + 1, dtype=np.int64)
+    return np.array(
+        [float(gap[edges[i]:edges[i+1]].mean()) for i in range(n_bursts)],
+        dtype=np.float64,
+    )
+
+
+@measurable(reads=('online_argmax_per_step', 'eval_step_index', 'n_actions'))
+def argmax_entropy_per_burst(
+    record: Mapping[str, object],
+) -> npt.NDArray[np.float64]:
+    """Per-burst Shannon entropy (nats) of `online_argmax_per_step`
+    distribution. Returns `(n_bursts,)`.
+
+    Per-burst analog of `argmax_entropy_late` (late-50% window).
+    Each burst's entropy is computed from the argmax counts in
+    that burst's training-step window. Surfaces phase-specific
+    policy-decisiveness dynamics that the late-window reduction
+    averages away."""
+    argmax = _record_array(record, 'online_argmax_per_step')
+    eval_idx = _record_array(record, 'eval_step_index')
+    n_actions_v = record.get('n_actions')
+    if argmax is None or eval_idx is None:
+        return np.zeros((0,), dtype=np.float64)
+    if not isinstance(n_actions_v, int):
+        return np.zeros((0,), dtype=np.float64)
+    n_bursts = int(eval_idx.shape[0])
+    if n_bursts == 0:
+        return np.zeros((0,), dtype=np.float64)
+    n_steps = argmax.shape[0]
+    edges = np.linspace(0, n_steps, n_bursts + 1, dtype=np.int64)
+    out = np.zeros((n_bursts,), dtype=np.float64)
+    for i in range(n_bursts):
+        chunk = argmax[edges[i]:edges[i+1]].astype(np.int64)
+        if chunk.size == 0:
+            out[i] = float('nan')
+            continue
+        counts = np.bincount(chunk, minlength=int(n_actions_v))
+        p = counts.astype(np.float64) / counts.sum()
+        p_nz = p[p > 0]
+        if p_nz.size == 0:
+            out[i] = float('nan')
+            continue
+        out[i] = float(-(p_nz * np.log(p_nz)).sum())
+    return out
 
 
 @measurable(reads=('buf_size',))
@@ -2345,6 +2457,13 @@ def dqn_default_measurables() -> tuple[
         # beating ep_len + chain + |A| in the post-fix panel
         # (`findings_fa_coherence_bias`).
         q_autocorr_late,
+        # FA intra-state α — gradient-overlap probe at a sampled
+        # batch state per training step. THE theoretical intra-
+        # state α that distinguishes shared-trunk MLP (α > 0) from
+        # linear FA (α = 0) from tabular (α = 0). Persisted as a
+        # per-step trace column by `train_phase`'s gradient-
+        # overlap probe block.
+        q_action_grad_overlap_late,
         # Raw (undiscounted) eval-return scalar — γ-invariant
         # policy-quality metric for cross-γ / cross-env bridges.
         # Reconstructs per-(burst, episode) raw return inline from

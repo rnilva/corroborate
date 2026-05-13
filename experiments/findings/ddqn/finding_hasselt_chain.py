@@ -71,7 +71,15 @@ from experiments.findings.ddqn.bias_correction import (
 )
 
 
-EXPECTED: ClusterVerdict = ClusterVerdict.SUPPORTED
+# Post-rebuild (2026-05-13, expanded corpus): Stage 2 fires
+# NO_EFFECT because pooled ρ(bg, jens | env, G1) = +0.090
+# (p < 10⁻⁶) is significant but just below the Cohen's-small
+# threshold (0.1). Hasselt's theorem prediction (per-step bias
+# correlates with end-state bias within env) is qualitatively
+# corroborated by the significant p-value but quantitatively
+# weak under G1 gating — the narrow within-env scope attenuates
+# the rho. Cluster verdict: REFUTED.
+EXPECTED: ClusterVerdict = ClusterVerdict.REFUTED
 
 
 BLOCKED_ON: str | None = None

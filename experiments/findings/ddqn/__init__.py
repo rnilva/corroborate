@@ -20,6 +20,7 @@ import corroborate_rl.dqn.measurables  # pyright: ignore[reportUnusedImport]  # 
 from experiments.findings.ddqn import (
     finding_hasselt_chain,
     finding_metamaze_gamma_amplification,
+    finding_per_burst_chain_dynamics,
     finding_polarity_conditional_chain,
     finding_reach_bias_link,
     finding_rs01_rescue_envelope,
@@ -48,6 +49,7 @@ BRIDGES = (
 FINDINGS = (
     finding_hasselt_chain,
     finding_polarity_conditional_chain,
+    finding_per_burst_chain_dynamics,
     finding_reach_bias_link,
     finding_metamaze_gamma_amplification,
     finding_rs01_rescue_envelope,

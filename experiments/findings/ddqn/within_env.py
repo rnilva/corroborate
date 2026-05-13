@@ -22,7 +22,6 @@ from corroborate.stats import MetaRegressionResult
 from experiments.findings.ddqn._arms import (
     DDQN_ARM, INTERVENTION, VANILLA_ARM,
 )
-from experiments.findings.ddqn._common import JENSEN_BIAS_PER_BURST_MEAN
 from experiments.findings.ddqn._scope import (
     G1_VANILLA_CONFIG_PREMISE_ACTIVE,
     VANILLA_JENS_NOISE_FLOOR,
@@ -258,10 +257,10 @@ _AUTOCORR_PER_ENV: dict[object, dict[str, float]] = {
 }
 
 
-# CLAIM 27 — Cross-env: DDQN's per-burst bias-reduction scales with FA-coherence.
+# CLAIM 27 — Cross-env: DDQN's bias-reduction scales with FA-coherence.
 @claim_bridge(
     source=INTERVENTION,
-    target='jensen_bias_per_eps__mean_axis_-1',
+    target='jensen_gap',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
     scope=(
@@ -270,26 +269,33 @@ _AUTOCORR_PER_ENV: dict[object, dict[str, float]] = {
         & ((pl.col('n_step') == 1) | pl.col('n_step').is_null())
         & pl.col('action_duplicate_k').is_null()
         & (pl.col('reward_scale').is_null() | (pl.col('reward_scale') == 1.0))
+        & pl.col('jensen_gap').is_finite()
     ),
     predicted_direction='a_lt_b',
 )
 def ddqn_bias_reduction_scales_with_fa_coherence__cross_env(
-    meta_regression_per_burst: MetaRegressionResult,
+    meta_regression_unpaired_d: MetaRegressionResult,
     *,
     treatment_arm: str = DDQN_ARM,
     baseline_arm: str = VANILLA_ARM,
-    source: object = JENSEN_BIAS_PER_BURST_MEAN,
-    covariates_per_env: dict[str, dict[str, float]] = (
-        # `_AUTOCORR_PER_ENV` is keyed by `object` (Hashable for arbitrary
-        # stratum-id values); covariates_per_env wants `dict[str, ...]`.
-        # Cast at the call site via a fresh dict literal.
-        {
-            k if isinstance(k, str) else str(k): v
-            for k, v in _AUTOCORR_PER_ENV.items()
-        }
+    source: str = 'jensen_gap',
+    # Stratify by (env, config) — different configs at the same
+    # env land in distinct strata. Independent-samples Cohen's d
+    # per (env, config), no seed-pairing (per
+    # `feedback_paired_g_in_rl`: RL seed-pairing inflates SE
+    # without genuine within-subject correlation; trajectories
+    # diverge by the first decision step).
+    stratify_by: tuple[str, ...] = (
+        'env_name', 'total_steps', 'replay.capacity', 'sync_period',
     ),
+    covariate_key_field: str = 'env_name',
+    covariates_per_key: dict[object, dict[str, float]] = (
+        _AUTOCORR_PER_ENV
+    ),
+    scope_predictor: str = 'jensen_gap',
+    min_vanilla_predictor: float = VANILLA_JENS_NOISE_FLOOR,
     slope_threshold: float = 0.3,
-    min_strata: int = 10,
+    min_strata: int = 4,
 ) -> Verdict:
     """Cross-env do(DDQN) probe at the BIAS level: per-(env, burst)
     Δ_jens = jens_DDQN − jens_vanilla → meta-regress on
@@ -325,15 +331,17 @@ def ddqn_bias_reduction_scales_with_fa_coherence__cross_env(
     "small"). A meaningful FA-coherence-driven bias reduction.
 
     The complementary OUTCOME bridge — DDQN's outcome benefit
-    scaling with autocorr — runs null cross-env at γ=0.99 (per-
-    burst β = +0.05, p = 0.67) because the bias-→-outcome
-    translation is gated by per-env G3 outcome-headroom (different
-    envs have different ceilings; CartPole sees its outcome
-    plummet at high-jens regardless of DDQN). The bias-level
-    claim is the cleaner test of the mechanism."""
-    del treatment_arm, baseline_arm, source, covariates_per_env
+    scaling with autocorr — runs null cross-env at γ=0.99
+    because the bias-→-outcome translation is gated by per-env
+    G3 outcome-headroom (different envs have different ceilings;
+    CartPole sees its outcome plummet at high-jens regardless
+    of DDQN). The bias-level claim is the cleaner test of the
+    mechanism."""
+    del treatment_arm, baseline_arm, source, stratify_by
+    del covariate_key_field, covariates_per_key
+    del scope_predictor, min_vanilla_predictor
     return meta_regression_coefficient_verdict(
-        meta_regression_per_burst,
+        meta_regression_unpaired_d,
         'q_autocorr_vanilla',
         sign=-1,
         threshold=slope_threshold,
