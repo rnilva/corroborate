@@ -1,0 +1,85 @@
+name: lr_capacity_mountaincar
+out_dir: experiments/data/lr_capacity_mountaincar
+arms_shape: chunked
+archive_remote: s3://corroborate-archive/lr_capacity_mountaincar
+
+# Adds G1-active config variation to MountainCar to unblock the
+# per-env bootstrap_gap_magnitude → Δ_outcome correlation. Current
+# cache has only 1 G1-active MountainCar config (clip ≈ 0.02), so
+# the within-env r is undefined. This sweep adds 4 more configs by
+# varying `replay.capacity` and `optimizer.inner.lr` independently,
+# keeping every other knob at the MountainCar default.
+#
+# Predicted: configs span clip ≈ 0.01-0.04 (capacity & lr both
+# modulate effective sample efficiency, which moves the gap
+# between online and target argmax). Within-env n=5 lets us
+# compute Pearson r between vanilla clip-magnitude and DDQN
+# Cohen-d-on-outcome and unblock MountainCar's contribution to
+# the cross-env panel (`finding_reach_bias_link` REFUTED →
+# possibly UNDERPOWERED / SUPPORTED depending on what these add).
+#
+# 4 configs × 2 arms × 30 seeds × 200k = 8 cells.
+# CPU runtime ~2-3 min/cell × 8 ≈ 20-25 min wall on MLP [64, 64].
+
+envs:
+  - {name: MountainCar-v0, n_seeds: 30, chunk_size: 30}
+
+base_intervention:
+  total_steps: 200000
+  eval_every:  20000
+  n_episodes:  5
+  gamma:       0.99
+  sync_period: 100
+  replay:
+    class: Replay
+    capacity: 50000
+    batch_size: 32
+  optimizer:
+    fn: warmed_update
+    inner: {fn: adam, lr: 0.0001}
+    warmup_steps: 100
+  q_network:
+    class: MLP
+    hidden: [64, 64]
+
+hypotheses:
+  - name: cap10k_lr1e4
+    predicted_direction: a_gt_b
+    intervention: {replay: {class: Replay, capacity: 10000, batch_size: 32}}
+    arms:
+      - []
+      - - slot_path: bootstrap
+          replacement:
+            fn: bootstrap
+            greedification: {fn: double_greedify}
+
+  - name: cap25k_lr1e4
+    predicted_direction: a_gt_b
+    intervention: {replay: {class: Replay, capacity: 25000, batch_size: 32}}
+    arms:
+      - []
+      - - slot_path: bootstrap
+          replacement:
+            fn: bootstrap
+            greedification: {fn: double_greedify}
+
+  - name: cap50k_lr3e4
+    predicted_direction: a_gt_b
+    intervention:
+      optimizer: {fn: warmed_update, inner: {fn: adam, lr: 0.0003}, warmup_steps: 100}
+    arms:
+      - []
+      - - slot_path: bootstrap
+          replacement:
+            fn: bootstrap
+            greedification: {fn: double_greedify}
+
+  - name: cap100k_lr1e4
+    predicted_direction: a_gt_b
+    intervention: {replay: {class: Replay, capacity: 100000, batch_size: 32}}
+    arms:
+      - []
+      - - slot_path: bootstrap
+          replacement:
+            fn: bootstrap
+            greedification: {fn: double_greedify}

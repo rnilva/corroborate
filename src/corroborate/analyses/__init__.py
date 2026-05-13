@@ -46,6 +46,7 @@ from corroborate.analyses import (  # noqa: F401
     stratum_delta_link_dowhy as _stratum_delta_link_dowhy,  # pyright: ignore[reportUnusedImport]
     stratum_link_moderation_dowhy as _stratum_link_moderation,  # pyright: ignore[reportUnusedImport]
     stratum_vanilla_predictor_link_dowhy as _stratum_vanilla_pred_link,  # pyright: ignore[reportUnusedImport]
+    stratum_panel_jci_spearman as _stratum_panel_jci_spearman,  # pyright: ignore[reportUnusedImport]
     proportion_mediated as _proportion_mediated,  # pyright: ignore[reportUnusedImport]
     partial_spearman_paired as _psp,  # pyright: ignore[reportUnusedImport]
     cross_config_paired_slope as _ccps,  # pyright: ignore[reportUnusedImport]

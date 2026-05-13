@@ -37,8 +37,12 @@ All bridges use independent-samples stratum aggregation (no
 seed pairing per `feedback_paired_g_in_rl`)."""
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 
+from corroborate.analyses.stratum_panel_jci_spearman import (
+    StratumPanelJciResult,
+)
 from corroborate.analyses.stratum_vanilla_predictor_link_dowhy import (
     StratumVanillaPredictorLinkDowhyResult,
 )
@@ -269,6 +273,157 @@ def bias_correction_clip_predicts_outcome_rcc(
     )
 
 
+# === Cluster 3: JCI/PC mediation falsification (predicted NULL) ===
+#
+# Encodes the causal-discovery refutation directly. Three bridges
+# author null-form claims at three test levels:
+#
+# 1. JCI-stratified Spearman ρ(v_clip, Δ_outcome | env) — pooled
+#    within-env Spearman, Fisher-z averaged. The "raw" within-env
+#    link, scale-decontaminated. **Predicted near zero**.
+# 2. JCI + partial: ρ(v_clip, Δ_outcome | v_outcome, env) — same
+#    but with vanilla outcome (config-quality proxy) partialled
+#    out. The strongest falsification of "bias-correction
+#    magnitude causes outcome gain" — controls for env AND
+#    config-quality. **Predicted near zero**.
+# 3. Sibling test using `jensen_gap` predictor — should also fire
+#    NULL (algebra collapses to noise after env + quality
+#    control). Documents that no jens-based predictor escapes the
+#    null result.
+#
+# Empirical reading 2026-05-13 (n_strata=29, 11 envs): ρ_jci =
+# +0.075 (p=0.87), ρ_jci_partial = -0.61 (p=0.22, sign flips
+# after config-quality control). PC at depth-1 env-stratified
+# removes the v_clip↔delta_out edge at Z={∅}. The mediation link
+# is empirically NULL on this corpus.
+
+
+def _jci_null_verdict(
+    res: StratumPanelJciResult,
+    *,
+    rho: float,
+    null_max_abs_rho: float,
+    min_strata: int,
+) -> Verdict:
+    """Null-form Spearman verdict. HELD when |ρ| <
+    `null_max_abs_rho` (predicted-null confirmed); NO_EFFECT
+    when |ρ| ≥ threshold (would-be mediation signal exceeds the
+    null tolerance — null prediction empirically refuted)."""
+    if res.n_strata < min_strata:
+        return Verdict.POWER_INSUFFICIENT
+    if math.isnan(rho):
+        return Verdict.POWER_INSUFFICIENT
+    if abs(rho) < null_max_abs_rho:
+        return Verdict.HELD
+    return Verdict.NO_EFFECT
+
+
+@claim_bridge(
+    source='bootstrap_gap_magnitude',
+    target='eval_best_burst_raw_mean',
+    direction=Direction.DIRECT,
+    tier=Tier.ASSOCIATIONAL,
+    scope=DDQN_RELEVANT_SCOPE,
+    predicted_direction='null',
+)
+def mediation_link_null__jci_stratified_clip(
+    stratum_panel_jci_spearman: StratumPanelJciResult,
+    *,
+    treatment_arm: str = DDQN_ARM,
+    baseline_arm: str = VANILLA_ARM,
+    predictor_col: str = 'bootstrap_gap_magnitude',
+    target_col: str = 'eval_best_burst_raw_mean',
+    min_vanilla_predictor: float = 0.0,
+    null_max_abs_rho: float = 0.25,
+    min_strata: int = 10,
+) -> Verdict:
+    """JCI-stratified Spearman ρ(v_clip, Δ_outcome | env) is
+    near zero — the within-env link between bias-correction
+    magnitude and outcome gain, pooled across envs via Fisher z,
+    fails to detect a consistent mediation signal. **HELD when
+    |ρ| < null_max_abs_rho** (predicted-null confirmed)."""
+    del treatment_arm, baseline_arm, predictor_col, target_col
+    del min_vanilla_predictor
+    return _jci_null_verdict(
+        stratum_panel_jci_spearman,
+        rho=stratum_panel_jci_spearman.rho_stratified,
+
+        null_max_abs_rho=null_max_abs_rho,
+        min_strata=min_strata,
+    )
+
+
+@claim_bridge(
+    source='bootstrap_gap_magnitude',
+    target='eval_best_burst_raw_mean',
+    direction=Direction.DIRECT,
+    tier=Tier.ASSOCIATIONAL,
+    scope=DDQN_RELEVANT_SCOPE,
+    predicted_direction='null',
+)
+def mediation_link_null__jci_partial_clip(
+    stratum_panel_jci_spearman: StratumPanelJciResult,
+    *,
+    treatment_arm: str = DDQN_ARM,
+    baseline_arm: str = VANILLA_ARM,
+    predictor_col: str = 'bootstrap_gap_magnitude',
+    target_col: str = 'eval_best_burst_raw_mean',
+    min_vanilla_predictor: float = 0.0,
+    null_max_abs_rho: float = 0.25,
+    min_strata: int = 10,
+) -> Verdict:
+    """JCI + partial Spearman ρ(v_clip, Δ_outcome | v_outcome, env)
+    is near zero — after controlling for both env and vanilla's
+    convergence quality (config-quality confound proxy), no
+    residual link survives. The strongest falsification of the
+    bias-correction mediation claim. **HELD when
+    |ρ| < null_max_abs_rho**."""
+    del treatment_arm, baseline_arm, predictor_col, target_col
+    del min_vanilla_predictor
+    return _jci_null_verdict(
+        stratum_panel_jci_spearman,
+        rho=stratum_panel_jci_spearman.rho_partial_stratified,
+
+        null_max_abs_rho=null_max_abs_rho,
+        min_strata=min_strata,
+    )
+
+
+@claim_bridge(
+    source='jensen_gap',
+    target='eval_best_burst_raw_mean',
+    direction=Direction.INVERSE,
+    tier=Tier.ASSOCIATIONAL,
+    scope=DDQN_RELEVANT_SCOPE,
+    predicted_direction='null',
+)
+def mediation_link_null__jci_partial_jens(
+    stratum_panel_jci_spearman: StratumPanelJciResult,
+    *,
+    treatment_arm: str = DDQN_ARM,
+    baseline_arm: str = VANILLA_ARM,
+    predictor_col: str = 'jensen_gap',
+    target_col: str = 'eval_best_burst_raw_mean',
+    min_vanilla_predictor: float = 0.0,
+    null_max_abs_rho: float = 0.25,
+    min_strata: int = 10,
+) -> Verdict:
+    """JCI + partial Spearman ρ(v_jens, Δ_outcome | v_outcome,
+    env) is near zero — the jens-based mediation also fails
+    under the same null-form test. Documents that the algebra
+    collapse of the jens predictor isn't rescued by within-env
+    aggregation. **HELD when |ρ| < null_max_abs_rho**."""
+    del treatment_arm, baseline_arm, predictor_col, target_col
+    del min_vanilla_predictor
+    return _jci_null_verdict(
+        stratum_panel_jci_spearman,
+        rho=stratum_panel_jci_spearman.rho_partial_stratified,
+
+        null_max_abs_rho=null_max_abs_rho,
+        min_strata=min_strata,
+    )
+
+
 # Retired 2026-05-13: all jens→outcome stratum-Δ link bridges
 # (REACH cluster + extreme_q_div cluster + fourrooms_action_dim).
 # They correlated Δ_jens with Δ_mc_return, which has Δ_MC on
@@ -291,4 +446,7 @@ BRIDGES = (
     bias_correction_clip_predicts_outcome_backdoor,
     bias_correction_clip_predicts_outcome_placebo,
     bias_correction_clip_predicts_outcome_rcc,
+    mediation_link_null__jci_stratified_clip,
+    mediation_link_null__jci_partial_clip,
+    mediation_link_null__jci_partial_jens,
 )
