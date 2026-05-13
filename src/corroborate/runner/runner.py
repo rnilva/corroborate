@@ -1583,8 +1583,18 @@ def _load_one_corpus(
             except OSError:
                 pass
     else:
+        # Narrow trace_reads to drifted-only cols at the join step
+        # too. Loading 20+ cols × multi-GB trace files into memory
+        # OOMs the worker even when the cells aren't ultimately
+        # recomputed (build_measurements skips them, but the join
+        # has already pulled the columns). Drifted-only join avoids
+        # this. Already-current measurables don't need their trace
+        # data for the recompute step.
+        drifted = _drifted_or_missing_measurables(sub, required)
+        drifted_reads = _required_record_keys(drifted)
+        cols_for_join = frozenset(drifted_reads & trace_reads)
         df = _join_required_traces(
-            df, sub / 'traces.parquet', trace_reads,
+            df, sub / 'traces.parquet', cols_for_join,
         )
     # **Phase 2.1** (CACHE_BUILD.md): route per-cell measurable
     # computation through `build_measurements` so the per-corpus

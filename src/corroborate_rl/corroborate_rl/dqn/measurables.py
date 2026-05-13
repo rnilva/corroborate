@@ -545,13 +545,11 @@ def q_argmax_margin_per_burst(
     `findings_two_channel_cross_corpus.md`."""
     arr = _record_array(record, 'online_top12_margin_per_step')
     eval_idx = _record_array(record, 'eval_step_index')
-    if arr is None or eval_idx is None:
+    if arr is None or eval_idx is None or arr.ndim < 1 or eval_idx.ndim < 1:
         return np.zeros((0,), dtype=np.float64)
     n = int(arr.shape[0])
-    if n == 0:
-        return np.zeros((0,), dtype=np.float64)
     n_bursts = int(eval_idx.shape[0])
-    if n_bursts == 0:
+    if n == 0 or n_bursts == 0:
         return np.zeros((0,), dtype=np.float64)
     edges = np.linspace(0, n, n_bursts + 1, dtype=np.int64)
     return np.array(
@@ -569,13 +567,11 @@ def q_action_std_per_burst(
     (cross-action Q-stdev at non-terminal states)."""
     arr = _record_array(record, 'online_std_q_per_step')
     eval_idx = _record_array(record, 'eval_step_index')
-    if arr is None or eval_idx is None:
+    if arr is None or eval_idx is None or arr.ndim < 1 or eval_idx.ndim < 1:
         return np.zeros((0,), dtype=np.float64)
     n = int(arr.shape[0])
-    if n == 0:
-        return np.zeros((0,), dtype=np.float64)
     n_bursts = int(eval_idx.shape[0])
-    if n_bursts == 0:
+    if n == 0 or n_bursts == 0:
         return np.zeros((0,), dtype=np.float64)
     edges = np.linspace(0, n, n_bursts + 1, dtype=np.int64)
     return np.array(
