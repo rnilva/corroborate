@@ -23,6 +23,7 @@ import corroborate_rl.dqn.measurables  # pyright: ignore[reportUnusedImport]  # 
 import polars as pl
 
 from experiments.findings.ddqn_sweeps import (
+    finding_metamaze_gamma_amplification,
     finding_rs01_rescue_envelope,
 )
 from experiments.findings.ddqn._arms import INTERVENTION as INTERVENTION
@@ -30,6 +31,7 @@ from experiments.findings.ddqn._common import CLAIM as CLAIM
 from experiments.findings.ddqn_sweeps.n_step import BRIDGES as _N_STEP
 from experiments.findings.ddqn_sweeps.polyak_tau import BRIDGES as _POLYAK_TAU
 from experiments.findings.ddqn_sweeps.rs_rescue import BRIDGES as _RS_RESCUE
+from experiments.findings.ddqn_sweeps.within_env_sweeps import BRIDGES as _WITHIN_ENV_SWEEPS
 
 
 # Loose module scope: only bsuite exclusion. HP-sweep bridges set
@@ -41,9 +43,11 @@ BRIDGES = (
     *_N_STEP,
     *_POLYAK_TAU,
     *_RS_RESCUE,
+    *_WITHIN_ENV_SWEEPS,
 )
 
 
 FINDINGS = (
+    finding_metamaze_gamma_amplification,
     finding_rs01_rescue_envelope,
 )

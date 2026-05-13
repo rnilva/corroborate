@@ -120,7 +120,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_refuted_when_dormancy_fires",
       "direction": "inverse",
-      "extent_hash": -6444104038897665565,
+      "extent_hash": 3587417730289355101,
       "n_cells_in_scope": 253,
       "n_cells_pre_scope": 740,
       "pair_by": [
@@ -314,7 +314,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_helps_under_three_gate_scope__cross_env",
       "direction": "direct",
-      "extent_hash": 1696691146704781207,
+      "extent_hash": -4882414924920063863,
       "n_cells_in_scope": 620,
       "n_cells_pre_scope": 740,
       "pair_by": [
@@ -494,7 +494,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_helps_under_three_gate_scope_AND_trajectory_smooth__cross_env",
       "direction": "direct",
-      "extent_hash": 2627321534087216200,
+      "extent_hash": -4205789365014001074,
       "n_cells_in_scope": 500,
       "n_cells_pre_scope": 740,
       "pair_by": [
@@ -551,7 +551,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_link_outcome_scales_inversely_with_reward_density__cross_env",
       "direction": "inverse",
-      "extent_hash": 7901312650189523310,
+      "extent_hash": 7173535158970162226,
       "n_cells_in_scope": 560,
       "n_cells_pre_scope": 740,
       "pair_by": [
@@ -614,34 +614,25 @@
       "analysis_results": {
         "meta_regression_unpaired_d": {
           "cleavage_axes": [],
-          "coefficients": [
-            {
-              "ci_hi": 11015000.0,
-              "ci_lo": -11015000.0,
-              "coefficient": 0.0625,
-              "is_significant": false,
-              "name": "log_horizon",
-              "p_value": 1.0
-            }
-          ],
-          "i_squared": 0.662752,
-          "intercept": 0.603379,
-          "intercept_ci_hi": 50724300.0,
-          "intercept_ci_lo": -50724300.0,
-          "intercept_p_value": 1.0,
-          "intercept_se": 19732600.0,
+          "coefficients": [],
+          "i_squared": null,
+          "intercept": null,
+          "intercept_ci_hi": null,
+          "intercept_ci_lo": null,
+          "intercept_p_value": null,
+          "intercept_se": null,
           "n_strata": 7,
           "pool": "random",
-          "q_statistic": 14.8259,
-          "r_squared": -1.11544,
-          "tau_sq": 0.12567
+          "q_statistic": null,
+          "r_squared": null,
+          "tau_sq": null
         }
       },
       "assumption_violations": [],
       "blocked_by": null,
       "bridge_name": "ddqn_link_outcome_scales_with_chain_depth__cross_env",
       "direction": "direct",
-      "extent_hash": 1696691146704781207,
+      "extent_hash": -4882414924920063863,
       "n_cells_in_scope": 620,
       "n_cells_pre_scope": 740,
       "pair_by": [
@@ -699,7 +690,7 @@
       "blocked_by": null,
       "bridge_name": "clip_wedge_predicts_outcome__polarity_moderated__dormant_scope",
       "direction": "direct",
-      "extent_hash": 7117905184792034010,
+      "extent_hash": -6499409450882259076,
       "n_cells_in_scope": 81,
       "n_cells_pre_scope": 740,
       "pair_by": [
@@ -720,130 +711,6 @@
       "target_name": "eval_best_burst_mean",
       "tier": "associational",
       "verdict": "held",
-      "warnings": []
-    },
-    {
-      "analysis_results": {
-        "meta_regression_unpaired_d": {
-          "cleavage_axes": [],
-          "coefficients": [],
-          "i_squared": null,
-          "intercept": null,
-          "intercept_ci_hi": null,
-          "intercept_ci_lo": null,
-          "intercept_p_value": null,
-          "intercept_se": null,
-          "n_strata": 0,
-          "pool": "random",
-          "q_statistic": null,
-          "r_squared": null,
-          "tau_sq": null
-        }
-      },
-      "assumption_violations": [],
-      "blocked_by": null,
-      "bridge_name": "ddqn_benefit_scales_with_effective_horizon__fourrooms",
-      "direction": "direct",
-      "extent_hash": -6464115203463628683,
-      "n_cells_in_scope": 60,
-      "n_cells_pre_scope": 740,
-      "pair_by": [
-        "seed"
-      ],
-      "params": {
-        "baseline_arm": "baseline",
-        "covariate_key_field": "gamma",
-        "covariates_per_key": {
-          "0.99": {
-            "effective_horizon": 37.3
-          },
-          "0.995": {
-            "effective_horizon": 80.6
-          },
-          "0.999": {
-            "effective_horizon": 235.6
-          }
-        },
-        "min_strata": 3,
-        "min_vanilla_predictor": 0.05,
-        "scope_predictor": "jensen_gap",
-        "slope_threshold": 0.01,
-        "source": "eval_best_burst_raw_mean",
-        "stratify_by": [
-          "gamma",
-          "total_steps",
-          "reward_scale"
-        ],
-        "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
-      },
-      "predicted_direction": "a_gt_b",
-      "scope_repr": "[([([([([([(col(\"env_name\")) == (\"FourRooms-misc\")]) & (col(\"gamma\").is_in([[0.99, 0.995, 0.999]]))]) & ([([(col(\"n_step\")) == (dyn int: 1)]) | (col(\"n_step\").is_null())])]) & (col(\"action_duplicate_k\").is_null())]) & ([(col(\"reward_scale\").is_null()) | ([(col(\"reward_scale\")) == (dyn float: 1)])])]) & (col(\"target_sync.tau\").is_null())]",
-      "source_name": "do(baseline|bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify))",
-      "target_name": "eval_best_burst_raw_mean",
-      "tier": "interventional",
-      "verdict": "power_insufficient",
-      "warnings": []
-    },
-    {
-      "analysis_results": {
-        "stratum_effect_panel": {
-          "aggregator": "mean",
-          "baseline_arm": "baseline",
-          "deltas": {
-            "eval_best_burst_mean": [
-              1.48507
-            ]
-          },
-          "measurables": [
-            "eval_best_burst_mean"
-          ],
-          "n_baseline": [
-            30
-          ],
-          "n_strata": 1,
-          "n_treatment": [
-            30
-          ],
-          "strata": [
-            [
-              0.99
-            ]
-          ],
-          "stratify_by": [
-            "gamma"
-          ],
-          "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
-        }
-      },
-      "assumption_violations": [],
-      "blocked_by": null,
-      "bridge_name": "metamaze_link_steeper_at_high_gamma",
-      "direction": "direct",
-      "extent_hash": -461598086265370818,
-      "n_cells_in_scope": 60,
-      "n_cells_pre_scope": 740,
-      "pair_by": [
-        "seed"
-      ],
-      "params": {
-        "amplification_ratio_min": 1.5,
-        "high_floor": 0.01,
-        "high_gamma": 0.999,
-        "low_gamma": 0.99,
-        "measurables": [
-          "eval_best_burst_mean"
-        ],
-        "min_seeds_per_arm": 10,
-        "stratify_by": [
-          "gamma"
-        ]
-      },
-      "predicted_direction": "a_gt_b",
-      "scope_repr": "[([([([([([([(col(\"env_name\")) == (\"MetaMaze-misc\")]) & (col(\"gamma\").is_in([[0.99, 0.999]]))]) & ([([(.when([(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_gap\")).otherwise(null).is_not_nan()) | (.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_gap\")).otherwise(null).is_null())]).then(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_gap\")).otherwise(null)).otherwise(null).mean().over([col(\"env_name\"), col(\"sync_period\"), col(\"gamma\"), col(\"total_steps\"), col(\"n_step\"), col(\"reward_scale\"), col(\"action_duplicate_k\")])) > (dyn float: 0.05)]) & ([(.when([(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_dormancy_gap\")).otherwise(null).is_not_nan()) | (.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_dormancy_gap\")).otherwise(null).is_null())]).then(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_dormancy_gap\")).otherwise(null)).otherwise(null).mean().over([col(\"env_name\"), col(\"sync_period\"), col(\"gamma\"), col(\"total_steps\"), col(\"n_step\"), col(\"reward_scale\"), col(\"action_duplicate_k\")])) < (dyn float: 0.05)])])]) & ([([(col(\"n_step\")) == (dyn int: 1)]) | (col(\"n_step\").is_null())])]) & (col(\"action_duplicate_k\").is_null())]) & ([(col(\"reward_scale\").is_null()) | ([(col(\"reward_scale\")) == (dyn float: 1)])])]) & (col(\"target_sync.tau\").is_null())]",
-      "source_name": "do(baseline|bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify))",
-      "target_name": "eval_best_burst_mean",
-      "tier": "associational",
-      "verdict": "power_insufficient",
       "warnings": []
     },
     {
@@ -877,7 +744,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_bias_reduction_scales_with_fa_coherence__cross_env",
       "direction": "inverse",
-      "extent_hash": -6323459500024302630,
+      "extent_hash": 996534098374721052,
       "n_cells_in_scope": 440,
       "n_cells_pre_scope": 740,
       "pair_by": [
@@ -1050,7 +917,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_bias_reduction_under_sparse_reward_scope",
       "direction": "inverse",
-      "extent_hash": -3113545590518680523,
+      "extent_hash": -3953611459886344940,
       "n_cells_in_scope": 309,
       "n_cells_pre_scope": 740,
       "pair_by": [
@@ -1251,7 +1118,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_bias_reduction_under_high_fa_coherence_scope",
       "direction": "inverse",
-      "extent_hash": 820442843753181753,
+      "extent_hash": 1436199737935696348,
       "n_cells_in_scope": 387,
       "n_cells_pre_scope": 740,
       "pair_by": [
@@ -1400,7 +1267,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_bias_reduction_under_full_degeneracy_scope",
       "direction": "inverse",
-      "extent_hash": -4516659778347726453,
+      "extent_hash": 4987188707848181614,
       "n_cells_in_scope": 216,
       "n_cells_pre_scope": 740,
       "pair_by": [
@@ -1549,7 +1416,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_outcome_benefit_under_sparse_reward_scope",
       "direction": "direct",
-      "extent_hash": -3113545590518680523,
+      "extent_hash": -3953611459886344940,
       "n_cells_in_scope": 309,
       "n_cells_pre_scope": 740,
       "pair_by": [
@@ -1750,7 +1617,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_outcome_benefit_under_high_fa_coherence_scope",
       "direction": "direct",
-      "extent_hash": 820442843753181753,
+      "extent_hash": 1436199737935696348,
       "n_cells_in_scope": 387,
       "n_cells_pre_scope": 740,
       "pair_by": [
@@ -1899,7 +1766,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_outcome_benefit_under_full_degeneracy_scope",
       "direction": "direct",
-      "extent_hash": -4516659778347726453,
+      "extent_hash": 4987188707848181614,
       "n_cells_in_scope": 216,
       "n_cells_pre_scope": 740,
       "pair_by": [
@@ -1933,7 +1800,7 @@
         "stratum_vanilla_predictor_link_dowhy": {
           "backdoor": {
             "ate": 1.79245,
-            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n    d                                                                          ↪\n─────────(E[d_out|__env__Asterix-MinAtar,__env__MetaMaze-misc,__env__SlidingTi ↪\nd[v_pred]                                                                      ↪\n\n↪                                                                              ↪\n↪ lePuzzle-jumanji,__env__MountainCar-v0,__env__Freeway-MinAtar,__env__Breakou ↪\n↪                                                                              ↪\n\n↪                                                                              ↪\n↪ t-MinAtar,__env__SpaceInvaders-MinAtar,__env__Snake-jumanji,__env__PacMan-ju ↪\n↪                                                                              ↪\n\n↪        \n↪ manji])\n↪        \nEstimand assumption 1, Unconfoundedness: If U→{v_pred} and U→d_out then P(d_out|v_pred,__env__Asterix-MinAtar,__env__MetaMaze-misc,__env__SlidingTilePuzzle-jumanji,__env__MountainCar-v0,__env__Freeway-MinAtar,__env__Breakout-MinAtar,__env__SpaceInvaders-MinAtar,__env__Snake-jumanji,__env__PacMan-jumanji,U) = P(d_out|v_pred,__env__Asterix-MinAtar,__env__MetaMaze-misc,__env__SlidingTilePuzzle-jumanji,__env__MountainCar-v0,__env__Freeway-MinAtar,__env__Breakout-MinAtar,__env__SpaceInvaders-MinAtar,__env__Snake-jumanji,__env__PacMan-jumanji)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n    d                                                                          ↪\n─────────(E[d_out|__env__Asterix-MinAtar,__env__MetaMaze-misc,__env__SlidingTi ↪\nd[v_pred]                                                                      ↪\n\n↪                                                                              ↪\n↪ lePuzzle-jumanji,__env__MountainCar-v0,__env__Freeway-MinAtar,__env__Breakou ↪\n↪                                                                              ↪\n\n↪                                                                              ↪\n↪ t-MinAtar,__env__SpaceInvaders-MinAtar,__env__Snake-jumanji,__env__PacMan-ju ↪\n↪                                                                              ↪\n\n↪        \n↪ manji])\n↪        \nEstimand assumption 1, Unconfoundedness: If U→{v_pred} and U→d_out then P(d_out|v_pred,__env__Asterix-MinAtar,__env__MetaMaze-misc,__env__SlidingTilePuzzle-jumanji,__env__MountainCar-v0,__env__Freeway-MinAtar,__env__Breakout-MinAtar,__env__SpaceInvaders-MinAtar,__env__Snake-jumanji,__env__PacMan-jumanji,U) = P(d_out|v_pred,__env__Asterix-MinAtar,__env__MetaMaze-misc,__env__SlidingTilePuzzle-jumanji,__env__MountainCar-v0,__env__Freeway-MinAtar,__env__Breakout-MinAtar,__env__SpaceInvaders-MinAtar,__env__Snake-jumanji,__env__PacMan-jumanji)\n",
+            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n    d                                                                          ↪\n─────────(E[d_out|__env__Freeway-MinAtar,__env__MetaMaze-misc,__env__Asterix-M ↪\nd[v_pred]                                                                      ↪\n\n↪                                                                              ↪\n↪ inAtar,__env__Snake-jumanji,__env__Breakout-MinAtar,__env__SpaceInvaders-Min ↪\n↪                                                                              ↪\n\n↪                                                                              ↪\n↪ Atar,__env__SlidingTilePuzzle-jumanji,__env__PacMan-jumanji,__env__MountainC ↪\n↪                                                                              ↪\n\n↪        \n↪ ar-v0])\n↪        \nEstimand assumption 1, Unconfoundedness: If U→{v_pred} and U→d_out then P(d_out|v_pred,__env__Freeway-MinAtar,__env__MetaMaze-misc,__env__Asterix-MinAtar,__env__Snake-jumanji,__env__Breakout-MinAtar,__env__SpaceInvaders-MinAtar,__env__SlidingTilePuzzle-jumanji,__env__PacMan-jumanji,__env__MountainCar-v0,U) = P(d_out|v_pred,__env__Freeway-MinAtar,__env__MetaMaze-misc,__env__Asterix-MinAtar,__env__Snake-jumanji,__env__Breakout-MinAtar,__env__SpaceInvaders-MinAtar,__env__SlidingTilePuzzle-jumanji,__env__PacMan-jumanji,__env__MountainCar-v0)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n    d                                                                          ↪\n─────────(E[d_out|__env__Freeway-MinAtar,__env__MetaMaze-misc,__env__Asterix-M ↪\nd[v_pred]                                                                      ↪\n\n↪                                                                              ↪\n↪ inAtar,__env__Snake-jumanji,__env__Breakout-MinAtar,__env__SpaceInvaders-Min ↪\n↪                                                                              ↪\n\n↪                                                                              ↪\n↪ Atar,__env__SlidingTilePuzzle-jumanji,__env__PacMan-jumanji,__env__MountainC ↪\n↪                                                                              ↪\n\n↪        \n↪ ar-v0])\n↪        \nEstimand assumption 1, Unconfoundedness: If U→{v_pred} and U→d_out then P(d_out|v_pred,__env__Freeway-MinAtar,__env__MetaMaze-misc,__env__Asterix-MinAtar,__env__Snake-jumanji,__env__Breakout-MinAtar,__env__SpaceInvaders-MinAtar,__env__SlidingTilePuzzle-jumanji,__env__PacMan-jumanji,__env__MountainCar-v0,U) = P(d_out|v_pred,__env__Freeway-MinAtar,__env__MetaMaze-misc,__env__Asterix-MinAtar,__env__Snake-jumanji,__env__Breakout-MinAtar,__env__SpaceInvaders-MinAtar,__env__SlidingTilePuzzle-jumanji,__env__PacMan-jumanji,__env__MountainCar-v0)\n",
             "identified": true,
             "method_name": "backdoor.linear_regression",
             "n_rows": 10,
@@ -1948,17 +1815,17 @@
             "n_rows": 10,
             "outcome": "d_out",
             "real_ate": 1.79245,
-            "refuted_ate": 1.42109e-14,
+            "refuted_ate": 3.55271e-15,
             "refuter_name": "placebo_treatment_refuter",
             "treatment": "v_pred"
           },
           "random_common_cause": {
-            "drift": 0.0138397,
+            "drift": 0.0156504,
             "method_name": "backdoor.linear_regression",
             "n_rows": 10,
             "outcome": "d_out",
             "real_ate": 1.79245,
-            "refuted_ate": 1.80629,
+            "refuted_ate": 1.8081,
             "refuter_name": "random_common_cause",
             "treatment": "v_pred"
           },
@@ -1969,7 +1836,7 @@
       "blocked_by": null,
       "bridge_name": "bias_premise_jens_predicts_outcome_backdoor",
       "direction": "inverse",
-      "extent_hash": 7736580762933492162,
+      "extent_hash": 3683975202143259653,
       "n_cells_in_scope": 620,
       "n_cells_pre_scope": 740,
       "pair_by": [
@@ -2003,7 +1870,7 @@
         "stratum_vanilla_predictor_link_dowhy": {
           "backdoor": {
             "ate": 1.79245,
-            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n    d                                                                          ↪\n─────────(E[d_out|__env__Asterix-MinAtar,__env__MetaMaze-misc,__env__SlidingTi ↪\nd[v_pred]                                                                      ↪\n\n↪                                                                              ↪\n↪ lePuzzle-jumanji,__env__MountainCar-v0,__env__Freeway-MinAtar,__env__Breakou ↪\n↪                                                                              ↪\n\n↪                                                                              ↪\n↪ t-MinAtar,__env__SpaceInvaders-MinAtar,__env__Snake-jumanji,__env__PacMan-ju ↪\n↪                                                                              ↪\n\n↪        \n↪ manji])\n↪        \nEstimand assumption 1, Unconfoundedness: If U→{v_pred} and U→d_out then P(d_out|v_pred,__env__Asterix-MinAtar,__env__MetaMaze-misc,__env__SlidingTilePuzzle-jumanji,__env__MountainCar-v0,__env__Freeway-MinAtar,__env__Breakout-MinAtar,__env__SpaceInvaders-MinAtar,__env__Snake-jumanji,__env__PacMan-jumanji,U) = P(d_out|v_pred,__env__Asterix-MinAtar,__env__MetaMaze-misc,__env__SlidingTilePuzzle-jumanji,__env__MountainCar-v0,__env__Freeway-MinAtar,__env__Breakout-MinAtar,__env__SpaceInvaders-MinAtar,__env__Snake-jumanji,__env__PacMan-jumanji)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n    d                                                                          ↪\n─────────(E[d_out|__env__Asterix-MinAtar,__env__MetaMaze-misc,__env__SlidingTi ↪\nd[v_pred]                                                                      ↪\n\n↪                                                                              ↪\n↪ lePuzzle-jumanji,__env__MountainCar-v0,__env__Freeway-MinAtar,__env__Breakou ↪\n↪                                                                              ↪\n\n↪                                                                              ↪\n↪ t-MinAtar,__env__SpaceInvaders-MinAtar,__env__Snake-jumanji,__env__PacMan-ju ↪\n↪                                                                              ↪\n\n↪        \n↪ manji])\n↪        \nEstimand assumption 1, Unconfoundedness: If U→{v_pred} and U→d_out then P(d_out|v_pred,__env__Asterix-MinAtar,__env__MetaMaze-misc,__env__SlidingTilePuzzle-jumanji,__env__MountainCar-v0,__env__Freeway-MinAtar,__env__Breakout-MinAtar,__env__SpaceInvaders-MinAtar,__env__Snake-jumanji,__env__PacMan-jumanji,U) = P(d_out|v_pred,__env__Asterix-MinAtar,__env__MetaMaze-misc,__env__SlidingTilePuzzle-jumanji,__env__MountainCar-v0,__env__Freeway-MinAtar,__env__Breakout-MinAtar,__env__SpaceInvaders-MinAtar,__env__Snake-jumanji,__env__PacMan-jumanji)\n",
+            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n    d                                                                          ↪\n─────────(E[d_out|__env__Freeway-MinAtar,__env__MetaMaze-misc,__env__Asterix-M ↪\nd[v_pred]                                                                      ↪\n\n↪                                                                              ↪\n↪ inAtar,__env__Snake-jumanji,__env__Breakout-MinAtar,__env__SpaceInvaders-Min ↪\n↪                                                                              ↪\n\n↪                                                                              ↪\n↪ Atar,__env__SlidingTilePuzzle-jumanji,__env__PacMan-jumanji,__env__MountainC ↪\n↪                                                                              ↪\n\n↪        \n↪ ar-v0])\n↪        \nEstimand assumption 1, Unconfoundedness: If U→{v_pred} and U→d_out then P(d_out|v_pred,__env__Freeway-MinAtar,__env__MetaMaze-misc,__env__Asterix-MinAtar,__env__Snake-jumanji,__env__Breakout-MinAtar,__env__SpaceInvaders-MinAtar,__env__SlidingTilePuzzle-jumanji,__env__PacMan-jumanji,__env__MountainCar-v0,U) = P(d_out|v_pred,__env__Freeway-MinAtar,__env__MetaMaze-misc,__env__Asterix-MinAtar,__env__Snake-jumanji,__env__Breakout-MinAtar,__env__SpaceInvaders-MinAtar,__env__SlidingTilePuzzle-jumanji,__env__PacMan-jumanji,__env__MountainCar-v0)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n    d                                                                          ↪\n─────────(E[d_out|__env__Freeway-MinAtar,__env__MetaMaze-misc,__env__Asterix-M ↪\nd[v_pred]                                                                      ↪\n\n↪                                                                              ↪\n↪ inAtar,__env__Snake-jumanji,__env__Breakout-MinAtar,__env__SpaceInvaders-Min ↪\n↪                                                                              ↪\n\n↪                                                                              ↪\n↪ Atar,__env__SlidingTilePuzzle-jumanji,__env__PacMan-jumanji,__env__MountainC ↪\n↪                                                                              ↪\n\n↪        \n↪ ar-v0])\n↪        \nEstimand assumption 1, Unconfoundedness: If U→{v_pred} and U→d_out then P(d_out|v_pred,__env__Freeway-MinAtar,__env__MetaMaze-misc,__env__Asterix-MinAtar,__env__Snake-jumanji,__env__Breakout-MinAtar,__env__SpaceInvaders-MinAtar,__env__SlidingTilePuzzle-jumanji,__env__PacMan-jumanji,__env__MountainCar-v0,U) = P(d_out|v_pred,__env__Freeway-MinAtar,__env__MetaMaze-misc,__env__Asterix-MinAtar,__env__Snake-jumanji,__env__Breakout-MinAtar,__env__SpaceInvaders-MinAtar,__env__SlidingTilePuzzle-jumanji,__env__PacMan-jumanji,__env__MountainCar-v0)\n",
             "identified": true,
             "method_name": "backdoor.linear_regression",
             "n_rows": 10,
@@ -2018,17 +1885,17 @@
             "n_rows": 10,
             "outcome": "d_out",
             "real_ate": 1.79245,
-            "refuted_ate": 1.42109e-14,
+            "refuted_ate": 3.55271e-15,
             "refuter_name": "placebo_treatment_refuter",
             "treatment": "v_pred"
           },
           "random_common_cause": {
-            "drift": 0.0128449,
+            "drift": 0.0171194,
             "method_name": "backdoor.linear_regression",
             "n_rows": 10,
             "outcome": "d_out",
             "real_ate": 1.79245,
-            "refuted_ate": 1.8053,
+            "refuted_ate": 1.80957,
             "refuter_name": "random_common_cause",
             "treatment": "v_pred"
           },
@@ -2039,7 +1906,7 @@
       "blocked_by": null,
       "bridge_name": "bias_premise_jens_predicts_outcome_placebo",
       "direction": "inverse",
-      "extent_hash": 7736580762933492162,
+      "extent_hash": 3683975202143259653,
       "n_cells_in_scope": 620,
       "n_cells_pre_scope": 740,
       "pair_by": [
@@ -2073,7 +1940,7 @@
         "stratum_vanilla_predictor_link_dowhy": {
           "backdoor": {
             "ate": 1.79245,
-            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n    d                                                                          ↪\n─────────(E[d_out|__env__Asterix-MinAtar,__env__MetaMaze-misc,__env__SlidingTi ↪\nd[v_pred]                                                                      ↪\n\n↪                                                                              ↪\n↪ lePuzzle-jumanji,__env__MountainCar-v0,__env__Freeway-MinAtar,__env__Breakou ↪\n↪                                                                              ↪\n\n↪                                                                              ↪\n↪ t-MinAtar,__env__SpaceInvaders-MinAtar,__env__Snake-jumanji,__env__PacMan-ju ↪\n↪                                                                              ↪\n\n↪        \n↪ manji])\n↪        \nEstimand assumption 1, Unconfoundedness: If U→{v_pred} and U→d_out then P(d_out|v_pred,__env__Asterix-MinAtar,__env__MetaMaze-misc,__env__SlidingTilePuzzle-jumanji,__env__MountainCar-v0,__env__Freeway-MinAtar,__env__Breakout-MinAtar,__env__SpaceInvaders-MinAtar,__env__Snake-jumanji,__env__PacMan-jumanji,U) = P(d_out|v_pred,__env__Asterix-MinAtar,__env__MetaMaze-misc,__env__SlidingTilePuzzle-jumanji,__env__MountainCar-v0,__env__Freeway-MinAtar,__env__Breakout-MinAtar,__env__SpaceInvaders-MinAtar,__env__Snake-jumanji,__env__PacMan-jumanji)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n    d                                                                          ↪\n─────────(E[d_out|__env__Asterix-MinAtar,__env__MetaMaze-misc,__env__SlidingTi ↪\nd[v_pred]                                                                      ↪\n\n↪                                                                              ↪\n↪ lePuzzle-jumanji,__env__MountainCar-v0,__env__Freeway-MinAtar,__env__Breakou ↪\n↪                                                                              ↪\n\n↪                                                                              ↪\n↪ t-MinAtar,__env__SpaceInvaders-MinAtar,__env__Snake-jumanji,__env__PacMan-ju ↪\n↪                                                                              ↪\n\n↪        \n↪ manji])\n↪        \nEstimand assumption 1, Unconfoundedness: If U→{v_pred} and U→d_out then P(d_out|v_pred,__env__Asterix-MinAtar,__env__MetaMaze-misc,__env__SlidingTilePuzzle-jumanji,__env__MountainCar-v0,__env__Freeway-MinAtar,__env__Breakout-MinAtar,__env__SpaceInvaders-MinAtar,__env__Snake-jumanji,__env__PacMan-jumanji,U) = P(d_out|v_pred,__env__Asterix-MinAtar,__env__MetaMaze-misc,__env__SlidingTilePuzzle-jumanji,__env__MountainCar-v0,__env__Freeway-MinAtar,__env__Breakout-MinAtar,__env__SpaceInvaders-MinAtar,__env__Snake-jumanji,__env__PacMan-jumanji)\n",
+            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n    d                                                                          ↪\n─────────(E[d_out|__env__Freeway-MinAtar,__env__MetaMaze-misc,__env__Asterix-M ↪\nd[v_pred]                                                                      ↪\n\n↪                                                                              ↪\n↪ inAtar,__env__Snake-jumanji,__env__Breakout-MinAtar,__env__SpaceInvaders-Min ↪\n↪                                                                              ↪\n\n↪                                                                              ↪\n↪ Atar,__env__SlidingTilePuzzle-jumanji,__env__PacMan-jumanji,__env__MountainC ↪\n↪                                                                              ↪\n\n↪        \n↪ ar-v0])\n↪        \nEstimand assumption 1, Unconfoundedness: If U→{v_pred} and U→d_out then P(d_out|v_pred,__env__Freeway-MinAtar,__env__MetaMaze-misc,__env__Asterix-MinAtar,__env__Snake-jumanji,__env__Breakout-MinAtar,__env__SpaceInvaders-MinAtar,__env__SlidingTilePuzzle-jumanji,__env__PacMan-jumanji,__env__MountainCar-v0,U) = P(d_out|v_pred,__env__Freeway-MinAtar,__env__MetaMaze-misc,__env__Asterix-MinAtar,__env__Snake-jumanji,__env__Breakout-MinAtar,__env__SpaceInvaders-MinAtar,__env__SlidingTilePuzzle-jumanji,__env__PacMan-jumanji,__env__MountainCar-v0)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n    d                                                                          ↪\n─────────(E[d_out|__env__Freeway-MinAtar,__env__MetaMaze-misc,__env__Asterix-M ↪\nd[v_pred]                                                                      ↪\n\n↪                                                                              ↪\n↪ inAtar,__env__Snake-jumanji,__env__Breakout-MinAtar,__env__SpaceInvaders-Min ↪\n↪                                                                              ↪\n\n↪                                                                              ↪\n↪ Atar,__env__SlidingTilePuzzle-jumanji,__env__PacMan-jumanji,__env__MountainC ↪\n↪                                                                              ↪\n\n↪        \n↪ ar-v0])\n↪        \nEstimand assumption 1, Unconfoundedness: If U→{v_pred} and U→d_out then P(d_out|v_pred,__env__Freeway-MinAtar,__env__MetaMaze-misc,__env__Asterix-MinAtar,__env__Snake-jumanji,__env__Breakout-MinAtar,__env__SpaceInvaders-MinAtar,__env__SlidingTilePuzzle-jumanji,__env__PacMan-jumanji,__env__MountainCar-v0,U) = P(d_out|v_pred,__env__Freeway-MinAtar,__env__MetaMaze-misc,__env__Asterix-MinAtar,__env__Snake-jumanji,__env__Breakout-MinAtar,__env__SpaceInvaders-MinAtar,__env__SlidingTilePuzzle-jumanji,__env__PacMan-jumanji,__env__MountainCar-v0)\n",
             "identified": true,
             "method_name": "backdoor.linear_regression",
             "n_rows": 10,
@@ -2088,17 +1955,17 @@
             "n_rows": 10,
             "outcome": "d_out",
             "real_ate": 1.79245,
-            "refuted_ate": 1.42109e-14,
+            "refuted_ate": 3.55271e-15,
             "refuter_name": "placebo_treatment_refuter",
             "treatment": "v_pred"
           },
           "random_common_cause": {
-            "drift": 0.0129582,
+            "drift": 0.0153036,
             "method_name": "backdoor.linear_regression",
             "n_rows": 10,
             "outcome": "d_out",
             "real_ate": 1.79245,
-            "refuted_ate": 1.80541,
+            "refuted_ate": 1.80776,
             "refuter_name": "random_common_cause",
             "treatment": "v_pred"
           },
@@ -2109,7 +1976,7 @@
       "blocked_by": null,
       "bridge_name": "bias_premise_jens_predicts_outcome_rcc",
       "direction": "inverse",
-      "extent_hash": 7736580762933492162,
+      "extent_hash": 3683975202143259653,
       "n_cells_in_scope": 620,
       "n_cells_pre_scope": 740,
       "pair_by": [
@@ -2143,7 +2010,7 @@
         "stratum_vanilla_predictor_link_dowhy": {
           "backdoor": {
             "ate": 38.3395,
-            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n    d                                                                          ↪\n─────────(E[d_out|__env__Asterix-MinAtar,__env__MetaMaze-misc,__env__SlidingTi ↪\nd[v_pred]                                                                      ↪\n\n↪                                                                              ↪\n↪ lePuzzle-jumanji,__env__MountainCar-v0,__env__Freeway-MinAtar,__env__Breakou ↪\n↪                                                                              ↪\n\n↪                                                                              ↪\n↪ t-MinAtar,__env__SpaceInvaders-MinAtar,__env__Snake-jumanji,__env__PacMan-ju ↪\n↪                                                                              ↪\n\n↪        \n↪ manji])\n↪        \nEstimand assumption 1, Unconfoundedness: If U→{v_pred} and U→d_out then P(d_out|v_pred,__env__Asterix-MinAtar,__env__MetaMaze-misc,__env__SlidingTilePuzzle-jumanji,__env__MountainCar-v0,__env__Freeway-MinAtar,__env__Breakout-MinAtar,__env__SpaceInvaders-MinAtar,__env__Snake-jumanji,__env__PacMan-jumanji,U) = P(d_out|v_pred,__env__Asterix-MinAtar,__env__MetaMaze-misc,__env__SlidingTilePuzzle-jumanji,__env__MountainCar-v0,__env__Freeway-MinAtar,__env__Breakout-MinAtar,__env__SpaceInvaders-MinAtar,__env__Snake-jumanji,__env__PacMan-jumanji)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n    d                                                                          ↪\n─────────(E[d_out|__env__Asterix-MinAtar,__env__MetaMaze-misc,__env__SlidingTi ↪\nd[v_pred]                                                                      ↪\n\n↪                                                                              ↪\n↪ lePuzzle-jumanji,__env__MountainCar-v0,__env__Freeway-MinAtar,__env__Breakou ↪\n↪                                                                              ↪\n\n↪                                                                              ↪\n↪ t-MinAtar,__env__SpaceInvaders-MinAtar,__env__Snake-jumanji,__env__PacMan-ju ↪\n↪                                                                              ↪\n\n↪        \n↪ manji])\n↪        \nEstimand assumption 1, Unconfoundedness: If U→{v_pred} and U→d_out then P(d_out|v_pred,__env__Asterix-MinAtar,__env__MetaMaze-misc,__env__SlidingTilePuzzle-jumanji,__env__MountainCar-v0,__env__Freeway-MinAtar,__env__Breakout-MinAtar,__env__SpaceInvaders-MinAtar,__env__Snake-jumanji,__env__PacMan-jumanji,U) = P(d_out|v_pred,__env__Asterix-MinAtar,__env__MetaMaze-misc,__env__SlidingTilePuzzle-jumanji,__env__MountainCar-v0,__env__Freeway-MinAtar,__env__Breakout-MinAtar,__env__SpaceInvaders-MinAtar,__env__Snake-jumanji,__env__PacMan-jumanji)\n",
+            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n    d                                                                          ↪\n─────────(E[d_out|__env__Freeway-MinAtar,__env__MetaMaze-misc,__env__Asterix-M ↪\nd[v_pred]                                                                      ↪\n\n↪                                                                              ↪\n↪ inAtar,__env__Snake-jumanji,__env__Breakout-MinAtar,__env__SpaceInvaders-Min ↪\n↪                                                                              ↪\n\n↪                                                                              ↪\n↪ Atar,__env__SlidingTilePuzzle-jumanji,__env__PacMan-jumanji,__env__MountainC ↪\n↪                                                                              ↪\n\n↪        \n↪ ar-v0])\n↪        \nEstimand assumption 1, Unconfoundedness: If U→{v_pred} and U→d_out then P(d_out|v_pred,__env__Freeway-MinAtar,__env__MetaMaze-misc,__env__Asterix-MinAtar,__env__Snake-jumanji,__env__Breakout-MinAtar,__env__SpaceInvaders-MinAtar,__env__SlidingTilePuzzle-jumanji,__env__PacMan-jumanji,__env__MountainCar-v0,U) = P(d_out|v_pred,__env__Freeway-MinAtar,__env__MetaMaze-misc,__env__Asterix-MinAtar,__env__Snake-jumanji,__env__Breakout-MinAtar,__env__SpaceInvaders-MinAtar,__env__SlidingTilePuzzle-jumanji,__env__PacMan-jumanji,__env__MountainCar-v0)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n    d                                                                          ↪\n─────────(E[d_out|__env__Freeway-MinAtar,__env__MetaMaze-misc,__env__Asterix-M ↪\nd[v_pred]                                                                      ↪\n\n↪                                                                              ↪\n↪ inAtar,__env__Snake-jumanji,__env__Breakout-MinAtar,__env__SpaceInvaders-Min ↪\n↪                                                                              ↪\n\n↪                                                                              ↪\n↪ Atar,__env__SlidingTilePuzzle-jumanji,__env__PacMan-jumanji,__env__MountainC ↪\n↪                                                                              ↪\n\n↪        \n↪ ar-v0])\n↪        \nEstimand assumption 1, Unconfoundedness: If U→{v_pred} and U→d_out then P(d_out|v_pred,__env__Freeway-MinAtar,__env__MetaMaze-misc,__env__Asterix-MinAtar,__env__Snake-jumanji,__env__Breakout-MinAtar,__env__SpaceInvaders-MinAtar,__env__SlidingTilePuzzle-jumanji,__env__PacMan-jumanji,__env__MountainCar-v0,U) = P(d_out|v_pred,__env__Freeway-MinAtar,__env__MetaMaze-misc,__env__Asterix-MinAtar,__env__Snake-jumanji,__env__Breakout-MinAtar,__env__SpaceInvaders-MinAtar,__env__SlidingTilePuzzle-jumanji,__env__PacMan-jumanji,__env__MountainCar-v0)\n",
             "identified": true,
             "method_name": "backdoor.linear_regression",
             "n_rows": 10,
@@ -2158,17 +2025,17 @@
             "n_rows": 10,
             "outcome": "d_out",
             "real_ate": 38.3395,
-            "refuted_ate": 1.42109e-14,
+            "refuted_ate": 3.55271e-15,
             "refuter_name": "placebo_treatment_refuter",
             "treatment": "v_pred"
           },
           "random_common_cause": {
-            "drift": 4.40085,
+            "drift": 3.07332,
             "method_name": "backdoor.linear_regression",
             "n_rows": 10,
             "outcome": "d_out",
             "real_ate": 38.3395,
-            "refuted_ate": 33.9386,
+            "refuted_ate": 35.2661,
             "refuter_name": "random_common_cause",
             "treatment": "v_pred"
           },
@@ -2179,7 +2046,7 @@
       "blocked_by": null,
       "bridge_name": "bias_correction_clip_predicts_outcome_backdoor",
       "direction": "direct",
-      "extent_hash": 7736580762933492162,
+      "extent_hash": 3683975202143259653,
       "n_cells_in_scope": 620,
       "n_cells_pre_scope": 740,
       "pair_by": [
@@ -2213,7 +2080,7 @@
         "stratum_vanilla_predictor_link_dowhy": {
           "backdoor": {
             "ate": 38.3395,
-            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n    d                                                                          ↪\n─────────(E[d_out|__env__Asterix-MinAtar,__env__MetaMaze-misc,__env__SlidingTi ↪\nd[v_pred]                                                                      ↪\n\n↪                                                                              ↪\n↪ lePuzzle-jumanji,__env__MountainCar-v0,__env__Freeway-MinAtar,__env__Breakou ↪\n↪                                                                              ↪\n\n↪                                                                              ↪\n↪ t-MinAtar,__env__SpaceInvaders-MinAtar,__env__Snake-jumanji,__env__PacMan-ju ↪\n↪                                                                              ↪\n\n↪        \n↪ manji])\n↪        \nEstimand assumption 1, Unconfoundedness: If U→{v_pred} and U→d_out then P(d_out|v_pred,__env__Asterix-MinAtar,__env__MetaMaze-misc,__env__SlidingTilePuzzle-jumanji,__env__MountainCar-v0,__env__Freeway-MinAtar,__env__Breakout-MinAtar,__env__SpaceInvaders-MinAtar,__env__Snake-jumanji,__env__PacMan-jumanji,U) = P(d_out|v_pred,__env__Asterix-MinAtar,__env__MetaMaze-misc,__env__SlidingTilePuzzle-jumanji,__env__MountainCar-v0,__env__Freeway-MinAtar,__env__Breakout-MinAtar,__env__SpaceInvaders-MinAtar,__env__Snake-jumanji,__env__PacMan-jumanji)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n    d                                                                          ↪\n─────────(E[d_out|__env__Asterix-MinAtar,__env__MetaMaze-misc,__env__SlidingTi ↪\nd[v_pred]                                                                      ↪\n\n↪                                                                              ↪\n↪ lePuzzle-jumanji,__env__MountainCar-v0,__env__Freeway-MinAtar,__env__Breakou ↪\n↪                                                                              ↪\n\n↪                                                                              ↪\n↪ t-MinAtar,__env__SpaceInvaders-MinAtar,__env__Snake-jumanji,__env__PacMan-ju ↪\n↪                                                                              ↪\n\n↪        \n↪ manji])\n↪        \nEstimand assumption 1, Unconfoundedness: If U→{v_pred} and U→d_out then P(d_out|v_pred,__env__Asterix-MinAtar,__env__MetaMaze-misc,__env__SlidingTilePuzzle-jumanji,__env__MountainCar-v0,__env__Freeway-MinAtar,__env__Breakout-MinAtar,__env__SpaceInvaders-MinAtar,__env__Snake-jumanji,__env__PacMan-jumanji,U) = P(d_out|v_pred,__env__Asterix-MinAtar,__env__MetaMaze-misc,__env__SlidingTilePuzzle-jumanji,__env__MountainCar-v0,__env__Freeway-MinAtar,__env__Breakout-MinAtar,__env__SpaceInvaders-MinAtar,__env__Snake-jumanji,__env__PacMan-jumanji)\n",
+            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n    d                                                                          ↪\n─────────(E[d_out|__env__Freeway-MinAtar,__env__MetaMaze-misc,__env__Asterix-M ↪\nd[v_pred]                                                                      ↪\n\n↪                                                                              ↪\n↪ inAtar,__env__Snake-jumanji,__env__Breakout-MinAtar,__env__SpaceInvaders-Min ↪\n↪                                                                              ↪\n\n↪                                                                              ↪\n↪ Atar,__env__SlidingTilePuzzle-jumanji,__env__PacMan-jumanji,__env__MountainC ↪\n↪                                                                              ↪\n\n↪        \n↪ ar-v0])\n↪        \nEstimand assumption 1, Unconfoundedness: If U→{v_pred} and U→d_out then P(d_out|v_pred,__env__Freeway-MinAtar,__env__MetaMaze-misc,__env__Asterix-MinAtar,__env__Snake-jumanji,__env__Breakout-MinAtar,__env__SpaceInvaders-MinAtar,__env__SlidingTilePuzzle-jumanji,__env__PacMan-jumanji,__env__MountainCar-v0,U) = P(d_out|v_pred,__env__Freeway-MinAtar,__env__MetaMaze-misc,__env__Asterix-MinAtar,__env__Snake-jumanji,__env__Breakout-MinAtar,__env__SpaceInvaders-MinAtar,__env__SlidingTilePuzzle-jumanji,__env__PacMan-jumanji,__env__MountainCar-v0)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n    d                                                                          ↪\n─────────(E[d_out|__env__Freeway-MinAtar,__env__MetaMaze-misc,__env__Asterix-M ↪\nd[v_pred]                                                                      ↪\n\n↪                                                                              ↪\n↪ inAtar,__env__Snake-jumanji,__env__Breakout-MinAtar,__env__SpaceInvaders-Min ↪\n↪                                                                              ↪\n\n↪                                                                              ↪\n↪ Atar,__env__SlidingTilePuzzle-jumanji,__env__PacMan-jumanji,__env__MountainC ↪\n↪                                                                              ↪\n\n↪        \n↪ ar-v0])\n↪        \nEstimand assumption 1, Unconfoundedness: If U→{v_pred} and U→d_out then P(d_out|v_pred,__env__Freeway-MinAtar,__env__MetaMaze-misc,__env__Asterix-MinAtar,__env__Snake-jumanji,__env__Breakout-MinAtar,__env__SpaceInvaders-MinAtar,__env__SlidingTilePuzzle-jumanji,__env__PacMan-jumanji,__env__MountainCar-v0,U) = P(d_out|v_pred,__env__Freeway-MinAtar,__env__MetaMaze-misc,__env__Asterix-MinAtar,__env__Snake-jumanji,__env__Breakout-MinAtar,__env__SpaceInvaders-MinAtar,__env__SlidingTilePuzzle-jumanji,__env__PacMan-jumanji,__env__MountainCar-v0)\n",
             "identified": true,
             "method_name": "backdoor.linear_regression",
             "n_rows": 10,
@@ -2228,17 +2095,17 @@
             "n_rows": 10,
             "outcome": "d_out",
             "real_ate": 38.3395,
-            "refuted_ate": 1.42109e-14,
+            "refuted_ate": 3.55271e-15,
             "refuter_name": "placebo_treatment_refuter",
             "treatment": "v_pred"
           },
           "random_common_cause": {
-            "drift": 4.1689,
+            "drift": 3.96959,
             "method_name": "backdoor.linear_regression",
             "n_rows": 10,
             "outcome": "d_out",
             "real_ate": 38.3395,
-            "refuted_ate": 34.1706,
+            "refuted_ate": 34.3699,
             "refuter_name": "random_common_cause",
             "treatment": "v_pred"
           },
@@ -2249,7 +2116,7 @@
       "blocked_by": null,
       "bridge_name": "bias_correction_clip_predicts_outcome_placebo",
       "direction": "direct",
-      "extent_hash": 7736580762933492162,
+      "extent_hash": 3683975202143259653,
       "n_cells_in_scope": 620,
       "n_cells_pre_scope": 740,
       "pair_by": [
@@ -2283,7 +2150,7 @@
         "stratum_vanilla_predictor_link_dowhy": {
           "backdoor": {
             "ate": 38.3395,
-            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n    d                                                                          ↪\n─────────(E[d_out|__env__Asterix-MinAtar,__env__MetaMaze-misc,__env__SlidingTi ↪\nd[v_pred]                                                                      ↪\n\n↪                                                                              ↪\n↪ lePuzzle-jumanji,__env__MountainCar-v0,__env__Freeway-MinAtar,__env__Breakou ↪\n↪                                                                              ↪\n\n↪                                                                              ↪\n↪ t-MinAtar,__env__SpaceInvaders-MinAtar,__env__Snake-jumanji,__env__PacMan-ju ↪\n↪                                                                              ↪\n\n↪        \n↪ manji])\n↪        \nEstimand assumption 1, Unconfoundedness: If U→{v_pred} and U→d_out then P(d_out|v_pred,__env__Asterix-MinAtar,__env__MetaMaze-misc,__env__SlidingTilePuzzle-jumanji,__env__MountainCar-v0,__env__Freeway-MinAtar,__env__Breakout-MinAtar,__env__SpaceInvaders-MinAtar,__env__Snake-jumanji,__env__PacMan-jumanji,U) = P(d_out|v_pred,__env__Asterix-MinAtar,__env__MetaMaze-misc,__env__SlidingTilePuzzle-jumanji,__env__MountainCar-v0,__env__Freeway-MinAtar,__env__Breakout-MinAtar,__env__SpaceInvaders-MinAtar,__env__Snake-jumanji,__env__PacMan-jumanji)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n    d                                                                          ↪\n─────────(E[d_out|__env__Asterix-MinAtar,__env__MetaMaze-misc,__env__SlidingTi ↪\nd[v_pred]                                                                      ↪\n\n↪                                                                              ↪\n↪ lePuzzle-jumanji,__env__MountainCar-v0,__env__Freeway-MinAtar,__env__Breakou ↪\n↪                                                                              ↪\n\n↪                                                                              ↪\n↪ t-MinAtar,__env__SpaceInvaders-MinAtar,__env__Snake-jumanji,__env__PacMan-ju ↪\n↪                                                                              ↪\n\n↪        \n↪ manji])\n↪        \nEstimand assumption 1, Unconfoundedness: If U→{v_pred} and U→d_out then P(d_out|v_pred,__env__Asterix-MinAtar,__env__MetaMaze-misc,__env__SlidingTilePuzzle-jumanji,__env__MountainCar-v0,__env__Freeway-MinAtar,__env__Breakout-MinAtar,__env__SpaceInvaders-MinAtar,__env__Snake-jumanji,__env__PacMan-jumanji,U) = P(d_out|v_pred,__env__Asterix-MinAtar,__env__MetaMaze-misc,__env__SlidingTilePuzzle-jumanji,__env__MountainCar-v0,__env__Freeway-MinAtar,__env__Breakout-MinAtar,__env__SpaceInvaders-MinAtar,__env__Snake-jumanji,__env__PacMan-jumanji)\n",
+            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n    d                                                                          ↪\n─────────(E[d_out|__env__Freeway-MinAtar,__env__MetaMaze-misc,__env__Asterix-M ↪\nd[v_pred]                                                                      ↪\n\n↪                                                                              ↪\n↪ inAtar,__env__Snake-jumanji,__env__Breakout-MinAtar,__env__SpaceInvaders-Min ↪\n↪                                                                              ↪\n\n↪                                                                              ↪\n↪ Atar,__env__SlidingTilePuzzle-jumanji,__env__PacMan-jumanji,__env__MountainC ↪\n↪                                                                              ↪\n\n↪        \n↪ ar-v0])\n↪        \nEstimand assumption 1, Unconfoundedness: If U→{v_pred} and U→d_out then P(d_out|v_pred,__env__Freeway-MinAtar,__env__MetaMaze-misc,__env__Asterix-MinAtar,__env__Snake-jumanji,__env__Breakout-MinAtar,__env__SpaceInvaders-MinAtar,__env__SlidingTilePuzzle-jumanji,__env__PacMan-jumanji,__env__MountainCar-v0,U) = P(d_out|v_pred,__env__Freeway-MinAtar,__env__MetaMaze-misc,__env__Asterix-MinAtar,__env__Snake-jumanji,__env__Breakout-MinAtar,__env__SpaceInvaders-MinAtar,__env__SlidingTilePuzzle-jumanji,__env__PacMan-jumanji,__env__MountainCar-v0)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n    d                                                                          ↪\n─────────(E[d_out|__env__Freeway-MinAtar,__env__MetaMaze-misc,__env__Asterix-M ↪\nd[v_pred]                                                                      ↪\n\n↪                                                                              ↪\n↪ inAtar,__env__Snake-jumanji,__env__Breakout-MinAtar,__env__SpaceInvaders-Min ↪\n↪                                                                              ↪\n\n↪                                                                              ↪\n↪ Atar,__env__SlidingTilePuzzle-jumanji,__env__PacMan-jumanji,__env__MountainC ↪\n↪                                                                              ↪\n\n↪        \n↪ ar-v0])\n↪        \nEstimand assumption 1, Unconfoundedness: If U→{v_pred} and U→d_out then P(d_out|v_pred,__env__Freeway-MinAtar,__env__MetaMaze-misc,__env__Asterix-MinAtar,__env__Snake-jumanji,__env__Breakout-MinAtar,__env__SpaceInvaders-MinAtar,__env__SlidingTilePuzzle-jumanji,__env__PacMan-jumanji,__env__MountainCar-v0,U) = P(d_out|v_pred,__env__Freeway-MinAtar,__env__MetaMaze-misc,__env__Asterix-MinAtar,__env__Snake-jumanji,__env__Breakout-MinAtar,__env__SpaceInvaders-MinAtar,__env__SlidingTilePuzzle-jumanji,__env__PacMan-jumanji,__env__MountainCar-v0)\n",
             "identified": true,
             "method_name": "backdoor.linear_regression",
             "n_rows": 10,
@@ -2298,17 +2165,17 @@
             "n_rows": 10,
             "outcome": "d_out",
             "real_ate": 38.3395,
-            "refuted_ate": 1.42109e-14,
+            "refuted_ate": 3.55271e-15,
             "refuter_name": "placebo_treatment_refuter",
             "treatment": "v_pred"
           },
           "random_common_cause": {
-            "drift": 3.73966,
+            "drift": 3.36971,
             "method_name": "backdoor.linear_regression",
             "n_rows": 10,
             "outcome": "d_out",
             "real_ate": 38.3395,
-            "refuted_ate": 34.5998,
+            "refuted_ate": 34.9698,
             "refuter_name": "random_common_cause",
             "treatment": "v_pred"
           },
@@ -2319,7 +2186,7 @@
       "blocked_by": null,
       "bridge_name": "bias_correction_clip_predicts_outcome_rcc",
       "direction": "direct",
-      "extent_hash": 7736580762933492162,
+      "extent_hash": 3683975202143259653,
       "n_cells_in_scope": 620,
       "n_cells_pre_scope": 740,
       "pair_by": [
@@ -2368,7 +2235,7 @@
       "blocked_by": null,
       "bridge_name": "mediation_link_null__jci_stratified_clip",
       "direction": "direct",
-      "extent_hash": 7736580762933492162,
+      "extent_hash": 3683975202143259653,
       "n_cells_in_scope": 620,
       "n_cells_pre_scope": 740,
       "pair_by": [
@@ -2411,7 +2278,7 @@
       "blocked_by": null,
       "bridge_name": "mediation_link_null__jci_partial_clip",
       "direction": "direct",
-      "extent_hash": 7736580762933492162,
+      "extent_hash": 3683975202143259653,
       "n_cells_in_scope": 620,
       "n_cells_pre_scope": 740,
       "pair_by": [
@@ -2454,7 +2321,7 @@
       "blocked_by": null,
       "bridge_name": "mediation_link_null__jci_partial_jens",
       "direction": "inverse",
-      "extent_hash": 7736580762933492162,
+      "extent_hash": 3683975202143259653,
       "n_cells_in_scope": 620,
       "n_cells_pre_scope": 740,
       "pair_by": [
@@ -2493,7 +2360,7 @@
       "blocked_by": null,
       "bridge_name": "mc_disc_raw_coupled__per_env_jci",
       "direction": "direct",
-      "extent_hash": 7736580762933492162,
+      "extent_hash": 3683975202143259653,
       "n_cells_in_scope": 620,
       "n_cells_pre_scope": 740,
       "pair_by": [
@@ -2708,7 +2575,7 @@
       "blocked_by": null,
       "bridge_name": "algorithm_reduces_bootstrap_gap_magnitude",
       "direction": "inverse",
-      "extent_hash": 7736580762933492162,
+      "extent_hash": 3683975202143259653,
       "n_cells_in_scope": 620,
       "n_cells_pre_scope": 740,
       "pair_by": [
@@ -2927,7 +2794,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_reduces_jens_gap__theorem",
       "direction": "inverse",
-      "extent_hash": 7736580762933492162,
+      "extent_hash": 3683975202143259653,
       "n_cells_in_scope": 620,
       "n_cells_pre_scope": 740,
       "pair_by": [
@@ -3146,7 +3013,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_reduces_signed_q_late__structural",
       "direction": "inverse",
-      "extent_hash": 7736580762933492162,
+      "extent_hash": 3683975202143259653,
       "n_cells_in_scope": 620,
       "n_cells_pre_scope": 740,
       "pair_by": [
@@ -3188,7 +3055,7 @@
       "blocked_by": null,
       "bridge_name": "bootstrap_gap_predicts_jens__theorem",
       "direction": "direct",
-      "extent_hash": 7736580762933492162,
+      "extent_hash": 3683975202143259653,
       "n_cells_in_scope": 620,
       "n_cells_pre_scope": 740,
       "pair_by": [
@@ -3227,7 +3094,7 @@
       "blocked_by": null,
       "bridge_name": "intervention_outcome_link_null__mech_conditioned",
       "direction": "direct",
-      "extent_hash": 7736580762933492162,
+      "extent_hash": 3683975202143259653,
       "n_cells_in_scope": 620,
       "n_cells_pre_scope": 740,
       "pair_by": [
@@ -3275,12 +3142,12 @@
             "treatment": "v_pred"
           },
           "random_common_cause": {
-            "drift": 0.117584,
+            "drift": 0.119294,
             "method_name": "backdoor.linear_regression",
             "n_rows": 3,
             "outcome": "d_out",
             "real_ate": -0.245754,
-            "refuted_ate": -0.128171,
+            "refuted_ate": -0.126461,
             "refuter_name": "random_common_cause",
             "treatment": "v_pred"
           },
@@ -3291,7 +3158,7 @@
       "blocked_by": null,
       "bridge_name": "intervention_outcome_link__decoupled_envs_only",
       "direction": "direct",
-      "extent_hash": 4382958122755417610,
+      "extent_hash": -6266987194497079439,
       "n_cells_in_scope": 180,
       "n_cells_pre_scope": 740,
       "pair_by": [
@@ -3306,7 +3173,7 @@
         "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
       },
       "predicted_direction": "a_gt_b",
-      "scope_repr": "DeferredScope(panel_analysis=Analysis(fn=<function stratum_panel at 0x7e537af2da80>, name='stratum_panel', reads=()), panel_kwargs={'measurables': ('eval_best_burst_mean', 'eval_best_burst_raw_mean'), 'treatment_arm': 'bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)', 'baseline_arm': 'baseline', 'stratify_by': ('env_name',), 'min_seeds_per_arm': 5}, keep=<function <lambda> at 0x7e52e7537740>, stratify_column='env_name', static_scope=<Expr ['[([([([([([([([(.when([(.when(…'] at 0x7E52ED39EC50>)",
+      "scope_repr": "DeferredScope(panel_analysis=Analysis(fn=<function stratum_panel at 0x7e093308da80>, name='stratum_panel', reads=()), panel_kwargs={'measurables': ('eval_best_burst_mean', 'eval_best_burst_raw_mean'), 'treatment_arm': 'bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)', 'baseline_arm': 'baseline', 'stratify_by': ('env_name',), 'min_seeds_per_arm': 5}, keep=<function <lambda> at 0x7e089f717740>, stratify_column='env_name', static_scope=<Expr ['[([([([([([([([(.when([(.when(…'] at 0x7E08A557AC50>)",
       "source_name": "bootstrap_gap_magnitude",
       "target_name": "eval_best_burst_raw_mean",
       "tier": "associational",
@@ -3329,7 +3196,7 @@
       "blocked_by": null,
       "bridge_name": "intervention_predicts_policy_decisiveness__mc_free",
       "direction": "direct",
-      "extent_hash": 7736580762933492162,
+      "extent_hash": 3683975202143259653,
       "n_cells_in_scope": 620,
       "n_cells_pre_scope": 740,
       "pair_by": [
@@ -3367,7 +3234,7 @@
       "blocked_by": null,
       "bridge_name": "policy_decisiveness_helps_outcome__survive",
       "direction": "direct",
-      "extent_hash": -4425549915894490553,
+      "extent_hash": 2003149571260801230,
       "n_cells_in_scope": 358,
       "n_cells_pre_scope": 740,
       "pair_by": [
@@ -3405,7 +3272,7 @@
       "blocked_by": null,
       "bridge_name": "policy_decisiveness_hurts_outcome__reach",
       "direction": "inverse",
-      "extent_hash": 4528217045707008727,
+      "extent_hash": 790693488990556663,
       "n_cells_in_scope": 223,
       "n_cells_pre_scope": 740,
       "pair_by": [
@@ -3443,7 +3310,7 @@
       "blocked_by": null,
       "bridge_name": "bg_link_to_outcome__survive",
       "direction": "direct",
-      "extent_hash": -4425549915894490553,
+      "extent_hash": 2003149571260801230,
       "n_cells_in_scope": 358,
       "n_cells_pre_scope": 740,
       "pair_by": [
@@ -3481,7 +3348,7 @@
       "blocked_by": null,
       "bridge_name": "bg_link_to_outcome_null__reach",
       "direction": "direct",
-      "extent_hash": 4528217045707008727,
+      "extent_hash": 790693488990556663,
       "n_cells_in_scope": 223,
       "n_cells_pre_scope": 740,
       "pair_by": [
@@ -3519,7 +3386,7 @@
       "blocked_by": null,
       "bridge_name": "bg_per_burst_predicts_entropy_per_burst",
       "direction": "direct",
-      "extent_hash": 7736580762933492162,
+      "extent_hash": 3683975202143259653,
       "n_cells_in_scope": 620,
       "n_cells_pre_scope": 740,
       "pair_by": [
@@ -3557,7 +3424,7 @@
       "blocked_by": null,
       "bridge_name": "entropy_per_burst_predicts_outcome_per_burst",
       "direction": "direct",
-      "extent_hash": 7736580762933492162,
+      "extent_hash": 3683975202143259653,
       "n_cells_in_scope": 620,
       "n_cells_pre_scope": 740,
       "pair_by": [
@@ -3595,7 +3462,7 @@
       "blocked_by": null,
       "bridge_name": "bg_per_burst_link_to_outcome",
       "direction": "direct",
-      "extent_hash": 7736580762933492162,
+      "extent_hash": 3683975202143259653,
       "n_cells_in_scope": 620,
       "n_cells_pre_scope": 740,
       "pair_by": [
@@ -3634,7 +3501,7 @@
       "blocked_by": null,
       "bridge_name": "q_divergence_shadowed_by_jens",
       "direction": "direct",
-      "extent_hash": 7736580762933492162,
+      "extent_hash": 3683975202143259653,
       "n_cells_in_scope": 620,
       "n_cells_pre_scope": 740,
       "pair_by": [
@@ -3674,7 +3541,7 @@
       "blocked_by": null,
       "bridge_name": "argmax_entropy_shadowed_by_jens",
       "direction": "direct",
-      "extent_hash": 7736580762933492162,
+      "extent_hash": 3683975202143259653,
       "n_cells_in_scope": 620,
       "n_cells_pre_scope": 740,
       "pair_by": [
@@ -3714,7 +3581,7 @@
       "blocked_by": null,
       "bridge_name": "eff_h_mediates_g_link__goal_envs",
       "direction": "direct",
-      "extent_hash": -2809972791229179602,
+      "extent_hash": -4328824785742142841,
       "n_cells_in_scope": 264,
       "n_cells_pre_scope": 740,
       "pair_by": [
@@ -3759,7 +3626,7 @@
       "blocked_by": null,
       "bridge_name": "eff_h_mediates_g_link__survival_envs",
       "direction": "direct",
-      "extent_hash": 2914645217862300576,
+      "extent_hash": 7506898956168851118,
       "n_cells_in_scope": 246,
       "n_cells_pre_scope": 740,
       "pair_by": [
@@ -3912,7 +3779,7 @@
       "blocked_by": null,
       "bridge_name": "cross_config_staleness_slope_negative__survive",
       "direction": "direct",
-      "extent_hash": -4540830043899170306,
+      "extent_hash": 3351500839541890776,
       "n_cells_in_scope": 237,
       "n_cells_pre_scope": 740,
       "pair_by": [
@@ -3966,7 +3833,7 @@
       "blocked_by": null,
       "bridge_name": "effh_predicts_link_power__reach_envs",
       "direction": "direct",
-      "extent_hash": -1562840254152022161,
+      "extent_hash": 8255592322789419301,
       "n_cells_in_scope": 240,
       "n_cells_pre_scope": 740,
       "pair_by": [
@@ -4036,7 +3903,7 @@
       "blocked_by": null,
       "bridge_name": "argmax_entropy_link_power_null__survive_envs",
       "direction": "direct",
-      "extent_hash": 363673326436482199,
+      "extent_hash": 4520037699268717735,
       "n_cells_in_scope": 179,
       "n_cells_pre_scope": 740,
       "pair_by": [
@@ -4078,7 +3945,7 @@
   ],
   "cache_path": "experiments/data/cache/ddqn.parquet",
   "errored_bridges": [],
-  "git_commit": "38a7d7133bf4",
+  "git_commit": "c94c14fd2148",
   "hypothesis_module": "experiments.findings.ddqn",
   "measurable_signatures": {
     "argmax_entropy_late": "22f4c683c0bfee66",
@@ -4105,5 +3972,5 @@
     "target_staleness_late": "14b90395c7aabd2e"
   },
   "n_cells_total": 740,
-  "timestamp_utc": "2026-05-13T15:23:54+00:00"
+  "timestamp_utc": "2026-05-13T21:08:25+00:00"
 }

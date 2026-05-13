@@ -349,8 +349,345 @@ def ddqn_bias_reduction_scales_with_fa_coherence__cross_env(
     )
 
 
+# Per-cell scope filters for the FA-degeneracy conjunction
+# (`findings_unified_degeneracy_theory.md`). Each bridge uses
+# `reward_nonzero_frac` and / or `q_autocorr_late` as PER-CELL
+# scope predicates (NOT per-env dict constants), which makes
+# them transitively required by the bridge → `--ingest-all`
+# walks the trace columns + computes the measurable per cell.
+#
+# Thresholds derived from FR γ=0.999 vanilla-collapse condition
+# (factorial 2026-05-13):
+#  - bare FR (sparse): reward_nonzero_frac ≈ 0.005 → 0.05 cutoff
+#  - deep MLP[64,64]:  q_autocorr_late ≈ 0.7-0.99 → 0.5 cutoff
+# Scope-restricted bridges fire on cells where the theory's
+# axes are ACTIVE; null bridges on the same scope would
+# falsify the theory in the rescue regime.
+
+# Sparse-reward scope: vanilla's per-step reward signal is near-
+# zero (uninf-r axis active).
+_SPARSE_REWARD_SCOPE = pl.col('reward_nonzero_frac') < 0.05
+# High-FA-coherence scope: vanilla's online_max_Q autocorr is
+# high (FA-coherence axis active).
+_HIGH_AUTOCORR_SCOPE = pl.col('q_autocorr_late') > 0.5
+# Canonical-config gates shared across the three new bridges.
+_CANONICAL_CONFIG_SCOPE = (
+    (pl.col('gamma') == 0.99)
+    & ((pl.col('n_step') == 1) | pl.col('n_step').is_null())
+    & pl.col('action_duplicate_k').is_null()
+    & (pl.col('reward_scale').is_null() | (pl.col('reward_scale') == 1.0))
+    & pl.col('jensen_gap').is_finite()
+)
+
+
+# CLAIM 28 — Sparse-reward scope: DDQN's bias-reduction is large
+# where per-step reward is uninformative (axis iii active).
+@claim_bridge(
+    source=INTERVENTION,
+    target='jensen_gap',
+    direction=Direction.INVERSE,
+    tier=Tier.INTERVENTIONAL,
+    scope=(
+        _SPARSE_REWARD_SCOPE
+        & _CANONICAL_CONFIG_SCOPE
+        & pl.col('reward_nonzero_frac').is_finite()
+    ),
+    predicted_direction='a_lt_b',
+)
+def ddqn_bias_reduction_under_sparse_reward_scope(
+    stratified_arm_diff_pooled: object,
+    *,
+    treatment_arm: str = DDQN_ARM,
+    baseline_arm: str = VANILLA_ARM,
+    measurables: tuple[str, ...] = ('jensen_gap',),
+    stratify_by: tuple[str, ...] = (
+        'env_name', 'total_steps', 'replay.capacity', 'sync_period',
+    ),
+    min_seeds_per_arm: int = 10,
+    effect_threshold: float = 0.3,
+) -> Verdict:
+    """Per-cell SCOPE: cells with `reward_nonzero_frac < 0.05`
+    (sparse-reward, theory's axis-iii ACTIVE). Pool Cohen's d on
+    `jensen_gap` per (env, config) via independent-samples →
+    random-effects pool. HELD when DL pooled d ≤ −0.3 AND
+    heterogeneity-not-flagged.
+
+    **Per-cell scope (not per-env dict)**: the bridge filters
+    cells INDIVIDUALLY by their measured `reward_nonzero_frac`.
+    Each cell flowing through the bridge has had its trace
+    re-walked at `--ingest-all` time to compute this measurable,
+    so the runner backfills it for any corpus where traces are
+    locally / cloud-restorable.
+
+    This shape is more honest than the env-level pinning:
+    `reward_nonzero_frac` is (env, policy)-dependent — a vanilla
+    cell on FR γ=0.999 that collapses may have density near 0
+    while a converged vanilla cell on FR γ=0.99 sees the goal
+    reward more often, density ~ 0.005. Per-cell filtering
+    captures the regime each cell is actually IN; per-env mean
+    averages over both regimes.
+
+    Empirical anchor (`findings_unified_degeneracy_theory.md`):
+    shaping FR via `PotentialReward` makes density → 1 and rescues
+    vanilla collapse (0.21 → 61.5 outcome at γ=0.999). Cells with
+    density > 0.05 should ESCAPE this bridge's scope; cells in
+    scope should show large bias-reduction under DDQN."""
+    del treatment_arm, baseline_arm, measurables, stratify_by
+    del min_seeds_per_arm, effect_threshold
+    # Use stratified_arm_diff_pooled's verdict directly; the
+    # primitive emits HELD / NO_EFFECT / POWER_INSUFFICIENT /
+    # HELD_WITH_SCOPE_FLAG based on the DL pooled-d magnitude +
+    # heterogeneity. Pass-through.
+    if not hasattr(stratified_arm_diff_pooled, 'verdict'):
+        return Verdict.POWER_INSUFFICIENT
+    return getattr(stratified_arm_diff_pooled, 'verdict')
+
+
+# CLAIM 29 — High-FA-coherence scope: DDQN's bias-reduction is
+# large where the FA over-smooths Q across nearby states (axis i
+# active). Standalone test of axis (i) at per-cell resolution.
+@claim_bridge(
+    source=INTERVENTION,
+    target='jensen_gap',
+    direction=Direction.INVERSE,
+    tier=Tier.INTERVENTIONAL,
+    scope=(
+        _HIGH_AUTOCORR_SCOPE
+        & _CANONICAL_CONFIG_SCOPE
+        & pl.col('q_autocorr_late').is_finite()
+    ),
+    predicted_direction='a_lt_b',
+)
+def ddqn_bias_reduction_under_high_fa_coherence_scope(
+    stratified_arm_diff_pooled: object,
+    *,
+    treatment_arm: str = DDQN_ARM,
+    baseline_arm: str = VANILLA_ARM,
+    measurables: tuple[str, ...] = ('jensen_gap',),
+    stratify_by: tuple[str, ...] = (
+        'env_name', 'total_steps', 'replay.capacity', 'sync_period',
+    ),
+    min_seeds_per_arm: int = 10,
+    effect_threshold: float = 0.3,
+) -> Verdict:
+    """Per-cell SCOPE: cells with `q_autocorr_late > 0.5`. Same
+    pool-and-DL shape as the sparse-reward bridge. Sibling test
+    of the FA-coherence axis (i).
+
+    The original `ddqn_bias_reduction_scales_with_fa_coherence__cross_env`
+    bridge uses a per-env DICT covariate — captures the cross-env
+    slope but not the per-cell regime structure. This bridge
+    asks: of cells in the high-autocorr regime (regardless of
+    env), does DDQN reduce bias significantly? Per-cell scope is
+    the post-`feedback_endogenous_scope_predicates` shape: env-
+    feature predicates over env-name predicates."""
+    del treatment_arm, baseline_arm, measurables, stratify_by
+    del min_seeds_per_arm, effect_threshold
+    if not hasattr(stratified_arm_diff_pooled, 'verdict'):
+        return Verdict.POWER_INSUFFICIENT
+    return getattr(stratified_arm_diff_pooled, 'verdict')
+
+
+# CLAIM 30 — Full conjunction scope: axes (i) ∧ (iii) BOTH
+# active. The load-bearing test of the multiplicative theory.
+@claim_bridge(
+    source=INTERVENTION,
+    target='jensen_gap',
+    direction=Direction.INVERSE,
+    tier=Tier.INTERVENTIONAL,
+    scope=(
+        _SPARSE_REWARD_SCOPE
+        & _HIGH_AUTOCORR_SCOPE
+        & _CANONICAL_CONFIG_SCOPE
+        & pl.col('reward_nonzero_frac').is_finite()
+        & pl.col('q_autocorr_late').is_finite()
+    ),
+    predicted_direction='a_lt_b',
+)
+def ddqn_bias_reduction_under_full_degeneracy_scope(
+    stratified_arm_diff_pooled: object,
+    *,
+    treatment_arm: str = DDQN_ARM,
+    baseline_arm: str = VANILLA_ARM,
+    measurables: tuple[str, ...] = ('jensen_gap',),
+    stratify_by: tuple[str, ...] = (
+        'env_name', 'total_steps', 'replay.capacity', 'sync_period',
+    ),
+    min_seeds_per_arm: int = 10,
+    effect_threshold: float = 0.3,
+) -> Verdict:
+    """Per-cell CONJUNCTION SCOPE: cells with BOTH `reward_nonzero_frac
+    < 0.05` AND `q_autocorr_late > 0.5`. The load-bearing test of
+    the FA-degeneracy theory's multiplicative structure: only
+    cells where ALL endogenous axes fire should show large DDQN
+    bias-reduction.
+
+    Compared to the standalone (sparsity-only / autocorr-only)
+    bridges, the conjunction scope is STRICTLY smaller. The
+    multiplicative theory predicts:
+    - On conjunction-scope cells: DDQN reduces bias substantially
+      (pooled d ≤ −0.3, HELD).
+    - On standalone-scope-but-not-conjunction cells (axis (i) OR
+      (iii) but not both): DDQN benefit attenuates.
+
+    The standalone bridges measure pooled effect on UNION; this
+    bridge measures pooled effect on INTERSECTION. If the
+    multiplicative theory holds, the conjunction's d-magnitude
+    should be larger than either standalone's d on cells outside
+    the conjunction (post-hoc decomposition once cells land)."""
+    del treatment_arm, baseline_arm, measurables, stratify_by
+    del min_seeds_per_arm, effect_threshold
+    if not hasattr(stratified_arm_diff_pooled, 'verdict'):
+        return Verdict.POWER_INSUFFICIENT
+    return getattr(stratified_arm_diff_pooled, 'verdict')
+
+
+# CLAIM 31/32/33 — Outcome-target siblings of the mech bridges
+# above. Same per-cell scopes; ask whether DDQN's bias-reduction
+# TRANSLATES into outcome benefit. Together with the mech bridges,
+# these form a mech-link decoupling cluster: same scope, two
+# verdicts (mech-side, outcome-side). The contrast IS the finding
+# wherever they differ.
+#
+# Predicted_direction='a_gt_b' (DDQN > vanilla on outcome). The
+# pre-registration: theory predicts DDQN should improve outcome
+# whenever mech HELDs on the same scope. Empirical reality may
+# differ (cf. `findings_q_amplification_cartpole.md` +
+# `findings_ddqn_variance_injection.md`: on some envs DDQN reduces
+# bias but increases per-seed σ_Q, hurting outcome).
+
+
+# CLAIM 31 — Sparse-reward scope on OUTCOME.
+@claim_bridge(
+    source=INTERVENTION,
+    target='eval_best_burst_raw_mean',
+    direction=Direction.DIRECT,
+    tier=Tier.INTERVENTIONAL,
+    scope=(
+        _SPARSE_REWARD_SCOPE
+        & _CANONICAL_CONFIG_SCOPE
+        & pl.col('reward_nonzero_frac').is_finite()
+        & pl.col('eval_best_burst_raw_mean').is_finite()
+    ),
+    predicted_direction='a_gt_b',
+)
+def ddqn_outcome_benefit_under_sparse_reward_scope(
+    stratified_arm_diff_pooled: object,
+    *,
+    treatment_arm: str = DDQN_ARM,
+    baseline_arm: str = VANILLA_ARM,
+    measurables: tuple[str, ...] = ('eval_best_burst_raw_mean',),
+    stratify_by: tuple[str, ...] = (
+        'env_name', 'total_steps', 'replay.capacity', 'sync_period',
+    ),
+    min_seeds_per_arm: int = 10,
+    effect_threshold: float = 0.3,
+) -> Verdict:
+    """OUTCOME-side counterpart of CLAIM 28. Same per-cell
+    sparse-reward scope; tests whether DDQN's bias-reduction
+    translates into outcome benefit at the raw-return scale.
+
+    Sibling-to-CLAIM-28 verdict CONTRAST is the finding: any
+    drift between mech-side HELD and outcome-side non-HELD on
+    identical scope is exactly the mech↛link decoupling the
+    framework's three-verdict architecture was designed to
+    surface (PAPER §3.4)."""
+    del treatment_arm, baseline_arm, measurables, stratify_by
+    del min_seeds_per_arm, effect_threshold
+    if not hasattr(stratified_arm_diff_pooled, 'verdict'):
+        return Verdict.POWER_INSUFFICIENT
+    return getattr(stratified_arm_diff_pooled, 'verdict')
+
+
+# CLAIM 32 — High-FA-coherence scope on OUTCOME.
+@claim_bridge(
+    source=INTERVENTION,
+    target='eval_best_burst_raw_mean',
+    direction=Direction.DIRECT,
+    tier=Tier.INTERVENTIONAL,
+    scope=(
+        _HIGH_AUTOCORR_SCOPE
+        & _CANONICAL_CONFIG_SCOPE
+        & pl.col('q_autocorr_late').is_finite()
+        & pl.col('eval_best_burst_raw_mean').is_finite()
+    ),
+    predicted_direction='a_gt_b',
+)
+def ddqn_outcome_benefit_under_high_fa_coherence_scope(
+    stratified_arm_diff_pooled: object,
+    *,
+    treatment_arm: str = DDQN_ARM,
+    baseline_arm: str = VANILLA_ARM,
+    measurables: tuple[str, ...] = ('eval_best_burst_raw_mean',),
+    stratify_by: tuple[str, ...] = (
+        'env_name', 'total_steps', 'replay.capacity', 'sync_period',
+    ),
+    min_seeds_per_arm: int = 10,
+    effect_threshold: float = 0.3,
+) -> Verdict:
+    """OUTCOME-side counterpart of CLAIM 29."""
+    del treatment_arm, baseline_arm, measurables, stratify_by
+    del min_seeds_per_arm, effect_threshold
+    if not hasattr(stratified_arm_diff_pooled, 'verdict'):
+        return Verdict.POWER_INSUFFICIENT
+    return getattr(stratified_arm_diff_pooled, 'verdict')
+
+
+# CLAIM 33 — Full conjunction scope on OUTCOME.
+@claim_bridge(
+    source=INTERVENTION,
+    target='eval_best_burst_raw_mean',
+    direction=Direction.DIRECT,
+    tier=Tier.INTERVENTIONAL,
+    scope=(
+        _SPARSE_REWARD_SCOPE
+        & _HIGH_AUTOCORR_SCOPE
+        & _CANONICAL_CONFIG_SCOPE
+        & pl.col('reward_nonzero_frac').is_finite()
+        & pl.col('q_autocorr_late').is_finite()
+        & pl.col('eval_best_burst_raw_mean').is_finite()
+    ),
+    predicted_direction='a_gt_b',
+)
+def ddqn_outcome_benefit_under_full_degeneracy_scope(
+    stratified_arm_diff_pooled: object,
+    *,
+    treatment_arm: str = DDQN_ARM,
+    baseline_arm: str = VANILLA_ARM,
+    measurables: tuple[str, ...] = ('eval_best_burst_raw_mean',),
+    stratify_by: tuple[str, ...] = (
+        'env_name', 'total_steps', 'replay.capacity', 'sync_period',
+    ),
+    min_seeds_per_arm: int = 10,
+    effect_threshold: float = 0.3,
+) -> Verdict:
+    """OUTCOME-side counterpart of CLAIM 30 (the conjunction
+    bridge). Paired with CLAIM 30 this is the LOAD-BEARING test
+    of FA-degeneracy theory at the OUTCOME layer:
+    - CLAIM 30 HELD + CLAIM 33 HELD → theory fully corroborated
+    - CLAIM 30 HELD + CLAIM 33 NO_EFFECT → mech↛link decoupling
+      (theory predicts mech but link breaks — premise insufficient)
+    - CLAIM 30 NO_EFFECT → theory's mech-axis prediction refuted
+
+    Pre-registered: signed-direction expectation a_gt_b (DDQN
+    raises outcome). The framework's PI-based verdict applies."""
+    del treatment_arm, baseline_arm, measurables, stratify_by
+    del min_seeds_per_arm, effect_threshold
+    if not hasattr(stratified_arm_diff_pooled, 'verdict'):
+        return Verdict.POWER_INSUFFICIENT
+    return getattr(stratified_arm_diff_pooled, 'verdict')
+
+
 BRIDGES = (
-    ddqn_benefit_scales_with_effective_horizon__fourrooms,
-    metamaze_link_steeper_at_high_gamma,
+    # γ-sweep bridges moved to `ddqn_sweeps.within_env_sweeps` —
+    # canonical pins γ=0.99 so they fire empty here:
+    #   ddqn_benefit_scales_with_effective_horizon__fourrooms (CLAIM 5)
+    #   metamaze_link_steeper_at_high_gamma (CLAIM 24)
     ddqn_bias_reduction_scales_with_fa_coherence__cross_env,
+    ddqn_bias_reduction_under_sparse_reward_scope,
+    ddqn_bias_reduction_under_high_fa_coherence_scope,
+    ddqn_bias_reduction_under_full_degeneracy_scope,
+    ddqn_outcome_benefit_under_sparse_reward_scope,
+    ddqn_outcome_benefit_under_high_fa_coherence_scope,
+    ddqn_outcome_benefit_under_full_degeneracy_scope,
 )

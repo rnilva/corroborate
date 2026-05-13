@@ -17,14 +17,15 @@ from experiments.findings.ddqn.within_env import (
 )
 
 
-EXPECTED: ClusterVerdict = ClusterVerdict.UNDERPOWERED
+EXPECTED: ClusterVerdict = ClusterVerdict.EMPTY_EXTENT
 
 
 BLOCKED_ON: str | None = (
-    'γ-sweep finding: tests γ=0.99 vs γ=0.999 amplification within '
-    'MetaMaze. Canonical pins γ=0.99, so γ=0.999 arm has 0 cells. '
-    'Belongs in `ddqn_sweeps` (deferred until within_env.py triage). '
-    'Pre-canonical fired REFUTED on the HP-mixed pool.'
+    'Bridge fires empty even under ddqn_sweeps (relaxed MODULE_SCOPE). '
+    '`G1_VANILLA_CONFIG_PREMISE_ACTIVE` in the bridge\'s scope filters '
+    'out MetaMaze γ=0.999 — vanilla jens is below the 0.05 noise floor '
+    'at the long-horizon γ. Need either G1-relaxed γ-sweep bridge or '
+    'denser MetaMaze γ=0.999 cells with active vanilla bias.'
 )
 
 
