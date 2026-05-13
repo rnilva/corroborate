@@ -29,7 +29,7 @@ heterogeneous; obscuring it via per-pair pooling was misleading.
 from __future__ import annotations
 
 import math
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
 from corroborate.bridge.analysis import analysis
@@ -39,7 +39,7 @@ from corroborate.stats.effect_size import (
     random_effects_summary, random_effects_verdict,
 )
 
-from corroborate.analyses.paired_g import resolve_value
+from corroborate.analyses.stratum_panel import stratum_panel
 
 
 @dataclass(frozen=True, slots=True)
@@ -145,60 +145,9 @@ class StratifiedArmDiffPooledResult:
         return self.pooled_d + 1.96 * self.pooled_se
 
 
-def _per_stratum_aggregate(
-    cells: Iterable[Mapping[str, object]],
-    *,
-    source: str,
-    scope_predictor: str,
-    treatment_arm: str,
-    baseline_arm: str,
-    stratify_by: Sequence[str],
-    arm_field: str,
-) -> dict[tuple[object, ...], dict[str, list[float]]]:
-    """Bucket cells by (stratum, arm); return per-bucket
-    `{'source': [...], 'predictor': [...]}`. NaN values are
-    skipped. Predictor values are tracked only for the BASELINE
-    arm (used for stratum-level scope filtering)."""
-    buckets: dict[tuple[object, ...], dict[str, list[float]]] = {}
-    for cell in cells:
-        arm = cell.get(arm_field)
-        if arm not in (treatment_arm, baseline_arm):
-            continue
-        stratum_id = tuple(cell.get(k) for k in stratify_by)
-        bucket_key = stratum_id + (arm,)
-        v = resolve_value(cell, source)
-        if math.isnan(v):
-            continue
-        b = buckets.setdefault(bucket_key, {'source': [], 'predictor': []})
-        b['source'].append(v)
-        if arm == baseline_arm:
-            p = resolve_value(cell, scope_predictor)
-            if not math.isnan(p):
-                b['predictor'].append(p)
-    return buckets
-
-
-def _cohen_d_indep_samples(
-    mean_t: float, sd_t: float, n_t: int,
-    mean_b: float, sd_b: float, n_b: int,
-) -> tuple[float, float]:
-    """Independent-samples Cohen's d + Hedges 1981 SE.
-
-    `d = (mean_t - mean_b) / sqrt((sd_t² + sd_b²) / 2)`.
-    `se ≈ sqrt((n_t + n_b)/(n_t n_b) + d²/(2(n_t + n_b - 2)))`.
-    Returns (NaN, NaN) on degenerate (zero-SD or n<2) input.
-    """
-    if n_t < 2 or n_b < 2:
-        return float('nan'), float('nan')
-    pooled_var = (sd_t ** 2 + sd_b ** 2) / 2.0
-    if pooled_var <= 0:
-        return float('nan'), float('nan')
-    d = (mean_t - mean_b) / math.sqrt(pooled_var)
-    se = math.sqrt(
-        (n_t + n_b) / (n_t * n_b)
-        + d ** 2 / (2.0 * (n_t + n_b - 2))
-    )
-    return d, se
+# Removed `_per_stratum_aggregate` and `_cohen_d_indep_samples`
+# in Phase 5 migration (2026-05-13): panel-build + Cohen's d
+# computation moved to `stratum_panel.cohen_d` / `.cohen_se`.
 
 
 @analysis
@@ -218,6 +167,13 @@ def stratified_arm_diff_pooled(
     predicted_direction: PredictedDirection | None = None,
 ) -> StratifiedArmDiffPooledResult:
     """Per-stratum independent-samples Cohen's d, DL-pooled.
+
+    Phase 5 migration (2026-05-13): delegates to `stratum_panel`
+    for the cell→panel build, then builds the rich
+    `StratifiedArmDiffPooledResult` from panel data + applies the
+    `min_vanilla_predictor` stratum-level filter +
+    `random_effects_summary` for the DL pool. Result type and
+    semantics unchanged — verdict-preserving.
 
     Strata are formed by `stratify_by` tuple (default:
     `(env_name, sync_period, gamma, action_duplicate_k)`). Per
@@ -244,52 +200,51 @@ def stratified_arm_diff_pooled(
     `pooled_d` is in Cohen's d units (sign-stable, scale-free).
     NaN-pooled when fewer than 2 strata pass filters.
     """
-    buckets = _per_stratum_aggregate(
+    # Phase 5: delegate panel-build to `stratum_panel`. We need
+    # both `source` and `scope_predictor` on the panel so the
+    # `min_vanilla_predictor` stratum-level filter can read the
+    # baseline arm's `scope_predictor` mean per stratum.
+    measurables_for_panel: tuple[str, ...] = (
+        (source,) if source == scope_predictor
+        else (source, scope_predictor)
+    )
+    panel = stratum_panel.fn(
         cells,
-        source=source,
-        scope_predictor=scope_predictor,
+        measurables=measurables_for_panel,
         treatment_arm=treatment_arm,
         baseline_arm=baseline_arm,
         stratify_by=stratify_by,
         arm_field=arm_field,
+        min_seeds_per_arm=min_seeds_per_arm,
     )
 
-    # Group by stratum_id (drop the trailing arm dimension).
-    stratum_ids: set[tuple[object, ...]] = {
-        k[:-1] for k in buckets.keys()
-    }
+    cohen_d_per_stratum = panel.cohen_d(source)
+    cohen_se_per_stratum = panel.cohen_se(source)
 
     per_stratum: list[StratumDiff] = []
-    for stratum_id in sorted(stratum_ids, key=str):
-        t_bucket = buckets.get(stratum_id + (treatment_arm,))
-        b_bucket = buckets.get(stratum_id + (baseline_arm,))
-        if t_bucket is None or b_bucket is None:
-            continue
-        t_vals = t_bucket['source']; b_vals = b_bucket['source']
-        n_t = len(t_vals); n_b = len(b_vals)
+    for i, stratum_id in enumerate(panel.strata):
+        # n_seeds reflects FINITE-VALUE counts for `source`,
+        # matching legacy semantics where cells with NaN source
+        # were excluded before counting.
+        n_t = panel.n_treatment_per_measurable[source][i]
+        n_b = panel.n_baseline_per_measurable[source][i]
         if n_t < min_seeds_per_arm or n_b < min_seeds_per_arm:
             continue
         # Stratum-level scope filter on vanilla aggregate
-        v_predictor_vals = b_bucket['predictor']
-        if not v_predictor_vals:
+        v_predictor_mean = panel.means_baseline[scope_predictor][i]
+        if math.isnan(v_predictor_mean):
             continue
-        v_predictor_mean = sum(v_predictor_vals) / len(v_predictor_vals)
         if v_predictor_mean <= min_vanilla_predictor:
             continue
-        mean_t = sum(t_vals) / n_t
-        mean_b = sum(b_vals) / n_b
-        sd_t = math.sqrt(
-            sum((v - mean_t) ** 2 for v in t_vals) / (n_t - 1)
-        ) if n_t >= 2 else float('nan')
-        sd_b = math.sqrt(
-            sum((v - mean_b) ** 2 for v in b_vals) / (n_b - 1)
-        ) if n_b >= 2 else float('nan')
-        d, se = _cohen_d_indep_samples(mean_t, sd_t, n_t, mean_b, sd_b, n_b)
+        mean_t = panel.means_treatment[source][i]
+        mean_b = panel.means_baseline[source][i]
+        sd_t = panel.stds_treatment[source][i]
+        sd_b = panel.stds_baseline[source][i]
         per_stratum.append(StratumDiff(
             stratum_id=stratum_id,
             mean_diff=mean_t - mean_b,
-            cohen_d=d,
-            cohen_se=se,
+            cohen_d=cohen_d_per_stratum[i],
+            cohen_se=cohen_se_per_stratum[i],
             arm_mean_treatment=mean_t,
             arm_mean_baseline=mean_b,
             arm_sd_treatment=sd_t,

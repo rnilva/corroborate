@@ -312,7 +312,17 @@ def exogenous_scope(
         return None
     if claim is None:
         return None
-    referenced = set(bridge.scope.meta.root_names())
+    # DeferredScope: extract column references from the static_scope
+    # half if any; the dynamic part references the stratify column
+    # (a regular cell column, not a measurable).
+    from corroborate.bridge.deferred_scope import DeferredScope
+    if isinstance(bridge.scope, DeferredScope):
+        static_expr = bridge.scope.static_scope
+        if static_expr is None:
+            return None
+        referenced = set(static_expr.meta.root_names())
+    else:
+        referenced = set(bridge.scope.meta.root_names())
     endogenous = {n for n in referenced if is_endogenous(n, claim)}
     exogenous = referenced - endogenous
     if exogenous and not endogenous:

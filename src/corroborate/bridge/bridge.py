@@ -57,6 +57,7 @@ from typing import cast
 import polars as pl
 
 from corroborate._internals.introspection import get_param_default
+from corroborate.bridge.deferred_scope import DeferredScope
 from corroborate.bridge.admission import (
     AUTO_GATES,
     AdmissionGate,
@@ -243,7 +244,7 @@ class Bridge:
     direction: Direction = Direction.DIRECT
     tier: Tier = Tier.ASSOCIATIONAL
     pair_by: tuple[str, ...] = ('seed',)
-    scope: pl.Expr | None = None
+    scope: 'pl.Expr | DeferredScope | None' = None
     predicted_direction: PredictedDirection | None = None
     holds_when: Callable[..., 'Verdict | tuple[Verdict, RefutationClass | None]'] | None = None
     threshold: float | None = None
@@ -469,19 +470,22 @@ def _require_tier(value: object, fn_name: str) -> Tier:
     return value
 
 
-def _require_scope(value: object, fn_name: str) -> pl.Expr | None:
+def _require_scope(
+    value: object, fn_name: str,
+) -> 'pl.Expr | DeferredScope | None':
     """Validate `scope` decorator arg. `None` → no filter;
-    a `pl.Expr` is accepted as the polars-native cell predicate.
-    Any other value is an authoring mistake — fail loudly at
-    import."""
+    a `pl.Expr` is accepted as the polars-native cell predicate,
+    OR a `DeferredScope` for scopes that resolve at evaluation
+    time (via `scope_from_panel`). Any other value is an
+    authoring mistake — fail loudly at import."""
     if value is None:
         return None
-    if isinstance(value, pl.Expr):
+    if isinstance(value, (pl.Expr, DeferredScope)):
         return value
     raise TypeError(
         f'@claim_bridge {fn_name!r}: default for `scope` '
-        f'must be a pl.Expr (e.g. `pl.col(\'env_name\') == \'X\'`) '
-        f'or None; got {type(value).__name__}',
+        f'must be a pl.Expr, DeferredScope, or None; '
+        f'got {type(value).__name__}',
     )
 
 
@@ -535,7 +539,7 @@ def claim_bridge(
     direction: Direction = Direction.DIRECT,
     tier: Tier = Tier.ASSOCIATIONAL,
     pair_by: tuple[str, ...] = ('seed',),
-    scope: pl.Expr | None = None,
+    scope: 'pl.Expr | DeferredScope | None' = None,
     predicted_direction: PredictedDirection | None = None,
     gates: tuple[AdmissionGate, ...] = (),
 ) -> Callable[[Callable[..., 'Verdict | tuple[Verdict, RefutationClass | None]']], Bridge]:
@@ -751,15 +755,36 @@ def evaluate(
         )
     # Effective scope = bridge.scope ∧ module_scope (either may
     # be None). Polars' `&` is the framework-honest composition.
+    #
+    # `bridge.scope` may be a `DeferredScope` whose resolution
+    # depends on the cells themselves (e.g. scope_from_panel
+    # filtering to strata where an upstream panel statistic
+    # crosses a threshold). Resolve those FIRST: build the panel
+    # from raw cells (with the deferred-scope's `static_scope`
+    # applied if present), extract surviving strata, produce
+    # a `pl.Expr` that's AND-combined with `module_scope` like
+    # any other.
+    bridge_scope_expr: pl.Expr | None
+    if isinstance(bridge.scope, DeferredScope):
+        # Pre-materialize cells for the panel build. The deferred
+        # scope's `resolve` runs on raw cells; static_scope inside
+        # the deferred scope is applied by the resolve method.
+        if isinstance(cells, pl.DataFrame):
+            cells_for_panel = cast(list[dict[str, object]], cells.to_dicts())
+        else:
+            cells_for_panel = [dict(c) for c in cells]
+        bridge_scope_expr = bridge.scope.resolve(cells_for_panel)
+    else:
+        bridge_scope_expr = bridge.scope
     effective_scope: pl.Expr | None
-    if bridge.scope is None and module_scope is None:
+    if bridge_scope_expr is None and module_scope is None:
         effective_scope = None
-    elif bridge.scope is None:
+    elif bridge_scope_expr is None:
         effective_scope = module_scope
     elif module_scope is None:
-        effective_scope = bridge.scope
+        effective_scope = bridge_scope_expr
     else:
-        effective_scope = bridge.scope & module_scope
+        effective_scope = bridge_scope_expr & module_scope
 
     filtered_cells: list[dict[str, object]]
     if effective_scope is None:
@@ -1017,13 +1042,26 @@ def measurable_names_for_bridges(
         # by the polars expression — exactly the set we need to
         # ensure those measurables are computed at ingest.
         if b.scope is not None:
-            try:
-                candidates.extend(b.scope.meta.root_names())
-            except Exception:  # noqa: BLE001
-                # If polars metadata extraction fails, fall through
-                # — the missing-column path in `_filter_with_missing_cols`
-                # will surface the error at evaluate-time instead.
-                pass
+            # DeferredScope: pull the static_scope (its polars-Expr
+            # half) if any; the dynamic part references the
+            # stratify column which is also a regular cell column.
+            if isinstance(b.scope, DeferredScope):
+                candidates.append(b.scope.stratify_column)
+                static_expr = b.scope.static_scope
+                if static_expr is not None:
+                    try:
+                        candidates.extend(static_expr.meta.root_names())
+                    except Exception:  # noqa: BLE001
+                        pass
+            else:
+                try:
+                    candidates.extend(b.scope.meta.root_names())
+                except Exception:  # noqa: BLE001
+                    # If polars metadata extraction fails, fall through
+                    # — the missing-column path in
+                    # `_filter_with_missing_cols` will surface the error
+                    # at evaluate-time instead.
+                    pass
         for name in candidates:
             if get_registered(name) is None:
                 continue

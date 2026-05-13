@@ -35,7 +35,7 @@ verdict helpers (`dowhy_backdoor_verdict`, `dowhy_placebo_verdict`,
 from __future__ import annotations
 
 import math
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
 from corroborate.analyses.dowhy import (
@@ -45,6 +45,7 @@ from corroborate.analyses.dowhy import (
     placebo_refutation,
     random_common_cause_refutation,
 )
+from corroborate.analyses.stratum_panel import stratum_panel
 from corroborate.bridge.analysis import analysis
 
 
@@ -61,125 +62,10 @@ class StratumVanillaPredictorLinkDowhyResult:
     outcome_col: str
 
 
-def _build_stratum_panel(
-    cells: Sequence[Mapping[str, object]],
-    *,
-    treatment_arm: str,
-    baseline_arm: str,
-    predictor_col: str,
-    target_col: str,
-    stratify_by: tuple[str, ...],
-    arm_field: str,
-    min_seeds_per_arm: int,
-    min_vanilla_predictor: float,
-) -> tuple[
-    list[Mapping[str, object]],
-    list[tuple[str, str]],
-    str,
-    str,
-]:
-    """Build per-stratum rows: one row per unique `stratify_by`
-    tuple. Each row carries `vanilla_predictor` (mean over
-    baseline cells of `predictor_col`) and `delta_target`
-    (mean_T − mean_B of `target_col`). Env one-hot dummies are
-    added for backdoor adjustment."""
-    treatment_col = 'v_pred'
-    outcome_col = 'd_out'
-
-    # Group cells by (stratum_key, arm). Stratum key = tuple of
-    # values pulled from `stratify_by` columns.
-    by_stratum_arm: dict[
-        tuple[object, ...],
-        dict[str, list[Mapping[str, object]]],
-    ] = {}
-    for cell in cells:
-        arm = cell.get(arm_field)
-        if not isinstance(arm, str):
-            continue
-        if arm not in (treatment_arm, baseline_arm):
-            continue
-        try:
-            key = tuple(cell.get(k) for k in stratify_by)
-        except (TypeError, KeyError):
-            continue
-        if any(v is None for v in key):
-            continue
-        by_stratum_arm.setdefault(key, {}).setdefault(arm, []).append(cell)
-
-    stratum_rows: list[dict[str, object]] = []
-    envs_seen: list[str] = []
-    for key, arms_dict in by_stratum_arm.items():
-        t_cells = arms_dict.get(treatment_arm, [])
-        b_cells = arms_dict.get(baseline_arm, [])
-        if len(t_cells) < min_seeds_per_arm:
-            continue
-        if len(b_cells) < min_seeds_per_arm:
-            continue
-        b_pred_vals: list[float] = []
-        for c in b_cells:
-            v = c.get(predictor_col)
-            if isinstance(v, (int, float)) and not math.isnan(float(v)):
-                b_pred_vals.append(float(v))
-        t_target_vals: list[float] = []
-        for c in t_cells:
-            v = c.get(target_col)
-            if isinstance(v, (int, float)) and not math.isnan(float(v)):
-                t_target_vals.append(float(v))
-        b_target_vals: list[float] = []
-        for c in b_cells:
-            v = c.get(target_col)
-            if isinstance(v, (int, float)) and not math.isnan(float(v)):
-                b_target_vals.append(float(v))
-        if (
-            len(b_pred_vals) < min_seeds_per_arm
-            or len(t_target_vals) < min_seeds_per_arm
-            or len(b_target_vals) < min_seeds_per_arm
-        ):
-            continue
-        vanilla_pred = sum(b_pred_vals) / len(b_pred_vals)
-        if vanilla_pred <= min_vanilla_predictor:
-            continue
-        delta_target = (
-            sum(t_target_vals) / len(t_target_vals)
-            - sum(b_target_vals) / len(b_target_vals)
-        )
-        # env is the first element of stratify_by by convention;
-        # if not present, fall back to 'env_name' lookup on a cell.
-        if 'env_name' in stratify_by:
-            env_idx = stratify_by.index('env_name')
-            env_v = key[env_idx]
-        else:
-            env_v = b_cells[0].get('env_name')
-        if not isinstance(env_v, str):
-            continue
-        if env_v not in envs_seen:
-            envs_seen.append(env_v)
-        stratum_rows.append({
-            'env_name': env_v,
-            treatment_col: vanilla_pred,
-            outcome_col: delta_target,
-        })
-
-    if not stratum_rows:
-        return [], [], treatment_col, outcome_col
-
-    # Env one-hot, drop first env to avoid collinearity.
-    envs_sorted = sorted(envs_seen)
-    env_dummy_cols = [f'__env__{e}' for e in envs_sorted[1:]]
-    rows: list[Mapping[str, object]] = []
-    for r in stratum_rows:
-        row = dict(r)
-        e = r['env_name']
-        for col in env_dummy_cols:
-            row[col] = 1.0 if col == f'__env__{e}' else 0.0
-        rows.append(row)
-
-    dag: list[tuple[str, str]] = []
-    for c in env_dummy_cols:
-        dag.append((c, treatment_col))
-        dag.append((c, outcome_col))
-    dag.append((treatment_col, outcome_col))
-    return rows, dag, treatment_col, outcome_col
+# Removed `_build_stratum_panel` in Phase 6 migration (2026-05-13):
+# panel-build moved to `stratum_panel`; the body's per-stratum row
+# assembly + env one-hot encoding now lives directly in
+# `stratum_vanilla_predictor_link_dowhy`.
 
 
 def _nan_backdoor(
@@ -233,6 +119,12 @@ def stratum_vanilla_predictor_link_dowhy(
     """Test `vanilla_predictor → Δ_target` on stratum-level rows
     via DoWhy backdoor + refutations, adjusting for env.
 
+    Phase 6 migration (2026-05-13): delegates panel-build to
+    `stratum_panel`. The per-stratum rows + env-one-hot DAG
+    construction stay; the cell→stratum aggregation moves into
+    the shared panel primitive. Result type and semantics
+    unchanged — verdict-preserving.
+
     Each stratum: pool seeds within each arm INDEPENDENTLY, take
     baseline-arm-mean of `predictor_col` as the treatment value
     and (treatment-arm-mean − baseline-arm-mean) of `target_col`
@@ -244,17 +136,80 @@ def stratum_vanilla_predictor_link_dowhy(
     Empty panel (no stratum survives filters) yields a
     NaN-everywhere result."""
     cells_list = list(cells)
-    rows, dag, treatment_col, outcome_col = _build_stratum_panel(
+    treatment_col = 'v_pred'
+    outcome_col = 'd_out'
+    measurables_for_panel: tuple[str, ...] = (
+        (predictor_col,) if predictor_col == target_col
+        else (predictor_col, target_col)
+    )
+    panel = stratum_panel.fn(
         cells_list,
+        measurables=measurables_for_panel,
         treatment_arm=treatment_arm,
         baseline_arm=baseline_arm,
-        predictor_col=predictor_col,
-        target_col=target_col,
         stratify_by=stratify_by,
         arm_field=arm_field,
         min_seeds_per_arm=min_seeds_per_arm,
-        min_vanilla_predictor=min_vanilla_predictor,
     )
+    rows: list[Mapping[str, object]] = []
+    envs_seen: list[str] = []
+    try:
+        env_idx = stratify_by.index('env_name')
+    except ValueError:
+        env_idx = None
+    for i, stratum_id in enumerate(panel.strata):
+        # Match legacy semantics: require ≥ `min_seeds_per_arm`
+        # FINITE-VALUE cells for predictor (on baseline) and
+        # target (on both arms) before computing means.
+        n_b_pred = panel.n_baseline_per_measurable[predictor_col][i]
+        n_t_target = panel.n_treatment_per_measurable[target_col][i]
+        n_b_target = panel.n_baseline_per_measurable[target_col][i]
+        if (
+            n_b_pred < min_seeds_per_arm
+            or n_t_target < min_seeds_per_arm
+            or n_b_target < min_seeds_per_arm
+        ):
+            continue
+        v_pred = panel.means_baseline[predictor_col][i]
+        if math.isnan(v_pred) or v_pred <= min_vanilla_predictor:
+            continue
+        v_target = panel.means_baseline[target_col][i]
+        t_target = panel.means_treatment[target_col][i]
+        if math.isnan(v_target) or math.isnan(t_target):
+            continue
+        env_v: object | None = (
+            stratum_id[env_idx] if env_idx is not None else None
+        )
+        if not isinstance(env_v, str):
+            continue
+        if env_v not in envs_seen:
+            envs_seen.append(env_v)
+        rows.append({
+            'env_name': env_v,
+            treatment_col: v_pred,
+            outcome_col: t_target - v_target,
+        })
+
+    if rows:
+        envs_sorted = sorted(envs_seen)
+        env_dummy_cols = [f'__env__{e}' for e in envs_sorted[1:]]
+        rows = [
+            {
+                **r,
+                **{
+                    col: (1.0 if col == f'__env__{r["env_name"]}' else 0.0)
+                    for col in env_dummy_cols
+                },
+            }
+            for r in rows
+        ]
+        dag: list[tuple[str, str]] = []
+        for c in env_dummy_cols:
+            dag.append((c, treatment_col))
+            dag.append((c, outcome_col))
+        dag.append((treatment_col, outcome_col))
+    else:
+        dag = []
     if not rows:
         return StratumVanillaPredictorLinkDowhyResult(
             backdoor=_nan_backdoor(
