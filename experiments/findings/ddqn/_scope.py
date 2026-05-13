@@ -31,7 +31,7 @@ from corroborate.bridge.predicates import (
 # get hidden=(64) + CNN channels=(8,16).
 _MLP_ENVS: tuple[str, ...] = (
     'Acrobot-v1', 'CartPole-v1', 'FourRooms-misc',
-    'MountainCar-v0', 'MetaMaze-misc', 'BernoulliBandit-misc',
+    'MountainCar-v0', 'MetaMaze-misc',
 )
 _MINATAR_ENVS: tuple[str, ...] = (
     'Asterix-MinAtar', 'Breakout-MinAtar', 'Freeway-MinAtar',
