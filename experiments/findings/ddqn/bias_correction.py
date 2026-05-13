@@ -551,6 +551,65 @@ def mc_disc_raw_coupled__per_env_jci(
     )
 
 
+# === A2: MC-free outcome — fully decoupled link test ===
+#
+# The Stage 0 coupling bridge documents that the MC-derived
+# outcome target carries residual tautology (pooled ρ between
+# MC_disc and MC_raw = +0.61). A1 (`intervention_outcome_link__
+# decoupled_envs_only`) scopes around that. A2 closes it entirely
+# by switching to an MC-FREE outcome: `argmax_entropy_late`, the
+# Shannon entropy of the online-argmax distribution over late
+# training. Pure behavioral measurement — depends only on which
+# action the policy picks, never on what reward it gets.
+#
+# The link claim: configs with larger algorithmic-correction
+# magnitude (`bootstrap_gap_magnitude`) have more uncertain
+# policies (`argmax_entropy_late` larger) — both reflect
+# training-dynamics dispersion. Diagnostic 2026-05-13:
+# ρ(bg, argmax_entropy_late | env) = +0.391, p < 10⁻¹⁰ on 3270
+# cells across 11 envs. Robust positive within-env rank
+# correlation — the MC-free link fires.
+
+
+@claim_bridge(
+    source='bootstrap_gap_magnitude',
+    target='argmax_entropy_late',
+    direction=Direction.DIRECT,
+    tier=Tier.ASSOCIATIONAL,
+    scope=DDQN_RELEVANT_SCOPE,
+    predicted_direction='a_gt_b',
+)
+def intervention_predicts_policy_decisiveness__mc_free(
+    stratified_spearman: StratifiedSpearmanResult,
+    *,
+    x: str = 'bootstrap_gap_magnitude',
+    y: str = 'argmax_entropy_late',
+    stratify_by: str = 'env_name',
+    min_stratum_size: int = 5,
+    rho_threshold: float = 0.2,
+    min_strata: int = 5,
+) -> Verdict:
+    """A2 (MC-free outcome): bootstrap_gap → argmax_entropy_late.
+
+    JCI Spearman ρ within env. Predicted positive — configs where
+    the network's argmax-decoupling magnitude is large have more
+    diffuse argmax distributions (less decisive policy).
+
+    Argmax entropy is purely a function of online-network argmax
+    counts over training steps; it does NOT use MC return at any
+    step. Algebraically independent of jens / MC_disc / MC_raw —
+    the link bridge here is genuinely tautology-free, complementing
+    A1's scope-restricted form.
+
+    Diagnostic: ρ = +0.391, p < 10⁻¹⁰ on the full DDQN-relevant
+    scope (n=3270 cells, 11 envs). HELD."""
+    del x, y, stratify_by, min_stratum_size
+    return partial_spearman_signed_verdict(
+        stratified_spearman,
+        threshold=rho_threshold, sign=1, min_strata=min_strata,
+    )
+
+
 # Stage 1: algorithmic intervention magnitude
 @claim_bridge(
     source=INTERVENTION,
@@ -779,4 +838,5 @@ BRIDGES = (
     bootstrap_gap_predicts_jens__theorem,
     intervention_outcome_link_null__mech_conditioned,
     intervention_outcome_link__decoupled_envs_only,
+    intervention_predicts_policy_decisiveness__mc_free,
 )
