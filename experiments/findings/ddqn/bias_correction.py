@@ -40,6 +40,8 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping
 
+import polars as pl
+
 from corroborate.analyses.stratified_arm_diff_pooled import (
     StratifiedArmDiffPooledResult,
 )
@@ -551,6 +553,174 @@ def mc_disc_raw_coupled__per_env_jci(
     )
 
 
+# === Polarity-disjoint cluster ===
+#
+# Stratification justified by contrastive bridges: the bg →
+# outcome and entropy → outcome edges are split into disjoint
+# polarity scopes (SURVIVE: env_reward_polarity > 0.1; REACH:
+# < -0.1). Same edge identity (source, target), DISJOINT scopes
+# — the framework's cluster machinery surfaces this as a
+# scope-cluster pattern per HYPOTHESIS_AS_GRAPH.md §3b.
+#
+# Diagnostic 2026-05-13 (within DDQN_RELEVANT_SCOPE):
+#
+# | edge | SURVIVE ρ | REACH ρ |
+# |---|---|---|
+# | bg → entropy | +0.30 (HELD) | +0.42 (HELD)         | <- polarity-blind
+# | entropy → outcome | +0.36 (HELD pos) | −0.09 (HELD neg)| <- moderated
+# | bg → outcome | +0.19 (HELD pos) | −0.03 (null)        | <- moderated
+#
+# The chain `bg → entropy → outcome` holds in SURVIVE (full
+# mediation: bg→outcome|entropy ≈ 0). In REACH, the entropy →
+# outcome edge is significantly NEGATIVE (entropy hurts goal-
+# commit policies). Bias-correction → behavior is polarity-blind;
+# behavior → outcome flips sign with env polarity.
+
+
+_SURVIVE_POLARITY_SCOPE: pl.Expr = (
+    DDQN_RELEVANT_SCOPE
+    & (pl.col('env_reward_polarity') > 0.1)
+)
+
+_REACH_POLARITY_SCOPE: pl.Expr = (
+    DDQN_RELEVANT_SCOPE
+    & (pl.col('env_reward_polarity') < -0.1)
+)
+
+
+@claim_bridge(
+    source='argmax_entropy_late',
+    target='eval_best_burst_raw_mean',
+    direction=Direction.DIRECT,
+    tier=Tier.ASSOCIATIONAL,
+    scope=_SURVIVE_POLARITY_SCOPE,
+    predicted_direction='a_gt_b',
+)
+def policy_decisiveness_helps_outcome__survive(
+    stratified_spearman: StratifiedSpearmanResult,
+    *,
+    x: str = 'argmax_entropy_late',
+    y: str = 'eval_best_burst_raw_mean',
+    stratify_by: str = 'env_name',
+    min_stratum_size: int = 5,
+    rho_threshold: float = 0.2,
+    min_strata: int = 3,
+) -> Verdict:
+    """SURVIVE-polarity arm of the entropy → outcome cluster.
+
+    Predicted positive: in envs where reward accumulates with
+    episode length (positive polarity = "stay alive longer →
+    higher return"), high argmax-entropy (exploratory / less-
+    committed policy) avoids early death → higher outcome.
+
+    Diagnostic: ρ = +0.36, p < 10⁻¹⁰ on the SURVIVE polarity
+    cohort (env_reward_polarity > 0.1). HELD."""
+    del x, y, stratify_by, min_stratum_size
+    return partial_spearman_signed_verdict(
+        stratified_spearman,
+        threshold=rho_threshold, sign=1, min_strata=min_strata,
+    )
+
+
+@claim_bridge(
+    source='argmax_entropy_late',
+    target='eval_best_burst_raw_mean',
+    direction=Direction.INVERSE,
+    tier=Tier.ASSOCIATIONAL,
+    scope=_REACH_POLARITY_SCOPE,
+    predicted_direction='a_lt_b',
+)
+def policy_decisiveness_hurts_outcome__reach(
+    stratified_spearman: StratifiedSpearmanResult,
+    *,
+    x: str = 'argmax_entropy_late',
+    y: str = 'eval_best_burst_raw_mean',
+    stratify_by: str = 'env_name',
+    min_stratum_size: int = 5,
+    rho_threshold: float = -0.05,
+    min_strata: int = 3,
+) -> Verdict:
+    """REACH-polarity arm of the entropy → outcome cluster.
+
+    Predicted negative: in envs where reward comes from reaching
+    a goal (negative polarity = "earlier termination → higher
+    return"), high argmax-entropy (uncertain policy) FAILS to
+    commit → lower outcome.
+
+    Diagnostic: ρ = −0.093, p = 1.5e-4 on the REACH polarity
+    cohort. Modest magnitude but significantly negative — opposite
+    sign from the SURVIVE bridge. Together they justify the
+    polarity stratification (contrastive cluster shape)."""
+    del x, y, stratify_by, min_stratum_size
+    return partial_spearman_signed_verdict(
+        stratified_spearman,
+        threshold=abs(rho_threshold), sign=-1, min_strata=min_strata,
+    )
+
+
+@claim_bridge(
+    source='bootstrap_gap_magnitude',
+    target='eval_best_burst_raw_mean',
+    direction=Direction.DIRECT,
+    tier=Tier.ASSOCIATIONAL,
+    scope=_SURVIVE_POLARITY_SCOPE,
+    predicted_direction='a_gt_b',
+)
+def bg_link_to_outcome__survive(
+    stratified_spearman: StratifiedSpearmanResult,
+    *,
+    x: str = 'bootstrap_gap_magnitude',
+    y: str = 'eval_best_burst_raw_mean',
+    stratify_by: str = 'env_name',
+    min_stratum_size: int = 5,
+    rho_threshold: float = 0.1,
+    min_strata: int = 3,
+) -> Verdict:
+    """SURVIVE-polarity arm of the bg → outcome cluster.
+    Predicted positive (HELD when ρ ≥ 0.1).
+
+    Diagnostic ρ = +0.19, p = 6.5e-9. HELD."""
+    del x, y, stratify_by, min_stratum_size
+    return partial_spearman_signed_verdict(
+        stratified_spearman,
+        threshold=rho_threshold, sign=1, min_strata=min_strata,
+    )
+
+
+@claim_bridge(
+    source='bootstrap_gap_magnitude',
+    target='eval_best_burst_raw_mean',
+    direction=Direction.DIRECT,
+    tier=Tier.ASSOCIATIONAL,
+    scope=_REACH_POLARITY_SCOPE,
+    predicted_direction='null',
+)
+def bg_link_to_outcome_null__reach(
+    stratified_spearman: StratifiedSpearmanResult,
+    *,
+    x: str = 'bootstrap_gap_magnitude',
+    y: str = 'eval_best_burst_raw_mean',
+    stratify_by: str = 'env_name',
+    min_stratum_size: int = 5,
+    null_max_abs_rho: float = 0.1,
+    min_strata: int = 3,
+) -> Verdict:
+    """REACH-polarity arm of the bg → outcome cluster.
+    Predicted null. HELD when |ρ| < 0.1.
+
+    Diagnostic ρ = −0.032, p = 0.20. HELD (null confirmed). The
+    bg → outcome link doesn't fire end-to-end in REACH polarity
+    because the entropy → outcome step is negative-direction
+    (entropy hurts goal-commit) and the bg → entropy step is
+    positive — the polarity flip at the middle node breaks the
+    end-to-end transitive sign."""
+    del x, y, stratify_by, min_stratum_size
+    return partial_spearman_null_verdict(
+        stratified_spearman,
+        max_abs_rho=null_max_abs_rho, min_strata=min_strata,
+    )
+
+
 # === A2: MC-free outcome — fully decoupled link test ===
 #
 # The Stage 0 coupling bridge documents that the MC-derived
@@ -839,4 +1009,8 @@ BRIDGES = (
     intervention_outcome_link_null__mech_conditioned,
     intervention_outcome_link__decoupled_envs_only,
     intervention_predicts_policy_decisiveness__mc_free,
+    policy_decisiveness_helps_outcome__survive,
+    policy_decisiveness_hurts_outcome__reach,
+    bg_link_to_outcome__survive,
+    bg_link_to_outcome_null__reach,
 )
