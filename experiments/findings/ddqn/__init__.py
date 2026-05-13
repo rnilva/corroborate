@@ -70,4 +70,8 @@ REQUIRED_MEASURABLES: tuple[str, ...] = (
     'argmax_persistence_late',
     'q_max_temporal_cv_late',
     'q_mc_calibration_pearson',
+    # Per-burst variants for within-cell mediator testing
+    # (`findings_two_channel_cross_corpus.md` walk-back).
+    'q_argmax_margin_per_burst',
+    'q_action_std_per_burst',
 )

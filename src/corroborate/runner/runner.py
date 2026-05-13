@@ -1377,6 +1377,38 @@ def _try_unlink(
         return False
 
 
+def _drifted_or_missing_measurables(
+    sub: Path, required: Sequence[str],
+) -> tuple[str, ...]:
+    """Return the subset of `required` whose stored signature in
+    `measurements.parquet`'s sidecar differs from the current
+    registry hash, OR is absent entirely.
+
+    Used to scope `restore_columns` to just the trace columns the
+    drifted/missing measurables actually need — when only 1-2 new
+    measurables are added, this cuts the column count (and
+    bandwidth) by ~5-10×.
+
+    Pure read; no side effects. Sibling to
+    `_measurements_sidecar_current`."""
+    from corroborate.corpus.measurements import (
+        MEASUREMENTS_FILENAME, current_signatures,
+    )
+    if not (sub / MEASUREMENTS_FILENAME).exists():
+        return tuple(required)
+    stored = current_signatures(sub)
+    drifted: list[str] = []
+    for name in required:
+        live = _measurable_signature(name)
+        if live is None:
+            # Substrate doesn't define this — it'll null-pad
+            # downstream. Don't request its trace columns.
+            continue
+        if stored.get(name) != live:
+            drifted.append(name)
+    return tuple(drifted)
+
+
 def _measurements_sidecar_current(
     sub: Path, required: Sequence[str],
 ) -> bool:
@@ -1471,20 +1503,26 @@ def _load_one_corpus(
                 # and structural.
                 full_restore = [p for p in need_restore if p != 'traces.parquet']
                 thin_restore_traces = 'traces.parquet' in need_restore
+                # Narrow the trace columns to those needed by the
+                # DRIFTED/MISSING measurables only. Already-current
+                # measurables won't be recomputed by build_measurements,
+                # so their trace cols aren't needed in this restore.
+                drifted = _drifted_or_missing_measurables(sub, required)
+                drifted_reads = _required_record_keys(drifted)
+                cols_to_fetch = sorted(drifted_reads & trace_reads)
                 names = [Path(p).name for p in need_restore]
                 if thin_restore_traces:
-                    proj_cols = ['id'] + sorted(trace_reads)
                     names[names.index('traces.parquet')] = (
-                        f'traces.parquet[{len(proj_cols)} cols]'
+                        f'traces.parquet[{1 + len(cols_to_fetch)} cols]'
                     )
                 log_lines.append(f'{prefix}: restoring {names}...')
                 if full_restore:
                     restore(sub, files=full_restore, overwrite=True)
-                if thin_restore_traces:
+                if thin_restore_traces and cols_to_fetch:
                     restore_columns(
                         sub,
                         file_columns={
-                            'traces.parquet': ['id'] + sorted(trace_reads),
+                            'traces.parquet': ['id'] + cols_to_fetch,
                         },
                         overwrite=True,
                     )

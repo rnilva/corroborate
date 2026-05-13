@@ -532,6 +532,58 @@ def q_range_to_std_late(record: Mapping[str, object]) -> float:
     return float(np.mean(rng[valid] / sd[valid]))
 
 
+@measurable(reads=('online_top12_margin_per_step', 'eval_step_index'))
+def q_argmax_margin_per_burst(
+    record: Mapping[str, object],
+) -> npt.NDArray[np.float64]:
+    """Per-burst analog of `q_argmax_margin_late`. Returns
+    `(n_bursts,)` — per-burst mean of `online_top12_margin_per_step`.
+
+    Used to test whether action-margin mediates the per-burst
+    Q-channel within canonical-config scope (where cell-level
+    margin mediation drops to ~6%). See
+    `findings_two_channel_cross_corpus.md`."""
+    arr = _record_array(record, 'online_top12_margin_per_step')
+    eval_idx = _record_array(record, 'eval_step_index')
+    if arr is None or eval_idx is None:
+        return np.zeros((0,), dtype=np.float64)
+    n = int(arr.shape[0])
+    if n == 0:
+        return np.zeros((0,), dtype=np.float64)
+    n_bursts = int(eval_idx.shape[0])
+    if n_bursts == 0:
+        return np.zeros((0,), dtype=np.float64)
+    edges = np.linspace(0, n, n_bursts + 1, dtype=np.int64)
+    return np.array(
+        [float(arr[edges[i]:edges[i+1]].mean()) for i in range(n_bursts)],
+        dtype=np.float64,
+    )
+
+
+@measurable(reads=('online_std_q_per_step', 'eval_step_index'))
+def q_action_std_per_burst(
+    record: Mapping[str, object],
+) -> npt.NDArray[np.float64]:
+    """Per-burst analog of `q_action_std_late`. Returns
+    `(n_bursts,)` — per-burst mean of `online_std_q_per_step`
+    (cross-action Q-stdev at non-terminal states)."""
+    arr = _record_array(record, 'online_std_q_per_step')
+    eval_idx = _record_array(record, 'eval_step_index')
+    if arr is None or eval_idx is None:
+        return np.zeros((0,), dtype=np.float64)
+    n = int(arr.shape[0])
+    if n == 0:
+        return np.zeros((0,), dtype=np.float64)
+    n_bursts = int(eval_idx.shape[0])
+    if n_bursts == 0:
+        return np.zeros((0,), dtype=np.float64)
+    edges = np.linspace(0, n, n_bursts + 1, dtype=np.int64)
+    return np.array(
+        [float(arr[edges[i]:edges[i+1]].mean()) for i in range(n_bursts)],
+        dtype=np.float64,
+    )
+
+
 @measurable(reads=('online_top12_margin_per_step',))
 def q_argmax_margin_late(record: Mapping[str, object]) -> float:
     """Mean of `online_top12_margin_per_step` over the late 50%
