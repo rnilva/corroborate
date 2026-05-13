@@ -495,6 +495,60 @@ del Mapping
 # stage refutes, the chain breaks.
 
 
+# Stage 0: outcome-measurement tautology baseline
+@claim_bridge(
+    source='eval_best_burst_mean',
+    target='eval_best_burst_raw_mean',
+    direction=Direction.DIRECT,
+    tier=Tier.ASSOCIATIONAL,
+    scope=DDQN_RELEVANT_SCOPE,
+    predicted_direction='a_gt_b',
+)
+def mc_disc_raw_coupled__per_env_jci(
+    stratified_spearman: StratifiedSpearmanResult,
+    *,
+    x: str = 'eval_best_burst_mean',
+    y: str = 'eval_best_burst_raw_mean',
+    stratify_by: str = 'env_name',
+    min_stratum_size: int = 5,
+    rho_threshold: float = 0.5,
+    min_strata: int = 5,
+) -> Verdict:
+    """Stage 0 (tautology baseline): MC_disc ↔ MC_raw per-env
+    coupling.
+
+    The two outcome measurables — γ-discounted `eval_best_burst_mean`
+    and raw `eval_best_burst_raw_mean` — derive from the same MC
+    trajectory. The PER-ENV within-env Spearman ρ between them
+    quantifies how much the choice of outcome target matters for
+    breaking the `jens = Q − MC` tautology:
+
+    - ρ ≈ 1 (sparse-terminal envs like FR, MC, Acrobot): MC_raw ≈
+      γ^T × MC_disc up to T variation; switching outcome targets
+      barely escapes the algebraic identity.
+    - ρ < 1 (dense-reward envs like MinAtar, MetaMaze): MC_disc
+      and MC_raw measure different aspects of the trajectory;
+      switching outcome targets meaningfully mitigates the
+      tautology.
+
+    HELD when pooled within-env ρ ≥ `rho_threshold` (moderately
+    coupled, tautology not fully escapable). Diagnostic
+    2026-05-13: pooled ρ = +0.61, p < 10⁻¹⁰ → HELD at threshold
+    0.5. The corpus's outcome-side measurement has residual
+    tautology even when using raw return.
+
+    This bridge sits at the chain's outcome-side as an INVARIANT-
+    LIKE observational anchor — not a corroborable claim about
+    DDQN, but a documented caveat that downstream link bridges'
+    null verdicts may partly reflect the algebraic structure of
+    the measurement, not just the absence of a causal link."""
+    del x, y, stratify_by, min_stratum_size
+    return partial_spearman_signed_verdict(
+        stratified_spearman,
+        threshold=rho_threshold, sign=1, min_strata=min_strata,
+    )
+
+
 # Stage 1: algorithmic intervention magnitude
 @claim_bridge(
     source=INTERVENTION,
@@ -628,6 +682,7 @@ BRIDGES = (
     mediation_link_null__jci_stratified_clip,
     mediation_link_null__jci_partial_clip,
     mediation_link_null__jci_partial_jens,
+    mc_disc_raw_coupled__per_env_jci,
     algorithm_reduces_bootstrap_gap_magnitude,
     bootstrap_gap_predicts_jens__theorem,
     intervention_outcome_link_null__mech_conditioned,

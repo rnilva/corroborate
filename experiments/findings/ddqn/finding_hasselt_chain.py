@@ -1,9 +1,18 @@
-"""Hasselt causal chain: arm → bootstrap_gap → jens → outcome.
+"""Hasselt causal chain: arm → bootstrap_gap → jens → outcome,
+plus the MC_disc ↔ MC_raw coupling anchor.
 
 Decomposes the literature's compound claim "DDQN reduces Q
-overestimation, which causes higher return" into three
+overestimation, which causes higher return" into four
 falsifiable edges, using the framework's three-tiered edge-
 conditioning primitives:
+
+- Stage 0 (`mc_disc_raw_coupled__per_env_jci`):
+  outcome-measurement tautology baseline. Per-env Spearman ρ
+  between the γ-discounted `eval_best_burst_mean` and the raw
+  `eval_best_burst_raw_mean`. Quantifies whether switching
+  outcome targets escapes the `jens = Q − MC` algebraic
+  identity. Pooled ρ = +0.61 → HELD at threshold 0.5 (corpus
+  retains residual tautology even with raw outcome).
 
 - Stage 1 (`algorithm_reduces_bootstrap_gap_magnitude`):
   algorithmic intervention magnitude. Tests whether DDQN's
@@ -58,6 +67,7 @@ from experiments.findings.ddqn.bias_correction import (
     algorithm_reduces_bootstrap_gap_magnitude,
     bootstrap_gap_predicts_jens__theorem,
     intervention_outcome_link_null__mech_conditioned,
+    mc_disc_raw_coupled__per_env_jci,
 )
 
 
@@ -68,6 +78,7 @@ BLOCKED_ON: str | None = None
 
 
 BRIDGES: tuple[Bridge, ...] = (
+    mc_disc_raw_coupled__per_env_jci,
     algorithm_reduces_bootstrap_gap_magnitude,
     bootstrap_gap_predicts_jens__theorem,
     intervention_outcome_link_null__mech_conditioned,
