@@ -142,7 +142,32 @@ class Hypothesis(Protocol):
     legitimately violate the module-level filter must live in a
     different hypothesis module — there's no per-bridge opt-out
     by design (a hypothesis module's scope universe is
-    file-level, not bridge-level)."""
+    file-level, not bridge-level).
+
+    Optional `REQUIRED_MEASURABLES` attribute
+    (`tuple[str, ...]`): explicit hatch for "compute these
+    measurables during `--ingest` even though no bridge names
+    them yet." The runner unions this set with the
+    bridge-derived `required` (from `measurable_names_for_bridges`)
+    so the persisted `measurements.parquet` carries them at the
+    next build. Use cases the bridge-only required-set doesn't
+    cover:
+
+    - Exploration: look at a measurable's distribution before
+      authoring the bridge that consumes it (chicken-and-egg
+      otherwise — bridges define what's required, but you need
+      the data to know which bridge makes sense).
+    - Pre-population: stage measurables for future analyses so
+      re-ingest cost doesn't gate the work.
+    - Per-burst PC / discovery: PC walks a panel of candidate
+      variables; the variables don't have bridges yet by
+      definition.
+
+    Names listed here MUST be registered `@measurable` functions
+    — `_validate_hypothesis` raises if any are unknown to the
+    registry. Silently dropping (the behavior for unrecognized
+    bridge names) is wrong here: an explicit author declaration
+    should fail loud on typos."""
 
     __name__: str
     INTERVENTION: DoEffect

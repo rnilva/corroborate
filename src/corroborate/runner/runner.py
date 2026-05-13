@@ -175,6 +175,23 @@ def _validate_hypothesis(h: object) -> Hypothesis:
                 f'and does not pair with a BLOCKED_ON gap — likely '
                 f'forgot to clear BLOCKED_ON after data landed.',
             )
+    # Optional REQUIRED_MEASURABLES hatch — validate that every name
+    # is a registered @measurable. Typos must fail loud (vs the
+    # bridge-name silent drop which is appropriate for ambiguous
+    # column-path-vs-measurable inputs).
+    extras = getattr(h, 'REQUIRED_MEASURABLES', ())
+    if extras:
+        from corroborate.measurables import get_registered
+        unknown = [name for name in extras if get_registered(name) is None]
+        if unknown:
+            raise TypeError(
+                f'{h.__name__}.REQUIRED_MEASURABLES contains unknown '
+                f'measurables: {unknown!r}. These must be registered '
+                f'via `@measurable` and importable at validation time. '
+                f'Either fix the typo, import the defining module at '
+                f'the top of the hypothesis module, or remove the '
+                f'entry from REQUIRED_MEASURABLES.',
+            )
     return h
 
 
@@ -458,6 +475,7 @@ def run(
         cache_path=resolved_cache,
         write_cache=write_cache and use_cache,
         restore_from_cloud=restore_from_cloud,
+        extra_required=tuple(getattr(h, 'REQUIRED_MEASURABLES', ())),
     )
 
     if cells.height == 0:
@@ -562,7 +580,10 @@ def check(
         h = _validate_hypothesis(importlib.import_module(h))
     else:
         h = _validate_hypothesis(h)
-    required = sorted(measurable_names_for_bridges(h.BRIDGES))
+    required = sorted(
+        measurable_names_for_bridges(h.BRIDGES)
+        | frozenset(getattr(h, 'REQUIRED_MEASURABLES', ()))
+    )
     return check_drift(
         Path(root),
         required=required,
@@ -636,6 +657,7 @@ def _ingest_and_compute(
     cache_path: Path | None,
     write_cache: bool,
     restore_from_cloud: bool,
+    extra_required: tuple[str, ...] = (),
 ) -> pl.DataFrame:
     """Resolve `data` into the per-hypothesis cache.
 
@@ -654,7 +676,9 @@ def _ingest_and_compute(
     parquet or DataFrame to be merged into an existing cache.
     Tests exercise this path directly; substrate code paths a
     directory."""
-    required = sorted(measurable_names_for_bridges(bridges))
+    required = sorted(
+        measurable_names_for_bridges(bridges) | frozenset(extra_required)
+    )
 
     is_directory_walk: bool
     if data is None or isinstance(data, pl.DataFrame):

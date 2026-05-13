@@ -97,6 +97,43 @@ def test_validate_rejects_non_bridge_in_bridges() -> None:
         _validate_hypothesis(Malformed)
 
 
+def test_validate_required_measurables_accepts_registered() -> None:
+    """`REQUIRED_MEASURABLES` opt-in hatch — registered names pass."""
+    from collections.abc import Mapping
+    from corroborate.measurables import get_registered, measurable
+
+    @measurable(reads=())
+    def _validate_test_measurable(record: Mapping[str, object]) -> float:
+        return 0.0
+    assert get_registered('_validate_test_measurable') is not None
+
+    @dataclass(frozen=True)
+    class H:
+        INTERVENTION: ClassVar[DoEffect] = _trivial_doeffect()
+        BRIDGES: ClassVar[tuple[Bridge, ...]] = ()
+        FINDINGS: ClassVar[tuple[Finding, ...]] = ()
+        REQUIRED_MEASURABLES: ClassVar[tuple[str, ...]] = (
+            '_validate_test_measurable',
+        )
+    out = _validate_hypothesis(H)
+    assert out is H
+
+
+def test_validate_required_measurables_rejects_unknown() -> None:
+    """Typo'd / unimported names must fail loud — silently dropping
+    would defeat the opt-in's purpose."""
+    @dataclass(frozen=True)
+    class H:
+        INTERVENTION: ClassVar[DoEffect] = _trivial_doeffect()
+        BRIDGES: ClassVar[tuple[Bridge, ...]] = ()
+        FINDINGS: ClassVar[tuple[Finding, ...]] = ()
+        REQUIRED_MEASURABLES: ClassVar[tuple[str, ...]] = (
+            'no_such_measurable_anywhere',
+        )
+    with pytest.raises(TypeError, match='REQUIRED_MEASURABLES'):
+        _validate_hypothesis(H)
+
+
 # ============ _default_cache_path ============
 
 def test_default_cache_path_bare_class_name() -> None:
