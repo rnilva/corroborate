@@ -29,13 +29,21 @@ from scipy import stats
 
 CACHE = 'experiments/data/cache/ddqn.parquet'
 
-# Candidates available in the cache today
+# Candidates: original (no-backfill) + newly-backfilled via the
+# REQUIRED_MEASURABLES hatch
 CANDIDATES = [
+    # Previously-cached
     'argmax_entropy_late',
     'q_autocorr_late',
     'target_staleness_late',
     'jensen_dormancy_gap',
     'effective_horizon',
+    # Newly backfilled (Q-quality candidates)
+    'q_action_std_late',
+    'q_argmax_margin_late',
+    'argmax_persistence_late',
+    'q_max_temporal_cv_late',
+    'q_mc_calibration_pearson',
 ]
 
 
@@ -160,30 +168,51 @@ def main() -> None:
     print()
 
     # For each candidate: ρ(q, mc | bg, candidate)
-    print(f'{"candidate":<28s} | {"pool ρ(q,mc|bg,m)":>18s} | {"Δ from baseline":>16s} | n_envs')
-    print('-' * 90)
-    for cand in CANDIDATES:
+    print(f'{"candidate":<40s} | {"pool ρ":>10s} | {"Δ":>9s} | n_envs')
+    print('-' * 80)
+    def _test(candidate_set: list[str]) -> tuple[float, int]:
         per_env_cand = {}
+        ctrl_cols = ['bg'] + candidate_set
         for env in envs:
             sub = panel.filter(pl.col('env_name') == env)
             if sub.height < 20:
                 continue
-            # Drop NaNs on the candidate
-            cand_vals = sub.get_column(cand).to_numpy()
-            if not np.isfinite(cand_vals).any():
+            valid = sub
+            for c in candidate_set:
+                valid = valid.filter(pl.col(c).is_finite())
+            if valid.height < 20:
                 continue
-            ctrl = sub.select(['bg', cand]).to_numpy()
+            ctrl = valid.select(ctrl_cols).to_numpy()
             rho, n = _partial_spearman_multi(
-                sub.get_column('mc').to_numpy(),
-                sub.get_column('q').to_numpy(),
+                valid.get_column('mc').to_numpy(),
+                valid.get_column('q').to_numpy(),
                 ctrl,
             )
             per_env_cand[env] = (rho, n)
-        rhos_c = [r for r, _ in per_env_cand.values()]
-        ns_c = [n for _, n in per_env_cand.values()]
-        pool_c = _fz_pool(rhos_c, ns_c)
+        rhos = [r for r, _ in per_env_cand.values()]
+        ns = [n for _, n in per_env_cand.values()]
+        return _fz_pool(rhos, ns), len(per_env_cand)
+
+    # Single-mediator tests
+    for cand in CANDIDATES:
+        pool_c, n_envs = _test([cand])
         delta = pool_c - pool_baseline
-        print(f'{cand:<28s} | {pool_c:>+18.3f} | {delta:>+16.3f} | {len(per_env_cand)}')
+        print(f'{cand:<40s} | {pool_c:>+10.3f} | {delta:>+9.3f} | {n_envs}')
+
+    print()
+    print('Joint conditioning (top candidates simultaneously):')
+    print('-' * 80)
+    joint_sets = [
+        ['q_argmax_margin_late', 'q_action_std_late'],
+        ['q_argmax_margin_late', 'jensen_dormancy_gap'],
+        ['q_argmax_margin_late', 'q_action_std_late', 'jensen_dormancy_gap'],
+        ['q_argmax_margin_late', 'q_action_std_late', 'jensen_dormancy_gap', 'effective_horizon'],
+    ]
+    for js in joint_sets:
+        label = ' + '.join(c.replace('_late', '').replace('jensen_', 'jens_').replace('effective_horizon', 'eff_h') for c in js)
+        pool_j, n_envs = _test(js)
+        delta = pool_j - pool_baseline
+        print(f'  {label:<60s} | {pool_j:>+10.3f} | {delta:>+9.3f} | {n_envs}')
 
 
 if __name__ == '__main__':
