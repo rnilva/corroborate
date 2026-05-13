@@ -62,4 +62,12 @@ FINDINGS = (
 # the @measurable registry at `_validate_hypothesis`.
 REQUIRED_MEASURABLES: tuple[str, ...] = (
     'q_per_burst',
+    # Q-channel mediator candidates (no bridge consumes yet;
+    # `scripts/q_channel_mediator_search.py` tests which one
+    # explains the partial ρ(q, mc | bg) ≈ +0.55 residual.
+    'q_action_std_late',
+    'q_argmax_margin_late',
+    'argmax_persistence_late',
+    'q_max_temporal_cv_late',
+    'q_mc_calibration_pearson',
 )

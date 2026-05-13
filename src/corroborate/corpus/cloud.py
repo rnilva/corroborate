@@ -775,7 +775,20 @@ def restore_columns(
         if local.exists() and not overwrite:
             continue
         remote_uri = _join_remote(manifest.remote_root, relpath)
-        df = pl.scan_parquet(remote_uri).select(list(columns)).collect()
+        # Intersect requested cols with the file's actual schema —
+        # callers commonly pass a "union of required-reads" set
+        # which may contain runs.parquet fields not present on
+        # traces.parquet (CACHE_BUILD.md: trace_reads is unsplit).
+        # Silently dropping is correct here: the runner downstream
+        # joins what's available; columns not in this file would
+        # be NaN anyway after a full restore.
+        available = set(pl.scan_parquet(remote_uri).collect_schema().names())
+        keep = [c for c in columns if c in available]
+        if not keep:
+            # Nothing useful in this file for the requested colset;
+            # skip the write rather than create a zero-column file.
+            continue
+        df = pl.scan_parquet(remote_uri).select(keep).collect()
         local.parent.mkdir(parents=True, exist_ok=True)
         tmp = local.with_suffix(local.suffix + '.tmp')
         df.write_parquet(tmp)
