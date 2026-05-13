@@ -27,10 +27,22 @@ Empirical (2026-05-13, DDQN_RELEVANT_SCOPE):
 
 The chain holds in SURVIVE (full mediation via entropy). In
 REACH, bg still drives entropy but entropy is anti-correlated
-with outcome — uncertain policies fail to commit to a goal.
-Both halves admit; the SUPPORTED verdict on this Finding means
-"the polarity-moderation pattern is empirically corroborated"
-— a stronger claim than "the link fires in one half".
+with outcome. Both halves admit; the SUPPORTED verdict on this
+Finding means "the polarity-moderation pattern is empirically
+corroborated" — a stronger claim than "the link fires in one
+half".
+
+**Corrected mechanism (2026-05-13)**: the polarity-moderation is
+NOT "entropy moderates by polarity" — entropy is a downstream
+symptom. The load-bearing structural fact is that DDQN's
+bootstrap target `target_q[argmax_online] ≤ max_a target_q` is
+always-downward by construction. In positive-Q envs (SURVIVE)
+this clip reduces vanilla's upward overestimation (helps); in
+negative-Q envs (REACH) the same downward clip pushes Q more
+negative (often hurts, overshooting truth). Per-burst PC on
+FourRooms shows entropy → mc is FULLY MEDIATED by bg (residual
++0.036 after conditioning on bg_pb). See
+`findings_ddqn_reward_sign_conditional.md`.
 
 Sibling to `finding_hasselt_chain` (the polarity-blind variant).
 That Finding's Stage 3 (bg → outcome | jens, env) fires null
