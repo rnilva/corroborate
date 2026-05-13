@@ -834,6 +834,125 @@ def algorithm_reduces_bootstrap_gap_magnitude(
     return Verdict.NO_EFFECT
 
 
+# === Two SEPARATE predictions, both downstream of the same
+# === structural clip but conceptually distinct (see
+# === `findings_clip_to_trained_q_propagation.md`):
+# ===
+# === (A) `ddqn_reduces_jens_gap__theorem` — bias reduction
+# ===     (Hasselt 2010 theorem prediction). Δjens < 0 means
+# ===     DDQN's Q is closer to MC than vanilla's. Polarity-blind:
+# ===     applies in both positive- and negative-Q envs.
+# ===
+# === (B) `ddqn_reduces_signed_q_late__structural` — signed Q
+# ===     reduction (structural-clip propagation). Δq_late_mean < 0
+# ===     means DDQN's trained Q is lower regardless of where MC
+# ===     went. Polarity-blind direction; the |Q|-effect derived
+# ===     from this is polarity-conditional.
+# ===
+# === (A) and (B) are NOT redundant. MetaMaze fires HELD on (A)
+# === — Δjens = −2.25, p < 5e-4 — but NO_EFFECT on (B) — Δq_late
+# === = +0.56 because MC outran Q (policy improved enough that
+# === Q rose despite DDQN's clip). The bookkeeping needs both.
+
+
+@claim_bridge(
+    source=INTERVENTION,
+    target='jensen_gap',
+    direction=Direction.INVERSE,
+    tier=Tier.INTERVENTIONAL,
+    scope=DDQN_RELEVANT_SCOPE,
+    predicted_direction='a_lt_b',
+)
+def ddqn_reduces_jens_gap__theorem(
+    stratified_arm_diff_pooled: StratifiedArmDiffPooledResult,
+    *,
+    source: str = 'jensen_gap',
+    scope_predictor: str = 'jensen_gap',
+    min_vanilla_predictor: float = VANILLA_JENS_NOISE_FLOOR,
+    stratify_by: tuple[str, ...] = ('env_name',),
+    treatment_arm: str = DDQN_ARM,
+    baseline_arm: str = VANILLA_ARM,
+    pooled_d_threshold: float = -0.3,
+    min_strata: int = 5,
+) -> Verdict:
+    """Hasselt theorem prediction at the end-state level — DDQN
+    reduces `jensen_gap = max(0, mean(Q − MC))` relative to vanilla.
+
+    SEPARATE from the signed-Q bridge: bias reduction (Δjens < 0)
+    is the Q-MC gap shrinking; the |Q| consequence depends on
+    whether MC moved as well. MetaMaze demonstrates the dissociation
+    (Δjens = -2.25 *** while Δq_late = +0.56 *).
+
+    Per-env Cohen's d of DDQN − vanilla on `jensen_gap`, DL-pooled.
+    HELD when pooled_d ≤ -0.3 (DDQN systematically narrows the
+    Q-MC gap relative to vanilla)."""
+    del source, scope_predictor, min_vanilla_predictor, stratify_by
+    del treatment_arm, baseline_arm
+    if stratified_arm_diff_pooled.n_strata < min_strata:
+        return Verdict.POWER_INSUFFICIENT
+    d = stratified_arm_diff_pooled.pooled_d
+    if math.isnan(d):
+        return Verdict.POWER_INSUFFICIENT
+    if d <= pooled_d_threshold:
+        return Verdict.HELD
+    if d < 0.0:
+        return Verdict.POWER_INSUFFICIENT
+    return Verdict.NO_EFFECT
+
+
+@claim_bridge(
+    source=INTERVENTION,
+    target='q_late_mean',
+    direction=Direction.INVERSE,
+    tier=Tier.INTERVENTIONAL,
+    scope=DDQN_RELEVANT_SCOPE,
+    predicted_direction='a_lt_b',
+)
+def ddqn_reduces_signed_q_late__structural(
+    stratified_arm_diff_pooled: StratifiedArmDiffPooledResult,
+    *,
+    source: str = 'q_late_mean',
+    scope_predictor: str = 'jensen_gap',
+    min_vanilla_predictor: float = VANILLA_JENS_NOISE_FLOOR,
+    stratify_by: tuple[str, ...] = ('env_name',),
+    treatment_arm: str = DDQN_ARM,
+    baseline_arm: str = VANILLA_ARM,
+    pooled_d_threshold: float = -0.3,
+    min_strata: int = 5,
+) -> Verdict:
+    """Structural-clip consequence — DDQN's trained signed Q is
+    lower than vanilla's in expectation.
+
+    At every training step the bootstrap target
+    `T_d = r + γ Q_target(s', argmax Q_online(s', a)) ≤ T_v = r + γ max_a Q_target(s', a)`.
+    The integrated downward push during training (the finite-T
+    residual; at the Bellman fixed point both algorithms agree)
+    propagates to a lower trained Q.
+
+    DISTINCT from `ddqn_reduces_jens_gap__theorem`: bias reduction
+    measures the Q-MC gap; this bridge measures the absolute level
+    of Q. They dissociate when MC moves: MetaMaze HELDs (A) but
+    not (B) because policy improvement pushed MC up faster than
+    DDQN's clip pushed Q down.
+
+    The |Q|-asymmetry result (Δ|Q| sign-conditional on env Q-sign,
+    `findings_ddqn_reward_sign_conditional.md`) is derived from
+    this bridge's verdict + the env's Q-sign — NO separate bridge
+    needed for it."""
+    del source, scope_predictor, min_vanilla_predictor, stratify_by
+    del treatment_arm, baseline_arm
+    if stratified_arm_diff_pooled.n_strata < min_strata:
+        return Verdict.POWER_INSUFFICIENT
+    d = stratified_arm_diff_pooled.pooled_d
+    if math.isnan(d):
+        return Verdict.POWER_INSUFFICIENT
+    if d <= pooled_d_threshold:
+        return Verdict.HELD
+    if d < 0.0:
+        return Verdict.POWER_INSUFFICIENT
+    return Verdict.NO_EFFECT
+
+
 # Stage 2: theorem-predicted mediation, bg → jens
 @claim_bridge(
     source='bootstrap_gap_magnitude',
@@ -1138,6 +1257,8 @@ BRIDGES = (
     mediation_link_null__jci_partial_jens,
     mc_disc_raw_coupled__per_env_jci,
     algorithm_reduces_bootstrap_gap_magnitude,
+    ddqn_reduces_jens_gap__theorem,
+    ddqn_reduces_signed_q_late__structural,
     bootstrap_gap_predicts_jens__theorem,
     intervention_outcome_link_null__mech_conditioned,
     intervention_outcome_link__decoupled_envs_only,
