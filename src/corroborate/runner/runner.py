@@ -476,6 +476,7 @@ def run(
         write_cache=write_cache and use_cache,
         restore_from_cloud=restore_from_cloud,
         extra_required=tuple(getattr(h, 'REQUIRED_MEASURABLES', ())),
+        module_scope=getattr(h, 'MODULE_SCOPE', None),
     )
 
     if cells.height == 0:
@@ -658,6 +659,7 @@ def _ingest_and_compute(
     write_cache: bool,
     restore_from_cloud: bool,
     extra_required: tuple[str, ...] = (),
+    module_scope: pl.Expr | None = None,
 ) -> pl.DataFrame:
     """Resolve `data` into the per-hypothesis cache.
 
@@ -693,6 +695,26 @@ def _ingest_and_compute(
         data, restore_from_cloud=restore_from_cloud,
         required=required, bridges=bridges,
     )
+
+    # Apply MODULE_SCOPE at ingest time. Cells outside the
+    # hypothesis-module's scope universe never enter the cache,
+    # so downstream analyses can't accidentally pollute by reading
+    # them. Per the Hypothesis Protocol, MODULE_SCOPE is a
+    # file-level scope universe — applying it here makes the
+    # per-hypothesis cache an honest projection of that universe.
+    if module_scope is not None and new_data is not None and new_data.height > 0:
+        try:
+            new_data = new_data.filter(module_scope)
+        except pl.exceptions.ColumnNotFoundError as e:
+            # Some MODULE_SCOPE expressions reference columns
+            # added by recent substrate updates that older corpora
+            # don't carry. Silently keep cells in that case —
+            # bridge-level scope filtering at evaluate time will
+            # still catch them.
+            sys.stderr.write(
+                f'runner: WARNING — module_scope references missing '
+                f'column ({e}); skipping ingest-time filter\n',
+            )
 
     if is_directory_walk:
         # Phase 2.2: per-corpus stores already filled in measurables

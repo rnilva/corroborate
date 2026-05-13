@@ -560,8 +560,8 @@ BRIDGES = (
     eff_h_mediates_g_link__survival_envs,
     target_staleness_late_mediates_outcome__minatar_intermediate_sync,
     cross_config_staleness_slope_negative__survive,
-    staleness_amplifies_ddqn_outcome__sparse_goal_polyak,
-    staleness_does_not_amplify_ddqn_outcome__survival_polyak,
+    # Polyak-do(τ) bridges moved to `experiments.findings.ddqn_sweeps`:
+    # they require `target_sync.tau > 0` which is excluded by canonical.
     effh_predicts_link_power__reach_envs,
     argmax_entropy_link_power_null__survive_envs,
 )

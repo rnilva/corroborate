@@ -23,24 +23,24 @@ from experiments.findings.ddqn import (
     finding_per_burst_chain_dynamics,
     finding_polarity_conditional_chain,
     finding_reach_bias_link,
-    finding_rs01_rescue_envelope,
 )
 from experiments.findings.ddqn._arms import INTERVENTION as INTERVENTION
 from experiments.findings.ddqn._common import CLAIM as CLAIM
 from experiments.findings.ddqn._scope import MODULE_SCOPE as MODULE_SCOPE
 from experiments.findings.ddqn.bias_correction import BRIDGES as _BIAS_CORRECTION
 from experiments.findings.ddqn.mediation import BRIDGES as _MEDIATION
-from experiments.findings.ddqn.n_step import BRIDGES as _N_STEP
 from experiments.findings.ddqn.outcome_scope import BRIDGES as _OUTCOME_SCOPE
-from experiments.findings.ddqn.rs_rescue import BRIDGES as _RS_RESCUE
 from experiments.findings.ddqn.within_env import BRIDGES as _WITHIN_ENV
 
 
+# HP-sweep bridges (n_step, reward-scale rescue) moved to sibling
+# module `experiments.findings.ddqn_sweeps`. The canonical module
+# scope (`MODULE_SCOPE = ~bsuite & DDQN_CANONICAL_REGIME`) admits
+# zero cells for HP-sweep bridges, so they belong in a separate
+# hypothesis with a relaxed scope universe.
 BRIDGES = (
     *_OUTCOME_SCOPE,
     *_WITHIN_ENV,
-    *_RS_RESCUE,
-    *_N_STEP,
     *_BIAS_CORRECTION,
     *_MEDIATION,
 )
@@ -52,7 +52,6 @@ FINDINGS = (
     finding_per_burst_chain_dynamics,
     finding_reach_bias_link,
     finding_metamaze_gamma_amplification,
-    finding_rs01_rescue_envelope,
 )
 
 

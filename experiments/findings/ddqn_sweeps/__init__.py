@@ -1,0 +1,49 @@
+"""Companion hypothesis module for DDQN: HP-sweep bridges.
+
+The parent `experiments.findings.ddqn` module pins all HPs to the
+canonical config (see `_scope.py:DDQN_CANONICAL_REGIME`). Bridges
+that *intentionally* vary HPs — n-step, reward-scale, Polyak-τ,
+γ-sweep, action-duplicate, network-depth — would have empty extents
+there. They live here instead.
+
+`MODULE_SCOPE` is loose: just `~bsuite` exclusion. Each bridge in
+this module opts INTO its specific HP-sweep regime via its own
+`scope=` parameter (e.g., `reward_scale == 0.1` for the rs-rescue
+bridges, `n_step == 10` for the MC-backup falsification, etc.).
+
+The framework's "scope universe is file-level" axiom is honored by
+keeping this module separate from the canonical-pinned `ddqn`
+module — verdict landscapes from the two are interpretable against
+their respective universes."""
+from __future__ import annotations
+
+import corroborate.analyses  # pyright: ignore[reportUnusedImport]  # populate registry
+import corroborate_rl.dqn.measurables  # pyright: ignore[reportUnusedImport]  # populate measurable registry
+
+import polars as pl
+
+from experiments.findings.ddqn_sweeps import (
+    finding_rs01_rescue_envelope,
+)
+from experiments.findings.ddqn._arms import INTERVENTION as INTERVENTION
+from experiments.findings.ddqn._common import CLAIM as CLAIM
+from experiments.findings.ddqn_sweeps.n_step import BRIDGES as _N_STEP
+from experiments.findings.ddqn_sweeps.polyak_tau import BRIDGES as _POLYAK_TAU
+from experiments.findings.ddqn_sweeps.rs_rescue import BRIDGES as _RS_RESCUE
+
+
+# Loose module scope: only bsuite exclusion. HP-sweep bridges set
+# their own scope= predicates per intervention.
+MODULE_SCOPE: pl.Expr = ~pl.col('env_name').str.ends_with('-bsuite')
+
+
+BRIDGES = (
+    *_N_STEP,
+    *_POLYAK_TAU,
+    *_RS_RESCUE,
+)
+
+
+FINDINGS = (
+    finding_rs01_rescue_envelope,
+)

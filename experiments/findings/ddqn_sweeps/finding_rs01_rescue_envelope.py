@@ -17,7 +17,7 @@ from __future__ import annotations
 from corroborate.bridge.bridge import Bridge
 from corroborate.graph.causal import ClusterVerdict
 
-from experiments.findings.ddqn.rs_rescue import (
+from experiments.findings.ddqn_sweeps.rs_rescue import (
     ddqn_does_not_rescue__acrobot_rs_0p1,
     ddqn_does_not_rescue__cartpole_rs_0p1,
     ddqn_rescues_underlearning_vanilla__fourrooms_rs_0p1,

@@ -17,8 +17,95 @@ from corroborate.bridge.predicates import (
 )
 
 
+# Canonical HP regime — the default training configuration that
+# every "is DDQN substantively different from vanilla" bridge
+# should operate under. Pins everything that's an HP-sweep axis
+# elsewhere in the corpus, so cross-cell variation within this
+# scope is dominated by SEED variance + within-config dynamics,
+# not by HP/network/wrapper differences (the cross-config common-
+# cause confound surfaced in `findings_two_channel_cross_corpus.md`).
+#
+# Env-class network branches: MLP envs get hidden=(64,64);
+# MinAtar (Atari-style 10×10×k) gets hidden=(128) + CNN
+# channels=(16,32); jumanji games (PacMan / SlidingTile / Snake)
+# get hidden=(64) + CNN channels=(8,16).
+_MLP_ENVS: tuple[str, ...] = (
+    'Acrobot-v1', 'CartPole-v1', 'FourRooms-misc',
+    'MountainCar-v0', 'MetaMaze-misc', 'BernoulliBandit-misc',
+)
+_MINATAR_ENVS: tuple[str, ...] = (
+    'Asterix-MinAtar', 'Breakout-MinAtar', 'Freeway-MinAtar',
+    'SpaceInvaders-MinAtar',
+)
+_JUMANJI_ENVS: tuple[str, ...] = (
+    'PacMan-jumanji', 'SlidingTilePuzzle-jumanji', 'Snake-jumanji',
+)
+# Substrate-default config per env class. Tuples are
+# (sync_period, total_steps, replay_capacity, hidden, channels-or-None).
+# - MLP-state envs: standard DQN scale (sync=100, 200k steps, 50k buf).
+# - MinAtar: paper-canonical (Young & Tian 2019 /
+#   minatar_paper_1m_clean): sync=1000, 1M steps, 100k buf, CNN(16).
+# - jumanji games: sync=1000, 1M steps, 50k buf, CNN(8,16).
+_ENV_CLASS_CANONICAL = (
+    (_MLP_ENVS,     100,  200000,   50000,  '(64,64)', None),
+    (_MINATAR_ENVS, 1000, 1000000,  100000, '(128)',  '(16)'),
+    (_JUMANJI_ENVS, 1000, 1000000,  50000,  '(64)',   '(8,16)'),
+)
+
+
+def _build_env_class_canonical_filter() -> pl.Expr:
+    """Disjunction of per-env-class canonical filters.
+
+    Each env-class has its own substrate-default config — MLP-state
+    envs run at sync=100 / 200k / 50k buf / MLP(64,64); MinAtar-CNN
+    runs at sync=1000 / 1M / 100k buf / (128)+(16); jumanji-CNN at
+    sync=1000 / 1M / 50k buf / (64)+(8,16). A single shared HP pin
+    can't capture all three, so canonical is built as `OR over
+    env-classes` with class-conditional HP pins."""
+    parts: list[pl.Expr] = []
+    for envs, sync, steps, capacity, hidden, channels in _ENV_CLASS_CANONICAL:
+        cond = (
+            pl.col('env_name').is_in(list(envs))
+            & (pl.col('sync_period') == sync)
+            & (pl.col('total_steps') == steps)
+            & (pl.col('replay.capacity') == capacity)
+            & (pl.col('q_network.hidden') == hidden)
+        )
+        if channels is None:
+            cond = cond & pl.col('q_network.channels').is_null()
+        else:
+            cond = cond & (pl.col('q_network.channels') == channels)
+        parts.append(cond)
+    out = parts[0]
+    for p in parts[1:]:
+        out = out | p
+    return out
+
+
+DDQN_CANONICAL_REGIME: pl.Expr = (
+    (pl.col('gamma') == 0.99)
+    & (pl.col('optimizer.inner.lr') == 0.0001)
+    & ((pl.col('n_step') == 1) | pl.col('n_step').is_null())
+    & pl.col('action_duplicate_k').is_null()
+    & (pl.col('reward_scale').is_null() | (pl.col('reward_scale') == 1.0))
+    & pl.col('target_sync.tau').is_null()
+    & (pl.col('wrappers') == '()')
+    & _build_env_class_canonical_filter()
+)
+
+
 # Hypothesis-module-level scope (AND-combined into every bridge).
-MODULE_SCOPE: pl.Expr = ~pl.col('env_name').str.ends_with('-bsuite')
+# `~bsuite`: bsuite diagnostic envs are excluded — they're not
+# chain MDPs.
+# `& DDQN_CANONICAL_REGIME`: every bridge in THIS hypothesis module
+# operates under canonical HPs. Bridges that intentionally vary
+# HPs (n-step, action-duplicate, γ-sweep, lr/capacity, Polyak-τ,
+# reward-scale, wrappers) live in `experiments.findings.ddqn_sweeps`
+# — a sibling hypothesis module with a relaxed scope.
+MODULE_SCOPE: pl.Expr = (
+    ~pl.col('env_name').str.ends_with('-bsuite')
+    & DDQN_CANONICAL_REGIME
+)
 
 
 # Config-discriminator keys used by partition_aggregate. Distinguish
