@@ -1,19 +1,26 @@
-"""Empirical test of the finite-training-residual prediction:
-longer n-step replaces bootstrap with Monte-Carlo, so the
-integrated structural clip during training shrinks, so the
-DDQN-vs-vanilla |Δjens| should shrink monotonically with n_step.
+"""Observed n-step attenuation on FourRooms γ=0.99 — and why it's
+NOT decisive evidence for the integrated-clip theorem.
 
-Setup: FourRooms-misc γ=0.99, n_step ∈ {1, 2, 3, 5, 10}, n=30
-paired cells per n>1 level (n=90 at n=1). Holds gamma fixed so
-that the only varying axis is n_step.
+Initial framing: longer n-step shrinks bootstrap weight γⁿ, so
+the integrated structural clip during training should shrink, so
+|Δjens| should shrink monotonically.
 
-Two predictions:
-  1. |Δjens| (bias-reduction strength) decreases monotonically
-     with n_step. Cleanest test of the theorem because jens is
-     directly the bias-correction direction.
-  2. |ΔQ| (signed Q reduction) also decreases monotonically with
-     n_step. Theorem-aligned but at FR γ=0.99 the absolute ΔQ
-     magnitudes are tiny (<0.06), so this test is power-limited.
+The data confirms the monotonicity (ρ(n_step, |Δjens|) = −1.000)
+but this is observationally equivalent to a trivial alternative:
+at n=∞, training targets ARE Monte-Carlo, so Q → MC in both arms
+by construction, so jens = max(0, Q−MC) → 0 in both arms
+mechanically. Δjens shrinking to zero is forced by the training
+setup, not by the clip story.
+
+The falsifiable quantity is **relative attenuation**:
+`|Δjens| / jens_van`. The theorem predicts THIS also shrinks
+(less bootstrap weight → less DDQN distinctiveness). Empirically
+it does NOT — it sits at ~50-65% across all n_step values.
+
+So the n-step axis on this corpus cannot distinguish the
+integrated-clip theory from "Q is trained on something closer to
+MC at high n". This script reports the result for completeness;
+do not cite as evidence for the theorem.
 
 Run: `uv run python scripts/verify_nstep_attenuates_clip.py`."""
 from __future__ import annotations
@@ -83,9 +90,31 @@ def main() -> None:
     rho_j, p_j = stats.spearmanr(ns, abs_dj)
 
     print()
-    print('Theorem prediction: |Δ·| should decrease monotonically with n_step')
-    print(f'  ρ(n_step, |ΔQ|):    {rho_q:+.3f} p={p_q:.4f}  (Q-side, power-limited at FR γ=0.99)')
-    print(f'  ρ(n_step, |Δjens|): {rho_j:+.3f} p={p_j:.4f}  (bias-side, decisive — Δjens drops {abs_dj[0]:.3f} → {abs_dj[-1]:.3f})')
+    print('Absolute attenuation (NOT decisive — see below):')
+    print(f'  ρ(n_step, |ΔQ|):    {rho_q:+.3f} p={p_q:.4f}')
+    print(f'  ρ(n_step, |Δjens|): {rho_j:+.3f} p={p_j:.4f}')
+
+    # Per-arm levels at each n_step — the diagnostic that shows jens_van
+    # itself shrinks toward zero (training-target → MC at high n).
+    df_summary = df.group_by(['n_step', 'arm']).agg([
+        pl.col('jensen_gap').mean().alias('jens_mean'),
+        pl.len().alias('n'),
+    ]).sort(['n_step', 'arm'])
+    print()
+    print('Relative attenuation |Δjens| / jens_van — the falsifiable quantity:')
+    print(f"{'n_step':>7} | {'jens_van':>10} {'jens_ddqn':>10} | {'rel_atten':>10}")
+    print('-' * 50)
+    for n in sorted(df.get_column('n_step').unique().to_list()):
+        v = float(df_summary.filter((pl.col('n_step') == n) & (pl.col('arm') == 'vanilla')).get_column('jens_mean')[0])
+        d = float(df_summary.filter((pl.col('n_step') == n) & (pl.col('arm') == 'ddqn')).get_column('jens_mean')[0])
+        rel = abs(d - v) / v if v > 0 else float('nan')
+        print(f"{n:>7} | {v:>10.4f} {d:>10.4f} | {rel:>10.1%}")
+    print()
+    print('Conclusion: vanilla jens shrinks 65× from n=1 to n=10 — Q-trained-on-MC')
+    print('drives the absolute |Δjens| → 0, NOT the clip story. Relative attenuation')
+    print('stays ~50-65% across n_step, contradicting the theorem\'s strict prediction')
+    print('that relative effect should also shrink. The n-step axis here is not')
+    print('a falsifying test for the integrated-clip framing.')
 
 
 if __name__ == '__main__':
