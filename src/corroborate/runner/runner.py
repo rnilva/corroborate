@@ -1460,12 +1460,34 @@ def _load_one_corpus(
         )
         if need_restore:
             if restore_from_cloud:
-                from corroborate.corpus.cloud import restore
-                log_lines.append(
-                    f'{prefix}: restoring '
-                    f'{[Path(p).name for p in need_restore]}...',
+                from corroborate.corpus.cloud import (
+                    restore, restore_columns,
                 )
-                restore(sub, files=need_restore, overwrite=True)
+                # Split: traces.parquet uses column-projected restore
+                # (~19× faster on heavy archives — see
+                # `scripts/smoke_column_projected_restore.py`).
+                # Everything else (runs.parquet, sidecars) uses the
+                # sha256-verified full-file path because it's small
+                # and structural.
+                full_restore = [p for p in need_restore if p != 'traces.parquet']
+                thin_restore_traces = 'traces.parquet' in need_restore
+                names = [Path(p).name for p in need_restore]
+                if thin_restore_traces:
+                    proj_cols = ['id'] + sorted(trace_reads)
+                    names[names.index('traces.parquet')] = (
+                        f'traces.parquet[{len(proj_cols)} cols]'
+                    )
+                log_lines.append(f'{prefix}: restoring {names}...')
+                if full_restore:
+                    restore(sub, files=full_restore, overwrite=True)
+                if thin_restore_traces:
+                    restore_columns(
+                        sub,
+                        file_columns={
+                            'traces.parquet': ['id'] + sorted(trace_reads),
+                        },
+                        overwrite=True,
+                    )
                 just_restored_traces = (
                     'traces.parquet' in need_restore
                 )

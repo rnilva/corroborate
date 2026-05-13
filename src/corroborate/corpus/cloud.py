@@ -725,6 +725,65 @@ def restore(
     return restored
 
 
+def restore_columns(
+    sweep_dir: Path,
+    *,
+    file_columns: Mapping[str, Sequence[str]],
+    overwrite: bool = True,
+) -> list[str]:
+    """Column-projected restore: scan cloud-hosted parquet with
+    `pl.scan_parquet(..., columns=[...])` (real S3 column pushdown
+    via fsspec; validated in `scripts/smoke_column_projected_restore.py`
+    at ≈19× speedup on a 4.4GB traces.parquet).
+
+    Unlike `restore` this:
+    - Does NOT verify sha256 — the materialized local file is a
+      column subset, not a byte-for-byte copy.
+    - Always overwrites by default — the prior local file may have
+      a different column set and would silently mislead downstream
+      consumers that read a column not in the subset.
+    - Writes the projection at the canonical local path (e.g.,
+      `traces.parquet`); callers needing a different colset on a
+      later run will trigger a re-fetch (cheap: column-projected
+      reads are ≈5s on multi-GB archives).
+
+    `file_columns`: a map from relpath → required column names.
+    Example:
+        restore_columns(sweep_dir, file_columns={
+            'traces.parquet': ['id', 'online_max_q_per_step', 'eval_step_index'],
+        })
+
+    The columns must be subsets of the cloud file's schema; an
+    unknown column raises at scan time. Returns the list of
+    relpaths actually rewritten."""
+    manifest = _load_manifest(sweep_dir)
+    if manifest is None:
+        raise FileNotFoundError(
+            f'{sweep_dir}: no manifest at {MANIFEST_NAME}',
+        )
+    by_relpath = {f.relpath: f for f in manifest.files}
+    missing = [r for r in file_columns if r not in by_relpath]
+    if missing:
+        raise KeyError(
+            f'manifest does not contain: {sorted(missing)}',
+        )
+
+    import polars as pl
+    restored: list[str] = []
+    for relpath, columns in file_columns.items():
+        local = sweep_dir / relpath
+        if local.exists() and not overwrite:
+            continue
+        remote_uri = _join_remote(manifest.remote_root, relpath)
+        df = pl.scan_parquet(remote_uri).select(list(columns)).collect()
+        local.parent.mkdir(parents=True, exist_ok=True)
+        tmp = local.with_suffix(local.suffix + '.tmp')
+        df.write_parquet(tmp)
+        tmp.replace(local)
+        restored.append(relpath)
+    return restored
+
+
 def is_archived(sweep_dir: Path, relpath: str) -> bool:
     """True iff `relpath` (relative to `sweep_dir`) is recorded in
     the per-sweep manifest. Used by sweep-loop resume: skip arms

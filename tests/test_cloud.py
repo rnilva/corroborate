@@ -417,6 +417,92 @@ def test_ls_without_archive_raises(sweep_dir: Path) -> None:
         _ = cloud.ls(sweep_dir)
 
 
+# ============ restore_columns: column-projected restore ============
+
+
+def _write_multicol_parquet(p: Path, n_rows: int = 500) -> None:
+    """Multi-column parquet so column projection has columns to drop.
+    Fat columns are deliberately big (300-element lists × random
+    payload) so parquet metadata doesn't dominate the size measurement."""
+    import polars as pl
+    import random
+    random.seed(0)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    fat = lambda: [random.random() for _ in range(300)]
+    df = pl.DataFrame({
+        'id': [f'cell-{i}' for i in range(n_rows)],
+        'wanted_col': [random.random() for _ in range(n_rows)],
+        'fat_col_a': [fat() for _ in range(n_rows)],
+        'fat_col_b': [fat() for _ in range(n_rows)],
+        'fat_col_c': [fat() for _ in range(n_rows)],
+    })
+    df.write_parquet(p)
+
+
+def test_restore_columns_writes_thin_local(tmp_path: Path) -> None:
+    """`restore_columns` materializes only the requested columns,
+    producing a much smaller local file than the cloud original."""
+    sweep = tmp_path / 'sweep'
+    _write_multicol_parquet(sweep / 'traces.parquet')
+    full_size = (sweep / 'traces.parquet').stat().st_size
+    remote = f'file://{tmp_path / "remote"}'
+    _ = cloud.archive(sweep, remote)
+
+    # Purge local to force a fetch
+    (sweep / 'traces.parquet').unlink()
+
+    restored = cloud.restore_columns(
+        sweep, file_columns={
+            'traces.parquet': ['id', 'wanted_col'],
+        },
+    )
+    assert restored == ['traces.parquet']
+
+    thin = sweep / 'traces.parquet'
+    assert thin.exists()
+    thin_size = thin.stat().st_size
+    # Projection should drop the three fat list columns (3× ~400KB
+    # each); thin file should be a small fraction of the original.
+    assert thin_size < full_size * 0.5, (
+        f'thin {thin_size} not meaningfully smaller than full {full_size}'
+    )
+
+    import polars as pl
+    df = pl.read_parquet(thin)
+    assert set(df.columns) == {'id', 'wanted_col'}
+    assert df.height == 500
+
+
+def test_restore_columns_raises_on_unknown_relpath(tmp_path: Path) -> None:
+    sweep = tmp_path / 'sweep'
+    _write_real_parquet(sweep / 'runs.parquet')
+    remote = f'file://{tmp_path / "remote"}'
+    _ = cloud.archive(sweep, remote)
+    with pytest.raises(KeyError, match='manifest does not contain'):
+        _ = cloud.restore_columns(
+            sweep, file_columns={'not_in_manifest.parquet': ['x']},
+        )
+
+
+def test_restore_columns_overwrite_false_skips_existing(
+    tmp_path: Path,
+) -> None:
+    """When overwrite=False, an existing local file is left alone."""
+    sweep = tmp_path / 'sweep'
+    _write_multicol_parquet(sweep / 'traces.parquet')
+    remote = f'file://{tmp_path / "remote"}'
+    _ = cloud.archive(sweep, remote)
+    # Replace local with stub
+    sentinel = b'pre-existing-do-not-overwrite'
+    _ = (sweep / 'traces.parquet').write_bytes(sentinel)
+    restored = cloud.restore_columns(
+        sweep, file_columns={'traces.parquet': ['id']},
+        overwrite=False,
+    )
+    assert restored == []  # nothing rewritten
+    assert (sweep / 'traces.parquet').read_bytes() == sentinel
+
+
 def test_archive_empty_sweep_raises(tmp_path: Path) -> None:
     empty = tmp_path / 'empty'
     empty.mkdir()
