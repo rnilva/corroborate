@@ -25,49 +25,37 @@ from corroborate.bridge.predicates import (
 # not by HP/network/wrapper differences (the cross-config common-
 # cause confound surfaced in `findings_two_channel_cross_corpus.md`).
 #
-# Env-class network branches: MLP envs get hidden=(64,64);
-# MinAtar (Atari-style 10×10×k) gets hidden=(128) + CNN
-# channels=(16,32); jumanji games (PacMan / SlidingTile / Snake)
-# get hidden=(64) + CNN channels=(8,16).
-_MLP_ENVS: tuple[str, ...] = (
-    'Acrobot-v1', 'CartPole-v1', 'FourRooms-misc',
-    'MountainCar-v0', 'MetaMaze-misc',
-)
-_MINATAR_ENVS: tuple[str, ...] = (
-    'Asterix-MinAtar', 'Breakout-MinAtar', 'Freeway-MinAtar',
-    'SpaceInvaders-MinAtar',
-)
-_JUMANJI_ENVS: tuple[str, ...] = (
-    'PacMan-jumanji', 'SlidingTilePuzzle-jumanji', 'Snake-jumanji',
-)
-# Substrate-default config per env class. Tuples are
-# (sync_period, total_steps, replay_capacity, hidden, channels-or-None).
-# - MLP-state envs: standard DQN scale (sync=100, 200k steps, 50k buf).
-# - MinAtar: paper-canonical (Young & Tian 2019 /
-#   minatar_paper_1m_clean): sync=1000, 1M steps, 100k buf, CNN(16).
-# - jumanji games: sync=1000, 1M steps, 50k buf, CNN(8,16).
-_ENV_CLASS_CANONICAL = (
-    (_MLP_ENVS,     100,  200000,   50000,  '(64,64)', None),
-    (_MINATAR_ENVS, 1000, 1000000,  100000, '(128)',  '(16)'),
-    (_JUMANJI_ENVS, 1000, 1000000,  50000,  '(64)',   '(8,16)'),
+# Per-env canonical config. 1M total_steps for ALL envs (state-based
+# envs at 200k are undertrained — MountainCar stuck at -86.6 median).
+# Tuples are (env_name, sync_period, replay_capacity, hidden,
+# channels-or-None). total_steps is fixed at 1M.
+_PER_ENV_CANONICAL: tuple[tuple[str, int, int, str, str | None], ...] = (
+    # MLP-state at 1M
+    ('Acrobot-v1',                100,  50000,  '(64,64)', None),
+    ('CartPole-v1',               100,  50000,  '(64,64)', None),
+    ('FourRooms-misc',            100,  50000,  '(64,64)', None),
+    ('MountainCar-v0',            100,  50000,  '(64,64)', None),
+    ('MetaMaze-misc',             100,  50000,  '(64,64)', None),
+    # MinAtar paper-canonical
+    ('Asterix-MinAtar',           1000, 100000, '(128)',  '(16)'),
+    ('Breakout-MinAtar',          1000, 100000, '(128)',  '(16)'),
+    ('Freeway-MinAtar',           1000, 100000, '(128)',  '(16)'),
+    ('SpaceInvaders-MinAtar',     1000, 100000, '(128)',  '(16)'),
+    # jumanji games
+    ('PacMan-jumanji',            1000, 50000,  '(64)',   '(8,16)'),
+    ('SlidingTilePuzzle-jumanji', 1000, 50000,  '(64)',   '(8,16)'),
+    ('Snake-jumanji',             1000, 50000,  '(64)',   '(8,16)'),
 )
 
 
-def _build_env_class_canonical_filter() -> pl.Expr:
-    """Disjunction of per-env-class canonical filters.
-
-    Each env-class has its own substrate-default config — MLP-state
-    envs run at sync=100 / 200k / 50k buf / MLP(64,64); MinAtar-CNN
-    runs at sync=1000 / 1M / 100k buf / (128)+(16); jumanji-CNN at
-    sync=1000 / 1M / 50k buf / (64)+(8,16). A single shared HP pin
-    can't capture all three, so canonical is built as `OR over
-    env-classes` with class-conditional HP pins."""
+def _build_per_env_canonical_filter() -> pl.Expr:
+    """Disjunction of per-env canonical filters (1M total_steps for all)."""
     parts: list[pl.Expr] = []
-    for envs, sync, steps, capacity, hidden, channels in _ENV_CLASS_CANONICAL:
+    for env, sync, capacity, hidden, channels in _PER_ENV_CANONICAL:
         cond = (
-            pl.col('env_name').is_in(list(envs))
+            (pl.col('env_name') == env)
             & (pl.col('sync_period') == sync)
-            & (pl.col('total_steps') == steps)
+            & (pl.col('total_steps') == 1000000)
             & (pl.col('replay.capacity') == capacity)
             & (pl.col('q_network.hidden') == hidden)
         )
@@ -90,7 +78,7 @@ DDQN_CANONICAL_REGIME: pl.Expr = (
     & (pl.col('reward_scale').is_null() | (pl.col('reward_scale') == 1.0))
     & pl.col('target_sync.tau').is_null()
     & (pl.col('wrappers') == '()')
-    & _build_env_class_canonical_filter()
+    & _build_per_env_canonical_filter()
 )
 
 
