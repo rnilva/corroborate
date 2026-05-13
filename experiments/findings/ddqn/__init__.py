@@ -27,6 +27,10 @@ from experiments.findings.ddqn._arms import INTERVENTION as INTERVENTION
 from experiments.findings.ddqn._common import CLAIM as CLAIM
 from experiments.findings.ddqn._scope import MODULE_SCOPE as MODULE_SCOPE
 from experiments.findings.ddqn.bias_correction import BRIDGES as _BIAS_CORRECTION
+from experiments.findings.ddqn.bias_correction_xenv import (
+    bias_correction_dose_response__xenv_arm_diff,
+    bias_correction_dose_response__xenv_arm_diff_loo_robust,
+)
 from experiments.findings.ddqn.mediation import BRIDGES as _MEDIATION
 from experiments.findings.ddqn.outcome_scope import BRIDGES as _OUTCOME_SCOPE
 from experiments.findings.ddqn.within_env import BRIDGES as _WITHIN_ENV
@@ -41,6 +45,8 @@ BRIDGES = (
     *_OUTCOME_SCOPE,
     *_WITHIN_ENV,
     *_BIAS_CORRECTION,
+    bias_correction_dose_response__xenv_arm_diff,
+    bias_correction_dose_response__xenv_arm_diff_loo_robust,
     *_MEDIATION,
 )
 

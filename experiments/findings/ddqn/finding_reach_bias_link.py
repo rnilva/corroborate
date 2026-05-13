@@ -1,64 +1,52 @@
-"""Bias-correction magnitude does NOT predict DDQN outcome gain
-on the G1-active DDQN-relevant scope — REFUTED on the current
-corpus.
+"""DDQN's bootstrap clip does NOT translate to outcome benefit
+across envs at canonical scope — REFUTED.
 
-The bootstrap_gap_magnitude → Δ_outcome cluster (MC-free
-predictor) fires REFUTED under G1 gating: ATE = −29 (placebo
-holds, RCC drift exceeds threshold). Pre-G1-gate diagnostic
-(no premise-active filter, n=29 strata) gives β = +244,
-p < 10⁻⁴, CI = [+157, +332] — strong positive cross-env signal
-— but the 9 low-bias configs that anchored the slope drop out
-when G1 fires, and the remaining 20 G1-active strata don't
-reproduce the positive relationship in aggregate.
+The cross-env dose-response cluster (anchor Spearman + LOO
+robustness sibling) fires NO_EFFECT on the canonical 1M panel:
 
-Within-env, the relationship still looks strong (r ≥ +0.82 in
-4/5 envs: FourRooms, SpaceInvaders, Asterix, Breakout; only
-Acrobot disagrees at r=−0.60). The cross-env null isn't
-"no link anywhere" — it's "no consistent slope after env
-intercepts are absorbed." More configs per env in the
-G1-active scope (currently 3-7) could flip this.
+  anchor   : ρ = +0.105, p = 0.75 (n=10 envs after saturation
+             guard drops CartPole / FourRooms)
+  LOO      : min(ρ_LOO) far below the +0.3 robustness gate
 
-The jens-based companion cluster
-(`bias_premise_jens_predicts_outcome_*`) is also REFUTED, but
-that one is expected because `jens = Q − MC` shares its MC
-term with the outcome — the framework correctly refuses to
-corroborate that tautological measurement.
+The substantive reading: at canonical scope (1 config per env,
+sync/replay/network at env-class-canonical defaults), envs where
+DDQN induces a bigger Δ in `bootstrap_gap_magnitude` do NOT
+systematically see a bigger Δ in `eval_best_burst_raw_mean`. The
+per-step clip inequality (`findings_clip_to_trained_q_propagation`)
+remains structurally true; its translation to env-level
+outcome-benefit is empirically null at the population-of-envs
+scope where the practitioner-facing claim lives.
 
 Renamed from `finding_reach_bias_link` (REACH-cohort jens→outcome
-test, retired 2026-05-13 because tautological).
+test, retired 2026-05-13 because tautological). The
+previous cross-stratum DoWhy cluster
+(`bias_correction_clip_predicts_outcome_*`) was deleted — it
+asked a pooled-cross-stratum slope question that at canonical
+n_strata=12 was structurally underpowered; the question itself
+needed more strata than canonical provides. The cleanly-scoped
+cross-env dose-response replaces it.
 
-Three-bridge cluster form per CLAUDE.md's cluster-shaped causal
-claims principle: backdoor (adjustment-identified ATE), placebo
-(instrument validity), RCC (omitted-confound sensitivity).
-Finding-level `composed_verdict` AND-aggregates."""
+Anchor + robustness cluster shape per HYPOTHESIS_AS_GRAPH.md
+§3b — composed_verdict AND-aggregates the two NO_EFFECT members
+into REFUTED at the Finding level."""
 from __future__ import annotations
 
 from corroborate.bridge.bridge import Bridge
 from corroborate.graph.causal import ClusterVerdict
 
-from experiments.findings.ddqn.bias_correction import (
-    bias_correction_clip_predicts_outcome_backdoor,
-    bias_correction_clip_predicts_outcome_placebo,
-    bias_correction_clip_predicts_outcome_rcc,
+from experiments.findings.ddqn.bias_correction_xenv import (
+    bias_correction_dose_response__xenv_arm_diff,
+    bias_correction_dose_response__xenv_arm_diff_loo_robust,
 )
 
 
-EXPECTED: ClusterVerdict = ClusterVerdict.UNDERPOWERED
+EXPECTED: ClusterVerdict = ClusterVerdict.REFUTED
 
 
-BLOCKED_ON: str | None = (
-    'At canonical scope (60 cells / env), the bias_correction_clip_'
-    'predicts_outcome_{backdoor,placebo,rcc} DoWhy cluster needs '
-    'n>=30 per stratum to fire; canonical has roughly that minimum '
-    'and the cluster fires POWER_INSUFFICIENT. Pre-canonical the '
-    'finding was REFUTED on the HP-mixed pool (where the same '
-    'cluster had ~600 cells and resolved cleanly). Needs ~240 cells '
-    'per env at canonical config to recover decisive verdict.'
-)
+BLOCKED_ON: str | None = None
 
 
 BRIDGES: tuple[Bridge, ...] = (
-    bias_correction_clip_predicts_outcome_backdoor,
-    bias_correction_clip_predicts_outcome_placebo,
-    bias_correction_clip_predicts_outcome_rcc,
+    bias_correction_dose_response__xenv_arm_diff,
+    bias_correction_dose_response__xenv_arm_diff_loo_robust,
 )
