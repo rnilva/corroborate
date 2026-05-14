@@ -23,6 +23,7 @@ import corroborate_rl.dqn.measurables  # pyright: ignore[reportUnusedImport]  # 
 import polars as pl
 
 from experiments.findings.ddqn_sweeps import (
+    finding_hp_variance_outcome_refuted,
     finding_metamaze_gamma_amplification,
     finding_rs01_rescue_envelope,
 )
@@ -58,6 +59,7 @@ BRIDGES = (
 
 
 FINDINGS = (
+    finding_hp_variance_outcome_refuted,
     finding_metamaze_gamma_amplification,
     finding_rs01_rescue_envelope,
 )

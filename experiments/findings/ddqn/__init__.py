@@ -22,6 +22,7 @@ from experiments.findings.ddqn import (
     finding_per_burst_chain_dynamics,
     finding_polarity_conditional_chain,
     finding_reach_bias_link,
+    finding_three_gate_scope_outcome_held,
 )
 from experiments.findings.ddqn._arms import INTERVENTION as INTERVENTION
 from experiments.findings.ddqn._common import CLAIM as CLAIM
@@ -56,6 +57,7 @@ FINDINGS = (
     finding_polarity_conditional_chain,
     finding_per_burst_chain_dynamics,
     finding_reach_bias_link,
+    finding_three_gate_scope_outcome_held,
 )
 
 
