@@ -3,7 +3,16 @@
 - `argmax_entropy_shadowed_by_jens` (CLAIM 23): null-form bridge.
   argmaxH co-varies with jens via shared Q-distribution; partial-
   Spearman | Δ_jens should collapse the residual coupling.
-- `eff_h_mediates_g_link__{goal,survival}_envs` (CLAIM 12): polarity-
+- `eff_h_polarity_structure_check__{goal,survival}_envs` (CLAIM 12):
+  POLARITY-STRUCTURE observation, NOT a mediator claim. At canonical
+  γ pinned, eff_h is a monotone function of bf; within env,
+  ρ(eff_h, outcome) is structurally polarity-typed (GOAL: faster
+  solving → less reward / more reward, opposite signs by env
+  family). The partial-Spearman conditioning on jens doesn't break
+  this — jens is independent of bf. Substantive mediator test
+  requires intervention on length (γ-sweep) and lives in
+  `ddqn_sweeps/eff_h_intervention.py`.
+- `eff_h_polarity_structure_check__{goal,survival}_envs` (CLAIM 12): polarity-
   stratified eff_h mediator. GOAL polarity ρ_partial ≤ -0.3; SURVIVAL
   ρ_partial ≥ +0.3 (polarity-tautology sign).
 - `target_staleness_late_mediates_outcome__minatar_intermediate_sync`
@@ -99,7 +108,7 @@ def argmax_entropy_shadowed_by_jens(
     ),
     predicted_direction='a_lt_b',
 )
-def eff_h_mediates_g_link__goal_envs(
+def eff_h_polarity_structure_check__goal_envs(
     stratified_partial_spearman: StratifiedPartialSpearmanResult,
     *,
     x: str = 'effective_horizon',
@@ -110,7 +119,20 @@ def eff_h_mediates_g_link__goal_envs(
     magnitude_threshold: float = 0.3,
     min_strata: int = 2,
 ) -> Verdict:
-    """GOAL-polarity (`polarity < -0.3`). HELD when ρ ≤ -threshold."""
+    """**Polarity-structure check, NOT a mediator claim.** GOAL-
+    polarity envs (`polarity < -0.3`) should show ρ(eff_h, outcome
+    | jens, env) ≤ -threshold by env structure: faster solving →
+    shorter episode → lower bf → lower eff_h, AND faster solving →
+    higher sparse-terminal outcome. The negative ρ documents the
+    polarity-structure correlation, NOT a substrate mediator path.
+
+    γ is pinned at canonical → eff_h = 1/(1−γ·bf) is a monotone
+    function of bf alone; partial-Spearman conditioning on jens
+    doesn't break the bf→outcome structural correlation.
+
+    For the substantive mediator test (does DDQN's INTERVENTION on
+    eff_h via γ-sweep predict its effect on outcome?), see
+    `ddqn_sweeps/eff_h_intervention.py`."""
     del x, y, conditioning, stratify_by, min_stratum_size
     return partial_spearman_signed_verdict(
         stratified_partial_spearman,
@@ -133,7 +155,7 @@ def eff_h_mediates_g_link__goal_envs(
     ),
     predicted_direction='a_gt_b',
 )
-def eff_h_mediates_g_link__survival_envs(
+def eff_h_polarity_structure_check__survival_envs(
     stratified_partial_spearman: StratifiedPartialSpearmanResult,
     *,
     x: str = 'effective_horizon',
@@ -144,8 +166,16 @@ def eff_h_mediates_g_link__survival_envs(
     magnitude_threshold: float = 0.3,
     min_strata: int = 2,
 ) -> Verdict:
-    """SURVIVAL-polarity (`polarity > +0.3`). HELD when ρ ≥
-    threshold (polarity-tautology sign)."""
+    """**Polarity-structure check, NOT a mediator claim.** SURVIVAL-
+    polarity envs (`polarity > +0.3`) should show ρ(eff_h, outcome
+    | jens, env) ≥ +threshold by env structure: longer episode →
+    higher bf → higher eff_h, AND longer episode → more cumulative
+    reward. The positive ρ documents the polarity-structure
+    correlation, NOT a substrate mediator path.
+
+    No γ-sweep intervention data exists for SURVIVAL envs at
+    canonical, so the substantive mediator test isn't authored —
+    would require a designed truncation-wrapper sweep."""
     del x, y, conditioning, stratify_by, min_stratum_size
     return partial_spearman_signed_verdict(
         stratified_partial_spearman,
@@ -524,8 +554,8 @@ def argmax_entropy_link_power_null__survive_envs(
 
 BRIDGES = (
     argmax_entropy_shadowed_by_jens,
-    eff_h_mediates_g_link__goal_envs,
-    eff_h_mediates_g_link__survival_envs,
+    eff_h_polarity_structure_check__goal_envs,
+    eff_h_polarity_structure_check__survival_envs,
     target_staleness_late_mediates_outcome__minatar_intermediate_sync,
     cross_config_staleness_slope_negative__survive,
     # Polyak-do(τ) bridges moved to `experiments.findings.ddqn_sweeps`:
