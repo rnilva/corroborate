@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
+import numpy as np
 import pytest
 
 from corroborate.measurables import Measurable, measurable
@@ -243,6 +244,52 @@ def test_register_idempotent_on_signature_equal_distinct_instances() -> None:
 
     # First-registered identity wins (no last-write-wins replacement).
     assert get_registered('_idempotent_dup_test') is first
+
+
+def test_register_as_preserves_compose_of() -> None:
+    """`register_as(m, name='alias')` constructs a renamed Measurable
+    that threads `m.compose_of` through — the source lineage stays
+    intact across the rename, so `signature()` recursion at
+    `measurable.py:240-246` reaches the leaf through the aliased
+    Measurable just as it would through the original."""
+    from corroborate.measurables import (
+        from_key,
+        get_registered,
+        mean_window,
+        register_as,
+    )
+
+    source = from_key('_register_as_test_key')
+    composed = mean_window(source, 0.5, 1.0)
+    aliased = register_as(composed, name='_register_as_test_alias')
+
+    assert aliased.name == '_register_as_test_alias'
+    assert aliased.reads == composed.reads == ('_register_as_test_key',)
+    # `compose_of` threaded through — the renamed Measurable's lineage
+    # reaches back to the original `mean_window` operand.
+    assert aliased.compose_of == composed.compose_of
+    # Registered under the alias.
+    assert get_registered('_register_as_test_alias') is aliased
+    # Functional behavior preserved.
+    record: Mapping[str, object] = {
+        '_register_as_test_key': np.asarray([1.0, 2.0, 3.0, 4.0]),
+    }
+    assert aliased(record) == pytest.approx(3.5)  # mean of [3, 4]
+
+
+def test_register_as_reads_override() -> None:
+    """`register_as(m, name=..., reads=(...))` overrides the operand's
+    reads when the persistence contract differs from the auto-derived
+    set."""
+    from corroborate.measurables import from_key, register_as
+
+    source = from_key('_register_as_reads_override_key')
+    aliased = register_as(
+        source,
+        name='_register_as_reads_override_alias',
+        reads=('explicit_key',),
+    )
+    assert aliased.reads == ('explicit_key',)
 
 
 def test_signature_flips_on_constant_change() -> None:

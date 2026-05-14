@@ -379,6 +379,42 @@ def register[R: Mapping[str, object], T](
     return m
 
 
+def register_as[R: Mapping[str, object], T](
+    m: Measurable[R, T],
+    *,
+    name: str,
+    reads: tuple[str, ...] | None = None,
+) -> Measurable[R, T]:
+    """Register `m` under an aliased `name`, preserving `compose_of`
+    and `reads`.
+
+    Use when binding a stable hand-picked name to a composition of
+    framework reductions whose auto-derived name would be verbose
+    (e.g., `'online_max_q_per_step__mean_50_100'`) — the cached
+    parquet column contract and `pl.col('q_late_mean')` scope
+    predicates depend on stable hand-picked names.
+
+    Threads `compose_of=m.compose_of` so `signature()` recursion at
+    `measurable.py:240-246` reaches the source lineage through the
+    rename, preserving structural cache invalidation. The earlier
+    substrate idiom `Measurable(fn=composition.fn, name='alias',
+    reads=(...))` silently dropped `compose_of`; `register_as` is
+    the discipline that keeps the lineage honest.
+
+    `reads` defaults to `m.reads`. Override only when the
+    composition's auto-derived reads don't match the desired
+    persistence contract (rare).
+    """
+    aliased: Measurable[R, T] = Measurable(
+        fn=m.fn,
+        name=name,
+        reads=reads if reads is not None else m.reads,
+        compose_of=m.compose_of,
+    )
+    register(aliased)
+    return aliased
+
+
 def registered_names() -> tuple[str, ...]:
     """Sorted tuple of all currently-registered measurable names.
     Useful for debug / diagnostic output."""

@@ -385,11 +385,12 @@ def build_measurements(
     # Skip-recompute for unsatisfiable measurables. A measurable
     # whose **transitive** record-key reads aren't all in
     # `joined.columns` will silently return NaN per cell (the
-    # measurable itself NaN-propagates when `_record_array` returns
-    # None for a missing key), and `compute_missing_columns`'s
-    # partial-null branch will then OVERWRITE existing finite
-    # values in `joined` with the fresh NaN — turning a previously-
-    # good per-corpus store into stale NaN.
+    # measurable itself NaN-propagates when its shared-source
+    # `from_key` invocation raises `KeyError`), and
+    # `compute_missing_columns`'s partial-null branch will then
+    # OVERWRITE existing finite values in `joined` with the fresh
+    # NaN — turning a previously-good per-corpus store into stale
+    # NaN.
     #
     # `m.reads` alone isn't enough: a measurable like `effective_
     # horizon` declares `reads=('gamma',)` but takes a parameter-

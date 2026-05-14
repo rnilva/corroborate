@@ -10,6 +10,7 @@ Verifies:
   trajectory."""
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 
 import numpy as np
@@ -106,6 +107,28 @@ def test_mean_window_handles_tiny_arrays() -> None:
     m = mean_window(from_key('x'), 0.0, 0.25)
     # 0.25 * 2 = 0; i_hi = 0 → bumped to 1 → mean(arr[0:1]) = 7
     assert m(record) == pytest.approx(7.0)
+
+
+def test_mean_window_handles_zero_d() -> None:
+    """0-d / scalar operand (e.g. a null trace cell decoded as a
+    scalar ndarray) has no window axis; NaN-propagate rather than
+    raise. Subsumes the substrate's prior `_mean_window` 0-d
+    guard."""
+    record: Mapping[str, npt.NDArray[np.floating]] = {
+        'x': np.asarray(0.0),  # 0-d scalar ndarray
+    }
+    m = mean_window(from_key('x'), 0.5, 1.0)
+    assert math.isnan(m(record))
+
+
+def test_mean_window_handles_empty() -> None:
+    """Empty 1-d operand also NaN-propagates rather than raising
+    on a 0-length window."""
+    record: Mapping[str, npt.NDArray[np.floating]] = {
+        'x': np.asarray([], dtype=np.float64),
+    }
+    m = mean_window(from_key('x'), 0.5, 1.0)
+    assert math.isnan(m(record))
 
 
 # ============ growth_window ============

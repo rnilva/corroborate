@@ -156,7 +156,16 @@ def mean_window[R: Mapping[str, object]](
 
     def fn(record: R) -> float:
         arr = of(record)
+        # 0-d / scalar inputs (e.g. a null trace cell that
+        # `from_key`'s `np.asarray` decoded as a 0-d ndarray) have
+        # no window to take a mean over; NaN-propagate. Subsumes
+        # the substrate's prior `_mean_window` helper, which
+        # guarded the same case before being deleted.
+        if arr.ndim == 0:
+            return float('nan')
         n = len(arr)
+        if n == 0:
+            return float('nan')
         i_lo = int(lo * n)
         i_hi = int(hi * n)
         # Guard the corner cases where n is tiny: ensure at
