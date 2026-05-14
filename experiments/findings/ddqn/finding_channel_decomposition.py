@@ -1,45 +1,47 @@
-"""DDQN's outcome benefit operates through a Q-shape mediator
-channel (action-std) at per-burst within-cell granularity.
+"""Q-shape "channel" at canonical is largely Q-MC tautology
+artifact — REFUTED after partial conditioning on Q-magnitude.
 
-The substantive channel decomposition at canonical:
+Two-bridge cluster on `q_action_std_per_burst → mc_return_raw_
+per_burst_mean` documents the substantive resolution of the
+Q-shape channel claim:
 
-1. **bg-channel** (algorithmic clip): `bg_per_burst_link_to_outcome`
-   fires HELD as predicted-NULL (pooled ρ ≈ -0.16, below |0.2|
-   null band). The bg → outcome per-burst link is env-specific
-   (cancels in pool, strong negative on Acrobot, mixed elsewhere).
-2. **Q-shape channel** (action-spread): `q_action_std_per_burst_
-   link_to_outcome` fires HELD as predicted-POSITIVE (pooled ρ =
-   +0.249 across 10 envs). DDQN's effect on within-state Q-spread
-   consistently predicts per-burst outcome.
+1. `q_action_std_per_burst_link_to_outcome` (marginal):
+   ρ_pooled = +0.249 → HELD (above +0.2 threshold)
+2. `q_action_std_per_burst_link_to_outcome__partial_q` (partial
+   conditioned on q_per_burst): ρ_partial = below +0.2 threshold,
+   p=0.0006 → **NO_EFFECT**
 
-Companion (NOT in this Finding's cluster — empirically below
-threshold): `q_argmax_margin_per_burst_link_to_outcome` fires
-NO_EFFECT (ρ=+0.157, below +0.2 marginal threshold). The
-empirical mediator search (`scripts/q_channel_mediator_search.py`)
-shows q_argmax_margin's role is at the Q→MC RESIDUAL level
-(reduces partial ρ(q, mc | bg) from +0.58 to +0.23 — single
-strongest residual reducer) — i.e., it mediates the Q→MC channel
-conditional on bg, but doesn't directly correlate with outcome
-at the marginal per-burst granularity tested here.
+Cluster verdict: **REFUTED**. The marginal HELD was largely
+driven by the Q-IS-MC structural coupling on positive-return
+envs (Q estimates MC return, so Q-spread cells trivially have
+high MC). After partialling Q-magnitude, the Q-SHAPE residual
+doesn't surface above the substantive threshold.
 
-Per-env variation (from mediator-search script): Q-shape mediation
-strength differs substantially across envs — Breakout-MinAtar
-shows huge Q→MC residual reduction (-0.62) after conditioning on
-bg + Q-shape; PacMan/SI/MetaMaze moderate (-0.22 to -0.52);
-Asterix/Freeway/SlidingTile small (-0.06 to -0.16). Documented in
-memory `findings_q_shape_env_class_stratification`.
+**Implication for the "two channels" framing at canonical**:
+the channel decomposition reduces to ONE substantive channel
+(bg / algorithmic clip — `finding_three_gate_scope_outcome_
+held` SUPPORTED) plus Q-magnitude acting through structural
+Q-MC coupling (which is part of the bg→outcome chain anyway,
+not an independent mediator). The pre-canonical "Q-channel
+beyond bg" finding survives only as a residual that the
+mediator-search script (`scripts/q_channel_mediator_search.py`)
+explains via within-cell Q-shape measures — but those measures
+don't add substantive predictive value to outcome beyond
+Q-magnitude itself.
 
-**Caveat — Q-MC tautology**: q_action_std scales with Q
-magnitude on positive-return envs; Q estimates MC return so
-high-Q-spread cells trivially have high MC. Per-env data
-partially contradicts the naive tautology (Asterix SURVIVE shows
-ρ=-0.32, MountainCar GOAL shows ρ=+0.73), so the signal isn't
-purely tautological, but partial contribution is plausible. The
-substantively clean form needs `ρ(q_action_std, mc | q_per_burst)`
-— the per-burst partial primitive doesn't support conditioning
-yet (`project_per_burst_partial_primitive` deferred). This
-Finding's SUPPORTED verdict reflects the marginal empirical
-signal at canonical; the partial-conditioned form may differ.
+Companion (NOT in this Finding's cluster — different extent,
+weaker marginal signal): `q_argmax_margin_per_burst_link_to_
+outcome` fires NO_EFFECT marginally (ρ=+0.157). Its role lives
+at the Q→MC residual conditioning level per the mediator-search
+script (reduces partial ρ(q, mc | bg) by 0.35), not as a direct
+outcome predictor.
+
+Per-env Q-shape mediation strength (from mediator-search) varies
+across envs — documented in memory
+`findings_q_shape_env_class_stratification`. The variation is
+Q-magnitude-variance-based, not polarity-based, and after this
+partial-conditioning test the "differs by env" claim is also
+shown to be largely tautology-driven.
 
 This Finding documents the positive Q-shape channel claim. The
 bg-channel runs through `finding_three_gate_scope_outcome_held`
@@ -54,21 +56,19 @@ from __future__ import annotations
 from corroborate.bridge.bridge import Bridge
 from corroborate.graph.causal import ClusterVerdict
 
-from experiments.findings.ddqn.bias_correction import (
-    bg_per_burst_link_to_outcome,
-)
 from experiments.findings.ddqn.q_shape_mediation import (
     q_action_std_per_burst_link_to_outcome,
+    q_action_std_per_burst_link_to_outcome__partial_q,
 )
 
 
-EXPECTED: ClusterVerdict = ClusterVerdict.SUPPORTED
+EXPECTED: ClusterVerdict = ClusterVerdict.REFUTED
 
 
 BLOCKED_ON: str | None = None
 
 
 BRIDGES: tuple[Bridge, ...] = (
-    bg_per_burst_link_to_outcome,
     q_action_std_per_burst_link_to_outcome,
+    q_action_std_per_burst_link_to_outcome__partial_q,
 )

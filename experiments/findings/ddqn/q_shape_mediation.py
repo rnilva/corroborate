@@ -43,12 +43,16 @@ import numpy.typing as npt
 from corroborate.analyses.per_burst_jci_spearman import (
     PerBurstJciSpearmanResult,
 )
+from corroborate.analyses.per_burst_partial_jci_spearman import (
+    PerBurstPartialJciSpearmanResult,
+)
 from corroborate.bridge.bridge import Direction, Tier, claim_bridge
 from corroborate.bridge.verdict import Verdict
 from corroborate.measurables import Measurable
 from corroborate_rl.dqn.measurables import (
     q_action_std_per_burst,  # pyright: ignore[reportUnknownVariableType]
     q_argmax_margin_per_burst,  # pyright: ignore[reportUnknownVariableType]
+    q_per_burst,  # pyright: ignore[reportUnknownVariableType]
 )
 
 from experiments.findings.ddqn._common import MC_RETURN_RAW_PER_BURST_MEAN
@@ -68,6 +72,9 @@ _Q_ARGMAX_MARGIN_PER_BURST: _PerBurstMeasurable = cast(
 )
 _Q_ACTION_STD_PER_BURST: _PerBurstMeasurable = cast(
     _PerBurstMeasurable, q_action_std_per_burst,
+)
+_Q_PER_BURST: _PerBurstMeasurable = cast(
+    _PerBurstMeasurable, q_per_burst,
 )
 
 
@@ -155,7 +162,47 @@ def q_argmax_margin_per_burst_link_to_outcome(
     )
 
 
+@claim_bridge(
+    source='q_action_std_per_burst',
+    target='mc_return_raw_per_burst_mean',
+    direction=Direction.DIRECT,
+    tier=Tier.ASSOCIATIONAL,
+    scope=DDQN_RELEVANT_SCOPE,
+    predicted_direction='a_gt_b',
+)
+def q_action_std_per_burst_link_to_outcome__partial_q(
+    per_burst_partial_jci_spearman: PerBurstPartialJciSpearmanResult,
+    *,
+    x: _PerBurstMeasurable = _Q_ACTION_STD_PER_BURST,
+    y: _PerBurstMeasurable = MC_RETURN_RAW_PER_BURST_MEAN,
+    conditioning: _PerBurstMeasurable = _Q_PER_BURST,
+    stratify_by: str = 'env_name',
+    min_stratum_size: int = 5,
+    rho_threshold: float = 0.2,
+    min_strata: int = 5,
+) -> Verdict:
+    """Substantively-clean form: per-burst partial Spearman
+    ρ(q_action_std, mc | q_per_burst), env-stratified Fisher-z
+    pooled. Partials Q-magnitude out so Q-IS-MC tautology no
+    longer drives the signal — surviving correlation is the
+    Q-SHAPE residual mediator beyond Q-magnitude.
+
+    Predicted positive (Q-shape additionally predicts outcome
+    beyond Q-magnitude). HELD when |ρ_partial| ≥ +`rho_threshold`.
+
+    Sibling of `q_action_std_per_burst_link_to_outcome` (marginal
+    form, ρ=+0.249 HELD with tautology caveat). The pair documents
+    whether the marginal signal is substantive or tautology-driven.
+    """
+    del x, y, conditioning, stratify_by, min_stratum_size
+    return partial_spearman_signed_verdict(
+        per_burst_partial_jci_spearman,
+        threshold=rho_threshold, sign=+1, min_strata=min_strata,
+    )
+
+
 BRIDGES = (
     q_action_std_per_burst_link_to_outcome,
+    q_action_std_per_burst_link_to_outcome__partial_q,
     q_argmax_margin_per_burst_link_to_outcome,
 )

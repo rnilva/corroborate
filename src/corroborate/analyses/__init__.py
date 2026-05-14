@@ -50,6 +50,7 @@ from corroborate.analyses import (  # noqa: F401
     panel_consumers as _panel_consumers,  # pyright: ignore[reportUnusedImport]
     stratum_panel_jci_spearman as _stratum_panel_jci_spearman,  # pyright: ignore[reportUnusedImport]
     per_burst_jci_spearman as _per_burst_jci_spearman,  # pyright: ignore[reportUnusedImport]
+    per_burst_partial_jci_spearman as _per_burst_partial,  # pyright: ignore[reportUnusedImport]
     proportion_mediated as _proportion_mediated,  # pyright: ignore[reportUnusedImport]
     partial_spearman_paired as _psp,  # pyright: ignore[reportUnusedImport]
     cross_config_paired_slope as _ccps,  # pyright: ignore[reportUnusedImport]
