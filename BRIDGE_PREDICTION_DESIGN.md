@@ -25,9 +25,12 @@ answer for each.
 - Threaded through `PairedComparisonResult.predicted_direction`
   (`analyses/paired_comparison.py:80`) and the run report
   (`runner/report.py:72`).
-- Surfaced on the substrate YAML's `HypothesisConfig`
-  (`corroborate_rl/dqn/config_loader.py:69`) as a sweep-runner
-  legacy default.
+- `Bridge.predicted_direction` is the sole authoring surface.
+  The substrate YAML (`InterventionConfig`) no longer carries
+  this field — the inheritance pathway it implied was never
+  wired (bridges always authored their own value via
+  `@claim_bridge(predicted_direction=...)`), so the YAML field
+  was dropped in the 2026-05-14 schema cleanup.
 - `RefutationClass.SIGN_FLIP` already encodes XPASS-shape;
   `RefutationClass.NULL_EFFECT` already encodes
   XFAIL_VIOLATED-shape.
@@ -158,15 +161,15 @@ Options:
 **Recommendation:** split. The audit-trail distinction is
 why we added the bundle.
 
-### 7. YAML loader refactor (decided)
+### 7. YAML loader refactor (obsolete)
 
-`HypothesisConfig.predicted_direction: PredictedDirection |
-None` → `HypothesisConfig.prediction: Prediction | None`.
-Loader parses a nested form
-(`prediction: {direction, reason, strict}`). Hard-cut the
-legacy flat `predicted_direction` key with a one-shot
-migration script. Before landing, grep the live YAML
-configs for the flat key to inventory the migration scope.
+Original plan: extend `HypothesisConfig.predicted_direction`
+to a `prediction: Prediction` bundle on the YAML. Obsoleted by
+the 2026-05-14 schema cleanup, which dropped the YAML's
+predicted-direction surface entirely — `Bridge.predicted_direction`
+is the canonical (and sole) home, authored at `@claim_bridge`
+decoration time. If a `Prediction(direction, reason, strict)`
+bundle ships, it lives on `Bridge`, not on `InterventionConfig`.
 
 ### 8. `verdict_from_threshold` carried-forward debt
 
