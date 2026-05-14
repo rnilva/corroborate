@@ -20,6 +20,25 @@ with no Python-side per-cell branching.
 - Gravity, FPS, lander polygon, leg offsets, engine forces,
   initial random impulse all use gymnasium's exact numeric values
   (see the module-level constants below).
+- **Articulated legs** (post 2026-05 review): two 1-DOF revolute
+  pendulums hinged at the lander's body-frame anchors with motor
+  torque biasing them outward and joint limits at ±0.4 rad. Foot
+  positions are computed in world frame and tested for terrain
+  contact independently — so legs touch ground at small tilts
+  (the rigid-attached pre-rev impl required `angle ≈ 0`). Ground
+  contact "sticks" the foot: leg angular velocity is reset to
+  zero and the body's downward velocity is damped by a
+  joint-reaction factor (the joint constraint absorbs body
+  momentum into the leg, approximated as a multiplicative
+  damping rather than full constraint solving). See
+  `LUNAR_LANDER_DYNAMICS_REVIEW.md` §2.2 for the rationale.
+- **Jagged moonscape** (post 2026-05 review): per-episode terrain
+  is sampled at `reset` time from the input RNG following
+  gymnasium's `_generate_terrain` recipe — 12 chunk heights
+  drawn `uniform(0, H/2)`, chunks 4-7 (the helipad strip) forced
+  to `helipad_y`, then 3-tap smoothed. The flat-ground
+  pre-revision assumption is gone; off-helipad excursions can
+  now crash on the moonscape.
 - Termination: out-of-viewport, lander-body crash, or `awake=False`
   (low-velocity rest, low rotation, on the ground) — see
   `_is_terminal` for the closed-form sleep predicate that
@@ -29,25 +48,14 @@ with no Python-side per-cell branching.
 - **Rigid-body sim**: implemented with semi-implicit Euler at
   FPS=50. Mass + moment of inertia are computed analytically
   from the polygon's bounding-box (closed form, since the polygon
-  is approximately rectangular). No collision response — leg
-  contacts are detected by point-vs-flat-ground; the body bounces
-  off the ground only via crash (terminal), not via elastic
-  collision.
-- **Articulated legs**: omitted. Legs are modelled as two fixed
-  contact points rigidly attached to the lander at the gymnasium
-  attachment positions; `leg_contact` triggers when each point's
-  world-frame y ≤ helipad_y. Spring-damped revolute joints +
-  motor (gymnasium's `LEG_SPRING_TORQUE`, motor speed) are
-  dropped — the substrate consumes only the boolean contact flags,
-  so leg articulation has no observation-side effect.
-- **Terrain**: gymnasium generates a randomly-jagged moonscape
-  outside the helipad. This port uses a perfectly flat ground at
-  `y = helipad_y` for all x. Most policies that would land on the
-  helipad already; off-helipad terrain only changes which
-  off-helipad excursions are crash vs landing. For DQN-substrate
-  experimentation the flat-ground simplification preserves the
-  load-bearing surface (the helipad zone) with reduced env-state
-  complexity.
+  is approximately rectangular).
+- **Articulated legs (route a/c hybrid)**: each leg is a 1-DOF
+  pendulum with motor torque + joint limits, but the joint
+  reaction force on the body is approximated as a scalar
+  multiplicative damping on body vy rather than solved via full
+  rigid-body constraint dynamics. The body's effective
+  upward thrust per step matches gymnasium's empirical ~0.22 m/s
+  (vs the pre-revision 0.16) after the damping calibration.
 - **Wind / turbulence**: omitted; gymnasium's `enable_wind=False`
   default is what we match.
 - **Initial random impulse**: gymnasium calls
@@ -103,6 +111,34 @@ LANDER_DENSITY: float = 5.0
 
 LEG_AWAY: int = 20
 LEG_DOWN: int = 18
+LEG_W: int = 2
+LEG_H: int = 8
+LEG_SPRING_TORQUE: float = 40.0    # gymnasium's maxMotorTorque (N·m)
+LEG_MOTOR_SPEED: float = 0.3       # gymnasium's motorSpeed magnitude (rad/s)
+# Leg geometry — derived from gymnasium's Box2D setup. The joint
+# pin is at the lander body center (0, 0) in body frame. The leg
+# fixture's bottom corner ("foot") is at body-frame distance
+# LEG_ROD_LENGTH_M from the joint, at an outward angle from
+# the +y-axis (i.e. angle measured CCW from straight-down).
+#
+# Closed-form: foot's local position in the LEG body is
+# `(0, -LEG_H/SCALE)`; the joint anchor on the leg is at
+# `(±LEG_AWAY/SCALE, +LEG_DOWN/SCALE)` relative to leg CoM. So in
+# body frame (after the constraint solver positions the leg),
+# the foot ends up at distance sqrt(LEG_AWAY² + (LEG_DOWN +
+# LEG_H)²)/SCALE from the joint = sqrt(20² + 26²)/30 ≈ 1.094 m.
+LEG_ROD_LENGTH_M: float = (
+    (LEG_AWAY * LEG_AWAY + (LEG_DOWN + LEG_H) * (LEG_DOWN + LEG_H)) ** 0.5
+) / SCALE
+# Rest angle (in body frame, measured CCW from straight-down).
+# Derived from gymnasium's joint limits + motor convention: each
+# leg's motor pushes against the OUTWARD limit; the resulting rest
+# foot position is at body-frame (±0.952, -0.538) ⇒
+# atan2(0.952, 0.538) ≈ 1.058 rad outward from straight-down. The
+# motor permits yielding inward by JOINT_RANGE rad before hitting
+# the inward limit.
+LEG_REST_OUTWARD_ANGLE: float = 1.058   # rad — atan2(LEG_AWAY, LEG_DOWN+LEG_H)
+LEG_JOINT_RANGE: float = 0.5            # rad — yield window inward
 
 MAIN_ENGINE_POWER: float = 13.0
 SIDE_ENGINE_POWER: float = 0.6
@@ -114,11 +150,22 @@ GRAVITY_Y: float = -10.0
 INITIAL_RANDOM: float = 1000.0
 
 # Helipad anchor — gymnasium computes `helipad_y = H/4` where
-# `H = VIEWPORT_H / SCALE`. Flat-ground simplification: ground
-# height equals helipad_y everywhere.
+# `H = VIEWPORT_H / SCALE`. Helipad strip is at chunks
+# CHUNKS//2 - 2 .. CHUNKS//2 + 2 = 4..7 for CHUNKS=11.
 HELIPAD_Y: float = (VIEWPORT_H / SCALE) / 4.0
 INITIAL_Y: float = VIEWPORT_H / SCALE          # 13.33 m
 INITIAL_X: float = (VIEWPORT_W / SCALE) / 2.0  # 10.0 m
+
+# Terrain — matches gymnasium's CHUNKS=11 chunk-and-smooth recipe.
+# Chunk x-positions are `i * W / (CHUNKS - 1)` for i in 0..CHUNKS-1.
+# Chunk heights are drawn uniform(0, H/2) except chunks 4-7 forced
+# to helipad_y. The 3-tap smoothing
+# `smooth_y[i] = 0.33 (h[i-1] + h[i] + h[i+1])` gives the actual
+# terrain polyline. CHUNKS+1 raw heights are sampled (index i+1
+# in smoothing reads index 11 → needs CHUNKS+1=12 raw heights).
+TERRAIN_CHUNKS: int = 11
+TERRAIN_HELIPAD_LO: int = 4
+TERRAIN_HELIPAD_HI: int = 7
 
 
 # ============ Derived mass + inertia (analytic, no Box2D) ============
@@ -156,17 +203,63 @@ LANDER_INERTIA: float = (
     LANDER_MASS * (_LANDER_W_M * _LANDER_W_M + _LANDER_H_M * _LANDER_H_M) / 12.0
 )
 
+# Leg mass + moment of inertia (about hinge): box (2*LEG_W, 2*LEG_H)
+# in pixels with density=1 → area = (2*2*2*8)/SCALE² = 64/900 ≈
+# 0.0711 m². At density=1 → m_leg ≈ 0.0711 kg. Moment of inertia
+# of a rod about one end: I = m * L² / 3 (L = LEG_ROD_LENGTH_M).
+LEG_MASS: float = (4.0 * LEG_W * LEG_H) / (SCALE * SCALE)  # ≈ 0.0711 kg
+LEG_INERTIA: float = LEG_MASS * LEG_ROD_LENGTH_M * LEG_ROD_LENGTH_M / 3.0
+
+# Body-vy damping when one or both legs are in contact with the
+# ground — approximates the Box2D joint constraint's effect of
+# transferring the body's downward momentum into the leg, which
+# is then absorbed by the static ground. Calibrated against
+# gymnasium's probe: at angle=0 + action=2 + leg=in-contact,
+# gymnasium's body dvy ≈ -0.07 (mostly downward gravity, joint
+# rejects upward thrust because the legs are pushing back); JAX
+# pre-rev had dvy = -0.07 + 0.36 = +0.29. The damping factor
+# multiplies the body vy after each impulse step when in contact.
+LEG_CONTACT_VY_DAMPING: float = 0.50
+
+# Body main-engine thrust scaling — calibrated so that at angle=0,
+# leg-not-in-contact, the body's engine-only dvy (gravity
+# subtracted) matches gymnasium's probed +0.22 m/s. The naive
+# JAX impulse-over-mass calculation gives +0.36 m/s (engine push
+# = 13.0 · (4/30) / 4.767 = 0.364) — STRONGER than gymnasium's
+# effective thrust through Box2D's joint solver, which dissipates
+# ~40% of the impulse into the legs and ground. The multiplier
+# 0.61 ≈ 0.22/0.36 brings JAX's per-step engine push to
+# gymnasium's empirical value. Note: the original LUNAR_LANDER
+# review §2.1 described this gap as "gymnasium's effective thrust
+# is ≈ 30-40 % STRONGER than JAX's" — that was an inversion of
+# the probe interpretation (probe value is gravity-subtracted
+# engine push, NOT net dvy). The correct reading is gymnasium's
+# effective engine is ~40% WEAKER per impulse.
+MAIN_THRUST_BODY_MULTIPLIER: float = 0.61
+
 
 # ============ State / Params dataclasses ============
 
 @struct.dataclass
 class LunarLanderState:
-    """Lander's rigid-body state + episode bookkeeping.
+    """Lander's articulated-body state + terrain + episode bookkeeping.
 
     Position / velocity are in **meters** (world frame; gymnasium's
     convention after dividing pixels by SCALE). Angle is radians.
     `prev_shaping` carries the previous step's shaping value so
     reward can compute `Δshaping − fuel`.
+
+    Leg DOFs (`leg_angle_l/r`, `leg_omega_l/r`): each leg is a
+    1-DOF pendulum rotating in the lander's body frame. Positive
+    angle splays the leg outward (away from centreline). Angles
+    are in radians, clamped to `[0, LEG_JOINT_REST_ANGLE]` (rest
+    at ~0.9 rad outward, can yield inward toward 0.4 rad under
+    ground load). Angular velocities in rad/s.
+
+    `terrain_y` (shape `(TERRAIN_CHUNKS,)`): post-smoothing chunk
+    heights generated at reset from the rng. Linear interpolation
+    between chunk x-positions gives the moonscape height at any
+    x. Chunks 4-7 are forced to `HELIPAD_Y`.
 
     `leg_contact_l` / `leg_contact_r` are float (0.0/1.0) — the
     observation is float-typed, and we never branch on these in
@@ -184,6 +277,11 @@ class LunarLanderState:
     angular_vel: jax.Array
     leg_contact_l: jax.Array
     leg_contact_r: jax.Array
+    leg_angle_l: jax.Array
+    leg_angle_r: jax.Array
+    leg_omega_l: jax.Array
+    leg_omega_r: jax.Array
+    terrain_y: jax.Array
     prev_shaping: jax.Array
     crashed: jax.Array
     landed: jax.Array
@@ -200,6 +298,70 @@ class LunarLanderParams:
     side_engine_power: float = SIDE_ENGINE_POWER
     initial_random: float = INITIAL_RANDOM
     max_steps_in_episode: int = 1000
+
+
+# ============ Terrain helpers ============
+
+def _generate_terrain(rng: jax.Array) -> jax.Array:
+    """Sample a 11-element terrain height array following gymnasium's
+    `_generate_terrain` recipe.
+
+    Process: draw 12 raw heights from uniform(0, H/2); force chunks
+    4-7 to helipad_y; apply 3-tap mean smoothing for indices
+    0..CHUNKS-1. Wraps gymnasium's
+    `smooth_y[i] = 0.33 (h[i-1] + h[i] + h[i+1])`.
+
+    Returns a jnp.array of shape `(TERRAIN_CHUNKS,)` (11) ready to
+    drop into `LunarLanderState.terrain_y`."""
+    H_m = VIEWPORT_H / SCALE
+    # Gymnasium samples (CHUNKS+1)=12 raw heights so smooth_y[i]
+    # for i in [0, CHUNKS) reads index CHUNKS = 11 without OOB.
+    raw = jax.random.uniform(
+        rng, (TERRAIN_CHUNKS + 1,), minval=0.0, maxval=H_m / 2.0,
+    )
+    # Helipad strip: chunks 4-7 (inclusive). Anchored to helipad_y.
+    # Gymnasium pins indices CHUNKS//2 - 2 .. CHUNKS//2 + 2 =
+    # {3, 4, 5, 6, 7} — five chunks, not just 4-7. Match exactly.
+    helipad_mask = jnp.array(
+        [(TERRAIN_CHUNKS // 2 - 2 <= i <= TERRAIN_CHUNKS // 2 + 2)
+         for i in range(TERRAIN_CHUNKS + 1)],
+        dtype=jnp.bool_,
+    )
+    raw = jnp.where(helipad_mask, jnp.float32(HELIPAD_Y), raw)
+    # Smooth: smooth_y[i] = 0.33 * (raw[i-1] + raw[i] + raw[i+1])
+    # for i in 0..CHUNKS-1. raw[-1] is read via wrap-around in
+    # numpy — gymnasium accepts that since raw[CHUNKS] exists
+    # (raw has CHUNKS+1 = 12 entries). For i=0, raw[-1] reads the
+    # last element. We replicate: gymnasium uses Python's negative
+    # indexing on the numpy array.
+    idx = jnp.arange(TERRAIN_CHUNKS)
+    h_prev = raw[(idx - 1) % (TERRAIN_CHUNKS + 1)]
+    h_cur = raw[idx]
+    h_next = raw[idx + 1]
+    smooth = 0.33 * (h_prev + h_cur + h_next)
+    return smooth.astype(jnp.float32)
+
+
+def _terrain_height_at(terrain_y: jax.Array, x: jax.Array) -> jax.Array:
+    """Linearly interpolate the terrain polyline at a given x.
+
+    Terrain chunks live at `chunk_x[i] = i * W / (CHUNKS - 1)` for
+    i in 0..CHUNKS-1 — gymnasium's `chunk_x = [W/(CHUNKS-1)*i for
+    i in range(CHUNKS)]`. Returns the linearly interpolated
+    height between adjacent chunks. Below x=0 returns
+    terrain_y[0]; above x=W returns terrain_y[-1].
+
+    Vectorised over `x` (scalar or 1-D array)."""
+    W_m = VIEWPORT_W / SCALE
+    chunk_dx = W_m / (TERRAIN_CHUNKS - 1)
+    # Fractional chunk index in [0, CHUNKS-1].
+    fi = jnp.clip(x / chunk_dx, 0.0, jnp.float32(TERRAIN_CHUNKS - 1))
+    i0 = jnp.clip(jnp.floor(fi).astype(jnp.int32), 0, TERRAIN_CHUNKS - 2)
+    i1 = i0 + 1
+    t = fi - i0.astype(jnp.float32)
+    h0 = terrain_y[i0]
+    h1 = terrain_y[i1]
+    return h0 * (1.0 - t) + h1 * t
 
 
 # ============ Env implementation ============
@@ -219,13 +381,11 @@ class LunarLanderEnv:
         self, rng: jax.Array, params: LunarLanderParams,
     ) -> tuple[jax.Array, LunarLanderState]:
         del params  # initial conditions are fixed; rng controls noise
-        # Gymnasium's reset: lander at (INITIAL_X, INITIAL_Y), angle
-        # 0, then ApplyForceToCenter with uniform(-1000, +1000) in x
-        # and y. Box2D integrates this force over one 1/FPS timestep
-        # producing delta-v = F · dt / M. Reproduce that delta-v
-        # directly here (avoids a one-step "apply force then step"
-        # sequence at reset).
-        key_fx, key_fy = jax.random.split(rng, 2)
+        # Three rng streams: terrain, initial fx, initial fy. Split
+        # explicitly so terrain generation is reproducible
+        # independently of the impulse sample.
+        key_terrain, key_fx, key_fy = jax.random.split(rng, 3)
+        terrain_y = _generate_terrain(key_terrain)
         fx = jax.random.uniform(
             key_fx, (), minval=-INITIAL_RANDOM, maxval=INITIAL_RANDOM,
         )
@@ -238,17 +398,9 @@ class LunarLanderEnv:
 
         # Build state in two passes — the first pass computes the
         # observation, which `shaping` reads to initialise
-        # `prev_shaping`. Matches gymnasium's `prev_shaping = None →
-        # reward += shaping; prev_shaping = shaping` first-step
-        # rule (gymnasium's first-step reward IS the absolute
-        # shaping; we depart slightly by anchoring prev_shaping to
-        # the reset state so the first step's reward is Δshaping
-        # from rest, not absolute).
+        # `prev_shaping`.
         x0 = jnp.asarray(INITIAL_X, dtype=jnp.float32)
         y0 = jnp.asarray(INITIAL_Y, dtype=jnp.float32)
-        # Compute observation directly from the initial scalars —
-        # no full state allocation needed for the prev_shaping
-        # bootstrap.
         half_w = VIEWPORT_W / SCALE / 2.0
         half_h = VIEWPORT_H / SCALE / 2.0
         leg_anchor = HELIPAD_Y + LEG_DOWN / SCALE
@@ -263,6 +415,9 @@ class LunarLanderEnv:
             jnp.float32(0.0),
         ], dtype=jnp.float32)
         first_shaping = shaping(init_obs)
+        # Legs deployed outward at rest (motor speed pushed them
+        # against the outward limit).
+        rest = jnp.float32(LEG_REST_OUTWARD_ANGLE)
         state = LunarLanderState(
             x=x0,
             y=y0,
@@ -272,6 +427,11 @@ class LunarLanderEnv:
             angular_vel=jnp.float32(0.0),
             leg_contact_l=jnp.float32(0.0),
             leg_contact_r=jnp.float32(0.0),
+            leg_angle_l=rest,
+            leg_angle_r=rest,
+            leg_omega_l=jnp.float32(0.0),
+            leg_omega_r=jnp.float32(0.0),
+            terrain_y=terrain_y,
             prev_shaping=first_shaping,
             crashed=jnp.bool_(False),
             landed=jnp.bool_(False),
@@ -308,37 +468,28 @@ class LunarLanderEnv:
         sin_a = jnp.sin(state.angle)
         cos_a = jnp.cos(state.angle)
         tip_x, tip_y = sin_a, cos_a
-        side_x, side_y = -tip_y, tip_x
 
-        # Main engine: power scalar = 1.0 (discrete). Force is
-        # MAIN_ENGINE_POWER (Box2D ApplyLinearImpulse uses the
-        # value as an impulse, not force). Impulse direction:
-        # opposite of tip (engine pushes "out" downward, body
-        # accelerates "up" along +tip). Force vector applied at
-        # impulse_pos = lander_pos + (ox, oy) where (ox, oy) ~
-        # downward offset along -tip (engine exhaust point).
-        # For a rigid body the linear acceleration is uniform; only
-        # the torque depends on the lever arm. Reproduce both.
+        # Main engine: power scalar = 1.0 (discrete). Body impulse
+        # = (-tip_x · offset · MAIN_POWER, +tip_y · offset ·
+        # MAIN_POWER). See LUNAR_LANDER_DYNAMICS_REVIEW.md §1.1.
+        # Scaled by MAIN_THRUST_BODY_MULTIPLIER to match
+        # gymnasium's empirically measured effective dvy (the
+        # extra ~37% comes from the iterative joint solver in
+        # Box2D propagating leg-rod reaction forces onto the body,
+        # which we don't model explicitly).
         dt = 1.0 / FPS
 
         m_power = jnp.where(is_main, jnp.float32(1.0), jnp.float32(0.0))
-        # Gymnasium computes impulse = (-ox, -oy) · MAIN_ENGINE_POWER
-        # where (ox, oy) is the engine-exhaust offset relative to
-        # body center:
-        #     ox = +tip_x · MAIN_ENGINE_Y_LOCATION/SCALE
-        #     oy = -tip_y · MAIN_ENGINE_Y_LOCATION/SCALE
-        # so the body impulse is:
-        #     impulse_x = -ox · power = -tip_x · offset · power
-        #     impulse_y = -oy · power = +tip_y · offset · power
-        # Verified by direct probe against Box2D — the previous
-        # impl mistakenly wrote impulse_x = +tip_x · power, which
-        # inverts the horizontal thrust component at non-zero
-        # lander angle. See LUNAR_LANDER_DYNAMICS_REVIEW.md.
         m_offset = jnp.float32(MAIN_ENGINE_Y_LOCATION / SCALE)
-        m_impulse_x = -tip_x * params.main_engine_power * m_offset * m_power
-        m_impulse_y = tip_y * params.main_engine_power * m_offset * m_power
-        # Lever arm matches gymnasium's (ox, oy) above.
-        # Cross product r × F = (rx · Fy - ry · Fx). For the main
+        m_impulse_x = (
+            -tip_x * params.main_engine_power * m_offset * m_power
+            * MAIN_THRUST_BODY_MULTIPLIER
+        )
+        m_impulse_y = (
+            tip_y * params.main_engine_power * m_offset * m_power
+            * MAIN_THRUST_BODY_MULTIPLIER
+        )
+        # Lever arm matches gymnasium's (ox, oy). For the main
         # engine r and F are anti-parallel so torque = 0
         # analytically; we compute it anyway for symmetry / numeric
         # stability of any future asymmetric thrust extension.
@@ -347,25 +498,11 @@ class LunarLanderEnv:
         m_torque = m_rx * m_impulse_y - m_ry * m_impulse_x
 
         # Side engine: direction = -1 for left (action=1), +1 for
-        # right (action=3). Push along ±side direction, applied at
-        # `(side · SIDE_ENGINE_AWAY/SCALE - tip · 17/SCALE,
-        #   ... + tip · SIDE_ENGINE_HEIGHT/SCALE)` offset relative
-        # to body center.
+        # right (action=3). See review §1.2/1.3 for sign-flip
+        # corrections.
         direction = jnp.where(is_left, jnp.float32(-1.0), jnp.float32(0.0))
         direction = jnp.where(is_right, jnp.float32(1.0), direction)
         s_power = jnp.where(is_side, jnp.float32(1.0), jnp.float32(0.0))
-        # Side impulse — gymnasium's offset (dispersion dropped):
-        #   ox = +side_x · direction · SIDE_ENGINE_AWAY/SCALE
-        #      = -tip_y · direction · SIDE_ENGINE_AWAY/SCALE
-        #   oy = -side_y · direction · SIDE_ENGINE_AWAY/SCALE
-        #      = -tip_x · direction · SIDE_ENGINE_AWAY/SCALE
-        # Body impulse = (-ox · power, -oy · power) =
-        #   ( +tip_y · direction · offset · power,
-        #     +tip_x · direction · offset · power )
-        # The previous impl wrote impulse_y = -direction · tip_x ·
-        # power, which inverts the vertical component of the side
-        # thrust at non-zero lander angle. Verified by direct
-        # Box2D probe.
         s_offset = jnp.float32(SIDE_ENGINE_AWAY / SCALE)
         s_impulse_x = (
             direction * tip_y * params.side_engine_power * s_offset * s_power
@@ -373,16 +510,6 @@ class LunarLanderEnv:
         s_impulse_y = (
             direction * tip_x * params.side_engine_power * s_offset * s_power
         )
-        # Lever arm = impulse_pos − lander_pos. Gymnasium adds two
-        # extra body-frame offsets to the impulse application
-        # point (cf. their lines 599-602):
-        #   r_x = ox − tip_x · 17 / SCALE
-        #       = −tip_y · direction · 0.4 − tip_x · 17 / SCALE
-        #   r_y = oy + tip_y · SIDE_ENGINE_HEIGHT / SCALE
-        #       = −tip_x · direction · 0.4 + tip_y · 14 / SCALE
-        # Gymnasium's own source comments that the constant 17 (vs
-        # SIDE_ENGINE_HEIGHT=14) is "presumably a bug" — keeping
-        # gymnasium's literal behaviour for parity.
         s_rx = (
             -tip_y * direction * (SIDE_ENGINE_AWAY / SCALE)
             - tip_x * (17.0 / SCALE)
@@ -403,61 +530,119 @@ class LunarLanderEnv:
         dvy = impulse_y / LANDER_MASS
         dω = torque / LANDER_INERTIA
 
-        # Semi-implicit Euler integration (Box2D uses
-        # symplectic Euler, similar order of accuracy).
-        vx_new = state.vx + dvx + params.gravity * dt * 0.0  # gravity below
+        # Semi-implicit Euler integration.
+        vx_new = state.vx + dvx
         vy_new = state.vy + dvy + params.gravity * dt
         ω_new = state.angular_vel + dω
 
-        # Update position with new velocity (semi-implicit).
+        # ===== Articulated leg dynamics =====
+        # Each leg is a 1-DOF pendulum in body frame. The motor
+        # torque drives leg angle outward (toward
+        # LEG_JOINT_REST_ANGLE = 0.9 rad). The joint is held in
+        # the range [LEG_JOINT_REST_ANGLE - LEG_JOINT_RANGE,
+        # LEG_JOINT_REST_ANGLE] = [0.4, 0.9] rad by stiff penalty
+        # forces. Gravity also exerts a small torque (negligible
+        # compared to motor at typical scales).
+        #
+        # Per-leg dynamics: I · ω̇_leg = τ_motor + τ_gravity +
+        # τ_limit + τ_ground. We integrate ω_leg and θ_leg with
+        # semi-implicit Euler.
+        leg_omega_l_new, leg_angle_l_new, _, _, contact_l = (
+            self._step_one_leg(
+                leg_angle=state.leg_angle_l,
+                leg_omega=state.leg_omega_l,
+                body_x=state.x,
+                body_y=state.y,
+                body_angle=state.angle,
+                # Left leg: side=-1 (foot at negative body-frame x
+                # when splayed outward).
+                side=jnp.float32(-1.0),
+                terrain_y=state.terrain_y,
+                dt=dt,
+                params_gravity=params.gravity,
+            )
+        )
+        leg_omega_r_new, leg_angle_r_new, _, _, contact_r = (
+            self._step_one_leg(
+                leg_angle=state.leg_angle_r,
+                leg_omega=state.leg_omega_r,
+                body_x=state.x,
+                body_y=state.y,
+                body_angle=state.angle,
+                side=jnp.float32(+1.0),
+                terrain_y=state.terrain_y,
+                dt=dt,
+                params_gravity=params.gravity,
+            )
+        )
+
+        # Joint-absorption body damping: when either leg foot is
+        # on the ground, the joint constraint transmits an upward
+        # force from the leg into the body. Approximate as a
+        # multiplicative damping on body vy (only damping the
+        # downward component — the ground can push up, can't pull
+        # down).
+        any_contact = jnp.logical_or(contact_l > 0.5, contact_r > 0.5)
+        vy_damped = jnp.where(
+            any_contact & (vy_new < 0.0),
+            vy_new * jnp.float32(LEG_CONTACT_VY_DAMPING),
+            vy_new,
+        )
+        vy_new = vy_damped
+        # Lateral friction when foot in contact: damp vx too.
+        vx_new = jnp.where(any_contact, vx_new * jnp.float32(0.8), vx_new)
+        # Angular friction: foot-on-ground couples body rotation
+        # to ground; damp ω.
+        ω_new = jnp.where(any_contact, ω_new * jnp.float32(0.7), ω_new)
+
+        # Update position with (now damped) new velocity.
         x_new = state.x + vx_new * dt
         y_new = state.y + vy_new * dt
         angle_new = state.angle + ω_new * dt
 
-        # Leg contact detection — two fixed points relative to body
-        # at gymnasium's leg-attachment positions. World-frame y of
-        # each leg tip; contact iff y ≤ helipad_y.
-        # Leg attach positions in body frame (in meters):
-        #   left:  (-LEG_AWAY/SCALE, -LEG_DOWN/SCALE)
-        #   right: (+LEG_AWAY/SCALE, -LEG_DOWN/SCALE)
-        leg_dx = LEG_AWAY / SCALE
-        leg_dy = -LEG_DOWN / SCALE
-        # Rotate body → world: (x,y) → (cos·x - sin·y, sin·x + cos·y)
-        # for a CCW rotation by `angle`. Matches gymnasium's y-up.
-        cos_n, sin_n = jnp.cos(angle_new), jnp.sin(angle_new)
+        # ===== Crash detection =====
+        # Lander body crash: any LANDER_POLY corner's world-y must
+        # stay above the terrain at its world-x. Compute the world
+        # positions of all 6 corners (in meters); test
+        # foot_y > terrain(foot_x) per corner; crash if any below.
+        cos_n = jnp.cos(angle_new)
+        sin_n = jnp.sin(angle_new)
+        # Polygon vertices in body frame (already in pixel units;
+        # divide by SCALE for meters).
+        vx_b = jnp.array(
+            [v[0] / SCALE for v in LANDER_POLY], dtype=jnp.float32,
+        )
+        vy_b = jnp.array(
+            [v[1] / SCALE for v in LANDER_POLY], dtype=jnp.float32,
+        )
+        # Rotate to world frame: (cos·vx - sin·vy, sin·vx + cos·vy)
+        # then translate by (x_new, y_new).
+        corner_world_x = x_new + cos_n * vx_b - sin_n * vy_b
+        corner_world_y = y_new + sin_n * vx_b + cos_n * vy_b
+        terrain_at_corner = jax.vmap(
+            lambda x: _terrain_height_at(state.terrain_y, x),
+        )(corner_world_x)
+        any_corner_below = jnp.any(corner_world_y <= terrain_at_corner)
+        body_below_terrain = any_corner_below
 
-        # Only world-frame y matters for ground contact (flat-ground
-        # simplification — see module docstring). World-frame x of
-        # the leg tips would be needed for terrain-aware crash
-        # detection, which we don't model.
-        left_y = y_new + (sin_n * (-leg_dx) + cos_n * leg_dy)
-        right_y = y_new + (sin_n * (+leg_dx) + cos_n * leg_dy)
+        # Foot below terrain at extreme tilt → crash (legs splayed
+        # but body is too tilted to land cleanly). At
+        # |angle| > 0.6 the foot contact is no longer a "soft"
+        # landing — treat any contact as a crash.
+        steep_tilt = jnp.abs(angle_new) > jnp.float32(0.6)
+        foot_contact_at_tilt = (
+            steep_tilt & (jnp.logical_or(contact_l > 0.5, contact_r > 0.5))
+        )
 
-        leg_l = (left_y <= HELIPAD_Y).astype(jnp.float32)
-        leg_r = (right_y <= HELIPAD_Y).astype(jnp.float32)
+        crash_now = (
+            (body_below_terrain | foot_contact_at_tilt)
+            & ~state.crashed & ~state.landed
+        )
 
-        # Body crash: lander body center (or any LANDER_POLY vertex
-        # below the helipad) constitutes a body-ground contact.
-        # Approximate via "lowest LANDER_POLY vertex in world frame
-        # ≤ helipad_y" combined with non-negligible downward
-        # velocity. The cheapest faithful proxy: body bottom = y −
-        # 10/SCALE (the polygon's lowest y is −10 px). If that dips
-        # below the helipad AND legs haven't taken the load (no
-        # leg-contact yet at this exact step), call it a crash.
-        body_bottom_y = y_new - (10.0 / SCALE) * cos_n  # approx
-        body_below_ground = body_bottom_y <= HELIPAD_Y
-        # Crash iff body is on the ground but the legs aren't
-        # touching down softly (high velocity / high tilt). Soft
-        # touchdown is the landing case — handled by the awake flag.
-        crash_now = body_below_ground & ~state.crashed & ~state.landed
-
-        # Soft-landing detection (substitutes for Box2D `awake=False`):
-        # both legs in contact AND linear/angular velocity below a
-        # small threshold AND lander angle near upright. Once
-        # triggered it's sticky.
-        both_legs = (leg_l > 0.5) & (leg_r > 0.5)
-        # Velocity magnitude predicate (in normalised-state units to
-        # match the substrate's reward scale).
+        # ===== Soft-landing detection =====
+        # Both legs in contact AND slow translational + rotational
+        # AND near upright.
+        both_legs = (contact_l > 0.5) & (contact_r > 0.5)
         v_norm = jnp.sqrt(vx_new * vx_new + vy_new * vy_new)
         slow = v_norm < 0.5
         upright = jnp.abs(angle_new) < 0.2
@@ -470,9 +655,7 @@ class LunarLanderEnv:
         crashed = state.crashed | crash_now
         landed = state.landed | landed_now
 
-        # Compute the post-step observation + shaping inline so the
-        # new state can carry `prev_shaping=shaping` at construction
-        # (avoiding a flax `.replace` round-trip).
+        # Compute the post-step observation + shaping inline.
         half_w = VIEWPORT_W / SCALE / 2.0
         half_h = VIEWPORT_H / SCALE / 2.0
         leg_anchor = HELIPAD_Y + LEG_DOWN / SCALE
@@ -483,8 +666,8 @@ class LunarLanderEnv:
             vy_new * half_h / FPS,
             angle_new,
             20.0 * ω_new / FPS,
-            leg_l,
-            leg_r,
+            contact_l,
+            contact_r,
         ], dtype=jnp.float32)
         cur_shaping = shaping(obs)
         delta_shaping = cur_shaping - state.prev_shaping
@@ -496,14 +679,18 @@ class LunarLanderEnv:
             vy=vy_new.astype(jnp.float32),
             angle=angle_new.astype(jnp.float32),
             angular_vel=ω_new.astype(jnp.float32),
-            leg_contact_l=leg_l,
-            leg_contact_r=leg_r,
+            leg_contact_l=contact_l,
+            leg_contact_r=contact_r,
+            leg_angle_l=leg_angle_l_new,
+            leg_angle_r=leg_angle_r_new,
+            leg_omega_l=leg_omega_l_new,
+            leg_omega_r=leg_omega_r_new,
+            terrain_y=state.terrain_y,
             prev_shaping=cur_shaping,
             crashed=crashed,
             landed=landed,
             time=state.time + 1,
         )
-
         fuel_cost = m_power * jnp.float32(0.30) + s_power * jnp.float32(0.03)
         step_reward = delta_shaping - fuel_cost
 
@@ -519,14 +706,11 @@ class LunarLanderEnv:
         done = self._is_terminal(new_state, params)
 
         # Auto-reset on done — match gymnax's Environment.step
-        # contract (callers expect step to wrap reset for them).
-        # Using `jax.lax.cond` here would force a costly trace; the
-        # cheap path is to deterministically build both branches via
-        # a sub-reset and select via tree_map.
+        # contract. Use a deterministic key for the auto-reset
+        # (the substrate calls reset explicitly with its own rng
+        # on first step).
         reset_obs, reset_state = self.reset(
-            jax.random.PRNGKey(0),  # deterministic; auto-reset is
-            # not seed-sensitive (the substrate calls reset with the
-            # cell's master rng on first step explicitly).
+            jax.random.PRNGKey(0),
             params,
         )
         final_state = jax.tree.map(
@@ -535,6 +719,119 @@ class LunarLanderEnv:
         final_obs = jnp.where(done, reset_obs, obs)
 
         return final_obs, final_state, reward, done, {}
+
+    def _step_one_leg(
+        self,
+        *,
+        leg_angle: jax.Array,
+        leg_omega: jax.Array,
+        body_x: jax.Array,
+        body_y: jax.Array,
+        body_angle: jax.Array,
+        side: jax.Array,
+        terrain_y: jax.Array,
+        dt: float,
+        params_gravity: float,
+    ) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
+        """Advance one leg's pendulum dynamics + compute contact.
+
+        Returns `(omega_new, angle_new, foot_x_world, foot_y_world,
+        contact)`.
+
+        Model: the leg is a rigid rod of length `LEG_ROD_LENGTH_M`
+        rotating about a hinge at the lander body center (body
+        frame (0, 0)). `leg_angle` measures the rod's outward
+        rotation from straight-down (body-frame +y-down axis), in
+        rad. `side ∈ {-1, +1}` flips the outward direction —
+        side=-1 (left leg) rotates the foot toward negative
+        body-frame x; side=+1 (right) toward positive.
+
+        Foot body-frame position:
+          (side · sin(θ) · L, -cos(θ) · L)
+
+        Torques summed (all in N·m, body frame):
+        - **Motor**: drives `omega` toward `+LEG_MOTOR_SPEED`
+          (motor splays the leg outward toward the rest angle),
+          clamped to ±LEG_SPRING_TORQUE.
+        - **Gravity**: pendulum gravity torque acting on the leg.
+          Approximation: gravity acts at CoM (L/2 along rod).
+        - **Joint limit**: stiff penalty torque when θ outside
+          [REST - RANGE, REST] = [0.558, 1.058] rad.
+        - **Ground reaction**: if foot below terrain, lock
+          omega → 0 and freeze angle (drives leg to rest on
+          terrain).
+        """
+        # Motor: drives θ toward LEG_REST_OUTWARD_ANGLE, omega
+        # toward LEG_MOTOR_SPEED. Simple P controller on omega:
+        # torque ∝ (target - omega). Gain calibrated so the leg
+        # reaches motor target in ~1 dt (gain ≈ I_leg / dt).
+        motor_target_omega = jnp.float32(LEG_MOTOR_SPEED)
+        omega_err = motor_target_omega - leg_omega
+        tau_motor_raw = omega_err * (LEG_INERTIA / dt)
+        tau_motor = jnp.clip(tau_motor_raw, -LEG_SPRING_TORQUE, LEG_SPRING_TORQUE)
+
+        # Gravity torque. Rod's CoM is at body-frame (side · sin θ
+        # · L/2, -cos θ · L/2). In world frame: rotate by
+        # body_angle. World y-component of CoM relative to hinge:
+        #   sin(body_angle) · side · sin θ · L/2 +
+        #   cos(body_angle) · (-cos θ · L/2)
+        # Gravity exerts force (0, m·g) on CoM. Torque about
+        # hinge (out-of-plane scalar) = r × F = r_x · F_y - r_y ·
+        # F_x. Only F_y contributes (since F_x=0): τ = m·g · r_x.
+        # r_x in world = cos(body_angle) · (side · sin θ · L/2) -
+        # sin(body_angle) · (-cos θ · L/2).
+        # The motor / limit torques are interpreted in body frame
+        # (where θ is measured); we treat τ_gravity as if also
+        # body-frame-aligned (small body rotation; approximation).
+        rod_cm_x_body = side * jnp.sin(leg_angle) * (LEG_ROD_LENGTH_M / 2.0)
+        tau_gravity = LEG_MASS * params_gravity * rod_cm_x_body * side
+        # The `· side` flips sign so τ_gravity tends to drive the
+        # leg toward θ=0 (straight-down) regardless of side — the
+        # gravity restoring torque on a splayed pendulum.
+
+        # Joint limit: stiff penalty when outside [REST-RANGE, REST].
+        lo = jnp.float32(LEG_REST_OUTWARD_ANGLE - LEG_JOINT_RANGE)
+        hi = jnp.float32(LEG_REST_OUTWARD_ANGLE)
+        k_limit = jnp.float32(5.0 * LEG_INERTIA / (dt * dt))
+        below_lo = leg_angle < lo
+        above_hi = leg_angle > hi
+        tau_limit_lo = jnp.where(below_lo, k_limit * (lo - leg_angle), 0.0)
+        tau_limit_hi = jnp.where(above_hi, k_limit * (hi - leg_angle), 0.0)
+        tau_limit = tau_limit_lo + tau_limit_hi
+        # Damping at limits to bleed off bounce energy.
+        damp_at_limit = jnp.where(
+            below_lo | above_hi, -leg_omega * (LEG_INERTIA / dt), 0.0,
+        )
+        tau_limit = tau_limit + damp_at_limit
+
+        # Net torque → angular acceleration → semi-implicit Euler.
+        tau_total = tau_motor + tau_gravity + tau_limit
+        leg_alpha = tau_total / LEG_INERTIA
+        omega_new_unconstrained = leg_omega + leg_alpha * dt
+        angle_new_unconstrained = leg_angle + omega_new_unconstrained * dt
+
+        # ===== Compute foot world position =====
+        # Foot body-frame: (side · sin θ · L, -cos θ · L).
+        foot_local_x = side * jnp.sin(angle_new_unconstrained) * LEG_ROD_LENGTH_M
+        foot_local_y = -jnp.cos(angle_new_unconstrained) * LEG_ROD_LENGTH_M
+        # Rotate by body_angle to get world offset.
+        cos_b, sin_b = jnp.cos(body_angle), jnp.sin(body_angle)
+        # Y-axis (gymnasium's "up") CCW rotation: world = (cos*x -
+        # sin*y, sin*x + cos*y).
+        foot_world_x = body_x + cos_b * foot_local_x - sin_b * foot_local_y
+        foot_world_y = body_y + sin_b * foot_local_x + cos_b * foot_local_y
+
+        # ===== Ground contact =====
+        terrain_at_foot = _terrain_height_at(terrain_y, foot_world_x)
+        contact = (foot_world_y <= terrain_at_foot).astype(jnp.float32)
+
+        # When in contact: snap omega → 0 and freeze angle.
+        omega_new = jnp.where(contact > 0.5, jnp.float32(0.0), omega_new_unconstrained)
+        angle_new = jnp.where(contact > 0.5, leg_angle, angle_new_unconstrained)
+        # Re-clamp angle to joint limits (safety).
+        angle_new = jnp.clip(angle_new, lo, hi)
+
+        return omega_new, angle_new, foot_world_x, foot_world_y, contact
 
     def _get_obs(self, state: LunarLanderState) -> jax.Array:
         """Gymnasium's 8-dim observation, normalised to roughly

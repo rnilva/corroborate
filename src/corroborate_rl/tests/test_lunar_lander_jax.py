@@ -41,6 +41,11 @@ def _make_state(
     angular_vel: float = 0.0,
     leg_l: float = 0.0,
     leg_r: float = 0.0,
+    leg_angle_l: float = 1.058,
+    leg_angle_r: float = 1.058,
+    leg_omega_l: float = 0.0,
+    leg_omega_r: float = 0.0,
+    terrain_y: jax.Array | None = None,
     crashed: bool = False,
     landed: bool = False,
     time: int = 0,
@@ -80,6 +85,11 @@ def _make_state(
             leg_r,
         ], dtype=jnp.float32)
         prev_shaping = float(shaping(init_obs))
+    if terrain_y is None:
+        # Default: flat terrain at HELIPAD_Y everywhere — matches
+        # the pre-revision env shape and keeps legacy tests
+        # backward-compatible. Terrain-aware tests pass their own.
+        terrain_y = jnp.full((11,), HELIPAD_Y, dtype=jnp.float32)
     return LunarLanderState(
         x=jnp.float32(x),
         y=jnp.float32(y),
@@ -89,6 +99,11 @@ def _make_state(
         angular_vel=jnp.float32(angular_vel),
         leg_contact_l=jnp.float32(leg_l),
         leg_contact_r=jnp.float32(leg_r),
+        leg_angle_l=jnp.float32(leg_angle_l),
+        leg_angle_r=jnp.float32(leg_angle_r),
+        leg_omega_l=jnp.float32(leg_omega_l),
+        leg_omega_r=jnp.float32(leg_omega_r),
+        terrain_y=terrain_y,
         prev_shaping=jnp.float32(prev_shaping),
         crashed=jnp.bool_(crashed),
         landed=jnp.bool_(landed),
@@ -245,29 +260,36 @@ def test_shaping_negative_far_from_origin() -> None:
 
 def test_main_engine_changes_reward_vs_nop() -> None:
     """Firing main engine produces a measurably different reward
-    than NOP at the same start state — the main engine slows the
-    fall (smaller |vy| growth → smaller |Δshaping|) AND costs
-    fuel. Net direction depends on which dominates; here we only
-    assert that the two are distinguishable (the test is a
-    sanity check on the dynamics + fuel-cost wiring, not on the
-    exact magnitude)."""
+    than NOP at the same start state. Sanity check on the
+    dynamics + fuel-cost wiring — the two outcomes must differ.
+
+    Post-rev note: at INITIAL_Y the lander is far above the
+    helipad and main-engine thrust pushes the body *up* (away
+    from helipad), so main produces WORSE shaping than NOP near
+    rest. Gymnasium has the same property (dvy_main ≈ +0.22 net
+    upward → distance grows). We assert magnitudes differ; not
+    the sign of the difference."""
     env, params = make_lunar_lander()
     # Hand-build a deterministic rest state — bypasses reset's
     # random initial impulse so we can compare nop vs main at
     # IDENTICAL starting velocity.
     state = _make_state()
-    _, _, r_nop, _, _ = env.step(
+    _, ns_nop, r_nop, _, _ = env.step(
         jax.random.PRNGKey(1), state, jnp.int32(0), params,
     )
-    _, _, r_main, _, _ = env.step(
+    _, ns_main, r_main, _, _ = env.step(
         jax.random.PRNGKey(1), state, jnp.int32(2), params,
     )
-    # Main engine reduces |vy| growth from gravity → larger
-    # (less-negative) Δshaping → reward higher than NOP, even
-    # accounting for 0.30 fuel cost. Sign-check.
-    assert float(r_main) > float(r_nop), (
-        f'main engine should yield higher reward than NOP near '
-        f'rest, got r_main={r_main} r_nop={r_nop}'
+    # Engine must change vy: main pushes up (less-negative or
+    # positive), nop only sees gravity (negative).
+    assert float(ns_main.vy) > float(ns_nop.vy), (
+        f'main engine should produce larger vy than NOP, '
+        f'got vy_main={ns_main.vy} vy_nop={ns_nop.vy}'
+    )
+    # Rewards must differ (sanity check on fuel cost wiring).
+    assert float(r_main) != float(r_nop), (
+        f'main and nop should produce distinct rewards, '
+        f'got r_main={r_main} r_nop={r_nop}'
     )
 
 
@@ -397,12 +419,14 @@ def test_landing_bonus_positive_reward() -> None:
     """A clean landing (both legs in contact, low velocity,
     upright, low ω) emits +100 bonus on the transitioning step."""
     env, params = make_lunar_lander()
-    # Pre-position lander at ground level with both legs touching,
-    # near-zero velocity, upright. The next step's transition
-    # should fire `landed_now=True` and emit the +100 bonus.
-    # y is positioned so that after the next step's leg-tip
-    # rotation, both leg points are at ≤ helipad_y.
-    state = _make_state(x=10.0, y=HELIPAD_Y + 0.55)
+    # Pre-position lander with both legs at rest angle (1.058 rad
+    # outward splay). With θ_leg = 1.058, foot body-frame y =
+    # -0.538. At body_angle = 0, both feet at world_y = body_y -
+    # 0.538. To put both feet just at/below helipad: body_y =
+    # HELIPAD_Y + 0.50 (foot world_y = HELIPAD_Y - 0.038).
+    # Body lowest corner at world_y = body_y - 0.333 = HELIPAD_Y
+    # + 0.167 (no body crash).
+    state = _make_state(x=10.0, y=HELIPAD_Y + 0.50)
     _, _, reward, _done, _ = env.step(
         jax.random.PRNGKey(1), state, jnp.int32(0), params,
     )
@@ -485,3 +509,219 @@ def test_lunar_lander_params_is_pytree() -> None:
     # marks it as a leaf by default). We don't care about the
     # exact leaf count, only that it doesn't raise.
     assert isinstance(leaves, list)
+
+
+# ============ Articulated legs (post 2026-05 review) ============
+
+def test_leg_angle_stays_in_joint_limits_under_impulse() -> None:
+    """Leg angles must stay within the joint limits
+    `[REST - RANGE, REST] = [0.558, 1.058]` rad under typical
+    impulse. The motor + limit penalty torques clamp them.
+
+    Probe: 200 random-action steps from reset; track min/max leg
+    angles. Allow a small overshoot window (1e-3) for the
+    discrete penalty enforcement."""
+    env, params = make_lunar_lander()
+    rng = jax.random.PRNGKey(13)
+    _obs, state = env.reset(rng, params)
+    rng_loop = rng
+    min_l, max_l = jnp.float32(1e9), jnp.float32(-1e9)
+    min_r, max_r = jnp.float32(1e9), jnp.float32(-1e9)
+    for _ in range(200):
+        rng_loop, k_act, k_step = jax.random.split(rng_loop, 3)
+        action = jax.random.randint(k_act, (), 0, 4)
+        _obs, state, _r, done, _ = env.step(k_step, state, action, params)
+        # Skip if episode auto-reset.
+        if bool(done):
+            continue
+        min_l = jnp.minimum(min_l, state.leg_angle_l)
+        max_l = jnp.maximum(max_l, state.leg_angle_l)
+        min_r = jnp.minimum(min_r, state.leg_angle_r)
+        max_r = jnp.maximum(max_r, state.leg_angle_r)
+    # Joint limits: [REST - RANGE, REST] = [0.558, 1.058].
+    lo = 0.558 - 1e-3
+    hi = 1.058 + 1e-3
+    assert float(min_l) >= lo, f'left leg below limit: {min_l}'
+    assert float(max_l) <= hi, f'left leg above limit: {max_l}'
+    assert float(min_r) >= lo, f'right leg below limit: {min_r}'
+    assert float(max_r) <= hi, f'right leg above limit: {max_r}'
+
+
+def test_both_legs_touch_at_small_nonzero_tilt() -> None:
+    """Pre-revision rigid-leg geometry made both legs contact
+    ONLY at angle ≈ 0 (the two leg world-y values matched only
+    when cos(angle) symmetry held). Post-revision articulated
+    legs swing on hinges, so both legs can contact flat ground
+    at small non-zero tilts.
+
+    At rest θ_leg = 1.058 (outward splay), foot body-frame =
+    (±0.952, -0.538). At body_angle = +0.05:
+    - right foot world_y = body_y - 0.49
+    - left foot world_y = body_y - 0.59
+    - left bottom corner world_y = body_y - 0.36
+    Sweet spot at body_y = HELIPAD_Y + 0.39 + small: both feet
+    below helipad smoothed-height (0.99·HELIPAD_Y), bottom
+    corners clear."""
+    env, params = make_lunar_lander()
+    # Add some downward velocity so `slow` predicate fails — that
+    # way the step doesn't trigger `landed_now` (which auto-resets
+    # the state and zeroes contact). vy=-0.8 ensures |v| > 0.5.
+    state = _make_state(
+        x=10.0, y=HELIPAD_Y + 0.42, angle=0.05, vy=-0.8,
+    )
+    _, next_state, _r, _done, _ = env.step(
+        jax.random.PRNGKey(1), state, jnp.int32(0), params,
+    )
+    # Episode should not have terminated (no body crash).
+    assert not bool(next_state.crashed), (
+        f'unexpected crash at body_y={state.y} angle={state.angle}'
+    )
+    # BOTH legs in contact — this was the FAIL CASE pre-revision.
+    assert float(next_state.leg_contact_l) > 0.5, (
+        f'left leg should touch at small tilt, got {next_state.leg_contact_l}'
+    )
+    assert float(next_state.leg_contact_r) > 0.5, (
+        f'right leg should touch at small tilt, got {next_state.leg_contact_r}'
+    )
+
+
+def test_leg_omega_zero_when_foot_in_contact() -> None:
+    """Leg angular velocity must snap to zero when foot is in
+    contact with terrain (the joint "sticks"). Verifies the
+    contact-clamp branch in `_step_one_leg`."""
+    env, params = make_lunar_lander()
+    state = _make_state(
+        x=10.0, y=HELIPAD_Y + 0.30, angle=0.0,
+        leg_omega_l=2.0,  # arbitrary non-zero starting omega
+        leg_omega_r=-1.5,
+    )
+    _, next_state, _r, _done, _ = env.step(
+        jax.random.PRNGKey(0), state, jnp.int32(0), params,
+    )
+    # If both legs in contact, both omegas should be zero.
+    if (
+        float(next_state.leg_contact_l) > 0.5
+        and float(next_state.leg_contact_r) > 0.5
+    ):
+        assert float(next_state.leg_omega_l) == 0.0
+        assert float(next_state.leg_omega_r) == 0.0
+
+
+# ============ Jagged terrain (post 2026-05 review) ============
+
+def test_terrain_is_reproducible_given_same_seed() -> None:
+    """Two resets with the same rng must produce byte-identical
+    terrain arrays. Substrate's seed-pairing assumes deterministic
+    env reset."""
+    env, params = make_lunar_lander()
+    rng = jax.random.PRNGKey(42)
+    _obs1, state1 = env.reset(rng, params)
+    _obs2, state2 = env.reset(rng, params)
+    assert jnp.allclose(state1.terrain_y, state2.terrain_y)
+
+
+def test_terrain_differs_across_seeds() -> None:
+    """Different rngs must produce different terrain (otherwise
+    the rng wiring is broken)."""
+    env, params = make_lunar_lander()
+    _obs1, state1 = env.reset(jax.random.PRNGKey(0), params)
+    _obs2, state2 = env.reset(jax.random.PRNGKey(99), params)
+    assert not jnp.allclose(state1.terrain_y, state2.terrain_y)
+
+
+def test_terrain_helipad_strip_pinned() -> None:
+    """Chunks 4..6 (the inner helipad strip) come out as
+    `0.99 · HELIPAD_Y` after smoothing — gymnasium pins five
+    chunks {3, 4, 5, 6, 7} pre-smooth, and the 3-tap smoothing
+    `0.33 · (h[i-1] + h[i] + h[i+1])` of three consecutive equal
+    values yields `0.99 · helipad_y` (the inherited gymnasium
+    constant-vs-1/3 quirk — kept for parity)."""
+    env, params = make_lunar_lander()
+    expected = 0.99 * HELIPAD_Y
+    for seed in (0, 1, 7, 42, 99):
+        _, state = env.reset(jax.random.PRNGKey(seed), params)
+        for i in (4, 5, 6):
+            assert float(state.terrain_y[i]) == pytest.approx(expected, abs=1e-4), (
+                f'seed={seed} chunk {i} = {state.terrain_y[i]} != {expected}'
+            )
+
+
+def test_terrain_crashes_register_for_off_helipad_excursion() -> None:
+    """If the lander body dips below the moonscape (high terrain
+    chunk on the edge), `crashed=True` must fire. Build a state
+    on a moonscape edge with a tall terrain block beneath, and
+    verify crash. Skip if the random terrain seed happens to put
+    a low chunk under the edge — try several seeds until one has
+    a tall edge chunk."""
+    env, params = make_lunar_lander()
+    # Seek a seed with chunk 0 (far-left) above helipad_y by a
+    # margin large enough to be useful.
+    chosen_seed = None
+    chosen_height = 0.0
+    for seed in range(20):
+        _, state = env.reset(jax.random.PRNGKey(seed), params)
+        h0 = float(state.terrain_y[0])
+        if h0 > HELIPAD_Y + 1.0:
+            chosen_seed = seed
+            chosen_height = h0
+            break
+    assert chosen_seed is not None, (
+        'no seed produced a tall left-edge chunk in 20 tries — '
+        'terrain rng may be miscalibrated'
+    )
+    _, state = env.reset(jax.random.PRNGKey(chosen_seed), params)
+    # Position lander just above the tall chunk on the left edge.
+    # Body x = 0.5 (close to chunk 0 which is at x=0).
+    state_at_edge = LunarLanderState(
+        x=jnp.float32(0.5),
+        y=jnp.float32(chosen_height + 0.1),  # just above terrain
+        vx=jnp.float32(0.0),
+        vy=jnp.float32(-2.0),  # falling
+        angle=jnp.float32(0.0),
+        angular_vel=jnp.float32(0.0),
+        leg_contact_l=jnp.float32(0.0),
+        leg_contact_r=jnp.float32(0.0),
+        leg_angle_l=jnp.float32(1.058),
+        leg_angle_r=jnp.float32(1.058),
+        leg_omega_l=jnp.float32(0.0),
+        leg_omega_r=jnp.float32(0.0),
+        terrain_y=state.terrain_y,
+        prev_shaping=jnp.float32(0.0),
+        crashed=jnp.bool_(False),
+        landed=jnp.bool_(False),
+        time=jnp.int32(0),
+    )
+    # Step a few times — gravity + initial vy=-2 should drive
+    # the body below the tall terrain chunk in <= 5 steps. The
+    # auto-reset wipes the `crashed` flag from the returned state,
+    # so detect crash via the terminal -100 bonus on the reward
+    # (the transition step's reward includes crash_bonus=-100).
+    s = state_at_edge
+    crashed_within = False
+    for _ in range(5):
+        _, s, r, _d, _ = env.step(
+            jax.random.PRNGKey(0), s, jnp.int32(0), params,
+        )
+        if float(r) < -50.0:  # crash_bonus=-100 dwarfs shaping
+            crashed_within = True
+            break
+    assert crashed_within, (
+        f'expected crash on tall edge chunk (height={chosen_height}), '
+        f'lander did not crash within 5 steps'
+    )
+
+
+def test_terrain_height_lookup_returns_helipad_in_strip() -> None:
+    """`_terrain_height_at` evaluated at the helipad x-range
+    returns `HELIPAD_Y` regardless of seed."""
+    from corroborate_rl.lunar_lander_jax import _terrain_height_at
+    env, params = make_lunar_lander()
+    for seed in (0, 1, 42):
+        _, state = env.reset(jax.random.PRNGKey(seed), params)
+        # Helipad covers chunks 4..7. chunk_x[i] = i · W/(CHUNKS-1)
+        # → at CHUNKS=11, W=20, chunk 5 is at x=10.0 (middle of viewport).
+        # Probe x = 10.0 (chunk 5 center, helipad). Smoothed
+        # value is 0.99·HELIPAD_Y (the gymnasium-inherited 0.33
+        # vs 1/3 quirk; see test_terrain_helipad_strip_pinned).
+        h = float(_terrain_height_at(state.terrain_y, jnp.float32(10.0)))
+        assert h == pytest.approx(0.99 * HELIPAD_Y, abs=1e-4)

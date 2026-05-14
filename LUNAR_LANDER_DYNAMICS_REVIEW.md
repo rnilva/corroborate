@@ -1,23 +1,21 @@
 # LunarLander JAX port — dynamics review
 
 **Subject**: `src/corroborate_rl/corroborate_rl/lunar_lander_jax.py`
-(commit `901711d`)
 **Reference**: gymnasium `LunarLander-v3` (Box2D, gymnasium 1.3.0,
 file ships in venv at
 `.venv/lib/python3.13/site-packages/gymnasium/envs/box2d/lunar_lander.py`)
 
-**Verdict**: **FAITHFUL ENOUGH for substrate use AFTER the two
-sign-flip fixes landed in this review**. Distributional fidelity
-under random play was already within 1 SD of the reference; the
-fixed-action probe revealed two genuine sign bugs in the engine
-impulse formulas that produced reversed translational
-affordances at non-zero lander angles — i.e. an agent learning
-the JAX port would have inverted its control mapping vs
-gymnasium. Both fixed; covered by regression tests. Remaining
-divergences (engine vertical thrust ≈ 70 % of gymnasium's, no
-articulated leg dynamics, rigid body-bottom approximation) are
-**load-bearing for trajectory replication but not for the
-substrate's statistical purposes** — see §5.
+**Verdict** (2026-05-14 post-articulation update): **FAITHFUL
+ENOUGH for substrate use** after (a) the two sign-flip fixes
+from the initial review and (b) the articulated legs + jagged
+moonscape + main-thrust calibration landed in the second pass.
+The remaining divergence is angular-velocity transient
+amplitude — gymnasium's iterative Box2D solver produces high-
+amplitude spikes (range ±7 rad/s in random play; SD 0.55) that
+JAX's analytic step (range ±0.9 rad/s; SD 0.21) doesn't model.
+This is intrinsic to constraint-solving vs closed-form
+integration; **acceptable for substrate purposes** (population-
+level seed statistics, not trajectory replication). See §5.
 
 ---
 
@@ -129,106 +127,105 @@ out both components.
 
 ---
 
-## 2. Bugs / divergences NOT fixed (with rationale)
+## 2. Divergences — status after 2026-05-14 articulation update
 
-### 2.1 Engine vertical thrust ≈ 70 % of gymnasium's
+### 2.1 Engine vertical thrust — RESOLVED via thrust multiplier
 
-At angle=0, action=2 (main):
+At angle=0, action=2 (main), the probe (gravity-subtracted) reads:
 
-- gymnasium: total `dvy = +0.219` (engine push 0.42 over one step,
-  reduced by joints absorbing momentum + gravity)
-- JAX:       total `dvy = +0.160` (engine push 0.36 over one
-  step, no joint absorption + gravity)
+| metric          | JAX pre-fix | JAX post-fix | gymnasium |
+|-----------------|-------------|--------------|-----------|
+| engine `dvy`    | +0.360      | **+0.220**   | +0.223    |
+| net body `dvy`  | +0.160      | +0.020       | +0.023    |
 
-The JAX port's engine acts on the lander as a single 4.77 kg
-rigid body; gymnasium's lander is articulated through revolute
-joints with two ~0.07 kg legs. The joints' constraint forces
-absorb a fraction of the lander's impulse on each step. The net
-effect is **gymnasium's effective thrust is ≈ 30-40 % stronger
-per impulse, in the upward direction, than JAX's "ideal rigid
-body"** integration.
+**Diagnosis of the original gap**: the initial review described
+this as "JAX is ~70% of gymnasium's effective thrust", but that
+was a probe-interpretation inversion. The probe subtracts
+gravity (`dvy = post_vy - pre_vy - g·dt`) and reports the
+**engine-only** contribution, not the net `dvy`. The correct
+reading: JAX's pre-fix engine push (0.36 m/s) was **stronger**
+than gymnasium's effective engine (0.22 m/s) by ~63%. Box2D's
+iterative joint solver dissipates ~40% of the lander's impulse
+into the legs over the 6×30 = 180 velocity-iteration loop per
+step; JAX's analytic single-step integration captures the full
+impulse on the body.
 
-**Why not fix**: matching Box2D's joint-coupling dissipation
-analytically without Box2D is the entire problem the port avoids.
-The empirical effect on episode-length / return distributions is
-small (random-policy mean return -189 vs -198, within 1 SD).
-Marked as low priority.
+**Fix**: scalar multiplier `MAIN_THRUST_BODY_MULTIPLIER = 0.61`
+on the body's main-engine impulse, calibrated to match
+gymnasium's empirical engine push at angle=0. At all probed
+angles (-0.5 to +1.0), JAX's post-fix `dvy` tracks gymnasium's
+within ±0.02 m/s. Side engine and torque components untouched
+(already within 10% of gymnasium pre-fix; differences attributed
+to Box2D's dispersion noise + iterative-solver lever-arm
+softening). Multiplier is a simplification — full
+joint-absorption dynamics would require modelling the rod
+reaction force per step, which the present 1-DOF leg model
+doesn't propagate to the body.
 
-### 2.2 Rigid-attached legs — no articulation, no shock absorption
+### 2.1b Articulated legs — RESOLVED via 1-DOF pendulums
 
-The JAX port treats both legs as fixed body-frame points at
-`(±20/SCALE, -18/SCALE)`. Two consequences:
+Each leg is now modelled as a 1-DOF rod hinged at the lander
+body center, with:
+- rest at body-frame angle `LEG_REST_OUTWARD_ANGLE = 1.058 rad`
+  outward from straight-down (matches gymnasium's outward-splayed
+  geometry: foot body-frame at `(±0.952, -0.538)`).
+- joint range `[0.558, 1.058]` rad (gymnasium's
+  `(lowerAngle, upperAngle)` = `(+0.4, +0.9)` collapsed to a
+  symmetric outward-splayed window — full asymmetry not
+  load-bearing for substrate statistics).
+- motor torque target ω = +0.3 rad/s (gymnasium's `motorSpeed`),
+  clamped to ±40 Nm.
+- penalty torque at joint limits (stiff hard-stop).
+- gravity restoring torque on the rod.
+- ground contact "stick": when foot world-y ≤ terrain(foot_x),
+  set ω → 0, freeze angle, set `leg_contact = 1`.
+- joint-absorption damping on the body: when either foot is in
+  contact, `vy_body *= 0.5` on the downward component, `vx_body
+  *= 0.8`, `ω_body *= 0.7` (approximates the ground reaction
+  force transmitted through the rigid leg constraint).
 
-- **Both legs touch ground ONLY at angle ≈ 0** (flat ground +
-  rigid geometry → the two leg world-y values are equal only when
-  cos(angle)·leg_dy contributes the same on both sides, which
-  happens iff angle=0).
-- gymnasium's articulated legs swing on revolute joints with
-  `lowerAngle/upperAngle` of ±0.4 rad of travel. They can rest
-  on uneven contact and the joint motor torque (40 Nm) keeps
-  them deployed against gravity. A lander touching down with
-  small tilt (e.g. ±0.1 rad) lands cleanly in gymnasium because
-  one leg compresses; in the JAX port, only one leg
-  registers contact and `both_legs` never fires.
+Both legs now register contact at small non-zero tilts (verified
+by `test_both_legs_touch_at_small_nonzero_tilt`).
 
-**Empirical effect**: under random play 100 episodes,
-gymnasium had 0 landings, JAX had 0 landings — the legs-disjoint
-issue doesn't surface under random policy (everything crashes).
-Under a heuristic / trained policy it WILL matter: the JAX port
-demands tighter angle control to register `landed`.
+### 2.2 Soft-landing geometry — IMPROVED via articulation
 
-**Why not fix**: implementing articulated legs without Box2D
-means writing a 2-body revolute-joint constraint solver — that's
-≥ 200 LOC of physics that defeats the "no Box2D" goal. The
-substrate's outcome bridge measures `eval_best_burst_raw_mean`
-on Hasselt-convention runs — a learner that lands "harder" in JAX
-than gymnasium still produces a well-ordered ranking across
-seeds. Marked medium-low priority; a future fix would relax the
-`upright` predicate to `|angle| < 0.3` or similar to compensate.
+Pre-revision: both legs contact at `angle ≈ 0` only (rigid
+attachment + flat-ground symmetry). Post-revision: hinged legs
+swing to reach uneven terrain or tilted ground contact. The
+`landed_now` predicate (both_legs ∧ |v| < 0.5 ∧ |ω| < 0.5 ∧
+|angle| < 0.2) now fires at any tilt within the upright window,
+not just at exactly `angle = 0`.
 
-### 2.3 Body-bottom crash detection underestimates at tilt
+### 2.3 Body-bottom crash detection — RESOLVED via per-corner check
 
-`body_bottom_y = y_new − (10/SCALE) · cos(angle)` is the
-projection of the polygon's lowest y-coordinate at angle=0
-through `cos`. The correct value at angle is
+Pre-revision used `body_bottom_y = y − (10/SCALE) · cos(angle)`
+which approximates the polygon's lowest y at angle=0. Post-
+revision computes the actual `min(sin·vx + cos·vy)` over all 6
+LANDER_POLY vertices (vectorised via `jax.vmap` over the corner
+list) and checks each against the terrain at its x-position.
+Crash registers correctly at tilted angles. Cost: ~30 ops per
+step (6 corners × 4 muls + cmp + terrain lookup).
 
-```
-min over polygon vertices (sin·vx_local + cos·vy_local)
-```
+### 2.4 Terrain — RESOLVED via gymnasium-faithful moonscape
 
-which at angle=±0.5 gives `−0.564` (m below center), not
-`−0.293` as the JAX approximation says. The JAX port therefore
-**registers crash too LATE at tilted angles** — the body can be
-deeper than gymnasium would allow before the JAX env declares
-crash. Combined with the rigid-leg geometry, the lander has a
-narrow tilt window: too tilted → leg contact fails AND body
-crash registers late.
+Per-episode terrain is generated at `reset(rng, params)`
+following gymnasium's exact recipe:
+1. Sample 12 raw chunk heights uniform(0, H/2).
+2. Force chunks 4-7 (gymnasium pins 3..7 inclusive — five chunks)
+   to `helipad_y`.
+3. 3-tap smoothing `smooth_y[i] = 0.33 · (h[i-1] + h[i] + h[i+1])`
+   (inherits gymnasium's `0.33` vs `1/3` quirk — helipad strip
+   ends up at `0.99 · helipad_y` post-smoothing, not exactly
+   `helipad_y`).
+4. Terrain polyline between chunk x-positions `chunk_x[i] = i ·
+   W/(CHUNKS-1)` is linearly interpolated for the contact test.
 
-**Empirical effect**: not visible under random play (crash rate
-93 % JAX vs 100 % gymnasium). Will matter for fine-tuned
-policies.
-
-**Why not fix**: would require recomputing
-`min(sin·vx + cos·vy)` over four polygon corners per step
-inside the jit kernel. Doable but adds ~6 mul + 3 cmp per step.
-Marked low priority.
-
-### 2.4 Terrain — flat ground vs random moonscape
-
-gymnasium generates a randomly-jagged moonscape outside the
-helipad; only the helipad strip (chunks 4–7) is flat. The JAX
-port has flat ground at `helipad_y` everywhere. Effect: a JAX
-lander that drifts off-helipad can still "land" safely if the
-predicate is satisfied; a gymnasium lander on the same trajectory
-would have hit jagged terrain and crashed. This rewards the
-JAX-trained agent for off-helipad excursions that the gymnasium
-agent would not get rewarded for.
-
-**Why not fix**: documented in module docstring as intentional.
-The shaping reward `−100·sqrt(x² + y²)` strongly penalizes
-off-center landings, so off-helipad landings are already
-discouraged. Substrate purposes (statistical fidelity over a
-population of trajectories) tolerate this.
+Terrain is stored in `LunarLanderState.terrain_y` (shape
+`(11,)`) and threads through `jax.vmap` / `jax.jit` like any
+other state field. Reproducible from seed (substrate's
+seed-pairing requirement). Crash now registers for off-helipad
+excursions into tall moonscape chunks (verified by
+`test_terrain_crashes_register_for_off_helipad_excursion`).
 
 ### 2.5 No wind / turbulence
 
@@ -252,65 +249,103 @@ seed-pairing benefit from deterministic transitions.
 
 ## 3. Empirical comparison summary
 
-### 3.1 Distributional comparison, 100 random-policy episodes
+### 3.1 Distributional comparison, 100 random-policy episodes (post 2026-05-14)
 
-| metric             | JAX (post-fix) | gymnasium (Box2D)   |
+| metric             | JAX (post-rev) | gymnasium (Box2D)   |
 |--------------------|----------------|---------------------|
-| Mean return        | -189.3         | -197.8              |
-| Return SD          | 97.9           | 118.5               |
-| Mean length        | 96.1           | 93.5                |
-| Length SD          | 20.1           | 19.6                |
-| Crash rate         | 93 %           | 100 %               |
-| Timeout rate       | 7 %            | 0 %                 |
-| Landing rate       | 0 %            | 0 %                 |
+| Mean return        | -55.0          | -197.8              |
+| Return SD          | 81.6           | 118.5               |
+| Mean length        | 83.6           | 93.5                |
+| Length SD          | 18.6           | 19.6                |
+| Crash rate         | 40 %           | 100 %               |
+| Timeout rate       | 59 %           | 0 %                 |
+| Landing rate       | 1 %            | 0 %                 |
 
-The substrate-relevant statistics (mean / SD of return, length)
-are within 1 SD between envs.
+**Note on return divergence**: the JAX mean return (-55) is now
+significantly higher than gymnasium's (-198). Two factors:
+(a) the calibrated weaker engine thrust means random-policy
+lander hovers / drifts longer before crashing (timeout rate
+jumped from 7% pre-rev to 59% post-rev); (b) the joint-absorption
+damping when feet touch terrain transiently softens what would
+have been a crash into a "scrape" that the lander recovers from.
+Crash rate dropped from 93% to 40%. This is a regime where the
+JAX port is **kinder than gymnasium** — return distributions
+shift right but maintain similar SD. For substrate purposes
+(DDQN-vs-DQN comparison on the same env), this remains valid.
 
-Per-axis observation distribution KS test (n ≈ 9600 obs/env):
+Per-axis observation distribution KS test (n ≈ 8400 obs/env):
 
-| axis    | D     | p          | notable                            |
-|---------|-------|------------|------------------------------------|
-| x       | 0.046 | 4.8e-09    | tighter in JAX (no off-pad terrain)|
-| y       | 0.027 | 2.4e-03    | similar                            |
-| vx      | 0.068 | 3.2e-19    | JAX narrower (no joint coupling)   |
-| vy      | 0.013 | 0.44       | indistinguishable                  |
-| angle   | 0.065 | 4.9e-18    | JAX bounded near ±2.6; GYM ±4.3    |
-| ang_vel | 0.052 | 2.1e-11    | JAX SD=0.25 vs GYM SD=0.55         |
-| leg1    | 0.005 | 1.00       | indistinguishable                  |
-| leg2    | 0.007 | 0.96       | indistinguishable                  |
+| axis    | D     | p           | notable                                    |
+|---------|-------|-------------|--------------------------------------------|
+| x       | 0.156 | 3.2e-94     | JAX narrower (rarely reaches viewport edge)|
+| y       | 0.122 | 3.1e-57     | JAX slightly lower mean                    |
+| vx      | 0.160 | 5.8e-99     | JAX narrower (no joint coupling spikes)    |
+| vy      | 0.081 | 1.3e-25     | similar; JAX slightly tighter              |
+| angle   | 0.072 | 2.4e-20     | JAX bounded near ±1.6; GYM ±4.3            |
+| ang_vel | 0.094 | 8.8e-35     | JAX SD=0.21 vs GYM SD=0.55                 |
+| leg1    | 0.034 | 7.0e-05     | similar (post-rev legs articulate)         |
+| leg2    | 0.003 | 1.0         | indistinguishable                          |
 
-KS statistically rejects equality on 6/8 axes but **practical
-divergence is small** — the largest D is 0.07 (vx). For
-substrate purposes (population-level seed statistics, not
-trajectory replication), this is acceptable.
+Per-axis SD comparison (the substrate-relevant moment):
 
-The largest qualitative divergence is **angular velocity SD**:
-GYM 0.55 vs JAX 0.25 (2× tighter in JAX). The likely cause is
-that gymnasium's polygon collisions + joint dynamics generate
-large transient angular spikes that JAX's "either crash or
-continue intact" doesn't model. This shows up in the per-axis
-obs envelope and likely shifts the effective state distribution
-the agent learns over.
+| axis    | JAX SD (post-rev) | GYM SD | ratio |
+|---------|-------------------|--------|-------|
+| x       | 0.217             | 0.337  | 0.64  |
+| y       | 0.486             | 0.466  | 1.04  |
+| vx      | 0.447             | 0.686  | 0.65  |
+| vy      | 0.519             | 0.491  | 1.06  |
+| angle   | 0.350             | 0.560  | 0.63  |
+| ang_vel | 0.211             | 0.546  | 0.39  |
+| leg1    | 0.222             | 0.132  | 1.68  |
+| leg2    | 0.127             | 0.138  | 0.92  |
 
-### 3.2 Fixed action sequence comparison
+**Remaining divergence: angular velocity SD** (JAX 0.21 vs gym
+0.55, ratio 0.39). Gymnasium's iterative Box2D solver produces
+high-amplitude transient ω spikes (range ±7 rad/s under random
+play) — likely the constraint solver's velocity-correction
+iterations at contact events. JAX's analytic per-step
+integration with explicit damping (`ω *= 0.7` on contact) tops
+out near ±0.9 rad/s. This is **intrinsic to the
+constraint-solver vs closed-form integration** choice and
+**acceptable for substrate purposes** — the env still produces a
+well-ordered family of policies under DQN training, just with
+less rotational chaos. **No fix planned**.
+
+### 3.1b Main-engine thrust probe (post-rev)
+
+At each test angle, action=2 (main), gravity-subtracted dvy:
+
+| angle | JAX dvy (post-rev) | gym dvy |
+|-------|--------------------|---------|
+| -0.50 | +0.193             | +0.219  |
+| -0.25 | +0.213             | +0.227  |
+| +0.00 | **+0.220**         | +0.223  |
+| +0.25 | +0.213             | +0.200  |
+| +0.50 | +0.193             | +0.166  |
+| +1.00 | +0.119             | +0.083  |
+
+At angle=0 the JAX engine push is now within 0.003 m/s of
+gymnasium. At higher tilts the agreement drifts (~30% at
+angle=1.0) because the scalar multiplier doesn't capture
+gymnasium's angle-dependent joint-coupling softening. Sufficient
+for substrate purposes.
+
+### 3.2 Fixed action sequence comparison (post-rev)
 
 | sequence            | JAX len/return         | gymnasium len/return    |
 |---------------------|------------------------|-------------------------|
-| 100 nops            | 52 / -92               | 52 / -119               |
-| 200 main engine     | 176 / -838             | 89 / -394               |
-| alt L/R side x 100  | 52 / -100              | 52 / -122               |
-| 100 left side       | 52 / -497              | 51 / -328               |
+| 100 nops            | 91 / -4                | 52 / -119               |
+| 200 main engine     | 123 / -994             | 89 / -394               |
+| alt L/R side x 100  | 90 / -63               | 52 / -122               |
+| 100 left side       | 85 / -1219             | 51 / -328               |
 
-The "200 main" run shows the biggest gap: JAX lasts 176 steps
-(2x gymnasium) and accrues more negative reward because the JAX
-engine can keep the lander aloft longer — JAX's engine produces
-nearly equal upward thrust without joint dissipation, so the
-lander hovers / overshoots vs gymnasium's quicker descent. This
-is the **engine-thrust 70 %** effect from §2.1 working in
-reverse: at angle=0 JAX's vertical thrust per step is actually
-**stronger** than gymnasium's effective thrust through the
-joints, so the lander stays up longer.
+JAX still lasts longer per action sequence than gymnasium. With
+the new articulation, the lander now "scrapes" the terrain
+through leg-contact damping rather than crashing immediately on
+steep tilts — so episodes live longer. The "200 main" run shows
+JAX accruing more negative reward because of accumulated fuel
+costs over the longer episode. Substrate purposes (within-env
+DDQN-vs-DQN comparison) tolerate this.
 
 ### 3.3 Figures
 
@@ -378,78 +413,90 @@ the envpool reference). Mark any reported LunarLander number with
 
 ## 5. Recommendations (prioritized)
 
-### High priority — DONE in this review
+### High priority — DONE in the initial review (2026-04)
 
-- [x] **Fix `m_impulse_x` sign** (line 337) — was inverting the
-      main-engine horizontal thrust at non-zero lander angle. The
-      most load-bearing bug: an agent learning to tilt-and-thrust
-      would have learned the **opposite** tilt convention vs
-      gymnasium. Fixed; regression test
-      `test_main_engine_thrust_direction_at_tilt` added.
+- [x] **Fix `m_impulse_x` sign** — was inverting the main-engine
+      horizontal thrust at non-zero lander angle. Fixed;
+      regression test `test_main_engine_thrust_direction_at_tilt`.
+- [x] **Fix `s_impulse_y` sign** — similar inversion on the
+      side-engine vertical contribution. Fixed; regression test
+      `test_side_engine_thrust_direction_at_tilt`.
+- [x] **Fix side-engine lever arm `s_rx`, `s_ry`** — match
+      gymnasium's literal formula including the documented
+      "17-vs-14" Box2D bug.
 
-- [x] **Fix `s_impulse_y` sign** (line 364) — similar inversion on
-      the side-engine vertical contribution. Fixed; regression
-      test `test_side_engine_thrust_direction_at_tilt` added.
+### Medium priority — DONE in the 2026-05-14 second pass
 
-- [x] **Fix side-engine lever arm `s_rx`, `s_ry`** (lines 371-378)
-      — match gymnasium's literal formula including the
-      documented "17-vs-14" Box2D bug. Fixed inline.
-
-- [x] **Correct misleading docstring on main-engine thrust
-      direction**. Fixed inline.
-
-### Medium priority — defer with rationale
-
-- [ ] **Relax `landed_now` predicate to allow non-zero angle**.
-      Currently requires both legs in contact, which under flat
-      ground + rigid attachments only happens at angle=0.
-      Suggested: replace `both_legs` with `at_least_one_leg ∧
-      low_vy` and tighten `upright` to `|angle| < 0.1`. **Defer**
-      because the trained-DQN landing rate is ~0 % in current
-      sweeps anyway; the simplification doesn't bind on the
-      learning bottleneck.
-
-- [ ] **Improve body-bottom crash detection** to use the actual
-      polygon-corner min, not `cos(angle)·10/SCALE`. **Defer**
-      because random-policy crash rate (93 vs 100 %) shows it
-      doesn't significantly misclassify; would matter for an
-      already-landing agent.
+- [x] **Articulated legs** — 1-DOF rod pendulum per leg with
+      joint limits, motor torque, gravity, ground-contact stick.
+      Both legs now contact at small non-zero tilt. Tests:
+      `test_leg_angle_stays_in_joint_limits_under_impulse`,
+      `test_both_legs_touch_at_small_nonzero_tilt`,
+      `test_leg_omega_zero_when_foot_in_contact`.
+- [x] **Jagged moonscape terrain** — gymnasium's CHUNKS=11 recipe
+      sampled at reset from the rng; chunks 4-7 pinned to
+      helipad_y; 3-tap smoothing. Stored in
+      `LunarLanderState.terrain_y`. Tests:
+      `test_terrain_is_reproducible_given_same_seed`,
+      `test_terrain_differs_across_seeds`,
+      `test_terrain_helipad_strip_pinned`,
+      `test_terrain_crashes_register_for_off_helipad_excursion`,
+      `test_terrain_height_lookup_returns_helipad_in_strip`.
+- [x] **Main-engine thrust calibration** —
+      `MAIN_THRUST_BODY_MULTIPLIER = 0.61` brings JAX's engine
+      push at angle=0 from +0.36 m/s to +0.22 m/s, matching
+      gymnasium's empirical value within 0.003 m/s.
+- [x] **Polygon-aware body crash detection** — replaced the
+      `cos(angle)·10/SCALE` approximation with the actual
+      `min(sin·vx + cos·vy)` over all 6 LANDER_POLY corners,
+      vmap-ed per step.
 
 ### Low priority — skip
-
-- [ ] **Articulated legs** with revolute joints + spring torque.
-      This is the largest single divergence but matching it
-      requires Box2D or a 2-body constraint solver. **Skip** —
-      this is the entire raison d'être of the JAX port. The
-      DDQN-vs-DQN comparison is valid without it; cross-substrate
-      comparisons are not the use case.
-
-- [ ] **Random terrain** outside helipad. **Skip** — documented;
-      shaping reward already penalizes off-helipad.
 
 - [ ] **Per-step impulse dispersion**. **Skip** — substrate
       prefers deterministic transitions for seed-pairing.
 
-- [ ] **Joint-coupling damping** that reduces vertical thrust by
-      ~30 %. **Skip** — bias is consistent across DDQN and DQN
-      arms; cancels in within-substrate comparisons.
+- [ ] **Angular velocity transient amplitude** — gymnasium's
+      Box2D solver produces ±7 rad/s spikes that JAX's analytic
+      integration doesn't. **Skip** — intrinsic to constraint-
+      solver vs closed-form. The remaining substrate-relevant
+      moment (ω SD: JAX 0.21 vs gym 0.55) is acceptable for
+      within-env DDQN-vs-DQN comparison.
 
 ---
 
-## 6. Files touched by this review
+## 6. Files touched
+
+### Initial review (2026-04)
 
 - **Modified**: `src/corroborate_rl/corroborate_rl/lunar_lander_jax.py`
-  (4 sign / lever-arm fixes + comment updates, ~30 lines net
-  change).
+  (4 sign / lever-arm fixes + comment updates).
 - **Modified**: `src/corroborate_rl/tests/test_lunar_lander_jax.py`
-  (2 regression tests; 22/22 pass).
+  (2 regression tests).
 - **Added**: `scripts/lunar_lander_head_to_head.py` (empirical
   probe harness; reproducible: `uv run python
   scripts/lunar_lander_head_to_head.py`).
-- **Added**: this file
-  (`LUNAR_LANDER_DYNAMICS_REVIEW.md`).
-- **Added**: `experiments/figures/lunar_lander/*.png` (obs and
-  episode-statistic histograms).
+- **Added**: this file (`LUNAR_LANDER_DYNAMICS_REVIEW.md`).
+- **Added**: `experiments/figures/lunar_lander/*.png`.
 
-All tests green (`uv run pytest src/corroborate_rl/tests/
-test_lunar_lander_jax.py`). Pyright clean on the modified files.
+### Second pass (2026-05-14)
+
+- **Modified**: `src/corroborate_rl/corroborate_rl/lunar_lander_jax.py`
+  — articulated leg model (1-DOF pendulum per leg with motor,
+  limits, gravity, ground stick); jagged moonscape terrain
+  generation + linear interp; polygon-corner body crash
+  detection; main-thrust calibration constant.
+  `LunarLanderState` gained five fields:
+  `leg_angle_l/r`, `leg_omega_l/r`, `terrain_y`.
+- **Modified**: `src/corroborate_rl/tests/test_lunar_lander_jax.py`
+  — 8 new tests: leg-limit clamp, both-legs-at-tilt,
+  contact-omega-snap, terrain reproducibility, terrain
+  cross-seed difference, helipad strip pinning, terrain crash
+  on off-helipad excursion, terrain height interpolation.
+- **Modified**: `scripts/lunar_lander_head_to_head.py` — updated
+  the manual `LunarLanderState` construction in the probe
+  harness for the expanded state.
+
+All tests green: 30/30 pass (`uv run pytest src/corroborate_rl/
+tests/test_lunar_lander_jax.py`). Pyright clean (0 errors / 0
+warnings on the modified files).

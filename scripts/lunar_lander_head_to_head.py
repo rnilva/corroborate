@@ -391,6 +391,7 @@ def torque_asymmetry_probe() -> None:
             # JAX side: build a state at rest with the given angle
             from corroborate_rl.lunar_lander_jax import (
                 LunarLanderState, HELIPAD_Y, INITIAL_Y, INITIAL_X,
+                LEG_REST_OUTWARD_ANGLE,
             )
             jstate = LunarLanderState(
                 x=jnp.float32(INITIAL_X),
@@ -398,6 +399,10 @@ def torque_asymmetry_probe() -> None:
                 vx=jnp.float32(0.0), vy=jnp.float32(0.0),
                 angle=jnp.float32(angle), angular_vel=jnp.float32(0.0),
                 leg_contact_l=jnp.float32(0.0), leg_contact_r=jnp.float32(0.0),
+                leg_angle_l=jnp.float32(LEG_REST_OUTWARD_ANGLE),
+                leg_angle_r=jnp.float32(LEG_REST_OUTWARD_ANGLE),
+                leg_omega_l=jnp.float32(0.0), leg_omega_r=jnp.float32(0.0),
+                terrain_y=jnp.full((11,), HELIPAD_Y, dtype=jnp.float32),
                 prev_shaping=jnp.float32(0.0),
                 crashed=jnp.bool_(False), landed=jnp.bool_(False),
                 time=jnp.int32(0),
@@ -448,20 +453,26 @@ def landing_detection_probe() -> None:
     # Build a state right at the moment of touchdown in JAX, see if
     # `landed=True` triggers
     from corroborate_rl.lunar_lander_jax import (
-        LunarLanderState, HELIPAD_Y,
+        LunarLanderState, HELIPAD_Y, LEG_REST_OUTWARD_ANGLE,
     )
     env, params = make_lunar_lander()
 
     # State: lander at helipad ground level, both legs touching,
-    # near zero velocity / angle
-    LEG_DOWN_M = 18.0 / 30.0
-    y = HELIPAD_Y + LEG_DOWN_M - 0.001  # legs just barely touching
+    # near zero velocity / angle. With articulated legs at rest
+    # outward splay (θ_leg = 1.058), foot body-frame y = -0.538.
+    # Position body so foot just touches.
+    y = HELIPAD_Y + 0.50
+    flat_terrain = jnp.full((11,), HELIPAD_Y, dtype=jnp.float32)
     state = LunarLanderState(
         x=jnp.float32(10.0),
         y=jnp.float32(y),
         vx=jnp.float32(0.0), vy=jnp.float32(-0.1),
         angle=jnp.float32(0.05), angular_vel=jnp.float32(0.0),
         leg_contact_l=jnp.float32(1.0), leg_contact_r=jnp.float32(1.0),
+        leg_angle_l=jnp.float32(LEG_REST_OUTWARD_ANGLE),
+        leg_angle_r=jnp.float32(LEG_REST_OUTWARD_ANGLE),
+        leg_omega_l=jnp.float32(0.0), leg_omega_r=jnp.float32(0.0),
+        terrain_y=flat_terrain,
         prev_shaping=jnp.float32(20.0),
         crashed=jnp.bool_(False), landed=jnp.bool_(False),
         time=jnp.int32(0),
@@ -475,15 +486,15 @@ def landing_detection_probe() -> None:
     )
 
     # Test what happens with high lateral velocity but legs touching
-    state2 = state.replace(  # type: ignore[attr-defined]
-        vx=jnp.float32(1.0),
-    ) if hasattr(state, 'replace') else state
-    # struct dataclass replace
     state2 = LunarLanderState(
         x=jnp.float32(10.0), y=jnp.float32(y),
         vx=jnp.float32(1.0), vy=jnp.float32(-0.1),
         angle=jnp.float32(0.05), angular_vel=jnp.float32(0.0),
         leg_contact_l=jnp.float32(1.0), leg_contact_r=jnp.float32(1.0),
+        leg_angle_l=jnp.float32(LEG_REST_OUTWARD_ANGLE),
+        leg_angle_r=jnp.float32(LEG_REST_OUTWARD_ANGLE),
+        leg_omega_l=jnp.float32(0.0), leg_omega_r=jnp.float32(0.0),
+        terrain_y=flat_terrain,
         prev_shaping=jnp.float32(20.0),
         crashed=jnp.bool_(False), landed=jnp.bool_(False),
         time=jnp.int32(0),
