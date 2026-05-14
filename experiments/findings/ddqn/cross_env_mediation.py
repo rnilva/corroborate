@@ -75,36 +75,40 @@ _NONSATURATED_SCOPE: pl.Expr = (
 )
 
 
-# **Outcome-translation alignment scope** — load-bearing for any
-# bridge that pairs a disc-space predictor (e.g., `jensen_gap` ≡
-# Q − MC_disc) with the substrate's raw-space outcome target
-# (`eval_best_burst_raw_mean`). On envs where disc and raw
-# returns rank cells nearly identically (per-cell Pearson r > 0.7
-# at the env aggregate), the mech→outcome translation is
-# internally consistent and the cross-env Δ-Δ test is a clean
-# substantive read. On low-alignment envs (Freeway, Asterix, SI,
-# FourRooms-sliced), γ^t reweighting decouples disc-MC from raw
-# return, injecting outcome-measurement noise into the bridge
-# verdict alongside the substantive causal question — the bridge
-# can't tell mech-failure from translation-failure.
+# **Q-MC algebraic tautology caveat for the `jensen_gap`
+# predictor**. The substrate's `jensen_gap` is `Q − MC_disc` by
+# definition. Cross-env arm-diff: `Δ_jens = ΔQ − ΔMC_disc`. When
+# the env's disc-MC and raw outcome co-vary tightly
+# (`env_disc_raw_alignment` high), `ΔMC_disc ≈ Δ_outcome_raw`, so
+# `Δ_jens ≈ ΔQ − Δ_outcome_raw`, and the cross-env
+# `ρ(Δ_jens, Δ_outcome_raw)` is algebraically negative *by
+# construction* whenever `cov(ΔQ, Δ_outcome_raw) ≪
+# var(Δ_outcome_raw)` — not from a substantive
+# mech→outcome causal relationship.
 #
-# Currently realized as a cell-level scope predicate. The
-# substantive precondition is "outcome-translation is consistent
-# in this env" — a bridge-claim that would be more naturally
-# expressed as a chained dependency once the framework supports
-# `Bridge.depends_on` (see `CHAINED_BRIDGES_DESIGN.md`). For now
-# the cell-level filter captures the right cells; the design doc
-# captures the architectural gap.
-_OUTCOME_TRANSLATION_ALIGNED_SCOPE: pl.Expr = (
-    pl.col('env_disc_raw_alignment').is_finite()
-    & (pl.col('env_disc_raw_alignment') > 0.7)
-)
-
-
+# An earlier version of this file scoped to `align > 0.7`
+# thinking this filtered to envs where the disc/raw translation
+# was clean. That scope MAXIMIZED the tautology rather than
+# mitigating it; it was retracted. The current file runs the
+# `jensen_gap`-predictor bridges unscoped (full canonical n=12)
+# with the explicit caveat that any negative ρ contains an
+# algebraic component the cross-env Δ-Δ form cannot
+# disentangle. The MC-free predictor
+# (`bootstrap_gap_frac_active`) is algebraically clean: defined
+# from Q-network outputs only, no `MC` term, so its cross-env
+# ρ(Δ_bg_frac, Δ_outcome_raw) is a substantive causal test.
+#
+# Memory: `findings_bg_not_causally_manipulated_at_canonical`
+# captured the bg-aggregation diagnosis; the user critique
+# 2026-05-14 ("scoping the bridge where the tautology is more
+# prominent") flagged the alignment-scope inversion. See also
+# `CHAINED_BRIDGES_DESIGN.md` — chained-edge preconditions would
+# make the algebraic interaction between `outcome_translation_
+# consistent` (the would-be precondition edge) and the dependent
+# `jens → raw` edge VISIBLE in the graph topology rather than
+# buried in a scope predicate.
 _XENV_MECH_TO_OUTCOME_SCOPE: pl.Expr = (
-    DDQN_RELEVANT_SCOPE
-    & _NONSATURATED_SCOPE
-    & _OUTCOME_TRANSLATION_ALIGNED_SCOPE
+    DDQN_RELEVANT_SCOPE & _NONSATURATED_SCOPE
 )
 
 

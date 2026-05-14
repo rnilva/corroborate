@@ -1,65 +1,91 @@
-"""Cross-env mediation: DDQN's mech effect predicts its outcome effect.
+"""Cross-env mediation: DDQN's mech effect predicts its outcome effect — REFUTED.
 
 This Finding tests the substantive bias-correction claim at the
-cross-env arm-diff level, where the Q-MC algebraic identity that
-pins per-cell ρ(jens, out_disc) DOESN'T apply (each env
-contributes ONE arm-diff point; intervention assignment is the
-causal cut).
+cross-env arm-diff level: each env contributes one
+(Δ_predictor, Δ_outcome_raw) point; cross-env Spearman asks "are
+the envs where DDQN reduces mech MORE the envs where DDQN
+improves outcome MORE?"
 
-Three sibling bridges using different mech predictors. The
-cluster's substantive REFUTED arises from the bg-frac bridge
-sign-flipping on the high-alignment cohort — the jens-based
-bridges actually HELD:
+Empirical reading at canonical 1M (12 envs, ex-CartPole-saturated):
 
-  - `ddqn_outcome_scales_with_jens_reduction__xenv`: **HELD**
-      (ρ_pool=−0.83, p=0.014, n_strata=6). Theory-canonical
-      Hasselt-2016 predictor. Per-cell ρ(jens, out_disc) is
-      Q-MC tautological; the cross-env arm-diff form is clean.
+  - `ddqn_outcome_scales_with_jens_reduction__xenv`:
+      POWER_INSUFFICIENT (ρ=−0.35, p=0.19). Direction-correct
+      but below the substantive HELD threshold. With the Q-MC
+      algebraic identity (see below), even this modest ρ is
+      partly an algebraic shadow rather than substantive
+      evidence — the cross-env Δ-Δ form does NOT escape the
+      tautology, contra the docstring's earlier framing.
   - `ddqn_outcome_scales_with_jens_reduction__xenv_loo_robust`:
-      **HELD** (LOO-robustness sibling — anchor isn't outlier-
-      driven; signal survives every single-env removal).
+      POWER_INSUFFICIENT — same data, robustness gate fails on
+      the underpowered anchor.
   - `ddqn_outcome_scales_with_bg_frac_active__xenv`:
-      **NO_EFFECT (sign_flip)** (p=0.34). The MC-free predictor
-      (rate of online/target argmax disagreement) actually
-      *INCREASES* on DDQN on this cohort's SURVIVE-polarity
-      envs (PacMan, SpaceInvaders, Breakout) — opposite of the
-      "DDQN reduces disagreement events" prediction. The
-      cross-env scaling is not what the substrate-author's
-      theory expected.
+      **NO_EFFECT (null_effect)** (p=0.63). This is the clean
+      substantive test: `bootstrap_gap_frac_active` is MC-free
+      (defined entirely from Q-network outputs, no MC term),
+      so its cross-env scaling is NOT algebraically pinned. It
+      finds NO substantive cross-env mech→outcome relationship.
 
-**Scope is `env_disc_raw_alignment > 0.7`** (the outcome-
-translation alignment scope, per memory
-`findings_bg_not_causally_manipulated_at_canonical`). This
-filters to envs where the substrate's disc-MC and raw return
-co-vary tightly — the precondition for the cross-env Δ_jens →
-Δ_out_raw test to be substantively interpretable. The 6 envs
-in scope: Acrobot, CartPole(no), MetaMaze, MountainCar,
-PacMan, Snake, SlidingTilePuzzle, Breakout (modulo
-CartPole-saturation exclusion). Without this scope, low-
-alignment envs (Freeway 0.42, Asterix/SI 0.65, FourRooms-
-sliced −0.85) inject γ^t reweighting noise that masked the
-signal at n=12 (pre-scope ρ=−0.35).
+Cluster verdict: REFUTED. The bg_frac NO_EFFECT(null) is the
+substantively load-bearing reading; the jens bridges' modest
+negative ρ is partly algebraic.
 
-Cluster shape (REFUTED): cluster verdict is AND-aggregate. The
-two jens-based bridges HELD; the bg-frac-active sibling
-NO_EFFECT(sign_flip) → cluster REFUTED. Substantively this is
-the right reading: the substrate's full hypothesis was "both
-the disc-space proxy (jens) AND the MC-free proxy
-(bg_frac_active) predict cross-env outcome scaling." That
-conjunction is REFUTED. The sub-claim "jens alone predicts
-cross-env outcome on the alignment-scoped cohort" IS supported,
-but the cluster-level test refuses to claim the weaker form
-when the conjunction it explicitly enumerates fails.
+## The Q-MC algebraic tautology in the cross-env Δ-Δ form
 
-The bg-frac-active sign-flip is itself substantively important
-— it confirms `findings_bg_not_causally_manipulated_at_canonical`:
-the wedge-frequency predictor doesn't carry the cross-env
-mediation signal that jens does. If you want the SUPPORTED
-sub-claim cleanly, factor a sibling Finding holding only the
-two jens bridges (the LOO + anchor cluster would then be
-SUPPORTED at ρ=−0.83). The current Finding documents the full
-substrate hypothesis honestly: jens-only works, bg_frac_active
-doesn't, conjunction REFUTED."""
+The substrate's `jensen_gap` ≡ `Q − MC_disc` by definition. So:
+
+    Δ_jens = ΔQ − ΔMC_disc
+
+When the env's disc and raw outcomes co-vary tightly
+(`env_disc_raw_alignment > 0.7`), `ΔMC_disc ≈ Δ_outcome_raw`,
+so:
+
+    Δ_jens ≈ ΔQ − Δ_outcome_raw
+
+    ρ(Δ_jens, Δ_outcome_raw)
+      = ρ(ΔQ − Δ_outcome_raw, Δ_outcome_raw)
+      = [cov(ΔQ, Δ_out) − var(Δ_out)] / (σ_jens · σ_out)
+
+The −`var(Δ_out)` term guarantees a negative ρ baseline whenever
+cov(ΔQ, Δ_outcome_raw) is small. This is the cross-env analog of
+the per-cell Q-MC tautology — the arm-diff DOES NOT escape it
+when the env's outcome-translation is tight.
+
+**The earlier alignment-scope (`align > 0.7`) was exactly
+backwards**: it scoped to envs where the tautology is most
+pronounced, then read the algebraically-guaranteed ρ=−0.83 as
+substantive evidence. Retracted 2026-05-14 under user critique.
+
+The genuine substantive cross-env test of mech→outcome requires
+an MC-free predictor. `bootstrap_gap_frac_active` is that
+predictor; it gives NO_EFFECT(null) at canonical scope. The
+substrate's "DDQN's outcome benefit scales cross-env with its
+bg-wedge frequency reduction" hypothesis is empirically refuted.
+
+## What survives substantively
+
+- DDQN reduces `jensen_gap` and Q on every canonical env
+  (within-env mech HELD; see `finding_hasselt_chain`).
+- DDQN improves `eval_best_burst_raw_mean` on 11/12 canonical
+  envs (within-env outcome benefit).
+- **Cross-env: the magnitude of mech reduction does NOT scale
+  predictably with the magnitude of outcome improvement** when
+  tested with a properly MC-free predictor. The env-to-env
+  conversion ratio (mech reduction → outcome improvement) is
+  env-structural noise from the cross-env test's perspective.
+
+This is consistent with `findings_canonical_scope_reverification`:
+substrate-level mech claims hold; cross-env outcome-translation
+claims don't survive at canonical scope.
+
+## What `CHAINED_BRIDGES_DESIGN.md` would fix
+
+The algebraic entanglement between the alignment scope (an edge
+on `MC_disc` and `raw`) and the dependent bridge (an edge on
+`jens = Q − MC_disc` and `raw`) is invisible when scope is a
+polars expression. Promoting alignment to a first-class
+precondition edge would make the shared `MC_disc` node visible
+in the graph topology — surfacing the tautology BEFORE empirical
+evaluation. See the design doc."""
 from __future__ import annotations
 
 from corroborate.bridge.bridge import Bridge
