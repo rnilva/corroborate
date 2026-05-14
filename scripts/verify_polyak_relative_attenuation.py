@@ -13,8 +13,8 @@ Predicted (integrated-clip theory, strict form):
 - τ < 1.0: smaller τ ⇒ higher target staleness ⇒ larger per-step
   clip ⇒ larger relative attenuation.
 
-Empirical result on `polyak_tau_fr_postfix` (FR γ=0.99,
-n=30/τ paired):
+Empirical result on the polyak-τ cells in the ddqn cache
+(FR γ=0.99, n=30/τ paired):
   τ=1.0   : Δjens = +0.0000 EXACT, rel_atten = 0.0%
   τ=0.1   : Δjens = -0.0475***,    rel_atten = 28.0%
   τ=0.01  : Δjens = -0.0411*,      rel_atten = 30.4%

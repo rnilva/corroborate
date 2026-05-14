@@ -180,9 +180,6 @@ None means corpus is unreachable via cloud restore.
 Fix: re-run the sweep (cell hashes will produce new UUIDs) OR
 remove the corpus entirely if other corpora cover the env.
 
-Known instance: `acrobot_1M_postfix` (removed 2026-05-14;
-`acrobot_1M_postfix_seeds30to59` is the complete sibling).
-
 ### 2. Archive incomplete — corpus has manifest but partial files
 
 Symptom: local `traces.parquet` exists but has fewer columns

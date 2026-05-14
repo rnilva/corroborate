@@ -1,12 +1,12 @@
 name: minatar_1M_spaceinvaders
 out_dir: experiments/data/minatar_1M_spaceinvaders
 env_binding: per_env
-archive_remote: s3://corroborate-archive/minatar_1M
+archive_remote: s3://corroborate-archive/minatar_1M_spaceinvaders
 
-# Finishes the missing 2 arms from the original minatar_1M sweep
-# (the previous run completed Asterix×2, Breakout×2, Freeway×2;
-# SpaceInvaders×2 was killed mid-arm). The archive_remote points
-# to the same bucket so all 8 arms land at the same path.
+# SpaceInvaders × {vanilla, ddqn} at 1M steps. Companion to
+# `minatar_1M.yaml`; the bucket is intentionally distinct so the
+# cross-sweep `archive_remote` lint stays green and the cell
+# fingerprints don't co-mingle on cloud.
 
 envs:
   - {name: SpaceInvaders-MinAtar, n_seeds: 30, chunk_size: 15}
