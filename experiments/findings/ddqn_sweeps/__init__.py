@@ -28,6 +28,9 @@ from experiments.findings.ddqn_sweeps import (
 )
 from experiments.findings.ddqn._arms import INTERVENTION as INTERVENTION
 from experiments.findings.ddqn._common import CLAIM as CLAIM
+from experiments.findings.ddqn_sweeps.bias_correction_hp_variance import (
+    BRIDGES as _BIAS_CORRECTION_HP,
+)
 from experiments.findings.ddqn_sweeps.chain_depth import BRIDGES as _CHAIN_DEPTH
 from experiments.findings.ddqn_sweeps.n_step import BRIDGES as _N_STEP
 from experiments.findings.ddqn_sweeps.polyak_tau import BRIDGES as _POLYAK_TAU
@@ -41,6 +44,7 @@ MODULE_SCOPE: pl.Expr = ~pl.col('env_name').str.ends_with('-bsuite')
 
 
 BRIDGES = (
+    *_BIAS_CORRECTION_HP,
     *_CHAIN_DEPTH,
     *_N_STEP,
     *_POLYAK_TAU,
