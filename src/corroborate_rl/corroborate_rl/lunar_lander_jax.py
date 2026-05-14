@@ -325,21 +325,24 @@ class LunarLanderEnv:
         # Gymnasium computes impulse = (-ox, -oy) · MAIN_ENGINE_POWER
         # where (ox, oy) is the engine-exhaust offset relative to
         # body center:
-        #     ox = tip_x · MAIN_ENGINE_Y_LOCATION/SCALE
+        #     ox = +tip_x · MAIN_ENGINE_Y_LOCATION/SCALE
         #     oy = -tip_y · MAIN_ENGINE_Y_LOCATION/SCALE
-        # so the impulse direction is +tip (i.e., the body
-        # accelerates "up" along the lander's local +y axis).
-        # Magnitude scaling: `MAIN_ENGINE_Y_LOCATION/SCALE` is part
-        # of the offset, which also appears in the impulse via the
-        # `-(ox, oy)·power` pattern — gymnasium's impulse magnitude
-        # is `(MAIN_ENGINE_Y_LOCATION/SCALE) · MAIN_ENGINE_POWER`.
+        # so the body impulse is:
+        #     impulse_x = -ox · power = -tip_x · offset · power
+        #     impulse_y = -oy · power = +tip_y · offset · power
+        # Verified by direct probe against Box2D — the previous
+        # impl mistakenly wrote impulse_x = +tip_x · power, which
+        # inverts the horizontal thrust component at non-zero
+        # lander angle. See LUNAR_LANDER_DYNAMICS_REVIEW.md.
         m_offset = jnp.float32(MAIN_ENGINE_Y_LOCATION / SCALE)
-        m_impulse_x = tip_x * params.main_engine_power * m_offset * m_power
+        m_impulse_x = -tip_x * params.main_engine_power * m_offset * m_power
         m_impulse_y = tip_y * params.main_engine_power * m_offset * m_power
-        # Lever arm: gymnasium applies impulse at offset
-        # (ox, oy) = -tip × (4/SCALE) (ignoring random dispersion).
-        # Cross product r × F = (rx · Fy - ry · Fx) → torque.
-        m_rx = -tip_x * m_offset
+        # Lever arm matches gymnasium's (ox, oy) above.
+        # Cross product r × F = (rx · Fy - ry · Fx). For the main
+        # engine r and F are anti-parallel so torque = 0
+        # analytically; we compute it anyway for symmetry / numeric
+        # stability of any future asymmetric thrust extension.
+        m_rx = tip_x * m_offset
         m_ry = -tip_y * m_offset
         m_torque = m_rx * m_impulse_y - m_ry * m_impulse_x
 
@@ -351,29 +354,41 @@ class LunarLanderEnv:
         direction = jnp.where(is_left, jnp.float32(-1.0), jnp.float32(0.0))
         direction = jnp.where(is_right, jnp.float32(1.0), direction)
         s_power = jnp.where(is_side, jnp.float32(1.0), jnp.float32(0.0))
-        # Side impulse — see gymnasium block. Dominant component:
-        #   ox = side_x · direction · SIDE_ENGINE_AWAY/SCALE
+        # Side impulse — gymnasium's offset (dispersion dropped):
+        #   ox = +side_x · direction · SIDE_ENGINE_AWAY/SCALE
+        #      = -tip_y · direction · SIDE_ENGINE_AWAY/SCALE
         #   oy = -side_y · direction · SIDE_ENGINE_AWAY/SCALE
-        # impulse = (-ox · power, -oy · power) so the body
-        # accelerates in `-direction · side`.
+        #      = -tip_x · direction · SIDE_ENGINE_AWAY/SCALE
+        # Body impulse = (-ox · power, -oy · power) =
+        #   ( +tip_y · direction · offset · power,
+        #     +tip_x · direction · offset · power )
+        # The previous impl wrote impulse_y = -direction · tip_x ·
+        # power, which inverts the vertical component of the side
+        # thrust at non-zero lander angle. Verified by direct
+        # Box2D probe.
         s_offset = jnp.float32(SIDE_ENGINE_AWAY / SCALE)
         s_impulse_x = (
-            -direction * side_x * params.side_engine_power * s_offset * s_power
+            direction * tip_y * params.side_engine_power * s_offset * s_power
         )
         s_impulse_y = (
-            -direction * side_y * params.side_engine_power * s_offset * s_power
+            direction * tip_x * params.side_engine_power * s_offset * s_power
         )
-        # Lever arm: dominant term is offset along `direction · side
-        # · SIDE_ENGINE_AWAY/SCALE` plus `tip · SIDE_ENGINE_HEIGHT/
-        # SCALE`. We use the dominant offsets, dropping the
-        # `-tip · 17/SCALE` orientation-dependent term (which
-        # gymnasium's own code flags as likely a bug).
+        # Lever arm = impulse_pos − lander_pos. Gymnasium adds two
+        # extra body-frame offsets to the impulse application
+        # point (cf. their lines 599-602):
+        #   r_x = ox − tip_x · 17 / SCALE
+        #       = −tip_y · direction · 0.4 − tip_x · 17 / SCALE
+        #   r_y = oy + tip_y · SIDE_ENGINE_HEIGHT / SCALE
+        #       = −tip_x · direction · 0.4 + tip_y · 14 / SCALE
+        # Gymnasium's own source comments that the constant 17 (vs
+        # SIDE_ENGINE_HEIGHT=14) is "presumably a bug" — keeping
+        # gymnasium's literal behaviour for parity.
         s_rx = (
-            direction * side_x * (SIDE_ENGINE_AWAY / SCALE)
-            + tip_x * (SIDE_ENGINE_HEIGHT / SCALE)
+            -tip_y * direction * (SIDE_ENGINE_AWAY / SCALE)
+            - tip_x * (17.0 / SCALE)
         )
         s_ry = (
-            direction * side_y * (SIDE_ENGINE_AWAY / SCALE)
+            -tip_x * direction * (SIDE_ENGINE_AWAY / SCALE)
             + tip_y * (SIDE_ENGINE_HEIGHT / SCALE)
         )
         s_torque = s_rx * s_impulse_y - s_ry * s_impulse_x

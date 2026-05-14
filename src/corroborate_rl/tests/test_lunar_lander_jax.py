@@ -285,6 +285,87 @@ def test_side_engine_differs_from_main() -> None:
     assert float(r_main) != float(r_side)
 
 
+# ============ Engine thrust direction (regression: sign-flip bug) ============
+
+def test_main_engine_thrust_direction_at_tilt() -> None:
+    """The main engine impulse direction was sign-flipped on the
+    x-component prior to fixing — at angle=+0.5 rad, gymnasium's
+    main engine pushes the body in the −x direction (up-left in
+    world frame), but the JAX port pushed it in +x (up-right),
+    inverting the lander's translational affordance.
+
+    Verified against a Box2D probe: at angle=+0.5, the gymnasium
+    reference yields dvx ≈ −0.14; the previous JAX impl yielded
+    +0.17. This test pins the correct direction (negative dvx)
+    so the bug cannot regress silently.
+    """
+    env, params = make_lunar_lander()
+
+    # Lander tilted CCW by 0.5 rad (top tipped right in
+    # gymnasium's sign convention where angle > 0 is CW visually
+    # but +tip points "up-right").
+    state = _make_state(angle=0.5)
+    _, ns, _, _, _ = env.step(
+        jax.random.PRNGKey(0), state, jnp.int32(2), params,
+    )
+    # vx should decrease (negative dvx). The pre-fix impl gave
+    # dvx > 0.
+    assert float(ns.vx) < 0.0, (
+        f"main engine at angle=+0.5 should push dvx negative, "
+        f"got vx={float(ns.vx):.4f}"
+    )
+
+    # Symmetric: at angle=-0.5, dvx should be positive.
+    state2 = _make_state(angle=-0.5)
+    _, ns2, _, _, _ = env.step(
+        jax.random.PRNGKey(0), state2, jnp.int32(2), params,
+    )
+    assert float(ns2.vx) > 0.0, (
+        f"main engine at angle=-0.5 should push dvx positive, "
+        f"got vx={float(ns2.vx):.4f}"
+    )
+
+
+def test_side_engine_thrust_direction_at_tilt() -> None:
+    """The side engine's y-component was sign-flipped prior to
+    fixing — at angle=+0.5 with action=1 (left), the body's dvy
+    should be negative (small downward push from horizontal
+    thrust projected into tilted frame). The pre-fix impl
+    returned positive dvy.
+
+    Per gymnasium: at angle=+0.5, action=1, dvy ≈ −0.025.
+    """
+    env, params = make_lunar_lander()
+
+    # action 1 (left side engine), tilted CCW
+    state = _make_state(angle=0.5)
+    _, ns, _, _, _ = env.step(
+        jax.random.PRNGKey(0), state, jnp.int32(1), params,
+    )
+    # The engine vy contribution should be negative; total vy
+    # includes gravity (-0.2 over dt=0.02) which is also negative.
+    # The pre-fix impl had engine_vy = +0.024, making total vy
+    # less negative.
+    dt = 1.0 / 50.0
+    engine_vy = float(ns.vy) - (-10.0 * dt)
+    assert engine_vy < 0.0, (
+        f"side-left engine at angle=+0.5 should push dvy negative, "
+        f"got engine_dvy={engine_vy:.4f}"
+    )
+
+    # action 3 (right side engine), tilted CCW → dvy should
+    # be positive at angle=+0.5
+    state2 = _make_state(angle=0.5)
+    _, ns2, _, _, _ = env.step(
+        jax.random.PRNGKey(0), state2, jnp.int32(3), params,
+    )
+    engine_vy2 = float(ns2.vy) - (-10.0 * dt)
+    assert engine_vy2 > 0.0, (
+        f"side-right engine at angle=+0.5 should push dvy positive, "
+        f"got engine_dvy={engine_vy2:.4f}"
+    )
+
+
 # ============ Termination ============
 
 def test_out_of_bounds_terminates() -> None:
