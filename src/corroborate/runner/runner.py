@@ -1147,7 +1147,12 @@ def _missing_for_restore(
     `runs.parquet` is always required (the row store). `traces.
     parquet` is required only when any required measurable or
     declared analysis-read pulls from a trace-store column AND the
-    remote manifest carries it AND it's missing/stub locally.
+    remote manifest carries it AND the LOCAL file is either
+    (a) missing/stub or (b) PARTIAL — exists but lacks a column
+    in `trace_reads`. Partial state arises from a prior
+    `restore_columns` call that wrote a column-subset; subsequent
+    runs needing different cols would silently read NaN if we
+    didn't detect this.
 
     Returns the list of relpaths to restore, or None if nothing
     needs restoring. Stub local files (size < 1KB) are treated as
@@ -1155,26 +1160,53 @@ def _missing_for_restore(
     targets: list[str] = []
     if not _file_present(runs_path):
         targets.append('runs.parquet')
-    if trace_reads and not _file_present(traces_path):
-        # Two manifest shapes count as carrying trace data:
-        # (a) a top-level `traces.parquet` entry (canonical), or
-        # (b) per-arm `tmp/*_traces.parquet` shards (older sweeps
-        # that archived before the per-corpus merge step ran). For
-        # (b), `_merge_shard_traces` stitches the shards into a
-        # canonical `traces.parquet` after restore so downstream
-        # code sees one shape.
-        manifest = _read_remote_manifest(manifest_path)
-        if manifest is not None:
-            if manifest.has('traces.parquet'):
-                targets.append('traces.parquet')
-            else:
-                shards = sorted(
-                    rp for rp in manifest.relpaths()
-                    if rp.startswith('tmp/')
-                    and rp.endswith('_traces.parquet')
-                )
-                targets.extend(shards)
+    if trace_reads:
+        traces_partial = (
+            _file_present(traces_path)
+            and not _trace_file_has_columns(traces_path, trace_reads)
+        )
+        if not _file_present(traces_path) or traces_partial:
+            # Two manifest shapes count as carrying trace data:
+            # (a) a top-level `traces.parquet` entry (canonical), or
+            # (b) per-arm `tmp/*_traces.parquet` shards (older sweeps
+            # that archived before the per-corpus merge step ran). For
+            # (b), `_merge_shard_traces` stitches the shards into a
+            # canonical `traces.parquet` after restore so downstream
+            # code sees one shape.
+            manifest = _read_remote_manifest(manifest_path)
+            if manifest is not None:
+                if manifest.has('traces.parquet'):
+                    targets.append('traces.parquet')
+                else:
+                    shards = sorted(
+                        rp for rp in manifest.relpaths()
+                        if rp.startswith('tmp/')
+                        and rp.endswith('_traces.parquet')
+                    )
+                    targets.extend(shards)
     return targets or None
+
+
+def _trace_file_has_columns(
+    traces_path: Path, trace_reads: frozenset[str],
+) -> bool:
+    """Check whether a local `traces.parquet` carries every column
+    in `trace_reads`. Returns True iff `trace_reads ⊆ schema`.
+
+    A partial local file (left by a prior `restore_columns` with a
+    narrower col-set) returns False — the runner treats it as
+    missing and re-fetches with the current col-set.
+
+    On unreadable / corrupted file: returns False so the runner
+    re-restores rather than silently proceeding with bad data.
+
+    Pure read; no side effects."""
+    import polars as pl
+    try:
+        schema = pl.scan_parquet(traces_path).collect_schema()
+        return trace_reads.issubset(set(schema.names()))
+    except (OSError, ValueError, pl.exceptions.ComputeError):
+        return False
 
 
 def _read_remote_manifest(manifest_path: Path) -> RemoteManifest | None:

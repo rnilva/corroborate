@@ -538,3 +538,66 @@ def test_ingest_and_compute_directory_path_unlinks_legacy_manifest_even_when_emp
         f'pre-fix: unlink was gated on `merged.height > 0`. '
         f'Post-fix: unlink should be unconditional.'
     )
+
+
+# ============ Partial-column trace detection ============
+
+
+def test_missing_for_restore_detects_partial_trace_columns(
+    tmp_path: Path,
+) -> None:
+    """Regression for the partial-column trace bug (2026-05-14):
+    a prior `restore_columns` call writes traces.parquet with cols
+    {A, B}; a subsequent run needing {B, C} must detect the local
+    file as partial (missing C) and re-restore — not silently
+    proceed with NaN for C.
+
+    Pre-fix `_missing_for_restore` checked only file presence;
+    partial files passed the size gate and were treated as
+    complete. Post-fix: also checks column subset.
+    """
+    import polars as pl
+
+    from corroborate.runner.runner import _missing_for_restore
+
+    runs_path = tmp_path / 'runs.parquet'
+    traces_path = tmp_path / 'traces.parquet'
+    manifest_path = tmp_path / '_remote.json'
+
+    # Make files comfortably above the 1KB _file_present gate.
+    pl.DataFrame({'id': list(range(2000))}).write_parquet(runs_path)
+    pl.DataFrame(
+        {'A': list(range(2000)), 'B': list(range(2000))},
+    ).write_parquet(traces_path)
+    manifest_path.write_text(
+        '{"remote_root": "s3://bucket/x", "files": ['
+        '{"relpath": "runs.parquet", "size_bytes": 1024, '
+        '"sha256": "abc", "pushed_at": "2026-05-14T00:00:00+00:00", '
+        '"row_ids": []},'
+        '{"relpath": "traces.parquet", "size_bytes": 1024, '
+        '"sha256": "def", "pushed_at": "2026-05-14T00:00:00+00:00", '
+        '"row_ids": []}'
+        ']}',
+    )
+
+    # Asking only for cols A, B → no restore needed.
+    targets = _missing_for_restore(
+        runs_path, traces_path,
+        trace_reads=frozenset({'A', 'B'}),
+        manifest_path=manifest_path,
+    )
+    assert targets is None, (
+        f'partial file with {{A, B}} should satisfy trace_reads={{A, B}}; '
+        f'got {targets!r}'
+    )
+
+    # Asking for col C (not in partial local file) → must restore.
+    targets = _missing_for_restore(
+        runs_path, traces_path,
+        trace_reads=frozenset({'B', 'C'}),
+        manifest_path=manifest_path,
+    )
+    assert targets == ['traces.parquet'], (
+        f'partial local file lacking col C should trigger restore; '
+        f'got {targets!r}'
+    )
