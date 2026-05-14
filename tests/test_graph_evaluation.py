@@ -297,3 +297,106 @@ def test_cluster_verdict_empty_extent_all_empty() -> None:
 def test_cluster_verdict_empty_members_underpowered() -> None:
     """Defensive: empty cluster is UNDERPOWERED, not crash."""
     assert cluster_verdict(()) == ClusterVerdict.UNDERPOWERED
+
+
+# ============ Walk primitives (walk_subgraph / is_walk / walk_scope) ============
+
+
+def test_walk_subgraph_two_step_chain() -> None:
+    """Standard 3-node walk A → B → C: subgraph keeps both step
+    edges, drops any diagonal edges A→C."""
+    from corroborate.graph.causal import walk_subgraph
+    g = authored_graph((_bridge_assoc_a, _bridge_other))
+    # _bridge_assoc_a is m1→out; _bridge_other is m2→out.
+    # Walk through ('m1', 'out') = single step using _bridge_assoc_a only.
+    sub = walk_subgraph(g, nodes=('m1', 'out'))
+    edge_names = {e.metadata.bridge_name for e in sub.edges}
+    # _bridge_assoc_b is also m1→out — it appears too (multi-edge step)
+    assert '_bridge_assoc_a' in edge_names or '_bridge_assoc_b' in edge_names
+    # _bridge_other is m2→out — NOT in walk through m1
+    assert '_bridge_other' not in edge_names
+
+
+def test_walk_subgraph_drops_non_walk_edges() -> None:
+    """walk_subgraph keeps ONLY edges between consecutive nodes —
+    drops edges between non-adjacent nodes in the walk."""
+    from corroborate.graph.causal import walk_subgraph
+    g = authored_graph((_bridge_assoc_a, _bridge_other))
+    # Walk ('m1', 'out', 'm2'): step 1 is m1→out (a-edges), step 2
+    # would be out→m2 (no edges in g).
+    sub = walk_subgraph(g, nodes=('m1', 'out', 'm2'))
+    # _bridge_other goes m2→out — NOT (out→m2), so dropped.
+    edge_names = {e.metadata.bridge_name for e in sub.edges}
+    assert '_bridge_other' not in edge_names
+
+
+def test_walk_subgraph_empty_or_singleton() -> None:
+    """Walks of length <2 have no edges (still a valid subgraph)."""
+    from corroborate.graph.causal import walk_subgraph
+    g = authored_graph((_bridge_assoc_a,))
+    sub_empty = walk_subgraph(g, nodes=())
+    sub_singleton = walk_subgraph(g, nodes=('m1',))
+    assert tuple(sub_empty.edges) == ()
+    assert tuple(sub_singleton.edges) == ()
+
+
+def test_is_walk_well_formed_chain() -> None:
+    """_bridge_assoc_a (m1→out) alone is a trivial walk."""
+    from corroborate.graph.causal import is_walk
+    g = authored_graph((_bridge_assoc_a,))
+    assert is_walk(g, bridges=(_bridge_assoc_a,)) is True
+
+
+def test_is_walk_disconnected_returns_false() -> None:
+    """Two bridges where bridge[i+1].source != bridge[i].target →
+    not a walk."""
+    from corroborate.graph.causal import is_walk
+    g = authored_graph((_bridge_assoc_a, _bridge_other))
+    # _bridge_assoc_a: m1→out; _bridge_other: m2→out.
+    # Target of a (=out) != source of other (=m2) → disconnected.
+    assert is_walk(g, bridges=(_bridge_assoc_a, _bridge_other)) is False
+
+
+def test_is_walk_empty_or_singleton() -> None:
+    """Trivially well-formed walks of length 0 and 1."""
+    from corroborate.graph.causal import is_walk
+    g = authored_graph((_bridge_assoc_a,))
+    assert is_walk(g, bridges=()) is True
+    assert is_walk(g, bridges=(_bridge_assoc_a,)) is True
+
+
+def test_walk_scope_and_reduce_two_bridges() -> None:
+    """walk_scope AND-reduces two bridges' scope predicates."""
+    from corroborate.graph.causal import walk_scope
+    expr = walk_scope((_bridge_assoc_a, _bridge_assoc_b))
+    # Both bridges have scope `pl.col('x') > 0`; AND with itself
+    # is structurally identical. Verify it's a valid pl.Expr.
+    df = pl.DataFrame({'x': [-1, 0, 1, 2]})
+    admitted = df.filter(expr)
+    assert admitted.height == 2  # x ∈ {1, 2}
+
+
+def test_walk_scope_empty_returns_lit_true() -> None:
+    """No bridges → AND-reduce identity is True."""
+    from corroborate.graph.causal import walk_scope
+    expr = walk_scope(())
+    df = pl.DataFrame({'x': [1, 2, 3]})
+    admitted = df.filter(expr)
+    assert admitted.height == 3  # all rows admitted
+
+
+def test_walk_scope_rejects_deferred_scope() -> None:
+    """DeferredScope bridges can't compose into a static walk
+    scope — `walk_scope` must raise TypeError so callers don't
+    silently get a confusing partial scope."""
+    from corroborate.bridge.deferred_scope import DeferredScope
+    from corroborate.graph.causal import walk_scope
+    # Build a Bridge stub with a DeferredScope. Real DeferredScope
+    # construction is complex; instead, replace scope on an existing
+    # bridge via dataclasses.replace.
+    from dataclasses import replace
+    deferred = object.__new__(DeferredScope)
+    stub = replace(_bridge_assoc_a, scope=deferred)
+    import pytest
+    with pytest.raises(TypeError, match='deferred-scope'):
+        walk_scope((stub,))

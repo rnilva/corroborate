@@ -52,10 +52,14 @@ together with the consumer in the same PR — typed surface
 follows the caller, per CLAUDE.md primitive discipline."""
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+import functools
+import operator
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from enum import Enum, IntEnum
 from typing import TYPE_CHECKING, Literal, override
+
+import polars as pl
 
 from corroborate.bridge.verdict import Verdict
 from corroborate.graph.graph import Edge, Graph
@@ -242,6 +246,121 @@ def chain_tier(edges: Iterable[BridgeEdge]) -> Tier:
         if e.tier < result:
             result = e.tier
     return result if any_edge else Tier.ASSOCIATIONAL
+
+
+# ============ Walk primitives ============
+#
+# A "walk" is a directed sequence of edges where edge i+1's source
+# matches edge i's target. Walks correspond to substrate-author
+# chain claims (e.g. Q → discounted → raw). The verdict layer
+# doesn't need a separate primitive: `composed_verdict` AND-
+# aggregates over walk edges correctly under monotone composition
+# (transitivity of HELD). What walks DO need beyond clusters:
+#
+# - `compose_direction(edges)` for path-direction product (existing)
+# - `chain_tier(edges)` for path-tier minimum (existing)
+# - `walk_scope(bridges)` for path joint-scope predicate (new)
+# - `walk_subgraph(g, nodes=...)` for induced subgraph view (new)
+# - `is_walk(g, bridges=...)` for topology validation (new)
+
+
+def walk_subgraph(
+    g: CausalGraph, *, nodes: Sequence[str],
+) -> CausalGraph:
+    """Subgraph induced by the directed walk through `nodes`.
+
+    Keeps ONLY edges `(n_i, n_{i+1})` for consecutive pairs — drops
+    diagonals and back-edges that `Graph.subgraph(keep_nodes)`
+    would retain. Multigraph-aware: if multiple edges exist between
+    consecutive nodes, all are kept (each step is a per-step
+    cluster).
+
+    A walk of length <2 yields a node-only graph with no edges
+    (still a valid subgraph; consumers can check `edges` is empty).
+    """
+    if len(nodes) < 2:
+        return Graph(nodes=frozenset(nodes), edges=())
+    consecutive_pairs: set[tuple[str, str]] = {
+        (nodes[i], nodes[i + 1]) for i in range(len(nodes) - 1)
+    }
+    kept_edges = tuple(
+        e for e in g.edges
+        if (e.source, e.target) in consecutive_pairs
+    )
+    return Graph(nodes=frozenset(nodes), edges=kept_edges)
+
+
+def is_walk(
+    g: CausalGraph, *, bridges: 'Iterable[ClaimBridge]',
+) -> bool:
+    """True iff the bridge sequence forms a connected directed walk
+    in `g`.
+
+    Validates: for each consecutive pair `(b_i, b_{i+1})`, the
+    target node of `b_i`'s edge equals the source node of
+    `b_{i+1}`'s edge. Empty / single-bridge sequences are
+    trivially walks.
+
+    Bridge source/target nodes are looked up via the bridge's
+    name in `g`'s edges (so DoEffect sources resolve to the same
+    canonical node-key the graph uses). Bridges absent from `g`
+    return False.
+
+    Use to gate `walk_*` primitives — calling them on a non-walk
+    bridge sequence (e.g. a cluster of sibling bridges at the
+    same edge) is a substrate-author mistake; this predicate
+    catches it loudly."""
+    bridge_list = list(bridges)
+    if len(bridge_list) < 2:
+        return True
+    edges_by_name = {
+        e.metadata.bridge_name: e for e in g.edges
+    }
+    for i in range(len(bridge_list) - 1):
+        e_i = edges_by_name.get(bridge_list[i].name)
+        e_next = edges_by_name.get(bridge_list[i + 1].name)
+        if e_i is None or e_next is None:
+            return False
+        if e_i.target != e_next.source:
+            return False
+    return True
+
+
+def walk_scope(bridges: 'Iterable[ClaimBridge]') -> pl.Expr:
+    """AND-reduce of `bridges`' scope predicates — the joint scope
+    expression specifying the cell-set on which the entire walk
+    is empirically corroborable.
+
+    For a chain `b_1 → b_2 → ... → b_k`, the joint-scope cell-set
+    is the intersection of all step scopes: cells admitted by
+    every step's bridge. Composition is just polars `&`-reduce;
+    the result is a `pl.Expr` callable consumers can apply to a
+    DataFrame to materialize the joint extent.
+
+    Empty sequence returns `pl.lit(True)` (no constraint — the
+    algebraic identity of AND-reduce). Bridges with `scope=None`
+    are skipped (they admit all cells, contributing the AND
+    identity).
+
+    Raises `TypeError` if any bridge carries a `DeferredScope` —
+    those resolve at evaluation time against the corpus, so they
+    can't compose into a static expression. Resolve them via
+    `Bridge.evaluate(cells)` first, or compose joint scope at
+    evaluation time."""
+    exprs: list[pl.Expr] = []
+    for b in bridges:
+        if b.scope is None:
+            continue
+        if not isinstance(b.scope, pl.Expr):
+            raise TypeError(
+                f'walk_scope: bridge {b.name!r} has non-Expr scope '
+                f'({type(b.scope).__name__}); deferred-scope bridges '
+                f'require runtime resolution before joint composition.',
+            )
+        exprs.append(b.scope)
+    if not exprs:
+        return pl.lit(True)
+    return functools.reduce(operator.and_, exprs)
 
 
 # ============ Pre-evaluation authored graph ============

@@ -25,12 +25,12 @@
             "treatment": "v_pred"
           },
           "random_common_cause": {
-            "drift": 20.8502,
+            "drift": 14.9311,
             "method_name": "backdoor.linear_regression",
             "n_rows": 9,
             "outcome": "d_out",
             "real_ate": -137.588,
-            "refuted_ate": -158.438,
+            "refuted_ate": -122.657,
             "refuter_name": "random_common_cause",
             "treatment": "v_pred"
           },
@@ -41,7 +41,7 @@
       "blocked_by": null,
       "bridge_name": "bias_correction_clip_predicts_outcome__hp_variance__backdoor",
       "direction": "direct",
-      "extent_hash": -7547603076141914063,
+      "extent_hash": -1691883855817858060,
       "n_cells_in_scope": 2700,
       "n_cells_pre_scope": 6290,
       "pair_by": [
@@ -88,12 +88,12 @@
             "treatment": "v_pred"
           },
           "random_common_cause": {
-            "drift": 8.62385,
+            "drift": 2.31284,
             "method_name": "backdoor.linear_regression",
             "n_rows": 9,
             "outcome": "d_out",
             "real_ate": -137.588,
-            "refuted_ate": -146.212,
+            "refuted_ate": -135.275,
             "refuter_name": "random_common_cause",
             "treatment": "v_pred"
           },
@@ -104,7 +104,7 @@
       "blocked_by": null,
       "bridge_name": "bias_correction_clip_predicts_outcome__hp_variance__placebo",
       "direction": "direct",
-      "extent_hash": -7547603076141914063,
+      "extent_hash": -1691883855817858060,
       "n_cells_in_scope": 2700,
       "n_cells_pre_scope": 6290,
       "pair_by": [
@@ -151,12 +151,12 @@
             "treatment": "v_pred"
           },
           "random_common_cause": {
-            "drift": 1.27163,
+            "drift": 13.285,
             "method_name": "backdoor.linear_regression",
             "n_rows": 9,
             "outcome": "d_out",
             "real_ate": -137.588,
-            "refuted_ate": -138.859,
+            "refuted_ate": -150.873,
             "refuter_name": "random_common_cause",
             "treatment": "v_pred"
           },
@@ -167,7 +167,7 @@
       "blocked_by": null,
       "bridge_name": "bias_correction_clip_predicts_outcome__hp_variance__rcc",
       "direction": "direct",
-      "extent_hash": -7547603076141914063,
+      "extent_hash": -1691883855817858060,
       "n_cells_in_scope": 2700,
       "n_cells_pre_scope": 6290,
       "pair_by": [
@@ -212,7 +212,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_link_outcome_scales_with_chain_depth__cross_env",
       "direction": "direct",
-      "extent_hash": 458223048032513953,
+      "extent_hash": 6616379474769013070,
       "n_cells_in_scope": 4230,
       "n_cells_pre_scope": 6290,
       "pair_by": [
@@ -259,28 +259,28 @@
       "analysis_results": {
         "cross_stratum_arm_diff_slope": {
           "arm_diff_predictor": [
-            0.00420758,
-            -5.27168,
             -106.518,
             -0.028513,
-            6.95484,
             -82.6532,
-            -14.755,
-            -0.491206,
+            -5.27168,
             -0.376083,
-            -0.0085867
+            0.00420758,
+            6.95484,
+            -0.0085867,
+            -14.755,
+            -0.491206
           ],
           "arm_diff_target": [
-            0.292299,
-            -0.589889,
             0.355841,
             3.11802,
-            -6.42454,
             0.228571,
-            0.450794,
-            9.13716,
+            -0.589889,
             -0.373333,
-            4.3077
+            0.292299,
+            -6.42454,
+            4.3077,
+            0.450794,
+            9.13716
           ],
           "n_strata": 10,
           "p_value": 0.776998,
@@ -291,7 +291,7 @@
       "blocked_by": null,
       "bridge_name": "eff_h_intervention_mediates_outcome__goal_envs_gamma_sweep",
       "direction": "inverse",
-      "extent_hash": -4551871524181746594,
+      "extent_hash": -428007769985784505,
       "n_cells_in_scope": 1806,
       "n_cells_pre_scope": 6290,
       "pair_by": [
@@ -348,7 +348,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_helps_at_full_bootstrap__fourrooms_n1",
       "direction": "direct",
-      "extent_hash": 8567143669334700937,
+      "extent_hash": 1830816952923074422,
       "n_cells_in_scope": 2160,
       "n_cells_pre_scope": 6290,
       "pair_by": [
@@ -405,7 +405,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_null_under_monte_carlo__fourrooms_n10",
       "direction": "direct",
-      "extent_hash": 3784615378158378431,
+      "extent_hash": 1566412087998986434,
       "n_cells_in_scope": 60,
       "n_cells_pre_scope": 6290,
       "pair_by": [
@@ -460,12 +460,12 @@
             "treatment": "target_staleness_late"
           },
           "random_common_cause": {
-            "drift": 0.00482901,
+            "drift": 0.0205908,
             "method_name": "backdoor.linear_regression",
             "n_rows": 119,
             "outcome": "delta_outcome",
             "real_ate": 2.7792,
-            "refuted_ate": 2.77437,
+            "refuted_ate": 2.75861,
             "refuter_name": "random_common_cause",
             "treatment": "target_staleness_late"
           },
@@ -476,7 +476,7 @@
       "blocked_by": null,
       "bridge_name": "staleness_amplifies_ddqn_outcome__sparse_goal_polyak",
       "direction": "inverse",
-      "extent_hash": 4782319891135505813,
+      "extent_hash": 2740985445674190472,
       "n_cells_in_scope": 238,
       "n_cells_pre_scope": 6290,
       "pair_by": [
@@ -601,7 +601,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_rescues_underlearning_vanilla__fourrooms_rs_0p1",
       "direction": "direct",
-      "extent_hash": 6806306100126577385,
+      "extent_hash": -1494790507766026936,
       "n_cells_in_scope": 60,
       "n_cells_pre_scope": 6290,
       "pair_by": [
@@ -645,7 +645,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_dominates_vanilla_response_curve__fourrooms_rs_0p3",
       "direction": "direct",
-      "extent_hash": -2088866003432171867,
+      "extent_hash": 1427650429840507658,
       "n_cells_in_scope": 60,
       "n_cells_pre_scope": 6290,
       "pair_by": [
@@ -689,7 +689,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_does_not_rescue__acrobot_rs_0p1",
       "direction": "direct",
-      "extent_hash": 268605253178893397,
+      "extent_hash": -8284375244862538133,
       "n_cells_in_scope": 240,
       "n_cells_pre_scope": 6290,
       "pair_by": [
@@ -733,7 +733,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_does_not_rescue__cartpole_rs_0p1",
       "direction": "direct",
-      "extent_hash": -1610536760079837124,
+      "extent_hash": 196878487836657847,
       "n_cells_in_scope": 240,
       "n_cells_pre_scope": 6290,
       "pair_by": [
@@ -777,7 +777,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_increases_argmax_entropy__fourrooms_rs_0p1",
       "direction": "direct",
-      "extent_hash": 6806306100126577385,
+      "extent_hash": -1494790507766026936,
       "n_cells_in_scope": 60,
       "n_cells_pre_scope": 6290,
       "pair_by": [
@@ -821,7 +821,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_entropy_matches_vanilla__fourrooms_rs_1p0",
       "direction": "direct",
-      "extent_hash": 7366423313527229239,
+      "extent_hash": 6865857440774238243,
       "n_cells_in_scope": 60,
       "n_cells_pre_scope": 6290,
       "pair_by": [
@@ -869,7 +869,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_benefit_scales_with_effective_horizon__fourrooms",
       "direction": "direct",
-      "extent_hash": 7509743224898663972,
+      "extent_hash": 3181416294771180598,
       "n_cells_in_scope": 1560,
       "n_cells_pre_scope": 6290,
       "pair_by": [
@@ -964,7 +964,7 @@
   ],
   "cache_path": "experiments/data/cache/ddqn_sweeps.parquet",
   "errored_bridges": [],
-  "git_commit": "c0003e0aff9f",
+  "git_commit": "3eda113a63d3",
   "hypothesis_module": "experiments.findings.ddqn_sweeps",
   "measurable_signatures": {
     "argmax_entropy_late": "22f4c683c0bfee66",
@@ -985,5 +985,5 @@
     "target_staleness_late": "14b90395c7aabd2e"
   },
   "n_cells_total": 6290,
-  "timestamp_utc": "2026-05-14T03:01:16+00:00"
+  "timestamp_utc": "2026-05-14T05:17:08+00:00"
 }
