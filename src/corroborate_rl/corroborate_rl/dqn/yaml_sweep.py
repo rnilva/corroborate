@@ -357,7 +357,6 @@ def dispatch_sweep(sweep: DQNSweep) -> tuple[Path, Path]:
     from functools import partial
 
     from corroborate.corpus.persistence import stream_concat_parquets
-    from corroborate.core.intervention import DoEffect
     from corroborate.runner.sweep import run_intervention
     from corroborate_rl.dqn.collect import _chunks
     from corroborate_rl.dqn.dqn import dqn
@@ -434,13 +433,11 @@ def dispatch_sweep(sweep: DQNSweep) -> tuple[Path, Path]:
     sub_traces: list[Path] = []
     sub_arm_dirs: list[Path] = []
     for cfg, env_configs in zip(configs, envs_per_h, strict=True):
-        do_arms = cfg.do_effect_arms()
         # `base` IS the SCM kwargs map; each arm's interventions
         # override slot values via partial precedence in
         # `apply_interventions`. Empty-tuple arm = "use base".
-        hp_kwargs = cfg.base_hp_kwargs()
-        base: Callable[..., object] = partial(dqn, **hp_kwargs)
-        intervention = DoEffect(arms=do_arms)
+        base: Callable[..., object] = partial(dqn, **cfg.base)
+        intervention = cfg.do_effect
         # Flat grid_points: env × chunk × wrappers.
         grid_points: list[Mapping[str, object]] = [
             {

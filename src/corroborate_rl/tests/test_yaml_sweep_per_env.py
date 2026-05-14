@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from corroborate.core.intervention import Intervention, combined_arm_key
+from corroborate.core.intervention import DoEffect, Intervention
 from corroborate.runner.registry import Registry
 from corroborate_rl.dqn.collect import EnvConfig
 from corroborate_rl.dqn.config_loader import InterventionConfig
@@ -70,16 +70,17 @@ def _python_minatar_1M_intervention(
     }
     if name == 'vanilla_dqn':
         return InterventionConfig(
-            name='vanilla_dqn', base=base, arms=((),),
+            name='vanilla_dqn', base=base,
+            do_effect=DoEffect(arms=((),)),
         )
     if name == 'ddqn':
         boot = partial(bootstrap, greedification=double_greedify)
         return InterventionConfig(
             name='ddqn', base=base,
-            arms=(
+            do_effect=DoEffect(arms=(
                 (),
                 (Intervention(slot_path='bootstrap', replacement=boot),),
-            ),
+            )),
         )
     raise ValueError(name)
 
@@ -115,16 +116,17 @@ def _python_ddqn_effective_intervention(
     }
     if name == 'vanilla_dqn':
         return InterventionConfig(
-            name='vanilla_dqn', base=base, arms=((),),
+            name='vanilla_dqn', base=base,
+            do_effect=DoEffect(arms=((),)),
         )
     if name == 'ddqn':
         boot = partial(bootstrap, greedification=double_greedify)
         return InterventionConfig(
             name='ddqn', base=base,
-            arms=(
+            do_effect=DoEffect(arms=(
                 (),
                 (Intervention(slot_path='bootstrap', replacement=boot),),
-            ),
+            )),
         )
     raise ValueError(name)
 
@@ -270,8 +272,8 @@ def test_per_env_ddqn_bootstrap_signature_stable(
     built, envs_aligned = build_per_env(minatar_1M_sweep, reg=reg)
     yaml_h = _pick(built, envs_aligned, 'Asterix-MinAtar', 'ddqn')
     py_h = _python_minatar_1M_intervention('ddqn', 'Asterix-MinAtar')
-    sig_yaml = claim_graph_signature(yaml_h.arms[1][0].replacement)
-    sig_python = claim_graph_signature(py_h.arms[1][0].replacement)
+    sig_yaml = claim_graph_signature(yaml_h.do_effect.arms[1][0].replacement)
+    sig_python = claim_graph_signature(py_h.do_effect.arms[1][0].replacement)
     assert sig_yaml == sig_python
 
 
@@ -315,7 +317,7 @@ def test_from_env_in_shared_mode_raises(reg: Registry) -> None:
 # ---------- helpers ----------
 
 def _arm_keys(cfg: InterventionConfig) -> tuple[str, ...]:
-    return tuple(combined_arm_key(a) for a in cfg.do_effect_arms())
+    return cfg.do_effect.arm_keys()
 
 
 def _pick(

@@ -14,7 +14,9 @@ from pathlib import Path
 
 import pytest
 
-from corroborate.core.intervention import Intervention, combined_arm_key
+from corroborate.core.intervention import (
+    DoEffect, Intervention, combined_arm_key,
+)
 from corroborate.runner.registry import Registry
 from corroborate_rl.dqn.config_loader import (
     InterventionConfig, load_intervention, resolve,
@@ -210,10 +212,10 @@ def _expectile_python() -> InterventionConfig:
     return InterventionConfig(
         name='expectile_dqn',
         base=base,
-        arms=(
+        do_effect=DoEffect(arms=(
             (),
             (Intervention(slot_path='bootstrap', replacement=boot),),
-        ),
+        )),
     )
 
 
@@ -269,36 +271,35 @@ def test_yaml_bootstrap_partial_signature_matches_python(
     diverges and the YAML run is structurally non-comparable to
     the Python run.
 
-    The bootstrap partial lives on the treatment arm (`arms[1][0]
-    .replacement`); the YAML's empty control arm doesn't carry it
-    (and inherits the substrate's default at dispatch time)."""
+    The bootstrap partial lives on the treatment arm
+    (`do_effect.arms[1][0].replacement`); the YAML's empty control
+    arm doesn't carry it (and inherits the substrate's default at
+    dispatch time)."""
     h_yaml = load_intervention(expectile_yaml_path, reg=reg)
     h_python = _expectile_python()
-    yaml_repl = h_yaml.arms[1][0].replacement
-    py_repl = h_python.arms[1][0].replacement
+    yaml_repl = h_yaml.do_effect.arms[1][0].replacement
+    py_repl = h_python.do_effect.arms[1][0].replacement
     assert claim_graph_signature(yaml_repl) == claim_graph_signature(py_repl)
 
 
 def test_yaml_arm_keys_match_python(
     reg: Registry, expectile_yaml_path: Path,
 ) -> None:
-    """Arm fingerprint stability: combined_arm_key over each arm
-    is the canonical fingerprint of an arm. Drift here would
-    place YAML- and Python-built rows in different arms during
+    """Arm fingerprint stability: `DoEffect.arm_keys()` is the
+    canonical fingerprint tuple. Drift here would place YAML- and
+    Python-built rows in different arms during
     `paired_comparison`."""
     h_yaml = load_intervention(expectile_yaml_path, reg=reg)
     h_python = _expectile_python()
-    yaml_keys = tuple(combined_arm_key(a) for a in h_yaml.do_effect_arms())
-    py_keys = tuple(combined_arm_key(a) for a in h_python.do_effect_arms())
-    assert yaml_keys == py_keys
+    assert h_yaml.do_effect.arm_keys() == h_python.do_effect.arm_keys()
 
 
 def test_vanilla_yaml_defaults_to_single_empty_arm(
     reg: Registry, tmp_path: Path,
 ) -> None:
     """Baseline / vanilla intervention: no `arms` key declared →
-    `arms` defaults to `((),)` (single empty control arm). The
-    `combined_arm_key` of that arm is `'baseline'`."""
+    `do_effect.arms` defaults to `((),)` (single empty control
+    arm). The `combined_arm_key` of that arm is `'baseline'`."""
     p = tmp_path / 'vanilla.yaml'
     _ = p.write_text("""
 name: vanilla_dqn
@@ -308,8 +309,8 @@ base:
   q_network: {class: MLP, hidden: [64, 64]}
 """.strip())
     h = load_intervention(p, reg=reg)
-    assert h.arms == ((),)
-    assert combined_arm_key(h.arms[0]) == 'baseline'
+    assert h.do_effect.arms == ((),)
+    assert combined_arm_key(h.do_effect.arms[0]) == 'baseline'
 
 
 def test_arm_with_non_callable_replacement_raises(
@@ -335,4 +336,4 @@ arms:
     # value as a typed Intervention. Confirming behavioural
     # invariant: load succeeds; downstream apply fails on type.
     cfg = load_intervention(p, reg=reg)
-    assert cfg.arms[1][0].replacement == 0.99
+    assert cfg.do_effect.arms[1][0].replacement == 0.99

@@ -40,7 +40,7 @@ from pathlib import Path
 from typing import TypeIs
 
 from corroborate._internals.yaml import safe_load as _yaml_load
-from corroborate.core.intervention import Intervention, is_replacement
+from corroborate.core.intervention import DoEffect, Intervention, is_replacement
 from corroborate.runner.registry import Registry
 
 
@@ -54,40 +54,20 @@ class InterventionConfig:
     - `name`: substrate-chosen short label (for arm_tag output naming).
     - `base`: HP scalars + slot-Claim bindings, as a flat dict.
       Becomes the bound kwargs of `partial(dqn, **base)` — the SCM
-      the `arms` `do(·)` operators act on. Empty arms inherit these
-      values; non-empty arms override at the configured slot path.
-    - `arms`: typed structural deltas for the N-arm contrast — a
-      tuple of tuples, each inner tuple being one arm's slot
-      replacements. Forms `DoEffect.arms` directly. Empty tuple
-      `()` is the Pearl-style "no intervention" control arm.
-      Default `((),)` (single empty arm) supports the chunked-mode
-      "this template is one arm in a multi-template sweep" pattern."""
+      the `do_effect`'s `do(·)` operators act on. Empty arms inherit
+      these values; non-empty arms override at the configured slot
+      path.
+    - `do_effect`: typed multi-arm contrast (framework primitive).
+      `do_effect.arms` is the `tuple[tuple[Intervention, ...], ...]`
+      of slot replacements; empty-tuple arm is the Pearl-style "no
+      intervention" control. Default `DoEffect(arms=((),))` (single
+      empty arm) supports the shared-mode "this template is one arm
+      in a multi-template sweep" pattern."""
     name: str
     base: Mapping[str, object]
-    arms: tuple[tuple[Intervention, ...], ...] = field(
-        default_factory=lambda: ((),),
+    do_effect: DoEffect = field(
+        default_factory=lambda: DoEffect(arms=((),)),
     )
-
-    def do_effect_arms(self) -> tuple[tuple[Intervention, ...], ...]:
-        """The `DoEffect.arms` shape this config dispatches to.
-        Identical to `self.arms` — the field IS the canonical
-        representation. Kept as a method for symmetry with the
-        framework's `DoEffect.arm_keys()` pattern + as a hook for
-        future schema migrations."""
-        return self.arms
-
-    def base_hp_kwargs(self) -> dict[str, object]:
-        """The HP kwargs for `partial(dqn, **kwargs)` — the base
-        configuration shared across arms.
-
-        Identity: `dict(self.base)`. Each arm's interventions
-        override slot values via partial precedence
-        (`apply_interventions`). Empty-tuple arm = "use base
-        values" — the Pearl-style "no intervention" control.
-
-        Visible in dispatch — see `yaml_sweep.dispatch_sweep` for
-        the full call site."""
-        return dict(self.base)
 
 
 _CLASS_KEY = 'class'
@@ -329,7 +309,7 @@ def build_intervention_from_mapping(
     return InterventionConfig(
         name=name,
         base=base,
-        arms=arms,
+        do_effect=DoEffect(arms=arms),
     )
 
 

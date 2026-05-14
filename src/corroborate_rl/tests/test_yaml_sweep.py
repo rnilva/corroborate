@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from corroborate.core.intervention import Intervention, combined_arm_key
+from corroborate.core.intervention import DoEffect, Intervention
 from corroborate.runner.registry import Registry
 from corroborate_rl.dqn.collect import EnvConfig
 from corroborate_rl.dqn.config_loader import InterventionConfig
@@ -62,16 +62,17 @@ def _python_intervention(
     }
     if name == 'vanilla_dqn':
         return InterventionConfig(
-            name='vanilla_dqn', base=base, arms=((),),
+            name='vanilla_dqn', base=base,
+            do_effect=DoEffect(arms=((),)),
         )
     if name == 'ddqn':
         boot = partial(bootstrap, greedification=double_greedify)
         return InterventionConfig(
             name='ddqn', base=base,
-            arms=(
+            do_effect=DoEffect(arms=(
                 (),
                 (Intervention(slot_path='bootstrap', replacement=boot),),
-            ),
+            )),
         )
     if name == 'expectile_dqn':
         boot = partial(
@@ -80,10 +81,10 @@ def _python_intervention(
         )
         return InterventionConfig(
             name='expectile_dqn', base=base,
-            arms=(
+            do_effect=DoEffect(arms=(
                 (),
                 (Intervention(slot_path='bootstrap', replacement=boot),),
-            ),
+            )),
         )
     raise ValueError(name)
 
@@ -109,55 +110,33 @@ def yaml_interventions(
     return sweep.build_interventions(reg=reg)
 
 
-# ---------- do_effect_arms / base_hp_kwargs semantics ----------
+# ---------- do_effect / base default-shape ----------
 
-def test_do_effect_arms_defaults_to_single_empty_arm() -> None:
-    """No `arms` declared → single empty control arm `((),)`.
-    The empty arm is the Pearl-style "no intervention" baseline;
-    one cell per (env, seed) at the base config."""
+def test_do_effect_defaults_to_single_empty_arm() -> None:
+    """No `do_effect` argument → single empty control arm
+    `DoEffect(arms=((),))`. The empty arm is the Pearl-style "no
+    intervention" baseline; one cell per (env, seed) at the base
+    config."""
     cfg = InterventionConfig(
         name='vanilla_template',
         base={'n_step': 1},
     )
-    assert cfg.do_effect_arms() == ((),)
+    assert cfg.do_effect.arms == ((),)
 
 
-def test_do_effect_arms_returns_arms_unchanged() -> None:
-    """`do_effect_arms()` is identity: the field IS the canonical
-    arm representation. Multi-arm contrast survives the call."""
+def test_do_effect_preserves_multi_arm_shape() -> None:
+    """The `DoEffect` field round-trips multi-arm contrasts
+    unchanged — no normalisation, no dedup."""
     from corroborate_rl.dqn.claims.bootstrap import bootstrap
 
     iv = Intervention(slot_path='bootstrap', replacement=bootstrap)
-    arms = ((), (iv,), (iv,))  # 3 arms
+    arms = ((), (iv,), (iv,))  # 3 arms (intentional duplicate)
     cfg = InterventionConfig(
         name='triarm',
         base={},
-        arms=arms,
+        do_effect=DoEffect(arms=arms),
     )
-    assert cfg.do_effect_arms() == arms
-
-
-def test_base_hp_kwargs_returns_base() -> None:
-    """`base` IS the partial(dqn, **kwargs) kwargs map. Arm
-    interventions override at dispatch via partial precedence;
-    `base` itself never strips per-arm slot values (Pearl-style
-    "no intervention" empty arm inherits whatever base sets)."""
-    from corroborate_rl.dqn.claims.replay import Replay
-
-    base_replay = Replay(capacity=50_000, batch_size=32)
-    arm_replay_small = Replay(capacity=5_000, batch_size=32)
-    arms = (
-        (),  # empty control inherits base_replay
-        (Intervention(slot_path='replay', replacement=arm_replay_small),),
-    )
-    cfg = InterventionConfig(
-        name='replay_multi_arm',
-        base={'gamma': 0.99, 'replay': base_replay},
-        arms=arms,
-    )
-    hp = cfg.base_hp_kwargs()
-    assert hp['gamma'] == 0.99
-    assert hp['replay'] is base_replay
+    assert cfg.do_effect.arms == arms
 
 
 # ---------- envelope checks ----------
@@ -268,8 +247,8 @@ def test_bootstrap_signature_matches(
     rows tagged with the signature land in different
     structural-identity buckets."""
     yaml_h, py_h = intervention_pairs[h_name]
-    yaml_repl = yaml_h.arms[1][0].replacement
-    py_repl = py_h.arms[1][0].replacement
+    yaml_repl = yaml_h.do_effect.arms[1][0].replacement
+    py_repl = py_h.do_effect.arms[1][0].replacement
     assert claim_graph_signature(yaml_repl) == claim_graph_signature(py_repl)
 
 
@@ -286,13 +265,7 @@ def test_arm_keys_match(
     """Pairing key for paired_comparison. Drift here would
     place YAML and Python rows in different arms."""
     yaml_h, py_h = intervention_pairs[h_name]
-    yaml_keys = tuple(
-        combined_arm_key(arm) for arm in yaml_h.do_effect_arms()
-    )
-    py_keys = tuple(
-        combined_arm_key(arm) for arm in py_h.do_effect_arms()
-    )
-    assert yaml_keys == py_keys
+    assert yaml_h.do_effect.arm_keys() == py_h.do_effect.arm_keys()
 
 
 def test_signatures_distinct_across_arms(
@@ -304,9 +277,9 @@ def test_signatures_distinct_across_arms(
     collapsing into the same hash."""
     by_name = {h.name: h for h in yaml_interventions}
     sig_ddqn = claim_graph_signature(
-        by_name['ddqn'].arms[1][0].replacement,
+        by_name['ddqn'].do_effect.arms[1][0].replacement,
     )
     sig_expectile = claim_graph_signature(
-        by_name['expectile_dqn'].arms[1][0].replacement,
+        by_name['expectile_dqn'].do_effect.arms[1][0].replacement,
     )
     assert sig_ddqn != sig_expectile
