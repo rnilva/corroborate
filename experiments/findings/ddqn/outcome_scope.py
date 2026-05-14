@@ -98,13 +98,13 @@ def ddqn_refuted_when_dormancy_fires(
 # CLAIM 26b — three-gate scope conjunction predicts outcome benefit.
 @claim_bridge(
     source=INTERVENTION,
-    target='eval_best_burst_mean',
+    target='eval_best_burst_raw_mean',
     direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
     scope=(
         # ARM-SYMMETRIC predicates only. Stratum-level filter is
         # applied INSIDE the primitive via `min_vanilla_predictor`.
-        pl.col('eval_best_burst_mean').is_finite()
+        pl.col('eval_best_burst_raw_mean').is_finite()
         & pl.col('jensen_gap').is_finite()
         & pl.col('n_actions').is_finite() & (pl.col('n_actions') >= 3)
         & ((pl.col('n_step') == 1) | pl.col('n_step').is_null())
@@ -131,7 +131,15 @@ def ddqn_helps_under_three_gate_scope__cross_env(
     DerSimonian-Laird random-effects pool over strata that pass the
     stratum-level G1 filter (`mean(vanilla jens) > min_vanilla_
     predictor`). Stratify by `(env, sync, γ, total_steps)`. HELD
-    when pooled d > threshold, p < α, n_strata ≥ min_strata."""
+    when pooled d > threshold, p < α, n_strata ≥ min_strata.
+
+    Target is `eval_best_burst_raw_mean` (γ-invariant), per
+    `findings_units_bug.md`. γ-discounted return distorts cross-env
+    Cohen's d because different envs have different episode lengths
+    → γ-discount scales differently per env. Diagnostic 2026-05-14:
+    on the discounted target d=+0.39 p=0.078 (POWER_INSUFFICIENT,
+    SpaceInvaders shows spurious d=-0.44 sign-flip); on raw target
+    d=+0.46 p=0.006 (HELD, SI sign-flip vanishes to d=+0.11)."""
     if stratified_arm_diff_pooled.n_strata < min_strata:
         return Verdict.POWER_INSUFFICIENT
     d = stratified_arm_diff_pooled.pooled_d
