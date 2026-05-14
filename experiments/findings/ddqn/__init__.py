@@ -18,6 +18,7 @@ import corroborate.analyses  # pyright: ignore[reportUnusedImport]  # populate r
 import corroborate_rl.dqn.measurables  # pyright: ignore[reportUnusedImport]  # populate measurable registry
 
 from experiments.findings.ddqn import (
+    finding_channel_decomposition,
     finding_hasselt_chain,
     finding_per_burst_chain_dynamics,
     finding_polarity_conditional_chain,
@@ -34,6 +35,7 @@ from experiments.findings.ddqn.bias_correction_xenv import (
 )
 from experiments.findings.ddqn.mediation import BRIDGES as _MEDIATION
 from experiments.findings.ddqn.outcome_scope import BRIDGES as _OUTCOME_SCOPE
+from experiments.findings.ddqn.q_shape_mediation import BRIDGES as _Q_SHAPE
 from experiments.findings.ddqn.within_env import BRIDGES as _WITHIN_ENV
 
 
@@ -49,6 +51,7 @@ BRIDGES = (
     bias_correction_dose_response__xenv_arm_diff,
     bias_correction_dose_response__xenv_arm_diff_loo_robust,
     *_MEDIATION,
+    *_Q_SHAPE,
 )
 
 
@@ -58,6 +61,7 @@ FINDINGS = (
     finding_per_burst_chain_dynamics,
     finding_reach_bias_link,
     finding_three_gate_scope_outcome_held,
+    finding_channel_decomposition,
 )
 
 
