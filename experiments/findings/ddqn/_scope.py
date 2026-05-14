@@ -25,37 +25,47 @@ from corroborate.bridge.predicates import (
 # not by HP/network/wrapper differences (the cross-config common-
 # cause confound surfaced in `findings_two_channel_cross_corpus.md`).
 #
-# Per-env canonical config. 1M total_steps for ALL envs (state-based
-# envs at 200k are undertrained — MountainCar stuck at -86.6 median).
+# Per-env canonical config. Default total_steps=1M; FourRooms-misc
+# uses 200k because it saturates by burst 1 at 1M (outcome
+# constant within float precision → no signal for bg/jens→outcome
+# bridges). The 200k slice is derived from the 1M corpus via
+# `scripts/slice_corpus.py` (see `findings_fourrooms_slicing.md`).
 # Tuples are (env_name, sync_period, replay_capacity, hidden,
-# channels-or-None). total_steps is fixed at 1M.
-_PER_ENV_CANONICAL: tuple[tuple[str, int, int, str, str | None], ...] = (
-    # MLP-state at 1M
-    ('Acrobot-v1',                100,  50000,  '(64,64)', None),
-    ('CartPole-v1',               100,  50000,  '(64,64)', None),
-    ('FourRooms-misc',            100,  50000,  '(64,64)', None),
-    ('MountainCar-v0',            100,  50000,  '(64,64)', None),
-    ('MetaMaze-misc',             100,  50000,  '(64,64)', None),
+# channels-or-None, total_steps).
+_PER_ENV_CANONICAL: tuple[
+    tuple[str, int, int, str, str | None, int], ...
+] = (
+    # MLP-state envs
+    ('Acrobot-v1',                100,  50000,  '(64,64)', None,    1_000_000),
+    ('CartPole-v1',               100,  50000,  '(64,64)', None,    1_000_000),
+    # FourRooms saturates by burst 1 at 1M; canonical is the
+    # 100k slice (see `slice_corpus.py` + `findings_fourrooms_slicing`).
+    # 200k slice is still post-saturation for both arms; only
+    # burst 0 (100k) preserves the pre-saturation signal where
+    # vanilla still has variance (0.94 ± 0.23 raw) vs DDQN (1.0).
+    ('FourRooms-misc',            100,  50000,  '(64,64)', None,      100_000),
+    ('MountainCar-v0',            100,  50000,  '(64,64)', None,    1_000_000),
+    ('MetaMaze-misc',             100,  50000,  '(64,64)', None,    1_000_000),
     # MinAtar paper-canonical
-    ('Asterix-MinAtar',           1000, 100000, '(128)',  '(16)'),
-    ('Breakout-MinAtar',          1000, 100000, '(128)',  '(16)'),
-    ('Freeway-MinAtar',           1000, 100000, '(128)',  '(16)'),
-    ('SpaceInvaders-MinAtar',     1000, 100000, '(128)',  '(16)'),
+    ('Asterix-MinAtar',           1000, 100000, '(128)',  '(16)',   1_000_000),
+    ('Breakout-MinAtar',          1000, 100000, '(128)',  '(16)',   1_000_000),
+    ('Freeway-MinAtar',           1000, 100000, '(128)',  '(16)',   1_000_000),
+    ('SpaceInvaders-MinAtar',     1000, 100000, '(128)',  '(16)',   1_000_000),
     # jumanji games
-    ('PacMan-jumanji',            1000, 50000,  '(64)',   '(8,16)'),
-    ('SlidingTilePuzzle-jumanji', 1000, 50000,  '(64)',   '(8,16)'),
-    ('Snake-jumanji',             1000, 50000,  '(64)',   '(8,16)'),
+    ('PacMan-jumanji',            1000, 50000,  '(64)',   '(8,16)', 1_000_000),
+    ('SlidingTilePuzzle-jumanji', 1000, 50000,  '(64)',   '(8,16)', 1_000_000),
+    ('Snake-jumanji',             1000, 50000,  '(64)',   '(8,16)', 1_000_000),
 )
 
 
 def _build_per_env_canonical_filter() -> pl.Expr:
-    """Disjunction of per-env canonical filters (1M total_steps for all)."""
+    """Disjunction of per-env canonical filters (per-env total_steps)."""
     parts: list[pl.Expr] = []
-    for env, sync, capacity, hidden, channels in _PER_ENV_CANONICAL:
+    for env, sync, capacity, hidden, channels, total in _PER_ENV_CANONICAL:
         cond = (
             (pl.col('env_name') == env)
             & (pl.col('sync_period') == sync)
-            & (pl.col('total_steps') == 1000000)
+            & (pl.col('total_steps') == total)
             & (pl.col('replay.capacity') == capacity)
             & (pl.col('q_network.hidden') == hidden)
         )
