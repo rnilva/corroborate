@@ -20,6 +20,7 @@ import corroborate_rl.dqn.measurables  # pyright: ignore[reportUnusedImport]  # 
 from experiments.findings.ddqn import (
     finding_channel_decomposition,
     finding_hasselt_chain,
+    finding_mediation_polarity_conditional,
     finding_per_burst_chain_dynamics,
     finding_polarity_conditional_chain,
     finding_reach_bias_link,
@@ -36,6 +37,9 @@ from experiments.findings.ddqn.bias_correction_xenv import (
 )
 from experiments.findings.ddqn.mediation import BRIDGES as _MEDIATION
 from experiments.findings.ddqn.outcome_scope import BRIDGES as _OUTCOME_SCOPE
+from experiments.findings.ddqn.polarity_conditional_mediation import (
+    BRIDGES as _POLARITY_MEDIATION,
+)
 from experiments.findings.ddqn.q_shape_mediation import BRIDGES as _Q_SHAPE
 from experiments.findings.ddqn.within_env import BRIDGES as _WITHIN_ENV
 
@@ -52,6 +56,7 @@ BRIDGES = (
     bias_correction_dose_response__xenv_arm_diff,
     bias_correction_dose_response__xenv_arm_diff_loo_robust,
     *_MEDIATION,
+    *_POLARITY_MEDIATION,
     *_Q_SHAPE,
 )
 
@@ -64,6 +69,7 @@ FINDINGS = (
     finding_three_gate_scope_outcome_held,
     finding_channel_decomposition,
     finding_tautology_baseline_chain,
+    finding_mediation_polarity_conditional,
 )
 
 
