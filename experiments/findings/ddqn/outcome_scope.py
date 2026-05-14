@@ -40,13 +40,13 @@ from experiments.findings.ddqn._verdicts import (
 # CLAIM 2 — Necessary-scope dormancy refutation.
 @claim_bridge(
     source=INTERVENTION,
-    target='eval_best_burst_mean',
+    target='eval_best_burst_raw_mean',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
     scope=(
         pl.col('jensen_dormancy_gap_at_best_burst').is_finite()
         & (pl.col('jensen_dormancy_gap_at_best_burst') >= 0.05)
-        & pl.col('eval_best_burst_mean').is_finite()
+        & pl.col('eval_best_burst_raw_mean').is_finite()
     ),
     predicted_direction='null',
 )
@@ -160,7 +160,7 @@ def ddqn_helps_under_three_gate_scope__cross_env(
 # CLAIM 3 — Q-clip channel sufficient-condition on dormant scope.
 @claim_bridge(
     source='clip_wedge_polarity_aligned',
-    target='eval_best_burst_mean',
+    target='eval_best_burst_raw_mean',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
     scope=(
@@ -168,7 +168,7 @@ def ddqn_helps_under_three_gate_scope__cross_env(
         & pl.col('clip_wedge_polarity_aligned').is_finite()
         & pl.col('env_reward_polarity').is_finite()
         & (pl.col('env_reward_polarity').abs() > 0.3)
-        & pl.col('eval_best_burst_mean').is_finite()
+        & pl.col('eval_best_burst_raw_mean').is_finite()
     ),
     predicted_direction='a_gt_b',
 )
@@ -176,7 +176,7 @@ def clip_wedge_predicts_outcome__polarity_moderated__dormant_scope(
     stratified_partial_spearman: StratifiedPartialSpearmanResult,
     *,
     x: str = 'clip_wedge_polarity_aligned',
-    y: str = 'eval_best_burst_mean',
+    y: str = 'eval_best_burst_raw_mean',
     conditioning: str = 'jensen_gap',
     stratify_by: str = 'env_name',
     min_stratum_size: int = 5,
