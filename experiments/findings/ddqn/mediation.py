@@ -1,11 +1,8 @@
 """Mediator probes — what carries Δ_outcome after Δ_jens.
 
-10 bridges across 4 candidate mediators:
-
-- `q_divergence_shadowed_by_jens` / `argmax_entropy_shadowed_by_jens`
-  (CLAIM 23): null-form bridges. q_div = jens × per-env-constant
-  mathematically; argmaxH co-varies via shared Q-distribution.
-  Partial-Spearman | Δ_jens should collapse them.
+- `argmax_entropy_shadowed_by_jens` (CLAIM 23): null-form bridge.
+  argmaxH co-varies with jens via shared Q-distribution; partial-
+  Spearman | Δ_jens should collapse the residual coupling.
 - `eff_h_mediates_g_link__{goal,survival}_envs` (CLAIM 12): polarity-
   stratified eff_h mediator. GOAL polarity ρ_partial ≤ -0.3; SURVIVAL
   ρ_partial ≥ +0.3 (polarity-tautology sign).
@@ -58,34 +55,6 @@ from experiments.findings.ddqn._verdicts import (
 
 
 # CLAIM 23 — Δ_jens shadow tests.
-@claim_bridge(
-    source='q_divergence_score',
-    target='eval_best_burst_raw_mean',
-    direction=Direction.DIRECT,
-    tier=Tier.ASSOCIATIONAL,
-    scope=DDQN_RELEVANT_SCOPE,
-    predicted_direction='null',
-)
-def q_divergence_shadowed_by_jens(
-    stratified_partial_spearman: StratifiedPartialSpearmanResult,
-    *,
-    x: str = 'q_divergence_score',
-    y: str = 'eval_best_burst_mean',
-    conditioning: str = 'jensen_gap',
-    stratify_by: str = 'env_name',
-    min_stratum_size: int = 5,
-    null_max_abs_rho: float = 0.2,
-    min_strata: int = 2,
-) -> Verdict:
-    """`ρ_partial(qdiv, outcome | jens)` env-stratified Fisher-z
-    pooled. HELD (null confirmed) when |ρ| < `null_max_abs_rho`."""
-    del x, y, conditioning, stratify_by, min_stratum_size
-    return partial_spearman_null_verdict(
-        stratified_partial_spearman,
-        max_abs_rho=null_max_abs_rho, min_strata=min_strata,
-    )
-
-
 @claim_bridge(
     source='argmax_entropy_late',
     target='eval_best_burst_raw_mean',
@@ -554,7 +523,6 @@ def argmax_entropy_link_power_null__survive_envs(
 
 
 BRIDGES = (
-    q_divergence_shadowed_by_jens,
     argmax_entropy_shadowed_by_jens,
     eff_h_mediates_g_link__goal_envs,
     eff_h_mediates_g_link__survival_envs,
