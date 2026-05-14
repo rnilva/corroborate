@@ -28,14 +28,39 @@ the chain HELDs at the Finding level iff both links HELD
 individually, and downstream bridges can refer to this Finding
 as the documented coupling they partial out.
 
-Chain semantics via `composed_verdict`: SUPPORTED iff both
-edges HELD (transitivity of admissibility); REFUTED if any
-link refuted (a broken link breaks the chain claim). The
-Finding doesn't reify chain-specific reasoning (the framework
-doesn't have a `path_verdict` primitive yet); the AND-aggregate
-of `composed_verdict` IS the correct chain compose under
-monotonicity assumptions (positive rank correlations compose
-positively).
+Chain semantics via the walk primitives in `graph.causal`:
+
+  composed_verdict(g, bridges=BRIDGES) → ClusterVerdict
+    AND-aggregate; SUPPORTED iff both edges HELD; REFUTED if any
+    refutes. The cluster-verdict rule IS the correct chain compose
+    under monotone composition (transitivity of HELD = all-admit-
+    non-empty). The verdict layer doesn't distinguish cluster from
+    walk; the distinction is structural, captured by:
+
+  walk_subgraph(g, nodes=('q_per_burst', 'mc_return__mean_axis_-1',
+                          'eval_best_burst_raw_mean'))
+    Induced subgraph along the directed walk. Renders the
+    Q → discounted MC → raw MC topology explicitly.
+
+  is_walk(g, bridges=BRIDGES) → True
+    Validates the bridges form a connected directed walk
+    (q_per_burst → mc_return__mean_axis_-1 via Bellman, then
+    mc_return__mean_axis_-1 → eval_best_burst_raw_mean via the
+    practitioner-coupling edge).
+
+  walk_scope(BRIDGES) → pl.Expr
+    Joint-scope predicate (both bridges' scope `&`-reduced).
+    The cell-set on which the FULL chain is empirically
+    corroborable — useful for downstream bridges that need to
+    condition on the chain's validity (see PARTIAL bridge in
+    `q_shape_mediation.py`).
+
+  compose_direction([e for e in walk_subgraph(...).edges])
+    = DIRECT × DIRECT = DIRECT. The chain's predicted direction.
+
+The walk primitives don't change this Finding's verdict (still
+`composed_verdict`), but make the chain's topology / direction /
+joint-scope explicit and queryable for downstream consumers.
 """
 from __future__ import annotations
 
