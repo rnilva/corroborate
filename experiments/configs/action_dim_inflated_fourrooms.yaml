@@ -1,6 +1,6 @@
 name: action_dim_inflated_fourrooms
 out_dir: experiments/data/action_dim_inflated_fourrooms
-arms_shape: chunked
+env_binding: shared
 # Test the |A|∈{3,4} → LINK_ACTIVE rule by inflating FourRooms's
 # declared action space via duplication. ActionDuplicate(k) maps
 # action `i ∈ [0, k*4)` to inner action `i % 4`, preserving
@@ -21,7 +21,7 @@ envs:
   - {name: FourRooms-misc, n_seeds: 30, chunk_size: 30, wrappers: [{type: action_duplicate, k: 3}]}
   - {name: FourRooms-misc, n_seeds: 30, chunk_size: 30, wrappers: [{type: action_duplicate, k: 4}]}
 
-base_intervention:
+defaults:
   total_steps: 200000
   eval_every:  20000
   n_episodes:  5
@@ -39,19 +39,14 @@ base_intervention:
     class: MLP
     hidden: [64, 64]
 
-hypotheses:
+interventions:
   - name: vanilla_dqn
-    predicted_direction: null
-    intervention: {}
+    base: {}
 
   - name: ddqn
-    predicted_direction: a_gt_b
-    intervention:
-      bootstrap:
-        fn: bootstrap
-        greedification: {fn: double_greedify}
-    intervention_arms:
-      - slot_path: bootstrap
-        replacement:
-          fn: bootstrap
-          greedification: {fn: double_greedify}
+    arms:
+      - []  # vanilla control
+      - - slot_path: bootstrap
+          replacement:
+            fn: bootstrap
+            greedification: {fn: double_greedify}

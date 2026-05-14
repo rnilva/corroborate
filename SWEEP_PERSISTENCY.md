@@ -5,7 +5,7 @@ artifacts that outlive a single Python process**: per-cell
 `runs.parquet` / `traces.parquet` shards, manifest files for cloud
 archives, and the merged corpus parquets that downstream analyses
 consume. This doc names the invariants the layer must hold so that
-sweep restarts, multi-arm-config sweeps, and re-merges from cloud
+sweep restarts, multi-intervention sweeps, and re-merges from cloud
 can all be **safe by construction**, not by careful authoring.
 
 The doc is principle-led, not bug-led. It came out of two
@@ -19,25 +19,20 @@ edge against them.
 
 ### I1. Identity — every persisted artifact has a unique address
 
-**Vocabulary note.** The YAML's `hypotheses:` field and the
-`HypothesisConfig` dataclass in `corroborate_rl/dqn/yaml_sweep.py`
-are misnomers. The framework's `Hypothesis` Protocol
-(`corroborate.core.hypothesis.Hypothesis`) is a verdict-time
-contract carrying `INTERVENTION + BRIDGES + __name__` — the thing
-`runner.run()` consumes. The YAML entries carry only an
-intervention spec + a name, with no bridges. Conceptually each
-YAML entry is a **sweep arm-config**: one paired contrast
-(`DoEffect(treatment=intervention_arms, baseline=())`) with shared
-HPs, dispatched once via `run_intervention`. The rest of this doc
-calls them "arm-configs" rather than "hypotheses." A code-level
-rename of the YAML schema + `HypothesisConfig` is out of scope
-for this design doc but worth doing.
+**Vocabulary.** The YAML's `interventions:` field holds
+`InterventionConfig` records (one named contrast each:
+HPs in `base`, multi-arm slot deltas in `arms`). Each entry
+dispatches to a `DoEffect(arms=cfg.arms)` via `run_intervention`.
+These are NOT framework `Hypothesis` Protocol-conformers — the
+Protocol carries `INTERVENTION + BRIDGES + __name__` and is
+verdict-time; `InterventionConfig` is sweep-time only and decomposes
+into a Protocol-conformer + a `base` callable at dispatch.
 
 **The collision.** A persisted artifact's location is uniquely
 determined by the provenance tuple
 
 ```
-(sweep_name, arm_config_name, env_name, arm_key, chunk_id)
+(sweep_name, intervention_name, env_name, arm_key, chunk_id)
 ```
 
 If two distinct cells map to the same path on S3 *or* on disk,
@@ -45,54 +40,55 @@ the path scheme is broken — not the upload code. Every dimension
 of variation in `dispatch_sweep` MUST appear in the relpath.
 
 The current `tmp/cell{NNN}__{env}__{arm_tag}` includes env and
-arm but **omits arm-config**. dispatch_sweep already creates a
-per-arm-config local directory: `h_out_dir = sweep.out_dir / cfg.name`
-(`yaml_sweep.py:420`). The local layout is namespaced. The remote
-upload, however, is built relative to `out_dir` and prepended
-with the SHARED `archive_remote` — stripping the `cfg.name`
-prefix the local path included. Two arm-configs producing
-identical rp_rels (`tmp/cell001__Freeway-MinAtar__baseline__runs.parquet`)
-upload to the same S3 object — last writer wins.
+arm but **omits intervention name**. dispatch_sweep already
+creates a per-intervention local directory: `h_out_dir =
+sweep.out_dir / cfg.name`. The local layout is namespaced. The
+remote upload, however, is built relative to `out_dir` and
+prepended with the SHARED `archive_remote` — stripping the
+`cfg.name` prefix the local path included. Two interventions
+producing identical rp_rels
+(`tmp/cell001__Freeway-MinAtar__baseline__runs.parquet`) upload
+to the same S3 object — last writer wins.
 
 **The rule.** Local-vs-remote composition must be symmetric:
 
 ```python
-# In dispatch_sweep — pass an arm-config-namespaced archive_remote.
+# In dispatch_sweep — pass an intervention-namespaced archive_remote.
 archive_remote = f'{sweep.archive_remote}/{cfg.name}'   # mirrors h_out_dir
 ```
 
-That alone closes the collision. The arm-config name comes from
+That alone closes the collision. The intervention name comes from
 the YAML — there's no other source of truth — and the framework
 need not reach for `claim_graph_signature` or invent a structural-
-signature concept. If two YAML configs share a name, that's an
-authoring bug detectable at YAML-load time
-(`assert len({cfg.name for cfg in sweep.hypotheses}) == len(sweep.hypotheses)`),
+signature concept. If two YAML interventions share a name, that's
+an authoring bug detectable at YAML-load time
+(`assert len({cfg.name for cfg in sweep.interventions}) == len(sweep.interventions)`),
 not a persistency-layer concern.
 
 **Optional hardening (CellAddress).** If we want a typed surface
 that makes collisions impossible at compile time AND admits
 future per-cell dimensions (`n_step`, `gamma`, etc. that may vary
-within a single arm-config), introduce a discriminator-typed
+within a single intervention), introduce a discriminator-typed
 address. dispatch_sweep populates the discriminator from whatever
-varies per cell within an arm-config; the address renders to a
+varies per cell within an intervention; the address renders to a
 deterministic relpath:
 
 ```python
 @dataclass(frozen=True, slots=True)
 class CellAddress:
-    arm_config_name: str        # YAML name, e.g. 'ddqn_sync1k'
+    intervention_name: str        # YAML name, e.g. 'ddqn_sync1k'
     arm_key: str                # treatment / baseline
     chunk_id: int
     discriminator: tuple[tuple[str, str], ...] = ()
     # Sorted (key, value) pairs for every per-cell-varying field
-    # within the arm-config (env, wrappers, n_step if swept, …).
+    # within the intervention (env, wrappers, n_step if swept, …).
 
     @property
     def relpath(self) -> str:
         disc = '__'.join(f'{k}={v}' for k, v in self.discriminator)
         suffix = f'__{disc}' if disc else ''
         return (
-            f'{self.arm_config_name}/tmp/'
+            f'{self.intervention_name}/tmp/'
             f'cell{self.chunk_id:03d}__{self.arm_key}{suffix}'
         )
 ```
@@ -100,9 +96,9 @@ class CellAddress:
 `dispatch_sweep` builds the `CellAddress` set up front; if two
 addresses produce the same relpath, the sweep refuses to start.
 The CURRENT sync_curve_resume case has
-`arm_config_name='ddqn_sync1k'`, `arm_key='baseline'`,
+`intervention_name='ddqn_sync1k'`, `arm_key='baseline'`,
 `discriminator=(('env', 'Freeway-MinAtar'),)`. A future sweep
-adding n_step variation within one arm-config would extend
+adding n_step variation within one intervention would extend
 to `discriminator=(..., ('n_step', '3'))` — no schema change.
 
 The minimal one-line fix (passing a namespaced `archive_remote`)
@@ -121,7 +117,7 @@ already produced an artifact MUST:
    manifest doesn't know about.
 
 The current `archive()` only checks the LOCAL manifest's prior
-entry. Two manifests in different arm-config dirs claiming the
+entry. Two manifests in different intervention dirs claiming the
 same S3 path is invisible to this check — both happily upload
 because each manifest's `prior` is `None` for that path. This
 is how the sync_curve_resume corpus lost data.
@@ -158,7 +154,7 @@ re-merge from manifest at any time → byte-identical output
 The current per-call merge in `run_intervention` reads from
 `archived_runs_uris`, a list populated only with this call's
 iteration cells. When the same `out_dir` is targeted by multiple
-calls (paired sweeps with shared arm-config names), each merge
+calls (paired sweeps with shared intervention names), each merge
 clobbers the prior one with a SUBSET of the corpus's cells.
 
 **The rule.** Merge takes the manifest as input, period. No
@@ -218,7 +214,7 @@ sweep logs.
 
 | invariant | held by current code? | gap |
 |---|---|---|
-| **I1 Identity** | partial — env+arm in path, arm-config namespace missing on remote | mirror `out_dir` composition: `archive_remote=f'{sweep.archive_remote}/{cfg.name}'` |
+| **I1 Identity** | partial — env+arm in path, intervention namespace missing on remote | mirror `out_dir` composition: `archive_remote=f'{sweep.archive_remote}/{cfg.name}'` |
 | **I2 Idempotency** | per-dir only | add cross-manifest / head-object check on upload |
 | **I3 Cache invariance** | broken — merge from call-local state | switch merge to manifest-driven |
 | **I4 Atomicity** | broken for parquet writes | tmp+rename in `stream_concat_parquets` |
@@ -235,7 +231,7 @@ The audit table also implies a dependency order:
    can call it post-hoc.
 2. **I4 next** (tmp+rename). One-line change. Defends future
    sweeps against crash mid-merge regardless of the I3 fix.
-3. **I1 third** (arm-config namespace mirror on remote). Forward-
+3. **I1 third** (intervention namespace mirror on remote). Forward-
    compatible: existing corpora keep their flat layout; new
    sweeps get nested. Migration script copies old paths to new
    on S3 (one-time, optional).

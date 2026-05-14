@@ -1,6 +1,6 @@
 name: gamma_sweep_metamaze
 out_dir: experiments/data/gamma_sweep_metamaze
-arms_shape: chunked
+env_binding: shared
 archive_remote: s3://corroborate-archive/gamma_sweep_metamaze
 
 # Test the prediction: chain-depth-as-amplifier should reproduce on
@@ -9,7 +9,7 @@ archive_remote: s3://corroborate-archive/gamma_sweep_metamaze
 envs:
   - {name: MetaMaze-misc, n_seeds: 30, chunk_size: 30}
 
-base_intervention:
+defaults:
   total_steps: 200000
   eval_every:  20000
   n_episodes:  5
@@ -27,54 +27,42 @@ base_intervention:
     class: MLP
     hidden: [64, 64]
 
-hypotheses:
+interventions:
   - name: vanilla_dqn_g099
-    predicted_direction: null
-    intervention:
+    base:
       gamma: 0.99
   - name: ddqn_g099
-    predicted_direction: a_gt_b
-    intervention:
+    base:
       gamma: 0.99
-      bootstrap:
-        fn: bootstrap
-        greedification: {fn: double_greedify}
-    intervention_arms:
-      - slot_path: bootstrap
-        replacement:
-          fn: bootstrap
-          greedification: {fn: double_greedify}
+    arms:
+      - []  # vanilla control
+      - - slot_path: bootstrap
+          replacement:
+            fn: bootstrap
+            greedification: {fn: double_greedify}
 
   - name: vanilla_dqn_g095
-    predicted_direction: null
-    intervention:
+    base:
       gamma: 0.95
   - name: ddqn_g095
-    predicted_direction: a_gt_b
-    intervention:
+    base:
       gamma: 0.95
-      bootstrap:
-        fn: bootstrap
-        greedification: {fn: double_greedify}
-    intervention_arms:
-      - slot_path: bootstrap
-        replacement:
-          fn: bootstrap
-          greedification: {fn: double_greedify}
+    arms:
+      - []  # vanilla control
+      - - slot_path: bootstrap
+          replacement:
+            fn: bootstrap
+            greedification: {fn: double_greedify}
 
   - name: vanilla_dqn_g090
-    predicted_direction: null
-    intervention:
+    base:
       gamma: 0.90
   - name: ddqn_g090
-    predicted_direction: a_gt_b
-    intervention:
+    base:
       gamma: 0.90
-      bootstrap:
-        fn: bootstrap
-        greedification: {fn: double_greedify}
-    intervention_arms:
-      - slot_path: bootstrap
-        replacement:
-          fn: bootstrap
-          greedification: {fn: double_greedify}
+    arms:
+      - []  # vanilla control
+      - - slot_path: bootstrap
+          replacement:
+            fn: bootstrap
+            greedification: {fn: double_greedify}

@@ -1,6 +1,6 @@
 name: l2_gamma_sweep_acrobot
 out_dir: experiments/data/l2_gamma_sweep_acrobot
-arms_shape: chunked
+env_binding: shared
 archive_remote: s3://corroborate-archive/l2_gamma_sweep_acrobot
 
 # L2-regularized γ-sweep on Acrobot-v1 — replaces the
@@ -21,7 +21,7 @@ archive_remote: s3://corroborate-archive/l2_gamma_sweep_acrobot
 envs:
   - {name: Acrobot-v1, n_seeds: 30, chunk_size: 30}
 
-base_intervention:
+defaults:
   total_steps: 200000
   eval_every:  20000
   n_episodes:  5
@@ -39,10 +39,9 @@ base_intervention:
     class: MLP
     hidden: [64, 64]
 
-hypotheses:
+interventions:
   - name: l2_gamma_sweep_g099
-    predicted_direction: a_gt_b
-    intervention: {gamma: 0.99}
+    base: {gamma: 0.99}
     arms:
       - []   # vanilla
       - - slot_path: bootstrap
@@ -51,8 +50,7 @@ hypotheses:
             greedification: {fn: double_greedify}
 
   - name: l2_gamma_sweep_g0995
-    predicted_direction: a_gt_b
-    intervention: {gamma: 0.995}
+    base: {gamma: 0.995}
     arms:
       - []
       - - slot_path: bootstrap
@@ -61,8 +59,7 @@ hypotheses:
             greedification: {fn: double_greedify}
 
   - name: l2_gamma_sweep_g0999
-    predicted_direction: a_gt_b
-    intervention: {gamma: 0.999}
+    base: {gamma: 0.999}
     arms:
       - []
       - - slot_path: bootstrap

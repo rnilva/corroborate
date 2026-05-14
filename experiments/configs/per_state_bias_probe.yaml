@@ -1,6 +1,6 @@
 name: per_state_bias_probe
 out_dir: experiments/data/per_state_bias_probe
-arms_shape: chunked
+env_binding: shared
 
 # Test the per-state cumulative bias measurable on the two envs where
 # the textbook DDQN story should fire most cleanly.
@@ -11,7 +11,7 @@ envs:
   # Acrobot γ=0.999: per CLAIM 10, link causally HELD via DoWhy.
   - {name: Acrobot-v1, n_seeds: 30, chunk_size: 30}
 
-base_intervention:
+defaults:
   total_steps: 200000
   eval_every:  20000
   n_episodes:  20
@@ -28,43 +28,35 @@ base_intervention:
     class: MLP
     hidden: [64, 64]
 
-hypotheses:
+interventions:
   # FR γ=0.99 — the textbook regime (CLAIM 5: g_link=+1.11)
   - name: vanilla_dqn_fr_g099
-    predicted_direction: null
-    intervention:
+    base:
       gamma: 0.99
     scope: env_name == 'FourRooms-misc'
   - name: ddqn_fr_g099
-    predicted_direction: a_gt_b
-    intervention:
+    base:
       gamma: 0.99
-      bootstrap:
-        fn: bootstrap
-        greedification: {fn: double_greedify}
-    intervention_arms:
-      - slot_path: bootstrap
-        replacement:
-          fn: bootstrap
-          greedification: {fn: double_greedify}
+    arms:
+      - []  # vanilla control
+      - - slot_path: bootstrap
+          replacement:
+            fn: bootstrap
+            greedification: {fn: double_greedify}
     scope: env_name == 'FourRooms-misc'
 
   # Acrobot γ=0.999 — CLAIM 10 regime
   - name: vanilla_dqn_acrobot_g0999
-    predicted_direction: null
-    intervention:
+    base:
       gamma: 0.999
     scope: env_name == 'Acrobot-v1'
   - name: ddqn_acrobot_g0999
-    predicted_direction: a_gt_b
-    intervention:
+    base:
       gamma: 0.999
-      bootstrap:
-        fn: bootstrap
-        greedification: {fn: double_greedify}
-    intervention_arms:
-      - slot_path: bootstrap
-        replacement:
-          fn: bootstrap
-          greedification: {fn: double_greedify}
+    arms:
+      - []  # vanilla control
+      - - slot_path: bootstrap
+          replacement:
+            fn: bootstrap
+            greedification: {fn: double_greedify}
     scope: env_name == 'Acrobot-v1'

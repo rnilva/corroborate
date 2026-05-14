@@ -1,6 +1,6 @@
 name: lr_capacity_mountaincar
 out_dir: experiments/data/lr_capacity_mountaincar
-arms_shape: chunked
+env_binding: shared
 archive_remote: s3://corroborate-archive/lr_capacity_mountaincar
 
 # Adds G1-active config variation to MountainCar to unblock the
@@ -24,7 +24,7 @@ archive_remote: s3://corroborate-archive/lr_capacity_mountaincar
 envs:
   - {name: MountainCar-v0, n_seeds: 30, chunk_size: 30}
 
-base_intervention:
+defaults:
   total_steps: 200000
   eval_every:  20000
   n_episodes:  5
@@ -42,10 +42,9 @@ base_intervention:
     class: MLP
     hidden: [64, 64]
 
-hypotheses:
+interventions:
   - name: cap10k_lr1e4
-    predicted_direction: a_gt_b
-    intervention: {replay: {class: Replay, capacity: 10000, batch_size: 32}}
+    base: {replay: {class: Replay, capacity: 10000, batch_size: 32}}
     arms:
       - []
       - - slot_path: bootstrap
@@ -54,8 +53,7 @@ hypotheses:
             greedification: {fn: double_greedify}
 
   - name: cap25k_lr1e4
-    predicted_direction: a_gt_b
-    intervention: {replay: {class: Replay, capacity: 25000, batch_size: 32}}
+    base: {replay: {class: Replay, capacity: 25000, batch_size: 32}}
     arms:
       - []
       - - slot_path: bootstrap
@@ -64,8 +62,7 @@ hypotheses:
             greedification: {fn: double_greedify}
 
   - name: cap50k_lr3e4
-    predicted_direction: a_gt_b
-    intervention:
+    base:
       optimizer: {fn: warmed_update, inner: {fn: adam, lr: 0.0003}, warmup_steps: 100}
     arms:
       - []
@@ -75,8 +72,7 @@ hypotheses:
             greedification: {fn: double_greedify}
 
   - name: cap100k_lr1e4
-    predicted_direction: a_gt_b
-    intervention: {replay: {class: Replay, capacity: 100000, batch_size: 32}}
+    base: {replay: {class: Replay, capacity: 100000, batch_size: 32}}
     arms:
       - []
       - - slot_path: bootstrap

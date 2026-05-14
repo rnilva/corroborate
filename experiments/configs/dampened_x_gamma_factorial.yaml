@@ -1,6 +1,6 @@
 name: dampened_x_gamma_factorial
 out_dir: experiments/data/dampened_x_gamma_factorial
-arms_shape: chunked
+env_binding: shared
 archive_remote: s3://corroborate-archive/dampened_x_gamma_factorial
 
 # (α × γ) factorial on FourRooms. Tests whether
@@ -9,7 +9,7 @@ archive_remote: s3://corroborate-archive/dampened_x_gamma_factorial
 envs:
   - {name: FourRooms-misc, n_seeds: 30, chunk_size: 30}
 
-base_intervention:
+defaults:
   total_steps: 200000
   eval_every:  20000
   n_episodes:  5
@@ -28,78 +28,69 @@ base_intervention:
     hidden: [64, 64]
 
 # 3 α × 3 γ = 9 arms.
-hypotheses:
+interventions:
   - name: a000_g099
-    predicted_direction: null
-    intervention:
+    base:
       gamma: 0.99
-      bootstrap: {fn: bootstrap, greedification: {fn: dampened_double_greedify, alpha: 0.0}}
-    intervention_arms:
-      - slot_path: bootstrap
-        replacement: {fn: bootstrap, greedification: {fn: dampened_double_greedify, alpha: 0.0}}
+    arms:
+      - []  # vanilla control
+      - - slot_path: bootstrap
+          replacement: {fn: bootstrap, greedification: {fn: dampened_double_greedify, alpha: 0.0}}
   - name: a050_g099
-    predicted_direction: a_gt_b
-    intervention:
+    base:
       gamma: 0.99
-      bootstrap: {fn: bootstrap, greedification: {fn: dampened_double_greedify, alpha: 0.5}}
-    intervention_arms:
-      - slot_path: bootstrap
-        replacement: {fn: bootstrap, greedification: {fn: dampened_double_greedify, alpha: 0.5}}
+    arms:
+      - []  # vanilla control
+      - - slot_path: bootstrap
+          replacement: {fn: bootstrap, greedification: {fn: dampened_double_greedify, alpha: 0.5}}
   - name: a100_g099
-    predicted_direction: a_gt_b
-    intervention:
+    base:
       gamma: 0.99
-      bootstrap: {fn: bootstrap, greedification: {fn: dampened_double_greedify, alpha: 1.0}}
-    intervention_arms:
-      - slot_path: bootstrap
-        replacement: {fn: bootstrap, greedification: {fn: dampened_double_greedify, alpha: 1.0}}
+    arms:
+      - []  # vanilla control
+      - - slot_path: bootstrap
+          replacement: {fn: bootstrap, greedification: {fn: dampened_double_greedify, alpha: 1.0}}
 
   - name: a000_g095
-    predicted_direction: null
-    intervention:
+    base:
       gamma: 0.95
-      bootstrap: {fn: bootstrap, greedification: {fn: dampened_double_greedify, alpha: 0.0}}
-    intervention_arms:
-      - slot_path: bootstrap
-        replacement: {fn: bootstrap, greedification: {fn: dampened_double_greedify, alpha: 0.0}}
+    arms:
+      - []  # vanilla control
+      - - slot_path: bootstrap
+          replacement: {fn: bootstrap, greedification: {fn: dampened_double_greedify, alpha: 0.0}}
   - name: a050_g095
-    predicted_direction: a_gt_b
-    intervention:
+    base:
       gamma: 0.95
-      bootstrap: {fn: bootstrap, greedification: {fn: dampened_double_greedify, alpha: 0.5}}
-    intervention_arms:
-      - slot_path: bootstrap
-        replacement: {fn: bootstrap, greedification: {fn: dampened_double_greedify, alpha: 0.5}}
+    arms:
+      - []  # vanilla control
+      - - slot_path: bootstrap
+          replacement: {fn: bootstrap, greedification: {fn: dampened_double_greedify, alpha: 0.5}}
   - name: a100_g095
-    predicted_direction: a_gt_b
-    intervention:
+    base:
       gamma: 0.95
-      bootstrap: {fn: bootstrap, greedification: {fn: dampened_double_greedify, alpha: 1.0}}
-    intervention_arms:
-      - slot_path: bootstrap
-        replacement: {fn: bootstrap, greedification: {fn: dampened_double_greedify, alpha: 1.0}}
+    arms:
+      - []  # vanilla control
+      - - slot_path: bootstrap
+          replacement: {fn: bootstrap, greedification: {fn: dampened_double_greedify, alpha: 1.0}}
 
   - name: a000_g090
-    predicted_direction: null
-    intervention:
+    base:
       gamma: 0.90
-      bootstrap: {fn: bootstrap, greedification: {fn: dampened_double_greedify, alpha: 0.0}}
-    intervention_arms:
-      - slot_path: bootstrap
-        replacement: {fn: bootstrap, greedification: {fn: dampened_double_greedify, alpha: 0.0}}
+    arms:
+      - []  # vanilla control
+      - - slot_path: bootstrap
+          replacement: {fn: bootstrap, greedification: {fn: dampened_double_greedify, alpha: 0.0}}
   - name: a050_g090
-    predicted_direction: a_gt_b
-    intervention:
+    base:
       gamma: 0.90
-      bootstrap: {fn: bootstrap, greedification: {fn: dampened_double_greedify, alpha: 0.5}}
-    intervention_arms:
-      - slot_path: bootstrap
-        replacement: {fn: bootstrap, greedification: {fn: dampened_double_greedify, alpha: 0.5}}
+    arms:
+      - []  # vanilla control
+      - - slot_path: bootstrap
+          replacement: {fn: bootstrap, greedification: {fn: dampened_double_greedify, alpha: 0.5}}
   - name: a100_g090
-    predicted_direction: a_gt_b
-    intervention:
+    base:
       gamma: 0.90
-      bootstrap: {fn: bootstrap, greedification: {fn: dampened_double_greedify, alpha: 1.0}}
-    intervention_arms:
-      - slot_path: bootstrap
-        replacement: {fn: bootstrap, greedification: {fn: dampened_double_greedify, alpha: 1.0}}
+    arms:
+      - []  # vanilla control
+      - - slot_path: bootstrap
+          replacement: {fn: bootstrap, greedification: {fn: dampened_double_greedify, alpha: 1.0}}

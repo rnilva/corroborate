@@ -1,6 +1,6 @@
 name: adaptive_dqn_acrobot
 out_dir: experiments/data/adaptive_dqn_acrobot
-arms_shape: chunked
+env_binding: shared
 
 envs:
   # Small MLP env — chunk_size=30 fits easily in GPU memory.
@@ -9,7 +9,7 @@ envs:
 # HPs match expectile_3way + nstep_intervention's Acrobot cells
 # so adaptive_dqn pairs against existing vanilla_dqn + ddqn cells
 # (seeds 0-29 align across all three corpora).
-base_intervention:
+defaults:
   total_steps: 200000
   eval_every:  20000
   n_episodes:  5
@@ -31,19 +31,13 @@ base_intervention:
 # Acrobot is a "DDQN-mildly-hurts" env (mean_d_final ≈ -2.4 raw
 # return); the adaptive heuristic should land between vanilla
 # and DDQN, ideally beating both.
-hypotheses:
+interventions:
   - name: adaptive_dqn
-    predicted_direction: a_gt_b
-    intervention:
-      bootstrap:
-        fn: bootstrap
-        greedification:
-          fn: adaptive_dormancy_greedify
-          sigma_floor_factor: 0.5
-    intervention_arms:
-      - slot_path: bootstrap
-        replacement:
-          fn: bootstrap
-          greedification:
-            fn: adaptive_dormancy_greedify
-            sigma_floor_factor: 0.5
+    arms:
+      - []  # vanilla control
+      - - slot_path: bootstrap
+          replacement:
+            fn: bootstrap
+            greedification:
+              fn: adaptive_dormancy_greedify
+              sigma_floor_factor: 0.5

@@ -15,7 +15,7 @@ Three sub-modules:
 `corroborate.bridge.analysis` — they're the glue for
 `claim_bridge`, not a runner concern.
 
-YAML-loaded `HypothesisConfig` (the substrate-coupled
+YAML-loaded `InterventionConfig` (the substrate-coupled
 intermediate that decomposes into a Hypothesis Protocol-conformer
 + a `base` callable) lives substrate-side; the framework's
 hypothesis surface is the `Hypothesis` Protocol in

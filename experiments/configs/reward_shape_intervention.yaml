@@ -1,6 +1,6 @@
 name: reward_shape_intervention
 out_dir: experiments/data/reward_shape_intervention
-arms_shape: chunked
+env_binding: shared
 
 # Pearl-rung-2 do(reward_shape) probe of the action-selection
 # mechanism. `findings_action_selection_fourrooms_specific`
@@ -34,7 +34,7 @@ envs:
   - {name: MetaMaze-misc, n_seeds: 30, chunk_size: 30, wrappers: [{type: reward_sparsify, terminal_bonus: 1.0, success_threshold: 0.5}]}
   - {name: FourRooms-misc, n_seeds: 30, chunk_size: 30, wrappers: [{type: reward_densify, per_step: -0.01}]}
 
-base_intervention:
+defaults:
   total_steps: 200000
   eval_every:  20000
   n_episodes:  5
@@ -52,15 +52,11 @@ base_intervention:
     class: MLP
     hidden: [64, 64]
 
-hypotheses:
+interventions:
   - name: ddqn
-    predicted_direction: a_gt_b
-    intervention:
-      bootstrap:
-        fn: bootstrap
-        greedification: {fn: double_greedify}
-    intervention_arms:
-      - slot_path: bootstrap
-        replacement:
-          fn: bootstrap
-          greedification: {fn: double_greedify}
+    arms:
+      - []  # vanilla control
+      - - slot_path: bootstrap
+          replacement:
+            fn: bootstrap
+            greedification: {fn: double_greedify}

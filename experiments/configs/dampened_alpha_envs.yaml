@@ -1,6 +1,6 @@
 name: dampened_alpha_envs
 out_dir: experiments/data/dampened_alpha_envs
-arms_shape: chunked
+env_binding: shared
 archive_remote: s3://corroborate-archive/dampened_alpha_envs
 
 # Continuous-α intervention extended across the 4
@@ -23,7 +23,7 @@ envs:
   - {name: DiscountingChain-bsuite, n_seeds: 30, chunk_size: 30, wrappers: [{type: reward_scale, scale: 0.1}]}
   - {name: MNISTBandit-bsuite,      n_seeds: 30, chunk_size: 10, wrappers: [{type: reward_scale, scale: 0.1}]}
 
-base_intervention:
+defaults:
   total_steps: 200000
   eval_every:  20000
   n_episodes:  5
@@ -41,63 +41,43 @@ base_intervention:
     class: MLP
     hidden: [64, 64]
 
-hypotheses:
+interventions:
   - name: dampened_a000
-    predicted_direction: null
-    intervention:
-      bootstrap:
-        fn: bootstrap
-        greedification: {fn: dampened_double_greedify, alpha: 0.0}
-    intervention_arms:
-      - slot_path: bootstrap
-        replacement:
-          fn: bootstrap
-          greedification: {fn: dampened_double_greedify, alpha: 0.0}
+    arms:
+      - []  # vanilla control
+      - - slot_path: bootstrap
+          replacement:
+            fn: bootstrap
+            greedification: {fn: dampened_double_greedify, alpha: 0.0}
 
   - name: dampened_a025
-    predicted_direction: a_gt_b
-    intervention:
-      bootstrap:
-        fn: bootstrap
-        greedification: {fn: dampened_double_greedify, alpha: 0.25}
-    intervention_arms:
-      - slot_path: bootstrap
-        replacement:
-          fn: bootstrap
-          greedification: {fn: dampened_double_greedify, alpha: 0.25}
+    arms:
+      - []  # vanilla control
+      - - slot_path: bootstrap
+          replacement:
+            fn: bootstrap
+            greedification: {fn: dampened_double_greedify, alpha: 0.25}
 
   - name: dampened_a050
-    predicted_direction: a_gt_b
-    intervention:
-      bootstrap:
-        fn: bootstrap
-        greedification: {fn: dampened_double_greedify, alpha: 0.5}
-    intervention_arms:
-      - slot_path: bootstrap
-        replacement:
-          fn: bootstrap
-          greedification: {fn: dampened_double_greedify, alpha: 0.5}
+    arms:
+      - []  # vanilla control
+      - - slot_path: bootstrap
+          replacement:
+            fn: bootstrap
+            greedification: {fn: dampened_double_greedify, alpha: 0.5}
 
   - name: dampened_a075
-    predicted_direction: a_gt_b
-    intervention:
-      bootstrap:
-        fn: bootstrap
-        greedification: {fn: dampened_double_greedify, alpha: 0.75}
-    intervention_arms:
-      - slot_path: bootstrap
-        replacement:
-          fn: bootstrap
-          greedification: {fn: dampened_double_greedify, alpha: 0.75}
+    arms:
+      - []  # vanilla control
+      - - slot_path: bootstrap
+          replacement:
+            fn: bootstrap
+            greedification: {fn: dampened_double_greedify, alpha: 0.75}
 
   - name: dampened_a100
-    predicted_direction: a_gt_b
-    intervention:
-      bootstrap:
-        fn: bootstrap
-        greedification: {fn: dampened_double_greedify, alpha: 1.0}
-    intervention_arms:
-      - slot_path: bootstrap
-        replacement:
-          fn: bootstrap
-          greedification: {fn: dampened_double_greedify, alpha: 1.0}
+    arms:
+      - []  # vanilla control
+      - - slot_path: bootstrap
+          replacement:
+            fn: bootstrap
+            greedification: {fn: dampened_double_greedify, alpha: 1.0}

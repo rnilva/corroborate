@@ -1,11 +1,12 @@
 """Schema-contract smoke for `minatar_1M.yaml` and
-`ddqn_effective.yaml` paired-mode sweeps. The schema's contract:
-each `(template, env)` resolves to a concrete `Hypothesis` with
+`ddqn_effective.yaml` per-env sweeps. The schema's contract:
+each `(template, env)` resolves to a concrete `InterventionConfig`
+with
 - `CNN.obs_shape` substituted from `EnvSpec.public_attrs()`,
 - frozen-dataclass equality on every config-bundle slot,
-- stable `arm_key()` and `claim_graph_signature`.
+- stable arm keys and `claim_graph_signature`.
 
-`build_paired` is the substrate's per-env resolver; asserting
+`build_per_env` is the substrate's per-env resolver; asserting
 the contract at its output is the strongest guarantee short of
 running the sweep itself."""
 from __future__ import annotations
@@ -16,12 +17,12 @@ from pathlib import Path
 
 import pytest
 
-from corroborate.core.intervention import Intervention
+from corroborate.core.intervention import Intervention, combined_arm_key
 from corroborate.runner.registry import Registry
 from corroborate_rl.dqn.collect import EnvConfig
-from corroborate_rl.dqn.config_loader import HypothesisConfig
+from corroborate_rl.dqn.config_loader import InterventionConfig
 from corroborate_rl.dqn.yaml_sweep import (
-    DQNSweep, build_paired, default_dqn_registry, load_sweep,
+    DQNSweep, build_per_env, default_dqn_registry, load_sweep,
 )
 from corroborate_rl.env_catalogue import get as get_env_spec
 from corroborate.core.signature import claim_graph_signature
@@ -38,9 +39,9 @@ DDQN_EFFECTIVE_PATH = (
 
 # ---------- Python-authored references ----------
 
-def _python_minatar_1M_hypothesis(
+def _python_minatar_1M_intervention(
     name: str, env_name: str,
-) -> HypothesisConfig:
+) -> InterventionConfig:
     """Canonical Python recipe for the minatar_1M cohort. Used as
     the reference the YAML sweep must match structurally."""
     from corroborate_rl.dqn.claims.bootstrap import (
@@ -68,25 +69,24 @@ def _python_minatar_1M_hypothesis(
         ),
     }
     if name == 'vanilla_dqn':
-        return HypothesisConfig(
-            name='vanilla_dqn', intervention=base, predicted_direction=None,
-            intervention_arms=(),
+        return InterventionConfig(
+            name='vanilla_dqn', base=base, arms=((),),
         )
     if name == 'ddqn':
         boot = partial(bootstrap, greedification=double_greedify)
-        base['bootstrap'] = boot
-        return HypothesisConfig(
-            name='ddqn', intervention=base, predicted_direction='a_gt_b',
-            intervention_arms=(
-                Intervention(slot_path='bootstrap', replacement=boot),
+        return InterventionConfig(
+            name='ddqn', base=base,
+            arms=(
+                (),
+                (Intervention(slot_path='bootstrap', replacement=boot),),
             ),
         )
     raise ValueError(name)
 
 
-def _python_ddqn_effective_hypothesis(
+def _python_ddqn_effective_intervention(
     name: str, env_name: str,
-) -> HypothesisConfig:
+) -> InterventionConfig:
     """Canonical Python recipe for the ddqn_effective cohort
     (200k steps). Reference for the matching YAML sweep."""
     from corroborate_rl.dqn.claims.bootstrap import (
@@ -114,17 +114,16 @@ def _python_ddqn_effective_hypothesis(
         ),
     }
     if name == 'vanilla_dqn':
-        return HypothesisConfig(
-            name='vanilla_dqn', intervention=base, predicted_direction=None,
-            intervention_arms=(),
+        return InterventionConfig(
+            name='vanilla_dqn', base=base, arms=((),),
         )
     if name == 'ddqn':
         boot = partial(bootstrap, greedification=double_greedify)
-        base['bootstrap'] = boot
-        return HypothesisConfig(
-            name='ddqn', intervention=base, predicted_direction='a_gt_b',
-            intervention_arms=(
-                Intervention(slot_path='bootstrap', replacement=boot),
+        return InterventionConfig(
+            name='ddqn', base=base,
+            arms=(
+                (),
+                (Intervention(slot_path='bootstrap', replacement=boot),),
             ),
         )
     raise ValueError(name)
@@ -140,14 +139,14 @@ def reg() -> Registry:
 @pytest.fixture
 def minatar_1M_sweep(reg: Registry) -> DQNSweep:
     s = load_sweep(MINATAR_1M_PATH, reg=reg)
-    assert s.arms_shape == 'paired'
+    assert s.env_binding == 'per_env'
     return s
 
 
 @pytest.fixture
 def ddqn_effective_sweep(reg: Registry) -> DQNSweep:
     s = load_sweep(DDQN_EFFECTIVE_PATH, reg=reg)
-    assert s.arms_shape == 'paired'
+    assert s.env_binding == 'per_env'
     return s
 
 
@@ -166,7 +165,7 @@ def test_minatar_1M_envelope(
         EnvConfig('Freeway-MinAtar', n_seeds=30, chunk_size=15),
         EnvConfig('SpaceInvaders-MinAtar', n_seeds=30, chunk_size=15),
     )
-    assert len(s.hypothesis_templates) == 2
+    assert len(s.intervention_templates) == 2
 
 
 # ---------- ddqn_effective envelope ----------
@@ -186,7 +185,7 @@ def test_ddqn_effective_envelope(
         'SpaceInvaders-MinAtar', 'Freeway-MinAtar',
         'MNISTBandit-bsuite',
     }
-    assert len(s.hypothesis_templates) == 2
+    assert len(s.intervention_templates) == 2
 
 
 # ---------- per-env build contract, parametrised ----------
@@ -204,30 +203,29 @@ def test_minatar_1M_per_env_contract(
     env_name: str,
     h_name: str,
 ) -> None:
-    """For each (env, hypothesis), the YAML resolves to a
-    Hypothesis whose config bundles match a reference Python
-    construction, including env-specific CNN.obs_shape
+    """For each (env, intervention), the YAML resolves to an
+    InterventionConfig whose config bundles match a reference
+    Python construction, including env-specific CNN.obs_shape
     substitution."""
-    built, envs_aligned = build_paired(minatar_1M_sweep, reg=reg)
+    built, envs_aligned = build_per_env(minatar_1M_sweep, reg=reg)
     yaml_h = _pick(built, envs_aligned, env_name, h_name)
-    py_h = _python_minatar_1M_hypothesis(h_name, env_name)
+    py_h = _python_minatar_1M_intervention(h_name, env_name)
 
     assert yaml_h.name == py_h.name
-    assert yaml_h.predicted_direction == py_h.predicted_direction
-    assert yaml_h.arm_key() == py_h.arm_key()
+    assert _arm_keys(yaml_h) == _arm_keys(py_h)
 
     # `partial` lacks value equality; `canonical_str` is the
     # framework's value-equality contract for partial-baked claims.
     from corroborate._internals.canonical import canonical_str
     for k in ('q_network', 'optimizer', 'replay'):
-        assert canonical_str(yaml_h.intervention[k]) == canonical_str(
-            py_h.intervention[k],
+        assert canonical_str(yaml_h.base[k]) == canonical_str(
+            py_h.base[k],
         )
 
     # CNN obs_shape resolved to the env's spec attribute.
     spec = get_env_spec(env_name)
     from corroborate_rl.dqn.claims.q_network import CNN
-    qn_yaml = yaml_h.intervention['q_network']
+    qn_yaml = yaml_h.base['q_network']
     assert isinstance(qn_yaml, CNN)
     assert qn_yaml.obs_shape == spec.observation_shape
 
@@ -246,89 +244,88 @@ def test_ddqn_effective_per_env_contract(
     env_name: str,
     h_name: str,
 ) -> None:
-    built, envs_aligned = build_paired(ddqn_effective_sweep, reg=reg)
+    built, envs_aligned = build_per_env(ddqn_effective_sweep, reg=reg)
     yaml_h = _pick(built, envs_aligned, env_name, h_name)
-    py_h = _python_ddqn_effective_hypothesis(h_name, env_name)
+    py_h = _python_ddqn_effective_intervention(h_name, env_name)
 
     assert yaml_h.name == py_h.name
-    assert yaml_h.predicted_direction == py_h.predicted_direction
-    assert yaml_h.arm_key() == py_h.arm_key()
+    assert _arm_keys(yaml_h) == _arm_keys(py_h)
     # `partial` lacks value equality; `canonical_str` is the
     # framework's value-equality contract for partial-baked claims.
     from corroborate._internals.canonical import canonical_str
     for k in ('q_network', 'optimizer', 'replay'):
-        assert canonical_str(yaml_h.intervention[k]) == canonical_str(
-            py_h.intervention[k],
+        assert canonical_str(yaml_h.base[k]) == canonical_str(
+            py_h.base[k],
         )
 
 
 # ---------- cross-env signature stability ----------
 
-def test_paired_ddqn_bootstrap_signature_stable(
+def test_per_env_ddqn_bootstrap_signature_stable(
     minatar_1M_sweep: DQNSweep, reg: Registry,
 ) -> None:
-    """The DDQN partial sits inside the intervention dict; its
+    """The DDQN partial sits on the treatment arm; its
     `claim_graph_signature` is env-independent (only CNN slot has
     env binding) — same hash across all envs."""
-    built, envs_aligned = build_paired(minatar_1M_sweep, reg=reg)
+    built, envs_aligned = build_per_env(minatar_1M_sweep, reg=reg)
     yaml_h = _pick(built, envs_aligned, 'Asterix-MinAtar', 'ddqn')
-    py_h = _python_minatar_1M_hypothesis('ddqn', 'Asterix-MinAtar')
-    sig_yaml = claim_graph_signature(
-        yaml_h.intervention['bootstrap'],
-    )
-    sig_python = claim_graph_signature(
-        py_h.intervention['bootstrap'],
-    )
+    py_h = _python_minatar_1M_intervention('ddqn', 'Asterix-MinAtar')
+    sig_yaml = claim_graph_signature(yaml_h.arms[1][0].replacement)
+    sig_python = claim_graph_signature(py_h.arms[1][0].replacement)
     assert sig_yaml == sig_python
 
 
-def test_paired_arms_count_matches_paired_arms_helper(
+def test_per_env_count_matches_template_x_env(
     minatar_1M_sweep: DQNSweep, reg: Registry,
 ) -> None:
-    """The expanded (hypotheses, envs_aligned) tuples have
-    `n_envs * n_templates` entries — so `paired_arms` zips them
-    cleanly, one (h, env) pair per arm."""
-    built, envs_aligned = build_paired(minatar_1M_sweep, reg=reg)
+    """The expanded (interventions, envs_aligned) tuples have
+    `n_envs * n_templates` entries — so a downstream zip lands
+    one (h, env) pair per arm."""
+    built, envs_aligned = build_per_env(minatar_1M_sweep, reg=reg)
     n_envs = len(minatar_1M_sweep.envs)
-    n_templates = len(minatar_1M_sweep.hypothesis_templates)
+    n_templates = len(minatar_1M_sweep.intervention_templates)
     assert len(built) == n_envs * n_templates
     assert len(envs_aligned) == n_envs * n_templates
 
 
-def test_chunked_sweep_rejects_build_paired(reg: Registry) -> None:
-    """`build_paired` is the wrong helper for a chunked sweep
+def test_shared_sweep_rejects_build_per_env(reg: Registry) -> None:
+    """`build_per_env` is the wrong helper for a shared sweep
     and refuses early — the alternative would be silently
     iterating envs while ignoring per-env env_attrs, which
     would produce nonsense output."""
-    chunked_path = (
+    shared_path = (
         REPO_ROOT / 'experiments' / 'configs' / 'expectile_3way.yaml'
     )
-    chunked = load_sweep(chunked_path, reg=reg)
-    assert chunked.arms_shape == 'chunked'
-    with pytest.raises(ValueError, match="arms_shape='paired'"):
-        _ = build_paired(chunked, reg=reg)
+    shared = load_sweep(shared_path, reg=reg)
+    assert shared.env_binding == 'shared'
+    with pytest.raises(ValueError, match="env_binding='per_env'"):
+        _ = build_per_env(shared, reg=reg)
 
 
-def test_from_env_in_chunked_mode_raises(reg: Registry) -> None:
+def test_from_env_in_shared_mode_raises(reg: Registry) -> None:
     """A `{from_env: ...}` placeholder is only meaningful in
-    paired-mode dispatch; trying to build hypotheses for a
-    chunked sweep that contains one fails fast with a clear
+    per-env dispatch; trying to build interventions for a
+    shared sweep that contains one fails fast with a clear
     error pointing at the schema mistake."""
     sweep = load_sweep(MINATAR_1M_PATH, reg=reg)
     with pytest.raises(ValueError, match='from_env'):
-        _ = sweep.build_hypotheses(reg=reg)  # no env_attrs
+        _ = sweep.build_interventions(reg=reg)  # no env_attrs
 
 
 # ---------- helpers ----------
 
+def _arm_keys(cfg: InterventionConfig) -> tuple[str, ...]:
+    return tuple(combined_arm_key(a) for a in cfg.do_effect_arms())
+
+
 def _pick(
-    built: tuple[HypothesisConfig, ...],
+    built: tuple[InterventionConfig, ...],
     envs_aligned: tuple[EnvConfig, ...],
     env_name: str,
     h_name: str,
-) -> HypothesisConfig:
-    """Find the (env, hypothesis-name) pair in the expanded
-    paired tuples."""
+) -> InterventionConfig:
+    """Find the (env, intervention-name) pair in the expanded
+    per-env tuples."""
     for h, ec in zip(built, envs_aligned, strict=True):
         if ec.env_name == env_name and h.name == h_name:
             return h
@@ -338,9 +335,9 @@ def _pick(
 # ---------- dispatcher collision detection ----------
 
 def test_dispatch_sweep_raises_on_cfg_name_collision(tmp_path: Path) -> None:
-    """`arms_shape: paired` + multi-env hypothesis without a
+    """`env_binding: per_env` + multi-env intervention without a
     `{from_env: <attr>}` substitution in `name` yields multiple
-    `HypothesisConfig`s sharing `cfg.name`. They all write to
+    `InterventionConfig`s sharing `cfg.name`. They all write to
     `<out_dir>/<cfg.name>/runs.parquet` and the final merge silently
     concatenates the same file N times — losing all but one env's
     data. `dispatch_sweep` must refuse the collision pre-dispatch.
@@ -349,28 +346,27 @@ def test_dispatch_sweep_raises_on_cfg_name_collision(tmp_path: Path) -> None:
     reward_scale_sweep_postfix (CORPUS_INTEGRITY.md CI9)."""
     from corroborate_rl.dqn.yaml_sweep import dispatch_sweep
 
-    cfg = tmp_path / 'colliding_paired_sweep.yaml'
+    cfg = tmp_path / 'colliding_per_env_sweep.yaml'
     cfg.write_text(
         'name: colliding\n'
         f'out_dir: {tmp_path / "out"}\n'
-        'arms_shape: paired\n'
+        'env_binding: per_env\n'
         'envs:\n'
         '  - {name: FourRooms-misc, n_seeds: 2}\n'
         '  - {name: Acrobot-v1, n_seeds: 2}\n'
-        'base_intervention:\n'
+        'defaults:\n'
         '  total_steps: 1000\n'
         '  eval_every: 500\n'
         '  n_episodes: 1\n'
         '  gamma: 0.99\n'
-        'hypotheses:\n'
+        'interventions:\n'
         '  - name: ddqn_vs_vanilla\n'  # no {from_env} substitution
-        '    predicted_direction: a_gt_b\n'
-        '    intervention: {}\n'
-        '    intervention_arms:\n'
-        '      - slot_path: bootstrap\n'
-        '        replacement:\n'
-        '          fn: bootstrap\n'
-        '          greedification: {fn: double_greedify}\n'
+        '    arms:\n'
+        '      - []\n'
+        '      - - slot_path: bootstrap\n'
+        '          replacement:\n'
+        '            fn: bootstrap\n'
+        '            greedification: {fn: double_greedify}\n'
     )
     sweep = load_sweep(cfg, reg=default_dqn_registry())
     with pytest.raises(ValueError, match=r"share output paths"):
@@ -381,36 +377,35 @@ def test_dispatch_sweep_raises_on_cfg_name_collision(tmp_path: Path) -> None:
     )
 
 
-def test_dispatch_sweep_accepts_chunked_multi_env(tmp_path: Path) -> None:
-    """`arms_shape: chunked` packs all envs into a single config —
-    no name collision, no silent overwrite. The chunked path is
+def test_dispatch_sweep_accepts_shared_multi_env(tmp_path: Path) -> None:
+    """`env_binding: shared` packs all envs into a single config —
+    no name collision, no silent overwrite. The shared path is
     one of the two valid fixes for the collision case."""
     from corroborate_rl.dqn.yaml_sweep import load_sweep
-    cfg = tmp_path / 'chunked_multi_env.yaml'
+    cfg = tmp_path / 'shared_multi_env.yaml'
     cfg.write_text(
-        'name: chunked_multi\n'
+        'name: shared_multi\n'
         f'out_dir: {tmp_path / "out"}\n'
-        'arms_shape: chunked\n'
+        'env_binding: shared\n'
         'envs:\n'
         '  - {name: FourRooms-misc, n_seeds: 2}\n'
         '  - {name: Acrobot-v1, n_seeds: 2}\n'
-        'base_intervention:\n'
+        'defaults:\n'
         '  total_steps: 1000\n'
         '  eval_every: 500\n'
         '  n_episodes: 1\n'
         '  gamma: 0.99\n'
-        'hypotheses:\n'
+        'interventions:\n'
         '  - name: ddqn_vs_vanilla\n'
-        '    predicted_direction: a_gt_b\n'
-        '    intervention: {}\n'
-        '    intervention_arms:\n'
-        '      - slot_path: bootstrap\n'
-        '        replacement:\n'
-        '          fn: bootstrap\n'
-        '          greedification: {fn: double_greedify}\n'
+        '    arms:\n'
+        '      - []\n'
+        '      - - slot_path: bootstrap\n'
+        '          replacement:\n'
+        '            fn: bootstrap\n'
+        '            greedification: {fn: double_greedify}\n'
     )
     sweep = load_sweep(cfg, reg=default_dqn_registry())
-    configs = list(sweep.build_hypotheses(reg=default_dqn_registry()))
+    configs = list(sweep.build_interventions(reg=default_dqn_registry()))
     # One config carrying all envs — no collision possible.
     assert len(configs) == 1
     assert configs[0].name == 'ddqn_vs_vanilla'

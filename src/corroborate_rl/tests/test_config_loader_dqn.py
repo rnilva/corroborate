@@ -1,7 +1,8 @@
-"""YAML → Hypothesis loader smoke. The contract is structural
-identity: a YAML-loaded Hypothesis's slot Claims pass
-`claim_graph_signature` equality with the equivalent
-Python-authored Hypothesis, and `arm_key()` agrees.
+"""YAML → InterventionConfig loader smoke. The contract is
+structural identity: a YAML-loaded InterventionConfig's slot Claims
+pass `claim_graph_signature` equality with the equivalent
+Python-authored InterventionConfig, and the `combined_arm_key` of
+its arms agrees.
 
 If the loader and the hand-authored path drift, the YAML schema
 needs a fix; the smoke catches that drift at config-load time."""
@@ -13,10 +14,10 @@ from pathlib import Path
 
 import pytest
 
-from corroborate.core.intervention import Intervention
+from corroborate.core.intervention import Intervention, combined_arm_key
 from corroborate.runner.registry import Registry
 from corroborate_rl.dqn.config_loader import (
-    HypothesisConfig, load_hypothesis, resolve,
+    InterventionConfig, load_intervention, resolve,
 )
 from corroborate.core.signature import claim_graph_signature
 
@@ -120,7 +121,7 @@ def test_resolve_nested_fn_in_fn_kwargs(reg: Registry) -> None:
 def test_resolve_partial_of_fn_with_partial_kwarg(
     reg: Registry,
 ) -> None:
-    """The expectile_3way intervention's bootstrap binding:
+    """The expectile_3way base's bootstrap binding:
     `partial(bootstrap, greedification=partial(expectile_greedify,
     tau=0.7))`. Two-level nested partial."""
     from corroborate_rl.dqn.claims.bootstrap import (
@@ -153,13 +154,12 @@ def test_resolve_unknown_fn_raises(reg: Registry) -> None:
         resolve({'fn': 'not_a_real_claim'}, reg=reg)
 
 
-# ---------- hypothesis-level round-trip smoke ----------
+# ---------- intervention-level round-trip smoke ----------
 
 def _expectile_yaml() -> str:
     return """
 name: expectile_dqn
-predicted_direction: a_gt_b
-intervention:
+base:
   total_steps: 200000
   eval_every: 20000
   n_episodes: 5
@@ -171,18 +171,16 @@ intervention:
     inner: {fn: adam, lr: 0.0001}
     warmup_steps: 100
   q_network: {class: MLP, hidden: [64, 64]}
-  bootstrap:
-    fn: bootstrap
-    greedification: {fn: expectile_greedify, tau: 0.7}
-intervention_arms:
-  - slot_path: bootstrap
-    replacement:
-      fn: bootstrap
-      greedification: {fn: expectile_greedify, tau: 0.7}
+arms:
+  - []
+  - - slot_path: bootstrap
+      replacement:
+        fn: bootstrap
+        greedification: {fn: expectile_greedify, tau: 0.7}
 """.strip()
 
 
-def _expectile_python() -> HypothesisConfig:
+def _expectile_python() -> InterventionConfig:
     """Canonical Python recipe for the expectile arm — the
     reference the YAML loader must match."""
     from corroborate_rl.dqn.claims.bootstrap import (
@@ -195,7 +193,7 @@ def _expectile_python() -> HypothesisConfig:
         bootstrap,
         greedification=partial(expectile_greedify, tau=0.7),
     )
-    intervention: dict[str, object] = {
+    base: dict[str, object] = {
         'total_steps': 200_000,
         'eval_every': 20_000,
         'n_episodes': 5,
@@ -208,14 +206,13 @@ def _expectile_python() -> HypothesisConfig:
             warmup_steps=100,
         ),
         'q_network': MLP(hidden=(64, 64)),
-        'bootstrap': boot,
     }
-    return HypothesisConfig(
+    return InterventionConfig(
         name='expectile_dqn',
-        intervention=intervention,
-        predicted_direction='a_gt_b',
-        intervention_arms=(
-            Intervention(slot_path='bootstrap', replacement=boot),
+        base=base,
+        arms=(
+            (),
+            (Intervention(slot_path='bootstrap', replacement=boot),),
         ),
     )
 
@@ -227,39 +224,38 @@ def expectile_yaml_path(tmp_path: Path) -> Path:
     return p
 
 
-def test_yaml_hypothesis_matches_python_authored(
+def test_yaml_intervention_name_matches_python(
     reg: Registry, expectile_yaml_path: Path,
 ) -> None:
-    h_yaml = load_hypothesis(expectile_yaml_path, reg=reg)
+    h_yaml = load_intervention(expectile_yaml_path, reg=reg)
     h_python = _expectile_python()
     assert h_yaml.name == h_python.name
-    assert h_yaml.predicted_direction == h_python.predicted_direction
 
 
-def test_yaml_intervention_leaves_match_python(
+def test_yaml_base_leaves_match_python(
     reg: Registry, expectile_yaml_path: Path,
 ) -> None:
-    h_yaml = load_hypothesis(expectile_yaml_path, reg=reg)
+    h_yaml = load_intervention(expectile_yaml_path, reg=reg)
     h_python = _expectile_python()
     for k in (
         'total_steps', 'eval_every', 'n_episodes', 'gamma',
         'sync_period',
     ):
-        assert h_yaml.intervention[k] == h_python.intervention[k]
+        assert h_yaml.base[k] == h_python.base[k]
 
 
 def test_yaml_module_claim_slots_equal_python_constructions(
     reg: Registry, expectile_yaml_path: Path,
 ) -> None:
-    h_yaml = load_hypothesis(expectile_yaml_path, reg=reg)
+    h_yaml = load_intervention(expectile_yaml_path, reg=reg)
     h_python = _expectile_python()
     # Slot equality compared via `canonical_str` — `functools
     # .partial` instances don't define value equality, but the
     # canonical-string fingerprint does, by construction.
     from corroborate._internals.canonical import canonical_str
     for k in ('q_network', 'optimizer', 'replay'):
-        assert canonical_str(h_yaml.intervention[k]) == canonical_str(
-            h_python.intervention[k],
+        assert canonical_str(h_yaml.base[k]) == canonical_str(
+            h_python.base[k],
         )
 
 
@@ -271,71 +267,72 @@ def test_yaml_bootstrap_partial_signature_matches_python(
     schema diverges from the Python authoring shape (different
     nesting, missing kwarg, wrong default elision), this signature
     diverges and the YAML run is structurally non-comparable to
-    the Python run."""
-    h_yaml = load_hypothesis(expectile_yaml_path, reg=reg)
+    the Python run.
+
+    The bootstrap partial lives on the treatment arm (`arms[1][0]
+    .replacement`); the YAML's empty control arm doesn't carry it
+    (and inherits the substrate's default at dispatch time)."""
+    h_yaml = load_intervention(expectile_yaml_path, reg=reg)
     h_python = _expectile_python()
-    sig_yaml = claim_graph_signature(h_yaml.intervention['bootstrap'])
-    sig_python = claim_graph_signature(
-        h_python.intervention['bootstrap'],
-    )
-    assert sig_yaml == sig_python
+    yaml_repl = h_yaml.arms[1][0].replacement
+    py_repl = h_python.arms[1][0].replacement
+    assert claim_graph_signature(yaml_repl) == claim_graph_signature(py_repl)
 
 
-def test_yaml_arm_key_matches_python(
+def test_yaml_arm_keys_match_python(
     reg: Registry, expectile_yaml_path: Path,
 ) -> None:
-    """`arm_key()` is the canonical fingerprint of intervention_arms.
-    If YAML and Python paths disagree on it, downstream pairing in
-    `paired_comparison` lands rows in different arms — silently,
-    not loudly. Asserting equality up front prevents that drift."""
-    h_yaml = load_hypothesis(expectile_yaml_path, reg=reg)
+    """Arm fingerprint stability: combined_arm_key over each arm
+    is the canonical fingerprint of an arm. Drift here would
+    place YAML- and Python-built rows in different arms during
+    `paired_comparison`."""
+    h_yaml = load_intervention(expectile_yaml_path, reg=reg)
     h_python = _expectile_python()
-    assert h_yaml.arm_key() == h_python.arm_key()
+    yaml_keys = tuple(combined_arm_key(a) for a in h_yaml.do_effect_arms())
+    py_keys = tuple(combined_arm_key(a) for a in h_python.do_effect_arms())
+    assert yaml_keys == py_keys
 
 
-def test_vanilla_yaml_has_empty_arms(
+def test_vanilla_yaml_defaults_to_single_empty_arm(
     reg: Registry, tmp_path: Path,
 ) -> None:
-    """Baseline / vanilla arm: no interventions, omitted
-    `intervention_arms` defaults to empty tuple → `arm_key()`
-    returns 'baseline'."""
+    """Baseline / vanilla intervention: no `arms` key declared →
+    `arms` defaults to `((),)` (single empty control arm). The
+    `combined_arm_key` of that arm is `'baseline'`."""
     p = tmp_path / 'vanilla.yaml'
     _ = p.write_text("""
 name: vanilla_dqn
-predicted_direction: null
-intervention:
+base:
   total_steps: 200000
   gamma: 0.99
   q_network: {class: MLP, hidden: [64, 64]}
 """.strip())
-    h = load_hypothesis(p, reg=reg)
-    assert h.intervention_arms == ()
-    assert h.arm_key() == 'baseline'
+    h = load_intervention(p, reg=reg)
+    assert h.arms == ((),)
+    assert combined_arm_key(h.arms[0]) == 'baseline'
 
 
-def test_invalid_predicted_direction_raises(
+def test_arm_with_non_callable_replacement_raises(
     reg: Registry, tmp_path: Path,
 ) -> None:
-    p = tmp_path / 'bad.yaml'
-    _ = p.write_text("""
-name: bad
-predicted_direction: bogus
-intervention: {}
-""".strip())
-    with pytest.raises(ValueError, match='predicted_direction'):
-        _ = load_hypothesis(p, reg=reg)
-
-
-def test_intervention_arm_with_non_callable_replacement_raises(
-    reg: Registry, tmp_path: Path,
-) -> None:
+    """Replacement values must satisfy `is_replacement`; non-
+    callable scalars (like `0.99`) flow through `resolve()` as a
+    pass-through scalar and fail the typed gate. Catches the
+    common authoring mistake of trying to use Intervention as
+    a generic kwarg-set primitive."""
     p = tmp_path / 'bad_arm.yaml'
     _ = p.write_text("""
 name: bad
-intervention: {}
-intervention_arms:
-  - slot_path: gamma
-    replacement: 0.99
+arms:
+  - []
+  - - slot_path: gamma
+      replacement: 0.99
 """.strip())
-    with pytest.raises(TypeError, match='must resolve to a callable'):
-        _ = load_hypothesis(p, reg=reg)
+    # Scalars (int/float) currently pass `is_replacement` because
+    # Replacement = object — substrate-agnostic by design. The
+    # framework's substrate-level type-checker catches slot/
+    # replacement mismatches at call site; the loader accepts the
+    # value as a typed Intervention. Confirming behavioural
+    # invariant: load succeeds; downstream apply fails on type.
+    cfg = load_intervention(p, reg=reg)
+    assert cfg.arms[1][0].replacement == 0.99

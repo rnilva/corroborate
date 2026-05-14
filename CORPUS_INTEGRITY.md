@@ -260,7 +260,7 @@ runner falls back to no-traces.
 
 ### CI9. Dispatcher refuses configs that share output paths
 
-`dispatch_sweep` writes each `HypothesisConfig`'s per-arm corpus
+`dispatch_sweep` writes each `InterventionConfig`'s per-arm corpus
 to `<out_dir>/<cfg.name>/`. Two configs sharing `cfg.name` write
 to the same directory; each `run_intervention` call overwrites
 the prior one's `runs.parquet`, and the final
@@ -272,16 +272,16 @@ N × (unique ids of the last config) unique ids, and zero
 representation of the first N−1 configs.
 
 **Rule.** At dispatch entry, after building the config list (via
-either `sweep.build_hypotheses` for chunked or `build_paired`
-for paired), check `cfg.name` uniqueness across all configs.
+either `sweep.build_interventions` for shared or `build_per_env`
+for per-env), check `cfg.name` uniqueness across all configs.
 Raise `ValueError` on any duplicate, naming the colliding
 config(s), the count, and the two valid fixes (templated `name`
-with `{from_env: <attr>}` substitution, or `arms_shape:
-chunked`). The check fires BEFORE any cell is written.
+with `{from_env: <attr>}` substitution, or `env_binding:
+shared`). The check fires BEFORE any cell is written.
 
-**Why.** `arms_shape: paired` is the only path that can produce
-name collisions: `build_paired` generates one
-`HypothesisConfig` per (template × env) and uses the template's
+**Why.** `env_binding: per_env` is the only path that can produce
+name collisions: `build_per_env` generates one
+`InterventionConfig` per (template × env) and uses the template's
 `name` field verbatim. Without a `{from_env: <attr>}`
 substitution differentiating per-env names, all configs share
 `cfg.name`. Pre-CI9 the failure was silent — the dispatcher
@@ -290,15 +290,15 @@ a corrupt parquet that subsequent ingest / analysis pipelines
 would then treat as authoritative.
 
 **Failure caught.** `reward_scale_sweep_postfix` (2026-05-11):
-`arms_shape: paired` + 5 envs (FR rs={0.1, 0.3, 1.0} + Acrobot
-rs=0.1 + CartPole rs=0.1) + single hypothesis template
-`name: ddqn_vs_vanilla` (no substitution) → `build_paired`
+`env_binding: per_env` + 5 envs (FR rs={0.1, 0.3, 1.0} + Acrobot
+rs=0.1 + CartPole rs=0.1) + single intervention template
+`name: ddqn_vs_vanilla` (no substitution) → `build_per_env`
 produced 5 configs all named `ddqn_vs_vanilla`. 60 min CPU
 sweep completed without error; final `runs.parquet` contained
 300 rows / 60 unique ids — all CartPole rs=0.1 (the last
 config), duplicated 5×. Audit caught this only because the
 follow-up ingest report showed `env_name.n_unique() == 1`.
-Repaired by switching the YAML to `arms_shape: chunked` and
+Repaired by switching the YAML to `env_binding: shared` and
 re-running.
 
 ## Audit table — current vs. target

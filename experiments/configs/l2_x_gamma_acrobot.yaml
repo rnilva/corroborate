@@ -1,6 +1,6 @@
 name: l2_x_gamma_acrobot
 out_dir: experiments/data/l2_x_gamma_acrobot
-arms_shape: chunked
+env_binding: shared
 archive_remote: s3://corroborate-archive/l2_x_gamma_acrobot
 
 # Probe the "Goldilocks ceiling" finding from `gamma_sweep_acrobot_high`:
@@ -24,7 +24,7 @@ archive_remote: s3://corroborate-archive/l2_x_gamma_acrobot
 envs:
   - {name: Acrobot-v1, n_seeds: 30, chunk_size: 30}
 
-base_intervention:
+defaults:
   total_steps: 200000
   eval_every:  20000
   n_episodes:  5
@@ -42,63 +42,50 @@ base_intervention:
     class: MLP
     hidden: [64, 64]
 
-hypotheses:
+interventions:
   # γ=0.99 × wd=1e-4 — sanity check (L2 shouldn't break things at
   # the working baseline γ).
   - name: vanilla_g099_wd1em4
-    predicted_direction: null
-    intervention:
+    base:
       gamma: 0.99
   - name: ddqn_g099_wd1em4
-    predicted_direction: a_gt_b
-    intervention:
+    base:
       gamma: 0.99
-      bootstrap:
-        fn: bootstrap
-        greedification: {fn: double_greedify}
-    intervention_arms:
-      - slot_path: bootstrap
-        replacement:
-          fn: bootstrap
-          greedification: {fn: double_greedify}
+    arms:
+      - []  # vanilla control
+      - - slot_path: bootstrap
+          replacement:
+            fn: bootstrap
+            greedification: {fn: double_greedify}
 
   # γ=0.999 × wd=1e-4 — primary test cell. If vanilla recovers from
   # −73 to ≥ −60 here, the Goldilocks ceiling was a regularization
   # artifact. If still ~−73, the ceiling is intrinsic.
   - name: vanilla_g0999_wd1em4
-    predicted_direction: null
   - name: ddqn_g0999_wd1em4
-    predicted_direction: a_gt_b
-    intervention:
-      bootstrap:
-        fn: bootstrap
-        greedification: {fn: double_greedify}
-    intervention_arms:
-      - slot_path: bootstrap
-        replacement:
-          fn: bootstrap
-          greedification: {fn: double_greedify}
+    arms:
+      - []  # vanilla control
+      - - slot_path: bootstrap
+          replacement:
+            fn: bootstrap
+            greedification: {fn: double_greedify}
 
   # γ=0.999 × wd=1e-3 — stronger L2 if 1e-4 is insufficient.
   - name: vanilla_g0999_wd1em3
-    predicted_direction: null
-    intervention:
+    base:
       optimizer:
         fn: warmed_update
         inner: {fn: adam, lr: 0.0001, weight_decay: 0.001}
         warmup_steps: 100
   - name: ddqn_g0999_wd1em3
-    predicted_direction: a_gt_b
-    intervention:
+    base:
       optimizer:
         fn: warmed_update
         inner: {fn: adam, lr: 0.0001, weight_decay: 0.001}
         warmup_steps: 100
-      bootstrap:
-        fn: bootstrap
-        greedification: {fn: double_greedify}
-    intervention_arms:
-      - slot_path: bootstrap
-        replacement:
-          fn: bootstrap
-          greedification: {fn: double_greedify}
+    arms:
+      - []  # vanilla control
+      - - slot_path: bootstrap
+          replacement:
+            fn: bootstrap
+            greedification: {fn: double_greedify}

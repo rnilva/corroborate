@@ -1,11 +1,10 @@
-"""YAML → HypothesisConfig builder, registry-resolved.
+"""YAML → InterventionConfig builder, registry-resolved.
 
-Substrate-coupled: the YAML schema (`name`, `intervention`,
-`intervention_arms`, `predicted_direction`) is a substrate-
-authoring convention, not a framework typed contract. The
-framework's hypothesis surface is the `Hypothesis` Protocol
+Substrate-coupled: the YAML schema (`name`, `base`, `arms`) is a
+substrate-authoring convention, not a framework typed contract.
+The framework's hypothesis surface is the `Hypothesis` Protocol
 (`INTERVENTION: DoEffect`, `BRIDGES: tuple[Bridge, ...]`);
-`HypothesisConfig` is the intermediate the substrate's
+`InterventionConfig` is the intermediate the substrate's
 `dispatch_sweep` decomposes into a Protocol-conformer + a `base`
 callable.
 
@@ -25,10 +24,10 @@ authors never need string-prefix sigils. List literals tuple-ify
 to match `frozen=True, slots=True` config-bundle fields like
 `MLP.hidden: tuple[int, ...]`.
 
-Round-trip contract: a YAML-loaded HypothesisConfig's slot values
+Round-trip contract: a YAML-loaded InterventionConfig's slot values
 are structurally equal (frozen-dataclass `==` on config bundles,
 identity on FnClaim references) to the equivalent Python-authored
-HypothesisConfig.
+InterventionConfig.
 The smokes assert this; drift means the YAML schema diverged from
 the Python authoring shape and the loader should refuse before
 the sweep launches."""
@@ -41,94 +40,54 @@ from pathlib import Path
 from typing import TypeIs
 
 from corroborate._internals.yaml import safe_load as _yaml_load
-from corroborate.core.hypothesis import PredictedDirection
 from corroborate.core.intervention import Intervention, is_replacement
 from corroborate.runner.registry import Registry
 
 
 @dataclass(frozen=True, slots=True)
-class HypothesisConfig:
-    """YAML-loaded hypothesis configuration. A substrate-coupled
+class InterventionConfig:
+    """YAML-loaded intervention configuration. A substrate-coupled
     intermediate — the substrate's `dispatch_sweep` decomposes it
     into a Hypothesis Protocol-conformer + a `base` Callable.
 
     Carries:
     - `name`: substrate-chosen short label (for arm_tag output naming).
-    - `intervention`: HP scalars + (legacy) slot-Claim swaps, as a
-      flat dict. The substrate splits HPs (slot paths NOT in
-      `intervention_arms`) into the `base` callable's bound kwargs;
-      mechanism swaps come via `intervention_arms` or `arms`.
-    - `intervention_arms`: typed structural deltas for the binary
-      contrast (treatment-arm slot replacements). Forms
-      `DoEffect.arms = ((), intervention_arms)` at dispatch — the
-      legacy authoring surface; one hypothesis = one binary
-      contrast.
+    - `base`: HP scalars + slot-Claim bindings, as a flat dict.
+      Becomes the bound kwargs of `partial(dqn, **base)` — the SCM
+      the `arms` `do(·)` operators act on. Empty arms inherit these
+      values; non-empty arms override at the configured slot path.
     - `arms`: typed structural deltas for the N-arm contrast — a
       tuple of tuples, each inner tuple being one arm's slot
-      replacements. Forms `DoEffect.arms` directly. Mutually
-      exclusive with `intervention_arms`; authors pick one or the
-      other.
-    - `predicted_direction`: optional sign-prior; per-bridge
-      `Bridge.predicted_direction` is the canonical home, but
-      substrate authors can default it here for legacy YAML configs."""
+      replacements. Forms `DoEffect.arms` directly. Empty tuple
+      `()` is the Pearl-style "no intervention" control arm.
+      Default `((),)` (single empty arm) supports the chunked-mode
+      "this template is one arm in a multi-template sweep" pattern."""
     name: str
-    intervention: Mapping[str, object]
-    predicted_direction: PredictedDirection | None = None
-    intervention_arms: tuple[Intervention, ...] = field(default_factory=tuple)
-    arms: tuple[tuple[Intervention, ...], ...] | None = None
+    base: Mapping[str, object]
+    arms: tuple[tuple[Intervention, ...], ...] = field(
+        default_factory=lambda: ((),),
+    )
 
     def do_effect_arms(self) -> tuple[tuple[Intervention, ...], ...]:
         """The `DoEffect.arms` shape this config dispatches to.
-
-        Resolution order:
-        - If `arms` is explicitly authored (new N-arm schema), use it.
-        - Else if `intervention_arms` is non-empty (legacy binary
-          shape), translate to `((), intervention_arms)` — empty
-          baseline vs treatment.
-        - Else (legacy with empty `intervention_arms` — the
-          chunked-mode "this template is one arm in a multi-template
-          sweep" pattern), return `((),)` — a single empty arm. This
-          matches the chunked-mode authoring intent without the
-          duplicate-baseline-cell artifact of `((), ())`."""
-        if self.arms is not None:
-            return self.arms
-        if not self.intervention_arms:
-            return ((),)
-        return ((), self.intervention_arms)
+        Identical to `self.arms` — the field IS the canonical
+        representation. Kept as a method for symmetry with the
+        framework's `DoEffect.arm_keys()` pattern + as a hook for
+        future schema migrations."""
+        return self.arms
 
     def base_hp_kwargs(self) -> dict[str, object]:
-        """Compute the HP kwargs for `partial(dqn, **kwargs)` —
-        the base configuration shared across arms.
+        """The HP kwargs for `partial(dqn, **kwargs)` — the base
+        configuration shared across arms.
 
-        Two schemas, two strip-behaviors:
+        Identity: `dict(self.base)`. Each arm's interventions
+        override slot values via partial precedence
+        (`apply_interventions`). Empty-tuple arm = "use base
+        values" — the Pearl-style "no intervention" control.
 
-        - **New N-arm `arms:` schema** (`cfg.arms is not None`):
-          `intervention:` IS the base. NO stripping — each arm's
-          interventions override slot values via partial precedence
-          (`apply_interventions`). Empty-tuple arm = "use base
-          values" — the natural Pearl-style "no intervention"
-          control.
-
-        - **Legacy binary `intervention_arms:` schema** (`cfg.arms
-          is None`): authors traditionally duplicate the treatment
-          arm's slot swap in `intervention:` for self-documentation.
-          Strip arm-slot paths from base so the empty arm
-          reconstructs the vanilla baseline (slot falls through to
-          dqn's default), and the treatment arm overrides via
-          `apply_interventions`. This is the strip-from-base
-          behavior the framework has had since the binary days.
-
-        The split is visible in dispatch — see
-        `yaml_sweep.dispatch_sweep` for the full call site."""
-        if self.arms is not None:
-            return dict(self.intervention)
-        arm_slot_paths = {
-            iv.slot_path for iv in self.intervention_arms
-        }
-        return {
-            k: v for k, v in self.intervention.items()
-            if k not in arm_slot_paths
-        }
+        Visible in dispatch — see `yaml_sweep.dispatch_sweep` for
+        the full call site."""
+        return dict(self.base)
 
 
 _CLASS_KEY = 'class'
@@ -143,12 +102,6 @@ def is_str_keyed_mapping(v: object) -> TypeIs[Mapping[str, object]]:
     if not isinstance(v, Mapping):
         return False
     return all(isinstance(k, str) for k in v.keys())
-
-
-def _is_predicted_direction(v: object) -> TypeIs[PredictedDirection]:
-    return isinstance(v, str) and v in (
-        'a_gt_b', 'a_lt_b', 'two_sided', 'null',
-    )
 
 
 def _construct(cls: type, kwargs: Mapping[str, object]) -> object:
@@ -178,10 +131,10 @@ def resolve(
     through unchanged.
 
     `env_attrs` is the per-env attribute map used to resolve
-    `{from_env: <attr>}` placeholders in paired mode. When
-    `None` (chunked default), encountering a `from_env` mapping
-    raises — placeholders only make sense inside paired-mode
-    dispatch where the env context is known."""
+    `{from_env: <attr>}` placeholders in per-env mode. When
+    `None` (shared default), encountering a `from_env` mapping
+    raises — placeholders only make sense inside per-env dispatch
+    where the env context is known."""
     if is_str_keyed_mapping(value):
         if _FROM_ENV_KEY in value:
             return _resolve_from_env(value, env_attrs=env_attrs)
@@ -217,7 +170,7 @@ def _resolve_from_env(
         raise ValueError(
             '`from_env` reference encountered but no env context '
             'provided; this placeholder is only valid in '
-            "paired-mode dispatch (`arms_shape: 'paired'`).",
+            "per-env dispatch (`env_binding: 'per_env'`).",
         )
     if len(node) != 1:
         raise TypeError(
@@ -279,12 +232,12 @@ def _resolve_fn(
     return partial(fn, **kwargs)
 
 
-def load_hypothesis(
+def load_intervention(
     path: Path, *, reg: Registry,
-) -> HypothesisConfig:
-    """Build a HypothesisConfig from a YAML file. The file is one
-    hypothesis per `path`; multi-hypothesis sweeps are loaded
-    by the substrate's own dispatcher."""
+) -> InterventionConfig:
+    """Build an InterventionConfig from a YAML file. The file is
+    one intervention per `path`; multi-intervention sweeps are
+    loaded by the substrate's own dispatcher."""
     with path.open() as f:
         raw = _yaml_load(f)
     if not is_str_keyed_mapping(raw):
@@ -292,36 +245,35 @@ def load_hypothesis(
             f'top-level YAML must be a string-keyed mapping; got '
             f'{type(raw).__name__}',
         )
-    return build_hypothesis_from_mapping(raw, reg=reg)
+    return build_intervention_from_mapping(raw, reg=reg)
 
 
-def build_hypothesis_from_mapping(
+def build_intervention_from_mapping(
     node: Mapping[str, object],
     *,
     reg: Registry,
     env_attrs: Mapping[str, object] | None = None,
-) -> HypothesisConfig:
+) -> InterventionConfig:
     """Public path-into-loader for callers (e.g. the RL sweep
     dispatcher) that already have the parsed mapping in hand and
-    just need it turned into a HypothesisConfig. `load_hypothesis`
-    delegates here after `yaml.safe_load`.
+    just need it turned into an InterventionConfig.
+    `load_intervention` delegates here after `yaml.safe_load`.
 
     `env_attrs` is forwarded to `resolve` so the loader can
-    substitute `{from_env: <attr>}` placeholders during
-    paired-mode dispatch.
+    substitute `{from_env: <attr>}` placeholders during per-env
+    dispatch.
 
     `name` field supports string-template substitution: occurrences
     of `{from_env: <attr>}` are replaced with the corresponding
-    env_attr value at paired-mode dispatch time. Required when
-    `arms_shape: paired` produces multiple HypothesisConfig instances
-    that would otherwise collide on `cfg.name` (one config per env).
-    Documented behavior since 2026-05-11; previously the error
-    message advertised the syntax without implementation."""
+    env_attr value at per-env dispatch time. Required when
+    `env_binding: per_env` produces multiple InterventionConfig
+    instances that would otherwise collide on `cfg.name` (one
+    config per env)."""
     import re
     name = node.get('name')
     if not isinstance(name, str):
         raise TypeError(
-            f'hypothesis.name must be a string; got '
+            f'intervention.name must be a string; got '
             f'{type(name).__name__}',
         )
     if env_attrs is not None and '{from_env:' in name:
@@ -329,88 +281,55 @@ def build_hypothesis_from_mapping(
             key = match.group(1).strip()
             if key not in env_attrs:
                 raise KeyError(
-                    f'hypothesis.name template references env attr '
+                    f'intervention.name template references env attr '
                     f'{key!r} not in env_attrs '
                     f'(known: {sorted(env_attrs)})',
                 )
             return str(env_attrs[key])
         name = re.sub(r'\{from_env:\s*([^}]+)\}', _sub_match, name)
 
-    intervention_raw = node.get('intervention', {})
-    if not is_str_keyed_mapping(intervention_raw):
+    base_raw = node.get('base', {})
+    if not is_str_keyed_mapping(base_raw):
         raise TypeError(
-            f'intervention must be a string-keyed mapping; got '
-            f'{type(intervention_raw).__name__}',
+            f'intervention.base must be a string-keyed mapping; got '
+            f'{type(base_raw).__name__}',
         )
-    intervention: dict[str, object] = {
+    base: dict[str, object] = {
         k: resolve(v, reg=reg, env_attrs=env_attrs)
-        for k, v in intervention_raw.items()
+        for k, v in base_raw.items()
     }
 
-    direction_raw = node.get('predicted_direction')
-    direction: PredictedDirection | None
-    if direction_raw is None:
-        direction = None
-    elif _is_predicted_direction(direction_raw):
-        direction = direction_raw
+    arms_raw = node.get('arms')
+    arms: tuple[tuple[Intervention, ...], ...]
+    if arms_raw is None:
+        arms = ((),)
     else:
-        raise ValueError(
-            f'predicted_direction must be one of: YAML null (no '
-            f'prediction declared), or one of the strings '
-            f"'a_gt_b' / 'a_lt_b' / 'two_sided' / 'null' (the "
-            f'last is the xfail-style predicted-no-effect — note '
-            f"the quotes; bare YAML `null` is the no-prediction "
-            f'sentinel). Got {direction_raw!r}',
-        )
-
-    arms_raw = node.get('intervention_arms', [])
-    multi_arms_raw = node.get('arms')
-    if arms_raw and multi_arms_raw is not None:
-        raise ValueError(
-            'hypothesis cannot declare both `intervention_arms` '
-            '(binary contrast — legacy shape) and `arms` (N-arm '
-            'contrast — generalized shape). Pick one.',
-        )
-    if not isinstance(arms_raw, list):
-        raise TypeError(
-            f'intervention_arms must be a list; got '
-            f'{type(arms_raw).__name__}',
-        )
-    arms_typed: list[object] = list(arms_raw)
-    intervention_arms_tuple = tuple(
-        _build_arm(a, reg=reg, env_attrs=env_attrs)
-        for a in arms_typed
-    )
-
-    multi_arms: tuple[tuple[Intervention, ...], ...] | None = None
-    if multi_arms_raw is not None:
-        if not isinstance(multi_arms_raw, list):
+        if not isinstance(arms_raw, list):
             raise TypeError(
-                f'`arms` must be a list of arms (each arm a list '
-                f'of slot-replacement dicts, or [] for the empty '
-                f'control arm); got {type(multi_arms_raw).__name__}',
+                f'intervention.arms must be a list of arms (each '
+                f'arm a list of slot-replacement dicts, or [] for '
+                f'the empty control arm); got '
+                f'{type(arms_raw).__name__}',
             )
-        multi_arms_list: list[tuple[Intervention, ...]] = []
-        for i, arm_raw in enumerate(multi_arms_raw):
+        arms_list: list[tuple[Intervention, ...]] = []
+        for i, arm_raw in enumerate(arms_raw):
             if not isinstance(arm_raw, list):
                 raise TypeError(
-                    f'`arms[{i}]` must be a list of slot-replacement '
-                    f'dicts (or [] for empty control); got '
-                    f'{type(arm_raw).__name__}',
+                    f'intervention.arms[{i}] must be a list of '
+                    f'slot-replacement dicts (or [] for empty '
+                    f'control); got {type(arm_raw).__name__}',
                 )
             arm = tuple(
                 _build_arm(a, reg=reg, env_attrs=env_attrs)
                 for a in arm_raw
             )
-            multi_arms_list.append(arm)
-        multi_arms = tuple(multi_arms_list)
+            arms_list.append(arm)
+        arms = tuple(arms_list)
 
-    return HypothesisConfig(
+    return InterventionConfig(
         name=name,
-        intervention=intervention,
-        predicted_direction=direction,
-        intervention_arms=intervention_arms_tuple,
-        arms=multi_arms,
+        base=base,
+        arms=arms,
     )
 
 
@@ -422,30 +341,30 @@ def _build_arm(
 ) -> Intervention:
     if not is_str_keyed_mapping(node):
         raise TypeError(
-            f'intervention_arm must be a mapping; got '
+            f'arm entry must be a mapping; got '
             f'{type(node).__name__}',
         )
     slot_path = node.get('slot_path')
     if not isinstance(slot_path, str):
         raise TypeError(
-            f'intervention_arm.slot_path must be a string; got '
+            f'arm.slot_path must be a string; got '
             f'{type(slot_path).__name__}',
         )
     if 'replacement' not in node:
-        raise KeyError('intervention_arm missing `replacement`')
+        raise KeyError('arm missing `replacement`')
     raw_repl = resolve(node['replacement'], reg=reg, env_attrs=env_attrs)
     if not is_replacement(raw_repl):
         raise TypeError(
-            f'intervention_arm.replacement must resolve to a '
-            f'callable; got {type(raw_repl).__name__}',
+            f'arm.replacement must resolve to a callable; got '
+            f'{type(raw_repl).__name__}',
         )
     return Intervention(slot_path=slot_path, replacement=raw_repl)
 
 
 __all__ = [
-    'HypothesisConfig',
-    'build_hypothesis_from_mapping',
+    'InterventionConfig',
+    'build_intervention_from_mapping',
     'is_str_keyed_mapping',
-    'load_hypothesis',
+    'load_intervention',
     'resolve',
 ]

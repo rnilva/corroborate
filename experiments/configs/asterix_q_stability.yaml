@@ -1,6 +1,6 @@
 name: asterix_q_stability
 out_dir: experiments/data/asterix_q_stability
-arms_shape: paired
+env_binding: per_env
 # Probe whether Q-explosion on Asterix masks the bias→outcome link.
 #
 # Baseline (sync=100, wd=0) gives Q_late ≈ 5×10⁶ and DDQN slightly
@@ -29,7 +29,7 @@ arms_shape: paired
 envs:
   - {name: Asterix-MinAtar, n_seeds: 30, chunk_size: 15}
 
-base_intervention:
+defaults:
   total_steps: 100000
   eval_every:  10000
   n_episodes:  5
@@ -45,103 +45,87 @@ base_intervention:
     kernel_size: 3
     hidden: [128]
 
-hypotheses:
+interventions:
   - name: vanilla_sync100_wd0
-    predicted_direction: null
-    intervention:
+    base:
       sync_period: 100
       optimizer:
         fn: warmed_update
         inner: {fn: adam, lr: 0.0001, weight_decay: 0.0}
         warmup_steps: 100
   - name: ddqn_sync100_wd0
-    predicted_direction: a_gt_b
-    intervention:
+    base:
       sync_period: 100
       optimizer:
         fn: warmed_update
         inner: {fn: adam, lr: 0.0001, weight_decay: 0.0}
         warmup_steps: 100
-      bootstrap:
-        fn: bootstrap
-        greedification: {fn: double_greedify}
-    intervention_arms:
-      - slot_path: bootstrap
-        replacement:
-          fn: bootstrap
-          greedification: {fn: double_greedify}
+    arms:
+      - []  # vanilla control
+      - - slot_path: bootstrap
+          replacement:
+            fn: bootstrap
+            greedification: {fn: double_greedify}
 
   - name: vanilla_sync10k_wd0
-    predicted_direction: null
-    intervention:
+    base:
       sync_period: 10000
       optimizer:
         fn: warmed_update
         inner: {fn: adam, lr: 0.0001, weight_decay: 0.0}
         warmup_steps: 100
   - name: ddqn_sync10k_wd0
-    predicted_direction: a_gt_b
-    intervention:
+    base:
       sync_period: 10000
       optimizer:
         fn: warmed_update
         inner: {fn: adam, lr: 0.0001, weight_decay: 0.0}
         warmup_steps: 100
-      bootstrap:
-        fn: bootstrap
-        greedification: {fn: double_greedify}
-    intervention_arms:
-      - slot_path: bootstrap
-        replacement:
-          fn: bootstrap
-          greedification: {fn: double_greedify}
+    arms:
+      - []  # vanilla control
+      - - slot_path: bootstrap
+          replacement:
+            fn: bootstrap
+            greedification: {fn: double_greedify}
 
   - name: vanilla_sync100_wd1e3
-    predicted_direction: null
-    intervention:
+    base:
       sync_period: 100
       optimizer:
         fn: warmed_update
         inner: {fn: adam, lr: 0.0001, weight_decay: 0.001}
         warmup_steps: 100
   - name: ddqn_sync100_wd1e3
-    predicted_direction: a_gt_b
-    intervention:
+    base:
       sync_period: 100
       optimizer:
         fn: warmed_update
         inner: {fn: adam, lr: 0.0001, weight_decay: 0.001}
         warmup_steps: 100
-      bootstrap:
-        fn: bootstrap
-        greedification: {fn: double_greedify}
-    intervention_arms:
-      - slot_path: bootstrap
-        replacement:
-          fn: bootstrap
-          greedification: {fn: double_greedify}
+    arms:
+      - []  # vanilla control
+      - - slot_path: bootstrap
+          replacement:
+            fn: bootstrap
+            greedification: {fn: double_greedify}
 
   - name: vanilla_sync10k_wd1e3
-    predicted_direction: null
-    intervention:
+    base:
       sync_period: 10000
       optimizer:
         fn: warmed_update
         inner: {fn: adam, lr: 0.0001, weight_decay: 0.001}
         warmup_steps: 100
   - name: ddqn_sync10k_wd1e3
-    predicted_direction: a_gt_b
-    intervention:
+    base:
       sync_period: 10000
       optimizer:
         fn: warmed_update
         inner: {fn: adam, lr: 0.0001, weight_decay: 0.001}
         warmup_steps: 100
-      bootstrap:
-        fn: bootstrap
-        greedification: {fn: double_greedify}
-    intervention_arms:
-      - slot_path: bootstrap
-        replacement:
-          fn: bootstrap
-          greedification: {fn: double_greedify}
+    arms:
+      - []  # vanilla control
+      - - slot_path: bootstrap
+          replacement:
+            fn: bootstrap
+            greedification: {fn: double_greedify}

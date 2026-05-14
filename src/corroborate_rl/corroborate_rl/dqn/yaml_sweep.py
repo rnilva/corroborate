@@ -1,17 +1,17 @@
-"""DQN-substrate YAML → `run_hypotheses` dispatch.
+"""DQN-substrate YAML → `run_intervention` dispatch.
 
 `DQNSweep` is the typed shape of a configured sweep loaded from
 YAML — one dataclass for both arm shapes. The dispatch
-distinction lives in `arms_shape: 'chunked' | 'paired'` and the
-`{from_env: <attr>}` placeholders inside `hypothesis_templates`,
+distinction lives in `env_binding: 'shared' | 'per_env'` and the
+`{from_env: <attr>}` placeholders inside `intervention_templates`,
 not in the dataclass type.
 
-- `arms_shape: 'chunked'` — hypotheses are env-generic. The
-  templates resolve once (no env_attrs) and pair Cartesianly with
-  envs via `chunked_arms`.
-- `arms_shape: 'paired'` — each (template × env) builds one
-  concrete Hypothesis after `{from_env: <attr>}` substitution
-  against `EnvSpec.public_attrs()`. The substrate's `paired_arms`
+- `env_binding: 'shared'` — intervention templates are env-generic.
+  Each resolves once (no env_attrs) and pairs Cartesianly with
+  envs at dispatch time.
+- `env_binding: 'per_env'` — each (template × env) builds one
+  concrete InterventionConfig after `{from_env: <attr>}`
+  substitution against `EnvSpec.public_attrs()`. The substrate
   zips them with one env_config per arm.
 
 The split between *shape* (the dataclass) and *dispatch* (the
@@ -28,8 +28,8 @@ import yaml
 
 from corroborate.runner.registry import Registry
 from corroborate_rl.dqn.config_loader import (
-    HypothesisConfig,
-    build_hypothesis_from_mapping,
+    InterventionConfig,
+    build_intervention_from_mapping,
     is_str_keyed_mapping,
 )
 from corroborate_rl.dqn.collect import EnvConfig
@@ -38,45 +38,45 @@ from corroborate_rl.dqn.invariants import DQNTrajectoryRecord
 from corroborate_rl.env_catalogue import EnvSpec
 
 
-type ArmsShape = Literal['chunked', 'paired']
+type EnvBinding = Literal['shared', 'per_env']
 
 
-def _is_arms_shape(v: object) -> TypeIs[ArmsShape]:
-    return isinstance(v, str) and v in ('chunked', 'paired')
+def _is_env_binding(v: object) -> TypeIs[EnvBinding]:
+    return isinstance(v, str) and v in ('shared', 'per_env')
 
 
 @dataclass(frozen=True, slots=True)
 class DQNSweep:
-    """A configured DQN sweep. `hypothesis_templates` are raw
+    """A configured DQN sweep. `intervention_templates` are raw
     string-keyed mappings (pre-resolution); call
-    `build_hypotheses` with the appropriate env context to get
-    concrete `Hypothesis` instances.
+    `build_interventions` with the appropriate env context to get
+    concrete `InterventionConfig` instances.
 
-    The dataclass is shape-uniform between chunked and paired
-    modes. The dispatch routine reads `arms_shape` to decide
-    whether to resolve once (chunked) or per-env (paired)."""
+    The dataclass is shape-uniform between shared and per-env
+    modes. The dispatch routine reads `env_binding` to decide
+    whether to resolve once (shared) or per-env (per_env)."""
     name: str
     out_dir: Path
     envs: tuple[EnvConfig, ...]
-    hypothesis_templates: tuple[Mapping[str, object], ...]
-    arms_shape: ArmsShape
+    intervention_templates: tuple[Mapping[str, object], ...]
+    env_binding: EnvBinding
     archive_remote: str | None = None
 
-    def build_hypotheses(
+    def build_interventions(
         self,
         *,
         reg: Registry,
         env_attrs: Mapping[str, object] | None = None,
-    ) -> tuple[HypothesisConfig, ...]:
+    ) -> tuple[InterventionConfig, ...]:
         """Resolve every template against `reg` and return the
-        built Hypothesis tuple. Pass `env_attrs=None` for chunked
-        mode (any `{from_env: <attr>}` placeholder raises);
-        provide an env's `public_attrs()` map for paired mode."""
+        built InterventionConfig tuple. Pass `env_attrs=None` for
+        shared mode (any `{from_env: <attr>}` placeholder raises);
+        provide an env's `public_attrs()` map for per-env mode."""
         return tuple(
-            build_hypothesis_from_mapping(
+            build_intervention_from_mapping(
                 t, reg=reg, env_attrs=env_attrs,
             )
-            for t in self.hypothesis_templates
+            for t in self.intervention_templates
         )
 
 
@@ -110,24 +110,24 @@ def _build_sweep(node: Mapping[str, object]) -> DQNSweep:
     name = _require_str(node, 'name')
     out_dir = Path(_require_str(node, 'out_dir'))
     envs = _build_envs(node)
-    arms_shape = _require_arms_shape(node)
+    env_binding = _require_env_binding(node)
     archive_remote = _build_archive_remote(node)
-    base_intervention = _build_base_intervention(node)
-    hypotheses_raw = node.get('hypotheses')
-    if not isinstance(hypotheses_raw, list):
+    defaults = _build_defaults(node)
+    interventions_raw = node.get('interventions')
+    if not isinstance(interventions_raw, list):
         raise TypeError(
-            f'sweep.hypotheses must be a list; got '
-            f'{type(hypotheses_raw).__name__}',
+            f'sweep.interventions must be a list; got '
+            f'{type(interventions_raw).__name__}',
         )
-    hypotheses_typed: list[object] = list(hypotheses_raw)
+    interventions_typed: list[object] = list(interventions_raw)
     templates = tuple(
-        _merge_with_base(h, base_intervention)
-        for h in hypotheses_typed
+        _merge_with_defaults(h, defaults)
+        for h in interventions_typed
     )
     return DQNSweep(
         name=name, out_dir=out_dir, envs=envs,
-        hypothesis_templates=templates,
-        arms_shape=arms_shape, archive_remote=archive_remote,
+        intervention_templates=templates,
+        env_binding=env_binding, archive_remote=archive_remote,
     )
 
 
@@ -152,11 +152,11 @@ def _build_envs(node: Mapping[str, object]) -> tuple[EnvConfig, ...]:
     return tuple(_build_env(e) for e in envs_typed)
 
 
-def _require_arms_shape(node: Mapping[str, object]) -> ArmsShape:
-    v = node.get('arms_shape', 'chunked')
-    if not _is_arms_shape(v):
+def _require_env_binding(node: Mapping[str, object]) -> EnvBinding:
+    v = node.get('env_binding', 'shared')
+    if not _is_env_binding(v):
         raise ValueError(
-            f'sweep.arms_shape must be chunked|paired; got {v!r}',
+            f'sweep.env_binding must be shared|per_env; got {v!r}',
         )
     return v
 
@@ -173,38 +173,38 @@ def _build_archive_remote(node: Mapping[str, object]) -> str | None:
     )
 
 
-def _build_base_intervention(
+def _build_defaults(
     node: Mapping[str, object],
 ) -> Mapping[str, object]:
-    v = node.get('base_intervention', {})
+    v = node.get('defaults', {})
     if not is_str_keyed_mapping(v):
         raise TypeError(
-            f'sweep.base_intervention must be a mapping; got '
+            f'sweep.defaults must be a mapping; got '
             f'{type(v).__name__}',
         )
     return v
 
 
-def _merge_with_base(
-    h_node: object, base: Mapping[str, object],
+def _merge_with_defaults(
+    h_node: object, defaults: Mapping[str, object],
 ) -> Mapping[str, object]:
-    """Shallow-merge `base` under the hypothesis's own
-    `intervention` (own keys override). Returns the merged
-    template (still raw — not yet resolved)."""
+    """Shallow-merge `defaults` under the intervention's own
+    `base` (own keys override). Returns the merged template
+    (still raw — not yet resolved)."""
     if not is_str_keyed_mapping(h_node):
         raise TypeError(
-            f'hypothesis must be a mapping; got '
+            f'intervention must be a mapping; got '
             f'{type(h_node).__name__}',
         )
-    own_intervention = h_node.get('intervention', {})
-    if not is_str_keyed_mapping(own_intervention):
+    own_base = h_node.get('base', {})
+    if not is_str_keyed_mapping(own_base):
         raise TypeError(
-            f'hypothesis.intervention must be a mapping; got '
-            f'{type(own_intervention).__name__}',
+            f'intervention.base must be a mapping; got '
+            f'{type(own_base).__name__}',
         )
     return {
         **h_node,
-        'intervention': {**base, **own_intervention},
+        'base': {**defaults, **own_base},
     }
 
 
@@ -309,45 +309,45 @@ def default_dqn_registry() -> Registry:
     return reg
 
 
-def build_paired(
+def build_per_env(
     sweep: DQNSweep, *, reg: Registry,
 ) -> tuple[
-    tuple[HypothesisConfig, ...],
+    tuple[InterventionConfig, ...],
     tuple[EnvConfig, ...],
 ]:
-    """Resolve a paired sweep's templates against each env's
-    `EnvSpec.public_attrs()`. Returns `(hypotheses,
-    envs_aligned)` suitable for `paired_arms`: each env appears
+    """Resolve a per-env sweep's templates against each env's
+    `EnvSpec.public_attrs()`. Returns `(interventions,
+    envs_aligned)` suitable for paired dispatch: each env appears
     once per template, in env-major order.
 
     Standalone so tests can verify per-env resolution without
     dispatching the whole sweep."""
-    if sweep.arms_shape != 'paired':
+    if sweep.env_binding != 'per_env':
         raise ValueError(
-            f"build_paired requires arms_shape='paired'; got "
-            f'{sweep.arms_shape!r}',
+            f"build_per_env requires env_binding='per_env'; got "
+            f'{sweep.env_binding!r}',
         )
     from corroborate_rl.env_catalogue import get as get_env_spec
 
-    hypotheses: list[HypothesisConfig] = []
+    interventions: list[InterventionConfig] = []
     envs_aligned: list[EnvConfig] = []
     for ec in sweep.envs:
         spec = get_env_spec(ec.env_name)
         env_attrs = env_attrs_from_spec(spec)
-        for built in sweep.build_hypotheses(reg=reg, env_attrs=env_attrs):
-            hypotheses.append(built)
+        for built in sweep.build_interventions(reg=reg, env_attrs=env_attrs):
+            interventions.append(built)
             envs_aligned.append(ec)
-    return tuple(hypotheses), tuple(envs_aligned)
+    return tuple(interventions), tuple(envs_aligned)
 
 
 def dispatch_sweep(sweep: DQNSweep) -> tuple[Path, Path]:
     """Run the sweep end-to-end. For each YAML-loaded
-    `HypothesisConfig`, decompose into a Hypothesis Protocol-
+    `InterventionConfig`, decompose into a Hypothesis Protocol-
     conformer + `base` Callable (`partial(dqn, **HPs)`), build a
     discrete grid_points list (env × seed_chunk × wrappers), and
     dispatch to the framework's `run_intervention` paired-sweep
-    primitive. Each Hypothesis produces its own per-arm parquet
-    pair under `<out_dir>/<name>/`; the per-Hypothesis corpora
+    primitive. Each InterventionConfig produces its own per-arm
+    parquet pair under `<out_dir>/<name>/`; the per-config corpora
     are concatenated to `<out_dir>/runs.parquet` /
     `<out_dir>/traces.parquet`.
 
@@ -371,26 +371,26 @@ def dispatch_sweep(sweep: DQNSweep) -> tuple[Path, Path]:
     from corroborate_rl.sweep import DQNRunner
 
     reg = default_dqn_registry()
-    if sweep.arms_shape == 'chunked':
-        configs: list[HypothesisConfig] = list(
-            sweep.build_hypotheses(reg=reg),
+    if sweep.env_binding == 'shared':
+        configs: list[InterventionConfig] = list(
+            sweep.build_interventions(reg=reg),
         )
         envs_per_h: list[Sequence[EnvConfig]] = [
             list(sweep.envs)
         ] * len(configs)
     else:
-        built_paired, envs_aligned = build_paired(sweep, reg=reg)
-        configs = list(built_paired)
+        built_per_env, envs_aligned = build_per_env(sweep, reg=reg)
+        configs = list(built_per_env)
         envs_per_h = [[ec] for ec in envs_aligned]
 
     # Each config writes to `sweep.out_dir / cfg.name`; two configs
     # sharing a name silently overwrite each other's runs.parquet
     # at merge time and the final corpus loses all but one config's
-    # data. Refuse to dispatch on collision. With `arms_shape:
-    # paired`, this fires when the hypothesis template's `name`
+    # data. Refuse to dispatch on collision. With `env_binding:
+    # per_env`, this fires when the intervention template's `name`
     # field omits an env-attribute substitution (e.g.,
     # `name: ddqn_vs_{from_env: env_name}`); fix the template or
-    # switch to `arms_shape: chunked`.
+    # switch to `env_binding: shared`.
     seen_names: dict[str, int] = {}
     for cfg in configs:
         seen_names[cfg.name] = seen_names.get(cfg.name, 0) + 1
@@ -400,9 +400,9 @@ def dispatch_sweep(sweep: DQNSweep) -> tuple[Path, Path]:
             f'dispatch_sweep: configs share output paths — '
             f'{collisions!r} would overwrite each other at '
             f'`<out_dir>/<cfg.name>/runs.parquet`. '
-            f'Templating the hypothesis `name` with '
-            f"`{{from_env: env_name}}` (arms_shape='paired') or "
-            f"switching to arms_shape='chunked' resolves this. "
+            f'Templating the intervention `name` with '
+            f"`{{from_env: env_name}}` (env_binding='per_env') or "
+            f"switching to env_binding='shared' resolves this. "
             f'Sweep aborted before any data is written.',
         )
 
@@ -435,10 +435,9 @@ def dispatch_sweep(sweep: DQNSweep) -> tuple[Path, Path]:
     sub_arm_dirs: list[Path] = []
     for cfg, env_configs in zip(configs, envs_per_h, strict=True):
         do_arms = cfg.do_effect_arms()
-        # HP/arm split — see `HypothesisConfig.base_hp_kwargs` for
-        # the two schemas. New N-arm `arms:` leaves base intact;
-        # legacy binary `intervention_arms:` strips arm-slot paths
-        # to reconstruct the vanilla baseline.
+        # `base` IS the SCM kwargs map; each arm's interventions
+        # override slot values via partial precedence in
+        # `apply_interventions`. Empty-tuple arm = "use base".
         hp_kwargs = cfg.base_hp_kwargs()
         base: Callable[..., object] = partial(dqn, **hp_kwargs)
         intervention = DoEffect(arms=do_arms)
@@ -504,7 +503,7 @@ def dispatch_sweep(sweep: DQNSweep) -> tuple[Path, Path]:
         sys.stderr.write(
             f'run_sweep: WARNING — top-level traces.parquet merge '
             f'skipped (insufficient disk in '
-            f'{sweep.out_dir.parent}). Per-hypothesis sub-corpora '
+            f'{sweep.out_dir.parent}). Per-intervention sub-corpora '
             f'under {sweep.out_dir} are intact and usable directly '
             f'for analysis / ingest. To finish the top-level merge '
             f'later: archive sub-corpora, free disk, then concat '
@@ -540,9 +539,9 @@ def dispatch_sweep(sweep: DQNSweep) -> tuple[Path, Path]:
 
 
 __all__ = [
-    'ArmsShape',
     'DQNSweep',
-    'build_paired',
+    'EnvBinding',
+    'build_per_env',
     'default_dqn_registry',
     'dispatch_sweep',
     'env_attrs_from_spec',

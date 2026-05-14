@@ -1,6 +1,6 @@
 name: minatar_1M_spaceinvaders
 out_dir: experiments/data/minatar_1M_spaceinvaders
-arms_shape: paired
+env_binding: per_env
 archive_remote: s3://corroborate-archive/minatar_1M
 
 # Finishes the missing 2 arms from the original minatar_1M sweep
@@ -11,7 +11,7 @@ archive_remote: s3://corroborate-archive/minatar_1M
 envs:
   - {name: SpaceInvaders-MinAtar, n_seeds: 30, chunk_size: 15}
 
-base_intervention:
+defaults:
   total_steps: 1000000
   eval_every:  50000
   n_episodes:  5
@@ -32,18 +32,13 @@ base_intervention:
     kernel_size: 3
     hidden: [128]
 
-hypotheses:
+interventions:
   - name: vanilla_dqn
-    predicted_direction: null
 
   - name: ddqn
-    predicted_direction: a_gt_b
-    intervention:
-      bootstrap:
-        fn: bootstrap
-        greedification: {fn: double_greedify}
-    intervention_arms:
-      - slot_path: bootstrap
-        replacement:
-          fn: bootstrap
-          greedification: {fn: double_greedify}
+    arms:
+      - []  # vanilla control
+      - - slot_path: bootstrap
+          replacement:
+            fn: bootstrap
+            greedification: {fn: double_greedify}

@@ -1,6 +1,6 @@
 name: reward_scale_sweep
 out_dir: experiments/data/reward_scale_sweep
-arms_shape: chunked
+env_binding: shared
 # archive_remote removed — no R2 credentials in this environment.
 # Run the archive step manually after the sweep:
 #   uv run python -m corroborate archive experiments/data/reward_scale_sweep \
@@ -33,7 +33,7 @@ envs:
 # Same HP regime as gamma_sweep / dampened_ddqn_alpha — γ fixed at
 # 0.99, MLP backbone, capacity 50k. Reward scale is the ONLY varied
 # axis (× the vanilla/ddqn arm split).
-base_intervention:
+defaults:
   total_steps: 200000
   eval_every:  20000
   n_episodes:  5
@@ -51,19 +51,14 @@ base_intervention:
     class: MLP
     hidden: [64, 64]
 
-hypotheses:
+interventions:
   - name: vanilla_dqn
-    predicted_direction: null
-    intervention: {}
+    base: {}
 
   - name: ddqn
-    predicted_direction: a_gt_b
-    intervention:
-      bootstrap:
-        fn: bootstrap
-        greedification: {fn: double_greedify}
-    intervention_arms:
-      - slot_path: bootstrap
-        replacement:
-          fn: bootstrap
-          greedification: {fn: double_greedify}
+    arms:
+      - []  # vanilla control
+      - - slot_path: bootstrap
+          replacement:
+            fn: bootstrap
+            greedification: {fn: double_greedify}

@@ -1,6 +1,6 @@
 name: adaptive_dqn_spaceinvaders_1m
 out_dir: experiments/data/adaptive_dqn_spaceinvaders_1m
-arms_shape: paired
+env_binding: per_env
 
 envs:
   # CNN at 1M — chunk_size: 15 to stay within GPU memory (matches
@@ -9,7 +9,7 @@ envs:
 
 # HPs match minatar_1M's SpaceInvaders cells (vanilla_dqn + ddqn
 # already there). Pair adaptive arm against those existing cells.
-base_intervention:
+defaults:
   total_steps: 1000000
   eval_every:  50000
   n_episodes:  5
@@ -31,19 +31,13 @@ base_intervention:
     hidden: [128]
 
 # Single arm — the winning factor=0.5 from the FourRooms tuning.
-hypotheses:
+interventions:
   - name: adaptive_dqn
-    predicted_direction: a_gt_b
-    intervention:
-      bootstrap:
-        fn: bootstrap
-        greedification:
-          fn: adaptive_dormancy_greedify
-          sigma_floor_factor: 0.5
-    intervention_arms:
-      - slot_path: bootstrap
-        replacement:
-          fn: bootstrap
-          greedification:
-            fn: adaptive_dormancy_greedify
-            sigma_floor_factor: 0.5
+    arms:
+      - []  # vanilla control
+      - - slot_path: bootstrap
+          replacement:
+            fn: bootstrap
+            greedification:
+              fn: adaptive_dormancy_greedify
+              sigma_floor_factor: 0.5

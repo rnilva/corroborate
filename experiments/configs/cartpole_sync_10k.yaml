@@ -1,6 +1,6 @@
 name: cartpole_sync_10k
 out_dir: experiments/data/cartpole_sync_10k
-arms_shape: paired
+env_binding: per_env
 
 # Test whether Q-amplification on CartPole (σQ ratio = 3.70× at sync=100)
 # disappears at sync=10000. Predicts: with proper Q stabilization, DDQN
@@ -10,7 +10,7 @@ arms_shape: paired
 envs:
   - {name: CartPole-v1, n_seeds: 30, chunk_size: 30}
 
-base_intervention:
+defaults:
   total_steps: 200000
   eval_every:  20000
   n_episodes:  5
@@ -21,26 +21,21 @@ base_intervention:
     capacity: 50000
     batch_size: 32
   optimizer:
-    class: WarmedUpdate
-    inner: {class: Adam, lr: 0.0001}
+    fn: warmed_update
+    inner: {fn: adam, lr: 0.0001}
     warmup_steps: 100
   q_network:
     class: MLP
     hidden: [64, 64]
 
-hypotheses:
+interventions:
   - name: vanilla_dqn_sync10k
-    predicted_direction: null
-    intervention: {}
+    base: {}
 
   - name: ddqn_sync10k
-    predicted_direction: a_gt_b
-    intervention:
-      bootstrap:
-        fn: bootstrap
-        greedification: {fn: double_greedify}
-    intervention_arms:
-      - slot_path: bootstrap
-        replacement:
-          fn: bootstrap
-          greedification: {fn: double_greedify}
+    arms:
+      - []  # vanilla control
+      - - slot_path: bootstrap
+          replacement:
+            fn: bootstrap
+            greedification: {fn: double_greedify}

@@ -1,6 +1,6 @@
 name: per_state_bias_probe_fr
 out_dir: experiments/data/per_state_bias_probe_fr
-arms_shape: chunked
+env_binding: shared
 
 # Per-state cumulative-bias probe sweep. Single env (FR γ=0.99) +
 # vanilla/DDQN. Tests the new `mean_per_state_cumulative_bias_late`
@@ -12,7 +12,7 @@ arms_shape: chunked
 envs:
   - {name: FourRooms-misc, n_seeds: 30, chunk_size: 30}
 
-base_intervention:
+defaults:
   total_steps: 200000
   eval_every:  20000
   n_episodes:  20
@@ -30,13 +30,13 @@ base_intervention:
     class: MLP
     hidden: [64, 64]
 
-hypotheses:
+interventions:
   - name: ddqn_vs_vanilla_fr_g099
-    predicted_direction: a_gt_b
-    intervention:
+    base:
       gamma: 0.99
-    intervention_arms:
-      - slot_path: bootstrap
-        replacement:
-          fn: bootstrap
-          greedification: {fn: double_greedify}
+    arms:
+      - []  # vanilla control
+      - - slot_path: bootstrap
+          replacement:
+            fn: bootstrap
+            greedification: {fn: double_greedify}

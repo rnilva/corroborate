@@ -1,6 +1,6 @@
 name: reward_scale_lower_boundary
 out_dir: experiments/data/reward_scale_lower_boundary
-arms_shape: chunked
+env_binding: shared
 archive_remote: s3://corroborate-archive/reward_scale_lower_boundary
 
 # Map the lower boundary of the rescue regime on FourRooms
@@ -23,7 +23,7 @@ envs:
   - {name: FourRooms-misc, n_seeds: 30, chunk_size: 30, wrappers: [{type: reward_scale, scale: 0.01}]}
   - {name: FourRooms-misc, n_seeds: 30, chunk_size: 30, wrappers: [{type: reward_scale, scale: 0.03}]}
 
-base_intervention:
+defaults:
   total_steps: 200000
   eval_every:  20000
   n_episodes:  5
@@ -41,19 +41,14 @@ base_intervention:
     class: MLP
     hidden: [64, 64]
 
-hypotheses:
+interventions:
   - name: vanilla_dqn
-    predicted_direction: null
-    intervention: {}
+    base: {}
 
   - name: ddqn
-    predicted_direction: a_gt_b
-    intervention:
-      bootstrap:
-        fn: bootstrap
-        greedification: {fn: double_greedify}
-    intervention_arms:
-      - slot_path: bootstrap
-        replacement:
-          fn: bootstrap
-          greedification: {fn: double_greedify}
+    arms:
+      - []  # vanilla control
+      - - slot_path: bootstrap
+          replacement:
+            fn: bootstrap
+            greedification: {fn: double_greedify}

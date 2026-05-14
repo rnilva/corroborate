@@ -1,6 +1,6 @@
 name: total_steps_sweep_fourrooms
 out_dir: experiments/data/total_steps_sweep_fourrooms
-arms_shape: chunked
+env_binding: shared
 archive_remote: s3://corroborate-archive/total_steps_sweep_fourrooms
 
 # Vary `total_steps` (literal chain depth bound) at γ=0.99 fixed
@@ -9,7 +9,7 @@ archive_remote: s3://corroborate-archive/total_steps_sweep_fourrooms
 envs:
   - {name: FourRooms-misc, n_seeds: 30, chunk_size: 30}
 
-base_intervention:
+defaults:
   total_steps: 200000
   eval_every:  10000
   n_episodes:  5
@@ -29,68 +29,58 @@ base_intervention:
 
 # 5 lengths × 2 arms = 10 hypotheses. 25k/50k/100k/200k/500k.
 # (1M is the fourrooms_1m sweep; we already have that.)
-hypotheses:
+interventions:
   - name: vanilla_25k
-    predicted_direction: null
-    intervention: {total_steps: 25000, eval_every: 2500}
+    base: {total_steps: 25000, eval_every: 2500}
   - name: ddqn_25k
-    predicted_direction: a_gt_b
-    intervention:
+    base:
       total_steps: 25000
       eval_every: 2500
-      bootstrap: {fn: bootstrap, greedification: {fn: double_greedify}}
-    intervention_arms:
-      - slot_path: bootstrap
-        replacement: {fn: bootstrap, greedification: {fn: double_greedify}}
+    arms:
+      - []  # vanilla control
+      - - slot_path: bootstrap
+          replacement: {fn: bootstrap, greedification: {fn: double_greedify}}
 
   - name: vanilla_50k
-    predicted_direction: null
-    intervention: {total_steps: 50000, eval_every: 5000}
+    base: {total_steps: 50000, eval_every: 5000}
   - name: ddqn_50k
-    predicted_direction: a_gt_b
-    intervention:
+    base:
       total_steps: 50000
       eval_every: 5000
-      bootstrap: {fn: bootstrap, greedification: {fn: double_greedify}}
-    intervention_arms:
-      - slot_path: bootstrap
-        replacement: {fn: bootstrap, greedification: {fn: double_greedify}}
+    arms:
+      - []  # vanilla control
+      - - slot_path: bootstrap
+          replacement: {fn: bootstrap, greedification: {fn: double_greedify}}
 
   - name: vanilla_100k
-    predicted_direction: null
-    intervention: {total_steps: 100000, eval_every: 10000}
+    base: {total_steps: 100000, eval_every: 10000}
   - name: ddqn_100k
-    predicted_direction: a_gt_b
-    intervention:
+    base:
       total_steps: 100000
       eval_every: 10000
-      bootstrap: {fn: bootstrap, greedification: {fn: double_greedify}}
-    intervention_arms:
-      - slot_path: bootstrap
-        replacement: {fn: bootstrap, greedification: {fn: double_greedify}}
+    arms:
+      - []  # vanilla control
+      - - slot_path: bootstrap
+          replacement: {fn: bootstrap, greedification: {fn: double_greedify}}
 
   - name: vanilla_200k
-    predicted_direction: null
-    intervention: {total_steps: 200000, eval_every: 20000}
+    base: {total_steps: 200000, eval_every: 20000}
   - name: ddqn_200k
-    predicted_direction: a_gt_b
-    intervention:
+    base:
       total_steps: 200000
       eval_every: 20000
-      bootstrap: {fn: bootstrap, greedification: {fn: double_greedify}}
-    intervention_arms:
-      - slot_path: bootstrap
-        replacement: {fn: bootstrap, greedification: {fn: double_greedify}}
+    arms:
+      - []  # vanilla control
+      - - slot_path: bootstrap
+          replacement: {fn: bootstrap, greedification: {fn: double_greedify}}
 
   - name: vanilla_500k
-    predicted_direction: null
-    intervention: {total_steps: 500000, eval_every: 25000}
+    base: {total_steps: 500000, eval_every: 25000}
   - name: ddqn_500k
-    predicted_direction: a_gt_b
-    intervention:
+    base:
       total_steps: 500000
       eval_every: 25000
-      bootstrap: {fn: bootstrap, greedification: {fn: double_greedify}}
-    intervention_arms:
-      - slot_path: bootstrap
-        replacement: {fn: bootstrap, greedification: {fn: double_greedify}}
+    arms:
+      - []  # vanilla control
+      - - slot_path: bootstrap
+          replacement: {fn: bootstrap, greedification: {fn: double_greedify}}

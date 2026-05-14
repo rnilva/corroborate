@@ -2,7 +2,7 @@
 
 Replaces per-experiment Python scripts: pass a sweep YAML, the
 runner loads it through the auto-registry, builds the arms, and
-forwards to `run_hypotheses`. The YAML is the single authoring
+forwards to `run_intervention`. The YAML is the single authoring
 surface; the corpus shape (parquets, archive, arm tags) is
 unchanged from the per-script path.
 
@@ -45,9 +45,9 @@ def main() -> None:
     sweep = load_sweep(Path(sweep_path_attr), reg=default_dqn_registry())
     print(
         f'sweep: {sweep.name} '
-        f'({len(sweep.hypothesis_templates)} hypotheses × '
+        f'({len(sweep.intervention_templates)} interventions × '
         f'{len(sweep.envs)} envs, '
-        f'arms_shape={sweep.arms_shape})',
+        f'env_binding={sweep.env_binding})',
         flush=True,
     )
     runs, traces = dispatch_sweep(sweep)

@@ -1,13 +1,13 @@
 name: adaptive_dqn_fourrooms
 out_dir: experiments/data/adaptive_dqn_fourrooms
-arms_shape: chunked
+env_binding: shared
 
 envs:
   - {name: FourRooms-misc, n_seeds: 30, chunk_size: 15}
 
 # HPs match expectile_3way's FourRooms cells so pairing-by-seed
 # against expectile_3way's vanilla_dqn + ddqn cells is admissible.
-base_intervention:
+defaults:
   total_steps: 200000
   eval_every:  20000
   n_episodes:  5
@@ -27,19 +27,13 @@ base_intervention:
 
 # Single arm — pair against expectile_3way's existing
 # vanilla_dqn + ddqn FourRooms cells (seeds 0-29 align).
-hypotheses:
+interventions:
   - name: adaptive_dqn
-    predicted_direction: a_gt_b
-    intervention:
-      bootstrap:
-        fn: bootstrap
-        greedification:
-          fn: adaptive_dormancy_greedify
-          sigma_floor_factor: 1.0
-    intervention_arms:
-      - slot_path: bootstrap
-        replacement:
-          fn: bootstrap
-          greedification:
-            fn: adaptive_dormancy_greedify
-            sigma_floor_factor: 1.0
+    arms:
+      - []  # vanilla control
+      - - slot_path: bootstrap
+          replacement:
+            fn: bootstrap
+            greedification:
+              fn: adaptive_dormancy_greedify
+              sigma_floor_factor: 1.0

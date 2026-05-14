@@ -1,6 +1,6 @@
 name: survive_sync_intermediate_minatar
 out_dir: experiments/data/survive_sync_intermediate_minatar
-arms_shape: paired
+env_binding: per_env
 
 # Intermediate-sync sweep on MinAtar SURVIVE-class envs to populate
 # more strict-mech-HELD configs in CLAIM 17 scope. Existing data:
@@ -18,7 +18,7 @@ envs:
   - {name: Freeway-MinAtar,        n_seeds: 30, chunk_size: 10}
   - {name: SpaceInvaders-MinAtar,  n_seeds: 30, chunk_size: 10}
 
-base_intervention:
+defaults:
   total_steps: 200000
   eval_every:  20000
   n_episodes:  5
@@ -39,52 +39,40 @@ base_intervention:
     kernel_size: 3
     hidden: [128]
 
-hypotheses:
+interventions:
   # sync = 500
   - name: vanilla_dqn_sync500
-    predicted_direction: null
-    intervention: {sync_period: 500}
+    base: {sync_period: 500}
   - name: ddqn_sync500
-    predicted_direction: a_gt_b
-    intervention:
+    base:
       sync_period: 500
-      bootstrap:
-        fn: bootstrap
-        greedification: {fn: double_greedify}
-    intervention_arms:
-      - slot_path: bootstrap
-        replacement:
-          fn: bootstrap
-          greedification: {fn: double_greedify}
+    arms:
+      - []  # vanilla control
+      - - slot_path: bootstrap
+          replacement:
+            fn: bootstrap
+            greedification: {fn: double_greedify}
   # sync = 1500
   - name: vanilla_dqn_sync1500
-    predicted_direction: null
-    intervention: {sync_period: 1500}
+    base: {sync_period: 1500}
   - name: ddqn_sync1500
-    predicted_direction: a_gt_b
-    intervention:
+    base:
       sync_period: 1500
-      bootstrap:
-        fn: bootstrap
-        greedification: {fn: double_greedify}
-    intervention_arms:
-      - slot_path: bootstrap
-        replacement:
-          fn: bootstrap
-          greedification: {fn: double_greedify}
+    arms:
+      - []  # vanilla control
+      - - slot_path: bootstrap
+          replacement:
+            fn: bootstrap
+            greedification: {fn: double_greedify}
   # sync = 3000
   - name: vanilla_dqn_sync3000
-    predicted_direction: null
-    intervention: {sync_period: 3000}
+    base: {sync_period: 3000}
   - name: ddqn_sync3000
-    predicted_direction: a_gt_b
-    intervention:
+    base:
       sync_period: 3000
-      bootstrap:
-        fn: bootstrap
-        greedification: {fn: double_greedify}
-    intervention_arms:
-      - slot_path: bootstrap
-        replacement:
-          fn: bootstrap
-          greedification: {fn: double_greedify}
+    arms:
+      - []  # vanilla control
+      - - slot_path: bootstrap
+          replacement:
+            fn: bootstrap
+            greedification: {fn: double_greedify}
