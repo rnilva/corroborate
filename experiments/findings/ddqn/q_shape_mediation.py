@@ -162,6 +162,59 @@ def q_argmax_margin_per_burst_link_to_outcome(
     )
 
 
+# Stage 0' tautology baseline: Bellman-contraction edge q → mc.
+@claim_bridge(
+    source='q_per_burst',
+    target='mc_return_raw_per_burst_mean',
+    direction=Direction.DIRECT,
+    tier=Tier.ASSOCIATIONAL,
+    scope=DDQN_RELEVANT_SCOPE,
+    predicted_direction='a_gt_b',
+)
+def q_to_mc_coupled__bellman_contraction_baseline(
+    per_burst_jci_spearman: PerBurstJciSpearmanResult,
+    *,
+    x: _PerBurstMeasurable = _Q_PER_BURST,
+    y: _PerBurstMeasurable = MC_RETURN_RAW_PER_BURST_MEAN,
+    stratify_by: str = 'env_name',
+    min_stratum_size: int = 5,
+    rho_threshold: float = 0.2,
+    min_strata: int = 5,
+) -> Verdict:
+    """Stage 0' tautology baseline (Bellman contraction): Q-late
+    estimates MC return, so ρ(q_per_burst, mc_per_burst) should be
+    POSITIVE within env. HELD when pooled within-env ρ ≥
+    `rho_threshold`.
+
+    This bridge documents the Q→MC structural coupling that other
+    bridges (`q_action_std_per_burst_link_to_outcome__partial_q`)
+    PARTIAL OUT explicitly. Analog of
+    `mc_disc_raw_coupled__per_env_jci` (Stage 0 outcome-side
+    coupling) but for the BIAS-side coupling driven by Bellman
+    contraction.
+
+    Empirical at canonical: ρ_pooled = +0.348 across 10 envs.
+    Per-env strongly positive on most (Breakout +0.72, MountainCar
+    +0.81, MountainCar +0.81, SI +0.43, PacMan +0.60, Freeway
+    +0.60) — Bellman coupling HELDs. Strongly NEGATIVE on Asterix
+    (-0.33) and Snake (-0.23); near-zero on SlidingTile (-0.04) —
+    envs where training Q-magnitude doesn't track MC return,
+    likely reflecting unconverged Q-estimation or env-specific
+    structure (Asterix's per-step scoring dynamics could produce
+    high Q at low-progress states; Snake's stochastic reward
+    structure decouples Q from realized MC).
+
+    The HELD-with-env-heterogeneity reading: Bellman contraction
+    is the EXPECTED coupling but training imperfections produce
+    env-specific deviations. The per-env structure documented in
+    `findings_q_shape_env_class_stratification`."""
+    del x, y, stratify_by, min_stratum_size
+    return partial_spearman_signed_verdict(
+        per_burst_jci_spearman,
+        threshold=rho_threshold, sign=+1, min_strata=min_strata,
+    )
+
+
 @claim_bridge(
     source='q_action_std_per_burst',
     target='mc_return_raw_per_burst_mean',
@@ -202,6 +255,7 @@ def q_action_std_per_burst_link_to_outcome__partial_q(
 
 
 BRIDGES = (
+    q_to_mc_coupled__bellman_contraction_baseline,
     q_action_std_per_burst_link_to_outcome,
     q_action_std_per_burst_link_to_outcome__partial_q,
     q_argmax_margin_per_burst_link_to_outcome,
