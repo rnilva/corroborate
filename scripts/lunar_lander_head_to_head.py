@@ -204,20 +204,23 @@ def random_policy_distributional() -> dict[str, object]:
         j_obs, j_r, _, j_fd, j_len = jax_rollout(env, params, actions, seed=seed)
         g_obs, g_r, _, g_fd, g_len, g_kind = gym_rollout(actions, seed=seed)
 
-        # Termination kind for JAX (figure out from last reward).
+        # Termination kind for JAX. The env auto-resets on done, so
+        # `j_obs[-1]` is the post-reset obs (useless for inspection).
+        # Use `j_obs[j_fd]` (the obs at the FIRST done step, before
+        # auto-reset clobbered it) together with the terminal reward
+        # to classify.
         if j_fd >= 0:
             last_r = float(j_r[j_fd])
-            if last_r < -50:
-                j_kind = "crash"
-            elif last_r > 50:
+            terminal_obs = j_obs[j_fd]
+            x_at_done = float(terminal_obs[0])
+            if last_r > 50:
                 j_kind = "land"
+            elif abs(x_at_done) >= 1.0:
+                j_kind = "bounds"
+            elif last_r < -50:
+                j_kind = "crash"
             else:
-                # Check if x-obs was OOB
-                last_obs = j_obs[-1]
-                if abs(last_obs[0]) >= 1.0:
-                    j_kind = "bounds"
-                else:
-                    j_kind = "timeout"
+                j_kind = "timeout"
         else:
             j_kind = "timeout"
 

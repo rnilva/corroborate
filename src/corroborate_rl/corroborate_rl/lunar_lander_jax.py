@@ -696,8 +696,26 @@ class LunarLanderEnv:
 
         # Terminal bonuses — only on the TRANSITION to terminal
         # (crash_now / landed_now), not on subsequent steps after a
-        # sticky flag is already set.
-        crash_bonus = jnp.where(crash_now, jnp.float32(-100.0), jnp.float32(0.0))
+        # sticky flag is already set. OOB (out-of-viewport) gets
+        # the same −100 penalty as crash, matching gymnasium's
+        # behavior — in gymnasium, drifting off-screen at velocity
+        # is registered as a crash via Box2D's contact callback on
+        # the terrain boundary; in JAX the closed-form leg
+        # articulation deflects lateral momentum that gymnasium
+        # would terminate as a crash, so OOB-bound trajectories
+        # would otherwise escape the crash penalty. Calibrated
+        # against gymnasium's random-policy 100% crash rate.
+        x_obs = (
+            (x_new - jnp.float32(VIEWPORT_W / SCALE / 2.0))
+            / jnp.float32(VIEWPORT_W / SCALE / 2.0)
+        )
+        oob_now = (
+            (jnp.abs(x_obs) >= jnp.float32(1.0))
+            & ~state.crashed & ~state.landed
+        )
+        crash_bonus = jnp.where(
+            crash_now | oob_now, jnp.float32(-100.0), jnp.float32(0.0),
+        )
         landing_bonus = jnp.where(
             landed_now, jnp.float32(+100.0), jnp.float32(0.0),
         )
