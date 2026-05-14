@@ -50,17 +50,10 @@ from experiments.findings.ddqn.q_shape_mediation import (
 )
 
 
-EXPECTED: ClusterVerdict = ClusterVerdict.UNDERPOWERED
+EXPECTED: ClusterVerdict = ClusterVerdict.SUPPORTED
 
 
-BLOCKED_ON: str | None = (
-    'q_to_mc_coupled bridge fires POW_INSUF until '
-    '`mc_return__mean_axis_-1` (discounted MC per burst) is '
-    'backfilled — column exists but is all-None in current '
-    'cache. transitive_reads will queue on next --ingest-all. '
-    'After backfill, flip EXPECTED to SUPPORTED + clear '
-    'BLOCKED_ON if both edges HELD.'
-)
+BLOCKED_ON: str | None = None
 
 
 BRIDGES: tuple[Bridge, ...] = (

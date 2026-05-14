@@ -71,19 +71,39 @@ from experiments.findings.ddqn.bias_correction import (
 )
 
 
-# Canonical-scope re-verification (2026-05-13,
-# `findings_canonical_scope_reverification.md`):
-# Stage 0/1/2/3 ALL admit on the 740-cell × 12-env canonical
-# panel. The earlier REFUTED state came from cross-config Stage 2
-# noise (the wider corpus mixed in HP-sweep cells that diluted
-# the bg→jens within-env ρ). Under canonical (substrate-default
-# config, 1M total_steps, no HP sweeps), the chain holds as a
-# coherent finding: bg → jens → outcome with the link conditioned
-# on the mechanism.
-EXPECTED: ClusterVerdict = ClusterVerdict.SUPPORTED
+# Canonical-scope state post-2026-05-14 backfill (`mc_return`
+# discounted + Q-shape measurables backfilled via `--ingest-all`):
+# Stage 1 (`algorithm_reduces_bootstrap_gap_magnitude`) drifted
+# from HELD to POW_INSUF. Per-env Cohen's d is wildly
+# heterogeneous (I²=0.94): Asterix -2.6 / SlidingTile -1.3 /
+# Freeway -0.7 / MountainCar -0.4 (DDQN reduces bg) but Snake
+# +0.5 / PacMan +0.8 / SpaceInvaders +2.6 (DDQN INCREASES bg).
+# Pooled d = -0.08, p=0.85, CI=[-0.90, +0.74] — null.
+#
+# This matches memory `findings_clip_to_trained_q_propagation`:
+# the per-step downward clip is deterministic, but trained-Q
+# comparisons can flip across envs (finite-training residual).
+# The substrate-level "DDQN reduces bg universally" claim is
+# heterogeneous at canonical; pooled-d is null.
+#
+# Chain consequence: Stage 1 POW_INSUF → chain UNDERPOWERED at
+# the Finding level. Stages 0 / 2 / 3 still HELD. The chain
+# CAN be re-supported if Stage 1 is re-authored per-env (with
+# heterogeneity-aware verdict) or replaced with a more direct
+# mech-magnitude bridge that doesn't pool across heterogeneous
+# envs.
+EXPECTED: ClusterVerdict = ClusterVerdict.UNDERPOWERED
 
 
-BLOCKED_ON: str | None = None
+BLOCKED_ON: str | None = (
+    'algorithm_reduces_bootstrap_gap_magnitude is POW_INSUF due to '
+    'I²=0.94 cross-env heterogeneity (DDQN reduces bg on Asterix/'
+    'SlidingTile/Freeway/MountainCar; INCREASES bg on Snake/PacMan/'
+    'SpaceInvaders/Breakout). Pooled-d null. Need either '
+    'heterogeneity-aware verdict on this bridge OR a per-env '
+    'stratified shape to re-support the chain. Substantive '
+    'finding, not data deficiency.'
+)
 
 
 BRIDGES: tuple[Bridge, ...] = (
