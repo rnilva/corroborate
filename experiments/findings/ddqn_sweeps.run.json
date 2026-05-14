@@ -25,12 +25,12 @@
             "treatment": "v_pred"
           },
           "random_common_cause": {
-            "drift": 0.172858,
+            "drift": 17.5723,
             "method_name": "backdoor.linear_regression",
             "n_rows": 9,
             "outcome": "d_out",
             "real_ate": -137.588,
-            "refuted_ate": -137.415,
+            "refuted_ate": -120.015,
             "refuter_name": "random_common_cause",
             "treatment": "v_pred"
           },
@@ -41,7 +41,7 @@
       "blocked_by": null,
       "bridge_name": "bias_correction_clip_predicts_outcome__hp_variance__backdoor",
       "direction": "direct",
-      "extent_hash": 1928921999004666664,
+      "extent_hash": 5833626042664752023,
       "n_cells_in_scope": 2700,
       "n_cells_pre_scope": 6290,
       "pair_by": [
@@ -88,12 +88,12 @@
             "treatment": "v_pred"
           },
           "random_common_cause": {
-            "drift": 3.133,
+            "drift": 0.756574,
             "method_name": "backdoor.linear_regression",
             "n_rows": 9,
             "outcome": "d_out",
             "real_ate": -137.588,
-            "refuted_ate": -140.721,
+            "refuted_ate": -136.831,
             "refuter_name": "random_common_cause",
             "treatment": "v_pred"
           },
@@ -104,7 +104,7 @@
       "blocked_by": null,
       "bridge_name": "bias_correction_clip_predicts_outcome__hp_variance__placebo",
       "direction": "direct",
-      "extent_hash": 1928921999004666664,
+      "extent_hash": 5833626042664752023,
       "n_cells_in_scope": 2700,
       "n_cells_pre_scope": 6290,
       "pair_by": [
@@ -151,12 +151,12 @@
             "treatment": "v_pred"
           },
           "random_common_cause": {
-            "drift": 0.321679,
+            "drift": 4.96234,
             "method_name": "backdoor.linear_regression",
             "n_rows": 9,
             "outcome": "d_out",
             "real_ate": -137.588,
-            "refuted_ate": -137.266,
+            "refuted_ate": -142.55,
             "refuter_name": "random_common_cause",
             "treatment": "v_pred"
           },
@@ -167,7 +167,7 @@
       "blocked_by": null,
       "bridge_name": "bias_correction_clip_predicts_outcome__hp_variance__rcc",
       "direction": "direct",
-      "extent_hash": 1928921999004666664,
+      "extent_hash": 5833626042664752023,
       "n_cells_in_scope": 2700,
       "n_cells_pre_scope": 6290,
       "pair_by": [
@@ -212,7 +212,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_link_outcome_scales_with_chain_depth__cross_env",
       "direction": "direct",
-      "extent_hash": 1116945899086026324,
+      "extent_hash": 7993611071104208261,
       "n_cells_in_scope": 4230,
       "n_cells_pre_scope": 6290,
       "pair_by": [
@@ -258,19 +258,41 @@
     {
       "analysis_results": {
         "cross_stratum_arm_diff_slope": {
-          "arm_diff_predictor": [],
-          "arm_diff_target": [],
-          "n_strata": 0,
-          "p_value": null,
-          "rho": null
+          "arm_diff_predictor": [
+            -5.27168,
+            6.95484,
+            0.00420758,
+            -106.518,
+            -0.376083,
+            -0.491206,
+            -0.028513,
+            -82.6532,
+            -14.755,
+            -0.0085867
+          ],
+          "arm_diff_target": [
+            -0.589889,
+            -6.42454,
+            0.292299,
+            0.355841,
+            -0.373333,
+            9.13716,
+            3.11802,
+            0.228571,
+            0.450794,
+            4.3077
+          ],
+          "n_strata": 10,
+          "p_value": 0.776998,
+          "rho": -0.10303
         }
       },
       "assumption_violations": [],
       "blocked_by": null,
       "bridge_name": "eff_h_intervention_mediates_outcome__goal_envs_gamma_sweep",
       "direction": "inverse",
-      "extent_hash": 133146708735736,
-      "n_cells_in_scope": 0,
+      "extent_hash": 480648730614057829,
+      "n_cells_in_scope": 1806,
       "n_cells_pre_scope": 6290,
       "pair_by": [
         "seed"
@@ -296,7 +318,7 @@
       "source_name": "do(baseline|bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify))",
       "target_name": "eval_best_burst_raw_mean",
       "tier": "interventional",
-      "verdict": "power_insufficient",
+      "verdict": "no_effect",
       "warnings": []
     },
     {
@@ -326,7 +348,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_helps_at_full_bootstrap__fourrooms_n1",
       "direction": "direct",
-      "extent_hash": -2842066124572291781,
+      "extent_hash": -5718153051329505623,
       "n_cells_in_scope": 2160,
       "n_cells_pre_scope": 6290,
       "pair_by": [
@@ -383,7 +405,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_null_under_monte_carlo__fourrooms_n10",
       "direction": "direct",
-      "extent_hash": 4179481394837281915,
+      "extent_hash": 498438877243532890,
       "n_cells_in_scope": 60,
       "n_cells_pre_scope": 6290,
       "pair_by": [
@@ -438,12 +460,12 @@
             "treatment": "target_staleness_late"
           },
           "random_common_cause": {
-            "drift": 0.0190962,
+            "drift": 0.00570789,
             "method_name": "backdoor.linear_regression",
             "n_rows": 119,
             "outcome": "delta_outcome",
             "real_ate": 2.7792,
-            "refuted_ate": 2.7601,
+            "refuted_ate": 2.7849,
             "refuter_name": "random_common_cause",
             "treatment": "target_staleness_late"
           },
@@ -454,7 +476,7 @@
       "blocked_by": null,
       "bridge_name": "staleness_amplifies_ddqn_outcome__sparse_goal_polyak",
       "direction": "inverse",
-      "extent_hash": -266688621455403929,
+      "extent_hash": 2785951136484035493,
       "n_cells_in_scope": 238,
       "n_cells_pre_scope": 6290,
       "pair_by": [
@@ -579,7 +601,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_rescues_underlearning_vanilla__fourrooms_rs_0p1",
       "direction": "direct",
-      "extent_hash": -5312791685264710693,
+      "extent_hash": -2034887035571875246,
       "n_cells_in_scope": 60,
       "n_cells_pre_scope": 6290,
       "pair_by": [
@@ -623,7 +645,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_dominates_vanilla_response_curve__fourrooms_rs_0p3",
       "direction": "direct",
-      "extent_hash": 8533282749557815304,
+      "extent_hash": -2230129884053418733,
       "n_cells_in_scope": 60,
       "n_cells_pre_scope": 6290,
       "pair_by": [
@@ -667,7 +689,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_does_not_rescue__acrobot_rs_0p1",
       "direction": "direct",
-      "extent_hash": -406864332961623319,
+      "extent_hash": -28431980898355209,
       "n_cells_in_scope": 240,
       "n_cells_pre_scope": 6290,
       "pair_by": [
@@ -711,7 +733,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_does_not_rescue__cartpole_rs_0p1",
       "direction": "direct",
-      "extent_hash": 3063135576494274216,
+      "extent_hash": -5569792447320541948,
       "n_cells_in_scope": 240,
       "n_cells_pre_scope": 6290,
       "pair_by": [
@@ -755,7 +777,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_increases_argmax_entropy__fourrooms_rs_0p1",
       "direction": "direct",
-      "extent_hash": -5312791685264710693,
+      "extent_hash": -2034887035571875246,
       "n_cells_in_scope": 60,
       "n_cells_pre_scope": 6290,
       "pair_by": [
@@ -799,7 +821,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_entropy_matches_vanilla__fourrooms_rs_1p0",
       "direction": "direct",
-      "extent_hash": 7387379067896751765,
+      "extent_hash": 8968165924068930987,
       "n_cells_in_scope": 60,
       "n_cells_pre_scope": 6290,
       "pair_by": [
@@ -847,7 +869,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_benefit_scales_with_effective_horizon__fourrooms",
       "direction": "direct",
-      "extent_hash": 5683568267063066576,
+      "extent_hash": 1117244941657436306,
       "n_cells_in_scope": 1560,
       "n_cells_pre_scope": 6290,
       "pair_by": [
@@ -942,7 +964,7 @@
   ],
   "cache_path": "experiments/data/cache/ddqn_sweeps.parquet",
   "errored_bridges": [],
-  "git_commit": "13b6bc676188",
+  "git_commit": "2f05d0a952c2",
   "hypothesis_module": "experiments.findings.ddqn_sweeps",
   "measurable_signatures": {
     "argmax_entropy_late": "22f4c683c0bfee66",
@@ -963,5 +985,5 @@
     "target_staleness_late": "14b90395c7aabd2e"
   },
   "n_cells_total": 6290,
-  "timestamp_utc": "2026-05-14T02:44:19+00:00"
+  "timestamp_utc": "2026-05-14T02:48:57+00:00"
 }
