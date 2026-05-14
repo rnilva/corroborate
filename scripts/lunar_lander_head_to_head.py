@@ -113,16 +113,20 @@ def jax_rollout(
     """Roll out the JAX env for `len(actions)` steps with given seed.
     Returns (obs_traj [T+1, 8], rewards [T], dones [T], step_done_first, length).
     Stops the loop at first done; auto-reset is built into step but
-    we record the boundary."""
+    we record the boundary. The step function is jit-compiled
+    once and reused across all rollouts — without this, each
+    Python step call retraces and the cache grows linearly with
+    the rollout count."""
     rng = jax.random.PRNGKey(seed)
     obs, state = env.reset(rng, params)
     obs_buf = [np.asarray(obs)]
     rew_buf: list[float] = []
     done_buf: list[bool] = []
     first_done = -1
+    step_jit = _jit_step(env, params)
     for t, a in enumerate(actions):
-        next_obs, state, reward, done, _ = env.step(
-            jax.random.PRNGKey(0), state, jnp.int32(int(a)), params,
+        next_obs, state, reward, done, _ = step_jit(
+            state, jnp.int32(int(a)),
         )
         rew_buf.append(float(reward))
         done_buf.append(bool(done))
@@ -139,6 +143,21 @@ def jax_rollout(
         first_done,
         length,
     )
+
+
+_STEP_JIT_CACHE: dict[int, object] = {}
+
+
+def _jit_step(env, params):  # type: ignore[no-untyped-def]
+    """Memoised jit-compiled `env.step` keyed by env identity.
+    Saves us from retracing on every rollout step."""
+    key = id(env)
+    if key not in _STEP_JIT_CACHE:
+        rng0 = jax.random.PRNGKey(0)
+        _STEP_JIT_CACHE[key] = jax.jit(
+            lambda s, a: env.step(rng0, s, a, params),
+        )
+    return _STEP_JIT_CACHE[key]
 
 
 def gym_rollout(

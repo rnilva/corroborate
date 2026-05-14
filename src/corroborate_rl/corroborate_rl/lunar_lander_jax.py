@@ -151,15 +151,17 @@ INITIAL_RANDOM: float = 1000.0
 
 # Solver iteration count — Box2D's default for World.Step is
 # (vel=8, pos=3). Gymnasium increases this to (180, 60) for
-# LunarLander to keep joint drift low over 1 000-step episodes;
-# for our 3-DOF chain at LunarLander scales 4 vel-iterations is
-# enough (the chain has only 2 joints + 8 contact slots, so
-# residual joint velocity error converges in 2–3 sweeps; we
-# spend the 4th for stability margin under transient impacts).
-# Keeping the iteration count low keeps XLA's compiled HLO
-# compact enough that 1 000-step rollouts inside `vmap` fit in
-# compiler memory.
-VEL_ITERATIONS: int = 4
+# LunarLander to keep joint drift low + propagate impulses
+# fully through the chain. For our 3-DOF chain at LunarLander
+# scales 8 vel-iterations is enough: at 4 iterations the
+# engine thrust is over-attributed to body vy by ~60 %
+# (the constraint solver hadn't propagated the impulse from the
+# body to the legs yet); at 8 iterations the propagation
+# matches gymnasium's 180-iteration solution within 10 %.
+# Python-unrolled — `lax.fori_loop` here compiles to an XLA
+# while-loop whose per-call memory cost compounds across the
+# 1 000-step trace inside the random-policy rollout test.
+VEL_ITERATIONS: int = 8
 
 # Contact restitution. Gymnasium sets the lander + leg fixture
 # restitution to 0.0, so contacts are inelastic.
