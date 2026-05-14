@@ -165,6 +165,32 @@ class ActionDuplicate:
 
 
 @dataclass(frozen=True, slots=True)
+class ActionDiscretize:
+    """Wrapper config: discretize a 1-D continuous action space
+    into `n_bins` uniformly-spaced buckets. Inner action space
+    must be a `Box` of shape `(1,)`. Discrete action `i ∈
+    [0, n_bins)` maps to `low + (high − low) · i / (n_bins − 1)`
+    (endpoints included).
+
+    Use to bring continuous-action gymnax envs (Pendulum,
+    MountainCarContinuous) into the discrete-action DQN substrate
+    without re-engineering the agent. Provides REACH-polarity
+    cohort additions where the discrete env catalogue is thin —
+    DQN learning behavior is well-studied at modest n_bins (5-9)
+    on Pendulum.
+
+    Multi-D continuous action spaces are not handled (n_bins^d
+    inflates combinatorially; outside the substrate's scope)."""
+    n_bins: int
+
+    def wrap(self, inner: Env) -> Env:
+        return ActionDiscretizedEnv(inner=inner, n_bins=self.n_bins)
+
+    def measurement_keys(self) -> Mapping[str, float]:
+        return {'action_discretize_n_bins': float(self.n_bins)}
+
+
+@dataclass(frozen=True, slots=True)
 class RewardSparsify:
     """Wrapper config: zero per-step reward; emit `terminal_bonus`
     only at SUCCESS-terminal steps (distinguished from timeout-
@@ -265,13 +291,67 @@ class RewardDensify:
         return {'reward_densify_per_step': float(self.per_step)}
 
 
+@dataclass(frozen=True, slots=True)
+class PotentialReward:
+    """Wrapper config: potential-based reward shaping per
+    Ng-Harada-Russell 1999.
+
+      r'(s, a, s') = r(s, a, s') + γ · Φ(s') − Φ(s)
+
+    Φ is a STATE-DEPENDENT potential function. Theorem 1 of
+    Ng 1999 proves this shaping preserves the optimal policy
+    (under any γ-discounted reward MDP) while transforming
+    the per-step reward into a state-varying, informative
+    signal.
+
+    Causal-probe lever for the FA-degeneracy theory
+    (`findings_fa_depth_within_env`): under (high α, sparse r,
+    high γ), the TD bootstrap `Q(s,a) ← r + γ max_a' Q(s',a')`
+    degenerates to a self-referential map `Q(s,a) ≈ γ Q(s,a*)`
+    when r=0 most steps. Potential shaping replaces the
+    zero-reward chain with an INFORMATIVE per-step signal
+    `γΦ(s') − Φ(s)` (proportional to progress toward goal),
+    breaking the self-reference WITHOUT changing the optimal
+    policy. Test prediction: shaped FR at high γ + deep FA
+    should NOT show vanilla bias collapse (the degeneracy
+    requires the uninformative-reward condition).
+
+    Distinct from `RewardDensify(per_step=C)`: that adds a
+    CONSTANT per-step term, which doesn't break the self-
+    reference (Q just converges to a different constant
+    fixed point). Potential shaping is what's needed.
+
+    `gamma` must match the agent's training γ for policy-
+    invariance to hold. `potential_kind` selects the Φ
+    function — currently FR-specific (`fr_manhattan_to_goal`:
+    Φ(s) = −|agent_pos − goal_pos|_1)."""
+    gamma: float
+    potential_kind: str = 'fr_manhattan_to_goal'
+
+    def wrap(self, inner: Env) -> Env:
+        return PotentialShapedEnv(
+            inner=inner, gamma=self.gamma, kind=self.potential_kind,
+        )
+
+    def measurement_keys(self) -> Mapping[str, float]:
+        # Stringly-typed kind serialised as a stable hash so
+        # the measurement column is queryable. The float value
+        # carries the bridge-relevant scalar (gamma).
+        return {
+            'potential_reward_gamma': float(self.gamma),
+            f'potential_kind_{self.potential_kind}': 1.0,
+        }
+
+
 _WRAPPER_REGISTRY: dict[str, type[EnvWrapper]] = {
     'reward_scale': RewardScale,
     'reward_clip': RewardClip,
     'action_duplicate': ActionDuplicate,
+    'action_discretize': ActionDiscretize,
     'reward_sparsify': RewardSparsify,
     'reward_densify': RewardDensify,
     'action_noise': ActionNoise,
+    'potential_reward': PotentialReward,
 }
 """Name → wrapper class. YAML's `wrappers: [{type: <name>, ...}]`
 parses each entry by looking up `<name>` here and instantiating
@@ -472,6 +552,48 @@ class ActionDuplicatedEnv:
 
 
 @dataclass(frozen=True, slots=True)
+class ActionDiscretizedEnv:
+    """Wraps a gymnax-style env with a 1-D continuous (Box(1,))
+    action space, exposing a Discrete(n_bins) action space.
+
+    Discrete action `i ∈ [0, n_bins)` maps to continuous action
+    `low + (high − low) · i / (n_bins − 1)`. Both endpoints
+    included; at `n_bins=1` the single action picks `low`.
+
+    Observation space and dynamics are inherited unchanged."""
+    inner: Env
+    n_bins: int
+
+    def reset(
+        self, rng: jax.Array, params: EnvParams,
+    ) -> tuple[jax.Array, EnvState]:
+        return self.inner.reset(rng, params)
+
+    def step(
+        self,
+        rng: jax.Array,
+        state: EnvState,
+        action: jax.Array,
+        params: EnvParams,
+    ) -> tuple[
+        jax.Array, EnvState, jax.Array, jax.Array, dict[str, object],
+    ]:
+        inner_space = self.inner.action_space(params)
+        low = jnp.asarray(inner_space.low, dtype=jnp.float32)
+        high = jnp.asarray(inner_space.high, dtype=jnp.float32)
+        denom = jnp.float32(max(self.n_bins - 1, 1))
+        t = action.astype(jnp.float32) / denom
+        continuous = low + (high - low) * t
+        return self.inner.step(rng, state, continuous, params)
+
+    def observation_space(self, params: EnvParams) -> Box:
+        return self.inner.observation_space(params)
+
+    def action_space(self, params: EnvParams) -> Discrete:
+        return spaces.Discrete(self.n_bins)
+
+
+@dataclass(frozen=True, slots=True)
 class RewardSparsifiedEnv:
     """Wraps a gymnax-style env, zeroing per-step reward; emits
     `terminal_bonus` only at SUCCESS-terminal steps, distinguished
@@ -585,6 +707,72 @@ class RewardDensifiedEnv:
             rng, state, action, params,
         )
         return next_obs, next_state, reward + self.per_step, done, info
+
+    def observation_space(self, params: EnvParams) -> Box:
+        return self.inner.observation_space(params)
+
+    def action_space(self, params: EnvParams) -> Discrete:
+        return self.inner.action_space(params)
+
+
+@dataclass(frozen=True, slots=True)
+class PotentialShapedEnv:
+    """Wraps a gymnax-style env with potential-based shaping
+    `r'(s,a,s') = r + γ Φ(s') − Φ(s)`.
+
+    `kind` selects the Φ function. Currently:
+      - 'fr_manhattan_to_goal': Φ(s) = −|agent_pos − goal_pos|_1
+        for `gymnax.environments.misc.FourRooms` (uses
+        `state.pos` and `state.goal` directly).
+
+    Terminal-step handling: at done, Φ(s_terminal) is treated
+    as 0 (absorbing-state convention per Ng 1999), so the
+    shaped reward at the terminal step is `r − Φ(s_pre)` —
+    the agent's pre-terminal distance is credited as the
+    final shaping term."""
+    inner: Env
+    gamma: float
+    kind: str
+
+    def reset(
+        self, rng: jax.Array, params: EnvParams,
+    ) -> tuple[jax.Array, EnvState]:
+        return self.inner.reset(rng, params)
+
+    def _phi(self, state: EnvState) -> jax.Array:
+        if self.kind == 'fr_manhattan_to_goal':
+            # FourRooms state carries `.pos` and `.goal`, each (2,) int.
+            # Negative manhattan distance — higher Φ = closer to goal.
+            pos = state.pos  # pyright: ignore[reportAttributeAccessIssue]
+            goal = state.goal  # pyright: ignore[reportAttributeAccessIssue]
+            return -jnp.sum(jnp.abs(pos - goal)).astype(jnp.float32)
+        raise ValueError(
+            f'PotentialShapedEnv: unknown potential_kind={self.kind!r}; '
+            f"known: ['fr_manhattan_to_goal']",
+        )
+
+    def step(
+        self,
+        rng: jax.Array,
+        state: EnvState,
+        action: jax.Array,
+        params: EnvParams,
+    ) -> tuple[
+        jax.Array, EnvState, jax.Array, jax.Array, dict[str, object],
+    ]:
+        next_obs, next_state, reward, done, info = self.inner.step(
+            rng, state, action, params,
+        )
+        phi_curr = self._phi(state)
+        phi_next = self._phi(next_state)
+        # Absorbing-state convention: Φ(terminal) = 0 in the
+        # shaping. At done, shaped contribution is just −Φ(s).
+        # Done-aware: jnp.where to keep this jit-compatible.
+        gamma_phi_next = jnp.where(
+            done, jnp.float32(0.0), self.gamma * phi_next,
+        )
+        shaped = reward + gamma_phi_next - phi_curr
+        return next_obs, next_state, shaped, done, info
 
     def observation_space(self, params: EnvParams) -> Box:
         return self.inner.observation_space(params)
@@ -717,8 +905,18 @@ def introspect_env(name: str) -> IntrospectedEnv:
     obs_space = env_obj.observation_space(env_params)
 
     shape = tuple(int(d) for d in obs_space.shape)
-    action_dim = int(act_space.n)
-    is_discrete = True
+    # Box (continuous) → action_dim is the product of shape dims;
+    # is_discrete=False. Caller must apply `ActionDiscretize` (or
+    # similar) before the substrate's discrete-action consumers see
+    # the env. Discrete envs follow the original path.
+    # `Discrete` is TYPE_CHECKING-only; duck-type at runtime via the
+    # `n` attribute (Discrete has `n`, Box has `shape`).
+    if hasattr(act_space, 'n'):
+        action_dim = int(act_space.n)
+        is_discrete = True
+    else:
+        action_dim = int(np.prod(act_space.shape)) if act_space.shape else 1
+        is_discrete = False
 
     horizon: int | None = int(env_params.max_steps_in_episode)
 
@@ -983,6 +1181,30 @@ _register(
     solve_threshold=-67.3,
     solve_threshold_source='gymnasium-docs-(-110)-discounted-gamma-0.99',
     solve_threshold_confidence='literature',
+)
+
+# Continuous-action classic-control envs, used via the
+# `ActionDiscretize` wrapper to bring them into the discrete-action
+# DQN substrate. Solve thresholds are approximate (literature
+# values vary by author + discretisation choice). Reward bounds
+# below are the inner (continuous-action) values.
+_register(
+    'Pendulum-v1',
+    r_min=-16.27, r_max=0.0,
+    reward_regime='per_step',
+    benchmark_family='classic_control',
+    solve_threshold=-200.0,
+    solve_threshold_source='gymnasium-docs-(-200)-undiscounted-near-optimal',
+    solve_threshold_confidence='derived',
+)
+_register(
+    'MountainCarContinuous-v0',
+    r_min=-0.1, r_max=100.0,
+    reward_regime='event_triggered',
+    benchmark_family='classic_control',
+    solve_threshold=90.0,
+    solve_threshold_source='gymnasium-docs-(90)-undiscounted-summit-reached',
+    solve_threshold_confidence='derived',
 )
 
 # bsuite — small-scale theoretical benchmarks. Vector obs;

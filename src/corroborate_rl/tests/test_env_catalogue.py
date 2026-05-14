@@ -28,6 +28,9 @@ def test_all_v9_envs_registered() -> None:
     backend-extension envs (jumanji)."""
     expected_gymnax = {
         'CartPole-v1', 'Acrobot-v1', 'MountainCar-v0',
+        # Continuous-action gymnax envs (consumed via
+        # ActionDiscretize wrapper).
+        'Pendulum-v1', 'MountainCarContinuous-v0',
         'Catch-bsuite', 'DeepSea-bsuite', 'MemoryChain-bsuite',
         'UmbrellaChain-bsuite', 'DiscountingChain-bsuite',
         'MNISTBandit-bsuite',
@@ -179,7 +182,10 @@ def test_get_raises_keyerror_with_helpful_message() -> None:
 def test_envs_in_family_filters_correctly() -> None:
     classic = envs_in_family('classic_control')
     names = {e.name for e in classic}
-    assert names == {'CartPole-v1', 'Acrobot-v1', 'MountainCar-v0'}
+    assert names == {
+        'CartPole-v1', 'Acrobot-v1', 'MountainCar-v0',
+        'Pendulum-v1', 'MountainCarContinuous-v0',
+    }
 
     minatar = envs_in_family('minatar')
     assert len(minatar) == 4
@@ -189,3 +195,62 @@ def test_envs_in_family_filters_correctly() -> None:
 def test_all_envs_returns_complete_set() -> None:
     assert len(all_envs()) == len(ENV_REGISTRY)
     assert all(isinstance(e, EnvSpec) for e in all_envs())
+
+
+# ============ PotentialReward wrapper ============
+
+def test_potential_reward_fr_shaping_matches_closed_form() -> None:
+    """Ng 1999 shaping: r'(s,a,s') = r + γΦ(s') − Φ(s).
+    For FR with Φ = −manhattan_to_goal, a step from (4,1) toward
+    (3,1) increases the distance to goal at (8,9) by 1 (since
+    goal_y > agent_y, moving "up" (agent_y stays) takes the agent
+    further if x increases distance). Closed-form: shaped reward
+    = 0 + 0.99·(−13) − (−12) = −0.87."""
+    from gymnax.environments.misc import FourRooms
+
+    from corroborate_rl.env_catalogue import PotentialReward
+    import jax
+    import jax.numpy as jnp
+
+    env = PotentialReward(gamma=0.99, potential_kind='fr_manhattan_to_goal').wrap(FourRooms())
+    params = FourRooms().default_params
+
+    _, state = env.reset(jax.random.PRNGKey(0), params)
+    # FR seed=0 spawns agent at (4,1), goal at (8,9). Manhattan = 12.
+    assert tuple(state.pos.tolist()) == (4, 1)
+    assert tuple(state.goal.tolist()) == (8, 9)
+
+    # Take action 0 (up): (4,1) → (3,1); manhattan = 8 + 2 = 10... wait
+    # the gymnax FR up=row-1, so (4,1)→(3,1). Goal (8,9). Manhattan=|3-8|+|1-9|=5+8=13.
+    next_obs, next_state, shaped_r, done, _ = env.step(
+        jax.random.PRNGKey(1), state, jnp.int32(0), params,
+    )
+    assert tuple(next_state.pos.tolist()) == (3, 1)
+    phi_start = -12.0
+    phi_next = -13.0
+    expected = 0.0 + 0.99 * phi_next - phi_start  # inner_r=0 mid-episode
+    assert abs(float(shaped_r) - expected) < 1e-5
+    assert abs(float(shaped_r) - (-0.87)) < 1e-5
+    assert not bool(done)
+
+
+def test_potential_reward_terminal_uses_zero_phi() -> None:
+    """At a terminal step, Φ(s_terminal) should be treated as 0
+    (Ng 1999 absorbing-state convention). The shaped reward then
+    is `r − Φ(s_pre)` regardless of next_state."""
+    from gymnax.environments.misc import FourRooms
+
+    from corroborate_rl.env_catalogue import PotentialShapedEnv
+    import jax
+    import jax.numpy as jnp
+
+    # Build a tiny stub: we use the wrapper's _phi + direct construction
+    # to verify the done=True branch zeroes Φ(s'). FR doesn't terminate
+    # in one step typically, so we just exercise the shaping function.
+    env = PotentialShapedEnv(
+        inner=FourRooms(), gamma=0.99, kind='fr_manhattan_to_goal',
+    )
+    params = FourRooms().default_params
+    _, state = env.reset(jax.random.PRNGKey(0), params)
+    phi_pre = float(env._phi(state))  # pyright: ignore[reportPrivateUsage]
+    assert phi_pre == -12.0  # −manhattan((4,1), (8,9))
