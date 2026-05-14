@@ -55,7 +55,10 @@ from corroborate_rl.dqn.measurables import (
     q_per_burst,  # pyright: ignore[reportUnknownVariableType]
 )
 
-from experiments.findings.ddqn._common import MC_RETURN_RAW_PER_BURST_MEAN
+from experiments.findings.ddqn._common import (
+    MC_RETURN_PER_BURST_MEAN,
+    MC_RETURN_RAW_PER_BURST_MEAN,
+)
 from experiments.findings.ddqn._scope import DDQN_RELEVANT_SCOPE
 from experiments.findings.ddqn._verdicts import (
     partial_spearman_signed_verdict,
@@ -162,10 +165,10 @@ def q_argmax_margin_per_burst_link_to_outcome(
     )
 
 
-# Stage 0' tautology baseline: Bellman-contraction edge q → mc.
+# Stage 0' tautology baseline: Bellman-contraction edge q → mc_disc.
 @claim_bridge(
     source='q_per_burst',
-    target='mc_return_raw_per_burst_mean',
+    target='mc_return_per_burst_mean',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
     scope=DDQN_RELEVANT_SCOPE,
@@ -175,39 +178,48 @@ def q_to_mc_coupled__bellman_contraction_baseline(
     per_burst_jci_spearman: PerBurstJciSpearmanResult,
     *,
     x: _PerBurstMeasurable = _Q_PER_BURST,
-    y: _PerBurstMeasurable = MC_RETURN_RAW_PER_BURST_MEAN,
+    y: _PerBurstMeasurable = MC_RETURN_PER_BURST_MEAN,
     stratify_by: str = 'env_name',
     min_stratum_size: int = 5,
     rho_threshold: float = 0.2,
     min_strata: int = 5,
 ) -> Verdict:
-    """Stage 0' tautology baseline (Bellman contraction): Q-late
-    estimates MC return, so ρ(q_per_burst, mc_per_burst) should be
-    POSITIVE within env. HELD when pooled within-env ρ ≥
-    `rho_threshold`.
+    """Stage 0' tautology baseline (Bellman contraction): Q
+    estimates E[Σ γ^t r_t] (the γ-DISCOUNTED return). So
+    ρ(q_per_burst, mc_return_per_burst_mean) — the DISCOUNTED
+    per-burst MC return — should be POSITIVE within env. HELD when
+    pooled within-env ρ ≥ `rho_threshold`.
 
-    This bridge documents the Q→MC structural coupling that other
-    bridges (`q_action_std_per_burst_link_to_outcome__partial_q`)
-    PARTIAL OUT explicitly. Analog of
-    `mc_disc_raw_coupled__per_env_jci` (Stage 0 outcome-side
-    coupling) but for the BIAS-side coupling driven by Bellman
-    contraction.
+    Target is `mc_return_per_burst_mean` (γ-discounted, what Q
+    targets per Bellman) — NOT `mc_return_raw_per_burst_mean`.
+    The raw return differs by γ^T weighting across episode
+    lengths; the contraction-implied edge is to the discounted
+    return specifically.
 
-    Empirical at canonical: ρ_pooled = +0.348 across 10 envs.
-    Per-env strongly positive on most (Breakout +0.72, MountainCar
-    +0.81, MountainCar +0.81, SI +0.43, PacMan +0.60, Freeway
-    +0.60) — Bellman coupling HELDs. Strongly NEGATIVE on Asterix
-    (-0.33) and Snake (-0.23); near-zero on SlidingTile (-0.04) —
-    envs where training Q-magnitude doesn't track MC return,
-    likely reflecting unconverged Q-estimation or env-specific
-    structure (Asterix's per-step scoring dynamics could produce
-    high Q at low-progress states; Snake's stochastic reward
-    structure decouples Q from realized MC).
+This bridge is the BIAS-side half of the substrate's tautology
+    chain Q → discounted → raw outcome. Two explicit edges:
 
-    The HELD-with-env-heterogeneity reading: Bellman contraction
-    is the EXPECTED coupling but training imperfections produce
-    env-specific deviations. The per-env structure documented in
-    `findings_q_shape_env_class_stratification`."""
+    1. **Q → discounted MC** (this bridge): Bellman contraction —
+       the algorithm's training objective IS that Q estimates
+       discounted return.
+    2. **discounted → raw MC**: `mc_disc_raw_coupled__per_env_jci`
+       — RL-practitioner convention reports raw return as outcome
+       even though Q targets discounted.
+
+    Together they document the structural Q→raw_outcome coupling
+    that downstream substantive bridges partial out. The
+    `q_action_std_per_burst_link_to_outcome__partial_q` bridge
+    conditions on `q_per_burst` to remove Q's full chain-mediated
+    effect on raw outcome — methodologically sound because Q's
+    effect on raw outcome flows ENTIRELY through edges (1)+(2)
+    when both are HELD.
+
+    Empirical at canonical pending re-smoke on discounted target
+    (raw target gave ρ_pooled = +0.348 with env heterogeneity:
+    strongly positive on Breakout / MountainCar / SI / PacMan /
+    Freeway; negative on Asterix / Snake; near-zero on
+    SlidingTile). The discounted version is the contraction-
+    correct form."""
     del x, y, stratify_by, min_stratum_size
     return partial_spearman_signed_verdict(
         per_burst_jci_spearman,
