@@ -28,10 +28,72 @@ import matplotlib.pyplot as plt
 import gymnasium
 
 from corroborate_rl.lunar_lander_jax import (
+    LEG_ANCHOR_LOCAL_X,
+    LEG_ANCHOR_LOCAL_Y,
+    LEG_LIMIT_LO,
     LunarLanderEnv,
     LunarLanderParams,
+    LunarLanderState,
     make_lunar_lander,
 )
+
+
+def _build_state(
+    *,
+    x: float,
+    y: float,
+    vx: float = 0.0,
+    vy: float = 0.0,
+    angle: float = 0.0,
+    angular_vel: float = 0.0,
+    leg_contact_l: float = 0.0,
+    leg_contact_r: float = 0.0,
+    terrain_y: jax.Array | None = None,
+    prev_shaping: float = 0.0,
+) -> LunarLanderState:
+    """Probe helper: build a `LunarLanderState` for the 3-body
+    solver shape. Legs are positioned at the motor-target joint
+    angle (inner limit ±0.4 rad), with the leg CoM placed so the
+    revolute-joint anchor is satisfied exactly. Matches
+    `env.reset`'s convention."""
+    import math
+    from corroborate_rl.lunar_lander_jax import HELIPAD_Y
+    leg_l_joint = +LEG_LIMIT_LO
+    leg_r_joint = -LEG_LIMIT_LO
+    leg_l_world = angle + leg_l_joint
+    leg_r_world = angle + leg_r_joint
+    if terrain_y is None:
+        terrain_y = jnp.full((11,), HELIPAD_Y, dtype=jnp.float32)
+
+    def _leg_pos(side: int, leg_world_angle: float) -> tuple[float, float]:
+        ax = side * LEG_ANCHOR_LOCAL_X
+        ay = LEG_ANCHOR_LOCAL_Y
+        c, s = math.cos(leg_world_angle), math.sin(leg_world_angle)
+        rx = c * ax - s * ay
+        ry = s * ax + c * ay
+        return x - rx, y - ry
+
+    leg_lx, leg_ly = _leg_pos(-1, leg_l_world)
+    leg_rx, leg_ry = _leg_pos(+1, leg_r_world)
+    return LunarLanderState(
+        x=jnp.float32(x), y=jnp.float32(y),
+        vx=jnp.float32(vx), vy=jnp.float32(vy),
+        angle=jnp.float32(angle), angular_vel=jnp.float32(angular_vel),
+        leg_lx=jnp.float32(leg_lx), leg_ly=jnp.float32(leg_ly),
+        leg_lvx=jnp.float32(vx), leg_lvy=jnp.float32(vy),
+        leg_l_angle=jnp.float32(leg_l_world),
+        leg_l_omega=jnp.float32(0.0),
+        leg_rx=jnp.float32(leg_rx), leg_ry=jnp.float32(leg_ry),
+        leg_rvx=jnp.float32(vx), leg_rvy=jnp.float32(vy),
+        leg_r_angle=jnp.float32(leg_r_world),
+        leg_r_omega=jnp.float32(0.0),
+        leg_contact_l=jnp.float32(leg_contact_l),
+        leg_contact_r=jnp.float32(leg_contact_r),
+        terrain_y=terrain_y,
+        prev_shaping=jnp.float32(prev_shaping),
+        crashed=jnp.bool_(False), landed=jnp.bool_(False),
+        time=jnp.int32(0),
+    )
 
 
 OUT_FIG = Path("experiments/figures/lunar_lander")
@@ -392,23 +454,9 @@ def torque_asymmetry_probe() -> None:
 
         for angle in test_angles:
             # JAX side: build a state at rest with the given angle
-            from corroborate_rl.lunar_lander_jax import (
-                LunarLanderState, HELIPAD_Y, INITIAL_Y, INITIAL_X,
-                LEG_REST_OUTWARD_ANGLE,
-            )
-            jstate = LunarLanderState(
-                x=jnp.float32(INITIAL_X),
-                y=jnp.float32(INITIAL_Y),
-                vx=jnp.float32(0.0), vy=jnp.float32(0.0),
-                angle=jnp.float32(angle), angular_vel=jnp.float32(0.0),
-                leg_contact_l=jnp.float32(0.0), leg_contact_r=jnp.float32(0.0),
-                leg_angle_l=jnp.float32(LEG_REST_OUTWARD_ANGLE),
-                leg_angle_r=jnp.float32(LEG_REST_OUTWARD_ANGLE),
-                leg_omega_l=jnp.float32(0.0), leg_omega_r=jnp.float32(0.0),
-                terrain_y=jnp.full((11,), HELIPAD_Y, dtype=jnp.float32),
-                prev_shaping=jnp.float32(0.0),
-                crashed=jnp.bool_(False), landed=jnp.bool_(False),
-                time=jnp.int32(0),
+            from corroborate_rl.lunar_lander_jax import INITIAL_X, INITIAL_Y
+            jstate = _build_state(
+                x=INITIAL_X, y=INITIAL_Y, angle=angle,
             )
             _, jnext, _, _, _ = env.step(
                 jax.random.PRNGKey(0), jstate, jnp.int32(a), params,
@@ -455,30 +503,18 @@ def landing_detection_probe() -> None:
     print("\n=== Soft-landing predicate probe ===")
     # Build a state right at the moment of touchdown in JAX, see if
     # `landed=True` triggers
-    from corroborate_rl.lunar_lander_jax import (
-        LunarLanderState, HELIPAD_Y, LEG_REST_OUTWARD_ANGLE,
-    )
+    from corroborate_rl.lunar_lander_jax import HELIPAD_Y
     env, params = make_lunar_lander()
 
     # State: lander at helipad ground level, both legs touching,
-    # near zero velocity / angle. With articulated legs at rest
-    # outward splay (θ_leg = 1.058), foot body-frame y = -0.538.
-    # Position body so foot just touches.
+    # near zero velocity / angle. Legs at motor-target inner limit
+    # (joint angle ±0.4 rad) put foot at body offset (±0.95, -0.54).
     y = HELIPAD_Y + 0.50
     flat_terrain = jnp.full((11,), HELIPAD_Y, dtype=jnp.float32)
-    state = LunarLanderState(
-        x=jnp.float32(10.0),
-        y=jnp.float32(y),
-        vx=jnp.float32(0.0), vy=jnp.float32(-0.1),
-        angle=jnp.float32(0.05), angular_vel=jnp.float32(0.0),
-        leg_contact_l=jnp.float32(1.0), leg_contact_r=jnp.float32(1.0),
-        leg_angle_l=jnp.float32(LEG_REST_OUTWARD_ANGLE),
-        leg_angle_r=jnp.float32(LEG_REST_OUTWARD_ANGLE),
-        leg_omega_l=jnp.float32(0.0), leg_omega_r=jnp.float32(0.0),
-        terrain_y=flat_terrain,
-        prev_shaping=jnp.float32(20.0),
-        crashed=jnp.bool_(False), landed=jnp.bool_(False),
-        time=jnp.int32(0),
+    state = _build_state(
+        x=10.0, y=y, vy=-0.1, angle=0.05,
+        leg_contact_l=1.0, leg_contact_r=1.0,
+        terrain_y=flat_terrain, prev_shaping=20.0,
     )
     _, jnext, jr, jd, _ = env.step(
         jax.random.PRNGKey(0), state, jnp.int32(0), params,
@@ -489,18 +525,10 @@ def landing_detection_probe() -> None:
     )
 
     # Test what happens with high lateral velocity but legs touching
-    state2 = LunarLanderState(
-        x=jnp.float32(10.0), y=jnp.float32(y),
-        vx=jnp.float32(1.0), vy=jnp.float32(-0.1),
-        angle=jnp.float32(0.05), angular_vel=jnp.float32(0.0),
-        leg_contact_l=jnp.float32(1.0), leg_contact_r=jnp.float32(1.0),
-        leg_angle_l=jnp.float32(LEG_REST_OUTWARD_ANGLE),
-        leg_angle_r=jnp.float32(LEG_REST_OUTWARD_ANGLE),
-        leg_omega_l=jnp.float32(0.0), leg_omega_r=jnp.float32(0.0),
-        terrain_y=flat_terrain,
-        prev_shaping=jnp.float32(20.0),
-        crashed=jnp.bool_(False), landed=jnp.bool_(False),
-        time=jnp.int32(0),
+    state2 = _build_state(
+        x=10.0, y=y, vx=1.0, vy=-0.1, angle=0.05,
+        leg_contact_l=1.0, leg_contact_r=1.0,
+        terrain_y=flat_terrain, prev_shaping=20.0,
     )
     _, jnext2, jr2, jd2, _ = env.step(
         jax.random.PRNGKey(0), state2, jnp.int32(0), params,
