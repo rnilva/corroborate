@@ -59,7 +59,7 @@ type BenchmarkFamily = Literal[
 ]
 type ActionType = Literal['discrete', 'continuous']
 type ObservationType = Literal['vector', 'image', 'structured']
-type EnvBackend = Literal['gymnax', 'jumanji']
+type EnvBackend = Literal['gymnax', 'jumanji', 'lunar_lander']
 
 type ThresholdConfidence = Literal[
     'literature', 'derived', 'sample_relative', 'absent',
@@ -1095,6 +1095,17 @@ def make_env(env_spec: EnvSpec) -> 'tuple[Env, EnvParams]':
                 f"factory in _JUMANJI_FACTORIES",
             )
         return factory()
+    if env_spec.backend == 'lunar_lander':
+        # Lazy import — the lunar_lander module pulls in flax/jax;
+        # we already import jax above, but the import is kept lazy
+        # to mirror the jumanji factory pattern.
+        from corroborate_rl.lunar_lander_jax import make_lunar_lander
+        env, params = make_lunar_lander()
+        # Structural conformance to the gymnax Env / EnvParams
+        # Protocol surface — the LunarLander types declare the
+        # same method shape (reset/step/spaces) and field
+        # (`max_steps_in_episode`).
+        return env, params  # type: ignore[return-value]
     return gymnax.make(env_spec.name)
 
 
@@ -1401,6 +1412,56 @@ class SolveThreshold:
 # at module-load time. Placed here (not at the top of this file)
 # because `_register_jumanji` must be defined first.
 from corroborate_rl import jumanji_envs as _jumanji_envs  # noqa: F401, E402
+
+
+def _register_lunar_lander() -> None:
+    """Register the pure-JAX LunarLander port. Single-env backend
+    (no factory dict needed) — `make_env` routes via the
+    `lunar_lander` backend tag.
+
+    Reward bounds are loose: per-step shaped contribution ≈ ±100 +
+    fuel cost, terminal ±100. Author-declared range covers the
+    typical range observed in random rollouts. Solve threshold
+    follows gymnasium's `score >= 200` convention; left as
+    'derived' confidence because the JAX port's simplifications
+    (no articulated legs, flat ground) make the threshold a less
+    exact match for Box2D-trained baselines."""
+    lunar_hash, lunar_card = bucket_hash(
+        # x, y ∈ ±2.5 (normalised viewport); vx, vy ∈ ±10; angle
+        # ∈ ±π; ang_vel ∈ ±10; legs ∈ {0, 1}. 6 buckets per dim ×
+        # 6 dims of continuous obs + 2 binary = 6^6 × 4 = 186_624
+        # buckets — large but tractable for the (s, a)-coverage gap.
+        lows=jnp.array(
+            [-2.5, -2.5, -10.0, -10.0, -3.1416, -10.0, 0.0, 0.0],
+        ),
+        highs=jnp.array(
+            [2.5, 2.5, 10.0, 10.0, 3.1416, 10.0, 1.0, 1.0],
+        ),
+        n_buckets_per_dim=4,
+    )
+    ENV_REGISTRY['LunarLander-v2-jax'] = EnvSpec(
+        name='LunarLander-v2-jax',
+        action_type='discrete',
+        n_actions=4,
+        observation_shape=(8,),
+        observation_type='vector',
+        horizon=1000,
+        r_min=-300.0,
+        r_max=300.0,
+        reward_regime='shaped',
+        benchmark_family='classic_control',
+        state_hash=lunar_hash,
+        state_hash_cardinality=lunar_card,
+        benchmark_params=MappingProxyType({}),
+        solve_threshold=200.0,
+        solve_threshold_source='gymnasium-docs-(200)-undiscounted',
+        solve_threshold_confidence='derived',
+        solve_threshold_outcome_path='eval_final_mean',
+        backend='lunar_lander',
+    )
+
+
+_register_lunar_lander()
 
 
 SOLVE_THRESHOLDS: Mapping[str, SolveThreshold] = MappingProxyType({

@@ -43,7 +43,12 @@ def test_all_v9_envs_registered() -> None:
         'Snake-jumanji', 'PacMan-jumanji', 'Game2048-jumanji',
         'Maze-jumanji', 'Sokoban-jumanji', 'SlidingTilePuzzle-jumanji',
     }
-    assert set(ENV_REGISTRY.keys()) == expected_gymnax | expected_jumanji
+    # JAX-native LunarLander port (its own `lunar_lander` backend).
+    expected_lunar_lander = {'LunarLander-v2-jax'}
+    assert (
+        set(ENV_REGISTRY.keys())
+        == expected_gymnax | expected_jumanji | expected_lunar_lander
+    )
 
 
 def test_classic_control_envs_have_state_hash() -> None:
@@ -185,6 +190,11 @@ def test_envs_in_family_filters_correctly() -> None:
     assert names == {
         'CartPole-v1', 'Acrobot-v1', 'MountainCar-v0',
         'Pendulum-v1', 'MountainCarContinuous-v0',
+        # JAX-native LunarLander port — registered under
+        # classic_control because the gymnasium reference lives in
+        # gymnasium's classic-control family (`box2d`); semantically
+        # closest to existing classic-control envs.
+        'LunarLander-v2-jax',
     }
 
     minatar = envs_in_family('minatar')
