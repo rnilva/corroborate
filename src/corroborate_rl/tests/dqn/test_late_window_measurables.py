@@ -8,6 +8,7 @@ from __future__ import annotations
 import math
 
 import numpy as np
+import pytest
 
 from corroborate_rl.dqn.measurables import (
     fill_ratio_late,
@@ -30,11 +31,18 @@ def test_q_gap_late_matches_late_half_mean() -> None:
     assert q_gap_late(record) == 2.75
 
 
-def test_q_gap_late_returns_nan_when_min_missing() -> None:
+def test_q_gap_late_raises_when_min_missing() -> None:
+    """Substrate bodies declare their `reads` and rely on the
+    framework's `compute_missing_columns` wrapper to catch
+    `KeyError` at the per-cell boundary (`measurable.py:681`). A
+    direct function-level invocation with a record missing a
+    declared read raises `KeyError` — that's the honest contract,
+    and the cache builder still NaN-stores per cell."""
     record = {
         'online_max_q_per_step': np.array([1.0, 2.0]),
     }
-    assert math.isnan(q_gap_late(record))
+    with pytest.raises(KeyError):
+        q_gap_late(record)
 
 
 def test_q_gap_growth_late_minus_early() -> None:
@@ -99,8 +107,10 @@ def test_q_autocorr_late_constant_returns_nan() -> None:
     assert math.isnan(q_autocorr_late(record))
 
 
-def test_q_autocorr_late_missing_key_returns_nan() -> None:
-    assert math.isnan(q_autocorr_late({}))
+def test_q_autocorr_late_missing_key_raises() -> None:
+    """Missing-key contract: see `test_q_gap_late_raises_when_min_missing`."""
+    with pytest.raises(KeyError):
+        q_autocorr_late({})
 
 
 def test_q_autocorr_late_too_short_returns_nan() -> None:

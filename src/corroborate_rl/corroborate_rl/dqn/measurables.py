@@ -168,11 +168,8 @@ def q_gap_late(record: Mapping[str, object]) -> float:
     training. Action-margin scalar — sharp policy preferences
     correlate with reward in Breakout / MNISTBandit /
     SpaceInvaders (PAPER §5.1)."""
-    try:
-        max_q = ONLINE_MAX_Q(record)
-        min_q = ONLINE_MIN_Q(record)
-    except KeyError:
-        return float('nan')
+    max_q = ONLINE_MAX_Q(record)
+    min_q = ONLINE_MIN_Q(record)
     return _windowed_mean(max_q - min_q, 0.5, 1.0)
 
 
@@ -181,11 +178,8 @@ def q_gap_growth(record: Mapping[str, object]) -> float:
     """(late_half_mean − early_half_mean) of the q_gap signal.
     Captures whether action-margin widens as training progresses
     (positive growth → emergent policy sharpness)."""
-    try:
-        max_q = ONLINE_MAX_Q(record)
-        min_q = ONLINE_MIN_Q(record)
-    except KeyError:
-        return float('nan')
+    max_q = ONLINE_MAX_Q(record)
+    min_q = ONLINE_MIN_Q(record)
     gap = max_q - min_q
     early = _windowed_mean(gap, 0.0, 0.5)
     late = _windowed_mean(gap, 0.5, 1.0)
@@ -236,11 +230,8 @@ def ddqn_bootstrap_gap(record: Mapping[str, object]) -> float:
     Prefer this over the legacy `_late` variant (which used an
     arbitrary 50% cut-off); `_late` is kept for backward compat
     with bridges authored before the convention was reconsidered."""
-    try:
-        target_max = TARGET_MAX_Q(record)
-        target_at_online = TARGET_AT_ARGMAX(record)
-    except KeyError:
-        return float('nan')
+    target_max = TARGET_MAX_Q(record)
+    target_at_online = TARGET_AT_ARGMAX(record)
     n = min(target_max.shape[0], target_at_online.shape[0])
     if n == 0:
         return float('nan')
@@ -282,11 +273,8 @@ def clip_wedge_polarity_aligned(record: Mapping[str, object]) -> float:
     system doesn't guarantee eval order for derived measurables).
     Cheap — both underlying quantities are already O(n_steps)."""
     # Clip wedge (full-trajectory mean of target_max - target_at_argmax)
-    try:
-        target_max = TARGET_MAX_Q(record)
-        target_at_online = TARGET_AT_ARGMAX(record)
-    except KeyError:
-        return float('nan')
+    target_max = TARGET_MAX_Q(record)
+    target_at_online = TARGET_AT_ARGMAX(record)
     n = min(target_max.shape[0], target_at_online.shape[0])
     if n == 0:
         return float('nan')
@@ -349,11 +337,8 @@ def bootstrap_gap_magnitude(record: Mapping[str, object]) -> float:
     anywhere so its regression on Δ_outcome is non-tautological.
 
     Returns NaN when trace cols are absent."""
-    try:
-        target_max = TARGET_MAX_Q(record)
-        target_at_online = TARGET_AT_ARGMAX(record)
-    except KeyError:
-        return float('nan')
+    target_max = TARGET_MAX_Q(record)
+    target_at_online = TARGET_AT_ARGMAX(record)
     n = min(target_max.shape[0], target_at_online.shape[0])
     if n == 0:
         return float('nan')
@@ -393,11 +378,8 @@ def ddqn_bootstrap_gap_late(record: Mapping[str, object]) -> float:
     sign-flip: bridge `staleness_amplifies_ddqn_outcome__sparse_
     goal_polyak` predicts gap × Q-sign correlates with
     Δ_outcome."""
-    try:
-        target_max = TARGET_MAX_Q(record)
-        target_at_online = TARGET_AT_ARGMAX(record)
-    except KeyError:
-        return float('nan')
+    target_max = TARGET_MAX_Q(record)
+    target_at_online = TARGET_AT_ARGMAX(record)
     n = min(target_max.shape[0], target_at_online.shape[0])
     if n == 0:
         return float('nan')
@@ -435,10 +417,7 @@ def argmax_entropy_late(record: Mapping[str, object]) -> float:
     distinguishes (a) vs (b) regimes.
 
     Returns nan if `online_argmax_per_step` is missing or empty."""
-    try:
-        arr_np = ONLINE_ARGMAX(record).astype(np.int64)
-    except KeyError:
-        return float('nan')
+    arr_np = ONLINE_ARGMAX(record).astype(np.int64)
     n = arr_np.shape[0] if arr_np.ndim > 0 else 0
     if n < 2:
         return float('nan')
@@ -463,10 +442,7 @@ def argmax_mode_freq_late(record: Mapping[str, object]) -> float:
 
     Per-cell measurable. Bridge body computes paired
     DDQN_mode_freq − vanilla_mode_freq."""
-    try:
-        arr_np = ONLINE_ARGMAX(record).astype(np.int64)
-    except KeyError:
-        return float('nan')
+    arr_np = ONLINE_ARGMAX(record).astype(np.int64)
     n = arr_np.shape[0] if arr_np.ndim > 0 else 0
     if n < 2:
         return float('nan')
@@ -500,10 +476,7 @@ def q_action_std_late(record: Mapping[str, object]) -> float:
 
     Returns nan if `online_std_q_per_step` is absent (cache
     lacking trace column) or if the late window is empty."""
-    try:
-        arr = ONLINE_STD_Q(record)
-    except KeyError:
-        return float('nan')
+    arr = ONLINE_STD_Q(record)
     return _windowed_mean(arr, 0.5, 1.0)
 
 
@@ -529,12 +502,9 @@ def q_range_to_std_late(record: Mapping[str, object]) -> float:
 
     Returns nan when any of the trace columns is missing or the
     late window is empty."""
-    try:
-        max_arr = ONLINE_MAX_Q(record)
-        min_arr = ONLINE_MIN_Q(record)
-        std_arr = ONLINE_STD_Q(record)
-    except KeyError:
-        return float('nan')
+    max_arr = ONLINE_MAX_Q(record)
+    min_arr = ONLINE_MIN_Q(record)
+    std_arr = ONLINE_STD_Q(record)
     if max_arr.size != min_arr.size or max_arr.size != std_arr.size:
         return float('nan')
     n = max_arr.size
@@ -622,10 +592,7 @@ def q_argmax_margin_late(record: Mapping[str, object]) -> float:
     bias is below margin scale.
 
     Returns nan if the trace column is absent."""
-    try:
-        arr = ONLINE_TOP12_MARGIN(record)
-    except KeyError:
-        return float('nan')
+    arr = ONLINE_TOP12_MARGIN(record)
     return _windowed_mean(arr, 0.5, 1.0)
 
 
@@ -711,10 +678,7 @@ def q_late_mean(record: Mapping[str, object]) -> float:
     The endogenous downstream of `r_min`. Used as a regime-
     selector predicate in bridges that test claims dependent on
     the sign of Hasselt's bias direction."""
-    try:
-        arr = ONLINE_MAX_Q(record)
-    except KeyError:
-        return float('nan')
+    arr = ONLINE_MAX_Q(record)
     return _windowed_mean(arr, 0.5, 1.0)
 
 
@@ -754,10 +718,7 @@ def q_max_growth(record: Mapping[str, object]) -> float:
     """late_quarter / max(|early_quarter|, 1e-9) of online_max_q.
     Value-curve growth — vanilla DQN's Jensen bias typically
     pushes this above 1; DDQN attenuates."""
-    try:
-        arr = ONLINE_MAX_Q(record)
-    except KeyError:
-        return float('nan')
+    arr = ONLINE_MAX_Q(record)
     early = _windowed_mean(arr, 0.0, 0.25)
     late = _windowed_mean(arr, 0.75, 1.0)
     return float(late / max(abs(early), 1e-9))
@@ -789,10 +750,7 @@ def q_action_grad_overlap_late(record: Mapping[str, object]) -> float:
     and deep FA. Use `q_action_grad_overlap_late` for the
     architectural-α test; use the temporal correlation only as
     a Q-rank-deficiency proxy."""
-    try:
-        arr = Q_ACTION_GRAD_OVERLAP(record)
-    except KeyError:
-        return float('nan')
+    arr = Q_ACTION_GRAD_OVERLAP(record)
     if arr.ndim == 0 or arr.shape[0] < 2:
         return float('nan')
     return _windowed_mean(arr, 0.5, 1.0)
@@ -822,10 +780,7 @@ def q_autocorr_late(record: Mapping[str, object]) -> float:
     onto Q(s', a) for s' ≈ s, amplifying spatial bias coverage.
     DDQN's argmax-decorrelation breaks this loop — should help
     most where autocorr is high."""
-    try:
-        arr = ONLINE_MAX_Q(record)
-    except KeyError:
-        return float('nan')
+    arr = ONLINE_MAX_Q(record)
     if arr.ndim == 0 or arr.shape[0] < 2:
         return float('nan')
     half = arr.shape[0] // 2
@@ -960,10 +915,7 @@ def argmax_persistence_late(record: Mapping[str, object]) -> float:
     transitions can produce different argmaxes even with stable Q.
     Read in conjunction with `argmax_entropy_late` (which captures
     the across-action histogram) to disambiguate."""
-    try:
-        arr = ONLINE_ARGMAX(record)
-    except KeyError:
-        return float('nan')
+    arr = ONLINE_ARGMAX(record)
     n = arr.shape[0]
     if n < 4:
         return float('nan')
@@ -994,10 +946,7 @@ def q_max_temporal_cv_late(record: Mapping[str, object]) -> float:
 
     Returns NaN if `online_max_q_per_step` absent or if late-window
     mean is below 1e-9 in magnitude (CV undefined)."""
-    try:
-        arr = ONLINE_MAX_Q(record)
-    except KeyError:
-        return float('nan')
+    arr = ONLINE_MAX_Q(record)
     n = arr.shape[0]
     if n < 4:
         return float('nan')
@@ -1043,11 +992,8 @@ def env_reward_polarity(record: Mapping[str, object]) -> float:
     positive slope coupling. The pool ρ values were −0.798 and
     +0.240 respectively (formal proof n_envs=8, binomial p=0.004).
     """
-    try:
-        el = EP_LENGTH(record)
-        mc = MC_RETURN(record)
-    except KeyError:
-        return float('nan')
+    el = EP_LENGTH(record)
+    mc = MC_RETURN(record)
     el_arr = np.asarray(el, dtype=np.float64).flatten()
     mc_arr = np.asarray(mc, dtype=np.float64).flatten()
     if el_arr.shape != mc_arr.shape or el_arr.size < 3:
@@ -1083,11 +1029,8 @@ def q_mc_calibration_pearson(record: Mapping[str, object]) -> float:
     online-Q vs target-Q population correlation, a target-
     staleness diagnostic): this one is Q vs realized return —
     the OPE-style validity of the value function."""
-    try:
-        qs = PREDICTED_Q_AT_START(record)
-        mc = MC_RETURN(record)
-    except KeyError:
-        return float('nan')
+    qs = PREDICTED_Q_AT_START(record)
+    mc = MC_RETURN(record)
     qs_flat = np.asarray(qs).flatten()
     mc_flat = np.asarray(mc).flatten()
     if qs_flat.size != mc_flat.size or qs_flat.size < 3:
@@ -1119,11 +1062,8 @@ def target_staleness_late(record: Mapping[str, object]) -> float:
     Late-50% window matches the canonical late-quarter Hasselt
     convention while keeping enough samples for a stable mean.
     """
-    try:
-        omax = ONLINE_MAX_Q(record)
-        tmax = TARGET_MAX_Q(record)
-    except KeyError:
-        return float('nan')
+    omax = ONLINE_MAX_Q(record)
+    tmax = TARGET_MAX_Q(record)
     abs_gap = np.abs(omax - tmax)
     denom = np.maximum(np.maximum(np.abs(omax), np.abs(tmax)), 1e-6)
     return _windowed_mean(abs_gap / denom, 0.5, 1.0)
@@ -1139,11 +1079,8 @@ def target_staleness_early(record: Mapping[str, object]) -> float:
     Breakout). Useful as the substrate-level mediator for
     early-policy-quality bridges where the late window has
     already stabilised."""
-    try:
-        omax = ONLINE_MAX_Q(record)
-        tmax = TARGET_MAX_Q(record)
-    except KeyError:
-        return float('nan')
+    omax = ONLINE_MAX_Q(record)
+    tmax = TARGET_MAX_Q(record)
     abs_gap = np.abs(omax - tmax)
     denom = np.maximum(np.maximum(np.abs(omax), np.abs(tmax)), 1e-6)
     return _windowed_mean(abs_gap / denom, 0.0, 0.25)
@@ -1156,11 +1093,8 @@ def v_vs_max_delta_late(record: Mapping[str, object]) -> float:
     action-Q distribution (large delta); DDQN's decoupled
     selection narrows it. The Hasselt 2010 Jensen-bias proxy at
     the per-step level."""
-    try:
-        mean_q = ONLINE_MEAN_Q(record)
-        max_q = ONLINE_MAX_Q(record)
-    except KeyError:
-        return float('nan')
+    mean_q = ONLINE_MEAN_Q(record)
+    max_q = ONLINE_MAX_Q(record)
     return _windowed_mean(np.abs(mean_q - max_q), 0.5, 1.0)
 
 
@@ -1170,10 +1104,7 @@ def td_residual_late(record: Mapping[str, object]) -> float:
     scalar — Acrobot's r=+0.84 vs GaussianBandit's r=−0.81
     (sign-flip across regimes) is the canonical motivation for
     per-env PC in PAPER §6."""
-    try:
-        arr = TD_ERROR(record)
-    except KeyError:
-        return float('nan')
+    arr = TD_ERROR(record)
     return _windowed_mean(arr, 0.5, 1.0)
 
 
@@ -1194,10 +1125,7 @@ def td_within_batch_var_late(record: Mapping[str, object]) -> float:
     happened to be in the batch) and *not* a re-encoding of the
     outcome (reads `td_error_within_batch_std`, disjoint from
     `mc_return`)."""
-    try:
-        arr = TD_WB_STD(record)
-    except KeyError:
-        return float('nan')
+    arr = TD_WB_STD(record)
     return _windowed_mean(arr, 0.5, 1.0)
 
 
@@ -1208,11 +1136,8 @@ def greedy_match_late(record: Mapping[str, object]) -> float:
     large match ⇒ DDQN's mechanism is *inactive* on this cell
     (the two estimators agree, so vanilla and DDQN reduce to
     each other)."""
-    try:
-        online = ONLINE_ARGMAX(record)
-        target = TARGET_ARGMAX(record)
-    except KeyError:
-        return float('nan')
+    online = ONLINE_ARGMAX(record)
+    target = TARGET_ARGMAX(record)
     match = (online == target).astype(np.float64)
     return _windowed_mean(match, 0.5, 1.0)
 
@@ -1349,10 +1274,7 @@ def fill_ratio_late(
     redundancy / reads-set fingerprinting."""
     if capacity <= 0:
         return float('nan')
-    try:
-        arr = BUF_SIZE(record)
-    except KeyError:
-        return float('nan')
+    arr = BUF_SIZE(record)
     return _windowed_mean(arr / float(capacity), 0.5, 1.0)
 
 
