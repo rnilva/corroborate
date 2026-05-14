@@ -486,7 +486,37 @@ def dispatch_sweep(sweep: DQNSweep) -> tuple[Path, Path]:
     # `--ingest-all` walks see "still in progress" and skip the
     # corpus rather than ingest a half-merged parent.
     stream_concat_parquets(sub_runs, final_runs)
-    stream_concat_parquets(sub_traces, final_traces)
+    # **Disk-full graceful fallback**: traces.parquet merge is the
+    # large one (per-cell shards can sum to 30 GB on 60-seed × 1M
+    # sweeps). If the pre-flight check in stream_concat_parquets
+    # raises ENOSPC, leave the per-arm sub-corpora intact instead
+    # of crashing the sweep. The sub-corpora are independently
+    # usable for analysis and downstream --ingest is shard-aware.
+    # Pre-fix this triggered a ~20 GB orphan `.partial` mid-write
+    # and burned 30+ min of GPU compute on an unrecoverable merge.
+    import errno
+    import sys
+    try:
+        stream_concat_parquets(sub_traces, final_traces)
+    except OSError as exc:
+        if exc.errno != errno.ENOSPC:
+            raise
+        sys.stderr.write(
+            f'run_sweep: WARNING — top-level traces.parquet merge '
+            f'skipped (insufficient disk in '
+            f'{sweep.out_dir.parent}). Per-hypothesis sub-corpora '
+            f'under {sweep.out_dir} are intact and usable directly '
+            f'for analysis / ingest. To finish the top-level merge '
+            f'later: archive sub-corpora, free disk, then concat '
+            f'their traces.parquet via '
+            f'`stream_concat_parquets`. The sweep '
+            f'`.in_progress` sentinel stays UP — `--ingest-all` '
+            f'will skip the parent dir until merged or removed.\n',
+        )
+        # Don't delete sub_arm_dirs (they're the salvage path).
+        # Don't remove sentinel (signals incomplete merge state).
+        # Return the per-arm paths so callers know what landed.
+        return final_runs, sweep.out_dir
     # **Scratch cleanup**: per-arm sub-corpora are scratch — the
     # parent runs.parquet + traces.parquet now have everything.
     # Pre-fix this was documented as a manual `rm -rf` step,

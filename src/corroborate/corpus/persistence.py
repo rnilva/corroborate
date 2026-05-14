@@ -534,6 +534,44 @@ def stream_concat_parquets(
         raise ValueError('stream_concat_parquets: no inputs')
     if chunk_size < 1:
         raise ValueError(f'chunk_size must be ≥ 1, got {chunk_size}')
+    # **Disk pre-flight check**: output parquet is roughly the sum
+    # of input sizes (zstd already on inputs; no compression
+    # savings during concat). If filesystem free < estimated output
+    # + 10% safety, raise BEFORE writing anything. This converts
+    # mid-stream `OSError errno 28` (which leaves an orphan
+    # `.partial` and may take 30+ min of compute to recover) into
+    # a clean upfront refusal that callers can handle gracefully
+    # (e.g. by skipping the top-level concat and leaving per-arm
+    # sub-corpora intact).
+    inputs_list_check = [str(p) for p in inputs]
+    try:
+        from os import path as _path
+        from shutil import disk_usage as _disk_usage
+        total_input_bytes = sum(
+            _path.getsize(p) for p in inputs_list_check
+            if _path.exists(p) and not p.startswith('s3://')
+        )
+        if total_input_bytes > 0:
+            free_bytes = _disk_usage(out.parent).free
+            need_bytes = int(total_input_bytes * 1.1)
+            if free_bytes < need_bytes:
+                raise OSError(
+                    28,  # errno.ENOSPC
+                    f'stream_concat_parquets: pre-flight disk check '
+                    f'fails — need ~{need_bytes / 1e9:.1f} GB free in '
+                    f'{out.parent}, have {free_bytes / 1e9:.1f} GB. '
+                    f'Inputs sum to {total_input_bytes / 1e9:.1f} GB '
+                    f'across {len(inputs_list_check)} file(s). '
+                    f'Free disk or pass `scratch_dir=` pointing to a '
+                    f'volume with more space.',
+                )
+    except OSError:
+        raise
+    except Exception:
+        # Pre-flight check is advisory — never block on its own
+        # failure (e.g. missing input, fsspec URIs). Let the
+        # normal write path try and surface a real error if any.
+        pass
     # **OOM mitigation**: adaptive chunk-size based on per-file
     # decompressed-size estimates. Static `chunk_size=4` blindly
     # holds 4× max(decomp_size) in RAM during the eager concat;
