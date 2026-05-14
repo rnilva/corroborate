@@ -1,0 +1,731 @@
+{
+  "bridges": [
+    {
+      "analysis_results": {
+        "cross_stratum_property_slope": {
+          "cohen_d_per_stratum": [
+            0.00508924,
+            -0.00423321,
+            0.0839059
+          ],
+          "covariate_name": "log_horizon",
+          "covariate_values": [
+            4.605,
+            5.298,
+            6.908
+          ],
+          "n_strata": 3,
+          "p_value": null,
+          "rho": null
+        }
+      },
+      "assumption_violations": [],
+      "blocked_by": null,
+      "bridge_name": "ddqn_link_outcome_scales_with_chain_depth__cross_env",
+      "direction": "direct",
+      "extent_hash": 8282271023418009870,
+      "n_cells_in_scope": 3870,
+      "n_cells_pre_scope": 5930,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "baseline_arm": "baseline",
+        "covariate_key_field": "gamma",
+        "covariate_name": "log_horizon",
+        "covariates_per_key": {
+          "0.99": {
+            "log_horizon": 4.605
+          },
+          "0.995": {
+            "log_horizon": 5.298
+          },
+          "0.999": {
+            "log_horizon": 6.908
+          }
+        },
+        "min_seeds_per_arm": 5,
+        "min_strata": 10,
+        "min_vanilla_predictor": 2.0,
+        "null_threshold": 0.2,
+        "p_threshold": 0.05,
+        "rho_threshold_held": 0.6,
+        "scope_predictor": "jensen_gap",
+        "sign_flip_threshold": 0.5,
+        "source": "eval_best_burst_raw_mean",
+        "stratify_by": [
+          "gamma"
+        ],
+        "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
+      },
+      "predicted_direction": "a_gt_b",
+      "scope_repr": "[([([([([([([([([([(col(\"eval_best_burst_raw_mean\").is_finite()) & (col(\"jensen_gap\").is_finite())]) & (col(\"n_actions\").is_finite())]) & ([(col(\"n_actions\")) >= (dyn int: 3)])]) & ([([(col(\"n_step\")) == (dyn int: 1)]) | (col(\"n_step\").is_null())])]) & (col(\"action_duplicate_k\").is_null())]) & ([([(col(\"env_name\")) == (\"MetaMaze-misc\")]) & ([(col(\"gamma\")) == (dyn float: 0.999)])].not())]) & ([(col(\"env_name\")) != (\"CartPole-v1\")])]) & ([(col(\"env_name\")) != (\"SlidingTilePuzzle-jumanji\")])]) & ([(col(\"wrappers\")) == (\"()\")])]) & (col(\"gamma\").is_in([[0.99, 0.995, 0.999]]))]",
+      "source_name": "do(baseline|bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify))",
+      "target_name": "eval_best_burst_raw_mean",
+      "tier": "interventional",
+      "verdict": "power_insufficient",
+      "warnings": []
+    },
+    {
+      "analysis_results": {
+        "arm_mean_diff": {
+          "arm_field": "arm_key",
+          "baseline_arm": "baseline",
+          "mean_baseline": 4.62676,
+          "mean_diff": -0.145667,
+          "mean_diff_p_value": 0.805737,
+          "mean_diff_se": 0.592226,
+          "mean_treatment": 4.4811,
+          "measurable": "eval_best_burst_mean",
+          "n_baseline": 870,
+          "n_paired": 60,
+          "n_treatment": 930,
+          "pairing_rho": 0.997767,
+          "pairing_rho_se": 0.132453,
+          "sd_baseline": 12.8092,
+          "sd_treatment": 12.2797,
+          "standardized_effect": -0.0116177,
+          "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)",
+          "welch_df": 1776.95
+        }
+      },
+      "assumption_violations": [],
+      "blocked_by": null,
+      "bridge_name": "ddqn_helps_at_full_bootstrap__fourrooms_n1",
+      "direction": "direct",
+      "extent_hash": -5705780295686617756,
+      "n_cells_in_scope": 1800,
+      "n_cells_pre_scope": 5930,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "threshold_diff": 0.05
+      },
+      "predicted_direction": null,
+      "scope_repr": "[([(col(\"env_name\")) == (\"FourRooms-misc\")]) & ([(col(\"n_step\")) == (dyn int: 1)])]",
+      "source_name": "do(baseline|bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify))",
+      "target_name": "eval_best_burst_mean",
+      "tier": "interventional",
+      "verdict": "no_effect",
+      "warnings": [
+        {
+          "gate_name": "exogenous_scope",
+          "level": "warn",
+          "message": "Bridge.scope references only exogenous (leaves of the outermost claim) columns: ['env_name', 'n_step']. The principled scope-axis is endogenous (cf. ANALYSIS_RECIPE.md §0); HP envelopes are a temporary substitute. See FUTURE_WORKS \"Endogenous-variable scope predicates\".",
+          "passed": false
+        },
+        {
+          "gate_name": "no_predicted_direction",
+          "level": "info",
+          "message": "Bridge 'ddqn_helps_at_full_bootstrap__fourrooms_n1' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
+          "passed": false
+        }
+      ]
+    },
+    {
+      "analysis_results": {
+        "arm_mean_diff": {
+          "arm_field": "arm_key",
+          "baseline_arm": "baseline",
+          "mean_baseline": 0.780132,
+          "mean_diff": 0.00448897,
+          "mean_diff_p_value": 0.59185,
+          "mean_diff_se": 0.0083179,
+          "mean_treatment": 0.784621,
+          "measurable": "eval_best_burst_mean",
+          "n_baseline": 30,
+          "n_paired": 30,
+          "n_treatment": 30,
+          "pairing_rho": 0.47156,
+          "pairing_rho_se": 0.19245,
+          "sd_baseline": 0.0383905,
+          "sd_treatment": 0.0245315,
+          "standardized_effect": 0.139344,
+          "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)",
+          "welch_df": 49.2982
+        }
+      },
+      "assumption_violations": [],
+      "blocked_by": null,
+      "bridge_name": "ddqn_null_under_monte_carlo__fourrooms_n10",
+      "direction": "direct",
+      "extent_hash": 6721781556923489165,
+      "n_cells_in_scope": 60,
+      "n_cells_pre_scope": 5930,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "null_ceiling": 0.02
+      },
+      "predicted_direction": null,
+      "scope_repr": "[([(col(\"env_name\")) == (\"FourRooms-misc\")]) & ([(col(\"n_step\")) == (dyn int: 10)])]",
+      "source_name": "do(baseline|bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify))",
+      "target_name": "eval_best_burst_mean",
+      "tier": "interventional",
+      "verdict": "held",
+      "warnings": [
+        {
+          "gate_name": "exogenous_scope",
+          "level": "warn",
+          "message": "Bridge.scope references only exogenous (leaves of the outermost claim) columns: ['env_name', 'n_step']. The principled scope-axis is endogenous (cf. ANALYSIS_RECIPE.md §0); HP envelopes are a temporary substitute. See FUTURE_WORKS \"Endogenous-variable scope predicates\".",
+          "passed": false
+        },
+        {
+          "gate_name": "no_predicted_direction",
+          "level": "info",
+          "message": "Bridge 'ddqn_null_under_monte_carlo__fourrooms_n10' declares no `predicted_direction`. Sign-flip refutations (observed effect with the wrong sign) cannot be distinguished from null effects. Add e.g. `predicted_direction='a_lt_b'` if the claim has a sign prior; `predicted_direction='null'` for xfail-style null claims.",
+          "passed": false
+        }
+      ]
+    },
+    {
+      "analysis_results": {
+        "paired_continuous_do_dowhy": {
+          "backdoor": {
+            "ate": 2.7792,
+            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n           d                         \n───────────────────────(E[δ_outcome])\nd[targetₛₜₐₗₑₙₑₛₛ ₗₐₜₑ]              \nEstimand assumption 1, Unconfoundedness: If U→{target_staleness_late} and U→delta_outcome then P(delta_outcome|target_staleness_late,,U) = P(delta_outcome|target_staleness_late,)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n           d                         \n───────────────────────(E[δ_outcome])\nd[targetₛₜₐₗₑₙₑₛₛ ₗₐₜₑ]              \nEstimand assumption 1, Unconfoundedness: If U→{target_staleness_late} and U→delta_outcome then P(delta_outcome|target_staleness_late,,U) = P(delta_outcome|target_staleness_late,)\n",
+            "identified": true,
+            "method_name": "backdoor.linear_regression",
+            "n_rows": 119,
+            "outcome": "delta_outcome",
+            "treatment": "target_staleness_late"
+          },
+          "n_pairs": 119,
+          "outcome": "delta_outcome",
+          "placebo": {
+            "drift": 2.7792,
+            "method_name": "backdoor.linear_regression",
+            "n_rows": 119,
+            "outcome": "delta_outcome",
+            "real_ate": 2.7792,
+            "refuted_ate": 0.0,
+            "refuter_name": "placebo_treatment_refuter",
+            "treatment": "target_staleness_late"
+          },
+          "random_common_cause": {
+            "drift": 0.0208671,
+            "method_name": "backdoor.linear_regression",
+            "n_rows": 119,
+            "outcome": "delta_outcome",
+            "real_ate": 2.7792,
+            "refuted_ate": 2.75833,
+            "refuter_name": "random_common_cause",
+            "treatment": "target_staleness_late"
+          },
+          "treatment": "target_staleness_late"
+        }
+      },
+      "assumption_violations": [],
+      "blocked_by": null,
+      "bridge_name": "staleness_amplifies_ddqn_outcome__sparse_goal_polyak",
+      "direction": "inverse",
+      "extent_hash": 7466526207688016729,
+      "n_cells_in_scope": 238,
+      "n_cells_pre_scope": 5930,
+      "pair_by": [
+        "env_name",
+        "gamma",
+        "sync_period",
+        "total_steps",
+        "seed",
+        "target_sync.tau"
+      ],
+      "params": {
+        "ate_threshold": 1.0,
+        "baseline_arm": "baseline",
+        "n_pairs_floor": 30,
+        "outcome": "eval_best_burst_mean",
+        "refutation_drift_threshold": 5.0,
+        "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)",
+        "treatment_var": "target_staleness_late",
+        "treatment_var_arm": "baseline"
+      },
+      "predicted_direction": "a_lt_b",
+      "scope_repr": "[([([([([([([(col(\"target_sync.tau\").is_finite()) & ([(col(\"target_sync.tau\")) > (dyn int: 0)])]) & ([(col(\"env_reward_polarity\").is_finite()) & ([(col(\"env_reward_polarity\")) < (dyn float: -0.5)])])]) & (col(\"q_divergence_score\").is_finite())]) & ([(col(\"q_divergence_score\").is_finite()) & ([(col(\"q_divergence_score\")) < (dyn float: 100)])])]) & (col(\"target_staleness_late\").is_finite())]) & (col(\"eval_best_burst_mean\").is_finite())]) & ([(col(\"q_late_mean\").is_finite()) & ([(col(\"q_late_mean\")) > (dyn float: 0)])])]",
+      "source_name": "target_staleness_late",
+      "target_name": "eval_best_burst_raw_mean",
+      "tier": "associational",
+      "verdict": "held",
+      "warnings": []
+    },
+    {
+      "analysis_results": {
+        "paired_continuous_do_dowhy": {
+          "backdoor": {
+            "ate": null,
+            "estimand_str": "",
+            "identified": false,
+            "method_name": "backdoor.linear_regression",
+            "n_rows": 0,
+            "outcome": "delta_outcome",
+            "treatment": "target_staleness_late"
+          },
+          "n_pairs": 0,
+          "outcome": "delta_outcome",
+          "placebo": {
+            "drift": null,
+            "method_name": "backdoor.linear_regression",
+            "n_rows": 0,
+            "outcome": "delta_outcome",
+            "real_ate": null,
+            "refuted_ate": null,
+            "refuter_name": "placebo_treatment_refuter",
+            "treatment": "target_staleness_late"
+          },
+          "random_common_cause": {
+            "drift": null,
+            "method_name": "backdoor.linear_regression",
+            "n_rows": 0,
+            "outcome": "delta_outcome",
+            "real_ate": null,
+            "refuted_ate": null,
+            "refuter_name": "random_common_cause",
+            "treatment": "target_staleness_late"
+          },
+          "treatment": "target_staleness_late"
+        }
+      },
+      "assumption_violations": [],
+      "blocked_by": null,
+      "bridge_name": "staleness_does_not_amplify_ddqn_outcome__survival_polyak",
+      "direction": "direct",
+      "extent_hash": 133146708735736,
+      "n_cells_in_scope": 0,
+      "n_cells_pre_scope": 5930,
+      "pair_by": [
+        "env_name",
+        "gamma",
+        "sync_period",
+        "total_steps",
+        "seed",
+        "target_sync.tau"
+      ],
+      "params": {
+        "baseline_arm": "baseline",
+        "n_pairs_floor": 30,
+        "null_band": 5.0,
+        "outcome": "eval_best_burst_mean",
+        "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)",
+        "treatment_var": "target_staleness_late",
+        "treatment_var_arm": "baseline"
+      },
+      "predicted_direction": "null",
+      "scope_repr": "[([([([(col(\"target_sync.tau\").is_finite()) & ([(col(\"target_sync.tau\")) > (dyn int: 0)])]) & ([(col(\"env_reward_polarity\").is_finite()) & ([(col(\"env_reward_polarity\")) > (dyn float: 0.3)])])]) & (col(\"target_staleness_late\").is_finite())]) & (col(\"eval_best_burst_mean\").is_finite())]",
+      "source_name": "target_staleness_late",
+      "target_name": "eval_best_burst_raw_mean",
+      "tier": "associational",
+      "verdict": "power_insufficient",
+      "warnings": []
+    },
+    {
+      "analysis_results": {
+        "arm_mean_diff": {
+          "arm_field": "arm_key",
+          "baseline_arm": "baseline",
+          "mean_baseline": 0.0535179,
+          "mean_diff": 0.638038,
+          "mean_diff_p_value": 0.0,
+          "mean_diff_se": 0.0235458,
+          "mean_treatment": 0.691556,
+          "measurable": "outcome_native",
+          "n_baseline": 30,
+          "n_paired": 30,
+          "n_treatment": 30,
+          "pairing_rho": 0.104812,
+          "pairing_rho_se": 0.19245,
+          "sd_baseline": 0.0635208,
+          "sd_treatment": 0.112238,
+          "standardized_effect": 6.99659,
+          "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)",
+          "welch_df": 45.8488
+        }
+      },
+      "assumption_violations": [],
+      "blocked_by": null,
+      "bridge_name": "ddqn_rescues_underlearning_vanilla__fourrooms_rs_0p1",
+      "direction": "direct",
+      "extent_hash": 8536468527961962030,
+      "n_cells_in_scope": 60,
+      "n_cells_pre_scope": 5930,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "threshold_diff": 0.35
+      },
+      "predicted_direction": "a_gt_b",
+      "scope_repr": "[([(col(\"env_name\")) == (\"FourRooms-misc\")]) & ([(col(\"reward_scale\")) == (dyn float: 0.1)])]",
+      "source_name": "do(baseline|bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify))",
+      "target_name": "outcome_native",
+      "tier": "interventional",
+      "verdict": "held",
+      "warnings": []
+    },
+    {
+      "analysis_results": {
+        "arm_mean_diff": {
+          "arm_field": "arm_key",
+          "baseline_arm": "baseline",
+          "mean_baseline": 0.520307,
+          "mean_diff": 0.259039,
+          "mean_diff_p_value": 5.60742e-06,
+          "mean_diff_se": 0.0470671,
+          "mean_treatment": 0.779346,
+          "measurable": "outcome_native",
+          "n_baseline": 30,
+          "n_paired": 30,
+          "n_treatment": 30,
+          "pairing_rho": 0.167561,
+          "pairing_rho_se": 0.19245,
+          "sd_baseline": 0.255552,
+          "sd_treatment": 0.0339465,
+          "standardized_effect": 1.42102,
+          "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)",
+          "welch_df": 30.0231
+        }
+      },
+      "assumption_violations": [],
+      "blocked_by": null,
+      "bridge_name": "ddqn_dominates_vanilla_response_curve__fourrooms_rs_0p3",
+      "direction": "direct",
+      "extent_hash": -338912639543868864,
+      "n_cells_in_scope": 60,
+      "n_cells_pre_scope": 5930,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "threshold_diff": 0.35
+      },
+      "predicted_direction": "a_gt_b",
+      "scope_repr": "[([(col(\"env_name\")) == (\"FourRooms-misc\")]) & ([(col(\"reward_scale\")) == (dyn float: 0.3)])]",
+      "source_name": "do(baseline|bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify))",
+      "target_name": "outcome_native",
+      "tier": "interventional",
+      "verdict": "power_insufficient",
+      "warnings": []
+    },
+    {
+      "analysis_results": {
+        "arm_mean_diff": {
+          "arm_field": "arm_key",
+          "baseline_arm": "baseline",
+          "mean_baseline": -52.9144,
+          "mean_diff": 0.110349,
+          "mean_diff_p_value": 0.633399,
+          "mean_diff_se": 0.231067,
+          "mean_treatment": -52.804,
+          "measurable": "outcome_native",
+          "n_baseline": 120,
+          "n_paired": 120,
+          "n_treatment": 120,
+          "pairing_rho": 0.112912,
+          "pairing_rho_se": 0.09245,
+          "sd_baseline": 1.74072,
+          "sd_treatment": 1.83764,
+          "standardized_effect": 0.0616534,
+          "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)",
+          "welch_df": 237.305
+        }
+      },
+      "assumption_violations": [],
+      "blocked_by": null,
+      "bridge_name": "ddqn_does_not_rescue__acrobot_rs_0p1",
+      "direction": "direct",
+      "extent_hash": -8289816450107781656,
+      "n_cells_in_scope": 240,
+      "n_cells_pre_scope": 5930,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "null_ceiling": 0.2
+      },
+      "predicted_direction": "null",
+      "scope_repr": "[([([(col(\"env_name\")) == (\"Acrobot-v1\")]) & ([(col(\"reward_scale\")) == (dyn float: 0.1)])]) & ([([(col(\"n_step\")) == (dyn int: 1)]) | (col(\"n_step\").is_null())])]",
+      "source_name": "do(baseline|bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify))",
+      "target_name": "outcome_native",
+      "tier": "interventional",
+      "verdict": "power_insufficient",
+      "warnings": []
+    },
+    {
+      "analysis_results": {
+        "arm_mean_diff": {
+          "arm_field": "arm_key",
+          "baseline_arm": "baseline",
+          "mean_baseline": 99.1678,
+          "mean_diff": 0.0941064,
+          "mean_diff_p_value": 0.0888537,
+          "mean_diff_se": 0.0550545,
+          "mean_treatment": 99.2619,
+          "measurable": "outcome_native",
+          "n_baseline": 120,
+          "n_paired": 120,
+          "n_treatment": 120,
+          "pairing_rho": 0.025277,
+          "pairing_rho_se": 0.09245,
+          "sd_baseline": 0.495713,
+          "sd_treatment": 0.343495,
+          "standardized_effect": 0.220674,
+          "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)",
+          "welch_df": 211.867
+        }
+      },
+      "assumption_violations": [],
+      "blocked_by": null,
+      "bridge_name": "ddqn_does_not_rescue__cartpole_rs_0p1",
+      "direction": "direct",
+      "extent_hash": -8636344836916938781,
+      "n_cells_in_scope": 240,
+      "n_cells_pre_scope": 5930,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "null_ceiling": 0.2
+      },
+      "predicted_direction": "null",
+      "scope_repr": "[([([(col(\"env_name\")) == (\"CartPole-v1\")]) & ([(col(\"reward_scale\")) == (dyn float: 0.1)])]) & ([([(col(\"n_step\")) == (dyn int: 1)]) | (col(\"n_step\").is_null())])]",
+      "source_name": "do(baseline|bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify))",
+      "target_name": "outcome_native",
+      "tier": "interventional",
+      "verdict": "power_insufficient",
+      "warnings": []
+    },
+    {
+      "analysis_results": {
+        "arm_mean_diff": {
+          "arm_field": "arm_key",
+          "baseline_arm": "baseline",
+          "mean_baseline": 1.36537,
+          "mean_diff": -0.231559,
+          "mean_diff_p_value": 0.0,
+          "mean_diff_se": 0.0135526,
+          "mean_treatment": 1.13381,
+          "measurable": "argmax_entropy_late",
+          "n_baseline": 30,
+          "n_paired": 30,
+          "n_treatment": 30,
+          "pairing_rho": -0.080874,
+          "pairing_rho_se": 0.19245,
+          "sd_baseline": 0.0175443,
+          "sd_treatment": 0.0721275,
+          "standardized_effect": -4.41158,
+          "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)",
+          "welch_df": 32.4196
+        }
+      },
+      "assumption_violations": [],
+      "blocked_by": null,
+      "bridge_name": "ddqn_increases_argmax_entropy__fourrooms_rs_0p1",
+      "direction": "direct",
+      "extent_hash": 8536468527961962030,
+      "n_cells_in_scope": 60,
+      "n_cells_pre_scope": 5930,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "threshold_diff": 0.05
+      },
+      "predicted_direction": "a_gt_b",
+      "scope_repr": "[([([(col(\"env_name\")) == (\"FourRooms-misc\")]) & ([(col(\"reward_scale\")) == (dyn float: 0.1)])]) & ([([(col(\"n_step\")) == (dyn int: 1)]) | (col(\"n_step\").is_null())])]",
+      "source_name": "do(baseline|bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify))",
+      "target_name": "argmax_entropy_late",
+      "tier": "interventional",
+      "verdict": "no_effect",
+      "warnings": []
+    },
+    {
+      "analysis_results": {
+        "arm_mean_diff": {
+          "arm_field": "arm_key",
+          "baseline_arm": "baseline",
+          "mean_baseline": 0.861047,
+          "mean_diff": -0.0988733,
+          "mean_diff_p_value": 8.82212e-08,
+          "mean_diff_se": 0.0158628,
+          "mean_treatment": 0.762174,
+          "measurable": "argmax_entropy_late",
+          "n_baseline": 30,
+          "n_paired": 30,
+          "n_treatment": 30,
+          "pairing_rho": 0.628855,
+          "pairing_rho_se": 0.19245,
+          "sd_baseline": 0.0719075,
+          "sd_treatment": 0.0487662,
+          "standardized_effect": -1.60936,
+          "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)",
+          "welch_df": 51.0182
+        }
+      },
+      "assumption_violations": [],
+      "blocked_by": null,
+      "bridge_name": "ddqn_entropy_matches_vanilla__fourrooms_rs_1p0",
+      "direction": "direct",
+      "extent_hash": 5321109708328385315,
+      "n_cells_in_scope": 60,
+      "n_cells_pre_scope": 5930,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "null_ceiling": 0.05
+      },
+      "predicted_direction": "null",
+      "scope_repr": "[([([(col(\"env_name\")) == (\"FourRooms-misc\")]) & ([(col(\"reward_scale\")) == (dyn float: 1)])]) & ([([(col(\"n_step\")) == (dyn int: 1)]) | (col(\"n_step\").is_null())])]",
+      "source_name": "do(baseline|bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify))",
+      "target_name": "argmax_entropy_late",
+      "tier": "interventional",
+      "verdict": "no_effect",
+      "warnings": []
+    },
+    {
+      "analysis_results": {
+        "meta_regression_unpaired_d": {
+          "cleavage_axes": [],
+          "coefficients": [
+            {
+              "ci_hi": 0.0182333,
+              "ci_lo": -0.0191441,
+              "coefficient": -0.000455382,
+              "is_significant": false,
+              "name": "effective_horizon",
+              "p_value": 0.926069
+            }
+          ],
+          "i_squared": 0.890082,
+          "intercept": 0.223453,
+          "intercept_ci_hi": 2.67282,
+          "intercept_ci_lo": -2.22591,
+          "intercept_p_value": 0.732553,
+          "intercept_se": 0.569269,
+          "n_strata": 4,
+          "pool": "random",
+          "q_statistic": 18.1954,
+          "r_squared": 0.00546582,
+          "tau_sq": 0.355969
+        }
+      },
+      "assumption_violations": [],
+      "blocked_by": null,
+      "bridge_name": "ddqn_benefit_scales_with_effective_horizon__fourrooms",
+      "direction": "direct",
+      "extent_hash": 2213218619937448560,
+      "n_cells_in_scope": 1200,
+      "n_cells_pre_scope": 5930,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "baseline_arm": "baseline",
+        "covariate_key_field": "gamma",
+        "covariates_per_key": {
+          "0.99": {
+            "effective_horizon": 37.3
+          },
+          "0.995": {
+            "effective_horizon": 80.6
+          },
+          "0.999": {
+            "effective_horizon": 235.6
+          }
+        },
+        "min_strata": 3,
+        "min_vanilla_predictor": 0.05,
+        "scope_predictor": "jensen_gap",
+        "slope_threshold": 0.01,
+        "source": "eval_best_burst_raw_mean",
+        "stratify_by": [
+          "gamma",
+          "total_steps",
+          "reward_scale"
+        ],
+        "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
+      },
+      "predicted_direction": "a_gt_b",
+      "scope_repr": "[([([([([([(col(\"env_name\")) == (\"FourRooms-misc\")]) & (col(\"gamma\").is_in([[0.99, 0.995, 0.999]]))]) & ([([(col(\"n_step\")) == (dyn int: 1)]) | (col(\"n_step\").is_null())])]) & (col(\"action_duplicate_k\").is_null())]) & ([(col(\"reward_scale\").is_null()) | ([(col(\"reward_scale\")) == (dyn float: 1)])])]) & (col(\"target_sync.tau\").is_null())]",
+      "source_name": "do(baseline|bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify))",
+      "target_name": "eval_best_burst_raw_mean",
+      "tier": "interventional",
+      "verdict": "power_insufficient",
+      "warnings": []
+    },
+    {
+      "analysis_results": {
+        "stratum_effect_panel": {
+          "aggregator": "mean",
+          "baseline_arm": "baseline",
+          "deltas": {
+            "eval_best_burst_mean": []
+          },
+          "measurables": [
+            "eval_best_burst_mean"
+          ],
+          "n_baseline": [],
+          "n_strata": 0,
+          "n_treatment": [],
+          "strata": [],
+          "stratify_by": [
+            "gamma"
+          ],
+          "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
+        }
+      },
+      "assumption_violations": [],
+      "blocked_by": null,
+      "bridge_name": "metamaze_link_steeper_at_high_gamma",
+      "direction": "direct",
+      "extent_hash": 133146708735736,
+      "n_cells_in_scope": 0,
+      "n_cells_pre_scope": 5930,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "amplification_ratio_min": 1.5,
+        "high_floor": 0.01,
+        "high_gamma": 0.999,
+        "low_gamma": 0.99,
+        "measurables": [
+          "eval_best_burst_mean"
+        ],
+        "min_seeds_per_arm": 10,
+        "stratify_by": [
+          "gamma"
+        ]
+      },
+      "predicted_direction": "a_gt_b",
+      "scope_repr": "[([([([([([([(col(\"env_name\")) == (\"MetaMaze-misc\")]) & (col(\"gamma\").is_in([[0.99, 0.999]]))]) & ([([(.when([(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_gap\")).otherwise(null).is_not_nan()) | (.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_gap\")).otherwise(null).is_null())]).then(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_gap\")).otherwise(null)).otherwise(null).mean().over([col(\"env_name\"), col(\"sync_period\"), col(\"gamma\"), col(\"total_steps\"), col(\"n_step\"), col(\"reward_scale\"), col(\"action_duplicate_k\")])) > (dyn float: 0.05)]) & ([(.when([(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_dormancy_gap\")).otherwise(null).is_not_nan()) | (.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_dormancy_gap\")).otherwise(null).is_null())]).then(.when([(col(\"arm_key\")) == (\"baseline\")]).then(col(\"jensen_dormancy_gap\")).otherwise(null)).otherwise(null).mean().over([col(\"env_name\"), col(\"sync_period\"), col(\"gamma\"), col(\"total_steps\"), col(\"n_step\"), col(\"reward_scale\"), col(\"action_duplicate_k\")])) < (dyn float: 0.05)])])]) & ([([(col(\"n_step\")) == (dyn int: 1)]) | (col(\"n_step\").is_null())])]) & (col(\"action_duplicate_k\").is_null())]) & ([(col(\"reward_scale\").is_null()) | ([(col(\"reward_scale\")) == (dyn float: 1)])])]) & (col(\"target_sync.tau\").is_null())]",
+      "source_name": "do(baseline|bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify))",
+      "target_name": "eval_best_burst_mean",
+      "tier": "associational",
+      "verdict": "power_insufficient",
+      "warnings": []
+    }
+  ],
+  "cache_path": "experiments/data/cache/ddqn_sweeps.parquet",
+  "errored_bridges": [],
+  "git_commit": "868a7d107ed8",
+  "hypothesis_module": "experiments.findings.ddqn_sweeps",
+  "measurable_signatures": {
+    "argmax_entropy_late": "22f4c683c0bfee66",
+    "env_reward_polarity": "4761fcc1b08efcca",
+    "eval_best_burst_mean": "bd74ed4e1d64a859",
+    "eval_best_burst_raw_mean": "829be9a6bcc9c696",
+    "jensen_dormancy_gap": "12502f5ce2171f73",
+    "jensen_gap": "950342c492febd27",
+    "log_horizon": "ed101b4d10ac77fa",
+    "outcome_native": "e341c5547e14bb9a",
+    "q_divergence_score": "fec5bd72d1fb6609",
+    "q_late_mean": "2b8f0297335ad2e5",
+    "r_max": "409ed3da1f32e66e",
+    "r_min": "5717682c68a0f956",
+    "target_staleness_late": "14b90395c7aabd2e"
+  },
+  "n_cells_total": 5930,
+  "timestamp_utc": "2026-05-14T01:23:44+00:00"
+}

@@ -12,11 +12,16 @@ from __future__ import annotations
 
 import math
 
+from types import MappingProxyType
+
 import polars as pl
 
+from corroborate.analyses.cross_stratum_property_slope import (
+    CrossStratumPropertySlopeResult,
+)
 from corroborate.analyses.stratum_effect_panel import StratumEffectPanel
 from corroborate.bridge.bridge import Direction, Tier, claim_bridge
-from corroborate.bridge.verdict import Verdict
+from corroborate.bridge.verdict import RefutationClass, Verdict
 from corroborate.stats import MetaRegressionResult
 
 from experiments.findings.ddqn._arms import (
@@ -27,6 +32,7 @@ from experiments.findings.ddqn._scope import (
     VANILLA_JENS_NOISE_FLOOR,
 )
 from experiments.findings.ddqn._verdicts import (
+    cross_stratum_signed_spearman_verdict,
     meta_regression_coefficient_verdict,
 )
 
@@ -246,15 +252,17 @@ def metamaze_link_steeper_at_high_gamma(
 # `findings_fa_coherence_bias.md` for the full panel + r=+0.71
 # cross-env correlation with log(jens/σ_Q) that motivated this
 # bridge.
-_AUTOCORR_PER_ENV: dict[object, dict[str, float]] = {
-    'FourRooms-misc':   {'q_autocorr_vanilla': 0.99},
-    'CartPole-v1':      {'q_autocorr_vanilla': 0.76},
-    'MetaMaze-misc':    {'q_autocorr_vanilla': 0.72},
-    'Breakout-MinAtar': {'q_autocorr_vanilla': 0.74},
-    'MountainCar-v0':   {'q_autocorr_vanilla': 0.59},
-    'PacMan-jumanji':   {'q_autocorr_vanilla': 0.35},
-    'Acrobot-v1':       {'q_autocorr_vanilla': 0.07},
-}
+_AUTOCORR_PER_ENV: MappingProxyType[object, MappingProxyType[str, float]] = (
+    MappingProxyType({
+        'FourRooms-misc':   MappingProxyType({'q_autocorr_vanilla': 0.99}),
+        'CartPole-v1':      MappingProxyType({'q_autocorr_vanilla': 0.76}),
+        'MetaMaze-misc':    MappingProxyType({'q_autocorr_vanilla': 0.72}),
+        'Breakout-MinAtar': MappingProxyType({'q_autocorr_vanilla': 0.74}),
+        'MountainCar-v0':   MappingProxyType({'q_autocorr_vanilla': 0.59}),
+        'PacMan-jumanji':   MappingProxyType({'q_autocorr_vanilla': 0.35}),
+        'Acrobot-v1':       MappingProxyType({'q_autocorr_vanilla': 0.07}),
+    })
+)
 
 
 # CLAIM 27 — Cross-env: DDQN's bias-reduction scales with FA-coherence.
@@ -274,77 +282,61 @@ _AUTOCORR_PER_ENV: dict[object, dict[str, float]] = {
     predicted_direction='a_lt_b',
 )
 def ddqn_bias_reduction_scales_with_fa_coherence__cross_env(
-    meta_regression_unpaired_d: MetaRegressionResult,
+    cross_stratum_property_slope: CrossStratumPropertySlopeResult,
     *,
     treatment_arm: str = DDQN_ARM,
     baseline_arm: str = VANILLA_ARM,
     source: str = 'jensen_gap',
-    # Stratify by (env, config) — different configs at the same
-    # env land in distinct strata. Independent-samples Cohen's d
-    # per (env, config), no seed-pairing (per
-    # `feedback_paired_g_in_rl`: RL seed-pairing inflates SE
-    # without genuine within-subject correlation; trajectories
-    # diverge by the first decision step).
-    stratify_by: tuple[str, ...] = (
-        'env_name', 'total_steps', 'replay.capacity', 'sync_period',
-    ),
+    stratify_by: tuple[str, ...] = ('env_name',),
+    covariate_name: str = 'q_autocorr_vanilla',
     covariate_key_field: str = 'env_name',
-    covariates_per_key: dict[object, dict[str, float]] = (
+    covariates_per_key: MappingProxyType[object, MappingProxyType[str, float]] = (
         _AUTOCORR_PER_ENV
     ),
     scope_predictor: str = 'jensen_gap',
     min_vanilla_predictor: float = VANILLA_JENS_NOISE_FLOOR,
-    slope_threshold: float = 0.3,
-    min_strata: int = 4,
-) -> Verdict:
-    """Cross-env do(DDQN) probe at the BIAS level: per-(env, burst)
-    Δ_jens = jens_DDQN − jens_vanilla → meta-regress on
-    `q_autocorr_vanilla`. The bias-reduction grows (becomes more
-    negative) as FA-coherence increases. HELD when β_autocorr ≤
-    −`slope_threshold` AND significant.
+    min_seeds_per_arm: int = 5,
+    rho_threshold_held: float = 0.6,
+    p_threshold: float = 0.05,
+    null_threshold: float = 0.2,
+    sign_flip_threshold: float = 0.5,
+    min_strata: int = 10,
+) -> tuple[Verdict, RefutationClass | None]:
+    """Cross-env Spearman ρ between `q_autocorr_vanilla` and per-env
+    Cohen's d on `jensen_gap`.
 
-    Per-burst over per-cell: per-cell scalars collapse the bias
-    trajectory and lose the early-vs-late phase structure that the
-    FA-amplification mechanism operates through. At γ=0.99 most
-    envs are partly-mech-dormant at best-burst (jens collapses
-    late) — the per-burst panel captures the WHOLE bias trajectory
-    so the autocorr signal isn't washed out by phase mismatch
-    (cf. CLAUDE.md § per-burst-canonical rule).
-
-    Theoretical motivation: high q_autocorr means the FA enforces
-    Q(s,a) ≈ Q(s',a') for s ≈ s' along trajectory; an overestimate
-    at one state propagates spatially via shared trunk gradients,
+    **Predicted direction**: ρ < 0 — higher FA-coherence → more
+    negative Δ_jens (larger bias reduction). High q_autocorr means
+    the FA enforces Q(s,a) ≈ Q(s',a') along trajectory; an
+    overestimate at one state propagates via shared trunk gradients,
     amplifying argmax-bias coverage. DDQN's argmax-decorrelation
-    breaks this loop. Prediction: Δ_jens (DDQN−vanilla) should be
-    near-zero on low-autocorr envs (Acrobot 0.07) and large-
-    negative on high-autocorr envs (FR 0.99).
+    breaks this loop.
 
-    Empirical motivation: `findings_fa_coherence_bias.md` —
-    cross-env r(q_autocorr_late, log(jens/σ_Q)) = +0.71, p=0.003,
-    n=15 strata 8 envs at the vanilla descriptive level. This
-    bridge is the do(DDQN) interventional sibling: per-(env, burst)
-    paired-g of jens, regressed on autocorr.
+    **Calibrated for n_strata≥10**. The covariate dict has 7 envs;
+    at canonical's G1 filter the bridge admits ≤6. Below the
+    verdict helper's resolution band — fires POWER_INSUFFICIENT
+    honestly. The pre-canonical descriptive diagnostic (r=+0.71
+    p=0.003 on vanilla log(jens/σ_Q), n=15 HP-mixed) doesn't
+    transfer to canonical-scope.
 
-    `slope_threshold=0.3` is calibrated to the cross-env autocorr
-    range [0.07, 0.99] ≈ 0.92 units — a slope of −0.3 corresponds
-    to ≈ −0.28 Cohen's g shift across the full range (Cohen's
-    "small"). A meaningful FA-coherence-driven bias reduction.
+    Small-n sibling of `meta_regression_unpaired_d` on the same
+    panel — both unresolved at canonical's env count.
 
-    The complementary OUTCOME bridge — DDQN's outcome benefit
-    scaling with autocorr — runs null cross-env at γ=0.99
-    because the bias-→-outcome translation is gated by per-env
-    G3 outcome-headroom (different envs have different ceilings;
-    CartPole sees its outcome plummet at high-jens regardless
-    of DDQN). The bias-level claim is the cleaner test of the
-    mechanism."""
+    Verdict matrix (per `cross_stratum_signed_spearman_verdict`):
+      HELD                  : ρ ≤ −0.6 AND p ≤ 0.05 (binding gate)
+      NO_EFFECT (SIGN_FLIP) : ρ ≥ +0.5 (decisive wrong-direction)
+      NO_EFFECT (NULL_EFFECT) : |ρ| < 0.2 (calibrated for n≥10)
+      POWER_INSUFFICIENT    : in-between, or n_strata < 10"""
     del treatment_arm, baseline_arm, source, stratify_by
-    del covariate_key_field, covariates_per_key
-    del scope_predictor, min_vanilla_predictor
-    return meta_regression_coefficient_verdict(
-        meta_regression_unpaired_d,
-        'q_autocorr_vanilla',
+    del covariate_name, covariate_key_field, covariates_per_key
+    del scope_predictor, min_vanilla_predictor, min_seeds_per_arm
+    return cross_stratum_signed_spearman_verdict(
+        cross_stratum_property_slope,
         sign=-1,
-        threshold=slope_threshold,
+        rho_threshold_held=rho_threshold_held,
+        p_threshold=p_threshold,
+        null_threshold=null_threshold,
+        sign_flip_threshold=sign_flip_threshold,
         min_strata=min_strata,
     )
 

@@ -28,6 +28,7 @@ from experiments.findings.ddqn_sweeps import (
 )
 from experiments.findings.ddqn._arms import INTERVENTION as INTERVENTION
 from experiments.findings.ddqn._common import CLAIM as CLAIM
+from experiments.findings.ddqn_sweeps.chain_depth import BRIDGES as _CHAIN_DEPTH
 from experiments.findings.ddqn_sweeps.n_step import BRIDGES as _N_STEP
 from experiments.findings.ddqn_sweeps.polyak_tau import BRIDGES as _POLYAK_TAU
 from experiments.findings.ddqn_sweeps.rs_rescue import BRIDGES as _RS_RESCUE
@@ -40,6 +41,7 @@ MODULE_SCOPE: pl.Expr = ~pl.col('env_name').str.ends_with('-bsuite')
 
 
 BRIDGES = (
+    *_CHAIN_DEPTH,
     *_N_STEP,
     *_POLYAK_TAU,
     *_RS_RESCUE,

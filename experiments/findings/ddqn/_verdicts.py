@@ -17,7 +17,7 @@ from typing import Literal, Protocol
 
 import scipy.stats as stats
 
-from corroborate.bridge.verdict import Verdict
+from corroborate.bridge.verdict import RefutationClass, Verdict
 
 
 # ============ Typed protocols for analysis-result shapes ============
@@ -423,3 +423,71 @@ def native_diff_null_verdict(
     if ci_lo > null_ceiling or ci_hi < -null_ceiling:
         return Verdict.NO_EFFECT
     return Verdict.POWER_INSUFFICIENT
+
+
+class _SpearmanResult(Protocol):
+    """Read-only shape of `CrossStratumPropertySlopeResult` and
+    `CrossStratumArmDiffSlopeResult` — anything carrying a per-
+    stratum Spearman ρ + p_value + n_strata."""
+    @property
+    def rho(self) -> float: ...
+    @property
+    def p_value(self) -> float: ...
+    @property
+    def n_strata(self) -> int: ...
+
+
+def cross_stratum_signed_spearman_verdict(
+    result: _SpearmanResult,
+    *,
+    sign: Literal[-1, 1],
+    rho_threshold_held: float = 0.6,
+    p_threshold: float = 0.05,
+    null_threshold: float = 0.2,
+    sign_flip_threshold: float = 0.5,
+    min_strata: int = 10,
+) -> tuple[Verdict, RefutationClass | None]:
+    """Sign-aware Spearman verdict for cross-stratum slope claims.
+
+    `sign=+1`: predicted positive (HELD when ρ ≥ +rho_threshold_held
+    AND p ≤ p_threshold; SIGN_FLIP when ρ ≤ −sign_flip_threshold).
+    `sign=-1`: predicted negative (mirrored).
+
+    Verdict trichotomy:
+      HELD                  : correct sign, |ρ| ≥ rho_threshold_held, p ≤ p_threshold
+      NO_EFFECT (SIGN_FLIP) : wrong sign, |ρ| ≥ sign_flip_threshold (refutation by direction)
+      NO_EFFECT (NULL_EFFECT) : |ρ| < null_threshold (clean null band, both directions)
+      POWER_INSUFFICIENT    : in-between magnitudes, or n_strata < min_strata, or NaN
+
+    Calibration. Two-sided critical |r| at p=0.05: n=10→0.648,
+    n=8→0.707, n=6→0.829. Under H0, Spearman ρ has SD≈1/√(n−1) →
+    ±0.45 at n=6, ±0.38 at n=8, ±0.33 at n=10. So:
+
+    - `null_threshold=0.2` requires |ρ|<0.2 to fire NULL_EFFECT —
+      below half the H0 SD at n=10. Calibrated for n_strata≥10;
+      at smaller n the NULL band over-claims.
+    - `rho_threshold_held=0.6` is decorative below n=10 — the
+      p_threshold gate dominates (HELD requires |ρ|≥|r|_crit ≈ 0.65
+      at n=10, ≥0.71 at n=8, ≥0.83 at n=6). Documented; do not
+      "lower the held gate" — that would smuggle.
+    - `min_strata=10` enforces both: below n=10, the verdict
+      cannot resolve direction without overclaiming."""
+    if result.n_strata < min_strata:
+        return Verdict.POWER_INSUFFICIENT, None
+    rho = result.rho
+    p = result.p_value
+    if math.isnan(rho) or math.isnan(p):
+        return Verdict.POWER_INSUFFICIENT, None
+    if sign > 0:
+        if rho >= rho_threshold_held and p <= p_threshold:
+            return Verdict.HELD, None
+        if rho <= -sign_flip_threshold:
+            return Verdict.NO_EFFECT, RefutationClass.SIGN_FLIP
+    else:
+        if rho <= -rho_threshold_held and p <= p_threshold:
+            return Verdict.HELD, None
+        if rho >= sign_flip_threshold:
+            return Verdict.NO_EFFECT, RefutationClass.SIGN_FLIP
+    if abs(rho) < null_threshold:
+        return Verdict.NO_EFFECT, RefutationClass.NULL_EFFECT
+    return Verdict.POWER_INSUFFICIENT, None
