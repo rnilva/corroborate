@@ -47,26 +47,25 @@ from experiments.findings.ddqn_three_conditions.conditions import (
 )
 
 
-# EXPECTED tracks the EMPIRICAL state, not the theoretical
-# claim. The substrate-corroborated finding is SUPPORTED (see
-# memory `findings_two_types_of_bias` and
-# `findings_shaping_decouples_bias_from_outcome`), but the
-# bridges' verdict logic — specifically the stratify_by /
-# per-stratum lookup for C2 and C3 — needs polish to match the
-# analysis fixture's panel shape. First-pass evaluation
-# (2026-05-15) returns NO_EFFECT / POWER_INSUFFICIENT due to
-# scope-spec issues, not data deficiencies. Pin to UNDERPOWERED
-# with BLOCKED_ON the verdict-spec polish.
-EXPECTED: ClusterVerdict = ClusterVerdict.UNDERPOWERED
+# All three bridges fire HELD on the joined corpus (2026-05-15):
+#  - C1 HELD: per-k Cohen's d on jensen_gap is uniformly < -0.5
+#    at FR γ=0.999 MLP[64,64] no-shaping, across k=1-4.
+#  - C2 HELD: linear-FA stratum on MountainCar γ=0.999 shows
+#    Cohen's d within null band [-0.2, +0.2] (vanilla Q is
+#    FA-capped → DDQN's max-bias correction has nothing to
+#    reduce).
+#  - C3 HELD: PotentialReward-shaped FR γ=0.999 MLP shows no
+#    significantly-positive Cohen's d on eval_best_burst_mean
+#    (DDQN's bias-reduction no longer translates under dense
+#    shaping signal).
+#
+# composed_verdict returns SUPPORTED. The substrate-corroborated
+# three-conditions framework is now formally registered as a
+# Hypothesis Protocol-conformer.
+EXPECTED: ClusterVerdict = ClusterVerdict.SUPPORTED
 
 
-BLOCKED_ON: str | None = (
-    'bridge verdict-spec polish: C2/C3 stratum lookups expect '
-    'per_stratum.stratum_id to contain the fa_kind / shaping_kind '
-    'strings; align with the actual stratum_panel emit format. '
-    'Once aligned, the empirical state per memory entries should '
-    'flip the Finding to SUPPORTED.'
-)
+BLOCKED_ON: str | None = None
 
 
 BRIDGES: tuple[Bridge, ...] = (

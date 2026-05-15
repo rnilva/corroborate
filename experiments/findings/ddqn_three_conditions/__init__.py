@@ -31,13 +31,26 @@ Distinct from the canonical `experiments.findings.ddqn`
 hypothesis which scopes to a single config-per-env at 1M and
 tests within-canonical-scope claims (mech / link / outcome
 trichotomy). This hypothesis spans MULTIPLE HP regimes via
-interventions on K, FA, and shaping — the corpus joiner at
-`_corpus.py` builds the combined cache."""
+interventions on K, FA, and shaping.
+
+**Cache population** is canonical — `--ingest <corpus>` /
+`--ingest-all <root>` walks raw `runs.parquet` + `traces.parquet`
+pairs and populates the per-hypothesis cache (default at
+`experiments/data/cache/ddqn_three_conditions.parquet`).
+Three derived measurables (`shaping_kind`, `fa_kind`, `k_eff`)
+live in `_measurables.py` — they compute from existing
+substrate fields at ingest time. Scope predicates reference
+these endogenous env-properties, not corpus-source labels."""
 from __future__ import annotations
 
 import corroborate.analyses  # pyright: ignore[reportUnusedImport]  # populate registry
 import corroborate_rl.dqn.measurables  # pyright: ignore[reportUnusedImport]  # populate measurable registry
 
+# Register hypothesis-local derived measurables (shaping_kind,
+# fa_kind, k_eff) so `--ingest` computes them at cache-build.
+from experiments.findings.ddqn_three_conditions import (  # noqa: F401
+    _measurables,
+)
 from experiments.findings.ddqn_three_conditions._arms import (
     INTERVENTION as INTERVENTION,
 )
@@ -63,4 +76,16 @@ BRIDGES = (
 
 FINDINGS = (
     finding_three_conditions,
+)
+
+
+# Declared for the framework's `--ingest` machinery — these
+# measurables must be computed and persisted per cell at ingest
+# time. The trio is hypothesis-local (defined in `_measurables`)
+# and reads existing per-cell scalar fields; no trace
+# materialization needed.
+REQUIRED_MEASURABLES: tuple[str, ...] = (
+    'shaping_kind',
+    'fa_kind',
+    'k_eff',
 )
