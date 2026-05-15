@@ -209,7 +209,7 @@ def condition_2__fa_capacity_caps_type_1_in_linear_fa(
 
 @claim_bridge(
     source=INTERVENTION,
-    target='eval_best_burst_mean',
+    target='eval_best_burst_raw_mean',
     direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
     scope=(
@@ -217,7 +217,7 @@ def condition_2__fa_capacity_caps_type_1_in_linear_fa(
         & (pl.col('gamma') == 0.999)
         & (pl.col('fa_kind') == 'mlp_deep')
         & (pl.col('shaping_kind') == 'potential_manhattan')
-        & finite(pl.col('eval_best_burst_mean'))
+        & finite(pl.col('eval_best_burst_raw_mean'))
     ),
     predicted_direction='null',
 )
@@ -233,20 +233,16 @@ def condition_3__shaping_decouples_mech_from_outcome(
     that overrides Q-noise in argmax. DDQN's bias-reduction
     still fires on Q but no longer translates to outcome.
 
+    Target is `eval_best_burst_raw_mean` (γ-invariant) per the
+    canonical `findings_units_bug` discipline. Under potential-
+    based shaping the raw episode return still encodes "did the
+    agent reach the goal" correctly — Ng et al. 1999 guarantees
+    the optimal policy is preserved.
+
     HELD when shaped stratum's |cohen_d| < null_d_threshold OR
     cohen_d is significantly negative (DDQN's clip wedge hurts).
     Empirical readings in
-    `findings_shaping_decouples_bias_from_outcome` (memory).
-
-    **Outcome unit caveat**: target is the discounted return
-    `eval_best_burst_mean`, NOT `eval_best_burst_raw_mean`
-    (canonical-ddqn convention per `findings_units_bug`). The
-    raw is trace-dependent and not materialized in the
-    `fa_degeneracy_shaped_only` corpus's cache yet. At γ=0.999
-    on FR-misc the discount factor amounts to ~10% magnitude
-    bias (γ^100 ≈ 0.905); direction is preserved. Switch to
-    raw when the shaped corpus's traces are restored + the
-    raw measurable is backfilled."""
+    `findings_shaping_decouples_bias_from_outcome` (memory)."""
     del stratify_by, min_vanilla_predictor
     if stratified_arm_diff_pooled.n_strata < min_strata:
         return Verdict.POWER_INSUFFICIENT, None
