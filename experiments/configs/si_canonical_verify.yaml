@@ -1,0 +1,55 @@
+name: si_canonical_verify
+out_dir: experiments/data/si_canonical_verify
+env_binding: per_env
+archive_remote: s3://corroborate-archive/si_canonical_verify
+
+# Standalone SI canonical-verify (split from asterix_si because
+# the combined sweep ran out of GPU compile-time memory when
+# transitioning from Asterix params to SI compile — even with
+# Asterix-resume's smaller params still resident).
+#
+# Reduced chunk_size=5 (vs canonical's 10) halves the per-chunk
+# vmap batch and thus the SI HLO compile-time memory footprint.
+# n_seeds=60 still (2× canonical 30) for the verify.
+#
+# 6 chunks per arm × 2 arms = 24 cells. ~17 min/cell ≈ 7 hours.
+
+envs:
+  - {name: SpaceInvaders-MinAtar, n_seeds: 60, chunk_size: 5}
+
+defaults:
+  total_steps: 1000000
+  eval_every:  20000
+  n_episodes:  5
+  gamma:       0.99
+  sync_period: 1000
+  replay:
+    class: Replay
+    capacity: 100000
+    batch_size: 32
+  optimizer:
+    fn: warmed_update
+    inner: {fn: adam, lr: 0.0001}
+    warmup_steps: 100
+  action_select:
+    fn: epsilon_greedy
+    schedule:
+      fn: linear_epsilon
+      eps_init: 1.0
+      eps_final: 0.05
+      anneal_steps: 100000
+  q_network:
+    class: CNN
+    obs_shape: {from_env: observation_shape}
+    channels: [16]
+    kernel_size: 3
+    hidden: [128]
+
+interventions:
+  - name: "verify_{from_env: name}"
+    arms:
+      - []
+      - - slot_path: bootstrap
+          replacement:
+            fn: bootstrap
+            greedification: {fn: double_greedify}

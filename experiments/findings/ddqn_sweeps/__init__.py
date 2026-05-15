@@ -40,6 +40,10 @@ from experiments.findings.ddqn_sweeps.n_step import BRIDGES as _N_STEP
 from experiments.findings.ddqn_sweeps.polyak_tau import BRIDGES as _POLYAK_TAU
 from experiments.findings.ddqn_sweeps.rs_rescue import BRIDGES as _RS_RESCUE
 from experiments.findings.ddqn_sweeps.within_env_sweeps import BRIDGES as _WITHIN_ENV_SWEEPS
+from experiments.findings.ddqn_sweeps.dense_eval_acrobot_k_scaling import (
+    ddqn_full_auc_helps_at_acrobot_k16_dense,
+    ddqn_full_auc_null_at_acrobot_k4_dense,
+)
 
 
 # Loose module scope: only bsuite exclusion. HP-sweep bridges set
@@ -55,6 +59,8 @@ BRIDGES = (
     *_POLYAK_TAU,
     *_RS_RESCUE,
     *_WITHIN_ENV_SWEEPS,
+    ddqn_full_auc_helps_at_acrobot_k16_dense,
+    ddqn_full_auc_null_at_acrobot_k4_dense,
 )
 
 
