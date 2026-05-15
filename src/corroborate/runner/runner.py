@@ -51,12 +51,16 @@ import json
 import re
 import sys
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
-from typing import cast
+from typing import Literal, Self, cast
 
 import polars as pl
 
 from corroborate._internals.json import loads as _json_loads
+from corroborate._internals.narrow import (
+    is_list_of_object, is_mapping_str_object, optional_str, require_str,
+)
 from corroborate.bridge.analysis import get_registered as _get_analysis
 from corroborate.bridge.bridge import (
     Bridge,
@@ -263,6 +267,126 @@ from corroborate.corpus.persistence import (
 def _write_manifest(path: Path, sigs: Mapping[str, str]) -> None:
     _atomic_write_text(
         path, json.dumps(dict(sigs), indent=2, sort_keys=True),
+    )
+
+
+# ============ Cache-sources sidecar (input provenance) ============
+
+
+@dataclass(frozen=True, slots=True)
+class CacheSourceEntry:
+    """One per-corpus row in the cache-sources sidecar.
+
+    `data_root` and `remote_root` carry the corpus's location at
+    ingest time; either may be `None` when not knowable (e.g.
+    named-ingest mode whose root resolves to the parent-of-corpus
+    rather than the data root). `ingested_at` is the append-only
+    audit trail — one ISO-8601 UTC timestamp per ingest event."""
+    corpus: str
+    data_root: str | None
+    remote_root: str | None
+    ingested_at: tuple[str, ...]
+
+    def as_dict(self) -> Mapping[str, object]:
+        """JSON-shape. Emits `null` (not omitted key) for absent
+        `data_root` / `remote_root` so byte-level diffs across
+        re-emits stay meaningful (test #12)."""
+        return {
+            'corpus':       self.corpus,
+            'data_root':    self.data_root,
+            'remote_root':  self.remote_root,
+            'ingested_at':  list(self.ingested_at),
+        }
+
+    @classmethod
+    def from_dict(cls, d: Mapping[str, object]) -> Self:
+        raw_ts = d.get('ingested_at')
+        if is_list_of_object(raw_ts):
+            ts = tuple(
+                str(item) for item in raw_ts if isinstance(item, str)
+            )
+        else:
+            ts = ()
+        return cls(
+            corpus=require_str(d, 'corpus'),
+            data_root=optional_str(d, 'data_root'),
+            remote_root=optional_str(d, 'remote_root'),
+            ingested_at=ts,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class CacheSources:
+    """The full sidecar — sorted tuple of per-corpus entries."""
+    sources: tuple[CacheSourceEntry, ...]
+
+    def as_dict(self) -> Mapping[str, object]:
+        return {'sources': [dict(e.as_dict()) for e in self.sources]}
+
+    @classmethod
+    def from_dict(cls, d: Mapping[str, object]) -> Self:
+        raw = d.get('sources')
+        if not is_list_of_object(raw):
+            return cls(sources=())
+        out: list[CacheSourceEntry] = []
+        for item in raw:
+            if is_mapping_str_object(item):
+                try:
+                    out.append(CacheSourceEntry.from_dict(item))
+                except (TypeError, ValueError):
+                    continue
+        return cls(sources=tuple(out))
+
+
+@dataclass(frozen=True, slots=True)
+class SourceDrift:
+    """One row of the input-side drift report. See
+    `check_cache_sources`."""
+    corpus: str
+    data_root: str | None
+    remote_root: str | None
+    cache_cell_count: int
+    current_cell_count: int | None
+    status: Literal[
+        'MATCHED',
+        'DRIFTED',
+        'MISSING_LOCAL',
+        'NO_SIDECAR_RECORD',
+        'STALE_SIDECAR_ENTRY',
+    ]
+
+
+def _sources_path(cache_path: Path) -> Path:
+    """Sidecar lives alongside the cache parquet, mirroring
+    `_manifest_path`'s `.hashes.json` convention."""
+    return cache_path.with_suffix('.sources.json')
+
+
+def _read_sources(path: Path) -> CacheSources | None:
+    """Parse the sidecar JSON; tolerant of corruption / wrong shape
+    (returns None rather than raising) so a malformed sidecar just
+    triggers a regenerable-state report rather than aborting."""
+    if not path.exists():
+        return None
+    try:
+        parsed = _json_loads(path.read_text())
+    except (OSError, ValueError):
+        return None
+    if not is_mapping_str_object(parsed):
+        return None
+    return CacheSources.from_dict(parsed)
+
+
+def _write_sources(path: Path, sources: CacheSources) -> None:
+    """Atomic write. Sorts entries by `corpus` and uses
+    `sort_keys=True` so byte-level diffs across re-emits are
+    stable (test #12)."""
+    ordered = CacheSources(
+        sources=tuple(sorted(sources.sources, key=lambda e: e.corpus)),
+    )
+    _atomic_write_text(
+        path,
+        json.dumps(dict(ordered.as_dict()), indent=2, sort_keys=True),
     )
 
 
@@ -645,7 +769,32 @@ def evict(
         # Avoid writing a 0-row parquet (polars rejects some schemas);
         # delete the cache file when nothing remains.
         cp.unlink()
+    # Mirror the filter on the sidecar so it doesn't carry stale
+    # entries for evicted corpora. No-op when no sidecar exists.
+    _evict_from_sources(_sources_path(cp), evicted=set(corpora))
     return total, counts
+
+
+def _evict_from_sources(
+    sources_path: Path, *, evicted: set[str],
+) -> None:
+    """Drop entries whose `corpus` is in `evicted`. No-op when the
+    sidecar doesn't exist; idempotent on a sidecar that already
+    lacks the names."""
+    sources = _read_sources(sources_path)
+    if sources is None:
+        return
+    kept = tuple(e for e in sources.sources if e.corpus not in evicted)
+    if len(kept) == len(sources.sources):
+        return  # no change; skip the write
+    if not kept:
+        # Empty sidecar — remove the file rather than write `{"sources": []}`.
+        try:
+            sources_path.unlink()
+        except OSError:
+            pass
+        return
+    _write_sources(sources_path, CacheSources(sources=kept))
 
 
 # ============ Cache + ingest ============
