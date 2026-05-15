@@ -400,3 +400,184 @@ def test_build_no_op_on_empty_walk(tmp_path: Path) -> None:
     )
     # No sidecar created.
     assert not _sources_path(cache_path).exists()
+
+
+# ============ check_cache_sources: drift detection ============
+
+from corroborate.runner.runner import check_cache_sources  # noqa: E402
+
+
+def _make_corpus_runs(
+    parent: Path, name: str, n_rows: int, with_id: bool = True,
+) -> Path:
+    corpus_dir = parent / name
+    corpus_dir.mkdir(parents=True, exist_ok=True)
+    cols: dict[str, list[object]] = {
+        'pad': ['x' * 200 for _ in range(n_rows)],
+    }
+    if with_id:
+        cols['id'] = [f'{name}-{i}' for i in range(n_rows)]
+    pl.DataFrame(cols).write_parquet(corpus_dir / 'runs.parquet')
+    return corpus_dir / 'runs.parquet'
+
+
+def test_check_returns_matched_when_counts_agree(tmp_path: Path) -> None:
+    """Test #6 happy path: cache cells == on-disk rows → MATCHED."""
+    cache_path = tmp_path / 'ddqn.parquet'
+    data_root = tmp_path / 'data'
+
+    _ = _make_corpus_runs(data_root, 'cartpole', n_rows=60)
+    _write_cache_parquet(cache_path, [
+        {'id': f'cell-{i}', 'corpus': 'cartpole', 'pad': 'x' * 200}
+        for i in range(60)
+    ])
+    _write_sources(_sources_path(cache_path), CacheSources(sources=(
+        _make_entry('cartpole', data_root=str(data_root.resolve())),
+    )))
+
+    drifts = check_cache_sources(cache_path)
+    assert len(drifts) == 1
+    d = drifts[0]
+    assert d.status == 'MATCHED'
+    assert d.cache_cell_count == 60
+    assert d.current_cell_count == 60
+
+
+def test_check_detects_drifted(tmp_path: Path) -> None:
+    """Test #6: cache and on-disk counts differ → DRIFTED."""
+    cache_path = tmp_path / 'ddqn.parquet'
+    data_root = tmp_path / 'data'
+
+    _ = _make_corpus_runs(data_root, 'cartpole', n_rows=50)  # less than cache
+    _write_cache_parquet(cache_path, [
+        {'id': f'cell-{i}', 'corpus': 'cartpole', 'pad': 'x' * 200}
+        for i in range(60)
+    ])
+    _write_sources(_sources_path(cache_path), CacheSources(sources=(
+        _make_entry('cartpole', data_root=str(data_root.resolve())),
+    )))
+
+    drifts = check_cache_sources(cache_path)
+    assert len(drifts) == 1
+    d = drifts[0]
+    assert d.status == 'DRIFTED'
+    assert d.cache_cell_count == 60
+    assert d.current_cell_count == 50
+
+
+def test_check_missing_local(tmp_path: Path) -> None:
+    """Test #7: corpus dir deleted from disk → MISSING_LOCAL,
+    current_cell_count is None (NOT 0 — distinguishes from real
+    zero per the R3 fix)."""
+    cache_path = tmp_path / 'ddqn.parquet'
+    data_root = tmp_path / 'data'
+    data_root.mkdir()
+
+    _write_cache_parquet(cache_path, [
+        {'id': 'c-0', 'corpus': 'gone', 'pad': 'x' * 200},
+    ])
+    _write_sources(_sources_path(cache_path), CacheSources(sources=(
+        _make_entry('gone', data_root=str(data_root.resolve())),
+    )))
+
+    drifts = check_cache_sources(cache_path)
+    assert len(drifts) == 1
+    d = drifts[0]
+    assert d.status == 'MISSING_LOCAL'
+    assert d.current_cell_count is None  # critical: None vs 0
+
+
+def test_check_zero_rows_is_real_zero(tmp_path: Path) -> None:
+    """Test #8 (R3 fix): runs.parquet has 0 rows but the `id`
+    column exists → current_cell_count is 0, NOT None. If cache
+    also has 0 cells, status is MATCHED (real zero === real zero)."""
+    cache_path = tmp_path / 'ddqn.parquet'
+    data_root = tmp_path / 'data'
+
+    # 0-row runs.parquet WITH id column.
+    corpus_dir = data_root / 'empty'
+    corpus_dir.mkdir(parents=True)
+    pl.DataFrame(
+        schema={'id': pl.String, 'pad': pl.String},
+    ).write_parquet(corpus_dir / 'runs.parquet')
+
+    # The cache has rows for some other corpus; the sidecar has
+    # an entry for 'empty' but the cache doesn't list 'empty' →
+    # STALE_SIDECAR_ENTRY with current_cell_count=0 (real zero).
+    _write_cache_parquet(cache_path, [
+        {'id': 'other-0', 'corpus': 'other', 'pad': 'x' * 200},
+    ])
+    _write_sources(_sources_path(cache_path), CacheSources(sources=(
+        _make_entry('empty', data_root=str(data_root.resolve())),
+    )))
+
+    drifts = check_cache_sources(cache_path)
+    by_corpus = {d.corpus: d for d in drifts}
+    # 'empty' in sidecar, not in cache → STALE_SIDECAR_ENTRY.
+    assert 'empty' in by_corpus
+    assert by_corpus['empty'].status == 'STALE_SIDECAR_ENTRY'
+    assert by_corpus['empty'].current_cell_count == 0  # real zero, NOT None
+    # 'other' in cache, not in sidecar → NO_SIDECAR_RECORD.
+    assert 'other' in by_corpus
+    assert by_corpus['other'].status == 'NO_SIDECAR_RECORD'
+
+
+def test_check_missing_id_column(tmp_path: Path) -> None:
+    """Test #9 (R3 fix): runs.parquet exists but has no `id`
+    column → MISSING_LOCAL, current_cell_count=None."""
+    cache_path = tmp_path / 'ddqn.parquet'
+    data_root = tmp_path / 'data'
+
+    _ = _make_corpus_runs(data_root, 'no_id', n_rows=10, with_id=False)
+    _write_cache_parquet(cache_path, [
+        {'id': f'c-{i}', 'corpus': 'no_id', 'pad': 'x' * 200}
+        for i in range(10)
+    ])
+    _write_sources(_sources_path(cache_path), CacheSources(sources=(
+        _make_entry('no_id', data_root=str(data_root.resolve())),
+    )))
+
+    drifts = check_cache_sources(cache_path)
+    assert len(drifts) == 1
+    d = drifts[0]
+    assert d.status == 'MISSING_LOCAL'
+    assert d.current_cell_count is None
+
+
+def test_check_pre_sidecar_cache(tmp_path: Path) -> None:
+    """Test #10: cache parquet with corpus column, no sidecar →
+    every distinct corpus reports NO_SIDECAR_RECORD."""
+    cache_path = tmp_path / 'ddqn.parquet'
+    _write_cache_parquet(cache_path, [
+        {'id': 'a-0', 'corpus': 'A', 'pad': 'x' * 200},
+        {'id': 'b-0', 'corpus': 'B', 'pad': 'x' * 200},
+    ])
+    # No sidecar.
+
+    drifts = check_cache_sources(cache_path)
+    assert {d.corpus for d in drifts} == {'A', 'B'}
+    assert all(d.status == 'NO_SIDECAR_RECORD' for d in drifts)
+
+
+def test_check_stale_sidecar_entry(tmp_path: Path) -> None:
+    """Test #11 (B3 fix): sidecar lists a corpus the cache parquet
+    has no rows for → STALE_SIDECAR_ENTRY. Surfaces the orphan."""
+    cache_path = tmp_path / 'ddqn.parquet'
+    data_root = tmp_path / 'data'
+    _ = _make_corpus_runs(data_root, 'ghost', n_rows=5)
+
+    # Cache has rows for someone else; sidecar lists 'ghost'.
+    _write_cache_parquet(cache_path, [
+        {'id': 'other-0', 'corpus': 'other', 'pad': 'x' * 200},
+    ])
+    _write_sources(_sources_path(cache_path), CacheSources(sources=(
+        _make_entry('ghost', data_root=str(data_root.resolve())),
+    )))
+
+    drifts = check_cache_sources(cache_path)
+    by_corpus = {d.corpus: d for d in drifts}
+    assert by_corpus['ghost'].status == 'STALE_SIDECAR_ENTRY'
+    assert by_corpus['ghost'].cache_cell_count == 0
+    # current_cell_count populated via §R3 so the operator can see
+    # whether the source is recoverable.
+    assert by_corpus['ghost'].current_cell_count == 5

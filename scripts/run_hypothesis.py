@@ -11,6 +11,17 @@ Library code lives in `corroborate.runner`; this file is purely the
 argparse + verdict-printing surface."""
 from __future__ import annotations
 
+import os as _os
+
+# Force JAX onto CPU before any substrate import. The bridge-eval /
+# ingest paths don't need GPU — they're numpy/polars work. Substrate
+# modules unavoidably `import jax.numpy as jnp` at module-load time
+# (Replay, MLP, train_phase, ...), which probes the GPU and
+# pre-allocates ~80% of VRAM via XLA's default preallocator, starving
+# any concurrent GPU work (e.g. a sweep running in another shell).
+# Set BEFORE importlib / runner imports — JAX latches on first init.
+_os.environ.setdefault('JAX_PLATFORMS', 'cpu')
+
 import argparse
 import importlib
 from collections.abc import Sequence
@@ -23,7 +34,11 @@ from corroborate.graph.causal import (
     EMPTY_EXTENT_HASH, PostEvalEntry,
     cluster_verdict, clusters_by_extent, composed_verdict, evaluated_graph,
 )
-from corroborate.runner import check, evict, run
+from corroborate.runner import check, check_cache_sources, evict, run
+from corroborate.runner.runner import (
+    _default_cache_path,  # pyright: ignore[reportPrivateUsage]
+    _validate_hypothesis,  # pyright: ignore[reportPrivateUsage]
+)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -218,38 +233,79 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 
 def _check_and_report(module: str) -> int:
-    """**CACHE_ADDITIVITY.md Phase 2** drift report. Calls
-    `runner.check(module)`, prints per-corpus drift / missing
-    summary + a pasteable `--ingest` command for the affected
-    corpora. Exits 0 when clean, 2 when drift detected — usable
-    in shell pipelines (`run_hypothesis.py <m> --check &&
-    run_hypothesis.py <m>`)."""
+    """**CACHE_ADDITIVITY.md Phase 2** drift report.
+
+    Two halves:
+    - **Output-side** (measurable drift): `runner.check(module)`
+      compares per-corpus `measurements.hashes.json` against the
+      current registry's closure hashes.
+    - **Input-side** (cache-sources drift):
+      `runner.check_cache_sources(cache_path)` compares the cache
+      parquet's per-corpus cell counts against the on-disk
+      `runs.parquet` of each source.
+
+    Exits 0 when both clean, 2 when either reports drift —
+    pipeline-friendly (`run_hypothesis.py <m> --check &&
+    run_hypothesis.py <m>`).
+    """
     report = check(module)
+    # Resolve cache path for the input-side check.
+    h = _validate_hypothesis(importlib.import_module(module))
+    cache_path = _default_cache_path(h)
+    input_drift = check_cache_sources(cache_path)
+
+    # Output-side rendering (existing behavior).
+    output_exit = 0
     if not report.per_corpus:
         print('check: no corpora found under experiments/data/')
-        return 0
-    if report.is_clean:
+    elif report.is_clean:
         print(
-            f'check: {len(report.per_corpus)} corpora — all current. '
-            f'No drift, no missing required columns.',
+            f'check: {len(report.per_corpus)} corpora — '
+            f'no measurable drift, no missing columns.',
         )
-        return 0
-    affected = report.affected_corpus_names()
-    print(f'check: drift detected across {len(affected)} corpora')
-    for c in report.per_corpus:
-        if c.is_clean:
-            continue
-        bits: list[str] = []
-        if c.drifted:
-            bits.append(f'drifted=[{", ".join(c.drifted)}]')
-        if c.missing:
-            bits.append(f'missing=[{", ".join(c.missing)}]')
-        print(f'  {c.corpus_dir.name:50s}  {" ".join(bits)}')
-    print()
-    print(f'  → refresh affected corpora with:')
-    print(f'     --ingest {",".join(affected)}')
-    print(f'     OR --ingest-all experiments/data')
-    return 2
+    else:
+        affected = report.affected_corpus_names()
+        print(f'check (output): drift detected across {len(affected)} corpora')
+        for c in report.per_corpus:
+            if c.is_clean:
+                continue
+            bits: list[str] = []
+            if c.drifted:
+                bits.append(f'drifted=[{", ".join(c.drifted)}]')
+            if c.missing:
+                bits.append(f'missing=[{", ".join(c.missing)}]')
+            print(f'  {c.corpus_dir.name:50s}  {" ".join(bits)}')
+        print()
+        print(f'  → refresh affected corpora with:')
+        print(f'     --ingest {",".join(affected)}')
+        print(f'     OR --ingest-all experiments/data')
+        output_exit = 2
+
+    # Input-side rendering (cache-sources drift).
+    bad = [d for d in input_drift if d.status != 'MATCHED']
+    input_exit = 0
+    if input_drift and bad:
+        print()
+        print(
+            f'check (input): {len(bad)} of {len(input_drift)} '
+            f'cache-source entries are not MATCHED',
+        )
+        for d in bad:
+            line = (
+                f'  {d.corpus:50s}  status={d.status}  '
+                f'cache={d.cache_cell_count}  '
+                f'current={d.current_cell_count}'
+            )
+            if d.remote_root is not None:
+                line += f'  remote={d.remote_root}'
+            print(line)
+        input_exit = 2
+    elif input_drift:
+        print(
+            f'check (input): {len(input_drift)} cache-source entries — '
+            f'all MATCHED.',
+        )
+    return max(output_exit, input_exit)
 
 
 def _print_verdicts(

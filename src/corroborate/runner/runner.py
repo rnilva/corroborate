@@ -717,6 +717,123 @@ def check(
     )
 
 
+def check_cache_sources(
+    cache_path: Path | str,
+) -> tuple[SourceDrift, ...]:
+    """Input-side drift report. Joins the cache parquet's `corpus`
+    column with the `<cache>.sources.json` sidecar; for each
+    corpus in EITHER side, reports cache cell count, current
+    on-disk count, and a status discriminator:
+
+    - `MATCHED`: cache_count == current_count.
+    - `DRIFTED`: both known, different.
+    - `MISSING_LOCAL`: corpus's `runs.parquet` absent or
+      unreadable (no `id` column / read failure).
+    - `NO_SIDECAR_RECORD`: cache parquet has cells for this corpus
+      but the sidecar lacks the entry (pre-sidecar cache OR a
+      sidecar write that failed after a parquet write).
+    - `STALE_SIDECAR_ENTRY`: sidecar lists this corpus but the
+      cache parquet has zero rows for it (cache was evicted but
+      sidecar update didn't run, or evict happened before this
+      feature landed).
+
+    Iterates the UNION of (cache.corpus values ∪ sidecar.corpora),
+    so orphans surface in both directions.
+
+    Returns rows sorted by `corpus` for stable output.
+    """
+    cp = Path(cache_path)
+    sidecar_path = _sources_path(cp)
+    sidecar = _read_sources(sidecar_path)
+    sidecar_by_corpus: Mapping[str, CacheSourceEntry] = (
+        {e.corpus: e for e in sidecar.sources}
+        if sidecar is not None else {}
+    )
+
+    # Cache parquet's per-corpus cell counts.
+    if cp.exists():
+        df = pl.read_parquet(cp, columns=['corpus'])
+        cache_counts_raw = cast(
+            list[object],
+            df.group_by('corpus').len().rows(),
+        )
+        cache_counts: dict[str, int] = {}
+        for row in cache_counts_raw:
+            if (isinstance(row, tuple)
+                    and len(row) == 2
+                    and isinstance(row[0], str)
+                    and isinstance(row[1], int)):
+                cache_counts[row[0]] = row[1]
+    else:
+        cache_counts = {}
+
+    union = sorted(set(cache_counts) | set(sidecar_by_corpus))
+    out: list[SourceDrift] = []
+    for name in union:
+        cache_cells = cache_counts.get(name, 0)
+        entry = sidecar_by_corpus.get(name)
+        if entry is None:
+            # In cache, absent from sidecar.
+            out.append(SourceDrift(
+                corpus=name,
+                data_root=None, remote_root=None,
+                cache_cell_count=cache_cells,
+                current_cell_count=None,
+                status='NO_SIDECAR_RECORD',
+            ))
+            continue
+        # Resolve on-disk path from sidecar's data_root.
+        current_count = _current_runs_count(entry)
+        # Classify.
+        if cache_cells == 0:
+            status: Literal[
+                'MATCHED', 'DRIFTED', 'MISSING_LOCAL',
+                'NO_SIDECAR_RECORD', 'STALE_SIDECAR_ENTRY',
+            ] = 'STALE_SIDECAR_ENTRY'
+        elif current_count is None:
+            status = 'MISSING_LOCAL'
+        elif current_count == cache_cells:
+            status = 'MATCHED'
+        else:
+            status = 'DRIFTED'
+        out.append(SourceDrift(
+            corpus=name,
+            data_root=entry.data_root,
+            remote_root=entry.remote_root,
+            cache_cell_count=cache_cells,
+            current_cell_count=current_count,
+            status=status,
+        ))
+    return tuple(out)
+
+
+def _current_runs_count(entry: CacheSourceEntry) -> int | None:
+    """Resolve `Path(data_root) / corpus / runs.parquet` and return
+    its `id`-column row count, distinguishing absent / unreadable
+    (None) from real-zero (0) per the plan §R3 fix.
+
+    `sniff_row_ids` returns `()` for SIX failure modes
+    (no parquet, no id column, ComputeError, FileNotFoundError,
+    zero rows, non-string ids); `len(...)==0` collapses all six.
+    To distinguish:
+    - path doesn't exist → None
+    - read fails (column-not-found, compute error) → None
+    - read succeeds → df.height (0 means real zero)
+    """
+    if entry.data_root is None:
+        return None
+    runs_path = Path(entry.data_root) / entry.corpus / 'runs.parquet'
+    if not runs_path.exists():
+        return None
+    try:
+        df = pl.read_parquet(runs_path, columns=['id'])
+    except (pl.exceptions.ColumnNotFoundError,
+            pl.exceptions.ComputeError,
+            OSError, FileNotFoundError):
+        return None
+    return df.height
+
+
 def evict(
     h: Hypothesis | str,
     corpora: Sequence[str],
