@@ -493,22 +493,26 @@ class ArmLeafProfile:
     leaves: Mapping[str, tuple[str, ...]]
 
 
-# Framework-typed RunRow fields (schema.py:RunRow). These appear
-# as parquet columns but are never leaves.
-_RUNROW_FIELDS: frozenset[str] = frozenset({
-    'id', 'parent_id', 'cycle_id', 'timestamp', 'verdict',
-    'arm_key', 'substrate_commit_sha',
-})
+# Framework-typed RunRow fields. Single source of truth lives in
+# schema.py — auto-derived from `dataclasses.fields(RunRow)` so a
+# new typed field on RunRow propagates here without manual sync.
+from corroborate.corpus.schema import (  # noqa: E402,PLC0415
+    _RUN_ROW_TYPED_FIELDS as _RUNROW_FIELDS,  # pyright: ignore[reportPrivateUsage]
+)
 
-# Default substrate-exogenous keys for the RL substrate. Caller
-# may override via the `exogenous_keys` and `exogenous_prefixes`
-# arguments to `arm_leaves`. The framework itself doesn't hardcode
-# RL keys (per CLAUDE.md); the defaults here are a convenience for
-# the only substrate that currently uses this view.
+# Default substrate-exogenous keys for the RL substrate. Mirrors
+# the `Annotated[..., Exogenous]` set declared on the `dqn` claim
+# (corroborate_rl.dqn.dqn:dqn). The framework doesn't hardcode RL
+# keys; this default is a convenience for the only substrate that
+# currently uses this view. Callers with other substrates pass
+# their own `exogenous_keys` + `exogenous_prefixes`. NOTE: keys
+# like `total_steps`, `eval_every`, `n_episodes` are NOT in this
+# set — they're plain int defaults on the dqn claim, NOT
+# Exogenous, so they ARE leaves per the framework's vocabulary.
 _DEFAULT_EXOGENOUS_KEYS: frozenset[str] = frozenset({
     'env_name', 'seed', 'wrappers',
-    'total_steps', 'eval_every', 'n_episodes', 'eval_episode_cap',
-    'env', 'env_params', 'obs_shape', 'n_actions', 'state_hash',
+    'env', 'env_params', 'obs_shape', 'n_actions',
+    'state_hash', 'eval_episode_cap',
 })
 _DEFAULT_EXOGENOUS_PREFIXES: tuple[str, ...] = (
     'env_params.', 'env.',
@@ -557,8 +561,28 @@ def _scalar_to_str(v: object) -> str | None:
     if v is None:
         return None
     if isinstance(v, (list, tuple)):
-        return '(' + ','.join(_scalar_to_str(x) or '' for x in v) + ')'
+        # Use 'None' for null elements so the rendering is
+        # unambiguous (avoids '(1,,3)' colliding with '(1,"",3)').
+        parts: list[str] = []
+        for x in v:
+            if x is None:
+                parts.append('None')
+            else:
+                s = _scalar_to_str(x)
+                parts.append(s if s is not None else 'None')
+        return '(' + ','.join(parts) + ')'
     return str(v)
+
+
+def _sort_leaf_values(values: set[str]) -> tuple[str, ...]:
+    """Sort distinct stringified leaf values. If every value parses
+    as a float, sort numerically; else fall back to lexicographic.
+    Fixes the `('1','10','2',...)` lexicographic-on-numeric quirk."""
+    try:
+        floats = [(float(v), v) for v in values]
+    except ValueError:
+        return tuple(sorted(values))
+    return tuple(v for _, v in sorted(floats))
 
 
 def arm_leaves(
@@ -614,14 +638,27 @@ def arm_leaves(
             exogenous_prefixes=ex_pre,
             measurable_names=measurables,
         )
-        wanted: list[str] = ['arm_key']
+        # Legacy parquets may not carry `arm_key` (RunRow defaults
+        # to 'baseline'; pre-arm-key corpora omit the column entirely
+        # — same convention `RunRow.from_row_dict` honors at
+        # schema.py:269+). Inject the default rather than crashing.
+        has_arm_key = 'arm_key' in col_names
+        wanted: list[str] = []
+        if has_arm_key:
+            wanted.append('arm_key')
         if 'env_name' in col_names:
             wanted.append('env_name')
         wanted.extend(leaves)
         try:
             df = pl.read_parquet(path, columns=wanted)
-        except (pl.exceptions.ComputeError, FileNotFoundError, OSError):
+        except (pl.exceptions.ComputeError,
+                pl.exceptions.ColumnNotFoundError,
+                FileNotFoundError, OSError):
             continue
+        if not has_arm_key:
+            df = df.with_columns(
+                pl.lit('baseline').alias('arm_key'),
+            )
         addr = f'{r.parent}/{r.name}' if r.parent else r.name
         arm_values = cast(list[object], df['arm_key'].to_list())
         for arm in sorted({str(a) for a in arm_values if a is not None}):
@@ -641,7 +678,7 @@ def arm_leaves(
                     if s is not None
                 }
                 if vals:
-                    leaf_map[leaf] = tuple(sorted(vals))
+                    leaf_map[leaf] = _sort_leaf_values(vals)
             profiles.append(ArmLeafProfile(
                 corpus=addr, arm=arm, n_cells=sub.height,
                 envs=envs, leaves=leaf_map,

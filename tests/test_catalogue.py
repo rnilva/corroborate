@@ -430,6 +430,93 @@ def test_arm_leaves_drops_bundle_placeholder(tmp_path: Path) -> None:
     assert 'optimizer.inner.lr' in p.leaves
 
 
+# ============ 14a. arm_leaves: legacy parquet missing arm_key ============
+
+def test_arm_leaves_missing_arm_key_falls_back_to_baseline(tmp_path: Path) -> None:
+    """`RunRow.arm_key` defaults to 'baseline'; legacy parquets that
+    pre-date the column should not crash the walk."""
+    data_root = tmp_path / 'data'
+    p = data_root / 'legacy_corpus' / 'runs.parquet'
+    p.parent.mkdir(parents=True, exist_ok=True)
+    df = pl.DataFrame({
+        'id': ['c0', 'c1', 'c2'],
+        'gamma': [0.99, 0.99, 0.99],
+        'pad': ['x' * 256] * 3,
+    })
+    df.write_parquet(p)
+
+    profiles = catalogue.arm_leaves(data_root)
+    assert len(profiles) == 1
+    assert profiles[0].arm == 'baseline'
+    assert profiles[0].n_cells == 3
+
+
+# ============ 14b. arm_leaves: trajectory List columns excluded ============
+
+def test_arm_leaves_excludes_trajectory_list_columns(tmp_path: Path) -> None:
+    """Trajectory columns (1-D `List` dtype) are claim-outputs, not
+    leaves; they must not surface in the profile."""
+    data_root = tmp_path / 'data'
+    p = data_root / 'corpus_traj' / 'runs.parquet'
+    p.parent.mkdir(parents=True, exist_ok=True)
+    df = pl.DataFrame({
+        'id': ['c0', 'c1'],
+        'arm_key': ['baseline', 'baseline'],
+        'gamma': [0.99, 0.99],
+        'reward': [[1.0, 2.0, 3.0], [1.5, 2.5, 3.5]],  # List[Float64]
+        'pad': ['x' * 256, 'x' * 256],
+    })
+    df.write_parquet(p)
+
+    profiles = catalogue.arm_leaves(data_root)
+    assert len(profiles) == 1
+    assert 'reward' not in profiles[0].leaves
+    assert 'gamma' in profiles[0].leaves
+
+
+# ============ 14c. arm_leaves: numeric sort on sweep values ============
+
+def test_arm_leaves_sweep_sorts_numerically(tmp_path: Path) -> None:
+    """`n_step=(1,2,3,5,10)` should sort numerically, not as the
+    lexicographic `('1','10','2','3','5')`."""
+    data_root = tmp_path / 'data'
+    p = data_root / 'nstep_sweep' / 'runs.parquet'
+    p.parent.mkdir(parents=True, exist_ok=True)
+    df = pl.DataFrame({
+        'id': [f'c{i}' for i in range(5)],
+        'arm_key': ['baseline'] * 5,
+        'n_step': [1, 10, 2, 3, 5],
+        'pad': ['x' * 256] * 5,
+    })
+    df.write_parquet(p)
+
+    profiles = catalogue.arm_leaves(data_root)
+    assert len(profiles) == 1
+    assert profiles[0].leaves['n_step'] == ('1', '2', '3', '5', '10')
+
+
+# ============ 14d. arm_leaves: n_episodes IS a leaf (not exogenous) ============
+
+def test_arm_leaves_n_episodes_surfaces_as_leaf(tmp_path: Path) -> None:
+    """The dqn claim's `n_episodes` is a plain int default, NOT
+    Annotated[..., Exogenous]. The catalogue must surface it."""
+    data_root = tmp_path / 'data'
+    p = data_root / 'corpus_n_eps' / 'runs.parquet'
+    p.parent.mkdir(parents=True, exist_ok=True)
+    df = pl.DataFrame({
+        'id': ['c0', 'c1'],
+        'arm_key': ['baseline', 'baseline'],
+        'n_episodes': [5, 20],
+        'pad': ['x' * 256, 'x' * 256],
+    })
+    df.write_parquet(p)
+
+    profiles = catalogue.arm_leaves(data_root)
+    assert len(profiles) == 1
+    assert 'n_episodes' in profiles[0].leaves
+    assert profiles[0].leaves['n_episodes'] == ('5', '20')
+
+
 # ============ 14. arm_leaves: exogenous filter ============
 
 def test_arm_leaves_excludes_exogenous_and_framework(tmp_path: Path) -> None:
