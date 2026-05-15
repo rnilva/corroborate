@@ -61,16 +61,19 @@ def test_classic_control_envs_have_state_hash() -> None:
         assert spec.state_hash_cardinality > 0, name
 
 
-def test_minatar_envs_have_no_state_hash() -> None:
-    """Image-obs minatar envs ship `state_hash=None` —
-    bucket cardinality is astronomical, KL invariant signal-free."""
+def test_minatar_envs_have_image_bucket_hash() -> None:
+    """Image-obs minatar envs now ship a random-projection
+    `image_bucket_hash` (added 2026-05-15 for state-conditional
+    argmax measurables — see memory
+    `project_image_state_hash_for_substrate`). Cardinality
+    256 = 4 proj-dims × 4 buckets per dim."""
     for name in (
         'Asterix-MinAtar', 'Breakout-MinAtar',
         'Freeway-MinAtar', 'SpaceInvaders-MinAtar',
     ):
         spec = get(name)
-        assert spec.state_hash is None, name
-        assert spec.state_hash_cardinality is None, name
+        assert spec.state_hash is not None, name
+        assert spec.state_hash_cardinality == 512, name
 
 
 # ============ Introspection ============

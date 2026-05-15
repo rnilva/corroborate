@@ -973,6 +973,172 @@ def bucket_hash(
     return state_hash, cardinality
 
 
+def image_bucket_hash(
+    obs_shape: tuple[int, ...],
+    *,
+    n_proj_dims: int = 4,
+    n_buckets_per_dim: int = 4,
+    proj_seed: int = 0,
+    proj_low: float = -3.0,
+    proj_high: float = +3.0,
+) -> tuple[StateHash, int]:
+    """Random-projection state hash for image-obs envs (MinAtar
+    10×10×C, jumanji PacMan 31×28×5, etc.).
+
+    Constructs a fixed random projection `R: (obs_flat_dim,
+    n_proj_dims)` seeded reproducibly. Each obs flattened, then
+    projected to `n_proj_dims`-vector; each dim bucketed in
+    `[proj_low, proj_high]` via `n_buckets_per_dim` equal slots.
+
+    Johnson-Lindenstrauss preserves rank-ordering of obs distance
+    approximately, so the resulting bucket-id captures coarse
+    state similarity. The (proj_low, proj_high) bounds default
+    to a reasonable [-3σ, +3σ] window for normalised-projection
+    output (assumes obs values are roughly bounded; pre-norm
+    isn't done here so authors should pick bounds matching the
+    env's obs scale).
+
+    Cardinality = `n_buckets_per_dim ** n_proj_dims`. Default
+    4^4 = 256 buckets — coarse enough to retain signal across
+    1M-step trajectories without sparsity.
+
+    Returns `(state_hash_fn, cardinality)`. The function is
+    `jit`-compatible (`obs: jax.Array` → `jax.Array` int32).
+
+    Use for envs where direct per-dim bucketing isn't feasible
+    (image obs, high-dim). Sibling of `bucket_hash`."""
+    import numpy as np
+    obs_flat_dim = int(np.prod(obs_shape))
+    rng = jax.random.PRNGKey(proj_seed)
+    # Normalised projection: divide by sqrt(obs_flat_dim) so that
+    # projection of bounded inputs stays in a comparable range.
+    R = jax.random.normal(rng, (obs_flat_dim, n_proj_dims)) / jnp.sqrt(
+        jnp.float32(obs_flat_dim)
+    )
+    cardinality = int(n_buckets_per_dim ** n_proj_dims)
+    lows = jnp.full((n_proj_dims,), float(proj_low), dtype=jnp.float32)
+    highs = jnp.full((n_proj_dims,), float(proj_high), dtype=jnp.float32)
+    span = highs - lows
+    weights = jnp.power(
+        n_buckets_per_dim, jnp.arange(n_proj_dims, dtype=jnp.int32),
+    )
+
+    def state_hash(obs: jax.Array) -> jax.Array:
+        flat = obs.astype(jnp.float32).flatten()
+        projected = flat @ R
+        clipped = jnp.clip(projected, lows, highs)
+        scaled = (clipped - lows) / jnp.maximum(span, 1e-9)
+        bucketed = jnp.clip(
+            jnp.floor(scaled * n_buckets_per_dim),
+            0, n_buckets_per_dim - 1,
+        ).astype(jnp.int32)
+        return jnp.sum(bucketed * weights)
+
+    return state_hash, cardinality
+
+
+def image_downsample_hash(
+    obs_shape: tuple[int, ...],
+    *,
+    pool_size: int = 3,
+    n_buckets_per_dim: int = 2,
+    channel_agg: Literal['sum', 'max', 'none'] = 'sum',
+    feature_low: float = 0.0,
+    feature_high: float | None = None,
+) -> tuple[StateHash, int]:
+    """Go-Explore-style spatial-downsample state hash for image-
+    obs envs. Pools the obs to `pool_size × pool_size` cells via
+    `avg`-pool, optionally aggregates channels (`sum` / `max`),
+    then buckets each resulting feature.
+
+    Preserves spatial structure (different ball-positions in
+    Breakout → different pool cells active → different buckets)
+    that `image_bucket_hash`'s random projection collapses.
+
+    For MinAtar 10×10×C with `pool_size=3, channel_agg='sum',
+    n_buckets_per_dim=2`: 3×3 = 9 features × 2 buckets each =
+    `2^9 = 512` buckets. Compact + spatial.
+
+    For higher-resolution envs (jumanji PacMan 31×28×5) use the
+    random-projection `image_bucket_hash` fallback — pooling to
+    2×2 over 31×28 is too coarse to preserve policy-relevant
+    state.
+
+    Args:
+      obs_shape: full obs (H, W, C) or (H, W) shape.
+      pool_size: target downsampled resolution per spatial dim.
+      n_buckets_per_dim: bucket count per pooled feature.
+      channel_agg: 'sum' (typical for MinAtar binary channels —
+        feature = total active across types), 'max' (highest
+        activation), or 'none' (per-channel).
+      feature_low / feature_high: bucket range for pooled
+        features. If `feature_high` is None, derived from
+        obs_shape (sum-agg over a pool cell of binary input
+        max ≈ pool_area; max-agg max = 1.0).
+
+    Cardinality = `n_buckets_per_dim ** n_features` where
+    `n_features = pool_size² × (1 if channel_agg != 'none' else C)`.
+
+    Returns `(state_hash_fn, cardinality)`. `state_hash_fn` is
+    `jit`-compatible.
+    """
+    if len(obs_shape) < 2:
+        raise ValueError(f'image_downsample_hash needs ≥2 spatial dims, got {obs_shape}')
+    H, W = obs_shape[0], obs_shape[1]
+    C = obs_shape[2] if len(obs_shape) >= 3 else 1
+    n_spatial = pool_size * pool_size
+    n_features = n_spatial if channel_agg != 'none' else n_spatial * C
+    cardinality = int(n_buckets_per_dim ** n_features)
+    # Derive feature_high default from pool-cell area + channel agg
+    pool_cell_h = max(H // pool_size, 1)
+    pool_cell_w = max(W // pool_size, 1)
+    pool_area = pool_cell_h * pool_cell_w
+    if feature_high is None:
+        if channel_agg == 'sum':
+            feature_high = float(pool_area * C * 0.5)
+        else:
+            feature_high = float(pool_area * 0.5)
+    feature_high_f = float(feature_high)
+    weights = jnp.power(
+        n_buckets_per_dim, jnp.arange(n_features, dtype=jnp.int32),
+    )
+    span = float(feature_high_f - feature_low)
+
+    def state_hash(obs: jax.Array) -> jax.Array:
+        x = obs.astype(jnp.float32)
+        # Ensure (H, W, C) — add channel dim if missing
+        if x.ndim == 2:
+            x = x[..., None]
+        # Spatial pool: chunk H, W into pool_size groups, sum within group.
+        # Use indexing-based sum (jax-friendly, fixed shape).
+        h_idx = jnp.minimum(
+            jnp.arange(H, dtype=jnp.int32) * pool_size // H, pool_size - 1,
+        )
+        w_idx = jnp.minimum(
+            jnp.arange(W, dtype=jnp.int32) * pool_size // W, pool_size - 1,
+        )
+        pooled = jnp.zeros((pool_size, pool_size, x.shape[-1]), dtype=jnp.float32)
+        for i in range(H):
+            for j in range(W):
+                pooled = pooled.at[h_idx[i], w_idx[j]].add(x[i, j])
+        # Channel aggregation
+        if channel_agg == 'sum':
+            features = pooled.sum(axis=-1).flatten()
+        elif channel_agg == 'max':
+            features = pooled.max(axis=-1).flatten()
+        else:
+            features = pooled.flatten()
+        # Bucket each feature
+        scaled = (features - feature_low) / max(span, 1e-9)
+        bucketed = jnp.clip(
+            jnp.floor(scaled * n_buckets_per_dim),
+            0, n_buckets_per_dim - 1,
+        ).astype(jnp.int32)
+        return jnp.sum(bucketed * weights)
+
+    return state_hash, cardinality
+
+
 # ============ Registry ============
 
 ENV_REGISTRY: dict[str, EnvSpec] = {}
@@ -1277,42 +1443,69 @@ _register(
     solve_threshold_confidence='literature',
 )
 
-# Minatar — image obs (10×10×n_channels). state_hash skipped:
-# bucket cardinality is astronomical, KL-against-uniform has no
-# useful signal; the (s, a)-coverage gap reports `gap=0` (no-data)
-# for these envs.
+# Minatar — image obs (10×10×n_channels). state_hash via
+# image_downsample_hash (Go-Explore-style spatial-pool to 3×3 +
+# channel-sum + 2-buckets per cell = 2^9 = 512 buckets).
+# Preserves spatial structure that random projection collapses;
+# unlocks state-conditional argmax measurables for the policy-
+# channel verification per memory
+# `project_image_state_hash_for_substrate`.
+_ASTERIX_HASH, _ASTERIX_CARD = image_downsample_hash(
+    (10, 10, 4), pool_size=3, n_buckets_per_dim=2, channel_agg='sum',
+    feature_low=0.0, feature_high=2.0,
+)
 _register(
     'Asterix-MinAtar',
     r_min=0.0, r_max=1.0,
     reward_regime='event_triggered',
     benchmark_family='minatar',
+    state_hash=_ASTERIX_HASH,
+    state_hash_cardinality=_ASTERIX_CARD,
     solve_threshold=1.35,
     solve_threshold_source='young-tian-2019-50pct-discounted-approx',
     solve_threshold_confidence='derived',
+)
+_BREAKOUT_HASH, _BREAKOUT_CARD = image_downsample_hash(
+    (10, 10, 4), pool_size=3, n_buckets_per_dim=2, channel_agg='sum',
+    feature_low=0.0, feature_high=2.0,
 )
 _register(
     'Breakout-MinAtar',
     r_min=0.0, r_max=1.0,
     reward_regime='event_triggered',
     benchmark_family='minatar',
+    state_hash=_BREAKOUT_HASH,
+    state_hash_cardinality=_BREAKOUT_CARD,
     solve_threshold=1.23,
     solve_threshold_source='young-tian-2019-50pct-discounted-approx',
     solve_threshold_confidence='derived',
+)
+_FREEWAY_HASH, _FREEWAY_CARD = image_downsample_hash(
+    (10, 10, 7), pool_size=3, n_buckets_per_dim=2, channel_agg='sum',
+    feature_low=0.0, feature_high=2.0,
 )
 _register(
     'Freeway-MinAtar',
     r_min=0.0, r_max=1.0,
     reward_regime='event_triggered',
     benchmark_family='minatar',
+    state_hash=_FREEWAY_HASH,
+    state_hash_cardinality=_FREEWAY_CARD,
     solve_threshold=2.57,
     solve_threshold_source='young-tian-2019-50pct-discounted-approx',
     solve_threshold_confidence='derived',
+)
+_SI_HASH, _SI_CARD = image_downsample_hash(
+    (10, 10, 6), pool_size=3, n_buckets_per_dim=2, channel_agg='sum',
+    feature_low=0.0, feature_high=2.0,
 )
 _register(
     'SpaceInvaders-MinAtar',
     r_min=0.0, r_max=1.0,
     reward_regime='event_triggered',
     benchmark_family='minatar',
+    state_hash=_SI_HASH,
+    state_hash_cardinality=_SI_CARD,
     solve_threshold=0.74,
     solve_threshold_source='young-tian-2019-50pct-discounted-approx',
     solve_threshold_confidence='derived',

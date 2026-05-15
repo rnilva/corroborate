@@ -19,6 +19,7 @@ import corroborate_rl.dqn.measurables  # pyright: ignore[reportUnusedImport]  # 
 
 from experiments.findings.ddqn import (
     finding_channel_decomposition,
+    finding_cross_env_mediation,
     finding_hasselt_chain,
     finding_mediation_polarity_conditional,
     finding_per_burst_chain_dynamics,
@@ -40,6 +41,11 @@ from experiments.findings.ddqn.outcome_scope import BRIDGES as _OUTCOME_SCOPE
 from experiments.findings.ddqn.polarity_conditional_mediation import (
     BRIDGES as _POLARITY_MEDIATION,
 )
+from experiments.findings.ddqn.cross_env_mediation import (
+    ddqn_outcome_scales_with_bg_frac_active__xenv,
+    ddqn_outcome_scales_with_jens_reduction__xenv,
+    ddqn_outcome_scales_with_jens_reduction__xenv_loo_robust,
+)
 from experiments.findings.ddqn.q_shape_mediation import BRIDGES as _Q_SHAPE
 from experiments.findings.ddqn.within_env import BRIDGES as _WITHIN_ENV
 
@@ -58,6 +64,9 @@ BRIDGES = (
     *_MEDIATION,
     *_POLARITY_MEDIATION,
     *_Q_SHAPE,
+    ddqn_outcome_scales_with_jens_reduction__xenv,
+    ddqn_outcome_scales_with_jens_reduction__xenv_loo_robust,
+    ddqn_outcome_scales_with_bg_frac_active__xenv,
 )
 
 
@@ -70,6 +79,7 @@ FINDINGS = (
     finding_channel_decomposition,
     finding_tautology_baseline_chain,
     finding_mediation_polarity_conditional,
+    finding_cross_env_mediation,
 )
 
 
@@ -91,4 +101,26 @@ REQUIRED_MEASURABLES: tuple[str, ...] = (
     # (`findings_two_channel_cross_corpus.md` walk-back).
     'q_argmax_margin_per_burst',
     'q_action_std_per_burst',
+    # Alternative bg aggregations — the mean reduction
+    # (`bootstrap_gap_magnitude`) hides arm differences by
+    # averaging mostly-zeros from convergence. `frac_active`
+    # (rate of online/target argmax disagreement) and `q99`
+    # (tail magnitude) recover signal. See memory
+    # `findings_bg_not_causally_manipulated_at_canonical`.
+    'bootstrap_gap_frac_active',
+    'bootstrap_gap_q99',
+    # State-conditional argmax measurables (2026-05-15) — for
+    # policy-channel mechanism identification per memory
+    # `findings_ddqn_mediator_heterogeneity`. Distinguishes
+    # state-differentiated policy (high MI) from Q-flat noise
+    # (low MI + high marginal entropy). Requires state_hash on
+    # each env: bucket_hash (vector envs) or image_downsample_hash
+    # (MinAtar). image envs without registered state_hash return
+    # NaN (sentinel).
+    'state_conditional_argmax_entropy_late',
+    'mutual_info_state_argmax_late',
+    # Env-level disc-raw alignment for outcome-translation scope.
+    # Where r > 0.7, raw vs disc outcome are interchangeable; below
+    # that, the choice matters and bridges must commit.
+    'env_disc_raw_alignment',
 )

@@ -89,6 +89,8 @@ BUF_SIZE = from_key('buf_size')
 TD_ERROR = from_key('td_error')
 TD_WB_STD = from_key('td_error_within_batch_std')
 Q_ACTION_GRAD_OVERLAP = from_key('q_action_grad_overlap_per_step')
+BOOTSTRAP_ACTION_MISMATCH = from_key('bootstrap_action_mismatch_per_step')
+Q_INTER_STATE_GRAD_OVERLAP = from_key('q_inter_state_grad_overlap_per_step')
 
 
 # ============ Pearson r — online vs target Q populations ============
@@ -168,8 +170,11 @@ def q_gap_late(record: Mapping[str, object]) -> float:
     training. Action-margin scalar — sharp policy preferences
     correlate with reward in Breakout / MNISTBandit /
     SpaceInvaders (PAPER §5.1)."""
-    max_q = ONLINE_MAX_Q(record)
-    min_q = ONLINE_MIN_Q(record)
+    try:
+        max_q = ONLINE_MAX_Q(record)
+        min_q = ONLINE_MIN_Q(record)
+    except KeyError:
+        return float('nan')
     return _windowed_mean(max_q - min_q, 0.5, 1.0)
 
 
@@ -178,8 +183,11 @@ def q_gap_growth(record: Mapping[str, object]) -> float:
     """(late_half_mean − early_half_mean) of the q_gap signal.
     Captures whether action-margin widens as training progresses
     (positive growth → emergent policy sharpness)."""
-    max_q = ONLINE_MAX_Q(record)
-    min_q = ONLINE_MIN_Q(record)
+    try:
+        max_q = ONLINE_MAX_Q(record)
+        min_q = ONLINE_MIN_Q(record)
+    except KeyError:
+        return float('nan')
     gap = max_q - min_q
     early = _windowed_mean(gap, 0.0, 0.5)
     late = _windowed_mean(gap, 0.5, 1.0)
@@ -230,8 +238,11 @@ def ddqn_bootstrap_gap(record: Mapping[str, object]) -> float:
     Prefer this over the legacy `_late` variant (which used an
     arbitrary 50% cut-off); `_late` is kept for backward compat
     with bridges authored before the convention was reconsidered."""
-    target_max = TARGET_MAX_Q(record)
-    target_at_online = TARGET_AT_ARGMAX(record)
+    try:
+        target_max = TARGET_MAX_Q(record)
+        target_at_online = TARGET_AT_ARGMAX(record)
+    except KeyError:
+        return float('nan')
     n = min(target_max.shape[0], target_at_online.shape[0])
     if n == 0:
         return float('nan')
@@ -273,19 +284,16 @@ def clip_wedge_polarity_aligned(record: Mapping[str, object]) -> float:
     system doesn't guarantee eval order for derived measurables).
     Cheap — both underlying quantities are already O(n_steps)."""
     # Clip wedge (full-trajectory mean of target_max - target_at_argmax)
-    target_max = TARGET_MAX_Q(record)
-    target_at_online = TARGET_AT_ARGMAX(record)
+    try:
+        target_max = TARGET_MAX_Q(record)
+        target_at_online = TARGET_AT_ARGMAX(record)
+    except KeyError:
+        return float('nan')
     n = min(target_max.shape[0], target_at_online.shape[0])
     if n == 0:
         return float('nan')
     clip = float(np.mean(target_max[:n] - target_at_online[:n]))
-    # Polarity (Pearson r between episode_length and mc_return).
-    # Use `record.get` (not the module-top `EP_LENGTH` / `MC_RETURN`
-    # Measurable sources) because the body needs the raw nested-
-    # list shape (`List[List[float]]` per burst) before flattening;
-    # `from_key`'s `np.asarray` would prematurely coerce the nested
-    # structure to an object-dtype 2-D array and the per-burst
-    # iteration below would fail.
+    # Polarity (Pearson r between episode_length and mc_return)
     ep_len = record.get('episode_length')
     mc_ret = record.get('mc_return')
     if ep_len is None or mc_ret is None:
@@ -337,12 +345,82 @@ def bootstrap_gap_magnitude(record: Mapping[str, object]) -> float:
     anywhere so its regression on Δ_outcome is non-tautological.
 
     Returns NaN when trace cols are absent."""
-    target_max = TARGET_MAX_Q(record)
-    target_at_online = TARGET_AT_ARGMAX(record)
+    try:
+        target_max = TARGET_MAX_Q(record)
+        target_at_online = TARGET_AT_ARGMAX(record)
+    except KeyError:
+        return float('nan')
     n = min(target_max.shape[0], target_at_online.shape[0])
     if n == 0:
         return float('nan')
     return float(np.mean(target_max[:n] - target_at_online[:n]))
+
+
+@measurable(reads=(
+    'target_max_q_per_step', 'target_q_at_online_argmax_per_step',
+))
+def bootstrap_gap_frac_active(record: Mapping[str, object]) -> float:
+    """Fraction of training steps with bg > 0.001 — the
+    "wedge-active rate." Twin to `bootstrap_gap_magnitude` (mean
+    aggregation), but sensitive to the FREQUENCY of arm-
+    disagreement rather than the integrated magnitude.
+
+    The per-step `target_max − target_q_at_online_argmax`
+    distribution is heavy-tailed and dominated by post-convergence
+    zeros at canonical 1M. The mean reduction averages toward
+    zero and hides arm differences. `frac_active` instead asks:
+    on what fraction of training steps did online's argmax
+    disagree with target's argmax (above a tiny tolerance)?
+
+    Empirically arm-separable: FourRooms d_bg_frac001 = -0.021
+    (t=-3.7), MountainCar d_bg_frac001 = -0.036 (t=-1.9), both
+    DDQN < vanilla. The 0.001 threshold trims float-noise from
+    bg ≈ 0 events (online/target literally agree on argmax →
+    bg=0 exactly); 0.001 is well below the q99 tail (~0.013-0.25
+    across canonical envs).
+
+    **MC-free** — same MC-free property as `bootstrap_gap_magnitude`;
+    no `jens = Q − MC` tautology."""
+    try:
+        target_max = TARGET_MAX_Q(record)
+        target_at_online = TARGET_AT_ARGMAX(record)
+    except KeyError:
+        return float('nan')
+    n = min(target_max.shape[0], target_at_online.shape[0])
+    if n == 0:
+        return float('nan')
+    gap = target_max[:n] - target_at_online[:n]
+    return float((gap > 0.001).mean())
+
+
+@measurable(reads=(
+    'target_max_q_per_step', 'target_q_at_online_argmax_per_step',
+))
+def bootstrap_gap_q99(record: Mapping[str, object]) -> float:
+    """99th-percentile of per-step bootstrap-gap magnitude — the
+    tail of online/target argmax disagreement.
+
+    Companion to `bootstrap_gap_frac_active`. Where `frac_active`
+    asks "how often do they disagree?", `q99` asks "when they
+    disagree at all, how large is the wedge?" Together the two
+    decompose what the mean reduction collapses.
+
+    Useful on envs where DDQN preserves bigger wedges per
+    disagreement event (e.g., FourRooms d_bg_q999=+0.006, t=+2.5
+    — DDQN's online net stays consistent with its own argmax
+    even when target disagrees, so the wedge stays open).
+
+    **MC-free** — same MC-free property as the family."""
+    try:
+        target_max = TARGET_MAX_Q(record)
+        target_at_online = TARGET_AT_ARGMAX(record)
+    except KeyError:
+        return float('nan')
+    n = min(target_max.shape[0], target_at_online.shape[0])
+    if n == 0:
+        return float('nan')
+    gap = target_max[:n] - target_at_online[:n]
+    return float(np.quantile(gap, 0.99))
 
 
 @measurable(reads=('target_max_q_per_step', 'target_q_at_online_argmax_per_step'))
@@ -378,13 +456,143 @@ def ddqn_bootstrap_gap_late(record: Mapping[str, object]) -> float:
     sign-flip: bridge `staleness_amplifies_ddqn_outcome__sparse_
     goal_polyak` predicts gap × Q-sign correlates with
     Δ_outcome."""
-    target_max = TARGET_MAX_Q(record)
-    target_at_online = TARGET_AT_ARGMAX(record)
+    try:
+        target_max = TARGET_MAX_Q(record)
+        target_at_online = TARGET_AT_ARGMAX(record)
+    except KeyError:
+        return float('nan')
     n = min(target_max.shape[0], target_at_online.shape[0])
     if n == 0:
         return float('nan')
     gap = target_max[:n] - target_at_online[:n]
     return _windowed_mean(gap, 0.5, 1.0)
+
+
+@measurable(reads=('online_argmax_per_step', 'state_hash'))
+def state_conditional_argmax_entropy_late(
+    record: Mapping[str, object],
+) -> float:
+    """State-conditional Shannon entropy of `online_argmax_per_step`
+    over the late 50% of training.
+
+    `H(argmax | state)` = E_s [ -Σ_a p(a|s) log p(a|s) ] where
+    p(a|s) is the empirical fraction of late-training steps in
+    state-bucket s where the online network's argmax was action a.
+
+    Distinguishes (a) state-differentiated policy from (b) Q-flat
+    indecisive policy that marginal `argmax_entropy_late` confounds:
+      (a) state-differentiated: H(argmax | state) ≈ 0 (decisive
+          per state, just different argmax per state region) →
+          high mutual_info(state, argmax) → STATE-CONDITIONAL
+          structure.
+      (b) Q-flat: H(argmax | state) ≈ H(argmax) ≈ log(|A|) →
+          mutual_info ≈ 0 → no state-conditional information.
+
+    Returns NaN when state_hash is missing or all-zero (image envs
+    pre-state-hash-registration), or fewer than 2 distinct
+    (state, argmax) pairs are observed."""
+    argmax_arr = record.get('online_argmax_per_step')
+    state_arr = record.get('state_hash')
+    if argmax_arr is None or state_arr is None:
+        return float('nan')
+    a = np.asarray(argmax_arr, dtype=np.int64).flatten()
+    s = np.asarray(state_arr, dtype=np.int64).flatten()
+    n = min(a.size, s.size)
+    if n < 4:
+        return float('nan')
+    half = n // 2
+    a_late, s_late = a[half:], s[half:]
+    unique_s = np.unique(s_late)
+    if unique_s.size < 2:
+        return float('nan')
+    total_h = 0.0
+    total_w = 0
+    for s_val in unique_s:
+        mask = s_late == s_val
+        n_s = int(mask.sum())
+        if n_s < 2:
+            continue
+        a_in_s = a_late[mask]
+        counts = np.bincount(a_in_s)
+        nonzero = counts[counts > 0]
+        if nonzero.size <= 1:
+            h_s = 0.0
+        else:
+            p = nonzero.astype(np.float64) / float(nonzero.sum())
+            h_s = float(-np.sum(p * np.log(p)))
+        total_h += h_s * n_s
+        total_w += n_s
+    if total_w == 0:
+        return float('nan')
+    return total_h / total_w
+
+
+@measurable(reads=('online_argmax_per_step', 'state_hash'))
+def mutual_info_state_argmax_late(
+    record: Mapping[str, object],
+) -> float:
+    """Mutual information I(state; argmax) over the late 50% of
+    training. `I = H(argmax) − H(argmax | state)` — measures how
+    much of the action-distribution variance is explained by
+    state-bucket identity.
+
+    High MI: DDQN's policy is STATE-DIFFERENTIATED (different
+    state regions yield different argmaxes; marginal action
+    diversity is structured by state).
+    Low MI + high marginal entropy: Q-FLAT noise (same near-
+    uniform action distribution regardless of state).
+    Low MI + low marginal entropy: COLLAPSED policy (same action
+    everywhere).
+
+    The (a) vs (b) disambiguation primary measurable for the
+    policy-structure-channel claim per memory
+    `findings_ddqn_mediator_heterogeneity`.
+
+    Returns NaN under same degenerate cases as
+    `state_conditional_argmax_entropy_late`."""
+    argmax_arr = record.get('online_argmax_per_step')
+    state_arr = record.get('state_hash')
+    if argmax_arr is None or state_arr is None:
+        return float('nan')
+    a = np.asarray(argmax_arr, dtype=np.int64).flatten()
+    s = np.asarray(state_arr, dtype=np.int64).flatten()
+    n = min(a.size, s.size)
+    if n < 4:
+        return float('nan')
+    half = n // 2
+    a_late, s_late = a[half:], s[half:]
+    unique_s = np.unique(s_late)
+    if unique_s.size < 2:
+        return float('nan')
+    # Marginal H(argmax)
+    counts_a = np.bincount(a_late)
+    nz_a = counts_a[counts_a > 0]
+    if nz_a.size <= 1:
+        return float('nan')
+    p_a = nz_a.astype(np.float64) / float(nz_a.sum())
+    h_a = float(-np.sum(p_a * np.log(p_a)))
+    # Conditional H(argmax | state)
+    total_h = 0.0
+    total_w = 0
+    for s_val in unique_s:
+        mask = s_late == s_val
+        n_s = int(mask.sum())
+        if n_s < 2:
+            continue
+        a_in_s = a_late[mask]
+        counts = np.bincount(a_in_s)
+        nonzero = counts[counts > 0]
+        if nonzero.size <= 1:
+            h_s = 0.0
+        else:
+            p = nonzero.astype(np.float64) / float(nonzero.sum())
+            h_s = float(-np.sum(p * np.log(p)))
+        total_h += h_s * n_s
+        total_w += n_s
+    if total_w == 0:
+        return float('nan')
+    h_cond = total_h / total_w
+    return h_a - h_cond
 
 
 @measurable(reads=('online_argmax_per_step',))
@@ -417,17 +625,27 @@ def argmax_entropy_late(record: Mapping[str, object]) -> float:
     distinguishes (a) vs (b) regimes.
 
     Returns nan if `online_argmax_per_step` is missing or empty."""
-    arr_np = ONLINE_ARGMAX(record).astype(np.int64)
-    n = arr_np.shape[0] if arr_np.ndim > 0 else 0
+    arr = record.get('online_argmax_per_step')
+    if arr is None:
+        return float('nan')
+    try:
+        a = list(arr)
+    except TypeError:
+        return float('nan')
+    if not a:
+        return float('nan')
+    import numpy as np_
+    arr_np = np_.asarray(a, dtype=np_.int64)
+    n = len(arr_np)
     if n < 2:
         return float('nan')
     late = arr_np[n // 2:]
-    if late.size == 0:
+    if len(late) == 0:
         return float('nan')
-    counts = np.bincount(late)
-    p = counts / late.size
+    counts = np_.bincount(late)
+    p = counts / len(late)
     p_pos = p[p > 0]
-    return float(-(p_pos * np.log(p_pos)).sum())
+    return float(-(p_pos * np_.log(p_pos)).sum())
 
 
 @measurable(reads=('online_argmax_per_step',))
@@ -442,15 +660,25 @@ def argmax_mode_freq_late(record: Mapping[str, object]) -> float:
 
     Per-cell measurable. Bridge body computes paired
     DDQN_mode_freq − vanilla_mode_freq."""
-    arr_np = ONLINE_ARGMAX(record).astype(np.int64)
-    n = arr_np.shape[0] if arr_np.ndim > 0 else 0
+    arr = record.get('online_argmax_per_step')
+    if arr is None:
+        return float('nan')
+    try:
+        a = list(arr)
+    except TypeError:
+        return float('nan')
+    if not a:
+        return float('nan')
+    import numpy as np_
+    arr_np = np_.asarray(a, dtype=np_.int64)
+    n = len(arr_np)
     if n < 2:
         return float('nan')
     late = arr_np[n // 2:]
-    if late.size == 0:
+    if len(late) == 0:
         return float('nan')
-    counts = np.bincount(late)
-    return float(counts.max()) / float(late.size)
+    counts = np_.bincount(late)
+    return float(counts.max()) / float(len(late))
 
 
 @measurable(reads=('online_std_q_per_step',))
@@ -476,7 +704,10 @@ def q_action_std_late(record: Mapping[str, object]) -> float:
 
     Returns nan if `online_std_q_per_step` is absent (cache
     lacking trace column) or if the late window is empty."""
-    arr = ONLINE_STD_Q(record)
+    try:
+        arr = ONLINE_STD_Q(record)
+    except KeyError:
+        return float('nan')
     return _windowed_mean(arr, 0.5, 1.0)
 
 
@@ -502,9 +733,12 @@ def q_range_to_std_late(record: Mapping[str, object]) -> float:
 
     Returns nan when any of the trace columns is missing or the
     late window is empty."""
-    max_arr = ONLINE_MAX_Q(record)
-    min_arr = ONLINE_MIN_Q(record)
-    std_arr = ONLINE_STD_Q(record)
+    try:
+        max_arr = ONLINE_MAX_Q(record)
+        min_arr = ONLINE_MIN_Q(record)
+        std_arr = ONLINE_STD_Q(record)
+    except KeyError:
+        return float('nan')
     if max_arr.size != min_arr.size or max_arr.size != std_arr.size:
         return float('nan')
     n = max_arr.size
@@ -592,7 +826,10 @@ def q_argmax_margin_late(record: Mapping[str, object]) -> float:
     bias is below margin scale.
 
     Returns nan if the trace column is absent."""
-    arr = ONLINE_TOP12_MARGIN(record)
+    try:
+        arr = ONLINE_TOP12_MARGIN(record)
+    except KeyError:
+        return float('nan')
     return _windowed_mean(arr, 0.5, 1.0)
 
 
@@ -678,7 +915,10 @@ def q_late_mean(record: Mapping[str, object]) -> float:
     The endogenous downstream of `r_min`. Used as a regime-
     selector predicate in bridges that test claims dependent on
     the sign of Hasselt's bias direction."""
-    arr = ONLINE_MAX_Q(record)
+    try:
+        arr = ONLINE_MAX_Q(record)
+    except KeyError:
+        return float('nan')
     return _windowed_mean(arr, 0.5, 1.0)
 
 
@@ -718,7 +958,10 @@ def q_max_growth(record: Mapping[str, object]) -> float:
     """late_quarter / max(|early_quarter|, 1e-9) of online_max_q.
     Value-curve growth — vanilla DQN's Jensen bias typically
     pushes this above 1; DDQN attenuates."""
-    arr = ONLINE_MAX_Q(record)
+    try:
+        arr = ONLINE_MAX_Q(record)
+    except KeyError:
+        return float('nan')
     early = _windowed_mean(arr, 0.0, 0.25)
     late = _windowed_mean(arr, 0.75, 1.0)
     return float(late / max(abs(early), 1e-9))
@@ -750,7 +993,74 @@ def q_action_grad_overlap_late(record: Mapping[str, object]) -> float:
     and deep FA. Use `q_action_grad_overlap_late` for the
     architectural-α test; use the temporal correlation only as
     a Q-rank-deficiency proxy."""
-    arr = Q_ACTION_GRAD_OVERLAP(record)
+    try:
+        arr = Q_ACTION_GRAD_OVERLAP(record)
+    except KeyError:
+        return float('nan')
+    if arr.ndim == 0 or arr.shape[0] < 2:
+        return float('nan')
+    return _windowed_mean(arr, 0.5, 1.0)
+
+
+@measurable(reads=('bootstrap_action_mismatch_per_step',))
+def bootstrap_action_mismatch_late(
+    record: Mapping[str, object],
+) -> float:
+    """Late-window mean of the cross-action bootstrap rate:
+    fraction of training transitions where
+    `argmax_a' Q_online(s', a') ≠ action_taken_at_s`.
+
+    **Theory connection**: DDQN's contribution is decorrelating
+    the argmax-selection from the value-estimation in the
+    bootstrap target. That decorrelation matters EXACTLY when
+    the bootstrap pulls Q(s, a) toward Q(s', a') with a' ≠ a —
+    cross-action TD updates. When the rate is high (s' decisions
+    diverge from s decisions frequently), DDQN's mechanism has
+    leverage. When near zero (within-action bootstrap), the
+    update is trivially Q(s, a) ← r + γ · Q(s', a) and DDQN
+    has nothing to fix.
+
+    Conjunction with axis (ii) `γ → 1` and axis (iii) `r → 0`:
+    when r → 0 the TD target reduces to γ · max_a' Q(s', a');
+    when γ → 1 the propagation horizon is long; when a' ≠ a
+    frequently the cross-action correction accumulates. ALL
+    THREE jointly are the regime where DDQN should help most.
+
+    Cheap probe added 2026-05-13 in `train_phase` — single
+    argmax + compare per batch step. Negligible cost."""
+    try:
+        arr = BOOTSTRAP_ACTION_MISMATCH(record)
+    except KeyError:
+        return float('nan')
+    if arr.ndim == 0 or arr.shape[0] < 2:
+        return float('nan')
+    return _windowed_mean(arr, 0.5, 1.0)
+
+
+@measurable(reads=('q_inter_state_grad_overlap_per_step',))
+def q_inter_state_grad_overlap_late(
+    record: Mapping[str, object],
+) -> float:
+    """Late-window mean of inter-state α — cosine overlap of
+    `∂Q(s, a)/∂θ` vs `∂Q(s', a)/∂θ` at paired (s, s') from the
+    replay batch (s' = batch.next_obs[0]), averaged across actions.
+
+    Theory's axis (i) of FA-coherence: spatial smoothness of Q
+    GRADIENTS under the FA at neighboring states. Distinct from:
+    - `q_action_grad_overlap_late`: intra-state α (action-head
+      overlap at the same state).
+    - `q_trajectory_autocorr_late`: trajectory-Q autocorr
+      (confounded by env-dynamics smoothness).
+    - `q_autocorr_late`: training-batch-mean autocorr (confounded
+      by network nonlinearity).
+
+    Probe added 2026-05-13 in `train_phase`; populated by sweeps
+    run after that. Pre-existing corpora have NaN for this
+    column."""
+    try:
+        arr = Q_INTER_STATE_GRAD_OVERLAP(record)
+    except KeyError:
+        return float('nan')
     if arr.ndim == 0 or arr.shape[0] < 2:
         return float('nan')
     return _windowed_mean(arr, 0.5, 1.0)
@@ -780,7 +1090,10 @@ def q_autocorr_late(record: Mapping[str, object]) -> float:
     onto Q(s', a) for s' ≈ s, amplifying spatial bias coverage.
     DDQN's argmax-decorrelation breaks this loop — should help
     most where autocorr is high."""
-    arr = ONLINE_MAX_Q(record)
+    try:
+        arr = ONLINE_MAX_Q(record)
+    except KeyError:
+        return float('nan')
     if arr.ndim == 0 or arr.shape[0] < 2:
         return float('nan')
     half = arr.shape[0] // 2
@@ -793,6 +1106,193 @@ def q_autocorr_late(record: Mapping[str, object]) -> float:
         return float('nan')
     r = float(np.corrcoef(x, y)[0, 1])
     return r if math.isfinite(r) else float('nan')
+
+
+@measurable(reads=('predicted_q_per_step', 'active_per_step'))
+def q_trajectory_autocorr_late(
+    record: Mapping[str, object],
+) -> float:
+    """**Inter-state** Q correlation along actual eval trajectories,
+    averaged over late-half bursts.
+
+    For each (burst, episode) in the late half of `predicted_q_per_step`
+    (shape `(n_bursts, n_episodes, episode_cap)`), masks to active
+    steps and computes the lag-1 Pearson autocorr of Q values
+    along the trajectory. Returns the mean across episodes/bursts.
+
+    **Distinct from `q_autocorr_late`** which uses
+    `online_max_q_per_step` — that trace is per-training-step
+    mean over a RANDOM REPLAY BATCH (`phases.py:199`), so the
+    autocorr is between consecutive batch-means, not between
+    consecutive trajectory states. The training-batch quantity
+    confounds (a) network nonlinearity (linear FA produces
+    smoother batch-means than deep MLP → higher autocorr), (b)
+    replay-buffer stability, and (c) Q-network convergence —
+    none of which is the theory's "FA spatial coherence ALONG A
+    TRAJECTORY" axis.
+
+    **Distinct from `q_action_grad_overlap_late`** which measures
+    *intra*-state α (cosine overlap of ∂Q/∂θ across action heads
+    AT the same state — action-head shared trunk). The theory's
+    FA-degeneracy axis (i) requires *inter*-state α: how Q at
+    state s relates to Q at neighboring state s' under the FA.
+    This measurable is the natural empirical proxy via the
+    realized trajectory.
+
+    Computed at EVAL time on the agent's trajectory (with current
+    policy's action selection). Reflects (env, trained-policy)
+    pair; the vanilla-arm value at the converged policy is the
+    intended proxy for env-architecture-determined spatial
+    smoothness."""
+    q = record.get('predicted_q_per_step')
+    a = record.get('active_per_step')
+    if q is None or a is None:
+        return float('nan')
+    q_arr = np.asarray(q, dtype=np.float64)
+    a_arr = np.asarray(a, dtype=np.float64)
+    if q_arr.ndim != 3 or q_arr.shape != a_arr.shape:
+        return float('nan')
+    n_bursts = q_arr.shape[0]
+    if n_bursts < 2:
+        return float('nan')
+    half = n_bursts // 2
+    late_q = q_arr[half:]
+    late_a = a_arr[half:]
+    corrs: list[float] = []
+    n_b_late, n_episodes, _ = late_q.shape
+    for b in range(n_b_late):
+        for e in range(n_episodes):
+            mask = late_a[b, e] > 0
+            q_traj = late_q[b, e][mask]
+            if q_traj.size < 2:
+                continue
+            x = q_traj[:-1]
+            y = q_traj[1:]
+            if np.std(x) == 0 or np.std(y) == 0:
+                continue
+            r = float(np.corrcoef(x, y)[0, 1])
+            if math.isfinite(r):
+                corrs.append(r)
+    if not corrs:
+        return float('nan')
+    return float(np.mean(corrs))
+
+
+@measurable(reads=('online_max_q_per_step', 'eval_step_index'))
+def q_autocorr_per_burst(
+    record: Mapping[str, object],
+) -> npt.NDArray[np.float64]:
+    """Per-burst version of `q_autocorr_late`. Splits
+    `online_max_q_per_step` (shape `(total_steps,)`) into N equal
+    chunks where N = `len(eval_step_index)` (one window per eval
+    burst), and returns the lag-1 Pearson autocorrelation within
+    each window.
+
+    Returns shape `(n_bursts,)`. Each value is the autocorr over
+    the corresponding training-step chunk, NaN when the chunk has
+    zero std (constant Q).
+
+    Use when the fixed late-50% window of `q_autocorr_late`
+    silently mixes learning + converged phases. The per-burst
+    trajectory makes the convergence point visible: autocorr
+    typically rises monotonically and saturates after the agent
+    locks onto a policy. Downstream analyses can take `[-1]` for
+    the final burst, mean over the last K bursts, or fit a slope
+    `autocorr ~ burst_idx`.
+
+    Long-term fix (deferred per
+    `project_convergence_detect_pelt.md` /
+    `project_convergence_detect_spectral.md`): replace the fixed-
+    chunk windowing with PELT-detected segment boundaries OR
+    ADF-stationarity detection on TD-error. Per-burst is the
+    cheap-ship-now option."""
+    try:
+        arr = ONLINE_MAX_Q(record)
+        step_idx = EVAL_STEP_INDEX(record)
+    except KeyError:
+        return np.zeros((0,), dtype=np.float64)
+    if arr.ndim != 1 or step_idx.ndim != 1:
+        return np.zeros((0,), dtype=np.float64)
+    n_bursts = int(step_idx.shape[0])
+    if n_bursts < 1 or arr.shape[0] < n_bursts * 2:
+        return np.zeros((0,), dtype=np.float64)
+    chunks = np.array_split(arr, n_bursts)
+    out = np.full((n_bursts,), np.nan, dtype=np.float64)
+    for i, chunk in enumerate(chunks):
+        if chunk.size < 2:
+            continue
+        x = chunk[:-1]
+        y = chunk[1:]
+        if np.std(x) == 0 or np.std(y) == 0:
+            continue
+        r = float(np.corrcoef(x, y)[0, 1])
+        if math.isfinite(r):
+            out[i] = r
+    return out
+
+
+@measurable(reads=(
+    'mc_return_from_step', 'active_per_step', 'gamma',
+))
+def reward_nonzero_frac(
+    record: Mapping[str, object],
+    eps: float = 1e-3,
+) -> float:
+    """Fraction of active eval-trajectory steps with non-zero per-
+    step reward. Proxy for env-level reward informativeness — high
+    (→ 1) means every step gets reward (CartPole-style dense
+    return); low (→ 0) means reward is sparse and the TD target
+    reduces to `γ · Q(s, a*)` (the degenerate self-referential map
+    in `findings_unified_degeneracy_theory.md`).
+
+    Reconstructs per-step reward via
+    `r[t] = mc[t] − γ · mc[t+1]`
+    on `active[t] == 1` steps, and terminal `r[T−1] = mc[T−1]`
+    (no future). Then divides the count of `|r| > eps` by the
+    active-step count.
+
+    `eps = 1e-3` is a numerical-noise threshold (mc_return_from_step
+    is float32 in cache, so true zeros may carry ~1e-7 jitter).
+    Sweep-relevant rewards are O(1).
+
+    **Policy-conditional caveat**: this is computed over eval
+    trajectories, so its value reflects the (env, trained policy)
+    pair. On a sparse-reward env with a trained agent that solves
+    the task, density ≈ `1 / episode_length` (terminal-reward
+    only). On the same env with vanilla collapse, density → 0
+    (agent never reaches goal). Use the VANILLA-arm value per env
+    as the operational proxy for env-level reward sparsity (the
+    theory's `uninf-r` axis). Shaped envs (via `PotentialReward`)
+    show density → 1 even on bare-reward envs because the
+    potential transform adds per-step signal."""
+    mc = record.get('mc_return_from_step')
+    active = record.get('active_per_step')
+    gamma_v = record.get('gamma')
+    if mc is None or active is None:
+        return float('nan')
+    if not isinstance(gamma_v, (int, float)):
+        return float('nan')
+    gamma = float(gamma_v)
+    mc_arr = np.asarray(mc, dtype=np.float64)
+    a_arr = np.asarray(active, dtype=np.float64)
+    if mc_arr.ndim < 1 or mc_arr.shape != a_arr.shape or mc_arr.size == 0:
+        return float('nan')
+    # Shift mc backwards along the trailing (step) axis. Treat past-
+    # episode-end positions as `r[t] = mc[t]` (no future): set
+    # next_mc to 0 where active[t+1] == 0 or at the array end.
+    next_mc = np.roll(mc_arr, -1, axis=-1)
+    next_active = np.roll(a_arr, -1, axis=-1)
+    # Last step of trailing axis has no `t+1`: force terminal.
+    next_mc[..., -1] = 0.0
+    next_active[..., -1] = 0.0
+    next_mc = next_mc * next_active
+    rewards = mc_arr - gamma * next_mc
+    mask = a_arr > 0
+    denom = float(mask.sum())
+    if denom < 1.0:
+        return float('nan')
+    nonzero = (np.abs(rewards) > eps) & mask
+    return float(nonzero.sum() / denom)
 
 
 @measurable(reads=(
@@ -915,7 +1415,10 @@ def argmax_persistence_late(record: Mapping[str, object]) -> float:
     transitions can produce different argmaxes even with stable Q.
     Read in conjunction with `argmax_entropy_late` (which captures
     the across-action histogram) to disambiguate."""
-    arr = ONLINE_ARGMAX(record)
+    try:
+        arr = ONLINE_ARGMAX(record)
+    except KeyError:
+        return float('nan')
     n = arr.shape[0]
     if n < 4:
         return float('nan')
@@ -946,7 +1449,10 @@ def q_max_temporal_cv_late(record: Mapping[str, object]) -> float:
 
     Returns NaN if `online_max_q_per_step` absent or if late-window
     mean is below 1e-9 in magnitude (CV undefined)."""
-    arr = ONLINE_MAX_Q(record)
+    try:
+        arr = ONLINE_MAX_Q(record)
+    except KeyError:
+        return float('nan')
     n = arr.shape[0]
     if n < 4:
         return float('nan')
@@ -958,6 +1464,46 @@ def q_max_temporal_cv_late(record: Mapping[str, object]) -> float:
         return float('nan')
     sd = float(np.std(late, ddof=1))
     return sd / abs(mu)
+
+
+@measurable(reads=('mc_return_from_step', 'episode_length', 'gamma', 'mc_return'))
+def env_disc_raw_alignment(record: Mapping[str, object]) -> float:
+    """Per-cell Pearson r between **discounted** and **undiscounted**
+    episode returns across all (burst, eval-episode) pairs. An
+    endogenous proxy for how much discounting bites in this env:
+
+    - r → +1: episode lengths similar across episodes (or rewards
+      concentrated near terminal step). Discounting reshapes uniformly;
+      raw and disc co-vary perfectly. Outcomes interchangeable up to
+      a constant scaling. Examples: fixed-length envs.
+
+    - r ≈ 0 or low: episode lengths vary wildly. Discounting
+      gives short-quick episodes much higher disc-return than
+      long-success ones with same raw return. Raw and disc rank
+      cells differently. Outcome choice MATTERS.
+
+    Use as a scope predicate for bridges that consume an
+    outcome measure: where `env_disc_raw_alignment > 0.7`,
+    `eval_best_burst_raw_mean` and `eval_best_burst_mean` are
+    interchangeable; below that, the bridge must commit to one
+    semantics and justify it. Companion to `env_reward_polarity`
+    (the REACH/SURVIVE moderator)."""
+    raw = _compute_mc_return_raw(record)
+    if raw.size == 0:
+        return float('nan')
+    try:
+        mc = MC_RETURN(record)
+    except KeyError:
+        return float('nan')
+    mc_arr = np.asarray(mc, dtype=np.float64)
+    if raw.shape != mc_arr.shape:
+        return float('nan')
+    rf = raw.flatten()
+    mf = mc_arr.flatten()
+    if rf.size < 3 or rf.std() == 0 or mf.std() == 0:
+        return float('nan')
+    r = float(np.corrcoef(rf, mf)[0, 1])
+    return r if math.isfinite(r) else float('nan')
 
 
 @measurable(reads=('episode_length', 'mc_return'))
@@ -992,8 +1538,11 @@ def env_reward_polarity(record: Mapping[str, object]) -> float:
     positive slope coupling. The pool ρ values were −0.798 and
     +0.240 respectively (formal proof n_envs=8, binomial p=0.004).
     """
-    el = EP_LENGTH(record)
-    mc = MC_RETURN(record)
+    try:
+        el = EP_LENGTH(record)
+        mc = MC_RETURN(record)
+    except KeyError:
+        return float('nan')
     el_arr = np.asarray(el, dtype=np.float64).flatten()
     mc_arr = np.asarray(mc, dtype=np.float64).flatten()
     if el_arr.shape != mc_arr.shape or el_arr.size < 3:
@@ -1029,8 +1578,11 @@ def q_mc_calibration_pearson(record: Mapping[str, object]) -> float:
     online-Q vs target-Q population correlation, a target-
     staleness diagnostic): this one is Q vs realized return —
     the OPE-style validity of the value function."""
-    qs = PREDICTED_Q_AT_START(record)
-    mc = MC_RETURN(record)
+    try:
+        qs = PREDICTED_Q_AT_START(record)
+        mc = MC_RETURN(record)
+    except KeyError:
+        return float('nan')
     qs_flat = np.asarray(qs).flatten()
     mc_flat = np.asarray(mc).flatten()
     if qs_flat.size != mc_flat.size or qs_flat.size < 3:
@@ -1062,8 +1614,11 @@ def target_staleness_late(record: Mapping[str, object]) -> float:
     Late-50% window matches the canonical late-quarter Hasselt
     convention while keeping enough samples for a stable mean.
     """
-    omax = ONLINE_MAX_Q(record)
-    tmax = TARGET_MAX_Q(record)
+    try:
+        omax = ONLINE_MAX_Q(record)
+        tmax = TARGET_MAX_Q(record)
+    except KeyError:
+        return float('nan')
     abs_gap = np.abs(omax - tmax)
     denom = np.maximum(np.maximum(np.abs(omax), np.abs(tmax)), 1e-6)
     return _windowed_mean(abs_gap / denom, 0.5, 1.0)
@@ -1079,8 +1634,11 @@ def target_staleness_early(record: Mapping[str, object]) -> float:
     Breakout). Useful as the substrate-level mediator for
     early-policy-quality bridges where the late window has
     already stabilised."""
-    omax = ONLINE_MAX_Q(record)
-    tmax = TARGET_MAX_Q(record)
+    try:
+        omax = ONLINE_MAX_Q(record)
+        tmax = TARGET_MAX_Q(record)
+    except KeyError:
+        return float('nan')
     abs_gap = np.abs(omax - tmax)
     denom = np.maximum(np.maximum(np.abs(omax), np.abs(tmax)), 1e-6)
     return _windowed_mean(abs_gap / denom, 0.0, 0.25)
@@ -1093,8 +1651,11 @@ def v_vs_max_delta_late(record: Mapping[str, object]) -> float:
     action-Q distribution (large delta); DDQN's decoupled
     selection narrows it. The Hasselt 2010 Jensen-bias proxy at
     the per-step level."""
-    mean_q = ONLINE_MEAN_Q(record)
-    max_q = ONLINE_MAX_Q(record)
+    try:
+        mean_q = ONLINE_MEAN_Q(record)
+        max_q = ONLINE_MAX_Q(record)
+    except KeyError:
+        return float('nan')
     return _windowed_mean(np.abs(mean_q - max_q), 0.5, 1.0)
 
 
@@ -1104,7 +1665,10 @@ def td_residual_late(record: Mapping[str, object]) -> float:
     scalar — Acrobot's r=+0.84 vs GaussianBandit's r=−0.81
     (sign-flip across regimes) is the canonical motivation for
     per-env PC in PAPER §6."""
-    arr = TD_ERROR(record)
+    try:
+        arr = TD_ERROR(record)
+    except KeyError:
+        return float('nan')
     return _windowed_mean(arr, 0.5, 1.0)
 
 
@@ -1125,7 +1689,10 @@ def td_within_batch_var_late(record: Mapping[str, object]) -> float:
     happened to be in the batch) and *not* a re-encoding of the
     outcome (reads `td_error_within_batch_std`, disjoint from
     `mc_return`)."""
-    arr = TD_WB_STD(record)
+    try:
+        arr = TD_WB_STD(record)
+    except KeyError:
+        return float('nan')
     return _windowed_mean(arr, 0.5, 1.0)
 
 
@@ -1136,8 +1703,11 @@ def greedy_match_late(record: Mapping[str, object]) -> float:
     large match ⇒ DDQN's mechanism is *inactive* on this cell
     (the two estimators agree, so vanilla and DDQN reduce to
     each other)."""
-    online = ONLINE_ARGMAX(record)
-    target = TARGET_ARGMAX(record)
+    try:
+        online = ONLINE_ARGMAX(record)
+        target = TARGET_ARGMAX(record)
+    except KeyError:
+        return float('nan')
     match = (online == target).astype(np.float64)
     return _windowed_mean(match, 0.5, 1.0)
 
@@ -1274,7 +1844,10 @@ def fill_ratio_late(
     redundancy / reads-set fingerprinting."""
     if capacity <= 0:
         return float('nan')
-    arr = BUF_SIZE(record)
+    try:
+        arr = BUF_SIZE(record)
+    except KeyError:
+        return float('nan')
     return _windowed_mean(arr / float(capacity), 0.5, 1.0)
 
 
@@ -1527,21 +2100,25 @@ def outcome_native(record: Mapping[str, object]) -> float:
 # is rebound under a stable substrate name so existing bridges
 # referencing 'mc_return_first_quarter' etc. resolve unchanged.
 
-mc_return_first_quarter = register_as(
-    mean_window(
-        reduce_axis(MC_RETURN, axis=-1, op='mean'),
+mc_return_first_quarter = Measurable(
+    fn=mean_window(
+        reduce_axis(from_key('mc_return'), axis=-1, op='mean'),
         0.0, 0.25,
-    ),
+    ).fn,
     name='mc_return_first_quarter',
+    reads=('mc_return',),
 )
+register(mc_return_first_quarter)
 
-mc_return_last_quarter = register_as(
-    mean_window(
-        reduce_axis(MC_RETURN, axis=-1, op='mean'),
+mc_return_last_quarter = Measurable(
+    fn=mean_window(
+        reduce_axis(from_key('mc_return'), axis=-1, op='mean'),
         0.75, 1.0,
-    ),
+    ).fn,
     name='mc_return_last_quarter',
+    reads=('mc_return',),
 )
+register(mc_return_last_quarter)
 
 
 # Raw-return per-burst reduction, mirroring
@@ -1664,25 +2241,35 @@ def per_step_max_bias(record: Mapping[str, object]) -> float:
 # Each rebound under a stable name for back-compat with bridges
 # that reference these by string source/target.
 
-mc_variance_per_burst = register_as(
-    reduce_axis(MC_RETURN, axis=-1, op='var'),
+mc_variance_per_burst = Measurable(
+    fn=reduce_axis(from_key('mc_return'), axis=-1, op='var').fn,
     name='mc_variance_per_burst',
+    reads=('mc_return',),
 )
+register(mc_variance_per_burst)
 
-log_mc_variance_per_burst = register_as(
-    log_safe(reduce_axis(MC_RETURN, axis=-1, op='var')),
+log_mc_variance_per_burst = Measurable(
+    fn=log_safe(
+        reduce_axis(from_key('mc_return'), axis=-1, op='var'),
+    ).fn,
     name='log_mc_variance_per_burst',
+    reads=('mc_return',),
 )
+register(log_mc_variance_per_burst)
 
-mc_cv_per_burst = register_as(
-    cv_safe(MC_RETURN, axis=-1),
+mc_cv_per_burst = Measurable(
+    fn=cv_safe(from_key('mc_return'), axis=-1).fn,
     name='mc_cv_per_burst',
+    reads=('mc_return',),
 )
+register(mc_cv_per_burst)
 
-log_mc_cv_per_burst = register_as(
-    log_safe(cv_safe(MC_RETURN, axis=-1)),
+log_mc_cv_per_burst = Measurable(
+    fn=log_safe(cv_safe(from_key('mc_return'), axis=-1)).fn,
     name='log_mc_cv_per_burst',
+    reads=('mc_return',),
 )
+register(log_mc_cv_per_burst)
 
 
 # ============ Lifted from cell_runner._eval_outcomes (Phase 3A) ============
@@ -2484,6 +3071,27 @@ def dqn_default_measurables() -> tuple[
         # beating ep_len + chain + |A| in the post-fix panel
         # (`findings_fa_coherence_bias`).
         q_autocorr_late,
+        # Inter-state α: lag-1 autocorr of Q along actual eval
+        # TRAJECTORY states (vs `q_autocorr_late` which is
+        # training-batch-mean autocorr — see docstring distinction).
+        # This is the proper empirical proxy for FA spatial
+        # coherence under the unified-degeneracy theory's axis (i).
+        q_trajectory_autocorr_late,
+        # Note: `q_autocorr_per_burst` (vector — shape (n_bursts,))
+        # is registered but NOT in this scalar tuple. cell_runner
+        # persists scalar `MeasurementLeaf` only; vector-shaped
+        # returns would stringify via `_leaf_scalar` and break
+        # ingestion. Bridges request it through `transitive_reads`
+        # at the cache-build path which handles vectors. Same
+        # pattern as `mean_per_state_cumulative_bias_per_burst` and
+        # `mc_return_raw_per_burst_mean`.
+        # Env-level reward informativeness proxy: fraction of
+        # active eval-trajectory steps with |r| > eps, recovered
+        # from `mc_return_from_step` + γ. Vanilla-arm value per env
+        # is the theory's `uninf-r` axis (third leg of the
+        # FA-degeneracy conjunction in
+        # `findings_unified_degeneracy_theory.md`).
+        reward_nonzero_frac,
         # FA intra-state α — gradient-overlap probe at a sampled
         # batch state per training step. THE theoretical intra-
         # state α that distinguishes shared-trunk MLP (α > 0) from
@@ -2491,6 +3099,18 @@ def dqn_default_measurables() -> tuple[
         # per-step trace column by `train_phase`'s gradient-
         # overlap probe block.
         q_action_grad_overlap_late,
+        # FA-coherence INTER-state α (theory's axis i). Cosine
+        # overlap of per-action gradients at paired (s, s') from
+        # the replay batch's (obs, next_obs). The proper
+        # architectural measurement; see docstring distinction
+        # from intra-state α and trajectory autocorr.
+        q_inter_state_grad_overlap_late,
+        # Cross-action bootstrap rate: fraction of training
+        # transitions where argmax_a' Q_online(s', a') differs from
+        # the action taken at s. THE regime where DDQN's argmax-
+        # target decoupling has leverage. Conjunct with γ→1 + r→0
+        # to operationalize "when DDQN should help" hypothesis.
+        bootstrap_action_mismatch_late,
         # Raw (undiscounted) eval-return scalar — γ-invariant
         # policy-quality metric for cross-γ / cross-env bridges.
         # Reconstructs per-(burst, episode) raw return inline from
