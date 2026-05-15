@@ -44,6 +44,28 @@ from corroborate_rl.dqn.types import (
 )
 from corroborate_rl.env_catalogue import StateHash
 
+
+# ============ Gradient-probe runtime flag ============
+#
+# Module-level flag controlling whether `train_phase` runs the
+# Jacobian-based intra/inter-state α probes. Default True
+# (backwards compat). Set False to skip them — the probes scale
+# O(n_actions × n_params) per training step and become the
+# dominant compute on |A|≥12 envs.
+#
+# `yaml_sweep.dispatch_sweep` mutates this from the YAML field
+# `gradient_probes: bool` before the sweep loop runs. Mutating
+# AFTER the sweep starts is racy (the train_phase is jit-compiled
+# on first call); set BEFORE any cell runs.
+#
+# Schema-stable: even when disabled, train_phase emits the
+# diagnostic keys as NaN so the persisted parquet schema is
+# invariant. Downstream `q_action_grad_overlap_late` /
+# `q_inter_state_grad_overlap_late` measurables NaN-propagate;
+# bridges using them as `is_finite()` scope predicates drop
+# disabled-probe cells cleanly.
+_GRADIENT_PROBES_ENABLED: bool = True
+
 if TYPE_CHECKING:
     # Stub-only Protocol — see env_catalogue.py for the rationale.
     from gymnax import Env
@@ -194,6 +216,22 @@ def train_phase(
     # information without the materialised tensors.
     online_q_full = q_network(state.online_params, batch.next_obs)
     target_q_full = q_network(state.target_params, batch.next_obs)
+
+    # ============ Cross-action bootstrap rate ============
+    # Per-step fraction over the batch where the bootstrap target's
+    # argmax (a' = argmax_a' Q_online(s', a')) differs from the
+    # action actually taken at s (a = batch.action). When this rate
+    # is high, the TD update is CROSS-ACTION: Q(s, a) is pulled
+    # toward Q(s', a') with a' ≠ a — exactly where DDQN's argmax-
+    # target decoupling has leverage. When the rate is near zero,
+    # bootstrap stays within-action and DDQN's decorrelation has no
+    # work to do.
+    online_argmax_at_sp = jnp.argmax(online_q_full, axis=-1)  # (batch,)
+    bootstrap_action_mismatch = jnp.mean(
+        (online_argmax_at_sp != batch.action).astype(jnp.float32)
+    )
+    # ============ end cross-action bootstrap rate ============
+
     # Per-step Q reductions for the measurable layer (q_mean, q_max,
     # q_std, q_gap-via-(top-second)).
     online_q_per_action = online_q_full.mean(axis=0)  # avg over batch
@@ -245,6 +283,71 @@ def train_phase(
         compute_loss, has_aux=True,
     )(state.online_params)
 
+    # ============ Gradient-overlap probes (intra-α + inter-α) ============
+    #
+    # Disabled when `_GRADIENT_PROBES_ENABLED` is False — set
+    # via YAML `gradient_probes: false` (yaml_sweep mutates the
+    # module flag at sweep launch). Probes scale O(n_actions ×
+    # n_params) per training step — ~2× cell time on |A|=12 envs.
+    # Disable for sweeps that don't consume gradient-overlap
+    # measurables.
+    #
+    # Schema-stable: even when disabled, emits diagnostic keys as
+    # NaN so downstream parquet shape is invariant. Measurables
+    # `q_action_grad_overlap_late` / `q_inter_state_grad_overlap_late`
+    # NaN-propagate; bridges with `is_finite()` scope filters drop
+    # disabled-probe cells cleanly.
+    if not _GRADIENT_PROBES_ENABLED:
+        q_action_grad_overlap = jnp.asarray(jnp.nan, dtype=jnp.float32)
+        q_inter_state_grad_overlap = jnp.asarray(jnp.nan, dtype=jnp.float32)
+    else:
+        # `findings_fa_depth_within_env`: gradient overlap between
+        # action heads when the FA's trunk is updated.
+        #   - Linear FA `Q(s,a) = W_a · obs + b_a`: rows of W are
+        #     independent across actions → α = 0 by construction.
+        #   - Shared-trunk MLP: trunk gradients flow into all action
+        #     heads → α > 0; specifically, α ≈ (heads · heads^T) /
+        #     ||heads||² for the trunk-output layer.
+        #   - Tabular Q: per-(s,a) entry is independent → α = 0.
+        probe_obs = batch.obs[0]  # single state per training step
+
+        def _q_for_grad(p: Params) -> jax.Array:
+            return q_network(p, probe_obs)  # shape (n_actions,)
+
+        J_pytree = jax.jacrev(_q_for_grad)(state.online_params)
+        J_leaves = jax.tree_util.tree_leaves(J_pytree)
+        J_flat = jnp.concatenate(
+            [x.reshape(x.shape[0], -1) for x in J_leaves], axis=1,
+        )  # (n_actions, n_params_total)
+        norms = jnp.sqrt(jnp.sum(J_flat ** 2, axis=1) + 1e-12)
+        J_unit = J_flat / norms[:, None]
+        gram = J_unit @ J_unit.T
+        n_a = gram.shape[0]
+        mask = 1.0 - jnp.eye(n_a)
+        off_diag_count = jnp.maximum(jnp.sum(mask), 1.0)
+        q_action_grad_overlap = jnp.sum(gram * mask) / off_diag_count
+
+        # Inter-state α: cosine of ∂Q(s, a)/∂θ vs ∂Q(s', a)/∂θ at
+        # paired (batch.obs[0], batch.next_obs[0]) for the SAME action,
+        # averaged across actions. Closed-form: linear FA gives
+        # cos(obs, obs') (env-dynamics-driven); deep MLP gradient
+        # depends on trunk + ReLU gating.
+        probe_obs_sp = batch.next_obs[0]
+
+        def _q_at_sp(p: Params) -> jax.Array:
+            return q_network(p, probe_obs_sp)
+
+        J_sp_pytree = jax.jacrev(_q_at_sp)(state.online_params)
+        J_sp_leaves = jax.tree_util.tree_leaves(J_sp_pytree)
+        J_sp_flat = jnp.concatenate(
+            [x.reshape(x.shape[0], -1) for x in J_sp_leaves], axis=1,
+        )
+        norms_sp = jnp.sqrt(jnp.sum(J_sp_flat ** 2, axis=1) + 1e-12)
+        J_sp_unit = J_sp_flat / norms_sp[:, None]
+        per_action_overlap = jnp.sum(J_unit * J_sp_unit, axis=1)
+        q_inter_state_grad_overlap = per_action_overlap.mean()
+    # ============ end gradient-overlap probes ============
+
     updates, new_opt_state = optimizer.update(
         grads, state.opt_state, state.online_params,
     )
@@ -274,6 +377,25 @@ def train_phase(
         # post-hoc to recover the population-level Pearson r over
         # all (s', a) pairs across training.
         'pearson_stats': pearson_stats,
+        # FA-coherence intra-state α probe (theoretical Hasselt-
+        # bound assumption: iid action noise). Single-state Jacobian
+        # cosine overlap across action heads. See block above and
+        # `findings_fa_depth_within_env` for theory ↔ measurement.
+        'q_action_grad_overlap_per_step': q_action_grad_overlap,
+        # FA-coherence INTER-state α probe (theory's axis i). Cosine
+        # overlap of ∂Q(s, a)/∂θ vs ∂Q(s', a)/∂θ at paired
+        # (s, s') = (batch.obs[0], batch.next_obs[0]). The proper
+        # spatial-smoothness measurement — independent of env-state-
+        # trajectory smoothness (which confounds the eval-trajectory
+        # autocorr `q_trajectory_autocorr_late`).
+        'q_inter_state_grad_overlap_per_step': q_inter_state_grad_overlap,
+        # Cross-action bootstrap rate: per-step fraction over batch
+        # where argmax_a' Q_online(s', a') ≠ action_taken_at_s.
+        # When high, the TD bootstrap pulls Q(s, a) toward
+        # Q(s', a') for a' ≠ a — the regime where DDQN's argmax-
+        # target decoupling has maximum leverage. When low, the
+        # bootstrap is within-action and DDQN's mechanism is dormant.
+        'bootstrap_action_mismatch_per_step': bootstrap_action_mismatch,
     }
     return new_state, diagnostics
 
