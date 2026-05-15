@@ -8,6 +8,7 @@ auto-populated and corroborate-specific extensions
 family."""
 from __future__ import annotations
 
+import jax
 import jax.numpy as jnp
 
 from corroborate_rl.env_catalogue import (
@@ -61,12 +62,13 @@ def test_classic_control_envs_have_state_hash() -> None:
         assert spec.state_hash_cardinality > 0, name
 
 
-def test_minatar_envs_have_image_bucket_hash() -> None:
-    """Image-obs minatar envs now ship a random-projection
-    `image_bucket_hash` (added 2026-05-15 for state-conditional
+def test_minatar_envs_have_image_downsample_hash() -> None:
+    """Image-obs minatar envs ship a Go-Explore-style
+    `image_downsample_hash` (added 2026-05-15 for state-conditional
     argmax measurables — see memory
     `project_image_state_hash_for_substrate`). Cardinality
-    256 = 4 proj-dims × 4 buckets per dim."""
+    512 = 2^9 = (2 buckets/dim) ^ (pool_size² = 9 features under
+    `channel_agg='sum'`)."""
     for name in (
         'Asterix-MinAtar', 'Breakout-MinAtar',
         'Freeway-MinAtar', 'SpaceInvaders-MinAtar',
@@ -173,6 +175,52 @@ def test_cartpole_state_hash_callable_on_real_obs() -> None:
     obs = jnp.array([0.1, 0.0, 0.05, 0.0])
     h = int(spec.state_hash(obs))
     assert 0 <= h < (spec.state_hash_cardinality or 0)
+
+
+# ============ image_downsample_hash factory ============
+
+def test_image_downsample_hash_in_range_and_jittable() -> None:
+    """Closed-form: 2×2×2 buckets per spatial dim on a 10×10×4
+    obs, sum-aggregated → cardinality `2^9 = 512`. Hash of a valid
+    obs is in `[0, 512)`. The function must be jit-compatible."""
+    from corroborate_rl.env_catalogue import image_downsample_hash
+
+    state_hash, cardinality = image_downsample_hash(
+        (10, 10, 4), pool_size=3, n_buckets_per_dim=2,
+        channel_agg='sum', feature_low=0.0, feature_high=2.0,
+    )
+    assert cardinality == 512
+
+    obs_zero = jnp.zeros((10, 10, 4), dtype=jnp.float32)
+    obs_one = jnp.ones((10, 10, 4), dtype=jnp.float32)
+    h_zero = int(state_hash(obs_zero))
+    h_one = int(state_hash(obs_one))
+    assert 0 <= h_zero < cardinality
+    assert 0 <= h_one < cardinality
+    # All-zero pools to 0 features → bucket 0 for every feature → hash 0.
+    assert h_zero == 0
+    # All-one obs saturates all 9 pool cells (feature ≫ feature_high) →
+    # max bucket index everywhere → hash = sum(weights) = 2^9 − 1 = 511.
+    assert h_one == 511
+
+    jitted = jax.jit(state_hash)
+    assert int(jitted(obs_zero)) == 0
+    assert int(jitted(obs_one)) == 511
+
+
+def test_image_downsample_hash_distinct_obs_distinct_buckets() -> None:
+    """An obs with activity only in the top-left pool-cell differs
+    from one with activity only in the bottom-right pool-cell. The
+    spatial-pool mask must route them to different feature buckets."""
+    from corroborate_rl.env_catalogue import image_downsample_hash
+
+    state_hash, _ = image_downsample_hash(
+        (10, 10, 4), pool_size=3, n_buckets_per_dim=2,
+        channel_agg='sum', feature_low=0.0, feature_high=2.0,
+    )
+    top_left = jnp.zeros((10, 10, 4), dtype=jnp.float32).at[0, 0, 0].set(5.0)
+    bot_right = jnp.zeros((10, 10, 4), dtype=jnp.float32).at[9, 9, 0].set(5.0)
+    assert int(state_hash(top_left)) != int(state_hash(bot_right))
 
 
 # ============ Lookup helpers ============

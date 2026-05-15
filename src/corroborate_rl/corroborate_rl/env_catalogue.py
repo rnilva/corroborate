@@ -1103,24 +1103,26 @@ def image_downsample_hash(
         n_buckets_per_dim, jnp.arange(n_features, dtype=jnp.int32),
     )
     span = float(feature_high_f - feature_low)
+    # h_idx/w_idx depend only on (H, W, pool_size) — all static. Precompute
+    # a (pool_size, pool_size, H, W) one-hot pooling mask in numpy at factory
+    # time so the jit'd hash is a single einsum, not 100 dynamic-index
+    # `.at[].add()` scatters.
+    h_idx_np = np.minimum(np.arange(H) * pool_size // H, pool_size - 1)
+    w_idx_np = np.minimum(np.arange(W) * pool_size // W, pool_size - 1)
+    pool_mask_np = np.zeros((pool_size, pool_size, H, W), dtype=np.float32)
+    for i in range(H):
+        for j in range(W):
+            pool_mask_np[h_idx_np[i], w_idx_np[j], i, j] = 1.0
+    pool_mask = jnp.asarray(pool_mask_np)
 
     def state_hash(obs: jax.Array) -> jax.Array:
         x = obs.astype(jnp.float32)
         # Ensure (H, W, C) — add channel dim if missing
         if x.ndim == 2:
             x = x[..., None]
-        # Spatial pool: chunk H, W into pool_size groups, sum within group.
-        # Use indexing-based sum (jax-friendly, fixed shape).
-        h_idx = jnp.minimum(
-            jnp.arange(H, dtype=jnp.int32) * pool_size // H, pool_size - 1,
-        )
-        w_idx = jnp.minimum(
-            jnp.arange(W, dtype=jnp.int32) * pool_size // W, pool_size - 1,
-        )
-        pooled = jnp.zeros((pool_size, pool_size, x.shape[-1]), dtype=jnp.float32)
-        for i in range(H):
-            for j in range(W):
-                pooled = pooled.at[h_idx[i], w_idx[j]].add(x[i, j])
+        # Spatial pool via the precomputed static mask:
+        # (pool_size, pool_size, H, W) × (H, W, C) → (pool_size, pool_size, C)
+        pooled = jnp.einsum('pqHW,HWc->pqc', pool_mask, x)
         # Channel aggregation
         if channel_agg == 'sum':
             features = pooled.sum(axis=-1).flatten()

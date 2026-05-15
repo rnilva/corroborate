@@ -47,6 +47,10 @@ from experiments.findings.ddqn.cross_env_mediation import (
     ddqn_outcome_scales_with_jens_reduction__xenv_loo_robust,
 )
 from experiments.findings.ddqn.q_shape_mediation import BRIDGES as _Q_SHAPE
+from experiments.findings.ddqn.q_suppression_translation import (
+    ddqn_q_suppression_tracks_outcome_translation__xenv,
+    ddqn_q_suppression_tracks_outcome_translation__xenv_loo_robust,
+)
 from experiments.findings.ddqn.within_env import BRIDGES as _WITHIN_ENV
 
 
@@ -67,6 +71,8 @@ BRIDGES = (
     ddqn_outcome_scales_with_jens_reduction__xenv,
     ddqn_outcome_scales_with_jens_reduction__xenv_loo_robust,
     ddqn_outcome_scales_with_bg_frac_active__xenv,
+    ddqn_q_suppression_tracks_outcome_translation__xenv,
+    ddqn_q_suppression_tracks_outcome_translation__xenv_loo_robust,
 )
 
 
@@ -109,18 +115,32 @@ REQUIRED_MEASURABLES: tuple[str, ...] = (
     # `findings_bg_not_causally_manipulated_at_canonical`.
     'bootstrap_gap_frac_active',
     'bootstrap_gap_q99',
-    # State-conditional argmax measurables (2026-05-15) — for
-    # policy-channel mechanism identification per memory
-    # `findings_ddqn_mediator_heterogeneity`. Distinguishes
-    # state-differentiated policy (high MI) from Q-flat noise
-    # (low MI + high marginal entropy). Requires state_hash on
-    # each env: bucket_hash (vector envs) or image_downsample_hash
-    # (MinAtar). image envs without registered state_hash return
-    # NaN (sentinel).
+    # State-conditional argmax measurables (2026-05-15).
+    # Distinguishes state-differentiated policy (high MI) from
+    # Q-flat noise (low MI + high marginal entropy) — algorithm-
+    # agnostic decomposition, currently consumed by the DDQN
+    # policy-channel claim per memory
+    # `findings_ddqn_mediator_heterogeneity`. Requires state_hash
+    # on each env: `bucket_hash` (vector envs) or
+    # `image_downsample_hash` (MinAtar). Envs without a registered
+    # state_hash return NaN (sentinel).
     'state_conditional_argmax_entropy_late',
     'mutual_info_state_argmax_late',
     # Env-level disc-raw alignment for outcome-translation scope.
     # Where r > 0.7, raw vs disc outcome are interchangeable; below
     # that, the choice matters and bridges must commit.
     'env_disc_raw_alignment',
+    # Per-burst-window outcome measurables (2026-05-15) — additions
+    # to the canonical `eval_best_burst_mean` family. `best-burst`
+    # picks a single peak; `full_auc` integrates the trajectory;
+    # `late_burst` reads the convergence-region endpoint. The
+    # MetaMaze canonical-verify + Acrobot k=16 findings showed
+    # best-burst structurally hides translation in slow-converging
+    # / late-collapse-prone envs (memories
+    # `findings_metamaze_translates_after_eval_power` and
+    # `findings_per_burst_acrobot_k_sweep`).
+    'eval_full_auc_mean',
+    'eval_full_auc_raw_mean',
+    'eval_late_burst_mean',
+    'eval_late_burst_raw_mean',
 )

@@ -468,49 +468,33 @@ def ddqn_bootstrap_gap_late(record: Mapping[str, object]) -> float:
     return _windowed_mean(gap, 0.5, 1.0)
 
 
-@measurable(reads=('online_argmax_per_step', 'state_hash'))
-def state_conditional_argmax_entropy_late(
-    record: Mapping[str, object],
+def _weighted_conditional_entropy(
+    a_late: np.ndarray, s_late: np.ndarray, unique_s: np.ndarray,
 ) -> float:
-    """State-conditional Shannon entropy of `online_argmax_per_step`
-    over the late 50% of training.
+    """Plug-in estimate of `H(argmax | state) = Σ_s (n_s/N) ·
+    H(argmax | state=s)` over the full empirical distribution.
 
-    `H(argmax | state)` = E_s [ -Σ_a p(a|s) log p(a|s) ] where
-    p(a|s) is the empirical fraction of late-training steps in
-    state-bucket s where the online network's argmax was action a.
+    All buckets contribute: singleton buckets (n_s=1) have a point-mass
+    conditional → `H = 0`, which is the correct plug-in value (not
+    a degenerate skip). Normalising by full `N = Σ n_s` keeps the
+    support consistent with the marginal `H(argmax)`, which makes
+    `H(X|Y) ≤ H(X)` hold by construction (chain rule of entropy).
 
-    Distinguishes (a) state-differentiated policy from (b) Q-flat
-    indecisive policy that marginal `argmax_entropy_late` confounds:
-      (a) state-differentiated: H(argmax | state) ≈ 0 (decisive
-          per state, just different argmax per state region) →
-          high mutual_info(state, argmax) → STATE-CONDITIONAL
-          structure.
-      (b) Q-flat: H(argmax | state) ≈ H(argmax) ≈ log(|A|) →
-          mutual_info ≈ 0 → no state-conditional information.
+    Like all plug-in entropy estimators this is biased downward in
+    the small-sample regime — when state-bucket cardinality is
+    high relative to N, conditional entropy reads lower than the
+    underlying truth. Miller-Madow `(K-1)/(2N)` would correct, but
+    we keep the unadjusted form: the bias direction is consistent
+    across arms, so cross-arm MI deltas are unaffected.
 
-    Returns NaN when state_hash is missing or all-zero (image envs
-    pre-state-hash-registration), or fewer than 2 distinct
-    (state, argmax) pairs are observed."""
-    argmax_arr = record.get('online_argmax_per_step')
-    state_arr = record.get('state_hash')
-    if argmax_arr is None or state_arr is None:
-        return float('nan')
-    a = np.asarray(argmax_arr, dtype=np.int64).flatten()
-    s = np.asarray(state_arr, dtype=np.int64).flatten()
-    n = min(a.size, s.size)
-    if n < 4:
-        return float('nan')
-    half = n // 2
-    a_late, s_late = a[half:], s[half:]
-    unique_s = np.unique(s_late)
-    if unique_s.size < 2:
-        return float('nan')
+    NaN only when every bucket has zero observations (impossible
+    if `unique_s` was derived from `s_late`)."""
     total_h = 0.0
     total_w = 0
     for s_val in unique_s:
         mask = s_late == s_val
         n_s = int(mask.sum())
-        if n_s < 2:
+        if n_s == 0:
             continue
         a_in_s = a_late[mask]
         counts = np.bincount(a_in_s)
@@ -528,28 +512,27 @@ def state_conditional_argmax_entropy_late(
 
 
 @measurable(reads=('online_argmax_per_step', 'state_hash'))
-def mutual_info_state_argmax_late(
+def state_conditional_argmax_entropy_late(
     record: Mapping[str, object],
 ) -> float:
-    """Mutual information I(state; argmax) over the late 50% of
-    training. `I = H(argmax) − H(argmax | state)` — measures how
-    much of the action-distribution variance is explained by
-    state-bucket identity.
+    """State-conditional Shannon entropy of `online_argmax_per_step`
+    over the late 50% of training.
 
-    High MI: DDQN's policy is STATE-DIFFERENTIATED (different
-    state regions yield different argmaxes; marginal action
-    diversity is structured by state).
-    Low MI + high marginal entropy: Q-FLAT noise (same near-
-    uniform action distribution regardless of state).
-    Low MI + low marginal entropy: COLLAPSED policy (same action
-    everywhere).
+    `H(argmax | state)` = E_s [ -Σ_a p(a|s) log p(a|s) ] where
+    p(a|s) is the empirical fraction of late-training steps in
+    state-bucket `s` where the online network's argmax was action
+    `a`. Paired with `mutual_info_state_argmax_late` (and the
+    marginal `argmax_entropy_late`) to decompose action-distribution
+    structure: marginal entropy alone cannot distinguish a
+    decisive-per-state policy with action-diversity ACROSS states
+    from a Q-flat policy with action-diversity WITHIN states.
 
-    The (a) vs (b) disambiguation primary measurable for the
-    policy-structure-channel claim per memory
-    `findings_ddqn_mediator_heterogeneity`.
+    Plug-in estimator over all observed state buckets — see
+    `_weighted_conditional_entropy` for the finite-sample bias note.
 
-    Returns NaN under same degenerate cases as
-    `state_conditional_argmax_entropy_late`."""
+    Returns NaN when `state_hash` is missing (env-side hash not
+    registered) or fewer than 2 distinct state buckets are
+    observed in the late slice."""
     argmax_arr = record.get('online_argmax_per_step')
     state_arr = record.get('state_hash')
     if argmax_arr is None or state_arr is None:
@@ -564,35 +547,61 @@ def mutual_info_state_argmax_late(
     unique_s = np.unique(s_late)
     if unique_s.size < 2:
         return float('nan')
-    # Marginal H(argmax)
+    return _weighted_conditional_entropy(a_late, s_late, unique_s)
+
+
+@measurable(reads=('online_argmax_per_step', 'state_hash'))
+def mutual_info_state_argmax_late(
+    record: Mapping[str, object],
+) -> float:
+    """Mutual information `I(state; argmax)` over the late 50% of
+    training. `I = H(argmax) − H(argmax | state)` — the share of
+    action-distribution structure explained by state-bucket identity.
+
+    Joint reading with marginal `argmax_entropy_late` distinguishes:
+      - **State-differentiated policy**: high MI, marginal H is
+        whatever the action mix needs to be. Different state regions
+        yield different argmaxes — structure is in the conditioning.
+      - **Q-flat / noisy policy**: MI ≈ 0, marginal H ≈ log|A|.
+        Near-uniform action distribution INDEPENDENT of state.
+      - **Collapsed policy**: MI ≈ 0, marginal H ≈ 0. Same action
+        everywhere.
+
+    Algorithm-agnostic: any algorithm whose online network emits a
+    per-step argmax stream can be analysed with this. The hash
+    (env-side) provides the state-bucket; the measurable reads the
+    per-step argmax stream that the cell runner already records.
+
+    Plug-in estimator. `MI ≥ 0` holds by construction (chain rule
+    on matched supports); the `max(0, ...)` clip absorbs fp rounding
+    only. Returns NaN under the same degenerate cases as
+    `state_conditional_argmax_entropy_late`, or when the marginal
+    action distribution collapses to a single action (MI undefined)."""
+    argmax_arr = record.get('online_argmax_per_step')
+    state_arr = record.get('state_hash')
+    if argmax_arr is None or state_arr is None:
+        return float('nan')
+    a = np.asarray(argmax_arr, dtype=np.int64).flatten()
+    s = np.asarray(state_arr, dtype=np.int64).flatten()
+    n = min(a.size, s.size)
+    if n < 4:
+        return float('nan')
+    half = n // 2
+    a_late, s_late = a[half:], s[half:]
+    unique_s = np.unique(s_late)
+    if unique_s.size < 2:
+        return float('nan')
     counts_a = np.bincount(a_late)
     nz_a = counts_a[counts_a > 0]
     if nz_a.size <= 1:
         return float('nan')
     p_a = nz_a.astype(np.float64) / float(nz_a.sum())
     h_a = float(-np.sum(p_a * np.log(p_a)))
-    # Conditional H(argmax | state)
-    total_h = 0.0
-    total_w = 0
-    for s_val in unique_s:
-        mask = s_late == s_val
-        n_s = int(mask.sum())
-        if n_s < 2:
-            continue
-        a_in_s = a_late[mask]
-        counts = np.bincount(a_in_s)
-        nonzero = counts[counts > 0]
-        if nonzero.size <= 1:
-            h_s = 0.0
-        else:
-            p = nonzero.astype(np.float64) / float(nonzero.sum())
-            h_s = float(-np.sum(p * np.log(p)))
-        total_h += h_s * n_s
-        total_w += n_s
-    if total_w == 0:
+    h_cond = _weighted_conditional_entropy(a_late, s_late, unique_s)
+    if not np.isfinite(h_cond):
         return float('nan')
-    h_cond = total_h / total_w
-    return h_a - h_cond
+    # I ≥ 0 in theory; clip to absorb fp-rounding negatives.
+    return max(0.0, h_a - h_cond)
 
 
 @measurable(reads=('online_argmax_per_step',))
@@ -1229,6 +1238,103 @@ def q_autocorr_per_burst(
         if math.isfinite(r):
             out[i] = r
     return out
+
+
+def _per_burst_q_and_mc(
+    record: Mapping[str, object],
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]] | None:
+    """Build per-burst (q_window_mean, mc_burst_mean) for the cross-
+    lagged scalar measurables. Returns None when shapes are
+    inconsistent or n_bursts < 3 (lag-1 Pearson needs ≥3 pairs)."""
+    try:
+        q_arr = ONLINE_MAX_Q(record)
+        mc_arr = MC_RETURN(record)
+    except KeyError:
+        return None
+    if q_arr.ndim != 1 or mc_arr.ndim != 2:
+        return None
+    n_bursts = int(mc_arr.shape[0])
+    if n_bursts < 3 or q_arr.shape[0] < n_bursts * 2:
+        return None
+    # Equal-length training-step windows ending at each burst's eval
+    # boundary (same windowing as `q_autocorr_per_burst`).
+    chunks = np.array_split(q_arr, n_bursts)
+    q_per_burst = np.fromiter(
+        (chunk.mean() for chunk in chunks),
+        dtype=np.float64, count=n_bursts,
+    )
+    mc_per_burst = mc_arr.mean(axis=1).astype(np.float64)
+    return q_per_burst, mc_per_burst
+
+
+def _lag1_pearson(
+    x_prev: npt.NDArray[np.float64], y_curr: npt.NDArray[np.float64],
+) -> float:
+    """Lag-1 Pearson of `corr(y[1:], x[:-1])`. Returns NaN when
+    either series has zero variance."""
+    if x_prev.size < 2 or y_curr.size < 2:
+        return float('nan')
+    if np.std(x_prev) == 0 or np.std(y_curr) == 0:
+        return float('nan')
+    r = float(np.corrcoef(x_prev, y_curr)[0, 1])
+    return r if math.isfinite(r) else float('nan')
+
+
+@measurable(reads=('online_max_q_per_step', 'mc_return'))
+def q_burst_autoregression_lag1(record: Mapping[str, object]) -> float:
+    """Lag-1 Pearson autocorrelation of per-burst window-mean Q,
+    one scalar per cell. Captures Q's burst-to-burst persistence.
+
+    Why this matters: in the FR γ=0.999 vanilla Q-explosion regime
+    (`findings_q_explosion_direct_evidence`), Q drifts via self-
+    bootstrap with a1 ≈ 0.82 — Q[t] ≈ 0.82·Q[t-1] + drift. High
+    autoregression + observational decoupling (see
+    `q_burst_to_mc_cross_lag1`) is the dynamical signature of the
+    pure-overestimation-only regime. Acrobot-style cells have low
+    autoregression (Q converges fast, ≈ 0.1-0.2).
+
+    Distinct from `q_autocorr_late` (lag-1 across consecutive
+    training steps WITHIN a burst — measures FA spatial coherence)
+    and `q_autocorr_per_burst` (per-burst vector of the same). This
+    one is across-burst — captures the cross-burst dynamical
+    persistence of the windowed Q signal."""
+    pair = _per_burst_q_and_mc(record)
+    if pair is None:
+        return float('nan')
+    q_per_burst, _ = pair
+    return _lag1_pearson(q_per_burst[:-1], q_per_burst[1:])
+
+
+@measurable(reads=('online_max_q_per_step', 'mc_return'))
+def q_burst_to_mc_cross_lag1(record: Mapping[str, object]) -> float:
+    """Lag-1 cross-correlation `corr(Q_burst[t-1], MC_burst[t])` —
+    does past Q predict future MC? One scalar per cell.
+
+    The 'Q leads MC' marker. In healthy Q-learning (Acrobot DDQN,
+    z=+3.01 per `findings_q_explosion_direct_evidence`'s lagged
+    analysis), Q-estimate improvements precede policy quality
+    improvements with a positive lag. In the FR vanilla Q-
+    explosion regime, this is ≈ 0 (z=-0.73 NS) — Q grows
+    internally with no propagation to policy."""
+    pair = _per_burst_q_and_mc(record)
+    if pair is None:
+        return float('nan')
+    q_per_burst, mc_per_burst = pair
+    return _lag1_pearson(q_per_burst[:-1], mc_per_burst[1:])
+
+
+@measurable(reads=('online_max_q_per_step', 'mc_return'))
+def mc_burst_to_q_cross_lag1(record: Mapping[str, object]) -> float:
+    """Lag-1 cross-correlation `corr(MC_burst[t-1], Q_burst[t])` —
+    does past observation inform current Q? The complement of
+    `q_burst_to_mc_cross_lag1`. Healthy Q-learning has both
+    directions positive (bidirectional Q↔MC coupling, Acrobot
+    DDQN pattern: MC→Q z=+2.97)."""
+    pair = _per_burst_q_and_mc(record)
+    if pair is None:
+        return float('nan')
+    q_per_burst, mc_per_burst = pair
+    return _lag1_pearson(mc_per_burst[:-1], q_per_burst[1:])
 
 
 @measurable(reads=(
@@ -2421,6 +2527,78 @@ def eval_best_burst_raw_mean(record: Mapping[str, object]) -> float:
     return float(raw.mean(axis=1).max())
 
 
+@measurable(name='eval_full_auc_mean', reads=('mc_return',))
+def eval_full_auc_mean(record: Mapping[str, object]) -> float:
+    """`mean(mc_return)` over all bursts × episodes. The
+    full-trajectory AUC of the training curve — captures
+    integrated DDQN benefit across early-learning AND
+    late-stability windows, while `eval_best_burst_mean` only
+    captures a single peak.
+
+    The honest estimator for slow-converging envs where DDQN's
+    benefit accumulates across bursts (MetaMaze γ=0.99 d=+0.71
+    via AUC vs d=+0.30 via best-burst; memory
+    `findings_metamaze_translates_after_eval_power`)."""
+    if 'mc_return' not in record:
+        return float('nan')
+    mc = np.asarray(record['mc_return'], dtype=np.float64)
+    if mc.ndim != 2 or mc.size == 0:
+        return float('nan')
+    return float(mc.mean())
+
+
+@measurable(
+    name='eval_full_auc_raw_mean',
+    reads=('mc_return_from_step', 'episode_length', 'gamma'),
+)
+def eval_full_auc_raw_mean(record: Mapping[str, object]) -> float:
+    """Undiscounted counterpart of `eval_full_auc_mean`:
+    `mean(mc_return_raw)` over all bursts × episodes. γ-invariant
+    integrated AUC for cross-γ / cross-env comparisons."""
+    raw = _compute_mc_return_raw(record)
+    if raw.ndim != 2 or raw.size == 0:
+        return float('nan')
+    return float(raw.mean())
+
+
+@measurable(name='eval_late_burst_mean', reads=('mc_return',))
+def eval_late_burst_mean(record: Mapping[str, object]) -> float:
+    """Mean of `mc_return` over the LAST 30% of bursts (rounded
+    up; minimum 1 burst). Convergence-region policy quality —
+    captures DDQN's late-stability benefit (vanilla can drift down
+    after peaking; this metric reads the trained-agent endpoint
+    rather than the pre-collapse peak that `eval_best_burst_mean`
+    picks).
+
+    Pair with `eval_best_burst_mean`: a large best > late gap
+    flags vanilla's late-burst Q-collapse (Acrobot k=16 pattern,
+    memory `findings_per_burst_acrobot_k_sweep`)."""
+    if 'mc_return' not in record:
+        return float('nan')
+    mc = np.asarray(record['mc_return'], dtype=np.float64)
+    if mc.ndim != 2 or mc.size == 0:
+        return float('nan')
+    n_bursts = mc.shape[0]
+    n_late = max(1, (n_bursts + 2) // 3)  # ceil(n/3)
+    return float(mc[-n_late:, :].mean())
+
+
+@measurable(
+    name='eval_late_burst_raw_mean',
+    reads=('mc_return_from_step', 'episode_length', 'gamma'),
+)
+def eval_late_burst_raw_mean(record: Mapping[str, object]) -> float:
+    """Undiscounted counterpart of `eval_late_burst_mean`:
+    last-30%-bursts mean of `mc_return_raw`. γ-invariant
+    convergence-region policy quality."""
+    raw = _compute_mc_return_raw(record)
+    if raw.ndim != 2 or raw.size == 0:
+        return float('nan')
+    n_bursts = raw.shape[0]
+    n_late = max(1, (n_bursts + 2) // 3)
+    return float(raw[-n_late:, :].mean())
+
+
 @measurable(
     name='eval_best_burst_step',
     reads=('mc_return', 'eval_step_index'),
@@ -3111,6 +3289,19 @@ def dqn_default_measurables() -> tuple[
         # target decoupling has leverage. Conjunct with γ→1 + r→0
         # to operationalize "when DDQN should help" hypothesis.
         bootstrap_action_mismatch_late,
+        # Cross-burst lagged dynamics. The Q-explosion dynamical
+        # signature (`findings_q_explosion_direct_evidence`):
+        # - High Q autoregression (a1 ≈ 0.82 in FR γ=0.999 VAN)
+        #   means Q drifts via self-bootstrap.
+        # - Null Q→MC cross-lag (z=-0.73 NS in FR VAN) means Q is
+        #   decoupled from observations — pure overestimation.
+        # - Bidirectional Q↔MC coupling (Acrobot DDQN, z=+3 both
+        #   ways) marks healthy mech-link translation.
+        # Pair these with `reward_nonzero_frac` as substrate-level
+        # regime classifiers.
+        q_burst_autoregression_lag1,
+        q_burst_to_mc_cross_lag1,
+        mc_burst_to_q_cross_lag1,
         # Raw (undiscounted) eval-return scalar — γ-invariant
         # policy-quality metric for cross-γ / cross-env bridges.
         # Reconstructs per-(burst, episode) raw return inline from
