@@ -40,11 +40,33 @@ pairs and populates the per-hypothesis cache (default at
 Three derived measurables (`shaping_kind`, `fa_kind`, `k_eff`)
 live in `_measurables.py` — they compute from existing
 substrate fields at ingest time. Scope predicates reference
-these endogenous env-properties, not corpus-source labels."""
+these endogenous env-properties, not corpus-source labels.
+
+**Pending follow-up — reward polarity is implicit**: the
+canonical `findings_ddqn_reward_sign_conditional` shows DDQN's
+clip wedge slightly HURTS in Type-2-dominated negative-polarity
+envs (Acrobot, MountainCar). This is implicit in the current
+C2/C3 testbeds (MC is dense-negative, FR-shaped is positive-
+via-potential) but not factored as a fourth condition. A future
+extension would split C3 by reward-polarity to test the clip-
+wedge sign-conditional. Deferred."""
 from __future__ import annotations
+
+import polars as pl
 
 import corroborate.analyses  # pyright: ignore[reportUnusedImport]  # populate registry
 import corroborate_rl.dqn.measurables  # pyright: ignore[reportUnusedImport]  # populate measurable registry
+
+
+# Defensive scope: γ ∈ {0.99, 0.999} (the two regimes this
+# hypothesis tests) AND non-bsuite envs (canonical-ddqn
+# convention — bsuite envs are diagnostic probes, not chain
+# MDPs). AND-combined into every bridge's scope by the runner
+# (`getattr(h, 'MODULE_SCOPE', None)`).
+MODULE_SCOPE = (
+    ~pl.col('env_name').str.ends_with('-bsuite')
+    & pl.col('gamma').is_in([0.99, 0.999])
+)
 
 # Register hypothesis-local derived measurables (shaping_kind,
 # fa_kind, k_eff) so `--ingest` computes them at cache-build.
@@ -76,6 +98,16 @@ BRIDGES = (
 
 FINDINGS = (
     finding_three_conditions,
+)
+
+
+__all__ = (
+    'BRIDGES',
+    'CLAIM',
+    'FINDINGS',
+    'INTERVENTION',
+    'MODULE_SCOPE',
+    'REQUIRED_MEASURABLES',
 )
 
 

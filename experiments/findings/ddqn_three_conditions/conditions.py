@@ -67,7 +67,7 @@ from experiments.findings.ddqn_three_conditions._arms import INTERVENTION
 def condition_1__q_bias_exists_under_high_gamma_and_K(
     stratified_arm_diff_pooled: StratifiedArmDiffPooledResult,
     *,
-    stratify_by: tuple[str, ...] = ('action_duplicate_k',),
+    stratify_by: tuple[str, ...] = ('k_eff',),
     min_strata: int = 3,
     min_vanilla_predictor: float = 0.5,
     per_stratum_d_threshold: float = -0.5,
@@ -75,12 +75,16 @@ def condition_1__q_bias_exists_under_high_gamma_and_K(
     """**Condition 1**: Q-bias exists at FR γ=0.999 AND its
     magnitude scales with K (action multiplier).
 
-    Per-k stratum: each cell's Cohen's d on `jensen_gap` should
-    be substantially negative (`d ≤ per_stratum_d_threshold`).
-    HELD when ALL admitted strata pass the threshold.
+    Stratified by `k_eff = native_actions × action_duplicate_k`
+    — the Hasselt-theorem-relevant action count. On FR (native=4),
+    k_eff ∈ {4, 8, 12, 16} across the action_duplicate_k=1-4
+    cells. Per-stratum Cohen's d on `jensen_gap` should be
+    substantially negative across all k_eff strata.
 
-    Empirical pre-author (FR γ=0.999, k=1-4): Δ_jens grows from
-    -8.7 to -41.2; per-stratum Cohen's d is large-negative."""
+    Empirical readings live in
+    `findings_two_types_of_bias` (memory). Direction.INVERSE
+    encodes the Hasselt prediction; `predicted_direction='a_lt_b'`
+    means treatment-arm jens < baseline-arm jens (DDQN reduces)."""
     del stratify_by, min_vanilla_predictor
     if stratified_arm_diff_pooled.n_strata < min_strata:
         return Verdict.POWER_INSUFFICIENT, None
@@ -119,7 +123,7 @@ def condition_1__q_bias_exists_under_high_gamma_and_K(
 @claim_bridge(
     source=INTERVENTION,
     target='jensen_gap',
-    direction=Direction.INVERSE,
+    direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
     scope=(
         (pl.col('env_name') == 'MountainCar-v0')
@@ -147,8 +151,17 @@ def condition_2__fa_capacity_caps_type_1_in_linear_fa(
     AND no stratum's CI fully excludes zero in the predicted-
     inverse direction.
 
-    Empirical pre-author (MC γ=0.999 linear FA, n=60): Cohen's d
-    is near zero — DDQN's mechanism dormant under FA cap."""
+    Empirical readings in `findings_two_types_of_bias` (memory).
+
+    **Verdict override**: `min_strata=1` and the per-stratum
+    CI-inspection body intentionally bypass the primitive's
+    DL-pooled POWER_INSUFFICIENT gate. The hypothesis tests a
+    single-env intervention (MC γ=0.999 linear FA), and the
+    within-stratum n=60 per arm gives adequate per-stratum
+    Cohen's d precision. The DL-pooled verdict from
+    `stratified_arm_diff_pooled` is not consumed; if you need
+    multi-env pooling, fork this bridge with a different
+    `min_strata`."""
     del stratify_by, min_vanilla_predictor
     if stratified_arm_diff_pooled.n_strata < min_strata:
         return Verdict.POWER_INSUFFICIENT, None
@@ -222,12 +235,18 @@ def condition_3__shaping_decouples_mech_from_outcome(
 
     HELD when shaped stratum's |cohen_d| < null_d_threshold OR
     cohen_d is significantly negative (DDQN's clip wedge hurts).
+    Empirical readings in
+    `findings_shaping_decouples_bias_from_outcome` (memory).
 
-    Empirical pre-author (FR γ=0.999 shaped, n=30): Δ_out =
-    -0.49 (DDQN's mech still fires on Q but outcome decouples).
-    Caveat: outcome unit is shaped-reward scale (telescoped via
-    potential), not directly comparable to unshaped. The
-    substantive claim is sign-flip / NULL under shaping."""
+    **Outcome unit caveat**: target is the discounted return
+    `eval_best_burst_mean`, NOT `eval_best_burst_raw_mean`
+    (canonical-ddqn convention per `findings_units_bug`). The
+    raw is trace-dependent and not materialized in the
+    `fa_degeneracy_shaped_only` corpus's cache yet. At γ=0.999
+    on FR-misc the discount factor amounts to ~10% magnitude
+    bias (γ^100 ≈ 0.905); direction is preserved. Switch to
+    raw when the shaped corpus's traces are restored + the
+    raw measurable is backfilled."""
     del stratify_by, min_vanilla_predictor
     if stratified_arm_diff_pooled.n_strata < min_strata:
         return Verdict.POWER_INSUFFICIENT, None
