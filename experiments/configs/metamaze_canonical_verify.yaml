@@ -1,0 +1,58 @@
+name: metamaze_canonical_verify
+out_dir: experiments/data/metamaze_canonical_verify
+env_binding: shared
+archive_remote: s3://corroborate-archive/metamaze_canonical_verify
+
+# Formal verification of MetaMaze's DDQN-translation pattern.
+# Postfix vs probe corpora disagreed at γ=0.999 (d=-0.11 vs
+# +0.49) due to chunk_size + GPU non-determinism + framework-sha
+# drift. Pooled estimate was d≈+0.29 (γ=0.999) and +0.23
+# (γ=0.99), both with wide CI.
+#
+# Bumped n_episodes=20 to tighten MetaMaze's intrinsic eval-task
+# distribution variance (n_episodes=5 was the dominant noise
+# source per the chunk-size determinism audit). n_seeds=60 per
+# γ × 2 arms × 2 γs = 240 cells total.
+#
+# Cost on GPU: chunk_size=30 → 2 chunks per arm per γ → 8 cells
+# total × ~9 min/cell ≈ 72 min wall.
+
+envs:
+  - {name: MetaMaze-misc, n_seeds: 60, chunk_size: 30}
+
+defaults:
+  total_steps: 1000000
+  eval_every:  100000
+  n_episodes:  20
+  gamma:       0.99
+  sync_period: 100
+  replay:
+    class: Replay
+    capacity: 50000
+    batch_size: 32
+  optimizer:
+    fn: warmed_update
+    inner: {fn: adam, lr: 0.0001}
+    warmup_steps: 100
+  q_network:
+    class: MLP
+    hidden: [64, 64]
+
+interventions:
+  - name: g099
+    base: {gamma: 0.99}
+    arms:
+      - []
+      - - slot_path: bootstrap
+          replacement:
+            fn: bootstrap
+            greedification: {fn: double_greedify}
+
+  - name: g0999
+    base: {gamma: 0.999}
+    arms:
+      - []
+      - - slot_path: bootstrap
+          replacement:
+            fn: bootstrap
+            greedification: {fn: double_greedify}

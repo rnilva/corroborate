@@ -220,6 +220,54 @@ def test_sweep_envelope_fields(sweep: DQNSweep) -> None:
     )
     assert sweep.archive_remote is None
     assert sweep.env_binding == 'shared'
+    # `gradient_probes` defaults to True when not specified — the
+    # expectile_3way YAML omits the field. Disabling is opt-in.
+    assert sweep.gradient_probes is True
+
+
+# ---------- gradient_probes field parsing ----------
+
+def _minimal_sweep_yaml(extra: str = '') -> str:
+    """Smallest valid sweep YAML — for focused field-parsing tests
+    that shouldn't depend on the expectile_3way fixture."""
+    return (
+        'name: probe_test\n'
+        'out_dir: /tmp/probe_test\n'
+        'envs:\n'
+        '  - name: Catch-bsuite\n'
+        '    n_seeds: 1\n'
+        'interventions:\n'
+        '  - name: van\n'
+        '    base: {}\n'
+        f'{extra}'
+    )
+
+
+def test_gradient_probes_explicit_false(
+    tmp_path: Path, reg: Registry,
+) -> None:
+    yaml_path = tmp_path / 'probe_off.yaml'
+    yaml_path.write_text(_minimal_sweep_yaml('gradient_probes: false\n'))
+    s = load_sweep(yaml_path, reg=reg)
+    assert s.gradient_probes is False
+
+
+def test_gradient_probes_explicit_true(
+    tmp_path: Path, reg: Registry,
+) -> None:
+    yaml_path = tmp_path / 'probe_on.yaml'
+    yaml_path.write_text(_minimal_sweep_yaml('gradient_probes: true\n'))
+    s = load_sweep(yaml_path, reg=reg)
+    assert s.gradient_probes is True
+
+
+def test_gradient_probes_rejects_non_bool(
+    tmp_path: Path, reg: Registry,
+) -> None:
+    yaml_path = tmp_path / 'probe_bad.yaml'
+    yaml_path.write_text(_minimal_sweep_yaml('gradient_probes: yes_please\n'))
+    with pytest.raises(TypeError, match='gradient_probes must be bool'):
+        load_sweep(yaml_path, reg=reg)
 
 
 def test_sweep_envs_tuple_matches(sweep: DQNSweep) -> None:

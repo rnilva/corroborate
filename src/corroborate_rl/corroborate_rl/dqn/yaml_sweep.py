@@ -59,6 +59,12 @@ class DQNSweep:
     intervention_templates: tuple[Mapping[str, object], ...]
     env_binding: EnvBinding
     archive_remote: str | None = None
+    # Jacobian-based intra/inter-state α probes in `train_phase`.
+    # Default True (backwards compat). YAML field
+    # `gradient_probes: false` disables; `dispatch_sweep` mutates
+    # `corroborate_rl.dqn.phases._GRADIENT_PROBES_ENABLED` before
+    # the sweep loop. Disabling drops ~2× wall-clock on |A|≥12.
+    gradient_probes: bool = True
 
     def build_interventions(
         self,
@@ -111,6 +117,7 @@ def _build_sweep(node: Mapping[str, object]) -> DQNSweep:
     env_binding = _require_env_binding(node)
     archive_remote = _build_archive_remote(node)
     defaults = _build_defaults(node)
+    gradient_probes = _build_gradient_probes(node)
     interventions_raw = node.get('interventions')
     if not isinstance(interventions_raw, list):
         raise TypeError(
@@ -126,6 +133,7 @@ def _build_sweep(node: Mapping[str, object]) -> DQNSweep:
         name=name, out_dir=out_dir, envs=envs,
         intervention_templates=templates,
         env_binding=env_binding, archive_remote=archive_remote,
+        gradient_probes=gradient_probes,
     )
 
 
@@ -169,6 +177,19 @@ def _build_archive_remote(node: Mapping[str, object]) -> str | None:
         f'sweep.archive_remote must be string|null; got '
         f'{type(v).__name__}',
     )
+
+
+def _build_gradient_probes(node: Mapping[str, object]) -> bool:
+    v = node.get('gradient_probes', True)
+    # `isinstance(v, bool)` accepts True/False; `int` would let 0/1
+    # through (Python bool subclasses int) — separately bool-check
+    # to keep the schema strict.
+    if not isinstance(v, bool):
+        raise TypeError(
+            f'sweep.gradient_probes must be bool; got '
+            f'{type(v).__name__}',
+        )
+    return v
 
 
 def _build_defaults(
@@ -437,6 +458,7 @@ def dispatch_sweep(sweep: DQNSweep) -> tuple[Path, Path]:
 
     from corroborate.corpus.persistence import stream_concat_parquets
     from corroborate.runner.sweep import run_intervention
+    from corroborate_rl.dqn import phases
     from corroborate_rl.dqn.collect import _chunks
     from corroborate_rl.dqn.dqn import dqn
     from corroborate_rl.dqn.measurables import dqn_default_measurables
@@ -447,6 +469,13 @@ def dispatch_sweep(sweep: DQNSweep) -> tuple[Path, Path]:
         get as get_env_spec, wrappers_canonical_str,
     )
     from corroborate_rl.sweep import DQNRunner
+
+    # Wire YAML `gradient_probes:` field into the module flag
+    # `train_phase` reads. Must happen BEFORE any cell runs — JAX
+    # jit-compiles `train_phase` on first call and the conditional
+    # branch is baked into the traced graph. Mutating after start
+    # is racy and only affects fresh-jit calls.
+    phases._GRADIENT_PROBES_ENABLED = sweep.gradient_probes
 
     reg = default_dqn_registry()
     if sweep.env_binding == 'shared':

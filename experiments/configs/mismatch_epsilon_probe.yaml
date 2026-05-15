@@ -1,0 +1,78 @@
+name: mismatch_epsilon_probe
+out_dir: experiments/probes/mismatch_epsilon_probe
+env_binding: shared
+archive_remote: s3://corroborate-archive/mismatch_epsilon_probe
+
+# Within-env ε-manipulation test of whether
+# `bootstrap_action_mismatch_late` is a CAUSAL driver of DDQN's
+# outcome benefit, or just an env-structural indicator that
+# correlates with the same env features that drive Δ_out.
+#
+# Falsification of mismatch's causal role: if mismatch is a
+# driver, varying ε within the same env should shift mismatch
+# AND shift Δ_out together. If only an indicator, ε will move
+# mismatch without moving Δ_out.
+#
+# Env: FourRooms γ=0.999 DEEP MLP[64,64] — the textbook DDQN
+# regime where mismatch is already highest (0.72) and Δ_out is
+# moderate (+0.71). Holding env+FA+γ fixed maximally controls
+# structural confounds.
+#
+# 3 ε schedules × 2 arms × 30 seeds × 200k steps = 6 cells.
+# GPU wall ~30 min on chunk_size=30.
+
+envs:
+  - {name: FourRooms-misc, n_seeds: 30, chunk_size: 30}
+
+defaults:
+  total_steps: 200000
+  eval_every:  20000
+  n_episodes:  5
+  gamma:       0.999
+  sync_period: 100
+  replay:
+    class: Replay
+    capacity: 50000
+    batch_size: 32
+  optimizer:
+    fn: warmed_update
+    inner: {fn: adam, lr: 0.0001}
+    warmup_steps: 100
+  q_network:
+    class: MLP
+    hidden: [64, 64]
+
+interventions:
+  # Low exploration → tight argmax-following → LOW mismatch.
+  - name: eps_low
+    base:
+      action_select:
+        fn: epsilon_greedy
+        schedule: {fn: linear_epsilon, eps_init: 0.1, eps_final: 0.01, anneal_steps: 10000}
+    arms:
+      - []
+      - - slot_path: bootstrap
+          replacement: {fn: bootstrap, greedification: {fn: double_greedify}}
+
+  # Canonical: ε from 1.0 → 0.05, anneal 10k steps. Matches the
+  # 1M MetaMaze/MC sweeps. MID mismatch reference point.
+  - name: eps_canonical
+    base:
+      action_select:
+        fn: epsilon_greedy
+        schedule: {fn: linear_epsilon, eps_init: 1.0, eps_final: 0.05, anneal_steps: 10000}
+    arms:
+      - []
+      - - slot_path: bootstrap
+          replacement: {fn: bootstrap, greedification: {fn: double_greedify}}
+
+  # High exploration → action_taken often random → HIGH mismatch.
+  - name: eps_high
+    base:
+      action_select:
+        fn: epsilon_greedy
+        schedule: {fn: linear_epsilon, eps_init: 1.0, eps_final: 0.5, anneal_steps: 10000}
+    arms:
+      - []
+      - - slot_path: bootstrap
+          replacement: {fn: bootstrap, greedification: {fn: double_greedify}}
