@@ -30,6 +30,25 @@ _FRAMEWORK_EXCLUDED_KEYS: frozenset[str] = frozenset({
 })
 
 
+def non_leaf_names(
+    exogenous_keys: frozenset[str] = frozenset(),
+) -> frozenset[str]:
+    """The union of name-sets a leaf filter must exclude:
+    framework-legacy keys (`intervention_name`), substrate-declared
+    exogenous keys, and every registered measurable name. Shared
+    by `leaf_signature` (which filters `measurements` dicts) and
+    `catalogue.arm_leaves` (which filters parquet column lists).
+
+    Computed lazily via `measurables.registered_names()` so newly-
+    imported substrate measurables get picked up."""
+    from corroborate.measurables import registered_names
+    return (
+        _FRAMEWORK_EXCLUDED_KEYS
+        | exogenous_keys
+        | frozenset(registered_names())
+    )
+
+
 def leaf_signature(
     measurements: Mapping[str, MeasurementLeaf],
     *,
@@ -55,12 +74,7 @@ def leaf_signature(
     topology paths. "Leaf" rather than "HP": a leaf-regime kwarg
     is a non-recursive scalar claim of the configured composition,
     observed at composition time."""
-    from corroborate.measurables import registered_names
-    excluded = (
-        _FRAMEWORK_EXCLUDED_KEYS
-        | exogenous_keys
-        | frozenset(registered_names())
-    )
+    excluded = non_leaf_names(exogenous_keys)
     return tuple(sorted(
         (k, str(v))
         for k, v in measurements.items()
@@ -68,4 +82,4 @@ def leaf_signature(
     ))
 
 
-__all__ = ['leaf_signature']
+__all__ = ['leaf_signature', 'non_leaf_names']

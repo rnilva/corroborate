@@ -405,7 +405,7 @@ def test_arm_leaves_sweep_arm_surfaces_multiple_values(tmp_path: Path) -> None:
     assert profiles[0].leaves['gamma'] == ('0.99', '0.995', '0.999')
 
     long_df = catalogue.arm_leaves_to_polars_long(profiles)
-    assert long_df.filter(pl.col('leaf_path') == 'gamma').height == 3
+    assert long_df.filter(pl.col('path') == 'gamma').height == 3
 
 
 # ============ 13. arm_leaves: bundle-placeholder pruning ============
@@ -535,9 +535,11 @@ def test_arm_leaves_excludes_exogenous_and_framework(tmp_path: Path) -> None:
     profiles = catalogue.arm_leaves(data_root)
     assert len(profiles) == 1
     p = profiles[0]
-    assert p.envs == ('CartPole-v1',)
+    # env_name and seed are substrate-exogenous → on `exogenous`, not `leaves`.
+    assert p.exogenous.get('env_name') == ('CartPole-v1',)
     assert 'env_name' not in p.leaves
     assert 'seed' not in p.leaves
+    assert p.exogenous.get('seed') == ('0', '1')
     assert 'gamma' in p.leaves
 
 

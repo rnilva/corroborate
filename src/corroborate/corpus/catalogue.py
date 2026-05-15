@@ -482,15 +482,18 @@ def to_polars(rows: Sequence[CorpusInventoryRow]) -> pl.DataFrame:
 @dataclass(frozen=True, slots=True)
 class ArmLeafProfile:
     """Per-(corpus, arm) configurational fingerprint, sourced from
-    `runs.parquet` columns. `leaves` maps each leaf path to a sorted
-    tuple of distinct values observed across that arm's cells —
-    length 1 for constant leaves; longer for sweep arms (each
-    distinct value, stringified)."""
-    corpus: str                              # parent/name addr
+    `runs.parquet` columns. Both `leaves` and `exogenous` map a
+    path → sorted tuple of distinct stringified values observed
+    across that arm's cells (length 1 for constant; longer for
+    sweep). The split mirrors the framework's vocabulary:
+    `leaves` are composition-time scalars (RL calls them HPs);
+    `exogenous` are substrate-declared `Annotated[T, Exogenous]`
+    kwargs (env_name, seed, …)."""
+    corpus: str                                # parent/name addr
     arm: str
     n_cells: int
-    envs: tuple[str, ...]                    # sorted distinct env_name values
     leaves: Mapping[str, tuple[str, ...]]
+    exogenous: Mapping[str, tuple[str, ...]]
 
 
 # Framework-typed RunRow fields. Single source of truth lives in
@@ -519,38 +522,47 @@ _DEFAULT_EXOGENOUS_PREFIXES: tuple[str, ...] = (
 )
 
 
-def _leaf_columns(
+def _partition_columns(
     columns: Sequence[str],
     dtypes: Mapping[str, pl.DataType],
     *,
     exogenous_keys: frozenset[str],
     exogenous_prefixes: tuple[str, ...],
-    measurable_names: frozenset[str],
-) -> tuple[str, ...]:
-    """Filter a parquet's column list down to leaf columns —
-    excluding framework-typed RunRow fields, registered measurables,
-    substrate-declared exogenous keys, trajectory (List-dtype)
-    columns, and bundle-placeholder columns (the `optimizer`
-    column when `optimizer.inner.lr` exists)."""
-    candidates: list[str] = []
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Partition a parquet's column list into (leaves, exogenous).
+
+    Excludes framework-typed RunRow fields (single source of truth:
+    `_RUN_ROW_TYPED_FIELDS` in schema.py); registered measurables
+    + legacy keys (via `leaf_signature.non_leaf_names`); trajectory
+    (List-dtype) columns; and bundle-placeholder columns (the
+    `optimizer` column when `optimizer.inner.lr` exists)."""
+    from corroborate.corpus.leaf_signature import non_leaf_names
+    excluded = non_leaf_names() | _RUNROW_FIELDS
+    leaves_out: list[str] = []
+    exogenous_out: list[str] = []
     for c in columns:
-        if c in _RUNROW_FIELDS or c in exogenous_keys or c in measurable_names:
-            continue
-        if any(c.startswith(p) for p in exogenous_prefixes):
+        if c in excluded:
             continue
         dt = dtypes.get(c)
         if isinstance(dt, pl.List):
             continue
-        candidates.append(c)
-    # Drop bundle placeholders: column X where X+'.' is a prefix of
-    # some other candidate.
-    cand_set = set(candidates)
-    final: list[str] = []
-    for c in candidates:
-        if any(other.startswith(c + '.') for other in cand_set):
-            continue
-        final.append(c)
-    return tuple(sorted(final))
+        if c in exogenous_keys or any(c.startswith(p) for p in exogenous_prefixes):
+            exogenous_out.append(c)
+        else:
+            leaves_out.append(c)
+    # Bundle-placeholder prune: drop scalar column X when X+'.' is
+    # a prefix of another candidate (e.g. `optimizer` shadowed by
+    # `optimizer.inner.lr`).
+    def _drop_placeholders(names: list[str]) -> list[str]:
+        name_set = set(names)
+        return [
+            c for c in names
+            if not any(o.startswith(c + '.') for o in name_set)
+        ]
+    return (
+        tuple(sorted(_drop_placeholders(leaves_out))),
+        tuple(sorted(_drop_placeholders(exogenous_out))),
+    )
 
 
 def _scalar_to_str(v: object) -> str | None:
@@ -588,36 +600,34 @@ def _sort_leaf_values(values: set[str]) -> tuple[str, ...]:
 def arm_leaves(
     data_root: Path | Sequence[Path],
     *,
-    include_misc: bool = False,
     exogenous_keys: frozenset[str] | None = None,
     exogenous_prefixes: tuple[str, ...] | None = None,
 ) -> tuple[ArmLeafProfile, ...]:
     """Per-(corpus, arm) leaf profile across local corpora.
 
     Reads `runs.parquet` for every catalogue row whose `local` slice
-    has parquets on disk (CLOUD_AND_LOCAL / LOCAL_ONLY / etc.).
-    Returns one `ArmLeafProfile` per distinct (corpus, arm_key) pair.
-    The `leaves` mapping carries the distinct stringified values
-    each leaf takes across that arm's cells: length-1 for constant
-    arms, longer for sweeps.
+    has parquets on disk. Returns one `ArmLeafProfile` per distinct
+    (corpus, arm_key) pair. Each profile carries:
 
-    Reads are column-projected for speed: only `arm_key`,
-    `env_name`, and leaf candidates are decoded.
+    - `leaves`: composition-time scalars (one entry per leaf path,
+      sorted tuple of distinct values across cells)
+    - `exogenous`: substrate-declared `Annotated[T, Exogenous]`
+      kwargs (env_name, seed, etc.) — same shape
+
+    Reads are column-projected for speed: only `arm_key`, leaf
+    candidates, and exogenous columns are decoded.
 
     `exogenous_keys` and `exogenous_prefixes` let the caller
     override the default RL substrate's exogenous-key set
     (cf. CLAUDE.md: substrate declares exogenous via
     `Annotated[T, Exogenous]`; framework doesn't hardcode).
     """
-    from corroborate.measurables import registered_names
     ex_keys = (exogenous_keys
                if exogenous_keys is not None else _DEFAULT_EXOGENOUS_KEYS)
     ex_pre = (exogenous_prefixes
               if exogenous_prefixes is not None else _DEFAULT_EXOGENOUS_PREFIXES)
-    measurables = frozenset(registered_names())
 
-    rows = catalogue(data_root, remote_prefix=None,
-                     include_misc=include_misc)
+    rows = catalogue(data_root, remote_prefix=None)
     profiles: list[ArmLeafProfile] = []
     for r in rows:
         if r.local is None or r.local.parquet_count == 0:
@@ -632,11 +642,10 @@ def arm_leaves(
             continue
         col_names = schema.names()
         dtypes: dict[str, pl.DataType] = dict(zip(col_names, schema.dtypes()))
-        leaves = _leaf_columns(
+        leaves, exogenous_cols = _partition_columns(
             col_names, dtypes,
             exogenous_keys=ex_keys,
             exogenous_prefixes=ex_pre,
-            measurable_names=measurables,
         )
         # Legacy parquets may not carry `arm_key` (RunRow defaults
         # to 'baseline'; pre-arm-key corpora omit the column entirely
@@ -646,9 +655,8 @@ def arm_leaves(
         wanted: list[str] = []
         if has_arm_key:
             wanted.append('arm_key')
-        if 'env_name' in col_names:
-            wanted.append('env_name')
         wanted.extend(leaves)
+        wanted.extend(exogenous_cols)
         try:
             df = pl.read_parquet(path, columns=wanted)
         except (pl.exceptions.ComputeError,
@@ -663,61 +671,68 @@ def arm_leaves(
         arm_values = cast(list[object], df['arm_key'].to_list())
         for arm in sorted({str(a) for a in arm_values if a is not None}):
             sub = df.filter(pl.col('arm_key') == arm)
-            if 'env_name' in sub.columns:
-                env_values = cast(list[object], sub['env_name'].to_list())
-                envs = tuple(sorted(
-                    {str(e) for e in env_values if e is not None}
-                ))
-            else:
-                envs = ()
-            leaf_map: dict[str, tuple[str, ...]] = {}
-            for leaf in leaves:
-                leaf_vals = cast(list[object], sub[leaf].to_list())
-                vals = {
-                    s for s in (_scalar_to_str(v) for v in leaf_vals)
-                    if s is not None
-                }
-                if vals:
-                    leaf_map[leaf] = _sort_leaf_values(vals)
+            leaf_map = _collect_value_map(sub, leaves)
+            exo_map = _collect_value_map(sub, exogenous_cols)
             profiles.append(ArmLeafProfile(
                 corpus=addr, arm=arm, n_cells=sub.height,
-                envs=envs, leaves=leaf_map,
+                leaves=leaf_map, exogenous=exo_map,
             ))
     profiles.sort(key=lambda p: (p.corpus, p.arm))
     return tuple(profiles)
 
 
+def _collect_value_map(
+    df: pl.DataFrame, paths: Sequence[str],
+) -> Mapping[str, tuple[str, ...]]:
+    """For each column in `paths`, collect distinct stringified
+    values into a sorted tuple. Empty entries (all None) are
+    skipped."""
+    out: dict[str, tuple[str, ...]] = {}
+    for path in paths:
+        vals_raw = cast(list[object], df[path].to_list())
+        vals = {
+            s for s in (_scalar_to_str(v) for v in vals_raw)
+            if s is not None
+        }
+        if vals:
+            out[path] = _sort_leaf_values(vals)
+    return out
+
+
 _LEAVES_LONG_SCHEMA: Mapping[str, pl.DataType | type[pl.DataType]] = {
-    'corpus':     pl.String,
-    'arm':        pl.String,
-    'n_cells':    pl.UInt32,
-    'envs':       pl.String,
-    'leaf_path':  pl.String,
-    'leaf_value': pl.String,
-    'n_values':   pl.UInt32,
+    'corpus': pl.String,
+    'arm':    pl.String,
+    'kind':   pl.String,   # 'leaf' or 'exogenous'
+    'path':   pl.String,
+    'value':  pl.String,
 }
 
 
 def arm_leaves_to_polars_long(
     profiles: Sequence[ArmLeafProfile],
 ) -> pl.DataFrame:
-    """One row per `(corpus, arm, leaf_path, leaf_value)` —
-    sweep arms produce multiple rows for the same leaf. Suitable
-    for filter / aggregate queries: `df.filter(pl.col('leaf_path')
-    == 'gamma')` etc."""
+    """One row per `(corpus, arm, path, value)` — sweep arms
+    produce multiple rows for the same path. `kind` discriminates
+    leaf vs exogenous. `n_cells` is intentionally NOT denormalized
+    here (it's per-(corpus, arm), not per-(arm, path, value)); call
+    `arm_leaves_to_polars_wide` or read it off the profile list
+    directly when you need it.
+
+    Suitable for filter / aggregate queries:
+    `df.filter(pl.col('path') == 'gamma')` etc."""
     flat: list[dict[str, object]] = []
     for p in profiles:
-        envs = ','.join(p.envs)
-        for leaf_path, values in sorted(p.leaves.items()):
+        for path, values in sorted(p.leaves.items()):
             for v in values:
                 flat.append({
-                    'corpus':     p.corpus,
-                    'arm':        p.arm,
-                    'n_cells':    p.n_cells,
-                    'envs':       envs,
-                    'leaf_path':  leaf_path,
-                    'leaf_value': v,
-                    'n_values':   len(values),
+                    'corpus': p.corpus, 'arm': p.arm,
+                    'kind': 'leaf', 'path': path, 'value': v,
+                })
+        for path, values in sorted(p.exogenous.items()):
+            for v in values:
+                flat.append({
+                    'corpus': p.corpus, 'arm': p.arm,
+                    'kind': 'exogenous', 'path': path, 'value': v,
                 })
     return pl.DataFrame(flat, schema=_LEAVES_LONG_SCHEMA)
 
@@ -725,39 +740,42 @@ def arm_leaves_to_polars_long(
 def arm_leaves_to_polars_wide(
     profiles: Sequence[ArmLeafProfile],
 ) -> pl.DataFrame:
-    """One row per `(corpus, arm)` with each leaf as its own
-    column. Sweep leaves collapse to `'MULTI:[v1,v2,...]'` strings.
-    Sparse — many nulls when leaves are corpus-specific. Useful
-    for at-a-glance scan; long-format is better for queries."""
-    all_leaves: list[str] = []
+    """One row per `(corpus, arm)` with each leaf/exogenous path
+    as its own column. Sweep paths collapse to `'MULTI:[v1,v2,...]'`
+    strings. Sparse — many nulls when paths are corpus-specific.
+    Useful for at-a-glance scan; long-format is better for queries.
+
+    Leaf and exogenous columns share the same flat namespace
+    (substrate convention precludes collision — exogenous keys
+    like `env_name` don't overlap with leaf paths like
+    `optimizer.inner.lr`)."""
+    all_paths: list[str] = []
     seen: set[str] = set()
     for p in profiles:
-        for leaf in sorted(p.leaves.keys()):
-            if leaf not in seen:
-                seen.add(leaf); all_leaves.append(leaf)
+        for path in sorted(set(p.leaves) | set(p.exogenous)):
+            if path not in seen:
+                seen.add(path); all_paths.append(path)
     flat: list[dict[str, object]] = []
     for p in profiles:
         row: dict[str, object] = {
             'corpus':  p.corpus,
             'arm':     p.arm,
             'n_cells': p.n_cells,
-            'envs':    ','.join(p.envs),
         }
-        for leaf in all_leaves:
-            vals = p.leaves.get(leaf, ())
+        for path in all_paths:
+            vals = p.leaves.get(path) or p.exogenous.get(path) or ()
             if not vals:
-                row[leaf] = None
+                row[path] = None
             elif len(vals) == 1:
-                row[leaf] = vals[0]
+                row[path] = vals[0]
             else:
-                row[leaf] = f'MULTI:[{",".join(vals)}]'
+                row[path] = f'MULTI:[{",".join(vals)}]'
         flat.append(row)
     schema: dict[str, pl.DataType | type[pl.DataType]] = {
         'corpus':  pl.String,
         'arm':     pl.String,
         'n_cells': pl.UInt32,
-        'envs':    pl.String,
     }
-    for leaf in all_leaves:
-        schema[leaf] = pl.String
+    for path in all_paths:
+        schema[path] = pl.String
     return pl.DataFrame(flat, schema=schema)

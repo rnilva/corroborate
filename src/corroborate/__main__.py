@@ -107,17 +107,25 @@ def _cmd_catalogue(args: Mapping[str, object]) -> int:
     leaves_wide = require_bool(args, 'leaves_wide')
 
     if leaves_mode:
-        # Register the RL substrate's @measurable functions so
-        # `registered_names()` filters them out of leaves. Catalogue
-        # itself is substrate-agnostic; the CLI is the canonical
-        # entry point and knows the in-tree substrate.
-        try:
-            import corroborate_rl.dqn.measurables  # noqa: F401
-        except ImportError:
-            pass
-        profiles = _catalogue.arm_leaves(
-            data_roots, include_misc=include_misc,
-        )
+        # Register substrate `@measurable` functions so
+        # `registered_names()` filters them out of leaves.
+        # Caller-provided substrate modules (CLI flag or env
+        # var) take priority; the in-tree RL substrate is a
+        # fallback if neither is specified.
+        substrate_modules = optional_str_list(args, 'substrate_modules')
+        if substrate_modules is None:
+            env_mods = os.environ.get('CORROBORATE_SUBSTRATE_MODULES')
+            substrate_modules = (
+                [m.strip() for m in env_mods.split(',') if m.strip()]
+                if env_mods else ['corroborate_rl.dqn.measurables']
+            )
+        import importlib
+        for mod_name in substrate_modules:
+            try:
+                _ = importlib.import_module(mod_name)
+            except ImportError:
+                pass
+        profiles = _catalogue.arm_leaves(data_roots)
         if as_json:
             payload = [dataclasses.asdict(p) for p in profiles]
             print(json.dumps(payload, default=str, indent=2))
@@ -263,6 +271,16 @@ def _build_parser() -> argparse.ArgumentParser:
         '--leaves-wide', dest='leaves_wide', action='store_true',
         help='with --leaves, render in wide format (each leaf as a '
              'column; sweep arms collapse to `MULTI:[v1,v2,...]`).',
+    )
+    _ = p_cat.add_argument(
+        '--substrate-module', dest='substrate_modules',
+        nargs='*', default=None,
+        help='with --leaves, import these modules to register '
+             'their `@measurable` functions before leaf filtering. '
+             'Falls back to $CORROBORATE_SUBSTRATE_MODULES '
+             '(comma-separated). Default is '
+             '`corroborate_rl.dqn.measurables` (the in-tree RL '
+             'substrate).',
     )
 
     return parser
