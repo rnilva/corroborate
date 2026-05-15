@@ -2,26 +2,34 @@
 
 Subcommands:
 
-  archive  upload sweep parquets to remote storage
-  restore  download archived parquets from remote
-  ls       show what is archived for a sweep
-  purge    delete LOCAL copies of files in the manifest
+  archive    upload sweep parquets to remote storage
+  restore    download archived parquets from remote
+  ls         show what is archived for a sweep
+  purge      delete LOCAL copies of files in the manifest
+  catalogue  inventory all corpora under a data root (local + cloud)
 
-Each subcommand operates on one sweep directory. The remote
-root is pinned in the per-sweep manifest after the first
-`archive`; later `restore`/`ls`/`purge` read it from there.
+The first four operate on one sweep directory. The remote root
+is pinned in the per-sweep manifest after the first `archive`;
+later `restore`/`ls`/`purge` read it from there. `catalogue`
+walks a data root and cross-references with a cloud prefix.
 
-Python API mirror lives in `corroborate.cloud`."""
+Python API mirror lives in `corroborate.cloud` and
+`corroborate.corpus.catalogue`."""
 from __future__ import annotations
 
 import argparse
+import dataclasses
+import json
+import os
 import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
+from corroborate.corpus import catalogue as _catalogue
 from corroborate.corpus import cloud
 from corroborate._internals.argparse import to_mapping
 from corroborate._internals.narrow import (
+    optional_str,
     optional_str_list,
     require_bool,
     require_str,
@@ -87,6 +95,35 @@ def _cmd_purge(args: Mapping[str, object]) -> int:
     return 0
 
 
+def _cmd_catalogue(args: Mapping[str, object]) -> int:
+    data_root = Path(require_str(args, 'data_root')).resolve()
+    cli_prefix = optional_str(args, 'remote_prefix')
+    local_only = require_bool(args, 'local_only')
+    include_misc = require_bool(args, 'include_misc')
+    as_json = require_bool(args, 'json_output')
+
+    if local_only:
+        remote_prefix: str | None = None
+    elif cli_prefix is not None:
+        remote_prefix = cli_prefix
+    else:
+        env_prefix = os.environ.get('CORROBORATE_REMOTE_PREFIX')
+        remote_prefix = env_prefix if env_prefix else None
+
+    rows = _catalogue.catalogue(
+        data_root,
+        remote_prefix=remote_prefix,
+        include_misc=include_misc,
+    )
+    if as_json:
+        payload = [dataclasses.asdict(r) for r in rows]
+        print(json.dumps(payload, default=str, indent=2))
+    else:
+        df = _catalogue.to_polars(rows)
+        print(df)
+    return 0
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog='python -m corroborate',
@@ -148,6 +185,43 @@ def _build_parser() -> argparse.ArgumentParser:
     _ = p_purge.add_argument('sweep_dir')
     _ = p_purge.add_argument('--files', nargs='*', default=None)
 
+    p_cat = sub.add_parser(
+        'catalogue',
+        help='inventory all corpora under a data root, cross-'
+             'referenced against cloud archives under a remote prefix.',
+    )
+    _ = p_cat.add_argument(
+        'data_root',
+        help='directory containing per-sweep corpus dirs '
+             '(e.g. experiments/data).',
+    )
+    cat_remote = p_cat.add_mutually_exclusive_group()
+    _ = cat_remote.add_argument(
+        '--remote-prefix', dest='remote_prefix', default=None,
+        help='fsspec URI prefix for cloud discovery '
+             '(e.g. s3://corroborate-archive/). Falls back to '
+             '$CORROBORATE_REMOTE_PREFIX. Pass --local-only to '
+             'explicitly skip cloud queries.',
+    )
+    _ = cat_remote.add_argument(
+        '--local-only', dest='local_only', action='store_true',
+        help='skip cloud discovery entirely (air-gapped / network-'
+             'down mode). Statuses limited to LOCAL_ONLY / '
+             'STALE_MANIFEST / IN_PROGRESS_SCAFFOLD; STALE_MANIFEST '
+             'in this mode means "local manifest present, cloud '
+             'unverified" rather than "cloud verified absent".',
+    )
+    _ = p_cat.add_argument(
+        '--include-misc', dest='include_misc', action='store_true',
+        help='include kind=misc rows (cache/, _old_logs/, ...). '
+             'Default surfaces only kind=corpus rows.',
+    )
+    _ = p_cat.add_argument(
+        '--json', dest='json_output', action='store_true',
+        help='emit rows as a JSON array (nested local/cloud slices) '
+             'instead of the default polars table.',
+    )
+
     return parser
 
 
@@ -164,6 +238,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _cmd_ls(args)
     if cmd == 'purge':
         return _cmd_purge(args)
+    if cmd == 'catalogue':
+        return _cmd_catalogue(args)
     raise ValueError(f'unknown subcommand: {cmd}')
 
 
