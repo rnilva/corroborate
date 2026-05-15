@@ -111,20 +111,10 @@ __all__ = (
 )
 
 
-# Escape hatch for measurables NOT consumed by any bridge but
-# needed at cache-build time. Per `CACHE_ARCHITECTURE.md` lines
-# 78-98: bridge-consumed measurables (source/target/analysis-
-# reads) auto-enter via `transitive_reads`. REQUIRED_MEASURABLES
-# is the additional declaration for prep / scope-predicate
-# columns that the runner can't infer.
-#
-# The trio below appear ONLY in `pl.col(...)` scope filters
-# (`shaping_kind`, `fa_kind`, `k_eff`) — pl.Expr column refs
-# aren't framework-tracked, so the auto-resolution misses them.
-# `eval_best_burst_raw_mean` is consumed via C3's `target=` and
-# auto-includes — NOT duplicated here.
-REQUIRED_MEASURABLES: tuple[str, ...] = (
-    'shaping_kind',
-    'fa_kind',
-    'k_eff',
-)
+# Empty — the framework's `measurable_names_for_bridges`
+# (`bridge/bridge.py` lines 1044-1068) walks `scope.meta.root_names()`
+# and auto-includes scope-referenced measurables. So our three
+# hypothesis-local categoricals (`shaping_kind`, `fa_kind`,
+# `k_eff`) are picked up via the scope predicates even though
+# no bridge consumes them via source/target/analysis-fixture.
+REQUIRED_MEASURABLES: tuple[str, ...] = ()
