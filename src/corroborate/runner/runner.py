@@ -1889,6 +1889,30 @@ def _measurements_sidecar_current(
     return True
 
 
+def _corpus_stamp(sub: Path) -> str:
+    """Per-corpus `df['corpus']` value: `parent/name` when the
+    sub-corpus is nested inside another corpus dir (parent has its
+    own `runs.parquet`), else just `name`.
+
+    Pre-fix the stamp was always `sub.name` (leaf dirname). When
+    two distinct sub-corpora share a leaf name across different
+    parents (e.g. `ddqn_axis_probes_metamaze_1m/fa_linear_g0999`
+    and `ddqn_axis_probes_mc_1m/fa_linear_g0999`), they collided
+    on the corpus column and the named-ingest cache-merge filter
+    (`pl.col('corpus').is_in(walked_corpora)`) silently evicted
+    one when the other was ingested. The parent/name form matches
+    the catalogue's `parent` + `name` discriminator and removes
+    the aliasing.
+
+    Top-level corpora keep the bare leaf-name stamp — backward-
+    compatible with caches predating this fix and with bridge
+    scope predicates like `pl.col('corpus') == 'gamma_sweep_more'`
+    that reference flat top-level names."""
+    if (sub.parent / 'runs.parquet').exists():
+        return f'{sub.parent.name}/{sub.name}'
+    return sub.name
+
+
 def _load_one_corpus(
     sub: Path,
     *,
@@ -2100,7 +2124,7 @@ def _load_one_corpus(
     if joined_trace_cols:
         df = df.drop(joined_trace_cols)
     if 'corpus' not in df.columns:
-        df = df.with_columns(pl.lit(sub.name).alias('corpus'))
+        df = df.with_columns(pl.lit(_corpus_stamp(sub)).alias('corpus'))
     # **CORPUS_INTEGRITY.md CI7**: evict locally-cached trace
     # files when they're cloud-recoverable, not just when
     # downloaded THIS session. Pre-fix, pre-existing local

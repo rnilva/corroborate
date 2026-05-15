@@ -335,3 +335,144 @@ def test_load_data_named_corpora_missing_dir_raises(
             [tmp_path / 'does_not_exist'],
             restore_from_cloud=False, required=(), bridges=(),
         )
+
+
+def test_corpus_stamp_top_level_bare_name(tmp_path: Path) -> None:
+    """Top-level corpus (parent dir has no `runs.parquet` of its
+    own) stamps `corpus` with just the leaf dirname — backward
+    compatible with caches predating the nested-stamp fix."""
+    from corroborate.runner.runner import (
+        _corpus_stamp,  # pyright: ignore[reportPrivateUsage]
+    )
+    container = tmp_path / 'data'
+    container.mkdir()
+    sub = container / 'fa_depth_fourrooms'
+    sub.mkdir()
+    assert _corpus_stamp(sub) == 'fa_depth_fourrooms'
+
+
+def test_named_ingest_nested_colliding_leaf_names_no_eviction(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """**Corpus-leaf-name collision fix**: sequentially ingesting
+    two nested sub-corpora that share a leaf name across different
+    parents must produce TWO distinct corpus stamps in the cache,
+    not silently evict one. Pre-fix the leaf-only stamp aliased
+    them on the corpus column and the named-ingest cache-merge
+    filter dropped the first when the second was ingested.
+
+    Mirrors the production scenario:
+    `experiments/probes/ddqn_axis_probes_metamaze_1m/fa_linear_g0999`
+    and `experiments/probes/ddqn_axis_probes_mc_1m/fa_linear_g0999`
+    — different envs, same leaf name. Cf.
+    `findings_corpus_name_leaf_collision.md`."""
+    monkeypatch.setenv('CORROBORATE_CACHE_WORKERS', '1')
+    import polars as pl
+    from corroborate.runner.runner import _ingest_and_compute
+
+    root = tmp_path / 'probes'
+    cache_path = tmp_path / 'cache.parquet'
+
+    parent_a = root / 'parent_a'
+    parent_a.mkdir(parents=True)
+    pl.DataFrame({'id': ['a-parent']}).write_parquet(
+        parent_a / 'runs.parquet',
+    )
+    sub_a = parent_a / 'shared_leaf_name'
+    sub_a.mkdir()
+    pl.DataFrame({
+        'id': ['a-0', 'a-1'],
+        'env_name': ['EnvA', 'EnvA'],
+        'arm_key': ['baseline', 'baseline'],
+        'seed': [0, 1],
+    }).write_parquet(sub_a / 'runs.parquet')
+
+    parent_b = root / 'parent_b'
+    parent_b.mkdir(parents=True)
+    pl.DataFrame({'id': ['b-parent']}).write_parquet(
+        parent_b / 'runs.parquet',
+    )
+    sub_b = parent_b / 'shared_leaf_name'
+    sub_b.mkdir()
+    pl.DataFrame({
+        'id': ['b-0', 'b-1'],
+        'env_name': ['EnvB', 'EnvB'],
+        'arm_key': ['baseline', 'baseline'],
+        'seed': [0, 1],
+    }).write_parquet(sub_b / 'runs.parquet')
+
+    # Ingest sub_a alone.
+    _ingest_and_compute(
+        bridges=(),
+        data=[sub_a],
+        cache_path=cache_path,
+        write_cache=True,
+        restore_from_cloud=False,
+    )
+    cache_after_a = pl.read_parquet(cache_path)
+    assert set(cache_after_a['corpus'].to_list()) == {
+        'parent_a/shared_leaf_name',
+    }
+    assert sorted(cache_after_a['id'].to_list()) == ['a-0', 'a-1']
+
+    # Ingest sub_b. Pre-fix this would have evicted sub_a's
+    # cells (both stamped `shared_leaf_name`); post-fix the
+    # distinct `parent_*/shared_leaf_name` stamps prevent the
+    # collision.
+    _ingest_and_compute(
+        bridges=(),
+        data=[sub_b],
+        cache_path=cache_path,
+        write_cache=True,
+        restore_from_cloud=False,
+    )
+    cache_after_b = pl.read_parquet(cache_path)
+    assert set(cache_after_b['corpus'].to_list()) == {
+        'parent_a/shared_leaf_name',
+        'parent_b/shared_leaf_name',
+    }, (
+        f'Expected both nested sub-corpora to coexist with distinct '
+        f'parent/leaf stamps; got {set(cache_after_b["corpus"].to_list())}'
+    )
+    assert sorted(cache_after_b['id'].to_list()) == [
+        'a-0', 'a-1', 'b-0', 'b-1',
+    ]
+
+
+def test_corpus_stamp_nested_uses_parent_name(tmp_path: Path) -> None:
+    """Nested sub-corpus (parent dir has its own `runs.parquet`)
+    stamps `corpus` with `parent_name/sub_name` — distinguishes
+    two sub-corpora that share a leaf name across parents.
+
+    Reproduces the silent-eviction collision discovered in
+    findings_corpus_name_leaf_collision.md: pre-fix, both
+    `mc_1m/fa_linear_g0999/` and `metamaze_1m/fa_linear_g0999/`
+    stamped `corpus='fa_linear_g0999'` and silently evicted each
+    other from the cache on named-ingest."""
+    import polars as pl
+    from corroborate.runner.runner import (
+        _corpus_stamp,  # pyright: ignore[reportPrivateUsage]
+    )
+    parent = tmp_path / 'ddqn_axis_probes_mc_1m'
+    parent.mkdir()
+    # Parent has its own runs.parquet — discriminator for "this
+    # is a corpus, not a container".
+    pl.DataFrame({'id': ['parent-0']}).write_parquet(
+        parent / 'runs.parquet',
+    )
+    sub = parent / 'fa_linear_g0999'
+    sub.mkdir()
+    assert _corpus_stamp(sub) == 'ddqn_axis_probes_mc_1m/fa_linear_g0999'
+
+    # The other parent (would-be collision pre-fix).
+    parent2 = tmp_path / 'ddqn_axis_probes_metamaze_1m'
+    parent2.mkdir()
+    pl.DataFrame({'id': ['parent2-0']}).write_parquet(
+        parent2 / 'runs.parquet',
+    )
+    sub2 = parent2 / 'fa_linear_g0999'
+    sub2.mkdir()
+    # Distinct stamp despite shared leaf name `fa_linear_g0999`.
+    assert _corpus_stamp(sub2) == 'ddqn_axis_probes_metamaze_1m/fa_linear_g0999'
+    assert _corpus_stamp(sub) != _corpus_stamp(sub2)
