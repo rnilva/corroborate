@@ -750,22 +750,29 @@ def check_cache_sources(
         if sidecar is not None else {}
     )
 
-    # Cache parquet's per-corpus cell counts.
+    # Cache parquet's per-corpus cell counts. Defensive against
+    # pre-corpus-stamping legacy caches (mirrors `evict()`'s guard
+    # at runner.py:872) — return empty `cache_counts` so the
+    # sidecar's entries surface as STALE_SIDECAR_ENTRY rather than
+    # crashing on the column projection.
+    cache_counts: dict[str, int] = {}
     if cp.exists():
-        df = pl.read_parquet(cp, columns=['corpus'])
-        cache_counts_raw = cast(
-            list[object],
-            df.group_by('corpus').len().rows(),
-        )
-        cache_counts: dict[str, int] = {}
-        for row in cache_counts_raw:
-            if (isinstance(row, tuple)
-                    and len(row) == 2
-                    and isinstance(row[0], str)
-                    and isinstance(row[1], int)):
-                cache_counts[row[0]] = row[1]
-    else:
-        cache_counts = {}
+        try:
+            df = pl.read_parquet(cp, columns=['corpus'])
+        except (pl.exceptions.ColumnNotFoundError,
+                pl.exceptions.ComputeError):
+            df = None
+        if df is not None:
+            cache_counts_raw = cast(
+                list[object],
+                df.group_by('corpus').len().rows(),
+            )
+            for row in cache_counts_raw:
+                if (isinstance(row, tuple)
+                        and len(row) == 2
+                        and isinstance(row[0], str)
+                        and isinstance(row[1], int)):
+                    cache_counts[row[0]] = row[1]
 
     union = sorted(set(cache_counts) | set(sidecar_by_corpus))
     out: list[SourceDrift] = []
@@ -827,9 +834,12 @@ def _current_runs_count(entry: CacheSourceEntry) -> int | None:
         return None
     try:
         df = pl.read_parquet(runs_path, columns=['id'])
-    except (pl.exceptions.ColumnNotFoundError,
-            pl.exceptions.ComputeError,
-            OSError, FileNotFoundError):
+    except (pl.exceptions.PolarsError, OSError):
+        # `PolarsError` is the polars exception root —
+        # covers ColumnNotFoundError, ComputeError, SchemaError,
+        # SchemaFieldNotFoundError, InvalidOperationError, etc.
+        # Conservative catch: any read failure → None (unresolvable),
+        # never a spurious zero.
         return None
     return df.height
 
