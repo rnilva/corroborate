@@ -292,7 +292,7 @@ def assert_unique_remote_root(
         return
 
     # Lazy import to avoid circular dep with cloud.py
-    from corroborate.corpus.cloud import MANIFEST_NAME, _load_manifest
+    from corroborate.corpus.cloud import MANIFEST_NAME, load_manifest
 
     for sibling in sorted(parent.iterdir()):
         if not sibling.is_dir():
@@ -301,7 +301,7 @@ def assert_unique_remote_root(
             continue
         if not (sibling / MANIFEST_NAME).exists():
             continue
-        m = _load_manifest(sibling)
+        m = load_manifest(sibling)
         if m is None:
             continue
         if m.remote_root == remote_root:

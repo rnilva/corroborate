@@ -211,7 +211,7 @@ def _manifest_path(sweep_dir: Path) -> Path:
     return sweep_dir / MANIFEST_NAME
 
 
-def _load_manifest(sweep_dir: Path) -> RemoteManifest | None:
+def load_manifest(sweep_dir: Path) -> RemoteManifest | None:
     """Return the existing manifest, or None if no archive yet
     exists for `sweep_dir`."""
     p = _manifest_path(sweep_dir)
@@ -345,7 +345,7 @@ def list_archives(remote_prefix: str) -> list[str]:
 
 # ============ Helpers ============
 
-def _sniff_row_ids(source: Path | str) -> tuple[str, ...]:
+def sniff_row_ids(source: Path | str) -> tuple[str, ...]:
     """Read the `id` column from a parquet file or URI if present;
     return empty tuple otherwise. The provenance breadcrumb for
     invariant I5: per-shard `RunRow.id` lists land in the manifest
@@ -516,7 +516,7 @@ def archive(
     if not sweep_dir.is_dir():
         raise NotADirectoryError(f'{sweep_dir}: not a directory')
 
-    existing = _load_manifest(sweep_dir)
+    existing = load_manifest(sweep_dir)
     if existing is not None and existing.remote_root != remote_root:
         raise ValueError(
             f'manifest at {sweep_dir} already pinned to '
@@ -609,7 +609,7 @@ def archive(
             size_bytes=local_size,
             sha256=sha256,
             pushed_at=datetime.now(UTC).isoformat(timespec='seconds'),
-            row_ids=_sniff_row_ids(local),
+            row_ids=sniff_row_ids(local),
         )
         by_relpath[relpath] = entry
         # Save after every successful file — partial archives
@@ -681,7 +681,7 @@ def restore(
 
     Returns the list of relpaths actually restored (excludes
     files that were already present with matching sha256)."""
-    manifest = _load_manifest(sweep_dir)
+    manifest = load_manifest(sweep_dir)
     if manifest is None:
         raise FileNotFoundError(
             f'{sweep_dir}: no manifest at {MANIFEST_NAME}',
@@ -756,7 +756,7 @@ def restore_columns(
     The columns must be subsets of the cloud file's schema; an
     unknown column raises at scan time. Returns the list of
     relpaths actually rewritten."""
-    manifest = _load_manifest(sweep_dir)
+    manifest = load_manifest(sweep_dir)
     if manifest is None:
         raise FileNotFoundError(
             f'{sweep_dir}: no manifest at {MANIFEST_NAME}',
@@ -802,7 +802,7 @@ def is_archived(sweep_dir: Path, relpath: str) -> bool:
     the per-sweep manifest. Used by sweep-loop resume: skip arms
     whose tmp parquets are already on the remote so a relaunch
     after a partial crash doesn't redo finished work."""
-    manifest = _load_manifest(sweep_dir)
+    manifest = load_manifest(sweep_dir)
     if manifest is None:
         return False
     return any(f.relpath == relpath for f in manifest.files)
@@ -842,7 +842,7 @@ def backfill_row_ids(sweep_dir: Path) -> int:
         n = backfill_row_ids(Path('experiments/data/my_sweep'))
         print(f'updated {n} manifest entries')
     """
-    manifest = _load_manifest(sweep_dir)
+    manifest = load_manifest(sweep_dir)
     if manifest is None:
         return 0
     updated_count = 0
@@ -852,7 +852,7 @@ def backfill_row_ids(sweep_dir: Path) -> int:
             new_files.append(entry)
             continue
         remote_uri = _join_remote(manifest.remote_root, entry.relpath)
-        ids = _sniff_row_ids(remote_uri)
+        ids = sniff_row_ids(remote_uri)
         if not ids:
             new_files.append(entry)
             continue
@@ -898,7 +898,7 @@ def archived_shard_uris(
     Sorted by relpath for deterministic concat order — important
     so re-merging from the same manifest produces byte-identical
     output."""
-    manifest = _load_manifest(sweep_dir)
+    manifest = load_manifest(sweep_dir)
     if manifest is None:
         return []
     matches = [
@@ -913,7 +913,7 @@ def ls(sweep_dir: Path) -> RemoteManifest:
     """Read and return the per-sweep manifest. Raises
     `FileNotFoundError` if no archive yet exists for
     `sweep_dir`."""
-    m = _load_manifest(sweep_dir)
+    m = load_manifest(sweep_dir)
     if m is None:
         raise FileNotFoundError(
             f'{sweep_dir}: no manifest at {MANIFEST_NAME}',
@@ -935,7 +935,7 @@ def purge(
 
     Returns the list of relpaths actually deleted (excludes
     files that were already absent locally)."""
-    manifest = _load_manifest(sweep_dir)
+    manifest = load_manifest(sweep_dir)
     if manifest is None:
         raise FileNotFoundError(
             f'{sweep_dir}: no manifest at {MANIFEST_NAME}',
