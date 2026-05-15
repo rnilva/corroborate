@@ -84,15 +84,15 @@ from experiments.findings.ddqn_three_conditions import (
 )
 from experiments.findings.ddqn_three_conditions.conditions import (
     condition_1__q_bias_exists_under_high_gamma_and_K,
-    condition_2__fa_capacity_caps_type_1_in_linear_fa,
-    condition_3__shaping_decouples_mech_from_outcome,
+    condition_2__no_appreciable_jens_reduction_under_mc_linear_fa,
+    condition_3__no_outcome_benefit_under_fr_shaped,
 )
 
 
 BRIDGES = (
     condition_1__q_bias_exists_under_high_gamma_and_K,
-    condition_2__fa_capacity_caps_type_1_in_linear_fa,
-    condition_3__shaping_decouples_mech_from_outcome,
+    condition_2__no_appreciable_jens_reduction_under_mc_linear_fa,
+    condition_3__no_outcome_benefit_under_fr_shaped,
 )
 
 

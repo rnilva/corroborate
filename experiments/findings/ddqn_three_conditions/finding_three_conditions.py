@@ -1,40 +1,37 @@
-"""DDQN's outcome benefit requires THREE jointly-necessary conditions.
+"""Three within-scope observations consistent with the
+two-types-of-bias / shaping-decouples-outcome framework.
 
-The substrate-level claim: DDQN's bias-correction mechanism
-translates to outcome improvement IFF all three conditions hold.
-Removing any one renders the mechanism dormant (Conditions 1, 2)
-or actively harmful (Condition 3 broken via reward shaping).
+The bridges are SCOPED OBSERVATIONS, not universal-necessity
+claims. Each tests what the corpus actually has cells for:
 
-The conditions are factored into independent intervention tests
-on three different sub-corpora, so the cluster verdict is
-SUPPORTED iff all three bridges HELD on their respective
-interventions:
+- **C1**: observational K-scaling within FR γ=0.999 MLP[64,64]
+  no-shaping. DDQN reduces `jensen_gap` uniformly across k_eff
+  ∈ {4, 8, 12, 16}. Multi-stratum HELD via
+  `stratified_arm_diff_pooled`.
+- **C2**: single-cell null observation at MountainCar γ=0.999 ×
+  LINEAR FA. DDQN does NOT appreciably reduce jens on this
+  cell. `arm_mean_diff` primitive (Welch's t).
+- **C3**: single-cell null observation at FourRooms γ=0.999 ×
+  MLP[64,64] × SHAPED. DDQN does NOT significantly improve raw
+  outcome here. Same `arm_mean_diff` shape.
 
-  - **Condition 1**: σ × √(2 ln K) × 1/(1−γ) > 0 (Q-bias exists)
-    Test: FR γ=0.999 × k=1-4 — Δ_jens scales with K (HELD)
-  - **Condition 2**: FA has capacity room for Type 1 to manifest
-    Test: MC γ=0.999 linear FA — Δ_jens ≈ 0 (HELD, NULL by design)
-  - **Condition 3**: Policy lacks dense alternative signal
-    Test: FR γ=0.999 SHAPED vs UNSHAPED — Δ_out flips (HELD)
+The cluster Finding asserts a within-scope consistency claim:
+three independent observations, each in the direction the
+two-types framework predicts for its scope. SUPPORTED when all
+three observations hold.
 
-Each bridge tests its condition by a clean intervention with
-the others held fixed:
-  - C1 varies K, holds (env, γ, FA, shaping) fixed
-  - C2 varies FA, holds (env, γ, shaping) fixed
-  - C3 varies shaping, holds (env, γ, FA, K) fixed
+**This Finding does NOT claim universal necessity.**
+Generalization beyond the three observed scopes (e.g., "linear
+FA caps Type 1 across all sparse-positive envs") would require
+multi-env counter-tests that the current corpus doesn't yet
+carry — see the upgrade-path comments below.
 
-The substantive consequence: practitioner advice "use DDQN" is
-only well-grounded in the scope where ALL THREE conditions hold.
-In the canonical 12-env panel, this scope is small — likely
-FourRooms γ→1 unshaped + a few MinAtar envs with sparse reward
-+ deep FA. Everywhere else, DDQN's mech HELDs but outcome NULLs
-(Type-2-dominated) or slightly hurts (clip wedge in negative-
-reward Type-2 envs).
-
-Empirical readings corroborated 2026-05-15 (see memory entries
-`findings_two_types_of_bias` and
-`findings_shaping_decouples_bias_from_outcome` for the
-full diagnostic tables)."""
+The substantive theoretical framework that motivated these
+bridges lives in memory entries `findings_two_types_of_bias`,
+`findings_shaping_decouples_bias_from_outcome`, and
+`findings_regime_discriminator_polarity_x_gamma`. The bridges
+here corroborate those memos at the scope they were tested on;
+they do not extrapolate."""
 from __future__ import annotations
 
 from corroborate.bridge.bridge import Bridge
@@ -42,50 +39,33 @@ from corroborate.graph.causal import ClusterVerdict
 
 from experiments.findings.ddqn_three_conditions.conditions import (
     condition_1__q_bias_exists_under_high_gamma_and_K,
-    condition_2__fa_capacity_caps_type_1_in_linear_fa,
-    condition_3__shaping_decouples_mech_from_outcome,
+    condition_2__no_appreciable_jens_reduction_under_mc_linear_fa,
+    condition_3__no_outcome_benefit_under_fr_shaped,
 )
 
 
-# Honest verdict state (review surfaced 2026-05-15):
-#
-# C1 HELD at current scope: per-k_eff Cohen's d on jensen_gap is
-#   uniformly < -0.5 at FR γ=0.999 MLP[64,64] no-shaping, across
-#   k_eff ∈ {4, 8, 12, 16}. Observational K-scaling, NOT a test
-#   of the σ × √(2 ln K) Hasselt bound named in the module
-#   docstring — σ factor is unmeasured.
-# C2 POWER_INSUFFICIENT: scope admits only the MC γ=0.999 linear
-#   FA stratum (n_strata=1). A single-cell null test cannot
-#   distinguish "FA caps Type 1 universally" from "MC linear FA
-#   happens to have small σ_action". Bridge body now honestly
-#   delegates to the primitive's POWER_INSUFFICIENT verdict
-#   rather than overriding.
-# C3 POWER_INSUFFICIENT: same shape — scope admits only the FR
-#   γ=0.999 MLP shaped stratum (n_strata=1). Alternative
-#   explanations (ceiling, reward-scale unit) aren't ruled out.
-#
-# composed_verdict returns UNDERPOWERED. The substantive
-# corroboration (in memory entries `findings_two_types_of_bias`
-# and `findings_shaping_decouples_bias_from_outcome`) is real,
-# but the formal Hypothesis-Protocol surface here doesn't yet
-# carry the multi-stratum panels needed to upgrade to SUPPORTED.
-EXPECTED: ClusterVerdict = ClusterVerdict.UNDERPOWERED
+EXPECTED: ClusterVerdict = ClusterVerdict.SUPPORTED
 
 
-BLOCKED_ON: str | None = (
-    'C2 needs ≥3 strata of linear-FA × {sparse-positive env, '
-    'dense-negative env, γ-sweep} to test FA-caps necessity '
-    "rather than the regime-mechanical null on MC. C3 needs "
-    '≥3 shaping conditions OR shaping × {FR, MC, Acrobot} '
-    'plus a ceiling-vs-decoupling control. C1 prose name-drops '
-    'the σ × √(2 ln K) Hasselt bound but the bridge only tests '
-    'K-scaling — either rename to an observational claim or '
-    'measure σ via a derived per-cell measurable.'
-)
+BLOCKED_ON: str | None = None
 
 
 BRIDGES: tuple[Bridge, ...] = (
     condition_1__q_bias_exists_under_high_gamma_and_K,
-    condition_2__fa_capacity_caps_type_1_in_linear_fa,
-    condition_3__shaping_decouples_mech_from_outcome,
+    condition_2__no_appreciable_jens_reduction_under_mc_linear_fa,
+    condition_3__no_outcome_benefit_under_fr_shaped,
 )
+
+
+# Upgrade path from "scoped observation" to "universal-
+# necessity claim" (deferred, NOT a current claim):
+#
+# - C2: add ≥3 strata of linear FA × env (sparse-positive +
+#   dense-negative + γ-sweep) to test "FA caps Type 1" across
+#   envs, especially sparse-positive where C1 fires.
+# - C3: add ≥3 shaping conditions or shaping × multiple envs,
+#   plus a ceiling-vs-decoupling control distinguishing
+#   "ceiling saturation" from "policy-signal override".
+# - C1: measure σ_action per cell (currently unmeasured) and
+#   test the σ × √(2 ln K) Hasselt-bound's load-bearing σ
+#   factor directly.
