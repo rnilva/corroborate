@@ -39,7 +39,7 @@ defaults:
     warmup_steps: 100
 
 interventions:
-  - name: polyak_tau_1p0
+  - name: "polyak_tau_1p0_{from_env: name}"
     base:
       target_sync:
         fn: polyak_update
@@ -51,7 +51,7 @@ interventions:
             fn: bootstrap
             greedification: {fn: double_greedify}
 
-  - name: polyak_tau_0p1
+  - name: "polyak_tau_0p1_{from_env: name}"
     base:
       target_sync:
         fn: polyak_update
@@ -63,7 +63,7 @@ interventions:
             fn: bootstrap
             greedification: {fn: double_greedify}
 
-  - name: polyak_tau_0p01
+  - name: "polyak_tau_0p01_{from_env: name}"
     base:
       target_sync:
         fn: polyak_update
@@ -75,7 +75,7 @@ interventions:
             fn: bootstrap
             greedification: {fn: double_greedify}
 
-  - name: polyak_tau_0p001
+  - name: "polyak_tau_0p001_{from_env: name}"
     base:
       target_sync:
         fn: polyak_update

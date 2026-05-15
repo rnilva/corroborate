@@ -41,9 +41,9 @@ defaults:
 
 interventions:
   # sync = 500
-  - name: vanilla_dqn_sync500
+  - name: "vanilla_dqn_sync500_{from_env: name}"
     base: {sync_period: 500}
-  - name: ddqn_sync500
+  - name: "ddqn_sync500_{from_env: name}"
     base:
       sync_period: 500
     arms:
@@ -53,9 +53,9 @@ interventions:
             fn: bootstrap
             greedification: {fn: double_greedify}
   # sync = 1500
-  - name: vanilla_dqn_sync1500
+  - name: "vanilla_dqn_sync1500_{from_env: name}"
     base: {sync_period: 1500}
-  - name: ddqn_sync1500
+  - name: "ddqn_sync1500_{from_env: name}"
     base:
       sync_period: 1500
     arms:
@@ -65,9 +65,9 @@ interventions:
             fn: bootstrap
             greedification: {fn: double_greedify}
   # sync = 3000
-  - name: vanilla_dqn_sync3000
+  - name: "vanilla_dqn_sync3000_{from_env: name}"
     base: {sync_period: 3000}
-  - name: ddqn_sync3000
+  - name: "ddqn_sync3000_{from_env: name}"
     base:
       sync_period: 3000
     arms:

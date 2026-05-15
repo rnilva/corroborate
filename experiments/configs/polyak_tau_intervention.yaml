@@ -64,7 +64,7 @@ defaults:
 # Four hypotheses, one per τ value. Each runs paired (vanilla + DDQN)
 # with target_sync swapped to polyak_update at the specified τ.
 interventions:
-  - name: polyak_tau_1p0
+  - name: "polyak_tau_1p0_{from_env: name}"
     base:
       target_sync:
         fn: polyak_update
@@ -76,7 +76,7 @@ interventions:
             fn: bootstrap
             greedification: {fn: double_greedify}
 
-  - name: polyak_tau_0p1
+  - name: "polyak_tau_0p1_{from_env: name}"
     base:
       target_sync:
         fn: polyak_update
@@ -88,7 +88,7 @@ interventions:
             fn: bootstrap
             greedification: {fn: double_greedify}
 
-  - name: polyak_tau_0p01
+  - name: "polyak_tau_0p01_{from_env: name}"
     base:
       target_sync:
         fn: polyak_update
@@ -100,7 +100,7 @@ interventions:
             fn: bootstrap
             greedification: {fn: double_greedify}
 
-  - name: polyak_tau_0p001
+  - name: "polyak_tau_0p001_{from_env: name}"
     base:
       target_sync:
         fn: polyak_update

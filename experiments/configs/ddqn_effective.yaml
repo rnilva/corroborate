@@ -31,9 +31,9 @@ defaults:
     hidden: [128]
 
 interventions:
-  - name: vanilla_dqn
+  - name: "vanilla_dqn_{from_env: name}"
 
-  - name: ddqn
+  - name: "ddqn_{from_env: name}"
     arms:
       - []  # vanilla control
       - - slot_path: bootstrap

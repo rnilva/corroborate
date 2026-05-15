@@ -1,24 +1,30 @@
 """Cross-config lint for the sweep YAMLs.
 
-Catches authoring mistakes that span multiple YAMLs and that the
-single-config loader can't see:
+Catches authoring mistakes that span multiple YAMLs and dispatch-
+time conditions that the build-only paths can't see:
 
 - **Duplicate `archive_remote`.** Two YAMLs pushing to the same S3
   prefix silently overwrite each other's merged top-level files;
   the local `assert_unique_remote_root` check (`integrity.py:278`)
   only scans `sweep_dir.parent` for siblings, so it doesn't catch
   YAMLs whose `out_dir`s sit in different parents.
+- **Post-expansion `cfg.name` collisions.** `env_binding: per_env`
+  templates without `{from_env: ...}` substitution in the `name`
+  field produce duplicate config names after env expansion —
+  CI9 raises at dispatch, but the build-only tests
+  (`build_per_env`) don't trigger it. Lint runs the same check
+  (`expand_sweep`) on every YAML at test time.
 
-The lint runs at test time so PRs that introduce a collision fail
-fast, before any sweep dispatch."""
+Failures here fail the PR before any sweep dispatch."""
 from __future__ import annotations
 
-from collections import Counter
 from pathlib import Path
 
 import pytest
 
-from corroborate_rl.dqn.yaml_sweep import default_dqn_registry, load_sweep
+from corroborate_rl.dqn.yaml_sweep import (
+    default_dqn_registry, expand_sweep, load_sweep,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -56,31 +62,25 @@ def test_archive_remote_unique_across_configs() -> None:
     )
 
 
-def test_cfg_name_unique_within_each_config() -> None:
-    """Within each YAML, every intervention's `name` must be unique.
+def test_every_config_dispatches_cleanly() -> None:
+    """For every YAML in `experiments/configs/`, `expand_sweep`
+    must succeed — i.e., templates resolve through the registry
+    AND post-expansion `cfg.name` values are unique.
 
-    `dispatch_sweep` writes per-intervention parquets to
-    `<out_dir>/<cfg.name>/`. Duplicate names overwrite each other
-    at merge time, which CI9 raises on. This lint surfaces the
-    same condition statically — useful when a YAML adds a new
-    intervention and copy-pastes the `name` from a sibling."""
+    Catches dispatch-time failures the build-only tests miss:
+    `env_binding: per_env` templates with bare `name: ddqn`
+    (no `{from_env: ...}`) expand to N copies sharing the same
+    name and would fail CI9 at dispatch. The build-only path
+    (`build_per_env`) returns these without complaint."""
     reg = default_dqn_registry()
     failures: list[str] = []
     for p in sorted(CONFIGS_DIR.glob('*.yaml')):
-        sweep = load_sweep(p, reg=reg)
-        # Only `shared` mode resolves templates once; `per_env`
-        # mode generates one InterventionConfig per env (the
-        # template's `name` must include `{from_env: ...}` to
-        # differentiate). We check the template-level names —
-        # within-sweep N×envs collisions are CI9's job at dispatch.
-        names = [
-            t.get('name', '') for t in sweep.intervention_templates
-        ]
-        counts = Counter(names)
-        dupes = {n: c for n, c in counts.items() if c > 1}
-        if dupes:
-            failures.append(f'{p.name}: {dupes}')
+        try:
+            sweep = load_sweep(p, reg=reg)
+            _ = expand_sweep(sweep, reg=reg)
+        except Exception as e:
+            failures.append(f'{p.name}: {type(e).__name__}: {e}')
     assert not failures, (
-        'duplicate intervention `name`s within a YAML:\n  '
+        'YAMLs that fail to expand cleanly:\n  '
         + '\n  '.join(failures)
     )

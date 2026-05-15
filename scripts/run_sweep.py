@@ -51,6 +51,11 @@ def main(argv: list[str] | None = None) -> None:
     platform = 'cuda' if args.device == 'gpu' else args.device
     if 'JAX_PLATFORMS' not in os.environ:
         os.environ['JAX_PLATFORMS'] = platform
+    # Avoid JAX's default ~80% GPU prealloc — sweeps frequently
+    # share a GPU with the env vectorisation, and a 90% cap leaves
+    # headroom without thrashing.
+    os.environ.setdefault('XLA_PYTHON_CLIENT_PREALLOCATE', 'false')
+    os.environ.setdefault('XLA_PYTHON_CLIENT_MEM_FRACTION', '0.9')
     print(f'run_sweep: JAX_PLATFORMS={os.environ["JAX_PLATFORMS"]}', file=sys.stderr)
 
     # Imports AFTER JAX_PLATFORMS so jax picks the device up.
@@ -63,7 +68,9 @@ def main(argv: list[str] | None = None) -> None:
         raise SystemExit(f'config not found: {cfg_path}')
     sweep = load_sweep(cfg_path, reg=default_dqn_registry())
     print(
-        f'run_sweep: loaded {sweep.name!r} → out_dir={sweep.out_dir}',
+        f'run_sweep: loaded {sweep.name!r} → out_dir={sweep.out_dir} '
+        f'({len(sweep.intervention_templates)} interventions × '
+        f'{len(sweep.envs)} envs, env_binding={sweep.env_binding})',
         file=sys.stderr,
     )
     runs_path, traces_path = dispatch_sweep(sweep)

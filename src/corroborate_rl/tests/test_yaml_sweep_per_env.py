@@ -70,13 +70,13 @@ def _python_minatar_1M_intervention(
     }
     if name == 'vanilla_dqn':
         return InterventionConfig(
-            name='vanilla_dqn', base=base,
+            name=f'vanilla_dqn_{env_name}', base=base,
             do_effect=DoEffect(arms=((),)),
         )
     if name == 'ddqn':
         boot = partial(bootstrap, greedification=double_greedify)
         return InterventionConfig(
-            name='ddqn', base=base,
+            name=f'ddqn_{env_name}', base=base,
             do_effect=DoEffect(arms=(
                 (),
                 (Intervention(slot_path='bootstrap', replacement=boot),),
@@ -116,13 +116,13 @@ def _python_ddqn_effective_intervention(
     }
     if name == 'vanilla_dqn':
         return InterventionConfig(
-            name='vanilla_dqn', base=base,
+            name=f'vanilla_dqn_{env_name}', base=base,
             do_effect=DoEffect(arms=((),)),
         )
     if name == 'ddqn':
         boot = partial(bootstrap, greedification=double_greedify)
         return InterventionConfig(
-            name='ddqn', base=base,
+            name=f'ddqn_{env_name}', base=base,
             do_effect=DoEffect(arms=(
                 (),
                 (Intervention(slot_path='bootstrap', replacement=boot),),
@@ -327,9 +327,12 @@ def _pick(
     h_name: str,
 ) -> InterventionConfig:
     """Find the (env, intervention-name) pair in the expanded
-    per-env tuples."""
+    per-env tuples. The expanded `cfg.name` includes the env's
+    `{from_env: name}` substitution, so we match
+    `<h_name>_<env_name>`."""
+    target = f'{h_name}_{env_name}'
     for h, ec in zip(built, envs_aligned, strict=True):
-        if ec.env_name == env_name and h.name == h_name:
+        if ec.env_name == env_name and h.name == target:
             return h
     raise KeyError(f'no ({env_name}, {h_name}) in built tuples')
 

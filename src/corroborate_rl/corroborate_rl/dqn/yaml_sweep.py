@@ -19,7 +19,7 @@ function) keeps tests cheap: they load a `DQNSweep` and inspect
 without spinning up the runner."""
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, TypeIs
@@ -340,6 +340,54 @@ def build_per_env(
     return tuple(interventions), tuple(envs_aligned)
 
 
+def _assert_unique_cfg_names(
+    configs: Sequence[InterventionConfig],
+) -> None:
+    """Raise `ValueError` if any two configs share `cfg.name`.
+
+    `dispatch_sweep` writes each config to `<out_dir>/<cfg.name>/`;
+    a shared name silently overwrites at merge time. Fires for
+    `env_binding: per_env` when the template's `name` field lacks
+    `{from_env: ...}` substitution and produces post-expansion
+    duplicates across envs. Exposed for the cross-config lint
+    (`tests/test_configs_lint.py`) so the check runs at test
+    time on every YAML, not only at dispatch."""
+    seen: dict[str, int] = {}
+    for cfg in configs:
+        seen[cfg.name] = seen.get(cfg.name, 0) + 1
+    collisions = {n: c for n, c in seen.items() if c > 1}
+    if collisions:
+        raise ValueError(
+            f'configs share output paths — {collisions!r} would '
+            f'overwrite each other at '
+            f'`<out_dir>/<cfg.name>/runs.parquet`. '
+            f'Templating the intervention `name` with '
+            f"`{{from_env: env_name}}` (env_binding='per_env') or "
+            f"switching to env_binding='shared' resolves this. "
+            f'Sweep aborted before any data is written.',
+        )
+
+
+def expand_sweep(
+    sweep: DQNSweep, *, reg: Registry,
+) -> tuple[InterventionConfig, ...]:
+    """The dispatch-time intervention list, without dispatching.
+
+    For `env_binding: shared`, returns `sweep.build_interventions()`.
+    For `env_binding: per_env`, returns the per-env expansion.
+    Asserts post-expansion `cfg.name` uniqueness (the same check
+    `dispatch_sweep` performs before any cell runs).
+
+    Substrate-shared helper for tests that want to validate a
+    YAML would dispatch cleanly without actually running cells."""
+    if sweep.env_binding == 'shared':
+        configs = sweep.build_interventions(reg=reg)
+    else:
+        configs, _ = build_per_env(sweep, reg=reg)
+    _assert_unique_cfg_names(configs)
+    return configs
+
+
 def dispatch_sweep(sweep: DQNSweep) -> tuple[Path, Path]:
     """Run the sweep end-to-end. For each YAML-loaded
     `InterventionConfig`, decompose into a Hypothesis Protocol-
@@ -353,7 +401,7 @@ def dispatch_sweep(sweep: DQNSweep) -> tuple[Path, Path]:
 
     Substrate-coupled by design (knows about `DQNRunner`,
     `Q_TRACE_REDUCTIONS`, env catalogue, `dqn` theory)."""
-    from collections.abc import Callable, Sequence
+    from collections.abc import Callable
     from functools import partial
 
     from corroborate.corpus.persistence import stream_concat_parquets
@@ -390,20 +438,7 @@ def dispatch_sweep(sweep: DQNSweep) -> tuple[Path, Path]:
     # field omits an env-attribute substitution (e.g.,
     # `name: ddqn_vs_{from_env: env_name}`); fix the template or
     # switch to `env_binding: shared`.
-    seen_names: dict[str, int] = {}
-    for cfg in configs:
-        seen_names[cfg.name] = seen_names.get(cfg.name, 0) + 1
-    collisions = {n: c for n, c in seen_names.items() if c > 1}
-    if collisions:
-        raise ValueError(
-            f'dispatch_sweep: configs share output paths — '
-            f'{collisions!r} would overwrite each other at '
-            f'`<out_dir>/<cfg.name>/runs.parquet`. '
-            f'Templating the intervention `name` with '
-            f"`{{from_env: env_name}}` (env_binding='per_env') or "
-            f"switching to env_binding='shared' resolves this. "
-            f'Sweep aborted before any data is written.',
-        )
+    _assert_unique_cfg_names(configs)
 
     env_specs = {
         ec.env_name: get_env_spec(ec.env_name) for ec in sweep.envs
@@ -542,5 +577,6 @@ __all__ = [
     'default_dqn_registry',
     'dispatch_sweep',
     'env_attrs_from_spec',
+    'expand_sweep',
     'load_sweep',
 ]
