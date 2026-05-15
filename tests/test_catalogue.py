@@ -304,6 +304,59 @@ def test_in_progress_scaffold(tmp_path: Path) -> None:
     assert r.local.runs_row_count is None
 
 
+# ============ 9. Multi-root: shadowing ============
+
+def test_multi_root_shadows_orphan(tmp_path: Path) -> None:
+    """A corpus archived from root B but absent from root A:
+    walking only A reports CLOUD_ORPHAN; walking both A + B
+    shadows the orphan because B carries the local manifest."""
+    root_a = tmp_path / 'data'
+    root_b = tmp_path / 'probes'
+    cloud_root = tmp_path / 'cloud'
+
+    # Corpus lives under root_b, archived to cloud.
+    corpus_b = root_b / 'pilot_foo'
+    _write_real_parquet(corpus_b / 'runs.parquet', n_rows=3)
+    _ = cloud.archive(
+        corpus_b, f'file://{cloud_root / "pilot_foo"}',
+    )
+
+    # Walking only root_a → cloud orphan reported.
+    rows_a = catalogue.catalogue(
+        root_a, remote_prefix=f'file://{cloud_root}',
+    )
+    orphans_a = [r for r in rows_a if r.status == 'CLOUD_ORPHAN']
+    assert any(r.name == 'pilot_foo' for r in orphans_a)
+
+    # Walking [root_a, root_b] → corpus has local match in B,
+    # so no orphan reported for `pilot_foo`.
+    rows_both = catalogue.catalogue(
+        [root_a, root_b], remote_prefix=f'file://{cloud_root}',
+    )
+    orphans_both = [r for r in rows_both if r.status == 'CLOUD_ORPHAN']
+    assert not any(r.name == 'pilot_foo' for r in orphans_both)
+    cal = [r for r in rows_both if r.name == 'pilot_foo']
+    assert len(cal) == 1
+    assert cal[0].status == 'CLOUD_AND_LOCAL'
+
+
+# ============ 10. Multi-root: additive ============
+
+def test_multi_root_additive(tmp_path: Path) -> None:
+    """Distinct corpora under two roots both surface, once each."""
+    root_a = tmp_path / 'data'
+    root_b = tmp_path / 'probes'
+    _write_real_parquet(root_a / 'cal_a' / 'runs.parquet', n_rows=2)
+    _write_real_parquet(root_b / 'pilot_b' / 'runs.parquet', n_rows=2)
+
+    rows = catalogue.catalogue([root_a, root_b], remote_prefix=None)
+    names = [r.name for r in rows]
+    assert names.count('cal_a') == 1
+    assert names.count('pilot_b') == 1
+    assert all(r.status == 'LOCAL_ONLY' for r in rows
+               if r.name in {'cal_a', 'pilot_b'})
+
+
 # ============ 8. runs_row_count populates ============
 
 def test_runs_row_count_from_parquet(tmp_path: Path) -> None:

@@ -302,13 +302,22 @@ def _remote_root_to_parent_name(
 # ============ Entry point ============
 
 def catalogue(
-    data_root: Path,
+    data_root: Path | Sequence[Path],
     remote_prefix: str | None = None,
     *,
     include_misc: bool = False,
 ) -> tuple[CorpusInventoryRow, ...]:
     """Inventory all corpora under `data_root` (recursively, up to
     one level of nesting).
+
+    `data_root` accepts either a single `Path` or a sequence of
+    `Path`s. The project convention has two corpus-bearing roots
+    (`experiments/data/` for canonical sweeps + `experiments/probes/`
+    for ad-hoc pilots); pass both to avoid false-orphan reports on
+    corpora that live in one root but were `cloud.archive`d to a
+    prefix the other root's walk doesn't surface. Local discoveries
+    are deduplicated by absolute resolved path; cloud orphans are
+    deduplicated by `remote_root`.
 
     When `remote_prefix` is provided, cross-reference each corpus
     against cloud archives discoverable under that prefix
@@ -321,7 +330,15 @@ def catalogue(
     `include_misc=False` filters out `kind='misc'` rows (cache,
     log dirs). Pass True to surface them.
     """
-    locals_found = _walk_local(data_root)
+    roots: tuple[Path, ...] = (
+        (data_root,) if isinstance(data_root, Path) else tuple(data_root)
+    )
+    locals_by_path: dict[Path, _LocalDiscovery] = {}
+    for root in roots:
+        for d in _walk_local(root):
+            key = d.dir_path.resolve()
+            locals_by_path.setdefault(key, d)
+    locals_found: tuple[_LocalDiscovery, ...] = tuple(locals_by_path.values())
 
     cloud_by_root: dict[str, cloud.RemoteManifest] = {}
     if remote_prefix is not None:

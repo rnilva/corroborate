@@ -96,7 +96,9 @@ def _cmd_purge(args: Mapping[str, object]) -> int:
 
 
 def _cmd_catalogue(args: Mapping[str, object]) -> int:
-    data_root = Path(require_str(args, 'data_root')).resolve()
+    from corroborate._internals.narrow import require_str_list
+    data_root_strs = require_str_list(args, 'data_root')
+    data_roots = tuple(Path(s).resolve() for s in data_root_strs)
     cli_prefix = optional_str(args, 'remote_prefix')
     local_only = require_bool(args, 'local_only')
     include_misc = require_bool(args, 'include_misc')
@@ -111,7 +113,7 @@ def _cmd_catalogue(args: Mapping[str, object]) -> int:
         remote_prefix = env_prefix if env_prefix else None
 
     rows = _catalogue.catalogue(
-        data_root,
+        data_roots,
         remote_prefix=remote_prefix,
         include_misc=include_misc,
     )
@@ -191,9 +193,12 @@ def _build_parser() -> argparse.ArgumentParser:
              'referenced against cloud archives under a remote prefix.',
     )
     _ = p_cat.add_argument(
-        'data_root',
-        help='directory containing per-sweep corpus dirs '
-             '(e.g. experiments/data).',
+        'data_root', nargs='+',
+        help='one or more directories containing per-sweep corpus '
+             'dirs. The project convention has two corpus-bearing '
+             'roots: `experiments/data/` (canonical sweep output) '
+             'and `experiments/probes/` (ad-hoc pilots). Pass both '
+             'to avoid false-orphan reports.',
     )
     cat_remote = p_cat.add_mutually_exclusive_group()
     _ = cat_remote.add_argument(
