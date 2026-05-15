@@ -103,6 +103,29 @@ def _cmd_catalogue(args: Mapping[str, object]) -> int:
     local_only = require_bool(args, 'local_only')
     include_misc = require_bool(args, 'include_misc')
     as_json = require_bool(args, 'json_output')
+    leaves_mode = require_bool(args, 'leaves_mode')
+    leaves_wide = require_bool(args, 'leaves_wide')
+
+    if leaves_mode:
+        # Register the RL substrate's @measurable functions so
+        # `registered_names()` filters them out of leaves. Catalogue
+        # itself is substrate-agnostic; the CLI is the canonical
+        # entry point and knows the in-tree substrate.
+        try:
+            import corroborate_rl.dqn.measurables  # noqa: F401
+        except ImportError:
+            pass
+        profiles = _catalogue.arm_leaves(
+            data_roots, include_misc=include_misc,
+        )
+        if as_json:
+            payload = [dataclasses.asdict(p) for p in profiles]
+            print(json.dumps(payload, default=str, indent=2))
+        elif leaves_wide:
+            print(_catalogue.arm_leaves_to_polars_wide(profiles))
+        else:
+            print(_catalogue.arm_leaves_to_polars_long(profiles))
+        return 0
 
     if local_only:
         remote_prefix: str | None = None
@@ -225,6 +248,21 @@ def _build_parser() -> argparse.ArgumentParser:
         '--json', dest='json_output', action='store_true',
         help='emit rows as a JSON array (nested local/cloud slices) '
              'instead of the default polars table.',
+    )
+    _ = p_cat.add_argument(
+        '--leaves', dest='leaves_mode', action='store_true',
+        help='switch output to per-(corpus, arm) leaf-signature view. '
+             'Reads runs.parquet for every locally-present corpus and '
+             'extracts the configurational leaves (composition-time '
+             'kwargs; framework vocabulary — RL practice calls these '
+             'hyperparameters). Default long format is `(corpus, arm, '
+             'leaf_path, leaf_value)`; combine with --leaves-wide for '
+             'a pivoted view.',
+    )
+    _ = p_cat.add_argument(
+        '--leaves-wide', dest='leaves_wide', action='store_true',
+        help='with --leaves, render in wide format (each leaf as a '
+             'column; sweep arms collapse to `MULTI:[v1,v2,...]`).',
     )
 
     return parser

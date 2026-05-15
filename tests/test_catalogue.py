@@ -357,6 +357,103 @@ def test_multi_root_additive(tmp_path: Path) -> None:
                if r.name in {'cal_a', 'pilot_b'})
 
 
+# ============ 11. arm_leaves: constant arm ============
+
+def _write_runs_parquet(
+    p: Path,
+    arm_keys: list[str],
+    leaves: dict[str, list[object]],
+) -> None:
+    """Write a parquet with arm_key + leaf columns. Each list must
+    have len == len(arm_keys)."""
+    p.parent.mkdir(parents=True, exist_ok=True)
+    df_dict: dict[str, list[object]] = {
+        'id': [f'cell-{i}' for i in range(len(arm_keys))],
+        'arm_key': list(arm_keys),
+        'pad': ['x' * 256 for _ in range(len(arm_keys))],
+    }
+    df_dict.update(leaves)
+    pl.DataFrame(df_dict).write_parquet(p)
+
+
+def test_arm_leaves_two_arms_constant_leaves(tmp_path: Path) -> None:
+    data_root = tmp_path / 'data'
+    _write_runs_parquet(
+        data_root / 'corpus_a' / 'runs.parquet',
+        arm_keys=['baseline'] * 3 + ['ddqn'] * 3,
+        leaves={'gamma': [0.99] * 6, 'optimizer.inner.lr': [1e-4] * 6},
+    )
+    profiles = catalogue.arm_leaves(data_root)
+    assert len(profiles) == 2
+    by_arm = {p.arm: p for p in profiles}
+    assert by_arm['baseline'].n_cells == 3
+    assert by_arm['baseline'].leaves['gamma'] == ('0.99',)
+    assert by_arm['ddqn'].leaves['optimizer.inner.lr'] == ('0.0001',)
+
+
+# ============ 12. arm_leaves: sweep arm ============
+
+def test_arm_leaves_sweep_arm_surfaces_multiple_values(tmp_path: Path) -> None:
+    data_root = tmp_path / 'data'
+    _write_runs_parquet(
+        data_root / 'gamma_sweep' / 'runs.parquet',
+        arm_keys=['baseline'] * 3,
+        leaves={'gamma': [0.99, 0.995, 0.999]},
+    )
+    profiles = catalogue.arm_leaves(data_root)
+    assert len(profiles) == 1
+    assert profiles[0].leaves['gamma'] == ('0.99', '0.995', '0.999')
+
+    long_df = catalogue.arm_leaves_to_polars_long(profiles)
+    assert long_df.filter(pl.col('leaf_path') == 'gamma').height == 3
+
+
+# ============ 13. arm_leaves: bundle-placeholder pruning ============
+
+def test_arm_leaves_drops_bundle_placeholder(tmp_path: Path) -> None:
+    """A column like `optimizer` (placeholder for the config bundle)
+    must be dropped when its dotted children (`optimizer.inner.lr`)
+    are present."""
+    data_root = tmp_path / 'data'
+    _write_runs_parquet(
+        data_root / 'corpus_b' / 'runs.parquet',
+        arm_keys=['baseline', 'baseline'],
+        leaves={
+            'optimizer': ['adam', 'adam'],            # placeholder
+            'optimizer.inner.lr': [1e-3, 1e-3],       # the real leaf
+        },
+    )
+    profiles = catalogue.arm_leaves(data_root)
+    assert len(profiles) == 1
+    p = profiles[0]
+    assert 'optimizer' not in p.leaves
+    assert 'optimizer.inner.lr' in p.leaves
+
+
+# ============ 14. arm_leaves: exogenous filter ============
+
+def test_arm_leaves_excludes_exogenous_and_framework(tmp_path: Path) -> None:
+    """Framework-typed fields (timestamp, verdict, ...) and exogenous
+    keys (env_name, seed) must NOT appear as leaves."""
+    data_root = tmp_path / 'data'
+    _write_runs_parquet(
+        data_root / 'corpus_c' / 'runs.parquet',
+        arm_keys=['baseline', 'baseline'],
+        leaves={
+            'env_name': ['CartPole-v1', 'CartPole-v1'],
+            'seed': [0, 1],
+            'gamma': [0.99, 0.99],
+        },
+    )
+    profiles = catalogue.arm_leaves(data_root)
+    assert len(profiles) == 1
+    p = profiles[0]
+    assert p.envs == ('CartPole-v1',)
+    assert 'env_name' not in p.leaves
+    assert 'seed' not in p.leaves
+    assert 'gamma' in p.leaves
+
+
 # ============ 8. runs_row_count populates ============
 
 def test_runs_row_count_from_parquet(tmp_path: Path) -> None:

@@ -30,7 +30,7 @@ import os
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Literal, cast
 
 import polars as pl
 
@@ -475,3 +475,252 @@ def to_polars(rows: Sequence[CorpusInventoryRow]) -> pl.DataFrame:
     """
     flat = [_row_to_dict(r) for r in rows]
     return pl.DataFrame(flat, schema=POLARS_SCHEMA)
+
+
+# ============ Arm/leaves view (per-cell content) ============
+
+@dataclass(frozen=True, slots=True)
+class ArmLeafProfile:
+    """Per-(corpus, arm) configurational fingerprint, sourced from
+    `runs.parquet` columns. `leaves` maps each leaf path to a sorted
+    tuple of distinct values observed across that arm's cells —
+    length 1 for constant leaves; longer for sweep arms (each
+    distinct value, stringified)."""
+    corpus: str                              # parent/name addr
+    arm: str
+    n_cells: int
+    envs: tuple[str, ...]                    # sorted distinct env_name values
+    leaves: Mapping[str, tuple[str, ...]]
+
+
+# Framework-typed RunRow fields (schema.py:RunRow). These appear
+# as parquet columns but are never leaves.
+_RUNROW_FIELDS: frozenset[str] = frozenset({
+    'id', 'parent_id', 'cycle_id', 'timestamp', 'verdict',
+    'arm_key', 'substrate_commit_sha',
+})
+
+# Default substrate-exogenous keys for the RL substrate. Caller
+# may override via the `exogenous_keys` and `exogenous_prefixes`
+# arguments to `arm_leaves`. The framework itself doesn't hardcode
+# RL keys (per CLAUDE.md); the defaults here are a convenience for
+# the only substrate that currently uses this view.
+_DEFAULT_EXOGENOUS_KEYS: frozenset[str] = frozenset({
+    'env_name', 'seed', 'wrappers',
+    'total_steps', 'eval_every', 'n_episodes', 'eval_episode_cap',
+    'env', 'env_params', 'obs_shape', 'n_actions', 'state_hash',
+})
+_DEFAULT_EXOGENOUS_PREFIXES: tuple[str, ...] = (
+    'env_params.', 'env.',
+)
+
+
+def _leaf_columns(
+    columns: Sequence[str],
+    dtypes: Mapping[str, pl.DataType],
+    *,
+    exogenous_keys: frozenset[str],
+    exogenous_prefixes: tuple[str, ...],
+    measurable_names: frozenset[str],
+) -> tuple[str, ...]:
+    """Filter a parquet's column list down to leaf columns —
+    excluding framework-typed RunRow fields, registered measurables,
+    substrate-declared exogenous keys, trajectory (List-dtype)
+    columns, and bundle-placeholder columns (the `optimizer`
+    column when `optimizer.inner.lr` exists)."""
+    candidates: list[str] = []
+    for c in columns:
+        if c in _RUNROW_FIELDS or c in exogenous_keys or c in measurable_names:
+            continue
+        if any(c.startswith(p) for p in exogenous_prefixes):
+            continue
+        dt = dtypes.get(c)
+        if isinstance(dt, pl.List):
+            continue
+        candidates.append(c)
+    # Drop bundle placeholders: column X where X+'.' is a prefix of
+    # some other candidate.
+    cand_set = set(candidates)
+    final: list[str] = []
+    for c in candidates:
+        if any(other.startswith(c + '.') for other in cand_set):
+            continue
+        final.append(c)
+    return tuple(sorted(final))
+
+
+def _scalar_to_str(v: object) -> str | None:
+    """Stringify a parquet cell value for leaf signature use.
+    Tuples / lists rendered as `(x,y,z)` for parity with the
+    `q_network.hidden = (64, 64)` pattern. Returns None for null
+    inputs so callers can filter empties."""
+    if v is None:
+        return None
+    if isinstance(v, (list, tuple)):
+        return '(' + ','.join(_scalar_to_str(x) or '' for x in v) + ')'
+    return str(v)
+
+
+def arm_leaves(
+    data_root: Path | Sequence[Path],
+    *,
+    include_misc: bool = False,
+    exogenous_keys: frozenset[str] | None = None,
+    exogenous_prefixes: tuple[str, ...] | None = None,
+) -> tuple[ArmLeafProfile, ...]:
+    """Per-(corpus, arm) leaf profile across local corpora.
+
+    Reads `runs.parquet` for every catalogue row whose `local` slice
+    has parquets on disk (CLOUD_AND_LOCAL / LOCAL_ONLY / etc.).
+    Returns one `ArmLeafProfile` per distinct (corpus, arm_key) pair.
+    The `leaves` mapping carries the distinct stringified values
+    each leaf takes across that arm's cells: length-1 for constant
+    arms, longer for sweeps.
+
+    Reads are column-projected for speed: only `arm_key`,
+    `env_name`, and leaf candidates are decoded.
+
+    `exogenous_keys` and `exogenous_prefixes` let the caller
+    override the default RL substrate's exogenous-key set
+    (cf. CLAUDE.md: substrate declares exogenous via
+    `Annotated[T, Exogenous]`; framework doesn't hardcode).
+    """
+    from corroborate.measurables import registered_names
+    ex_keys = (exogenous_keys
+               if exogenous_keys is not None else _DEFAULT_EXOGENOUS_KEYS)
+    ex_pre = (exogenous_prefixes
+              if exogenous_prefixes is not None else _DEFAULT_EXOGENOUS_PREFIXES)
+    measurables = frozenset(registered_names())
+
+    rows = catalogue(data_root, remote_prefix=None,
+                     include_misc=include_misc)
+    profiles: list[ArmLeafProfile] = []
+    for r in rows:
+        if r.local is None or r.local.parquet_count == 0:
+            continue
+        path = r.local.path / 'runs.parquet'
+        if not path.exists():
+            continue
+        # Read schema first (cheap), pick columns, then read those.
+        try:
+            schema = pl.scan_parquet(path).collect_schema()
+        except (pl.exceptions.ComputeError, FileNotFoundError, OSError):
+            continue
+        col_names = schema.names()
+        dtypes: dict[str, pl.DataType] = dict(zip(col_names, schema.dtypes()))
+        leaves = _leaf_columns(
+            col_names, dtypes,
+            exogenous_keys=ex_keys,
+            exogenous_prefixes=ex_pre,
+            measurable_names=measurables,
+        )
+        wanted: list[str] = ['arm_key']
+        if 'env_name' in col_names:
+            wanted.append('env_name')
+        wanted.extend(leaves)
+        try:
+            df = pl.read_parquet(path, columns=wanted)
+        except (pl.exceptions.ComputeError, FileNotFoundError, OSError):
+            continue
+        addr = f'{r.parent}/{r.name}' if r.parent else r.name
+        arm_values = cast(list[object], df['arm_key'].to_list())
+        for arm in sorted({str(a) for a in arm_values if a is not None}):
+            sub = df.filter(pl.col('arm_key') == arm)
+            if 'env_name' in sub.columns:
+                env_values = cast(list[object], sub['env_name'].to_list())
+                envs = tuple(sorted(
+                    {str(e) for e in env_values if e is not None}
+                ))
+            else:
+                envs = ()
+            leaf_map: dict[str, tuple[str, ...]] = {}
+            for leaf in leaves:
+                leaf_vals = cast(list[object], sub[leaf].to_list())
+                vals = {
+                    s for s in (_scalar_to_str(v) for v in leaf_vals)
+                    if s is not None
+                }
+                if vals:
+                    leaf_map[leaf] = tuple(sorted(vals))
+            profiles.append(ArmLeafProfile(
+                corpus=addr, arm=arm, n_cells=sub.height,
+                envs=envs, leaves=leaf_map,
+            ))
+    profiles.sort(key=lambda p: (p.corpus, p.arm))
+    return tuple(profiles)
+
+
+_LEAVES_LONG_SCHEMA: Mapping[str, pl.DataType | type[pl.DataType]] = {
+    'corpus':     pl.String,
+    'arm':        pl.String,
+    'n_cells':    pl.UInt32,
+    'envs':       pl.String,
+    'leaf_path':  pl.String,
+    'leaf_value': pl.String,
+    'n_values':   pl.UInt32,
+}
+
+
+def arm_leaves_to_polars_long(
+    profiles: Sequence[ArmLeafProfile],
+) -> pl.DataFrame:
+    """One row per `(corpus, arm, leaf_path, leaf_value)` —
+    sweep arms produce multiple rows for the same leaf. Suitable
+    for filter / aggregate queries: `df.filter(pl.col('leaf_path')
+    == 'gamma')` etc."""
+    flat: list[dict[str, object]] = []
+    for p in profiles:
+        envs = ','.join(p.envs)
+        for leaf_path, values in sorted(p.leaves.items()):
+            for v in values:
+                flat.append({
+                    'corpus':     p.corpus,
+                    'arm':        p.arm,
+                    'n_cells':    p.n_cells,
+                    'envs':       envs,
+                    'leaf_path':  leaf_path,
+                    'leaf_value': v,
+                    'n_values':   len(values),
+                })
+    return pl.DataFrame(flat, schema=_LEAVES_LONG_SCHEMA)
+
+
+def arm_leaves_to_polars_wide(
+    profiles: Sequence[ArmLeafProfile],
+) -> pl.DataFrame:
+    """One row per `(corpus, arm)` with each leaf as its own
+    column. Sweep leaves collapse to `'MULTI:[v1,v2,...]'` strings.
+    Sparse — many nulls when leaves are corpus-specific. Useful
+    for at-a-glance scan; long-format is better for queries."""
+    all_leaves: list[str] = []
+    seen: set[str] = set()
+    for p in profiles:
+        for leaf in sorted(p.leaves.keys()):
+            if leaf not in seen:
+                seen.add(leaf); all_leaves.append(leaf)
+    flat: list[dict[str, object]] = []
+    for p in profiles:
+        row: dict[str, object] = {
+            'corpus':  p.corpus,
+            'arm':     p.arm,
+            'n_cells': p.n_cells,
+            'envs':    ','.join(p.envs),
+        }
+        for leaf in all_leaves:
+            vals = p.leaves.get(leaf, ())
+            if not vals:
+                row[leaf] = None
+            elif len(vals) == 1:
+                row[leaf] = vals[0]
+            else:
+                row[leaf] = f'MULTI:[{",".join(vals)}]'
+        flat.append(row)
+    schema: dict[str, pl.DataType | type[pl.DataType]] = {
+        'corpus':  pl.String,
+        'arm':     pl.String,
+        'n_cells': pl.UInt32,
+        'envs':    pl.String,
+    }
+    for leaf in all_leaves:
+        schema[leaf] = pl.String
+    return pl.DataFrame(flat, schema=schema)
