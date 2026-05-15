@@ -33,9 +33,7 @@ from corroborate_rl.dqn.config_loader import (
     is_str_keyed_mapping,
 )
 from corroborate_rl.dqn.collect import EnvConfig
-from corroborate_rl.env_catalogue import EnvWrapper
-from corroborate_rl.dqn.invariants import DQNTrajectoryRecord
-from corroborate_rl.env_catalogue import EnvSpec
+from corroborate_rl.env_catalogue import EnvSpec, EnvWrapper
 
 
 type EnvBinding = Literal['shared', 'per_env']

@@ -20,8 +20,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from corroborate_rl.dqn.yaml_sweep import (
     default_dqn_registry, expand_sweep, load_sweep,
 )

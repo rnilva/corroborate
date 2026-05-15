@@ -8,6 +8,7 @@ threads through correctly."""
 from __future__ import annotations
 
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -18,7 +19,7 @@ RUN_SWEEP_PATH = REPO_ROOT / 'scripts' / 'run_sweep.py'
 
 
 @pytest.fixture(autouse=True)
-def _add_script_to_syspath() -> 'Iterator[None]':  # noqa: F821
+def _add_script_to_syspath() -> Iterator[None]:
     """`scripts/run_sweep.py` isn't a package; import it directly
     via the path. Restore syspath after to avoid leaking into
     sibling tests."""

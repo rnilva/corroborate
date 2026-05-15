@@ -39,7 +39,8 @@ from functools import partial
 from pathlib import Path
 from typing import TypeIs
 
-from corroborate._internals.yaml import safe_load as _yaml_load
+import yaml
+
 from corroborate.core.intervention import DoEffect, Intervention, is_replacement
 from corroborate.runner.registry import Registry
 
@@ -228,7 +229,7 @@ def load_intervention(
     one intervention per `path`; multi-intervention sweeps are
     loaded by the substrate's own dispatcher."""
     with path.open() as f:
-        raw = _yaml_load(f)
+        raw: object = yaml.safe_load(f)
     if not is_str_keyed_mapping(raw):
         raise TypeError(
             f'top-level YAML must be a string-keyed mapping; got '
