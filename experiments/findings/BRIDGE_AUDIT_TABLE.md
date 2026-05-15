@@ -311,12 +311,9 @@ Classified by why the scope filter matches zero post-fix cells:
 
 - **Re-run (now, CPU):** rs-intervention rescue family (6 bridges:
   rescue_underlearning, dominates_response_curve, does_not_rescue
-  ×2, increases_argmax_entropy, entropy_matches_vanilla). New
-  config `experiments/configs/reward_scale_sweep_postfix.yaml`
-  authored; 5 (env, rs) × 2 arms × 30 seeds × 200K steps on CPU
-  in progress at `experiments/data/reward_scale_sweep_postfix/`.
-  After completion: ingest into the ddqn cache, re-run
-  the 6 bridges, retag.
+  ×2, increases_argmax_entropy, entropy_matches_vanilla). 5 (env,
+  rs) × 2 arms × 30 seeds × 200K steps on CPU. After completion:
+  ingest into the ddqn cache, re-run the 6 bridges, retag.
 - **Queue for re-run (10):** Pearl rung-2 corroborations
   (adaptive_dqn × 2, gamma_sweep × 2, polyak τ × 2) + per-corpus
   mediator (staleness × 3) + SI 1M crossover (1). Test

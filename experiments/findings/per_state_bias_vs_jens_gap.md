@@ -80,7 +80,7 @@ Reproduction:
 - Substrate: `src/corroborate_rl/corroborate_rl/dqn/eval.py`,
   `src/corroborate_rl/corroborate_rl/dqn/measurables.py`
   (mean_per_state_cumulative_bias_{late,per_burst}).
-- Configs: `experiments/configs/per_state_bias_probe_{fr,acrobot,metamaze}.yaml`.
+- Configs: probe YAMLs were retired; corpus survives in the cache.
 - Analysis: `scripts/per_state_bias_analysis.py`.
 
 The deeper question — what's UPSTREAM of bias-at-start reduction

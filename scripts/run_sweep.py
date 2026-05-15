@@ -33,8 +33,7 @@ def main(argv: list[str] | None = None) -> None:
     )
     parser.add_argument(
         'config', type=Path,
-        help='YAML sweep config (e.g. '
-             'experiments/configs/capacity_sweep_fourrooms.yaml)',
+        help='Path to the YAML sweep config to run.',
     )
     parser.add_argument(
         '--device', choices=['cpu', 'gpu'], default='cpu',

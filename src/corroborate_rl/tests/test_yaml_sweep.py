@@ -26,10 +26,55 @@ from corroborate_rl.dqn.yaml_sweep import (
 from corroborate.core.signature import claim_graph_signature
 
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
-MANIFEST_PATH = (
-    REPO_ROOT / 'experiments' / 'configs' / 'expectile_3way.yaml'
-)
+EXPECTILE_3WAY_YAML = """
+name: expectile_3way
+out_dir: experiments/data/expectile_3way
+env_binding: shared
+
+envs:
+  - {name: Catch-bsuite,             n_seeds: 30, chunk_size: 15}
+  - {name: DiscountingChain-bsuite,  n_seeds: 30, chunk_size: 15}
+  - {name: MountainCar-v0,           n_seeds: 30, chunk_size: 15}
+  - {name: Acrobot-v1,               n_seeds: 30, chunk_size: 15}
+  - {name: FourRooms-misc,           n_seeds: 30, chunk_size: 15}
+
+defaults:
+  total_steps: 200000
+  eval_every:  20000
+  n_episodes:  5
+  gamma:       0.99
+  sync_period: 100
+  replay:
+    class: Replay
+    capacity: 50000
+    batch_size: 32
+  optimizer:
+    fn: warmed_update
+    inner: {fn: adam, lr: 0.0001}
+    warmup_steps: 100
+  q_network:
+    class: MLP
+    hidden: [64, 64]
+
+interventions:
+  - name: vanilla_dqn
+
+  - name: ddqn
+    arms:
+      - []
+      - - slot_path: bootstrap
+          replacement:
+            fn: bootstrap
+            greedification: {fn: double_greedify}
+
+  - name: expectile_dqn
+    arms:
+      - []
+      - - slot_path: bootstrap
+          replacement:
+            fn: bootstrap
+            greedification: {fn: expectile_greedify, tau: 0.7}
+""".strip()
 
 
 # ---------- Python-authored reference ----------
@@ -97,8 +142,10 @@ def reg() -> Registry:
 
 
 @pytest.fixture
-def sweep(reg: Registry) -> DQNSweep:
-    s = load_sweep(MANIFEST_PATH, reg=reg)
+def sweep(reg: Registry, tmp_path: Path) -> DQNSweep:
+    p = tmp_path / 'expectile_3way.yaml'
+    _ = p.write_text(EXPECTILE_3WAY_YAML)
+    s = load_sweep(p, reg=reg)
     assert s.env_binding == 'shared'
     return s
 

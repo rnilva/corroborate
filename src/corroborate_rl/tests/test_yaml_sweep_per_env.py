@@ -28,13 +28,96 @@ from corroborate_rl.env_catalogue import get as get_env_spec
 from corroborate.core.signature import claim_graph_signature
 
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
-MINATAR_1M_PATH = (
-    REPO_ROOT / 'experiments' / 'configs' / 'minatar_1M.yaml'
-)
-DDQN_EFFECTIVE_PATH = (
-    REPO_ROOT / 'experiments' / 'configs' / 'ddqn_effective.yaml'
-)
+MINATAR_1M_YAML = """
+name: minatar_1M
+out_dir: experiments/data/minatar_1M
+env_binding: per_env
+archive_remote: s3://corroborate-archive/minatar_1M
+
+envs:
+  - {name: Asterix-MinAtar,        n_seeds: 30, chunk_size: 15}
+  - {name: Breakout-MinAtar,       n_seeds: 30, chunk_size: 15}
+  - {name: Freeway-MinAtar,        n_seeds: 30, chunk_size: 15}
+  - {name: SpaceInvaders-MinAtar,  n_seeds: 30, chunk_size: 15}
+
+defaults:
+  total_steps: 1000000
+  eval_every:  50000
+  n_episodes:  5
+  gamma:       0.99
+  sync_period: 100
+  replay:
+    class: Replay
+    capacity: 50000
+    batch_size: 32
+  optimizer:
+    fn: warmed_update
+    inner: {fn: adam, lr: 0.0001}
+    warmup_steps: 100
+  q_network:
+    class: CNN
+    obs_shape: {from_env: observation_shape}
+    channels: [16, 32]
+    kernel_size: 3
+    hidden: [128]
+
+interventions:
+  - name: "vanilla_dqn_{from_env: name}"
+
+  - name: "ddqn_{from_env: name}"
+    arms:
+      - []
+      - - slot_path: bootstrap
+          replacement:
+            fn: bootstrap
+            greedification: {fn: double_greedify}
+""".strip()
+
+
+DDQN_EFFECTIVE_YAML = """
+name: ddqn_effective_cohort
+out_dir: experiments/data/ddqn_effective_cohort
+env_binding: per_env
+
+envs:
+  - {name: Asterix-MinAtar,        n_seeds: 30, chunk_size: 10}
+  - {name: Breakout-MinAtar,       n_seeds: 30, chunk_size: 10}
+  - {name: SpaceInvaders-MinAtar,  n_seeds: 30, chunk_size: 10}
+  - {name: Freeway-MinAtar,        n_seeds: 30, chunk_size: 10}
+  - {name: MNISTBandit-bsuite,     n_seeds: 30, chunk_size: 10}
+
+defaults:
+  total_steps: 200000
+  eval_every:  20000
+  n_episodes:  5
+  gamma:       0.99
+  sync_period: 100
+  replay:
+    class: Replay
+    capacity: 50000
+    batch_size: 32
+  optimizer:
+    fn: warmed_update
+    inner: {fn: adam, lr: 0.0001}
+    warmup_steps: 100
+  q_network:
+    class: CNN
+    obs_shape: {from_env: observation_shape}
+    channels: [16, 32]
+    kernel_size: 3
+    hidden: [128]
+
+interventions:
+  - name: "vanilla_dqn_{from_env: name}"
+
+  - name: "ddqn_{from_env: name}"
+    arms:
+      - []
+      - - slot_path: bootstrap
+          replacement:
+            fn: bootstrap
+            greedification: {fn: double_greedify}
+""".strip()
 
 
 # ---------- Python-authored references ----------
@@ -139,15 +222,19 @@ def reg() -> Registry:
 
 
 @pytest.fixture
-def minatar_1M_sweep(reg: Registry) -> DQNSweep:
-    s = load_sweep(MINATAR_1M_PATH, reg=reg)
+def minatar_1M_sweep(reg: Registry, tmp_path: Path) -> DQNSweep:
+    p = tmp_path / 'minatar_1M.yaml'
+    _ = p.write_text(MINATAR_1M_YAML)
+    s = load_sweep(p, reg=reg)
     assert s.env_binding == 'per_env'
     return s
 
 
 @pytest.fixture
-def ddqn_effective_sweep(reg: Registry) -> DQNSweep:
-    s = load_sweep(DDQN_EFFECTIVE_PATH, reg=reg)
+def ddqn_effective_sweep(reg: Registry, tmp_path: Path) -> DQNSweep:
+    p = tmp_path / 'ddqn_effective.yaml'
+    _ = p.write_text(DDQN_EFFECTIVE_YAML)
+    s = load_sweep(p, reg=reg)
     assert s.env_binding == 'per_env'
     return s
 
@@ -290,26 +377,40 @@ def test_per_env_count_matches_template_x_env(
     assert len(envs_aligned) == n_envs * n_templates
 
 
-def test_shared_sweep_rejects_build_per_env(reg: Registry) -> None:
+def test_shared_sweep_rejects_build_per_env(
+    reg: Registry, tmp_path: Path,
+) -> None:
     """`build_per_env` is the wrong helper for a shared sweep
     and refuses early — the alternative would be silently
     iterating envs while ignoring per-env env_attrs, which
     would produce nonsense output."""
-    shared_path = (
-        REPO_ROOT / 'experiments' / 'configs' / 'expectile_3way.yaml'
+    cfg = tmp_path / 'shared.yaml'
+    cfg.write_text(
+        'name: shared\n'
+        f'out_dir: {tmp_path / "out"}\n'
+        'env_binding: shared\n'
+        'envs:\n'
+        '  - {name: FourRooms-misc, n_seeds: 2}\n'
+        'interventions:\n'
+        '  - name: ddqn_vs_vanilla\n'
     )
-    shared = load_sweep(shared_path, reg=reg)
+    shared = load_sweep(cfg, reg=reg)
     assert shared.env_binding == 'shared'
     with pytest.raises(ValueError, match="env_binding='per_env'"):
         _ = build_per_env(shared, reg=reg)
 
 
-def test_from_env_in_shared_mode_raises(reg: Registry) -> None:
+def test_from_env_in_shared_mode_raises(
+    reg: Registry, tmp_path: Path,
+) -> None:
     """A `{from_env: ...}` placeholder is only meaningful in
     per-env dispatch; trying to build interventions for a
-    shared sweep that contains one fails fast with a clear
-    error pointing at the schema mistake."""
-    sweep = load_sweep(MINATAR_1M_PATH, reg=reg)
+    per_env sweep with `{from_env: ...}` without supplying
+    env_attrs fails fast with a clear error pointing at the
+    schema mistake."""
+    p = tmp_path / 'minatar_1M.yaml'
+    _ = p.write_text(MINATAR_1M_YAML)
+    sweep = load_sweep(p, reg=reg)
     with pytest.raises(ValueError, match='from_env'):
         _ = sweep.build_interventions(reg=reg)  # no env_attrs
 
