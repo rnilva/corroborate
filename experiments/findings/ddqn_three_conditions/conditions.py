@@ -72,19 +72,30 @@ def condition_1__q_bias_exists_under_high_gamma_and_K(
     min_vanilla_predictor: float = 0.5,
     per_stratum_d_threshold: float = -0.5,
 ) -> tuple[Verdict, RefutationClass | None]:
-    """**Condition 1**: Q-bias exists at FR γ=0.999 AND its
-    magnitude scales with K (action multiplier).
+    """**Condition 1 (observational K-scaling, not σ-bound test)**:
+    DDQN reduces `jensen_gap` uniformly across k_eff strata at
+    FR γ=0.999 MLP[64,64].
 
     Stratified by `k_eff = native_actions × action_duplicate_k`
-    — the Hasselt-theorem-relevant action count. On FR (native=4),
-    k_eff ∈ {4, 8, 12, 16} across the action_duplicate_k=1-4
-    cells. Per-stratum Cohen's d on `jensen_gap` should be
-    substantially negative across all k_eff strata.
+    (= K, the discrete action count). On FR (native=4), k_eff ∈
+    {4, 8, 12, 16} for action_duplicate_k=1-4. Per-stratum
+    Cohen's d on `jensen_gap` is substantially negative across
+    all k_eff strata.
 
-    Empirical readings live in
-    `findings_two_types_of_bias` (memory). Direction.INVERSE
-    encodes the Hasselt prediction; `predicted_direction='a_lt_b'`
-    means treatment-arm jens < baseline-arm jens (DDQN reduces)."""
+    Caveat (review surfaced 2026-05-15): the module-level prose
+    names the `σ × √(2 ln K) × 1/(1−γ)` Hasselt bound, but this
+    bridge tests ONLY that DDQN reduces jens uniformly across
+    K_eff. The σ factor is not measured (Q-magnitude SD across
+    cells is a substrate-level diagnostic, not a per-cell
+    measurable in this hypothesis). The empirical pattern is
+    consistent with the Hasselt bound but is also consistent
+    with any monotone-in-K reduction; the bound's load-bearing
+    σ factor is unverified.
+
+    Direction.INVERSE encodes the Hasselt prediction;
+    `predicted_direction='a_lt_b'` means treatment-arm jens <
+    baseline-arm jens (DDQN reduces). Empirical readings in
+    `findings_two_types_of_bias` (memory)."""
     del stratify_by, min_vanilla_predictor
     if stratified_arm_diff_pooled.n_strata < min_strata:
         return Verdict.POWER_INSUFFICIENT, None
@@ -138,59 +149,57 @@ def condition_2__fa_capacity_caps_type_1_in_linear_fa(
     stratified_arm_diff_pooled: StratifiedArmDiffPooledResult,
     *,
     stratify_by: tuple[str, ...] = ('env_name',),
-    min_strata: int = 1,
+    min_strata: int = 3,
     min_vanilla_predictor: float = float('-inf'),
     null_d_threshold: float = 0.2,
 ) -> tuple[Verdict, RefutationClass | None]:
-    """**Condition 2**: With linear FA, vanilla's Q is FA-capped
-    before max-bias compounds → DDQN's bias-correction has
-    nothing to reduce. The linear-FA stratum should show NULL
-    effect on `jensen_gap`.
+    """**Condition 2 (UNDERPOWERED at current scope)**: With
+    linear FA, vanilla's Q is FA-capped before max-bias
+    compounds → DDQN's bias-correction has nothing to reduce.
 
-    HELD when all admitted strata's |cohen_d| < null_d_threshold
-    AND no stratum's CI fully excludes zero in the predicted-
-    inverse direction.
+    Currently scoped to MC γ=0.999 linear FA only — ONE stratum,
+    which the DL-pooled primitive correctly flags as
+    POWER_INSUFFICIENT. The bridge body delegates to the
+    primitive's verdict honestly rather than overriding it.
 
-    Empirical readings in `findings_two_types_of_bias` (memory).
+    A single-stratum null cannot distinguish "FA caps Type 1
+    universally" from "MC linear FA happens to have small
+    σ_action". To upgrade this to HELD, the scope needs ≥3
+    strata varying linear-FA across envs (e.g., FR γ=0.999
+    linear FA, Acrobot γ=0.999 linear FA, MC γ=0.999 linear FA)
+    — particularly a sparse-positive env where C1 is known to
+    fire, to test that linear FA STILL caps Type 1 there.
 
-    **Verdict override**: `min_strata=1` and the per-stratum
-    CI-inspection body intentionally bypass the primitive's
-    DL-pooled POWER_INSUFFICIENT gate. The hypothesis tests a
-    single-env intervention (MC γ=0.999 linear FA), and the
-    within-stratum n=60 per arm gives adequate per-stratum
-    Cohen's d precision. The DL-pooled verdict from
-    `stratified_arm_diff_pooled` is not consumed; if you need
-    multi-env pooling, fork this bridge with a different
-    `min_strata`."""
+    Caveat (review surfaced 2026-05-15): linear FA on MC
+    produces σ_VAN ≈ σ_DDQN ≈ 128 (both FA-capped) so the null
+    Δ_jens here is *mechanical from the regime*, not a clean
+    test of the FA-capacity intervention's causal effect on
+    Type 1. Substantive claim needs the
+    sparse-positive-linear-FA counter-test."""
     del stratify_by, min_vanilla_predictor
+    # Honest delegation: when n_strata < min_strata=3, the
+    # primitive's POWER_INSUFFICIENT verdict is correct. Don't
+    # smuggle a single-cell null into HELD.
     if stratified_arm_diff_pooled.n_strata < min_strata:
         return Verdict.POWER_INSUFFICIENT, None
+    # Multi-stratum case (NOT achievable on current corpus, but
+    # documents the upgrade path): every stratum's |d| in null
+    # band, no significant wrong-sign or right-sign refutation.
     any_significant = False
     any_wrong_sign = False
-    n_valid = 0
     for s in stratified_arm_diff_pooled.per_stratum:
-        d = s.cohen_d
-        se = s.cohen_se
+        d, se = s.cohen_d, s.cohen_se
         if math.isnan(d) or math.isnan(se):
             continue
-        n_valid += 1
         ci_lo = d - 1.96 * se
         ci_hi = d + 1.96 * se
-        # Predicted-inverse means d should be negative. The
-        # null-prediction asserts |d| < threshold. If CI fully
-        # below -threshold → mechanism active (refutes null).
         if ci_hi < -null_d_threshold:
             any_significant = True
-        # Wrong-sign (positive significant d) flags refutation.
         if ci_lo > +null_d_threshold:
             any_wrong_sign = True
-    if n_valid < min_strata:
-        return Verdict.POWER_INSUFFICIENT, None
     if any_wrong_sign:
         return Verdict.NO_EFFECT, RefutationClass.SIGN_FLIP
     if any_significant:
-        # Mechanism fired under linear FA — refutes the FA-caps
-        # hypothesis.
         return Verdict.NO_EFFECT, None
     return Verdict.HELD, None
 
@@ -225,44 +234,50 @@ def condition_3__shaping_decouples_mech_from_outcome(
     stratified_arm_diff_pooled: StratifiedArmDiffPooledResult,
     *,
     stratify_by: tuple[str, ...] = ('env_name',),
-    min_strata: int = 1,
+    min_strata: int = 3,
     min_vanilla_predictor: float = float('-inf'),
     null_d_threshold: float = 0.3,
 ) -> tuple[Verdict, RefutationClass | None]:
-    """**Condition 3**: Reward shaping adds dense policy signal
-    that overrides Q-noise in argmax. DDQN's bias-reduction
-    still fires on Q but no longer translates to outcome.
+    """**Condition 3 (UNDERPOWERED at current scope)**: Reward
+    shaping adds dense policy signal that decouples DDQN's bias-
+    reduction from outcome translation.
 
-    Target is `eval_best_burst_raw_mean` (γ-invariant) per the
-    canonical `findings_units_bug` discipline. Under potential-
-    based shaping the raw episode return still encodes "did the
-    agent reach the goal" correctly — Ng et al. 1999 guarantees
-    the optimal policy is preserved.
+    Currently scoped to FR γ=0.999 MLP[64,64] shaped — ONE
+    stratum. The DL-pooled primitive correctly returns
+    POWER_INSUFFICIENT; bridge body now delegates honestly
+    rather than overriding.
 
-    HELD when shaped stratum's |cohen_d| < null_d_threshold OR
-    cohen_d is significantly negative (DDQN's clip wedge hurts).
-    Empirical readings in
-    `findings_shaping_decouples_bias_from_outcome` (memory)."""
+    Alternative explanations the current scope does NOT rule out
+    (review surfaced 2026-05-15):
+    1. **Ceiling**: shaping makes both arms learn → both saturate
+       near goal-success ceiling → Δ_out shrinks because of
+       saturation, not policy-signal decoupling.
+    2. **Reward-scale unit**: `eval_best_burst_raw_mean` on a
+       shaped wrapper integrates the modified reward; Cohen's d
+       magnitude is unit-bound to the shaping potential.
+    3. **The "policy gradient overrides Q-noise in argmax"
+       mechanism is unmeasured** — it would need probe-level
+       visibility into the argmax decision (Q vs Φ-gradient
+       contribution).
+
+    Upgrade requires: multiple shaping conditions, OR shaping ×
+    multiple sparse-positive envs, plus a control that
+    distinguishes "ceiling saturation" from "argmax override"."""
     del stratify_by, min_vanilla_predictor
+    # Honest delegation: single-stratum scope returns
+    # POWER_INSUFFICIENT. Don't smuggle into HELD.
     if stratified_arm_diff_pooled.n_strata < min_strata:
         return Verdict.POWER_INSUFFICIENT, None
+    # Multi-stratum: HELD iff no stratum's CI fully excludes the
+    # null toward the active-mechanism direction.
     any_positive_significant = False
-    n_valid = 0
     for s in stratified_arm_diff_pooled.per_stratum:
-        d = s.cohen_d
-        se = s.cohen_se
+        d, se = s.cohen_d, s.cohen_se
         if math.isnan(d) or math.isnan(se):
             continue
-        n_valid += 1
         ci_lo = d - 1.96 * se
-        # Direction.DIRECT means the predicted (active-mechanism)
-        # direction is positive. If CI lo > threshold, the
-        # mechanism translates positively under shaping →
-        # refutes the decoupling claim.
         if ci_lo > +null_d_threshold:
             any_positive_significant = True
-    if n_valid < min_strata:
-        return Verdict.POWER_INSUFFICIENT, None
     if any_positive_significant:
         return Verdict.NO_EFFECT, None
     return Verdict.HELD, None

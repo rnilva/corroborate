@@ -47,25 +47,41 @@ from experiments.findings.ddqn_three_conditions.conditions import (
 )
 
 
-# All three bridges fire HELD on the joined corpus (2026-05-15):
-#  - C1 HELD: per-k Cohen's d on jensen_gap is uniformly < -0.5
-#    at FR γ=0.999 MLP[64,64] no-shaping, across k=1-4.
-#  - C2 HELD: linear-FA stratum on MountainCar γ=0.999 shows
-#    Cohen's d within null band [-0.2, +0.2] (vanilla Q is
-#    FA-capped → DDQN's max-bias correction has nothing to
-#    reduce).
-#  - C3 HELD: PotentialReward-shaped FR γ=0.999 MLP shows no
-#    significantly-positive Cohen's d on eval_best_burst_mean
-#    (DDQN's bias-reduction no longer translates under dense
-#    shaping signal).
+# Honest verdict state (review surfaced 2026-05-15):
 #
-# composed_verdict returns SUPPORTED. The substrate-corroborated
-# three-conditions framework is now formally registered as a
-# Hypothesis Protocol-conformer.
-EXPECTED: ClusterVerdict = ClusterVerdict.SUPPORTED
+# C1 HELD at current scope: per-k_eff Cohen's d on jensen_gap is
+#   uniformly < -0.5 at FR γ=0.999 MLP[64,64] no-shaping, across
+#   k_eff ∈ {4, 8, 12, 16}. Observational K-scaling, NOT a test
+#   of the σ × √(2 ln K) Hasselt bound named in the module
+#   docstring — σ factor is unmeasured.
+# C2 POWER_INSUFFICIENT: scope admits only the MC γ=0.999 linear
+#   FA stratum (n_strata=1). A single-cell null test cannot
+#   distinguish "FA caps Type 1 universally" from "MC linear FA
+#   happens to have small σ_action". Bridge body now honestly
+#   delegates to the primitive's POWER_INSUFFICIENT verdict
+#   rather than overriding.
+# C3 POWER_INSUFFICIENT: same shape — scope admits only the FR
+#   γ=0.999 MLP shaped stratum (n_strata=1). Alternative
+#   explanations (ceiling, reward-scale unit) aren't ruled out.
+#
+# composed_verdict returns UNDERPOWERED. The substantive
+# corroboration (in memory entries `findings_two_types_of_bias`
+# and `findings_shaping_decouples_bias_from_outcome`) is real,
+# but the formal Hypothesis-Protocol surface here doesn't yet
+# carry the multi-stratum panels needed to upgrade to SUPPORTED.
+EXPECTED: ClusterVerdict = ClusterVerdict.UNDERPOWERED
 
 
-BLOCKED_ON: str | None = None
+BLOCKED_ON: str | None = (
+    'C2 needs ≥3 strata of linear-FA × {sparse-positive env, '
+    'dense-negative env, γ-sweep} to test FA-caps necessity '
+    "rather than the regime-mechanical null on MC. C3 needs "
+    '≥3 shaping conditions OR shaping × {FR, MC, Acrobot} '
+    'plus a ceiling-vs-decoupling control. C1 prose name-drops '
+    'the σ × √(2 ln K) Hasselt bound but the bridge only tests '
+    'K-scaling — either rename to an observational claim or '
+    'measure σ via a derived per-cell measurable.'
+)
 
 
 BRIDGES: tuple[Bridge, ...] = (
