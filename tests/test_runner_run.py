@@ -180,14 +180,16 @@ def test_default_cache_path_dotted_module_name_uses_last_segment() -> None:
 
 
 def test_load_data_returns_none_when_data_is_none() -> None:
-    """**CA2**: `_load_data(None, ...)` returns None — no walk,
-    no DataFrame construction. The cache-only default path
-    relies on this."""
+    """**CA2**: `_load_data(None, ...)` returns (None, None) — no
+    walk, no DataFrame, no walk_root. The cache-only default path
+    relies on the first half; the second-half `walk_root` accompanies
+    the DataFrame for the cache-sources sidecar."""
     from corroborate.runner.runner import _load_data
-    out = _load_data(
+    df, walk_root = _load_data(
         None, restore_from_cloud=False, required=(), bridges=(),
     )
-    assert out is None
+    assert df is None
+    assert walk_root is None
 
 
 def test_load_data_dispatches_sequence_path_to_named_corpora(
@@ -221,31 +223,35 @@ def test_load_data_dispatches_sequence_path_to_named_corpora(
         })
         df.write_parquet(d / 'runs.parquet')
 
-    # Ingest just `a` and `b`. `_load_data` returns just the named
-    # subset; the cache append against existing cells happens at
-    # the higher `_ingest_and_compute` layer.
-    out = _load_data(
+    # Ingest just `a` and `b`. `_load_data` returns (df, walk_root)
+    # where walk_root is the resolved parent of the named corpora —
+    # plumbed through for the cache-sources sidecar wire-in.
+    out_df, walk_root = _load_data(
         [root / 'a', root / 'b'],
         restore_from_cloud=False, required=(), bridges=(),
     )
-    assert out is not None
-    ids = sorted(out['id'].to_list())
+    assert out_df is not None
+    ids = sorted(out_df['id'].to_list())
     assert ids == ['a-0', 'a-1', 'b-0', 'b-1'], (
         f'expected only a + b cells; got {ids}. CA3 may have '
         f'fallen through to a directory walk.'
     )
+    # walk_root should be the parent of the named corpora (the
+    # cache-sources sidecar uses it as the recorded data_root).
+    assert walk_root == root.resolve()
 
 
 def test_load_data_named_corpora_empty_sequence_is_noop(
     tmp_path: Path,
 ) -> None:
-    """**CA3 edge case**: empty list — return None, don't walk
-    any default root."""
+    """**CA3 edge case**: empty list — return (None, None), don't
+    walk any default root."""
     from corroborate.runner.runner import _load_data
-    out = _load_data(
+    df, walk_root = _load_data(
         [], restore_from_cloud=False, required=(), bridges=(),
     )
-    assert out is None
+    assert df is None
+    assert walk_root is None
 
 
 def test_named_ingest_appends_to_existing_cache_preserving_others(

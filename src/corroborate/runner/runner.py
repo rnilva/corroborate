@@ -52,6 +52,7 @@ import re
 import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal, Self, cast
 
@@ -775,6 +776,80 @@ def evict(
     return total, counts
 
 
+def _update_sources_for_walk(
+    sources_path: Path, *,
+    new_walk: pl.DataFrame,
+    walk_root: Path,
+) -> None:
+    """Append a fresh `ingested_at` timestamp per corpus in the
+    current walk. Replace-or-create semantics: existing entries
+    keep their `ingested_at` history (timestamp appended);
+    new corpora get a single-element history. Entries for corpora
+    NOT in the current walk are left untouched (additivity).
+
+    `data_root` and `remote_root` are updated only when the new
+    value is non-null (B2 fix from the plan: never overwrite a
+    known-good value with null — e.g. if a corpus was first
+    ingested via `--ingest-all <root>` and is now re-ingested via
+    a named-ingest path whose root resolves differently)."""
+    if 'corpus' not in new_walk.columns or new_walk.height == 0:
+        return
+    walked = cast(
+        list[object],
+        new_walk['corpus'].unique().to_list(),
+    )
+    walked_names: list[str] = sorted({
+        str(c) for c in walked if isinstance(c, str)
+    })
+    if not walked_names:
+        return
+
+    now_iso = datetime.now(UTC).isoformat(timespec='seconds')
+    data_root_str = str(walk_root.resolve())
+    existing = _read_sources(sources_path)
+    existing_by_corpus: dict[str, CacheSourceEntry] = (
+        {e.corpus: e for e in existing.sources}
+        if existing is not None else {}
+    )
+
+    for name in walked_names:
+        corpus_dir = walk_root / name
+        new_remote_root: str | None = None
+        try:
+            from corroborate.corpus.cloud import load_manifest as _load_remote
+            m = _load_remote(corpus_dir)
+            if m is not None:
+                new_remote_root = m.remote_root
+        except (OSError, ValueError, TypeError):
+            new_remote_root = None
+
+        prior = existing_by_corpus.get(name)
+        if prior is not None:
+            existing_by_corpus[name] = CacheSourceEntry(
+                corpus=name,
+                # Null-preserving update: keep prior values when
+                # new value is None (B2 fix).
+                data_root=(data_root_str if data_root_str
+                           else prior.data_root),
+                remote_root=(new_remote_root
+                             if new_remote_root is not None
+                             else prior.remote_root),
+                ingested_at=prior.ingested_at + (now_iso,),
+            )
+        else:
+            existing_by_corpus[name] = CacheSourceEntry(
+                corpus=name,
+                data_root=data_root_str,
+                remote_root=new_remote_root,
+                ingested_at=(now_iso,),
+            )
+
+    _write_sources(
+        sources_path,
+        CacheSources(sources=tuple(existing_by_corpus.values())),
+    )
+
+
 def _evict_from_sources(
     sources_path: Path, *, evicted: set[str],
 ) -> None:
@@ -840,7 +915,7 @@ def _ingest_and_compute(
     else:
         is_directory_walk = True   # named-corpora ingest (CA3)
 
-    new_data = _load_data(
+    new_data, walk_root = _load_data(
         data, restore_from_cloud=restore_from_cloud,
         required=required, bridges=bridges,
     )
@@ -930,9 +1005,27 @@ def _ingest_and_compute(
             # absent file.
             if merged.height > 0:
                 _atomic_write_parquet(merged, cache_path)
+                # Cache-sources sidecar (input provenance). Updates
+                # the per-corpus audit trail for everyone in the
+                # current walk; entries for corpora NOT in this
+                # walk are preserved (additivity). No-op if
+                # `walk_root` couldn't be derived (DataFrame /
+                # file paths skip this anyway via early-return).
+                if walk_root is not None and new_walk.height > 0:
+                    _update_sources_for_walk(
+                        _sources_path(cache_path),
+                        new_walk=new_walk,
+                        walk_root=walk_root,
+                    )
         return merged
 
     # Legacy DataFrame/file path — incremental cache merge.
+    # NB (cache-sources sidecar): the per-corpus sources sidecar
+    # is intentionally NOT updated on this path. Raw DataFrame /
+    # `--ingest-file <path.parquet>` ingest may not even carry a
+    # `corpus` column (let alone derivable data_root/remote_root),
+    # so the sidecar's schema doesn't naturally apply. Documented
+    # v1 limitation; revisit if `--ingest-file` becomes common.
     manifest_path = (
         _manifest_path(cache_path) if cache_path is not None else None
     )
@@ -1001,6 +1094,9 @@ def _enrich_cache_in_place(
             _write_manifest(
                 manifest_path, _signatures_for(required, enriched),
             )
+        # NB (cache-sources sidecar): schema-only enrichment doesn't
+        # change corpus membership — no `ingested_at` event happened.
+        # Sidecar deliberately untouched.
     return enriched
 
 
@@ -1231,9 +1327,24 @@ def _load_data(
     restore_from_cloud: bool,
     required: Sequence[str],
     bridges: tuple[Bridge, ...],
-) -> pl.DataFrame | None:
-    """Resolve data into a DataFrame, with auto-restore on missing-
-    raw corpora when given a directory.
+) -> tuple[pl.DataFrame | None, Path | None]:
+    """Resolve data into a DataFrame + the walk root used to load it.
+
+    Returns `(df, root)`. The root is the absolute path used as the
+    walk-root for directory ingest; it's preserved so the
+    cache-sources sidecar can record per-corpus `data_root`
+    without the caller re-deriving it.
+
+    For `--ingest <named>` mode, `root` is the parent-of-the-first-
+    corpus — same as the disk-budget root used here historically.
+    For top-level named ingest this equals the data root; for nested
+    named ingest (`--ingest k_sweep_acrobot/ddqn_vs_vanilla`) it
+    equals the corpus's IMMEDIATE parent, which is the
+    parent-of-nested rather than the data root (acknowledged v1
+    limitation; see plan §v1 scope cuts).
+
+    `root` is None for the legacy DataFrame / file paths — sidecar
+    isn't updated for those ingest modes anyway.
 
     Five shapes accepted (CACHE_ADDITIVITY.md CA1-CA3):
     - `None`: cache-only mode, caller skips ingest entirely.
@@ -1242,20 +1353,19 @@ def _load_data(
     - `Path` to a directory: walk all corpus subdirs (full
       `--ingest-all` behavior).
     - `Sequence[Path]`: named corpus dirs to ingest selectively
-      (`--ingest <name>[,<name>...]`). The disk-budget calculation
-      uses the first dir's parent as the volume reference.
+      (`--ingest <name>[,<name>...]`).
     """
     if data is None:
-        return None
+        return None, None
     if isinstance(data, pl.DataFrame):
-        return data
+        return data, None
     if not isinstance(data, (Path, str)):
         # Sequence[Path] — named-corpora ingest. Each entry must
         # be a directory at this point (CLI resolves names; tests
         # pass Paths directly).
         corpus_paths = tuple(Path(p) for p in data)
         if not corpus_paths:
-            return None
+            return None, None
         for cp in corpus_paths:
             if not cp.is_dir():
                 raise FileNotFoundError(
@@ -1264,23 +1374,25 @@ def _load_data(
         # Use the first corpus's parent as the disk-budget root.
         # All named corpora share a filesystem in practice.
         root = corpus_paths[0].parent
-        return _load_directory(
+        df = _load_directory(
             root, restore_from_cloud=restore_from_cloud,
             required=required, bridges=bridges,
             corpus_dirs=corpus_paths,
         )
+        return df, root.resolve()
     p = Path(data)
     if not p.exists() and (
         not p.is_absolute() and (Path.cwd() / p).exists()
     ):
         p = Path.cwd() / p
     if p.is_dir():
-        return _load_directory(
+        df = _load_directory(
             p, restore_from_cloud=restore_from_cloud,
             required=required, bridges=bridges,
         )
+        return df, p.resolve()
     if p.is_file():
-        return pl.read_parquet(p)
+        return pl.read_parquet(p), None
     raise FileNotFoundError(f'no such data path: {data}')
 
 

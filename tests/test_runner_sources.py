@@ -250,3 +250,153 @@ def test_evict_no_op_when_no_sidecar(tmp_path: Path) -> None:
     )
     assert total == 1  # parquet filtered fine, no sidecar touched
     assert not _sources_path(cache_path).exists()
+
+
+# ============ Build wire-in: _update_sources_for_walk ============
+
+# Tests #2, #3, #4, #13 from the plan. We call `_update_sources_for_walk`
+# directly with a hand-built `new_walk` DataFrame to exercise the
+# write logic without invoking the full `_ingest_and_compute` path
+# (which needs JAX-compile-heavy fixtures). The integration shape
+# is covered by the live smoke at the end of implementation.
+
+from corroborate.runner.runner import (  # noqa: E402
+    _update_sources_for_walk,  # pyright: ignore[reportPrivateUsage]
+)
+
+
+def _walk_df(corpora: list[str]) -> pl.DataFrame:
+    """A minimal `new_walk`-shape DataFrame with just the `corpus`
+    column the wire-in actually reads."""
+    return pl.DataFrame({'corpus': corpora})
+
+
+def test_build_writes_sources_for_walk(tmp_path: Path) -> None:
+    """Test #2: A walk producing 'A' and 'B' creates a sidecar
+    with one entry per corpus, each carrying the resolved
+    `data_root` and a length-1 `ingested_at`."""
+    cache_path = tmp_path / 'ddqn.parquet'
+    walk_root = tmp_path / 'data'
+    walk_root.mkdir(parents=True)
+    (walk_root / 'A').mkdir()
+    (walk_root / 'B').mkdir()
+
+    _update_sources_for_walk(
+        _sources_path(cache_path),
+        new_walk=_walk_df(['A', 'B']),
+        walk_root=walk_root,
+    )
+
+    got = _read_sources(_sources_path(cache_path))
+    assert got is not None
+    by_corpus = {e.corpus: e for e in got.sources}
+    assert set(by_corpus) == {'A', 'B'}
+    for name in ('A', 'B'):
+        e = by_corpus[name]
+        assert e.data_root == str(walk_root.resolve())
+        assert len(e.ingested_at) == 1
+        assert e.remote_root is None  # no _remote.json in fixture
+
+
+def test_build_re_ingest_appends_timestamp(tmp_path: Path) -> None:
+    """Test #3: Calling the build twice for the same corpus appends
+    a second timestamp; the entry isn't duplicated."""
+    cache_path = tmp_path / 'ddqn.parquet'
+    walk_root = tmp_path / 'data'
+    walk_root.mkdir(parents=True)
+    (walk_root / 'A').mkdir()
+
+    df = _walk_df(['A'])
+    _update_sources_for_walk(
+        _sources_path(cache_path), new_walk=df, walk_root=walk_root,
+    )
+    _update_sources_for_walk(
+        _sources_path(cache_path), new_walk=df, walk_root=walk_root,
+    )
+
+    got = _read_sources(_sources_path(cache_path))
+    assert got is not None
+    assert len(got.sources) == 1
+    assert len(got.sources[0].ingested_at) == 2
+
+
+def test_build_append_new_corpus_preserves_existing(
+    tmp_path: Path,
+) -> None:
+    """Test #4: Ingest A then B in separate calls. Both entries
+    surface; A's `ingested_at` retains length 1 (not re-appended)."""
+    cache_path = tmp_path / 'ddqn.parquet'
+    walk_root = tmp_path / 'data'
+    walk_root.mkdir(parents=True)
+    (walk_root / 'A').mkdir()
+    (walk_root / 'B').mkdir()
+
+    _update_sources_for_walk(
+        _sources_path(cache_path),
+        new_walk=_walk_df(['A']), walk_root=walk_root,
+    )
+    _update_sources_for_walk(
+        _sources_path(cache_path),
+        new_walk=_walk_df(['B']), walk_root=walk_root,
+    )
+
+    got = _read_sources(_sources_path(cache_path))
+    assert got is not None
+    by_corpus = {e.corpus: e for e in got.sources}
+    assert set(by_corpus) == {'A', 'B'}
+    assert len(by_corpus['A'].ingested_at) == 1
+    assert len(by_corpus['B'].ingested_at) == 1
+
+
+def test_build_null_preserves_existing_values(tmp_path: Path) -> None:
+    """Test #13: When a re-ingest call returns a `remote_root=None`
+    (no _remote.json this time), a previously-recorded
+    `remote_root` must NOT be overwritten with null. Same rule
+    keeps `data_root` from getting clobbered by hypothetical
+    mixed-mode ingest where one call has a known root and another
+    doesn't."""
+    cache_path = tmp_path / 'ddqn.parquet'
+    walk_root = tmp_path / 'data'
+    walk_root.mkdir(parents=True)
+    (walk_root / 'A').mkdir()
+
+    # Seed the sidecar with a prior entry carrying a non-null
+    # remote_root (simulating a previous ingest that DID find a
+    # `_remote.json`).
+    sources_path = _sources_path(cache_path)
+    _write_sources(sources_path, CacheSources(sources=(
+        _make_entry('A',
+                    remote_root='s3://corroborate-archive/A',
+                    ingested_at=('2026-05-15T11:00:00+00:00',)),
+    )))
+
+    # Now re-ingest A. The walk_root has no `_remote.json` under
+    # `A/`, so the new `remote_root` would be None.
+    _update_sources_for_walk(
+        sources_path,
+        new_walk=_walk_df(['A']),
+        walk_root=walk_root,
+    )
+
+    got = _read_sources(sources_path)
+    assert got is not None
+    assert len(got.sources) == 1
+    e = got.sources[0]
+    # Prior remote_root preserved (B2 fix: null-preserving update).
+    assert e.remote_root == 's3://corroborate-archive/A'
+    assert len(e.ingested_at) == 2
+
+
+def test_build_no_op_on_empty_walk(tmp_path: Path) -> None:
+    """An empty walk (height 0) must NOT touch the sidecar."""
+    cache_path = tmp_path / 'ddqn.parquet'
+    walk_root = tmp_path / 'data'
+    walk_root.mkdir(parents=True)
+
+    _update_sources_for_walk(
+        _sources_path(cache_path),
+        new_walk=pl.DataFrame({'corpus': []}, schema={'corpus': pl.String}),
+        walk_root=walk_root,
+    )
+    # No sidecar created.
+    assert not _sources_path(cache_path).exists()
