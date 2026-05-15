@@ -337,3 +337,60 @@ arms:
     # invariant: load succeeds; downstream apply fails on type.
     cfg = load_intervention(p, reg=reg)
     assert cfg.do_effect.arms[1][0].replacement == 0.99
+
+
+# ---------- required_measurables ----------
+
+def test_required_measurables_resolves_registered_names(
+    reg: Registry, tmp_path: Path,
+) -> None:
+    """The YAML's `required_measurables` lookup goes through the
+    global `@measurable` registry; valid names land on the
+    `InterventionConfig` field as a typed tuple."""
+    # Importing the substrate registers the canonical measurable
+    # set as a side effect — `eval_best_burst_mean` and
+    # `jensen_gap` are stable framework-recognised names.
+    import corroborate_rl.dqn.measurables  # noqa: F401
+    p = tmp_path / 'with_extras.yaml'
+    _ = p.write_text("""
+name: with_extras
+base: {gamma: 0.99}
+required_measurables:
+  - eval_best_burst_mean
+  - jensen_gap
+""".strip())
+    cfg = load_intervention(p, reg=reg)
+    assert cfg.required_measurables == (
+        'eval_best_burst_mean', 'jensen_gap',
+    )
+
+
+def test_required_measurables_unknown_name_raises(
+    reg: Registry, tmp_path: Path,
+) -> None:
+    """Loader rejects unrecognised names at parse time — typos
+    fail loud, not silently. Mirrors the framework's
+    `_validate_hypothesis` discipline for `REQUIRED_MEASURABLES`."""
+    import corroborate_rl.dqn.measurables  # noqa: F401
+    p = tmp_path / 'bad.yaml'
+    _ = p.write_text("""
+name: bad
+base: {}
+required_measurables:
+  - not_a_real_measurable
+""".strip())
+    with pytest.raises(KeyError, match='not_a_real_measurable'):
+        _ = load_intervention(p, reg=reg)
+
+
+def test_required_measurables_default_empty(
+    reg: Registry, tmp_path: Path,
+) -> None:
+    """Field is optional; omitting it yields the empty tuple."""
+    p = tmp_path / 'no_extras.yaml'
+    _ = p.write_text("""
+name: no_extras
+base: {gamma: 0.99}
+""".strip())
+    cfg = load_intervention(p, reg=reg)
+    assert cfg.required_measurables == ()

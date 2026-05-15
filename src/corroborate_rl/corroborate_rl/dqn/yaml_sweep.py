@@ -388,6 +388,39 @@ def expand_sweep(
     return configs
 
 
+def _resolve_measurables(
+    extras: tuple[str, ...],
+) -> 'tuple[Measurable[Mapping[str, object], object], ...]':
+    """Resolve a tuple of measurable names to `Measurable`
+    instances and concat with `dqn_default_measurables()`.
+
+    Names are pre-validated by the YAML loader; this just looks
+    them up. Defaults come first so `--ingest` consumers see a
+    stable canonical column order; extras append in declaration
+    order. Duplicates between defaults and extras dedupe by
+    identity (the framework's measurable registry returns
+    singletons per name)."""
+    from corroborate.measurables.measurable import (
+        Measurable, get_registered,
+    )
+    from corroborate_rl.dqn.measurables import dqn_default_measurables
+    defaults = dqn_default_measurables()
+    if not extras:
+        return defaults
+    seen: set[Measurable[Mapping[str, object], object]] = set(defaults)
+    out: list[Measurable[Mapping[str, object], object]] = list(defaults)
+    for name in extras:
+        m = get_registered(name)
+        if m is None:
+            # Loader validates names; should not reach here.
+            raise KeyError(f'unknown measurable {name!r}')
+        if m in seen:
+            continue
+        seen.add(m)
+        out.append(m)
+    return tuple(out)
+
+
 def dispatch_sweep(sweep: DQNSweep) -> tuple[Path, Path]:
     """Run the sweep end-to-end. For each YAML-loaded
     `InterventionConfig`, decompose into a Hypothesis Protocol-
@@ -495,10 +528,16 @@ def dispatch_sweep(sweep: DQNSweep) -> tuple[Path, Path]:
             f'{sweep.archive_remote.rstrip("/")}/{cfg.name}'
             if sweep.archive_remote is not None else None
         )
+        # Substrate defaults + YAML-requested extras. Extras are
+        # validated by the loader (`config_loader._build_required_
+        # measurables`) so by the time we reach here every name
+        # resolves; duplicates are de-duped by identity since
+        # `Measurable` instances are registry-cached singletons.
+        measurables = _resolve_measurables(cfg.required_measurables)
         rp, tp = run_intervention(
             intervention,
             base=base,
-            measurables=dqn_default_measurables(),
+            measurables=measurables,
             grid_points=grid_points,
             runner=runner,
             out_dir=h_out_dir,

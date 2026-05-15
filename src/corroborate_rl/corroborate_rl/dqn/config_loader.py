@@ -62,12 +62,21 @@ class InterventionConfig:
       of slot replacements; empty-tuple arm is the Pearl-style "no
       intervention" control. Default `DoEffect(arms=((),))` (single
       empty arm) supports the shared-mode "this template is one arm
-      in a multi-template sweep" pattern."""
+      in a multi-template sweep" pattern.
+    - `required_measurables`: extra `@measurable` names to compute
+      per cell at sweep time, on top of the substrate's default set.
+      Use case: exploration — pre-compute a measurable's
+      distribution before authoring the bridge that consumes it
+      (chicken-and-egg: bridges declare what's required at ingest,
+      but you need the data to know which bridge makes sense). Names
+      are validated against the global measurable registry at
+      YAML-parse time; unknown names raise."""
     name: str
     base: Mapping[str, object]
     do_effect: DoEffect = field(
         default_factory=lambda: DoEffect(arms=((),)),
     )
+    required_measurables: tuple[str, ...] = ()
 
 
 _CLASS_KEY = 'class'
@@ -306,11 +315,47 @@ def build_intervention_from_mapping(
             arms_list.append(arm)
         arms = tuple(arms_list)
 
+    required_measurables = _build_required_measurables(node)
+
     return InterventionConfig(
         name=name,
         base=base,
         do_effect=DoEffect(arms=arms),
+        required_measurables=required_measurables,
     )
+
+
+def _build_required_measurables(
+    node: Mapping[str, object],
+) -> tuple[str, ...]:
+    """Parse `required_measurables: [name1, name2]` (optional) and
+    validate names against the global measurable registry. Unknown
+    names raise so typos surface at YAML-load time — silently
+    dropping (the behaviour for unrecognised bridge names) is wrong
+    here: an explicit author declaration should fail loud."""
+    raw = node.get('required_measurables', [])
+    if not isinstance(raw, list):
+        raise TypeError(
+            f'intervention.required_measurables must be a list of '
+            f'strings; got {type(raw).__name__}',
+        )
+    from corroborate.measurables.measurable import (
+        get_registered, registered_names,
+    )
+    names: list[str] = []
+    for v in raw:
+        if not isinstance(v, str):
+            raise TypeError(
+                f'intervention.required_measurables entries must be '
+                f'strings; got {type(v).__name__}',
+            )
+        if get_registered(v) is None:
+            raise KeyError(
+                f'required_measurables: unknown measurable {v!r}. '
+                f'Registered: {registered_names()!r}',
+            )
+        names.append(v)
+    return tuple(names)
 
 
 def _build_arm(

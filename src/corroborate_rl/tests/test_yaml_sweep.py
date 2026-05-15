@@ -157,6 +157,31 @@ def yaml_interventions(
     return sweep.build_interventions(reg=reg)
 
 
+# ---------- _resolve_measurables (defaults + YAML extras) ----------
+
+def test_resolve_measurables_empty_returns_defaults() -> None:
+    """No YAML-declared extras → identity with substrate defaults.
+    Preserves the canonical column order downstream consumers
+    expect."""
+    from corroborate_rl.dqn.measurables import dqn_default_measurables
+    from corroborate_rl.dqn.yaml_sweep import _resolve_measurables
+    assert _resolve_measurables(()) == dqn_default_measurables()
+
+
+def test_resolve_measurables_appends_extras() -> None:
+    """YAML extras append after defaults so default order stays
+    canonical. The substrate's `dqn_default_measurables` already
+    contains `eval_best_burst_mean`, so requesting it as an
+    extra is a no-op (dedup by registry identity)."""
+    from corroborate_rl.dqn.measurables import dqn_default_measurables
+    from corroborate_rl.dqn.yaml_sweep import _resolve_measurables
+    defaults = dqn_default_measurables()
+    # eval_best_burst_mean IS in defaults; requesting it as
+    # `extras` must not double-add.
+    out = _resolve_measurables(('eval_best_burst_mean',))
+    assert out == defaults
+
+
 # ---------- do_effect / base default-shape ----------
 
 def test_do_effect_defaults_to_single_empty_arm() -> None:
