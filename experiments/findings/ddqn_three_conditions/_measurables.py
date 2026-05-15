@@ -79,17 +79,30 @@ def k_eff(record: Mapping[str, object]) -> int:
 
     Computed as `native_actions(env_name) × action_duplicate_k`.
     Returns the native count when `action_duplicate_k` is None
-    (no wrapper) or missing from the catalogue. Used as a scope
-    axis for Condition 1 (Q-bias scales with K)."""
-    env = record.get('env_name')
-    if not isinstance(env, str):
+    (no wrapper in the cell's config) or when env_name is not in
+    the native-action catalogue. Used as a scope axis for
+    Condition 1 (Q-bias scales with K) and Condition 3a (DDQN
+    outcome benefit × K).
+
+    The framework's runner admission gate (`transitive_reads`
+    check in `corpus/measurements.py`) excludes computation on
+    corpora whose `runs.parquet` lacks `action_duplicate_k` as a
+    column entirely — those cells get null `k_eff` after the
+    cache join. Bridges that stratify on `k_eff` naturally drop
+    those cells (different sweep design — pooling them with the
+    action-multiplier sweep's k=native-count cells would mix
+    independent draws under different sweep configs)."""
+    env_obj = record.get('env_name')
+    if not isinstance(env_obj, str):
         return 0
-    native = _NATIVE_ACTIONS.get(env, 0)
-    k_raw = record.get('action_duplicate_k')
-    if k_raw is None:
+    native = _NATIVE_ACTIONS.get(env_obj, 0)
+    k_raw_obj = record.get('action_duplicate_k')
+    if k_raw_obj is None:
+        return native
+    if not isinstance(k_raw_obj, (int, float, str)):
         return native
     try:
-        k = int(float(k_raw))  # action_duplicate_k arrives as float
+        k = int(float(k_raw_obj))
     except (TypeError, ValueError):
         return native
     return native * k
