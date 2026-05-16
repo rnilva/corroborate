@@ -53,7 +53,7 @@ class StratumDiff:
       sign-stable across heterogeneous-scale envs.
     `cohen_se` — Approximate SE of Cohen's d:
       `sqrt((n_t + n_b)/(n_t * n_b) + d²/(2*(n_t + n_b - 2)))`.
-    `vanilla_predictor` — the vanilla-arm aggregate of the
+    `baseline_predictor` — the vanilla-arm aggregate of the
       stratum-level scope-filter predictor (e.g. mean jens). Used
       to apply scope-at-stratum-level. NaN if not requested.
     """
@@ -67,7 +67,7 @@ class StratumDiff:
     arm_sd_baseline: float
     n_seeds_treatment: int
     n_seeds_baseline: int
-    vanilla_predictor: float
+    baseline_predictor: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -162,7 +162,7 @@ def stratified_arm_diff_pooled(
     ),
     arm_field: str = 'arm_key',
     scope_predictor: str = 'jensen_gap',
-    min_vanilla_predictor: float = 0.05,
+    min_baseline_predictor: float = 0.05,
     min_seeds_per_arm: int = 5,
     predicted_direction: PredictedDirection | None = None,
 ) -> StratifiedArmDiffPooledResult:
@@ -171,7 +171,7 @@ def stratified_arm_diff_pooled(
     Phase 5 migration (2026-05-13): delegates to `stratum_panel`
     for the cell→panel build, then builds the rich
     `StratifiedArmDiffPooledResult` from panel data + applies the
-    `min_vanilla_predictor` stratum-level filter +
+    `min_baseline_predictor` stratum-level filter +
     `random_effects_summary` for the DL pool. Result type and
     semantics unchanged — verdict-preserving.
 
@@ -186,7 +186,7 @@ def stratified_arm_diff_pooled(
     Stratum-level scope filter (BOTH arms in or out together):
       - `n_seeds_treatment >= min_seeds_per_arm`
       - `n_seeds_baseline >= min_seeds_per_arm`
-      - `vanilla_predictor > min_vanilla_predictor`
+      - `baseline_predictor > min_baseline_predictor`
 
     Per-bridge cell-level filters (env, config exclusions) belong
     on `Bridge.scope` upstream; this primitive only handles
@@ -202,7 +202,7 @@ def stratified_arm_diff_pooled(
     """
     # Phase 5: delegate panel-build to `stratum_panel`. We need
     # both `source` and `scope_predictor` on the panel so the
-    # `min_vanilla_predictor` stratum-level filter can read the
+    # `min_baseline_predictor` stratum-level filter can read the
     # baseline arm's `scope_predictor` mean per stratum.
     measurables_for_panel: tuple[str, ...] = (
         (source,) if source == scope_predictor
@@ -234,7 +234,7 @@ def stratified_arm_diff_pooled(
         v_predictor_mean = panel.means_baseline[scope_predictor][i]
         if math.isnan(v_predictor_mean):
             continue
-        if v_predictor_mean <= min_vanilla_predictor:
+        if v_predictor_mean <= min_baseline_predictor:
             continue
         mean_t = panel.means_treatment[source][i]
         mean_b = panel.means_baseline[source][i]
@@ -251,7 +251,7 @@ def stratified_arm_diff_pooled(
             arm_sd_baseline=sd_b,
             n_seeds_treatment=n_t,
             n_seeds_baseline=n_b,
-            vanilla_predictor=v_predictor_mean,
+            baseline_predictor=v_predictor_mean,
         ))
 
     # DL pooling on (cohen_d, cohen_se)

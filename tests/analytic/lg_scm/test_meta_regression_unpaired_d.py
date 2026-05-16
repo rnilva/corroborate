@@ -116,7 +116,7 @@ def test_meta_regression_unpaired_d_recovers_closed_form_slope_on_mu_x() -> None
         # No scope-predictor filter — LG-SCM cells don't carry
         # a `jensen_gap` column.
         scope_predictor='y_mean',
-        min_vanilla_predictor=float('-inf'),
+        min_baseline_predictor=float('-inf'),
         min_seeds_per_arm=5,
     )
 
@@ -192,7 +192,7 @@ def test_meta_regression_unpaired_d_nan_fallback_when_underpowered() -> None:
         covariate_key_field='env_name',
         stratify_by=('env_name',),
         scope_predictor='y_mean',
-        min_vanilla_predictor=float('-inf'),
+        min_baseline_predictor=float('-inf'),
         min_seeds_per_arm=5,
     )
     # Underpowered → no coefficient.
@@ -237,5 +237,5 @@ def test_meta_regression_unpaired_d_rejects_invalid_covariate_key_field() -> Non
             covariate_key_field='not_in_stratify_by',
             stratify_by=('env_name',),
             scope_predictor='y_mean',
-            min_vanilla_predictor=float('-inf'),
+            min_baseline_predictor=float('-inf'),
         )

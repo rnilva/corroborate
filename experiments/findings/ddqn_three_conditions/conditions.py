@@ -88,7 +88,7 @@ def ddqn_reduces_jens_uniformly_across_k_at_fr_high_gamma(
     *,
     stratify_by: tuple[str, ...] = ('k_eff',),
     min_strata: int = 3,
-    min_vanilla_predictor: float = 0.5,
+    min_baseline_predictor: float = 0.5,
     per_stratum_d_threshold: float = -0.5,
 ) -> tuple[Verdict, RefutationClass | None]:
     """Per-k_eff Cohen's d on `jensen_gap` is uniformly < -0.5
@@ -108,7 +108,7 @@ def ddqn_reduces_jens_uniformly_across_k_at_fr_high_gamma(
     Verdict: HELD iff every admitted stratum's Cohen's d is
     below `per_stratum_d_threshold` and no stratum shows a
     wrong-sign refutation."""
-    del stratify_by, min_vanilla_predictor
+    del stratify_by, min_baseline_predictor
     if stratified_arm_diff_pooled.n_strata < min_strata:
         return Verdict.POWER_INSUFFICIENT, None
     all_below = True
@@ -237,7 +237,7 @@ def linear_fa_caps_type_1_across_envs__null_panel(
     *,
     stratify_by: tuple[str, ...] = ('env_name',),
     min_strata: int = 3,
-    min_vanilla_predictor: float = float('-inf'),
+    min_baseline_predictor: float = float('-inf'),
     null_ceiling: float = 0.3,
 ) -> tuple[Verdict, RefutationClass | None]:
     """Linear FA caps Type 1 manifestation across envs whose
@@ -278,7 +278,7 @@ def linear_fa_caps_type_1_across_envs__null_panel(
     *theoretical* mech direction (DDQN reduces jens *when the
     mech fires*); `predicted_direction='null'` captures that we
     expect the mech NOT to fire at this scope."""
-    del stratify_by, min_vanilla_predictor
+    del stratify_by, min_baseline_predictor
     return _null_band_verdict(
         stratified_arm_diff_pooled,
         null_ceiling=null_ceiling,
@@ -325,7 +325,7 @@ def linear_fa_cap_fails_at_metamaze_g999__exception(
     *,
     stratify_by: tuple[str, ...] = ('n_episodes',),
     min_strata: int = 2,
-    min_vanilla_predictor: float = float('-inf'),
+    min_baseline_predictor: float = float('-inf'),
     per_stratum_d_threshold: float = -0.3,
 ) -> tuple[Verdict, RefutationClass | None]:
     """At MetaMaze γ=0.999 with linear FA, the C2a FA-cap rule
@@ -355,7 +355,7 @@ def linear_fa_cap_fails_at_metamaze_g999__exception(
     Forms a sibling-cluster with C2a: C2a HELD (rule) + C2b HELD
     (named exception with opposite direction prediction at a
     specifically scoped env, γ combination)."""
-    del stratify_by, min_vanilla_predictor
+    del stratify_by, min_baseline_predictor
     if stratified_arm_diff_pooled.n_strata < min_strata:
         return Verdict.POWER_INSUFFICIENT, None
     all_below = True
@@ -409,7 +409,7 @@ def ddqn_helps_outcome_at_fr_g999_mlp_unshaped__k_panel(
     *,
     stratify_by: tuple[str, ...] = ('k_eff',),
     min_strata: int = 3,
-    min_vanilla_predictor: float = float('-inf'),
+    min_baseline_predictor: float = float('-inf'),
     per_stratum_d_threshold: float = 0.3,
 ) -> tuple[Verdict, RefutationClass | None]:
     """DDQN's outcome > vanilla's outcome uniformly across
@@ -431,7 +431,7 @@ def ddqn_helps_outcome_at_fr_g999_mlp_unshaped__k_panel(
     Pairs with C3b — both HELD reads as "DDQN's outcome benefit
     is real at unshaped MLP but vanishes under potential-based
     shaping at the same env/FA"."""
-    del stratify_by, min_vanilla_predictor
+    del stratify_by, min_baseline_predictor
     if stratified_arm_diff_pooled.n_strata < min_strata:
         return Verdict.POWER_INSUFFICIENT, None
     all_above = True
@@ -536,7 +536,7 @@ def shaping_decouples_outcome_benefit__fr_shaped_fa_x_gamma_panel(
     *,
     stratify_by: tuple[str, ...] = ('fa_kind', 'gamma'),
     min_strata: int = 3,
-    min_vanilla_predictor: float = float('-inf'),
+    min_baseline_predictor: float = float('-inf'),
     per_stratum_d_upper_bound: float = 0.3,
 ) -> tuple[Verdict, RefutationClass | None]:
     """No POSITIVE outcome benefit at FR × shaped across
@@ -572,7 +572,7 @@ def shaping_decouples_outcome_benefit__fr_shaped_fa_x_gamma_panel(
     Pairs with C3a — C3a HELD (DDQN helps unshaped) + C3b
     HELD (DDQN doesn't help shaped) = "shaping moderates the
     outcome translation"."""
-    del stratify_by, min_vanilla_predictor
+    del stratify_by, min_baseline_predictor
     return _per_stratum_upper_bound_verdict(
         stratified_arm_diff_pooled,
         upper_bound=per_stratum_d_upper_bound,
@@ -622,7 +622,7 @@ def ddqn_reduction_amplified_by_gamma__fr_mlp_k4_unshaped(
     *,
     stratify_by: tuple[str, ...] = ('gamma',),
     min_strata: int = 2,
-    min_vanilla_predictor: float = float('-inf'),
+    min_baseline_predictor: float = float('-inf'),
     per_stratum_d_threshold: float = -0.8,
     gamma_amp_ratio: float = 3.0,
 ) -> tuple[Verdict, RefutationClass | None]:
@@ -653,7 +653,7 @@ def ddqn_reduction_amplified_by_gamma__fr_mlp_k4_unshaped(
     scope only γ varies. The K-scaling claim is C1's domain
     (k_eff ∈ {4,8,12,16} at γ=0.999); this bridge isolates γ at
     K-fixed."""
-    del stratify_by, min_vanilla_predictor
+    del stratify_by, min_baseline_predictor
     if stratified_arm_diff_pooled.n_strata < min_strata:
         return Verdict.POWER_INSUFFICIENT, None
     # stratum_id is the tuple of stratify_by values; here it's (gamma,).

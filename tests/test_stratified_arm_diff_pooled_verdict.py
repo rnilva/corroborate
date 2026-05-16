@@ -73,7 +73,7 @@ def _run(
         baseline_arm=_BASELINE,
         stratify_by=('env_name',),
         scope_predictor='jensen_gap',
-        min_vanilla_predictor=0.05,
+        min_baseline_predictor=0.05,
         min_seeds_per_arm=5,
         predicted_direction=predicted_direction,
     )

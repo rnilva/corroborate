@@ -42,8 +42,8 @@ from __future__ import annotations
 
 import polars as pl
 
-from corroborate.analyses.stratum_vanilla_predictor_link_dowhy import (
-    StratumVanillaPredictorLinkDowhyResult,
+from corroborate.analyses.stratum_baseline_predictor_link_dowhy import (
+    StratumBaselinePredictorLinkDowhyResult,
 )
 from corroborate.bridge.bridge import Direction, Tier, claim_bridge
 from corroborate.bridge.predicates import finite
@@ -80,15 +80,15 @@ _HP_VARIANCE_SCOPE: pl.Expr = (
     predicted_direction='a_gt_b',
 )
 def bias_correction_clip_predicts_outcome__hp_variance__backdoor(
-    stratum_vanilla_predictor_link_dowhy: (
-        StratumVanillaPredictorLinkDowhyResult
+    stratum_baseline_predictor_link_dowhy: (
+        StratumBaselinePredictorLinkDowhyResult
     ),
     *,
     treatment_arm: str = DDQN_ARM,
     baseline_arm: str = VANILLA_ARM,
     predictor_col: str = 'bootstrap_gap_magnitude',
     target_col: str = 'eval_best_burst_raw_mean',
-    min_vanilla_predictor: float = 0.0,
+    min_baseline_predictor: float = 0.0,
     ate_floor: float = 50.0,
 ) -> Verdict:
     """DoWhy backdoor on per-stratum independent-samples panel of
@@ -97,9 +97,9 @@ def bias_correction_clip_predicts_outcome__hp_variance__backdoor(
     predictor range spans HP-axis-induced bg variation; β slope
     captures the dose-response across that range."""
     del treatment_arm, baseline_arm, predictor_col, target_col
-    del min_vanilla_predictor
+    del min_baseline_predictor
     return dowhy_backdoor_verdict(
-        stratum_vanilla_predictor_link_dowhy.backdoor,
+        stratum_baseline_predictor_link_dowhy.backdoor,
         ate_threshold=ate_floor, sign=1,
     )
 
@@ -113,23 +113,23 @@ def bias_correction_clip_predicts_outcome__hp_variance__backdoor(
     predicted_direction='a_gt_b',
 )
 def bias_correction_clip_predicts_outcome__hp_variance__placebo(
-    stratum_vanilla_predictor_link_dowhy: (
-        StratumVanillaPredictorLinkDowhyResult
+    stratum_baseline_predictor_link_dowhy: (
+        StratumBaselinePredictorLinkDowhyResult
     ),
     *,
     treatment_arm: str = DDQN_ARM,
     baseline_arm: str = VANILLA_ARM,
     predictor_col: str = 'bootstrap_gap_magnitude',
     target_col: str = 'eval_best_burst_raw_mean',
-    min_vanilla_predictor: float = 0.0,
+    min_baseline_predictor: float = 0.0,
     placebo_max_ratio: float = 0.2,
 ) -> Verdict:
     """Placebo refutation: random treatment ATE should be near
     zero relative to the real ATE."""
     del treatment_arm, baseline_arm, predictor_col, target_col
-    del min_vanilla_predictor
+    del min_baseline_predictor
     return dowhy_placebo_verdict(
-        stratum_vanilla_predictor_link_dowhy.placebo,
+        stratum_baseline_predictor_link_dowhy.placebo,
         max_ratio=placebo_max_ratio,
     )
 
@@ -143,23 +143,23 @@ def bias_correction_clip_predicts_outcome__hp_variance__placebo(
     predicted_direction='a_gt_b',
 )
 def bias_correction_clip_predicts_outcome__hp_variance__rcc(
-    stratum_vanilla_predictor_link_dowhy: (
-        StratumVanillaPredictorLinkDowhyResult
+    stratum_baseline_predictor_link_dowhy: (
+        StratumBaselinePredictorLinkDowhyResult
     ),
     *,
     treatment_arm: str = DDQN_ARM,
     baseline_arm: str = VANILLA_ARM,
     predictor_col: str = 'bootstrap_gap_magnitude',
     target_col: str = 'eval_best_burst_raw_mean',
-    min_vanilla_predictor: float = 0.0,
+    min_baseline_predictor: float = 0.0,
     rcc_max_drift_ratio: float = 0.15,
 ) -> Verdict:
     """Random-common-cause refutation: synthetic confounder
     leaves the ATE near-stable."""
     del treatment_arm, baseline_arm, predictor_col, target_col
-    del min_vanilla_predictor
+    del min_baseline_predictor
     return dowhy_rcc_verdict(
-        stratum_vanilla_predictor_link_dowhy.random_common_cause,
+        stratum_baseline_predictor_link_dowhy.random_common_cause,
         max_drift_ratio=rcc_max_drift_ratio,
     )
 

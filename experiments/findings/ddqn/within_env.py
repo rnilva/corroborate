@@ -78,7 +78,7 @@ def ddqn_benefit_scales_with_effective_horizon__fourrooms(
         _FOURROOMS_EFFECTIVE_HORIZON_PER_GAMMA
     ),
     scope_predictor: str = 'jensen_gap',
-    min_vanilla_predictor: float = VANILLA_JENS_NOISE_FLOOR,
+    min_baseline_predictor: float = VANILLA_JENS_NOISE_FLOOR,
     slope_threshold: float = 0.01,
     min_strata: int = 3,
 ) -> Verdict:
@@ -113,7 +113,7 @@ def ddqn_benefit_scales_with_effective_horizon__fourrooms(
     `findings_gamma_sweep_three_regimes.md`."""
     del treatment_arm, baseline_arm, source, stratify_by
     del covariate_key_field, covariates_per_key
-    del scope_predictor, min_vanilla_predictor
+    del scope_predictor, min_baseline_predictor
     return meta_regression_coefficient_verdict(
         meta_regression_unpaired_d,
         'effective_horizon',
@@ -294,7 +294,7 @@ def ddqn_bias_reduction_scales_with_fa_coherence__cross_env(
         _AUTOCORR_PER_ENV
     ),
     scope_predictor: str = 'jensen_gap',
-    min_vanilla_predictor: float = VANILLA_JENS_NOISE_FLOOR,
+    min_baseline_predictor: float = VANILLA_JENS_NOISE_FLOOR,
     min_seeds_per_arm: int = 5,
     rho_threshold_held: float = 0.6,
     p_threshold: float = 0.05,
@@ -329,7 +329,7 @@ def ddqn_bias_reduction_scales_with_fa_coherence__cross_env(
       POWER_INSUFFICIENT    : in-between, or n_strata < 10"""
     del treatment_arm, baseline_arm, source, stratify_by
     del covariate_name, covariate_key_field, covariates_per_key
-    del scope_predictor, min_vanilla_predictor, min_seeds_per_arm
+    del scope_predictor, min_baseline_predictor, min_seeds_per_arm
     return cross_stratum_signed_spearman_verdict(
         cross_stratum_property_slope,
         sign=-1,

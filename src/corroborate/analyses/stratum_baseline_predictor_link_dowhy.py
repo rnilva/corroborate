@@ -4,7 +4,7 @@ Tests the *common-claim* of "reducing bias causes higher return"
 empirically via DoWhy backdoor on per-(env, config) **stratum-
 level** rows. At each stratum:
 
-    vanilla_predictor[stratum] = mean over baseline seeds of `predictor`
+    baseline_predictor[stratum] = mean over baseline seeds of `predictor`
     Δ_target[stratum]         = mean_T(target) − mean_B(target)
                                 (independent-samples; no seed pairing)
 
@@ -50,8 +50,8 @@ from corroborate.bridge.analysis import analysis
 
 
 @dataclass(frozen=True, slots=True)
-class StratumVanillaPredictorLinkDowhyResult:
-    """Backdoor + placebo + RCC refutations of `vanilla_predictor
+class StratumBaselinePredictorLinkDowhyResult:
+    """Backdoor + placebo + RCC refutations of `baseline_predictor
     → Δ_target` on per-(env, config) **stratum-level** rows.
     Adjusts for env (one-hot)."""
     backdoor: BackdoorResult
@@ -65,7 +65,7 @@ class StratumVanillaPredictorLinkDowhyResult:
 # Removed `_build_stratum_panel` in Phase 6 migration (2026-05-13):
 # panel-build moved to `stratum_panel`; the body's per-stratum row
 # assembly + env one-hot encoding now lives directly in
-# `stratum_vanilla_predictor_link_dowhy`.
+# `stratum_baseline_predictor_link_dowhy`.
 
 
 def _nan_backdoor(
@@ -99,7 +99,7 @@ def _nan_refutation(
 
 
 @analysis
-def stratum_vanilla_predictor_link_dowhy(
+def stratum_baseline_predictor_link_dowhy(
     cells: Iterable[Mapping[str, object]],
     *,
     treatment_arm: str,
@@ -114,9 +114,9 @@ def stratum_vanilla_predictor_link_dowhy(
     arm_field: str = 'arm_key',
     method_name: str = 'backdoor.linear_regression',
     min_seeds_per_arm: int = 5,
-    min_vanilla_predictor: float = 0.05,
-) -> StratumVanillaPredictorLinkDowhyResult:
-    """Test `vanilla_predictor → Δ_target` on stratum-level rows
+    min_baseline_predictor: float = 0.05,
+) -> StratumBaselinePredictorLinkDowhyResult:
+    """Test `baseline_predictor → Δ_target` on stratum-level rows
     via DoWhy backdoor + refutations, adjusting for env.
 
     Phase 6 migration (2026-05-13): delegates panel-build to
@@ -130,7 +130,7 @@ def stratum_vanilla_predictor_link_dowhy(
     and (treatment-arm-mean − baseline-arm-mean) of `target_col`
     as the outcome value. No seed pairing.
 
-    Strata where vanilla mean predictor < `min_vanilla_predictor`
+    Strata where vanilla mean predictor < `min_baseline_predictor`
     (premise inactive) drop before DoWhy.
 
     Empty panel (no stratum survives filters) yields a
@@ -171,7 +171,7 @@ def stratum_vanilla_predictor_link_dowhy(
         ):
             continue
         v_pred = panel.means_baseline[predictor_col][i]
-        if math.isnan(v_pred) or v_pred <= min_vanilla_predictor:
+        if math.isnan(v_pred) or v_pred <= min_baseline_predictor:
             continue
         v_target = panel.means_baseline[target_col][i]
         t_target = panel.means_treatment[target_col][i]
@@ -211,7 +211,7 @@ def stratum_vanilla_predictor_link_dowhy(
     else:
         dag = []
     if not rows:
-        return StratumVanillaPredictorLinkDowhyResult(
+        return StratumBaselinePredictorLinkDowhyResult(
             backdoor=_nan_backdoor(
                 treatment_col, outcome_col, method_name,
             ),
@@ -240,7 +240,7 @@ def stratum_vanilla_predictor_link_dowhy(
         rows, treatment=treatment_col, outcome=outcome_col,
         dag=dag, method_name=method_name,
     )
-    return StratumVanillaPredictorLinkDowhyResult(
+    return StratumBaselinePredictorLinkDowhyResult(
         backdoor=backdoor,
         placebo=placebo,
         random_common_cause=rcc,
@@ -251,6 +251,6 @@ def stratum_vanilla_predictor_link_dowhy(
 
 
 __all__ = [
-    'StratumVanillaPredictorLinkDowhyResult',
-    'stratum_vanilla_predictor_link_dowhy',
+    'StratumBaselinePredictorLinkDowhyResult',
+    'stratum_baseline_predictor_link_dowhy',
 ]

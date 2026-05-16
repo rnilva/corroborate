@@ -81,7 +81,7 @@ def cross_stratum_property_slope(
     covariate_key_field: str = 'env_name',
     stratify_by: tuple[str, ...] = ('env_name',),
     scope_predictor: str = 'jensen_gap',
-    min_vanilla_predictor: float = 0.0,
+    min_baseline_predictor: float = 0.0,
     min_seeds_per_arm: int = 5,
     min_strata: int = 8,
 ) -> CrossStratumPropertySlopeResult:
@@ -117,7 +117,7 @@ def cross_stratum_property_slope(
         baseline_arm=baseline_arm,
         stratify_by=stratify_by,
         scope_predictor=scope_predictor,
-        min_vanilla_predictor=min_vanilla_predictor,
+        min_baseline_predictor=min_baseline_predictor,
         min_seeds_per_arm=min_seeds_per_arm,
     )
     cov_values: list[float] = []

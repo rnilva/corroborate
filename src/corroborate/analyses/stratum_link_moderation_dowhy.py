@@ -36,7 +36,7 @@ attenuated. Placebo + RCC refutations are run on the
 interaction-term treatment under env-one-hot adjustment.
 
 Mech conditioning: strata where vanilla mean predictor is below
-`min_vanilla_predictor` (G1 premise inactive) are dropped before
+`min_baseline_predictor` (G1 premise inactive) are dropped before
 the regression — the link is moot if the mech isn't firing.
 
 Identified iff ≥ 1 env above-threshold AND ≥ 1 below; bridges
@@ -120,7 +120,7 @@ def _build_panel(
     binary_threshold: float,
     confounder: str,
     arm_field: str,
-    min_vanilla_predictor: float,
+    min_baseline_predictor: float,
 ) -> tuple[
     list[Mapping[str, object]],
     list[tuple[str, str]],
@@ -195,7 +195,7 @@ def _build_panel(
             mb_p = float(np.nanmean(b_pred))
             if any(math.isnan(v) for v in (mt_t, mt_p, mb_t, mb_p)):
                 continue
-            if mb_p <= min_vanilla_predictor:
+            if mb_p <= min_baseline_predictor:
                 continue
             d_pred = mt_p - mb_p
             d_target = mt_t - mb_t
@@ -282,7 +282,7 @@ def stratum_link_moderation_dowhy(
     confounder: str = 'env_name',
     arm_field: str = 'arm_key',
     method_name: str = 'backdoor.linear_regression',
-    min_vanilla_predictor: float = 0.05,
+    min_baseline_predictor: float = 0.05,
 ) -> StratumLinkModerationDowhyResult:
     """Test whether `attenuator > binary_threshold` moderates the
     `Δ_predictor → Δ_target` slope via DoWhy backdoor on the
@@ -296,7 +296,7 @@ def stratum_link_moderation_dowhy(
     above-threshold envs have a less-negative link slope (link
     weakened); sign < 0 means link strengthened.
 
-    Mech conditioning via `min_vanilla_predictor` drops strata
+    Mech conditioning via `min_baseline_predictor` drops strata
     where vanilla mean predictor is below the G1-premise floor.
 
     Empty panel (no env above OR below threshold, no admitted
@@ -314,7 +314,7 @@ def stratum_link_moderation_dowhy(
         binary_threshold=binary_threshold,
         confounder=confounder,
         arm_field=arm_field,
-        min_vanilla_predictor=min_vanilla_predictor,
+        min_baseline_predictor=min_baseline_predictor,
     )
     if not rows:
         return StratumLinkModerationDowhyResult(

@@ -50,7 +50,7 @@ class StratumPanelJciResult:
     `predictor`, `target`, `stratify_by` echo the inputs for
     introspection. `n_strata` is the number of (env, config)
     rows that survived `min_seeds_per_arm` per-arm and
-    `min_vanilla_predictor` filtering.
+    `min_baseline_predictor` filtering.
 
     - `rho_marginal` / `p_marginal`: Spearman across all strata,
       no env adjustment.
@@ -84,11 +84,11 @@ def _build_panel_arrays(
     stratify_by: tuple[str, ...],
     arm_field: str,
     min_seeds_per_arm: int,
-    min_vanilla_predictor: float,
+    min_baseline_predictor: float,
 ) -> tuple[
     np.ndarray, np.ndarray, np.ndarray, list[object],
 ]:
-    """Build per-stratum scalars: (vanilla_predictor_mean,
+    """Build per-stratum scalars: (baseline_predictor_mean,
     delta_target, vanilla_target_mean) per row, plus the env-
     bucket key (first element of `stratify_by`, or pulled from
     `env_name` field on the cell)."""
@@ -142,7 +142,7 @@ def _build_panel_arrays(
         ):
             continue
         v_pred = sum(b_pred) / len(b_pred)
-        if v_pred <= min_vanilla_predictor:
+        if v_pred <= min_baseline_predictor:
             continue
         v_target = sum(b_target) / len(b_target)
         d_target = sum(t_target) / len(t_target) - v_target
@@ -196,7 +196,7 @@ def stratum_panel_jci_spearman(
     arm_field: str = 'arm_key',
     env_field: str = 'env_name',
     min_seeds_per_arm: int = 5,
-    min_vanilla_predictor: float = 0.0,
+    min_baseline_predictor: float = 0.0,
 ) -> StratumPanelJciResult:
     """Per-stratum-panel JCI Spearman tests of `predictor →
     Δ_target` mediation.
@@ -217,7 +217,7 @@ def stratum_panel_jci_spearman(
         stratify_by=stratify_by,
         arm_field=arm_field,
         min_seeds_per_arm=min_seeds_per_arm,
-        min_vanilla_predictor=min_vanilla_predictor,
+        min_baseline_predictor=min_baseline_predictor,
     )
     del env_field
     n = int(x_arr.size)

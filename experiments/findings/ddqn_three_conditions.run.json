@@ -14,6 +14,7 @@
               "arm_mean_treatment": 1.03414,
               "arm_sd_baseline": 11.0747,
               "arm_sd_treatment": 0.354852,
+              "baseline_predictor": 60.5964,
               "cohen_d": -7.60204,
               "cohen_se": 0.751575,
               "mean_diff": -59.5622,
@@ -21,14 +22,14 @@
               "n_seeds_treatment": 30,
               "stratum_id": [
                 12
-              ],
-              "vanilla_predictor": 60.5964
+              ]
             },
             {
               "arm_mean_baseline": 89.1177,
               "arm_mean_treatment": 1.91441,
               "arm_sd_baseline": 26.1699,
               "arm_sd_treatment": 0.631785,
+              "baseline_predictor": 89.1177,
               "cohen_d": -4.71106,
               "cohen_se": 0.356898,
               "mean_diff": -87.2033,
@@ -36,14 +37,14 @@
               "n_seeds_treatment": 60,
               "stratum_id": [
                 16
-              ],
-              "vanilla_predictor": 89.1177
+              ]
             },
             {
               "arm_mean_baseline": 9.5478,
               "arm_mean_treatment": 0.550581,
               "arm_sd_baseline": 2.0766,
               "arm_sd_treatment": 0.26832,
+              "baseline_predictor": 9.5478,
               "cohen_d": -6.07679,
               "cohen_se": 0.26317,
               "mean_diff": -8.99722,
@@ -51,14 +52,14 @@
               "n_seeds_treatment": 165,
               "stratum_id": [
                 4
-              ],
-              "vanilla_predictor": 9.5478
+              ]
             },
             {
               "arm_mean_baseline": 34.0975,
               "arm_mean_treatment": 0.434604,
               "arm_sd_baseline": 7.92269,
               "arm_sd_treatment": 0.129361,
+              "baseline_predictor": 34.0975,
               "cohen_d": -6.00809,
               "cohen_se": 0.614694,
               "mean_diff": -33.6629,
@@ -66,8 +67,7 @@
               "n_seeds_treatment": 30,
               "stratum_id": [
                 8
-              ],
-              "vanilla_predictor": 34.0975
+              ]
             }
           ],
           "pooled": {
@@ -105,15 +105,15 @@
       "blocked_by": null,
       "bridge_name": "ddqn_reduces_jens_uniformly_across_k_at_fr_high_gamma",
       "direction": "inverse",
-      "extent_hash": -1622244619281782900,
+      "extent_hash": -1453302445050265495,
       "n_cells_in_scope": 566,
       "n_cells_pre_scope": 4711,
       "pair_by": [
         "seed"
       ],
       "params": {
+        "min_baseline_predictor": 0.5,
         "min_strata": 3,
-        "min_vanilla_predictor": 0.5,
         "per_stratum_d_threshold": -0.5,
         "stratify_by": [
           "k_eff"
@@ -141,6 +141,7 @@
               "arm_mean_treatment": 0.0934424,
               "arm_sd_baseline": 0.100407,
               "arm_sd_treatment": 0.0531289,
+              "baseline_predictor": 0.286706,
               "cohen_d": -2.40602,
               "cohen_se": 0.160947,
               "mean_diff": -0.193264,
@@ -148,14 +149,14 @@
               "n_seeds_treatment": 134,
               "stratum_id": [
                 0.99
-              ],
-              "vanilla_predictor": 0.286706
+              ]
             },
             {
               "arm_mean_baseline": 9.5478,
               "arm_mean_treatment": 0.550581,
               "arm_sd_baseline": 2.0766,
               "arm_sd_treatment": 0.26832,
+              "baseline_predictor": 9.5478,
               "cohen_d": -6.07679,
               "cohen_se": 0.26317,
               "mean_diff": -8.99722,
@@ -163,8 +164,7 @@
               "n_seeds_treatment": 165,
               "stratum_id": [
                 0.999
-              ],
-              "vanilla_predictor": 9.5478
+              ]
             }
           ],
           "pooled": {
@@ -202,7 +202,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_reduction_amplified_by_gamma__fr_mlp_k4_unshaped",
       "direction": "inverse",
-      "extent_hash": 3255027194725411840,
+      "extent_hash": -8360916123581447552,
       "n_cells_in_scope": 593,
       "n_cells_pre_scope": 4711,
       "pair_by": [
@@ -210,8 +210,8 @@
       ],
       "params": {
         "gamma_amp_ratio": 3.0,
+        "min_baseline_predictor": null,
         "min_strata": 2,
-        "min_vanilla_predictor": null,
         "per_stratum_d_threshold": -0.8,
         "stratify_by": [
           "gamma"
@@ -239,6 +239,7 @@
               "arm_mean_treatment": 173.823,
               "arm_sd_baseline": 120.003,
               "arm_sd_treatment": 116.898,
+              "baseline_predictor": 172.921,
               "cohen_d": 0.00761485,
               "cohen_se": 0.1291,
               "mean_diff": 0.90206,
@@ -246,14 +247,14 @@
               "n_seeds_treatment": 120,
               "stratum_id": [
                 "Acrobot-v1"
-              ],
-              "vanilla_predictor": 172.921
+              ]
             },
             {
               "arm_mean_baseline": 0.0,
               "arm_mean_treatment": 0.0,
               "arm_sd_baseline": 0.0,
               "arm_sd_treatment": 0.0,
+              "baseline_predictor": 0.0,
               "cohen_d": null,
               "cohen_se": null,
               "mean_diff": 0.0,
@@ -261,14 +262,14 @@
               "n_seeds_treatment": 120,
               "stratum_id": [
                 "CartPole-v1"
-              ],
-              "vanilla_predictor": 0.0
+              ]
             },
             {
               "arm_mean_baseline": 0.152042,
               "arm_mean_treatment": 0.144493,
               "arm_sd_baseline": 0.137232,
               "arm_sd_treatment": 0.133399,
+              "baseline_predictor": 0.152042,
               "cohen_d": -0.0557804,
               "cohen_se": 0.129125,
               "mean_diff": -0.0075487,
@@ -276,14 +277,14 @@
               "n_seeds_treatment": 120,
               "stratum_id": [
                 "Catch-bsuite"
-              ],
-              "vanilla_predictor": 0.152042
+              ]
             },
             {
               "arm_mean_baseline": 4.72184e-05,
               "arm_mean_treatment": 4.48681e-05,
               "arm_sd_baseline": 8.62678e-05,
               "arm_sd_treatment": 8.4403e-05,
+              "baseline_predictor": 4.72184e-05,
               "cohen_d": -0.0275392,
               "cohen_se": 0.129106,
               "mean_diff": -2.35021e-06,
@@ -291,14 +292,14 @@
               "n_seeds_treatment": 120,
               "stratum_id": [
                 "DeepSea-bsuite"
-              ],
-              "vanilla_predictor": 4.72184e-05
+              ]
             },
             {
               "arm_mean_baseline": 8.47188,
               "arm_mean_treatment": 7.98407,
               "arm_sd_baseline": 7.54148,
               "arm_sd_treatment": 7.41493,
+              "baseline_predictor": 8.47188,
               "cohen_d": -0.065229,
               "cohen_se": 0.0879043,
               "mean_diff": -0.487814,
@@ -306,14 +307,14 @@
               "n_seeds_treatment": 262,
               "stratum_id": [
                 "FourRooms-misc"
-              ],
-              "vanilla_predictor": 8.47188
+              ]
             },
             {
               "arm_mean_baseline": 92.3844,
               "arm_mean_treatment": 92.411,
               "arm_sd_baseline": 45.5317,
               "arm_sd_treatment": 45.4294,
+              "baseline_predictor": 92.3844,
               "cohen_d": 0.000584551,
               "cohen_se": 0.0816497,
               "mean_diff": 0.0265857,
@@ -321,8 +322,7 @@
               "n_seeds_treatment": 300,
               "stratum_id": [
                 "MountainCar-v0"
-              ],
-              "vanilla_predictor": 92.3844
+              ]
             }
           ],
           "pooled": {
@@ -358,15 +358,15 @@
       "blocked_by": null,
       "bridge_name": "linear_fa_caps_type_1_across_envs__null_panel",
       "direction": "inverse",
-      "extent_hash": 2025739676993175372,
+      "extent_hash": 8161065476090922708,
       "n_cells_in_scope": 2078,
       "n_cells_pre_scope": 4711,
       "pair_by": [
         "seed"
       ],
       "params": {
+        "min_baseline_predictor": null,
         "min_strata": 3,
-        "min_vanilla_predictor": null,
         "null_ceiling": 0.3,
         "stratify_by": [
           "env_name"
@@ -394,6 +394,7 @@
               "arm_mean_treatment": 7.79309,
               "arm_sd_baseline": 1.79177,
               "arm_sd_treatment": 2.09205,
+              "baseline_predictor": 10.0158,
               "cohen_d": -1.14118,
               "cohen_se": 0.197108,
               "mean_diff": -2.22269,
@@ -401,14 +402,14 @@
               "n_seeds_treatment": 60,
               "stratum_id": [
                 20
-              ],
-              "vanilla_predictor": 10.0158
+              ]
             },
             {
               "arm_mean_baseline": 9.04338,
               "arm_mean_treatment": 7.59626,
               "arm_sd_baseline": 3.40794,
               "arm_sd_treatment": 3.04504,
+              "baseline_predictor": 9.04338,
               "cohen_d": -0.447805,
               "cohen_se": 0.116918,
               "mean_diff": -1.44712,
@@ -416,8 +417,7 @@
               "n_seeds_treatment": 150,
               "stratum_id": [
                 5
-              ],
-              "vanilla_predictor": 9.04338
+              ]
             }
           ],
           "pooled": {
@@ -455,15 +455,15 @@
       "blocked_by": null,
       "bridge_name": "linear_fa_cap_fails_at_metamaze_g999__exception",
       "direction": "inverse",
-      "extent_hash": -2490163271628787100,
+      "extent_hash": -4896656812020661078,
       "n_cells_in_scope": 420,
       "n_cells_pre_scope": 4711,
       "pair_by": [
         "seed"
       ],
       "params": {
+        "min_baseline_predictor": null,
         "min_strata": 2,
-        "min_vanilla_predictor": null,
         "per_stratum_d_threshold": -0.3,
         "stratify_by": [
           "n_episodes"
@@ -491,6 +491,7 @@
               "arm_mean_treatment": 1.0,
               "arm_sd_baseline": 0.301415,
               "arm_sd_treatment": 8.2156e-07,
+              "baseline_predictor": 60.5964,
               "cohen_d": 3.5033,
               "cohen_se": 0.415294,
               "mean_diff": 0.746668,
@@ -498,14 +499,14 @@
               "n_seeds_treatment": 30,
               "stratum_id": [
                 12
-              ],
-              "vanilla_predictor": 60.5964
+              ]
             },
             {
               "arm_mean_baseline": 0.0800003,
               "arm_mean_treatment": 0.580001,
               "arm_sd_baseline": 0.162736,
               "arm_sd_treatment": 0.380019,
+              "baseline_predictor": 89.1177,
               "cohen_d": 1.71048,
               "cohen_se": 0.303131,
               "mean_diff": 0.500001,
@@ -513,14 +514,14 @@
               "n_seeds_treatment": 30,
               "stratum_id": [
                 16
-              ],
-              "vanilla_predictor": 89.1177
+              ]
             },
             {
               "arm_mean_baseline": 0.198758,
               "arm_mean_treatment": 0.990305,
               "arm_sd_baseline": 0.220791,
               "arm_sd_treatment": 0.0655412,
+              "baseline_predictor": 9.5478,
               "cohen_d": 4.8604,
               "cohen_se": 0.220744,
               "mean_diff": 0.791546,
@@ -528,14 +529,14 @@
               "n_seeds_treatment": 165,
               "stratum_id": [
                 4
-              ],
-              "vanilla_predictor": 9.5478
+              ]
             },
             {
               "arm_mean_baseline": 0.193334,
               "arm_mean_treatment": 1.0,
               "arm_sd_baseline": 0.299349,
               "arm_sd_treatment": 7.75489e-07,
+              "baseline_predictor": 34.0975,
               "cohen_d": 3.81094,
               "cohen_se": 0.438027,
               "mean_diff": 0.806668,
@@ -543,8 +544,7 @@
               "n_seeds_treatment": 30,
               "stratum_id": [
                 8
-              ],
-              "vanilla_predictor": 34.0975
+              ]
             }
           ],
           "pooled": {
@@ -582,15 +582,15 @@
       "blocked_by": null,
       "bridge_name": "ddqn_helps_outcome_at_fr_g999_mlp_unshaped__k_panel",
       "direction": "direct",
-      "extent_hash": -1622244619281782900,
+      "extent_hash": -1453302445050265495,
       "n_cells_in_scope": 506,
       "n_cells_pre_scope": 4711,
       "pair_by": [
         "seed"
       ],
       "params": {
+        "min_baseline_predictor": null,
         "min_strata": 3,
-        "min_vanilla_predictor": null,
         "per_stratum_d_threshold": 0.3,
         "stratify_by": [
           "k_eff"
@@ -618,6 +618,7 @@
               "arm_mean_treatment": 43.4652,
               "arm_sd_baseline": 10.1691,
               "arm_sd_treatment": 10.7202,
+              "baseline_predictor": 4.15904,
               "cohen_d": 0.0668563,
               "cohen_se": 0.258273,
               "mean_diff": 0.698533,
@@ -626,14 +627,14 @@
               "stratum_id": [
                 "linear",
                 0.99
-              ],
-              "vanilla_predictor": 4.15904
+              ]
             },
             {
               "arm_mean_baseline": 43.4825,
               "arm_mean_treatment": 42.5852,
               "arm_sd_baseline": 12.6255,
               "arm_sd_treatment": 12.8124,
+              "baseline_predictor": 9.28486,
               "cohen_d": -0.0705443,
               "cohen_se": 0.258282,
               "mean_diff": -0.897272,
@@ -642,14 +643,14 @@
               "stratum_id": [
                 "linear",
                 0.999
-              ],
-              "vanilla_predictor": 9.28486
+              ]
             },
             {
               "arm_mean_baseline": 78.9237,
               "arm_mean_treatment": 70.2109,
               "arm_sd_baseline": 3.5659,
               "arm_sd_treatment": 7.37146,
+              "baseline_predictor": 1.69981,
               "cohen_d": -1.50475,
               "cohen_se": 0.293575,
               "mean_diff": -8.71287,
@@ -658,14 +659,14 @@
               "stratum_id": [
                 "mlp_deep",
                 0.99
-              ],
-              "vanilla_predictor": 1.69981
+              ]
             },
             {
               "arm_mean_baseline": 81.8044,
               "arm_mean_treatment": 81.0848,
               "arm_sd_baseline": 2.7716,
               "arm_sd_treatment": 3.39764,
+              "baseline_predictor": 37.6924,
               "cohen_d": -0.232095,
               "cohen_se": 0.259097,
               "mean_diff": -0.719602,
@@ -674,8 +675,7 @@
               "stratum_id": [
                 "mlp_deep",
                 0.999
-              ],
-              "vanilla_predictor": 37.6924
+              ]
             }
           ],
           "pooled": {
@@ -714,15 +714,15 @@
       "blocked_by": null,
       "bridge_name": "shaping_decouples_outcome_benefit__fr_shaped_fa_x_gamma_panel",
       "direction": "direct",
-      "extent_hash": -9112406877154156081,
+      "extent_hash": 7204545543679684640,
       "n_cells_in_scope": 240,
       "n_cells_pre_scope": 4711,
       "pair_by": [
         "seed"
       ],
       "params": {
+        "min_baseline_predictor": null,
         "min_strata": 3,
-        "min_vanilla_predictor": null,
         "per_stratum_d_upper_bound": 0.3,
         "stratify_by": [
           "fa_kind",
@@ -740,7 +740,7 @@
   ],
   "cache_path": "experiments/data/cache/ddqn_three_conditions.parquet",
   "errored_bridges": [],
-  "git_commit": "523038f05d52",
+  "git_commit": "035684b186ca",
   "hypothesis_module": "experiments.findings.ddqn_three_conditions",
   "measurable_signatures": {
     "eval_best_burst_raw_mean": "829be9a6bcc9c696",
@@ -750,5 +750,5 @@
     "shaping_kind": "8d7b9f162d87a266"
   },
   "n_cells_total": 4711,
-  "timestamp_utc": "2026-05-16T06:48:30+00:00"
+  "timestamp_utc": "2026-05-16T10:04:22+00:00"
 }

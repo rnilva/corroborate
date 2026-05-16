@@ -14,7 +14,7 @@ per-(env, burst, seed) — pseudo-replicating each stratum by N
 seeds where N_effective_per_stratum is 1.
 
 Mech conditioning is built in: strata where vanilla's mean
-predictor is below `min_vanilla_predictor` (G1 premise inactive)
+predictor is below `min_baseline_predictor` (G1 premise inactive)
 are skipped before they reach DoWhy. A link-bridge consuming this
 fixture is automatically conditioned on mech-premise-active strata.
 
@@ -74,7 +74,7 @@ def _build_stratum_panel(
     ],
     env_filter: tuple[str, ...],
     arm_field: str,
-    min_vanilla_predictor: float,
+    min_baseline_predictor: float,
 ) -> tuple[
     list[Mapping[str, object]],
     list[tuple[str, str]],
@@ -149,7 +149,7 @@ def _build_stratum_panel(
                 continue
             # Mech conditioning: skip stratum if vanilla's mean
             # predictor is below the premise-active floor.
-            if mean_b_pred <= min_vanilla_predictor:
+            if mean_b_pred <= min_baseline_predictor:
                 continue
             d_target = mean_t_target - mean_b_target
             d_pred = mean_t_pred - mean_b_pred
@@ -227,7 +227,7 @@ def stratum_delta_link_dowhy(
     env_filter: tuple[str, ...] = (),
     arm_field: str = 'arm_key',
     method_name: str = 'backdoor.linear_regression',
-    min_vanilla_predictor: float = 0.05,
+    min_baseline_predictor: float = 0.05,
 ) -> StratumDeltaLinkDowhyResult:
     """Test `Δ_predictor → Δ_target` on stratum-level (env, burst)
     Δ rows via DoWhy backdoor + refutations.
@@ -235,7 +235,7 @@ def stratum_delta_link_dowhy(
     Pool seeds within each arm INDEPENDENTLY at each (env, burst);
     Δ at that stratum is the difference of arm-means. No per-pair
     structure. Strata where vanilla mean predictor <
-    `min_vanilla_predictor` (mech premise inactive) are dropped
+    `min_baseline_predictor` (mech premise inactive) are dropped
     before they enter DoWhy.
 
     Empty panel (no env survives filter, no paired strata, or all
@@ -249,7 +249,7 @@ def stratum_delta_link_dowhy(
         link_target=link_target,
         env_filter=env_filter,
         arm_field=arm_field,
-        min_vanilla_predictor=min_vanilla_predictor,
+        min_baseline_predictor=min_baseline_predictor,
     )
     if not rows:
         return StratumDeltaLinkDowhyResult(

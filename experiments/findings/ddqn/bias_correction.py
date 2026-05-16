@@ -43,8 +43,8 @@ from corroborate.analyses.stratum_panel import pair_key, stratum_panel
 from corroborate.analyses.stratum_panel_jci_spearman import (
     StratumPanelJciResult,
 )
-from corroborate.analyses.stratum_vanilla_predictor_link_dowhy import (
-    StratumVanillaPredictorLinkDowhyResult,
+from corroborate.analyses.stratum_baseline_predictor_link_dowhy import (
+    StratumBaselinePredictorLinkDowhyResult,
 )
 from corroborate.bridge.deferred_scope import scope_from_panel
 from corroborate.bridge.bridge import Direction, Tier, claim_bridge
@@ -92,15 +92,15 @@ from experiments.findings.ddqn._verdicts import (
     scope=DDQN_RELEVANT_SCOPE,
 )
 def bias_premise_jens_predicts_outcome_backdoor(
-    stratum_vanilla_predictor_link_dowhy: (
-        StratumVanillaPredictorLinkDowhyResult
+    stratum_baseline_predictor_link_dowhy: (
+        StratumBaselinePredictorLinkDowhyResult
     ),
     *,
     treatment_arm: str = DDQN_ARM,
     baseline_arm: str = VANILLA_ARM,
     predictor_col: str = 'jensen_gap',
     target_col: str = 'eval_best_burst_raw_mean',
-    min_vanilla_predictor: float = VANILLA_JENS_NOISE_FLOOR,
+    min_baseline_predictor: float = VANILLA_JENS_NOISE_FLOOR,
     ate_floor: float = 0.10,
 ) -> Verdict:
     """Vanilla `jensen_gap` (one-arm scalar) predicting cross-arm
@@ -108,9 +108,9 @@ def bias_premise_jens_predicts_outcome_backdoor(
     POSITIVE (more vanilla bias → bigger DDQN outcome gain), so
     sign=+1, ATE ≥ `ate_floor`."""
     del treatment_arm, baseline_arm, predictor_col, target_col
-    del min_vanilla_predictor
+    del min_baseline_predictor
     return dowhy_backdoor_verdict(
-        stratum_vanilla_predictor_link_dowhy.backdoor,
+        stratum_baseline_predictor_link_dowhy.backdoor,
         ate_threshold=ate_floor, sign=1,
     )
 
@@ -123,23 +123,23 @@ def bias_premise_jens_predicts_outcome_backdoor(
     scope=DDQN_RELEVANT_SCOPE,
 )
 def bias_premise_jens_predicts_outcome_placebo(
-    stratum_vanilla_predictor_link_dowhy: (
-        StratumVanillaPredictorLinkDowhyResult
+    stratum_baseline_predictor_link_dowhy: (
+        StratumBaselinePredictorLinkDowhyResult
     ),
     *,
     treatment_arm: str = DDQN_ARM,
     baseline_arm: str = VANILLA_ARM,
     predictor_col: str = 'jensen_gap',
     target_col: str = 'eval_best_burst_raw_mean',
-    min_vanilla_predictor: float = VANILLA_JENS_NOISE_FLOOR,
+    min_baseline_predictor: float = VANILLA_JENS_NOISE_FLOOR,
     placebo_max_ratio: float = 0.2,
 ) -> Verdict:
     """Placebo refutation: random treatment ATE should be near
     zero relative to the real ATE."""
     del treatment_arm, baseline_arm, predictor_col, target_col
-    del min_vanilla_predictor
+    del min_baseline_predictor
     return dowhy_placebo_verdict(
-        stratum_vanilla_predictor_link_dowhy.placebo,
+        stratum_baseline_predictor_link_dowhy.placebo,
         max_ratio=placebo_max_ratio,
     )
 
@@ -152,23 +152,23 @@ def bias_premise_jens_predicts_outcome_placebo(
     scope=DDQN_RELEVANT_SCOPE,
 )
 def bias_premise_jens_predicts_outcome_rcc(
-    stratum_vanilla_predictor_link_dowhy: (
-        StratumVanillaPredictorLinkDowhyResult
+    stratum_baseline_predictor_link_dowhy: (
+        StratumBaselinePredictorLinkDowhyResult
     ),
     *,
     treatment_arm: str = DDQN_ARM,
     baseline_arm: str = VANILLA_ARM,
     predictor_col: str = 'jensen_gap',
     target_col: str = 'eval_best_burst_raw_mean',
-    min_vanilla_predictor: float = VANILLA_JENS_NOISE_FLOOR,
+    min_baseline_predictor: float = VANILLA_JENS_NOISE_FLOOR,
     rcc_max_drift_ratio: float = 0.15,
 ) -> Verdict:
     """Random-common-cause refutation: synthetic confounder
     leaves the ATE near-stable."""
     del treatment_arm, baseline_arm, predictor_col, target_col
-    del min_vanilla_predictor
+    del min_baseline_predictor
     return dowhy_rcc_verdict(
-        stratum_vanilla_predictor_link_dowhy.random_common_cause,
+        stratum_baseline_predictor_link_dowhy.random_common_cause,
         max_drift_ratio=rcc_max_drift_ratio,
     )
 
@@ -233,7 +233,7 @@ def mediation_link_null__jci_stratified_clip(
     baseline_arm: str = VANILLA_ARM,
     predictor_col: str = 'bootstrap_gap_magnitude',
     target_col: str = 'eval_best_burst_raw_mean',
-    min_vanilla_predictor: float = 0.0,
+    min_baseline_predictor: float = 0.0,
     null_max_abs_rho: float = 0.25,
     min_strata: int = 10,
 ) -> Verdict:
@@ -243,7 +243,7 @@ def mediation_link_null__jci_stratified_clip(
     fails to detect a consistent mediation signal. **HELD when
     |ρ| < null_max_abs_rho** (predicted-null confirmed)."""
     del treatment_arm, baseline_arm, predictor_col, target_col
-    del min_vanilla_predictor
+    del min_baseline_predictor
     return _jci_null_verdict(
         stratum_panel_jci_spearman,
         rho=stratum_panel_jci_spearman.rho_stratified,
@@ -268,7 +268,7 @@ def mediation_link_null__jci_partial_clip(
     baseline_arm: str = VANILLA_ARM,
     predictor_col: str = 'bootstrap_gap_magnitude',
     target_col: str = 'eval_best_burst_raw_mean',
-    min_vanilla_predictor: float = 0.0,
+    min_baseline_predictor: float = 0.0,
     null_max_abs_rho: float = 0.25,
     min_strata: int = 10,
 ) -> Verdict:
@@ -279,7 +279,7 @@ def mediation_link_null__jci_partial_clip(
     bias-correction mediation claim. **HELD when
     |ρ| < null_max_abs_rho**."""
     del treatment_arm, baseline_arm, predictor_col, target_col
-    del min_vanilla_predictor
+    del min_baseline_predictor
     return _jci_null_verdict(
         stratum_panel_jci_spearman,
         rho=stratum_panel_jci_spearman.rho_partial_stratified,
@@ -304,7 +304,7 @@ def mediation_link_null__jci_partial_jens(
     baseline_arm: str = VANILLA_ARM,
     predictor_col: str = 'jensen_gap',
     target_col: str = 'eval_best_burst_raw_mean',
-    min_vanilla_predictor: float = 0.0,
+    min_baseline_predictor: float = 0.0,
     null_max_abs_rho: float = 0.25,
     min_strata: int = 10,
 ) -> Verdict:
@@ -314,7 +314,7 @@ def mediation_link_null__jci_partial_jens(
     collapse of the jens predictor isn't rescued by within-env
     aggregation. **HELD when |ρ| < null_max_abs_rho**."""
     del treatment_arm, baseline_arm, predictor_col, target_col
-    del min_vanilla_predictor
+    del min_baseline_predictor
     return _jci_null_verdict(
         stratum_panel_jci_spearman,
         rho=stratum_panel_jci_spearman.rho_partial_stratified,
@@ -344,8 +344,8 @@ del Mapping
 # Three bridges expressing the chain arm → bg → jens → outcome,
 # using the framework's three edge-conditioning primitives:
 #
-# 1. min_vanilla_predictor data filter (Stages 2+3 scope to mech-
-#    active strata via `min_vanilla_predictor` in the analysis)
+# 1. min_baseline_predictor data filter (Stages 2+3 scope to mech-
+#    active strata via `min_baseline_predictor` in the analysis)
 # 2. partial_spearman_rho(z=...) continuous conditioning at Stage 3
 # 3. composed_verdict at the Finding level (AND-aggregation)
 #
@@ -679,7 +679,7 @@ def algorithm_reduces_bootstrap_gap_magnitude(
     *,
     source: str = 'bootstrap_gap_magnitude',
     scope_predictor: str = 'jensen_gap',
-    min_vanilla_predictor: float = VANILLA_JENS_NOISE_FLOOR,
+    min_baseline_predictor: float = VANILLA_JENS_NOISE_FLOOR,
     stratify_by: tuple[str, ...] = ('env_name',),
     treatment_arm: str = DDQN_ARM,
     baseline_arm: str = VANILLA_ARM,
@@ -693,7 +693,7 @@ def algorithm_reduces_bootstrap_gap_magnitude(
     active envs. HELD when pooled_d ≤ `pooled_d_threshold` (DDQN
     systematically produces smaller per-step argmax disagreement
     on its trained networks)."""
-    del source, scope_predictor, min_vanilla_predictor, stratify_by
+    del source, scope_predictor, min_baseline_predictor, stratify_by
     del treatment_arm, baseline_arm
     if stratified_arm_diff_pooled.n_strata < min_strata:
         return Verdict.POWER_INSUFFICIENT
@@ -741,7 +741,7 @@ def ddqn_reduces_jens_gap__theorem(
     *,
     source: str = 'jensen_gap',
     scope_predictor: str = 'jensen_gap',
-    min_vanilla_predictor: float = VANILLA_JENS_NOISE_FLOOR,
+    min_baseline_predictor: float = VANILLA_JENS_NOISE_FLOOR,
     stratify_by: tuple[str, ...] = ('env_name',),
     treatment_arm: str = DDQN_ARM,
     baseline_arm: str = VANILLA_ARM,
@@ -759,7 +759,7 @@ def ddqn_reduces_jens_gap__theorem(
     Per-env Cohen's d of DDQN − vanilla on `jensen_gap`, DL-pooled.
     HELD when pooled_d ≤ -0.3 (DDQN systematically narrows the
     Q-MC gap relative to vanilla)."""
-    del source, scope_predictor, min_vanilla_predictor, stratify_by
+    del source, scope_predictor, min_baseline_predictor, stratify_by
     del treatment_arm, baseline_arm
     if stratified_arm_diff_pooled.n_strata < min_strata:
         return Verdict.POWER_INSUFFICIENT
@@ -786,7 +786,7 @@ def ddqn_reduces_signed_q_late__structural(
     *,
     source: str = 'q_late_mean',
     scope_predictor: str = 'jensen_gap',
-    min_vanilla_predictor: float = VANILLA_JENS_NOISE_FLOOR,
+    min_baseline_predictor: float = VANILLA_JENS_NOISE_FLOOR,
     stratify_by: tuple[str, ...] = ('env_name',),
     treatment_arm: str = DDQN_ARM,
     baseline_arm: str = VANILLA_ARM,
@@ -812,7 +812,7 @@ def ddqn_reduces_signed_q_late__structural(
     `findings_ddqn_reward_sign_conditional.md`) is derived from
     this bridge's verdict + the env's Q-sign — NO separate bridge
     needed for it."""
-    del source, scope_predictor, min_vanilla_predictor, stratify_by
+    del source, scope_predictor, min_baseline_predictor, stratify_by
     del treatment_arm, baseline_arm
     if stratified_arm_diff_pooled.n_strata < min_strata:
         return Verdict.POWER_INSUFFICIENT
@@ -964,15 +964,15 @@ _DECOUPLED_OUTCOME_SCOPE = scope_from_panel(
     predicted_direction='a_gt_b',
 )
 def intervention_outcome_link__decoupled_envs_only(
-    stratum_vanilla_predictor_link_dowhy: (
-        StratumVanillaPredictorLinkDowhyResult
+    stratum_baseline_predictor_link_dowhy: (
+        StratumBaselinePredictorLinkDowhyResult
     ),
     *,
     treatment_arm: str = DDQN_ARM,
     baseline_arm: str = VANILLA_ARM,
     predictor_col: str = 'bootstrap_gap_magnitude',
     target_col: str = 'eval_best_burst_raw_mean',
-    min_vanilla_predictor: float = 0.0,
+    min_baseline_predictor: float = 0.0,
     ate_floor: float = 50.0,
 ) -> Verdict:
     """A1 (Stage 0 → Stage 3 conditioning): bootstrap_gap →
@@ -990,9 +990,9 @@ def intervention_outcome_link__decoupled_envs_only(
     full cohort was null due to tautology, this scope-restricted
     test should reveal any residual real signal."""
     del treatment_arm, baseline_arm, predictor_col, target_col
-    del min_vanilla_predictor
+    del min_baseline_predictor
     return dowhy_backdoor_verdict(
-        stratum_vanilla_predictor_link_dowhy.backdoor,
+        stratum_baseline_predictor_link_dowhy.backdoor,
         ate_threshold=ate_floor, sign=1,
     )
 

@@ -75,7 +75,7 @@ def ddqn_link_outcome_scales_with_chain_depth__cross_env(
         _LOG_HORIZON_PER_GAMMA
     ),
     scope_predictor: str = 'jensen_gap',
-    min_vanilla_predictor: float = 2.0,
+    min_baseline_predictor: float = 2.0,
     min_seeds_per_arm: int = 5,
     rho_threshold_held: float = 0.6,
     p_threshold: float = 0.05,
@@ -98,7 +98,7 @@ def ddqn_link_outcome_scales_with_chain_depth__cross_env(
     structural limit; cannot fire HELD without denser γ coverage."""
     del treatment_arm, baseline_arm, source, stratify_by
     del covariate_name, covariate_key_field, covariates_per_key
-    del scope_predictor, min_vanilla_predictor, min_seeds_per_arm
+    del scope_predictor, min_baseline_predictor, min_seeds_per_arm
     return cross_stratum_signed_spearman_verdict(
         cross_stratum_property_slope,
         sign=1,

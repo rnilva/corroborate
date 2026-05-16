@@ -136,8 +136,8 @@ _VANILLA_Q_DIVERGENCE_SCORE = pl.when(pl.col('arm_key') == 'baseline').then(
 # trims the FR-1M saturated-vanilla case (mean jens ≈ 0.043).
 # Used by:
 #   - `G1_VANILLA_CONFIG_PREMISE_ACTIVE` (scope predicate)
-#   - `stratified_arm_diff_pooled.min_vanilla_predictor` (analysis param)
-#   - `stratum_*_dowhy.min_vanilla_predictor` (analysis param)
+#   - `stratified_arm_diff_pooled.min_baseline_predictor` (analysis param)
+#   - `stratum_*_dowhy.min_baseline_predictor` (analysis param)
 # All sites apply `vanilla_mean_predictor > VANILLA_JENS_NOISE_FLOOR`
 # (admit) / `<= floor` (skip). Substrate-physical calibration to
 # σ_Q × √(2 log K) per `findings_three_gate_empirical_taxonomy.md`

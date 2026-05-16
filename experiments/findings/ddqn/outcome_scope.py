@@ -56,14 +56,14 @@ def ddqn_refuted_when_dormancy_fires(
     null_ceiling: float = 0.2,
     min_strata: int = 2,
     stratify_by: tuple[str, ...] = ('env_name',),
-    min_vanilla_predictor: float = float('-inf'),
+    min_baseline_predictor: float = float('-inf'),
 ) -> tuple[Verdict, RefutationClass | None]:
     """On dormant-at-best-burst cells (σ_Q × √(2 log K) − (Q − MC)
     > 0.05), Δ_outcome should be ≈ 0. Per-env Cohen's d. HELD if
     all per-env CIs in ±`null_ceiling`; INVARIANT_VIOLATION if any
     CI fully > +ceiling; NO_EFFECT (SIGN_FLIP) if any CI fully <
     −ceiling; else POW_INSUF."""
-    del stratify_by, min_vanilla_predictor
+    del stratify_by, min_baseline_predictor
     if stratified_arm_diff_pooled.n_strata < min_strata:
         return Verdict.POWER_INSUFFICIENT, None
     any_above = False
@@ -103,7 +103,7 @@ def ddqn_refuted_when_dormancy_fires(
     tier=Tier.INTERVENTIONAL,
     scope=(
         # ARM-SYMMETRIC predicates only. Stratum-level filter is
-        # applied INSIDE the primitive via `min_vanilla_predictor`.
+        # applied INSIDE the primitive via `min_baseline_predictor`.
         pl.col('eval_best_burst_raw_mean').is_finite()
         & pl.col('jensen_gap').is_finite()
         & pl.col('n_actions').is_finite() & (pl.col('n_actions') >= 3)
@@ -125,7 +125,7 @@ def ddqn_helps_under_three_gate_scope__cross_env(
     stratify_by: tuple[str, ...] = (
         'env_name', 'sync_period', 'gamma', 'total_steps',
     ),
-    min_vanilla_predictor: float = 2.0,
+    min_baseline_predictor: float = 2.0,
 ) -> Verdict:
     """Cross-config independent-samples Cohen's d (Hedges 1981),
     DerSimonian-Laird random-effects pool over strata that pass the
@@ -247,7 +247,7 @@ def ddqn_helps_under_three_gate_scope_AND_trajectory_smooth__cross_env(
     stratify_by: tuple[str, ...] = (
         'env_name', 'sync_period', 'gamma', 'total_steps',
     ),
-    min_vanilla_predictor: float = 2.0,
+    min_baseline_predictor: float = 2.0,
 ) -> Verdict:
     """26b's structural scope + inter-state Q trajectory smoothness
     (`q_trajectory_autocorr_late > 0.5`). DL pool of per-stratum
@@ -352,7 +352,7 @@ def ddqn_link_outcome_scales_inversely_with_reward_density__cross_env(
         _REWARD_DENSITY_PER_ENV
     ),
     scope_predictor: str = 'jensen_gap',
-    min_vanilla_predictor: float = 2.0,
+    min_baseline_predictor: float = 2.0,
     min_seeds_per_arm: int = 5,
     rho_threshold_held: float = 0.6,
     p_threshold: float = 0.05,
@@ -369,7 +369,7 @@ def ddqn_link_outcome_scales_inversely_with_reward_density__cross_env(
     signal is rich; DDQN's de-biasing has less to translate.
 
     **Calibrated for n_strata≥10**. At canonical the bridge admits
-    ≤7 envs after G1 gating (`min_vanilla_predictor=2.0`) — below
+    ≤7 envs after G1 gating (`min_baseline_predictor=2.0`) — below
     the resolution band of either Spearman or meta-regression at
     canonical's env count. Fires POWER_INSUFFICIENT honestly.
 
@@ -386,7 +386,7 @@ def ddqn_link_outcome_scales_inversely_with_reward_density__cross_env(
       POWER_INSUFFICIENT    : in-between, or n_strata < 10"""
     del treatment_arm, baseline_arm, source, stratify_by
     del covariate_name, covariate_key_field, covariates_per_key
-    del scope_predictor, min_vanilla_predictor, min_seeds_per_arm
+    del scope_predictor, min_baseline_predictor, min_seeds_per_arm
     return cross_stratum_signed_spearman_verdict(
         cross_stratum_property_slope,
         sign=-1,

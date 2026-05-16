@@ -22,7 +22,7 @@ The composition: cells →
 `meta_regress_panel(covariates_per_stratum=...)` →
 `MetaRegressionResult`. NaN strata (e.g. saturated outcome →
 NaN d) and mech-dormant strata (filtered via
-`min_vanilla_predictor`) are dropped before meta-regression.
+`min_baseline_predictor`) are dropped before meta-regression.
 
 Returns NaN-coefficient `MetaRegressionResult` when the panel
 is too small for OLS (n_strata ≤ 1 + n_covariates) or design is
@@ -55,7 +55,7 @@ def meta_regression_unpaired_d(
         'env_name', 'total_steps', 'reward_scale',
     ),
     scope_predictor: str = 'jensen_gap',
-    min_vanilla_predictor: float = 0.05,
+    min_baseline_predictor: float = 0.05,
     min_seeds_per_arm: int = 5,
     alpha: float = 0.05,
     pool: Pool = 'random',
@@ -98,7 +98,7 @@ def meta_regression_unpaired_d(
         baseline_arm=baseline_arm,
         stratify_by=stratify_by,
         scope_predictor=scope_predictor,
-        min_vanilla_predictor=min_vanilla_predictor,
+        min_baseline_predictor=min_baseline_predictor,
         min_seeds_per_arm=min_seeds_per_arm,
     )
     panel: list[StratumG[tuple[object, ...]]] = []
