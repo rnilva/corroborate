@@ -101,7 +101,7 @@ def test_vanilla_dqn_runs_on_cartpole_via_python_loop() -> None:
     # - per-step Q-summaries: (T, n_actions) or (T, 5)
     scalar_keys = {
         'reward', 'done', 'max_q',
-        'ep_return', 'action', 'state_hash', 'buf_size',
+        'ep_return', 'action', 'state_hash_per_step', 'buf_size',
         'loss', 'td_error', 'td_error_within_batch_std',
     }
     # Per-step Q reductions: per-action vectors (n_actions,) and

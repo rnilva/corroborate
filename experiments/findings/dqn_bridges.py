@@ -1660,7 +1660,7 @@ _CARTPOLE_HP_AUDIT_PANEL: tuple[dict[str, object], ...] = (
     },
     {
         'name': 'mediator.state_coverage_kl_uniform_late',
-        'reads': ('state_hash',),
+        'reads': ('state_hash_per_step',),
     },
 )
 

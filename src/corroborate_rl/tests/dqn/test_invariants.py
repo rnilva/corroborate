@@ -355,7 +355,7 @@ def test_sa_coverage_gap_zero_for_perfect_coverage() -> None:
     state_hashes = pairs // n_actions
     actions = pairs % n_actions
     record: Mapping[str, jnp.ndarray] = {
-        'state_hash': state_hashes,
+        'state_hash_per_step': state_hashes,
         'action': actions,
     }
     gap = state_action_coverage_gap(
@@ -367,7 +367,7 @@ def test_sa_coverage_gap_zero_for_perfect_coverage() -> None:
 def test_sa_coverage_gap_one_for_zero_coverage_against_huge_card() -> None:
     """Few unique pairs vs huge cardinality → near-1 gap."""
     record: Mapping[str, jnp.ndarray] = {
-        'state_hash': jnp.zeros((50,), dtype=jnp.int32),  # all bucket 0
+        'state_hash_per_step': jnp.zeros((50,), dtype=jnp.int32),  # all bucket 0
         'action': jnp.zeros((50,), dtype=jnp.int32),       # all action 0
     }
     gap = state_action_coverage_gap(
@@ -384,7 +384,7 @@ def test_sa_coverage_gap_nan_when_cardinality_none() -> None:
     from 'gap = 0' (perfect coverage)."""
     import math
     record: Mapping[str, jnp.ndarray] = {
-        'state_hash': jnp.zeros((50,), dtype=jnp.int32),
+        'state_hash_per_step': jnp.zeros((50,), dtype=jnp.int32),
         'action': jnp.zeros((50,), dtype=jnp.int32),
     }
     gap = state_action_coverage_gap(

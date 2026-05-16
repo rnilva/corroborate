@@ -449,9 +449,9 @@ def state_action_coverage_gap(
     )
 
     def fn(record: DQNTrajectoryRecord) -> float:
-        sh = jnp.asarray(record['state_hash']).flatten()
+        sh = jnp.asarray(record['state_hash_per_step']).flatten()
         ac = jnp.asarray(record['action']).flatten()
-        # Defensive: contract says state_hash ∈ [0, cardinality);
+        # Defensive: contract says state_hash_per_step ∈ [0, cardinality);
         # if violated, the pair encoding overflows and unique-count
         # is misleading. Clip to the valid range so gap stays
         # honest even on contract-broken inputs.
@@ -462,7 +462,7 @@ def state_action_coverage_gap(
         coverage = n_unique / max_unique
         return float(max(0.0, 1.0 - coverage))
 
-    return Measurable(fn=fn, name=name, reads=('state_hash', 'action'))
+    return Measurable(fn=fn, name=name, reads=('state_hash_per_step', 'action'))
 
 
 # ============ Convenience: all v0-implementable gaps ============

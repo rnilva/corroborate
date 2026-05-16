@@ -9,7 +9,7 @@ IS the measurable surface — `dqn_step` composes phases via
 Phases:
 
 - `rollout_phase`: select action, step env, store transition.
-  Emits `reward, done, max_q, ep_return, action, state_hash,
+  Emits `reward, done, max_q, ep_return, action, state_hash_per_step,
   buf_size`.
 - `train_phase`: sample batch, compute TD-error, gradient step.
   Emits `loss, td_error, online_q_per_action, target_q_per_action,
@@ -101,7 +101,7 @@ def rollout_phase(
     are no-op when the window hasn't yet filled.
 
     Returns `(new_state, diagnostic_dict)` — the dict's keys
-    (`reward, done, max_q, ep_return, action, state_hash,
+    (`reward, done, max_q, ep_return, action, state_hash_per_step,
     buf_size`) are the measurable signals bridges target. Reward
     and done in the diagnostic dict are the RAW per-step values
     from this rollout step, not the n-step aggregates (those are
@@ -157,7 +157,14 @@ def rollout_phase(
         'max_q': jnp.max(q_values),
         'ep_return': cumulative,
         'action': action.astype(jnp.int32),
-        'state_hash': obs_hash,
+        # Per-step state bucket from the env-registered state_hash
+        # callable (`bucket_hash` for vector envs, `image_downsample_hash`
+        # for MinAtar). Named with the `_per_step` suffix to avoid
+        # colliding with the `state_hash` LEAF (config-level callable
+        # identifier in runs.parquet) at join time. Pre-2026-05-16
+        # this key was just `state_hash` — see sanitizer for legacy
+        # trace.parquets.
+        'state_hash_per_step': obs_hash,
         # Populated-slot count for the diagnostic. `state.size` is a
         # monotonic add-counter (post FIFO-fix) that grows past
         # `capacity`; clip here so `buf_size` keeps the historical

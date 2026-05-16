@@ -483,11 +483,11 @@ def test_fill_ratio_late_is_measurable_with_extra_kwarg() -> None:
 # ============ state-conditional argmax measurables ============
 
 def _argmax_record(argmax: list[int], state: list[int]) -> dict[str, np.ndarray]:
-    """Build a record exposing `online_argmax_per_step` + `state_hash`
-    for the state-conditional argmax measurables."""
+    """Build a record exposing `online_argmax_per_step` +
+    `state_hash_per_step` for the state-conditional argmax measurables."""
     return {
         'online_argmax_per_step': np.asarray(argmax, dtype=np.int64),
-        'state_hash': np.asarray(state, dtype=np.int64),
+        'state_hash_per_step': np.asarray(state, dtype=np.int64),
     }
 
 
@@ -546,8 +546,8 @@ def test_state_conditional_argmax_entropy_nan_when_single_bucket() -> None:
 
 
 def test_state_conditional_argmax_entropy_nan_when_state_hash_missing() -> None:
-    """No state_hash key in record → NaN sentinel (env-side hash
-    not registered)."""
+    """No state_hash_per_step key in record → NaN sentinel
+    (env-side hash not registered)."""
     record = {'online_argmax_per_step': np.array([0, 1, 0, 1])}
     assert math.isnan(state_conditional_argmax_entropy_late(record))
 

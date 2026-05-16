@@ -165,15 +165,8 @@ def test_leaf_and_trajectory_namespaces_do_not_collide(tmp_path: Path) -> None:
     assert flat_traj_keys, 'expected at least one flat trajectory key'
 
     overlap = set(leaf_values) & set(traj_leaves)
-    # `state_hash` is a known intentional collision: it's BOTH
-    # the configurational Claim function (kwarg of `dqn`, surfaces
-    # via `walk_paths` as a leaf) AND the per-step record column
-    # (emitted by `phases.py:138` as `'state_hash': obs_hash`).
-    # The substrate uses one name for both because they're
-    # logically the same — the function and its emitted value at
-    # each step. Persistence dispatches on the value's type
-    # (callable → leaf serialization, ndarray → trajectory).
-    # Other framework conventions (`replay.batch_size`, `loss`,
-    # etc.) are not allowed to collide.
-    overlap -= {'state_hash'}
+    # Post-2026-05-16: the trace column is `state_hash_per_step`
+    # (see `phases.py`) so it no longer collides with the
+    # configurational `state_hash` leaf (kwarg of `dqn` surfaced
+    # via `walk_paths`). No leaf/trajectory keys may collide.
     assert not overlap, f'leaf and trajectory keys collide: {overlap}'

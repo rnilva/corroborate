@@ -30,8 +30,8 @@ def test_q_action_temporal_corr_perfect_co_motion_returns_one() -> None:
     visits_state_0 = [[t, t + 0.1, t + 0.2, t + 0.3] for t in range(10)]
     visits_state_1 = [[t + 5.0, t + 5.1, t + 5.2, t + 5.3] for t in range(10)]
     q_per_step = visits_state_0 + visits_state_1
-    state_hash = [0] * 10 + [1] * 10
-    record = {'online_q_per_action': q_per_step, 'state_hash': state_hash}
+    state_hash_per_step = [0] * 10 + [1] * 10
+    record = {'online_q_per_action': q_per_step, 'state_hash_per_step': state_hash_per_step}
     r = _q_action_temporal_corr_at_state_late(record)
     # Late half: state 0 t=5..9 and state 1 t=0..4. Each state has 5
     # visits — exactly at the min_state_visits threshold.
@@ -48,7 +48,7 @@ def test_q_action_temporal_corr_independent_actions_returns_near_zero() -> None:
     visits = [[rng.gauss(0, 1) for _ in range(3)] for _ in range(100)]
     record = {
         'online_q_per_action': visits,
-        'state_hash': [42] * 100,
+        'state_hash_per_step': [42] * 100,
     }
     r = _q_action_temporal_corr_at_state_late(record)
     # Empirical r over 50 samples × 3 pairs has SE ≈ 0.14; |r| < 0.4
@@ -62,7 +62,7 @@ def test_q_action_temporal_corr_independent_actions_returns_near_zero() -> None:
 def test_q_action_temporal_corr_missing_keys_returns_nan() -> None:
     assert math.isnan(_q_action_temporal_corr_at_state_late({}))
     assert math.isnan(_q_action_temporal_corr_at_state_late({'online_q_per_action': [[0.0, 1.0]]}))
-    assert math.isnan(_q_action_temporal_corr_at_state_late({'state_hash': [0]}))
+    assert math.isnan(_q_action_temporal_corr_at_state_late({'state_hash_per_step': [0]}))
 
 
 def test_q_action_temporal_corr_too_few_state_visits_returns_nan() -> None:
@@ -71,7 +71,7 @@ def test_q_action_temporal_corr_too_few_state_visits_returns_nan() -> None:
     record = {
         # 10 steps, 10 distinct states (no repeats) → no state has ≥5 visits
         'online_q_per_action': [[1.0, 2.0, 3.0]] * 10,
-        'state_hash': list(range(10)),
+        'state_hash_per_step': list(range(10)),
     }
     assert math.isnan(_q_action_temporal_corr_at_state_late(record))
 
@@ -89,7 +89,7 @@ def test_q_action_temporal_corr_zero_variance_state_dropped() -> None:
             zero_var_visits + co_motion_visits
             + zero_var_visits + co_motion_visits  # ×2 so late-half spans both
         ),
-        'state_hash': [0] * 6 + [1] * 6 + [0] * 6 + [1] * 6,
+        'state_hash_per_step': [0] * 6 + [1] * 6 + [0] * 6 + [1] * 6,
     }
     r = _q_action_temporal_corr_at_state_late(record)
     # State 0 (zero-var) contributes nothing; state 1 (co-motion) → r=1
@@ -107,7 +107,7 @@ def test_q_action_temporal_corr_partial_anticorr_yields_negative() -> None:
         visits.append([float(t), float(5 - t), 0.0])
     record = {
         'online_q_per_action': visits + visits,  # 12 visits so late-half = 6
-        'state_hash': [99] * 12,
+        'state_hash_per_step': [99] * 12,
     }
     r = _q_action_temporal_corr_at_state_late(record)
     # Action 2 (constant) pairs with anyone gives zero-variance → skip.

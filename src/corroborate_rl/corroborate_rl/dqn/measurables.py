@@ -511,7 +511,7 @@ def _weighted_conditional_entropy(
     return total_h / total_w
 
 
-@measurable(reads=('online_argmax_per_step', 'state_hash'))
+@measurable(reads=('online_argmax_per_step', 'state_hash_per_step'))
 def state_conditional_argmax_entropy_late(
     record: Mapping[str, object],
 ) -> float:
@@ -534,7 +534,7 @@ def state_conditional_argmax_entropy_late(
     registered) or fewer than 2 distinct state buckets are
     observed in the late slice."""
     argmax_arr = record.get('online_argmax_per_step')
-    state_arr = record.get('state_hash')
+    state_arr = record.get('state_hash_per_step')
     if argmax_arr is None or state_arr is None:
         return float('nan')
     a = np.asarray(argmax_arr, dtype=np.int64).flatten()
@@ -550,7 +550,7 @@ def state_conditional_argmax_entropy_late(
     return _weighted_conditional_entropy(a_late, s_late, unique_s)
 
 
-@measurable(reads=('online_argmax_per_step', 'state_hash'))
+@measurable(reads=('online_argmax_per_step', 'state_hash_per_step'))
 def mutual_info_state_argmax_late(
     record: Mapping[str, object],
 ) -> float:
@@ -578,7 +578,7 @@ def mutual_info_state_argmax_late(
     `state_conditional_argmax_entropy_late`, or when the marginal
     action distribution collapses to a single action (MI undefined)."""
     argmax_arr = record.get('online_argmax_per_step')
-    state_arr = record.get('state_hash')
+    state_arr = record.get('state_hash_per_step')
     if argmax_arr is None or state_arr is None:
         return float('nan')
     a = np.asarray(argmax_arr, dtype=np.int64).flatten()
@@ -2090,18 +2090,23 @@ def plateau_slope_late(
 def _state_distribution_late_half(
     record: Mapping[str, object],
 ) -> npt.NDArray[np.int64] | None:
-    """Slice `state_hash` to the late 50% and return as int64.
-    None when the field is absent or the slice is empty."""
-    if 'state_hash' not in record:
+    """Slice `state_hash_per_step` to the late 50% and return as
+    int64. None when the field is absent or the slice is empty.
+
+    Reads `state_hash_per_step` (the per-step trace, NOT the
+    `state_hash` LEAF config callable). Pre-2026-05-16 the trace
+    column was named `state_hash` and collided with the leaf at
+    cache-join time; renamed in commit TBD."""
+    if 'state_hash_per_step' not in record:
         return None
-    arr = np.asarray(record['state_hash'], dtype=np.int64)
+    arr = np.asarray(record['state_hash_per_step'], dtype=np.int64)
     n = arr.shape[0] if arr.ndim >= 1 else 0
     if n < 2:
         return None
     return arr[n // 2:]
 
 
-@measurable(reads=('state_hash',))
+@measurable(reads=('state_hash_per_step',))
 def state_visit_entropy_late(record: Mapping[str, object]) -> float:
     """Shannon entropy (in nats) of the `state_hash` distribution
     over the late 50% of training. Higher entropy = more uniform
@@ -2127,7 +2132,7 @@ def state_visit_entropy_late(record: Mapping[str, object]) -> float:
     return float(-np.sum(p * np.log(p)))
 
 
-@measurable(reads=('state_hash',))
+@measurable(reads=('state_hash_per_step',))
 def state_coverage_kl_uniform_late(
     record: Mapping[str, object],
 ) -> float:

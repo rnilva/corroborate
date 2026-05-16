@@ -180,13 +180,13 @@ def _q_action_temporal_corr_at_state_late(s: object) -> float:
     so the source column remains visible.
 
     Operates on a row-level struct of
-    `{online_q_per_action: list[list[float]], state_hash: list[int]}`.
+    `{online_q_per_action: list[list[float]], state_hash_per_step: list[int]}`.
     Returns NaN when no state has ≥ 5 late-window visits or all
     visits have zero variance (degenerate input)."""
     if not isinstance(s, Mapping):
         return float('nan')
     q = s.get('online_q_per_action')
-    h = s.get('state_hash')
+    h = s.get('state_hash_per_step')
     if q is None or h is None:
         return float('nan')
     if not isinstance(q, Sequence) or not isinstance(h, Sequence):
@@ -308,7 +308,7 @@ Q_TRACE_REDUCTIONS: tuple[pl.Expr, ...] = (
     # Per-cell scalar (NOT per-step list) — intra-state coupling
     # proxy. Computed here because `online_q_per_action` is dropped
     # immediately after; no @measurable can recover it post-hoc.
-    pl.struct(['online_q_per_action', 'state_hash']).map_elements(
+    pl.struct(['online_q_per_action', 'state_hash_per_step']).map_elements(
         _q_action_temporal_corr_at_state_late,
         return_dtype=pl.Float64,
     ).alias('q_action_temporal_corr_at_state_late'),
