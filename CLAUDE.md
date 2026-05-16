@@ -386,11 +386,21 @@ operational rules below catch the most common mistakes.
   the manifest before deletion (preserving the manifest so
   `restore` stays available). Direct `rm` on archived files is
   silent data loss the next time you need to ingest.
-- **`.env` carries AWS creds** for S3-touching commands.
-  `set -a && . .env && set +a` before any sweep / archive / restore
-  / catalogue-with-`--remote-prefix` call. The runner's
-  cloud-restore branch silently no-ops on credential failure;
-  read the stderr.
+- **Cloud credentials via botocore's standard chain.** No
+  `.env` auto-loading. Three accepted sources, in order of
+  preference: (1) `~/.aws/credentials` + `~/.aws/config` with
+  per-profile `endpoint_url` for R2; (2) env vars
+  (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`,
+  `AWS_ENDPOINT_URL`) — if kept in `.env`, source manually
+  (`set -a && . .env && set +a`); (3) IAM role (EC2/ECS).
+  Every cloud-touching CLI subcommand runs a `preflight` check
+  (`_internals.cloud_auth.preflight`) that emits a typed
+  `CloudAuthError(stage, message, hint)` — stages:
+  `no_credentials`, `auth_failed`, `bucket_missing`, `network`.
+  Each subcommand accepts `--profile <name>` for explicit
+  profile selection. Library callers opt into preflight by
+  importing it explicitly (no implicit pre-flight on every
+  cloud op).
 
 ## Sweep + trace discipline
 

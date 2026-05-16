@@ -366,24 +366,69 @@ uv run python -m corroborate catalogue \
     --leaves --leaves-wide
 ```
 
+### Cloud credentials + preflight
+
+The framework uses **botocore's standard credential resolution
+chain** — no `.env` auto-loading, no custom providers. Configure
+via any of:
+
+1. **`~/.aws/credentials` (recommended)**: profile-based, picked
+   up automatically. Pair with `~/.aws/config` for the
+   per-service `endpoint_url` (R2 / non-AWS S3 backends need it):
+   ```ini
+   # ~/.aws/credentials
+   [r2]
+   aws_access_key_id = ...
+   aws_secret_access_key = ...
+
+   # ~/.aws/config
+   [profile r2]
+   region = auto
+   services = r2-endpoint
+
+   [services r2-endpoint]
+   s3 =
+     endpoint_url = https://<account>.r2.cloudflarestorage.com
+   ```
+   Then: `python -m corroborate archive <dir> --remote s3://... --profile r2`
+2. **Environment variables** (`AWS_ACCESS_KEY_ID`,
+   `AWS_SECRET_ACCESS_KEY`, `AWS_ENDPOINT_URL`): work without
+   profile config. If you keep them in `.env`, source it
+   explicitly (`set -a && . .env && set +a`) — there's no
+   auto-load.
+3. **IAM role** (EC2 / ECS): zero config; the chain picks it up.
+
+Every cloud-touching CLI subcommand (`archive`, `restore`, `ls`,
+`catalogue --remote-prefix`) runs a **preflight check** that
+fails fast with a typed stage + actionable hint:
+
+| stage              | example hint                                                                                  |
+|--------------------|------------------------------------------------------------------------------------------------|
+| `no_credentials`   | "Set AWS_ACCESS_KEY_ID or pass --profile <name>."                                              |
+| `auth_failed`      | "Credentials accepted by boto3 but rejected by the bucket (HTTP 403). Verify key/secret."     |
+| `bucket_missing`   | "No bucket at that name. Check the URI AND AWS_ENDPOINT_URL (R2 ≠ s3.amazonaws.com)."         |
+| `network`          | "Could not reach endpoint. Check AWS_ENDPOINT_URL."                                            |
+
+Python API: `from corroborate._internals.cloud_auth import preflight`
+— call explicitly for library use.
+
 ### Archive lifecycle
 
 ```bash
-set -a && . .env && set +a   # AWS creds live in .env
-
-# After a sweep completes, archive its parquets to cloud:
+# Per-command --profile flag (or rely on AWS_PROFILE env var):
 uv run python -m corroborate archive experiments/data/<corpus> \
-    --remote s3://corroborate-archive/<corpus>
+    --remote s3://corroborate-archive/<corpus> --profile r2
 
 # Inspect what a corpus has archived:
-uv run python -m corroborate ls experiments/data/<corpus>
+uv run python -m corroborate ls experiments/data/<corpus> --profile r2
 
 # Restore (e.g. to re-derive trace-dependent measurables):
-uv run python -m corroborate restore experiments/data/<corpus>
+uv run python -m corroborate restore experiments/data/<corpus> --profile r2
 
 # Purge LOCAL copies of cloud-archived files (manifest preserved,
 # `restore` stays available). NEVER `rm` cloud-backed files
-# directly — `purge` validates the manifest first.
+# directly — `purge` validates the manifest first. (No preflight:
+# purge is local-only.)
 uv run python -m corroborate purge experiments/data/<corpus>
 ```
 

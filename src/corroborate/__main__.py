@@ -28,6 +28,9 @@ from pathlib import Path
 from corroborate.corpus import catalogue as _catalogue
 from corroborate.corpus import cloud
 from corroborate._internals.argparse import to_mapping
+from corroborate._internals.cloud_auth import (
+    CloudAuthError, preflight,
+)
 from corroborate._internals.narrow import (
     optional_str,
     optional_str_list,
@@ -36,12 +39,32 @@ from corroborate._internals.narrow import (
 )
 
 
+def _preflight_or_exit(
+    remote_prefix: str, profile: str | None,
+) -> int | None:
+    """Run cloud-auth preflight; on failure, print the typed error
+    + hint to stderr and return the CLI exit code. Returns None on
+    success (caller continues). Returning the code (not raising)
+    lets callers keep the early-return pattern used elsewhere."""
+    try:
+        preflight(remote_prefix, profile=profile)
+    except CloudAuthError as e:
+        sys.stderr.write(f'corroborate: cloud auth failed\n  {e}\n')
+        return 1
+    return None
+
+
 def _cmd_archive(args: Mapping[str, object]) -> int:
     sweep_dir = Path(require_str(args, 'sweep_dir'))
     remote = require_str(args, 'remote')
     files = optional_str_list(args, 'files')
     force = require_bool(args, 'force')
     purge_local = require_bool(args, 'purge_local')
+    profile = optional_str(args, 'profile')
+
+    rc = _preflight_or_exit(remote, profile)
+    if rc is not None:
+        return rc
 
     manifest = cloud.archive(
         sweep_dir, remote,
@@ -61,6 +84,19 @@ def _cmd_restore(args: Mapping[str, object]) -> int:
     sweep_dir = Path(require_str(args, 'sweep_dir'))
     files = optional_str_list(args, 'files')
     overwrite = require_bool(args, 'overwrite')
+    profile = optional_str(args, 'profile')
+
+    # Preflight needs the bucket — read it off the local manifest.
+    manifest = cloud.load_manifest(sweep_dir)
+    if manifest is None:
+        sys.stderr.write(
+            f'corroborate: no `_remote.json` at {sweep_dir} — '
+            f'nothing to restore.\n',
+        )
+        return 1
+    rc = _preflight_or_exit(manifest.remote_root, profile)
+    if rc is not None:
+        return rc
 
     restored = cloud.restore(sweep_dir, files=files, overwrite=overwrite)
     print(f'restored {len(restored)} files to {sweep_dir}')
@@ -71,6 +107,18 @@ def _cmd_restore(args: Mapping[str, object]) -> int:
 
 def _cmd_ls(args: Mapping[str, object]) -> int:
     sweep_dir = Path(require_str(args, 'sweep_dir'))
+    profile = optional_str(args, 'profile')
+
+    manifest = cloud.load_manifest(sweep_dir)
+    if manifest is None:
+        sys.stderr.write(
+            f'corroborate: no `_remote.json` at {sweep_dir}.\n',
+        )
+        return 1
+    rc = _preflight_or_exit(manifest.remote_root, profile)
+    if rc is not None:
+        return rc
+
     m = cloud.ls(sweep_dir)
     print(f'remote: {m.remote_root}')
     print(f'files: {len(m.files)}')
@@ -105,6 +153,7 @@ def _cmd_catalogue(args: Mapping[str, object]) -> int:
     as_json = require_bool(args, 'json_output')
     leaves_mode = require_bool(args, 'leaves_mode')
     leaves_wide = require_bool(args, 'leaves_wide')
+    profile = optional_str(args, 'profile')
 
     if leaves_mode:
         # Register substrate `@measurable` functions so
@@ -142,6 +191,12 @@ def _cmd_catalogue(args: Mapping[str, object]) -> int:
     else:
         env_prefix = os.environ.get('CORROBORATE_REMOTE_PREFIX')
         remote_prefix = env_prefix if env_prefix else None
+
+    # Preflight only when we're actually going to touch cloud.
+    if remote_prefix is not None:
+        rc = _preflight_or_exit(remote_prefix, profile)
+        if rc is not None:
+            return rc
 
     rows = _catalogue.catalogue(
         data_roots,
@@ -191,6 +246,13 @@ def _build_parser() -> argparse.ArgumentParser:
              'verification. Default is the safer two-step lifecycle '
              '(archive → verify → purge).',
     )
+    _ = p_archive.add_argument(
+        '--profile', dest='profile', default=None,
+        help='AWS profile name to use for credential resolution '
+             '(forwarded to botocore via AWS_PROFILE). Falls back to '
+             'the default chain (env vars → ~/.aws/credentials → '
+             'IAM role).',
+    )
 
     p_restore = sub.add_parser(
         'restore',
@@ -206,9 +268,17 @@ def _build_parser() -> argparse.ArgumentParser:
         help='replace local files with mismatched sha256. Default '
              'is to raise instead, surfacing drift before clobbering.',
     )
+    _ = p_restore.add_argument(
+        '--profile', dest='profile', default=None,
+        help='AWS profile name (see archive --help).',
+    )
 
     p_ls = sub.add_parser('ls', help='show what is archived for a sweep')
     _ = p_ls.add_argument('sweep_dir')
+    _ = p_ls.add_argument(
+        '--profile', dest='profile', default=None,
+        help='AWS profile name (see archive --help).',
+    )
 
     p_purge = sub.add_parser(
         'purge',
@@ -281,6 +351,11 @@ def _build_parser() -> argparse.ArgumentParser:
              '(comma-separated). Default is '
              '`corroborate_rl.dqn.measurables` (the in-tree RL '
              'substrate).',
+    )
+    _ = p_cat.add_argument(
+        '--profile', dest='profile', default=None,
+        help='AWS profile name for the cloud preflight when '
+             '--remote-prefix is used. See archive --help.',
     )
 
     return parser
