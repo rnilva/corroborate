@@ -60,10 +60,13 @@ them differently. All three reuse the same primitives.
 
 ## Authoring shape
 
-A bridge file is a Python module exporting `INTERVENTION:
-DoEffect` + `BRIDGES: tuple[Bridge, ...]` — anything structurally
-satisfying `corroborate.core.hypothesis.Hypothesis` works
-(modules, classes-with-`ClassVar`s, frozen dataclasses).
+Two layers stack: individual bridges (one falsifiable edge each)
+and hypothesis modules (the package surface that composes them).
+The canonical primary usage is hypothesis modules under
+`experiments/findings/<name>/` — modular packages organized per
+claim and per finding.
+
+### A bridge
 
 ```python
 from functools import partial
@@ -71,12 +74,13 @@ from corroborate import claim_bridge
 from corroborate.bridge import Direction, Tier, Verdict
 from corroborate.core.intervention import DoEffect, Intervention
 
-# Typed structural delta on the claim graph.
 DDQN_SWAP = Intervention(
     slot_path='bootstrap',
     replacement=partial(bootstrap, greedification=double_greedify),
 )
-INTERVENTION = DoEffect(treatment=(DDQN_SWAP,), baseline=())
+# Two-arm contrast: arms[0] is the empty-tuple baseline (vanilla);
+# arms[1] is the treatment (DDQN swap).
+INTERVENTION = DoEffect(arms=((), (DDQN_SWAP,)))
 
 @claim_bridge(
     source=INTERVENTION,
@@ -84,22 +88,153 @@ INTERVENTION = DoEffect(treatment=(DDQN_SWAP,), baseline=())
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
     predicted_direction='a_lt_b',
-    pair_by=('seed',),
+    stratify_by=('env_name',),
 )
-def ddqn_reduces_jensen_gap(paired_g: PairedGResult) -> Verdict:
-    if paired_g.n_pairs < 30:
-        return Verdict.POWER_INSUFFICIENT
-    if paired_g.g < -0.3 and paired_g.p_value < 0.05:
-        return Verdict.HELD
-    return Verdict.NO_EFFECT
+def ddqn_reduces_jensen_gap(
+    stratified_arm_diff_pooled: StratifiedArmDiffPooledResult,
+) -> Verdict:
+    return stratified_arm_diff_pooled.verdict
 ```
 
-The `paired_g` parameter (no default) is a fixture — the
-framework's `@analysis`-registered `paired_g` runs against the
-bridge-filtered cells and the result is injected by name. The
-function body is the threshold logic; the decorator args are the
-edge metadata. See `experiments/findings/dqn_bridges.py` for
-the canonical zoo (32 bridges).
+`stratified_arm_diff_pooled` is a **fixture** — the framework's
+`@analysis`-registered `stratified_arm_diff_pooled` runs against
+the bridge-filtered cells and the result is injected by name. The
+function body is the threshold logic (the canonical primitive
+returns its own `verdict` per the verdict trichotomy + scope-flag
+discipline); decorator args are edge metadata. See CLAUDE.md
+§"Canonical analyses" for which primitive to reach for in which
+shape — `paired_g` is **off-limits for RL substrate bridges**
+because seeds pseudo-replicate across strata; `stratified_arm_diff_pooled`
+is the canonical cross-env / cross-config pool.
+
+### A hypothesis module
+
+A hypothesis module / package satisfies the
+`corroborate.core.hypothesis.Hypothesis` Protocol by exposing
+six module-level names. Canonical layout
+(`experiments/findings/ddqn/__init__.py`):
+
+```python
+import corroborate.analyses                  # populate analysis registry
+import corroborate_rl.dqn.measurables        # populate measurable registry
+
+from experiments.findings.ddqn._arms import INTERVENTION
+from experiments.findings.ddqn._common import CLAIM
+from experiments.findings.ddqn._scope import MODULE_SCOPE
+
+# Per-claim sub-modules export their own BRIDGES tuples; the
+# package re-aggregates.
+from experiments.findings.ddqn.bias_correction import BRIDGES as _BIAS
+from experiments.findings.ddqn.mediation import BRIDGES as _MEDIATION
+from experiments.findings.ddqn.q_shape_mediation import BRIDGES as _Q_SHAPE
+# ... (one sub-module per theoretical claim)
+
+# Per-finding sub-modules each define EXPECTED + BLOCKED_ON +
+# BRIDGES (cluster-shaped claims; see "Findings" below).
+from experiments.findings.ddqn import (
+    finding_hasselt_chain,
+    finding_polarity_conditional_chain,
+    # ...
+)
+
+BRIDGES = (*_BIAS, *_MEDIATION, *_Q_SHAPE, ...)
+FINDINGS = (finding_hasselt_chain, finding_polarity_conditional_chain, ...)
+
+REQUIRED_MEASURABLES: tuple[str, ...] = (
+    'q_per_burst', 'state_conditional_argmax_entropy_late', ...,
+)
+```
+
+Six load-bearing module-level names:
+
+| name | role |
+|---|---|
+| `INTERVENTION: DoEffect` | typed structural delta on the claim graph (the "do" the bridges arm against) |
+| `CLAIM` | outermost claim for endogeneity gating |
+| `MODULE_SCOPE: pl.Expr` | scope universe applied at ingest time — every cell that enters the cache satisfies it. Bridges scope further on its columns. |
+| `BRIDGES: tuple[Bridge, ...]` | flat tuple of all `@claim_bridge`-decorated functions in the package |
+| `FINDINGS: tuple[Finding, ...]` | cluster-shaped claims composed from subsets of `BRIDGES` (see below) |
+| `REQUIRED_MEASURABLES: tuple[str, ...]` | opt-in measurables to pre-populate at ingest, even when no current bridge consumes them. Validated against the registry at `_validate_hypothesis` |
+
+**Sub-module shape** — `ddqn/` exemplifies one decomposition that
+the framework doesn't enforce; siblings adapt as needed:
+
+- **`ddqn/`** is the most decomposed: package-private constants in
+  `_arms.py` / `_common.py` / `_scope.py` / `_verdicts.py`; one
+  `<claim>.py` per theoretical unit (`bias_correction.py`,
+  `mediation.py`, `q_shape_mediation.py`, ...) each exporting its
+  own `BRIDGES` tuple; one `finding_<name>.py` per cluster-shaped
+  finding (each exports `EXPECTED`, `BLOCKED_ON`, `BRIDGES`).
+- **`ddqn_sweeps/`** is flatter — no underscore-privates; reuses
+  `INTERVENTION` and `CLAIM` from `ddqn._arms` / `ddqn._common`;
+  inlines `MODULE_SCOPE`. Per-claim and per-finding files only.
+- **`ddqn_three_conditions/`** has `_arms.py` / `_common.py` /
+  `_measurables.py` (hypothesis-local `@measurable` registration
+  for derived columns: `shaping_kind`, `fa_kind`, `k_eff`) but
+  collapses all four bridges into one `conditions.py`. The
+  per-claim split is a bridge-count heuristic, not a rule.
+
+Each `<claim>.py` is a flat module with `@claim_bridge`-decorated
+functions and a closing `BRIDGES = (bridge_a, bridge_b, ...)`
+tuple — the per-claim sub-modules are NOT packages, just regular
+Python modules.
+
+Three live hypothesis packages at the time of writing:
+
+- `experiments/findings/ddqn/` — the DDQN canonical study.
+  ~58 bridges across 9 per-claim sub-modules; 9 findings spanning
+  Hasselt's chain, mediation, channel decomposition, polarity-
+  conditional moderation. (Note: two extra `finding_*.py` files
+  on disk — `finding_ddqn_bias_channel.py`,
+  `finding_ddqn_policy_structure_channel.py` — exist but aren't
+  registered in `FINDINGS`; treat as orphan / dead code.)
+- `experiments/findings/ddqn_sweeps/` — companion HP-sweep bridges
+  (n-step, reward-scale, Polyak-τ, γ-sweep, ...). ~15 bridges,
+  3 findings. Loose `MODULE_SCOPE` (just `~bsuite`) so each bridge
+  opts INTO its own HP regime via per-bridge `scope=`.
+- `experiments/findings/ddqn_three_conditions/` — multi-stratum
+  panel claims (linear-FA caps Type 1; shaping decouples; k-sweep
+  panel). 4 bridges, 1 finding (the panel cluster).
+
+## Findings — cluster-shaped claims on the post-evaluated graph
+
+A `Finding` is a typed subgraph of a Hypothesis's evaluated
+causal graph asserting an aggregate verdict. Module-level
+attributes only (mirrors `Hypothesis`):
+
+```python
+# experiments/findings/ddqn/finding_hasselt_chain.py
+from corroborate.bridge.bridge import Bridge
+from corroborate.graph.causal import ClusterVerdict
+from experiments.findings.ddqn.bias_correction import (
+    algorithm_reduces_bootstrap_gap_magnitude,
+    bootstrap_gap_predicts_jens__theorem,
+    intervention_outcome_link_null__mech_conditioned,
+    mc_disc_raw_coupled__per_env_jci,
+)
+
+EXPECTED: ClusterVerdict = ClusterVerdict.SUPPORTED
+BLOCKED_ON: str | None = None
+BRIDGES: tuple[Bridge, ...] = (
+    mc_disc_raw_coupled__per_env_jci,
+    algorithm_reduces_bootstrap_gap_magnitude,
+    bootstrap_gap_predicts_jens__theorem,
+    intervention_outcome_link_null__mech_conditioned,
+)
+```
+
+The framework derives the cluster's verdict via `composed_verdict(g,
+bridges=BRIDGES)`: every named bridge admits → `SUPPORTED`; any
+refutes → `REFUTED`; mix admit / unevaluated → `UNDERPOWERED`;
+all members admit zero cells → `EMPTY_EXTENT` (corpus can't
+distinguish them).
+
+`EXPECTED` pins the **EMPIRICAL** state (not the theoretical
+claim). When data hasn't caught up, pin to the current verdict +
+set `BLOCKED_ON` to a non-`None` string naming the gap; the
+renderer surfaces `[blocked]` for the pending state and `← DRIFT`
+only when the actual verdict diverges from `EXPECTED`. See
+CLAUDE.md §"Findings" for the full authoring discipline.
 
 ## Verdict + predicted_direction
 
@@ -124,25 +259,45 @@ were confirmed; the predicted direction names which prediction.
 ## Running it
 
 ```bash
-# Author bridges in `experiments/findings/<X>.py`. Three CLI modes
-# (CACHE_ADDITIVITY.md):
+# Run a hypothesis module / package. Four CLI modes (CACHE_ADDITIVITY.md):
 PYTHONPATH=. uv run python scripts/run_hypothesis.py \
-    experiments.findings.dqn_bridges                  # read-only (default)
+    experiments.findings.ddqn                         # read-only (default)
 PYTHONPATH=. uv run python scripts/run_hypothesis.py \
-    experiments.findings.dqn_bridges --check          # drift report, no work
+    experiments.findings.ddqn --check                 # drift report, no work
 PYTHONPATH=. uv run python scripts/run_hypothesis.py \
-    experiments.findings.dqn_bridges \
+    experiments.findings.ddqn \
     --ingest <corpus>[,<corpus>...]                   # named ingest
 PYTHONPATH=. uv run python scripts/run_hypothesis.py \
-    experiments.findings.dqn_bridges \
+    experiments.findings.ddqn \
     --ingest-all experiments/data/                    # walk full root
 ```
+
+The runner imports the hypothesis module (e.g.
+`experiments.findings.ddqn`), validates the `Hypothesis`
+Protocol shape, populates / extends
+`experiments/data/cache/ddqn.parquet` with the cells `BRIDGES`
+need, evaluates each bridge, then surfaces:
+
+- per-bridge verdicts (HELD / NO_EFFECT / POWER_INSUFFICIENT /
+  ...);
+- per-finding cluster verdicts via `composed_verdict(graph,
+  bridges=f.BRIDGES)` — each Finding's runtime verdict gets
+  compared to its author-pinned `EXPECTED`, with `← DRIFT`
+  flagged when they diverge;
+- a snapshot at `experiments/findings/<short>.run.json` (where
+  `<short> = h.__name__.split('.')[-1]`) — the audit baseline
+  alongside the bridges file.
+
+`--check` itself does NOT diff against the snapshot. It runs
+two drift checks without computing anything: (a) measurable-
+closure drift via per-corpus `<corpus>/measurements.hashes.json`,
+and (b) cache-source drift via `<cache>.sources.json`. Finding
+verdict drift surfaces only on a full run (above).
 
 `runner.run(h: Hypothesis | str, *, data, cache_path, ...)` is
 the library entry; the CLI is a thin argparse wrapper. Per-corpus
 `measurements.parquet` stores are the source of truth; the
-per-hypothesis cache (`experiments/data/cache/<short>.parquet`)
-is a projection.
+per-hypothesis cache is a projection.
 
 ### Sweeps + traces
 
@@ -178,9 +333,9 @@ PER-CORPUS STORES                     PER-HYPOTHESIS CACHE
   source of truth                       derived projection
 ─────────────────────────             ────────────────────
 experiments/data/<corpus>/            experiments/data/cache/
-experiments/probes/<corpus>/            ├── <hyp>.parquet
-  ├── runs.parquet                      ├── <hyp>.hashes.json   (measurable closure-hash sidecar)
-  ├── measurements.parquet              └── <hyp>.sources.json  (per-corpus input provenance)
+experiments/probes/<corpus>/            ├── <hyp>.parquet      (cells × measurables)
+  ├── runs.parquet                      └── <hyp>.sources.json (per-corpus input provenance)
+  ├── measurements.parquet
   ├── measurements.hashes.json        experiments/findings/<hyp>.run.json
   ├── traces.parquet                    └── (verdict snapshot)
   └── _remote.json (cloud manifest)
@@ -286,16 +441,34 @@ CI1–CI8 invariants the runner enforces.
 
 Pre-v0. The acceptance test is a DDQN-vs-vanilla study
 reproducing the `mechanism HELD ↛ outcome HELD ↛ link HELD`
-verdict pattern across the canonical 17-env corpus. Current
-state: 32 bridges across `experiments/findings/dqn_bridges.py`
-+ `ddqn/`, exercising the typed Phase-6 contract
-(`Hypothesis` Protocol + typed `DoEffect` Interventions) end-to-
-end.
+verdict pattern across the canonical 12-env panel. Current state:
+
+- **3 hypothesis-module packages** under `experiments/findings/`:
+  `ddqn/`, `ddqn_sweeps/`, `ddqn_three_conditions/` — each with a
+  modular per-claim + per-finding sub-module layout (see
+  Authoring shape above).
+- **~77 bridges** across the three packages (≈58 + ≈15 + 4),
+  organized into per-claim groupings (bias-correction / mediation
+  / q-shape-mediation / polarity-conditional-mediation /
+  cross-env-mediation / outcome-scope / within-env / chain-depth
+  / HP-sweeps / three-conditions panels).
+- **13 findings** as cluster-shaped claims on the post-evaluated
+  graph (Hasselt's chain, polarity-conditional moderation,
+  per-burst dynamics, channel decomposition, three-conditions
+  decomposition, ...).
+- Earlier flat-file zoos `experiments/findings/dqn_bridges.py`
+  and `experiments/findings/second_layer_theorem.py` remain for
+  backwards reference; new work goes into the modular packages.
 
 ## Documentation
 
 - `CLAUDE.md` — typing discipline, vocabulary, canonical
   analyses, contributor instructions.
+- `HYPOTHESIS_AS_GRAPH.md` — the framework's organizing
+  principle. Why a hypothesis IS a causal graph (not a claim),
+  the bridge-naming + refutation-cluster + scope-as-extent
+  authoring discipline. Pair-read with the Findings section
+  above.
 - `ANALYSIS_RECIPE.md` — post-sweep analysis sequence (classify
   cells → bridges → meta-regression → PC → robustness →
   per-burst → tautology audit → data-driven intervention
