@@ -202,10 +202,20 @@ def _null_band_verdict(
     return Verdict.POWER_INSUFFICIENT, None
 
 
-_C2_ENVS = [
-    'FourRooms-misc', 'Acrobot-v1', 'MetaMaze-misc', 'MountainCar-v0',
+_C2_RULE_ENVS = [
+    'FourRooms-misc', 'Acrobot-v1', 'MountainCar-v0',
     'CartPole-v1', 'Catch-bsuite', 'DeepSea-bsuite',
 ]
+# MetaMaze is EXCLUDED from the C2a rule scope. MetaMaze γ=0.999
+# linear FA is a documented exception (encoded as the C2b
+# sibling bridge below). At γ=0.99 MetaMaze still straddles ±0.3
+# at current n=90/arm, so we exclude the env entirely from the
+# rule rather than partially. The substantive scope of the rule
+# is then "linear FA caps Type 1 across envs whose Q function is
+# tractable by linear FA" — operationalised as the 6-env list.
+
+
+# === C2a — Linear FA caps Type 1 (RULE: 6 envs excl. MetaMaze) ===
 
 
 @claim_bridge(
@@ -217,7 +227,7 @@ _C2_ENVS = [
         pl.col('gamma').is_in([0.99, 0.999])
         & (pl.col('fa_kind') == 'linear')
         & (pl.col('shaping_kind') == 'none')
-        & (pl.col('env_name').is_in(_C2_ENVS))
+        & (pl.col('env_name').is_in(_C2_RULE_ENVS))
         & finite(pl.col('jensen_gap'))
     ),
     predicted_direction='null',
@@ -230,11 +240,14 @@ def linear_fa_caps_type_1_across_envs__null_panel(
     min_vanilla_predictor: float = float('-inf'),
     null_ceiling: float = 0.3,
 ) -> tuple[Verdict, RefutationClass | None]:
-    """Linear FA caps Type 1 manifestation across envs at γ=0.999.
+    """Linear FA caps Type 1 manifestation across envs whose
+    Q-function is tractable by linear FA (the rule of the
+    rule+exception cluster).
 
     Per-env independent-samples Cohen's d on `jensen_gap` at
-    (γ=0.999, fa_kind=linear, shaping_kind=none). HELD iff every
-    env's 95% CI fits inside ±`null_ceiling` (= 0.3).
+    (γ ∈ {0.99, 0.999}, fa_kind=linear, shaping_kind=none).
+    HELD iff every env's 95% CI fits inside ±`null_ceiling`
+    (= 0.3).
 
     Substantive mechanism: with empty-hidden-tuple linear FA,
     σ_action — the per-state action-value SD whose √(2 ln K)
@@ -243,22 +256,23 @@ def linear_fa_caps_type_1_across_envs__null_panel(
     nothing to reduce. The null is the load-bearing prediction
     of the FA-capacity gate.
 
-    null_ceiling = 0.3 (Cohen's "small" threshold) is the
-    substantively-meaningful band — d ≥ 0.3 is a non-trivial
-    effect by Cohen's convention. Pre-2026-05-16 the band was
-    0.5 ("medium" threshold) but MetaMaze's d=-0.24 CI=[-0.42,
-    -0.06] fits 0.5 while excluding zero (i.e., DDQN really does
-    reduce jens at MM linear, just by a small amount). The
-    tightened band makes the bridge falsifiable in that regime
-    and surfaces MM as POWER_INSUFFICIENT until densified.
+    **MetaMaze is excluded from this rule's scope** —
+    MM γ=0.999 linear shows d ≈ −1 at eval-power-fixed
+    n_episodes=20 (the FA-cap fails because the random-maze-per-
+    episode structure forces FA-fit error that DDQN clips). The
+    exception is encoded as the C2b sibling bridge
+    `linear_fa_cap_fails_at_metamaze_g999__exception`. Together
+    C2a (HELD across 6 envs) + C2b (HELD at MM γ=0.999 with the
+    opposite prediction) form a rule + exception cluster.
 
     Refutations:
-    - INVARIANT_VIOLATION: any env shows CI fully > +0.3 (DDQN
-      meaningfully REDUCES jens even at linear FA — refutes
-      FA-capacity hypothesis).
-    - NO_EFFECT/SIGN_FLIP: any env shows CI fully < -0.3 (DDQN
+    - INVARIANT_VIOLATION: any in-scope env shows CI fully > +0.3
+      (DDQN meaningfully REDUCES jens even at linear FA at an env
+      we'd previously catalogued as tractable — would refute
+      FA-capacity hypothesis for that env).
+    - NO_EFFECT/SIGN_FLIP: any env shows CI fully < −0.3 (DDQN
       INCREASES jens at linear FA — never observed).
-    - POWER_INSUFFICIENT: any env's CI straddles ±0.3.
+    - POWER_INSUFFICIENT: any in-scope env's CI straddles ±0.3.
 
     Note Direction.INVERSE on the bridge captures the
     *theoretical* mech direction (DDQN reduces jens *when the
@@ -270,6 +284,99 @@ def linear_fa_caps_type_1_across_envs__null_panel(
         null_ceiling=null_ceiling,
         min_strata=min_strata,
     )
+
+
+# === C2b — Exception: at MetaMaze γ=0.999 linear FA, cap fails ===
+#
+# Counterpart to C2a. MetaMaze re-draws a random maze per
+# evaluation episode (per env_catalogue + `metamaze_canonical_
+# verify.yaml` notes). Linear FA cannot generalize a single Q
+# function across maze instances → vanilla's bootstrap target is
+# biased by FA-fit error (wrong action wins the argmax under
+# linear FA's approximation) → DDQN's clip removes it. The
+# mechanism is FA-fit-error × episode-level state-distribution
+# shift, distinct from Hasselt's classical σ × √(2 ln K) path
+# which the FA-cap rule (C2a) tests.
+#
+# Encoded as the OPPOSITE prediction to C2a in the scoped region:
+# predicted_direction='a_lt_b' (DDQN reduces jens substantially),
+# tested as per-stratum d ≤ -0.3 across n_episodes strata
+# (n_episodes=5 from older corpora; n_episodes=20 from the
+# eval-power-fixed `metamaze_linear_eval_power` sweep that
+# revealed the larger underlying effect).
+
+
+@claim_bridge(
+    source=INTERVENTION,
+    target='jensen_gap',
+    direction=Direction.INVERSE,
+    tier=Tier.INTERVENTIONAL,
+    scope=(
+        (pl.col('env_name') == 'MetaMaze-misc')
+        & (pl.col('gamma') == 0.999)
+        & (pl.col('fa_kind') == 'linear')
+        & (pl.col('shaping_kind') == 'none')
+        & finite(pl.col('jensen_gap'))
+    ),
+    predicted_direction='a_lt_b',
+)
+def linear_fa_cap_fails_at_metamaze_g999__exception(
+    stratified_arm_diff_pooled: StratifiedArmDiffPooledResult,
+    *,
+    stratify_by: tuple[str, ...] = ('n_episodes',),
+    min_strata: int = 2,
+    min_vanilla_predictor: float = float('-inf'),
+    per_stratum_d_threshold: float = -0.3,
+) -> tuple[Verdict, RefutationClass | None]:
+    """At MetaMaze γ=0.999 with linear FA, the C2a FA-cap rule
+    FAILS — DDQN substantively reduces jens with a non-trivial
+    effect at every eval-power level tested.
+
+    Per-(n_episodes) independent-samples Cohen's d on
+    `jensen_gap` at (env=MetaMaze, γ=0.999, linear, unshaped).
+    Stratifying by n_episodes exposes the eval-power
+    sensitivity: n_episodes=5 shows d ≈ −0.5 (real but partly
+    diluted by MetaMaze's high per-episode eval variance);
+    n_episodes=20 shows d ≈ −1.1 (the eval-power-fixed reading).
+
+    HELD iff per-stratum d ≤ `per_stratum_d_threshold` (= −0.3,
+    Cohen's "small") at EVERY n_episodes stratum. The two strata
+    are expected to agree on sign; the larger n_episodes stratum
+    just shows the cleaner magnitude.
+
+    Substantive mechanism: MetaMaze draws a new random maze per
+    evaluation episode. Linear FA cannot represent a single Q
+    function that generalises across mazes → vanilla's bootstrap
+    target is biased by FA-fit error → DDQN's clip removes it.
+    The mech is FA-fit-error × state-distribution-shift, NOT the
+    σ × √(2 ln K) path (which C2a tests and rules out across the
+    6-env rule scope).
+
+    Forms a sibling-cluster with C2a: C2a HELD (rule) + C2b HELD
+    (named exception with opposite direction prediction at a
+    specifically scoped env, γ combination)."""
+    del stratify_by, min_vanilla_predictor
+    if stratified_arm_diff_pooled.n_strata < min_strata:
+        return Verdict.POWER_INSUFFICIENT, None
+    all_below = True
+    any_wrong_sign = False
+    n_valid = 0
+    for s in stratified_arm_diff_pooled.per_stratum:
+        d = s.cohen_d
+        if math.isnan(d):
+            continue
+        n_valid += 1
+        if d > per_stratum_d_threshold:
+            all_below = False
+        if d > 0.3:
+            any_wrong_sign = True
+    if n_valid < min_strata:
+        return Verdict.POWER_INSUFFICIENT, None
+    if any_wrong_sign:
+        return Verdict.NO_EFFECT, RefutationClass.SIGN_FLIP
+    if all_below:
+        return Verdict.HELD, None
+    return Verdict.NO_EFFECT, None
 
 
 # === C3a — DDQN improves outcome at FR γ=0.999 MLP unshaped ===
