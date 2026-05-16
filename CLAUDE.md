@@ -337,6 +337,48 @@ registered measurables use **bare names** (`jensen_gap`,
 measurable registry itself — `aggregate.leaf_signature` excludes
 `registered_names()` from the configurational fingerprint.
 
+## Cache + cloud operator discipline
+
+The framework has two storage layers and two corpus roots; the
+operational rules below catch the most common mistakes.
+
+- **Two corpus roots**. `experiments/data/` is canonical sweep
+  output; `experiments/probes/` is ad-hoc pilots. **Both carry
+  corpora.** Any inventory / catalogue walk that omits
+  `experiments/probes/` is wrong by construction (single-root
+  walks have surfaced 60% false-orphan-rate on the live tree).
+- **Discovery via `corroborate catalogue`**. Reach for
+  `python -m corroborate catalogue experiments/data
+  experiments/probes --remote-prefix s3://corroborate-archive/`
+  BEFORE inventing your own glob / walk. The catalogue carries
+  `parent`, `name`, `status` (CLOUD_AND_LOCAL / CLOUD_EVICTED /
+  LOCAL_ONLY / IN_PROGRESS_SCAFFOLD), and `--leaves` /
+  `--leaves-wide` give the per-(corpus, arm) configurational
+  fingerprint. Use it to find which corpus actually carries the
+  cells a bridge needs (`findings_three_conditions_recovered`
+  for the worked example).
+- **`--ingest <name>` resolution**. The CLI prefixes relative
+  names with `experiments/data/`. Probes corpora need
+  ABSOLUTE paths (`--ingest "$PWD/experiments/probes/<corpus>"`)
+  or they error out. The catalogue's `parent/name` discriminator
+  is the canonical address.
+- **Corpus stamping** (`runner._corpus_stamp`). Top-level corpora
+  stamp `corpus = sub.name`; nested sub-corpora (parent dir has
+  its own `runs.parquet`) stamp `corpus = parent.name/sub.name`.
+  The parent/leaf form prevents the silent eviction that bit when
+  two distinct sub-corpora share a leaf name across parents (see
+  `findings_corpus_name_leaf_collision`).
+- **`purge`, never `rm` on cloud-backed files**. The
+  `corroborate purge <corpus>` command validates each file is in
+  the manifest before deletion (preserving the manifest so
+  `restore` stays available). Direct `rm` on archived files is
+  silent data loss the next time you need to ingest.
+- **`.env` carries AWS creds** for S3-touching commands.
+  `set -a && . .env && set +a` before any sweep / archive / restore
+  / catalogue-with-`--remote-prefix` call. The runner's
+  cloud-restore branch silently no-ops on credential failure;
+  read the stderr.
+
 ## Sweep + trace discipline
 
 Sweeps write per-arm sub-corpora under `<out_dir>/<arm>/` and
