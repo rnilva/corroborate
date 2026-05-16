@@ -86,6 +86,7 @@ from experiments.findings.ddqn_three_conditions import (
 from experiments.findings.ddqn_three_conditions.conditions import (
     ddqn_helps_outcome_at_fr_g999_mlp_unshaped__k_panel,
     ddqn_reduces_jens_uniformly_across_k_at_fr_high_gamma,
+    ddqn_reduction_amplified_by_gamma__fr_mlp_k4_unshaped,
     linear_fa_caps_type_1_across_envs__null_panel,
     shaping_decouples_outcome_benefit__fr_shaped_fa_x_gamma_panel,
 )
@@ -93,6 +94,7 @@ from experiments.findings.ddqn_three_conditions.conditions import (
 
 BRIDGES = (
     ddqn_reduces_jens_uniformly_across_k_at_fr_high_gamma,
+    ddqn_reduction_amplified_by_gamma__fr_mlp_k4_unshaped,
     linear_fa_caps_type_1_across_envs__null_panel,
     ddqn_helps_outcome_at_fr_g999_mlp_unshaped__k_panel,
     shaping_decouples_outcome_benefit__fr_shaped_fa_x_gamma_panel,
@@ -111,7 +113,22 @@ FINDINGS = (
 # don't already carry it in their hashes/measurements parquet
 # get NaN values, collapsing the k_eff panel to a single stratum
 # at ingest time).
-REQUIRED_MEASURABLES: tuple[str, ...] = ('k_eff',)
+REQUIRED_MEASURABLES: tuple[str, ...] = (
+    'k_eff',
+    'q_action_std_late',
+    'clip_wedge_polarity_aligned',  # signed wedge × polarity
+    'bootstrap_gap_magnitude',      # |wedge| per cell
+    'bootstrap_gap_frac_active',    # fraction of steps with wedge > 0
+)
+# `q_action_std_late` is the proper σ_action measure (within-state
+# across-action Q SD, averaged over the late 50% of training,
+# per `findings_sigma_K_scaling_corroborated`). C2's mechanism-
+# discriminator bridge predicts σ_action(vanilla, linear FA)
+# bounds where the FA-cap claim holds: small σ_action → mech
+# dormant → null Δ_jens; large σ_action → mech fires → Δ_jens
+# substantially negative. MetaMaze γ=0.999 is the suspected
+# breaker (recurring-positive × γ→1 → value range too large for
+# linear FA to bound σ_action).
 
 
 __all__ = (

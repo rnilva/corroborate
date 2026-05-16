@@ -55,6 +55,7 @@ from corroborate.graph.causal import ClusterVerdict
 from experiments.findings.ddqn_three_conditions.conditions import (
     ddqn_helps_outcome_at_fr_g999_mlp_unshaped__k_panel,
     ddqn_reduces_jens_uniformly_across_k_at_fr_high_gamma,
+    ddqn_reduction_amplified_by_gamma__fr_mlp_k4_unshaped,
     linear_fa_caps_type_1_across_envs__null_panel,
     shaping_decouples_outcome_benefit__fr_shaped_fa_x_gamma_panel,
 )
@@ -75,6 +76,7 @@ BLOCKED_ON: str | None = (
 
 BRIDGES: tuple[Bridge, ...] = (
     ddqn_reduces_jens_uniformly_across_k_at_fr_high_gamma,
+    ddqn_reduction_amplified_by_gamma__fr_mlp_k4_unshaped,
     linear_fa_caps_type_1_across_envs__null_panel,
     ddqn_helps_outcome_at_fr_g999_mlp_unshaped__k_panel,
     shaping_decouples_outcome_benefit__fr_shaped_fa_x_gamma_panel,

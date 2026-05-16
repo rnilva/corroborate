@@ -471,3 +471,106 @@ def shaping_decouples_outcome_benefit__fr_shaped_fa_x_gamma_panel(
         upper_bound=per_stratum_d_upper_bound,
         min_strata=min_strata,
     )
+
+
+# === C4 — γ amplifies DDQN's bias reduction (Hasselt 1/(1−γ) factor) ===
+#
+# Hasselt 2010's bound: bias ≤ σ_action × √(2 ln K) × 1/(1 − γ).
+# The 1/(1−γ) factor predicts that vanilla's overestimation grows
+# with γ, and so does the absolute magnitude of DDQN's reduction
+# (DDQN clips vanilla's bias to near-zero at any γ).
+#
+# Test scope: FourRooms × MLP[64,64] × unshaped × k_eff=4 (the
+# native FR action count, controls for K) × γ ∈ {0.99, 0.999}.
+# Within this controlled scope, the only thing that varies across
+# strata is γ. The empirical reading: vanilla's mean jens grows
+# from ~0.28 at γ=0.99 to ~9.5 at γ=0.999 (≈ 34×); DDQN's mean
+# jens stays ~0.1-0.5 at both. The reduction's absolute magnitude
+# scales with γ as predicted by the bound (1/(1-γ) ratio is 10×;
+# empirical ratio is much larger because variance amplifies).
+#
+# HELD iff (a) per-γ |Cohen's d on jens| > 0.8 ("large" effect) at
+# BOTH γ strata AND (b) |mean_diff(γ=0.999)| ≥ `gamma_amp_ratio` ×
+# |mean_diff(γ=0.99)|. Default `gamma_amp_ratio=3.0` is
+# conservative vs the bound's 10×.
+
+
+@claim_bridge(
+    source=INTERVENTION,
+    target='jensen_gap',
+    direction=Direction.INVERSE,
+    tier=Tier.INTERVENTIONAL,
+    scope=(
+        (pl.col('env_name') == 'FourRooms-misc')
+        & (pl.col('fa_kind') == 'mlp_deep')
+        & (pl.col('shaping_kind') == 'none')
+        & (pl.col('k_eff') == 4)
+        & pl.col('gamma').is_in([0.99, 0.999])
+        & finite(pl.col('jensen_gap'))
+    ),
+    predicted_direction='a_lt_b',
+)
+def ddqn_reduction_amplified_by_gamma__fr_mlp_k4_unshaped(
+    stratified_arm_diff_pooled: StratifiedArmDiffPooledResult,
+    *,
+    stratify_by: tuple[str, ...] = ('gamma',),
+    min_strata: int = 2,
+    min_vanilla_predictor: float = float('-inf'),
+    per_stratum_d_threshold: float = -0.8,
+    gamma_amp_ratio: float = 3.0,
+) -> tuple[Verdict, RefutationClass | None]:
+    """DDQN's bias-reduction magnitude scales with γ as Hasselt's
+    1/(1−γ) factor predicts.
+
+    Per-γ independent-samples Cohen's d + mean-diff on jensen_gap
+    at FR × MLP[64,64] × unshaped × k_eff=4 across γ ∈ {0.99,
+    0.999}. HELD iff:
+
+    1. Per-stratum cohen_d ≤ -0.8 at BOTH γ strata (DDQN's effect
+       is "large" by Cohen's convention at every γ in scope), AND
+    2. |mean_diff(γ=0.999)| ≥ 3 × |mean_diff(γ=0.99)| (the
+       absolute magnitude of bias reduction scales with γ; 3× is
+       a conservative lower bound vs the bound's structural
+       prediction of 10× for 1/(1-γ) at γ ∈ {0.99, 0.999}).
+
+    Refutations:
+    - NO_EFFECT/SIGN_FLIP: any γ shows d > 0 (DDQN INCREASES jens).
+    - NO_EFFECT/NULL_EFFECT: either γ shows d > -0.8 (DDQN's effect
+      not large at one γ — the reduction isn't uniformly present).
+    - POWER_INSUFFICIENT: amplification ratio < 3 (the γ-amplification
+      structure isn't visible; the data is consistent with no
+      γ-scaling).
+
+    k_eff=4 (native FR action count, no action_duplicate wrapper)
+    is fixed to remove the K factor as a confound — within this
+    scope only γ varies. The K-scaling claim is C1's domain
+    (k_eff ∈ {4,8,12,16} at γ=0.999); this bridge isolates γ at
+    K-fixed."""
+    del stratify_by, min_vanilla_predictor
+    if stratified_arm_diff_pooled.n_strata < min_strata:
+        return Verdict.POWER_INSUFFICIENT, None
+    # stratum_id is the tuple of stratify_by values; here it's (gamma,).
+    # Build a (γ, d, |mean_diff|) tuple list, filtering NaN.
+    valid: list[tuple[float, float, float]] = []
+    for s in stratified_arm_diff_pooled.per_stratum:
+        d, md = s.cohen_d, s.mean_diff
+        if math.isnan(d) or math.isnan(md):
+            continue
+        g_val_obj = s.stratum_id[0] if s.stratum_id else None
+        if not isinstance(g_val_obj, (int, float)):
+            continue
+        valid.append((float(g_val_obj), d, abs(md)))
+    if len(valid) < min_strata:
+        return Verdict.POWER_INSUFFICIENT, None
+    # Check 1: per-stratum d below threshold (DDQN's effect large at all γ)
+    if any(d_val > per_stratum_d_threshold for _, d_val, _ in valid):
+        return Verdict.NO_EFFECT, None
+    # Check 2: γ-amplification ratio (1/(1-γ) factor empirically visible)
+    g_to_amd: dict[float, float] = {g: amd for g, _, amd in valid}
+    if 0.99 in g_to_amd and 0.999 in g_to_amd:
+        amp = (g_to_amd[0.999] / g_to_amd[0.99]
+               if g_to_amd[0.99] > 0 else float('inf'))
+        if amp >= gamma_amp_ratio:
+            return Verdict.HELD, None
+        return Verdict.POWER_INSUFFICIENT, None
+    return Verdict.POWER_INSUFFICIENT, None
