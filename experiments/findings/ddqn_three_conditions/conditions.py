@@ -202,7 +202,10 @@ def _null_band_verdict(
     return Verdict.POWER_INSUFFICIENT, None
 
 
-_C2_ENVS = ['FourRooms-misc', 'Acrobot-v1', 'MetaMaze-misc', 'MountainCar-v0']
+_C2_ENVS = [
+    'FourRooms-misc', 'Acrobot-v1', 'MetaMaze-misc', 'MountainCar-v0',
+    'CartPole-v1', 'Catch-bsuite', 'DeepSea-bsuite',
+]
 
 
 @claim_bridge(

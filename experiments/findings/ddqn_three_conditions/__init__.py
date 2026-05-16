@@ -63,10 +63,13 @@ import corroborate.analyses  # pyright: ignore[reportUnusedImport]  # populate r
 import corroborate_rl.dqn.measurables  # pyright: ignore[reportUnusedImport]  # populate measurable registry
 
 
-MODULE_SCOPE = (
-    ~pl.col('env_name').str.ends_with('-bsuite')
-    & pl.col('gamma').is_in([0.99, 0.999])
-)
+MODULE_SCOPE = pl.col('gamma').is_in([0.99, 0.999])
+# Bsuite envs (Catch, DeepSea, DiscountingChain, UmbrellaChain) are
+# admitted — C2's "linear FA caps Type 1 across envs" claim is
+# env-agnostic and bsuite envs are valid scoping points. Earlier
+# MODULE_SCOPE excluded `*-bsuite` for canonical-cohort discipline
+# in other hypotheses; that exclusion blocked C2's new-env
+# extension at ingest time so we drop it here.
 
 
 # Register hypothesis-local derived measurables.
