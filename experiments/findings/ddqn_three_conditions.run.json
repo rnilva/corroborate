@@ -105,7 +105,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_reduces_jens_uniformly_across_k_at_fr_high_gamma",
       "direction": "inverse",
-      "extent_hash": -1509629501325159543,
+      "extent_hash": -1622244619281782900,
       "n_cells_in_scope": 566,
       "n_cells_pre_scope": 4711,
       "pair_by": [
@@ -202,7 +202,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_reduction_amplified_by_gamma__fr_mlp_k4_unshaped",
       "direction": "inverse",
-      "extent_hash": 4839377236108557768,
+      "extent_hash": 3255027194725411840,
       "n_cells_in_scope": 593,
       "n_cells_pre_scope": 4711,
       "pair_by": [
@@ -358,7 +358,7 @@
       "blocked_by": null,
       "bridge_name": "linear_fa_caps_type_1_across_envs__null_panel",
       "direction": "inverse",
-      "extent_hash": -8257288622318887356,
+      "extent_hash": 2025739676993175372,
       "n_cells_in_scope": 2078,
       "n_cells_pre_scope": 4711,
       "pair_by": [
@@ -455,7 +455,7 @@
       "blocked_by": null,
       "bridge_name": "linear_fa_cap_fails_at_metamaze_g999__exception",
       "direction": "inverse",
-      "extent_hash": -4929676251296092862,
+      "extent_hash": -2490163271628787100,
       "n_cells_in_scope": 420,
       "n_cells_pre_scope": 4711,
       "pair_by": [
@@ -582,7 +582,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_helps_outcome_at_fr_g999_mlp_unshaped__k_panel",
       "direction": "direct",
-      "extent_hash": -1509629501325159543,
+      "extent_hash": -1622244619281782900,
       "n_cells_in_scope": 506,
       "n_cells_pre_scope": 4711,
       "pair_by": [
@@ -714,7 +714,7 @@
       "blocked_by": null,
       "bridge_name": "shaping_decouples_outcome_benefit__fr_shaped_fa_x_gamma_panel",
       "direction": "direct",
-      "extent_hash": -1478087554020712479,
+      "extent_hash": -9112406877154156081,
       "n_cells_in_scope": 240,
       "n_cells_pre_scope": 4711,
       "pair_by": [
@@ -740,7 +740,7 @@
   ],
   "cache_path": "experiments/data/cache/ddqn_three_conditions.parquet",
   "errored_bridges": [],
-  "git_commit": "a5fd40d6e484",
+  "git_commit": "523038f05d52",
   "hypothesis_module": "experiments.findings.ddqn_three_conditions",
   "measurable_signatures": {
     "eval_best_burst_raw_mean": "829be9a6bcc9c696",
@@ -750,5 +750,5 @@
     "shaping_kind": "8d7b9f162d87a266"
   },
   "n_cells_total": 4711,
-  "timestamp_utc": "2026-05-16T06:33:54+00:00"
+  "timestamp_utc": "2026-05-16T06:48:30+00:00"
 }

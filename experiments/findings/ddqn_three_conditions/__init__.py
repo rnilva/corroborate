@@ -1,28 +1,72 @@
-"""DDQN three-conditions Hypothesis — multi-stratum panels.
+"""DDQN as Hasselt's three-factor bound, with shaping as a
+separable outcome-translation axis.
 
-Three substantive conditions, each backed by an adequately-
-powered multi-stratum panel:
+Hasselt 2010's structural bound on Q-learning's overestimation:
 
-C1 — DDQN reduces `jensen_gap` uniformly across action-multiplier
-     k_eff at FR γ=0.999 × MLP[64,64] × no-shaping. 4 strata.
-C2 — Linear FA caps Type 1 across envs at γ=0.999 × no-shaping.
-     Per-env Cohen's d on `jensen_gap` sits in ±0.5 band.
-     4 strata (FR + Acrobot + MM + MC).
-C3a — DDQN improves outcome at FR γ=0.999 × MLP × no-shaping
-      across k_eff strata. 4 strata.
-C3b — Shaping decouples: no outcome benefit at FR × MLP × shaped
-      across γ ∈ {0.99, 0.999} strata. 2 strata.
+    bias ≤ σ_action × √(2 ln K) × 1/(1 − γ)
 
-C3a + C3b form a sibling cluster — the moderation pattern is
-read off the joint verdicts (positive + null) rather than
-authored as a single bridge.
+Three multiplicative factors, three places to intervene. The
+bridges in this module test each factor in isolation, then test
+how bias-reduction translates to outcome and how reward shaping
+decouples that translation.
 
-The substrate-corroborated framework prose (two-types
-decomposition, FA-capacity gate, policy-signal-strength) lives
-in memory entries:
-- `findings_two_types_of_bias`
-- `findings_shaping_decouples_bias_from_outcome`
-- `findings_regime_discriminator_polarity_x_gamma`
+**The Hasselt-bound cluster (3 bridges)** — one per factor:
+
+- **K factor `√(2 ln K)`** — `ddqn_reduces_jens_uniformly_across_k_at_fr_high_gamma`:
+  at FR γ=0.999 × MLP × unshaped, DDQN's `jensen_gap` reduction
+  scales monotonically across k_eff ∈ {4, 8, 12, 16}. Stratified
+  Cohen's d ≤ −0.5 at every stratum. HELD.
+
+- **γ factor `1/(1 − γ)`** — `ddqn_reduction_amplified_by_gamma__fr_mlp_k4_unshaped`:
+  at FR × MLP × unshaped × k_eff=4 (controlled K), per-γ Cohen's
+  d ≤ −0.8 at both γ ∈ {0.99, 0.999} AND |mean_diff(γ=0.999)| ≥ 3×
+  |mean_diff(γ=0.99)|. Empirical amplification ratio 46.6×
+  exceeds the structural 10× via variance amplification. HELD.
+
+- **σ_action factor (FA-capacity gate)** — rule + exception cluster:
+  - rule `linear_fa_caps_type_1_across_envs__null_panel`:
+    at linear FA, σ_action is bounded by FA capacity → Hasselt
+    mech dormant → DDQN has nothing to reduce. Per-env Cohen's d
+    on `jensen_gap` sits in ±0.3 band across 6 envs
+    (FR, Acrobot, MountainCar, CartPole, Catch-bsuite,
+    DeepSea-bsuite). Currently POWER_INSUFFICIENT only because
+    Catch's CI = [−0.31, +0.20] straddles the band by 0.01.
+  - exception `linear_fa_cap_fails_at_metamaze_g999__exception`:
+    at MetaMaze γ=0.999 × linear, the cap FAILS — DDQN reduces
+    jens by d ≤ −0.3 at every n_episodes stratum. The mechanism
+    here is FA-fit-error × state-distribution-shift (MetaMaze
+    re-draws the maze per evaluation episode → linear FA can't
+    generalise → bias enters via FA-fit error, not σ × √(2 ln K)).
+    Encoded as the opposite-direction prediction in the same
+    (env, γ) scope. HELD.
+
+**The shaping-decouples cluster (2 sibling bridges)** — the
+fourth, orthogonal axis: how bias-reduction translates to outcome.
+
+- positive arm `ddqn_helps_outcome_at_fr_g999_mlp_unshaped__k_panel`:
+  at FR γ=0.999 × MLP × unshaped (the "all Hasselt factors
+  active" reference cell), DDQN improves outcome
+  (`eval_best_burst_raw_mean`) at every k_eff stratum. HELD.
+- null arm `shaping_decouples_outcome_benefit__fr_shaped_fa_x_gamma_panel`:
+  at FR × shaped × {linear, MLP} × γ ∈ {0.99, 0.999}, DDQN's
+  outcome effect is never positive — shaping provides an
+  alternative dense policy-gradient signal that decouples
+  bias-reduction from outcome improvement. Predicted_direction
+  `'a_lt_b'` (asymmetric: negative effects consistent).
+  HELD.
+
+The cluster pattern: positive (unshaped) + null (shaped) reads
+as "shaping moderates the bias→outcome translation at FR ×
+MLP × γ ∈ {0.99, 0.999}".
+
+**Memory cross-references** for the substantive narrative
+(theory + interpretation; framework-side claims live here):
+- `findings_two_types_of_bias` — decomposing Type 1 (DDQN reduces)
+  vs Type 2 (FA/γ-truncation, DDQN cannot reduce) bias.
+- `findings_shaping_decouples_bias_from_outcome` — the shaping
+  intervention's mechanism story.
+- `findings_regime_discriminator_polarity_x_gamma` — env-feature
+  taxonomy for when DDQN's reduction translates to outcome.
 
 **Cache population** is canonical via `--ingest <corpus>` /
 `--ingest-all <root>`. Three hypothesis-local derived
