@@ -105,7 +105,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_reduces_jens_uniformly_across_k_at_fr_high_gamma",
       "direction": "inverse",
-      "extent_hash": -1453302445050265495,
+      "extent_hash": 7891116215937276859,
       "n_cells_in_scope": 566,
       "n_cells_pre_scope": 4711,
       "pair_by": [
@@ -202,7 +202,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_reduction_amplified_by_gamma__fr_mlp_k4_unshaped",
       "direction": "inverse",
-      "extent_hash": -8360916123581447552,
+      "extent_hash": -1074154637716051212,
       "n_cells_in_scope": 593,
       "n_cells_pre_scope": 4711,
       "pair_by": [
@@ -227,157 +227,70 @@
     },
     {
       "analysis_results": {
-        "stratified_arm_diff_pooled": {
-          "arm_field": "arm_key",
-          "baseline_arm": "baseline",
-          "i_squared": 0.0,
-          "measurable": "jensen_gap",
-          "n_strata": 6,
-          "per_stratum": [
+        "meta_regression_unpaired_d": {
+          "cleavage_axes": [
+            "fa_capacity"
+          ],
+          "coefficients": [
             {
-              "arm_mean_baseline": 172.921,
-              "arm_mean_treatment": 173.823,
-              "arm_sd_baseline": 120.003,
-              "arm_sd_treatment": 116.898,
-              "baseline_predictor": 172.921,
-              "cohen_d": 0.00761485,
-              "cohen_se": 0.1291,
-              "mean_diff": 0.90206,
-              "n_seeds_baseline": 120,
-              "n_seeds_treatment": 120,
-              "stratum_id": [
-                "Acrobot-v1"
-              ]
-            },
-            {
-              "arm_mean_baseline": 0.0,
-              "arm_mean_treatment": 0.0,
-              "arm_sd_baseline": 0.0,
-              "arm_sd_treatment": 0.0,
-              "baseline_predictor": 0.0,
-              "cohen_d": null,
-              "cohen_se": null,
-              "mean_diff": 0.0,
-              "n_seeds_baseline": 120,
-              "n_seeds_treatment": 120,
-              "stratum_id": [
-                "CartPole-v1"
-              ]
-            },
-            {
-              "arm_mean_baseline": 0.152042,
-              "arm_mean_treatment": 0.144493,
-              "arm_sd_baseline": 0.137232,
-              "arm_sd_treatment": 0.133399,
-              "baseline_predictor": 0.152042,
-              "cohen_d": -0.0557804,
-              "cohen_se": 0.129125,
-              "mean_diff": -0.0075487,
-              "n_seeds_baseline": 120,
-              "n_seeds_treatment": 120,
-              "stratum_id": [
-                "Catch-bsuite"
-              ]
-            },
-            {
-              "arm_mean_baseline": 4.72184e-05,
-              "arm_mean_treatment": 4.48681e-05,
-              "arm_sd_baseline": 8.62678e-05,
-              "arm_sd_treatment": 8.4403e-05,
-              "baseline_predictor": 4.72184e-05,
-              "cohen_d": -0.0275392,
-              "cohen_se": 0.129106,
-              "mean_diff": -2.35021e-06,
-              "n_seeds_baseline": 120,
-              "n_seeds_treatment": 120,
-              "stratum_id": [
-                "DeepSea-bsuite"
-              ]
-            },
-            {
-              "arm_mean_baseline": 8.47188,
-              "arm_mean_treatment": 7.98407,
-              "arm_sd_baseline": 7.54148,
-              "arm_sd_treatment": 7.41493,
-              "baseline_predictor": 8.47188,
-              "cohen_d": -0.065229,
-              "cohen_se": 0.0879043,
-              "mean_diff": -0.487814,
-              "n_seeds_baseline": 256,
-              "n_seeds_treatment": 262,
-              "stratum_id": [
-                "FourRooms-misc"
-              ]
-            },
-            {
-              "arm_mean_baseline": 92.3844,
-              "arm_mean_treatment": 92.411,
-              "arm_sd_baseline": 45.5317,
-              "arm_sd_treatment": 45.4294,
-              "baseline_predictor": 92.3844,
-              "cohen_d": 0.000584551,
-              "cohen_se": 0.0816497,
-              "mean_diff": 0.0265857,
-              "n_seeds_baseline": 300,
-              "n_seeds_treatment": 300,
-              "stratum_id": [
-                "MountainCar-v0"
-              ]
+              "ci_hi": -0.171274,
+              "ci_lo": -1.82535,
+              "coefficient": -0.998311,
+              "is_significant": true,
+              "name": "fa_capacity",
+              "p_value": 0.0227164
             }
           ],
-          "pooled": {
-            "I2": 0.0,
-            "Q": 0.424331,
-            "assumption_violations": [],
-            "empirical_max_g": 0.00761485,
-            "empirical_min_g": -0.065229,
-            "n_cells": 5,
-            "pi_hi": 0.120412,
-            "pi_lo": -0.176551,
-            "pooled_g": -0.0280695,
-            "se_pooled": 0.0466565,
-            "tau2": 0.0
-          },
-          "pooled_ci_hi": 0.0633773,
-          "pooled_ci_lo": -0.119516,
-          "pooled_d": -0.0280695,
-          "pooled_p_value": 0.547427,
-          "pooled_se": 0.0466565,
-          "q_statistic": 0.424331,
-          "refutation": "null_effect",
-          "scope_predictor": "jensen_gap",
-          "stratify_by": [
-            "env_name"
-          ],
-          "tau2": 0.0,
-          "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)",
-          "verdict": "no_effect"
+          "i_squared": 0.946286,
+          "intercept": -0.0557635,
+          "intercept_ci_hi": 0.524952,
+          "intercept_ci_lo": -0.636479,
+          "intercept_p_value": 0.834879,
+          "intercept_se": 0.260628,
+          "n_strata": 12,
+          "pool": "random",
+          "q_statistic": 186.17,
+          "r_squared": 0.419745,
+          "tau_sq": 0.335678
         }
       },
       "assumption_violations": [],
       "blocked_by": null,
-      "bridge_name": "linear_fa_caps_type_1_across_envs__null_panel",
+      "bridge_name": "fa_capacity_moderates_ddqn_jens_reduction",
       "direction": "inverse",
-      "extent_hash": 8161065476090922708,
-      "n_cells_in_scope": 2078,
+      "extent_hash": -6953641163801436381,
+      "n_cells_in_scope": 2911,
       "n_cells_pre_scope": 4711,
       "pair_by": [
         "seed"
       ],
       "params": {
-        "min_baseline_predictor": null,
-        "min_strata": 3,
-        "null_ceiling": 0.3,
+        "baseline_arm": "baseline",
+        "covariate_key_field": "fa_kind",
+        "covariates_per_key": {
+          "linear": {
+            "fa_capacity": 0.0
+          },
+          "mlp_deep": {
+            "fa_capacity": 1.0
+          }
+        },
+        "min_strata": 6,
+        "slope_threshold": -0.5,
+        "source": "jensen_gap",
         "stratify_by": [
-          "env_name"
-        ]
+          "env_name",
+          "gamma",
+          "fa_kind"
+        ],
+        "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
       },
-      "predicted_direction": "null",
-      "scope_repr": "[([([([(col(\"gamma\").is_in([[0.99, 0.999]])) & ([(col(\"fa_kind\")) == (\"linear\")])]) & ([(col(\"shaping_kind\")) == (\"none\")])]) & (col(\"env_name\").is_in([[\"FourRooms-misc\", \"Acrobot-v1\", … \"DeepSea-bsuite\"]]))]) & (col(\"jensen_gap\").is_finite())]",
+      "predicted_direction": "a_lt_b",
+      "scope_repr": "[([([([(col(\"gamma\").is_in([[0.99, 0.999]])) & (col(\"fa_kind\").is_in([[\"linear\", \"mlp_deep\"]]))]) & ([(col(\"shaping_kind\")) == (\"none\")])]) & (col(\"env_name\").is_in([[\"FourRooms-misc\", \"Acrobot-v1\", \"MountainCar-v0\"]]))]) & (col(\"jensen_gap\").is_finite())]",
       "source_name": "do(baseline|bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify))",
       "target_name": "jensen_gap",
       "tier": "interventional",
-      "verdict": "power_insufficient",
+      "verdict": "held",
       "warnings": []
     },
     {
@@ -455,7 +368,7 @@
       "blocked_by": null,
       "bridge_name": "linear_fa_cap_fails_at_metamaze_g999__exception",
       "direction": "inverse",
-      "extent_hash": -4896656812020661078,
+      "extent_hash": -2645902929069417090,
       "n_cells_in_scope": 420,
       "n_cells_pre_scope": 4711,
       "pair_by": [
@@ -582,7 +495,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_helps_outcome_at_fr_g999_mlp_unshaped__k_panel",
       "direction": "direct",
-      "extent_hash": -1453302445050265495,
+      "extent_hash": 7891116215937276859,
       "n_cells_in_scope": 506,
       "n_cells_pre_scope": 4711,
       "pair_by": [
@@ -714,7 +627,7 @@
       "blocked_by": null,
       "bridge_name": "shaping_decouples_outcome_benefit__fr_shaped_fa_x_gamma_panel",
       "direction": "direct",
-      "extent_hash": 7204545543679684640,
+      "extent_hash": 4202289189499611352,
       "n_cells_in_scope": 240,
       "n_cells_pre_scope": 4711,
       "pair_by": [
@@ -740,7 +653,7 @@
   ],
   "cache_path": "experiments/data/cache/ddqn_three_conditions.parquet",
   "errored_bridges": [],
-  "git_commit": "035684b186ca",
+  "git_commit": "58d77309cbc6",
   "hypothesis_module": "experiments.findings.ddqn_three_conditions",
   "measurable_signatures": {
     "eval_best_burst_raw_mean": "829be9a6bcc9c696",
@@ -750,5 +663,5 @@
     "shaping_kind": "8d7b9f162d87a266"
   },
   "n_cells_total": 4711,
-  "timestamp_utc": "2026-05-16T10:04:22+00:00"
+  "timestamp_utc": "2026-05-16T10:14:46+00:00"
 }

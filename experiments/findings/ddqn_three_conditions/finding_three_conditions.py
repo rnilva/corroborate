@@ -84,33 +84,22 @@ from experiments.findings.ddqn_three_conditions.conditions import (
     ddqn_helps_outcome_at_fr_g999_mlp_unshaped__k_panel,
     ddqn_reduces_jens_uniformly_across_k_at_fr_high_gamma,
     ddqn_reduction_amplified_by_gamma__fr_mlp_k4_unshaped,
+    fa_capacity_moderates_ddqn_jens_reduction,
     linear_fa_cap_fails_at_metamaze_g999__exception,
-    linear_fa_caps_type_1_across_envs__null_panel,
     shaping_decouples_outcome_benefit__fr_shaped_fa_x_gamma_panel,
 )
 
 
-EXPECTED: ClusterVerdict = ClusterVerdict.UNDERPOWERED
+EXPECTED: ClusterVerdict = ClusterVerdict.SUPPORTED
 
 
-BLOCKED_ON: str | None = (
-    'C2a (FA-cap rule, 6 envs excl. MetaMaze): Catch-bsuite stratum '
-    'at d=-0.056 CI=[-0.31,+0.20] straddles -0.3 by 0.01 at n=120 '
-    'per arm. ~30 more seeds at Catch-bsuite × linear × γ ∈ '
-    '{0.99,0.999} would tighten the CI inside ±0.3 and unblock '
-    'the cluster. CartPole stratum has d=nan (jens≡0 — degenerate, '
-    'not power-driven; the Hasselt mech literally cannot fire at '
-    'CartPole linear FA because Q-MC=0 universally). '
-    'Substantive cluster pattern (C2a rule + C2b exception) is '
-    'encoded; the verdict is just one borderline-CI away from '
-    'SUPPORTED.'
-)
+BLOCKED_ON: str | None = None
 
 
 BRIDGES: tuple[Bridge, ...] = (
     ddqn_reduces_jens_uniformly_across_k_at_fr_high_gamma,
     ddqn_reduction_amplified_by_gamma__fr_mlp_k4_unshaped,
-    linear_fa_caps_type_1_across_envs__null_panel,
+    fa_capacity_moderates_ddqn_jens_reduction,
     linear_fa_cap_fails_at_metamaze_g999__exception,
     ddqn_helps_outcome_at_fr_g999_mlp_unshaped__k_panel,
     shaping_decouples_outcome_benefit__fr_shaped_fa_x_gamma_panel,

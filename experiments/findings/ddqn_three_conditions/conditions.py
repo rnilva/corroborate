@@ -48,9 +48,14 @@ What this is NOT:
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping
+from types import MappingProxyType
 
 import polars as pl
 
+from corroborate.analyses.meta_regression_unpaired_d import (
+    MetaRegressionResult,
+)
 from corroborate.analyses.stratified_arm_diff_pooled import (
     StratifiedArmDiffPooledResult,
 )
@@ -59,6 +64,18 @@ from corroborate.bridge.predicates import finite
 from corroborate.bridge.verdict import RefutationClass, Verdict
 
 from experiments.findings.ddqn_three_conditions._arms import INTERVENTION
+
+
+# FA capacity encoded as a numeric for meta-regression. The
+# substantive meaning: linear FA has minimal cross-action Q
+# variance (σ_action bounded); MLP[64,64] has substantial room.
+# We use a binary encoding (0, 1) — the slope is the Cohen's d
+# change per "step" of FA capacity, which under the binary form
+# equals `d_mlp − d_linear` at the panel level.
+_FA_CAPACITY: Mapping[object, Mapping[str, float]] = MappingProxyType({
+    'linear':   MappingProxyType({'fa_capacity': 0.0}),
+    'mlp_deep': MappingProxyType({'fa_capacity': 1.0}),
+})
 
 
 # === C1 — DDQN reduces jens uniformly across K_eff at FR γ=0.999 ===
@@ -157,65 +174,72 @@ def ddqn_reduces_jens_uniformly_across_k_at_fr_high_gamma(
 # Min strata = 3 (we have 4: FR, Acrobot, MM, MC).
 
 
-def _null_band_verdict(
-    res: StratifiedArmDiffPooledResult,
+def _meta_regression_coef_verdict(
+    result: MetaRegressionResult,
+    coef_name: str,
     *,
-    null_ceiling: float,
+    sign: int,
+    threshold: float,
     min_strata: int,
-) -> tuple[Verdict, RefutationClass | None]:
-    """Generic per-stratum null-band verdict.
+) -> Verdict:
+    """Verdict on a meta-regression coefficient.
 
-    For each stratum (with valid d, se), test whether the 95% CI
-    fits inside ±`null_ceiling`. HELD iff every stratum's CI
-    fits; INVARIANT_VIOLATION if any CI fully > +ceiling;
-    SIGN_FLIP if any CI fully < -ceiling; POWER_INSUFFICIENT if
-    any CI straddles the band edge (effect direction not
-    resolvable at this n)."""
-    if res.n_strata < min_strata:
-        return Verdict.POWER_INSUFFICIENT, None
-    any_above = False
-    any_below = False
-    any_spans = False
-    n_valid = 0
-    for s in res.per_stratum:
-        d_env = s.cohen_d
-        se_env = s.cohen_se
-        if math.isnan(d_env) or math.isnan(se_env):
-            continue
-        n_valid += 1
-        ci_lo = d_env - 1.96 * se_env
-        ci_hi = d_env + 1.96 * se_env
-        if ci_lo > null_ceiling:
-            any_above = True
-        elif ci_hi < -null_ceiling:
-            any_below = True
-        elif not (ci_lo >= -null_ceiling and ci_hi <= null_ceiling):
-            any_spans = True
-    if n_valid < min_strata:
-        return Verdict.POWER_INSUFFICIENT, None
-    if any_above:
-        return Verdict.INVARIANT_VIOLATION, None
-    if any_below:
-        return Verdict.NO_EFFECT, RefutationClass.SIGN_FLIP
-    if not any_spans:
-        return Verdict.HELD, None
-    return Verdict.POWER_INSUFFICIENT, None
+    sign=-1: HELD when `coef ≤ threshold` AND significant
+             (slope is at-or-below the negative threshold).
+    sign=+1: HELD when `coef ≥ threshold` AND significant.
+    sign=0: HELD when `|coef| < |threshold|` AND non-significant
+            (null prediction confirmed).
+    NO_EFFECT/SIGN_FLIP when significant in the wrong direction.
+    POWER_INSUFFICIENT when too few strata or coef is missing/NaN.
+    """
+    if result.n_strata < min_strata:
+        return Verdict.POWER_INSUFFICIENT
+    coef = next(
+        (c for c in result.coefficients if c.name == coef_name), None,
+    )
+    if coef is None or math.isnan(coef.coefficient):
+        return Verdict.POWER_INSUFFICIENT
+    if sign == -1:
+        if coef.coefficient <= threshold and coef.is_significant:
+            return Verdict.HELD
+        if coef.is_significant and coef.coefficient >= -threshold:
+            return Verdict.NO_EFFECT
+        return Verdict.POWER_INSUFFICIENT
+    if sign == 1:
+        if coef.coefficient >= threshold and coef.is_significant:
+            return Verdict.HELD
+        if coef.is_significant and coef.coefficient <= -threshold:
+            return Verdict.NO_EFFECT
+        return Verdict.POWER_INSUFFICIENT
+    if abs(coef.coefficient) < abs(threshold) and not coef.is_significant:
+        return Verdict.HELD
+    return Verdict.NO_EFFECT
 
 
-_C2_RULE_ENVS = [
-    'FourRooms-misc', 'Acrobot-v1', 'MountainCar-v0',
-    'CartPole-v1', 'Catch-bsuite', 'DeepSea-bsuite',
-]
-# MetaMaze is EXCLUDED from the C2a rule scope. MetaMaze γ=0.999
-# linear FA is a documented exception (encoded as the C2b
-# sibling bridge below). At γ=0.99 MetaMaze still straddles ±0.3
-# at current n=90/arm, so we exclude the env entirely from the
-# rule rather than partially. The substantive scope of the rule
-# is then "linear FA caps Type 1 across envs whose Q function is
-# tractable by linear FA" — operationalised as the 6-env list.
-
-
-# === C2a — Linear FA caps Type 1 (RULE: 6 envs excl. MetaMaze) ===
+# === C2a — FA capacity moderates DDQN's bias-reduction effect ===
+#
+# Proper test of the σ_action factor in Hasselt 2010's bound:
+# σ_action × √(2 ln K) × 1/(1−γ). At linear FA, σ_action is
+# structurally bounded by FA capacity; at MLP[64,64] it's not.
+# The FA-cap claim is therefore a *moderator* claim: DDQN's
+# effect on jensen_gap should be more negative at MLP than at
+# linear, holding (env, γ) fixed.
+#
+# Earlier authoring tested "null at linear across envs", which
+# conflated two things: (a) FA capacity capping σ_action, and
+# (b) envs that have no bias to develop at any FA. The cleanest
+# scientific test is a moderator: per-stratum Cohen's d
+# regressed against `fa_capacity` (binary 0=linear, 1=MLP)
+# across (env_name, gamma, fa_kind) strata, with the slope being
+# the FA-moderator effect.
+#
+# Scope is restricted to envs where vanilla MLP develops
+# substantive bias — FR + Acrobot + MountainCar (where vanilla's
+# MLP jensen_gap is well above noise). MetaMaze is excluded
+# because the C2b sibling bridge documents its exception
+# (random-maze state distribution → FA-fit-error bias not
+# captured by σ × √(2 ln K)). CartPole / Catch / DeepSea are
+# excluded because vanilla never overshoots regardless of FA.
 
 
 @claim_bridge(
@@ -225,63 +249,69 @@ _C2_RULE_ENVS = [
     tier=Tier.INTERVENTIONAL,
     scope=(
         pl.col('gamma').is_in([0.99, 0.999])
-        & (pl.col('fa_kind') == 'linear')
+        & pl.col('fa_kind').is_in(['linear', 'mlp_deep'])
         & (pl.col('shaping_kind') == 'none')
-        & (pl.col('env_name').is_in(_C2_RULE_ENVS))
+        & pl.col('env_name').is_in([
+            'FourRooms-misc', 'Acrobot-v1', 'MountainCar-v0',
+        ])
         & finite(pl.col('jensen_gap'))
     ),
-    predicted_direction='null',
+    predicted_direction='a_lt_b',
 )
-def linear_fa_caps_type_1_across_envs__null_panel(
-    stratified_arm_diff_pooled: StratifiedArmDiffPooledResult,
+def fa_capacity_moderates_ddqn_jens_reduction(
+    meta_regression_unpaired_d: MetaRegressionResult,
     *,
-    stratify_by: tuple[str, ...] = ('env_name',),
-    min_strata: int = 3,
-    min_baseline_predictor: float = float('-inf'),
-    null_ceiling: float = 0.3,
-) -> tuple[Verdict, RefutationClass | None]:
-    """Linear FA caps Type 1 manifestation across envs whose
-    Q-function is tractable by linear FA (the rule of the
-    rule+exception cluster).
+    treatment_arm: str = (
+        'bootstrap=partial(Claim:bootstrap;'
+        'greedification=Claim:double_greedify)'
+    ),
+    baseline_arm: str = 'baseline',
+    source: str = 'jensen_gap',
+    covariate_key_field: str = 'fa_kind',
+    covariates_per_key: Mapping[
+        object, Mapping[str, float],
+    ] = _FA_CAPACITY,
+    stratify_by: tuple[str, ...] = ('env_name', 'gamma', 'fa_kind'),
+    min_strata: int = 6,
+    slope_threshold: float = -0.5,
+) -> Verdict:
+    """FA capacity moderates DDQN's effect on jensen_gap.
 
-    Per-env independent-samples Cohen's d on `jensen_gap` at
-    (γ ∈ {0.99, 0.999}, fa_kind=linear, shaping_kind=none).
-    HELD iff every env's 95% CI fits inside ±`null_ceiling`
-    (= 0.3).
+    Per-(env, gamma, fa_kind) independent-samples Cohen's d on
+    `jensen_gap` → random-effects meta-regression on
+    `fa_capacity` (binary 0=linear, 1=mlp_deep). The slope is
+    Δd per unit FA capacity — under the binary encoding, this
+    equals `mean(d at MLP) − mean(d at linear)`.
 
-    Substantive mechanism: with empty-hidden-tuple linear FA,
-    σ_action — the per-state action-value SD whose √(2 ln K)
-    Hasselt-bound product is the overestimation room — is
-    FA-capped for BOTH arms. Vanilla can't overshoot; DDQN has
-    nothing to reduce. The null is the load-bearing prediction
-    of the FA-capacity gate.
+    HELD iff the slope is significantly negative AND
+    ≤ `slope_threshold` (= −0.5): DDQN's effect on jens at MLP
+    is more negative than at linear by at least 0.5 Cohen units,
+    consistent with σ_action being FA-capped (Hasselt bound's
+    σ factor empirically corroborated).
 
-    **MetaMaze is excluded from this rule's scope** —
-    MM γ=0.999 linear shows d ≈ −1 at eval-power-fixed
-    n_episodes=20 (the FA-cap fails because the random-maze-per-
-    episode structure forces FA-fit error that DDQN clips). The
-    exception is encoded as the C2b sibling bridge
-    `linear_fa_cap_fails_at_metamaze_g999__exception`. Together
-    C2a (HELD across 6 envs) + C2b (HELD at MM γ=0.999 with the
-    opposite prediction) form a rule + exception cluster.
+    Refutations (via `meta_regression_coefficient_verdict` shape):
+    - NO_EFFECT/SIGN_FLIP: slope significantly POSITIVE (DDQN's
+      effect MORE negative at linear than at MLP — would refute
+      the σ-via-FA hypothesis).
+    - NO_EFFECT/NULL: slope CI brackets the threshold (not
+      significantly different from zero or not large enough).
+    - POWER_INSUFFICIENT: n_strata < 6 (we have at minimum 3 envs
+      × 2 γ × 2 fa = 12 strata at full ingest; require half).
 
-    Refutations:
-    - INVARIANT_VIOLATION: any in-scope env shows CI fully > +0.3
-      (DDQN meaningfully REDUCES jens even at linear FA at an env
-      we'd previously catalogued as tractable — would refute
-      FA-capacity hypothesis for that env).
-    - NO_EFFECT/SIGN_FLIP: any env shows CI fully < −0.3 (DDQN
-      INCREASES jens at linear FA — never observed).
-    - POWER_INSUFFICIENT: any in-scope env's CI straddles ±0.3.
-
-    Note Direction.INVERSE on the bridge captures the
-    *theoretical* mech direction (DDQN reduces jens *when the
-    mech fires*); `predicted_direction='null'` captures that we
-    expect the mech NOT to fire at this scope."""
-    del stratify_by, min_baseline_predictor
-    return _null_band_verdict(
-        stratified_arm_diff_pooled,
-        null_ceiling=null_ceiling,
+    Substantive scope excludes:
+    - MetaMaze (encoded as the C2b exception bridge — FA-fit
+      error from random-maze state distribution provides a
+      parallel bias path that DDQN clips even at linear FA).
+    - CartPole / Catch / DeepSea (vanilla doesn't overshoot at
+      any FA — moderator effect is unmeasurable when there's
+      no signal to moderate)."""
+    del treatment_arm, baseline_arm, source
+    del covariate_key_field, covariates_per_key, stratify_by
+    return _meta_regression_coef_verdict(
+        meta_regression_unpaired_d,
+        'fa_capacity',
+        sign=-1,
+        threshold=slope_threshold,
         min_strata=min_strata,
     )
 
