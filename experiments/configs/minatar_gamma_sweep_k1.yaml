@@ -18,7 +18,7 @@ archive_remote: s3://corroborate-archive/minatar_gamma_sweep_k1
 envs:
   - {name: Asterix-MinAtar, n_seeds: 30, chunk_size: 10}
   - {name: Breakout-MinAtar, n_seeds: 30, chunk_size: 10}
-  - {name: Freeway-MinAtar, n_seeds: 30, chunk_size: 10}
+  - {name: Freeway-MinAtar, n_seeds: 30, chunk_size: 5}
   - {name: SpaceInvaders-MinAtar, n_seeds: 30, chunk_size: 10}
 
 defaults:

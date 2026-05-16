@@ -18,7 +18,7 @@ archive_remote: s3://corroborate-archive/minatar_gamma_sweep_k2
 envs:
   - {name: Asterix-MinAtar, n_seeds: 30, chunk_size: 10, wrappers: [{type: action_duplicate, k: 2}]}
   - {name: Breakout-MinAtar, n_seeds: 30, chunk_size: 10, wrappers: [{type: action_duplicate, k: 2}]}
-  - {name: Freeway-MinAtar, n_seeds: 30, chunk_size: 10, wrappers: [{type: action_duplicate, k: 2}]}
+  - {name: Freeway-MinAtar, n_seeds: 30, chunk_size: 5, wrappers: [{type: action_duplicate, k: 2}]}
   - {name: SpaceInvaders-MinAtar, n_seeds: 30, chunk_size: 10, wrappers: [{type: action_duplicate, k: 2}]}
 
 defaults:
