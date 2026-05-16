@@ -96,6 +96,24 @@ def main(argv: list[str] | None = None) -> None:
     # headroom without thrashing.
     os.environ.setdefault('XLA_PYTHON_CLIENT_PREALLOCATE', 'false')
     os.environ.setdefault('XLA_PYTHON_CLIENT_MEM_FRACTION', '0.9')
+    # XLA deterministic matmul / scatter ops. Without this, GPU
+    # thread-scheduling jitter introduces per-matmul ~1e-7 noise
+    # that compounds chaotically over 1M training steps on Q-
+    # explosion-prone vanilla DQN — manifests as ~8σ cross-realization
+    # population-mean drift on Asterix / SI canonical-verify
+    # (memory `findings_substrate_realization_variance`). Measured
+    # negligible perf overhead at MinAtar scale (CNN[16]/FC[128]
+    # 1M-step Asterix: 271s deterministic ≈ 273s non-deterministic).
+    # Set as a `setdefault` so callers can override with explicit
+    # `XLA_FLAGS=` if they need non-deterministic kernels for some
+    # specific reason.
+    if 'XLA_FLAGS' not in os.environ:
+        os.environ['XLA_FLAGS'] = '--xla_gpu_deterministic_ops=true'
+    elif '--xla_gpu_deterministic_ops' not in os.environ['XLA_FLAGS']:
+        os.environ['XLA_FLAGS'] = (
+            os.environ['XLA_FLAGS'].rstrip()
+            + ' --xla_gpu_deterministic_ops=true'
+        )
     print(
         f'run_sweep: JAX_PLATFORMS={os.environ["JAX_PLATFORMS"]}',
         file=sys.stderr,
