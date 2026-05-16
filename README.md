@@ -177,12 +177,12 @@ Two storage layers + two corpus roots:
 PER-CORPUS STORES                     PER-HYPOTHESIS CACHE
   source of truth                       derived projection
 ─────────────────────────             ────────────────────
-experiments/data/<corpus>/            experiments/data/cache/<hyp>.parquet
-experiments/probes/<corpus>/          experiments/findings/<hyp>.run.json
-  ├── runs.parquet                      ├── (verdict snapshot)
-  ├── measurements.parquet              └── (rebuilt each ingest)
-  ├── measurements.hashes.json
-  ├── traces.parquet
+experiments/data/<corpus>/            experiments/data/cache/
+experiments/probes/<corpus>/            ├── <hyp>.parquet
+  ├── runs.parquet                      ├── <hyp>.hashes.json   (measurable closure-hash sidecar)
+  ├── measurements.parquet              └── <hyp>.sources.json  (per-corpus input provenance)
+  ├── measurements.hashes.json        experiments/findings/<hyp>.run.json
+  ├── traces.parquet                    └── (verdict snapshot)
   └── _remote.json (cloud manifest)
                               ↕
                  s3://corroborate-archive/<corpus>/
@@ -243,6 +243,15 @@ uv run python -m corroborate purge experiments/data/<corpus>
   `diagonal_relaxed` concat over the per-corpus stores, filtered
   by the hypothesis's `MODULE_SCOPE`. Rebuilt atomically each
   directory-walk ingest. Bridges scope on its columns.
+- **Cache-sources sidecar** (`cache/<hyp>.sources.json`): per-
+  corpus input provenance — `data_root`, `remote_root`, and an
+  append-only `ingested_at` audit trail. Mutates lockstep with
+  the cache parquet (build wire-in updates entries on each
+  `--ingest`; `evict` drops entries). Read via
+  `runner.check_cache_sources(cache_path)` or the input-side
+  section of `--check`. Distinguishes pre-sidecar caches
+  (`NO_SIDECAR_RECORD` status) from drift (`DRIFTED`) from
+  evicted-not-mirrored (`STALE_SIDECAR_ENTRY`).
 - **Corpus stamp**: cells carry a `corpus` column derived from
   the leaf directory name — `<name>` for top-level corpora,
   `<parent>/<name>` for nested sub-corpora (parent dir has its
@@ -264,7 +273,8 @@ uv run python -m corroborate purge experiments/data/<corpus>
 | "what corpora do I have, locally and in cloud?" | `corroborate catalogue` (above) |
 | "I added a new @measurable, refresh the cache" | `run_hypothesis --ingest <corpus>[,…]` or `--ingest-all <root>` |
 | "I deleted a sweep dir, the cache still has its cells" | `run_hypothesis --evict <corpus>` |
-| "drift check, no work" | `run_hypothesis --check` |
+| "drift check, no work" | `run_hypothesis --check` (reports both measurable-side AND input-side drift) |
+| "which caches depend on corpus X? did the source drift?" | `cat experiments/data/cache/*.sources.json \| jq` or `runner.check_cache_sources(<cache_path>)` |
 | "trace cols missing on a new measurable" | runner auto-restores from cloud; ensure `.env` is sourced |
 | "free disk on a cloud-backed corpus" | `corroborate purge` (NEVER `rm`) |
 

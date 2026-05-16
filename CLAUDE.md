@@ -368,6 +368,19 @@ operational rules below catch the most common mistakes.
   The parent/leaf form prevents the silent eviction that bit when
   two distinct sub-corpora share a leaf name across parents (see
   `findings_corpus_name_leaf_collision`).
+- **Cache-sources sidecar** (`cache/<hyp>.sources.json`). Pairs
+  with the existing `<hyp>.hashes.json` (output-side measurable
+  provenance) by tracking the INPUT side: which corpora's cells
+  contributed, with `data_root`, `remote_root`, and an
+  append-only `ingested_at` audit trail. Mutates lockstep with
+  the cache parquet via the `--ingest` and `--evict` paths.
+  Query via `runner.check_cache_sources(cache_path)` (typed
+  `tuple[SourceDrift, ...]`) or the input-side section of
+  `run_hypothesis --check`. Statuses: `MATCHED`, `DRIFTED`,
+  `MISSING_LOCAL`, `NO_SIDECAR_RECORD` (cache pre-dates
+  sidecar), `STALE_SIDECAR_ENTRY` (cache evicted but sidecar
+  not mirrored — surfaces orphans). Pre-sidecar caches keep
+  working; the first re-ingest creates the entry.
 - **`purge`, never `rm` on cloud-backed files**. The
   `corroborate purge <corpus>` command validates each file is in
   the manifest before deletion (preserving the manifest so
