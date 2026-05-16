@@ -169,6 +169,109 @@ them only when computing measurables, then evicts them
 `corpus.measurements.compute_trace_measurables_streaming`
 iterates row-groups instead of materialising the full join.
 
+## Cache + cloud
+
+Two storage layers + two corpus roots:
+
+```
+PER-CORPUS STORES                     PER-HYPOTHESIS CACHE
+  source of truth                       derived projection
+─────────────────────────             ────────────────────
+experiments/data/<corpus>/            experiments/data/cache/<hyp>.parquet
+experiments/probes/<corpus>/          experiments/findings/<hyp>.run.json
+  ├── runs.parquet                      ├── (verdict snapshot)
+  ├── measurements.parquet              └── (rebuilt each ingest)
+  ├── measurements.hashes.json
+  ├── traces.parquet
+  └── _remote.json (cloud manifest)
+                              ↕
+                 s3://corroborate-archive/<corpus>/
+                 (MANIFEST.json mirror)
+```
+
+`experiments/data/` is canonical sweep output; `experiments/probes/`
+is ad-hoc pilots. **Both roots carry corpora** — any inventory or
+catalogue walk must include both, and `--ingest <name>` resolves
+relative names against `experiments/data/` only, so probes need
+absolute paths.
+
+### Discovery — `catalogue`
+
+```bash
+# Inventory all corpora across local + cloud, with status per row
+# (CLOUD_AND_LOCAL / CLOUD_EVICTED / LOCAL_ONLY / IN_PROGRESS_SCAFFOLD).
+uv run python -m corroborate catalogue \
+    experiments/data experiments/probes \
+    --remote-prefix s3://corroborate-archive/
+
+# Per-(corpus, arm) leaf-signature view — the configurational
+# fingerprint each sweep arm holds constant vs sweeps over.
+uv run python -m corroborate catalogue \
+    experiments/data experiments/probes \
+    --leaves --leaves-wide
+```
+
+### Archive lifecycle
+
+```bash
+set -a && . .env && set +a   # AWS creds live in .env
+
+# After a sweep completes, archive its parquets to cloud:
+uv run python -m corroborate archive experiments/data/<corpus> \
+    --remote s3://corroborate-archive/<corpus>
+
+# Inspect what a corpus has archived:
+uv run python -m corroborate ls experiments/data/<corpus>
+
+# Restore (e.g. to re-derive trace-dependent measurables):
+uv run python -m corroborate restore experiments/data/<corpus>
+
+# Purge LOCAL copies of cloud-archived files (manifest preserved,
+# `restore` stays available). NEVER `rm` cloud-backed files
+# directly — `purge` validates the manifest first.
+uv run python -m corroborate purge experiments/data/<corpus>
+```
+
+### Cache mechanics
+
+- **Per-corpus measurements** (`<corpus>/measurements.parquet`):
+  column-additive. Each `@measurable` is hashed (closure +
+  reads + name); the `measurements.hashes.json` sidecar tracks
+  which hashes are current. Drifted / missing measurables are
+  recomputed on `--ingest` (CACHE_ADDITIVITY.md C2/C3).
+- **Per-hypothesis cache** (`cache/<hyp>.parquet`): a
+  `diagonal_relaxed` concat over the per-corpus stores, filtered
+  by the hypothesis's `MODULE_SCOPE`. Rebuilt atomically each
+  directory-walk ingest. Bridges scope on its columns.
+- **Corpus stamp**: cells carry a `corpus` column derived from
+  the leaf directory name — `<name>` for top-level corpora,
+  `<parent>/<name>` for nested sub-corpora (parent dir has its
+  own `runs.parquet`). Distinguishes sub-corpora that share leaf
+  names across different parents
+  (`findings_corpus_name_leaf_collision.md`).
+- **Trace eviction (CI7)**: trace columns are heavy (~MB per
+  cell) and cloud-recoverable. Local `traces.parquet` is evicted
+  post-measurable-compute when the cloud manifest confirms a
+  sha256-matching archived copy.
+- **`.in_progress` sentinel**: a sweep mid-flight drops this
+  file; `--ingest-all` walks skip the corpus until it lands
+  (CORPUS_INTEGRITY.md CI1).
+
+### When to reach for which command
+
+| situation | command |
+|---|---|
+| "what corpora do I have, locally and in cloud?" | `corroborate catalogue` (above) |
+| "I added a new @measurable, refresh the cache" | `run_hypothesis --ingest <corpus>[,…]` or `--ingest-all <root>` |
+| "I deleted a sweep dir, the cache still has its cells" | `run_hypothesis --evict <corpus>` |
+| "drift check, no work" | `run_hypothesis --check` |
+| "trace cols missing on a new measurable" | runner auto-restores from cloud; ensure `.env` is sourced |
+| "free disk on a cloud-backed corpus" | `corroborate purge` (NEVER `rm`) |
+
+See `CACHE_ARCHITECTURE.md` for the full picture, `CACHE_ADDITIVITY.md`
+for the named-ingest contract, and `CORPUS_INTEGRITY.md` for the
+CI1–CI8 invariants the runner enforces.
+
 ## Status
 
 Pre-v0. The acceptance test is a DDQN-vs-vanilla study
@@ -190,5 +293,10 @@ end.
 - `SCOPE_SEARCH.md` — the scope-finding procedure (Phase 1).
 - `LIFECYCLE.md` — corpus + verdict lifecycle from cell-runner
   to bridge evaluation.
+- `CACHE_ARCHITECTURE.md` / `CACHE_ADDITIVITY.md` /
+  `CACHE_BUILD.md` — two-layer cache: per-corpus stores
+  (column-additive, closure-hash drift) vs per-hypothesis cache
+  (atomically-rebuilt projection). `CORPUS_INTEGRITY.md` —
+  the CI1–CI8 invariants the runner enforces on ingest.
 - `FUTURE_WORKS.md` — explicit deferrals and open questions.
 - `FINDINGS.md` — historical narrative log of empirical findings.
