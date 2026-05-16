@@ -60,10 +60,17 @@ from experiments.findings.ddqn_three_conditions.conditions import (
 )
 
 
-EXPECTED: ClusterVerdict = ClusterVerdict.SUPPORTED
+EXPECTED: ClusterVerdict = ClusterVerdict.UNDERPOWERED
 
 
-BLOCKED_ON: str | None = None
+BLOCKED_ON: str | None = (
+    'C2 null_ceiling tightened from 0.5 to 0.3 (Cohen "small"). '
+    'MetaMaze stratum at d=-0.24 CI=[-0.42, -0.06] straddles -0.3 '
+    '→ POWER_INSUFFICIENT. Either (a) densify MM linear cells beyond '
+    'n=180 per arm or (b) add new-env strata to dilute MM\'s pull on '
+    'the panel\'s overall finding. Sweep pending; see '
+    'experiments/configs/fa_linear_extra_envs.yaml.'
+)
 
 
 BRIDGES: tuple[Bridge, ...] = (

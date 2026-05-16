@@ -225,13 +225,13 @@ def linear_fa_caps_type_1_across_envs__null_panel(
     stratify_by: tuple[str, ...] = ('env_name',),
     min_strata: int = 3,
     min_vanilla_predictor: float = float('-inf'),
-    null_ceiling: float = 0.5,
+    null_ceiling: float = 0.3,
 ) -> tuple[Verdict, RefutationClass | None]:
     """Linear FA caps Type 1 manifestation across envs at γ=0.999.
 
     Per-env independent-samples Cohen's d on `jensen_gap` at
     (γ=0.999, fa_kind=linear, shaping_kind=none). HELD iff every
-    env's 95% CI fits inside ±`null_ceiling` (= 0.5).
+    env's 95% CI fits inside ±`null_ceiling` (= 0.3).
 
     Substantive mechanism: with empty-hidden-tuple linear FA,
     σ_action — the per-state action-value SD whose √(2 ln K)
@@ -240,13 +240,22 @@ def linear_fa_caps_type_1_across_envs__null_panel(
     nothing to reduce. The null is the load-bearing prediction
     of the FA-capacity gate.
 
+    null_ceiling = 0.3 (Cohen's "small" threshold) is the
+    substantively-meaningful band — d ≥ 0.3 is a non-trivial
+    effect by Cohen's convention. Pre-2026-05-16 the band was
+    0.5 ("medium" threshold) but MetaMaze's d=-0.24 CI=[-0.42,
+    -0.06] fits 0.5 while excluding zero (i.e., DDQN really does
+    reduce jens at MM linear, just by a small amount). The
+    tightened band makes the bridge falsifiable in that regime
+    and surfaces MM as POWER_INSUFFICIENT until densified.
+
     Refutations:
-    - INVARIANT_VIOLATION: any env shows CI fully > +0.5 (DDQN
+    - INVARIANT_VIOLATION: any env shows CI fully > +0.3 (DDQN
       meaningfully REDUCES jens even at linear FA — refutes
       FA-capacity hypothesis).
-    - NO_EFFECT/SIGN_FLIP: any env shows CI fully < -0.5 (DDQN
+    - NO_EFFECT/SIGN_FLIP: any env shows CI fully < -0.3 (DDQN
       INCREASES jens at linear FA — never observed).
-    - POWER_INSUFFICIENT: any env's CI straddles ±0.5.
+    - POWER_INSUFFICIENT: any env's CI straddles ±0.3.
 
     Note Direction.INVERSE on the bridge captures the
     *theoretical* mech direction (DDQN reduces jens *when the
