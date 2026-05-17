@@ -398,9 +398,23 @@ via any of:
    auto-load.
 3. **IAM role** (EC2 / ECS): zero config; the chain picks it up.
 
-Every cloud-touching CLI subcommand (`archive`, `restore`, `ls`,
-`catalogue --remote-prefix`) runs a **preflight check** that
-fails fast with a typed stage + actionable hint:
+Every cloud-touching CLI entry runs a **preflight check** that
+fails fast with a typed stage + actionable hint. Covered:
+
+- `python -m corroborate {archive, restore, ls, catalogue --remote-prefix}`
+  — preflights against the per-command remote (always for
+  `archive`, derived from the local manifest for `restore` / `ls`,
+  from `--remote-prefix` for `catalogue`).
+- `scripts/run_sweep.py` — preflights when the sweep YAML has
+  `archive_remote` set; **fails before the sweep loop kicks off**
+  (which can be hours of compute). Skip with `--skip-preflight`.
+- `scripts/run_hypothesis.py` — preflights when `--ingest` /
+  `--ingest-all` is used AND `--no-restore` is NOT set AND any
+  corpus under the ingest scope (2 levels deep, mirroring the
+  catalogue's `_MAX_DEPTH`) carries `_remote.json`. Skip with
+  `--skip-preflight`.
+
+Stages:
 
 | stage              | example hint                                                                                  |
 |--------------------|------------------------------------------------------------------------------------------------|

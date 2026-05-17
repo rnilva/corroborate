@@ -227,15 +227,28 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         from corroborate.corpus.cloud import load_manifest, MANIFEST_NAME
         manifest_remote_root: str | None = None
-        # Walk the ingest scope and find ANY corpus carrying a
+        # Walk the ingest scope (2 levels deep, mirroring
+        # `catalogue._MAX_DEPTH`) and find ANY corpus carrying a
         # `_remote.json`. Use its remote_root for preflight.
+        # 2-level walk catches nested corpora like
+        # `k_sweep_acrobot/ddqn_vs_vanilla/_remote.json` that the
+        # one-level `iterdir()` misses.
         candidate_dirs: list[Path] = []
         if isinstance(data, list):
-            candidate_dirs.extend(data)
+            for top in data:
+                candidate_dirs.append(top)
+                if top.is_dir():
+                    candidate_dirs.extend(
+                        c for c in top.iterdir() if c.is_dir()
+                    )
         elif data.is_dir():
-            candidate_dirs.extend(
-                d for d in data.iterdir() if d.is_dir()
-            )
+            for child in data.iterdir():
+                if not child.is_dir():
+                    continue
+                candidate_dirs.append(child)
+                candidate_dirs.extend(
+                    c for c in child.iterdir() if c.is_dir()
+                )
         for d in candidate_dirs:
             if not (d / MANIFEST_NAME).exists():
                 continue

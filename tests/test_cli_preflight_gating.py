@@ -210,6 +210,66 @@ def test_hypothesis_profile_exported_to_env_independent_of_preflight(
     )
 
 
+def test_hypothesis_nested_corpus_triggers_preflight(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    """Regression: `--ingest-all <root>` where the cloud-backed
+    corpus is NESTED two levels deep (e.g.
+    `k_sweep_acrobot/ddqn_vs_vanilla/_remote.json`) must trigger
+    preflight. The earlier one-level `iterdir()` walk missed
+    nested corpora and silently skipped preflight."""
+    root = tmp_path / 'data'
+    nested = root / 'parent_sweep' / 'child_corpus'
+    _write_remote_json(nested, 's3://my-bucket/nested')
+
+    called: list[str] = []
+
+    def _fake_preflight(remote: str, *, profile: str | None = None) -> None:
+        called.append(remote)
+
+    monkeypatch.setattr(_HYP_PREFLIGHT_PATH, _fake_preflight)
+    with patch('corroborate.runner.run', return_value={}), \
+         patch('scripts.run_hypothesis._print_verdicts'):
+        from scripts.run_hypothesis import main
+        _ = main([
+            'experiments.findings.ddqn',
+            '--ingest-all', str(root),
+            '--no-report', '--no-cache',
+        ])
+    assert called == ['s3://my-bucket/nested'], (
+        f'nested-corpus walk should reach 2 levels deep; got: {called}'
+    )
+
+
+def test_hypothesis_named_ingest_nested_corpus_triggers_preflight(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    """Same nested case but via `--ingest <parent>` (Sequence[Path]
+    code path). Should reach the child's _remote.json."""
+    parent = tmp_path / 'parent_sweep'
+    child = parent / 'child_corpus'
+    _write_remote_json(child, 's3://my-bucket/named-nested')
+
+    called: list[str] = []
+
+    def _fake_preflight(remote: str, *, profile: str | None = None) -> None:
+        called.append(remote)
+
+    monkeypatch.setattr(_HYP_PREFLIGHT_PATH, _fake_preflight)
+    with patch('corroborate.runner.run', return_value={}), \
+         patch('scripts.run_hypothesis._print_verdicts'):
+        from scripts.run_hypothesis import main
+        _ = main([
+            'experiments.findings.ddqn',
+            '--ingest', str(parent),
+            '--no-report', '--no-cache',
+        ])
+    assert called == ['s3://my-bucket/named-nested'], (
+        f'named-ingest nested-corpus walk should reach 2 levels; '
+        f'got: {called}'
+    )
+
+
 def test_hypothesis_corrupt_remote_json_fails_cleanly(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
     capsys: pytest.CaptureFixture[str],

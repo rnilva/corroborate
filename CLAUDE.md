@@ -393,12 +393,19 @@ operational rules below catch the most common mistakes.
   (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`,
   `AWS_ENDPOINT_URL`) — if kept in `.env`, source manually
   (`set -a && . .env && set +a`); (3) IAM role (EC2/ECS).
-  Every cloud-touching CLI subcommand runs a `preflight` check
+  Every cloud-touching CLI entry runs a `preflight` check
   (`_internals.cloud_auth.preflight`) that emits a typed
   `CloudAuthError(stage, message, hint)` — stages:
   `no_credentials`, `auth_failed`, `bucket_missing`, `network`.
-  Each subcommand accepts `--profile <name>` for explicit
-  profile selection. Library callers opt into preflight by
+  Covered entries: `python -m corroborate {archive, restore, ls,
+  catalogue --remote-prefix}`, `scripts/run_sweep.py` (gated on
+  `sweep.archive_remote`), and `scripts/run_hypothesis.py`
+  (gated on `--ingest*` + `--no-restore` not set + any
+  `_remote.json` 2 levels deep under the ingest scope). Each
+  entry accepts `--profile <name>` for explicit profile
+  selection and `--skip-preflight` to opt out (the `--profile`
+  export to `AWS_PROFILE` still runs when skipped, so downstream
+  fsspec inherits it). Library callers opt into preflight by
   importing it explicitly (no implicit pre-flight on every
   cloud op).
 

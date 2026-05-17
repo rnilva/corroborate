@@ -63,12 +63,14 @@ def main(argv: list[str] | None = None) -> None:
     )
     _ = parser.add_argument(
         '--skip-preflight', action='store_true',
-        help='Skip the upfront cloud-auth check before the sweep '
-             'runs. Use when iterating against a known-good profile '
-             'and the ~100-300ms head_bucket round-trip becomes '
-             'friction. Off by default — preflight protects against '
-             'wasting hours of compute then failing at the archive '
-             'step.',
+        help='Skip the cloud-auth check that fires before the '
+             'sweep loop kicks off. Off by default — preflight '
+             'protects against wasting hours of compute then '
+             'failing at the archive step. NOTE: preflight runs '
+             'AFTER the YAML+substrate load (those imports happen '
+             'unavoidably to read `archive_remote`); the savings '
+             'are over the dispatch + train loop, not the '
+             'process startup.',
     )
     args = parser.parse_args(argv)
 
