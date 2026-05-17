@@ -1,0 +1,262 @@
+"""Causal chain: DDQN's clip introduces argmax noise that, at
+γ=0.999, propagates to outcome harm — when vanilla's argmax was
+already meaningful (uniform-overestimation regime).
+
+This module decomposes the σ/jens hypothesis into testable causal
+edges, replacing the bare regression
+`finding_sigma_over_jens_regime_discriminator` (which was REFUTED
+because it tested a marginal cross-env correlate, not a mechanism).
+
+The mechanism (per
+`findings_sigma_over_jens_regime_discriminator.md`):
+
+DDQN's clip replaces `max_a Q_target(s', a)` with
+`Q_target(s', argmax_online(s'))`. Two effects:
+
+  PRO: when Q estimates have positive max-bias, using
+       argmax_online (decoupled estimator) breaks the bias
+       upward-pressure (Hasselt 2010).
+  CON: when argmax_online ≠ argmax_target (they DO disagree
+       because of fresh gradient updates), DDQN bootstraps from
+       a sub-optimal-per-target action. This is a NEW error
+       vanilla doesn't have.
+
+Both PRO and CON propagate through Bellman backups → both scale
+by 1/(1−γ) at γ→1. At γ=0.999, both are amplified ~1000×.
+
+When vanilla's argmax was preserved (uniform Q-overestimation,
+e.g. Asterix γ=0.999), PRO is small (vanilla's argmax wasn't
+corrupted to begin with) and CON dominates → DDQN HARMS outcome.
+
+This is the CON-side mechanism. Three causal edges, three bridges:
+
+  Edge 1 — `ddqn_clip_disrupts_argmax_persistence_at_gamma_999`:
+    DDQN's argmax persistence is LOWER than vanilla's. Tests the
+    direct mechanistic effect of the clip on argmax stability.
+    Predicted: a_lt_b (DDQN persistence < vanilla persistence).
+
+  Edge 2 — `mismatch_predicts_outcome_harm__within_ddqn`:
+    Within DDQN cells at γ=0.999, more bootstrap action mismatch
+    correlates with worse outcome. Tests that the mechanism's
+    proximate effect (mismatch) translates to the distal effect
+    (outcome). Predicted: ρ < 0.
+
+  Edge 3 — `delta_persistence_predicts_delta_outcome_xenv`:
+    Across envs at γ=0.999, the per-env arm-diff in persistence
+    (DDQN-vanilla) correlates with the per-env arm-diff in
+    outcome. Tests the dose-response form: more clip-induced
+    persistence-loss → more outcome harm. Predicted: ρ > 0.
+
+If all three HELD → mechanism chain SUPPORTED. The framework's
+`composed_verdict` AND-aggregates them in
+`finding_ddqn_clip_argmax_harm_chain`."""
+from __future__ import annotations
+
+import math
+
+import polars as pl
+
+from corroborate.analyses.cross_stratum_arm_diff_slope import (
+    CrossStratumArmDiffSlopeResult,
+)
+from corroborate.analyses.stratified_arm_diff_pooled import (
+    StratifiedArmDiffPooledResult,
+)
+from corroborate.analyses.stratified_partial_spearman import (
+    StratifiedPartialSpearmanResult,
+)
+from corroborate.bridge.bridge import Direction, Tier, claim_bridge
+from corroborate.bridge.verdict import RefutationClass, Verdict
+
+from experiments.findings.ddqn._arms import (
+    DDQN_ARM, INTERVENTION, VANILLA_ARM,
+)
+
+
+# Common γ=0.999 + learnability scope: cells where vanilla's Q
+# tracks MC (excludes regime-C Q-explosion cases like FR γ=0.999
+# unshaped). The mechanism only applies when vanilla's argmax
+# carries meaningful policy structure — Q-MC coupling is the
+# proxy for that.
+_GAMMA_999_LEARNABLE_SCOPE: pl.Expr = (
+    (pl.col('gamma') == 0.999)
+    & pl.col('q_mc_burst_correlation_late').is_finite()
+    & (pl.col('q_mc_burst_correlation_late') >= 0.3)
+    & ((pl.col('n_step') == 1) | pl.col('n_step').is_null())
+    & pl.col('action_duplicate_k').is_null()
+    & (pl.col('wrappers') == '()')
+)
+
+
+# ============ Edge 1: clip disrupts argmax persistence ============
+
+@claim_bridge(
+    source=INTERVENTION,
+    target='argmax_persistence_late',
+    direction=Direction.INVERSE,
+    tier=Tier.INTERVENTIONAL,
+    scope=(
+        _GAMMA_999_LEARNABLE_SCOPE
+        & pl.col('argmax_persistence_late').is_finite()
+    ),
+    predicted_direction='a_lt_b',
+)
+def ddqn_clip_disrupts_argmax_persistence_at_gamma_999(
+    stratified_arm_diff_pooled: StratifiedArmDiffPooledResult,
+    *,
+    treatment_arm: str = DDQN_ARM,
+    baseline_arm: str = VANILLA_ARM,
+    source: str = 'argmax_persistence_late',
+    stratify_by: tuple[str, ...] = ('env_name',),
+    scope_predictor: str = 'jensen_gap',
+    min_baseline_predictor: float = 0.5,
+    min_seeds_per_arm: int = 5,
+    harm_floor: float = -0.2,
+    min_strata: int = 1,
+) -> tuple[Verdict, RefutationClass | None]:
+    """Edge 1 of the clip-argmax-harm chain.
+
+    Test that DDQN's clip mechanism is mechanistically active:
+    DDQN's argmax flips MORE often than vanilla's at γ=0.999.
+    Direct evidence that the clip introduces argmax disagreement.
+
+    HELD: per-env pooled Cohen's d on argmax_persistence_late is
+    < `harm_floor` (default −0.2). That is, DDQN's persistence
+    is at least 0.2 SD below vanilla's, pooled across envs.
+
+    REFUTED (SIGN_FLIP): d > +|harm_floor| (DDQN has HIGHER
+    persistence — would contradict the mechanism)."""
+    del treatment_arm, baseline_arm, source, stratify_by
+    del scope_predictor, min_baseline_predictor, min_seeds_per_arm
+    if stratified_arm_diff_pooled.n_strata < min_strata:
+        return Verdict.POWER_INSUFFICIENT, None
+    d = stratified_arm_diff_pooled.pooled_d
+    p = stratified_arm_diff_pooled.pooled_p_value
+    if math.isnan(d) or math.isnan(p):
+        return Verdict.POWER_INSUFFICIENT, None
+    abs_floor = abs(harm_floor)
+    if d <= -abs_floor and p < 0.05:
+        return Verdict.HELD, None
+    if d >= abs_floor and p < 0.05:
+        return Verdict.NO_EFFECT, RefutationClass.SIGN_FLIP
+    return Verdict.POWER_INSUFFICIENT, None
+
+
+# ============ Edge 2: mismatch → outcome harm WITHIN DDQN ============
+
+@claim_bridge(
+    source='bootstrap_action_mismatch_late',
+    target='eval_best_burst_raw_mean',
+    direction=Direction.INVERSE,
+    tier=Tier.ASSOCIATIONAL,
+    scope=(
+        _GAMMA_999_LEARNABLE_SCOPE
+        & pl.col('bootstrap_action_mismatch_late').is_finite()
+        & pl.col('eval_best_burst_raw_mean').is_finite()
+        & pl.col('arm_key').str.contains('double_greedify')
+    ),
+    predicted_direction='a_lt_b',
+)
+def mismatch_predicts_outcome_harm__within_ddqn(
+    stratified_partial_spearman: StratifiedPartialSpearmanResult,
+    *,
+    x: str = 'bootstrap_action_mismatch_late',
+    y: str = 'eval_best_burst_raw_mean',
+    conditioning: str = 'jensen_gap',
+    stratify_by: str = 'env_name',
+    min_stratum_size: int = 5,
+    min_rho: float = 0.3,
+    min_strata: int = 2,
+) -> Verdict:
+    """Edge 2 of the clip-argmax-harm chain.
+
+    Within DDQN cells at γ=0.999, test that bootstrap-action
+    mismatch (clip-induced argmax disagreement) correlates with
+    WORSE outcome. Per-env Spearman partialed by jensen_gap to
+    rule out the mismatch-just-tracks-bias confound, Fisher-z
+    pool across envs.
+
+    Predicted ρ_pool < 0 — more mismatch → worse outcome.
+
+    HELD if pooled partial-r ≤ −`min_rho`. NO_EFFECT (SIGN_FLIP)
+    if pooled-r ≥ +min_rho (would contradict the mechanism).
+    POWER_INSUFFICIENT otherwise."""
+    del x, y, conditioning, stratify_by, min_stratum_size
+    if stratified_partial_spearman.n_strata < min_strata:
+        return Verdict.POWER_INSUFFICIENT
+    rho = stratified_partial_spearman.rho_pooled
+    if math.isnan(rho):
+        return Verdict.POWER_INSUFFICIENT
+    if rho <= -min_rho:
+        return Verdict.HELD
+    if rho >= min_rho:
+        return Verdict.NO_EFFECT
+    return Verdict.POWER_INSUFFICIENT
+
+
+# ============ Edge 3: cross-env dose-response ============
+
+@claim_bridge(
+    source=INTERVENTION,
+    target='eval_best_burst_raw_mean',
+    direction=Direction.DIRECT,
+    tier=Tier.INTERVENTIONAL,
+    scope=(
+        _GAMMA_999_LEARNABLE_SCOPE
+        & pl.col('argmax_persistence_late').is_finite()
+        & pl.col('eval_best_burst_raw_mean').is_finite()
+    ),
+    predicted_direction='a_gt_b',
+)
+def delta_persistence_predicts_delta_outcome_xenv(
+    cross_stratum_arm_diff_slope: CrossStratumArmDiffSlopeResult,
+    *,
+    treatment_arm: str = DDQN_ARM,
+    baseline_arm: str = VANILLA_ARM,
+    target: str = 'eval_best_burst_raw_mean',
+    predictor: str = 'argmax_persistence_late',
+    stratify_by: tuple[str, ...] = ('env_name',),
+    min_seeds_per_arm: int = 5,
+    rho_threshold_held: float = 0.5,
+    p_threshold: float = 0.10,
+    null_threshold: float = 0.2,
+    min_strata: int = 4,
+) -> tuple[Verdict, RefutationClass | None]:
+    """Edge 3 of the clip-argmax-harm chain — dose-response.
+
+    Across envs at γ=0.999 (learnable), Spearman ρ between
+    per-env Δ_persistence (DDQN−vanilla) and per-env Δ_outcome
+    (DDQN−vanilla). Predicts ρ > 0: more persistence-loss →
+    more outcome-loss. Each is negative in the harm regime, so
+    their RANK correlation is positive (both moving in the same
+    "harm" direction).
+
+    Tests the mechanism at the cohort level: does the dose
+    (clip-induced persistence drop) predict the response
+    (outcome drop) across envs?
+
+    HELD if ρ ≥ +`rho_threshold_held` AND p ≤ `p_threshold`.
+    NO_EFFECT (SIGN_FLIP) if ρ ≤ −`rho_threshold_held` (clip
+    helps persistence-loss envs, contradicting mechanism)."""
+    del treatment_arm, baseline_arm, target, predictor, stratify_by
+    del min_seeds_per_arm
+    if cross_stratum_arm_diff_slope.n_strata < min_strata:
+        return Verdict.POWER_INSUFFICIENT, None
+    rho = cross_stratum_arm_diff_slope.rho
+    p = cross_stratum_arm_diff_slope.p_value
+    if math.isnan(rho):
+        return Verdict.POWER_INSUFFICIENT, None
+    if rho >= rho_threshold_held and (math.isnan(p) or p <= p_threshold):
+        return Verdict.HELD, None
+    if rho <= -rho_threshold_held:
+        return Verdict.NO_EFFECT, RefutationClass.SIGN_FLIP
+    if abs(rho) < null_threshold:
+        return Verdict.NO_EFFECT, RefutationClass.NULL_EFFECT
+    return Verdict.POWER_INSUFFICIENT, None
+
+
+BRIDGES = (
+    ddqn_clip_disrupts_argmax_persistence_at_gamma_999,
+    mismatch_predicts_outcome_harm__within_ddqn,
+    delta_persistence_predicts_delta_outcome_xenv,
+)

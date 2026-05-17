@@ -25,6 +25,7 @@ import polars as pl
 from experiments.findings.ddqn_sweeps import (
     finding_asterix_gamma_999_harm,
     finding_breakout_gamma_999_help_underpowered,
+    finding_ddqn_clip_argmax_harm_chain,
     finding_hp_variance_outcome_refuted,
     finding_metamaze_gamma_amplification,
     finding_rs01_rescue_envelope,
@@ -50,6 +51,9 @@ from experiments.findings.ddqn_sweeps.dense_eval_acrobot_k_scaling import (
 from experiments.findings.ddqn_sweeps.sigma_over_jens_regime import (
     BRIDGES as _SIGMA_OVER_JENS_REGIME,
 )
+from experiments.findings.ddqn_sweeps.clip_argmax_harm_mechanism import (
+    BRIDGES as _CLIP_ARGMAX_HARM_MECHANISM,
+)
 
 
 # Loose module scope: only bsuite exclusion. HP-sweep bridges set
@@ -66,6 +70,7 @@ BRIDGES = (
     *_RS_RESCUE,
     *_WITHIN_ENV_SWEEPS,
     *_SIGMA_OVER_JENS_REGIME,
+    *_CLIP_ARGMAX_HARM_MECHANISM,
     ddqn_full_auc_helps_at_acrobot_k16_dense,
     ddqn_full_auc_null_at_acrobot_k4_dense,
 )
@@ -78,4 +83,5 @@ FINDINGS = (
     finding_sigma_over_jens_regime_discriminator,
     finding_asterix_gamma_999_harm,
     finding_breakout_gamma_999_help_underpowered,
+    finding_ddqn_clip_argmax_harm_chain,
 )
