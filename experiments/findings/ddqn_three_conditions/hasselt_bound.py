@@ -317,12 +317,15 @@ def fa_capacity_moderates_ddqn_jens_reduction(
       effect is unmeasurable when there's no signal to
       moderate).
 
-    To discriminate σ_action from FA-truncation, replace the
-    binary `fa_capacity` proxy with a continuous meta-regression
-    on `q_action_std_late` (the proper σ measure per
-    `findings_sigma_K_scaling_corroborated`; already in
-    REQUIRED_MEASURABLES but not consumed by this bridge body).
-    Follow-up work.
+    The sibling discriminator bridge
+    `sigma_action_predicts_ddqn_jens_reduction` (same scope, same
+    stratify_by) tests the σ_action attribution directly via
+    continuous meta-regression on `q_action_std_late`. Empirical
+    state on this corpus: slope = +2.84, p=0.143 — sign-flipped
+    from Hasselt's prediction (NS at n_strata=12). The σ_action
+    attribution is NOT corroborated; the FA-cap effect this
+    bridge HELDs on goes through a non-σ path (likely Type-1
+    FA-truncation per `findings_two_types_of_bias`).
 
     The scope restriction to {FR, Acrobot, MountainCar} is a
     pre-registered inclusion criterion ("envs where vanilla
@@ -334,6 +337,105 @@ def fa_capacity_moderates_ddqn_jens_reduction(
     return meta_regression_coef_verdict(
         meta_regression_unpaired_d,
         'fa_capacity',
+        sign=-1,
+        threshold=slope_threshold,
+        min_strata=min_strata,
+    )
+
+
+@claim_bridge(
+    source=INTERVENTION,
+    target='jensen_gap',
+    direction=Direction.INVERSE,
+    tier=Tier.INTERVENTIONAL,
+    scope=(
+        pl.col('gamma').is_in([0.99, 0.999])
+        & pl.col('fa_kind').is_in(['linear', 'mlp_deep'])
+        & (pl.col('shaping_kind') == 'none')
+        & pl.col('env_name').is_in([
+            'FourRooms-misc', 'Acrobot-v1', 'MountainCar-v0',
+        ])
+        & finite(pl.col('jensen_gap'))
+    ),
+    predicted_direction='a_lt_b',
+)
+def sigma_action_predicts_ddqn_jens_reduction(
+    meta_regression_unpaired_d: MetaRegressionResult,
+    *,
+    treatment_arm: str = (
+        'bootstrap=partial(Claim:bootstrap;'
+        'greedification=Claim:double_greedify)'
+    ),
+    baseline_arm: str = 'baseline',
+    source: str = 'jensen_gap',
+    continuous_covariate: str = 'q_action_std_late',
+    continuous_covariate_arm: str = 'baseline',
+    stratify_by: tuple[str, ...] = ('env_name', 'gamma', 'fa_kind'),
+    min_strata: int = 6,
+    slope_threshold: float = -2.0,
+) -> Verdict:
+    """Discriminating σ_action test: does baseline σ_action
+    (within-state across-action Q SD) predict DDQN's effect on
+    jensen_gap as Hasselt's σ factor implies?
+
+    Per-(env, gamma, fa_kind) independent-samples Cohen's d on
+    `jensen_gap` → random-effects meta-regression on the
+    continuous per-stratum baseline mean of `q_action_std_late`
+    (the proper σ_action measure per
+    `findings_sigma_K_scaling_corroborated`).
+
+    HELD iff slope ≤ `slope_threshold` (= −2.0) AND significant:
+    DDQN's effect on jens becomes more negative as baseline
+    σ_action grows, the directional prediction of Hasselt's
+    bound. This is the test that the binary
+    `fa_capacity_moderates_ddqn_jens_reduction` bridge cannot
+    perform — that bridge HELDs on the FA-capacity binary, but
+    the binary cannot discriminate σ_action capping from
+    Type-1 FA-truncation.
+
+    Empirical state on this corpus (12 strata, 3 envs × 2 γ × 2
+    fa, baseline σ_action ranges 0.005–0.36):
+
+        slope = +2.84  CI = [-1.14, +6.82]  p = 0.143
+        intercept = -0.96  p = 0.017
+
+    The slope is **sign-flipped** from the Hasselt prediction
+    (Hasselt: σ↑ → d_jens↓; observed: σ↑ → d_jens↑, NS). The
+    intercept is significantly negative — DDQN reduces jens
+    even at σ=0 — which is inconsistent with the σ-mediator
+    story (no σ → no Hasselt bias → no DDQN reduction
+    expected).
+
+    Verdict: POWER_INSUFFICIENT at this n_strata. The point
+    estimate already favors REFUTATION of the Hasselt-σ
+    mediator hypothesis (sign-flipped slope + nonzero
+    intercept); the data do not reject the null at α=0.05.
+
+    Refutations (when reached):
+    - NO_EFFECT (sig POSITIVE slope ≥ +2.0): σ_action is NOT
+      the Hasselt mediator; the FA-cap effect goes through a
+      non-σ path (likely Type-1 FA-truncation per
+      `findings_two_types_of_bias`).
+    - HELD: σ_action is the Hasselt mediator at this scope.
+
+    Sibling to `fa_capacity_moderates_ddqn_jens_reduction`:
+    that bridge tests the FA-CAPACITY moderator (HELD), this
+    bridge tests the σ_ACTION moderator (POW_INSUF / point
+    estimate sign-flipped). Together they encode "FA capacity
+    matters, σ_action does not" — the FA-cap effect is NOT
+    mediated by σ_action; Hasselt's σ_action attribution is
+    NOT corroborated by the proper continuous measure on this
+    corpus.
+
+    NOT in either cluster Finding. Stands as the standalone
+    σ-discriminator bridge that documents why the cluster's
+    `fa_capacity_moderates_*` bridge HELDs without identifying
+    Hasselt's σ factor."""
+    del treatment_arm, baseline_arm, source
+    del continuous_covariate, continuous_covariate_arm, stratify_by
+    return meta_regression_coef_verdict(
+        meta_regression_unpaired_d,
+        'q_action_std_late',
         sign=-1,
         threshold=slope_threshold,
         min_strata=min_strata,

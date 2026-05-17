@@ -106,6 +106,7 @@ from experiments.findings.ddqn_three_conditions.hasselt_bound import (
     ddqn_reduction_amplified_by_gamma__fr_mlp_k4_unshaped,
     fa_capacity_moderates_ddqn_jens_reduction,
     linear_fa_cap_fails_at_metamaze_g999__exception,
+    sigma_action_predicts_ddqn_jens_reduction,
 )
 from experiments.findings.ddqn_three_conditions.outcome_translation import (
     ddqn_helps_outcome_at_fr_g999_mlp_unshaped__k_panel,
@@ -118,6 +119,7 @@ BRIDGES = (
     ddqn_reduction_amplified_by_gamma__fr_mlp_k4_unshaped,
     fa_capacity_moderates_ddqn_jens_reduction,
     linear_fa_cap_fails_at_metamaze_g999__exception,
+    sigma_action_predicts_ddqn_jens_reduction,
     ddqn_helps_outcome_at_fr_g999_mlp_unshaped__k_panel,
     ddqn_no_positive_outcome_under_shaping__fr_shaped_fa_x_gamma_panel,
 )

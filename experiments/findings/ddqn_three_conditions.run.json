@@ -105,7 +105,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_reduces_jens_uniformly_across_k_at_fr_high_gamma",
       "direction": "inverse",
-      "extent_hash": 7771810083601638625,
+      "extent_hash": -5683678125584685631,
       "n_cells_in_scope": 566,
       "n_cells_pre_scope": 4711,
       "pair_by": [
@@ -202,7 +202,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_reduction_amplified_by_gamma__fr_mlp_k4_unshaped",
       "direction": "inverse",
-      "extent_hash": 4012287188096217227,
+      "extent_hash": -1609369652408284687,
       "n_cells_in_scope": 593,
       "n_cells_pre_scope": 4711,
       "pair_by": [
@@ -258,7 +258,7 @@
       "blocked_by": null,
       "bridge_name": "fa_capacity_moderates_ddqn_jens_reduction",
       "direction": "inverse",
-      "extent_hash": -6039540812313706053,
+      "extent_hash": -1489025875397242948,
       "n_cells_in_scope": 2911,
       "n_cells_pre_scope": 4711,
       "pair_by": [
@@ -368,7 +368,7 @@
       "blocked_by": null,
       "bridge_name": "linear_fa_cap_fails_at_metamaze_g999__exception",
       "direction": "inverse",
-      "extent_hash": 1095044495448909785,
+      "extent_hash": 6082824078887216172,
       "n_cells_in_scope": 420,
       "n_cells_pre_scope": 4711,
       "pair_by": [
@@ -388,6 +388,65 @@
       "target_name": "jensen_gap",
       "tier": "interventional",
       "verdict": "held",
+      "warnings": []
+    },
+    {
+      "analysis_results": {
+        "meta_regression_unpaired_d": {
+          "cleavage_axes": [],
+          "coefficients": [
+            {
+              "ci_hi": 6.82186,
+              "ci_lo": -1.14382,
+              "coefficient": 2.83902,
+              "is_significant": false,
+              "name": "q_action_std_late",
+              "p_value": 0.143315
+            }
+          ],
+          "i_squared": 0.962165,
+          "intercept": -0.962596,
+          "intercept_ci_hi": -0.208532,
+          "intercept_ci_lo": -1.71666,
+          "intercept_p_value": 0.017419,
+          "intercept_se": 0.338428,
+          "n_strata": 12,
+          "pool": "random",
+          "q_statistic": 264.309,
+          "r_squared": 0.201439,
+          "tau_sq": 0.473881
+        }
+      },
+      "assumption_violations": [],
+      "blocked_by": null,
+      "bridge_name": "sigma_action_predicts_ddqn_jens_reduction",
+      "direction": "inverse",
+      "extent_hash": -1489025875397242948,
+      "n_cells_in_scope": 2911,
+      "n_cells_pre_scope": 4711,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "baseline_arm": "baseline",
+        "continuous_covariate": "q_action_std_late",
+        "continuous_covariate_arm": "baseline",
+        "min_strata": 6,
+        "slope_threshold": -2.0,
+        "source": "jensen_gap",
+        "stratify_by": [
+          "env_name",
+          "gamma",
+          "fa_kind"
+        ],
+        "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
+      },
+      "predicted_direction": "a_lt_b",
+      "scope_repr": "[([([([(col(\"gamma\").is_in([[0.99, 0.999]])) & (col(\"fa_kind\").is_in([[\"linear\", \"mlp_deep\"]]))]) & ([(col(\"shaping_kind\")) == (\"none\")])]) & (col(\"env_name\").is_in([[\"FourRooms-misc\", \"Acrobot-v1\", \"MountainCar-v0\"]]))]) & (col(\"jensen_gap\").is_finite())]",
+      "source_name": "do(baseline|bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify))",
+      "target_name": "jensen_gap",
+      "tier": "interventional",
+      "verdict": "power_insufficient",
       "warnings": []
     },
     {
@@ -495,7 +554,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_helps_outcome_at_fr_g999_mlp_unshaped__k_panel",
       "direction": "direct",
-      "extent_hash": 7771810083601638625,
+      "extent_hash": -5683678125584685631,
       "n_cells_in_scope": 506,
       "n_cells_pre_scope": 4711,
       "pair_by": [
@@ -625,9 +684,9 @@
       },
       "assumption_violations": [],
       "blocked_by": null,
-      "bridge_name": "shaping_decouples_outcome_benefit__fr_shaped_fa_x_gamma_panel",
+      "bridge_name": "ddqn_no_positive_outcome_under_shaping__fr_shaped_fa_x_gamma_panel",
       "direction": "direct",
-      "extent_hash": 5600014379270347368,
+      "extent_hash": 8756511552249551302,
       "n_cells_in_scope": 240,
       "n_cells_pre_scope": 4711,
       "pair_by": [
@@ -653,15 +712,16 @@
   ],
   "cache_path": "experiments/data/cache/ddqn_three_conditions.parquet",
   "errored_bridges": [],
-  "git_commit": "086b4f8298a0",
+  "git_commit": "44636217e50f",
   "hypothesis_module": "experiments.findings.ddqn_three_conditions",
   "measurable_signatures": {
     "eval_best_burst_raw_mean": "829be9a6bcc9c696",
     "fa_kind": "0a45c52b5f1196cd",
     "jensen_gap": "950342c492febd27",
     "k_eff": "897a3817d75dcb99",
+    "q_action_std_late": "7765d6e892aaf5f0",
     "shaping_kind": "8d7b9f162d87a266"
   },
   "n_cells_total": 4711,
-  "timestamp_utc": "2026-05-17T02:25:57+00:00"
+  "timestamp_utc": "2026-05-17T03:15:03+00:00"
 }

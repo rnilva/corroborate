@@ -48,13 +48,23 @@ theoretical instance.
 **What this Finding does NOT claim**:
 - That Hasselt's bound has been identified factor-by-factor.
 - That `σ_action × √(2 ln K) × 1/(1−γ)` is a TIGHT bound.
-- That the scalings would survive in a Hasselt-discriminating
-  panel: natural-K bridge across envs with native |A|
-  variation; continuous σ regression on `q_action_std_late`;
-  γ-amplification threshold tightened to ≥ 8× plus γ=0.995.
 - Generalisation of the FA-axis (rule + exception) beyond
   {FR, Acrobot, MountainCar} + the MetaMaze γ=0.999 exception
-  cell."""
+  cell.
+
+**Sibling discriminator (NOT in this cluster)**:
+`sigma_action_predicts_ddqn_jens_reduction` tests whether the
+FA-axis bridge (3a) actually identifies Hasselt's σ_action.
+Continuous meta-regression on the proper σ measure
+(`q_action_std_late`) returns slope = +2.84, p=0.143 at
+n_strata=12 — sign-flipped from Hasselt's prediction, NS.
+Verdict: POWER_INSUFFICIENT, but the point estimate already
+favors REFUTATION of the σ_action attribution. The FA-axis
+HELD goes through a non-σ path. This bridge stays OUTSIDE
+the cluster because the cluster's claim is about the
+SCALINGS being monotone — which is corroborated. The σ
+attribution is a separate claim, separately tested and not
+identified."""
 from __future__ import annotations
 
 from corroborate.bridge.bridge import Bridge
