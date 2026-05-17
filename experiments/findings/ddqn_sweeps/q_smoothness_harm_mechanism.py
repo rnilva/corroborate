@@ -88,21 +88,21 @@ _ASTERIX_GAMMA_999_LEARNABLE_SCOPE: pl.Expr = (
 
 @claim_bridge(
     source=INTERVENTION,
-    target='q_autocorr_late',
+    target='q_inter_state_grad_overlap_late',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
     scope=(
         _ASTERIX_GAMMA_999_LEARNABLE_SCOPE
-        & pl.col('q_autocorr_late').is_finite()
+        & pl.col('q_inter_state_grad_overlap_late').is_finite()
     ),
     predicted_direction='a_lt_b',
 )
-def ddqn_cuts_q_autocorr_asterix_gamma_999(
+def ddqn_cuts_q_smoothness_asterix_gamma_999(
     stratified_arm_diff_pooled: StratifiedArmDiffPooledResult,
     *,
     treatment_arm: str = DDQN_ARM,
     baseline_arm: str = VANILLA_ARM,
-    source: str = 'q_autocorr_late',
+    source: str = 'q_inter_state_grad_overlap_late',
     stratify_by: tuple[str, ...] = ('env_name',),
     scope_predictor: str = 'jensen_gap',
     min_baseline_predictor: float = 50.0,
@@ -114,15 +114,15 @@ def ddqn_cuts_q_autocorr_asterix_gamma_999(
     """Edge 1 of the Q-smoothness-harm chain.
 
     Test the mechanism is active: DDQN's clip reduces Q-function
-    smoothness across consecutive training steps on Asterix
-    γ=0.999. q_autocorr_late is the lag-1 autocorrelation of
-    batch-mean Q across training steps in the late half — lower
-    autocorr = more "jagged" Q-function step to step.
+    smoothness across consecutive trajectory states on Asterix
+    γ=0.999. `q_inter_state_grad_overlap_late` measures the
+    inner-product alignment of dQ/dθ between consecutive states
+    in the late half — high overlap = trunk gradients propagate
+    coherently across states (smooth value surface), low overlap
+    = states discriminate sharply.
 
-    Empirical preview (canonical ddqn cache, n=30/arm): vanilla
-    q_autocorr = 0.9995, DDQN = 0.9992, d=−1.98 z=−7.7. Tiny
-    absolute change but huge effect size because seed variance
-    is also tiny.
+    Empirical preview (ddqn_sweeps cache, n=30/arm): vanilla
+    overlap = 0.9792, DDQN = 0.9708, d=−2.13 z=−8.24.
 
     HELD: pooled Cohen's d ≤ harm_floor (default −0.5) AND p <
     alpha. Predicted direction: a_lt_b.
@@ -147,21 +147,21 @@ def ddqn_cuts_q_autocorr_asterix_gamma_999(
 # ============ Edge 2: Q-smoothness → outcome ============
 
 @claim_bridge(
-    source='q_autocorr_late',
+    source='q_inter_state_grad_overlap_late',
     target='eval_best_burst_raw_mean',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
     scope=(
         _ASTERIX_GAMMA_999_LEARNABLE_SCOPE
-        & pl.col('q_autocorr_late').is_finite()
+        & pl.col('q_inter_state_grad_overlap_late').is_finite()
         & pl.col('eval_best_burst_raw_mean').is_finite()
     ),
     predicted_direction='a_gt_b',
 )
-def q_autocorr_predicts_outcome__asterix_gamma_999(
+def q_smoothness_predicts_outcome__asterix_gamma_999(
     stratified_partial_spearman: StratifiedPartialSpearmanResult,
     *,
-    x: str = 'q_autocorr_late',
+    x: str = 'q_inter_state_grad_overlap_late',
     y: str = 'eval_best_burst_raw_mean',
     conditioning: str = 'jensen_gap',
     stratify_by: str = 'env_name',
@@ -172,17 +172,17 @@ def q_autocorr_predicts_outcome__asterix_gamma_999(
     """Edge 2 of the Q-smoothness-harm chain.
 
     Within Asterix γ=0.999 cells (across both arms), Q-smoothness
-    (q_autocorr_late) correlates POSITIVELY with outcome. Tests
-    that the proximate mediator (smoothness) is the actual cause
-    of outcome — cells with smoother Q score higher.
+    (q_inter_state_grad_overlap_late) correlates POSITIVELY with
+    outcome. Tests that the proximate mediator (smoothness) is
+    the actual cause of outcome — cells with smoother Q score
+    higher.
 
     Conditioning on `jensen_gap` partials out the smoothness-
     just-tracks-bias confound.
 
-    Empirical preview (canonical ddqn cache, 60 cells pooled):
-    r(q_autocorr, outcome) = +0.530 p<0.001 (Pearson).
-    Vanilla-only: r=+0.486 p=0.007. DDQN-only: r=+0.402 p=0.028.
-    The correlation holds WITHIN each arm.
+    Empirical preview (ddqn_sweeps cache, 60 cells pooled):
+    r(q_inter_state_grad_overlap_late, outcome) = +0.381 p=0.003
+    (Pearson).
 
     HELD: pooled partial-r ≥ `min_rho` (default +0.3)."""
     del x, y, conditioning, stratify_by, min_stratum_size
@@ -199,6 +199,6 @@ def q_autocorr_predicts_outcome__asterix_gamma_999(
 
 
 BRIDGES = (
-    ddqn_cuts_q_autocorr_asterix_gamma_999,
-    q_autocorr_predicts_outcome__asterix_gamma_999,
+    ddqn_cuts_q_smoothness_asterix_gamma_999,
+    q_smoothness_predicts_outcome__asterix_gamma_999,
 )
