@@ -25,6 +25,7 @@ import polars as pl
 from experiments.findings.ddqn_sweeps import (
     finding_asterix_g999_pc_mediator_triangle,
     finding_asterix_g999_smoothness_harm_chain,
+    finding_pc_cross_env_smoothness,
     finding_asterix_gamma_999_harm,
     finding_breakout_gamma_999_help_underpowered,
     finding_ddqn_clip_argmax_harm_chain,
@@ -62,6 +63,9 @@ from experiments.findings.ddqn_sweeps.q_smoothness_harm_mechanism import (
 from experiments.findings.ddqn_sweeps.pc_mediator_triangle_asterix import (
     BRIDGES as _PC_MEDIATOR_TRIANGLE,
 )
+from experiments.findings.ddqn_sweeps.pc_cross_env_smoothness import (
+    BRIDGES as _PC_CROSS_ENV_SMOOTHNESS,
+)
 
 
 # Loose module scope: only bsuite exclusion. HP-sweep bridges set
@@ -81,6 +85,7 @@ BRIDGES = (
     *_CLIP_ARGMAX_HARM_MECHANISM,
     *_Q_SMOOTHNESS_HARM_MECHANISM,
     *_PC_MEDIATOR_TRIANGLE,
+    *_PC_CROSS_ENV_SMOOTHNESS,
     ddqn_full_auc_helps_at_acrobot_k16_dense,
     ddqn_full_auc_null_at_acrobot_k4_dense,
 )
@@ -96,4 +101,5 @@ FINDINGS = (
     finding_ddqn_clip_argmax_harm_chain,
     finding_asterix_g999_smoothness_harm_chain,
     finding_asterix_g999_pc_mediator_triangle,
+    finding_pc_cross_env_smoothness,
 )
