@@ -77,20 +77,27 @@ from corroborate.bridge.verdict import RefutationClass, Verdict
 from experiments.findings.ddqn._arms import (
     DDQN_ARM, INTERVENTION, VANILLA_ARM,
 )
+from experiments.findings.ddqn._scope import CANONICAL_HP_EXCLUDING_GAMMA
 
 
-# Common γ=0.999 + learnability scope: cells where vanilla's Q
-# tracks MC (excludes regime-C Q-explosion cases like FR γ=0.999
-# unshaped). The mechanism only applies when vanilla's argmax
-# carries meaningful policy structure — Q-MC coupling is the
-# proxy for that.
-_GAMMA_999_LEARNABLE_SCOPE: pl.Expr = (
+# File-level scope shared by every bridge in this module. Three
+# requirements composed:
+#   1. γ=0.999 (the regime where the mechanism amplifies via 1/(1-γ))
+#   2. CANONICAL_HP_EXCLUDING_GAMMA — canonical-shape HPs per env
+#      (sync, capacity, hidden, channels, lr, wrappers, etc.) so
+#      cross-env effects aren't confounded by HP-sweep variants
+#      (Acrobot has 2130 γ=0.999 cells across HP-varied corpora;
+#      MountainCar 1440; CartPole 720 — most of those are HP
+#      sweeps that contaminate the mechanism test if not filtered).
+#   3. q_mc_burst_correlation_late >= 0.3 — vanilla's Q tracks MC,
+#      excluding regime-C Q-explosion cases (FR γ=0.999 unshaped)
+#      where vanilla's argmax doesn't carry meaningful policy
+#      structure and the mechanism doesn't apply.
+_GAMMA_999_LEARNABLE_CANONICAL_SCOPE: pl.Expr = (
     (pl.col('gamma') == 0.999)
+    & CANONICAL_HP_EXCLUDING_GAMMA
     & pl.col('q_mc_burst_correlation_late').is_finite()
     & (pl.col('q_mc_burst_correlation_late') >= 0.3)
-    & ((pl.col('n_step') == 1) | pl.col('n_step').is_null())
-    & pl.col('action_duplicate_k').is_null()
-    & (pl.col('wrappers') == '()')
 )
 
 
@@ -102,7 +109,7 @@ _GAMMA_999_LEARNABLE_SCOPE: pl.Expr = (
     direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
     scope=(
-        _GAMMA_999_LEARNABLE_SCOPE
+        _GAMMA_999_LEARNABLE_CANONICAL_SCOPE
         & pl.col('state_conditional_argmax_entropy_late').is_finite()
     ),
     predicted_direction='a_gt_b',
@@ -183,7 +190,7 @@ def ddqn_clip_increases_state_conditional_argmax_entropy(
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
     scope=(
-        _GAMMA_999_LEARNABLE_SCOPE
+        _GAMMA_999_LEARNABLE_CANONICAL_SCOPE
         & pl.col('bootstrap_action_mismatch_late').is_finite()
         & pl.col('eval_best_burst_raw_mean').is_finite()
         & pl.col('arm_key').str.contains('double_greedify')
@@ -235,7 +242,7 @@ def mismatch_predicts_outcome_harm__within_ddqn(
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
     scope=(
-        _GAMMA_999_LEARNABLE_SCOPE
+        _GAMMA_999_LEARNABLE_CANONICAL_SCOPE
         & pl.col('state_conditional_argmax_entropy_late').is_finite()
         & pl.col('eval_best_burst_raw_mean').is_finite()
     ),

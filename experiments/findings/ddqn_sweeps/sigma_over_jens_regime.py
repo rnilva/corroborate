@@ -64,8 +64,22 @@ from corroborate.bridge.verdict import RefutationClass, Verdict
 from experiments.findings.ddqn._arms import (
     DDQN_ARM, INTERVENTION, VANILLA_ARM,
 )
+from experiments.findings.ddqn._scope import CANONICAL_HP_EXCLUDING_GAMMA
 from experiments.findings.ddqn._verdicts import (
     cross_stratum_signed_spearman_verdict,
+)
+
+
+# File-level scope shared by every bridge in this module: γ=0.999
+# + canonical-shape HPs + Q-MC coupled. See
+# `clip_argmax_harm_mechanism._GAMMA_999_LEARNABLE_CANONICAL_SCOPE`
+# for the rationale (this is identical to that constant — could
+# be hoisted to a shared file if a third module wants it).
+_GAMMA_999_LEARNABLE_CANONICAL_SCOPE: pl.Expr = (
+    (pl.col('gamma') == 0.999)
+    & CANONICAL_HP_EXCLUDING_GAMMA
+    & pl.col('q_mc_burst_correlation_late').is_finite()
+    & (pl.col('q_mc_burst_correlation_late') >= 0.3)
 )
 
 
@@ -93,14 +107,9 @@ _SIGMA_OVER_JENS_PER_ENV: MappingProxyType[object, MappingProxyType[str, float]]
     direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
     scope=(
-        (pl.col('gamma') == 0.999)
+        _GAMMA_999_LEARNABLE_CANONICAL_SCOPE
         & pl.col('eval_best_burst_raw_mean').is_finite()
         & pl.col('jensen_gap').is_finite()
-        & pl.col('q_mc_burst_correlation_late').is_finite()
-        & (pl.col('q_mc_burst_correlation_late') >= 0.3)
-        & ((pl.col('n_step') == 1) | pl.col('n_step').is_null())
-        & pl.col('action_duplicate_k').is_null()
-        & (pl.col('wrappers') == '()')
         & pl.col('env_name').is_in(tuple(_SIGMA_OVER_JENS_PER_ENV.keys()))
     ),
     predicted_direction='a_gt_b',
@@ -163,14 +172,9 @@ def ddqn_outcome_scales_with_sigma_over_jens__gamma_999_xenv(
     tier=Tier.INTERVENTIONAL,
     scope=(
         (pl.col('env_name') == 'Asterix-MinAtar')
-        & (pl.col('gamma') == 0.999)
+        & _GAMMA_999_LEARNABLE_CANONICAL_SCOPE
         & pl.col('eval_best_burst_raw_mean').is_finite()
         & pl.col('jensen_gap').is_finite()
-        & pl.col('q_mc_burst_correlation_late').is_finite()
-        & (pl.col('q_mc_burst_correlation_late') >= 0.3)
-        & ((pl.col('n_step') == 1) | pl.col('n_step').is_null())
-        & pl.col('action_duplicate_k').is_null()
-        & (pl.col('wrappers') == '()')
     ),
     predicted_direction='a_lt_b',
 )
@@ -208,14 +212,9 @@ def ddqn_harms_asterix_gamma_999(
     tier=Tier.INTERVENTIONAL,
     scope=(
         (pl.col('env_name') == 'Breakout-MinAtar')
-        & (pl.col('gamma') == 0.999)
+        & _GAMMA_999_LEARNABLE_CANONICAL_SCOPE
         & pl.col('eval_best_burst_raw_mean').is_finite()
         & pl.col('jensen_gap').is_finite()
-        & pl.col('q_mc_burst_correlation_late').is_finite()
-        & (pl.col('q_mc_burst_correlation_late') >= 0.3)
-        & ((pl.col('n_step') == 1) | pl.col('n_step').is_null())
-        & pl.col('action_duplicate_k').is_null()
-        & (pl.col('wrappers') == '()')
     ),
     predicted_direction='a_gt_b',
 )
@@ -301,14 +300,9 @@ def _ci_test(
     direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
     scope=(
-        (pl.col('gamma') == 0.999)
+        _GAMMA_999_LEARNABLE_CANONICAL_SCOPE
         & pl.col('eval_late_burst_raw_mean').is_finite()
         & pl.col('jensen_gap').is_finite()
-        & pl.col('q_mc_burst_correlation_late').is_finite()
-        & (pl.col('q_mc_burst_correlation_late') >= 0.3)
-        & ((pl.col('n_step') == 1) | pl.col('n_step').is_null())
-        & pl.col('action_duplicate_k').is_null()
-        & (pl.col('wrappers') == '()')
         & pl.col('env_name').is_in(tuple(_SIGMA_OVER_JENS_PER_ENV.keys()))
     ),
     predicted_direction='a_gt_b',
@@ -359,14 +353,9 @@ def ddqn_outcome_scales_with_sigma_over_jens__gamma_999_xenv__late_burst(
     direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
     scope=(
-        (pl.col('gamma') == 0.999)
+        _GAMMA_999_LEARNABLE_CANONICAL_SCOPE
         & pl.col('eval_full_auc_raw_mean').is_finite()
         & pl.col('jensen_gap').is_finite()
-        & pl.col('q_mc_burst_correlation_late').is_finite()
-        & (pl.col('q_mc_burst_correlation_late') >= 0.3)
-        & ((pl.col('n_step') == 1) | pl.col('n_step').is_null())
-        & pl.col('action_duplicate_k').is_null()
-        & (pl.col('wrappers') == '()')
         & pl.col('env_name').is_in(tuple(_SIGMA_OVER_JENS_PER_ENV.keys()))
     ),
     predicted_direction='a_gt_b',
@@ -416,14 +405,9 @@ def ddqn_outcome_scales_with_sigma_over_jens__gamma_999_xenv__full_auc(
     tier=Tier.INTERVENTIONAL,
     scope=(
         (pl.col('env_name') == 'Asterix-MinAtar')
-        & (pl.col('gamma') == 0.999)
+        & _GAMMA_999_LEARNABLE_CANONICAL_SCOPE
         & pl.col('eval_late_burst_raw_mean').is_finite()
         & pl.col('jensen_gap').is_finite()
-        & pl.col('q_mc_burst_correlation_late').is_finite()
-        & (pl.col('q_mc_burst_correlation_late') >= 0.3)
-        & ((pl.col('n_step') == 1) | pl.col('n_step').is_null())
-        & pl.col('action_duplicate_k').is_null()
-        & (pl.col('wrappers') == '()')
     ),
     predicted_direction='a_lt_b',
 )
@@ -457,14 +441,9 @@ def ddqn_harms_asterix_gamma_999__late_burst(
     tier=Tier.INTERVENTIONAL,
     scope=(
         (pl.col('env_name') == 'Asterix-MinAtar')
-        & (pl.col('gamma') == 0.999)
+        & _GAMMA_999_LEARNABLE_CANONICAL_SCOPE
         & pl.col('eval_full_auc_raw_mean').is_finite()
         & pl.col('jensen_gap').is_finite()
-        & pl.col('q_mc_burst_correlation_late').is_finite()
-        & (pl.col('q_mc_burst_correlation_late') >= 0.3)
-        & ((pl.col('n_step') == 1) | pl.col('n_step').is_null())
-        & pl.col('action_duplicate_k').is_null()
-        & (pl.col('wrappers') == '()')
     ),
     predicted_direction='a_lt_b',
 )
@@ -497,14 +476,9 @@ def ddqn_harms_asterix_gamma_999__full_auc(
     tier=Tier.INTERVENTIONAL,
     scope=(
         (pl.col('env_name') == 'Breakout-MinAtar')
-        & (pl.col('gamma') == 0.999)
+        & _GAMMA_999_LEARNABLE_CANONICAL_SCOPE
         & pl.col('eval_late_burst_raw_mean').is_finite()
         & pl.col('jensen_gap').is_finite()
-        & pl.col('q_mc_burst_correlation_late').is_finite()
-        & (pl.col('q_mc_burst_correlation_late') >= 0.3)
-        & ((pl.col('n_step') == 1) | pl.col('n_step').is_null())
-        & pl.col('action_duplicate_k').is_null()
-        & (pl.col('wrappers') == '()')
     ),
     predicted_direction='a_gt_b',
 )
@@ -537,14 +511,9 @@ def ddqn_helps_breakout_gamma_999__late_burst(
     tier=Tier.INTERVENTIONAL,
     scope=(
         (pl.col('env_name') == 'Breakout-MinAtar')
-        & (pl.col('gamma') == 0.999)
+        & _GAMMA_999_LEARNABLE_CANONICAL_SCOPE
         & pl.col('eval_full_auc_raw_mean').is_finite()
         & pl.col('jensen_gap').is_finite()
-        & pl.col('q_mc_burst_correlation_late').is_finite()
-        & (pl.col('q_mc_burst_correlation_late') >= 0.3)
-        & ((pl.col('n_step') == 1) | pl.col('n_step').is_null())
-        & pl.col('action_duplicate_k').is_null()
-        & (pl.col('wrappers') == '()')
     ),
     predicted_direction='a_gt_b',
 )

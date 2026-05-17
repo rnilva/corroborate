@@ -59,7 +59,10 @@ _PER_ENV_CANONICAL: tuple[
 
 
 def _build_per_env_canonical_filter() -> pl.Expr:
-    """Disjunction of per-env canonical filters (per-env total_steps)."""
+    """Disjunction of per-env canonical HP filters (per-env total_steps).
+    Use `PER_ENV_CANONICAL_HP_FILTER` (precomputed) at file scope —
+    this function is the builder, the constant is what consumers
+    import."""
     parts: list[pl.Expr] = []
     for env, sync, capacity, hidden, channels, total in _PER_ENV_CANONICAL:
         cond = (
@@ -80,15 +83,30 @@ def _build_per_env_canonical_filter() -> pl.Expr:
     return out
 
 
-DDQN_CANONICAL_REGIME: pl.Expr = (
-    (pl.col('gamma') == 0.99)
-    & (pl.col('optimizer.inner.lr') == 0.0001)
+PER_ENV_CANONICAL_HP_FILTER: pl.Expr = _build_per_env_canonical_filter()
+"""γ-free canonical HP disjunction across envs. Exposed for
+γ-sweep modules (e.g. `ddqn_sweeps.clip_argmax_harm_mechanism`)
+that want to AND canonical-shape HPs without pinning γ. The
+canonical regime composes this with γ=0.99."""
+
+
+CANONICAL_HP_EXCLUDING_GAMMA: pl.Expr = (
+    (pl.col('optimizer.inner.lr') == 0.0001)
     & ((pl.col('n_step') == 1) | pl.col('n_step').is_null())
     & pl.col('action_duplicate_k').is_null()
     & (pl.col('reward_scale').is_null() | (pl.col('reward_scale') == 1.0))
     & pl.col('target_sync.tau').is_null()
     & (pl.col('wrappers') == '()')
-    & _build_per_env_canonical_filter()
+    & PER_ENV_CANONICAL_HP_FILTER
+)
+"""All canonical HP filters EXCEPT γ. Use in γ-varied modules
+(e.g. `ddqn_sweeps`) where bridges test specific γ values but
+otherwise want canonical-shape cells."""
+
+
+DDQN_CANONICAL_REGIME: pl.Expr = (
+    (pl.col('gamma') == 0.99)
+    & CANONICAL_HP_EXCLUDING_GAMMA
 )
 
 

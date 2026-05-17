@@ -65,10 +65,20 @@ from experiments.findings.ddqn_sweeps.sigma_over_jens_regime import (
 )
 
 
-EXPECTED: ClusterVerdict = ClusterVerdict.REFUTED
+EXPECTED: ClusterVerdict = ClusterVerdict.UNDERPOWERED
 
 
-BLOCKED_ON: str | None = None
+BLOCKED_ON: str | None = (
+    'After tightening the bridge scope to canonical-shape HPs '
+    '(via CANONICAL_HP_EXCLUDING_GAMMA), the HP-varied Acrobot / '
+    'MountainCar / CartPole γ=0.999 cells drop out and n_strata '
+    'falls below the cross-env Spearman threshold. The earlier '
+    'REFUTED verdict was an artifact of HP-mixed pool — on the '
+    'clean canonical panel we honestly don\'t have power. '
+    'k=2 / k=4 sweep + Asterix-verify SI γ=0.999 will populate '
+    'enough canonical-shape γ=0.999 cells across MinAtar envs '
+    'to retest with adequate power.'
+)
 
 
 BRIDGES: tuple[Bridge, ...] = (
