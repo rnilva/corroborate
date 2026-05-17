@@ -99,6 +99,7 @@ from experiments.findings.ddqn_three_conditions import (
     finding_q_magnitude_residual_mediator,
     finding_shaping_decouples,
     finding_sigma_action_completes_chain,
+    finding_warmup_rescues_vanilla,
 )
 from experiments.findings.ddqn_three_conditions._arms import (
     INTERVENTION as INTERVENTION,
@@ -125,6 +126,8 @@ from experiments.findings.ddqn_three_conditions.jens_reduction_factors import (
     sigma_action_predicts_jens_residual_at_fr_mlp,
     vanilla_anchor_collapses_with_gamma_at_fr_mlp,
     vanilla_anchor_preserved_with_gamma_at_acrobot_mlp,
+    vanilla_jens_shrinks_with_warmup_at_fr_g999_mlp,
+    vanilla_outcome_recovers_with_warmup_at_fr_g999_mlp,
 )
 from experiments.findings.ddqn_three_conditions.outcome_translation import (
     ddqn_helps_outcome_at_fr_g999_mlp_unshaped__k_panel,
@@ -153,6 +156,8 @@ BRIDGES = (
     gamma_jens_jointly_mediated_by_self_ref_and_sigma_action_at_fr_mlp,
     gamma_jens_marginal_small_at_acrobot_mlp,
     q_late_sign_flipped_with_gamma_at_acrobot_mlp,
+    vanilla_outcome_recovers_with_warmup_at_fr_g999_mlp,
+    vanilla_jens_shrinks_with_warmup_at_fr_g999_mlp,
 )
 
 
@@ -165,6 +170,7 @@ FINDINGS = (
     finding_joint_mediation_incomplete,
     finding_sigma_action_completes_chain,
     finding_acrobot_chain_does_not_replicate,
+    finding_warmup_rescues_vanilla,
 )
 
 

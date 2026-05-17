@@ -1254,3 +1254,125 @@ def q_late_sign_flipped_with_gamma_at_acrobot_mlp(
         sign=-1,
         threshold=rho_threshold,
     )
+
+
+# === Anchor-failure causal-intervention test (FR γ=0.999 warmup sweep) ===
+#
+# `fr_warmup_intervention` sweep manipulates `optimizer.warmup_steps`
+# at FR × γ=0.999 × MLP × unshaped. `warmed_update` zeros Q-parameter
+# updates during warmup; ε-greedy still explores (replay fills). If
+# the goal is found during warmup, the replay buffer carries reward
+# signal when training begins → Q anchors on real return.
+#
+# Predictions:
+# - vanilla outcome SCALES POSITIVELY with warmup_steps (more
+#   random-walk time → more reward-finding → MC anchors)
+# - vanilla jens SCALES NEGATIVELY with warmup_steps (Q stays
+#   anchored, less explosion)
+#
+# If both predictions HELD, the anchor-failure mechanism is
+# corroborated CAUSALLY (intervention on Q-update timing changes
+# vanilla's outcome and bias profile in the predicted direction).
+
+
+@claim_bridge(
+    source='optimizer.warmup_steps',
+    target='eval_best_burst_raw_mean',
+    direction=Direction.DIRECT,
+    tier=Tier.INTERVENTIONAL,
+    scope=(
+        (pl.col('env_name') == 'FourRooms-misc')
+        & (pl.col('fa_kind') == 'mlp_deep')
+        & (pl.col('shaping_kind') == 'none')
+        & (pl.col('arm_key') == 'baseline')
+        & (pl.col('gamma') == 0.999)
+        & pl.col('optimizer.warmup_steps').is_in([100, 10000, 100000])
+        & finite(pl.col('eval_best_burst_raw_mean'))
+    ),
+    predicted_direction='a_gt_b',
+)
+def vanilla_outcome_recovers_with_warmup_at_fr_g999_mlp(
+    stratified_spearman: StratifiedSpearmanResult,
+    *,
+    x: str = 'optimizer.warmup_steps',
+    y: str = 'eval_best_burst_raw_mean',
+    stratify_by: str = 'env_name',
+    min_stratum_size: int = 30,
+    rho_threshold: float = 0.5,
+) -> Verdict:
+    """Vanilla outcome at FR × γ=0.999 × MLP × unshaped × baseline
+    recovers as `optimizer.warmup_steps` grows — the
+    anchor-failure causal-intervention test.
+
+    Per-cell Spearman ρ(warmup_steps, eval_best_burst_raw_mean)
+    over baseline cells with warmup ∈ {100, 10k, 100k}. Predicted
+    strong positive: longer warmup gives ε-greedy more random-walk
+    time to find the goal before Q-updates begin → MC anchors Q
+    when training starts → vanilla learns properly.
+
+    HELDs iff ρ ≥ +0.5 AND p < 0.05.
+
+    Refutations:
+    - NO_EFFECT (sig negative ρ): vanilla outcome WORSENS with
+      warmup. Anchor-failure hypothesis refuted.
+    - POWER_INSUFFICIENT (small or NS ρ): warmup doesn't change
+      vanilla outcome. Anchor-failure mechanism not the
+      load-bearing path; some other mechanism (e.g., exploration
+      itself is the bottleneck independent of Q-drift speed)
+      drives the FR γ=0.999 failure mode.
+
+    Companion: `vanilla_jens_shrinks_with_warmup_at_fr_g999_mlp`.
+    Together they form the causal-intervention cluster
+    `finding_warmup_rescues_vanilla_at_fr_g999_mlp`."""
+    del x, y, stratify_by, min_stratum_size
+    return spearman_rho_verdict(
+        stratified_spearman,
+        sign=+1,
+        threshold=rho_threshold,
+    )
+
+
+@claim_bridge(
+    source='optimizer.warmup_steps',
+    target='jensen_gap',
+    direction=Direction.INVERSE,
+    tier=Tier.INTERVENTIONAL,
+    scope=(
+        (pl.col('env_name') == 'FourRooms-misc')
+        & (pl.col('fa_kind') == 'mlp_deep')
+        & (pl.col('shaping_kind') == 'none')
+        & (pl.col('arm_key') == 'baseline')
+        & (pl.col('gamma') == 0.999)
+        & pl.col('optimizer.warmup_steps').is_in([100, 10000, 100000])
+        & finite(pl.col('jensen_gap'))
+    ),
+    predicted_direction='a_lt_b',
+)
+def vanilla_jens_shrinks_with_warmup_at_fr_g999_mlp(
+    stratified_spearman: StratifiedSpearmanResult,
+    *,
+    x: str = 'optimizer.warmup_steps',
+    y: str = 'jensen_gap',
+    stratify_by: str = 'env_name',
+    min_stratum_size: int = 30,
+    rho_threshold: float = -0.5,
+) -> Verdict:
+    """Vanilla jens at FR × γ=0.999 × MLP × unshaped × baseline
+    shrinks as `optimizer.warmup_steps` grows — the Q-explosion
+    is delayed-and-prevented when training waits for reward.
+
+    Per-cell Spearman ρ(warmup_steps, jensen_gap) over baseline
+    cells with warmup ∈ {100, 10k, 100k}. Predicted strong
+    negative: longer warmup → reward found during warmup →
+    Q anchors on observed MC → no catastrophic Q-explosion →
+    smaller jens.
+
+    HELDs iff ρ ≤ -0.5 AND p < 0.05.
+
+    Companion: `vanilla_outcome_recovers_with_warmup_at_fr_g999_mlp`."""
+    del x, y, stratify_by, min_stratum_size
+    return spearman_rho_verdict(
+        stratified_spearman,
+        sign=-1,
+        threshold=rho_threshold,
+    )

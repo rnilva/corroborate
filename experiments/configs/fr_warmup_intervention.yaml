@@ -1,0 +1,96 @@
+name: fr_warmup_intervention
+out_dir: experiments/probes/fr_warmup_intervention
+env_binding: shared
+archive_remote: s3://corroborate-archive/fr_warmup_intervention
+
+# Anchor-failure causal-intervention test at FR × MLP × unshaped × γ=0.999.
+#
+# The hypothesis (from `findings_fr_gamma_mediation_chain` + the WHY
+# narrative on FR γ=0.999): vanilla DQN's Q-explosion at FR γ=0.999 is
+# triggered by training the Q-network on bootstrap targets BEFORE any
+# reward has been observed. With ε-greedy at long effective horizon,
+# the goal is rarely found in the first few hundred random transitions;
+# Q-updates on that reward-less bootstrap chain inflate Q in a noisy-
+# asymmetric way → argmax follows the noise → policy never finds the
+# goal → MC stays ≈ 0 → loop. DDQN's clip prevents this by keeping per-
+# state across-action Q SPREAD small, so ε-greedy stays exploratory.
+#
+# The intervention test: `warmed_update.warmup_steps` zeros parameter
+# updates for the first N training steps (per
+# `claims/optimizer.py:warmed_update`'s step-function schedule —
+# `where(count < warmup_steps, 0.0, 1.0)`). During warmup the agent
+# rolls out (replay fills, ε-greedy explores) but Q stays at
+# initialization. If the goal is found during warmup, the replay buffer
+# carries reward signal when training kicks in → Q learns properly from
+# now-grounded data.
+#
+# Predictions:
+# - warmup_100 (current default): vanilla outcome ≈ 0.19 (Q-explosion,
+#   goal rarely found). Matches existing FR γ=0.999 × MLP × unshaped
+#   cells in `fa_depth_fourrooms` and `action_dup_*` corpora.
+# - warmup_10k: enough random-walk time for many seeds to find the goal
+#   during warmup. Vanilla outcome should jump substantially.
+# - warmup_100k: most seeds find the goal during warmup. Vanilla outcome
+#   should approach the γ=0.99 ceiling (≈ 1.0).
+# - DDQN's benefit on outcome should SHRINK as warmup grows (vanilla
+#   needs DDQN less when it can anchor on its own).
+#
+# Tests authored as bridges in
+# `experiments/findings/ddqn_three_conditions/jens_reduction_factors.py`:
+# - `vanilla_outcome_recovers_with_warmup_at_fr_g999_mlp`
+# - `vanilla_jens_shrinks_with_warmup_at_fr_g999_mlp`
+#
+# Composed into `finding_warmup_rescues_vanilla_at_fr_g999_mlp`.
+#
+# 3 warmup levels × 2 arms × 30 seeds = 180 cells. CPU at FR ≈ 5k
+# training steps/s, 1M steps per cell, chunk_size=30 (vmap over seeds),
+# ~6 chunks of 1M-step × 30-seed runs ≈ 1-2h wall.
+
+envs:
+  - {name: FourRooms-misc, n_seeds: 30, chunk_size: 30}
+
+defaults:
+  total_steps: 1000000
+  eval_every:  100000
+  n_episodes:  5
+  gamma:       0.999
+  sync_period: 100
+  replay:
+    class: Replay
+    capacity: 50000
+    batch_size: 32
+  optimizer:
+    fn: warmed_update
+    inner: {fn: adam, lr: 0.0001}
+    warmup_steps: 100
+  q_network:
+    class: MLP
+    hidden: [64, 64]
+
+interventions:
+  - name: warmup_100
+    base: {optimizer.warmup_steps: 100}
+    arms:
+      - []
+      - - slot_path: bootstrap
+          replacement:
+            fn: bootstrap
+            greedification: {fn: double_greedify}
+
+  - name: warmup_10k
+    base: {optimizer.warmup_steps: 10000}
+    arms:
+      - []
+      - - slot_path: bootstrap
+          replacement:
+            fn: bootstrap
+            greedification: {fn: double_greedify}
+
+  - name: warmup_100k
+    base: {optimizer.warmup_steps: 100000}
+    arms:
+      - []
+      - - slot_path: bootstrap
+          replacement:
+            fn: bootstrap
+            greedification: {fn: double_greedify}
