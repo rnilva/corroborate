@@ -105,7 +105,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_reduces_jens_uniformly_across_k_at_fr_high_gamma",
       "direction": "inverse",
-      "extent_hash": -5683678125584685631,
+      "extent_hash": 616899864566442313,
       "n_cells_in_scope": 566,
       "n_cells_pre_scope": 4711,
       "pair_by": [
@@ -202,7 +202,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_reduction_amplified_by_gamma__fr_mlp_k4_unshaped",
       "direction": "inverse",
-      "extent_hash": -1609369652408284687,
+      "extent_hash": 1735875278439699300,
       "n_cells_in_scope": 593,
       "n_cells_pre_scope": 4711,
       "pair_by": [
@@ -258,7 +258,7 @@
       "blocked_by": null,
       "bridge_name": "fa_capacity_moderates_ddqn_jens_reduction",
       "direction": "inverse",
-      "extent_hash": -1489025875397242948,
+      "extent_hash": -6834577687177802818,
       "n_cells_in_scope": 2911,
       "n_cells_pre_scope": 4711,
       "pair_by": [
@@ -368,7 +368,7 @@
       "blocked_by": null,
       "bridge_name": "linear_fa_cap_fails_at_metamaze_g999__exception",
       "direction": "inverse",
-      "extent_hash": 6082824078887216172,
+      "extent_hash": -6952623813565407330,
       "n_cells_in_scope": 420,
       "n_cells_pre_scope": 4711,
       "pair_by": [
@@ -421,7 +421,7 @@
       "blocked_by": null,
       "bridge_name": "sigma_action_predicts_ddqn_jens_reduction",
       "direction": "inverse",
-      "extent_hash": -1489025875397242948,
+      "extent_hash": -6834577687177802818,
       "n_cells_in_scope": 2911,
       "n_cells_pre_scope": 4711,
       "pair_by": [
@@ -554,7 +554,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_helps_outcome_at_fr_g999_mlp_unshaped__k_panel",
       "direction": "direct",
-      "extent_hash": -5683678125584685631,
+      "extent_hash": 616899864566442313,
       "n_cells_in_scope": 506,
       "n_cells_pre_scope": 4711,
       "pair_by": [
@@ -686,7 +686,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_no_positive_outcome_under_shaping__fr_shaped_fa_x_gamma_panel",
       "direction": "direct",
-      "extent_hash": 8756511552249551302,
+      "extent_hash": -1677441536084360309,
       "n_cells_in_scope": 240,
       "n_cells_pre_scope": 4711,
       "pair_by": [
@@ -712,7 +712,7 @@
   ],
   "cache_path": "experiments/data/cache/ddqn_three_conditions.parquet",
   "errored_bridges": [],
-  "git_commit": "44636217e50f",
+  "git_commit": "81c165375d0e",
   "hypothesis_module": "experiments.findings.ddqn_three_conditions",
   "measurable_signatures": {
     "eval_best_burst_raw_mean": "829be9a6bcc9c696",
@@ -723,5 +723,5 @@
     "shaping_kind": "8d7b9f162d87a266"
   },
   "n_cells_total": 4711,
-  "timestamp_utc": "2026-05-17T03:15:03+00:00"
+  "timestamp_utc": "2026-05-17T04:46:56+00:00"
 }

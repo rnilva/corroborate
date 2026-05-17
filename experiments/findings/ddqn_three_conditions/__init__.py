@@ -1,46 +1,45 @@
-"""DDQN bias-reduction scalings (K-axis, γ-axis, FA-axis) +
-outcome-translation scope. Six bridges across two cluster
-Findings.
+"""Empirical characterization of DDQN's effect — on `jensen_gap`
+(bias) and `eval_best_burst_raw_mean` (outcome) — viewed through
+structural moderators that Hasselt 2010's bound suggests are
+worth looking at.
 
-Hasselt 2010's `bias ≤ σ_action × √(2 ln K) × 1/(1 − γ)`
-motivates three axes (action count, discount factor, FA
-capacity) on which DDQN's bias-reduction might scale. The
-bridges in `hasselt_bound.py` corroborate that the scalings are
-empirically MONOTONE at this corpus's scope. They DO NOT
-identify the manipulated variable with Hasselt's specific
-factor — each bridge docstring disclaims the non-identification
-(K-via-action_duplicate is a confounded K-proxy; γ-amplification
-cannot discriminate Hasselt's 1/(1−γ) from vanilla-degeneracy at
-γ→1; FA-capacity binary cannot discriminate σ_action from
-Type-1 FA-truncation).
+The bridges here are NOT a test of Hasselt's theorem. Hasselt's
+formula `bias ≤ σ_action × √(2 ln K) × 1/(1 − γ)` is a LENS —
+it tells us where to look (action count, discount factor,
+function-approximator capacity). What we find on each axis is
+the empirical content.
 
-The empirically-corroborated frame is the Type 1 / Type 2
-bias decomposition from `findings_two_types_of_bias`. Hasselt's
-bound is the cleanest theoretical inspiration; this module's
-bridges corroborate scalings consistent with — but not
-identified to — that bound.
-
-- `hasselt_bound.py` (4 bridges) — K-axis, γ-axis, FA-axis
-  rule + FA-axis exception. Cluster Finding `finding_hasselt_bound`.
-- `outcome_translation.py` (2 bridges) — positive arm at the
-  bias-active reference cell + null arm at FR × shaped panel.
+- `jens_reduction_factors.py` (4 bridges) — how DDQN's effect
+  on `jensen_gap` varies along k_eff, γ, FA-capacity, plus the
+  MM γ=0.999 × linear exception. Cluster Finding
+  `finding_jens_reduction_factors`.
+- `outcome_translation.py` (2 bridges) — where DDQN's effect
+  reaches `eval_best_burst_raw_mean`. Positive arm at the
+  bias-active reference cell + null arm at the shaped panel.
   Cluster Finding `finding_shaping_decouples`. NB: the two
-  arms test non-matched scopes — the matched-scope claim
+  arms test non-matched scopes; the matched-scope claim
   (FR γ=0.999 × MLP × {shaped, unshaped} × k_eff sweep)
   requires a shaped × k_eff sweep that does not yet exist.
+- `sigma_action_predicts_ddqn_jens_reduction` (1 sibling
+  bridge, NOT in either cluster Finding) — characterizes
+  whether baseline σ_action is a useful predictor of DDQN's
+  standardized effect on jens. Empirical answer: POW_INSUF /
+  point estimate sign-flipped, so σ alone is NOT a clean
+  predictor at this corpus's panel.
 
 Substantive narrative cross-refs (memory):
 - `findings_two_types_of_bias` — Type 1 (DDQN reduces) vs Type 2
   (FA/γ-truncation, DDQN cannot reduce) bias decomposition.
-- `findings_q_explosion_direct_evidence` — alternative mechanism
-  the γ-axis bridge cannot discriminate against.
-- `findings_sigma_K_scaling_corroborated` — the previously
-  retracted σ × √(2 ln K) claim; the FA-axis bridge avoids the
-  same retracted shape only by disclaiming σ_action attribution.
-- `findings_shaping_decouples_bias_from_outcome` — narrative for
-  the null arm; partly tested, partly asserted.
+  The empirically-anchored interpretive frame.
+- `findings_q_explosion_direct_evidence` — vanilla-degeneracy at
+  γ→1; relevant context for the γ-axis bridge.
+- `findings_sigma_K_scaling_corroborated` — earlier σ × √(2 ln K)
+  framing was retracted; we now characterize σ empirically
+  without theory-test framing.
+- `findings_shaping_decouples_bias_from_outcome` — substantive
+  narrative for the outcome null arm.
 - `findings_regime_discriminator_polarity_x_gamma` — env-feature
-  taxonomy for when DDQN's reduction translates to outcome.
+  taxonomy for where DDQN's reduction translates to outcome.
 
 **Cache population** is canonical via `--ingest <corpus>` /
 `--ingest-all <root>`. Three hypothesis-local derived
@@ -92,7 +91,7 @@ MODULE_SCOPE = pl.col('gamma').is_in([0.99, 0.999])
 # Register hypothesis-local derived measurables.
 from experiments.findings.ddqn_three_conditions import _measurables  # pyright: ignore[reportUnusedImport]  # noqa: F401  -- registers @measurable side-effects
 from experiments.findings.ddqn_three_conditions import (
-    finding_hasselt_bound,
+    finding_jens_reduction_factors,
     finding_shaping_decouples,
 )
 from experiments.findings.ddqn_three_conditions._arms import (
@@ -101,7 +100,7 @@ from experiments.findings.ddqn_three_conditions._arms import (
 from experiments.findings.ddqn_three_conditions._common import (
     CLAIM as CLAIM,
 )
-from experiments.findings.ddqn_three_conditions.hasselt_bound import (
+from experiments.findings.ddqn_three_conditions.jens_reduction_factors import (
     ddqn_reduces_jens_uniformly_across_k_at_fr_high_gamma,
     ddqn_reduction_amplified_by_gamma__fr_mlp_k4_unshaped,
     fa_capacity_moderates_ddqn_jens_reduction,
@@ -126,7 +125,7 @@ BRIDGES = (
 
 
 FINDINGS = (
-    finding_hasselt_bound,
+    finding_jens_reduction_factors,
     finding_shaping_decouples,
 )
 
