@@ -1,12 +1,12 @@
-"""Shared constants for the three-conditions hypothesis.
+"""Shared constants for the ddqn_three_conditions hypothesis.
 
 CLAIM is the outermost claim — the substrate's `dqn` Free Claim,
 shared with the canonical `experiments.findings.ddqn` module.
-The hypothesis tests THREE necessary conditions for DDQN's
-outcome benefit to translate from mech (Δ_jensen_gap < 0) to
-outcome (Δ_eval > 0). The conditions are jointly required —
-absence of any one suffices to make DDQN's mechanism inactive
-or harmful."""
+The hypothesis tests Hasselt 2010's three-factor bound
+`bias ≤ σ_action × √(2 ln K) × 1/(1−γ)` factor-by-factor (the
+`finding_hasselt_bound` cluster) and how potential-based shaping
+decouples bias-reduction from outcome (the
+`finding_shaping_decouples` cluster)."""
 from __future__ import annotations
 
 from corroborate_rl.dqn.dqn import dqn

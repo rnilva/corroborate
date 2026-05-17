@@ -100,7 +100,11 @@ def per_stratum_upper_bound_verdict(
             any_strong_above = True
         if d > upper_bound:
             all_below = False
-        if not all_below and ci_hi > upper_bound and ci_lo <= upper_bound:
+        # Iteration-order-invariant spans check: a stratum with the
+        # point estimate below the bound but the CI extending above
+        # is "in the gray zone" regardless of what other strata
+        # look like.
+        if d <= upper_bound and ci_hi > upper_bound:
             any_spans = True
     if n_valid < min_strata:
         return Verdict.POWER_INSUFFICIENT, None
