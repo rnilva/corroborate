@@ -19,6 +19,9 @@ from corroborate.analyses.meta_regression_unpaired_d import (
 from corroborate.analyses.stratified_arm_diff_pooled import (
     StratifiedArmDiffPooledResult,
 )
+from corroborate.analyses.stratified_partial_spearman import (
+    StratifiedPartialSpearmanResult,
+)
 from corroborate.analyses.stratified_spearman import (
     StratifiedSpearmanResult,
 )
@@ -121,14 +124,15 @@ def per_stratum_upper_bound_verdict(
 
 
 def spearman_rho_verdict(
-    result: StratifiedSpearmanResult,
+    result: StratifiedSpearmanResult | StratifiedPartialSpearmanResult,
     *,
     sign: int,
     threshold: float,
     min_strata: int = 1,
     alpha: float = 0.05,
 ) -> Verdict:
-    """Verdict on a Fisher-z-pooled stratified Spearman ρ.
+    """Verdict on a Fisher-z-pooled stratified Spearman ρ (marginal
+    or partial).
 
     `sign=-1`: HELD iff `rho_pooled ≤ -|threshold|` AND `p < alpha`.
     `sign=+1`: mirror.

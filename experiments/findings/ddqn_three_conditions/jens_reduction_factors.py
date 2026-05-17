@@ -75,6 +75,9 @@ from corroborate.analyses.meta_regression_unpaired_d import (
 from corroborate.analyses.stratified_arm_diff_pooled import (
     StratifiedArmDiffPooledResult,
 )
+from corroborate.analyses.stratified_partial_spearman import (
+    StratifiedPartialSpearmanResult,
+)
 from corroborate.analyses.stratified_spearman import (
     StratifiedSpearmanResult,
 )
@@ -582,5 +585,170 @@ def vanilla_anchor_preserved_with_gamma_at_acrobot_mlp(
     return spearman_rho_verdict(
         stratified_spearman,
         sign=+1,
+        threshold=rho_threshold,
+    )
+
+
+# === γ-WHY mediation chain via bootstrap_self_reference_fraction ===
+#
+# Three bridges that test the causal chain
+#   γ → bootstrap_self_reference_fraction → jensen_gap
+# at FR × MLP × unshaped × baseline. The first two are forward
+# correlation tests (γ predicts self-ref; self-ref predicts jens).
+# The third is the partial-Spearman mediation test: after
+# conditioning on self-ref, γ's residual effect on jens should
+# be near zero (full mediation).
+#
+# Composed by `finding_gamma_jens_via_q_self_reference` into the
+# why-claim that the γ-amplification of vanilla jens at FR is
+# mediated by the Q-self-referential bootstrap regime.
+
+
+@claim_bridge(
+    source='gamma',
+    target='bootstrap_self_reference_fraction',
+    direction=Direction.DIRECT,
+    tier=Tier.ASSOCIATIONAL,
+    scope=(
+        (pl.col('env_name') == 'FourRooms-misc')
+        & (pl.col('fa_kind') == 'mlp_deep')
+        & (pl.col('shaping_kind') == 'none')
+        & (pl.col('arm_key') == 'baseline')
+        & pl.col('gamma').is_in([0.99, 0.999])
+        & finite(pl.col('bootstrap_self_reference_fraction'))
+    ),
+    predicted_direction='a_gt_b',
+)
+def gamma_predicts_q_self_reference_at_fr_mlp(
+    stratified_spearman: StratifiedSpearmanResult,
+    *,
+    x: str = 'gamma',
+    y: str = 'bootstrap_self_reference_fraction',
+    stratify_by: str = 'env_name',
+    min_stratum_size: int = 30,
+    rho_threshold: float = 0.3,
+) -> Verdict:
+    """γ predicts Q-self-reference fraction at FR × MLP ×
+    unshaped × baseline (the within-FR mediator-axis observation).
+
+    Per-cell Spearman ρ(γ, bootstrap_self_reference_fraction)
+    over baseline cells. HELDs iff ρ ≥ +0.3 AND p < 0.05.
+
+    Predicted: γ↑ → more bootstrap targets are dominated by
+    γ × Q (self-reference). At FR γ=0.999 vanilla, the agent
+    rarely observes reward, so virtually every bootstrap target
+    is γ × Q with no reward injection — frac → 1.0. At γ=0.99,
+    vanilla finds the goal more often, so SOME bootstrap targets
+    have nonzero r — frac somewhat below 1.0.
+
+    Mediator-axis stage 1 of the γ → self-ref → jens chain."""
+    del x, y, stratify_by, min_stratum_size
+    return spearman_rho_verdict(
+        stratified_spearman,
+        sign=+1,
+        threshold=rho_threshold,
+    )
+
+
+@claim_bridge(
+    source='bootstrap_self_reference_fraction',
+    target='jensen_gap',
+    direction=Direction.DIRECT,
+    tier=Tier.ASSOCIATIONAL,
+    scope=(
+        (pl.col('env_name') == 'FourRooms-misc')
+        & (pl.col('fa_kind') == 'mlp_deep')
+        & (pl.col('shaping_kind') == 'none')
+        & (pl.col('arm_key') == 'baseline')
+        & pl.col('gamma').is_in([0.99, 0.999])
+        & finite(pl.col('jensen_gap'))
+        & finite(pl.col('bootstrap_self_reference_fraction'))
+    ),
+    predicted_direction='a_gt_b',
+)
+def q_self_reference_predicts_jens_at_fr_mlp(
+    stratified_spearman: StratifiedSpearmanResult,
+    *,
+    x: str = 'bootstrap_self_reference_fraction',
+    y: str = 'jensen_gap',
+    stratify_by: str = 'env_name',
+    min_stratum_size: int = 30,
+    rho_threshold: float = 0.3,
+) -> Verdict:
+    """Q-self-reference fraction predicts jens at FR × MLP ×
+    unshaped × baseline.
+
+    Per-cell Spearman ρ(bootstrap_self_reference_fraction,
+    jensen_gap) over baseline cells. HELDs iff ρ ≥ +0.3 AND
+    p < 0.05.
+
+    Predicted: cells with higher self-ref fraction have larger
+    jens (Q-explosion mechanism — without reward injection, Q
+    drifts up via the bootstrap chain).
+
+    Mediator-axis stage 2 of the chain. Sets up the partial-
+    Spearman test (stage 3) — if both stages 1 and 2 hold, the
+    mediation question becomes whether γ has any RESIDUAL effect
+    on jens after partialling out self-ref."""
+    del x, y, stratify_by, min_stratum_size
+    return spearman_rho_verdict(
+        stratified_spearman,
+        sign=+1,
+        threshold=rho_threshold,
+    )
+
+
+@claim_bridge(
+    source='gamma',
+    target='jensen_gap',
+    direction=Direction.DIRECT,
+    tier=Tier.ASSOCIATIONAL,
+    scope=(
+        (pl.col('env_name') == 'FourRooms-misc')
+        & (pl.col('fa_kind') == 'mlp_deep')
+        & (pl.col('shaping_kind') == 'none')
+        & (pl.col('arm_key') == 'baseline')
+        & pl.col('gamma').is_in([0.99, 0.999])
+        & finite(pl.col('jensen_gap'))
+        & finite(pl.col('bootstrap_self_reference_fraction'))
+    ),
+    predicted_direction='null',
+)
+def gamma_jens_mediated_by_q_self_reference_at_fr_mlp(
+    stratified_partial_spearman: StratifiedPartialSpearmanResult,
+    *,
+    x: str = 'gamma',
+    y: str = 'jensen_gap',
+    conditioning: str = 'bootstrap_self_reference_fraction',
+    stratify_by: str = 'env_name',
+    min_stratum_size: int = 30,
+    rho_threshold: float = 0.3,
+) -> Verdict:
+    """Partial Spearman ρ(γ, jens | bootstrap_self_reference_fraction)
+    at FR × MLP × unshaped × baseline.
+
+    Tests whether γ has any residual predictive power on jens
+    after conditioning on the Q-self-reference fraction.
+
+    Predicted: ρ_partial ≈ 0 — full mediation. If stages 1 and 2
+    HELD, then γ → jens flows entirely through self-ref → jens.
+
+    HELDs iff |ρ_partial| ≤ 0.3 AND p ≥ 0.05 (null prediction
+    confirmed).
+
+    Refutations:
+    - NO_EFFECT (significantly positive ρ_partial): γ has direct
+      effect on jens beyond what self-ref explains — partial
+      mediation, not full.
+    - NO_EFFECT (significantly negative ρ_partial): γ's effect is
+      OPPOSITE-direction after conditioning — would suggest
+      suppression structure (rare; indicates model
+      misspecification).
+
+    Stage 3 of the γ → self-ref → jens mediation chain."""
+    del x, y, conditioning, stratify_by, min_stratum_size
+    return spearman_rho_verdict(
+        stratified_partial_spearman,
+        sign=0,
         threshold=rho_threshold,
     )

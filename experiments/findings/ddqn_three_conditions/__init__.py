@@ -92,6 +92,7 @@ MODULE_SCOPE = pl.col('gamma').is_in([0.99, 0.999])
 from experiments.findings.ddqn_three_conditions import _measurables  # pyright: ignore[reportUnusedImport]  # noqa: F401  -- registers @measurable side-effects
 from experiments.findings.ddqn_three_conditions import (
     finding_gamma_amplification_anchor_gated,
+    finding_gamma_jens_via_q_self_reference,
     finding_jens_reduction_factors,
     finding_shaping_decouples,
 )
@@ -105,7 +106,10 @@ from experiments.findings.ddqn_three_conditions.jens_reduction_factors import (
     ddqn_reduces_jens_uniformly_across_k_at_fr_high_gamma,
     ddqn_reduction_amplified_by_gamma__fr_mlp_k4_unshaped,
     fa_capacity_moderates_ddqn_jens_reduction,
+    gamma_jens_mediated_by_q_self_reference_at_fr_mlp,
+    gamma_predicts_q_self_reference_at_fr_mlp,
     linear_fa_cap_fails_at_metamaze_g999__exception,
+    q_self_reference_predicts_jens_at_fr_mlp,
     sigma_action_predicts_ddqn_jens_reduction,
     vanilla_anchor_collapses_with_gamma_at_fr_mlp,
     vanilla_anchor_preserved_with_gamma_at_acrobot_mlp,
@@ -126,6 +130,9 @@ BRIDGES = (
     ddqn_no_positive_outcome_under_shaping__fr_shaped_fa_x_gamma_panel,
     vanilla_anchor_collapses_with_gamma_at_fr_mlp,
     vanilla_anchor_preserved_with_gamma_at_acrobot_mlp,
+    gamma_predicts_q_self_reference_at_fr_mlp,
+    q_self_reference_predicts_jens_at_fr_mlp,
+    gamma_jens_mediated_by_q_self_reference_at_fr_mlp,
 )
 
 
@@ -133,6 +140,7 @@ FINDINGS = (
     finding_jens_reduction_factors,
     finding_shaping_decouples,
     finding_gamma_amplification_anchor_gated,
+    finding_gamma_jens_via_q_self_reference,
 )
 
 
