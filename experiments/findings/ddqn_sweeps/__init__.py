@@ -23,6 +23,7 @@ import corroborate_rl.dqn.measurables  # pyright: ignore[reportUnusedImport]  # 
 import polars as pl
 
 from experiments.findings.ddqn_sweeps import (
+    finding_asterix_g999_smoothness_harm_chain,
     finding_asterix_gamma_999_harm,
     finding_breakout_gamma_999_help_underpowered,
     finding_ddqn_clip_argmax_harm_chain,
@@ -54,6 +55,9 @@ from experiments.findings.ddqn_sweeps.sigma_over_jens_regime import (
 from experiments.findings.ddqn_sweeps.clip_argmax_harm_mechanism import (
     BRIDGES as _CLIP_ARGMAX_HARM_MECHANISM,
 )
+from experiments.findings.ddqn_sweeps.q_smoothness_harm_mechanism import (
+    BRIDGES as _Q_SMOOTHNESS_HARM_MECHANISM,
+)
 
 
 # Loose module scope: only bsuite exclusion. HP-sweep bridges set
@@ -71,6 +75,7 @@ BRIDGES = (
     *_WITHIN_ENV_SWEEPS,
     *_SIGMA_OVER_JENS_REGIME,
     *_CLIP_ARGMAX_HARM_MECHANISM,
+    *_Q_SMOOTHNESS_HARM_MECHANISM,
     ddqn_full_auc_helps_at_acrobot_k16_dense,
     ddqn_full_auc_null_at_acrobot_k4_dense,
 )
@@ -84,4 +89,5 @@ FINDINGS = (
     finding_asterix_gamma_999_harm,
     finding_breakout_gamma_999_help_underpowered,
     finding_ddqn_clip_argmax_harm_chain,
+    finding_asterix_g999_smoothness_harm_chain,
 )
