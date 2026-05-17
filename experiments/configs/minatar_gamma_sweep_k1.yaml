@@ -19,7 +19,7 @@ envs:
   - {name: Asterix-MinAtar, n_seeds: 30, chunk_size: 10}
   - {name: Breakout-MinAtar, n_seeds: 30, chunk_size: 10}
   - {name: Freeway-MinAtar, n_seeds: 30, chunk_size: 5}
-  - {name: SpaceInvaders-MinAtar, n_seeds: 30, chunk_size: 10}
+  - {name: SpaceInvaders-MinAtar, n_seeds: 30, chunk_size: 5}
 
 defaults:
   total_steps: 1000000

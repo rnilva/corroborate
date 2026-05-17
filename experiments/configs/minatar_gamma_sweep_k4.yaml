@@ -19,7 +19,7 @@ envs:
   - {name: Asterix-MinAtar, n_seeds: 30, chunk_size: 10, wrappers: [{type: action_duplicate, k: 4}]}
   - {name: Breakout-MinAtar, n_seeds: 30, chunk_size: 10, wrappers: [{type: action_duplicate, k: 4}]}
   - {name: Freeway-MinAtar, n_seeds: 30, chunk_size: 5, wrappers: [{type: action_duplicate, k: 4}]}
-  - {name: SpaceInvaders-MinAtar, n_seeds: 30, chunk_size: 10, wrappers: [{type: action_duplicate, k: 4}]}
+  - {name: SpaceInvaders-MinAtar, n_seeds: 30, chunk_size: 5, wrappers: [{type: action_duplicate, k: 4}]}
 
 defaults:
   total_steps: 1000000
