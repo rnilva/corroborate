@@ -1281,6 +1281,51 @@ def _lag1_pearson(
 
 
 @measurable(reads=('online_max_q_per_step', 'mc_return'))
+def q_mc_burst_correlation_late(record: Mapping[str, object]) -> float:
+    """Contemporaneous Pearson r between per-burst window-mean Q
+    and per-burst MC return, over the LATE half of bursts.
+
+    Why it matters: the σ/jens regime discriminator (per
+    `findings_sigma_over_jens_regime_discriminator`) assumes
+    vanilla's bias is uniform across actions — argmax preserves
+    meaningful policy structure. That assumption only holds when
+    Q is COUPLED to MC (Q-function tracks return).
+
+    In the FR γ=0.999 vanilla regime, Q grows monotonically to
+    100 while MC stays at ~0.005 — Q is decoupled from MC. The
+    argmax structure is whatever Q's noise propagates into, not
+    a meaningful policy. DDQN's clip prevents the unbounded
+    explosion → DDQN rescues regardless of σ/jens shape.
+
+    This measurable lets the σ/jens bridges scope-restrict to
+    cells where Q-MC coupling is non-trivial (r > 0.5 say),
+    excluding the regime-C "vanilla collapse" cases.
+
+    Returns NaN when n_bursts < 3, when MC variance is too small
+    to compute r reliably (z-score floor), or shapes inconsistent.
+    Computed on the late HALF of bursts only — late training is
+    where the regime is most clearly expressed.
+
+    Distinct from the lag-1 cross-correlations
+    (`q_burst_to_mc_cross_lag1`, `mc_burst_to_q_cross_lag1`)
+    which test temporal precedence; this one is contemporaneous."""
+    pair = _per_burst_q_and_mc(record)
+    if pair is None:
+        return float('nan')
+    q_per_burst, mc_per_burst = pair
+    n = q_per_burst.size
+    if n < 4:
+        return float('nan')
+    half = n // 2
+    q_late = q_per_burst[half:]
+    mc_late = mc_per_burst[half:]
+    if np.std(q_late) == 0 or np.std(mc_late) == 0:
+        return float('nan')
+    r = float(np.corrcoef(q_late, mc_late)[0, 1])
+    return r if math.isfinite(r) else float('nan')
+
+
+@measurable(reads=('online_max_q_per_step', 'mc_return'))
 def q_burst_autoregression_lag1(record: Mapping[str, object]) -> float:
     """Lag-1 Pearson autocorrelation of per-burst window-mean Q,
     one scalar per cell. Captures Q's burst-to-burst persistence.

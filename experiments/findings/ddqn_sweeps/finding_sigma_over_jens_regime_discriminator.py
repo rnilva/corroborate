@@ -1,5 +1,13 @@
-"""σ_VAN/jens_VAN at γ=0.999 is a regime discriminator for DDQN's
-outcome sign.
+"""σ_VAN/jens_VAN at γ=0.999, conditional on Q-MC coupling, is a
+regime discriminator for DDQN's outcome sign.
+
+REFINEMENT (2026-05-17): the original σ/jens-only discriminator
+fails on FR γ=0.999 — a "vanilla Q-explodes-and-decouples-from-MC"
+regime where σ/jens looks low (uniform overestimation) but DDQN
+RESCUES (not harms). The fix: scope-restrict every bridge in this
+Finding to cells where `q_mc_burst_correlation_late >= 0.3` —
+Q is at least modestly coupled to MC. Cells where Q has decoupled
+from MC (regime C) are out of scope of the σ/jens theory.
 
 This Finding aggregates nine bridges (3 hypothesis shapes × 3
 outcome metrics) that operationalize the theory in
