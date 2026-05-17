@@ -752,3 +752,114 @@ def gamma_jens_mediated_by_q_self_reference_at_fr_mlp(
         sign=0,
         threshold=rho_threshold,
     )
+
+
+# === Q magnitude as residual co-mediator (alongside self-reference) ===
+#
+# The full-mediation test via self_ref alone refuted (residual partial
+# ρ = +0.33 at FR baseline). Q magnitude (`q_late_mean`) is a candidate
+# additional mediator: γ → q_late → jens beyond what self_ref captures.
+#
+# Empirical (FR × MLP × unshaped × baseline, n=120):
+#   ρ(γ, q_late | self_ref)        = +0.57, p<1e-11   ← γ still drives q_late
+#   ρ(q_late, jens | self_ref)     = +0.26, p=0.004   ← q_late still drives jens
+#   ρ(γ, jens | self_ref + q_late) = +0.22, p=0.014   ← still residual
+#
+# Both partials (γ→q_late and q_late→jens after partialling self_ref) are
+# substantively non-zero → q_late IS a co-mediator alongside self_ref. The
+# joint multi-Z partial leaves ~28% of γ's effect unexplained — chain
+# length (1/(1−γ)) and Hasselt per-step max-bias remain candidates.
+
+
+@claim_bridge(
+    source='gamma',
+    target='q_late_mean',
+    direction=Direction.DIRECT,
+    tier=Tier.ASSOCIATIONAL,
+    scope=(
+        (pl.col('env_name') == 'FourRooms-misc')
+        & (pl.col('fa_kind') == 'mlp_deep')
+        & (pl.col('shaping_kind') == 'none')
+        & (pl.col('arm_key') == 'baseline')
+        & pl.col('gamma').is_in([0.99, 0.999])
+        & finite(pl.col('q_late_mean'))
+        & finite(pl.col('bootstrap_self_reference_fraction'))
+    ),
+    predicted_direction='a_gt_b',
+)
+def gamma_predicts_q_late_residual_at_fr_mlp(
+    stratified_partial_spearman: StratifiedPartialSpearmanResult,
+    *,
+    x: str = 'gamma',
+    y: str = 'q_late_mean',
+    conditioning: str = 'bootstrap_self_reference_fraction',
+    stratify_by: str = 'env_name',
+    min_stratum_size: int = 30,
+    rho_threshold: float = 0.3,
+) -> Verdict:
+    """γ predicts Q magnitude even after partialling out
+    self-reference at FR × MLP × unshaped × baseline.
+
+    Partial Spearman ρ(γ, q_late_mean | bootstrap_self_reference_fraction).
+    Predicted: positive — γ drives Q magnitude via a path beyond
+    self-reference (likely chain length / per-step max-bias).
+
+    HELDs iff ρ_partial ≥ +0.3 AND p < 0.05.
+
+    Stage 1 of the q_late residual-mediator chain. Empirical:
+    +0.57 (p<1e-11) at FR baseline."""
+    del x, y, conditioning, stratify_by, min_stratum_size
+    return spearman_rho_verdict(
+        stratified_partial_spearman,
+        sign=+1,
+        threshold=rho_threshold,
+    )
+
+
+@claim_bridge(
+    source='q_late_mean',
+    target='jensen_gap',
+    direction=Direction.DIRECT,
+    tier=Tier.ASSOCIATIONAL,
+    scope=(
+        (pl.col('env_name') == 'FourRooms-misc')
+        & (pl.col('fa_kind') == 'mlp_deep')
+        & (pl.col('shaping_kind') == 'none')
+        & (pl.col('arm_key') == 'baseline')
+        & pl.col('gamma').is_in([0.99, 0.999])
+        & finite(pl.col('jensen_gap'))
+        & finite(pl.col('q_late_mean'))
+        & finite(pl.col('bootstrap_self_reference_fraction'))
+    ),
+    predicted_direction='a_gt_b',
+)
+def q_late_predicts_jens_residual_at_fr_mlp(
+    stratified_partial_spearman: StratifiedPartialSpearmanResult,
+    *,
+    x: str = 'q_late_mean',
+    y: str = 'jensen_gap',
+    conditioning: str = 'bootstrap_self_reference_fraction',
+    stratify_by: str = 'env_name',
+    min_stratum_size: int = 30,
+    rho_threshold: float = 0.2,
+) -> Verdict:
+    """Q magnitude predicts jens even after partialling out
+    self-reference at FR × MLP × unshaped × baseline.
+
+    Partial Spearman ρ(q_late_mean, jensen_gap |
+    bootstrap_self_reference_fraction). Predicted: positive —
+    cells with larger Q magnitude have larger jens beyond what
+    self-reference alone explains.
+
+    HELDs iff ρ_partial ≥ +0.2 AND p < 0.05. Lower threshold than
+    γ→q_late (0.3): the residual effect is smaller after partialling
+    out the strongest mediator (self_ref).
+
+    Stage 2 of the q_late residual-mediator chain. Empirical:
+    +0.26 (p=0.004) at FR baseline."""
+    del x, y, conditioning, stratify_by, min_stratum_size
+    return spearman_rho_verdict(
+        stratified_partial_spearman,
+        sign=+1,
+        threshold=rho_threshold,
+    )

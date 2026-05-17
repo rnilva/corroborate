@@ -94,6 +94,7 @@ from experiments.findings.ddqn_three_conditions import (
     finding_gamma_amplification_anchor_gated,
     finding_gamma_jens_via_q_self_reference,
     finding_jens_reduction_factors,
+    finding_q_magnitude_residual_mediator,
     finding_shaping_decouples,
 )
 from experiments.findings.ddqn_three_conditions._arms import (
@@ -107,8 +108,10 @@ from experiments.findings.ddqn_three_conditions.jens_reduction_factors import (
     ddqn_reduction_amplified_by_gamma__fr_mlp_k4_unshaped,
     fa_capacity_moderates_ddqn_jens_reduction,
     gamma_jens_mediated_by_q_self_reference_at_fr_mlp,
+    gamma_predicts_q_late_residual_at_fr_mlp,
     gamma_predicts_q_self_reference_at_fr_mlp,
     linear_fa_cap_fails_at_metamaze_g999__exception,
+    q_late_predicts_jens_residual_at_fr_mlp,
     q_self_reference_predicts_jens_at_fr_mlp,
     sigma_action_predicts_ddqn_jens_reduction,
     vanilla_anchor_collapses_with_gamma_at_fr_mlp,
@@ -133,6 +136,8 @@ BRIDGES = (
     gamma_predicts_q_self_reference_at_fr_mlp,
     q_self_reference_predicts_jens_at_fr_mlp,
     gamma_jens_mediated_by_q_self_reference_at_fr_mlp,
+    gamma_predicts_q_late_residual_at_fr_mlp,
+    q_late_predicts_jens_residual_at_fr_mlp,
 )
 
 
@@ -141,6 +146,7 @@ FINDINGS = (
     finding_shaping_decouples,
     finding_gamma_amplification_anchor_gated,
     finding_gamma_jens_via_q_self_reference,
+    finding_q_magnitude_residual_mediator,
 )
 
 
