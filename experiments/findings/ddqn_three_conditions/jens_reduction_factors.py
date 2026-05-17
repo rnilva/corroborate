@@ -78,6 +78,9 @@ from corroborate.analyses.stratified_arm_diff_pooled import (
 from corroborate.analyses.stratified_partial_spearman import (
     StratifiedPartialSpearmanResult,
 )
+from corroborate.analyses.stratified_partial_spearman_multi import (
+    StratifiedPartialSpearmanMultiResult,
+)
 from corroborate.analyses.stratified_spearman import (
     StratifiedSpearmanResult,
 )
@@ -861,5 +864,71 @@ def q_late_predicts_jens_residual_at_fr_mlp(
     return spearman_rho_verdict(
         stratified_partial_spearman,
         sign=+1,
+        threshold=rho_threshold,
+    )
+
+
+@claim_bridge(
+    source='gamma',
+    target='jensen_gap',
+    direction=Direction.DIRECT,
+    tier=Tier.ASSOCIATIONAL,
+    scope=(
+        (pl.col('env_name') == 'FourRooms-misc')
+        & (pl.col('fa_kind') == 'mlp_deep')
+        & (pl.col('shaping_kind') == 'none')
+        & (pl.col('arm_key') == 'baseline')
+        & pl.col('gamma').is_in([0.99, 0.999])
+        & finite(pl.col('jensen_gap'))
+        & finite(pl.col('bootstrap_self_reference_fraction'))
+        & finite(pl.col('q_late_mean'))
+    ),
+    predicted_direction='null',
+)
+def gamma_jens_jointly_mediated_by_self_ref_and_q_late_at_fr_mlp(
+    stratified_partial_spearman_multi: StratifiedPartialSpearmanMultiResult,
+    *,
+    x: str = 'gamma',
+    y: str = 'jensen_gap',
+    conditioning: tuple[str, ...] = (
+        'bootstrap_self_reference_fraction',
+        'q_late_mean',
+    ),
+    stratify_by: str = 'env_name',
+    min_stratum_size: int = 30,
+    rho_threshold: float = 0.3,
+) -> Verdict:
+    """Multi-Z partial Spearman ρ(γ, jens | self_ref + q_late) ≈ 0
+    at FR × MLP × unshaped × baseline.
+
+    Tests whether self-reference fraction AND Q magnitude TOGETHER
+    fully mediate γ → jens. Predicted null: |ρ_partial| ≤ 0.3 AND
+    p ≥ 0.05.
+
+    Empirical (FR baseline, n=120):
+        ρ_partial = +0.22  p = 0.014
+
+    Verdict: NO_EFFECT. Significant residual (~28% of γ's effect
+    on jens) remains after partialling out both mediators. Joint
+    full-mediation is REFUTED.
+
+    The residual is the unexplained part of γ's effect. Candidate
+    mechanisms (untested):
+    - Hasselt's σ × √(2 ln K) per-step max-bias scaling
+    - Bootstrap-chain length `1/(1−γ)` — γ amplifies the chain
+      itself even after value-magnitude and anchor are
+      partialled out.
+    - Interaction effects between mediators not captured by the
+      linear partial.
+
+    Stage 3 of the mediation chain. Joint-mediation test;
+    individual-mediator stages are
+    `gamma_predicts_q_late_residual_at_fr_mlp` and
+    `q_late_predicts_jens_residual_at_fr_mlp`
+    (both HELD)."""
+    del x, y, conditioning, stratify_by, min_stratum_size
+    return spearman_rho_verdict(
+        stratified_partial_spearman_multi,
+        sign=0,
         threshold=rho_threshold,
     )

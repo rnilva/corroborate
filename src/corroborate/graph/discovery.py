@@ -440,6 +440,59 @@ def stratified_partial_spearman_rho(
     return rho_pooled, p
 
 
+def stratified_partial_spearman_rho_multi(
+    x: npt.NDArray[np.float64],
+    y: npt.NDArray[np.float64],
+    z_matrix: npt.NDArray[np.float64],
+    strata: Sequence[object],
+    *,
+    min_stratum_size: int = 5,
+) -> tuple[float, float]:
+    """JCI-stratified multi-Z partial Spearman ρ(X, Y | Z₁, …, Zₖ).
+
+    Per stratum: closed-form `partial_spearman_rho_multi(x_k, y_k,
+    z_matrix_k)`. Fisher z pooled by `(n_k − 3 − k)` per stratum
+    (df accounting for the k conditioning variables). Returns
+    `(rho_pooled, p)`.
+
+    `z_matrix` shape: `(n, k)`. Strata with fewer than
+    `min_stratum_size` complete observations are dropped; strata
+    where `n_k ≤ 3 + k` (insufficient df) are also dropped."""
+    k_cond = z_matrix.shape[1] if z_matrix.ndim == 2 else 1
+    strata_list = list(strata)
+    strata_arr: npt.NDArray[np.object_] = np.asarray(strata_list, dtype=object)
+    unique_strata: list[object] = list(np.unique(strata_arr))
+    z_vals: list[float] = []
+    weights: list[float] = []
+    for k in unique_strata:
+        mask: npt.NDArray[np.bool_] = np.fromiter(
+            (s == k for s in strata_list),
+            dtype=bool, count=len(strata_list),
+        )
+        n_k = int(np.count_nonzero(mask))
+        if n_k < min_stratum_size or n_k <= 3 + k_cond:
+            continue
+        rho_k, _ = partial_spearman_rho_multi(
+            x[mask], y[mask], z_matrix[mask],
+        )
+        if math.isnan(rho_k):
+            continue
+        rho_clamped = max(-0.999999, min(0.999999, rho_k))
+        z_k = 0.5 * math.log((1 + rho_clamped) / (1 - rho_clamped))
+        z_vals.append(z_k)
+        weights.append(float(n_k - 3 - k_cond))
+    if not z_vals:
+        return float('nan'), float('nan')
+    total_w = sum(weights)
+    if total_w <= 0:
+        return float('nan'), float('nan')
+    z_pooled = sum(w * z for w, z in zip(weights, z_vals)) / total_w
+    rho_pooled = float(math.tanh(z_pooled))
+    z_stat = z_pooled * math.sqrt(total_w)
+    p = 2 * (1.0 - float(norm.cdf(abs(z_stat))))
+    return rho_pooled, p
+
+
 @dataclass(frozen=True, slots=True)
 class DiscoveredAdjacency:
     """PC adjacency-discovery result. Edges are unordered (frozenset

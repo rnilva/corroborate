@@ -22,6 +22,9 @@ from corroborate.analyses.stratified_arm_diff_pooled import (
 from corroborate.analyses.stratified_partial_spearman import (
     StratifiedPartialSpearmanResult,
 )
+from corroborate.analyses.stratified_partial_spearman_multi import (
+    StratifiedPartialSpearmanMultiResult,
+)
 from corroborate.analyses.stratified_spearman import (
     StratifiedSpearmanResult,
 )
@@ -124,15 +127,19 @@ def per_stratum_upper_bound_verdict(
 
 
 def spearman_rho_verdict(
-    result: StratifiedSpearmanResult | StratifiedPartialSpearmanResult,
+    result: (
+        StratifiedSpearmanResult
+        | StratifiedPartialSpearmanResult
+        | StratifiedPartialSpearmanMultiResult
+    ),
     *,
     sign: int,
     threshold: float,
     min_strata: int = 1,
     alpha: float = 0.05,
 ) -> Verdict:
-    """Verdict on a Fisher-z-pooled stratified Spearman ρ (marginal
-    or partial).
+    """Verdict on a Fisher-z-pooled stratified Spearman ρ (marginal,
+    single-Z partial, or multi-Z partial).
 
     `sign=-1`: HELD iff `rho_pooled ≤ -|threshold|` AND `p < alpha`.
     `sign=+1`: mirror.
