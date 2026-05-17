@@ -148,10 +148,13 @@ def main(argv: list[str] | None = None) -> None:
         file=sys.stderr,
     )
 
-    # Cloud preflight — fail fast on missing/wrong credentials
-    # BEFORE spending hours on the sweep loop. Gated on whether
-    # the sweep config actually uploads (`archive_remote` set).
-    # Skip when the user explicitly opts out via --skip-preflight.
+    # Cloud preflight + AWS_PROFILE export.
+    # Preflight is gated on whether the sweep config actually
+    # uploads (`archive_remote` set) AND the user hasn't opted out
+    # via --skip-preflight. The AWS_PROFILE export is INDEPENDENT
+    # of preflight — if --profile is passed, downstream cloud ops
+    # (cloud.archive at sweep end, is_archived during resume) need
+    # it on the env, regardless of whether preflight ran.
     profile_attr_raw: object = args.profile  # pyright: ignore[reportAny]
     skip_attr_raw: object = args.skip_preflight  # pyright: ignore[reportAny]
     profile_arg: str | None = (
@@ -160,6 +163,8 @@ def main(argv: list[str] | None = None) -> None:
     skip_preflight: bool = bool(skip_attr_raw) if isinstance(
         skip_attr_raw, bool,
     ) else False
+    if profile_arg is not None:
+        os.environ['AWS_PROFILE'] = profile_arg
     if sweep.archive_remote is not None and not skip_preflight:
         from corroborate._internals.cloud_auth import (
             CloudAuthError, preflight,
@@ -173,8 +178,6 @@ def main(argv: list[str] | None = None) -> None:
                 file=sys.stderr,
             )
             raise SystemExit(1) from e
-        if profile_arg is not None:
-            os.environ['AWS_PROFILE'] = profile_arg
 
     runs_path, traces_path = dispatch_sweep(sweep)
     print(

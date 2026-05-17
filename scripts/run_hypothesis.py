@@ -209,6 +209,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     profile = cast(str | None, args.profile)
     skip_preflight = cast(bool, args.skip_preflight)
 
+    # AWS_PROFILE export is independent of preflight. If the user
+    # passes --profile, downstream cloud ops (lazy restore, archive)
+    # need it on the env regardless of whether preflight ran.
+    if profile is not None:
+        import os as _os
+        _os.environ['AWS_PROFILE'] = profile
+
     # Cloud preflight — only when (a) we're ingesting AND (b)
     # cloud-restore is on AND (c) at least one corpus under the
     # ingest scope has a `_remote.json` (else there's no cloud touch
@@ -230,11 +237,24 @@ def main(argv: Sequence[str] | None = None) -> int:
                 d for d in data.iterdir() if d.is_dir()
             )
         for d in candidate_dirs:
-            if (d / MANIFEST_NAME).exists():
+            if not (d / MANIFEST_NAME).exists():
+                continue
+            try:
                 m = load_manifest(d)
-                if m is not None:
-                    manifest_remote_root = m.remote_root
-                    break
+            except (ValueError, TypeError, OSError) as e:
+                # Corrupt `_remote.json` — surface as a clean
+                # preflight error rather than letting the unhandled
+                # exception bubble.
+                import sys
+                print(
+                    f'run_hypothesis: preflight aborted — corrupt '
+                    f'manifest at {d / MANIFEST_NAME}: {e}',
+                    file=sys.stderr,
+                )
+                return 1
+            if m is not None:
+                manifest_remote_root = m.remote_root
+                break
         if manifest_remote_root is not None:
             try:
                 _preflight(manifest_remote_root, profile=profile)
@@ -246,9 +266,6 @@ def main(argv: Sequence[str] | None = None) -> int:
                     file=sys.stderr,
                 )
                 return 1
-            if profile is not None:
-                import os
-                os.environ['AWS_PROFILE'] = profile
     if bridge_filter is not None:
         # Filter mode runs a subset of bridges → measurable
         # computation is the filtered subset's deps, not the full
