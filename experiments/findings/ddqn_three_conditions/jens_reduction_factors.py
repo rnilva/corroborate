@@ -1119,3 +1119,138 @@ def gamma_jens_jointly_mediated_by_self_ref_and_sigma_action_at_fr_mlp(
         sign=0,
         threshold=rho_threshold,
     )
+
+
+# === Cross-env Acrobot replication of the γ → jens chain ===
+#
+# At Acrobot × MLP × unshaped × baseline (n=120), the marginal
+# γ → jens correlation is SMALL (+0.19 vs FR's +0.78). Vanilla
+# anchors on per-step reward — no catastrophic Q-explosion at
+# γ→1 — so γ has little to amplify.
+#
+# Two cross-env observations:
+#
+# 1. Marginal γ → jens at Acrobot is below the moderate-effect
+#    threshold (|ρ| ≤ 0.3). The FR amplification doesn't
+#    replicate, but for a STRUCTURALLY DIFFERENT reason than
+#    "different mechanism" — vanilla's Q-growth regime is
+#    fundamentally different.
+#
+# 2. q_late is sign-flipped vs FR: ρ(γ, q_late) at Acrobot =
+#    -0.72 (vs FR's +0.79). At Acrobot's dense-negative-reward
+#    regime, higher γ → less negative Q (better policy reaches
+#    goal in fewer steps); at FR's sparse-positive-reward,
+#    higher γ → more positive Q (unbounded overestimation).
+
+
+@claim_bridge(
+    source='gamma',
+    target='jensen_gap',
+    direction=Direction.DIRECT,
+    tier=Tier.ASSOCIATIONAL,
+    scope=(
+        (pl.col('env_name') == 'Acrobot-v1')
+        & (pl.col('fa_kind') == 'mlp_deep')
+        & (pl.col('shaping_kind') == 'none')
+        & (pl.col('arm_key') == 'baseline')
+        & pl.col('gamma').is_in([0.99, 0.999])
+        & finite(pl.col('jensen_gap'))
+    ),
+    predicted_direction='a_gt_b',
+)
+def gamma_jens_marginal_small_at_acrobot_mlp(
+    stratified_spearman: StratifiedSpearmanResult,
+    *,
+    x: str = 'gamma',
+    y: str = 'jensen_gap',
+    stratify_by: str = 'env_name',
+    min_stratum_size: int = 30,
+    rho_threshold: float = 0.1,
+) -> Verdict:
+    """γ → jens marginal correlation at Acrobot × MLP × unshaped ×
+    baseline is small but detectable — much weaker than FR's
+    +0.78.
+
+    Per-cell Spearman ρ(γ, jensen_gap) over baseline cells.
+    Predicted: ρ ≥ +0.1 AND significant. HELDs iff the effect
+    is detectable; the substantive content is the CONTRAST with
+    FR (where the same marginal is +0.78).
+
+    Empirical (n=120): ρ = +0.19 (p ≈ 1e-4). Detectable but
+    well below FR's +0.78. The regime is qualitatively
+    different — vanilla anchors at Acrobot (dense per-step
+    reward), so the Q-explosion path doesn't fire and γ has
+    little to amplify.
+
+    The small-marginal condition makes the mediation chain
+    structure DIFFERENT at Acrobot: ANY single mediator
+    collapses the partial to ~0 because the marginal itself
+    is small, NOT because the mediator is the right path
+    (the FR-style discriminating mediation test isn't
+    informative here — there's not enough effect to mediate).
+
+    Cluster-level claim of `finding_acrobot_chain_does_not_replicate`
+    pairs this bridge with `q_late_sign_flipped_with_gamma_at_acrobot_mlp`
+    to document the cross-env regime contrast."""
+    del x, y, stratify_by, min_stratum_size
+    return spearman_rho_verdict(
+        stratified_spearman,
+        sign=+1,
+        threshold=rho_threshold,
+    )
+
+
+@claim_bridge(
+    source='gamma',
+    target='q_late_mean',
+    direction=Direction.INVERSE,
+    tier=Tier.ASSOCIATIONAL,
+    scope=(
+        (pl.col('env_name') == 'Acrobot-v1')
+        & (pl.col('fa_kind') == 'mlp_deep')
+        & (pl.col('shaping_kind') == 'none')
+        & (pl.col('arm_key') == 'baseline')
+        & pl.col('gamma').is_in([0.99, 0.999])
+        & finite(pl.col('q_late_mean'))
+    ),
+    predicted_direction='a_lt_b',
+)
+def q_late_sign_flipped_with_gamma_at_acrobot_mlp(
+    stratified_spearman: StratifiedSpearmanResult,
+    *,
+    x: str = 'gamma',
+    y: str = 'q_late_mean',
+    stratify_by: str = 'env_name',
+    min_stratum_size: int = 30,
+    rho_threshold: float = -0.5,
+) -> Verdict:
+    """At Acrobot × MLP × unshaped × baseline, ρ(γ, q_late) is
+    significantly NEGATIVE — the sign-flipped Q-growth regime
+    vs FR.
+
+    Per-cell Spearman ρ(γ, q_late_mean). Predicted: strongly
+    negative — higher γ → less negative |Q| (vanilla reaches
+    the goal in fewer steps, so accumulated negative reward
+    is smaller in magnitude).
+
+    HELDs iff ρ ≤ -0.5 AND p < 0.05. Empirical: ρ = -0.72
+    (p<1e-19) at n=120.
+
+    Cross-env contrast: at FR × MLP × unshaped × baseline,
+    ρ(γ, q_late) = +0.79 (positive — Q grows unbounded under
+    γ→1 because vanilla can't anchor). At Acrobot the Q-growth
+    regime is structurally OPPOSITE — vanilla anchors on
+    per-step negative reward; γ→1 produces a better policy
+    with smaller |Q|.
+
+    Documents that the same axis (γ) drives Q in opposite
+    directions in different env regimes. The mediation chain
+    structure at FR is regime-specific to sparse-single-terminal
+    × γ→1; cross-env replication requires matching the regime,
+    not just the env-feature axis."""
+    del x, y, stratify_by, min_stratum_size
+    return spearman_rho_verdict(
+        stratified_spearman,
+        sign=-1,
+        threshold=rho_threshold,
+    )

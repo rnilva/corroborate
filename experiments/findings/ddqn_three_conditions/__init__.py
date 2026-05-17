@@ -91,6 +91,7 @@ MODULE_SCOPE = pl.col('gamma').is_in([0.99, 0.999])
 # Register hypothesis-local derived measurables.
 from experiments.findings.ddqn_three_conditions import _measurables  # pyright: ignore[reportUnusedImport]  # noqa: F401  -- registers @measurable side-effects
 from experiments.findings.ddqn_three_conditions import (
+    finding_acrobot_chain_does_not_replicate,
     finding_gamma_amplification_anchor_gated,
     finding_gamma_jens_via_q_self_reference,
     finding_jens_reduction_factors,
@@ -111,12 +112,14 @@ from experiments.findings.ddqn_three_conditions.jens_reduction_factors import (
     fa_capacity_moderates_ddqn_jens_reduction,
     gamma_jens_jointly_mediated_by_self_ref_and_q_late_at_fr_mlp,
     gamma_jens_jointly_mediated_by_self_ref_and_sigma_action_at_fr_mlp,
+    gamma_jens_marginal_small_at_acrobot_mlp,
     gamma_jens_mediated_by_q_self_reference_at_fr_mlp,
     gamma_predicts_q_late_residual_at_fr_mlp,
     gamma_predicts_q_self_reference_at_fr_mlp,
     gamma_predicts_sigma_action_residual_at_fr_mlp,
     linear_fa_cap_fails_at_metamaze_g999__exception,
     q_late_predicts_jens_residual_at_fr_mlp,
+    q_late_sign_flipped_with_gamma_at_acrobot_mlp,
     q_self_reference_predicts_jens_at_fr_mlp,
     sigma_action_predicts_ddqn_jens_reduction,
     sigma_action_predicts_jens_residual_at_fr_mlp,
@@ -148,6 +151,8 @@ BRIDGES = (
     gamma_predicts_sigma_action_residual_at_fr_mlp,
     sigma_action_predicts_jens_residual_at_fr_mlp,
     gamma_jens_jointly_mediated_by_self_ref_and_sigma_action_at_fr_mlp,
+    gamma_jens_marginal_small_at_acrobot_mlp,
+    q_late_sign_flipped_with_gamma_at_acrobot_mlp,
 )
 
 
@@ -159,6 +164,7 @@ FINDINGS = (
     finding_q_magnitude_residual_mediator,
     finding_joint_mediation_incomplete,
     finding_sigma_action_completes_chain,
+    finding_acrobot_chain_does_not_replicate,
 )
 
 
