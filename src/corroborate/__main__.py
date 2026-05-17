@@ -224,8 +224,10 @@ def _cmd_catalogue(args: Mapping[str, object]) -> int:
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog='python -m corroborate',
-        description='cloud archive for sweep parquets',
+        prog='corroborate',
+        description='cloud archive for sweep parquets + corpus '
+                    'catalogue (via `corroborate` console script '
+                    'or `python -m corroborate`).',
     )
     sub = parser.add_subparsers(dest='cmd', required=True)
 

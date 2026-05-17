@@ -348,7 +348,7 @@ operational rules below catch the most common mistakes.
   `experiments/probes/` is wrong by construction (single-root
   walks have surfaced 60% false-orphan-rate on the live tree).
 - **Discovery via `corroborate catalogue`**. Reach for
-  `python -m corroborate catalogue experiments/data
+  `corroborate catalogue experiments/data
   experiments/probes --remote-prefix s3://corroborate-archive/`
   BEFORE inventing your own glob / walk. The catalogue carries
   `parent`, `name`, `status` (CLOUD_AND_LOCAL / CLOUD_EVICTED /
@@ -397,7 +397,7 @@ operational rules below catch the most common mistakes.
   (`_internals.cloud_auth.preflight`) that emits a typed
   `CloudAuthError(stage, message, hint)` — stages:
   `no_credentials`, `auth_failed`, `bucket_missing`, `network`.
-  Covered entries: `python -m corroborate {archive, restore, ls,
+  Covered entries: `corroborate {archive, restore, ls,
   catalogue --remote-prefix}`, `scripts/run_sweep.py` (gated on
   `sweep.archive_remote`), and `scripts/run_hypothesis.py`
   (gated on `--ingest*` + `--no-restore` not set + any

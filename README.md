@@ -355,13 +355,13 @@ absolute paths.
 ```bash
 # Inventory all corpora across local + cloud, with status per row
 # (CLOUD_AND_LOCAL / CLOUD_EVICTED / LOCAL_ONLY / IN_PROGRESS_SCAFFOLD).
-uv run python -m corroborate catalogue \
+uv run corroborate catalogue \
     experiments/data experiments/probes \
     --remote-prefix s3://corroborate-archive/
 
 # Per-(corpus, arm) leaf-signature view — the configurational
 # fingerprint each sweep arm holds constant vs sweeps over.
-uv run python -m corroborate catalogue \
+uv run corroborate catalogue \
     experiments/data experiments/probes \
     --leaves --leaves-wide
 ```
@@ -390,7 +390,7 @@ via any of:
    s3 =
      endpoint_url = https://<account>.r2.cloudflarestorage.com
    ```
-   Then: `python -m corroborate archive <dir> --remote s3://... --profile r2`
+   Then: `corroborate archive <dir> --remote s3://... --profile r2`
 2. **Environment variables** (`AWS_ACCESS_KEY_ID`,
    `AWS_SECRET_ACCESS_KEY`, `AWS_ENDPOINT_URL`): work without
    profile config. If you keep them in `.env`, source it
@@ -401,7 +401,7 @@ via any of:
 Every cloud-touching CLI entry runs a **preflight check** that
 fails fast with a typed stage + actionable hint. Covered:
 
-- `python -m corroborate {archive, restore, ls, catalogue --remote-prefix}`
+- `corroborate {archive, restore, ls, catalogue --remote-prefix}`
   — preflights against the per-command remote (always for
   `archive`, derived from the local manifest for `restore` / `ls`,
   from `--remote-prefix` for `catalogue`).
@@ -430,20 +430,20 @@ Python API: `from corroborate._internals.cloud_auth import preflight`
 
 ```bash
 # Per-command --profile flag (or rely on AWS_PROFILE env var):
-uv run python -m corroborate archive experiments/data/<corpus> \
+uv run corroborate archive experiments/data/<corpus> \
     --remote s3://corroborate-archive/<corpus> --profile r2
 
 # Inspect what a corpus has archived:
-uv run python -m corroborate ls experiments/data/<corpus> --profile r2
+uv run corroborate ls experiments/data/<corpus> --profile r2
 
 # Restore (e.g. to re-derive trace-dependent measurables):
-uv run python -m corroborate restore experiments/data/<corpus> --profile r2
+uv run corroborate restore experiments/data/<corpus> --profile r2
 
 # Purge LOCAL copies of cloud-archived files (manifest preserved,
 # `restore` stays available). NEVER `rm` cloud-backed files
 # directly — `purge` validates the manifest first. (No preflight:
 # purge is local-only.)
-uv run python -m corroborate purge experiments/data/<corpus>
+uv run corroborate purge experiments/data/<corpus>
 ```
 
 ### Cache mechanics

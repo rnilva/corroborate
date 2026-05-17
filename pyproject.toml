@@ -19,6 +19,13 @@ dependencies = [
     "dowhy>=0.14",
 ]
 
+[project.scripts]
+# Entry point — exposes `corroborate ...` as a direct console
+# command instead of requiring `python -m corroborate ...`.
+# Both forms continue to work (the module's `if __name__ ==
+# '__main__'` block stays intact).
+corroborate = "corroborate.__main__:main"
+
 [project.optional-dependencies]
 yaml = [
     "pyyaml>=6.0",          # `load_hypothesis` + `_internals/yaml`
