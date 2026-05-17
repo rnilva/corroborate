@@ -1,27 +1,44 @@
-"""DDQN as Hasselt's three-factor bound, with shaping as a
-separable outcome-translation axis.
+"""DDQN bias-reduction scalings (K-axis, γ-axis, FA-axis) +
+outcome-translation scope. Six bridges across two cluster
+Findings.
 
-Hasselt 2010's structural bound on Q-learning's overestimation:
+Hasselt 2010's `bias ≤ σ_action × √(2 ln K) × 1/(1 − γ)`
+motivates three axes (action count, discount factor, FA
+capacity) on which DDQN's bias-reduction might scale. The
+bridges in `hasselt_bound.py` corroborate that the scalings are
+empirically MONOTONE at this corpus's scope. They DO NOT
+identify the manipulated variable with Hasselt's specific
+factor — each bridge docstring disclaims the non-identification
+(K-via-action_duplicate is a confounded K-proxy; γ-amplification
+cannot discriminate Hasselt's 1/(1−γ) from vanilla-degeneracy at
+γ→1; FA-capacity binary cannot discriminate σ_action from
+Type-1 FA-truncation).
 
-    bias ≤ σ_action × √(2 ln K) × 1/(1 − γ)
+The empirically-corroborated frame is the Type 1 / Type 2
+bias decomposition from `findings_two_types_of_bias`. Hasselt's
+bound is the cleanest theoretical inspiration; this module's
+bridges corroborate scalings consistent with — but not
+identified to — that bound.
 
-Three multiplicative factors, three places to intervene. Six
-bridges across two topical modules + two cluster Findings test
-each factor in isolation, then test how bias-reduction
-translates to outcome and how reward shaping decouples that
-translation.
-
-- `hasselt_bound.py` (4 bridges) — one per factor, tested in
-  isolation. Cluster Finding `finding_hasselt_bound`.
-- `outcome_translation.py` (2 bridges) — the shaping-decouples
-  cluster (positive arm at unshaped + null arm at shaped).
-  Cluster Finding `finding_shaping_decouples`.
+- `hasselt_bound.py` (4 bridges) — K-axis, γ-axis, FA-axis
+  rule + FA-axis exception. Cluster Finding `finding_hasselt_bound`.
+- `outcome_translation.py` (2 bridges) — positive arm at the
+  bias-active reference cell + null arm at FR × shaped panel.
+  Cluster Finding `finding_shaping_decouples`. NB: the two
+  arms test non-matched scopes — the matched-scope claim
+  (FR γ=0.999 × MLP × {shaped, unshaped} × k_eff sweep)
+  requires a shaped × k_eff sweep that does not yet exist.
 
 Substantive narrative cross-refs (memory):
 - `findings_two_types_of_bias` — Type 1 (DDQN reduces) vs Type 2
   (FA/γ-truncation, DDQN cannot reduce) bias decomposition.
-- `findings_shaping_decouples_bias_from_outcome` — the
-  intervention's mechanism story.
+- `findings_q_explosion_direct_evidence` — alternative mechanism
+  the γ-axis bridge cannot discriminate against.
+- `findings_sigma_K_scaling_corroborated` — the previously
+  retracted σ × √(2 ln K) claim; the FA-axis bridge avoids the
+  same retracted shape only by disclaiming σ_action attribution.
+- `findings_shaping_decouples_bias_from_outcome` — narrative for
+  the null arm; partly tested, partly asserted.
 - `findings_regime_discriminator_polarity_x_gamma` — env-feature
   taxonomy for when DDQN's reduction translates to outcome.
 
@@ -92,7 +109,7 @@ from experiments.findings.ddqn_three_conditions.hasselt_bound import (
 )
 from experiments.findings.ddqn_three_conditions.outcome_translation import (
     ddqn_helps_outcome_at_fr_g999_mlp_unshaped__k_panel,
-    shaping_decouples_outcome_benefit__fr_shaped_fa_x_gamma_panel,
+    ddqn_no_positive_outcome_under_shaping__fr_shaped_fa_x_gamma_panel,
 )
 
 
@@ -102,7 +119,7 @@ BRIDGES = (
     fa_capacity_moderates_ddqn_jens_reduction,
     linear_fa_cap_fails_at_metamaze_g999__exception,
     ddqn_helps_outcome_at_fr_g999_mlp_unshaped__k_panel,
-    shaping_decouples_outcome_benefit__fr_shaped_fa_x_gamma_panel,
+    ddqn_no_positive_outcome_under_shaping__fr_shaped_fa_x_gamma_panel,
 )
 
 

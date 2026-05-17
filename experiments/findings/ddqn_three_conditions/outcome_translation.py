@@ -1,24 +1,37 @@
-"""Outcome-translation cluster: shaping moderates bias → outcome.
+"""Outcome-translation cluster: where DDQN's bias-reduction
+translates to outcome and where it does not.
 
-Hasselt's bound describes WHY DDQN's mech fires (the bias side);
-this module's two bridges describe WHEN that mech translates to
-outcome. The cluster pattern: positive arm at unshaped FA-dense
-+ null arm at shaped reads as "potential-based shaping decouples
-DDQN's bias-reduction from its outcome effect at FR γ ∈ {0.99,
-0.999} × MLP".
+Two bridges, both on FourRooms, with non-matched stratification
+axes:
 
 - positive arm `ddqn_helps_outcome_at_fr_g999_mlp_unshaped__k_panel`:
-  the "Hasselt factors all active + dense FA" reference cell.
-  DDQN's outcome > vanilla's outcome at every k_eff stratum.
-- null arm `shaping_decouples_outcome_benefit__fr_shaped_fa_x_gamma_panel`:
-  the "alternative policy signal" perturbation. Under
-  PotentialReward(Manhattan-to-goal), DDQN's outcome effect is
-  never appreciably positive — the dense Φ-gradient signal
-  overrides Q-noise on argmax, so bias-reduction doesn't matter.
+  at FR γ=0.999 × MLP × unshaped, DDQN's outcome > vanilla's
+  outcome at every k_eff stratum.
+- null arm `ddqn_no_positive_outcome_under_shaping__fr_shaped_fa_x_gamma_panel`:
+  at FR × {linear, MLP} × {γ=0.99, 0.999} × PotentialReward,
+  DDQN's outcome effect is never appreciably POSITIVE.
+
+What the cluster does NOT claim:
+- That the two arms test matched scopes. The positive arm pins
+  γ=0.999 + MLP and varies k_eff; the null arm pools γ +
+  fa_kind and fixes k_eff. The honest cluster reading is
+  "DDQN helps at A, doesn't help anywhere in B" where A and B
+  are non-overlapping scopes of FR. The matched-stratum claim
+  (positive vs null at FR γ=0.999 × MLP × {shaped, unshaped} ×
+  k_eff sweep) would require a sweep that doesn't yet exist.
+- That shaping CAUSALLY DECOUPLES bias from outcome. The
+  empirical pattern is "no positive benefit". One stratum
+  (γ=0.99 × MLP × shaped) shows d ≈ −1.5 — DDQN actively
+  HURTS. The `predicted_direction='a_lt_b'` framing admits
+  both "decouples to ~0" and "inverts to −1.5" as consistent;
+  these are different mechanisms collapsed by the asymmetric
+  upper-bound verdict.
 
 Memo cross-ref: `findings_shaping_decouples_bias_from_outcome`
-documents the substantive mechanism (three-condition scope
-discriminator for DDQN's outcome benefit)."""
+gives the substantive narrative; this module's bridges
+corroborate the no-positive-benefit empirical content
+(the narrative's mechanism story is partly tested, partly
+asserted)."""
 from __future__ import annotations
 
 import polars as pl
@@ -71,14 +84,16 @@ def ddqn_helps_outcome_at_fr_g999_mlp_unshaped__k_panel(
     seeds per arm per stratum.
 
     HELD iff every stratum's d ≥ +`per_stratum_d_threshold`
-    (= 0.3). NO_EFFECT/SIGN_FLIP if any stratum shows d < -0.3
-    (DDQN substantially HURTS). NO_EFFECT (null) if any stratum
-    sits in the indeterminate band (-0.3, 0.3).
+    (= 0.3). NO_EFFECT/SIGN_FLIP if any stratum shows d < -0.3.
+    NO_EFFECT (null) if any stratum sits in (-0.3, 0.3).
 
-    Pairs with `shaping_decouples_outcome_benefit__fr_shaped_fa_x_gamma_panel` —
-    both HELD reads as "DDQN's outcome benefit is real at
-    unshaped MLP but vanishes under potential-based shaping at
-    the same env/FA"."""
+    Pairs with `ddqn_no_positive_outcome_under_shaping__fr_shaped_fa_x_gamma_panel`
+    on non-matched scopes (this arm: γ=0.999 × MLP × k_eff sweep
+    × unshaped; null arm: γ ∈ {0.99, 0.999} × {linear, MLP} ×
+    shaped). Both HELD reads as "DDQN's outcome benefit is real
+    at A and absent at B" — NOT "shaping moderates the outcome
+    at the same scope as A". The matched-scope claim requires
+    a shaped × k_eff sweep that does not yet exist."""
     del stratify_by, min_baseline_predictor
     return per_stratum_d_threshold_verdict(
         stratified_arm_diff_pooled,
@@ -101,7 +116,7 @@ def ddqn_helps_outcome_at_fr_g999_mlp_unshaped__k_panel(
     ),
     predicted_direction='a_lt_b',
 )
-def shaping_decouples_outcome_benefit__fr_shaped_fa_x_gamma_panel(
+def ddqn_no_positive_outcome_under_shaping__fr_shaped_fa_x_gamma_panel(
     stratified_arm_diff_pooled: StratifiedArmDiffPooledResult,
     *,
     stratify_by: tuple[str, ...] = ('fa_kind', 'gamma'),
@@ -113,36 +128,38 @@ def shaping_decouples_outcome_benefit__fr_shaped_fa_x_gamma_panel(
     (fa_kind, γ) panel.
 
     Per-stratum independent-samples Cohen's d on
-    `eval_best_burst_raw_mean` (the canonical γ-invariant target
-    for cross-γ analysis). HELD iff every stratum's d ≤
-    `per_stratum_d_upper_bound` (= 0.3) — DDQN never appreciably
-    HELPS the outcome under shaping. NEGATIVE effects (DDQN
-    hurts) are consistent with the decoupling claim and don't
-    refute it.
-
-    Substantive mechanism (memo entry
-    `findings_shaping_decouples_bias_from_outcome`): under
-    potential-based shaping, vanilla's optimization signal is
-    dense enough that the bias→behavior chain breaks. DDQN's
-    bias-reduction is mechanistically real (jens still drops)
-    but doesn't translate to outcome gains because vanilla
-    already converges from the dense shaped signal. The
-    empirical reading on this corpus is stronger than null at
-    one cell (mlp × γ=0.99 has d=-1.5: DDQN actively HURTS),
-    consistent with shaping INVERTING rather than just decoupling
-    the translation at lower γ.
+    `eval_best_burst_raw_mean` (canonical γ-invariant target).
+    HELD iff every stratum's d ≤ `per_stratum_d_upper_bound`
+    (= 0.3) — DDQN never appreciably HELPS the outcome under
+    shaping. NEGATIVE effects (DDQN hurts) are consistent with
+    the verdict and do not refute it.
 
     Refutations:
     - INVARIANT_VIOLATION: any stratum's CI fully > +0.3
-      (DDQN meaningfully helps under shaping — would refute
-      decoupling).
+      (DDQN meaningfully helps under shaping).
     - POWER_INSUFFICIENT: any stratum's CI straddles +0.3
       without crossing fully above.
 
-    Pairs with `ddqn_helps_outcome_at_fr_g999_mlp_unshaped__k_panel` —
-    that bridge HELD (DDQN helps unshaped) + this bridge HELD
-    (DDQN doesn't help shaped) = "shaping moderates the outcome
-    translation"."""
+    What this bridge does NOT claim:
+    - That shaping DECOUPLES bias from outcome. The bridge's
+      asymmetric `predicted_direction='a_lt_b'` admits BOTH:
+      (a) "shaping decouples to ~0" (the narrative in
+      `findings_shaping_decouples_bias_from_outcome`), and
+      (b) "shaping INVERTS the translation" (the γ=0.99 × MLP
+      × shaped stratum has d ≈ −1.5 — DDQN actively HURTS).
+      These are different mechanisms; the upper-bound verdict
+      collapses them. The honest empirical content is "no
+      positive benefit", which is weaker than "decouples".
+    - Cross-env generalisation. Scope is FR-only; no other env
+      has been run with PotentialReward shaping at this
+      writing.
+
+    Pairs with `ddqn_helps_outcome_at_fr_g999_mlp_unshaped__k_panel`
+    on non-matched scopes (positive arm: γ=0.999 × MLP × k_eff
+    sweep; null arm: γ ∈ {0.99, 0.999} × {linear, MLP}). The
+    matched-stratum claim — positive vs null at the SAME
+    (γ=0.999, MLP) cell — needs a shaped × k_eff sweep that
+    does not yet exist."""
     del stratify_by, min_baseline_predictor
     return per_stratum_upper_bound_verdict(
         stratified_arm_diff_pooled,

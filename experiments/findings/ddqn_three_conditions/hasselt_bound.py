@@ -1,29 +1,69 @@
-"""Hasselt's three-factor bound on Q-learning overestimation.
+"""Three scalings of DDQN's bias-reduction, inspired by but NOT
+identified to Hasselt 2010's bound.
 
 Hasselt 2010's structural bound:
 
     bias ≤ σ_action × √(2 ln K) × 1/(1 − γ)
 
-The bound has three multiplicative factors. DDQN's clip on the
-bootstrap target is supposed to annihilate the `√(2 ln K)`
-factor (the argmax-vs-max gap). The three factors give three
-places to intervene; this module's four bridges test each.
+motivates three axes to interrogate DDQN's effect on
+`jensen_gap`: action count, discount factor, function-
+approximator capacity. Each bridge below tests a SCALING on its
+axis. None identify the bridge's variable with Hasselt's
+specific factor — the SCALINGS are corroborated; the factor-
+by-factor ATTRIBUTION is not.
 
-- `√(2 ln K)` factor — K-scaling within FR γ=0.999 × MLP ×
-  unshaped across k_eff ∈ {4, 8, 12, 16}.
-- `1/(1 − γ)` factor — γ-amplification at FR × MLP × unshaped
-  × k_eff=4 (K controlled) across γ ∈ {0.99, 0.999}.
-- σ_action factor — rule + exception cluster:
-  - rule: linear FA bounds σ_action → Hasselt mech dormant.
-    Tested as the FA-capacity moderator on the panel
-    {FR, Acrobot, MountainCar} × γ × {linear, mlp_deep}.
-  - exception: MetaMaze γ=0.999 × linear FA — the cap FAILS
-    because random-maze-per-episode forces FA-fit-error bias
-    that DDQN clips via a non-σ path.
+What the bridges actually test:
 
-The cluster pattern: K HELD + γ HELD + (FA-moderator HELD +
-MM-exception HELD) → "Hasselt's bound is the right
-mechanistic frame for DDQN's bias-reduction at these envs"."""
+- **K-axis scaling** (`ddqn_reduces_jens_uniformly_across_k_*`):
+  monotone-in-`k_eff` at FR γ=0.999 × MLP × unshaped across
+  k_eff ∈ {4, 8, 12, 16}. `k_eff = native_K × action_duplicate_k`
+  is a CONFOUNDED K-proxy: action_duplicate creates K
+  identical-effect actions (perfectly correlated estimators),
+  not iid K-armed-max draws. The √(2 ln K)-iid derivation does
+  NOT apply to k_eff produced this way. Cannot discriminate
+  Hasselt's K factor from state-distribution / exploration
+  effects of action duplication.
+
+- **γ-axis scaling** (`ddqn_reduction_amplified_by_gamma_*`):
+  monotone-in-γ at FR × MLP × unshaped × k_eff=4 across γ ∈
+  {0.99, 0.999}. Threshold ≥ 3× amplification. The structural
+  prediction is 10×; the threshold is loose enough to admit
+  any monotone-in-γ scaling. Cannot discriminate Hasselt's
+  1/(1−γ) factor from the alternative in
+  `findings_q_explosion_direct_evidence` (vanilla degeneracy
+  at γ→1 — at FR γ=0.999 vanilla never finds goal, Q grows
+  19,520× MC because no observational anchor exists).
+
+- **FA-axis moderator** (`fa_capacity_moderates_*`): per-(env,
+  γ, fa_kind) Cohen's d ↦ binary `fa_capacity` (0=linear,
+  1=mlp_deep), random-effects meta-regression slope. The
+  empirical pattern (Δd more negative at MLP than linear) is
+  consistent with σ_action being FA-capped (Hasselt-σ
+  interpretation). It is ALSO consistent with the Type 1 /
+  Type 2 framing of `findings_two_types_of_bias`: linear FA
+  truncates Q before the max-amplifier has headroom, so Type 1
+  is small regardless of σ_action. This bridge tests FA-
+  capacity moderation; it does NOT discriminate σ_action from
+  FA-truncation. A continuous regression on `q_action_std_late`
+  (already in REQUIRED_MEASURABLES) would; this binary form
+  does not.
+
+- **FA-axis exception** (`linear_fa_cap_fails_at_metamaze_*`):
+  at MetaMaze γ=0.999 × linear, DDQN substantially reduces
+  jens — an empirical anomaly relative to the FA-moderator
+  rule. The mechanism story ("random-maze state-distribution
+  shift → FA-fit error") is ASSERTED from env structure but
+  NOT empirically discriminated from alternatives (Type 1
+  contribution at MM's intermediate T1/T2 = 0.21 per
+  `findings_two_types_of_bias`; FR-style late-divergence under
+  sufficient |Q| magnitude). The bridge documents the
+  anomaly; it does not corroborate the proposed mechanism.
+
+The empirically-corroborated frame here is the Type 1 / Type 2
+decomposition of `findings_two_types_of_bias`. Hasselt's bound
+is the cleanest theoretical inspiration; this cluster's bridges
+corroborate three scalings consistent with — but not
+identified to — that bound."""
 from __future__ import annotations
 
 import math
@@ -86,14 +126,32 @@ def ddqn_reduces_jens_uniformly_across_k_at_fr_high_gamma(
     at FourRooms γ=0.999 × MLP[64,64] × no-shaping across
     k_eff ∈ {4, 8, 12, 16}.
 
-    Direction.INVERSE encodes the Hasselt mech prediction;
-    `predicted_direction='a_lt_b'` means treatment-arm jens <
-    baseline-arm jens (DDQN reduces). Empirical readings live
-    in `findings_two_types_of_bias`.
+    Empirical content: DDQN's bias-reduction is monotone-in-k_eff
+    at this scope. Direction.INVERSE encodes the predicted
+    direction; `predicted_direction='a_lt_b'` means treatment-arm
+    jens < baseline-arm jens. See `findings_two_types_of_bias`.
 
-    Caveat: within-FR K-scaling only. The bound's σ factor is
-    tested by the FA-capacity moderator below; the γ factor by
-    the amplification bridge. This bridge isolates √(2 ln K)."""
+    What this bridge does NOT claim:
+    - That k_eff identifies Hasselt's K factor.
+      `k_eff = native_K × action_duplicate_k` is a confounded
+      K-proxy: action_duplicate creates K identical-effect
+      actions (perfectly correlated estimators), not iid
+      K-armed-max draws. Hasselt's √(2 ln K)-iid-Gaussian-max
+      derivation does NOT apply at k_eff. The empirical pattern
+      is also consistent with state-distribution and exploration
+      effects from action duplication (longer effective horizon,
+      sparser per-action visit counts). The bridge corroborates
+      the SCALING, not the Hasselt-K attribution.
+
+    To identify the Hasselt-K factor, a natural-K bridge across
+    envs with native |A| variation (MetaMaze=4, MC=3, Acrobot=3,
+    Asterix=5, PacMan=5) is required; this corpus does not yet
+    carry that panel.
+
+    `min_baseline_predictor=0.5` excludes strata where vanilla's
+    jens is below the noise floor (Type 1 has no headroom to
+    develop). Pre-registered as a noise-floor exclusion, not
+    post-hoc tuning."""
     del stratify_by, min_baseline_predictor
     return per_stratum_d_threshold_verdict(
         stratified_arm_diff_pooled,
@@ -127,31 +185,43 @@ def ddqn_reduction_amplified_by_gamma__fr_mlp_k4_unshaped(
     per_stratum_d_threshold: float = -0.8,
     gamma_amp_ratio: float = 3.0,
 ) -> tuple[Verdict, RefutationClass | None]:
-    """DDQN's bias-reduction magnitude scales with γ as Hasselt's
-    1/(1−γ) factor predicts.
+    """DDQN's bias-reduction magnitude scales monotonically with
+    γ at FR × MLP[64,64] × unshaped × k_eff=4.
 
     Per-γ independent-samples Cohen's d + mean-diff on jensen_gap
-    at FR × MLP[64,64] × unshaped × k_eff=4 across γ ∈ {0.99,
-    0.999}. HELD iff:
+    across γ ∈ {0.99, 0.999}. HELD iff:
 
-    1. Per-stratum cohen_d ≤ -0.8 at BOTH γ strata (DDQN's effect
-       is "large" by Cohen's convention at every γ in scope), AND
+    1. Per-stratum cohen_d ≤ -0.8 at BOTH γ strata (large Cohen's
+       d at every γ in scope), AND
     2. |mean_diff(γ=0.999)| ≥ 3 × |mean_diff(γ=0.99)| (absolute
-       magnitude of bias reduction scales with γ; 3× is a
-       conservative lower bound vs the bound's structural
-       prediction of 10× for 1/(1-γ) at γ ∈ {0.99, 0.999}).
+       magnitude of bias reduction grows with γ).
 
     Refutations:
     - NO_EFFECT/SIGN_FLIP: any γ shows d > 0 (DDQN INCREASES jens).
-    - NO_EFFECT/NULL: either γ shows d > -0.8 (DDQN's effect not
-      large at one γ — the reduction isn't uniformly present).
-    - POWER_INSUFFICIENT: amplification ratio < 3 (the
-      γ-amplification structure isn't visible; data consistent
-      with no γ-scaling).
+    - NO_EFFECT/NULL: either γ shows d > -0.8.
+    - POWER_INSUFFICIENT: amplification ratio < 3.
 
     k_eff=4 (native FR action count, no action_duplicate wrapper)
-    is fixed to remove the K factor as a confound — within this
-    scope only γ varies."""
+    is fixed to hold the k-axis constant.
+
+    What this bridge does NOT claim:
+    - That the empirical amplification identifies Hasselt's
+      `1/(1−γ)` factor specifically. The structural prediction
+      is 10× from γ=0.99→0.999; the ≥ 3× threshold is loose
+      enough to admit any monotone-in-γ scaling. Cannot
+      discriminate Hasselt-bound amplification from the
+      alternative mechanism documented in
+      `findings_q_explosion_direct_evidence`: at FR γ=0.999
+      vanilla never finds the goal (MC ≈ 0.005 throughout) and
+      Q grows to 19,520× MC because no observational anchor
+      exists — a degenerate dynamic, not bootstrap-chain
+      amplification. Both alternatives predict γ-monotone Q
+      growth at this scope.
+
+    To discriminate, the threshold would need tightening to ≥ 8×
+    (within 1.25× of the structural prediction) and a third
+    γ-stratum (0.995) testing linearity-in-1/(1−γ). Both are
+    follow-up work."""
     del stratify_by, min_baseline_predictor
     if stratified_arm_diff_pooled.n_strata < min_strata:
         return Verdict.POWER_INSUFFICIENT, None
@@ -221,26 +291,44 @@ def fa_capacity_moderates_ddqn_jens_reduction(
 
     HELD iff the slope is significantly negative AND
     ≤ `slope_threshold` (= −0.5): DDQN's effect on jens at MLP
-    is more negative than at linear by at least 0.5 Cohen units,
-    consistent with σ_action being FA-capped (Hasselt bound's
-    σ factor empirically corroborated).
+    is more negative than at linear by at least 0.5 Cohen units.
 
     Refutations:
     - NO_EFFECT/SIGN_FLIP: slope significantly POSITIVE (DDQN's
-      effect MORE negative at linear than at MLP — would refute
-      the σ-via-FA hypothesis).
-    - NO_EFFECT/NULL: slope CI brackets the threshold (not
-      significantly different from zero or not large enough).
+      effect MORE negative at linear than at MLP).
+    - NO_EFFECT/NULL: slope CI brackets the threshold.
     - POWER_INSUFFICIENT: n_strata < 6 (we have at minimum 3 envs
       × 2 γ × 2 fa = 12 strata at full ingest; require half).
 
-    Substantive scope excludes:
-    - MetaMaze (encoded as the MM-exception bridge — FA-fit
-      error from random-maze state distribution provides a
-      parallel bias path that DDQN clips even at linear FA).
-    - CartPole / Catch / DeepSea (vanilla doesn't overshoot at
-      any FA — moderator effect is unmeasurable when there's
-      no signal to moderate)."""
+    What this bridge does NOT claim:
+    - That FA capacity identifies Hasselt's σ_action factor.
+      The empirical pattern (Δd more negative at MLP than linear)
+      is consistent with σ_action being FA-capped at linear —
+      the Hasselt-σ interpretation. It is ALSO consistent with
+      Type-1-truncation at linear FA: per
+      `findings_two_types_of_bias`, linear FA truncates Q
+      before the max-bias amplifier has headroom, so Type 1 is
+      small regardless of within-state across-action σ. The
+      binary `fa_capacity` proxy CANNOT discriminate these.
+    - Anything about MetaMaze (encoded as the MM-exception
+      bridge — see `linear_fa_cap_fails_at_metamaze_g999__exception`).
+    - Anything about CartPole / Catch / DeepSea (excluded
+      because vanilla doesn't overshoot at any FA — moderator
+      effect is unmeasurable when there's no signal to
+      moderate).
+
+    To discriminate σ_action from FA-truncation, replace the
+    binary `fa_capacity` proxy with a continuous meta-regression
+    on `q_action_std_late` (the proper σ measure per
+    `findings_sigma_K_scaling_corroborated`; already in
+    REQUIRED_MEASURABLES but not consumed by this bridge body).
+    Follow-up work.
+
+    The scope restriction to {FR, Acrobot, MountainCar} is a
+    pre-registered inclusion criterion ("envs where vanilla
+    MLP develops substantive bias") — not a post-hoc filter on
+    moderator results. MetaMaze + the bsuite light envs are
+    excluded for separately-documented mechanism reasons."""
     del treatment_arm, baseline_arm, source
     del covariate_key_field, covariates_per_key, stratify_by
     return meta_regression_coef_verdict(
@@ -280,28 +368,37 @@ def linear_fa_cap_fails_at_metamaze_g999__exception(
 
     Per-(n_episodes) independent-samples Cohen's d on
     `jensen_gap` at (env=MetaMaze, γ=0.999, linear, unshaped).
-    Stratifying by n_episodes exposes the eval-power
-    sensitivity: n_episodes=5 shows d ≈ −0.5 (real but partly
-    diluted by MetaMaze's high per-episode eval variance);
-    n_episodes=20 shows d ≈ −1.1 (the eval-power-fixed reading).
+    n_episodes=5 shows d ≈ −0.5; n_episodes=20 (eval-power
+    fixed) shows d ≈ −1.1.
 
     HELD iff per-stratum d ≤ `per_stratum_d_threshold` (= −0.3,
-    Cohen's "small") at EVERY n_episodes stratum. The two strata
-    are expected to agree on sign; the larger n_episodes stratum
-    just shows the cleaner magnitude.
+    Cohen's "small") at EVERY n_episodes stratum.
 
-    Substantive mechanism: MetaMaze draws a new random maze per
-    evaluation episode. Linear FA cannot represent a single Q
-    function that generalises across mazes → vanilla's bootstrap
-    target is biased by FA-fit error → DDQN's clip removes it.
-    The mech is FA-fit-error × state-distribution-shift, NOT the
-    σ × √(2 ln K) path that the FA-capacity moderator tests and
-    rules out across the 6-env rule scope.
+    What this bridge does NOT claim:
+    - That the FA-fit-error mechanism is empirically
+      corroborated. The mechanism story (MetaMaze redraws a
+      random maze per evaluation episode → linear FA cannot
+      generalize across mazes → vanilla's bootstrap target is
+      biased by FA-fit error → DDQN clips it via a non-σ path)
+      is ASSERTED from env structure but NOT empirically
+      discriminated from alternatives. Specifically: per
+      `findings_two_types_of_bias`, MM has an intermediate
+      T1/T2 ratio (0.21-0.71), so Type 1 still contributes at
+      MM linear; an FR-style late-divergence at sufficient |Q|
+      under linear is also possible. The bridge documents the
+      empirical anomaly; the proposed mechanism is the cleanest
+      narrative but is not measured.
+    - That this exception generalises to other non-stationary
+      envs. No other env with per-episode state-distribution
+      shift (random-init Catch, randomized DeepSea, etc.) has
+      been tested at linear FA. The rule + exception cluster
+      with `fa_capacity_moderates_ddqn_jens_reduction` is
+      currently a 1-env exception, not a generalizable
+      structure.
 
-    Forms a rule + exception cluster with the FA-capacity
-    moderator: rule HELD + exception HELD = "σ-via-FA gates the
-    Hasselt mech EXCEPT where FA-fit error provides a parallel
-    bias path"."""
+    To corroborate the FA-fit-error story, a probe at other
+    random-init / non-stationary envs at linear FA is required.
+    Follow-up work."""
     del stratify_by, min_baseline_predictor
     return per_stratum_d_threshold_verdict(
         stratified_arm_diff_pooled,

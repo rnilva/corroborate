@@ -1,41 +1,60 @@
-"""Hasselt 2010's three-factor bound corroborated.
+"""Three bias-reduction scalings inspired by Hasselt 2010's
+bound — corroborated as SCALINGS, not as factor identifications.
 
-DDQN's bias-reduction at this envelope's scope is well-described
-by `bias ≤ σ_action × √(2 ln K) × 1/(1 − γ)`. Four bridges, one
-per factor (with σ_action as a rule + exception cluster):
+Hasselt 2010's `bias ≤ σ_action × √(2 ln K) × 1/(1 − γ)`
+motivates three axes (action count, discount factor,
+function-approximator capacity) on which to interrogate DDQN's
+effect on `jensen_gap`. The four bridges below corroborate
+that DDQN's bias-reduction is monotone on each axis at this
+corpus's scope. They do NOT identify the bridge's manipulated
+variable with Hasselt's specific factor — the bridge docstrings
+disclaim each non-identification:
 
 1. `ddqn_reduces_jens_uniformly_across_k_at_fr_high_gamma`
-   — the `√(2 ln K)` factor: jens reduction scales monotonically
-   across k_eff ∈ {4, 8, 12, 16} at FR γ=0.999 MLP unshaped.
+   — k_eff axis (FR γ=0.999 MLP unshaped × k_eff ∈ {4,8,12,16}).
+   k_eff via action_duplicate creates correlated identical-
+   effect actions, NOT iid K-armed-max draws. Hasselt's K
+   factor is not identified.
 
 2. `ddqn_reduction_amplified_by_gamma__fr_mlp_k4_unshaped`
-   — the `1/(1−γ)` factor: at controlled K (k_eff=4),
-   |mean_diff(γ=0.999)| ≥ 3× |mean_diff(γ=0.99)| AND per-γ
-   Cohen's d ≤ -0.8 at both γ.
+   — γ axis (FR × MLP × unshaped × k_eff=4 × γ ∈ {0.99, 0.999}).
+   ≥ 3× amplification threshold cannot discriminate Hasselt's
+   1/(1−γ) factor from vanilla-degeneracy at γ→1 (see
+   `findings_q_explosion_direct_evidence`).
 
 3a. `fa_capacity_moderates_ddqn_jens_reduction`
-   — the σ_action factor: random-effects meta-regression of
-   per-(env, γ, fa_kind) Cohen's d on `fa_capacity` (0=linear,
-   1=mlp_deep) across 12 strata ({FR, Acrobot, MountainCar} × 2
-   γ × 2 fa). HELD iff slope ≤ −0.5 AND significant.
+   — FA axis (rule). Random-effects meta-regression on binary
+   `fa_capacity` proxy across 12 strata ({FR, Acrobot, MC} × 2γ
+   × 2fa). Cannot discriminate σ_action capping from Type-1
+   FA-truncation; the continuous σ measurement
+   (`q_action_std_late`) needed to discriminate is not
+   consumed by this bridge body.
 
 3b. `linear_fa_cap_fails_at_metamaze_g999__exception`
-   — the named exception: at MetaMaze γ=0.999 × linear FA, the
-   cap fails (d ≤ −0.3 across n_episodes strata) because the
-   random-maze-per-episode structure forces FA-fit-error bias
-   that DDQN clips via a non-σ path.
+   — FA axis (exception). At MetaMaze γ=0.999 × linear, DDQN
+   substantially reduces jens — an empirical anomaly relative
+   to the FA-moderator rule. The "FA-fit-error from random-maze
+   state-distribution shift" mechanism is asserted from env
+   structure, not empirically discriminated.
 
-Bridges (3a, 3b) form a rule + exception cluster for the σ
-factor — together they encode "σ-via-FA gates the Hasselt mech
-EXCEPT where FA-fit error provides a parallel bias path".
+**What this Finding claims**: DDQN's bias-reduction at this
+corpus's scope exhibits three monotone scalings (K-axis,
+γ-axis, FA-axis) consistent with — but not identified to —
+Hasselt's bound. The empirically corroborated frame is the
+Type 1 / Type 2 decomposition from
+`findings_two_types_of_bias`, of which Hasselt's bound is one
+theoretical instance.
 
 **What this Finding does NOT claim**:
-- That `σ_action × √(2 ln K) × 1/(1−γ)` is a TIGHT bound — only
-  that the three factors' structural predictions hold
-  empirically.
-- Generalisation of the σ-via-FA rule beyond {FR, Acrobot, MC}.
-- That MetaMaze γ=0.999's FA-fit-error mechanism (3b)
-  generalises to other non-stationary envs."""
+- That Hasselt's bound has been identified factor-by-factor.
+- That `σ_action × √(2 ln K) × 1/(1−γ)` is a TIGHT bound.
+- That the scalings would survive in a Hasselt-discriminating
+  panel: natural-K bridge across envs with native |A|
+  variation; continuous σ regression on `q_action_std_late`;
+  γ-amplification threshold tightened to ≥ 8× plus γ=0.995.
+- Generalisation of the FA-axis (rule + exception) beyond
+  {FR, Acrobot, MountainCar} + the MetaMaze γ=0.999 exception
+  cell."""
 from __future__ import annotations
 
 from corroborate.bridge.bridge import Bridge
