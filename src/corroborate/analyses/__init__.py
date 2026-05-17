@@ -54,6 +54,7 @@ from corroborate.analyses import (  # noqa: F401
     per_burst_partial_jci_spearman as _per_burst_partial,  # pyright: ignore[reportUnusedImport]
     proportion_mediated as _proportion_mediated,  # pyright: ignore[reportUnusedImport]
     partial_spearman_paired as _psp,  # pyright: ignore[reportUnusedImport]
+    pc_discovery as _pc_discovery,  # pyright: ignore[reportUnusedImport]
     cross_config_paired_slope as _ccps,  # pyright: ignore[reportUnusedImport]
     cross_stratum_arm_diff_slope as _csads,  # pyright: ignore[reportUnusedImport]
     cross_stratum_arm_diff_partial_spearman as _csadps,  # pyright: ignore[reportUnusedImport]
