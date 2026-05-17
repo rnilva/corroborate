@@ -139,11 +139,26 @@ def ddqn_clip_increases_state_conditional_argmax_entropy(
     MORE deterministic per state — would contradict the
     mechanism).
 
-    CAVEAT: state_conditional_argmax_entropy_late requires
+    CAVEAT 1: state_conditional_argmax_entropy_late requires
     `state_hash_per_step` — env must have a registered state_hash
-    callable. MinAtar envs do; FourRooms / MetaMaze / PacMan
-    don't (→ NaN). The bridge's scope `is_finite()` predicate
-    drops those automatically."""
+    callable. Available on 8 envs: Acrobot (card=46656), CartPole
+    (10000), MountainCar (400), LunarLander (65536), and 4
+    MinAtar envs (Asterix/Breakout/Freeway/SI, card=512 each).
+    FourRooms-misc, MetaMaze-misc, PacMan-jumanji, bsuite,
+    SlidingTile, Snake → NaN, dropped by the scope predicate.
+
+    CAVEAT 2: state_hash cardinality vs trace length. Acrobot
+    at 46k buckets over 1M steps → ~21 visits/bucket — H_cond
+    is undersampled. MountainCar at 400 buckets → ~2500
+    visits/bucket — well-resolved. The discrimination power of
+    H_cond depends on this ratio.
+
+    CAVEAT 3: empirical evidence at γ=0.99 (from
+    `findings-mi-state-argmax-disambiguation`) shows DDQN's
+    marginal H_marg LOWER than vanilla's on SI (d=-0.57 sig),
+    not higher. The chain's Edge 1 prediction is that γ=0.999
+    REVERSES this (clip-noise amplification dominates), but
+    that's an open empirical question this bridge will test."""
     del treatment_arm, baseline_arm, source, stratify_by
     del scope_predictor, min_baseline_predictor, min_seeds_per_arm
     if stratified_arm_diff_pooled.n_strata < min_strata:
@@ -256,9 +271,11 @@ def delta_h_cond_predicts_delta_outcome_xenv(
     NO_EFFECT (SIGN_FLIP) if ρ ≥ +`rho_threshold_held` (more
     noise → better outcome, contradicting mechanism).
 
-    `min_strata=3` because state_hash is only registered on
-    MinAtar envs (Asterix, Breakout, Freeway, SI). Pending
-    cells expand the panel."""
+    `min_strata=3` accommodates the panel after the
+    learnability scope drops some envs. The eligible cohort
+    (state_hash registered + γ=0.999 cells available + Q-MC
+    coupled) is up to 8 envs: Acrobot, CartPole, MountainCar,
+    LunarLander, and 4 MinAtar."""
     del treatment_arm, baseline_arm, target, predictor, stratify_by
     del min_seeds_per_arm
     if cross_stratum_arm_diff_slope.n_strata < min_strata:
