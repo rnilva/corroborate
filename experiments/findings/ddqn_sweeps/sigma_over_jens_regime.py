@@ -192,20 +192,8 @@ def ddqn_harms_asterix_gamma_999(
     helps instead). POWER_INSUFFICIENT otherwise."""
     del treatment_arm, baseline_arm, source, stratify_by
     del scope_predictor, min_baseline_predictor, min_seeds_per_arm
-    if stratified_arm_diff_pooled.n_strata < min_strata:
-        return Verdict.POWER_INSUFFICIENT, None
-    for s in stratified_arm_diff_pooled.per_stratum:
-        d, se = s.cohen_d, s.cohen_se
-        if math.isnan(d) or math.isnan(se):
-            continue
-        ci_lo = d - 1.96 * se
-        ci_hi = d + 1.96 * se
-        if ci_hi <= harm_floor:
-            return Verdict.HELD, None
-        if ci_lo >= -harm_floor:
-            return Verdict.NO_EFFECT, RefutationClass.SIGN_FLIP
-        # CI spans the harm_floor → underpowered
-    return Verdict.POWER_INSUFFICIENT, None
+    return _ci_test(stratified_arm_diff_pooled, floor=harm_floor,
+                    direction=-1, min_strata=min_strata)
 
 
 # Bridge 3 — Per-env: Breakout γ=0.999 d_out CI fully above 0.
@@ -247,23 +235,331 @@ def ddqn_helps_breakout_gamma_999(
     CI_high ≤ -help_floor. POWER_INSUFFICIENT otherwise."""
     del treatment_arm, baseline_arm, source, stratify_by
     del scope_predictor, min_baseline_predictor, min_seeds_per_arm
-    if stratified_arm_diff_pooled.n_strata < min_strata:
+    return _ci_test(stratified_arm_diff_pooled, floor=help_floor,
+                    direction=1, min_strata=min_strata)
+
+
+def _ci_test(
+    pooled: StratifiedArmDiffPooledResult,
+    *,
+    floor: float,
+    direction: int,
+    min_strata: int = 1,
+) -> tuple[Verdict, RefutationClass | None]:
+    """Per-env CI gate. `direction=+1` ↔ help (CI_low ≥ +floor);
+    `direction=−1` ↔ harm (CI_high ≤ −|floor|). Mirror floor used
+    for sign-flip detection."""
+    if pooled.n_strata < min_strata:
         return Verdict.POWER_INSUFFICIENT, None
-    for s in stratified_arm_diff_pooled.per_stratum:
+    abs_floor = abs(floor)
+    for s in pooled.per_stratum:
         d, se = s.cohen_d, s.cohen_se
         if math.isnan(d) or math.isnan(se):
             continue
         ci_lo = d - 1.96 * se
         ci_hi = d + 1.96 * se
-        if ci_lo >= help_floor:
-            return Verdict.HELD, None
-        if ci_hi <= -help_floor:
-            return Verdict.NO_EFFECT, RefutationClass.SIGN_FLIP
+        if direction > 0:
+            if ci_lo >= abs_floor:
+                return Verdict.HELD, None
+            if ci_hi <= -abs_floor:
+                return Verdict.NO_EFFECT, RefutationClass.SIGN_FLIP
+        else:
+            if ci_hi <= -abs_floor:
+                return Verdict.HELD, None
+            if ci_lo >= abs_floor:
+                return Verdict.NO_EFFECT, RefutationClass.SIGN_FLIP
     return Verdict.POWER_INSUFFICIENT, None
+
+
+# ============ Per-burst outcome variants ============
+#
+# The earlier bridges (1, 2, 3) use `eval_best_burst_raw_mean` —
+# the PEAK burst raw return. Two additional outcome shapes encode
+# different aspects of the γ=0.999 dynamic:
+#
+# - `eval_late_burst_raw_mean`: mean of the LAST 25% of bursts.
+#   Tests "the mechanism bites where Q has grown most" — at
+#   γ=0.999 Q grows monotonically across training, so late-burst
+#   captures the peak-mechanism state. Asterix d_out sharpens
+#   from -0.80 (best) to -1.07 (late).
+#
+# - `eval_full_auc_raw_mean`: trajectory-averaged outcome (whole
+#   training). Tests the cumulative effect; less sensitive to
+#   timing artifacts.
+
+
+# Bridge 4 — cross-env late-burst.
+@claim_bridge(
+    source=INTERVENTION,
+    target='eval_late_burst_raw_mean',
+    direction=Direction.DIRECT,
+    tier=Tier.INTERVENTIONAL,
+    scope=(
+        (pl.col('gamma') == 0.999)
+        & pl.col('eval_late_burst_raw_mean').is_finite()
+        & pl.col('jensen_gap').is_finite()
+        & ((pl.col('n_step') == 1) | pl.col('n_step').is_null())
+        & pl.col('action_duplicate_k').is_null()
+        & (pl.col('wrappers') == '()')
+        & pl.col('env_name').is_in(tuple(_SIGMA_OVER_JENS_PER_ENV.keys()))
+    ),
+    predicted_direction='a_gt_b',
+)
+def ddqn_outcome_scales_with_sigma_over_jens__gamma_999_xenv__late_burst(
+    cross_stratum_property_slope: CrossStratumPropertySlopeResult,
+    *,
+    treatment_arm: str = DDQN_ARM,
+    baseline_arm: str = VANILLA_ARM,
+    source: str = 'eval_late_burst_raw_mean',
+    stratify_by: tuple[str, ...] = ('env_name',),
+    covariate_name: str = 'sigma_over_jens',
+    covariate_key_field: str = 'env_name',
+    covariates_per_key: MappingProxyType[object, MappingProxyType[str, float]] = (
+        _SIGMA_OVER_JENS_PER_ENV
+    ),
+    scope_predictor: str = 'jensen_gap',
+    min_baseline_predictor: float = 0.5,
+    min_seeds_per_arm: int = 5,
+    rho_threshold_held: float = 0.5,
+    p_threshold: float = 0.10,
+    null_threshold: float = 0.2,
+    sign_flip_threshold: float = 0.5,
+    min_strata: int = 6,
+) -> tuple[Verdict, RefutationClass | None]:
+    """Late-burst variant of bridge 1. Tests the same cross-env
+    Spearman ρ on `eval_late_burst_raw_mean` — where Q-explosion
+    has progressed most. Predicted ρ stronger than best-burst form
+    (Asterix harm sharpens -0.80 → -1.07 between metrics)."""
+    del treatment_arm, baseline_arm, source, stratify_by
+    del covariate_name, covariate_key_field, covariates_per_key
+    del scope_predictor, min_baseline_predictor, min_seeds_per_arm
+    return cross_stratum_signed_spearman_verdict(
+        cross_stratum_property_slope,
+        sign=1,
+        rho_threshold_held=rho_threshold_held,
+        p_threshold=p_threshold,
+        null_threshold=null_threshold,
+        sign_flip_threshold=sign_flip_threshold,
+        min_strata=min_strata,
+    )
+
+
+# Bridge 5 — cross-env full-AUC.
+@claim_bridge(
+    source=INTERVENTION,
+    target='eval_full_auc_raw_mean',
+    direction=Direction.DIRECT,
+    tier=Tier.INTERVENTIONAL,
+    scope=(
+        (pl.col('gamma') == 0.999)
+        & pl.col('eval_full_auc_raw_mean').is_finite()
+        & pl.col('jensen_gap').is_finite()
+        & ((pl.col('n_step') == 1) | pl.col('n_step').is_null())
+        & pl.col('action_duplicate_k').is_null()
+        & (pl.col('wrappers') == '()')
+        & pl.col('env_name').is_in(tuple(_SIGMA_OVER_JENS_PER_ENV.keys()))
+    ),
+    predicted_direction='a_gt_b',
+)
+def ddqn_outcome_scales_with_sigma_over_jens__gamma_999_xenv__full_auc(
+    cross_stratum_property_slope: CrossStratumPropertySlopeResult,
+    *,
+    treatment_arm: str = DDQN_ARM,
+    baseline_arm: str = VANILLA_ARM,
+    source: str = 'eval_full_auc_raw_mean',
+    stratify_by: tuple[str, ...] = ('env_name',),
+    covariate_name: str = 'sigma_over_jens',
+    covariate_key_field: str = 'env_name',
+    covariates_per_key: MappingProxyType[object, MappingProxyType[str, float]] = (
+        _SIGMA_OVER_JENS_PER_ENV
+    ),
+    scope_predictor: str = 'jensen_gap',
+    min_baseline_predictor: float = 0.5,
+    min_seeds_per_arm: int = 5,
+    rho_threshold_held: float = 0.5,
+    p_threshold: float = 0.10,
+    null_threshold: float = 0.2,
+    sign_flip_threshold: float = 0.5,
+    min_strata: int = 6,
+) -> tuple[Verdict, RefutationClass | None]:
+    """Full-AUC variant of bridge 1. Trajectory-averaged outcome.
+    Less sensitive to timing artifacts than best-burst."""
+    del treatment_arm, baseline_arm, source, stratify_by
+    del covariate_name, covariate_key_field, covariates_per_key
+    del scope_predictor, min_baseline_predictor, min_seeds_per_arm
+    return cross_stratum_signed_spearman_verdict(
+        cross_stratum_property_slope,
+        sign=1,
+        rho_threshold_held=rho_threshold_held,
+        p_threshold=p_threshold,
+        null_threshold=null_threshold,
+        sign_flip_threshold=sign_flip_threshold,
+        min_strata=min_strata,
+    )
+
+
+# Bridge 6 — Asterix late-burst harm.
+@claim_bridge(
+    source=INTERVENTION,
+    target='eval_late_burst_raw_mean',
+    direction=Direction.INVERSE,
+    tier=Tier.INTERVENTIONAL,
+    scope=(
+        (pl.col('env_name') == 'Asterix-MinAtar')
+        & (pl.col('gamma') == 0.999)
+        & pl.col('eval_late_burst_raw_mean').is_finite()
+        & pl.col('jensen_gap').is_finite()
+        & ((pl.col('n_step') == 1) | pl.col('n_step').is_null())
+        & pl.col('action_duplicate_k').is_null()
+        & (pl.col('wrappers') == '()')
+    ),
+    predicted_direction='a_lt_b',
+)
+def ddqn_harms_asterix_gamma_999__late_burst(
+    stratified_arm_diff_pooled: StratifiedArmDiffPooledResult,
+    *,
+    treatment_arm: str = DDQN_ARM,
+    baseline_arm: str = VANILLA_ARM,
+    source: str = 'eval_late_burst_raw_mean',
+    stratify_by: tuple[str, ...] = ('env_name',),
+    scope_predictor: str = 'jensen_gap',
+    min_baseline_predictor: float = 50.0,
+    min_seeds_per_arm: int = 5,
+    harm_floor: float = -0.5,
+    min_strata: int = 1,
+) -> tuple[Verdict, RefutationClass | None]:
+    """Late-burst variant of Asterix harm bridge. Asterix d_out
+    sharpens to −1.07 in late-burst (vs −0.80 best-burst), so the
+    floor is set tighter at −0.5."""
+    del treatment_arm, baseline_arm, source, stratify_by
+    del scope_predictor, min_baseline_predictor, min_seeds_per_arm
+    return _ci_test(stratified_arm_diff_pooled, floor=harm_floor,
+                    direction=-1, min_strata=min_strata)
+
+
+# Bridge 7 — Asterix full-AUC harm.
+@claim_bridge(
+    source=INTERVENTION,
+    target='eval_full_auc_raw_mean',
+    direction=Direction.INVERSE,
+    tier=Tier.INTERVENTIONAL,
+    scope=(
+        (pl.col('env_name') == 'Asterix-MinAtar')
+        & (pl.col('gamma') == 0.999)
+        & pl.col('eval_full_auc_raw_mean').is_finite()
+        & pl.col('jensen_gap').is_finite()
+        & ((pl.col('n_step') == 1) | pl.col('n_step').is_null())
+        & pl.col('action_duplicate_k').is_null()
+        & (pl.col('wrappers') == '()')
+    ),
+    predicted_direction='a_lt_b',
+)
+def ddqn_harms_asterix_gamma_999__full_auc(
+    stratified_arm_diff_pooled: StratifiedArmDiffPooledResult,
+    *,
+    treatment_arm: str = DDQN_ARM,
+    baseline_arm: str = VANILLA_ARM,
+    source: str = 'eval_full_auc_raw_mean',
+    stratify_by: tuple[str, ...] = ('env_name',),
+    scope_predictor: str = 'jensen_gap',
+    min_baseline_predictor: float = 50.0,
+    min_seeds_per_arm: int = 5,
+    harm_floor: float = -0.5,
+    min_strata: int = 1,
+) -> tuple[Verdict, RefutationClass | None]:
+    """Full-AUC variant of Asterix harm bridge. Asterix d_out
+    is −1.08 across the AUC. floor = −0.5."""
+    del treatment_arm, baseline_arm, source, stratify_by
+    del scope_predictor, min_baseline_predictor, min_seeds_per_arm
+    return _ci_test(stratified_arm_diff_pooled, floor=harm_floor,
+                    direction=-1, min_strata=min_strata)
+
+
+# Bridge 8 — Breakout late-burst help.
+@claim_bridge(
+    source=INTERVENTION,
+    target='eval_late_burst_raw_mean',
+    direction=Direction.DIRECT,
+    tier=Tier.INTERVENTIONAL,
+    scope=(
+        (pl.col('env_name') == 'Breakout-MinAtar')
+        & (pl.col('gamma') == 0.999)
+        & pl.col('eval_late_burst_raw_mean').is_finite()
+        & pl.col('jensen_gap').is_finite()
+        & ((pl.col('n_step') == 1) | pl.col('n_step').is_null())
+        & pl.col('action_duplicate_k').is_null()
+        & (pl.col('wrappers') == '()')
+    ),
+    predicted_direction='a_gt_b',
+)
+def ddqn_helps_breakout_gamma_999__late_burst(
+    stratified_arm_diff_pooled: StratifiedArmDiffPooledResult,
+    *,
+    treatment_arm: str = DDQN_ARM,
+    baseline_arm: str = VANILLA_ARM,
+    source: str = 'eval_late_burst_raw_mean',
+    stratify_by: tuple[str, ...] = ('env_name',),
+    scope_predictor: str = 'jensen_gap',
+    min_baseline_predictor: float = 5.0,
+    min_seeds_per_arm: int = 5,
+    help_floor: float = 0.4,
+    min_strata: int = 1,
+) -> tuple[Verdict, RefutationClass | None]:
+    """Late-burst variant of Breakout help bridge. d_out = +0.67
+    in late-burst — close to best-burst's +0.66."""
+    del treatment_arm, baseline_arm, source, stratify_by
+    del scope_predictor, min_baseline_predictor, min_seeds_per_arm
+    return _ci_test(stratified_arm_diff_pooled, floor=help_floor,
+                    direction=1, min_strata=min_strata)
+
+
+# Bridge 9 — Breakout full-AUC help.
+@claim_bridge(
+    source=INTERVENTION,
+    target='eval_full_auc_raw_mean',
+    direction=Direction.DIRECT,
+    tier=Tier.INTERVENTIONAL,
+    scope=(
+        (pl.col('env_name') == 'Breakout-MinAtar')
+        & (pl.col('gamma') == 0.999)
+        & pl.col('eval_full_auc_raw_mean').is_finite()
+        & pl.col('jensen_gap').is_finite()
+        & ((pl.col('n_step') == 1) | pl.col('n_step').is_null())
+        & pl.col('action_duplicate_k').is_null()
+        & (pl.col('wrappers') == '()')
+    ),
+    predicted_direction='a_gt_b',
+)
+def ddqn_helps_breakout_gamma_999__full_auc(
+    stratified_arm_diff_pooled: StratifiedArmDiffPooledResult,
+    *,
+    treatment_arm: str = DDQN_ARM,
+    baseline_arm: str = VANILLA_ARM,
+    source: str = 'eval_full_auc_raw_mean',
+    stratify_by: tuple[str, ...] = ('env_name',),
+    scope_predictor: str = 'jensen_gap',
+    min_baseline_predictor: float = 5.0,
+    min_seeds_per_arm: int = 5,
+    help_floor: float = 0.3,
+    min_strata: int = 1,
+) -> tuple[Verdict, RefutationClass | None]:
+    """Full-AUC variant of Breakout help bridge. d_out = +0.42
+    in full-AUC — weakest of Breakout's outcome metrics; floor
+    set lower at +0.3."""
+    del treatment_arm, baseline_arm, source, stratify_by
+    del scope_predictor, min_baseline_predictor, min_seeds_per_arm
+    return _ci_test(stratified_arm_diff_pooled, floor=help_floor,
+                    direction=1, min_strata=min_strata)
 
 
 BRIDGES = (
     ddqn_outcome_scales_with_sigma_over_jens__gamma_999_xenv,
+    ddqn_outcome_scales_with_sigma_over_jens__gamma_999_xenv__late_burst,
+    ddqn_outcome_scales_with_sigma_over_jens__gamma_999_xenv__full_auc,
     ddqn_harms_asterix_gamma_999,
+    ddqn_harms_asterix_gamma_999__late_burst,
+    ddqn_harms_asterix_gamma_999__full_auc,
     ddqn_helps_breakout_gamma_999,
+    ddqn_helps_breakout_gamma_999__late_burst,
+    ddqn_helps_breakout_gamma_999__full_auc,
 )
