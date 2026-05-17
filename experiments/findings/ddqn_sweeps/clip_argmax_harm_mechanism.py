@@ -30,10 +30,14 @@ corrupted to begin with) and CON dominates → DDQN HARMS outcome.
 
 This is the CON-side mechanism. Three causal edges, three bridges:
 
-  Edge 1 — `ddqn_clip_disrupts_argmax_persistence_at_gamma_999`:
-    DDQN's argmax persistence is LOWER than vanilla's. Tests the
-    direct mechanistic effect of the clip on argmax stability.
-    Predicted: a_lt_b (DDQN persistence < vanilla persistence).
+  Edge 1 — `ddqn_clip_increases_state_conditional_argmax_entropy`:
+    DDQN's per-state argmax variability is HIGHER than vanilla's.
+    Using H(argmax | state) so we isolate "argmax noise per
+    state" from "state-discriminative policy" — `argmax_persistence`
+    conflates these because consecutive states are different
+    (a good state-discriminative policy will have low persistence
+    by construction). Predicted: a_gt_b (DDQN H_cond > vanilla
+    H_cond).
 
   Edge 2 — `mismatch_predicts_outcome_harm__within_ddqn`:
     Within DDQN cells at γ=0.999, more bootstrap action mismatch
@@ -41,11 +45,13 @@ This is the CON-side mechanism. Three causal edges, three bridges:
     proximate effect (mismatch) translates to the distal effect
     (outcome). Predicted: ρ < 0.
 
-  Edge 3 — `delta_persistence_predicts_delta_outcome_xenv`:
-    Across envs at γ=0.999, the per-env arm-diff in persistence
-    (DDQN-vanilla) correlates with the per-env arm-diff in
-    outcome. Tests the dose-response form: more clip-induced
-    persistence-loss → more outcome harm. Predicted: ρ > 0.
+  Edge 3 — `delta_h_cond_predicts_delta_outcome_xenv`:
+    Across envs at γ=0.999, the per-env arm-diff in per-state
+    argmax entropy (DDQN−vanilla) correlates with the per-env
+    arm-diff in outcome. Tests the dose-response form: more
+    clip-induced per-state argmax-noise → more outcome harm.
+    Δ_H_cond > 0 (DDQN noisier), Δ_out < 0 (DDQN worse) → ρ < 0
+    across envs.
 
 If all three HELD → mechanism chain SUPPORTED. The framework's
 `composed_verdict` AND-aggregates them in
@@ -88,44 +94,56 @@ _GAMMA_999_LEARNABLE_SCOPE: pl.Expr = (
 )
 
 
-# ============ Edge 1: clip disrupts argmax persistence ============
+# ============ Edge 1: clip increases per-state argmax noise ============
 
 @claim_bridge(
     source=INTERVENTION,
-    target='argmax_persistence_late',
-    direction=Direction.INVERSE,
+    target='state_conditional_argmax_entropy_late',
+    direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
     scope=(
         _GAMMA_999_LEARNABLE_SCOPE
-        & pl.col('argmax_persistence_late').is_finite()
+        & pl.col('state_conditional_argmax_entropy_late').is_finite()
     ),
-    predicted_direction='a_lt_b',
+    predicted_direction='a_gt_b',
 )
-def ddqn_clip_disrupts_argmax_persistence_at_gamma_999(
+def ddqn_clip_increases_state_conditional_argmax_entropy(
     stratified_arm_diff_pooled: StratifiedArmDiffPooledResult,
     *,
     treatment_arm: str = DDQN_ARM,
     baseline_arm: str = VANILLA_ARM,
-    source: str = 'argmax_persistence_late',
+    source: str = 'state_conditional_argmax_entropy_late',
     stratify_by: tuple[str, ...] = ('env_name',),
     scope_predictor: str = 'jensen_gap',
     min_baseline_predictor: float = 0.5,
     min_seeds_per_arm: int = 5,
-    harm_floor: float = -0.2,
+    harm_floor: float = 0.2,
     min_strata: int = 1,
 ) -> tuple[Verdict, RefutationClass | None]:
     """Edge 1 of the clip-argmax-harm chain.
 
-    Test that DDQN's clip mechanism is mechanistically active:
-    DDQN's argmax flips MORE often than vanilla's at γ=0.999.
-    Direct evidence that the clip introduces argmax disagreement.
+    Test that DDQN's clip introduces *per-state* argmax noise:
+    `H(argmax | state)` is HIGHER under DDQN than vanilla at
+    γ=0.999. Using state-CONDITIONAL entropy isolates "argmax
+    noise WITHIN a state" from "argmax variability ACROSS
+    states" — the latter being just the agent's state-
+    discriminative policy structure, which DOESN'T indicate a
+    noisy mechanism.
 
-    HELD: per-env pooled Cohen's d on argmax_persistence_late is
-    < `harm_floor` (default −0.2). That is, DDQN's persistence
-    is at least 0.2 SD below vanilla's, pooled across envs.
+    HELD: per-env pooled Cohen's d on H_cond is ≥ `harm_floor`
+    (default +0.2) AT p < 0.05. That is, DDQN's H_cond is at
+    least 0.2 SD above vanilla's — more action variability for
+    the same observed state.
 
-    REFUTED (SIGN_FLIP): d > +|harm_floor| (DDQN has HIGHER
-    persistence — would contradict the mechanism)."""
+    REFUTED (SIGN_FLIP): d ≤ −`harm_floor` (DDQN policy is
+    MORE deterministic per state — would contradict the
+    mechanism).
+
+    CAVEAT: state_conditional_argmax_entropy_late requires
+    `state_hash_per_step` — env must have a registered state_hash
+    callable. MinAtar envs do; FourRooms / MetaMaze / PacMan
+    don't (→ NaN). The bridge's scope `is_finite()` predicate
+    drops those automatically."""
     del treatment_arm, baseline_arm, source, stratify_by
     del scope_predictor, min_baseline_predictor, min_seeds_per_arm
     if stratified_arm_diff_pooled.n_strata < min_strata:
@@ -135,9 +153,9 @@ def ddqn_clip_disrupts_argmax_persistence_at_gamma_999(
     if math.isnan(d) or math.isnan(p):
         return Verdict.POWER_INSUFFICIENT, None
     abs_floor = abs(harm_floor)
-    if d <= -abs_floor and p < 0.05:
-        return Verdict.HELD, None
     if d >= abs_floor and p < 0.05:
+        return Verdict.HELD, None
+    if d <= -abs_floor and p < 0.05:
         return Verdict.NO_EFFECT, RefutationClass.SIGN_FLIP
     return Verdict.POWER_INSUFFICIENT, None
 
@@ -199,45 +217,48 @@ def mismatch_predicts_outcome_harm__within_ddqn(
 @claim_bridge(
     source=INTERVENTION,
     target='eval_best_burst_raw_mean',
-    direction=Direction.DIRECT,
+    direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
     scope=(
         _GAMMA_999_LEARNABLE_SCOPE
-        & pl.col('argmax_persistence_late').is_finite()
+        & pl.col('state_conditional_argmax_entropy_late').is_finite()
         & pl.col('eval_best_burst_raw_mean').is_finite()
     ),
-    predicted_direction='a_gt_b',
+    predicted_direction='a_lt_b',
 )
-def delta_persistence_predicts_delta_outcome_xenv(
+def delta_h_cond_predicts_delta_outcome_xenv(
     cross_stratum_arm_diff_slope: CrossStratumArmDiffSlopeResult,
     *,
     treatment_arm: str = DDQN_ARM,
     baseline_arm: str = VANILLA_ARM,
     target: str = 'eval_best_burst_raw_mean',
-    predictor: str = 'argmax_persistence_late',
+    predictor: str = 'state_conditional_argmax_entropy_late',
     stratify_by: tuple[str, ...] = ('env_name',),
     min_seeds_per_arm: int = 5,
     rho_threshold_held: float = 0.5,
     p_threshold: float = 0.10,
     null_threshold: float = 0.2,
-    min_strata: int = 4,
+    min_strata: int = 3,
 ) -> tuple[Verdict, RefutationClass | None]:
     """Edge 3 of the clip-argmax-harm chain — dose-response.
 
     Across envs at γ=0.999 (learnable), Spearman ρ between
-    per-env Δ_persistence (DDQN−vanilla) and per-env Δ_outcome
-    (DDQN−vanilla). Predicts ρ > 0: more persistence-loss →
-    more outcome-loss. Each is negative in the harm regime, so
-    their RANK correlation is positive (both moving in the same
-    "harm" direction).
+    per-env Δ_H_cond (DDQN−vanilla, H(argmax|state)) and
+    per-env Δ_outcome (DDQN−vanilla). Predicts ρ < 0: when
+    DDQN's clip makes the per-state argmax noisier (Δ_H_cond > 0)
+    the outcome drops more (Δ_out < 0).
 
     Tests the mechanism at the cohort level: does the dose
-    (clip-induced persistence drop) predict the response
+    (clip-induced per-state argmax noise) predict the response
     (outcome drop) across envs?
 
-    HELD if ρ ≥ +`rho_threshold_held` AND p ≤ `p_threshold`.
-    NO_EFFECT (SIGN_FLIP) if ρ ≤ −`rho_threshold_held` (clip
-    helps persistence-loss envs, contradicting mechanism)."""
+    HELD if ρ ≤ −`rho_threshold_held` AND p ≤ `p_threshold`.
+    NO_EFFECT (SIGN_FLIP) if ρ ≥ +`rho_threshold_held` (more
+    noise → better outcome, contradicting mechanism).
+
+    `min_strata=3` because state_hash is only registered on
+    MinAtar envs (Asterix, Breakout, Freeway, SI). Pending
+    cells expand the panel."""
     del treatment_arm, baseline_arm, target, predictor, stratify_by
     del min_seeds_per_arm
     if cross_stratum_arm_diff_slope.n_strata < min_strata:
@@ -246,9 +267,9 @@ def delta_persistence_predicts_delta_outcome_xenv(
     p = cross_stratum_arm_diff_slope.p_value
     if math.isnan(rho):
         return Verdict.POWER_INSUFFICIENT, None
-    if rho >= rho_threshold_held and (math.isnan(p) or p <= p_threshold):
+    if rho <= -rho_threshold_held and (math.isnan(p) or p <= p_threshold):
         return Verdict.HELD, None
-    if rho <= -rho_threshold_held:
+    if rho >= rho_threshold_held:
         return Verdict.NO_EFFECT, RefutationClass.SIGN_FLIP
     if abs(rho) < null_threshold:
         return Verdict.NO_EFFECT, RefutationClass.NULL_EFFECT
@@ -256,7 +277,7 @@ def delta_persistence_predicts_delta_outcome_xenv(
 
 
 BRIDGES = (
-    ddqn_clip_disrupts_argmax_persistence_at_gamma_999,
+    ddqn_clip_increases_state_conditional_argmax_entropy,
     mismatch_predicts_outcome_harm__within_ddqn,
-    delta_persistence_predicts_delta_outcome_xenv,
+    delta_h_cond_predicts_delta_outcome_xenv,
 )

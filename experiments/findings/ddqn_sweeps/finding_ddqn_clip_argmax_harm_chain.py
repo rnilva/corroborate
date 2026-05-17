@@ -5,18 +5,25 @@ harm at γ=0.999, on envs where vanilla's Q is uniformly inflated
 This Finding aggregates the 3 causal-chain edges in
 `clip_argmax_harm_mechanism`:
 
-  Edge 1 — `ddqn_clip_disrupts_argmax_persistence_at_gamma_999`:
-    Direct mechanism: DDQN's clip flips argmax MORE often than
-    vanilla. Tests cause (mechanism active).
+  Edge 1 — `ddqn_clip_increases_state_conditional_argmax_entropy`:
+    Direct mechanism: DDQN's policy has HIGHER per-state argmax
+    variability than vanilla. Uses H(argmax | state) so we
+    isolate "noise within a state" from "state-discriminative
+    policy" — `argmax_persistence_late` (across consecutive
+    states) conflates the two, since a good state-discriminative
+    policy will naturally have low persistence. Tests cause
+    (mechanism active).
 
   Edge 2 — `mismatch_predicts_outcome_harm__within_ddqn`:
     Within DDQN cells at γ=0.999, more bootstrap-action mismatch
     correlates with worse outcome (after partialling out jens).
     Tests mediator-to-distal link.
 
-  Edge 3 — `delta_persistence_predicts_delta_outcome_xenv`:
-    Cross-env dose-response: per-env Δ_persistence (DDQN-vanilla)
-    correlates with per-env Δ_outcome. Tests effect at cohort.
+  Edge 3 — `delta_h_cond_predicts_delta_outcome_xenv`:
+    Cross-env dose-response: per-env Δ_H_cond (DDQN-vanilla,
+    H(argmax|state)) correlates with per-env Δ_outcome.
+    Tests effect at cohort: more per-state argmax noise →
+    more outcome harm.
 
 `composed_verdict` is AND-aggregate: SUPPORTED iff all 3 edges
 HELD; REFUTED if any edge refutes.
@@ -53,8 +60,8 @@ from corroborate.bridge.bridge import Bridge
 from corroborate.graph.causal import ClusterVerdict
 
 from experiments.findings.ddqn_sweeps.clip_argmax_harm_mechanism import (
-    ddqn_clip_disrupts_argmax_persistence_at_gamma_999,
-    delta_persistence_predicts_delta_outcome_xenv,
+    ddqn_clip_increases_state_conditional_argmax_entropy,
+    delta_h_cond_predicts_delta_outcome_xenv,
     mismatch_predicts_outcome_harm__within_ddqn,
 )
 
@@ -63,19 +70,21 @@ EXPECTED: ClusterVerdict = ClusterVerdict.UNDERPOWERED
 
 
 BLOCKED_ON: str | None = (
-    'Bridges need argmax_persistence_late + q_argmax_margin_late '
-    'in ddqn_sweeps cache; currently those measurables are '
-    'populated only in the canonical ddqn cache. After backfill '
-    '(re-ingest of γ=0.999 corpora into ddqn_sweeps with '
-    'transitive_reads catching the new bridges), Edge 1/2/3 '
-    'will fire. Edge 1 expected HELD from canonical-verify data '
-    '(DDQN argmax_persistence < vanilla on Asterix γ=0.999); '
-    'Edge 2/3 TBD pending data.'
+    'Bridges need state_conditional_argmax_entropy_late and '
+    'bootstrap_action_mismatch_late populated in ddqn_sweeps '
+    'cache. The state_conditional measure requires `state_hash` '
+    'to be registered per env — only MinAtar envs qualify. After '
+    'backfill of γ=0.999 MinAtar corpora into ddqn_sweeps with '
+    'transitive_reads catching the new bridges, Edge 1/2/3 will '
+    'fire. Preliminary canonical-ddqn-cache estimate: Asterix '
+    'γ=0.99 H_cond_VAN=1.39 vs H_cond_DDQN=1.38 (no difference '
+    'at γ=0.99); γ=0.999 TBD — mechanism predicts DDQN > VAN '
+    'amplified by 1/(1−γ).'
 )
 
 
 BRIDGES: tuple[Bridge, ...] = (
-    ddqn_clip_disrupts_argmax_persistence_at_gamma_999,
+    ddqn_clip_increases_state_conditional_argmax_entropy,
     mismatch_predicts_outcome_harm__within_ddqn,
-    delta_persistence_predicts_delta_outcome_xenv,
+    delta_h_cond_predicts_delta_outcome_xenv,
 )
