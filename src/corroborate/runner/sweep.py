@@ -492,6 +492,18 @@ def run_intervention[R: Mapping[str, object]](
             )
             cell_idx += 1
 
+    if failures:
+        # Surface failures before the merge step — a thin merge
+        # (no runs_paths) otherwise raises ValueError without
+        # explaining which cells crashed. Print here too; the
+        # tail-of-function print stays for the partial-failure
+        # case where some merge succeeded.
+        print()
+        print(f'  WARN: {len(failures)} cell failures (pre-merge):',
+              flush=True)
+        for f in failures:
+            print(f'    [{f.arm_key}] {f.grid_point}: {f.error}',
+                  flush=True)
     print()
     print('merging per-cell parquets ...', flush=True)
     if archive_remote is not None:
