@@ -124,7 +124,7 @@ def ddqn_outcome_scales_with_sigma_over_jens__gamma_999_xenv(
     p_threshold: float = 0.10,
     null_threshold: float = 0.2,
     sign_flip_threshold: float = 0.5,
-    min_strata: int = 6,
+    min_strata: int = 5,
 ) -> tuple[Verdict, RefutationClass | None]:
     """Cross-env Spearman ρ between σ_VAN/jens_VAN (per env) and
     per-env Cohen's d on raw outcome.
@@ -332,7 +332,7 @@ def ddqn_outcome_scales_with_sigma_over_jens__gamma_999_xenv__late_burst(
     p_threshold: float = 0.10,
     null_threshold: float = 0.2,
     sign_flip_threshold: float = 0.5,
-    min_strata: int = 6,
+    min_strata: int = 5,
 ) -> tuple[Verdict, RefutationClass | None]:
     """Late-burst variant of bridge 1. Tests the same cross-env
     Spearman ρ on `eval_late_burst_raw_mean` — where Q-explosion
@@ -390,7 +390,7 @@ def ddqn_outcome_scales_with_sigma_over_jens__gamma_999_xenv__full_auc(
     p_threshold: float = 0.10,
     null_threshold: float = 0.2,
     sign_flip_threshold: float = 0.5,
-    min_strata: int = 6,
+    min_strata: int = 5,
 ) -> tuple[Verdict, RefutationClass | None]:
     """Full-AUC variant of bridge 1. Trajectory-averaged outcome.
     Less sensitive to timing artifacts than best-burst."""

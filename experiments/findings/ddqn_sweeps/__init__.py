@@ -23,6 +23,8 @@ import corroborate_rl.dqn.measurables  # pyright: ignore[reportUnusedImport]  # 
 import polars as pl
 
 from experiments.findings.ddqn_sweeps import (
+    finding_asterix_gamma_999_harm,
+    finding_breakout_gamma_999_help_underpowered,
     finding_hp_variance_outcome_refuted,
     finding_metamaze_gamma_amplification,
     finding_rs01_rescue_envelope,
@@ -74,4 +76,6 @@ FINDINGS = (
     finding_metamaze_gamma_amplification,
     finding_rs01_rescue_envelope,
     finding_sigma_over_jens_regime_discriminator,
+    finding_asterix_gamma_999_harm,
+    finding_breakout_gamma_999_help_underpowered,
 )

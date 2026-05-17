@@ -1,55 +1,57 @@
-"""σ_VAN/jens_VAN at γ=0.999, conditional on Q-MC coupling, is a
-regime discriminator for DDQN's outcome sign.
+"""σ_VAN/jens_VAN at γ=0.999 is NOT a universal cross-env predictor
+of DDQN's outcome sign.
 
-REFINEMENT (2026-05-17): the original σ/jens-only discriminator
-fails on FR γ=0.999 — a "vanilla Q-explodes-and-decouples-from-MC"
-regime where σ/jens looks low (uniform overestimation) but DDQN
-RESCUES (not harms). The fix: scope-restrict every bridge in this
-Finding to cells where `q_mc_burst_correlation_late >= 0.3` —
-Q is at least modestly coupled to MC. Cells where Q has decoupled
-from MC (regime C) are out of scope of the σ/jens theory.
+This Finding records the REFUTATION of the universal-discriminator
+claim. The Asterix-specific harm prediction (which the same
+theory implies) is in a sibling Finding,
+`finding_asterix_gamma_999_harm`, where it lands SUPPORTED.
 
-This Finding aggregates nine bridges (3 hypothesis shapes × 3
-outcome metrics) that operationalize the theory in
-`findings_sigma_over_jens_regime_discriminator.md`:
+History. After observing the Asterix γ=0.999 sign-flip
+(`findings_minatar_gamma_sweep_first_results`), I proposed that
+σ_VAN/jens_VAN at γ=0.999 should discriminate Type A (uniform
+overestimation → DDQN harms) from Type B (asymmetric → DDQN
+helps) across envs. The cross-env Spearman ρ between σ/jens and
+per-env Cohen's d was predicted to be positive.
 
-Hypothesis shapes:
-  (A) cross-env: Spearman ρ across envs between (σ_VAN/jens_VAN at
-      γ=0.999) and per-env Cohen's d on outcome. ρ > 0 predicted.
-  (B) single-env Type A learnable: Asterix γ=0.999 d_out CI fully
-      below the harm floor (DDQN harms).
-  (C) single-env Type B / FA-truncation: Breakout γ=0.999 d_out
-      CI fully above the help floor (DDQN helps).
+After refining the scope with `q_mc_burst_correlation_late >= 0.3`
+(restricting to cells where vanilla's Q is meaningfully coupled
+to MC — i.e., excluding regime-C "vanilla Q-explosion +
+MC-decoupled" cases), the cross-env Spearman ρ on the 5
+surviving envs is **+0.10, p=0.87** — null. The discriminator
+is REFUTED at this panel.
 
-Outcome metrics:
-  1. `eval_best_burst_raw_mean` — peak burst (best-of-training).
-  2. `eval_late_burst_raw_mean` — last-25% burst average. Tests
-     "Q-explosion bites where Q has grown most". Asterix d_out
-     sharpens from −0.80 (best) to −1.07 (late).
-  3. `eval_full_auc_raw_mean` — trajectory-averaged. Less
-     sensitive to timing artifacts.
+Per-env Cohen's d after learnability scope (best-burst):
 
-`composed_verdict` is AND-aggregate: SUPPORTED iff all 9 HELD;
-REFUTED if any REFUTES. Multi-metric coverage hardens the claim
-— if the theory is right, the regime classification should HELD
-at multiple outcome shapes, not just best-burst.
+  env          | σ/jens  | d_out  | predicted | actual
+  Acrobot-v1   | 0.0037  | −0.13  | Type A     | weak harm ≈
+  FR-misc      | 0.0052  | +0.91  | Type A     | **helps strongly** ✗
+  Asterix-MA   | 0.0155  | −1.35  | Type A     | strong harm ✓
+  MetaMaze     | 0.0166  | −0.53? | Type A     | helps ✗
+  Breakout-MA  | 0.0609  | +0.40  | Type B     | mild help ≈
+  MountainCar  | 0.0014  | (drops)| —          | —
 
-Current empirical snapshot (k=1 sweep complete for Asterix +
-Breakout γ=0.999; pending for Freeway + SI):
-  best-burst: Asterix d=−0.80, Breakout d=+0.66, cross-env ρ trending +0.61
-  late-burst: Asterix d=−1.07, Breakout d=+0.67 (Asterix sharpens)
-  full-AUC:   Asterix d=−1.08, Breakout d=+0.42 (Breakout softens)
+Two failures of the theory:
+  - FourRooms γ=0.999 shaped cells (the ones that pass r ≥ 0.3)
+    fall in regime B (FA-truncation-rescue) despite low σ/jens.
+  - MetaMaze γ=0.999 helps DDQN at moderate σ/jens, contradicting
+    the Type-A prediction.
 
-The per-burst metrics differ in their predicted ordering across
-envs — late-burst should give the SHARPEST Type-A harm (Asterix),
-while full-AUC averages and may soften it. The Finding tests
-whether the theory holds at multiple operationalizations.
+The σ/jens predictor is 1-dimensional. A 2D classifier (σ/jens ×
+env-class, where env-class captures whether reward-shaping /
+exploration regime puts the env into FA-rescue territory) might
+work — left as future work.
 
-Setting EXPECTED to UNDERPOWERED + BLOCKED_ON to capture the
-n_strata=6 + per-env n=30 power floors. Once the running γ × k
-sweeps land (~3 days from now), each bridge gets more cells +
-the cross-env bridges get more strata; this finding's verdict
-should flip to SUPPORTED.
+This Finding fires three cross-env bridges (best, late_burst,
+full_auc outcomes); all predict ρ > 0 with sign=+1. The
+empirical ρ is consistently near 0, so all three bridges
+return NO_EFFECT (NULL_EFFECT). EXPECTED is REFUTED to make the
+walk-back honest. The substrate-level claim (σ/jens-as-discriminator
+in general) is REFUTED at canonical γ × k=1 data.
+
+When the running k=2/k=4 sweeps land (next 3 days), the cross-env
+n_strata grows (Freeway + SI both come online); the test may
+gain power to detect a non-zero ρ if one exists. The empirical
+state will be re-evaluated then.
 """
 from __future__ import annotations
 
@@ -57,43 +59,20 @@ from corroborate.bridge.bridge import Bridge
 from corroborate.graph.causal import ClusterVerdict
 
 from experiments.findings.ddqn_sweeps.sigma_over_jens_regime import (
-    ddqn_harms_asterix_gamma_999,
-    ddqn_harms_asterix_gamma_999__full_auc,
-    ddqn_harms_asterix_gamma_999__late_burst,
-    ddqn_helps_breakout_gamma_999,
-    ddqn_helps_breakout_gamma_999__full_auc,
-    ddqn_helps_breakout_gamma_999__late_burst,
     ddqn_outcome_scales_with_sigma_over_jens__gamma_999_xenv,
     ddqn_outcome_scales_with_sigma_over_jens__gamma_999_xenv__full_auc,
     ddqn_outcome_scales_with_sigma_over_jens__gamma_999_xenv__late_burst,
 )
 
 
-EXPECTED: ClusterVerdict = ClusterVerdict.UNDERPOWERED
+EXPECTED: ClusterVerdict = ClusterVerdict.REFUTED
 
 
-BLOCKED_ON: str | None = (
-    'n_strata=6 envs with γ=0.999 data; cross-env Spearman ρ=+0.61 '
-    'trending at p=0.15 with n=7. Per-env CIs (Asterix d_out=-0.80 '
-    'z=-3.1 best / -1.07 z=-4.1 late / -1.08 z=-4.2 full_auc; '
-    'Breakout d_out=+0.66 z=+2.6 best / +0.67 z=+2.6 late / +0.42 '
-    'z=+1.6 full_auc) approach but do not yet uniformly exceed the '
-    '|0.4–0.5| floors at n=30. Once minatar_gamma_sweep_k1 lands '
-    'Freeway + SI γ=0.999 (n_strata → 8) and k=2/k=4 sweeps '
-    'amplify per √(2 ln K), the cross-env bridges should HELD at '
-    'ρ ≥ 0.5 p ≤ 0.10 and per-env bridges should flip HELD on '
-    'stronger d-magnitudes.'
-)
+BLOCKED_ON: str | None = None
 
 
 BRIDGES: tuple[Bridge, ...] = (
     ddqn_outcome_scales_with_sigma_over_jens__gamma_999_xenv,
     ddqn_outcome_scales_with_sigma_over_jens__gamma_999_xenv__late_burst,
     ddqn_outcome_scales_with_sigma_over_jens__gamma_999_xenv__full_auc,
-    ddqn_harms_asterix_gamma_999,
-    ddqn_harms_asterix_gamma_999__late_burst,
-    ddqn_harms_asterix_gamma_999__full_auc,
-    ddqn_helps_breakout_gamma_999,
-    ddqn_helps_breakout_gamma_999__late_burst,
-    ddqn_helps_breakout_gamma_999__full_auc,
 )
