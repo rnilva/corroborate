@@ -1382,6 +1382,68 @@ def mc_burst_to_q_cross_lag1(record: Mapping[str, object]) -> float:
     return _lag1_pearson(mc_per_burst[:-1], q_per_burst[1:])
 
 
+@measurable(reads=('reward', 'target_max_q_per_step', 'gamma'))
+def bootstrap_self_reference_fraction(
+    record: Mapping[str, object],
+    eps: float = 1e-3,
+) -> float:
+    """Late-window mean fraction of |bootstrap target| attributable
+    to `γ × max_a Q_target(s', a)` (self-reference) vs `|r(s, a)|`
+    (observed reward) at training steps.
+
+    For each training step t in the late half:
+        |self_ref[t]| = |γ × target_max_q_per_step[t]|
+        |reward[t]|   = |reward[t]|
+        frac[t]       = |self_ref[t]| / (|self_ref[t]| + |reward[t]| + eps)
+
+    Returns mean over the late half of training steps.
+
+    Interpretation:
+    - frac → 1.0: bootstrap target dominated by γ × Q (self-
+      reference). Rewards negligible vs Q magnitude — the
+      Q-explosion regime per `findings_q_explosion_direct_evidence`
+      (sparse-reward × γ→1 vanilla: r=0 almost always while
+      γ × Q ~ 100).
+    - frac → 0.0: bootstrap target dominated by |r|. Rare in
+      sequential decision problems where Q is cumulative.
+
+    Note: this measure naturally saturates near 1.0 because |r|
+    (per-step) is typically much smaller than γ × |Q| (cumulative)
+    in any non-degenerate RL task. It discriminates Q-explosion
+    cases (FR γ=0.999 vanilla: frac ≈ 1.0) from cases where
+    vanilla observes reward more (FR γ=0.99 vanilla: frac
+    moderately lower because vanilla finds goal sometimes,
+    injecting r=1 events). Cross-env comparisons less meaningful
+    due to scale differences.
+
+    Uses `target_max_q_per_step` (target net's max Q) at the same
+    index as `reward`. Strictly the bootstrap target uses Q at
+    the NEXT state s_{t+1}; using `target_max_q_per_step[t]` is a
+    one-step-shift approximation that's fine for late-window
+    averages (the late training distribution is stable)."""
+    r = record.get('reward')
+    q = record.get('target_max_q_per_step')
+    gamma_v = record.get('gamma')
+    if r is None or q is None:
+        return float('nan')
+    if not isinstance(gamma_v, (int, float)):
+        return float('nan')
+    gamma = float(gamma_v)
+    r_arr = np.asarray(r, dtype=np.float64)
+    q_arr = np.asarray(q, dtype=np.float64)
+    if r_arr.ndim != 1 or q_arr.ndim != 1 or r_arr.size != q_arr.size:
+        return float('nan')
+    n = r_arr.size
+    if n < 2:
+        return float('nan')
+    start = n // 2
+    r_abs = np.abs(r_arr[start:])
+    q_abs = np.abs(gamma * q_arr[start:])
+    denom = q_abs + r_abs + eps
+    frac = q_abs / denom
+    return float(frac.mean())
+
+
 @measurable(reads=(
     'mc_return_from_step', 'active_per_step', 'gamma',
 ))

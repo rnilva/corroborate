@@ -149,6 +149,8 @@ REQUIRED_MEASURABLES: tuple[str, ...] = (
     'clip_wedge_polarity_aligned',  # signed wedge × polarity
     'bootstrap_gap_magnitude',      # |wedge| per cell
     'bootstrap_gap_frac_active',    # fraction of steps with wedge > 0
+    'q_late_mean',                  # late-window Q magnitude (Q-explosion direct measure)
+    'bootstrap_self_reference_fraction',  # WHY-mediator: |γQ|/(|γQ|+|r|) late mean
 )
 # `q_action_std_late` is the proper σ_action measure (within-state
 # across-action Q SD, averaged over the late 50% of training,
