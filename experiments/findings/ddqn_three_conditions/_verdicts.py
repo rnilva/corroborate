@@ -19,6 +19,9 @@ from corroborate.analyses.meta_regression_unpaired_d import (
 from corroborate.analyses.stratified_arm_diff_pooled import (
     StratifiedArmDiffPooledResult,
 )
+from corroborate.analyses.stratified_spearman import (
+    StratifiedSpearmanResult,
+)
 from corroborate.bridge.verdict import RefutationClass, Verdict
 
 
@@ -115,6 +118,49 @@ def per_stratum_upper_bound_verdict(
     if any_spans:
         return Verdict.POWER_INSUFFICIENT, None
     return Verdict.NO_EFFECT, None
+
+
+def spearman_rho_verdict(
+    result: StratifiedSpearmanResult,
+    *,
+    sign: int,
+    threshold: float,
+    min_strata: int = 1,
+    alpha: float = 0.05,
+) -> Verdict:
+    """Verdict on a Fisher-z-pooled stratified Spearman ρ.
+
+    `sign=-1`: HELD iff `rho_pooled ≤ -|threshold|` AND `p < alpha`.
+    `sign=+1`: mirror.
+    `sign=0`: HELD iff `|rho_pooled| ≤ |threshold|` AND `p ≥ alpha`
+    (null prediction confirmed); refuted if significant in either
+    direction.
+
+    POWER_INSUFFICIENT when too few strata or ρ is NaN."""
+    if result.n_strata < min_strata:
+        return Verdict.POWER_INSUFFICIENT
+    rho = result.rho_pooled
+    p = result.p_value
+    if math.isnan(rho) or math.isnan(p):
+        return Verdict.POWER_INSUFFICIENT
+    is_sig = p < alpha
+    if sign == -1:
+        if rho <= -abs(threshold) and is_sig:
+            return Verdict.HELD
+        if is_sig and rho >= abs(threshold):
+            return Verdict.NO_EFFECT
+        return Verdict.POWER_INSUFFICIENT
+    if sign == 1:
+        if rho >= abs(threshold) and is_sig:
+            return Verdict.HELD
+        if is_sig and rho <= -abs(threshold):
+            return Verdict.NO_EFFECT
+        return Verdict.POWER_INSUFFICIENT
+    if abs(rho) <= abs(threshold) and not is_sig:
+        return Verdict.HELD
+    if is_sig:
+        return Verdict.NO_EFFECT
+    return Verdict.POWER_INSUFFICIENT
 
 
 def per_stratum_d_threshold_verdict(

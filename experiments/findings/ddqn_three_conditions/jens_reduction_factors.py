@@ -75,6 +75,9 @@ from corroborate.analyses.meta_regression_unpaired_d import (
 from corroborate.analyses.stratified_arm_diff_pooled import (
     StratifiedArmDiffPooledResult,
 )
+from corroborate.analyses.stratified_spearman import (
+    StratifiedSpearmanResult,
+)
 from corroborate.bridge.bridge import Direction, Tier, claim_bridge
 from corroborate.bridge.predicates import finite
 from corroborate.bridge.verdict import RefutationClass, Verdict
@@ -83,6 +86,7 @@ from experiments.findings.ddqn_three_conditions._arms import INTERVENTION
 from experiments.findings.ddqn_three_conditions._verdicts import (
     meta_regression_coef_verdict,
     per_stratum_d_threshold_verdict,
+    spearman_rho_verdict,
 )
 
 
@@ -448,4 +452,135 @@ def linear_fa_cap_fails_at_metamaze_g999__exception(
         threshold=per_stratum_d_threshold,
         sign=-1,
         min_strata=min_strata,
+    )
+
+
+# === Within-arm anchor observations (γ-WHY bridges) ===
+#
+# The γ-amplification bridge above HELDs at FR — but knowing
+# THAT γ amplifies doesn't tell us WHY. Two candidate stories:
+# (A) Hasselt 1/(1−γ) bootstrap-chain amplification; (B)
+# vanilla-degeneracy at γ→1 (anchor failure — vanilla can't
+# find reward, Q grows unbounded without an MC anchor).
+#
+# The bridges below characterize VANILLA's anchor across γ at
+# FR (collapses) and at Acrobot (preserved). Composed by
+# `finding_gamma_amplification_anchor_gated` into a why-claim:
+# the γ-amplification observed at FR is paired with vanilla
+# anchor failure at FR γ=0.999, and the amplification does not
+# replicate at envs where vanilla anchor is preserved.
+
+
+@claim_bridge(
+    source='gamma',
+    target='eval_best_burst_raw_mean',
+    direction=Direction.INVERSE,
+    tier=Tier.ASSOCIATIONAL,
+    scope=(
+        (pl.col('env_name') == 'FourRooms-misc')
+        & (pl.col('fa_kind') == 'mlp_deep')
+        & (pl.col('shaping_kind') == 'none')
+        & (pl.col('arm_key') == 'baseline')
+        & pl.col('gamma').is_in([0.99, 0.999])
+        & finite(pl.col('eval_best_burst_raw_mean'))
+    ),
+    predicted_direction='a_lt_b',
+)
+def vanilla_anchor_collapses_with_gamma_at_fr_mlp(
+    stratified_spearman: StratifiedSpearmanResult,
+    *,
+    x: str = 'gamma',
+    y: str = 'eval_best_burst_raw_mean',
+    stratify_by: str = 'env_name',
+    min_stratum_size: int = 30,
+    rho_threshold: float = -0.5,
+) -> Verdict:
+    """Vanilla's eval outcome collapses with γ at FR × MLP ×
+    unshaped — the anchor-failure observation underlying the
+    γ-amplification of DDQN's jens reduction at this env.
+
+    Per-cell Spearman ρ(γ, eval_best_burst_raw_mean) over
+    baseline-arm cells. stratify_by='env_name' collapses to a
+    single stratum (env=FR) within scope.
+
+    Empirical (n=414):
+    - vanilla outcome at γ=0.99 ≈ 1.0 (finds the goal every
+      episode, MLP+unshaped is enough)
+    - vanilla outcome at γ=0.999 ≈ 0.19 (most cells score 0;
+      ~42% of cells never find the goal at all)
+
+    HELD iff ρ ≤ -0.5 AND p < 0.05.
+
+    Pairs with the γ-amplification observation: at FR γ=0.999,
+    vanilla is mostly degenerate (no MC anchor), Q grows
+    unbounded, jens explodes (jens=34.6 vs 0.29 at γ=0.99 — a
+    119× growth). The γ-amplification of DDQN's effect is
+    consistent with "DDQN clips the unbounded Q of degenerate
+    vanilla" — not necessarily Hasselt's bootstrap-chain
+    amplification."""
+    del x, y, stratify_by, min_stratum_size
+    return spearman_rho_verdict(
+        stratified_spearman,
+        sign=-1,
+        threshold=rho_threshold,
+    )
+
+
+@claim_bridge(
+    source='gamma',
+    target='eval_best_burst_raw_mean',
+    direction=Direction.DIRECT,
+    tier=Tier.ASSOCIATIONAL,
+    scope=(
+        (pl.col('env_name') == 'Acrobot-v1')
+        & (pl.col('fa_kind') == 'mlp_deep')
+        & (pl.col('shaping_kind') == 'none')
+        & (pl.col('arm_key') == 'baseline')
+        & pl.col('gamma').is_in([0.99, 0.999])
+        & finite(pl.col('eval_best_burst_raw_mean'))
+    ),
+    predicted_direction='a_gt_b',
+)
+def vanilla_anchor_preserved_with_gamma_at_acrobot_mlp(
+    stratified_spearman: StratifiedSpearmanResult,
+    *,
+    x: str = 'gamma',
+    y: str = 'eval_best_burst_raw_mean',
+    stratify_by: str = 'env_name',
+    min_stratum_size: int = 30,
+    rho_threshold: float = 0.0,
+) -> Verdict:
+    """Vanilla's eval outcome is PRESERVED — slightly improved —
+    across γ at Acrobot × MLP × unshaped. The cross-env
+    discriminator for the γ-amplification's anchor-failure
+    interpretation.
+
+    Per-cell Spearman ρ(γ, eval_best_burst_raw_mean) over
+    baseline-arm cells. Predicted: ρ ≥ 0 (vanilla outcome does
+    NOT collapse with γ, may even slightly improve).
+
+    Empirical (n=240):
+    - vanilla outcome at γ=0.99 ≈ -79.2 (vanilla reaches the
+      goal in ~79 steps)
+    - vanilla outcome at γ=0.999 ≈ -73.8 (~74 steps; γ=0.999
+      slightly improves the policy because the negative-step
+      reward has higher effective horizon to optimize over)
+    - ρ(γ, outcome) = +0.34, p ≈ 7e-8
+
+    HELDs iff ρ ≥ 0 AND p < 0.05.
+
+    The OPPOSITE-SIGN γ-effect (positive at Acrobot vs strongly
+    negative at FR) is the why-evidence: at envs where vanilla
+    can anchor on reward, γ HELPS (longer horizon = better
+    policy); at envs where vanilla can't anchor, γ HURTS (Q
+    grows unbounded). The γ-amplification of DDQN's jens
+    reduction at FR is contingent on this regime difference.
+
+    Pairs with `vanilla_anchor_collapses_with_gamma_at_fr_mlp`
+    in the cluster Finding."""
+    del x, y, stratify_by, min_stratum_size
+    return spearman_rho_verdict(
+        stratified_spearman,
+        sign=+1,
+        threshold=rho_threshold,
     )

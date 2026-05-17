@@ -91,6 +91,7 @@ MODULE_SCOPE = pl.col('gamma').is_in([0.99, 0.999])
 # Register hypothesis-local derived measurables.
 from experiments.findings.ddqn_three_conditions import _measurables  # pyright: ignore[reportUnusedImport]  # noqa: F401  -- registers @measurable side-effects
 from experiments.findings.ddqn_three_conditions import (
+    finding_gamma_amplification_anchor_gated,
     finding_jens_reduction_factors,
     finding_shaping_decouples,
 )
@@ -106,6 +107,8 @@ from experiments.findings.ddqn_three_conditions.jens_reduction_factors import (
     fa_capacity_moderates_ddqn_jens_reduction,
     linear_fa_cap_fails_at_metamaze_g999__exception,
     sigma_action_predicts_ddqn_jens_reduction,
+    vanilla_anchor_collapses_with_gamma_at_fr_mlp,
+    vanilla_anchor_preserved_with_gamma_at_acrobot_mlp,
 )
 from experiments.findings.ddqn_three_conditions.outcome_translation import (
     ddqn_helps_outcome_at_fr_g999_mlp_unshaped__k_panel,
@@ -121,12 +124,15 @@ BRIDGES = (
     sigma_action_predicts_ddqn_jens_reduction,
     ddqn_helps_outcome_at_fr_g999_mlp_unshaped__k_panel,
     ddqn_no_positive_outcome_under_shaping__fr_shaped_fa_x_gamma_panel,
+    vanilla_anchor_collapses_with_gamma_at_fr_mlp,
+    vanilla_anchor_preserved_with_gamma_at_acrobot_mlp,
 )
 
 
 FINDINGS = (
     finding_jens_reduction_factors,
     finding_shaping_decouples,
+    finding_gamma_amplification_anchor_gated,
 )
 
 

@@ -105,7 +105,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_reduces_jens_uniformly_across_k_at_fr_high_gamma",
       "direction": "inverse",
-      "extent_hash": 616899864566442313,
+      "extent_hash": -3598241313095409408,
       "n_cells_in_scope": 566,
       "n_cells_pre_scope": 4711,
       "pair_by": [
@@ -202,7 +202,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_reduction_amplified_by_gamma__fr_mlp_k4_unshaped",
       "direction": "inverse",
-      "extent_hash": 1735875278439699300,
+      "extent_hash": -7651730442092081320,
       "n_cells_in_scope": 593,
       "n_cells_pre_scope": 4711,
       "pair_by": [
@@ -258,7 +258,7 @@
       "blocked_by": null,
       "bridge_name": "fa_capacity_moderates_ddqn_jens_reduction",
       "direction": "inverse",
-      "extent_hash": -6834577687177802818,
+      "extent_hash": 5605362511652231846,
       "n_cells_in_scope": 2911,
       "n_cells_pre_scope": 4711,
       "pair_by": [
@@ -368,7 +368,7 @@
       "blocked_by": null,
       "bridge_name": "linear_fa_cap_fails_at_metamaze_g999__exception",
       "direction": "inverse",
-      "extent_hash": -6952623813565407330,
+      "extent_hash": -310140123482978999,
       "n_cells_in_scope": 420,
       "n_cells_pre_scope": 4711,
       "pair_by": [
@@ -421,7 +421,7 @@
       "blocked_by": null,
       "bridge_name": "sigma_action_predicts_ddqn_jens_reduction",
       "direction": "inverse",
-      "extent_hash": -6834577687177802818,
+      "extent_hash": 5605362511652231846,
       "n_cells_in_scope": 2911,
       "n_cells_pre_scope": 4711,
       "pair_by": [
@@ -554,7 +554,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_helps_outcome_at_fr_g999_mlp_unshaped__k_panel",
       "direction": "direct",
-      "extent_hash": 616899864566442313,
+      "extent_hash": -3598241313095409408,
       "n_cells_in_scope": 506,
       "n_cells_pre_scope": 4711,
       "pair_by": [
@@ -686,7 +686,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_no_positive_outcome_under_shaping__fr_shaped_fa_x_gamma_panel",
       "direction": "direct",
-      "extent_hash": -1677441536084360309,
+      "extent_hash": 454937548430147330,
       "n_cells_in_scope": 240,
       "n_cells_pre_scope": 4711,
       "pair_by": [
@@ -708,11 +708,85 @@
       "tier": "interventional",
       "verdict": "held",
       "warnings": []
+    },
+    {
+      "analysis_results": {
+        "stratified_spearman": {
+          "n_obs_total": 384,
+          "n_strata": 1,
+          "p_value": 0.0,
+          "rho_pooled": -0.809697,
+          "stratify_by": "env_name",
+          "x": "gamma",
+          "y": "eval_best_burst_raw_mean"
+        }
+      },
+      "assumption_violations": [],
+      "blocked_by": null,
+      "bridge_name": "vanilla_anchor_collapses_with_gamma_at_fr_mlp",
+      "direction": "inverse",
+      "extent_hash": -50248320424445939,
+      "n_cells_in_scope": 384,
+      "n_cells_pre_scope": 4711,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "min_stratum_size": 30,
+        "rho_threshold": -0.5,
+        "stratify_by": "env_name",
+        "x": "gamma",
+        "y": "eval_best_burst_raw_mean"
+      },
+      "predicted_direction": "a_lt_b",
+      "scope_repr": "[([([([([([(col(\"env_name\")) == (\"FourRooms-misc\")]) & ([(col(\"fa_kind\")) == (\"mlp_deep\")])]) & ([(col(\"shaping_kind\")) == (\"none\")])]) & ([(col(\"arm_key\")) == (\"baseline\")])]) & (col(\"gamma\").is_in([[0.99, 0.999]]))]) & (col(\"eval_best_burst_raw_mean\").is_finite())]",
+      "source_name": "gamma",
+      "target_name": "eval_best_burst_raw_mean",
+      "tier": "associational",
+      "verdict": "held",
+      "warnings": []
+    },
+    {
+      "analysis_results": {
+        "stratified_spearman": {
+          "n_obs_total": 240,
+          "n_strata": 1,
+          "p_value": 6.82577e-08,
+          "rho_pooled": 0.336808,
+          "stratify_by": "env_name",
+          "x": "gamma",
+          "y": "eval_best_burst_raw_mean"
+        }
+      },
+      "assumption_violations": [],
+      "blocked_by": null,
+      "bridge_name": "vanilla_anchor_preserved_with_gamma_at_acrobot_mlp",
+      "direction": "direct",
+      "extent_hash": -5401399943859894629,
+      "n_cells_in_scope": 240,
+      "n_cells_pre_scope": 4711,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "min_stratum_size": 30,
+        "rho_threshold": 0.0,
+        "stratify_by": "env_name",
+        "x": "gamma",
+        "y": "eval_best_burst_raw_mean"
+      },
+      "predicted_direction": "a_gt_b",
+      "scope_repr": "[([([([([([(col(\"env_name\")) == (\"Acrobot-v1\")]) & ([(col(\"fa_kind\")) == (\"mlp_deep\")])]) & ([(col(\"shaping_kind\")) == (\"none\")])]) & ([(col(\"arm_key\")) == (\"baseline\")])]) & (col(\"gamma\").is_in([[0.99, 0.999]]))]) & (col(\"eval_best_burst_raw_mean\").is_finite())]",
+      "source_name": "gamma",
+      "target_name": "eval_best_burst_raw_mean",
+      "tier": "associational",
+      "verdict": "held",
+      "warnings": []
     }
   ],
   "cache_path": "experiments/data/cache/ddqn_three_conditions.parquet",
   "errored_bridges": [],
-  "git_commit": "81c165375d0e",
+  "git_commit": "0ecb5888cd21",
   "hypothesis_module": "experiments.findings.ddqn_three_conditions",
   "measurable_signatures": {
     "eval_best_burst_raw_mean": "829be9a6bcc9c696",
@@ -723,5 +797,5 @@
     "shaping_kind": "8d7b9f162d87a266"
   },
   "n_cells_total": 4711,
-  "timestamp_utc": "2026-05-17T04:46:56+00:00"
+  "timestamp_utc": "2026-05-17T08:05:52+00:00"
 }
