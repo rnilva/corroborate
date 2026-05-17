@@ -55,6 +55,7 @@ from corroborate.analyses import (  # noqa: F401
     partial_spearman_paired as _psp,  # pyright: ignore[reportUnusedImport]
     cross_config_paired_slope as _ccps,  # pyright: ignore[reportUnusedImport]
     cross_stratum_arm_diff_slope as _csads,  # pyright: ignore[reportUnusedImport]
+    cross_stratum_arm_diff_partial_spearman as _csadps,  # pyright: ignore[reportUnusedImport]
     cross_stratum_property_slope as _csps,  # pyright: ignore[reportUnusedImport]
     stratified_arm_diff_pooled as _stratified_arm_diff_pooled,  # pyright: ignore[reportUnusedImport]
     stratified_partial_spearman as _stratified_partial_spearman,  # pyright: ignore[reportUnusedImport]

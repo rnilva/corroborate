@@ -28,7 +28,7 @@ from corroborate.graph.causal import ClusterVerdict
 
 from experiments.findings.ddqn_sweeps.q_smoothness_harm_mechanism import (
     ddqn_cuts_q_smoothness_asterix_gamma_999,
-    q_smoothness_predicts_outcome__asterix_gamma_999,
+    q_smoothness_predicts_outcome__cross_stratum,
 )
 
 
@@ -36,30 +36,20 @@ EXPECTED: ClusterVerdict = ClusterVerdict.UNDERPOWERED
 
 
 BLOCKED_ON: str | None = (
-    'Q-smoothness mechanism is real cross-arm (DDQN cuts '
-    'q_inter_state_grad_overlap_late by d=-2.13 z=-8.24 on '
-    'Asterix γ=0.999) but at single-env panel (n=29 after '
-    'learnability + canonical-HP filters) we cannot distinguish '
-    '"smoothness is independent mediator" from "smoothness is '
-    'jens-shadow":\n'
-    '  Edge 1 fires nan-d at n_strata=1 (DL random-effects pool '
-    'requires ≥2 strata for tau estimation); needs multi-env '
-    'panel.\n'
-    '  Edge 2 partial-Spearman r(smoothness, outcome | jens) = '
-    '-0.088 on the single Asterix stratum. The marginal Pearson '
-    'r(smoothness, outcome) = +0.381 absorbs entirely into the '
-    'jens conditioning — they are near-collinear (DDQN reduces '
-    'both ~50% in lockstep).\n'
-    'Disambiguation needs envs where DDQN affects smoothness and '
-    'jens differently. Candidate panel: Breakout γ=0.999 (where '
-    'DDQN HELPS outcome) + Freeway γ=0.999 + Asterix γ=0.999 + '
-    'γ=0.95 controls. k=2 / k=4 amplification would also '
-    'introduce within-env decoupling via the √(2 ln K) jens '
-    'scaling.'
+    'Edge 1 (single-env mechanism-active on Asterix γ=0.999) is '
+    'HELD: d=-2.13 z=-8.24 on q_inter_state_grad_overlap_late. '
+    'Edge 2 (cross-stratum partial-r) tests whether smoothness '
+    'is independent of jens at the 6-stratum (env × γ) Δ panel. '
+    'Empirical preview on ddqn_sweeps cache: partial ρ=-0.325 '
+    'p=0.63 with n_strata=6 — UNDERPOWERED (n=6 needs ρ≥0.7 to '
+    'reject at α=0.10). The 6-stratum panel suggests smoothness '
+    'is NOT a universal positive mediator (sign trends wrong) '
+    'but power is too low to refute decisively. k=2/k=4 sweep '
+    'would push the panel to 12-18 strata and discriminate.'
 )
 
 
 BRIDGES: tuple[Bridge, ...] = (
     ddqn_cuts_q_smoothness_asterix_gamma_999,
-    q_smoothness_predicts_outcome__asterix_gamma_999,
+    q_smoothness_predicts_outcome__cross_stratum,
 )
