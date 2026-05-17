@@ -45,12 +45,22 @@ def _preflight_or_exit(
     """Run cloud-auth preflight; on failure, print the typed error
     + hint to stderr and return the CLI exit code. Returns None on
     success (caller continues). Returning the code (not raising)
-    lets callers keep the early-return pattern used elsewhere."""
+    lets callers keep the early-return pattern used elsewhere.
+
+    On preflight SUCCESS with `--profile <name>`, also export
+    `AWS_PROFILE` to the process environment so the actual cloud
+    op (which goes through `fsspec` / `s3fs`, NOT through the
+    botocore.session we used for preflight) picks up the same
+    profile. Without this, `--profile r2` would pass preflight
+    but the upload/download would fall back to the default chain
+    and likely fail with different creds."""
     try:
         preflight(remote_prefix, profile=profile)
     except CloudAuthError as e:
         sys.stderr.write(f'corroborate: cloud auth failed\n  {e}\n')
         return 1
+    if profile is not None:
+        os.environ['AWS_PROFILE'] = profile
     return None
 
 

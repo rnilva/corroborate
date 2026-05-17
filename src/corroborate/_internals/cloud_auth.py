@@ -141,7 +141,13 @@ def preflight(
         ) from e
     except botocore.exceptions.ClientError as e:
         code: str = str(e.response.get('Error', {}).get('Code', ''))
-        if code in ('403', 'Forbidden', 'AccessDenied'):
+        # `head_bucket` only synthesizes numeric codes (botocore
+        # parsers.py: head responses carry no body, so the parser
+        # uses status_code as the Code). String codes like
+        # `AccessDenied` / `NoSuchBucket` only appear from
+        # body-returning operations (list_objects_v2, get_object, …)
+        # — DON'T pattern on them here.
+        if code == '403':
             profile_clause = (
                 f' via profile {profile!r}' if profile else ''
             )
@@ -154,10 +160,11 @@ def preflight(
                 hint=(
                     'Credentials were accepted by boto3 but rejected '
                     'by the bucket. Verify the access key + secret are '
-                    'current and have read access to the bucket.'
+                    'current (typo? expired?) and that the key has read '
+                    'access to this bucket.'
                 ),
             ) from e
-        if code in ('404', 'NoSuchBucket'):
+        if code == '404':
             raise CloudAuthError(
                 stage='bucket_missing',
                 message=f'Bucket {bucket!r} not found at the endpoint.',
@@ -167,6 +174,20 @@ def preflight(
                     '(R2 buckets only exist at the R2 endpoint, not '
                     'at s3.amazonaws.com).'
                 ),
+            ) from e
+        # Transient codes (throttling, request timeout, internal
+        # error): classify as `network`, NOT `auth_failed` — the
+        # caller's retry-or-wait response differs.
+        if code in ('SlowDown', 'RequestTimeout', 'InternalError',
+                    'ServiceUnavailable', '503'):
+            raise CloudAuthError(
+                stage='network',
+                message=(
+                    f'Transient cloud error ({code}) against bucket '
+                    f'{bucket!r}.'
+                ),
+                hint='Retry shortly; the request was throttled or the '
+                     'service is briefly unavailable.',
             ) from e
         raise CloudAuthError(
             stage='auth_failed',

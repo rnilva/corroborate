@@ -131,18 +131,12 @@ def test_preflight_auth_failed_403(
     assert '403' in exc_info.value.message
 
 
-def test_preflight_auth_failed_access_denied_code(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """The S3 API surfaces 403 with `Code='AccessDenied'` sometimes."""
-    err = botocore.exceptions.ClientError(
-        error_response={'Error': {'Code': 'AccessDenied'}},
-        operation_name='HeadBucket',
-    )
-    _install_session(monkeypatch, client=_StubClient(raises=err))
-    with pytest.raises(CloudAuthError) as exc_info:
-        preflight('s3://my-bucket/')
-    assert exc_info.value.stage == 'auth_failed'
+# Note: `head_bucket` only ever produces numeric Code values
+# (per botocore parsers.py — head responses have no body, so the
+# parser uses the HTTP status code as the Code). Body-coded errors
+# like `AccessDenied` / `NoSuchBucket` only appear from
+# list/get/put operations. The fallback `auth_failed` branch
+# handles any non-403/404/transient codes if they ever appear.
 
 
 # ============ Stage: bucket_missing (404) ============
@@ -162,17 +156,31 @@ def test_preflight_bucket_missing_404(
     assert 'AWS_ENDPOINT_URL' in exc_info.value.hint  # R2 hint
 
 
-def test_preflight_bucket_missing_no_such_bucket_code(
+# `NoSuchBucket` string-code is unreachable through head_bucket
+# (see note above the auth_failed section). 404 alone is enough.
+
+
+# ============ Stage: network — transient + endpoint ============
+
+def test_preflight_throttle_classified_as_network(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """SlowDown (HTTP 503 throttling) must NOT classify as
+    auth_failed — it's transient, not an auth problem. The
+    operator's response (retry-with-backoff) differs from an
+    auth fix (rotate credentials)."""
     err = botocore.exceptions.ClientError(
-        error_response={'Error': {'Code': 'NoSuchBucket'}},
+        error_response={
+            'Error': {'Code': 'SlowDown', 'Message': 'Reduce rate'},
+        },
         operation_name='HeadBucket',
     )
     _install_session(monkeypatch, client=_StubClient(raises=err))
     with pytest.raises(CloudAuthError) as exc_info:
         preflight('s3://my-bucket/')
-    assert exc_info.value.stage == 'bucket_missing'
+    assert exc_info.value.stage == 'network'
+    assert 'SlowDown' in exc_info.value.message
+    assert 'throttled' in exc_info.value.hint.lower()
 
 
 # ============ Stage: network ============
@@ -228,16 +236,67 @@ def test_cloud_auth_error_carries_chained_exception(
     assert exc_info.value.__cause__ is err
 
 
-# ============ Unknown-code fallback ============
+# ============ CLI integration: --profile must reach fsspec ============
 
-def test_preflight_unknown_client_error_classifies_as_auth_failed(
+def test_preflight_or_exit_exports_aws_profile_on_success(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """An unexpected botocore error code (e.g. throttling) shouldn't
-    crash; surface it as `auth_failed` with the code in the message."""
+    """Regression: --profile <name> on the CLI must propagate to
+    the downstream cloud op (which goes through fsspec / s3fs, NOT
+    through the botocore.session used for preflight). The fix sets
+    `os.environ['AWS_PROFILE']` after preflight succeeds; s3fs
+    reads that env var when constructing its S3FileSystem.
+
+    Without this, `archive --profile r2` would pass preflight via
+    the r2 profile but fail the actual upload (default chain)."""
+    import os
+    from corroborate.__main__ import _preflight_or_exit  # pyright: ignore[reportPrivateUsage]
+    monkeypatch.delenv('AWS_PROFILE', raising=False)
+    _install_session(monkeypatch, client=_StubClient())
+    rc = _preflight_or_exit('s3://my-bucket/', profile='r2')
+    assert rc is None  # success
+    assert os.environ.get('AWS_PROFILE') == 'r2'
+
+
+def test_preflight_or_exit_no_profile_leaves_env_alone(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When --profile is not passed, don't clobber an existing
+    AWS_PROFILE env var (or set one when none was set)."""
+    import os
+    from corroborate.__main__ import _preflight_or_exit  # pyright: ignore[reportPrivateUsage]
+    monkeypatch.setenv('AWS_PROFILE', 'preexisting')
+    _install_session(monkeypatch, client=_StubClient())
+    rc = _preflight_or_exit('s3://my-bucket/', profile=None)
+    assert rc is None
+    assert os.environ.get('AWS_PROFILE') == 'preexisting'
+
+
+def test_preflight_or_exit_does_not_set_env_on_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """If preflight fails, the downstream cloud op never runs, so
+    don't pollute the env with the profile that didn't authenticate."""
+    import os
+    from corroborate.__main__ import _preflight_or_exit  # pyright: ignore[reportPrivateUsage]
+    monkeypatch.delenv('AWS_PROFILE', raising=False)
+    _install_session(monkeypatch, creds_returned=False)
+    rc = _preflight_or_exit('s3://my-bucket/', profile='broken')
+    assert rc == 1
+    assert 'AWS_PROFILE' not in os.environ
+
+
+# ============ Unknown-code fallback ============
+
+def test_preflight_unknown_client_error_falls_through_to_auth_failed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A genuinely unknown error code (not 403/404, not a transient)
+    falls through to `auth_failed` with the code carried in the
+    message so the operator can investigate."""
     err = botocore.exceptions.ClientError(
         error_response={
-            'Error': {'Code': 'SlowDown', 'Message': 'Reduce rate'},
+            'Error': {'Code': 'UnusualThing', 'Message': 'huh'},
         },
         operation_name='HeadBucket',
     )
@@ -245,4 +304,4 @@ def test_preflight_unknown_client_error_classifies_as_auth_failed(
     with pytest.raises(CloudAuthError) as exc_info:
         preflight('s3://my-bucket/')
     assert exc_info.value.stage == 'auth_failed'
-    assert re.search(r'\bSlowDown\b', exc_info.value.message)
+    assert re.search(r'\bUnusualThing\b', exc_info.value.message)
