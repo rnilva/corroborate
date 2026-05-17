@@ -355,17 +355,87 @@ moderation.
 
 ## 3. Rung 3: Counterfactual (deferred)
 
-NDE / NIE not yet shipped as framework primitive. DoWhy
-backdoor + refutation primitives are the ingredients. Authoring
-a typed counterfactual primitive is gated on a substrate bridge
+NDE / NIE counterfactual identification not shipped as a typed
+primitive. The framework ships `mediation_dowhy` (two-stage
+backdoor + OLS-with-mediators) but **as a diagnostic, not a
+magnitude estimator** — see §3.1 below. Authoring a typed
+counterfactual primitive (e.g., DoWhy's mediation.two_stage with
+proper SE + identification) is gated on a substrate bridge
 whose claim is load-bearingly counterfactual; the lift gate is
 "a real bridge fires positive on the linear-mediation
 diagnostics AND the question is genuinely manipulability."
 
-When the diagnostic does fire (proportion-mediated outside
-[0,1], per-stratum partial-ρ heterogeneity, nonlinear M→Y), use
-hand-rolled DoWhy mediation (the substrate exposes the
-ingredients) and document the lift in `FUTURE_WORKS.md`.
+### 3.1 `mediation_dowhy` as diagnostic, not magnitude
+
+The framework ships `corroborate.analyses.mediation_dowhy` —
+v10 PoC ported forward (CASE_STUDY_LESSONS §2.11). It returns
+`MediationResult(total_ate, direct_ate, indirect_ate,
+indirect_proportion, ...)` via:
+
+1. **Total ATE**: DoWhy backdoor on (treatment, outcome) under
+   the DAG.
+2. **Direct ATE**: OLS of outcome on (treatment, *mediators)
+   — the coefficient on treatment is the controlled direct
+   effect.
+3. **Indirect = total − direct**; **indirect proportion =
+   indirect / total** (NaN-guarded when |total| < eps).
+
+**Use it as a diagnostic for the linearity / multicollinearity
+failure mode**, not a decomposition estimator. Symptoms that
+indicate the model is broken (the v10 lesson empirically
+reproduced on FR × MLP × unshaped × baseline, n=120, mediators
+{self_ref, σ_action}, pairwise ρ ≈ 0.78–0.93):
+
+- `direct_ate` sign-flipped vs `total_ate` (regression
+  artifact, not mechanism)
+- `indirect_proportion` outside [0, 1]
+- Multicollinearity warning in the residuals
+
+When ANY of these fire on a corpus, the linear-mediation
+assumption is broken — **read the result as a flag, not a
+magnitude**. The canonical mediation primitive in this regime
+remains `partial_spearman_rho` (or `_multi` for joint
+mediators), which is rank-based and multicollinearity-robust.
+
+### 3.2 The mediation gating recipe (v10 §2.11)
+
+Mediation magnitudes are slippery — never read them without
+prior power + topology gating:
+
+1. **Power-gate the total ATE.** Run `dowhy.backdoor_ate` +
+   `placebo_refutation` + `random_common_cause_refutation` on
+   `(treatment, outcome)`. If placebo doesn't drop to ≈ 0 OR
+   RCC drift > tolerance, the total ATE is not reliable enough
+   to decompose. STOP.
+
+2. **Topology-gate via PC.** Run `discover_adjacency` with
+   depth ≥ 2 on the full variable set. If PC does NOT remove
+   the treatment-outcome edge under the proposed mediator
+   separating set, the posited DAG is suspect. Either re-DAG
+   to match PC, or STOP.
+
+3. **Mediation via partial-Spearman (canonical).** Use
+   `stratified_partial_spearman` (single mediator) or
+   `stratified_partial_spearman_multi` (joint mediators) to
+   compute ρ(X, Y | Z) on the SAME panel. Rank-based +
+   multicollinearity-robust + bounded-output → reliable
+   mediation evidence.
+
+4. **`mediation_dowhy` as diagnostic.** Sign-flips (direct/total
+   opposite signs) or proportions outside [0, 1] indicate
+   linear-mediation assumption is broken on this corpus.
+
+5. **Refutations on the total.** Placebo + RCC corroborate the
+   foundation; mediation magnitude doesn't inherit reliability
+   beyond what stages 1 and 3 establish.
+
+Bridges that just emit `mediation_dowhy.indirect_proportion`
+without the gating pipeline are NOT trusted. The empirical
+failure mode documented in `mediation_dowhy.py`'s module
+docstring (FR × MLP × unshaped × baseline) is the reproducible
+example of skipping this discipline. Cf.
+`findings_v10_mediation_failure_reproduced` (memory) and CLAUDE.md
+`### Mediation recipe` section.
 
 ---
 
