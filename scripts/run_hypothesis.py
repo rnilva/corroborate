@@ -95,6 +95,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         help='don\'t restore archived corpora from cloud on miss',
     )
     parser.add_argument(
+        '--profile', dest='profile', default=None, type=str,
+        help='AWS profile name for the cloud preflight + downstream '
+             'restore calls. Only used when an ingest mode is set '
+             'AND --no-restore is NOT set AND the ingested corpora '
+             'have `_remote.json` (cloud-backed). Falls back to '
+             'AWS_PROFILE env var, then the default credential chain.',
+    )
+    parser.add_argument(
+        '--skip-preflight', action='store_true',
+        help='Skip the upfront cloud-auth check on --ingest paths. '
+             'Use when iterating against known-good creds; saves '
+             '~100-300ms per run. Off by default.',
+    )
+    parser.add_argument(
         '--no-report', action='store_true',
         help='skip writing the post-run JSON audit report',
     )
@@ -191,6 +205,50 @@ def main(argv: Sequence[str] | None = None) -> int:
     bridge_filter = cast(str | None, args.bridge_filter)
     write_cache = not cast(bool, args.no_write_cache)
     write_report = not cast(bool, args.no_report)
+    restore_from_cloud = not cast(bool, args.no_restore)
+    profile = cast(str | None, args.profile)
+    skip_preflight = cast(bool, args.skip_preflight)
+
+    # Cloud preflight — only when (a) we're ingesting AND (b)
+    # cloud-restore is on AND (c) at least one corpus under the
+    # ingest scope has a `_remote.json` (else there's no cloud touch
+    # to verify against). Fails fast instead of letting the lazy
+    # restore step in `runner.run` crash mid-load.
+    if data is not None and restore_from_cloud and not skip_preflight:
+        from corroborate._internals.cloud_auth import (
+            CloudAuthError, preflight as _preflight,
+        )
+        from corroborate.corpus.cloud import load_manifest, MANIFEST_NAME
+        manifest_remote_root: str | None = None
+        # Walk the ingest scope and find ANY corpus carrying a
+        # `_remote.json`. Use its remote_root for preflight.
+        candidate_dirs: list[Path] = []
+        if isinstance(data, list):
+            candidate_dirs.extend(data)
+        elif data.is_dir():
+            candidate_dirs.extend(
+                d for d in data.iterdir() if d.is_dir()
+            )
+        for d in candidate_dirs:
+            if (d / MANIFEST_NAME).exists():
+                m = load_manifest(d)
+                if m is not None:
+                    manifest_remote_root = m.remote_root
+                    break
+        if manifest_remote_root is not None:
+            try:
+                _preflight(manifest_remote_root, profile=profile)
+            except CloudAuthError as e:
+                import sys
+                print(
+                    f'run_hypothesis: cloud preflight FAILED — '
+                    f'aborting before ingest.\n  {e}',
+                    file=sys.stderr,
+                )
+                return 1
+            if profile is not None:
+                import os
+                os.environ['AWS_PROFILE'] = profile
     if bridge_filter is not None:
         # Filter mode runs a subset of bridges → measurable
         # computation is the filtered subset's deps, not the full
@@ -223,7 +281,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         use_cache=not cast(bool, args.no_cache),
         write_cache=write_cache,
         rebuild=cast(bool, args.rebuild),
-        restore_from_cloud=not cast(bool, args.no_restore),
+        restore_from_cloud=restore_from_cloud,
         report_path=cast(Path | None, args.report_path),
         write_report=write_report,
         bridge_filter=bridge_filter,

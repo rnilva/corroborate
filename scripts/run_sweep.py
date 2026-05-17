@@ -54,6 +54,22 @@ def main(argv: list[str] | None = None) -> None:
              '(`expand_sweep`) and print the resolved configs '
              'without touching JAX or writing any cells.',
     )
+    _ = parser.add_argument(
+        '--profile', dest='profile', default=None,
+        help='AWS profile name for the cloud preflight when the '
+             'sweep config has `archive_remote` set. Falls back to '
+             'AWS_PROFILE env var, then the default credential '
+             'chain (env vars → ~/.aws/credentials → IAM role).',
+    )
+    _ = parser.add_argument(
+        '--skip-preflight', action='store_true',
+        help='Skip the upfront cloud-auth check before the sweep '
+             'runs. Use when iterating against a known-good profile '
+             'and the ~100-300ms head_bucket round-trip becomes '
+             'friction. Off by default — preflight protects against '
+             'wasting hours of compute then failing at the archive '
+             'step.',
+    )
     args = parser.parse_args(argv)
 
     cfg_path_attr: object = args.config
@@ -131,6 +147,35 @@ def main(argv: list[str] | None = None) -> None:
         f'{len(sweep.envs)} envs, env_binding={sweep.env_binding})',
         file=sys.stderr,
     )
+
+    # Cloud preflight — fail fast on missing/wrong credentials
+    # BEFORE spending hours on the sweep loop. Gated on whether
+    # the sweep config actually uploads (`archive_remote` set).
+    # Skip when the user explicitly opts out via --skip-preflight.
+    profile_attr_raw: object = args.profile  # pyright: ignore[reportAny]
+    skip_attr_raw: object = args.skip_preflight  # pyright: ignore[reportAny]
+    profile_arg: str | None = (
+        profile_attr_raw if isinstance(profile_attr_raw, str) else None
+    )
+    skip_preflight: bool = bool(skip_attr_raw) if isinstance(
+        skip_attr_raw, bool,
+    ) else False
+    if sweep.archive_remote is not None and not skip_preflight:
+        from corroborate._internals.cloud_auth import (
+            CloudAuthError, preflight,
+        )
+        try:
+            preflight(sweep.archive_remote, profile=profile_arg)
+        except CloudAuthError as e:
+            print(
+                f'run_sweep: cloud preflight FAILED — aborting before '
+                f'sweep loop kicks off.\n  {e}',
+                file=sys.stderr,
+            )
+            raise SystemExit(1) from e
+        if profile_arg is not None:
+            os.environ['AWS_PROFILE'] = profile_arg
+
     runs_path, traces_path = dispatch_sweep(sweep)
     print(
         f'run_sweep: done → {runs_path}, {traces_path}',
