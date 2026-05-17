@@ -47,6 +47,17 @@ What this Finding does NOT claim:
   The chain interpretation is mechanistic-narrative, supported
   by the empirical mediation structure.
 
+**Independent validation via PC algorithm**: Conservative-PC at
+α=0.05, depth≤2 on these 5 variables surfaces 5 surviving edges
+(γ-self_ref, γ-q_late, self_ref-jens, σ_action-jens,
+σ_action-q_late) — and crucially REMOVES the direct γ-jens edge
+with separating set **{self_ref, σ_action}**, independently
+recovering the same conditioning set Stage 3 of this chain
+tests. PC declines to orient the (self_ref, jens, σ_action)
+triple (ambiguous: could be chain with jens as mediator, or
+fork with jens as common cause) — exactly the epistemic limit
+we'd expect from observation-only data.
+
 The mediation budget at FR × MLP × unshaped × baseline (n=120):
 
   Mediator set                       Residual ρ(γ, jens | ·)   Reduction
