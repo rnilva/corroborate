@@ -26,6 +26,7 @@ from experiments.findings.ddqn_sweeps import (
     finding_hp_variance_outcome_refuted,
     finding_metamaze_gamma_amplification,
     finding_rs01_rescue_envelope,
+    finding_sigma_over_jens_regime_discriminator,
 )
 from experiments.findings.ddqn._arms import INTERVENTION as INTERVENTION
 from experiments.findings.ddqn._common import CLAIM as CLAIM
@@ -44,6 +45,9 @@ from experiments.findings.ddqn_sweeps.dense_eval_acrobot_k_scaling import (
     ddqn_full_auc_helps_at_acrobot_k16_dense,
     ddqn_full_auc_null_at_acrobot_k4_dense,
 )
+from experiments.findings.ddqn_sweeps.sigma_over_jens_regime import (
+    BRIDGES as _SIGMA_OVER_JENS_REGIME,
+)
 
 
 # Loose module scope: only bsuite exclusion. HP-sweep bridges set
@@ -59,6 +63,7 @@ BRIDGES = (
     *_POLYAK_TAU,
     *_RS_RESCUE,
     *_WITHIN_ENV_SWEEPS,
+    *_SIGMA_OVER_JENS_REGIME,
     ddqn_full_auc_helps_at_acrobot_k16_dense,
     ddqn_full_auc_null_at_acrobot_k4_dense,
 )
@@ -68,4 +73,5 @@ FINDINGS = (
     finding_hp_variance_outcome_refuted,
     finding_metamaze_gamma_amplification,
     finding_rs01_rescue_envelope,
+    finding_sigma_over_jens_regime_discriminator,
 )
