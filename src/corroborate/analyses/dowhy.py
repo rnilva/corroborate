@@ -32,14 +32,14 @@ from typing import TYPE_CHECKING
 from corroborate.bridge.analysis import analysis
 from corroborate.analyses._dowhy_internal import (
     DAGLike,
+    _backdoor_estimate,
     _build_causal_model,
-    _record_keys_for,
     _refuter_effect,
 )
 
 
 if TYPE_CHECKING:
-    import pandas as pd
+    pass
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,64 +88,6 @@ class RefutationResult:
     treatment: str
     outcome: str
     n_rows: int
-
-
-def _cells_to_dataframe(
-    cells: Iterable[Mapping[str, object]],
-    keys: list[str],
-) -> 'pd.DataFrame':
-    """Project the cell collection to a pandas DataFrame: one
-    row per cell, columns = `keys`. Cells missing any required
-    key are skipped (so partial corpora don't crash). Non-scalar
-    values are skipped."""
-    import pandas as pd
-
-    rows: list[dict[str, float]] = []
-    for cell in cells:
-        row: dict[str, float] = {}
-        complete = True
-        for k in keys:
-            v = cell.get(k)
-            if isinstance(v, bool):
-                row[k] = float(v)
-            elif isinstance(v, (int, float)):
-                row[k] = float(v)
-            else:
-                complete = False
-                break
-        if complete:
-            rows.append(row)
-    return pd.DataFrame(rows)
-
-
-def _backdoor_estimate(
-    cells: Iterable[Mapping[str, object]],
-    treatment: str,
-    outcome: str,
-    dag: DAGLike,
-    method_name: str,
-) -> tuple[
-    'pd.DataFrame',
-    object,  # identified estimand
-    object | None,  # estimate object (None if unidentified)
-]:
-    """Build DataFrame + CausalModel + run identification +
-    (when identified) estimation. Helper shared by all three
-    analyses so the model construction is consistent."""
-    df = _cells_to_dataframe(cells, _record_keys_for(dag))
-    model = _build_causal_model(df, treatment, outcome, dag)
-    identified = model.identify_effect(
-        proceed_when_unidentifiable=False,
-    )
-    if (
-        getattr(identified, 'no_directed_path', False)
-        or not getattr(identified, 'estimands', None)
-    ):
-        return df, identified, None
-    estimate = model.estimate_effect(
-        identified, method_name=method_name,
-    )
-    return df, identified, estimate
 
 
 @analysis

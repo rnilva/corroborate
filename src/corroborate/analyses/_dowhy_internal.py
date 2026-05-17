@@ -13,6 +13,7 @@ helper bodies, not at module top, so corroborate's spine imports
 cleanly without them. ImportError surfaces at call time."""
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -101,9 +102,73 @@ def _record_keys_for(graph: DAGLike) -> list[str]:
     return list(nx_graph.nodes)
 
 
+def _cells_to_dataframe(
+    cells: Iterable[Mapping[str, object]],
+    keys: list[str],
+) -> 'pd.DataFrame':
+    """Project the cell collection to a pandas DataFrame: one
+    row per cell, columns = `keys`. Cells missing any required
+    key are skipped (so partial corpora don't crash). Non-scalar
+    values are skipped.
+
+    Lifted from `analyses.dowhy` so sibling analyses (e.g.
+    `mediation_dowhy`) can reuse without crossing the
+    public/private boundary on a sibling-module helper."""
+    import pandas as pd
+
+    rows: list[dict[str, float]] = []
+    for cell in cells:
+        row: dict[str, float] = {}
+        complete = True
+        for k in keys:
+            v = cell.get(k)
+            if isinstance(v, bool):
+                row[k] = float(v)
+            elif isinstance(v, (int, float)):
+                row[k] = float(v)
+            else:
+                complete = False
+                break
+        if complete:
+            rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def _backdoor_estimate(
+    cells: Iterable[Mapping[str, object]],
+    treatment: str,
+    outcome: str,
+    dag: DAGLike,
+    method_name: str,
+) -> tuple[
+    'pd.DataFrame',
+    object,
+    object | None,
+]:
+    """Build DataFrame + CausalModel + run identification +
+    (when identified) estimation. Helper shared by all DoWhy-
+    consuming analyses so model construction is consistent."""
+    df = _cells_to_dataframe(cells, _record_keys_for(dag))
+    model = _build_causal_model(df, treatment, outcome, dag)
+    identified = model.identify_effect(
+        proceed_when_unidentifiable=False,
+    )
+    if (
+        getattr(identified, 'no_directed_path', False)
+        or not getattr(identified, 'estimands', None)
+    ):
+        return df, identified, None
+    estimate = model.estimate_effect(
+        identified, method_name=method_name,
+    )
+    return df, identified, estimate
+
+
 __all__ = [
     'DAGLike',
+    '_backdoor_estimate',
     '_build_causal_model',
+    '_cells_to_dataframe',
     '_record_keys_for',
     '_refuter_effect',
     '_to_networkx',

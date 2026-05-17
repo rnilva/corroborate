@@ -520,10 +520,12 @@ different verdicts — the framework refuses to collapse them.
 | `meta_regression_per_burst` | per-(stratum, burst) panel meta-regression |
 | `stratified_arm_diff_pooled` | per-stratum **independent-samples** Cohen's d → DL random-effects pool with heterogeneity-flagged verdict (HELD / HELD_WITH_SCOPE_FLAG / NO_EFFECT / POWER_INSUFFICIENT). Pair with `meta_regression` sibling on the same scope for the scope-cluster pattern (HYPOTHESIS_AS_GRAPH.md §3b). Use **this** for cross-env / cross-config pooling — NOT `paired_g_pooled`, which pseudo-replicates by seed (see its module docstring). |
 | `mundlak_paired_g_per_burst` | **synthetic SCM tests only** — paired form. Off-limits in RL substrate. |
-| `proportion_mediated` | linear-mediation decomposition: indirect / total share of Δ_target carried by `mediator` |
-| `partial_spearman_rho` (graph.discovery) | linear-mediation Spearman form — partial-r of (X, Y) given Z; the Spearman analog of `proportion_mediated`'s direct effect |
+| `proportion_mediated` | linear-mediation decomposition: indirect / total share of Δ_target carried by `mediator`. **DEPRECATED** (ratio explodes, lands outside [0, 1] under suppression, first-difference ≠ population slope). Use `stratified_partial_spearman` instead. |
+| `partial_spearman_rho` (graph.discovery) | partial-r of (X, Y) given Z. **Canonical mediation primitive** — rank-based, multicollinearity-robust. |
 | `stratified_partial_spearman_rho` (graph.discovery) | **JCI form**: per-env partial Spearman, Fisher-z-pooled — the canonical adjustment when env is a confound |
+| `stratified_partial_spearman_multi` (graph.discovery + analysis wrapper) | multi-Z generalization: ρ(X, Y \| Z₁, …, Zₖ) for joint-mediation tests. |
 | `dowhy` | DoWhy backdoor / refutation on a typed causal graph |
+| `mediation_dowhy` | DoWhy two-stage mediation: total ATE via backdoor + direct ATE via OLS with mediators as covariates → indirect ATE = total − direct, indirect proportion = indirect / total. **Use the recipe below** — magnitudes are wildly unreliable without prior power + topology gating. |
 | `factorial_2x2` | 2×2 factorial interaction Δ |
 | `tautology_audit` | three-check audit (HP shadow / partial-correlation / convergence) |
 | `verdict_distribution` | corpus-level verdict count / class breakdown |
@@ -533,6 +535,60 @@ When proposing an analysis: **check this list first**. New
 inline analyses only when none of the above fits — and even then,
 prefer to extend an existing primitive (or add a sibling) rather
 than copying logic.
+
+### Mediation recipe (load-bearing — read before authoring mediation bridges)
+
+Mediation magnitudes are slippery. The framework's
+`proportion_mediated` was deprecated for documented structural
+reasons (ratio explodes, lands outside [0, 1] under suppression,
+first-difference identification ≠ population slope). The
+ported-forward `mediation_dowhy` (DoWhy two-stage backdoor +
+OLS) is similarly fragile under multicollinear mediators —
+on the FR γ-WHY corpus (n=120, mediators ρ ≈ 0.93) it produced
+direct ATE = −57 alongside total ATE = +1023 (a sign-flip
+multicollinearity artifact), with indirect proportion = +106%
+(outside [0, 1]).
+
+The v10 CASE_STUDY_LESSONS §2.11 prescription, refined through
+empirical reproduction of the failure mode: **never read
+mediation magnitudes without prior power-gate + topology-gate.**
+The pipeline:
+
+1. **Power gate the TOTAL ATE.** Run `dowhy.backdoor_ate` +
+   `placebo_refutation` + `random_common_cause_refutation` on
+   `(treatment, outcome)`. If placebo doesn't drop to ≈ 0 OR
+   RCC drift > tolerance, the total ATE is not reliable enough
+   to decompose. STOP.
+
+2. **Topology gate via PC.** Run
+   `corroborate.graph.discovery.discover_adjacency` with depth
+   2 on the full variable set. If PC does NOT remove the
+   treatment-outcome edge under the proposed mediator
+   separating set, the posited DAG is suspect. Either re-DAG
+   to match PC, or STOP.
+
+3. **Mediation via partial-Spearman (canonical).** Use
+   `stratified_partial_spearman` (single mediator) or
+   `stratified_partial_spearman_multi` (joint mediators) to
+   compute ρ(X, Y \| Z) on the SAME panel. Rank-based +
+   multicollinearity-robust + bounded-output → reliable
+   mediation evidence.
+
+4. **`mediation_dowhy` as DIAGNOSTIC, not magnitude
+   estimator.** Sign-flips (direct/total opposite signs) or
+   proportions outside [0, 1] indicate linear-mediation
+   assumption is broken on this corpus. Read the result as a
+   "linearity is broken" flag, not a decomposition.
+
+5. **Refutations on the total.** Placebo + RCC corroborate the
+   foundation; mediation magnitude doesn't inherit
+   reliability beyond what stage 1 and 3 establish.
+
+Bridges that just emit `mediation_dowhy.indirect_proportion`
+without the gating pipeline are NOT trusted. The empirical
+example documented in `mediation_dowhy.py`'s module docstring
+(FR × MLP × unshaped × baseline) is the reproducible failure
+mode of skipping this discipline.
 
 ## Test iteration
 

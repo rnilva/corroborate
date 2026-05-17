@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from corroborate.analyses.dowhy import _cells_to_dataframe
+from corroborate.analyses._dowhy_internal import _cells_to_dataframe
 
 
 def test_cells_to_dataframe_includes_bool_as_float() -> None:

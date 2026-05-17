@@ -30,6 +30,7 @@ from corroborate.analyses import (  # noqa: F401
     meta_regression_paired_g as _mr,  # pyright: ignore[reportUnusedImport]
     meta_regression_per_burst as _mr_per_burst,  # pyright: ignore[reportUnusedImport]
     meta_regression_unpaired_d as _mr_unpaired,  # pyright: ignore[reportUnusedImport]
+    mediation_dowhy as _mediation_dowhy,  # pyright: ignore[reportUnusedImport]
     mundlak_decomposition as _mundlak,  # pyright: ignore[reportUnusedImport]
     mundlak_paired_g_per_burst as _mundlak_pgpb,  # pyright: ignore[reportUnusedImport]
     paired_comparison as _paired_comparison,  # pyright: ignore[reportUnusedImport]
