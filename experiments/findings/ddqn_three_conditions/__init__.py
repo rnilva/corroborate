@@ -97,6 +97,7 @@ from experiments.findings.ddqn_three_conditions import (
     finding_joint_mediation_incomplete,
     finding_q_magnitude_residual_mediator,
     finding_shaping_decouples,
+    finding_sigma_action_completes_chain,
 )
 from experiments.findings.ddqn_three_conditions._arms import (
     INTERVENTION as INTERVENTION,
@@ -109,13 +110,16 @@ from experiments.findings.ddqn_three_conditions.jens_reduction_factors import (
     ddqn_reduction_amplified_by_gamma__fr_mlp_k4_unshaped,
     fa_capacity_moderates_ddqn_jens_reduction,
     gamma_jens_jointly_mediated_by_self_ref_and_q_late_at_fr_mlp,
+    gamma_jens_jointly_mediated_by_self_ref_and_sigma_action_at_fr_mlp,
     gamma_jens_mediated_by_q_self_reference_at_fr_mlp,
     gamma_predicts_q_late_residual_at_fr_mlp,
     gamma_predicts_q_self_reference_at_fr_mlp,
+    gamma_predicts_sigma_action_residual_at_fr_mlp,
     linear_fa_cap_fails_at_metamaze_g999__exception,
     q_late_predicts_jens_residual_at_fr_mlp,
     q_self_reference_predicts_jens_at_fr_mlp,
     sigma_action_predicts_ddqn_jens_reduction,
+    sigma_action_predicts_jens_residual_at_fr_mlp,
     vanilla_anchor_collapses_with_gamma_at_fr_mlp,
     vanilla_anchor_preserved_with_gamma_at_acrobot_mlp,
 )
@@ -141,6 +145,9 @@ BRIDGES = (
     gamma_predicts_q_late_residual_at_fr_mlp,
     q_late_predicts_jens_residual_at_fr_mlp,
     gamma_jens_jointly_mediated_by_self_ref_and_q_late_at_fr_mlp,
+    gamma_predicts_sigma_action_residual_at_fr_mlp,
+    sigma_action_predicts_jens_residual_at_fr_mlp,
+    gamma_jens_jointly_mediated_by_self_ref_and_sigma_action_at_fr_mlp,
 )
 
 
@@ -151,6 +158,7 @@ FINDINGS = (
     finding_gamma_jens_via_q_self_reference,
     finding_q_magnitude_residual_mediator,
     finding_joint_mediation_incomplete,
+    finding_sigma_action_completes_chain,
 )
 
 

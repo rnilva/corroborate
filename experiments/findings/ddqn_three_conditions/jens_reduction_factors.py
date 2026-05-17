@@ -932,3 +932,190 @@ def gamma_jens_jointly_mediated_by_self_ref_and_q_late_at_fr_mlp(
         sign=0,
         threshold=rho_threshold,
     )
+
+
+# === σ_action as completing residual mediator (alongside self_ref) ===
+#
+# Empirical at FR × MLP × unshaped × baseline (n=120):
+#   Stage 1: ρ(γ, σ_action | self_ref)         = +0.59  p<1e-12
+#   Stage 2: ρ(σ_action, jens | self_ref)      = +0.48  p<1e-7
+#   Stage 3: ρ(γ, jens | self_ref + σ_action)  = +0.06  p=0.50  ← NS
+#
+# Two-mediator chain {self_ref + σ_action} fully accounts for γ → jens.
+# σ_action (within-state across-action Q SD) is a per-state Q-variance
+# quantity — upstream of jens in the causal chain (NOT a jens-twin like
+# bg_magnitude, which is ρ=0.97 with jens).
+#
+# CAVEAT: σ_action and q_late_mean are ρ=0.93 — they capture overlapping
+# Q-growth dimensions at this scope. The two chains
+# (γ → σ_action → jens) and (γ → q_late → jens) are NOT independent
+# evidence; they're alternative readings of the same Q-trajectory
+# dynamics. The 3-mediator chain {self_ref + q_late + σ_action} adds
+# little over {self_ref + σ_action} (γ → jens residual moves from +0.06
+# to +0.11, still NS).
+
+
+@claim_bridge(
+    source='gamma',
+    target='q_action_std_late',
+    direction=Direction.DIRECT,
+    tier=Tier.ASSOCIATIONAL,
+    scope=(
+        (pl.col('env_name') == 'FourRooms-misc')
+        & (pl.col('fa_kind') == 'mlp_deep')
+        & (pl.col('shaping_kind') == 'none')
+        & (pl.col('arm_key') == 'baseline')
+        & pl.col('gamma').is_in([0.99, 0.999])
+        & finite(pl.col('q_action_std_late'))
+        & finite(pl.col('bootstrap_self_reference_fraction'))
+    ),
+    predicted_direction='a_gt_b',
+)
+def gamma_predicts_sigma_action_residual_at_fr_mlp(
+    stratified_partial_spearman: StratifiedPartialSpearmanResult,
+    *,
+    x: str = 'gamma',
+    y: str = 'q_action_std_late',
+    conditioning: str = 'bootstrap_self_reference_fraction',
+    stratify_by: str = 'env_name',
+    min_stratum_size: int = 30,
+    rho_threshold: float = 0.3,
+) -> Verdict:
+    """γ predicts σ_action even after partialling out self-reference
+    at FR × MLP × unshaped × baseline.
+
+    Partial Spearman ρ(γ, q_action_std_late |
+    bootstrap_self_reference_fraction). Predicted: positive — γ
+    drives per-state across-action Q variance even beyond what the
+    self-reference fraction captures.
+
+    HELDs iff ρ_partial ≥ +0.3 AND p < 0.05. Empirical: +0.59
+    (p<1e-12) at FR baseline.
+
+    Stage 1 of the σ_action completing-mediator chain. Pairs with
+    `sigma_action_predicts_jens_residual_at_fr_mlp` (Stage 2) and
+    `gamma_jens_jointly_mediated_by_self_ref_and_sigma_action_at_fr_mlp`
+    (Stage 3 — null prediction HELD: full mediation by these
+    two)."""
+    del x, y, conditioning, stratify_by, min_stratum_size
+    return spearman_rho_verdict(
+        stratified_partial_spearman,
+        sign=+1,
+        threshold=rho_threshold,
+    )
+
+
+@claim_bridge(
+    source='q_action_std_late',
+    target='jensen_gap',
+    direction=Direction.DIRECT,
+    tier=Tier.ASSOCIATIONAL,
+    scope=(
+        (pl.col('env_name') == 'FourRooms-misc')
+        & (pl.col('fa_kind') == 'mlp_deep')
+        & (pl.col('shaping_kind') == 'none')
+        & (pl.col('arm_key') == 'baseline')
+        & pl.col('gamma').is_in([0.99, 0.999])
+        & finite(pl.col('jensen_gap'))
+        & finite(pl.col('q_action_std_late'))
+        & finite(pl.col('bootstrap_self_reference_fraction'))
+    ),
+    predicted_direction='a_gt_b',
+)
+def sigma_action_predicts_jens_residual_at_fr_mlp(
+    stratified_partial_spearman: StratifiedPartialSpearmanResult,
+    *,
+    x: str = 'q_action_std_late',
+    y: str = 'jensen_gap',
+    conditioning: str = 'bootstrap_self_reference_fraction',
+    stratify_by: str = 'env_name',
+    min_stratum_size: int = 30,
+    rho_threshold: float = 0.3,
+) -> Verdict:
+    """σ_action predicts jens beyond what self-reference captures
+    at FR × MLP × unshaped × baseline.
+
+    Partial Spearman ρ(q_action_std_late, jensen_gap |
+    bootstrap_self_reference_fraction). Predicted: positive —
+    higher per-state across-action Q variance correlates with
+    higher bias beyond what self-reference fraction predicts.
+
+    HELDs iff ρ_partial ≥ +0.3 AND p < 0.05. Empirical: +0.48
+    (p<1e-7) at FR baseline.
+
+    Stage 2 of the σ_action completing-mediator chain. NOTE:
+    σ_action is more upstream of jens in the causal chain than
+    `bootstrap_gap_magnitude` (which is ρ=0.97 with jens — a
+    jens-twin, not a clean mediator). Using σ_action keeps the
+    mediation interpretation clean."""
+    del x, y, conditioning, stratify_by, min_stratum_size
+    return spearman_rho_verdict(
+        stratified_partial_spearman,
+        sign=+1,
+        threshold=rho_threshold,
+    )
+
+
+@claim_bridge(
+    source='gamma',
+    target='jensen_gap',
+    direction=Direction.DIRECT,
+    tier=Tier.ASSOCIATIONAL,
+    scope=(
+        (pl.col('env_name') == 'FourRooms-misc')
+        & (pl.col('fa_kind') == 'mlp_deep')
+        & (pl.col('shaping_kind') == 'none')
+        & (pl.col('arm_key') == 'baseline')
+        & pl.col('gamma').is_in([0.99, 0.999])
+        & finite(pl.col('jensen_gap'))
+        & finite(pl.col('bootstrap_self_reference_fraction'))
+        & finite(pl.col('q_action_std_late'))
+    ),
+    predicted_direction='null',
+)
+def gamma_jens_jointly_mediated_by_self_ref_and_sigma_action_at_fr_mlp(
+    stratified_partial_spearman_multi: StratifiedPartialSpearmanMultiResult,
+    *,
+    x: str = 'gamma',
+    y: str = 'jensen_gap',
+    conditioning: tuple[str, ...] = (
+        'bootstrap_self_reference_fraction',
+        'q_action_std_late',
+    ),
+    stratify_by: str = 'env_name',
+    min_stratum_size: int = 30,
+    rho_threshold: float = 0.3,
+) -> Verdict:
+    """Multi-Z partial Spearman ρ(γ, jens | self_ref + σ_action) ≈ 0
+    at FR × MLP × unshaped × baseline.
+
+    Tests whether self-reference fraction AND σ_action TOGETHER
+    fully mediate γ → jens. Predicted null: |ρ_partial| ≤ 0.3 AND
+    p ≥ 0.05.
+
+    Empirical (FR baseline, n=120):
+        ρ_partial = +0.063  p = 0.499
+
+    Verdict: HELD. The 2-mediator chain {self_ref, σ_action}
+    accounts for the empirical γ → jens relationship at this
+    scope. ~92% reduction from marginal ρ(γ, jens) = +0.78.
+
+    CAVEAT: σ_action and q_late_mean are highly correlated
+    (ρ=0.93) — they capture overlapping Q-growth dimensions.
+    The clean 2-mediator interpretation here doesn't mean
+    σ_action is THE unique upstream of jens; it means
+    {self_ref, σ_action} together capture all the
+    γ-correlated variance in jens at this scope. A different
+    pair (e.g., {self_ref, q_late}) would do nearly as well
+    but with a small residual remaining (per
+    `finding_joint_mediation_incomplete`).
+
+    Stage 3 of the σ_action completing-mediator chain;
+    individual stages: `gamma_predicts_sigma_action_residual_at_fr_mlp`
+    and `sigma_action_predicts_jens_residual_at_fr_mlp`."""
+    del x, y, conditioning, stratify_by, min_stratum_size
+    return spearman_rho_verdict(
+        stratified_partial_spearman_multi,
+        sign=0,
+        threshold=rho_threshold,
+    )
