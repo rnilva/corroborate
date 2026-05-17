@@ -58,6 +58,23 @@ triple (ambiguous: could be chain with jens as mediator, or
 fork with jens as common cause) — exactly the epistemic limit
 we'd expect from observation-only data.
 
+**Independent validation via DoWhy backdoor + refutations**: on
+the same panel, DoWhy `backdoor.linear_regression` identifies
+the total causal effect γ → jens (ATE = 1023.36 per unit γ).
+Refutations pass:
+- Placebo (random-permutation treatment): refuted ATE = 0.000
+  (model correctly identifies γ as the treatment channel)
+- Random-common-cause: refuted ATE = 1023.21, drift = 0.15
+  (estimate is invariant to a synthetic confounder)
+
+The framework's DoWhy primitive is backdoor-only and doesn't
+estimate natural direct/indirect effects, so it can't directly
+test the mediation decomposition. What it corroborates: γ → jens
+at FR baseline is a robust causal effect (not artifactual
+correlation). Three independent methods (partial Spearman, PC,
+DoWhy backdoor) agree on the foundation; the mediation
+structure on top is corroborated by the first two.
+
 The mediation budget at FR × MLP × unshaped × baseline (n=120):
 
   Mediator set                       Residual ρ(γ, jens | ·)   Reduction
