@@ -174,10 +174,18 @@ def test_arm_mean_diff_recovers_structural_contrast() -> None:
         f'mean_diff={result.mean_diff:.4f} expected={expected:.4f} '
         f'4*SE={4.0 * se_expected:.4f}'
     )
-    # Framework Welch SE matches the closed-form full-variance SE
-    # within ±10% — sample-SD CV at n=60 is ≈ 1/sqrt(2(n-1)) ≈
-    # 9%, so 10% absorbs that one-σ slack on each per-arm SD.
-    assert 0.9 * se_expected <= result.mean_diff_se <= 1.1 * se_expected, (
+    # Framework Welch SE matches closed-form full-variance SE
+    # within ±15%. Derivation: Welch SE² ~ (s_t² + s_b²)/n; each
+    # s_arm² is chi-squared with Var(s²) = 2σ⁴/(n−1). By delta
+    # method on the sqrt:
+    #     CV(Welch SE) ≈ sqrt(1/(2(n−1))) ·
+    #                    sqrt((σ_t⁴ + σ_b⁴) / (σ_t² + σ_b²)²)
+    # At n=60 with σ_t² ≈ 7·σ_b² (β=(0.8, 0.2)), this gives ≈
+    # 8.2%. Empirical SD across random seed offsets matches
+    # (~10%). 15% is a ~1.8× safety on the closed-form CV that
+    # tolerates non-asymptotic chi-squared moments without
+    # admitting any plausible bug.
+    assert 0.85 * se_expected <= result.mean_diff_se <= 1.15 * se_expected, (
         f'mean_diff_se={result.mean_diff_se:.4f} '
         f'expected_se={se_expected:.4f} '
         f'(ratio={result.mean_diff_se / se_expected:.3f})'

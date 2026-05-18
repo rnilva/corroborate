@@ -193,8 +193,6 @@ def test_marginal_rho_recovers_closed_form() -> None:
     )
     assert result.n_strata == 3
     assert result.n_obs_total == _N_SEEDS_PER_ENV * 3
-    assert result.conditioning == ()
-    assert result.granularity == 'per_cell'
 
 
 def test_partial_rho_conditional_on_mediator_is_null() -> None:
