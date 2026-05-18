@@ -10,14 +10,14 @@ from the new `q_lambda_a_per_burst` measurable in
 What this module tests (Phase 1 scope, Breakout-only pilot):
 
 - **(A4'a) magnitude alignment in converged tail.** The
-  `a4a_tail_cv_invariant_across_gamma__breakout` bridge
+  `a4a_tail_cv_invariant_across_gamma__minatar_gamma_sweep` bridge
   computes Spearman ρ(γ, q_lambda_a_tail_cv) on the
   baseline-arm cells. Predicted NULL (|ρ| < 0.3) — converged-tail
   CV is γ-invariant and small in absolute terms (the (A4'a)
   prediction). Finding `finding_a4a_holds_in_converged_tail`.
 
 - **Geometric-series gap γ-scaling.** The
-  `geometric_gap_scales_with_gamma__breakout` bridge computes
+  `geometric_gap_scales_with_gamma__minatar_gamma_sweep` bridge computes
   Spearman ρ(γ, q_lambda_a_growth_ratio). Predicted POSITIVE
   (ρ > +0.3) — the init-to-converged drift scales with γ. The
   THEORY §6.1 open limitation (parallel to §9.3's Robbins-Monro
@@ -51,20 +51,20 @@ from experiments.findings.theorem3 import (
     finding_geometric_gap_scales_with_gamma,
 )
 from experiments.findings.theorem3.bridges import (
-    a4a_tail_cv_invariant_across_gamma__breakout,
-    geometric_gap_scales_with_gamma__breakout,
+    a4a_tail_cv_invariant_across_gamma__minatar_gamma_sweep,
+    geometric_gap_scales_with_gamma__minatar_gamma_sweep,
 )
 
 
 CLAIM = dqn
 
 
-MODULE_SCOPE = pl.col('env_name') == 'Breakout-MinAtar'
+MODULE_SCOPE = pl.col('env_name').is_in(['Breakout-MinAtar', 'Asterix-MinAtar'])
 
 
 BRIDGES = (
-    a4a_tail_cv_invariant_across_gamma__breakout,
-    geometric_gap_scales_with_gamma__breakout,
+    a4a_tail_cv_invariant_across_gamma__minatar_gamma_sweep,
+    geometric_gap_scales_with_gamma__minatar_gamma_sweep,
 )
 
 

@@ -45,7 +45,7 @@ from corroborate.bridge.bridge import Bridge
 from corroborate.graph.causal import ClusterVerdict
 
 from experiments.findings.theorem3.bridges import (
-    geometric_gap_scales_with_gamma__breakout,
+    geometric_gap_scales_with_gamma__minatar_gamma_sweep,
 )
 
 
@@ -56,5 +56,5 @@ BLOCKED_ON: str | None = None
 
 
 BRIDGES: tuple[Bridge, ...] = (
-    geometric_gap_scales_with_gamma__breakout,
+    geometric_gap_scales_with_gamma__minatar_gamma_sweep,
 )

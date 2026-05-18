@@ -60,7 +60,7 @@ from corroborate.bridge.bridge import Bridge
 from corroborate.graph.causal import ClusterVerdict
 
 from experiments.findings.theorem3.bridges import (
-    a4a_tail_cv_invariant_across_gamma__breakout,
+    a4a_tail_cv_invariant_across_gamma__minatar_gamma_sweep,
 )
 
 
@@ -71,5 +71,5 @@ BLOCKED_ON: str | None = None
 
 
 BRIDGES: tuple[Bridge, ...] = (
-    a4a_tail_cv_invariant_across_gamma__breakout,
+    a4a_tail_cv_invariant_across_gamma__minatar_gamma_sweep,
 )
