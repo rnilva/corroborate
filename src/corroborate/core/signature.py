@@ -1,33 +1,45 @@
-"""Signature introspection — `Exogenous` marker + walker.
+"""Signature introspection + source-fingerprint primitives.
 
-Two pieces:
+The module hosts two related surfaces:
 
-1. **`Exogenous`** — a sentinel class used as PEP 593 `Annotated`
-   metadata on claim kwargs. `Annotated[int, Exogenous]` declares
-   that a kwarg is something we generalize *over*, not intervene
-   on. Anything not so marked is implicitly a `leaf` — a
-   configurational scalar claim, interventionable by default.
-   Authors hide a leaf from intervention by baking it in via
-   `functools.partial`; the bake-in records honestly via
-   `canonical_str`'s partial branch.
+A. **Source-fingerprint primitives** — three hashes, picked by the
+*level of abstraction* the caller wants to identify:
 
-2. **Walker** — `walk(claim) → ClaimSignature`. Recursively
-   descends into:
-   - free-function claims (`FnClaim`): walk the wrapped fn's
-     signature.
-   - frozen-dataclass instances (Modules, config bundles): walk
-     `dataclasses.fields`.
-   - `functools.partial` over a claim: walk the wrapped claim's
-     signature, but with each baked kwarg's default replaced by
-     the bound value. Lets `partial(linear_epsilon, anneal_steps=
-     50_000)` surface `anneal_steps=50_000` instead of the
-     original default.
+| primitive | level | granularity | use case |
+|---|---|---|---|
+| `bytecode_source_hash` | Python bytecode | `co_code` + `co_consts` + `co_names` | Measurable cache invalidation; closure-hash |
+| `claim_graph_signature` | signature tree | dataclass fields + bound partial defaults | Program-instance identity; arm fingerprint |
+| `bridge_source_hash` | source text (canonical) | AST-dump (docstring-stripped) + decorator kwargs (JSON-sorted) | Pre-registration commitment artifacts |
 
-The walker also feeds two consumers: `flatten_leaves` /
-`flatten_exogenous` (configurational-leaf discovery for parquet
-columns + intervention surface), and `collect_invariants` (auto-
-discovery of invariants attached to any claim in the composition
-tree).
+Three distinct APIs rather than one polymorphic `style=...`
+dispatcher: the choice of which level a caller wants is a
+*semantic* decision (cache-invalidation vs commitment artifact vs
+program-instance identity), not a parameter of one operation.
+
+B. **Signature walker** — `Exogenous` marker + `walk(claim)
+ClaimSignature` + canonical-form helpers. Feeds the
+`claim_graph_signature` primitive above and the framework's
+`flatten_leaves` / `flatten_exogenous` consumers.
+
+`Exogenous` is a sentinel class used as PEP 593 `Annotated`
+metadata on claim kwargs. `Annotated[int, Exogenous]` declares
+that a kwarg is something we generalize *over*, not intervene
+on. Anything not so marked is implicitly a `leaf` — a
+configurational scalar claim, interventionable by default.
+Authors hide a leaf from intervention by baking it in via
+`functools.partial`; the bake-in records honestly via
+`canonical_str`'s partial branch.
+
+The walker descends into:
+- free-function claims (`FnClaim`): walk the wrapped fn's
+  signature.
+- frozen-dataclass instances (Modules, config bundles): walk
+  `dataclasses.fields`.
+- `functools.partial` over a claim: walk the wrapped claim's
+  signature, but with each baked kwarg's default replaced by
+  the bound value. Lets `partial(linear_epsilon, anneal_steps=
+  50_000)` surface `anneal_steps=50_000` instead of the
+  original default.
 
 "Leaf" terminology: a leaf-regime kwarg is a configurational
 scalar claim — a non-recursive value in the graph of claims
@@ -37,14 +49,17 @@ shape covers any non-RL configuration too. Authors who want to
 hide a leaf from intervention bake it in via `functools.partial`."""
 from __future__ import annotations
 
+import ast
 import dataclasses
 import functools
 import hashlib
 import inspect
+import json
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, fields, is_dataclass
+from types import CodeType
 from typing import (
-    Annotated, Literal, Protocol, TypeIs,
+    TYPE_CHECKING, Annotated, Literal, Protocol, TypeIs,
     get_origin, runtime_checkable,
 )
 
@@ -58,6 +73,9 @@ from corroborate._internals.introspection import (
     get_typing_args,
 )
 from corroborate.core.claim import FnClaim
+
+if TYPE_CHECKING:
+    from corroborate.bridge.bridge import Bridge
 
 
 @runtime_checkable
@@ -543,3 +561,156 @@ def _emit_signature(sig: ClaimSignature, parts: list[str]) -> None:
             _emit_signature(k.inner, parts)
         else:
             parts.append(f'{k.name}={_stable_repr(k.default)}')
+
+
+# ============ Bytecode source hash (closure cache-invalidation) ============
+
+
+def bytecode_source_hash(code: CodeType) -> str:
+    """16-hex-char SHA-256 prefix over (`co_code`, `co_consts`,
+    `co_names`). Recurses into nested code objects in `co_consts`
+    so a constant edit inside a lambda / comprehension / inner def
+    still flips the hash.
+
+    Choose this when: you have a Python `CodeType` (function /
+    lambda / comprehension bytecode) and want to detect any
+    bytecode-level edit — including literal-constant changes that
+    don't affect the AST shape — without paying the source-text
+    parse cost.
+
+    Why these three fields: `co_code` alone misses constant-only
+    edits (`return 1.0` → `return 2.0` produces identical opcode
+    streams; the literal lives in `co_consts` indexed by an opcode
+    arg). `co_names` misses changes to external references
+    (`np.mean` → `np.nanmean`). Local var renames live in
+    `co_varnames` and are deliberately NOT hashed — cosmetic edits
+    shouldn't bust the cache.
+
+    Limit: Python compiler optimisations (constant folding) may
+    affect the hash across Python versions; pin the interpreter
+    version in `pyproject.toml`.
+
+    Used by `Measurable.signature()` per-function and itself
+    recursively for nested code."""
+    h = hashlib.sha256()
+    h.update(code.co_code)
+    h.update(b'|names=')
+    h.update('\x00'.join(code.co_names).encode())
+    h.update(b'|consts=')
+    for const in code.co_consts:
+        if isinstance(const, CodeType):
+            h.update(b'<code:' + bytecode_source_hash(const).encode() + b'>')
+        else:
+            # `repr` is stable across Python versions for the
+            # primitives that show up in `co_consts` (numbers,
+            # strings, tuples, frozensets, None, bytes).
+            h.update(repr(const).encode())
+        h.update(b'\x00')
+    return h.hexdigest()[:16]
+
+
+# ============ Bridge source hash (pre-registration manifests) ============
+
+
+def bridge_source_hash(bridge: 'Bridge') -> str:
+    """Hex-string SHA-256 over (AST of bridge `holds_when` source
+    with docstrings stripped) + (JSON of decorator kwargs sorted
+    by key).
+
+    Choose this when: you want to identify the source-text-
+    canonical content of a `@claim_bridge`-decorated bridge for
+    pre-registration manifests or similar commitment artifacts.
+    The AST canonicalisation makes it robust to reformat passes
+    (black / ruff) and docstring edits; the decorator-kwargs
+    serialisation captures the bound predicate parameters so a
+    `harm_floor=0.3 → 0.5` literal edit OR a scope-expression
+    edit flips the hash.
+
+    Decorator kwargs serialised: `predicted_direction`, `source` /
+    `target` (canonicalised via the framework's `endpoint_name`
+    helper — strings pass through, Measurables surface `.name`,
+    DoEffects surface the canonical `do(treatment|vs=baseline)`
+    graph-render string), `direction`, `tier`, `scope`
+    (`str(pl.Expr)`).
+
+    Limit: `str(pl.Expr)` is not formally stable across polars
+    versions. The framework's pyproject pins polars; consumers who
+    upgrade polars MUST re-write their manifest (the audit's
+    source-hash check will otherwise drift on a no-op upgrade)."""
+    if bridge.holds_when is None:
+        raise ValueError(
+            f'bridge_source_hash: bridge {bridge.name!r} has no '
+            f'holds_when body; bridges constructed via '
+            f'`@claim_bridge` always carry one. Refusing to hash '
+            f'a body-less Bridge.',
+        )
+    # Deferred import breaks the circular chain `core.signature` ←
+    # `bridge.bridge` ← `measurables` ← `core.signature` (via
+    # `Measurable.signature()` consuming `bytecode_source_hash`).
+    # The deferred resolution only fires when `bridge_source_hash`
+    # is actually called, by which time the full module graph is
+    # constructed.
+    from corroborate.bridge.bridge import endpoint_name
+
+    src = inspect.getsource(bridge.holds_when)
+    parsed = ast.parse(src)
+    # Strip docstrings from every FunctionDef / ClassDef / Module
+    # body before dumping — docstrings are documentation, not
+    # behaviour. The contract is that cosmetic edits (whitespace,
+    # comments, docstrings) must not bust the hash while semantic
+    # edits (literal values, expressions, control flow) must.
+    _strip_docstrings(parsed)
+    ast_repr = ast.dump(
+        parsed, annotate_fields=True, include_attributes=False,
+    )
+    pd = bridge.predicted_direction
+    decorator_kwargs: dict[str, str] = {
+        'predicted_direction': pd if pd is not None else 'null',
+        # `endpoint_name` is the single laundering point for the
+        # `BridgeEndpoint = str | Measurable | DoEffect` union —
+        # str passthrough; Measurable → `.name`; DoEffect →
+        # `node_key()` (the canonical `do(treatment|vs=baseline)`
+        # graph-render string). Routing through it keeps the
+        # serialised form in lockstep with every other consumer of
+        # the union (graph builder, cache walker).
+        'source': endpoint_name(bridge.source),
+        'target': endpoint_name(bridge.target),
+        'direction': bridge.direction.value,
+        # Tier is an IntEnum — `.value` returns int. Use `.name`
+        # for a stable string ('INVARIANT' / 'ASSOCIATIONAL' /
+        # 'INTERVENTIONAL') so the json.dumps payload's dict type
+        # stays `dict[str, str]`.
+        'tier': bridge.tier.name,
+        # Polars Expr / DeferredScope / None — str() is the only
+        # stable serialisation available without polars-version
+        # coupling we don't already inherit.
+        'scope': str(bridge.scope),
+    }
+    payload = ast_repr + '\n' + json.dumps(decorator_kwargs, sort_keys=True)
+    return hashlib.sha256(payload.encode('utf-8')).hexdigest()
+
+
+def _strip_docstrings(tree: ast.AST) -> None:
+    """Walk an AST and drop the leading docstring node from every
+    `Module`, `FunctionDef`, `AsyncFunctionDef`, and `ClassDef`
+    body. Mutates in place — caller passes the parsed tree
+    directly, then calls `ast.dump`.
+
+    The contract: a docstring edit is a documentation change and
+    must NOT flip the source hash. A code change (literal,
+    expression, control flow) does flip it. This walk is the
+    canonicalisation step that makes both true."""
+    for node in ast.walk(tree):
+        if isinstance(node, (
+            ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef,
+        )):
+            body = node.body
+            if (
+                body
+                and isinstance(body[0], ast.Expr)
+                and isinstance(body[0].value, ast.Constant)
+                and isinstance(body[0].value.value, str)
+            ):
+                node.body = body[1:]
+
+

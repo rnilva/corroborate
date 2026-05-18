@@ -43,47 +43,7 @@ from typing import cast, overload, override
 import polars as pl
 
 from corroborate._internals.registry import Registry
-
-
-def _hash_code(code: object) -> str:
-    """Hash a CodeType across the fields that affect behavior:
-    `co_code` (opcodes), `co_consts` (literals + nested code
-    objects), `co_names` (external name references). Recurses into
-    nested code objects in `co_consts` so a constant edit inside a
-    lambda / comprehension / inner def still flips the hash.
-
-    Returns a 16-hex-char SHA-256 prefix. Used by
-    `Measurable.signature()` per-function and itself recursively
-    for nested code.
-
-    Why these three fields: `co_code` alone misses constant-only
-    edits (`return 1.0` → `return 2.0` produces identical opcode
-    streams; the literal lives in `co_consts` indexed by an opcode
-    arg). `co_names` misses changes to external references
-    (`np.mean` → `np.nanmean`). Local var renames live in
-    `co_varnames` and are deliberately NOT hashed — cosmetic edits
-    shouldn't bust cache."""
-    import hashlib
-    from types import CodeType
-    if not isinstance(code, CodeType):
-        # Defensive: unexpected. Hash repr so the signature still
-        # changes if `co_consts` carries something we don't model.
-        return hashlib.sha256(repr(code).encode()).hexdigest()[:16]
-    h = hashlib.sha256()
-    h.update(code.co_code)
-    h.update(b'|names=')
-    h.update('\x00'.join(code.co_names).encode())
-    h.update(b'|consts=')
-    for const in code.co_consts:
-        if isinstance(const, CodeType):
-            h.update(b'<code:' + _hash_code(const).encode() + b'>')
-        else:
-            # `repr` is stable across Python versions for the
-            # primitives that show up in `co_consts` (numbers,
-            # strings, tuples, frozensets, None, bytes).
-            h.update(repr(const).encode())
-        h.update(b'\x00')
-    return h.hexdigest()[:16]
+from corroborate.core.signature import bytecode_source_hash
 
 
 class Measurable[R: Mapping[str, object], T]:
@@ -241,7 +201,7 @@ class Measurable[R: Mapping[str, object], T]:
             if m._name in seen:
                 return
             seen.add(m._name)
-            parts.append(f'{m._name}:{_hash_code(m._fn.__code__)}')
+            parts.append(f'{m._name}:{bytecode_source_hash(m._fn.__code__)}')
             # Closure-captured operands.
             for sub in m._compose_of:
                 _walk(sub)
