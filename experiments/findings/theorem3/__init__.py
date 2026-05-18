@@ -59,7 +59,10 @@ from experiments.findings.theorem3.bridges import (
 CLAIM = dqn
 
 
-MODULE_SCOPE = pl.col('env_name').is_in(['Breakout-MinAtar', 'Asterix-MinAtar'])
+MODULE_SCOPE = pl.col('env_name').is_in([
+    'Breakout-MinAtar', 'Asterix-MinAtar',
+    'Freeway-MinAtar', 'SpaceInvaders-MinAtar',
+])
 
 
 BRIDGES = (

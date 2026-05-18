@@ -39,7 +39,10 @@ from experiments.findings.ddqn_three_conditions._verdicts import (
 
 
 _MINATAR_GAMMA_SCOPE = (
-    pl.col('env_name').is_in(['Breakout-MinAtar', 'Asterix-MinAtar'])
+    pl.col('env_name').is_in([
+        'Breakout-MinAtar', 'Asterix-MinAtar',
+        'Freeway-MinAtar', 'SpaceInvaders-MinAtar',
+    ])
     & pl.col('gamma').is_in([0.95, 0.99, 0.999])
     & (pl.col('arm_key') == 'baseline')
     & finite(pl.col('q_lambda_a_tail_cv'))
