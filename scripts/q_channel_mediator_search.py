@@ -206,13 +206,50 @@ def main() -> None:
         ['q_argmax_margin_late', 'q_action_std_late'],
         ['q_argmax_margin_late', 'jensen_dormancy_gap'],
         ['q_argmax_margin_late', 'q_action_std_late', 'jensen_dormancy_gap'],
-        ['q_argmax_margin_late', 'q_action_std_late', 'jensen_dormancy_gap', 'effective_horizon'],
+        # Full joint: every candidate that mediates AT ALL
+        ['q_argmax_margin_late', 'jensen_dormancy_gap',
+         'effective_horizon', 'argmax_persistence_late',
+         'target_staleness_late'],
+        # All 10 candidates — max-conditioning
+        CANDIDATES,
     ]
     for js in joint_sets:
-        label = ' + '.join(c.replace('_late', '').replace('jensen_', 'jens_').replace('effective_horizon', 'eff_h') for c in js)
+        label_parts = [c.replace('_late', '').replace('jensen_', 'jens_').replace('effective_horizon', 'eff_h') for c in js]
+        if len(label_parts) > 4:
+            label = f'ALL-{len(label_parts)} candidates'
+        else:
+            label = ' + '.join(label_parts)
         pool_j, n_envs = _test(js)
         delta = pool_j - pool_baseline
         print(f'  {label:<60s} | {pool_j:>+10.3f} | {delta:>+9.3f} | {n_envs}')
+
+    # Per-env: show where the residual lives after best mediator
+    print()
+    print('Per-env: residual after conditioning on (bg, margin, dormancy)')
+    print('-' * 90)
+    print(f'{"env":<28s} | {"n":>5} | {"baseline ρ":>10s} | {"with conds":>10s} | {"Δ":>9s}')
+    for env in envs:
+        sub = panel.filter(pl.col('env_name') == env)
+        if sub.height < 20:
+            continue
+        rho_base, _ = _partial_spearman_multi(
+            sub.get_column('mc').to_numpy(),
+            sub.get_column('q').to_numpy(),
+            sub.select('bg').to_numpy(),
+        )
+        valid = sub.filter(
+            pl.col('q_argmax_margin_late').is_finite()
+            & pl.col('jensen_dormancy_gap').is_finite()
+        )
+        if valid.height < 20:
+            continue
+        rho_cond, _ = _partial_spearman_multi(
+            valid.get_column('mc').to_numpy(),
+            valid.get_column('q').to_numpy(),
+            valid.select(['bg', 'q_argmax_margin_late', 'jensen_dormancy_gap']).to_numpy(),
+        )
+        delta = rho_cond - rho_base
+        print(f'{env:<28s} | {sub.height:>5} | {rho_base:>+10.3f} | {rho_cond:>+10.3f} | {delta:>+9.3f}')
 
 
 if __name__ == '__main__':

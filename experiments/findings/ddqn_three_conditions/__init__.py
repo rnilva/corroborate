@@ -92,12 +92,15 @@ MODULE_SCOPE = pl.col('gamma').is_in([0.99, 0.999])
 from experiments.findings.ddqn_three_conditions import _measurables  # pyright: ignore[reportUnusedImport]  # noqa: F401  -- registers @measurable side-effects
 from experiments.findings.ddqn_three_conditions import (
     finding_acrobot_chain_does_not_replicate,
+    finding_asterix_gamma_why_does_not_transfer,
     finding_gamma_amplification_anchor_gated,
     finding_gamma_jens_via_q_self_reference,
+    finding_jens_does_not_mediate_outcome_at_fr_g999_mlp,
     finding_jens_reduction_factors,
     finding_joint_mediation_incomplete,
     finding_q_magnitude_residual_mediator,
     finding_shaping_decouples,
+    finding_si_gamma_why_transfers_from_fr,
     finding_sigma_action_completes_chain,
     finding_warmup_rescues_vanilla,
 )
@@ -108,6 +111,8 @@ from experiments.findings.ddqn_three_conditions._common import (
     CLAIM as CLAIM,
 )
 from experiments.findings.ddqn_three_conditions.jens_reduction_factors import (
+    ddqn_jens_reduction_amplified_by_k_eff_at_fr_g999_mlp,
+    ddqn_outcome_help_constant_across_k_eff_at_fr_g999_mlp,
     ddqn_reduces_jens_uniformly_across_k_at_fr_high_gamma,
     ddqn_reduction_amplified_by_gamma__fr_mlp_k4_unshaped,
     fa_capacity_moderates_ddqn_jens_reduction,
@@ -118,6 +123,7 @@ from experiments.findings.ddqn_three_conditions.jens_reduction_factors import (
     gamma_predicts_q_late_residual_at_fr_mlp,
     gamma_predicts_q_self_reference_at_fr_mlp,
     gamma_predicts_sigma_action_residual_at_fr_mlp,
+    jens_reduction_does_not_predict_outcome_at_fr_g999_mlp,
     linear_fa_cap_fails_at_metamaze_g999__exception,
     q_late_predicts_jens_residual_at_fr_mlp,
     q_late_sign_flipped_with_gamma_at_acrobot_mlp,
@@ -128,6 +134,13 @@ from experiments.findings.ddqn_three_conditions.jens_reduction_factors import (
     vanilla_anchor_preserved_with_gamma_at_acrobot_mlp,
     vanilla_jens_shrinks_with_warmup_at_fr_g999_mlp,
     vanilla_outcome_recovers_with_warmup_at_fr_g999_mlp,
+)
+from experiments.findings.ddqn_three_conditions.minatar_gamma_why_transfer import (
+    gamma_jens_jointly_mediated_by_self_ref_and_sigma_action_at_si,
+    gamma_jens_residual_at_asterix_after_fr_mediators,
+    gamma_predicts_q_self_reference_at_si,
+    gamma_self_ref_null_at_asterix,
+    q_self_reference_predicts_jens_at_si,
 )
 from experiments.findings.ddqn_three_conditions.outcome_translation import (
     ddqn_helps_outcome_at_fr_g999_mlp_unshaped__k_panel,
@@ -158,6 +171,14 @@ BRIDGES = (
     q_late_sign_flipped_with_gamma_at_acrobot_mlp,
     vanilla_outcome_recovers_with_warmup_at_fr_g999_mlp,
     vanilla_jens_shrinks_with_warmup_at_fr_g999_mlp,
+    ddqn_jens_reduction_amplified_by_k_eff_at_fr_g999_mlp,
+    ddqn_outcome_help_constant_across_k_eff_at_fr_g999_mlp,
+    jens_reduction_does_not_predict_outcome_at_fr_g999_mlp,
+    gamma_predicts_q_self_reference_at_si,
+    q_self_reference_predicts_jens_at_si,
+    gamma_jens_jointly_mediated_by_self_ref_and_sigma_action_at_si,
+    gamma_self_ref_null_at_asterix,
+    gamma_jens_residual_at_asterix_after_fr_mediators,
 )
 
 
@@ -171,6 +192,9 @@ FINDINGS = (
     finding_sigma_action_completes_chain,
     finding_acrobot_chain_does_not_replicate,
     finding_warmup_rescues_vanilla,
+    finding_jens_does_not_mediate_outcome_at_fr_g999_mlp,
+    finding_si_gamma_why_transfers_from_fr,
+    finding_asterix_gamma_why_does_not_transfer,
 )
 
 

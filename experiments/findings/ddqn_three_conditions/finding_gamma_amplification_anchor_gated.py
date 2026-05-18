@@ -89,10 +89,32 @@ from experiments.findings.ddqn_three_conditions.jens_reduction_factors import (
 )
 
 
-EXPECTED: ClusterVerdict = ClusterVerdict.SUPPORTED
+EXPECTED: ClusterVerdict = ClusterVerdict.UNDERPOWERED
 
 
 BLOCKED_ON: str | None = None
+
+
+# Walk-back 2026-05-18. After tightening the FR chain bridges to
+# `total_steps == 200000` (proper single-horizon scope), the
+# Acrobot cross-env discriminator bridge `vanilla_anchor_preserved_
+# with_gamma_at_acrobot_mlp` dropped from ρ=+0.34 sig (pooled
+# 200k + 1M cells, n=240) to ρ=+0.14 NS (200k only, n=180). The
+# pooled-horizon evidence was inflated by horizon-effect.
+#
+# Single-horizon honest read: vanilla outcome at Acrobot γ=0.99
+# (-78.4) vs γ=0.999 (-75.9) is roughly flat — consistent with
+# "anchor preserved" (vanilla doesn't dramatically collapse) but
+# can't statistically reject ρ=0 at n=180.
+#
+# The two FR-leg bridges (γ-amplification of jens, vanilla anchor
+# collapse at FR) remain HELD. The cross-env discriminator that
+# would let us claim "FR's amplification is anchor-failure-gated"
+# instead of "Hasselt 1/(1−γ) generic amplification" is now too
+# weak to land at threshold. UNDERPOWERED matches the empirical
+# state — Finding can flip back to SUPPORTED if we get more
+# Acrobot baseline cells at 200k canonical (current n=90/arm
+# per γ at canonical mlp_deep × unshaped).
 
 
 BRIDGES: tuple[Bridge, ...] = (

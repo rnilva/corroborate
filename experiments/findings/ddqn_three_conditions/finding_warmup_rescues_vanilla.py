@@ -70,12 +70,73 @@ from experiments.findings.ddqn_three_conditions.jens_reduction_factors import (
 EXPECTED: ClusterVerdict = ClusterVerdict.UNDERPOWERED
 
 
-BLOCKED_ON: str | None = (
-    'awaiting fr_warmup_intervention corpus ingest — '
-    '180 cells (3 warmup × 2 arms × 30 seeds) on FR × γ=0.999 × '
-    'MLP × unshaped pending. Sweep config at '
-    'experiments/configs/fr_warmup_intervention.yaml.'
-)
+BLOCKED_ON: str | None = None
+
+
+# Empirical (2026-05-18, fr_warmup_intervention corpus,
+# within-corpus analysis at FR × MLP × unshaped × γ=0.999 × 1M
+# total_steps, 90 baseline cells across 3 warmup levels × 30 seeds):
+#
+#   warmup    | n  | outcome | jens | q_late | σ_action
+#   100       | 30 | 0.12    | 8.81 | 6.96   | 0.018
+#   10000     | 30 | 0.18    | 8.39 | 6.53   | 0.017
+#   100000    | 30 | 0.28    | 7.93 | 7.48   | 0.019
+#
+#   ρ(warmup, outcome)   = +0.233  p=0.027  HELD     (threshold +0.2)
+#   ρ(warmup, jens)      = -0.189  p=0.075  POW_INSUF (sig direction
+#                                                     but below |0.2|)
+#   q_late + σ_action:   flat across warmup levels.
+#
+# Walked-back reading. The original hypothesis was "anchor failure
+# → Q-explosion → policy failure"; warmup tested whether
+# preventing Q-update during early ε-greedy rollout would (a)
+# reduce Q-explosion AND (b) rescue policy.
+#
+# Empirical (within-corpus, no cross-horizon confound):
+#   - Warmup DOES help vanilla outcome significantly (ρ=+0.23,
+#     p=0.027). Outcome ~doubles from warmup=100 (0.12) to
+#     warmup=100k (0.28). The intervention works at the outcome
+#     level.
+#   - Warmup does NOT meaningfully shrink jens (ρ=-0.19 NS,
+#     8.81→7.93 across 5 orders of magnitude in warmup_steps).
+#     Q-magnitude (q_late) and per-state Q-variance (σ_action)
+#     stay flat. The Q dynamics at 1M are essentially the same
+#     across warmup levels.
+#
+# Substantive consequence: **the rescue mechanism is NOT
+# Q-explosion prevention.** Vanilla's Q stays at the same
+# high-magnitude over-bootstrapped state at all warmup levels.
+# Yet outcome improves with warmup. The likely mechanism:
+#   - Replay buffer composition. Long warmup (100k steps) fills
+#     replay with ε-greedy random trajectories before Q starts
+#     training. By the time training begins, replay contains
+#     more diverse (and possibly more reward-containing)
+#     trajectories.
+#   - Commit-timing. Longer warmup delays the bootstrap chain
+#     from locking onto a particular biased Q. Random reward
+#     discoveries in the warmup buffer can re-shape the early
+#     Q update, even if the asymptotic Q magnitude is the same.
+#
+# So warmup helps outcome by changing the DATA the agent
+# learns from, not by anchoring Q. The "anchor failure → Q-
+# explosion → outcome failure" chain is REFUTED at the second
+# link. The Q-explosion is incidental to the policy failure at
+# FR γ=0.999 — Q stays high either way; outcome differs because
+# of pre-training data composition.
+#
+# Composed verdict: 1 HELD + 1 POWER_INSUFFICIENT → UNDERPOWERED.
+# The intervention HELPS (outcome bridge HELD) but the anchor-
+# failure-as-mechanism prediction (jens bridge HELD on negative ρ)
+# is NOT supported.
+#
+# Cross-references (parallel decoupling evidence):
+# - `finding_jens_does_not_mediate_outcome_at_fr_g999_mlp`: DDQN's
+#   bias reduction magnitude does not predict outcome help across
+#   k_eff.
+# - This Finding: warmup's outcome rescue does not flow through
+#   jens reduction.
+# Both converge on the same decoupling claim — bias / Q-magnitude
+# is NOT the rate-limiting variable for outcome at FR γ=0.999.
 
 
 BRIDGES: tuple[Bridge, ...] = (

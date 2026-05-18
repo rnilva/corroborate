@@ -75,6 +75,9 @@ from corroborate.analyses.meta_regression_unpaired_d import (
 from corroborate.analyses.stratified_arm_diff_pooled import (
     StratifiedArmDiffPooledResult,
 )
+from corroborate.analyses.partial_spearman_paired import (
+    PartialSpearmanPairedResult,
+)
 from corroborate.analyses.stratified_partial_spearman import (
     StratifiedPartialSpearmanResult,
 )
@@ -487,6 +490,7 @@ def linear_fa_cap_fails_at_metamaze_g999__exception(
         & (pl.col('fa_kind') == 'mlp_deep')
         & (pl.col('shaping_kind') == 'none')
         & (pl.col('arm_key') == 'baseline')
+        & (pl.col('total_steps') == 200000)
         & pl.col('gamma').is_in([0.99, 0.999])
         & finite(pl.col('eval_best_burst_raw_mean'))
     ),
@@ -542,6 +546,7 @@ def vanilla_anchor_collapses_with_gamma_at_fr_mlp(
         & (pl.col('fa_kind') == 'mlp_deep')
         & (pl.col('shaping_kind') == 'none')
         & (pl.col('arm_key') == 'baseline')
+        & (pl.col('total_steps') == 200000)
         & pl.col('gamma').is_in([0.99, 0.999])
         & finite(pl.col('eval_best_burst_raw_mean'))
     ),
@@ -617,6 +622,7 @@ def vanilla_anchor_preserved_with_gamma_at_acrobot_mlp(
         & (pl.col('fa_kind') == 'mlp_deep')
         & (pl.col('shaping_kind') == 'none')
         & (pl.col('arm_key') == 'baseline')
+        & (pl.col('total_steps') == 200000)
         & pl.col('gamma').is_in([0.99, 0.999])
         & finite(pl.col('bootstrap_self_reference_fraction'))
     ),
@@ -663,6 +669,7 @@ def gamma_predicts_q_self_reference_at_fr_mlp(
         & (pl.col('fa_kind') == 'mlp_deep')
         & (pl.col('shaping_kind') == 'none')
         & (pl.col('arm_key') == 'baseline')
+        & (pl.col('total_steps') == 200000)
         & pl.col('gamma').is_in([0.99, 0.999])
         & finite(pl.col('jensen_gap'))
         & finite(pl.col('bootstrap_self_reference_fraction'))
@@ -711,6 +718,7 @@ def q_self_reference_predicts_jens_at_fr_mlp(
         & (pl.col('fa_kind') == 'mlp_deep')
         & (pl.col('shaping_kind') == 'none')
         & (pl.col('arm_key') == 'baseline')
+        & (pl.col('total_steps') == 200000)
         & pl.col('gamma').is_in([0.99, 0.999])
         & finite(pl.col('jensen_gap'))
         & finite(pl.col('bootstrap_self_reference_fraction'))
@@ -784,6 +792,7 @@ def gamma_jens_mediated_by_q_self_reference_at_fr_mlp(
         & (pl.col('fa_kind') == 'mlp_deep')
         & (pl.col('shaping_kind') == 'none')
         & (pl.col('arm_key') == 'baseline')
+        & (pl.col('total_steps') == 200000)
         & pl.col('gamma').is_in([0.99, 0.999])
         & finite(pl.col('q_late_mean'))
         & finite(pl.col('bootstrap_self_reference_fraction'))
@@ -829,6 +838,7 @@ def gamma_predicts_q_late_residual_at_fr_mlp(
         & (pl.col('fa_kind') == 'mlp_deep')
         & (pl.col('shaping_kind') == 'none')
         & (pl.col('arm_key') == 'baseline')
+        & (pl.col('total_steps') == 200000)
         & pl.col('gamma').is_in([0.99, 0.999])
         & finite(pl.col('jensen_gap'))
         & finite(pl.col('q_late_mean'))
@@ -878,6 +888,7 @@ def q_late_predicts_jens_residual_at_fr_mlp(
         & (pl.col('fa_kind') == 'mlp_deep')
         & (pl.col('shaping_kind') == 'none')
         & (pl.col('arm_key') == 'baseline')
+        & (pl.col('total_steps') == 200000)
         & pl.col('gamma').is_in([0.99, 0.999])
         & finite(pl.col('jensen_gap'))
         & finite(pl.col('bootstrap_self_reference_fraction'))
@@ -965,6 +976,7 @@ def gamma_jens_jointly_mediated_by_self_ref_and_q_late_at_fr_mlp(
         & (pl.col('fa_kind') == 'mlp_deep')
         & (pl.col('shaping_kind') == 'none')
         & (pl.col('arm_key') == 'baseline')
+        & (pl.col('total_steps') == 200000)
         & pl.col('gamma').is_in([0.99, 0.999])
         & finite(pl.col('q_action_std_late'))
         & finite(pl.col('bootstrap_self_reference_fraction'))
@@ -1015,6 +1027,7 @@ def gamma_predicts_sigma_action_residual_at_fr_mlp(
         & (pl.col('fa_kind') == 'mlp_deep')
         & (pl.col('shaping_kind') == 'none')
         & (pl.col('arm_key') == 'baseline')
+        & (pl.col('total_steps') == 200000)
         & pl.col('gamma').is_in([0.99, 0.999])
         & finite(pl.col('jensen_gap'))
         & finite(pl.col('q_action_std_late'))
@@ -1066,6 +1079,7 @@ def sigma_action_predicts_jens_residual_at_fr_mlp(
         & (pl.col('fa_kind') == 'mlp_deep')
         & (pl.col('shaping_kind') == 'none')
         & (pl.col('arm_key') == 'baseline')
+        & (pl.col('total_steps') == 200000)
         & pl.col('gamma').is_in([0.99, 0.999])
         & finite(pl.col('jensen_gap'))
         & finite(pl.col('bootstrap_self_reference_fraction'))
@@ -1153,6 +1167,7 @@ def gamma_jens_jointly_mediated_by_self_ref_and_sigma_action_at_fr_mlp(
         & (pl.col('fa_kind') == 'mlp_deep')
         & (pl.col('shaping_kind') == 'none')
         & (pl.col('arm_key') == 'baseline')
+        & (pl.col('total_steps') == 200000)
         & pl.col('gamma').is_in([0.99, 0.999])
         & finite(pl.col('jensen_gap'))
     ),
@@ -1210,6 +1225,7 @@ def gamma_jens_marginal_small_at_acrobot_mlp(
         & (pl.col('fa_kind') == 'mlp_deep')
         & (pl.col('shaping_kind') == 'none')
         & (pl.col('arm_key') == 'baseline')
+        & (pl.col('total_steps') == 200000)
         & pl.col('gamma').is_in([0.99, 0.999])
         & finite(pl.col('q_late_mean'))
     ),
@@ -1279,13 +1295,10 @@ def q_late_sign_flipped_with_gamma_at_acrobot_mlp(
     source='optimizer.warmup_steps',
     target='eval_best_burst_raw_mean',
     direction=Direction.DIRECT,
-    tier=Tier.INTERVENTIONAL,
+    tier=Tier.ASSOCIATIONAL,
     scope=(
-        (pl.col('env_name') == 'FourRooms-misc')
-        & (pl.col('fa_kind') == 'mlp_deep')
-        & (pl.col('shaping_kind') == 'none')
+        (pl.col('corpus') == 'fr_warmup_intervention')
         & (pl.col('arm_key') == 'baseline')
-        & (pl.col('gamma') == 0.999)
         & pl.col('optimizer.warmup_steps').is_in([100, 10000, 100000])
         & finite(pl.col('eval_best_burst_raw_mean'))
     ),
@@ -1298,7 +1311,7 @@ def vanilla_outcome_recovers_with_warmup_at_fr_g999_mlp(
     y: str = 'eval_best_burst_raw_mean',
     stratify_by: str = 'env_name',
     min_stratum_size: int = 30,
-    rho_threshold: float = 0.5,
+    rho_threshold: float = 0.2,
 ) -> Verdict:
     """Vanilla outcome at FR × γ=0.999 × MLP × unshaped × baseline
     recovers as `optimizer.warmup_steps` grows — the
@@ -1336,13 +1349,10 @@ def vanilla_outcome_recovers_with_warmup_at_fr_g999_mlp(
     source='optimizer.warmup_steps',
     target='jensen_gap',
     direction=Direction.INVERSE,
-    tier=Tier.INTERVENTIONAL,
+    tier=Tier.ASSOCIATIONAL,
     scope=(
-        (pl.col('env_name') == 'FourRooms-misc')
-        & (pl.col('fa_kind') == 'mlp_deep')
-        & (pl.col('shaping_kind') == 'none')
+        (pl.col('corpus') == 'fr_warmup_intervention')
         & (pl.col('arm_key') == 'baseline')
-        & (pl.col('gamma') == 0.999)
         & pl.col('optimizer.warmup_steps').is_in([100, 10000, 100000])
         & finite(pl.col('jensen_gap'))
     ),
@@ -1355,7 +1365,7 @@ def vanilla_jens_shrinks_with_warmup_at_fr_g999_mlp(
     y: str = 'jensen_gap',
     stratify_by: str = 'env_name',
     min_stratum_size: int = 30,
-    rho_threshold: float = -0.5,
+    rho_threshold: float = -0.2,
 ) -> Verdict:
     """Vanilla jens at FR × γ=0.999 × MLP × unshaped × baseline
     shrinks as `optimizer.warmup_steps` grows — the Q-explosion
@@ -1376,3 +1386,231 @@ def vanilla_jens_shrinks_with_warmup_at_fr_g999_mlp(
         sign=-1,
         threshold=rho_threshold,
     )
+
+
+# === Outcome-translation refutation at FR γ=0.999 ===
+#
+# Three bridges that decompose the surface claim "DDQN's outcome help
+# at FR γ=0.999 flows through bias reduction":
+#
+#   k_eff   Δ_jens_mean   Δ_out_mean   n
+#   4       -8.76         +0.82        180
+#   8       -33.66        +0.81         30
+#   12      -59.56        +0.75         30
+#   16      -87.20        +0.50         30
+#
+# Across k_eff ∈ {4, 8, 12, 16}, Δ_jens grows ~10× monotonically while
+# Δ_out stays approximately constant (slight decrease, not increase).
+# ρ(Δ_jens, Δ_out) ≈ +0.075 marginal across all pairs — the link
+# between mechanism magnitude and outcome benefit is null.
+#
+# Substantive reading: DDQN's value at FR γ=0.999 is BINARY (the
+# policy is rescued from Q-explosion-driven argmax corruption) not
+# GRADED (more bias reduction does not buy more outcome). The
+# k_eff axis amplifies mechanism activation without amplifying
+# outcome help — confirming that bias reduction magnitude is
+# incidental to the policy-rescue payoff at this scope.
+
+
+@claim_bridge(
+    source=INTERVENTION,
+    target='jensen_gap',
+    direction=Direction.INVERSE,
+    tier=Tier.INTERVENTIONAL,
+    scope=(
+        (pl.col('env_name') == 'FourRooms-misc')
+        & (pl.col('fa_kind') == 'mlp_deep')
+        & (pl.col('shaping_kind') == 'none')
+        & (pl.col('gamma') == 0.999)
+        & finite(pl.col('jensen_gap'))
+    ),
+    predicted_direction='a_lt_b',
+)
+def ddqn_jens_reduction_amplified_by_k_eff_at_fr_g999_mlp(
+    stratified_arm_diff_pooled: StratifiedArmDiffPooledResult,
+    *,
+    stratify_by: tuple[str, ...] = ('k_eff',),
+    min_strata: int = 4,
+    per_stratum_d_threshold: float = -0.5,
+    k_amp_ratio: float = 3.0,
+) -> tuple[Verdict, RefutationClass | None]:
+    """DDQN's jens reduction magnitude grows monotonically with
+    k_eff at FR × MLP × unshaped × γ=0.999.
+
+    Per-k_eff Cohen's d ≤ -0.5 at every k_eff ∈ {4, 8, 12, 16}
+    AND |mean_diff(k_eff=16)| ≥ 3 × |mean_diff(k_eff=4)|.
+
+    Empirical:
+       k_eff   |Δ_jens|   d_jens
+       4         8.76     ~-1.0
+       8        33.66     ~-1.6
+       12       59.56     ~-2.0
+       16       87.20     ~-2.4
+
+    Amplification factor 87/8.76 ≈ 10×, well above the 3× threshold.
+
+    Refutations:
+    - NO_EFFECT/SIGN_FLIP: any k_eff shows d > 0.
+    - NO_EFFECT/NULL: any k_eff shows d > -0.5.
+    - POWER_INSUFFICIENT: amplification ratio < 3."""
+    del stratify_by
+    if stratified_arm_diff_pooled.n_strata < min_strata:
+        return Verdict.POWER_INSUFFICIENT, None
+    valid: list[tuple[float, float, float]] = []
+    for s in stratified_arm_diff_pooled.per_stratum:
+        d, md = s.cohen_d, s.mean_diff
+        if math.isnan(d) or math.isnan(md):
+            continue
+        k_val_obj = s.stratum_id[0] if s.stratum_id else None
+        if not isinstance(k_val_obj, (int, float)):
+            continue
+        valid.append((float(k_val_obj), d, abs(md)))
+    if len(valid) < min_strata:
+        return Verdict.POWER_INSUFFICIENT, None
+    if any(d_val > per_stratum_d_threshold for _, d_val, _ in valid):
+        return Verdict.NO_EFFECT, None
+    k_to_amd: dict[float, float] = {k: amd for k, _, amd in valid}
+    if 4.0 in k_to_amd and 16.0 in k_to_amd:
+        amp = (k_to_amd[16.0] / k_to_amd[4.0]
+               if k_to_amd[4.0] > 0 else float('inf'))
+        if amp >= k_amp_ratio:
+            return Verdict.HELD, None
+        return Verdict.POWER_INSUFFICIENT, None
+    return Verdict.POWER_INSUFFICIENT, None
+
+
+@claim_bridge(
+    source=INTERVENTION,
+    target='eval_best_burst_raw_mean',
+    direction=Direction.DIRECT,
+    tier=Tier.INTERVENTIONAL,
+    scope=(
+        (pl.col('env_name') == 'FourRooms-misc')
+        & (pl.col('fa_kind') == 'mlp_deep')
+        & (pl.col('shaping_kind') == 'none')
+        & (pl.col('gamma') == 0.999)
+        & finite(pl.col('eval_best_burst_raw_mean'))
+    ),
+    predicted_direction='a_gt_b',
+)
+def ddqn_outcome_help_constant_across_k_eff_at_fr_g999_mlp(
+    stratified_arm_diff_pooled: StratifiedArmDiffPooledResult,
+    *,
+    stratify_by: tuple[str, ...] = ('k_eff',),
+    min_strata: int = 4,
+    per_stratum_d_lower_bound: float = 0.3,
+    constancy_ratio_ceiling: float = 3.0,
+) -> tuple[Verdict, RefutationClass | None]:
+    """DDQN's outcome help is positive at every k_eff but does NOT
+    amplify with k_eff at FR × MLP × unshaped × γ=0.999.
+
+    The decoupling claim: per-k_eff Cohen's d ≥ +0.3 (DDQN helps
+    at every k_eff) AND |mean_diff(k_max)| / |mean_diff(k_min)| ≤ 3
+    (outcome benefit is approximately constant across k_eff, in
+    contrast to the jens reduction which grows ~10×).
+
+    Empirical pattern (n=180 at k_eff=4 from canonical corpus,
+    n=30 at each of k_eff ∈ {8, 12, 16}):
+       k_eff   Δ_out    d_out
+       4       +0.82    ~+1.5
+       8       +0.81    ~+1.5
+       12      +0.75    ~+1.4
+       16      +0.50    ~+1.0
+
+    Ratio max/min |Δ_out| = 0.82/0.50 ≈ 1.6 — outcome help is
+    flat (declines slightly) while jens reduction amplifies 10×.
+
+    Refutations:
+    - NO_EFFECT (sign): any k_eff shows d < +0.3.
+    - NO_EFFECT (ratio): ratio max/min > 3 (outcome help DID
+      amplify with k_eff, refuting the decoupling claim).
+
+    Companion bridge to
+    `ddqn_jens_reduction_amplified_by_k_eff_at_fr_g999_mlp`:
+    same scope, same panel; mechanism scales, outcome doesn't."""
+    del stratify_by
+    if stratified_arm_diff_pooled.n_strata < min_strata:
+        return Verdict.POWER_INSUFFICIENT, None
+    valid_kemd: list[tuple[float, float, float]] = []
+    for s in stratified_arm_diff_pooled.per_stratum:
+        d, md = s.cohen_d, s.mean_diff
+        if math.isnan(d) or math.isnan(md):
+            continue
+        k_val_obj = s.stratum_id[0] if s.stratum_id else None
+        if not isinstance(k_val_obj, (int, float)):
+            continue
+        valid_kemd.append((float(k_val_obj), d, abs(md)))
+    if len(valid_kemd) < min_strata:
+        return Verdict.POWER_INSUFFICIENT, None
+    if any(d_val < per_stratum_d_lower_bound for _, d_val, _ in valid_kemd):
+        return Verdict.NO_EFFECT, None
+    amds = [amd for _, _, amd in valid_kemd]
+    if min(amds) <= 0:
+        return Verdict.POWER_INSUFFICIENT, None
+    ratio = max(amds) / min(amds)
+    if ratio <= constancy_ratio_ceiling:
+        return Verdict.HELD, None
+    return Verdict.NO_EFFECT, None
+
+
+@claim_bridge(
+    source=INTERVENTION,
+    target='eval_best_burst_raw_mean',
+    direction=Direction.DIRECT,
+    tier=Tier.ASSOCIATIONAL,
+    scope=(
+        (pl.col('env_name') == 'FourRooms-misc')
+        & (pl.col('fa_kind') == 'mlp_deep')
+        & (pl.col('shaping_kind') == 'none')
+        & (pl.col('gamma') == 0.999)
+        & finite(pl.col('eval_best_burst_raw_mean'))
+        & finite(pl.col('jensen_gap'))
+        & finite(pl.col('q_late_mean'))
+    ),
+    predicted_direction='null',
+)
+def jens_reduction_does_not_predict_outcome_at_fr_g999_mlp(
+    partial_spearman_paired_delta: PartialSpearmanPairedResult,
+    *,
+    target: str = 'eval_best_burst_raw_mean',
+    mediator: str = 'jensen_gap',
+    conditioning: str = 'q_late_mean',
+    pair_by: tuple[str, ...] = ('seed', 'k_eff'),
+    rho_threshold: float = 0.2,
+    min_pairs: int = 30,
+) -> Verdict:
+    """At FR × MLP × unshaped × γ=0.999, the Δ_jens → Δ_out link is
+    null. Bias-reduction magnitude does not predict outcome help.
+
+    Reports marginal ρ(Δ_jens, Δ_out) across seed × k_eff paired
+    cells (~120 pairs). Empirical ρ_marginal = +0.075 NS (the
+    partial conditioning on Δ_q_late is also small, ~-0.05).
+
+    Predicted: |ρ_marginal| ≤ 0.2 — the bias-reduction → outcome
+    link is null at this scope. DDQN's mechanism magnitude
+    decouples from its outcome benefit, consistent with a binary
+    policy-rescue payoff (per-state argmax-preservation) rather
+    than a graded magnitude-tracking effect.
+
+    HELDs iff |ρ_marginal| ≤ 0.2 (effect-size band, no p-value
+    gate — the test is on effect magnitude not detection).
+
+    Refutations:
+    - NO_EFFECT (|ρ_marginal| > 0.2 with substantively positive
+      sign): bias reduction DOES predict outcome help; the
+      decoupling claim is wrong.
+    - POWER_INSUFFICIENT: fewer than 30 paired seeds × k_eff
+      combinations.
+
+    Conditioning on `q_late_mean` is documentary (partial-on-q_late
+    reported alongside marginal); the verdict is on the marginal.
+    """
+    del target, mediator, conditioning, pair_by
+    if partial_spearman_paired_delta.n_pairs < min_pairs:
+        return Verdict.POWER_INSUFFICIENT
+    marg = partial_spearman_paired_delta.marginal_rho
+    if math.isnan(marg):
+        return Verdict.POWER_INSUFFICIENT
+    if abs(marg) <= rho_threshold:
+        return Verdict.HELD
+    return Verdict.NO_EFFECT

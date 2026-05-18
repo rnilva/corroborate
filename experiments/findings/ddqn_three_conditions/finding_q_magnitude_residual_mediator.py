@@ -71,6 +71,12 @@ EXPECTED: ClusterVerdict = ClusterVerdict.SUPPORTED
 BLOCKED_ON: str | None = None
 
 
+# Scope note 2026-05-18. The chain bridges in this Finding
+# exclude the `fr_warmup_intervention` corpus from the panel
+# (see `finding_sigma_action_completes_chain` for rationale).
+# The canonical-corpus panel (n=120) shows both stages HELD.
+
+
 BRIDGES: tuple[Bridge, ...] = (
     gamma_predicts_q_late_residual_at_fr_mlp,
     q_late_predicts_jens_residual_at_fr_mlp,

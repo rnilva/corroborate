@@ -5,7 +5,7 @@
         "stratified_arm_diff_pooled": {
           "arm_field": "arm_key",
           "baseline_arm": "baseline",
-          "i_squared": 0.82051,
+          "i_squared": 0.780355,
           "measurable": "jensen_gap",
           "n_strata": 4,
           "per_stratum": [
@@ -40,16 +40,16 @@
               ]
             },
             {
-              "arm_mean_baseline": 9.4698,
-              "arm_mean_treatment": 0.56828,
-              "arm_sd_baseline": 2.04728,
-              "arm_sd_treatment": 0.259723,
-              "baseline_predictor": 9.4698,
-              "cohen_d": -6.10006,
-              "cohen_se": 0.241391,
-              "mean_diff": -8.90152,
-              "n_seeds_baseline": 180,
-              "n_seeds_treatment": 210,
+              "arm_mean_baseline": 9.10473,
+              "arm_mean_treatment": 0.45619,
+              "arm_sd_baseline": 2.15986,
+              "arm_sd_treatment": 0.28087,
+              "baseline_predictor": 9.10473,
+              "cohen_d": -5.61552,
+              "cohen_se": 0.186537,
+              "mean_diff": -8.64854,
+              "n_seeds_baseline": 270,
+              "n_seeds_treatment": 300,
               "stratum_id": [
                 4
               ]
@@ -71,32 +71,32 @@
             }
           ],
           "pooled": {
-            "I2": 0.82051,
-            "Q": 16.714,
+            "I2": 0.780355,
+            "Q": 13.6584,
             "assumption_violations": [
               "dl_small_g_unreliable_inference (n_cells=4, τ² CV ≈ 79% — point estimate not interpretable; prefer REML when available)"
             ],
             "empirical_max_g": -4.71106,
             "empirical_min_g": -7.60204,
             "n_cells": 4,
-            "pi_hi": -1.524,
-            "pi_lo": -10.4291,
-            "pooled_g": -5.97657,
-            "se_pooled": 0.513199,
-            "tau2": 0.80753
+            "pi_hi": -2.05109,
+            "pi_lo": -9.52021,
+            "pooled_g": -5.78565,
+            "se_pooled": 0.442464,
+            "tau2": 0.557592
           },
-          "pooled_ci_hi": -4.9707,
-          "pooled_ci_lo": -6.98244,
-          "pooled_d": -5.97657,
-          "pooled_p_value": 2.41277e-31,
-          "pooled_se": 0.513199,
-          "q_statistic": 16.714,
+          "pooled_ci_hi": -4.91842,
+          "pooled_ci_lo": -6.65288,
+          "pooled_d": -5.78565,
+          "pooled_p_value": 4.51681e-39,
+          "pooled_se": 0.442464,
+          "q_statistic": 13.6584,
           "refutation": null,
           "scope_predictor": "jensen_gap",
           "stratify_by": [
             "k_eff"
           ],
-          "tau2": 0.80753,
+          "tau2": 0.557592,
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)",
           "verdict": "held_with_scope_flag"
         }
@@ -105,9 +105,9 @@
       "blocked_by": null,
       "bridge_name": "ddqn_reduces_jens_uniformly_across_k_at_fr_high_gamma",
       "direction": "inverse",
-      "extent_hash": -1063315865958518038,
-      "n_cells_in_scope": 630,
-      "n_cells_pre_scope": 4855,
+      "extent_hash": -7310290785186325131,
+      "n_cells_in_scope": 810,
+      "n_cells_pre_scope": 5515,
       "pair_by": [
         "seed"
       ],
@@ -132,7 +132,7 @@
         "stratified_arm_diff_pooled": {
           "arm_field": "arm_key",
           "baseline_arm": "baseline",
-          "i_squared": 0.994241,
+          "i_squared": 0.994638,
           "measurable": "jensen_gap",
           "n_strata": 2,
           "per_stratum": [
@@ -152,48 +152,48 @@
               ]
             },
             {
-              "arm_mean_baseline": 9.4698,
-              "arm_mean_treatment": 0.56828,
-              "arm_sd_baseline": 2.04728,
-              "arm_sd_treatment": 0.259723,
-              "baseline_predictor": 9.4698,
-              "cohen_d": -6.10006,
-              "cohen_se": 0.241391,
-              "mean_diff": -8.90152,
-              "n_seeds_baseline": 180,
-              "n_seeds_treatment": 210,
+              "arm_mean_baseline": 9.10473,
+              "arm_mean_treatment": 0.45619,
+              "arm_sd_baseline": 2.15986,
+              "arm_sd_treatment": 0.28087,
+              "baseline_predictor": 9.10473,
+              "cohen_d": -5.61552,
+              "cohen_se": 0.186537,
+              "mean_diff": -8.64854,
+              "n_seeds_baseline": 270,
+              "n_seeds_treatment": 300,
               "stratum_id": [
                 0.999
               ]
             }
           ],
           "pooled": {
-            "I2": 0.994241,
-            "Q": 173.631,
+            "I2": 0.994638,
+            "Q": 186.488,
             "assumption_violations": [
               "dl_small_g_unreliable_inference (n_cells=2, τ² CV ≈ 105% — point estimate not interpretable; prefer REML when available)"
             ],
             "empirical_max_g": -2.39151,
-            "empirical_min_g": -6.10006,
+            "empirical_min_g": -5.61552,
             "n_cells": 2,
             "pi_hi": null,
             "pi_lo": null,
-            "pooled_g": -4.24076,
-            "se_pooled": 1.85427,
-            "tau2": 6.83707
+            "pooled_g": -4.00137,
+            "se_pooled": 1.612,
+            "tau2": 5.16925
           },
-          "pooled_ci_hi": -0.606391,
-          "pooled_ci_lo": -7.87512,
-          "pooled_d": -4.24076,
-          "pooled_p_value": 0.0221944,
-          "pooled_se": 1.85427,
-          "q_statistic": 173.631,
+          "pooled_ci_hi": -0.841844,
+          "pooled_ci_lo": -7.1609,
+          "pooled_d": -4.00137,
+          "pooled_p_value": 0.0130561,
+          "pooled_se": 1.612,
+          "q_statistic": 186.488,
           "refutation": "underpowered",
           "scope_predictor": "jensen_gap",
           "stratify_by": [
             "gamma"
           ],
-          "tau2": 6.83707,
+          "tau2": 5.16925,
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)",
           "verdict": "power_insufficient"
         }
@@ -202,9 +202,9 @@
       "blocked_by": null,
       "bridge_name": "ddqn_reduction_amplified_by_gamma__fr_mlp_k4_unshaped",
       "direction": "inverse",
-      "extent_hash": 9018684201214419254,
-      "n_cells_in_scope": 720,
-      "n_cells_pre_scope": 4855,
+      "extent_hash": 2833659681865801194,
+      "n_cells_in_scope": 900,
+      "n_cells_pre_scope": 5515,
       "pair_by": [
         "seed"
       ],
@@ -233,34 +233,34 @@
           ],
           "coefficients": [
             {
-              "ci_hi": -0.162173,
-              "ci_lo": -1.85619,
-              "coefficient": -1.00918,
+              "ci_hi": -0.142657,
+              "ci_lo": -1.82327,
+              "coefficient": -0.982966,
               "is_significant": true,
               "name": "fa_capacity",
-              "p_value": 0.0241156
+              "p_value": 0.0262019
             }
           ],
-          "i_squared": 0.95612,
-          "intercept": -0.0229985,
-          "intercept_ci_hi": 0.574994,
-          "intercept_ci_lo": -0.620991,
-          "intercept_p_value": 0.933402,
-          "intercept_se": 0.268382,
+          "i_squared": 0.95429,
+          "intercept": -0.0233109,
+          "intercept_ci_hi": 0.570044,
+          "intercept_ci_lo": -0.616666,
+          "intercept_p_value": 0.931974,
+          "intercept_se": 0.266301,
           "n_strata": 12,
           "pool": "random",
-          "q_statistic": 227.895,
-          "r_squared": 0.413411,
-          "tau_sq": 0.401705
+          "q_statistic": 218.771,
+          "r_squared": 0.404526,
+          "tau_sq": 0.370149
         }
       },
       "assumption_violations": [],
       "blocked_by": null,
       "bridge_name": "fa_capacity_moderates_ddqn_jens_reduction",
       "direction": "inverse",
-      "extent_hash": -9023627892476393866,
-      "n_cells_in_scope": 3055,
-      "n_cells_pre_scope": 4855,
+      "extent_hash": -2111386296173761671,
+      "n_cells_in_scope": 3235,
+      "n_cells_pre_scope": 5515,
       "pair_by": [
         "seed"
       ],
@@ -368,9 +368,9 @@
       "blocked_by": null,
       "bridge_name": "linear_fa_cap_fails_at_metamaze_g999__exception",
       "direction": "inverse",
-      "extent_hash": -1222534373476957413,
+      "extent_hash": 8554967814380280716,
       "n_cells_in_scope": 420,
-      "n_cells_pre_scope": 4855,
+      "n_cells_pre_scope": 5515,
       "pair_by": [
         "seed"
       ],
@@ -396,34 +396,34 @@
           "cleavage_axes": [],
           "coefficients": [
             {
-              "ci_hi": 6.97921,
-              "ci_lo": -0.841873,
-              "coefficient": 3.06867,
+              "ci_hi": 6.81976,
+              "ci_lo": -0.868134,
+              "coefficient": 2.97581,
               "is_significant": false,
               "name": "q_action_std_late",
-              "p_value": 0.110957
+              "p_value": 0.115254
             }
           ],
-          "i_squared": 0.96405,
-          "intercept": -0.973374,
-          "intercept_ci_hi": -0.226351,
-          "intercept_ci_lo": -1.7204,
-          "intercept_p_value": 0.015745,
-          "intercept_se": 0.335268,
+          "i_squared": 0.962255,
+          "intercept": -0.944762,
+          "intercept_ci_hi": -0.211392,
+          "intercept_ci_lo": -1.67813,
+          "intercept_p_value": 0.0166574,
+          "intercept_se": 0.32914,
           "n_strata": 12,
           "pool": "random",
-          "q_statistic": 278.161,
-          "r_squared": 0.234134,
-          "tau_sq": 0.484445
+          "q_statistic": 264.937,
+          "r_squared": 0.229309,
+          "tau_sq": 0.443285
         }
       },
       "assumption_violations": [],
       "blocked_by": null,
       "bridge_name": "sigma_action_predicts_ddqn_jens_reduction",
       "direction": "inverse",
-      "extent_hash": -9023627892476393866,
-      "n_cells_in_scope": 3055,
-      "n_cells_pre_scope": 4855,
+      "extent_hash": -2111386296173761671,
+      "n_cells_in_scope": 3235,
+      "n_cells_pre_scope": 5515,
       "pair_by": [
         "seed"
       ],
@@ -454,7 +454,7 @@
         "stratified_arm_diff_pooled": {
           "arm_field": "arm_key",
           "baseline_arm": "baseline",
-          "i_squared": 0.963879,
+          "i_squared": 0.963203,
           "measurable": "eval_best_burst_raw_mean",
           "n_strata": 4,
           "per_stratum": [
@@ -489,16 +489,16 @@
               ]
             },
             {
-              "arm_mean_baseline": 0.190001,
-              "arm_mean_treatment": 0.985716,
-              "arm_sd_baseline": 0.208507,
-              "arm_sd_treatment": 0.0805823,
-              "baseline_predictor": 9.4698,
-              "cohen_d": 5.03413,
-              "cohen_se": 0.207305,
-              "mean_diff": 0.795715,
-              "n_seeds_baseline": 180,
-              "n_seeds_treatment": 210,
+              "arm_mean_baseline": 0.191112,
+              "arm_mean_treatment": 0.990002,
+              "arm_sd_baseline": 0.225994,
+              "arm_sd_treatment": 0.06769,
+              "baseline_predictor": 9.10473,
+              "cohen_d": 4.78904,
+              "cohen_se": 0.165004,
+              "mean_diff": 0.79889,
+              "n_seeds_baseline": 270,
+              "n_seeds_treatment": 300,
               "stratum_id": [
                 4
               ]
@@ -520,32 +520,32 @@
             }
           ],
           "pooled": {
-            "I2": 0.963879,
-            "Q": 83.0545,
+            "I2": 0.963203,
+            "Q": 81.5294,
             "assumption_violations": [
               "dl_small_g_unreliable_inference (n_cells=4, τ² CV ≈ 79% — point estimate not interpretable; prefer REML when available)"
             ],
-            "empirical_max_g": 5.03413,
+            "empirical_max_g": 4.78904,
             "empirical_min_g": 1.71048,
             "n_cells": 4,
-            "pi_hi": 11.5193,
-            "pi_lo": -4.48133,
-            "pooled_g": 3.51899,
-            "se_pooled": 0.84627,
-            "tau2": 2.74117
+            "pi_hi": 10.967,
+            "pi_lo": -4.04992,
+            "pooled_g": 3.45853,
+            "se_pooled": 0.79554,
+            "tau2": 2.4124
           },
-          "pooled_ci_hi": 5.17768,
-          "pooled_ci_lo": 1.8603,
-          "pooled_d": 3.51899,
-          "pooled_p_value": 3.2072e-05,
-          "pooled_se": 0.84627,
-          "q_statistic": 83.0545,
+          "pooled_ci_hi": 5.01779,
+          "pooled_ci_lo": 1.89927,
+          "pooled_d": 3.45853,
+          "pooled_p_value": 1.37764e-05,
+          "pooled_se": 0.79554,
+          "q_statistic": 81.5294,
           "refutation": "null_effect",
           "scope_predictor": "jensen_gap",
           "stratify_by": [
             "k_eff"
           ],
-          "tau2": 2.74117,
+          "tau2": 2.4124,
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)",
           "verdict": "no_effect"
         }
@@ -554,9 +554,9 @@
       "blocked_by": null,
       "bridge_name": "ddqn_helps_outcome_at_fr_g999_mlp_unshaped__k_panel",
       "direction": "direct",
-      "extent_hash": -1063315865958518038,
-      "n_cells_in_scope": 570,
-      "n_cells_pre_scope": 4855,
+      "extent_hash": -7310290785186325131,
+      "n_cells_in_scope": 750,
+      "n_cells_pre_scope": 5515,
       "pair_by": [
         "seed"
       ],
@@ -686,9 +686,9 @@
       "blocked_by": null,
       "bridge_name": "ddqn_no_positive_outcome_under_shaping__fr_shaped_fa_x_gamma_panel",
       "direction": "direct",
-      "extent_hash": 4353358156680784225,
+      "extent_hash": -6283721188771607875,
       "n_cells_in_scope": 240,
-      "n_cells_pre_scope": 4855,
+      "n_cells_pre_scope": 5515,
       "pair_by": [
         "seed"
       ],
@@ -712,10 +712,10 @@
     {
       "analysis_results": {
         "stratified_spearman": {
-          "n_obs_total": 420,
+          "n_obs_total": 300,
           "n_strata": 1,
           "p_value": 0.0,
-          "rho_pooled": -0.81617,
+          "rho_pooled": -0.868303,
           "stratify_by": "env_name",
           "x": "gamma",
           "y": "eval_best_burst_raw_mean"
@@ -725,9 +725,9 @@
       "blocked_by": null,
       "bridge_name": "vanilla_anchor_collapses_with_gamma_at_fr_mlp",
       "direction": "inverse",
-      "extent_hash": -1275722389881526412,
-      "n_cells_in_scope": 420,
-      "n_cells_pre_scope": 4855,
+      "extent_hash": -847833509665164619,
+      "n_cells_in_scope": 300,
+      "n_cells_pre_scope": 5515,
       "pair_by": [
         "seed"
       ],
@@ -739,7 +739,7 @@
         "y": "eval_best_burst_raw_mean"
       },
       "predicted_direction": "a_lt_b",
-      "scope_repr": "[([([([([([(col(\"env_name\")) == (\"FourRooms-misc\")]) & ([(col(\"fa_kind\")) == (\"mlp_deep\")])]) & ([(col(\"shaping_kind\")) == (\"none\")])]) & ([(col(\"arm_key\")) == (\"baseline\")])]) & (col(\"gamma\").is_in([[0.99, 0.999]]))]) & (col(\"eval_best_burst_raw_mean\").is_finite())]",
+      "scope_repr": "[([([([([([([(col(\"env_name\")) == (\"FourRooms-misc\")]) & ([(col(\"fa_kind\")) == (\"mlp_deep\")])]) & ([(col(\"shaping_kind\")) == (\"none\")])]) & ([(col(\"arm_key\")) == (\"baseline\")])]) & ([(col(\"total_steps\")) == (dyn int: 200000)])]) & (col(\"gamma\").is_in([[0.99, 0.999]]))]) & (col(\"eval_best_burst_raw_mean\").is_finite())]",
       "source_name": "gamma",
       "target_name": "eval_best_burst_raw_mean",
       "tier": "associational",
@@ -749,10 +749,10 @@
     {
       "analysis_results": {
         "stratified_spearman": {
-          "n_obs_total": 300,
+          "n_obs_total": 180,
           "n_strata": 1,
-          "p_value": 1.22376e-08,
-          "rho_pooled": 0.319004,
+          "p_value": 0.0635334,
+          "rho_pooled": 0.138566,
           "stratify_by": "env_name",
           "x": "gamma",
           "y": "eval_best_burst_raw_mean"
@@ -762,9 +762,9 @@
       "blocked_by": null,
       "bridge_name": "vanilla_anchor_preserved_with_gamma_at_acrobot_mlp",
       "direction": "direct",
-      "extent_hash": 6948607461531131387,
-      "n_cells_in_scope": 300,
-      "n_cells_pre_scope": 4855,
+      "extent_hash": -3571014075765732641,
+      "n_cells_in_scope": 180,
+      "n_cells_pre_scope": 5515,
       "pair_by": [
         "seed"
       ],
@@ -776,11 +776,11 @@
         "y": "eval_best_burst_raw_mean"
       },
       "predicted_direction": "a_gt_b",
-      "scope_repr": "[([([([([([(col(\"env_name\")) == (\"Acrobot-v1\")]) & ([(col(\"fa_kind\")) == (\"mlp_deep\")])]) & ([(col(\"shaping_kind\")) == (\"none\")])]) & ([(col(\"arm_key\")) == (\"baseline\")])]) & (col(\"gamma\").is_in([[0.99, 0.999]]))]) & (col(\"eval_best_burst_raw_mean\").is_finite())]",
+      "scope_repr": "[([([([([([([(col(\"env_name\")) == (\"Acrobot-v1\")]) & ([(col(\"fa_kind\")) == (\"mlp_deep\")])]) & ([(col(\"shaping_kind\")) == (\"none\")])]) & ([(col(\"arm_key\")) == (\"baseline\")])]) & ([(col(\"total_steps\")) == (dyn int: 200000)])]) & (col(\"gamma\").is_in([[0.99, 0.999]]))]) & (col(\"eval_best_burst_raw_mean\").is_finite())]",
       "source_name": "gamma",
       "target_name": "eval_best_burst_raw_mean",
       "tier": "associational",
-      "verdict": "held",
+      "verdict": "power_insufficient",
       "warnings": []
     },
     {
@@ -799,9 +799,9 @@
       "blocked_by": null,
       "bridge_name": "gamma_predicts_q_self_reference_at_fr_mlp",
       "direction": "direct",
-      "extent_hash": 2457228776238250943,
+      "extent_hash": 2982012515917560846,
       "n_cells_in_scope": 120,
-      "n_cells_pre_scope": 4855,
+      "n_cells_pre_scope": 5515,
       "pair_by": [
         "seed"
       ],
@@ -813,7 +813,7 @@
         "y": "bootstrap_self_reference_fraction"
       },
       "predicted_direction": "a_gt_b",
-      "scope_repr": "[([([([([([(col(\"env_name\")) == (\"FourRooms-misc\")]) & ([(col(\"fa_kind\")) == (\"mlp_deep\")])]) & ([(col(\"shaping_kind\")) == (\"none\")])]) & ([(col(\"arm_key\")) == (\"baseline\")])]) & (col(\"gamma\").is_in([[0.99, 0.999]]))]) & (col(\"bootstrap_self_reference_fraction\").is_finite())]",
+      "scope_repr": "[([([([([([([(col(\"env_name\")) == (\"FourRooms-misc\")]) & ([(col(\"fa_kind\")) == (\"mlp_deep\")])]) & ([(col(\"shaping_kind\")) == (\"none\")])]) & ([(col(\"arm_key\")) == (\"baseline\")])]) & ([(col(\"total_steps\")) == (dyn int: 200000)])]) & (col(\"gamma\").is_in([[0.99, 0.999]]))]) & (col(\"bootstrap_self_reference_fraction\").is_finite())]",
       "source_name": "gamma",
       "target_name": "bootstrap_self_reference_fraction",
       "tier": "associational",
@@ -836,9 +836,9 @@
       "blocked_by": null,
       "bridge_name": "q_self_reference_predicts_jens_at_fr_mlp",
       "direction": "direct",
-      "extent_hash": 2457228776238250943,
+      "extent_hash": 2982012515917560846,
       "n_cells_in_scope": 120,
-      "n_cells_pre_scope": 4855,
+      "n_cells_pre_scope": 5515,
       "pair_by": [
         "seed"
       ],
@@ -850,7 +850,7 @@
         "y": "jensen_gap"
       },
       "predicted_direction": "a_gt_b",
-      "scope_repr": "[([([([([([([(col(\"env_name\")) == (\"FourRooms-misc\")]) & ([(col(\"fa_kind\")) == (\"mlp_deep\")])]) & ([(col(\"shaping_kind\")) == (\"none\")])]) & ([(col(\"arm_key\")) == (\"baseline\")])]) & (col(\"gamma\").is_in([[0.99, 0.999]]))]) & (col(\"jensen_gap\").is_finite())]) & (col(\"bootstrap_self_reference_fraction\").is_finite())]",
+      "scope_repr": "[([([([([([([([(col(\"env_name\")) == (\"FourRooms-misc\")]) & ([(col(\"fa_kind\")) == (\"mlp_deep\")])]) & ([(col(\"shaping_kind\")) == (\"none\")])]) & ([(col(\"arm_key\")) == (\"baseline\")])]) & ([(col(\"total_steps\")) == (dyn int: 200000)])]) & (col(\"gamma\").is_in([[0.99, 0.999]]))]) & (col(\"jensen_gap\").is_finite())]) & (col(\"bootstrap_self_reference_fraction\").is_finite())]",
       "source_name": "bootstrap_self_reference_fraction",
       "target_name": "jensen_gap",
       "tier": "associational",
@@ -874,9 +874,9 @@
       "blocked_by": null,
       "bridge_name": "gamma_jens_mediated_by_q_self_reference_at_fr_mlp",
       "direction": "direct",
-      "extent_hash": 2457228776238250943,
+      "extent_hash": 2982012515917560846,
       "n_cells_in_scope": 120,
-      "n_cells_pre_scope": 4855,
+      "n_cells_pre_scope": 5515,
       "pair_by": [
         "seed"
       ],
@@ -889,7 +889,7 @@
         "y": "jensen_gap"
       },
       "predicted_direction": "null",
-      "scope_repr": "[([([([([([([(col(\"env_name\")) == (\"FourRooms-misc\")]) & ([(col(\"fa_kind\")) == (\"mlp_deep\")])]) & ([(col(\"shaping_kind\")) == (\"none\")])]) & ([(col(\"arm_key\")) == (\"baseline\")])]) & (col(\"gamma\").is_in([[0.99, 0.999]]))]) & (col(\"jensen_gap\").is_finite())]) & (col(\"bootstrap_self_reference_fraction\").is_finite())]",
+      "scope_repr": "[([([([([([([([(col(\"env_name\")) == (\"FourRooms-misc\")]) & ([(col(\"fa_kind\")) == (\"mlp_deep\")])]) & ([(col(\"shaping_kind\")) == (\"none\")])]) & ([(col(\"arm_key\")) == (\"baseline\")])]) & ([(col(\"total_steps\")) == (dyn int: 200000)])]) & (col(\"gamma\").is_in([[0.99, 0.999]]))]) & (col(\"jensen_gap\").is_finite())]) & (col(\"bootstrap_self_reference_fraction\").is_finite())]",
       "source_name": "gamma",
       "target_name": "jensen_gap",
       "tier": "associational",
@@ -913,9 +913,9 @@
       "blocked_by": null,
       "bridge_name": "gamma_predicts_q_late_residual_at_fr_mlp",
       "direction": "direct",
-      "extent_hash": 2457228776238250943,
+      "extent_hash": 2982012515917560846,
       "n_cells_in_scope": 120,
-      "n_cells_pre_scope": 4855,
+      "n_cells_pre_scope": 5515,
       "pair_by": [
         "seed"
       ],
@@ -928,7 +928,7 @@
         "y": "q_late_mean"
       },
       "predicted_direction": "a_gt_b",
-      "scope_repr": "[([([([([([([(col(\"env_name\")) == (\"FourRooms-misc\")]) & ([(col(\"fa_kind\")) == (\"mlp_deep\")])]) & ([(col(\"shaping_kind\")) == (\"none\")])]) & ([(col(\"arm_key\")) == (\"baseline\")])]) & (col(\"gamma\").is_in([[0.99, 0.999]]))]) & (col(\"q_late_mean\").is_finite())]) & (col(\"bootstrap_self_reference_fraction\").is_finite())]",
+      "scope_repr": "[([([([([([([([(col(\"env_name\")) == (\"FourRooms-misc\")]) & ([(col(\"fa_kind\")) == (\"mlp_deep\")])]) & ([(col(\"shaping_kind\")) == (\"none\")])]) & ([(col(\"arm_key\")) == (\"baseline\")])]) & ([(col(\"total_steps\")) == (dyn int: 200000)])]) & (col(\"gamma\").is_in([[0.99, 0.999]]))]) & (col(\"q_late_mean\").is_finite())]) & (col(\"bootstrap_self_reference_fraction\").is_finite())]",
       "source_name": "gamma",
       "target_name": "q_late_mean",
       "tier": "associational",
@@ -952,9 +952,9 @@
       "blocked_by": null,
       "bridge_name": "q_late_predicts_jens_residual_at_fr_mlp",
       "direction": "direct",
-      "extent_hash": 2457228776238250943,
+      "extent_hash": 2982012515917560846,
       "n_cells_in_scope": 120,
-      "n_cells_pre_scope": 4855,
+      "n_cells_pre_scope": 5515,
       "pair_by": [
         "seed"
       ],
@@ -967,7 +967,7 @@
         "y": "jensen_gap"
       },
       "predicted_direction": "a_gt_b",
-      "scope_repr": "[([([([([([([([(col(\"env_name\")) == (\"FourRooms-misc\")]) & ([(col(\"fa_kind\")) == (\"mlp_deep\")])]) & ([(col(\"shaping_kind\")) == (\"none\")])]) & ([(col(\"arm_key\")) == (\"baseline\")])]) & (col(\"gamma\").is_in([[0.99, 0.999]]))]) & (col(\"jensen_gap\").is_finite())]) & (col(\"q_late_mean\").is_finite())]) & (col(\"bootstrap_self_reference_fraction\").is_finite())]",
+      "scope_repr": "[([([([([([([([([(col(\"env_name\")) == (\"FourRooms-misc\")]) & ([(col(\"fa_kind\")) == (\"mlp_deep\")])]) & ([(col(\"shaping_kind\")) == (\"none\")])]) & ([(col(\"arm_key\")) == (\"baseline\")])]) & ([(col(\"total_steps\")) == (dyn int: 200000)])]) & (col(\"gamma\").is_in([[0.99, 0.999]]))]) & (col(\"jensen_gap\").is_finite())]) & (col(\"q_late_mean\").is_finite())]) & (col(\"bootstrap_self_reference_fraction\").is_finite())]",
       "source_name": "q_late_mean",
       "target_name": "jensen_gap",
       "tier": "associational",
@@ -994,9 +994,9 @@
       "blocked_by": null,
       "bridge_name": "gamma_jens_jointly_mediated_by_self_ref_and_q_late_at_fr_mlp",
       "direction": "direct",
-      "extent_hash": 2457228776238250943,
+      "extent_hash": 2982012515917560846,
       "n_cells_in_scope": 120,
-      "n_cells_pre_scope": 4855,
+      "n_cells_pre_scope": 5515,
       "pair_by": [
         "seed"
       ],
@@ -1012,7 +1012,7 @@
         "y": "jensen_gap"
       },
       "predicted_direction": "null",
-      "scope_repr": "[([([([([([([([(col(\"env_name\")) == (\"FourRooms-misc\")]) & ([(col(\"fa_kind\")) == (\"mlp_deep\")])]) & ([(col(\"shaping_kind\")) == (\"none\")])]) & ([(col(\"arm_key\")) == (\"baseline\")])]) & (col(\"gamma\").is_in([[0.99, 0.999]]))]) & (col(\"jensen_gap\").is_finite())]) & (col(\"bootstrap_self_reference_fraction\").is_finite())]) & (col(\"q_late_mean\").is_finite())]",
+      "scope_repr": "[([([([([([([([([(col(\"env_name\")) == (\"FourRooms-misc\")]) & ([(col(\"fa_kind\")) == (\"mlp_deep\")])]) & ([(col(\"shaping_kind\")) == (\"none\")])]) & ([(col(\"arm_key\")) == (\"baseline\")])]) & ([(col(\"total_steps\")) == (dyn int: 200000)])]) & (col(\"gamma\").is_in([[0.99, 0.999]]))]) & (col(\"jensen_gap\").is_finite())]) & (col(\"bootstrap_self_reference_fraction\").is_finite())]) & (col(\"q_late_mean\").is_finite())]",
       "source_name": "gamma",
       "target_name": "jensen_gap",
       "tier": "associational",
@@ -1036,9 +1036,9 @@
       "blocked_by": null,
       "bridge_name": "gamma_predicts_sigma_action_residual_at_fr_mlp",
       "direction": "direct",
-      "extent_hash": 2457228776238250943,
+      "extent_hash": 2982012515917560846,
       "n_cells_in_scope": 120,
-      "n_cells_pre_scope": 4855,
+      "n_cells_pre_scope": 5515,
       "pair_by": [
         "seed"
       ],
@@ -1051,7 +1051,7 @@
         "y": "q_action_std_late"
       },
       "predicted_direction": "a_gt_b",
-      "scope_repr": "[([([([([([([(col(\"env_name\")) == (\"FourRooms-misc\")]) & ([(col(\"fa_kind\")) == (\"mlp_deep\")])]) & ([(col(\"shaping_kind\")) == (\"none\")])]) & ([(col(\"arm_key\")) == (\"baseline\")])]) & (col(\"gamma\").is_in([[0.99, 0.999]]))]) & (col(\"q_action_std_late\").is_finite())]) & (col(\"bootstrap_self_reference_fraction\").is_finite())]",
+      "scope_repr": "[([([([([([([([(col(\"env_name\")) == (\"FourRooms-misc\")]) & ([(col(\"fa_kind\")) == (\"mlp_deep\")])]) & ([(col(\"shaping_kind\")) == (\"none\")])]) & ([(col(\"arm_key\")) == (\"baseline\")])]) & ([(col(\"total_steps\")) == (dyn int: 200000)])]) & (col(\"gamma\").is_in([[0.99, 0.999]]))]) & (col(\"q_action_std_late\").is_finite())]) & (col(\"bootstrap_self_reference_fraction\").is_finite())]",
       "source_name": "gamma",
       "target_name": "q_action_std_late",
       "tier": "associational",
@@ -1075,9 +1075,9 @@
       "blocked_by": null,
       "bridge_name": "sigma_action_predicts_jens_residual_at_fr_mlp",
       "direction": "direct",
-      "extent_hash": 2457228776238250943,
+      "extent_hash": 2982012515917560846,
       "n_cells_in_scope": 120,
-      "n_cells_pre_scope": 4855,
+      "n_cells_pre_scope": 5515,
       "pair_by": [
         "seed"
       ],
@@ -1090,7 +1090,7 @@
         "y": "jensen_gap"
       },
       "predicted_direction": "a_gt_b",
-      "scope_repr": "[([([([([([([([(col(\"env_name\")) == (\"FourRooms-misc\")]) & ([(col(\"fa_kind\")) == (\"mlp_deep\")])]) & ([(col(\"shaping_kind\")) == (\"none\")])]) & ([(col(\"arm_key\")) == (\"baseline\")])]) & (col(\"gamma\").is_in([[0.99, 0.999]]))]) & (col(\"jensen_gap\").is_finite())]) & (col(\"q_action_std_late\").is_finite())]) & (col(\"bootstrap_self_reference_fraction\").is_finite())]",
+      "scope_repr": "[([([([([([([([([(col(\"env_name\")) == (\"FourRooms-misc\")]) & ([(col(\"fa_kind\")) == (\"mlp_deep\")])]) & ([(col(\"shaping_kind\")) == (\"none\")])]) & ([(col(\"arm_key\")) == (\"baseline\")])]) & ([(col(\"total_steps\")) == (dyn int: 200000)])]) & (col(\"gamma\").is_in([[0.99, 0.999]]))]) & (col(\"jensen_gap\").is_finite())]) & (col(\"q_action_std_late\").is_finite())]) & (col(\"bootstrap_self_reference_fraction\").is_finite())]",
       "source_name": "q_action_std_late",
       "target_name": "jensen_gap",
       "tier": "associational",
@@ -1117,9 +1117,9 @@
       "blocked_by": null,
       "bridge_name": "gamma_jens_jointly_mediated_by_self_ref_and_sigma_action_at_fr_mlp",
       "direction": "direct",
-      "extent_hash": 2457228776238250943,
+      "extent_hash": 2982012515917560846,
       "n_cells_in_scope": 120,
-      "n_cells_pre_scope": 4855,
+      "n_cells_pre_scope": 5515,
       "pair_by": [
         "seed"
       ],
@@ -1135,7 +1135,7 @@
         "y": "jensen_gap"
       },
       "predicted_direction": "null",
-      "scope_repr": "[([([([([([([([(col(\"env_name\")) == (\"FourRooms-misc\")]) & ([(col(\"fa_kind\")) == (\"mlp_deep\")])]) & ([(col(\"shaping_kind\")) == (\"none\")])]) & ([(col(\"arm_key\")) == (\"baseline\")])]) & (col(\"gamma\").is_in([[0.99, 0.999]]))]) & (col(\"jensen_gap\").is_finite())]) & (col(\"bootstrap_self_reference_fraction\").is_finite())]) & (col(\"q_action_std_late\").is_finite())]",
+      "scope_repr": "[([([([([([([([([(col(\"env_name\")) == (\"FourRooms-misc\")]) & ([(col(\"fa_kind\")) == (\"mlp_deep\")])]) & ([(col(\"shaping_kind\")) == (\"none\")])]) & ([(col(\"arm_key\")) == (\"baseline\")])]) & ([(col(\"total_steps\")) == (dyn int: 200000)])]) & (col(\"gamma\").is_in([[0.99, 0.999]]))]) & (col(\"jensen_gap\").is_finite())]) & (col(\"bootstrap_self_reference_fraction\").is_finite())]) & (col(\"q_action_std_late\").is_finite())]",
       "source_name": "gamma",
       "target_name": "jensen_gap",
       "tier": "associational",
@@ -1145,10 +1145,10 @@
     {
       "analysis_results": {
         "stratified_spearman": {
-          "n_obs_total": 300,
+          "n_obs_total": 180,
           "n_strata": 1,
-          "p_value": 0.000109518,
-          "rho_pooled": 0.220776,
+          "p_value": 0.000613567,
+          "rho_pooled": 0.251937,
           "stratify_by": "env_name",
           "x": "gamma",
           "y": "jensen_gap"
@@ -1158,9 +1158,9 @@
       "blocked_by": null,
       "bridge_name": "gamma_jens_marginal_small_at_acrobot_mlp",
       "direction": "direct",
-      "extent_hash": 6948607461531131387,
-      "n_cells_in_scope": 300,
-      "n_cells_pre_scope": 4855,
+      "extent_hash": -3571014075765732641,
+      "n_cells_in_scope": 180,
+      "n_cells_pre_scope": 5515,
       "pair_by": [
         "seed"
       ],
@@ -1172,7 +1172,7 @@
         "y": "jensen_gap"
       },
       "predicted_direction": "a_gt_b",
-      "scope_repr": "[([([([([([(col(\"env_name\")) == (\"Acrobot-v1\")]) & ([(col(\"fa_kind\")) == (\"mlp_deep\")])]) & ([(col(\"shaping_kind\")) == (\"none\")])]) & ([(col(\"arm_key\")) == (\"baseline\")])]) & (col(\"gamma\").is_in([[0.99, 0.999]]))]) & (col(\"jensen_gap\").is_finite())]",
+      "scope_repr": "[([([([([([([(col(\"env_name\")) == (\"Acrobot-v1\")]) & ([(col(\"fa_kind\")) == (\"mlp_deep\")])]) & ([(col(\"shaping_kind\")) == (\"none\")])]) & ([(col(\"arm_key\")) == (\"baseline\")])]) & ([(col(\"total_steps\")) == (dyn int: 200000)])]) & (col(\"gamma\").is_in([[0.99, 0.999]]))]) & (col(\"jensen_gap\").is_finite())]",
       "source_name": "gamma",
       "target_name": "jensen_gap",
       "tier": "associational",
@@ -1195,9 +1195,9 @@
       "blocked_by": null,
       "bridge_name": "q_late_sign_flipped_with_gamma_at_acrobot_mlp",
       "direction": "inverse",
-      "extent_hash": 6751644361813351470,
+      "extent_hash": -851192958643061243,
       "n_cells_in_scope": 120,
-      "n_cells_pre_scope": 4855,
+      "n_cells_pre_scope": 5515,
       "pair_by": [
         "seed"
       ],
@@ -1209,7 +1209,7 @@
         "y": "q_late_mean"
       },
       "predicted_direction": "a_lt_b",
-      "scope_repr": "[([([([([([(col(\"env_name\")) == (\"Acrobot-v1\")]) & ([(col(\"fa_kind\")) == (\"mlp_deep\")])]) & ([(col(\"shaping_kind\")) == (\"none\")])]) & ([(col(\"arm_key\")) == (\"baseline\")])]) & (col(\"gamma\").is_in([[0.99, 0.999]]))]) & (col(\"q_late_mean\").is_finite())]",
+      "scope_repr": "[([([([([([([(col(\"env_name\")) == (\"Acrobot-v1\")]) & ([(col(\"fa_kind\")) == (\"mlp_deep\")])]) & ([(col(\"shaping_kind\")) == (\"none\")])]) & ([(col(\"arm_key\")) == (\"baseline\")])]) & ([(col(\"total_steps\")) == (dyn int: 200000)])]) & (col(\"gamma\").is_in([[0.99, 0.999]]))]) & (col(\"q_late_mean\").is_finite())]",
       "source_name": "gamma",
       "target_name": "q_late_mean",
       "tier": "associational",
@@ -1217,19 +1217,399 @@
       "warnings": []
     },
     {
-      "analysis_results": {},
-      "assumption_violations": [],
-      "blocked_by": {
-        "gate_name": "exogenous_source",
-        "level": "block",
-        "message": "Tier.INTERVENTIONAL bridge 'vanilla_outcome_recovers_with_warmup_at_fr_g999_mlp' sourced on 'optimizer.warmup_steps', which is a leaf of the outermost claim (author-controlled at design time, not produced by the cell). Causal claims require an endogenous source — find the delegate (e.g., `effective_horizon` for γ, `q_divergence_score` for sync_period). See ADMISSION_GATES_DESIGN.md § Principle.",
-        "passed": false
+      "analysis_results": {
+        "stratified_spearman": {
+          "n_obs_total": 90,
+          "n_strata": 1,
+          "p_value": 0.0271598,
+          "rho_pooled": 0.232521,
+          "stratify_by": "env_name",
+          "x": "optimizer.warmup_steps",
+          "y": "eval_best_burst_raw_mean"
+        }
       },
+      "assumption_violations": [],
+      "blocked_by": null,
       "bridge_name": "vanilla_outcome_recovers_with_warmup_at_fr_g999_mlp",
       "direction": "direct",
-      "extent_hash": 6252017889776985670,
-      "n_cells_in_scope": 270,
-      "n_cells_pre_scope": 4855,
+      "extent_hash": 8251617103271069133,
+      "n_cells_in_scope": 90,
+      "n_cells_pre_scope": 5515,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "min_stratum_size": 30,
+        "rho_threshold": 0.2,
+        "stratify_by": "env_name",
+        "x": "optimizer.warmup_steps",
+        "y": "eval_best_burst_raw_mean"
+      },
+      "predicted_direction": "a_gt_b",
+      "scope_repr": "[([([([(col(\"corpus\")) == (\"fr_warmup_intervention\")]) & ([(col(\"arm_key\")) == (\"baseline\")])]) & (col(\"optimizer.warmup_steps\").is_in([[100, 10000, 100000]]))]) & (col(\"eval_best_burst_raw_mean\").is_finite())]",
+      "source_name": "optimizer.warmup_steps",
+      "target_name": "eval_best_burst_raw_mean",
+      "tier": "associational",
+      "verdict": "held",
+      "warnings": []
+    },
+    {
+      "analysis_results": {
+        "stratified_spearman": {
+          "n_obs_total": 90,
+          "n_strata": 1,
+          "p_value": 0.075043,
+          "rho_pooled": -0.188573,
+          "stratify_by": "env_name",
+          "x": "optimizer.warmup_steps",
+          "y": "jensen_gap"
+        }
+      },
+      "assumption_violations": [],
+      "blocked_by": null,
+      "bridge_name": "vanilla_jens_shrinks_with_warmup_at_fr_g999_mlp",
+      "direction": "inverse",
+      "extent_hash": 8251617103271069133,
+      "n_cells_in_scope": 90,
+      "n_cells_pre_scope": 5515,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "min_stratum_size": 30,
+        "rho_threshold": -0.2,
+        "stratify_by": "env_name",
+        "x": "optimizer.warmup_steps",
+        "y": "jensen_gap"
+      },
+      "predicted_direction": "a_lt_b",
+      "scope_repr": "[([([([(col(\"corpus\")) == (\"fr_warmup_intervention\")]) & ([(col(\"arm_key\")) == (\"baseline\")])]) & (col(\"optimizer.warmup_steps\").is_in([[100, 10000, 100000]]))]) & (col(\"jensen_gap\").is_finite())]",
+      "source_name": "optimizer.warmup_steps",
+      "target_name": "jensen_gap",
+      "tier": "associational",
+      "verdict": "power_insufficient",
+      "warnings": []
+    },
+    {
+      "analysis_results": {
+        "stratified_arm_diff_pooled": {
+          "arm_field": "arm_key",
+          "baseline_arm": "baseline",
+          "i_squared": 0.780355,
+          "measurable": "jensen_gap",
+          "n_strata": 4,
+          "per_stratum": [
+            {
+              "arm_mean_baseline": 60.5964,
+              "arm_mean_treatment": 1.03414,
+              "arm_sd_baseline": 11.0747,
+              "arm_sd_treatment": 0.354852,
+              "baseline_predictor": 60.5964,
+              "cohen_d": -7.60204,
+              "cohen_se": 0.751575,
+              "mean_diff": -59.5622,
+              "n_seeds_baseline": 30,
+              "n_seeds_treatment": 30,
+              "stratum_id": [
+                12
+              ]
+            },
+            {
+              "arm_mean_baseline": 89.1177,
+              "arm_mean_treatment": 1.91441,
+              "arm_sd_baseline": 26.1699,
+              "arm_sd_treatment": 0.631785,
+              "baseline_predictor": 89.1177,
+              "cohen_d": -4.71106,
+              "cohen_se": 0.356898,
+              "mean_diff": -87.2033,
+              "n_seeds_baseline": 60,
+              "n_seeds_treatment": 60,
+              "stratum_id": [
+                16
+              ]
+            },
+            {
+              "arm_mean_baseline": 9.10473,
+              "arm_mean_treatment": 0.45619,
+              "arm_sd_baseline": 2.15986,
+              "arm_sd_treatment": 0.28087,
+              "baseline_predictor": 9.10473,
+              "cohen_d": -5.61552,
+              "cohen_se": 0.186537,
+              "mean_diff": -8.64854,
+              "n_seeds_baseline": 270,
+              "n_seeds_treatment": 300,
+              "stratum_id": [
+                4
+              ]
+            },
+            {
+              "arm_mean_baseline": 34.0975,
+              "arm_mean_treatment": 0.434604,
+              "arm_sd_baseline": 7.92269,
+              "arm_sd_treatment": 0.129361,
+              "baseline_predictor": 34.0975,
+              "cohen_d": -6.00809,
+              "cohen_se": 0.614694,
+              "mean_diff": -33.6629,
+              "n_seeds_baseline": 30,
+              "n_seeds_treatment": 30,
+              "stratum_id": [
+                8
+              ]
+            }
+          ],
+          "pooled": {
+            "I2": 0.780355,
+            "Q": 13.6584,
+            "assumption_violations": [
+              "dl_small_g_unreliable_inference (n_cells=4, τ² CV ≈ 79% — point estimate not interpretable; prefer REML when available)"
+            ],
+            "empirical_max_g": -4.71106,
+            "empirical_min_g": -7.60204,
+            "n_cells": 4,
+            "pi_hi": -2.05109,
+            "pi_lo": -9.52021,
+            "pooled_g": -5.78565,
+            "se_pooled": 0.442464,
+            "tau2": 0.557592
+          },
+          "pooled_ci_hi": -4.91842,
+          "pooled_ci_lo": -6.65288,
+          "pooled_d": -5.78565,
+          "pooled_p_value": 4.51681e-39,
+          "pooled_se": 0.442464,
+          "q_statistic": 13.6584,
+          "refutation": null,
+          "scope_predictor": "jensen_gap",
+          "stratify_by": [
+            "k_eff"
+          ],
+          "tau2": 0.557592,
+          "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)",
+          "verdict": "held_with_scope_flag"
+        }
+      },
+      "assumption_violations": [],
+      "blocked_by": null,
+      "bridge_name": "ddqn_jens_reduction_amplified_by_k_eff_at_fr_g999_mlp",
+      "direction": "inverse",
+      "extent_hash": -7310290785186325131,
+      "n_cells_in_scope": 810,
+      "n_cells_pre_scope": 5515,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "k_amp_ratio": 3.0,
+        "min_strata": 4,
+        "per_stratum_d_threshold": -0.5,
+        "stratify_by": [
+          "k_eff"
+        ]
+      },
+      "predicted_direction": "a_lt_b",
+      "scope_repr": "[([([([([(col(\"env_name\")) == (\"FourRooms-misc\")]) & ([(col(\"fa_kind\")) == (\"mlp_deep\")])]) & ([(col(\"shaping_kind\")) == (\"none\")])]) & ([(col(\"gamma\")) == (dyn float: 0.999)])]) & (col(\"jensen_gap\").is_finite())]",
+      "source_name": "do(baseline|bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify))",
+      "target_name": "jensen_gap",
+      "tier": "interventional",
+      "verdict": "held",
+      "warnings": []
+    },
+    {
+      "analysis_results": {
+        "stratified_arm_diff_pooled": {
+          "arm_field": "arm_key",
+          "baseline_arm": "baseline",
+          "i_squared": 0.963203,
+          "measurable": "eval_best_burst_raw_mean",
+          "n_strata": 4,
+          "per_stratum": [
+            {
+              "arm_mean_baseline": 0.253334,
+              "arm_mean_treatment": 1.0,
+              "arm_sd_baseline": 0.301415,
+              "arm_sd_treatment": 8.2156e-07,
+              "baseline_predictor": 60.5964,
+              "cohen_d": 3.5033,
+              "cohen_se": 0.415294,
+              "mean_diff": 0.746668,
+              "n_seeds_baseline": 30,
+              "n_seeds_treatment": 30,
+              "stratum_id": [
+                12
+              ]
+            },
+            {
+              "arm_mean_baseline": 0.0800003,
+              "arm_mean_treatment": 0.580001,
+              "arm_sd_baseline": 0.162736,
+              "arm_sd_treatment": 0.380019,
+              "baseline_predictor": 89.1177,
+              "cohen_d": 1.71048,
+              "cohen_se": 0.303131,
+              "mean_diff": 0.500001,
+              "n_seeds_baseline": 30,
+              "n_seeds_treatment": 30,
+              "stratum_id": [
+                16
+              ]
+            },
+            {
+              "arm_mean_baseline": 0.191112,
+              "arm_mean_treatment": 0.990002,
+              "arm_sd_baseline": 0.225994,
+              "arm_sd_treatment": 0.06769,
+              "baseline_predictor": 9.10473,
+              "cohen_d": 4.78904,
+              "cohen_se": 0.165004,
+              "mean_diff": 0.79889,
+              "n_seeds_baseline": 270,
+              "n_seeds_treatment": 300,
+              "stratum_id": [
+                4
+              ]
+            },
+            {
+              "arm_mean_baseline": 0.193334,
+              "arm_mean_treatment": 1.0,
+              "arm_sd_baseline": 0.299349,
+              "arm_sd_treatment": 7.75489e-07,
+              "baseline_predictor": 34.0975,
+              "cohen_d": 3.81094,
+              "cohen_se": 0.438027,
+              "mean_diff": 0.806668,
+              "n_seeds_baseline": 30,
+              "n_seeds_treatment": 30,
+              "stratum_id": [
+                8
+              ]
+            }
+          ],
+          "pooled": {
+            "I2": 0.963203,
+            "Q": 81.5294,
+            "assumption_violations": [
+              "dl_small_g_unreliable_inference (n_cells=4, τ² CV ≈ 79% — point estimate not interpretable; prefer REML when available)"
+            ],
+            "empirical_max_g": 4.78904,
+            "empirical_min_g": 1.71048,
+            "n_cells": 4,
+            "pi_hi": 10.967,
+            "pi_lo": -4.04992,
+            "pooled_g": 3.45853,
+            "se_pooled": 0.79554,
+            "tau2": 2.4124
+          },
+          "pooled_ci_hi": 5.01779,
+          "pooled_ci_lo": 1.89927,
+          "pooled_d": 3.45853,
+          "pooled_p_value": 1.37764e-05,
+          "pooled_se": 0.79554,
+          "q_statistic": 81.5294,
+          "refutation": "null_effect",
+          "scope_predictor": "jensen_gap",
+          "stratify_by": [
+            "k_eff"
+          ],
+          "tau2": 2.4124,
+          "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)",
+          "verdict": "no_effect"
+        }
+      },
+      "assumption_violations": [],
+      "blocked_by": null,
+      "bridge_name": "ddqn_outcome_help_constant_across_k_eff_at_fr_g999_mlp",
+      "direction": "direct",
+      "extent_hash": -7310290785186325131,
+      "n_cells_in_scope": 750,
+      "n_cells_pre_scope": 5515,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "constancy_ratio_ceiling": 3.0,
+        "min_strata": 4,
+        "per_stratum_d_lower_bound": 0.3,
+        "stratify_by": [
+          "k_eff"
+        ]
+      },
+      "predicted_direction": "a_gt_b",
+      "scope_repr": "[([([([([(col(\"env_name\")) == (\"FourRooms-misc\")]) & ([(col(\"fa_kind\")) == (\"mlp_deep\")])]) & ([(col(\"shaping_kind\")) == (\"none\")])]) & ([(col(\"gamma\")) == (dyn float: 0.999)])]) & (col(\"eval_best_burst_raw_mean\").is_finite())]",
+      "source_name": "do(baseline|bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify))",
+      "target_name": "eval_best_burst_raw_mean",
+      "tier": "interventional",
+      "verdict": "held",
+      "warnings": []
+    },
+    {
+      "analysis_results": {
+        "partial_spearman_paired_delta": {
+          "baseline_arm": "baseline",
+          "conditioning": "q_late_mean",
+          "marginal_rho": 0.0869855,
+          "mediator": "jensen_gap",
+          "n_pairs": 30,
+          "p_value": 0.231826,
+          "pair_by": [
+            "seed",
+            "k_eff"
+          ],
+          "rho": -0.230285,
+          "target": "eval_best_burst_raw_mean",
+          "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
+        }
+      },
+      "assumption_violations": [],
+      "blocked_by": null,
+      "bridge_name": "jens_reduction_does_not_predict_outcome_at_fr_g999_mlp",
+      "direction": "direct",
+      "extent_hash": -7328304328556850833,
+      "n_cells_in_scope": 300,
+      "n_cells_pre_scope": 5515,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "conditioning": "q_late_mean",
+        "mediator": "jensen_gap",
+        "min_pairs": 30,
+        "pair_by": [
+          "seed",
+          "k_eff"
+        ],
+        "rho_threshold": 0.2,
+        "target": "eval_best_burst_raw_mean"
+      },
+      "predicted_direction": "null",
+      "scope_repr": "[([([([([([([(col(\"env_name\")) == (\"FourRooms-misc\")]) & ([(col(\"fa_kind\")) == (\"mlp_deep\")])]) & ([(col(\"shaping_kind\")) == (\"none\")])]) & ([(col(\"gamma\")) == (dyn float: 0.999)])]) & (col(\"eval_best_burst_raw_mean\").is_finite())]) & (col(\"jensen_gap\").is_finite())]) & (col(\"q_late_mean\").is_finite())]",
+      "source_name": "do(baseline|bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify))",
+      "target_name": "eval_best_burst_raw_mean",
+      "tier": "associational",
+      "verdict": "held",
+      "warnings": []
+    },
+    {
+      "analysis_results": {
+        "stratified_spearman": {
+          "n_obs_total": 60,
+          "n_strata": 1,
+          "p_value": 0.0,
+          "rho_pooled": 0.866146,
+          "stratify_by": "env_name",
+          "x": "gamma",
+          "y": "bootstrap_self_reference_fraction"
+        }
+      },
+      "assumption_violations": [],
+      "blocked_by": null,
+      "bridge_name": "gamma_predicts_q_self_reference_at_si",
+      "direction": "direct",
+      "extent_hash": 1313353871771065700,
+      "n_cells_in_scope": 60,
+      "n_cells_pre_scope": 5515,
       "pair_by": [
         "seed"
       ],
@@ -1237,53 +1617,185 @@
         "min_stratum_size": 30,
         "rho_threshold": 0.5,
         "stratify_by": "env_name",
-        "x": "optimizer.warmup_steps",
-        "y": "eval_best_burst_raw_mean"
+        "x": "gamma",
+        "y": "bootstrap_self_reference_fraction"
       },
       "predicted_direction": "a_gt_b",
-      "scope_repr": "[([([([([([([(col(\"env_name\")) == (\"FourRooms-misc\")]) & ([(col(\"fa_kind\")) == (\"mlp_deep\")])]) & ([(col(\"shaping_kind\")) == (\"none\")])]) & ([(col(\"arm_key\")) == (\"baseline\")])]) & ([(col(\"gamma\")) == (dyn float: 0.999)])]) & (col(\"optimizer.warmup_steps\").is_in([[100, 10000, 100000]]))]) & (col(\"eval_best_burst_raw_mean\").is_finite())]",
-      "source_name": "optimizer.warmup_steps",
-      "target_name": "eval_best_burst_raw_mean",
-      "tier": "interventional",
-      "verdict": "inadmissible",
+      "scope_repr": "[([([([(col(\"env_name\")) == (\"SpaceInvaders-MinAtar\")]) & (col(\"gamma\").is_in([[0.95, 0.99, 0.999]]))]) & ([(col(\"arm_key\")) == (\"baseline\")])]) & (col(\"bootstrap_self_reference_fraction\").is_finite())]",
+      "source_name": "gamma",
+      "target_name": "bootstrap_self_reference_fraction",
+      "tier": "associational",
+      "verdict": "held",
       "warnings": []
     },
     {
-      "analysis_results": {},
-      "assumption_violations": [],
-      "blocked_by": {
-        "gate_name": "exogenous_source",
-        "level": "block",
-        "message": "Tier.INTERVENTIONAL bridge 'vanilla_jens_shrinks_with_warmup_at_fr_g999_mlp' sourced on 'optimizer.warmup_steps', which is a leaf of the outermost claim (author-controlled at design time, not produced by the cell). Causal claims require an endogenous source — find the delegate (e.g., `effective_horizon` for γ, `q_divergence_score` for sync_period). See ADMISSION_GATES_DESIGN.md § Principle.",
-        "passed": false
+      "analysis_results": {
+        "stratified_spearman": {
+          "n_obs_total": 60,
+          "n_strata": 1,
+          "p_value": 0.0,
+          "rho_pooled": 0.972492,
+          "stratify_by": "env_name",
+          "x": "bootstrap_self_reference_fraction",
+          "y": "jensen_gap"
+        }
       },
-      "bridge_name": "vanilla_jens_shrinks_with_warmup_at_fr_g999_mlp",
-      "direction": "inverse",
-      "extent_hash": 6252017889776985670,
-      "n_cells_in_scope": 300,
-      "n_cells_pre_scope": 4855,
+      "assumption_violations": [],
+      "blocked_by": null,
+      "bridge_name": "q_self_reference_predicts_jens_at_si",
+      "direction": "direct",
+      "extent_hash": 1313353871771065700,
+      "n_cells_in_scope": 60,
+      "n_cells_pre_scope": 5515,
       "pair_by": [
         "seed"
       ],
       "params": {
         "min_stratum_size": 30,
-        "rho_threshold": -0.5,
+        "rho_threshold": 0.5,
         "stratify_by": "env_name",
-        "x": "optimizer.warmup_steps",
+        "x": "bootstrap_self_reference_fraction",
         "y": "jensen_gap"
       },
-      "predicted_direction": "a_lt_b",
-      "scope_repr": "[([([([([([([(col(\"env_name\")) == (\"FourRooms-misc\")]) & ([(col(\"fa_kind\")) == (\"mlp_deep\")])]) & ([(col(\"shaping_kind\")) == (\"none\")])]) & ([(col(\"arm_key\")) == (\"baseline\")])]) & ([(col(\"gamma\")) == (dyn float: 0.999)])]) & (col(\"optimizer.warmup_steps\").is_in([[100, 10000, 100000]]))]) & (col(\"jensen_gap\").is_finite())]",
-      "source_name": "optimizer.warmup_steps",
+      "predicted_direction": "a_gt_b",
+      "scope_repr": "[([([([([(col(\"env_name\")) == (\"SpaceInvaders-MinAtar\")]) & (col(\"gamma\").is_in([[0.95, 0.99, 0.999]]))]) & ([(col(\"arm_key\")) == (\"baseline\")])]) & (col(\"bootstrap_self_reference_fraction\").is_finite())]) & (col(\"jensen_gap\").is_finite())]",
+      "source_name": "bootstrap_self_reference_fraction",
       "target_name": "jensen_gap",
-      "tier": "interventional",
-      "verdict": "inadmissible",
+      "tier": "associational",
+      "verdict": "held",
+      "warnings": []
+    },
+    {
+      "analysis_results": {
+        "stratified_partial_spearman_multi": {
+          "conditioning": [
+            "bootstrap_self_reference_fraction",
+            "q_action_std_late"
+          ],
+          "n_obs_total": 60,
+          "n_strata": 1,
+          "p_value": 0.122527,
+          "rho_pooled": 0.205269,
+          "stratify_by": "env_name",
+          "x": "gamma",
+          "y": "jensen_gap"
+        }
+      },
+      "assumption_violations": [],
+      "blocked_by": null,
+      "bridge_name": "gamma_jens_jointly_mediated_by_self_ref_and_sigma_action_at_si",
+      "direction": "direct",
+      "extent_hash": 1313353871771065700,
+      "n_cells_in_scope": 60,
+      "n_cells_pre_scope": 5515,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "conditioning": [
+          "bootstrap_self_reference_fraction",
+          "q_action_std_late"
+        ],
+        "min_stratum_size": 30,
+        "rho_threshold": 0.3,
+        "stratify_by": "env_name",
+        "x": "gamma",
+        "y": "jensen_gap"
+      },
+      "predicted_direction": "null",
+      "scope_repr": "[([([([([([(col(\"env_name\")) == (\"SpaceInvaders-MinAtar\")]) & (col(\"gamma\").is_in([[0.95, 0.99, 0.999]]))]) & ([(col(\"arm_key\")) == (\"baseline\")])]) & (col(\"bootstrap_self_reference_fraction\").is_finite())]) & (col(\"q_action_std_late\").is_finite())]) & (col(\"jensen_gap\").is_finite())]",
+      "source_name": "gamma",
+      "target_name": "jensen_gap",
+      "tier": "associational",
+      "verdict": "held",
+      "warnings": []
+    },
+    {
+      "analysis_results": {
+        "stratified_spearman": {
+          "n_obs_total": 60,
+          "n_strata": 1,
+          "p_value": 0.0,
+          "rho_pooled": 0.866146,
+          "stratify_by": "env_name",
+          "x": "gamma",
+          "y": "bootstrap_self_reference_fraction"
+        }
+      },
+      "assumption_violations": [],
+      "blocked_by": null,
+      "bridge_name": "gamma_self_ref_null_at_asterix",
+      "direction": "direct",
+      "extent_hash": 1009421315243098250,
+      "n_cells_in_scope": 60,
+      "n_cells_pre_scope": 5515,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "min_stratum_size": 30,
+        "rho_threshold": 0.3,
+        "stratify_by": "env_name",
+        "x": "gamma",
+        "y": "bootstrap_self_reference_fraction"
+      },
+      "predicted_direction": "null",
+      "scope_repr": "[([([([(col(\"env_name\")) == (\"Asterix-MinAtar\")]) & (col(\"gamma\").is_in([[0.95, 0.99, 0.999]]))]) & ([(col(\"arm_key\")) == (\"baseline\")])]) & (col(\"bootstrap_self_reference_fraction\").is_finite())]",
+      "source_name": "gamma",
+      "target_name": "bootstrap_self_reference_fraction",
+      "tier": "associational",
+      "verdict": "no_effect",
+      "warnings": []
+    },
+    {
+      "analysis_results": {
+        "stratified_partial_spearman_multi": {
+          "conditioning": [
+            "bootstrap_self_reference_fraction",
+            "q_action_std_late"
+          ],
+          "n_obs_total": 60,
+          "n_strata": 1,
+          "p_value": 0.240642,
+          "rho_pooled": 0.156912,
+          "stratify_by": "env_name",
+          "x": "gamma",
+          "y": "jensen_gap"
+        }
+      },
+      "assumption_violations": [],
+      "blocked_by": null,
+      "bridge_name": "gamma_jens_residual_at_asterix_after_fr_mediators",
+      "direction": "direct",
+      "extent_hash": 1009421315243098250,
+      "n_cells_in_scope": 60,
+      "n_cells_pre_scope": 5515,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "conditioning": [
+          "bootstrap_self_reference_fraction",
+          "q_action_std_late"
+        ],
+        "min_stratum_size": 30,
+        "rho_threshold": 0.5,
+        "stratify_by": "env_name",
+        "x": "gamma",
+        "y": "jensen_gap"
+      },
+      "predicted_direction": "a_gt_b",
+      "scope_repr": "[([([([([([(col(\"env_name\")) == (\"Asterix-MinAtar\")]) & (col(\"gamma\").is_in([[0.95, 0.99, 0.999]]))]) & ([(col(\"arm_key\")) == (\"baseline\")])]) & (col(\"bootstrap_self_reference_fraction\").is_finite())]) & (col(\"q_action_std_late\").is_finite())]) & (col(\"jensen_gap\").is_finite())]",
+      "source_name": "gamma",
+      "target_name": "jensen_gap",
+      "tier": "associational",
+      "verdict": "power_insufficient",
       "warnings": []
     }
   ],
   "cache_path": "experiments/data/cache/ddqn_three_conditions.parquet",
   "errored_bridges": [],
-  "git_commit": "e2c831851cea",
+  "git_commit": "c440f9672f43",
   "hypothesis_module": "experiments.findings.ddqn_three_conditions",
   "measurable_signatures": {
     "bootstrap_self_reference_fraction": "5cc6075b00be255f",
@@ -1295,6 +1807,6 @@
     "q_late_mean": "bcaa1bbd516705a7",
     "shaping_kind": "8d7b9f162d87a266"
   },
-  "n_cells_total": 4855,
-  "timestamp_utc": "2026-05-17T12:37:14+00:00"
+  "n_cells_total": 5515,
+  "timestamp_utc": "2026-05-18T06:08:37+00:00"
 }

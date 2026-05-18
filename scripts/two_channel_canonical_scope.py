@@ -51,9 +51,13 @@ JUMANJI_ENVS = {
 
 
 def canonical_scope() -> pl.Expr:
-    """Pl.Expr selecting only canonical-config cells for each env."""
+    """Pl.Expr selecting only canonical-config cells for each env,
+    AND respecting the ddqn hypothesis's MODULE_SCOPE (excludes
+    `-bsuite` diagnostic envs)."""
     base = (
-        (pl.col('gamma') == 0.99)
+        # MODULE_SCOPE: ddqn hypothesis excludes bsuite diagnostic envs
+        ~pl.col('env_name').str.ends_with('-bsuite')
+        & (pl.col('gamma') == 0.99)
         & (pl.col('sync_period') == 100)
         & (pl.col('replay.capacity') == 50000)
         & (pl.col('optimizer.inner.lr') == 0.0001)

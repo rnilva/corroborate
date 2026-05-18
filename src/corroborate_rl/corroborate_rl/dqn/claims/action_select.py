@@ -85,6 +85,38 @@ def linear_epsilon(
     return eps_init + (eps_final - eps_init) * progress
 
 
+@claim
+def paused_linear_epsilon(
+    step: jax.Array,
+    *,
+    eps_init: float = 1.0,
+    eps_final: float = 0.05,
+    anneal_steps: int = 10_000,
+    warmup_steps: int = 0,
+) -> jax.Array:
+    """ε holds at `eps_init` during the first `warmup_steps` env
+    steps (the optimizer-warmup window when Q is untrained and its
+    argmax is degenerate), then anneals linearly from `eps_init`
+    to `eps_final` over the next `anneal_steps` env steps.
+
+    Designed to pair with `warmed_update.warmup_steps`: during
+    warmup the Q network has no updates so greedy-on-Q follows a
+    fixed init-arbitrary argmax — ε=eps_init keeps rollouts fully
+    exploratory until training starts. Post-warmup ε behaves as
+    canonical `linear_epsilon`.
+
+    With `warmup_steps=0` this is equivalent to `linear_epsilon`."""
+    assert 0.0 <= eps_final <= eps_init <= 1.0, (
+        f'Kolmogorov axiom: ε must be a probability; got '
+        f'eps_init={eps_init}, eps_final={eps_final}'
+    )
+    assert anneal_steps > 0, f'anneal_steps must be positive; got {anneal_steps}'
+    assert warmup_steps >= 0, f'warmup_steps must be non-negative; got {warmup_steps}'
+    post_warmup_step = jnp.maximum(step - warmup_steps, 0)
+    progress = jnp.minimum(post_warmup_step / anneal_steps, 1.0)
+    return eps_init + (eps_final - eps_init) * progress
+
+
 # ============ Action-selection ============
 
 @claim

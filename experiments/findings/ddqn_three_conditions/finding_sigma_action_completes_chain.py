@@ -116,6 +116,24 @@ EXPECTED: ClusterVerdict = ClusterVerdict.SUPPORTED
 BLOCKED_ON: str | None = None
 
 
+# Scope note 2026-05-18. The bridges in this Finding exclude
+# the `fr_warmup_intervention` corpus from the FR-baseline panel.
+# Rationale: that corpus is a CAUSAL INTERVENTION study (3
+# warmup levels × 30 seeds, separate substrate run with its
+# own σ_action realization) — pooling its observations into
+# the observational chain test conflates two different
+# experimental designs AND introduces substrate-realization
+# noise (warmup probe at γ=0.999 baseline carries σ_action=0.018
+# vs canonical 0.034 at same jens magnitude ≈ 9). The warmup
+# probe's verdict is authored separately in
+# `finding_warmup_rescues_vanilla`.
+#
+# At the canonical-corpus panel (n=120, gamma_sweep_fourrooms +
+# fa_depth_fourrooms + fa_depth_gradient_overlap), the joint
+# partial holds null at +0.06 NS (p≈0.5) — 92% shrinkage from
+# marginal +0.78. All three stages HELD.
+
+
 BRIDGES: tuple[Bridge, ...] = (
     gamma_predicts_sigma_action_residual_at_fr_mlp,
     sigma_action_predicts_jens_residual_at_fr_mlp,
