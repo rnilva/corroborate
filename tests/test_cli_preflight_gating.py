@@ -1,7 +1,8 @@
-"""CLI-level preflight gating tests for `run_sweep.py` and
-`run_hypothesis.py`. The unit-level preflight tests cover
-`preflight()` in isolation; these cover the gating logic that
-decides WHEN to call it.
+"""CLI-level preflight gating tests for `run_sweep.py` and the
+`corroborate hypothesis` subcommand (also reachable via the
+`scripts/run_hypothesis.py` back-compat shim). The unit-level
+preflight tests cover `preflight()` in isolation; these cover the
+gating logic that decides WHEN to call it.
 """
 from __future__ import annotations
 
@@ -12,15 +13,17 @@ from unittest.mock import patch
 import pytest
 
 
-# ============ run_hypothesis.py — _check_and_report uses preflight ============
+# ============ corroborate.cli.hypothesis — _check_and_report uses preflight ============
 
 # We exercise `main()` directly with a mock for `_preflight` so no
 # cloud / JAX work happens. The `_preflight` import in
-# `run_hypothesis.py` is function-local; patch that path.
+# `corroborate.cli.hypothesis` is function-local; patch the source
+# path so any indirect import resolves to the stub.
 
 _HYP_PREFLIGHT_PATH = (
     'corroborate._internals.cloud_auth.preflight'
 )
+_HYP_PRINT_PATH = 'corroborate.cli.hypothesis._print_verdicts'
 
 
 def _write_remote_json(d: Path, remote_root: str) -> None:
@@ -50,8 +53,8 @@ def test_hypothesis_skips_preflight_when_no_ingest(
 
     # Patch `run` so we don't actually evaluate bridges.
     with patch('corroborate.runner.run', return_value={}), \
-         patch('scripts.run_hypothesis._print_verdicts'):
-        from scripts.run_hypothesis import main
+         patch(_HYP_PRINT_PATH):
+        from corroborate.cli.hypothesis import main
         # Use --check mode which returns before the bridge eval +
         # before the preflight block (check is early-return).
         # Instead, use --no-report --no-cache to skip writes.
@@ -85,8 +88,8 @@ def test_hypothesis_skips_preflight_when_no_remote_json(
 
     monkeypatch.setattr(_HYP_PREFLIGHT_PATH, _fake_preflight)
     with patch('corroborate.runner.run', return_value={}), \
-         patch('scripts.run_hypothesis._print_verdicts'):
-        from scripts.run_hypothesis import main
+         patch(_HYP_PRINT_PATH):
+        from corroborate.cli.hypothesis import main
         _ = main([
             'experiments.findings.ddqn',
             '--ingest', str(corpus),
@@ -115,8 +118,8 @@ def test_hypothesis_runs_preflight_when_remote_json_present(
 
     monkeypatch.setattr(_HYP_PREFLIGHT_PATH, _fake_preflight)
     with patch('corroborate.runner.run', return_value={}), \
-         patch('scripts.run_hypothesis._print_verdicts'):
-        from scripts.run_hypothesis import main
+         patch(_HYP_PRINT_PATH):
+        from corroborate.cli.hypothesis import main
         _ = main([
             'experiments.findings.ddqn',
             '--ingest', str(corpus),
@@ -143,8 +146,8 @@ def test_hypothesis_skip_preflight_flag_disables_check(
 
     monkeypatch.setattr(_HYP_PREFLIGHT_PATH, _fake_preflight)
     with patch('corroborate.runner.run', return_value={}), \
-         patch('scripts.run_hypothesis._print_verdicts'):
-        from scripts.run_hypothesis import main
+         patch(_HYP_PRINT_PATH):
+        from corroborate.cli.hypothesis import main
         _ = main([
             'experiments.findings.ddqn',
             '--ingest', str(corpus),
@@ -172,8 +175,8 @@ def test_hypothesis_no_restore_skips_preflight(
 
     monkeypatch.setattr(_HYP_PREFLIGHT_PATH, _fake_preflight)
     with patch('corroborate.runner.run', return_value={}), \
-         patch('scripts.run_hypothesis._print_verdicts'):
-        from scripts.run_hypothesis import main
+         patch(_HYP_PRINT_PATH):
+        from corroborate.cli.hypothesis import main
         _ = main([
             'experiments.findings.ddqn',
             '--ingest', str(corpus),
@@ -195,8 +198,8 @@ def test_hypothesis_profile_exported_to_env_independent_of_preflight(
     monkeypatch.delenv('AWS_PROFILE', raising=False)
     monkeypatch.setattr(_HYP_PREFLIGHT_PATH, lambda *_, **__: None)
     with patch('corroborate.runner.run', return_value={}), \
-         patch('scripts.run_hypothesis._print_verdicts'):
-        from scripts.run_hypothesis import main
+         patch(_HYP_PRINT_PATH):
+        from corroborate.cli.hypothesis import main
         _ = main([
             'experiments.findings.ddqn',
             '--ingest', str(corpus),
@@ -229,8 +232,8 @@ def test_hypothesis_nested_corpus_triggers_preflight(
 
     monkeypatch.setattr(_HYP_PREFLIGHT_PATH, _fake_preflight)
     with patch('corroborate.runner.run', return_value={}), \
-         patch('scripts.run_hypothesis._print_verdicts'):
-        from scripts.run_hypothesis import main
+         patch(_HYP_PRINT_PATH):
+        from corroborate.cli.hypothesis import main
         _ = main([
             'experiments.findings.ddqn',
             '--ingest-all', str(root),
@@ -257,8 +260,8 @@ def test_hypothesis_named_ingest_nested_corpus_triggers_preflight(
 
     monkeypatch.setattr(_HYP_PREFLIGHT_PATH, _fake_preflight)
     with patch('corroborate.runner.run', return_value={}), \
-         patch('scripts.run_hypothesis._print_verdicts'):
-        from scripts.run_hypothesis import main
+         patch(_HYP_PRINT_PATH):
+        from corroborate.cli.hypothesis import main
         _ = main([
             'experiments.findings.ddqn',
             '--ingest', str(parent),
@@ -283,8 +286,8 @@ def test_hypothesis_corrupt_remote_json_fails_cleanly(
 
     monkeypatch.setattr(_HYP_PREFLIGHT_PATH, lambda *_, **__: None)
     with patch('corroborate.runner.run', return_value={}), \
-         patch('scripts.run_hypothesis._print_verdicts'):
-        from scripts.run_hypothesis import main
+         patch(_HYP_PRINT_PATH):
+        from corroborate.cli.hypothesis import main
         rc = main([
             'experiments.findings.ddqn',
             '--ingest', str(corpus),

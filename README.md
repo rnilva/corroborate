@@ -260,17 +260,21 @@ were confirmed; the predicted direction names which prediction.
 
 ```bash
 # Run a hypothesis module / package. Four CLI modes (CACHE_ADDITIVITY.md):
-PYTHONPATH=. uv run python scripts/run_hypothesis.py \
+uv run corroborate hypothesis \
     experiments.findings.ddqn                         # read-only (default)
-PYTHONPATH=. uv run python scripts/run_hypothesis.py \
+uv run corroborate hypothesis \
     experiments.findings.ddqn --check                 # drift report, no work
-PYTHONPATH=. uv run python scripts/run_hypothesis.py \
+uv run corroborate hypothesis \
     experiments.findings.ddqn \
     --ingest <corpus>[,<corpus>...]                   # named ingest
-PYTHONPATH=. uv run python scripts/run_hypothesis.py \
+uv run corroborate hypothesis \
     experiments.findings.ddqn \
     --ingest-all experiments/data/                    # walk full root
 ```
+
+The legacy `python scripts/run_hypothesis.py ...` invocation
+continues to work as a back-compat shim that forwards to the same
+`corroborate.cli.hypothesis.main`.
 
 The runner imports the hypothesis module (e.g.
 `experiments.findings.ddqn`), validates the `Hypothesis`
@@ -408,11 +412,11 @@ fails fast with a typed stage + actionable hint. Covered:
 - `scripts/run_sweep.py` — preflights when the sweep YAML has
   `archive_remote` set; **fails before the sweep loop kicks off**
   (which can be hours of compute). Skip with `--skip-preflight`.
-- `scripts/run_hypothesis.py` — preflights when `--ingest` /
-  `--ingest-all` is used AND `--no-restore` is NOT set AND any
-  corpus under the ingest scope (2 levels deep, mirroring the
-  catalogue's `_MAX_DEPTH`) carries `_remote.json`. Skip with
-  `--skip-preflight`.
+- `corroborate hypothesis` (and the `scripts/run_hypothesis.py`
+  shim) — preflights when `--ingest` / `--ingest-all` is used AND
+  `--no-restore` is NOT set AND any corpus under the ingest scope
+  (2 levels deep, mirroring the catalogue's `_MAX_DEPTH`) carries
+  `_remote.json`. Skip with `--skip-preflight`.
 
 Stages:
 
@@ -485,9 +489,9 @@ uv run corroborate purge experiments/data/<corpus>
 | situation | command |
 |---|---|
 | "what corpora do I have, locally and in cloud?" | `corroborate catalogue` (above) |
-| "I added a new @measurable, refresh the cache" | `run_hypothesis --ingest <corpus>[,…]` or `--ingest-all <root>` |
-| "I deleted a sweep dir, the cache still has its cells" | `run_hypothesis --evict <corpus>` |
-| "drift check, no work" | `run_hypothesis --check` (reports both measurable-side AND input-side drift) |
+| "I added a new @measurable, refresh the cache" | `corroborate hypothesis <module> --ingest <corpus>[,…]` or `--ingest-all <root>` |
+| "I deleted a sweep dir, the cache still has its cells" | `corroborate hypothesis <module> --evict <corpus>` |
+| "drift check, no work" | `corroborate hypothesis <module> --check` (reports both measurable-side AND input-side drift) |
 | "which caches depend on corpus X? did the source drift?" | `cat experiments/data/cache/*.sources.json \| jq` or `runner.check_cache_sources(<cache_path>)` |
 | "trace cols missing on a new measurable" | runner auto-restores from cloud; ensure `.env` is sourced |
 | "free disk on a cloud-backed corpus" | `corroborate purge` (NEVER `rm`) |

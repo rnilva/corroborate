@@ -376,7 +376,7 @@ operational rules below catch the most common mistakes.
   the cache parquet via the `--ingest` and `--evict` paths.
   Query via `runner.check_cache_sources(cache_path)` (typed
   `tuple[SourceDrift, ...]`) or the input-side section of
-  `run_hypothesis --check`. Statuses: `MATCHED`, `DRIFTED`,
+  `corroborate hypothesis <module> --check`. Statuses: `MATCHED`, `DRIFTED`,
   `MISSING_LOCAL`, `NO_SIDECAR_RECORD` (cache pre-dates
   sidecar), `STALE_SIDECAR_ENTRY` (cache evicted but sidecar
   not mirrored — surfaces orphans). Pre-sidecar caches keep
@@ -398,10 +398,12 @@ operational rules below catch the most common mistakes.
   `CloudAuthError(stage, message, hint)` — stages:
   `no_credentials`, `auth_failed`, `bucket_missing`, `network`.
   Covered entries: `corroborate {archive, restore, ls,
-  catalogue --remote-prefix}`, `scripts/run_sweep.py` (gated on
-  `sweep.archive_remote`), and `scripts/run_hypothesis.py`
-  (gated on `--ingest*` + `--no-restore` not set + any
-  `_remote.json` 2 levels deep under the ingest scope). Each
+  catalogue --remote-prefix, hypothesis}` (the last gated on
+  `--ingest*` + `--no-restore` not set + any `_remote.json` 2
+  levels deep under the ingest scope), and `scripts/run_sweep.py`
+  (gated on `sweep.archive_remote`). The
+  `scripts/run_hypothesis.py` back-compat shim forwards to the
+  same `corroborate.cli.hypothesis.main`. Each
   entry accepts `--profile <name>` for explicit profile
   selection and `--skip-preflight` to opt out (the `--profile`
   export to `AWS_PROFILE` still runs when skipped, so downstream

@@ -1,20 +1,27 @@
-"""Cloud archive CLI — `python -m corroborate <subcommand>`.
+"""Top-level CLI — `corroborate <subcommand>` (or `python -m corroborate ...`).
 
 Subcommands:
 
-  archive    upload sweep parquets to remote storage
-  restore    download archived parquets from remote
-  ls         show what is archived for a sweep
-  purge      delete LOCAL copies of files in the manifest
-  catalogue  inventory all corpora under a data root (local + cloud)
+  archive     upload sweep parquets to remote storage
+  restore     download archived parquets from remote
+  ls          show what is archived for a sweep
+  purge       delete LOCAL copies of files in the manifest
+  catalogue   inventory all corpora under a data root (local + cloud)
+  hypothesis  run a bridges-module-as-hypothesis on a data input
 
-The first four operate on one sweep directory. The remote root
-is pinned in the per-sweep manifest after the first `archive`;
-later `restore`/`ls`/`purge` read it from there. `catalogue`
-walks a data root and cross-references with a cloud prefix.
+`archive`/`restore`/`ls`/`purge` operate on one sweep directory.
+The remote root is pinned in the per-sweep manifest after the
+first `archive`; later `restore`/`ls`/`purge` read it from there.
+`catalogue` walks one or more data roots and cross-references with
+a cloud prefix. `hypothesis` is the framework's primary
+research-loop entry point: load a `@claim`-driven hypothesis
+module (e.g. `experiments.findings.ddqn`), ingest a corpus into
+the per-hypothesis cache, and run the bridge evaluations.
 
-Python API mirror lives in `corroborate.cloud` and
-`corroborate.corpus.catalogue`."""
+Python API mirrors:
+- `corroborate.cloud` (archive / restore / ls / purge)
+- `corroborate.corpus.catalogue` (catalogue)
+- `corroborate.runner.run` (hypothesis)."""
 from __future__ import annotations
 
 import argparse
@@ -25,6 +32,7 @@ import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
+from corroborate.cli import hypothesis as _hypothesis
 from corroborate.corpus import catalogue as _catalogue
 from corroborate.corpus import cloud
 from corroborate._internals.argparse import to_mapping
@@ -370,6 +378,14 @@ def _build_parser() -> argparse.ArgumentParser:
              '--remote-prefix is used. See archive --help.',
     )
 
+    p_hyp = sub.add_parser(
+        'hypothesis',
+        help='run a bridges-module-as-hypothesis on a data input '
+             '(e.g. `corroborate hypothesis experiments.findings.ddqn '
+             '--ingest-all experiments/data/`).',
+    )
+    _hypothesis.add_args(p_hyp)
+
     return parser
 
 
@@ -388,6 +404,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _cmd_purge(args)
     if cmd == 'catalogue':
         return _cmd_catalogue(args)
+    if cmd == 'hypothesis':
+        # `hypothesis.dispatch` consumes the parsed Namespace
+        # directly (its arg names are richer + typed via `cast`s
+        # rather than the `to_mapping` + `require_*` narrowing
+        # pattern the other subcommands use). Pass `ns` through.
+        return _hypothesis.dispatch(ns)
     raise ValueError(f'unknown subcommand: {cmd}')
 
 
