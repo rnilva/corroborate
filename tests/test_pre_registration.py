@@ -283,7 +283,10 @@ def test_source_hash_stable_across_cosmetic_changes() -> None:
     )
 
 
-# ============ Tests 5+ live in later commits ============
-# Test 5 (end-to-end audit) lives in the CLI commit (commit 3).
-# Test for manifest-write-at-sweep-launch lives in the runner
-# commit (commit 2).
+# Test 5 (sweep-launch write path) and Test 6 (end-to-end audit)
+# live as:
+#   - sweep-launch write: `src/corroborate_rl/tests/dqn/
+#     test_pre_registration_at_sweep_launch.py` (substrate test;
+#     needs `corroborate_rl.dqn.yaml_sweep`).
+#   - end-to-end audit: the CLI commit (commit 3) adds it to
+#     this file using framework-only deps.

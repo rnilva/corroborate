@@ -160,16 +160,32 @@ class RemoteFile:
 class RemoteManifest:
     """Per-sweep manifest. `remote_root` is the fsspec URI prefix
     (e.g. `s3://bucket/sweeps/ddqn`); each `files` entry's
-    `relpath` joins onto it."""
+    `relpath` joins onto it.
+
+    `pre_registration_uri`: cloud URI of the sweep-launch
+    pre-registration manifest (the `pre_registration.json`
+    sidecar — see `corroborate.core.pre_registration`). Set
+    iff the sweep was pre-registered AND the corpus has been
+    archived. `None` for sweeps without pre-registration AND for
+    legacy archives written before this field landed (JSON
+    field-omitted on serialise, default-None on parse — bytewise
+    backward-compatible with pre-existing `_remote.json`
+    manifests)."""
 
     remote_root: str
     files: tuple[RemoteFile, ...]
+    pre_registration_uri: str | None = None
 
     def as_dict(self) -> Mapping[str, object]:
-        return {
+        out: dict[str, object] = {
             'remote_root': self.remote_root,
             'files': [dict(f.as_dict()) for f in self.files],
         }
+        # Omit when absent so pre-existing manifests round-trip
+        # bytewise unchanged.
+        if self.pre_registration_uri is not None:
+            out['pre_registration_uri'] = self.pre_registration_uri
+        return out
 
     def relpaths(self) -> frozenset[str]:
         """All archived relpaths, as a hashable set for membership
@@ -199,9 +215,22 @@ class RemoteManifest:
                     f"{type(item).__name__}",
                 )
             files.append(RemoteFile.from_dict(item))
+        # `pre_registration_uri` is optional for backward
+        # compatibility with manifests written before priority-3
+        # pre-registration landed.
+        pre_reg_raw = d.get('pre_registration_uri')
+        pre_reg_uri: str | None = None
+        if pre_reg_raw is not None:
+            if not isinstance(pre_reg_raw, str):
+                raise TypeError(
+                    f"manifest 'pre_registration_uri' must be str "
+                    f"or absent, got {type(pre_reg_raw).__name__}",
+                )
+            pre_reg_uri = pre_reg_raw
         return cls(
             remote_root=require_str(d, 'remote_root'),
             files=tuple(files),
+            pre_registration_uri=pre_reg_uri,
         )
 
 
@@ -401,15 +430,28 @@ def _join_remote(remote_root: str, relpath: str) -> str:
 
 
 def _default_files(sweep_dir: Path) -> list[str]:
-    """Default selection: top-level `*.parquet` files in the
-    sweep directory (non-recursive). The `tmp/` shard
+    """Default selection: top-level `*.parquet` files plus the
+    pre-registration manifest sidecar
+    (`pre_registration.json`) if present. The `tmp/` shard
     subdirectory is intentionally excluded — when present, the
     merged top-level parquet supersedes the shards. Users who
-    want shards too pass `--files tmp/<arm>...` explicitly."""
-    return sorted(
+    want shards too pass `--files tmp/<arm>...` explicitly.
+
+    The pre-registration sidecar is opt-in (created by sweeps
+    declaring `pre_registered_bridges` — see
+    `corroborate.core.pre_registration`). Auto-archiving it
+    alongside the parquets mirrors the spec §6 contract: a
+    pre-registered sweep's commitment + corpus travel together
+    to the cloud."""
+    from corroborate.core.pre_registration import MANIFEST_NAME as PRE_REG
+    files = [
         p.name for p in sweep_dir.iterdir()
         if p.is_file() and p.suffix == '.parquet'
-    )
+    ]
+    pre_reg = sweep_dir / PRE_REG
+    if pre_reg.is_file():
+        files.append(PRE_REG)
+    return sorted(files)
 
 
 def _warn_if_trace_schema_incomplete(traces_path: Path) -> None:
@@ -478,6 +520,22 @@ def _warn_if_trace_schema_incomplete(traces_path: Path) -> None:
 
 def _sorted_by_relpath(items: Iterable[RemoteFile]) -> list[RemoteFile]:
     return sorted(items, key=lambda f: f.relpath)
+
+
+def _pre_registration_uri_from(
+    remote_root: str, by_relpath: Mapping[str, RemoteFile],
+) -> str | None:
+    """Derive `RemoteManifest.pre_registration_uri` from the
+    archive's `by_relpath` map. Returns the canonical
+    `<remote_root>/pre_registration.json` URI iff the manifest
+    sidecar was archived (its relpath is in the map); None
+    otherwise."""
+    from corroborate.core.pre_registration import (
+        MANIFEST_NAME as _PRE_REG,
+    )
+    if _PRE_REG not in by_relpath:
+        return None
+    return _join_remote(remote_root, _PRE_REG)
 
 
 # ============ Public API ============
@@ -557,7 +615,20 @@ def archive(
         # touch the cloud — a 0-byte placeholder from an
         # interrupted sweep merge gets caught here rather than
         # silently overwriting the cloud's authoritative copy.
-        if validate:
+        #
+        # `pre_registration.json` is a small JSON sidecar (often
+        # well under the 1 KiB CI5 floor for short manifests) and
+        # has no PAR1 footer; skip the parquet-shaped check for it
+        # so the sidecar rides the same archive path without a
+        # spurious `ArchivePrecondition` failure.
+        from corroborate.core.pre_registration import (
+            MANIFEST_NAME as _PRE_REG_NAME,
+        )
+        is_pre_registration = (
+            relpath == _PRE_REG_NAME
+            or relpath.endswith('/' + _PRE_REG_NAME)
+        )
+        if validate and not is_pre_registration:
             from corroborate.corpus.integrity import (
                 assert_archive_eligible,
             )
@@ -609,16 +680,25 @@ def archive(
             size_bytes=local_size,
             sha256=sha256,
             pushed_at=datetime.now(UTC).isoformat(timespec='seconds'),
-            row_ids=sniff_row_ids(local),
+            # `sniff_row_ids` runs `pl.scan_parquet` on the local
+            # file — fine for parquets, would raise on a JSON
+            # sidecar. Short-circuit non-parquets to an empty
+            # tuple.
+            row_ids=sniff_row_ids(local) if not is_pre_registration else (),
         )
         by_relpath[relpath] = entry
         # Save after every successful file — partial archives
-        # remain consistent.
+        # remain consistent. The `pre_registration_uri` is
+        # populated once we have the final by_relpath; mid-loop
+        # writes leave it None and a final write sets it.
         _save_manifest(
             sweep_dir,
             RemoteManifest(
                 remote_root=remote_root,
                 files=tuple(_sorted_by_relpath(by_relpath.values())),
+                pre_registration_uri=_pre_registration_uri_from(
+                    remote_root, by_relpath,
+                ),
             ),
         )
         purge_targets.append(local)
@@ -626,6 +706,9 @@ def archive(
     final = RemoteManifest(
         remote_root=remote_root,
         files=tuple(_sorted_by_relpath(by_relpath.values())),
+        pre_registration_uri=_pre_registration_uri_from(
+            remote_root, by_relpath,
+        ),
     )
 
     # **Cloud-side manifest mirror**: upload the freshly-saved

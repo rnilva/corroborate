@@ -26,6 +26,9 @@ from typing import Literal, TypeIs
 
 import yaml
 
+from corroborate.bridge.verdict import Verdict
+from corroborate.core.hypothesis import PredictedDirection
+from corroborate.core.pre_registration import BridgeCommitmentInput
 from corroborate.runner.registry import Registry
 from corroborate_rl.dqn.config_loader import (
     InterventionConfig,
@@ -80,6 +83,20 @@ class DQNSweep:
     # - Downstream `--ingest <out_dir>` walks the sub-corpora.
     # - Saves up to ~tens of GB of disk on trace-heavy sweeps.
     merge_top_level: bool = True
+    # Pre-registration commitments. Each entry names a bridge by
+    # fully-qualified import path + the author's predicted
+    # direction + the author's predicted verdict. At sweep launch
+    # `dispatch_sweep` resolves each bridge, hashes its source,
+    # and writes `<out_dir>/pre_registration.json` BEFORE any
+    # cell runs. Empty tuple = no pre-registration (existing
+    # sweeps unaffected; manifest is opt-in).
+    #
+    # YAML form:
+    #   pre_registered_bridges:
+    #     - bridge: pkg.mod.fn_name
+    #       predicted_direction: a_lt_b
+    #       predicted_verdict: held
+    pre_registered_bridges: tuple[BridgeCommitmentInput, ...] = ()
 
     def build_interventions(
         self,
@@ -134,6 +151,7 @@ def _build_sweep(node: Mapping[str, object]) -> DQNSweep:
     defaults = _build_defaults(node)
     gradient_probes = _build_gradient_probes(node)
     merge_top_level = _build_merge_top_level(node)
+    pre_registered_bridges = _build_pre_registered_bridges(node)
     interventions_raw = node.get('interventions')
     if not isinstance(interventions_raw, list):
         raise TypeError(
@@ -151,6 +169,7 @@ def _build_sweep(node: Mapping[str, object]) -> DQNSweep:
         env_binding=env_binding, archive_remote=archive_remote,
         gradient_probes=gradient_probes,
         merge_top_level=merge_top_level,
+        pre_registered_bridges=pre_registered_bridges,
     )
 
 
@@ -217,6 +236,79 @@ def _build_merge_top_level(node: Mapping[str, object]) -> bool:
             f'{type(v).__name__}',
         )
     return v
+
+
+def _build_pre_registered_bridges(
+    node: Mapping[str, object],
+) -> tuple[BridgeCommitmentInput, ...]:
+    """Parse `pre_registered_bridges:` from YAML.
+
+    Empty/absent → empty tuple (sweep is not pre-registered).
+    Otherwise each entry must declare `bridge` (import path),
+    `predicted_direction`, and `predicted_verdict`. Unknown
+    verdict strings or directions raise loudly at load time —
+    we won't burn sweep compute on a typo'd commitment."""
+    raw = node.get('pre_registered_bridges')
+    if raw is None:
+        return ()
+    if not isinstance(raw, list):
+        raise TypeError(
+            f'sweep.pre_registered_bridges must be a list; got '
+            f'{type(raw).__name__}',
+        )
+    raw_typed: list[object] = list(raw)
+    out: list[BridgeCommitmentInput] = []
+    for entry in raw_typed:
+        if not is_str_keyed_mapping(entry):
+            raise TypeError(
+                f'pre_registered_bridges entry must be a mapping; '
+                f'got {type(entry).__name__}',
+            )
+        bridge_name = _require_str(entry, 'bridge')
+        out.append(BridgeCommitmentInput(
+            bridge_name=bridge_name,
+            predicted_direction=_require_predicted_direction(entry),
+            predicted_verdict=_require_predicted_verdict(entry),
+        ))
+    return tuple(out)
+
+
+def _require_predicted_direction(
+    entry: Mapping[str, object],
+) -> PredictedDirection:
+    """Narrow `predicted_direction` to the typed Literal. Match
+    the four allowed strings; anything else is a typo'd
+    commitment that should fail loud at YAML load."""
+    v = entry.get('predicted_direction')
+    if v == 'a_gt_b':
+        return 'a_gt_b'
+    if v == 'a_lt_b':
+        return 'a_lt_b'
+    if v == 'two_sided':
+        return 'two_sided'
+    if v == 'null':
+        return 'null'
+    raise ValueError(
+        f"pre_registered_bridges entry: 'predicted_direction' must "
+        f"be one of ('a_gt_b', 'a_lt_b', 'two_sided', 'null'); "
+        f'got {v!r}',
+    )
+
+
+def _require_predicted_verdict(entry: Mapping[str, object]) -> Verdict:
+    """Narrow `predicted_verdict` to the typed `Verdict` enum.
+    Matches against the same string values as parquet
+    persistence (`Verdict.value`) so the YAML form is
+    'held' / 'no_effect' / 'power_insufficient' / ..."""
+    v = entry.get('predicted_verdict')
+    for verdict in Verdict:
+        if v == verdict.value:
+            return verdict
+    raise ValueError(
+        f"pre_registered_bridges entry: 'predicted_verdict' must "
+        f'be a Verdict value '
+        f'({[v.value for v in Verdict]!r}); got {v!r}',
+    )
 
 
 def _build_defaults(
@@ -467,6 +559,48 @@ def _resolve_measurables(
     return tuple(out)
 
 
+def write_pre_registration_manifest_for_sweep(
+    sweep: DQNSweep,
+) -> Path | None:
+    """Resolve each bridge in `sweep.pre_registered_bridges`,
+    compute its source hash, and write the manifest to
+    `<sweep.out_dir>/pre_registration.json`.
+
+    Empty `pre_registered_bridges` → returns None without
+    touching disk (manifest is opt-in; sweeps without explicit
+    commitments behave identically to the pre-feature baseline).
+
+    Manifests are immutable per spec §5: a second invocation
+    against the same `out_dir` raises `FileExistsError` rather
+    than silently overwriting. Callers that legitimately need to
+    re-commit must delete the corpus and re-run.
+
+    The git HEAD is read via `git rev-parse HEAD` in the
+    framework's repo (`Path.cwd()`); the audit later verifies the
+    SHA exists in `git log --all` and exits with the dedicated
+    `EXIT_GIT_HASH_NOT_FOUND` code if missing. The
+    `sweep_config_hash` is a sha256 of the canonicalised
+    `DQNSweep` dict — a re-run from the same YAML produces a
+    matching hash."""
+    from corroborate.core.pre_registration import (
+        PreRegistrationManifest, asdict_for_hash, build_commitments,
+        compute_sweep_config_hash, get_git_head_sha, now_utc,
+        write_manifest,
+    )
+    if not sweep.pre_registered_bridges:
+        return None
+    commitments = build_commitments(sweep.pre_registered_bridges)
+    sweep_dict = asdict_for_hash(sweep)
+    cfg_hash = compute_sweep_config_hash(sweep_dict)
+    manifest = PreRegistrationManifest(
+        sweep_launched_at=now_utc(),
+        git_commit_hash=get_git_head_sha(),
+        sweep_config_hash=cfg_hash,
+        bridge_commitments=commitments,
+    )
+    return write_manifest(sweep.out_dir, manifest)
+
+
 def dispatch_sweep(sweep: DQNSweep) -> tuple[Path, Path]:
     """Run the sweep end-to-end. For each YAML-loaded
     `InterventionConfig`, decompose into a Hypothesis Protocol-
@@ -551,6 +685,13 @@ def dispatch_sweep(sweep: DQNSweep) -> tuple[Path, Path]:
     sweep.out_dir.mkdir(parents=True, exist_ok=True)
     sentinel = sweep.out_dir / IN_PROGRESS_SENTINEL
     sentinel.touch()
+    # Write the pre-registration manifest BEFORE any cell runs.
+    # Manifests are immutable per spec §5 — `write_pre_registration_
+    # manifest_for_sweep` raises FileExistsError on a second
+    # invocation against the same out_dir. Empty
+    # `pre_registered_bridges` returns None without touching disk
+    # (existing sweeps unaffected).
+    _ = write_pre_registration_manifest_for_sweep(sweep)
     sub_runs: list[Path] = []
     sub_traces: list[Path] = []
     sub_arm_dirs: list[Path] = []
@@ -697,4 +838,5 @@ __all__ = [
     'env_attrs_from_spec',
     'expand_sweep',
     'load_sweep',
+    'write_pre_registration_manifest_for_sweep',
 ]
