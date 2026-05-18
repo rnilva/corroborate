@@ -28,6 +28,7 @@ from experiments.findings.ddqn_sweeps import (
     finding_asterix_g999_smoothness_harm_chain,
     finding_cross_env_outcome_regime_g999,
     finding_pc_cross_env_smoothness,
+    finding_snake_clip_ratchet_regime,
     finding_asterix_gamma_999_harm,
     finding_breakout_gamma_999_help_underpowered,
     finding_ddqn_clip_argmax_harm_chain,
@@ -74,6 +75,9 @@ from experiments.findings.ddqn_sweeps.action_duplicate_fa_mechanism import (
 from experiments.findings.ddqn_sweeps.outcome_regime_g999_cross_env import (
     BRIDGES as _OUTCOME_REGIME_G999_CROSS_ENV,
 )
+from experiments.findings.ddqn_sweeps.snake_clip_ratchet_regime import (
+    BRIDGES as _SNAKE_CLIP_RATCHET_REGIME,
+)
 
 
 # Loose module scope: only bsuite exclusion. HP-sweep bridges set
@@ -96,6 +100,7 @@ BRIDGES = (
     *_PC_CROSS_ENV_SMOOTHNESS,
     *_ACTION_DUPLICATE_FA_MECHANISM,
     *_OUTCOME_REGIME_G999_CROSS_ENV,
+    *_SNAKE_CLIP_RATCHET_REGIME,
     ddqn_full_auc_helps_at_acrobot_k16_dense,
     ddqn_full_auc_null_at_acrobot_k4_dense,
 )
@@ -114,4 +119,5 @@ FINDINGS = (
     finding_pc_cross_env_smoothness,
     finding_action_duplicate_fa_mechanism,
     finding_cross_env_outcome_regime_g999,
+    finding_snake_clip_ratchet_regime,
 )
