@@ -26,6 +26,7 @@ from experiments.findings.ddqn_sweeps import (
     finding_action_duplicate_fa_mechanism,
     finding_asterix_g999_pc_mediator_triangle,
     finding_asterix_g999_smoothness_harm_chain,
+    finding_cross_env_outcome_regime_g999,
     finding_pc_cross_env_smoothness,
     finding_asterix_gamma_999_harm,
     finding_breakout_gamma_999_help_underpowered,
@@ -70,6 +71,9 @@ from experiments.findings.ddqn_sweeps.pc_cross_env_smoothness import (
 from experiments.findings.ddqn_sweeps.action_duplicate_fa_mechanism import (
     BRIDGES as _ACTION_DUPLICATE_FA_MECHANISM,
 )
+from experiments.findings.ddqn_sweeps.outcome_regime_g999_cross_env import (
+    BRIDGES as _OUTCOME_REGIME_G999_CROSS_ENV,
+)
 
 
 # Loose module scope: only bsuite exclusion. HP-sweep bridges set
@@ -91,6 +95,7 @@ BRIDGES = (
     *_PC_MEDIATOR_TRIANGLE,
     *_PC_CROSS_ENV_SMOOTHNESS,
     *_ACTION_DUPLICATE_FA_MECHANISM,
+    *_OUTCOME_REGIME_G999_CROSS_ENV,
     ddqn_full_auc_helps_at_acrobot_k16_dense,
     ddqn_full_auc_null_at_acrobot_k4_dense,
 )
@@ -108,4 +113,5 @@ FINDINGS = (
     finding_asterix_g999_pc_mediator_triangle,
     finding_pc_cross_env_smoothness,
     finding_action_duplicate_fa_mechanism,
+    finding_cross_env_outcome_regime_g999,
 )
