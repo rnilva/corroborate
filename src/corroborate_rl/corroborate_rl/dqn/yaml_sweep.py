@@ -16,7 +16,12 @@ not in the dataclass type.
 
 The split between *shape* (the dataclass) and *dispatch* (the
 function) keeps tests cheap: they load a `DQNSweep` and inspect
-without spinning up the runner."""
+without spinning up the runner.
+
+The substrate-agnostic YAML primitives (`Sweep` Protocol, scalar
+parsers, manifest writer) live in `corroborate.runner.yaml_sweep`;
+this module composes them with DQN-specific env / intervention
+parsing + dispatch."""
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
@@ -26,10 +31,16 @@ from typing import Literal, TypeIs
 
 import yaml
 
-from corroborate.bridge.verdict import Verdict
-from corroborate.core.hypothesis import PredictedDirection
-from corroborate.core.pre_registration import BridgeCommitmentInput
 from corroborate.runner.registry import Registry
+from corroborate.runner.yaml_sweep import (
+    BridgeCommitmentInput,
+    assert_unique_cfg_names,
+    build_archive_remote,
+    build_merge_top_level,
+    build_pre_registered_bridges,
+    require_sweep_str,
+    write_pre_registration_manifest_for_sweep,
+)
 from corroborate_rl.dqn.config_loader import (
     InterventionConfig,
     build_intervention_from_mapping,
@@ -55,7 +66,12 @@ class DQNSweep:
 
     The dataclass is shape-uniform between shared and per-env
     modes. The dispatch routine reads `env_binding` to decide
-    whether to resolve once (shared) or per-env (per_env)."""
+    whether to resolve once (shared) or per-env (per_env).
+
+    Structurally satisfies `corroborate.runner.yaml_sweep.Sweep`
+    (frozen-dataclass fields match the Protocol's read-only
+    `@property` shape — name, out_dir, archive_remote,
+    merge_top_level, pre_registered_bridges)."""
     name: str
     out_dir: Path
     envs: tuple[EnvConfig, ...]
@@ -143,15 +159,15 @@ def load_sweep(path: Path, *, reg: Registry) -> DQNSweep:
 
 
 def _build_sweep(node: Mapping[str, object]) -> DQNSweep:
-    name = _require_str(node, 'name')
-    out_dir = Path(_require_str(node, 'out_dir'))
+    name = require_sweep_str(node, 'name')
+    out_dir = Path(require_sweep_str(node, 'out_dir'))
     envs = _build_envs(node)
     env_binding = _require_env_binding(node)
-    archive_remote = _build_archive_remote(node)
+    archive_remote = build_archive_remote(node)
     defaults = _build_defaults(node)
     gradient_probes = _build_gradient_probes(node)
-    merge_top_level = _build_merge_top_level(node)
-    pre_registered_bridges = _build_pre_registered_bridges(node)
+    merge_top_level = build_merge_top_level(node)
+    pre_registered_bridges = build_pre_registered_bridges(node)
     interventions_raw = node.get('interventions')
     if not isinstance(interventions_raw, list):
         raise TypeError(
@@ -171,16 +187,6 @@ def _build_sweep(node: Mapping[str, object]) -> DQNSweep:
         merge_top_level=merge_top_level,
         pre_registered_bridges=pre_registered_bridges,
     )
-
-
-def _require_str(node: Mapping[str, object], key: str) -> str:
-    v = node.get(key)
-    if not isinstance(v, str):
-        raise TypeError(
-            f'sweep.{key} must be a string; got '
-            f'{type(v).__name__}',
-        )
-    return v
 
 
 def _build_envs(node: Mapping[str, object]) -> tuple[EnvConfig, ...]:
@@ -203,18 +209,6 @@ def _require_env_binding(node: Mapping[str, object]) -> EnvBinding:
     return v
 
 
-def _build_archive_remote(node: Mapping[str, object]) -> str | None:
-    v = node.get('archive_remote')
-    if v is None:
-        return None
-    if isinstance(v, str):
-        return v
-    raise TypeError(
-        f'sweep.archive_remote must be string|null; got '
-        f'{type(v).__name__}',
-    )
-
-
 def _build_gradient_probes(node: Mapping[str, object]) -> bool:
     v = node.get('gradient_probes', True)
     # `isinstance(v, bool)` accepts True/False; `int` would let 0/1
@@ -226,89 +220,6 @@ def _build_gradient_probes(node: Mapping[str, object]) -> bool:
             f'{type(v).__name__}',
         )
     return v
-
-
-def _build_merge_top_level(node: Mapping[str, object]) -> bool:
-    v = node.get('merge_top_level', True)
-    if not isinstance(v, bool):
-        raise TypeError(
-            f'sweep.merge_top_level must be bool; got '
-            f'{type(v).__name__}',
-        )
-    return v
-
-
-def _build_pre_registered_bridges(
-    node: Mapping[str, object],
-) -> tuple[BridgeCommitmentInput, ...]:
-    """Parse `pre_registered_bridges:` from YAML.
-
-    Empty/absent → empty tuple (sweep is not pre-registered).
-    Otherwise each entry must declare `bridge` (import path),
-    `predicted_direction`, and `predicted_verdict`. Unknown
-    verdict strings or directions raise loudly at load time —
-    we won't burn sweep compute on a typo'd commitment."""
-    raw = node.get('pre_registered_bridges')
-    if raw is None:
-        return ()
-    if not isinstance(raw, list):
-        raise TypeError(
-            f'sweep.pre_registered_bridges must be a list; got '
-            f'{type(raw).__name__}',
-        )
-    raw_typed: list[object] = list(raw)
-    out: list[BridgeCommitmentInput] = []
-    for entry in raw_typed:
-        if not is_str_keyed_mapping(entry):
-            raise TypeError(
-                f'pre_registered_bridges entry must be a mapping; '
-                f'got {type(entry).__name__}',
-            )
-        bridge_name = _require_str(entry, 'bridge')
-        out.append(BridgeCommitmentInput(
-            bridge_name=bridge_name,
-            predicted_direction=_require_predicted_direction(entry),
-            predicted_verdict=_require_predicted_verdict(entry),
-        ))
-    return tuple(out)
-
-
-def _require_predicted_direction(
-    entry: Mapping[str, object],
-) -> PredictedDirection:
-    """Narrow `predicted_direction` to the typed Literal. Match
-    the four allowed strings; anything else is a typo'd
-    commitment that should fail loud at YAML load."""
-    v = entry.get('predicted_direction')
-    if v == 'a_gt_b':
-        return 'a_gt_b'
-    if v == 'a_lt_b':
-        return 'a_lt_b'
-    if v == 'two_sided':
-        return 'two_sided'
-    if v == 'null':
-        return 'null'
-    raise ValueError(
-        f"pre_registered_bridges entry: 'predicted_direction' must "
-        f"be one of ('a_gt_b', 'a_lt_b', 'two_sided', 'null'); "
-        f'got {v!r}',
-    )
-
-
-def _require_predicted_verdict(entry: Mapping[str, object]) -> Verdict:
-    """Narrow `predicted_verdict` to the typed `Verdict` enum.
-    Matches against the same string values as parquet
-    persistence (`Verdict.value`) so the YAML form is
-    'held' / 'no_effect' / 'power_insufficient' / ..."""
-    v = entry.get('predicted_verdict')
-    for verdict in Verdict:
-        if v == verdict.value:
-            return verdict
-    raise ValueError(
-        f"pre_registered_bridges entry: 'predicted_verdict' must "
-        f'be a Verdict value '
-        f'({[v.value for v in Verdict]!r}); got {v!r}',
-    )
 
 
 def _build_defaults(
@@ -478,34 +389,6 @@ def build_per_env(
     return tuple(interventions), tuple(envs_aligned)
 
 
-def _assert_unique_cfg_names(
-    configs: Sequence[InterventionConfig],
-) -> None:
-    """Raise `ValueError` if any two configs share `cfg.name`.
-
-    `dispatch_sweep` writes each config to `<out_dir>/<cfg.name>/`;
-    a shared name silently overwrites at merge time. Fires for
-    `env_binding: per_env` when the template's `name` field lacks
-    `{from_env: ...}` substitution and produces post-expansion
-    duplicates across envs. Exposed for the cross-config lint
-    (`tests/test_configs_lint.py`) so the check runs at test
-    time on every YAML, not only at dispatch."""
-    seen: dict[str, int] = {}
-    for cfg in configs:
-        seen[cfg.name] = seen.get(cfg.name, 0) + 1
-    collisions = {n: c for n, c in seen.items() if c > 1}
-    if collisions:
-        raise ValueError(
-            f'configs share output paths — {collisions!r} would '
-            f'overwrite each other at '
-            f'`<out_dir>/<cfg.name>/runs.parquet`. '
-            f'Templating the intervention `name` with '
-            f"`{{from_env: env_name}}` (env_binding='per_env') or "
-            f"switching to env_binding='shared' resolves this. "
-            f'Sweep aborted before any data is written.',
-        )
-
-
 def expand_sweep(
     sweep: DQNSweep, *, reg: Registry,
 ) -> tuple[InterventionConfig, ...]:
@@ -522,7 +405,7 @@ def expand_sweep(
         configs = sweep.build_interventions(reg=reg)
     else:
         configs, _ = build_per_env(sweep, reg=reg)
-    _assert_unique_cfg_names(configs)
+    assert_unique_cfg_names(configs)
     return configs
 
 
@@ -557,48 +440,6 @@ def _resolve_measurables(
         seen.add(m)
         out.append(m)
     return tuple(out)
-
-
-def write_pre_registration_manifest_for_sweep(
-    sweep: DQNSweep,
-) -> Path | None:
-    """Resolve each bridge in `sweep.pre_registered_bridges`,
-    compute its source hash, and write the manifest to
-    `<sweep.out_dir>/pre_registration.json`.
-
-    Empty `pre_registered_bridges` → returns None without
-    touching disk (manifest is opt-in; sweeps without explicit
-    commitments behave identically to the pre-feature baseline).
-
-    Manifests are immutable per spec §5: a second invocation
-    against the same `out_dir` raises `FileExistsError` rather
-    than silently overwriting. Callers that legitimately need to
-    re-commit must delete the corpus and re-run.
-
-    The git HEAD is read via `git rev-parse HEAD` in the
-    framework's repo (`Path.cwd()`); the audit later verifies the
-    SHA exists in `git log --all` and exits with the dedicated
-    `EXIT_GIT_HASH_NOT_FOUND` code if missing. The
-    `sweep_config_hash` is a sha256 of the canonicalised
-    `DQNSweep` dict — a re-run from the same YAML produces a
-    matching hash."""
-    from corroborate.core.pre_registration import (
-        PreRegistrationManifest, asdict_for_hash, build_commitments,
-        compute_sweep_config_hash, get_git_head_sha, now_utc,
-        write_manifest,
-    )
-    if not sweep.pre_registered_bridges:
-        return None
-    commitments = build_commitments(sweep.pre_registered_bridges)
-    sweep_dict = asdict_for_hash(sweep)
-    cfg_hash = compute_sweep_config_hash(sweep_dict)
-    manifest = PreRegistrationManifest(
-        sweep_launched_at=now_utc(),
-        git_commit_hash=get_git_head_sha(),
-        sweep_config_hash=cfg_hash,
-        bridge_commitments=commitments,
-    )
-    return write_manifest(sweep.out_dir, manifest)
 
 
 def dispatch_sweep(sweep: DQNSweep) -> tuple[Path, Path]:
@@ -659,7 +500,7 @@ def dispatch_sweep(sweep: DQNSweep) -> tuple[Path, Path]:
     # field omits an env-attribute substitution (e.g.,
     # `name: ddqn_vs_{from_env: env_name}`); fix the template or
     # switch to `env_binding: shared`.
-    _assert_unique_cfg_names(configs)
+    assert_unique_cfg_names(configs)
 
     env_specs = {
         ec.env_name: get_env_spec(ec.env_name) for ec in sweep.envs

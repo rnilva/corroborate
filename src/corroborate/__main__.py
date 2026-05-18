@@ -34,6 +34,7 @@ from pathlib import Path
 
 from corroborate.cli import audit as _audit
 from corroborate.cli import hypothesis as _hypothesis
+from corroborate.cli import sweep as _sweep
 from corroborate.corpus import catalogue as _catalogue
 from corroborate.corpus import cloud
 from corroborate._internals.argparse import to_mapping
@@ -231,7 +232,17 @@ def _cmd_catalogue(args: Mapping[str, object]) -> int:
     return 0
 
 
-def _build_parser() -> argparse.ArgumentParser:
+def _build_parser(
+    *, argv: Sequence[str] | None = None,
+) -> argparse.ArgumentParser:
+    """Build the top-level `corroborate` parser.
+
+    `argv`, when provided, is threaded into the `sweep` subparser
+    so its substrate-CLI peek + extension loading happens at
+    parser-build time (substrate's `add_args(p_run)` registers
+    substrate-specific options before `parser.parse_args(argv)`
+    runs). When `argv` is None, the sweep subparser registers
+    only framework args; substrate extensions are skipped."""
     parser = argparse.ArgumentParser(
         prog='corroborate',
         description='cloud archive for sweep parquets + corpus '
@@ -394,11 +405,25 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     _audit.add_args(p_audit)
 
+    p_sweep = sub.add_parser(
+        'sweep',
+        help='run a YAML-configured sweep through a substrate '
+             '(`corroborate sweep run <yaml>`).',
+    )
+    _sweep.add_args(p_sweep, argv=argv)
+
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = _build_parser()
+    # Thread argv through the parser so the `sweep` subparser can
+    # peek for `--substrate <name>` and load that substrate's CLI
+    # extensions BEFORE argparse runs (substrate-specific args
+    # then get validated alongside framework args in one parse).
+    effective_argv: Sequence[str] = (
+        argv if argv is not None else sys.argv[1:]
+    )
+    parser = _build_parser(argv=effective_argv)
     ns = parser.parse_args(argv)
     args = to_mapping(ns)
     cmd = require_str(args, 'cmd')
@@ -420,6 +445,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _hypothesis.dispatch(ns)
     if cmd == 'audit':
         return _audit.dispatch(ns)
+    if cmd == 'sweep':
+        return _sweep.dispatch(ns)
     raise ValueError(f'unknown subcommand: {cmd}')
 
 
