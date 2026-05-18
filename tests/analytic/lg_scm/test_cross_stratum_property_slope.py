@@ -116,8 +116,9 @@ def test_cross_stratum_property_slope_monotone_in_mu_x() -> None:
         'monotone Cohen\'s d in μ_x'
     )
     assert result.p_value < 0.01
-    assert result.covariate_name == 'mu_x_cov'
-    # Covariate values should match the input map exactly
+    # Covariate values match the input map exactly (verifies the
+    # env→covariate threading inside the primitive, NOT a pure
+    # readback of an input arg).
     assert sorted(result.covariate_values) == sorted(_ENV_MU_X.values())
     # All Cohen's d should be positive (treatment β > baseline β
     # uniformly) and monotone increasing in μ_x.

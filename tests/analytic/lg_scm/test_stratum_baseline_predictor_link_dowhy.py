@@ -125,8 +125,6 @@ def test_stratum_baseline_predictor_link_recovers_structural_slope() -> None:
         f'expected={expected:.4f}'
     )
     assert result.n_strata == len(_ENVS) * len(_MU_X_LEVELS)
-    assert result.treatment_col == 'v_pred'
-    assert result.outcome_col == 'd_out'
 
 
 def test_stratum_baseline_predictor_link_placebo_drift() -> None:
