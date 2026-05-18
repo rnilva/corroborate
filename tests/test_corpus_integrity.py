@@ -183,6 +183,33 @@ def test_is_in_progress_helper(tmp_path: Path) -> None:
     assert IN_PROGRESS_SENTINEL == '.in_progress'
 
 
+def test_assert_no_nested_corpora_respects_sub_corpora_only_sentinel(
+    tmp_path: Path,
+) -> None:
+    """`.sub_corpora_only` sentinel: parent intentionally contains
+    a flat list of sub-corpora with no own runs.parquet. Without
+    the sentinel this triggers CI1 (pure-nested violation); with
+    it, CI1 silently skips the parent. This is the
+    `merge_top_level: false` opt-out path."""
+    from corroborate.corpus.integrity import (
+        SUB_CORPORA_ONLY_SENTINEL,
+        is_sub_corpora_only,
+    )
+    root = tmp_path / 'data'
+    root.mkdir()
+    parent = root / 'sweep_no_merge'
+    _make_corpus(parent / 'arm_a')
+    _make_corpus(parent / 'arm_b')
+    # Without the sentinel: pure-nested violation.
+    with pytest.raises(NestedCorpusError):
+        assert_no_nested_corpora(root)
+    # With the sentinel: silent skip.
+    (parent / SUB_CORPORA_ONLY_SENTINEL).touch()
+    assert_no_nested_corpora(root)
+    assert is_sub_corpora_only(parent) is True
+    assert SUB_CORPORA_ONLY_SENTINEL == '.sub_corpora_only'
+
+
 # ============ CI3 — cloud-root uniqueness ============
 
 

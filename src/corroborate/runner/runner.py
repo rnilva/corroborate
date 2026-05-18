@@ -2194,6 +2194,7 @@ def _load_directory(
         assert_named_corpora_no_nested,
         assert_no_nested_corpora,
         is_in_progress,
+        is_sub_corpora_only,
     )
     if corpus_dirs is None:
         assert_no_nested_corpora(root)
@@ -2201,6 +2202,25 @@ def _load_directory(
     else:
         assert_named_corpora_no_nested(corpus_dirs)
         sub_dirs_all = list(corpus_dirs)
+    # `.sub_corpora_only` sentinel: a named corpus that's actually
+    # a container for sub-corpora (no top-level runs.parquet of its
+    # own — `dispatch_sweep` with `merge_top_level: false`). Expand
+    # to the sub-dirs that have their own runs.parquet so the walker
+    # ingests them as separate corpora. This makes
+    # `--ingest <parent>` transparent across merged-and-not-merged
+    # sweep outputs.
+    expanded: list[Path] = []
+    for p in sub_dirs_all:
+        if p.is_dir() and is_sub_corpora_only(p):
+            expanded.extend(
+                sorted(
+                    sub for sub in p.iterdir()
+                    if sub.is_dir() and (sub / 'runs.parquet').exists()
+                ),
+            )
+        else:
+            expanded.append(p)
+    sub_dirs_all = expanded
     import time as _time
     measurable_reads = _required_record_keys(required)
     analysis_reads = _analysis_reads_for_bridges(bridges)

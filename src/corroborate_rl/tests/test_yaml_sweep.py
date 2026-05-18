@@ -270,6 +270,45 @@ def test_gradient_probes_rejects_non_bool(
         load_sweep(yaml_path, reg=reg)
 
 
+# ---------- merge_top_level field parsing ----------
+
+
+def test_merge_top_level_default_true(
+    tmp_path: Path, reg: Registry,
+) -> None:
+    yaml_path = tmp_path / 'merge_default.yaml'
+    yaml_path.write_text(_minimal_sweep_yaml(''))
+    s = load_sweep(yaml_path, reg=reg)
+    assert s.merge_top_level is True
+
+
+def test_merge_top_level_explicit_false(
+    tmp_path: Path, reg: Registry,
+) -> None:
+    yaml_path = tmp_path / 'merge_off.yaml'
+    yaml_path.write_text(_minimal_sweep_yaml('merge_top_level: false\n'))
+    s = load_sweep(yaml_path, reg=reg)
+    assert s.merge_top_level is False
+
+
+def test_merge_top_level_explicit_true(
+    tmp_path: Path, reg: Registry,
+) -> None:
+    yaml_path = tmp_path / 'merge_on.yaml'
+    yaml_path.write_text(_minimal_sweep_yaml('merge_top_level: true\n'))
+    s = load_sweep(yaml_path, reg=reg)
+    assert s.merge_top_level is True
+
+
+def test_merge_top_level_rejects_non_bool(
+    tmp_path: Path, reg: Registry,
+) -> None:
+    yaml_path = tmp_path / 'merge_bad.yaml'
+    yaml_path.write_text(_minimal_sweep_yaml('merge_top_level: maybe\n'))
+    with pytest.raises(TypeError, match='merge_top_level must be bool'):
+        load_sweep(yaml_path, reg=reg)
+
+
 def test_sweep_envs_tuple_matches(sweep: DQNSweep) -> None:
     expected_envs = (
         EnvConfig('Catch-bsuite', n_seeds=30, chunk_size=15),

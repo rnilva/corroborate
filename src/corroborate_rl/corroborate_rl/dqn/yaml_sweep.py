@@ -65,6 +65,21 @@ class DQNSweep:
     # `corroborate_rl.dqn.phases._GRADIENT_PROBES_ENABLED` before
     # the sweep loop. Disabling drops ~2× wall-clock on |A|≥12.
     gradient_probes: bool = True
+    # Whether to merge per-intervention parquets into top-level
+    # `<out_dir>/{runs,traces}.parquet`. Default True for backwards
+    # compat. When False, per-intervention sub-corpora remain as
+    # the canonical local artifacts (matching cloud's per-corpus
+    # archive shape) and no merged top-level file is produced.
+    # YAML field `merge_top_level: false` opts out.
+    #
+    # When False:
+    # - Per-intervention sub-dirs `<out_dir>/<cfg.name>/` persist
+    #   locally (instead of being rm'd post-merge).
+    # - Top-level `<out_dir>/runs.parquet` and `traces.parquet`
+    #   are NOT created.
+    # - Downstream `--ingest <out_dir>` walks the sub-corpora.
+    # - Saves up to ~tens of GB of disk on trace-heavy sweeps.
+    merge_top_level: bool = True
 
     def build_interventions(
         self,
@@ -118,6 +133,7 @@ def _build_sweep(node: Mapping[str, object]) -> DQNSweep:
     archive_remote = _build_archive_remote(node)
     defaults = _build_defaults(node)
     gradient_probes = _build_gradient_probes(node)
+    merge_top_level = _build_merge_top_level(node)
     interventions_raw = node.get('interventions')
     if not isinstance(interventions_raw, list):
         raise TypeError(
@@ -134,6 +150,7 @@ def _build_sweep(node: Mapping[str, object]) -> DQNSweep:
         intervention_templates=templates,
         env_binding=env_binding, archive_remote=archive_remote,
         gradient_probes=gradient_probes,
+        merge_top_level=merge_top_level,
     )
 
 
@@ -187,6 +204,16 @@ def _build_gradient_probes(node: Mapping[str, object]) -> bool:
     if not isinstance(v, bool):
         raise TypeError(
             f'sweep.gradient_probes must be bool; got '
+            f'{type(v).__name__}',
+        )
+    return v
+
+
+def _build_merge_top_level(node: Mapping[str, object]) -> bool:
+    v = node.get('merge_top_level', True)
+    if not isinstance(v, bool):
+        raise TypeError(
+            f'sweep.merge_top_level must be bool; got '
             f'{type(v).__name__}',
         )
     return v
@@ -579,6 +606,31 @@ def dispatch_sweep(sweep: DQNSweep) -> tuple[Path, Path]:
 
     final_runs = sweep.out_dir / 'runs.parquet'
     final_traces = sweep.out_dir / 'traces.parquet'
+
+    # Skip top-level merge when YAML config opts out. Per-intervention
+    # sub-corpora persist locally as canonical artifacts, matching
+    # the cloud's per-corpus shape; downstream `--ingest <out_dir>`
+    # transparently walks the sub-corpora via the `.sub_corpora_only`
+    # sentinel below. Saves up to ~tens of GB of disk on trace-heavy
+    # sweeps where the merged top-level is only used for one-shot
+    # analysis before hypothesis-cache ingest evicts it anyway.
+    if not sweep.merge_top_level:
+        # Sentinel removed; sub-dirs intact.
+        if sentinel.exists():
+            try:
+                sentinel.unlink()
+            except OSError:
+                pass
+        # Mark this dir as "intentionally a container of
+        # sub-corpora, no top-level merged parquet" — CI1 skips it,
+        # `--ingest <out_dir>` transparently expands to sub-corpora.
+        from corroborate.corpus.integrity import SUB_CORPORA_ONLY_SENTINEL
+        (sweep.out_dir / SUB_CORPORA_ONLY_SENTINEL).touch()
+        # Return parent out_dir for both — downstream consumers
+        # (e.g., `run_sweep.py` printing the path) treat this as
+        # "walk this directory for sub-corpora".
+        return sweep.out_dir, sweep.out_dir
+
     # If either merge raises, the sentinel stays — subsequent
     # `--ingest-all` walks see "still in progress" and skip the
     # corpus rather than ingest a half-merged parent.

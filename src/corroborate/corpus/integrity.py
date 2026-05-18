@@ -58,6 +58,32 @@ def is_in_progress(corpus_dir: Path) -> bool:
     return (corpus_dir / IN_PROGRESS_SENTINEL).exists()
 
 
+SUB_CORPORA_ONLY_SENTINEL = '.sub_corpora_only'
+"""Filename of the sentinel a sweep dispatcher drops at corpus
+root to signal "this dir is INTENTIONALLY a container of
+sub-corpora, with no top-level merge of its own." Used when the
+dispatcher is configured with `merge_top_level: false`.
+
+Behavior when present at `<corpus_dir>/.sub_corpora_only`:
+- `assert_no_nested_corpora` / `assert_named_corpora_no_nested`:
+  skip the parent's CI1 audit. The "pure-nested" pattern is
+  intentional, not a layout bug.
+- `runner._load_directory`: treats the parent as a data root,
+  walks its sub-directories and ingests them as separate corpora.
+
+Distinct from `.in_progress` (which causes total skip — used for
+mid-flight sweeps). This sentinel signals "completed sweep that
+produces sub-corpora; please walk them." Persistent — not
+removed by any framework step."""
+
+
+def is_sub_corpora_only(corpus_dir: Path) -> bool:
+    """Cheap sentinel check — used by both CI1 and the runner to
+    detect dirs that legitimately contain only sub-corpora and no
+    top-level merged parquet of their own."""
+    return (corpus_dir / SUB_CORPORA_ONLY_SENTINEL).exists()
+
+
 # ============ CI1 — corpora are leaves ============
 
 
@@ -100,12 +126,18 @@ def _check_corpus_no_nested(
     sub: Path,
 ) -> list[NestedCorpusViolation]:
     """Return any nested-corpus violations within `sub`. Returns
-    `[]` when sentinel'd (sweep mid-flight) or genuinely clean.
-    Shared between root-level walk and named-corpora ingest paths
-    so both produce the same shape of error."""
+    `[]` when sentinel'd (sweep mid-flight or sub-corpora-only) or
+    genuinely clean. Shared between root-level walk and named-
+    corpora ingest paths so both produce the same shape of error."""
     if not sub.is_dir():
         return []
     if (sub / IN_PROGRESS_SENTINEL).exists():
+        return []
+    # Sub-corpora-only sentinel: parent intentionally contains a
+    # flat list of sub-corpora with no own runs.parquet. The walker
+    # treats this as a data root; CI1 should not flag the pure-
+    # nested pattern as a violation.
+    if (sub / SUB_CORPORA_ONLY_SENTINEL).exists():
         return []
     out: list[NestedCorpusViolation] = []
     for p in sub.rglob('runs.parquet'):
@@ -412,6 +444,7 @@ def assert_traces_subset_of_runs(corpus_dir: Path) -> None:
 
 __all__ = [
     'IN_PROGRESS_SENTINEL',
+    'SUB_CORPORA_ONLY_SENTINEL',
     'ArchivePrecondition',
     'NestedCorpusError',
     'NestedCorpusViolation',
@@ -425,4 +458,5 @@ __all__ = [
     'assert_unique_remote_root',
     'audit_trace_contamination',
     'is_in_progress',
+    'is_sub_corpora_only',
 ]
