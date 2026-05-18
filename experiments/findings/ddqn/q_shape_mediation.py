@@ -40,11 +40,8 @@ from typing import cast
 import numpy as np
 import numpy.typing as npt
 
-from corroborate.analyses.per_burst_jci_spearman import (
-    PerBurstJciSpearmanResult,
-)
-from corroborate.analyses.per_burst_partial_jci_spearman import (
-    PerBurstPartialJciSpearmanResult,
+from corroborate.analyses.spearman.partial_spearman import (
+    PartialSpearmanResult,
 )
 from corroborate.bridge.bridge import Direction, Tier, claim_bridge
 from corroborate.bridge.verdict import Verdict
@@ -90,7 +87,7 @@ _Q_PER_BURST: _PerBurstMeasurable = cast(
     predicted_direction='a_gt_b',
 )
 def q_action_std_per_burst_link_to_outcome(
-    per_burst_jci_spearman: PerBurstJciSpearmanResult,
+    partial_spearman: PartialSpearmanResult,
     *,
     x: _PerBurstMeasurable = _Q_ACTION_STD_PER_BURST,
     y: _PerBurstMeasurable = MC_RETURN_RAW_PER_BURST_MEAN,
@@ -124,7 +121,7 @@ def q_action_std_per_burst_link_to_outcome(
     `findings_q_shape_env_class_stratification`."""
     del x, y, stratify_by, min_stratum_size
     return partial_spearman_signed_verdict(
-        per_burst_jci_spearman,
+        partial_spearman,
         threshold=rho_threshold, sign=+1, min_strata=min_strata,
     )
 
@@ -138,7 +135,7 @@ def q_action_std_per_burst_link_to_outcome(
     predicted_direction='a_gt_b',
 )
 def q_argmax_margin_per_burst_link_to_outcome(
-    per_burst_jci_spearman: PerBurstJciSpearmanResult,
+    partial_spearman: PartialSpearmanResult,
     *,
     x: _PerBurstMeasurable = _Q_ARGMAX_MARGIN_PER_BURST,
     y: _PerBurstMeasurable = MC_RETURN_RAW_PER_BURST_MEAN,
@@ -160,7 +157,7 @@ def q_argmax_margin_per_burst_link_to_outcome(
     predictor."""
     del x, y, stratify_by, min_stratum_size
     return partial_spearman_signed_verdict(
-        per_burst_jci_spearman,
+        partial_spearman,
         threshold=rho_threshold, sign=+1, min_strata=min_strata,
     )
 
@@ -175,7 +172,7 @@ def q_argmax_margin_per_burst_link_to_outcome(
     predicted_direction='a_gt_b',
 )
 def q_to_mc_coupled__bellman_contraction_baseline(
-    per_burst_jci_spearman: PerBurstJciSpearmanResult,
+    partial_spearman: PartialSpearmanResult,
     *,
     x: _PerBurstMeasurable = _Q_PER_BURST,
     y: _PerBurstMeasurable = MC_RETURN_PER_BURST_MEAN,
@@ -222,7 +219,7 @@ This bridge is the BIAS-side half of the substrate's tautology
     correct form."""
     del x, y, stratify_by, min_stratum_size
     return partial_spearman_signed_verdict(
-        per_burst_jci_spearman,
+        partial_spearman,
         threshold=rho_threshold, sign=+1, min_strata=min_strata,
     )
 
@@ -236,11 +233,11 @@ This bridge is the BIAS-side half of the substrate's tautology
     predicted_direction='a_gt_b',
 )
 def q_action_std_per_burst_link_to_outcome__partial_q(
-    per_burst_partial_jci_spearman: PerBurstPartialJciSpearmanResult,
+    partial_spearman: PartialSpearmanResult,
     *,
     x: _PerBurstMeasurable = _Q_ACTION_STD_PER_BURST,
     y: _PerBurstMeasurable = MC_RETURN_RAW_PER_BURST_MEAN,
-    conditioning: _PerBurstMeasurable = _Q_PER_BURST,
+    conditioning: tuple[_PerBurstMeasurable, ...] = (_Q_PER_BURST,),
     stratify_by: str = 'env_name',
     min_stratum_size: int = 5,
     rho_threshold: float = 0.2,
@@ -261,7 +258,7 @@ def q_action_std_per_burst_link_to_outcome__partial_q(
     """
     del x, y, conditioning, stratify_by, min_stratum_size
     return partial_spearman_signed_verdict(
-        per_burst_partial_jci_spearman,
+        partial_spearman,
         threshold=rho_threshold, sign=+1, min_strata=min_strata,
     )
 

@@ -22,7 +22,7 @@ from collections.abc import Mapping
 
 import numpy as np
 
-from corroborate.analyses.paired_link_per_burst import (
+from corroborate.analyses.link.paired_link_per_burst import (
     paired_link_per_burst,
 )
 from corroborate.measurables.reductions import from_key, reduce_axis

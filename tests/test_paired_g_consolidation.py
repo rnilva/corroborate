@@ -16,7 +16,7 @@ naturally reach — empty cell-sets (NaN g/se contract) and
 policy on hand-built panels."""
 from __future__ import annotations
 
-from corroborate.analyses.paired_g import paired_g
+from corroborate.analyses.paired.paired_g import paired_g
 from corroborate.stats import meta_regress_panel
 from corroborate.corpus.schema import StratumG
 

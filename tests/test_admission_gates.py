@@ -22,7 +22,7 @@ import pytest
 # Importing analyses populates the registry (paired_g lives there).
 import corroborate.analyses  # noqa: F401  # pyright: ignore[reportUnusedImport]
 
-from corroborate.analyses.paired_g import PairedGResult
+from corroborate.analyses.paired.paired_g import PairedGResult
 from corroborate.bridge.admission import (
     AUTO_GATES,
     AdmissionGate,

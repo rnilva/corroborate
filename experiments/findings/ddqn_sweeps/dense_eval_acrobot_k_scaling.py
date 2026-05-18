@@ -28,7 +28,7 @@ import math
 
 import polars as pl
 
-from corroborate.analyses.arm_mean_diff import ArmMeanDiffResult
+from corroborate.analyses.paired.arm_mean_diff import ArmMeanDiffResult
 from corroborate.bridge.bridge import Direction, Tier, claim_bridge
 from corroborate.bridge.verdict import RefutationClass, Verdict
 

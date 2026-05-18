@@ -43,7 +43,7 @@ from __future__ import annotations
 import math
 import zlib
 
-from corroborate.analyses.tautology_audit import tautology_audit
+from corroborate.analyses.diagnostic.tautology_audit import tautology_audit
 
 
 def _det_seed(*parts: object) -> int:

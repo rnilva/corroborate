@@ -28,7 +28,7 @@ sys.path.insert(0, str(REPO / 'src/corroborate_rl'))
 import corroborate.analyses  # noqa: F401  populate registry
 import corroborate_rl.dqn.measurables  # noqa: F401  populate registry
 
-from corroborate.analyses.stratum_delta_link_dowhy import (
+from corroborate.analyses.dowhy.stratum_delta_link_dowhy import (
     stratum_delta_link_dowhy,
 )
 from corroborate_rl.dqn.measurables import (

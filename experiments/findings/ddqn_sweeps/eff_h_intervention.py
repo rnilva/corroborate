@@ -41,7 +41,7 @@ from __future__ import annotations
 
 import polars as pl
 
-from corroborate.analyses.cross_stratum_arm_diff_slope import (
+from corroborate.analyses.link.cross_stratum_arm_diff_slope import (
     CrossStratumArmDiffSlopeResult,
 )
 from corroborate.bridge.bridge import Direction, Tier, claim_bridge

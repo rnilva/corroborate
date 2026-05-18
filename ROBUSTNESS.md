@@ -158,7 +158,11 @@ planned:
   within-stratum variance
 - `meta_regression_per_burst` IVW-vs-equal-weight under stratum
   imbalance
-- `proportion_mediated` linear-mediation assumption
+- `mediation_dowhy` linear-mediation assumption (the
+  primitive's typed `linearity_status` field surfaces the
+  failure modes as `SIGN_FLIPPED` / `OUT_OF_BOUNDS` —
+  diagnostic-already-typed; the robustness probe documents
+  the bias on multicollinear-mediator corpora)
 
 Each follow-up probe is structurally similar: pick the
 primitive's load-bearing distributional or epistemic assumption,

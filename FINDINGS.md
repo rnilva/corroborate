@@ -113,10 +113,14 @@ SURVIVAL envs isn't captured by polarity alone.
   per-unit slope despite the strongest per-cell r). The per-env r
   panel is the load-bearing evidence; the bridges' verdict
   operationalizes it.
-- `proportion_mediated.proportion` (0.27 / 0.46) is a more
-  dimensionally clean alternative to the slope; future bridge
-  authoring across heterogeneous-scale envs should prefer it, OR
-  aggregate per env first via Fisher-z stratified Spearman.
+- Mediator-share readings (0.27 / 0.46 on the legacy v9
+  `proportion_mediated`) were more dimensionally clean than
+  the pooled-OLS slope. `proportion_mediated` was deleted
+  2026-05-18; the canonical replacement is `partial_spearman`
+  (per-env Fisher-z stratified) paired with `mediation_dowhy`'s
+  typed `linearity_status` diagnostic at the same scope. Future
+  bridge authoring across heterogeneous-scale envs should
+  reach for that pair.
 
 ### Reproduction
 

@@ -56,7 +56,7 @@ import numpy as np
 import polars as pl
 import scipy.stats as stats
 
-from corroborate.analyses.cross_stratum_arm_diff_slope import (
+from corroborate.analyses.link.cross_stratum_arm_diff_slope import (
     CrossStratumArmDiffSlopeResult,
 )
 from corroborate.bridge.bridge import Direction, Tier, claim_bridge

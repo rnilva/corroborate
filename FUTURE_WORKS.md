@@ -126,26 +126,30 @@ is settled — but the framing needs settling first.
 
 ## Counterfactual mediation primitive (Pearl NDE/NIE)
 
-**Status:** LIVE. Linear mediation now shipped as
-`proportion_mediated`; counterfactual decomposition still
-deferred.
+**Status:** LIVE. Linear mediation now shipped as the salvaged
+`mediation_dowhy` (typed `linearity_status` diagnostic);
+counterfactual decomposition still deferred.
 
 **Description.** Linear-mediation decomposition (treatment ×
 mediator additive, single-slope assumption) is sufficient for
-most bridge claims; `proportion_mediated` (added 2026-05-05)
-returns the indirect / total share with an `in_unit_interval`
-diagnostic flag. The *counterfactual* decomposition — Pearl's
-natural-direct (NDE) and natural-indirect (NIE) effects —
-re-simulates the mediator's distribution under the
-counterfactual treatment, identifying treatment×mediator
-interactions and nonlinearity that linear-mediation can't.
+most bridge claims; `mediation_dowhy` (salvaged 2026-05-18 from
+the v9 `proportion_mediated`) returns total / direct / indirect
+ATEs + indirect proportion + a typed `linearity_status` field
+that classifies the linear assumption's defensibility on the
+corpus (RELIABLE / SIGN_FLIPPED / OUT_OF_BOUNDS /
+UNIDENTIFIED / POWER_INSUFFICIENT). The *counterfactual*
+decomposition — Pearl's natural-direct (NDE) and natural-
+indirect (NIE) effects — re-simulates the mediator's
+distribution under the counterfactual treatment, identifying
+treatment×mediator interactions and nonlinearity that
+linear-mediation can't.
 
-**Lift gate is empirical, not a-priori.** Per ANALYSIS_RECIPE.md
-§3a, three diagnostic signals indicate linear-mediation has
-broken:
+**Lift gate is empirical, not a-priori.** Three diagnostic
+signals indicate linear-mediation has broken:
 
-1. `proportion_mediated.in_unit_interval == False` (suppressor
-   or overshoot).
+1. `mediation_dowhy.linearity_status in {SIGN_FLIPPED,
+   OUT_OF_BOUNDS}` (suppressor / overshoot / sign-flipped
+   direct ATE — typed at the result surface).
 2. Per-stratum partial-ρ heterogeneity across mediator-binned
    strata (treatment×mediator interaction).
 3. LOESS RMSE materially smaller than linear-fit RMSE on
@@ -153,7 +157,8 @@ broken:
 
 When a bridge's data fires one of these on real corpora, that's
 the cue to author the counterfactual primitive. Until then,
-linear is the right tool.
+linear is the right tool (and the `linearity_status` field tells
+the bridge author when it isn't).
 
 **Likely first triggers** (per the substrate's known findings):
 - Per-burst link panels (memory `findings_minatar_link_attenuation`,
@@ -171,9 +176,11 @@ with NDE, NIE, and bootstrap CIs — implementable on top of
 DoWhy's `mediation_estimand` (which exists in DoWhy but isn't
 wrapped in `corroborate.analyses.dowhy`).
 
-**Lift when:** a bridge author runs `proportion_mediated` on real
-data and sees one of the three diagnostic signals fire, AND the
-bridge's verdict needs the decomposition to be load-bearing.
+**Lift when:** a bridge author runs `mediation_dowhy` on real
+data and the typed `linearity_status` returns SIGN_FLIPPED or
+OUT_OF_BOUNDS at a scope where the bridge's verdict needs the
+decomposition to be load-bearing (rather than just a sibling
+diagnostic alongside `partial_spearman`'s rank-based answer).
 
 ---
 

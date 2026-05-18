@@ -38,13 +38,14 @@ import math
 import numpy as np
 import polars as pl
 
-from corroborate.analyses.paired_continuous_do_dowhy import (
+from corroborate.analyses.dowhy.mediation_dowhy import MediationResult
+from corroborate.analyses.dowhy.paired_continuous_do_dowhy import (
     PairedContinuousDoResult,
 )
-from corroborate.analyses.stratified_partial_spearman import (
-    StratifiedPartialSpearmanResult,
+from corroborate.analyses.panel.stratum_effect_panel import StratumEffectPanel
+from corroborate.analyses.spearman.partial_spearman import (
+    PartialSpearmanResult,
 )
-from corroborate.analyses.stratum_effect_panel import StratumEffectPanel
 from corroborate.bridge.bridge import Direction, Tier, claim_bridge
 from corroborate.bridge.predicates import (
     finite, finite_gt, finite_lt,
@@ -58,8 +59,19 @@ from experiments.findings.ddqn._scope import (
     VANILLA_CONFIG_Q_BOUNDED, VANILLA_JENS_NOISE_FLOOR,
 )
 from experiments.findings.ddqn._verdicts import (
+    mediation_linearity_verdict,
     meta_regression_coefficient_verdict,
     partial_spearman_null_verdict, partial_spearman_signed_verdict,
+)
+
+
+# DAG for staleness → jens → outcome (single-mediator chain +
+# direct path). Used by the linearity-diagnostic sibling for
+# the MinAtar intermediate-sync staleness bridge.
+_STALENESS_JENS_OUTCOME_DAG: tuple[tuple[str, str], ...] = (
+    ('target_staleness_late', 'jensen_gap'),
+    ('jensen_gap', 'eval_best_burst_raw_mean'),
+    ('target_staleness_late', 'eval_best_burst_raw_mean'),
 )
 
 
@@ -73,11 +85,11 @@ from experiments.findings.ddqn._verdicts import (
     predicted_direction='null',
 )
 def argmax_entropy_shadowed_by_jens(
-    stratified_partial_spearman: StratifiedPartialSpearmanResult,
+    partial_spearman: PartialSpearmanResult,
     *,
     x: str = 'argmax_entropy_late',
     y: str = 'eval_best_burst_raw_mean',
-    conditioning: str = 'jensen_gap',
+    conditioning: tuple[str, ...] = ('jensen_gap',),
     stratify_by: str = 'env_name',
     min_stratum_size: int = 5,
     null_max_abs_rho: float = 0.2,
@@ -87,7 +99,7 @@ def argmax_entropy_shadowed_by_jens(
     (null confirmed) when |ρ| < `null_max_abs_rho`."""
     del x, y, conditioning, stratify_by, min_stratum_size
     return partial_spearman_null_verdict(
-        stratified_partial_spearman,
+        partial_spearman,
         max_abs_rho=null_max_abs_rho, min_strata=min_strata,
     )
 
@@ -109,11 +121,11 @@ def argmax_entropy_shadowed_by_jens(
     predicted_direction='a_lt_b',
 )
 def eff_h_polarity_structure_check__goal_envs(
-    stratified_partial_spearman: StratifiedPartialSpearmanResult,
+    partial_spearman: PartialSpearmanResult,
     *,
     x: str = 'effective_horizon',
     y: str = 'eval_best_burst_raw_mean',
-    conditioning: str = 'jensen_gap',
+    conditioning: tuple[str, ...] = ('jensen_gap',),
     stratify_by: str = 'env_name',
     min_stratum_size: int = 5,
     magnitude_threshold: float = 0.3,
@@ -135,7 +147,7 @@ def eff_h_polarity_structure_check__goal_envs(
     `ddqn_sweeps/eff_h_intervention.py`."""
     del x, y, conditioning, stratify_by, min_stratum_size
     return partial_spearman_signed_verdict(
-        stratified_partial_spearman,
+        partial_spearman,
         threshold=magnitude_threshold, sign=-1, min_strata=min_strata,
     )
 
@@ -156,11 +168,11 @@ def eff_h_polarity_structure_check__goal_envs(
     predicted_direction='a_gt_b',
 )
 def eff_h_polarity_structure_check__survival_envs(
-    stratified_partial_spearman: StratifiedPartialSpearmanResult,
+    partial_spearman: PartialSpearmanResult,
     *,
     x: str = 'effective_horizon',
     y: str = 'eval_best_burst_raw_mean',
-    conditioning: str = 'jensen_gap',
+    conditioning: tuple[str, ...] = ('jensen_gap',),
     stratify_by: str = 'env_name',
     min_stratum_size: int = 5,
     magnitude_threshold: float = 0.3,
@@ -178,7 +190,7 @@ def eff_h_polarity_structure_check__survival_envs(
     would require a designed truncation-wrapper sweep."""
     del x, y, conditioning, stratify_by, min_stratum_size
     return partial_spearman_signed_verdict(
-        stratified_partial_spearman,
+        partial_spearman,
         threshold=magnitude_threshold, sign=+1, min_strata=min_strata,
     )
 
@@ -200,11 +212,11 @@ def eff_h_polarity_structure_check__survival_envs(
     predicted_direction='a_lt_b',
 )
 def target_staleness_late_mediates_outcome__minatar_intermediate_sync(
-    stratified_partial_spearman: StratifiedPartialSpearmanResult,
+    partial_spearman: PartialSpearmanResult,
     *,
     x: str = 'target_staleness_late',
     y: str = 'eval_best_burst_raw_mean',
-    conditioning: str = 'jensen_gap',
+    conditioning: tuple[str, ...] = ('jensen_gap',),
     stratify_by: str = 'env_name',
     min_stratum_size: int = 10,
     magnitude_threshold: float = 0.2,
@@ -215,9 +227,56 @@ def target_staleness_late_mediates_outcome__minatar_intermediate_sync(
     -magnitude_threshold (predicted negative)."""
     del x, y, conditioning, stratify_by, min_stratum_size
     return partial_spearman_signed_verdict(
-        stratified_partial_spearman,
+        partial_spearman,
         threshold=magnitude_threshold, sign=-1, min_strata=min_strata,
     )
+
+
+@claim_bridge(
+    source='target_staleness_late',
+    target='eval_best_burst_raw_mean',
+    direction=Direction.INVERSE,
+    tier=Tier.ASSOCIATIONAL,
+    scope=(
+        pl.col('env_name').is_in(['Asterix-MinAtar', 'Breakout-MinAtar'])
+        & pl.col('sync_period').is_in([500, 1500, 3000])
+        & finite('target_staleness_late')
+        & finite('jensen_gap')
+        & finite('eval_best_burst_mean')
+        & VANILLA_CONFIG_Q_BOUNDED
+    ),
+    predicted_direction='null',
+)
+def target_staleness_late_linearity_holds__minatar_intermediate_sync(
+    mediation_dowhy: MediationResult,
+    *,
+    treatment: str = 'target_staleness_late',
+    outcome: str = 'eval_best_burst_raw_mean',
+    mediators: tuple[str, ...] = ('jensen_gap',),
+    dag: tuple[tuple[str, str], ...] = _STALENESS_JENS_OUTCOME_DAG,
+) -> Verdict:
+    """Linearity-diagnostic sibling of
+    `target_staleness_late_mediates_outcome__minatar_intermediate_sync`.
+
+    The canonical bridge asserts the staleness→jens→outcome
+    mediation via rank-based partial Spearman. This sibling
+    asserts that the LINEAR mediation decomposition is ALSO
+    coherent at the same scope —
+    `mediation_dowhy.linearity_status == RELIABLE`.
+
+    Paired with the canonical bridge as
+    `finding_staleness_jens_mediation_robust__minatar`: both
+    HELD → mediation survives both rank-based AND linear
+    identifications, joint evidence stronger than partial_spearman
+    alone. REFUTED here (linearity broken via SIGN_FLIPPED or
+    OUT_OF_BOUNDS) flags the v10 lesson at this scope — the
+    canonical rank-based answer is the trustworthy one
+    standing alone.
+
+    See `mediation_dowhy` module docstring §"What this primitive
+    is FOR" for the per-status semantics."""
+    del treatment, outcome, mediators, dag
+    return mediation_linearity_verdict(mediation_dowhy)
 
 
 # CLAIM 21 — Polarity-stratified cross-config staleness slope.
@@ -333,8 +392,29 @@ def staleness_amplifies_ddqn_outcome__sparse_goal_polyak(
     """Polyak-do(τ) on GOAL polarity: per-pair baseline target
     staleness causally amplifies DDQN's outcome benefit. HELD if
     identified ∧ ATE > threshold ∧ refutations clean. Historical:
-    FR n=120, ATE≈+5. AWAITING DATA (polyak_tau_intervention
-    absent post-rebuild)."""
+    FR n=120, ATE≈+5.
+
+    Uses `paired_continuous_do_dowhy` under the **principled
+    HP-keyed pair_by exception** to the seed-pairing critique:
+    the pair_by tuple includes the swept HP (`target_sync.tau`),
+    so each pair is one (HP_value, Δ_outcome) observation in a
+    dose-response regression. Seed appears in pair_by as the
+    pair-identifier (each seed contributes one (x, y) point per
+    HP value), NOT as a pseudo-replication multiplier on a
+    stratum-level effect size. The seed-pairing critique
+    (`feedback_paired_g_in_rl`) applies to seed-paired Hedges' g
+    forms where seed pairs inflate within-stratum n; it does NOT
+    apply to seed-as-row-id in a regression where each row is
+    one observation.
+
+    Round-3 critic revision (2026-05-17): a brief attempt to
+    migrate to `stratum_baseline_predictor_link_dowhy` (commit
+    f178b4d) was reverted after empirical verification that the
+    migration collapsed the panel from ~119 pairs to 4 HP-buckets
+    (FourRooms-misc × 4 τ values), breaking the bridge's
+    `n_strata_floor=30` and silently losing the historic HELD
+    verdict (ATE≈+2.78). The seed-paired form's data density
+    on a 4-HP polyak sweep is load-bearing for power."""
     del treatment_arm, baseline_arm, treatment_var, treatment_var_arm, outcome
     result = paired_continuous_do_dowhy
     if not result.backdoor.identified:
@@ -383,7 +463,11 @@ def staleness_does_not_amplify_ddqn_outcome__survival_polyak(
 ) -> Verdict:
     """SURVIVAL-polarity companion. Null-form HELD when |ATE| <
     null_band AND identified AND n ≥ floor. Staleness mediation
-    chain BREAKS on SURVIVE polarity. AWAITING DATA."""
+    chain BREAKS on SURVIVE polarity.
+
+    See the GOAL companion for the principled HP-keyed pair_by
+    exception that keeps `paired_continuous_do_dowhy` in scope
+    here."""
     del treatment_arm, baseline_arm, treatment_var, treatment_var_arm, outcome
     result = paired_continuous_do_dowhy
     if not result.backdoor.identified:
@@ -557,6 +641,7 @@ BRIDGES = (
     eff_h_polarity_structure_check__goal_envs,
     eff_h_polarity_structure_check__survival_envs,
     target_staleness_late_mediates_outcome__minatar_intermediate_sync,
+    target_staleness_late_linearity_holds__minatar_intermediate_sync,
     cross_config_staleness_slope_negative__survive,
     # Polyak-do(τ) bridges moved to `experiments.findings.ddqn_sweeps`:
     # they require `target_sync.tau > 0` which is excluded by canonical.

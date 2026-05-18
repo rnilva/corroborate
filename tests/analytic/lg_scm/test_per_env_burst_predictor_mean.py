@@ -13,7 +13,7 @@ from collections.abc import Mapping
 import numpy as np
 import pytest
 
-from corroborate.analyses.mundlak_paired_g_per_burst import (
+from corroborate.analyses.paired.mundlak_paired_g_per_burst import (
     _per_env_burst_predictor_mean,
 )
 

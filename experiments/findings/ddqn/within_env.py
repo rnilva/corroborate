@@ -16,10 +16,10 @@ from types import MappingProxyType
 
 import polars as pl
 
-from corroborate.analyses.cross_stratum_property_slope import (
+from corroborate.analyses.link.cross_stratum_property_slope import (
     CrossStratumPropertySlopeResult,
 )
-from corroborate.analyses.stratum_effect_panel import StratumEffectPanel
+from corroborate.analyses.panel.stratum_effect_panel import StratumEffectPanel
 from corroborate.bridge.bridge import Direction, Tier, claim_bridge
 from corroborate.bridge.verdict import RefutationClass, Verdict
 from corroborate.stats import MetaRegressionResult

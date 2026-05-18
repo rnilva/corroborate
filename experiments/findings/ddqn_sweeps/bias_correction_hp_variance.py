@@ -42,7 +42,7 @@ from __future__ import annotations
 
 import polars as pl
 
-from corroborate.analyses.stratum_baseline_predictor_link_dowhy import (
+from corroborate.analyses.dowhy.stratum_baseline_predictor_link_dowhy import (
     StratumBaselinePredictorLinkDowhyResult,
 )
 from corroborate.bridge.bridge import Direction, Tier, claim_bridge

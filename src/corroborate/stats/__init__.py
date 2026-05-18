@@ -19,6 +19,7 @@ power-checking helpers, and verdict-derivation utilities live
 on the submodule path."""
 from corroborate.stats.effect_size import (
     PooledStats,
+    fisher_z_pool,
     hedges_g_paired,
     random_effects_summary,
     random_effects_verdict,
@@ -37,6 +38,7 @@ __all__ = [
     'MetaRegressionResult',
     'PooledStats',
     'StratumObservation',
+    'fisher_z_pool',
     'hedges_g_paired',
     'meta_regress_panel',
     'meta_regression',

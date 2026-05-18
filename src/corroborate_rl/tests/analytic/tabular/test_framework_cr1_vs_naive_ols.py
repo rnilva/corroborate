@@ -64,7 +64,7 @@ import zlib
 
 import numpy as np
 
-from corroborate.analyses.mundlak_decomposition import mundlak_decomposition
+from corroborate.analyses.paired.mundlak_decomposition import mundlak_decomposition
 
 
 def _det_seed(*parts: object) -> int:

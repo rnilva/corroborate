@@ -24,8 +24,8 @@ from pathlib import Path
 
 import numpy as np
 
-from corroborate.analyses.paired_g import paired_g
-from corroborate.analyses.paired_g_per_burst import paired_g_per_burst
+from corroborate.analyses.paired.paired_g import paired_g
+from corroborate.analyses.paired.paired_g_per_burst import paired_g_per_burst
 from corroborate.measurables.reductions import from_key
 
 # Reuse the cell loaders from the link analysis.

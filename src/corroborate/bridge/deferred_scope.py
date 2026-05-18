@@ -29,7 +29,7 @@ from dataclasses import dataclass
 
 import polars as pl
 
-from corroborate.analyses.stratum_panel import StratumPanel
+from corroborate.analyses.panel.stratum_panel import StratumPanel
 from corroborate.bridge.analysis import Analysis
 
 

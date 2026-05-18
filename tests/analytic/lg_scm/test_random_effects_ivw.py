@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import math
 
-from corroborate.analyses.paired_g import per_env_paired_g_panel
+from corroborate.analyses.paired.paired_g import per_env_paired_g_panel
 from corroborate.corpus.schema import RunRow
 from corroborate.stats.effect_size import random_effects_summary
 

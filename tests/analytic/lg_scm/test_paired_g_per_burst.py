@@ -30,8 +30,8 @@ from __future__ import annotations
 
 import math
 
-from corroborate.analyses.paired_g import paired_g
-from corroborate.analyses.paired_g_per_burst import (
+from corroborate.analyses.paired.paired_g import paired_g
+from corroborate.analyses.paired.paired_g_per_burst import (
     PerBurstStratum,
     paired_g_per_burst,
 )

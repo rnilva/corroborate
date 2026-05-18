@@ -20,7 +20,7 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 from corroborate_rl.dqn import measurables as _dqn_measurables  # noqa: F401
-from corroborate.analyses.proportion_mediated import proportion_mediated as _pm
+from corroborate.analyses.paired.proportion_mediated import proportion_mediated as _pm
 from corroborate.measurables import get_registered
 
 proportion_mediated = _pm.fn

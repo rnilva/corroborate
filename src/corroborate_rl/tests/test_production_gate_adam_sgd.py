@@ -38,7 +38,7 @@ import pytest
 import corroborate.analyses  # noqa: F401  # pyright: ignore[reportUnusedImport]
 import corroborate_rl.dqn.measurables  # noqa: F401  # pyright: ignore[reportUnusedImport]
 
-from corroborate.analyses.paired_g import paired_g
+from corroborate.analyses.paired.paired_g import paired_g
 from corroborate_rl.cell_runner import ArmResult, run_dqn_arm
 from corroborate_rl.dqn.claims.optimizer import adam, sgd
 from corroborate_rl.dqn.dqn import dqn

@@ -519,13 +519,14 @@ different verdicts — the framework refuses to collapse them.
 | `meta_regression_paired_g` | per-stratum Δ regressed on covariates |
 | `meta_regression_per_burst` | per-(stratum, burst) panel meta-regression |
 | `stratified_arm_diff_pooled` | per-stratum **independent-samples** Cohen's d → DL random-effects pool with heterogeneity-flagged verdict (HELD / HELD_WITH_SCOPE_FLAG / NO_EFFECT / POWER_INSUFFICIENT). Pair with `meta_regression` sibling on the same scope for the scope-cluster pattern (HYPOTHESIS_AS_GRAPH.md §3b). Use **this** for cross-env / cross-config pooling — NOT `paired_g_pooled`, which pseudo-replicates by seed (see its module docstring). |
+| `stratum_effect_panel_per_burst` | per-(env, burst) **independent-samples** Cohen's d panel. Walks per-burst NDArray source (same shape as `paired_g_per_burst`) but pools treatment / baseline seeds independently within each (env, burst) → Cohen's d via simple-mean-variance form. Canonical migration target for per-burst phase-consistency bridges that can't use `paired_g_per_burst` under the RL substrate seed-pairing rule. |
 | `mundlak_paired_g_per_burst` | **synthetic SCM tests only** — paired form. Off-limits in RL substrate. |
-| `proportion_mediated` | linear-mediation decomposition: indirect / total share of Δ_target carried by `mediator`. **DEPRECATED** (ratio explodes, lands outside [0, 1] under suppression, first-difference ≠ population slope). Use `stratified_partial_spearman` instead. |
-| `partial_spearman_rho` (graph.discovery) | partial-r of (X, Y) given Z. **Canonical mediation primitive** — rank-based, multicollinearity-robust. |
-| `stratified_partial_spearman_rho` (graph.discovery) | **JCI form**: per-env partial Spearman, Fisher-z-pooled — the canonical adjustment when env is a confound |
-| `stratified_partial_spearman_multi` (graph.discovery + analysis wrapper) | multi-Z generalization: ρ(X, Y \| Z₁, …, Zₖ) for joint-mediation tests. |
+| `partial_spearman` | **Canonical mediation primitive — unified JCI (partial-)Spearman**. Subsumes five legacy variants (`stratified_spearman` / `stratified_partial_spearman` / `stratified_partial_spearman_multi` / `per_burst_jci_spearman` / `per_burst_partial_jci_spearman`). Single result type `PartialSpearmanResult`. Granularity detected from input types: `x/y: str` → per-cell; `x/y: Measurable[..., NDArray]` → per-burst (one observation per (cell, burst) — preserves phase structure). `conditioning: tuple[..., ...] = ()` — empty for marginal, single entry for closed-form first-order partial, k entries for multi-Z OLS-residual partial. Internal dispatch picks the right `graph.discovery` primitive per k. |
+| `partial_spearman_rho` (graph.discovery) | underlying single-Z closed-form first-order partial Spearman (`(rxy − rxz·ryz) / sqrt((1−rxz²)(1−ryz²))`). The `partial_spearman` analysis primitive dispatches single-Z conditioning here for verdict-stability reasons (boundary-case ρ differs from the multi-Z OLS-residual form). |
+| `partial_spearman_rho_multi` / `stratified_partial_spearman_rho_multi` (graph.discovery) | underlying multi-Z OLS-residual primitive. The `partial_spearman` analysis primitive dispatches k≥2 conditioning here. |
+| `stratum_panel_jci_spearman` | per-stratum-panel Spearman for mediation FALSIFICATION (marginal-vs-stratified ρ comparison per stratum). Distinct shape from `partial_spearman` (which iterates observations, not strata) — kept separate. |
 | `dowhy` | DoWhy backdoor / refutation on a typed causal graph |
-| `mediation_dowhy` | DoWhy two-stage mediation: total ATE via backdoor + direct ATE via OLS with mediators as covariates → indirect ATE = total − direct, indirect proportion = indirect / total. **Use the recipe below** — magnitudes are wildly unreliable without prior power + topology gating. |
+| `mediation_dowhy` | DoWhy two-stage mediation with typed `LinearityStatus` diagnostic on the result (`RELIABLE` / `SIGN_FLIPPED` / `OUT_OF_BOUNDS` / `UNIDENTIFIED` / `POWER_INSUFFICIENT`). **Diagnostic, NOT magnitude estimator** — surfaces whether the linear-mediation assumption is defensible on this corpus. Pair with `partial_spearman` as a HYPOTHESIS_AS_GRAPH §3b scope-cluster: both HELD → mediation survives BOTH rank-based AND linear identifications. Magnitudes remain unreliable without prior power + topology gating per the recipe below; the `linearity_status` field makes the failure modes first-class. |
 | `factorial_2x2` | 2×2 factorial interaction Δ |
 | `tautology_audit` | three-check audit (HP shadow / partial-correlation / convergence) |
 | `verdict_distribution` | corpus-level verdict count / class breakdown |
@@ -535,6 +536,80 @@ When proposing an analysis: **check this list first**. New
 inline analyses only when none of the above fits — and even then,
 prefer to extend an existing primitive (or add a sibling) rather
 than copying logic.
+
+### Moderation vs mediation (question-shape clarification)
+
+The above primitives ask **mediation** questions ("does the
+intervention work THROUGH X to affect Y?"). A structurally
+distinct question is **moderation**: "does the intervention
+CHANGE the strength or direction of the X→Y relationship?"
+HYPOTHESIS_AS_GRAPH.md §3b's scope-cluster pattern is
+moderation-shaped (the meta-regression coefficient on an env
+feature IS a moderation test: does the effect size differ by
+context?). The mediation answer comes from
+`partial_spearman_rho` / `mediation_dowhy`; the moderation
+answer at the OUTCOME level comes from `meta_regression_*` on
+the scope-cluster, and at the LINK level from
+`stratum_link_moderation_dowhy` (currently UNCONSUMED — kept
+provisionally for a future moderation-asking bridge).
+
+If a bridge would ask "does the intervention break the link
+between X and Y in some envs but not others?" — that's
+moderation, not mediation. Reach for the moderation primitive,
+NOT a partial-Spearman over Δ-projection (which is a mediation
+question on a different sample shape).
+
+### Methodology debt (out of scope of `corroborate.analyses`)
+
+CLAUDE.md flags `paired_g`, `paired_g_per_burst`,
+`paired_link_per_burst`, and `mundlak_paired_g_per_burst` as
+"off-limits in RL substrate bridges". Status after the
+consolidation:
+
+- **`dqn_bridges.py`** — fully audited (Phase B5,
+  `/tmp/methodology_debt_audit.md`). Of 18 distinct seed-paired
+  consumer bridges, **17 migrated to independent-samples
+  Cohen's d** (`arm_mean_diff` for single-stratum,
+  `meta_regression_unpaired_d_by_nstep` for the n_step slope
+  family, `meta_regression_unpaired_d` for the action-dim
+  meta-regression, `stratum_effect_panel_per_burst` for the
+  per-burst phase-consistency tests). **1 retained as
+  principled exception** with explicit docstring justification:
+  - `ddqn_benefit_scales_with_gamma__discountingchain` —
+    `helped_fraction` per-seed sign-count requires the paired
+    form on the bimodal DC reward distribution.
+
+  The two per-burst phase-consistency bridges
+  (`ddqn_outcome_stable_across_bursts__fourrooms`,
+  `ddqn_outcome_zero_across_bursts__catch`) migrated to the
+  framework's `stratum_effect_panel_per_burst` primitive
+  (per-(env, burst) Cohen's d via independent-samples seed
+  pooling). Zero verdict drift on the canonical cache;
+  saturation cells (Catch's identical per-arm means → NaN d)
+  fall back to a per-burst |mean_t − mean_b| floor check
+  inside the bridge.
+
+- **`experiments/findings/ddqn/mediation.py`** — the polyak τ
+  bridges (`staleness_amplifies_..._sparse_goal_polyak`,
+  `staleness_does_not_amplify_..._survival_polyak`) keep the
+  seed-paired `paired_continuous_do_dowhy` form under the
+  HP-keyed-pair_by principled exception: each pair contributes
+  one (HP_value, Δ_outcome) regression observation in a dose-
+  response analysis. Seed-as-row-id ≠ seed-pseudo-replication
+  of stratum-level effect size.
+
+- **Other findings modules** — audit closed 2026-05-18.
+  Surveyed via grep across `experiments/findings/`: zero
+  bridges outside `dqn_bridges.py` and `ddqn/mediation.py`'s
+  polyak τ pair still use the off-limits seed-paired
+  primitives. The taxonomy that drove the audit remains the
+  contributor heuristic for future bridge-authoring: any
+  bridge whose question depends on a per-pair Δ diagnostic
+  (helped_fraction, per-seed sign histograms, per-burst
+  phase consistency, dose-response per HP value) is a
+  candidate principled exception; bridges that ask "is the
+  treatment-baseline difference real at this stratum?" should
+  reach for `arm_mean_diff` / `stratified_arm_diff_pooled`.
 
 ### Mediation recipe (load-bearing — read before authoring mediation bridges)
 
@@ -574,11 +649,21 @@ The pipeline:
    multicollinearity-robust + bounded-output → reliable
    mediation evidence.
 
-4. **`mediation_dowhy` as DIAGNOSTIC, not magnitude
-   estimator.** Sign-flips (direct/total opposite signs) or
-   proportions outside [0, 1] indicate linear-mediation
-   assumption is broken on this corpus. Read the result as a
-   "linearity is broken" flag, not a decomposition.
+4. **`mediation_dowhy` as DIAGNOSTIC** via the typed
+   `LinearityStatus` field on the result. Surfaces sign-flips
+   (direct/total opposite signs) and proportions outside [0, 1]
+   as first-class enum values (`SIGN_FLIPPED` / `OUT_OF_BOUNDS`)
+   rather than runtime gotchas. RELIABLE means linear
+   decomposition's coherent range; the other failure-mode
+   statuses flag "linear assumption broken on this corpus —
+   `partial_spearman` is the trustworthy answer." The
+   diagnostic-sibling bridge pattern (a `partial_spearman`
+   bridge paired with its linearity sibling at the same scope)
+   forms a HYPOTHESIS_AS_GRAPH §3b scope-cluster — both HELD →
+   robust mediation under both rank-based AND linear
+   identifications. See `finding_bg_jens_mediation_robust__reach`
+   and `finding_staleness_jens_mediation_robust__minatar` for
+   the two canonical instances in the ddqn hypothesis.
 
 5. **Refutations on the total.** Placebo + RCC corroborate the
    foundation; mediation magnitude doesn't inherit
@@ -587,8 +672,20 @@ The pipeline:
 Bridges that just emit `mediation_dowhy.indirect_proportion`
 without the gating pipeline are NOT trusted. The empirical
 example documented in `mediation_dowhy.py`'s module docstring
-(FR × MLP × unshaped × baseline) is the reproducible failure
-mode of skipping this discipline.
+(FR × MLP × unshaped × baseline at γ=0.999) is the reproducible
+failure mode of skipping this discipline; the typed
+`linearity_status = SIGN_FLIPPED` IS the surfaced flag at that
+scope.
+
+`proportion_mediated` was the v9-era ratio-of-noisy-means
+mediation primitive; deleted 2026-05-18 — statistical
+deprecation case: (1) ratio explodes near zero; (2) lands
+outside [0, 1] under suppression; (3) first-difference
+identification doesn't recover population slopes under
+seed-coupled noise (the same critique that puts `paired_g`
+off-limits in RL substrate bridges). `partial_spearman` and
+the salvaged `mediation_dowhy` diagnostic jointly cover the
+surface.
 
 ## Test iteration
 

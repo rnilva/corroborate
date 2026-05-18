@@ -49,7 +49,7 @@ def _det_seed(*parts: object) -> int:
     Python's `hash()` randomizes per process under PYTHONHASHSEED=random."""
     return zlib.adler32(repr(parts).encode()) & 0xFFFF_FFFF
 
-from corroborate.analyses.paired_g_per_burst import (
+from corroborate.analyses.paired.paired_g_per_burst import (
     paired_g_per_burst,
 )
 from corroborate.measurables.reductions import from_key, reduce_axis

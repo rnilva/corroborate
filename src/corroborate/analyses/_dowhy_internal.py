@@ -27,23 +27,30 @@ if TYPE_CHECKING:
 # Type alias — DAG accepted shapes. Coerced to `nx.DiGraph[str]`
 # by `_to_networkx` at call time. PEP 695 lazy alias, so the
 # TYPE_CHECKING imports above are sufficient.
+#
+# Sequence-of-edges accepts both `list` and `tuple` — bridges
+# pass `tuple[tuple[str, str], ...]` as a default arg (immutable
+# class-level constants), while script callers tend to build
+# `list[tuple[str, str]]` inline.
 type DAGLike = (
-    'nx.DiGraph[str] | CausalGraph | list[tuple[str, str]]'
+    'nx.DiGraph[str] | CausalGraph '
+    '| list[tuple[str, str]] | tuple[tuple[str, str], ...]'
 )
 
 
 def _to_networkx(graph: DAGLike) -> 'nx.DiGraph[str]':
     """Coerce a graph spec into `nx.DiGraph[str]`. Accepts an
     `nx.DiGraph` directly; corroborate's `CausalGraph`
-    (`Graph[str, BridgeEdge]`); or a `list[(source, target)]` edge
-    tuple list."""
+    (`Graph[str, BridgeEdge]`); or a sequence of `(source,
+    target)` edge 2-tuples (list or tuple — bridge defaults are
+    typically tuples for immutability)."""
     import networkx as nx
 
     if isinstance(graph, nx.DiGraph):
         return graph
 
     g: nx.DiGraph[str] = nx.DiGraph()
-    if isinstance(graph, list):
+    if isinstance(graph, (list, tuple)):
         for src, tgt in graph:
             g.add_edge(src, tgt)
         return g
@@ -164,6 +171,48 @@ def _backdoor_estimate(
     return df, identified, estimate
 
 
+def backdoor_with_refutations(
+    cells: Iterable[Mapping[str, object]],
+    *,
+    treatment: str,
+    outcome: str,
+    dag: DAGLike,
+    method_name: str = 'backdoor.linear_regression',
+) -> tuple[
+    'BackdoorResult', 'RefutationResult', 'RefutationResult',
+]:
+    """Bundle the 3-call DoWhy chain: backdoor ATE + placebo +
+    RCC refutations, all on the same `(treatment, outcome, dag)`
+    triple. Used by `stratum_*_link_dowhy` analyses that always
+    run the three together — the refutation chain is the
+    methodologically required corroboration, not a separable
+    choice (CLAUDE.md §"Mediation recipe" steps 1+5)."""
+    from corroborate.analyses.dowhy import (
+        backdoor_ate, placebo_refutation,
+        random_common_cause_refutation,
+    )
+    cells_list = list(cells)
+    backdoor = backdoor_ate.fn(
+        cells_list, treatment=treatment, outcome=outcome,
+        dag=dag, method_name=method_name,
+    )
+    placebo = placebo_refutation.fn(
+        cells_list, treatment=treatment, outcome=outcome,
+        dag=dag, method_name=method_name,
+    )
+    rcc = random_common_cause_refutation.fn(
+        cells_list, treatment=treatment, outcome=outcome,
+        dag=dag, method_name=method_name,
+    )
+    return backdoor, placebo, rcc
+
+
+if TYPE_CHECKING:
+    from corroborate.analyses.dowhy import (
+        BackdoorResult, RefutationResult,
+    )
+
+
 __all__ = [
     'DAGLike',
     '_backdoor_estimate',
@@ -172,4 +221,5 @@ __all__ = [
     '_record_keys_for',
     '_refuter_effect',
     '_to_networkx',
+    'backdoor_with_refutations',
 ]

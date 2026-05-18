@@ -19,7 +19,7 @@ import math
 import numpy as np
 import pytest
 
-from corroborate.analyses.mundlak_decomposition import (
+from corroborate.analyses.paired.mundlak_decomposition import (
     MundlakResult,
     mundlak_decomposition,
 )

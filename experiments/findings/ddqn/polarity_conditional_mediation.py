@@ -35,19 +35,28 @@ from __future__ import annotations
 
 import polars as pl
 
-from corroborate.analyses.stratified_partial_spearman import (
-    StratifiedPartialSpearmanResult,
-)
-from corroborate.analyses.stratified_spearman import (
-    StratifiedSpearmanResult,
+from corroborate.analyses.dowhy.mediation_dowhy import MediationResult
+from corroborate.analyses.spearman.partial_spearman import (
+    PartialSpearmanResult,
 )
 from corroborate.bridge.bridge import Direction, Tier, claim_bridge
 from corroborate.bridge.predicates import finite_gt, finite_lt
 from corroborate.bridge.verdict import Verdict
 
 from experiments.findings.ddqn._verdicts import (
+    mediation_linearity_verdict,
     partial_spearman_null_verdict,
     partial_spearman_signed_verdict,
+)
+
+
+# DAG for bg → jens → outcome (single-mediator chain + direct
+# path). Used by the linearity-diagnostic sibling bridge as the
+# `mediation_dowhy` adjustment input.
+_BG_JENS_OUTCOME_DAG: tuple[tuple[str, str], ...] = (
+    ('bootstrap_gap_magnitude', 'jensen_gap'),
+    ('jensen_gap', 'eval_best_burst_raw_mean'),
+    ('bootstrap_gap_magnitude', 'eval_best_burst_raw_mean'),
 )
 
 
@@ -76,10 +85,11 @@ _SURVIVE_SCOPE: pl.Expr = (
     predicted_direction='a_lt_b',
 )
 def bg_outcome_link_held_negative__reach_envs(
-    stratified_spearman: StratifiedSpearmanResult,
+    partial_spearman: PartialSpearmanResult,
     *,
     x: str = 'bootstrap_gap_magnitude',
     y: str = 'eval_best_burst_raw_mean',
+    conditioning: tuple[str, ...] = (),
     stratify_by: str = 'env_name',
     min_stratum_size: int = 5,
     rho_threshold: float = 0.2,
@@ -95,9 +105,9 @@ def bg_outcome_link_held_negative__reach_envs(
     REACH envs. The mediation question (does it flow through
     jens?) is the sibling
     `bg_outcome_fully_mediated_by_jens__reach_envs`."""
-    del x, y, stratify_by, min_stratum_size
+    del x, y, conditioning, stratify_by, min_stratum_size
     return partial_spearman_signed_verdict(
-        stratified_spearman,
+        partial_spearman,
         threshold=rho_threshold, sign=-1, min_strata=min_strata,
     )
 
@@ -111,11 +121,11 @@ def bg_outcome_link_held_negative__reach_envs(
     predicted_direction='null',
 )
 def bg_outcome_fully_mediated_by_jens__reach_envs(
-    stratified_partial_spearman: StratifiedPartialSpearmanResult,
+    partial_spearman: PartialSpearmanResult,
     *,
     x: str = 'bootstrap_gap_magnitude',
     y: str = 'eval_best_burst_raw_mean',
-    conditioning: str = 'jensen_gap',
+    conditioning: tuple[str, ...] = ('jensen_gap',),
     stratify_by: str = 'env_name',
     min_stratum_size: int = 5,
     null_max_abs_rho: float = 0.2,
@@ -136,7 +146,7 @@ def bg_outcome_fully_mediated_by_jens__reach_envs(
     (bias reduction)."""
     del x, y, conditioning, stratify_by, min_stratum_size
     return partial_spearman_null_verdict(
-        stratified_partial_spearman,
+        partial_spearman,
         max_abs_rho=null_max_abs_rho, min_strata=min_strata,
     )
 
@@ -150,10 +160,11 @@ def bg_outcome_fully_mediated_by_jens__reach_envs(
     predicted_direction='null',
 )
 def bg_outcome_link_null__survive_envs(
-    stratified_spearman: StratifiedSpearmanResult,
+    partial_spearman: PartialSpearmanResult,
     *,
     x: str = 'bootstrap_gap_magnitude',
     y: str = 'eval_best_burst_raw_mean',
+    conditioning: tuple[str, ...] = (),
     stratify_by: str = 'env_name',
     min_stratum_size: int = 5,
     null_max_abs_rho: float = 0.2,
@@ -171,15 +182,58 @@ def bg_outcome_link_null__survive_envs(
     mediate). Combined with the REACH bridges, this bridge says:
     on SURVIVE envs DDQN's mech doesn't fire AND there's no bg-
     mediated outcome benefit."""
-    del x, y, stratify_by, min_stratum_size
+    del x, y, conditioning, stratify_by, min_stratum_size
     return partial_spearman_null_verdict(
-        stratified_spearman,
+        partial_spearman,
         max_abs_rho=null_max_abs_rho, min_strata=min_strata,
     )
+
+
+@claim_bridge(
+    source='bootstrap_gap_magnitude',
+    target='eval_best_burst_raw_mean',
+    direction=Direction.DIRECT,
+    tier=Tier.ASSOCIATIONAL,
+    scope=_REACH_SCOPE,
+    predicted_direction='null',
+)
+def bg_outcome_mediation_linearity_holds__reach_envs(
+    mediation_dowhy: MediationResult,
+    *,
+    treatment: str = 'bootstrap_gap_magnitude',
+    outcome: str = 'eval_best_burst_raw_mean',
+    mediators: tuple[str, ...] = ('jensen_gap',),
+    dag: tuple[tuple[str, str], ...] = _BG_JENS_OUTCOME_DAG,
+) -> Verdict:
+    """Linearity-diagnostic sibling of
+    `bg_outcome_fully_mediated_by_jens__reach_envs`.
+
+    The canonical bridge asserts mediation via rank-based partial
+    Spearman (`ρ(bg, outcome | jens) ≈ 0` per-env Fisher-z
+    pooled). This sibling asserts that the LINEAR mediation
+    decomposition is ALSO coherent at this scope —
+    `mediation_dowhy.linearity_status == RELIABLE` (direct/total
+    same sign + indirect_proportion in [0, 1]).
+
+    The pair forms a HYPOTHESIS_AS_GRAPH §3b scope-cluster
+    Finding (`finding_bg_jens_mediation_robust__reach`): when
+    BOTH the rank-based AND linear identifications admit, the
+    mediation claim survives both methodological lenses → joint
+    evidence stronger than partial_spearman alone.
+
+    The sibling REFUTES when linearity_status is SIGN_FLIPPED
+    or OUT_OF_BOUNDS — at that scope the linear assumption is
+    broken (the v10 FR γ-WHY failure mode applies), and the
+    canonical partial_spearman answer is the trustworthy one
+    standing alone. POWER_INSUFFICIENT when DAG identification
+    fails or OLS is rank-deficient."""
+    del treatment, outcome, mediators, dag
+    return mediation_linearity_verdict(mediation_dowhy)
 
 
 BRIDGES = (
     bg_outcome_link_held_negative__reach_envs,
     bg_outcome_fully_mediated_by_jens__reach_envs,
+    bg_outcome_mediation_linearity_holds__reach_envs,
     bg_outcome_link_null__survive_envs,
 )

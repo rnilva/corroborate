@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import polars as pl
 
-from corroborate.analyses.stratified_arm_diff_pooled import (
+from corroborate.analyses.panel.stratified_arm_diff_pooled import (
     stratified_arm_diff_pooled,
 )
 from experiments.findings.ddqn._arms import DDQN_ARM, VANILLA_ARM

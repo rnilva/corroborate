@@ -43,11 +43,8 @@ import corroborate.analyses  # pyright: ignore[reportUnusedImport]
 import corroborate_rl.dqn.measurables  # pyright: ignore[reportUnusedImport]
 
 from corroborate.core.finding import NO_FINDINGS
-from corroborate.analyses.stratified_partial_spearman import (
-    StratifiedPartialSpearmanResult,
-)
-from corroborate.analyses.stratified_spearman import (
-    StratifiedSpearmanResult,
+from corroborate.analyses.spearman.partial_spearman import (
+    PartialSpearmanResult,
 )
 from corroborate.bridge.bridge import Direction, Tier, claim_bridge
 from corroborate.bridge.verdict import RefutationClass, Verdict
@@ -133,7 +130,7 @@ _ALPHA_SWEEP_SCOPE = (
     predicted_direction='a_gt_b',
 )
 def alpha_outcome_slope_per_env__second_layer(
-    stratified_spearman: StratifiedSpearmanResult,
+    partial_spearman: PartialSpearmanResult,
     *,
     x: str = 'effective_alpha',
     y: str = 'eval_best_burst_mean',
@@ -163,10 +160,12 @@ def alpha_outcome_slope_per_env__second_layer(
     negative on net-negative-DDQN envs). JCI pooled-ρ DILUTES
     opposite signs and so cannot directly confirm or refute the
     per-env sign claim. Even with n_strata=4 the pooled
-    primitive is at best a weaker proxy. Author-recommended
-    refactor: replace with `paired_link_per_env` panel-shape
-    bridge (per-env signed link, panel meta-regress on
-    env-level direction). Current pooled form returns
+    primitive is at best a weaker proxy. (The earlier "swap to
+    `paired_link_per_env`" refactor target is no longer
+    available — that primitive was deleted as E1 seed-paired.
+    A per-env signed panel-shape bridge could be built on
+    `stratum_effect_panel` if the sign-aware claim becomes
+    investigative-priority again.) Current pooled form returns
     POWER_INSUFFICIENT in two cases:
       (a) n_strata below the pre-registered floor;
       (b) pooled |ρ| < `rho_threshold` and pooled-ρ is the
@@ -177,10 +176,10 @@ def alpha_outcome_slope_per_env__second_layer(
     convenience): ρ_pooled=+0.166, p=0.0016. POW_INSUF under
     the restored floor is the right verdict on the data we have."""
     del x, y, stratify_by, min_stratum_size
-    if stratified_spearman.n_strata < min_strata:
+    if partial_spearman.n_strata < min_strata:
         return Verdict.POWER_INSUFFICIENT, None
-    rho = stratified_spearman.rho_pooled
-    p = stratified_spearman.p_value
+    rho = partial_spearman.rho_pooled
+    p = partial_spearman.p_value
     if math.isnan(rho) or math.isnan(p):
         return Verdict.POWER_INSUFFICIENT, None
     if rho >= rho_threshold:
@@ -204,7 +203,7 @@ def alpha_outcome_slope_per_env__second_layer(
     predicted_direction='a_lt_b',
 )
 def alpha_jens_slope_per_env__second_layer(
-    stratified_spearman: StratifiedSpearmanResult,
+    partial_spearman: PartialSpearmanResult,
     *,
     x: str = 'effective_alpha',
     y: str = 'jensen_gap',
@@ -242,10 +241,10 @@ def alpha_jens_slope_per_env__second_layer(
     Refutation would mean the bias-correction mechanism doesn't
     scale linearly with α, which would also refute P1's premise."""
     del x, y, stratify_by, min_stratum_size
-    if stratified_spearman.n_strata < min_strata:
+    if partial_spearman.n_strata < min_strata:
         return Verdict.POWER_INSUFFICIENT, None
-    rho = stratified_spearman.rho_pooled
-    p = stratified_spearman.p_value
+    rho = partial_spearman.rho_pooled
+    p = partial_spearman.p_value
     if math.isnan(rho) or math.isnan(p):
         return Verdict.POWER_INSUFFICIENT, None
     if rho <= rho_threshold:
@@ -265,11 +264,11 @@ def alpha_jens_slope_per_env__second_layer(
     predicted_direction='a_lt_b',
 )
 def intrinsic_penalty_scales_with_bootstrap_gap__second_layer(
-    stratified_partial_spearman: StratifiedPartialSpearmanResult,
+    partial_spearman: PartialSpearmanResult,
     *,
     x: str = 'ddqn_bootstrap_gap_late',
     y: str = 'eval_best_burst_mean',
-    conditioning: str = 'effective_alpha',
+    conditioning: tuple[str, ...] = ('effective_alpha',),
     stratify_by: str = 'env_name',
     min_stratum_size: int = 5,
     rho_threshold: float = -0.3,
@@ -303,10 +302,10 @@ def intrinsic_penalty_scales_with_bootstrap_gap__second_layer(
     the second-layer theorem's intrinsic_penalty prediction fails
     on the env with the most α-sweep data."""
     del x, y, conditioning, stratify_by, min_stratum_size
-    if stratified_partial_spearman.n_strata < min_strata:
+    if partial_spearman.n_strata < min_strata:
         return Verdict.POWER_INSUFFICIENT, None
-    rho = stratified_partial_spearman.rho_pooled
-    p = stratified_partial_spearman.p_value
+    rho = partial_spearman.rho_pooled
+    p = partial_spearman.p_value
     if math.isnan(rho) or math.isnan(p):
         return Verdict.POWER_INSUFFICIENT, None
     if rho <= rho_threshold:

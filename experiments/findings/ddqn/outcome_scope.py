@@ -17,14 +17,14 @@ from types import MappingProxyType
 
 import polars as pl
 
-from corroborate.analyses.cross_stratum_property_slope import (
+from corroborate.analyses.link.cross_stratum_property_slope import (
     CrossStratumPropertySlopeResult,
 )
-from corroborate.analyses.stratified_arm_diff_pooled import (
+from corroborate.analyses.panel.stratified_arm_diff_pooled import (
     StratifiedArmDiffPooledResult,
 )
-from corroborate.analyses.stratified_partial_spearman import (
-    StratifiedPartialSpearmanResult,
+from corroborate.analyses.spearman.partial_spearman import (
+    PartialSpearmanResult,
 )
 from corroborate.bridge.bridge import Direction, Tier, claim_bridge
 from corroborate.bridge.verdict import RefutationClass, Verdict
@@ -173,11 +173,11 @@ def ddqn_helps_under_three_gate_scope__cross_env(
     predicted_direction='a_gt_b',
 )
 def clip_wedge_predicts_outcome__polarity_moderated__dormant_scope(
-    stratified_partial_spearman: StratifiedPartialSpearmanResult,
+    partial_spearman: PartialSpearmanResult,
     *,
     x: str = 'clip_wedge_polarity_aligned',
     y: str = 'eval_best_burst_raw_mean',
-    conditioning: str = 'jensen_gap',
+    conditioning: tuple[str, ...] = ('jensen_gap',),
     stratify_by: str = 'env_name',
     min_stratum_size: int = 5,
     min_rho: float = 0.2,
@@ -190,9 +190,9 @@ def clip_wedge_predicts_outcome__polarity_moderated__dormant_scope(
     env_reward_polarity)` folds polarity-moderation into a single
     predictor. HELD if pooled partial-r ≥ `min_rho`."""
     del x, y, conditioning, stratify_by, min_stratum_size
-    if stratified_partial_spearman.n_strata < min_strata:
+    if partial_spearman.n_strata < min_strata:
         return Verdict.POWER_INSUFFICIENT
-    rho = stratified_partial_spearman.rho_pooled
+    rho = partial_spearman.rho_pooled
     if math.isnan(rho):
         return Verdict.POWER_INSUFFICIENT
     if rho >= min_rho:

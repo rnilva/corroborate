@@ -41,10 +41,10 @@ import math
 import polars as pl
 from scipy.stats import norm
 
-from corroborate.analyses.cross_stratum_arm_diff_partial_spearman import (
+from corroborate.analyses.link.cross_stratum_arm_diff_partial_spearman import (
     CrossStratumArmDiffPartialSpearmanResult,
 )
-from corroborate.analyses.stratified_arm_diff_pooled import (
+from corroborate.analyses.panel.stratified_arm_diff_pooled import (
     StratifiedArmDiffPooledResult,
 )
 from corroborate.bridge.bridge import Direction, Tier, claim_bridge

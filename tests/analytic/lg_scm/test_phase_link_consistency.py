@@ -12,7 +12,7 @@ import math
 
 import pytest
 
-from corroborate.analyses.paired_link_per_burst import (
+from corroborate.analyses.link.paired_link_per_burst import (
     PerBurstLinkResult,
     PerBurstLinkStratum,
     phase_link_consistency,

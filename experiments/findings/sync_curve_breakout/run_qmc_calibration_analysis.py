@@ -27,7 +27,7 @@ import numpy as np
 import polars as pl
 from scipy.stats import spearmanr
 
-from corroborate.analyses.paired_g import paired_g
+from corroborate.analyses.paired.paired_g import paired_g
 from corroborate.corpus.schema import StratumG
 from corroborate.graph.discovery import (
     partial_spearman_rho, partial_spearman_rho_multi,

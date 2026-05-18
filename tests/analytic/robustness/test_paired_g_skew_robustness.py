@@ -63,7 +63,7 @@ from collections.abc import Callable, Mapping
 import numpy as np
 import numpy.typing as npt
 
-from corroborate.analyses.paired_g import paired_g
+from corroborate.analyses.paired.paired_g import paired_g
 
 
 def _det_seed(*parts: object) -> int:

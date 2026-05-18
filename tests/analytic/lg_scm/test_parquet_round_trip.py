@@ -31,8 +31,8 @@ import math
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-from corroborate.analyses.paired_g import paired_g
-from corroborate.analyses.paired_g_per_burst import paired_g_per_burst
+from corroborate.analyses.paired.paired_g import paired_g
+from corroborate.analyses.paired.paired_g_per_burst import paired_g_per_burst
 from corroborate.corpus.persistence import (
     read_runrows,
     read_tracerows,

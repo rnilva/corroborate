@@ -22,8 +22,8 @@ import zlib
 
 import numpy as np
 
-from corroborate.analyses.cliff_delta_paired import cliff_delta_paired
-from corroborate.analyses.paired_g import paired_g
+from corroborate.analyses.paired.cliff_delta_paired import cliff_delta_paired
+from corroborate.analyses.paired.paired_g import paired_g
 
 
 def _det_seed(*parts: object) -> int:

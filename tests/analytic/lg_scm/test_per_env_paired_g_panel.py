@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from corroborate.analyses.paired_g import per_env_paired_g_panel
+from corroborate.analyses.paired.paired_g import per_env_paired_g_panel
 
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
 from tests.analytic.lg_scm.runner import run_paired_arms

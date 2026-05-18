@@ -27,7 +27,7 @@ import polars as pl
 
 import corroborate.analyses  # noqa: F401  # pyright: ignore[reportUnusedImport]
 
-from corroborate.analyses.paired_g import PairedGResult
+from corroborate.analyses.paired.paired_g import PairedGResult
 from corroborate.bridge.bridge import (
     Direction, Tier, claim_bridge, evaluate,
 )

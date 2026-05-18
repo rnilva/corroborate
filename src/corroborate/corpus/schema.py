@@ -324,9 +324,9 @@ class StratumG[K]:
     type — `str` for env-strata, `tuple[str, int]` for (env,
     burst), or whatever the substrate uses.
 
-    Per-stratum analyses (`paired_g_pooled`, `paired_g_per_burst`,
-    panel meta-regression) produce sequences of these. The
-    sibling `StratumObservation` in `corroborate.stats.meta_regression`
+    Per-stratum analyses (`paired_g_per_burst`, panel
+    meta-regression) produce sequences of these. The sibling
+    `StratumObservation` in `corroborate.stats.meta_regression`
     extends the shape with a `covariates: Mapping[str, float]`
     field for covariate-bearing meta-regression."""
     stratum_id: K

@@ -54,7 +54,7 @@ import zlib
 
 import numpy as np
 
-from corroborate.analyses.paired_g import paired_g
+from corroborate.analyses.paired.paired_g import paired_g
 from corroborate.stats.effect_size import (
     I2_THRESHOLD,
     random_effects_summary,

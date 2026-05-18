@@ -25,7 +25,7 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping
 
-from corroborate.analyses.meta_regression_per_burst import (
+from corroborate.analyses.panel.meta_regression_per_burst import (
     meta_regression_per_burst,
 )
 from corroborate.measurables.reductions import from_key, reduce_axis

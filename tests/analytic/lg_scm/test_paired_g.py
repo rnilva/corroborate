@@ -26,7 +26,7 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping, Sequence
 
-from corroborate.analyses.paired_g import paired_g
+from corroborate.analyses.paired.paired_g import paired_g
 from corroborate.corpus.schema import RunRow
 
 from tests.analytic.lg_scm.composition import LinearGaussianSCM

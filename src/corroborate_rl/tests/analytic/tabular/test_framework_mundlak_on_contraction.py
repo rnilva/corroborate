@@ -69,7 +69,7 @@ import numpy as np
 import numpy.typing as npt
 
 from corroborate import measurable
-from corroborate.analyses.mundlak_paired_g_per_burst import (
+from corroborate.analyses.paired.mundlak_paired_g_per_burst import (
     mundlak_paired_g_per_burst,
 )
 from corroborate.measurables.reductions import from_key, reduce_axis

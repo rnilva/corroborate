@@ -20,8 +20,8 @@ import zlib
 
 import numpy as np
 
-from corroborate.analyses.bootstrap_paired_g import bootstrap_paired_g
-from corroborate.analyses.paired_g import paired_g
+from corroborate.analyses.paired.bootstrap_paired_g import bootstrap_paired_g
+from corroborate.analyses.paired.paired_g import paired_g
 
 
 def _det_seed(*parts: object) -> int:

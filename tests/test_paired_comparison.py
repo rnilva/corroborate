@@ -19,7 +19,7 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping
 
-from corroborate.analyses.paired_comparison import paired_comparison
+from corroborate.analyses.paired.paired_comparison import paired_comparison
 
 
 def _cell(

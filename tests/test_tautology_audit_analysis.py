@@ -21,7 +21,7 @@ import pytest
 
 import corroborate.analyses  # noqa: F401  # pyright: ignore[reportUnusedImport]
 
-from corroborate.analyses.tautology_audit import tautology_audit
+from corroborate.analyses.diagnostic.tautology_audit import tautology_audit
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent

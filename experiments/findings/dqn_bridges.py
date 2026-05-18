@@ -19,7 +19,7 @@ artifact the architecture promises.
 from __future__ import annotations
 
 import math
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Mapping
 from functools import partial
 from typing import Literal
 
@@ -29,7 +29,6 @@ import polars as pl
 # resolution by parameter name succeeds.
 import corroborate.analyses  # noqa: F401  # pyright: ignore[reportUnusedImport]
 
-from corroborate.core.finding import NO_FINDINGS
 
 # Substrate measurables (jensen_gap, jensen_dormancy_*, eval_*,
 # etc.) are registered by importing the rl.dqn module — without
@@ -41,20 +40,23 @@ import corroborate_rl.dqn.measurables  # noqa: F401  # pyright: ignore[reportUnu
 from corroborate.analyses.dowhy import (
     BackdoorResult, RefutationResult,
 )
-from corroborate.analyses.factorial_2x2 import Factorial2x2Result
-from corroborate.analyses.paired_g import PairedGResult
-from corroborate.analyses.paired_g_per_burst import (
-    PerBurstResult, panel_for_env,
+from corroborate.analyses.dowhy.stratum_delta_link_dowhy import (
+    StratumDeltaLinkDowhyResult,
 )
-from corroborate.analyses.paired_g_pooled import (
-    PooledPairedGResult,
+from corroborate.analyses.paired.arm_mean_diff import ArmMeanDiffResult
+from corroborate.analyses.paired.factorial_2x2 import Factorial2x2Result
+from corroborate.analyses.paired.paired_g import PairedGResult
+from corroborate.analyses.panel.stratified_arm_diff_pooled import (
+    StratifiedArmDiffPooledResult,
+)
+from corroborate.analyses.panel.stratum_effect_panel_per_burst import (
+    PerBurstPanelDResult, panel_for_env_d,
 )
 from corroborate_rl.env_catalogue import SOLVE_THRESHOLDS
-from corroborate.analyses.tautology_audit import AuditResult
-from corroborate.analyses.verdict_distribution import (
+from corroborate.analyses.diagnostic.tautology_audit import AuditResult
+from corroborate.analyses.diagnostic.verdict_distribution import (
     VerdictDistributionResult,
 )
-from corroborate.analyses.panel import per_stratum_panel
 from corroborate.bridge.analysis import analysis
 from corroborate.bridge.bridge import (
     Direction, Tier, claim_bridge,
@@ -63,10 +65,9 @@ from corroborate.bridge.predicates import (
     finite_ge, finite_lt, partition_aggregate,
 )
 from corroborate.core.intervention import ArmRole, DoEffect, Intervention
-from corroborate.corpus.schema import StratumG
 from corroborate.measurables import Measurable
 from corroborate.stats import MetaRegressionResult
-from corroborate.stats.meta_regression import Pool, meta_regress_panel
+from corroborate.stats.meta_regression import Pool
 from corroborate.bridge.verdict import Verdict
 from corroborate_rl.dqn.claims.bootstrap import (
     bootstrap, double_greedify, expectile_greedify,
@@ -115,6 +116,19 @@ EXPECTILE_SWAP = Intervention(
 # (expectile-vs-DDQN, expectile-vs-vanilla) override via the
 # per-decorator `source = DoEffect(...)` kwarg.
 INTERVENTION = DoEffect(arms=((), (DDQN_SWAP,)))
+
+# Canonical arm keys for the expectile-vs-vanilla pair. Bridges
+# with `source='<measurable_name>'` (link / mediation bridges)
+# don't get arms auto-injected from a `DoEffect` source, so they
+# need explicit string keys as defaulted kwargs. Computed at
+# module load via `DoEffect.arm_keys()` so the canonical
+# fingerprint stays in lockstep with `EXPECTILE_SWAP`'s
+# replacement (no hand-pasted hashes that go stale).
+_EXPECTILE_VS_VANILLA_ARMS: tuple[str, ...] = (
+    DoEffect(arms=((), (EXPECTILE_SWAP,))).arm_keys()
+)
+_VANILLA_ARM = _EXPECTILE_VS_VANILLA_ARMS[0]  # 'baseline'
+_EXPECTILE_ARM = _EXPECTILE_VS_VANILLA_ARMS[1]
 
 
 # ============ Canonical training-regime envelopes ============
@@ -261,17 +275,28 @@ _FOURROOMS_CANONICAL_REGIME: pl.Expr = (
 #   CartPole-v1  |A|=2 g=+0.090 POWER_INSUFFICIENT (sign wrong)
 
 
-def _ddqn_reduces_gap_holds_when(paired_g: PairedGResult) -> Verdict:
+def _ddqn_reduces_gap_holds_when(arm_diff: ArmMeanDiffResult) -> Verdict:
     """Shared threshold logic for the per-env DDQN-reduces-gap
     bridges. Sign opposes prediction (DDQN expected to *reduce*
-    gap, so positive g is sign-wrong) → POWER_INSUFFICIENT;
-    n_pairs < 30 → POWER_INSUFFICIENT; else HELD when |g|≥0.3
-    and p<0.05."""
-    if paired_g.n_pairs < 30:
+    gap, so positive d is sign-wrong) → POWER_INSUFFICIENT;
+    min(n_t, n_b) < 30 → POWER_INSUFFICIENT; else HELD when
+    |d|≥0.3 and Welch p<0.05.
+
+    Migrated from seed-paired Hedges' g (E1 in RL substrate per
+    CLAUDE.md) to independent-samples Cohen's d. Thresholds and
+    p-cutoff are preserved by magnitude; SE-shape changes (Welch
+    rather than paired SE) — heterogeneous variances now propagate
+    cleanly through Welch instead of being absorbed by within-
+    pair pairing."""
+    d = arm_diff.standardized_effect
+    p_value = arm_diff.mean_diff_p_value
+    if min(arm_diff.n_treatment, arm_diff.n_baseline) < 30:
         return Verdict.POWER_INSUFFICIENT
-    if paired_g.g >= 0:
+    if math.isnan(d):
+        return Verdict.POWER_INSUFFICIENT
+    if d >= 0:
         return Verdict.POWER_INSUFFICIENT  # sign opposes prediction
-    if paired_g.g < -0.3 and paired_g.p_value < 0.05:
+    if d < -0.3 and p_value < 0.05:
         return Verdict.HELD
     return Verdict.NO_EFFECT
 
@@ -280,20 +305,20 @@ def _ddqn_reduces_gap_holds_when(paired_g: PairedGResult) -> Verdict:
     source=INTERVENTION,
     target='jensen_gap',
     direction=Direction.INVERSE,
-    tier=Tier.ASSOCIATIONAL,
+    tier=Tier.INTERVENTIONAL,
     scope=_ACTION_DIM_SWEEP_REGIME & (pl.col('env_name') == 'Acrobot-v1'),
 )
 def ddqn_reduces_jensen_gap__acrobot(
-    paired_g: PairedGResult,
+    arm_mean_diff: ArmMeanDiffResult,
 ) -> Verdict:
-    return _ddqn_reduces_gap_holds_when(paired_g)
+    return _ddqn_reduces_gap_holds_when(arm_mean_diff)
 
 
 @claim_bridge(
     source=INTERVENTION,
     target='jensen_gap',
     direction=Direction.INVERSE,
-    tier=Tier.ASSOCIATIONAL,
+    tier=Tier.INTERVENTIONAL,
     # Pin total_steps + capacity; the action-dim regime alone
     # leaves both varying for Q-bounded envs (Catch).
     scope=(
@@ -304,16 +329,16 @@ def ddqn_reduces_jensen_gap__acrobot(
     ),
 )
 def ddqn_reduces_jensen_gap__catch(
-    paired_g: PairedGResult,
+    arm_mean_diff: ArmMeanDiffResult,
 ) -> Verdict:
-    return _ddqn_reduces_gap_holds_when(paired_g)
+    return _ddqn_reduces_gap_holds_when(arm_mean_diff)
 
 
 @claim_bridge(
     source=INTERVENTION,
     target='jensen_gap',
     direction=Direction.INVERSE,
-    tier=Tier.ASSOCIATIONAL,
+    tier=Tier.INTERVENTIONAL,
     scope=(
         _ACTION_DIM_SWEEP_REGIME
         & (pl.col('env_name') == 'DiscountingChain-bsuite')
@@ -322,16 +347,16 @@ def ddqn_reduces_jensen_gap__catch(
     ),
 )
 def ddqn_reduces_jensen_gap__discounting_chain(
-    paired_g: PairedGResult,
+    arm_mean_diff: ArmMeanDiffResult,
 ) -> Verdict:
-    return _ddqn_reduces_gap_holds_when(paired_g)
+    return _ddqn_reduces_gap_holds_when(arm_mean_diff)
 
 
 @claim_bridge(
     source=INTERVENTION,
     target='jensen_gap',
     direction=Direction.INVERSE,
-    tier=Tier.ASSOCIATIONAL,
+    tier=Tier.INTERVENTIONAL,
     scope=(
         _ACTION_DIM_SWEEP_REGIME
         & (pl.col('env_name') == 'CartPole-v1')
@@ -342,9 +367,9 @@ def ddqn_reduces_jensen_gap__discounting_chain(
     ),
 )
 def ddqn_reduces_jensen_gap__cartpole(
-    paired_g: PairedGResult,
+    arm_mean_diff: ArmMeanDiffResult,
 ) -> Verdict:
-    return _ddqn_reduces_gap_holds_when(paired_g)
+    return _ddqn_reduces_gap_holds_when(arm_mean_diff)
 
 
 # ============ Eighth revision: meta-regression ============
@@ -382,15 +407,22 @@ _LOG_ACTION_DIM_PER_ENV: dict[str, dict[str, float]] = {
     ),
 )
 def log_action_dim_drives_jensen_gap_reduction(
-    meta_regression_paired_g: MetaRegressionResult,
+    meta_regression_unpaired_d: MetaRegressionResult,
     *,
-    covariates_per_env: dict[str, dict[str, float]] = (
+    covariates_per_key: dict[str, dict[str, float]] = (
         _LOG_ACTION_DIM_PER_ENV
     ),
+    covariate_key_field: str = 'env_name',
 ) -> Verdict:
-    del covariates_per_env
+    """Migrated from `meta_regression_paired_g` (which runs
+    `paired_g` per env, pseudo-replicating seeds inside each
+    stratum) to `meta_regression_unpaired_d` (independent-samples
+    Cohen's d per stratum, fed to the same DL random-effects
+    meta-regression). Per-env covariates carry over verbatim
+    under the `covariates_per_key` key-based mode."""
+    del covariates_per_key, covariate_key_field
     coef = next(
-        (c for c in meta_regression_paired_g.coefficients
+        (c for c in meta_regression_unpaired_d.coefficients
          if c.name == 'log_action_dim'),
         None,
     )
@@ -603,7 +635,21 @@ def ddqn_benefit_scales_with_gamma__discountingchain(
     high-γ subset. helped threshold is lower than other bridges
     because DC is sparse-reward bimodal: many seeds score 0
     (never find goal), so helped_fraction undershoots even when
-    the mean effect is significant."""
+    the mean effect is significant.
+
+    **Principled exception to the seed-paired off-limits rule**
+    (CLAUDE.md §"Methodology debt"): the bridge's question is
+    intrinsically about per-seed Δ direction — `helped_fraction`
+    counts seeds where the treatment-baseline pair has positive Δ
+    on a bimodal-reward env (DiscountingChain). Independent-
+    samples Cohen's d collapses this per-seed sign information
+    into a pooled mean and SE; it cannot answer "what fraction of
+    seeds benefit?". When the framework grows a per-seed sign-
+    histogram diagnostic on `stratified_arm_diff_pooled` (or a
+    bootstrap-based helped-fraction analogue), this bridge can
+    migrate; until then, `paired_g.helped_fraction` is load-
+    bearing for the question shape and the seed-paired form
+    stays."""
     if paired_g.n_pairs < 20:
         return Verdict.POWER_INSUFFICIENT
     if math.isnan(paired_g.helped_fraction):
@@ -616,10 +662,20 @@ def ddqn_benefit_scales_with_gamma__discountingchain(
     return Verdict.NO_EFFECT
 
 
+# Catch's saturation floor for the migrated `_zero_across_bursts`
+# bridge. On Catch action-dim cells, both arms saturate to bit-
+# exact identical means (~0.923) → per-arm SD = 0 → Cohen's d is
+# NaN. The bridge falls back to |mean_t − mean_b| in that case;
+# 1e-3 catches non-trivial signal while accommodating any
+# floating-point drift the saturation mean might pick up.
+_CATCH_SATURATION_DIFF_FLOOR: float = 1e-3
+
+
 # ============ Per-burst panel claims (revisions 9, 12) ============
 #
-# Per-(env, burst) paired g on `mc_return`. Asserted on the
-# expectile_3way corpus (joined runs.parquet × traces.parquet).
+# Per-(env, burst) independent-samples Cohen's d on `mc_return`.
+# Asserted on the expectile_3way corpus (joined runs.parquet ×
+# traces.parquet).
 #
 # Reference verdicts:
 #   FourRooms-misc: g positive across all 10 bursts; mean g
@@ -632,7 +688,7 @@ def ddqn_benefit_scales_with_gamma__discountingchain(
     source=INTERVENTION,
     target='mc_return',
     direction=Direction.DIRECT,
-    tier=Tier.ASSOCIATIONAL,
+    tier=Tier.INTERVENTIONAL,
     # Pin n_step to the default DDQN-1step regime — n=3/5/10 cells
     # from `nstep_*` corpora at FourRooms otherwise pool into the
     # same (env, seed) bucket as different intervention regimes.
@@ -642,7 +698,7 @@ def ddqn_benefit_scales_with_gamma__discountingchain(
     ),
 )
 def ddqn_outcome_stable_across_bursts__fourrooms(
-    paired_g_per_burst: PerBurstResult,
+    stratum_effect_panel_per_burst: PerBurstPanelDResult,
     *,
     source: Measurable[
         _Mapping[str, object], npt.NDArray[np.floating],
@@ -650,14 +706,24 @@ def ddqn_outcome_stable_across_bursts__fourrooms(
 ) -> Verdict:
     """DDQN's outcome benefit on FourRooms is stable across every
     eval burst. HELD when (a) at least 9/10 bursts have positive
-    g and (b) the per-burst mean g exceeds 0.3."""
-    del source  # forwarded to paired_g_per_burst
-    panel = panel_for_env(paired_g_per_burst, 'FourRooms-misc')
+    Cohen's d and (b) the per-burst mean d exceeds 0.3.
+
+    Tests *phase consistency* — a per-burst sign-count of the
+    treatment effect across the eval-burst time axis. Migrated
+    from `paired_g_per_burst` to the independent-samples form
+    (CLAUDE.md §"Methodology debt": seed-paired primitives are
+    off-limits in RL substrate bridges). The Cohen's d magnitudes
+    track paired Hedges' g within ~10% on FR canonical cells —
+    the per-burst sign structure (the bridge's actual question
+    shape) is preserved, and the 0.3 threshold remains
+    discriminating."""
+    del source  # forwarded to stratum_effect_panel_per_burst
+    panel = panel_for_env_d(stratum_effect_panel_per_burst, 'FourRooms-misc')
     if not panel:
         return Verdict.POWER_INSUFFICIENT
-    positive = sum(1 for s in panel if s.g > 0)
-    mean_g = sum(s.g for s in panel) / len(panel)
-    if positive >= len(panel) - 1 and mean_g > 0.3:
+    positive = sum(1 for s in panel if s.cohen_d > 0)
+    mean_d = sum(s.cohen_d for s in panel) / len(panel)
+    if positive >= len(panel) - 1 and mean_d > 0.3:
         return Verdict.HELD
     return Verdict.NO_EFFECT
 
@@ -666,7 +732,7 @@ def ddqn_outcome_stable_across_bursts__fourrooms(
     source=INTERVENTION,
     target='mc_return',
     direction=Direction.DIRECT,
-    tier=Tier.ASSOCIATIONAL,
+    tier=Tier.INTERVENTIONAL,
     # Action-dim sweep regime + total_steps + capacity pin so the
     # per-burst panel has uniform array shapes and one regime per
     # `(arm, seed)` bucket.
@@ -678,27 +744,43 @@ def ddqn_outcome_stable_across_bursts__fourrooms(
     ),
 )
 def ddqn_outcome_zero_across_bursts__catch(
-    paired_g_per_burst: PerBurstResult,
+    stratum_effect_panel_per_burst: PerBurstPanelDResult,
     *,
     source: Measurable[
         _Mapping[str, object], npt.NDArray[np.floating],
     ] = _MC_RETURN_PER_BURST_MEAN,
 ) -> Verdict:
     """Catch-bsuite saturates near-optimal under both arms;
-    DDQN at n=1 has zero per-burst effect. NO_EFFECT when
-    every burst's |g| is below 0.1; HELD-shaped verdicts are
-    impossible since the prediction is null."""
-    del source  # forwarded to paired_g_per_burst
-    panel = panel_for_env(paired_g_per_burst, 'Catch-bsuite')
+    DDQN at n=1 has zero per-burst effect. NO_EFFECT when every
+    burst's effect is consistent-with-null; HELD-shaped verdicts
+    are impossible since the prediction is null.
+
+    Migrated from `paired_g_per_burst`. The independent-samples
+    form's per-burst d is NaN on Catch because both arms saturate
+    to the IDENTICAL bit-exact value (per-arm SD = 0 → pooled
+    var = 0 → d undefined). That's the strongest possible form
+    of the null: identical arm means AND zero within-arm
+    variance. The predicate "null-consistent" therefore allows
+    BOTH (a) defined-but-tiny d AND (b) NaN d alongside identical
+    arm means — both express "effect indistinguishable from zero
+    at this burst.\"
+
+    Any burst with a defined |d| ≥ 0.1 OR a defined |mean_t −
+    mean_b| ≥ `_CATCH_SATURATION_DIFF_FLOOR` falsifies the
+    saturation claim and maps to POWER_INSUFFICIENT (the
+    bridge's "I expected null and saw a signal" path)."""
+    del source  # forwarded to stratum_effect_panel_per_burst
+    panel = panel_for_env_d(stratum_effect_panel_per_burst, 'Catch-bsuite')
     if not panel:
         return Verdict.POWER_INSUFFICIENT
-    if all(abs(s.g) < 0.1 for s in panel):
-        return Verdict.NO_EFFECT
-    # Any burst with |g| ≥ 0.1 falsifies the "saturated, no
-    # effect" claim. NO_EFFECT/HELD aren't the right shape; map
-    # to POWER_INSUFFICIENT with the per-burst max |g| as the
-    # diagnostic signal in the audit trail.
-    return Verdict.POWER_INSUFFICIENT
+    for s in panel:
+        diff = s.mean_treatment - s.mean_baseline
+        if math.isnan(s.cohen_d):
+            if abs(diff) >= _CATCH_SATURATION_DIFF_FLOOR:
+                return Verdict.POWER_INSUFFICIENT
+        elif abs(s.cohen_d) >= 0.1:
+            return Verdict.POWER_INSUFFICIENT
+    return Verdict.NO_EFFECT
 
 
 # ============ First revision (ddqn 200k corpus) =====================
@@ -736,51 +818,45 @@ _CONVERGED_ENVS_DDQN_200K: tuple[str, ...] = (
 )
 
 
-def _pooled_negative_holds_when(
-    pooled: PooledPairedGResult,
+def _dl_pooled_negative_holds_when(
+    pooled: StratifiedArmDiffPooledResult,
     *,
-    g_threshold: float,
-    min_envs: int,
+    d_threshold: float,
+    min_strata: int,
 ) -> Verdict:
-    """HELD when pooled g < -|threshold| with sufficient envs;
-    sign-positive → POWER_INSUFFICIENT; insufficient envs →
-    POWER_INSUFFICIENT; otherwise NO_EFFECT."""
-    if pooled.n_envs < min_envs:
+    """Independent-samples Cohen-d version of
+    `_pooled_negative_holds_when`. HELD when pooled_d <
+    -|threshold| with sufficient strata; sign-positive →
+    POWER_INSUFFICIENT; insufficient strata → POWER_INSUFFICIENT;
+    otherwise NO_EFFECT."""
+    if pooled.n_strata < min_strata:
         return Verdict.POWER_INSUFFICIENT
-    g = pooled.pooled.pooled_g
-    if math.isnan(g):
+    d = pooled.pooled_d
+    if math.isnan(d):
         return Verdict.POWER_INSUFFICIENT
-    if g >= 0:
-        return Verdict.POWER_INSUFFICIENT  # sign opposes prediction
-    if g < -abs(g_threshold):
+    if d >= 0:
+        return Verdict.POWER_INSUFFICIENT
+    if d < -abs(d_threshold):
         return Verdict.HELD
     return Verdict.NO_EFFECT
 
 
-def _pooled_null_prediction_holds_when(
-    pooled: PooledPairedGResult,
+def _dl_pooled_null_prediction_holds_when(
+    pooled: StratifiedArmDiffPooledResult,
     *,
     null_band: float,
-    min_envs: int,
+    min_strata: int,
 ) -> Verdict:
-    """For bridges with `predicted_direction='null'` (xfail-style):
-    HELD when |pooled g| < null_band — the no-effect prediction
-    is confirmed (small effect, link/outcome empirically null);
-    NO_EFFECT when |pooled g| >= null_band — the no-effect
-    prediction is REFUTED (an effect was observed when none was
-    predicted; the unexpected-pass / xpass analog).
-
-    Verdict semantics are uniform across all four
-    `predicted_direction` values: HELD = prediction confirmed.
-    Pair this body with `predicted_direction='null'` on the
-    decorator so the (verdict, predicted_direction) tuple at the
-    report layer reads unambiguously."""
-    if pooled.n_envs < min_envs:
+    """Independent-samples Cohen-d version of
+    `_pooled_null_prediction_holds_when`. For
+    `predicted_direction='null'` bridges: HELD when |pooled_d| <
+    null_band; NO_EFFECT when |pooled_d| >= null_band."""
+    if pooled.n_strata < min_strata:
         return Verdict.POWER_INSUFFICIENT
-    g = pooled.pooled.pooled_g
-    if math.isnan(g):
+    d = pooled.pooled_d
+    if math.isnan(d):
         return Verdict.POWER_INSUFFICIENT
-    if abs(g) < null_band:
+    if abs(d) < null_band:
         return Verdict.HELD
     return Verdict.NO_EFFECT
 
@@ -789,7 +865,7 @@ def _pooled_null_prediction_holds_when(
     source=INTERVENTION,
     target='jensen_gap',
     direction=Direction.INVERSE,
-    tier=Tier.ASSOCIATIONAL,
+    tier=Tier.INTERVENTIONAL,
     scope=(
         _ACTION_DIM_SWEEP_REGIME
         & pl.col('env_name').is_in(list(_CONVERGED_ENVS_DDQN_200K))
@@ -798,15 +874,28 @@ def _pooled_null_prediction_holds_when(
     ),
 )
 def ddqn_reduces_jensen_gap__converged_subset(
-    paired_g_pooled: PooledPairedGResult,
+    stratified_arm_diff_pooled: StratifiedArmDiffPooledResult,
     *,
     total_steps_filter: int = 200000,
 ) -> Verdict:
     """rev 1: pooled paired g(jensen_gap) on the converged subset
-    is strongly negative (~-0.93), HELD."""
+    is strongly negative (~-0.93), HELD.
+
+    Phase A.1.1 migration (2026-05-17): switched from
+    `paired_g_pooled` (seed-paired, E1 in RL substrate per
+    CLAUDE.md) to `stratified_arm_diff_pooled`
+    (independent-samples per stratum, DL pool). Threshold
+    reuses the old `g_threshold=0.5` magnitude. Caveat: pooled
+    Cohen's d (independent samples) ≠ pooled Hedges' g (paired)
+    in general — the paired SE absorbs treatment-baseline
+    correlation, the independent-samples SE doesn't, so the
+    same numerical threshold encodes a different power gate.
+    Re-evaluation on cache-complete data is the right time to
+    re-derive the threshold; until then the magnitude is
+    preserved as a HOLD-this-line gate."""
     del total_steps_filter
-    return _pooled_negative_holds_when(
-        paired_g_pooled, g_threshold=0.5, min_envs=5,
+    return _dl_pooled_negative_holds_when(
+        stratified_arm_diff_pooled, d_threshold=0.5, min_strata=5,
     )
 
 
@@ -814,7 +903,7 @@ def ddqn_reduces_jensen_gap__converged_subset(
     source=INTERVENTION,
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
-    tier=Tier.ASSOCIATIONAL,
+    tier=Tier.INTERVENTIONAL,
     predicted_direction='null',
     scope=(
         _ACTION_DIM_SWEEP_REGIME
@@ -824,7 +913,7 @@ def ddqn_reduces_jensen_gap__converged_subset(
     ),
 )
 def ddqn_link_to_outcome_null__converged_subset(
-    paired_g_pooled: PooledPairedGResult,
+    stratified_arm_diff_pooled: StratifiedArmDiffPooledResult,
     *,
     total_steps_filter: int = 200000,
 ) -> Verdict:
@@ -845,15 +934,17 @@ def ddqn_link_to_outcome_null__converged_subset(
     — same scope, same arm, mechanism activates but outcome
     doesn't move."""
     del total_steps_filter
-    return _pooled_null_prediction_holds_when(
-        paired_g_pooled, null_band=0.15, min_envs=3,
+    return _dl_pooled_null_prediction_holds_when(
+        stratified_arm_diff_pooled, null_band=0.15, min_strata=3,
     )
 
 
-# Note: paired_g_pooled is the analysis name. Both bridges
-# consume the SAME analysis name but with different `source`
-# values (jensen_gap vs eval_best_burst_mean) —
-# the framework's resolver instantiates separately per bridge.
+# Note: stratified_arm_diff_pooled is the analysis name. Both
+# bridges above consume the same analysis with different `source`
+# values (jensen_gap vs eval_best_burst_mean) — the framework's
+# resolver instantiates separately per bridge. Phase A.1.1
+# migration (2026-05-17) replaced the prior `paired_g_pooled`
+# (seed-paired E1) consumer.
 
 
 # ============ Eleventh revision: n-step attenuates DDQN ============
@@ -896,36 +987,45 @@ def ddqn_link_to_outcome_null__converged_subset(
 
 
 def _attenuated_holds_when(
-    paired_g: PairedGResult, *, null_band: float,
+    arm_diff: ArmMeanDiffResult, *, null_band: float,
 ) -> Verdict:
-    """HELD when |g| < null_band — the attenuation reading. The
+    """HELD when |d| < null_band — the attenuation reading. The
     theorem predicts smallness; HELD encodes prediction confirmed.
     HELD-strong-positive or HELD-strong-negative would refute
     attenuation, but bridges that want to encode that should
     declare a separate DIRECT/INVERSE bridge with their own
-    threshold. n_pairs < 30 → POWER_INSUFFICIENT."""
-    if paired_g.n_pairs < 30:
+    threshold. min(n_t, n_b) < 30 → POWER_INSUFFICIENT.
+
+    Migrated from seed-paired Hedges' g; magnitude preserved on
+    the independent-samples Cohen's d axis."""
+    d = arm_diff.standardized_effect
+    if min(arm_diff.n_treatment, arm_diff.n_baseline) < 30:
         return Verdict.POWER_INSUFFICIENT
-    if math.isnan(paired_g.g):
+    if math.isnan(d):
         return Verdict.POWER_INSUFFICIENT
-    if abs(paired_g.g) < null_band:
+    if abs(d) < null_band:
         return Verdict.HELD
     return Verdict.NO_EFFECT
 
 
 def _ddqn_helps_outcome_holds_when(
-    paired_g: PairedGResult, *, g_threshold: float,
+    arm_diff: ArmMeanDiffResult, *, d_threshold: float,
 ) -> Verdict:
-    """HELD when DDQN improves outcome (g > threshold AND p<0.05).
-    Sign opposes prediction (negative g is sign-wrong) →
-    POWER_INSUFFICIENT; n_pairs < 30 → POWER_INSUFFICIENT."""
-    if paired_g.n_pairs < 30:
+    """HELD when DDQN improves outcome (d > threshold AND p<0.05).
+    Sign opposes prediction (negative d is sign-wrong) →
+    POWER_INSUFFICIENT; min(n_t, n_b) < 30 → POWER_INSUFFICIENT.
+
+    Migrated from seed-paired Hedges' g; magnitude preserved on
+    the independent-samples Cohen's d axis."""
+    d = arm_diff.standardized_effect
+    p_value = arm_diff.mean_diff_p_value
+    if min(arm_diff.n_treatment, arm_diff.n_baseline) < 30:
         return Verdict.POWER_INSUFFICIENT
-    if math.isnan(paired_g.g):
+    if math.isnan(d):
         return Verdict.POWER_INSUFFICIENT
-    if paired_g.g <= 0:
+    if d <= 0:
         return Verdict.POWER_INSUFFICIENT  # sign opposes prediction
-    if paired_g.g > g_threshold and paired_g.p_value < 0.05:
+    if d > d_threshold and p_value < 0.05:
         return Verdict.HELD
     return Verdict.NO_EFFECT
 
@@ -941,13 +1041,13 @@ def _ddqn_helps_outcome_holds_when(
     ),
 )
 def ddqn_reduces_jensen_gap__fourrooms_n1(
-    paired_g: PairedGResult,
+    arm_mean_diff: ArmMeanDiffResult,
 ) -> Verdict:
     """At full bootstrap (n=1) on FourRooms, DDQN-vs-vanilla
     g(jensen_gap) is strongly negative — DDQN cuts the
     bootstrap-bias just as theory predicts. HELD when g < -0.3
     with p<0.05 (uses the shared per-env helper)."""
-    return _ddqn_reduces_gap_holds_when(paired_g)
+    return _ddqn_reduces_gap_holds_when(arm_mean_diff)
 
 
 @claim_bridge(
@@ -962,14 +1062,14 @@ def ddqn_reduces_jensen_gap__fourrooms_n1(
     ),
 )
 def ddqn_attenuates_jensen_gap__fourrooms_n3(
-    paired_g: PairedGResult,
+    arm_mean_diff: ArmMeanDiffResult,
 ) -> Verdict:
     """At n=3 on FourRooms, the MC component pre-empts most of
     the bootstrap-bias so DDQN has less to fix. The attenuation
     prediction: |g(jensen_gap)| should land in the null band.
     HELD when |g| < 0.3 (HELD-as-null convention; the theorem
     predicts smallness here)."""
-    return _attenuated_holds_when(paired_g, null_band=0.3)
+    return _attenuated_holds_when(arm_mean_diff, null_band=0.3)
 
 
 @claim_bridge(
@@ -983,12 +1083,12 @@ def ddqn_attenuates_jensen_gap__fourrooms_n3(
     ),
 )
 def ddqn_helps_outcome__fourrooms_n1(
-    paired_g: PairedGResult,
+    arm_mean_diff: ArmMeanDiffResult,
 ) -> Verdict:
     """At n=1 on FourRooms, DDQN improves outcome — per
     `findings_nstep_falsification.md`, Δ=+0.087, p=0.0003. HELD
     when g > 0.3 with p<0.05."""
-    return _ddqn_helps_outcome_holds_when(paired_g, g_threshold=0.3)
+    return _ddqn_helps_outcome_holds_when(arm_mean_diff, d_threshold=0.3)
 
 
 @claim_bridge(
@@ -1003,13 +1103,13 @@ def ddqn_helps_outcome__fourrooms_n1(
     ),
 )
 def ddqn_outcome_attenuates__fourrooms_n3(
-    paired_g: PairedGResult,
+    arm_mean_diff: ArmMeanDiffResult,
 ) -> Verdict:
     """At n=3 on FourRooms, DDQN's outcome advantage collapses
     to Δ=+0.002 (ns) — variance-reduction theory's prediction
     that n-step rescues the link is refuted. HELD when
     |g(outcome)| < 0.3 (the attenuated reading)."""
-    return _attenuated_holds_when(paired_g, null_band=0.3)
+    return _attenuated_holds_when(arm_mean_diff, null_band=0.3)
 
 
 # ============ N-step slope: meta-regression over n_step ============
@@ -1027,7 +1127,7 @@ def ddqn_outcome_attenuates__fourrooms_n3(
 # toward MC — the bias-compounding theory's slope-form prediction.
 
 @analysis
-def meta_regression_paired_g_by_nstep(
+def meta_regression_unpaired_d_by_nstep(
     cells: Iterable[Mapping[str, object]],
     *,
     treatment_arm: str,
@@ -1037,53 +1137,50 @@ def meta_regression_paired_g_by_nstep(
     arm_field: str = 'arm_key',
     pool: Pool = 'random',
 ) -> MetaRegressionResult:
-    """Per-`n_step` paired-g panel + meta-regression on
-    `log(n_step)`. Substrate-specific stratifier (n_step is an
-    RL-substrate hyperparameter); the framework's
-    `meta_regression_paired_g` hardcodes `env_name`-stratification,
-    which doesn't fit a single-env n-step sweep.
+    """Per-`n_step` independent-samples Cohen's d panel + meta-
+    regression on `log(n_step)`. Substrate-specific stratifier
+    (n_step is an RL-substrate hyperparameter); the framework's
+    `meta_regression_unpaired_d` defaults to `env_name`-
+    stratification, which doesn't fit a single-env n-step sweep.
 
-    For each `n_step` value present in `cells`, runs paired_g on
-    the (treatment, baseline) cells; packs the per-stratum results
-    into `StratumG[int]`; calls `meta_regress_panel` with
-    `{n_step: {'log_n_step': log(n_step)}}` covariates. The slope
-    on `log_n_step` is the moderator-direction estimate."""
+    For each `n_step` value present in `cells`, calls
+    `meta_regression_unpaired_d.fn` with `stratify_by=('n_step',)`
+    and `covariates_per_key={n_step: {'log_n_step': log(n_step)}}`.
+    The slope on `log_n_step` is the moderator-direction estimate.
+
+    Migrated from seed-paired Hedges' g (E1 in RL substrate per
+    CLAUDE.md) to independent-samples Cohen's d via the framework's
+    own per-stratum d primitive — the inner `paired_g.fn` call
+    was pseudo-replicating seeds inside each n_step stratum.
+    `pair_by` and `arm_field` are accepted from the bridge
+    framework's calling convention but are unused: stratification
+    in independent-samples mode is by `n_step` alone."""
+    del pair_by, arm_field
     cells_list = list(cells)
-
-    def _stratify(cell: Mapping[str, object]) -> int | None:
-        n = cell.get('n_step')
-        return n if isinstance(n, int) else None
-
-    def _analyze(subset: Sequence[Mapping[str, object]]) -> PairedGResult:
-        from corroborate.analyses.paired_g import paired_g
-        return paired_g.fn(
-            subset,
-            treatment_arm=treatment_arm,
-            baseline_arm=baseline_arm,
-            source=source,
-            pair_by=pair_by,
-            arm_field=arm_field,
-        )
-
-    panel_raw = per_stratum_panel(
-        cells_list, stratify_by=_stratify, analysis=_analyze,
-        min_cells_per_stratum=2,
+    # Compute per-n_step log covariate dynamically (only n_step
+    # values present in cells).
+    from corroborate.analyses.panel.meta_regression_unpaired_d import (
+        meta_regression_unpaired_d,
     )
-    panel = tuple(
-        StratumG[int](
-            stratum_id=n,
-            g=r.g,
-            se=r.se,
-            n_pairs=r.n_pairs,
-        )
-        for n, r in panel_raw
-    )
-    covariates: dict[int, Mapping[str, float]] = {
-        n: {'log_n_step': math.log(n)} for n, _ in panel_raw
+    n_step_values: set[int] = {
+        c['n_step'] for c in cells_list  # type: ignore[misc]
+        if isinstance(c.get('n_step'), int)
     }
-    return meta_regress_panel(
-        panel,
-        covariates_per_stratum=covariates,
+    covariates: dict[object, Mapping[str, float]] = {
+        n: {'log_n_step': math.log(n)} for n in n_step_values
+    }
+    return meta_regression_unpaired_d.fn(
+        cells_list,
+        treatment_arm=treatment_arm,
+        baseline_arm=baseline_arm,
+        source=source,
+        stratify_by=('n_step',),
+        covariates_per_key=covariates,
+        covariate_key_field='n_step',
+        # Disable the inner scope filter — the bridge's scope
+        # already restricts cells; we don't want a second jens-
+        # premise gate here.
+        min_baseline_predictor=0.0,
         pool=pool,
     )
 
@@ -1120,6 +1217,133 @@ def _slope_holds_when(
     return Verdict.NO_EFFECT
 
 
+# ============ n_step attenuation cluster: premise bridges =================
+#
+# The three slope-form bridges below
+# (`ddqn_{outcome,jensen,final_outcome}_slope_attenuates_with_log_nstep__
+# fourrooms`) test moderation of DDQN's effect by `n_step`. They use
+# `meta_regression_unpaired_d_by_nstep` with `min_baseline_predictor=0.0` —
+# the inner jens-premise scope filter is DELIBERATELY disabled because
+# the slope IS the attenuation signal (dropping low-mech strata would
+# remove the very signal the bridges test). See the wrapper's docstring
+# (`meta_regression_unpaired_d_by_nstep`) for the rationale.
+#
+# That leaves the cluster's IMPLICIT premise hidden: bias-compounding
+# theory says outcome attenuates BECAUSE mech attenuates. If mech is
+# never active at the n_step floor, the slope is testing in a regime
+# where the theory makes no claim. Per HYPOTHESIS_AS_GRAPH.md, an
+# implicit premise IS a node — make it queryable.
+#
+# These two bridges materialize the premise:
+#   - `jensen_premise_active__fourrooms_n1`: cohort baseline
+#     mean(jensen_gap) > floor at FR canonical n=1 (where theory says
+#     bias-compounding bites hardest)
+#   - `jensen_premise_dormant__fourrooms_n10`: cohort baseline
+#     mean(jensen_gap) ≤ floor at FR canonical n=10 (the predicted
+#     attenuation endpoint — the theory's strongest corroborated
+#     bookend, not just the floor)
+#
+# Both use `arm_mean_diff`'s `mean_baseline` field — a COHORT-level
+# read, not a per-cell verdict tally. The per-cell `jensen_dormancy_
+# premise_active` verdict is underpowered on FR (sigma_Q small relative
+# to per-cell test power); cohort baseline mean is conclusive
+# (0.37 at n=1, 0.013 at n=10 — well-separated from the 0.05 floor).
+# The Acrobot / CartPole / DC premise bridges use the per-cell tally
+# form because those substrates have enough per-cell power.
+
+_FOURROOMS_NSTEP_DORMANCY_FLOOR: float = 0.05
+# ^ Matches the framework's `min_baseline_predictor=0.05` default for
+# jens-premise filtering. FR canonical observed: baseline mean(jensen_
+# gap) at n=1 = 0.37 (7× floor → clearly active); at n=10 = 0.013
+# (below floor → clearly dormant). The per-stratum `jensen_dormancy_
+# gap` (substrate-respecting floor) is 0.015 at n=10, agrees with
+# the uniform 0.05 verdict at the bookends.
+
+
+def _baseline_jensen_active_when(
+    arm_diff: ArmMeanDiffResult,
+    *, floor: float = _FOURROOMS_NSTEP_DORMANCY_FLOOR,
+) -> Verdict:
+    """HELD when cohort baseline mean(jensen_gap) > floor. Reads
+    `arm_diff.mean_baseline` — the interventional comparison's
+    DDQN-vs-baseline diff is computed but unused; we observe only
+    the baseline arm's cohort mean. POWER_INSUFFICIENT when the
+    baseline cohort is empty or NaN."""
+    m = arm_diff.mean_baseline
+    if math.isnan(m) or arm_diff.n_baseline < 5:
+        return Verdict.POWER_INSUFFICIENT
+    if m > floor:
+        return Verdict.HELD
+    return Verdict.INVARIANT_VIOLATION
+
+
+def _baseline_jensen_dormant_when(
+    arm_diff: ArmMeanDiffResult,
+    *, floor: float = _FOURROOMS_NSTEP_DORMANCY_FLOOR,
+) -> Verdict:
+    """HELD when cohort baseline mean(jensen_gap) ≤ floor (predicted
+    dormancy). Mirrors `_baseline_jensen_active_when` for the
+    high-n endpoint. POWER_INSUFFICIENT when the baseline cohort
+    is empty or NaN."""
+    m = arm_diff.mean_baseline
+    if math.isnan(m) or arm_diff.n_baseline < 5:
+        return Verdict.POWER_INSUFFICIENT
+    if m <= floor:
+        return Verdict.HELD
+    return Verdict.INVARIANT_VIOLATION
+
+
+@claim_bridge(
+    source=INTERVENTION,
+    target='jensen_gap',
+    direction=Direction.INVERSE,
+    tier=Tier.ASSOCIATIONAL,
+    scope=(
+        _FOURROOMS_CANONICAL_REGIME
+        & (pl.col('n_step').is_null() | (pl.col('n_step') == 1))
+    ),
+    pair_by=('seed',),
+)
+def jensen_premise_active__fourrooms_n1(
+    arm_mean_diff: ArmMeanDiffResult,
+) -> Verdict:
+    """Cohort-level premise check: baseline mean(jensen_gap) > 0.05
+    at FR canonical n=1, the n_step value where bias-compounding
+    theory predicts mech bites hardest. Companion to the three
+    slope bridges below — they assume mech is active at the floor
+    of the n_step sweep; this bridge corroborates the assumption.
+
+    Cohort-form rather than per-cell verdict tally (cf. existing
+    `jensen_premise_active__{acrobot, cartpole, dc}` bridges) because
+    FR's per-cell `jensen_dormancy_premise_active` test is
+    power-insufficient (PI on 100% of baseline cells); the cohort
+    mean is conclusive. See the cluster header above for the
+    methodological note."""
+    return _baseline_jensen_active_when(arm_mean_diff)
+
+
+@claim_bridge(
+    source=INTERVENTION,
+    target='jensen_gap',
+    direction=Direction.INVERSE,
+    tier=Tier.ASSOCIATIONAL,
+    scope=_FOURROOMS_CANONICAL_REGIME & (pl.col('n_step') == 10),
+    pair_by=('seed',),
+)
+def jensen_premise_dormant__fourrooms_n10(
+    arm_mean_diff: ArmMeanDiffResult,
+) -> Verdict:
+    """Predicted-dormancy bookend: baseline mean(jensen_gap) ≤ 0.05
+    at FR canonical n=10, where bias-compounding theory predicts
+    mech is no longer the dominant failure mode (n-step bootstrap
+    has shifted target toward MC). Pairs with
+    `jensen_premise_active__fourrooms_n1` to corroborate the
+    cluster's predicted attenuation BOOKENDS — mech-active at low
+    n, mech-dormant at high n — independent of the slope bridges'
+    moderation tests."""
+    return _baseline_jensen_dormant_when(arm_mean_diff)
+
+
 @claim_bridge(
     source=INTERVENTION,
     target='eval_best_burst_mean',
@@ -1134,7 +1358,7 @@ def _slope_holds_when(
     pair_by=('seed',),
 )
 def ddqn_outcome_slope_attenuates_with_log_nstep__fourrooms(
-    meta_regression_paired_g_by_nstep: MetaRegressionResult,
+    meta_regression_unpaired_d_by_nstep: MetaRegressionResult,
 ) -> Verdict:
     """The slope form of the bias-compounding prediction on
     FourRooms. As `n_step` grows, the bootstrap-target shifts
@@ -1142,9 +1366,16 @@ def ddqn_outcome_slope_attenuates_with_log_nstep__fourrooms(
     of DDQN-vs-vanilla on `eval_best_burst_mean` should attenuate
     monotonically. HELD when the `log_n_step` coefficient is
     significantly negative (CI strictly below zero) across at
-    least 3 of the 5 strata (n ∈ {1, 2, 3, 5, 10})."""
+    least 3 of the 5 strata (n ∈ {1, 2, 3, 5, 10}).
+
+    Implicit premise: mech is active at the n_step floor.
+    Corroborated externally by `jensen_premise_active__fourrooms_n1`
+    (cohort baseline mean(jensen_gap) > floor at n=1). The slope's
+    "attenuates" claim is only meaningful if there's mech to
+    attenuate FROM; see `finding_nstep_attenuation` for the
+    graph-composed verdict."""
     return _slope_holds_when(
-        meta_regression_paired_g_by_nstep,
+        meta_regression_unpaired_d_by_nstep,
         covariate='log_n_step',
         sign='negative',
         min_strata=3,
@@ -1165,16 +1396,25 @@ def ddqn_outcome_slope_attenuates_with_log_nstep__fourrooms(
     pair_by=('seed',),
 )
 def ddqn_jensen_slope_attenuates_with_log_nstep__fourrooms(
-    meta_regression_paired_g_by_nstep: MetaRegressionResult,
+    meta_regression_unpaired_d_by_nstep: MetaRegressionResult,
 ) -> Verdict:
     """The slope form on the mechanism (jensen_gap). Theory:
     `|g_jensen|` should shrink as `n_step` grows because the
     bootstrap-bias compounds less under MC-leaning targets. HELD
     when the `log_n_step` slope is significantly positive
     (g(jensen) is negative; growing toward zero is a positive
-    slope)."""
+    slope).
+
+    Mech-step bridge — no separate premise gate. The slope IS the
+    attenuation; gating on "mech HELD at every stratum" would
+    drop the very strata where the theory predicts dormancy.
+    Cohort-level bookend bridges
+    (`jensen_premise_{active__fourrooms_n1, dormant__fourrooms_n10}`)
+    corroborate the predicted endpoints externally; the slope
+    quantifies the trajectory between them. Graph-composed in
+    `finding_nstep_attenuation`."""
     return _slope_holds_when(
-        meta_regression_paired_g_by_nstep,
+        meta_regression_unpaired_d_by_nstep,
         covariate='log_n_step',
         sign='positive',
         min_strata=3,
@@ -1195,7 +1435,7 @@ def ddqn_jensen_slope_attenuates_with_log_nstep__fourrooms(
     pair_by=('seed',),
 )
 def ddqn_final_outcome_slope_attenuates_with_log_nstep__fourrooms(
-    meta_regression_paired_g_by_nstep: MetaRegressionResult,
+    meta_regression_unpaired_d_by_nstep: MetaRegressionResult,
 ) -> Verdict:
     """Sibling of the `eval_best_burst_mean` slope on the
     `eval_final_mean` (steady-state) target. Best-burst is a peak
@@ -1213,9 +1453,14 @@ def ddqn_final_outcome_slope_attenuates_with_log_nstep__fourrooms(
     dissociation: peak = no slope-significance,
     steady-state = clear attenuation. Per memory
     `findings_l2_acrobot_goldilocks`, scalar best-burst can hide
-    effects the time-resolved metrics expose."""
+    effects the time-resolved metrics expose.
+
+    Implicit premise (same as the burst-mean sibling): mech is
+    active at n_step floor. Corroborated by
+    `jensen_premise_active__fourrooms_n1`; graph-composed with the
+    sibling slope bridges in `finding_nstep_attenuation`."""
     return _slope_holds_when(
-        meta_regression_paired_g_by_nstep,
+        meta_regression_unpaired_d_by_nstep,
         covariate='log_n_step',
         sign='negative',
         min_strata=3,
@@ -1373,11 +1618,32 @@ _TIME_TO_SOLVE_HIGH_SOLVE_ENVS: tuple[str, ...] = (
 )
 
 
+# Phase A.1.2 (2026-05-17): the prior `paired_g_among_solvers`
+# analysis baked in a per-env "above solve threshold" gate. The
+# replacement `stratified_arm_diff_pooled` is a generic pool, so
+# the per-env gate moves into the bridge scope as a polars
+# expression. `replace_strict` maps env_name → threshold via
+# the same `_SOLVE_THRESHOLDS_FLAT` dict; envs without an entry
+# get NULL, which fails the `>=` comparison (cell dropped).
+_SOLVER_GATE_EXPR: pl.Expr = (
+    pl.col('eval_best_burst_mean').is_not_null()
+    & pl.col('eval_best_burst_mean').is_finite()
+    & (
+        pl.col('eval_best_burst_mean')
+        >= pl.col('env_name').replace_strict(
+            _SOLVE_THRESHOLDS_FLAT,
+            default=None,
+            return_dtype=pl.Float64,
+        )
+    )
+)
+
+
 @claim_bridge(
     source=INTERVENTION,
     target='eval_best_burst_step',
     direction=Direction.INVERSE,
-    tier=Tier.ASSOCIATIONAL,
+    tier=Tier.INTERVENTIONAL,
     predicted_direction='null',
     # rev6 sample-efficiency envelope — pins lr=1e-3 + sync=100 +
     # total_steps=200000 across all 7 envs in the rev6 study.
@@ -1387,24 +1653,18 @@ _TIME_TO_SOLVE_HIGH_SOLVE_ENVS: tuple[str, ...] = (
     # `_REV6_SAMPLE_EFFICIENCY_REGIME` keeps all 7 and accepts that
     # Acrobot/Catch/DC have both cap=10k+50k cells averaged within
     # env (the original rev6 study did the same; cf.
-    # `findings_time_to_solve.md`).
-    scope=_REV6_SAMPLE_EFFICIENCY_REGIME,
+    # `findings_time_to_solve.md`). Phase A.1.2 (2026-05-17):
+    # added the per-env solver-gate (`_SOLVER_GATE_EXPR`) so cells
+    # below their env's solve threshold drop out at scope time;
+    # was previously baked into the `paired_g_among_solvers`
+    # analysis.
+    scope=_REV6_SAMPLE_EFFICIENCY_REGIME & _SOLVER_GATE_EXPR,
 )
 def time_to_solve_link_null__pooled(
-    paired_g_among_solvers: PooledPairedGResult,
+    stratified_arm_diff_pooled: StratifiedArmDiffPooledResult,
     *,
-    gate_column: str = 'eval_best_burst_mean',
-    gate_thresholds: dict[str, float] = _SOLVE_THRESHOLDS_FLAT,
-    env_filter: tuple[str, ...] = _TIME_TO_SOLVE_HIGH_SOLVE_ENVS,
+    stratify_by: tuple[str, ...] = ('env_name',),
     total_steps_filter: int = 200000,
-    # Explicit opt-in to mean-aggregation: the rev6 study
-    # legitimately included both cap=10k and cap=50k cells for
-    # Acrobot/Catch/DC (the comment on `_REV6_SAMPLE_EFFICIENCY_
-    # REGIME` notes this). Within each env's per-(arm, seed)
-    # bucket the per-cell `eval_best_burst_step` is mean-
-    # aggregated across capacity regimes — same shape the
-    # original rev6 verdict was computed under.
-    dedupe_strategy: str = 'mean',
 ) -> Verdict:
     """rev 6: replacing the steady-state outcome with a sample-
     efficiency proxy doesn't rescue DDQN. Pooled across 5
@@ -1412,11 +1672,16 @@ def time_to_solve_link_null__pooled(
     averages zero with PI bracketing zero. Authored with
     `predicted_direction='null'`; HELD encodes "the null
     prediction was confirmed — sample-efficiency-as-outcome
-    doesn't break the rev-1 link-null."""
-    del gate_column, gate_thresholds, env_filter, total_steps_filter
-    del dedupe_strategy
-    return _pooled_null_prediction_holds_when(
-        paired_g_among_solvers, null_band=0.15, min_envs=4,
+    doesn't break the rev-1 link-null."
+
+    Phase A.1.2 migration (2026-05-17): switched from
+    `paired_g_among_solvers` (seed-paired E1 + baked-in
+    solve-threshold gate) to `stratified_arm_diff_pooled`
+    (independent-samples per env) with the solve-threshold
+    gate moved into the bridge scope as `_SOLVER_GATE_EXPR`."""
+    del total_steps_filter, stratify_by
+    return _dl_pooled_null_prediction_holds_when(
+        stratified_arm_diff_pooled, null_band=0.15, min_strata=4,
     )
 
 
@@ -1424,41 +1689,57 @@ def time_to_solve_link_null__pooled(
     source=INTERVENTION,
     target='eval_best_burst_step',
     direction=Direction.INVERSE,
-    tier=Tier.ASSOCIATIONAL,
+    tier=Tier.INTERVENTIONAL,
     # SpaceInvaders rev6 sample-efficiency cell — pin the rev6
     # envelope so the SpaceInvaders bucket is one canonical
     # regime per (arm, seed). SpaceInvaders is in the rev6 set
     # only at cap=10000 (so `_ACTION_DIM_SWEEP_REGIME` would
     # drop it via the cap-pin); the rev6 envelope keeps it.
-    scope=_REV6_SAMPLE_EFFICIENCY_REGIME,
+    # Phase A.1.2 (2026-05-17): scope adds env-filter to
+    # SpaceInvaders + the per-env solver-gate; previously the
+    # gate was baked into `paired_g_among_solvers`.
+    scope=(
+        _REV6_SAMPLE_EFFICIENCY_REGIME
+        & (pl.col('env_name') == 'SpaceInvaders-MinAtar')
+        & _SOLVER_GATE_EXPR
+    ),
 )
 def ddqn_solves_faster__spaceinvaders(
-    paired_g_among_solvers: PooledPairedGResult,
+    stratified_arm_diff_pooled: StratifiedArmDiffPooledResult,
     *,
-    gate_column: str = 'eval_best_burst_mean',
-    gate_thresholds: dict[str, float] = _SOLVE_THRESHOLDS_FLAT,
-    env_filter: tuple[str, ...] = ('SpaceInvaders-MinAtar',),
+    stratify_by: tuple[str, ...] = ('env_name',),
     total_steps_filter: int = 200000,
+    min_seeds_per_arm: int = 20,
 ) -> Verdict:
     """rev 6: SpaceInvaders-MinAtar is the one env where DDQN
     crosses the solve threshold reliably faster than vanilla
-    (g=-0.532, n=30 — moderate effect, sign matches Hasselt's
-    overestimation-bias-cost-on-sparse-reward prediction)."""
-    del gate_column, gate_thresholds, total_steps_filter
-    spaceinvaders = next(
-        (p for p in paired_g_among_solvers.per_env
-         if p.stratum_id == env_filter[0]),
+    (g≈-0.532, n=30 — moderate effect, sign matches Hasselt's
+    overestimation-bias-cost-on-sparse-reward prediction).
+
+    Phase A.1.2 migration (2026-05-17): switched from
+    `paired_g_among_solvers` (seed-paired E1) to
+    `stratified_arm_diff_pooled` with `stratify_by=('env_name',)`.
+    Single-env scope means the panel has one stratum
+    (SpaceInvaders-MinAtar) and `pooled_d` collapses to that
+    stratum's Cohen's d."""
+    del total_steps_filter, stratify_by
+    si = next(
+        (s for s in stratified_arm_diff_pooled.per_stratum
+         if s.stratum_id == ('SpaceInvaders-MinAtar',)),
         None,
     )
-    if spaceinvaders is None:
+    if si is None:
         return Verdict.POWER_INSUFFICIENT
-    if spaceinvaders.n_pairs < 20:
+    if (
+        si.n_seeds_treatment < min_seeds_per_arm
+        or si.n_seeds_baseline < min_seeds_per_arm
+    ):
         return Verdict.POWER_INSUFFICIENT
-    if math.isnan(spaceinvaders.g):
+    if math.isnan(si.cohen_d):
         return Verdict.POWER_INSUFFICIENT
-    if spaceinvaders.g >= 0:
+    if si.cohen_d >= 0:
         return Verdict.POWER_INSUFFICIENT  # sign opposes prediction
-    if spaceinvaders.g < -0.3:
+    if si.cohen_d < -0.3:
         return Verdict.HELD
     return Verdict.NO_EFFECT
 
@@ -1504,6 +1785,8 @@ NSTEP_INTERVENTION_BRIDGES = (
     ddqn_attenuates_jensen_gap__fourrooms_n3,
     ddqn_helps_outcome__fourrooms_n1,
     ddqn_outcome_attenuates__fourrooms_n3,
+    jensen_premise_active__fourrooms_n1,
+    jensen_premise_dormant__fourrooms_n10,
     ddqn_outcome_slope_attenuates_with_log_nstep__fourrooms,
     ddqn_jensen_slope_attenuates_with_log_nstep__fourrooms,
     ddqn_final_outcome_slope_attenuates_with_log_nstep__fourrooms,
@@ -1832,12 +2115,21 @@ _SCV_DAG: list[tuple[str, str]] = [
 # DDQN-specific.
 
 
-def _expectile_reduces_gap_holds_when(paired_g: PairedGResult) -> Verdict:
-    if paired_g.n_pairs < 30:
+def _expectile_reduces_gap_holds_when(
+    arm_diff: ArmMeanDiffResult,
+) -> Verdict:
+    """Migrated from seed-paired Hedges' g to independent-samples
+    Cohen's d. Threshold magnitude (|d|≥0.3) and p-cutoff (0.05)
+    preserved."""
+    d = arm_diff.standardized_effect
+    p_value = arm_diff.mean_diff_p_value
+    if min(arm_diff.n_treatment, arm_diff.n_baseline) < 30:
         return Verdict.POWER_INSUFFICIENT
-    if paired_g.g >= 0:
+    if math.isnan(d):
         return Verdict.POWER_INSUFFICIENT
-    if paired_g.g < -0.3 and paired_g.p_value < 0.05:
+    if d >= 0:
+        return Verdict.POWER_INSUFFICIENT
+    if d < -0.3 and p_value < 0.05:
         return Verdict.HELD
     return Verdict.NO_EFFECT
 
@@ -1846,7 +2138,7 @@ def _expectile_reduces_gap_holds_when(paired_g: PairedGResult) -> Verdict:
     source=DoEffect(arms=((DDQN_SWAP,), (EXPECTILE_SWAP,))),
     target='jensen_gap',
     direction=Direction.INVERSE,
-    tier=Tier.ASSOCIATIONAL,
+    tier=Tier.INTERVENTIONAL,
     # Pin n_step=1 — the expectile arm has only n=1 cells, but
     # the canonical baseline arm shares arm_key with cells from
     # the n-step sweep; without this filter, the baseline bucket
@@ -1858,19 +2150,19 @@ def _expectile_reduces_gap_holds_when(paired_g: PairedGResult) -> Verdict:
     ),
 )
 def expectile_reduces_jensen_gap_more_than_ddqn__fourrooms(
-    paired_g: PairedGResult,
+    arm_mean_diff: ArmMeanDiffResult,
 ) -> Verdict:
     """Expectile reduces jensen_gap further than DDQN does on
     FourRooms (the env where DDQN had room to operate).
     Confirms expectile's bias-correction is more aggressive."""
-    return _expectile_reduces_gap_holds_when(paired_g)
+    return _expectile_reduces_gap_holds_when(arm_mean_diff)
 
 
 @claim_bridge(
     source=DoEffect(arms=((DDQN_SWAP,), (EXPECTILE_SWAP,))),
     target='eval_best_burst_mean',
     direction=Direction.INVERSE,
-    tier=Tier.ASSOCIATIONAL,
+    tier=Tier.INTERVENTIONAL,
     # n_step=1 pin; see `expectile_reduces_jensen_gap_more_than_
     # ddqn__fourrooms` comment for rationale.
     scope=(
@@ -1878,17 +2170,41 @@ def expectile_reduces_jensen_gap_more_than_ddqn__fourrooms(
         & (pl.col('n_step').is_null() | (pl.col('n_step') == 1))
     ),
 )
-def ddqn_outperforms_expectile_on_outcome__fourrooms(
-    paired_g: PairedGResult,
+def expectile_underperforms_ddqn_on_outcome__fourrooms(
+    arm_mean_diff: ArmMeanDiffResult,
 ) -> Verdict:
-    """Despite expectile's bigger bias-reduction, DDQN beats
-    expectile on FourRooms outcome. Verdict HELD when expectile
-    < ddqn on outcome (g < -0.3 with p < 0.05). The bigger-bias-
-    reduction-doesn't-translate finding from FINDINGS revisions
-    9 + 10 reproduces under a different mechanism family."""
-    if paired_g.n_pairs < 30:
+    """Expectile is the treatment arm vs DDQN baseline. INVERSE
+    direction: expectile (treatment) reduces outcome below DDQN
+    (baseline). HELD when `d = mean(expectile) - mean(DDQN)
+    < -0.3` with p < 0.05 — i.e., DDQN beats expectile by ≥
+    0.3 SD with significance.
+
+    Despite expectile's larger mech reduction (see the mech
+    sibling `expectile_reduces_jensen_gap_more_than_ddqn`), the
+    bigger-bias-reduction-doesn't-translate finding from FINDINGS
+    revisions 9 + 10 reproduces here under a different mechanism
+    family — bigger mech cut, smaller outcome.
+
+    **Arm orientation note**: expectile = treatment (arms[1]),
+    DDQN = baseline (arms[0]) — same as the mech sibling. Both
+    bridges keep expectile in the treatment role so the
+    contrast (and the canonical `arm_key` fingerprint) stays
+    consistent across the expectile cluster. The bridge name
+    names the conclusion (expectile underperforms) rather than
+    the treatment role (expectile-vs-DDQN); the conclusion
+    direction is encoded in `direction=INVERSE`.
+
+    Previously named `ddqn_outperforms_expectile_on_outcome__
+    fourrooms` — the name's active voice (DDQN-as-subject)
+    flipped from the DoEffect's treatment role (expectile-as-
+    treatment), making the `d < -0.3` HELD criterion read as a
+    sign-flip puzzle. Renamed to match the treatment role; the
+    underlying contrast is unchanged."""
+    d = arm_mean_diff.standardized_effect
+    p_value = arm_mean_diff.mean_diff_p_value
+    if min(arm_mean_diff.n_treatment, arm_mean_diff.n_baseline) < 30:
         return Verdict.POWER_INSUFFICIENT
-    if paired_g.g < -0.3 and paired_g.p_value < 0.05:
+    if d < -0.3 and p_value < 0.05:
         return Verdict.HELD
     return Verdict.NO_EFFECT
 
@@ -1897,7 +2213,7 @@ def ddqn_outperforms_expectile_on_outcome__fourrooms(
     source=DoEffect(arms=((), (EXPECTILE_SWAP,))),
     target='eval_best_burst_mean',
     direction=Direction.DIRECT,
-    tier=Tier.ASSOCIATIONAL,
+    tier=Tier.INTERVENTIONAL,
     # n_step=1 pin; see `expectile_reduces_jensen_gap_more_than_
     # ddqn__fourrooms` comment for rationale.
     scope=(
@@ -1905,22 +2221,134 @@ def ddqn_outperforms_expectile_on_outcome__fourrooms(
         & (pl.col('n_step').is_null() | (pl.col('n_step') == 1))
     ),
 )
-def expectile_reproduces_mechanism_link_disconnect__fourrooms(
-    paired_g: PairedGResult,
+def expectile_outcome_effect__fourrooms(
+    arm_mean_diff: ArmMeanDiffResult,
 ) -> Verdict:
-    """Strategy 2's headline question: does expectile produce
-    the same outcome-vs-vanilla effect as DDQN on FourRooms?
-    (FINDINGS revision 9: DDQN g_link ≈ +0.79 across bursts.)
+    """Marginal outcome effect of `do(bootstrap = expectile)` vs
+    vanilla on FourRooms. HELD when expectile improves outcome
+    (d > 0.3 + p < 0.05).
 
-    HELD when expectile shows a similar magnitude DIRECT effect
-    (g > 0.3 + p < 0.05); NO_EFFECT when expectile's outcome
-    effect is much smaller than DDQN's; both establish the
-    finding (whether the link reproduces or not is the answer)."""
-    if paired_g.n_pairs < 30:
+    Pairs with `expectile_reduces_jensen_gap_more_than_ddqn__
+    fourrooms` (mech) and `expectile_link_null__fourrooms` (per-
+    burst link) in `finding_expectile_reproduces_disconnect`. The
+    cluster-shaped disconnect claim ("mech reduced AND outcome
+    rises in aggregate AND per-burst link is null") lives at the
+    Finding level — bridges don't condition on each other's
+    verdicts directly (framework doesn't support cross-bridge
+    verdict gating; `CHAINED_BRIDGES_DESIGN.md` proposes
+    `depends_on` but it isn't built).
+
+    Previously named `expectile_reproduces_mechanism_link_
+    disconnect__fourrooms` — that name claimed a link-disconnect
+    test the bridge couldn't perform (single arm contrast, no
+    per-burst link computation). Renamed to the question it
+    actually asks."""
+    d = arm_mean_diff.standardized_effect
+    p_value = arm_mean_diff.mean_diff_p_value
+    if min(arm_mean_diff.n_treatment, arm_mean_diff.n_baseline) < 30:
         return Verdict.POWER_INSUFFICIENT
-    if paired_g.g > 0.3 and paired_g.p_value < 0.05:
+    if d > 0.3 and p_value < 0.05:
         return Verdict.HELD
     return Verdict.NO_EFFECT
+
+
+def _link_null_holds_when(
+    link: StratumDeltaLinkDowhyResult, *,
+    ate_null_band: float = 0.3,
+    placebo_null_band: float = 0.2,
+    rcc_drift_band: float = 0.2,
+    min_strata: int = 8,
+) -> Verdict:
+    """HELD-null verdict for `stratum_delta_link_dowhy` consumers.
+
+    Pearl tier-2 link disconnect: per-burst Δ_predictor → Δ_target
+    ATE near zero, AND placebo refutation near zero (sanity:
+    permuted-treatment ATE doesn't show a phantom link), AND RCC
+    drift small (robustness: synthetic common-cause perturbation
+    doesn't move the ATE). All three corroborate the null reading;
+    the disconnect is what HELD means here.
+
+    `ate_null_band` — |backdoor.ate| < this for HELD-null
+    (canonical 0.3 is the same band used by `_attenuated_holds_when`).
+    `placebo_null_band` — |placebo.refuted_ate| < this; permuted-
+    treatment should yield ≈ 0. `rcc_drift_band` — RCC's drift
+    (|refuted_ate − real_ate|) < this; bounded perturbation
+    means the estimate is robust to a synthetic common cause.
+
+    POW_INSUF when backdoor isn't identified, n_strata < floor,
+    or any field is NaN. NO_EFFECT when |ate| crosses out of the
+    null band — i.e., the link is present, the disconnect doesn't
+    reproduce."""
+    if not link.backdoor.identified:
+        return Verdict.POWER_INSUFFICIENT
+    if link.n_strata < min_strata:
+        return Verdict.POWER_INSUFFICIENT
+    ate = link.backdoor.ate
+    placebo_ate = link.placebo.refuted_ate
+    rcc_drift = link.random_common_cause.drift
+    if (
+        math.isnan(ate) or math.isnan(placebo_ate)
+        or math.isnan(rcc_drift)
+    ):
+        return Verdict.POWER_INSUFFICIENT
+    if abs(ate) >= ate_null_band:
+        return Verdict.NO_EFFECT  # link is present
+    if abs(placebo_ate) >= placebo_null_band:
+        return Verdict.POWER_INSUFFICIENT  # placebo failed
+    if rcc_drift >= rcc_drift_band:
+        return Verdict.POWER_INSUFFICIENT  # RCC failed
+    return Verdict.HELD  # link is null + refutations corroborate
+
+
+@claim_bridge(
+    source='jensen_gap',
+    target='eval_best_burst_mean',
+    direction=Direction.DIRECT,
+    tier=Tier.INTERVENTIONAL,
+    predicted_direction='null',
+    # n_step=1 pin; see `expectile_reduces_jensen_gap_more_than_
+    # ddqn__fourrooms` comment for rationale.
+    scope=(
+        _FOURROOMS_CANONICAL_REGIME
+        & (pl.col('n_step').is_null() | (pl.col('n_step') == 1))
+    ),
+)
+def expectile_link_null__fourrooms(
+    stratum_delta_link_dowhy: StratumDeltaLinkDowhyResult,
+    *,
+    treatment_arm: str = _EXPECTILE_ARM,
+    baseline_arm: str = _VANILLA_ARM,
+    link_predictor: Measurable[
+        _Mapping[str, object], npt.NDArray[np.floating],
+    ] = _JENSEN_BIAS_PER_BURST_MEAN,
+    link_target: Measurable[
+        _Mapping[str, object], npt.NDArray[np.floating],
+    ] = _MC_RETURN_PER_BURST_MEAN,
+    env_filter: tuple[str, ...] = ('FourRooms-misc',),
+    min_baseline_predictor: float = 0.05,
+) -> Verdict:
+    """Per-burst link test on the expectile arm: does Δ_jensen
+    explain Δ_outcome at the stratum-Δ level? HELD when the link
+    is NULL (the disconnect-shaped reading).
+
+    The FR rev-9 finding for DDQN: marginal outcome rises (+0.79 g)
+    AND per-burst link between Δ_jens and Δ_outcome is null —
+    the mech→outcome story breaks at the stratum level. This
+    bridge asks: does the same disconnect reproduce on the
+    expectile arm?
+
+    DoWhy backdoor + placebo + RCC on per-(env, burst) Δ rows.
+    HELD-null when |ATE| < 0.3 AND placebo ATE ≈ 0 AND RCC drift
+    small AND n_strata ≥ 8. NO_EFFECT means the link IS present
+    (disconnect doesn't reproduce); POW_INSUF means the test
+    couldn't run (no backdoor identification, insufficient strata,
+    or refutations failed sanity).
+
+    Sibling-of: `expectile_outcome_effect__fourrooms` (marginal
+    outcome HELD-DIRECT) + `expectile_reduces_jensen_gap_more_
+    than_ddqn__fourrooms` (mech HELD-INVERSE). Composed in
+    `finding_expectile_reproduces_disconnect`."""
+    return _link_null_holds_when(stratum_delta_link_dowhy)
 
 
 @claim_bridge(
@@ -1970,8 +2398,9 @@ def state_coverage_kl_causes_outcome(
 
 EXPECTILE_STRATEGY_2_BRIDGES = (
     expectile_reduces_jensen_gap_more_than_ddqn__fourrooms,
-    ddqn_outperforms_expectile_on_outcome__fourrooms,
-    expectile_reproduces_mechanism_link_disconnect__fourrooms,
+    expectile_underperforms_ddqn_on_outcome__fourrooms,
+    expectile_outcome_effect__fourrooms,
+    expectile_link_null__fourrooms,
 )
 """Strategy-2 bridges (expectile-greedify contrast). Run against
 the expectile_3way runs.parquet (no traces required)."""
@@ -2144,10 +2573,15 @@ BRIDGES = (
     *CHAIN_DECOMPOSITION_BRIDGES,
 )
 
-# No findings authored against this hypothesis yet. `NO_FINDINGS`
-# is the framework's empty-FINDINGS sentinel — populate as
-# cluster-shaped claims emerge.
-FINDINGS = NO_FINDINGS
+from experiments.findings import (  # noqa: E402
+    dqn_bridges_finding_expectile_disconnect,
+    dqn_bridges_finding_nstep_attenuation,
+)
+
+FINDINGS = (
+    dqn_bridges_finding_expectile_disconnect,
+    dqn_bridges_finding_nstep_attenuation,
+)
 
 
 __all__ = [
@@ -2162,7 +2596,7 @@ __all__ = [
     'ddqn_link_to_outcome_null__converged_subset',
     'ddqn_outcome_stable_across_bursts__fourrooms',
     'ddqn_outcome_zero_across_bursts__catch',
-    'ddqn_outperforms_expectile_on_outcome__fourrooms',
+    'expectile_underperforms_ddqn_on_outcome__fourrooms',
     'ddqn_reduces_jensen_gap__acrobot',
     'ddqn_reduces_jensen_gap__catch',
     'ddqn_reduces_jensen_gap__cartpole',
@@ -2170,12 +2604,15 @@ __all__ = [
     'ddqn_reduces_jensen_gap__discounting_chain',
     'ddqn_solves_faster__spaceinvaders',
     'expectile_reduces_jensen_gap_more_than_ddqn__fourrooms',
-    'expectile_reproduces_mechanism_link_disconnect__fourrooms',
+    'expectile_link_null__fourrooms',
+    'expectile_outcome_effect__fourrooms',
     'jensen_gap_outcome_borderline',
     'jensen_premise_active__acrobot',
     'jensen_premise_active__cartpole',
     'jensen_premise_active__discounting_chain',
+    'jensen_premise_active__fourrooms_n1',
     'jensen_premise_dormant__catch',
+    'jensen_premise_dormant__fourrooms_n10',
     'log_action_dim_drives_g_mech',
     'log_action_dim_drives_jensen_gap_reduction',
     'log_obs_dim_drives_g_link',

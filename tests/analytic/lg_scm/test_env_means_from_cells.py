@@ -14,7 +14,7 @@ from collections.abc import Mapping
 
 import pytest
 
-from corroborate.analyses.meta_regression_per_burst import (
+from corroborate.analyses.panel.meta_regression_per_burst import (
     _env_means_from_cells,
 )
 

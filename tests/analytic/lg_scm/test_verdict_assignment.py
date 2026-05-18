@@ -23,7 +23,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 
-from corroborate.analyses.paired_g import paired_g
+from corroborate.analyses.paired.paired_g import paired_g
 from corroborate.bridge.verdict import RefutationClass, Verdict
 from corroborate.corpus.schema import RunRow
 from corroborate.stats.effect_size import verdict_from_paired_stats

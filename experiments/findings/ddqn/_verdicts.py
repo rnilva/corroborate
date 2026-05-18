@@ -129,6 +129,55 @@ def dowhy_rcc_verdict(
 # ============ Partial-Spearman deciders ============
 
 
+class _MediationDowhyLike(Protocol):
+    """Read-only shape of `MediationResult` — the typed-linearity-
+    diagnostic mediation primitive's output."""
+    @property
+    def linearity_status(self) -> str: ...
+
+
+def mediation_linearity_verdict(
+    result: _MediationDowhyLike,
+) -> Verdict:
+    """Verdict on whether the linear-mediation assumption holds
+    at this scope. Consumes `mediation_dowhy.linearity_status`
+    (typed StrEnum) and maps:
+
+      - RELIABLE                → HELD (linear decomposition's
+                                   coherent range — direct/total
+                                   same sign + proportion in
+                                   [0, 1] — joint evidence with
+                                   the canonical `partial_spearman`
+                                   bridge at the same scope)
+      - SIGN_FLIPPED            → NO_EFFECT (multicollinearity-
+                                   induced sign flip — the v10
+                                   FR γ-WHY failure mode; the
+                                   linearity claim is empirically
+                                   broken at this scope)
+      - OUT_OF_BOUNDS           → NO_EFFECT (proportion outside
+                                   [0, 1] — suppression)
+      - UNIDENTIFIED            → POWER_INSUFFICIENT (DAG
+                                   admits no backdoor adjustment)
+      - POWER_INSUFFICIENT      → POWER_INSUFFICIENT (|total| <
+                                   eps or OLS rank-deficient)
+
+    Pair with a canonical `partial_spearman` mediation bridge
+    at the same scope to form a HYPOTHESIS_AS_GRAPH §3b scope-
+    cluster: both HELD → "mediation HELD under BOTH rank-based
+    AND linear identifications" SUPPORTED."""
+    status = result.linearity_status
+    if status == 'reliable':
+        return Verdict.HELD
+    if status in ('sign_flipped', 'out_of_bounds'):
+        # NO_EFFECT is the framework's "the bridge's claim
+        # failed empirically" verdict (Verdict has no REFUTED;
+        # cluster-level REFUTED is composed from member NO_EFFECTs).
+        # The linearity claim ("linear decomposition is coherent
+        # here") is empirically broken under either failure mode.
+        return Verdict.NO_EFFECT
+    return Verdict.POWER_INSUFFICIENT
+
+
 def partial_spearman_null_verdict(
     result: _PartialSpearmanResult,
     *,

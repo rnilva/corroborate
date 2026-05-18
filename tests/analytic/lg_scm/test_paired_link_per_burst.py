@@ -36,7 +36,7 @@ from __future__ import annotations
 
 import math
 
-from corroborate.analyses.paired_link_per_burst import (
+from corroborate.analyses.link.paired_link_per_burst import (
     PerBurstLinkStratum,
     paired_link_per_burst,
     phase_link_consistency,

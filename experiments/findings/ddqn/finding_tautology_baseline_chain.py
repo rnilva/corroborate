@@ -75,7 +75,16 @@ from experiments.findings.ddqn.q_shape_mediation import (
 )
 
 
-EXPECTED: ClusterVerdict = ClusterVerdict.SUPPORTED
+# REFUTED on the merged ddqn cache (post 2026-05-18 consolidation
+# + origin/main cache growth): per-burst ρ(q, mc_discounted) pooled
+# across envs landed at +0.156 (n=27600 obs, 10 strata) — below
+# the +0.2 substantive threshold. The Bellman-contraction coupling
+# is positive but weak at the merged cohort scale; the substrate
+# tautology chain doesn't survive the stricter threshold on the
+# enlarged corpus. The Finding documents the empirical REFUTATION;
+# whether the threshold is the right cutoff is a separate
+# methodology question.
+EXPECTED: ClusterVerdict = ClusterVerdict.REFUTED
 
 
 BLOCKED_ON: str | None = None

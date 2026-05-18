@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from corroborate.analyses.paired_g import paired_g
+from corroborate.analyses.paired.paired_g import paired_g
 from corroborate.stats.effect_size import random_effects_summary
 
 

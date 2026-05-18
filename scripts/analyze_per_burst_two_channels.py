@@ -26,6 +26,8 @@ import numpy as np
 import polars as pl
 from scipy import stats
 
+from corroborate.stats import fisher_z_pool
+
 
 CACHE_PATH = 'experiments/data/cache/ddqn.parquet'
 
@@ -44,27 +46,6 @@ def _partial_spearman(x: np.ndarray, y: np.ndarray, z: np.ndarray) -> tuple[floa
     if den == 0.0:
         return float('nan'), len(x)
     return float((rho_xy - rho_xz * rho_yz) / den), len(x)
-
-
-def _fisher_z_pool(rhos: list[float], ns: list[int]) -> tuple[float, float]:
-    """Fisher-z pool of per-env ρ with sample-size weighting.
-    Returns (pooled_rho, p_value_two_sided)."""
-    weights = []
-    zs = []
-    for rho, n in zip(rhos, ns, strict=True):
-        if not math.isfinite(rho) or n < 4 or abs(rho) >= 1.0:
-            continue
-        z = 0.5 * math.log((1 + rho) / (1 - rho))
-        w = n - 3
-        zs.append(z * w)
-        weights.append(w)
-    if not zs or sum(weights) == 0:
-        return float('nan'), float('nan')
-    z_pool = sum(zs) / sum(weights)
-    rho_pool = math.tanh(z_pool)
-    se = 1.0 / math.sqrt(sum(weights))
-    p = 2 * (1 - stats.norm.cdf(abs(z_pool / se)))
-    return rho_pool, float(p)
 
 
 def load_panel() -> pl.DataFrame:
@@ -151,7 +132,7 @@ def fisher_z_summary(per_env: pl.DataFrame) -> dict[str, tuple[float, float]]:
     ns = per_env.get_column('n').to_list()
     for c in cols:
         rhos = per_env.get_column(c).to_list()
-        rho, p = _fisher_z_pool(rhos, ns)
+        rho, p = fisher_z_pool(tuple(rhos), tuple(ns))
         out[c] = (rho, p)
     return out
 

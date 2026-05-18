@@ -26,7 +26,7 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 from corroborate_rl.dqn import measurables as _dqn_measurables  # noqa: F401
-from corroborate.analyses.tautology_audit import tautology_audit as _ta
+from corroborate.analyses.diagnostic.tautology_audit import tautology_audit as _ta
 from corroborate.measurables import get_registered
 
 tautology_audit = _ta.fn

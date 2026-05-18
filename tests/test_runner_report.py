@@ -14,11 +14,10 @@ import polars as pl
 import pytest
 
 from corroborate.analyses.dowhy import BackdoorResult, RefutationResult
-from corroborate.analyses.factorial_2x2 import Factorial2x2Result, FactorialPerEnv
-from corroborate.analyses.paired_g import PairedGResult
-from corroborate.analyses.paired_g_per_burst import PerBurstResult, PerBurstStratum
-from corroborate.analyses.proportion_mediated import ProportionMediatedResult
-from corroborate.analyses.verdict_distribution import (
+from corroborate.analyses.paired.factorial_2x2 import Factorial2x2Result, FactorialPerEnv
+from corroborate.analyses.paired.paired_g import PairedGResult
+from corroborate.analyses.paired.paired_g_per_burst import PerBurstResult, PerBurstStratum
+from corroborate.analyses.diagnostic.verdict_distribution import (
     VerdictCounts, VerdictDistributionResult,
 )
 from corroborate.bridge.admission import GateLevel, GateResult
@@ -245,19 +244,26 @@ def test_property_that_raises_yields_null_and_warns(capsys: pytest.CaptureFixtur
 # ============ Composite / nested Result classes ============
 
 
-def test_coerce_nested_dataclass_proportion_mediated() -> None:
-    r = ProportionMediatedResult(
-        proportion=0.4, total=2.5, direct=1.5, indirect=1.0,
-        slope_y_on_m=-0.3, in_unit_interval=True, n_pairs=50,
-        target='outcome', mediator='effective_horizon',
-        treatment_arm='ddqn', baseline_arm='vanilla',
-        pair_by=('seed', 'env_name'),
+def test_coerce_nested_dataclass_partial_spearman() -> None:
+    """Generic coercion: frozen dataclass with mixed types
+    (str / float / int / tuple[str,...] / Literal) flattens to
+    a JSON-serializable dict. Uses `PartialSpearmanResult`
+    because it carries the full mix of field shapes the runner
+    needs to handle."""
+    from corroborate.analyses.spearman.partial_spearman import (
+        PartialSpearmanResult,
+    )
+    r = PartialSpearmanResult(
+        x='bg', y='outcome', conditioning=('jensen_gap',),
+        stratify_by='env_name', granularity='per_cell',
+        rho_pooled=-0.42, p_value=0.001,
+        n_obs_total=120, n_strata=4,
     )
     out = _coerce_value(r)
     assert isinstance(out, dict)
-    assert out['proportion'] == 0.4
-    assert out['in_unit_interval'] is True
-    assert out['pair_by'] == ['seed', 'env_name']
+    assert out['rho_pooled'] == -0.42
+    assert out['conditioning'] == ['jensen_gap']
+    assert out['granularity'] == 'per_cell'
 
 
 def test_coerce_per_burst_result_full_panel() -> None:

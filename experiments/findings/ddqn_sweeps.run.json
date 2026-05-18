@@ -5,7 +5,7 @@
         "stratum_baseline_predictor_link_dowhy": {
           "backdoor": {
             "ate": -2.63788,
-            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n    d                                                                          ↪\n─────────(E[d_out|__env__MountainCar-v0,__env__Freeway-MinAtar,__env__Asterix- ↪\nd[v_pred]                                                                      ↪\n\n↪                                                                              ↪\n↪ MinAtar,__env__SpaceInvaders-MinAtar,__env__FourRooms-misc,__env__Breakout-M ↪\n↪                                                                              ↪\n\n↪                              \n↪ inAtar,__env__MetaMaze-misc])\n↪                              \nEstimand assumption 1, Unconfoundedness: If U→{v_pred} and U→d_out then P(d_out|v_pred,__env__MountainCar-v0,__env__Freeway-MinAtar,__env__Asterix-MinAtar,__env__SpaceInvaders-MinAtar,__env__FourRooms-misc,__env__Breakout-MinAtar,__env__MetaMaze-misc,U) = P(d_out|v_pred,__env__MountainCar-v0,__env__Freeway-MinAtar,__env__Asterix-MinAtar,__env__SpaceInvaders-MinAtar,__env__FourRooms-misc,__env__Breakout-MinAtar,__env__MetaMaze-misc)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n    d                                                                          ↪\n─────────(E[d_out|__env__MountainCar-v0,__env__Freeway-MinAtar,__env__Asterix- ↪\nd[v_pred]                                                                      ↪\n\n↪                                                                              ↪\n↪ MinAtar,__env__SpaceInvaders-MinAtar,__env__FourRooms-misc,__env__Breakout-M ↪\n↪                                                                              ↪\n\n↪                              \n↪ inAtar,__env__MetaMaze-misc])\n↪                              \nEstimand assumption 1, Unconfoundedness: If U→{v_pred} and U→d_out then P(d_out|v_pred,__env__MountainCar-v0,__env__Freeway-MinAtar,__env__Asterix-MinAtar,__env__SpaceInvaders-MinAtar,__env__FourRooms-misc,__env__Breakout-MinAtar,__env__MetaMaze-misc,U) = P(d_out|v_pred,__env__MountainCar-v0,__env__Freeway-MinAtar,__env__Asterix-MinAtar,__env__SpaceInvaders-MinAtar,__env__FourRooms-misc,__env__Breakout-MinAtar,__env__MetaMaze-misc)\n",
+            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n    d                                                                          ↪\n─────────(E[d_out|__env__MetaMaze-misc,__env__Asterix-MinAtar,__env__Freeway-M ↪\nd[v_pred]                                                                      ↪\n\n↪                                                                              ↪\n↪ inAtar,__env__MountainCar-v0,__env__FourRooms-misc,__env__SpaceInvaders-MinA ↪\n↪                                                                              ↪\n\n↪                              \n↪ tar,__env__Breakout-MinAtar])\n↪                              \nEstimand assumption 1, Unconfoundedness: If U→{v_pred} and U→d_out then P(d_out|v_pred,__env__MetaMaze-misc,__env__Asterix-MinAtar,__env__Freeway-MinAtar,__env__MountainCar-v0,__env__FourRooms-misc,__env__SpaceInvaders-MinAtar,__env__Breakout-MinAtar,U) = P(d_out|v_pred,__env__MetaMaze-misc,__env__Asterix-MinAtar,__env__Freeway-MinAtar,__env__MountainCar-v0,__env__FourRooms-misc,__env__SpaceInvaders-MinAtar,__env__Breakout-MinAtar)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n    d                                                                          ↪\n─────────(E[d_out|__env__MetaMaze-misc,__env__Asterix-MinAtar,__env__Freeway-M ↪\nd[v_pred]                                                                      ↪\n\n↪                                                                              ↪\n↪ inAtar,__env__MountainCar-v0,__env__FourRooms-misc,__env__SpaceInvaders-MinA ↪\n↪                                                                              ↪\n\n↪                              \n↪ tar,__env__Breakout-MinAtar])\n↪                              \nEstimand assumption 1, Unconfoundedness: If U→{v_pred} and U→d_out then P(d_out|v_pred,__env__MetaMaze-misc,__env__Asterix-MinAtar,__env__Freeway-MinAtar,__env__MountainCar-v0,__env__FourRooms-misc,__env__SpaceInvaders-MinAtar,__env__Breakout-MinAtar,U) = P(d_out|v_pred,__env__MetaMaze-misc,__env__Asterix-MinAtar,__env__Freeway-MinAtar,__env__MountainCar-v0,__env__FourRooms-misc,__env__SpaceInvaders-MinAtar,__env__Breakout-MinAtar)\n",
             "identified": true,
             "method_name": "backdoor.linear_regression",
             "n_rows": 26,
@@ -20,17 +20,17 @@
             "n_rows": 26,
             "outcome": "d_out",
             "real_ate": -2.63788,
-            "refuted_ate": 2.13163e-14,
+            "refuted_ate": 1.02141e-14,
             "refuter_name": "placebo_treatment_refuter",
             "treatment": "v_pred"
           },
           "random_common_cause": {
-            "drift": 0.253688,
+            "drift": 0.649128,
             "method_name": "backdoor.linear_regression",
             "n_rows": 26,
             "outcome": "d_out",
             "real_ate": -2.63788,
-            "refuted_ate": -2.89157,
+            "refuted_ate": -1.98875,
             "refuter_name": "random_common_cause",
             "treatment": "v_pred"
           },
@@ -41,7 +41,7 @@
       "blocked_by": null,
       "bridge_name": "bias_correction_clip_predicts_outcome__hp_variance__backdoor",
       "direction": "direct",
-      "extent_hash": 5413903773957874779,
+      "extent_hash": 48294950896515047,
       "n_cells_in_scope": 3840,
       "n_cells_pre_scope": 6830,
       "pair_by": [
@@ -68,7 +68,7 @@
         "stratum_baseline_predictor_link_dowhy": {
           "backdoor": {
             "ate": -2.63788,
-            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n    d                                                                          ↪\n─────────(E[d_out|__env__MountainCar-v0,__env__Freeway-MinAtar,__env__Asterix- ↪\nd[v_pred]                                                                      ↪\n\n↪                                                                              ↪\n↪ MinAtar,__env__SpaceInvaders-MinAtar,__env__FourRooms-misc,__env__Breakout-M ↪\n↪                                                                              ↪\n\n↪                              \n↪ inAtar,__env__MetaMaze-misc])\n↪                              \nEstimand assumption 1, Unconfoundedness: If U→{v_pred} and U→d_out then P(d_out|v_pred,__env__MountainCar-v0,__env__Freeway-MinAtar,__env__Asterix-MinAtar,__env__SpaceInvaders-MinAtar,__env__FourRooms-misc,__env__Breakout-MinAtar,__env__MetaMaze-misc,U) = P(d_out|v_pred,__env__MountainCar-v0,__env__Freeway-MinAtar,__env__Asterix-MinAtar,__env__SpaceInvaders-MinAtar,__env__FourRooms-misc,__env__Breakout-MinAtar,__env__MetaMaze-misc)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n    d                                                                          ↪\n─────────(E[d_out|__env__MountainCar-v0,__env__Freeway-MinAtar,__env__Asterix- ↪\nd[v_pred]                                                                      ↪\n\n↪                                                                              ↪\n↪ MinAtar,__env__SpaceInvaders-MinAtar,__env__FourRooms-misc,__env__Breakout-M ↪\n↪                                                                              ↪\n\n↪                              \n↪ inAtar,__env__MetaMaze-misc])\n↪                              \nEstimand assumption 1, Unconfoundedness: If U→{v_pred} and U→d_out then P(d_out|v_pred,__env__MountainCar-v0,__env__Freeway-MinAtar,__env__Asterix-MinAtar,__env__SpaceInvaders-MinAtar,__env__FourRooms-misc,__env__Breakout-MinAtar,__env__MetaMaze-misc,U) = P(d_out|v_pred,__env__MountainCar-v0,__env__Freeway-MinAtar,__env__Asterix-MinAtar,__env__SpaceInvaders-MinAtar,__env__FourRooms-misc,__env__Breakout-MinAtar,__env__MetaMaze-misc)\n",
+            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n    d                                                                          ↪\n─────────(E[d_out|__env__MetaMaze-misc,__env__Asterix-MinAtar,__env__Freeway-M ↪\nd[v_pred]                                                                      ↪\n\n↪                                                                              ↪\n↪ inAtar,__env__MountainCar-v0,__env__FourRooms-misc,__env__SpaceInvaders-MinA ↪\n↪                                                                              ↪\n\n↪                              \n↪ tar,__env__Breakout-MinAtar])\n↪                              \nEstimand assumption 1, Unconfoundedness: If U→{v_pred} and U→d_out then P(d_out|v_pred,__env__MetaMaze-misc,__env__Asterix-MinAtar,__env__Freeway-MinAtar,__env__MountainCar-v0,__env__FourRooms-misc,__env__SpaceInvaders-MinAtar,__env__Breakout-MinAtar,U) = P(d_out|v_pred,__env__MetaMaze-misc,__env__Asterix-MinAtar,__env__Freeway-MinAtar,__env__MountainCar-v0,__env__FourRooms-misc,__env__SpaceInvaders-MinAtar,__env__Breakout-MinAtar)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n    d                                                                          ↪\n─────────(E[d_out|__env__MetaMaze-misc,__env__Asterix-MinAtar,__env__Freeway-M ↪\nd[v_pred]                                                                      ↪\n\n↪                                                                              ↪\n↪ inAtar,__env__MountainCar-v0,__env__FourRooms-misc,__env__SpaceInvaders-MinA ↪\n↪                                                                              ↪\n\n↪                              \n↪ tar,__env__Breakout-MinAtar])\n↪                              \nEstimand assumption 1, Unconfoundedness: If U→{v_pred} and U→d_out then P(d_out|v_pred,__env__MetaMaze-misc,__env__Asterix-MinAtar,__env__Freeway-MinAtar,__env__MountainCar-v0,__env__FourRooms-misc,__env__SpaceInvaders-MinAtar,__env__Breakout-MinAtar,U) = P(d_out|v_pred,__env__MetaMaze-misc,__env__Asterix-MinAtar,__env__Freeway-MinAtar,__env__MountainCar-v0,__env__FourRooms-misc,__env__SpaceInvaders-MinAtar,__env__Breakout-MinAtar)\n",
             "identified": true,
             "method_name": "backdoor.linear_regression",
             "n_rows": 26,
@@ -83,17 +83,17 @@
             "n_rows": 26,
             "outcome": "d_out",
             "real_ate": -2.63788,
-            "refuted_ate": 2.13163e-14,
+            "refuted_ate": 1.02141e-14,
             "refuter_name": "placebo_treatment_refuter",
             "treatment": "v_pred"
           },
           "random_common_cause": {
-            "drift": 0.182431,
+            "drift": 0.110532,
             "method_name": "backdoor.linear_regression",
             "n_rows": 26,
             "outcome": "d_out",
             "real_ate": -2.63788,
-            "refuted_ate": -2.82031,
+            "refuted_ate": -2.74841,
             "refuter_name": "random_common_cause",
             "treatment": "v_pred"
           },
@@ -104,7 +104,7 @@
       "blocked_by": null,
       "bridge_name": "bias_correction_clip_predicts_outcome__hp_variance__placebo",
       "direction": "direct",
-      "extent_hash": 5413903773957874779,
+      "extent_hash": 48294950896515047,
       "n_cells_in_scope": 3840,
       "n_cells_pre_scope": 6830,
       "pair_by": [
@@ -131,7 +131,7 @@
         "stratum_baseline_predictor_link_dowhy": {
           "backdoor": {
             "ate": -2.63788,
-            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n    d                                                                          ↪\n─────────(E[d_out|__env__MountainCar-v0,__env__Freeway-MinAtar,__env__Asterix- ↪\nd[v_pred]                                                                      ↪\n\n↪                                                                              ↪\n↪ MinAtar,__env__SpaceInvaders-MinAtar,__env__FourRooms-misc,__env__Breakout-M ↪\n↪                                                                              ↪\n\n↪                              \n↪ inAtar,__env__MetaMaze-misc])\n↪                              \nEstimand assumption 1, Unconfoundedness: If U→{v_pred} and U→d_out then P(d_out|v_pred,__env__MountainCar-v0,__env__Freeway-MinAtar,__env__Asterix-MinAtar,__env__SpaceInvaders-MinAtar,__env__FourRooms-misc,__env__Breakout-MinAtar,__env__MetaMaze-misc,U) = P(d_out|v_pred,__env__MountainCar-v0,__env__Freeway-MinAtar,__env__Asterix-MinAtar,__env__SpaceInvaders-MinAtar,__env__FourRooms-misc,__env__Breakout-MinAtar,__env__MetaMaze-misc)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n    d                                                                          ↪\n─────────(E[d_out|__env__MountainCar-v0,__env__Freeway-MinAtar,__env__Asterix- ↪\nd[v_pred]                                                                      ↪\n\n↪                                                                              ↪\n↪ MinAtar,__env__SpaceInvaders-MinAtar,__env__FourRooms-misc,__env__Breakout-M ↪\n↪                                                                              ↪\n\n↪                              \n↪ inAtar,__env__MetaMaze-misc])\n↪                              \nEstimand assumption 1, Unconfoundedness: If U→{v_pred} and U→d_out then P(d_out|v_pred,__env__MountainCar-v0,__env__Freeway-MinAtar,__env__Asterix-MinAtar,__env__SpaceInvaders-MinAtar,__env__FourRooms-misc,__env__Breakout-MinAtar,__env__MetaMaze-misc,U) = P(d_out|v_pred,__env__MountainCar-v0,__env__Freeway-MinAtar,__env__Asterix-MinAtar,__env__SpaceInvaders-MinAtar,__env__FourRooms-misc,__env__Breakout-MinAtar,__env__MetaMaze-misc)\n",
+            "estimand_str": "Estimand type: EstimandType.NONPARAMETRIC_ATE\n\n### Estimand : 1\nEstimand name: backdoor\nEstimand expression:\n    d                                                                          ↪\n─────────(E[d_out|__env__MetaMaze-misc,__env__Asterix-MinAtar,__env__Freeway-M ↪\nd[v_pred]                                                                      ↪\n\n↪                                                                              ↪\n↪ inAtar,__env__MountainCar-v0,__env__FourRooms-misc,__env__SpaceInvaders-MinA ↪\n↪                                                                              ↪\n\n↪                              \n↪ tar,__env__Breakout-MinAtar])\n↪                              \nEstimand assumption 1, Unconfoundedness: If U→{v_pred} and U→d_out then P(d_out|v_pred,__env__MetaMaze-misc,__env__Asterix-MinAtar,__env__Freeway-MinAtar,__env__MountainCar-v0,__env__FourRooms-misc,__env__SpaceInvaders-MinAtar,__env__Breakout-MinAtar,U) = P(d_out|v_pred,__env__MetaMaze-misc,__env__Asterix-MinAtar,__env__Freeway-MinAtar,__env__MountainCar-v0,__env__FourRooms-misc,__env__SpaceInvaders-MinAtar,__env__Breakout-MinAtar)\n\n### Estimand : 2\nEstimand name: iv\nNo such variable(s) found!\n\n### Estimand : 3\nEstimand name: frontdoor\nNo such variable(s) found!\n\n### Estimand : 4\nEstimand name: general_adjustment\nEstimand expression:\n    d                                                                          ↪\n─────────(E[d_out|__env__MetaMaze-misc,__env__Asterix-MinAtar,__env__Freeway-M ↪\nd[v_pred]                                                                      ↪\n\n↪                                                                              ↪\n↪ inAtar,__env__MountainCar-v0,__env__FourRooms-misc,__env__SpaceInvaders-MinA ↪\n↪                                                                              ↪\n\n↪                              \n↪ tar,__env__Breakout-MinAtar])\n↪                              \nEstimand assumption 1, Unconfoundedness: If U→{v_pred} and U→d_out then P(d_out|v_pred,__env__MetaMaze-misc,__env__Asterix-MinAtar,__env__Freeway-MinAtar,__env__MountainCar-v0,__env__FourRooms-misc,__env__SpaceInvaders-MinAtar,__env__Breakout-MinAtar,U) = P(d_out|v_pred,__env__MetaMaze-misc,__env__Asterix-MinAtar,__env__Freeway-MinAtar,__env__MountainCar-v0,__env__FourRooms-misc,__env__SpaceInvaders-MinAtar,__env__Breakout-MinAtar)\n",
             "identified": true,
             "method_name": "backdoor.linear_regression",
             "n_rows": 26,
@@ -146,17 +146,17 @@
             "n_rows": 26,
             "outcome": "d_out",
             "real_ate": -2.63788,
-            "refuted_ate": 2.13163e-14,
+            "refuted_ate": 1.02141e-14,
             "refuter_name": "placebo_treatment_refuter",
             "treatment": "v_pred"
           },
           "random_common_cause": {
-            "drift": 0.134404,
+            "drift": 0.44276,
             "method_name": "backdoor.linear_regression",
             "n_rows": 26,
             "outcome": "d_out",
             "real_ate": -2.63788,
-            "refuted_ate": -2.77228,
+            "refuted_ate": -3.08064,
             "refuter_name": "random_common_cause",
             "treatment": "v_pred"
           },
@@ -167,7 +167,7 @@
       "blocked_by": null,
       "bridge_name": "bias_correction_clip_predicts_outcome__hp_variance__rcc",
       "direction": "direct",
-      "extent_hash": 5413903773957874779,
+      "extent_hash": 48294950896515047,
       "n_cells_in_scope": 3840,
       "n_cells_pre_scope": 6830,
       "pair_by": [
@@ -186,7 +186,7 @@
       "source_name": "bootstrap_gap_magnitude",
       "target_name": "eval_best_burst_raw_mean",
       "tier": "associational",
-      "verdict": "held",
+      "verdict": "power_insufficient",
       "warnings": []
     },
     {
@@ -212,7 +212,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_link_outcome_scales_with_chain_depth__cross_env",
       "direction": "direct",
-      "extent_hash": 8547661046008687770,
+      "extent_hash": 6149399029476708780,
       "n_cells_in_scope": 4350,
       "n_cells_pre_scope": 6830,
       "pair_by": [
@@ -259,28 +259,28 @@
       "analysis_results": {
         "cross_stratum_arm_diff_slope": {
           "arm_diff_predictor": [
-            -88.353,
-            -5.32378,
-            0.00420758,
             -0.376083,
-            -0.491206,
-            -14.755,
+            -5.32378,
+            -88.353,
+            0.00420758,
             6.95484,
             -0.028513,
             -82.6532,
-            -0.0085867
+            -0.0085867,
+            -14.755,
+            -0.491206
           ],
           "arm_diff_target": [
-            0.282671,
-            -0.660285,
-            0.292299,
             -0.373333,
-            9.13716,
-            0.450794,
+            -0.660285,
+            0.282671,
+            0.292299,
             -6.42454,
             3.11802,
             0.228571,
-            4.3077
+            4.3077,
+            0.450794,
+            9.13716
           ],
           "n_strata": 10,
           "p_value": 0.986743,
@@ -291,7 +291,7 @@
       "blocked_by": null,
       "bridge_name": "eff_h_intervention_mediates_outcome__goal_envs_gamma_sweep",
       "direction": "inverse",
-      "extent_hash": 3808865542805472890,
+      "extent_hash": 8487114330525596912,
       "n_cells_in_scope": 1696,
       "n_cells_pre_scope": 6830,
       "pair_by": [
@@ -348,7 +348,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_helps_at_full_bootstrap__fourrooms_n1",
       "direction": "direct",
-      "extent_hash": -3247594192830337491,
+      "extent_hash": -8960094392180748893,
       "n_cells_in_scope": 2040,
       "n_cells_pre_scope": 6830,
       "pair_by": [
@@ -405,7 +405,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_null_under_monte_carlo__fourrooms_n10",
       "direction": "direct",
-      "extent_hash": -5196042127165741010,
+      "extent_hash": 4663257105218561071,
       "n_cells_in_scope": 60,
       "n_cells_pre_scope": 6830,
       "pair_by": [
@@ -460,12 +460,12 @@
             "treatment": "target_staleness_late"
           },
           "random_common_cause": {
-            "drift": 0.0114863,
+            "drift": 0.00214547,
             "method_name": "backdoor.linear_regression",
             "n_rows": 119,
             "outcome": "delta_outcome",
             "real_ate": 2.7792,
-            "refuted_ate": 2.76771,
+            "refuted_ate": 2.78134,
             "refuter_name": "random_common_cause",
             "treatment": "target_staleness_late"
           },
@@ -476,7 +476,7 @@
       "blocked_by": null,
       "bridge_name": "staleness_amplifies_ddqn_outcome__sparse_goal_polyak",
       "direction": "inverse",
-      "extent_hash": -3698319129179287923,
+      "extent_hash": -6553234931265077107,
       "n_cells_in_scope": 238,
       "n_cells_pre_scope": 6830,
       "pair_by": [
@@ -601,7 +601,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_rescues_underlearning_vanilla__fourrooms_rs_0p1",
       "direction": "direct",
-      "extent_hash": 7036497859415405335,
+      "extent_hash": 31380854302235594,
       "n_cells_in_scope": 60,
       "n_cells_pre_scope": 6830,
       "pair_by": [
@@ -645,7 +645,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_dominates_vanilla_response_curve__fourrooms_rs_0p3",
       "direction": "direct",
-      "extent_hash": -7802352435387897157,
+      "extent_hash": 937898356187662053,
       "n_cells_in_scope": 60,
       "n_cells_pre_scope": 6830,
       "pair_by": [
@@ -689,7 +689,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_does_not_rescue__acrobot_rs_0p1",
       "direction": "direct",
-      "extent_hash": 4360152214887896281,
+      "extent_hash": 2540509310658130279,
       "n_cells_in_scope": 240,
       "n_cells_pre_scope": 6830,
       "pair_by": [
@@ -733,7 +733,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_does_not_rescue__cartpole_rs_0p1",
       "direction": "direct",
-      "extent_hash": 2470090921930507696,
+      "extent_hash": -5939326623238230843,
       "n_cells_in_scope": 240,
       "n_cells_pre_scope": 6830,
       "pair_by": [
@@ -777,7 +777,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_increases_argmax_entropy__fourrooms_rs_0p1",
       "direction": "direct",
-      "extent_hash": 7036497859415405335,
+      "extent_hash": 31380854302235594,
       "n_cells_in_scope": 60,
       "n_cells_pre_scope": 6830,
       "pair_by": [
@@ -821,7 +821,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_entropy_matches_vanilla__fourrooms_rs_1p0",
       "direction": "direct",
-      "extent_hash": 6789961619081067198,
+      "extent_hash": -3558018413463899956,
       "n_cells_in_scope": 60,
       "n_cells_pre_scope": 6830,
       "pair_by": [
@@ -869,7 +869,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_benefit_scales_with_effective_horizon__fourrooms",
       "direction": "direct",
-      "extent_hash": -9091135192845941602,
+      "extent_hash": 6637835462142578628,
       "n_cells_in_scope": 1440,
       "n_cells_pre_scope": 6830,
       "pair_by": [
@@ -950,7 +950,7 @@
       "blocked_by": null,
       "bridge_name": "metamaze_link_steeper_at_high_gamma",
       "direction": "direct",
-      "extent_hash": 1678196905365207616,
+      "extent_hash": -2342982566739349835,
       "n_cells_in_scope": 300,
       "n_cells_pre_scope": 6830,
       "pair_by": [
@@ -1000,7 +1000,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_outcome_scales_with_sigma_over_jens__gamma_999_xenv",
       "direction": "direct",
-      "extent_hash": -7249224856095898940,
+      "extent_hash": 6549336140261836511,
       "n_cells_in_scope": 80,
       "n_cells_pre_scope": 6830,
       "pair_by": [
@@ -1075,7 +1075,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_outcome_scales_with_sigma_over_jens__gamma_999_xenv__late_burst",
       "direction": "direct",
-      "extent_hash": -7249224856095898940,
+      "extent_hash": 6549336140261836511,
       "n_cells_in_scope": 80,
       "n_cells_pre_scope": 6830,
       "pair_by": [
@@ -1150,7 +1150,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_outcome_scales_with_sigma_over_jens__gamma_999_xenv__full_auc",
       "direction": "direct",
-      "extent_hash": -7249224856095898940,
+      "extent_hash": 6549336140261836511,
       "n_cells_in_scope": 80,
       "n_cells_pre_scope": 6830,
       "pair_by": [
@@ -1260,7 +1260,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_harms_asterix_gamma_999",
       "direction": "inverse",
-      "extent_hash": 4751165988978787231,
+      "extent_hash": 1481771456902945759,
       "n_cells_in_scope": 29,
       "n_cells_pre_scope": 6830,
       "pair_by": [
@@ -1345,7 +1345,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_harms_asterix_gamma_999__late_burst",
       "direction": "inverse",
-      "extent_hash": 4751165988978787231,
+      "extent_hash": 1481771456902945759,
       "n_cells_in_scope": 29,
       "n_cells_pre_scope": 6830,
       "pair_by": [
@@ -1430,7 +1430,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_harms_asterix_gamma_999__full_auc",
       "direction": "inverse",
-      "extent_hash": 4751165988978787231,
+      "extent_hash": 1481771456902945759,
       "n_cells_in_scope": 29,
       "n_cells_pre_scope": 6830,
       "pair_by": [
@@ -1515,7 +1515,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_helps_breakout_gamma_999",
       "direction": "direct",
-      "extent_hash": -4980379629262521687,
+      "extent_hash": -7500872747378334886,
       "n_cells_in_scope": 35,
       "n_cells_pre_scope": 6830,
       "pair_by": [
@@ -1600,7 +1600,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_helps_breakout_gamma_999__late_burst",
       "direction": "direct",
-      "extent_hash": -4980379629262521687,
+      "extent_hash": -7500872747378334886,
       "n_cells_in_scope": 35,
       "n_cells_pre_scope": 6830,
       "pair_by": [
@@ -1685,7 +1685,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_helps_breakout_gamma_999__full_auc",
       "direction": "direct",
-      "extent_hash": -4980379629262521687,
+      "extent_hash": -7500872747378334886,
       "n_cells_in_scope": 35,
       "n_cells_pre_scope": 6830,
       "pair_by": [
@@ -1787,7 +1787,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_clip_increases_state_conditional_argmax_entropy",
       "direction": "direct",
-      "extent_hash": 7825798584234751832,
+      "extent_hash": 1274489015941815293,
       "n_cells_in_scope": 78,
       "n_cells_pre_scope": 6830,
       "pair_by": [
@@ -1816,8 +1816,11 @@
     },
     {
       "analysis_results": {
-        "stratified_partial_spearman": {
-          "conditioning": "jensen_gap",
+        "partial_spearman": {
+          "conditioning": [
+            "jensen_gap"
+          ],
+          "granularity": "per_cell",
           "n_obs_total": 39,
           "n_strata": 2,
           "p_value": 0.709039,
@@ -1831,14 +1834,16 @@
       "blocked_by": null,
       "bridge_name": "mismatch_predicts_outcome_harm__within_ddqn",
       "direction": "inverse",
-      "extent_hash": -1129997907318094724,
+      "extent_hash": 1216193553185054987,
       "n_cells_in_scope": 39,
       "n_cells_pre_scope": 6830,
       "pair_by": [
         "seed"
       ],
       "params": {
-        "conditioning": "jensen_gap",
+        "conditioning": [
+          "jensen_gap"
+        ],
         "min_rho": 0.3,
         "min_strata": 2,
         "min_stratum_size": 5,
@@ -1858,12 +1863,12 @@
       "analysis_results": {
         "cross_stratum_arm_diff_slope": {
           "arm_diff_predictor": [
-            -0.0313999,
-            -0.0149868
+            -0.0149868,
+            -0.0313999
           ],
           "arm_diff_target": [
-            -5.31769,
-            6.70002
+            6.70002,
+            -5.31769
           ],
           "n_strata": 2,
           "p_value": null,
@@ -1874,7 +1879,7 @@
       "blocked_by": null,
       "bridge_name": "delta_h_cond_predicts_delta_outcome_xenv",
       "direction": "inverse",
-      "extent_hash": 7825798584234751832,
+      "extent_hash": 1274489015941815293,
       "n_cells_in_scope": 78,
       "n_cells_pre_scope": 6830,
       "pair_by": [
@@ -1960,7 +1965,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_cuts_q_smoothness_asterix_gamma_999",
       "direction": "inverse",
-      "extent_hash": -3446491301601063542,
+      "extent_hash": -7170665121167855245,
       "n_cells_in_scope": 60,
       "n_cells_pre_scope": 6830,
       "pair_by": [
@@ -1992,28 +1997,28 @@
       "analysis_results": {
         "cross_stratum_arm_diff_partial_spearman": {
           "arm_diff_confound": [
+            -0.120962,
+            -18.8675,
             -0.00535424,
-            -153.502,
             -0.120328,
             -0.208072,
-            -0.120962,
-            -18.8675
+            -153.502
           ],
           "arm_diff_predictor": [
+            0.00589286,
+            -0.0211394,
             -0.00638718,
-            -0.00836683,
             0.000510071,
             -0.00618824,
-            0.00589286,
-            -0.0211394
+            -0.00836683
           ],
           "arm_diff_target": [
+            -1.47333,
+            9.52005,
             0.213333,
-            -3.16669,
             0.520005,
             0.846666,
-            -1.47333,
-            9.52005
+            -3.16669
           ],
           "n_strata": 6,
           "p_value": 0.633665,
@@ -2025,7 +2030,7 @@
       "blocked_by": null,
       "bridge_name": "q_smoothness_predicts_outcome__cross_stratum",
       "direction": "direct",
-      "extent_hash": 870572297741524120,
+      "extent_hash": 4045857100457178749,
       "n_cells_in_scope": 360,
       "n_cells_pre_scope": 6830,
       "pair_by": [
@@ -2084,6 +2089,11 @@
               ]
             ],
             "separating_sets": {
+              "frozenset({'arm_ddqn_indicator', 'jensen_gap'})": [
+                [
+                  "q_late_mean"
+                ]
+              ],
               "frozenset({'bootstrap_action_mismatch_late', 'arm_ddqn_indicator'})": [
                 [
                   "eval_best_burst_raw_mean"
@@ -2104,7 +2114,56 @@
               "frozenset({'bootstrap_action_mismatch_late', 'q_action_grad_overlap_late'})": [
                 []
               ],
-              "frozenset({'bootstrap_action_mismatch_late', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'bootstrap_action_mismatch_late', 'q_late_mean'})": [
+                []
+              ],
+              "frozenset({'bootstrap_action_mismatch_late', 'q_trajectory_autocorr_late'})": [
+                []
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'arm_ddqn_indicator'})": [
+                [
+                  "jensen_gap"
+                ],
+                [
+                  "q_inter_state_grad_overlap_late"
+                ],
+                [
+                  "q_late_mean"
+                ]
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'jensen_gap'})": [
+                [
+                  "q_late_mean"
+                ]
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'q_late_mean'})": [
+                [
+                  "jensen_gap"
+                ]
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'q_trajectory_autocorr_late'})": [
+                []
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'arm_ddqn_indicator'})": [
+                []
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'jensen_gap'})": [
+                []
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'q_late_mean'})": [
+                []
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'q_trajectory_autocorr_late'})": [
+                [
+                  "jensen_gap",
+                  "q_late_mean"
+                ],
+                [
+                  "q_inter_state_grad_overlap_late",
+                  "state_conditional_argmax_entropy_late"
+                ]
+              ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'bootstrap_action_mismatch_late'})": [
                 [
                   "arm_ddqn_indicator",
                   "eval_best_burst_raw_mean"
@@ -2138,18 +2197,7 @@
                   "state_conditional_argmax_entropy_late"
                 ]
               ],
-              "frozenset({'eval_best_burst_raw_mean', 'arm_ddqn_indicator'})": [
-                [
-                  "jensen_gap"
-                ],
-                [
-                  "q_inter_state_grad_overlap_late"
-                ],
-                [
-                  "q_late_mean"
-                ]
-              ],
-              "frozenset({'eval_best_burst_raw_mean', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'eval_best_burst_raw_mean'})": [
                 [
                   "arm_ddqn_indicator"
                 ],
@@ -2160,20 +2208,7 @@
                   "q_late_mean"
                 ]
               ],
-              "frozenset({'jensen_gap', 'arm_ddqn_indicator'})": [
-                [
-                  "q_late_mean"
-                ]
-              ],
-              "frozenset({'jensen_gap', 'eval_best_burst_raw_mean'})": [
-                [
-                  "q_late_mean"
-                ]
-              ],
-              "frozenset({'jensen_gap', 'q_action_grad_overlap_late'})": [
-                []
-              ],
-              "frozenset({'jensen_gap', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'jensen_gap'})": [
                 [
                   "arm_ddqn_indicator"
                 ],
@@ -2181,32 +2216,32 @@
                   "q_late_mean"
                 ]
               ],
-              "frozenset({'q_action_grad_overlap_late', 'arm_ddqn_indicator'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'q_action_grad_overlap_late'})": [
                 []
               ],
-              "frozenset({'q_action_grad_overlap_late', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'q_late_mean'})": [
+                [
+                  "arm_ddqn_indicator"
+                ],
+                [
+                  "jensen_gap"
+                ]
+              ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'q_trajectory_autocorr_late'})": [
+                [
+                  "arm_ddqn_indicator"
+                ],
+                [
+                  "jensen_gap"
+                ],
+                [
+                  "q_late_mean"
+                ]
+              ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'state_conditional_argmax_entropy_late'})": [
                 []
               ],
               "frozenset({'q_late_mean', 'arm_ddqn_indicator'})": [
-                [
-                  "jensen_gap"
-                ]
-              ],
-              "frozenset({'q_late_mean', 'bootstrap_action_mismatch_late'})": [
-                []
-              ],
-              "frozenset({'q_late_mean', 'eval_best_burst_raw_mean'})": [
-                [
-                  "jensen_gap"
-                ]
-              ],
-              "frozenset({'q_late_mean', 'q_action_grad_overlap_late'})": [
-                []
-              ],
-              "frozenset({'q_late_mean', 'q_inter_state_grad_overlap_late'})": [
-                [
-                  "arm_ddqn_indicator"
-                ],
                 [
                   "jensen_gap"
                 ]
@@ -2216,50 +2251,9 @@
                   "arm_ddqn_indicator"
                 ]
               ],
-              "frozenset({'q_late_mean', 'state_conditional_argmax_entropy_late'})": [
-                []
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'bootstrap_action_mismatch_late'})": [
-                []
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'eval_best_burst_raw_mean'})": [
-                []
-              ],
               "frozenset({'q_trajectory_autocorr_late', 'jensen_gap'})": [
                 [
                   "arm_ddqn_indicator"
-                ]
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'q_action_grad_overlap_late'})": [
-                [
-                  "jensen_gap",
-                  "q_late_mean"
-                ],
-                [
-                  "q_inter_state_grad_overlap_late",
-                  "state_conditional_argmax_entropy_late"
-                ]
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'q_inter_state_grad_overlap_late'})": [
-                [
-                  "arm_ddqn_indicator"
-                ],
-                [
-                  "jensen_gap"
-                ],
-                [
-                  "q_late_mean"
-                ]
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'state_conditional_argmax_entropy_late'})": [
-                [
-                  "jensen_gap"
-                ],
-                [
-                  "q_action_grad_overlap_late"
-                ],
-                [
-                  "q_late_mean"
                 ]
               ],
               "frozenset({'state_conditional_argmax_entropy_late', 'arm_ddqn_indicator'})": [
@@ -2274,8 +2268,19 @@
               "frozenset({'state_conditional_argmax_entropy_late', 'q_action_grad_overlap_late'})": [
                 []
               ],
-              "frozenset({'state_conditional_argmax_entropy_late', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'state_conditional_argmax_entropy_late', 'q_late_mean'})": [
                 []
+              ],
+              "frozenset({'state_conditional_argmax_entropy_late', 'q_trajectory_autocorr_late'})": [
+                [
+                  "jensen_gap"
+                ],
+                [
+                  "q_action_grad_overlap_late"
+                ],
+                [
+                  "q_late_mean"
+                ]
               ]
             },
             "undirected_edges": [
@@ -2335,6 +2340,11 @@
             "max_conditioning": 2,
             "n_observations": 60,
             "separating_sets": {
+              "frozenset({'arm_ddqn_indicator', 'jensen_gap'})": [
+                [
+                  "q_late_mean"
+                ]
+              ],
               "frozenset({'bootstrap_action_mismatch_late', 'arm_ddqn_indicator'})": [
                 [
                   "eval_best_burst_raw_mean"
@@ -2355,7 +2365,56 @@
               "frozenset({'bootstrap_action_mismatch_late', 'q_action_grad_overlap_late'})": [
                 []
               ],
-              "frozenset({'bootstrap_action_mismatch_late', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'bootstrap_action_mismatch_late', 'q_late_mean'})": [
+                []
+              ],
+              "frozenset({'bootstrap_action_mismatch_late', 'q_trajectory_autocorr_late'})": [
+                []
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'arm_ddqn_indicator'})": [
+                [
+                  "jensen_gap"
+                ],
+                [
+                  "q_inter_state_grad_overlap_late"
+                ],
+                [
+                  "q_late_mean"
+                ]
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'jensen_gap'})": [
+                [
+                  "q_late_mean"
+                ]
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'q_late_mean'})": [
+                [
+                  "jensen_gap"
+                ]
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'q_trajectory_autocorr_late'})": [
+                []
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'arm_ddqn_indicator'})": [
+                []
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'jensen_gap'})": [
+                []
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'q_late_mean'})": [
+                []
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'q_trajectory_autocorr_late'})": [
+                [
+                  "jensen_gap",
+                  "q_late_mean"
+                ],
+                [
+                  "q_inter_state_grad_overlap_late",
+                  "state_conditional_argmax_entropy_late"
+                ]
+              ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'bootstrap_action_mismatch_late'})": [
                 [
                   "arm_ddqn_indicator",
                   "eval_best_burst_raw_mean"
@@ -2389,18 +2448,7 @@
                   "state_conditional_argmax_entropy_late"
                 ]
               ],
-              "frozenset({'eval_best_burst_raw_mean', 'arm_ddqn_indicator'})": [
-                [
-                  "jensen_gap"
-                ],
-                [
-                  "q_inter_state_grad_overlap_late"
-                ],
-                [
-                  "q_late_mean"
-                ]
-              ],
-              "frozenset({'eval_best_burst_raw_mean', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'eval_best_burst_raw_mean'})": [
                 [
                   "arm_ddqn_indicator"
                 ],
@@ -2411,20 +2459,7 @@
                   "q_late_mean"
                 ]
               ],
-              "frozenset({'jensen_gap', 'arm_ddqn_indicator'})": [
-                [
-                  "q_late_mean"
-                ]
-              ],
-              "frozenset({'jensen_gap', 'eval_best_burst_raw_mean'})": [
-                [
-                  "q_late_mean"
-                ]
-              ],
-              "frozenset({'jensen_gap', 'q_action_grad_overlap_late'})": [
-                []
-              ],
-              "frozenset({'jensen_gap', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'jensen_gap'})": [
                 [
                   "arm_ddqn_indicator"
                 ],
@@ -2432,32 +2467,32 @@
                   "q_late_mean"
                 ]
               ],
-              "frozenset({'q_action_grad_overlap_late', 'arm_ddqn_indicator'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'q_action_grad_overlap_late'})": [
                 []
               ],
-              "frozenset({'q_action_grad_overlap_late', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'q_late_mean'})": [
+                [
+                  "arm_ddqn_indicator"
+                ],
+                [
+                  "jensen_gap"
+                ]
+              ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'q_trajectory_autocorr_late'})": [
+                [
+                  "arm_ddqn_indicator"
+                ],
+                [
+                  "jensen_gap"
+                ],
+                [
+                  "q_late_mean"
+                ]
+              ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'state_conditional_argmax_entropy_late'})": [
                 []
               ],
               "frozenset({'q_late_mean', 'arm_ddqn_indicator'})": [
-                [
-                  "jensen_gap"
-                ]
-              ],
-              "frozenset({'q_late_mean', 'bootstrap_action_mismatch_late'})": [
-                []
-              ],
-              "frozenset({'q_late_mean', 'eval_best_burst_raw_mean'})": [
-                [
-                  "jensen_gap"
-                ]
-              ],
-              "frozenset({'q_late_mean', 'q_action_grad_overlap_late'})": [
-                []
-              ],
-              "frozenset({'q_late_mean', 'q_inter_state_grad_overlap_late'})": [
-                [
-                  "arm_ddqn_indicator"
-                ],
                 [
                   "jensen_gap"
                 ]
@@ -2467,50 +2502,9 @@
                   "arm_ddqn_indicator"
                 ]
               ],
-              "frozenset({'q_late_mean', 'state_conditional_argmax_entropy_late'})": [
-                []
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'bootstrap_action_mismatch_late'})": [
-                []
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'eval_best_burst_raw_mean'})": [
-                []
-              ],
               "frozenset({'q_trajectory_autocorr_late', 'jensen_gap'})": [
                 [
                   "arm_ddqn_indicator"
-                ]
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'q_action_grad_overlap_late'})": [
-                [
-                  "jensen_gap",
-                  "q_late_mean"
-                ],
-                [
-                  "q_inter_state_grad_overlap_late",
-                  "state_conditional_argmax_entropy_late"
-                ]
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'q_inter_state_grad_overlap_late'})": [
-                [
-                  "arm_ddqn_indicator"
-                ],
-                [
-                  "jensen_gap"
-                ],
-                [
-                  "q_late_mean"
-                ]
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'state_conditional_argmax_entropy_late'})": [
-                [
-                  "jensen_gap"
-                ],
-                [
-                  "q_action_grad_overlap_late"
-                ],
-                [
-                  "q_late_mean"
                 ]
               ],
               "frozenset({'state_conditional_argmax_entropy_late', 'arm_ddqn_indicator'})": [
@@ -2525,8 +2519,19 @@
               "frozenset({'state_conditional_argmax_entropy_late', 'q_action_grad_overlap_late'})": [
                 []
               ],
-              "frozenset({'state_conditional_argmax_entropy_late', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'state_conditional_argmax_entropy_late', 'q_late_mean'})": [
                 []
+              ],
+              "frozenset({'state_conditional_argmax_entropy_late', 'q_trajectory_autocorr_late'})": [
+                [
+                  "jensen_gap"
+                ],
+                [
+                  "q_action_grad_overlap_late"
+                ],
+                [
+                  "q_late_mean"
+                ]
               ]
             },
             "stratify_by": null,
@@ -2560,7 +2565,7 @@
       "blocked_by": null,
       "bridge_name": "pc_jens_screens_arm_to_outcome__asterix_g999",
       "direction": "inverse",
-      "extent_hash": -3446491301601063542,
+      "extent_hash": -7170665121167855245,
       "n_cells_in_scope": 60,
       "n_cells_pre_scope": 6830,
       "pair_by": [
@@ -2628,6 +2633,11 @@
               ]
             ],
             "separating_sets": {
+              "frozenset({'arm_ddqn_indicator', 'jensen_gap'})": [
+                [
+                  "q_late_mean"
+                ]
+              ],
               "frozenset({'bootstrap_action_mismatch_late', 'arm_ddqn_indicator'})": [
                 [
                   "eval_best_burst_raw_mean"
@@ -2648,7 +2658,56 @@
               "frozenset({'bootstrap_action_mismatch_late', 'q_action_grad_overlap_late'})": [
                 []
               ],
-              "frozenset({'bootstrap_action_mismatch_late', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'bootstrap_action_mismatch_late', 'q_late_mean'})": [
+                []
+              ],
+              "frozenset({'bootstrap_action_mismatch_late', 'q_trajectory_autocorr_late'})": [
+                []
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'arm_ddqn_indicator'})": [
+                [
+                  "jensen_gap"
+                ],
+                [
+                  "q_inter_state_grad_overlap_late"
+                ],
+                [
+                  "q_late_mean"
+                ]
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'jensen_gap'})": [
+                [
+                  "q_late_mean"
+                ]
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'q_late_mean'})": [
+                [
+                  "jensen_gap"
+                ]
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'q_trajectory_autocorr_late'})": [
+                []
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'arm_ddqn_indicator'})": [
+                []
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'jensen_gap'})": [
+                []
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'q_late_mean'})": [
+                []
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'q_trajectory_autocorr_late'})": [
+                [
+                  "jensen_gap",
+                  "q_late_mean"
+                ],
+                [
+                  "q_inter_state_grad_overlap_late",
+                  "state_conditional_argmax_entropy_late"
+                ]
+              ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'bootstrap_action_mismatch_late'})": [
                 [
                   "arm_ddqn_indicator",
                   "eval_best_burst_raw_mean"
@@ -2682,18 +2741,7 @@
                   "state_conditional_argmax_entropy_late"
                 ]
               ],
-              "frozenset({'eval_best_burst_raw_mean', 'arm_ddqn_indicator'})": [
-                [
-                  "jensen_gap"
-                ],
-                [
-                  "q_inter_state_grad_overlap_late"
-                ],
-                [
-                  "q_late_mean"
-                ]
-              ],
-              "frozenset({'eval_best_burst_raw_mean', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'eval_best_burst_raw_mean'})": [
                 [
                   "arm_ddqn_indicator"
                 ],
@@ -2704,20 +2752,7 @@
                   "q_late_mean"
                 ]
               ],
-              "frozenset({'jensen_gap', 'arm_ddqn_indicator'})": [
-                [
-                  "q_late_mean"
-                ]
-              ],
-              "frozenset({'jensen_gap', 'eval_best_burst_raw_mean'})": [
-                [
-                  "q_late_mean"
-                ]
-              ],
-              "frozenset({'jensen_gap', 'q_action_grad_overlap_late'})": [
-                []
-              ],
-              "frozenset({'jensen_gap', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'jensen_gap'})": [
                 [
                   "arm_ddqn_indicator"
                 ],
@@ -2725,32 +2760,32 @@
                   "q_late_mean"
                 ]
               ],
-              "frozenset({'q_action_grad_overlap_late', 'arm_ddqn_indicator'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'q_action_grad_overlap_late'})": [
                 []
               ],
-              "frozenset({'q_action_grad_overlap_late', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'q_late_mean'})": [
+                [
+                  "arm_ddqn_indicator"
+                ],
+                [
+                  "jensen_gap"
+                ]
+              ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'q_trajectory_autocorr_late'})": [
+                [
+                  "arm_ddqn_indicator"
+                ],
+                [
+                  "jensen_gap"
+                ],
+                [
+                  "q_late_mean"
+                ]
+              ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'state_conditional_argmax_entropy_late'})": [
                 []
               ],
               "frozenset({'q_late_mean', 'arm_ddqn_indicator'})": [
-                [
-                  "jensen_gap"
-                ]
-              ],
-              "frozenset({'q_late_mean', 'bootstrap_action_mismatch_late'})": [
-                []
-              ],
-              "frozenset({'q_late_mean', 'eval_best_burst_raw_mean'})": [
-                [
-                  "jensen_gap"
-                ]
-              ],
-              "frozenset({'q_late_mean', 'q_action_grad_overlap_late'})": [
-                []
-              ],
-              "frozenset({'q_late_mean', 'q_inter_state_grad_overlap_late'})": [
-                [
-                  "arm_ddqn_indicator"
-                ],
                 [
                   "jensen_gap"
                 ]
@@ -2760,50 +2795,9 @@
                   "arm_ddqn_indicator"
                 ]
               ],
-              "frozenset({'q_late_mean', 'state_conditional_argmax_entropy_late'})": [
-                []
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'bootstrap_action_mismatch_late'})": [
-                []
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'eval_best_burst_raw_mean'})": [
-                []
-              ],
               "frozenset({'q_trajectory_autocorr_late', 'jensen_gap'})": [
                 [
                   "arm_ddqn_indicator"
-                ]
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'q_action_grad_overlap_late'})": [
-                [
-                  "jensen_gap",
-                  "q_late_mean"
-                ],
-                [
-                  "q_inter_state_grad_overlap_late",
-                  "state_conditional_argmax_entropy_late"
-                ]
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'q_inter_state_grad_overlap_late'})": [
-                [
-                  "arm_ddqn_indicator"
-                ],
-                [
-                  "jensen_gap"
-                ],
-                [
-                  "q_late_mean"
-                ]
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'state_conditional_argmax_entropy_late'})": [
-                [
-                  "jensen_gap"
-                ],
-                [
-                  "q_action_grad_overlap_late"
-                ],
-                [
-                  "q_late_mean"
                 ]
               ],
               "frozenset({'state_conditional_argmax_entropy_late', 'arm_ddqn_indicator'})": [
@@ -2818,8 +2812,19 @@
               "frozenset({'state_conditional_argmax_entropy_late', 'q_action_grad_overlap_late'})": [
                 []
               ],
-              "frozenset({'state_conditional_argmax_entropy_late', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'state_conditional_argmax_entropy_late', 'q_late_mean'})": [
                 []
+              ],
+              "frozenset({'state_conditional_argmax_entropy_late', 'q_trajectory_autocorr_late'})": [
+                [
+                  "jensen_gap"
+                ],
+                [
+                  "q_action_grad_overlap_late"
+                ],
+                [
+                  "q_late_mean"
+                ]
               ]
             },
             "undirected_edges": [
@@ -2879,6 +2884,11 @@
             "max_conditioning": 2,
             "n_observations": 60,
             "separating_sets": {
+              "frozenset({'arm_ddqn_indicator', 'jensen_gap'})": [
+                [
+                  "q_late_mean"
+                ]
+              ],
               "frozenset({'bootstrap_action_mismatch_late', 'arm_ddqn_indicator'})": [
                 [
                   "eval_best_burst_raw_mean"
@@ -2899,7 +2909,56 @@
               "frozenset({'bootstrap_action_mismatch_late', 'q_action_grad_overlap_late'})": [
                 []
               ],
-              "frozenset({'bootstrap_action_mismatch_late', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'bootstrap_action_mismatch_late', 'q_late_mean'})": [
+                []
+              ],
+              "frozenset({'bootstrap_action_mismatch_late', 'q_trajectory_autocorr_late'})": [
+                []
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'arm_ddqn_indicator'})": [
+                [
+                  "jensen_gap"
+                ],
+                [
+                  "q_inter_state_grad_overlap_late"
+                ],
+                [
+                  "q_late_mean"
+                ]
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'jensen_gap'})": [
+                [
+                  "q_late_mean"
+                ]
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'q_late_mean'})": [
+                [
+                  "jensen_gap"
+                ]
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'q_trajectory_autocorr_late'})": [
+                []
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'arm_ddqn_indicator'})": [
+                []
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'jensen_gap'})": [
+                []
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'q_late_mean'})": [
+                []
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'q_trajectory_autocorr_late'})": [
+                [
+                  "jensen_gap",
+                  "q_late_mean"
+                ],
+                [
+                  "q_inter_state_grad_overlap_late",
+                  "state_conditional_argmax_entropy_late"
+                ]
+              ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'bootstrap_action_mismatch_late'})": [
                 [
                   "arm_ddqn_indicator",
                   "eval_best_burst_raw_mean"
@@ -2933,18 +2992,7 @@
                   "state_conditional_argmax_entropy_late"
                 ]
               ],
-              "frozenset({'eval_best_burst_raw_mean', 'arm_ddqn_indicator'})": [
-                [
-                  "jensen_gap"
-                ],
-                [
-                  "q_inter_state_grad_overlap_late"
-                ],
-                [
-                  "q_late_mean"
-                ]
-              ],
-              "frozenset({'eval_best_burst_raw_mean', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'eval_best_burst_raw_mean'})": [
                 [
                   "arm_ddqn_indicator"
                 ],
@@ -2955,20 +3003,7 @@
                   "q_late_mean"
                 ]
               ],
-              "frozenset({'jensen_gap', 'arm_ddqn_indicator'})": [
-                [
-                  "q_late_mean"
-                ]
-              ],
-              "frozenset({'jensen_gap', 'eval_best_burst_raw_mean'})": [
-                [
-                  "q_late_mean"
-                ]
-              ],
-              "frozenset({'jensen_gap', 'q_action_grad_overlap_late'})": [
-                []
-              ],
-              "frozenset({'jensen_gap', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'jensen_gap'})": [
                 [
                   "arm_ddqn_indicator"
                 ],
@@ -2976,32 +3011,32 @@
                   "q_late_mean"
                 ]
               ],
-              "frozenset({'q_action_grad_overlap_late', 'arm_ddqn_indicator'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'q_action_grad_overlap_late'})": [
                 []
               ],
-              "frozenset({'q_action_grad_overlap_late', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'q_late_mean'})": [
+                [
+                  "arm_ddqn_indicator"
+                ],
+                [
+                  "jensen_gap"
+                ]
+              ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'q_trajectory_autocorr_late'})": [
+                [
+                  "arm_ddqn_indicator"
+                ],
+                [
+                  "jensen_gap"
+                ],
+                [
+                  "q_late_mean"
+                ]
+              ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'state_conditional_argmax_entropy_late'})": [
                 []
               ],
               "frozenset({'q_late_mean', 'arm_ddqn_indicator'})": [
-                [
-                  "jensen_gap"
-                ]
-              ],
-              "frozenset({'q_late_mean', 'bootstrap_action_mismatch_late'})": [
-                []
-              ],
-              "frozenset({'q_late_mean', 'eval_best_burst_raw_mean'})": [
-                [
-                  "jensen_gap"
-                ]
-              ],
-              "frozenset({'q_late_mean', 'q_action_grad_overlap_late'})": [
-                []
-              ],
-              "frozenset({'q_late_mean', 'q_inter_state_grad_overlap_late'})": [
-                [
-                  "arm_ddqn_indicator"
-                ],
                 [
                   "jensen_gap"
                 ]
@@ -3011,50 +3046,9 @@
                   "arm_ddqn_indicator"
                 ]
               ],
-              "frozenset({'q_late_mean', 'state_conditional_argmax_entropy_late'})": [
-                []
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'bootstrap_action_mismatch_late'})": [
-                []
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'eval_best_burst_raw_mean'})": [
-                []
-              ],
               "frozenset({'q_trajectory_autocorr_late', 'jensen_gap'})": [
                 [
                   "arm_ddqn_indicator"
-                ]
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'q_action_grad_overlap_late'})": [
-                [
-                  "jensen_gap",
-                  "q_late_mean"
-                ],
-                [
-                  "q_inter_state_grad_overlap_late",
-                  "state_conditional_argmax_entropy_late"
-                ]
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'q_inter_state_grad_overlap_late'})": [
-                [
-                  "arm_ddqn_indicator"
-                ],
-                [
-                  "jensen_gap"
-                ],
-                [
-                  "q_late_mean"
-                ]
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'state_conditional_argmax_entropy_late'})": [
-                [
-                  "jensen_gap"
-                ],
-                [
-                  "q_action_grad_overlap_late"
-                ],
-                [
-                  "q_late_mean"
                 ]
               ],
               "frozenset({'state_conditional_argmax_entropy_late', 'arm_ddqn_indicator'})": [
@@ -3069,8 +3063,19 @@
               "frozenset({'state_conditional_argmax_entropy_late', 'q_action_grad_overlap_late'})": [
                 []
               ],
-              "frozenset({'state_conditional_argmax_entropy_late', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'state_conditional_argmax_entropy_late', 'q_late_mean'})": [
                 []
+              ],
+              "frozenset({'state_conditional_argmax_entropy_late', 'q_trajectory_autocorr_late'})": [
+                [
+                  "jensen_gap"
+                ],
+                [
+                  "q_action_grad_overlap_late"
+                ],
+                [
+                  "q_late_mean"
+                ]
               ]
             },
             "stratify_by": null,
@@ -3104,7 +3109,7 @@
       "blocked_by": null,
       "bridge_name": "pc_qlate_screens_arm_to_outcome__asterix_g999",
       "direction": "inverse",
-      "extent_hash": -3446491301601063542,
+      "extent_hash": -7170665121167855245,
       "n_cells_in_scope": 60,
       "n_cells_pre_scope": 6830,
       "pair_by": [
@@ -3172,6 +3177,11 @@
               ]
             ],
             "separating_sets": {
+              "frozenset({'arm_ddqn_indicator', 'jensen_gap'})": [
+                [
+                  "q_late_mean"
+                ]
+              ],
               "frozenset({'bootstrap_action_mismatch_late', 'arm_ddqn_indicator'})": [
                 [
                   "eval_best_burst_raw_mean"
@@ -3192,7 +3202,56 @@
               "frozenset({'bootstrap_action_mismatch_late', 'q_action_grad_overlap_late'})": [
                 []
               ],
-              "frozenset({'bootstrap_action_mismatch_late', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'bootstrap_action_mismatch_late', 'q_late_mean'})": [
+                []
+              ],
+              "frozenset({'bootstrap_action_mismatch_late', 'q_trajectory_autocorr_late'})": [
+                []
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'arm_ddqn_indicator'})": [
+                [
+                  "jensen_gap"
+                ],
+                [
+                  "q_inter_state_grad_overlap_late"
+                ],
+                [
+                  "q_late_mean"
+                ]
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'jensen_gap'})": [
+                [
+                  "q_late_mean"
+                ]
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'q_late_mean'})": [
+                [
+                  "jensen_gap"
+                ]
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'q_trajectory_autocorr_late'})": [
+                []
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'arm_ddqn_indicator'})": [
+                []
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'jensen_gap'})": [
+                []
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'q_late_mean'})": [
+                []
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'q_trajectory_autocorr_late'})": [
+                [
+                  "jensen_gap",
+                  "q_late_mean"
+                ],
+                [
+                  "q_inter_state_grad_overlap_late",
+                  "state_conditional_argmax_entropy_late"
+                ]
+              ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'bootstrap_action_mismatch_late'})": [
                 [
                   "arm_ddqn_indicator",
                   "eval_best_burst_raw_mean"
@@ -3226,18 +3285,7 @@
                   "state_conditional_argmax_entropy_late"
                 ]
               ],
-              "frozenset({'eval_best_burst_raw_mean', 'arm_ddqn_indicator'})": [
-                [
-                  "jensen_gap"
-                ],
-                [
-                  "q_inter_state_grad_overlap_late"
-                ],
-                [
-                  "q_late_mean"
-                ]
-              ],
-              "frozenset({'eval_best_burst_raw_mean', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'eval_best_burst_raw_mean'})": [
                 [
                   "arm_ddqn_indicator"
                 ],
@@ -3248,20 +3296,7 @@
                   "q_late_mean"
                 ]
               ],
-              "frozenset({'jensen_gap', 'arm_ddqn_indicator'})": [
-                [
-                  "q_late_mean"
-                ]
-              ],
-              "frozenset({'jensen_gap', 'eval_best_burst_raw_mean'})": [
-                [
-                  "q_late_mean"
-                ]
-              ],
-              "frozenset({'jensen_gap', 'q_action_grad_overlap_late'})": [
-                []
-              ],
-              "frozenset({'jensen_gap', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'jensen_gap'})": [
                 [
                   "arm_ddqn_indicator"
                 ],
@@ -3269,32 +3304,32 @@
                   "q_late_mean"
                 ]
               ],
-              "frozenset({'q_action_grad_overlap_late', 'arm_ddqn_indicator'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'q_action_grad_overlap_late'})": [
                 []
               ],
-              "frozenset({'q_action_grad_overlap_late', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'q_late_mean'})": [
+                [
+                  "arm_ddqn_indicator"
+                ],
+                [
+                  "jensen_gap"
+                ]
+              ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'q_trajectory_autocorr_late'})": [
+                [
+                  "arm_ddqn_indicator"
+                ],
+                [
+                  "jensen_gap"
+                ],
+                [
+                  "q_late_mean"
+                ]
+              ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'state_conditional_argmax_entropy_late'})": [
                 []
               ],
               "frozenset({'q_late_mean', 'arm_ddqn_indicator'})": [
-                [
-                  "jensen_gap"
-                ]
-              ],
-              "frozenset({'q_late_mean', 'bootstrap_action_mismatch_late'})": [
-                []
-              ],
-              "frozenset({'q_late_mean', 'eval_best_burst_raw_mean'})": [
-                [
-                  "jensen_gap"
-                ]
-              ],
-              "frozenset({'q_late_mean', 'q_action_grad_overlap_late'})": [
-                []
-              ],
-              "frozenset({'q_late_mean', 'q_inter_state_grad_overlap_late'})": [
-                [
-                  "arm_ddqn_indicator"
-                ],
                 [
                   "jensen_gap"
                 ]
@@ -3304,50 +3339,9 @@
                   "arm_ddqn_indicator"
                 ]
               ],
-              "frozenset({'q_late_mean', 'state_conditional_argmax_entropy_late'})": [
-                []
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'bootstrap_action_mismatch_late'})": [
-                []
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'eval_best_burst_raw_mean'})": [
-                []
-              ],
               "frozenset({'q_trajectory_autocorr_late', 'jensen_gap'})": [
                 [
                   "arm_ddqn_indicator"
-                ]
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'q_action_grad_overlap_late'})": [
-                [
-                  "jensen_gap",
-                  "q_late_mean"
-                ],
-                [
-                  "q_inter_state_grad_overlap_late",
-                  "state_conditional_argmax_entropy_late"
-                ]
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'q_inter_state_grad_overlap_late'})": [
-                [
-                  "arm_ddqn_indicator"
-                ],
-                [
-                  "jensen_gap"
-                ],
-                [
-                  "q_late_mean"
-                ]
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'state_conditional_argmax_entropy_late'})": [
-                [
-                  "jensen_gap"
-                ],
-                [
-                  "q_action_grad_overlap_late"
-                ],
-                [
-                  "q_late_mean"
                 ]
               ],
               "frozenset({'state_conditional_argmax_entropy_late', 'arm_ddqn_indicator'})": [
@@ -3362,8 +3356,19 @@
               "frozenset({'state_conditional_argmax_entropy_late', 'q_action_grad_overlap_late'})": [
                 []
               ],
-              "frozenset({'state_conditional_argmax_entropy_late', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'state_conditional_argmax_entropy_late', 'q_late_mean'})": [
                 []
+              ],
+              "frozenset({'state_conditional_argmax_entropy_late', 'q_trajectory_autocorr_late'})": [
+                [
+                  "jensen_gap"
+                ],
+                [
+                  "q_action_grad_overlap_late"
+                ],
+                [
+                  "q_late_mean"
+                ]
               ]
             },
             "undirected_edges": [
@@ -3423,6 +3428,11 @@
             "max_conditioning": 2,
             "n_observations": 60,
             "separating_sets": {
+              "frozenset({'arm_ddqn_indicator', 'jensen_gap'})": [
+                [
+                  "q_late_mean"
+                ]
+              ],
               "frozenset({'bootstrap_action_mismatch_late', 'arm_ddqn_indicator'})": [
                 [
                   "eval_best_burst_raw_mean"
@@ -3443,7 +3453,56 @@
               "frozenset({'bootstrap_action_mismatch_late', 'q_action_grad_overlap_late'})": [
                 []
               ],
-              "frozenset({'bootstrap_action_mismatch_late', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'bootstrap_action_mismatch_late', 'q_late_mean'})": [
+                []
+              ],
+              "frozenset({'bootstrap_action_mismatch_late', 'q_trajectory_autocorr_late'})": [
+                []
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'arm_ddqn_indicator'})": [
+                [
+                  "jensen_gap"
+                ],
+                [
+                  "q_inter_state_grad_overlap_late"
+                ],
+                [
+                  "q_late_mean"
+                ]
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'jensen_gap'})": [
+                [
+                  "q_late_mean"
+                ]
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'q_late_mean'})": [
+                [
+                  "jensen_gap"
+                ]
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'q_trajectory_autocorr_late'})": [
+                []
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'arm_ddqn_indicator'})": [
+                []
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'jensen_gap'})": [
+                []
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'q_late_mean'})": [
+                []
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'q_trajectory_autocorr_late'})": [
+                [
+                  "jensen_gap",
+                  "q_late_mean"
+                ],
+                [
+                  "q_inter_state_grad_overlap_late",
+                  "state_conditional_argmax_entropy_late"
+                ]
+              ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'bootstrap_action_mismatch_late'})": [
                 [
                   "arm_ddqn_indicator",
                   "eval_best_burst_raw_mean"
@@ -3477,18 +3536,7 @@
                   "state_conditional_argmax_entropy_late"
                 ]
               ],
-              "frozenset({'eval_best_burst_raw_mean', 'arm_ddqn_indicator'})": [
-                [
-                  "jensen_gap"
-                ],
-                [
-                  "q_inter_state_grad_overlap_late"
-                ],
-                [
-                  "q_late_mean"
-                ]
-              ],
-              "frozenset({'eval_best_burst_raw_mean', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'eval_best_burst_raw_mean'})": [
                 [
                   "arm_ddqn_indicator"
                 ],
@@ -3499,20 +3547,7 @@
                   "q_late_mean"
                 ]
               ],
-              "frozenset({'jensen_gap', 'arm_ddqn_indicator'})": [
-                [
-                  "q_late_mean"
-                ]
-              ],
-              "frozenset({'jensen_gap', 'eval_best_burst_raw_mean'})": [
-                [
-                  "q_late_mean"
-                ]
-              ],
-              "frozenset({'jensen_gap', 'q_action_grad_overlap_late'})": [
-                []
-              ],
-              "frozenset({'jensen_gap', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'jensen_gap'})": [
                 [
                   "arm_ddqn_indicator"
                 ],
@@ -3520,32 +3555,32 @@
                   "q_late_mean"
                 ]
               ],
-              "frozenset({'q_action_grad_overlap_late', 'arm_ddqn_indicator'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'q_action_grad_overlap_late'})": [
                 []
               ],
-              "frozenset({'q_action_grad_overlap_late', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'q_late_mean'})": [
+                [
+                  "arm_ddqn_indicator"
+                ],
+                [
+                  "jensen_gap"
+                ]
+              ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'q_trajectory_autocorr_late'})": [
+                [
+                  "arm_ddqn_indicator"
+                ],
+                [
+                  "jensen_gap"
+                ],
+                [
+                  "q_late_mean"
+                ]
+              ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'state_conditional_argmax_entropy_late'})": [
                 []
               ],
               "frozenset({'q_late_mean', 'arm_ddqn_indicator'})": [
-                [
-                  "jensen_gap"
-                ]
-              ],
-              "frozenset({'q_late_mean', 'bootstrap_action_mismatch_late'})": [
-                []
-              ],
-              "frozenset({'q_late_mean', 'eval_best_burst_raw_mean'})": [
-                [
-                  "jensen_gap"
-                ]
-              ],
-              "frozenset({'q_late_mean', 'q_action_grad_overlap_late'})": [
-                []
-              ],
-              "frozenset({'q_late_mean', 'q_inter_state_grad_overlap_late'})": [
-                [
-                  "arm_ddqn_indicator"
-                ],
                 [
                   "jensen_gap"
                 ]
@@ -3555,50 +3590,9 @@
                   "arm_ddqn_indicator"
                 ]
               ],
-              "frozenset({'q_late_mean', 'state_conditional_argmax_entropy_late'})": [
-                []
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'bootstrap_action_mismatch_late'})": [
-                []
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'eval_best_burst_raw_mean'})": [
-                []
-              ],
               "frozenset({'q_trajectory_autocorr_late', 'jensen_gap'})": [
                 [
                   "arm_ddqn_indicator"
-                ]
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'q_action_grad_overlap_late'})": [
-                [
-                  "jensen_gap",
-                  "q_late_mean"
-                ],
-                [
-                  "q_inter_state_grad_overlap_late",
-                  "state_conditional_argmax_entropy_late"
-                ]
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'q_inter_state_grad_overlap_late'})": [
-                [
-                  "arm_ddqn_indicator"
-                ],
-                [
-                  "jensen_gap"
-                ],
-                [
-                  "q_late_mean"
-                ]
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'state_conditional_argmax_entropy_late'})": [
-                [
-                  "jensen_gap"
-                ],
-                [
-                  "q_action_grad_overlap_late"
-                ],
-                [
-                  "q_late_mean"
                 ]
               ],
               "frozenset({'state_conditional_argmax_entropy_late', 'arm_ddqn_indicator'})": [
@@ -3613,8 +3607,19 @@
               "frozenset({'state_conditional_argmax_entropy_late', 'q_action_grad_overlap_late'})": [
                 []
               ],
-              "frozenset({'state_conditional_argmax_entropy_late', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'state_conditional_argmax_entropy_late', 'q_late_mean'})": [
                 []
+              ],
+              "frozenset({'state_conditional_argmax_entropy_late', 'q_trajectory_autocorr_late'})": [
+                [
+                  "jensen_gap"
+                ],
+                [
+                  "q_action_grad_overlap_late"
+                ],
+                [
+                  "q_late_mean"
+                ]
               ]
             },
             "stratify_by": null,
@@ -3648,7 +3653,7 @@
       "blocked_by": null,
       "bridge_name": "pc_smoothness_screens_arm_to_outcome__asterix_g999",
       "direction": "inverse",
-      "extent_hash": -3446491301601063542,
+      "extent_hash": -7170665121167855245,
       "n_cells_in_scope": 60,
       "n_cells_pre_scope": 6830,
       "pair_by": [
@@ -3716,6 +3721,11 @@
               ]
             ],
             "separating_sets": {
+              "frozenset({'arm_ddqn_indicator', 'jensen_gap'})": [
+                [
+                  "q_late_mean"
+                ]
+              ],
               "frozenset({'bootstrap_action_mismatch_late', 'arm_ddqn_indicator'})": [
                 [
                   "eval_best_burst_raw_mean"
@@ -3736,7 +3746,56 @@
               "frozenset({'bootstrap_action_mismatch_late', 'q_action_grad_overlap_late'})": [
                 []
               ],
-              "frozenset({'bootstrap_action_mismatch_late', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'bootstrap_action_mismatch_late', 'q_late_mean'})": [
+                []
+              ],
+              "frozenset({'bootstrap_action_mismatch_late', 'q_trajectory_autocorr_late'})": [
+                []
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'arm_ddqn_indicator'})": [
+                [
+                  "jensen_gap"
+                ],
+                [
+                  "q_inter_state_grad_overlap_late"
+                ],
+                [
+                  "q_late_mean"
+                ]
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'jensen_gap'})": [
+                [
+                  "q_late_mean"
+                ]
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'q_late_mean'})": [
+                [
+                  "jensen_gap"
+                ]
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'q_trajectory_autocorr_late'})": [
+                []
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'arm_ddqn_indicator'})": [
+                []
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'jensen_gap'})": [
+                []
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'q_late_mean'})": [
+                []
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'q_trajectory_autocorr_late'})": [
+                [
+                  "jensen_gap",
+                  "q_late_mean"
+                ],
+                [
+                  "q_inter_state_grad_overlap_late",
+                  "state_conditional_argmax_entropy_late"
+                ]
+              ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'bootstrap_action_mismatch_late'})": [
                 [
                   "arm_ddqn_indicator",
                   "eval_best_burst_raw_mean"
@@ -3770,18 +3829,7 @@
                   "state_conditional_argmax_entropy_late"
                 ]
               ],
-              "frozenset({'eval_best_burst_raw_mean', 'arm_ddqn_indicator'})": [
-                [
-                  "jensen_gap"
-                ],
-                [
-                  "q_inter_state_grad_overlap_late"
-                ],
-                [
-                  "q_late_mean"
-                ]
-              ],
-              "frozenset({'eval_best_burst_raw_mean', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'eval_best_burst_raw_mean'})": [
                 [
                   "arm_ddqn_indicator"
                 ],
@@ -3792,20 +3840,7 @@
                   "q_late_mean"
                 ]
               ],
-              "frozenset({'jensen_gap', 'arm_ddqn_indicator'})": [
-                [
-                  "q_late_mean"
-                ]
-              ],
-              "frozenset({'jensen_gap', 'eval_best_burst_raw_mean'})": [
-                [
-                  "q_late_mean"
-                ]
-              ],
-              "frozenset({'jensen_gap', 'q_action_grad_overlap_late'})": [
-                []
-              ],
-              "frozenset({'jensen_gap', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'jensen_gap'})": [
                 [
                   "arm_ddqn_indicator"
                 ],
@@ -3813,32 +3848,32 @@
                   "q_late_mean"
                 ]
               ],
-              "frozenset({'q_action_grad_overlap_late', 'arm_ddqn_indicator'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'q_action_grad_overlap_late'})": [
                 []
               ],
-              "frozenset({'q_action_grad_overlap_late', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'q_late_mean'})": [
+                [
+                  "arm_ddqn_indicator"
+                ],
+                [
+                  "jensen_gap"
+                ]
+              ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'q_trajectory_autocorr_late'})": [
+                [
+                  "arm_ddqn_indicator"
+                ],
+                [
+                  "jensen_gap"
+                ],
+                [
+                  "q_late_mean"
+                ]
+              ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'state_conditional_argmax_entropy_late'})": [
                 []
               ],
               "frozenset({'q_late_mean', 'arm_ddqn_indicator'})": [
-                [
-                  "jensen_gap"
-                ]
-              ],
-              "frozenset({'q_late_mean', 'bootstrap_action_mismatch_late'})": [
-                []
-              ],
-              "frozenset({'q_late_mean', 'eval_best_burst_raw_mean'})": [
-                [
-                  "jensen_gap"
-                ]
-              ],
-              "frozenset({'q_late_mean', 'q_action_grad_overlap_late'})": [
-                []
-              ],
-              "frozenset({'q_late_mean', 'q_inter_state_grad_overlap_late'})": [
-                [
-                  "arm_ddqn_indicator"
-                ],
                 [
                   "jensen_gap"
                 ]
@@ -3848,50 +3883,9 @@
                   "arm_ddqn_indicator"
                 ]
               ],
-              "frozenset({'q_late_mean', 'state_conditional_argmax_entropy_late'})": [
-                []
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'bootstrap_action_mismatch_late'})": [
-                []
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'eval_best_burst_raw_mean'})": [
-                []
-              ],
               "frozenset({'q_trajectory_autocorr_late', 'jensen_gap'})": [
                 [
                   "arm_ddqn_indicator"
-                ]
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'q_action_grad_overlap_late'})": [
-                [
-                  "jensen_gap",
-                  "q_late_mean"
-                ],
-                [
-                  "q_inter_state_grad_overlap_late",
-                  "state_conditional_argmax_entropy_late"
-                ]
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'q_inter_state_grad_overlap_late'})": [
-                [
-                  "arm_ddqn_indicator"
-                ],
-                [
-                  "jensen_gap"
-                ],
-                [
-                  "q_late_mean"
-                ]
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'state_conditional_argmax_entropy_late'})": [
-                [
-                  "jensen_gap"
-                ],
-                [
-                  "q_action_grad_overlap_late"
-                ],
-                [
-                  "q_late_mean"
                 ]
               ],
               "frozenset({'state_conditional_argmax_entropy_late', 'arm_ddqn_indicator'})": [
@@ -3906,8 +3900,19 @@
               "frozenset({'state_conditional_argmax_entropy_late', 'q_action_grad_overlap_late'})": [
                 []
               ],
-              "frozenset({'state_conditional_argmax_entropy_late', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'state_conditional_argmax_entropy_late', 'q_late_mean'})": [
                 []
+              ],
+              "frozenset({'state_conditional_argmax_entropy_late', 'q_trajectory_autocorr_late'})": [
+                [
+                  "jensen_gap"
+                ],
+                [
+                  "q_action_grad_overlap_late"
+                ],
+                [
+                  "q_late_mean"
+                ]
               ]
             },
             "undirected_edges": [
@@ -3967,6 +3972,11 @@
             "max_conditioning": 2,
             "n_observations": 60,
             "separating_sets": {
+              "frozenset({'arm_ddqn_indicator', 'jensen_gap'})": [
+                [
+                  "q_late_mean"
+                ]
+              ],
               "frozenset({'bootstrap_action_mismatch_late', 'arm_ddqn_indicator'})": [
                 [
                   "eval_best_burst_raw_mean"
@@ -3987,7 +3997,56 @@
               "frozenset({'bootstrap_action_mismatch_late', 'q_action_grad_overlap_late'})": [
                 []
               ],
-              "frozenset({'bootstrap_action_mismatch_late', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'bootstrap_action_mismatch_late', 'q_late_mean'})": [
+                []
+              ],
+              "frozenset({'bootstrap_action_mismatch_late', 'q_trajectory_autocorr_late'})": [
+                []
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'arm_ddqn_indicator'})": [
+                [
+                  "jensen_gap"
+                ],
+                [
+                  "q_inter_state_grad_overlap_late"
+                ],
+                [
+                  "q_late_mean"
+                ]
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'jensen_gap'})": [
+                [
+                  "q_late_mean"
+                ]
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'q_late_mean'})": [
+                [
+                  "jensen_gap"
+                ]
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'q_trajectory_autocorr_late'})": [
+                []
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'arm_ddqn_indicator'})": [
+                []
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'jensen_gap'})": [
+                []
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'q_late_mean'})": [
+                []
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'q_trajectory_autocorr_late'})": [
+                [
+                  "jensen_gap",
+                  "q_late_mean"
+                ],
+                [
+                  "q_inter_state_grad_overlap_late",
+                  "state_conditional_argmax_entropy_late"
+                ]
+              ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'bootstrap_action_mismatch_late'})": [
                 [
                   "arm_ddqn_indicator",
                   "eval_best_burst_raw_mean"
@@ -4021,18 +4080,7 @@
                   "state_conditional_argmax_entropy_late"
                 ]
               ],
-              "frozenset({'eval_best_burst_raw_mean', 'arm_ddqn_indicator'})": [
-                [
-                  "jensen_gap"
-                ],
-                [
-                  "q_inter_state_grad_overlap_late"
-                ],
-                [
-                  "q_late_mean"
-                ]
-              ],
-              "frozenset({'eval_best_burst_raw_mean', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'eval_best_burst_raw_mean'})": [
                 [
                   "arm_ddqn_indicator"
                 ],
@@ -4043,20 +4091,7 @@
                   "q_late_mean"
                 ]
               ],
-              "frozenset({'jensen_gap', 'arm_ddqn_indicator'})": [
-                [
-                  "q_late_mean"
-                ]
-              ],
-              "frozenset({'jensen_gap', 'eval_best_burst_raw_mean'})": [
-                [
-                  "q_late_mean"
-                ]
-              ],
-              "frozenset({'jensen_gap', 'q_action_grad_overlap_late'})": [
-                []
-              ],
-              "frozenset({'jensen_gap', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'jensen_gap'})": [
                 [
                   "arm_ddqn_indicator"
                 ],
@@ -4064,32 +4099,32 @@
                   "q_late_mean"
                 ]
               ],
-              "frozenset({'q_action_grad_overlap_late', 'arm_ddqn_indicator'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'q_action_grad_overlap_late'})": [
                 []
               ],
-              "frozenset({'q_action_grad_overlap_late', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'q_late_mean'})": [
+                [
+                  "arm_ddqn_indicator"
+                ],
+                [
+                  "jensen_gap"
+                ]
+              ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'q_trajectory_autocorr_late'})": [
+                [
+                  "arm_ddqn_indicator"
+                ],
+                [
+                  "jensen_gap"
+                ],
+                [
+                  "q_late_mean"
+                ]
+              ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'state_conditional_argmax_entropy_late'})": [
                 []
               ],
               "frozenset({'q_late_mean', 'arm_ddqn_indicator'})": [
-                [
-                  "jensen_gap"
-                ]
-              ],
-              "frozenset({'q_late_mean', 'bootstrap_action_mismatch_late'})": [
-                []
-              ],
-              "frozenset({'q_late_mean', 'eval_best_burst_raw_mean'})": [
-                [
-                  "jensen_gap"
-                ]
-              ],
-              "frozenset({'q_late_mean', 'q_action_grad_overlap_late'})": [
-                []
-              ],
-              "frozenset({'q_late_mean', 'q_inter_state_grad_overlap_late'})": [
-                [
-                  "arm_ddqn_indicator"
-                ],
                 [
                   "jensen_gap"
                 ]
@@ -4099,50 +4134,9 @@
                   "arm_ddqn_indicator"
                 ]
               ],
-              "frozenset({'q_late_mean', 'state_conditional_argmax_entropy_late'})": [
-                []
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'bootstrap_action_mismatch_late'})": [
-                []
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'eval_best_burst_raw_mean'})": [
-                []
-              ],
               "frozenset({'q_trajectory_autocorr_late', 'jensen_gap'})": [
                 [
                   "arm_ddqn_indicator"
-                ]
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'q_action_grad_overlap_late'})": [
-                [
-                  "jensen_gap",
-                  "q_late_mean"
-                ],
-                [
-                  "q_inter_state_grad_overlap_late",
-                  "state_conditional_argmax_entropy_late"
-                ]
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'q_inter_state_grad_overlap_late'})": [
-                [
-                  "arm_ddqn_indicator"
-                ],
-                [
-                  "jensen_gap"
-                ],
-                [
-                  "q_late_mean"
-                ]
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'state_conditional_argmax_entropy_late'})": [
-                [
-                  "jensen_gap"
-                ],
-                [
-                  "q_action_grad_overlap_late"
-                ],
-                [
-                  "q_late_mean"
                 ]
               ],
               "frozenset({'state_conditional_argmax_entropy_late', 'arm_ddqn_indicator'})": [
@@ -4157,8 +4151,19 @@
               "frozenset({'state_conditional_argmax_entropy_late', 'q_action_grad_overlap_late'})": [
                 []
               ],
-              "frozenset({'state_conditional_argmax_entropy_late', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'state_conditional_argmax_entropy_late', 'q_late_mean'})": [
                 []
+              ],
+              "frozenset({'state_conditional_argmax_entropy_late', 'q_trajectory_autocorr_late'})": [
+                [
+                  "jensen_gap"
+                ],
+                [
+                  "q_action_grad_overlap_late"
+                ],
+                [
+                  "q_late_mean"
+                ]
               ]
             },
             "stratify_by": null,
@@ -4192,7 +4197,7 @@
       "blocked_by": null,
       "bridge_name": "pc_hcond_not_arm_affected__asterix_g999",
       "direction": "direct",
-      "extent_hash": -3446491301601063542,
+      "extent_hash": -7170665121167855245,
       "n_cells_in_scope": 60,
       "n_cells_pre_scope": 6830,
       "pair_by": [
@@ -4259,6 +4264,11 @@
               ]
             ],
             "separating_sets": {
+              "frozenset({'arm_ddqn_indicator', 'jensen_gap'})": [
+                [
+                  "q_late_mean"
+                ]
+              ],
               "frozenset({'bootstrap_action_mismatch_late', 'arm_ddqn_indicator'})": [
                 [
                   "eval_best_burst_raw_mean"
@@ -4279,7 +4289,56 @@
               "frozenset({'bootstrap_action_mismatch_late', 'q_action_grad_overlap_late'})": [
                 []
               ],
-              "frozenset({'bootstrap_action_mismatch_late', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'bootstrap_action_mismatch_late', 'q_late_mean'})": [
+                []
+              ],
+              "frozenset({'bootstrap_action_mismatch_late', 'q_trajectory_autocorr_late'})": [
+                []
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'arm_ddqn_indicator'})": [
+                [
+                  "jensen_gap"
+                ],
+                [
+                  "q_inter_state_grad_overlap_late"
+                ],
+                [
+                  "q_late_mean"
+                ]
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'jensen_gap'})": [
+                [
+                  "q_late_mean"
+                ]
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'q_late_mean'})": [
+                [
+                  "jensen_gap"
+                ]
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'q_trajectory_autocorr_late'})": [
+                []
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'arm_ddqn_indicator'})": [
+                []
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'jensen_gap'})": [
+                []
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'q_late_mean'})": [
+                []
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'q_trajectory_autocorr_late'})": [
+                [
+                  "jensen_gap",
+                  "q_late_mean"
+                ],
+                [
+                  "q_inter_state_grad_overlap_late",
+                  "state_conditional_argmax_entropy_late"
+                ]
+              ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'bootstrap_action_mismatch_late'})": [
                 [
                   "arm_ddqn_indicator",
                   "eval_best_burst_raw_mean"
@@ -4313,18 +4372,7 @@
                   "state_conditional_argmax_entropy_late"
                 ]
               ],
-              "frozenset({'eval_best_burst_raw_mean', 'arm_ddqn_indicator'})": [
-                [
-                  "jensen_gap"
-                ],
-                [
-                  "q_inter_state_grad_overlap_late"
-                ],
-                [
-                  "q_late_mean"
-                ]
-              ],
-              "frozenset({'eval_best_burst_raw_mean', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'eval_best_burst_raw_mean'})": [
                 [
                   "arm_ddqn_indicator"
                 ],
@@ -4335,20 +4383,7 @@
                   "q_late_mean"
                 ]
               ],
-              "frozenset({'jensen_gap', 'arm_ddqn_indicator'})": [
-                [
-                  "q_late_mean"
-                ]
-              ],
-              "frozenset({'jensen_gap', 'eval_best_burst_raw_mean'})": [
-                [
-                  "q_late_mean"
-                ]
-              ],
-              "frozenset({'jensen_gap', 'q_action_grad_overlap_late'})": [
-                []
-              ],
-              "frozenset({'jensen_gap', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'jensen_gap'})": [
                 [
                   "arm_ddqn_indicator"
                 ],
@@ -4356,32 +4391,32 @@
                   "q_late_mean"
                 ]
               ],
-              "frozenset({'q_action_grad_overlap_late', 'arm_ddqn_indicator'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'q_action_grad_overlap_late'})": [
                 []
               ],
-              "frozenset({'q_action_grad_overlap_late', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'q_late_mean'})": [
+                [
+                  "arm_ddqn_indicator"
+                ],
+                [
+                  "jensen_gap"
+                ]
+              ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'q_trajectory_autocorr_late'})": [
+                [
+                  "arm_ddqn_indicator"
+                ],
+                [
+                  "jensen_gap"
+                ],
+                [
+                  "q_late_mean"
+                ]
+              ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'state_conditional_argmax_entropy_late'})": [
                 []
               ],
               "frozenset({'q_late_mean', 'arm_ddqn_indicator'})": [
-                [
-                  "jensen_gap"
-                ]
-              ],
-              "frozenset({'q_late_mean', 'bootstrap_action_mismatch_late'})": [
-                []
-              ],
-              "frozenset({'q_late_mean', 'eval_best_burst_raw_mean'})": [
-                [
-                  "jensen_gap"
-                ]
-              ],
-              "frozenset({'q_late_mean', 'q_action_grad_overlap_late'})": [
-                []
-              ],
-              "frozenset({'q_late_mean', 'q_inter_state_grad_overlap_late'})": [
-                [
-                  "arm_ddqn_indicator"
-                ],
                 [
                   "jensen_gap"
                 ]
@@ -4391,50 +4426,9 @@
                   "arm_ddqn_indicator"
                 ]
               ],
-              "frozenset({'q_late_mean', 'state_conditional_argmax_entropy_late'})": [
-                []
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'bootstrap_action_mismatch_late'})": [
-                []
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'eval_best_burst_raw_mean'})": [
-                []
-              ],
               "frozenset({'q_trajectory_autocorr_late', 'jensen_gap'})": [
                 [
                   "arm_ddqn_indicator"
-                ]
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'q_action_grad_overlap_late'})": [
-                [
-                  "jensen_gap",
-                  "q_late_mean"
-                ],
-                [
-                  "q_inter_state_grad_overlap_late",
-                  "state_conditional_argmax_entropy_late"
-                ]
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'q_inter_state_grad_overlap_late'})": [
-                [
-                  "arm_ddqn_indicator"
-                ],
-                [
-                  "jensen_gap"
-                ],
-                [
-                  "q_late_mean"
-                ]
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'state_conditional_argmax_entropy_late'})": [
-                [
-                  "jensen_gap"
-                ],
-                [
-                  "q_action_grad_overlap_late"
-                ],
-                [
-                  "q_late_mean"
                 ]
               ],
               "frozenset({'state_conditional_argmax_entropy_late', 'arm_ddqn_indicator'})": [
@@ -4449,8 +4443,19 @@
               "frozenset({'state_conditional_argmax_entropy_late', 'q_action_grad_overlap_late'})": [
                 []
               ],
-              "frozenset({'state_conditional_argmax_entropy_late', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'state_conditional_argmax_entropy_late', 'q_late_mean'})": [
                 []
+              ],
+              "frozenset({'state_conditional_argmax_entropy_late', 'q_trajectory_autocorr_late'})": [
+                [
+                  "jensen_gap"
+                ],
+                [
+                  "q_action_grad_overlap_late"
+                ],
+                [
+                  "q_late_mean"
+                ]
               ]
             },
             "undirected_edges": [
@@ -4510,6 +4515,11 @@
             "max_conditioning": 2,
             "n_observations": 60,
             "separating_sets": {
+              "frozenset({'arm_ddqn_indicator', 'jensen_gap'})": [
+                [
+                  "q_late_mean"
+                ]
+              ],
               "frozenset({'bootstrap_action_mismatch_late', 'arm_ddqn_indicator'})": [
                 [
                   "eval_best_burst_raw_mean"
@@ -4530,7 +4540,56 @@
               "frozenset({'bootstrap_action_mismatch_late', 'q_action_grad_overlap_late'})": [
                 []
               ],
-              "frozenset({'bootstrap_action_mismatch_late', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'bootstrap_action_mismatch_late', 'q_late_mean'})": [
+                []
+              ],
+              "frozenset({'bootstrap_action_mismatch_late', 'q_trajectory_autocorr_late'})": [
+                []
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'arm_ddqn_indicator'})": [
+                [
+                  "jensen_gap"
+                ],
+                [
+                  "q_inter_state_grad_overlap_late"
+                ],
+                [
+                  "q_late_mean"
+                ]
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'jensen_gap'})": [
+                [
+                  "q_late_mean"
+                ]
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'q_late_mean'})": [
+                [
+                  "jensen_gap"
+                ]
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'q_trajectory_autocorr_late'})": [
+                []
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'arm_ddqn_indicator'})": [
+                []
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'jensen_gap'})": [
+                []
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'q_late_mean'})": [
+                []
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'q_trajectory_autocorr_late'})": [
+                [
+                  "jensen_gap",
+                  "q_late_mean"
+                ],
+                [
+                  "q_inter_state_grad_overlap_late",
+                  "state_conditional_argmax_entropy_late"
+                ]
+              ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'bootstrap_action_mismatch_late'})": [
                 [
                   "arm_ddqn_indicator",
                   "eval_best_burst_raw_mean"
@@ -4564,18 +4623,7 @@
                   "state_conditional_argmax_entropy_late"
                 ]
               ],
-              "frozenset({'eval_best_burst_raw_mean', 'arm_ddqn_indicator'})": [
-                [
-                  "jensen_gap"
-                ],
-                [
-                  "q_inter_state_grad_overlap_late"
-                ],
-                [
-                  "q_late_mean"
-                ]
-              ],
-              "frozenset({'eval_best_burst_raw_mean', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'eval_best_burst_raw_mean'})": [
                 [
                   "arm_ddqn_indicator"
                 ],
@@ -4586,20 +4634,7 @@
                   "q_late_mean"
                 ]
               ],
-              "frozenset({'jensen_gap', 'arm_ddqn_indicator'})": [
-                [
-                  "q_late_mean"
-                ]
-              ],
-              "frozenset({'jensen_gap', 'eval_best_burst_raw_mean'})": [
-                [
-                  "q_late_mean"
-                ]
-              ],
-              "frozenset({'jensen_gap', 'q_action_grad_overlap_late'})": [
-                []
-              ],
-              "frozenset({'jensen_gap', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'jensen_gap'})": [
                 [
                   "arm_ddqn_indicator"
                 ],
@@ -4607,32 +4642,32 @@
                   "q_late_mean"
                 ]
               ],
-              "frozenset({'q_action_grad_overlap_late', 'arm_ddqn_indicator'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'q_action_grad_overlap_late'})": [
                 []
               ],
-              "frozenset({'q_action_grad_overlap_late', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'q_late_mean'})": [
+                [
+                  "arm_ddqn_indicator"
+                ],
+                [
+                  "jensen_gap"
+                ]
+              ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'q_trajectory_autocorr_late'})": [
+                [
+                  "arm_ddqn_indicator"
+                ],
+                [
+                  "jensen_gap"
+                ],
+                [
+                  "q_late_mean"
+                ]
+              ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'state_conditional_argmax_entropy_late'})": [
                 []
               ],
               "frozenset({'q_late_mean', 'arm_ddqn_indicator'})": [
-                [
-                  "jensen_gap"
-                ]
-              ],
-              "frozenset({'q_late_mean', 'bootstrap_action_mismatch_late'})": [
-                []
-              ],
-              "frozenset({'q_late_mean', 'eval_best_burst_raw_mean'})": [
-                [
-                  "jensen_gap"
-                ]
-              ],
-              "frozenset({'q_late_mean', 'q_action_grad_overlap_late'})": [
-                []
-              ],
-              "frozenset({'q_late_mean', 'q_inter_state_grad_overlap_late'})": [
-                [
-                  "arm_ddqn_indicator"
-                ],
                 [
                   "jensen_gap"
                 ]
@@ -4642,50 +4677,9 @@
                   "arm_ddqn_indicator"
                 ]
               ],
-              "frozenset({'q_late_mean', 'state_conditional_argmax_entropy_late'})": [
-                []
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'bootstrap_action_mismatch_late'})": [
-                []
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'eval_best_burst_raw_mean'})": [
-                []
-              ],
               "frozenset({'q_trajectory_autocorr_late', 'jensen_gap'})": [
                 [
                   "arm_ddqn_indicator"
-                ]
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'q_action_grad_overlap_late'})": [
-                [
-                  "jensen_gap",
-                  "q_late_mean"
-                ],
-                [
-                  "q_inter_state_grad_overlap_late",
-                  "state_conditional_argmax_entropy_late"
-                ]
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'q_inter_state_grad_overlap_late'})": [
-                [
-                  "arm_ddqn_indicator"
-                ],
-                [
-                  "jensen_gap"
-                ],
-                [
-                  "q_late_mean"
-                ]
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'state_conditional_argmax_entropy_late'})": [
-                [
-                  "jensen_gap"
-                ],
-                [
-                  "q_action_grad_overlap_late"
-                ],
-                [
-                  "q_late_mean"
                 ]
               ],
               "frozenset({'state_conditional_argmax_entropy_late', 'arm_ddqn_indicator'})": [
@@ -4700,8 +4694,19 @@
               "frozenset({'state_conditional_argmax_entropy_late', 'q_action_grad_overlap_late'})": [
                 []
               ],
-              "frozenset({'state_conditional_argmax_entropy_late', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'state_conditional_argmax_entropy_late', 'q_late_mean'})": [
                 []
+              ],
+              "frozenset({'state_conditional_argmax_entropy_late', 'q_trajectory_autocorr_late'})": [
+                [
+                  "jensen_gap"
+                ],
+                [
+                  "q_action_grad_overlap_late"
+                ],
+                [
+                  "q_late_mean"
+                ]
               ]
             },
             "stratify_by": null,
@@ -4735,7 +4740,7 @@
       "blocked_by": null,
       "bridge_name": "pc_action_grad_overlap_not_arm_affected__asterix_g999",
       "direction": "direct",
-      "extent_hash": -3446491301601063542,
+      "extent_hash": -7170665121167855245,
       "n_cells_in_scope": 60,
       "n_cells_pre_scope": 6830,
       "pair_by": [
@@ -4802,6 +4807,11 @@
               ]
             ],
             "separating_sets": {
+              "frozenset({'arm_ddqn_indicator', 'jensen_gap'})": [
+                [
+                  "q_late_mean"
+                ]
+              ],
               "frozenset({'bootstrap_action_mismatch_late', 'arm_ddqn_indicator'})": [
                 [
                   "eval_best_burst_raw_mean"
@@ -4822,7 +4832,56 @@
               "frozenset({'bootstrap_action_mismatch_late', 'q_action_grad_overlap_late'})": [
                 []
               ],
-              "frozenset({'bootstrap_action_mismatch_late', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'bootstrap_action_mismatch_late', 'q_late_mean'})": [
+                []
+              ],
+              "frozenset({'bootstrap_action_mismatch_late', 'q_trajectory_autocorr_late'})": [
+                []
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'arm_ddqn_indicator'})": [
+                [
+                  "jensen_gap"
+                ],
+                [
+                  "q_inter_state_grad_overlap_late"
+                ],
+                [
+                  "q_late_mean"
+                ]
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'jensen_gap'})": [
+                [
+                  "q_late_mean"
+                ]
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'q_late_mean'})": [
+                [
+                  "jensen_gap"
+                ]
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'q_trajectory_autocorr_late'})": [
+                []
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'arm_ddqn_indicator'})": [
+                []
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'jensen_gap'})": [
+                []
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'q_late_mean'})": [
+                []
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'q_trajectory_autocorr_late'})": [
+                [
+                  "jensen_gap",
+                  "q_late_mean"
+                ],
+                [
+                  "q_inter_state_grad_overlap_late",
+                  "state_conditional_argmax_entropy_late"
+                ]
+              ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'bootstrap_action_mismatch_late'})": [
                 [
                   "arm_ddqn_indicator",
                   "eval_best_burst_raw_mean"
@@ -4856,18 +4915,7 @@
                   "state_conditional_argmax_entropy_late"
                 ]
               ],
-              "frozenset({'eval_best_burst_raw_mean', 'arm_ddqn_indicator'})": [
-                [
-                  "jensen_gap"
-                ],
-                [
-                  "q_inter_state_grad_overlap_late"
-                ],
-                [
-                  "q_late_mean"
-                ]
-              ],
-              "frozenset({'eval_best_burst_raw_mean', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'eval_best_burst_raw_mean'})": [
                 [
                   "arm_ddqn_indicator"
                 ],
@@ -4878,20 +4926,7 @@
                   "q_late_mean"
                 ]
               ],
-              "frozenset({'jensen_gap', 'arm_ddqn_indicator'})": [
-                [
-                  "q_late_mean"
-                ]
-              ],
-              "frozenset({'jensen_gap', 'eval_best_burst_raw_mean'})": [
-                [
-                  "q_late_mean"
-                ]
-              ],
-              "frozenset({'jensen_gap', 'q_action_grad_overlap_late'})": [
-                []
-              ],
-              "frozenset({'jensen_gap', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'jensen_gap'})": [
                 [
                   "arm_ddqn_indicator"
                 ],
@@ -4899,32 +4934,32 @@
                   "q_late_mean"
                 ]
               ],
-              "frozenset({'q_action_grad_overlap_late', 'arm_ddqn_indicator'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'q_action_grad_overlap_late'})": [
                 []
               ],
-              "frozenset({'q_action_grad_overlap_late', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'q_late_mean'})": [
+                [
+                  "arm_ddqn_indicator"
+                ],
+                [
+                  "jensen_gap"
+                ]
+              ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'q_trajectory_autocorr_late'})": [
+                [
+                  "arm_ddqn_indicator"
+                ],
+                [
+                  "jensen_gap"
+                ],
+                [
+                  "q_late_mean"
+                ]
+              ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'state_conditional_argmax_entropy_late'})": [
                 []
               ],
               "frozenset({'q_late_mean', 'arm_ddqn_indicator'})": [
-                [
-                  "jensen_gap"
-                ]
-              ],
-              "frozenset({'q_late_mean', 'bootstrap_action_mismatch_late'})": [
-                []
-              ],
-              "frozenset({'q_late_mean', 'eval_best_burst_raw_mean'})": [
-                [
-                  "jensen_gap"
-                ]
-              ],
-              "frozenset({'q_late_mean', 'q_action_grad_overlap_late'})": [
-                []
-              ],
-              "frozenset({'q_late_mean', 'q_inter_state_grad_overlap_late'})": [
-                [
-                  "arm_ddqn_indicator"
-                ],
                 [
                   "jensen_gap"
                 ]
@@ -4934,50 +4969,9 @@
                   "arm_ddqn_indicator"
                 ]
               ],
-              "frozenset({'q_late_mean', 'state_conditional_argmax_entropy_late'})": [
-                []
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'bootstrap_action_mismatch_late'})": [
-                []
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'eval_best_burst_raw_mean'})": [
-                []
-              ],
               "frozenset({'q_trajectory_autocorr_late', 'jensen_gap'})": [
                 [
                   "arm_ddqn_indicator"
-                ]
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'q_action_grad_overlap_late'})": [
-                [
-                  "jensen_gap",
-                  "q_late_mean"
-                ],
-                [
-                  "q_inter_state_grad_overlap_late",
-                  "state_conditional_argmax_entropy_late"
-                ]
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'q_inter_state_grad_overlap_late'})": [
-                [
-                  "arm_ddqn_indicator"
-                ],
-                [
-                  "jensen_gap"
-                ],
-                [
-                  "q_late_mean"
-                ]
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'state_conditional_argmax_entropy_late'})": [
-                [
-                  "jensen_gap"
-                ],
-                [
-                  "q_action_grad_overlap_late"
-                ],
-                [
-                  "q_late_mean"
                 ]
               ],
               "frozenset({'state_conditional_argmax_entropy_late', 'arm_ddqn_indicator'})": [
@@ -4992,8 +4986,19 @@
               "frozenset({'state_conditional_argmax_entropy_late', 'q_action_grad_overlap_late'})": [
                 []
               ],
-              "frozenset({'state_conditional_argmax_entropy_late', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'state_conditional_argmax_entropy_late', 'q_late_mean'})": [
                 []
+              ],
+              "frozenset({'state_conditional_argmax_entropy_late', 'q_trajectory_autocorr_late'})": [
+                [
+                  "jensen_gap"
+                ],
+                [
+                  "q_action_grad_overlap_late"
+                ],
+                [
+                  "q_late_mean"
+                ]
               ]
             },
             "undirected_edges": [
@@ -5053,6 +5058,11 @@
             "max_conditioning": 2,
             "n_observations": 60,
             "separating_sets": {
+              "frozenset({'arm_ddqn_indicator', 'jensen_gap'})": [
+                [
+                  "q_late_mean"
+                ]
+              ],
               "frozenset({'bootstrap_action_mismatch_late', 'arm_ddqn_indicator'})": [
                 [
                   "eval_best_burst_raw_mean"
@@ -5073,7 +5083,56 @@
               "frozenset({'bootstrap_action_mismatch_late', 'q_action_grad_overlap_late'})": [
                 []
               ],
-              "frozenset({'bootstrap_action_mismatch_late', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'bootstrap_action_mismatch_late', 'q_late_mean'})": [
+                []
+              ],
+              "frozenset({'bootstrap_action_mismatch_late', 'q_trajectory_autocorr_late'})": [
+                []
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'arm_ddqn_indicator'})": [
+                [
+                  "jensen_gap"
+                ],
+                [
+                  "q_inter_state_grad_overlap_late"
+                ],
+                [
+                  "q_late_mean"
+                ]
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'jensen_gap'})": [
+                [
+                  "q_late_mean"
+                ]
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'q_late_mean'})": [
+                [
+                  "jensen_gap"
+                ]
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'q_trajectory_autocorr_late'})": [
+                []
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'arm_ddqn_indicator'})": [
+                []
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'jensen_gap'})": [
+                []
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'q_late_mean'})": [
+                []
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'q_trajectory_autocorr_late'})": [
+                [
+                  "jensen_gap",
+                  "q_late_mean"
+                ],
+                [
+                  "q_inter_state_grad_overlap_late",
+                  "state_conditional_argmax_entropy_late"
+                ]
+              ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'bootstrap_action_mismatch_late'})": [
                 [
                   "arm_ddqn_indicator",
                   "eval_best_burst_raw_mean"
@@ -5107,18 +5166,7 @@
                   "state_conditional_argmax_entropy_late"
                 ]
               ],
-              "frozenset({'eval_best_burst_raw_mean', 'arm_ddqn_indicator'})": [
-                [
-                  "jensen_gap"
-                ],
-                [
-                  "q_inter_state_grad_overlap_late"
-                ],
-                [
-                  "q_late_mean"
-                ]
-              ],
-              "frozenset({'eval_best_burst_raw_mean', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'eval_best_burst_raw_mean'})": [
                 [
                   "arm_ddqn_indicator"
                 ],
@@ -5129,20 +5177,7 @@
                   "q_late_mean"
                 ]
               ],
-              "frozenset({'jensen_gap', 'arm_ddqn_indicator'})": [
-                [
-                  "q_late_mean"
-                ]
-              ],
-              "frozenset({'jensen_gap', 'eval_best_burst_raw_mean'})": [
-                [
-                  "q_late_mean"
-                ]
-              ],
-              "frozenset({'jensen_gap', 'q_action_grad_overlap_late'})": [
-                []
-              ],
-              "frozenset({'jensen_gap', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'jensen_gap'})": [
                 [
                   "arm_ddqn_indicator"
                 ],
@@ -5150,32 +5185,32 @@
                   "q_late_mean"
                 ]
               ],
-              "frozenset({'q_action_grad_overlap_late', 'arm_ddqn_indicator'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'q_action_grad_overlap_late'})": [
                 []
               ],
-              "frozenset({'q_action_grad_overlap_late', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'q_late_mean'})": [
+                [
+                  "arm_ddqn_indicator"
+                ],
+                [
+                  "jensen_gap"
+                ]
+              ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'q_trajectory_autocorr_late'})": [
+                [
+                  "arm_ddqn_indicator"
+                ],
+                [
+                  "jensen_gap"
+                ],
+                [
+                  "q_late_mean"
+                ]
+              ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'state_conditional_argmax_entropy_late'})": [
                 []
               ],
               "frozenset({'q_late_mean', 'arm_ddqn_indicator'})": [
-                [
-                  "jensen_gap"
-                ]
-              ],
-              "frozenset({'q_late_mean', 'bootstrap_action_mismatch_late'})": [
-                []
-              ],
-              "frozenset({'q_late_mean', 'eval_best_burst_raw_mean'})": [
-                [
-                  "jensen_gap"
-                ]
-              ],
-              "frozenset({'q_late_mean', 'q_action_grad_overlap_late'})": [
-                []
-              ],
-              "frozenset({'q_late_mean', 'q_inter_state_grad_overlap_late'})": [
-                [
-                  "arm_ddqn_indicator"
-                ],
                 [
                   "jensen_gap"
                 ]
@@ -5185,50 +5220,9 @@
                   "arm_ddqn_indicator"
                 ]
               ],
-              "frozenset({'q_late_mean', 'state_conditional_argmax_entropy_late'})": [
-                []
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'bootstrap_action_mismatch_late'})": [
-                []
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'eval_best_burst_raw_mean'})": [
-                []
-              ],
               "frozenset({'q_trajectory_autocorr_late', 'jensen_gap'})": [
                 [
                   "arm_ddqn_indicator"
-                ]
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'q_action_grad_overlap_late'})": [
-                [
-                  "jensen_gap",
-                  "q_late_mean"
-                ],
-                [
-                  "q_inter_state_grad_overlap_late",
-                  "state_conditional_argmax_entropy_late"
-                ]
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'q_inter_state_grad_overlap_late'})": [
-                [
-                  "arm_ddqn_indicator"
-                ],
-                [
-                  "jensen_gap"
-                ],
-                [
-                  "q_late_mean"
-                ]
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'state_conditional_argmax_entropy_late'})": [
-                [
-                  "jensen_gap"
-                ],
-                [
-                  "q_action_grad_overlap_late"
-                ],
-                [
-                  "q_late_mean"
                 ]
               ],
               "frozenset({'state_conditional_argmax_entropy_late', 'arm_ddqn_indicator'})": [
@@ -5243,8 +5237,19 @@
               "frozenset({'state_conditional_argmax_entropy_late', 'q_action_grad_overlap_late'})": [
                 []
               ],
-              "frozenset({'state_conditional_argmax_entropy_late', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'state_conditional_argmax_entropy_late', 'q_late_mean'})": [
                 []
+              ],
+              "frozenset({'state_conditional_argmax_entropy_late', 'q_trajectory_autocorr_late'})": [
+                [
+                  "jensen_gap"
+                ],
+                [
+                  "q_action_grad_overlap_late"
+                ],
+                [
+                  "q_late_mean"
+                ]
               ]
             },
             "stratify_by": null,
@@ -5278,7 +5283,7 @@
       "blocked_by": null,
       "bridge_name": "pc_trajectory_autocorr_not_outcome_predictor__asterix_g999",
       "direction": "direct",
-      "extent_hash": -3446491301601063542,
+      "extent_hash": -7170665121167855245,
       "n_cells_in_scope": 60,
       "n_cells_pre_scope": 6830,
       "pair_by": [
@@ -5345,6 +5350,11 @@
               ]
             ],
             "separating_sets": {
+              "frozenset({'arm_ddqn_indicator', 'jensen_gap'})": [
+                [
+                  "q_late_mean"
+                ]
+              ],
               "frozenset({'bootstrap_action_mismatch_late', 'arm_ddqn_indicator'})": [
                 [
                   "eval_best_burst_raw_mean"
@@ -5365,7 +5375,56 @@
               "frozenset({'bootstrap_action_mismatch_late', 'q_action_grad_overlap_late'})": [
                 []
               ],
-              "frozenset({'bootstrap_action_mismatch_late', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'bootstrap_action_mismatch_late', 'q_late_mean'})": [
+                []
+              ],
+              "frozenset({'bootstrap_action_mismatch_late', 'q_trajectory_autocorr_late'})": [
+                []
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'arm_ddqn_indicator'})": [
+                [
+                  "jensen_gap"
+                ],
+                [
+                  "q_inter_state_grad_overlap_late"
+                ],
+                [
+                  "q_late_mean"
+                ]
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'jensen_gap'})": [
+                [
+                  "q_late_mean"
+                ]
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'q_late_mean'})": [
+                [
+                  "jensen_gap"
+                ]
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'q_trajectory_autocorr_late'})": [
+                []
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'arm_ddqn_indicator'})": [
+                []
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'jensen_gap'})": [
+                []
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'q_late_mean'})": [
+                []
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'q_trajectory_autocorr_late'})": [
+                [
+                  "jensen_gap",
+                  "q_late_mean"
+                ],
+                [
+                  "q_inter_state_grad_overlap_late",
+                  "state_conditional_argmax_entropy_late"
+                ]
+              ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'bootstrap_action_mismatch_late'})": [
                 [
                   "arm_ddqn_indicator",
                   "eval_best_burst_raw_mean"
@@ -5399,18 +5458,7 @@
                   "state_conditional_argmax_entropy_late"
                 ]
               ],
-              "frozenset({'eval_best_burst_raw_mean', 'arm_ddqn_indicator'})": [
-                [
-                  "jensen_gap"
-                ],
-                [
-                  "q_inter_state_grad_overlap_late"
-                ],
-                [
-                  "q_late_mean"
-                ]
-              ],
-              "frozenset({'eval_best_burst_raw_mean', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'eval_best_burst_raw_mean'})": [
                 [
                   "arm_ddqn_indicator"
                 ],
@@ -5421,20 +5469,7 @@
                   "q_late_mean"
                 ]
               ],
-              "frozenset({'jensen_gap', 'arm_ddqn_indicator'})": [
-                [
-                  "q_late_mean"
-                ]
-              ],
-              "frozenset({'jensen_gap', 'eval_best_burst_raw_mean'})": [
-                [
-                  "q_late_mean"
-                ]
-              ],
-              "frozenset({'jensen_gap', 'q_action_grad_overlap_late'})": [
-                []
-              ],
-              "frozenset({'jensen_gap', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'jensen_gap'})": [
                 [
                   "arm_ddqn_indicator"
                 ],
@@ -5442,32 +5477,32 @@
                   "q_late_mean"
                 ]
               ],
-              "frozenset({'q_action_grad_overlap_late', 'arm_ddqn_indicator'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'q_action_grad_overlap_late'})": [
                 []
               ],
-              "frozenset({'q_action_grad_overlap_late', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'q_late_mean'})": [
+                [
+                  "arm_ddqn_indicator"
+                ],
+                [
+                  "jensen_gap"
+                ]
+              ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'q_trajectory_autocorr_late'})": [
+                [
+                  "arm_ddqn_indicator"
+                ],
+                [
+                  "jensen_gap"
+                ],
+                [
+                  "q_late_mean"
+                ]
+              ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'state_conditional_argmax_entropy_late'})": [
                 []
               ],
               "frozenset({'q_late_mean', 'arm_ddqn_indicator'})": [
-                [
-                  "jensen_gap"
-                ]
-              ],
-              "frozenset({'q_late_mean', 'bootstrap_action_mismatch_late'})": [
-                []
-              ],
-              "frozenset({'q_late_mean', 'eval_best_burst_raw_mean'})": [
-                [
-                  "jensen_gap"
-                ]
-              ],
-              "frozenset({'q_late_mean', 'q_action_grad_overlap_late'})": [
-                []
-              ],
-              "frozenset({'q_late_mean', 'q_inter_state_grad_overlap_late'})": [
-                [
-                  "arm_ddqn_indicator"
-                ],
                 [
                   "jensen_gap"
                 ]
@@ -5477,50 +5512,9 @@
                   "arm_ddqn_indicator"
                 ]
               ],
-              "frozenset({'q_late_mean', 'state_conditional_argmax_entropy_late'})": [
-                []
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'bootstrap_action_mismatch_late'})": [
-                []
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'eval_best_burst_raw_mean'})": [
-                []
-              ],
               "frozenset({'q_trajectory_autocorr_late', 'jensen_gap'})": [
                 [
                   "arm_ddqn_indicator"
-                ]
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'q_action_grad_overlap_late'})": [
-                [
-                  "jensen_gap",
-                  "q_late_mean"
-                ],
-                [
-                  "q_inter_state_grad_overlap_late",
-                  "state_conditional_argmax_entropy_late"
-                ]
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'q_inter_state_grad_overlap_late'})": [
-                [
-                  "arm_ddqn_indicator"
-                ],
-                [
-                  "jensen_gap"
-                ],
-                [
-                  "q_late_mean"
-                ]
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'state_conditional_argmax_entropy_late'})": [
-                [
-                  "jensen_gap"
-                ],
-                [
-                  "q_action_grad_overlap_late"
-                ],
-                [
-                  "q_late_mean"
                 ]
               ],
               "frozenset({'state_conditional_argmax_entropy_late', 'arm_ddqn_indicator'})": [
@@ -5535,8 +5529,19 @@
               "frozenset({'state_conditional_argmax_entropy_late', 'q_action_grad_overlap_late'})": [
                 []
               ],
-              "frozenset({'state_conditional_argmax_entropy_late', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'state_conditional_argmax_entropy_late', 'q_late_mean'})": [
                 []
+              ],
+              "frozenset({'state_conditional_argmax_entropy_late', 'q_trajectory_autocorr_late'})": [
+                [
+                  "jensen_gap"
+                ],
+                [
+                  "q_action_grad_overlap_late"
+                ],
+                [
+                  "q_late_mean"
+                ]
               ]
             },
             "undirected_edges": [
@@ -5596,6 +5601,11 @@
             "max_conditioning": 2,
             "n_observations": 60,
             "separating_sets": {
+              "frozenset({'arm_ddqn_indicator', 'jensen_gap'})": [
+                [
+                  "q_late_mean"
+                ]
+              ],
               "frozenset({'bootstrap_action_mismatch_late', 'arm_ddqn_indicator'})": [
                 [
                   "eval_best_burst_raw_mean"
@@ -5616,7 +5626,56 @@
               "frozenset({'bootstrap_action_mismatch_late', 'q_action_grad_overlap_late'})": [
                 []
               ],
-              "frozenset({'bootstrap_action_mismatch_late', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'bootstrap_action_mismatch_late', 'q_late_mean'})": [
+                []
+              ],
+              "frozenset({'bootstrap_action_mismatch_late', 'q_trajectory_autocorr_late'})": [
+                []
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'arm_ddqn_indicator'})": [
+                [
+                  "jensen_gap"
+                ],
+                [
+                  "q_inter_state_grad_overlap_late"
+                ],
+                [
+                  "q_late_mean"
+                ]
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'jensen_gap'})": [
+                [
+                  "q_late_mean"
+                ]
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'q_late_mean'})": [
+                [
+                  "jensen_gap"
+                ]
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'q_trajectory_autocorr_late'})": [
+                []
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'arm_ddqn_indicator'})": [
+                []
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'jensen_gap'})": [
+                []
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'q_late_mean'})": [
+                []
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'q_trajectory_autocorr_late'})": [
+                [
+                  "jensen_gap",
+                  "q_late_mean"
+                ],
+                [
+                  "q_inter_state_grad_overlap_late",
+                  "state_conditional_argmax_entropy_late"
+                ]
+              ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'bootstrap_action_mismatch_late'})": [
                 [
                   "arm_ddqn_indicator",
                   "eval_best_burst_raw_mean"
@@ -5650,18 +5709,7 @@
                   "state_conditional_argmax_entropy_late"
                 ]
               ],
-              "frozenset({'eval_best_burst_raw_mean', 'arm_ddqn_indicator'})": [
-                [
-                  "jensen_gap"
-                ],
-                [
-                  "q_inter_state_grad_overlap_late"
-                ],
-                [
-                  "q_late_mean"
-                ]
-              ],
-              "frozenset({'eval_best_burst_raw_mean', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'eval_best_burst_raw_mean'})": [
                 [
                   "arm_ddqn_indicator"
                 ],
@@ -5672,20 +5720,7 @@
                   "q_late_mean"
                 ]
               ],
-              "frozenset({'jensen_gap', 'arm_ddqn_indicator'})": [
-                [
-                  "q_late_mean"
-                ]
-              ],
-              "frozenset({'jensen_gap', 'eval_best_burst_raw_mean'})": [
-                [
-                  "q_late_mean"
-                ]
-              ],
-              "frozenset({'jensen_gap', 'q_action_grad_overlap_late'})": [
-                []
-              ],
-              "frozenset({'jensen_gap', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'jensen_gap'})": [
                 [
                   "arm_ddqn_indicator"
                 ],
@@ -5693,32 +5728,32 @@
                   "q_late_mean"
                 ]
               ],
-              "frozenset({'q_action_grad_overlap_late', 'arm_ddqn_indicator'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'q_action_grad_overlap_late'})": [
                 []
               ],
-              "frozenset({'q_action_grad_overlap_late', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'q_late_mean'})": [
+                [
+                  "arm_ddqn_indicator"
+                ],
+                [
+                  "jensen_gap"
+                ]
+              ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'q_trajectory_autocorr_late'})": [
+                [
+                  "arm_ddqn_indicator"
+                ],
+                [
+                  "jensen_gap"
+                ],
+                [
+                  "q_late_mean"
+                ]
+              ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'state_conditional_argmax_entropy_late'})": [
                 []
               ],
               "frozenset({'q_late_mean', 'arm_ddqn_indicator'})": [
-                [
-                  "jensen_gap"
-                ]
-              ],
-              "frozenset({'q_late_mean', 'bootstrap_action_mismatch_late'})": [
-                []
-              ],
-              "frozenset({'q_late_mean', 'eval_best_burst_raw_mean'})": [
-                [
-                  "jensen_gap"
-                ]
-              ],
-              "frozenset({'q_late_mean', 'q_action_grad_overlap_late'})": [
-                []
-              ],
-              "frozenset({'q_late_mean', 'q_inter_state_grad_overlap_late'})": [
-                [
-                  "arm_ddqn_indicator"
-                ],
                 [
                   "jensen_gap"
                 ]
@@ -5728,50 +5763,9 @@
                   "arm_ddqn_indicator"
                 ]
               ],
-              "frozenset({'q_late_mean', 'state_conditional_argmax_entropy_late'})": [
-                []
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'bootstrap_action_mismatch_late'})": [
-                []
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'eval_best_burst_raw_mean'})": [
-                []
-              ],
               "frozenset({'q_trajectory_autocorr_late', 'jensen_gap'})": [
                 [
                   "arm_ddqn_indicator"
-                ]
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'q_action_grad_overlap_late'})": [
-                [
-                  "jensen_gap",
-                  "q_late_mean"
-                ],
-                [
-                  "q_inter_state_grad_overlap_late",
-                  "state_conditional_argmax_entropy_late"
-                ]
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'q_inter_state_grad_overlap_late'})": [
-                [
-                  "arm_ddqn_indicator"
-                ],
-                [
-                  "jensen_gap"
-                ],
-                [
-                  "q_late_mean"
-                ]
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'state_conditional_argmax_entropy_late'})": [
-                [
-                  "jensen_gap"
-                ],
-                [
-                  "q_action_grad_overlap_late"
-                ],
-                [
-                  "q_late_mean"
                 ]
               ],
               "frozenset({'state_conditional_argmax_entropy_late', 'arm_ddqn_indicator'})": [
@@ -5786,8 +5780,19 @@
               "frozenset({'state_conditional_argmax_entropy_late', 'q_action_grad_overlap_late'})": [
                 []
               ],
-              "frozenset({'state_conditional_argmax_entropy_late', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'state_conditional_argmax_entropy_late', 'q_late_mean'})": [
                 []
+              ],
+              "frozenset({'state_conditional_argmax_entropy_late', 'q_trajectory_autocorr_late'})": [
+                [
+                  "jensen_gap"
+                ],
+                [
+                  "q_action_grad_overlap_late"
+                ],
+                [
+                  "q_late_mean"
+                ]
               ]
             },
             "stratify_by": null,
@@ -5821,7 +5826,7 @@
       "blocked_by": null,
       "bridge_name": "pc_smoothness_in_skeleton__asterix_g999",
       "direction": "inverse",
-      "extent_hash": -3446491301601063542,
+      "extent_hash": -7170665121167855245,
       "n_cells_in_scope": 60,
       "n_cells_pre_scope": 6830,
       "pair_by": [
@@ -5903,13 +5908,9 @@
                   "state_conditional_argmax_entropy_late"
                 ]
               ],
-              "frozenset({'bootstrap_action_mismatch_late', 'q_inter_state_grad_overlap_late'})": [
-                []
-              ],
-              "frozenset({'bootstrap_action_mismatch_late', 'state_conditional_argmax_entropy_late'})": [
+              "frozenset({'bootstrap_action_mismatch_late', 'q_late_mean'})": [
                 [
-                  "q_action_grad_overlap_late",
-                  "q_trajectory_autocorr_late"
+                  "arm_ddqn_indicator"
                 ]
               ],
               "frozenset({'eval_best_burst_raw_mean', 'arm_ddqn_indicator'})": [
@@ -5934,24 +5935,40 @@
                   "q_trajectory_autocorr_late"
                 ]
               ],
-              "frozenset({'eval_best_burst_raw_mean', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'eval_best_burst_raw_mean', 'jensen_gap'})": [
+                [
+                  "arm_ddqn_indicator"
+                ]
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'q_action_grad_overlap_late'})": [
                 []
               ],
-              "frozenset({'jensen_gap', 'eval_best_burst_raw_mean'})": [
-                [
-                  "arm_ddqn_indicator"
-                ]
+              "frozenset({'eval_best_burst_raw_mean', 'q_late_mean'})": [
+                []
               ],
-              "frozenset({'jensen_gap', 'q_action_grad_overlap_late'})": [
+              "frozenset({'eval_best_burst_raw_mean', 'q_trajectory_autocorr_late'})": [
                 [
+                  "arm_ddqn_indicator",
                   "bootstrap_action_mismatch_late"
-                ]
-              ],
-              "frozenset({'jensen_gap', 'q_inter_state_grad_overlap_late'})": [
-                [
-                  "arm_ddqn_indicator"
                 ],
                 [
+                  "arm_ddqn_indicator",
+                  "q_inter_state_grad_overlap_late"
+                ],
+                [
+                  "arm_ddqn_indicator",
+                  "q_late_mean"
+                ],
+                [
+                  "bootstrap_action_mismatch_late",
+                  "q_action_grad_overlap_late"
+                ],
+                [
+                  "bootstrap_action_mismatch_late",
+                  "q_inter_state_grad_overlap_late"
+                ],
+                [
+                  "jensen_gap",
                   "q_late_mean"
                 ]
               ],
@@ -5966,10 +5983,18 @@
                   "q_late_mean"
                 ]
               ],
-              "frozenset({'q_action_grad_overlap_late', 'eval_best_burst_raw_mean'})": [
-                []
+              "frozenset({'q_action_grad_overlap_late', 'jensen_gap'})": [
+                [
+                  "bootstrap_action_mismatch_late"
+                ]
               ],
-              "frozenset({'q_action_grad_overlap_late', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'q_action_grad_overlap_late', 'q_late_mean'})": [
+                [
+                  "bootstrap_action_mismatch_late",
+                  "q_trajectory_autocorr_late"
+                ]
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'q_trajectory_autocorr_late'})": [
                 []
               ],
               "frozenset({'q_inter_state_grad_overlap_late', 'arm_ddqn_indicator'})": [
@@ -5980,27 +6005,24 @@
                   "q_late_mean"
                 ]
               ],
-              "frozenset({'q_late_mean', 'arm_ddqn_indicator'})": [
-                [
-                  "jensen_gap",
-                  "q_trajectory_autocorr_late"
-                ]
-              ],
-              "frozenset({'q_late_mean', 'bootstrap_action_mismatch_late'})": [
-                [
-                  "arm_ddqn_indicator"
-                ]
-              ],
-              "frozenset({'q_late_mean', 'eval_best_burst_raw_mean'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'bootstrap_action_mismatch_late'})": [
                 []
               ],
-              "frozenset({'q_late_mean', 'q_action_grad_overlap_late'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'eval_best_burst_raw_mean'})": [
+                []
+              ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'jensen_gap'})": [
                 [
-                  "bootstrap_action_mismatch_late",
-                  "q_trajectory_autocorr_late"
+                  "arm_ddqn_indicator"
+                ],
+                [
+                  "q_late_mean"
                 ]
               ],
-              "frozenset({'q_late_mean', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'q_action_grad_overlap_late'})": [
+                []
+              ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'q_late_mean'})": [
                 [
                   "arm_ddqn_indicator",
                   "eval_best_burst_raw_mean"
@@ -6026,28 +6048,22 @@
                   "q_trajectory_autocorr_late"
                 ]
               ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'q_trajectory_autocorr_late'})": [
+                []
+              ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'state_conditional_argmax_entropy_late'})": [
+                []
+              ],
+              "frozenset({'q_late_mean', 'arm_ddqn_indicator'})": [
+                [
+                  "jensen_gap",
+                  "q_trajectory_autocorr_late"
+                ]
+              ],
               "frozenset({'q_late_mean', 'q_trajectory_autocorr_late'})": [
                 [
                   "q_action_grad_overlap_late",
                   "state_conditional_argmax_entropy_late"
-                ]
-              ],
-              "frozenset({'q_late_mean', 'state_conditional_argmax_entropy_late'})": [
-                [
-                  "arm_ddqn_indicator",
-                  "jensen_gap"
-                ],
-                [
-                  "bootstrap_action_mismatch_late",
-                  "jensen_gap"
-                ],
-                [
-                  "eval_best_burst_raw_mean",
-                  "q_trajectory_autocorr_late"
-                ],
-                [
-                  "jensen_gap",
-                  "q_trajectory_autocorr_late"
                 ]
               ],
               "frozenset({'q_trajectory_autocorr_late', 'arm_ddqn_indicator'})": [
@@ -6055,57 +6071,17 @@
                   "bootstrap_action_mismatch_late"
                 ]
               ],
-              "frozenset({'q_trajectory_autocorr_late', 'eval_best_burst_raw_mean'})": [
-                [
-                  "arm_ddqn_indicator",
-                  "bootstrap_action_mismatch_late"
-                ],
-                [
-                  "arm_ddqn_indicator",
-                  "q_inter_state_grad_overlap_late"
-                ],
-                [
-                  "arm_ddqn_indicator",
-                  "q_late_mean"
-                ],
-                [
-                  "bootstrap_action_mismatch_late",
-                  "q_action_grad_overlap_late"
-                ],
-                [
-                  "bootstrap_action_mismatch_late",
-                  "q_inter_state_grad_overlap_late"
-                ],
-                [
-                  "jensen_gap",
-                  "q_late_mean"
-                ]
-              ],
               "frozenset({'q_trajectory_autocorr_late', 'jensen_gap'})": [
                 []
               ],
-              "frozenset({'q_trajectory_autocorr_late', 'q_action_grad_overlap_late'})": [
-                []
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'q_inter_state_grad_overlap_late'})": [
-                []
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'state_conditional_argmax_entropy_late'})": [
-                [
-                  "arm_ddqn_indicator",
-                  "q_late_mean"
-                ],
-                [
-                  "bootstrap_action_mismatch_late",
-                  "jensen_gap"
-                ],
-                [
-                  "bootstrap_action_mismatch_late",
-                  "q_late_mean"
-                ]
-              ],
               "frozenset({'state_conditional_argmax_entropy_late', 'arm_ddqn_indicator'})": [
                 []
+              ],
+              "frozenset({'state_conditional_argmax_entropy_late', 'bootstrap_action_mismatch_late'})": [
+                [
+                  "q_action_grad_overlap_late",
+                  "q_trajectory_autocorr_late"
+                ]
               ],
               "frozenset({'state_conditional_argmax_entropy_late', 'eval_best_burst_raw_mean'})": [
                 []
@@ -6124,8 +6100,37 @@
                   "eval_best_burst_raw_mean"
                 ]
               ],
-              "frozenset({'state_conditional_argmax_entropy_late', 'q_inter_state_grad_overlap_late'})": [
-                []
+              "frozenset({'state_conditional_argmax_entropy_late', 'q_late_mean'})": [
+                [
+                  "arm_ddqn_indicator",
+                  "jensen_gap"
+                ],
+                [
+                  "bootstrap_action_mismatch_late",
+                  "jensen_gap"
+                ],
+                [
+                  "eval_best_burst_raw_mean",
+                  "q_trajectory_autocorr_late"
+                ],
+                [
+                  "jensen_gap",
+                  "q_trajectory_autocorr_late"
+                ]
+              ],
+              "frozenset({'state_conditional_argmax_entropy_late', 'q_trajectory_autocorr_late'})": [
+                [
+                  "arm_ddqn_indicator",
+                  "q_late_mean"
+                ],
+                [
+                  "bootstrap_action_mismatch_late",
+                  "jensen_gap"
+                ],
+                [
+                  "bootstrap_action_mismatch_late",
+                  "q_late_mean"
+                ]
               ]
             },
             "undirected_edges": [
@@ -6207,13 +6212,9 @@
                   "state_conditional_argmax_entropy_late"
                 ]
               ],
-              "frozenset({'bootstrap_action_mismatch_late', 'q_inter_state_grad_overlap_late'})": [
-                []
-              ],
-              "frozenset({'bootstrap_action_mismatch_late', 'state_conditional_argmax_entropy_late'})": [
+              "frozenset({'bootstrap_action_mismatch_late', 'q_late_mean'})": [
                 [
-                  "q_action_grad_overlap_late",
-                  "q_trajectory_autocorr_late"
+                  "arm_ddqn_indicator"
                 ]
               ],
               "frozenset({'eval_best_burst_raw_mean', 'arm_ddqn_indicator'})": [
@@ -6238,24 +6239,40 @@
                   "q_trajectory_autocorr_late"
                 ]
               ],
-              "frozenset({'eval_best_burst_raw_mean', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'eval_best_burst_raw_mean', 'jensen_gap'})": [
+                [
+                  "arm_ddqn_indicator"
+                ]
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'q_action_grad_overlap_late'})": [
                 []
               ],
-              "frozenset({'jensen_gap', 'eval_best_burst_raw_mean'})": [
-                [
-                  "arm_ddqn_indicator"
-                ]
+              "frozenset({'eval_best_burst_raw_mean', 'q_late_mean'})": [
+                []
               ],
-              "frozenset({'jensen_gap', 'q_action_grad_overlap_late'})": [
+              "frozenset({'eval_best_burst_raw_mean', 'q_trajectory_autocorr_late'})": [
                 [
+                  "arm_ddqn_indicator",
                   "bootstrap_action_mismatch_late"
-                ]
-              ],
-              "frozenset({'jensen_gap', 'q_inter_state_grad_overlap_late'})": [
-                [
-                  "arm_ddqn_indicator"
                 ],
                 [
+                  "arm_ddqn_indicator",
+                  "q_inter_state_grad_overlap_late"
+                ],
+                [
+                  "arm_ddqn_indicator",
+                  "q_late_mean"
+                ],
+                [
+                  "bootstrap_action_mismatch_late",
+                  "q_action_grad_overlap_late"
+                ],
+                [
+                  "bootstrap_action_mismatch_late",
+                  "q_inter_state_grad_overlap_late"
+                ],
+                [
+                  "jensen_gap",
                   "q_late_mean"
                 ]
               ],
@@ -6270,10 +6287,18 @@
                   "q_late_mean"
                 ]
               ],
-              "frozenset({'q_action_grad_overlap_late', 'eval_best_burst_raw_mean'})": [
-                []
+              "frozenset({'q_action_grad_overlap_late', 'jensen_gap'})": [
+                [
+                  "bootstrap_action_mismatch_late"
+                ]
               ],
-              "frozenset({'q_action_grad_overlap_late', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'q_action_grad_overlap_late', 'q_late_mean'})": [
+                [
+                  "bootstrap_action_mismatch_late",
+                  "q_trajectory_autocorr_late"
+                ]
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'q_trajectory_autocorr_late'})": [
                 []
               ],
               "frozenset({'q_inter_state_grad_overlap_late', 'arm_ddqn_indicator'})": [
@@ -6284,27 +6309,24 @@
                   "q_late_mean"
                 ]
               ],
-              "frozenset({'q_late_mean', 'arm_ddqn_indicator'})": [
-                [
-                  "jensen_gap",
-                  "q_trajectory_autocorr_late"
-                ]
-              ],
-              "frozenset({'q_late_mean', 'bootstrap_action_mismatch_late'})": [
-                [
-                  "arm_ddqn_indicator"
-                ]
-              ],
-              "frozenset({'q_late_mean', 'eval_best_burst_raw_mean'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'bootstrap_action_mismatch_late'})": [
                 []
               ],
-              "frozenset({'q_late_mean', 'q_action_grad_overlap_late'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'eval_best_burst_raw_mean'})": [
+                []
+              ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'jensen_gap'})": [
                 [
-                  "bootstrap_action_mismatch_late",
-                  "q_trajectory_autocorr_late"
+                  "arm_ddqn_indicator"
+                ],
+                [
+                  "q_late_mean"
                 ]
               ],
-              "frozenset({'q_late_mean', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'q_action_grad_overlap_late'})": [
+                []
+              ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'q_late_mean'})": [
                 [
                   "arm_ddqn_indicator",
                   "eval_best_burst_raw_mean"
@@ -6330,28 +6352,22 @@
                   "q_trajectory_autocorr_late"
                 ]
               ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'q_trajectory_autocorr_late'})": [
+                []
+              ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'state_conditional_argmax_entropy_late'})": [
+                []
+              ],
+              "frozenset({'q_late_mean', 'arm_ddqn_indicator'})": [
+                [
+                  "jensen_gap",
+                  "q_trajectory_autocorr_late"
+                ]
+              ],
               "frozenset({'q_late_mean', 'q_trajectory_autocorr_late'})": [
                 [
                   "q_action_grad_overlap_late",
                   "state_conditional_argmax_entropy_late"
-                ]
-              ],
-              "frozenset({'q_late_mean', 'state_conditional_argmax_entropy_late'})": [
-                [
-                  "arm_ddqn_indicator",
-                  "jensen_gap"
-                ],
-                [
-                  "bootstrap_action_mismatch_late",
-                  "jensen_gap"
-                ],
-                [
-                  "eval_best_burst_raw_mean",
-                  "q_trajectory_autocorr_late"
-                ],
-                [
-                  "jensen_gap",
-                  "q_trajectory_autocorr_late"
                 ]
               ],
               "frozenset({'q_trajectory_autocorr_late', 'arm_ddqn_indicator'})": [
@@ -6359,57 +6375,17 @@
                   "bootstrap_action_mismatch_late"
                 ]
               ],
-              "frozenset({'q_trajectory_autocorr_late', 'eval_best_burst_raw_mean'})": [
-                [
-                  "arm_ddqn_indicator",
-                  "bootstrap_action_mismatch_late"
-                ],
-                [
-                  "arm_ddqn_indicator",
-                  "q_inter_state_grad_overlap_late"
-                ],
-                [
-                  "arm_ddqn_indicator",
-                  "q_late_mean"
-                ],
-                [
-                  "bootstrap_action_mismatch_late",
-                  "q_action_grad_overlap_late"
-                ],
-                [
-                  "bootstrap_action_mismatch_late",
-                  "q_inter_state_grad_overlap_late"
-                ],
-                [
-                  "jensen_gap",
-                  "q_late_mean"
-                ]
-              ],
               "frozenset({'q_trajectory_autocorr_late', 'jensen_gap'})": [
                 []
               ],
-              "frozenset({'q_trajectory_autocorr_late', 'q_action_grad_overlap_late'})": [
-                []
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'q_inter_state_grad_overlap_late'})": [
-                []
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'state_conditional_argmax_entropy_late'})": [
-                [
-                  "arm_ddqn_indicator",
-                  "q_late_mean"
-                ],
-                [
-                  "bootstrap_action_mismatch_late",
-                  "jensen_gap"
-                ],
-                [
-                  "bootstrap_action_mismatch_late",
-                  "q_late_mean"
-                ]
-              ],
               "frozenset({'state_conditional_argmax_entropy_late', 'arm_ddqn_indicator'})": [
                 []
+              ],
+              "frozenset({'state_conditional_argmax_entropy_late', 'bootstrap_action_mismatch_late'})": [
+                [
+                  "q_action_grad_overlap_late",
+                  "q_trajectory_autocorr_late"
+                ]
               ],
               "frozenset({'state_conditional_argmax_entropy_late', 'eval_best_burst_raw_mean'})": [
                 []
@@ -6428,8 +6404,37 @@
                   "eval_best_burst_raw_mean"
                 ]
               ],
-              "frozenset({'state_conditional_argmax_entropy_late', 'q_inter_state_grad_overlap_late'})": [
-                []
+              "frozenset({'state_conditional_argmax_entropy_late', 'q_late_mean'})": [
+                [
+                  "arm_ddqn_indicator",
+                  "jensen_gap"
+                ],
+                [
+                  "bootstrap_action_mismatch_late",
+                  "jensen_gap"
+                ],
+                [
+                  "eval_best_burst_raw_mean",
+                  "q_trajectory_autocorr_late"
+                ],
+                [
+                  "jensen_gap",
+                  "q_trajectory_autocorr_late"
+                ]
+              ],
+              "frozenset({'state_conditional_argmax_entropy_late', 'q_trajectory_autocorr_late'})": [
+                [
+                  "arm_ddqn_indicator",
+                  "q_late_mean"
+                ],
+                [
+                  "bootstrap_action_mismatch_late",
+                  "jensen_gap"
+                ],
+                [
+                  "bootstrap_action_mismatch_late",
+                  "q_late_mean"
+                ]
               ]
             },
             "stratify_by": null,
@@ -6463,7 +6468,7 @@
       "blocked_by": null,
       "bridge_name": "pc_smoothness_is_jens_shadow__breakout_g999",
       "direction": "inverse",
-      "extent_hash": -613509615372990168,
+      "extent_hash": 1539407161360964424,
       "n_cells_in_scope": 60,
       "n_cells_pre_scope": 6830,
       "pair_by": [
@@ -6539,6 +6544,9 @@
               ]
             ],
             "separating_sets": {
+              "frozenset({'arm_ddqn_indicator', 'jensen_gap'})": [
+                []
+              ],
               "frozenset({'bootstrap_action_mismatch_late', 'arm_ddqn_indicator'})": [
                 [
                   "q_trajectory_autocorr_late"
@@ -6552,82 +6560,10 @@
               "frozenset({'bootstrap_action_mismatch_late', 'q_action_grad_overlap_late'})": [
                 []
               ],
-              "frozenset({'bootstrap_action_mismatch_late', 'q_inter_state_grad_overlap_late'})": [
-                [
-                  "eval_best_burst_raw_mean"
-                ],
-                [
-                  "q_trajectory_autocorr_late"
-                ],
-                [
-                  "state_conditional_argmax_entropy_late"
-                ]
-              ],
-              "frozenset({'eval_best_burst_raw_mean', 'arm_ddqn_indicator'})": [
+              "frozenset({'bootstrap_action_mismatch_late', 'q_late_mean'})": [
                 []
               ],
-              "frozenset({'jensen_gap', 'arm_ddqn_indicator'})": [
-                []
-              ],
-              "frozenset({'jensen_gap', 'eval_best_burst_raw_mean'})": [
-                []
-              ],
-              "frozenset({'jensen_gap', 'q_action_grad_overlap_late'})": [
-                []
-              ],
-              "frozenset({'jensen_gap', 'q_inter_state_grad_overlap_late'})": [
-                []
-              ],
-              "frozenset({'q_action_grad_overlap_late', 'arm_ddqn_indicator'})": [
-                [
-                  "q_inter_state_grad_overlap_late",
-                  "q_late_mean"
-                ]
-              ],
-              "frozenset({'q_action_grad_overlap_late', 'eval_best_burst_raw_mean'})": [
-                []
-              ],
-              "frozenset({'q_inter_state_grad_overlap_late', 'arm_ddqn_indicator'})": [
-                []
-              ],
-              "frozenset({'q_late_mean', 'bootstrap_action_mismatch_late'})": [
-                []
-              ],
-              "frozenset({'q_late_mean', 'jensen_gap'})": [
-                []
-              ],
-              "frozenset({'q_late_mean', 'q_action_grad_overlap_late'})": [
-                [
-                  "arm_ddqn_indicator"
-                ],
-                [
-                  "q_trajectory_autocorr_late"
-                ]
-              ],
-              "frozenset({'q_late_mean', 'q_inter_state_grad_overlap_late'})": [
-                []
-              ],
-              "frozenset({'q_late_mean', 'q_trajectory_autocorr_late'})": [
-                []
-              ],
-              "frozenset({'q_late_mean', 'state_conditional_argmax_entropy_late'})": [
-                []
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'arm_ddqn_indicator'})": [
-                [
-                  "bootstrap_action_mismatch_late",
-                  "q_action_grad_overlap_late"
-                ],
-                [
-                  "q_action_grad_overlap_late",
-                  "state_conditional_argmax_entropy_late"
-                ],
-                [
-                  "q_late_mean",
-                  "state_conditional_argmax_entropy_late"
-                ]
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'bootstrap_action_mismatch_late'})": [
+              "frozenset({'bootstrap_action_mismatch_late', 'q_trajectory_autocorr_late'})": [
                 [
                   "arm_ddqn_indicator",
                   "state_conditional_argmax_entropy_late"
@@ -6641,7 +6577,16 @@
                   "state_conditional_argmax_entropy_late"
                 ]
               ],
-              "frozenset({'q_trajectory_autocorr_late', 'eval_best_burst_raw_mean'})": [
+              "frozenset({'eval_best_burst_raw_mean', 'arm_ddqn_indicator'})": [
+                []
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'jensen_gap'})": [
+                []
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'q_action_grad_overlap_late'})": [
+                []
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'q_trajectory_autocorr_late'})": [
                 [
                   "bootstrap_action_mismatch_late"
                 ],
@@ -6658,15 +6603,24 @@
                   "state_conditional_argmax_entropy_late"
                 ]
               ],
-              "frozenset({'q_trajectory_autocorr_late', 'jensen_gap'})": [
+              "frozenset({'q_action_grad_overlap_late', 'arm_ddqn_indicator'})": [
                 [
-                  "bootstrap_action_mismatch_late"
-                ],
-                [
-                  "state_conditional_argmax_entropy_late"
+                  "q_inter_state_grad_overlap_late",
+                  "q_late_mean"
                 ]
               ],
-              "frozenset({'q_trajectory_autocorr_late', 'q_action_grad_overlap_late'})": [
+              "frozenset({'q_action_grad_overlap_late', 'jensen_gap'})": [
+                []
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'q_late_mean'})": [
+                [
+                  "arm_ddqn_indicator"
+                ],
+                [
+                  "q_trajectory_autocorr_late"
+                ]
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'q_trajectory_autocorr_late'})": [
                 [
                   "arm_ddqn_indicator"
                 ],
@@ -6674,9 +6628,62 @@
                   "q_inter_state_grad_overlap_late"
                 ]
               ],
-              "frozenset({'q_trajectory_autocorr_late', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'arm_ddqn_indicator'})": [
+                []
+              ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'bootstrap_action_mismatch_late'})": [
+                [
+                  "eval_best_burst_raw_mean"
+                ],
+                [
+                  "q_trajectory_autocorr_late"
+                ],
+                [
+                  "state_conditional_argmax_entropy_late"
+                ]
+              ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'jensen_gap'})": [
+                []
+              ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'q_late_mean'})": [
+                []
+              ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'q_trajectory_autocorr_late'})": [
                 [
                   "q_action_grad_overlap_late",
+                  "state_conditional_argmax_entropy_late"
+                ]
+              ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'state_conditional_argmax_entropy_late'})": [
+                [
+                  "q_trajectory_autocorr_late"
+                ]
+              ],
+              "frozenset({'q_late_mean', 'jensen_gap'})": [
+                []
+              ],
+              "frozenset({'q_late_mean', 'q_trajectory_autocorr_late'})": [
+                []
+              ],
+              "frozenset({'q_trajectory_autocorr_late', 'arm_ddqn_indicator'})": [
+                [
+                  "bootstrap_action_mismatch_late",
+                  "q_action_grad_overlap_late"
+                ],
+                [
+                  "q_action_grad_overlap_late",
+                  "state_conditional_argmax_entropy_late"
+                ],
+                [
+                  "q_late_mean",
+                  "state_conditional_argmax_entropy_late"
+                ]
+              ],
+              "frozenset({'q_trajectory_autocorr_late', 'jensen_gap'})": [
+                [
+                  "bootstrap_action_mismatch_late"
+                ],
+                [
                   "state_conditional_argmax_entropy_late"
                 ]
               ],
@@ -6719,10 +6726,8 @@
               "frozenset({'state_conditional_argmax_entropy_late', 'q_action_grad_overlap_late'})": [
                 []
               ],
-              "frozenset({'state_conditional_argmax_entropy_late', 'q_inter_state_grad_overlap_late'})": [
-                [
-                  "q_trajectory_autocorr_late"
-                ]
+              "frozenset({'state_conditional_argmax_entropy_late', 'q_late_mean'})": [
+                []
               ]
             },
             "undirected_edges": [
@@ -6782,6 +6787,9 @@
             "max_conditioning": 2,
             "n_observations": 60,
             "separating_sets": {
+              "frozenset({'arm_ddqn_indicator', 'jensen_gap'})": [
+                []
+              ],
               "frozenset({'bootstrap_action_mismatch_late', 'arm_ddqn_indicator'})": [
                 [
                   "q_trajectory_autocorr_late"
@@ -6795,82 +6803,10 @@
               "frozenset({'bootstrap_action_mismatch_late', 'q_action_grad_overlap_late'})": [
                 []
               ],
-              "frozenset({'bootstrap_action_mismatch_late', 'q_inter_state_grad_overlap_late'})": [
-                [
-                  "eval_best_burst_raw_mean"
-                ],
-                [
-                  "q_trajectory_autocorr_late"
-                ],
-                [
-                  "state_conditional_argmax_entropy_late"
-                ]
-              ],
-              "frozenset({'eval_best_burst_raw_mean', 'arm_ddqn_indicator'})": [
+              "frozenset({'bootstrap_action_mismatch_late', 'q_late_mean'})": [
                 []
               ],
-              "frozenset({'jensen_gap', 'arm_ddqn_indicator'})": [
-                []
-              ],
-              "frozenset({'jensen_gap', 'eval_best_burst_raw_mean'})": [
-                []
-              ],
-              "frozenset({'jensen_gap', 'q_action_grad_overlap_late'})": [
-                []
-              ],
-              "frozenset({'jensen_gap', 'q_inter_state_grad_overlap_late'})": [
-                []
-              ],
-              "frozenset({'q_action_grad_overlap_late', 'arm_ddqn_indicator'})": [
-                [
-                  "q_inter_state_grad_overlap_late",
-                  "q_late_mean"
-                ]
-              ],
-              "frozenset({'q_action_grad_overlap_late', 'eval_best_burst_raw_mean'})": [
-                []
-              ],
-              "frozenset({'q_inter_state_grad_overlap_late', 'arm_ddqn_indicator'})": [
-                []
-              ],
-              "frozenset({'q_late_mean', 'bootstrap_action_mismatch_late'})": [
-                []
-              ],
-              "frozenset({'q_late_mean', 'jensen_gap'})": [
-                []
-              ],
-              "frozenset({'q_late_mean', 'q_action_grad_overlap_late'})": [
-                [
-                  "arm_ddqn_indicator"
-                ],
-                [
-                  "q_trajectory_autocorr_late"
-                ]
-              ],
-              "frozenset({'q_late_mean', 'q_inter_state_grad_overlap_late'})": [
-                []
-              ],
-              "frozenset({'q_late_mean', 'q_trajectory_autocorr_late'})": [
-                []
-              ],
-              "frozenset({'q_late_mean', 'state_conditional_argmax_entropy_late'})": [
-                []
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'arm_ddqn_indicator'})": [
-                [
-                  "bootstrap_action_mismatch_late",
-                  "q_action_grad_overlap_late"
-                ],
-                [
-                  "q_action_grad_overlap_late",
-                  "state_conditional_argmax_entropy_late"
-                ],
-                [
-                  "q_late_mean",
-                  "state_conditional_argmax_entropy_late"
-                ]
-              ],
-              "frozenset({'q_trajectory_autocorr_late', 'bootstrap_action_mismatch_late'})": [
+              "frozenset({'bootstrap_action_mismatch_late', 'q_trajectory_autocorr_late'})": [
                 [
                   "arm_ddqn_indicator",
                   "state_conditional_argmax_entropy_late"
@@ -6884,7 +6820,16 @@
                   "state_conditional_argmax_entropy_late"
                 ]
               ],
-              "frozenset({'q_trajectory_autocorr_late', 'eval_best_burst_raw_mean'})": [
+              "frozenset({'eval_best_burst_raw_mean', 'arm_ddqn_indicator'})": [
+                []
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'jensen_gap'})": [
+                []
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'q_action_grad_overlap_late'})": [
+                []
+              ],
+              "frozenset({'eval_best_burst_raw_mean', 'q_trajectory_autocorr_late'})": [
                 [
                   "bootstrap_action_mismatch_late"
                 ],
@@ -6901,15 +6846,24 @@
                   "state_conditional_argmax_entropy_late"
                 ]
               ],
-              "frozenset({'q_trajectory_autocorr_late', 'jensen_gap'})": [
+              "frozenset({'q_action_grad_overlap_late', 'arm_ddqn_indicator'})": [
                 [
-                  "bootstrap_action_mismatch_late"
-                ],
-                [
-                  "state_conditional_argmax_entropy_late"
+                  "q_inter_state_grad_overlap_late",
+                  "q_late_mean"
                 ]
               ],
-              "frozenset({'q_trajectory_autocorr_late', 'q_action_grad_overlap_late'})": [
+              "frozenset({'q_action_grad_overlap_late', 'jensen_gap'})": [
+                []
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'q_late_mean'})": [
+                [
+                  "arm_ddqn_indicator"
+                ],
+                [
+                  "q_trajectory_autocorr_late"
+                ]
+              ],
+              "frozenset({'q_action_grad_overlap_late', 'q_trajectory_autocorr_late'})": [
                 [
                   "arm_ddqn_indicator"
                 ],
@@ -6917,9 +6871,62 @@
                   "q_inter_state_grad_overlap_late"
                 ]
               ],
-              "frozenset({'q_trajectory_autocorr_late', 'q_inter_state_grad_overlap_late'})": [
+              "frozenset({'q_inter_state_grad_overlap_late', 'arm_ddqn_indicator'})": [
+                []
+              ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'bootstrap_action_mismatch_late'})": [
+                [
+                  "eval_best_burst_raw_mean"
+                ],
+                [
+                  "q_trajectory_autocorr_late"
+                ],
+                [
+                  "state_conditional_argmax_entropy_late"
+                ]
+              ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'jensen_gap'})": [
+                []
+              ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'q_late_mean'})": [
+                []
+              ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'q_trajectory_autocorr_late'})": [
                 [
                   "q_action_grad_overlap_late",
+                  "state_conditional_argmax_entropy_late"
+                ]
+              ],
+              "frozenset({'q_inter_state_grad_overlap_late', 'state_conditional_argmax_entropy_late'})": [
+                [
+                  "q_trajectory_autocorr_late"
+                ]
+              ],
+              "frozenset({'q_late_mean', 'jensen_gap'})": [
+                []
+              ],
+              "frozenset({'q_late_mean', 'q_trajectory_autocorr_late'})": [
+                []
+              ],
+              "frozenset({'q_trajectory_autocorr_late', 'arm_ddqn_indicator'})": [
+                [
+                  "bootstrap_action_mismatch_late",
+                  "q_action_grad_overlap_late"
+                ],
+                [
+                  "q_action_grad_overlap_late",
+                  "state_conditional_argmax_entropy_late"
+                ],
+                [
+                  "q_late_mean",
+                  "state_conditional_argmax_entropy_late"
+                ]
+              ],
+              "frozenset({'q_trajectory_autocorr_late', 'jensen_gap'})": [
+                [
+                  "bootstrap_action_mismatch_late"
+                ],
+                [
                   "state_conditional_argmax_entropy_late"
                 ]
               ],
@@ -6962,10 +6969,8 @@
               "frozenset({'state_conditional_argmax_entropy_late', 'q_action_grad_overlap_late'})": [
                 []
               ],
-              "frozenset({'state_conditional_argmax_entropy_late', 'q_inter_state_grad_overlap_late'})": [
-                [
-                  "q_trajectory_autocorr_late"
-                ]
+              "frozenset({'state_conditional_argmax_entropy_late', 'q_late_mean'})": [
+                []
               ]
             },
             "stratify_by": null,
@@ -6999,7 +7004,7 @@
       "blocked_by": null,
       "bridge_name": "pc_arm_inactive_marginal__freeway_g999",
       "direction": "direct",
-      "extent_hash": 3021623248464410250,
+      "extent_hash": 5374850258278565721,
       "n_cells_in_scope": 60,
       "n_cells_pre_scope": 6830,
       "pair_by": [
@@ -7039,7 +7044,9 @@
     },
     {
       "analysis_results": {
-        "stratified_spearman": {
+        "partial_spearman": {
+          "conditioning": [],
+          "granularity": "per_cell",
           "n_obs_total": 370,
           "n_strata": 3,
           "p_value": 0.0,
@@ -7053,7 +7060,7 @@
       "blocked_by": null,
       "bridge_name": "vanilla_jens_amplifies_with_k",
       "direction": "direct",
-      "extent_hash": 1441666084416869386,
+      "extent_hash": 1802133333286039486,
       "n_cells_in_scope": 370,
       "n_cells_pre_scope": 6830,
       "pair_by": [
@@ -7078,7 +7085,9 @@
     },
     {
       "analysis_results": {
-        "stratified_spearman": {
+        "partial_spearman": {
+          "conditioning": [],
+          "granularity": "per_cell",
           "n_obs_total": 370,
           "n_strata": 3,
           "p_value": 0.0,
@@ -7092,7 +7101,7 @@
       "blocked_by": null,
       "bridge_name": "vanilla_q_late_drifts_with_k",
       "direction": "direct",
-      "extent_hash": 1441666084416869386,
+      "extent_hash": 1802133333286039486,
       "n_cells_in_scope": 370,
       "n_cells_pre_scope": 6830,
       "pair_by": [
@@ -7117,7 +7126,9 @@
     },
     {
       "analysis_results": {
-        "stratified_spearman": {
+        "partial_spearman": {
+          "conditioning": [],
+          "granularity": "per_cell",
           "n_obs_total": 0,
           "n_strata": 0,
           "p_value": null,
@@ -7212,7 +7223,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_harms_asterix_g999__cross_env_regime",
       "direction": "inverse",
-      "extent_hash": -3446491301601063542,
+      "extent_hash": -7170665121167855245,
       "n_cells_in_scope": 60,
       "n_cells_pre_scope": 6830,
       "pair_by": [
@@ -7298,7 +7309,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_helps_breakout_g999__cross_env_regime",
       "direction": "direct",
-      "extent_hash": -613509615372990168,
+      "extent_hash": 1539407161360964424,
       "n_cells_in_scope": 60,
       "n_cells_pre_scope": 6830,
       "pair_by": [
@@ -7384,7 +7395,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_helps_si_g999__cross_env_regime",
       "direction": "direct",
-      "extent_hash": -9067176857092545988,
+      "extent_hash": 9045607786237834264,
       "n_cells_in_scope": 60,
       "n_cells_pre_scope": 6830,
       "pair_by": [
@@ -7470,7 +7481,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_neutral_freeway_g999__cross_env_regime",
       "direction": "direct",
-      "extent_hash": 3021623248464410250,
+      "extent_hash": 5374850258278565721,
       "n_cells_in_scope": 60,
       "n_cells_pre_scope": 6830,
       "pair_by": [
@@ -7603,7 +7614,7 @@
   ],
   "cache_path": "experiments/data/cache/ddqn_sweeps.parquet",
   "errored_bridges": [],
-  "git_commit": "c440f9672f43",
+  "git_commit": "7355b03280ee",
   "hypothesis_module": "experiments.findings.ddqn_sweeps",
   "measurable_signatures": {
     "argmax_entropy_late": "22f4c683c0bfee66",
@@ -7633,5 +7644,5 @@
     "target_staleness_late": "b085645f658e9f49"
   },
   "n_cells_total": 6830,
-  "timestamp_utc": "2026-05-18T06:09:29+00:00"
+  "timestamp_utc": "2026-05-18T06:29:40+00:00"
 }

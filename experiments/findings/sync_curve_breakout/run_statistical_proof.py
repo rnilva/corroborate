@@ -27,8 +27,8 @@ import numpy as np
 import polars as pl
 from scipy.stats import norm
 
-from corroborate.analyses.paired_g import paired_g
-from corroborate.analyses.proportion_mediated import proportion_mediated
+from corroborate.analyses.paired.paired_g import paired_g
+from corroborate.analyses.paired.proportion_mediated import proportion_mediated
 from corroborate.graph.discovery import (
     partial_spearman_rho,
     stratified_partial_spearman_rho,

@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import random
 
-from corroborate.analyses.stratified_arm_diff_pooled import (
+from corroborate.analyses.panel.stratified_arm_diff_pooled import (
     StratifiedArmDiffPooledResult, stratified_arm_diff_pooled,
 )
 from corroborate.bridge.verdict import RefutationClass, Verdict

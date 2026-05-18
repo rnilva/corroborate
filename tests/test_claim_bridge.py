@@ -26,7 +26,7 @@ import pytest
 # Importing analyses populates the registry.
 import corroborate.analyses  # noqa: F401  # pyright: ignore[reportUnusedImport]
 
-from corroborate.analyses.paired_g import PairedGResult
+from corroborate.analyses.paired.paired_g import PairedGResult
 from corroborate.bridge.bridge import (
     Bridge, Direction, Tier, claim_bridge, evaluate,
 )
@@ -90,7 +90,7 @@ def test_paired_g_analysis_runs_directly() -> None:
     """The analysis is callable on its own — no bridge needed.
     Cell-level filtering lives upstream on `Bridge.scope`;
     when calling paired_g.fn directly the test pre-filters cells."""
-    from corroborate.analyses.paired_g import paired_g
+    from corroborate.analyses.paired.paired_g import paired_g
     cells = [
         c for c in _synthetic_cells()
         if c.get('env_name') == 'TestEnv'

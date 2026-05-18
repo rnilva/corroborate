@@ -19,7 +19,7 @@ import numpy as np
 import pytest
 from scipy.stats import norm
 
-from corroborate.analyses.paired_link_per_burst import _pearson_r_p_slope
+from corroborate.analyses.link.paired_link_per_burst import _pearson_r_p_slope
 
 
 def test_pearson_perfect_positive_correlation_returns_r_one_p_zero() -> None:

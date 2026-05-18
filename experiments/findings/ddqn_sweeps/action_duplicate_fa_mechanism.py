@@ -45,8 +45,8 @@ import math
 
 import polars as pl
 
-from corroborate.analyses.stratified_spearman import (
-    StratifiedSpearmanResult,
+from corroborate.analyses.spearman.partial_spearman import (
+    PartialSpearmanResult,
 )
 from corroborate.bridge.bridge import Direction, Tier, claim_bridge
 from corroborate.bridge.verdict import Verdict
@@ -72,7 +72,7 @@ _K_SWEEP_VANILLA_SCOPE: pl.Expr = (
     predicted_direction='a_gt_b',
 )
 def vanilla_jens_amplifies_with_k(
-    stratified_spearman: StratifiedSpearmanResult,
+    partial_spearman: PartialSpearmanResult,
     *,
     x: str = 'action_duplicate_k',
     y: str = 'jensen_gap',
@@ -95,10 +95,10 @@ def vanilla_jens_amplifies_with_k(
     (the framework's NO_EFFECT shape — could happen if action_
     duplicate doesn't move jens at all)."""
     del x, y, stratify_by, min_stratum_size
-    if stratified_spearman.n_strata < min_strata:
+    if partial_spearman.n_strata < min_strata:
         return Verdict.POWER_INSUFFICIENT
-    rho = stratified_spearman.rho_pooled
-    p = stratified_spearman.p_value
+    rho = partial_spearman.rho_pooled
+    p = partial_spearman.p_value
     if math.isnan(rho) or math.isnan(p):
         return Verdict.POWER_INSUFFICIENT
     if rho >= min_rho and p < alpha:
@@ -122,7 +122,7 @@ def vanilla_jens_amplifies_with_k(
     predicted_direction='a_gt_b',
 )
 def vanilla_q_late_drifts_with_k(
-    stratified_spearman: StratifiedSpearmanResult,
+    partial_spearman: PartialSpearmanResult,
     *,
     x: str = 'action_duplicate_k',
     y: str = 'q_late_mean',
@@ -144,10 +144,10 @@ def vanilla_q_late_drifts_with_k(
     because the Q-drift channel only activates on some envs).
     """
     del x, y, stratify_by, min_stratum_size
-    if stratified_spearman.n_strata < min_strata:
+    if partial_spearman.n_strata < min_strata:
         return Verdict.POWER_INSUFFICIENT
-    rho = stratified_spearman.rho_pooled
-    p = stratified_spearman.p_value
+    rho = partial_spearman.rho_pooled
+    p = partial_spearman.p_value
     if math.isnan(rho) or math.isnan(p):
         return Verdict.POWER_INSUFFICIENT
     if rho >= min_rho and p < alpha:
@@ -171,7 +171,7 @@ def vanilla_q_late_drifts_with_k(
     predicted_direction='a_gt_b',
 )
 def vanilla_sigma_q_scales_with_k(
-    stratified_spearman: StratifiedSpearmanResult,
+    partial_spearman: PartialSpearmanResult,
     *,
     x: str = 'action_duplicate_k',
     y: str = 'q_action_std_late',
@@ -193,10 +193,10 @@ def vanilla_sigma_q_scales_with_k(
 
     HELD: pooled ρ ≥ 0.3 with p < 0.10."""
     del x, y, stratify_by, min_stratum_size
-    if stratified_spearman.n_strata < min_strata:
+    if partial_spearman.n_strata < min_strata:
         return Verdict.POWER_INSUFFICIENT
-    rho = stratified_spearman.rho_pooled
-    p = stratified_spearman.p_value
+    rho = partial_spearman.rho_pooled
+    p = partial_spearman.p_value
     if math.isnan(rho) or math.isnan(p):
         return Verdict.POWER_INSUFFICIENT
     if rho >= min_rho and p < alpha:

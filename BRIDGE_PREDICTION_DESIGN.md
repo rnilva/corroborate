@@ -175,11 +175,14 @@ bundle ships, it lives on `Bridge`, not on `InterventionConfig`.
 
 Substrate helpers `_eff_h_mediation_holds_when` and
 `_staleness_mediation_holds_when` (since-removed pre-migration;
-see `experiments/findings/ddqn/` for current shape) operate on
+see `experiments/findings/ddqn/` for current shape) operated on
 `proportion_mediated.proportion` against a `dominance_floor`
-— proportion-style, not paired-g. `verdict_from_paired_stats`
-can't subsume them. They're ~25-line substrate-specific
-verdict-from-threshold factories.
+— proportion-style, not paired-g. The underlying
+`proportion_mediated` primitive was itself deleted 2026-05-18
+(superseded by `partial_spearman` + the salvaged
+`mediation_dowhy` diagnostic), so the helper-removal also
+landed the underlying-primitive removal. This subsection is
+preserved as historical record.
 
 A future framework primitive:
 
@@ -262,7 +265,7 @@ effects look like population effects.
 |---|---|---|---|
 | `paired_g` | `stratified_arm_diff_pooled` | ✓ | bridge-side migration |
 | `paired_link_per_burst` | `stratified_link_per_burst` | ✗ | author |
-| `proportion_mediated` | `stratified_proportion_mediated` | ✗ | author |
+| `proportion_mediated` | `partial_spearman` + `mediation_dowhy` (linearity sibling) | ✓ | deleted 2026-05-18; the canonical mediation pair lives in `corroborate.analyses.spearman` + `corroborate.analyses.dowhy`. No `stratified_proportion_mediated` was authored — `partial_spearman` is the stratified surface. |
 | `partial_spearman_paired_delta` | per-stratum partial Spearman + Fisher-z pool | ✗ | author (Fisher-z + DerSimonian-Laird) |
 | `paired_delta_link_dowhy` | DoWhy stratified backdoor (env as confounder, not pairing axis) | partial | refactor existing |
 | `link_attenuation_dowhy` | Same | partial | refactor existing |
@@ -286,10 +289,14 @@ DoWhy-family) need internal refactors; 4 are already stratified
    are actually *half-stratified* (within-stratum pair via
    `pair_by`, across-stratum pool); they migrate alongside the
    load-bearing bridges in step 4 below.
-2. **Author missing stratified analogs** (3 new fixtures:
-   `stratified_link_per_burst`, `stratified_proportion_mediated`,
-   per-stratum partial Spearman). Frame-level: each must
-   produce a `(d, se, pooled_p)` shape compatible with
+2. **Author missing stratified analogs** (2 new fixtures:
+   `stratified_link_per_burst`, per-stratum partial Spearman).
+   `proportion_mediated` was deleted 2026-05-18 — the
+   mediation surface is now `partial_spearman` (which IS
+   stratified) + the salvaged `mediation_dowhy` diagnostic,
+   so no stratified-mediator-share fixture is needed.
+   Frame-level: each new fixture must produce a `(d, se,
+   pooled_p)` shape compatible with
    `verdict_from_paired_stats`'s `'null'` branch so the
    Prediction bundle's xfail semantics apply uniformly.
 3. **Refactor existing fixtures** (`mundlak_*`,

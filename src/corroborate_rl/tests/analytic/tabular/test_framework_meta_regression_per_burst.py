@@ -61,7 +61,7 @@ import zlib
 
 import numpy as np
 
-from corroborate.analyses.meta_regression_per_burst import (
+from corroborate.analyses.panel.meta_regression_per_burst import (
     meta_regression_per_burst,
 )
 from corroborate.measurables.reductions import from_key, reduce_axis

@@ -35,7 +35,7 @@ from collections.abc import Mapping, Sequence
 
 import pytest
 
-from corroborate.analyses.meta_regression_unpaired_d import (
+from corroborate.analyses.panel.meta_regression_unpaired_d import (
     meta_regression_unpaired_d,
 )
 from corroborate.corpus.schema import RunRow

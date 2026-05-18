@@ -445,3 +445,44 @@ def recommended_n_paired(
         nobs=None, alpha=alpha, power=power,
         alternative=alternative,
     ))
+
+
+def fisher_z_pool(
+    per_stratum_r: tuple[float, ...] | list[float],
+    per_stratum_n: tuple[int, ...] | list[int],
+    df_offset: int = 3,
+) -> tuple[float, float]:
+    """Fisher-z pool of per-stratum r-values, weighted by
+    `(n_k − df_offset)`. Returns `(rho_pooled, p_two_sided)`.
+
+    `df_offset` = 3 for marginal Spearman (n-3 weighting per
+    stratum, standard for Pearson/Spearman via Fisher's atanh
+    transform); 4 for partial Spearman (one extra DOF lost to
+    the conditioning variable). NaN when no strata contribute
+    or total weight is non-positive.
+
+    Promoted from `analyses/panel_consumers.py:_fisher_z_pool`
+    in phase B.4 of the consolidation so the inverse of
+    `random_effects_summary` for ρ lives alongside it."""
+    z_vals: list[float] = []
+    weights: list[float] = []
+    for r, n in zip(per_stratum_r, per_stratum_n):
+        if math.isnan(r):
+            continue
+        if n - df_offset < 1:
+            continue
+        r_c = max(-0.999999, min(0.999999, r))
+        z = 0.5 * math.log((1 + r_c) / (1 - r_c))
+        z_vals.append(z)
+        weights.append(float(n - df_offset))
+    if not z_vals:
+        return float('nan'), float('nan')
+    total_w = sum(weights)
+    if total_w <= 0:
+        return float('nan'), float('nan')
+    z_pooled = sum(w * z for w, z in zip(weights, z_vals)) / total_w
+    rho = math.tanh(z_pooled)
+    z_stat = z_pooled * math.sqrt(total_w)
+    from scipy.stats import norm
+    p = float(2 * (1.0 - norm.cdf(abs(z_stat))))
+    return rho, p

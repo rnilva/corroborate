@@ -13,20 +13,14 @@ from __future__ import annotations
 
 import math
 
-from corroborate.analyses.meta_regression_unpaired_d import (
+from corroborate.analyses.panel.meta_regression_unpaired_d import (
     MetaRegressionResult,
 )
-from corroborate.analyses.stratified_arm_diff_pooled import (
+from corroborate.analyses.panel.stratified_arm_diff_pooled import (
     StratifiedArmDiffPooledResult,
 )
-from corroborate.analyses.stratified_partial_spearman import (
-    StratifiedPartialSpearmanResult,
-)
-from corroborate.analyses.stratified_partial_spearman_multi import (
-    StratifiedPartialSpearmanMultiResult,
-)
-from corroborate.analyses.stratified_spearman import (
-    StratifiedSpearmanResult,
+from corroborate.analyses.spearman.partial_spearman import (
+    PartialSpearmanResult,
 )
 from corroborate.bridge.verdict import RefutationClass, Verdict
 
@@ -128,9 +122,9 @@ def per_stratum_upper_bound_verdict(
 
 def spearman_rho_verdict(
     result: (
-        StratifiedSpearmanResult
-        | StratifiedPartialSpearmanResult
-        | StratifiedPartialSpearmanMultiResult
+        PartialSpearmanResult
+        | PartialSpearmanResult
+        | PartialSpearmanResult
     ),
     *,
     sign: int,

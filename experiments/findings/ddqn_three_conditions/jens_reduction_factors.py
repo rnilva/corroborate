@@ -69,23 +69,14 @@ from types import MappingProxyType
 
 import polars as pl
 
-from corroborate.analyses.meta_regression_unpaired_d import (
+from corroborate.analyses.panel.meta_regression_unpaired_d import (
     MetaRegressionResult,
 )
-from corroborate.analyses.stratified_arm_diff_pooled import (
+from corroborate.analyses.panel.stratified_arm_diff_pooled import (
     StratifiedArmDiffPooledResult,
 )
-from corroborate.analyses.partial_spearman_paired import (
-    PartialSpearmanPairedResult,
-)
-from corroborate.analyses.stratified_partial_spearman import (
-    StratifiedPartialSpearmanResult,
-)
-from corroborate.analyses.stratified_partial_spearman_multi import (
-    StratifiedPartialSpearmanMultiResult,
-)
-from corroborate.analyses.stratified_spearman import (
-    StratifiedSpearmanResult,
+from corroborate.analyses.spearman.partial_spearman import (
+    PartialSpearmanResult,
 )
 from corroborate.bridge.bridge import Direction, Tier, claim_bridge
 from corroborate.bridge.predicates import finite
@@ -497,7 +488,7 @@ def linear_fa_cap_fails_at_metamaze_g999__exception(
     predicted_direction='a_lt_b',
 )
 def vanilla_anchor_collapses_with_gamma_at_fr_mlp(
-    stratified_spearman: StratifiedSpearmanResult,
+    partial_spearman: PartialSpearmanResult,
     *,
     x: str = 'gamma',
     y: str = 'eval_best_burst_raw_mean',
@@ -530,7 +521,7 @@ def vanilla_anchor_collapses_with_gamma_at_fr_mlp(
     amplification."""
     del x, y, stratify_by, min_stratum_size
     return spearman_rho_verdict(
-        stratified_spearman,
+        partial_spearman,
         sign=-1,
         threshold=rho_threshold,
     )
@@ -553,7 +544,7 @@ def vanilla_anchor_collapses_with_gamma_at_fr_mlp(
     predicted_direction='a_gt_b',
 )
 def vanilla_anchor_preserved_with_gamma_at_acrobot_mlp(
-    stratified_spearman: StratifiedSpearmanResult,
+    partial_spearman: PartialSpearmanResult,
     *,
     x: str = 'gamma',
     y: str = 'eval_best_burst_raw_mean',
@@ -591,7 +582,7 @@ def vanilla_anchor_preserved_with_gamma_at_acrobot_mlp(
     in the cluster Finding."""
     del x, y, stratify_by, min_stratum_size
     return spearman_rho_verdict(
-        stratified_spearman,
+        partial_spearman,
         sign=+1,
         threshold=rho_threshold,
     )
@@ -629,7 +620,7 @@ def vanilla_anchor_preserved_with_gamma_at_acrobot_mlp(
     predicted_direction='a_gt_b',
 )
 def gamma_predicts_q_self_reference_at_fr_mlp(
-    stratified_spearman: StratifiedSpearmanResult,
+    partial_spearman: PartialSpearmanResult,
     *,
     x: str = 'gamma',
     y: str = 'bootstrap_self_reference_fraction',
@@ -653,7 +644,7 @@ def gamma_predicts_q_self_reference_at_fr_mlp(
     Mediator-axis stage 1 of the γ → self-ref → jens chain."""
     del x, y, stratify_by, min_stratum_size
     return spearman_rho_verdict(
-        stratified_spearman,
+        partial_spearman,
         sign=+1,
         threshold=rho_threshold,
     )
@@ -677,7 +668,7 @@ def gamma_predicts_q_self_reference_at_fr_mlp(
     predicted_direction='a_gt_b',
 )
 def q_self_reference_predicts_jens_at_fr_mlp(
-    stratified_spearman: StratifiedSpearmanResult,
+    partial_spearman: PartialSpearmanResult,
     *,
     x: str = 'bootstrap_self_reference_fraction',
     y: str = 'jensen_gap',
@@ -702,7 +693,7 @@ def q_self_reference_predicts_jens_at_fr_mlp(
     on jens after partialling out self-ref."""
     del x, y, stratify_by, min_stratum_size
     return spearman_rho_verdict(
-        stratified_spearman,
+        partial_spearman,
         sign=+1,
         threshold=rho_threshold,
     )
@@ -726,11 +717,11 @@ def q_self_reference_predicts_jens_at_fr_mlp(
     predicted_direction='null',
 )
 def gamma_jens_mediated_by_q_self_reference_at_fr_mlp(
-    stratified_partial_spearman: StratifiedPartialSpearmanResult,
+    partial_spearman: PartialSpearmanResult,
     *,
     x: str = 'gamma',
     y: str = 'jensen_gap',
-    conditioning: str = 'bootstrap_self_reference_fraction',
+    conditioning: tuple[str, ...] = ('bootstrap_self_reference_fraction',),
     stratify_by: str = 'env_name',
     min_stratum_size: int = 30,
     rho_threshold: float = 0.3,
@@ -759,7 +750,7 @@ def gamma_jens_mediated_by_q_self_reference_at_fr_mlp(
     Stage 3 of the γ → self-ref → jens mediation chain."""
     del x, y, conditioning, stratify_by, min_stratum_size
     return spearman_rho_verdict(
-        stratified_partial_spearman,
+        partial_spearman,
         sign=0,
         threshold=rho_threshold,
     )
@@ -800,11 +791,11 @@ def gamma_jens_mediated_by_q_self_reference_at_fr_mlp(
     predicted_direction='a_gt_b',
 )
 def gamma_predicts_q_late_residual_at_fr_mlp(
-    stratified_partial_spearman: StratifiedPartialSpearmanResult,
+    partial_spearman: PartialSpearmanResult,
     *,
     x: str = 'gamma',
     y: str = 'q_late_mean',
-    conditioning: str = 'bootstrap_self_reference_fraction',
+    conditioning: tuple[str, ...] = ('bootstrap_self_reference_fraction',),
     stratify_by: str = 'env_name',
     min_stratum_size: int = 30,
     rho_threshold: float = 0.3,
@@ -822,7 +813,7 @@ def gamma_predicts_q_late_residual_at_fr_mlp(
     +0.57 (p<1e-11) at FR baseline."""
     del x, y, conditioning, stratify_by, min_stratum_size
     return spearman_rho_verdict(
-        stratified_partial_spearman,
+        partial_spearman,
         sign=+1,
         threshold=rho_threshold,
     )
@@ -847,11 +838,11 @@ def gamma_predicts_q_late_residual_at_fr_mlp(
     predicted_direction='a_gt_b',
 )
 def q_late_predicts_jens_residual_at_fr_mlp(
-    stratified_partial_spearman: StratifiedPartialSpearmanResult,
+    partial_spearman: PartialSpearmanResult,
     *,
     x: str = 'q_late_mean',
     y: str = 'jensen_gap',
-    conditioning: str = 'bootstrap_self_reference_fraction',
+    conditioning: tuple[str, ...] = ('bootstrap_self_reference_fraction',),
     stratify_by: str = 'env_name',
     min_stratum_size: int = 30,
     rho_threshold: float = 0.2,
@@ -872,7 +863,7 @@ def q_late_predicts_jens_residual_at_fr_mlp(
     +0.26 (p=0.004) at FR baseline."""
     del x, y, conditioning, stratify_by, min_stratum_size
     return spearman_rho_verdict(
-        stratified_partial_spearman,
+        partial_spearman,
         sign=+1,
         threshold=rho_threshold,
     )
@@ -897,7 +888,7 @@ def q_late_predicts_jens_residual_at_fr_mlp(
     predicted_direction='null',
 )
 def gamma_jens_jointly_mediated_by_self_ref_and_q_late_at_fr_mlp(
-    stratified_partial_spearman_multi: StratifiedPartialSpearmanMultiResult,
+    partial_spearman: PartialSpearmanResult,
     *,
     x: str = 'gamma',
     y: str = 'jensen_gap',
@@ -939,7 +930,7 @@ def gamma_jens_jointly_mediated_by_self_ref_and_q_late_at_fr_mlp(
     (both HELD)."""
     del x, y, conditioning, stratify_by, min_stratum_size
     return spearman_rho_verdict(
-        stratified_partial_spearman_multi,
+        partial_spearman,
         sign=0,
         threshold=rho_threshold,
     )
@@ -984,11 +975,11 @@ def gamma_jens_jointly_mediated_by_self_ref_and_q_late_at_fr_mlp(
     predicted_direction='a_gt_b',
 )
 def gamma_predicts_sigma_action_residual_at_fr_mlp(
-    stratified_partial_spearman: StratifiedPartialSpearmanResult,
+    partial_spearman: PartialSpearmanResult,
     *,
     x: str = 'gamma',
     y: str = 'q_action_std_late',
-    conditioning: str = 'bootstrap_self_reference_fraction',
+    conditioning: tuple[str, ...] = ('bootstrap_self_reference_fraction',),
     stratify_by: str = 'env_name',
     min_stratum_size: int = 30,
     rho_threshold: float = 0.3,
@@ -1011,7 +1002,7 @@ def gamma_predicts_sigma_action_residual_at_fr_mlp(
     two)."""
     del x, y, conditioning, stratify_by, min_stratum_size
     return spearman_rho_verdict(
-        stratified_partial_spearman,
+        partial_spearman,
         sign=+1,
         threshold=rho_threshold,
     )
@@ -1036,11 +1027,11 @@ def gamma_predicts_sigma_action_residual_at_fr_mlp(
     predicted_direction='a_gt_b',
 )
 def sigma_action_predicts_jens_residual_at_fr_mlp(
-    stratified_partial_spearman: StratifiedPartialSpearmanResult,
+    partial_spearman: PartialSpearmanResult,
     *,
     x: str = 'q_action_std_late',
     y: str = 'jensen_gap',
-    conditioning: str = 'bootstrap_self_reference_fraction',
+    conditioning: tuple[str, ...] = ('bootstrap_self_reference_fraction',),
     stratify_by: str = 'env_name',
     min_stratum_size: int = 30,
     rho_threshold: float = 0.3,
@@ -1063,7 +1054,7 @@ def sigma_action_predicts_jens_residual_at_fr_mlp(
     mediation interpretation clean."""
     del x, y, conditioning, stratify_by, min_stratum_size
     return spearman_rho_verdict(
-        stratified_partial_spearman,
+        partial_spearman,
         sign=+1,
         threshold=rho_threshold,
     )
@@ -1088,7 +1079,7 @@ def sigma_action_predicts_jens_residual_at_fr_mlp(
     predicted_direction='null',
 )
 def gamma_jens_jointly_mediated_by_self_ref_and_sigma_action_at_fr_mlp(
-    stratified_partial_spearman_multi: StratifiedPartialSpearmanMultiResult,
+    partial_spearman: PartialSpearmanResult,
     *,
     x: str = 'gamma',
     y: str = 'jensen_gap',
@@ -1129,7 +1120,7 @@ def gamma_jens_jointly_mediated_by_self_ref_and_sigma_action_at_fr_mlp(
     and `sigma_action_predicts_jens_residual_at_fr_mlp`."""
     del x, y, conditioning, stratify_by, min_stratum_size
     return spearman_rho_verdict(
-        stratified_partial_spearman_multi,
+        partial_spearman,
         sign=0,
         threshold=rho_threshold,
     )
@@ -1174,7 +1165,7 @@ def gamma_jens_jointly_mediated_by_self_ref_and_sigma_action_at_fr_mlp(
     predicted_direction='a_gt_b',
 )
 def gamma_jens_marginal_small_at_acrobot_mlp(
-    stratified_spearman: StratifiedSpearmanResult,
+    partial_spearman: PartialSpearmanResult,
     *,
     x: str = 'gamma',
     y: str = 'jensen_gap',
@@ -1209,7 +1200,7 @@ def gamma_jens_marginal_small_at_acrobot_mlp(
     to document the cross-env regime contrast."""
     del x, y, stratify_by, min_stratum_size
     return spearman_rho_verdict(
-        stratified_spearman,
+        partial_spearman,
         sign=+1,
         threshold=rho_threshold,
     )
@@ -1232,7 +1223,7 @@ def gamma_jens_marginal_small_at_acrobot_mlp(
     predicted_direction='a_lt_b',
 )
 def q_late_sign_flipped_with_gamma_at_acrobot_mlp(
-    stratified_spearman: StratifiedSpearmanResult,
+    partial_spearman: PartialSpearmanResult,
     *,
     x: str = 'gamma',
     y: str = 'q_late_mean',
@@ -1266,7 +1257,7 @@ def q_late_sign_flipped_with_gamma_at_acrobot_mlp(
     not just the env-feature axis."""
     del x, y, stratify_by, min_stratum_size
     return spearman_rho_verdict(
-        stratified_spearman,
+        partial_spearman,
         sign=-1,
         threshold=rho_threshold,
     )
@@ -1305,7 +1296,7 @@ def q_late_sign_flipped_with_gamma_at_acrobot_mlp(
     predicted_direction='a_gt_b',
 )
 def vanilla_outcome_recovers_with_warmup_at_fr_g999_mlp(
-    stratified_spearman: StratifiedSpearmanResult,
+    partial_spearman: PartialSpearmanResult,
     *,
     x: str = 'optimizer.warmup_steps',
     y: str = 'eval_best_burst_raw_mean',
@@ -1339,7 +1330,7 @@ def vanilla_outcome_recovers_with_warmup_at_fr_g999_mlp(
     `finding_warmup_rescues_vanilla_at_fr_g999_mlp`."""
     del x, y, stratify_by, min_stratum_size
     return spearman_rho_verdict(
-        stratified_spearman,
+        partial_spearman,
         sign=+1,
         threshold=rho_threshold,
     )
@@ -1359,7 +1350,7 @@ def vanilla_outcome_recovers_with_warmup_at_fr_g999_mlp(
     predicted_direction='a_lt_b',
 )
 def vanilla_jens_shrinks_with_warmup_at_fr_g999_mlp(
-    stratified_spearman: StratifiedSpearmanResult,
+    partial_spearman: PartialSpearmanResult,
     *,
     x: str = 'optimizer.warmup_steps',
     y: str = 'jensen_gap',
@@ -1382,7 +1373,7 @@ def vanilla_jens_shrinks_with_warmup_at_fr_g999_mlp(
     Companion: `vanilla_outcome_recovers_with_warmup_at_fr_g999_mlp`."""
     del x, y, stratify_by, min_stratum_size
     return spearman_rho_verdict(
-        stratified_spearman,
+        partial_spearman,
         sign=-1,
         threshold=rho_threshold,
     )
@@ -1570,47 +1561,45 @@ def ddqn_outcome_help_constant_across_k_eff_at_fr_g999_mlp(
     predicted_direction='null',
 )
 def jens_reduction_does_not_predict_outcome_at_fr_g999_mlp(
-    partial_spearman_paired_delta: PartialSpearmanPairedResult,
+    partial_spearman: PartialSpearmanResult,
     *,
-    target: str = 'eval_best_burst_raw_mean',
-    mediator: str = 'jensen_gap',
-    conditioning: str = 'q_late_mean',
-    pair_by: tuple[str, ...] = ('seed', 'k_eff'),
+    x: str = 'jensen_gap',
+    y: str = 'eval_best_burst_raw_mean',
+    conditioning: tuple[str, ...] = ('q_late_mean',),
+    stratify_by: str = 'env_name',
+    min_stratum_size: int = 30,
     rho_threshold: float = 0.2,
-    min_pairs: int = 30,
 ) -> Verdict:
-    """At FR × MLP × unshaped × γ=0.999, the Δ_jens → Δ_out link is
-    null. Bias-reduction magnitude does not predict outcome help.
+    """At FR × MLP × unshaped × γ=0.999, the jens → outcome link
+    is null after partialling on q_late_mean. Bias-reduction
+    magnitude does not predict outcome help.
 
-    Reports marginal ρ(Δ_jens, Δ_out) across seed × k_eff paired
-    cells (~120 pairs). Empirical ρ_marginal = +0.075 NS (the
-    partial conditioning on Δ_q_late is also small, ~-0.05).
+    Partial Spearman ρ(jens, outcome | q_late_mean) per-env
+    Fisher-z pooled — the canonical mediation form (CLAUDE.md
+    mediation recipe). Stratified by env_name (collapses to FR
+    within scope). Predicted null: |ρ_partial| ≤ 0.2 AND p ≥
+    0.05.
 
-    Predicted: |ρ_marginal| ≤ 0.2 — the bias-reduction → outcome
-    link is null at this scope. DDQN's mechanism magnitude
-    decouples from its outcome benefit, consistent with a binary
+    DDQN's mechanism magnitude decouples from its outcome
+    benefit at this scope, consistent with a binary
     policy-rescue payoff (per-state argmax-preservation) rather
     than a graded magnitude-tracking effect.
 
-    HELDs iff |ρ_marginal| ≤ 0.2 (effect-size band, no p-value
-    gate — the test is on effect magnitude not detection).
-
     Refutations:
-    - NO_EFFECT (|ρ_marginal| > 0.2 with substantively positive
-      sign): bias reduction DOES predict outcome help; the
-      decoupling claim is wrong.
-    - POWER_INSUFFICIENT: fewer than 30 paired seeds × k_eff
-      combinations.
+    - NO_EFFECT (significant ρ either sign with |ρ| > 0.2):
+      bias reduction DOES predict outcome help via a residual
+      that q_late doesn't capture; the decoupling claim fails.
+    - POWER_INSUFFICIENT: too few strata or ρ NaN.
 
-    Conditioning on `q_late_mean` is documentary (partial-on-q_late
-    reported alongside marginal); the verdict is on the marginal.
+    Migrated from seed-paired-Δ form (off-limits in RL substrate
+    per CLAUDE.md analyses §"Methodology debt"); the per-cell
+    partial-Spearman variant asks the same substantive
+    "does mech magnitude predict outcome" question without
+    pseudo-replication.
     """
-    del target, mediator, conditioning, pair_by
-    if partial_spearman_paired_delta.n_pairs < min_pairs:
-        return Verdict.POWER_INSUFFICIENT
-    marg = partial_spearman_paired_delta.marginal_rho
-    if math.isnan(marg):
-        return Verdict.POWER_INSUFFICIENT
-    if abs(marg) <= rho_threshold:
-        return Verdict.HELD
-    return Verdict.NO_EFFECT
+    del x, y, conditioning, stratify_by, min_stratum_size
+    return spearman_rho_verdict(
+        partial_spearman,
+        sign=0,
+        threshold=rho_threshold,
+    )

@@ -48,14 +48,8 @@ from __future__ import annotations
 
 import polars as pl
 
-from corroborate.analyses.stratified_partial_spearman import (
-    StratifiedPartialSpearmanResult,
-)
-from corroborate.analyses.stratified_partial_spearman_multi import (
-    StratifiedPartialSpearmanMultiResult,
-)
-from corroborate.analyses.stratified_spearman import (
-    StratifiedSpearmanResult,
+from corroborate.analyses.spearman.partial_spearman import (
+    PartialSpearmanResult,
 )
 from corroborate.bridge.bridge import Direction, Tier, claim_bridge
 from corroborate.bridge.predicates import finite
@@ -89,7 +83,7 @@ _MINATAR_GAMMAS = pl.col('gamma').is_in([0.95, 0.99, 0.999])
     predicted_direction='a_gt_b',
 )
 def gamma_predicts_q_self_reference_at_si(
-    stratified_spearman: StratifiedSpearmanResult,
+    partial_spearman: PartialSpearmanResult,
     *,
     x: str = 'gamma',
     y: str = 'bootstrap_self_reference_fraction',
@@ -106,7 +100,7 @@ def gamma_predicts_q_self_reference_at_si(
     HELDs iff ρ ≥ +0.5 AND p < 0.05."""
     del x, y, stratify_by, min_stratum_size
     return spearman_rho_verdict(
-        stratified_spearman,
+        partial_spearman,
         sign=+1,
         threshold=rho_threshold,
     )
@@ -127,7 +121,7 @@ def gamma_predicts_q_self_reference_at_si(
     predicted_direction='a_gt_b',
 )
 def q_self_reference_predicts_jens_at_si(
-    stratified_spearman: StratifiedSpearmanResult,
+    partial_spearman: PartialSpearmanResult,
     *,
     x: str = 'bootstrap_self_reference_fraction',
     y: str = 'jensen_gap',
@@ -144,7 +138,7 @@ def q_self_reference_predicts_jens_at_si(
     HELDs iff ρ ≥ +0.5 AND p < 0.05."""
     del x, y, stratify_by, min_stratum_size
     return spearman_rho_verdict(
-        stratified_spearman,
+        partial_spearman,
         sign=+1,
         threshold=rho_threshold,
     )
@@ -166,7 +160,7 @@ def q_self_reference_predicts_jens_at_si(
     predicted_direction='null',
 )
 def gamma_jens_jointly_mediated_by_self_ref_and_sigma_action_at_si(
-    stratified_partial_spearman_multi: StratifiedPartialSpearmanMultiResult,
+    partial_spearman: PartialSpearmanResult,
     *,
     x: str = 'gamma',
     y: str = 'jensen_gap',
@@ -196,7 +190,7 @@ def gamma_jens_jointly_mediated_by_self_ref_and_sigma_action_at_si(
     """
     del x, y, conditioning, stratify_by, min_stratum_size
     return spearman_rho_verdict(
-        stratified_partial_spearman_multi,
+        partial_spearman,
         sign=0,
         threshold=rho_threshold,
     )
@@ -218,7 +212,7 @@ def gamma_jens_jointly_mediated_by_self_ref_and_sigma_action_at_si(
     predicted_direction='null',
 )
 def gamma_self_ref_null_at_asterix(
-    stratified_spearman: StratifiedSpearmanResult,
+    partial_spearman: PartialSpearmanResult,
     *,
     x: str = 'gamma',
     y: str = 'bootstrap_self_reference_fraction',
@@ -242,7 +236,7 @@ def gamma_self_ref_null_at_asterix(
     """
     del x, y, stratify_by, min_stratum_size
     return spearman_rho_verdict(
-        stratified_spearman,
+        partial_spearman,
         sign=0,
         threshold=rho_threshold,
     )
@@ -264,7 +258,7 @@ def gamma_self_ref_null_at_asterix(
     predicted_direction='a_gt_b',
 )
 def gamma_jens_residual_at_asterix_after_fr_mediators(
-    stratified_partial_spearman_multi: StratifiedPartialSpearmanMultiResult,
+    partial_spearman: PartialSpearmanResult,
     *,
     x: str = 'gamma',
     y: str = 'jensen_gap',
@@ -295,7 +289,7 @@ def gamma_jens_residual_at_asterix_after_fr_mediators(
     """
     del x, y, conditioning, stratify_by, min_stratum_size
     return spearman_rho_verdict(
-        stratified_partial_spearman_multi,
+        partial_spearman,
         sign=+1,
         threshold=rho_threshold,
     )

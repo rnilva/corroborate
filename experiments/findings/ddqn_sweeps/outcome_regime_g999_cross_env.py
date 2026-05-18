@@ -45,7 +45,7 @@ import math
 
 import polars as pl
 
-from corroborate.analyses.stratified_arm_diff_pooled import (
+from corroborate.analyses.panel.stratified_arm_diff_pooled import (
     StratifiedArmDiffPooledResult,
 )
 from corroborate.bridge.bridge import Direction, Tier, claim_bridge

@@ -40,7 +40,7 @@ sys.path.insert(0, str(_REPO_ROOT))
 
 import corroborate.analyses  # pyright: ignore[reportUnusedImport]  # populate registry
 import corroborate_rl.dqn.measurables  # pyright: ignore[reportUnusedImport]  # populate registry
-from corroborate.analyses.tautology_audit import tautology_audit
+from corroborate.analyses.diagnostic.tautology_audit import tautology_audit
 from corroborate.runner.runner import (
     _load_directory,  # pyright: ignore[reportPrivateUsage]
     _compute_measurables,  # pyright: ignore[reportPrivateUsage]

@@ -49,7 +49,7 @@ import zlib
 
 import numpy as np
 
-from corroborate.analyses.paired_link_per_burst import (
+from corroborate.analyses.link.paired_link_per_burst import (
     paired_link_per_burst,
     phase_link_consistency,
 )

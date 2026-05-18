@@ -290,10 +290,15 @@ docstring.
   scope predicates across bridges produces distinct extents even
   when the predicates are semantically identical. Refactor shared
   predicates to module-level constants (`_scope.py`).
-- **`proportion_mediated` for mediation claims**. Deprecated;
-  ratio-of-noisy-means. The framework's mediation answer is
-  graph-walk + cluster query, not a single ratio-of-means
-  primitive.
+- **`proportion_mediated` for mediation claims**. Deleted
+  2026-05-18 (statistical case: ratio explodes near zero,
+  lands outside [0, 1] under suppression, first-difference
+  identification ≠ population slope under seed-coupled
+  noise). The framework's mediation answer is graph-walk +
+  cluster query, not a single ratio-of-means primitive;
+  the canonical analyses are `partial_spearman` (rank-based,
+  multicollinearity-robust) paired with `mediation_dowhy`
+  (typed `linearity_status` diagnostic) at the same scope.
 - **HP-conditioned bridges named as if HP-invariant**. A bridge
   on sync=500 scope tests an edge at sync=500. The extent-hash
   encodes that constraint empirically. Don't paper over it in the

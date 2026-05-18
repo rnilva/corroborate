@@ -27,23 +27,17 @@ import polars as pl
 
 from corroborate.measurables import Measurable  # noqa: F401  # for bridge param type strings
 
-from corroborate.analyses.per_burst_jci_spearman import (
-    PerBurstJciSpearmanResult,
+from corroborate.analyses.spearman.partial_spearman import (
+    PartialSpearmanResult,
 )
-from corroborate.analyses.stratified_arm_diff_pooled import (
+from corroborate.analyses.panel.stratified_arm_diff_pooled import (
     StratifiedArmDiffPooledResult,
 )
-from corroborate.analyses.stratified_partial_spearman import (
-    StratifiedPartialSpearmanResult,
-)
-from corroborate.analyses.stratified_spearman import (
-    StratifiedSpearmanResult,
-)
-from corroborate.analyses.stratum_panel import pair_key, stratum_panel
-from corroborate.analyses.stratum_panel_jci_spearman import (
+from corroborate.analyses.panel.stratum_panel import pair_key, stratum_panel
+from corroborate.analyses.spearman.stratum_panel_jci_spearman import (
     StratumPanelJciResult,
 )
-from corroborate.analyses.stratum_baseline_predictor_link_dowhy import (
+from corroborate.analyses.dowhy.stratum_baseline_predictor_link_dowhy import (
     StratumBaselinePredictorLinkDowhyResult,
 )
 from corroborate.bridge.deferred_scope import scope_from_panel
@@ -394,7 +388,7 @@ del Mapping
     predicted_direction='a_gt_b',
 )
 def mc_disc_raw_coupled__per_env_jci(
-    stratified_spearman: StratifiedSpearmanResult,
+    partial_spearman: PartialSpearmanResult,
     *,
     x: str = 'eval_best_burst_mean',
     y: str = 'eval_best_burst_raw_mean',
@@ -433,7 +427,7 @@ def mc_disc_raw_coupled__per_env_jci(
     the measurement, not just the absence of a causal link."""
     del x, y, stratify_by, min_stratum_size
     return partial_spearman_signed_verdict(
-        stratified_spearman,
+        partial_spearman,
         threshold=rho_threshold, sign=1, min_strata=min_strata,
     )
 
@@ -482,7 +476,7 @@ _REACH_POLARITY_SCOPE: pl.Expr = (
     predicted_direction='a_gt_b',
 )
 def policy_decisiveness_helps_outcome__survive(
-    stratified_spearman: StratifiedSpearmanResult,
+    partial_spearman: PartialSpearmanResult,
     *,
     x: str = 'argmax_entropy_late',
     y: str = 'eval_best_burst_raw_mean',
@@ -502,7 +496,7 @@ def policy_decisiveness_helps_outcome__survive(
     cohort (env_reward_polarity > 0.1). HELD."""
     del x, y, stratify_by, min_stratum_size
     return partial_spearman_signed_verdict(
-        stratified_spearman,
+        partial_spearman,
         threshold=rho_threshold, sign=1, min_strata=min_strata,
     )
 
@@ -516,7 +510,7 @@ def policy_decisiveness_helps_outcome__survive(
     predicted_direction='a_lt_b',
 )
 def policy_decisiveness_hurts_outcome__reach(
-    stratified_spearman: StratifiedSpearmanResult,
+    partial_spearman: PartialSpearmanResult,
     *,
     x: str = 'argmax_entropy_late',
     y: str = 'eval_best_burst_raw_mean',
@@ -538,7 +532,7 @@ def policy_decisiveness_hurts_outcome__reach(
     polarity stratification (contrastive cluster shape)."""
     del x, y, stratify_by, min_stratum_size
     return partial_spearman_signed_verdict(
-        stratified_spearman,
+        partial_spearman,
         threshold=abs(rho_threshold), sign=-1, min_strata=min_strata,
     )
 
@@ -552,7 +546,7 @@ def policy_decisiveness_hurts_outcome__reach(
     predicted_direction='a_gt_b',
 )
 def bg_link_to_outcome__survive(
-    stratified_spearman: StratifiedSpearmanResult,
+    partial_spearman: PartialSpearmanResult,
     *,
     x: str = 'bootstrap_gap_magnitude',
     y: str = 'eval_best_burst_raw_mean',
@@ -567,7 +561,7 @@ def bg_link_to_outcome__survive(
     Diagnostic ρ = +0.19, p = 6.5e-9. HELD."""
     del x, y, stratify_by, min_stratum_size
     return partial_spearman_signed_verdict(
-        stratified_spearman,
+        partial_spearman,
         threshold=rho_threshold, sign=1, min_strata=min_strata,
     )
 
@@ -581,7 +575,7 @@ def bg_link_to_outcome__survive(
     predicted_direction='null',
 )
 def bg_link_to_outcome_null__reach(
-    stratified_spearman: StratifiedSpearmanResult,
+    partial_spearman: PartialSpearmanResult,
     *,
     x: str = 'bootstrap_gap_magnitude',
     y: str = 'eval_best_burst_raw_mean',
@@ -601,7 +595,7 @@ def bg_link_to_outcome_null__reach(
     end-to-end transitive sign."""
     del x, y, stratify_by, min_stratum_size
     return partial_spearman_null_verdict(
-        stratified_spearman,
+        partial_spearman,
         max_abs_rho=null_max_abs_rho, min_strata=min_strata,
     )
 
@@ -635,7 +629,7 @@ def bg_link_to_outcome_null__reach(
     predicted_direction='a_gt_b',
 )
 def intervention_predicts_policy_decisiveness__mc_free(
-    stratified_spearman: StratifiedSpearmanResult,
+    partial_spearman: PartialSpearmanResult,
     *,
     x: str = 'bootstrap_gap_magnitude',
     y: str = 'argmax_entropy_late',
@@ -660,7 +654,7 @@ def intervention_predicts_policy_decisiveness__mc_free(
     scope (n=3270 cells, 11 envs). HELD."""
     del x, y, stratify_by, min_stratum_size
     return partial_spearman_signed_verdict(
-        stratified_spearman,
+        partial_spearman,
         threshold=rho_threshold, sign=1, min_strata=min_strata,
     )
 
@@ -836,7 +830,7 @@ def ddqn_reduces_signed_q_late__structural(
     predicted_direction='a_gt_b',
 )
 def bootstrap_gap_predicts_jens__theorem(
-    stratified_spearman: StratifiedSpearmanResult,
+    partial_spearman: PartialSpearmanResult,
     *,
     x: str = 'bootstrap_gap_magnitude',
     y: str = 'jensen_gap',
@@ -867,7 +861,7 @@ def bootstrap_gap_predicts_jens__theorem(
     the rho)."""
     del x, y, stratify_by, min_stratum_size
     return partial_spearman_signed_verdict(
-        stratified_spearman,
+        partial_spearman,
         threshold=rho_threshold, sign=1, min_strata=min_strata,
     )
 
@@ -882,11 +876,11 @@ def bootstrap_gap_predicts_jens__theorem(
     predicted_direction='null',
 )
 def intervention_outcome_link_null__mech_conditioned(
-    stratified_partial_spearman: StratifiedPartialSpearmanResult,
+    partial_spearman: PartialSpearmanResult,
     *,
     x: str = 'bootstrap_gap_magnitude',
     y: str = 'eval_best_burst_raw_mean',
-    conditioning: str = 'jensen_gap',
+    conditioning: tuple[str, ...] = ('jensen_gap',),
     stratify_by: str = 'env_name',
     min_stratum_size: int = 5,
     null_max_abs_rho: float = 0.2,
@@ -912,7 +906,7 @@ def intervention_outcome_link_null__mech_conditioned(
     interpretation."""
     del x, y, conditioning, stratify_by, min_stratum_size
     return partial_spearman_null_verdict(
-        stratified_partial_spearman,
+        partial_spearman,
         max_abs_rho=null_max_abs_rho, min_strata=min_strata,
     )
 
@@ -1023,7 +1017,7 @@ def intervention_outcome_link__decoupled_envs_only(
     predicted_direction='a_gt_b',
 )
 def bg_per_burst_predicts_entropy_per_burst(
-    per_burst_jci_spearman: PerBurstJciSpearmanResult,
+    partial_spearman: PartialSpearmanResult,
     *,
     x: 'Measurable[Mapping[str, object], npt.NDArray[np.floating]]' = (
         BOOTSTRAP_GAP_MAGNITUDE_PER_BURST  # noqa: F821
@@ -1041,7 +1035,7 @@ def bg_per_burst_predicts_entropy_per_burst(
     positive."""
     del x, y, stratify_by, min_stratum_size
     return partial_spearman_signed_verdict(
-        per_burst_jci_spearman,
+        partial_spearman,
         threshold=rho_threshold, sign=1, min_strata=min_strata,
     )
 
@@ -1055,7 +1049,7 @@ def bg_per_burst_predicts_entropy_per_burst(
     predicted_direction='null',
 )
 def entropy_per_burst_predicts_outcome_per_burst(
-    per_burst_jci_spearman: PerBurstJciSpearmanResult,
+    partial_spearman: PartialSpearmanResult,
     *,
     x: 'Measurable[Mapping[str, object], npt.NDArray[np.floating]]' = (
         ARGMAX_ENTROPY_PER_BURST  # noqa: F821
@@ -1077,7 +1071,7 @@ def entropy_per_burst_predicts_outcome_per_burst(
     claim."""
     del x, y, stratify_by, min_stratum_size
     return partial_spearman_null_verdict(
-        per_burst_jci_spearman,
+        partial_spearman,
         max_abs_rho=null_max_abs_rho, min_strata=min_strata,
     )
 
@@ -1091,7 +1085,7 @@ def entropy_per_burst_predicts_outcome_per_burst(
     predicted_direction='null',
 )
 def bg_per_burst_link_to_outcome(
-    per_burst_jci_spearman: PerBurstJciSpearmanResult,
+    partial_spearman: PartialSpearmanResult,
     *,
     x: 'Measurable[Mapping[str, object], npt.NDArray[np.floating]]' = (
         BOOTSTRAP_GAP_MAGNITUDE_PER_BURST  # noqa: F821
@@ -1113,7 +1107,7 @@ def bg_per_burst_link_to_outcome(
     specific, not pool-detectable."""
     del x, y, stratify_by, min_stratum_size
     return partial_spearman_null_verdict(
-        per_burst_jci_spearman,
+        partial_spearman,
         max_abs_rho=null_max_abs_rho, min_strata=min_strata,
     )
 

@@ -25,7 +25,7 @@ import numpy as np
 import polars as pl
 from scipy.stats import pearsonr
 
-from corroborate.analyses.paired_link_per_burst import (
+from corroborate.analyses.link.paired_link_per_burst import (
     paired_link_per_burst, phase_link_consistency,
 )
 from corroborate.measurables.reductions import from_key

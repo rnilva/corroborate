@@ -34,7 +34,7 @@ import random
 from collections.abc import Mapping
 from dataclasses import replace
 
-from corroborate.analyses.tautology_audit import tautology_audit
+from corroborate.analyses.diagnostic.tautology_audit import tautology_audit
 from corroborate.corpus.schema import MeasurementLeaf, RunRow
 from corroborate.measurables.redundancy_check import TautologyReport
 

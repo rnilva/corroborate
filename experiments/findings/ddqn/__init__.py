@@ -18,6 +18,7 @@ import corroborate.analyses  # pyright: ignore[reportUnusedImport]  # populate r
 import corroborate_rl.dqn.measurables  # pyright: ignore[reportUnusedImport]  # populate measurable registry
 
 from experiments.findings.ddqn import (
+    finding_bg_jens_mediation_robust__reach,
     finding_channel_decomposition,
     finding_cross_env_mediation,
     finding_hasselt_chain,
@@ -25,6 +26,7 @@ from experiments.findings.ddqn import (
     finding_per_burst_chain_dynamics,
     finding_polarity_conditional_chain,
     finding_reach_bias_link,
+    finding_staleness_jens_mediation_robust__minatar,
     finding_tautology_baseline_chain,
     finding_three_gate_scope_outcome_held,
 )
@@ -86,6 +88,8 @@ FINDINGS = (
     finding_tautology_baseline_chain,
     finding_mediation_polarity_conditional,
     finding_cross_env_mediation,
+    finding_bg_jens_mediation_robust__reach,
+    finding_staleness_jens_mediation_robust__minatar,
 )
 
 

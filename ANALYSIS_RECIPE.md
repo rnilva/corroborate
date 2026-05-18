@@ -229,7 +229,7 @@ question-first index pointing at it.
 | Cross-config moderator (sweep as lever)? | `cross_config_paired_slope` | CLAIM 21-shaped sync / Polyak slope. |
 | Per-env panel meta-regression on paired g? | `meta_regression_paired_g` | Seed-paired form. Use `meta_regression_unpaired_d` instead for the seed-pairing-free RL form. Kept for synthetic substrate tests and analytic-test usage. |
 | Within/between decomposition? | `mundlak_decomposition` / `mundlak_paired_g_per_burst` | Cluster-robust CR1 SE; Hausman test for `β_b == β_w`. |
-| Mediation: does X→Y survive conditioning on Z? | `partial_spearman_rho` (1 Z) / `partial_spearman_rho_multi` (k Z) / `stratified_partial_spearman_rho` (JCI) | The non-parametric mediation primitives. **NOT `proportion_mediated`** (deprecated; ratio-of-noisy-means with no SE; see its module docstring). |
+| Mediation: does X→Y survive conditioning on Z? | `partial_spearman_rho` (1 Z) / `partial_spearman_rho_multi` (k Z) / `stratified_partial_spearman_rho` (JCI) | The non-parametric canonical mediation primitives. Pair with `mediation_dowhy` at the same scope for a typed `linearity_status` diagnostic (HYPOTHESIS_AS_GRAPH §3b scope-cluster). `proportion_mediated` was the v9 ratio-of-noisy-means primitive — deleted 2026-05-18; see CLAUDE.md mediation recipe for the statistical case. |
 | Sample efficiency among solvers? | `paired_g_among_solvers` | Per-env gate by solve threshold. |
 | Verdict landscape per env? | `verdict_distribution_per_env` | Tally INVARIANT bridges' per-cell verdicts. |
 | Mediator-set tautology audit? | `tautology_audit` | HP shadow / partial-correlation collapse / convergence proxy. |
@@ -314,10 +314,9 @@ def do_treatment_increases_outcome__regime(
 | Robust to placebo treatment? | `dowhy.placebo_refutation` (gate on `abs(refuted_ate) < tolerance` — NOT `drift`; placebo's drift ≈ \|real_ate\|) |
 | Robust to synthetic confounder? | `dowhy.random_common_cause_refutation` (gate on `drift < tolerance`) |
 | 2×2 factorial interaction? | `factorial_2x2_interaction` |
-| Continuous treatment? | `paired_continuous_do_dowhy` |
-| Stratum-Δ link DoWhy (cross-env, mech-conditioned)? | `stratum_delta_link_dowhy` — per-(env, burst) stratum-Δ panel, backdoor+placebo+RCC. Sibling of `paired_delta_link_dowhy`; uses pattern-2 aggregation (independent-samples per stratum). |
-| Outcome attenuation DoWhy (binary moderator)? | `stratum_outcome_attenuation_dowhy` — per-(env, burst) stratum-Δ_outcome, binary attenuator + env one-hot. Sibling of `link_attenuation_dowhy`. |
-| Seed-paired Δ panel DoWhy? | `paired_delta_link_dowhy`, `link_attenuation_dowhy` — kept for substrates where seed pairing is structurally valid (synthetic SCMs, single-stratum analytic tests). **NOT for cross-stratum RL claims** — use the `stratum_*` siblings above. |
+| Continuous baseline-arm predictor → Δ_outcome at stratum level? | `stratum_baseline_predictor_link_dowhy` — per-(env, HP) stratum row carrying `baseline_predictor` (e.g. baseline target staleness) and Δ_target; backdoor+placebo+RCC under env one-hot. |
+| Continuous treatment, dose-response across HP values? | `paired_continuous_do_dowhy` — pair on (env, HP, seed) where HP is the swept treatment_var; each pair contributes one (HP_value, Δ_outcome) point. Use when the polyak/dampened sweep has only a handful of HP buckets but multiple seeds per bucket — the seed-paired form preserves data density that stratum-pooling collapses. |
+| Stratum-Δ link DoWhy (cross-env, mech-conditioned)? | `stratum_delta_link_dowhy` — per-(env, burst) stratum-Δ panel, backdoor+placebo+RCC. Uses pattern-2 aggregation (independent-samples per stratum). |
 
 **Composite trio verdicts.** When a single causal claim is
 corroborated by `backdoor + placebo + RCC` working together

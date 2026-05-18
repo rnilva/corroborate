@@ -91,7 +91,21 @@ from experiments.findings.ddqn_three_conditions.jens_reduction_factors import (
 )
 
 
-EXPECTED: ClusterVerdict = ClusterVerdict.SUPPORTED
+# REFUTED on the merged cache post 2026-05-18 consolidation. The
+# third bridge (`jens_reduction_does_not_predict_outcome_at_fr_
+# g999_mlp`) migrated from the off-limits seed-paired-Δ
+# `partial_spearman_paired` (pre-consolidation, reported ρ ≈ +0.075
+# NS) to the canonical per-cell partial Spearman primitive
+# (ρ(jensen_gap, eval_best_burst_raw_mean | q_late_mean) ≈ -0.45,
+# n=300, p<0.001 → NO_EFFECT). The canonical RL-substrate primitive
+# surfaces a STRONG negative link that the per-pair-Δ form did not.
+# The "no jens→outcome link at FR γ=0.999" claim does NOT survive
+# the canonical primitive. Methodology follow-up is open (see
+# module docstring) — substrate authors should decide whether the
+# original decoupling-via-binary-rescue framing needs revision OR
+# whether a different mediation question (e.g. partial-stratified
+# by k_eff levels) is the right substrate-honest test.
+EXPECTED: ClusterVerdict = ClusterVerdict.REFUTED
 
 
 BLOCKED_ON: str | None = None

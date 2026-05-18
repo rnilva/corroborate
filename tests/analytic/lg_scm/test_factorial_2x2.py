@@ -41,7 +41,7 @@ from collections.abc import Mapping, Sequence
 import math
 import pytest
 
-from corroborate.analyses.factorial_2x2 import (
+from corroborate.analyses.paired.factorial_2x2 import (
     _g_paired_from_two_arms,
     factorial_2x2_interaction,
 )

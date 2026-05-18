@@ -29,7 +29,7 @@ from collections.abc import Mapping
 
 import numpy as np
 
-from corroborate.analyses.cross_stratum_arm_diff_partial_spearman import (
+from corroborate.analyses.link.cross_stratum_arm_diff_partial_spearman import (
     cross_stratum_arm_diff_partial_spearman,
 )
 

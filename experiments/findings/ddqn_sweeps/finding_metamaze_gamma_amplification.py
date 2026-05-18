@@ -17,16 +17,15 @@ from experiments.findings.ddqn.within_env import (
 )
 
 
-EXPECTED: ClusterVerdict = ClusterVerdict.EMPTY_EXTENT
+# REFUTED on the merged ddqn_sweeps cache (post 2026-05-18
+# consolidation): the cache grew with origin/main's new corpora,
+# unblocking the MetaMaze γ=0.999 cells that the bridge needs. The
+# bridge now fires and refutes the substrate's "MetaMaze γ-
+# amplification" prediction. The original BLOCKED_ON gap is closed.
+EXPECTED: ClusterVerdict = ClusterVerdict.REFUTED
 
 
-BLOCKED_ON: str | None = (
-    'Bridge fires empty even under ddqn_sweeps (relaxed MODULE_SCOPE). '
-    '`G1_VANILLA_CONFIG_PREMISE_ACTIVE` in the bridge\'s scope filters '
-    'out MetaMaze γ=0.999 — vanilla jens is below the 0.05 noise floor '
-    'at the long-horizon γ. Need either G1-relaxed γ-sweep bridge or '
-    'denser MetaMaze γ=0.999 cells with active vanilla bias.'
-)
+BLOCKED_ON: str | None = None
 
 
 BRIDGES: tuple[Bridge, ...] = (

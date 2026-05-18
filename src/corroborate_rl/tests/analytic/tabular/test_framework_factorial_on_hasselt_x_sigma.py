@@ -74,7 +74,7 @@ import zlib
 
 import numpy as np
 
-from corroborate.analyses.factorial_2x2 import factorial_2x2_interaction
+from corroborate.analyses.paired.factorial_2x2 import factorial_2x2_interaction
 
 from corroborate_rl.tabular import (
     double_greedify_tabular,

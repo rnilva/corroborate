@@ -20,7 +20,7 @@ import zlib
 import numpy as np
 from scipy.stats import norm
 
-from corroborate.analyses.cliff_delta_paired import cliff_delta_paired
+from corroborate.analyses.paired.cliff_delta_paired import cliff_delta_paired
 
 
 def _det_seed(*parts: object) -> int:

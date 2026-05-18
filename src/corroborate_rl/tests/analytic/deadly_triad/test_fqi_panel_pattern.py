@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import corroborate_rl.dqn  # noqa: F401  # pyright: ignore[reportUnusedImport]  # side-effect: registers q_divergence_score + r_max
 
-from corroborate.analyses.paired_g import paired_g
+from corroborate.analyses.paired.paired_g import paired_g
 from corroborate.measurables import (
     evaluate_with_measurables,
     get_registered,

@@ -19,7 +19,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import replace
 
-from corroborate.analyses.verdict_distribution import (
+from corroborate.analyses.diagnostic.verdict_distribution import (
     verdict_distribution_per_env,
 )
 from corroborate.bridge.verdict import Verdict

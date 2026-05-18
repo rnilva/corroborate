@@ -35,7 +35,7 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping, Sequence
 
-from corroborate.analyses.meta_regression_paired_g import (
+from corroborate.analyses.panel.meta_regression_paired_g import (
     meta_regression_paired_g,
 )
 from corroborate.corpus.schema import RunRow
