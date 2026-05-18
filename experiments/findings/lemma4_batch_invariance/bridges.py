@@ -71,7 +71,7 @@ _FR_VANILLA_GAMMA999_SCOPE = (
     source='replay.batch_size',
     target='jensen_gap',
     direction=Direction.DIRECT,
-    tier=Tier.INTERVENTIONAL,
+    tier=Tier.ASSOCIATIONAL,
     scope=_FR_VANILLA_GAMMA999_SCOPE,
     predicted_direction='null',
 )

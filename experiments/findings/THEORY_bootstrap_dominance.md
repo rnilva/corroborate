@@ -928,8 +928,37 @@ future work.
 - `findings_si_corroborates_regime_classification.md` — SI γ=0.999
   fits Q-STRUCTURED (Λ_m moderate); DDQN helps via Corollary 1.1.
 
-**Falsifiable prediction (in flight):** batch-size sweep at FR
-γ=0.999 × MLP × 1M, B ∈ {128, 512, 2048} (B=32 anchor from existing
-warmup probes). Lemma 4 → Corollary 4.1 predicts vanilla `jensen_gap`
-≈ invariant in B. Refutation criterion: sig negative trend
-ρ(B, jens) ≤ -0.5. See `experiments/configs/fr_batch_size_sweep.yaml`.
+**Falsifiable prediction — RESOLVED 2026-05-18, REFUTED.** Batch-size
+sweep at FR γ=0.999 × MLP × 1M × n=30 seeds × B ∈ {128, 512, 2048}
+ran 14 hours wall time, materialised the test panel:
+
+    B       jens_mean   jens_SD
+    128     4.56        1.51
+    512     2.41        0.76
+    2048    1.55        0.64
+
+ρ(B, jens) Spearman = **−0.832, p=3e-24** — well past the
+pre-registered |ρ| > 0.5 refutation threshold. Larger B gives
+SMALLER jens (3× drop from B=128 → B=2048); cross-seed SD drops
+2.4× consistent with Lemma 4's Var[∇L] = O(1/B). The MEAN is
+what fails the prediction.
+
+**Direction matters**: small B AMPLIFIES bias accumulation (the
+opposite of §7's "escape from bias-attraction" intuition). At
+finite training under γ→1, SGD's high-variance updates compound
+into more aggressive Q-divergence through the chain amplifier.
+
+**Implications:**
+- Lemma 4's mathematical claim (E[∇L] B-invariant) is true.
+- **Corollary 4.1's empirical applicability is REFUTED** at this
+  scope — the 1M-step jens magnitude moves 3× across B, even
+  though the regime classification stays "bias-dominated" at all B.
+- The §7 caveat is sharpened: finite-T escape probability IS
+  B-dependent, but in the OPPOSITE direction (smaller B → MORE
+  bias, not less).
+- Practitioner implication: at γ→1 with finite training, batch
+  size is a load-bearing config choice, not a free hyperparameter.
+
+Bridge: `experiments.findings.lemma4_batch_invariance` (commit
+`40b20f0`). Sweep config:
+`experiments/configs/fr_batch_size_sweep.yaml`.
