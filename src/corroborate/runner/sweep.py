@@ -425,13 +425,26 @@ def run_intervention[R: Mapping[str, object]](
             # ARE legitimately per-cell and continue.
             substep = 'write_runs'
             try:
+                # Defensive re-mkdir before each cell write.
+                # `tmp_dir` was created once at the start of
+                # run_intervention (line ~286), but a long-running
+                # sweep can have its untracked tmp/ wiped by external
+                # forces (git operations in the same worktree, manual
+                # cleanup, concurrent test cleanup). Without this
+                # belt-and-suspenders, a transient deletion ends the
+                # sweep with ENOENT on every subsequent cell. The
+                # mkdir is idempotent + cheap; the cost is one
+                # syscall per cell vs lifetime of the sweep.
+                runs_path.parent.mkdir(parents=True, exist_ok=True)
                 write_runrows(cell_result.runs, runs_path)
                 substep = 'reduce_and_write_traces'
+                traces_path.parent.mkdir(parents=True, exist_ok=True)
                 write_reduced_tracerows(
                     list(cell_result.traces), traces_path,
                     add=trace_reductions, drop=trace_drops,
                 )
                 substep = 'write_graph'
+                graph_path.parent.mkdir(parents=True, exist_ok=True)
                 write_graphs_sidecar(
                     {arm_key: cell_result.graph}, graph_path,
                 )
