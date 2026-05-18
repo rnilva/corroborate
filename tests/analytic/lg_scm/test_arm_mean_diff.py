@@ -74,11 +74,26 @@ def _expected_mean_diff(*, beta_xz_t: float, beta_xz_b: float) -> float:
 
 
 def _expected_arm_var(*, beta_xz: float) -> float:
-    """Var[y_mean_per_seed | arm]. Dominant term is the X_avg
-    propagation; σ_z² / σ_y² contributions are smaller by
-    σ_z²/(β_xz²·σ_x²) and σ_y²/((β_xz·β_zy)²·σ_x²) and ignored
-    in the closed form (they're absorbed into the 4-sigma bound)."""
-    return (beta_xz * _BETA_ZY) ** 2 * (_SIGMA_X ** 2) / _N_STEPS
+    """Closed-form Var[y_mean_per_seed | arm] including ALL
+    structural noise terms.
+
+    Per-step y_t = β_zy · (β_xz · x_t + σ_z · ε_z_t) + σ_y · ε_y_t.
+    Mean over n_steps: y_mean = β_xz·β_zy·x_mean + β_zy·σ_z·ε_z_avg
+                       + σ_y·ε_y_avg. The three terms are
+    uncorrelated, so:
+
+        Var[y_mean] = (β_xz · β_zy)² · σ_x² / n_steps
+                    + (β_zy · σ_z)² / n_steps
+                    + σ_y² / n_steps
+
+    At β_xz_b = 0.2 the σ_z + σ_y noise terms account for ~59%
+    of the variance (the X_avg term scales as β_xz²); omitting
+    them would understate the per-arm variance by ~2.4×."""
+    return (
+        (beta_xz * _BETA_ZY) ** 2 * (_SIGMA_X ** 2) / _N_STEPS
+        + (_BETA_ZY * _SIGMA_Z) ** 2 / _N_STEPS
+        + (_SIGMA_Y ** 2) / _N_STEPS
+    )
 
 
 def _expected_mean_diff_se(
@@ -88,6 +103,41 @@ def _expected_mean_diff_se(
     var_t = _expected_arm_var(beta_xz=beta_xz_t)
     var_b = _expected_arm_var(beta_xz=beta_xz_b)
     return math.sqrt(var_t / n_per_arm + var_b / n_per_arm)
+
+
+def _expected_pairing_rho(*, beta_xz_t: float, beta_xz_b: float) -> float:
+    """Closed-form pairing-rho under shared-seed cancellation.
+
+    Under shared seeds the σ_z and σ_y noise components are
+    IDENTICAL across arms (the runner uses
+    `numpy.random.default_rng(seed)` to pre-draw all epsilons),
+    so:
+        y_t = β_xz_t·β_zy·X_avg + β_zy·σ_z·ε_z_avg + σ_y·ε_y_avg
+        y_b = β_xz_b·β_zy·X_avg + β_zy·σ_z·ε_z_avg + σ_y·ε_y_avg
+
+    The X_avg, ε_z_avg, ε_y_avg components are mutually
+    uncorrelated. Cov(y_t, y_b) over seeds picks up the products
+    of MATCHED component variances:
+
+        Cov(y_t, y_b) = β_xz_t·β_xz_b · β_zy² · σ_x²/n_steps
+                      + (β_zy · σ_z)² / n_steps
+                      + σ_y² / n_steps
+
+    And pairing_rho = Cov / sqrt(Var_t · Var_b).
+
+    Not 1.0 because the X_avg component has DIFFERENT
+    coefficients in the two arms (β_xz_t vs β_xz_b); the σ_z
+    and σ_y components are perfectly correlated, but the
+    structural X_avg component contributes less than perfectly.
+    """
+    var_t = _expected_arm_var(beta_xz=beta_xz_t)
+    var_b = _expected_arm_var(beta_xz=beta_xz_b)
+    cov = (
+        beta_xz_t * beta_xz_b * (_BETA_ZY ** 2) * (_SIGMA_X ** 2) / _N_STEPS
+        + (_BETA_ZY * _SIGMA_Z) ** 2 / _N_STEPS
+        + (_SIGMA_Y ** 2) / _N_STEPS
+    )
+    return cov / math.sqrt(var_t * var_b)
 
 
 def _as_dicts(rows: Sequence[RunRow]) -> list[Mapping[str, object]]:
@@ -116,30 +166,37 @@ def test_arm_mean_diff_recovers_structural_contrast() -> None:
         beta_xz_b=beta_xz_b,
         n_per_arm=_N_SEEDS_PER_ARM,
     )
-    # 4-sigma analytical window — Var carries only the dominant
-    # X_avg-propagation term, so σ_z² / σ_y² contributions inflate
-    # the empirical SD by a few %; 4σ accommodates that residual.
+    # 4-σ analytical window. The closed-form SE now includes all
+    # three variance components (X_avg, σ_z, σ_y propagation), so
+    # the bound is calibrated against actual sampling SD rather
+    # than absorbing a structural omission.
     assert abs(result.mean_diff - expected) < 4.0 * se_expected, (
         f'mean_diff={result.mean_diff:.4f} expected={expected:.4f} '
         f'4*SE={4.0 * se_expected:.4f}'
     )
-    # Framework SE should match closed-form Welch SE within 20%
-    # (the dominant-term approximation, sample-SD CV at n=60).
-    assert 0.8 * se_expected <= result.mean_diff_se <= 1.25 * se_expected, (
+    # Framework Welch SE matches the closed-form full-variance SE
+    # within ±10% — sample-SD CV at n=60 is ≈ 1/sqrt(2(n-1)) ≈
+    # 9%, so 10% absorbs that one-σ slack on each per-arm SD.
+    assert 0.9 * se_expected <= result.mean_diff_se <= 1.1 * se_expected, (
         f'mean_diff_se={result.mean_diff_se:.4f} '
-        f'expected_se={se_expected:.4f}'
+        f'expected_se={se_expected:.4f} '
+        f'(ratio={result.mean_diff_se / se_expected:.3f})'
     )
     assert result.n_treatment == _N_SEEDS_PER_ARM
     assert result.n_baseline == _N_SEEDS_PER_ARM
-    # Shared seeds → paired noise cancels → high pairing rho. The
-    # diagnostic should fire "would benefit from paired_g". The
-    # population pairing-rho under shared X_avg noise is the ratio
-    # of shared-variance to total per-arm variance, which is 1.0
-    # in the closed form (X_avg is the dominant variance source);
-    # the empirical value drops slightly from the σ_z²/σ_y² terms.
-    assert result.pairing_rho >= 0.85, (
-        f'pairing_rho={result.pairing_rho:.4f} — expected ≈ 1.0 '
-        'under shared-seed noise cancellation'
+    # Closed-form pairing-rho derived from the variance
+    # decomposition: shared σ_z/σ_y noise + arm-asymmetric X_avg
+    # coefficient. At β=(0.8, 0.2) the population value is ≈ 0.83.
+    expected_pairing = _expected_pairing_rho(
+        beta_xz_t=beta_xz_t, beta_xz_b=beta_xz_b,
+    )
+    # Fisher-z SE on pairing rho at n=60 ≈ 1/sqrt(n-3) ≈ 0.131.
+    # At ρ ≈ 0.83, the back-transformed bound is (1-ρ²) · z_se ≈
+    # 0.041. 0.08 is a 2× safety on z_se to cover Pearson-vs-
+    # population-Pearson sampling at n=60.
+    assert abs(result.pairing_rho - expected_pairing) < 0.08, (
+        f'pairing_rho={result.pairing_rho:.4f} '
+        f'expected={expected_pairing:.4f}'
     )
 
 

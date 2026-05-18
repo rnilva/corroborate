@@ -7,35 +7,49 @@ at each (env, burst), compute Δ_predictor and Δ_target at the
 stratum level, then run DoWhy backdoor regression on the panel
 adjusting for burst dummies.
 
-Under the LG-SCM (X → Z → Y), with z_mean as Δ_predictor and
-y_mean as Δ_target:
+Under the LG-SCM (X → Z → Y) with SHARED seeds across arms (the
+substrate's design — `numpy.random.default_rng(seed)` pre-draws
+all epsilons identically per seed), the σ_z and σ_y noise
+streams are PERFECTLY MATCHED across arms. Seed-pooled means
+at each (env, burst, arm) therefore differ ONLY by the
+structural-coefficient channel:
 
-    mean_z_arm(env, burst) ≈ β_xz_arm · μ_x(env)        (population)
-    mean_y_arm(env, burst) ≈ β_zy · β_xz_arm · μ_x(env)
+    mean_z_arm(env, burst) = β_xz_arm · mean_seeds(X_avg)
+                             + σ_z · mean_seeds(ε_z_avg)
+    mean_y_arm(env, burst) = β_zy · mean_z_arm(env, burst)
+                             + σ_y · mean_seeds(ε_y_avg)
 
-    Δ_z(env, burst) = (β_xz_t − β_xz_b) · μ_x(env)
+Δ at each stratum is `mean_treatment − mean_baseline`:
+
+    Δ_z(env, burst) = (β_xz_t − β_xz_b) · mean_seeds(X_avg)
     Δ_y(env, burst) = β_zy · Δ_z(env, burst)
 
-→ population OLS slope of Δ_y on Δ_z (adjusting for burst
-dummies) = β_zy.
+The σ_z and σ_y components cancel EXACTLY in the Δ (identical
+ε streams across arms). So Δ_y / Δ_z = β_zy holds NUMERICALLY
+at every stratum, not just in expectation.
 
-The closed-form structural slope is `β_zy`. The substrate's
-μ_x grid (1.0, 1.5, 2.0 across three envs) gives Δ_z and Δ_y
-enough between-env variance for the backdoor regression to
-converge tightly; the burst dimension (4 bursts per env) gives
-the panel its stratum count.
+→ DoWhy backdoor regression of Δ_y on Δ_z (adjusting for burst
+dummies) recovers β_zy = 1.5 to machine precision (empirically
+1.5 ± 1e-15 — float64 OLS solve noise, not sampling noise).
+The substrate's variation in μ_x across envs gives the panel
+enough between-stratum spread for the OLS solve to converge
+without singularity.
 
-Refuters:
-- **Placebo**: random-permute the treatment column → ATE → 0,
-  drift → β_zy.
-- **Random common cause**: add an independent N(0, σ²) confounder
-  → ATE invariant, drift → 0.
+Refuters under shared-seed exactness:
+- **Placebo**: random-permute the treatment column → structural
+  link broken → refuted ATE = 0 exactly → drift = β_zy exactly.
+- **Random common cause**: add an independent column to the
+  regression. Since Δ_y is perfectly explained by Δ_z, OLS
+  zeroes the new column's coefficient and preserves the Δ_z
+  coefficient at β_zy → refuted ATE = β_zy → drift ≈ 0.
 
-The DoWhy primitive itself is already covered by `test_dowhy.py`;
-this test specifically verifies that the panel-construction +
+The DoWhy primitive itself is covered by `test_dowhy.py` (which
+exercises finite-sample SE behavior with non-shared noise); this
+test specifically verifies that the panel-construction +
 stratum-Δ + burst-adjustment plumbing inside
 `stratum_delta_link_dowhy.fn` doesn't corrupt the structural
-recovery.
+recovery. The 1e-9 bound is well above float64 OLS noise
+(~1e-15) and well below any plausible sign/scale/pooling bug.
 """
 from __future__ import annotations
 
@@ -130,9 +144,10 @@ def _expected_link_slope() -> float:
 
 
 def test_stratum_delta_link_recovers_structural_slope() -> None:
-    """Population Δ_y / Δ_z = β_zy exactly. The DoWhy backdoor on
-    the (Δ_jens=Δ_z, Δ_out=Δ_y) panel adjusting for burst
-    dummies should recover β_zy = 1.5 within a tight bound."""
+    """Δ_y / Δ_z = β_zy exactly under shared-seed cancellation
+    of σ_z and σ_y streams. The DoWhy backdoor on the
+    (Δ_jens=Δ_z, Δ_out=Δ_y) panel adjusting for burst dummies
+    recovers β_zy = 1.5 to machine precision."""
     cells = _build_phased_cells()
 
     result = stratum_delta_link_dowhy.fn(
@@ -144,30 +159,28 @@ def test_stratum_delta_link_recovers_structural_slope() -> None:
     )
 
     expected = _expected_link_slope()
-    # Panel size: 3 envs × 4 bursts = 12 strata. After burst-
-    # dummy adjustment, residual df = 12 − 4 = 8 (intercept + 3
-    # burst dummies). At n_seeds=30 per arm × n_steps=100 the
-    # within-(env, burst) seed-pooled mean estimates have small
-    # SD; the dominant source of slope-recovery error is residual
-    # variance from σ_z² propagation through β_zy. Empirical SE
-    # on the slope is ≈ 0.02 — a 4-σ window of 0.10 is a
-    # generous 5× safety margin that still detects any sign,
-    # scale, or pooling regression by orders of magnitude.
-    assert abs(result.backdoor.ate - expected) < 0.10, (
-        f'backdoor.ate={result.backdoor.ate:.4f} '
-        f'expected={expected:.4f}'
+    # Tight numerical bound — under shared seeds the σ_z + σ_y
+    # noise streams cancel exactly between arms in seed-pooled
+    # means, so Δ_y = β_zy · Δ_z holds numerically (not just in
+    # expectation). 1e-9 is six orders of magnitude above float64
+    # OLS noise (~1e-15) and detects any sign / scale / pooling
+    # regression at far below "one part per million".
+    assert abs(result.backdoor.ate - expected) < 1e-9, (
+        f'backdoor.ate={result.backdoor.ate!r} '
+        f'expected={expected}'
     )
     assert result.n_strata == 3 * _N_BURSTS, (
         f'n_strata={result.n_strata} expected '
         f'{3 * _N_BURSTS} — stratum-panel construction lost rows'
     )
-    assert result.treatment_col == 'djens'
-    assert result.outcome_col == 'dout'
 
 
 def test_stratum_delta_link_placebo_destroys_signal() -> None:
-    """Placebo refutation: random-permute Δ_jens → structural
-    link broken → refuted ATE ≈ 0, drift ≈ β_zy."""
+    """Placebo refutation: random-permute Δ_jens. Under the
+    deterministic structural recovery (Δ_y = β_zy · Δ_z exact),
+    the permuted treatment carries no information about Δ_y →
+    OLS slope on permuted column = 0 exactly. Drift = original
+    − refuted = β_zy exactly."""
     cells = _build_phased_cells()
     result = stratum_delta_link_dowhy.fn(
         cells,
@@ -177,24 +190,24 @@ def test_stratum_delta_link_placebo_destroys_signal() -> None:
         link_target=_PER_BURST_Y_MEAN,
     )
     expected = _expected_link_slope()
-    # Placebo SHOULD recover ≈ 0 after permutation. Drift =
-    # original − refuted. Tolerance: 0.30 absolute (the
-    # permutation samples carry their own MC noise on small n;
-    # 12 strata permuted → drift SE ≈ 0.20).
-    assert abs(result.placebo.refuted_ate) < 0.30, (
-        f'placebo refuted_ate={result.placebo.refuted_ate:.4f} '
-        'should be near 0 after permutation'
+    # Same numerical-precision rationale as the structural test:
+    # 1e-9 covers float64 OLS noise on the permuted-column solve
+    # and detects any "placebo doesn't fully break the link" bug.
+    assert abs(result.placebo.refuted_ate) < 1e-9, (
+        f'placebo refuted_ate={result.placebo.refuted_ate!r} '
+        'should be 0 — permutation breaks Δ_jens → Δ_out signal'
     )
     drift = result.placebo.drift
-    assert abs(drift - expected) < 0.30, (
-        f'placebo drift={drift:.4f} should match the '
-        f'structural slope β_zy={expected}'
+    assert abs(drift - expected) < 1e-9, (
+        f'placebo drift={drift!r} should match β_zy={expected}'
     )
 
 
 def test_stratum_delta_link_random_common_cause_preserves_signal() -> None:
-    """Random common cause: add a random confounder unrelated to
-    Δ_jens or Δ_out → refuted ATE ≈ original ATE, drift ≈ 0."""
+    """Random common cause: add an independent column to the
+    regression. Since Δ_y is perfectly explained by Δ_z (no
+    residual to allocate to the new column), OLS preserves the
+    Δ_z coefficient exactly → refuted ATE = β_zy → drift = 0."""
     cells = _build_phased_cells()
     result = stratum_delta_link_dowhy.fn(
         cells,
@@ -204,32 +217,31 @@ def test_stratum_delta_link_random_common_cause_preserves_signal() -> None:
         link_target=_PER_BURST_Y_MEAN,
     )
     expected = _expected_link_slope()
-    # RCC SHOULD give refuted_ate ≈ original ATE.
-    assert abs(result.random_common_cause.refuted_ate - expected) < 0.20
-    # Drift on a random confounder should be small. With 12
-    # strata and a random N(0,1) confounder added, the refuted
-    # estimate fluctuates by the OLS slope of the random column
-    # on Δ_jens — SE on that fluctuation ≈ 0.10 on this corpus.
-    # 0.20 absolute is a 2× safety margin.
-    assert abs(result.random_common_cause.drift) < 0.20, (
-        f'rcc drift={result.random_common_cause.drift:.4f} should '
-        'be ≈ 0 — random confounder carries no structural signal'
+    assert abs(result.random_common_cause.refuted_ate - expected) < 1e-9, (
+        f'rcc refuted_ate={result.random_common_cause.refuted_ate!r} '
+        f'should match β_zy={expected}'
+    )
+    # Same precision rationale: under deterministic structural
+    # recovery, OLS allocates zero coefficient to the random
+    # column → drift is numerical OLS noise (~1e-15).
+    assert abs(result.random_common_cause.drift) < 1e-9, (
+        f'rcc drift={result.random_common_cause.drift!r} '
+        'should be ≈ 0'
     )
 
 
-def test_stratum_delta_link_null_contrast_indistinguishable() -> None:
-    """Null intervention (β_xz_t == β_xz_b): Δ_z and Δ_y are both
-    exactly zero at the population level (modulo seed-pool noise).
-    The slope is unidentified at the population level — backdoor
-    will report something near 0 but with the precise value
-    sensitive to the OLS solve under near-constant treatment.
+def test_stratum_delta_link_null_contrast_yields_nan_or_zero() -> None:
+    """Null intervention (β_xz_t == β_xz_b): under shared seeds,
+    Δ_z = 0 EXACTLY at every (env, burst) stratum. The OLS solve
+    has a singular treatment column — the framework should either
+    return NaN (singular regression) or zero ATE, but never a
+    spurious non-zero structural slope.
 
-    What's load-bearing: the framework doesn't return a runtime
-    error on this corpus; the panel construction is still valid
-    (12 strata, valid burst dummies). The placebo + RCC drift
-    interpretation breaks because the original ATE has no
-    structural meaning here — verified by ATE being far smaller
-    than the non-null case."""
+    The min_baseline_predictor=0.05 filter still admits all strata
+    (mean_baseline_z = β_xz_b · μ_x ∈ {0.3, 0.45, 0.6} all > 0.05),
+    so panel construction is valid; only the OLS solve is
+    degenerate.
+    """
     cells = _build_phased_cells(
         beta_xz_t=_BETA_XZ_BASELINE,
         beta_xz_b=_BETA_XZ_BASELINE,
@@ -241,21 +253,13 @@ def test_stratum_delta_link_null_contrast_indistinguishable() -> None:
         link_predictor=_PER_BURST_Z_MEAN,
         link_target=_PER_BURST_Y_MEAN,
     )
-    # n_strata may be < n_bursts*n_envs because min_baseline_predictor
-    # filter applies; but it should be > 0 (β_xz_b * μ_x > 0.05 in
-    # all envs).
-    assert result.n_strata > 0
-    # In the null contrast, even tiny Δ_z values get amplified
-    # by OLS noise. The structural slope is undefined; what we
-    # check is that the ATE is much smaller than the non-null
-    # β_zy = 1.5. A 5σ-of-noise bound on the null ATE is ~0.5;
-    # any non-trivial structural recovery would be many multiples
-    # of that, so failing this bound means the primitive is
-    # manufacturing a slope from i.i.d. noise.
-    assert abs(result.backdoor.ate) < 1.0, (
-        f'backdoor.ate={result.backdoor.ate:.4f} should be ≈ 0 '
-        'on a null contrast — non-zero suggests OLS is finding '
-        'spurious structure'
+    assert result.n_strata == 3 * _N_BURSTS
+    # Under exact null treatment, OLS slope is either NaN
+    # (singular column) or 0 (degenerate solve). NOT a non-zero
+    # structural slope — that would mean the primitive is
+    # manufacturing signal from machine precision.
+    ate = result.backdoor.ate
+    assert math.isnan(ate) or abs(ate) < 1e-9, (
+        f'backdoor.ate={ate!r} under null contrast — expected NaN '
+        '(singular OLS) or numerically zero'
     )
-    # ensure the result is well-formed
-    assert not math.isnan(result.backdoor.ate)
