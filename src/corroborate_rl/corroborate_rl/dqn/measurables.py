@@ -961,6 +961,76 @@ def q_lambda_a_growth_ratio(
     return float(q_lambda_a_tail_mean / q_lambda_a_init_mean)
 
 
+@measurable(reads=('gamma', 'eval_step_index'))
+def q_lambda_a_horizon_normalised_per_burst(
+    record: Mapping[str, object],
+    q_lambda_a_per_burst: npt.NDArray[np.float64],
+) -> npt.NDArray[np.float64]:
+    """Per-burst $\\Lambda_a^{\\mathrm{cell}}$ divided by the
+    effective-horizon factor $(1 - \\gamma^t) / (1 - \\gamma)$
+    at the burst's training-step count $t$.
+
+    Under Lemma 2's Bellman bias accumulation, σ_aniso[t] ≈
+    σ_aniso[∞] · (1 - γ^t). Dividing the per-burst trajectory by
+    `(1 - γ^t)/(1-γ)` (the effective horizon at step $t$ for a
+    γ-discounted geometric series) gives an "asymptote-normalised"
+    trajectory that should equal σ_aniso[∞]/(1-γ) at every burst
+    if the geometric-series accumulation captures the trajectory
+    shape. The growth_ratio of the normalised trajectory then
+    reduces from ~2.4× (raw) to ~1× if the gap is purely
+    geometric-series scaling, OR stays ~2.4× if there's residual
+    non-Bellman structure (FA dynamics, replay-as-prior etc.).
+
+    Empirical test of the geometric-series gap's structural source."""
+    gamma = record.get('gamma')
+    if not isinstance(gamma, (int, float)) or gamma >= 1.0 or gamma < 0.0:
+        return np.zeros((0,), dtype=np.float64)
+    g = float(gamma)
+    arr = np.asarray(q_lambda_a_per_burst, dtype=np.float64)
+    if arr.size == 0:
+        return np.zeros((0,), dtype=np.float64)
+    try:
+        eval_idx = EVAL_STEP_INDEX(record)
+    except KeyError:
+        return np.zeros((0,), dtype=np.float64)
+    if eval_idx.size == 0 or eval_idx.size != arr.size:
+        return np.zeros((0,), dtype=np.float64)
+    steps = np.asarray(eval_idx, dtype=np.float64)
+    eff_horizon = (1.0 - np.power(g, steps)) / (1.0 - g)
+    eff_horizon = np.where(eff_horizon > 1e-9, eff_horizon, np.nan)
+    return arr / eff_horizon
+
+
+@measurable(reads=())
+def q_lambda_a_horizon_normalised_growth_ratio(
+    record: Mapping[str, object],
+    q_lambda_a_horizon_normalised_per_burst: npt.NDArray[np.float64],
+) -> float:
+    """Growth ratio of the horizon-normalised per-burst Λ_a
+    (tail mean / init mean). Tests whether the geometric-series
+    gap is purely Bellman-accumulation scaling (ratio → 1 after
+    normalisation) or has residual non-geometric structure (ratio
+    stays > 1)."""
+    arr = np.asarray(q_lambda_a_horizon_normalised_per_burst, dtype=np.float64)
+    if arr.size == 0:
+        return float('nan')
+    lo_init = max(1, int(arr.size * 0.1))
+    lo_tail = int(arr.size * 0.8)
+    if lo_tail >= arr.size or lo_init > lo_tail:
+        return float('nan')
+    init = arr[:lo_init]
+    tail = arr[lo_tail:]
+    init_finite = init[np.isfinite(init)]
+    tail_finite = tail[np.isfinite(tail)]
+    if init_finite.size == 0 or tail_finite.size == 0:
+        return float('nan')
+    init_mean = float(init_finite.mean())
+    tail_mean = float(tail_finite.mean())
+    if abs(init_mean) < 1e-9:
+        return float('nan')
+    return tail_mean / init_mean
+
+
 @measurable(reads=('online_top12_margin_per_step',))
 def q_argmax_margin_late(record: Mapping[str, object]) -> float:
     """Mean of `online_top12_margin_per_step` over the late 50%

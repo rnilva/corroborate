@@ -49,10 +49,12 @@ from experiments.findings.ddqn_three_conditions._arms import (
 from experiments.findings.theorem3 import (
     finding_a4a_invariance_refuted,
     finding_geometric_gap_scales_with_gamma,
+    finding_horizon_normalisation_overcomes_gap,
 )
 from experiments.findings.theorem3.bridges import (
     a4a_tail_cv_invariant_across_gamma__minatar_gamma_sweep,
     geometric_gap_scales_with_gamma__minatar_gamma_sweep,
+    horizon_normalisation_flattens_geometric_gap__minatar_gamma_sweep,
 )
 
 
@@ -68,12 +70,14 @@ MODULE_SCOPE = pl.col('env_name').is_in([
 BRIDGES = (
     a4a_tail_cv_invariant_across_gamma__minatar_gamma_sweep,
     geometric_gap_scales_with_gamma__minatar_gamma_sweep,
+    horizon_normalisation_flattens_geometric_gap__minatar_gamma_sweep,
 )
 
 
 FINDINGS = (
     finding_a4a_invariance_refuted,
     finding_geometric_gap_scales_with_gamma,
+    finding_horizon_normalisation_overcomes_gap,
 )
 
 
@@ -83,6 +87,8 @@ REQUIRED_MEASURABLES: tuple[str, ...] = (
     'q_lambda_a_tail_mean',
     'q_lambda_a_init_mean',
     'q_lambda_a_growth_ratio',
+    'q_lambda_a_horizon_normalised_per_burst',
+    'q_lambda_a_horizon_normalised_growth_ratio',
 )
 
 

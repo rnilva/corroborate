@@ -50,6 +50,17 @@ _MINATAR_GAMMA_SCOPE = (
 )
 
 
+_NORMALISED_SCOPE = (
+    pl.col('env_name').is_in([
+        'Breakout-MinAtar', 'Asterix-MinAtar',
+        'Freeway-MinAtar', 'SpaceInvaders-MinAtar',
+    ])
+    & pl.col('gamma').is_in([0.95, 0.99, 0.999])
+    & (pl.col('arm_key') == 'baseline')
+    & finite(pl.col('q_lambda_a_horizon_normalised_growth_ratio'))
+)
+
+
 @claim_bridge(
     source='gamma',
     target='q_lambda_a_tail_cv',
@@ -137,5 +148,49 @@ def geometric_gap_scales_with_gamma__minatar_gamma_sweep(
     return spearman_rho_verdict(
         partial_spearman,
         sign=+1,
+        threshold=rho_threshold,
+    )
+
+
+@claim_bridge(
+    source='gamma',
+    target='q_lambda_a_horizon_normalised_growth_ratio',
+    direction=Direction.DIRECT,
+    tier=Tier.ASSOCIATIONAL,
+    scope=_NORMALISED_SCOPE,
+    predicted_direction='null',
+)
+def horizon_normalisation_flattens_geometric_gap__minatar_gamma_sweep(
+    partial_spearman: PartialSpearmanResult,
+    *,
+    x: str = 'gamma',
+    y: str = 'q_lambda_a_horizon_normalised_growth_ratio',
+    conditioning: tuple[str, ...] = (),
+    stratify_by: str = 'env_name',
+    min_stratum_size: int = 30,
+    rho_threshold: float = 0.3,
+) -> Verdict:
+    """Tests whether dividing the per-burst $\\Lambda_a$ trajectory
+    by the effective-horizon factor $(1 - \\gamma^t)/(1 - \\gamma)$
+    flattens the γ-dependence of the growth ratio.
+
+    Under Lemma 2's Bellman bias accumulation, σ_aniso[t] ≈
+    σ_aniso[∞] · (1 − γ^t). If this fully captures the trajectory
+    shape, the horizon-normalised growth ratio is ~1 regardless
+    of γ → ρ(γ, normalised_growth) ≈ 0 (NULL prediction).
+
+    Refutations:
+    - NO_EFFECT (significant ρ in either direction): horizon
+      normalisation does NOT capture the trajectory's γ-structure
+      → residual non-Bellman accumulation (FA capacity, replay
+      effects, etc.) drives the geometric-series gap. The formal
+      extension of Theorem 3 to converged-iterate cannot rely on
+      pure Bellman bias-accumulation as the bridging mechanism.
+
+    HELD iff |ρ| ≤ 0.3 AND p ≥ 0.05 (NULL prediction confirmed)."""
+    del x, y, conditioning, stratify_by, min_stratum_size
+    return spearman_rho_verdict(
+        partial_spearman,
+        sign=0,
         threshold=rho_threshold,
     )
