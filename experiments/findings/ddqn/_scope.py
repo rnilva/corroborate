@@ -46,6 +46,10 @@ _PER_ENV_CANONICAL: tuple[
     ('FourRooms-misc',            100,  50000,  '(64,64)', None,      100_000),
     ('MountainCar-v0',            100,  50000,  '(64,64)', None,    1_000_000),
     ('MetaMaze-misc',             100,  50000,  '(64,64)', None,    1_000_000),
+    # LunarLander-v2-jax: gymnax-jax port, 8-dim continuous obs,
+    # |A|=4 discrete, shaped reward, horizon 1000. Treat as a
+    # mid-complexity vector env like Acrobot/MountainCar.
+    ('LunarLander-v2-jax',        100,  50000,  '(64,64)', None,    1_000_000),
     # MinAtar paper-canonical
     ('Asterix-MinAtar',           1000, 100000, '(128)',  '(16)',   1_000_000),
     ('Breakout-MinAtar',          1000, 100000, '(128)',  '(16)',   1_000_000),

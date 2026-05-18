@@ -1,0 +1,62 @@
+name: g0999_panel_extension_jumanji
+out_dir: experiments/data/g0999_panel_extension_jumanji
+env_binding: per_env
+archive_remote: s3://corroborate-archive/g0999_panel_extension_jumanji
+
+# T3a γ=0.999 panel extension for Jumanji envs (PacMan, Snake)
+# at canonical HPs. Adds outcome-regime data points to the
+# existing 4-env MinAtar panel (Asterix HARMS / Breakout HELPS /
+# SI HELPS / Freeway NEUTRAL).
+#
+# Companion: `g0999_panel_extension_mlp.yaml` for Acrobot +
+# LunarLander γ=0.999 at MLP HPs.
+#
+# Canonical HPs from `_PER_ENV_CANONICAL`:
+# PacMan/Snake: sync=1000, cap=50000, hidden=(64), channels=(8,16),
+# total_steps=1M.
+#
+# 2 envs × 1 γ × 2 arms × 30 seeds = 120 cells. Estimated 6-8h
+# GPU at chunk_size=10 (Jumanji envs run slower than MinAtar
+# per env-step).
+
+envs:
+  - {name: PacMan-jumanji, n_seeds: 30, chunk_size: 10}
+  - {name: Snake-jumanji,  n_seeds: 30, chunk_size: 10}
+
+defaults:
+  total_steps: 1000000
+  eval_every:  20000
+  n_episodes:  5
+  gamma:       0.999
+  sync_period: 1000
+  replay:
+    class: Replay
+    capacity: 50000
+    batch_size: 32
+  optimizer:
+    fn: warmed_update
+    inner: {fn: adam, lr: 0.0001}
+    warmup_steps: 100
+  action_select:
+    fn: epsilon_greedy
+    schedule:
+      fn: linear_epsilon
+      eps_init: 1.0
+      eps_final: 0.05
+      anneal_steps: 100000
+  q_network:
+    class: CNN
+    obs_shape: {from_env: observation_shape}
+    channels: [8, 16]
+    kernel_size: 3
+    hidden: [64]
+
+interventions:
+  - name: "g0999_{from_env: name}"
+    base: {}
+    arms:
+      - []
+      - - slot_path: bootstrap
+          replacement:
+            fn: bootstrap
+            greedification: {fn: double_greedify}
