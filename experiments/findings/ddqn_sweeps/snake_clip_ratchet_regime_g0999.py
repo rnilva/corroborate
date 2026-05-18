@@ -1,38 +1,43 @@
-"""Snake γ=0.99: 4th regime category in cross-env DDQN outcome
-classification — CLIP-RATCHET / T1-sign-flipped.
+"""Snake γ=0.999 cross-γ confirmatory pre-registration.
 
-The 4-env γ=0.999 MinAtar panel
-(`finding_cross_env_outcome_regime_g999`) identified three
-regimes (Q-EXPLODED, Q-STRUCTURED, Q-COLLAPSED). Snake γ=0.99 at
-canonical HPs (n=60, `snake_1M` corpus) fits a structurally
-distinct fourth regime documented in
-`findings_snake_ddqn_destabilizes_sparse_reward`: DDQN's clip
-LOCKS Q-explosion in 3/30 seeds rather than suppressing it
-uniformly, producing a bimodal seed distribution that
-renders the marginal Cohen's d uninformative.
+Pre-registered 2026-05-18 (commit hash documented at fold-in time)
+BEFORE the T3a panel-extension sweep
+(`g0999_panel_extension_jumanji.yaml`) lands Snake γ=0.999 cells.
 
-Three bridges jointly assert the 4th-regime claim:
+Background. `finding_snake_clip_ratchet_regime` SUPPORTED Snake's
+CLIP-RATCHET regime at γ=0.99. Bridge 2 was substituted post-hoc
+(`q_late_mean` d=+0.20 NS → `q_action_std_late` d=+0.65 sig)
+because the bimodal seed distribution makes mean Q a low-power
+test statistic. The σ_Q form is substantively cleaner but the
+substitution is post-hoc. THIS module pre-registers the same
+3-bridge cluster at γ=0.999 — the σ_Q-inflation bridge now lands
+as a genuinely-pre-registered confirmatory test.
 
-  1. `snake_arm_drives_temporal_cv` — `arm — q_max_temporal_cv_late`
-     edge IS in PC skeleton (unique to Snake; not in any
-     γ=0.999 MinAtar env's PC skeleton).
+Predicted (γ=0.999 vs γ=0.99 at canonical CNN HPs, n=30):
 
-  2. `snake_arm_inflates_action_std` — DDQN nearly doubles
-     `q_action_std_late` (cross-action SD of trained Q):
-     VAN 0.087 → DDQN 0.167 (d=+0.65 z=+2.5 sig). This is
-     the clean clip-ratchet signature — 3 Q-exploding DDQN
-     seeds drag σ_Q up while the remaining 27 match vanilla.
-     The "DDQN INFLATES Q" claim lives in cross-action SD,
-     not in the (bimodally-shaped) mean Q.
+  Bridge 1 (PC `arm — q_max_temporal_cv_late` edge present):
+    HELD if Snake's clip-ratchet failure is γ-portable. DRIFT to
+    POWER_INSUFFICIENT or absent edge → CLIP-RATCHET is γ=0.99
+    specific (4-regime classifier is regime-detector at the γ
+    level, not env level).
 
-  3. `snake_arm_outcome_marginal_independent` — `arm ⫫ outcome`
-     marginally (consistent with the bimodal d=+0.22 NS).
-     Confirms the marginal Cohen's d framing hides the actual
-     regime structure.
+  Bridge 2 (σ_Q d ≥ +0.4 sig at α=0.05): HELD if cross-action SD
+    inflation is γ-portable. This is the load-bearing
+    pre-registered bridge — if it lands HELD at γ=0.999 the
+    post-hoc substitution at γ=0.99 has a confirmatory cell.
 
-If all 3 HELD → 4th-regime claim SUPPORTED. The Finding sits
-alongside `finding_cross_env_outcome_regime_g999` as the
-fifth-env extension of the regime classification.
+  Bridge 3 (PC `arm ⫫ outcome` marginal): HELD if bimodal seed
+    distribution dominates outcome (Cohen's d on outcome NS).
+    DRIFT to non-marginal → outcome is no longer bimodal at
+    γ=0.999 (e.g., DDQN harm dominates or DDQN help emerges).
+
+Walk-back conditions. If 2+ bridges DRIFT to non-HELD at γ=0.999,
+the CLIP-RATCHET regime is γ-dependent at the env level — Snake
+reclassifies into one of the existing 3 bins (likely Q-EXPLODED
+given γ→1 typically pushes vanilla into Q-explosion territory).
+This would be a framework-mechanic-caught walk-back of T2a's
+SUPPORTED claim and a paper-grade demonstration of the DRIFT
+mechanic on a high-stakes prediction.
 """
 from __future__ import annotations
 
@@ -52,9 +57,9 @@ from experiments.findings.ddqn._arms import (
 )
 
 
-_SNAKE_G099_SCOPE: pl.Expr = (
+_SNAKE_G0999_SCOPE: pl.Expr = (
     (pl.col('env_name') == 'Snake-jumanji')
-    & (pl.col('gamma') == 0.99)
+    & (pl.col('gamma') == 0.999)
     & (pl.col('total_steps') == 1_000_000)
     & (pl.col('q_network.hidden') == '(64)')
 )
@@ -85,12 +90,12 @@ _NODES: tuple[str, ...] = (
     direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
     scope=(
-        _SNAKE_G099_SCOPE
+        _SNAKE_G0999_SCOPE
         & pl.col('q_max_temporal_cv_late').is_finite()
     ),
     predicted_direction='a_gt_b',
 )
-def snake_arm_drives_temporal_cv(
+def snake_g0999_arm_drives_temporal_cv(
     pc_discovery: PCDiscoveryResult,
     *,
     nodes: tuple[str, ...] = _NODES,
@@ -101,10 +106,10 @@ def snake_arm_drives_temporal_cv(
     arm_node: str = 'arm_ddqn_indicator',
     temporal_cv_node: str = 'q_max_temporal_cv_late',
 ) -> Verdict:
-    """HELDs when PC's skeleton includes `arm — q_max_temporal_cv`
-    on Snake γ=0.99. This edge is the structural signature of
-    clip-ratchet failure (DDQN triples temporal CV; not seen in
-    any γ=0.999 MinAtar env)."""
+    """Pre-registered: PC skeleton at Snake γ=0.999 contains
+    `arm — q_max_temporal_cv_late` (the CLIP-RATCHET temporal
+    signature is γ-portable). HELD if signature replicates from
+    γ=0.99."""
     del nodes, alpha, max_conditioning, indicators
     if pc_discovery.n_cells < min_cells:
         return Verdict.POWER_INSUFFICIENT
@@ -113,7 +118,7 @@ def snake_arm_drives_temporal_cv(
     return Verdict.POWER_INSUFFICIENT
 
 
-# ============ Bridge 2: DDQN inflates cross-action SD of Q (σ_Q) ============
+# ============ Bridge 2: σ_Q inflation (load-bearing confirmatory) ============
 
 @claim_bridge(
     source=INTERVENTION,
@@ -121,12 +126,12 @@ def snake_arm_drives_temporal_cv(
     direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
     scope=(
-        _SNAKE_G099_SCOPE
+        _SNAKE_G0999_SCOPE
         & pl.col('q_action_std_late').is_finite()
     ),
     predicted_direction='a_gt_b',
 )
-def snake_arm_inflates_action_std(
+def snake_g0999_arm_inflates_action_std(
     stratified_arm_diff_pooled: StratifiedArmDiffPooledResult,
     *,
     treatment_arm: str = DDQN_ARM,
@@ -140,16 +145,14 @@ def snake_arm_inflates_action_std(
     alpha: float = 0.05,
     min_strata: int = 1,
 ) -> tuple[Verdict, RefutationClass | None]:
-    """DDQN inflates the cross-action SD of Q (`q_action_std_late`)
-    on Snake — the clip-ratchet signature. HELD when Cohen's d ≥
-    inflate_floor (0.4 — medium effect) at α=0.05.
+    """Pre-registered confirmatory test: DDQN inflates cross-action
+    SD of Q at Snake γ=0.999, d ≥ +0.4 sig at α=0.05.
 
-    The 3 Q-exploding DDQN seeds expand cross-action Q range while
-    the remaining 27 match vanilla; the mean Q shift is bimodal
-    and small, but the cross-action SD is dominated by the
-    inflated tail and reaches d=+0.65 cleanly. This is the
-    statistically-honest form of the "DDQN INFLATES Q" claim that
-    the original Q-mean-shifted framing tried to express."""
+    Load-bearing: γ=0.99 finding's Bridge 2 was substituted
+    post-hoc (`q_late_mean` → `q_action_std_late`). This γ=0.999
+    bridge is genuinely pre-registered before data lands. HELD →
+    σ_Q form has confirmatory evidence. DRIFT to NS or SIGN_FLIP →
+    γ=0.99 finding's regime claim walks back."""
     del (
         treatment_arm, baseline_arm, source, stratify_by,
         scope_predictor, min_baseline_predictor, min_seeds_per_arm,
@@ -157,7 +160,6 @@ def snake_arm_inflates_action_std(
     res = stratified_arm_diff_pooled
     if res.n_strata < min_strata:
         return Verdict.POWER_INSUFFICIENT, None
-    # Single-stratum fallback (DL pool nan at n_strata=1)
     if res.n_strata == 1 and math.isnan(res.pooled_d):
         s = res.per_stratum[0]
         if math.isnan(s.cohen_d) or math.isnan(s.cohen_se) or s.cohen_se <= 0:
@@ -178,7 +180,7 @@ def snake_arm_inflates_action_std(
     return Verdict.POWER_INSUFFICIENT, None
 
 
-# ============ Bridge 3: arm ⫫ outcome marginal (bimodal NS) ============
+# ============ Bridge 3: arm ⫫ outcome marginal ============
 
 @claim_bridge(
     source=INTERVENTION,
@@ -186,12 +188,12 @@ def snake_arm_inflates_action_std(
     direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
     scope=(
-        _SNAKE_G099_SCOPE
+        _SNAKE_G0999_SCOPE
         & pl.col('eval_best_burst_raw_mean').is_finite()
     ),
     predicted_direction='null',
 )
-def snake_arm_outcome_marginal_independent(
+def snake_g0999_arm_outcome_marginal_independent(
     pc_discovery: PCDiscoveryResult,
     *,
     nodes: tuple[str, ...] = _NODES,
@@ -202,11 +204,10 @@ def snake_arm_outcome_marginal_independent(
     arm_node: str = 'arm_ddqn_indicator',
     outcome_node: str = 'eval_best_burst_raw_mean',
 ) -> Verdict:
-    """HELDs when PC finds `arm ⫫ outcome` marginally on Snake
-    γ=0.99. Confirms d=+0.22 NS reading; the marginal mean-
-    difference is uninformative because the seed distribution
-    is bimodal (3 Q-exploding DDQN seeds + 1 outcome=7.67
-    outlier + 26 seeds matching vanilla)."""
+    """Pre-registered: bimodal seed distribution dominates outcome
+    at Snake γ=0.999 (PC finds `arm ⫫ outcome` marginally). HELD →
+    bimodal pattern is γ-portable. DRIFT to non-marginal → outcome
+    is no longer bimodal (e.g., DDQN harm dominates at γ=0.999)."""
     del nodes, alpha, max_conditioning, indicators
     if pc_discovery.n_cells < min_cells:
         return Verdict.POWER_INSUFFICIENT
@@ -216,7 +217,7 @@ def snake_arm_outcome_marginal_independent(
 
 
 BRIDGES = (
-    snake_arm_drives_temporal_cv,
-    snake_arm_inflates_action_std,
-    snake_arm_outcome_marginal_independent,
+    snake_g0999_arm_drives_temporal_cv,
+    snake_g0999_arm_inflates_action_std,
+    snake_g0999_arm_outcome_marginal_independent,
 )

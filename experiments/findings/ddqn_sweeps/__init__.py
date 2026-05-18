@@ -29,6 +29,7 @@ from experiments.findings.ddqn_sweeps import (
     finding_cross_env_outcome_regime_g999,
     finding_pc_cross_env_smoothness,
     finding_snake_clip_ratchet_regime,
+    finding_snake_clip_ratchet_regime_g0999,
     finding_asterix_gamma_999_harm,
     finding_breakout_gamma_999_help_underpowered,
     finding_ddqn_clip_argmax_harm_chain,
@@ -78,6 +79,9 @@ from experiments.findings.ddqn_sweeps.outcome_regime_g999_cross_env import (
 from experiments.findings.ddqn_sweeps.snake_clip_ratchet_regime import (
     BRIDGES as _SNAKE_CLIP_RATCHET_REGIME,
 )
+from experiments.findings.ddqn_sweeps.snake_clip_ratchet_regime_g0999 import (
+    BRIDGES as _SNAKE_CLIP_RATCHET_REGIME_G0999,
+)
 
 
 # Loose module scope: only bsuite exclusion. HP-sweep bridges set
@@ -101,6 +105,7 @@ BRIDGES = (
     *_ACTION_DUPLICATE_FA_MECHANISM,
     *_OUTCOME_REGIME_G999_CROSS_ENV,
     *_SNAKE_CLIP_RATCHET_REGIME,
+    *_SNAKE_CLIP_RATCHET_REGIME_G0999,
     ddqn_full_auc_helps_at_acrobot_k16_dense,
     ddqn_full_auc_null_at_acrobot_k4_dense,
 )
@@ -120,4 +125,16 @@ FINDINGS = (
     finding_action_duplicate_fa_mechanism,
     finding_cross_env_outcome_regime_g999,
     finding_snake_clip_ratchet_regime,
+    finding_snake_clip_ratchet_regime_g0999,
+)
+
+
+# Measurables consumed by PC-discovery `nodes=(...)` kwargs only
+# (NOT referenced by any bridge's `source`/`target`/`scope` polars
+# expression). Bridge-referenced measurables auto-backfill via
+# the scope walker; this escape hatch covers names that appear
+# exclusively inside @analysis kwargs.
+REQUIRED_MEASURABLES: tuple[str, ...] = (
+    'q_argmax_margin_late',
+    'q_trajectory_autocorr_late',
 )

@@ -22,6 +22,19 @@ jens scaling exponent under γ→1`:
 
 Captured in the regime-classification memory; this Finding is
 the formal substantive claim.
+
+PRE-REGISTERED DRIFT (2026-05-18): k=2 sweep is running; k=4 to
+follow. Prediction committed at this commit hash: at k=2 and k=4
+the cross-env classifier STAYS SUPPORTED with intensified d
+magnitudes — Asterix harm intensifies (d ≤ -1.0 by k=4 OR
+saturates), Breakout help strengthens (d_out ≥ +0.85 by k=4 per
+the √log amplification), SI help strengthens (already huge at
+k=1, may plateau). Freeway stays NEUTRAL. If ANY env's sign flips
+at k=2/k=4, the regime classification walks back — likely the
+4-bin classifier needs k-conditioning. The T3a panel extension
+(separately running) adds Snake γ=0.999 (CLIP-RATCHET cross-γ
+test), PacMan γ=0.999 (predicted Q-STRUCTURED), LunarLander
+γ=0.999 (novel slot — could expose a 5th regime).
 """
 from __future__ import annotations
 

@@ -21,6 +21,16 @@ EXPECTED: SUPPORTED on bridges 1+2 (data is in cache);
 POWER_INSUFFICIENT on bridge 3 (column missing). The composed
 verdict at cluster level is UNDERPOWERED. BLOCKED_ON names the
 re-ingest path that would land bridge 3.
+
+PRE-REGISTERED DRIFT (2026-05-18): Bridge 3 prediction committed
+at this commit hash. The per-corpus measurements.parquet ALREADY
+shows the σ_Q scaling (FR k=1→4: 0.0050→0.0070; MC: 0.115→0.167;
+ρ ≈ +1 in each). Once a re-ingest uplifts `q_action_std_late`
+into the ddqn_sweeps cache, Bridge 3 should DRIFT to HELD (the
+ρ values above are well past the bridge's predicted_direction
+threshold). If Bridge 3 lands with ρ < +0.5 OR sign-flips, the
+σ_Q-scaling mechanism walks back — Finding 7 of the case study
+report becomes "amplification real, mechanism not isolated".
 """
 from __future__ import annotations
 
