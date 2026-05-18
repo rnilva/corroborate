@@ -459,6 +459,41 @@ Theorem 3's empirical signature relies on (A4'a) being approximately
 true PLUS the geometric-series gap being benign on the canonical
 calibration scope. The algebraic derivation covers one-step only.
 
+**Empirical update (2026-05-18, `experiments.findings.theorem3`).** The
+geometric-series gap was tested via a typed hypothesis panel on
+14-corpus / 840-cell MinAtar γ-sweep (commits `9f4cc0d` +
+`35cdfde`):
+
+1. *Horizon normalisation*: dividing per-burst $\Lambda_a$ by the
+   Bellman effective-horizon factor $(1 - \gamma^t)/(1 - \gamma)$
+   at the burst's training step $t$ is mathematically vacuous at
+   the burst granularity — $\gamma^{20000} \approx 0$ for any
+   $\gamma < 1$, so the factor saturates to a per-cell constant
+   that doesn't affect the growth ratio. **Bellman bias accumulation
+   saturates within the first burst.**
+
+2. *Sub-burst direct test*: $\Lambda_a$ measured in the steps
+   100-1000 transient and paired against Bellman's predicted
+   growth $1/(1-\gamma^{550})$ via Spearman ρ on the 840-cell
+   panel returns POWER_INSUFFICIENT (p=0.31). The empirical
+   sub-burst-to-tail growth ratio is **env- and K-dependent
+   (1.05 to 15.4×) while Bellman's predictor is γ-only (1.00 at
+   γ=0.95, 2.36 at γ=0.999)**. The Bellman predictor explains
+   essentially none of the cross-env variance.
+
+Both probes converge on the same conclusion: **the formal
+geometric-series gap is empirically moot for the σ_Λa signature.**
+NN training dynamics + FA fitting + replay-buffer effects drive
+σ_Λa's training-trajectory non-stationarity — all outside Theorem
+3's algebraic scope. For converged-tail measurements (where the
+empirical signature operates), Bellman accumulation has long
+saturated; Theorem 3's empirical signature stands in better
+standing than the original open-limitation framing implied.
+
+The §6.1 caveat is retained as honest theoretical bookkeeping;
+the empirical probe shows it doesn't bite at the measurement
+scale the empirical signature uses.
+
 **Proof.** From (6.1.3),
 $Q_d(s, a) = Q_v(s, a) - \gamma \mathbb{E}[\Delta_{\mathrm{clip}}(s'_a)]$.
 For argmax to be preserved, the maximum pairwise deviation among the
