@@ -1001,6 +1001,88 @@ def q_lambda_a_horizon_normalised_per_burst(
     return arr / eff_horizon
 
 
+@measurable(
+    reads=('online_std_q_per_step', 'online_top12_margin_per_step',
+           'n_actions'),
+)
+def q_lambda_a_early_window_mean(
+    record: Mapping[str, object],
+) -> float:
+    """Λ_a^cell averaged over the very early training window
+    (steps 100-1000) — captures the transient regime where
+    Bellman bias is still accumulating from initialisation.
+
+    Sub-burst granularity needed: at γ=0.95 Bellman bias saturates
+    by step ~90; at γ=0.99 by step ~460; at γ=0.999 by step ~4600.
+    The first burst-window (steps 0-20000) is past saturation for
+    all γ ≤ 0.999, so per-burst measurements miss the transient.
+
+    Combined with `q_lambda_a_tail_mean`, the ratio
+    `tail_mean / early_window_mean` gives a finer-grained test of
+    whether the geometric-series accumulation matches Bellman's
+    `1 / (1 − γ^t)` prediction or has residual NN-side structure."""
+    try:
+        sigma = ONLINE_STD_Q(record)
+        margin = ONLINE_TOP12_MARGIN(record)
+    except KeyError:
+        return float('nan')
+    n_actions = record.get('n_actions')
+    if not isinstance(n_actions, (int, float)) or n_actions <= 1:
+        return float('nan')
+    if sigma.size < 1000 or margin.size < 1000:
+        return float('nan')
+    lo, hi = 100, 1000
+    s = float(sigma[lo:hi].mean())
+    m = float(margin[lo:hi].mean())
+    if m <= 1e-9:
+        return float('nan')
+    return s * math.sqrt(2.0 * math.log(float(n_actions))) / m
+
+
+@measurable(reads=('gamma',))
+def q_lambda_a_bellman_growth_predicted(
+    record: Mapping[str, object],
+) -> float:
+    """Bellman's predicted growth ratio `1 / (1 − γ^N)` at the
+    early-window midpoint (N=550 steps, midpoint of 100-1000).
+
+    Closed-form prediction: if the geometric-series gap is pure
+    Bellman bias accumulation, then σ_aniso[t] ≈ σ_aniso[∞]·(1 − γ^t),
+    so the growth from early (t=550) to converged (t→∞) is
+    `1 / (1 − γ^550)`. This measurable gives the theoretical
+    prediction per cell; pairing with the empirical
+    `q_lambda_a_early_to_tail_ratio` (next) tests it."""
+    gamma = record.get('gamma')
+    if not isinstance(gamma, (int, float)) or gamma >= 1.0 or gamma < 0.0:
+        return float('nan')
+    g = float(gamma)
+    denom = 1.0 - math.pow(g, 550)
+    if denom <= 1e-9:
+        return float('nan')
+    return 1.0 / denom
+
+
+@measurable(reads=())
+def q_lambda_a_early_to_tail_ratio(
+    record: Mapping[str, object],
+    q_lambda_a_tail_mean: float,
+    q_lambda_a_early_window_mean: float,
+) -> float:
+    """Empirical growth ratio from early-window (steps 100-1000)
+    to converged-tail (last 20% of bursts). Compared against
+    `q_lambda_a_bellman_growth_predicted` — if the ratio matches
+    `1/(1−γ^550)`, the gap is pure Bellman; if the empirical ratio
+    is systematically larger (or differently γ-scaled), residual
+    NN training dynamics drive the gap."""
+    if not math.isfinite(q_lambda_a_tail_mean):
+        return float('nan')
+    if not math.isfinite(q_lambda_a_early_window_mean):
+        return float('nan')
+    if abs(q_lambda_a_early_window_mean) < 1e-9:
+        return float('nan')
+    return q_lambda_a_tail_mean / q_lambda_a_early_window_mean
+
+
 @measurable(reads=())
 def q_lambda_a_horizon_normalised_growth_ratio(
     record: Mapping[str, object],

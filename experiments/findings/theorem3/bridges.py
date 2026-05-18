@@ -61,6 +61,18 @@ _NORMALISED_SCOPE = (
 )
 
 
+_BELLMAN_TEST_SCOPE = (
+    pl.col('env_name').is_in([
+        'Breakout-MinAtar', 'Asterix-MinAtar',
+        'Freeway-MinAtar', 'SpaceInvaders-MinAtar',
+    ])
+    & pl.col('gamma').is_in([0.95, 0.99, 0.999])
+    & (pl.col('arm_key') == 'baseline')
+    & finite(pl.col('q_lambda_a_early_to_tail_ratio'))
+    & finite(pl.col('q_lambda_a_bellman_growth_predicted'))
+)
+
+
 @claim_bridge(
     source='gamma',
     target='q_lambda_a_tail_cv',
@@ -144,6 +156,50 @@ def geometric_gap_scales_with_gamma__minatar_gamma_sweep(
 
     Pilot showed growth 2.4× (γ=0.95) → 4.6× (γ=0.99 and γ=0.999).
     Expected verdict: HELD with positive ρ."""
+    del x, y, conditioning, stratify_by, min_stratum_size
+    return spearman_rho_verdict(
+        partial_spearman,
+        sign=+1,
+        threshold=rho_threshold,
+    )
+
+
+@claim_bridge(
+    source='q_lambda_a_bellman_growth_predicted',
+    target='q_lambda_a_early_to_tail_ratio',
+    direction=Direction.DIRECT,
+    tier=Tier.ASSOCIATIONAL,
+    scope=_BELLMAN_TEST_SCOPE,
+    predicted_direction='a_gt_b',
+)
+def bellman_predicts_early_to_tail_growth__minatar_gamma_sweep(
+    partial_spearman: PartialSpearmanResult,
+    *,
+    x: str = 'q_lambda_a_bellman_growth_predicted',
+    y: str = 'q_lambda_a_early_to_tail_ratio',
+    conditioning: tuple[str, ...] = (),
+    stratify_by: str = 'env_name',
+    min_stratum_size: int = 30,
+    rho_threshold: float = 0.3,
+) -> Verdict:
+    """At Breakout + Asterix + Freeway + SpaceInvaders × baseline ×
+    γ ∈ {0.95, 0.99, 0.999}, sub-burst data (steps 100-1000) lets
+    us see Bellman bias still accumulating. The closed-form
+    prediction `q_lambda_a_bellman_growth_predicted` = 1/(1−γ^550)
+    gives expected growth ratio if the gap is pure Bellman:
+    γ=0.95 → 1.006, γ=0.99 → 1.58, γ=0.999 → 10.5.
+
+    Spearman ρ(Bellman_predicted, empirical_early_to_tail_ratio):
+    HELD iff ρ ≥ +0.3 AND p < 0.05 (positive rank correlation
+    means the predictor explains the empirical pattern).
+
+    Refutations:
+    - NULL (|ρ| < 0.3): empirical growth doesn't track Bellman →
+      the dominant accumulation source isn't pure bootstrap-bias.
+    - NO_EFFECT (significant negative ρ): empirical growth is
+      INVERSELY correlated with Bellman prediction → the
+      empirical signature lives in a regime where NN training
+      dynamics dominate over Bellman accumulation."""
     del x, y, conditioning, stratify_by, min_stratum_size
     return spearman_rho_verdict(
         partial_spearman,
