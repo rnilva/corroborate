@@ -23,6 +23,7 @@ import corroborate_rl.dqn.measurables  # pyright: ignore[reportUnusedImport]  # 
 import polars as pl
 
 from experiments.findings.ddqn_sweeps import (
+    finding_action_duplicate_fa_mechanism,
     finding_asterix_g999_pc_mediator_triangle,
     finding_asterix_g999_smoothness_harm_chain,
     finding_pc_cross_env_smoothness,
@@ -66,6 +67,9 @@ from experiments.findings.ddqn_sweeps.pc_mediator_triangle_asterix import (
 from experiments.findings.ddqn_sweeps.pc_cross_env_smoothness import (
     BRIDGES as _PC_CROSS_ENV_SMOOTHNESS,
 )
+from experiments.findings.ddqn_sweeps.action_duplicate_fa_mechanism import (
+    BRIDGES as _ACTION_DUPLICATE_FA_MECHANISM,
+)
 
 
 # Loose module scope: only bsuite exclusion. HP-sweep bridges set
@@ -86,6 +90,7 @@ BRIDGES = (
     *_Q_SMOOTHNESS_HARM_MECHANISM,
     *_PC_MEDIATOR_TRIANGLE,
     *_PC_CROSS_ENV_SMOOTHNESS,
+    *_ACTION_DUPLICATE_FA_MECHANISM,
     ddqn_full_auc_helps_at_acrobot_k16_dense,
     ddqn_full_auc_null_at_acrobot_k4_dense,
 )
@@ -102,4 +107,5 @@ FINDINGS = (
     finding_asterix_g999_smoothness_harm_chain,
     finding_asterix_g999_pc_mediator_triangle,
     finding_pc_cross_env_smoothness,
+    finding_action_duplicate_fa_mechanism,
 )
