@@ -32,6 +32,7 @@ import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
+from corroborate.cli import audit as _audit
 from corroborate.cli import hypothesis as _hypothesis
 from corroborate.corpus import catalogue as _catalogue
 from corroborate.corpus import cloud
@@ -386,6 +387,13 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     _hypothesis.add_args(p_hyp)
 
+    p_audit = sub.add_parser(
+        'audit',
+        help='audit corpus-level commitments (currently: '
+             '`pre-registration` manifest written at sweep launch).',
+    )
+    _audit.add_args(p_audit)
+
     return parser
 
 
@@ -410,6 +418,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         # rather than the `to_mapping` + `require_*` narrowing
         # pattern the other subcommands use). Pass `ns` through.
         return _hypothesis.dispatch(ns)
+    if cmd == 'audit':
+        return _audit.dispatch(ns)
     raise ValueError(f'unknown subcommand: {cmd}')
 
 

@@ -283,10 +283,208 @@ def test_source_hash_stable_across_cosmetic_changes() -> None:
     )
 
 
-# Test 5 (sweep-launch write path) and Test 6 (end-to-end audit)
-# live as:
-#   - sweep-launch write: `src/corroborate_rl/tests/dqn/
-#     test_pre_registration_at_sweep_launch.py` (substrate test;
-#     needs `corroborate_rl.dqn.yaml_sweep`).
-#   - end-to-end audit: the CLI commit (commit 3) adds it to
-#     this file using framework-only deps.
+# ============ Test 5: end-to-end audit on a tiny corpus ============
+
+
+def _make_audit_corpus(corpus_dir: Path) -> None:
+    """Build a tiny corpus (synthetic cells in runs.parquet) that
+    `bridge_floor_a` can run against. Per spec §8 test 5: we want
+    the audit's exit code 0 path, with the bridge producing the
+    predicted verdict (HELD)."""
+    import polars as pl
+    treatment_key = _INTERVENTION.arm_keys()[1]
+    baseline_key = _INTERVENTION.arm_keys()[0]
+    cells: list[dict[str, object]] = []
+    for s in range(30):
+        cells.append({
+            'id': f'cell-t-{s}',
+            'arm_key': treatment_key,
+            'seed': s,
+            'env_name': 'LGSCM',
+            'outcome': 1.0 + 0.01 * s,
+        })
+        cells.append({
+            'id': f'cell-b-{s}',
+            'arm_key': baseline_key,
+            'seed': s,
+            'env_name': 'LGSCM',
+            'outcome': 0.0 + 0.01 * s,
+        })
+    pl.DataFrame(cells).write_parquet(corpus_dir / 'runs.parquet')
+
+
+def test_audit_end_to_end_fixture_corpus(tmp_path: Path) -> None:
+    """End-to-end: build a fixture corpus, write the manifest via
+    the public write_manifest API, run `audit_pre_registration`,
+    assert exit code 0 + report shows verdict matches.
+
+    Walks the runner-commit's write helper and the CLI-commit's
+    audit verifier in one pass. The synthetic corpus has 30
+    seeds × 2 arms = 60 cells; the bridge body returns HELD
+    unconditionally on this fixture (its scope is implicitly the
+    full corpus). The author committed `predicted_verdict=HELD`,
+    so the audit must exit 0."""
+    import subprocess
+    from corroborate.cli.audit import (
+        EXIT_BRIDGE_UNRESOLVED,
+        EXIT_DRIFT,
+        EXIT_GIT_HASH_NOT_FOUND,
+        EXIT_MANIFEST_MISSING,
+        EXIT_MATCH,
+        audit_pre_registration,
+    )
+    from corroborate.core.pre_registration import (
+        BridgeCommitmentInput, build_commitments,
+    )
+
+    # Pin all 5 exit codes — a future refactor that silently
+    # renumbers them would break the contract that scripts /
+    # operators depend on. The values are part of the CLI's
+    # public surface.
+    assert EXIT_MATCH == 0
+    assert EXIT_DRIFT == 1
+    assert EXIT_MANIFEST_MISSING == 2
+    assert EXIT_GIT_HASH_NOT_FOUND == 3
+    assert EXIT_BRIDGE_UNRESOLVED == 4
+
+    corpus_dir = tmp_path / 'fixture_corpus'
+    corpus_dir.mkdir()
+    _make_audit_corpus(corpus_dir)
+
+    commitments = build_commitments((
+        BridgeCommitmentInput(
+            bridge_name='tests.test_pre_registration.bridge_floor_a',
+            predicted_direction='a_gt_b',
+            predicted_verdict=Verdict.HELD,
+        ),
+    ))
+    head = subprocess.run(
+        ['git', 'rev-parse', 'HEAD'],
+        check=True, capture_output=True, text=True,
+    ).stdout.strip()
+    manifest = PreRegistrationManifest(
+        sweep_launched_at=datetime(2026, 5, 18, tzinfo=UTC),
+        git_commit_hash=head,
+        sweep_config_hash='deadbeef' * 8,
+        bridge_commitments=commitments,
+    )
+    _ = write_manifest(corpus_dir, manifest)
+
+    report = audit_pre_registration(corpus_dir)
+    assert report.exit_code == EXIT_MATCH, (
+        f'expected MATCH (0); got {report.exit_code}; '
+        f'entries: {report.entries!r}'
+    )
+    assert len(report.entries) == 1
+    entry = report.entries[0]
+    assert entry.bridge_name == (
+        'tests.test_pre_registration.bridge_floor_a'
+    )
+    assert entry.source_hash_matches is True
+    assert entry.empirical_verdict == Verdict.HELD
+    assert entry.predicted_verdict == Verdict.HELD
+    assert entry.verdict_matches is True
+
+    # Adjacent: missing-manifest path → exit code 2.
+    other_corpus = tmp_path / 'empty_corpus'
+    other_corpus.mkdir()
+    _make_audit_corpus(other_corpus)
+    report_missing = audit_pre_registration(other_corpus)
+    assert report_missing.exit_code == EXIT_MANIFEST_MISSING
+
+
+def test_audit_drift_on_source_hash_change(tmp_path: Path) -> None:
+    """Source-hash drift → exit code 1. Manually commit a hash
+    that doesn't match the current source; the audit must flag
+    the mismatch."""
+    from corroborate.cli.audit import (
+        EXIT_BRIDGE_UNRESOLVED, EXIT_DRIFT, audit_pre_registration,
+    )
+
+    corpus_dir = tmp_path / 'drifting_corpus'
+    corpus_dir.mkdir()
+    _make_audit_corpus(corpus_dir)
+
+    # Fabricate a manifest with a deliberately-wrong source_hash.
+    head = (
+        __import__('subprocess')
+        .run(['git', 'rev-parse', 'HEAD'],
+             check=True, capture_output=True, text=True)
+        .stdout.strip()
+    )
+    manifest = PreRegistrationManifest(
+        sweep_launched_at=datetime(2026, 5, 18, tzinfo=UTC),
+        git_commit_hash=head,
+        sweep_config_hash='deadbeef' * 8,
+        bridge_commitments=(
+            BridgeCommitment(
+                bridge_name='tests.test_pre_registration.bridge_floor_a',
+                # Wrong hash — the audit must flag the mismatch.
+                source_hash='not-the-real-hash-' + 'x' * 46,
+                predicted_direction='a_gt_b',
+                predicted_verdict=Verdict.HELD,
+            ),
+        ),
+    )
+    _ = write_manifest(corpus_dir, manifest)
+
+    report = audit_pre_registration(corpus_dir)
+    # source-hash drift always lands on EXIT_DRIFT (1), not
+    # EXIT_BRIDGE_UNRESOLVED (4) — the bridge resolved fine; only
+    # the hash differs.
+    assert report.exit_code == EXIT_DRIFT, (
+        f'expected DRIFT (1); got {report.exit_code}; '
+        f'entries: {report.entries!r}'
+    )
+    assert report.exit_code != EXIT_BRIDGE_UNRESOLVED
+    entry = report.entries[0]
+    assert entry.source_hash_matches is False
+    # The empirical verdict is still HELD (the body is unchanged),
+    # so verdict_matches stays True — only the source hash drifted.
+    assert entry.verdict_matches is True
+
+
+def test_audit_drift_on_verdict_mismatch(tmp_path: Path) -> None:
+    """Verdict drift → exit code 1. Commit a predicted_verdict
+    that doesn't match what the bridge produces; the audit must
+    flag the mismatch."""
+    from corroborate.cli.audit import EXIT_DRIFT, audit_pre_registration
+    from corroborate.core.pre_registration import build_commitments
+    from corroborate.core.pre_registration import BridgeCommitmentInput
+
+    corpus_dir = tmp_path / 'verdict_drift_corpus'
+    corpus_dir.mkdir()
+    _make_audit_corpus(corpus_dir)
+
+    commitments = build_commitments((
+        BridgeCommitmentInput(
+            bridge_name='tests.test_pre_registration.bridge_floor_a',
+            predicted_direction='a_gt_b',
+            # bridge_floor_a always returns HELD on this corpus,
+            # so committing NO_EFFECT guarantees a verdict drift.
+            predicted_verdict=Verdict.NO_EFFECT,
+        ),
+    ))
+    head = (
+        __import__('subprocess')
+        .run(['git', 'rev-parse', 'HEAD'],
+             check=True, capture_output=True, text=True)
+        .stdout.strip()
+    )
+    manifest = PreRegistrationManifest(
+        sweep_launched_at=datetime(2026, 5, 18, tzinfo=UTC),
+        git_commit_hash=head,
+        sweep_config_hash='deadbeef' * 8,
+        bridge_commitments=commitments,
+    )
+    _ = write_manifest(corpus_dir, manifest)
+
+    report = audit_pre_registration(corpus_dir)
+    assert report.exit_code == EXIT_DRIFT
+    entry = report.entries[0]
+    # Source hash IS correct (we ran through build_commitments
+    # against the real bridge); only the verdict differs.
+    assert entry.source_hash_matches is True
+    assert entry.verdict_matches is False
+    assert entry.empirical_verdict == Verdict.HELD
+    assert entry.predicted_verdict == Verdict.NO_EFFECT
