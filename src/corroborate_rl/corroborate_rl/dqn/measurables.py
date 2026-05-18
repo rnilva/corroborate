@@ -816,6 +816,151 @@ def q_action_std_per_burst(
     )
 
 
+@measurable(
+    reads=('online_std_q_per_step', 'online_top12_margin_per_step',
+           'eval_step_index', 'n_actions'),
+)
+def q_lambda_a_per_burst(
+    record: Mapping[str, object],
+) -> npt.NDArray[np.float64]:
+    """Per-burst $\\Lambda_a^{\\mathrm{cell}}$ trajectory under the
+    Theorem 3 (THEORY note §6.1) operational definition:
+    $\\Lambda_a^{\\mathrm{burst}} = \\sigma_{\\mathrm{action}}^{\\mathrm{burst}}
+     \\cdot \\sqrt{2 \\ln K} / \\Delta^{\\mathrm{burst}}$, where the
+    burst-window averaged σ_action and top12-margin replace the
+    late-window aggregates of `q_action_std_late` /
+    `q_argmax_margin_late`.
+
+    Returns `(n_bursts,)`. Burst boundaries split the per-step
+    trace into `n_bursts` equal windows (same convention as
+    `q_action_std_per_burst` / `q_argmax_margin_per_burst`),
+    where `n_bursts = len(eval_step_index)`.
+
+    Use cases:
+    - (A4'a) magnitude-alignment test: CV of the converged-tail
+      window (last 20% of bursts) bounds σ_clip variation across
+      "one-step from converged" iterates. Operationalised by
+      `q_lambda_a_tail_cv` below.
+    - Geometric-series argmax-accumulation gap visualisation:
+      `q_lambda_a_growth_ratio = tail_mean / init_mean` quantifies
+      how far the converged σ_Λa drifts from the early-burst
+      ("one-step from init") value — the open limitation
+      acknowledged in v9's Status section.
+
+    NaN when any trace input is missing or the burst window is
+    empty."""
+    try:
+        sigma = ONLINE_STD_Q(record)
+        margin = ONLINE_TOP12_MARGIN(record)
+        eval_idx = EVAL_STEP_INDEX(record)
+    except KeyError:
+        return np.zeros((0,), dtype=np.float64)
+    n_actions = record.get('n_actions')
+    if not isinstance(n_actions, (int, float)) or n_actions <= 1:
+        return np.zeros((0,), dtype=np.float64)
+    n = int(sigma.shape[0])
+    n_bursts = int(eval_idx.shape[0])
+    if n == 0 or n_bursts == 0:
+        return np.zeros((0,), dtype=np.float64)
+    if margin.shape[0] != n:
+        return np.zeros((0,), dtype=np.float64)
+    edges = np.linspace(0, n, n_bursts + 1, dtype=np.int64)
+    coeff = math.sqrt(2.0 * math.log(float(n_actions)))
+    out = np.empty(n_bursts, dtype=np.float64)
+    for i in range(n_bursts):
+        s = float(sigma[edges[i]:edges[i+1]].mean())
+        m = float(margin[edges[i]:edges[i+1]].mean())
+        out[i] = s * coeff / m if m > 1e-9 else float('nan')
+    return out
+
+
+@measurable(reads=())
+def q_lambda_a_tail_mean(
+    record: Mapping[str, object],
+    q_lambda_a_per_burst: npt.NDArray[np.float64],
+) -> float:
+    """Mean of `q_lambda_a_per_burst` over the converged tail
+    (last 20% of bursts). The operational σ_Λa^env^cell that
+    Theorem 3's empirical signature consumes; pooled cross-seed
+    gives σ_Λa^env."""
+    arr = np.asarray(q_lambda_a_per_burst, dtype=np.float64)
+    if arr.size == 0:
+        return float('nan')
+    lo = int(arr.size * 0.8)
+    if lo >= arr.size:
+        return float('nan')
+    tail = arr[lo:]
+    finite = tail[np.isfinite(tail)]
+    if finite.size == 0:
+        return float('nan')
+    return float(finite.mean())
+
+
+@measurable(reads=())
+def q_lambda_a_tail_cv(
+    record: Mapping[str, object],
+    q_lambda_a_per_burst: npt.NDArray[np.float64],
+) -> float:
+    """Coefficient of variation of `q_lambda_a_per_burst` over the
+    converged tail (last 20% of bursts). Operationalises the
+    (A4'a) magnitude-alignment test from Theorem 3 v9: under
+    (A4'a), σ_clip is order-of-magnitude aligned across
+    converged-iterate one-step bootstraps; CV in the tail bounds
+    that drift. Cell-level CV < 0.2 → tail-stable. NaN propagates."""
+    arr = np.asarray(q_lambda_a_per_burst, dtype=np.float64)
+    if arr.size == 0:
+        return float('nan')
+    lo = int(arr.size * 0.8)
+    if lo >= arr.size:
+        return float('nan')
+    tail = arr[lo:]
+    finite = tail[np.isfinite(tail)]
+    if finite.size < 2:
+        return float('nan')
+    mean = float(finite.mean())
+    if abs(mean) < 1e-12:
+        return float('nan')
+    return float(finite.std(ddof=1) / abs(mean))
+
+
+@measurable(reads=())
+def q_lambda_a_init_mean(
+    record: Mapping[str, object],
+    q_lambda_a_per_burst: npt.NDArray[np.float64],
+) -> float:
+    """Mean of `q_lambda_a_per_burst` over the init window (first
+    10% of bursts). Reference quantity for the geometric-series
+    growth ratio."""
+    arr = np.asarray(q_lambda_a_per_burst, dtype=np.float64)
+    if arr.size == 0:
+        return float('nan')
+    hi = max(1, int(arr.size * 0.1))
+    init = arr[:hi]
+    finite = init[np.isfinite(init)]
+    if finite.size == 0:
+        return float('nan')
+    return float(finite.mean())
+
+
+@measurable(reads=())
+def q_lambda_a_growth_ratio(
+    record: Mapping[str, object],
+    q_lambda_a_tail_mean: float,
+    q_lambda_a_init_mean: float,
+) -> float:
+    """`q_lambda_a_tail_mean / q_lambda_a_init_mean` — quantifies
+    the geometric-series argmax-accumulation gap (THEORY §6.1
+    open limitation, parallel to §9.3's Robbins-Monro gap for
+    Theorem 1). Larger ratio → σ_Λa drifted more during training;
+    the converged signature accumulates farther from the one-step
+    bootstrap from init. NaN when init is degenerate."""
+    if not math.isfinite(q_lambda_a_init_mean) or abs(q_lambda_a_init_mean) < 1e-9:
+        return float('nan')
+    if not math.isfinite(q_lambda_a_tail_mean):
+        return float('nan')
+    return float(q_lambda_a_tail_mean / q_lambda_a_init_mean)
+
+
 @measurable(reads=('online_top12_margin_per_step',))
 def q_argmax_margin_late(record: Mapping[str, object]) -> float:
     """Mean of `online_top12_margin_per_step` over the late 50%
