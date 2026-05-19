@@ -26,6 +26,7 @@ from experiments.findings.ddqn_sweeps import (
     finding_action_duplicate_fa_mechanism,
     finding_asterix_g999_pc_mediator_triangle,
     finding_asterix_g999_smoothness_harm_chain,
+    finding_asterix_lambda_a_mechanism,
     finding_cross_env_outcome_regime_g999,
     finding_lambda_a_mediation,
     finding_lambda_a_within_arm_asymmetry,
@@ -132,6 +133,7 @@ FINDINGS = (
     finding_cross_env_outcome_regime_g999,
     finding_lambda_a_mediation,
     finding_lambda_a_within_arm_asymmetry,
+    finding_asterix_lambda_a_mechanism,
     finding_snake_clip_ratchet_regime,
     finding_snake_clip_ratchet_regime_g0999,
 )
