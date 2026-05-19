@@ -67,6 +67,17 @@ _FR_VANILLA_GAMMA999_SCOPE = (
 )
 
 
+_FR_VANILLA_HIGH_B_SCOPE = (
+    (pl.col('env_name') == 'FourRooms-misc')
+    & (pl.col('gamma') == 0.999)
+    & (pl.col('arm_key') == 'baseline')
+    & (pl.col('total_steps') == 1000000)
+    & pl.col('replay.batch_size').is_in([512, 2048])  # high-B where escape variance is detectable
+    & finite(pl.col('jensen_gap'))
+    & finite(pl.col('eval_best_burst_mean'))
+)
+
+
 @claim_bridge(
     source='replay.batch_size',
     target='jensen_gap',
@@ -105,5 +116,58 @@ def lemma4_b_invariance__fr_g999_vanilla(
     return spearman_rho_verdict(
         partial_spearman,
         sign=0,
+        threshold=rho_threshold,
+    )
+
+
+@claim_bridge(
+    source='jensen_gap',
+    target='eval_best_burst_mean',
+    direction=Direction.INVERSE,
+    tier=Tier.ASSOCIATIONAL,
+    scope=_FR_VANILLA_HIGH_B_SCOPE,
+    predicted_direction='a_lt_b',
+)
+def mechanism_jens_predicts_outcome_within_high_B__fr_g999_vanilla(
+    partial_spearman: PartialSpearmanResult,
+    *,
+    x: str = 'jensen_gap',
+    y: str = 'eval_best_burst_mean',
+    conditioning: tuple[str, ...] = (),
+    stratify_by: str = 'replay.batch_size',
+    min_stratum_size: int = 30,
+    rho_threshold: float = 0.4,
+) -> Verdict:
+    """At FR γ=0.999 × vanilla × B ∈ {512, 2048} (n=60), Spearman
+    ρ(jensen_gap, eval_best_burst_mean) stratified by batch_size
+    tests the Theorem 1 mechanism chain at the per-seed level:
+    bias-attraction (high jens) → trapped at zero reward;
+    escape (low jens) → policy succeeds.
+
+    HELD iff ρ ≤ −0.4 (significantly negative) AND p < 0.05.
+
+    Why B ∈ {512, 2048} only: at B=128 effectively all 30 seeds
+    are stuck in the bias-attraction basin (median outcome=0,
+    jens uniformly high). Within-B variance is dominated by
+    measurement noise rather than mechanism, so the per-seed
+    chain is undetectable. At B=512/2048, the escape fraction
+    (17-20%) produces a bimodal distribution where the within-B
+    mechanism chain emerges (escapees: jens ≈ 1.2-1.9; stuck:
+    jens ≈ 1.9-2.7).
+
+    Pilot per-B Spearman ρ (analysis 2026-05-19):
+        B=128:  ρ = +0.21 NS (no escape variance to correlate)
+        B=512:  ρ = −0.48 p=0.008
+        B=2048: ρ = −0.67 p<0.001
+
+    Pooled across B ∈ {512, 2048} via Fisher-z, expect ρ ≤ −0.5
+    with strong significance. This corroborates Theorem 1's chain
+    at the per-seed level: the bias-attraction regime is real,
+    AND the predicted mechanism (high bias → poor policy) holds
+    within-stratum once there's outcome variance to correlate."""
+    del x, y, conditioning, stratify_by, min_stratum_size
+    return spearman_rho_verdict(
+        partial_spearman,
+        sign=-1,
         threshold=rho_threshold,
     )

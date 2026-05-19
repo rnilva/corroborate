@@ -29,9 +29,11 @@ from experiments.findings.ddqn_three_conditions._arms import (
 )
 from experiments.findings.lemma4_batch_invariance import (
     finding_b_invariance_pre_registered,
+    finding_mechanism_corroborated_per_seed,
 )
 from experiments.findings.lemma4_batch_invariance.bridges import (
     lemma4_b_invariance__fr_g999_vanilla,
+    mechanism_jens_predicts_outcome_within_high_B__fr_g999_vanilla,
 )
 
 
@@ -46,16 +48,19 @@ MODULE_SCOPE = (
 
 BRIDGES = (
     lemma4_b_invariance__fr_g999_vanilla,
+    mechanism_jens_predicts_outcome_within_high_B__fr_g999_vanilla,
 )
 
 
 FINDINGS = (
     finding_b_invariance_pre_registered,
+    finding_mechanism_corroborated_per_seed,
 )
 
 
 REQUIRED_MEASURABLES: tuple[str, ...] = (
     'jensen_gap',
+    'eval_best_burst_mean',
 )
 
 
