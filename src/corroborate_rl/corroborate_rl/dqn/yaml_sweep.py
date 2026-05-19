@@ -16,7 +16,12 @@ not in the dataclass type.
 
 The split between *shape* (the dataclass) and *dispatch* (the
 function) keeps tests cheap: they load a `DQNSweep` and inspect
-without spinning up the runner."""
+without spinning up the runner.
+
+The substrate-agnostic YAML primitives (`Sweep` Protocol, scalar
+parsers, manifest writer) live in `corroborate.runner.yaml_sweep`;
+this module composes them with DQN-specific env / intervention
+parsing + dispatch."""
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
@@ -27,6 +32,15 @@ from typing import Literal, TypeIs
 import yaml
 
 from corroborate.runner.registry import Registry
+from corroborate.runner.yaml_sweep import (
+    BridgeCommitmentInput,
+    assert_unique_cfg_names,
+    build_archive_remote,
+    build_merge_top_level,
+    build_pre_registered_bridges,
+    require_sweep_str,
+    write_pre_registration_manifest_for_sweep,
+)
 from corroborate_rl.dqn.config_loader import (
     InterventionConfig,
     build_intervention_from_mapping,
@@ -52,7 +66,12 @@ class DQNSweep:
 
     The dataclass is shape-uniform between shared and per-env
     modes. The dispatch routine reads `env_binding` to decide
-    whether to resolve once (shared) or per-env (per_env)."""
+    whether to resolve once (shared) or per-env (per_env).
+
+    Structurally satisfies `corroborate.runner.yaml_sweep.Sweep`
+    (frozen-dataclass fields match the Protocol's read-only
+    `@property` shape — name, out_dir, archive_remote,
+    merge_top_level, pre_registered_bridges)."""
     name: str
     out_dir: Path
     envs: tuple[EnvConfig, ...]
@@ -80,6 +99,20 @@ class DQNSweep:
     # - Downstream `--ingest <out_dir>` walks the sub-corpora.
     # - Saves up to ~tens of GB of disk on trace-heavy sweeps.
     merge_top_level: bool = True
+    # Pre-registration commitments. Each entry names a bridge by
+    # fully-qualified import path + the author's predicted
+    # direction + the author's predicted verdict. At sweep launch
+    # `dispatch_sweep` resolves each bridge, hashes its source,
+    # and writes `<out_dir>/pre_registration.json` BEFORE any
+    # cell runs. Empty tuple = no pre-registration (existing
+    # sweeps unaffected; manifest is opt-in).
+    #
+    # YAML form:
+    #   pre_registered_bridges:
+    #     - bridge: pkg.mod.fn_name
+    #       predicted_direction: a_lt_b
+    #       predicted_verdict: held
+    pre_registered_bridges: tuple[BridgeCommitmentInput, ...] = ()
 
     def build_interventions(
         self,
@@ -126,14 +159,15 @@ def load_sweep(path: Path, *, reg: Registry) -> DQNSweep:
 
 
 def _build_sweep(node: Mapping[str, object]) -> DQNSweep:
-    name = _require_str(node, 'name')
-    out_dir = Path(_require_str(node, 'out_dir'))
+    name = require_sweep_str(node, 'name')
+    out_dir = Path(require_sweep_str(node, 'out_dir'))
     envs = _build_envs(node)
     env_binding = _require_env_binding(node)
-    archive_remote = _build_archive_remote(node)
+    archive_remote = build_archive_remote(node)
     defaults = _build_defaults(node)
     gradient_probes = _build_gradient_probes(node)
-    merge_top_level = _build_merge_top_level(node)
+    merge_top_level = build_merge_top_level(node)
+    pre_registered_bridges = build_pre_registered_bridges(node)
     interventions_raw = node.get('interventions')
     if not isinstance(interventions_raw, list):
         raise TypeError(
@@ -151,17 +185,8 @@ def _build_sweep(node: Mapping[str, object]) -> DQNSweep:
         env_binding=env_binding, archive_remote=archive_remote,
         gradient_probes=gradient_probes,
         merge_top_level=merge_top_level,
+        pre_registered_bridges=pre_registered_bridges,
     )
-
-
-def _require_str(node: Mapping[str, object], key: str) -> str:
-    v = node.get(key)
-    if not isinstance(v, str):
-        raise TypeError(
-            f'sweep.{key} must be a string; got '
-            f'{type(v).__name__}',
-        )
-    return v
 
 
 def _build_envs(node: Mapping[str, object]) -> tuple[EnvConfig, ...]:
@@ -184,18 +209,6 @@ def _require_env_binding(node: Mapping[str, object]) -> EnvBinding:
     return v
 
 
-def _build_archive_remote(node: Mapping[str, object]) -> str | None:
-    v = node.get('archive_remote')
-    if v is None:
-        return None
-    if isinstance(v, str):
-        return v
-    raise TypeError(
-        f'sweep.archive_remote must be string|null; got '
-        f'{type(v).__name__}',
-    )
-
-
 def _build_gradient_probes(node: Mapping[str, object]) -> bool:
     v = node.get('gradient_probes', True)
     # `isinstance(v, bool)` accepts True/False; `int` would let 0/1
@@ -204,16 +217,6 @@ def _build_gradient_probes(node: Mapping[str, object]) -> bool:
     if not isinstance(v, bool):
         raise TypeError(
             f'sweep.gradient_probes must be bool; got '
-            f'{type(v).__name__}',
-        )
-    return v
-
-
-def _build_merge_top_level(node: Mapping[str, object]) -> bool:
-    v = node.get('merge_top_level', True)
-    if not isinstance(v, bool):
-        raise TypeError(
-            f'sweep.merge_top_level must be bool; got '
             f'{type(v).__name__}',
         )
     return v
@@ -386,34 +389,6 @@ def build_per_env(
     return tuple(interventions), tuple(envs_aligned)
 
 
-def _assert_unique_cfg_names(
-    configs: Sequence[InterventionConfig],
-) -> None:
-    """Raise `ValueError` if any two configs share `cfg.name`.
-
-    `dispatch_sweep` writes each config to `<out_dir>/<cfg.name>/`;
-    a shared name silently overwrites at merge time. Fires for
-    `env_binding: per_env` when the template's `name` field lacks
-    `{from_env: ...}` substitution and produces post-expansion
-    duplicates across envs. Exposed for the cross-config lint
-    (`tests/test_configs_lint.py`) so the check runs at test
-    time on every YAML, not only at dispatch."""
-    seen: dict[str, int] = {}
-    for cfg in configs:
-        seen[cfg.name] = seen.get(cfg.name, 0) + 1
-    collisions = {n: c for n, c in seen.items() if c > 1}
-    if collisions:
-        raise ValueError(
-            f'configs share output paths — {collisions!r} would '
-            f'overwrite each other at '
-            f'`<out_dir>/<cfg.name>/runs.parquet`. '
-            f'Templating the intervention `name` with '
-            f"`{{from_env: env_name}}` (env_binding='per_env') or "
-            f"switching to env_binding='shared' resolves this. "
-            f'Sweep aborted before any data is written.',
-        )
-
-
 def expand_sweep(
     sweep: DQNSweep, *, reg: Registry,
 ) -> tuple[InterventionConfig, ...]:
@@ -430,7 +405,7 @@ def expand_sweep(
         configs = sweep.build_interventions(reg=reg)
     else:
         configs, _ = build_per_env(sweep, reg=reg)
-    _assert_unique_cfg_names(configs)
+    assert_unique_cfg_names(configs)
     return configs
 
 
@@ -525,7 +500,7 @@ def dispatch_sweep(sweep: DQNSweep) -> tuple[Path, Path]:
     # field omits an env-attribute substitution (e.g.,
     # `name: ddqn_vs_{from_env: env_name}`); fix the template or
     # switch to `env_binding: shared`.
-    _assert_unique_cfg_names(configs)
+    assert_unique_cfg_names(configs)
 
     env_specs = {
         ec.env_name: get_env_spec(ec.env_name) for ec in sweep.envs
@@ -551,6 +526,13 @@ def dispatch_sweep(sweep: DQNSweep) -> tuple[Path, Path]:
     sweep.out_dir.mkdir(parents=True, exist_ok=True)
     sentinel = sweep.out_dir / IN_PROGRESS_SENTINEL
     sentinel.touch()
+    # Write the pre-registration manifest BEFORE any cell runs.
+    # Manifests are immutable per spec §5 — `write_pre_registration_
+    # manifest_for_sweep` raises FileExistsError on a second
+    # invocation against the same out_dir. Empty
+    # `pre_registered_bridges` returns None without touching disk
+    # (existing sweeps unaffected).
+    _ = write_pre_registration_manifest_for_sweep(sweep)
     sub_runs: list[Path] = []
     sub_traces: list[Path] = []
     sub_arm_dirs: list[Path] = []
@@ -697,4 +679,5 @@ __all__ = [
     'env_attrs_from_spec',
     'expand_sweep',
     'load_sweep',
+    'write_pre_registration_manifest_for_sweep',
 ]

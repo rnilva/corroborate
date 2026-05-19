@@ -52,7 +52,7 @@ def test_hypothesis_skips_preflight_when_no_ingest(
     monkeypatch.setattr(_HYP_PREFLIGHT_PATH, _fake_preflight)
 
     # Patch `run` so we don't actually evaluate bridges.
-    with patch('corroborate.runner.run', return_value={}), \
+    with patch('corroborate.cli.hypothesis.run', return_value={}), \
          patch(_HYP_PRINT_PATH):
         from corroborate.cli.hypothesis import main
         # Use --check mode which returns before the bridge eval +
@@ -87,7 +87,7 @@ def test_hypothesis_skips_preflight_when_no_remote_json(
         called.append(remote)
 
     monkeypatch.setattr(_HYP_PREFLIGHT_PATH, _fake_preflight)
-    with patch('corroborate.runner.run', return_value={}), \
+    with patch('corroborate.cli.hypothesis.run', return_value={}), \
          patch(_HYP_PRINT_PATH):
         from corroborate.cli.hypothesis import main
         _ = main([
@@ -117,7 +117,7 @@ def test_hypothesis_runs_preflight_when_remote_json_present(
         called.append(remote)
 
     monkeypatch.setattr(_HYP_PREFLIGHT_PATH, _fake_preflight)
-    with patch('corroborate.runner.run', return_value={}), \
+    with patch('corroborate.cli.hypothesis.run', return_value={}), \
          patch(_HYP_PRINT_PATH):
         from corroborate.cli.hypothesis import main
         _ = main([
@@ -145,7 +145,7 @@ def test_hypothesis_skip_preflight_flag_disables_check(
         called.append(remote)
 
     monkeypatch.setattr(_HYP_PREFLIGHT_PATH, _fake_preflight)
-    with patch('corroborate.runner.run', return_value={}), \
+    with patch('corroborate.cli.hypothesis.run', return_value={}), \
          patch(_HYP_PRINT_PATH):
         from corroborate.cli.hypothesis import main
         _ = main([
@@ -174,7 +174,7 @@ def test_hypothesis_no_restore_skips_preflight(
         called.append(remote)
 
     monkeypatch.setattr(_HYP_PREFLIGHT_PATH, _fake_preflight)
-    with patch('corroborate.runner.run', return_value={}), \
+    with patch('corroborate.cli.hypothesis.run', return_value={}), \
          patch(_HYP_PRINT_PATH):
         from corroborate.cli.hypothesis import main
         _ = main([
@@ -197,7 +197,7 @@ def test_hypothesis_profile_exported_to_env_independent_of_preflight(
 
     monkeypatch.delenv('AWS_PROFILE', raising=False)
     monkeypatch.setattr(_HYP_PREFLIGHT_PATH, lambda *_, **__: None)
-    with patch('corroborate.runner.run', return_value={}), \
+    with patch('corroborate.cli.hypothesis.run', return_value={}), \
          patch(_HYP_PRINT_PATH):
         from corroborate.cli.hypothesis import main
         _ = main([
@@ -231,7 +231,7 @@ def test_hypothesis_nested_corpus_triggers_preflight(
         called.append(remote)
 
     monkeypatch.setattr(_HYP_PREFLIGHT_PATH, _fake_preflight)
-    with patch('corroborate.runner.run', return_value={}), \
+    with patch('corroborate.cli.hypothesis.run', return_value={}), \
          patch(_HYP_PRINT_PATH):
         from corroborate.cli.hypothesis import main
         _ = main([
@@ -259,7 +259,7 @@ def test_hypothesis_named_ingest_nested_corpus_triggers_preflight(
         called.append(remote)
 
     monkeypatch.setattr(_HYP_PREFLIGHT_PATH, _fake_preflight)
-    with patch('corroborate.runner.run', return_value={}), \
+    with patch('corroborate.cli.hypothesis.run', return_value={}), \
          patch(_HYP_PRINT_PATH):
         from corroborate.cli.hypothesis import main
         _ = main([
@@ -285,7 +285,7 @@ def test_hypothesis_corrupt_remote_json_fails_cleanly(
     _ = (corpus / '_remote.json').write_text('not-json{{')
 
     monkeypatch.setattr(_HYP_PREFLIGHT_PATH, lambda *_, **__: None)
-    with patch('corroborate.runner.run', return_value={}), \
+    with patch('corroborate.cli.hypothesis.run', return_value={}), \
          patch(_HYP_PRINT_PATH):
         from corroborate.cli.hypothesis import main
         rc = main([
@@ -298,22 +298,69 @@ def test_hypothesis_corrupt_remote_json_fails_cleanly(
     assert 'corrupt manifest' in err.lower()
 
 
-# ============ run_sweep.py preflight gating ============
+# ============ corroborate sweep run preflight gating ============
 
-# `run_sweep.py` is heavier — it imports `corroborate_rl.dqn` which
-# pulls JAX. Tests here use a minimal config + mock the sweep
-# dispatch to avoid full JAX work.
+# Substrate dispatch is heavier — `corroborate_rl.dqn.yaml_sweep`
+# pulls JAX via the eager `from corroborate_rl.dqn import
+# measurables` in `corroborate_rl.dqn.__init__`. Tests here mock
+# the substrate's `load_sweep` / `dispatch_sweep` via the lazy
+# proxies in `corroborate_rl.dqn_sweep` (which the framework's
+# `SWEEP_ENTRY_POINTS` Callables route through). A real
+# minimal `DQNSweep` instance is used to satisfy the proxy's
+# defensive isinstance narrow.
 
-class _StubSweep:
-    """Smallest stand-in for a loaded sweep."""
 
-    def __init__(self, archive_remote: str | None) -> None:
-        self.name = 'stub_sweep'
-        self.out_dir = Path('/tmp/stub_out')
-        self.intervention_templates: tuple[object, ...] = ()
-        self.envs: tuple[object, ...] = ()
-        self.env_binding = 'shared'
-        self.archive_remote = archive_remote
+def _make_stub_sweep(archive_remote: str | None) -> object:
+    """Construct a minimal real `DQNSweep` for these mock tests.
+
+    Uses the substrate's actual dataclass (which structurally
+    satisfies the framework `Sweep` Protocol) rather than a
+    duck-typed stub, because `corroborate_rl.dqn_sweep`'s lazy
+    proxies do a defensive `isinstance(sweep, DQNSweep)` narrow
+    before delegating to the heavy module."""
+    from corroborate_rl.dqn.collect import EnvConfig
+    from corroborate_rl.dqn.yaml_sweep import DQNSweep
+    return DQNSweep(
+        name='stub_sweep',
+        out_dir=Path('/tmp/stub_out'),
+        envs=(EnvConfig(env_name='TestEnv', n_seeds=2, chunk_size=2),),
+        intervention_templates=(),
+        env_binding='shared',
+        archive_remote=archive_remote,
+    )
+
+
+def _patch_substrate_callables(
+    monkeypatch: pytest.MonkeyPatch,
+    archive_remote: str | None,
+) -> None:
+    """Monkey-patch the substrate's heavy `load_sweep` /
+    `dispatch_sweep` so the framework's CLI dispatch doesn't
+    actually run a sweep. Patches the underlying functions; the
+    substrate's lazy proxies `from corroborate_rl.dqn.yaml_sweep
+    import load_sweep` resolves to the patched attribute at
+    proxy-call time."""
+    stub_sweep = _make_stub_sweep(archive_remote)
+    monkeypatch.setattr(
+        'corroborate_rl.dqn.yaml_sweep.load_sweep',
+        lambda _path, reg=None: stub_sweep,
+    )
+    monkeypatch.setattr(
+        'corroborate_rl.dqn.yaml_sweep.dispatch_sweep',
+        lambda _sweep: (Path('/tmp/runs.parquet'),
+                        Path('/tmp/traces.parquet')),
+    )
+
+
+def _run_cli_sweep(argv: list[str]) -> int:
+    """Drive `corroborate.cli.sweep.dispatch` through the
+    public CLI surface — same flow as `corroborate sweep run`."""
+    import argparse as _argparse
+    from corroborate.cli.sweep import add_args, dispatch
+    parser = _argparse.ArgumentParser(prog='corroborate sweep')
+    add_args(parser, argv=argv)
+    ns = parser.parse_args(argv)
+    return dispatch(ns)
 
 
 def test_sweep_skips_preflight_when_archive_remote_is_none(
@@ -332,17 +379,8 @@ def test_sweep_skips_preflight_when_archive_remote_is_none(
     monkeypatch.setattr(
         'corroborate._internals.cloud_auth.preflight', _fake_preflight,
     )
-    monkeypatch.setattr(
-        'corroborate_rl.dqn.yaml_sweep.load_sweep',
-        lambda _path, reg=None: _StubSweep(archive_remote=None),
-    )
-    monkeypatch.setattr(
-        'corroborate_rl.dqn.yaml_sweep.dispatch_sweep',
-        lambda _sweep: (None, None),
-    )
-
-    from scripts.run_sweep import main
-    main([str(cfg)])
+    _patch_substrate_callables(monkeypatch, archive_remote=None)
+    _ = _run_cli_sweep(['run', str(cfg)])
     assert not called
 
 
@@ -362,19 +400,10 @@ def test_sweep_runs_preflight_when_archive_remote_set(
     monkeypatch.setattr(
         'corroborate._internals.cloud_auth.preflight', _fake_preflight,
     )
-    monkeypatch.setattr(
-        'corroborate_rl.dqn.yaml_sweep.load_sweep',
-        lambda _path, reg=None: _StubSweep(
-            archive_remote='s3://my-bucket/x',
-        ),
+    _patch_substrate_callables(
+        monkeypatch, archive_remote='s3://my-bucket/x',
     )
-    monkeypatch.setattr(
-        'corroborate_rl.dqn.yaml_sweep.dispatch_sweep',
-        lambda _sweep: (None, None),
-    )
-
-    from scripts.run_sweep import main
-    main([str(cfg)])
+    _ = _run_cli_sweep(['run', str(cfg)])
     assert called == ['s3://my-bucket/x']
 
 
@@ -392,19 +421,10 @@ def test_sweep_skip_preflight_disables_check(
     monkeypatch.setattr(
         'corroborate._internals.cloud_auth.preflight', _fake_preflight,
     )
-    monkeypatch.setattr(
-        'corroborate_rl.dqn.yaml_sweep.load_sweep',
-        lambda _path, reg=None: _StubSweep(
-            archive_remote='s3://my-bucket/x',
-        ),
+    _patch_substrate_callables(
+        monkeypatch, archive_remote='s3://my-bucket/x',
     )
-    monkeypatch.setattr(
-        'corroborate_rl.dqn.yaml_sweep.dispatch_sweep',
-        lambda _sweep: (None, None),
-    )
-
-    from scripts.run_sweep import main
-    main([str(cfg), '--skip-preflight'])
+    _ = _run_cli_sweep(['run', str(cfg), '--skip-preflight'])
     assert not called
 
 
@@ -421,17 +441,10 @@ def test_sweep_profile_exported_with_skip_preflight(
         'corroborate._internals.cloud_auth.preflight',
         lambda *_, **__: None,
     )
-    monkeypatch.setattr(
-        'corroborate_rl.dqn.yaml_sweep.load_sweep',
-        lambda _path, reg=None: _StubSweep(
-            archive_remote='s3://my-bucket/x',
-        ),
+    _patch_substrate_callables(
+        monkeypatch, archive_remote='s3://my-bucket/x',
     )
-    monkeypatch.setattr(
-        'corroborate_rl.dqn.yaml_sweep.dispatch_sweep',
-        lambda _sweep: (None, None),
-    )
-
-    from scripts.run_sweep import main
-    main([str(cfg), '--profile', 'r2', '--skip-preflight'])
+    _ = _run_cli_sweep([
+        'run', str(cfg), '--profile', 'r2', '--skip-preflight',
+    ])
     assert os.environ.get('AWS_PROFILE') == 'r2'
