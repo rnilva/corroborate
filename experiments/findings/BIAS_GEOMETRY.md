@@ -359,6 +359,59 @@ Related: `findings_q_smoothness_is_jens_shadow`,
 `findings_asterix_g999_pc_mediator_triangle`,
 `findings_pc_cross_env_smoothness`.
 
+### 8.2 σ_Λ_a as MODERATOR, not within-cell MEDIATOR (2026-05-19)
+
+Cor 3.2's σ_clip is the formal route to argmax preservation:
+under (A2)+(A3) iid Gaussian, the agent's argmax is preserved
+iff `γ · σ_clip · √(2 ln K) < Δ_v`, where `σ_clip ∝ Var_a[Λ_a(s'_a)]`.
+The substrate operationalises σ_clip via per-cell
+`lambda_a_late = q_action_std_late · √(2 ln K_eff) / q_argmax_margin_late`
+(now a framework-typed `@measurable`). Two distinct empirical
+shapes live at this junction:
+
+1. **Cross-env moderation**: per-env σ_Λ_a (cross-seed SD of
+   vanilla Λ_a, an env feature) predicts DDQN's d_out. Framework-
+   typed bridge `sigma_lambda_a_moderates_ddqn_outcome__cross_env_g0999`
+   (finding `finding_lambda_a_mediation`); at the current
+   8-env panel (n=1140 cells, commit `6a0518f`) gives ρ=−0.619
+   p=0.102 — POWER_INSUFFICIENT.
+
+2. **Within-cell mediation**: per-cell Δ_Λ_a (DDQN − vanilla
+   per stratum) predicts Δ_outcome on the causal path. Framework-
+   typed bridge `lambda_a_does_not_mediate_outcome__cross_stratum_g0999`
+   gives ρ=+0.62 p=0.15 (wrong direction for HELD, magnitude
+   too large for NULL — also POWER_INSUFFICIENT, but the
+   *empirical preview* says Δ_Λ_a is too small per stratum to
+   drive cross-stratum d_out).
+
+A robustness audit at n=8 (`scripts/sigma_lambda_a_robustness.py`)
+characterises (1):
+
+- Jackknife: drop-one-env ρ ∈ [−0.750, −0.464]. Breakout + SI
+  load-bearing (low σ_Λ_a + high d_out). Dropping Asterix
+  strengthens to ρ=−0.75.
+- Permutation null (K=10k): empirical P(|ρ_null|≥0.643)=0.093.
+- Bootstrap (K=10k): ρ̂=−0.601, 95% CI=[−1.000, +0.233] —
+  covers zero.
+
+The cluster verdict is UNDERPOWERED [blocked] with a pre-
+registered DRIFT: post-k=4 panel extension (n≈12-16 strata)
+should sharpen the moderation signal into HELD if the true
+ρ≈−0.6 persists.
+
+**Substantive implication for the unification**: σ_Λ_a sits
+on the env-feature axis of the (Λ_m, Λ_a, L) tuple — predicts
+WHICH envs DDQN's clip helps versus harms, but does not
+mediate the within-cell causal path. This is the
+moderation-vs-mediation distinction from CLAUDE.md §"Moderation
+vs mediation". The Type A/B framing (high σ_Λ_a → DDQN harms;
+low σ_Λ_a → DDQN helps) is now framework-typed and empirically
+underpowered-but-direction-robust at n=8.
+
+Memory: `findings_lambda_a_within_cell_mediation`,
+`findings_sigma_lambda_a_robustness_audit`. Bridges:
+`experiments/findings/ddqn_sweeps/lambda_a_mediation.py`.
+
 ## 9. Cross-references
 
 - `experiments/findings/THEORY_bootstrap_dominance.md` v3 (formal
