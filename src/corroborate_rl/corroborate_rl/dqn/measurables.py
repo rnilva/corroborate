@@ -1165,6 +1165,67 @@ def hasselt_implied_per_step_bias(
     return c * q_action_std_late
 
 
+@measurable(reads=(
+    'n_actions', 'action_duplicate_k',
+    'q_action_std_late', 'q_argmax_margin_late',
+))
+def lambda_a_late(record: Mapping[str, object]) -> float:
+    """Per-cell Λ_a — the bias-asymmetry index
+    `σ_clip · √(2 ln K_eff) / Δ_v` (Cor 3.2,
+    THEORY_bootstrap_dominance v3).
+
+    Under (A2) iid Gaussian and (A3) iid sampling, Theorem 3 says
+    the agent's argmax is preserved iff
+    `γ · σ_clip · √(2 ln K) < Δ_v`. This per-cell quantity is the
+    structural predictor of how DDQN's bootstrap clip interacts
+    with bias asymmetry across actions: small Λ_a → bias dominated
+    by mean (Type B, asymmetric — DDQN's clip helps); large Λ_a →
+    bias variance dominates (Type A, uniform-across-actions —
+    DDQN's clip corrupts argmax).
+
+    K_eff = n_actions × max(1, action_duplicate_k).
+
+    Reads `q_action_std_late` (σ_clip proxy) and
+    `q_argmax_margin_late` (Δ_v proxy) from the record's cached
+    scalar columns rather than via the injection resolver — the
+    resolver would recompute them from `online_std_q_per_step`
+    traces, which are evicted post-ingest on most corpora.
+    Reading the cached scalars lets Λ_a populate from cache alone
+    once σ_clip + Δ_v are present.
+
+    Returns nan when any input is non-finite, q_argmax_margin_late
+    ≈ 0, or K_eff < 2."""
+    n_actions_obj = record.get('n_actions')
+    if not isinstance(n_actions_obj, (int, float)) or n_actions_obj < 2:
+        return float('nan')
+    adk_obj = record.get('action_duplicate_k')
+    if (
+        isinstance(adk_obj, (int, float))
+        and math.isfinite(adk_obj)
+        and adk_obj >= 1
+    ):
+        k_dup = int(adk_obj)
+    else:
+        k_dup = 1
+    k_eff = int(n_actions_obj) * k_dup
+    if k_eff < 2:
+        return float('nan')
+    sigma_clip_obj = record.get('q_action_std_late')
+    delta_v_obj = record.get('q_argmax_margin_late')
+    if not (
+        isinstance(sigma_clip_obj, (int, float))
+        and isinstance(delta_v_obj, (int, float))
+    ):
+        return float('nan')
+    sigma_clip = float(sigma_clip_obj)
+    delta_v = float(delta_v_obj)
+    if not (math.isfinite(sigma_clip) and math.isfinite(delta_v)):
+        return float('nan')
+    if abs(delta_v) < 1e-9:
+        return float('nan')
+    return sigma_clip * math.sqrt(2.0 * math.log(float(k_eff))) / delta_v
+
+
 @measurable(reads=())
 def q_signal_to_noise_late(
     record: Mapping[str, object],

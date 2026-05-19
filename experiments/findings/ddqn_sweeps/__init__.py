@@ -138,4 +138,5 @@ REQUIRED_MEASURABLES: tuple[str, ...] = (
     'q_action_std_late',
     'q_argmax_margin_late',
     'q_trajectory_autocorr_late',
+    'lambda_a_late',
 )
