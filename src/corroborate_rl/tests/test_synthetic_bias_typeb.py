@@ -84,17 +84,22 @@ def compute_v_star(
 # ============ Catalogue registration ============
 
 def test_v31_envs_registered_in_catalogue() -> None:
-    """The v3.1 panel registers envs spanning the payoff_spread
-    axis × the L (FA-capacity) axis."""
+    """The v3.1+ panel registers envs spanning the payoff_spread
+    axis × the L (FA-capacity) axis.
+
+    v3.2 narrows the registered set to L=1024 only; the env
+    constructor still supports arbitrary L for direct calls.
+    """
     registered = {
         name for name in ENV_REGISTRY.keys()
         if name.startswith('TypeBChainV31-')
     }
-    # Per the panel registration: 2 L × 5 spread × 3 payoff_seeds
-    # (see `_register_synthetic_bias_typeb_panel` in env_catalogue).
+    # Per the v3.2 panel registration: 1 L × 5 spread × 3
+    # payoff_seeds = 15 envs (see
+    # `_register_synthetic_bias_typeb_panel` in env_catalogue).
     # Check the panel is non-empty and the naming convention matches.
     assert len(registered) >= 6, (
-        f"expected ≥ 6 registered v3.1 envs; got {len(registered)}: "
+        f"expected ≥ 6 registered v3.1+ envs; got {len(registered)}: "
         f"{sorted(registered)[:10]}..."
     )
     # Every name should follow the v3.1 convention.
@@ -106,14 +111,22 @@ def test_v31_envs_registered_in_catalogue() -> None:
 
 
 def test_v31_env_has_correct_obs_shape() -> None:
-    """obs_shape = (n_states,) per the one-hot encoding."""
-    # Pick any registered v3.1 env to verify shape.
+    """obs_shape = (n_states,) per the one-hot encoding.
+
+    v3.2 drops the L=32 envs from the catalogue (see
+    `_register_synthetic_bias_typeb_panel`); the registered panel
+    is L=1024-only. The env constructor still supports arbitrary
+    L (covered by the `make_synthetic_bias_typeb` direct-call
+    tests below); only the registered catalogue subset narrows.
+    """
+    # Pick any registered v3.1+ env to verify shape; all L=1024
+    # in the v3.2 panel.
     name = next(
         n for n in ENV_REGISTRY
-        if n.startswith('TypeBChainV31-') and '-L32-' in n
+        if n.startswith('TypeBChainV31-') and '-L1024-' in n
     )
     spec = get(name)
-    assert spec.observation_shape == (32,)
+    assert spec.observation_shape == (1024,)
     assert spec.n_actions == 4
 
 

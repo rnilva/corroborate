@@ -1687,9 +1687,9 @@ from corroborate_rl import jumanji_envs as _jumanji_envs  # noqa: F401, E402
 
 def _register_synthetic_bias_typeb_panel() -> None:
     """Register the synthetic bias Type-A/B controlled-substrate
-    envs (v3.1).
+    envs (v3.2).
 
-    v1 → v2 → v3 → v3.1 evolution lives in
+    v1 → v2 → v3 → v3.1 → v3.2 evolution lives in
     `synthetic_bias_typeb.py`'s module docstring. v3 (state-baked
     `mu_state(s) = peak_value · β^(s mod K)`) was scrapped after
     value iteration confirmed two STRUCTURAL flaws
@@ -1707,17 +1707,24 @@ def _register_synthetic_bias_typeb_panel() -> None:
     `Var_a[V*(s'_a)] > 0` at every `payoff_spread > 0`, scaling
     monotonically; Q* has ~L distinct values (no modular collapse).
 
-    v3.1 naming convention encodes the three structural axes:
+    **v3.2 narrowing**: drop the L=32 envs (the v3.1 pre-launch
+    review surfaced that L=32 was a near-tabular baseline whose
+    inclusion buys little once L=1024 carries the FA-binding test;
+    dropping L=32 recovers the cell budget needed to bump
+    n_seeds 8 → 16 for the attenuation fix). The registered panel
+    keeps only L=1024 envs.
+
+    v3.1+ naming convention (preserved across v3.1 → v3.2 — the
+    env DEFINITION is unchanged, only the registered subset
+    shrinks):
     "TypeBChainV31-K{K}-L{n_states}-spread{payoff_spread}-seed{payoff_seed}-synthetic"
 
     The structural axes:
 
-    - n_states (L) ∈ {32, 1024}: FA-capacity axis. With hidden=[16]
-      and v3.1's L distinct V*-values (no modular collapse at high
-      payoff_spread), L=32 → 128 Q-entries through a 16-unit
-      bottleneck (mild compression); L=1024 → 4096 distinct
-      Q-entries through 16 units (8× sub-bottleneck) → genuine
-      FA-binding.
+    - n_states (L) = 1024 only in v3.2: FA-capacity axis. With
+      hidden=[16] and v3.1's L distinct V*-values (no modular
+      collapse), 1024 distinct Q-entries through 16 units (~64×
+      sub-bottleneck) → genuine FA-binding.
     - payoff_spread ∈ {0.0, 0.25, 0.5, 0.75, 1.0}: the v3.1
       anisotropy knob (replaces v3's β). `payoff_spread=0`
       degenerate (all states peak_value, Var_a[V*]=0);
@@ -1734,8 +1741,7 @@ def _register_synthetic_bias_typeb_panel() -> None:
     - peak_value = 1.0 (gives |Q*| ≤ 1/(1-γ); at γ=0.999, V*≤1000
       matches natural-env Asterix Q≈436 / Acrobot Q≈100 scale).
     - noise_sigma = 0.02 (per-step Gaussian reward noise SD; 2%
-      of peak_value, matching natural-env Asterix σ/Δ ≈ 1-3%
-      knife-edge).
+      of peak_value).
     - horizon = 128 steps per episode.
 
     The γ axis is swept via the YAML intervention's
@@ -1747,18 +1753,19 @@ def _register_synthetic_bias_typeb_panel() -> None:
     [-1.0, 2.0] for safety margin (covers all payoff_spread shapes
     with peak_value=1.0).
 
-    Panel: 2 L × 5 spread × 3 payoff_seed = 30 named envs. Sweep
-    YAML can opt into a sub-panel; the v3.1 sweep config uses
-    2 L × 5 spread × 3 payoff_seed = 30 envs × 3 γ × 2 arms ×
-    n_seeds=8 = 1440 cells (≤ 1500 budget).
+    Panel: 1 L × 5 spread × 3 payoff_seed = 15 named envs. Sweep
+    YAML can opt into a sub-panel; the v3.2 sweep config uses all
+    15 envs × 3 γ × 2 arms × n_seeds=16 = 1440 cells (≤ 1500
+    budget).
     """
     from corroborate_rl.synthetic_bias_typeb import (
         make_synthetic_bias_typeb,
     )
 
-    # v3.1 structural panel: 2 L × 5 payoff_spread × 3 payoff_seed
-    # = 30 named envs.
-    n_states_values = (32, 1024)
+    # v3.2 structural panel: 1 L × 5 payoff_spread × 3 payoff_seed
+    # = 15 named envs. v3.1's L=32 cells dropped (see v3.2
+    # rationale above).
+    n_states_values = (1024,)
     spread_values = (0.0, 0.25, 0.5, 0.75, 1.0)
     payoff_seeds = (0, 1, 2)
     n_actions = 4

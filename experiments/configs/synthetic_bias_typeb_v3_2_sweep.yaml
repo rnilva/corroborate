@@ -1,0 +1,171 @@
+name: synthetic_bias_typeb_v3_2_pilot
+out_dir: experiments/data/synthetic_bias_typeb_v3_2_pilot
+env_binding: per_env
+archive_remote: s3://corroborate-archive/synthetic_bias_typeb_v3_2_pilot
+
+# v3.2 synthetic bias Type-A/B controlled-substrate sweep.
+#
+# v1 → v2 → v3 → v3.1 → v3.2 evolution lives in:
+# - docs/PRE_REGISTRATION_synthetic_bias_typeb.md
+# - /tmp/synthetic_env_roast.md   (v1 critique)
+# - /tmp/synthetic_v2_roast.md    (v2 critique)
+# - /tmp/synthetic_v3_review.md   (v3 critique)
+# - /tmp/synthetic_v3_1_review.md (v3.1 pre-launch review)
+#
+# v1, v2, v3 scrapped pre-sweep — see PRE_REGISTRATION doc.
+#
+# v3.1 ran VI-validated (Var_a[V*]>0, Q* has ~L distinct entries),
+# but the pre-launch review surfaced an attenuation problem:
+# n_seeds=8 inflates per-stratum d-SE to ~0.51 → reliability r≈0.20
+# → a true ρ ≤ −0.5 attenuates to observed ρ ≈ −0.22 (BELOW HELD
+# threshold AND inside the REFUTATION |ρ|<0.20 band with ~30-43%
+# probability). The substrate test is "simultaneously close to HELD
+# AND close to REFUTATION" — the worst possible regime.
+#
+# v3.2 fixes (the v3.1 reviewer's cheap recommendations):
+#
+# 1. **n_seeds 8 → 16**. Per-stratum d-SE drops 0.51 → 0.36;
+#    reliability r → 0.32; observed ρ for true −0.5 → −0.29.
+#    Still marginal, but the false-REFUTATION rate at true ρ=−0.5
+#    drops from ~43% → ~15%.
+#
+# 2. **L axis dropped (keep only L=1024)**. The reviewer noted that
+#    L=1024 is where FA-capacity binds and the substantive claim
+#    lives. v3 made the L=32 cells essentially a tabular-baseline
+#    comparison (Q* with 16 distinct entries trivially represented
+#    by 16-unit hidden); v3.1 fixed this for L=1024 by giving Q*
+#    ~L distinct entries, but L=32 still has very limited
+#    capacity-axis information. v3.2 drops L=32 to recover the
+#    cell budget. **Consequence**: the N1 bridge (capacity-alone-
+#    doesn't-drive-d_out at spread=0) becomes structurally
+#    degenerate (single L value → Spearman on n_states is
+#    undefined) and is REMOVED from the pre-registered bridge set.
+#
+# 3. **REFUTATION null_threshold 0.20 → 0.15**. Matches the
+#    attenuation arithmetic: false-REFUTATION at true ρ=−0.5 drops
+#    from ~30-43% → ~15%. Still a substantive null (the
+#    PRE_REGISTRATION doc carries the updated REFUTATION text).
+#
+# Panel: 15 envs (5 spread × 3 payoff_seed at L=1024) × 3 γ × 2
+# arms × 16 seeds = 1440 cells (≤ 1500 budget, same as v3.1).
+#
+# v3.2 narrows the substantive claim: this sweep tests the
+# **FA-residual-heavy regime (σ/Δ ≈ 47%)**, NOT the Asterix 1-3%
+# knife-edge. The reviewer verified via VI that σ_clip and Δ_v
+# both scale linearly with payoff_spread, so σ/Δ stays
+# ratio-invariant at ~0.466 across all spread > 0. A HELD verdict
+# supports the mechanism shape at FA-heavy σ/Δ; it does NOT
+# establish that Asterix's knife-edge mechanism is the same.
+# See `docs/PRE_REGISTRATION_synthetic_bias_typeb.md` §v3.2.
+#
+# Pre-registered bridges — sweep-launch commitments captured in
+# `<out_dir>/pre_registration.json`. Each entry locks the bridge's
+# source-hash, predicted direction, and predicted verdict at the
+# git HEAD as of sweep launch. Post-sweep `corroborate audit
+# pre-registration <corpus>` re-resolves each bridge against the
+# corpus and reports source-hash drift OR verdict drift.
+#
+# These commitments encode the substantive predictions from
+# `docs/PRE_REGISTRATION_synthetic_bias_typeb.md`:
+#   P1 (PRIMARY): ρ(payoff_spread, d_out) ≤ −0.5 pooled
+#       (n_strata=45 at L=1024 × 3 γ × 5 spread × 3 seed;
+#       HELD predicted; REFUTATION null_threshold tightened
+#       to 0.15)
+#   D2 (DIAGNOSTIC): ρ(payoff_spread, d_out) ≤ −0.6 at γ=0.999
+#       (n_strata=15; PRE-REGISTERED VERDICT = POWER_INSUFFICIENT)
+#
+# N1 (the L-axis null bridge) was DROPPED in v3.2 because the
+# L=1024-only panel makes `n_states` a single-value covariate at
+# spread=0 — Spearman is undefined. The bridge file retains the
+# function for git-history / drift-detection purposes but it is
+# NOT in the pre-registered set and NOT in the Finding's BRIDGES
+# tuple.
+pre_registered_bridges:
+  - bridge: experiments.findings.ddqn_sweeps.synthetic_bias_typeb.ddqn_harms_under_high_spread__synthetic_typeb_v32
+    predicted_direction: a_lt_b
+    predicted_verdict: held
+  - bridge: experiments.findings.ddqn_sweeps.synthetic_bias_typeb.ddqn_harm_amplified_at_g999__synthetic_typeb_v32
+    predicted_direction: a_lt_b
+    predicted_verdict: power_insufficient
+
+# 15 v3.2 envs: L=1024 × 5 payoff_spread × 3 payoff_seed.
+# L=32 envs dropped (see v3.2 rationale above).
+envs:
+  - {name: TypeBChainV31-K4-L1024-spread0.0-seed0-synthetic, n_seeds: 16, chunk_size: 8}
+  - {name: TypeBChainV31-K4-L1024-spread0.0-seed1-synthetic, n_seeds: 16, chunk_size: 8}
+  - {name: TypeBChainV31-K4-L1024-spread0.0-seed2-synthetic, n_seeds: 16, chunk_size: 8}
+  - {name: TypeBChainV31-K4-L1024-spread0.25-seed0-synthetic, n_seeds: 16, chunk_size: 8}
+  - {name: TypeBChainV31-K4-L1024-spread0.25-seed1-synthetic, n_seeds: 16, chunk_size: 8}
+  - {name: TypeBChainV31-K4-L1024-spread0.25-seed2-synthetic, n_seeds: 16, chunk_size: 8}
+  - {name: TypeBChainV31-K4-L1024-spread0.5-seed0-synthetic, n_seeds: 16, chunk_size: 8}
+  - {name: TypeBChainV31-K4-L1024-spread0.5-seed1-synthetic, n_seeds: 16, chunk_size: 8}
+  - {name: TypeBChainV31-K4-L1024-spread0.5-seed2-synthetic, n_seeds: 16, chunk_size: 8}
+  - {name: TypeBChainV31-K4-L1024-spread0.75-seed0-synthetic, n_seeds: 16, chunk_size: 8}
+  - {name: TypeBChainV31-K4-L1024-spread0.75-seed1-synthetic, n_seeds: 16, chunk_size: 8}
+  - {name: TypeBChainV31-K4-L1024-spread0.75-seed2-synthetic, n_seeds: 16, chunk_size: 8}
+  - {name: TypeBChainV31-K4-L1024-spread1.0-seed0-synthetic, n_seeds: 16, chunk_size: 8}
+  - {name: TypeBChainV31-K4-L1024-spread1.0-seed1-synthetic, n_seeds: 16, chunk_size: 8}
+  - {name: TypeBChainV31-K4-L1024-spread1.0-seed2-synthetic, n_seeds: 16, chunk_size: 8}
+
+defaults:
+  # 200k steps to give the L=1024 FA-binding corner adequate
+  # convergence time. ~1.5k updates per (s,a) — Q is partially-
+  # learned, which is the FA-binding regime v3.1+ tests.
+  total_steps: 200000
+  eval_every:  10000
+  n_episodes:  10
+  gamma:       0.99
+  sync_period: 500
+  replay:
+    class: Replay
+    capacity: 50000
+    batch_size: 32
+  optimizer:
+    fn: warmed_update
+    inner: {fn: adam, lr: 0.0003}
+    warmup_steps: 200
+  action_select:
+    fn: epsilon_greedy
+    schedule:
+      fn: linear_epsilon
+      eps_init: 1.0
+      eps_final: 0.05
+      anneal_steps: 80000
+  q_network:
+    class: MLP
+    # Single hidden layer of 16 units. At L=1024 with random
+    # per-state payoffs (v3.1+), the MLP must alias ~1024 distinct
+    # V*-values through 16 hidden units (64 V*-values per unit) —
+    # genuine FA-binding regime.
+    hidden: [16]
+
+# γ × DDQN-vs-vanilla cross. Each γ level has 2 arms (vanilla
+# baseline + DDQN treatment); the YAML expands to 3 γ × 2 arms ×
+# 15 envs × 16 seeds = 1440 cells via env_binding=per_env.
+interventions:
+  - name: "g095_{from_env: name}"
+    base: {gamma: 0.95}
+    arms:
+      - []
+      - - slot_path: bootstrap
+          replacement:
+            fn: bootstrap
+            greedification: {fn: double_greedify}
+
+  - name: "g099_{from_env: name}"
+    base: {gamma: 0.99}
+    arms:
+      - []
+      - - slot_path: bootstrap
+          replacement:
+            fn: bootstrap
+            greedification: {fn: double_greedify}
+
+  - name: "g0999_{from_env: name}"
+    base: {gamma: 0.999}
+    arms:
+      - []
+      - - slot_path: bootstrap
+          replacement:
+            fn: bootstrap
+            greedification: {fn: double_greedify}
