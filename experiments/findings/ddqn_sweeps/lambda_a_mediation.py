@@ -51,6 +51,9 @@ from corroborate.analyses.link.cross_stratum_arm_diff_partial_spearman import (
 from corroborate.analyses.link.cross_stratum_property_slope import (
     CrossStratumPropertySlopeResult,
 )
+from corroborate.analyses.spearman.partial_spearman import (
+    PartialSpearmanResult,
+)
 from corroborate.bridge.bridge import Direction, Tier, claim_bridge
 from corroborate.bridge.verdict import RefutationClass, Verdict
 
@@ -262,7 +265,76 @@ def lambda_a_does_not_mediate_outcome__cross_stratum_g0999(
     return Verdict.POWER_INSUFFICIENT, None
 
 
+# Bridge 3 — Joint (σ_clip, Δ_v, jens) triplet within-cell partial-ρ.
+@claim_bridge(
+    source=INTERVENTION,
+    target='eval_best_burst_raw_mean',
+    direction=Direction.DIRECT,
+    tier=Tier.ASSOCIATIONAL,
+    scope=(
+        _GAMMA_999_SCOPE
+        & pl.col('lambda_a_late').is_finite()
+        & pl.col('q_action_std_late').is_finite()
+        & pl.col('q_argmax_margin_late').is_finite()
+        & pl.col('jensen_gap').is_finite()
+        & pl.col('eval_best_burst_raw_mean').is_finite()
+        & pl.col('arm_is_baseline').is_finite()
+    ),
+    predicted_direction='null',
+)
+def joint_bias_geometry_mediates_arm_outcome__cross_env_g0999(
+    partial_spearman: PartialSpearmanResult,
+    *,
+    x: str = 'arm_is_baseline',
+    y: str = 'eval_best_burst_raw_mean',
+    conditioning: tuple[str, ...] = (
+        'q_action_std_late', 'q_argmax_margin_late', 'jensen_gap',
+    ),
+    stratify_by: str = 'env_name',
+    min_stratum_size: int = 8,
+    null_threshold: float = 0.10,
+    held_strong_rho: float = 0.30,
+    min_strata: int = 5,
+) -> tuple[Verdict, RefutationClass | None]:
+    """Per-cell partial Spearman ρ(arm, outcome | σ_clip, Δ_v, jens)
+    stratified by env_name. Tests whether the joint (σ_clip, Δ_v,
+    jens) triplet absorbs the within-cell arm → outcome effect.
+
+    `x='arm_is_baseline'` encodes arm as 0/1 (baseline=1, DDQN=0).
+    Spearman ρ on a binary indicator is monotone-equivalent to a
+    rank-sum statistic, so partial-ρ here is the nonparametric
+    "how much of the arm-effect remains after conditioning on
+    the triplet."
+
+    Predicted direction: NULL (full mediation by the triplet →
+    partial-ρ ≈ 0). HELD if |ρ_partial| ≤ null_threshold (joint
+    triplet absorbs the arm-effect). NO_EFFECT (SIGN_FLIP) if
+    |ρ_partial| ≥ held_strong_rho with the same sign as marginal
+    arm → outcome — would say the conditioning REVERSES the
+    interpretation (an algebraic curiosity, not a substantive
+    mediation refutation).
+
+    Empirical evidence: on the 5-env MinAtar-heavy subset (n=360
+    cells) the joint triplet shrinks |ρ| 0.273 → 0.094 (66%
+    absorption). On the full 8-env panel (n=1140) only 17%
+    absorption — joint mediation is env-cohort dependent. The
+    cluster-finding's BLOCKED_ON predicts NULL_EFFECT under
+    k=4 panel extension (Asterix's special case dilutes)."""
+    del x, y, conditioning, stratify_by, min_stratum_size
+    if partial_spearman.n_strata < min_strata:
+        return Verdict.POWER_INSUFFICIENT, None
+    rho = partial_spearman.rho_pooled
+    if math.isnan(rho):
+        return Verdict.POWER_INSUFFICIENT, None
+    if abs(rho) <= null_threshold:
+        return Verdict.NO_EFFECT, RefutationClass.NULL_EFFECT
+    if abs(rho) >= held_strong_rho:
+        return Verdict.HELD, None
+    return Verdict.POWER_INSUFFICIENT, None
+
+
 BRIDGES = (
     sigma_lambda_a_moderates_ddqn_outcome__cross_env_g0999,
     lambda_a_does_not_mediate_outcome__cross_stratum_g0999,
+    joint_bias_geometry_mediates_arm_outcome__cross_env_g0999,
 )

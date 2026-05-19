@@ -1165,6 +1165,26 @@ def hasselt_implied_per_step_bias(
     return c * q_action_std_late
 
 
+@measurable(reads=('arm_key',))
+def arm_is_baseline(record: Mapping[str, object]) -> float:
+    """Numeric indicator for baseline arm membership.
+
+    Returns 1.0 if `arm_key == "baseline"`, 0.0 otherwise. Used
+    as the binary `x` in per-cell partial-Spearman bridges that
+    test whether mediators absorb the arm → outcome effect.
+    Encoding arm as a continuous {0, 1} variable makes Spearman
+    ρ equivalent to a Wilcoxon-Mann-Whitney rank-sum statistic
+    (Hollander & Wolfe 1973), so the resulting partial-ρ is a
+    monotone-equivalent of the partial Wilcoxon-Mann-Whitney
+    framework's nonparametric mediation effect.
+
+    Returns nan if `arm_key` is absent or non-string."""
+    arm = record.get('arm_key')
+    if not isinstance(arm, str):
+        return float('nan')
+    return 1.0 if arm == 'baseline' else 0.0
+
+
 @measurable(reads=(
     'n_actions', 'action_duplicate_k',
     'q_action_std_late', 'q_argmax_margin_late',

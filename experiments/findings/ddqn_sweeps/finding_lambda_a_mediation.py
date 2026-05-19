@@ -28,6 +28,7 @@ from corroborate.bridge.bridge import Bridge
 from corroborate.graph.causal import ClusterVerdict
 
 from experiments.findings.ddqn_sweeps.lambda_a_mediation import (
+    joint_bias_geometry_mediates_arm_outcome__cross_env_g0999,
     lambda_a_does_not_mediate_outcome__cross_stratum_g0999,
     sigma_lambda_a_moderates_ddqn_outcome__cross_env_g0999,
 )
@@ -55,4 +56,5 @@ BLOCKED_ON: str | None = (
 BRIDGES: tuple[Bridge, ...] = (
     sigma_lambda_a_moderates_ddqn_outcome__cross_env_g0999,
     lambda_a_does_not_mediate_outcome__cross_stratum_g0999,
+    joint_bias_geometry_mediates_arm_outcome__cross_env_g0999,
 )
