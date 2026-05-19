@@ -32,9 +32,12 @@ closed-form SE.
 Pairing-rho diagnostic: since the arms SHARE seeds (the
 substrate's whole-point cancellation), `pairing_rho` should be
 ≈ 1.0 — exercising the "arms-share-seed-noise" diagnostic
-branch. The null-contrast scenario (identical arms) corroborates
-that the framework doesn't manufacture a mean_diff out of paired
-i.i.d. noise.
+branch. The null-contrast scenario uses DISTINCT seed ranges
+across arms (identical SCM, independent samples) to exercise
+the framework's Welch-SE / Cohen's-d / NaN-pairing branches on
+non-trivial reducer input — a shared-seed identical-SCM null
+would have mean_diff bit-identically 0 BEFORE the reducer runs,
+making the test tautological.
 """
 from __future__ import annotations
 
@@ -46,7 +49,7 @@ from corroborate.corpus.schema import RunRow
 
 from tests.analytic.lg_scm._closed_form import y_mean_arm_variance
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
-from tests.analytic.lg_scm.runner import run_paired_arms
+from tests.analytic.lg_scm.runner import run_arm, run_paired_arms
 
 
 _MU_X = 1.0
@@ -201,12 +204,51 @@ def test_arm_mean_diff_recovers_structural_contrast() -> None:
     )
 
 
-def test_arm_mean_diff_null_contrast_indistinguishable_from_zero() -> None:
-    rows = run_paired_arms(
-        treatment=_scm(0.5),
-        baseline=_scm(0.5),
+def test_arm_mean_diff_null_contrast_welch_se_matches_closed_form() -> None:
+    """True null contrast: identical SCMs but DISTINCT seeds across
+    arms (independent samples from the same population). Shared-
+    seed identical-SCM is tautological — y_mean is bit-identical
+    across arms cell-by-cell, so mean_diff is identically 0.0
+    before the framework's reducer runs. Distinct seeds force the
+    framework's mean / SD / Welch-SE / Welch-df / Cohen's d /
+    pairing-ρ reducers all the way through non-trivial values.
+
+    Under identical SCMs the population mean_diff is 0, and the
+    framework's Welch SE must match the closed-form independent-
+    arms SE = sqrt(2·Var/n). Two assertions exercise actual
+    framework transformation logic:
+
+    1. Z-score bound (CLAUDE.md rule 3): |mean_diff /
+       framework_SE| < 4 — 4σ window around H0 against the
+       framework's own SE, not a closed-form one. Catches both
+       inflated mean_diff and collapsed SE.
+    2. Framework Welch SE matches closed-form SE within the
+       chi-squared CV at n=60 (≈ 8.2% per arm → ≈ 15% on the
+       sum-of-vars Welch SE; 0.20 bound is ~2.4× safety).
+    3. Cohen's d under exact identical population: |d| < 0.5
+       (4σ on Cohen's d at n_per_arm=60 ≈ 4·sqrt(2/60) ≈ 0.73,
+       so 0.5 is conservative; passes for any honest sampling
+       and detects e.g. swapped-numerator bugs).
+    4. pairing_rho is NaN: pair_by=('seed',) default; no shared
+       seeds across arms → n_paired = 0 < 5 → framework returns
+       NaN (exercises the n_paired-floor branch).
+    """
+    # Distinct seed ranges per arm: no overlap → pairing_rho
+    # branch returns NaN, while each arm pulls an independent
+    # n=60 sample from the same SCM.
+    treatment_rows = run_arm(
+        _scm(0.5),
         seeds=tuple(range(_N_SEEDS_PER_ARM)),
+        arm_key='treatment',
     )
+    baseline_rows = run_arm(
+        _scm(0.5),
+        seeds=tuple(range(
+            _N_SEEDS_PER_ARM, 2 * _N_SEEDS_PER_ARM,
+        )),
+        arm_key='baseline',
+    )
+    rows = treatment_rows + baseline_rows
 
     result = arm_mean_diff.fn(
         _as_dicts(rows),
@@ -215,20 +257,45 @@ def test_arm_mean_diff_null_contrast_indistinguishable_from_zero() -> None:
         baseline_arm='baseline',
     )
 
-    se_expected = _expected_mean_diff_se(
+    se_closed_form = _expected_mean_diff_se(
         beta_xz_t=0.5, beta_xz_b=0.5, n_per_arm=_N_SEEDS_PER_ARM,
     )
-    # Under shared seeds + identical SCM, every paired Δ is
-    # zero exactly. mean_diff IS zero up to floating-point. The
-    # 4-sigma bound here is generous slack for any drift.
-    assert abs(result.mean_diff) < 4.0 * se_expected
-    # Sign: when arms are identical the mean_diff should be
-    # exactly zero (modulo numerical noise) — independent-samples
-    # arithmetic on shared-seed cells gives identical per-seed
-    # contributions to both arms.
-    assert abs(result.mean_diff) < 1e-9, (
-        f'mean_diff={result.mean_diff} — expected exact 0.0 under '
-        'identical SCM + shared seeds'
+
+    # 1. Z-score on framework SE — H0 truth, 4σ window.
+    assert abs(result.mean_diff / result.mean_diff_se) < 4.0, (
+        f'|mean_diff / mean_diff_se| = '
+        f'{abs(result.mean_diff / result.mean_diff_se):.4f} '
+        '> 4σ under H0 — either mean_diff inflated or SE collapsed'
+    )
+
+    # 2. Framework Welch SE matches closed-form within
+    #    chi-squared-CV-derived bound (15% per arm at n=60,
+    #    inflated to 20% on the SE for the variance-sum).
+    assert (
+        0.80 * se_closed_form <= result.mean_diff_se
+        <= 1.20 * se_closed_form
+    ), (
+        f'mean_diff_se={result.mean_diff_se:.4f} '
+        f'closed_form_se={se_closed_form:.4f} '
+        f'(ratio={result.mean_diff_se / se_closed_form:.3f})'
+    )
+
+    # 3. Cohen's d is conservatively bounded under H0.
+    d = result.standardized_effect
+    assert abs(d) < 0.5, (
+        f'standardized_effect={d:.4f} — expected ≈ 0 under '
+        'identical-SCM H0 (4σ window is ~0.73 at n=60)'
+    )
+
+    # 4. NaN pairing_rho when seeds are disjoint across arms
+    #    (n_paired = 0 < 5 → framework returns NaN).
+    assert result.n_paired == 0, (
+        f'n_paired={result.n_paired} — expected 0 under '
+        'disjoint per-arm seed ranges'
+    )
+    assert math.isnan(result.pairing_rho), (
+        f'pairing_rho={result.pairing_rho!r} — expected NaN at '
+        'n_paired=0 (no shared keys, ρ undefined)'
     )
 
 

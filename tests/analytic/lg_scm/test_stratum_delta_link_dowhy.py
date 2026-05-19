@@ -56,8 +56,6 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping
 
-import corroborate.analyses  # noqa: F401  # pyright: ignore[reportUnusedImport]
-
 from corroborate.analyses.dowhy.stratum_delta_link_dowhy import (
     stratum_delta_link_dowhy,
 )

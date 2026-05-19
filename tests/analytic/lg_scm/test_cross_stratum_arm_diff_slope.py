@@ -155,13 +155,17 @@ def test_cross_stratum_arm_diff_slope_min_strata_floor_returns_nan() -> None:
     assert math.isnan(result.p_value)
 
 
-def test_cross_stratum_arm_diff_slope_constant_target_returns_nan_or_zero() -> None:
-    """Flip the predictor/target roles — y_mean as predictor, x_mean
-    as target. Δ_x is zero across all strata (treatment doesn't
-    affect X), so the slope is unidentified; ρ should be near
-    zero (NaN-aware Spearman on a constant vector returns NaN)
-    OR a small number — the framework treats a near-constant
-    target as unidentified."""
+def test_cross_stratum_arm_diff_slope_constant_target_returns_nan() -> None:
+    """Use x_mean as target. Under shared seeds, X is sampled
+    BEFORE the arm-distinguishing β_xz arrow → per-seed x_mean is
+    bit-identical across arms → Δ_x = mean(t.x) − mean(b.x) = 0.0
+    EXACTLY at every stratum (no sampling noise — float64
+    subtraction of equal sums). scipy.stats.spearmanr on a zero-
+    variance vector returns NaN. The contract is NaN, not "near
+    zero" — a bug that produced a finite ρ from a constant column
+    would silently pass a "ρ ≈ 0 means no effect" claim where the
+    truth is "ρ undefined".
+    """
     cells = _build_cells()
     result = cross_stratum_arm_diff_slope.fn(
         cells,
@@ -172,11 +176,11 @@ def test_cross_stratum_arm_diff_slope_constant_target_returns_nan_or_zero() -> N
         stratify_by=('env_name',),
         min_strata=4,
     )
-    # Under shared seeds, Δ_x = 0 EXACTLY at every stratum
-    # (X is sampled before the arm-distinguishing β_xz arrow).
-    # The Spearman ρ is then ill-defined — scipy returns NaN
-    # in this case.
-    assert math.isnan(result.rho) or abs(result.rho) < 0.5, (
-        f'rho={result.rho:.4f} — expected NaN or near-zero '
-        'when Δ_x is exactly zero across strata'
+    assert math.isnan(result.rho), (
+        f'rho={result.rho!r} — expected NaN under exact-zero Δ_x '
+        '(constant-vector spearmanr is undefined)'
+    )
+    assert math.isnan(result.p_value), (
+        f'p_value={result.p_value!r} — expected NaN paired with '
+        'NaN rho on constant input'
     )

@@ -183,6 +183,7 @@ reportUnusedFunction = "none"
 paths_to_mutate = [
     # paired/
     "src/corroborate/analyses/paired/arm_mean_diff.py",
+    "src/corroborate/analyses/paired/factorial_2x2.py",
     # spearman/
     "src/corroborate/analyses/spearman/partial_spearman.py",
     "src/corroborate/analyses/spearman/stratum_panel_jci_spearman.py",
@@ -197,11 +198,23 @@ paths_to_mutate = [
     "src/corroborate/analyses/dowhy/stratum_delta_link_dowhy.py",
     "src/corroborate/analyses/dowhy/stratum_baseline_predictor_link_dowhy.py",
     "src/corroborate/analyses/dowhy/paired_continuous_do_dowhy.py",
+    # diagnostic/
+    "src/corroborate/analyses/diagnostic/tautology_audit.py",
+    "src/corroborate/analyses/diagnostic/verdict_distribution.py",
     # stats / measurables / graph (still at pre-consolidation paths)
     "src/corroborate/stats/effect_size.py",
     "src/corroborate/measurables/redundancy_check.py",
     "src/corroborate/graph/discovery.py",
 ]
+# Pre-consolidation `paths_to_mutate` also covered `paired_g` /
+# `paired_g_per_burst` / `paired_link_per_burst` /
+# `mundlak_paired_g_per_burst` / `mundlak_decomposition` /
+# `meta_regression_paired_g` / `meta_regression_per_burst` /
+# `dowhy/dowhy.py`. These remain at well-defined post-consolidation
+# paths and have lg_scm tests, but the paired-g family is off-
+# limits in RL substrate bridges (CLAUDE.md §"Methodology debt")
+# so they're a lower priority for mutate-coverage; re-add when
+# the analytic suite grows tighter closed-form coverage on them.
 # `also_copy`: mutmut copies `paths_to_mutate` + `also_copy` into
 # `mutants/`. Copy ONLY the framework source — the RL substrate's
 # `tests/conftest.py` would otherwise collide with the framework's
