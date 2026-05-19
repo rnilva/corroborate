@@ -55,8 +55,11 @@ import zlib
 from collections.abc import Mapping, Sequence
 
 import numpy as np
+import numpy.typing as npt
+import pytest
 
 from corroborate.analyses.spearman.partial_spearman import partial_spearman
+from corroborate.measurables import Measurable
 from corroborate.measurables.reductions import from_key, reduce_axis
 
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
@@ -317,7 +320,10 @@ def _add_per_burst_noise_column(
     cells: Sequence[Mapping[str, object]], *,
     key: str = 'noise_indep_per_burst',
     sigma: float = 1.0,
-) -> tuple[list[Mapping[str, object]], object]:
+) -> tuple[
+    list[Mapping[str, object]],
+    Measurable[Mapping[str, object], npt.NDArray[np.floating]],
+]:
     """Stamp each cell with an independent per-burst noise array
     `(n_bursts,)` at the given top-level key, and return the
     Measurable that reads it. Statistically independent of every
@@ -422,8 +428,6 @@ def test_mixed_str_and_measurable_inputs_raises() -> None:
     """Mixing `str` and `Measurable` across x/y/conditioning is a
     bridge-author bug — silent coercion would flatten or broadcast
     incorrectly. The granularity detector raises TypeError."""
-    import pytest
-
     cells = _build_phased_cells()
     with pytest.raises(TypeError, match='must all be str.*OR all Measurable'):
         partial_spearman.fn(

@@ -19,9 +19,9 @@ The two-layer architecture this primitive enables:
   one bridge that consumed it — `chain_amplifier_link_active_in_bounded_q` —
   was cut as leverage-driven, and the canonical cross-stratum
   dose-response shape settled on Spearman-with-LOO via
-  `cross_stratum_arm_diff_slope`. Removed 2026-05-19 as orphan
-  framework surface; resurrect from git history if a future
-  bridge prefers R²-framing over rank-correlation.)
+  `cross_stratum_arm_diff_slope`. Removed as orphan framework
+  surface; resurrect from git history if a future bridge prefers
+  R²-framing over rank-correlation.)
 
 **Why this design.** Per-pair Δs (`paired_g`, `paired_link_*`)
 assume vanilla and DDQN cells share a unit through pairing.
