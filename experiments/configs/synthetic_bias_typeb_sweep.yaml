@@ -60,7 +60,7 @@ defaults:
     hidden: [32, 32]
 
 interventions:
-  - name: ddqn_vs_vanilla
+  - name: "ddqn_vs_vanilla_{from_env: name}"
     arms:
       - []
       - - slot_path: bootstrap

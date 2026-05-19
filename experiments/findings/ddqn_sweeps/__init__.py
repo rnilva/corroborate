@@ -33,6 +33,7 @@ from experiments.findings.ddqn_sweeps import (
     finding_pc_cross_env_smoothness,
     finding_snake_clip_ratchet_regime,
     finding_snake_clip_ratchet_regime_g0999,
+    finding_synthetic_bias_typeb,
     finding_asterix_gamma_999_harm,
     finding_breakout_gamma_999_help_underpowered,
     finding_ddqn_clip_argmax_harm_chain,
@@ -79,6 +80,9 @@ from experiments.findings.ddqn_sweeps.action_duplicate_fa_mechanism import (
 from experiments.findings.ddqn_sweeps.lambda_a_mediation import (
     BRIDGES as _LAMBDA_A_MEDIATION,
 )
+from experiments.findings.ddqn_sweeps.synthetic_bias_typeb import (
+    BRIDGES as _SYNTHETIC_BIAS_TYPEB,
+)
 from experiments.findings.ddqn_sweeps.outcome_regime_g999_cross_env import (
     BRIDGES as _OUTCOME_REGIME_G999_CROSS_ENV,
 )
@@ -110,6 +114,7 @@ BRIDGES = (
     *_PC_CROSS_ENV_SMOOTHNESS,
     *_ACTION_DUPLICATE_FA_MECHANISM,
     *_LAMBDA_A_MEDIATION,
+    *_SYNTHETIC_BIAS_TYPEB,
     *_OUTCOME_REGIME_G999_CROSS_ENV,
     *_SNAKE_CLIP_RATCHET_REGIME,
     *_SNAKE_CLIP_RATCHET_REGIME_G0999,
@@ -136,6 +141,7 @@ FINDINGS = (
     finding_asterix_lambda_a_mechanism,
     finding_snake_clip_ratchet_regime,
     finding_snake_clip_ratchet_regime_g0999,
+    finding_synthetic_bias_typeb,
 )
 
 
