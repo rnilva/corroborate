@@ -1,4 +1,4 @@
-"""Polarity-conditional mediation cluster — REFUTED at canonical.
+"""Polarity-conditional mediation cluster.
 
 The hypothesis: DDQN's outcome benefit is mediated through jens
 ONLY on REACH-polarity envs; on SURVIVE-polarity envs no
@@ -58,26 +58,30 @@ from experiments.findings.ddqn.polarity_conditional_mediation import (
 )
 
 
-# 2026-05-19: cluster verdict drifted from REFUTED → SUPPORTED
-# after the framework fix in commit `919f73f` (NO_EFFECT under
-# predicted_direction='null' now correctly stamps as
-# corroboration, not refutation). Current verdicts:
+# 2026-05-19 (post `919f73f` revert): the cluster fires REFUTED
+# under the framework's documented null-prediction convention
+# (`core.hypothesis.PredictedDirection`): HELD means
+# "prediction confirmed"; NO_EFFECT under `predicted_direction=
+# 'null'` is the pytest-xpass analog — an effect WAS observed
+# when none was predicted, a genuine refutation. Current
+# verdicts:
 #   bg_outcome_link_held_negative__reach_envs: HELD
-#     (ρ_pool=-0.105, n_strata=4 — sign correct)
-#   bg_outcome_fully_mediated_by_jens__reach_envs: NO_EFFECT
-#     under predicted_direction='null' → admit-equivalent.
-#   bg_outcome_link_null__survive_envs: NO_EFFECT under null
-#     → admit-equivalent.
-# Cluster: all 3 admit → SUPPORTED. The polarity-conditional
-# mediation claim (full mediation on REACH; no link on SURVIVE)
-# is now framework-supported at canonical scope. The earlier
-# "REFUTED" verdict was a framework artifact, not an empirical
-# walk-back. Substantive caveat: per-env magnitudes on REACH
-# remain below the +0.2 substantive threshold (ρ_pool=-0.10
-# vs author's earlier -0.18 reading); the pooled link is
-# SUPPORTED in sign + (now) framework-typed verdict, but
-# per-env magnitude weakness from the previous docstring stands.
-EXPECTED: ClusterVerdict = ClusterVerdict.SUPPORTED
+#     (ρ_pool sign correct, exceeds threshold).
+#   bg_outcome_fully_mediated_by_jens__reach_envs: HELD
+#     (|ρ_partial| < 0.2 — null mediation confirmed).
+#   bg_outcome_link_null__survive_envs: NO_EFFECT — the null
+#     prediction FAILS at this cohort (pooled |ρ| ≥ 0.2,
+#     p < 1e-8). DDQN's clip propagation prediction
+#     (no marginal link on SURVIVE) is empirically refuted at
+#     the canonical SURVIVE cohort.
+# The empirical walk-back: SURVIVE-polarity envs DO show a
+# substantive marginal bg→outcome link on this cache state —
+# the "no link to mediate" reading of `findings_clip_to_trained_q_propagation`
+# doesn't survive when the SURVIVE bridge has adequate cells.
+# The polarity-conditional mediation framing remains under-
+# corroborated at canonical scope; the REACH side admits, but
+# the SURVIVE side's empirical premise (the null link) fails.
+EXPECTED: ClusterVerdict = ClusterVerdict.REFUTED
 
 
 BLOCKED_ON: str | None = None

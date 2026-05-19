@@ -57,6 +57,7 @@ from corroborate.bridge.predicates import (
 from corroborate.bridge.verdict import (
     RefutationClass,
     Verdict,
+    null_predict_verdict,
 )
 
 __all__ = [
@@ -82,6 +83,7 @@ __all__ = [
     'finite_lt',
     'is_endogenous',
     'no_predicted_direction',
+    'null_predict_verdict',
     'partition_aggregate',
     'resolved_source',
 ]

@@ -18,9 +18,13 @@ to `finding_lambda_a_mediation`'s cross-env σ_Λ_a moderation
 claim (which is POWER_INSUFFICIENT at n=8).
 
 The DDQN bridge declares `predicted_direction='null'` and its
-NO_EFFECT (NULL_EFFECT) verdict is stamped as corroboration by
-the framework — both bridges admit their respective predictions,
-cluster composes to SUPPORTED."""
+body returns `Verdict.HELD` when the null prediction is
+confirmed (|ρ| ≤ null_threshold) — per the framework convention
+at `core.hypothesis.PredictedDirection`: HELD always means
+"prediction confirmed," uniform across the four
+PredictedDirection shapes. Both bridges admit their respective
+predictions (vanilla-side HELD on the directional channel +
+DDQN-side HELD on the null), cluster composes to SUPPORTED."""
 from __future__ import annotations
 
 from corroborate.bridge.bridge import Bridge

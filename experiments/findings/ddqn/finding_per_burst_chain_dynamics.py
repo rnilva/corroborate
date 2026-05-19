@@ -47,24 +47,24 @@ from experiments.findings.ddqn.bias_correction import (
 
 # Empirical result on rebuilt cache (2026-05-13, n=4730 cells):
 #   bg_per_burst → entropy_per_burst: HELD (positive, predicted)
-#   entropy_per_burst → outcome_per_burst: HELD (null-pooled,
-#     consistent with sign-mixed by env)
-#   bg_per_burst → outcome_per_burst: NO_EFFECT (NULL_EFFECT).
-#     The pooled ρ is near zero — the bridge's NULL prediction
-#     is corroborated AT THE POOLED LEVEL even though per-env
-#     reveals heterogeneity (Acrobot strong NEGATIVE ρ ≈ −0.8,
-#     mostly cancelled when pooled with sign-mixed other envs).
-# Cluster verdict = SUPPORTED post commit `919f73f` (framework
-# now correctly stamps NO_EFFECT (NULL_EFFECT) under
-# predicted_direction='null' as corroboration). Pre-fix the
-# cluster fired REFUTED because the null-prediction
-# admit-equivalence wasn't recognised — EXPECTED was pinned
-# REFUTED to match the buggy stamping. The literal-bridge-verdict
-# reading is: all 3 bridges admit their respective predictions
-# (HELD, HELD, NO_EFFECT under null prediction) → SUPPORTED.
-# The per-env heterogeneity Acrobot caveat is a separate
-# question that a future per-env bridge could test specifically.
-EXPECTED: ClusterVerdict = ClusterVerdict.SUPPORTED
+#   entropy_per_burst → outcome_per_burst: NO_EFFECT — the null
+#     prediction failed: pooled |ρ| ≥ 0.2 (an effect WAS observed
+#     when none was predicted, the xpass case per
+#     `core.hypothesis.PredictedDirection`). Per-env heterogeneity
+#     (Acrobot strong negative ρ ≈ −0.8 vs sign-mixed cohort)
+#     drives a pooled magnitude that exceeds the null band.
+#   bg_per_burst → outcome_per_burst: NO_EFFECT — same xpass
+#     failure mode at this cohort.
+# Cluster verdict: REFUTED per the framework convention. With
+# the null-prediction bridges' bodies returning HELD only when
+# |ρ| < null_threshold (per `partial_spearman_null_verdict`),
+# the cluster admits only when each member's prediction is
+# confirmed; the two NO_EFFECT members propagate to REFUTED.
+# Pre-919f73f-revert, the cluster fired REFUTED for the same
+# reason; the 919f73f band-aid temporarily made NO_EFFECT under
+# null admit-equivalent, which we've now reverted to the
+# framework's documented intent.
+EXPECTED: ClusterVerdict = ClusterVerdict.REFUTED
 
 
 BLOCKED_ON: str | None = None

@@ -68,7 +68,6 @@ if TYPE_CHECKING:
     # Forward import: `claim_bridge` depends on `causal_graph`
     # transitively via verdict; lazy-typed to avoid the cycle.
     from corroborate.bridge.bridge import Bridge as ClaimBridge
-    from corroborate.core.hypothesis import PredictedDirection
 
 
 # ============ Direction — sign or predicate of an edge ============
@@ -421,12 +420,8 @@ class PostEvalEntry:
     extent_hash: int
 
 
-def _stamp_level(
-    tier: Tier,
-    verdict: Verdict,
-    predicted_direction: 'PredictedDirection | None' = None,
-) -> EvidentiaryLevel:
-    """Map `(Tier, Verdict, predicted_direction)` → `EvidentiaryLevel`.
+def _stamp_level(tier: Tier, verdict: Verdict) -> EvidentiaryLevel:
+    """Map `(Tier, Verdict)` → `EvidentiaryLevel`.
 
     Dispatch via `Verdict.is_corroboration()` /
     `Verdict.is_refutation()` — the enum's own predicates —
@@ -434,36 +429,36 @@ def _stamp_level(
     rungs (per verdict-enum semantics: both are positive
     evidence the claim holds at population level; the
     scope-flag refines uniformity but not corroboration).
-    POWER_INSUFFICIENT, INVARIANT_VIOLATION, INADMISSIBLE all
-    stamp as 'unevaluated' — per verdict.py:71,
-    INVARIANT_VIOLATION means the test was out of scope, NOT a
-    refutation.
+    NO_EFFECT stamps as 'refuted'. POWER_INSUFFICIENT,
+    INVARIANT_VIOLATION, INADMISSIBLE all stamp as
+    'unevaluated' — per verdict.py:71, INVARIANT_VIOLATION
+    means the test was out of scope, NOT a refutation.
 
-    NO_EFFECT is conditional on `predicted_direction`:
-
-    - `predicted_direction == 'null'`: the bridge predicted the
-      effect is ≈ 0 and the test confirmed it. The prediction
-      succeeded → corroboration (`correlational` /
-      `causal_one_sided`), NOT refutation. This is symmetric
-      with HELD for non-null predictions: a successful
-      prediction is corroboration regardless of which direction
-      the author predicted.
-    - Any other `predicted_direction` (or `None`, the legacy
-      default): NO_EFFECT means the prediction failed →
-      `refuted`. Covers both `NULL_EFFECT` (observed ≈ 0 vs
-      predicted-non-null) and `SIGN_FLIP` (observed wrong-
-      direction) under the existing refinement classes."""
+    `predicted_direction` is NOT consulted here. Per the
+    framework convention documented on
+    `core.hypothesis.PredictedDirection`, the bridge body is
+    responsible for the verdict-mapping under each prediction
+    shape: `predicted_direction='null'` + observed null → bridge
+    returns `Verdict.HELD` (prediction confirmed); + observed
+    effect → `Verdict.NO_EFFECT` (the unexpected-pass / xpass
+    analog — the prediction failed). HELD always means
+    "prediction confirmed" regardless of which direction the
+    author predicted; NO_EFFECT always means "prediction
+    failed → genuine refutation". The substrate's verdict
+    helpers (`partial_spearman_null_verdict`,
+    `native_diff_null_verdict`, `spearman_rho_verdict` with
+    `sign=0`, `null_predict_verdict`, …) encode this once.
+    `_stamp_level` is verdict-only — keeping it free of
+    `predicted_direction` means the verdict enum's two
+    semantic predicates (`is_corroboration` / `is_refutation`)
+    are the single source of truth at the graph-stamping
+    boundary."""
     if verdict.is_corroboration():
         return (
             'causal_one_sided' if tier is Tier.INTERVENTIONAL
             else 'correlational'
         )
     if verdict.is_refutation():
-        if predicted_direction == 'null':
-            return (
-                'causal_one_sided' if tier is Tier.INTERVENTIONAL
-                else 'correlational'
-            )
         return 'refuted'
     return 'unevaluated'
 
@@ -485,21 +480,8 @@ def evaluated_graph(
     Per HYPOTHESIS_AS_GRAPH.md: the resulting graph IS the
     hypothesis under the principle's definition
     `Hypothesis = (V, E, evidence(E))`. Cluster-shaped queries
-    on this graph use `clusters_by_extent` + `cluster_verdict`.
-
-    `Bridge.predicted_direction` is threaded into `_stamp_level`
-    so NO_EFFECT under `predicted_direction='null'` stamps as
-    corroboration (the null prediction succeeded), not
-    'refuted'. Authors who pair a directional bridge with a
-    null-predicting sibling (within-arm asymmetry pattern) get
-    a cluster that admits when both predictions land —
-    previously the cluster fired REFUTED because the null bridge
-    was mis-stamped."""
-    bridge_list = tuple(bridges)
-    predicted_directions: dict[str, 'PredictedDirection | None'] = {
-        b.name: b.predicted_direction for b in bridge_list
-    }
-    g = authored_graph(bridge_list)
+    on this graph use `clusters_by_extent` + `cluster_verdict`."""
+    g = authored_graph(bridges)
     new_edges: list[Edge[str, BridgeEdge]] = []
     for e in g.edges:
         pe = post_eval.get(e.metadata.bridge_name)
@@ -508,11 +490,7 @@ def evaluated_graph(
             continue
         new_meta = replace(
             e.metadata,
-            evidentiary_level=_stamp_level(
-                e.metadata.tier,
-                pe.verdict,
-                predicted_directions.get(e.metadata.bridge_name),
-            ),
+            evidentiary_level=_stamp_level(e.metadata.tier, pe.verdict),
             extent_hash=pe.extent_hash,
         )
         new_edges.append(replace(e, metadata=new_meta))

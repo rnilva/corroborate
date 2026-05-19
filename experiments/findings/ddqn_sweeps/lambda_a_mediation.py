@@ -16,8 +16,10 @@ predictor sits in the causal graph at γ=0.999 cross-env:
     stratum Δ partial-Spearman ρ(Δ_Λ_a, Δ_out | Δ_jens). DDQN's
     effect on per-cell Λ_a is small (Asterix 2.903 → 2.811,
     Breakout 1.652 ≈ 1.654) — Δ_Λ_a ≈ 0 by construction, so the
-    within-cell mediator path is inactive. Predicted NO_EFFECT
-    (clean null band, |ρ| < null_threshold).
+    within-cell mediator path is inactive. Predicted null
+    (`predicted_direction='null'`); HELD when |ρ| <
+    null_threshold (null confirmed per the framework convention
+    at `core.hypothesis.PredictedDirection`).
 
 The cluster's load-bearing claim: σ_Λ_a operates at the env-
 aggregate level (moderation; CLAUDE.md §"Moderation vs
@@ -247,10 +249,14 @@ def lambda_a_does_not_mediate_outcome__cross_stratum_g0999(
     — both predicted to land in the moderator-not-mediator
     configuration.
 
-    HELD-negative branch covered for completeness: if Δ_Λ_a
-    DOES drive Δ_out (ρ ≤ −held_negative_rho), the mediation
-    reading would be empirically supported and the
-    moderator-not-mediator framing falsified."""
+    Under `predicted_direction='null'`: HELD when the null
+    prediction is confirmed (|ρ| < null_threshold). NO_EFFECT
+    (xpass, `SIGN_FLIP`) when |ρ| ≥ held_negative_rho with the
+    wrong (negative) sign — would mean Δ_Λ_a DOES drive Δ_out
+    after all, falsifying the moderator-not-mediator framing
+    (the predicted null fails — an effect was observed). The
+    null-band-confirmed case is the framework's HELD per
+    `core.hypothesis.PredictedDirection`'s docstring."""
     del treatment_arm, baseline_arm, predictor, target, confound
     del stratify_by, min_seeds_per_arm
     if cross_stratum_arm_diff_partial_spearman.n_strata < min_strata:
@@ -258,10 +264,10 @@ def lambda_a_does_not_mediate_outcome__cross_stratum_g0999(
     rho = cross_stratum_arm_diff_partial_spearman.rho
     if math.isnan(rho):
         return Verdict.POWER_INSUFFICIENT, None
-    if rho <= -held_negative_rho:
-        return Verdict.HELD, None
     if abs(rho) < null_threshold:
-        return Verdict.NO_EFFECT, RefutationClass.NULL_EFFECT
+        return Verdict.HELD, None  # null prediction confirmed
+    if rho <= -held_negative_rho:
+        return Verdict.NO_EFFECT, RefutationClass.SIGN_FLIP
     return Verdict.POWER_INSUFFICIENT, None
 
 
@@ -308,18 +314,18 @@ def joint_bias_geometry_mediates_arm_outcome__cross_env_g0999(
 
     Predicted direction: NULL (full mediation by the triplet →
     partial-ρ ≈ 0). HELD if |ρ_partial| ≤ null_threshold (joint
-    triplet absorbs the arm-effect). NO_EFFECT (SIGN_FLIP) if
-    |ρ_partial| ≥ held_strong_rho with the same sign as marginal
-    arm → outcome — would say the conditioning REVERSES the
-    interpretation (an algebraic curiosity, not a substantive
-    mediation refutation).
+    triplet absorbs the arm-effect → null prediction confirmed).
+    NO_EFFECT (xpass, `SIGN_FLIP`) if |ρ_partial| ≥
+    held_strong_rho — the arm-effect SURVIVES the joint
+    conditioning, so the predicted full mediation is refuted
+    (an effect was observed when none was predicted).
 
     Empirical evidence: on the 5-env MinAtar-heavy subset (n=360
     cells) the joint triplet shrinks |ρ| 0.273 → 0.094 (66%
     absorption). On the full 8-env panel (n=1140) only 17%
     absorption — joint mediation is env-cohort dependent. The
-    cluster-finding's BLOCKED_ON predicts NULL_EFFECT under
-    k=4 panel extension (Asterix's special case dilutes)."""
+    cluster-finding's BLOCKED_ON predicts admit under k=4 panel
+    extension (Asterix's special case dilutes)."""
     del x, y, conditioning, stratify_by, min_stratum_size
     if partial_spearman.n_strata < min_strata:
         return Verdict.POWER_INSUFFICIENT, None
@@ -327,9 +333,9 @@ def joint_bias_geometry_mediates_arm_outcome__cross_env_g0999(
     if math.isnan(rho):
         return Verdict.POWER_INSUFFICIENT, None
     if abs(rho) <= null_threshold:
-        return Verdict.NO_EFFECT, RefutationClass.NULL_EFFECT
+        return Verdict.HELD, None  # null prediction confirmed
     if abs(rho) >= held_strong_rho:
-        return Verdict.HELD, None
+        return Verdict.NO_EFFECT, RefutationClass.SIGN_FLIP
     return Verdict.POWER_INSUFFICIENT, None
 
 
@@ -442,10 +448,11 @@ def ddqn_lambda_a_does_not_predict_outcome__within_arm_g0999(
     partial | jens ρ=+0.006 p=0.89 (clean null) — DDQN's outcome
     is uncoupled from per-cell Λ_a after controlling for jens.
 
-    Predicted NULL_EFFECT (|ρ| ≤ null_threshold).
-    HELD-equivalent for the dual claim if |ρ| ≥ held_strong_rho
-    would say DDQN's outcome IS coupled to Λ_a — would refute
-    the bias-asymmetry-neutralization reading."""
+    Predicted null. HELD (null prediction confirmed) when |ρ| ≤
+    null_threshold. NO_EFFECT (xpass, `SIGN_FLIP`) if |ρ| ≥
+    held_strong_rho would say DDQN's outcome IS coupled to Λ_a
+    — would refute the bias-asymmetry-neutralization reading
+    (an effect was observed when none was predicted)."""
     del x, y, conditioning, stratify_by, min_stratum_size
     if partial_spearman.n_strata < min_strata:
         return Verdict.POWER_INSUFFICIENT, None
@@ -453,9 +460,9 @@ def ddqn_lambda_a_does_not_predict_outcome__within_arm_g0999(
     if math.isnan(rho):
         return Verdict.POWER_INSUFFICIENT, None
     if abs(rho) <= null_threshold:
-        return Verdict.NO_EFFECT, RefutationClass.NULL_EFFECT
+        return Verdict.HELD, None  # null prediction confirmed
     if abs(rho) >= held_strong_rho:
-        return Verdict.HELD, None
+        return Verdict.NO_EFFECT, RefutationClass.SIGN_FLIP
     return Verdict.POWER_INSUFFICIENT, None
 
 
