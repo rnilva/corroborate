@@ -28,12 +28,13 @@ EXPECTED: ClusterVerdict = ClusterVerdict.UNDERPOWERED
 
 
 BLOCKED_ON: str | None = (
-    'Acrobot/CartPole rs=0.1 null sides are POWER_INSUFFICIENT '
-    '(CIs span ±0.2 at n=60). Theoretical claim asserts SUPPORTED '
-    'envelope; data needs ~n=240 per env to land nulls at HELD. '
-    'When the cache gains those cells, this finding will drift '
-    'from UNDERPOWERED → SUPPORTED — author update: flip EXPECTED '
-    'and clear BLOCKED_ON.'
+    '2026-05-19 partial-DRIFT: ingest of rs01_followup_acrobot_cartpole '
+    '(n=90/arm, restored from cloud) brought CartPole to n=120 → '
+    'CartPole rs=0.1 null HELD (md=+0.077, CI ⊂ ±0.2). Acrobot still '
+    'POWER_INSUFFICIENT at n=120 (md=+0.094, CI slightly exceeds '
+    '±0.2 ceiling). Envelope needs Acrobot rs=0.1 to land HELD before '
+    'flipping to SUPPORTED — one more n=30 batch should suffice given '
+    'current SE. When it lands, flip EXPECTED and clear BLOCKED_ON.'
 )
 
 
