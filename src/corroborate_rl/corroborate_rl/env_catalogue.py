@@ -1687,75 +1687,96 @@ from corroborate_rl import jumanji_envs as _jumanji_envs  # noqa: F401, E402
 
 def _register_synthetic_bias_typeb_panel() -> None:
     """Register the synthetic bias Type-A/B controlled-substrate
-    envs.
+    envs (v2).
 
-    The naming convention encodes the structural knobs in the env
-    name (K, n_states) plus the swept knobs (rvs = reward variance
-    scale, sp = reward sparsity, ns = noise scale, h = horizon).
-    Each named env is fixed-config; sweep yamls list one cell per
-    named env. This mirrors the per-env naming pattern MinAtar
-    uses (Asterix-MinAtar, Breakout-MinAtar) rather than the
-    parameterised-single-env approach.
+    v1 → v2 redesign rationale lives in
+    `synthetic_bias_typeb.py`'s module docstring + the
+    `/tmp/synthetic_env_roast.md` review of v1. v1's 12 envs were
+    "TypeBChain-K4-rvs{rvs}-sp{sp}-ns{ns}-synthetic"; v2 replaces
+    them with a different shape entirely (the rvs/sp/ns axes were
+    confounded and the env transitions were action-independent
+    bandit-shaped).
 
-    Phase 1 panel (n=12): 3 reward_variance_scale × 2 sparsity ×
-    2 reward_noise_scale levels at K=4, n_states=4, h=64. Designed
-    to span the Asterix-like (high rvs, low sparsity, low noise)
-    → Breakout-like (low rvs, high sparsity, high noise) axis.
-    The TRUE Var_a[Q*] is (rvs × sp / (1 - γ))² up to a state-
-    independent constant; γ varies via the substrate's standard γ
-    sweep so we get the (env-feature × γ) cross-axis.
+    v2 naming convention encodes the two structural axes:
+    "TypeBChainV2-K{K}-L{n_states}-alpha{anisotropy_alpha}-synthetic"
 
-    Reward bounds: per-step reward ∈ [-rvs - 3·ns, +rvs + 3·ns]
-    (3σ Gaussian tail); registered as ±(rvs + 3*ns)."""
+    The structural axes are:
+    - n_states (L): FA-capacity axis. Larger L → 32-unit MLP
+      becomes capacity-bound on the K × L distinct Q* entries.
+    - anisotropy_alpha (α): Type-A vs Type-B axis. α < 0 quiets
+      the best action's reward noise (Type-A: DDQN's clip
+      denoises non-best actions → help). α > 0 amplifies the
+      best action's noise (Type-B: the noise IS the policy-
+      informative discriminator; DDQN's symmetric clip kills it
+      → harm).
+
+    Pinned per-env defaults (NOT swept):
+    - K = 4 actions.
+    - mu_best = 0.05 (best-action mean reward).
+    - sigma_base = 0.5 (baseline per-action noise SD).
+    - horizon = 128 steps per episode.
+
+    The γ axis is swept via the YAML intervention's
+    `base: {gamma: ...}` mechanism, NOT baked into the env name —
+    γ is a substrate knob, not an env structural property.
+
+    Reward bounds: per-step ∈ [-3·sigma_max, +mu_best + 3·sigma_max]
+    where sigma_max = sigma_base × exp(|α|) for α > 0 ⇒
+    sigma_base × exp(α). For the chosen α range (|α| ≤ 0.5),
+    sigma_max ≤ sigma_base × e^0.5 ≈ 0.82. Registered bounds use
+    sigma_max = sigma_base * 2 (cover α up to ~0.69 with safety
+    margin), giving r_min/r_max = ∓3.0.
+
+    Panel: 2 L levels × 3 α levels = 6 named envs. Sweep YAML
+    multiplies by 3 γ levels × 2 arms × n_seeds.
+    """
     from corroborate_rl.synthetic_bias_typeb import (
         make_synthetic_bias_typeb,
     )
 
-    # Phase 1 panel — 12 cells spanning rvs ∈ {0.2, 1.0, 3.0} ×
-    # sparsity ∈ {0.2, 1.0} × noise ∈ {0.1, 0.5}.
-    rvs_values = (0.2, 1.0, 3.0)
-    sparsity_values = (0.2, 1.0)
-    noise_values = (0.1, 0.5)
-    n_states = 4
+    # v2 structural panel: 2 × 3 = 6 envs.
+    n_states_values = (16, 64)
+    alpha_values = (-0.5, 0.0, 0.5)
     n_actions = 4
-    horizon = 64
+    horizon = 128
+    mu_best = 0.05
+    sigma_base = 0.5
 
-    for rvs in rvs_values:
-        for sp in sparsity_values:
-            for ns in noise_values:
-                # Naming: "TypeBChain-K4-rvs1.0-sp1.0-ns0.1-synthetic"
-                name = (
-                    f"TypeBChain-K{n_actions}-rvs{rvs}-sp{sp}-ns{ns}"
-                    f"-synthetic"
-                )
+    for n_states in n_states_values:
+        for alpha in alpha_values:
+            # Naming: "TypeBChainV2-K4-L16-alpha0.0-synthetic"
+            name = (
+                f"TypeBChainV2-K{n_actions}-L{n_states}"
+                f"-alpha{alpha}-synthetic"
+            )
 
-                def make(
-                    rvs: float = rvs, sp: float = sp,
-                    ns: float = ns,
-                ) -> 'tuple[Env, EnvParams]':
-                    env, params = make_synthetic_bias_typeb(
-                        n_states=n_states,
-                        n_actions=n_actions,
-                        reward_variance_scale=rvs,
-                        reward_sparsity=sp,
-                        reward_noise_scale=ns,
-                        max_steps_in_episode=horizon,
-                    )
-                    return env, params  # type: ignore[return-value]
-
-                r_bound = float(rvs + 3.0 * ns)
-                _register_synthetic(
-                    name=name,
-                    factory=make,
+            def make(
+                n_states: int = n_states,
+                alpha: float = alpha,
+            ) -> 'tuple[Env, EnvParams]':
+                env, params = make_synthetic_bias_typeb(
+                    n_states=n_states,
                     n_actions=n_actions,
-                    observation_shape=(n_states,),
-                    horizon=horizon,
-                    r_min=-r_bound,
-                    r_max=+r_bound,
-                    reward_regime=(
-                        'event_triggered' if sp < 1.0 else 'per_step'
-                    ),
+                    mu_best=mu_best,
+                    sigma_base=sigma_base,
+                    anisotropy_alpha=alpha,
+                    max_steps_in_episode=horizon,
                 )
+                return env, params  # type: ignore[return-value]
+
+            # Per-step reward ∈ [-3σ_max, mu_best + 3σ_max]; with
+            # sigma_base=0.5 × exp(α≤0.5) ≈ 0.82, 3σ ≈ 2.5.
+            # Round to ±3.0 with mu_best margin.
+            _register_synthetic(
+                name=name,
+                factory=make,
+                n_actions=n_actions,
+                observation_shape=(n_states,),
+                horizon=horizon,
+                r_min=-3.0,
+                r_max=+3.0 + mu_best,
+                reward_regime='per_step',
+            )
 
 
 _register_synthetic_bias_typeb_panel()
