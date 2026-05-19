@@ -1,154 +1,138 @@
-"""Synthetic bias Type-A/B controlled-substrate env (v2).
+"""Synthetic bias Type-A/B controlled-substrate env (v3).
 
-v1 → v2 redesign rationale (see `/tmp/synthetic_env_roast.md`
-for the brutal review of v1). v1 was "a bandit in a tuxedo":
-action-independent transitions (`s' = (s+1) mod L`) made
-`γ·max_b Q*(s', b)` action-independent, so the max-of-K bias
-contributed a constant to every action's Q-value that cancelled
-out of `argmax`. No chain-amplified bias preserved or destroyed.
-v1 also conflated `reward_variance_scale` with |Q|, Δ_v, AND
-Var_a[Q*] in lockstep, pinned γ=0.99, and had no FA-capacity
-axis. The five concrete redesign axes (verbatim from the roast):
+## Evolution: v1 → v2 → v3 (both prior versions scrapped)
 
-1. Action-dependent transitions — `s' = (s + a) mod L`. Action
-   selects WHICH successor state to land in, so `max_b Q*(s', b)`
-   is action-discriminating and chain-amplified bias can exist.
-2. Decouple Var_a[Q*] from Δ_v. Best-action immediate reward
-   pinned at `mu_best`; the (K-1) non-best actions have tied
-   mean 0. The TYPE-A/B AXIS is `anisotropy_alpha`: per-action
-   reward NOISE σ_a varies independently of action MEAN.
-   Var_a[Q*] grows with σ_a's heterogeneity; Δ_v stays pinned
-   at mu_best.
-3. L-axis: `n_states ∈ {8, 64, 256}` registered as separate
-   envs; the 32-unit MLP becomes capacity-bound at large L
-   (true Q* has K × n_states entries; a 2-layer 32-unit MLP
-   on one-hot input has fewer effective parameters than the
-   K × 256 = 1024 distinct Q values it must represent).
-4. γ sweep ∈ {0.95, 0.99, 0.999} via the intervention YAML's
-   `base: {gamma: ...}` mechanism.
-5. Knife-edge regime: `mu_best = 0.05`, `sigma_base = 0.5` ⇒
-   σ/Δ ≈ 10 (10× the natural-env Asterix 1% but order-of-
-   magnitude closer than v1's 30-50% / 2× regime). The
-   anisotropy_alpha knob can push σ_best/Δ into the 1-3% range
-   (when anisotropy_alpha=0, σ_best = sigma_base; when
-   anisotropy_alpha < 0, σ_best is suppressed so the best
-   action stays "clean" — Type-A).
+**v1** (2026-05-19 morning, scrapped pre-sweep): a "bandit in a
+tuxedo" — `s' = (s+1) mod L` made transitions action-independent;
+`γ·max_b Q*(s', b)` was a constant added to every action's Q-value
+that cancelled out of `argmax`. No chain-amplified policy-
+informative bias was possible. Also: `reward_variance_scale` knob
+confounded |Q*|, Δ_v, AND Var_a[Q*] in lockstep; no FA-capacity
+axis; γ pinned at 0.99. See `/tmp/synthetic_env_roast.md`.
 
-## MDP definition (v2)
+**v2** (2026-05-19 afternoon, scrapped pre-sweep): added action-
+dependent transitions (`s' = (s + a + 1) mod L`) and an
+`anisotropy_alpha` knob. But v2's α knob modulated per-step
+REWARD-SAMPLING NOISE (the per-action σ of the immediate reward),
+NOT the Q-target-side `Var_a[V*(s')]` that Cor 3.2's σ_clip
+actually concerns. Vanilla DDQN's bootstrap max is over `Q(s', b)`,
+whose action-wise fluctuation comes from FA residual + replay
+gradient noise atop the TRUE Q-target spread — NOT from immediate-
+reward noise. v2 also had |Q*| ≈ 50 (μ_best=0.05 / (1-γ=0.999)) —
+50× under the natural-env Asterix Q≈436 scale; σ/Δ ≈ 1000% (vs the
+natural-env knife-edge of ~1%); L ∈ {16, 64} with hidden=[32, 32]
+gave 12.8× over-parameterized FA at the L=64 corner (no FA-binding
+regime); n_seeds=12 (under-powered); pre-registration walk-back
+paths pre-laundered every observed-data shape as publishable.
+See `/tmp/synthetic_v2_roast.md`.
 
-- States: `s ∈ {0, ..., L-1}`. Initial state sampled uniformly
-  at reset (no fixed start so all states are visited even at
-  short horizons).
-- Actions: `K=4` discrete.
-- Transition: `s' = (s + a + 1) mod L`. Each action goes to a
-  DIFFERENT next state. (The +1 ensures action=0 doesn't
-  self-loop, which would otherwise create a trivial maximizing
-  policy.)
-- Reward at step t given state s, action a:
-    - The state-conditional "best action" rotates by state:
-      `a_best(s) = s mod K`. Calling action a_best(s) yields
-      mean = `mu_best`; all other actions yield mean 0.
-    - Per-action reward noise σ_a(s, a) follows the anisotropy
-      profile:
-        - For the best action: σ_best = sigma_base × exp(α)
-        - For all other actions: σ_other = sigma_base × exp(-α/(K-1))
-      where α = `anisotropy_alpha`. This holds total cross-action
-      noise variance ≈ constant in α (geometric-mean preserved)
-      while shifting the noise mass between the best and
-      non-best actions.
-    - Reward = mean_a + Normal(0, σ_a). NO sparsity gate (drops
-      a confounded knob from v1).
-- Termination: after `max_steps_in_episode` steps.
+## v3 design: anisotropy primitive on the Q-TARGET side
 
-## Type-A vs Type-B regime characterisation
+The substantive fix: the Type-A/B axis IS Var_a[V*(s')]. State
+`s'_a = (s + a + 1) mod L` is the action-`a` successor of state
+`s`. Each state has a DETERMINISTIC, ENV-BAKED scalar payoff
+`mu_state(s)` collected on transition INTO that state. The
+cross-action distribution `{mu_state(s'_a) : a ∈ 0..K-1}`
+determines the TRUE per-state argmax-margin and Var_a[V*(s')]
+DIRECTLY — no immediate-reward-noise conflation.
 
-The state-rotating best-action structure makes the optimal
-policy a TABLE indexed by state: a*(s) = s mod K. A linear FA
-(MLP) can represent this perfectly given enough capacity, but
-becomes capacity-bound at large L (specifically, when L > 4 ×
-hidden_width). FA-bound vanilla DQN learns approximate Q-values
-where per-state argmax errors are driven by the SD of the
-function approximator's residual; the σ_best vs σ_other
-anisotropy modulates how policy-informative that residual SD
-is.
+### Concrete construction
 
-**Type-A** (anisotropy_alpha < 0): the best action has LOW noise
-(σ_best < sigma_base); non-best actions have HIGHER noise.
-Vanilla's max-of-K bias picks up noise from non-best actions
-inflating their Q-estimates; DDQN's clip denoises uniformly →
-DDQN helps.
+- States: `s ∈ {0, ..., L-1}`. One-hot observations.
+- Actions: K=4 discrete.
+- Transition (action-dependent, deterministic):
+    `s' = (s + a + 1) mod L`. Each action visits a distinct
+    successor; from any s the K actions visit a contiguous block
+    of K successors `{(s+1) mod L, ..., (s+K) mod L}` in order.
+- State-payoff vector: `mu_state(s) = peak_value * beta ** (s mod K)`.
+    Each state-block of K consecutive states has payoffs
+    `(peak_value, peak·β, peak·β², peak·β³)` cycling. From any
+    state `s`, the K successors visit ALL K intra-block positions
+    (modulo L wrap) → cross-action payoff spread is exactly the
+    K-tuple `(peak, peak·β, peak·β², peak·β³)`.
+- Reward on transition to `s'`: `r = mu_state(s') + N(0, noise_sigma)`.
+    Small Gaussian noise calibrated to natural-env knife-edge SNR.
+- Episode terminates after `max_steps_in_episode` steps.
 
-**Type-B** (anisotropy_alpha > 0): the best action has HIGH
-noise (σ_best > sigma_base); non-best actions are quiet. The
-high noise on the best action is what makes it argmax-able
-(its Q-estimate fluctuates above the tied non-best plateau
-under vanilla's optimistic-max bias). DDQN's symmetric clip
-removes the inflation that was carrying the signal → DDQN
-harms.
+### The β knob (Type-A/B axis)
 
-**Type-A REGIME REPRODUCIBILITY**: high confidence. The "noise
-helps non-best actions cross above the best" story is the
-classical Hasselt 2010 max-bias result and reproduces in any
-finite-sample max-of-K estimator.
+`beta` ∈ [0, 1] controls the K-action payoff spread:
 
-**Type-B REGIME REPRODUCIBILITY**: open question. The natural-
-env Asterix story has vanilla's σ_action correlated with the
-true Q-value structure (high-Q states/actions have high SD as
-a feature of the FA's local approximation quality). Whether
-synthetic env construction with hand-injected per-action noise
-asymmetry reproduces this is the substantive empirical
-question this sweep tests. If only Type-A appears, that's a
-finding: the natural-env Asterix pattern doesn't reproduce in
-clean controllable substrate.
+- **β ≈ 0 (Type-A "peaked")**: Only the best-position successor
+    has nonzero payoff; the other K-1 have 0. Knife-edge
+    argmax-margin Δ_v = peak_value (full payoff). Low
+    σ_clip / Δ_v on the Q-target side because the value of
+    non-optimal actions IS structurally zero. Vanilla's max-of-K
+    bias INFLATES the Q-estimates of the K-1 tied non-best
+    actions via FA noise + replay noise; DDQN's clip denoises
+    them uniformly → DDQN HELPS.
+- **β ≈ 0.5-0.9 (Type-B "graded")**: All K actions have
+    nonzero successor-payoff; (1, β, β², β³) is monotone
+    decreasing. Best-vs-second-best margin Δ_v = peak·(1-β).
+    At β=0.9, Δ_v = 0.1·peak — knife-edge regime where the
+    optimal argmax is fragile to small perturbations of Q.
+    DDQN's symmetric clip on `Q_target(s', argmax_online_Q)`
+    introduces argmax-asymmetry that corrupts the knife-edge
+    selection → DDQN HARMS.
 
-## Q* closed form
+### Closed-form Q*
 
-With deterministic transition `s' = (s + a + 1) mod L`, the
-optimal value satisfies Q*(s, a) = mu(s, a) + γ V*((s+a+1) mod L)
-where V*(s) = max_a Q*(s, a). Across the state cycle the
-optimal policy is "always take a_best(current_state)", giving
-a per-state reward of `mu_best`; the geometric-series ceiling is
-V* ≤ mu_best / (1 - γ). At γ=0.999, that's ~50× mu_best, so
-mu_best=0.05 lands Q* in the 0-50 magnitude regime where
-finite-sample effects on argmax are meaningful.
+Optimal policy `a*(s)`: pick the action whose successor
+intra-block index is 0 (highest payoff). For any state with
+intra-block index `j = s mod K`, the action `a* = (K - j - 1)
+mod K` lands at intra-block-idx 0. Under the optimal policy the
+agent cycles indefinitely through intra-block-idx-0 states (or
+its modular orbit when L is not a multiple of K), collecting
+`peak_value` each step. Discounted return ceiling:
 
-Var_a[Q*(s, ·)] over the K actions has two structurally
-distinct contributions:
-1. The mean term: best action gets `mu_best`, others get 0
-   → Var_a[mean] = (K-1)/K² × mu_best².
-2. The γ-chain term: action a leads to state (s+a+1) mod L
-   with V*-value that varies across the state cycle.
+    V*(intra=0) = peak_value · (1 + γ + γ² + …) = peak_value / (1-γ)
 
-(1) is pinned at mu_best (no rvs confound). (2) is what
-`anisotropy_alpha` controls *via the empirical residual*, NOT
-in the true Q* (the true Q* is action-noise-independent because
-expected reward is action-noise-independent). The substrate
-test is: does FA-bound vanilla's argmax extract this true Q*
-correctly, or does the empirical (σ_best, σ_other) anisotropy
-warp it?
+At `peak_value = 1.0` and γ=0.999, V* ≈ 1000 — matches the
+natural-env Asterix Q≈436 / Acrobot Q≈100 magnitude regime
+(critic rec #1).
 
-## Per-cell parameters
+### Why the FA capacity-binding regime works at L ≥ 1024
+
+Under hidden=[16] (single 16-unit hidden layer, critic rec #3),
+the MLP must represent K · L distinct Q-values through a 16-unit
+bottleneck. At L=32, K·L=128 Q-values through 16 hidden units is
+representable (8 Q-values per hidden unit on average); at
+L=1024, K·L=4096 Q-values through 16 hidden units is fundamentally
+NOT representable without aliasing — the FA is forced to compress
+the Q-table into a 16-dim subspace, introducing structured
+approximation error. THIS is where the Hasselt max-of-K bias
+becomes load-bearing: vanilla's `max_b Q(s',b)` picks up the
+worst FA-residual on each (s,a); DDQN's clip via online-argmax
+reroutes the bootstrap through a less-biased estimator. The
+L-axis differential isolates the FA-binding regime contribution.
+
+### Calibrated knife-edge regime (critic rec #2)
+
+`noise_sigma = 0.02 * peak_value` (default). At β=0 (Type-A):
+σ/Δ = 2% — true knife-edge. At β=0.5: σ/Δ = 4% (still knife-
+edge). At β=0.9: σ/Δ = 20% (margin compressed below per-step
+noise, FA-residual dominates argmax). The β axis SCANS the
+σ/Δ regime cleanly — v2's σ/Δ ≈ 1000% issue is structurally
+resolved.
+
+### Per-cell parameters
 
 `BiasTypeBParams` carries:
-- `n_states`, `n_actions` (READ-ONLY metadata; structural).
-- `mu_best` (best-action immediate-reward mean, pinned per env
-  for the sweep).
-- `sigma_base` (the baseline noise SD; `sigma_base × exp(±α/...)`
-  is the per-action SD).
-- `anisotropy_alpha` (Type-A/B axis; 0 = isotropic, < 0 = best
-  action quiet, > 0 = best action loud).
-- `max_steps_in_episode`.
 
-The env factory `make_synthetic_bias_typeb` exposes all of
-these as keyword args; per-name registrations in
-`env_catalogue._register_synthetic_bias_typeb_panel` bake the
-structural axes (n_states, anisotropy_alpha) into the env name.
+- `n_states` (L): chain length, the FA-capacity axis (READ-ONLY
+    metadata).
+- `n_actions` (K): action count (READ-ONLY).
+- `max_steps_in_episode`: episode horizon (READ-ONLY).
+- `peak_value`: highest payoff in the per-block shape. Pinned at
+    1.0 across the v3 panel; sets the |Q| magnitude scale.
+- `beta`: Type-A/B knob (per-block payoff shape geometric ratio).
+- `noise_sigma`: per-step reward noise SD; pinned at 0.02 across
+    the v3 panel (relative to peak_value=1.0).
 
-API matches the gymnax `Env` Protocol structurally:
-`reset(rng, params) → (obs, state)`, `step(rng, state, action,
-params) → (obs, state, reward, done, info)`. Per the substrate
-convention, the env is config-free (no class fields) and all
-per-cell configuration flows through `BiasTypeBParams`.
+API matches the gymnax `Env` Protocol: `reset(rng, params) →
+(obs, state)`, `step(rng, state, action, params) → (obs, state,
+reward, done, info)`. Per the substrate convention, the env is
+config-free (no class fields).
 """
 from __future__ import annotations
 
@@ -166,29 +150,31 @@ if TYPE_CHECKING:
 
 @struct.dataclass
 class BiasTypeBParams:
-    """Per-cell parameters for the synthetic bias Type-A/B env v2.
+    """Per-cell parameters for the v3 synthetic bias Type-A/B env.
 
     Structural axes (READ-ONLY metadata baked at registration):
-    - `n_states`: chain length L; the FA-capacity axis.
-    - `n_actions`: action count K.
+
+    - `n_states` (L): chain length; the FA-capacity axis.
+    - `n_actions` (K): action count.
     - `max_steps_in_episode`: episode horizon.
 
     Sweep axes:
-    - `mu_best`: immediate-reward mean for the state-conditional
-      best action. Pinned per env (typically 0.05); chosen with
-      `sigma_base` to land σ/Δ in the knife-edge regime.
-    - `sigma_base`: baseline per-action reward noise SD; the
-      anisotropy_alpha distorts this asymmetrically across actions.
-    - `anisotropy_alpha`: Type-A/B axis. 0 = isotropic noise;
-      negative = best action quiet (Type-A predicted); positive
-      = best action loud (Type-B predicted). Typically swept
-      across {-0.5, -0.25, 0, +0.25, +0.5}.
+
+    - `peak_value`: highest payoff in the per-block shape. Pinned
+      at 1.0 in the v3 panel so |Q| at γ=0.999 lands near 1000,
+      matching natural-env Asterix/Acrobot.
+    - `beta`: Type-A/B knob. Per-block payoff shape is
+      `(peak, peak·β, peak·β², peak·β³)`. β=0 → one-peaked
+      Type-A; β=0.9 → graded knife-edge Type-B.
+    - `noise_sigma`: per-step Gaussian reward noise SD. Pinned at
+      0.02 across the panel — 2% of peak_value, matching the
+      natural-env Asterix knife-edge σ/Δ ≈ 1-3% regime.
     """
-    n_states: int = struct.field(pytree_node=False, default=16)
+    n_states: int = struct.field(pytree_node=False, default=32)
     n_actions: int = struct.field(pytree_node=False, default=4)
-    mu_best: float = 0.05
-    sigma_base: float = 0.5
-    anisotropy_alpha: float = 0.0
+    peak_value: float = 1.0
+    beta: float = 0.0
+    noise_sigma: float = 0.02
     max_steps_in_episode: int = struct.field(
         pytree_node=False, default=128,
     )
@@ -203,23 +189,28 @@ class BiasTypeBState:
 
 @dataclass(frozen=True, slots=True)
 class BiasTypeBEnv:
-    """Synthetic K-action chain MDP for bias Type-A/B causal
-    testing (v2).
+    """Synthetic K-action chain MDP with state-baked anisotropic
+    payoffs (v3) for bias Type-A/B causal testing.
 
-    Construction is config-free; per-cell config flows through
-    `BiasTypeBParams`. Mirrors `LunarLanderEnv`'s class shape.
+    The state-payoff vector `mu_state(s) = peak_value · β^(s mod K)`
+    encodes the Type-A/B axis directly on the Q-TARGET side:
+    Var_a[V*(s'_a)] is determined by the cross-action spread of
+    the K-tuple `(peak, peak·β, peak·β², peak·β³)`, NOT by per-
+    step reward-sampling noise (v2's conceptual error).
 
-    Action-dependent transitions: `s' = (s + a + 1) mod n_states`,
-    so each action leads to a distinct successor state — the
-    pre-requisite for chain-amplified bias to be policy-informative.
+    Action-dependent transition `s' = (s + a + 1) mod L` makes
+    each action visit a distinct successor — the precondition for
+    chain-amplified bias to be policy-informative. Mirrors
+    `LunarLanderEnv`'s class shape; config-free, params-carry-
+    everything.
     """
 
     def reset(
         self, rng: jax.Array, params: BiasTypeBParams,
     ) -> tuple[jax.Array, BiasTypeBState]:
         # Sample initial state uniformly so all states are visited
-        # equally at short horizons; vital for the FA-bound
-        # regime where some states might otherwise be under-sampled.
+        # equally at short horizons; vital for the FA-bound regime
+        # where some states might otherwise be under-sampled.
         s0 = jax.random.randint(
             rng, shape=(), minval=0, maxval=params.n_states,
         )
@@ -238,49 +229,34 @@ class BiasTypeBEnv:
         jax.Array, BiasTypeBState, jax.Array, jax.Array,
         dict[str, jax.Array],
     ]:
-        # Best action at this state rotates with state index: the
-        # state-conditional optimal action is (s mod K). Makes
-        # Q*(s, ·) action-discriminating in a state-dependent way.
-        a_best = state.state % params.n_actions
-        is_best = (action.astype(jnp.int32) == a_best.astype(jnp.int32))
-
-        # Action-mean: pinned mu_best for the best action, 0 for
-        # others. Var_a[mean] = (K-1)/K² × mu_best², INDEPENDENT
-        # of sigma_base / anisotropy_alpha — the decoupling axis.
-        mean_a = jnp.where(
-            is_best,
-            jnp.float32(params.mu_best),
-            jnp.float32(0.0),
-        )
-
-        # Per-action noise SD under anisotropy profile:
-        # - Best action: sigma_base × exp(+α)
-        # - Other K-1 actions: sigma_base × exp(-α/(K-1))
-        # The exponents are chosen so that the GEOMETRIC mean of
-        # per-action SDs equals sigma_base regardless of α (closed-
-        # form: 1×exp(α) + (K-1)×exp(-α/(K-1)) → log-geometric-mean
-        # = (α + (K-1)·(-α/(K-1)))/K = 0). This keeps "total noise
-        # budget" approximately fixed while shifting where the
-        # noise is concentrated.
-        k_minus_1 = jnp.maximum(params.n_actions - 1, 1).astype(
-            jnp.float32,
-        )
-        alpha = jnp.float32(params.anisotropy_alpha)
-        sigma_best = params.sigma_base * jnp.exp(alpha)
-        sigma_other = params.sigma_base * jnp.exp(-alpha / k_minus_1)
-        sigma_a = jnp.where(is_best, sigma_best, sigma_other)
-
-        # Gaussian reward noise.
-        eps = jax.random.normal(rng) * sigma_a
-        reward = mean_a + eps
-
         # Action-dependent transition: s' = (s + a + 1) mod L.
-        # The "+ 1" prevents action=0 from self-looping (which would
-        # otherwise create a degenerate optimal policy where action=0
-        # always wins by virtue of immediate-vs-discounted reward).
+        # Each action visits a distinct intra-block successor; from
+        # state s with intra-block idx j = s mod K, action a lands
+        # at intra-block idx (j + a + 1) mod K. The K actions visit
+        # ALL K intra-block positions, so Var_a over the K successor
+        # payoffs equals the variance of the per-block shape vector.
         new_state_idx = (
             state.state + action.astype(jnp.int32) + jnp.int32(1)
         ) % params.n_states
+
+        # State-baked payoff: mu_state(s) = peak_value · β^(s mod K).
+        # The Q-target-side anisotropy primitive. The per-block
+        # K-tuple is (peak, peak·β, peak·β², peak·β³); cycling β=0
+        # gives the one-peaked Type-A regime, β→1 gives the graded
+        # Type-B regime where the best/second-best margin
+        # peak·(1-β) shrinks below the per-step noise floor.
+        intra_block = (
+            new_state_idx % jnp.int32(params.n_actions)
+        ).astype(jnp.float32)
+        mu_target = jnp.float32(params.peak_value) * jnp.power(
+            jnp.float32(params.beta), intra_block,
+        )
+
+        # Small Gaussian noise calibrated to natural-env knife-edge
+        # SNR (2% of peak_value by default).
+        eps = jax.random.normal(rng) * jnp.float32(params.noise_sigma)
+        reward = mu_target + eps
+
         new_step = state.step + 1
         done = new_step >= params.max_steps_in_episode
 
@@ -293,9 +269,10 @@ class BiasTypeBEnv:
     def _obs(
         self, state_idx: jax.Array, n_states: int,
     ) -> jax.Array:
-        """One-hot encoding of chain position. The FA-capacity
-        axis (n_states ∈ {8, 64, 256}) exercises the MLP's
-        representational capacity through the input dimension."""
+        """One-hot encoding of chain position. With a small hidden
+        bottleneck (hidden ≤ 16) the L=1024 setting forces the FA
+        to alias K · L = 4096 distinct Q-values into a 16-dim
+        hidden subspace → genuine FA-binding regime."""
         return jax.nn.one_hot(
             state_idx, num_classes=n_states, dtype=jnp.float32,
         )
@@ -313,11 +290,11 @@ class BiasTypeBEnv:
 
 def make_synthetic_bias_typeb(
     *,
-    n_states: int = 16,
+    n_states: int = 32,
     n_actions: int = 4,
-    mu_best: float = 0.05,
-    sigma_base: float = 0.5,
-    anisotropy_alpha: float = 0.0,
+    peak_value: float = 1.0,
+    beta: float = 0.0,
+    noise_sigma: float = 0.02,
     max_steps_in_episode: int = 128,
 ) -> tuple[BiasTypeBEnv, BiasTypeBParams]:
     """Factory matching the lunar_lander pattern. Builds an env
@@ -330,9 +307,9 @@ def make_synthetic_bias_typeb(
     params = BiasTypeBParams(
         n_states=int(n_states),
         n_actions=int(n_actions),
-        mu_best=float(mu_best),
-        sigma_base=float(sigma_base),
-        anisotropy_alpha=float(anisotropy_alpha),
+        peak_value=float(peak_value),
+        beta=float(beta),
+        noise_sigma=float(noise_sigma),
         max_steps_in_episode=int(max_steps_in_episode),
     )
     return env, params

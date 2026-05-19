@@ -46,13 +46,14 @@ def test_all_v9_envs_registered() -> None:
     }
     # JAX-native LunarLander port (its own `lunar_lander` backend).
     expected_lunar_lander = {'LunarLander-v2-jax'}
-    # Synthetic bias Type-A/B v2 panel (controlled-substrate causal-
-    # test envs; see `synthetic_bias_typeb.py`). 6 envs spanning
-    # n_states ∈ {16, 64} × anisotropy_alpha ∈ {-0.5, 0, +0.5}.
+    # Synthetic bias Type-A/B v3 panel (controlled-substrate causal-
+    # test envs; see `synthetic_bias_typeb.py` and the v1/v2/v3
+    # evolution in its module docstring). 6 envs spanning
+    # n_states ∈ {32, 1024} × beta ∈ {0.0, 0.5, 0.9}.
     expected_synthetic = {
-        f"TypeBChainV2-K4-L{n_states}-alpha{alpha}-synthetic"
-        for n_states in (16, 64)
-        for alpha in (-0.5, 0.0, 0.5)
+        f"TypeBChainV3-K4-L{n_states}-beta{beta}-synthetic"
+        for n_states in (32, 1024)
+        for beta in (0.0, 0.5, 0.9)
     }
     assert (
         set(ENV_REGISTRY.keys())

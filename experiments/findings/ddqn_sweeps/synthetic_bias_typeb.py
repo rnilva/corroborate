@@ -1,29 +1,35 @@
-"""Synthetic bias Type-A/B controlled-substrate bridges (v2).
+"""Synthetic bias Type-A/B controlled-substrate bridges (v3).
 
-v1 → v2: see `src/corroborate_rl/corroborate_rl/synthetic_bias_typeb.py`
-module docstring + `/tmp/synthetic_env_roast.md`. v1's bridges
-tested ρ(reward_variance_scale, d_out) and ρ(reward_sparsity,
-d_out) on a 12-env panel where the underlying env was a bandit
-in a tuxedo (action-independent transitions). v2 replaces the
-env shape entirely; bridges here test the v2 axes.
+v1 → v2 → v3 evolution lives in
+`src/corroborate_rl/corroborate_rl/synthetic_bias_typeb.py`. v1
+was scrapped (action-independent transitions; bandit in a tuxedo);
+v2 was scrapped (per-step reward-noise α conflated with the
+Q-target-side Var_a[V*(s')] that Cor 3.2's σ_clip actually
+concerns; under-powered n_seeds=12; over-parameterized FA at
+L=64). v3 replaces the env entirely. See `/tmp/synthetic_v2_roast.md`
+for the v2 critique and the five recommendations v3 addresses.
 
-The v2 panel has TWO structural axes:
-- L = n_states ∈ {16, 64} (FA-capacity)
-- α = anisotropy_alpha ∈ {-0.5, 0, +0.5} (Type-A/B)
+The v3 panel has TWO structural axes:
 
-Plus γ ∈ {0.95, 0.99, 0.999} as a substrate axis. 6 envs × 3
-γ × 2 arms × 12 seeds = 432 cells.
+- L = n_states ∈ {32, 1024} (FA-capacity axis; with hidden=[16]
+  the L=1024 corner aliases 4096 Q-values into 16-dim hidden →
+  genuine FA-binding).
+- β = beta ∈ {0.0, 0.5, 0.9} (Type-A/B axis on the Q-target side;
+  per-block payoff shape `(peak, peak·β, peak·β², peak·β³)`).
 
-The substantive predictions (P1 — anisotropy_alpha drives DDQN's
-sign; P2 — γ amplifies the Type-A/B split; P3 — L amplifies the
-split) are pre-registered in
-`docs/PRE_REGISTRATION_synthetic_bias_typeb.md`.
+Plus γ ∈ {0.95, 0.99, 0.999} as a substrate axis. 6 envs × 3 γ ×
+2 arms × 27 seeds = 972 cells (≤ 1000 budget).
+
+The substantive predictions are pre-registered in
+`docs/PRE_REGISTRATION_synthetic_bias_typeb.md`. The verdict
+helper is the shared substrate primitive
+`cross_stratum_signed_spearman_verdict` (calibrated for
+n_strata≥10).
 """
 from __future__ import annotations
 
 import math
 from types import MappingProxyType
-from typing import Literal
 
 import polars as pl
 
@@ -36,10 +42,13 @@ from corroborate.bridge.verdict import RefutationClass, Verdict
 from experiments.findings.ddqn._arms import (
     DDQN_ARM, INTERVENTION, VANILLA_ARM,
 )
+from experiments.findings.ddqn._verdicts import (
+    cross_stratum_signed_spearman_verdict,
+)
 
 
-# v2 synthetic env naming convention:
-#   "TypeBChainV2-K{K}-L{n_states}-alpha{anisotropy_alpha}-synthetic"
+# v3 synthetic env naming convention:
+#   "TypeBChainV3-K{K}-L{n_states}-beta{beta}-synthetic"
 # γ is a substrate axis (set via YAML), not baked into the env
 # name. The (env_name, gamma) pair identifies a cell stratum.
 #
@@ -49,29 +58,34 @@ from experiments.findings.ddqn._arms import (
 def _build_synthetic_covariates() -> MappingProxyType[
     object, MappingProxyType[str, float]
 ]:
-    """Per-env structural covariates: (n_states, anisotropy_alpha).
+    """Per-env structural covariates for the v3 panel.
 
-    Keyed by env name. The values encode the env's STRUCTURAL
-    design parameters (set at registration time in
-    `env_catalogue._register_synthetic_bias_typeb_panel`), NOT
-    empirical observables. Hardcoding is appropriate because the
-    env IS its structural config — there's no drift between cache
-    state and these values."""
+    Keys are env names; values are immutable dicts of the env's
+    STRUCTURAL design parameters baked at registration time in
+    `env_catalogue._register_synthetic_bias_typeb_panel`. The
+    covariates exposed here are:
+
+    - `beta`: the Type-A/B axis (per-block payoff geometric ratio).
+    - `n_states`: chain length L, the FA-capacity axis.
+    - `argmax_margin`: closed-form best-vs-second-best margin
+      `peak_value × (1 - β)`. At peak_value=1.0 this is
+      monotone-decreasing in β; the inverse of the Type-A/B knob.
+    - `log_n_states`: `log(L)`, the FA-capacity axis on a scale
+      that linearizes the bottleneck-pressure intuition.
+    """
     out: dict[object, MappingProxyType[str, float]] = {}
-    for n_states in (16, 64):
-        for alpha in (-0.5, 0.0, 0.5):
+    peak_value = 1.0  # pinned across v3 panel
+    for n_states in (32, 1024):
+        for beta in (0.0, 0.5, 0.9):
             name = (
-                f"TypeBChainV2-K4-L{n_states}"
-                f"-alpha{alpha}-synthetic"
+                f"TypeBChainV3-K4-L{n_states}"
+                f"-beta{beta}-synthetic"
             )
             out[name] = MappingProxyType({
+                'beta': float(beta),
                 'n_states': float(n_states),
-                'anisotropy_alpha': float(alpha),
-                # Composite "Type-B-ness" score: positive α (best
-                # action noisy) × log(n_states) (FA capacity
-                # binding). Both ingredients amplify the
-                # type-B harm prediction.
-                'type_b_score': float(alpha) * math.log(float(n_states)),
+                'argmax_margin': peak_value * (1.0 - float(beta)),
+                'log_n_states': math.log(float(n_states)),
             })
     return MappingProxyType(out)
 
@@ -81,73 +95,59 @@ _SYNTHETIC_COVARIATES: MappingProxyType[
 ] = _build_synthetic_covariates()
 
 
-# Scope: v2 synthetic envs. γ NOT pinned here because the sweep
+# Scope: v3 synthetic envs. γ NOT pinned here because the sweep
 # spans γ ∈ {0.95, 0.99, 0.999} and individual bridges decide
 # whether to pin γ or pool.
-_SYNTHETIC_TYPEB_V2_SCOPE: pl.Expr = (
-    pl.col('env_name').str.starts_with('TypeBChainV2-K4-')
+_SYNTHETIC_TYPEB_V3_SCOPE: pl.Expr = (
+    pl.col('env_name').str.starts_with('TypeBChainV3-K4-')
     & pl.col('env_name').str.ends_with('-synthetic')
 )
 
-# γ=0.999 sub-scope for the "gamma amplifies Type-B" bridge.
-_SYNTHETIC_TYPEB_V2_G999_SCOPE: pl.Expr = (
-    _SYNTHETIC_TYPEB_V2_SCOPE & (pl.col('gamma') == 0.999)
+# γ=0.999 sub-scope for the "gamma amplifies Type-B" diagnostic.
+_SYNTHETIC_TYPEB_V3_G999_SCOPE: pl.Expr = (
+    _SYNTHETIC_TYPEB_V3_SCOPE & (pl.col('gamma') == 0.999)
+)
+
+# β=0 sub-scope for the FA-capacity-alone-doesn't-drive-d_out
+# null prediction (N1).
+_SYNTHETIC_TYPEB_V3_BETA0_SCOPE: pl.Expr = (
+    _SYNTHETIC_TYPEB_V3_SCOPE
+    & pl.col('env_name').str.contains('beta0.0-synthetic')
 )
 
 
-def _signed_spearman_verdict(
-    rho: float,
-    p_value: float,
-    n_strata: int,
-    *,
-    sign: Literal[-1, 1],
-    rho_threshold_held: float,
-    p_threshold: float,
-    null_threshold: float,
-    sign_flip_threshold: float,
-    min_strata: int,
-) -> tuple[Verdict, RefutationClass | None]:
-    """Sign-aware verdict for cross-stratum Spearman slopes.
-
-    Local copy with `min_strata` defaulting to ≤ panel size for
-    the small synthetic panel."""
-    if n_strata < min_strata:
-        return Verdict.POWER_INSUFFICIENT, None
-    if math.isnan(rho) or math.isnan(p_value):
-        return Verdict.POWER_INSUFFICIENT, None
-    correct_sign = (sign > 0 and rho > 0) or (sign < 0 and rho < 0)
-    if correct_sign and abs(rho) >= rho_threshold_held and p_value <= p_threshold:
-        return Verdict.HELD, None
-    wrong_sign = (sign > 0 and rho < 0) or (sign < 0 and rho > 0)
-    if wrong_sign and abs(rho) >= sign_flip_threshold:
-        return Verdict.NO_EFFECT, RefutationClass.SIGN_FLIP
-    if abs(rho) < null_threshold:
-        return Verdict.NO_EFFECT, RefutationClass.NULL_EFFECT
-    return Verdict.POWER_INSUFFICIENT, None
-
-
-# P1 — DDQN harms under positive anisotropy_alpha (Type-B regime).
-# Pooled across γ; bridges below test γ-amplification + L-axis
-# as separate questions.
+# ============ PRIMARY prediction (P1) ============
+#
+# P1 — DDQN's outcome benefit decreases as β grows (Type-A → Type-B).
+# Cross-stratum Spearman ρ between `beta` (the env-structural
+# Type-A/B axis) and DDQN-vs-vanilla Cohen's d on outcome,
+# stratified by (env_name, gamma). 6 envs × 3 γ = 18 strata; well
+# above min_strata=10 calibration of the verdict helper.
+#
+# This is the LOAD-BEARING bridge — the v3 design's primary
+# substantive prediction. The PRE_REGISTRATION doc defines its
+# REFUTATION criterion (a specific data shape that retracts the
+# claim that synthetic substrate enables causal env-feature
+# identification of the Asterix Type-B mechanism).
 @claim_bridge(
     source=INTERVENTION,
     target='eval_best_burst_raw_mean',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
     scope=(
-        _SYNTHETIC_TYPEB_V2_SCOPE
+        _SYNTHETIC_TYPEB_V3_SCOPE
         & pl.col('eval_best_burst_raw_mean').is_finite()
     ),
     predicted_direction='a_lt_b',
 )
-def ddqn_harms_under_positive_alpha__synthetic_typeb_v2(
+def ddqn_harms_under_high_beta__synthetic_typeb_v3(
     cross_stratum_property_slope: CrossStratumPropertySlopeResult,
     *,
     treatment_arm: str = DDQN_ARM,
     baseline_arm: str = VANILLA_ARM,
     source: str = 'eval_best_burst_raw_mean',
     stratify_by: tuple[str, ...] = ('env_name', 'gamma'),
-    covariate_name: str = 'anisotropy_alpha',
+    covariate_name: str = 'beta',
     covariate_key_field: str = 'env_name',
     covariates_per_key: MappingProxyType[
         object, MappingProxyType[str, float]
@@ -155,39 +155,41 @@ def ddqn_harms_under_positive_alpha__synthetic_typeb_v2(
     scope_predictor: str = 'eval_best_burst_raw_mean',
     min_baseline_predictor: float = -1e9,  # no gate; synthetic always active
     min_seeds_per_arm: int = 5,
-    rho_threshold_held: float = 0.4,
+    rho_threshold_held: float = 0.5,
     p_threshold: float = 0.05,
     null_threshold: float = 0.2,
-    sign_flip_threshold: float = 0.4,
+    sign_flip_threshold: float = 0.5,
     min_strata: int = 10,
 ) -> tuple[Verdict, RefutationClass | None]:
-    """P1 — Cross-stratum Spearman ρ between `anisotropy_alpha`
-    (the env-structural Type-A/B axis) and DDQN-vs-vanilla
+    """P1 (PRIMARY) — Cross-stratum Spearman ρ between `beta` (the
+    Q-target-side anisotropy primitive) and DDQN-vs-vanilla
     Cohen's d on outcome, stratified by (env_name, γ).
 
-    Predicted ρ ≤ −0.4 with p ≤ 0.05 — positive α (best-action
-    noisy = Type-B) → DDQN harms (clip removes policy-informative
-    noise asymmetry); negative α (best-action quiet = Type-A) →
-    DDQN helps (clip denoises non-best actions' max-bias). The
-    canonical bias Type-A/B test on the v2 controlled substrate.
+    **HELD criterion**: ρ ≤ −0.5 AND p ≤ 0.05 on n_strata ≥ 10.
+    Direction: higher β → more graded payoff shape → smaller
+    argmax-margin Δ_v = peak·(1-β) → knife-edge regime where
+    DDQN's clip introduces argmax-corrupting asymmetry → DDQN
+    HARMS more.
 
-    Stratification by (env_name, γ) gives 6 envs × 3 γ = 18
-    strata before missing-cell pruning, well above
-    `min_strata=10`.
+    **REFUTATION criterion** (the load-bearing pre-registered
+    walk-back-as-retraction; see PRE_REGISTRATION doc §REFUTATION):
+    NO_EFFECT-NULL fires (|ρ| < 0.2) AND the panel is adequately
+    powered (n_strata ≥ 15). In that case the synthetic-substrate
+    paradigm DOES NOT reproduce the natural-env Asterix Type-B
+    mechanism. NOT a publishable walk-back; the substrate-author
+    must retract the claim that v3 enables causal env-feature
+    identification.
 
-    HELD: ρ ≤ −0.4 with p ≤ 0.05.
-    NO_EFFECT (SIGN_FLIP): ρ ≥ +0.4 — DDQN HELPS more on Type-B
-    envs (would refute the central α-as-bias-shape interpretation).
-    NO_EFFECT (NULL_EFFECT): |ρ| < 0.2 — α doesn't predict
-    DDQN's effect direction; controlled substrate fails to
-    reproduce the natural-env Asterix Type-B mechanism."""
+    **SIGN_FLIP** (ρ ≥ +0.5): DDQN HELPS more as β grows. Walks
+    back the Cor 3.2 σ_clip → argmax-corruption mechanism: more
+    graded payoffs make DDQN's clip MORE effective. Suggests
+    distinct mechanism (e.g., FA-residual smoothness or replay-
+    distribution coupling) is dominant in synthetic substrate."""
     del treatment_arm, baseline_arm, source, stratify_by
     del covariate_name, covariate_key_field, covariates_per_key
     del scope_predictor, min_baseline_predictor, min_seeds_per_arm
-    return _signed_spearman_verdict(
-        cross_stratum_property_slope.rho,
-        cross_stratum_property_slope.p_value,
-        cross_stratum_property_slope.n_strata,
+    return cross_stratum_signed_spearman_verdict(
+        cross_stratum_property_slope,
         sign=-1,
         rho_threshold_held=rho_threshold_held,
         p_threshold=p_threshold,
@@ -197,30 +199,41 @@ def ddqn_harms_under_positive_alpha__synthetic_typeb_v2(
     )
 
 
-# P2 — γ AMPLIFIES the Type-A/B split. At γ=0.999 (highest chain
-# amplification), ρ(α, d_out) should be MORE negative than at
-# γ=0.95. This tests the bias-amplification chain story: longer
-# effective horizon → larger Var_a[Q*] disparity between Type-A
-# and Type-B regimes.
+# ============ DIAGNOSTIC: argmax margin (inverse parameterization
+# of P1; corroborates the mechanism interpretation) ============
+#
+# D1 — DDQN's outcome benefit INCREASES with argmax_margin. This
+# is `peak_value · (1 - β)`, the closed-form knife-edge width.
+# Predicting direct (a > b under HIGH argmax_margin) tests the
+# SAME slope as P1 with the opposite sign convention — IF the
+# mechanism is "DDQN's clip corrupts narrow argmax", D1 must HELD
+# whenever P1 HELDs (and the rank correlation is exactly inverted
+# since the covariate is monotone in -β).
+#
+# Why register both: D1 is a sanity check on the mechanism story.
+# P1 measures the β knob; D1 measures the DOWNSTREAM knife-edge
+# margin. Joint HELD is corroborating. P1 HELD + D1 NULL would
+# indicate the β knob has a non-knife-edge mechanism (substantive
+# finding).
 @claim_bridge(
     source=INTERVENTION,
     target='eval_best_burst_raw_mean',
-    direction=Direction.INVERSE,
+    direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
     scope=(
-        _SYNTHETIC_TYPEB_V2_G999_SCOPE
+        _SYNTHETIC_TYPEB_V3_SCOPE
         & pl.col('eval_best_burst_raw_mean').is_finite()
     ),
-    predicted_direction='a_lt_b',
+    predicted_direction='a_gt_b',
 )
-def ddqn_harm_amplified_at_g999__synthetic_typeb_v2(
+def ddqn_helps_when_argmax_margin_wide__synthetic_typeb_v3(
     cross_stratum_property_slope: CrossStratumPropertySlopeResult,
     *,
     treatment_arm: str = DDQN_ARM,
     baseline_arm: str = VANILLA_ARM,
     source: str = 'eval_best_burst_raw_mean',
-    stratify_by: tuple[str, ...] = ('env_name',),
-    covariate_name: str = 'anisotropy_alpha',
+    stratify_by: tuple[str, ...] = ('env_name', 'gamma'),
+    covariate_name: str = 'argmax_margin',
     covariate_key_field: str = 'env_name',
     covariates_per_key: MappingProxyType[
         object, MappingProxyType[str, float]
@@ -229,35 +242,36 @@ def ddqn_harm_amplified_at_g999__synthetic_typeb_v2(
     min_baseline_predictor: float = -1e9,
     min_seeds_per_arm: int = 5,
     rho_threshold_held: float = 0.5,
-    p_threshold: float = 0.1,
+    p_threshold: float = 0.05,
     null_threshold: float = 0.2,
     sign_flip_threshold: float = 0.5,
-    min_strata: int = 5,
+    min_strata: int = 10,
 ) -> tuple[Verdict, RefutationClass | None]:
-    """P2 — At γ=0.999 (load-bearing chain-amplification regime),
-    ρ(anisotropy_alpha, d_out) ≤ −0.5 across the 6 v2 envs. The
-    same shape as the natural-env Asterix γ=0.999 harm finding
-    (memory: `findings_asterix_g999_harm_is_optimization_dynamics`).
+    """D1 (DIAGNOSTIC) — Cross-stratum Spearman ρ between
+    `argmax_margin = peak_value · (1 - β)` and DDQN-vs-vanilla
+    Cohen's d on outcome, stratified by (env_name, γ).
 
-    Predicted ρ ≤ −0.5 with p ≤ 0.1 — same direction as P1 but
-    stronger at the γ=0.999 corner. The "γ amplifies Type-B"
-    pattern is the load-bearing prediction this v2 design is
-    built to test (γ-axis was a v1 punt; addressing critic
-    recommendation #4).
+    **HELD criterion**: ρ ≥ +0.5 AND p ≤ 0.05 on n_strata ≥ 10.
+    Direction: wider knife-edge margin → less argmax-corruption
+    risk from DDQN's clip → DDQN's optimism-bias correction
+    dominates → DDQN HELPS more.
 
-    `min_strata=5` is set lower than P1's `10` because this
-    bridge pins γ=0.999 (only 6 strata total at this corner).
-    The smaller-n threshold trades formal-significance for
-    direction-detection at the load-bearing γ corner.
-    """
+    **Joint with P1**: P1 HELD + D1 HELD ⇒ the β → argmax-margin
+    → DDQN-effect chain is corroborated. P1 HELD + D1 NULL ⇒ β
+    matters but argmax-margin isn't the mediator (substantive
+    open question for which mechanism dominates).
+
+    Note: this is structurally equivalent to P1 with opposite
+    sign because `argmax_margin = peak · (1 - β)` is monotone-
+    decreasing in β. The ρ should be EXACTLY the negative of P1's
+    ρ (rank-equivalent transform). The duplication serves as a
+    redundancy check on the verdict-helper's sign handling."""
     del treatment_arm, baseline_arm, source, stratify_by
     del covariate_name, covariate_key_field, covariates_per_key
     del scope_predictor, min_baseline_predictor, min_seeds_per_arm
-    return _signed_spearman_verdict(
-        cross_stratum_property_slope.rho,
-        cross_stratum_property_slope.p_value,
-        cross_stratum_property_slope.n_strata,
-        sign=-1,
+    return cross_stratum_signed_spearman_verdict(
+        cross_stratum_property_slope,
+        sign=+1,
         rho_threshold_held=rho_threshold_held,
         p_threshold=p_threshold,
         null_threshold=null_threshold,
@@ -266,30 +280,40 @@ def ddqn_harm_amplified_at_g999__synthetic_typeb_v2(
     )
 
 
-# P3 — FA-capacity (L = n_states) amplifies the Type-A/B split.
-# At higher L, FA is more capacity-bound; the within-arm bias
-# asymmetry that DDQN's clip removes is more policy-informative.
-# Predicts ρ(type_b_score, d_out) ≤ −0.4 where type_b_score =
-# α × log(L) — joint effect of both axes.
+# ============ DIAGNOSTIC: γ amplification ============
+#
+# D2 — At γ=0.999 (the load-bearing chain-amplification regime
+# where natural-env Asterix harm appears), ρ(β, d_out) should be
+# MORE negative than the pooled P1. The 1/(1-γ)=1000× horizon
+# magnifies the FA-residual contribution to Q* approximation
+# error → knife-edge argmax-corruption from DDQN's clip is
+# amplified.
+#
+# n_strata=6 at γ=0.999 alone is below the verdict helper's
+# min_strata=10 calibration band → will fire POWER_INSUFFICIENT
+# even under signal. Documented honestly; the diagnostic value
+# is in the rank-ordering of effect sizes between γ levels (not
+# a HELD verdict at this sub-scope). Surfaces direction
+# informally; full P1 pool carries the formal verdict.
 @claim_bridge(
     source=INTERVENTION,
     target='eval_best_burst_raw_mean',
     direction=Direction.INVERSE,
     tier=Tier.ASSOCIATIONAL,
     scope=(
-        _SYNTHETIC_TYPEB_V2_SCOPE
+        _SYNTHETIC_TYPEB_V3_G999_SCOPE
         & pl.col('eval_best_burst_raw_mean').is_finite()
     ),
     predicted_direction='a_lt_b',
 )
-def ddqn_harm_scales_with_type_b_score__synthetic_typeb_v2(
+def ddqn_harm_amplified_at_g999__synthetic_typeb_v3(
     cross_stratum_property_slope: CrossStratumPropertySlopeResult,
     *,
     treatment_arm: str = DDQN_ARM,
     baseline_arm: str = VANILLA_ARM,
     source: str = 'eval_best_burst_raw_mean',
-    stratify_by: tuple[str, ...] = ('env_name', 'gamma'),
-    covariate_name: str = 'type_b_score',
+    stratify_by: tuple[str, ...] = ('env_name',),
+    covariate_name: str = 'beta',
     covariate_key_field: str = 'env_name',
     covariates_per_key: MappingProxyType[
         object, MappingProxyType[str, float]
@@ -297,33 +321,30 @@ def ddqn_harm_scales_with_type_b_score__synthetic_typeb_v2(
     scope_predictor: str = 'eval_best_burst_raw_mean',
     min_baseline_predictor: float = -1e9,
     min_seeds_per_arm: int = 5,
-    rho_threshold_held: float = 0.4,
-    p_threshold: float = 0.05,
+    rho_threshold_held: float = 0.6,
+    p_threshold: float = 0.1,
     null_threshold: float = 0.2,
-    sign_flip_threshold: float = 0.4,
+    sign_flip_threshold: float = 0.5,
     min_strata: int = 10,
 ) -> tuple[Verdict, RefutationClass | None]:
-    """P3 — Cross-stratum Spearman ρ between `type_b_score = α ×
-    log(L)` and DDQN-vs-vanilla Cohen's d on outcome.
+    """D2 (DIAGNOSTIC) — At γ=0.999, ρ(β, d_out) ≤ −0.6 with
+    p ≤ 0.1 across n_strata = 6 envs. The same shape as the
+    natural-env Asterix γ=0.999 harm finding (memory
+    `findings_asterix_g999_harm_is_optimization_dynamics`).
 
-    Predicted ρ ≤ −0.4 with p ≤ 0.05 — the composite Type-B
-    score (positive α × log(L) — both axes pushing toward
-    Type-B) should predict DDQN harm more cleanly than α alone
-    (P1) because L modulates the FA-capacity that makes the
-    bias asymmetry policy-informative.
-
-    The substantive disambiguation against P1 is: if P1 HELDs
-    but P3 NULLs, α alone carries the signal and L doesn't
-    modulate it (the FA-capacity axis isn't load-bearing in
-    this synthetic substrate). If P3 HELDs more decisively
-    than P1, L genuinely amplifies the Type-B signal."""
+    **STRUCTURAL POWER_INSUFFICIENT**: n_strata=6 < min_strata=10
+    → this bridge fires POWER_INSUFFICIENT at the formal verdict
+    layer. Its diagnostic value is in the OBSERVED ρ direction
+    + magnitude (surfaced in the analysis result, not the
+    verdict) compared to P1's pooled ρ. If observed |ρ_γ=0.999| >
+    |ρ_pooled| with consistent sign, the γ-amplification
+    direction is corroborated even when the formal verdict can't
+    fire HELD at this sub-scope."""
     del treatment_arm, baseline_arm, source, stratify_by
     del covariate_name, covariate_key_field, covariates_per_key
     del scope_predictor, min_baseline_predictor, min_seeds_per_arm
-    return _signed_spearman_verdict(
-        cross_stratum_property_slope.rho,
-        cross_stratum_property_slope.p_value,
-        cross_stratum_property_slope.n_strata,
+    return cross_stratum_signed_spearman_verdict(
+        cross_stratum_property_slope,
         sign=-1,
         rho_threshold_held=rho_threshold_held,
         p_threshold=p_threshold,
@@ -333,28 +354,48 @@ def ddqn_harm_scales_with_type_b_score__synthetic_typeb_v2(
     )
 
 
-# N1 — n_states ALONE doesn't predict d_out at fixed α=0
-# (isotropic noise). Tests that FA-capacity is a MODULATOR not
-# a DRIVER: without the anisotropy axis, more capacity shouldn't
-# create an arm-difference direction.
-_SYNTHETIC_TYPEB_V2_ALPHA0_SCOPE: pl.Expr = (
-    _SYNTHETIC_TYPEB_V2_SCOPE
-    & pl.col('env_name').str.contains('alpha0.0-synthetic')
-)
-
-
+# ============ N1 — adequately-powered FALSIFIABLE null ============
+#
+# N1 — FA-capacity ALONE doesn't drive d_out's sign at β=0
+# (peaked Type-A). At Type-A, the argmax-margin is wide (Δ_v =
+# peak_value), the σ/Δ regime is benign (2%), and the FA-binding
+# only modulates HOW MUCH the bias correction helps — not whether
+# it helps. L should not flip the sign of d_out.
+#
+# v2's N1 was unfalsifiable: min_strata=4 against 6 strata, with
+# null_threshold=0.3 → ~70% noise admission. v3 lifts the bar:
+# - stratify_by=(env_name, gamma) → 2 L × 3 γ = 6 strata at β=0;
+#   STILL too small. v3 fixes this by REQUIRING n_strata ≥
+#   min_strata calibrated against the panel's per-stratum Cohen's
+#   d SE.
+#
+# Per-stratum d SE at n_seeds=27 ≈ sqrt(4/27) ≈ 0.385. For ρ
+# under H0 with n_strata=6 strata, SE ≈ 1/sqrt(n-1) ≈ 0.45 → the
+# null band |ρ|<0.3 has type-I-error rate ≈ 0.56, NOT 0.05.
+#
+# v3 N1 imposes:
+# - min_strata ≥ 6 STRICT.
+# - null_threshold = 0.30 with the understanding that NULL is
+#   declared only if ρ is within ±0.30 AND p>0.30 (i.e., the
+#   panel is NOT marginally significant in either direction).
+# - effect_observed_threshold = 0.70 (sign-flip refutation).
+#
+# At n_strata=6, |r|_crit at p=0.05 is 0.829; |r|_crit at p=0.30
+# is 0.34. So null_threshold=0.30 + p_floor=0.30 means "data
+# rules out marginal signal" — a stronger null commitment than
+# v2's noise-permissive |ρ|≤0.3 alone.
 @claim_bridge(
     source=INTERVENTION,
     target='eval_best_burst_raw_mean',
     direction=Direction.DIRECT,
     tier=Tier.ASSOCIATIONAL,
     scope=(
-        _SYNTHETIC_TYPEB_V2_ALPHA0_SCOPE
+        _SYNTHETIC_TYPEB_V3_BETA0_SCOPE
         & pl.col('eval_best_burst_raw_mean').is_finite()
     ),
     predicted_direction='null',
 )
-def n_states_alone_does_not_predict_dout__synthetic_typeb_v2(
+def n_states_alone_does_not_drive_dout__synthetic_typeb_v3(
     cross_stratum_property_slope: CrossStratumPropertySlopeResult,
     *,
     treatment_arm: str = DDQN_ARM,
@@ -369,33 +410,45 @@ def n_states_alone_does_not_predict_dout__synthetic_typeb_v2(
     scope_predictor: str = 'eval_best_burst_raw_mean',
     min_baseline_predictor: float = -1e9,
     min_seeds_per_arm: int = 5,
-    null_threshold: float = 0.3,
-    effect_observed_threshold: float = 0.6,
-    min_strata: int = 4,
+    null_threshold_rho: float = 0.30,
+    null_threshold_p: float = 0.30,
+    effect_observed_threshold: float = 0.70,
+    min_strata: int = 6,
 ) -> tuple[Verdict, RefutationClass | None]:
-    """N1 — Cross-stratum Spearman ρ(n_states, d_out) at α=0
-    (isotropic-noise envs only): 2 envs × 3 γ = 6 strata.
+    """N1 — At β=0 (Type-A peaked, wide argmax-margin), L doesn't
+    drive d_out direction across the 6 sub-strata (2 L × 3 γ).
 
-    Predicted null: at α=0, neither arm has policy-informative
-    bias asymmetry to preserve / destroy; n_states is a pure
-    FA-capacity stress with no Type-A/B character. ρ should be
-    small (|ρ| ≤ 0.3); if effect observed (|ρ| ≥ 0.6), capacity
-    is doing independent work — substantive walk-back of the
-    P3 interpretation.
+    **HELD-as-null criterion** (predicted_direction='null'):
+        |ρ| < null_threshold_rho (0.30) AND
+        p > null_threshold_p (0.30)
+    The data must rule out a marginal slope in either direction.
+    At n_strata=6, |r|_crit at p=0.30 is 0.34; null_threshold_rho
+    < this, so "satisfies-null" implies "not even marginally
+    detectable".
 
-    `min_strata=4` is lower than P1/P3 because this is a 6-
-    stratum sub-panel by construction. POWER_INSUFFICIENT if
-    fewer than 4 strata admit Cohen's d (e.g. all seeds
-    converged identically at one α=0 env)."""
+    **SIGN_FLIP / SIGN_DETECTED refutation**: |ρ| ≥ 0.70 →
+    capacity has an independent effect at β=0. Walks back the
+    "FA-binding modulates β's mechanism only" interpretation:
+    capacity might drive d_out directly via a non-β channel
+    (substantive open question; framework refuses to silently
+    absorb).
+
+    **POWER_INSUFFICIENT**: n_strata < 6 OR |ρ| in the
+    [null_threshold_rho, effect_observed_threshold) middle band.
+    HONEST UNDERPOWER — neither HELD nor refuted; the design
+    can't disambiguate at this sub-panel size. v2's N1 collapsed
+    POWER_INSUFFICIENT into HELD via permissive |ρ|≤0.3 → ~70%
+    type-I; v3 N1 keeps the band explicit."""
     del treatment_arm, baseline_arm, source, stratify_by
     del covariate_name, covariate_key_field, covariates_per_key
     del scope_predictor, min_baseline_predictor, min_seeds_per_arm
     if cross_stratum_property_slope.n_strata < min_strata:
         return Verdict.POWER_INSUFFICIENT, None
     rho = cross_stratum_property_slope.rho
-    if math.isnan(rho):
+    p_value = cross_stratum_property_slope.p_value
+    if math.isnan(rho) or math.isnan(p_value):
         return Verdict.POWER_INSUFFICIENT, None
-    if abs(rho) <= null_threshold:
+    if abs(rho) < null_threshold_rho and p_value > null_threshold_p:
         return Verdict.HELD, None
     if abs(rho) >= effect_observed_threshold:
         return Verdict.NO_EFFECT, RefutationClass.SIGN_FLIP
@@ -403,8 +456,8 @@ def n_states_alone_does_not_predict_dout__synthetic_typeb_v2(
 
 
 BRIDGES = (
-    ddqn_harms_under_positive_alpha__synthetic_typeb_v2,
-    ddqn_harm_amplified_at_g999__synthetic_typeb_v2,
-    ddqn_harm_scales_with_type_b_score__synthetic_typeb_v2,
-    n_states_alone_does_not_predict_dout__synthetic_typeb_v2,
+    ddqn_harms_under_high_beta__synthetic_typeb_v3,
+    ddqn_helps_when_argmax_margin_wide__synthetic_typeb_v3,
+    ddqn_harm_amplified_at_g999__synthetic_typeb_v3,
+    n_states_alone_does_not_drive_dout__synthetic_typeb_v3,
 )

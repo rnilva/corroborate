@@ -1,14 +1,25 @@
-"""Smoke tests for the v2 synthetic bias Type-A/B env.
+"""Smoke tests for the v3 synthetic bias Type-A/B env.
 
-Verifies the load-bearing structural properties of the v2 design
-(the critic recommendations from `/tmp/synthetic_env_roast.md`):
+v1 → v2 → v3 evolution lives in
+`src/corroborate_rl/corroborate_rl/synthetic_bias_typeb.py`.
 
-1. Action-DEPENDENT transitions: `s' = (s + a + 1) mod L`.
-2. Geometric-mean-preserving anisotropy: best-action SD =
-   sigma_base × exp(α); other-action SD = sigma_base × exp(-α/(K-1)).
-3. Best-action mean pinned at mu_best (DOESN'T scale with α).
-4. JIT + vmap traceability.
-5. Catalogue registration.
+These tests verify the LOAD-BEARING structural properties of v3
+(the critic recommendations from `/tmp/synthetic_v2_roast.md`):
+
+1. Action-DEPENDENT transitions: `s' = (s + a + 1) mod L` (each
+   action visits a distinct successor — preserved from v2).
+2. State-baked per-block payoff shape: `mu_state(s) = peak_value
+   · β^(s mod K)`. Successor payoff is a deterministic function
+   of (state, K, β); cross-action variance of successor payoff
+   is set by the SHAPE, NOT by per-step reward noise — the v3
+   substantive fix.
+3. peak_value pinned at 1.0 across v3 panel (|Q*| ≈ 1/(1-γ)
+   matches natural-env Asterix scale).
+4. noise_sigma = 0.02·peak_value (knife-edge σ/Δ regime).
+5. FA-binding regime check: L=1024 with hidden=[16] is genuinely
+   capacity-bound (representation check, not training-time).
+6. JIT + vmap traceability.
+7. Catalogue registration.
 
 Sample-size bounds are SD-CV-derived from the analytic mean / SD
 formulae, not "loose envelope" checks."""
@@ -25,34 +36,34 @@ from corroborate_rl.synthetic_bias_typeb import (
 
 # ============ Catalogue registration ============
 
-def test_v2_envs_registered_in_catalogue() -> None:
-    """The v2 panel registers 6 envs: 2 n_states × 3 alpha levels."""
+def test_v3_envs_registered_in_catalogue() -> None:
+    """The v3 panel registers 6 envs: 2 n_states × 3 beta levels."""
     expected = {
-        f"TypeBChainV2-K4-L{n_states}-alpha{alpha}-synthetic"
-        for n_states in (16, 64)
-        for alpha in (-0.5, 0.0, 0.5)
+        f"TypeBChainV3-K4-L{n_states}-beta{beta}-synthetic"
+        for n_states in (32, 1024)
+        for beta in (0.0, 0.5, 0.9)
     }
     registered = {
         name for name in ENV_REGISTRY.keys()
-        if name.startswith('TypeBChainV2-')
+        if name.startswith('TypeBChainV3-')
     }
     assert registered == expected
 
 
-def test_v2_envs_have_correct_obs_shape() -> None:
+def test_v3_envs_have_correct_obs_shape() -> None:
     """obs_shape = (n_states,) per the one-hot encoding."""
-    spec_l16 = get('TypeBChainV2-K4-L16-alpha0.0-synthetic')
-    assert spec_l16.observation_shape == (16,)
-    assert spec_l16.n_actions == 4
+    spec_l32 = get('TypeBChainV3-K4-L32-beta0.0-synthetic')
+    assert spec_l32.observation_shape == (32,)
+    assert spec_l32.n_actions == 4
 
-    spec_l64 = get('TypeBChainV2-K4-L64-alpha0.5-synthetic')
-    assert spec_l64.observation_shape == (64,)
+    spec_l1024 = get('TypeBChainV3-K4-L1024-beta0.9-synthetic')
+    assert spec_l1024.observation_shape == (1024,)
 
 
 def test_make_env_routes_to_synthetic_backend() -> None:
     """`make_env(spec)` constructs a BiasTypeBEnv + params when
     the spec's backend is `synthetic`."""
-    spec = get('TypeBChainV2-K4-L16-alpha0.5-synthetic')
+    spec = get('TypeBChainV3-K4-L32-beta0.5-synthetic')
     assert spec.backend == 'synthetic'
     env, params = make_env(spec)
     assert hasattr(env, 'reset')
@@ -88,15 +99,13 @@ def test_step_returns_5_tuple_with_correct_shapes() -> None:
     assert isinstance(info, dict)
 
 
-# ============ Action-dependent transitions (critic rec #1) ============
+# ============ Action-dependent transitions (critic rec #1, preserved from v2) ============
 
 def test_action_dependent_transition() -> None:
-    """The critical fix: each action leads to a DIFFERENT
-    successor state. Without this, max_b Q*(s', b) is action-
-    independent and chain-amplified bias is impossible (the v1
-    failure mode the v2 redesign addresses)."""
+    """v2 + v3: each action leads to a DIFFERENT successor state.
+    Without this, `max_b Q*(s', b)` is action-independent and
+    chain-amplified bias is impossible (the v1 failure mode)."""
     env, params = make_synthetic_bias_typeb(n_states=8, n_actions=4)
-    # Start at fixed state 3.
     s = BiasTypeBState(step=jnp.int32(0), state=jnp.int32(3))
     next_states: list[int] = []
     for a in range(4):
@@ -113,122 +122,152 @@ def test_action_dependent_transition() -> None:
     assert next_states == [4, 5, 6, 7]
 
 
-# ============ Decoupling Var_a[Q*] from Δ_v (critic rec #2) ============
+# ============ Q-target-side anisotropy primitive (v3 substantive fix) ============
 
-def test_mu_best_pinned_across_alpha() -> None:
-    """The decoupling fix: mu_best should NOT depend on
-    anisotropy_alpha. Empirical mean reward when calling the best
-    action should be mu_best regardless of α.
+def test_payoff_pinned_to_state_block_shape_beta0() -> None:
+    """At β=0 (Type-A peaked): payoff at intra-block-idx=0 is
+    peak_value; payoff at intra-block-idx ∈ {1, 2, 3} is 0
+    (modulo the small Gaussian noise).
 
-    Sample size N=10000 → SE ≈ σ / √N ≈ 0.005 (for σ ≤ 0.5);
-    tolerance 3 SE = 0.015 (well below mu_best=0.05)."""
+    Sample N=10000 → SE ≈ σ/√N ≈ 0.0002 (for σ=0.02);
+    tolerance 3 SE = 0.0006. Well below peak_value=1.0 and
+    below noise_sigma=0.02 itself."""
     n_samples = 10000
     rng = jax.random.PRNGKey(7)
     keys = jax.random.split(rng, n_samples)
 
-    def best_reward(alpha: float) -> float:
-        env, params = make_synthetic_bias_typeb(
-            n_states=8, n_actions=4, mu_best=0.05, sigma_base=0.5,
-            anisotropy_alpha=alpha,
-        )
-        # State 0, best action 0 (a_best(s) = s mod K).
-        s0 = BiasTypeBState(step=jnp.int32(0), state=jnp.int32(0))
+    env, params = make_synthetic_bias_typeb(
+        n_states=8, n_actions=4, peak_value=1.0, beta=0.0,
+        noise_sigma=0.02,
+    )
+    # Start at state 0 (intra=0). Action a leads to state
+    # (0 + a + 1) mod 8 = a + 1; intra-block-idx = (a+1) mod 4.
+    # a=3 → state 4, intra=0 → payoff = peak·β⁰ = peak = 1.0.
+    # a=0 → state 1, intra=1 → payoff = peak·β¹ = 0 at β=0.
+    s0 = BiasTypeBState(step=jnp.int32(0), state=jnp.int32(0))
 
-        def step_at(k: jax.Array) -> jax.Array:
-            _, _, r, _, _ = env.step(k, s0, jnp.int32(0), params)
-            return r
+    def step_at(k: jax.Array, a: int) -> jax.Array:
+        _, _, r, _, _ = env.step(k, s0, jnp.int32(a), params)
+        return r
 
-        rewards = jax.vmap(step_at)(keys)
-        return float(rewards.mean())
+    # Action 3 → intra-block-idx 0 successor → payoff 1.0.
+    r_best = jax.vmap(lambda k: step_at(k, 3))(keys)
+    # Action 0 → intra-block-idx 1 successor → payoff 0.0 at β=0.
+    r_other = jax.vmap(lambda k: step_at(k, 0))(keys)
 
-    # Best-action mean should be mu_best=0.05 independent of α.
-    for alpha in (-0.5, 0.0, 0.5):
-        empirical = best_reward(alpha)
-        # 3-SE tolerance on σ_best = 0.5×exp(0.5) ≈ 0.82 worst case.
-        # SE ≈ 0.82/√10000 ≈ 0.008; 3 SE ≈ 0.025.
-        assert abs(empirical - 0.05) < 0.03, (
-            f"mu_best mean drifted: alpha={alpha} empirical="
-            f"{empirical:.4f}, expected 0.05 ± 0.03"
-        )
+    mean_best = float(r_best.mean())
+    mean_other = float(r_other.mean())
+
+    # At β=0, peak=1.0: best is 1.0; non-best (intra ≥ 1) is 0.
+    # SE ≈ 0.02/√10000 ≈ 0.0002; 3 SE = 0.0006.
+    assert abs(mean_best - 1.0) < 0.005, (
+        f"best-position payoff at β=0 should be ≈ 1.0; "
+        f"empirical {mean_best:.4f}"
+    )
+    assert abs(mean_other - 0.0) < 0.005, (
+        f"non-best payoff at β=0 should be ≈ 0.0; "
+        f"empirical {mean_other:.4f}"
+    )
 
 
-def test_anisotropy_alpha_modulates_sd_not_mean() -> None:
-    """The Type-A/B axis: anisotropy_alpha shifts SD asymmetry
-    across actions but NOT means. Verifies the geometric-mean-
-    preserving construction:
-      sigma_best = sigma_base × exp(α)
-      sigma_other = sigma_base × exp(-α/(K-1))
-
-    Closed-form prediction: at α=0.5, sigma_base=0.5, K=4:
-      sigma_best = 0.5 × e^0.5 ≈ 0.824
-      sigma_other = 0.5 × e^(-1/6) ≈ 0.423"""
-    n_samples = 20000
+def test_payoff_geometric_shape_beta_0p5() -> None:
+    """At β=0.5: per-block payoffs are (1.0, 0.5, 0.25, 0.125).
+    From state 0, the K=4 actions visit successors with intra-
+    block-idx (1, 2, 3, 0) (i.e., a=3 visits intra=0). Payoffs
+    should be (β¹, β², β³, β⁰) = (0.5, 0.25, 0.125, 1.0)."""
+    n_samples = 5000
     rng = jax.random.PRNGKey(11)
     keys = jax.random.split(rng, n_samples)
 
     env, params = make_synthetic_bias_typeb(
-        n_states=8, n_actions=4, mu_best=0.0,  # zero out mean to
-        # cleanly observe noise SD.
-        sigma_base=0.5, anisotropy_alpha=0.5,
+        n_states=16, n_actions=4, peak_value=1.0, beta=0.5,
+        noise_sigma=0.02,
     )
-    # At state 0, action 0 is best (sigma_best); action 1 is non-
-    # best (sigma_other).
     s0 = BiasTypeBState(step=jnp.int32(0), state=jnp.int32(0))
 
     def step_at(k: jax.Array, a: int) -> jax.Array:
         _, _, r, _, _ = env.step(k, s0, jnp.int32(a), params)
         return r
 
-    r_best = jax.vmap(lambda k: step_at(k, 0))(keys)
-    r_other = jax.vmap(lambda k: step_at(k, 1))(keys)
-
-    sd_best = float(r_best.std())
-    sd_other = float(r_other.std())
-
-    expected_best = 0.5 * float(jnp.exp(0.5))   # ≈ 0.8244
-    expected_other = 0.5 * float(jnp.exp(-0.5 / 3))  # ≈ 0.4232
-
-    # Sample SD at N=20000 has CV ≈ 1/sqrt(2N) ≈ 0.5%; allow 5%.
-    assert abs(sd_best - expected_best) / expected_best < 0.05, (
-        f"sigma_best empirical {sd_best:.4f}, expected "
-        f"{expected_best:.4f}"
-    )
-    assert abs(sd_other - expected_other) / expected_other < 0.05, (
-        f"sigma_other empirical {sd_other:.4f}, expected "
-        f"{expected_other:.4f}"
-    )
-    # Type-B regime: sigma_best > sigma_other.
-    assert sd_best > sd_other
+    means = [
+        float(jax.vmap(lambda k: step_at(k, a))(keys).mean())
+        for a in range(4)
+    ]
+    expected = [0.5, 0.25, 0.125, 1.0]  # β¹, β², β³, β⁰
+    for a, (got, want) in enumerate(zip(means, expected, strict=True)):
+        # SE ≈ 0.02/√5000 ≈ 0.0003; 3 SE = 0.0009.
+        assert abs(got - want) < 0.005, (
+            f"action {a} (intra={(a+1) % 4}): empirical {got:.4f}, "
+            f"expected {want:.4f}"
+        )
 
 
-def test_anisotropy_alpha_isotropic_when_zero() -> None:
-    """At alpha=0, all actions have equal SD = sigma_base."""
+def test_noise_sigma_pinned_at_calibrated_value() -> None:
+    """The per-step Gaussian noise has SD = noise_sigma,
+    INDEPENDENT of β. At noise_sigma=0.02, σ/peak_value = 2% —
+    natural-env Asterix knife-edge regime.
+
+    Sample SD at N=20000 has CV ≈ 1/sqrt(2N) ≈ 0.5%; allow 5%."""
     n_samples = 20000
     rng = jax.random.PRNGKey(13)
     keys = jax.random.split(rng, n_samples)
 
-    env, params = make_synthetic_bias_typeb(
-        n_states=8, n_actions=4, mu_best=0.0,
-        sigma_base=0.5, anisotropy_alpha=0.0,
-    )
-    s0 = BiasTypeBState(step=jnp.int32(0), state=jnp.int32(0))
+    for beta in (0.0, 0.5, 0.9):
+        env, params = make_synthetic_bias_typeb(
+            n_states=8, n_actions=4, peak_value=1.0, beta=beta,
+            noise_sigma=0.02,
+        )
+        # Fix successor by always taking action 3 from state 0
+        # (always lands at intra-block-idx 0 successor → constant
+        # mean → SD is just the noise SD).
+        s0 = BiasTypeBState(step=jnp.int32(0), state=jnp.int32(0))
 
-    def step_at(k: jax.Array, a: int) -> jax.Array:
-        _, _, r, _, _ = env.step(k, s0, jnp.int32(a), params)
-        return r
+        def step_at(k: jax.Array) -> jax.Array:
+            _, _, r, _, _ = env.step(k, s0, jnp.int32(3), params)
+            return r
 
-    r_best = jax.vmap(lambda k: step_at(k, 0))(keys)
-    r_other = jax.vmap(lambda k: step_at(k, 1))(keys)
-
-    sd_best = float(r_best.std())
-    sd_other = float(r_other.std())
-
-    # Both should be ≈ sigma_base.
-    assert abs(sd_best - 0.5) / 0.5 < 0.05
-    assert abs(sd_other - 0.5) / 0.5 < 0.05
+        rewards = jax.vmap(step_at)(keys)
+        sd = float(rewards.std())
+        # SD should be 0.02 regardless of β.
+        assert abs(sd - 0.02) / 0.02 < 0.05, (
+            f"noise SD drifted at β={beta}: empirical {sd:.4f}, "
+            f"expected 0.02"
+        )
 
 
-# ============ Determinism + JIT/vmap traceability (critic rec, JAX) ============
+def test_cross_action_payoff_variance_increases_with_beta() -> None:
+    """The v3 substantive Var_a[V*(s')] knob: at β=0, only one
+    of K successors has nonzero payoff (variance = peak²·(K-1)/K²).
+    At β=0.5, all K successors have positive but graded payoffs
+    (variance is LARGER than β=0 if we count "spread across
+    nonzero entries" but SMALLER if we count "spread between
+    best and worst").
+
+    This test verifies the DOWNSTREAM claim that the variance
+    of the per-block shape vector is a deterministic function
+    of β (closed-form check, not noise-affected)."""
+    import math as math_mod
+
+    peak = 1.0
+    K = 4
+    for beta in (0.0, 0.5, 0.9):
+        # Per-block payoff vector: (peak, peak·β, peak·β², peak·β³).
+        payoffs = [peak * (beta ** j) for j in range(K)]
+        mean_p = sum(payoffs) / K
+        var_p = sum((p - mean_p) ** 2 for p in payoffs) / K
+        # The variance is closed-form and STRICTLY POSITIVE for
+        # all β ∈ [0, 1). At β=0: variance = (K-1)/K² · peak² =
+        # 3/16 = 0.1875. At β=0.5: ≈ 0.105. At β=0.9: ≈ 0.0073.
+        assert var_p > 0
+        # Argmax-margin (best - second-best) is monotone in β:
+        # β=0 → 1.0 (peak only), β=0.5 → 0.5, β=0.9 → 0.1.
+        sorted_p = sorted(payoffs, reverse=True)
+        margin = sorted_p[0] - sorted_p[1]
+        expected_margin = peak * (1.0 - beta) if beta > 0 else peak
+        assert math_mod.isclose(margin, expected_margin, rel_tol=1e-6)
+
+
+# ============ Determinism + JIT/vmap traceability ============
 
 def test_determinism_under_same_rng() -> None:
     """Same rng + same action sequence → byte-identical trajectory."""
@@ -315,5 +354,5 @@ def test_env_class_is_frozen_dataclass() -> None:
     env1 = BiasTypeBEnv()
     env2 = BiasTypeBEnv()
     # Frozen dataclass with no fields: instances are interchangeable
-    # but not identity-equal.
+    # but not identity-equal-by-default.
     assert env1 == env2

@@ -1687,94 +1687,102 @@ from corroborate_rl import jumanji_envs as _jumanji_envs  # noqa: F401, E402
 
 def _register_synthetic_bias_typeb_panel() -> None:
     """Register the synthetic bias Type-A/B controlled-substrate
-    envs (v2).
+    envs (v3).
 
-    v1 → v2 redesign rationale lives in
-    `synthetic_bias_typeb.py`'s module docstring + the
-    `/tmp/synthetic_env_roast.md` review of v1. v1's 12 envs were
-    "TypeBChain-K4-rvs{rvs}-sp{sp}-ns{ns}-synthetic"; v2 replaces
-    them with a different shape entirely (the rvs/sp/ns axes were
-    confounded and the env transitions were action-independent
-    bandit-shaped).
+    v1 → v2 → v3 evolution lives in `synthetic_bias_typeb.py`'s
+    module docstring. v1 was a "bandit in a tuxedo" (action-
+    independent transitions); v2 added action-dependent transitions
+    but placed the Type-A/B knob on per-step reward NOISE rather
+    than on the Q-target-side Var_a[V*(s')] that Cor 3.2's σ_clip
+    actually concerns. v3 places the anisotropy primitive on
+    state-baked deterministic payoffs `mu_state(s) = peak_value ·
+    β^(s mod K)`, so cross-action Var_a over successor payoffs is
+    hand-set, not Var_a[reward noise].
 
-    v2 naming convention encodes the two structural axes:
-    "TypeBChainV2-K{K}-L{n_states}-alpha{anisotropy_alpha}-synthetic"
+    v3 naming convention encodes the two structural axes:
+    "TypeBChainV3-K{K}-L{n_states}-beta{beta}-synthetic"
 
-    The structural axes are:
-    - n_states (L): FA-capacity axis. Larger L → 32-unit MLP
-      becomes capacity-bound on the K × L distinct Q* entries.
-    - anisotropy_alpha (α): Type-A vs Type-B axis. α < 0 quiets
-      the best action's reward noise (Type-A: DDQN's clip
-      denoises non-best actions → help). α > 0 amplifies the
-      best action's noise (Type-B: the noise IS the policy-
-      informative discriminator; DDQN's symmetric clip kills it
-      → harm).
+    The structural axes:
+
+    - n_states (L) ∈ {32, 1024}: FA-capacity axis. With hidden=[16],
+      L=32 → 128 Q-values through a 16-unit bottleneck (mild
+      compression, FA not strongly bound); L=1024 → 4096 Q-values
+      through 16 units (8× sub-bottleneck, FA forced to alias →
+      genuine capacity-binding regime).
+    - beta (β) ∈ {0.0, 0.5, 0.9}: Type-A/B axis. β=0 = one-peaked
+      shape (Type-A: knife-edge margin = peak_value, DDQN's clip
+      DENOISES non-best Q-tied actions → help). β=0.9 = graded
+      shape (Type-B: knife-edge margin = peak·(1-β) = 0.1·peak,
+      below per-step noise σ=0.02·peak; DDQN's clip CORRUPTS the
+      knife-edge argmax → harm).
 
     Pinned per-env defaults (NOT swept):
+
     - K = 4 actions.
-    - mu_best = 0.05 (best-action mean reward).
-    - sigma_base = 0.5 (baseline per-action noise SD).
+    - peak_value = 1.0 (gives |Q*| ≈ 1/(1-γ); at γ=0.999, V*≈1000
+      matches natural-env Asterix Q≈436 / Acrobot Q≈100 scale).
+    - noise_sigma = 0.02 (per-step Gaussian reward noise SD; 2%
+      of peak_value, matching natural-env Asterix σ/Δ ≈ 1-3%
+      knife-edge).
     - horizon = 128 steps per episode.
 
     The γ axis is swept via the YAML intervention's
     `base: {gamma: ...}` mechanism, NOT baked into the env name —
     γ is a substrate knob, not an env structural property.
 
-    Reward bounds: per-step ∈ [-3·sigma_max, +mu_best + 3·sigma_max]
-    where sigma_max = sigma_base × exp(|α|) for α > 0 ⇒
-    sigma_base × exp(α). For the chosen α range (|α| ≤ 0.5),
-    sigma_max ≤ sigma_base × e^0.5 ≈ 0.82. Registered bounds use
-    sigma_max = sigma_base * 2 (cover α up to ~0.69 with safety
-    margin), giving r_min/r_max = ∓3.0.
+    Reward bounds: per-step ∈ [-3·noise_sigma, peak_value +
+    3·noise_sigma] ≈ [-0.06, 1.06]. Registered bounds rounded to
+    [-1.0, 2.0] for safety margin (covers all β ∈ [0, 1) shapes
+    with peak_value=1.0).
 
-    Panel: 2 L levels × 3 α levels = 6 named envs. Sweep YAML
+    Panel: 2 L levels × 3 β levels = 6 named envs. Sweep YAML
     multiplies by 3 γ levels × 2 arms × n_seeds.
     """
     from corroborate_rl.synthetic_bias_typeb import (
         make_synthetic_bias_typeb,
     )
 
-    # v2 structural panel: 2 × 3 = 6 envs.
-    n_states_values = (16, 64)
-    alpha_values = (-0.5, 0.0, 0.5)
+    # v3 structural panel: 2 × 3 = 6 envs.
+    n_states_values = (32, 1024)
+    beta_values = (0.0, 0.5, 0.9)
     n_actions = 4
     horizon = 128
-    mu_best = 0.05
-    sigma_base = 0.5
+    peak_value = 1.0
+    noise_sigma = 0.02
 
     for n_states in n_states_values:
-        for alpha in alpha_values:
-            # Naming: "TypeBChainV2-K4-L16-alpha0.0-synthetic"
+        for beta in beta_values:
+            # Naming: "TypeBChainV3-K4-L32-beta0.0-synthetic"
             name = (
-                f"TypeBChainV2-K{n_actions}-L{n_states}"
-                f"-alpha{alpha}-synthetic"
+                f"TypeBChainV3-K{n_actions}-L{n_states}"
+                f"-beta{beta}-synthetic"
             )
 
             def make(
                 n_states: int = n_states,
-                alpha: float = alpha,
+                beta: float = beta,
             ) -> 'tuple[Env, EnvParams]':
                 env, params = make_synthetic_bias_typeb(
                     n_states=n_states,
                     n_actions=n_actions,
-                    mu_best=mu_best,
-                    sigma_base=sigma_base,
-                    anisotropy_alpha=alpha,
+                    peak_value=peak_value,
+                    beta=beta,
+                    noise_sigma=noise_sigma,
                     max_steps_in_episode=horizon,
                 )
                 return env, params  # type: ignore[return-value]
 
-            # Per-step reward ∈ [-3σ_max, mu_best + 3σ_max]; with
-            # sigma_base=0.5 × exp(α≤0.5) ≈ 0.82, 3σ ≈ 2.5.
-            # Round to ±3.0 with mu_best margin.
+            # Per-step reward bounded by peak_value + 3·noise_sigma
+            # = 1.0 + 0.06; symmetric lower bound covers the
+            # one-peaked Type-A regime's 0 payoffs minus 3σ.
             _register_synthetic(
                 name=name,
                 factory=make,
                 n_actions=n_actions,
                 observation_shape=(n_states,),
                 horizon=horizon,
-                r_min=-3.0,
-                r_max=+3.0 + mu_best,
+                r_min=-1.0,
+                r_max=2.0,
                 reward_regime='per_step',
             )
 
