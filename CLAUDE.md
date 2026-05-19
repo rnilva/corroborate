@@ -398,10 +398,10 @@ operational rules below catch the most common mistakes.
   `CloudAuthError(stage, message, hint)` — stages:
   `no_credentials`, `auth_failed`, `bucket_missing`, `network`.
   Covered entries: `corroborate {archive, restore, ls,
-  catalogue --remote-prefix, hypothesis}` (the last gated on
-  `--ingest*` + `--no-restore` not set + any `_remote.json` 2
-  levels deep under the ingest scope), and `scripts/run_sweep.py`
-  (gated on `sweep.archive_remote`). The
+  catalogue --remote-prefix, hypothesis, sweep run}` (`hypothesis`
+  gated on `--ingest*` + `--no-restore` not set + any
+  `_remote.json` 2 levels deep under the ingest scope; `sweep
+  run` gated on the substrate's `sweep.archive_remote`). The
   `scripts/run_hypothesis.py` back-compat shim forwards to the
   same `corroborate.cli.hypothesis.main`. Each
   entry accepts `--profile <name>` for explicit profile
@@ -413,10 +413,46 @@ operational rules below catch the most common mistakes.
 
 ## Sweep + trace discipline
 
+**Sweep entry**: `corroborate sweep run --substrate <module>
+<yaml>`. The CLI is substrate-agnostic; the substrate plugs in
+via a top-level `SWEEP_ENTRY_POINTS: SweepEntryPoints[S]` (and
+optional `SWEEP_CLI_EXTENSIONS: SweepCliExtensions`) module-level
+export. The in-tree DQN substrate exports these from
+`corroborate_rl.dqn_sweep` (the lightweight entry — NOT under
+`corroborate_rl.dqn.*` which eagerly imports JAX). The framework
+knows nothing about JAX; substrate's `pre_import_setup(args)`
+stamps env vars (`JAX_PLATFORMS`) BEFORE any heavy-import
+callable fires. Use:
+
+```bash
+set -a && . .env && set +a   # AWS creds for archive_remote
+uv run --package corroborate_rl corroborate sweep run \
+    --substrate corroborate_rl.dqn_sweep --device gpu \
+    experiments/configs/<sweep>.yaml
+```
+
+`scripts/run_sweep.py` was removed; the CLI is feature-equivalent.
+
+**Worktree-discipline for long sweeps.** Long sweeps create
+untracked `experiments/data/<corpus>/<arm>/tmp/` directories
+that survive only as long as the working tree isn't subject to
+operations that delete untracked content (`git clean -fd`,
+`git stash --include-untracked`, manual `rm -rf`). Standard
+git operations (`pull`, `merge`, `checkout`, `reset` even with
+`--hard`) do NOT touch untracked files — those are safe during
+a running sweep. If you need to run parallel work that might
+include the dangerous commands above, use a separate
+`git worktree add ../sweep-worktree main` so the running sweep's
+filesystem is independent. The runner also re-`mkdir(exist_ok)`
+each cell's parent dir before write as a belt-and-suspenders
+defense (commit `39ffb09`) — recovers automatically from a
+transient deletion of `tmp/` between cells, but the cell that
+was in-flight at the time of deletion is still lost.
+
 Sweeps write per-arm sub-corpora under `<out_dir>/<arm>/` and
 merge to top-level `<out_dir>/{runs,traces}.parquet`. The merged
 corpus is what the runner ingests; per-arm subdirs are scratch
-and `scripts/run_sweep.py` removes them post-merge.
+and the substrate's `dispatch_sweep` removes them post-merge.
 
 - **`.in_progress` sentinel**: dropped at sweep start, removed
   on successful completion. `--ingest-all` walks skip any corpus

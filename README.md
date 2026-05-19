@@ -306,13 +306,22 @@ per-hypothesis cache is a projection.
 ### Sweeps + traces
 
 ```bash
-# YAML-authored sweep — writes per-arm subdirs, merges to top-
-# level `<out_dir>/{runs,traces}.parquet`, archives to cloud.
+# YAML-authored sweep via the framework CLI. Substrate (e.g. the
+# in-tree DQN substrate at `corroborate_rl.dqn_sweep`) plugs in
+# via a typed `SWEEP_ENTRY_POINTS` module-level export; framework
+# knows nothing about JAX. Writes per-arm subdirs, merges to
+# top-level `<out_dir>/{runs,traces}.parquet`, archives to cloud.
 # Drops a `.in_progress` sentinel for the duration so concurrent
 # `--ingest-all` walks skip the half-built corpus.
 set -a && . .env && set +a   # AWS creds for archive
-PYTHONPATH=. uv run python scripts/run_sweep.py \
+uv run --package corroborate_rl corroborate sweep run \
+    --substrate corroborate_rl.dqn_sweep --device gpu \
     experiments/configs/<sweep>.yaml
+
+# Optional: pre-register bridge commitments at sweep launch
+# (writes <out_dir>/pre_registration.json immutably) by adding
+# a `pre_registered_bridges:` list to the YAML. Audit post-sweep:
+corroborate audit pre-registration <out_dir>
 
 # Inspect a trace's schema + which measurables it can satisfy
 # without materialising data:
@@ -409,7 +418,7 @@ fails fast with a typed stage + actionable hint. Covered:
   — preflights against the per-command remote (always for
   `archive`, derived from the local manifest for `restore` / `ls`,
   from `--remote-prefix` for `catalogue`).
-- `scripts/run_sweep.py` — preflights when the sweep YAML has
+- `corroborate sweep run` — preflights when the sweep YAML has
   `archive_remote` set; **fails before the sweep loop kicks off**
   (which can be hours of compute). Skip with `--skip-preflight`.
 - `corroborate hypothesis` (and the `scripts/run_hypothesis.py`
