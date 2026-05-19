@@ -79,6 +79,31 @@ def _bridge_interventional(_stub_analysis: object) -> Verdict:
     return Verdict.HELD
 
 
+# Null-prediction bridge: `predicted_direction='null'` means
+# "the bridge predicts the effect is ≈ 0." NO_EFFECT under this
+# prediction corroborates the null (the prediction succeeded),
+# NOT refutes it. Mirrors the within-arm asymmetry pattern at
+# `experiments/findings/ddqn_sweeps/finding_lambda_a_within_arm_asymmetry.py`.
+@claim_bridge(
+    source='m1', target='out',
+    direction=Direction.DIRECT, tier=Tier.ASSOCIATIONAL,
+    scope=pl.col('x') > 0, pair_by=(),
+    predicted_direction='null',
+)
+def _bridge_predicts_null(_stub_analysis: object) -> Verdict:
+    return Verdict.NO_EFFECT
+
+
+@claim_bridge(
+    source='m1', target='out',
+    direction=Direction.DIRECT, tier=Tier.INTERVENTIONAL,
+    scope=pl.col('x') > 0, pair_by=(),
+    predicted_direction='null',
+)
+def _bridge_predicts_null_interventional(_stub_analysis: object) -> Verdict:
+    return Verdict.NO_EFFECT
+
+
 # ============ evaluated_graph stamping ============
 
 def test_evaluated_graph_held_associational_correlational() -> None:
@@ -120,6 +145,74 @@ def test_evaluated_graph_no_effect_refuted() -> None:
     g = evaluated_graph(
         (_bridge_assoc_a,),
         {'_bridge_assoc_a': PostEvalEntry(verdict=Verdict.NO_EFFECT, extent_hash=7)},
+    )
+    edges = tuple(g.edges)
+    assert edges[0].metadata.evidentiary_level == 'refuted'
+
+
+def test_evaluated_graph_no_effect_under_predicted_null_corroborates() -> None:
+    """NO_EFFECT under `predicted_direction='null'` is the
+    prediction SUCCEEDING — the bridge predicted ≈ 0 effect and
+    the test confirmed it. Must stamp as admit-equivalent
+    (`'correlational'` at ASSOCIATIONAL tier), NOT `'refuted'`.
+
+    Reproduces the within-arm asymmetry pattern at
+    `experiments/findings/ddqn_sweeps/finding_lambda_a_within_arm_asymmetry.py`:
+    a directional bridge HELDs on vanilla cells and a sibling
+    null-predicting bridge admits its null on DDQN cells — both
+    are corroboration, the cluster should compose SUPPORTED."""
+    g = evaluated_graph(
+        (_bridge_predicts_null,),
+        {'_bridge_predicts_null': PostEvalEntry(verdict=Verdict.NO_EFFECT, extent_hash=7)},
+    )
+    edges = tuple(g.edges)
+    assert edges[0].metadata.evidentiary_level == 'correlational'
+
+
+def test_evaluated_graph_no_effect_under_predicted_null_interventional() -> None:
+    """Same logic at INTERVENTIONAL tier: null-prediction success
+    is admit-equivalent at the rung that produced it
+    (`'causal_one_sided'`)."""
+    g = evaluated_graph(
+        (_bridge_predicts_null_interventional,),
+        {'_bridge_predicts_null_interventional': PostEvalEntry(verdict=Verdict.NO_EFFECT, extent_hash=7)},
+    )
+    edges = tuple(g.edges)
+    assert edges[0].metadata.evidentiary_level == 'causal_one_sided'
+
+
+def test_evaluated_graph_cluster_held_plus_predicted_null_supported() -> None:
+    """The within-arm-asymmetry cluster shape end-to-end: one
+    bridge HELD on the directional prediction + one bridge
+    NO_EFFECT on the null prediction → cluster SUPPORTED, NOT
+    REFUTED. Pre-fix, this combination tripped `cluster_verdict`'s
+    `'refuted' in levels` branch and fired REFUTED on
+    every-bridge-admits."""
+    bridges = (_bridge_assoc_a, _bridge_predicts_null)
+    g = evaluated_graph(
+        bridges,
+        {
+            '_bridge_assoc_a': PostEvalEntry(
+                verdict=Verdict.HELD, extent_hash=42,
+            ),
+            '_bridge_predicts_null': PostEvalEntry(
+                verdict=Verdict.NO_EFFECT, extent_hash=42,
+            ),
+        },
+    )
+    members = tuple(e.metadata for e in g.edges)
+    assert cluster_verdict(members) == ClusterVerdict.SUPPORTED
+
+
+def test_evaluated_graph_no_effect_without_predicted_direction_refuted() -> None:
+    """Defensive: bridges that don't set `predicted_direction`
+    (the legacy default) must continue stamping NO_EFFECT as
+    `'refuted'`. The fix only changes the `predicted_direction
+    == 'null'` branch — every other prediction shape (including
+    None) keeps the existing semantics."""
+    g = evaluated_graph(
+        (_bridge_assoc_a,),  # predicted_direction defaults to None
+        {'_bridge_assoc_a': PostEvalEntry(verdict=Verdict.NO_EFFECT, extent_hash=1)},
     )
     edges = tuple(g.edges)
     assert edges[0].metadata.evidentiary_level == 'refuted'
