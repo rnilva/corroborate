@@ -87,7 +87,9 @@ def test_stratum_panel_jci_marginal_rho_high() -> None:
     """predictor (baseline z_mean = β_xz_b · μ_x) and target Δ
     (Δ y_mean = (β_xz_t − β_xz_b)·β_zy·μ_x) are both ∝ μ_x with
     constant per-env multipliers. Marginal Spearman across all
-    12 strata ≈ +1 (3 μ_x levels × 4 envs, perfectly monotone)."""
+    16 strata (4 envs × 4 μ_x levels) ≈ +1: predictor and
+    target share the same rank order in μ_x, with 4-way ties
+    at each of the 4 μ_x levels. Empirically ρ ≈ 0.994."""
     cells = _build_cells()
     result = stratum_panel_jci_spearman.fn(
         cells,
@@ -100,12 +102,10 @@ def test_stratum_panel_jci_marginal_rho_high() -> None:
         min_baseline_predictor=0.0,
     )
     assert result.n_strata == len(_ENVS) * len(_MU_X_LEVELS)
-    # Marginal: predictor and target both ∝ μ_x AND the
-    # multiplier on predictor (β_xz_b) is constant across envs;
-    # the multiplier on target ((β_xz_t − β_xz_b)·β_zy) is also
-    # constant. So the marginal relationship is strictly
-    # monotone in μ_x with NO tie except across envs at same μ_x
-    # (3 ties of 4 strata each). Empirically ρ ≈ 0.98.
+    # Spearman ρ at 16 ranks with 4 ties of 4 (Spearman tie
+    # correction reduces ρ from exact +1 to ≈ 0.994). 0.9 bound
+    # gives ~10× safety margin and still firmly catches any
+    # sign / scale / mediation-direction bug.
     assert result.rho_marginal > 0.9, (
         f'rho_marginal={result.rho_marginal:.4f} should be ≈ +1.0 '
         'under strict-monotone predictor → target across strata'

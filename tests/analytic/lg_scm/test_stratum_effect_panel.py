@@ -114,9 +114,23 @@ def test_stratum_effect_panel_mean_recovers_structural_delta() -> None:
 
 def test_stratum_effect_panel_median_recovers_structural_delta() -> None:
     """Median Δ on Gaussian data → same population value as mean
-    Δ, with sqrt(π/2) ≈ 1.253× the per-arm CV. 5σ bound on the
-    median-mode SE accommodates the wider median sampling
-    distribution without admitting any structural bug."""
+    Δ. The framework computes median(y_t) − median(y_b) on the
+    per-arm seed populations (NOT median of per-seed Δs), so the
+    shared-seed σ_z/σ_y cancellation that holds for the mean Δ
+    only PARTIALLY holds for the median Δ — empirically the
+    median picks similar-rank seeds in both arms, so the noise
+    components are correlated but not identical.
+
+    The closed-form `sqrt(π)·sd_arm/sqrt(n_seeds)` is the
+    INDEPENDENT-ARMS asymptotic Δ-of-medians SE (sum of
+    per-arm median SEs via independent-arm Pythagoras). It's a
+    CONSERVATIVE UPPER BOUND: empirically the actual SE is
+    ≈ 0.4-0.6× this value (shared-seed partial cancellation
+    reduces the noise variance). The 5σ window with the
+    conservative SE thus gives ~10σ-safety against the actual
+    sampling distribution — bound passes by margin but still
+    detects any sign / scale / pooling regression by orders of
+    magnitude."""
     panel = stratum_effect_panel.fn(
         _build_cells(),
         treatment_arm='treatment',
@@ -129,34 +143,35 @@ def test_stratum_effect_panel_median_recovers_structural_delta() -> None:
     for idx, stratum in enumerate(panel.strata):
         env_name = str(stratum[0])
         expected = _expected_y_delta(env_name)
-        # Median Δ under shared seeds: differs from mean Δ
-        # because median(y_t − y_b across seeds) ≠ median(y_t) −
-        # median(y_b) when arms aren't aligned — but the panel
-        # computes the LATTER form (median per arm, then Δ).
-        # Median(y_t) ≈ mean(y_t) for Gaussian; sampling SD on
-        # median is sqrt(π/2)·σ_arm/sqrt(n). With shared-seed
-        # cancellation breaking under per-arm-medians, σ_z/σ_y
-        # noise re-enters: full per-arm SD on y_mean ≈ 0.04 at
-        # the larger-β arm; median Δ SE ≈ sqrt(2·π/2)·0.04/√60 ≈
-        # 0.0091. 5σ bound ≈ 0.046, still < 8% of smallest Δ.
         t, b = _ENV_BETAS[env_name]
+        # Per-arm σ on y_mean (largest-β arm dominates the
+        # conservative independent-arms bound).
         var_arm = (
             (max(t, b) * _BETA_ZY) ** 2 * _SIGMA_X ** 2 / _N_STEPS
             + (_BETA_ZY * _SIGMA_Z) ** 2 / _N_STEPS
             + _SIGMA_Y ** 2 / _N_STEPS
         )
         sd_arm = math.sqrt(var_arm)
-        median_delta_se = math.sqrt(math.pi) * sd_arm / math.sqrt(_N_SEEDS_PER_ARM)
-        assert abs(deltas[idx] - expected) < 5.0 * median_delta_se, (
+        # Δ-of-medians SE under independent arms = sqrt(2 · π/2)·
+        # sd_arm/sqrt(n_seeds) = sqrt(π)·sd_arm/sqrt(n_seeds).
+        # Shared-seed cancellation halves this in practice.
+        median_delta_se_upper = (
+            math.sqrt(math.pi) * sd_arm / math.sqrt(_N_SEEDS_PER_ARM)
+        )
+        assert abs(deltas[idx] - expected) < 5.0 * median_delta_se_upper, (
             f'{env_name}: median Δ_y={deltas[idx]:.4f} '
-            f'expected={expected:.4f} 5σ={5.0 * median_delta_se:.4f}'
+            f'expected={expected:.4f} '
+            f'5σ(upper)={5.0 * median_delta_se_upper:.4f}'
         )
 
 
 def test_stratum_effect_panel_mean_vs_median_agree_under_gaussian() -> None:
-    """Under Gaussian noise, mean Δ and median Δ should land
-    close in population. The empirical spread between them is
-    bounded by the sum of their sampling SDs."""
+    """Under Gaussian noise, mean Δ and median Δ converge to the
+    same population value. Joint sampling SD on (mean Δ −
+    median Δ) is bounded by `mean_se + median_se_upper` per env
+    (worst case under uncorrelated noise; both estimators on the
+    same shared-seed cells have some correlation, so the actual
+    SD is smaller)."""
     cells = _build_cells()
     mean_panel = stratum_effect_panel.fn(
         cells,
@@ -176,12 +191,22 @@ def test_stratum_effect_panel_mean_vs_median_agree_under_gaussian() -> None:
     median_deltas = median_panel.deltas['y_mean']
     for idx, stratum in enumerate(mean_panel.strata):
         env_name = str(stratum[0])
-        # Joint sampling SD on (mean Δ - median Δ) bounded by
-        # sum of individual SDs ≈ 0.012 at env_a.
-        # 4σ window: 0.048 — should comfortably hold under
-        # Gaussian where the two aggregators agree in population.
-        assert abs(mean_deltas[idx] - median_deltas[idx]) < 0.05, (
+        t, b = _ENV_BETAS[env_name]
+        # Per-env bound = 4σ on (mean_se + median_se_upper) —
+        # both estimators are unbiased for the same population Δ.
+        mean_se = _expected_shared_seed_delta_se(env_name)
+        var_arm = (
+            (max(t, b) * _BETA_ZY) ** 2 * _SIGMA_X ** 2 / _N_STEPS
+            + (_BETA_ZY * _SIGMA_Z) ** 2 / _N_STEPS
+            + _SIGMA_Y ** 2 / _N_STEPS
+        )
+        sd_arm = math.sqrt(var_arm)
+        median_se_upper = (
+            math.sqrt(math.pi) * sd_arm / math.sqrt(_N_SEEDS_PER_ARM)
+        )
+        bound = 4.0 * (mean_se + median_se_upper)
+        assert abs(mean_deltas[idx] - median_deltas[idx]) < bound, (
             f'{env_name}: mean Δ={mean_deltas[idx]:.4f} '
             f'vs median Δ={median_deltas[idx]:.4f} '
-            'should agree under Gaussian noise'
+            f'bound={bound:.4f} (4σ on sum of estimator SEs)'
         )
