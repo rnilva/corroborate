@@ -28,6 +28,7 @@ from experiments.findings.ddqn_three_conditions._arms import (
     INTERVENTION as INTERVENTION,
 )
 from experiments.findings.lemma4_batch_invariance import (
+    finding_alpha_drives_jens_pre_registered,
     finding_b_invariance_pre_registered,
     finding_mechanism_corroborated_per_seed,
 )
@@ -57,6 +58,7 @@ BRIDGES = (
 FINDINGS = (
     finding_b_invariance_pre_registered,
     finding_mechanism_corroborated_per_seed,
+    finding_alpha_drives_jens_pre_registered,
 )
 
 
