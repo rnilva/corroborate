@@ -523,6 +523,37 @@ def test_archive_default_excludes_tmp_subdir(
     assert relpaths == {'traces.parquet'}
 
 
+# ============ CI1 guard at archive boundary ============
+
+def test_archive_refuses_hybrid_layout_with_nested_corpora(
+    tmp_path: Path,
+) -> None:
+    """`cloud.archive` must refuse a parent corpus whose dir
+    already contains a nested sub-corpus (each with its own
+    `runs.parquet`). Mirrors the runner's CI1 ingest check;
+    closes the asymmetry that previously let archive accept a
+    layout the runner would reject. The raise must fire BEFORE
+    any cloud I/O happens."""
+    from corroborate.corpus.integrity import NestedCorpusError
+
+    parent = tmp_path / 'parent'
+    _write_real_parquet(parent / 'runs.parquet')
+    _write_real_parquet(parent / 'child' / 'runs.parquet')
+
+    remote_dir = tmp_path / 'remote'
+    remote_uri = f'file://{remote_dir}'
+
+    with pytest.raises(NestedCorpusError):
+        _ = cloud.archive(parent, remote_uri)
+
+    # No cloud writes happened: the remote dir is either absent
+    # or empty (no MANIFEST.json, no parquets).
+    if remote_dir.exists():
+        assert list(remote_dir.iterdir()) == []
+    # Parent dir still has no local manifest.
+    assert not (parent / cloud.MANIFEST_NAME).exists()
+
+
 # ============ Manifest round-trip ============
 
 def test_manifest_dataclass_round_trip(

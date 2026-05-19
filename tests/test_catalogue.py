@@ -283,6 +283,98 @@ def test_nested_cloud_orphan_surfaces(tmp_path: Path) -> None:
     assert orphans[0].status == 'CLOUD_ORPHAN'
 
 
+# ============ 6b. Nested cloud archives: both classified ============
+
+def test_nested_cloud_archives_both_classified(tmp_path: Path) -> None:
+    """Hybrid parent-shell layout: parent has its own archived
+    `runs.parquet` AND a child sub-corpus that's also been
+    archived. Both rows must surface and classify correctly —
+    NOT collapse to STALE_MANIFEST on the child because the
+    catalogue's two-level walker stopped descending into the
+    parent once it saw a top-level MANIFEST.json.
+
+    The fixture writes the cloud state directly (mirroring what
+    `cloud.archive` produces) so the test exercises catalogue
+    classification independently of the new CI1 guard at
+    `cloud.archive()`."""
+    data_root = tmp_path / 'data'
+    cloud_root = tmp_path / 'cloud'
+
+    # Parent corpus's local + cloud state.
+    parent = data_root / 'parent'
+    _write_real_parquet(parent / 'runs.parquet', n_rows=4)
+    parent_remote = f'file://{cloud_root / "parent"}'
+
+    # Child sub-corpus's local + cloud state — archived BEFORE the
+    # parent dir's hybrid layout violates CI1, so cloud.archive
+    # accepts the child.
+    child = parent / 'child'
+    _write_real_parquet(child / 'runs.parquet', n_rows=2)
+    child_remote = f'file://{cloud_root / "parent" / "child"}'
+    _ = cloud.archive(child, child_remote)
+
+    # Build the parent's cloud state directly (bypassing
+    # `cloud.archive`, whose new CI1 guard refuses the hybrid).
+    # Mirror what `cloud.archive` would produce: a `_remote.json`
+    # in the local dir, a `MANIFEST.json` blob at the remote root,
+    # and the parquet file at the remote root.
+    import json
+    parent_cloud_dir = cloud_root / 'parent'
+    parent_cloud_dir.mkdir(parents=True, exist_ok=True)
+    import shutil
+    _ = shutil.copy(
+        parent / 'runs.parquet',
+        parent_cloud_dir / 'runs.parquet',
+    )
+    parent_manifest_payload = {
+        'remote_root': parent_remote,
+        'files': [{
+            'relpath': 'runs.parquet',
+            'sha256': 'a' * 64,
+            'size_bytes': (parent / 'runs.parquet').stat().st_size,
+            'pushed_at': '2026-01-01T00:00:00+00:00',
+            'row_ids': [f'cell-{i}' for i in range(4)],
+        }],
+    }
+    _ = (parent / cloud.MANIFEST_NAME).write_text(
+        json.dumps(parent_manifest_payload, indent=2),
+    )
+    _ = (parent_cloud_dir / 'MANIFEST.json').write_text(
+        json.dumps(parent_manifest_payload, indent=2),
+    )
+
+    rows = catalogue.catalogue(
+        data_root,
+        remote_prefix=f'file://{cloud_root}',
+    )
+    by_addr = {(r.parent, r.name): r for r in rows}
+
+    assert ('', 'parent') in by_addr
+    assert ('parent', 'child') in by_addr
+
+    parent_row = by_addr['', 'parent']
+    child_row = by_addr['parent', 'child']
+
+    assert parent_row.status == 'CLOUD_AND_LOCAL'
+    assert child_row.status == 'CLOUD_AND_LOCAL'
+
+    assert child_row.cloud is not None
+    # The child's cloud info must point at child_remote, NOT the
+    # parent_remote (the bug surfaced this as None because the
+    # nested walker skipped the parent's grandchildren).
+    assert child_row.cloud.remote_root == child_remote
+
+    # Negative control: evicting the child's local parquet must
+    # classify CLOUD_EVICTED (not STALE_MANIFEST).
+    (child / 'runs.parquet').unlink()
+    rows_after = catalogue.catalogue(
+        data_root,
+        remote_prefix=f'file://{cloud_root}',
+    )
+    by_addr_after = {(r.parent, r.name): r for r in rows_after}
+    assert by_addr_after['parent', 'child'].status == 'CLOUD_EVICTED'
+
+
 # ============ 7. IN_PROGRESS_SCAFFOLD ============
 
 def test_in_progress_scaffold(tmp_path: Path) -> None:

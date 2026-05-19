@@ -252,7 +252,14 @@ def test_two_run_intervention_calls_share_out_dir_merge_includes_all_cells(
     locally without S3 credentials. Two grid_points per call, two
     arms per grid_point → 4 cells per call → 8 cells in the final
     union.
+
+    `archive_remote` lives in a sibling of `out_dir` (not inside
+    it), so the new CI1 guard at `cloud.archive()` doesn't flag
+    fsspec's local uploads as nested-corpus violations of the
+    sweep dir.
     """
+    out_dir = tmp_path / 'sweep'
+    out_dir.mkdir()
     archive_remote = (tmp_path / 'remote').as_uri()
 
     # Tag includes replicate so each call's cells have distinct
@@ -271,7 +278,7 @@ def test_two_run_intervention_calls_share_out_dir_merge_includes_all_cells(
         measurables=_StubHypothesis.MEASURABLES,
         grid_points=[{'replicate': 0}, {'replicate': 1}],
         runner=_stub_runner,
-        out_dir=tmp_path,
+        out_dir=out_dir,
         archive_remote=archive_remote,
         arm_tag=_replicate_tag,
     )
@@ -283,7 +290,7 @@ def test_two_run_intervention_calls_share_out_dir_merge_includes_all_cells(
         measurables=_StubHypothesis.MEASURABLES,
         grid_points=[{'replicate': 2}, {'replicate': 3}],
         runner=_stub_runner,
-        out_dir=tmp_path,
+        out_dir=out_dir,
         archive_remote=archive_remote,
         arm_tag=_replicate_tag,
     )
@@ -406,7 +413,14 @@ def test_merge_integrity_check_raises_when_manifest_filter_drops_shards(
 
     Pre-fix: silent corruption uploaded via force=True. Post-fix:
     MergeIntegrityError before upload.
+
+    `archive_remote` lives in a sibling of `out_dir` (not inside
+    it) so the CI1 guard at `cloud.archive()` doesn't flag
+    fsspec's local uploads as nested-corpus violations of the
+    sweep dir.
     """
+    out_dir = tmp_path / 'sweep'
+    out_dir.mkdir()
     archive_remote = (tmp_path / 'remote').as_uri()
 
     def _replicate_tag(arm_key: str, gp: Mapping[str, object]) -> str:
@@ -420,7 +434,7 @@ def test_merge_integrity_check_raises_when_manifest_filter_drops_shards(
         measurables=_StubHypothesis.MEASURABLES,
         grid_points=[{'replicate': 0}, {'replicate': 1}],
         runner=_stub_runner,
-        out_dir=tmp_path,
+        out_dir=out_dir,
         archive_remote=archive_remote,
         arm_tag=_replicate_tag,
     )
@@ -457,7 +471,7 @@ def test_merge_integrity_check_raises_when_manifest_filter_drops_shards(
             measurables=_StubHypothesis.MEASURABLES,
             grid_points=[{'replicate': 2}, {'replicate': 3}],
             runner=_stub_runner,
-            out_dir=tmp_path,
+            out_dir=out_dir,
             archive_remote=archive_remote,
             arm_tag=_replicate_tag,
         )

@@ -250,16 +250,21 @@ def _list_archives_two_level(prefix: str) -> tuple[str, ...]:
     """Return remote_root URIs with MANIFEST.json reachable, up to
     one level of nesting under `prefix`. Top-level archives come
     from `cloud.list_archives`; nested ones from a second LIST on
-    each top-level child that lacks its own MANIFEST.json."""
+    each top-level child.
+
+    A top-level child that itself carries a MANIFEST.json is STILL
+    descended into so its sub-corpora's manifests stay discoverable
+    (the "hybrid" parent-shell layout: parent has its own
+    `runs.parquet` archived AND child directories with their own
+    `runs.parquet` archived). Skipping descent under such children
+    misclassifies their sub-corpora as STALE_MANIFEST. The output
+    set deduplicates so each `remote_root` appears once."""
     if not prefix.endswith('/'):
         prefix = prefix + '/'
-    direct = {r.rstrip('/') for r in cloud.list_archives(prefix)}
-    out: set[str] = set(direct)
+    out: set[str] = {r.rstrip('/') for r in cloud.list_archives(prefix)}
     all_direct = _fs.remote_list_dir(prefix)
     for child in all_direct:
         child_clean = child.rstrip('/')
-        if child_clean in direct:
-            continue
         for grandchild in cloud.list_archives(child_clean):
             out.add(grandchild.rstrip('/'))
     return tuple(sorted(out))

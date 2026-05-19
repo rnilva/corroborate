@@ -582,6 +582,22 @@ def archive(
             f'{remote_root!r}. Restore + re-archive if intentional.',
         )
 
+    # CORPUS_INTEGRITY.md CI1: refuse to archive a directory that
+    # itself contains nested sub-corpora (each with its own
+    # `runs.parquet`). The runner's ingest path already refuses
+    # this layout via `assert_no_nested_corpora`; closing the
+    # asymmetry here prevents future "hybrid parent shell" archive
+    # ops that would later confuse cloud-discovery walkers
+    # (catalogue's two-level scan, etc.). Mirrors the CI3
+    # placement: pre-upload, on every archive call (not just
+    # `existing is None` — re-archiving a hybrid is also
+    # disallowed). `assert_named_corpora_no_nested` scopes the
+    # audit to `sweep_dir` itself; unrelated siblings can't trigger.
+    from corroborate.corpus.integrity import (
+        assert_named_corpora_no_nested,
+    )
+    assert_named_corpora_no_nested((sweep_dir,))
+
     # CORPUS_INTEGRITY.md CI3: refuse if a sibling corpus already
     # claims this `remote_root`. Two local corpora pushing to the
     # same s3 prefix silently overwrite each other on every
