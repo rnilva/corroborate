@@ -33,6 +33,7 @@ from experiments.findings.lemma4_batch_invariance import (
 )
 from experiments.findings.lemma4_batch_invariance.bridges import (
     lemma4_b_invariance__fr_g999_vanilla,
+    lr_drives_jens_up__fr_b128_g999_vanilla,
     mechanism_jens_predicts_outcome_within_high_B__fr_g999_vanilla,
 )
 
@@ -49,6 +50,7 @@ MODULE_SCOPE = (
 BRIDGES = (
     lemma4_b_invariance__fr_g999_vanilla,
     mechanism_jens_predicts_outcome_within_high_B__fr_g999_vanilla,
+    lr_drives_jens_up__fr_b128_g999_vanilla,
 )
 
 

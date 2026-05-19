@@ -43,6 +43,11 @@ merge_top_level: false
 # Same canonical FR γ=0.999 MLP[64,64] unshaped setup. Replay
 # batch_size = 128 (matches the lemma4 reference cell).
 
+pre_registered_bridges:
+  - bridge: experiments.findings.lemma4_batch_invariance.bridges.lr_drives_jens_up__fr_b128_g999_vanilla
+    predicted_direction: a_gt_b
+    predicted_verdict: held
+
 envs:
   - {name: FourRooms-misc, n_seeds: 30, chunk_size: 30}
 

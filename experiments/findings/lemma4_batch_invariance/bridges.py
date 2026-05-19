@@ -78,6 +78,18 @@ _FR_VANILLA_HIGH_B_SCOPE = (
 )
 
 
+_FR_LR_SWEEP_SCOPE = (
+    (pl.col('env_name') == 'FourRooms-misc')
+    & (pl.col('gamma') == 0.999)
+    & (pl.col('arm_key') == 'baseline')
+    & (pl.col('total_steps') == 1000000)
+    & (pl.col('replay.batch_size') == 128)
+    & pl.col('optimizer.inner.lr').is_in([2.5e-5, 1e-4, 2e-4])
+    & finite(pl.col('jensen_gap'))
+    & finite(pl.col('optimizer.inner.lr'))
+)
+
+
 @claim_bridge(
     source='replay.batch_size',
     target='jensen_gap',
@@ -169,5 +181,61 @@ def mechanism_jens_predicts_outcome_within_high_B__fr_g999_vanilla(
     return spearman_rho_verdict(
         partial_spearman,
         sign=-1,
+        threshold=rho_threshold,
+    )
+
+
+@claim_bridge(
+    source='optimizer.inner.lr',
+    target='jensen_gap',
+    direction=Direction.DIRECT,
+    tier=Tier.ASSOCIATIONAL,
+    scope=_FR_LR_SWEEP_SCOPE,
+    predicted_direction='a_gt_b',
+)
+def lr_drives_jens_up__fr_b128_g999_vanilla(
+    partial_spearman: PartialSpearmanResult,
+    *,
+    x: str = 'optimizer.inner.lr',
+    y: str = 'jensen_gap',
+    conditioning: tuple[str, ...] = (),
+    stratify_by: str = 'env_name',
+    min_stratum_size: int = 30,
+    rho_threshold: float = 0.3,
+) -> Verdict:
+    """Pre-registered (YAML sweep `fr_lr_sweep_at_b128`):
+    Spearman ρ(α, jens) at FR γ=0.999 × MLP[64,64] × B=128 × baseline
+    × α ∈ {2.5e-5, 1e-4, 2e-4} × n=30 seeds each = 90 cells.
+
+    Tests the α/√B effective-noise hypothesis: if higher α (at
+    fixed B) inflates effective gradient noise, the bias chain
+    amplifier (Lemma 2) compounds more aggressively → higher jens.
+
+    HELD iff ρ ≥ +0.3 AND p < 0.05. Predicted direction: a_gt_b
+    (positive correlation, larger α → larger jens).
+
+    α values chosen to span the canonical α/√B reference grid:
+    α=2.5e-5 → α/√B = 2.21e-6 (matches canonical B=2048)
+    α=1e-4   → α/√B = 8.84e-6 (matches canonical B=128 lemma4-ref)
+    α=2e-4   → α/√B = 1.77e-5 (matches canonical B=32 default)
+
+    Resolution:
+    - HELD: α drives jens at fixed B → the Lemma 4 refutation's
+      mechanism is effective-noise, not pure-B. The expectation-
+      invariance holds at constant α/√B.
+    - NO_EFFECT (significant negative): higher α → lower jens?
+      Would suggest the mechanism is something other than
+      bias chain amplification (counterexample to Lemma 2's
+      reading).
+    - POWER_INSUFFICIENT: 3 α levels with 30 seeds each may not
+      have enough across-stratum variance to detect.
+
+    Sibling to `lemma4_b_invariance__fr_g999_vanilla` (the B-sweep
+    pre-registration). Together they disentangle Lemma 4's
+    refutation mechanism."""
+    del x, y, conditioning, stratify_by, min_stratum_size
+    return spearman_rho_verdict(
+        partial_spearman,
+        sign=+1,
         threshold=rho_threshold,
     )
