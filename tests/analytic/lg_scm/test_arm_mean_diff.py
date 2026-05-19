@@ -44,6 +44,7 @@ from collections.abc import Mapping, Sequence
 from corroborate.analyses.paired.arm_mean_diff import arm_mean_diff
 from corroborate.corpus.schema import RunRow
 
+from tests.analytic.lg_scm._closed_form import y_mean_arm_variance
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
 from tests.analytic.lg_scm.runner import run_paired_arms
 
@@ -74,25 +75,17 @@ def _expected_mean_diff(*, beta_xz_t: float, beta_xz_b: float) -> float:
 
 
 def _expected_arm_var(*, beta_xz: float) -> float:
-    """Closed-form Var[y_mean_per_seed | arm] including ALL
-    structural noise terms.
-
-    Per-step y_t = β_zy · (β_xz · x_t + σ_z · ε_z_t) + σ_y · ε_y_t.
-    Mean over n_steps: y_mean = β_xz·β_zy·x_mean + β_zy·σ_z·ε_z_avg
-                       + σ_y·ε_y_avg. The three terms are
-    uncorrelated, so:
-
-        Var[y_mean] = (β_xz · β_zy)² · σ_x² / n_steps
-                    + (β_zy · σ_z)² / n_steps
-                    + σ_y² / n_steps
+    """Population Var[y_mean_per_seed | arm]. Delegates to the
+    shared `y_mean_arm_variance` helper for the canonical 3-term
+    structural-variance decomposition (cf. `_closed_form.py`).
 
     At β_xz_b = 0.2 the σ_z + σ_y noise terms account for ~59%
     of the variance (the X_avg term scales as β_xz²); omitting
     them would understate the per-arm variance by ~2.4×."""
-    return (
-        (beta_xz * _BETA_ZY) ** 2 * (_SIGMA_X ** 2) / _N_STEPS
-        + (_BETA_ZY * _SIGMA_Z) ** 2 / _N_STEPS
-        + (_SIGMA_Y ** 2) / _N_STEPS
+    return y_mean_arm_variance(
+        beta_xz=beta_xz, beta_zy=_BETA_ZY,
+        sigma_x=_SIGMA_X, sigma_z=_SIGMA_Z, sigma_y=_SIGMA_Y,
+        n_steps=_N_STEPS,
     )
 
 

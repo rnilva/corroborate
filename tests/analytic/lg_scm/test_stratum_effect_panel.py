@@ -26,6 +26,7 @@ from corroborate.analyses.panel.stratum_effect_panel import (
     stratum_effect_panel,
 )
 
+from tests.analytic.lg_scm._closed_form import y_mean_arm_sd
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
 from tests.analytic.lg_scm.runner import run_multi_env_paired_arms
 
@@ -145,16 +146,15 @@ def test_stratum_effect_panel_median_recovers_structural_delta() -> None:
         expected = _expected_y_delta(env_name)
         t, b = _ENV_BETAS[env_name]
         # Per-arm σ on y_mean (largest-β arm dominates the
-        # conservative independent-arms bound).
-        var_arm = (
-            (max(t, b) * _BETA_ZY) ** 2 * _SIGMA_X ** 2 / _N_STEPS
-            + (_BETA_ZY * _SIGMA_Z) ** 2 / _N_STEPS
-            + _SIGMA_Y ** 2 / _N_STEPS
+        # conservative independent-arms bound). Δ-of-medians SE
+        # under independent arms = sqrt(2 · π/2)·sd_arm/sqrt(n) =
+        # sqrt(π)·sd_arm/sqrt(n). Shared-seed cancellation halves
+        # this in practice.
+        sd_arm = y_mean_arm_sd(
+            beta_xz=max(t, b), beta_zy=_BETA_ZY,
+            sigma_x=_SIGMA_X, sigma_z=_SIGMA_Z, sigma_y=_SIGMA_Y,
+            n_steps=_N_STEPS,
         )
-        sd_arm = math.sqrt(var_arm)
-        # Δ-of-medians SE under independent arms = sqrt(2 · π/2)·
-        # sd_arm/sqrt(n_seeds) = sqrt(π)·sd_arm/sqrt(n_seeds).
-        # Shared-seed cancellation halves this in practice.
         median_delta_se_upper = (
             math.sqrt(math.pi) * sd_arm / math.sqrt(_N_SEEDS_PER_ARM)
         )
@@ -195,12 +195,11 @@ def test_stratum_effect_panel_mean_vs_median_agree_under_gaussian() -> None:
         # Per-env bound = 4σ on (mean_se + median_se_upper) —
         # both estimators are unbiased for the same population Δ.
         mean_se = _expected_shared_seed_delta_se(env_name)
-        var_arm = (
-            (max(t, b) * _BETA_ZY) ** 2 * _SIGMA_X ** 2 / _N_STEPS
-            + (_BETA_ZY * _SIGMA_Z) ** 2 / _N_STEPS
-            + _SIGMA_Y ** 2 / _N_STEPS
+        sd_arm = y_mean_arm_sd(
+            beta_xz=max(t, b), beta_zy=_BETA_ZY,
+            sigma_x=_SIGMA_X, sigma_z=_SIGMA_Z, sigma_y=_SIGMA_Y,
+            n_steps=_N_STEPS,
         )
-        sd_arm = math.sqrt(var_arm)
         median_se_upper = (
             math.sqrt(math.pi) * sd_arm / math.sqrt(_N_SEEDS_PER_ARM)
         )

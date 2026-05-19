@@ -43,6 +43,7 @@ from collections.abc import Mapping
 
 from corroborate.analyses.panel.stratum_panel import stratum_panel
 
+from tests.analytic.lg_scm._closed_form import y_mean_arm_sd
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
 from tests.analytic.lg_scm.runner import run_multi_env_paired_arms
 
@@ -100,15 +101,14 @@ def _expected_y_delta(env: str) -> float:
 
 
 def _expected_y_arm_sd(beta_xz: float) -> float:
-    """Population per-arm SD of y_mean across seeds, including
-    all three variance components (X_avg + σ_z + σ_y propagation
-    through β_zy)."""
-    var = (
-        (beta_xz * _BETA_ZY) ** 2 * _SIGMA_X ** 2 / _N_STEPS
-        + (_BETA_ZY * _SIGMA_Z) ** 2 / _N_STEPS
-        + _SIGMA_Y ** 2 / _N_STEPS
+    """Population per-arm SD of y_mean across seeds. Delegates to
+    the shared `y_mean_arm_sd` helper for the 3-term variance
+    decomposition (cf. `_closed_form.py`)."""
+    return y_mean_arm_sd(
+        beta_xz=beta_xz, beta_zy=_BETA_ZY,
+        sigma_x=_SIGMA_X, sigma_z=_SIGMA_Z, sigma_y=_SIGMA_Y,
+        n_steps=_N_STEPS,
     )
-    return math.sqrt(var)
 
 
 def test_stratum_panel_strata_indexing_and_counts() -> None:

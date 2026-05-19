@@ -75,34 +75,33 @@ def _scm(mu_x: float, beta_xz: float, beta_zy: float) -> LinearGaussianSCM:
     )
 
 
-def _build_cells() -> list[Mapping[str, object]]:
+def _build_cells(
+    *,
+    beta_zy_below: float = _BETA_ZY_BELOW,
+    beta_zy_above: float = _BETA_ZY_ABOVE,
+) -> list[Mapping[str, object]]:
+    """Build per-(env, burst) cells. Per-env β_zy controlled
+    independently for the above/below groups so the homogeneous-
+    link scenario reuses the same builder with both args equal."""
     rows: list[Mapping[str, object]] = []
-    for env, mu_x in _ENVS_BELOW.items():
-        treatments = tuple(
-            _scm(mu_x, _BETA_XZ_T, _BETA_ZY_BELOW) for _ in range(_N_BURSTS)
-        )
-        baselines = tuple(
-            _scm(mu_x, _BETA_XZ_B, _BETA_ZY_BELOW) for _ in range(_N_BURSTS)
-        )
-        rows.extend(run_paired_phased_arms(
-            treatments_per_burst=treatments,
-            baselines_per_burst=baselines,
-            seeds=tuple(range(_N_SEEDS)),
-            env_name=env,
-        ))
-    for env, mu_x in _ENVS_ABOVE.items():
-        treatments = tuple(
-            _scm(mu_x, _BETA_XZ_T, _BETA_ZY_ABOVE) for _ in range(_N_BURSTS)
-        )
-        baselines = tuple(
-            _scm(mu_x, _BETA_XZ_B, _BETA_ZY_ABOVE) for _ in range(_N_BURSTS)
-        )
-        rows.extend(run_paired_phased_arms(
-            treatments_per_burst=treatments,
-            baselines_per_burst=baselines,
-            seeds=tuple(range(_N_SEEDS)),
-            env_name=env,
-        ))
+    for envs, beta_zy in (
+        (_ENVS_BELOW, beta_zy_below), (_ENVS_ABOVE, beta_zy_above),
+    ):
+        for env, mu_x in envs.items():
+            treatments = tuple(
+                _scm(mu_x, _BETA_XZ_T, beta_zy)
+                for _ in range(_N_BURSTS)
+            )
+            baselines = tuple(
+                _scm(mu_x, _BETA_XZ_B, beta_zy)
+                for _ in range(_N_BURSTS)
+            )
+            rows.extend(run_paired_phased_arms(
+                treatments_per_burst=treatments,
+                baselines_per_burst=baselines,
+                seeds=tuple(range(_N_SEEDS)),
+                env_name=env,
+            ))
     return rows
 
 
@@ -155,22 +154,7 @@ def test_stratum_link_moderation_no_moderation_under_homogeneous_link() -> None:
     OLS solve isn't exactly zero — it picks up tiny residual
     variance from per-stratum mean_seeds(X_avg) — but the
     interaction's contribution to outcome variance is null."""
-    # Rebuild cells with uniform β_zy = 1.5 across all envs.
-    rows: list[Mapping[str, object]] = []
-    all_envs = {**_ENVS_BELOW, **_ENVS_ABOVE}
-    for env, mu_x in all_envs.items():
-        treatments = tuple(
-            _scm(mu_x, _BETA_XZ_T, 1.5) for _ in range(_N_BURSTS)
-        )
-        baselines = tuple(
-            _scm(mu_x, _BETA_XZ_B, 1.5) for _ in range(_N_BURSTS)
-        )
-        rows.extend(run_paired_phased_arms(
-            treatments_per_burst=treatments,
-            baselines_per_burst=baselines,
-            seeds=tuple(range(_N_SEEDS)),
-            env_name=env,
-        ))
+    rows = _build_cells(beta_zy_below=1.5, beta_zy_above=1.5)
     result = stratum_link_moderation_dowhy.fn(
         rows,
         treatment_arm='treatment',

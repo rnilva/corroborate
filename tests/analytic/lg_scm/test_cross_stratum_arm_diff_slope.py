@@ -155,7 +155,7 @@ def test_cross_stratum_arm_diff_slope_min_strata_floor_returns_nan() -> None:
     assert math.isnan(result.p_value)
 
 
-def test_cross_stratum_arm_diff_slope_negative_contrast_inverts_sign() -> None:
+def test_cross_stratum_arm_diff_slope_constant_target_returns_nan_or_zero() -> None:
     """Flip the predictor/target roles — y_mean as predictor, x_mean
     as target. Δ_x is zero across all strata (treatment doesn't
     affect X), so the slope is unidentified; ρ should be near
