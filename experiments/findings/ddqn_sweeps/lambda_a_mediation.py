@@ -333,8 +333,136 @@ def joint_bias_geometry_mediates_arm_outcome__cross_env_g0999(
     return Verdict.POWER_INSUFFICIENT, None
 
 
+# Bridge 4 + 5 — Within-arm Λ_a-as-predictor asymmetry.
+# Vanilla cells: Λ_a predicts outcome. DDQN cells: clip abolishes
+# the predictive relationship. Together they form a paired
+# within-arm pattern: DDQN's intervention NEUTRALIZES the
+# vanilla-side bias-asymmetry → outcome channel.
+_VANILLA_G999_SCOPE: pl.Expr = (
+    _GAMMA_999_SCOPE
+    & (pl.col('arm_key') == VANILLA_ARM)
+    & pl.col('lambda_a_late').is_finite()
+    & pl.col('jensen_gap').is_finite()
+    & pl.col('eval_best_burst_raw_mean').is_finite()
+)
+
+_DDQN_G999_SCOPE: pl.Expr = (
+    _GAMMA_999_SCOPE
+    & (pl.col('arm_key') == DDQN_ARM)
+    & pl.col('lambda_a_late').is_finite()
+    & pl.col('jensen_gap').is_finite()
+    & pl.col('eval_best_burst_raw_mean').is_finite()
+)
+
+
+@claim_bridge(
+    source='lambda_a_late',
+    target='eval_best_burst_raw_mean',
+    direction=Direction.INVERSE,
+    tier=Tier.ASSOCIATIONAL,
+    scope=_VANILLA_G999_SCOPE,
+    predicted_direction='a_lt_b',
+)
+def vanilla_lambda_a_predicts_outcome__within_arm_g0999(
+    partial_spearman: PartialSpearmanResult,
+    *,
+    x: str = 'lambda_a_late',
+    y: str = 'eval_best_burst_raw_mean',
+    conditioning: tuple[str, ...] = ('jensen_gap',),
+    stratify_by: str = 'env_name',
+    min_stratum_size: int = 8,
+    held_rho: float = 0.10,
+    sign_flip_rho: float = 0.10,
+    min_strata: int = 5,
+) -> tuple[Verdict, RefutationClass | None]:
+    """Within VANILLA cells at γ=0.999: per-cell Λ_a inversely
+    predicts outcome after controlling for jens.
+
+    Cor 3.2 reading: high σ_clip · √(2 ln K) / Δ_v signals that
+    the bias-asymmetry inequality (γ · σ_clip · √(2 ln K) < Δ_v)
+    is closer to being violated. Vanilla cells where the
+    inequality fails should show degraded outcome (bias corrupts
+    argmax → policy worse). Conditioning on jens isolates the
+    asymmetry channel from the bias-magnitude channel.
+
+    Empirical: marginal ρ=-0.299 p=5e-13; partial | jens
+    ρ=-0.169 p=7.7e-5 (commit `4c075bf` cache state, n=570
+    vanilla cells × 8 envs). HELD when ρ ≤ -held_rho with
+    sufficient strata.
+
+    Pairs with `ddqn_lambda_a_does_not_predict_outcome__within_arm_g0999`
+    — the DDQN-side null test. The pair forms a within-arm
+    asymmetry pattern: Λ_a → outcome is real in vanilla and
+    abolished in DDQN — DIRECT per-cell evidence for the
+    bias Type A/B framing, distinct from the n=8 cross-env
+    moderation panel which is currently POWER_INSUFFICIENT."""
+    del x, y, conditioning, stratify_by, min_stratum_size
+    if partial_spearman.n_strata < min_strata:
+        return Verdict.POWER_INSUFFICIENT, None
+    rho = partial_spearman.rho_pooled
+    if math.isnan(rho):
+        return Verdict.POWER_INSUFFICIENT, None
+    if rho <= -held_rho:
+        return Verdict.HELD, None
+    if rho >= sign_flip_rho:
+        return Verdict.NO_EFFECT, RefutationClass.SIGN_FLIP
+    return Verdict.POWER_INSUFFICIENT, None
+
+
+@claim_bridge(
+    source='lambda_a_late',
+    target='eval_best_burst_raw_mean',
+    direction=Direction.DIRECT,
+    tier=Tier.ASSOCIATIONAL,
+    scope=_DDQN_G999_SCOPE,
+    predicted_direction='null',
+)
+def ddqn_lambda_a_does_not_predict_outcome__within_arm_g0999(
+    partial_spearman: PartialSpearmanResult,
+    *,
+    x: str = 'lambda_a_late',
+    y: str = 'eval_best_burst_raw_mean',
+    conditioning: tuple[str, ...] = ('jensen_gap',),
+    stratify_by: str = 'env_name',
+    min_stratum_size: int = 8,
+    null_threshold: float = 0.10,
+    held_strong_rho: float = 0.30,
+    min_strata: int = 5,
+) -> tuple[Verdict, RefutationClass | None]:
+    """Within DDQN cells at γ=0.999: Λ_a does NOT predict outcome
+    after conditioning on jens.
+
+    DDQN's clip neutralizes the bias-asymmetry channel — even
+    when σ_clip · √(2 ln K) / Δ_v is high, DDQN's argmax doesn't
+    suffer outcome-wise because the clip preserves the policy
+    despite the per-cell asymmetry signature. Tests the dual of
+    `vanilla_lambda_a_predicts_outcome__within_arm_g0999`.
+
+    Empirical: marginal ρ=-0.072 p=0.09 (basically null);
+    partial | jens ρ=+0.006 p=0.89 (clean null) — DDQN's outcome
+    is uncoupled from per-cell Λ_a after controlling for jens.
+
+    Predicted NULL_EFFECT (|ρ| ≤ null_threshold).
+    HELD-equivalent for the dual claim if |ρ| ≥ held_strong_rho
+    would say DDQN's outcome IS coupled to Λ_a — would refute
+    the bias-asymmetry-neutralization reading."""
+    del x, y, conditioning, stratify_by, min_stratum_size
+    if partial_spearman.n_strata < min_strata:
+        return Verdict.POWER_INSUFFICIENT, None
+    rho = partial_spearman.rho_pooled
+    if math.isnan(rho):
+        return Verdict.POWER_INSUFFICIENT, None
+    if abs(rho) <= null_threshold:
+        return Verdict.NO_EFFECT, RefutationClass.NULL_EFFECT
+    if abs(rho) >= held_strong_rho:
+        return Verdict.HELD, None
+    return Verdict.POWER_INSUFFICIENT, None
+
+
 BRIDGES = (
     sigma_lambda_a_moderates_ddqn_outcome__cross_env_g0999,
     lambda_a_does_not_mediate_outcome__cross_stratum_g0999,
     joint_bias_geometry_mediates_arm_outcome__cross_env_g0999,
+    vanilla_lambda_a_predicts_outcome__within_arm_g0999,
+    ddqn_lambda_a_does_not_predict_outcome__within_arm_g0999,
 )
