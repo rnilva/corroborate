@@ -59,7 +59,9 @@ type BenchmarkFamily = Literal[
 ]
 type ActionType = Literal['discrete', 'continuous']
 type ObservationType = Literal['vector', 'image', 'structured']
-type EnvBackend = Literal['gymnax', 'jumanji', 'lunar_lander']
+type EnvBackend = Literal[
+    'gymnax', 'jumanji', 'lunar_lander', 'synthetic',
+]
 
 type ThresholdConfidence = Literal[
     'literature', 'derived', 'sample_relative', 'absent',
@@ -1274,7 +1276,81 @@ def make_env(env_spec: EnvSpec) -> 'tuple[Env, EnvParams]':
         # same method shape (reset/step/spaces) and field
         # (`max_steps_in_episode`).
         return env, params  # type: ignore[return-value]
+    if env_spec.backend == 'synthetic':
+        factory = _SYNTHETIC_FACTORIES.get(env_spec.name)
+        if factory is None:
+            raise KeyError(
+                f"Synthetic env '{env_spec.name}' has no "
+                f"registered factory in _SYNTHETIC_FACTORIES",
+            )
+        env, params = factory()
+        return env, params  # type: ignore[return-value]
     return gymnax.make(env_spec.name)
+
+
+# ============ Synthetic env factories ============
+#
+# Synthetic envs (controlled-substrate causal-test envs) match
+# the gymnax `Env` Protocol structurally without going through
+# `gymnax.make`. Each registered name maps to a factory closure
+# that builds the env + its params with the per-name config
+# baked in (parameters that change the action/state space —
+# `n_states`, `n_actions` — must be fixed-per-name; sweepable
+# scalar knobs go into `BiasTypeBParams` and are set at factory
+# time).
+
+type SyntheticFactory = Callable[[], 'tuple[Env, EnvParams]']
+
+_SYNTHETIC_FACTORIES: dict[str, SyntheticFactory] = {}
+
+
+def _register_synthetic(
+    name: str,
+    *,
+    factory: SyntheticFactory,
+    n_actions: int,
+    observation_shape: tuple[int, ...],
+    horizon: int | None,
+    r_min: float,
+    r_max: float,
+    reward_regime: RewardRegime,
+    solve_threshold: float | None = None,
+    solve_threshold_source: str | None = None,
+    solve_threshold_confidence: ThresholdConfidence = 'absent',
+    solve_threshold_outcome_path: str = 'eval_final_mean',
+) -> None:
+    """Register a synthetic-backed env with the catalogue.
+
+    Mirrors `_register_jumanji` — metadata is supplied explicitly
+    rather than introspected so registration is import-time cheap.
+    The factory closure constructs the env + params at
+    `make_env` call time."""
+    obs_type: ObservationType = (
+        'vector' if len(observation_shape) == 1
+        else 'image' if len(observation_shape) == 3
+        else 'structured'
+    )
+    _SYNTHETIC_FACTORIES[name] = factory
+    ENV_REGISTRY[name] = EnvSpec(
+        name=name,
+        action_type='discrete',
+        n_actions=n_actions,
+        observation_shape=observation_shape,
+        observation_type=obs_type,
+        horizon=horizon,
+        r_min=r_min,
+        r_max=r_max,
+        reward_regime=reward_regime,
+        benchmark_family='misc',
+        state_hash=None,
+        state_hash_cardinality=None,
+        benchmark_params=MappingProxyType({}),
+        solve_threshold=solve_threshold,
+        solve_threshold_source=solve_threshold_source,
+        solve_threshold_confidence=solve_threshold_confidence,
+        solve_threshold_outcome_path=solve_threshold_outcome_path,
+        backend='synthetic',
+    )
 
 
 # Vector-obs envs with author-declared bounds for the bucket-
@@ -1607,6 +1683,82 @@ class SolveThreshold:
 # at module-load time. Placed here (not at the top of this file)
 # because `_register_jumanji` must be defined first.
 from corroborate_rl import jumanji_envs as _jumanji_envs  # noqa: F401, E402
+
+
+def _register_synthetic_bias_typeb_panel() -> None:
+    """Register the synthetic bias Type-A/B controlled-substrate
+    envs.
+
+    The naming convention encodes the structural knobs in the env
+    name (K, n_states) plus the swept knobs (rvs = reward variance
+    scale, sp = reward sparsity, ns = noise scale, h = horizon).
+    Each named env is fixed-config; sweep yamls list one cell per
+    named env. This mirrors the per-env naming pattern MinAtar
+    uses (Asterix-MinAtar, Breakout-MinAtar) rather than the
+    parameterised-single-env approach.
+
+    Phase 1 panel (n=12): 3 reward_variance_scale × 2 sparsity ×
+    2 reward_noise_scale levels at K=4, n_states=4, h=64. Designed
+    to span the Asterix-like (high rvs, low sparsity, low noise)
+    → Breakout-like (low rvs, high sparsity, high noise) axis.
+    The TRUE Var_a[Q*] is (rvs × sp / (1 - γ))² up to a state-
+    independent constant; γ varies via the substrate's standard γ
+    sweep so we get the (env-feature × γ) cross-axis.
+
+    Reward bounds: per-step reward ∈ [-rvs - 3·ns, +rvs + 3·ns]
+    (3σ Gaussian tail); registered as ±(rvs + 3*ns)."""
+    from corroborate_rl.synthetic_bias_typeb import (
+        make_synthetic_bias_typeb,
+    )
+
+    # Phase 1 panel — 12 cells spanning rvs ∈ {0.2, 1.0, 3.0} ×
+    # sparsity ∈ {0.2, 1.0} × noise ∈ {0.1, 0.5}.
+    rvs_values = (0.2, 1.0, 3.0)
+    sparsity_values = (0.2, 1.0)
+    noise_values = (0.1, 0.5)
+    n_states = 4
+    n_actions = 4
+    horizon = 64
+
+    for rvs in rvs_values:
+        for sp in sparsity_values:
+            for ns in noise_values:
+                # Naming: "TypeBChain-K4-rvs1.0-sp1.0-ns0.1-synthetic"
+                name = (
+                    f"TypeBChain-K{n_actions}-rvs{rvs}-sp{sp}-ns{ns}"
+                    f"-synthetic"
+                )
+
+                def make(
+                    rvs: float = rvs, sp: float = sp,
+                    ns: float = ns,
+                ) -> 'tuple[Env, EnvParams]':
+                    env, params = make_synthetic_bias_typeb(
+                        n_states=n_states,
+                        n_actions=n_actions,
+                        reward_variance_scale=rvs,
+                        reward_sparsity=sp,
+                        reward_noise_scale=ns,
+                        max_steps_in_episode=horizon,
+                    )
+                    return env, params  # type: ignore[return-value]
+
+                r_bound = float(rvs + 3.0 * ns)
+                _register_synthetic(
+                    name=name,
+                    factory=make,
+                    n_actions=n_actions,
+                    observation_shape=(n_states,),
+                    horizon=horizon,
+                    r_min=-r_bound,
+                    r_max=+r_bound,
+                    reward_regime=(
+                        'event_triggered' if sp < 1.0 else 'per_step'
+                    ),
+                )
+
+
+_register_synthetic_bias_typeb_panel()
 
 
 def _register_lunar_lander() -> None:
