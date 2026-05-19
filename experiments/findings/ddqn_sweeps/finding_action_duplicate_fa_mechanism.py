@@ -17,20 +17,17 @@ Three bridges encode the substantive empirical claims about how
     q_action_std_late on k-sweep corpora → POWER_INSUFFICIENT
     until uplifted.
 
-EXPECTED: SUPPORTED on bridges 1+2 (data is in cache);
-POWER_INSUFFICIENT on bridge 3 (column missing). The composed
-verdict at cluster level is UNDERPOWERED. BLOCKED_ON names the
-re-ingest path that would land bridge 3.
+EXPECTED post-2026-05-19 ingest: SUPPORTED on all 3 bridges.
+The May 18 pre-registered DRIFT prediction (Bridge 3 fires
+HELD once `q_action_std_late` is in cache for k-sweep corpora)
+LANDED: PartialSpearman ρ p_value < 1e-11 after re-ingesting
+`action_dim_inflated_fourrooms_postfix` + `k_sweep_mountaincar`
+with `q_action_std_late` added to REQUIRED_MEASURABLES.
+Empirical: FR σ_Q 0.0050→0.0070 (k=1→4); MC σ_Q 0.115→0.167.
 
-PRE-REGISTERED DRIFT (2026-05-18): Bridge 3 prediction committed
-at this commit hash. The per-corpus measurements.parquet ALREADY
-shows the σ_Q scaling (FR k=1→4: 0.0050→0.0070; MC: 0.115→0.167;
-ρ ≈ +1 in each). Once a re-ingest uplifts `q_action_std_late`
-into the ddqn_sweeps cache, Bridge 3 should DRIFT to HELD (the
-ρ values above are well past the bridge's predicted_direction
-threshold). If Bridge 3 lands with ρ < +0.5 OR sign-flips, the
-σ_Q-scaling mechanism walks back — Finding 7 of the case study
-report becomes "amplification real, mechanism not isolated".
+PR-4 verdict: HELD. The σ_Q-scaling mechanism (per-action
+gradient density splitting → σ_Q growth ~√K) is empirically
+corroborated cross-env on the canonical k-sweep panel.
 """
 from __future__ import annotations
 
@@ -44,23 +41,10 @@ from experiments.findings.ddqn_sweeps.action_duplicate_fa_mechanism import (
 )
 
 
-EXPECTED: ClusterVerdict = ClusterVerdict.UNDERPOWERED
+EXPECTED: ClusterVerdict = ClusterVerdict.SUPPORTED
 
 
-BLOCKED_ON: str | None = (
-    'Bridge 3 (vanilla_sigma_q_scales_with_k) needs '
-    'q_action_std_late in the ddqn_sweeps cache on k-sweep corpora '
-    '(action_dim_inflated_fourrooms_postfix, k_sweep_mountaincar). '
-    'The measurement.parquet files locally have the values '
-    '(measured at original ingest), but the ddqn_sweeps cache '
-    'parquet only retains columns referenced by bridges or '
-    'REQUIRED_MEASURABLES. After adding q_action_std_late to a '
-    'REQUIRED_MEASURABLES surface (or via this very bridge\'s '
-    'target field), a re-ingest will uplift the column. Empirical '
-    'preview from per-corpus measurements: FR σ_Q 0.0050→0.0070 '
-    '(k=1→4, ρ ≈ +1), MC σ_Q 0.115→0.167 (ρ ≈ +1). Bridge 3 '
-    'should fire HELD once the cache picks up the column.'
-)
+BLOCKED_ON: str | None = None
 
 
 BRIDGES: tuple[Bridge, ...] = (
