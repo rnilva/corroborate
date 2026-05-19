@@ -27,8 +27,6 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping, Sequence
 
-import corroborate.analyses  # noqa: F401  # pyright: ignore[reportUnusedImport]
-
 from corroborate.analyses.dowhy import (
     backdoor_ate,
     placebo_refutation,

@@ -178,44 +178,67 @@ reportUnusedFunction = "none"
 # `paths_to_mutate`: framework primitives the analytic suite
 # directly targets. Surviving mutants are gaps in the closed-form
 # bounds — either the bound is too loose or a code path lacks
-# coverage.
+# coverage. Paths reflect the post-consolidation
+# `analyses/<category>/<name>.py` layout.
 paths_to_mutate = [
-    "src/corroborate/analyses/paired_g.py",
-    "src/corroborate/analyses/paired_g_per_burst.py",
-    "src/corroborate/analyses/paired_link_per_burst.py",
-    "src/corroborate/analyses/factorial_2x2.py",
-    "src/corroborate/analyses/meta_regression_paired_g.py",
-    "src/corroborate/analyses/meta_regression_per_burst.py",
-    "src/corroborate/analyses/mundlak_paired_g_per_burst.py",
-    "src/corroborate/analyses/mundlak_decomposition.py",
-    "src/corroborate/analyses/tautology_audit.py",
-    "src/corroborate/analyses/dowhy.py",
-    "src/corroborate/analyses/verdict_distribution.py",
+    # paired/
+    "src/corroborate/analyses/paired/arm_mean_diff.py",
+    "src/corroborate/analyses/paired/factorial_2x2.py",
+    # spearman/
+    "src/corroborate/analyses/spearman/partial_spearman.py",
+    "src/corroborate/analyses/spearman/stratum_panel_jci_spearman.py",
+    # panel/
+    "src/corroborate/analyses/panel/stratum_panel.py",
+    "src/corroborate/analyses/panel/stratum_effect_panel.py",
+    # link/
+    "src/corroborate/analyses/link/cross_stratum_arm_diff_slope.py",
+    "src/corroborate/analyses/link/cross_stratum_property_slope.py",
+    "src/corroborate/analyses/link/stratum_link_moderation_dowhy.py",
+    # dowhy/
+    "src/corroborate/analyses/dowhy/stratum_delta_link_dowhy.py",
+    "src/corroborate/analyses/dowhy/stratum_baseline_predictor_link_dowhy.py",
+    "src/corroborate/analyses/dowhy/paired_continuous_do_dowhy.py",
+    # diagnostic/
+    "src/corroborate/analyses/diagnostic/tautology_audit.py",
+    "src/corroborate/analyses/diagnostic/verdict_distribution.py",
+    # stats / measurables / graph (still at pre-consolidation paths)
     "src/corroborate/stats/effect_size.py",
     "src/corroborate/measurables/redundancy_check.py",
     "src/corroborate/graph/discovery.py",
 ]
+# Pre-consolidation `paths_to_mutate` also covered `paired_g` /
+# `paired_g_per_burst` / `paired_link_per_burst` /
+# `mundlak_paired_g_per_burst` / `mundlak_decomposition` /
+# `meta_regression_paired_g` / `meta_regression_per_burst` /
+# `dowhy/dowhy.py`. These remain at well-defined post-consolidation
+# paths and have lg_scm tests, but the paired-g family is off-
+# limits in RL substrate bridges (CLAUDE.md §"Methodology debt")
+# so they're a lower priority for mutate-coverage; re-add when
+# the analytic suite grows tighter closed-form coverage on them.
 # `also_copy`: mutmut copies `paths_to_mutate` + `also_copy` into
-# `mutants/`. Framework imports from `corroborate.bridge`,
-# `corroborate.core`, `corroborate.measurables`, etc. — copy the
-# whole `src/` tree so those resolve. Non-mutated files stay at
-# their original content; mutants only generate for `paths_to_mutate`.
+# `mutants/`. Copy ONLY the framework source — the RL substrate's
+# `tests/conftest.py` would otherwise collide with the framework's
+# `tests/conftest.py` at pytest plugin-registration time (both
+# resolve to `tests.conftest` regardless of import mode; the
+# collision predates the `--import-mode=importlib` workaround
+# below which only affects test-module collection, not plugin
+# registration).
 also_copy = [
-    "src/",
+    "src/corroborate/",
     # Build needs `README.md` (pyproject `readme = "README.md"`)
     # — without it the per-mutant build fails before pytest even
     # collects, and every mutant is silently marked "survived".
     "README.md",
 ]
-# `tests_dir`: both the framework-side analytic suite AND the RL
-# substrate's analytic suite (tabular MDP / deadly-triad). The
-# RL-side `tabular/test_framework_detects_hasselt_correction.py`
-# exercises `paired_g` + `verdict_from_paired_stats` from a
-# different angle (closed-form Hasselt cells) than `lg_scm/`, so
-# it tightens the bound on those primitives independently.
+# `tests_dir`: framework analytic suite + pure-math primitive
+# tests. The RL substrate's analytic suite (tabular MDP / deadly-
+# triad) was historically included to tighten paired_g via
+# Hasselt cells, but it triggers the conftest-name collision
+# documented above. Re-add `src/corroborate_rl/tests/analytic/`
+# here after that collision is addressed (e.g., by renaming the
+# substrate's `tests/` package to avoid the framework collision).
 tests_dir = [
     "tests/analytic/",
-    "src/corroborate_rl/tests/analytic/",
     # Pure-math primitives that don't need a substrate to test
     # (effect-size formulas, Spearman partials, jaccard / R²
     # tautology checks). Each test in these files asserts a

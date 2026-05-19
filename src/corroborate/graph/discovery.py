@@ -42,6 +42,8 @@ import polars as pl
 import statsmodels.api as sm
 from scipy.stats import norm, spearmanr
 
+from corroborate.stats import fisher_z_pool
+
 
 # ============ Variable-scope classification ============
 #
@@ -356,8 +358,8 @@ def stratified_spearman_rho(
     # `list[object]` iteration; bare ndarray iteration yields Any.
     strata_arr: npt.NDArray[np.object_] = np.asarray(strata_list, dtype=object)
     unique_strata: list[object] = list(np.unique(strata_arr))
-    z_vals: list[float] = []
-    weights: list[float] = []
+    r_per_stratum: list[float] = []
+    n_per_stratum: list[int] = []
     for k in unique_strata:
         mask: npt.NDArray[np.bool_] = np.fromiter(
             (s == k for s in strata_list),
@@ -373,20 +375,9 @@ def stratified_spearman_rho(
         r, _ = _spearman_marginal(x_k, y_k)
         if math.isnan(r):
             continue
-        r_clamped = max(-0.999999, min(0.999999, r))
-        z_k = 0.5 * math.log((1 + r_clamped) / (1 - r_clamped))
-        z_vals.append(z_k)
-        weights.append(float(n_k - 3))
-    if not z_vals:
-        return float('nan'), float('nan')
-    total_w = sum(weights)
-    if total_w <= 0:
-        return float('nan'), float('nan')
-    z_pooled = sum(w * z for w, z in zip(weights, z_vals)) / total_w
-    rho_pooled = float(math.tanh(z_pooled))
-    z_stat = z_pooled * math.sqrt(total_w)
-    p = 2 * (1.0 - float(norm.cdf(abs(z_stat))))
-    return rho_pooled, p
+        r_per_stratum.append(r)
+        n_per_stratum.append(n_k)
+    return fisher_z_pool(r_per_stratum, n_per_stratum, df_offset=3)
 
 
 def stratified_partial_spearman_rho(
@@ -409,8 +400,8 @@ def stratified_partial_spearman_rho(
     # `list[object]` iteration; bare ndarray iteration yields Any.
     strata_arr: npt.NDArray[np.object_] = np.asarray(strata_list, dtype=object)
     unique_strata: list[object] = list(np.unique(strata_arr))
-    z_vals: list[float] = []
-    weights: list[float] = []
+    r_per_stratum: list[float] = []
+    n_per_stratum: list[int] = []
     for k in unique_strata:
         mask: npt.NDArray[np.bool_] = np.fromiter(
             (s == k for s in strata_list),
@@ -424,20 +415,9 @@ def stratified_partial_spearman_rho(
         )
         if math.isnan(rho_k):
             continue
-        rho_clamped = max(-0.999999, min(0.999999, rho_k))
-        z_k = 0.5 * math.log((1 + rho_clamped) / (1 - rho_clamped))
-        z_vals.append(z_k)
-        weights.append(float(n_k - 4))
-    if not z_vals:
-        return float('nan'), float('nan')
-    total_w = sum(weights)
-    if total_w <= 0:
-        return float('nan'), float('nan')
-    z_pooled = sum(w * z for w, z in zip(weights, z_vals)) / total_w
-    rho_pooled = float(math.tanh(z_pooled))
-    z_stat = z_pooled * math.sqrt(total_w)
-    p = 2 * (1.0 - float(norm.cdf(abs(z_stat))))
-    return rho_pooled, p
+        r_per_stratum.append(rho_k)
+        n_per_stratum.append(n_k)
+    return fisher_z_pool(r_per_stratum, n_per_stratum, df_offset=4)
 
 
 def stratified_partial_spearman_rho_multi(
@@ -462,8 +442,8 @@ def stratified_partial_spearman_rho_multi(
     strata_list = list(strata)
     strata_arr: npt.NDArray[np.object_] = np.asarray(strata_list, dtype=object)
     unique_strata: list[object] = list(np.unique(strata_arr))
-    z_vals: list[float] = []
-    weights: list[float] = []
+    r_per_stratum: list[float] = []
+    n_per_stratum: list[int] = []
     for k in unique_strata:
         mask: npt.NDArray[np.bool_] = np.fromiter(
             (s == k for s in strata_list),
@@ -477,20 +457,11 @@ def stratified_partial_spearman_rho_multi(
         )
         if math.isnan(rho_k):
             continue
-        rho_clamped = max(-0.999999, min(0.999999, rho_k))
-        z_k = 0.5 * math.log((1 + rho_clamped) / (1 - rho_clamped))
-        z_vals.append(z_k)
-        weights.append(float(n_k - 3 - k_cond))
-    if not z_vals:
-        return float('nan'), float('nan')
-    total_w = sum(weights)
-    if total_w <= 0:
-        return float('nan'), float('nan')
-    z_pooled = sum(w * z for w, z in zip(weights, z_vals)) / total_w
-    rho_pooled = float(math.tanh(z_pooled))
-    z_stat = z_pooled * math.sqrt(total_w)
-    p = 2 * (1.0 - float(norm.cdf(abs(z_stat))))
-    return rho_pooled, p
+        r_per_stratum.append(rho_k)
+        n_per_stratum.append(n_k)
+    return fisher_z_pool(
+        r_per_stratum, n_per_stratum, df_offset=3 + k_cond,
+    )
 
 
 @dataclass(frozen=True, slots=True)
