@@ -164,6 +164,7 @@ class LGSCMPhasedObservation:
     """
     y: tuple[tuple[float, ...], ...]
     z: tuple[tuple[float, ...], ...]
+    x: tuple[tuple[float, ...], ...]
     x_mean_per_burst: tuple[float, ...]
     y_mean_per_burst: tuple[float, ...]
     z_mean_per_burst: tuple[float, ...]
@@ -218,6 +219,7 @@ def simulate_phased(
 
     y_per_burst: list[tuple[float, ...]] = []
     z_per_burst: list[tuple[float, ...]] = []
+    x_per_burst: list[tuple[float, ...]] = []
     x_means: list[float] = []
     y_means: list[float] = []
     z_means: list[float] = []
@@ -241,6 +243,7 @@ def simulate_phased(
             zs.append(z)
         y_per_burst.append(tuple(ys))
         z_per_burst.append(tuple(zs))
+        x_per_burst.append(tuple(xs))
         x_means.append(float(np.mean(xs)))
         y_means.append(float(np.mean(ys)))
         z_means.append(float(np.mean(zs)))
@@ -248,6 +251,7 @@ def simulate_phased(
     return LGSCMPhasedObservation(
         y=tuple(y_per_burst),
         z=tuple(z_per_burst),
+        x=tuple(x_per_burst),
         x_mean_per_burst=tuple(x_means),
         y_mean_per_burst=tuple(y_means),
         z_mean_per_burst=tuple(z_means),

@@ -222,6 +222,7 @@ def run_multi_env_paired_arms(
 # read the per-burst-mean Y, etc.
 PER_BURST_Y_KEY = 'y_per_episode'
 PER_BURST_Z_KEY = 'z_per_episode'
+PER_BURST_X_KEY = 'x_per_episode'
 
 
 def _matrix_to_trace_leaf(
@@ -288,6 +289,7 @@ def run_phased_cell(
         leaves={
             PER_BURST_Y_KEY: _matrix_to_trace_leaf(obs.y),
             PER_BURST_Z_KEY: _matrix_to_trace_leaf(obs.z),
+            PER_BURST_X_KEY: _matrix_to_trace_leaf(obs.x),
         },
     )
     return run, trace
@@ -391,6 +393,7 @@ def run_paired_phased_arms(
 
 __all__ = [
     'CellId',
+    'PER_BURST_X_KEY',
     'PER_BURST_Y_KEY',
     'PER_BURST_Z_KEY',
     'merge_cell',
