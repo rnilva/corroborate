@@ -49,16 +49,22 @@ from experiments.findings.ddqn.bias_correction import (
 #   bg_per_burst → entropy_per_burst: HELD (positive, predicted)
 #   entropy_per_burst → outcome_per_burst: HELD (null-pooled,
 #     consistent with sign-mixed by env)
-#   bg_per_burst → outcome_per_burst: NO_EFFECT (predicted null,
-#     but pool has a REAL signal — mostly driven by Acrobot's
-#     strong NEGATIVE ρ ≈ −0.8 per burst, opposite of Hasselt
-#     direction. The null prediction was empirically wrong.)
-# Cluster verdict = REFUTED because the third bridge violates
-# its predicted_direction. Substantively the per-burst chain
-# DOES corroborate the bg → entropy step, but the chain breaks
-# at the outcome step in an env-specific (not polarity-clean)
-# way. EXPECTED pins the empirical REFUTED state.
-EXPECTED: ClusterVerdict = ClusterVerdict.REFUTED
+#   bg_per_burst → outcome_per_burst: NO_EFFECT (NULL_EFFECT).
+#     The pooled ρ is near zero — the bridge's NULL prediction
+#     is corroborated AT THE POOLED LEVEL even though per-env
+#     reveals heterogeneity (Acrobot strong NEGATIVE ρ ≈ −0.8,
+#     mostly cancelled when pooled with sign-mixed other envs).
+# Cluster verdict = SUPPORTED post commit `919f73f` (framework
+# now correctly stamps NO_EFFECT (NULL_EFFECT) under
+# predicted_direction='null' as corroboration). Pre-fix the
+# cluster fired REFUTED because the null-prediction
+# admit-equivalence wasn't recognised — EXPECTED was pinned
+# REFUTED to match the buggy stamping. The literal-bridge-verdict
+# reading is: all 3 bridges admit their respective predictions
+# (HELD, HELD, NO_EFFECT under null prediction) → SUPPORTED.
+# The per-env heterogeneity Acrobot caveat is a separate
+# question that a future per-env bridge could test specifically.
+EXPECTED: ClusterVerdict = ClusterVerdict.SUPPORTED
 
 
 BLOCKED_ON: str | None = None

@@ -58,7 +58,26 @@ from experiments.findings.ddqn.polarity_conditional_mediation import (
 )
 
 
-EXPECTED: ClusterVerdict = ClusterVerdict.REFUTED
+# 2026-05-19: cluster verdict drifted from REFUTED → SUPPORTED
+# after the framework fix in commit `919f73f` (NO_EFFECT under
+# predicted_direction='null' now correctly stamps as
+# corroboration, not refutation). Current verdicts:
+#   bg_outcome_link_held_negative__reach_envs: HELD
+#     (ρ_pool=-0.105, n_strata=4 — sign correct)
+#   bg_outcome_fully_mediated_by_jens__reach_envs: NO_EFFECT
+#     under predicted_direction='null' → admit-equivalent.
+#   bg_outcome_link_null__survive_envs: NO_EFFECT under null
+#     → admit-equivalent.
+# Cluster: all 3 admit → SUPPORTED. The polarity-conditional
+# mediation claim (full mediation on REACH; no link on SURVIVE)
+# is now framework-supported at canonical scope. The earlier
+# "REFUTED" verdict was a framework artifact, not an empirical
+# walk-back. Substantive caveat: per-env magnitudes on REACH
+# remain below the +0.2 substantive threshold (ρ_pool=-0.10
+# vs author's earlier -0.18 reading); the pooled link is
+# SUPPORTED in sign + (now) framework-typed verdict, but
+# per-env magnitude weakness from the previous docstring stands.
+EXPECTED: ClusterVerdict = ClusterVerdict.SUPPORTED
 
 
 BLOCKED_ON: str | None = None
