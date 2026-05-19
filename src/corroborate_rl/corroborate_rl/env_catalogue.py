@@ -1687,39 +1687,51 @@ from corroborate_rl import jumanji_envs as _jumanji_envs  # noqa: F401, E402
 
 def _register_synthetic_bias_typeb_panel() -> None:
     """Register the synthetic bias Type-A/B controlled-substrate
-    envs (v3).
+    envs (v3.1).
 
-    v1 → v2 → v3 evolution lives in `synthetic_bias_typeb.py`'s
-    module docstring. v1 was a "bandit in a tuxedo" (action-
-    independent transitions); v2 added action-dependent transitions
-    but placed the Type-A/B knob on per-step reward NOISE rather
-    than on the Q-target-side Var_a[V*(s')] that Cor 3.2's σ_clip
-    actually concerns. v3 places the anisotropy primitive on
-    state-baked deterministic payoffs `mu_state(s) = peak_value ·
-    β^(s mod K)`, so cross-action Var_a over successor payoffs is
-    hand-set, not Var_a[reward noise].
+    v1 → v2 → v3 → v3.1 evolution lives in
+    `synthetic_bias_typeb.py`'s module docstring. v3 (state-baked
+    `mu_state(s) = peak_value · β^(s mod K)`) was scrapped after
+    value iteration confirmed two STRUCTURAL flaws
+    (`/tmp/synthetic_v3_review.md`):
 
-    v3 naming convention encodes the two structural axes:
-    "TypeBChainV3-K{K}-L{n_states}-beta{beta}-synthetic"
+    - `Var_a[V*(s'_a)] = 0` at every β (modular periodicity made
+      every reachable successor sit on the same V* orbit);
+    - Q* had only K=4 distinct values across L=1024 states (no
+      genuine FA-capacity binding).
+
+    **v3.1 fix**: random per-state payoffs
+    `mu_state[s] = peak_value · (1 - payoff_spread + payoff_spread · U_s)`
+    where `U_s ~ U(0, 1)` is seeded by `payoff_seed`. Verified by
+    value iteration (`tests/test_synthetic_bias_typeb.py`):
+    `Var_a[V*(s'_a)] > 0` at every `payoff_spread > 0`, scaling
+    monotonically; Q* has ~L distinct values (no modular collapse).
+
+    v3.1 naming convention encodes the three structural axes:
+    "TypeBChainV31-K{K}-L{n_states}-spread{payoff_spread}-seed{payoff_seed}-synthetic"
 
     The structural axes:
 
-    - n_states (L) ∈ {32, 1024}: FA-capacity axis. With hidden=[16],
-      L=32 → 128 Q-values through a 16-unit bottleneck (mild
-      compression, FA not strongly bound); L=1024 → 4096 Q-values
-      through 16 units (8× sub-bottleneck, FA forced to alias →
-      genuine capacity-binding regime).
-    - beta (β) ∈ {0.0, 0.5, 0.9}: Type-A/B axis. β=0 = one-peaked
-      shape (Type-A: knife-edge margin = peak_value, DDQN's clip
-      DENOISES non-best Q-tied actions → help). β=0.9 = graded
-      shape (Type-B: knife-edge margin = peak·(1-β) = 0.1·peak,
-      below per-step noise σ=0.02·peak; DDQN's clip CORRUPTS the
-      knife-edge argmax → harm).
+    - n_states (L) ∈ {32, 1024}: FA-capacity axis. With hidden=[16]
+      and v3.1's L distinct V*-values (no modular collapse at high
+      payoff_spread), L=32 → 128 Q-entries through a 16-unit
+      bottleneck (mild compression); L=1024 → 4096 distinct
+      Q-entries through 16 units (8× sub-bottleneck) → genuine
+      FA-binding.
+    - payoff_spread ∈ {0.0, 0.25, 0.5, 0.75, 1.0}: the v3.1
+      anisotropy knob (replaces v3's β). `payoff_spread=0`
+      degenerate (all states peak_value, Var_a[V*]=0);
+      `payoff_spread=1` max anisotropy (states uniform on
+      [0, peak_value], maximum Var_a[V*]).
+    - payoff_seed ∈ {0, 1, 2}: cross-realisation averaging. At any
+      fixed `payoff_spread`, different `payoff_seed` give
+      independent random payoff vectors. Cross-env averaging
+      smooths over seed-specific topology.
 
     Pinned per-env defaults (NOT swept):
 
     - K = 4 actions.
-    - peak_value = 1.0 (gives |Q*| ≈ 1/(1-γ); at γ=0.999, V*≈1000
+    - peak_value = 1.0 (gives |Q*| ≤ 1/(1-γ); at γ=0.999, V*≤1000
       matches natural-env Asterix Q≈436 / Acrobot Q≈100 scale).
     - noise_sigma = 0.02 (per-step Gaussian reward noise SD; 2%
       of peak_value, matching natural-env Asterix σ/Δ ≈ 1-3%
@@ -1732,59 +1744,67 @@ def _register_synthetic_bias_typeb_panel() -> None:
 
     Reward bounds: per-step ∈ [-3·noise_sigma, peak_value +
     3·noise_sigma] ≈ [-0.06, 1.06]. Registered bounds rounded to
-    [-1.0, 2.0] for safety margin (covers all β ∈ [0, 1) shapes
+    [-1.0, 2.0] for safety margin (covers all payoff_spread shapes
     with peak_value=1.0).
 
-    Panel: 2 L levels × 3 β levels = 6 named envs. Sweep YAML
-    multiplies by 3 γ levels × 2 arms × n_seeds.
+    Panel: 2 L × 5 spread × 3 payoff_seed = 30 named envs. Sweep
+    YAML can opt into a sub-panel; the v3.1 sweep config uses
+    2 L × 5 spread × 3 payoff_seed = 30 envs × 3 γ × 2 arms ×
+    n_seeds=8 = 1440 cells (≤ 1500 budget).
     """
     from corroborate_rl.synthetic_bias_typeb import (
         make_synthetic_bias_typeb,
     )
 
-    # v3 structural panel: 2 × 3 = 6 envs.
+    # v3.1 structural panel: 2 L × 5 payoff_spread × 3 payoff_seed
+    # = 30 named envs.
     n_states_values = (32, 1024)
-    beta_values = (0.0, 0.5, 0.9)
+    spread_values = (0.0, 0.25, 0.5, 0.75, 1.0)
+    payoff_seeds = (0, 1, 2)
     n_actions = 4
     horizon = 128
     peak_value = 1.0
     noise_sigma = 0.02
 
     for n_states in n_states_values:
-        for beta in beta_values:
-            # Naming: "TypeBChainV3-K4-L32-beta0.0-synthetic"
-            name = (
-                f"TypeBChainV3-K{n_actions}-L{n_states}"
-                f"-beta{beta}-synthetic"
-            )
-
-            def make(
-                n_states: int = n_states,
-                beta: float = beta,
-            ) -> 'tuple[Env, EnvParams]':
-                env, params = make_synthetic_bias_typeb(
-                    n_states=n_states,
-                    n_actions=n_actions,
-                    peak_value=peak_value,
-                    beta=beta,
-                    noise_sigma=noise_sigma,
-                    max_steps_in_episode=horizon,
+        for spread in spread_values:
+            for payoff_seed in payoff_seeds:
+                # Naming:
+                # "TypeBChainV31-K4-L32-spread0.5-seed0-synthetic"
+                name = (
+                    f"TypeBChainV31-K{n_actions}-L{n_states}"
+                    f"-spread{spread}-seed{payoff_seed}-synthetic"
                 )
-                return env, params  # type: ignore[return-value]
 
-            # Per-step reward bounded by peak_value + 3·noise_sigma
-            # = 1.0 + 0.06; symmetric lower bound covers the
-            # one-peaked Type-A regime's 0 payoffs minus 3σ.
-            _register_synthetic(
-                name=name,
-                factory=make,
-                n_actions=n_actions,
-                observation_shape=(n_states,),
-                horizon=horizon,
-                r_min=-1.0,
-                r_max=2.0,
-                reward_regime='per_step',
-            )
+                def make(
+                    n_states: int = n_states,
+                    spread: float = spread,
+                    payoff_seed: int = payoff_seed,
+                ) -> 'tuple[Env, EnvParams]':
+                    env, params = make_synthetic_bias_typeb(
+                        n_states=n_states,
+                        n_actions=n_actions,
+                        peak_value=peak_value,
+                        payoff_spread=spread,
+                        payoff_seed=payoff_seed,
+                        noise_sigma=noise_sigma,
+                        max_steps_in_episode=horizon,
+                    )
+                    return env, params  # type: ignore[return-value]
+
+                # Per-step reward bounded by peak_value +
+                # 3·noise_sigma = 1.0 + 0.06; symmetric lower bound
+                # covers spread=1.0's near-zero payoffs minus 3σ.
+                _register_synthetic(
+                    name=name,
+                    factory=make,
+                    n_actions=n_actions,
+                    observation_shape=(n_states,),
+                    horizon=horizon,
+                    r_min=-1.0,
+                    r_max=2.0,
+                    reward_regime='per_step',
+                )
 
 
 _register_synthetic_bias_typeb_panel()

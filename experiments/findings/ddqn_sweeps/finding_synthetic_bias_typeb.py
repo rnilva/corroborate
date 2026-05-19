@@ -1,6 +1,6 @@
-"""Synthetic Type-A/B controlled-substrate pre-registered Finding (v3).
+"""Synthetic Type-A/B controlled-substrate pre-registered Finding (v3.1).
 
-v1 → v2 → v3 evolution (both prior versions scrapped pre-sweep):
+v1 → v2 → v3 → v3.1 evolution (all prior versions scrapped pre-sweep):
 
 - **v1**: a bandit in a tuxedo (`s' = (s+1) mod L`); rvs knob
   confounded |Q|, Δ_v, AND Var_a[Q*] in lockstep; no FA-capacity
@@ -13,35 +13,53 @@ v1 → v2 → v3 evolution (both prior versions scrapped pre-sweep):
   put |Q*| ≈ 50 (50× under natural-env scale). Walk-back paths
   pre-laundered every observed-data shape as publishable.
   Scrapped per `/tmp/synthetic_v2_roast.md`.
-- **v3**: anisotropy primitive on the Q-TARGET side. State-baked
-  payoffs `mu_state(s) = peak_value · β^(s mod K)` set
-  Var_a[V*(s')] directly; `peak_value=1.0` matches natural-env
-  Q scale; `noise_sigma=0.02` matches Asterix knife-edge σ/Δ ≈ 2%;
-  L=1024 with hidden=[16] aliases 4096 Q-values through 16-dim
-  bottleneck (genuine FA-binding); n_seeds=27 ≥ 27 (within
-  budget; v2 critic's recommendation was ≥30, see §Honest gaps).
+- **v3**: state-baked deterministic payoff `mu_state(s) =
+  peak · β^(s mod K)`. Value iteration confirmed two STRUCTURAL
+  flaws (`/tmp/synthetic_v3_review.md`): (i) `Var_a[V*(s'_a)] = 0`
+  identically at every β (modular periodicity made every reachable
+  successor sit on the same V* orbit); (ii) Q* had only K=4
+  distinct values across L=1024 states (no FA-capacity binding).
+  v3 was the SAME conceptual error as v2 (per-step reward variance
+  vs Q-target-side variance), just relocated.
+- **v3.1**: RANDOM per-state payoffs
+  `mu_state[s] = peak · (1 - spread + spread · U_s)` with
+  `U_s ~ U(0, 1)` seeded by `payoff_seed`. Value iteration
+  confirms `Var_a[V*(s'_a)] > 0` at every spread > 0 (scales
+  monotonically) and Q* has ~L distinct entries (no modular
+  collapse). The L axis now GENUINELY binds FA capacity.
 
-v3 panel has TWO structural axes + γ substrate:
+v3.1 panel has THREE structural axes + γ substrate:
 
 - L = n_states ∈ {32, 1024} (FA-capacity)
-- β = beta ∈ {0.0, 0.5, 0.9} (Type-A/B on Q-target side)
+- payoff_spread ∈ {0.0, 0.25, 0.5, 0.75, 1.0} (anisotropy on
+  Q-target side)
+- payoff_seed ∈ {0, 1, 2} (cross-realisation averaging)
 - γ ∈ {0.95, 0.99, 0.999} (substrate axis)
 
-6 envs × 3 γ × 2 arms × 27 seeds = 972 cells (≤ 1000 budget).
+30 envs × 3 γ × 2 arms × 8 seeds = 1440 cells (≤ 1500 budget).
 
-The v3 bridges:
+The v3.1 bridges:
 
-- **P1 (PRIMARY)**: ρ(β, d_out) ≤ −0.5 pooled across γ. The
-  load-bearing prediction; n_strata=18 ≥ min_strata=10.
-- **D1 (DIAGNOSTIC)**: ρ(argmax_margin, d_out) ≥ +0.5. Inverse
-  parameterization of P1; corroborates the mechanism interpretation.
-- **D2 (DIAGNOSTIC)**: ρ(β, d_out) ≤ −0.6 at γ=0.999 sub-scope.
-  Structurally fires POWER_INSUFFICIENT at n_strata=6 < 10;
-  diagnostic value via observed ρ magnitude compared to pooled.
+- **P1 (PRIMARY)**: ρ(payoff_spread, d_out) ≤ −0.5 pooled across γ.
+  The load-bearing prediction; n_strata=90 ≥ min_strata=10.
+- **D2 (DIAGNOSTIC, PRE-REGISTERED POWER_INSUFFICIENT)**:
+  ρ(payoff_spread, d_out) ≤ −0.6 at γ=0.999 sub-scope. v3.1
+  pre-registers the PREDICTED verdict as POWER_INSUFFICIENT
+  (matching the structural diagnostic), addressing the v3
+  reviewer's discipline issue #1.
 - **N1 (PROPERLY-POWERED NULL)**: |ρ(L, d_out)| < 0.30 AND
-  p > 0.30 at β=0. Capacity-alone shouldn't drive d_out
-  direction. v2's N1 noise-permissive |ρ|≤0.3 alone was ~70%
-  type-I; v3 requires the dual rho+p criterion.
+  p > 0.30 at spread=0. Capacity-alone shouldn't drive d_out
+  direction when the env is structurally isotropic.
+
+**v3 → v3.1 bridge surgery**: D1 (`ddqn_helps_when_argmax_margin_wide`)
+was DROPPED. v3's argmax_margin = peak·(1-β) was a closed-form
+function of β → D1's ρ was rank-equivalent to P1's ρ exactly
+(the v3 reviewer's discipline issue #2: "two HELDs here look like
+corroboration but carry one bit of information"). v3.1's
+random per-state payoffs make argmax_margin a per-realisation
+RANDOM variable not derivable from the env name; no closed-form
+covariate. Dropping D1 honestly reduces the bridge count from
+4 → 3.
 
 ## Expected verdict pre-sweep
 
@@ -53,12 +71,13 @@ fires when the post-ingest verdict deviates from this pin.
 
 The v2 critic noted: "the walk-back paths accept every observed-
 data shape as publishable — that's not commitment, it's a flowchart
-of post-hoc framings." v3 commits to a SPECIFIC data shape that,
-if observed, forces the substrate-author to retract the claim:
+of post-hoc framings." v3.1 inherits v3's binding commitment to a
+SPECIFIC observed-data shape that retracts the substrate-
+identification claim:
 
 **If P1 fires NO_EFFECT-NULL (|ρ| < 0.20) with n_strata ≥ 15
 admitted** (an adequately-powered null at the primary covariate),
-the v3 synthetic substrate FAILS to reproduce the natural-env
+the v3.1 synthetic substrate FAILS to reproduce the natural-env
 Asterix Type-B mechanism. This is a RETRACTION, not a walk-back:
 the substrate-author cannot claim "synthetic substrate enables
 causal env-feature identification of the Asterix harm regime."
@@ -66,54 +85,69 @@ The Finding's EXPECTED would be repinned to NO_EFFECT-NULL with
 BLOCKED_ON=None, and the substrate paper would carry the
 retraction as a methodology-demonstration finding ("this attempt
 fails because Q-target-side anisotropy alone, in a chain MDP
-with calibrated knife-edge σ/Δ, does not reproduce Asterix's
-mechanism").
+with calibrated knife-edge σ/Δ AND non-modular Q*, does not
+reproduce Asterix's mechanism").
+
+The REFUTATION criterion's threshold n_strata=15 is binding under
+v3.1's 90-stratum primary panel: cell-budget-induced dropout
+would have to exceed 83% before the criterion becomes vacuous.
 
 ## Diagnostic predictions (disambiguation surface)
 
-- **P1 HELD + D1 HELD**: β-driven mechanism corroborated;
-  argmax-margin is the proximate mediator.
-- **P1 HELD + D1 NULL**: β matters but argmax-margin isn't the
-  mediator. Substantive open question (which channel?).
 - **P1 HELD + D2 ρ stronger than pooled**: γ-amplification
   confirmed; the chain-amplification story carries.
-- **P1 HELD + D2 ρ NULL**: γ doesn't modulate the β effect in
+- **P1 HELD + D2 ρ NULL**: γ doesn't modulate the spread effect in
   synthetic; chain amplification is natural-env-specific.
-- **N1 HELD + P1 HELD**: clean separation — β drives, L doesn't.
+- **N1 HELD + P1 HELD**: clean separation — spread drives, L
+  doesn't (at the spread=0 baseline).
 - **N1 SIGN_FLIP + P1 HELD**: capacity has an independent channel
-  beyond β at Type-A; walks back the "single causal axis" claim.
-- **N1 HELD + P1 NULL**: substrate is QUIET — neither β nor L
-  drives DDQN's sign. Different from REFUTATION because N1 is
+  beyond spread at the isotropic baseline; walks back the
+  "single causal axis" claim.
+- **N1 HELD + P1 NULL**: substrate is QUIET — neither spread nor
+  L drives DDQN's sign. Different from REFUTATION because N1 is
   consistent with HELD or NULL; needs the REFUTATION clause's
   adequately-powered check on P1.
 
-## Critic recommendations addressed
+## Critic recommendations addressed (v3.1)
 
 1. **μ_best ≈ 1**: peak_value=1.0 (was μ_best=0.05). |Q*| at
-   γ=0.999 is now 1000, matching natural-env Asterix Q≈436.
-2. **σ at 1-3% of Δ_v**: noise_sigma=0.02·peak_value. At β=0
-   (Δ_v=peak), σ/Δ=2%; at β=0.5, σ/Δ=4%; at β=0.9, σ/Δ=20% (FA-
-   residual dominates argmax — the knife-edge end of the regime).
+   γ=0.999 is ≤ 1000, matching natural-env Asterix Q≈436.
+2. **σ at 1-3% of Δ_v**: noise_sigma=0.02·peak_value. At
+   spread=1.0 the per-state argmax-margin distribution has
+   median 0.12; σ/Δ at the median is 17% (FA-residual regime).
+   The heterogeneous spread of argmax-margins across states
+   is closer to natural-env Asterix than v3's uniform per-env
+   margin.
 3. **L ≥ 1024 with hidden ≤ 16**: L ∈ {32, 1024}; hidden=[16].
-   At L=1024 the FA must alias 4096 Q-values through 16-dim
-   hidden → genuine capacity-binding.
-4. **n_seeds ≥ 30**: PARTIAL — n_seeds=27 (cell budget binding
-   at 972 ≤ 1000). 27 is closer to 30 than v2's 12; the per-
-   stratum d SE ≈ sqrt(4/27) ≈ 0.385 vs v2's 0.577.
-5. **Anisotropy primitive on Q-target side**: YES, state-baked
-   `mu_state(s) = peak_value · β^(s mod K)`. Var_a[V*(s')] is
-   hand-set via the cross-action shape, NOT Var_a[reward noise].
+   v3.1 fix: Q* has ~1024 distinct entries at L=1024 (verified
+   by VI), so 16-dim hidden GENUINELY aliases 1024 distinct
+   V*-values → real FA-binding (v3 had only 16 distinct Q*
+   entries → 16-dim hidden trivially represented them).
+4. **n_seeds ≥ 30**: PARTIAL — n_seeds=8 per env. The v3.1
+   panel inflates the env-axis count (30 envs across 3
+   payoff_seeds × 5 spreads × 2 L) to substitute env-level
+   replication for seed-level replication. Cross-env averaging
+   over payoff_seed smooths the per-realisation topology while
+   the spread axis still has 30 distinct (L, seed) pairs at each
+   spread level. Effective n at each spread level = 6 envs ×
+   3 γ × 8 seeds = 144 cells.
+5. **Anisotropy primitive on Q-target side, NON-PERIODIC**:
+   FULLY ADDRESSED. `mu_state[s] = peak · (1 - spread + spread ·
+   U_s)` with `U_s ~ U(0, 1)`. Verified by value iteration:
+   `Var_a[V*(s'_a)] > 0` at every spread > 0 (v3 had this = 0);
+   Q* has ~L distinct entries at L=1024 (v3 had only 16).
 
 ## Companion docs
 
 - `docs/PRE_REGISTRATION_synthetic_bias_typeb.md` — predictions
-  + v1/v2/v3 evolution + REFUTATION clause.
-- `/tmp/synthetic_v2_roast.md` — the hostile v2 review v3 addresses.
+  + v1/v2/v3/v3.1 evolution + REFUTATION clause.
+- `/tmp/synthetic_v3_review.md` — the v3 review (structural flaws).
+- `/tmp/synthetic_v2_roast.md` — the v2 review.
 - `/tmp/synthetic_env_roast.md` — the v1 review.
 - `src/corroborate_rl/corroborate_rl/synthetic_bias_typeb.py` —
-  the v3 env module.
-- `experiments/configs/synthetic_bias_typeb_v3_sweep.yaml` — the
-  v3 sweep config.
+  the v3.1 env module.
+- `experiments/configs/synthetic_bias_typeb_v3_1_sweep.yaml` — the
+  v3.1 sweep config.
 """
 from __future__ import annotations
 
@@ -121,39 +155,37 @@ from corroborate.bridge.bridge import Bridge
 from corroborate.graph.causal import ClusterVerdict
 
 from experiments.findings.ddqn_sweeps.synthetic_bias_typeb import (
-    ddqn_harm_amplified_at_g999__synthetic_typeb_v3,
-    ddqn_harms_under_high_beta__synthetic_typeb_v3,
-    ddqn_helps_when_argmax_margin_wide__synthetic_typeb_v3,
-    n_states_alone_does_not_drive_dout__synthetic_typeb_v3,
+    ddqn_harm_amplified_at_g999__synthetic_typeb_v31,
+    ddqn_harms_under_high_spread__synthetic_typeb_v31,
+    n_states_alone_does_not_drive_dout__synthetic_typeb_v31,
 )
 
 
 # Pre-registration: EXPECTED = EMPTY_EXTENT until sweep ingests.
-# All four bridges fire POWER_INSUFFICIENT (n_strata=0) without
+# All three bridges fire POWER_INSUFFICIENT (n_strata=0) without
 # data. The framework's DRIFT detection fires when the post-ingest
 # composed verdict deviates from this pin.
 EXPECTED: ClusterVerdict = ClusterVerdict.EMPTY_EXTENT
 
 
 BLOCKED_ON: str | None = (
-    'Pre-registered 2026-05-19 BEFORE v3 sweep ran (v1 + v2 both '
-    'scrapped pre-sweep — see docs/PRE_REGISTRATION_synthetic_bias_typeb.md '
-    '+ /tmp/synthetic_v2_roast.md). Awaiting ingest of '
-    '`experiments/data/synthetic_bias_typeb_v3_pilot` (6 envs × 3 γ × '
-    '2 arms × 27 seeds = 972 cells). Predicted post-ingest '
-    'EXPECTED=SUPPORTED iff P1 HELDs (ρ(β, d_out) ≤ −0.5, p ≤ 0.05) '
-    'AND D1 HELDs (ρ(argmax_margin, d_out) ≥ +0.5) AND N1 HELDs-as-'
-    'null (|ρ(L, d_out)| < 0.30 at β=0). REFUTATION fires if P1 '
-    'NO_EFFECT-NULL at adequately-powered n_strata ≥ 15 — retracts '
-    'the synthetic-substrate identification claim (see Finding '
-    'docstring §REFUTATION criterion). Drift on any bridge fires '
-    'DRIFT at hypothesis run-time.'
+    'Pre-registered 2026-05-19 BEFORE v3.1 sweep ran (v1 + v2 + v3 '
+    'all scrapped pre-sweep — see docs/PRE_REGISTRATION_synthetic_bias_typeb.md '
+    '+ /tmp/synthetic_v3_review.md). Awaiting ingest of '
+    '`experiments/data/synthetic_bias_typeb_v3_1_pilot` (30 envs × 3 γ × '
+    '2 arms × 8 seeds = 1440 cells). Predicted post-ingest '
+    'EXPECTED=SUPPORTED iff P1 HELDs (ρ(payoff_spread, d_out) ≤ −0.5, '
+    'p ≤ 0.05) AND N1 HELDs-as-null (|ρ(L, d_out)| < 0.30 at '
+    'spread=0). D2 pre-registered as POWER_INSUFFICIENT (structural). '
+    'REFUTATION fires if P1 NO_EFFECT-NULL at adequately-powered '
+    'n_strata ≥ 15 — retracts the synthetic-substrate identification '
+    'claim (see Finding docstring §REFUTATION criterion). Drift on '
+    'any bridge fires DRIFT at hypothesis run-time.'
 )
 
 
 BRIDGES: tuple[Bridge, ...] = (
-    ddqn_harms_under_high_beta__synthetic_typeb_v3,
-    ddqn_helps_when_argmax_margin_wide__synthetic_typeb_v3,
-    ddqn_harm_amplified_at_g999__synthetic_typeb_v3,
-    n_states_alone_does_not_drive_dout__synthetic_typeb_v3,
+    ddqn_harms_under_high_spread__synthetic_typeb_v31,
+    ddqn_harm_amplified_at_g999__synthetic_typeb_v31,
+    n_states_alone_does_not_drive_dout__synthetic_typeb_v31,
 )
