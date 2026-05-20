@@ -612,6 +612,220 @@ def compute_trace_measurables_streaming(
     return pl.concat(accumulators, how='diagonal_relaxed')
 
 
+# ============ Recompute path (local-traces opt-in) ============
+
+
+@dataclass(frozen=True, slots=True)
+class RecomputeResult:
+    """Outcome of a `recompute_corpus_measurables` call on one
+    corpus.
+
+    Four disjoint name sets discriminate what happened per
+    measurable:
+
+    - `recomputed`: measurables whose values were freshly written
+      to `measurements.parquet` on this call. Either missing from
+      the sidecar before, or sidecar hash drifted from the current
+      registry.
+    - `already_current`: measurables whose sidecar hash already
+      matched the current registry — no recompute needed.
+    - `unsatisfiable`: measurables in the gap whose transitive
+      record-key reads aren't available in `runs.parquet` or the
+      local `traces.parquet`. Skipped to avoid silently overwriting
+      finite per-corpus values with NaN. Re-ingest with cloud
+      restore to materialise traces if these need filling.
+    - `unregistered`: names passed in `required` that aren't in
+      the framework's `@measurable` registry. Caller-side bug
+      surface — these can never be computed regardless.
+
+    `is_clean` mirrors `CorpusDriftReport.is_clean`: True iff
+    nothing was recomputed AND nothing was unsatisfiable AND
+    nothing was unregistered (i.e. the corpus was fully current
+    on entry)."""
+    corpus_dir: Path
+    recomputed: tuple[str, ...]
+    already_current: tuple[str, ...]
+    unsatisfiable: tuple[str, ...]
+    unregistered: tuple[str, ...]
+
+    @property
+    def is_clean(self) -> bool:
+        return not (
+            self.recomputed or self.unsatisfiable or self.unregistered
+        )
+
+
+def recompute_corpus_measurables(
+    corpus_dir: Path,
+    *,
+    required: Sequence[str],
+    measurable_signature_fn: Callable[[str], str | None] | None = None,
+) -> RecomputeResult:
+    """Recompute the *gap* between `required` and the corpus's
+    persisted `measurements.parquet` — strictly using LOCAL inputs
+    (`runs.parquet` + local `traces.parquet`). Opt-in
+    counterpart to the cloud-restore-driven recompute in
+    `_load_one_corpus`: gives the operator a way to fill in
+    newly-registered measurables without paying a cloud round-trip
+    when the trace data already lives locally.
+
+    Idempotent. Drift / missing detection uses the same closure-
+    hash contract as `check_drift`. The recompute path filters the
+    gap to satisfiable measurables (whose `transitive_reads` are
+    all present in `runs.parquet` ∪ local trace columns) before
+    handing off to `build_measurements`. Unsatisfiable measurables
+    are reported, NOT computed — overwriting a finite per-corpus
+    value with a fresh NaN (which is what would happen if we
+    forced compute with the read missing) would be silent data
+    loss.
+
+    Cloud-evicted traces are NOT auto-restored on this path —
+    that's the contract the docstring promises and what callers
+    rely on for predictability. If the user wants restore-driven
+    recompute, the existing `--ingest` flow already handles it
+    via `_load_one_corpus`'s sidecar-current check.
+
+    No-op when `runs.parquet` is missing (returns an empty
+    `RecomputeResult` with the corpus_dir field set). The caller
+    typically logs this case and continues.
+    """
+    if measurable_signature_fn is None:
+        def _default_sig(name: str) -> str | None:
+            m = get_registered(name)
+            return None if m is None else m.signature()
+        sig_fn: Callable[[str], str | None] = _default_sig
+    else:
+        sig_fn = measurable_signature_fn
+
+    runs_path = corpus_dir / 'runs.parquet'
+    if not runs_path.exists():
+        return RecomputeResult(
+            corpus_dir=corpus_dir,
+            recomputed=(),
+            already_current=(),
+            unsatisfiable=(),
+            unregistered=tuple(required),
+        )
+
+    # 1. Classify each required name vs the current sidecar state.
+    stored = current_signatures(corpus_dir)
+    unregistered: list[str] = []
+    already_current: list[str] = []
+    gap: list[str] = []   # missing OR drifted
+    for name in required:
+        live = sig_fn(name)
+        if live is None:
+            unregistered.append(name)
+            continue
+        if stored.get(name) == live:
+            already_current.append(name)
+            continue
+        gap.append(name)
+
+    if not gap:
+        return RecomputeResult(
+            corpus_dir=corpus_dir,
+            recomputed=(),
+            already_current=tuple(already_current),
+            unsatisfiable=(),
+            unregistered=tuple(unregistered),
+        )
+
+    # 2. Walk the gap and decide which are satisfiable from local
+    #    inputs only. Reads from runs.parquet schema first (cheap —
+    #    metadata only), then unions with the local trace schema
+    #    when present.
+    from corroborate.measurables.measurable import transitive_reads
+    runs_schema = pl.scan_parquet(runs_path).collect_schema()
+    available: set[str] = set(runs_schema.names())
+    traces_path = corpus_dir / 'traces.parquet'
+    if traces_path.exists():
+        try:
+            traces_schema = pl.scan_parquet(traces_path).collect_schema()
+            available |= set(traces_schema.names())
+        except pl.exceptions.ComputeError:
+            # Corrupt / truncated traces.parquet — treat as having
+            # no trace cols. Mirrors `_join_required_traces`'s
+            # defensive handling in the runner.
+            pass
+
+    satisfiable: list[str] = []
+    unsatisfiable: list[str] = []
+    for name in gap:
+        try:
+            reads = transitive_reads(name)
+        except KeyError:
+            # Registry mutated between sig_fn and transitive_reads
+            # — defensive only; should not fire in single-thread
+            # use.
+            unsatisfiable.append(name)
+            continue
+        if reads.issubset(available):
+            satisfiable.append(name)
+        else:
+            unsatisfiable.append(name)
+
+    if not satisfiable:
+        return RecomputeResult(
+            corpus_dir=corpus_dir,
+            recomputed=(),
+            already_current=tuple(already_current),
+            unsatisfiable=tuple(unsatisfiable),
+            unregistered=tuple(unregistered),
+        )
+
+    # 3. Load runs + join the trace cols the satisfiable
+    #    measurables actually need. Mirrors the runner's
+    #    `_join_required_traces` but reduced to the satisfiable
+    #    closure (avoids loading trace cols the gap doesn't read).
+    gap_reads: set[str] = set()
+    for name in satisfiable:
+        gap_reads |= transitive_reads(name)
+    runs_df = pl.read_parquet(runs_path)
+    if traces_path.exists() and 'id' in runs_df.columns:
+        try:
+            traces_schema_names: set[str] = set(
+                pl.scan_parquet(traces_path).collect_schema().names()
+            )
+        except pl.exceptions.ComputeError:
+            traces_schema_names = set()
+        cols_to_load = ['id'] + sorted(gap_reads & traces_schema_names)
+        if len(cols_to_load) > 1:
+            traces = pl.read_parquet(traces_path, columns=cols_to_load)
+            # Drop collisions: any non-id trace col already on
+            # runs_df. The runs-side value wins (substrate-stamped
+            # at sweep time); polars' join would otherwise
+            # `_right`-suffix it and break downstream reads.
+            overlap = [
+                c for c in traces.columns
+                if c != 'id' and c in runs_df.columns
+            ]
+            if overlap:
+                traces = traces.drop(overlap)
+            runs_df = runs_df.join(traces, on='id', how='left')
+
+    # 4. Force a build_measurements pass. `required` includes both
+    #    the satisfiable gap + already-current names so the build's
+    #    own drift / orphan logic preserves the existing columns
+    #    that don't need recompute. (Passing only the satisfiable
+    #    gap would mark all already-current cols as orphan and
+    #    drop them.)
+    build_measurements(
+        corpus_dir,
+        required=required,
+        runs_df=runs_df,
+        measurable_signature_fn=sig_fn,
+    )
+
+    return RecomputeResult(
+        corpus_dir=corpus_dir,
+        recomputed=tuple(satisfiable),
+        already_current=tuple(already_current),
+        unsatisfiable=tuple(unsatisfiable),
+        unregistered=tuple(unregistered),
+    )
+
+
 def check_drift(
     root: Path,
     *,
@@ -679,8 +893,10 @@ __all__ = [
     'SIDECAR_FILENAME',
     'CorpusDriftReport',
     'DriftReport',
+    'RecomputeResult',
     'build_measurements',
     'check_drift',
     'current_signatures',
     'load_measurements',
+    'recompute_corpus_measurables',
 ]

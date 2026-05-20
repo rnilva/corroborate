@@ -23,6 +23,7 @@ import pytest
 
 from corroborate.corpus.measurements import (
     MEASUREMENTS_FILENAME,
+    SIDECAR_FILENAME,
     build_measurements,
     check_drift,
     current_signatures,
@@ -745,3 +746,518 @@ def test_check_drift_skips_non_corpus_subdirs(tmp_path: Path) -> None:
     report = check_drift(tmp_path, required=['double_x'])
     assert len(report.per_corpus) == 1
     assert report.per_corpus[0].corpus_dir.name == 'corp_a'
+
+
+# ============ recompute_corpus_measurables ============
+#
+# Closes the schema-gap an operator hits when a new @measurable
+# is registered after a corpus was ingested. The existing
+# `_load_one_corpus` path handles this via cloud restore; the
+# recompute primitive is the opt-in LOCAL counterpart (no cloud
+# round-trip when the trace data already lives on disk).
+
+
+from corroborate.corpus.measurements import (   # noqa: E402
+    RecomputeResult,
+    recompute_corpus_measurables,
+)
+
+
+def _runs_df_with_traces(n: int = 5) -> pl.DataFrame:
+    """Substrate-shaped runs frame: lineage `id` + the leaf record
+    keys that `double_x` (reads x) and `x_plus_y` (reads x, y)
+    consume. Models a corpus whose runs.parquet carries both
+    measurable inputs inline (no separate traces.parquet needed
+    for these measurables)."""
+    return pl.DataFrame({
+        'id': [f'cell-{i}' for i in range(n)],
+        'x': [float(i) for i in range(n)],
+        'y': [float(i * 10) for i in range(n)],
+    })
+
+
+def _write_corpus(corpus_dir: Path, runs: pl.DataFrame) -> None:
+    corpus_dir.mkdir(parents=True, exist_ok=True)
+    runs.write_parquet(corpus_dir / 'runs.parquet')
+
+
+def test_recompute_fills_in_missing_measurable(tmp_path: Path) -> None:
+    """**The canonical case the prompt names**: a new @measurable
+    was registered after the corpus's `measurements.parquet` was
+    built, so the sidecar is missing the column. `recompute_corpus_
+    measurables` detects the gap, satisfies it from local
+    runs.parquet, and writes the column.
+
+    Probe pre-state: build a corpus with only `double_x`, leaving
+    `x_plus_y` out of the sidecar. Recompute with both measurables
+    required; check the column is now populated AND its closure
+    hash is recorded in the sidecar."""
+    corpus = tmp_path / 'corp'
+    runs = _runs_df_with_traces(4)
+    _write_corpus(corpus, runs)
+    build_measurements(corpus, required=['double_x'], runs_df=runs)
+
+    sidecar_before = current_signatures(corpus)
+    assert 'x_plus_y' not in sidecar_before
+
+    result = recompute_corpus_measurables(
+        corpus, required=['double_x', 'x_plus_y'],
+    )
+    assert isinstance(result, RecomputeResult)
+    assert result.recomputed == ('x_plus_y',), (
+        f'expected x_plus_y to be recomputed; got {result.recomputed}'
+    )
+    assert 'double_x' in result.already_current
+    assert result.unsatisfiable == ()
+    assert result.unregistered == ()
+    assert not result.is_clean   # something was recomputed
+
+    # The column is in the per-corpus store with the canonical
+    # framework values (x + y = i + 10·i = 11·i).
+    df = load_measurements(corpus)
+    assert 'x_plus_y' in df.columns
+    canonical = sorted(zip(
+        df['id'].to_list(),
+        df['x_plus_y'].to_list(),
+    ))
+    assert canonical == [
+        ('cell-0', 0.0),
+        ('cell-1', 11.0),
+        ('cell-2', 22.0),
+        ('cell-3', 33.0),
+    ]
+    # Sidecar updated with the new measurable's hash.
+    sidecar_after = current_signatures(corpus)
+    assert 'x_plus_y' in sidecar_after
+    assert 'double_x' in sidecar_after   # preserved across recompute
+
+
+def test_recompute_is_idempotent_no_op_on_current_corpus(
+    tmp_path: Path,
+) -> None:
+    """When every required measurable's closure hash already
+    matches the registry, the recompute is a no-op — no rewrite,
+    `recomputed` is empty, `already_current` lists everything,
+    and `is_clean` returns True.
+
+    Pin via parquet mtime (same shape as
+    `test_build_measurements_is_idempotent`): the file mustn't be
+    rewritten on a no-op recompute."""
+    corpus = tmp_path / 'corp'
+    runs = _runs_df_with_traces(3)
+    _write_corpus(corpus, runs)
+    build_measurements(
+        corpus, required=['double_x', 'x_plus_y'], runs_df=runs,
+    )
+    measurements_path = corpus / MEASUREMENTS_FILENAME
+    mtime_before = measurements_path.stat().st_mtime_ns
+
+    import time
+    time.sleep(0.01)
+
+    result = recompute_corpus_measurables(
+        corpus, required=['double_x', 'x_plus_y'],
+    )
+    assert result.recomputed == ()
+    assert set(result.already_current) == {'double_x', 'x_plus_y'}
+    assert result.unsatisfiable == ()
+    assert result.unregistered == ()
+    assert result.is_clean
+
+    mtime_after = measurements_path.stat().st_mtime_ns
+    assert mtime_after == mtime_before, (
+        f'no-op recompute rewrote the parquet (mtime '
+        f'{mtime_before} → {mtime_after}); should have been '
+        f'short-circuited.'
+    )
+
+
+def test_recompute_classifies_unsatisfiable_measurable(
+    tmp_path: Path,
+) -> None:
+    """When a required measurable's transitive reads aren't in
+    runs.parquet AND no local traces.parquet carries them, the
+    measurable is classified `unsatisfiable` — NOT recomputed.
+    Overwriting a finite per-corpus value with a fresh NaN
+    (which would happen if the resolver ran without the input)
+    would be silent data loss. The contract is strict: the
+    operator gets back a list naming what was skipped.
+
+    Probe: register a synthetic measurable `from_trace_col` that
+    reads `unavailable_trace_col`. Build a corpus that has neither
+    runs.parquet nor traces.parquet columns matching. Recompute
+    classifies the new measurable as unsatisfiable.
+    """
+    @measurable(name='from_trace_col', reads=('unavailable_trace_col',))
+    def _from_trace_col(record: Mapping[str, object]) -> float:
+        v = record.get('unavailable_trace_col')
+        if not isinstance(v, (int, float)):
+            raise TypeError('unavailable_trace_col missing')
+        return float(v)
+    # Reference the local def so the linter doesn't flag unused.
+    del _from_trace_col
+
+    corpus = tmp_path / 'corp'
+    runs = _runs_df_with_traces(3)
+    _write_corpus(corpus, runs)
+    build_measurements(corpus, required=['double_x'], runs_df=runs)
+
+    result = recompute_corpus_measurables(
+        corpus, required=['double_x', 'from_trace_col'],
+    )
+    assert result.unsatisfiable == ('from_trace_col',)
+    assert result.recomputed == ()
+    assert 'double_x' in result.already_current
+    assert not result.is_clean  # unsatisfiable counts as non-clean
+
+    # The non-recomputed column does NOT appear in the store —
+    # avoiding any "framework computed this and got NaN"
+    # ambiguity at the closure-hash layer.
+    df = load_measurements(corpus)
+    assert 'from_trace_col' not in df.columns
+
+
+def test_recompute_classifies_unregistered_measurable(
+    tmp_path: Path,
+) -> None:
+    """An unregistered name in `required` is a caller-side bug —
+    can never be computed. `recompute_corpus_measurables` reports
+    it under `unregistered` so the CLI can surface the typo
+    distinctly from "missing trace data" (an operational fault)."""
+    corpus = tmp_path / 'corp'
+    runs = _runs_df_with_traces(3)
+    _write_corpus(corpus, runs)
+    build_measurements(corpus, required=['double_x'], runs_df=runs)
+
+    result = recompute_corpus_measurables(
+        corpus,
+        required=['double_x', 'no_such_measurable_xyz'],
+    )
+    assert result.unregistered == ('no_such_measurable_xyz',)
+    assert result.recomputed == ()
+    assert not result.is_clean
+
+
+def test_recompute_no_runs_parquet_returns_empty_unregistered(
+    tmp_path: Path,
+) -> None:
+    """A corpus dir without `runs.parquet` is not a corpus — the
+    recompute returns a `RecomputeResult` with `required` mirrored
+    into `unregistered` (defensive — semantically "nothing usable
+    here"). The caller's CLI logs the SKIPPED state per directory
+    and continues."""
+    empty = tmp_path / 'no_runs'
+    empty.mkdir()
+    result = recompute_corpus_measurables(
+        empty, required=['double_x', 'x_plus_y'],
+    )
+    assert result.recomputed == ()
+    assert result.already_current == ()
+    assert result.unsatisfiable == ()
+    assert set(result.unregistered) == {'double_x', 'x_plus_y'}
+
+
+def test_recompute_reads_trace_columns_when_local_traces_present(
+    tmp_path: Path,
+) -> None:
+    """When the new measurable reads a column that lives in
+    `traces.parquet` (NOT `runs.parquet`), the recompute joins
+    the trace col before evaluating. Closes the production
+    failure mode: a per-step trace col like `online_max_q_per_step`
+    is what the canonical RL measurables read, and the recompute
+    must handle that case.
+
+    Probe: register `trace_double` that reads `step_value` (a
+    per-step trace col). Build a corpus with `runs.parquet`
+    (no step_value) AND `traces.parquet` (carries step_value).
+    Recompute fills in the column."""
+    @measurable(name='trace_double', reads=('step_value',))
+    def _trace_double(record: Mapping[str, object]) -> float:
+        v = record.get('step_value')
+        if not isinstance(v, (int, float)):
+            raise TypeError('step_value missing')
+        return 2.0 * float(v)
+    del _trace_double   # silence linter; the decorator registers
+
+    corpus = tmp_path / 'corp'
+    runs = pl.DataFrame({
+        'id': ['cell-0', 'cell-1', 'cell-2'],
+        'x': [1.0, 2.0, 3.0],
+    })
+    traces = pl.DataFrame({
+        'id': ['cell-0', 'cell-1', 'cell-2'],
+        'step_value': [10.0, 20.0, 30.0],
+    })
+    _write_corpus(corpus, runs)
+    traces.write_parquet(corpus / 'traces.parquet')
+
+    result = recompute_corpus_measurables(
+        corpus, required=['trace_double'],
+    )
+    assert result.recomputed == ('trace_double',)
+    assert result.unsatisfiable == ()
+    df = load_measurements(corpus)
+    assert 'trace_double' in df.columns
+    vals = sorted(zip(df['id'].to_list(), df['trace_double'].to_list()))
+    assert vals == [
+        ('cell-0', 20.0),
+        ('cell-1', 40.0),
+        ('cell-2', 60.0),
+    ]
+
+
+def test_recompute_does_not_clobber_already_current_columns(
+    tmp_path: Path,
+) -> None:
+    """When the recompute walks the gap (missing or drifted), it
+    must preserve the already-current columns in the persisted
+    store. This guards against "passing only the gap to
+    build_measurements drops the rest as orphans" — the function
+    passes the FULL `required` list so build's drift/orphan logic
+    keeps the current cols intact.
+
+    Probe: build with `double_x` and `x_plus_y` populated. Then
+    recompute with the same required list — the values for both
+    must survive the call unchanged."""
+    corpus = tmp_path / 'corp'
+    runs = _runs_df_with_traces(3)
+    _write_corpus(corpus, runs)
+    build_measurements(
+        corpus, required=['double_x', 'x_plus_y'], runs_df=runs,
+    )
+    before = load_measurements(corpus).sort('id')
+
+    # Now corrupt double_x's stored signature so it shows up as
+    # drifted, forcing a recompute. x_plus_y stays current.
+    sigs = current_signatures(corpus)
+    sigs['double_x'] = 'CORRUPTED-HASH'
+    import json
+    (corpus / SIDECAR_FILENAME).write_text(json.dumps(sigs))
+
+    result = recompute_corpus_measurables(
+        corpus, required=['double_x', 'x_plus_y'],
+    )
+    assert 'double_x' in result.recomputed
+    assert 'x_plus_y' in result.already_current
+
+    after = load_measurements(corpus).sort('id')
+    # Both columns survive with their canonical values.
+    assert after['double_x'].to_list() == before['double_x'].to_list()
+    assert after['x_plus_y'].to_list() == before['x_plus_y'].to_list()
+
+
+def test_recompute_idempotent_on_drifted_column(tmp_path: Path) -> None:
+    """A drifted (sidecar hash != live registry hash) column
+    counts as gap, gets recomputed. The closure-hash contract
+    means corrupting the stored hash forces a rebuild regardless
+    of whether the column values are sound."""
+    corpus = tmp_path / 'corp'
+    runs = _runs_df_with_traces(3)
+    _write_corpus(corpus, runs)
+    build_measurements(corpus, required=['double_x'], runs_df=runs)
+
+    sigs = current_signatures(corpus)
+    sigs['double_x'] = 'INTENTIONAL-DRIFT-' + sigs['double_x']
+    import json
+    (corpus / SIDECAR_FILENAME).write_text(json.dumps(sigs))
+
+    result = recompute_corpus_measurables(
+        corpus, required=['double_x'],
+    )
+    assert result.recomputed == ('double_x',), (
+        f'drift should trigger recompute; got {result.recomputed}'
+    )
+    # Sidecar now matches the live hash again.
+    new_sigs = current_signatures(corpus)
+    assert 'INTENTIONAL-DRIFT-' not in new_sigs['double_x']
+
+
+# ============ CLI wiring: _recompute_ingest_targets ============
+#
+# Exercises the dispatch helper that resolves the `--ingest`
+# argument shape (named list / directory walk / single file) into
+# concrete per-corpus recompute calls.
+
+
+@measurable(reads=('x', 'y'))
+def _xy_minus(record: Mapping[str, object]) -> float:
+    """Synthetic measurable for the CLI-integration tests below —
+    distinct from the `x_plus_y` defined at the top of the file
+    so the same test file can register both safely (no name
+    collision in the @measurable registry)."""
+    x = record.get('x')
+    y = record.get('y')
+    if not isinstance(x, (int, float)) or not isinstance(y, (int, float)):
+        raise TypeError('x or y missing')
+    return float(x) - float(y)
+
+
+# Bridge stand-in for the CLI tests: declares a `_xy_minus`
+# dependency via its holds_when signature. `measurable_names_for_
+# bridges` walks the analysis fixture-param names AND the
+# `transitive_reads` of registered measurables on the analysis
+# return; the simplest way to surface `_xy_minus` as required is
+# via a holds_when fixture parameter named `_xy_minus`.
+from corroborate.bridge.analysis import analysis as _cli_analysis   # noqa: E402
+from corroborate.bridge.bridge import claim_bridge as _claim_bridge   # noqa: E402
+from corroborate.bridge.verdict import Verdict as _Verdict   # noqa: E402
+from corroborate.graph.causal import Direction as _Direction, Tier as _Tier   # noqa: E402
+
+
+@_cli_analysis
+def _xy_minus_analysis(
+    cells: list[Mapping[str, object]],
+    _xy_minus: object,   # noqa: ARG001
+) -> int:
+    return len(cells)
+
+
+@_claim_bridge(
+    source='x', target='_xy_minus',
+    direction=_Direction.DIRECT, tier=_Tier.ASSOCIATIONAL,
+    pair_by=(),
+)
+def _bridge_for_cli_recompute(
+    _xy_minus_analysis: int,   # noqa: ARG001
+) -> _Verdict:
+    return _Verdict.HELD
+
+
+def test_cli_recompute_targets_named_list_calls_recompute(
+    tmp_path: Path,
+) -> None:
+    """`_recompute_ingest_targets` walks the named-corpus list
+    and triggers `recompute_corpus_measurables` per corpus. Pin
+    via the per-corpus measurements.parquet state before/after
+    the call.
+
+    The bridge `_bridge_for_cli_recompute` declares `_xy_minus`
+    as its analysis source — the CLI helper walks
+    `measurable_names_for_bridges(bridges)` which surfaces
+    `_xy_minus`, and the recompute fills it in for the named
+    corpus."""
+    import types
+    import sys
+    from corroborate.cli.hypothesis import (
+        _recompute_ingest_targets,  # pyright: ignore[reportPrivateUsage]
+    )
+
+    corpus = tmp_path / 'corp_a'
+    runs = _runs_df_with_traces(3)
+    _write_corpus(corpus, runs)
+    # Pre-state: build only `double_x`; `_xy_minus` is NOT in
+    # the sidecar.
+    build_measurements(corpus, required=['double_x'], runs_df=runs)
+    sigs_before = current_signatures(corpus)
+    assert '_xy_minus' not in sigs_before
+
+    # Stash a throwaway module so the CLI's
+    # `importlib.import_module(module_name)` resolves. The CLI
+    # only reads the optional `REQUIRED_MEASURABLES` escape
+    # hatch via `getattr(default=())`, so the module shape can
+    # be minimal — no `BRIDGES` attribute needed (bridges flow
+    # in as a function argument).
+    h_mod = types.ModuleType('test_recompute_named_inline')
+    sys.modules['test_recompute_named_inline'] = h_mod
+
+    _recompute_ingest_targets(
+        module_name='test_recompute_named_inline',
+        bridges=(_bridge_for_cli_recompute,),
+        data=[corpus],
+    )
+    # `_xy_minus` now appears in the per-corpus store.
+    sigs_after = current_signatures(corpus)
+    assert '_xy_minus' in sigs_after, (
+        f'expected CLI helper to fill `_xy_minus`; sidecar after: '
+        f'{sorted(sigs_after)}'
+    )
+    df = load_measurements(corpus)
+    assert '_xy_minus' in df.columns
+    # Values are the canonical `x - y` framework computation.
+    vals = sorted(zip(df['id'].to_list(), df['_xy_minus'].to_list()))
+    assert vals == [
+        ('cell-0', 0.0),
+        ('cell-1', -9.0),
+        ('cell-2', -18.0),
+    ]
+
+
+def test_cli_recompute_targets_no_data_skips_with_log(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """`--recompute-measurables` with no `--ingest` mode set is
+    a no-op; the function logs the skip but doesn't raise."""
+    from corroborate.cli.hypothesis import (
+        _recompute_ingest_targets,  # pyright: ignore[reportPrivateUsage]
+    )
+
+    _recompute_ingest_targets(
+        module_name='unused', bridges=(), data=None,
+    )
+    captured = capsys.readouterr()
+    assert 'no --ingest mode set' in captured.err
+
+
+def test_cli_recompute_targets_ingest_file_skips_with_log(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """`--recompute-measurables` paired with `--ingest-file
+    <path.parquet>` doesn't have a per-corpus dir to rebuild —
+    the function logs the skip rather than crashing on the
+    file-vs-dir mismatch."""
+    from corroborate.cli.hypothesis import (
+        _recompute_ingest_targets,  # pyright: ignore[reportPrivateUsage]
+    )
+
+    parquet = tmp_path / 'just_a_file.parquet'
+    pl.DataFrame({'id': ['a']}).write_parquet(parquet)
+    _recompute_ingest_targets(
+        module_name='unused', bridges=(), data=parquet,
+    )
+    captured = capsys.readouterr()
+    assert 'ingest-file' in captured.err
+    assert 'skipping recompute' in captured.err
+
+
+def test_cli_recompute_targets_directory_walks_one_level(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """`--ingest-all <root>`: the helper walks `root.iterdir()`
+    and recomputes each corpus subdir that has a `runs.parquet`.
+    Non-corpus subdirs (no runs.parquet) are silently skipped
+    via the iteration filter."""
+    import types
+    import sys
+    from corroborate.cli.hypothesis import (
+        _recompute_ingest_targets,  # pyright: ignore[reportPrivateUsage]
+    )
+
+    root = tmp_path / 'root'
+    root.mkdir()
+    # Two real corpora at the first level.
+    for name in ('corp_a', 'corp_b'):
+        runs = _runs_df_with_traces(2)
+        _write_corpus(root / name, runs)
+        build_measurements(
+            root / name, required=['double_x'], runs_df=runs,
+        )
+    # One non-corpus subdir — silently skipped.
+    (root / 'not_a_corpus').mkdir()
+    (root / 'not_a_corpus' / 'unrelated.json').write_text('{}')
+
+    h_mod = types.ModuleType('test_recompute_walk_inline')
+    sys.modules['test_recompute_walk_inline'] = h_mod
+
+    _recompute_ingest_targets(
+        module_name='test_recompute_walk_inline',
+        bridges=(_bridge_for_cli_recompute,),
+        data=root,
+    )
+    captured = capsys.readouterr()
+    # Both corpora walked; the not_a_corpus subdir didn't error.
+    assert 'walking 2 corpus dir(s)' in captured.err
+    # And the gap (`_xy_minus`) was filled on each.
+    for name in ('corp_a', 'corp_b'):
+        assert '_xy_minus' in current_signatures(root / name)
