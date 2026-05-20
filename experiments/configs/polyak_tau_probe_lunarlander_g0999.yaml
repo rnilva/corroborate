@@ -1,0 +1,108 @@
+name: polyak_tau_probe_lunarlander_g0999
+out_dir: experiments/probes/polyak_tau_probe_lunarlander_g0999
+env_binding: shared
+archive_remote: s3://corroborate-archive/polyak_tau_probe_lunarlander_g0999
+
+merge_top_level: false
+
+# Round-2 pre-registered probe testing the REVISED mechanism from
+# `findings_replay_capacity_probe_ll_g0999_refuted.md`:
+# "DDQN as off-policy-staleness-robustness" → if true, Polyak τ=0.01
+# (fresh targets) should COLLAPSE DDQN's +0.36 advantage at LL γ=0.999
+# sync=1000.
+#
+# Round-1 refutation: replay capacity 50k→250k DIDN'T shrink DDQN's
+# advantage (it GREW d +0.26→+0.36; V crashed 4/30 → 23/30
+# catastrophic). Revised mechanism: DDQN robust to off-policy-replay
+# staleness — buffer capacity isn't the right axis.
+#
+# Round-2 sharper test: isolate the TARGET-NET-STALENESS axis via
+# Polyak τ (Pearl rung-2 surgical intervention; ρ=+0.95-0.97 between
+# sync_period and staleness in periodic_copy per memory
+# `findings_target_staleness_collinear`).
+#
+# Polyak τ=0.01 makes targets ~fresh (online−target gap → ~0 over
+# late training), while keeping replay capacity = 50k unchanged.
+# Hard-sync=1000 (baseline) is the refuted-probe cell.
+#
+# ## Pre-registered prediction (`polyak_tau_collapses_ddqn__lunar_g0999`):
+#
+# - predicted_direction: a_lt_b (τ=0.01 → d(D-V) ↓ vs hard-sync=1000)
+# - predicted_verdict at polyak τ=0.01: null_effect, |d(D-V)| ≤ 0.15
+# - secondary: V late_window at τ=0.01 ≥ -100 (recovers from -208
+#   hard-sync floor by ≥ 1 SE ≈ 130)
+# - supporting: D late_window at τ=0.01 within 30 reward units of V
+#   (DDQN no longer rescuing)
+#
+# ## RETRACTION criteria (any of, retracts revised mechanism):
+#
+# 1. d(D-V; τ=0.01) ≥ +0.30 → DDQN's advantage survives fresh targets
+#    → mechanism is NOT target-staleness → routes to *replay-staleness*
+#    (axis b) or *bias-clip Type-A* (Hasselt canonical).
+#
+# 2. V late_window at τ=0.01 ≤ -150 → V doesn't recover with fresh
+#    targets → target-staleness wasn't load-bearing for vanilla either
+#    → routes to "γ=0.999 + sync=1000 is fundamentally an off-policy-
+#    replay or bias problem; target-sync wasn't the bottleneck."
+#
+# 3. Sign-flip: d(D-V; τ=0.01) ≤ -0.30 → DDQN HARMS with fresh targets
+#    → adds 5th DDQN role: Polyak makes the clip over-correct
+#    (parallel to LL γ=0.99 lr=3e-4 over-clip Type-A per
+#    `findings_lunarlander_lr3e4_ddqn_overclip`).
+#
+# Cells: 2 conditions × 2 arms × 30 seeds = 4 cells, n=30 vmapped.
+# CPU wall ≈ ~45 min/cell × 4 ≈ 3h (matches refuted-probe).
+
+envs:
+  - {name: LunarLander-v2-jax, n_seeds: 30, chunk_size: 30}
+
+defaults:
+  total_steps: 1000000
+  eval_every:  20000
+  n_episodes:  5
+  gamma:       0.999
+  sync_period: 1000
+  replay:
+    class: Replay
+    capacity: 50000
+    batch_size: 32
+  q_network:
+    class: MLP
+    hidden: [64, 64]
+  optimizer:
+    fn: warmed_update
+    inner: {fn: adam, lr: 0.0001}
+    warmup_steps: 100
+  action_select:
+    fn: epsilon_greedy
+    schedule:
+      fn: linear_epsilon
+      eps_init: 1.0
+      eps_final: 0.05
+      anneal_steps: 100000
+
+interventions:
+  - name: hard_sync_1000_baseline
+    base: {}                       # uses default periodic_copy + sync=1000
+    arms:
+      - []
+      - - slot_path: bootstrap
+          replacement:
+            fn: bootstrap
+            greedification: {fn: double_greedify}
+
+  - name: polyak_tau_001_fresh
+    base: {}
+    arms:
+      - - slot_path: target_sync
+          replacement:
+            fn: polyak_update
+            tau: 0.01
+      - - slot_path: target_sync
+          replacement:
+            fn: polyak_update
+            tau: 0.01
+        - slot_path: bootstrap
+          replacement:
+            fn: bootstrap
+            greedification: {fn: double_greedify}
