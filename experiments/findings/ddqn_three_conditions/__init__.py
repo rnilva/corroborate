@@ -253,6 +253,8 @@ REQUIRED_MEASURABLES: tuple[str, ...] = (
     'q_margin_burst_autocorr_ratio',
     'q_std_burst_autocorr_lag1',    # cross-action Q SD autocorr
     'q_std_burst_autocorr_long',
+    'state_repeat_rate_window64_late',   # loop hypothesis: short-window state revisits
+    'state_repeat_rate_window256_late',  # longer-window state revisits
 )
 # `q_action_std_late` is the proper σ_action measure (within-state
 # across-action Q SD, averaged over the late 50% of training,

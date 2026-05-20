@@ -738,6 +738,77 @@ def q_std_burst_autocorr_long(
     return float(np.median(finite))
 
 
+def _state_repeat_rate(s_arr: np.ndarray, window: int) -> float:
+    """For each step t, was state_hash[t] in the trailing `window`
+    steps? Returns fraction of steps that repeat. O(n) via sliding-
+    window dict."""
+    n = s_arr.size
+    if n <= window + 1:
+        return float('nan')
+    matches = 0
+    counts: dict[int, int] = {}
+    from collections import deque as _deque
+    queue: 'list[int]' = []
+    for i in range(n):
+        h = int(s_arr[i])
+        if h in counts:
+            matches += 1
+        queue.append(h)
+        counts[h] = counts.get(h, 0) + 1
+        if len(queue) > window:
+            old = queue.pop(0)
+            counts[old] -= 1
+            if counts[old] == 0:
+                del counts[old]
+    return matches / n
+
+
+@measurable(reads=('state_hash_per_step',))
+def state_repeat_rate_window64_late(
+    record: Mapping[str, object],
+) -> float:
+    """Fraction of late-50% steps whose state_hash also appears in
+    the trailing 64-step window. Captures short-range state cycling
+    (within ~1-2 episode lengths for SI/FR-class envs).
+
+    Tests the "loop-allowing dynamics" hypothesis: vanilla policies
+    at γ→1 sparse-reward might cycle through small state subsets
+    within episodes (state_hash[t] revisited at t+10, t+20, ...).
+    High repeat rate = strong within-window cycling. Low = each
+    step visits a "new" state in the recent window.
+
+    Degenerate-state-hash (constant 0) → repeat rate = 1.0
+    trivially. Pair with `state_hash_n_unique_late > 1.5` to
+    filter."""
+    state_arr = record.get('state_hash_per_step')
+    if state_arr is None:
+        return float('nan')
+    s = np.asarray(state_arr, dtype=np.int64).flatten()
+    n = s.size
+    if n < 128:
+        return float('nan')
+    half = n // 2
+    return _state_repeat_rate(s[half:], window=64)
+
+
+@measurable(reads=('state_hash_per_step',))
+def state_repeat_rate_window256_late(
+    record: Mapping[str, object],
+) -> float:
+    """Like `state_repeat_rate_window64_late` but with 256-step
+    window. Captures longer-range cycling (cross-episode revisits
+    of similar states)."""
+    state_arr = record.get('state_hash_per_step')
+    if state_arr is None:
+        return float('nan')
+    s = np.asarray(state_arr, dtype=np.int64).flatten()
+    n = s.size
+    if n < 512:
+        return float('nan')
+    half = n // 2
+    return _state_repeat_rate(s[half:], window=256)
+
+
 @measurable(reads=('online_max_q_per_step', 'mc_return'))
 def q_burst_autocorr_per_lag(
     record: Mapping[str, object],
