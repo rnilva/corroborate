@@ -928,10 +928,18 @@ has no direct published equivalent.
   (states where argmax flipped between consecutive snapshots).
   **Direct published sibling** for our `argmax_entropy_late`,
   `state_conditional_argmax_entropy_late`,
-  `argmax_persistence_late`, and `bootstrap_action_mismatch_late`.
-  Schaul's exact form requires per-burst argmax snapshots on
-  a fixed eval set; our state-conditional entropy form is the
-  cheaper proxy on stochastic evaluation episodes.
+  `argmax_persistence_late`, `bootstrap_action_mismatch_late`,
+  and `policy_churn_late`. Schaul's exact form requires per-burst
+  argmax snapshots on a fixed eval set; our state-conditional
+  entropy form is the cheaper proxy on stochastic evaluation
+  episodes. **Important**: Schaul positions churn as "a
+  beneficial but overlooked form of implicit exploration." The
+  paper does NOT predict that DDQN reduces churn — that's a
+  folkloric inference. The framework's
+  `finding_ddqn_reduces_policy_churn` Finding tests the *folkloric*
+  prediction (DDQN < vanilla churn) and refutes it at γ=0.999;
+  the empirical result (DDQN > vanilla churn) is *consistent with*
+  Schaul's exploration framing.
 - **Tang, Schaul, Quan, Barreto 2024** ("Reducing the Chain Effect
   of Value and Policy Churn", arXiv:2409.04792) — formalizes
   value-churn → action-gradient-deviation → biased-update →

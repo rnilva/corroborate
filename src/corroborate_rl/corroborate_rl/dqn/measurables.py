@@ -647,7 +647,21 @@ def policy_churn_late(
     Lit positioning: see THEORY_bootstrap_dominance.md §11. This is
     the direct sibling for Schaul's `W(π,π')` on our existing
     trace shape — no substrate change required, only the per-step
-    argmax + state-hash columns that are already standard."""
+    argmax + state-hash columns that are already standard.
+
+    **Caveat — degenerate `state_hash` envs.** When an env's
+    `state_hash` is `default_state_hash` (returns 0 for every obs),
+    `np.unique(s_late)` collapses to `[0]` and this measurable
+    DEGENERATES to a GLOBAL consecutive-step argmax-flip rate.
+    Envs in `env_catalogue.py` with `state_hash=None` or no
+    `state_hash=` kwarg fall into this case (FourRooms-misc,
+    MetaMaze-misc, image-obs envs without registered hashes).
+    Envs WITH explicit hashes — Asterix, Breakout, Freeway,
+    SpaceInvaders (MinAtar), CartPole, Acrobot, MountainCar —
+    return strict state-conditional churn. Check the env's
+    catalogue entry before treating this measurable's value as
+    Schaul-aligned. Schaul's published quantity requires a
+    non-trivial state hash."""
     argmax_arr = record.get('online_argmax_per_step')
     state_arr = record.get('state_hash_per_step')
     if argmax_arr is None or state_arr is None:
