@@ -604,6 +604,37 @@ def mutual_info_state_argmax_late(
     return max(0.0, h_a - h_cond)
 
 
+@measurable(reads=('state_hash_per_step',))
+def state_hash_n_unique_late(
+    record: Mapping[str, object],
+) -> float:
+    """Number of distinct `state_hash_per_step` values observed in
+    the late 50% of training. Diagnostic for whether the env's
+    registered `state_hash` is non-degenerate.
+
+    1.0 = the substrate's `default_state_hash` returned 0 for every
+    step (env catalogue did not register a real hash). Any
+    state-conditional measurable evaluated on this cell degenerates
+    to a global / no-conditioning form.
+
+    > 1 = the env has a meaningful state_hash; state-conditional
+    measurables compute their intended quantity.
+
+    Returns NaN if the column is missing. Returns int-as-float; the
+    `>1.5` scope predicate that guards Schaul-aligned bridges
+    catches the constant-0 case (1.0) and admits the meaningful
+    case (≥ 2)."""
+    state_arr = record.get('state_hash_per_step')
+    if state_arr is None:
+        return float('nan')
+    s = np.asarray(state_arr, dtype=np.int64).flatten()
+    n = s.size
+    if n < 4:
+        return float('nan')
+    half = n // 2
+    return float(np.unique(s[half:]).size)
+
+
 @measurable(reads=('online_argmax_per_step', 'state_hash_per_step'))
 def policy_churn_late(
     record: Mapping[str, object],

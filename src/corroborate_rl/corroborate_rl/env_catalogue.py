@@ -1363,6 +1363,29 @@ _CARTPOLE_HASH, _CARTPOLE_CARD = bucket_hash(
     highs=jnp.array([2.4, 3.0, 0.21, 3.0]),
     n_buckets_per_dim=10,
 )
+# FourRooms-misc obs is (4,) int32 = [agent_y, agent_x, goal_y, goal_x]
+# on a 13×13 grid. No bucketing — each (pos, goal) pair gets its own
+# id. Cardinality 13^4 = 28561.
+_FOURROOMS_CARD = 13 * 13 * 13 * 13
+
+
+def _fourrooms_hash(obs: jax.Array) -> jax.Array:
+    obs_i = obs.astype(jnp.int32)
+    return (
+        obs_i[0] * (13 * 13 * 13)
+        + obs_i[1] * (13 * 13)
+        + obs_i[2] * 13
+        + obs_i[3]
+    ).astype(jnp.int32)
+
+
+_FOURROOMS_HASH = _fourrooms_hash
+_PENDULUM_HASH, _PENDULUM_CARD = bucket_hash(
+    # obs = [cos(theta), sin(theta), theta_dot]; bounds from gymnax.
+    lows=jnp.array([-1.0, -1.0, -8.0]),
+    highs=jnp.array([1.0, 1.0, 8.0]),
+    n_buckets_per_dim=8,
+)
 _ACROBOT_HASH, _ACROBOT_CARD = bucket_hash(
     lows=jnp.array([-1.0, -1.0, -1.0, -1.0, -12.566, -28.274]),
     highs=jnp.array([1.0, 1.0, 1.0, 1.0, 12.566, 28.274]),
@@ -1448,6 +1471,8 @@ _register(
     r_min=-16.27, r_max=0.0,
     reward_regime='per_step',
     benchmark_family='classic_control',
+    state_hash=_PENDULUM_HASH,
+    state_hash_cardinality=_PENDULUM_CARD,
     solve_threshold=-200.0,
     solve_threshold_source='gymnasium-docs-(-200)-undiscounted-near-optimal',
     solve_threshold_confidence='derived',
@@ -1598,6 +1623,8 @@ _register(
     reward_regime='terminal_only',
     benchmark_family='misc',
     solve_threshold_source='no-canonical-criterion',
+    state_hash=_FOURROOMS_HASH,
+    state_hash_cardinality=_FOURROOMS_CARD,
 )
 _register(
     'MetaMaze-misc',

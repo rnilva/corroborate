@@ -235,6 +235,7 @@ REQUIRED_MEASURABLES: tuple[str, ...] = (
     'mc_growth_max_minus_initial',  # input to policy_growth_fraction
     'q_growth_max_minus_initial',   # input to policy_growth_fraction
     'policy_churn_late',            # Schaul 2022 sibling — state-conditional argmax churn
+    'state_hash_n_unique_late',     # gates policy_churn_late from degenerate-state-hash cells
 )
 # `q_action_std_late` is the proper σ_action measure (within-state
 # across-action Q SD, averaged over the late 50% of training,

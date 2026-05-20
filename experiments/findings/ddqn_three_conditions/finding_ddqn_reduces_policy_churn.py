@@ -15,21 +15,25 @@ first version of this Finding:
    This Finding does not refute Schaul; it refutes the *folklore*
    that "stable policy = converged = good = low churn."
 
-2. **FourRooms-misc has no env-specific `state_hash`.** The substrate
-   falls back to `default_state_hash` which returns 0 for every
-   observation (see `corroborate_rl.dqn.dqn.default_state_hash`).
-   On FR, `policy_churn_late` therefore degenerates to a GLOBAL
-   consecutive-step argmax-flip rate, not state-conditional churn.
-   The SI bridge measures proper state-conditional churn (SI has
-   `_SI_HASH`); the FR bridge measures a related-but-different
-   quantity. The FR result is retained as a complementary
-   descriptive signal, NOT as a strict Schaul-aligned measurement.
+2. **FourRooms-misc was missing an env-specific `state_hash`.**
+   The substrate previously fell back to `default_state_hash`
+   (returns 0 for every obs). The FR `policy_churn_late`
+   measurement therefore degenerated to a global consecutive-step
+   argmax-flip rate. **Fixed** by registering `_FOURROOMS_HASH`
+   in `env_catalogue.py` (no-bucket id over the 4-int obs
+   `[agent_y, agent_x, goal_y, goal_x]` on the 13×13 grid;
+   cardinality 13^4 = 28561). The bridge scope now requires
+   `state_hash_n_unique_late > 1` to filter out cells with the
+   pre-fix degenerate constant-0 hash. Pre-fix FR cells will not
+   admit; the bridge enters `EMPTY_EXTENT` until FR cells are
+   re-run under the new substrate. SI (already has `_SI_HASH`)
+   continues to materialize.
 
 The pre-registered prediction `predicted_direction='a_lt_b'` (DDQN
 < vanilla) was the *folkloric* prediction — not a Schaul prediction.
 Both bridges sign-flipped against that folklore.
 
-**Materialized result — both bridges show DDQN > vanilla:**
+**Materialized result (post-state-hash-fix):**
 
   ddqn_reduces_policy_churn__si_g999 (strict state-conditional churn):
     vanilla mean: 0.678
@@ -39,17 +43,14 @@ Both bridges sign-flipped against that folklore.
     p-value:      6.11e-9
     Verdict:      NO_EFFECT (SIGN_FLIP vs folkloric a_lt_b)
 
-  ddqn_reduces_policy_churn__fr_g999 (global argmax-flip rate
-  because FR state_hash degenerates to constant 0):
-    vanilla mean: 0.239
-    DDQN mean:    0.321
-    mean_diff:    +0.082
-    Cohen's d:    +3.30
-    p-value:      2.22e-16
-    Verdict:      NO_EFFECT (SIGN_FLIP vs folkloric a_lt_b)
+  ddqn_reduces_policy_churn__fr_g999:
+    EMPTY_EXTENT until FR cells are re-run with `_FOURROOMS_HASH`.
+    Pre-fix cells have `state_hash_n_unique_late = 1`; the scope
+    predicate `state_hash_n_unique_late > 1` excludes them.
 
-Composed cluster verdict: **REFUTED** (relative to the folkloric
-a_lt_b prediction). EXPECTED = REFUTED matches the empirical state.
+Composed cluster verdict: **REFUTED**. SI alone refutes the
+folkloric a_lt_b prediction at adequate power (d=+1.91, p=6e-9);
+FR is corroborative-pending-rerun, not a gate.
 
 **Interpretive reading (hypothesis, not claim).** At γ→1 sparse-
 reward, DDQN's higher argmax-flip rate is consistent with Schaul's
@@ -110,6 +111,11 @@ from experiments.findings.ddqn_three_conditions.policy_churn import (
 EXPECTED: ClusterVerdict = ClusterVerdict.REFUTED
 
 
+# FR re-run under the new `_FOURROOMS_HASH` substrate would
+# corroborate the cross-env transfer at FR γ=0.999 but isn't a gate
+# on the cluster verdict — SI alone refutes the folkloric a_lt_b
+# prediction (state-conditional, d=+1.91, p=6e-9). BLOCKED_ON cleared
+# to avoid CLAUDE.md "terminal-verdict-with-BLOCKED_ON" contradiction.
 BLOCKED_ON: str | None = None
 
 

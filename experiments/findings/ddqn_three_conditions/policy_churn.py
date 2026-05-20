@@ -59,6 +59,13 @@ from corroborate.bridge.predicates import finite
 from experiments.findings.ddqn._arms import DDQN_ARM, INTERVENTION, VANILLA_ARM
 
 
+# Scope predicates require `state_hash_n_unique_late > 1` to filter
+# out cells whose `state_hash_per_step` is the degenerate constant-0
+# default. FourRooms-misc cells collected BEFORE the `_FOURROOMS_HASH`
+# registration (commit lands the hash in env_catalogue.py) have
+# state_hash_per_step ≡ 0 — they will not admit. Re-running FR cells
+# under the new substrate emits non-degenerate hashes and admits them.
+# SI cells (registered `_SI_HASH`) admit at both old and new commits.
 _FR_CANONICAL_G999_SCOPE: pl.Expr = (
     (pl.col('env_name') == 'FourRooms-misc')
     & (pl.col('gamma') == 0.999)
@@ -66,6 +73,8 @@ _FR_CANONICAL_G999_SCOPE: pl.Expr = (
     & (pl.col('fa_kind') == 'mlp_deep')
     & (pl.col('shaping_kind') == 'none')
     & (pl.col('total_steps') == 1000000)
+    & finite(pl.col('state_hash_n_unique_late'))
+    & (pl.col('state_hash_n_unique_late') > 1.5)
     & finite(pl.col('policy_churn_late'))
 )
 
@@ -73,6 +82,8 @@ _FR_CANONICAL_G999_SCOPE: pl.Expr = (
 _SI_CANONICAL_G999_SCOPE: pl.Expr = (
     (pl.col('env_name') == 'SpaceInvaders-MinAtar')
     & (pl.col('gamma') == 0.999)
+    & finite(pl.col('state_hash_n_unique_late'))
+    & (pl.col('state_hash_n_unique_late') > 1.5)
     & finite(pl.col('policy_churn_late'))
 )
 
