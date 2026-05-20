@@ -242,6 +242,9 @@ REQUIRED_MEASURABLES: tuple[str, ...] = (
     'state_hash_entropy_early',     # early-window counterpart — upstream-vs-downstream disambig
     'state_hash_n_unique_early',
     'policy_churn_early',
+    'state_burst_jaccard_lag1',     # autocorr-style: state-set overlap at consecutive-burst lag
+    'state_burst_jaccard_long',     # state-set overlap at maximum lag (rut indicator)
+    'state_burst_jaccard_ratio',    # long/lag1 — direct rut-vs-drift signal
 )
 # `q_action_std_late` is the proper σ_action measure (within-state
 # across-action Q SD, averaged over the late 50% of training,

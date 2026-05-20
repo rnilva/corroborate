@@ -604,6 +604,125 @@ def mutual_info_state_argmax_late(
     return max(0.0, h_a - h_cond)
 
 
+@measurable(reads=('state_hash_per_step', 'mc_return'))
+def state_burst_jaccard_per_lag(
+    record: Mapping[str, object],
+) -> npt.NDArray[np.float64]:
+    """Per-lag Jaccard autocorrelation of per-burst state-hash sets.
+
+    For each burst t, compute `S_t` = set of unique `state_hash_per_step`
+    values visited during burst t (one chunk of size n_steps/n_bursts).
+    Then for each lag k ∈ {1, ..., n_bursts−1}, compute the mean
+    Jaccard similarity `|S_t ∩ S_{t+k}| / |S_t ∪ S_{t+k}|` averaged
+    over all valid t.
+
+    Returns: `(n_bursts−1,)` array. Element `[k−1]` is the mean
+    Jaccard at lag k.
+
+    This is the categorical analog of `q_autocorr_per_burst` —
+    captures whether the policy cycles through similar state sets
+    over time (high Jaccard at large lag = trajectory rut) or moves
+    through evolving state distributions (decaying Jaccard with lag
+    = preserved/expanding exploration). No arbitrary early/late
+    split: uses ALL pairs (t, t+k) weighted naturally by lag.
+
+    NaN when the inputs are missing, n_bursts < 3, or state_hash is
+    degenerate (constant 0)."""
+    state_arr = record.get('state_hash_per_step')
+    mc = record.get('mc_return')
+    if state_arr is None or mc is None:
+        return np.array([float('nan')])
+    s = np.asarray(state_arr, dtype=np.int64).flatten()
+    mc_arr = np.asarray(mc, dtype=np.float64)
+    if mc_arr.ndim != 2 or mc_arr.shape[0] < 3:
+        return np.array([float('nan')])
+    n_bursts = int(mc_arr.shape[0])
+    if s.size < n_bursts * 2:
+        return np.array([float('nan')])
+    chunks = np.array_split(s, n_bursts)
+    sets_per_burst: list[set[int]] = [set(c.tolist()) for c in chunks]
+    # Degenerate-hash short circuit.
+    all_hashes: set[int] = set()
+    for ss in sets_per_burst:
+        all_hashes |= ss
+    if len(all_hashes) < 2:
+        return np.array([float('nan')])
+    jaccard_at_lag = np.zeros((n_bursts - 1,), dtype=np.float64)
+    for k in range(1, n_bursts):
+        vals: list[float] = []
+        for t in range(n_bursts - k):
+            S1, S2 = sets_per_burst[t], sets_per_burst[t + k]
+            union = S1 | S2
+            if not union:
+                continue
+            intersect = S1 & S2
+            vals.append(len(intersect) / len(union))
+        jaccard_at_lag[k - 1] = float(np.mean(vals)) if vals else float('nan')
+    return jaccard_at_lag
+
+
+@measurable(reads=())
+def state_burst_jaccard_lag1(
+    record: Mapping[str, object],
+    state_burst_jaccard_per_lag: npt.NDArray[np.float64],
+) -> float:
+    """Mean Jaccard between consecutive bursts (lag = 1). Both arms
+    typically high (same policy generates similar state distributions
+    one burst apart). Reads `state_burst_jaccard_per_lag` via
+    framework param-name injection."""
+    del record
+    a = np.asarray(state_burst_jaccard_per_lag, dtype=np.float64).flatten()
+    if a.size < 1 or not np.isfinite(a[0]):
+        return float('nan')
+    return float(a[0])
+
+
+@measurable(reads=())
+def state_burst_jaccard_long(
+    record: Mapping[str, object],
+    state_burst_jaccard_per_lag: npt.NDArray[np.float64],
+) -> float:
+    """Median Jaccard across the longest 25% of lags. High = trajectory
+    rut (policy cycles through same states across all of training).
+    Low = drift (policy moves through different distributions over
+    time). Median of the long-lag region, not the single max-lag
+    pair (which is noisy with only 1 pair contributing)."""
+    del record
+    a = np.asarray(state_burst_jaccard_per_lag, dtype=np.float64).flatten()
+    if a.size < 1:
+        return float('nan')
+    n = a.size
+    tail_start = max(1, int(0.75 * n))
+    tail = a[tail_start:]
+    finite = tail[np.isfinite(tail)]
+    if finite.size == 0:
+        return float('nan')
+    return float(np.median(finite))
+
+
+@measurable(reads=())
+def state_burst_jaccard_ratio(
+    record: Mapping[str, object],
+    state_burst_jaccard_per_lag: npt.NDArray[np.float64],
+) -> float:
+    """`state_burst_jaccard_long / state_burst_jaccard_lag1` — the
+    direct rut-vs-drift indicator. Near 1 = state sets stay similar
+    across all lags (trajectory rut, no drift). Near 0 = state sets
+    decorrelate at long lag (policy moves through state space)."""
+    del record
+    a = np.asarray(state_burst_jaccard_per_lag, dtype=np.float64).flatten()
+    if a.size < 2 or not np.isfinite(a[0]) or a[0] <= 1e-9:
+        return float('nan')
+    n = a.size
+    tail_start = max(1, int(0.75 * n))
+    tail = a[tail_start:]
+    finite = tail[np.isfinite(tail)]
+    if finite.size == 0:
+        return float('nan')
+    long_val = float(np.median(finite))
+    return long_val / float(a[0])
+
+
 @measurable(reads=('state_hash_per_step',))
 def state_hash_entropy_early(
     record: Mapping[str, object],
