@@ -1,0 +1,51 @@
+name: g099_panel_extension_lunar_cpu
+out_dir: experiments/data/g099_panel_extension_lunar_cpu
+env_binding: per_env
+archive_remote: s3://corroborate-archive/g099_panel_extension_lunar_cpu
+
+# T3a γ=0.99 panel extension — LunarLander, on CPU. Companion
+# to `g0999_panel_extension_lunar_cpu.yaml` (already ingested
+# 2026-05-20). Two γ levels for LunarLander give a γ-axis
+# anchor on the borderline-Λ_m env, useful for the
+# (Λ_m, Λ_a, L, σ_Λ_a) tuple cross-γ analysis.
+#
+# 1 env × 1 γ × 2 arms × 30 seeds vmapped = 2 cells.
+# Same canonical MLP HPs as the γ=0.999 sibling.
+
+envs:
+  - {name: LunarLander-v2-jax, n_seeds: 30, chunk_size: 30}
+
+defaults:
+  total_steps: 1000000
+  eval_every:  20000
+  n_episodes:  5
+  gamma:       0.99
+  sync_period: 100
+  replay:
+    class: Replay
+    capacity: 50000
+    batch_size: 32
+  optimizer:
+    fn: warmed_update
+    inner: {fn: adam, lr: 0.0001}
+    warmup_steps: 100
+  action_select:
+    fn: epsilon_greedy
+    schedule:
+      fn: linear_epsilon
+      eps_init: 1.0
+      eps_final: 0.05
+      anneal_steps: 100000
+  q_network:
+    class: MLP
+    hidden: [64, 64]
+
+interventions:
+  - name: "g099_{from_env: name}"
+    base: {}
+    arms:
+      - []
+      - - slot_path: bootstrap
+          replacement:
+            fn: bootstrap
+            greedification: {fn: double_greedify}
