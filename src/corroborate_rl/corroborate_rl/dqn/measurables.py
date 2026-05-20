@@ -1760,6 +1760,57 @@ def mc_burst_to_q_cross_lag1(record: Mapping[str, object]) -> float:
     return _lag1_pearson(mc_per_burst[:-1], q_per_burst[1:])
 
 
+@measurable(reads=('online_max_q_per_step', 'mc_return'))
+def bootstrap_dominated_burst_fraction(
+    record: Mapping[str, object],
+    theta_q_rel: float = 0.05,
+    theta_mc: float = 0.02,
+) -> float:
+    """Fraction of bursts where Q grows substantially while MC stays flat.
+
+    Per-burst predicate: `dQ/|Q_mid| > theta_q_rel` AND `dMC < theta_mc`,
+    where d is the burst-to-burst forward difference. Returns the
+    fraction of valid (n_bursts − 1) burst pairs satisfying it.
+
+    Operationalizes the bootstrap-dominated under-learning regime of
+    Theorem 1 / `findings-fr-g999-rescue-unified-narrative`: the bias
+    chain compounds Q via `γ max Q` while the reward signal can't
+    pull the policy out. γ-agnostic and env-agnostic (relative-Q
+    threshold handles cross-env scale; absolute-MC threshold catches
+    "no policy progress").
+
+    Empirical signal at canonical 1M:
+        FR γ=0.99   vanilla / DDQN: ~0.05 / 0.07 (not under-learning)
+        FR γ=0.999  vanilla / DDQN: ~0.62 / 0.13 (vanilla pure
+                                                 under-learning;
+                                                 DDQN escapes)
+        Asterix γ=0.999 vanilla / DDQN: ~0.26 / 0.22 (intermediate —
+                                                     Asterix has Q
+                                                     and MC BOTH
+                                                     growing, Q faster)
+
+    Pairs with `DDQN/Vanilla Λ_a ratio` (computed at the
+    cross-arm bridge level) to discriminate Type A under-learning
+    (DDQN suppresses anisotropy → outcome rescue) from Type B
+    (DDQN doesn't suppress → outcome harm). See the under-learning
+    Finding panel for the full discrimination.
+
+    Returns NaN when n_bursts < 2 or the per-burst extraction fails.
+    """
+    pair = _per_burst_q_and_mc(record)
+    if pair is None:
+        return float('nan')
+    q_per_burst, mc_per_burst = pair
+    if q_per_burst.size < 2:
+        return float('nan')
+    dq = np.diff(q_per_burst)
+    dmc = np.diff(mc_per_burst)
+    q_mid = (q_per_burst[:-1] + q_per_burst[1:]) / 2.0
+    dq_rel = dq / np.maximum(np.abs(q_mid), 1e-6)
+    mask = (dq_rel > theta_q_rel) & (dmc < theta_mc)
+    return float(mask.mean())
+
+
 @measurable(reads=('reward', 'target_max_q_per_step', 'gamma'))
 def bootstrap_self_reference_fraction(
     record: Mapping[str, object],
@@ -2940,6 +2991,433 @@ def eval_best_burst_mean(record: Mapping[str, object]) -> float:
     if mc.ndim != 2 or mc.size == 0:
         return float('nan')
     return float(mc.mean(axis=1).max())
+
+
+@measurable(name='mc_first_nonzero_burst', reads=('mc_return',))
+def mc_first_nonzero_burst(
+    record: Mapping[str, object],
+    threshold: float = 0.1,
+) -> float:
+    """Burst index where per-burst-mean MC return first crosses
+    `threshold`. Sentinel value `float(n_bursts)` if MC never
+    crosses — usable as a "never anchored" indicator in arm-diff
+    analyses (vanilla stuck cells return n_bursts while escaped
+    cells return finite small index).
+
+    Used for the FR γ=0.999 temporal-ordering hypothesis: at the
+    canonical sparse-positive-reward + γ→1 scope, the burst at
+    which MC first anchors (policy aligns to reward signal) should
+    be EARLIER for DDQN than for vanilla. Paired with
+    `q_first_cross_burst` to test whether policy anchoring precedes
+    bias-dominance Q crossing.
+
+    Threshold default 0.1 is appropriate for FR (positive bounded
+    [0,1] reward where 0.1 is meaningfully nonzero). Substrates
+    with other reward scales should pass threshold explicitly.
+
+    Returns NaN only if `mc_return` is missing or malformed."""
+    if 'mc_return' not in record:
+        return float('nan')
+    mc = np.asarray(record['mc_return'], dtype=np.float64)
+    if mc.ndim != 2 or mc.shape[0] < 1:
+        return float('nan')
+    per_burst = mc.mean(axis=1)
+    n = per_burst.size
+    crossings = np.where(per_burst > threshold)[0]
+    if crossings.size == 0:
+        return float(n)  # sentinel: "never crossed"
+    return float(crossings[0])
+
+
+@measurable(name='q_first_cross_burst', reads=('online_max_q_per_step', 'mc_return'))
+def q_first_cross_burst(
+    record: Mapping[str, object],
+    threshold: float = 9.2,
+) -> float:
+    """Burst index where per-burst-mean online_max_Q first crosses
+    `threshold`. Sentinel value `float(n_bursts)` if Q never
+    crosses — usable as a "bias never dominated" indicator.
+
+    Used for FR γ=0.999 temporal-ordering hypothesis: at canonical
+    scope, `threshold=9.2` is 50% of the Lemma 2 asymptote
+    `γb/(1-γ)` ≈ 18.4 for K=4, σ_action≈0.04 (per memory
+    `findings_fr_g999_rescue_unified_narrative`). Vanilla cells
+    cross this around burst 5-8; DDQN cells never cross (Q stays
+    ~1).
+
+    Other envs need different thresholds tied to their Lemma 2
+    asymptote. The threshold parameterizes per-bridge author
+    commitment to a specific bias-dominance level.
+
+    Chunks `online_max_q_per_step` into n_bursts equal pieces
+    (n_bursts from mc_return.shape[0]). Returns NaN on missing data."""
+    if 'mc_return' not in record or 'online_max_q_per_step' not in record:
+        return float('nan')
+    mc = np.asarray(record['mc_return'], dtype=np.float64)
+    if mc.ndim != 2 or mc.shape[0] < 1:
+        return float('nan')
+    n_bursts = mc.shape[0]
+    q = np.asarray(record['online_max_q_per_step'], dtype=np.float64)
+    if q.ndim != 1 or q.size < n_bursts:
+        return float('nan')
+    chunks = np.array_split(q, n_bursts)
+    per_burst = np.array([c.mean() for c in chunks])
+    crossings = np.where(per_burst > threshold)[0]
+    if crossings.size == 0:
+        return float(n_bursts)  # sentinel: "never crossed"
+    return float(crossings[0])
+
+
+@measurable(name='mc_growth_max_minus_initial', reads=('mc_return',))
+def mc_growth_max_minus_initial(record: Mapping[str, object]) -> float:
+    """Per-cell scalar: max(per-burst-mean MC) − per-burst-mean MC[0].
+
+    Captures how much the policy improved over training in raw MC
+    units. Stuck cells: ~0. Rescued cells: substantial positive value.
+
+    Used (paired with `q_growth_max_minus_initial`) to compute
+    `policy_growth_fraction` — a threshold-free measure of "what
+    fraction of trajectory progress is policy-side vs bias-side."
+
+    For envs where MC can be negative (Acrobot, MountainCar), this
+    gives positive growth too (max − initial ≥ 0). The sign convention
+    is just absolute progress, not direction relative to optimal."""
+    if 'mc_return' not in record:
+        return float('nan')
+    mc = np.asarray(record['mc_return'], dtype=np.float64)
+    if mc.ndim != 2 or mc.size == 0:
+        return float('nan')
+    per_burst = mc.mean(axis=1)
+    if per_burst.size < 2:
+        return float('nan')
+    return float(per_burst.max() - per_burst[0])
+
+
+@measurable(
+    name='q_growth_max_minus_initial',
+    reads=('online_max_q_per_step', 'mc_return'),
+)
+def q_growth_max_minus_initial(record: Mapping[str, object]) -> float:
+    """Per-cell scalar: max(per-burst-mean Q) − per-burst-mean Q[0].
+
+    Captures how much vanilla's bootstrap chain (or DDQN's clipped
+    chain) inflated Q over training. Vanilla FR γ=0.999 cells:
+    Q grows ~3.8 → ~12 → growth ~8.2. DDQN cells: ~0.9 → ~1.0 →
+    growth ~0.1.
+
+    Paired with `mc_growth_max_minus_initial` to compute
+    `policy_growth_fraction`. Chunks `online_max_q_per_step` into
+    n_bursts using `mc_return.shape[0]` for n_bursts."""
+    if 'mc_return' not in record or 'online_max_q_per_step' not in record:
+        return float('nan')
+    mc = np.asarray(record['mc_return'], dtype=np.float64)
+    if mc.ndim != 2 or mc.shape[0] < 2:
+        return float('nan')
+    n_bursts = mc.shape[0]
+    q = np.asarray(record['online_max_q_per_step'], dtype=np.float64)
+    if q.ndim != 1 or q.size < n_bursts:
+        return float('nan')
+    chunks = np.array_split(q, n_bursts)
+    per_burst = np.array([c.mean() for c in chunks])
+    return float(per_burst.max() - per_burst[0])
+
+
+@measurable(
+    name='policy_growth_fraction',
+    reads=('online_max_q_per_step', 'mc_return'),
+)
+def policy_growth_fraction(
+    record: Mapping[str, object],
+    eps: float = 1e-6,
+) -> float:
+    """Per-cell scalar: fraction of trajectory growth attributable to
+    policy (MC) vs bias-chain (Q).
+
+    `policy_growth_fraction = mc_growth / (|mc_growth| + |q_growth| + ε)`
+
+    Where mc_growth = max(per_burst_MC) − per_burst_MC[0]
+    and q_growth = max(per_burst_Q) − per_burst_Q[0].
+
+    Threshold-free: no authored cutpoints, no Lemma-2-asymptote
+    estimate, no methodological fraction. Just the relative magnitude
+    of policy-side vs bias-side trajectory progress.
+
+    Interpretation:
+    - Near 0: trajectory progress was all bias-chain growth (Q grew,
+      MC didn't). Vanilla-in-failure-trap signature.
+    - Near 1: trajectory progress was all policy-side (MC grew, Q
+      stable). DDQN-rescue-clean signature.
+    - Intermediate: mixed growth.
+
+    Empirical at FR γ=0.999 (n=30 per arm, canonical k=4):
+        vanilla stuck cells: ~0.00
+        vanilla escape (rare): ~0.03 (post-escape Q inflation dominates)
+        DDQN cells: ~0.89
+
+    Empirical at SI γ=0.999 (n=30 per arm):
+        vanilla: ~0.065 (MC grew 22→30, Q grew 2→102)
+        DDQN:    ~0.24  (MC grew 23→50, Q grew 1.8→88)
+
+    Cross-env meta-comparison NOT recommended (the ratio's scale
+    depends on env-specific Q and MC ranges). Within-env arm-diff
+    is the appropriate use. The threshold-free formulation is the
+    paper-grade replacement for `policy_anchors_before_bias`."""
+    mc_growth = mc_growth_max_minus_initial.fn(record)
+    q_growth = q_growth_max_minus_initial.fn(record)
+    if np.isnan(mc_growth) or np.isnan(q_growth):
+        return float('nan')
+    denom = abs(mc_growth) + abs(q_growth) + eps
+    return mc_growth / denom
+
+
+@measurable(
+    name='policy_anchors_before_bias',
+    reads=('online_max_q_per_step', 'mc_return'),
+)
+def policy_anchors_before_bias(
+    record: Mapping[str, object],
+    mc_threshold: float = 0.1,
+    q_threshold: float = 9.2,
+) -> float:
+    """Binary indicator (0.0 / 1.0): does the policy reach `mc > mc_threshold`
+    BEFORE Q crosses `q_threshold`?
+
+    1.0 iff mc_first_nonzero_burst < q_first_cross_burst (policy
+    anchored to reward signal before bias dominated Q).
+    0.0 iff Q crossed first OR MC never anchored. Captures the
+    temporal-ordering claim at FR γ=0.999:
+
+    - **Vanilla failed cell**: MC stuck at 0; Q grows to ~12. MC
+      sentinel = n_bursts; Q sentinel = ~5. Q first → indicator 0.
+    - **Vanilla escape (rare)**: MC grows late; Q crosses earlier
+      (Q grew during pre-escape exploration). Q first → indicator 0.
+    - **DDQN cell**: MC grows; Q stays ~1 (never crosses 9.2).
+      MC first → indicator 1.
+
+    Predicted at canonical FR γ=0.999: arm_mean_diff(this) > 0.5
+    (DDQN proportion >> vanilla proportion). Pre-registration in
+    `experiments.findings.ddqn_three_conditions.bridges` —
+    commit hash records the prediction before resolution.
+
+    Default thresholds (mc=0.1, q=9.2) appropriate for FR γ=0.999;
+    substrates at other γ or reward scales pass explicitly."""
+    mc_first = mc_first_nonzero_burst.fn(record, threshold=mc_threshold)
+    q_first = q_first_cross_burst.fn(record, threshold=q_threshold)
+    if np.isnan(mc_first) or np.isnan(q_first):
+        return float('nan')
+    return 1.0 if mc_first < q_first else 0.0
+
+
+@measurable(name='mc_burst_trend', reads=('mc_return',))
+def mc_burst_trend(record: Mapping[str, object]) -> float:
+    """Per-cell Spearman ρ(burst_index, per-burst-mean MC return).
+
+    Captures whether the policy IMPROVES over training (ρ → +1),
+    STAYS FLAT (ρ → 0), or DEGRADES (ρ → -1).
+
+    Use cases where the trajectory shape matters but a single late
+    aggregate hides it:
+    - Freeway γ=0.999 vanilla: peak around burst 10-15, then
+      declines. Late_window_mean alone reports the declined value
+      but doesn't reveal the peak-then-decay shape; trend is
+      negative or null at late half, positive at full trajectory.
+    - SI γ=0.999 vanilla: MC flat across training (trend ≈ 0)
+      vs DDQN where trend ≈ +0.4 (climbing).
+    - FR γ=0.999 vanilla: trend ≈ 0 (10/30 cells truly flat at
+      zero); DDQN trend ≈ +0.5 (climbing).
+
+    Returns NaN when n_bursts < 3 or MC has zero variance across
+    bursts (e.g., truly flat). Zero-variance cells are NOT
+    re-coded to ρ=0 — NaN signals "no trend signal" rather than
+    "flat trend signal," letting analyses decide how to handle.
+    Substrates wanting flat-as-zero can post-process."""
+    if 'mc_return' not in record:
+        return float('nan')
+    mc = np.asarray(record['mc_return'], dtype=np.float64)
+    if mc.ndim != 2 or mc.shape[0] < 3:
+        return float('nan')
+    per_burst = mc.mean(axis=1)
+    if np.std(per_burst) == 0:
+        return float('nan')
+    from scipy.stats import spearmanr
+    burst_idx = np.arange(per_burst.size, dtype=np.float64)
+    rho, _ = spearmanr(burst_idx, per_burst)
+    return float(rho) if np.isfinite(rho) else float('nan')
+
+
+@measurable(name='td_burst_trend', reads=('td_error', 'mc_return'))
+def td_burst_trend(record: Mapping[str, object]) -> float:
+    """Per-cell Spearman ρ(burst_index, per-burst-mean |TD error|).
+
+    Captures whether the training loss CONVERGES (ρ → 0 with low
+    magnitude), GROWS (ρ → +1 — vanilla Q-explosion regime), or
+    SHRINKS (ρ → -1 — clean convergence).
+
+    Use case: at γ=0.999 the burst dynamics panel shows vanilla
+    |TD| keeps climbing across training in most envs (Asterix,
+    Breakout, SI, Freeway). DDQN's |TD| stabilizes. The "outcome
+    looks fine" reading hides "loss never converges" without this
+    trajectory signal.
+
+    Chunks `td_error` (per-training-step list) into n_bursts
+    equal pieces using `mc_return.shape[0]` for n_bursts. Same
+    chunking convention as `_per_burst_q_and_mc`.
+
+    Returns NaN when n_bursts < 3, td_error missing, or zero
+    variance across burst-chunks."""
+    if 'mc_return' not in record or 'td_error' not in record:
+        return float('nan')
+    mc = np.asarray(record['mc_return'], dtype=np.float64)
+    if mc.ndim != 2 or mc.shape[0] < 3:
+        return float('nan')
+    n_bursts = mc.shape[0]
+    td = np.asarray(record['td_error'], dtype=np.float64)
+    if td.ndim != 1 or td.size < n_bursts:
+        return float('nan')
+    chunks = np.array_split(np.abs(td), n_bursts)
+    per_burst = np.array([c.mean() for c in chunks])
+    if np.std(per_burst) == 0:
+        return float('nan')
+    from scipy.stats import spearmanr
+    burst_idx = np.arange(per_burst.size, dtype=np.float64)
+    rho, _ = spearmanr(burst_idx, per_burst)
+    return float(rho) if np.isfinite(rho) else float('nan')
+
+
+@measurable(name='outcome_peak_width_relative', reads=('mc_return',))
+def outcome_peak_width_relative(record: Mapping[str, object]) -> float:
+    """Per-cell peak BROADNESS: fraction of bursts whose per-burst-mean
+    MC sits within 20% of the peak's range above the minimum.
+
+    Range-based threshold handles negative-MC envs (Acrobot, MC).
+    `threshold = min + 0.8 × (peak − min)`. Count bursts where MC ≥
+    threshold, then divide by n_bursts.
+
+    Interpretation:
+    - Near 1.0: trajectory is FLAT (most bursts near peak — agent
+      converges early and stays).
+    - 0.5: half the trajectory is within 20% of peak range.
+    - Near 1/n_bursts: NARROW spike (only the peak burst itself
+      and 1-2 neighbors qualify).
+
+    Use case: resolves the "DDQN best-burst Δ is +5.30 but per-burst
+    plot looks flat" puzzle at Breakout γ=0.999. The plot showed
+    similar typical-burst performance; the +5.30 Δ comes from
+    cell-specific peak heights at varied timings. Peak-width
+    distinguishes the cells' peak SHAPE: vanilla Breakout γ=0.999
+    has mean peak-width 0.21 (huge spread, some broad some narrow);
+    DDQN has 0.094 — DDQN peaks are NARROWER but more cells reach
+    high peaks. So DDQN's gain at Breakout is "more cells reach
+    transient highs," not "broader sustained policy."
+
+    Pairs with `outcome_late_to_best_ratio` (stability of post-peak
+    region) to give the full peak-shape characterization."""
+    if 'mc_return' not in record:
+        return float('nan')
+    mc = np.asarray(record['mc_return'], dtype=np.float64)
+    if mc.ndim != 2 or mc.size == 0:
+        return float('nan')
+    per_burst = mc.mean(axis=1)
+    n = per_burst.size
+    if n < 4:
+        return float('nan')
+    peak = float(per_burst.max())
+    floor = float(per_burst.min())
+    if peak == floor:
+        return 1.0  # truly flat — every burst at peak
+    threshold = floor + 0.8 * (peak - floor)
+    return float((per_burst >= threshold).sum()) / float(n)
+
+
+@measurable(name='outcome_post_peak_decay_5', reads=('mc_return',))
+def outcome_post_peak_decay_5(record: Mapping[str, object]) -> float:
+    """Ratio of mean MC return in the 5-burst window AFTER the peak
+    to the peak value itself.
+
+    Detects post-peak policy decay. For sustained-peak policies:
+    ratio ≈ 1.0. For peak-then-decay: ratio < 1 (positive env) or
+    > 1 (negative env, more-negative is worse).
+
+    Distinct from `outcome_late_to_best_ratio` which uses the LATE
+    WINDOW (last 25%) regardless of peak timing. This measurable
+    aligns the window TO the peak — captures the local trajectory
+    shape around each cell's own peak. Useful for cells that peak
+    mid-training (where late_to_best_ratio aggregates over a window
+    that may or may not include the peak).
+
+    Empirical at γ=0.999 (median across cells):
+        Asterix:  vanilla=0.65, DDQN=0.60 — similar decay
+        Breakout: vanilla=0.67, DDQN=0.67 — similar
+        Freeway:  vanilla=0.70, DDQN=0.67 — similar
+        SI:       vanilla=0.46, DDQN=0.57 — DDQN less post-peak decay
+
+    NaN when peak is within 5 bursts of trajectory end (insufficient
+    post-peak window) or when peak and post-peak window have
+    opposite signs (ratio uninterpretable).
+    """
+    if 'mc_return' not in record:
+        return float('nan')
+    mc = np.asarray(record['mc_return'], dtype=np.float64)
+    if mc.ndim != 2 or mc.size == 0:
+        return float('nan')
+    per_burst = mc.mean(axis=1)
+    n = per_burst.size
+    if n < 6:
+        return float('nan')
+    peak_idx = int(np.argmax(per_burst))
+    peak_val = float(per_burst[peak_idx])
+    if peak_idx + 6 > n:
+        return float('nan')  # not enough post-peak window
+    post_peak_window = per_burst[peak_idx + 1:peak_idx + 6]
+    post_peak_mean = float(post_peak_window.mean())
+    if peak_val == 0.0:
+        return float('nan')
+    if (peak_val > 0 and post_peak_mean < 0) or (peak_val < 0 and post_peak_mean > 0):
+        return float('nan')
+    return post_peak_mean / peak_val
+
+
+@measurable(name='outcome_late_to_best_ratio', reads=('mc_return',))
+def outcome_late_to_best_ratio(record: Mapping[str, object]) -> float:
+    """Ratio of late-quarter-mean MC return to best-burst MC return.
+
+    Decomposes the stability/dynamics distinction at the per-cell
+    level: pairs with `eval_best_burst_mean` (dynamics) and
+    `late_window_mean` (stability) per
+    `findings_outcome_metric_distinction`.
+
+    Interpretation (when best and late have same sign):
+    - ratio ≈ 1.0: late performance ≈ peak. Stable policy at
+      convergence (FR γ=0.999 vanilla mostly-zero cells: ratio
+      undefined; FR converged cells: ratio ≈ 1.0).
+    - ratio < 1.0 (positive env): peak-then-decay. DDQN's effect
+      may be "prevents decay" rather than "improves peak." Freeway
+      γ=0.999 vanilla shows ratio ≈ 0.5 (peak ~15, late ~7).
+    - ratio > 1.0 (negative env): peak-then-worsening (rare).
+
+    Sign-mismatch case (best > 0, late < 0 or vice versa) returns
+    NaN — the ratio is uninterpretable across sign boundary; use
+    `late_window_mean` and `eval_best_burst_mean` directly.
+
+    Computation: best_burst over per-burst means; late_window over
+    last 25% of bursts."""
+    if 'mc_return' not in record:
+        return float('nan')
+    mc = np.asarray(record['mc_return'], dtype=np.float64)
+    if mc.ndim != 2 or mc.size == 0:
+        return float('nan')
+    per_burst = mc.mean(axis=1)
+    n = per_burst.size
+    if n < 4:
+        return float('nan')
+    best = float(per_burst.max())
+    late_start = int(0.75 * n)
+    late = float(per_burst[late_start:].mean())
+    if best == 0.0:
+        return float('nan')
+    if (best > 0 and late < 0) or (best < 0 and late > 0):
+        return float('nan')
+    return late / best
 
 
 def _compute_mc_return_raw(

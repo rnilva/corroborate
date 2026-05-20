@@ -95,6 +95,8 @@ from experiments.findings.ddqn_three_conditions import (
     finding_asterix_gamma_why_does_not_transfer,
     finding_gamma_amplification_anchor_gated,
     finding_gamma_jens_via_q_self_reference,
+    finding_hasselt_chain_at_fr_g999_unshaped,
+    finding_temporal_ordering_at_fr_g999,
     finding_jens_does_not_mediate_outcome_at_fr_g999_mlp,
     finding_jens_reduction_factors,
     finding_joint_mediation_incomplete,
@@ -146,6 +148,10 @@ from experiments.findings.ddqn_three_conditions.outcome_translation import (
     ddqn_helps_outcome_at_fr_g999_mlp_unshaped__k_panel,
     ddqn_no_positive_outcome_under_shaping__fr_shaped_fa_x_gamma_panel,
 )
+from experiments.findings.ddqn_three_conditions.temporal_ordering_fr_g999 import (
+    ddqn_increases_policy_growth_fraction__fr_g999,
+    ddqn_increases_policy_growth_fraction__si_g999,
+)
 
 
 BRIDGES = (
@@ -179,10 +185,14 @@ BRIDGES = (
     gamma_jens_jointly_mediated_by_self_ref_and_sigma_action_at_si,
     gamma_self_ref_null_at_asterix,
     gamma_jens_residual_at_asterix_after_fr_mediators,
+    ddqn_increases_policy_growth_fraction__fr_g999,
+    ddqn_increases_policy_growth_fraction__si_g999,
 )
 
 
 FINDINGS = (
+    finding_hasselt_chain_at_fr_g999_unshaped,
+    finding_temporal_ordering_at_fr_g999,
     finding_jens_reduction_factors,
     finding_shaping_decouples,
     finding_gamma_amplification_anchor_gated,
@@ -213,6 +223,9 @@ REQUIRED_MEASURABLES: tuple[str, ...] = (
     'bootstrap_gap_frac_active',    # fraction of steps with wedge > 0
     'q_late_mean',                  # late-window Q magnitude (Q-explosion direct measure)
     'bootstrap_self_reference_fraction',  # WHY-mediator: |γQ|/(|γQ|+|r|) late mean
+    'policy_growth_fraction',       # temporal-ordering mediator (FR γ=0.999 + SI γ=0.999 bridges)
+    'mc_growth_max_minus_initial',  # input to policy_growth_fraction
+    'q_growth_max_minus_initial',   # input to policy_growth_fraction
 )
 # `q_action_std_late` is the proper σ_action measure (within-state
 # across-action Q SD, averaged over the late 50% of training,
