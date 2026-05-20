@@ -245,6 +245,9 @@ REQUIRED_MEASURABLES: tuple[str, ...] = (
     'state_burst_jaccard_lag1',     # autocorr-style: state-set overlap at consecutive-burst lag
     'state_burst_jaccard_long',     # state-set overlap at maximum lag (rut indicator)
     'state_burst_jaccard_ratio',    # long/lag1 — direct rut-vs-drift signal
+    'q_burst_autocorr_lag1',        # Q-side: smoothness of per-burst max-Q at consecutive lag
+    'q_burst_autocorr_long',        # Q-side: long-lag autocorr retention (smoothness vs noise)
+    'q_burst_autocorr_ratio',       # Q-side: long/lag1 — Q-trajectory smoothness signal
 )
 # `q_action_std_late` is the proper σ_action measure (within-state
 # across-action Q SD, averaged over the late 50% of training,

@@ -604,6 +604,112 @@ def mutual_info_state_argmax_late(
     return max(0.0, h_a - h_cond)
 
 
+@measurable(reads=('online_max_q_per_step', 'mc_return'))
+def q_burst_autocorr_per_lag(
+    record: Mapping[str, object],
+) -> npt.NDArray[np.float64]:
+    """Per-lag Pearson autocorrelation of per-burst-mean max-Q.
+
+    Chunks `online_max_q_per_step` into n_bursts equal pieces
+    (n_bursts inferred from `mc_return.shape[0]`). Computes mean
+    max-Q per chunk → 1-D sequence of length n_bursts. For each
+    lag k ∈ {1, ..., n_bursts-1}:
+
+        autocorr[k-1] = Pearson(per_burst_Q[:-k], per_burst_Q[k:])
+
+    Returns `(n_bursts-1,)` array.
+
+    Captures whether Q's trajectory is smooth (high autocorr at
+    all lags — trend dominates noise) vs noisy (autocorr decays
+    with lag — fluctuations dominate). Companion to
+    `state_burst_jaccard_per_lag` on the Q-magnitude side; tests
+    whether vanilla's bias-chain produces noisier Q dynamics than
+    DDQN's clipped chain.
+
+    Returns array of NaN when inputs missing or n_bursts < 3."""
+    q = record.get('online_max_q_per_step')
+    mc = record.get('mc_return')
+    if q is None or mc is None:
+        return np.array([float('nan')])
+    q_arr = np.asarray(q, dtype=np.float64).flatten()
+    mc_arr = np.asarray(mc, dtype=np.float64)
+    if mc_arr.ndim != 2 or mc_arr.shape[0] < 3:
+        return np.array([float('nan')])
+    n_bursts = int(mc_arr.shape[0])
+    if q_arr.size < n_bursts * 2:
+        return np.array([float('nan')])
+    chunks = np.array_split(q_arr, n_bursts)
+    per_burst = np.array([float(c.mean()) for c in chunks])
+    autocorr = np.zeros((n_bursts - 1,), dtype=np.float64)
+    for k in range(1, n_bursts):
+        x = per_burst[:-k]
+        y = per_burst[k:]
+        if x.size < 3 or x.std() < 1e-9 or y.std() < 1e-9:
+            autocorr[k - 1] = float('nan')
+            continue
+        autocorr[k - 1] = float(np.corrcoef(x, y)[0, 1])
+    return autocorr
+
+
+@measurable(reads=())
+def q_burst_autocorr_lag1(
+    record: Mapping[str, object],
+    q_burst_autocorr_per_lag: npt.NDArray[np.float64],
+) -> float:
+    """Pearson autocorrelation of per-burst max-Q at lag 1. High =
+    Q changes smoothly between adjacent bursts; lower = jumpy."""
+    del record
+    a = np.asarray(q_burst_autocorr_per_lag, dtype=np.float64).flatten()
+    if a.size < 1 or not np.isfinite(a[0]):
+        return float('nan')
+    return float(a[0])
+
+
+@measurable(reads=())
+def q_burst_autocorr_long(
+    record: Mapping[str, object],
+    q_burst_autocorr_per_lag: npt.NDArray[np.float64],
+) -> float:
+    """Median Pearson autocorrelation of per-burst max-Q across the
+    longest 25% of lags. High = Q trajectory smooth across the
+    whole of training (monotonic trend dominates). Lower = the
+    long-lag correlation has decayed (noise dominates)."""
+    del record
+    a = np.asarray(q_burst_autocorr_per_lag, dtype=np.float64).flatten()
+    if a.size < 1:
+        return float('nan')
+    n = a.size
+    tail_start = max(1, int(0.75 * n))
+    tail = a[tail_start:]
+    finite = tail[np.isfinite(tail)]
+    if finite.size == 0:
+        return float('nan')
+    return float(np.median(finite))
+
+
+@measurable(reads=())
+def q_burst_autocorr_ratio(
+    record: Mapping[str, object],
+    q_burst_autocorr_per_lag: npt.NDArray[np.float64],
+) -> float:
+    """`q_burst_autocorr_long / q_burst_autocorr_lag1` — Q-side
+    smoothness-vs-noise indicator. Near 1 = autocorr retained at
+    all lags (smooth Q trajectory). Near 0 = autocorr decays with
+    lag (noisy Q dynamics around trend)."""
+    del record
+    a = np.asarray(q_burst_autocorr_per_lag, dtype=np.float64).flatten()
+    if a.size < 2 or not np.isfinite(a[0]) or abs(a[0]) <= 1e-9:
+        return float('nan')
+    n = a.size
+    tail_start = max(1, int(0.75 * n))
+    tail = a[tail_start:]
+    finite = tail[np.isfinite(tail)]
+    if finite.size == 0:
+        return float('nan')
+    long_val = float(np.median(finite))
+    return long_val / float(a[0])
+
+
 @measurable(reads=('state_hash_per_step', 'mc_return'))
 def state_burst_jaccard_per_lag(
     record: Mapping[str, object],
