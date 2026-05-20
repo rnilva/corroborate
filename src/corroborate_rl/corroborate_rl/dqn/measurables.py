@@ -605,6 +605,48 @@ def mutual_info_state_argmax_late(
 
 
 @measurable(reads=('state_hash_per_step',))
+def state_hash_entropy_late(
+    record: Mapping[str, object],
+) -> float:
+    """Shannon entropy (nats) of the `state_hash_per_step` distribution
+    over the late 50% of training.
+
+    Diagnostic of state-visitation diversity. High entropy = the
+    policy visits many distinct state-hash buckets in roughly even
+    proportions. Low entropy = the policy concentrates on a small
+    set of states.
+
+    Used to resolve the churn-Finding interpretive ambiguity (see
+    `finding_ddqn_reduces_policy_churn` docstring): DDQN's higher
+    `policy_churn_late` at γ→1 sparse-reward could be (a) wider state
+    distribution causing inter-state argmax differences to register
+    as "flips" at the same hash bucket, OR (b) true policy flux at
+    the same state across training updates. State-visitation entropy
+    isolates (a): if DDQN > vanilla entropy, some of the higher
+    churn is state-distribution drift, not pure policy churn.
+
+    Caveat: degenerates to 0 when `state_hash` is the constant-0
+    default (`default_state_hash`). Pair with
+    `state_hash_n_unique_late > 1.5` scope predicate to filter out
+    the degenerate case."""
+    state_arr = record.get('state_hash_per_step')
+    if state_arr is None:
+        return float('nan')
+    s = np.asarray(state_arr, dtype=np.int64).flatten()
+    n = s.size
+    if n < 4:
+        return float('nan')
+    half = n // 2
+    s_late = s[half:]
+    counts = np.bincount(s_late - s_late.min())
+    nonzero = counts[counts > 0]
+    if nonzero.size <= 1:
+        return 0.0
+    p = nonzero.astype(np.float64) / float(nonzero.sum())
+    return float(-np.sum(p * np.log(p)))
+
+
+@measurable(reads=('state_hash_per_step',))
 def state_hash_n_unique_late(
     record: Mapping[str, object],
 ) -> float:

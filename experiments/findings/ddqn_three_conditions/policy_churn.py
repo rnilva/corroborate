@@ -88,6 +88,15 @@ _SI_CANONICAL_G999_SCOPE: pl.Expr = (
 )
 
 
+_SI_DIVERSITY_G999_SCOPE: pl.Expr = (
+    (pl.col('env_name') == 'SpaceInvaders-MinAtar')
+    & (pl.col('gamma') == 0.999)
+    & finite(pl.col('state_hash_n_unique_late'))
+    & (pl.col('state_hash_n_unique_late') > 1.5)
+    & finite(pl.col('state_hash_entropy_late'))
+)
+
+
 def _signed_d_verdict_lt(
     result: ArmMeanDiffResult,
     *,
@@ -204,6 +213,89 @@ def ddqn_reduces_policy_churn__fr_g999(
     structural floor)."""
     del treatment_arm, baseline_arm, source, pair_by
     return _signed_d_verdict_lt(
+        arm_mean_diff,
+        d_floor=d_floor,
+        sign_flip_floor=sign_flip_floor,
+        null_band=null_band,
+        alpha=alpha,
+    )
+
+
+def _signed_d_verdict_gt(
+    result: ArmMeanDiffResult,
+    *,
+    d_floor: float,
+    sign_flip_floor: float,
+    null_band: float,
+    alpha: float,
+) -> tuple[Verdict, RefutationClass | None]:
+    """HELD if Cohen's d ≥ +d_floor AND p < alpha (predicted positive).
+    NO_EFFECT/SIGN_FLIP if d ≤ -sign_flip_floor with sig.
+    NO_EFFECT/NULL if |d| < null_band.
+    POWER_INSUFFICIENT otherwise."""
+    d = result.standardized_effect
+    p = result.mean_diff_p_value
+    if math.isnan(d) or math.isnan(p):
+        return Verdict.POWER_INSUFFICIENT, None
+    if d >= d_floor and p < alpha:
+        return Verdict.HELD, None
+    if d <= -sign_flip_floor and p < alpha:
+        return Verdict.NO_EFFECT, RefutationClass.SIGN_FLIP
+    if abs(d) < null_band:
+        return Verdict.NO_EFFECT, RefutationClass.NULL_EFFECT
+    return Verdict.POWER_INSUFFICIENT, None
+
+
+@claim_bridge(
+    source=INTERVENTION,
+    target='state_hash_entropy_late',
+    direction=Direction.DIRECT,
+    tier=Tier.INTERVENTIONAL,
+    scope=_SI_DIVERSITY_G999_SCOPE,
+    predicted_direction='a_gt_b',
+)
+def ddqn_increases_state_diversity__si_g999(
+    arm_mean_diff: ArmMeanDiffResult,
+    *,
+    treatment_arm: str = DDQN_ARM,
+    baseline_arm: str = VANILLA_ARM,
+    source: str = 'state_hash_entropy_late',
+    pair_by: tuple[str, ...] = ('seed',),
+    d_floor: float = 0.6,
+    sign_flip_floor: float = 0.3,
+    null_band: float = 0.2,
+    alpha: float = 0.05,
+) -> tuple[Verdict, RefutationClass | None]:
+    """At SI γ=0.999 × canonical, does DDQN visit a wider distribution
+    of states than vanilla? Resolves the interpretive ambiguity in
+    `finding_ddqn_reduces_policy_churn`.
+
+    Pre-registered hypothesis: DDQN's higher `policy_churn_late` at
+    γ→1 sparse-reward is partly explained by wider state distribution
+    (more eval-state buckets → more inter-state argmax differences
+    register as "flips" at the same hash). Predicted direction:
+    `a_gt_b` (DDQN > vanilla state_hash_entropy_late).
+
+    Interpretation:
+    - HELD (a_gt_b): some of the churn-Finding sign-flip is
+      explained by state-distribution drift. The pure "DDQN flips
+      argmax at the same state more often" claim is weakened —
+      part of the churn is just because DDQN sees more states.
+    - NO_EFFECT (NULL): state diversity comparable between arms.
+      The churn sign-flip is mostly true policy flux at fixed
+      states (the "active learning" reading holds).
+    - NO_EFFECT (SIGN_FLIP, a_lt_b observed): DDQN actually visits
+      FEWER state buckets than vanilla. The higher churn is
+      occurring within a more-restricted state set — stronger
+      evidence for true policy flux.
+
+    Verdict matrix on Cohen's d (DDQN − vanilla):
+      HELD                 : d ≥ +0.6 AND p < 0.05
+      NO_EFFECT (NULL)     : |d| < 0.2
+      NO_EFFECT (SIGN_FLIP): d ≤ -0.3 AND p < 0.05
+      POWER_INSUFFICIENT   : otherwise"""
+    del treatment_arm, baseline_arm, source, pair_by
+    return _signed_d_verdict_gt(
         arm_mean_diff,
         d_floor=d_floor,
         sign_flip_floor=sign_flip_floor,

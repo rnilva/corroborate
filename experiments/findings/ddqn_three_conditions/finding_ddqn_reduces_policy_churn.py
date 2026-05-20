@@ -52,26 +52,40 @@ Composed cluster verdict: **REFUTED**. SI alone refutes the
 folkloric a_lt_b prediction at adequate power (d=+1.91, p=6e-9);
 FR is corroborative-pending-rerun, not a gate.
 
-**Interpretive reading (hypothesis, not claim).** At γ→1 sparse-
-reward, DDQN's higher argmax-flip rate is consistent with Schaul's
-framing of churn as implicit exploration: DDQN's clip-mediated
-Q-stabilization frees the policy to RESPOND to changing return
-estimates rather than stay frozen on a bias-inflated argmax. Paired
-with `finding_temporal_ordering_at_fr_g999` (SUPPORTED — DDQN's
-`policy_growth_fraction` ≈ 0.80 vs vanilla ≈ 0):
+**Interpretive reading — partial resolution (2026-05-20).** A
+state-visitation-diversity diagnostic (`ddqn_increases_state_diversity__si_g999`)
+materialized HELD at SI γ=0.999: vanilla `state_hash_entropy_late`
+4.13 → DDQN 4.61 (Cohen's d = +2.77, p = 4.9e-12). DDQN visits ~60%
+more distinct state-hash buckets in the late window
+(exp(4.13) ≈ 62 vs exp(4.61) ≈ 100).
 
-|              | policy_growth_fraction | argmax-flip rate |
-|--------------|------------------------|------------------|
-| vanilla      | LOW (≈0)               | LOW (≈0.24 FR / 0.68 SI) |
-| DDQN         | HIGH (≈0.80)           | HIGH (≈0.32 FR / 0.71 SI) |
+This **weakens** the "DDQN actively learning at fixed states"
+reading. The state-diversity effect size (d=+2.77) actually
+EXCEEDS the churn effect size (d=+1.91), so the higher churn
+could be fully explained — or even overshot — by state-distribution
+drift alone. A pair (s_t, s_{t+k}) of same-hash appearances that
+"flip" their argmax might actually be at semantically-distinct
+states that collapsed into one hash bucket.
 
-At γ→1 sparse-reward, the actively-learning arm has BOTH higher
-growth fraction AND higher flip rate. This is interpretive — the
-joint shape could reflect (a) DDQN actively exploring while vanilla
-freezes, OR (b) DDQN visiting a wider state distribution while
-vanilla cycles through a narrow set. The two interpretations are
-distinguishable via a per-cell state-visitation-diversity measure
-(not yet implemented).
+The honest joint reading at γ→1 sparse-reward:
+
+|              | policy_growth_fraction | argmax-flip rate | state-visit entropy |
+|--------------|------------------------|------------------|---------------------|
+| vanilla      | LOW (≈0)               | LOW (≈0.24 FR / 0.68 SI) | LOW (4.13 SI) |
+| DDQN         | HIGH (≈0.80)           | HIGH (≈0.32 FR / 0.71 SI) | HIGH (4.61 SI) |
+
+DDQN's three coupled signatures at γ→1 sparse-reward: (1) higher
+trajectory progress on the policy side, (2) more argmax flips
+between consecutive state-revisits, (3) wider state distribution
+visited. These cannot be cleanly disentangled into a "pure"
+mechanism with the current measurables — they're all part of
+"actively-engaged policy learning vs frozen-stuck policy."
+
+To fully separate "wider state distribution" from "more argmax
+flips at the SAME state" would require either (a) a state_hash
+with much finer cardinality (so distinct semantic states don't
+collapse), or (b) explicit substrate tracing of features +
+Hussing-style representation rank.
 
 **Concerns for external citation (left open):**
 

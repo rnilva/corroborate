@@ -150,6 +150,7 @@ from experiments.findings.ddqn_three_conditions.outcome_translation import (
     ddqn_no_positive_outcome_under_shaping__fr_shaped_fa_x_gamma_panel,
 )
 from experiments.findings.ddqn_three_conditions.policy_churn import (
+    ddqn_increases_state_diversity__si_g999,
     ddqn_reduces_policy_churn__fr_g999,
     ddqn_reduces_policy_churn__si_g999,
 )
@@ -194,6 +195,7 @@ BRIDGES = (
     ddqn_increases_policy_growth_fraction__si_g999,
     ddqn_reduces_policy_churn__si_g999,
     ddqn_reduces_policy_churn__fr_g999,
+    ddqn_increases_state_diversity__si_g999,
 )
 
 
@@ -236,6 +238,7 @@ REQUIRED_MEASURABLES: tuple[str, ...] = (
     'q_growth_max_minus_initial',   # input to policy_growth_fraction
     'policy_churn_late',            # Schaul 2022 sibling — state-conditional argmax churn
     'state_hash_n_unique_late',     # gates policy_churn_late from degenerate-state-hash cells
+    'state_hash_entropy_late',      # state-visitation diversity — resolves churn interpretive ambiguity
 )
 # `q_action_std_late` is the proper σ_action measure (within-state
 # across-action Q SD, averaged over the late 50% of training,
