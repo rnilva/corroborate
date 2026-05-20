@@ -38,18 +38,18 @@ EXPECTED: ClusterVerdict = ClusterVerdict.UNDERPOWERED
 
 
 BLOCKED_ON: str | None = (
-    'Bridge 1 (σ_Λ_a moderation cross-env): current 8-env panel '
-    'gives ρ=−0.643 p=0.086, below the rho_threshold_held=0.6 + '
-    'p≤0.05 calibration at n=8 (critical |r|≈0.71). Memory '
-    'snapshot ρ=−0.78 cleared HELD; current cache cohort is '
-    'weaker due to FR contribution (σ_Λ_a=1.02 + d_out=+0.09 '
-    'breaks monotone). When the running k=4 minatar sweep '
-    'ingests + Asterix/Breakout/Freeway/SI strata land at k=2 '
-    'and k=4, panel will extend to n=12-16 strata and the '
-    'Bridge 1 signal should sharpen → HELD. Predicted post-k=4 '
-    'EXPECTED: SUPPORTED. Bridge 2 (within-cell null) predicted '
-    'to remain NULL_EFFECT regardless — the moderator-not-'
-    'mediator framing is the load-bearing pattern.'
+    'Bridge 1 (σ_Λ_a moderation cross-env): HELD post-T3a panel '
+    'extension. After ingesting LunarLander γ=0.999 + Snake γ=0.999, '
+    'panel grows from n=8 to n=10 strata; ρ=−0.745 p=0.0133 clears '
+    'the rho_threshold_held=0.6 + p≤0.05 calibration. The original '
+    'BLOCKED_ON predicted k=2/k=4 strata would extend the panel — '
+    'walked back per `findings_k_axis_gamma_regime_map`: Λ_a has '
+    'K_eff dependency, so per-K_eff strata are non-comparable on '
+    'the cross-env σ_Λ_a panel. The actual extension came via more '
+    'k=1 envs (LL, Snake) at γ=0.999. Bridge 2 (within-cell null) '
+    'still POWER_INSUFFICIENT — moderator-not-mediator framing '
+    'remains the load-bearing pattern. Cluster verdict awaits '
+    'Bridge 2 + Bridge 3 resolution; Bridge 1 substantively HELDs.'
 )
 
 

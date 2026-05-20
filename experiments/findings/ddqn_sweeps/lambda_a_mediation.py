@@ -69,13 +69,15 @@ from experiments.findings.ddqn._arms import (
 _SIGMA_LAMBDA_A_PER_ENV_G0999: MappingProxyType[
     object, MappingProxyType[str, float]
 ] = MappingProxyType({
-    'Acrobot-v1':             MappingProxyType({'sigma_lambda_a': 0.360}),
+    'Acrobot-v1':             MappingProxyType({'sigma_lambda_a': 0.394}),
     'Asterix-MinAtar':        MappingProxyType({'sigma_lambda_a': 0.565}),
     'Breakout-MinAtar':       MappingProxyType({'sigma_lambda_a': 0.073}),
-    'FourRooms-misc':         MappingProxyType({'sigma_lambda_a': 1.018}),
+    'FourRooms-misc':         MappingProxyType({'sigma_lambda_a': 0.866}),
     'Freeway-MinAtar':        MappingProxyType({'sigma_lambda_a': 0.160}),
+    'LunarLander-v2-jax':     MappingProxyType({'sigma_lambda_a': 0.340}),
     'MetaMaze-misc':          MappingProxyType({'sigma_lambda_a': 0.846}),
     'MountainCar-v0':         MappingProxyType({'sigma_lambda_a': 0.836}),
+    'Snake-jumanji':          MappingProxyType({'sigma_lambda_a': 0.215}),
     'SpaceInvaders-MinAtar':  MappingProxyType({'sigma_lambda_a': 0.072}),
 })
 
@@ -90,7 +92,13 @@ _SIGMA_LAMBDA_A_PER_ENV_G0999: MappingProxyType[
 # `_SIGMA_LAMBDA_A_PER_ENV_G0999` are aggregates across each
 # env's full γ=0.999 corpus, so the panel and the covariate
 # match the same HP-pooled cohort.
-_GAMMA_999_SCOPE: pl.Expr = (pl.col('gamma') == 0.999)
+_GAMMA_999_SCOPE: pl.Expr = (
+    (pl.col('gamma') == 0.999)
+    # Restrict to canonical k=1 (action_duplicate_k is null or 1) per
+    # `findings_k_axis_gamma_regime_map`: Λ_a's K_eff dependency makes
+    # k=2/k=4 strata structurally non-comparable on the per-env σ_Λ_a panel.
+    & (pl.col('action_duplicate_k').is_null() | (pl.col('action_duplicate_k') == 1))
+)
 
 
 def _signed_spearman_verdict(
@@ -139,7 +147,11 @@ def _signed_spearman_verdict(
     tier=Tier.ASSOCIATIONAL,
     scope=(
         _GAMMA_999_SCOPE
-        & pl.col('lambda_a_late').is_finite()
+        # `lambda_a_late.is_finite()` filter was vestigial here — the σ_Λ_a
+        # covariate is per-env hardcoded in `_SIGMA_LAMBDA_A_PER_ENV_G0999`,
+        # so per-cell λ_a doesn't gate cell inclusion. Removed to admit
+        # LunarLander + Snake whose framework `lambda_a_late` is NaN due to
+        # the resolver trap (inputs present, derived value not computed).
         & pl.col('eval_best_burst_raw_mean').is_finite()
     ),
     predicted_direction='a_lt_b',
