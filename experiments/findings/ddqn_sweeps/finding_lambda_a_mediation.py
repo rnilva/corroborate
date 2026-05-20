@@ -34,23 +34,36 @@ from experiments.findings.ddqn_sweeps.lambda_a_mediation import (
 )
 
 
-EXPECTED: ClusterVerdict = ClusterVerdict.UNDERPOWERED
+EXPECTED: ClusterVerdict = ClusterVerdict.REFUTED
 
 
-BLOCKED_ON: str | None = (
-    'Bridge 1 (σ_Λ_a moderation cross-env): HELD post-T3a panel '
-    'extension. After ingesting LunarLander γ=0.999 + Snake γ=0.999, '
-    'panel grows from n=8 to n=10 strata; ρ=−0.745 p=0.0133 clears '
-    'the rho_threshold_held=0.6 + p≤0.05 calibration. The original '
-    'BLOCKED_ON predicted k=2/k=4 strata would extend the panel — '
-    'walked back per `findings_k_axis_gamma_regime_map`: Λ_a has '
-    'K_eff dependency, so per-K_eff strata are non-comparable on '
-    'the cross-env σ_Λ_a panel. The actual extension came via more '
-    'k=1 envs (LL, Snake) at γ=0.999. Bridge 2 (within-cell null) '
-    'still POWER_INSUFFICIENT — moderator-not-mediator framing '
-    'remains the load-bearing pattern. Cluster verdict awaits '
-    'Bridge 2 + Bridge 3 resolution; Bridge 1 substantively HELDs.'
-)
+BLOCKED_ON: str | None = None  # Post-T3a + symmetric Bridge 2 verdict logic: REFUTED.
+
+# Cluster history (2026-05-20):
+# - Bridge 1 (σ_Λ_a moderation cross-env): HELD at ρ=−0.745 p=0.0133,
+#   n=10 after T3a panel extension (LL + Snake γ=0.999).
+# - Bridge 2 (Δ_Λ_a does not mediate Δ_out): REFUTED via SIGN_FLIP.
+#   Symmetric verdict logic now triggers on |ρ|≥0.5 in either
+#   direction. Actual ρ=+0.567 (cross-env partial controlling for
+#   Δ_jens) — POSITIVE direction, opposite of the anticipated
+#   "DDQN reduces Λ_a → outcome improves" mediator. Substantively
+#   the moderator-not-mediator framing partly survives: there's NO
+#   canonical negative-direction mediation, but cross-env Δ_Λ_a
+#   POSITIVELY tracks Δ_outcome. Envs where DDQN keeps/raises Λ_a
+#   (LL, MetaMaze, Breakout) are the bigger-help envs; envs where
+#   DDQN aggressively reduces Λ_a (FR Δ_Λ_a=−0.47, Asterix −0.09)
+#   don't see outcome benefit. See
+#   `findings_lambda_a_mediation_cluster_refuted` memo.
+# - Bridge 3 (joint bias-geometry triplet mediates within-cell):
+#   POWER_INSUFFICIENT. ρ_pooled=−0.186 in PI band (0.10, 0.30).
+#   Env-cohort-dependent absorption (66% on MinAtar subset, 17% on
+#   full panel) — needs scope refinement or more strata to escape.
+#
+# Cluster verdict: REFUTED (Bridge 2 NO_EFFECT/SIGN_FLIP) per the
+# composed-verdict aggregator. Substantively the σ_Λ_a moderation
+# finding (Bridge 1) stands; the cluster framing as
+# "moderator-not-mediator" needs revision to reflect the
+# positive-direction cross-env tracking.
 
 
 BRIDGES: tuple[Bridge, ...] = (

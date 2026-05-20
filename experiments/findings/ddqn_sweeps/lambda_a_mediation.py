@@ -240,7 +240,7 @@ def lambda_a_does_not_mediate_outcome__cross_stratum_g0999(
     stratify_by: tuple[str, ...] = ('env_name',),
     min_seeds_per_arm: int = 5,
     null_threshold: float = 0.2,
-    held_negative_rho: float = 0.5,
+    held_rho: float = 0.5,
     min_strata: int = 5,
 ) -> tuple[Verdict, RefutationClass | None]:
     """Cross-stratum partial Spearman ρ(Δ_Λ_a, Δ_out | Δ_jens).
@@ -248,27 +248,38 @@ def lambda_a_does_not_mediate_outcome__cross_stratum_g0999(
     Tests whether the per-stratum change in Λ_a (induced by DDQN
     vs vanilla) predicts the per-stratum change in outcome,
     controlling for the dominant bias-magnitude channel
-    (Δ_jens). If Λ_a is a within-cell mediator on the causal
-    path, Δ_Λ_a → Δ_out should correlate negatively (DDQN
-    reduces Λ_a → outcome improves).
+    (Δ_jens).
 
-    Predicted direction: NULL (|ρ| < null_threshold). Empirical
-    evidence walks back the within-cell mediation reading:
-    DDQN's effect on per-cell Λ_a is small (~3% reduction on
-    Asterix, ~0% on Breakout), so Δ_Λ_a is constrained to a
-    narrow range that can't capture cross-stratum d_out variance.
-    Pair with Bridge 1 (moderation at the env-aggregate level)
-    — both predicted to land in the moderator-not-mediator
-    configuration.
+    Predicted direction: NULL (|ρ| < null_threshold). The original
+    intuition was "DDQN's effect on per-cell Λ_a is small (~3% on
+    Asterix, ~0% on Breakout), so Δ_Λ_a is constrained to a narrow
+    range that can't capture cross-stratum d_out variance" —
+    pairing with Bridge 1 (moderation at env-aggregate level) in
+    the moderator-not-mediator configuration.
 
     Under `predicted_direction='null'`: HELD when the null
     prediction is confirmed (|ρ| < null_threshold). NO_EFFECT
-    (xpass, `SIGN_FLIP`) when |ρ| ≥ held_negative_rho with the
-    wrong (negative) sign — would mean Δ_Λ_a DOES drive Δ_out
-    after all, falsifying the moderator-not-mediator framing
-    (the predicted null fails — an effect was observed). The
-    null-band-confirmed case is the framework's HELD per
-    `core.hypothesis.PredictedDirection`'s docstring."""
+    (xpass, `SIGN_FLIP`) when |ρ| ≥ held_rho in EITHER direction
+    — would mean Δ_Λ_a DOES predict Δ_out cross-env, falsifying
+    the predicted null. Symmetric refutation: the original
+    verdict logic only triggered on NEGATIVE ρ (matching the
+    "DDQN reduces Λ_a → outcome up" anticipated direction), but
+    a POSITIVE ρ equally falsifies the predicted null.
+
+    Empirical (n=10, panel post-T3a Snake + LL extension):
+    rho=+0.567 partial (rho_marginal=+0.612) — POSITIVE direction.
+    Walks back the original anticipated-negative framing: cross-
+    env, envs where DDQN keeps/raises Λ_a (LL +0.027, MetaMaze
+    +0.039) are the bigger-help envs; envs where DDQN aggressively
+    reduces Λ_a (FR -0.474, Asterix -0.093) don't see outcome
+    benefit. NULL prediction REFUTED via positive-direction
+    SIGN_FLIP under the symmetric verdict logic.
+
+    The substantive reading is NOT "Δ_Λ_a mediates outcome
+    canonically (negative direction)" but "cross-env Δ_Λ_a tracks
+    Δ_outcome via a third unmodeled covariate" — see also Bridge 1
+    (σ_Λ_a moderation HELDs) for the env-aggregate moderation
+    pattern this is consistent with."""
     del treatment_arm, baseline_arm, predictor, target, confound
     del stratify_by, min_seeds_per_arm
     if cross_stratum_arm_diff_partial_spearman.n_strata < min_strata:
@@ -278,7 +289,7 @@ def lambda_a_does_not_mediate_outcome__cross_stratum_g0999(
         return Verdict.POWER_INSUFFICIENT, None
     if abs(rho) < null_threshold:
         return Verdict.HELD, None  # null prediction confirmed
-    if rho <= -held_negative_rho:
+    if abs(rho) >= held_rho:
         return Verdict.NO_EFFECT, RefutationClass.SIGN_FLIP
     return Verdict.POWER_INSUFFICIENT, None
 
