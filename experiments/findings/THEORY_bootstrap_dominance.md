@@ -886,13 +886,159 @@ future work.
   σ-asymmetry across seeds — a different mechanism not captured by
   Lemma 3's bias-reduction framing. Theorem 1 + 2 don't apply here.
 
-## 11. References
+## 11. Literature positioning — three published axes + our recovery-mechanism decomposition
+
+The published literature on DQN value-divergence diagnostics
+clusters into three roughly-orthogonal axes. Our framework's
+substantive contribution lives in the cross-cutting **recovery-
+mechanism decomposition** (`policy_growth_fraction` and the
+temporal-ordering Finding at FR + SI γ=0.999). That decomposition
+has no direct published equivalent.
+
+### Axis 1 — Value-magnitude (does Q blow up?)
+
+- **Hasselt et al. 2018** ("Deep RL and the Deadly Triad") — defines
+  *soft divergence*: $\max_a Q(s,a)$ exhibits exponential initial
+  growth then recovers to plausible magnitudes. Empirical motivation
+  for tracking Q-trajectory shape rather than final-Q. Our $\Lambda_m$
+  classifier (§5) operates in the same regime; `q_late` and
+  `online_max_q_per_step` are the framework's substrate-side
+  observables.
+- **Yue et al. 2023** ("SEEM") — proposes an NTK-based eigenvalue
+  predicting Q-divergence ex ante. Our `q_lambda_a_*` family and
+  Theorem 3 σ_clip operate on the same axis but via closed-form
+  iid-Gaussian analysis (Cor 3.2) rather than NTK estimation.
+- **Hussing et al. 2024** — Q-divergence under high update ratios
+  driven by OOD-action Q-blowup + Adam momentum. Proposes
+  *effective rank* of representation matrix as substrate-side
+  diagnostic. **Substrate-side complement we do NOT currently
+  trace** (would require last-layer feature snapshots); orthogonal
+  to our behavior-side `policy_growth_fraction`.
+- **Iordan et al. 2023** ("Edge of Stability in RL") — Hessian
+  eigenvalue oscillates around 2/lr; loss-magnitude monitoring
+  is misleading. Justifies our preference for `mc_return` /
+  `outcome_late` over Bellman-loss-magnitude as the policy-
+  meaningfulness indicator.
+
+### Axis 2 — Policy-structure (is policy converging or thrashing?)
+
+- **Schaul et al. 2022** ("The Phenomenon of Policy Churn") —
+  defines $W(\pi, \pi'|s) = \tfrac{1}{2}\sum_a |\pi(a|s) - \pi'(a|s)|$
+  per-state policy distance; aggregates to "churn fraction"
+  (states where argmax flipped between consecutive snapshots).
+  **Direct published sibling** for our `argmax_entropy_late`,
+  `state_conditional_argmax_entropy_late`,
+  `argmax_persistence_late`, and `bootstrap_action_mismatch_late`.
+  Schaul's exact form requires per-burst argmax snapshots on
+  a fixed eval set; our state-conditional entropy form is the
+  cheaper proxy on stochastic evaluation episodes.
+- **Tang, Schaul, Quan, Barreto 2024** ("Reducing the Chain Effect
+  of Value and Policy Churn", arXiv:2409.04792) — formalizes
+  value-churn → action-gradient-deviation → biased-update →
+  more-churn cycle via NTK analysis. **Closest published
+  theoretical antecedent** to our Lemma 2 chain framing
+  ($Q_{t+1} \leftarrow r + \gamma \max_a Q_t$ as bias amplifier).
+  Tang et al. propose CHAIN regularization; we observe the
+  signature empirically via `bootstrap_self_reference_fraction`
+  + `policy_growth_fraction`.
+
+### Axis 3 — Bias-decomposition (does Q track true return?)
+
+- **Fu, Kumar, Soh, Levine 2019** ("Diagnosing Bottlenecks in
+  Deep Q-learning") — oracle-FQI decomposition of error budget
+  into approximation / sampling-distribution / nonstationarity
+  components. Diagnostic: $\ell_\infty$ distance to $Q^*$ under
+  oracle FQI. Inapplicable where $Q^*$ unknown (most of our
+  envs); their conceptual decomposition transfers and is
+  echoed in our jensen_gap / signed-Q / Q-action-std separation.
+- **Nikishin et al. 2022** ("Primacy Bias") — Q overfits to early
+  experience; reset-based mitigation. Our γ→1 sparse-reward
+  regime is plausibly primacy-favorable; **DDQN's clip in our
+  framework is reinterpretable as "slows early Q inflation
+  enough for reward to arrive"** — the same mechanism Nikishin
+  resets undo post-hoc.
+- **Yu & Wei 2025+** ("Does DQN Learn?") — DQN can return
+  policies *worse than initial* even with infinite visitation.
+  Adjacent to our `paired_g_per_burst_minus_initial` and
+  `outcome_decay_5` measurables.
+
+### What our recovery-mechanism decomposition adds
+
+The literature already has:
+
+- The **symptom** (soft divergence, churn, divergence eigenvalue).
+- **Mitigations** (DDQN, target nets, primacy resets, CHAIN reg).
+- **Predictors** (SEEM, Hessian, churn rate).
+
+What it does NOT have, and what `policy_growth_fraction` + the
+temporal-ordering bridge provide:
+
+- A **per-cell decomposition of WHICH recovery mechanism is
+  operating** within the soft-divergence regime — i.e.,
+  whether (a) the policy anchored to sparse reward FIRST and
+  the Q-chain was stalled, or (b) the Q-chain dominated FIRST
+  and the policy lost the race. Vanilla at FR γ=0.999 is
+  systematically in case (b) (`policy_growth_fraction ≈ 0`,
+  observed 0.0006); DDQN at the same scope is systematically
+  in case (a) (`policy_growth_fraction ≈ 0.8`). The empirical
+  signature (Cohen's d = +2.78, p = 1.2e-11) closes the
+  Lemma 2 → outcome chain that prior work could only describe
+  via outcome-level evidence.
+
+This decomposition is **hybrid axis 1 + axis 3** — it tracks
+*coupling* between Q magnitude growth and MC return growth, not
+either axis alone. No published work uses precisely this ratio
+form; the closest analogues are Hasselt et al. 2018's
+qualitative soft-divergence shape (no MC anchor) and SEEM's
+NTK eigenvalue (predictor, not decomposer).
+
+## 12. References
 
 - Hasselt, H. (2010). *Double Q-learning*. NeurIPS. — Proposition 1 +
   §4.1 give Lemma 3 + the exact bias formula under iid.
 - Hasselt, H., Guez, A., & Silver, D. (2016). *Deep reinforcement
   learning with double Q-learning*. AAAI. — Empirical Atari claim,
   online/target version of Lemma 3.
+- van Hasselt, H., Doron, Y., Strub, F., Hessel, M., Sonnerat, N.,
+  & Modayil, J. (2018). *Deep reinforcement learning and the
+  deadly triad*. arXiv:1812.02648. — Defines "soft divergence";
+  empirical precedent for tracking $\max_a Q$ trajectory shape.
+- Achiam, J., Knight, E., & Abbeel, P. (2019). *Towards
+  characterizing divergence in deep Q-learning*. arXiv:1903.08894.
+  — Linearized-update contraction analysis; PreQN preconditioning.
+- Fu, J., Kumar, A., Soh, M., & Levine, S. (2019). *Diagnosing
+  bottlenecks in deep Q-learning algorithms*. ICML.
+  arXiv:1902.10250. — Oracle-FQI error decomposition.
+- Schaul, T., Barreto, A., Quan, J., & Ostrovski, G. (2022).
+  *The phenomenon of policy churn*. NeurIPS. arXiv:2206.00730. —
+  Per-state policy distance $W(\pi, \pi'|s)$; published sibling
+  for our argmax-stability measurables.
+- Nikishin, E., Schwarzer, M., D'Oro, P., Bacon, P.-L., &
+  Courville, A. (2022). *The primacy bias in deep reinforcement
+  learning*. ICML. arXiv:2205.07802. — Early-experience Q overfit;
+  reset-based mitigation; adjacent mechanism to our γ→1 regime.
+- Iordan, R., Deisenroth, M. P., & Rosca, M. (2023).
+  *Investigating the edge of stability phenomenon in
+  reinforcement learning*. arXiv:2307.04210. — Hessian-eigenvalue
+  dynamics; loss-monitoring misleads.
+- Yue, Y., Lu, R., Cheng, B., Wang, R., Yang, S., Liu, X., …
+  (2023). *Understanding, predicting and better resolving
+  Q-value divergence in offline-RL*. NeurIPS. OpenReview
+  71P7ugOGCV. — SEEM: NTK eigenvalue ex-ante divergence
+  predictor.
+- Hussing, M., Voelcker, C., Gilitschenski, I., Farahmand, A.-M.,
+  & Eaton, E. (2024). *Dissecting deep RL with high update
+  ratios: combatting value divergence*. arXiv:2403.05996. —
+  Effective rank of representation matrix; Adam-momentum
+  amplifier.
+- Tang, Y., Schaul, T., Quan, J., & Barreto, A. (2024).
+  *Reducing the chain effect of value and policy churn*.
+  arXiv:2409.04792. — NTK formalization of value-churn /
+  policy-churn cycle; CHAIN regularization. **Closest
+  published theoretical antecedent to this note's Lemma 2.**
+- Yu, X., & Wei, Z. (2025+). *Does DQN learn?* arXiv:2205.13617.
+  — DQN can return policies worse than initial under infinite
+  visitation; outcome-only evaluation can mask failure.
 - Thrun, S., & Schwartz, A. (1993). *Issues in using function
   approximation for reinforcement learning*. — Upper bound on
   Q-overestimation; Lemma 1 reference.
@@ -911,7 +1057,7 @@ future work.
 - Watkins, C. J. C. H. (1992). *Q-learning*. Machine Learning. —
   Original convergence proof for tabular Q-learning.
 
-## 12. Empirical-corroboration anchors (this study)
+## 13. Empirical-corroboration anchors (this study)
 
 - `findings_fr_gamma_why_transfers_to_minatar.md` — joint partial
   ρ(γ, jens | self_ref + σ_action) shrinks 76-87% at SI/Asterix/Breakout

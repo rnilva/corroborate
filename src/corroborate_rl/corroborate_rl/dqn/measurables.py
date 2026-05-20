@@ -1414,7 +1414,17 @@ def bootstrap_action_mismatch_late(
     THREE jointly are the regime where DDQN should help most.
 
     Cheap probe added 2026-05-13 in `train_phase` — single
-    argmax + compare per batch step. Negligible cost."""
+    argmax + compare per batch step. Negligible cost.
+
+    Literature positioning. Adjacent to Schaul et al. 2022 "Policy
+    Churn" (NeurIPS, arXiv:2206.00730), which measures argmax
+    *between policy snapshots* (consecutive update steps).
+    `bootstrap_action_mismatch` measures argmax *between (online net,
+    target net) at the same step* — a within-time, between-network
+    mismatch rate, not a between-time churn. Both capture the
+    policy-structure axis (Theorem 1 Cor 1.1 has explicit
+    "argmax-preservation" condition); the framework's three orthogonal
+    diagnostic axes are documented in THEORY_bootstrap_dominance.md §11."""
     try:
         arr = BOOTSTRAP_ACTION_MISMATCH(record)
     except KeyError:
@@ -2056,7 +2066,16 @@ def argmax_persistence_late(record: Mapping[str, object]) -> float:
     drift. Two consecutive batches drawing very different
     transitions can produce different argmaxes even with stable Q.
     Read in conjunction with `argmax_entropy_late` (which captures
-    the across-action histogram) to disambiguate."""
+    the across-action histogram) to disambiguate.
+
+    Literature positioning. Closest published sibling is Schaul et al.
+    2022 "The Phenomenon of Policy Churn" (NeurIPS, arXiv:2206.00730),
+    which defines `W(π, π'|s) = ½ Σ_a |π(a|s) − π'(a|s)|` per-state
+    and aggregates to a churn fraction. Our argmax_persistence is the
+    *temporal-self-pair* variant (consecutive STEPS, not consecutive
+    SNAPSHOTS on a fixed eval set) — cheaper to trace, but conflates
+    real policy instability with batch-composition drift. See
+    THEORY_bootstrap_dominance.md §11 for the full positioning."""
     try:
         arr = ONLINE_ARGMAX(record)
     except KeyError:
@@ -3161,7 +3180,19 @@ def policy_growth_fraction(
     Cross-env meta-comparison NOT recommended (the ratio's scale
     depends on env-specific Q and MC ranges). Within-env arm-diff
     is the appropriate use. The threshold-free formulation is the
-    paper-grade replacement for `policy_anchors_before_bias`."""
+    paper-grade replacement for `policy_anchors_before_bias`.
+
+    Literature positioning (see `THEORY_bootstrap_dominance.md` §11).
+    Hybrid of the value-magnitude axis (Hasselt et al. 2018 "soft
+    divergence" — `max_a Q` shape) and the bias-decomposition axis
+    (Fu et al. 2019 oracle-FQI; Q-vs-MC tracking). No published work
+    uses precisely this ratio form; the closest analogues are
+    Hasselt 2018's qualitative Q-trajectory shape (no MC anchor) and
+    Yue 2023's SEEM eigenvalue (predicts divergence, doesn't
+    decompose recovery). This measurable's substantive contribution
+    is the per-cell decomposition of WHICH recovery mechanism
+    (reward-anchored policy convergence vs DDQN-clip-prevented
+    Q-blowup) is operating within the soft-divergence regime."""
     mc_growth = mc_growth_max_minus_initial.fn(record)
     q_growth = q_growth_max_minus_initial.fn(record)
     if np.isnan(mc_growth) or np.isnan(q_growth):
