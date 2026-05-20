@@ -239,6 +239,9 @@ REQUIRED_MEASURABLES: tuple[str, ...] = (
     'policy_churn_late',            # Schaul 2022 sibling — state-conditional argmax churn
     'state_hash_n_unique_late',     # gates policy_churn_late from degenerate-state-hash cells
     'state_hash_entropy_late',      # state-visitation diversity — resolves churn interpretive ambiguity
+    'state_hash_entropy_early',     # early-window counterpart — upstream-vs-downstream disambig
+    'state_hash_n_unique_early',
+    'policy_churn_early',
 )
 # `q_action_std_late` is the proper σ_action measure (within-state
 # across-action Q SD, averaged over the late 50% of training,

@@ -605,6 +605,102 @@ def mutual_info_state_argmax_late(
 
 
 @measurable(reads=('state_hash_per_step',))
+def state_hash_entropy_early(
+    record: Mapping[str, object],
+) -> float:
+    """Shannon entropy (nats) of `state_hash_per_step` over the
+    EARLY 50% of training — symmetric counterpart to
+    `state_hash_entropy_late`.
+
+    In the early window the behavior policy is dominated by
+    ε-greedy exploration (ε still high). Early state-distribution
+    therefore reflects ε-random + env-dynamics + initial-Q
+    argmax, with the LEARNED-POLICY contribution still small.
+
+    Used to test whether arm-induced differences in late-window
+    state diversity are UPSTREAM (visible early too → DDQN affects
+    behavior from the start) or DOWNSTREAM (only diverge late →
+    state diversity is a manifestation of late-window policy
+    quality).
+
+    Same degenerate-state-hash caveat as `state_hash_entropy_late`."""
+    state_arr = record.get('state_hash_per_step')
+    if state_arr is None:
+        return float('nan')
+    s = np.asarray(state_arr, dtype=np.int64).flatten()
+    n = s.size
+    if n < 4:
+        return float('nan')
+    half = n // 2
+    s_early = s[:half]
+    counts = np.bincount(s_early - s_early.min())
+    nonzero = counts[counts > 0]
+    if nonzero.size <= 1:
+        return 0.0
+    p = nonzero.astype(np.float64) / float(nonzero.sum())
+    return float(-np.sum(p * np.log(p)))
+
+
+@measurable(reads=('state_hash_per_step',))
+def state_hash_n_unique_early(
+    record: Mapping[str, object],
+) -> float:
+    """Number of distinct `state_hash_per_step` values in the early
+    50% window. Counterpart to `state_hash_n_unique_late`."""
+    state_arr = record.get('state_hash_per_step')
+    if state_arr is None:
+        return float('nan')
+    s = np.asarray(state_arr, dtype=np.int64).flatten()
+    n = s.size
+    if n < 4:
+        return float('nan')
+    half = n // 2
+    return float(np.unique(s[:half]).size)
+
+
+@measurable(reads=('online_argmax_per_step', 'state_hash_per_step'))
+def policy_churn_early(
+    record: Mapping[str, object],
+) -> float:
+    """State-conditional policy churn over the EARLY 50% of training.
+
+    Symmetric counterpart to `policy_churn_late`. In the early window
+    the behavior policy is ε-greedy-dominated, so consecutive
+    same-state appearances are partly stochastic-ε actions — the
+    early churn rate carries less "policy flux" signal than the
+    late form and more "ε-random + early-Q-instability" noise.
+
+    Used as a baseline: if late churn differs between arms but early
+    churn doesn't, the arm-induced late churn is downstream of
+    learning. If early churn already differs, the clip is changing
+    behavior from the start."""
+    argmax_arr = record.get('online_argmax_per_step')
+    state_arr = record.get('state_hash_per_step')
+    if argmax_arr is None or state_arr is None:
+        return float('nan')
+    a = np.asarray(argmax_arr, dtype=np.int64).flatten()
+    s = np.asarray(state_arr, dtype=np.int64).flatten()
+    n = min(a.size, s.size)
+    if n < 4:
+        return float('nan')
+    half = n // 2
+    a_early, s_early = a[:half], s[:half]
+    n_flips = 0
+    n_pairs = 0
+    for s_val in np.unique(s_early):
+        mask = s_early == s_val
+        if int(mask.sum()) < 2:
+            continue
+        a_in_s = a_early[mask]
+        flips = a_in_s[1:] != a_in_s[:-1]
+        n_flips += int(flips.sum())
+        n_pairs += int(flips.size)
+    if n_pairs == 0:
+        return float('nan')
+    return float(n_flips) / float(n_pairs)
+
+
+@measurable(reads=('state_hash_per_step',))
 def state_hash_entropy_late(
     record: Mapping[str, object],
 ) -> float:

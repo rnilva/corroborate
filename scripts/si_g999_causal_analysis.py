@@ -31,6 +31,8 @@ _SI_G999 = (
     & pl.col('policy_growth_fraction').is_finite()
     & pl.col('policy_churn_late').is_finite()
     & pl.col('state_hash_entropy_late').is_finite()
+    & pl.col('state_hash_entropy_early').is_finite()
+    & pl.col('policy_churn_early').is_finite()
     & pl.col('jensen_gap').is_finite()
     & pl.col('eval_best_burst_raw_mean').is_finite()
 )
@@ -93,6 +95,35 @@ def main() -> None:
 
     print('Single-mediator partial:')
     for med in ('jensen_gap', 'policy_growth_fraction', 'policy_churn_late', 'state_hash_entropy_late'):
+        z = _col(cells, med)
+        rho_c, p_c = partial_spearman_rho(x_arm, y_out, z)
+        shrink = abs(rho_c / rho_m) if abs(rho_m) > 1e-9 else float('nan')
+        print(
+            f'  ρ(arm, outcome | {med:30s}) = {rho_c:+.3f}, p = {p_c:.4g}, '
+            f'shrink = {shrink:.2f}× of |marginal|'
+        )
+    print()
+
+    print('=== Pass 3 — Early vs late: is state diversity UPSTREAM or DOWNSTREAM? ===')
+    print()
+    # Direct arm-diff on early-window companions
+    import scipy.stats as st
+    for var in ('state_hash_entropy_early', 'state_hash_n_unique_early', 'policy_churn_early',
+                'state_hash_entropy_late',  'state_hash_n_unique_late',  'policy_churn_late'):
+        ddqn = _col(cells.filter(pl.col('arm') == 1.0), var)
+        vanilla = _col(cells.filter(pl.col('arm') == 0.0), var)
+        d = (ddqn.mean() - vanilla.mean()) / np.sqrt(
+            (ddqn.var(ddof=1) + vanilla.var(ddof=1)) / 2,
+        )
+        t_stat, p_val = st.ttest_ind(ddqn, vanilla, equal_var=False)
+        print(
+            f'  {var:32s} vanilla {vanilla.mean():.3f} → DDQN {ddqn.mean():.3f}, '
+            f'd={d:+.2f}, p={p_val:.3g}'
+        )
+    print()
+
+    print('Partial Spearman ρ(arm, outcome | early-window mediators):')
+    for med in ('state_hash_entropy_early', 'policy_churn_early'):
         z = _col(cells, med)
         rho_c, p_c = partial_spearman_rho(x_arm, y_out, z)
         shrink = abs(rho_c / rho_m) if abs(rho_m) > 1e-9 else float('nan')
