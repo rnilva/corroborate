@@ -255,6 +255,9 @@ REQUIRED_MEASURABLES: tuple[str, ...] = (
     'q_std_burst_autocorr_long',
     'state_repeat_rate_window64_late',   # loop hypothesis: short-window state revisits
     'state_repeat_rate_window256_late',  # longer-window state revisits
+    'state_repeat_rate_within_episode_window64_late',  # within-episode only — removes reset artifact
+    'episode_count_late',                # diagnostic: episodes in late window
+    'mean_episode_length_late',          # diagnostic: ~ inverse of episode count
 )
 # `q_action_std_late` is the proper σ_action measure (within-state
 # across-action Q SD, averaged over the late 50% of training,

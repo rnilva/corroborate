@@ -763,6 +763,122 @@ def _state_repeat_rate(s_arr: np.ndarray, window: int) -> float:
     return matches / n
 
 
+def _state_repeat_rate_within_episode(
+    s_arr: np.ndarray, done_arr: np.ndarray, window: int,
+) -> float:
+    """Within-episode-only repeat rate. For each step t, the
+    trailing-window lookback is BOUNDED by the most recent episode
+    start (i.e., the step after the last done before t). Cross-
+    episode initial-state matches are excluded.
+
+    Implementation: sliding-window dict that's RESET to empty
+    whenever a `done` is encountered. O(n)."""
+    n = s_arr.size
+    if n != done_arr.size or n <= window + 1:
+        return float('nan')
+    matches = 0
+    eligible = 0
+    counts: dict[int, int] = {}
+    queue: 'list[int]' = []
+    for i in range(n):
+        h = int(s_arr[i])
+        # Lookback exists only if this step has eligible trailing
+        # window (i.e., at least 1 prior within-episode step).
+        if queue:
+            eligible += 1
+            if h in counts:
+                matches += 1
+        # Update sliding window.
+        queue.append(h)
+        counts[h] = counts.get(h, 0) + 1
+        if len(queue) > window:
+            old = queue.pop(0)
+            counts[old] -= 1
+            if counts[old] == 0:
+                del counts[old]
+        # If this step ended the episode, reset window — next step
+        # is a fresh episode-start with no within-episode lookback.
+        if done_arr[i] > 0.5:
+            counts.clear()
+            queue.clear()
+    if eligible == 0:
+        return float('nan')
+    return matches / eligible
+
+
+@measurable(reads=('state_hash_per_step', 'done'))
+def state_repeat_rate_within_episode_window64_late(
+    record: Mapping[str, object],
+) -> float:
+    """Like `state_repeat_rate_window64_late` but RESTRICTED to
+    within-episode repeats — cross-episode initial-state matches
+    are excluded.
+
+    Addresses the episode-length-artifact concern: a weak agent
+    that dies often might inflate the window-64 repeat rate purely
+    via initial-state-after-reset matches, not via actual policy
+    cycling. This measurable counts only repeats where the matched
+    earlier step is from the SAME episode as the current step
+    (no `done` boundary between them).
+
+    If the original `state_repeat_rate_window64_late` arm-difference
+    SHRINKS substantially under this measure → the original signal
+    was largely the episode-reset artifact.
+    If the arm-difference SURVIVES → the loop signal is real
+    within-episode cycling."""
+    state_arr = record.get('state_hash_per_step')
+    done_arr = record.get('done')
+    if state_arr is None or done_arr is None:
+        return float('nan')
+    s = np.asarray(state_arr, dtype=np.int64).flatten()
+    d = np.asarray(done_arr, dtype=np.float64).flatten()
+    n = min(s.size, d.size)
+    if n < 128:
+        return float('nan')
+    half = n // 2
+    return _state_repeat_rate_within_episode(s[half:], d[half:], window=64)
+
+
+@measurable(reads=('done',))
+def episode_count_late(
+    record: Mapping[str, object],
+) -> float:
+    """Number of completed episodes (done==1 transitions) in the
+    late 50% of training. Direct measure of episode count — used
+    to verify the episode-length-artifact concern."""
+    done_arr = record.get('done')
+    if done_arr is None:
+        return float('nan')
+    d = np.asarray(done_arr, dtype=np.float64).flatten()
+    n = d.size
+    if n < 2:
+        return float('nan')
+    half = n // 2
+    return float((d[half:] > 0.5).sum())
+
+
+@measurable(reads=('done',))
+def mean_episode_length_late(
+    record: Mapping[str, object],
+) -> float:
+    """Mean training-step episode length in late 50%. Computed as
+    (late-window length) / (episode count + epsilon) for
+    interpretation as steps-per-episode."""
+    done_arr = record.get('done')
+    if done_arr is None:
+        return float('nan')
+    d = np.asarray(done_arr, dtype=np.float64).flatten()
+    n = d.size
+    if n < 2:
+        return float('nan')
+    half = n // 2
+    late = d[half:]
+    n_ep = int((late > 0.5).sum())
+    if n_ep == 0:
+        return float(late.size)
+    return float(late.size) / float(n_ep)
+
+
 @measurable(reads=('state_hash_per_step',))
 def state_repeat_rate_window64_late(
     record: Mapping[str, object],
