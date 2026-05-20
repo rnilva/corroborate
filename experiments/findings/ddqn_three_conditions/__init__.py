@@ -93,6 +93,7 @@ from experiments.findings.ddqn_three_conditions import _measurables  # pyright: 
 from experiments.findings.ddqn_three_conditions import (
     finding_acrobot_chain_does_not_replicate,
     finding_asterix_gamma_why_does_not_transfer,
+    finding_ddqn_reduces_policy_churn,
     finding_gamma_amplification_anchor_gated,
     finding_gamma_jens_via_q_self_reference,
     finding_hasselt_chain_at_fr_g999_unshaped,
@@ -148,6 +149,10 @@ from experiments.findings.ddqn_three_conditions.outcome_translation import (
     ddqn_helps_outcome_at_fr_g999_mlp_unshaped__k_panel,
     ddqn_no_positive_outcome_under_shaping__fr_shaped_fa_x_gamma_panel,
 )
+from experiments.findings.ddqn_three_conditions.policy_churn import (
+    ddqn_reduces_policy_churn__fr_g999,
+    ddqn_reduces_policy_churn__si_g999,
+)
 from experiments.findings.ddqn_three_conditions.temporal_ordering_fr_g999 import (
     ddqn_increases_policy_growth_fraction__fr_g999,
     ddqn_increases_policy_growth_fraction__si_g999,
@@ -187,6 +192,8 @@ BRIDGES = (
     gamma_jens_residual_at_asterix_after_fr_mediators,
     ddqn_increases_policy_growth_fraction__fr_g999,
     ddqn_increases_policy_growth_fraction__si_g999,
+    ddqn_reduces_policy_churn__si_g999,
+    ddqn_reduces_policy_churn__fr_g999,
 )
 
 
@@ -205,6 +212,7 @@ FINDINGS = (
     finding_jens_does_not_mediate_outcome_at_fr_g999_mlp,
     finding_si_gamma_why_transfers_from_fr,
     finding_asterix_gamma_why_does_not_transfer,
+    finding_ddqn_reduces_policy_churn,
 )
 
 
@@ -226,6 +234,7 @@ REQUIRED_MEASURABLES: tuple[str, ...] = (
     'policy_growth_fraction',       # temporal-ordering mediator (FR γ=0.999 + SI γ=0.999 bridges)
     'mc_growth_max_minus_initial',  # input to policy_growth_fraction
     'q_growth_max_minus_initial',   # input to policy_growth_fraction
+    'policy_churn_late',            # Schaul 2022 sibling — state-conditional argmax churn
 )
 # `q_action_std_late` is the proper σ_action measure (within-state
 # across-action Q SD, averaged over the late 50% of training,

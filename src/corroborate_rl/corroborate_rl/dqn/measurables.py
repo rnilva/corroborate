@@ -604,6 +604,76 @@ def mutual_info_state_argmax_late(
     return max(0.0, h_a - h_cond)
 
 
+@measurable(reads=('online_argmax_per_step', 'state_hash_per_step'))
+def policy_churn_late(
+    record: Mapping[str, object],
+) -> float:
+    """State-conditional policy churn over the late 50% of training,
+    in the form of Schaul et al. 2022 "The Phenomenon of Policy Churn"
+    (NeurIPS, arXiv:2206.00730).
+
+    For each state that appears at least twice in the late window,
+    walks the time-ordered argmax sequence at that state and counts
+    consecutive-pair flips (`argmax[i] != argmax[i-1]`). Pools over
+    all (state, consecutive-pair) tuples weighted by occurrence
+    count. Returned value is the empirical fraction of consecutive
+    state-revisit pairs where the online network's greedy choice
+    changed.
+
+    Schaul's exact form is `W(π_t, π_{t+1}|s) = ½ Σ_a |π_t(a|s) −
+    π_{t+1}(a|s)|` evaluated on a fixed eval set between consecutive
+    policy snapshots; for deterministic policy (DQN's greedy), W
+    reduces to `1[argmax flipped]`. Our trace stream is the natural-
+    rollout per-step argmax, so consecutive APPEARANCES of the same
+    state-hash serve as the consecutive-snapshot sample pair (the
+    policy DID advance between those two appearances because steps
+    elapsed). The proxy is exact when the state recurs and the
+    policy's argmax at that state is the only thing that changed
+    between appearances; it conflates with batch-composition drift
+    when the appearances are far apart.
+
+    Range: [0, 1]. Higher → more churn (policy thrashes between
+    revisits on the same state). 0 → policy fully stable at each
+    revisited state.
+
+    Complementary to `state_conditional_argmax_entropy_late`
+    (static argmax distribution at each state — does the policy
+    commit to one action there?). A policy with full commitment
+    (entropy 0) has churn 0; a noisy/exploration policy has both
+    entropy > 0 AND churn > 0; a drift policy can have entropy >
+    0 but churn near 0 (monotonic argmax sequence: aaaabbbb → 1
+    flip out of 7 pairs).
+
+    Lit positioning: see THEORY_bootstrap_dominance.md §11. This is
+    the direct sibling for Schaul's `W(π,π')` on our existing
+    trace shape — no substrate change required, only the per-step
+    argmax + state-hash columns that are already standard."""
+    argmax_arr = record.get('online_argmax_per_step')
+    state_arr = record.get('state_hash_per_step')
+    if argmax_arr is None or state_arr is None:
+        return float('nan')
+    a = np.asarray(argmax_arr, dtype=np.int64).flatten()
+    s = np.asarray(state_arr, dtype=np.int64).flatten()
+    n = min(a.size, s.size)
+    if n < 4:
+        return float('nan')
+    half = n // 2
+    a_late, s_late = a[half:], s[half:]
+    n_flips = 0
+    n_pairs = 0
+    for s_val in np.unique(s_late):
+        mask = s_late == s_val
+        if int(mask.sum()) < 2:
+            continue
+        a_in_s = a_late[mask]
+        flips = a_in_s[1:] != a_in_s[:-1]
+        n_flips += int(flips.sum())
+        n_pairs += int(flips.size)
+    if n_pairs == 0:
+        return float('nan')
+    return float(n_flips) / float(n_pairs)
+
+
 @measurable(reads=('online_argmax_per_step',))
 def argmax_entropy_late(record: Mapping[str, object]) -> float:
     """Shannon entropy (nats) of `online_argmax_per_step`'s

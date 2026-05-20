@@ -75,7 +75,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_reduces_jens_uniformly_across_k_at_fr_high_gamma",
       "direction": "inverse",
-      "extent_hash": -1284518757915839787,
+      "extent_hash": 3001091958523034754,
       "n_cells_in_scope": 450,
       "n_cells_pre_scope": 4975,
       "pair_by": [
@@ -172,7 +172,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_reduction_amplified_by_gamma__fr_mlp_k4_unshaped",
       "direction": "inverse",
-      "extent_hash": -2927140545794553047,
+      "extent_hash": 5571171179120656048,
       "n_cells_in_scope": 720,
       "n_cells_pre_scope": 4975,
       "pair_by": [
@@ -228,7 +228,7 @@
       "blocked_by": null,
       "bridge_name": "fa_capacity_moderates_ddqn_jens_reduction",
       "direction": "inverse",
-      "extent_hash": 8331828596448926896,
+      "extent_hash": -3991584524812045357,
       "n_cells_in_scope": 2695,
       "n_cells_pre_scope": 4975,
       "pair_by": [
@@ -338,7 +338,7 @@
       "blocked_by": null,
       "bridge_name": "linear_fa_cap_fails_at_metamaze_g999__exception",
       "direction": "inverse",
-      "extent_hash": 2961398450648189175,
+      "extent_hash": -6890702638999557219,
       "n_cells_in_scope": 420,
       "n_cells_pre_scope": 4975,
       "pair_by": [
@@ -391,7 +391,7 @@
       "blocked_by": null,
       "bridge_name": "sigma_action_predicts_ddqn_jens_reduction",
       "direction": "inverse",
-      "extent_hash": 8331828596448926896,
+      "extent_hash": -3991584524812045357,
       "n_cells_in_scope": 2695,
       "n_cells_pre_scope": 4975,
       "pair_by": [
@@ -477,7 +477,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_helps_outcome_at_fr_g999_mlp_unshaped__k_panel",
       "direction": "direct",
-      "extent_hash": -1732401707390370179,
+      "extent_hash": 7936722547503147720,
       "n_cells_in_scope": 330,
       "n_cells_pre_scope": 4975,
       "pair_by": [
@@ -609,7 +609,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_no_positive_outcome_under_shaping__fr_shaped_fa_x_gamma_panel",
       "direction": "direct",
-      "extent_hash": -1361760265598664147,
+      "extent_hash": 9112382005116761350,
       "n_cells_in_scope": 240,
       "n_cells_pre_scope": 4975,
       "pair_by": [
@@ -650,7 +650,7 @@
       "blocked_by": null,
       "bridge_name": "vanilla_anchor_collapses_with_gamma_at_fr_mlp",
       "direction": "inverse",
-      "extent_hash": 8940756859739168258,
+      "extent_hash": -8644009704546512055,
       "n_cells_in_scope": 300,
       "n_cells_pre_scope": 4975,
       "pair_by": [
@@ -689,7 +689,7 @@
       "blocked_by": null,
       "bridge_name": "vanilla_anchor_preserved_with_gamma_at_acrobot_mlp",
       "direction": "direct",
-      "extent_hash": 4714721988114257396,
+      "extent_hash": 395720096785250736,
       "n_cells_in_scope": 180,
       "n_cells_pre_scope": 4975,
       "pair_by": [
@@ -728,7 +728,7 @@
       "blocked_by": null,
       "bridge_name": "gamma_predicts_q_self_reference_at_fr_mlp",
       "direction": "direct",
-      "extent_hash": -94734275189833618,
+      "extent_hash": -63766821220167749,
       "n_cells_in_scope": 120,
       "n_cells_pre_scope": 4975,
       "pair_by": [
@@ -767,7 +767,7 @@
       "blocked_by": null,
       "bridge_name": "q_self_reference_predicts_jens_at_fr_mlp",
       "direction": "direct",
-      "extent_hash": -94734275189833618,
+      "extent_hash": -63766821220167749,
       "n_cells_in_scope": 120,
       "n_cells_pre_scope": 4975,
       "pair_by": [
@@ -808,7 +808,7 @@
       "blocked_by": null,
       "bridge_name": "gamma_jens_mediated_by_q_self_reference_at_fr_mlp",
       "direction": "direct",
-      "extent_hash": -94734275189833618,
+      "extent_hash": -63766821220167749,
       "n_cells_in_scope": 120,
       "n_cells_pre_scope": 4975,
       "pair_by": [
@@ -852,7 +852,7 @@
       "blocked_by": null,
       "bridge_name": "gamma_predicts_q_late_residual_at_fr_mlp",
       "direction": "direct",
-      "extent_hash": -94734275189833618,
+      "extent_hash": -63766821220167749,
       "n_cells_in_scope": 120,
       "n_cells_pre_scope": 4975,
       "pair_by": [
@@ -896,7 +896,7 @@
       "blocked_by": null,
       "bridge_name": "q_late_predicts_jens_residual_at_fr_mlp",
       "direction": "direct",
-      "extent_hash": -94734275189833618,
+      "extent_hash": -63766821220167749,
       "n_cells_in_scope": 120,
       "n_cells_pre_scope": 4975,
       "pair_by": [
@@ -941,7 +941,7 @@
       "blocked_by": null,
       "bridge_name": "gamma_jens_jointly_mediated_by_self_ref_and_q_late_at_fr_mlp",
       "direction": "direct",
-      "extent_hash": -94734275189833618,
+      "extent_hash": -63766821220167749,
       "n_cells_in_scope": 120,
       "n_cells_pre_scope": 4975,
       "pair_by": [
@@ -986,7 +986,7 @@
       "blocked_by": null,
       "bridge_name": "gamma_predicts_sigma_action_residual_at_fr_mlp",
       "direction": "direct",
-      "extent_hash": -94734275189833618,
+      "extent_hash": -63766821220167749,
       "n_cells_in_scope": 120,
       "n_cells_pre_scope": 4975,
       "pair_by": [
@@ -1030,7 +1030,7 @@
       "blocked_by": null,
       "bridge_name": "sigma_action_predicts_jens_residual_at_fr_mlp",
       "direction": "direct",
-      "extent_hash": -94734275189833618,
+      "extent_hash": -63766821220167749,
       "n_cells_in_scope": 120,
       "n_cells_pre_scope": 4975,
       "pair_by": [
@@ -1075,7 +1075,7 @@
       "blocked_by": null,
       "bridge_name": "gamma_jens_jointly_mediated_by_self_ref_and_sigma_action_at_fr_mlp",
       "direction": "direct",
-      "extent_hash": -94734275189833618,
+      "extent_hash": -63766821220167749,
       "n_cells_in_scope": 120,
       "n_cells_pre_scope": 4975,
       "pair_by": [
@@ -1118,7 +1118,7 @@
       "blocked_by": null,
       "bridge_name": "gamma_jens_marginal_small_at_acrobot_mlp",
       "direction": "direct",
-      "extent_hash": 4714721988114257396,
+      "extent_hash": 395720096785250736,
       "n_cells_in_scope": 180,
       "n_cells_pre_scope": 4975,
       "pair_by": [
@@ -1157,7 +1157,7 @@
       "blocked_by": null,
       "bridge_name": "q_late_sign_flipped_with_gamma_at_acrobot_mlp",
       "direction": "inverse",
-      "extent_hash": -4644285667308389100,
+      "extent_hash": 1290189225142256426,
       "n_cells_in_scope": 120,
       "n_cells_pre_scope": 4975,
       "pair_by": [
@@ -1331,7 +1331,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_jens_reduction_amplified_by_k_eff_at_fr_g999_mlp",
       "direction": "inverse",
-      "extent_hash": -1284518757915839787,
+      "extent_hash": 3001091958523034754,
       "n_cells_in_scope": 450,
       "n_cells_pre_scope": 4975,
       "pair_by": [
@@ -1411,7 +1411,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_outcome_help_constant_across_k_eff_at_fr_g999_mlp",
       "direction": "direct",
-      "extent_hash": -1732401707390370179,
+      "extent_hash": 7936722547503147720,
       "n_cells_in_scope": 330,
       "n_cells_pre_scope": 4975,
       "pair_by": [
@@ -1453,7 +1453,7 @@
       "blocked_by": null,
       "bridge_name": "jens_reduction_does_not_predict_outcome_at_fr_g999_mlp",
       "direction": "direct",
-      "extent_hash": 6707534950927915454,
+      "extent_hash": 2037764038843912179,
       "n_cells_in_scope": 120,
       "n_cells_pre_scope": 4975,
       "pair_by": [
@@ -1495,7 +1495,7 @@
       "blocked_by": null,
       "bridge_name": "gamma_predicts_q_self_reference_at_si",
       "direction": "direct",
-      "extent_hash": -5999242107635132417,
+      "extent_hash": -144956466431566014,
       "n_cells_in_scope": 60,
       "n_cells_pre_scope": 4975,
       "pair_by": [
@@ -1534,7 +1534,7 @@
       "blocked_by": null,
       "bridge_name": "q_self_reference_predicts_jens_at_si",
       "direction": "direct",
-      "extent_hash": -5999242107635132417,
+      "extent_hash": -144956466431566014,
       "n_cells_in_scope": 60,
       "n_cells_pre_scope": 4975,
       "pair_by": [
@@ -1576,7 +1576,7 @@
       "blocked_by": null,
       "bridge_name": "gamma_jens_jointly_mediated_by_self_ref_and_sigma_action_at_si",
       "direction": "direct",
-      "extent_hash": -5999242107635132417,
+      "extent_hash": -144956466431566014,
       "n_cells_in_scope": 60,
       "n_cells_pre_scope": 4975,
       "pair_by": [
@@ -1619,7 +1619,7 @@
       "blocked_by": null,
       "bridge_name": "gamma_self_ref_null_at_asterix",
       "direction": "direct",
-      "extent_hash": -5224960605981876873,
+      "extent_hash": -6322879276393033391,
       "n_cells_in_scope": 60,
       "n_cells_pre_scope": 4975,
       "pair_by": [
@@ -1661,7 +1661,7 @@
       "blocked_by": null,
       "bridge_name": "gamma_jens_residual_at_asterix_after_fr_mediators",
       "direction": "direct",
-      "extent_hash": -5224960605981876873,
+      "extent_hash": -6322879276393033391,
       "n_cells_in_scope": 60,
       "n_cells_pre_scope": 4975,
       "pair_by": [
@@ -1713,7 +1713,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_increases_policy_growth_fraction__fr_g999",
       "direction": "direct",
-      "extent_hash": -2855559488735596167,
+      "extent_hash": -2924717507647757177,
       "n_cells_in_scope": 60,
       "n_cells_pre_scope": 4975,
       "pair_by": [
@@ -1766,7 +1766,7 @@
       "blocked_by": null,
       "bridge_name": "ddqn_increases_policy_growth_fraction__si_g999",
       "direction": "direct",
-      "extent_hash": -8119255885501408420,
+      "extent_hash": 5468261687693366272,
       "n_cells_in_scope": 60,
       "n_cells_pre_scope": 4975,
       "pair_by": [
@@ -1791,11 +1791,117 @@
       "tier": "interventional",
       "verdict": "held",
       "warnings": []
+    },
+    {
+      "analysis_results": {
+        "arm_mean_diff": {
+          "arm_field": "arm_key",
+          "baseline_arm": "baseline",
+          "mean_baseline": 0.677843,
+          "mean_diff": 0.0300013,
+          "mean_diff_p_value": 6.11113e-09,
+          "mean_diff_se": 0.00404922,
+          "mean_treatment": 0.707844,
+          "measurable": "policy_churn_late",
+          "n_baseline": 30,
+          "n_paired": 30,
+          "n_treatment": 30,
+          "pairing_rho": 0.360741,
+          "pairing_rho_se": 0.19245,
+          "sd_baseline": 0.0204696,
+          "sd_treatment": 0.00853693,
+          "standardized_effect": 1.91303,
+          "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)",
+          "welch_df": 38.7919
+        }
+      },
+      "assumption_violations": [],
+      "blocked_by": null,
+      "bridge_name": "ddqn_reduces_policy_churn__si_g999",
+      "direction": "direct",
+      "extent_hash": 5468261687693366272,
+      "n_cells_in_scope": 60,
+      "n_cells_pre_scope": 4975,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "alpha": 0.05,
+        "baseline_arm": "baseline",
+        "d_floor": 0.6,
+        "null_band": 0.2,
+        "pair_by": [
+          "seed"
+        ],
+        "sign_flip_floor": 0.3,
+        "source": "policy_churn_late",
+        "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
+      },
+      "predicted_direction": "a_lt_b",
+      "scope_repr": "[([([(col(\"env_name\")) == (\"SpaceInvaders-MinAtar\")]) & ([(col(\"gamma\")) == (dyn float: 0.999)])]) & (col(\"policy_churn_late\").is_finite())]",
+      "source_name": "do(baseline|bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify))",
+      "target_name": "policy_churn_late",
+      "tier": "interventional",
+      "verdict": "no_effect",
+      "warnings": []
+    },
+    {
+      "analysis_results": {
+        "arm_mean_diff": {
+          "arm_field": "arm_key",
+          "baseline_arm": "baseline",
+          "mean_baseline": 0.238509,
+          "mean_diff": 0.0820101,
+          "mean_diff_p_value": 2.22045e-16,
+          "mean_diff_se": 0.00641551,
+          "mean_treatment": 0.320519,
+          "measurable": "policy_churn_late",
+          "n_baseline": 30,
+          "n_paired": 30,
+          "n_treatment": 30,
+          "pairing_rho": 0.0370975,
+          "pairing_rho_se": 0.19245,
+          "sd_baseline": 0.0167961,
+          "sd_treatment": 0.0308651,
+          "standardized_effect": 3.30058,
+          "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)",
+          "welch_df": 44.7907
+        }
+      },
+      "assumption_violations": [],
+      "blocked_by": null,
+      "bridge_name": "ddqn_reduces_policy_churn__fr_g999",
+      "direction": "direct",
+      "extent_hash": -2924717507647757177,
+      "n_cells_in_scope": 60,
+      "n_cells_pre_scope": 4975,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "alpha": 0.05,
+        "baseline_arm": "baseline",
+        "d_floor": 0.5,
+        "null_band": 0.2,
+        "pair_by": [
+          "seed"
+        ],
+        "sign_flip_floor": 0.3,
+        "source": "policy_churn_late",
+        "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
+      },
+      "predicted_direction": "a_lt_b",
+      "scope_repr": "[([([([([([([(col(\"env_name\")) == (\"FourRooms-misc\")]) & ([(col(\"gamma\")) == (dyn float: 0.999)])]) & ([(col(\"replay.batch_size\")) == (dyn int: 32)])]) & ([(col(\"fa_kind\")) == (\"mlp_deep\")])]) & ([(col(\"shaping_kind\")) == (\"none\")])]) & ([(col(\"total_steps\")) == (dyn int: 1000000)])]) & (col(\"policy_churn_late\").is_finite())]",
+      "source_name": "do(baseline|bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify))",
+      "target_name": "policy_churn_late",
+      "tier": "interventional",
+      "verdict": "no_effect",
+      "warnings": []
     }
   ],
   "cache_path": "experiments/data/cache/ddqn_three_conditions.parquet",
   "errored_bridges": [],
-  "git_commit": "ae80af024445",
+  "git_commit": "d7ed45ff026e",
   "hypothesis_module": "experiments.findings.ddqn_three_conditions",
   "measurable_signatures": {
     "bootstrap_self_reference_fraction": "5cc6075b00be255f",
@@ -1803,11 +1909,12 @@
     "fa_kind": "0a45c52b5f1196cd",
     "jensen_gap": "950342c492febd27",
     "k_eff": "897a3817d75dcb99",
-    "policy_growth_fraction": "ac3207001afdcadd",
+    "policy_churn_late": "032925edcb46ad18",
+    "policy_growth_fraction": "f0eaa9f68f6b0897",
     "q_action_std_late": "7765d6e892aaf5f0",
     "q_late_mean": "bcaa1bbd516705a7",
     "shaping_kind": "8d7b9f162d87a266"
   },
   "n_cells_total": 4975,
-  "timestamp_utc": "2026-05-20T07:03:20+00:00"
+  "timestamp_utc": "2026-05-20T07:28:37+00:00"
 }
