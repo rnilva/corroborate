@@ -248,6 +248,11 @@ REQUIRED_MEASURABLES: tuple[str, ...] = (
     'q_burst_autocorr_lag1',        # Q-side: smoothness of per-burst max-Q at consecutive lag
     'q_burst_autocorr_long',        # Q-side: long-lag autocorr retention (smoothness vs noise)
     'q_burst_autocorr_ratio',       # Q-side: long/lag1 — Q-trajectory smoothness signal
+    'q_margin_burst_autocorr_lag1', # finer Q-resolution: action-gap autocorr
+    'q_margin_burst_autocorr_long',
+    'q_margin_burst_autocorr_ratio',
+    'q_std_burst_autocorr_lag1',    # cross-action Q SD autocorr
+    'q_std_burst_autocorr_long',
 )
 # `q_action_std_late` is the proper σ_action measure (within-state
 # across-action Q SD, averaged over the late 50% of training,

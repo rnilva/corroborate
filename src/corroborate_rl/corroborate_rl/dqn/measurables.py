@@ -604,6 +604,140 @@ def mutual_info_state_argmax_late(
     return max(0.0, h_a - h_cond)
 
 
+@measurable(reads=())
+def q_margin_burst_autocorr_per_lag(
+    record: Mapping[str, object],
+    q_argmax_margin_per_burst: npt.NDArray[np.float64],
+) -> npt.NDArray[np.float64]:
+    """Per-lag Pearson autocorrelation of per-burst mean action-gap
+    (top1 − top2 of Q over actions). Operates on the existing
+    `q_argmax_margin_per_burst` array via param-name injection.
+
+    Captures whether the action-gap (i.e. the per-state policy
+    decisiveness) is smooth across training (high lag-k autocorr)
+    or noisy (decaying). Finer-resolution than `q_burst_autocorr_per_lag`
+    on max-Q: the action gap is the actual quantity governing
+    argmax stability per state, so vanilla's bias-amplified
+    fluctuations might show up here even when per-burst-mean
+    max-Q looks smooth."""
+    del record
+    a = np.asarray(q_argmax_margin_per_burst, dtype=np.float64).flatten()
+    n = a.size
+    if n < 3:
+        return np.array([float('nan')])
+    autocorr = np.zeros((n - 1,), dtype=np.float64)
+    for k in range(1, n):
+        x = a[:-k]
+        y = a[k:]
+        if x.size < 3 or x.std() < 1e-9 or y.std() < 1e-9:
+            autocorr[k - 1] = float('nan')
+            continue
+        autocorr[k - 1] = float(np.corrcoef(x, y)[0, 1])
+    return autocorr
+
+
+@measurable(reads=())
+def q_margin_burst_autocorr_lag1(
+    record: Mapping[str, object],
+    q_margin_burst_autocorr_per_lag: npt.NDArray[np.float64],
+) -> float:
+    del record
+    a = np.asarray(q_margin_burst_autocorr_per_lag, dtype=np.float64).flatten()
+    if a.size < 1 or not np.isfinite(a[0]):
+        return float('nan')
+    return float(a[0])
+
+
+@measurable(reads=())
+def q_margin_burst_autocorr_long(
+    record: Mapping[str, object],
+    q_margin_burst_autocorr_per_lag: npt.NDArray[np.float64],
+) -> float:
+    del record
+    a = np.asarray(q_margin_burst_autocorr_per_lag, dtype=np.float64).flatten()
+    if a.size < 1:
+        return float('nan')
+    n = a.size
+    tail_start = max(1, int(0.75 * n))
+    tail = a[tail_start:]
+    finite = tail[np.isfinite(tail)]
+    if finite.size == 0:
+        return float('nan')
+    return float(np.median(finite))
+
+
+@measurable(reads=())
+def q_margin_burst_autocorr_ratio(
+    record: Mapping[str, object],
+    q_margin_burst_autocorr_per_lag: npt.NDArray[np.float64],
+) -> float:
+    del record
+    a = np.asarray(q_margin_burst_autocorr_per_lag, dtype=np.float64).flatten()
+    if a.size < 2 or not np.isfinite(a[0]) or abs(a[0]) <= 1e-9:
+        return float('nan')
+    n = a.size
+    tail_start = max(1, int(0.75 * n))
+    tail = a[tail_start:]
+    finite = tail[np.isfinite(tail)]
+    if finite.size == 0:
+        return float('nan')
+    return float(np.median(finite)) / float(a[0])
+
+
+@measurable(reads=())
+def q_std_burst_autocorr_per_lag(
+    record: Mapping[str, object],
+    q_action_std_per_burst: npt.NDArray[np.float64],
+) -> npt.NDArray[np.float64]:
+    """Per-lag Pearson autocorrelation of per-burst cross-action Q SD
+    (i.e., how spread the Q values are across actions at a state,
+    averaged per burst). Operates on `q_action_std_per_burst`."""
+    del record
+    a = np.asarray(q_action_std_per_burst, dtype=np.float64).flatten()
+    n = a.size
+    if n < 3:
+        return np.array([float('nan')])
+    autocorr = np.zeros((n - 1,), dtype=np.float64)
+    for k in range(1, n):
+        x = a[:-k]
+        y = a[k:]
+        if x.size < 3 or x.std() < 1e-9 or y.std() < 1e-9:
+            autocorr[k - 1] = float('nan')
+            continue
+        autocorr[k - 1] = float(np.corrcoef(x, y)[0, 1])
+    return autocorr
+
+
+@measurable(reads=())
+def q_std_burst_autocorr_lag1(
+    record: Mapping[str, object],
+    q_std_burst_autocorr_per_lag: npt.NDArray[np.float64],
+) -> float:
+    del record
+    a = np.asarray(q_std_burst_autocorr_per_lag, dtype=np.float64).flatten()
+    if a.size < 1 or not np.isfinite(a[0]):
+        return float('nan')
+    return float(a[0])
+
+
+@measurable(reads=())
+def q_std_burst_autocorr_long(
+    record: Mapping[str, object],
+    q_std_burst_autocorr_per_lag: npt.NDArray[np.float64],
+) -> float:
+    del record
+    a = np.asarray(q_std_burst_autocorr_per_lag, dtype=np.float64).flatten()
+    if a.size < 1:
+        return float('nan')
+    n = a.size
+    tail_start = max(1, int(0.75 * n))
+    tail = a[tail_start:]
+    finite = tail[np.isfinite(tail)]
+    if finite.size == 0:
+        return float('nan')
+    return float(np.median(finite))
+
+
 @measurable(reads=('online_max_q_per_step', 'mc_return'))
 def q_burst_autocorr_per_lag(
     record: Mapping[str, object],
