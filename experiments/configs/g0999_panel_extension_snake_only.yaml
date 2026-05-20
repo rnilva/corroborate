@@ -1,0 +1,64 @@
+name: g0999_panel_extension_snake_only
+out_dir: experiments/data/g0999_panel_extension_snake_only
+env_binding: per_env
+archive_remote: s3://corroborate-archive/g0999_panel_extension_snake_only
+
+# T3a γ=0.999 panel extension — Snake-jumanji only. Filtered from
+# the bundled `g0999_panel_extension_jumanji.yaml` (which also
+# includes PacMan).
+#
+# Closes pre-registration PR-1: Snake γ=0.999 CLIP-RATCHET regime
+# confirmation (per memory `findings-snake-ddqn-destabilizes-sparse-reward`
+# at γ=0.99 + the pre-registered prediction in
+# `finding_snake_clip_ratchet_regime_g0999` BLOCKED_ON).
+#
+# Adds 1 stratum to the σ_Λ_a moderation panel at γ=0.999 k=1
+# (n=8 → n=9 with LL already added → n=10 with Snake here).
+#
+# Canonical Jumanji HPs from `_PER_ENV_CANONICAL`:
+# Snake-jumanji: sync=1000, cap=50000, hidden=(64),
+# channels=(8,16), total_steps=1M.
+#
+# 1 env × 1 γ × 2 arms × 30 seeds = 2 cells (n=30 vmapped).
+# Estimated 3-4h GPU.
+
+envs:
+  - {name: Snake-jumanji, n_seeds: 30, chunk_size: 10}
+
+defaults:
+  total_steps: 1000000
+  eval_every:  20000
+  n_episodes:  5
+  gamma:       0.999
+  sync_period: 1000
+  replay:
+    class: Replay
+    capacity: 50000
+    batch_size: 32
+  optimizer:
+    fn: warmed_update
+    inner: {fn: adam, lr: 0.0001}
+    warmup_steps: 100
+  action_select:
+    fn: epsilon_greedy
+    schedule:
+      fn: linear_epsilon
+      eps_init: 1.0
+      eps_final: 0.05
+      anneal_steps: 100000
+  q_network:
+    class: CNN
+    obs_shape: {from_env: observation_shape}
+    channels: [8, 16]
+    kernel_size: 3
+    hidden: [64]
+
+interventions:
+  - name: "g0999_{from_env: name}"
+    base: {}
+    arms:
+      - []
+      - - slot_path: bootstrap
+          replacement:
+            fn: bootstrap
+            greedification: {fn: double_greedify}

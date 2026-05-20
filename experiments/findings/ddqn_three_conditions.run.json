@@ -5,7 +5,7 @@
         "stratified_arm_diff_pooled": {
           "arm_field": "arm_key",
           "baseline_arm": "baseline",
-          "i_squared": 0.748273,
+          "i_squared": 0.745393,
           "measurable": "jensen_gap",
           "n_strata": 3,
           "per_stratum": [
@@ -40,48 +40,48 @@
               ]
             },
             {
-              "arm_mean_baseline": 9.42463,
-              "arm_mean_treatment": 0.549478,
-              "arm_sd_baseline": 2.07312,
-              "arm_sd_treatment": 0.246305,
-              "baseline_predictor": 9.42463,
-              "cohen_d": -6.01204,
-              "cohen_se": 0.27199,
-              "mean_diff": -8.87515,
-              "n_seeds_baseline": 150,
-              "n_seeds_treatment": 150,
+              "arm_mean_baseline": 9.31933,
+              "arm_mean_treatment": 0.495496,
+              "arm_sd_baseline": 2.0721,
+              "arm_sd_treatment": 0.256389,
+              "baseline_predictor": 9.31933,
+              "cohen_d": -5.9767,
+              "cohen_se": 0.246983,
+              "mean_diff": -8.82384,
+              "n_seeds_baseline": 180,
+              "n_seeds_treatment": 180,
               "stratum_id": [
                 null
               ]
             }
           ],
           "pooled": {
-            "I2": 0.748273,
-            "Q": 7.94513,
+            "I2": 0.745393,
+            "Q": 7.85526,
             "assumption_violations": [
               "dl_small_g_unreliable_inference (n_cells=3, τ² CV ≈ 105% — point estimate not interpretable; prefer REML when available)"
             ],
             "empirical_max_g": -4.67097,
             "empirical_min_g": -6.6524,
             "n_cells": 3,
-            "pi_hi": 5.63172,
-            "pi_lo": -17.2007,
-            "pooled_g": -5.78448,
-            "se_pooled": 0.500925,
-            "tau2": 0.556331
+            "pi_hi": 5.32935,
+            "pi_lo": -16.8746,
+            "pooled_g": -5.77261,
+            "se_pooled": 0.488082,
+            "tau2": 0.525203
           },
-          "pooled_ci_hi": -4.80267,
-          "pooled_ci_lo": -6.76629,
-          "pooled_d": -5.78448,
-          "pooled_p_value": 7.59117e-31,
-          "pooled_se": 0.500925,
-          "q_statistic": 7.94513,
+          "pooled_ci_hi": -4.81597,
+          "pooled_ci_lo": -6.72925,
+          "pooled_d": -5.77261,
+          "pooled_p_value": 2.82666e-32,
+          "pooled_se": 0.488082,
+          "q_statistic": 7.85526,
           "refutation": "null_effect",
           "scope_predictor": "jensen_gap",
           "stratify_by": [
             "k_eff"
           ],
-          "tau2": 0.556331,
+          "tau2": 0.525203,
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)",
           "verdict": "no_effect"
         }
@@ -90,9 +90,9 @@
       "blocked_by": null,
       "bridge_name": "ddqn_reduces_jens_uniformly_across_k_at_fr_high_gamma",
       "direction": "inverse",
-      "extent_hash": 9149903642229787653,
-      "n_cells_in_scope": 450,
-      "n_cells_pre_scope": 5155,
+      "extent_hash": -3950693369523762028,
+      "n_cells_in_scope": 510,
+      "n_cells_pre_scope": 5215,
       "pair_by": [
         "seed"
       ],
@@ -187,9 +187,9 @@
       "blocked_by": null,
       "bridge_name": "ddqn_reduction_amplified_by_gamma__fr_mlp_k4_unshaped",
       "direction": "inverse",
-      "extent_hash": -1114980387445522662,
+      "extent_hash": 1804323553471680239,
       "n_cells_in_scope": 180,
-      "n_cells_pre_scope": 5155,
+      "n_cells_pre_scope": 5215,
       "pair_by": [
         "seed"
       ],
@@ -218,34 +218,34 @@
           ],
           "coefficients": [
             {
-              "ci_hi": -0.148461,
-              "ci_lo": -1.45145,
-              "coefficient": -0.799956,
+              "ci_hi": -0.145965,
+              "ci_lo": -1.447,
+              "coefficient": -0.796482,
               "is_significant": true,
               "name": "fa_capacity",
-              "p_value": 0.0209805
+              "p_value": 0.0212628
             }
           ],
-          "i_squared": 0.909289,
-          "intercept": -0.0264064,
-          "intercept_ci_hi": 0.432605,
-          "intercept_ci_lo": -0.485418,
-          "intercept_p_value": 0.900546,
-          "intercept_se": 0.206007,
+          "i_squared": 0.909096,
+          "intercept": -0.0265172,
+          "intercept_ci_hi": 0.431914,
+          "intercept_ci_lo": -0.484948,
+          "intercept_p_value": 0.900006,
+          "intercept_se": 0.205746,
           "n_strata": 12,
           "pool": "random",
-          "q_statistic": 110.24,
-          "r_squared": 0.428083,
-          "tau_sq": 0.200287
+          "q_statistic": 110.006,
+          "r_squared": 0.426688,
+          "tau_sq": 0.196779
         }
       },
       "assumption_violations": [],
       "blocked_by": null,
       "bridge_name": "fa_capacity_moderates_ddqn_jens_reduction",
       "direction": "inverse",
-      "extent_hash": -4823673313648304121,
-      "n_cells_in_scope": 2695,
-      "n_cells_pre_scope": 5155,
+      "extent_hash": -5682060684213699012,
+      "n_cells_in_scope": 2755,
+      "n_cells_pre_scope": 5215,
       "pair_by": [
         "seed"
       ],
@@ -353,9 +353,9 @@
       "blocked_by": null,
       "bridge_name": "linear_fa_cap_fails_at_metamaze_g999__exception",
       "direction": "inverse",
-      "extent_hash": 5827424607923549841,
+      "extent_hash": -8951212984811144503,
       "n_cells_in_scope": 420,
-      "n_cells_pre_scope": 5155,
+      "n_cells_pre_scope": 5215,
       "pair_by": [
         "seed"
       ],
@@ -381,34 +381,34 @@
           "cleavage_axes": [],
           "coefficients": [
             {
-              "ci_hi": 5.38585,
-              "ci_lo": -0.823969,
-              "coefficient": 2.28094,
+              "ci_hi": 5.3712,
+              "ci_lo": -0.832081,
+              "coefficient": 2.26956,
               "is_significant": false,
               "name": "q_action_std_late",
-              "p_value": 0.132705
+              "p_value": 0.134072
             }
           ],
-          "i_squared": 0.939643,
-          "intercept": -0.754407,
-          "intercept_ci_hi": -0.164455,
-          "intercept_ci_lo": -1.34436,
-          "intercept_p_value": 0.0172721,
-          "intercept_se": 0.264773,
+          "i_squared": 0.939762,
+          "intercept": -0.751289,
+          "intercept_ci_hi": -0.162123,
+          "intercept_ci_lo": -1.34046,
+          "intercept_p_value": 0.0175104,
+          "intercept_se": 0.264421,
           "n_strata": 12,
           "pool": "random",
-          "q_statistic": 165.681,
-          "r_squared": 0.21131,
-          "tau_sq": 0.301458
+          "q_statistic": 166.009,
+          "r_squared": 0.209997,
+          "tau_sq": 0.296594
         }
       },
       "assumption_violations": [],
       "blocked_by": null,
       "bridge_name": "sigma_action_predicts_ddqn_jens_reduction",
       "direction": "inverse",
-      "extent_hash": -4823673313648304121,
-      "n_cells_in_scope": 2695,
-      "n_cells_pre_scope": 5155,
+      "extent_hash": -5682060684213699012,
+      "n_cells_in_scope": 2755,
+      "n_cells_pre_scope": 5215,
       "pair_by": [
         "seed"
       ],
@@ -459,16 +459,16 @@
               ]
             },
             {
-              "arm_mean_baseline": 0.246667,
-              "arm_mean_treatment": 0.981335,
-              "arm_sd_baseline": 0.228702,
-              "arm_sd_treatment": 0.0936843,
-              "baseline_predictor": 9.42463,
-              "cohen_d": 4.20389,
-              "cohen_se": 0.20733,
-              "mean_diff": 0.734668,
-              "n_seeds_baseline": 150,
-              "n_seeds_treatment": 150,
+              "arm_mean_baseline": 0.250001,
+              "arm_mean_treatment": 0.984446,
+              "arm_sd_baseline": 0.229525,
+              "arm_sd_treatment": 0.0857581,
+              "baseline_predictor": 9.31933,
+              "cohen_d": 4.23904,
+              "cohen_se": 0.190284,
+              "mean_diff": 0.734446,
+              "n_seeds_baseline": 180,
+              "n_seeds_treatment": 180,
               "stratum_id": [
                 null
               ]
@@ -476,25 +476,25 @@
           ],
           "pooled": {
             "I2": 0.0,
-            "Q": 0.0838966,
+            "Q": 0.0460841,
             "assumption_violations": [
               "dl_small_g_unreliable_inference (n_cells=2, τ² CV ≈ 105% — point estimate not interpretable; prefer REML when available)"
             ],
             "empirical_max_g": 4.33333,
-            "empirical_min_g": 4.20389,
+            "empirical_min_g": 4.23904,
             "n_cells": 2,
             "pi_hi": null,
             "pi_lo": null,
-            "pooled_g": 4.23176,
-            "se_pooled": 0.183662,
+            "pooled_g": 4.25674,
+            "se_pooled": 0.171498,
             "tau2": 0.0
           },
-          "pooled_ci_hi": 4.59174,
-          "pooled_ci_lo": 3.87178,
-          "pooled_d": 4.23176,
-          "pooled_p_value": 1.81166e-117,
-          "pooled_se": 0.183662,
-          "q_statistic": 0.0838966,
+          "pooled_ci_hi": 4.59287,
+          "pooled_ci_lo": 3.9206,
+          "pooled_d": 4.25674,
+          "pooled_p_value": 5.33812e-136,
+          "pooled_se": 0.171498,
+          "q_statistic": 0.0460841,
           "refutation": "underpowered",
           "scope_predictor": "jensen_gap",
           "stratify_by": [
@@ -509,9 +509,9 @@
       "blocked_by": null,
       "bridge_name": "ddqn_helps_outcome_at_fr_g999_mlp_unshaped__k_panel",
       "direction": "direct",
-      "extent_hash": -9016674597680476280,
-      "n_cells_in_scope": 390,
-      "n_cells_pre_scope": 5155,
+      "extent_hash": -5945170818009204206,
+      "n_cells_in_scope": 450,
+      "n_cells_pre_scope": 5215,
       "pair_by": [
         "seed"
       ],
@@ -641,9 +641,9 @@
       "blocked_by": null,
       "bridge_name": "ddqn_no_positive_outcome_under_shaping__fr_shaped_fa_x_gamma_panel",
       "direction": "direct",
-      "extent_hash": -3978850010522475677,
+      "extent_hash": -3892479256062088596,
       "n_cells_in_scope": 240,
-      "n_cells_pre_scope": 5155,
+      "n_cells_pre_scope": 5215,
       "pair_by": [
         "seed"
       ],
@@ -669,10 +669,10 @@
         "partial_spearman": {
           "conditioning": [],
           "granularity": "per_cell",
-          "n_obs_total": 300,
+          "n_obs_total": 330,
           "n_strata": 1,
           "p_value": 0.0,
-          "rho_pooled": -0.868303,
+          "rho_pooled": -0.865059,
           "stratify_by": "env_name",
           "x": "gamma",
           "y": "eval_best_burst_raw_mean"
@@ -682,9 +682,9 @@
       "blocked_by": null,
       "bridge_name": "vanilla_anchor_collapses_with_gamma_at_fr_mlp",
       "direction": "inverse",
-      "extent_hash": -4081111806008635164,
-      "n_cells_in_scope": 300,
-      "n_cells_pre_scope": 5155,
+      "extent_hash": -6378528749846183921,
+      "n_cells_in_scope": 330,
+      "n_cells_pre_scope": 5215,
       "pair_by": [
         "seed"
       ],
@@ -721,9 +721,9 @@
       "blocked_by": null,
       "bridge_name": "vanilla_anchor_preserved_with_gamma_at_acrobot_mlp",
       "direction": "direct",
-      "extent_hash": 1070277871862754074,
+      "extent_hash": 787939687883178208,
       "n_cells_in_scope": 180,
-      "n_cells_pre_scope": 5155,
+      "n_cells_pre_scope": 5215,
       "pair_by": [
         "seed"
       ],
@@ -747,10 +747,10 @@
         "partial_spearman": {
           "conditioning": [],
           "granularity": "per_cell",
-          "n_obs_total": 120,
+          "n_obs_total": 150,
           "n_strata": 1,
           "p_value": 0.0,
-          "rho_pooled": 0.866146,
+          "rho_pooled": 0.848592,
           "stratify_by": "env_name",
           "x": "gamma",
           "y": "bootstrap_self_reference_fraction"
@@ -760,9 +760,9 @@
       "blocked_by": null,
       "bridge_name": "gamma_predicts_q_self_reference_at_fr_mlp",
       "direction": "direct",
-      "extent_hash": 6499531378992870881,
-      "n_cells_in_scope": 120,
-      "n_cells_pre_scope": 5155,
+      "extent_hash": 2604191852705915285,
+      "n_cells_in_scope": 150,
+      "n_cells_pre_scope": 5215,
       "pair_by": [
         "seed"
       ],
@@ -786,10 +786,10 @@
         "partial_spearman": {
           "conditioning": [],
           "granularity": "per_cell",
-          "n_obs_total": 120,
+          "n_obs_total": 150,
           "n_strata": 1,
           "p_value": 0.0,
-          "rho_pooled": 0.931759,
+          "rho_pooled": 0.945787,
           "stratify_by": "env_name",
           "x": "bootstrap_self_reference_fraction",
           "y": "jensen_gap"
@@ -799,9 +799,9 @@
       "blocked_by": null,
       "bridge_name": "q_self_reference_predicts_jens_at_fr_mlp",
       "direction": "direct",
-      "extent_hash": 6499531378992870881,
-      "n_cells_in_scope": 120,
-      "n_cells_pre_scope": 5155,
+      "extent_hash": 2604191852705915285,
+      "n_cells_in_scope": 150,
+      "n_cells_pre_scope": 5215,
       "pair_by": [
         "seed"
       ],
@@ -827,10 +827,10 @@
             "bootstrap_self_reference_fraction"
           ],
           "granularity": "per_cell",
-          "n_obs_total": 120,
+          "n_obs_total": 150,
           "n_strata": 1,
-          "p_value": 0.00027183,
-          "rho_pooled": 0.325723,
+          "p_value": 0.000913574,
+          "rho_pooled": 0.267736,
           "stratify_by": "env_name",
           "x": "gamma",
           "y": "jensen_gap"
@@ -840,9 +840,9 @@
       "blocked_by": null,
       "bridge_name": "gamma_jens_mediated_by_q_self_reference_at_fr_mlp",
       "direction": "direct",
-      "extent_hash": 6499531378992870881,
-      "n_cells_in_scope": 120,
-      "n_cells_pre_scope": 5155,
+      "extent_hash": 2604191852705915285,
+      "n_cells_in_scope": 150,
+      "n_cells_pre_scope": 5215,
       "pair_by": [
         "seed"
       ],
@@ -871,10 +871,10 @@
             "bootstrap_self_reference_fraction"
           ],
           "granularity": "per_cell",
-          "n_obs_total": 120,
+          "n_obs_total": 150,
           "n_strata": 1,
-          "p_value": 5.0262e-12,
-          "rho_pooled": 0.565646,
+          "p_value": 2.80286e-06,
+          "rho_pooled": 0.369387,
           "stratify_by": "env_name",
           "x": "gamma",
           "y": "q_late_mean"
@@ -884,9 +884,9 @@
       "blocked_by": null,
       "bridge_name": "gamma_predicts_q_late_residual_at_fr_mlp",
       "direction": "direct",
-      "extent_hash": 6499531378992870881,
-      "n_cells_in_scope": 120,
-      "n_cells_pre_scope": 5155,
+      "extent_hash": 2604191852705915285,
+      "n_cells_in_scope": 150,
+      "n_cells_pre_scope": 5215,
       "pair_by": [
         "seed"
       ],
@@ -915,10 +915,10 @@
             "bootstrap_self_reference_fraction"
           ],
           "granularity": "per_cell",
-          "n_obs_total": 120,
+          "n_obs_total": 150,
           "n_strata": 1,
-          "p_value": 0.00410147,
-          "rho_pooled": 0.260361,
+          "p_value": 0.00384863,
+          "rho_pooled": 0.234743,
           "stratify_by": "env_name",
           "x": "q_late_mean",
           "y": "jensen_gap"
@@ -928,9 +928,9 @@
       "blocked_by": null,
       "bridge_name": "q_late_predicts_jens_residual_at_fr_mlp",
       "direction": "direct",
-      "extent_hash": 6499531378992870881,
-      "n_cells_in_scope": 120,
-      "n_cells_pre_scope": 5155,
+      "extent_hash": 2604191852705915285,
+      "n_cells_in_scope": 150,
+      "n_cells_pre_scope": 5215,
       "pair_by": [
         "seed"
       ],
@@ -960,10 +960,10 @@
             "q_late_mean"
           ],
           "granularity": "per_cell",
-          "n_obs_total": 120,
+          "n_obs_total": 150,
           "n_strata": 1,
-          "p_value": 0.0144857,
-          "rho_pooled": 0.224126,
+          "p_value": 0.0144345,
+          "rho_pooled": 0.200402,
           "stratify_by": "env_name",
           "x": "gamma",
           "y": "jensen_gap"
@@ -973,9 +973,9 @@
       "blocked_by": null,
       "bridge_name": "gamma_jens_jointly_mediated_by_self_ref_and_q_late_at_fr_mlp",
       "direction": "direct",
-      "extent_hash": 6499531378992870881,
-      "n_cells_in_scope": 120,
-      "n_cells_pre_scope": 5155,
+      "extent_hash": 2604191852705915285,
+      "n_cells_in_scope": 150,
+      "n_cells_pre_scope": 5215,
       "pair_by": [
         "seed"
       ],
@@ -1005,10 +1005,10 @@
             "bootstrap_self_reference_fraction"
           ],
           "granularity": "per_cell",
-          "n_obs_total": 120,
+          "n_obs_total": 150,
           "n_strata": 1,
-          "p_value": 2.81775e-13,
-          "rho_pooled": 0.590252,
+          "p_value": 7.00376e-07,
+          "rho_pooled": 0.388979,
           "stratify_by": "env_name",
           "x": "gamma",
           "y": "q_action_std_late"
@@ -1018,9 +1018,9 @@
       "blocked_by": null,
       "bridge_name": "gamma_predicts_sigma_action_residual_at_fr_mlp",
       "direction": "direct",
-      "extent_hash": 6499531378992870881,
-      "n_cells_in_scope": 120,
-      "n_cells_pre_scope": 5155,
+      "extent_hash": 2604191852705915285,
+      "n_cells_in_scope": 150,
+      "n_cells_pre_scope": 5215,
       "pair_by": [
         "seed"
       ],
@@ -1049,10 +1049,10 @@
             "bootstrap_self_reference_fraction"
           ],
           "granularity": "per_cell",
-          "n_obs_total": 120,
+          "n_obs_total": 150,
           "n_strata": 1,
-          "p_value": 2.42743e-08,
-          "rho_pooled": 0.47611,
+          "p_value": 1.11639e-06,
+          "rho_pooled": 0.382545,
           "stratify_by": "env_name",
           "x": "q_action_std_late",
           "y": "jensen_gap"
@@ -1062,9 +1062,9 @@
       "blocked_by": null,
       "bridge_name": "sigma_action_predicts_jens_residual_at_fr_mlp",
       "direction": "direct",
-      "extent_hash": 6499531378992870881,
-      "n_cells_in_scope": 120,
-      "n_cells_pre_scope": 5155,
+      "extent_hash": 2604191852705915285,
+      "n_cells_in_scope": 150,
+      "n_cells_pre_scope": 5215,
       "pair_by": [
         "seed"
       ],
@@ -1094,10 +1094,10 @@
             "q_action_std_late"
           ],
           "granularity": "per_cell",
-          "n_obs_total": 120,
+          "n_obs_total": 150,
           "n_strata": 1,
-          "p_value": 0.498942,
-          "rho_pooled": 0.0629683,
+          "p_value": 0.0903329,
+          "rho_pooled": 0.139729,
           "stratify_by": "env_name",
           "x": "gamma",
           "y": "jensen_gap"
@@ -1107,9 +1107,9 @@
       "blocked_by": null,
       "bridge_name": "gamma_jens_jointly_mediated_by_self_ref_and_sigma_action_at_fr_mlp",
       "direction": "direct",
-      "extent_hash": 6499531378992870881,
-      "n_cells_in_scope": 120,
-      "n_cells_pre_scope": 5155,
+      "extent_hash": 2604191852705915285,
+      "n_cells_in_scope": 150,
+      "n_cells_pre_scope": 5215,
       "pair_by": [
         "seed"
       ],
@@ -1150,9 +1150,9 @@
       "blocked_by": null,
       "bridge_name": "gamma_jens_marginal_small_at_acrobot_mlp",
       "direction": "direct",
-      "extent_hash": 1070277871862754074,
+      "extent_hash": 787939687883178208,
       "n_cells_in_scope": 180,
-      "n_cells_pre_scope": 5155,
+      "n_cells_pre_scope": 5215,
       "pair_by": [
         "seed"
       ],
@@ -1189,9 +1189,9 @@
       "blocked_by": null,
       "bridge_name": "q_late_sign_flipped_with_gamma_at_acrobot_mlp",
       "direction": "inverse",
-      "extent_hash": 3481208127355756678,
+      "extent_hash": -2059136173681535315,
       "n_cells_in_scope": 120,
-      "n_cells_pre_scope": 5155,
+      "n_cells_pre_scope": 5215,
       "pair_by": [
         "seed"
       ],
@@ -1230,7 +1230,7 @@
       "direction": "direct",
       "extent_hash": 133146708735736,
       "n_cells_in_scope": 0,
-      "n_cells_pre_scope": 5155,
+      "n_cells_pre_scope": 5215,
       "pair_by": [
         "seed"
       ],
@@ -1269,7 +1269,7 @@
       "direction": "inverse",
       "extent_hash": 133146708735736,
       "n_cells_in_scope": 0,
-      "n_cells_pre_scope": 5155,
+      "n_cells_pre_scope": 5215,
       "pair_by": [
         "seed"
       ],
@@ -1293,7 +1293,7 @@
         "stratified_arm_diff_pooled": {
           "arm_field": "arm_key",
           "baseline_arm": "baseline",
-          "i_squared": 0.748273,
+          "i_squared": 0.745393,
           "measurable": "jensen_gap",
           "n_strata": 3,
           "per_stratum": [
@@ -1328,48 +1328,48 @@
               ]
             },
             {
-              "arm_mean_baseline": 9.42463,
-              "arm_mean_treatment": 0.549478,
-              "arm_sd_baseline": 2.07312,
-              "arm_sd_treatment": 0.246305,
-              "baseline_predictor": 9.42463,
-              "cohen_d": -6.01204,
-              "cohen_se": 0.27199,
-              "mean_diff": -8.87515,
-              "n_seeds_baseline": 150,
-              "n_seeds_treatment": 150,
+              "arm_mean_baseline": 9.31933,
+              "arm_mean_treatment": 0.495496,
+              "arm_sd_baseline": 2.0721,
+              "arm_sd_treatment": 0.256389,
+              "baseline_predictor": 9.31933,
+              "cohen_d": -5.9767,
+              "cohen_se": 0.246983,
+              "mean_diff": -8.82384,
+              "n_seeds_baseline": 180,
+              "n_seeds_treatment": 180,
               "stratum_id": [
                 null
               ]
             }
           ],
           "pooled": {
-            "I2": 0.748273,
-            "Q": 7.94513,
+            "I2": 0.745393,
+            "Q": 7.85526,
             "assumption_violations": [
               "dl_small_g_unreliable_inference (n_cells=3, τ² CV ≈ 105% — point estimate not interpretable; prefer REML when available)"
             ],
             "empirical_max_g": -4.67097,
             "empirical_min_g": -6.6524,
             "n_cells": 3,
-            "pi_hi": 5.63172,
-            "pi_lo": -17.2007,
-            "pooled_g": -5.78448,
-            "se_pooled": 0.500925,
-            "tau2": 0.556331
+            "pi_hi": 5.32935,
+            "pi_lo": -16.8746,
+            "pooled_g": -5.77261,
+            "se_pooled": 0.488082,
+            "tau2": 0.525203
           },
-          "pooled_ci_hi": -4.80267,
-          "pooled_ci_lo": -6.76629,
-          "pooled_d": -5.78448,
-          "pooled_p_value": 7.59117e-31,
-          "pooled_se": 0.500925,
-          "q_statistic": 7.94513,
+          "pooled_ci_hi": -4.81597,
+          "pooled_ci_lo": -6.72925,
+          "pooled_d": -5.77261,
+          "pooled_p_value": 2.82666e-32,
+          "pooled_se": 0.488082,
+          "q_statistic": 7.85526,
           "refutation": "null_effect",
           "scope_predictor": "jensen_gap",
           "stratify_by": [
             "k_eff"
           ],
-          "tau2": 0.556331,
+          "tau2": 0.525203,
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)",
           "verdict": "no_effect"
         }
@@ -1378,9 +1378,9 @@
       "blocked_by": null,
       "bridge_name": "ddqn_jens_reduction_amplified_by_k_eff_at_fr_g999_mlp",
       "direction": "inverse",
-      "extent_hash": 9149903642229787653,
-      "n_cells_in_scope": 450,
-      "n_cells_pre_scope": 5155,
+      "extent_hash": -3950693369523762028,
+      "n_cells_in_scope": 510,
+      "n_cells_pre_scope": 5215,
       "pair_by": [
         "seed"
       ],
@@ -1425,16 +1425,16 @@
               ]
             },
             {
-              "arm_mean_baseline": 0.246667,
-              "arm_mean_treatment": 0.981335,
-              "arm_sd_baseline": 0.228702,
-              "arm_sd_treatment": 0.0936843,
-              "baseline_predictor": 9.42463,
-              "cohen_d": 4.20389,
-              "cohen_se": 0.20733,
-              "mean_diff": 0.734668,
-              "n_seeds_baseline": 150,
-              "n_seeds_treatment": 150,
+              "arm_mean_baseline": 0.250001,
+              "arm_mean_treatment": 0.984446,
+              "arm_sd_baseline": 0.229525,
+              "arm_sd_treatment": 0.0857581,
+              "baseline_predictor": 9.31933,
+              "cohen_d": 4.23904,
+              "cohen_se": 0.190284,
+              "mean_diff": 0.734446,
+              "n_seeds_baseline": 180,
+              "n_seeds_treatment": 180,
               "stratum_id": [
                 null
               ]
@@ -1442,25 +1442,25 @@
           ],
           "pooled": {
             "I2": 0.0,
-            "Q": 0.0838966,
+            "Q": 0.0460841,
             "assumption_violations": [
               "dl_small_g_unreliable_inference (n_cells=2, τ² CV ≈ 105% — point estimate not interpretable; prefer REML when available)"
             ],
             "empirical_max_g": 4.33333,
-            "empirical_min_g": 4.20389,
+            "empirical_min_g": 4.23904,
             "n_cells": 2,
             "pi_hi": null,
             "pi_lo": null,
-            "pooled_g": 4.23176,
-            "se_pooled": 0.183662,
+            "pooled_g": 4.25674,
+            "se_pooled": 0.171498,
             "tau2": 0.0
           },
-          "pooled_ci_hi": 4.59174,
-          "pooled_ci_lo": 3.87178,
-          "pooled_d": 4.23176,
-          "pooled_p_value": 1.81166e-117,
-          "pooled_se": 0.183662,
-          "q_statistic": 0.0838966,
+          "pooled_ci_hi": 4.59287,
+          "pooled_ci_lo": 3.9206,
+          "pooled_d": 4.25674,
+          "pooled_p_value": 5.33812e-136,
+          "pooled_se": 0.171498,
+          "q_statistic": 0.0460841,
           "refutation": "underpowered",
           "scope_predictor": "jensen_gap",
           "stratify_by": [
@@ -1475,9 +1475,9 @@
       "blocked_by": null,
       "bridge_name": "ddqn_outcome_help_constant_across_k_eff_at_fr_g999_mlp",
       "direction": "direct",
-      "extent_hash": -9016674597680476280,
-      "n_cells_in_scope": 390,
-      "n_cells_pre_scope": 5155,
+      "extent_hash": -5945170818009204206,
+      "n_cells_in_scope": 450,
+      "n_cells_pre_scope": 5215,
       "pair_by": [
         "seed"
       ],
@@ -1504,10 +1504,10 @@
             "q_late_mean"
           ],
           "granularity": "per_cell",
-          "n_obs_total": 180,
+          "n_obs_total": 240,
           "n_strata": 1,
           "p_value": 0.0,
-          "rho_pooled": -0.57485,
+          "rho_pooled": -0.545248,
           "stratify_by": "env_name",
           "x": "jensen_gap",
           "y": "eval_best_burst_raw_mean"
@@ -1517,9 +1517,9 @@
       "blocked_by": null,
       "bridge_name": "jens_reduction_does_not_predict_outcome_at_fr_g999_mlp",
       "direction": "direct",
-      "extent_hash": 7413077496431692522,
-      "n_cells_in_scope": 180,
-      "n_cells_pre_scope": 5155,
+      "extent_hash": 768146223626885464,
+      "n_cells_in_scope": 240,
+      "n_cells_pre_scope": 5215,
       "pair_by": [
         "seed"
       ],
@@ -1559,9 +1559,9 @@
       "blocked_by": null,
       "bridge_name": "gamma_predicts_q_self_reference_at_si",
       "direction": "direct",
-      "extent_hash": -2717218671274854147,
+      "extent_hash": -4881000192893259053,
       "n_cells_in_scope": 60,
-      "n_cells_pre_scope": 5155,
+      "n_cells_pre_scope": 5215,
       "pair_by": [
         "seed"
       ],
@@ -1598,9 +1598,9 @@
       "blocked_by": null,
       "bridge_name": "q_self_reference_predicts_jens_at_si",
       "direction": "direct",
-      "extent_hash": -2717218671274854147,
+      "extent_hash": -4881000192893259053,
       "n_cells_in_scope": 60,
-      "n_cells_pre_scope": 5155,
+      "n_cells_pre_scope": 5215,
       "pair_by": [
         "seed"
       ],
@@ -1640,9 +1640,9 @@
       "blocked_by": null,
       "bridge_name": "gamma_jens_jointly_mediated_by_self_ref_and_sigma_action_at_si",
       "direction": "direct",
-      "extent_hash": -2717218671274854147,
+      "extent_hash": -4881000192893259053,
       "n_cells_in_scope": 60,
-      "n_cells_pre_scope": 5155,
+      "n_cells_pre_scope": 5215,
       "pair_by": [
         "seed"
       ],
@@ -1683,9 +1683,9 @@
       "blocked_by": null,
       "bridge_name": "gamma_self_ref_null_at_asterix",
       "direction": "direct",
-      "extent_hash": 7481861849130135137,
+      "extent_hash": -5407315249928775551,
       "n_cells_in_scope": 120,
-      "n_cells_pre_scope": 5155,
+      "n_cells_pre_scope": 5215,
       "pair_by": [
         "seed"
       ],
@@ -1725,9 +1725,9 @@
       "blocked_by": null,
       "bridge_name": "gamma_jens_residual_at_asterix_after_fr_mediators",
       "direction": "direct",
-      "extent_hash": 7481861849130135137,
+      "extent_hash": -5407315249928775551,
       "n_cells_in_scope": 120,
-      "n_cells_pre_scope": 5155,
+      "n_cells_pre_scope": 5215,
       "pair_by": [
         "seed"
       ],
@@ -1777,9 +1777,9 @@
       "blocked_by": null,
       "bridge_name": "ddqn_increases_policy_growth_fraction__fr_g999",
       "direction": "direct",
-      "extent_hash": 106909457563791037,
+      "extent_hash": 6657250191414382455,
       "n_cells_in_scope": 60,
-      "n_cells_pre_scope": 5155,
+      "n_cells_pre_scope": 5215,
       "pair_by": [
         "seed"
       ],
@@ -1830,9 +1830,9 @@
       "blocked_by": null,
       "bridge_name": "ddqn_increases_policy_growth_fraction__si_g999",
       "direction": "direct",
-      "extent_hash": -3376481919436492348,
+      "extent_hash": 1171171979561136763,
       "n_cells_in_scope": 60,
-      "n_cells_pre_scope": 5155,
+      "n_cells_pre_scope": 5215,
       "pair_by": [
         "seed"
       ],
@@ -1883,9 +1883,9 @@
       "blocked_by": null,
       "bridge_name": "ddqn_reduces_policy_churn__si_g999",
       "direction": "direct",
-      "extent_hash": -3376481919436492348,
+      "extent_hash": 1171171979561136763,
       "n_cells_in_scope": 60,
-      "n_cells_pre_scope": 5155,
+      "n_cells_pre_scope": 5215,
       "pair_by": [
         "seed"
       ],
@@ -1936,9 +1936,9 @@
       "blocked_by": null,
       "bridge_name": "ddqn_reduces_policy_churn__fr_g999",
       "direction": "direct",
-      "extent_hash": 106909457563791037,
+      "extent_hash": 6657250191414382455,
       "n_cells_in_scope": 60,
-      "n_cells_pre_scope": 5155,
+      "n_cells_pre_scope": 5215,
       "pair_by": [
         "seed"
       ],
@@ -1989,9 +1989,9 @@
       "blocked_by": null,
       "bridge_name": "ddqn_increases_state_diversity__si_g999",
       "direction": "direct",
-      "extent_hash": -3376481919436492348,
+      "extent_hash": 1171171979561136763,
       "n_cells_in_scope": 60,
-      "n_cells_pre_scope": 5155,
+      "n_cells_pre_scope": 5215,
       "pair_by": [
         "seed"
       ],
@@ -2018,7 +2018,7 @@
   ],
   "cache_path": "experiments/data/cache/ddqn_three_conditions.parquet",
   "errored_bridges": [],
-  "git_commit": "0913ab3dfabc",
+  "git_commit": "f982fa4c4d0a",
   "hypothesis_module": "experiments.findings.ddqn_three_conditions",
   "measurable_signatures": {
     "bootstrap_self_reference_fraction": "5cc6075b00be255f",
@@ -2034,6 +2034,6 @@
     "state_hash_entropy_late": "a0b3ca1049d80c17",
     "state_hash_n_unique_late": "6178972d86c81bac"
   },
-  "n_cells_total": 5155,
-  "timestamp_utc": "2026-05-20T13:52:19+00:00"
+  "n_cells_total": 5215,
+  "timestamp_utc": "2026-05-20T16:15:15+00:00"
 }

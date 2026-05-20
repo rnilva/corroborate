@@ -1,0 +1,64 @@
+name: joint_probe_lunarlander_sb3
+out_dir: experiments/probes/joint_probe_lunarlander_sb3
+env_binding: shared
+archive_remote: s3://corroborate-archive/joint_probe_lunarlander_sb3
+
+merge_top_level: false
+
+# LunarLander γ=0.99 with literature-standard joint HPs:
+# lr=5e-4 + batch=128 (SB3-zoo + community-validated DQN-LL recipe).
+#
+# Context — lr and batch interact strongly at LL:
+# - lr=1e-4 + b=32 (canonical T3a): V=135 (under-fit)
+# - lr=3e-4 + b=32 (LR-probe peak):  V=189 (close to solve but not)
+# - lr=3e-4 + b=128 (batch-probe):   V=80  (lr stale relative to batch)
+# - lr=5e-4 + b=128 (this probe):    target +200, solve LL
+#
+# n_seeds=30 (full power, matches original LL sweeps) so the
+# within-arm distribution is properly characterized.
+#
+# Pre-reg prediction: vanilla mean late_window_mean ≥ 200
+# (solves LL). DDQN's effect direction at this HP regime is the
+# substantive question — does it harm (clip over-correcting on
+# a now-stable agent) or help (clip + larger batch jointly stabilize)?
+#
+# Cells: 1 env × 1 grid × 2 arms = 2 cells, n=30 vmapped.
+# Est wall: 2 × ~40 min = ~80 min + merge ~5 min ≈ 1.5h.
+
+envs:
+  - {name: LunarLander-v2-jax, n_seeds: 30, chunk_size: 30}
+
+defaults:
+  total_steps: 1000000
+  eval_every:  20000
+  n_episodes:  5
+  gamma:       0.99
+  sync_period: 100
+  replay:
+    class: Replay
+    capacity: 50000
+    batch_size: 128
+  q_network:
+    class: MLP
+    hidden: [64, 64]
+  optimizer:
+    fn: warmed_update
+    inner: {fn: adam, lr: 0.0005}
+    warmup_steps: 100
+  action_select:
+    fn: epsilon_greedy
+    schedule:
+      fn: linear_epsilon
+      eps_init: 1.0
+      eps_final: 0.05
+      anneal_steps: 100000
+
+interventions:
+  - name: lr5e4_b128
+    base: {}
+    arms:
+      - []
+      - - slot_path: bootstrap
+          replacement:
+            fn: bootstrap
+            greedification: {fn: double_greedify}
