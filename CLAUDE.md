@@ -386,6 +386,21 @@ operational rules below catch the most common mistakes.
   the manifest before deletion (preserving the manifest so
   `restore` stays available). Direct `rm` on archived files is
   silent data loss the next time you need to ingest.
+- **`--recompute-measurables`** (`corroborate.corpus.measurements.
+  recompute_corpus_measurables`). Opt-in per-corpus recompute
+  from **LOCAL** inputs only — fills in newly-registered
+  measurables when `runs.parquet` (and optionally local
+  `traces.parquet`) already carry the transitive reads. The flag
+  walks each `--ingest` target before the cache merge; the
+  rebuilt `measurements.parquet` is then the projection
+  source-of-truth. Measurables whose reads aren't satisfied
+  locally are reported `unsatisfiable` and NOT computed
+  (overwriting finite values with NaN would be silent data
+  loss). For cloud-evicted traces, the normal `--ingest` path
+  already handles new-measurable computation via
+  `_load_one_corpus`'s sidecar-current check; reach for
+  `--recompute-measurables` when you've got local traces and
+  don't want a cloud round-trip.
 - **Cloud credentials via botocore's standard chain.** No
   `.env` auto-loading. Three accepted sources, in order of
   preference: (1) `~/.aws/credentials` + `~/.aws/config` with

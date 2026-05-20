@@ -152,6 +152,21 @@ def add_args(parser: argparse.ArgumentParser) -> None:
              'and will re-include the evicted ones; for permanent '
              'exclusion, delete the corpus directory.',
     )
+    parser.add_argument(
+        '--recompute-measurables', action='store_true',
+        dest='recompute_measurables',
+        help='Before the --ingest cache merge, force a per-corpus '
+             'measurements.parquet rebuild on every ingest-target '
+             'corpus to fill in newly-registered measurables from '
+             'LOCAL inputs (runs.parquet + local traces.parquet). '
+             'Skips measurables whose transitive reads aren\'t '
+             'satisfied locally — those need cloud-restored traces, '
+             'which the normal --ingest path already handles via the '
+             'sidecar-current check. Use this flag when a corpus\'s '
+             'traces are local AND its measurements.parquet is '
+             'stale w.r.t. the substrate (e.g., new @measurable '
+             'added; no cloud round-trip wanted).',
+    )
 
 
 def dispatch(args: argparse.Namespace) -> int:
@@ -335,6 +350,17 @@ def dispatch(args: argparse.Namespace) -> int:
     h_module = importlib.import_module(module_name)
     bridges = cast(tuple[Bridge, ...], h_module.BRIDGES)
     findings = cast(tuple[Finding, ...], h_module.FINDINGS)
+
+    # `--recompute-measurables`: opt-in per-corpus rebuild from
+    # LOCAL inputs before the regular `--ingest` flow runs. The
+    # rebuilt `measurements.parquet` is then the source-of-truth
+    # the cache merge projects from. Only meaningful when an ingest
+    # mode resolved to a concrete corpus list.
+    if cast(bool, args.recompute_measurables):
+        _recompute_ingest_targets(
+            module_name=module_name, bridges=bridges, data=data,
+        )
+
     results = run(
         module_name,
         data=data,
@@ -349,6 +375,140 @@ def dispatch(args: argparse.Namespace) -> int:
     )
     _print_verdicts(results, bridges, findings)
     return 0
+
+
+def _recompute_ingest_targets(
+    *,
+    module_name: str,
+    bridges: tuple[Bridge, ...],
+    data: Path | str | list[Path] | None,
+) -> None:
+    """`--recompute-measurables` worker. For each corpus implied
+    by the resolved ingest mode, force a local-only
+    `recompute_corpus_measurables` pass. Logs per-corpus to stderr
+    so the operator sees what was refilled vs skipped (unsatisfiable
+    measurables surface separately — those are the ones the user
+    would need to re-ingest with cloud restore to materialise).
+    """
+    import sys
+    from corroborate.bridge.bridge import measurable_names_for_bridges
+    from corroborate.corpus.measurements import (
+        MEASUREMENTS_FILENAME, recompute_corpus_measurables,
+    )
+
+    # Resolve ingest scope → concrete list of corpus directories.
+    # `data is None` (cache-only) and `--ingest-file` (single
+    # parquet, not a corpus dir) have no per-corpus directory to
+    # rebuild — skip with a clear log.
+    corpus_dirs: list[Path] = []
+    if data is None:
+        print(
+            'recompute: no --ingest mode set; nothing to recompute',
+            file=sys.stderr,
+        )
+        return
+    if isinstance(data, list):
+        corpus_dirs = list(data)
+    elif isinstance(data, Path):
+        if data.is_file():
+            print(
+                'recompute: --ingest-file mode does not have a '
+                'per-corpus dir to rebuild; skipping recompute',
+                file=sys.stderr,
+            )
+            return
+        if not data.is_dir():
+            print(
+                f'recompute: ingest path {data} is neither file '
+                f'nor directory; skipping recompute',
+                file=sys.stderr,
+            )
+            return
+        # --ingest-all <root>: walk one level down.
+        for child in sorted(data.iterdir()):
+            if not child.is_dir():
+                continue
+            if not (child / 'runs.parquet').exists():
+                # Could be a nested-corpora container (e.g.
+                # `k_sweep_acrobot/ddqn_vs_vanilla/...`). Expand
+                # one more level. Matches the runner's
+                # `is_sub_corpora_only` expansion.
+                for sub in sorted(child.iterdir()):
+                    if sub.is_dir() and (sub / 'runs.parquet').exists():
+                        corpus_dirs.append(sub)
+                continue
+            corpus_dirs.append(child)
+    else:
+        # `str` data path (unlikely from CLI but typed-permitted).
+        corpus_dirs = [Path(data)]
+
+    if not corpus_dirs:
+        print(
+            'recompute: no corpora found under the ingest scope',
+            file=sys.stderr,
+        )
+        return
+
+    # Required measurables = union over the hypothesis's bridges
+    # + the module's REQUIRED_MEASURABLES escape hatch.
+    h_module = importlib.import_module(module_name)
+    extras = cast(
+        tuple[str, ...],
+        getattr(h_module, 'REQUIRED_MEASURABLES', ()),
+    )
+    required = sorted(
+        measurable_names_for_bridges(bridges) | frozenset(extras),
+    )
+
+    print(
+        f'recompute: walking {len(corpus_dirs)} corpus dir(s) '
+        f'with {len(required)} required measurable(s)',
+        file=sys.stderr,
+    )
+    for cd in corpus_dirs:
+        if not (cd / 'runs.parquet').exists():
+            print(
+                f'  - {cd}: SKIPPED (no runs.parquet)',
+                file=sys.stderr,
+            )
+            continue
+        result = recompute_corpus_measurables(cd, required=required)
+        if result.recomputed:
+            print(
+                f'  - {cd}: recomputed {len(result.recomputed)} '
+                f'measurable(s) → {cd / MEASUREMENTS_FILENAME}',
+                file=sys.stderr,
+            )
+            for name in result.recomputed:
+                print(f'      + {name}', file=sys.stderr)
+        else:
+            print(
+                f'  - {cd}: current ({len(result.already_current)} '
+                f'measurable(s) already in sidecar)',
+                file=sys.stderr,
+            )
+        if result.unsatisfiable:
+            print(
+                f'      ! skipped {len(result.unsatisfiable)} '
+                f'measurable(s) whose record-key reads aren\'t '
+                f'satisfied locally (typically trace cols evicted '
+                f'after sweep). Rerun without '
+                f'--recompute-measurables (cloud restore enabled) '
+                f'to materialise the inputs and fill these:',
+                file=sys.stderr,
+            )
+            for name in result.unsatisfiable:
+                print(f'        - {name}', file=sys.stderr)
+        if result.unregistered:
+            print(
+                f'      ! {len(result.unregistered)} required '
+                f'name(s) not in the @measurable registry — '
+                f'these are caller-side typos or stale bridge '
+                f'references and cannot be computed:',
+                file=sys.stderr,
+            )
+            for name in result.unregistered:
+                print(f'        - {name}', file=sys.stderr)
 
 
 def _check_and_report(module: str) -> int:
