@@ -55,12 +55,12 @@ type RewardRegime = Literal[
 ]
 type BenchmarkFamily = Literal[
     'classic_control', 'minatar', 'bsuite', 'bandit', 'misc',
-    'jumanji',
+    'jumanji', 'pgx_minatar',
 ]
 type ActionType = Literal['discrete', 'continuous']
 type ObservationType = Literal['vector', 'image', 'structured']
 type EnvBackend = Literal[
-    'gymnax', 'jumanji', 'lunar_lander', 'synthetic',
+    'gymnax', 'jumanji', 'lunar_lander', 'synthetic', 'pgx',
 ]
 
 type ThresholdConfidence = Literal[
@@ -889,6 +889,21 @@ type JumanjiFactory = Callable[[], 'tuple[Env, EnvParams]']
 _JUMANJI_FACTORIES: dict[str, JumanjiFactory] = {}
 
 
+# ============ Pgx per-env factories ============
+#
+# Pgx envs (board games + MinAtar reimplementations) are bridged
+# through `corroborate_rl.pgx_adapter.PgxEnv`. Mirrors the
+# jumanji pattern: each registered env declares a factory closure
+# that constructs the adapter + a `gymnax.EnvParams` with the env's
+# horizon baked in. The state_hash field for image-obs pgx envs
+# (MinAtar suite) ships `None` per the same convention as gymnax
+# MinAtar — image-space cardinality is astronomical.
+
+type PgxFactory = Callable[[], 'tuple[Env, EnvParams]']
+
+_PGX_FACTORIES: dict[str, PgxFactory] = {}
+
+
 # ============ Introspection: read gymnax's spaces ============
 
 def introspect_env(name: str) -> IntrospectedEnv:
@@ -1251,6 +1266,60 @@ def _register_jumanji(
     )
 
 
+def _register_pgx(
+    name: str,
+    *,
+    factory: PgxFactory,
+    n_actions: int,
+    observation_shape: tuple[int, ...],
+    horizon: int | None,
+    r_min: float,
+    r_max: float,
+    reward_regime: RewardRegime,
+    benchmark_family: BenchmarkFamily = 'pgx_minatar',
+    state_hash: StateHash | None = None,
+    state_hash_cardinality: int | None = None,
+    solve_threshold: float | None = None,
+    solve_threshold_source: str | None = None,
+    solve_threshold_confidence: ThresholdConfidence = 'absent',
+    solve_threshold_outcome_path: str = 'eval_final_mean',
+) -> None:
+    """Register a pgx-backed env (mirror of `_register_jumanji`).
+
+    The factory is stashed in `_PGX_FACTORIES` for later
+    `make_env` calls — one freshly-constructed adapter per cell,
+    not a shared singleton. Like the jumanji registration, the
+    metadata is supplied explicitly so import-time doesn't
+    construct the env."""
+    obs_type: ObservationType = (
+        'vector' if len(observation_shape) == 1
+        else 'image' if len(observation_shape) == 3
+        else 'structured'
+    )
+
+    _PGX_FACTORIES[name] = factory
+    ENV_REGISTRY[name] = EnvSpec(
+        name=name,
+        action_type='discrete',
+        n_actions=n_actions,
+        observation_shape=observation_shape,
+        observation_type=obs_type,
+        horizon=horizon,
+        r_min=r_min,
+        r_max=r_max,
+        reward_regime=reward_regime,
+        benchmark_family=benchmark_family,
+        state_hash=state_hash,
+        state_hash_cardinality=state_hash_cardinality,
+        benchmark_params=MappingProxyType({}),
+        solve_threshold=solve_threshold,
+        solve_threshold_source=solve_threshold_source,
+        solve_threshold_confidence=solve_threshold_confidence,
+        solve_threshold_outcome_path=solve_threshold_outcome_path,
+        backend='pgx',
+    )
+
+
 def make_env(env_spec: EnvSpec) -> 'tuple[Env, EnvParams]':
     """Construct an `(env, env_params)` pair routed by backend.
 
@@ -1263,6 +1332,14 @@ def make_env(env_spec: EnvSpec) -> 'tuple[Env, EnvParams]':
             raise KeyError(
                 f"Jumanji env '{env_spec.name}' has no registered "
                 f"factory in _JUMANJI_FACTORIES",
+            )
+        return factory()
+    if env_spec.backend == 'pgx':
+        factory = _PGX_FACTORIES.get(env_spec.name)
+        if factory is None:
+            raise KeyError(
+                f"Pgx env '{env_spec.name}' has no registered "
+                f"factory in _PGX_FACTORIES",
             )
         return factory()
     if env_spec.backend == 'lunar_lander':
@@ -1710,6 +1787,9 @@ class SolveThreshold:
 # at module-load time. Placed here (not at the top of this file)
 # because `_register_jumanji` must be defined first.
 from corroborate_rl import jumanji_envs as _jumanji_envs  # noqa: F401, E402
+# Same lazy-import pattern as jumanji_envs — pgx is an optional
+# dep; the inner factory closures defer `import pgx` to call time.
+from corroborate_rl import pgx_envs as _pgx_envs  # noqa: F401, E402
 
 
 def _register_synthetic_bias_typeb_panel() -> None:
