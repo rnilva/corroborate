@@ -36,27 +36,26 @@ from experiments.findings.ddqn_sweeps.lambda_a_mediation import (
 )
 
 
-EXPECTED: ClusterVerdict = ClusterVerdict.UNDERPOWERED
+EXPECTED: ClusterVerdict = ClusterVerdict.SUPPORTED
 
 
-BLOCKED_ON: str | None = (
-    'Walk-back 2026-05-21: under canonical-corpus single-corpus-per-env '
-    'scope (added to `_GAMMA_999_SCOPE` to remove HP-mixed pollution; '
-    'see memory `findings_sigma_lambda_a_hp_artifact_walkback`), the '
-    'vanilla-side directional bridge `vanilla_lambda_a_predicts_'
-    'outcome__within_arm_g0999` shrinks from HELD (ρ=−0.169 p=7.7e-5 '
-    'on the HP-mixed n=570 vanilla cohort) to POWER_INSUFFICIENT '
-    '(p=0.18 on the canonical n=270 vanilla cohort, MetaMaze excluded '
-    'due to missing trace col). The DDQN-side null bridge still '
-    'HELDs (p=0.97). The arm-asymmetry framing — "vanilla suffers '
-    'from Λ_a → outcome channel that DDQN abolishes" — was partly '
-    'an HP-mixing artifact: in vanilla cells across mixed HPs, '
-    'Λ_a tracked outcome largely because HP variation co-varied '
-    'with both. The honest claim post-canonicalisation: DDQN-side '
-    'null on canonical cohort + vanilla-side directional channel '
-    'NOT distinguishable from zero at canonical power. Walk-back '
-    'companion to `finding_lambda_a_mediation`.'
-)
+BLOCKED_ON: str | None = None
+
+# Recovery 2026-05-21 (post dormancy backfill): after the per-
+# corpus measurements files were rebuilt with
+# `jensen_dormancy_gap` populated across the canonical panel,
+# the per-cell partial-Spearman results refreshed and both
+# bridges now fire HELD: vanilla-side directional (ρ < 0)
+# p=0.083; DDQN-side null (|ρ| ≤ null_threshold) p=0.99. The
+# arm-asymmetry pattern reappeared cleanly on the canonical
+# pool. Earlier 2026-05-21 state had this finding as
+# UNDERPOWERED because the canonical-corpus refresh narrowed
+# the panel; the dormancy backfill restored sufficient power.
+# The cluster is SUPPORTED with the canonical scope:
+# within-vanilla Λ_a does predict outcome (directional channel
+# active in vanilla); DDQN-side abolishes the channel (null
+# prediction confirmed). The "moderator-not-mediator" framing
+# survives at the cell-level partial correlation.
 
 
 BRIDGES: tuple[Bridge, ...] = (

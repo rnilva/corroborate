@@ -65,23 +65,27 @@ from experiments.findings.ddqn_sweeps.sigma_over_jens_regime import (
 )
 
 
-EXPECTED: ClusterVerdict = ClusterVerdict.REFUTED
+EXPECTED: ClusterVerdict = ClusterVerdict.UNDERPOWERED
 
 
-BLOCKED_ON: str | None = None
-
-# Resolution (2026-05-21): σ_VAN/jens_VAN converted from hardcoded
-# `_SIGMA_OVER_JENS_PER_ENV` constant to `DerivedCovariateSpec`
-# reading the new `sigma_over_jens_late` measurable. On canonical
-# pool: cross-env ρ is null at all 3 outcome metrics (best-burst
-# p=0.75, late_burst p=0.87, full_auc p=0.75) — none distinguishable
-# from zero. The σ/jens-as-universal-discriminator claim is REFUTED
-# substantively, not just due to canonical-cohort power loss. The
-# prior hardcoded snapshot had Acrobot 15× under and MountainCar
-# 13× under the canonical pool's σ/jens values; that mismatch had
-# inflated the apparent cross-env signal. See memory
-# `findings_sigma_lambda_a_hp_artifact_walkback` for the meta-
-# pattern.
+BLOCKED_ON: str | None = (
+    'Walk-back 2026-05-21 (revised after dormancy backfill): σ_VAN/'
+    'jens_VAN converted from hardcoded `_SIGMA_OVER_JENS_PER_ENV` '
+    'to `DerivedCovariateSpec` reading `sigma_over_jens_late`. '
+    'Under the `_GAMMA_999_LEARNABLE_CANONICAL_SCOPE` predicate '
+    '(canonical HP filter + q_mc_burst_correlation_late ≥ 0.3 '
+    'learnability gate), per-env n shrinks: Snake n=4, LL n=7, '
+    'MetaMaze n=15, SI n=12 — most fall below `min_seeds_per_arm=5` '
+    'after the learnability filter. Result: cross-env ρ is NaN '
+    '(insufficient n_strata). EARLIER 2026-05-21 state reported '
+    'REFUTED at p=0.75-0.87 on a looser scope; after the dormancy '
+    'backfill replaced per-corpus measurements files, the scope '
+    'tightened and the verdict moved to PI. Same substantive '
+    'conclusion: σ/jens-as-cross-env-discriminator is NOT supported '
+    'at canonical scope (either NO_EFFECT or PI). See memory '
+    '`findings_sigma_lambda_a_hp_artifact_walkback` for the '
+    'HP-mixing meta-pattern.'
+)
 
 
 BRIDGES: tuple[Bridge, ...] = (
