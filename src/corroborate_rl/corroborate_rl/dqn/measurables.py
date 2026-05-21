@@ -91,6 +91,9 @@ TD_WB_STD = from_key('td_error_within_batch_std')
 Q_ACTION_GRAD_OVERLAP = from_key('q_action_grad_overlap_per_step')
 BOOTSTRAP_ACTION_MISMATCH = from_key('bootstrap_action_mismatch_per_step')
 Q_INTER_STATE_GRAD_OVERLAP = from_key('q_inter_state_grad_overlap_per_step')
+Q_INTER_STATE_GRAD_OVERLAP_RANDOM = from_key(
+    'q_inter_state_grad_overlap_random_per_step',
+)
 
 
 # ============ Pearson r — online vs target Q populations ============
@@ -2292,6 +2295,68 @@ def q_inter_state_grad_overlap_late(
     if arr.ndim == 0 or arr.shape[0] < 2:
         return float('nan')
     return _windowed_mean(arr, 0.5, 1.0)
+
+
+@measurable(reads=('q_inter_state_grad_overlap_random_per_step',))
+def q_inter_state_grad_overlap_random_late(
+    record: Mapping[str, object],
+) -> float:
+    """Late-window mean of "lag-k" baseline: cosine overlap of
+    `∂Q(s, a)/∂θ` vs `∂Q(s_random, a)/∂θ` at paired
+    (s, s_random) = (batch.obs[0], batch.obs[-1]) — two states from
+    uniform-random replay positions, generally different trajectories.
+
+    Diagnostic baseline for continuous-state envs (LL, MC) where
+    the lag-1 measure saturates at 1 because consecutive
+    observations differ by infinitesimal continuous deltas. The
+    discriminative signal in the cross-env smoothness claim is the
+    DIFFERENCE `q_inter_state_grad_overlap_late −
+    q_inter_state_grad_overlap_random_late`:
+    - Discrete envs: lag-1 > random-pair (trajectory-adjacency
+      confers extra smoothness above global baseline) → diff > 0.
+    - Continuous envs: both saturate near 1 → diff ≈ 0.
+
+    Probe added 2026-05-22 in `train_phase`; pre-existing corpora
+    have NaN."""
+    try:
+        arr = Q_INTER_STATE_GRAD_OVERLAP_RANDOM(record)
+    except KeyError:
+        return float('nan')
+    if arr.ndim == 0 or arr.shape[0] < 2:
+        return float('nan')
+    return _windowed_mean(arr, 0.5, 1.0)
+
+
+@measurable(
+    reads=(
+        'q_inter_state_grad_overlap_per_step',
+        'q_inter_state_grad_overlap_random_per_step',
+    ),
+)
+def q_inter_state_grad_overlap_excess_late(
+    record: Mapping[str, object],
+) -> float:
+    """Adjacent-pair smoothness EXCESS over random-pair baseline:
+    `q_inter_state_grad_overlap_late −
+     q_inter_state_grad_overlap_random_late`.
+
+    The intended discriminative measurable for cross-env
+    smoothness comparisons. Continuous-state envs saturate both
+    components near 1, driving excess to 0 (no trajectory-adjacency
+    signal). Discrete envs separate the two terms (lag-1 captures
+    adjacency-specific overlap; random-pair captures global Q
+    smoothness)."""
+    try:
+        adj = Q_INTER_STATE_GRAD_OVERLAP(record)
+        rand = Q_INTER_STATE_GRAD_OVERLAP_RANDOM(record)
+    except KeyError:
+        return float('nan')
+    if (
+        adj.ndim == 0 or rand.ndim == 0
+        or adj.shape[0] < 2 or rand.shape[0] < 2
+    ):
+        return float('nan')
+    return _windowed_mean(adj, 0.5, 1.0) - _windowed_mean(rand, 0.5, 1.0)
 
 
 @measurable(reads=('online_max_q_per_step',))
@@ -5136,6 +5201,18 @@ def dqn_default_measurables() -> tuple[
         # architectural measurement; see docstring distinction
         # from intra-state α and trajectory autocorr.
         q_inter_state_grad_overlap_late,
+        # "Lag-k" baseline: cosine overlap at a random-batch-partner
+        # pair (batch.obs[0], batch.obs[-1]) — sampled from different
+        # trajectory positions. Continuous-state envs saturate both
+        # adjacent and random pairs near 1; the EXCESS measurable
+        # below is the discriminative signal.
+        q_inter_state_grad_overlap_random_late,
+        # Adjacent-pair smoothness EXCESS over random-pair baseline.
+        # `q_inter_state_grad_overlap_late − q_inter_state_grad_overlap_random_late`.
+        # Robust cross-env smoothness comparator: ≈ 0 at saturated
+        # (continuous) envs; > 0 where adjacency confers extra
+        # smoothness above global Q smoothness.
+        q_inter_state_grad_overlap_excess_late,
         # Cross-action bootstrap rate: fraction of training
         # transitions where argmax_a' Q_online(s', a') differs from
         # the action taken at s. THE regime where DDQN's argmax-

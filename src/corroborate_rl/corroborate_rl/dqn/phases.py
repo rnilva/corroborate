@@ -344,6 +344,7 @@ def train_phase(
     if not _GRADIENT_PROBES_ENABLED:
         q_action_grad_overlap = jnp.asarray(jnp.nan, dtype=jnp.float32)
         q_inter_state_grad_overlap = jnp.asarray(jnp.nan, dtype=jnp.float32)
+        q_inter_state_grad_overlap_random = jnp.asarray(jnp.nan, dtype=jnp.float32)
     else:
         # `findings_fa_depth_within_env`: gradient overlap between
         # action heads when the FA's trunk is updated.
@@ -390,6 +391,36 @@ def train_phase(
         J_sp_unit = J_sp_flat / norms_sp[:, None]
         per_action_overlap = jnp.sum(J_unit * J_sp_unit, axis=1)
         q_inter_state_grad_overlap = per_action_overlap.mean()
+
+        # "Lag-k" baseline: cosine of ∂Q(s, a)/∂θ vs ∂Q(s_random, a)/∂θ
+        # at (batch.obs[0], batch.obs[-1]) — two states sampled from
+        # uniform-random replay positions, generally from different
+        # trajectories. Continuous-state envs (LL, MC) saturate the
+        # lag-1 overlap near 1 because consecutive observations differ
+        # by infinitesimal continuous deltas; pairing across the batch
+        # gives a "global Q smoothness" baseline.
+        #
+        # The discriminative signal is the DIFFERENCE
+        # `(lag-1 overlap) − (random-pair overlap)`: at discrete envs,
+        # lag-1 > random-pair (trajectory-adjacency confers extra
+        # smoothness); at continuous envs, both saturate near 1 and
+        # the difference drops to 0. Authoring a measurable + bridge
+        # to consume this is the next-step for the cross-env
+        # smoothness sign-alignment claim.
+        probe_obs_random = batch.obs[-1]
+
+        def _q_at_random(p: Params) -> jax.Array:
+            return q_network(p, probe_obs_random)
+
+        J_rand_pytree = jax.jacrev(_q_at_random)(state.online_params)
+        J_rand_leaves = jax.tree_util.tree_leaves(J_rand_pytree)
+        J_rand_flat = jnp.concatenate(
+            [x.reshape(x.shape[0], -1) for x in J_rand_leaves], axis=1,
+        )
+        norms_rand = jnp.sqrt(jnp.sum(J_rand_flat ** 2, axis=1) + 1e-12)
+        J_rand_unit = J_rand_flat / norms_rand[:, None]
+        per_action_overlap_rand = jnp.sum(J_unit * J_rand_unit, axis=1)
+        q_inter_state_grad_overlap_random = per_action_overlap_rand.mean()
     # ============ end gradient-overlap probes ============
 
     updates, new_opt_state = optimizer.update(
@@ -433,6 +464,11 @@ def train_phase(
         # trajectory smoothness (which confounds the eval-trajectory
         # autocorr `q_trajectory_autocorr_late`).
         'q_inter_state_grad_overlap_per_step': q_inter_state_grad_overlap,
+        # "Lag-k" baseline: same Jacobian overlap but at a
+        # random-batch-partner pair (batch.obs[0], batch.obs[-1]).
+        # Used to normalize the adjacent-pair measure at continuous-
+        # state envs where lag-1 saturates near 1. See block above.
+        'q_inter_state_grad_overlap_random_per_step': q_inter_state_grad_overlap_random,
         # Cross-action bootstrap rate: per-step fraction over batch
         # where argmax_a' Q_online(s', a') ≠ action_taken_at_s.
         # When high, the TD bootstrap pulls Q(s, a) toward
