@@ -98,11 +98,17 @@ from experiments.findings.ddqn_sweeps.jens_reduction_consistency import (
 from experiments.findings.ddqn_sweeps.dormancy_diagnostic import (
     dormancy_gates_jens_at_acrobot_g0999,
 )
+from experiments.findings.ddqn_sweeps.loop_channel_consistency import (
+    ddqn_outcome_opposes_loop_rate__canonical_g0999,
+)
 from experiments.findings.ddqn_sweeps import (
     finding_jens_reduction_consistency_g0999,
 )
 from experiments.findings.ddqn_sweeps import (
     finding_dormancy_diagnostic_acrobot_g0999,
+)
+from experiments.findings.ddqn_sweeps import (
+    finding_loop_channel_consistency_g0999,
 )
 
 
@@ -134,6 +140,7 @@ BRIDGES = (
     ddqn_full_auc_null_at_acrobot_k4_dense,
     ddqn_reduces_jens_consistently__canonical_g0999,
     dormancy_gates_jens_at_acrobot_g0999,
+    ddqn_outcome_opposes_loop_rate__canonical_g0999,
 )
 
 
@@ -158,6 +165,7 @@ FINDINGS = (
     finding_synthetic_bias_typeb,
     finding_jens_reduction_consistency_g0999,
     finding_dormancy_diagnostic_acrobot_g0999,
+    finding_loop_channel_consistency_g0999,
 )
 
 
