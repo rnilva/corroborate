@@ -100,7 +100,12 @@ _CANONICAL_G0999_CORPORA: tuple[str, ...] = (
     'minatar_gamma_sweep_k1/g0999_Breakout-MinAtar',
     'ddqn_vs_vanilla',
     'g0999_Freeway-MinAtar',
-    'g0999_panel_extension_lunar_cpu/g0999_LunarLander-v2-jax',
+    # LunarLander sync=1000 canonical (the sync=100
+    # `g0999_panel_extension_lunar_cpu` causes vanilla under-learning
+    # at γ=0.999 — see `findings_ll_g0999_canonical_not_hasselt`).
+    # `lunarlander_tuned_sync1000_gpu` carries 60 cells at γ=0.999
+    # with canonical-HP-modulo-sync_period.
+    'lunarlander_tuned_sync1000_gpu',
     'metamaze_g0999_1M_postfix',
     'fa_deep_g0999',
     'g0999_Snake-jumanji',

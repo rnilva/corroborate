@@ -47,9 +47,16 @@ _PER_ENV_CANONICAL: tuple[
     ('MountainCar-v0',            100,  50000,  '(64,64)', None,    1_000_000),
     ('MetaMaze-misc',             100,  50000,  '(64,64)', None,    1_000_000),
     # LunarLander-v2-jax: gymnax-jax port, 8-dim continuous obs,
-    # |A|=4 discrete, shaped reward, horizon 1000. Treat as a
-    # mid-complexity vector env like Acrobot/MountainCar.
-    ('LunarLander-v2-jax',        100,  50000,  '(64,64)', None,    1_000_000),
+    # |A|=4 discrete, shaped reward, horizon 1000. sync_period=1000
+    # (NOT the MLP-env default of 100): canonical sync=100 calibrated
+    # for γ=0.99 underlearns at γ=0.999 (vanilla mean eval_best
+    # collapses to −89 vs solved threshold +200; vanilla late_window
+    # crashes to −193). sync=1000 gives stable vanilla performance at
+    # BOTH γ values (γ=0.99 V=+52, γ=0.999 V=+37 eval_best_mean) per
+    # `findings_ll_g0999_canonical_not_hasselt`. The LL canonical
+    # diverges from the MLP-env sync=100 default for this
+    # γ-stability reason; documented intentional exception.
+    ('LunarLander-v2-jax',        1000, 50000,  '(64,64)', None,    1_000_000),
     # MinAtar paper-canonical
     ('Asterix-MinAtar',           1000, 100000, '(128)',  '(16)',   1_000_000),
     ('Breakout-MinAtar',          1000, 100000, '(128)',  '(16)',   1_000_000),
