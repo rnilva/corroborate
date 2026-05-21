@@ -64,6 +64,35 @@ from experiments.findings.ddqn_sweeps.lambda_a_mediation import (
 )
 
 
+# State-hash meaningfulness allowlist. An env's `state_hash_per_step`
+# is "meaningful" iff the per-cell `state_repeat_rate_*` metric
+# carries intervention-discriminating signal — i.e. NOT saturated
+# (every state revisits within the window, all cells = 1.0) and
+# NOT degenerate-constant (state hash collapses to a single value).
+#
+# Excluded:
+#   - MetaMaze-misc: rep_ea=0.999998 exactly for every cell of
+#     every arm (state-hash saturates inside 64-step window).
+#   - Snake-jumanji: not in canonical pool yet (no merged
+#     traces.parquet; per-cell trace files only).
+#
+# Acrobot-v1 IS included: rep_ea≈0.187 with within-arm SD≈0.010
+# — state-hash functional, just Hasselt-dormant (the intervention
+# effect happens to be near-zero, see
+# `findings_acrobot_dormancy_mech_walkback`; the metric itself is
+# discriminating).
+_STATE_HASH_MEANINGFUL_ENVS_G0999: tuple[str, ...] = (
+    'Acrobot-v1',
+    'Asterix-MinAtar',
+    'Breakout-MinAtar',
+    'FourRooms-misc',
+    'Freeway-MinAtar',
+    'LunarLander-v2-jax',
+    'MountainCar-v0',
+    'SpaceInvaders-MinAtar',
+)
+
+
 @claim_bridge(
     source=INTERVENTION,
     target='eval_best_burst_raw_mean',
@@ -76,6 +105,7 @@ from experiments.findings.ddqn_sweeps.lambda_a_mediation import (
             | (pl.col('action_duplicate_k') == 1)
         )
         & pl.col('corpus').is_in(CANONICAL_G0999_CORPORA)
+        & pl.col('env_name').is_in(_STATE_HASH_MEANINGFUL_ENVS_G0999)
         & pl.col('eval_best_burst_raw_mean').is_finite()
         & pl.col('state_repeat_rate_window64_late').is_finite()
     ),
