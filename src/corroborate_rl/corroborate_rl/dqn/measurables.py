@@ -4378,6 +4378,29 @@ def eval_full_auc_mean(record: Mapping[str, object]) -> float:
 
 
 @measurable(
+    name='eval_final_raw_mean',
+    reads=('mc_return_from_step', 'episode_length', 'gamma'),
+)
+def eval_final_raw_mean(record: Mapping[str, object]) -> float:
+    """Undiscounted counterpart of `eval_final_mean`:
+    `mean(mc_return_raw[-1, :])`. γ-invariant final-burst policy
+    quality for cross-γ comparisons where discounted-MC weights
+    later-step rewards differently across γ.
+
+    At Breakout γ=0.99, discounted `eval_final_mean` shows DDQN
+    marginally helping (+0.08) while undiscounted `eval_final_raw_mean`
+    shows DDQN marginally harming (-2.23). The discount kills
+    late-step weight in 50-step episodes (γ^50 ≈ 0.61), so
+    discounted and undiscounted measure different things at
+    intermediate γ. The raw version is the natural game-score
+    metric."""
+    raw = _compute_mc_return_raw(record)
+    if raw.ndim != 2 or raw.size == 0:
+        return float('nan')
+    return float(raw[-1, :].mean())
+
+
+@measurable(
     name='eval_full_auc_raw_mean',
     reads=('mc_return_from_step', 'episode_length', 'gamma'),
 )
@@ -5138,6 +5161,9 @@ def dqn_default_measurables() -> tuple[
         # trace columns; reduces to the best-burst scalar
         # (counterpart of `eval_best_burst_mean`).
         eval_best_burst_raw_mean,
+        eval_final_raw_mean,
+        eval_full_auc_raw_mean,
+        eval_late_burst_raw_mean,
         # Per-burst array measurable `mc_return_raw_per_burst_mean`
         # is intentionally NOT in this tuple. cell_runner persists
         # scalar MeasurementLeaf only — non-scalar (NDArray) returns
