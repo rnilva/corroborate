@@ -2075,6 +2075,38 @@ def q_signal_to_noise_late(
     return abs(q_late_mean) / q_action_std_late
 
 
+@measurable(reads=())
+def sigma_over_jens_late(
+    record: Mapping[str, object],
+    q_action_std_late: float,  # injected
+    jensen_gap: float,         # injected
+) -> float:
+    """`q_action_std_late / jensen_gap` — per-cell σ/jens ratio,
+    the regime-discriminator covariate at γ→1.
+
+    High σ/jens: bias is small relative to action-spread → bias is
+    noise on top of a directed Q signal (DDQN's clip removes
+    informative noise → potentially harms).
+    Low σ/jens: bias dominates action-spread → policy mostly
+    follows noise → DDQN's clip removes the dominant-bias-driven
+    misranking (potentially helps).
+
+    Replaces the hardcoded `_SIGMA_OVER_JENS_PER_ENV` constant in
+    `sigma_over_jens_regime.py`. The cross-env panel aggregator
+    is `mean(sigma_over_jens_late)` over baseline-arm cells per
+    env, computed at bridge resolution via `DerivedCovariateSpec`
+    so HP-mixing in per-env aggregates is surfaced as scope-
+    drift rather than frozen into a snapshot constant.
+
+    NaN when jensen_gap is non-finite, ≤ 0, or σ_action is
+    non-finite."""
+    if not math.isfinite(q_action_std_late):
+        return float('nan')
+    if not math.isfinite(jensen_gap) or jensen_gap <= 0.0:
+        return float('nan')
+    return q_action_std_late / jensen_gap
+
+
 @measurable(reads=('online_max_q_per_step',))
 def q_late_mean(record: Mapping[str, object]) -> float:
     """Mean of `online_max_q_per_step` over the late 50% of

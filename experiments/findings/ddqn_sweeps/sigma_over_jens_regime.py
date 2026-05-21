@@ -48,12 +48,12 @@ with denser strata.
 from __future__ import annotations
 
 import math
-from types import MappingProxyType
 
 import polars as pl
 
 from corroborate.analyses.link.cross_stratum_property_slope import (
     CrossStratumPropertySlopeResult,
+    DerivedCovariateSpec,
 )
 from corroborate.analyses.panel.stratified_arm_diff_pooled import (
     StratifiedArmDiffPooledResult,
@@ -83,20 +83,20 @@ _GAMMA_999_LEARNABLE_CANONICAL_SCOPE: pl.Expr = (
 )
 
 
-# Per-env σ_VAN / jens_VAN measured on γ=0.999 vanilla cells (k=1,
-# canonical-shape HPs). Snapshot 2026-05-17. Envs without γ=0.999
-# data yet (Freeway, SpaceInvaders, Snake, PacMan, SlidingTile,
-# CartPole-saturated) are absent here; the analysis primitive's
-# `covariates_per_key` lookup drops missing keys.
-_SIGMA_OVER_JENS_PER_ENV: MappingProxyType[object, MappingProxyType[str, float]] = (
-    MappingProxyType({
-        'Asterix-MinAtar':  MappingProxyType({'sigma_over_jens': 0.0155}),
-        'Breakout-MinAtar': MappingProxyType({'sigma_over_jens': 0.0609}),
-        'Acrobot-v1':       MappingProxyType({'sigma_over_jens': 0.0037}),
-        'MountainCar-v0':   MappingProxyType({'sigma_over_jens': 0.0014}),
-        'FourRooms-misc':   MappingProxyType({'sigma_over_jens': 0.0052}),
-        'MetaMaze-misc':    MappingProxyType({'sigma_over_jens': 0.0166}),
-    })
+# Per-env σ_VAN / jens_VAN derived from cells in scope at bridge-
+# resolution time. The prior hardcoded snapshot (2026-05-17) was
+# suspected of HP-mixing inflation per the σ_Λ_a walk-back; spot-
+# check on canonical pool confirmed Acrobot was 15× and MountainCar
+# 13× UNDER the canonical value, while FR was 0.4× and MetaMaze
+# 0.65× over — non-uniform drift indicating the hardcoded snapshot
+# came from a different cohort than the canonical pool. Converted
+# to `DerivedCovariateSpec` reading the new per-cell measurable
+# `sigma_over_jens_late` (q_action_std_late / jensen_gap) averaged
+# over baseline cells per env.
+_SIGMA_OVER_JENS_DERIVED: DerivedCovariateSpec = DerivedCovariateSpec(
+    column='sigma_over_jens_late',
+    aggregator='mean',
+    arm_filter='baseline',
 )
 
 
@@ -110,7 +110,7 @@ _SIGMA_OVER_JENS_PER_ENV: MappingProxyType[object, MappingProxyType[str, float]]
         _GAMMA_999_LEARNABLE_CANONICAL_SCOPE
         & pl.col('eval_best_burst_raw_mean').is_finite()
         & pl.col('jensen_gap').is_finite()
-        & pl.col('env_name').is_in(tuple(_SIGMA_OVER_JENS_PER_ENV.keys()))
+        & pl.col('sigma_over_jens_late').is_finite()
     ),
     predicted_direction='a_gt_b',
 )
@@ -123,9 +123,7 @@ def ddqn_outcome_scales_with_sigma_over_jens__gamma_999_xenv(
     stratify_by: tuple[str, ...] = ('env_name',),
     covariate_name: str = 'sigma_over_jens',
     covariate_key_field: str = 'env_name',
-    covariates_per_key: MappingProxyType[object, MappingProxyType[str, float]] = (
-        _SIGMA_OVER_JENS_PER_ENV
-    ),
+    derived_covariate: DerivedCovariateSpec = _SIGMA_OVER_JENS_DERIVED,
     scope_predictor: str = 'jensen_gap',
     min_baseline_predictor: float = 0.5,
     min_seeds_per_arm: int = 5,
@@ -151,7 +149,7 @@ def ddqn_outcome_scales_with_sigma_over_jens__gamma_999_xenv(
     Once Freeway and SpaceInvaders k=1 γ=0.999 land, n_strata=8 →
     rerun fires with denser data."""
     del treatment_arm, baseline_arm, source, stratify_by
-    del covariate_name, covariate_key_field, covariates_per_key
+    del covariate_name, covariate_key_field, derived_covariate
     del scope_predictor, min_baseline_predictor, min_seeds_per_arm
     return cross_stratum_signed_spearman_verdict(
         cross_stratum_property_slope,
@@ -303,7 +301,7 @@ def _ci_test(
         _GAMMA_999_LEARNABLE_CANONICAL_SCOPE
         & pl.col('eval_late_burst_raw_mean').is_finite()
         & pl.col('jensen_gap').is_finite()
-        & pl.col('env_name').is_in(tuple(_SIGMA_OVER_JENS_PER_ENV.keys()))
+        & pl.col('sigma_over_jens_late').is_finite()
     ),
     predicted_direction='a_gt_b',
 )
@@ -316,9 +314,7 @@ def ddqn_outcome_scales_with_sigma_over_jens__gamma_999_xenv__late_burst(
     stratify_by: tuple[str, ...] = ('env_name',),
     covariate_name: str = 'sigma_over_jens',
     covariate_key_field: str = 'env_name',
-    covariates_per_key: MappingProxyType[object, MappingProxyType[str, float]] = (
-        _SIGMA_OVER_JENS_PER_ENV
-    ),
+    derived_covariate: DerivedCovariateSpec = _SIGMA_OVER_JENS_DERIVED,
     scope_predictor: str = 'jensen_gap',
     min_baseline_predictor: float = 0.5,
     min_seeds_per_arm: int = 5,
@@ -333,7 +329,7 @@ def ddqn_outcome_scales_with_sigma_over_jens__gamma_999_xenv__late_burst(
     has progressed most. Predicted ρ stronger than best-burst form
     (Asterix harm sharpens -0.80 → -1.07 between metrics)."""
     del treatment_arm, baseline_arm, source, stratify_by
-    del covariate_name, covariate_key_field, covariates_per_key
+    del covariate_name, covariate_key_field, derived_covariate
     del scope_predictor, min_baseline_predictor, min_seeds_per_arm
     return cross_stratum_signed_spearman_verdict(
         cross_stratum_property_slope,
@@ -356,7 +352,7 @@ def ddqn_outcome_scales_with_sigma_over_jens__gamma_999_xenv__late_burst(
         _GAMMA_999_LEARNABLE_CANONICAL_SCOPE
         & pl.col('eval_full_auc_raw_mean').is_finite()
         & pl.col('jensen_gap').is_finite()
-        & pl.col('env_name').is_in(tuple(_SIGMA_OVER_JENS_PER_ENV.keys()))
+        & pl.col('sigma_over_jens_late').is_finite()
     ),
     predicted_direction='a_gt_b',
 )
@@ -369,9 +365,7 @@ def ddqn_outcome_scales_with_sigma_over_jens__gamma_999_xenv__full_auc(
     stratify_by: tuple[str, ...] = ('env_name',),
     covariate_name: str = 'sigma_over_jens',
     covariate_key_field: str = 'env_name',
-    covariates_per_key: MappingProxyType[object, MappingProxyType[str, float]] = (
-        _SIGMA_OVER_JENS_PER_ENV
-    ),
+    derived_covariate: DerivedCovariateSpec = _SIGMA_OVER_JENS_DERIVED,
     scope_predictor: str = 'jensen_gap',
     min_baseline_predictor: float = 0.5,
     min_seeds_per_arm: int = 5,
@@ -384,7 +378,7 @@ def ddqn_outcome_scales_with_sigma_over_jens__gamma_999_xenv__full_auc(
     """Full-AUC variant of bridge 1. Trajectory-averaged outcome.
     Less sensitive to timing artifacts than best-burst."""
     del treatment_arm, baseline_arm, source, stratify_by
-    del covariate_name, covariate_key_field, covariates_per_key
+    del covariate_name, covariate_key_field, derived_covariate
     del scope_predictor, min_baseline_predictor, min_seeds_per_arm
     return cross_stratum_signed_spearman_verdict(
         cross_stratum_property_slope,

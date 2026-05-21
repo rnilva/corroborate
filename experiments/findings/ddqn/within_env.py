@@ -12,12 +12,12 @@ from __future__ import annotations
 
 import math
 
-from types import MappingProxyType
 
 import polars as pl
 
 from corroborate.analyses.link.cross_stratum_property_slope import (
     CrossStratumPropertySlopeResult,
+    DerivedCovariateSpec,
 )
 from corroborate.analyses.panel.stratum_effect_panel import StratumEffectPanel
 from corroborate.bridge.bridge import Direction, Tier, claim_bridge
@@ -252,16 +252,18 @@ def metamaze_link_steeper_at_high_gamma(
 # `findings_fa_coherence_bias.md` for the full panel + r=+0.71
 # cross-env correlation with log(jens/σ_Q) that motivated this
 # bridge.
-_AUTOCORR_PER_ENV: MappingProxyType[object, MappingProxyType[str, float]] = (
-    MappingProxyType({
-        'FourRooms-misc':   MappingProxyType({'q_autocorr_vanilla': 0.99}),
-        'CartPole-v1':      MappingProxyType({'q_autocorr_vanilla': 0.76}),
-        'MetaMaze-misc':    MappingProxyType({'q_autocorr_vanilla': 0.72}),
-        'Breakout-MinAtar': MappingProxyType({'q_autocorr_vanilla': 0.74}),
-        'MountainCar-v0':   MappingProxyType({'q_autocorr_vanilla': 0.59}),
-        'PacMan-jumanji':   MappingProxyType({'q_autocorr_vanilla': 0.35}),
-        'Acrobot-v1':       MappingProxyType({'q_autocorr_vanilla': 0.07}),
-    })
+# Per-env q_autocorr_vanilla is now derived from cells in scope at
+# bridge-resolution time. The prior hardcoded snapshot (frozen
+# 2026-05-12) was suspected of HP-mixing inflation per the σ_Λ_a
+# walk-back (memory `findings_sigma_lambda_a_hp_artifact_walkback`);
+# spot-check on canonical cells confirmed Breakout's 0.74 was 3×
+# the canonical 0.27, the other 6 envs were correct. Converted to
+# `DerivedCovariateSpec` so scope changes auto-rederive instead of
+# silently freezing on a stale snapshot.
+_AUTOCORR_DERIVED: DerivedCovariateSpec = DerivedCovariateSpec(
+    column='q_autocorr_late',
+    aggregator='mean',
+    arm_filter='baseline',
 )
 
 
@@ -272,12 +274,12 @@ _AUTOCORR_PER_ENV: MappingProxyType[object, MappingProxyType[str, float]] = (
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
     scope=(
-        pl.col('env_name').is_in(tuple(_AUTOCORR_PER_ENV.keys()))
-        & (pl.col('gamma') == 0.99)
+        (pl.col('gamma') == 0.99)
         & ((pl.col('n_step') == 1) | pl.col('n_step').is_null())
         & pl.col('action_duplicate_k').is_null()
         & (pl.col('reward_scale').is_null() | (pl.col('reward_scale') == 1.0))
         & pl.col('jensen_gap').is_finite()
+        & pl.col('q_autocorr_late').is_finite()
     ),
     predicted_direction='a_lt_b',
 )
@@ -290,9 +292,7 @@ def ddqn_bias_reduction_scales_with_fa_coherence__cross_env(
     stratify_by: tuple[str, ...] = ('env_name',),
     covariate_name: str = 'q_autocorr_vanilla',
     covariate_key_field: str = 'env_name',
-    covariates_per_key: MappingProxyType[object, MappingProxyType[str, float]] = (
-        _AUTOCORR_PER_ENV
-    ),
+    derived_covariate: DerivedCovariateSpec = _AUTOCORR_DERIVED,
     scope_predictor: str = 'jensen_gap',
     min_baseline_predictor: float = VANILLA_JENS_NOISE_FLOOR,
     min_seeds_per_arm: int = 5,
@@ -328,7 +328,7 @@ def ddqn_bias_reduction_scales_with_fa_coherence__cross_env(
       NO_EFFECT (NULL_EFFECT) : |ρ| < 0.2 (calibrated for n≥10)
       POWER_INSUFFICIENT    : in-between, or n_strata < 10"""
     del treatment_arm, baseline_arm, source, stratify_by
-    del covariate_name, covariate_key_field, covariates_per_key
+    del covariate_name, covariate_key_field, derived_covariate
     del scope_predictor, min_baseline_predictor, min_seeds_per_arm
     return cross_stratum_signed_spearman_verdict(
         cross_stratum_property_slope,

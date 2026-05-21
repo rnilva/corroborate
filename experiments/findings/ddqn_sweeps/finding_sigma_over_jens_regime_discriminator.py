@@ -65,20 +65,23 @@ from experiments.findings.ddqn_sweeps.sigma_over_jens_regime import (
 )
 
 
-EXPECTED: ClusterVerdict = ClusterVerdict.UNDERPOWERED
+EXPECTED: ClusterVerdict = ClusterVerdict.REFUTED
 
 
-BLOCKED_ON: str | None = (
-    'After tightening the bridge scope to canonical-shape HPs '
-    '(via CANONICAL_HP_EXCLUDING_GAMMA), the HP-varied Acrobot / '
-    'MountainCar / CartPole γ=0.999 cells drop out and n_strata '
-    'falls below the cross-env Spearman threshold. The earlier '
-    'REFUTED verdict was an artifact of HP-mixed pool — on the '
-    'clean canonical panel we honestly don\'t have power. '
-    'k=2 / k=4 sweep + Asterix-verify SI γ=0.999 will populate '
-    'enough canonical-shape γ=0.999 cells across MinAtar envs '
-    'to retest with adequate power.'
-)
+BLOCKED_ON: str | None = None
+
+# Resolution (2026-05-21): σ_VAN/jens_VAN converted from hardcoded
+# `_SIGMA_OVER_JENS_PER_ENV` constant to `DerivedCovariateSpec`
+# reading the new `sigma_over_jens_late` measurable. On canonical
+# pool: cross-env ρ is null at all 3 outcome metrics (best-burst
+# p=0.75, late_burst p=0.87, full_auc p=0.75) — none distinguishable
+# from zero. The σ/jens-as-universal-discriminator claim is REFUTED
+# substantively, not just due to canonical-cohort power loss. The
+# prior hardcoded snapshot had Acrobot 15× under and MountainCar
+# 13× under the canonical pool's σ/jens values; that mismatch had
+# inflated the apparent cross-env signal. See memory
+# `findings_sigma_lambda_a_hp_artifact_walkback` for the meta-
+# pattern.
 
 
 BRIDGES: tuple[Bridge, ...] = (
