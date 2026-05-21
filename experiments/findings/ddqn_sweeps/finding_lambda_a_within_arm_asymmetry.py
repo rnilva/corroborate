@@ -36,10 +36,27 @@ from experiments.findings.ddqn_sweeps.lambda_a_mediation import (
 )
 
 
-EXPECTED: ClusterVerdict = ClusterVerdict.SUPPORTED
+EXPECTED: ClusterVerdict = ClusterVerdict.UNDERPOWERED
 
 
-BLOCKED_ON: str | None = None
+BLOCKED_ON: str | None = (
+    'Walk-back 2026-05-21: under canonical-corpus single-corpus-per-env '
+    'scope (added to `_GAMMA_999_SCOPE` to remove HP-mixed pollution; '
+    'see memory `findings_sigma_lambda_a_hp_artifact_walkback`), the '
+    'vanilla-side directional bridge `vanilla_lambda_a_predicts_'
+    'outcome__within_arm_g0999` shrinks from HELD (ρ=−0.169 p=7.7e-5 '
+    'on the HP-mixed n=570 vanilla cohort) to POWER_INSUFFICIENT '
+    '(p=0.18 on the canonical n=270 vanilla cohort, MetaMaze excluded '
+    'due to missing trace col). The DDQN-side null bridge still '
+    'HELDs (p=0.97). The arm-asymmetry framing — "vanilla suffers '
+    'from Λ_a → outcome channel that DDQN abolishes" — was partly '
+    'an HP-mixing artifact: in vanilla cells across mixed HPs, '
+    'Λ_a tracked outcome largely because HP variation co-varied '
+    'with both. The honest claim post-canonicalisation: DDQN-side '
+    'null on canonical cohort + vanilla-side directional channel '
+    'NOT distinguishable from zero at canonical power. Walk-back '
+    'companion to `finding_lambda_a_mediation`.'
+)
 
 
 BRIDGES: tuple[Bridge, ...] = (

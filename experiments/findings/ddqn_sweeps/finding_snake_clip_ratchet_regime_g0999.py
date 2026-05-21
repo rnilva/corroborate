@@ -39,24 +39,32 @@ from experiments.findings.ddqn_sweeps.snake_clip_ratchet_regime_g0999 import (
 )
 
 
-EXPECTED: ClusterVerdict = ClusterVerdict.EMPTY_EXTENT
+EXPECTED: ClusterVerdict = ClusterVerdict.REFUTED
 
 
-BLOCKED_ON: str | None = (
-    'PRE-REGISTERED DRIFT 2026-05-18 — predicted post-ingest '
-    'EXPECTED=SUPPORTED. Awaiting T3a panel-extension sweep '
-    '(`experiments/configs/g0999_panel_extension_jumanji.yaml`) to '
-    'land Snake-jumanji γ=0.999 canonical-HP cells (n=30, 1M '
-    'steps, CNN HPs). All 3 bridges fire POWER_INSUFFICIENT until '
-    'the sweep ingests. Predicted post-ingest: SUPPORTED — same '
-    'CLIP-RATCHET signatures (σ_Q d ≥ +0.4, PC `arm — '
-    'q_max_temporal_cv` edge, marginal `arm ⫫ outcome`) replicate '
-    'at γ=0.999. Walk-back path: see module docstring. When the '
-    'sweep lands, this BLOCKED_ON gets cleared and EXPECTED is '
-    'lifted to whatever the empirical verdict is; the renderer '
-    'surfaces `← DRIFT` if it differs from this pre-registered '
-    'prediction.'
-)
+BLOCKED_ON: str | None = None
+
+# Resolution (2026-05-21): T3a Snake-jumanji γ=0.999 cells
+# ingested. Pre-registered prediction was SUPPORTED (replicating
+# the γ=0.99 CLIP-RATCHET regime at γ=0.999). Empirical: REFUTED.
+#
+#   * arm_inflates_action_std: NO_EFFECT (SIGN_FLIP). DDQN does
+#     NOT inflate σ_Q at Snake γ=0.999 — opposite direction.
+#   * arm_drives_temporal_cv: POWER_INSUFFICIENT.
+#   * arm_outcome_marginal_independent: POWER_INSUFFICIENT
+#     (DDQN HELPS at Snake γ=0.999; arm ⫫ outcome breaks).
+#
+# Substantive walk-back (memory
+# `findings_snake_g0999_ddqn_helps_via_bias_clip`): Snake γ=0.999
+# routes through canonical Hasselt bias-clip (jensen_gap d=−1.25,
+# DDQN cuts bias 40% → eval_best d=+0.63), NOT through the
+# γ=0.99 CLIP-RATCHET regime. The CLIP-RATCHET regime is
+# γ=0.99-specific at Snake; the γ→0.999 transition flips Snake
+# out of clip-ratchet and into bias-dominated, where DDQN's clip
+# becomes helpful rather than destabilising. This is the
+# regime-transition predicted by Theorem 1 (Λ_m gate crossing
+# as γ→1) — Snake's Λ_m at γ=0.999 enters the bias-dominated
+# regime.
 
 
 BRIDGES: tuple[Bridge, ...] = (

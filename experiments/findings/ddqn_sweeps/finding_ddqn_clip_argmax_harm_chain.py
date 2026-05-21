@@ -66,34 +66,24 @@ from experiments.findings.ddqn_sweeps.clip_argmax_harm_mechanism import (
 )
 
 
-EXPECTED: ClusterVerdict = ClusterVerdict.UNDERPOWERED
+EXPECTED: ClusterVerdict = ClusterVerdict.REFUTED
 
 
-BLOCKED_ON: str | None = (
-    'Bridges need state_conditional_argmax_entropy_late + '
-    'bootstrap_action_mismatch_late in ddqn_sweeps cache; '
-    'currently those are populated only in canonical ddqn cache '
-    'and the ddqn_sweeps-side γ=0.999 corpora await backfill '
-    '(the relevant corpora live in the running '
-    'minatar_gamma_sweep_k1/ out_dir which is in active use). '
-    'EMPIRICAL PREVIEW against the canonical ddqn cache '
-    '(Asterix + Breakout γ=0.999, n=30/arm) suggests the chain '
-    'will REFUTE when backfilled:\n'
-    '  Edge 1: Asterix d_H_cond=+0.15 z=+0.58 NS (right direction '
-    'but far below +0.2 floor); Breakout d=+0.04 ≈0. The H_cond '
-    'signature is tiny — not "DDQN policy noisier per state".\n'
-    '  Edge 2: Asterix within-DDQN r(mismatch, outcome) = +0.40 '
-    'p=0.027 — WRONG SIGN. On the env where DDQN harms outcome '
-    'most (d_out=-3.17), DDQN cells with HIGHER mismatch perform '
-    'BETTER. Breakout r=-0.10 NS.\n'
-    '  Edge 3: Asterix Δ_H_cond=+0.019/Δ_out=-3.17 and Breakout '
-    '+0.003/+9.52 — direction inconsistent; n_strata=2 not testable.\n'
-    'When backfilled the chain should fire REFUTED. The Asterix '
-    'γ=0.999 harm is real (see finding_asterix_gamma_999_harm) '
-    'but its mechanism is NOT clip-induced per-state argmax noise. '
-    'Open question — needs a different hypothesis (e.g., σ/|Q| '
-    'reduction → margin reduction → noise-sensitivity).'
-)
+BLOCKED_ON: str | None = None
+
+# Resolution (2026-05-21): backfill landed, chain fires REFUTED as
+# the pre-registered prediction anticipated. The Asterix γ=0.999
+# harm is real (see `finding_asterix_gamma_999_harm`) but the
+# clip-induced per-state argmax-noise mechanism is REFUTED:
+#   * Edge 1 H_cond gap tiny across MinAtar (d≈+0.15/+0.04, well
+#     below the +0.2 harm floor).
+#   * Edge 2 within-DDQN r(mismatch, outcome) = +0.40 at Asterix
+#     (wrong sign — higher mismatch → BETTER outcome).
+#   * Edge 3 cross-env panel direction inconsistent, n insufficient.
+# The actual Asterix harm mechanism routes through Q-magnitude
+# policy-content reduction (see memory
+# `findings_asterix_breakout_channel_asymmetry_g999`), not
+# clip-induced per-state argmax noise.
 
 
 BRIDGES: tuple[Bridge, ...] = (

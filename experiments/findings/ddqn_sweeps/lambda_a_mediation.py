@@ -42,7 +42,6 @@ or a new `sigma_lambda_a_per_env` measurable (TODO).
 from __future__ import annotations
 
 import math
-from types import MappingProxyType
 from typing import Literal
 
 import polars as pl
@@ -52,6 +51,7 @@ from corroborate.analyses.link.cross_stratum_arm_diff_partial_spearman import (
 )
 from corroborate.analyses.link.cross_stratum_property_slope import (
     CrossStratumPropertySlopeResult,
+    DerivedCovariateSpec,
 )
 from corroborate.analyses.spearman.partial_spearman import (
     PartialSpearmanResult,
@@ -62,42 +62,58 @@ from corroborate.bridge.verdict import RefutationClass, Verdict
 from experiments.findings.ddqn._arms import (
     DDQN_ARM, INTERVENTION, VANILLA_ARM,
 )
-# Frozen empirical snapshot: per-env cross-seed SD of vanilla Λ_a
-# at γ=0.999 (commit `f471913` cache state, 8-env panel n=1140).
-# Computed from `q_action_std_late · √(2 ln K_eff) / q_argmax_margin_late`
-# over `arm_key == baseline` cells per env.
-_SIGMA_LAMBDA_A_PER_ENV_G0999: MappingProxyType[
-    object, MappingProxyType[str, float]
-] = MappingProxyType({
-    'Acrobot-v1':             MappingProxyType({'sigma_lambda_a': 0.394}),
-    'Asterix-MinAtar':        MappingProxyType({'sigma_lambda_a': 0.565}),
-    'Breakout-MinAtar':       MappingProxyType({'sigma_lambda_a': 0.073}),
-    'FourRooms-misc':         MappingProxyType({'sigma_lambda_a': 0.866}),
-    'Freeway-MinAtar':        MappingProxyType({'sigma_lambda_a': 0.160}),
-    'LunarLander-v2-jax':     MappingProxyType({'sigma_lambda_a': 0.340}),
-    'MetaMaze-misc':          MappingProxyType({'sigma_lambda_a': 0.846}),
-    'MountainCar-v0':         MappingProxyType({'sigma_lambda_a': 0.836}),
-    'Snake-jumanji':          MappingProxyType({'sigma_lambda_a': 0.215}),
-    'SpaceInvaders-MinAtar':  MappingProxyType({'sigma_lambda_a': 0.072}),
-})
+# Spec for deriving σ_Λ_a = std(lambda_a_late | vanilla cells, per env)
+# at bridge-resolution time from cells in scope. Supersedes the prior
+# hardcoded `_SIGMA_LAMBDA_A_PER_ENV_G0999` constant, which mixed
+# within-seed variance with cross-HP variance (see memory
+# `findings_sigma_lambda_a_hp_artifact_walkback`): on canonical-shape
+# single-corpus-per-env n=60 cohorts the σ_Λ_a values shrink 2-17× per
+# env and the published ρ=−0.745 HELD result no longer reproduces.
+_SIGMA_LAMBDA_A_DERIVED: DerivedCovariateSpec = DerivedCovariateSpec(
+    column='lambda_a_late',
+    aggregator='std',
+    arm_filter='baseline',
+)
 
 
-# 8-env γ=0.999 scope. Note: deliberately does NOT pin
-# CANONICAL_HP_EXCLUDING_GAMMA — the MLP env γ=0.999 corpora
-# (Acrobot, FourRooms, MetaMaze, MountainCar) live at
-# non-canonical HP combinations (FA-depth axis probes, γ-sweeps
-# at varying lr, etc.) and excluding them collapses the panel to
-# 4 MinAtar envs (n=4 strata, below the moderation-verdict's
-# min_strata=8 calibration). The σ_Λ_a-per-env values in
-# `_SIGMA_LAMBDA_A_PER_ENV_G0999` are aggregates across each
-# env's full γ=0.999 corpus, so the panel and the covariate
-# match the same HP-pooled cohort.
+# γ=0.999 scope — single canonical-shape corpus per env (no HP mixing).
+# The σ_Λ_a moderation panel requires σ_Λ_a to characterise the cohort
+# the d_out panel runs on; mixing HP variants across an env's cohort
+# leaks HP-variance into the σ_Λ_a aggregate and silently inflates the
+# moderation signal (Breakout 17×, SI 15×, FR 7×, ...). Memory
+# `findings_sigma_lambda_a_hp_artifact_walkback` documents the prior
+# n=10 panel's collapse from ρ=−0.745 (HELD) to ρ=−0.283 (NO_EFFECT)
+# under canonicalisation. Corpora picked per env:
+#   * Acrobot     - `gamma_sweep_acrobot` (200k, canonical-shape γ sweep)
+#   * FourRooms   - `ddqn_vs_vanilla` from `fr_g999_loop_test` (1M)
+#   * MountainCar - `fa_deep_g0999` from `ddqn_axis_probes_mc_1m` (1M;
+#                   subsampled to first 30 seeds)
+#   * MetaMaze    - `metamaze_g0999_1M_postfix` (1M; lambda_a_late NaN
+#                   because traces lack `online_top12_margin_per_step`
+#                   — corpus excluded by `lambda_a_late.is_finite()` filter)
+#   * Asterix/Breakout/Freeway/SI - paper-canonical MinAtar γ=0.999
+#   * LunarLander - `g0999_panel_extension_lunar_cpu` (1M)
+#   * Snake       - `g0999_Snake-jumanji` (1M)
+_CANONICAL_G0999_CORPORA: tuple[str, ...] = (
+    'gamma_sweep_acrobot',
+    'minatar_gamma_sweep_k1/g0999_Asterix-MinAtar',
+    'minatar_gamma_sweep_k1/g0999_Breakout-MinAtar',
+    'ddqn_vs_vanilla',
+    'g0999_Freeway-MinAtar',
+    'g0999_panel_extension_lunar_cpu/g0999_LunarLander-v2-jax',
+    'metamaze_g0999_1M_postfix',
+    'fa_deep_g0999',
+    'g0999_Snake-jumanji',
+    'g0999_SpaceInvaders-MinAtar',
+)
+
 _GAMMA_999_SCOPE: pl.Expr = (
     (pl.col('gamma') == 0.999)
     # Restrict to canonical k=1 (action_duplicate_k is null or 1) per
     # `findings_k_axis_gamma_regime_map`: Λ_a's K_eff dependency makes
     # k=2/k=4 strata structurally non-comparable on the per-env σ_Λ_a panel.
     & (pl.col('action_duplicate_k').is_null() | (pl.col('action_duplicate_k') == 1))
+    & pl.col('corpus').is_in(_CANONICAL_G0999_CORPORA)
 )
 
 
@@ -165,9 +181,7 @@ def sigma_lambda_a_moderates_ddqn_outcome__cross_env_g0999(
     stratify_by: tuple[str, ...] = ('env_name',),
     covariate_name: str = 'sigma_lambda_a',
     covariate_key_field: str = 'env_name',
-    covariates_per_key: MappingProxyType[
-        object, MappingProxyType[str, float]
-    ] = _SIGMA_LAMBDA_A_PER_ENV_G0999,
+    derived_covariate: DerivedCovariateSpec = _SIGMA_LAMBDA_A_DERIVED,
     scope_predictor: str = 'jensen_gap',
     min_baseline_predictor: float = 0.0,
     min_seeds_per_arm: int = 5,
@@ -190,15 +204,15 @@ def sigma_lambda_a_moderates_ddqn_outcome__cross_env_g0999(
     large, the inequality fails on more seeds → DDQN's clip
     flips argmax → outcome harm.
 
-    Empirical: memory ρ = −0.78 n=8 p=0.023 (commit `9c857f0`
-    era, possibly tighter cohort); current 8-env panel n=1140
-    (commit `f471913`): ρ = −0.643 p=0.086 — direction matches,
-    magnitude weakened by FR (σ_Λ_a=1.02 + d_out=+0.09 breaks
-    monotone). Verdict at this cache state resolves to
-    POWER_INSUFFICIENT (p > 0.05); memory's tighter cohort would
-    fire HELD."""
+    σ_Λ_a is now derived from cells in scope (vanilla cells,
+    `std(lambda_a_late)` per env), supersedes the prior hardcoded
+    `_SIGMA_LAMBDA_A_PER_ENV_G0999` constant. The hardcoded values
+    were 2-17× inflated by HP mixing — Breakout 17×, SI 15×, FR
+    7× — and the published ρ=−0.745 HELD result does not survive
+    canonical-shape single-corpus-per-env scoping. See memory
+    `findings_sigma_lambda_a_hp_artifact_walkback`."""
     del treatment_arm, baseline_arm, source, stratify_by
-    del covariate_name, covariate_key_field, covariates_per_key
+    del covariate_name, covariate_key_field, derived_covariate
     del scope_predictor, min_baseline_predictor, min_seeds_per_arm
     return _signed_spearman_verdict(
         cross_stratum_property_slope.rho,
@@ -348,7 +362,19 @@ def joint_bias_geometry_mediates_arm_outcome__cross_env_g0999(
     absorption). On the full 8-env panel (n=1140) only 17%
     absorption — joint mediation is env-cohort dependent. The
     cluster-finding's BLOCKED_ON predicts admit under k=4 panel
-    extension (Asterix's special case dilutes)."""
+    extension (Asterix's special case dilutes).
+
+    Aggregator: `rho_pooled` (Fisher-z weighted across strata).
+    Per-stratum medians/means were considered as a PI-escape
+    aggregator (median = −0.05 HELD vs pooled = −0.186 PI on
+    the current 6-env panel) but rejected: SpaceInvaders carries
+    a substantive partial r = −0.61, which represents the
+    SI-specific loop-mediation residual (the triplet doesn't
+    include the loop revisit-rate mediator the SI γ=0.999
+    causal-discovery result identifies as the dominant
+    mediator — see `findings_si_g999_causal_discovery`).
+    Discarding SI's signal via median would be aggregator-
+    shopping; pooled honestly weights it."""
     del x, y, conditioning, stratify_by, min_stratum_size
     if partial_spearman.n_strata < min_strata:
         return Verdict.POWER_INSUFFICIENT, None

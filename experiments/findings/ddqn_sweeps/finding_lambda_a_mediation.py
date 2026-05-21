@@ -34,36 +34,79 @@ from experiments.findings.ddqn_sweeps.lambda_a_mediation import (
 )
 
 
-EXPECTED: ClusterVerdict = ClusterVerdict.REFUTED
+EXPECTED: ClusterVerdict = ClusterVerdict.UNDERPOWERED
 
 
-BLOCKED_ON: str | None = None  # Post-T3a + symmetric Bridge 2 verdict logic: REFUTED.
+BLOCKED_ON: str | None = (
+    'Cluster verdict shifted from REFUTED to UNDERPOWERED on '
+    '2026-05-21 when σ_Λ_a converted from hardcoded `MappingProxyType` '
+    'constant to `DerivedCovariateSpec` (std of lambda_a_late on '
+    'baseline cells per env, computed in scope). Previously hardcoded '
+    'values were aggregated across HP-mixed cohorts and inflated '
+    'σ_Λ_a 2-17× per env (Breakout 17×, SI 15×, FR 7×, ...). The '
+    'cross-env Spearman ρ collapses from −0.745 p=0.013 (HELD) to '
+    '−0.283 p=0.46 (PI/NO_EFFECT) under canonical-corpus-per-env '
+    'scoping. See memory '
+    '`findings_sigma_lambda_a_hp_artifact_walkback`. The Λ_a-cluster '
+    'as a publishable cross-env finding needs walking back. Bridges '
+    '2-4 also rederive: Bridge 2 (Δ_Λ_a NULL prediction) now HELDs '
+    'at p=0.934 instead of refuting via SIGN_FLIP — the positive '
+    'cross-env signal that previously fired SIGN_FLIP was also an '
+    'HP-mixing artifact. Bridge 3 (joint bias-geometry triplet) '
+    'still PI at ρ=−0.21 on the 9-env single-corpus panel (40% '
+    'absorption). MetaMaze excluded — older corpus traces lack '
+    '`online_top12_margin_per_step` so lambda_a_late is NaN.'
+)
 
-# Cluster history (2026-05-20):
-# - Bridge 1 (σ_Λ_a moderation cross-env): HELD at ρ=−0.745 p=0.0133,
-#   n=10 after T3a panel extension (LL + Snake γ=0.999).
-# - Bridge 2 (Δ_Λ_a does not mediate Δ_out): REFUTED via SIGN_FLIP.
-#   Symmetric verdict logic now triggers on |ρ|≥0.5 in either
-#   direction. Actual ρ=+0.567 (cross-env partial controlling for
-#   Δ_jens) — POSITIVE direction, opposite of the anticipated
-#   "DDQN reduces Λ_a → outcome improves" mediator. Substantively
-#   the moderator-not-mediator framing partly survives: there's NO
-#   canonical negative-direction mediation, but cross-env Δ_Λ_a
-#   POSITIVELY tracks Δ_outcome. Envs where DDQN keeps/raises Λ_a
-#   (LL, MetaMaze, Breakout) are the bigger-help envs; envs where
-#   DDQN aggressively reduces Λ_a (FR Δ_Λ_a=−0.47, Asterix −0.09)
-#   don't see outcome benefit. See
-#   `findings_lambda_a_mediation_cluster_refuted` memo.
-# - Bridge 3 (joint bias-geometry triplet mediates within-cell):
-#   POWER_INSUFFICIENT. ρ_pooled=−0.186 in PI band (0.10, 0.30).
-#   Env-cohort-dependent absorption (66% on MinAtar subset, 17% on
-#   full panel) — needs scope refinement or more strata to escape.
+# Cluster history:
 #
-# Cluster verdict: REFUTED (Bridge 2 NO_EFFECT/SIGN_FLIP) per the
-# composed-verdict aggregator. Substantively the σ_Λ_a moderation
-# finding (Bridge 1) stands; the cluster framing as
-# "moderator-not-mediator" needs revision to reflect the
-# positive-direction cross-env tracking.
+# 2026-05-20 (REFUTED state, now superseded):
+#   Bridge 1 hardcoded σ_Λ_a → ρ=−0.745 p=0.013 HELD; Bridge 2
+#   Δ_Λ_a cross-stratum ρ=+0.567 fired NO_EFFECT (SIGN_FLIP) under
+#   the symmetric verdict logic. Cluster verdict REFUTED via
+#   Bridge 2.
+#
+# 2026-05-21 (canonical-scope rework):
+#   - Investigation triggered by user observation "FourRooms have
+#     too many points; definitely corrupted." Audit confirmed FR
+#     γ=0.999 cohort was 660 cells from 6 probe corpora (linear vs
+#     MLP architecture, shaped/unshaped reward, varying ε, varying
+#     lr). Other MLP envs similar.
+#   - Restored cloud-evicted traces for fr_g999_loop_test (1M),
+#     ddqn_axis_probes_mc_1m (1M); recomputed
+#     `q_argmax_margin_late` + `q_action_std_late` for FR + MC
+#     locally. MetaMaze excluded — older `metamaze_g0999_1M_postfix`
+#     corpus lacks `online_top12_margin_per_step` in traces (older
+#     substrate version, can't recompute).
+#   - Canonical-corpus allowlist: one canonical-HP-shape corpus
+#     per env at γ=0.999, n=60 each (MC subsampled to 30 seeds).
+#     9-env balanced panel n=540.
+#   - σ_Λ_a hardcoded values shrink 2-17× per env on canonical
+#     pool (memory `findings_sigma_lambda_a_hp_artifact_walkback`).
+#     Hardcoded constant converted to `DerivedCovariateSpec` —
+#     σ_Λ_a is now computed at bridge-resolution time from
+#     baseline cells in scope, so future scope changes auto-
+#     redrive.
+#   - Bridge verdicts on canonical pool:
+#     * Bridge 1 σ_Λ_a moderation: ρ=−0.28 p=0.29 →
+#       POWER_INSUFFICIENT (walk-back of the n=10 HP-mixed HELD)
+#     * Bridge 2 Δ_Λ_a does not mediate Δ_out: ρ near zero p=0.93
+#       → HELD (the prior SIGN_FLIP at ρ=+0.567 was also an
+#       HP-mixing artifact)
+#     * Bridge 3 joint (σ_clip, Δ_v, jens) within-cell: rho_pooled
+#       =−0.21 p=0.001 → PI. 40% absorption. FR (−0.65) and SI
+#       (−0.62) carry large residual; their established mediator
+#       is loop-revisit-rate (not in triplet).
+#     * Bridge 4 vanilla Λ_a within-arm: PI (p=0.18)
+#   - Cluster: UNDERPOWERED (no bridge refutes; Bridge 2 HELDs,
+#     others PI).
+#
+# Substantive case-study implication: the σ_Λ_a / Λ_a axis as a
+# publishable cross-env discriminator at γ=0.999 needs walked
+# back. What remains: per-env single-cell observations (Asterix
+# anchors high-σ_Λ_a + harm corner; FR anchors low-σ_Λ_a + strong
+# help corner). These are descriptive, not a tested cross-env
+# moderation.
 
 
 BRIDGES: tuple[Bridge, ...] = (

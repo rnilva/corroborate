@@ -38,10 +38,24 @@ from experiments.findings.ddqn_sweeps.lambda_a_mediation import (
 )
 
 
-EXPECTED: ClusterVerdict = ClusterVerdict.SUPPORTED
+EXPECTED: ClusterVerdict = ClusterVerdict.UNDERPOWERED
 
 
-BLOCKED_ON: str | None = None
+BLOCKED_ON: str | None = (
+    'Walk-back 2026-05-21: bridge fires POWER_INSUFFICIENT '
+    '(p=0.824) under the canonical-corpus single-corpus-per-env '
+    'scope. The HP-mixed pool had ρ_partial=+0.352 p=0.061 '
+    '(n=30 Asterix vanilla cells aggregated across non-canonical '
+    'lr/FA-depth/etc HPs); under the strict canonical pool the '
+    'effect is not distinguishable from zero. The Asterix Λ_a '
+    'positive-r-within-vanilla framing was part of the broader '
+    'HP-mixing artifact documented in '
+    '`findings_sigma_lambda_a_hp_artifact_walkback`. Single-env '
+    'n=30 is structurally underpowered for a per-cell partial-r '
+    'claim regardless. Walk-back companion to '
+    '`finding_lambda_a_mediation` + '
+    '`finding_lambda_a_within_arm_asymmetry`.'
+)
 
 
 BRIDGES: tuple[Bridge, ...] = (
