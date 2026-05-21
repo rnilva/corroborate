@@ -86,6 +86,7 @@ def init_state(
     optimizer: optax.GradientTransformation,
     q_network: QFunction = mlp_q,
     replay: Replay = Replay(),
+    state_hash_cardinality: int = 1,
 ) -> DQNState:
     """Build initial DQNState from a `jax.random.PRNGKey` directly.
 
@@ -118,6 +119,9 @@ def init_state(
         step=jnp.int32(0),
         rng_key=run_key,
         ep_return=jnp.float32(0.0),
+        state_hash_count=jnp.zeros(
+            (state_hash_cardinality,), dtype=jnp.int32,
+        ),
     )
 
 
@@ -140,6 +144,7 @@ def dqn_step(
     bootstrap: Bootstrap = default_bootstrap,
     loss_fn: LossFn = squared_error,
     target_sync: TargetSync = periodic_copy,
+    count_weight_alpha: float = 0.0,
 ) -> tuple[DQNState, StepRecord]:
     """One DQN step: rollout → train → sync → record.
 
@@ -193,7 +198,8 @@ def dqn_step(
         state,
         q_network=q_network, bootstrap=bootstrap, loss_fn=loss_fn,
         optimizer=optimizer, gamma=gamma, n_step=n_step,
-        replay=replay,
+        replay=replay, state_hash=state_hash,
+        count_weight_alpha=count_weight_alpha,
     )
 
     state = sync_phase(
@@ -231,6 +237,7 @@ def dqn(
     n_actions: Annotated[int, Exogenous],
     eval_episode_cap: Annotated[int, Exogenous] = 500,
     state_hash: Annotated[StateHash, Exogenous] = default_state_hash,
+    state_hash_cardinality: Annotated[int, Exogenous] = 1,
     # Cross-cutting HPs (no single Module owns these).
     gamma: float = 0.99,
     sync_period: int = 100,
@@ -246,6 +253,7 @@ def dqn(
     loss_fn: LossFn = squared_error,
     target_sync: TargetSync = periodic_copy,
     optimizer: OptimizerFactory = default_optimizer,
+    count_weight_alpha: float = 0.0,
 ) -> dict[str, jax.Array]:
     """Full DQN training+eval run as one claim.
 
@@ -358,6 +366,7 @@ def dqn(
         rng_key=init_key, optimizer=optax_handle,
         q_network=q_network,
         replay=replay,
+        state_hash_cardinality=state_hash_cardinality,
     )
 
     step_fn = partial(
@@ -369,6 +378,7 @@ def dqn(
         replay=replay,
         bootstrap=bootstrap,
         loss_fn=loss_fn, target_sync=target_sync,
+        count_weight_alpha=count_weight_alpha,
     )
 
     def eval_fn(s: DQNState, super_idx: jax.Array) -> EvalBurstOut:

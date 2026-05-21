@@ -45,6 +45,14 @@ from corroborate_rl.dqn.types import (
 from corroborate_rl.env_catalogue import StateHash
 
 
+def _zero_state_hash(obs: jax.Array) -> jax.Array:
+    """Local single-bucket fallback (mirrors dqn.default_state_hash —
+    keeping a local copy to avoid the phases→dqn circular import).
+    Used as default for `train_phase.state_hash` so count-weighted
+    interventions are opt-in; the caller wires the env's real hash."""
+    return jnp.zeros((), dtype=jnp.int32)
+
+
 # ============ Gradient-probe runtime flag ============
 #
 # Module-level flag controlling whether `train_phase` runs the
@@ -139,6 +147,17 @@ def rollout_phase(
     cumulative = state.ep_return + reward
     next_ep_return = jnp.where(done, jnp.float32(0.0), cumulative)
 
+    # State-hash logged at action-selection time (the state
+    # observed when the action was chosen, not after the env step).
+    obs_hash = state_hash(state.obs).astype(jnp.int32)
+
+    # Increment per-state visit counter. JAX-friendly scatter via
+    # `at[].add` — for state_hash_cardinality=1 (envs without a
+    # registered hash) the array is a single bucket and the counter
+    # is effectively a global step count (harmless: count-weighted
+    # loss reduces to a uniform weight).
+    new_state_hash_count = state.state_hash_count.at[obs_hash].add(1)
+
     new_state = state._replace(
         replay=new_replay,
         pending_n_step=new_pending,
@@ -146,10 +165,8 @@ def rollout_phase(
         obs=next_obs,
         rng_key=next_rng_key,
         ep_return=next_ep_return,
+        state_hash_count=new_state_hash_count,
     )
-    # State-hash logged at action-selection time (the state
-    # observed when the action was chosen, not after the env step).
-    obs_hash = state_hash(state.obs).astype(jnp.int32)
 
     diagnostics: dict[str, jax.Array] = {
         'reward': reward,
@@ -191,6 +208,8 @@ def train_phase(
     gamma: float,
     n_step: int,
     replay: Replay,
+    state_hash: StateHash = _zero_state_hash,
+    count_weight_alpha: float = 0.0,
 ) -> tuple[DQNState, dict[str, jax.Array]]:
     """One gradient step: sample batch → bootstrap target →
     compute loss → apply update.
@@ -279,12 +298,30 @@ def train_phase(
         )
         per_sample = loss_fn(predicted, target)        # (batch,)
         abs_td = jnp.abs(predicted - target)           # (batch,)
+        # Count-weighted loss aggregation (loop-mediation
+        # falsification): if α > 0, weight each sample's loss by
+        # 1 / (1 + count[state_hash(next_obs)])^α — downweights
+        # over-visited next-states so Q trains uniformly across
+        # state coverage. α=0 (default) is the standard uniform
+        # mean. Re-normalised so loss magnitude is comparable to
+        # the uniform-weight baseline; weights are stop-gradient
+        # so they don't enter the parameter gradient.
+        # state_hash takes a single obs (shape obs_shape) and
+        # returns a scalar; vmap over the batch axis.
+        next_hash = jax.vmap(state_hash)(batch.next_obs).astype(jnp.int32)
+        counts = state.state_hash_count[next_hash]
+        weights = 1.0 / jnp.power(1.0 + counts.astype(jnp.float32),
+                                   count_weight_alpha)
+        weights = jax.lax.stop_gradient(weights)
+        weighted_loss = (
+            (weights * per_sample).sum() / (weights.sum() + 1e-12)
+        )
         # Aux tuple: (batch-mean |TD|, batch-std |TD|). The latter
         # captures *training-signal heterogeneity* per step — high
         # std = the gradient is averaging diverse transitions; low
         # std = the batch is dominated by similar samples (small
         # replay or correlated transitions).
-        return per_sample.mean(), (abs_td.mean(), abs_td.std())
+        return weighted_loss, (abs_td.mean(), abs_td.std())
 
     (loss, (td_error, td_error_within_batch_std)), grads = jax.value_and_grad(
         compute_loss, has_aux=True,

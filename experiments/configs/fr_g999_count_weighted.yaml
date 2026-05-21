@@ -1,0 +1,72 @@
+name: fr_g999_count_weighted
+out_dir: experiments/probes/fr_g999_count_weighted
+env_binding: shared
+archive_remote: s3://corroborate-archive/fr_g999_count_weighted
+merge_top_level: false
+
+# Count-weighted-loss intervention at FR γ=0.999 — direct causal
+# test of the loop-mediation hypothesis. The OPIQ framing was
+# falsified (`findings_optimistic_init_test_falsifies_opiq`); the
+# bias-chain frame predicts that downweighting gradient updates
+# at over-visited states should approximate DDQN's outcome.
+#
+# Intervention: per-sample loss multiplied by 1/(1+count(s'))^α,
+# where count[state_hash] is incremented in rollout. α=0 is
+# uniform (= standard). α=1 is inverse-count. α=2 is aggressive.
+#
+# 4-arm × 30 seeds × 100k steps:
+#   1. vanilla, α=0 (control)
+#   2. DDQN, α=0 (existing DDQN benefit)
+#   3. vanilla, α=1.0 (count-weighted-vanilla — the test arm)
+#   4. vanilla, α=2.0 (aggressive count-weight)
+#
+# If loop-channel is causal: arms 3-4 outcome approaches DDQN's.
+# If bias-channel is causal: arms 3-4 outcome stays near vanilla.
+#
+# Cells: 4 arms × 1 grid point × 30 seeds = ~10 min on CPU.
+
+envs:
+  - {name: FourRooms-misc, n_seeds: 30, chunk_size: 30}
+
+defaults:
+  total_steps: 100000
+  eval_every:  2000
+  n_episodes:  5
+  gamma:       0.999
+  sync_period: 100
+  replay:
+    class: Replay
+    capacity: 50000
+    batch_size: 32
+  q_network:
+    class: MLP
+    hidden: [64, 64]
+  optimizer:
+    fn: warmed_update
+    inner: {fn: adam, lr: 0.0001}
+    warmup_steps: 100
+  action_select:
+    fn: epsilon_greedy
+    schedule:
+      fn: linear_epsilon
+      eps_init: 1.0
+      eps_final: 0.05
+      anneal_steps: 10000
+
+interventions:
+  - name: count_weighted
+    base: {}
+    arms:
+      # arm 0: vanilla baseline α=0
+      - []
+      # arm 1: DDQN α=0 (existing channel)
+      - - slot_path: bootstrap
+          replacement:
+            fn: bootstrap
+            greedification: {fn: double_greedify}
+      # arm 2: vanilla + count-weight α=1.0 (uniform-coverage training)
+      - - slot_path: count_weight_alpha
+          replacement: 1.0
+      # arm 3: vanilla + count-weight α=2.0 (aggressive)
+      - - slot_path: count_weight_alpha
+          replacement: 2.0

@@ -65,3 +65,12 @@ class DQNState(NamedTuple):
 
     # Running per-episode return; resets on `done`.
     ep_return: jax.Array       # () float32
+
+    # Per-state-hash visit count, indexed by the env's registered
+    # `state_hash(obs) → int`. Incremented at action-selection time
+    # in rollout_phase. Used by count-weighted-loss interventions
+    # (loop-mediation falsification): downweight per-sample loss
+    # at over-visited states to test if uniform-state-coverage
+    # training reproduces DDQN's benefit. Zero-init; size =
+    # env_spec.state_hash_cardinality.
+    state_hash_count: jax.Array   # (cardinality,) int32

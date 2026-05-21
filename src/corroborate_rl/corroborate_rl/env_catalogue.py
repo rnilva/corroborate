@@ -1703,12 +1703,30 @@ _register(
     state_hash=_FOURROOMS_HASH,
     state_hash_cardinality=_FOURROOMS_CARD,
 )
+# MetaMaze obs is (15,): dims 0-13 are 14 binary spatial-sensor bits
+# (local-view + goal-direction encoding), dim 14 is the episode step
+# counter (0..200). The step counter makes every step unique by
+# construction → degenerate state_hash if included. Hash only the
+# 14 spatial bits: cardinality 2^14 = 16384, comparable to FR's
+# 28561. Lets repeat-rate / state-coverage measurables fire at
+# MetaMaze the same way they do at FR.
+
+def _metamaze_hash(obs: jax.Array) -> jax.Array:
+    spatial_bits = (obs[:14] > 0.5).astype(jnp.int32)
+    weights = jnp.power(2, jnp.arange(14, dtype=jnp.int32))
+    return jnp.sum(spatial_bits * weights)
+
+_METAMAZE_HASH: StateHash = _metamaze_hash
+_METAMAZE_CARD: int = 2 ** 14  # 16384
+
 _register(
     'MetaMaze-misc',
     r_min=0.0, r_max=10.0,
     reward_regime='event_triggered',
     benchmark_family='misc',
     solve_threshold_source='no-canonical-criterion',
+    state_hash=_METAMAZE_HASH,
+    state_hash_cardinality=_METAMAZE_CARD,
 )
 _register(
     'Pong-misc',

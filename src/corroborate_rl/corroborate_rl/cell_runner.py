@@ -219,6 +219,16 @@ def run_dqn_arm(
         'obs_shape': env_spec.observation_shape, 'n_actions': n_actions,
         'eval_episode_cap': env_spec.eval_episode_cap,
         'state_hash': state_hash,
+        # Cardinality for the per-state visit-count array
+        # (DQNState.state_hash_count). Falls back to 1 (single bucket)
+        # for envs without a registered hash, in which case the count
+        # is a global step counter — harmless for count-weighted-loss
+        # interventions that just set α=0 in that scope.
+        'state_hash_cardinality': (
+            env_spec.state_hash_cardinality
+            if env_spec.state_hash_cardinality is not None
+            else 1
+        ),
     }
     configured = partial(claim, **cell_kwargs)
 

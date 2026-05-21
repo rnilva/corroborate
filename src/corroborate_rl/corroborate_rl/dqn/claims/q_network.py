@@ -105,9 +105,14 @@ def mlp_init(
     n_actions: int,
     *,
     hidden: tuple[int, ...],
+    init_bias_offset: float = 0.0,
 ) -> Params:
     """Initialise MLP parameter pytree. Layer-by-layer uniform
-    init in `[-sqrt(1/fan_in), sqrt(1/fan_in)]`; biases zero.
+    init in `[-sqrt(1/fan_in), sqrt(1/fan_in)]`; hidden-layer
+    biases zero. Output-layer bias initialised to
+    `init_bias_offset` (default 0.0 — standard near-zero init;
+    positive values implement optimistic-init as in OPIQ-style
+    over-Q tests).
 
     Mechanics: parameter allocation has no theorem; no
     `record_call`. `obs_shape` may be multi-dim (e.g.
@@ -130,7 +135,9 @@ def mlp_init(
     params[f'w{len(hidden)}'] = jax.random.uniform(
         keys[-1], (in_dim, n_actions), minval=-bound, maxval=bound,
     )
-    params[f'b{len(hidden)}'] = jnp.zeros((n_actions,))
+    params[f'b{len(hidden)}'] = jnp.full(
+        (n_actions,), init_bias_offset, dtype=jnp.float32,
+    )
     return params
 
 
@@ -193,6 +200,7 @@ class MLP:
     (`SpectralNormMLP`, `Tabular`, etc. — all matching the
     `QFunction` Protocol structurally)."""
     hidden: tuple[int, ...] = (64, 64)
+    init_bias_offset: float = 0.0
 
     def init(
         self,
@@ -202,6 +210,7 @@ class MLP:
     ) -> Params:
         return mlp_init(
             rng_key, obs_shape, n_actions, hidden=self.hidden,
+            init_bias_offset=self.init_bias_offset,
         )
 
     def __call__(self, params: Params, obs: jax.Array) -> jax.Array:

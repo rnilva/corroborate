@@ -1,0 +1,73 @@
+name: fr_g999_optimistic_init_test
+out_dir: experiments/probes/fr_g999_optimistic_init_test
+env_binding: shared
+archive_remote: s3://corroborate-archive/fr_g999_optimistic_init_test
+merge_top_level: false
+
+# Optimistic-init test at FR γ=0.999 — distinguishes the two
+# framings of the loop hypothesis:
+#
+#   OPIQ framing: pessimistic init → Q(unvisited) too low →
+#     policy gets stuck. Fix = add positive Q init.
+#   Bias-chain framing (ours): visited Q inflates via chain,
+#     loop attractor forms. Fix = DDQN-like target attenuation.
+#
+# Both frames predict standard-init vanilla loops at FR γ=0.999.
+# They DIFFER on optimistic-init vanilla:
+#   OPIQ: optimistic-init RESCUES vanilla (no init asymmetry)
+#   Bias-chain: optimistic-init does NOT rescue (chain amplifies
+#     whatever Q is at visited state regardless of init direction)
+#
+# Cells: 3 arms × 30 seeds × 1 grid point × chunked = 60-cell
+# style, 100k steps each. ~10-15 min on CPU.
+#
+# Matches fr_g999_100k_loop.yaml HPs exactly except for the
+# 3rd arm's MLP init_bias_offset=20.0 (well above the bias-chain
+# plateau at γ=0.999 of ~12.6).
+
+envs:
+  - {name: FourRooms-misc, n_seeds: 30, chunk_size: 30}
+
+defaults:
+  total_steps: 100000
+  eval_every:  2000
+  n_episodes:  5
+  gamma:       0.999
+  sync_period: 100
+  replay:
+    class: Replay
+    capacity: 50000
+    batch_size: 32
+  q_network:
+    class: MLP
+    hidden: [64, 64]
+  optimizer:
+    fn: warmed_update
+    inner: {fn: adam, lr: 0.0001}
+    warmup_steps: 100
+  action_select:
+    fn: epsilon_greedy
+    schedule:
+      fn: linear_epsilon
+      eps_init: 1.0
+      eps_final: 0.05
+      anneal_steps: 10000
+
+interventions:
+  - name: optimistic_init
+    base: {}
+    arms:
+      # arm 0: vanilla baseline (standard init, standard bootstrap)
+      - []
+      # arm 1: DDQN baseline (standard init, double-greedify)
+      - - slot_path: bootstrap
+          replacement:
+            fn: bootstrap
+            greedification: {fn: double_greedify}
+      # arm 2: vanilla + optimistic init (standard bootstrap,
+      #        positive Q-bias init at 20 > Lemma 2 asymptote of ~12.6)
+      - - slot_path: q_network
+          replacement:
+            class: MLP
+            hidden: [64, 64]
+            init_bias_offset: 20.0
