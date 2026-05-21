@@ -94,7 +94,7 @@ _SIGMA_LAMBDA_A_DERIVED: DerivedCovariateSpec = DerivedCovariateSpec(
 #   * Asterix/Breakout/Freeway/SI - paper-canonical MinAtar γ=0.999
 #   * LunarLander - `g0999_panel_extension_lunar_cpu` (1M)
 #   * Snake       - `g0999_Snake-jumanji` (1M)
-_CANONICAL_G0999_CORPORA: tuple[str, ...] = (
+CANONICAL_G0999_CORPORA: tuple[str, ...] = (
     'gamma_sweep_acrobot',
     'minatar_gamma_sweep_k1/g0999_Asterix-MinAtar',
     'minatar_gamma_sweep_k1/g0999_Breakout-MinAtar',
@@ -118,7 +118,7 @@ _GAMMA_999_SCOPE: pl.Expr = (
     # `findings_k_axis_gamma_regime_map`: Λ_a's K_eff dependency makes
     # k=2/k=4 strata structurally non-comparable on the per-env σ_Λ_a panel.
     & (pl.col('action_duplicate_k').is_null() | (pl.col('action_duplicate_k') == 1))
-    & pl.col('corpus').is_in(_CANONICAL_G0999_CORPORA)
+    & pl.col('corpus').is_in(CANONICAL_G0999_CORPORA)
 )
 
 

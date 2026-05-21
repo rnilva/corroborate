@@ -92,6 +92,12 @@ from experiments.findings.ddqn_sweeps.snake_clip_ratchet_regime import (
 from experiments.findings.ddqn_sweeps.snake_clip_ratchet_regime_g0999 import (
     BRIDGES as _SNAKE_CLIP_RATCHET_REGIME_G0999,
 )
+from experiments.findings.ddqn_sweeps.jens_reduction_consistency import (
+    ddqn_reduces_jens_consistently__canonical_g0999,
+)
+from experiments.findings.ddqn_sweeps import (
+    finding_jens_reduction_consistency_g0999,
+)
 
 
 # Loose module scope: only bsuite exclusion. HP-sweep bridges set
@@ -120,6 +126,7 @@ BRIDGES = (
     *_SNAKE_CLIP_RATCHET_REGIME_G0999,
     ddqn_full_auc_helps_at_acrobot_k16_dense,
     ddqn_full_auc_null_at_acrobot_k4_dense,
+    ddqn_reduces_jens_consistently__canonical_g0999,
 )
 
 
@@ -142,6 +149,7 @@ FINDINGS = (
     finding_snake_clip_ratchet_regime,
     finding_snake_clip_ratchet_regime_g0999,
     finding_synthetic_bias_typeb,
+    finding_jens_reduction_consistency_g0999,
 )
 
 
