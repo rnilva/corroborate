@@ -113,6 +113,7 @@ def stratum_baseline_predictor_link_dowhy(
     method_name: str = 'backdoor.linear_regression',
     min_seeds_per_arm: int = 5,
     min_baseline_predictor: float = 0.05,
+    random_state: int = 0,
 ) -> StratumBaselinePredictorLinkDowhyResult:
     """Test `baseline_predictor → Δ_target` on stratum-level rows
     via DoWhy backdoor + refutations, adjusting for env.
@@ -229,6 +230,7 @@ def stratum_baseline_predictor_link_dowhy(
     backdoor, placebo, rcc = backdoor_with_refutations(
         rows, treatment=treatment_col, outcome=outcome_col,
         dag=dag, method_name=method_name,
+        random_state=random_state,
     )
     return StratumBaselinePredictorLinkDowhyResult(
         backdoor=backdoor,

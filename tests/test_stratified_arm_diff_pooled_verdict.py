@@ -156,3 +156,33 @@ def test_pool_refutation_class_sign_flip() -> None:
     result = _run(cells, predicted_direction='a_gt_b')
     assert result.verdict == Verdict.NO_EFFECT
     assert result.refutation == RefutationClass.SIGN_FLIP
+
+
+def test_stratified_arm_diff_pooled_dataframe_input_identical_to_cells() -> None:
+    """Canonical-input invariant: cells-input (Iterable[Mapping])
+    and DataFrame-input produce the same
+    `StratifiedArmDiffPooledResult`. Guards against the DataFrame
+    branch diverging from cells branch."""
+    import polars as pl
+
+    envs = [(f'env_{i}', 1.0, 0.0) for i in range(5)]
+    cells = _make_cells(envs, n_seeds=30, noise=0.1)
+    result_cells = _run(cells, predicted_direction='a_gt_b')
+
+    result_panel = stratified_arm_diff_pooled.fn(
+        pl.DataFrame(cells),
+        source='outcome',
+        treatment_arm=_TREATMENT,
+        baseline_arm=_BASELINE,
+        stratify_by=('env_name',),
+        scope_predictor='jensen_gap',
+        min_baseline_predictor=0.05,
+        min_seeds_per_arm=5,
+        predicted_direction='a_gt_b',
+    )
+    # Verdict + refutation must match.
+    assert result_panel.verdict == result_cells.verdict
+    assert result_panel.refutation == result_cells.refutation
+    # n_strata + pooled point estimate must match.
+    assert result_panel.n_strata == result_cells.n_strata
+    assert result_panel.pooled_d == result_cells.pooled_d

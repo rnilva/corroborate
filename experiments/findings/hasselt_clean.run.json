@@ -1,0 +1,384 @@
+{
+  "bridges": [
+    {
+      "analysis_results": {
+        "partial_spearman": {
+          "conditioning": [],
+          "granularity": "per_cell",
+          "n_obs_total": 210,
+          "n_strata": 5,
+          "p_value": 0.00569455,
+          "rho_pooled": -0.292842,
+          "stratify_by": "env_name",
+          "x": "jensen_dormancy_gap",
+          "y": "jensen_gap"
+        }
+      },
+      "assumption_violations": [],
+      "blocked_by": null,
+      "bridge_name": "hasselt_floor_predicts_observed_bias__vanilla",
+      "direction": "inverse",
+      "extent_hash": 98543281963653412,
+      "n_cells_in_scope": 210,
+      "n_cells_pre_scope": 420,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "conditioning": [],
+        "min_stratum_size": 30,
+        "null_threshold": 0.1,
+        "p_threshold_held": 0.05,
+        "rho_threshold_held": -0.3,
+        "sign_flip_threshold": 0.3,
+        "stratify_by": "env_name",
+        "x": "jensen_dormancy_gap",
+        "y": "jensen_gap"
+      },
+      "predicted_direction": "a_lt_b",
+      "scope_repr": "[([([([([([([(col(\"gamma\")) == (dyn float: 0.999)]) & ([(col(\"action_duplicate_k\").is_null()) | ([(col(\"action_duplicate_k\")) == (dyn int: 1)])])]) & (col(\"env_name\").is_in([[\"Acrobot-v1\", \"Asterix-MinAtar\", … \"SpaceInvaders-MinAtar\"]]))]) & (col(\"jensen_dormancy_gap\").is_finite())]) & (col(\"jensen_gap\").is_finite())]) & (col(\"eval_best_burst_raw_mean\").is_finite())]) & ([(col(\"arm_key\")) == (\"baseline\")])]",
+      "source_name": "jensen_dormancy_gap",
+      "target_name": "jensen_gap",
+      "tier": "associational",
+      "verdict": "power_insufficient",
+      "warnings": []
+    },
+    {
+      "analysis_results": {
+        "partial_spearman": {
+          "conditioning": [],
+          "granularity": "per_cell",
+          "n_obs_total": 210,
+          "n_strata": 5,
+          "p_value": 0.000848035,
+          "rho_pooled": -0.234495,
+          "stratify_by": "env_name",
+          "x": "jensen_gap",
+          "y": "eval_best_burst_raw_mean"
+        }
+      },
+      "assumption_violations": [],
+      "blocked_by": null,
+      "bridge_name": "bias_predicts_worse_outcome__vanilla",
+      "direction": "inverse",
+      "extent_hash": 98543281963653412,
+      "n_cells_in_scope": 210,
+      "n_cells_pre_scope": 420,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "conditioning": [],
+        "min_stratum_size": 30,
+        "null_threshold": 0.1,
+        "p_threshold_held": 0.05,
+        "rho_threshold_held": -0.3,
+        "sign_flip_threshold": 0.3,
+        "stratify_by": "env_name",
+        "x": "jensen_gap",
+        "y": "eval_best_burst_raw_mean"
+      },
+      "predicted_direction": "a_lt_b",
+      "scope_repr": "[([([([([([([(col(\"gamma\")) == (dyn float: 0.999)]) & ([(col(\"action_duplicate_k\").is_null()) | ([(col(\"action_duplicate_k\")) == (dyn int: 1)])])]) & (col(\"env_name\").is_in([[\"Acrobot-v1\", \"Asterix-MinAtar\", … \"SpaceInvaders-MinAtar\"]]))]) & (col(\"jensen_dormancy_gap\").is_finite())]) & (col(\"jensen_gap\").is_finite())]) & (col(\"eval_best_burst_raw_mean\").is_finite())]) & ([(col(\"arm_key\")) == (\"baseline\")])]",
+      "source_name": "jensen_gap",
+      "target_name": "eval_best_burst_raw_mean",
+      "tier": "associational",
+      "verdict": "power_insufficient",
+      "warnings": []
+    },
+    {
+      "analysis_results": {
+        "stratified_arm_diff_pooled": {
+          "arm_field": "arm_key",
+          "baseline_arm": "baseline",
+          "i_squared": 0.777727,
+          "measurable": "jensen_gap",
+          "n_strata": 5,
+          "per_stratum": [
+            {
+              "arm_mean_baseline": 14.6306,
+              "arm_mean_treatment": 10.1158,
+              "arm_sd_baseline": 14.281,
+              "arm_sd_treatment": 10.2211,
+              "baseline_predictor": 14.6306,
+              "cohen_d": -0.363571,
+              "cohen_se": 0.260396,
+              "mean_diff": -4.51485,
+              "n_seeds_baseline": 30,
+              "n_seeds_treatment": 30,
+              "stratum_id": [
+                "Acrobot-v1"
+              ]
+            },
+            {
+              "arm_mean_baseline": 12.4197,
+              "arm_mean_treatment": 7.64419,
+              "arm_sd_baseline": 4.9983,
+              "arm_sd_treatment": 8.0412,
+              "baseline_predictor": 12.4197,
+              "cohen_d": -0.713296,
+              "cohen_se": 0.188386,
+              "mean_diff": -4.77546,
+              "n_seeds_baseline": 60,
+              "n_seeds_treatment": 60,
+              "stratum_id": [
+                "FourRooms-misc"
+              ]
+            },
+            {
+              "arm_mean_baseline": 352.358,
+              "arm_mean_treatment": 392.388,
+              "arm_sd_baseline": 137.232,
+              "arm_sd_treatment": 191.328,
+              "baseline_predictor": 352.358,
+              "cohen_d": 0.240434,
+              "cohen_se": 0.259162,
+              "mean_diff": 40.0302,
+              "n_seeds_baseline": 30,
+              "n_seeds_treatment": 30,
+              "stratum_id": [
+                "LunarLander-v2-jax"
+              ]
+            },
+            {
+              "arm_mean_baseline": 11.4405,
+              "arm_mean_treatment": 8.57125,
+              "arm_sd_baseline": 3.48611,
+              "arm_sd_treatment": 3.75431,
+              "baseline_predictor": 11.4405,
+              "cohen_d": -0.792024,
+              "cohen_se": 0.189714,
+              "mean_diff": -2.86926,
+              "n_seeds_baseline": 60,
+              "n_seeds_treatment": 60,
+              "stratum_id": [
+                "MetaMaze-misc"
+              ]
+            },
+            {
+              "arm_mean_baseline": 37.7106,
+              "arm_mean_treatment": 22.6259,
+              "arm_sd_baseline": 13.9908,
+              "arm_sd_treatment": 9.77195,
+              "baseline_predictor": 37.7106,
+              "cohen_d": -1.25006,
+              "cohen_se": 0.283086,
+              "mean_diff": -15.0847,
+              "n_seeds_baseline": 30,
+              "n_seeds_treatment": 30,
+              "stratum_id": [
+                "Snake-jumanji"
+              ]
+            }
+          ],
+          "pooled": {
+            "I2": 0.777727,
+            "Q": 17.9959,
+            "assumption_violations": [],
+            "empirical_max_g": 0.240434,
+            "empirical_min_g": -1.25006,
+            "n_cells": 5,
+            "pi_hi": 0.953875,
+            "pi_lo": -2.11213,
+            "pooled_g": -0.579128,
+            "se_pooled": 0.219074,
+            "tau2": 0.184047
+          },
+          "pooled_ci_hi": -0.149743,
+          "pooled_ci_lo": -1.00851,
+          "pooled_d": -0.579128,
+          "pooled_p_value": 0.00820469,
+          "pooled_se": 0.219074,
+          "q_statistic": 17.9959,
+          "refutation": "null_effect",
+          "scope_predictor": "jensen_gap",
+          "stratify_by": [
+            "env_name"
+          ],
+          "tau2": 0.184047,
+          "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)",
+          "verdict": "no_effect"
+        }
+      },
+      "assumption_violations": [],
+      "blocked_by": null,
+      "bridge_name": "intervention_reduces_bias__premise_active",
+      "direction": "inverse",
+      "extent_hash": -7919090667739483648,
+      "n_cells_in_scope": 420,
+      "n_cells_pre_scope": 420,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "baseline_arm": "baseline",
+        "min_seeds_per_arm": 5,
+        "source": "jensen_gap",
+        "stratify_by": [
+          "env_name"
+        ],
+        "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
+      },
+      "predicted_direction": "a_lt_b",
+      "scope_repr": "[([([([([([([(col(\"gamma\")) == (dyn float: 0.999)]) & ([(col(\"action_duplicate_k\").is_null()) | ([(col(\"action_duplicate_k\")) == (dyn int: 1)])])]) & (col(\"env_name\").is_in([[\"Acrobot-v1\", \"Asterix-MinAtar\", … \"SpaceInvaders-MinAtar\"]]))]) & (col(\"jensen_dormancy_gap\").is_finite())]) & (col(\"jensen_gap\").is_finite())]) & (col(\"eval_best_burst_raw_mean\").is_finite())]) & ([(col(\"jensen_dormancy_gap\").median().over([col(\"corpus\")])) == (dyn float: 0)])]",
+      "source_name": "do(baseline|bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify))",
+      "target_name": "jensen_gap",
+      "tier": "interventional",
+      "verdict": "no_effect",
+      "warnings": []
+    },
+    {
+      "analysis_results": {
+        "stratified_arm_diff_pooled": {
+          "arm_field": "arm_key",
+          "baseline_arm": "baseline",
+          "i_squared": 0.683753,
+          "measurable": "eval_best_burst_raw_mean",
+          "n_strata": 5,
+          "per_stratum": [
+            {
+              "arm_mean_baseline": -75.68,
+              "arm_mean_treatment": -75.2867,
+              "arm_sd_baseline": 3.91693,
+              "arm_sd_treatment": 3.17477,
+              "baseline_predictor": 14.6306,
+              "cohen_d": 0.110325,
+              "cohen_se": 0.258402,
+              "mean_diff": 0.393334,
+              "n_seeds_baseline": 30,
+              "n_seeds_treatment": 30,
+              "stratum_id": [
+                "Acrobot-v1"
+              ]
+            },
+            {
+              "arm_mean_baseline": 0.406668,
+              "arm_mean_treatment": 0.776668,
+              "arm_sd_baseline": 0.356949,
+              "arm_sd_treatment": 0.306078,
+              "baseline_predictor": 12.4197,
+              "cohen_d": 1.11282,
+              "cohen_se": 0.19642,
+              "mean_diff": 0.370001,
+              "n_seeds_baseline": 60,
+              "n_seeds_treatment": 60,
+              "stratum_id": [
+                "FourRooms-misc"
+              ]
+            },
+            {
+              "arm_mean_baseline": -89.3056,
+              "arm_mean_treatment": -67.5858,
+              "arm_sd_baseline": 46.7101,
+              "arm_sd_treatment": 65.0499,
+              "baseline_predictor": 352.358,
+              "cohen_d": 0.383557,
+              "cohen_se": 0.260643,
+              "mean_diff": 21.7198,
+              "n_seeds_baseline": 30,
+              "n_seeds_treatment": 30,
+              "stratum_id": [
+                "LunarLander-v2-jax"
+              ]
+            },
+            {
+              "arm_mean_baseline": 48.6001,
+              "arm_mean_treatment": 51.8584,
+              "arm_sd_baseline": 9.34908,
+              "arm_sd_treatment": 8.74309,
+              "baseline_predictor": 11.4405,
+              "cohen_d": 0.359991,
+              "cohen_se": 0.184072,
+              "mean_diff": 3.25834,
+              "n_seeds_baseline": 60,
+              "n_seeds_treatment": 60,
+              "stratum_id": [
+                "MetaMaze-misc"
+              ]
+            },
+            {
+              "arm_mean_baseline": 0.486667,
+              "arm_mean_treatment": 0.62,
+              "arm_sd_baseline": 0.171672,
+              "arm_sd_treatment": 0.248305,
+              "baseline_predictor": 37.7106,
+              "cohen_d": 0.624642,
+              "cohen_se": 0.264632,
+              "mean_diff": 0.133333,
+              "n_seeds_baseline": 30,
+              "n_seeds_treatment": 30,
+              "stratum_id": [
+                "Snake-jumanji"
+              ]
+            }
+          ],
+          "pooled": {
+            "I2": 0.683753,
+            "Q": 12.6484,
+            "assumption_violations": [],
+            "empirical_max_g": 1.11282,
+            "empirical_min_g": 0.110325,
+            "n_cells": 5,
+            "pi_hi": 1.74338,
+            "pi_lo": -0.679109,
+            "pooled_g": 0.532134,
+            "se_pooled": 0.182,
+            "tau2": 0.111733
+          },
+          "pooled_ci_hi": 0.888853,
+          "pooled_ci_lo": 0.175414,
+          "pooled_d": 0.532134,
+          "pooled_p_value": 0.00345769,
+          "pooled_se": 0.182,
+          "q_statistic": 12.6484,
+          "refutation": "null_effect",
+          "scope_predictor": "jensen_gap",
+          "stratify_by": [
+            "env_name"
+          ],
+          "tau2": 0.111733,
+          "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)",
+          "verdict": "no_effect"
+        }
+      },
+      "assumption_violations": [],
+      "blocked_by": null,
+      "bridge_name": "intervention_helps_outcome__chain_holds",
+      "direction": "direct",
+      "extent_hash": -7919090667739483648,
+      "n_cells_in_scope": 420,
+      "n_cells_pre_scope": 420,
+      "pair_by": [
+        "seed"
+      ],
+      "params": {
+        "baseline_arm": "baseline",
+        "min_seeds_per_arm": 5,
+        "source": "eval_best_burst_raw_mean",
+        "stratify_by": [
+          "env_name"
+        ],
+        "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)"
+      },
+      "predicted_direction": "a_gt_b",
+      "scope_repr": "[([([([([([([([(col(\"gamma\")) == (dyn float: 0.999)]) & ([(col(\"action_duplicate_k\").is_null()) | ([(col(\"action_duplicate_k\")) == (dyn int: 1)])])]) & (col(\"env_name\").is_in([[\"Acrobot-v1\", \"Asterix-MinAtar\", … \"SpaceInvaders-MinAtar\"]]))]) & (col(\"jensen_dormancy_gap\").is_finite())]) & (col(\"jensen_gap\").is_finite())]) & (col(\"eval_best_burst_raw_mean\").is_finite())]) & ([(col(\"jensen_dormancy_gap\").median().over([col(\"corpus\")])) == (dyn float: 0)])]) & ([(col(\"bootstrap_fraction\").median().over([col(\"corpus\")])) > (dyn float: 0.5)])]",
+      "source_name": "do(baseline|bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify))",
+      "target_name": "eval_best_burst_raw_mean",
+      "tier": "interventional",
+      "verdict": "no_effect",
+      "warnings": []
+    }
+  ],
+  "cache_path": "experiments/data/cache/hasselt_clean.parquet",
+  "errored_bridges": [],
+  "git_commit": "1cd0cfca9d94",
+  "hypothesis_module": "experiments.findings.hasselt_clean",
+  "measurable_signatures": {
+    "bootstrap_fraction": "5c7cc97efa79e56c",
+    "eval_best_burst_raw_mean": "829be9a6bcc9c696",
+    "jensen_dormancy_gap": "12502f5ce2171f73",
+    "jensen_gap": "950342c492febd27"
+  },
+  "n_cells_total": 420,
+  "timestamp_utc": "2026-05-22T04:31:12+00:00"
+}

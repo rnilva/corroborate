@@ -435,3 +435,25 @@ def test_mixed_str_and_measurable_inputs_raises() -> None:
             x='x_mean', y=_PER_BURST_Y_MEAN, conditioning=(),
             stratify_by='env_name',
         )
+
+
+def test_partial_spearman_dataframe_input_identical_to_cells() -> None:
+    """Canonical-input invariant: Iterable[Mapping] and
+    pl.DataFrame inputs produce the same `PartialSpearmanResult`."""
+    import polars as pl
+
+    cells = _build_cells()
+    kwargs = {
+        'x': 'x_mean',
+        'y': 'y_mean',
+        'conditioning': ('z_mean',),
+        'stratify_by': 'env_name',
+    }
+    result_cells = partial_spearman.fn(cells, **kwargs)
+    result_panel = partial_spearman.fn(
+        pl.DataFrame(cells), **kwargs,
+    )
+    assert result_panel.rho_pooled == result_cells.rho_pooled
+    assert result_panel.p_value == result_cells.p_value
+    assert result_panel.n_obs_total == result_cells.n_obs_total
+    assert result_panel.n_strata == result_cells.n_strata

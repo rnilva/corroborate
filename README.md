@@ -64,7 +64,67 @@ Two layers stack: individual bridges (one falsifiable edge each)
 and hypothesis modules (the package surface that composes them).
 The canonical primary usage is hypothesis modules under
 `experiments/findings/<name>/` — modular packages organized per
-claim and per finding.
+claim and per finding. **`Panel`** is the substrate-author's
+pre-authoring exploration surface that precedes both.
+
+### Day-1/2 exploration via `Panel`
+
+Before authoring bridges, a substrate author probes the data to
+decide the scope predicates + cluster shape the bridges will
+encode. `Panel` is the typed entry point — no `@claim_bridge`
+harness, no ingest dance, no need to declare a hypothesis
+module first:
+
+```python
+from corroborate.data import Panel, DerivedSpec
+import polars as pl
+
+# Three load entry points: from one corpus, multiple corpora, or
+# an existing per-hypothesis cache.
+panel = Panel.from_cache('experiments.findings.ddqn')
+# panel = Panel.from_corpora(['experiments/data/<corp_a>', ...])
+# panel = Panel.from_corpus('experiments/data/<one_corpus>')
+
+# Narrow scope — extends the panel's scope_chain so later
+# inspectors know what filtered down to this cohort.
+canonical = panel.narrow(pl.col('gamma') == 0.999).narrow(
+    pl.col('action_duplicate_k').is_null()
+    | (pl.col('action_duplicate_k') == 1),
+)
+
+# Probe per-stratum diagnostics — surfaces HP-mixing across
+# corpora, cohort heterogeneity, finite-fraction per measurable.
+diag = canonical.diagnostics
+for stratum, n in diag.n_cells_per_stratum.items():
+    if diag.nonunique_configs_per_stratum[stratum] > 1:
+        print(f'⚠ {stratum} carries {n} cells across multiple configs')
+
+# Analyze with framework primitives directly — `panel.cells` is
+# a pl.DataFrame, which is the canonical @analysis input.
+from corroborate.analyses.spearman.partial_spearman import partial_spearman
+res = partial_spearman.fn(
+    canonical.cells,
+    x='jensen_dormancy_gap', y='jensen_gap',
+    conditioning=(), stratify_by='env_name', min_stratum_size=30,
+)
+
+# Per-stratum aggregate via DerivedSpec — same kernel the
+# framework's per-stratum analyses use.
+sigmas = canonical.derive(DerivedSpec(
+    column='lambda_a_late',
+    aggregator='std',
+    cell_filter=pl.col('arm_key') == 'baseline',
+))
+
+# Promote: when exploration finds the right scope, write the
+# narrowed cohort as a per-hypothesis cache (+ sources sidecar).
+canonical.to_cache('experiments.findings.<new_hyp>')
+```
+
+See `experiments/findings/hasselt_clean/_exploration.py` for a
+fully-worked Day-1/2 substrate-author walk-through that decides
+the scope predicates ultimately encoded in
+`hasselt_clean/_scope.py`.
 
 ### A bridge
 

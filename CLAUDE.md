@@ -256,6 +256,46 @@ satisfies `Claim[P, T]` without inheritance. Unused in the
 current substrate; documented in `claim.py` and tested in
 `tests/test_claim.py::test_manual_dataclass_with_record_call`.
 
+## Substrate-author exploration via `Panel`
+
+Before `@claim_bridge` authoring, substrate authors probe data
+to decide scope predicates + cluster shape. The framework's
+exploration entry point is `Panel` (`corroborate.data.Panel`)
+— a typed, frozen dataclass wrapping
+`cells: pl.DataFrame` + `scope_chain` + `stratify_by` +
+`sources`. Four constructors:
+
+- `Panel.from_corpus(dir)` — one `runs.parquet` + sidecars.
+- `Panel.from_corpora([dir_a, dir_b, ...])` — diagonal-relaxed
+  union with per-corpus provenance.
+- `Panel.from_cache(hyp_module)` — load per-hypothesis cache +
+  populate `sources` from `<hyp>.sources.json` sidecar.
+- `Panel.from_dataframe(df, ...)` — adapt an externally-built
+  DataFrame.
+
+Chaining: `narrow(expr)` extends `scope_chain`; `derive(spec)`
+returns per-stratum aggregates via the shared kernel;
+`with_measurables(names)` fills nulls from the `@measurable`
+registry; `with_traces(cols)` joins trace columns lazily;
+`diagnostics` returns typed per-stratum facts (cell counts,
+corpora-per-stratum, finite-fraction, nonunique-config heterogeneity).
+
+Closing the loop: `panel.to_cache(hyp_module)` writes the
+parquet + `<hyp>.sources.json` (appending an ingested_at
+timestamp to each source's audit trail), so an exploration
+Panel can be promoted into the production cache without
+re-ingest. The cache parquet IS `panel.cells` on disk —
+there's no separate Panel format.
+
+`@analysis` primitives consume `pl.DataFrame` directly (not
+the `Panel` wrapper); pass `panel.cells` when calling them from
+exploration code. The `panel: Panel` bridge fixture pattern
+was tried and deleted as theatre — bridges consume @analysis
+results by typed parameter name, period. The exploration that
+*precedes* bridge authoring is where Panel earns its keep.
+
+Worked example: `experiments/findings/hasselt_clean/_exploration.py`.
+
 ## Findings — cluster-shaped claims on the post-eval graph
 
 A `Finding` (in `corroborate.core.finding`) is a typed subgraph

@@ -38,6 +38,8 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Literal
 
+import polars as pl
+
 import numpy as np
 import numpy.typing as npt
 
@@ -46,13 +48,10 @@ from corroborate.analyses._cell_value import (
 )
 from corroborate.bridge.analysis import analysis
 from corroborate.graph.discovery import (
-    partial_spearman_rho,
-    partial_spearman_rho_multi,
     stratified_partial_spearman_rho,
     stratified_partial_spearman_rho_multi,
     stratified_spearman_rho,
 )
-from scipy.stats import spearmanr as _spearmanr
 from corroborate.measurables import Measurable
 
 
@@ -94,75 +93,10 @@ class PartialSpearmanResult:
     p_value: float
     n_obs_total: int
     n_strata: int
-    # Per-stratum ρ values (one per stratum that met min_stratum_size +
-    # df_floor). Same ordering as the strata after dedup-via-np.unique.
-    # `rho_pooled` is the Fisher-z weighted average; verdict consumers
-    # that want a robust aggregator (median, mean) can use these
-    # directly. Default empty tuple for backward compat with callers
-    # that don't propagate per-stratum values.
-    rho_per_stratum: tuple[float, ...] = ()
-    n_per_stratum: tuple[int, ...] = ()
 
 
 def _arg_name(arg: _ScalarOrPerBurst) -> str:
     return arg if isinstance(arg, str) else arg.name
-
-
-def _compute_per_stratum_rho(
-    *,
-    x_np: npt.NDArray[np.float64],
-    y_np: npt.NDArray[np.float64],
-    zs: list[list[float]],
-    strata: list[object],
-    z_matrix_multi: npt.NDArray[np.float64] | None,
-    min_stratum_size: int,
-    k_cond: int,
-) -> tuple[tuple[float, ...], tuple[int, ...]]:
-    """Per-stratum ρ values matching the pooled-ρ computation.
-
-    Mirrors the same min_stratum_size + df_floor gating used by
-    the `stratified_*` primitives so the per-stratum list aligns
-    with `n_strata`. Closed-form variants per k_cond:
-      k=0 → scipy.spearmanr per stratum;
-      k=1 → `partial_spearman_rho`;
-      k≥2 → `partial_spearman_rho_multi`."""
-    df_floor = 3 + k_cond
-    strata_arr: npt.NDArray[np.object_] = np.asarray(
-        strata, dtype=object,
-    )
-    unique_strata: list[object] = list(np.unique(strata_arr))
-    r_out: list[float] = []
-    n_out: list[int] = []
-    for sk in unique_strata:
-        mask: npt.NDArray[np.bool_] = np.fromiter(
-            (s == sk for s in strata),
-            dtype=bool, count=len(strata),
-        )
-        n_k = int(np.count_nonzero(mask))
-        if n_k < min_stratum_size or n_k <= df_floor:
-            continue
-        x_k = x_np[mask]
-        y_k = y_np[mask]
-        if float(np.std(x_k)) == 0.0 or float(np.std(y_k)) == 0.0:
-            continue
-        if k_cond == 0:
-            r_raw, _ = _spearmanr(x_k, y_k)
-            r_k = float(r_raw)
-        elif k_cond == 1:
-            z_k = np.asarray(zs[0], dtype=np.float64)[mask]
-            r_k, _ = partial_spearman_rho(x_k, y_k, z_k)
-        else:
-            assert z_matrix_multi is not None, (
-                'multi-Z path must populate z_matrix_for_strata'
-            )
-            r_k, _ = partial_spearman_rho_multi(
-                x_k, y_k, z_matrix_multi[mask],
-            )
-        if math.isnan(r_k):
-            continue
-        r_out.append(float(r_k))
-        n_out.append(n_k)
-    return tuple(r_out), tuple(n_out)
 
 
 def _detect_granularity(
@@ -267,7 +201,7 @@ def _collect_per_burst(
 
 @analysis
 def partial_spearman(
-    cells: Iterable[Mapping[str, object]],
+    cells: pl.DataFrame | Iterable[Mapping[str, object]],
     *,
     x: _ScalarOrPerBurst,
     y: _ScalarOrPerBurst,
@@ -291,7 +225,17 @@ def partial_spearman(
 
     Returns NaN ρ/p when no stratum survives the size + df
     floors."""
-    cells_list = list(cells)
+    # Canonical input is `pl.DataFrame`; Iterable[Mapping]
+    # accepted as back-compat.
+    from corroborate._internals.polars import to_dicts as _to_dicts
+    from corroborate.data.kernel import cells_to_dataframe
+    cells_list: list[Mapping[str, object]]
+    if isinstance(cells, pl.DataFrame):
+        cells_list = list(_to_dicts(cells))
+    else:
+        # Synthetic test fixtures / ad-hoc dict lists.
+        cells_df = cells_to_dataframe(cells)
+        cells_list = list(_to_dicts(cells_df))
     granularity = _detect_granularity(x, y, conditioning)
     if granularity == 'per_cell':
         # Type narrowing for pyright — _detect_granularity guarantees
@@ -330,12 +274,10 @@ def partial_spearman(
             stratify_by=stratify_by, granularity=granularity,
             rho_pooled=float('nan'), p_value=float('nan'),
             n_obs_total=0, n_strata=0,
-            rho_per_stratum=(), n_per_stratum=(),
         )
 
     x_np = np.asarray(xs, dtype=np.float64)
     y_np = np.asarray(ys, dtype=np.float64)
-    z_matrix_for_strata: npt.NDArray[np.float64] | None = None
     if len(conditioning) == 0:
         rho, p = stratified_spearman_rho(
             x_np, y_np, strata,
@@ -358,7 +300,6 @@ def partial_spearman(
         z_matrix: npt.NDArray[np.float64] = np.column_stack(
             [np.asarray(col, dtype=np.float64) for col in zs],
         )
-        z_matrix_for_strata = z_matrix
         rho, p = stratified_partial_spearman_rho_multi(
             x_np, y_np, z_matrix, strata,
             min_stratum_size=min_stratum_size,
@@ -373,20 +314,11 @@ def partial_spearman(
         if c >= min_stratum_size and c > df_floor
     )
 
-    rho_per_stratum, n_per_stratum = _compute_per_stratum_rho(
-        x_np=x_np, y_np=y_np, zs=zs, strata=strata,
-        z_matrix_multi=z_matrix_for_strata,
-        min_stratum_size=min_stratum_size,
-        k_cond=len(conditioning),
-    )
-
     return PartialSpearmanResult(
         x=x_name, y=y_name, conditioning=cond_names,
         stratify_by=stratify_by, granularity=granularity,
         rho_pooled=float(rho), p_value=float(p),
         n_obs_total=len(xs), n_strata=n_strata,
-        rho_per_stratum=rho_per_stratum,
-        n_per_stratum=n_per_stratum,
     )
 
 

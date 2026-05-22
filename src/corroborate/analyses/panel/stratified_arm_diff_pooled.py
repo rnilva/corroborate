@@ -32,6 +32,8 @@ import math
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
+import polars as pl
+
 from corroborate.bridge.analysis import analysis
 from corroborate.bridge.verdict import RefutationClass, Verdict
 from corroborate.stats.effect_size import (
@@ -152,7 +154,7 @@ class StratifiedArmDiffPooledResult:
 
 @analysis
 def stratified_arm_diff_pooled(
-    cells: Iterable[Mapping[str, object]],
+    cells: pl.DataFrame | Iterable[Mapping[str, object]],
     *,
     source: str,
     treatment_arm: str,

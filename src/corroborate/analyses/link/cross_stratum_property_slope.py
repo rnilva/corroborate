@@ -43,10 +43,19 @@ from __future__ import annotations
 import math
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 import numpy as np
+import polars as pl
 import scipy.stats as stats
+
+if TYPE_CHECKING:
+    # Type-only import (avoids analyses ↔ data runtime cycle).
+    from corroborate.data import DerivedSpec as DerivedSpecKernel
+else:
+    # Runtime-only forward ref so `_derive_per_stratum_covariate`'s
+    # signature annotation parses without the import-cycle hit.
+    DerivedSpecKernel = object  # placeholder
 
 from corroborate.analyses.panel.stratified_arm_diff_pooled import (
     stratified_arm_diff_pooled,
@@ -96,7 +105,7 @@ class CrossStratumPropertySlopeResult:
 def _derive_per_stratum_covariate(
     cells: list[Mapping[str, object]],
     *,
-    spec: DerivedCovariateSpec,
+    spec: 'DerivedCovariateSpec | DerivedSpecKernel',
     treatment_arm: str,
     baseline_arm: str,
     stratify_by: tuple[str, ...],
@@ -104,14 +113,57 @@ def _derive_per_stratum_covariate(
 ) -> Mapping[object, float]:
     """Derive `{stratum_key: aggregate(column)}` from cells in scope.
 
-    Filters cells by `arm_filter`, groups by `stratify_by[key_position]`,
-    aggregates `column` via `aggregator`. Cells with non-finite
-    column value are dropped before aggregation. Returns a frozen
-    mapping suitable as the `covariates_per_key` input to the slope
-    analysis."""
+    Dispatches on spec type:
+    - `DerivedCovariateSpec` (legacy, with `arm_filter:
+      Literal[...]`): per-cell loop honouring `arm_filter`.
+    - `corroborate.data.DerivedSpec` (framework, with
+      `cell_filter: pl.Expr | None`): delegates to the kernel
+      (`corroborate.data.kernel.per_stratum_aggregate`) so the
+      Panel path and this path share semantics.
+
+    Filters cells by the spec's filter, groups by
+    `stratify_by[key_position]`, aggregates `column` via
+    `aggregator`. Cells with non-finite column value are dropped
+    before aggregation. Returns a frozen mapping suitable as the
+    `covariates_per_key` input to the slope analysis."""
+    # Lazy import to avoid analyses ↔ data runtime cycle.
+    from corroborate.data import DerivedSpec
+    from corroborate.data.kernel import (
+        cells_to_dataframe, per_stratum_aggregate,
+    )
+    if isinstance(spec, DerivedSpec):
+        # Framework path — delegate to the kernel. The kernel's
+        # stratify_by is the full panel-grouping tuple; we
+        # project to the single key_position'th key after.
+        kernel_out = per_stratum_aggregate(
+            cells_to_dataframe(cells),
+            column=spec.column,
+            aggregator=spec.aggregator,
+            stratify_by=stratify_by,
+            cell_filter=spec.cell_filter,
+            min_n=spec.effective_min_n,
+        )
+        # Project: the slope analysis's `covariate_key_field`
+        # picks ONE stratify key. Aggregate over the other
+        # stratify dimensions when present (multiple sub-keys
+        # share the same `covariate_key_field` value — rare in
+        # substrate use; substrate authors typically pass
+        # stratify_by=(covariate_key_field,) for cross-env panels.
+        # When n_stratify > 1, take the first occurrence per
+        # key — deterministic + the substrate-author should
+        # collapse upstream.
+        out: dict[object, float] = {}
+        for stratum_id, v in kernel_out.items():
+            if len(stratum_id) <= key_position:
+                continue
+            key = stratum_id[key_position]
+            if key not in out:
+                out[key] = v
+        return out
+    # Legacy DerivedCovariateSpec path — arm_filter Literal +
+    # per-cell loop. Same semantics as before the kernel landed.
     grouped: dict[object, list[float]] = {}
     for cell in cells:
-        # Arm filter
         arm = cell.get('arm_key')
         if not isinstance(arm, str):
             continue
@@ -120,14 +172,12 @@ def _derive_per_stratum_covariate(
         if spec.arm_filter == 'treatment' and arm != treatment_arm:
             continue
         # `both` keeps both
-        # Stratum key
         sid_parts: list[object] = []
         for sb in stratify_by:
             sid_parts.append(cell.get(sb))
         if len(sid_parts) <= key_position:
             continue
         key = sid_parts[key_position]
-        # Column value
         v = cell.get(spec.column)
         if not isinstance(v, (int, float)):
             continue
@@ -135,30 +185,30 @@ def _derive_per_stratum_covariate(
         if not math.isfinite(v_f):
             continue
         grouped.setdefault(key, []).append(v_f)
-    out: dict[object, float] = {}
+    out_legacy: dict[object, float] = {}
     for key, vs in grouped.items():
         if len(vs) < 2:  # SD undefined for n<2
             continue
         arr = np.asarray(vs, dtype=np.float64)
         if spec.aggregator == 'mean':
-            out[key] = float(arr.mean())
+            out_legacy[key] = float(arr.mean())
         elif spec.aggregator == 'std':
-            out[key] = float(arr.std(ddof=1))
+            out_legacy[key] = float(arr.std(ddof=1))
         elif spec.aggregator == 'median':
-            out[key] = float(np.median(arr))
-    return out
+            out_legacy[key] = float(np.median(arr))
+    return out_legacy
 
 
 @analysis
 def cross_stratum_property_slope(
-    cells: Iterable[Mapping[str, object]],
+    cells: pl.DataFrame | Iterable[Mapping[str, object]],
     *,
     treatment_arm: str,
     baseline_arm: str,
     source: str,
     covariate_name: str,
     covariates_per_key: Mapping[object, Mapping[str, float]] | None = None,
-    derived_covariate: DerivedCovariateSpec | None = None,
+    derived_covariate: 'DerivedCovariateSpec | DerivedSpecKernel | None' = None,
     covariate_key_field: str = 'env_name',
     stratify_by: tuple[str, ...] = ('env_name',),
     scope_predictor: str = 'jensen_gap',
@@ -196,6 +246,14 @@ def cross_stratum_property_slope(
     dropped. Spearman over the surviving (covariate, d) pairs.
 
     Returns NaN ρ/p when `n_strata < min_strata`."""
+    # Canonical input is `pl.DataFrame`; Iterable[Mapping]
+    # accepted as back-compat. Normalise at entry then stream
+    # row-dicts through the existing per-cell loop.
+    from corroborate.data.kernel import cells_to_dataframe
+    cells_df: pl.DataFrame = (
+        cells if isinstance(cells, pl.DataFrame)
+        else cells_to_dataframe(cells)
+    )
     if not stratify_by or covariate_key_field not in stratify_by:
         raise ValueError(
             f'cross_stratum_property_slope: covariate_key_field '
@@ -210,7 +268,14 @@ def cross_stratum_property_slope(
             f'derived_covariate={derived_covariate is not None}',
         )
     key_position = stratify_by.index(covariate_key_field)
-    cells_list = list(cells)
+    # Downstream `_derive_per_stratum_covariate` + `stratified_
+    # arm_diff_pooled.fn` accept either DataFrame or
+    # Iterable[Mapping]; materialise once to list[dict] here so
+    # both consumers iterate without re-conversion. `to_dicts()`
+    # returns `list[dict[str, Any]]`; widen to `Mapping[str, object]`
+    # via the framework's covariant boundary helper.
+    from corroborate._internals.polars import to_dicts as _to_dicts
+    cells_list: list[Mapping[str, object]] = list(_to_dicts(cells_df))
     # Build covariates_per_key from cells if a derived spec is given.
     if derived_covariate is not None:
         derived_map = _derive_per_stratum_covariate(

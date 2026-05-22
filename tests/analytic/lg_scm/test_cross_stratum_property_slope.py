@@ -175,3 +175,37 @@ def test_cross_stratum_property_slope_missing_covariates_dropped() -> None:
     )
     assert result.n_strata == 5
     assert math.isnan(result.rho)
+
+
+def test_cross_stratum_property_slope_dataframe_input_identical_to_cells() -> None:
+    """Canonical-input invariant: Iterable[Mapping] and
+    pl.DataFrame inputs produce the same result. Guards against
+    the DataFrame branch diverging from cells branch."""
+    import polars as pl
+
+    cells = _build_cells()
+    covariates_per_key = {
+        env: {'mu_x_cov': mu_x}
+        for env, mu_x in _ENV_MU_X.items()
+    }
+    kwargs = {
+        'treatment_arm': 'treatment',
+        'baseline_arm': 'baseline',
+        'source': 'y_mean',
+        'covariate_name': 'mu_x_cov',
+        'covariates_per_key': covariates_per_key,
+        'covariate_key_field': 'env_name',
+        'scope_predictor': 'z_mean',
+        'min_baseline_predictor': 0.0,
+        'min_strata': 8,
+    }
+    result_cells = cross_stratum_property_slope.fn(cells, **kwargs)
+    result_panel = cross_stratum_property_slope.fn(
+        pl.DataFrame(cells), **kwargs,
+    )
+    assert result_panel.n_strata == result_cells.n_strata
+    assert result_panel.rho == result_cells.rho
+    assert result_panel.p_value == result_cells.p_value
+    assert (
+        result_panel.cohen_d_per_stratum == result_cells.cohen_d_per_stratum
+    )

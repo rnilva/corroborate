@@ -517,14 +517,18 @@ from corroborate.corpus.schema import (  # noqa: E402,PLC0415
 # like `total_steps`, `eval_every`, `n_episodes` are NOT in this
 # set — they're plain int defaults on the dqn claim, NOT
 # Exogenous, so they ARE leaves per the framework's vocabulary.
-_DEFAULT_EXOGENOUS_KEYS: frozenset[str] = frozenset({
+DEFAULT_EXOGENOUS_KEYS: frozenset[str] = frozenset({
     'env_name', 'seed', 'wrappers',
     'env', 'env_params', 'obs_shape', 'n_actions',
     'state_hash', 'eval_episode_cap',
 })
-_DEFAULT_EXOGENOUS_PREFIXES: tuple[str, ...] = (
+DEFAULT_EXOGENOUS_PREFIXES: tuple[str, ...] = (
     'env_params.', 'env.',
 )
+# Underscore-prefix aliases retained for backwards-compat with
+# pre-2026-05-21 callers; new code uses the public names.
+_DEFAULT_EXOGENOUS_KEYS = DEFAULT_EXOGENOUS_KEYS
+_DEFAULT_EXOGENOUS_PREFIXES = DEFAULT_EXOGENOUS_PREFIXES
 
 
 def _partition_columns(

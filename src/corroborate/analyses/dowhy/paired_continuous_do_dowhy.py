@@ -162,6 +162,7 @@ def paired_continuous_do_dowhy(
     arm_field: str = 'arm_key',
     treatment_var_arm: str = 'baseline',
     method_name: str = 'backdoor.linear_regression',
+    random_state: int = 0,
 ) -> PairedContinuousDoResult:
     """Test `do(treatment_var) → Δ_outcome` via DoWhy backdoor +
     refutations.
@@ -224,6 +225,7 @@ def paired_continuous_do_dowhy(
         outcome='delta_outcome',
         dag=dag,
         method_name=method_name,
+        random_state=random_state,
     )
     rcc = _rcc_fn.fn(
         rows,
@@ -231,6 +233,7 @@ def paired_continuous_do_dowhy(
         outcome='delta_outcome',
         dag=dag,
         method_name=method_name,
+        random_state=random_state,
     )
     return PairedContinuousDoResult(
         backdoor=backdoor,

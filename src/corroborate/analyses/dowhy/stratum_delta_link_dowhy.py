@@ -225,6 +225,7 @@ def stratum_delta_link_dowhy(
     arm_field: str = 'arm_key',
     method_name: str = 'backdoor.linear_regression',
     min_baseline_predictor: float = 0.05,
+    random_state: int = 0,
 ) -> StratumDeltaLinkDowhyResult:
     """Test `Δ_predictor → Δ_target` on stratum-level (env, burst)
     Δ rows via DoWhy backdoor + refutations.
@@ -269,6 +270,7 @@ def stratum_delta_link_dowhy(
     backdoor, placebo, rcc = backdoor_with_refutations(
         rows, treatment=treatment_col, outcome=outcome_col,
         dag=dag, method_name=method_name,
+        random_state=random_state,
     )
     return StratumDeltaLinkDowhyResult(
         backdoor=backdoor,

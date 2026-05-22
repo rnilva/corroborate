@@ -136,10 +136,17 @@ def _run_refuter(
     dag: DAGLike,
     method_name: str,
     refuter_method: str,
+    random_state: int,
 ) -> RefutationResult:
     """Generic refutation runner: identifies, estimates the real
     ATE, then runs the named refuter. `refuter_method` is the
-    DoWhy refuter name (e.g. `'placebo_treatment_refuter'`)."""
+    DoWhy refuter name (e.g. `'placebo_treatment_refuter'`).
+
+    `random_state` seeds DoWhy's refuter RNG so the
+    `random_common_cause` / placebo samples are reproducible
+    independently of the numpy global state — without it,
+    cross-hypothesis test runs that consume the global RNG drift
+    refuter outputs and flip downstream verdicts."""
     cells_list = list(cells)
     df, identified, estimate = _backdoor_estimate(
         cells_list, treatment, outcome, dag, method_name,
@@ -158,10 +165,16 @@ def _run_refuter(
     real_ate = float(getattr(estimate, 'value'))
 
     # `estimate` and `identified` are dynamic DoWhy objects; the
-    # refute_estimate API takes both.
+    # refute_estimate API takes both. `random_state` is forwarded
+    # to the refuter class's __init__ via DoWhy's kwarg pass-through
+    # (RandomCommonCause / PlaceboTreatmentRefuter both accept it).
+    # DoWhy's typed stub doesn't declare `random_state` on
+    # CausalModel.refute_estimate's signature — the keyword goes
+    # through **kwargs to the refuter class init at runtime.
     model = _build_causal_model(df, treatment, outcome, dag)
     refuter = model.refute_estimate(
         identified, estimate, method_name=refuter_method,
+        random_state=random_state,  # pyright: ignore[reportCallIssue]
     )
     refuted_ate = _refuter_effect(refuter)
     return RefutationResult(
@@ -184,6 +197,7 @@ def placebo_refutation(
     outcome: str,
     dag: DAGLike,
     method_name: str = 'backdoor.linear_regression',
+    random_state: int = 0,
 ) -> RefutationResult:
     """Refute the ATE by replacing the treatment with a placebo
     (random permutation). A robust estimate yields
@@ -193,10 +207,20 @@ def placebo_refutation(
     when the model is correct, so a `drift < tolerance` gate
     would only fire when the real ATE is itself near zero, which
     is the opposite of robustness). See `RefutationResult`'s
-    docstring for the per-refuter gate convention."""
+    docstring for the per-refuter gate convention.
+
+    `random_state=0` is the default since 2026-05. Pre-2026-05
+    callers got the numpy global RNG (which made refuter outputs
+    depend on sibling-hypothesis import order in the same
+    pytest session — see the ddqn_sweeps snapshot-drift incident).
+    The deterministic default trades implicit-across-runs
+    variation for cross-session reproducibility; pass an
+    explicit different seed to probe sensitivity to the
+    synthetic-confounder draw."""
     return _run_refuter(
         cells, treatment, outcome, dag, method_name,
         refuter_method='placebo_treatment_refuter',
+        random_state=random_state,
     )
 
 
@@ -208,14 +232,25 @@ def random_common_cause_refutation(
     outcome: str,
     dag: DAGLike,
     method_name: str = 'backdoor.linear_regression',
+    random_state: int = 0,
 ) -> RefutationResult:
     """Refute the ATE by adding a random synthetic common cause
     of treatment and outcome. A robust estimate is invariant to
     the synthetic confounder: `refuted_ate ≈ real_ate` and
-    `drift ≈ 0`. Bridge gate: `result.drift < tolerance` → HELD."""
+    `drift ≈ 0`. Bridge gate: `result.drift < tolerance` → HELD.
+
+    `random_state=0` is the default since 2026-05 (same change
+    documented on `placebo_refutation`). Pre-2026-05 RCC outputs
+    drew from numpy's global RNG and so varied across re-runs
+    based on what consumed RNG state earlier in the process —
+    findings that hovered at the HELD/PI boundary on RCC drift
+    were partially-stable-by-accident under that scheme.
+    Deterministic seed 0 locks the synthetic-confounder draw;
+    pass a different int to probe sensitivity."""
     return _run_refuter(
         cells, treatment, outcome, dag, method_name,
         refuter_method='random_common_cause',
+        random_state=random_state,
     )
 
 

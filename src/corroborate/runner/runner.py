@@ -200,13 +200,26 @@ def _validate_hypothesis(h: object) -> Hypothesis:
     return h
 
 
-def _default_cache_path(h: Hypothesis) -> Path:
+def default_cache_path(h: Hypothesis) -> Path:
     """Per-hypothesis cache file at
     `experiments/data/cache/<short>.parquet`. For modules, `<short>`
     is the last segment of the dotted path; for classes, it's the
-    class's bare `__name__`."""
+    class's bare `__name__`.
+
+    Public so out-of-runner callers (Panel, CLI, tests) resolve the
+    canonical cache location without re-implementing the path logic
+    — if the runner's cache-stamp convention ever changes, every
+    consumer shifts together. The legacy underscore-prefixed name
+    stays as a deprecated alias for one cycle so existing imports
+    don't break in-flight."""
     short = h.__name__.split('.')[-1]
     return Path('experiments/data/cache') / f'{short}.parquet'
+
+
+# Deprecated alias — kept for one cycle so in-flight imports
+# (`from corroborate.runner.runner import _default_cache_path`)
+# don't break before callers update. Remove after one cycle.
+_default_cache_path = default_cache_path
 
 
 def _default_report_path(h: Hypothesis) -> Path:
@@ -232,9 +245,16 @@ def _measurable_signature(name: str) -> str | None:
     return None if m is None else m.signature()
 
 
-def _manifest_path(cache_path: Path) -> Path:
-    """Manifest sidecar lives alongside the cache parquet."""
+def manifest_path(cache_path: Path) -> Path:
+    """Measurable-hash manifest sidecar (`.hashes.json`) alongside
+    the cache parquet. Public so out-of-runner callers can locate
+    + unlink the manifest (Panel's `to_cache` does this to force
+    the next runner pass to rebuild a fresh manifest)."""
     return cache_path.with_suffix('.hashes.json')
+
+
+# Deprecated underscore-prefixed alias — kept for one cycle.
+_manifest_path = manifest_path
 
 
 def _read_manifest(path: Path) -> dict[str, str]:
@@ -357,16 +377,22 @@ class SourceDrift:
     ]
 
 
-def _sources_path(cache_path: Path) -> Path:
+def sources_sidecar_path(cache_path: Path) -> Path:
     """Sidecar lives alongside the cache parquet, mirroring
-    `_manifest_path`'s `.hashes.json` convention."""
+    `_manifest_path`'s `.hashes.json` convention. Public so
+    out-of-runner callers (Panel) can locate the sidecar
+    without re-deriving the convention."""
     return cache_path.with_suffix('.sources.json')
 
 
-def _read_sources(path: Path) -> CacheSources | None:
+def read_sources(path: Path) -> CacheSources | None:
     """Parse the sidecar JSON; tolerant of corruption / wrong shape
     (returns None rather than raising) so a malformed sidecar just
-    triggers a regenerable-state report rather than aborting."""
+    triggers a regenerable-state report rather than aborting.
+
+    Public for the same reason as `sources_sidecar_path` — the
+    `CacheSources` typed structure is the canonical sidecar shape;
+    consumers shouldn't re-parse the JSON by hand."""
     if not path.exists():
         return None
     try:
@@ -378,10 +404,10 @@ def _read_sources(path: Path) -> CacheSources | None:
     return CacheSources.from_dict(parsed)
 
 
-def _write_sources(path: Path, sources: CacheSources) -> None:
+def write_sources(path: Path, sources: CacheSources) -> None:
     """Atomic write. Sorts entries by `corpus` and uses
     `sort_keys=True` so byte-level diffs across re-emits are
-    stable (test #12)."""
+    stable (test #12). Public per the sidecar-API consolidation."""
     ordered = CacheSources(
         sources=tuple(sorted(sources.sources, key=lambda e: e.corpus)),
     )
@@ -389,6 +415,12 @@ def _write_sources(path: Path, sources: CacheSources) -> None:
         path,
         json.dumps(dict(ordered.as_dict()), indent=2, sort_keys=True),
     )
+
+
+# Deprecated underscore-prefixed aliases — kept for one cycle.
+_sources_path = sources_sidecar_path
+_read_sources = read_sources
+_write_sources = write_sources
 
 
 def _invalidate_drifted(

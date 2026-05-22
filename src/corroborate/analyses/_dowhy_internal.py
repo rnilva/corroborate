@@ -178,6 +178,7 @@ def backdoor_with_refutations(
     outcome: str,
     dag: DAGLike,
     method_name: str = 'backdoor.linear_regression',
+    random_state: int = 0,
 ) -> tuple[
     'BackdoorResult', 'RefutationResult', 'RefutationResult',
 ]:
@@ -186,7 +187,12 @@ def backdoor_with_refutations(
     triple. Used by `stratum_*_link_dowhy` analyses that always
     run the three together — the refutation chain is the
     methodologically required corroboration, not a separable
-    choice (CLAUDE.md §"Mediation recipe" steps 1+5)."""
+    choice (CLAUDE.md §"Mediation recipe" steps 1+5).
+
+    `random_state` seeds DoWhy's refuter RNGs so the placebo /
+    RCC samples are reproducible independently of numpy's global
+    state. Passes through to `placebo_refutation` and
+    `random_common_cause_refutation`."""
     from corroborate.analyses.dowhy import (
         backdoor_ate, placebo_refutation,
         random_common_cause_refutation,
@@ -199,10 +205,12 @@ def backdoor_with_refutations(
     placebo = placebo_refutation.fn(
         cells_list, treatment=treatment, outcome=outcome,
         dag=dag, method_name=method_name,
+        random_state=random_state,
     )
     rcc = random_common_cause_refutation.fn(
         cells_list, treatment=treatment, outcome=outcome,
         dag=dag, method_name=method_name,
+        random_state=random_state,
     )
     return backdoor, placebo, rcc
 

@@ -286,6 +286,7 @@ def stratum_link_moderation_dowhy(
     arm_field: str = 'arm_key',
     method_name: str = 'backdoor.linear_regression',
     min_baseline_predictor: float = 0.05,
+    random_state: int = 0,
 ) -> StratumLinkModerationDowhyResult:
     """Test whether `attenuator > binary_threshold` moderates the
     `Δ_predictor → Δ_target` slope via DoWhy backdoor on the
@@ -346,10 +347,12 @@ def stratum_link_moderation_dowhy(
     placebo = placebo_refutation.fn(
         rows, treatment=t_col, outcome=o_col,
         dag=dag, method_name=method_name,
+        random_state=random_state,
     )
     rcc = random_common_cause_refutation.fn(
         rows, treatment=t_col, outcome=o_col,
         dag=dag, method_name=method_name,
+        random_state=random_state,
     )
     return StratumLinkModerationDowhyResult(
         backdoor=backdoor,
