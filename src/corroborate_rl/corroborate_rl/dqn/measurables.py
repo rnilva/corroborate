@@ -3694,6 +3694,7 @@ register(mc_return_last_quarter)
 def _mc_return_raw_per_burst_mean(
     record: Mapping[str, object],
 ) -> npt.NDArray[np.floating]:
+    # [v2-fwd] uses _compute_mc_return_raw's forward form.
     raw = _compute_mc_return_raw(record)
     if raw.ndim != 2 or raw.size == 0:
         return np.full((0,), float('nan'), dtype=np.float64)
@@ -4424,7 +4425,11 @@ def eval_best_burst_raw_mean(record: Mapping[str, object]) -> float:
     `episode_length` + `gamma`. The best-burst-seen metric on the
     raw (undiscounted) return — γ-invariant policy quality. Use
     for bridges that compare across γ or across envs with
-    different reward scaling."""
+    different reward scaling.
+
+    [v2-fwd] Reconstruction switched to the forward form to avoid
+    cancellation-error accumulation at saturated-outcome envs.
+    See `_compute_mc_return_raw` docstring."""
     raw = _compute_mc_return_raw(record)
     if raw.ndim != 2 or raw.size == 0:
         return float('nan')
@@ -4467,7 +4472,10 @@ def eval_final_raw_mean(record: Mapping[str, object]) -> float:
     late-step weight in 50-step episodes (γ^50 ≈ 0.61), so
     discounted and undiscounted measure different things at
     intermediate γ. The raw version is the natural game-score
-    metric."""
+    metric.
+
+    [v2-fwd] Reconstruction switched to the forward form to avoid
+    cancellation-error accumulation at saturated-outcome envs."""
     raw = _compute_mc_return_raw(record)
     if raw.ndim != 2 or raw.size == 0:
         return float('nan')
@@ -4481,7 +4489,10 @@ def eval_final_raw_mean(record: Mapping[str, object]) -> float:
 def eval_full_auc_raw_mean(record: Mapping[str, object]) -> float:
     """Undiscounted counterpart of `eval_full_auc_mean`:
     `mean(mc_return_raw)` over all bursts × episodes. γ-invariant
-    integrated AUC for cross-γ / cross-env comparisons."""
+    integrated AUC for cross-γ / cross-env comparisons.
+
+    [v2-fwd] Reconstruction switched to the forward form to avoid
+    cancellation-error accumulation at saturated-outcome envs."""
     raw = _compute_mc_return_raw(record)
     if raw.ndim != 2 or raw.size == 0:
         return float('nan')
