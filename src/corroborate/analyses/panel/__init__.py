@@ -81,6 +81,9 @@ def per_stratum_panel[K: _SupportsLessThan, R](
 
 # Side-effect submodule imports — populate the @analysis
 # registry on `import corroborate.analyses.panel`.
+from corroborate.analyses.panel.cross_env_probability_of_improvement import (  # noqa: F401, E402
+    cross_env_probability_of_improvement as _cross_env_p_xy,  # pyright: ignore[reportUnusedImport]
+)
 from corroborate.analyses.panel.meta_regression_paired_g import (  # noqa: F401, E402
     meta_regression_paired_g as _mr,  # pyright: ignore[reportUnusedImport]
 )
