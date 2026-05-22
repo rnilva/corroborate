@@ -40,10 +40,43 @@ JDG_AVAILABLE_ENVS: tuple[str, ...] = (
 )
 
 
+# Canonical k=1 corpora at γ=0.999 — one per env (cells with
+# jdg+jens+eval finite after the 2026-05-22 backfill).
+CANONICAL_G0999_CORPORA: tuple[str, ...] = (
+    'gamma_sweep_acrobot',
+    'minatar_gamma_sweep_k1/g0999_Asterix-MinAtar',
+    'minatar_gamma_sweep_k1/g0999_Breakout-MinAtar',
+    'ddqn_vs_vanilla',                       # FR
+    'g0999_Freeway-MinAtar',
+    'lunarlander_tuned_sync1000_gpu',        # LL canonical sync=1000
+    'metamaze_g0999_1M_postfix',
+    'fa_deep_g0999',                         # MC
+    'g0999_Snake-jumanji',
+    'g0999_SpaceInvaders-MinAtar',
+)
+
+
+# Canonical k=1 corpora at γ=0.99 — only available for the 4
+# envs with γ=0.99 canonical sweeps. The five MinAtar envs at
+# γ=0.99 only have HP-sweep corpora (k=2 / k=4 or alpha sweeps),
+# not canonical-k=1; excluded honestly.
+CANONICAL_G099_CORPORA: tuple[str, ...] = (
+    'gamma_sweep_acrobot',                   # Acrobot γ=0.99 slice
+    'gamma_sweep_fourrooms',                 # FR γ=0.99 slice
+    'g099_panel_extension_lunar_cpu',        # LL γ=0.99
+    'metamaze_g099_1M_postfix',              # MetaMaze γ=0.99
+)
+
+
 # Canonical γ + k=1 + dormancy-availability scope. AND-combined
 # into every chain bridge via the module-level `MODULE_SCOPE`.
 CANONICAL_DORMANCY_SCOPE: pl.Expr = (
-    (pl.col('gamma') == 0.999)
+    (
+        # γ=0.999 canonical corpora (full 10-env panel)
+        ((pl.col('gamma') == 0.999) & pl.col('corpus').is_in(CANONICAL_G0999_CORPORA))
+        # γ=0.99 canonical corpora (4-env subpanel — only envs with k=1 γ=0.99 sweeps)
+        | ((pl.col('gamma') == 0.99) & pl.col('corpus').is_in(CANONICAL_G099_CORPORA))
+    )
     & (
         pl.col('action_duplicate_k').is_null()
         | (pl.col('action_duplicate_k') == 1)
@@ -77,22 +110,17 @@ PREMISE_ACTIVE_PER_CELL: pl.Expr = pl.col('jensen_dormancy_gap') == 0.0
 LINK_ACTIVE_PER_CELL: pl.Expr = pl.col('bootstrap_fraction') > 0.5
 
 
-# Per-stratum (corpus-level) premise-activation. Drops corpora
-# where premise is *broadly* dormant — i.e., median per-cell
-# `jensen_dormancy_gap` exceeds a structural threshold. Avoids
-# the per-cell post-treatment selection bias where DDQN's
-# intervention itself shifts which cells satisfy `gap == 0`.
+# Per-stratum (corpus + γ) premise-activation. Drops corpus-γ
+# slices where premise is *broadly* dormant — i.e., median
+# per-cell `jensen_dormancy_gap` exceeds a structural threshold.
+# Avoids per-cell post-treatment selection bias.
 #
-# Partition is `corpus`, not `env_name`. The cache holds
-# multiple corpora per env (e.g. Breakout appears in several
-# HP sweeps); `over(['env_name'])` would pool the median across
-# all of them, and any corpus with NaN jdg (e.g. older sweeps
-# pre-dormancy-backfill) would NaN-propagate the median for
-# the entire env. Partitioning by `corpus` gives per-corpus
-# medians; the canonical-pool corpus's jdg distribution
-# determines its own activation.
+# Partition is (corpus, gamma). Corpora like `gamma_sweep_acrobot`
+# hold cells across multiple γ values; pooling the median over
+# the whole corpus would mix the γ=0.99 and γ=0.999 regimes.
+# Per-(corpus, γ) gives the right slice-level activation test.
 PREMISE_ACTIVE_PER_STRATUM: pl.Expr = (
-    pl.col('jensen_dormancy_gap').median().over(['corpus']) == 0.0
+    pl.col('jensen_dormancy_gap').median().over(['corpus', 'gamma']) == 0.0
 )
 
 

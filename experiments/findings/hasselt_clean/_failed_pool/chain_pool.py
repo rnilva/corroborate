@@ -49,7 +49,7 @@ def intervention_reduces_bias__pool_inadequate(
     source: str = 'jensen_gap',
     treatment_arm: str = DDQN_ARM,
     baseline_arm: str = VANILLA_ARM,
-    stratify_by: tuple[str, ...] = ('env_name',),
+    stratify_by: tuple[str, ...] = ('env_name', 'gamma'),
     min_seeds_per_arm: int = 5,
 ) -> tuple[Verdict, RefutationClass | None]:
     """Mech edge via random-effects pool — pedagogically preserved.
@@ -85,7 +85,7 @@ def intervention_helps_outcome__pool_inadequate(
     source: str = 'eval_best_burst_raw_mean',
     treatment_arm: str = DDQN_ARM,
     baseline_arm: str = VANILLA_ARM,
-    stratify_by: tuple[str, ...] = ('env_name',),
+    stratify_by: tuple[str, ...] = ('env_name', 'gamma'),
     min_seeds_per_arm: int = 5,
 ) -> tuple[Verdict, RefutationClass | None]:
     """Outcome edge via random-effects pool — pedagogically

@@ -35,40 +35,60 @@ The pool-based attempt is preserved at
 `experiments/findings/hasselt_clean/_failed_pool/` for the
 methodology-pedagogy story.
 
-# Empirical result (canonical-dormancy panel)
+# Empirical result (canonical-dormancy panel, 13 strata)
 
-  B1   theorem  jdg → jens (vanilla):                        HELD  ρ=-0.48 p=1.4e-11
-  B2   link    jens → outcome (vanilla):                     PI    ρ=-0.27 p=4.4e-12 (|ρ| below threshold)
-  B3   mech do(DDQN) → jens (cross-env consistency):         HELD  9/9 envs, sign-test p=0.002
-  B4   outcome do(DDQN) → outcome (cross-env consistency):   PI    ~6/9 envs, sign-test p=0.254
+  B1   theorem  jdg → jens (vanilla):                        HELD       p=4e-7 across 434 vanilla cells
+  B2   link    jens → outcome (vanilla):                     HELD       ρ=-0.45 p=1.4e-12
+  B3   mech do(DDQN) → jens (cross-env consistency):         HELD       12/13 strata, sign-test p=0.002
+  B4   outcome do(DDQN) → outcome (cross-env consistency):   NO_EFFECT  7/13 strata, sign-test p=0.5
 
-Cluster verdict: UNDERPOWERED (mix of HELD and PI/UP).
+Cluster verdict: REFUTED (B4 NULL refutes; the upstream three
+edges all HELD).
+
+Panel: 9 γ=0.999 strata (Acrobot / Asterix / Breakout / FR /
+Freeway-dropped-by-dormancy / LL / MetaMaze / MC / Snake / SI)
++ 4 γ=0.99 strata (Acrobot / FR / LL / MetaMaze — the only
+envs with k=1 γ=0.99 canonical sweeps). 13 strata total.
 
 # Substantive reading
 
 The chain's structure decomposes the "DDQN's mixed record"
-question into layer-wise verdicts:
+question into layer-wise verdicts on a 13-stratum panel
+(9 γ=0.999 envs + 4 γ=0.99 envs):
 
 - **Theorem holds**: Hasselt's σ-floor empirically predicts
-  observed bias under vanilla (B1 HELD).
-- **Link present** at modest magnitude: ρ=-0.27 across panel
-  cells (B2 PI — framework's |ρ| threshold not met but the
-  correlation is real at p=4e-12).
-- **Mech holds *consistently* across envs**: in 9/9 envs where
-  the premise is broadly active, DDQN reduces the observed
-  Jensen bias (B3 HELD at sign-test p=0.002).
-- **Outcome edge does NOT hold consistently** (B4 PI): DDQN
-  improves outcome in ~6/9 envs but harms / shows null in
-  ~3/9 (Asterix d=-0.80, MetaMaze d=-0.12, MC d=-0.32). The
-  chain's mech→outcome step is empirically *env-conditional*,
-  not uniform.
+  observed bias under vanilla (B1 HELD, p=4e-7 across 434
+  vanilla cells).
+- **Link holds**: bias→outcome correlation under vanilla is
+  ρ=-0.45 at p=1.4e-12 (B2 HELD; was PI on the γ=0.999-only
+  panel — the γ=0.99 strata added enough cells to clear the
+  |ρ| threshold).
+- **Mech holds *consistently* across (env, γ) strata**: 12 of
+  13 strata show DDQN reducing observed Jensen bias (B3 HELD
+  at sign-test p=0.002). The lone sign-flipper is Acrobot
+  γ=0.999 (d=+0.10) — env solved by both arms (V_eb ≈ -76 =
+  solved ceiling), no Hasselt-bias to clip. Acrobot γ=0.99
+  (env still has room to learn) is well-behaved: d=-0.50.
+- **Outcome edge does NOT hold consistently** (B4
+  NO_EFFECT/NULL): 7/13 strata help, 6/13 harm or null. The
+  chain's mech→outcome step is empirically *env-and-γ-
+  conditional*, not uniform. Asterix γ=0.999 (d=-0.80) is the
+  canonical strong-harm case; FR γ=0.999 (d=+3.76) and SI
+  γ=0.999 (d=+2.16) the canonical strong-help cases.
 
 The framework's typed verdict layer reads this as a layer-wise
-diagnosis: the theorem, link, and mechanism all corroborate
-*consistently across envs*; the bite at outcome is env-specific.
-The cluster verdict is UNDERPOWERED (mix of HELD and PI) — an
-honest "the chain holds at the upper three edges but breaks
-inconsistently at outcome".
+diagnosis: theorem, link, and mechanism all corroborate
+*consistently across environments and γ values*; the bite at
+outcome is env-and-γ-specific. The cluster verdict is REFUTED
+because B4's NULL refutes the cluster — but the substantive
+content is sharper than "the chain doesn't hold": *three of
+four edges corroborate at the same scope; the chain breaks at
+the final mech→outcome step in a stratum-conditional way*.
+
+A future follow-up bridge could moderate B4 by an env-feature
+to test cleavage (HYPOTHESIS_AS_GRAPH §3b sibling pattern) —
+the per-stratum d's likely correlate with some env-property
+that explains the help/harm split.
 
 Companion to `experiments/findings/ddqn/finding_hasselt_chain.py`
 (the original 4-bridge cluster reporting SUPPORTED via a
@@ -91,19 +111,10 @@ from experiments.findings.hasselt_clean.chain import (
 )
 
 
-EXPECTED: ClusterVerdict = ClusterVerdict.UNDERPOWERED
+EXPECTED: ClusterVerdict = ClusterVerdict.REFUTED
 
 
-BLOCKED_ON: str | None = (
-    'Empirical state on the canonical-dormancy panel: cluster '
-    'verdict is UNDERPOWERED because the chain holds at three '
-    'edges (B1 HELD, B3 HELD) but the link (B2) and outcome (B4) '
-    'edges fire PI. B2 PI is a |ρ|-threshold issue (correlation '
-    'is real at p=4e-12 but magnitude modest); B4 PI is genuine '
-    'cross-env outcome heterogeneity (~6/9 envs help, ~3/9 harm). '
-    "This is the substantive case-study finding — the chain's "
-    'mech→outcome step is env-conditional, not uniform.'
-)
+BLOCKED_ON: str | None = None
 
 
 BRIDGES: tuple[Bridge, ...] = (
