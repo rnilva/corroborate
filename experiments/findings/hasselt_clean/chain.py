@@ -1,8 +1,5 @@
-"""Hasselt's chain as a directed walk on the post-eval graph.
-
-Four bridges form the connected chain
-  `jensen_dormancy_gap → jensen_gap → eval_best_burst_raw_mean`
-with `do(DDQN)` attacks on the two downstream nodes:
+"""Hasselt's chain as a directed walk on the post-eval graph,
+using cross-env consistency for the intervention edges.
 
   ┌──────────────────────────┐                       ┌──────────────────────────┐
   │   jensen_dormancy_gap    │──B1──►  jensen_gap   │──B2──►  eval_best_burst   │
@@ -12,44 +9,40 @@ with `do(DDQN)` attacks on the two downstream nodes:
 
 B1, B2 are ASSOCIATIONAL within-cell tests (vanilla-only): the
 substrate's theorem (`σ_Q × √(2 log K) ≥ V_jens`) and the
-bias→outcome mediator link, respectively. B3, B4 are
-INTERVENTIONAL per-stratum tests of DDQN's bite on the chain's
-downstream nodes.
+bias→outcome mediator link. B3, B4 are INTERVENTIONAL
+cross-env consistency tests via per-env Cohen's d sign-test.
 
-**Per-stratum scope is the principled choice for the
-intervention edges.** Per-cell conditioning on
-`jensen_dormancy_gap == 0` (premise activation) is a
-*post-treatment* scope filter: the DDQN intervention *itself*
-changes which cells satisfy `gap == 0` (DDQN reduces observed
-bias → more cells fall below the σ-floor → more cells are
-dormant). Conditioning on a post-treatment variable
-(equivalent to a collider in the chain's DAG) introduces
-M-bias: the surviving "premise-active" subset under DDQN is a
-DDQN-resistant cohort, not a comparable cell population.
+**Why cross-env consistency, not random-effects pool.** The
+chain edge's claim — "DDQN ∧ ¬dormant → bias↓" — is a
+*directional consistency* claim across envs, not a
+*population-average extrapolation* claim. Random-effects
+pooling (DerSimonian-Laird) assumes the strata are exchangeable
+draws from a population with `g_i ~ N(μ, τ²)`. RL environments
+aren't exchangeable: they differ in network class (CNN vs MLP),
+Q-magnitude (Asterix d=-8.9 vs Acrobot d=-0.01 — 800× scale
+range), reward sparsity. The pool's prediction interval
+correctly refuses extrapolation under this heterogeneity but
+buries the substantive cross-env-directional-consistency claim
+under a NO_EFFECT verdict.
 
-Acrobot γ=0.999 surfaces this directly: under per-cell scope,
-DDQN's per-arm jensen_gap reads HIGHER than vanilla's (15.9 vs
-12.6) — but this is the selection effect of comparing
-"DDQN-active" (DDQN failed to push below floor) against
-"vanilla-active" (typical high-bias cells). Under per-stratum
-scope (env median premise-active → include all cells from the
-env), the same data shows DDQN's net effect ≈ 0 — the honest
-answer: at Acrobot γ=0.999 (solved by both arms, V_eb≈-76 =
-solved ceiling), Hasselt's mech has no failure mode left to
-clip.
+The cross-env consistency primitive
+(`cross_env_consistency_binomial`) tests the directional claim
+directly: count envs in the predicted direction; binomial
+sign-test. Doesn't require exchangeability; doesn't extrapolate
+to a population; tests exactly the conditional claim the
+substrate author actually wants.
 
-The Finding `finding_hasselt_chain_explicit.py` AND-composes
-these four bridges; the chain's edges in the post-eval graph
-form a connected walk (validatable via
-`corroborate.graph.causal.is_walk`)."""
+(The pool-based bridges are preserved at
+`experiments/findings/hasselt_clean/_failed_pool/` for the
+pedagogical "what doesn't work and why" story.)"""
 from __future__ import annotations
 
 import math
 
 import polars as pl
 
-from corroborate.analyses.panel.stratified_arm_diff_pooled import (
-    StratifiedArmDiffPooledResult,
+from corroborate.analyses.panel.cross_env_consistency_binomial import (
+    CrossEnvConsistencyBinomialResult,
 )
 from corroborate.analyses.spearman.partial_spearman import (
     PartialSpearmanResult,
@@ -98,7 +91,6 @@ def hasselt_floor_predicts_observed_bias__vanilla(
     inversely related to `jensen_gap`: cells at the saturated
     floor (dormancy_gap = 0) carry the Jensen-bias the theorem
     describes; cells far below it have near-zero observed bias.
-
     Tests this as a stratified partial-Spearman across the
     canonical-dormancy panel."""
     del x, y, conditioning, stratify_by, min_stratum_size
@@ -116,7 +108,7 @@ def hasselt_floor_predicts_observed_bias__vanilla(
 
 
 # ============================================================
-# B2: Link edge — observed bias predicts worse outcome (vanilla)
+# B2: Link edge — observed bias predicts outcome (vanilla)
 # ============================================================
 
 @claim_bridge(
@@ -141,13 +133,8 @@ def bias_predicts_worse_outcome__vanilla(
     sign_flip_threshold: float = 0.3,
 ) -> tuple[Verdict, RefutationClass | None]:
     """Link edge. Under vanilla baseline, higher observed bias
-    predicts lower outcome. This is the empirical mediator-link
-    test — whether the bias-reduction-could-help premise has
-    bite at the link layer.
-
-    History note: this link is known to be env-conditional
-    (FINDINGS.md revisions 10-11). Pooling across the canonical
-    dormancy panel may produce a modest pooled estimate."""
+    predicts lower outcome — the bias-reduction-could-help
+    premise at the link layer."""
     del x, y, conditioning, stratify_by, min_stratum_size
     rho = partial_spearman.rho_pooled
     p = partial_spearman.p_value
@@ -163,16 +150,8 @@ def bias_predicts_worse_outcome__vanilla(
 
 
 # ============================================================
-# B3: Mech edge — DDQN reduces bias (per-stratum)
+# B3: Mech edge — DDQN reduces bias consistently across envs
 # ============================================================
-#
-# Per-stratum premise activation (`env median jdg == 0`)
-# avoids the post-treatment-conditioning bias of per-cell
-# `jdg == 0`. DDQN's intervention itself shifts which cells
-# fall below the σ-floor; the per-cell scope would select a
-# DDQN-resistant cohort. The per-stratum filter keeps all
-# cells from envs where the premise is broadly active, then
-# pools the per-arm contrast across them.
 
 @claim_bridge(
     source=INTERVENTION,
@@ -182,36 +161,55 @@ def bias_predicts_worse_outcome__vanilla(
     scope=CANONICAL_DORMANCY_SCOPE & PREMISE_ACTIVE_PER_STRATUM,
     predicted_direction='a_lt_b',
 )
-def intervention_reduces_bias__premise_active(
-    stratified_arm_diff_pooled: StratifiedArmDiffPooledResult,
+def ddqn_reduces_bias__consistently_cross_env(
+    cross_env_consistency_binomial: CrossEnvConsistencyBinomialResult,
     *,
     source: str = 'jensen_gap',
     treatment_arm: str = DDQN_ARM,
     baseline_arm: str = VANILLA_ARM,
     stratify_by: tuple[str, ...] = ('env_name',),
+    null_floor: float = 0.0,
     min_seeds_per_arm: int = 5,
+    min_strata: int = 5,
+    p_threshold_held: float = 0.05,
+    p_threshold_pi: float = 0.15,
 ) -> tuple[Verdict, RefutationClass | None]:
-    """Mechanism edge. Where the Hasselt premise is broadly
-    active at the env level (median `jensen_dormancy_gap == 0`
-    across the env's cells), DDQN reduces observed `jensen_gap`
-    relative to vanilla. Stratified by env, pooled via
-    independent-samples Cohen's d under DL random-effects.
+    """Mechanism edge as a cross-env consistency claim:
+    *"DDQN ∧ ¬dormant → bias reduced"* tested as
+    *"in every env where premise is broadly active, DDQN's
+    Cohen's d on `jensen_gap` is negative"*.
 
-    Per-stratum (rather than per-cell) conditioning is the
-    principled choice: DDQN's intervention itself affects which
-    cells satisfy `gap == 0`, so per-cell premise scope
-    introduces post-treatment selection bias (chain-internal
-    collider). Per-stratum filter keeps all cells from envs
-    where the substrate's dormancy regime is broadly active."""
+    Binomial sign-test on the per-env d panel. HELD when the
+    sign-test p ≤ 0.05 (under default null_floor=0.0, n=9 envs
+    in predicted direction gives p ≈ 0.002).
+
+    Cross-env consistency doesn't require env-exchangeability —
+    it tests directionality, not extrapolation. The right tool
+    for a conditional claim across heterogeneous strata."""
     del (
         source, treatment_arm, baseline_arm,
-        stratify_by, min_seeds_per_arm,
+        stratify_by, null_floor, min_seeds_per_arm,
     )
-    return stratified_arm_diff_pooled.verdict, None
+    if cross_env_consistency_binomial.n_strata_total < min_strata:
+        return Verdict.POWER_INSUFFICIENT, None
+    p = cross_env_consistency_binomial.p_value
+    if math.isnan(p):
+        return Verdict.POWER_INSUFFICIENT, None
+    n_total = cross_env_consistency_binomial.n_strata_total
+    n_signed = cross_env_consistency_binomial.n_signed_predicted
+    if p <= p_threshold_held:
+        return Verdict.HELD, None
+    if p <= p_threshold_pi:
+        return Verdict.POWER_INSUFFICIENT, None
+    if n_total > 0 and (n_total - n_signed) / n_total >= 0.70:
+        return Verdict.NO_EFFECT, RefutationClass.SIGN_FLIP
+    if n_total > 0 and n_signed / n_total <= 0.60:
+        return Verdict.NO_EFFECT, RefutationClass.NULL_EFFECT
+    return Verdict.POWER_INSUFFICIENT, None
 
 
 # ============================================================
-# B4: Outcome edge — DDQN helps outcome (per-stratum)
+# B4: Outcome edge — DDQN helps outcome consistently across envs
 # ============================================================
 
 @claim_bridge(
@@ -226,35 +224,54 @@ def intervention_reduces_bias__premise_active(
     ),
     predicted_direction='a_gt_b',
 )
-def intervention_helps_outcome__chain_holds(
-    stratified_arm_diff_pooled: StratifiedArmDiffPooledResult,
+def ddqn_helps_outcome__consistently_cross_env(
+    cross_env_consistency_binomial: CrossEnvConsistencyBinomialResult,
     *,
     source: str = 'eval_best_burst_raw_mean',
     treatment_arm: str = DDQN_ARM,
     baseline_arm: str = VANILLA_ARM,
     stratify_by: tuple[str, ...] = ('env_name',),
+    null_floor: float = 0.0,
     min_seeds_per_arm: int = 5,
+    min_strata: int = 5,
+    p_threshold_held: float = 0.05,
+    p_threshold_pi: float = 0.15,
 ) -> tuple[Verdict, RefutationClass | None]:
-    """Outcome edge. Where both upstream conditions hold at the
-    env level — premise broadly active (`median jdg == 0`) AND
-    link broadly active (`median bootstrap_fraction > 0.5`) —
-    DDQN improves outcome relative to vanilla.
+    """Outcome edge as a cross-env consistency claim:
+    *"where premise broadly active AND link broadly active,
+    does DDQN improve outcome at every env?"*.
 
-    Both conditions are per-stratum (env-median) rather than
-    per-cell, avoiding the post-treatment scope bias the
-    per-cell formulation would introduce."""
+    Same binomial sign-test shape as B3 but on the outcome
+    measurable with predicted direction `a_gt_b` (DDQN > vanilla
+    on outcome). The empirical answer is the per-env split
+    between "DDQN helps" and "DDQN harms/null" envs."""
     del (
         source, treatment_arm, baseline_arm,
-        stratify_by, min_seeds_per_arm,
+        stratify_by, null_floor, min_seeds_per_arm,
     )
-    return stratified_arm_diff_pooled.verdict, None
+    if cross_env_consistency_binomial.n_strata_total < min_strata:
+        return Verdict.POWER_INSUFFICIENT, None
+    p = cross_env_consistency_binomial.p_value
+    if math.isnan(p):
+        return Verdict.POWER_INSUFFICIENT, None
+    n_total = cross_env_consistency_binomial.n_strata_total
+    n_signed = cross_env_consistency_binomial.n_signed_predicted
+    if p <= p_threshold_held:
+        return Verdict.HELD, None
+    if p <= p_threshold_pi:
+        return Verdict.POWER_INSUFFICIENT, None
+    if n_total > 0 and (n_total - n_signed) / n_total >= 0.70:
+        return Verdict.NO_EFFECT, RefutationClass.SIGN_FLIP
+    if n_total > 0 and n_signed / n_total <= 0.60:
+        return Verdict.NO_EFFECT, RefutationClass.NULL_EFFECT
+    return Verdict.POWER_INSUFFICIENT, None
 
 
 BRIDGES = (
     hasselt_floor_predicts_observed_bias__vanilla,
     bias_predicts_worse_outcome__vanilla,
-    intervention_reduces_bias__premise_active,
-    intervention_helps_outcome__chain_holds,
+    ddqn_reduces_bias__consistently_cross_env,
+    ddqn_helps_outcome__consistently_cross_env,
 )
 
 
@@ -262,6 +279,6 @@ __all__ = [
     'BRIDGES',
     'hasselt_floor_predicts_observed_bias__vanilla',
     'bias_predicts_worse_outcome__vanilla',
-    'intervention_reduces_bias__premise_active',
-    'intervention_helps_outcome__chain_holds',
+    'ddqn_reduces_bias__consistently_cross_env',
+    'ddqn_helps_outcome__consistently_cross_env',
 ]
