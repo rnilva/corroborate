@@ -37,58 +37,57 @@ methodology-pedagogy story.
 
 # Empirical result (canonical-dormancy panel, 13 strata)
 
-  B1   theorem  jdg → jens (vanilla):                        HELD       p=4e-7 across 434 vanilla cells
-  B2   link    jens → outcome (vanilla):                     HELD       ρ=-0.45 p=1.4e-12
-  B3   mech do(DDQN) → jens (cross-env consistency):         HELD       12/13 strata, sign-test p=0.002
-  B4   outcome do(DDQN) → outcome (cross-env consistency):   NO_EFFECT  7/13 strata, sign-test p=0.5
+  B1   theorem  jdg → jens (vanilla):                  HELD  p=4e-7 across 434 vanilla cells
+  B2   link    jens → outcome (vanilla):               HELD  ρ=-0.45 p=1.4e-12
+  B3   mech do(DDQN) → jens (cross-env consistency):   HELD  12/13 strata, sign-test p=0.002
 
-Cluster verdict: REFUTED (B4 NULL refutes; the upstream three
-edges all HELD).
+Cluster verdict: SUPPORTED (all three chain edges admit).
 
 Panel: 9 γ=0.999 strata (Acrobot / Asterix / Breakout / FR /
 Freeway-dropped-by-dormancy / LL / MetaMaze / MC / Snake / SI)
 + 4 γ=0.99 strata (Acrobot / FR / LL / MetaMaze — the only
-envs with k=1 γ=0.99 canonical sweeps). 13 strata total.
+envs with k=1 γ=0.99 canonical sweeps).
+
+DDQN's total effect on outcome is tested separately at
+`finding_ddqn_outcome_consistency` — that's a structurally
+distinct claim (Pearl's "total effect" vs the chain's
+"indirect effect through mediator"). The chain HELDing does
+NOT imply the total effect HELDs; the empirical outcome verdict
+is REFUTED at that separate Finding.
 
 # Substantive reading
 
-The chain's structure decomposes the "DDQN's mixed record"
-question into layer-wise verdicts on a 13-stratum panel
+The chain's structure corroborates across a 13-stratum panel
 (9 γ=0.999 envs + 4 γ=0.99 envs):
 
 - **Theorem holds**: Hasselt's σ-floor empirically predicts
   observed bias under vanilla (B1 HELD, p=4e-7 across 434
   vanilla cells).
 - **Link holds**: bias→outcome correlation under vanilla is
-  ρ=-0.45 at p=1.4e-12 (B2 HELD; was PI on the γ=0.999-only
-  panel — the γ=0.99 strata added enough cells to clear the
-  |ρ| threshold).
+  ρ=-0.45 at p=1.4e-12 (B2 HELD).
 - **Mech holds *consistently* across (env, γ) strata**: 12 of
   13 strata show DDQN reducing observed Jensen bias (B3 HELD
   at sign-test p=0.002). The lone sign-flipper is Acrobot
   γ=0.999 (d=+0.10) — env solved by both arms (V_eb ≈ -76 =
   solved ceiling), no Hasselt-bias to clip. Acrobot γ=0.99
   (env still has room to learn) is well-behaved: d=-0.50.
-- **Outcome edge does NOT hold consistently** (B4
-  NO_EFFECT/NULL): 7/13 strata help, 6/13 harm or null. The
-  chain's mech→outcome step is empirically *env-and-γ-
-  conditional*, not uniform. Asterix γ=0.999 (d=-0.80) is the
-  canonical strong-harm case; FR γ=0.999 (d=+3.76) and SI
-  γ=0.999 (d=+2.16) the canonical strong-help cases.
 
 The framework's typed verdict layer reads this as a layer-wise
-diagnosis: theorem, link, and mechanism all corroborate
-*consistently across environments and γ values*; the bite at
-outcome is env-and-γ-specific. The cluster verdict is REFUTED
-because B4's NULL refutes the cluster — but the substantive
-content is sharper than "the chain doesn't hold": *three of
-four edges corroborate at the same scope; the chain breaks at
-the final mech→outcome step in a stratum-conditional way*.
+corroboration: theorem, link, and mechanism all hold
+*consistently across environments and γ values*. The Hasselt
+chain — as a *mechanism* claim, not a guarantee of outcome
+improvement — is empirically corroborated.
 
-A future follow-up bridge could moderate B4 by an env-feature
-to test cleavage (HYPOTHESIS_AS_GRAPH §3b sibling pattern) —
-the per-stratum d's likely correlate with some env-property
-that explains the help/harm split.
+DDQN's *total effect* on outcome is a structurally distinct
+claim (Pearl's mediation framing: chain quantifies the
+indirect effect; total effect captures direct + indirect +
+any non-mediated channels). That claim is tested at
+`finding_ddqn_outcome_consistency` and fires REFUTED (7/13
+strata help; outcome is env-and-γ-conditional). Separating
+the two Findings makes the substantive content explicit: the
+mechanism works as Hasselt describes; whether the mechanism
+nets out at outcome is a separate empirical question with
+a heterogeneous answer.
 
 Companion to `experiments/findings/ddqn/finding_hasselt_chain.py`
 (the original 4-bridge cluster reporting SUPPORTED via a
@@ -105,13 +104,12 @@ from corroborate.graph.causal import ClusterVerdict
 
 from experiments.findings.hasselt_clean.chain import (
     bias_predicts_worse_outcome__vanilla,
-    ddqn_helps_outcome__consistently_cross_env,
     ddqn_reduces_bias__consistently_cross_env,
     hasselt_floor_predicts_observed_bias__vanilla,
 )
 
 
-EXPECTED: ClusterVerdict = ClusterVerdict.REFUTED
+EXPECTED: ClusterVerdict = ClusterVerdict.SUPPORTED
 
 
 BLOCKED_ON: str | None = None
@@ -121,5 +119,4 @@ BRIDGES: tuple[Bridge, ...] = (
     hasselt_floor_predicts_observed_bias__vanilla,           # B1 theorem
     bias_predicts_worse_outcome__vanilla,                    # B2 link
     ddqn_reduces_bias__consistently_cross_env,               # B3 mech
-    ddqn_helps_outcome__consistently_cross_env,              # B4 outcome
 )

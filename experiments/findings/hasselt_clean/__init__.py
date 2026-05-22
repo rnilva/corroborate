@@ -32,21 +32,28 @@ from experiments.findings.hasselt_clean._scope import (
     JDG_AVAILABLE_ENVS as JDG_AVAILABLE_ENVS,
     MODULE_SCOPE as MODULE_SCOPE,
 )
-from experiments.findings.hasselt_clean.chain import BRIDGES as _MAIN_BRIDGES
+from experiments.findings.hasselt_clean.chain import BRIDGES as _CHAIN_BRIDGES
+from experiments.findings.hasselt_clean.outcome_consistency import (
+    BRIDGES as _OUTCOME_BRIDGES,
+)
 from experiments.findings.hasselt_clean._failed_pool.chain_pool import (
     BRIDGES as _FAILED_POOL_BRIDGES,
 )
-from experiments.findings.hasselt_clean import finding_hasselt_chain_explicit
+from experiments.findings.hasselt_clean import (
+    finding_ddqn_outcome_consistency,
+    finding_hasselt_chain_explicit,
+)
 from experiments.findings.hasselt_clean._failed_pool import (
     finding_chain_pool_inadequate,
 )
 
 
-BRIDGES = (*_MAIN_BRIDGES, *_FAILED_POOL_BRIDGES)
+BRIDGES = (*_CHAIN_BRIDGES, *_OUTCOME_BRIDGES, *_FAILED_POOL_BRIDGES)
 
 
 FINDINGS = (
     finding_hasselt_chain_explicit,
+    finding_ddqn_outcome_consistency,
     finding_chain_pool_inadequate,
 )
 

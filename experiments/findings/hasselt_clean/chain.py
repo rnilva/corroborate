@@ -39,8 +39,6 @@ from __future__ import annotations
 
 import math
 
-import polars as pl
-
 from corroborate.analyses.panel.cross_env_consistency_binomial import (
     CrossEnvConsistencyBinomialResult,
 )
@@ -208,70 +206,10 @@ def ddqn_reduces_bias__consistently_cross_env(
     return Verdict.POWER_INSUFFICIENT, None
 
 
-# ============================================================
-# B4: Outcome edge — DDQN helps outcome consistently across envs
-# ============================================================
-
-@claim_bridge(
-    source=INTERVENTION,
-    target='eval_best_burst_raw_mean',
-    direction=Direction.DIRECT,
-    tier=Tier.INTERVENTIONAL,
-    scope=(
-        CANONICAL_DORMANCY_SCOPE
-        & PREMISE_ACTIVE_PER_STRATUM
-        & (pl.col('bootstrap_fraction').median().over(['corpus']) > 0.5)
-    ),
-    predicted_direction='a_gt_b',
-)
-def ddqn_helps_outcome__consistently_cross_env(
-    cross_env_consistency_binomial: CrossEnvConsistencyBinomialResult,
-    *,
-    source: str = 'eval_best_burst_raw_mean',
-    treatment_arm: str = DDQN_ARM,
-    baseline_arm: str = VANILLA_ARM,
-    stratify_by: tuple[str, ...] = ('env_name', 'gamma'),
-    null_floor: float = 0.0,
-    min_seeds_per_arm: int = 5,
-    min_strata: int = 5,
-    p_threshold_held: float = 0.05,
-    p_threshold_pi: float = 0.15,
-) -> tuple[Verdict, RefutationClass | None]:
-    """Outcome edge as a cross-env consistency claim:
-    *"where premise broadly active AND link broadly active,
-    does DDQN improve outcome at every env?"*.
-
-    Same binomial sign-test shape as B3 but on the outcome
-    measurable with predicted direction `a_gt_b` (DDQN > vanilla
-    on outcome). The empirical answer is the per-env split
-    between "DDQN helps" and "DDQN harms/null" envs."""
-    del (
-        source, treatment_arm, baseline_arm,
-        stratify_by, null_floor, min_seeds_per_arm,
-    )
-    if cross_env_consistency_binomial.n_strata_total < min_strata:
-        return Verdict.POWER_INSUFFICIENT, None
-    p = cross_env_consistency_binomial.p_value
-    if math.isnan(p):
-        return Verdict.POWER_INSUFFICIENT, None
-    n_total = cross_env_consistency_binomial.n_strata_total
-    n_signed = cross_env_consistency_binomial.n_signed_predicted
-    if p <= p_threshold_held:
-        return Verdict.HELD, None
-    if p <= p_threshold_pi:
-        return Verdict.POWER_INSUFFICIENT, None
-    if n_total > 0 and (n_total - n_signed) / n_total >= 0.70:
-        return Verdict.NO_EFFECT, RefutationClass.SIGN_FLIP
-    if n_total > 0 and n_signed / n_total <= 0.60:
-        return Verdict.NO_EFFECT, RefutationClass.NULL_EFFECT
-    return Verdict.POWER_INSUFFICIENT, None
-
-
 BRIDGES = (
     hasselt_floor_predicts_observed_bias__vanilla,
     bias_predicts_worse_outcome__vanilla,
     ddqn_reduces_bias__consistently_cross_env,
-    ddqn_helps_outcome__consistently_cross_env,
 )
 
 
@@ -280,5 +218,4 @@ __all__ = [
     'hasselt_floor_predicts_observed_bias__vanilla',
     'bias_predicts_worse_outcome__vanilla',
     'ddqn_reduces_bias__consistently_cross_env',
-    'ddqn_helps_outcome__consistently_cross_env',
 ]
