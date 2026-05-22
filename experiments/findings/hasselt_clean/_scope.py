@@ -40,13 +40,27 @@ JDG_AVAILABLE_ENVS: tuple[str, ...] = (
 )
 
 
-# Canonical k=1 corpora at γ=0.999 — one per env (cells with
-# jdg+jens+eval finite after the 2026-05-22 backfill).
+# Canonical k=1 corpora at γ=0.999 — one per env, picked to be
+# HP-consistent with the γ=0.99 canonical at the same env so a
+# γ-comparison reads cleanly.
+#
+# HP audit (2026-05-22):
+# - Acrobot: gamma_sweep_acrobot (200k, both γ from same corpus)
+# - MinAtar: minatar_gamma_sweep_k1/g0999_* (1M; γ=0.99 absent
+#   at k=1 — these envs are γ=0.999-only in our panel)
+# - FR: gamma_sweep_fourrooms (200k γ=0.999, matches its γ=0.99
+#   slice from the same corpus). The 1M `ddqn_vs_vanilla`
+#   corpus (loop-hypothesis test) is NOT used here — would
+#   confound the γ comparison with 5× training difference.
+# - LL: lunarlander_tuned_sync1000_gpu (1M)
+# - MetaMaze: metamaze_g0999_1M_postfix (1M)
+# - MC: fa_deep_g0999 (1M; γ=0.99 has no jdg)
+# - Snake / Freeway / SI: g0999_*-MinAtar and g0999_Snake (1M)
 CANONICAL_G0999_CORPORA: tuple[str, ...] = (
     'gamma_sweep_acrobot',
     'minatar_gamma_sweep_k1/g0999_Asterix-MinAtar',
     'minatar_gamma_sweep_k1/g0999_Breakout-MinAtar',
-    'ddqn_vs_vanilla',                       # FR
+    'gamma_sweep_fourrooms',                 # FR γ=0.999 slice (200k, matches γ=0.99)
     'g0999_Freeway-MinAtar',
     'lunarlander_tuned_sync1000_gpu',        # LL canonical sync=1000
     'metamaze_g0999_1M_postfix',
@@ -56,13 +70,23 @@ CANONICAL_G0999_CORPORA: tuple[str, ...] = (
 )
 
 
-# Canonical k=1 corpora at γ=0.99 — only available for the 4
-# envs with γ=0.99 canonical sweeps. The five MinAtar envs at
-# γ=0.99 only have HP-sweep corpora (k=2 / k=4 or alpha sweeps),
-# not canonical-k=1; excluded honestly.
+# Canonical k=1 corpora at γ=0.99. For each env, the γ=0.99
+# corpus is chosen to be HP-consistent with the γ=0.999 entry
+# above (same corpus where possible, same total_steps otherwise).
+#
+# - Acrobot:  gamma_sweep_acrobot γ=0.99 slice (same corpus as
+#             γ=0.999, both 200k)
+# - FR:       gamma_sweep_fourrooms γ=0.99 slice (same corpus
+#             as γ=0.999, both 200k)
+# - LL:       g099_panel_extension_lunar_cpu (1M, matches LL γ=0.999 1M)
+# - MetaMaze: metamaze_g099_1M_postfix (1M, matches γ=0.999 1M)
+#
+# The 5 MinAtar envs and MC at γ=0.99 are absent — no k=1 γ=0.99
+# canonical sweep exists for them (MinAtar γ=0.99 only at k=2/k=4;
+# fa_deep_g099 has no jdg).
 CANONICAL_G099_CORPORA: tuple[str, ...] = (
     'gamma_sweep_acrobot',                   # Acrobot γ=0.99 slice
-    'gamma_sweep_fourrooms',                 # FR γ=0.99 slice
+    'gamma_sweep_fourrooms',                 # FR γ=0.99 slice (HP-matched to γ=0.999)
     'g099_panel_extension_lunar_cpu',        # LL γ=0.99
     'metamaze_g099_1M_postfix',              # MetaMaze γ=0.99
 )

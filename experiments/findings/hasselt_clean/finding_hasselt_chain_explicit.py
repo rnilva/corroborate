@@ -37,11 +37,18 @@ methodology-pedagogy story.
 
 # Empirical result (canonical-dormancy panel, 13 strata)
 
-  B1   theorem  jdg → jens (vanilla):                  HELD  p=4e-7 across 434 vanilla cells
-  B2   link    jens → outcome (vanilla):               HELD  ρ=-0.45 p=1.4e-12
+  B1   theorem  jdg → jens (vanilla):                  HELD  p=4e-7 across vanilla cells
+  B2   link    jens → outcome (vanilla):               HELD  ρ=-0.45 p=6.5e-12
   B3   mech do(DDQN) → jens (cross-env consistency):   HELD  12/13 strata, sign-test p=0.002
 
 Cluster verdict: SUPPORTED (all three chain edges admit).
+
+FR uses `gamma_sweep_fourrooms` for both γ values (200k each)
+so the γ comparison is HP-consistent — switched from
+`ddqn_vs_vanilla` (1M, γ=0.999-only) to avoid confounding γ
+with 5× training duration. The 1M `ddqn_vs_vanilla` corpus
+remains the loop-hypothesis canonical for the loop-channel
+Finding.
 
 Panel: 9 γ=0.999 strata (Acrobot / Asterix / Breakout / FR /
 Freeway-dropped-by-dormancy / LL / MetaMaze / MC / Snake / SI)
