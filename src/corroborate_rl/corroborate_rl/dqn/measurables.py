@@ -3023,8 +3023,11 @@ def q_max_temporal_cv_late(record: Mapping[str, object]) -> float:
     return sd / abs(mu)
 
 
-@measurable(reads=('mc_return_from_step', 'episode_length', 'gamma', 'mc_return'))
-def env_disc_raw_alignment(record: Mapping[str, object]) -> float:
+@measurable(reads=('mc_return',))
+def env_disc_raw_alignment(
+    record: Mapping[str, object],
+    mc_return_raw_episodes: npt.NDArray[np.floating],  # injected
+) -> float:
     """Per-cell Pearson r between **discounted** and **undiscounted**
     episode returns across all (burst, eval-episode) pairs. An
     endogenous proxy for how much discounting bites in this env:
@@ -3045,17 +3048,16 @@ def env_disc_raw_alignment(record: Mapping[str, object]) -> float:
     interchangeable; below that, the bridge must commit to one
     semantics and justify it. Companion to `env_reward_polarity`
     (the REACH/SURVIVE moderator)."""
-    raw = _compute_mc_return_raw(record)
-    if raw.size == 0:
+    if mc_return_raw_episodes.size == 0:
         return float('nan')
     try:
         mc = MC_RETURN(record)
     except KeyError:
         return float('nan')
     mc_arr = np.asarray(mc, dtype=np.float64)
-    if raw.shape != mc_arr.shape:
+    if mc_return_raw_episodes.shape != mc_arr.shape:
         return float('nan')
-    rf = raw.flatten()
+    rf = mc_return_raw_episodes.flatten()
     mf = mc_arr.flatten()
     if rf.size < 3 or rf.std() == 0 or mf.std() == 0:
         return float('nan')
@@ -3685,26 +3687,27 @@ register(mc_return_last_quarter)
 
 # Raw-return per-burst reduction, mirroring
 # `mc_return__mean_axis_-1`: per-burst mean of undiscounted
-# episode return. Computes the (n_bursts, n_episodes) raw return
-# inline from trace columns (see `_compute_mc_return_raw` below),
-# then averages over the episode axis to yield (n_bursts,). Direct
-# trace-column reads so the dependency walker sees the leaf
-# trace cols (rather than an intermediate measurable name the
-# build_measurements satisfiability check can't see).
+# episode return. Injects `mc_return_raw_episodes` (registered
+# below) for the (n_bursts, n_episodes) raw return, then
+# averages over the episode axis to yield (n_bursts,). The
+# parameter-name injection channel propagates the helper's
+# closure hash AND its leaf trace-col reads to the dependency
+# walker — when the helper's body changes, this consumer's
+# signature auto-invalidates without manual hash bumps.
 def _mc_return_raw_per_burst_mean(
     record: Mapping[str, object],
+    mc_return_raw_episodes: npt.NDArray[np.floating],  # injected
 ) -> npt.NDArray[np.floating]:
-    # [v2-fwd] uses _compute_mc_return_raw's forward form.
-    raw = _compute_mc_return_raw(record)
-    if raw.ndim != 2 or raw.size == 0:
+    del record
+    if mc_return_raw_episodes.ndim != 2 or mc_return_raw_episodes.size == 0:
         return np.full((0,), float('nan'), dtype=np.float64)
-    return raw.mean(axis=1)
+    return mc_return_raw_episodes.mean(axis=1)
 
 
 mc_return_raw_per_burst_mean = Measurable(
     fn=_mc_return_raw_per_burst_mean,
     name='mc_return_raw__mean_axis_-1',
-    reads=('mc_return_from_step', 'episode_length', 'gamma'),
+    reads=(),
 )
 register(mc_return_raw_per_burst_mean)
 
@@ -4348,7 +4351,8 @@ def outcome_late_to_best_ratio(record: Mapping[str, object]) -> float:
     return late / best
 
 
-def _compute_mc_return_raw(
+@measurable(reads=('mc_return_from_step', 'episode_length', 'gamma'))
+def mc_return_raw_episodes(
     record: Mapping[str, object],
 ) -> npt.NDArray[np.floating]:
     """Per-(burst, episode) **undiscounted** episode return,
@@ -4356,21 +4360,23 @@ def _compute_mc_return_raw(
     value-to-go).
 
     Math: at each step `t`, `mc[t] = r[t] + γ · mc[t+1]` →
-    `r[t] = mc[t] - γ · mc[t+1]`. Last-step `r[T-1] = mc[T-1]`
-    (no future). Summing per-step rewards over actual episode
-    length recovers the undiscounted episode return.
+    `r[t] = mc[t] - γ · mc[t+1]`. With `mc[T] = 0`, summing
+    per-step rewards gives:
 
-    Free function (not a `@measurable`): both
-    `mc_return_raw__mean_axis_-1` and `eval_best_burst_raw_mean`
-    inline this so the dependency walker (`transitive_reads`)
-    sees direct trace-column reads (`mc_return_from_step`,
-    `episode_length`, `gamma`) rather than an intermediate
-    `mc_return_raw` measurable. The intermediate would require
-    the measurable graph to walk through `reads=` (it currently
-    walks only through injected-param names), so the
-    `build_measurements` `all(r in joined.columns for r in
-    leaf_reads)` check would fail and the measurable would be
-    skipped."""
+      Σ_{t=0..T-1} r_t
+        = Σ_t (v[t] − γ·v[t+1])
+        = v[0] + (1 − γ) · Σ_{t=1..T-1} v[t]
+
+    Forward form avoids the cancellation error of the backward-
+    recurrence `Σ (v[t] − γ·v[t+1]) + v[T-1]`, ~T× fewer FLOPs.
+
+    Registered as a measurable (rather than a free function) so
+    the dependency walker tracks its closure hash via the
+    parameter-name injection channel — when this body changes,
+    every consumer that injects `mc_return_raw_episodes` gets its
+    signature auto-invalidated. Returns a (n_bursts, n_episodes)
+    array (~50 floats per cell at typical sweep shapes; safe to
+    persist)."""
     if (
         'mc_return_from_step' not in record
         or 'episode_length' not in record
@@ -4401,39 +4407,28 @@ def _compute_mc_return_raw(
             if T == 1:
                 raw[b, e] = float(v[0])
                 continue
-            # Algebraically: Σ_{t=0..T-1} r_t = v[0] + (1-γ) · Σ_{t=1..T-1} v[t]
-            # (derived from r[t] = v[t] - γ·v[t+1], v[T] = 0).
-            # Forward form avoids the cancellation error of the
-            # backward-recurrence `Σ (v[t] - γ·v[t+1]) + v[T-1]`,
-            # which at saturated-outcome envs accumulated FP error
-            # proportional to episode length (vanilla's longer paths
-            # got systematically higher reconstructed raw return than
-            # DDQN's — opposite the substantive signal). Same math,
-            # ~T× fewer FLOPs, no cancellation.
             raw[b, e] = float(v[0] + one_minus_gamma * v[1:].sum())
     return raw
 
 
-@measurable(
-    name='eval_best_burst_raw_mean',
-    reads=('mc_return_from_step', 'episode_length', 'gamma'),
-)
-def eval_best_burst_raw_mean(record: Mapping[str, object]) -> float:
+@measurable(name='eval_best_burst_raw_mean', reads=())
+def eval_best_burst_raw_mean(
+    record: Mapping[str, object],
+    mc_return_raw_episodes: npt.NDArray[np.floating],  # injected
+) -> float:
     """Undiscounted counterpart of `eval_best_burst_mean`:
-    `max_i(mean(mc_return_raw[i, :]))` where `mc_return_raw` is
-    reconstructed inline from `mc_return_from_step` +
-    `episode_length` + `gamma`. The best-burst-seen metric on the
-    raw (undiscounted) return — γ-invariant policy quality. Use
-    for bridges that compare across γ or across envs with
-    different reward scaling.
+    `max_i(mean(mc_return_raw[i, :]))`. The best-burst-seen
+    metric on the raw (undiscounted) return — γ-invariant policy
+    quality. Use for bridges that compare across γ or across
+    envs with different reward scaling.
 
-    [v2-fwd] Reconstruction switched to the forward form to avoid
-    cancellation-error accumulation at saturated-outcome envs.
-    See `_compute_mc_return_raw` docstring."""
-    raw = _compute_mc_return_raw(record)
-    if raw.ndim != 2 or raw.size == 0:
+    Injects `mc_return_raw_episodes` so this measurable's
+    closure-hash auto-invalidates when the reconstruction logic
+    changes."""
+    del record
+    if mc_return_raw_episodes.ndim != 2 or mc_return_raw_episodes.size == 0:
         return float('nan')
-    return float(raw.mean(axis=1).max())
+    return float(mc_return_raw_episodes.mean(axis=1).max())
 
 
 @measurable(name='eval_full_auc_mean', reads=('mc_return',))
@@ -4456,11 +4451,11 @@ def eval_full_auc_mean(record: Mapping[str, object]) -> float:
     return float(mc.mean())
 
 
-@measurable(
-    name='eval_final_raw_mean',
-    reads=('mc_return_from_step', 'episode_length', 'gamma'),
-)
-def eval_final_raw_mean(record: Mapping[str, object]) -> float:
+@measurable(name='eval_final_raw_mean', reads=())
+def eval_final_raw_mean(
+    record: Mapping[str, object],
+    mc_return_raw_episodes: npt.NDArray[np.floating],  # injected
+) -> float:
     """Undiscounted counterpart of `eval_final_mean`:
     `mean(mc_return_raw[-1, :])`. γ-invariant final-burst policy
     quality for cross-γ comparisons where discounted-MC weights
@@ -4472,31 +4467,25 @@ def eval_final_raw_mean(record: Mapping[str, object]) -> float:
     late-step weight in 50-step episodes (γ^50 ≈ 0.61), so
     discounted and undiscounted measure different things at
     intermediate γ. The raw version is the natural game-score
-    metric.
-
-    [v2-fwd] Reconstruction switched to the forward form to avoid
-    cancellation-error accumulation at saturated-outcome envs."""
-    raw = _compute_mc_return_raw(record)
-    if raw.ndim != 2 or raw.size == 0:
+    metric."""
+    del record
+    if mc_return_raw_episodes.ndim != 2 or mc_return_raw_episodes.size == 0:
         return float('nan')
-    return float(raw[-1, :].mean())
+    return float(mc_return_raw_episodes[-1, :].mean())
 
 
-@measurable(
-    name='eval_full_auc_raw_mean',
-    reads=('mc_return_from_step', 'episode_length', 'gamma'),
-)
-def eval_full_auc_raw_mean(record: Mapping[str, object]) -> float:
+@measurable(name='eval_full_auc_raw_mean', reads=())
+def eval_full_auc_raw_mean(
+    record: Mapping[str, object],
+    mc_return_raw_episodes: npt.NDArray[np.floating],  # injected
+) -> float:
     """Undiscounted counterpart of `eval_full_auc_mean`:
     `mean(mc_return_raw)` over all bursts × episodes. γ-invariant
-    integrated AUC for cross-γ / cross-env comparisons.
-
-    [v2-fwd] Reconstruction switched to the forward form to avoid
-    cancellation-error accumulation at saturated-outcome envs."""
-    raw = _compute_mc_return_raw(record)
-    if raw.ndim != 2 or raw.size == 0:
+    integrated AUC for cross-γ / cross-env comparisons."""
+    del record
+    if mc_return_raw_episodes.ndim != 2 or mc_return_raw_episodes.size == 0:
         return float('nan')
-    return float(raw.mean())
+    return float(mc_return_raw_episodes.mean())
 
 
 @measurable(name='eval_late_burst_mean', reads=('mc_return',))
@@ -4521,20 +4510,20 @@ def eval_late_burst_mean(record: Mapping[str, object]) -> float:
     return float(mc[-n_late:, :].mean())
 
 
-@measurable(
-    name='eval_late_burst_raw_mean',
-    reads=('mc_return_from_step', 'episode_length', 'gamma'),
-)
-def eval_late_burst_raw_mean(record: Mapping[str, object]) -> float:
+@measurable(name='eval_late_burst_raw_mean', reads=())
+def eval_late_burst_raw_mean(
+    record: Mapping[str, object],
+    mc_return_raw_episodes: npt.NDArray[np.floating],  # injected
+) -> float:
     """Undiscounted counterpart of `eval_late_burst_mean`:
     last-30%-bursts mean of `mc_return_raw`. γ-invariant
     convergence-region policy quality."""
-    raw = _compute_mc_return_raw(record)
-    if raw.ndim != 2 or raw.size == 0:
+    del record
+    if mc_return_raw_episodes.ndim != 2 or mc_return_raw_episodes.size == 0:
         return float('nan')
-    n_bursts = raw.shape[0]
+    n_bursts = mc_return_raw_episodes.shape[0]
     n_late = max(1, (n_bursts + 2) // 3)
-    return float(raw[-n_late:, :].mean())
+    return float(mc_return_raw_episodes[-n_late:, :].mean())
 
 
 @measurable(
