@@ -4390,6 +4390,7 @@ def _compute_mc_return_raw(
     if lengths.shape != (n_bursts, n_episodes):
         return np.full((0, 0), float('nan'), dtype=np.float64)
     raw = np.zeros((n_bursts, n_episodes), dtype=np.float64)
+    one_minus_gamma = 1.0 - gamma
     for b in range(n_bursts):
         for e in range(n_episodes):
             T = int(lengths[b, e])
@@ -4399,8 +4400,16 @@ def _compute_mc_return_raw(
             if T == 1:
                 raw[b, e] = float(v[0])
                 continue
-            inner = v[:-1] - gamma * v[1:]
-            raw[b, e] = float(inner.sum() + v[-1])
+            # Algebraically: Σ_{t=0..T-1} r_t = v[0] + (1-γ) · Σ_{t=1..T-1} v[t]
+            # (derived from r[t] = v[t] - γ·v[t+1], v[T] = 0).
+            # Forward form avoids the cancellation error of the
+            # backward-recurrence `Σ (v[t] - γ·v[t+1]) + v[T-1]`,
+            # which at saturated-outcome envs accumulated FP error
+            # proportional to episode length (vanilla's longer paths
+            # got systematically higher reconstructed raw return than
+            # DDQN's — opposite the substantive signal). Same math,
+            # ~T× fewer FLOPs, no cancellation.
+            raw[b, e] = float(v[0] + one_minus_gamma * v[1:].sum())
     return raw
 
 
