@@ -473,3 +473,79 @@ sequencing.
 
 **Lift when:** the dialectic-loop orchestrator lands AND
 verdict-evolution diagnostics become a feature.
+
+---
+
+## Framework: `Tier.INVARIANT` cross-node composition
+
+**Status:** OPEN.
+
+**Surfaced 2026-05-22** during `hasselt_clean` hypothesis
+authoring (see `experiments/findings/hasselt_clean/`).
+
+**Problem.** `Tier.INVARIANT` is currently a *self-loop-only*
+edge type: substrate axioms (e.g. Hasselt's σ-floor bound
+expressed as `jensen_dormancy_premise_active_bridge`) are
+modeled as self-loops on the source measurable, with
+`AT_MOST` / `AT_LEAST` direction. The `chain_tier` walker in
+`src/corroborate/graph/causal.py:231-248` explicitly *skips*
+invariant edges, documented as "self-loops, never compose into
+cross-node chains".
+
+When a substrate author wants to express "theoretical premise
+activation → mechanism activation" as a first-class chain edge,
+the current framework forces an associational sibling: a
+non-invariant bridge from the premise measurable to its
+downstream consequence (see B1 in `hasselt_clean/chain.py`).
+This is functionally equivalent but semantically a workaround —
+the invariant *is* the substrate's axiom about the cross-node
+relationship; modeling it as a self-loop loses the upstream-edge
+structure.
+
+**Proposed surface.** Allow `Tier.INVARIANT` cross-node edges
+with the upstream measurable as `source`, the downstream
+consequence as `target`, and the axiom's predicate (e.g.
+`σ-floor ≥ observed_bias`) encoded via the bridge's
+`threshold` + `direction` fields. The synthesized per-cell
+verdict (`held` / `invariant_violation` / `power_insufficient`)
+would then live on a *typed cross-node edge* in the post-eval
+graph. `chain_tier` would need to be updated to skip invariants
+only when they're self-loops (substrate axioms about a single
+measurable) and include them as the minimum-tier link when
+they're cross-node.
+
+**Lift when:** another substrate's authoring discipline
+exercises the same pattern (theoretical premise as upstream
+edge), confirming the abstraction generalises beyond the DDQN
+case study. Until then `hasselt_clean`'s associational B1 is
+the load-bearing workaround.
+
+---
+
+## Substrate: 5-env `jensen_dormancy_gap` backfill regression
+
+**Status:** OPEN engineering debt.
+
+**Surfaced 2026-05-22.** During cluster-wide `rep_ea` backfill,
+`scripts/rep_ea_serial.py` rewrote per-corpus
+`measurements.parquet` files for Acrobot / MetaMaze / MC / LL
+with a narrow `required=` set that did NOT include
+`jensen_dormancy_gap` (or its transitive `online_std_q_per_step`
+trace read). `build_measurements` overwrote the per-corpus
+store with only the requested measurables + transitive deps,
+truncating the dormancy column from those files.
+
+**Cache state at time of writing:** the framework cache
+(`experiments/data/cache/ddqn_sweeps.parquet`) retains
+`jensen_dormancy_gap` finite values for 5 of 10 canonical-pool
+envs from earlier ingests (Acrobot, LL, MetaMaze, MC, Snake);
+the 5 MinAtar+FR envs have the column null. Per-corpus stores
+for Acrobot / MetaMaze / MC are truncated — re-ingest from them
+will *remove* dormancy from the cache.
+
+**Lift when:** trace storage budget allows for cluster-wide
+re-restore of the 5 missing envs (~5GB MinAtar + 12GB FR) to
+recompute jdg under the full `required` set. The
+`hasselt_clean` hypothesis is scoped to the 5 envs that
+currently have jdg coverage; extending it to the full 10-env
+canonical pool requires this backfill.
