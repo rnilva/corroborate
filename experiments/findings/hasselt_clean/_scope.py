@@ -77,14 +77,22 @@ PREMISE_ACTIVE_PER_CELL: pl.Expr = pl.col('jensen_dormancy_gap') == 0.0
 LINK_ACTIVE_PER_CELL: pl.Expr = pl.col('bootstrap_fraction') > 0.5
 
 
-# Per-stratum (env-level) premise-activation sibling. Drops envs
+# Per-stratum (corpus-level) premise-activation. Drops corpora
 # where premise is *broadly* dormant — i.e., median per-cell
 # `jensen_dormancy_gap` exceeds a structural threshold. Avoids
-# the per-cell selection bias where surviving active cells in a
-# mostly-dormant env aren't representative of the env's per-arm
-# distribution. Implemented as a polars window aggregate.
+# the per-cell post-treatment selection bias where DDQN's
+# intervention itself shifts which cells satisfy `gap == 0`.
+#
+# Partition is `corpus`, not `env_name`. The cache holds
+# multiple corpora per env (e.g. Breakout appears in several
+# HP sweeps); `over(['env_name'])` would pool the median across
+# all of them, and any corpus with NaN jdg (e.g. older sweeps
+# pre-dormancy-backfill) would NaN-propagate the median for
+# the entire env. Partitioning by `corpus` gives per-corpus
+# medians; the canonical-pool corpus's jdg distribution
+# determines its own activation.
 PREMISE_ACTIVE_PER_STRATUM: pl.Expr = (
-    pl.col('jensen_dormancy_gap').median().over(['env_name']) == 0.0
+    pl.col('jensen_dormancy_gap').median().over(['corpus']) == 0.0
 )
 
 

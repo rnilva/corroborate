@@ -1,8 +1,8 @@
 """Hasselt's chain as a directed walk on the post-eval graph.
 
-Four primary bridges form the connected chain
+Four bridges form the connected chain
   `jensen_dormancy_gap → jensen_gap → eval_best_burst_raw_mean`
-plus two `do(DDQN)` attacks on the downstream nodes:
+with `do(DDQN)` attacks on the two downstream nodes:
 
   ┌──────────────────────────┐                       ┌──────────────────────────┐
   │   jensen_dormancy_gap    │──B1──►  jensen_gap   │──B2──►  eval_best_burst   │
@@ -13,23 +13,35 @@ plus two `do(DDQN)` attacks on the downstream nodes:
 B1, B2 are ASSOCIATIONAL within-cell tests (vanilla-only): the
 substrate's theorem (`σ_Q × √(2 log K) ≥ V_jens`) and the
 bias→outcome mediator link, respectively. B3, B4 are
-INTERVENTIONAL per-stratum tests of the DDQN intervention's bite
-on the chain's downstream nodes, scoped on per-cell premise
-activation.
+INTERVENTIONAL per-stratum tests of DDQN's bite on the chain's
+downstream nodes.
 
-Two sibling bridges (B3', B4') replicate B3, B4 with per-stratum
-(env-level) conditioning rather than per-cell — robustness check
-against the per-cell selection bias that can arise when an env's
-surviving premise-active cells are a small fraction of the
-stratum (the framework's `min_seeds_per_arm` floor handles this
-implicitly; the sibling makes the robustness explicit).
+**Per-stratum scope is the principled choice for the
+intervention edges.** Per-cell conditioning on
+`jensen_dormancy_gap == 0` (premise activation) is a
+*post-treatment* scope filter: the DDQN intervention *itself*
+changes which cells satisfy `gap == 0` (DDQN reduces observed
+bias → more cells fall below the σ-floor → more cells are
+dormant). Conditioning on a post-treatment variable
+(equivalent to a collider in the chain's DAG) introduces
+M-bias: the surviving "premise-active" subset under DDQN is a
+DDQN-resistant cohort, not a comparable cell population.
 
-The Finding `finding_hasselt_chain.py` AND-composes all six
-bridges. The chain's edges in the post-eval graph form a
-connected walk (validatable via `corroborate.graph.causal.is_walk`)
-through which the framework's monotone composition propagates
-underdetermination: any edge POWER_INSUFFICIENT or NO_EFFECT
-walks the cluster verdict to UNDERPOWERED or REFUTED."""
+Acrobot γ=0.999 surfaces this directly: under per-cell scope,
+DDQN's per-arm jensen_gap reads HIGHER than vanilla's (15.9 vs
+12.6) — but this is the selection effect of comparing
+"DDQN-active" (DDQN failed to push below floor) against
+"vanilla-active" (typical high-bias cells). Under per-stratum
+scope (env median premise-active → include all cells from the
+env), the same data shows DDQN's net effect ≈ 0 — the honest
+answer: at Acrobot γ=0.999 (solved by both arms, V_eb≈-76 =
+solved ceiling), Hasselt's mech has no failure mode left to
+clip.
+
+The Finding `finding_hasselt_chain_explicit.py` AND-composes
+these four bridges; the chain's edges in the post-eval graph
+form a connected walk (validatable via
+`corroborate.graph.causal.is_walk`)."""
 from __future__ import annotations
 
 import math
@@ -50,8 +62,6 @@ from experiments.findings.ddqn._arms import (
 )
 from experiments.findings.hasselt_clean._scope import (
     CANONICAL_DORMANCY_SCOPE,
-    LINK_ACTIVE_PER_CELL,
-    PREMISE_ACTIVE_PER_CELL,
     PREMISE_ACTIVE_PER_STRATUM,
     VANILLA_ONLY,
 )
@@ -136,8 +146,8 @@ def bias_predicts_worse_outcome__vanilla(
     bite at the link layer.
 
     History note: this link is known to be env-conditional
-    (FINDINGS.md revisions 10-11). Pooling across the 5-env
-    dormancy panel may produce a noisy estimate."""
+    (FINDINGS.md revisions 10-11). Pooling across the canonical
+    dormancy panel may produce a modest pooled estimate."""
     del x, y, conditioning, stratify_by, min_stratum_size
     rho = partial_spearman.rho_pooled
     p = partial_spearman.p_value
@@ -153,44 +163,16 @@ def bias_predicts_worse_outcome__vanilla(
 
 
 # ============================================================
-# B3: Mech edge (PER-CELL) — DDQN reduces bias where premise active
+# B3: Mech edge — DDQN reduces bias (per-stratum)
 # ============================================================
-
-@claim_bridge(
-    source=INTERVENTION,
-    target='jensen_gap',
-    direction=Direction.INVERSE,
-    tier=Tier.INTERVENTIONAL,
-    scope=CANONICAL_DORMANCY_SCOPE & PREMISE_ACTIVE_PER_CELL,
-    predicted_direction='a_lt_b',
-)
-def intervention_reduces_bias__premise_active_per_cell(
-    stratified_arm_diff_pooled: StratifiedArmDiffPooledResult,
-    *,
-    source: str = 'jensen_gap',
-    treatment_arm: str = DDQN_ARM,
-    baseline_arm: str = VANILLA_ARM,
-    stratify_by: tuple[str, ...] = ('env_name',),
-    min_seeds_per_arm: int = 5,
-) -> tuple[Verdict, RefutationClass | None]:
-    """Mechanism edge, per-cell premise conditioning. Where
-    `jensen_dormancy_gap == 0` (Hasselt premise locally
-    saturated), DDQN reduces `jensen_gap` relative to vanilla.
-    Stratified by env, pooled via independent-samples Cohen's d.
-
-    Per-cell conditioning is theorem-aligned (the σ-floor is a
-    per-cell quantity). Sibling B3' replicates with per-stratum
-    conditioning for robustness."""
-    del (
-        source, treatment_arm, baseline_arm,
-        stratify_by, min_seeds_per_arm,
-    )
-    return stratified_arm_diff_pooled.verdict, None
-
-
-# ============================================================
-# B3': Mech edge (PER-STRATUM) — robustness sibling of B3
-# ============================================================
+#
+# Per-stratum premise activation (`env median jdg == 0`)
+# avoids the post-treatment-conditioning bias of per-cell
+# `jdg == 0`. DDQN's intervention itself shifts which cells
+# fall below the σ-floor; the per-cell scope would select a
+# DDQN-resistant cohort. The per-stratum filter keeps all
+# cells from envs where the premise is broadly active, then
+# pools the per-arm contrast across them.
 
 @claim_bridge(
     source=INTERVENTION,
@@ -200,7 +182,7 @@ def intervention_reduces_bias__premise_active_per_cell(
     scope=CANONICAL_DORMANCY_SCOPE & PREMISE_ACTIVE_PER_STRATUM,
     predicted_direction='a_lt_b',
 )
-def intervention_reduces_bias__premise_active_per_stratum(
+def intervention_reduces_bias__premise_active(
     stratified_arm_diff_pooled: StratifiedArmDiffPooledResult,
     *,
     source: str = 'jensen_gap',
@@ -209,14 +191,18 @@ def intervention_reduces_bias__premise_active_per_stratum(
     stratify_by: tuple[str, ...] = ('env_name',),
     min_seeds_per_arm: int = 5,
 ) -> tuple[Verdict, RefutationClass | None]:
-    """Mechanism edge, per-stratum premise conditioning. Includes
-    all cells (active + dormant) from envs where the per-env
-    median `jensen_dormancy_gap` is zero (premise broadly
-    active). Avoids per-cell selection bias.
+    """Mechanism edge. Where the Hasselt premise is broadly
+    active at the env level (median `jensen_dormancy_gap == 0`
+    across the env's cells), DDQN reduces observed `jensen_gap`
+    relative to vanilla. Stratified by env, pooled via
+    independent-samples Cohen's d under DL random-effects.
 
-    Robustness sibling for B3. If B3 and B3' agree → robust
-    under both conditioning shapes; if they diverge → the
-    per-cell selection bias is material."""
+    Per-stratum (rather than per-cell) conditioning is the
+    principled choice: DDQN's intervention itself affects which
+    cells satisfy `gap == 0`, so per-cell premise scope
+    introduces post-treatment selection bias (chain-internal
+    collider). Per-stratum filter keeps all cells from envs
+    where the substrate's dormancy regime is broadly active."""
     del (
         source, treatment_arm, baseline_arm,
         stratify_by, min_seeds_per_arm,
@@ -225,43 +211,7 @@ def intervention_reduces_bias__premise_active_per_stratum(
 
 
 # ============================================================
-# B4: Outcome edge (PER-CELL) — DDQN helps outcome where chain holds
-# ============================================================
-
-@claim_bridge(
-    source=INTERVENTION,
-    target='eval_best_burst_raw_mean',
-    direction=Direction.DIRECT,
-    tier=Tier.INTERVENTIONAL,
-    scope=(
-        CANONICAL_DORMANCY_SCOPE
-        & PREMISE_ACTIVE_PER_CELL
-        & LINK_ACTIVE_PER_CELL
-    ),
-    predicted_direction='a_gt_b',
-)
-def intervention_helps_outcome__chain_holds_per_cell(
-    stratified_arm_diff_pooled: StratifiedArmDiffPooledResult,
-    *,
-    source: str = 'eval_best_burst_raw_mean',
-    treatment_arm: str = DDQN_ARM,
-    baseline_arm: str = VANILLA_ARM,
-    stratify_by: tuple[str, ...] = ('env_name',),
-    min_seeds_per_arm: int = 5,
-) -> tuple[Verdict, RefutationClass | None]:
-    """Outcome edge, per-cell conditioning on premise + link
-    activation. Where both upstream conditions hold (premise
-    saturated AND bootstrap_fraction > 0.5), DDQN improves
-    outcome relative to vanilla."""
-    del (
-        source, treatment_arm, baseline_arm,
-        stratify_by, min_seeds_per_arm,
-    )
-    return stratified_arm_diff_pooled.verdict, None
-
-
-# ============================================================
-# B4': Outcome edge (PER-STRATUM) — robustness sibling of B4
+# B4: Outcome edge — DDQN helps outcome (per-stratum)
 # ============================================================
 
 @claim_bridge(
@@ -272,11 +222,11 @@ def intervention_helps_outcome__chain_holds_per_cell(
     scope=(
         CANONICAL_DORMANCY_SCOPE
         & PREMISE_ACTIVE_PER_STRATUM
-        & (pl.col('bootstrap_fraction').median().over(['env_name']) > 0.5)
+        & (pl.col('bootstrap_fraction').median().over(['corpus']) > 0.5)
     ),
     predicted_direction='a_gt_b',
 )
-def intervention_helps_outcome__chain_holds_per_stratum(
+def intervention_helps_outcome__chain_holds(
     stratified_arm_diff_pooled: StratifiedArmDiffPooledResult,
     *,
     source: str = 'eval_best_burst_raw_mean',
@@ -285,11 +235,14 @@ def intervention_helps_outcome__chain_holds_per_stratum(
     stratify_by: tuple[str, ...] = ('env_name',),
     min_seeds_per_arm: int = 5,
 ) -> tuple[Verdict, RefutationClass | None]:
-    """Outcome edge, per-stratum conditioning. Includes all cells
-    from envs where the per-env median premise + link are both
-    active.
+    """Outcome edge. Where both upstream conditions hold at the
+    env level — premise broadly active (`median jdg == 0`) AND
+    link broadly active (`median bootstrap_fraction > 0.5`) —
+    DDQN improves outcome relative to vanilla.
 
-    Robustness sibling for B4."""
+    Both conditions are per-stratum (env-median) rather than
+    per-cell, avoiding the post-treatment scope bias the
+    per-cell formulation would introduce."""
     del (
         source, treatment_arm, baseline_arm,
         stratify_by, min_seeds_per_arm,
@@ -300,10 +253,8 @@ def intervention_helps_outcome__chain_holds_per_stratum(
 BRIDGES = (
     hasselt_floor_predicts_observed_bias__vanilla,
     bias_predicts_worse_outcome__vanilla,
-    intervention_reduces_bias__premise_active_per_cell,
-    intervention_reduces_bias__premise_active_per_stratum,
-    intervention_helps_outcome__chain_holds_per_cell,
-    intervention_helps_outcome__chain_holds_per_stratum,
+    intervention_reduces_bias__premise_active,
+    intervention_helps_outcome__chain_holds,
 )
 
 
@@ -311,8 +262,6 @@ __all__ = [
     'BRIDGES',
     'hasselt_floor_predicts_observed_bias__vanilla',
     'bias_predicts_worse_outcome__vanilla',
-    'intervention_reduces_bias__premise_active_per_cell',
-    'intervention_reduces_bias__premise_active_per_stratum',
-    'intervention_helps_outcome__chain_holds_per_cell',
-    'intervention_helps_outcome__chain_holds_per_stratum',
+    'intervention_reduces_bias__premise_active',
+    'intervention_helps_outcome__chain_holds',
 ]
