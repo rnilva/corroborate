@@ -23,16 +23,20 @@ from __future__ import annotations
 import polars as pl
 
 
-# Envs that currently have `jensen_dormancy_gap` populated in the
-# canonical cache. Future work: backfill the remaining 5 envs
-# (Asterix/Breakout/Freeway/SI/FR) to extend the clean-chain
-# panel to the full 10-env canonical pool.
+# Envs with `jensen_dormancy_gap` populated in the canonical
+# cache. Updated 2026-05-22 after backfill via per-corpus
+# sidecar-invalidation + cloud trace re-restore.
 JDG_AVAILABLE_ENVS: tuple[str, ...] = (
     'Acrobot-v1',
+    'Asterix-MinAtar',
+    'Breakout-MinAtar',
+    'FourRooms-misc',
+    'Freeway-MinAtar',
     'LunarLander-v2-jax',
     'MetaMaze-misc',
     'MountainCar-v0',
     'Snake-jumanji',
+    'SpaceInvaders-MinAtar',
 )
 
 
