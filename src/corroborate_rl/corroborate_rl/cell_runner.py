@@ -26,6 +26,7 @@ The DQN algorithm itself lives entirely in the `dqn` claim
 step semantics; it's a generic vmap-and-build-records harness."""
 from __future__ import annotations
 
+import os
 import subprocess
 import uuid
 from collections.abc import Callable, Mapping
@@ -68,6 +69,23 @@ def _git_head_sha() -> str | None:
         return out or None
     except (subprocess.SubprocessError, FileNotFoundError):
         return None
+
+
+def _xla_deterministic_ops() -> bool:
+    """Read the active `--xla_gpu_deterministic_ops` setting from
+    `XLA_FLAGS` at cell-run time. Persisted in every RunRow's
+    `measurements` so downstream consumers can filter / stratify
+    by determinism mode (corpora mixing det / non-det runs are
+    valid but the analyzer needs to know).
+
+    Returns True iff `XLA_FLAGS` contains the substring
+    `--xla_gpu_deterministic_ops=true`. Returns False if it
+    contains `--xla_gpu_deterministic_ops=false` OR is silent on
+    the flag (XLA's default is non-deterministic — see
+    `corroborate_rl.dqn_sweep.set_jax_env`'s docstring for the
+    perf / reproducibility trade-off this records)."""
+    flags = os.environ.get('XLA_FLAGS', '')
+    return '--xla_gpu_deterministic_ops=true' in flags
 
 
 class CellResult(NamedTuple):
@@ -315,6 +333,7 @@ def run_dqn_arm(
         measurements: dict[str, MeasurementLeaf] = {
             **leaf_measurements,
             'seed': seed,
+            'xla_deterministic_ops': _xla_deterministic_ops(),
             **wrapper_cols,
             **measurable_cols,
         }
