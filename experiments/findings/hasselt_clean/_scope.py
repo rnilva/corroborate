@@ -30,11 +30,13 @@ JDG_AVAILABLE_ENVS: tuple[str, ...] = (
     'Acrobot-v1',
     'Asterix-MinAtar',
     'Breakout-MinAtar',
+    'CartPole-v1',
     'FourRooms-misc',
     'Freeway-MinAtar',
     'LunarLander-v2-jax',
     'MetaMaze-misc',
     'MountainCar-v0',
+    'PacMan-jumanji',
     'Snake-jumanji',
     'SpaceInvaders-MinAtar',
 )
@@ -45,28 +47,30 @@ JDG_AVAILABLE_ENVS: tuple[str, ...] = (
 # γ-comparison reads cleanly.
 #
 # HP audit (2026-05-22):
-# - Acrobot: gamma_sweep_acrobot (200k, both γ from same corpus)
+# - Acrobot: acrobot_gamma_100k_short (100k, both γ from same
+#   fresh sweep — supersedes gamma_sweep_acrobot to get current
+#   trace schema with predicted_q_at_start + online_std_q_per_step,
+#   so jensen_dormancy_gap computes rather than NaNing out).
 # - MinAtar: minatar_gamma_sweep_k1/g0999_* (1M; γ=0.99 absent
 #   at k=1 — these envs are γ=0.999-only in our panel)
-# - FR: gamma_sweep_fourrooms (200k γ=0.999, matches its γ=0.99
-#   slice from the same corpus). The 1M `ddqn_vs_vanilla`
-#   corpus (loop-hypothesis test) is NOT used here — would
-#   confound the γ comparison with 5× training difference.
+# - FR: fr_gamma_100k_short (100k γ=0.999, matches its γ=0.99
+#   slice from the same fresh sweep — supersedes
+#   gamma_sweep_fourrooms for the same trace-schema reason).
 # - LL: lunarlander_tuned_sync1000_gpu (1M)
 # - MetaMaze: metamaze_g0999_1M_postfix (1M)
 # - MC: fa_deep_g0999 (1M; γ=0.99 has no jdg)
 # - Snake / Freeway / SI: g0999_*-MinAtar and g0999_Snake (1M)
 CANONICAL_G0999_CORPORA: tuple[str, ...] = (
-    'gamma_sweep_acrobot',
+    'acrobot_gamma_100k_30seeds',            # Acrobot γ=0.999 slice (100k, 30 seeds merged)
     'minatar_gamma_sweep_k1/g0999_Asterix-MinAtar',
     'minatar_gamma_sweep_k1/g0999_Breakout-MinAtar',
-    'gamma_sweep_fourrooms',                 # FR γ=0.999 slice (200k, matches γ=0.99)
-    'g0999_Freeway-MinAtar',
+    'fr_gamma_100k_30seeds',                 # FR γ=0.999 slice (100k, 30 seeds merged)
+    'minatar_gamma_sweep_k1/g0999_Freeway-MinAtar',
     'lunarlander_tuned_sync1000_gpu',        # LL canonical sync=1000
     'metamaze_g0999_1M_postfix',
-    'fa_deep_g0999',                         # MC
-    'g0999_Snake-jumanji',
-    'g0999_SpaceInvaders-MinAtar',
+    'g0999_Snake-jumanji',                   # Snake γ=0.999 (sub-corpus of g0999_panel_extension_snake_only, stamps bare)
+    'g0999_PacMan-jumanji',                  # PacMan γ=0.999 (sub-corpus of pacman_g0999_n20, stamps bare; n=20 seeds, n_episodes=5)
+    'minatar_gamma_sweep_k1/g0999_SpaceInvaders-MinAtar',
 )
 
 
@@ -74,10 +78,10 @@ CANONICAL_G0999_CORPORA: tuple[str, ...] = (
 # corpus is chosen to be HP-consistent with the γ=0.999 entry
 # above (same corpus where possible, same total_steps otherwise).
 #
-# - Acrobot:  gamma_sweep_acrobot γ=0.99 slice (same corpus as
-#             γ=0.999, both 200k)
-# - FR:       gamma_sweep_fourrooms γ=0.99 slice (same corpus
-#             as γ=0.999, both 200k)
+# - Acrobot:  acrobot_gamma_100k_short γ=0.99 slice (same corpus
+#             as γ=0.999, both 100k, fresh sweep)
+# - FR:       fr_gamma_100k_short γ=0.99 slice (same corpus
+#             as γ=0.999, both 100k, fresh sweep)
 # - LL:       g099_panel_extension_lunar_cpu (1M, matches LL γ=0.999 1M)
 # - MetaMaze: metamaze_g099_1M_postfix (1M, matches γ=0.999 1M)
 #
@@ -85,10 +89,18 @@ CANONICAL_G0999_CORPORA: tuple[str, ...] = (
 # canonical sweep exists for them (MinAtar γ=0.99 only at k=2/k=4;
 # fa_deep_g099 has no jdg).
 CANONICAL_G099_CORPORA: tuple[str, ...] = (
-    'gamma_sweep_acrobot',                   # Acrobot γ=0.99 slice
-    'gamma_sweep_fourrooms',                 # FR γ=0.99 slice (HP-matched to γ=0.999)
+    'acrobot_gamma_100k_30seeds',            # Acrobot γ=0.99 slice (100k, 30 seeds merged)
+    'fr_gamma_100k_30seeds',                 # FR γ=0.99 slice (100k, 30 seeds merged)
+    'g099_Asterix-MinAtar',                  # MinAtar γ=0.99 v2 (sub-corpus, parent has no runs.parquet)
+    'g099_Breakout-MinAtar',
+    'g099_Freeway-MinAtar',
+    'g099_SpaceInvaders-MinAtar',
     'g099_panel_extension_lunar_cpu',        # LL γ=0.99
-    'metamaze_g099_1M_postfix',              # MetaMaze γ=0.99
+    'metamaze_g099_1M_postfix',              # MetaMaze γ=0.99 (n_episodes=5; flag for re-sweep w/ n=20)
+    'mountaincar_1M_postfix',                # MountainCar γ=0.99
+    'cartpole_1M_postfix',                   # CartPole γ=0.99
+    'snake_1M',                              # Snake γ=0.99 (n_episodes=3 — noisier than rest)
+    'pacman_1M_postfix',                     # PacMan γ=0.99 (n_episodes=3, 10 seeds/arm)
 )
 
 
