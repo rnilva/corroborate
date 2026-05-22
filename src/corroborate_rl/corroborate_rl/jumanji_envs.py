@@ -29,7 +29,7 @@ import jax
 import jax.numpy as jnp
 from gymnax.environments.environment import EnvParams as GymnaxEnvParams
 
-from corroborate_rl.env_catalogue import _register_jumanji
+from corroborate_rl.env_catalogue import _register_jumanji, image_bucket_hash
 from corroborate_rl.jumanji_adapter import JumanjiEnv
 
 
@@ -164,6 +164,14 @@ def _make_pacman_v1() -> tuple[JumanjiEnv[object, object], GymnaxEnvParams]:
     return adapter, params
 
 
+# Pacman state_hash via random projection (per
+# `image_bucket_hash` docstring, recommended for high-resolution
+# image obs where downsample-pool would be too coarse). 4^4=256
+# buckets — same default as other image-obs envs.
+_PACMAN_HASH, _PACMAN_CARD = image_bucket_hash(
+    (31, 28, 5), n_proj_dims=4, n_buckets_per_dim=4,
+)
+
 _register_jumanji(
     'PacMan-jumanji',
     factory=_make_pacman_v1,
@@ -173,6 +181,8 @@ _register_jumanji(
     r_min=0.0,
     r_max=200.0,
     reward_regime='per_step',
+    state_hash=_PACMAN_HASH,
+    state_hash_cardinality=_PACMAN_CARD,
     solve_threshold=None,
     solve_threshold_source='no-canonical-criterion',
     solve_threshold_confidence='absent',
