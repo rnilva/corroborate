@@ -29,20 +29,19 @@ like `load_sweep=load_sweep` would force a module-level
 `from corroborate_rl.dqn.yaml_sweep import load_sweep`, which
 loads JAX before `pre_import_setup` can stamp anything.
 
-`set_jax_env` is also re-exported at module top-level so
-`scripts/run_sweep.py` (the back-compat substrate-coupled
-script) can call the same helper without re-implementing the
-env-stamp logic."""
+`set_jax_env` is exported at module top-level for callers that
+need the env-stamp logic outside the CLI path (tests, ad-hoc
+scripts) without re-implementing it."""
 from __future__ import annotations
 
 import argparse
 import os
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Final, Literal
 
 from corroborate._internals.argparse import to_mapping
-from corroborate._internals.narrow import require_str
+from corroborate._internals.narrow import require_bool, require_str
 from corroborate.runner.registry import Registry
 from corroborate.runner.yaml_sweep import (
     ConfigName,
@@ -75,6 +74,21 @@ def _add_args(parser: argparse.ArgumentParser) -> None:
              'deterministic XLA flags — stamped before the heavy '
              '`corroborate_rl.dqn.yaml_sweep` module imports JAX.',
     )
+    _ = parser.add_argument(
+        '--no-deterministic', action='store_true', default=False,
+        help='Skip the `--xla_gpu_deterministic_ops=true` XLA stamp. '
+             'Default is deterministic ON (preserves the '
+             '~1e-7-per-matmul reproducibility floor on Q-explosion-'
+             'prone envs; see `set_jax_env` docstring). Flip OFF when '
+             'the perf cost is significant — measured 10-30× on '
+             'PacMan-jumanji (tiny-op-heavy step disables CUDA Graphs '
+             'under determinism) vs negligible on MinAtar. Sweep YAML '
+             'may also set `deterministic: false` at the top level; '
+             'this CLI flag overrides the YAML when present. '
+             'Operators who set `XLA_FLAGS=--xla_gpu_deterministic_'
+             'ops=...` in the shell already get their explicit value '
+             '(both this flag and the YAML field are no-ops then).',
+    )
 
 
 def _pre_import_setup(args: argparse.Namespace) -> None:
@@ -83,11 +97,63 @@ def _pre_import_setup(args: argparse.Namespace) -> None:
     latches the backend on first init; setting `JAX_PLATFORMS`
     afterwards has no effect.
 
-    Reads `args.device` (registered by `_add_args`). argparse's
-    `choices=['cpu', 'gpu']` validates at parse time; this is the
-    type-level narrow + the actual env stamp."""
+    Reads `args.device` + `args.no_deterministic` (registered by
+    `_add_args`). argparse's `choices=['cpu', 'gpu']` validates
+    `--device` at parse time; the narrow is the type-level
+    dispatch.
+
+    Determinism resolution order: `--no-deterministic` CLI flag
+    forces OFF (always wins). Otherwise peek the YAML's
+    `deterministic: true|false` top-level field via a lightweight
+    plain-yaml read that does NOT trigger the substrate's lazy
+    loader (which would import JAX before we've stamped the
+    flags). Default ON when neither is set."""
     device = _require_device(args, 'device')
-    set_jax_env(device)
+    args_map = to_mapping(args)
+    deterministic = _resolve_deterministic(
+        no_det_cli=require_bool(args_map, 'no_deterministic'),
+        yaml_path=require_str(args_map, 'config'),
+    )
+    set_jax_env(device, deterministic=deterministic)
+
+
+def _resolve_deterministic(
+    *, no_det_cli: bool, yaml_path: str,
+) -> bool:
+    """Resolve the effective determinism setting from the CLI
+    flag + YAML's optional `deterministic:` top-level field.
+
+    CLI > YAML > default-True. The YAML peek uses plain
+    `yaml.safe_load` — no JAX, no substrate-specific dataclass
+    parsing — so it's safe to call before
+    `corroborate_rl.dqn.yaml_sweep` is imported."""
+    if no_det_cli:
+        return False
+    return _peek_yaml_bool(yaml_path, 'deterministic', default=True)
+
+
+def _peek_yaml_bool(path: str, key: str, *, default: bool) -> bool:
+    """Lightweight pre-import peek at a top-level bool field in a
+    YAML file. Returns `default` if the file is missing, isn't a
+    mapping at the top level, or the key is absent / non-bool.
+
+    Intentionally narrow: no schema validation, no error on
+    malformed YAML beyond what `yaml.safe_load` raises. Bad YAML
+    surfaces later when the substrate's typed loader runs; this
+    function exists ONLY to extract env-stamping hints before
+    JAX is imported."""
+    import yaml
+    p = Path(path)
+    if not p.is_file():
+        return default
+    with p.open() as f:
+        raw: object = yaml.safe_load(f)
+    if not isinstance(raw, Mapping):
+        return default
+    val = raw.get(key)
+    if isinstance(val, bool):
+        return val
+    return default
 
 
 def _require_device(
@@ -107,7 +173,7 @@ def _require_device(
     )
 
 
-def set_jax_env(device: Device) -> None:
+def set_jax_env(device: Device, *, deterministic: bool = True) -> None:
     """Set `JAX_PLATFORMS` + XLA flags. The `--device` CLI flag
     is treated as explicit user intent: it OVERRIDES any
     pre-existing `JAX_PLATFORMS` env var. Callers that want
@@ -118,7 +184,7 @@ def set_jax_env(device: Device) -> None:
     machine. Operators wanting ROCm / TPU set `JAX_PLATFORMS=`
     explicitly AND pass no `--device`; this function then is a
     no-op for `JAX_PLATFORMS` (still sets the deterministic XLA
-    flags).
+    flags when `deterministic=True`).
 
     Sets:
     - `JAX_PLATFORMS=cuda` (or `cpu`) — overrides any prior value
@@ -127,22 +193,43 @@ def set_jax_env(device: Device) -> None:
       JAX's default ~80% prealloc.
     - `XLA_PYTHON_CLIENT_MEM_FRACTION=0.9` (setdefault) — leave
       headroom.
-    - `XLA_FLAGS+=--xla_gpu_deterministic_ops=true` — append if
-      `XLA_FLAGS` already set, else set fresh.
+    - `XLA_FLAGS+=--xla_gpu_deterministic_ops=true` when
+      `deterministic=True` and the user hasn't already set the
+      flag in `XLA_FLAGS`. When `deterministic=False`, the
+      framework does NOT append the flag; XLA's defaults apply
+      (CUDA Graphs / command-buffer capture enabled for the
+      training loop).
 
-    Without `--xla_gpu_deterministic_ops`, GPU thread-scheduling
-    jitter introduces per-matmul ~1e-7 noise that compounds
-    chaotically over 1M-step training on Q-explosion-prone
-    vanilla DQN (~8σ cross-realisation drift on Asterix / SI
-    canonical-verify; memory
-    `findings_substrate_realization_variance`). Measured
-    negligible perf overhead at MinAtar scale (CNN[16]/FC[128]
-    1M-step Asterix: 271s deterministic ≈ 273s non-deterministic).
+    The reproducibility / perf trade-off: with
+    `--xla_gpu_deterministic_ops`, GPU thread-scheduling jitter
+    introduces per-matmul ~1e-7 noise that compounds chaotically
+    over 1M-step training on Q-explosion-prone vanilla DQN
+    (~8σ cross-realisation drift on Asterix / SI canonical-
+    verify; memory `findings_substrate_realization_variance`).
+
+    Perf overhead depends sharply on the env's per-step op
+    profile:
+    - **MinAtar scale** (small (10,10,4) obs, minimal env logic,
+      CNN[16]/FC[128]) — negligible: 271s deterministic ≈ 273s
+      non-deterministic on 1M-step Asterix.
+    - **PacMan-jumanji** (31×28×5 obs, 4 scatter ops in
+      `obs_extract`, dynamic_slice replay) — **10-30× slower**.
+      Determinism blocks XLA from capturing the inner loop as a
+      CUDA Graph, leaving 20M+ `cuLaunchKernel` calls per chunk
+      (host-bound at 33K launches/sec). Profiled via nsys on
+      RTX 5090 — see provenance notes in
+      `experiments/configs/pacman_g0999_n20.yaml`.
+
+    Operators on Jumanji-class envs should pass
+    `--no-deterministic` (or set `XLA_FLAGS=
+    --xla_gpu_deterministic_ops=false` in the shell, which this
+    function respects) and budget for the reproducibility loss
+    in the analysis.
 
     Exposed at module top-level (not just inside
-    `_pre_import_setup`) so `scripts/run_sweep.py` — the
-    substrate-coupled back-compat script — can call the same
-    helper without duplicating the env logic."""
+    `_pre_import_setup`) so callers outside the CLI path (tests,
+    ad-hoc scripts) can stamp the same env without duplicating
+    the logic."""
     platform = 'cuda' if device == 'gpu' else device
     # `--device` is explicit user intent; override any prior env
     # var. Reviewer flagged the prior `setdefault` semantics as a
@@ -151,6 +238,12 @@ def set_jax_env(device: Device) -> None:
     os.environ['JAX_PLATFORMS'] = platform
     os.environ.setdefault('XLA_PYTHON_CLIENT_PREALLOCATE', 'false')
     os.environ.setdefault('XLA_PYTHON_CLIENT_MEM_FRACTION', '0.9')
+    if not deterministic:
+        # XLA's defaults apply. If the operator pre-set
+        # `XLA_FLAGS`, leave it untouched — their explicit value
+        # (which may include `--xla_gpu_deterministic_ops=false`
+        # or other flags) wins.
+        return
     if 'XLA_FLAGS' not in os.environ:
         os.environ['XLA_FLAGS'] = '--xla_gpu_deterministic_ops=true'
     elif '--xla_gpu_deterministic_ops' not in os.environ['XLA_FLAGS']:
