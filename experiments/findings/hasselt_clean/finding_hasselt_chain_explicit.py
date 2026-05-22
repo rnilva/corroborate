@@ -38,11 +38,10 @@ left to clip.
 
 # Empirical result (canonical-dormancy panel)
 
-  B1     theorem      jdg → jens   (vanilla):         HELD       ρ=-0.48 p=1.4e-11
-  B2     link        jens → outcome (vanilla):        PI         ρ=-0.27 p=4.4e-12
-  B3     mech    do(DDQN) → jens   (per-stratum pool): NO_EFFECT  d=-1.90 p=1e-6 I²=0.97
-  B3-mod mech    do(DDQN) → jens   (per-env moderator): NO_EFFECT  ρ=-0.05 p=0.90 NULL
-  B4     outcome do(DDQN) → out    (per-stratum):     NO_EFFECT  d=+0.47 p=0.17 I²=0.97
+  B1   theorem      jdg → jens   (vanilla):           HELD       ρ=-0.48 p=1.4e-11
+  B2   link        jens → outcome (vanilla):          PI         ρ=-0.27 p=4.4e-12
+  B3   mech    do(DDQN) → jens   (per-stratum):       NO_EFFECT  d=-1.90 p=1e-6 I²=0.97
+  B4   outcome do(DDQN) → out    (per-stratum):       NO_EFFECT  d=+0.47 p=0.17 I²=0.97
 
 Cluster verdict: REFUTED.
 
@@ -141,7 +140,6 @@ from experiments.findings.hasselt_clean.chain import (
     hasselt_floor_predicts_observed_bias__vanilla,
     intervention_helps_outcome__chain_holds,
     intervention_reduces_bias__premise_active,
-    mech_bite_scales_with_vanilla_bias__per_env,
 )
 
 
@@ -154,7 +152,6 @@ BLOCKED_ON: str | None = None
 BRIDGES: tuple[Bridge, ...] = (
     hasselt_floor_predicts_observed_bias__vanilla,    # B1 theorem
     bias_predicts_worse_outcome__vanilla,             # B2 link
-    intervention_reduces_bias__premise_active,        # B3 mech (pool)
-    mech_bite_scales_with_vanilla_bias__per_env,      # B3-mod moderator sibling
+    intervention_reduces_bias__premise_active,        # B3 mech
     intervention_helps_outcome__chain_holds,          # B4 outcome
 )

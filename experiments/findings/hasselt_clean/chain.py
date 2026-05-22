@@ -48,10 +48,6 @@ import math
 
 import polars as pl
 
-from corroborate.analyses.link.cross_stratum_property_slope import (
-    CrossStratumPropertySlopeResult,
-    DerivedCovariateSpec,
-)
 from corroborate.analyses.panel.stratified_arm_diff_pooled import (
     StratifiedArmDiffPooledResult,
 )
@@ -68,19 +64,6 @@ from experiments.findings.hasselt_clean._scope import (
     CANONICAL_DORMANCY_SCOPE,
     PREMISE_ACTIVE_PER_STRATUM,
     VANILLA_ONLY,
-)
-
-
-# Per-env vanilla mean of `jensen_gap` — the env-level "amount
-# of bias to clip" under vanilla. The natural moderator for the
-# mech edge: the larger the vanilla bias, the larger the DDQN
-# reduction should be (in absolute units, which Cohen's d
-# normalises only locally). Used by the meta-regression
-# sibling B3-mod.
-VANILLA_JENS_PER_ENV: DerivedCovariateSpec = DerivedCovariateSpec(
-    column='jensen_gap',
-    aggregator='mean',
-    arm_filter='baseline',
 )
 
 
@@ -267,89 +250,11 @@ def intervention_helps_outcome__chain_holds(
     return stratified_arm_diff_pooled.verdict, None
 
 
-# ============================================================
-# B3-mod: Mech-edge moderator sibling — DDQN's mech-bite scales
-#         with env-level vanilla bias magnitude
-# ============================================================
-#
-# Per the HYPOTHESIS_AS_GRAPH §3b scope-cluster pattern: when a
-# random-effects pool fires NO_EFFECT (or HELD_WITH_SCOPE_FLAG)
-# under PI-based discipline due to cross-env heterogeneity, the
-# moderator sibling tests *cleavage by an env-feature*. If the
-# heterogeneity is structurally interpretable (e.g., scales with
-# env Q-magnitude / bias level), the sibling fires HELD and the
-# cluster's substantive claim is "moderated, not refuted".
-#
-# Hypothesis: DDQN's per-env mech-bite (Cohen's d on jensen_gap)
-# scales with env-level vanilla bias magnitude. Envs with larger
-# vanilla bias (more to clip) should show more-negative per-env
-# d. Cross-env Spearman ρ(vanilla_jens_mean, d_mech) should be
-# strongly negative.
-#
-# Shares (source, target, scope) with B3 — automatic
-# cluster-identity under `clusters_by_extent`.
-
-@claim_bridge(
-    source=INTERVENTION,
-    target='jensen_gap',
-    direction=Direction.INVERSE,
-    tier=Tier.INTERVENTIONAL,
-    scope=CANONICAL_DORMANCY_SCOPE & PREMISE_ACTIVE_PER_STRATUM,
-    predicted_direction='a_lt_b',
-)
-def mech_bite_scales_with_vanilla_bias__per_env(
-    cross_stratum_property_slope: CrossStratumPropertySlopeResult,
-    *,
-    source: str = 'jensen_gap',
-    covariate_name: str = 'vanilla_jens_per_env',
-    derived_covariate: DerivedCovariateSpec = VANILLA_JENS_PER_ENV,
-    treatment_arm: str = DDQN_ARM,
-    baseline_arm: str = VANILLA_ARM,
-    stratify_by: tuple[str, ...] = ('env_name',),
-    min_seeds_per_arm: int = 5,
-    rho_threshold_held: float = -0.5,
-    p_threshold_held: float = 0.05,
-    null_threshold: float = 0.1,
-    sign_flip_threshold: float = 0.5,
-) -> tuple[Verdict, RefutationClass | None]:
-    """Moderator sibling for B3 (mech edge). Tests whether the
-    per-env Cohen's d of DDQN's effect on `jensen_gap` scales
-    INVERSELY with env-level vanilla `jensen_gap` mean — i.e.,
-    envs with more bias to clip see larger DDQN reductions.
-
-    Cross-env Spearman ρ on (vanilla_jens_per_env, d_mech_per_env).
-    HELD when ρ ≤ -0.5 and p ≤ 0.05. If HELD, the cross-env
-    heterogeneity at B3 is structurally interpretable as
-    "DDQN's mech-bite scales with the amount of bias available
-    to clip" — the chain's mech layer survives as a *moderated*
-    rather than uniform population claim.
-
-    Cluster-pair with B3 at the same (source, target, scope) —
-    they share extent_hash automatically per HYPOTHESIS_AS_GRAPH
-    §3b's scope-cluster pattern."""
-    del (
-        source, covariate_name, derived_covariate,
-        treatment_arm, baseline_arm, stratify_by, min_seeds_per_arm,
-    )
-    rho = cross_stratum_property_slope.rho
-    p = cross_stratum_property_slope.p_value
-    if math.isnan(rho) or math.isnan(p):
-        return Verdict.POWER_INSUFFICIENT, None
-    if rho <= rho_threshold_held and p <= p_threshold_held:
-        return Verdict.HELD, None
-    if rho >= sign_flip_threshold:
-        return Verdict.NO_EFFECT, RefutationClass.SIGN_FLIP
-    if abs(rho) <= null_threshold:
-        return Verdict.NO_EFFECT, RefutationClass.NULL_EFFECT
-    return Verdict.POWER_INSUFFICIENT, None
-
-
 BRIDGES = (
     hasselt_floor_predicts_observed_bias__vanilla,
     bias_predicts_worse_outcome__vanilla,
     intervention_reduces_bias__premise_active,
     intervention_helps_outcome__chain_holds,
-    mech_bite_scales_with_vanilla_bias__per_env,
 )
 
 
@@ -359,5 +264,4 @@ __all__ = [
     'bias_predicts_worse_outcome__vanilla',
     'intervention_reduces_bias__premise_active',
     'intervention_helps_outcome__chain_holds',
-    'mech_bite_scales_with_vanilla_bias__per_env',
 ]
