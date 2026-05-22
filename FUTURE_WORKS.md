@@ -549,3 +549,74 @@ recompute jdg under the full `required` set. The
 `hasselt_clean` hypothesis is scoped to the 5 envs that
 currently have jdg coverage; extending it to the full 10-env
 canonical pool requires this backfill.
+
+---
+
+## Framework + substrate discipline: bridge verdict-body uniformity
+
+**Status:** OPEN.
+
+**Surfaced 2026-05-22** during `hasselt_clean` chain authoring
+(see `experiments/findings/hasselt_clean/`) and the comparison
+to `experiments/findings/ddqn/finding_hasselt_chain.py`'s
+Stage 1 bridge `algorithm_reduces_bootstrap_gap_magnitude`.
+
+**Problem.** Two distinct verdict-body shapes coexist for
+random-effects pooled bridges:
+
+1. **Custom threshold on `pooled_d`** (CI-like): the bridge
+   body reads `result.pooled_d` and compares to a fixed
+   threshold (`d ≤ -0.3 → HELD`). Bypasses I², τ², the
+   prediction interval. Effectively a CI-based "average effect
+   is reliably non-zero in our sample" test. Used in
+   `algorithm_reduces_bootstrap_gap_magnitude`.
+
+2. **Framework `.verdict` property** (PI-based): the bridge
+   body delegates to `result.verdict`, which dispatches to
+   `random_effects_verdict` (PI-based: PI excludes zero in
+   predicted direction → HELD/HELD_WITH_SCOPE_FLAG; PI brackets
+   zero → NO_EFFECT/NULL_EFFECT). Used in
+   `intervention_reduces_bias__premise_active`.
+
+Both are honest answers to different questions:
+- (1) tests *"is the average effect across our sample reliably
+  non-zero?"* — adequate when envs are exchangeable.
+- (2) tests *"would a new env from this population reliably show
+  this direction?"* — the framework's prediction-interval
+  extrapolation discipline.
+
+On the canonical DDQN panel (γ=0.999, 9-env), the same
+underlying data fires HELD under (1) at d=-0.6 and NO_EFFECT
+under (2) at d=-1.9 — because cross-env heterogeneity is
+extreme (I²=0.97, MinAtar d=-8.9 vs classical d=-0.01)
+and the PI brackets zero despite the CI being decisively
+negative.
+
+**The substantive issue underneath**: when environments aren't
+exchangeable (they differ in network class, Q-magnitude, reward
+sparsity, etc.), neither verdict shape is the right tool — the
+random-effects model's homogeneity assumption is structurally
+violated. The principled answer is a *moderator-aware sibling*
+(meta-regression or `cross_stratum_property_slope`) per
+`HYPOTHESIS_AS_GRAPH.md` §3b, which tests cleavage by env-feature
+rather than pooling across heterogeneous strata blindly.
+
+**Proposed framework discipline.** Either:
+- (a) Deprecate verdict-body shape (1) — require all
+  random-effects-pool bridges to use `.verdict`. Forces honest
+  exposure of cross-env heterogeneity through
+  `HELD_WITH_SCOPE_FLAG` or `NO_EFFECT/NULL_EFFECT` per the PI
+  test; substrate authors then explicitly author the
+  moderator-aware sibling when heterogeneity bites.
+- (b) Keep both, but ban shape (1) without an accompanying
+  moderator sibling in the same Finding. Pool-as-CI-test is fine
+  iff a moderator-aware sibling answers the "why so much
+  heterogeneity?" follow-up.
+
+(b) is the lighter-touch discipline.
+
+**Lift when:** the next substrate-author writing a cross-env
+pool bridge faces the choice. Until codified, in-tree bridges
+mix shapes — the original `ddqn/finding_hasselt_chain.py` uses
+(1) at Stage 1; `hasselt_clean` uses (2) at B3. Both are
+defensible at v1 cost.
