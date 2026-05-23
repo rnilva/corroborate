@@ -88,6 +88,41 @@ def _xla_deterministic_ops() -> bool:
     return '--xla_gpu_deterministic_ops=true' in flags
 
 
+def _xla_command_buffer_enabled() -> bool:
+    """Read the active `--xla_gpu_enable_command_buffer` setting
+    from `XLA_FLAGS` at cell-run time. CUDA Graph (command buffer)
+    capture is the dominant systematic-bias source we measured —
+    same env, same seeds, cmdbuf-on vs cmdbuf-off can flip the
+    DDQN-vs-baseline outcome verdict on γ=0.999 MinAtar workloads
+    (see REPRODUCIBILITY.md). Stamped per cell so cross-mode
+    analyses can stratify / condition on this knob alongside
+    `xla_deterministic_ops`.
+
+    Returns False iff `XLA_FLAGS` explicitly disables it via
+    `--xla_gpu_enable_command_buffer=` (empty value). True
+    otherwise (XLA's default enables FUSION,CUSTOM_CALL,CUBLAS,
+    CUDNN command-buffer modes; determinism mode also implicitly
+    disables capture but that's recoverable from
+    `xla_deterministic_ops=True`)."""
+    flags = os.environ.get('XLA_FLAGS', '')
+    # Empty-value form: `--xla_gpu_enable_command_buffer=` (followed
+    # by whitespace or end-of-string) is the canonical disable.
+    key = '--xla_gpu_enable_command_buffer='
+    if key in flags:
+        i = flags.index(key)
+        rest = flags[i + len(key):]
+        # Value runs until first whitespace OR end-of-string.
+        # `''` (empty value followed immediately by space / EOS) =>
+        # capture disabled.
+        end = len(rest)
+        for j, ch in enumerate(rest):
+            if ch.isspace():
+                end = j
+                break
+        return bool(rest[:end])
+    return True
+
+
 class CellResult(NamedTuple):
     """One cell's pair of records — the verdict-side `RunRow` (with
     derived measurements: leaves + outcome reduction + bridge
@@ -334,6 +369,7 @@ def run_dqn_arm(
             **leaf_measurements,
             'seed': seed,
             'xla_deterministic_ops': _xla_deterministic_ops(),
+            'xla_command_buffer_enabled': _xla_command_buffer_enabled(),
             **wrapper_cols,
             **measurable_cols,
         }

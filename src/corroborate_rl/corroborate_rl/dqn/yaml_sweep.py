@@ -84,6 +84,15 @@ class DQNSweep:
     # `corroborate_rl.dqn.phases._GRADIENT_PROBES_ENABLED` before
     # the sweep loop. Disabling drops ~2× wall-clock on |A|≥12.
     gradient_probes: bool = True
+    # Retain the full per-step per-action Q vectors
+    # (`online_q_per_action`, `target_q_per_action`) in the per-cell
+    # traces.parquet. Default False — `Q_TRACE_DROPS` strips them
+    # after `Q_TRACE_REDUCTIONS` has computed scalar summaries
+    # (max/min/mean/std/argmax-per-step), since the full vectors
+    # blow up parquet size to ~O(n_actions × total_steps × seeds)
+    # floats per cell. Set `keep_q_per_action: true` in the YAML
+    # for analyses that need the raw Q distribution post-hoc.
+    keep_q_per_action: bool = False
     # Whether to merge per-intervention parquets into top-level
     # `<out_dir>/{runs,traces}.parquet`. Default True for backwards
     # compat. When False, per-intervention sub-corpora remain as
@@ -166,6 +175,7 @@ def _build_sweep(node: Mapping[str, object]) -> DQNSweep:
     archive_remote = build_archive_remote(node)
     defaults = _build_defaults(node)
     gradient_probes = _build_gradient_probes(node)
+    keep_q_per_action = _build_keep_q_per_action(node)
     merge_top_level = build_merge_top_level(node)
     pre_registered_bridges = build_pre_registered_bridges(node)
     interventions_raw = node.get('interventions')
@@ -184,6 +194,7 @@ def _build_sweep(node: Mapping[str, object]) -> DQNSweep:
         intervention_templates=templates,
         env_binding=env_binding, archive_remote=archive_remote,
         gradient_probes=gradient_probes,
+        keep_q_per_action=keep_q_per_action,
         merge_top_level=merge_top_level,
         pre_registered_bridges=pre_registered_bridges,
     )
@@ -217,6 +228,16 @@ def _build_gradient_probes(node: Mapping[str, object]) -> bool:
     if not isinstance(v, bool):
         raise TypeError(
             f'sweep.gradient_probes must be bool; got '
+            f'{type(v).__name__}',
+        )
+    return v
+
+
+def _build_keep_q_per_action(node: Mapping[str, object]) -> bool:
+    v = node.get('keep_q_per_action', False)
+    if not isinstance(v, bool):
+        raise TypeError(
+            f'sweep.keep_q_per_action must be bool; got '
             f'{type(v).__name__}',
         )
     return v
@@ -580,7 +601,7 @@ def dispatch_sweep(sweep: DQNSweep) -> tuple[Path, Path]:
             archive_remote=h_archive_remote,
             arm_tag=_arm_tag,
             trace_reductions=Q_TRACE_REDUCTIONS,
-            trace_drops=Q_TRACE_DROPS,
+            trace_drops=() if sweep.keep_q_per_action else Q_TRACE_DROPS,
         )
         sub_runs.append(rp)
         sub_traces.append(tp)
