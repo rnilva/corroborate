@@ -82,7 +82,7 @@ CANONICAL_G0999_CORPORA: tuple[str, ...] = (
 #             as γ=0.999, both 100k, fresh sweep)
 # - FR:       fr_gamma_100k_short γ=0.99 slice (same corpus
 #             as γ=0.999, both 100k, fresh sweep)
-# - LL:       g099_panel_extension_lunar_cpu (1M, matches LL γ=0.999 1M)
+# - LL:       lunarlander_tuned_sync1000_gpu (1M, sync=1000 — matches LL γ=0.999 canonical)
 # - MetaMaze: metamaze_g099_1M_postfix (1M, matches γ=0.999 1M)
 #
 # The 5 MinAtar envs and MC at γ=0.99 are absent — no k=1 γ=0.99
@@ -95,7 +95,7 @@ CANONICAL_G099_CORPORA: tuple[str, ...] = (
     'g099_Breakout-MinAtar',
     'g099_Freeway-MinAtar',
     'g099_SpaceInvaders-MinAtar',
-    'g099_panel_extension_lunar_cpu',        # LL γ=0.99
+    'lunarlander_tuned_sync1000_gpu',        # LL γ=0.99 (sync=1000, matches γ=0.999 canonical)
     'metamaze_g099_1M_postfix',              # MetaMaze γ=0.99 (n_episodes=5; flag for re-sweep w/ n=20)
     'mountaincar_1M_postfix',                # MountainCar γ=0.99
     'cartpole_1M_postfix',                   # CartPole γ=0.99
