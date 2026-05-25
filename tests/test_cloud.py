@@ -520,6 +520,35 @@ def test_purge_cloud_fallback_refuses_uncovered_row_ids(
     assert (sweep_dir / 'runs.parquet').exists()
 
 
+def test_purge_cloud_fallback_uses_direct_manifest_at_sweep_path(
+    tmp_path: Path,
+) -> None:
+    """A sub-corpus dir has its own direct MANIFEST.json on the cloud
+    (no nested children). Cloud-fallback should find that manifest
+    directly via `fetch_remote_manifest` rather than walking children.
+
+    Use case: purging an inner sub-corpus dir like
+    `<root>/parent/<sub>/` where the cloud has archived JUST
+    `<remote_prefix>/parent/<sub>/MANIFEST.json`. The user passes
+    `--remote-prefix <prefix>/parent/`, and purge resolves to the
+    sub's own manifest.
+    """
+    sweep_dir = tmp_path / 'sub_corpus'
+    _write_real_parquet(sweep_dir / 'runs.parquet', n_rows=200)
+    _write_real_parquet(sweep_dir / 'traces.parquet', n_rows=200)
+    # Archive directly to a cloud path (no nested children).
+    direct_remote = f'file://{tmp_path / "remote_parent" / "sub_corpus"}'
+    _ = cloud.archive(sweep_dir, direct_remote)
+    # Simulate the orphan case: wipe local manifest, keep parquets.
+    (sweep_dir / cloud.MANIFEST_NAME).unlink()
+    parent_prefix = f'file://{tmp_path / "remote_parent"}'
+
+    deleted = cloud.purge(
+        sweep_dir, cloud_fallback_prefix=parent_prefix,
+    )
+    assert set(deleted) == {'runs.parquet', 'traces.parquet'}
+
+
 def test_purge_cloud_fallback_raises_when_no_subarchives_found(
     tmp_path: Path,
 ) -> None:
@@ -532,7 +561,7 @@ def test_purge_cloud_fallback_raises_when_no_subarchives_found(
     empty_remote = f'file://{tmp_path / "empty_remote"}'
 
     with pytest.raises(
-        FileNotFoundError, match='no sub-archives found',
+        FileNotFoundError, match='neither a direct MANIFEST.json',
     ):
         _ = cloud.purge(
             sweep_dir, cloud_fallback_prefix=empty_remote,

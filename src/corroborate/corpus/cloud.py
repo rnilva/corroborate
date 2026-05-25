@@ -1128,23 +1128,33 @@ def _purge_via_cloud_fallback(
     Recovery path for post-merge-cleanup orphans: the merged
     top-level parquets are reconstructable from the per-arm
     sub-corpus archives that survived the cleanup."""
-    sweep_prefix = f'{cloud_fallback_prefix.rstrip("/")}/{sweep_dir.name}/'
-    sub_archives = list_archives(sweep_prefix)
-    if not sub_archives:
-        raise FileNotFoundError(
-            f'{sweep_dir}: no manifest at {MANIFEST_NAME}, and no '
-            f'sub-archives found at {sweep_prefix} (cloud fallback '
-            f'requires at least one MANIFEST.json under the prefix).',
-        )
-
-    # Aggregate row_ids covered by all sub-archives.
-    covered_row_ids: set[str] = set()
-    for sub_root in sub_archives:
-        sub_manifest = fetch_remote_manifest(sub_root)
-        if sub_manifest is None:
-            continue
-        for f in sub_manifest.files:
+    sweep_root = f'{cloud_fallback_prefix.rstrip("/")}/{sweep_dir.name}'
+    # Try direct: cloud has a MANIFEST.json AT the sweep's expected
+    # path (post-proper-fix or nested sub-corpus archive).
+    direct_manifest = fetch_remote_manifest(sweep_root)
+    if direct_manifest is not None:
+        covered_row_ids: set[str] = set()
+        for f in direct_manifest.files:
             covered_row_ids.update(f.row_ids)
+    else:
+        # Walk sub-archives at the sweep's cloud path (orphan case
+        # where merge cleanup wiped the local manifest but per-arm
+        # sub-corpora got archived).
+        sub_archives = list_archives(f'{sweep_root}/')
+        if not sub_archives:
+            raise FileNotFoundError(
+                f'{sweep_dir}: no manifest at {MANIFEST_NAME}, and '
+                f'neither a direct MANIFEST.json at {sweep_root} nor '
+                f'sub-archives under {sweep_root}/ (cloud fallback '
+                f'requires either a direct or nested manifest).',
+            )
+        covered_row_ids = set()
+        for sub_root in sub_archives:
+            sub_manifest = fetch_remote_manifest(sub_root)
+            if sub_manifest is None:
+                continue
+            for f in sub_manifest.files:
+                covered_row_ids.update(f.row_ids)
 
     # Default targets: every parquet in sweep_dir top level.
     if files is None:
@@ -1169,7 +1179,7 @@ def _purge_via_cloud_fallback(
         if missing_ids:
             raise ValueError(
                 f'{local}: {len(missing_ids)} row_ids not covered by '
-                f'sub-archives at {sweep_prefix} '
+                f'sub-archives at {sweep_root}/ '
                 f'(e.g., {sorted(missing_ids)[:3]}...); refusing to '
                 f'purge to avoid data loss.',
             )
