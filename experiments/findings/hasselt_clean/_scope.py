@@ -61,10 +61,10 @@ JDG_AVAILABLE_ENVS: tuple[str, ...] = (
 # - MC: fa_deep_g0999 (1M; γ=0.99 has no jdg)
 # - Snake / Freeway / SI: g0999_*-MinAtar and g0999_Snake (1M)
 CANONICAL_G0999_CORPORA: tuple[str, ...] = (
-    'acrobot_gamma_100k_30seeds',            # Acrobot γ=0.999 slice (100k, 30 seeds merged)
+    'acrobot_gamma_50k_30seeds',             # Acrobot γ=0.999 slice (50k, 30 seeds — outlier-free regime)
     'minatar_gamma_sweep_k1/g0999_Asterix-MinAtar',
     'minatar_gamma_sweep_k1/g0999_Breakout-MinAtar',
-    'fr_gamma_100k_30seeds',                 # FR γ=0.999 slice (100k, 30 seeds merged)
+    'fr_gamma_50k_30seeds',                  # FR γ=0.999 slice (50k, 30 seeds — pre-ceiling regime)
     'minatar_gamma_sweep_k1/g0999_Freeway-MinAtar',
     'lunarlander_tuned_sync1000_gpu',        # LL canonical sync=1000
     'metamaze_g0999_1M_postfix',
@@ -89,8 +89,8 @@ CANONICAL_G0999_CORPORA: tuple[str, ...] = (
 # canonical sweep exists for them (MinAtar γ=0.99 only at k=2/k=4;
 # fa_deep_g099 has no jdg).
 CANONICAL_G099_CORPORA: tuple[str, ...] = (
-    'acrobot_gamma_100k_30seeds',            # Acrobot γ=0.99 slice (100k, 30 seeds merged)
-    'fr_gamma_100k_30seeds',                 # FR γ=0.99 slice (100k, 30 seeds merged)
+    'acrobot_gamma_50k_30seeds',             # Acrobot γ=0.99 slice (50k, 30 seeds — outlier-free regime)
+    'fr_gamma_50k_30seeds',                  # FR γ=0.99 slice (50k, 30 seeds — pre-ceiling regime)
     'g099_Asterix-MinAtar',                  # MinAtar γ=0.99 v2 (sub-corpus, parent has no runs.parquet)
     'g099_Breakout-MinAtar',
     'g099_Freeway-MinAtar',
