@@ -1322,6 +1322,60 @@ def state_hash_n_unique_late(
     return float(np.unique(s[half:]).size)
 
 
+# Per-burst siblings of the state-hash and state-repeat-rate late
+# measurables. Authored via `@temporal_reduction` (same window-
+# reduction kernel, two windowing strategies). The late-half versions
+# above stay as authored — only the per-burst sibling is registered
+# here, leaving the existing scalar measurables and their docstrings
+# untouched.
+from corroborate_rl.dqn._temporal_reduction import temporal_reduction
+
+
+def _window_n_unique(window: npt.NDArray[np.float64]) -> float:
+    """Count of distinct state-hash values in the window."""
+    if window.size < 2:
+        return float('nan')
+    return float(np.unique(window.astype(np.int64)).size)
+
+
+def _window_shannon_entropy(window: npt.NDArray[np.float64]) -> float:
+    """Shannon entropy (nats) of state-hash distribution in window."""
+    if window.size < 2:
+        return float('nan')
+    s = window.astype(np.int64)
+    counts = np.bincount(s - s.min())
+    counts = counts[counts > 0]
+    if counts.size <= 1:
+        return 0.0
+    p = counts.astype(np.float64) / float(counts.sum())
+    return float(-np.sum(p * np.log(p)))
+
+
+def _window_state_repeat_rate_64(window: npt.NDArray[np.float64]) -> float:
+    """Fraction of steps whose state appears in the trailing 64-step
+    sub-window — same kernel as `_state_repeat_rate(s, window=64)`
+    but applied to the supplied window (not the late half)."""
+    if window.size < 128:
+        return float('nan')
+    return _state_repeat_rate(window.astype(np.int64), window=64)
+
+
+temporal_reduction(
+    reads=('state_hash_per_step',),
+    per_burst_name='state_hash_n_unique_per_burst',
+)(_window_n_unique)
+
+temporal_reduction(
+    reads=('state_hash_per_step',),
+    per_burst_name='state_hash_entropy_per_burst',
+)(_window_shannon_entropy)
+
+temporal_reduction(
+    reads=('state_hash_per_step',),
+    per_burst_name='state_repeat_rate_window64_per_burst',
+)(_window_state_repeat_rate_64)
+
+
 @measurable(reads=('online_argmax_per_step', 'state_hash_per_step'))
 def policy_churn_late(
     record: Mapping[str, object],
