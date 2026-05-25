@@ -93,6 +93,25 @@ class DQNSweep:
     # floats per cell. Set `keep_q_per_action: true` in the YAML
     # for analyses that need the raw Q distribution post-hoc.
     keep_q_per_action: bool = False
+    # Persist the final online + target Q-network params per cell
+    # as a msgpack sidecar under
+    # `<out_dir>/<cfg.name>/q_checkpoints/cell<NNN>_<seed>_final.msgpack`.
+    # Default False — substrate doesn't pay the disk cost (~25 KB
+    # MLP / ~80 KB CNN per cell) unless a post-hoc analysis needs
+    # to re-evaluate Q at arbitrary observations after training
+    # ends. Independent of `keep_q_checkpoint_per_burst` — both
+    # flags can co-exist (final + 50 per-burst snapshots) or stand
+    # alone (final-only is the cheapest option).
+    keep_q_checkpoint_final: bool = False
+    # Persist a Q-network snapshot at the end of EVERY eval burst
+    # as msgpack sidecars under
+    # `<out_dir>/<cfg.name>/q_checkpoints/cell<NNN>_<seed>_burst<BB>.msgpack`.
+    # Default False — total disk per sweep is
+    # `n_super_steps × n_cells × param_bytes` (~240 MB for a 50-
+    # burst × 60-cell CNN sweep, ~75 MB for the MLP equivalent),
+    # manageable but only worth it for analyses that track the Q
+    # surface's evolution across training.
+    keep_q_checkpoint_per_burst: bool = False
     # Whether to merge per-intervention parquets into top-level
     # `<out_dir>/{runs,traces}.parquet`. Default True for backwards
     # compat. When False, per-intervention sub-corpora remain as
@@ -176,6 +195,8 @@ def _build_sweep(node: Mapping[str, object]) -> DQNSweep:
     defaults = _build_defaults(node)
     gradient_probes = _build_gradient_probes(node)
     keep_q_per_action = _build_keep_q_per_action(node)
+    keep_q_checkpoint_final = _build_keep_q_checkpoint_final(node)
+    keep_q_checkpoint_per_burst = _build_keep_q_checkpoint_per_burst(node)
     merge_top_level = build_merge_top_level(node)
     pre_registered_bridges = build_pre_registered_bridges(node)
     interventions_raw = node.get('interventions')
@@ -195,6 +216,8 @@ def _build_sweep(node: Mapping[str, object]) -> DQNSweep:
         env_binding=env_binding, archive_remote=archive_remote,
         gradient_probes=gradient_probes,
         keep_q_per_action=keep_q_per_action,
+        keep_q_checkpoint_final=keep_q_checkpoint_final,
+        keep_q_checkpoint_per_burst=keep_q_checkpoint_per_burst,
         merge_top_level=merge_top_level,
         pre_registered_bridges=pre_registered_bridges,
     )
@@ -238,6 +261,26 @@ def _build_keep_q_per_action(node: Mapping[str, object]) -> bool:
     if not isinstance(v, bool):
         raise TypeError(
             f'sweep.keep_q_per_action must be bool; got '
+            f'{type(v).__name__}',
+        )
+    return v
+
+
+def _build_keep_q_checkpoint_final(node: Mapping[str, object]) -> bool:
+    v = node.get('keep_q_checkpoint_final', False)
+    if not isinstance(v, bool):
+        raise TypeError(
+            f'sweep.keep_q_checkpoint_final must be bool; got '
+            f'{type(v).__name__}',
+        )
+    return v
+
+
+def _build_keep_q_checkpoint_per_burst(node: Mapping[str, object]) -> bool:
+    v = node.get('keep_q_checkpoint_per_burst', False)
+    if not isinstance(v, bool):
+        raise TypeError(
+            f'sweep.keep_q_checkpoint_per_burst must be bool; got '
             f'{type(v).__name__}',
         )
     return v
@@ -558,10 +601,20 @@ def dispatch_sweep(sweep: DQNSweep) -> tuple[Path, Path]:
     sub_traces: list[Path] = []
     sub_arm_dirs: list[Path] = []
     for cfg, env_configs in zip(configs, envs_per_h, strict=True):
+        # Per-arm-config base: bake the Q-checkpoint persistence
+        # flags into `cfg.base` so `dqn` sees them as Exogenous
+        # kwargs at composition time. Authors can override per-
+        # arm via the standard YAML mechanism, but the sweep-wide
+        # flags are the canonical opt-in.
+        base_overrides: dict[str, object] = {**cfg.base}
+        if sweep.keep_q_checkpoint_final:
+            base_overrides['keep_q_checkpoint_final'] = True
+        if sweep.keep_q_checkpoint_per_burst:
+            base_overrides['keep_q_checkpoint_per_burst'] = True
         # `base` IS the SCM kwargs map; each arm's interventions
         # override slot values via partial precedence in
         # `apply_interventions`. Empty-tuple arm = "use base".
-        base: Callable[..., object] = partial(dqn, **cfg.base)
+        base: Callable[..., object] = partial(dqn, **base_overrides)
         intervention = cfg.do_effect
         # Flat grid_points: env × chunk × wrappers.
         grid_points: list[Mapping[str, object]] = [
@@ -574,6 +627,19 @@ def dispatch_sweep(sweep: DQNSweep) -> tuple[Path, Path]:
             for chunk in _chunks(ec)
         ]
         h_out_dir = sweep.out_dir / cfg.name
+        # Re-arm the runner per arm-config: each arm's checkpoint
+        # files live under its own `<h_out_dir>/q_checkpoints/`,
+        # and the cell_idx counter restarts at 0 to mirror the
+        # framework's per-`run_intervention` cell numbering.
+        q_ckpt_enabled = (
+            sweep.keep_q_checkpoint_final
+            or sweep.keep_q_checkpoint_per_burst
+        )
+        runner.reset_for_intervention(
+            q_checkpoint_dir=(
+                h_out_dir / 'q_checkpoints' if q_ckpt_enabled else None
+            ),
+        )
         # Mirror the local out_dir composition on the remote
         # (invariant I1 in SWEEP_PERSISTENCY.md). The local path is
         # already arm-config-namespaced via `sweep.out_dir / cfg.name`;
@@ -677,10 +743,61 @@ def dispatch_sweep(sweep: DQNSweep) -> tuple[Path, Path]:
     # clean now: each per-arm `<out_dir>/<arm>/` directory
     # (containing the unconcatenated runs/traces used as merge
     # inputs) gets removed once the parent merge is durable.
+    #
+    # **q_checkpoints/ preservation**: when the sweep opts into
+    # keep_q_checkpoint_{final,per_burst}, the per-cell runners
+    # write msgpack files to `<arm_dir>/q_checkpoints/`. These
+    # are NOT in the merged parquets and are the explicit
+    # data product the user requested — must be lifted to a
+    # preserved location before rmtree wipes the arm dir.
+    # Destination: `<out_dir>/q_checkpoints/<arm_name>/` keeps
+    # the per-intervention namespace so multi-arm sweeps don't
+    # collide.
     import shutil
     for arm_dir in sub_arm_dirs:
         if arm_dir.exists() and arm_dir.is_dir():
+            q_ckpt_src = arm_dir / 'q_checkpoints'
+            if q_ckpt_src.exists() and q_ckpt_src.is_dir():
+                q_ckpt_dst = sweep.out_dir / 'q_checkpoints' / arm_dir.name
+                q_ckpt_dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.move(str(q_ckpt_src), str(q_ckpt_dst))
             shutil.rmtree(arm_dir)
+
+    # **Top-level archive**: the merged top-level parquets are the
+    # canonical artifact, but the per-arm cleanup above wiped the
+    # local sub-corpus dirs that held the per-arm `_remote.json`.
+    # Without a top-level archive, the sweep_dir has data files but
+    # no manifest — `corroborate purge` refuses to delete, forcing
+    # callers into the cloud-fallback path. Archive the merged
+    # parquets directly so the sweep has its own self-contained
+    # local + cloud manifest.
+    #
+    # Best-effort: failure is warned (cloud might be transiently
+    # down) but doesn't crash the sweep. Sub-corpus archives at
+    # `<remote>/<arm>/` are intact and provide a recovery path.
+    if sweep.archive_remote is not None:
+        from corroborate.corpus.cloud import archive as _cloud_archive
+        top_files = tuple(
+            p.name for p in (final_runs, final_traces) if p.is_file()
+        )
+        if top_files:
+            try:
+                _ = _cloud_archive(
+                    sweep.out_dir,
+                    sweep.archive_remote,
+                    files=top_files,
+                )
+            except (OSError, RuntimeError, ValueError) as exc:
+                import sys
+                sys.stderr.write(
+                    f'run_sweep: WARNING — top-level archive failed: '
+                    f'{exc}\n'
+                    f'  Sub-corpora at {sweep.archive_remote}/<arm>/ '
+                    f'are intact; use\n'
+                    f'  `corroborate purge --remote-prefix <prefix>` '
+                    f'for cloud-fallback purge.\n',
+                )
+
     # Sentinel removed only on successful completion (atomicity:
     # crash → sentinel stays → ingest skips).
     if sentinel.exists():
