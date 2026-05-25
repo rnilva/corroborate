@@ -156,7 +156,11 @@ def _cmd_ls(args: Mapping[str, object]) -> int:
 def _cmd_purge(args: Mapping[str, object]) -> int:
     sweep_dir = Path(require_str(args, 'sweep_dir'))
     files = optional_str_list(args, 'files')
-    deleted = cloud.purge(sweep_dir, files=files)
+    cloud_fallback_prefix = optional_str(args, 'remote_prefix')
+    deleted = cloud.purge(
+        sweep_dir, files=files,
+        cloud_fallback_prefix=cloud_fallback_prefix,
+    )
     print(f'deleted {len(deleted)} local files in {sweep_dir}')
     for r in deleted:
         print(f'  {r}')
@@ -319,6 +323,16 @@ def _build_parser(
     )
     _ = p_purge.add_argument('sweep_dir')
     _ = p_purge.add_argument('--files', nargs='*', default=None)
+    _ = p_purge.add_argument(
+        '--remote-prefix', dest='remote_prefix', default=None,
+        help='fsspec URI prefix (e.g. s3://corroborate-archive/) for '
+             'the cloud-fallback path. Used when the local '
+             '_remote.json was lost (e.g., post-merge cleanup wiped '
+             'the sub-corpus dir that held it). Discovers sub-archives '
+             'at <prefix>/<sweep_name>/* and verifies each local '
+             "parquet's row_ids are covered by the union of "
+             'sub-archive row_ids before deletion.',
+    )
 
     p_cat = sub.add_parser(
         'catalogue',

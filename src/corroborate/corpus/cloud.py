@@ -429,20 +429,39 @@ def _join_remote(remote_root: str, relpath: str) -> str:
     return f'{remote_root.rstrip("/")}/{relpath.lstrip("/")}'
 
 
+SIDECAR_DIRS: tuple[str, ...] = ('q_checkpoints',)
+"""Sweep-dir subdirectories whose entire contents are eligible for
+archival under the default selection. Substrate-side auxiliary
+artifacts that travel with the corpus (e.g., Q-network parameter
+checkpoints saved per cell) live here. The framework hardcodes a
+short whitelist rather than walking everything to avoid sweeping
+up scratch / tmp / log dirs that aren't part of the durable
+record."""
+
+
 def _default_files(sweep_dir: Path) -> list[str]:
     """Default selection: top-level `*.parquet` files plus the
     pre-registration manifest sidecar
-    (`pre_registration.json`) if present. The `tmp/` shard
-    subdirectory is intentionally excluded — when present, the
-    merged top-level parquet supersedes the shards. Users who
-    want shards too pass `--files tmp/<arm>...` explicitly.
+    (`pre_registration.json`) if present, plus every file under
+    each `SIDECAR_DIRS` subdirectory (substrate-authored
+    per-cell sidecars like Q-network checkpoints). The `tmp/`
+    shard subdirectory is intentionally excluded — when present,
+    the merged top-level parquet supersedes the shards. Users
+    who want shards too pass `--files tmp/<arm>...` explicitly.
 
     The pre-registration sidecar is opt-in (created by sweeps
     declaring `pre_registered_bridges` — see
     `corroborate.core.pre_registration`). Auto-archiving it
     alongside the parquets mirrors the spec §6 contract: a
     pre-registered sweep's commitment + corpus travel together
-    to the cloud."""
+    to the cloud.
+
+    `SIDECAR_DIRS` whitelist (currently `q_checkpoints/`): a
+    substrate writes per-cell auxiliary artifacts here; the
+    archive command sweeps them up alongside the parquets so
+    the cloud copy is self-contained. Files are added with
+    relpath `<sidecar_dir>/<filename>`; restore replicates the
+    subdir layout on download."""
     from corroborate.core.pre_registration import MANIFEST_NAME as PRE_REG
     files = [
         p.name for p in sweep_dir.iterdir()
@@ -451,6 +470,13 @@ def _default_files(sweep_dir: Path) -> list[str]:
     pre_reg = sweep_dir / PRE_REG
     if pre_reg.is_file():
         files.append(PRE_REG)
+    for sidecar in SIDECAR_DIRS:
+        sidecar_path = sweep_dir / sidecar
+        if not sidecar_path.is_dir():
+            continue
+        for entry in sidecar_path.iterdir():
+            if entry.is_file():
+                files.append(f'{sidecar}/{entry.name}')
     return sorted(files)
 
 
@@ -636,7 +662,10 @@ def archive(
         # well under the 1 KiB CI5 floor for short manifests) and
         # has no PAR1 footer; skip the parquet-shaped check for it
         # so the sidecar rides the same archive path without a
-        # spurious `ArchivePrecondition` failure.
+        # spurious `ArchivePrecondition` failure. Same exception
+        # applies to substrate sidecars under `SIDECAR_DIRS` (e.g.
+        # `q_checkpoints/cell000_0_final.msgpack`) — these are
+        # small msgpack files, not parquets.
         from corroborate.core.pre_registration import (
             MANIFEST_NAME as _PRE_REG_NAME,
         )
@@ -644,7 +673,10 @@ def archive(
             relpath == _PRE_REG_NAME
             or relpath.endswith('/' + _PRE_REG_NAME)
         )
-        if validate and not is_pre_registration:
+        is_sidecar = any(
+            relpath.startswith(f'{s}/') for s in SIDECAR_DIRS
+        )
+        if validate and not is_pre_registration and not is_sidecar:
             from corroborate.corpus.integrity import (
                 assert_archive_eligible,
             )
@@ -697,10 +729,14 @@ def archive(
             sha256=sha256,
             pushed_at=datetime.now(UTC).isoformat(timespec='seconds'),
             # `sniff_row_ids` runs `pl.scan_parquet` on the local
-            # file — fine for parquets, would raise on a JSON
-            # sidecar. Short-circuit non-parquets to an empty
-            # tuple.
-            row_ids=sniff_row_ids(local) if not is_pre_registration else (),
+            # file — fine for parquets, would raise on a JSON or
+            # msgpack sidecar. Short-circuit non-parquets to an
+            # empty tuple.
+            row_ids=(
+                sniff_row_ids(local)
+                if not is_pre_registration and not is_sidecar
+                else ()
+            ),
         )
         by_relpath[relpath] = entry
         # Save after every successful file — partial archives
@@ -1024,6 +1060,7 @@ def purge(
     sweep_dir: Path,
     *,
     files: Sequence[str] | None = None,
+    cloud_fallback_prefix: str | None = None,
 ) -> list[str]:
     """Delete LOCAL copies of files the manifest says are
     archived. The manifest itself is preserved so `restore`
@@ -1032,12 +1069,30 @@ def purge(
     `files`: relpaths to purge (must each be in the manifest).
     Default = all manifest files.
 
+    `cloud_fallback_prefix`: when set, allows purging sweeps
+    whose local `_remote.json` was lost (e.g., the post-merge
+    cleanup wiped the per-arm sub-corpus dir that originally
+    held the manifest). Looks up sub-archives at
+    `<prefix>/<sweep_dir.name>/*/MANIFEST.json` via
+    `list_archives()`, builds the union of cell row_ids
+    covered by those sub-archives, and verifies each local
+    parquet's row_ids are a subset of that union. Files
+    without row_ids (e.g., trace-only parquets that lack the
+    `id` column) skip the row_id check and require sha256
+    match against any sub-archive entry.
+
     Returns the list of relpaths actually deleted (excludes
     files that were already absent locally)."""
     manifest = load_manifest(sweep_dir)
     if manifest is None:
-        raise FileNotFoundError(
-            f'{sweep_dir}: no manifest at {MANIFEST_NAME}',
+        if cloud_fallback_prefix is None:
+            raise FileNotFoundError(
+                f'{sweep_dir}: no manifest at {MANIFEST_NAME}. '
+                f'Pass cloud_fallback_prefix to enable purge from '
+                f'cloud sub-archives.',
+            )
+        return _purge_via_cloud_fallback(
+            sweep_dir, cloud_fallback_prefix, files=files,
         )
     by_relpath = {f.relpath: f for f in manifest.files}
 
@@ -1057,4 +1112,67 @@ def purge(
         if local.exists():
             local.unlink()
             deleted.append(relpath)
+    return deleted
+
+
+def _purge_via_cloud_fallback(
+    sweep_dir: Path,
+    cloud_fallback_prefix: str,
+    *,
+    files: Sequence[str] | None,
+) -> list[str]:
+    """Discover sub-archives at `<prefix>/<sweep_dir.name>/*`,
+    verify local parquets' row_ids are subset of the
+    sub-archives' union of row_ids, then delete local copies.
+
+    Recovery path for post-merge-cleanup orphans: the merged
+    top-level parquets are reconstructable from the per-arm
+    sub-corpus archives that survived the cleanup."""
+    sweep_prefix = f'{cloud_fallback_prefix.rstrip("/")}/{sweep_dir.name}/'
+    sub_archives = list_archives(sweep_prefix)
+    if not sub_archives:
+        raise FileNotFoundError(
+            f'{sweep_dir}: no manifest at {MANIFEST_NAME}, and no '
+            f'sub-archives found at {sweep_prefix} (cloud fallback '
+            f'requires at least one MANIFEST.json under the prefix).',
+        )
+
+    # Aggregate row_ids covered by all sub-archives.
+    covered_row_ids: set[str] = set()
+    for sub_root in sub_archives:
+        sub_manifest = fetch_remote_manifest(sub_root)
+        if sub_manifest is None:
+            continue
+        for f in sub_manifest.files:
+            covered_row_ids.update(f.row_ids)
+
+    # Default targets: every parquet in sweep_dir top level.
+    if files is None:
+        targets = sorted(p.name for p in sweep_dir.glob('*.parquet'))
+    else:
+        targets = list(files)
+
+    # Verify each local file's row_ids are subset of covered set.
+    deleted: list[str] = []
+    for relpath in targets:
+        local = sweep_dir / relpath
+        if not local.exists():
+            continue
+        local_row_ids = set(sniff_row_ids(local))
+        if not local_row_ids:
+            raise ValueError(
+                f'{local}: no row_ids in parquet (`id` column missing '
+                f'or empty); cloud-fallback purge requires row_id '
+                f'evidence to verify recoverability. Cannot purge.',
+            )
+        missing_ids = local_row_ids - covered_row_ids
+        if missing_ids:
+            raise ValueError(
+                f'{local}: {len(missing_ids)} row_ids not covered by '
+                f'sub-archives at {sweep_prefix} '
+                f'(e.g., {sorted(missing_ids)[:3]}...); refusing to '
+                f'purge to avoid data loss.',
+            )
+        local.unlink()
+        deleted.append(relpath)
     return deleted

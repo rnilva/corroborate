@@ -417,6 +417,128 @@ def test_ls_without_archive_raises(sweep_dir: Path) -> None:
         _ = cloud.ls(sweep_dir)
 
 
+# ============ cloud-fallback purge (post-merge-cleanup orphans) ============
+
+
+def _sweep_with_subcorpus_archived(
+    sweep_dir: Path, remote_prefix: str, sub_name: str,
+) -> str:
+    """Build a sweep that mirrors the post-merge-cleanup orphan
+    shape: cloud sub-archive intact, but the LOCAL sub-corpus dir
+    has been wiped, and the local top-level parquets are what
+    survived after the merge.
+
+    For test simplicity: top-level parquets have the SAME content
+    as sub-corpus parquets (the single-intervention merge case
+    where merge copies are identity). Returns sub_remote_root used
+    for the archive."""
+    sub = sweep_dir / sub_name
+    _write_real_parquet(sub / 'runs.parquet', n_rows=200)
+    _write_real_parquet(sub / 'traces.parquet', n_rows=200)
+    sub_remote_root = f'{remote_prefix.rstrip("/")}/{sweep_dir.name}/{sub_name}'
+    _ = cloud.archive(sub, sub_remote_root)
+    # Copy top-level parquets — same content as sub, simulating
+    # the single-arm merge identity case.
+    (sweep_dir / 'runs.parquet').write_bytes(
+        (sub / 'runs.parquet').read_bytes(),
+    )
+    (sweep_dir / 'traces.parquet').write_bytes(
+        (sub / 'traces.parquet').read_bytes(),
+    )
+    # Now wipe the local sub-dir to mirror the post-merge cleanup.
+    import shutil
+    shutil.rmtree(sub)
+    return sub_remote_root
+
+
+def test_purge_without_local_manifest_fails_without_fallback(
+    tmp_path: Path,
+) -> None:
+    """Default behaviour preserved: no local manifest → refuse
+    purge. The cloud-fallback path requires an explicit
+    `cloud_fallback_prefix` argument."""
+    sweep_dir = tmp_path / 'orphan_sweep'
+    sweep_dir.mkdir()
+    remote_prefix = f'file://{tmp_path / "remote"}'
+    _ = _sweep_with_subcorpus_archived(sweep_dir, remote_prefix, 'canonical')
+
+    # Local top-level parquets exist but no _remote.json.
+    assert (sweep_dir / 'runs.parquet').exists()
+    assert not (sweep_dir / cloud.MANIFEST_NAME).exists()
+
+    with pytest.raises(FileNotFoundError, match='no manifest'):
+        _ = cloud.purge(sweep_dir)
+
+
+def test_purge_with_cloud_fallback_succeeds_for_orphan(
+    tmp_path: Path,
+) -> None:
+    """The post-merge-cleanup orphan: local top-level parquets
+    exist but their _remote.json was wiped along with the sub-
+    corpus dir that originally held it. Cloud sub-archives are
+    intact. With cloud_fallback_prefix, purge looks up the sub-
+    archives, verifies row_id coverage, and permits deletion."""
+    sweep_dir = tmp_path / 'orphan_sweep'
+    sweep_dir.mkdir()
+    remote_prefix = f'file://{tmp_path / "remote"}'
+    _ = _sweep_with_subcorpus_archived(sweep_dir, remote_prefix, 'canonical')
+
+    deleted = cloud.purge(
+        sweep_dir, cloud_fallback_prefix=remote_prefix,
+    )
+    assert set(deleted) == {'runs.parquet', 'traces.parquet'}
+    assert not (sweep_dir / 'runs.parquet').exists()
+    assert not (sweep_dir / 'traces.parquet').exists()
+
+
+def test_purge_cloud_fallback_refuses_uncovered_row_ids(
+    tmp_path: Path,
+) -> None:
+    """Safety check: if the local top-level parquet contains
+    row_ids NOT covered by any cloud sub-archive, purge refuses
+    rather than risk silent data loss. Simulated by replacing
+    the top-level runs.parquet with a parquet whose row_ids
+    differ from the archived sub-corpus."""
+    sweep_dir = tmp_path / 'orphan_sweep'
+    sweep_dir.mkdir()
+    remote_prefix = f'file://{tmp_path / "remote"}'
+    _ = _sweep_with_subcorpus_archived(sweep_dir, remote_prefix, 'canonical')
+    # Replace top-level runs.parquet with row_ids that don't
+    # appear in the archived sub-corpus (cell-200 .. cell-399).
+    import polars as pl
+    pl.DataFrame({
+        'id': [f'cell-{i}' for i in range(200, 400)],
+        'x': list(range(200)),
+    }).write_parquet(sweep_dir / 'runs.parquet')
+
+    with pytest.raises(ValueError, match='not covered by sub-archives'):
+        _ = cloud.purge(
+            sweep_dir, cloud_fallback_prefix=remote_prefix,
+            files=['runs.parquet'],
+        )
+    # Local file preserved (refused deletion).
+    assert (sweep_dir / 'runs.parquet').exists()
+
+
+def test_purge_cloud_fallback_raises_when_no_subarchives_found(
+    tmp_path: Path,
+) -> None:
+    """No sub-archives at the cloud prefix → purge refuses. The
+    error message points at the prefix so the user can diagnose
+    a misspelled remote or wrong cloud bucket."""
+    sweep_dir = tmp_path / 'orphan_sweep'
+    sweep_dir.mkdir()
+    _write_real_parquet(sweep_dir / 'runs.parquet', n_rows=200)
+    empty_remote = f'file://{tmp_path / "empty_remote"}'
+
+    with pytest.raises(
+        FileNotFoundError, match='no sub-archives found',
+    ):
+        _ = cloud.purge(
+            sweep_dir, cloud_fallback_prefix=empty_remote,
+        )
+
+
 # ============ restore_columns: column-projected restore ============
 
 
