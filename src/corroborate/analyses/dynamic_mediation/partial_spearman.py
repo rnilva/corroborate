@@ -46,11 +46,13 @@ import polars as pl
 
 from corroborate._internals.polars import to_dicts as _to_dicts
 from corroborate.analyses.dynamic_mediation._common import (
+    ClusterBootstrapInterval,
     FisherZDLPool,
     Stratum,
     TimeAggregationStatus,
     _ColumnOrMeasurable,
     _classify_status,
+    _cluster_bootstrap_pool,
     _collect_arm_and_per_burst,
     _encode_arm,
     _fisher_z_dl_pool,
@@ -103,7 +105,19 @@ class DynamicMediationResult:
     Fisher-z units (its scale). Pair the two pools: FE for the
     point estimate under consistent-direction (its n-weighting is
     sharper at low τ²), DL for the heterogeneity diagnostic +
-    point estimate under any pool-incoherent regime."""
+    point estimate under any pool-incoherent regime.
+
+    `bootstrap_marginal` / `bootstrap_partial` (the cluster
+    bootstrap empirical CI) are `None` when `n_bootstrap == 0`
+    (the default, fast path) and populated when `n_bootstrap > 0`.
+    DL's PI bounds are *parametric* — they assume per-burst
+    independence, which trajectory data violates (bursts within
+    one cell share network state, dynamics, replay buffer). The
+    cluster bootstrap resamples WHOLE CELLS with replacement and
+    is therefore assumption-free under any within-cell
+    autocorrelation structure. For publication-grade CIs reach
+    for `n_bootstrap=1000`; the empirical 2.5% / 97.5% percentile
+    range is the 95% CI."""
     burst_steps: tuple[int, ...]
     rho_marginal: tuple[float, ...]
     rho_partial: tuple[float, ...]
@@ -116,6 +130,9 @@ class DynamicMediationResult:
     mediator_name: str
     outcome_name: str
     arm_field: str
+    bootstrap_marginal: ClusterBootstrapInterval | None = None
+    bootstrap_partial: ClusterBootstrapInterval | None = None
+    n_bootstrap: int = 0
 
     @property
     def n_bursts(self) -> int:
@@ -145,6 +162,9 @@ def dynamic_partial_spearman(
     min_n_per_burst: int = 5,
     weak_time_varying_ratio: float = 2.0,
     sign_flip_min_abs_rho: float = 0.05,
+    n_bootstrap: int = 0,
+    bootstrap_seed: int = 42,
+    bootstrap_alpha: float = 0.05,
 ) -> Mapping[Stratum, DynamicMediationResult]:
     """Trajectory-resolved partial Spearman mediation per stratum.
 
@@ -201,7 +221,24 @@ def dynamic_partial_spearman(
     handling). This is the less-information-losing semantics — vs
     truncating ALL cells to the shortest stratum length, which
     discards every late-training burst a single short cell can
-    cause."""
+    cause.
+
+    `n_bootstrap` (default 0) enables a cluster-bootstrap CI on
+    the DL pool. Cells are the resampling unit (each cell = one
+    training trajectory = one independent unit). For each of
+    `n_bootstrap` iterations, resample `n_cells` with replacement
+    and recompute the DL-pooled ρ from the resampled per-burst
+    trajectories; the empirical [α/2, 1 − α/2] percentile range of
+    the bootstrap distribution becomes `bootstrap_marginal` /
+    `bootstrap_partial`. DL's PI bounds assume per-burst
+    independence — which trajectory data violates — so the
+    cluster bootstrap is the methodologically-correct CI for
+    publication-grade reports. `n_bootstrap=1000` is the
+    recommended value; the default 0 keeps the fast path
+    bit-identical to the pre-bootstrap behaviour.
+    `bootstrap_seed` (default 42) makes the resample deterministic
+    via `np.random.default_rng`; `bootstrap_alpha` (default 0.05 →
+    95% CI) controls the percentile."""
     # Group cells by stratum. Each entry is the list of cell-dicts
     # contributing to that stratum.
     by_stratum: dict[Stratum, list[Mapping[str, object]]] = {}
@@ -221,6 +258,9 @@ def dynamic_partial_spearman(
             min_n_per_burst=min_n_per_burst,
             weak_time_varying_ratio=weak_time_varying_ratio,
             sign_flip_min_abs_rho=sign_flip_min_abs_rho,
+            n_bootstrap=n_bootstrap,
+            bootstrap_seed=bootstrap_seed,
+            bootstrap_alpha=bootstrap_alpha,
         )
         if result is not None:
             out[stratum] = result
@@ -236,6 +276,9 @@ def _compute_one_stratum(
     min_n_per_burst: int,
     weak_time_varying_ratio: float,
     sign_flip_min_abs_rho: float,
+    n_bootstrap: int,
+    bootstrap_seed: int,
+    bootstrap_alpha: float,
 ) -> DynamicMediationResult | None:
     """Per-stratum core. Returns None when no per-cell row has
     valid arm + per-burst columns at all."""
@@ -321,6 +364,41 @@ def _compute_one_stratum(
         marg_pool = float('nan')
         part_pool = float('nan')
 
+    # Cluster bootstrap CI on the DL pool — opt-in via
+    # `n_bootstrap > 0`. Default fast path keeps existing test
+    # behaviour bit-identical. The bootstrap re-uses the
+    # (arm_codes, mediator_lists, outcome_lists) buffers built
+    # above; each resample picks `n_cells` cell indices with
+    # replacement, recomputes per-burst ρ from the subset, then
+    # DL-pools.
+    bootstrap_marg: ClusterBootstrapInterval | None = None
+    bootstrap_part: ClusterBootstrapInterval | None = None
+    if n_bootstrap > 0:
+        bootstrap_marg = _cluster_bootstrap_pool(
+            arm_codes=arm_codes,
+            mediator_lists=mediator_lists,
+            outcome_lists=outcome_lists,
+            n_bursts=n_bursts,
+            min_n_per_burst=min_n_per_burst,
+            kind='marginal',
+            df_offset=3,
+            n_resamples=n_bootstrap,
+            alpha=bootstrap_alpha,
+            seed=bootstrap_seed,
+        )
+        bootstrap_part = _cluster_bootstrap_pool(
+            arm_codes=arm_codes,
+            mediator_lists=mediator_lists,
+            outcome_lists=outcome_lists,
+            n_bursts=n_bursts,
+            min_n_per_burst=min_n_per_burst,
+            kind='partial',
+            df_offset=4,
+            n_resamples=n_bootstrap,
+            alpha=bootstrap_alpha,
+            seed=bootstrap_seed,
+        )
+
     return DynamicMediationResult(
         burst_steps=tuple(range(n_bursts)),
         rho_marginal=tuple(rho_marg),
@@ -334,6 +412,9 @@ def _compute_one_stratum(
         mediator_name=_source_name(mediator_per_burst),
         outcome_name=_source_name(outcome_per_burst),
         arm_field=arm_field,
+        bootstrap_marginal=bootstrap_marg,
+        bootstrap_partial=bootstrap_part,
+        n_bootstrap=n_bootstrap,
     )
 
 

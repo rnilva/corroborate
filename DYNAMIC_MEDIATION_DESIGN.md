@@ -234,6 +234,81 @@ training trajectories, G is large enough that DL is in its
 well-calibrated regime; the `assumption_violations` field
 surfaces the warning explicitly when G is small.
 
+### C.2 Aggregator: cluster bootstrap
+
+DL's prediction-interval bounds (`rho_pi_lo` / `rho_pi_hi` on
+`FisherZDLPool`) are *parametric* — they assume per-burst
+observations are independent. In trajectory data they are NOT:
+bursts within one cell share network state, replay-buffer
+contents, optimizer momentum, and dynamics. The within-cell
+autocorrelation is the load-bearing structural feature of
+training data — exactly the part DL's PI formula doesn't see.
+
+The cluster bootstrap is the standard methodological fix.
+Algorithm:
+
+1. **Cell as resampling unit.** Each cell = one training
+   trajectory = one independent unit. Bursts within a cell
+   stay together (they're not independent, so we don't break
+   them).
+2. **Resample with replacement.** For each of `n_resamples`
+   iterations, sample `n_cells` cell indices with replacement
+   from the original panel (using
+   `np.random.default_rng(seed)` for deterministic output).
+3. **Recompute the pool.** Per resample, materialise the
+   resampled panel's per-burst ρ trajectory (using the same
+   `_gather_burst_b` + `_spearman_marginal` /
+   `partial_spearman_rho` primitives the non-bootstrap path
+   uses) and DL-pool to one bootstrap-replica ρ.
+4. **Empirical percentile CI.** The [α/2, 1 − α/2] percentile
+   range across replicas is the CI; the median is the point
+   estimate (more robust than mean under asymmetric bootstrap
+   distributions).
+
+The cluster bootstrap is **assumption-free** under any
+within-cell autocorrelation structure — resampling cells
+preserves whatever dependence exists between bursts of the
+same cell. This is the methodologically-correct CI shape for
+publication-grade reports.
+
+**Why bootstrap alongside DL rather than instead of**: DL's
+τ²/I²/Q remain the canonical quantitative measures of
+heterogeneity (the diagnostic enum
+`TimeAggregationStatus` flags it qualitatively). The
+bootstrap adds an honest empirical CI to the point estimate.
+DL's PI is a *predictive* interval for a hypothetical new
+burst's underlying parameter — useful, but a different
+quantity from the *sampling* interval the bootstrap
+estimates. The two pools answer different questions:
+
+| pool | quantity | assumption |
+|---|---|---|
+| FE Fisher-z | n-weighted point estimate | bursts iid, identical population ρ |
+| DL `rho_pooled` | RE point estimate | bursts iid, ρ varies between bursts |
+| DL `rho_pi_lo` / `rho_pi_hi` | predictive interval for a new burst's ρ | bursts iid (independent draws from heterogeneous pop) |
+| Bootstrap CI | sampling CI on the DL pool point estimate | cells iid (within-cell dependence preserved) |
+
+**Typed surface**: `ClusterBootstrapInterval` frozen
+dataclass in `analyses.dynamic_mediation._common`. Fields:
+`rho_lower`, `rho_upper`, `rho_median`, `n_resamples`,
+`alpha`, `seed`. Both `DynamicMediationResult` and
+`DynamicPCResult` carry `bootstrap_marginal:
+ClusterBootstrapInterval | None` and `bootstrap_partial:
+ClusterBootstrapInterval | None` + `n_bootstrap: int`. The
+fields are `None` when `n_bootstrap == 0` (the default fast
+path); populated when `n_bootstrap > 0`. `n_bootstrap=1000`
+is the recommended publication-grade value (CI bound
+percentile-estimator sampling SD ~3% at G_bootstrap=1000); the
+default 0 keeps the non-bootstrap code path bit-identical to
+the pre-bootstrap behaviour for downstream consumers that
+don't need the CI.
+
+**Reference**: Pustejovsky & Tipton (2022) on CHE/RVE; Deen &
+de Rooij (2020) on ClusterBootstrap. The cluster bootstrap
+generalises the i.i.d. bootstrap by respecting cluster
+structure (Davison & Hinkley 1997 §3.8, "blocked bootstrap"
+in the time-series literature).
+
 ### D. Bridge consumers
 
 Existing bridges consume `PartialSpearmanResult.rho` and

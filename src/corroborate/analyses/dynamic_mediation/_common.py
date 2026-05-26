@@ -43,11 +43,16 @@ import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum, auto
+from typing import Literal
 
 import numpy as np
 import numpy.typing as npt
 
 from corroborate.analyses._cell_value import evaluate_per_burst_source
+from corroborate.graph.discovery import (
+    _spearman_marginal as _graph_spearman_marginal,  # pyright: ignore[reportPrivateUsage]
+    partial_spearman_rho,
+)
 from corroborate.measurables import Measurable
 from corroborate.stats import random_effects_summary
 
@@ -501,7 +506,202 @@ def _fisher_z_dl_pool(
     )
 
 
+@dataclass(frozen=True, slots=True)
+class ClusterBootstrapInterval:
+    """Empirical CI from a cluster bootstrap over cells.
+
+    DerSimonian-Laird's PI bounds are *parametric*: they assume
+    per-burst observations are independent. In trajectory data
+    bursts within one cell share network state, dynamics, and
+    replay buffer — they are NOT independent. The cluster
+    bootstrap is the standard fix: resample whole cells (each
+    cell = one training trajectory = one independent unit) with
+    replacement, recompute the per-burst ρ + pooled estimate per
+    resample, and take the empirical [α/2, 1−α/2] percentile
+    range as the CI. This is *assumption-free* under any
+    within-cell autocorrelation structure — the resampling
+    preserves whatever dependence exists.
+
+    Field semantics:
+
+      - `rho_lower` / `rho_upper` — empirical α/2 and 1 − α/2
+        percentiles of the pooled ρ across `n_resamples`
+        cell-resampled panels.
+      - `rho_median` — median of the bootstrap distribution; a
+        more robust point estimate than mean when the
+        distribution is asymmetric.
+      - `n_resamples` — number of bootstrap iterations.
+      - `alpha` — significance level (default 0.05 → 95% CI).
+      - `seed` — RNG seed for reproducibility.
+
+    See Pustejovsky & Tipton (2022) on CHE/RVE and Deen & de
+    Rooij (2020) on ClusterBootstrap for the methodological
+    background. Distinguishes from DL's parametric PI (over-
+    confident under within-cell autocorrelation); pair the two
+    pools: DL for the heterogeneity diagnostic, cluster bootstrap
+    for the publication-grade CI."""
+    rho_lower: float
+    rho_upper: float
+    rho_median: float
+    n_resamples: int
+    alpha: float
+    seed: int
+
+
+def _pool_rhos_dl(
+    rhos: Sequence[float], ns: Sequence[int], df_offset: int,
+) -> float:
+    """Compute the DL-pooled ρ from a per-burst (ρ, n) trajectory
+    via `_fisher_z_dl_pool`. Returns the inverse-Fisher-z'd point
+    estimate (`rho_pooled`). NaN propagates when DL is undefined
+    (fewer than 2 valid bursts). Bootstrap iterations that
+    resample to a degenerate panel (e.g. all-same-cell after
+    replacement) get NaN, which the percentile reducer filters
+    out."""
+    dl = _fisher_z_dl_pool(rhos, ns, df_offset)
+    return dl.rho_pooled
+
+
+def _per_burst_rhos_from_subset(
+    *,
+    arm_codes: npt.NDArray[np.float64],
+    mediator_lists: Sequence[Sequence[float]],
+    outcome_lists: Sequence[Sequence[float]],
+    cell_idx: npt.NDArray[np.intp],
+    n_bursts: int,
+    min_n_per_burst: int,
+    kind: Literal['marginal', 'partial'],
+) -> tuple[list[float], list[int]]:
+    """Compute per-burst ρ + n on a subset of cells (given by
+    `cell_idx`). The subset is built by indexing the parallel
+    arrays; resampling-with-replacement repeats the same cell
+    multiple times in `cell_idx`, which is the cluster-bootstrap
+    semantics (a duplicated cell contributes all its bursts to
+    each replica).
+
+    `kind` selects which ρ to compute: 'marginal' calls
+    `_spearman_marginal(arm, outcome)`; 'partial' calls
+    `partial_spearman_rho(arm, outcome, mediator)`. Same
+    primitives the non-bootstrap `_compute_one_stratum` path uses
+    — guarantees the bootstrap distribution centres on the
+    point estimate by construction."""
+    # Build subsetted arm-code vector + per-burst lookups.
+    # Using lists-of-lists indexed by `cell_idx` to mirror the
+    # `_gather_burst_b` shape without materialising NumPy 2-D
+    # matrices (mediator_lists / outcome_lists are ragged-length
+    # in the general case).
+    sub_arm_codes = arm_codes[cell_idx]
+    sub_mediator: list[Sequence[float]] = [
+        mediator_lists[int(i)] for i in cell_idx
+    ]
+    sub_outcome: list[Sequence[float]] = [
+        outcome_lists[int(i)] for i in cell_idx
+    ]
+
+    rho_list: list[float] = []
+    n_list: list[int] = []
+    for b in range(n_bursts):
+        x_np, y_np, z_np = _gather_burst_b(
+            sub_arm_codes, sub_mediator, sub_outcome, b,
+        )
+        n_b = int(x_np.size)
+        n_list.append(n_b)
+        if n_b < min_n_per_burst:
+            rho_list.append(float('nan'))
+            continue
+        # Spearman is invariant to monotone transforms but degenerate
+        # when arm has no variance — the cluster bootstrap CAN sample
+        # all-treatment / all-baseline cells when n_cells is small.
+        # Guard explicitly: NaN-out the burst when single-arm.
+        if float(np.std(x_np)) == 0.0:
+            rho_list.append(float('nan'))
+            continue
+        if kind == 'marginal':
+            r, _ = _graph_spearman_marginal(x_np, y_np)
+        else:
+            r, _ = partial_spearman_rho(x_np, y_np, z_np)
+        rho_list.append(float(r))
+    return rho_list, n_list
+
+
+def _cluster_bootstrap_pool(
+    *,
+    arm_codes: npt.NDArray[np.float64],
+    mediator_lists: Sequence[Sequence[float]],
+    outcome_lists: Sequence[Sequence[float]],
+    n_bursts: int,
+    min_n_per_burst: int,
+    kind: Literal['marginal', 'partial'],
+    df_offset: int,
+    n_resamples: int,
+    alpha: float,
+    seed: int,
+) -> ClusterBootstrapInterval:
+    """Cluster bootstrap CI over the DL pool. Cells are the
+    resampling unit (each cell = one training trajectory = one
+    independent unit); bursts within a cell stay together. For
+    each of `n_resamples` iterations:
+
+      1. Sample `n_cells` cell indices with replacement.
+      2. Recompute per-burst ρ (and n) from the resampled panel.
+      3. Pool the per-burst ρ via DL → one bootstrap-replica ρ.
+
+    The empirical [α/2, 1 − α/2] percentile range of the
+    bootstrap-replica ρ distribution is the CI; the median is the
+    point estimate (more robust than mean under asymmetric
+    bootstrap distributions). NaN replicas (bootstrap panels too
+    degenerate to compute DL — e.g. all-same-cell or single-arm
+    under replacement) are filtered before the percentile call so
+    they don't bias the bounds.
+
+    Deterministic given `seed` via `np.random.default_rng`."""
+    n_cells = arm_codes.size
+    rng = np.random.default_rng(seed)
+    replicas: list[float] = []
+    for _ in range(n_resamples):
+        idx = rng.integers(0, n_cells, size=n_cells)
+        rhos, ns = _per_burst_rhos_from_subset(
+            arm_codes=arm_codes,
+            mediator_lists=mediator_lists,
+            outcome_lists=outcome_lists,
+            cell_idx=idx,
+            n_bursts=n_bursts,
+            min_n_per_burst=min_n_per_burst,
+            kind=kind,
+        )
+        r = _pool_rhos_dl(rhos, ns, df_offset)
+        if not math.isnan(r):
+            replicas.append(r)
+    if not replicas:
+        # Every replica was degenerate (extreme small-stratum
+        # boundary). Return NaN bounds — consumers see a NaN
+        # interval and know to expand the panel.
+        return ClusterBootstrapInterval(
+            rho_lower=float('nan'),
+            rho_upper=float('nan'),
+            rho_median=float('nan'),
+            n_resamples=n_resamples,
+            alpha=alpha,
+            seed=seed,
+        )
+    arr = np.asarray(replicas, dtype=np.float64)
+    lo_q = 100.0 * (alpha / 2.0)
+    hi_q = 100.0 * (1.0 - alpha / 2.0)
+    rho_lower = float(np.percentile(arr, lo_q))
+    rho_upper = float(np.percentile(arr, hi_q))
+    rho_median = float(np.median(arr))
+    return ClusterBootstrapInterval(
+        rho_lower=rho_lower,
+        rho_upper=rho_upper,
+        rho_median=rho_median,
+        n_resamples=n_resamples,
+        alpha=alpha,
+        seed=seed,
+    )
+
+
 __all__ = [
+    'ClusterBootstrapInterval',
     'FisherZDLPool',
     'Stratum',
     'TimeAggregationStatus',
@@ -509,6 +709,7 @@ __all__ = [
     '_PerBurstMeasurable',
     '_as_float_list',
     '_classify_status',
+    '_cluster_bootstrap_pool',
     '_collect_arm_and_per_burst',
     '_encode_arm',
     '_fisher_z_dl_pool',

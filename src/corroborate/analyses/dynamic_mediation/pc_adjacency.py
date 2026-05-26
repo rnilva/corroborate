@@ -45,11 +45,13 @@ import polars as pl
 
 from corroborate._internals.polars import to_dicts as _to_dicts
 from corroborate.analyses.dynamic_mediation._common import (
+    ClusterBootstrapInterval,
     FisherZDLPool,
     Stratum,
     TimeAggregationStatus,
     _ColumnOrMeasurable,
     _classify_status,
+    _cluster_bootstrap_pool,
     _collect_arm_and_per_burst,
     _encode_arm,
     _fisher_z_dl_pool,
@@ -123,7 +125,19 @@ class DynamicPCResult:
     primitive's primary output is per-burst CI-test edge
     presence, not a pooled magnitude; the DL pool sits alongside
     as the trajectory-level magnitude / heterogeneity summary
-    for consumers that want it."""
+    for consumers that want it.
+
+    `bootstrap_marginal` / `bootstrap_partial` (the cluster
+    bootstrap empirical CI on the DL pool) are `None` when
+    `n_bootstrap == 0` (default fast path) and populated when
+    `n_bootstrap > 0`. DL's PI bounds are parametric and assume
+    per-burst independence — which trajectory data violates; the
+    cluster bootstrap resamples WHOLE CELLS and is therefore
+    assumption-free under any within-cell autocorrelation
+    structure. `n_bootstrap=1000` is recommended for
+    publication-grade CIs. The (marg, dsep, direct) edge counts
+    are NOT bootstrapped — they're descriptive trajectory-level
+    facts, not inferential pools."""
     burst_steps: tuple[int, ...]
     n_per_burst: tuple[int, ...]
     p_marginal: tuple[float, ...]
@@ -140,6 +154,9 @@ class DynamicPCResult:
     mediator_name: str
     outcome_name: str
     arm_field: str
+    bootstrap_marginal: ClusterBootstrapInterval | None = None
+    bootstrap_partial: ClusterBootstrapInterval | None = None
+    n_bootstrap: int = 0
 
     @property
     def n_bursts(self) -> int:
@@ -158,6 +175,9 @@ def dynamic_pc_adjacency(
     min_n_per_burst: int = 20,
     sign_flip_min_abs_rho: float = 0.05,
     weak_time_varying_ratio: float = 2.0,
+    n_bootstrap: int = 0,
+    bootstrap_seed: int = 42,
+    bootstrap_alpha: float = 0.05,
 ) -> Mapping[Stratum, DynamicPCResult]:
     """Trajectory-resolved PC-style mediation per stratum.
 
@@ -196,6 +216,20 @@ def dynamic_pc_adjacency(
     dispatch as the static `partial_spearman` and the sibling
     `dynamic_partial_spearman`.
 
+    `n_bootstrap` (default 0) enables a cluster-bootstrap CI on
+    the DL pool. Cells are the resampling unit. For each
+    iteration, resample `n_cells` with replacement and recompute
+    the DL-pooled per-burst ρ; the empirical [α/2, 1 − α/2]
+    percentile range becomes `bootstrap_marginal` /
+    `bootstrap_partial`. `n_bootstrap=1000` is the recommended
+    publication-grade value; default 0 keeps the fast path
+    intact. `bootstrap_seed` (default 42) → `np.random.default_rng`
+    for reproducibility; `bootstrap_alpha` (default 0.05 → 95% CI)
+    controls the percentile. The per-burst edge counts
+    (`n_bursts_marginal_edge` / `n_bursts_mediator_dseparates` /
+    `n_bursts_direct_edge`) are NOT bootstrapped — they're
+    descriptive trajectory-level facts, not inferential.
+
     Returns a `Mapping[Stratum, DynamicPCResult]`. Strata where no
     cell contributes (missing arm tag, malformed per-burst columns,
     single-arm stratum) are absent from the result — the framework
@@ -218,6 +252,9 @@ def dynamic_pc_adjacency(
             min_n_per_burst=min_n_per_burst,
             sign_flip_min_abs_rho=sign_flip_min_abs_rho,
             weak_time_varying_ratio=weak_time_varying_ratio,
+            n_bootstrap=n_bootstrap,
+            bootstrap_seed=bootstrap_seed,
+            bootstrap_alpha=bootstrap_alpha,
         )
         if result is not None:
             out[stratum] = result
@@ -234,6 +271,9 @@ def _compute_one_stratum_pc(
     min_n_per_burst: int,
     sign_flip_min_abs_rho: float,
     weak_time_varying_ratio: float,
+    n_bootstrap: int,
+    bootstrap_seed: int,
+    bootstrap_alpha: float,
 ) -> DynamicPCResult | None:
     """Per-stratum core for the PC primitive. Returns None when no
     per-cell row has valid arm + per-burst columns at all."""
@@ -329,6 +369,40 @@ def _compute_one_stratum_pc(
     dl_marg = _fisher_z_dl_pool(rho_marg, n_per_burst, df_offset=3)
     dl_part = _fisher_z_dl_pool(rho_part, n_per_burst, df_offset=4)
 
+    # Cluster bootstrap on the DL pool — opt-in. Same shape as the
+    # partial-Spearman sibling: resample whole cells with
+    # replacement, recompute the DL-pooled per-burst ρ per
+    # replica, take the empirical α/2 / 1−α/2 percentiles. The
+    # edge counts above are NOT bootstrapped — they're
+    # descriptive trajectory-level facts.
+    bootstrap_marg: ClusterBootstrapInterval | None = None
+    bootstrap_part: ClusterBootstrapInterval | None = None
+    if n_bootstrap > 0:
+        bootstrap_marg = _cluster_bootstrap_pool(
+            arm_codes=arm_codes,
+            mediator_lists=mediator_lists,
+            outcome_lists=outcome_lists,
+            n_bursts=n_bursts,
+            min_n_per_burst=min_n_per_burst,
+            kind='marginal',
+            df_offset=3,
+            n_resamples=n_bootstrap,
+            alpha=bootstrap_alpha,
+            seed=bootstrap_seed,
+        )
+        bootstrap_part = _cluster_bootstrap_pool(
+            arm_codes=arm_codes,
+            mediator_lists=mediator_lists,
+            outcome_lists=outcome_lists,
+            n_bursts=n_bursts,
+            min_n_per_burst=min_n_per_burst,
+            kind='partial',
+            df_offset=4,
+            n_resamples=n_bootstrap,
+            alpha=bootstrap_alpha,
+            seed=bootstrap_seed,
+        )
+
     return DynamicPCResult(
         burst_steps=tuple(range(n_bursts)),
         n_per_burst=tuple(n_per_burst),
@@ -346,6 +420,9 @@ def _compute_one_stratum_pc(
         mediator_name=_source_name(mediator_per_burst),
         outcome_name=_source_name(outcome_per_burst),
         arm_field=arm_field,
+        bootstrap_marginal=bootstrap_marg,
+        bootstrap_partial=bootstrap_part,
+        n_bootstrap=n_bootstrap,
     )
 
 

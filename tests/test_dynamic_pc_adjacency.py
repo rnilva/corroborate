@@ -32,6 +32,7 @@ import polars as pl
 import pytest
 
 from corroborate.analyses.dynamic_mediation import (
+    ClusterBootstrapInterval,
     DynamicPCResult,
     TimeAggregationStatus,
     dynamic_pc_adjacency,
@@ -735,3 +736,95 @@ def test_pc_adjacency_exposes_dl_pool_fields() -> None:
         f'dl_partial.rho_pooled={dl_p.rho_pooled:.4f} — expected '
         f'near 0 under d-separation; |·|<0.20 is 4σ from null'
     )
+
+
+# ============ Cluster bootstrap CI ============
+
+def test_pc_n_bootstrap_zero_keeps_bootstrap_fields_none() -> None:
+    """Default `n_bootstrap=0` keeps the PC primitive's bootstrap
+    fields None — pins fast-path bit-identical behaviour with
+    pre-bootstrap callers."""
+    df = _build_full_mediation_panel(n_bursts=3, seed=300)
+    results = dynamic_pc_adjacency.fn(
+        df, arm_field='arm_key',
+        mediator_per_burst='mediator_pb',
+        outcome_per_burst='outcome_pb',
+        stratify_by=('env_name', 'gamma'),
+    )
+    result = _get_single_stratum(results)
+    assert result.bootstrap_marginal is None
+    assert result.bootstrap_partial is None
+    assert result.n_bootstrap == 0
+
+
+def test_pc_cluster_bootstrap_populated_under_n_bootstrap_positive() -> None:
+    """Under `n_bootstrap > 0` the PC primitive exposes both
+    bootstrap CIs. Closed-form bounds:
+      - Full-mediation DAG: marginal ρ ≈ 0.58 → bootstrap CI
+        should bracket positive (planted positive direction).
+      - Mediator d-separates → partial ρ ≈ 0 → bootstrap CI
+        should bracket 0.
+
+    n_resamples=200 with n_cells=60 gives bootstrap-replica DL
+    sampling SD ≈ 1/sqrt(60-3) ≈ 0.132 in z-units; at ρ=0.58 the
+    delta-method ρ-unit SD ≈ (1 - 0.58²) · 0.132 ≈ 0.087. 95% CI
+    half-width ≈ 1.96 · 0.087 ≈ 0.17; bracket bound at 0.30."""
+    df = _build_full_mediation_panel(n_bursts=8, seed=301)
+    results = dynamic_pc_adjacency.fn(
+        df, arm_field='arm_key',
+        mediator_per_burst='mediator_pb',
+        outcome_per_burst='outcome_pb',
+        stratify_by=('env_name', 'gamma'),
+        n_bootstrap=200,
+        bootstrap_seed=42,
+    )
+    result = _get_single_stratum(results)
+    assert result.n_bootstrap == 200
+    boot_m = result.bootstrap_marginal
+    boot_p = result.bootstrap_partial
+    assert boot_m is not None and boot_p is not None
+    assert isinstance(boot_m, ClusterBootstrapInterval)
+    assert isinstance(boot_p, ClusterBootstrapInterval)
+    # Marginal CI brackets positive ρ (planted positive arm→outcome
+    # link through the mediator). DL marginal point estimate is in
+    # range ≈ 0.5–0.65; expect CI to bracket this.
+    assert boot_m.rho_lower > 0.0, (
+        f'marginal CI lower={boot_m.rho_lower:.4f}: full-mediation '
+        f'DAG should produce strictly-positive marginal CI'
+    )
+    assert boot_m.rho_upper > boot_m.rho_lower
+    # Partial CI brackets 0 under d-separation. With n_bursts=8 and
+    # n=60 per burst, partial sampling SD per replica is ~0.08;
+    # bracket [-0.20, +0.20].
+    assert boot_p.rho_lower < 0.1, (
+        f'partial CI lower={boot_p.rho_lower:.4f}: d-separated '
+        f'partial should bracket 0'
+    )
+    assert boot_p.rho_upper > -0.1
+
+
+def test_pc_cluster_bootstrap_reproducible() -> None:
+    """Reproducibility check on the PC primitive's bootstrap —
+    identical `bootstrap_seed` produces identical bounds."""
+    df = _build_full_mediation_panel(n_bursts=4, seed=302)
+    r_a = dynamic_pc_adjacency.fn(
+        df, arm_field='arm_key',
+        mediator_per_burst='mediator_pb',
+        outcome_per_burst='outcome_pb',
+        stratify_by=('env_name', 'gamma'),
+        n_bootstrap=50,
+        bootstrap_seed=7,
+    )
+    r_b = dynamic_pc_adjacency.fn(
+        df, arm_field='arm_key',
+        mediator_per_burst='mediator_pb',
+        outcome_per_burst='outcome_pb',
+        stratify_by=('env_name', 'gamma'),
+        n_bootstrap=50,
+        bootstrap_seed=7,
+    )
+    a = _get_single_stratum(r_a).bootstrap_marginal
+    b = _get_single_stratum(r_b).bootstrap_marginal
+    assert a is not None and b is not None
+    assert a.rho_lower == b.rho_lower
+    assert a.rho_upper == b.rho_upper
