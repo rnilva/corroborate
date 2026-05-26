@@ -622,6 +622,74 @@ def state_conditional_argmax_entropy_per_burst(
     return out
 
 
+@measurable(reads=(
+    'online_top12_margin_per_step', 'online_max_q_per_step',
+))
+def q_action_gap_relative_late(
+    record: Mapping[str, object],
+) -> float:
+    """Relative top1-top2 Q action gap over the late 50% of training:
+    `mean(top12_margin) / |mean(max_q)|`.
+
+    Captures **scale-invariant** anisotropy of Q(s, ·). Absolute
+    `q_argmax_margin_late` and `q_late_mean` are both DDQN-deflated
+    (the wedge halves both); their RATIO disentangles "DDQN halves
+    magnitude proportionally" (ratio invariant) from "DDQN halves
+    magnitude more than gap" (ratio GROWS under D).
+
+    The denominator absolute value handles envs where late-window
+    mean-Q can be negative (dense-penalty regimes). At Asterix γ
+    =0.999 (sparse-positive) the abs is a no-op; at MountainCar
+    γ=0.99 it makes the ratio interpretable.
+
+    Returns NaN when either trace column is missing or |mean(max_q)|
+    is too small (< 1e-6) to avoid division blow-up at near-zero Q."""
+    margin_arr = record.get('online_top12_margin_per_step')
+    maxq_arr = record.get('online_max_q_per_step')
+    if margin_arr is None or maxq_arr is None:
+        return float('nan')
+    margin = np.asarray(margin_arr, dtype=np.float64).flatten()
+    maxq = np.asarray(maxq_arr, dtype=np.float64).flatten()
+    n = min(margin.size, maxq.size)
+    if n < 4:
+        return float('nan')
+    half = n // 2
+    margin_late = margin[half:n]
+    maxq_late = maxq[half:n]
+    mean_margin = float(margin_late.mean())
+    mean_maxq = float(maxq_late.mean())
+    if abs(mean_maxq) < 1e-6:
+        return float('nan')
+    return mean_margin / abs(mean_maxq)
+
+
+@measurable(reads=('state_hash_per_step',))
+def unique_states_visited_late(
+    record: Mapping[str, object],
+) -> float:
+    """Count of distinct `state_hash_per_step` values over the late
+    50% of training.
+
+    Operationalises the **state-coverage** end of the lock-in chain:
+    canonical finding shows V visits 1351 unique states vs D's 1216
+    at Asterix γ=0.999 (overlap=9), with V's coverage GROWING +143
+    over training while D's plateaus at +68. The late-half count
+    captures the "stable attractor size" each arm settles into.
+
+    Returns as float (not int) so missing/empty windows can return
+    NaN cleanly. Reader semantics: integer-valued; cast to int at
+    use site if needed."""
+    state_arr = record.get('state_hash_per_step')
+    if state_arr is None:
+        return float('nan')
+    s = np.asarray(state_arr, dtype=np.int64).flatten()
+    n = s.size
+    if n < 4:
+        return float('nan')
+    half = n // 2
+    return float(np.unique(s[half:]).size)
+
+
 @measurable(reads=('online_argmax_per_step', 'state_hash_per_step'))
 def mutual_info_state_argmax_late(
     record: Mapping[str, object],

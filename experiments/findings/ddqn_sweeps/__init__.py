@@ -116,6 +116,12 @@ from experiments.findings.ddqn_sweeps import (
 from experiments.findings.ddqn_sweeps import (
     finding_smoothness_alignment_consistency_g0999,
 )
+from experiments.findings.ddqn_sweeps.alpha_relative_anisotropy_dose_response import (
+    BRIDGES as _ALPHA_REL_ANISO_DOSE,
+)
+from experiments.findings.ddqn_sweeps import (
+    finding_alpha_relative_anisotropy_dose_response,
+)
 
 
 # Loose module scope: only bsuite exclusion. HP-sweep bridges set
@@ -148,6 +154,7 @@ BRIDGES = (
     dormancy_gates_jens_at_acrobot_g0999,
     ddqn_outcome_opposes_loop_rate__canonical_g0999,
     ddqn_outcome_aligns_with_q_smoothness__canonical_g0999,
+    *_ALPHA_REL_ANISO_DOSE,
 )
 
 
@@ -174,6 +181,7 @@ FINDINGS = (
     finding_dormancy_diagnostic_acrobot_g0999,
     finding_loop_channel_consistency_g0999,
     finding_smoothness_alignment_consistency_g0999,
+    finding_alpha_relative_anisotropy_dose_response,
 )
 
 
