@@ -360,7 +360,8 @@ def test_result_provenance_fields() -> None:
         stratify_by=('env_name', 'gamma'),
     )
     result = _get_single_stratum(results)
-    assert result.mediator_name == 'mediator_pb'
+    assert result.mediator_names == ('mediator_pb',)
+    assert result.k_conditioning == 1
     assert result.outcome_name == 'outcome_pb'
     assert result.arm_field == 'arm_key'
     assert result.n_bursts == 3
@@ -1000,9 +1001,9 @@ def test_accepts_measurable_inputs_for_mediator_and_outcome() -> None:
         f'str={r_str.rho_marginal} measurable={r_m.rho_marginal}'
     )
     assert r_str.rho_partial == r_m.rho_partial
-    # Provenance: Measurable path stamps mediator_name /
+    # Provenance: Measurable path stamps mediator_names /
     # outcome_name from the Measurable's `.name`.
-    assert r_m.mediator_name == 'mediator_pb'
+    assert r_m.mediator_names == ('mediator_pb',)
     assert r_m.outcome_name == 'outcome_pb'
 
 
@@ -1659,3 +1660,211 @@ def test_cluster_bootstrap_interval_is_frozen_dataclass() -> None:
     assert isinstance(boot, ClusterBootstrapInterval)
     with pytest.raises((AttributeError, TypeError)):
         boot.rho_lower = 0.0  # pyright: ignore[reportAttributeAccessIssue]
+
+
+# ============ Multi-mediator depth-≥2 conditioning ============
+#
+# Layer A coverage for the multi-mediator extension. Construction
+# parallels the PC depth-2 tests: a planted DAG where joint
+# conditioning is the only valid d-separating set. The
+# closed-form expectation is that ρ(arm, outcome | {Z1, Z2}) → 0
+# while ρ(arm, outcome | Z1) stays bounded away from zero. The
+# DL pool's df_offset accounting must shift to 3+k per the
+# multi-Z Fisher-z statistic.
+
+
+def _build_two_mediator_panel(
+    *,
+    n_bursts: int,
+    seed: int = 0,
+    env_name: str = 'env_a',
+    gamma: float = 0.99,
+) -> pl.DataFrame:
+    """Planted DAG: arm → {Z1, Z2} → outcome (no direct edge).
+
+    Each cell:
+      Z1[b] = arm_code + ε_1
+      Z2[b] = arm_code + ε_2  (indep noise per mediator)
+      outcome[b] = Z1[b] + Z2[b] + ε_Y
+
+    Population-level partial ρ:
+      - With single Z1 conditioning: Z2 still carries
+        arm-information → ρ(arm, outcome | Z1) ≠ 0.
+      - With joint (Z1, Z2) conditioning: both back-doors
+        blocked → ρ(arm, outcome | Z1, Z2) ≈ 0.
+    """
+    rng = np.random.default_rng(seed)
+    n = 2 * _N_CELLS_PER_ARM
+    arms = ['treatment'] * _N_CELLS_PER_ARM + ['baseline'] * _N_CELLS_PER_ARM
+    arm_code = np.asarray(
+        [0.5] * _N_CELLS_PER_ARM + [-0.5] * _N_CELLS_PER_ARM,
+        dtype=np.float64,
+    )
+    z1 = np.zeros((n, n_bursts), dtype=np.float64)
+    z2 = np.zeros((n, n_bursts), dtype=np.float64)
+    out = np.zeros((n, n_bursts), dtype=np.float64)
+    for b in range(n_bursts):
+        z1[:, b] = arm_code + rng.normal(0.0, 0.5, size=n)
+        z2[:, b] = arm_code + rng.normal(0.0, 0.5, size=n)
+        out[:, b] = z1[:, b] + z2[:, b] + rng.normal(0.0, 0.5, size=n)
+    cells: list[Mapping[str, object]] = []
+    for i in range(n):
+        cells.append({
+            'env_name': env_name,
+            'gamma': gamma,
+            'arm_key': arms[i],
+            'z1_pb': z1[i, :].tolist(),
+            'z2_pb': z2[i, :].tolist(),
+            'outcome_pb': out[i, :].tolist(),
+        })
+    return pl.DataFrame(cells)
+
+
+def test_depth_2_joint_partial_rho_near_zero() -> None:
+    """Joint conditioning on (Z1, Z2) drives partial ρ ≈ 0 at
+    every burst. Bound: |ρ_partial[b]| ≤ 3 × SE_z (3-σ envelope
+    in Fisher-z units at n=80, df=n−5=75 → SE_z=1/√75 ≈ 0.115 →
+    ρ-units ≈ tanh(3 × 0.115) ≈ 0.34).
+    """
+    df = _build_two_mediator_panel(n_bursts=4, seed=700)
+    results = dynamic_partial_spearman.fn(
+        df, arm_field='arm_key',
+        mediator_per_burst=('z1_pb', 'z2_pb'),
+        outcome_per_burst='outcome_pb',
+        stratify_by=('env_name', 'gamma'),
+    )
+    result = _get_single_stratum(results)
+    assert result.k_conditioning == 2
+    n_per = result.n_per_burst[0]
+    # df=n-3-k=n-5 (k=2). SE_z=1/sqrt(df-1).
+    se_z = 1.0 / math.sqrt(n_per - 5 - 1)
+    # 3σ z-bound → ρ-units via tanh.
+    rho_bound = math.tanh(3.0 * se_z)
+    for b, r in enumerate(result.rho_partial):
+        assert not math.isnan(r)
+        assert abs(r) <= rho_bound, (
+            f'burst {b}: joint partial ρ={r:.3f} exceeds 3σ '
+            f'envelope ρ-bound={rho_bound:.3f} (n={n_per}, '
+            f'k=2, df={n_per-5}, SE_z={se_z:.3f})'
+        )
+
+
+def test_depth_2_vs_depth_1_dsep_proxy_via_partial_magnitudes() -> None:
+    """Single-Z1 conditioning leaves a residual ρ(arm, outcome | Z1)
+    well above zero (Z2 unblocked); joint (Z1, Z2) conditioning
+    drives it near zero. Verify
+    |ρ_partial_depth2| < |ρ_partial_depth1| at every burst.
+    """
+    df = _build_two_mediator_panel(n_bursts=4, seed=701)
+    res_single = _get_single_stratum(dynamic_partial_spearman.fn(
+        df, arm_field='arm_key',
+        mediator_per_burst='z1_pb',
+        outcome_per_burst='outcome_pb',
+        stratify_by=('env_name', 'gamma'),
+    ))
+    res_joint = _get_single_stratum(dynamic_partial_spearman.fn(
+        df, arm_field='arm_key',
+        mediator_per_burst=('z1_pb', 'z2_pb'),
+        outcome_per_burst='outcome_pb',
+        stratify_by=('env_name', 'gamma'),
+    ))
+    assert res_single.k_conditioning == 1
+    assert res_joint.k_conditioning == 2
+    for b, (r1, r2) in enumerate(
+        zip(res_single.rho_partial, res_joint.rho_partial)
+    ):
+        assert abs(r2) < abs(r1), (
+            f'burst {b}: joint |ρ|={abs(r2):.3f} should be less '
+            f'than single-Z1 |ρ|={abs(r1):.3f} (Z2 still unblocks '
+            f'arm-info at depth-1)'
+        )
+
+
+def test_depth_2_dl_pool_uses_df_offset_3_plus_k() -> None:
+    """The DL pool df_offset = 3 + k at depth-k. Verify by
+    comparing `_fisher_z_dl_pool(rho_partial, n, df_offset=5)`
+    against the framework's reported `dl_partial.rho_pooled`."""
+    df = _build_two_mediator_panel(n_bursts=4, seed=702)
+    result = _get_single_stratum(dynamic_partial_spearman.fn(
+        df, arm_field='arm_key',
+        mediator_per_burst=('z1_pb', 'z2_pb'),
+        outcome_per_burst='outcome_pb',
+        stratify_by=('env_name', 'gamma'),
+    ))
+    # k=2 → df_offset = 5.
+    expected_dl = _fisher_z_dl_pool(
+        list(result.rho_partial), list(result.n_per_burst),
+        df_offset=5,
+    )
+    # `_fisher_z_dl_pool` is the same primitive used inside the
+    # framework; results must be bit-identical.
+    assert result.dl_partial.rho_pooled == expected_dl.rho_pooled
+    assert result.dl_partial.tau2 == expected_dl.tau2
+    assert result.dl_partial.n_bursts_used == expected_dl.n_bursts_used
+
+
+def test_depth_1_singular_vs_tuple_bit_identical() -> None:
+    """`mediator_per_burst='m'` and `mediator_per_burst=('m',)`
+    must produce bit-identical results at k=1 (both dispatch to
+    the closed-form `partial_spearman_rho`).
+    """
+    df = _build_panel(rho_trajectory=(0.4, 0.4, 0.4), seed=703)
+    res_singular = _get_single_stratum(dynamic_partial_spearman.fn(
+        df, arm_field='arm_key',
+        mediator_per_burst='mediator_pb',
+        outcome_per_burst='outcome_pb',
+        stratify_by=('env_name', 'gamma'),
+    ))
+    res_tuple = _get_single_stratum(dynamic_partial_spearman.fn(
+        df, arm_field='arm_key',
+        mediator_per_burst=('mediator_pb',),
+        outcome_per_burst='outcome_pb',
+        stratify_by=('env_name', 'gamma'),
+    ))
+    assert res_singular.rho_marginal == res_tuple.rho_marginal
+    assert res_singular.rho_partial == res_tuple.rho_partial
+    assert res_singular.rho_marginal_pooled == res_tuple.rho_marginal_pooled
+    assert res_singular.rho_partial_pooled == res_tuple.rho_partial_pooled
+    assert res_singular.dl_partial.rho_pooled == (
+        res_tuple.dl_partial.rho_pooled
+    )
+    assert res_singular.k_conditioning == res_tuple.k_conditioning == 1
+    assert res_tuple.mediator_names == ('mediator_pb',)
+
+
+def test_empty_tuple_raises_value_error() -> None:
+    """`mediator_per_burst=()` raises ValueError — no conditioning
+    is the marginal test, which is reported via `rho_marginal`."""
+    df = _build_panel(rho_trajectory=(0.3, 0.3), seed=704)
+    with pytest.raises(ValueError, match='marginal'):
+        _ = dynamic_partial_spearman.fn(
+            df, arm_field='arm_key',
+            mediator_per_burst=(),
+            outcome_per_burst='outcome_pb',
+            stratify_by=('env_name', 'gamma'),
+        )
+
+
+def test_depth_2_bootstrap_reproducible_and_recomputed_via_multi() -> None:
+    """Same `bootstrap_seed` at depth-2 → identical CI bounds across
+    calls. Confirms the multi-mediator bootstrap kernel inherits
+    deterministic RNG behaviour from the depth-1 sibling."""
+    df = _build_two_mediator_panel(n_bursts=4, seed=705)
+    kwargs = dict(
+        arm_field='arm_key',
+        mediator_per_burst=('z1_pb', 'z2_pb'),
+        outcome_per_burst='outcome_pb',
+        stratify_by=('env_name', 'gamma'),
+        n_bootstrap=40,
+        bootstrap_seed=11,
+    )
+    r1 = _get_single_stratum(dynamic_partial_spearman.fn(df, **kwargs))
+    r2 = _get_single_stratum(dynamic_partial_spearman.fn(df, **kwargs))
+    bp1 = r1.bootstrap_partial
+    bp2 = r2.bootstrap_partial
+    assert bp1 is not None and bp2 is not None
+    assert (bp1.rho_lower, bp1.rho_median, bp1.rho_upper) == (
+        bp2.rho_lower, bp2.rho_median, bp2.rho_upper
+    )
+    # And the CI brackets near-zero (planted joint d-separation).
+    assert bp1.rho_lower < 0.2 < bp1.rho_upper or bp1.rho_median < 0.2

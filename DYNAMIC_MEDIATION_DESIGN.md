@@ -363,7 +363,71 @@ dominate runtime, not the inner reductions).
 outputs — its trajectory is continuous ρ, fully covered by
 the `ClusterBootstrapInterval` on the ρ-pool.
 
-### D. Bridge consumers
+### D. Multi-mediator depth-≥2 conditioning
+
+The depth-1 design above (one mediator) generalises directly to
+depth-k joint conditioning. Both primitives accept
+`mediator_per_burst: str | Measurable | tuple[..., ...]`,
+parallel to the static `partial_spearman`'s `conditioning`
+parameter:
+
+- Single `str | Measurable` → k=1. Internal dispatch uses the
+  closed-form `partial_spearman_rho` (Fisher-z df = n − 4) for
+  bit-exact compatibility with the depth-1 primitive.
+- Tuple of length k (`(z1, z2, ...)`) → k-mediator joint
+  conditioning. Internal dispatch uses `partial_spearman_rho_multi`
+  (Fisher-z df = n − 3 − k) — same OLS-residual primitive the
+  static `partial_spearman` uses at k≥2.
+- Empty tuple `()` raises `ValueError`. The marginal test (no
+  conditioning) is already reported via `rho_marginal[b]` /
+  `p_marginal[b]`; a silently-no-op invocation would mask a
+  bridge-author bug.
+
+Result-type changes (both primitives):
+
+- `mediator_name: str` → `mediator_names: tuple[str, ...]`.
+  Length-1 tuple at k=1 (back-compat for the singular shape);
+  length-k tuple at k≥2.
+- `k_conditioning` property reads `len(mediator_names)`. Used
+  by consumers that need to gate on conditioning depth.
+
+Edge-count semantics at depth ≥2 (`dynamic_pc_adjacency`): the
+`n_bursts_mediator_dseparates` count's interpretation
+generalises from "this one mediator d-separates arm from
+outcome at burst b" (k=1) to "the JOINT mediator set
+d-separates arm from outcome at burst b" (k≥2). Same
+machinery, broader conditioning set.
+
+`df_offset` accounting throughout (DL pool, FE pool, cluster
+bootstrap) becomes `3 + k`:
+- k=1 → df_offset=4 (matches the existing depth-1 path).
+- k=2 → df_offset=5.
+- k≥2 generally → df_offset = 3 + k.
+
+Bootstrap CIs at depth-k: same cell-resampling pattern; each
+replica recomputes per-burst ρ via the depth-k CI primitive.
+`bootstrap_edge_counts` at depth-k inherits the depth-1
+semantics (the count CIs answer "is the edge classification
+robust to which cells we sampled?" — same question, broader
+conditioning set).
+
+Use cases:
+
+- **Joint mediator analysis** — when no single mediator
+  d-separates but a small set jointly does (e.g., `bg_magnitude`
+  + `argmax_entropy` together capture the chain-amplification
+  channel that neither alone does).
+- **M1 rate × cond_gap decomposition** — conditioning on both
+  the per-step DDQN clip rate AND the magnitude of the
+  conditional gap to disentangle "clip fires often but mildly"
+  from "clip fires rarely but sharply."
+- **Higher-order PC search** — once a depth-1 mediator survives
+  the framework's CI tests at α, depth-2 searches the natural
+  joint sets including it. Currently authored manually by
+  bridges; future framework-level PC over per-burst trajectories
+  would use the same primitive.
+
+### E. Bridge consumers
 
 Existing bridges consume `PartialSpearmanResult.rho` and
 `.p_value`. New bridges that use `DynamicMediationResult` would
@@ -392,7 +456,7 @@ The point isn't this specific bridge; it's that the typed
 trajectory result enables bridges to ask trajectory-shaped
 questions.
 
-### E. Backwards-compatibility with current bridges
+### F. Backwards-compatibility with current bridges
 
 Existing bridges that consume `PartialSpearmanResult` shouldn't
 break. Two options:

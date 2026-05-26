@@ -52,6 +52,7 @@ from corroborate.analyses._cell_value import evaluate_per_burst_source
 from corroborate.graph.discovery import (
     _spearman_marginal as _graph_spearman_marginal,  # pyright: ignore[reportPrivateUsage]
     partial_spearman_rho,
+    partial_spearman_rho_multi,
 )
 from corroborate.measurables import Measurable
 from corroborate.stats import random_effects_summary
@@ -317,6 +318,131 @@ def _n_bursts(
         max(len(m), len(o))
         for m, o in zip(mediator_lists, outcome_lists)
     )
+
+
+def _collect_arm_and_per_burst_multi(
+    cells: Sequence[Mapping[str, object]],
+    *,
+    arm_field: str,
+    mediators_per_burst: Sequence[_ColumnOrMeasurable],
+    outcome_per_burst: _ColumnOrMeasurable,
+) -> tuple[
+    list[str], list[list[list[float]]], list[list[float]],
+] | None:
+    """Multi-mediator first-pass cell-record extractor.
+
+    Same role as `_collect_arm_and_per_burst` but extracts k
+    mediator trajectories per cell. Returns
+    `(arms, mediator_lists, outcome_lists)` where
+    `mediator_lists[i]` is a list of length `k` of per-burst
+    arrays for cell `i`. A cell is dropped iff ANY mediator
+    resolves to None or the outcome resolves to None — the
+    multi-mediator CI test requires all k mediators to be
+    well-shaped on the same cell.
+
+    The depth-1 sibling `_collect_arm_and_per_burst` is the thin
+    `k=1` case of this; both coexist because the depth-1
+    extractor's flatter return shape simplifies bit-exact
+    back-compat at the existing call sites."""
+    arms: list[str] = []
+    mediator_lists: list[list[list[float]]] = []
+    outcome_lists: list[list[float]] = []
+    for cell in cells:
+        arm = cell.get(arm_field)
+        if not isinstance(arm, str):
+            continue
+        out_arr = _resolve_per_burst(cell, outcome_per_burst)
+        if out_arr is None:
+            continue
+        meds: list[list[float]] = []
+        skip = False
+        for m_src in mediators_per_burst:
+            med = _resolve_per_burst(cell, m_src)
+            if med is None:
+                skip = True
+                break
+            meds.append(med)
+        if skip:
+            continue
+        arms.append(arm)
+        mediator_lists.append(meds)
+        outcome_lists.append(out_arr)
+    if not arms:
+        return None
+    return arms, mediator_lists, outcome_lists
+
+
+def _n_bursts_multi(
+    mediator_lists: Sequence[Sequence[Sequence[float]]],
+    outcome_lists: Sequence[Sequence[float]],
+) -> int:
+    """Ragged-tail burst-axis length under multi-mediator shape.
+
+    Each cell's mediator entry is a list of `k` per-burst arrays;
+    pick the longest across (all k mediators, the outcome) for
+    each cell; ragged-tail max across cells. Matches the depth-1
+    `_n_bursts` semantics at `k=1`."""
+    def _cell_len(meds: Sequence[Sequence[float]], o: Sequence[float]) -> int:
+        med_max = max((len(m) for m in meds), default=0)
+        return max(med_max, len(o))
+    return max(
+        _cell_len(m, o)
+        for m, o in zip(mediator_lists, outcome_lists)
+    )
+
+
+def _gather_burst_b_multi(
+    arm_codes: npt.NDArray[np.float64],
+    mediator_lists: Sequence[Sequence[Sequence[float]]],
+    outcome_lists: Sequence[Sequence[float]],
+    b: int,
+) -> tuple[
+    npt.NDArray[np.float64],
+    npt.NDArray[np.float64],
+    npt.NDArray[np.float64],
+]:
+    """Multi-mediator burst-b gather. Returns
+    `(arm_b, outcome_b, mediator_matrix_b)` where the matrix has
+    shape `(n_b, k)`. Cells that don't have a `b`-th entry in
+    ANY of the k mediator arrays or the outcome are dropped (the
+    multi-Z OLS-residual computation needs aligned observations
+    across all conditioning vars).
+
+    Depth-1 sibling `_gather_burst_b` returns a 1-D mediator
+    array; this returns a 2-D matrix. The two are kept distinct
+    so the depth-1 path bit-exactly preserves its existing
+    1-D-array call sites (the closed-form `partial_spearman_rho`
+    takes a 1-D z)."""
+    xs: list[float] = []
+    ys: list[float] = []
+    n_cells = len(arm_codes)
+    k = max((len(m) for m in mediator_lists), default=0)
+    zs_per_k: list[list[float]] = [[] for _ in range(k)]
+    for i in range(n_cells):
+        if b >= len(outcome_lists[i]):
+            continue
+        meds_i = mediator_lists[i]
+        if any(b >= len(meds_i[j]) for j in range(k)):
+            continue
+        yv = outcome_lists[i][b]
+        z_vals = [float(meds_i[j][b]) for j in range(k)]
+        if math.isnan(yv):
+            continue
+        if any(math.isnan(zv) for zv in z_vals):
+            continue
+        xs.append(float(arm_codes[i]))
+        ys.append(yv)
+        for j in range(k):
+            zs_per_k[j].append(z_vals[j])
+    x_np = np.asarray(xs, dtype=np.float64)
+    y_np = np.asarray(ys, dtype=np.float64)
+    if x_np.size == 0 or k == 0:
+        z_mat = np.zeros((x_np.size, k), dtype=np.float64)
+    else:
+        z_mat = np.column_stack([
+            np.asarray(col, dtype=np.float64) for col in zs_per_k
+        ])
+    return x_np, y_np, z_mat
 
 
 def _gather_burst_b(
@@ -624,6 +750,60 @@ def _per_burst_rhos_from_subset(
     return rho_list, n_list
 
 
+def _per_burst_rhos_from_subset_multi(
+    *,
+    arm_codes: npt.NDArray[np.float64],
+    mediator_lists: Sequence[Sequence[Sequence[float]]],
+    outcome_lists: Sequence[Sequence[float]],
+    cell_idx: npt.NDArray[np.intp],
+    n_bursts: int,
+    min_n_per_burst: int,
+    kind: Literal['marginal', 'partial'],
+) -> tuple[list[float], list[int]]:
+    """Multi-mediator sibling of `_per_burst_rhos_from_subset`.
+
+    `kind='marginal'` ignores the mediator matrix; `kind='partial'`
+    calls `partial_spearman_rho_multi` on the (n_b, k) z-matrix.
+    For k=1 the result differs from the closed-form
+    `partial_spearman_rho` only in tie-handling drift (matches the
+    static `partial_spearman` dispatch rule: k=1 → closed-form;
+    k≥2 → OLS-residual). The dispatch-by-k decision lives at the
+    caller (the public primitive), not here — this helper does
+    multi only.
+
+    Mirrors the depth-1 `_per_burst_rhos_from_subset`'s zero-arm-
+    variance NaN guard for the bootstrap path (cluster-resampling
+    can give all-treatment / all-baseline replicas at small n)."""
+    sub_arm_codes = arm_codes[cell_idx]
+    sub_mediator: list[Sequence[Sequence[float]]] = [
+        mediator_lists[int(i)] for i in cell_idx
+    ]
+    sub_outcome: list[Sequence[float]] = [
+        outcome_lists[int(i)] for i in cell_idx
+    ]
+
+    rho_list: list[float] = []
+    n_list: list[int] = []
+    for b in range(n_bursts):
+        x_np, y_np, z_mat = _gather_burst_b_multi(
+            sub_arm_codes, sub_mediator, sub_outcome, b,
+        )
+        n_b = int(x_np.size)
+        n_list.append(n_b)
+        if n_b < min_n_per_burst:
+            rho_list.append(float('nan'))
+            continue
+        if float(np.std(x_np)) == 0.0:
+            rho_list.append(float('nan'))
+            continue
+        if kind == 'marginal':
+            r, _ = _graph_spearman_marginal(x_np, y_np)
+        else:
+            r, _ = partial_spearman_rho_multi(x_np, y_np, z_mat)
+        rho_list.append(float(r))
+    return rho_list, n_list
+
+
 def _cluster_bootstrap_pool(
     *,
     arm_codes: npt.NDArray[np.float64],
@@ -676,6 +856,72 @@ def _cluster_bootstrap_pool(
         # Every replica was degenerate (extreme small-stratum
         # boundary). Return NaN bounds — consumers see a NaN
         # interval and know to expand the panel.
+        return ClusterBootstrapInterval(
+            rho_lower=float('nan'),
+            rho_upper=float('nan'),
+            rho_median=float('nan'),
+            n_resamples=n_resamples,
+            alpha=alpha,
+            seed=seed,
+        )
+    arr = np.asarray(replicas, dtype=np.float64)
+    lo_q = 100.0 * (alpha / 2.0)
+    hi_q = 100.0 * (1.0 - alpha / 2.0)
+    rho_lower = float(np.percentile(arr, lo_q))
+    rho_upper = float(np.percentile(arr, hi_q))
+    rho_median = float(np.median(arr))
+    return ClusterBootstrapInterval(
+        rho_lower=rho_lower,
+        rho_upper=rho_upper,
+        rho_median=rho_median,
+        n_resamples=n_resamples,
+        alpha=alpha,
+        seed=seed,
+    )
+
+
+def _cluster_bootstrap_pool_multi(
+    *,
+    arm_codes: npt.NDArray[np.float64],
+    mediator_lists: Sequence[Sequence[Sequence[float]]],
+    outcome_lists: Sequence[Sequence[float]],
+    n_bursts: int,
+    min_n_per_burst: int,
+    kind: Literal['marginal', 'partial'],
+    df_offset: int,
+    n_resamples: int,
+    alpha: float,
+    seed: int,
+) -> ClusterBootstrapInterval:
+    """Multi-mediator cluster bootstrap CI over the DL pool. Same
+    cell-resampling pattern as `_cluster_bootstrap_pool` but
+    `kind='partial'` recomputes ρ via `partial_spearman_rho_multi`
+    on the (n_b, k) z-matrix per burst per replica. `df_offset`
+    should be `3 + k` to match the multi-Z Fisher-z df accounting
+    inside `_fisher_z_dl_pool`.
+
+    The marginal `kind='marginal'` path is identical to the
+    depth-1 sibling (mediators don't enter the marginal ρ); we
+    keep the parameter so consumers don't fork their bootstrap
+    plumbing by depth."""
+    n_cells = arm_codes.size
+    rng = np.random.default_rng(seed)
+    replicas: list[float] = []
+    for _ in range(n_resamples):
+        idx = rng.integers(0, n_cells, size=n_cells)
+        rhos, ns = _per_burst_rhos_from_subset_multi(
+            arm_codes=arm_codes,
+            mediator_lists=mediator_lists,
+            outcome_lists=outcome_lists,
+            cell_idx=idx,
+            n_bursts=n_bursts,
+            min_n_per_burst=min_n_per_burst,
+            kind=kind,
+        )
+        r = _pool_rhos_dl(rhos, ns, df_offset)
+        if not math.isnan(r):
+            replicas.append(r)
+    if not replicas:
         return ClusterBootstrapInterval(
             rho_lower=float('nan'),
             rho_upper=float('nan'),
@@ -812,6 +1058,125 @@ def _per_burst_edge_counts_from_subset(
     return n_marg, n_dsep, n_direct
 
 
+def _per_burst_edge_counts_from_subset_multi(
+    *,
+    arm_codes: npt.NDArray[np.float64],
+    mediator_lists: Sequence[Sequence[Sequence[float]]],
+    outcome_lists: Sequence[Sequence[float]],
+    cell_idx: npt.NDArray[np.intp],
+    n_bursts: int,
+    min_n_per_burst: int,
+    alpha: float,
+) -> tuple[int, int, int]:
+    """Multi-mediator sibling of `_per_burst_edge_counts_from_subset`.
+
+    Same machinery + same primitives the multi-mediator non-
+    bootstrap path uses (`_spearman_marginal` for the depth-0 p,
+    `partial_spearman_rho_multi` for the depth-k p with Fisher-z
+    df = n − 3 − k). Calling the same primitives guarantees the
+    bootstrap distribution centres on the original count by
+    construction."""
+    sub_arm_codes = arm_codes[cell_idx]
+    sub_mediator: list[Sequence[Sequence[float]]] = [
+        mediator_lists[int(i)] for i in cell_idx
+    ]
+    sub_outcome: list[Sequence[float]] = [
+        outcome_lists[int(i)] for i in cell_idx
+    ]
+    n_marg, n_dsep, n_direct = 0, 0, 0
+    for b in range(n_bursts):
+        x_np, y_np, z_mat = _gather_burst_b_multi(
+            sub_arm_codes, sub_mediator, sub_outcome, b,
+        )
+        n_b = int(x_np.size)
+        if n_b < min_n_per_burst:
+            continue
+        if float(np.std(x_np)) == 0.0:
+            continue
+        _, p_m = _graph_spearman_marginal(x_np, y_np)
+        if math.isnan(p_m) or p_m >= alpha:
+            continue
+        n_marg += 1
+        _, p_p = partial_spearman_rho_multi(x_np, y_np, z_mat)
+        if math.isnan(p_p) or p_p >= alpha:
+            n_dsep += 1
+        else:
+            n_direct += 1
+    return n_marg, n_dsep, n_direct
+
+
+def _cluster_bootstrap_edge_counts_multi(
+    *,
+    arm_codes: npt.NDArray[np.float64],
+    mediator_lists: Sequence[Sequence[Sequence[float]]],
+    outcome_lists: Sequence[Sequence[float]],
+    n_bursts: int,
+    min_n_per_burst: int,
+    alpha: float,
+    n_resamples: int,
+    bootstrap_alpha: float,
+    seed: int,
+) -> ClusterBootstrapEdgeCounts:
+    """Multi-mediator sibling of `_cluster_bootstrap_edge_counts`.
+
+    Cell-resampling pattern identical; per-replica edge-count
+    triple is recomputed via the multi-Z CI primitive. The "joint
+    mediator set d-separates arm from outcome" interpretation is
+    the depth-k generalisation of the depth-1 semantics."""
+    n_cells = arm_codes.size
+    rng = np.random.default_rng(seed)
+    marg_counts: list[int] = []
+    dsep_counts: list[int] = []
+    direct_counts: list[int] = []
+    for _ in range(n_resamples):
+        idx = rng.integers(0, n_cells, size=n_cells)
+        n_m, n_d, n_dir = _per_burst_edge_counts_from_subset_multi(
+            arm_codes=arm_codes,
+            mediator_lists=mediator_lists,
+            outcome_lists=outcome_lists,
+            cell_idx=idx,
+            n_bursts=n_bursts,
+            min_n_per_burst=min_n_per_burst,
+            alpha=alpha,
+        )
+        marg_counts.append(n_m)
+        dsep_counts.append(n_d)
+        direct_counts.append(n_dir)
+
+    if not marg_counts:
+        return ClusterBootstrapEdgeCounts(
+            marg_lower=0, marg_median=0, marg_upper=0,
+            dsep_lower=0, dsep_median=0, dsep_upper=0,
+            direct_lower=0, direct_median=0, direct_upper=0,
+            n_resamples=n_resamples,
+            alpha=bootstrap_alpha,
+            seed=seed,
+        )
+
+    lo_q = 100.0 * (bootstrap_alpha / 2.0)
+    hi_q = 100.0 * (1.0 - bootstrap_alpha / 2.0)
+
+    def _ci(counts: list[int]) -> tuple[int, int, int]:
+        arr = np.asarray(counts, dtype=np.float64)
+        lo = int(round(float(np.percentile(arr, lo_q))))
+        hi = int(round(float(np.percentile(arr, hi_q))))
+        med = int(round(float(np.median(arr))))
+        return (lo, med, hi)
+
+    m_lo, m_med, m_hi = _ci(marg_counts)
+    d_lo, d_med, d_hi = _ci(dsep_counts)
+    dir_lo, dir_med, dir_hi = _ci(direct_counts)
+
+    return ClusterBootstrapEdgeCounts(
+        marg_lower=m_lo, marg_median=m_med, marg_upper=m_hi,
+        dsep_lower=d_lo, dsep_median=d_med, dsep_upper=d_hi,
+        direct_lower=dir_lo, direct_median=dir_med, direct_upper=dir_hi,
+        n_resamples=n_resamples,
+        alpha=bootstrap_alpha,
+        seed=seed,
+    )
+
+
 def _cluster_bootstrap_edge_counts(
     *,
     arm_codes: npt.NDArray[np.float64],
@@ -917,12 +1282,17 @@ __all__ = [
     '_as_float_list',
     '_classify_status',
     '_cluster_bootstrap_edge_counts',
+    '_cluster_bootstrap_edge_counts_multi',
     '_cluster_bootstrap_pool',
+    '_cluster_bootstrap_pool_multi',
     '_collect_arm_and_per_burst',
+    '_collect_arm_and_per_burst_multi',
     '_encode_arm',
     '_fisher_z_dl_pool',
     '_gather_burst_b',
+    '_gather_burst_b_multi',
     '_n_bursts',
+    '_n_bursts_multi',
     '_resolve_per_burst',
     '_source_name',
     '_stratum_key',

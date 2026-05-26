@@ -485,7 +485,7 @@ def test_accepts_measurable_inputs() -> None:
     assert r_str.rho_marginal == r_m.rho_marginal
     assert r_str.rho_partial == r_m.rho_partial
     # Provenance from Measurable.name.
-    assert r_m.mediator_name == 'mediator_pb'
+    assert r_m.mediator_names == ('mediator_pb',)
     assert r_m.outcome_name == 'outcome_pb'
 
 
@@ -540,7 +540,7 @@ def test_ragged_tail_alignment() -> None:
 # ============ Provenance + shape contract ============
 
 def test_result_provenance_and_shape() -> None:
-    """The result carries `mediator_name` / `outcome_name` /
+    """The result carries `mediator_names` / `outcome_name` /
     `arm_field` / `alpha` matching the call site. The burst-axis
     shape contract: tuples of equal length `n_bursts`."""
     df = _build_full_mediation_panel(n_bursts=5, seed=50)
@@ -552,7 +552,8 @@ def test_result_provenance_and_shape() -> None:
         alpha=0.01,
     )
     result = _get_single_stratum(results)
-    assert result.mediator_name == 'mediator_pb'
+    assert result.mediator_names == ('mediator_pb',)
+    assert result.k_conditioning == 1
     assert result.outcome_name == 'outcome_pb'
     assert result.arm_field == 'arm_key'
     assert result.alpha == 0.01
@@ -1213,3 +1214,206 @@ def test_pc_bootstrap_edge_counts_is_frozen() -> None:
     assert bec is not None
     with pytest.raises((AttributeError, TypeError)):
         bec.dsep_median = 0  # pyright: ignore[reportAttributeAccessIssue]
+
+
+# ============ Multi-mediator depth-≥2 conditioning ============
+#
+# These tests cover the multi-mediator extension. The depth-1
+# baseline tests above already pin the single-mediator path; here
+# we plant DAGs where joint conditioning on a TUPLE of mediators
+# is the only valid d-separating set.
+
+
+def _build_two_mediator_full_mediation_panel(
+    *,
+    n_bursts: int,
+    seed: int = 0,
+    env_name: str = 'env_a',
+    gamma: float = 0.99,
+) -> pl.DataFrame:
+    """DAG: arm → {Z1, Z2} → outcome (no direct arm→outcome).
+
+    At each burst b:
+      Z1[b] = arm_code + ε_1
+      Z2[b] = arm_code + ε_2  (independent of Z1 conditional on arm)
+      outcome[b] = Z1[b] + Z2[b] + ε_Y
+
+    Joint conditioning on {Z1, Z2} d-separates arm from outcome
+    (no edge survives once both colliders are blocked).
+    Conditioning on Z1 alone is INSUFFICIENT — Z2 still carries
+    arm-information, so the partial ρ(arm, outcome | Z1) stays
+    non-zero (Z2 acts as an unblocked back-door).
+
+    Compare the closed-form expectation under single-mediator vs
+    joint-mediator conditioning in the test docstrings."""
+    rng = np.random.default_rng(seed)
+    n = 2 * _N_CELLS_PER_ARM
+    arms = ['treatment'] * _N_CELLS_PER_ARM + ['baseline'] * _N_CELLS_PER_ARM
+    arm_code = np.asarray(
+        [0.5] * _N_CELLS_PER_ARM + [-0.5] * _N_CELLS_PER_ARM,
+        dtype=np.float64,
+    )
+    z1 = np.zeros((n, n_bursts), dtype=np.float64)
+    z2 = np.zeros((n, n_bursts), dtype=np.float64)
+    out = np.zeros((n, n_bursts), dtype=np.float64)
+    for b in range(n_bursts):
+        z1[:, b] = arm_code + rng.normal(0.0, 0.5, size=n)
+        z2[:, b] = arm_code + rng.normal(0.0, 0.5, size=n)
+        out[:, b] = z1[:, b] + z2[:, b] + rng.normal(0.0, 0.5, size=n)
+    cells: list[Mapping[str, object]] = []
+    for i in range(n):
+        cells.append({
+            'env_name': env_name,
+            'gamma': gamma,
+            'arm_key': arms[i],
+            'z1_pb': z1[i, :].tolist(),
+            'z2_pb': z2[i, :].tolist(),
+            'outcome_pb': out[i, :].tolist(),
+        })
+    return pl.DataFrame(cells)
+
+
+def test_pc_multi_mediator_joint_dseparates_at_every_burst() -> None:
+    """Depth-2 d-separation: planted DAG arm → {Z1, Z2} → outcome.
+
+    Joint conditioning on (Z1, Z2) MUST remove the arm→outcome
+    edge at every burst (under power: n=60 per burst with
+    saturating marginal r ≈ 0.7 → α=0.05 type-I rate on the
+    conditional CI test bounds dsep_count). Expected
+    `n_bursts_mediator_dseparates == n_bursts` within an
+    α-expected miss (≤ ⌈α · n_bursts⌉ = 1 miss at n_bursts=5).
+    """
+    n_bursts = 5
+    df = _build_two_mediator_full_mediation_panel(
+        n_bursts=n_bursts, seed=600,
+    )
+    results = dynamic_pc_adjacency.fn(
+        df, arm_field='arm_key',
+        mediator_per_burst=('z1_pb', 'z2_pb'),
+        outcome_per_burst='outcome_pb',
+        stratify_by=('env_name', 'gamma'),
+    )
+    result = _get_single_stratum(results)
+    assert result.k_conditioning == 2
+    assert result.mediator_names == ('z1_pb', 'z2_pb')
+    # Marginal edge present at every burst (saturating planted r).
+    assert result.n_bursts_marginal_edge >= n_bursts - 1
+    # Joint d-sep at all bursts within α-expected miss.
+    assert result.n_bursts_mediator_dseparates >= n_bursts - 1, (
+        f'joint dsep count = {result.n_bursts_mediator_dseparates} '
+        f'expected ≥ {n_bursts - 1} (α-expected misses ≤ 1)'
+    )
+
+
+def test_pc_single_mediator_does_not_dseparate_two_mediator_panel() -> None:
+    """Same panel, single-mediator conditioning on Z1 alone.
+
+    Z2 still carries arm-information; conditioning on Z1 alone is
+    insufficient → the partial CI test should still reject at most
+    bursts → `direct_edge` count dominates, NOT `dsep`. Compared
+    to the joint-conditioning test above, dsep count should be
+    much smaller (ideally 0-1 of n_bursts=5).
+    """
+    n_bursts = 5
+    df = _build_two_mediator_full_mediation_panel(
+        n_bursts=n_bursts, seed=601,
+    )
+    # Joint conditioning: dsep dominates.
+    res_joint = _get_single_stratum(dynamic_pc_adjacency.fn(
+        df, arm_field='arm_key',
+        mediator_per_burst=('z1_pb', 'z2_pb'),
+        outcome_per_burst='outcome_pb',
+        stratify_by=('env_name', 'gamma'),
+    ))
+    # Single-Z1 conditioning: direct dominates (Z2 unblocked).
+    res_single = _get_single_stratum(dynamic_pc_adjacency.fn(
+        df, arm_field='arm_key',
+        mediator_per_burst='z1_pb',
+        outcome_per_burst='outcome_pb',
+        stratify_by=('env_name', 'gamma'),
+    ))
+    assert res_single.k_conditioning == 1
+    assert res_joint.n_bursts_mediator_dseparates > (
+        res_single.n_bursts_mediator_dseparates
+    ), (
+        f'joint dsep={res_joint.n_bursts_mediator_dseparates} '
+        f'should exceed single-Z1 dsep='
+        f'{res_single.n_bursts_mediator_dseparates} when only '
+        f'joint conditioning is sufficient.'
+    )
+
+
+def test_pc_depth_2_single_mediator_backwards_compat_bit_identical() -> None:
+    """Passing a 1-tuple `(z,)` should produce results IDENTICAL to
+    passing the bare `z`. The closed-form `partial_spearman_rho` is
+    the dispatch target for k=1 in both code paths.
+    """
+    df = _build_full_mediation_panel(n_bursts=4, seed=602)
+    res_singular = _get_single_stratum(dynamic_pc_adjacency.fn(
+        df, arm_field='arm_key',
+        mediator_per_burst='mediator_pb',
+        outcome_per_burst='outcome_pb',
+        stratify_by=('env_name', 'gamma'),
+    ))
+    res_tuple = _get_single_stratum(dynamic_pc_adjacency.fn(
+        df, arm_field='arm_key',
+        mediator_per_burst=('mediator_pb',),
+        outcome_per_burst='outcome_pb',
+        stratify_by=('env_name', 'gamma'),
+    ))
+    # Per-burst trajectories bit-identical at k=1 (both dispatched
+    # to closed-form `partial_spearman_rho`).
+    assert res_singular.rho_marginal == res_tuple.rho_marginal
+    assert res_singular.rho_partial == res_tuple.rho_partial
+    assert res_singular.p_marginal == res_tuple.p_marginal
+    assert res_singular.p_conditional == res_tuple.p_conditional
+    assert res_singular.n_bursts_mediator_dseparates == (
+        res_tuple.n_bursts_mediator_dseparates
+    )
+    assert res_singular.k_conditioning == res_tuple.k_conditioning == 1
+    assert res_tuple.mediator_names == ('mediator_pb',)
+
+
+def test_pc_empty_tuple_raises_value_error() -> None:
+    """`mediator_per_burst=()` is the marginal test (already
+    reported via `p_marginal`). The framework refuses the
+    silently-no-op invocation."""
+    df = _build_full_mediation_panel(n_bursts=3, seed=603)
+    with pytest.raises(ValueError, match='marginal'):
+        _ = dynamic_pc_adjacency.fn(
+            df, arm_field='arm_key',
+            mediator_per_burst=(),
+            outcome_per_burst='outcome_pb',
+            stratify_by=('env_name', 'gamma'),
+        )
+
+
+def test_pc_depth_2_bootstrap_edge_counts_reproducible() -> None:
+    """Same `bootstrap_seed` at depth-2 → identical edge-count
+    triple across calls. Confirms the multi-mediator bootstrap
+    inherits the deterministic-RNG contract from the depth-1
+    sibling."""
+    df = _build_two_mediator_full_mediation_panel(
+        n_bursts=4, seed=604,
+    )
+    kwargs = dict(
+        arm_field='arm_key',
+        mediator_per_burst=('z1_pb', 'z2_pb'),
+        outcome_per_burst='outcome_pb',
+        stratify_by=('env_name', 'gamma'),
+        n_bootstrap=40,
+        bootstrap_seed=7,
+    )
+    r1 = _get_single_stratum(dynamic_pc_adjacency.fn(df, **kwargs))
+    r2 = _get_single_stratum(dynamic_pc_adjacency.fn(df, **kwargs))
+    bec1 = r1.bootstrap_edge_counts
+    bec2 = r2.bootstrap_edge_counts
+    assert bec1 is not None and bec2 is not None
+    assert (bec1.dsep_lower, bec1.dsep_median, bec1.dsep_upper) == (
+        bec2.dsep_lower, bec2.dsep_median, bec2.dsep_upper
+    )
+    assert (bec1.direct_lower, bec1.direct_median, bec1.direct_upper) == (
+        bec2.direct_lower, bec2.direct_median, bec2.direct_upper
+    )
+    # k=2 dsep median should be high (joint mediation).
+    assert bec1.dsep_median >= 2
