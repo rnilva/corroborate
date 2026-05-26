@@ -1589,6 +1589,7 @@ def _q_action_std_window_mean(window: npt.NDArray[np.float64]) -> float:
 
 
 q_action_std_late = _registered('q_action_std_late')
+q_action_std_per_burst = _registered('q_action_std_per_burst')
 
 
 @measurable(reads=('online_max_q_per_step', 'online_min_q_per_step',
@@ -1963,6 +1964,7 @@ def _q_argmax_margin_window_mean(window: npt.NDArray[np.float64]) -> float:
 
 
 q_argmax_margin_late = _registered('q_argmax_margin_late')
+q_argmax_margin_per_burst = _registered('q_argmax_margin_per_burst')
 
 
 @measurable(reads=('n_actions',))
@@ -2176,6 +2178,7 @@ def _q_max_window_mean(window: npt.NDArray[np.float64]) -> float:
 
 
 q_late_mean = _registered('q_late_mean')
+q_per_burst = _registered('q_per_burst')
 
 
 @measurable(reads=('online_max_q_per_step',))

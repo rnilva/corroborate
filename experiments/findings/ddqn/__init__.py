@@ -49,6 +49,9 @@ from experiments.findings.ddqn.cross_env_mediation import (
     ddqn_outcome_scales_with_jens_reduction__xenv_loo_robust,
 )
 from experiments.findings.ddqn.q_shape_mediation import BRIDGES as _Q_SHAPE
+from experiments.findings.ddqn.q_smoothness_link import (
+    q_smoothness_link_to_outcome_held_positive__asterix_g0999,
+)
 from experiments.findings.ddqn.q_suppression_translation import (
     ddqn_q_suppression_tracks_outcome_translation__xenv,
     ddqn_q_suppression_tracks_outcome_translation__xenv_loo_robust,
@@ -70,6 +73,7 @@ BRIDGES = (
     *_MEDIATION,
     *_POLARITY_MEDIATION,
     *_Q_SHAPE,
+    q_smoothness_link_to_outcome_held_positive__asterix_g0999,
     ddqn_outcome_scales_with_jens_reduction__xenv,
     ddqn_outcome_scales_with_jens_reduction__xenv_loo_robust,
     ddqn_outcome_scales_with_bg_frac_active__xenv,
