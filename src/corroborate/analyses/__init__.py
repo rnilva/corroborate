@@ -30,6 +30,8 @@ Subpackage layout (post-D consolidation, 2026-05-17):
                     `stratified_arm_diff_pooled`, `meta_regression_*`)
 - `dowhy/`        — DoWhy backdoor + refutations + stratum-link
                     DoWhy primitives
+- `dynamic_mediation/` — `dynamic_partial_spearman` trajectory-resolved
+                    mediation on per-burst `List(Float64)` columns
 - `diagnostic/`   — `tautology_audit`, `verdict_distribution`
 
 Top-level analyses (don't fit a single bucket yet):
@@ -45,6 +47,7 @@ Available analyses are discoverable via
 from corroborate.analyses import (  # noqa: F401
     diagnostic as _diagnostic,  # pyright: ignore[reportUnusedImport]
     dowhy as _dowhy,  # pyright: ignore[reportUnusedImport]
+    dynamic_mediation as _dynamic_mediation,  # pyright: ignore[reportUnusedImport]
     link as _link,  # pyright: ignore[reportUnusedImport]
     paired as _paired,  # pyright: ignore[reportUnusedImport]
     panel as _panel,  # pyright: ignore[reportUnusedImport]
