@@ -238,6 +238,14 @@ def dqn(
     eval_episode_cap: Annotated[int, Exogenous] = 500,
     state_hash: Annotated[StateHash, Exogenous] = default_state_hash,
     state_hash_cardinality: Annotated[int, Exogenous] = 1,
+    # Q-network checkpoint persistence flags. Exogenous because
+    # they're framework-side bookkeeping (whether to snapshot
+    # params for post-hoc Q-evaluation analyses) — NOT theoretical
+    # content, so they don't change the leaf-signature fingerprint
+    # that groups cells into arms. The cell runner intercepts the
+    # sentinel-prefixed checkpoint keys these enable.
+    keep_q_checkpoint_final: Annotated[bool, Exogenous] = False,
+    keep_q_checkpoint_per_burst: Annotated[bool, Exogenous] = False,
     # Cross-cutting HPs (no single Module owns these).
     gamma: float = 0.99,
     sync_period: int = 100,
@@ -394,4 +402,6 @@ def dqn(
         step_fn=step_fn, eval_fn=eval_fn,
         init_state=state,
         total_steps=total_steps, eval_every=eval_every,
+        keep_q_checkpoint_final=keep_q_checkpoint_final,
+        keep_q_checkpoint_per_burst=keep_q_checkpoint_per_burst,
     )

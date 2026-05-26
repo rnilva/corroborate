@@ -36,6 +36,7 @@ from corroborate.core.loop import Loop, iterate
 from corroborate_rl.loop import scan_loop
 from corroborate_rl.dqn.state import DQNState
 from corroborate_rl.dqn.claims.q_network import QFunction
+from corroborate_rl.dqn.q_checkpoint import checkpoint_key
 from corroborate_rl.dqn.types import StepRecord
 
 if TYPE_CHECKING:
@@ -247,8 +248,15 @@ def train_with_eval(
     total_steps: int,
     eval_every: int,
     loop: Loop[
-        DQNState, tuple[StepRecord, EvalBurstOut], jax.Array,
+        DQNState,
+        tuple[
+            StepRecord, EvalBurstOut,
+            dict[str, jax.Array], dict[str, jax.Array],
+        ],
+        jax.Array,
     ] = scan_loop,
+    keep_q_checkpoint_final: bool = False,
+    keep_q_checkpoint_per_burst: bool = False,
 ) -> dict[str, jax.Array]:
     """Run `step_fn` for `total_steps` with an `eval_fn` burst at
     the end of every `eval_every` chunk. Returns the merged
@@ -276,7 +284,17 @@ def train_with_eval(
 
     Decoupled from `dqn` itself so the algorithm composition stays
     paper-prose. The same driver can power any RL algorithm with
-    a step+eval shape (PPO, SAC, distributional Q)."""
+    a step+eval shape (PPO, SAC, distributional Q).
+
+    `keep_q_checkpoint_final` / `keep_q_checkpoint_per_burst` are
+    persistence-only flags: when enabled, the corresponding param
+    snapshots are emitted under sentinel-prefixed keys
+    (`__q_checkpoint__<arm>__<role>__<param_key>`) in the returned
+    record. The cell runner intercepts these keys, writes msgpack
+    files, and filters them from the trace columns — measurables
+    ignore unknown keys, so the sentinel-prefixed entries are
+    transparent to the existing analysis pipeline. See
+    `q_checkpoint.py` for the key-convention details."""
     n_super_steps = total_steps // eval_every
 
     # Inner loop: re-bind the backend's `T` to `StepRecord` (the
@@ -289,9 +307,33 @@ def train_with_eval(
     # different T binding for the inner-vs-outer call.
     inner_loop = cast('Loop[DQNState, StepRecord, jax.Array]', loop)
 
+    # Decide ONCE outside the scan whether per-burst snapshots are
+    # captured: the scan body's pytree shape must be static across
+    # super-steps. The capture itself is cheap (params are small —
+    # ~25 KB MLP / ~80 KB CNN — and stay device-resident; the
+    # outer scan stacks them to `(n_super_steps, *param_shape)`).
+    # The gating at this level decides whether to allocate the
+    # stacked-checkpoint slot in scan output at all.
+    capture_per_burst = keep_q_checkpoint_per_burst
+
+    # super_step's per-step output is a 4-tuple:
+    #   (train_chunk: StepRecord,
+    #    burst: EvalBurstOut,
+    #    online_snap: dict[str, jax.Array],  # per_burst online params
+    #    target_snap: dict[str, jax.Array])  # per_burst target params
+    # When per-burst capture is OFF the two snap dicts are EMPTY —
+    # the scan's pytree shape stays uniform across the on/off
+    # branches without forcing the framework's JIT cache to re-trace.
+
     def super_step(
         s: DQNState, super_idx: jax.Array,
-    ) -> tuple[DQNState, tuple[StepRecord, EvalBurstOut]]:
+    ) -> tuple[
+        DQNState,
+        tuple[
+            StepRecord, EvalBurstOut,
+            dict[str, jax.Array], dict[str, jax.Array],
+        ],
+    ]:
         s, train_chunk_obj = iterate(
             step=step_fn, init=s, length=eval_every, backend=inner_loop,
         )
@@ -302,18 +344,34 @@ def train_with_eval(
         # `(eval_every, ...)`). Cast at the use site.
         train_chunk = cast(StepRecord, train_chunk_obj)
         burst = eval_fn(s, super_idx)
-        return s, (train_chunk, burst)
+        # Snapshot the post-burst online + target params for the
+        # per-burst checkpoint stack. When the feature is OFF, emit
+        # empty dicts so the scan output is structurally uniform
+        # (no JAX retrace on the off-path).
+        if capture_per_burst:
+            online_snap: dict[str, jax.Array] = dict(s.online_params)
+            target_snap: dict[str, jax.Array] = dict(s.target_params)
+        else:
+            online_snap = {}
+            target_snap = {}
+        return s, (train_chunk, burst, online_snap, target_snap)
 
-    _final, super_aggregated_obj = iterate(
+    final_state, super_aggregated_obj = iterate(
         step=super_step, init=init_state, length=n_super_steps,
         backend=loop,
     )
     # Same cast pattern at the outer scope: scan_loop / rl-python_loop
     # stack super_step's output, producing
     # `tuple[StepRecord (n_super_steps-stacked),
-    #        EvalBurstOut (n_super_steps-stacked)]`.
-    train_chunks, eval_bursts = cast(
-        tuple[StepRecord, EvalBurstOut], super_aggregated_obj,
+    #        EvalBurstOut (n_super_steps-stacked),
+    #        per_burst online dict — leaves (n_super_steps, *p),
+    #        per_burst target dict — same shape]`.
+    train_chunks, eval_bursts, per_burst_online, per_burst_target = cast(
+        tuple[
+            StepRecord, EvalBurstOut,
+            dict[str, jax.Array], dict[str, jax.Array],
+        ],
+        super_aggregated_obj,
     )
 
     def _flatten(x: jax.Array) -> jax.Array:
@@ -326,7 +384,7 @@ def train_with_eval(
         jnp.arange(n_super_steps, dtype=jnp.int32) + 1
     ) * eval_every
 
-    return {
+    record: dict[str, jax.Array] = {
         **train_trace,
         'predicted_q_at_start': eval_bursts.predicted_q_at_start,
         'mc_return': eval_bursts.mc_return,
@@ -336,3 +394,21 @@ def train_with_eval(
         'active_per_step': eval_bursts.active_per_step,
         'eval_step_index': eval_step_indices,
     }
+
+    # Sentinel-prefixed checkpoint payloads. Per-burst arrays carry
+    # the leading `(n_super_steps, *param_shape)` axis; the final
+    # snapshot is a single `(*param_shape)` array taken from the
+    # post-scan state. The cell runner partitions on
+    # `CHECKPOINT_KEY_PREFIX` to extract them.
+    if keep_q_checkpoint_per_burst:
+        for pk, arr in per_burst_online.items():
+            record[checkpoint_key('online', 'per_burst', pk)] = arr
+        for pk, arr in per_burst_target.items():
+            record[checkpoint_key('target', 'per_burst', pk)] = arr
+    if keep_q_checkpoint_final:
+        for pk, arr in final_state.online_params.items():
+            record[checkpoint_key('online', 'final', pk)] = arr
+        for pk, arr in final_state.target_params.items():
+            record[checkpoint_key('target', 'final', pk)] = arr
+
+    return record

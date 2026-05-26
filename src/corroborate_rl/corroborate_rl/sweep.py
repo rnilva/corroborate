@@ -25,6 +25,7 @@ framework's `run_intervention` driver — not the runner's."""
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+from pathlib import Path
 from typing import TypeIs
 
 from corroborate_rl.cell_runner import run_dqn_arm
@@ -47,10 +48,49 @@ class DQNRunner:
     """RL substrate's `Runner[DQNTrajectoryRecord]`. Holds the
     env catalogue so each call doesn't re-resolve env_specs from
     strings, and so the runner's identity is shared across grid
-    points."""
+    points.
 
-    def __init__(self, env_catalogue: Mapping[str, EnvSpec]) -> None:
+    `q_checkpoint_dir`: when set, every `__q_checkpoint__*` payload
+    in the per-cell record gets persisted to a msgpack sidecar
+    under this dir. The substrate's `dispatch_sweep` constructs the
+    runner with this set to `<out_dir>/q_checkpoints/` per arm-
+    config; library callers can leave it None (default).
+
+    The runner maintains a `_call_count` to mirror the framework's
+    `run_intervention` cell-index counter — each `__call__` is one
+    `(grid_point, arm)` pair, the same granularity at which the
+    parquet shards are named `cell{NNN}__...`. Cells inside one
+    call (multi-seed vmap) share `cell_idx` and are disambiguated
+    by `seed` in the checkpoint filename."""
+
+    def __init__(
+        self,
+        env_catalogue: Mapping[str, EnvSpec],
+        *,
+        q_checkpoint_dir: Path | None = None,
+    ) -> None:
         self._envs = env_catalogue
+        self._q_checkpoint_dir = q_checkpoint_dir
+        self._call_count = 0
+
+    def reset_for_intervention(
+        self, *, q_checkpoint_dir: Path | None = None,
+    ) -> None:
+        """Re-arm the runner for a fresh `run_intervention` call.
+
+        The framework's `run_intervention` restarts its `cell_idx`
+        counter from 0 per call (one call = one arm-config in
+        `dispatch_sweep`'s loop). The runner mirrors that by
+        zero-ing `_call_count` so the `cell_idx` the runner stamps
+        on checkpoint filenames aligns with the framework's
+        parquet-shard numbering.
+
+        `q_checkpoint_dir` is rebound per call so each arm-config
+        writes to its own `<out_dir>/<cfg.name>/q_checkpoints/`
+        subdir — without this, two arm-configs would collide on
+        `cell000_<seed>_*.msgpack`."""
+        self._q_checkpoint_dir = q_checkpoint_dir
+        self._call_count = 0
 
     def __call__(
         self,
@@ -91,9 +131,13 @@ class DQNRunner:
             )
         env_spec = self._envs[env_name]
 
+        cell_idx = self._call_count
+        self._call_count += 1
         arm = run_dqn_arm(
             env_spec, seeds, claim, arm_key, measurables,
             wrappers=wrappers_v,
+            q_checkpoint_dir=self._q_checkpoint_dir,
+            cell_idx=cell_idx,
         )
         return SweepCellResult(
             runs=tuple(c.run for c in arm.cells),
