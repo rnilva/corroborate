@@ -56,7 +56,7 @@ JDG_AVAILABLE_ENVS: tuple[str, ...] = (
 # - FR: fr_gamma_100k_short (100k γ=0.999, matches its γ=0.99
 #   slice from the same fresh sweep — supersedes
 #   gamma_sweep_fourrooms for the same trace-schema reason).
-# - LL: lunarlander_tuned_sync1000_gpu (1M)
+# - LL: lunarlander_2M_30seeds_cpu/g0999 (2M)
 # - MetaMaze: metamaze_g0999_1M_postfix (1M)
 # - MC: fa_deep_g0999 (1M; γ=0.99 has no jdg)
 # - Snake / Freeway / SI: g0999_*-MinAtar and g0999_Snake (1M)
@@ -66,7 +66,7 @@ CANONICAL_G0999_CORPORA: tuple[str, ...] = (
     'minatar_gamma_sweep_k1/g0999_Breakout-MinAtar',
     'fr_gamma_50k_30seeds',                  # FR γ=0.999 slice (50k, 30 seeds — pre-ceiling regime)
     'minatar_gamma_sweep_k1/g0999_Freeway-MinAtar',
-    'lunarlander_tuned_sync1000_gpu',        # LL canonical sync=1000
+    'lunarlander_2M_30seeds_cpu/g0999',      # LL γ=0.999 (2M, 30 seeds — supersedes lunarlander_tuned_sync1000_gpu 1M)
     'metamaze_g0999_1M_postfix',
     'g0999_Snake-jumanji',                   # Snake γ=0.999 (sub-corpus of g0999_panel_extension_snake_only, stamps bare)
     'g0999_PacMan-jumanji',                  # PacMan γ=0.999 (sub-corpus of pacman_g0999_n20, stamps bare; n=20 seeds, n_episodes=5)
@@ -82,7 +82,7 @@ CANONICAL_G0999_CORPORA: tuple[str, ...] = (
 #             as γ=0.999, both 100k, fresh sweep)
 # - FR:       fr_gamma_100k_short γ=0.99 slice (same corpus
 #             as γ=0.999, both 100k, fresh sweep)
-# - LL:       lunarlander_tuned_sync1000_gpu (1M, sync=1000 — matches LL γ=0.999 canonical)
+# - LL:       lunarlander_2M_30seeds_cpu/g099 (2M, sync=1000 — matches LL γ=0.999 canonical at 2M)
 # - MetaMaze: metamaze_g099_1M_postfix (1M, matches γ=0.999 1M)
 #
 # The 5 MinAtar envs and MC at γ=0.99 are absent — no k=1 γ=0.99
@@ -95,7 +95,7 @@ CANONICAL_G099_CORPORA: tuple[str, ...] = (
     'g099_Breakout-MinAtar',
     'g099_Freeway-MinAtar',
     'g099_SpaceInvaders-MinAtar',
-    'lunarlander_tuned_sync1000_gpu',        # LL γ=0.99 (sync=1000, matches γ=0.999 canonical)
+    'lunarlander_2M_30seeds_cpu/g099',       # LL γ=0.99 (2M, 30 seeds — supersedes lunarlander_tuned_sync1000_gpu 1M)
     'metamaze_g099_1M_postfix',              # MetaMaze γ=0.99 (n_episodes=5; flag for re-sweep w/ n=20)
     'mountaincar_1M_postfix',                # MountainCar γ=0.99
     'cartpole_1M_postfix',                   # CartPole γ=0.99
