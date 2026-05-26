@@ -1,0 +1,77 @@
+name: metamaze_g099_tau_sweep_cpu
+out_dir: experiments/data/metamaze_g099_tau_sweep_cpu
+env_binding: shared
+archive_remote: s3://corroborate-archive/metamaze_g099_tau_sweep_cpu
+
+# I1 — τ (sync_period) sweep at MetaMaze γ=0.99.
+#
+# Background: M1 decomposition (findings_m1_rate_vs_magnitude_decomposition)
+# found MetaMaze γ=0.99 in the "rate-reduction" regime — DDQN
+# genuinely reduces the online-target argmax disagreement rate
+# (d=-1.77, large) while Q-magnitudes are unchanged. The
+# remaining question: is this Mechanism A (self-consistency in
+# update direction) or Mechanism B (Q-volatility damping ×
+# target staleness)?
+#
+# Prediction:
+#   A → rate gap is approximately τ-invariant (structural
+#       difference, not magnitude-driven)
+#   B → rate gap grows monotonically with τ (more staleness →
+#       more rank flips → more rate gap between V and D)
+#
+# At τ=1 both mechanisms predict bg=0 trivially (target ==
+# online → no possible wedge). So pick τ values spanning the
+# canonical τ=100 region with enough leverage to see a trend.
+#
+# CPU sizing: 3 τ × 2 arms × 8 seeds × 200k steps = 48 cells.
+# MetaMaze 200k on CPU is light — ~5-10 min per cell estimated
+# (canonical 1M MetaMaze on CPU is ~30-50 min based on
+# metamaze_canonical_verify cost notes).
+
+envs:
+  - {name: MetaMaze-misc, n_seeds: 8, chunk_size: 8}
+
+defaults:
+  total_steps: 200000
+  eval_every:  20000
+  n_episodes:  5
+  gamma:       0.99
+  replay:
+    class: Replay
+    capacity: 50000
+    batch_size: 32
+  optimizer:
+    fn: warmed_update
+    inner: {fn: adam, lr: 0.0001}
+    warmup_steps: 100
+  q_network:
+    class: MLP
+    hidden: [64, 64]
+
+interventions:
+  - name: tau30
+    base: {sync_period: 30}
+    arms:
+      - []
+      - - slot_path: bootstrap
+          replacement:
+            fn: bootstrap
+            greedification: {fn: double_greedify}
+
+  - name: tau100
+    base: {sync_period: 100}
+    arms:
+      - []
+      - - slot_path: bootstrap
+          replacement:
+            fn: bootstrap
+            greedification: {fn: double_greedify}
+
+  - name: tau300
+    base: {sync_period: 300}
+    arms:
+      - []
+      - - slot_path: bootstrap
+          replacement:
+            fn: bootstrap
+            greedification: {fn: double_greedify}
