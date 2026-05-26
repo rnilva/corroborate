@@ -53,6 +53,7 @@ from corroborate.measurables import (
     register,
     register_as,
 )
+from corroborate.measurables.measurable import get_registered
 from corroborate.measurables.reductions import (
     cv_safe,
     from_key,
@@ -61,6 +62,23 @@ from corroborate.measurables.reductions import (
     reduce_axis,
 )
 from corroborate_rl import env_catalogue
+from corroborate_rl.dqn._temporal_reduction import temporal_reduction
+
+
+def _registered(name: str) -> Measurable[Mapping[str, object], object]:
+    """Fetch a measurable freshly registered via `@temporal_reduction`,
+    raising on the (unreachable-by-construction) miss. The
+    `@temporal_reduction` decorator returns the window-reduction
+    kernel — when the public Python name must remain a
+    `Measurable[Mapping, object]` (e.g., exported in
+    `dqn_default_measurables`), rebind via `name = _registered('name')`
+    immediately after the decorator call."""
+    m = get_registered(name)
+    if m is None:
+        raise RuntimeError(
+            f'expected measurable {name!r} to be registered',
+        )
+    return m
 
 
 # ============ Module-top shared sources ============
@@ -1328,7 +1346,6 @@ def state_hash_n_unique_late(
 # above stay as authored — only the per-burst sibling is registered
 # here, leaving the existing scalar measurables and their docstrings
 # untouched.
-from corroborate_rl.dqn._temporal_reduction import temporal_reduction
 
 
 def _window_n_unique(window: npt.NDArray[np.float64]) -> float:
@@ -1460,8 +1477,11 @@ def policy_churn_late(
     return float(n_flips) / float(n_pairs)
 
 
-@measurable(reads=('online_argmax_per_step',))
-def argmax_entropy_late(record: Mapping[str, object]) -> float:
+@temporal_reduction(
+    reads=('online_argmax_per_step',),
+    late_name='argmax_entropy_late',
+)
+def _argmax_entropy_window(window: npt.NDArray[np.float64]) -> float:
     """Shannon entropy (nats) of `online_argmax_per_step`'s
     distribution over the late 50% of training.
 
@@ -1489,32 +1509,30 @@ def argmax_entropy_late(record: Mapping[str, object]) -> float:
     DDQN_entropy − vanilla_entropy. Sign of the difference
     distinguishes (a) vs (b) regimes.
 
+    Late-only: the per-burst sibling `argmax_entropy_per_burst`
+    is authored separately because it reads `n_actions` to
+    `minlength`-pad the bincount — the trailing zeros are
+    entropy-neutral but the explicit dependency is preserved
+    in the existing measurable.
+
     Returns nan if `online_argmax_per_step` is missing or empty."""
-    arr = record.get('online_argmax_per_step')
-    if arr is None:
+    if window.size == 0:
         return float('nan')
-    try:
-        a = list(arr)
-    except TypeError:
-        return float('nan')
-    if not a:
-        return float('nan')
-    import numpy as np_
-    arr_np = np_.asarray(a, dtype=np_.int64)
-    n = len(arr_np)
-    if n < 2:
-        return float('nan')
-    late = arr_np[n // 2:]
-    if len(late) == 0:
-        return float('nan')
-    counts = np_.bincount(late)
-    p = counts / len(late)
+    late = window.astype(np.int64)
+    counts = np.bincount(late)
+    p = counts.astype(np.float64) / float(late.size)
     p_pos = p[p > 0]
-    return float(-(p_pos * np_.log(p_pos)).sum())
+    return float(-(p_pos * np.log(p_pos)).sum())
 
 
-@measurable(reads=('online_argmax_per_step',))
-def argmax_mode_freq_late(record: Mapping[str, object]) -> float:
+argmax_entropy_late = _registered('argmax_entropy_late')
+
+
+@temporal_reduction(
+    reads=('online_argmax_per_step',),
+    late_name='argmax_mode_freq_late',
+)
+def _argmax_mode_freq_window(window: npt.NDArray[np.float64]) -> float:
     """Fraction of late-training steps where `online_argmax_
     per_step` equals the mode action.
 
@@ -1525,29 +1543,22 @@ def argmax_mode_freq_late(record: Mapping[str, object]) -> float:
 
     Per-cell measurable. Bridge body computes paired
     DDQN_mode_freq − vanilla_mode_freq."""
-    arr = record.get('online_argmax_per_step')
-    if arr is None:
+    if window.size == 0:
         return float('nan')
-    try:
-        a = list(arr)
-    except TypeError:
-        return float('nan')
-    if not a:
-        return float('nan')
-    import numpy as np_
-    arr_np = np_.asarray(a, dtype=np_.int64)
-    n = len(arr_np)
-    if n < 2:
-        return float('nan')
-    late = arr_np[n // 2:]
-    if len(late) == 0:
-        return float('nan')
-    counts = np_.bincount(late)
-    return float(counts.max()) / float(len(late))
+    late = window.astype(np.int64)
+    counts = np.bincount(late)
+    return float(counts.max()) / float(late.size)
 
 
-@measurable(reads=('online_std_q_per_step',))
-def q_action_std_late(record: Mapping[str, object]) -> float:
+argmax_mode_freq_late = _registered('argmax_mode_freq_late')
+
+
+@temporal_reduction(
+    reads=('online_std_q_per_step',),
+    late_name='q_action_std_late',
+    per_burst_name='q_action_std_per_burst',
+)
+def _q_action_std_window_mean(window: npt.NDArray[np.float64]) -> float:
     """Mean of `online_std_q_per_step` over the late 50% of
     training — the cross-action Q-stdev at non-terminal states,
     averaged over late training.
@@ -1567,13 +1578,17 @@ def q_action_std_late(record: Mapping[str, object]) -> float:
     benefit may operate through SNR rather than through
     accumulated bias / chain depth.
 
-    Returns nan if `online_std_q_per_step` is absent (cache
-    lacking trace column) or if the late window is empty."""
-    try:
-        arr = ONLINE_STD_Q(record)
-    except KeyError:
+    The per-burst sibling `q_action_std_per_burst` returns the
+    same statistic computed within each eval-burst training-step
+    window — the per-burst granularity for panel bridges that
+    cannot collapse training-time phase structure into a single
+    late-half scalar."""
+    if window.size == 0:
         return float('nan')
-    return _windowed_mean(arr, 0.5, 1.0)
+    return float(window.mean())
+
+
+q_action_std_late = _registered('q_action_std_late')
 
 
 @measurable(reads=('online_max_q_per_step', 'online_min_q_per_step',
@@ -1616,60 +1631,6 @@ def q_range_to_std_late(record: Mapping[str, object]) -> float:
     if not valid.any():
         return float('nan')
     return float(np.mean(rng[valid] / sd[valid]))
-
-
-@measurable(reads=('online_top12_margin_per_step', 'eval_step_index'))
-def q_argmax_margin_per_burst(
-    record: Mapping[str, object],
-) -> npt.NDArray[np.float64]:
-    """Per-burst analog of `q_argmax_margin_late`. Returns
-    `(n_bursts,)` — per-burst mean of `online_top12_margin_per_step`.
-
-    Used to test whether action-margin mediates the per-burst
-    Q-channel within canonical-config scope (where cell-level
-    margin mediation drops to ~6%). See
-    `findings_two_channel_cross_corpus.md`."""
-    try:
-        arr = ONLINE_TOP12_MARGIN(record)
-        eval_idx = EVAL_STEP_INDEX(record)
-    except KeyError:
-        return np.zeros((0,), dtype=np.float64)
-    if arr.ndim < 1 or eval_idx.ndim < 1:
-        return np.zeros((0,), dtype=np.float64)
-    n = int(arr.shape[0])
-    n_bursts = int(eval_idx.shape[0])
-    if n == 0 or n_bursts == 0:
-        return np.zeros((0,), dtype=np.float64)
-    edges = np.linspace(0, n, n_bursts + 1, dtype=np.int64)
-    return np.array(
-        [float(arr[edges[i]:edges[i+1]].mean()) for i in range(n_bursts)],
-        dtype=np.float64,
-    )
-
-
-@measurable(reads=('online_std_q_per_step', 'eval_step_index'))
-def q_action_std_per_burst(
-    record: Mapping[str, object],
-) -> npt.NDArray[np.float64]:
-    """Per-burst analog of `q_action_std_late`. Returns
-    `(n_bursts,)` — per-burst mean of `online_std_q_per_step`
-    (cross-action Q-stdev at non-terminal states)."""
-    try:
-        arr = ONLINE_STD_Q(record)
-        eval_idx = EVAL_STEP_INDEX(record)
-    except KeyError:
-        return np.zeros((0,), dtype=np.float64)
-    if arr.ndim < 1 or eval_idx.ndim < 1:
-        return np.zeros((0,), dtype=np.float64)
-    n = int(arr.shape[0])
-    n_bursts = int(eval_idx.shape[0])
-    if n == 0 or n_bursts == 0:
-        return np.zeros((0,), dtype=np.float64)
-    edges = np.linspace(0, n, n_bursts + 1, dtype=np.int64)
-    return np.array(
-        [float(arr[edges[i]:edges[i+1]].mean()) for i in range(n_bursts)],
-        dtype=np.float64,
-    )
 
 
 @measurable(
@@ -1969,8 +1930,12 @@ def q_lambda_a_horizon_normalised_growth_ratio(
     return tail_mean / init_mean
 
 
-@measurable(reads=('online_top12_margin_per_step',))
-def q_argmax_margin_late(record: Mapping[str, object]) -> float:
+@temporal_reduction(
+    reads=('online_top12_margin_per_step',),
+    late_name='q_argmax_margin_late',
+    per_burst_name='q_argmax_margin_per_burst',
+)
+def _q_argmax_margin_window_mean(window: npt.NDArray[np.float64]) -> float:
     """Mean of `online_top12_margin_per_step` over the late 50%
     of training — per-step (Q(top1) − Q(top2)) averaged across
     late states. Captures **argmax-bias-sensitivity**: the
@@ -1987,12 +1952,17 @@ def q_argmax_margin_late(record: Mapping[str, object]) -> float:
     when ratio < 1, bias differential can flip argmax; when > 1,
     bias is below margin scale.
 
-    Returns nan if the trace column is absent."""
-    try:
-        arr = ONLINE_TOP12_MARGIN(record)
-    except KeyError:
+    The per-burst sibling `q_argmax_margin_per_burst` is used to
+    test whether action-margin mediates the per-burst Q-channel
+    within canonical-config scope (where cell-level margin
+    mediation drops to ~6%). See
+    `findings_two_channel_cross_corpus.md`."""
+    if window.size == 0:
         return float('nan')
-    return _windowed_mean(arr, 0.5, 1.0)
+    return float(window.mean())
+
+
+q_argmax_margin_late = _registered('q_argmax_margin_late')
 
 
 @measurable(reads=('n_actions',))
@@ -2164,8 +2134,12 @@ def sigma_over_jens_late(
     return q_action_std_late / jensen_gap
 
 
-@measurable(reads=('online_max_q_per_step',))
-def q_late_mean(record: Mapping[str, object]) -> float:
+@temporal_reduction(
+    reads=('online_max_q_per_step',),
+    late_name='q_late_mean',
+    per_burst_name='q_per_burst',
+)
+def _q_max_window_mean(window: npt.NDArray[np.float64]) -> float:
     """Mean of `online_max_q_per_step` over the late 50% of
     training — a scalar summary of where the value function ends
     up.
@@ -2189,43 +2163,19 @@ def q_late_mean(record: Mapping[str, object]) -> float:
 
     The endogenous downstream of `r_min`. Used as a regime-
     selector predicate in bridges that test claims dependent on
-    the sign of Hasselt's bias direction."""
-    try:
-        arr = ONLINE_MAX_Q(record)
-    except KeyError:
-        return float('nan')
-    return _windowed_mean(arr, 0.5, 1.0)
+    the sign of Hasselt's bias direction.
 
-
-@measurable(reads=('online_max_q_per_step', 'eval_step_index'))
-def q_per_burst(
-    record: Mapping[str, object],
-) -> npt.NDArray[np.float64]:
-    """Per-burst mean of `online_max_q_per_step`. Returns `(n_bursts,)`.
-
-    Per-burst analog of `q_late_mean` (full-trajectory late-50%
-    reduction). Chunks per-step Q into n_bursts equal training-step
-    windows, takes mean per window. The Q-magnitude channel at
+    Per-burst sibling `q_per_burst` is the Q-magnitude channel at
     per-burst granularity for the two-channel decomposition
     (`findings_ddqn_reward_sign_conditional.md`):
     `bg_per_burst → mc_per_burst` and `q_per_burst → mc_per_burst`
     are independent direct edges in the per-burst PC graph."""
-    try:
-        arr = ONLINE_MAX_Q(record)
-        eval_idx = EVAL_STEP_INDEX(record)
-    except KeyError:
-        return np.zeros((0,), dtype=np.float64)
-    n = int(arr.shape[0])
-    if n == 0:
-        return np.zeros((0,), dtype=np.float64)
-    n_bursts = int(eval_idx.shape[0])
-    if n_bursts == 0:
-        return np.zeros((0,), dtype=np.float64)
-    edges = np.linspace(0, n, n_bursts + 1, dtype=np.int64)
-    return np.array(
-        [float(arr[edges[i]:edges[i+1]].mean()) for i in range(n_bursts)],
-        dtype=np.float64,
-    )
+    if window.size == 0:
+        return float('nan')
+    return float(window.mean())
+
+
+q_late_mean = _registered('q_late_mean')
 
 
 @measurable(reads=('online_max_q_per_step',))
@@ -2242,8 +2192,13 @@ def q_max_growth(record: Mapping[str, object]) -> float:
     return float(late / max(abs(early), 1e-9))
 
 
-@measurable(reads=('q_action_grad_overlap_per_step',))
-def q_action_grad_overlap_late(record: Mapping[str, object]) -> float:
+@temporal_reduction(
+    reads=('q_action_grad_overlap_per_step',),
+    late_name='q_action_grad_overlap_late',
+)
+def _q_action_grad_overlap_window_mean(
+    window: npt.NDArray[np.float64],
+) -> float:
     """Late-window mean of per-step `q_action_grad_overlap_per_step`:
     mean off-diagonal cosine similarity of `∂Q(s, a_i)/∂θ` for action
     pairs (i, j) at a single sampled batch state per training step,
@@ -2267,19 +2222,25 @@ def q_action_grad_overlap_late(record: Mapping[str, object]) -> float:
     trajectory-induced drift; it returns near-1 for BOTH linear
     and deep FA. Use `q_action_grad_overlap_late` for the
     architectural-α test; use the temporal correlation only as
-    a Q-rank-deficiency proxy."""
-    try:
-        arr = Q_ACTION_GRAD_OVERLAP(record)
-    except KeyError:
+    a Q-rank-deficiency proxy.
+
+    Late-only: no per-burst sibling — the bridge consumers all
+    read this as the trajectory-averaged FA-architectural
+    invariant, not as a per-burst panel."""
+    if window.size == 0:
         return float('nan')
-    if arr.ndim == 0 or arr.shape[0] < 2:
-        return float('nan')
-    return _windowed_mean(arr, 0.5, 1.0)
+    return float(window.mean())
 
 
-@measurable(reads=('bootstrap_action_mismatch_per_step',))
-def bootstrap_action_mismatch_late(
-    record: Mapping[str, object],
+q_action_grad_overlap_late = _registered('q_action_grad_overlap_late')
+
+
+@temporal_reduction(
+    reads=('bootstrap_action_mismatch_per_step',),
+    late_name='bootstrap_action_mismatch_late',
+)
+def _bootstrap_action_mismatch_window_mean(
+    window: npt.NDArray[np.float64],
 ) -> float:
     """Late-window mean of the cross-action bootstrap rate:
     fraction of training transitions where
@@ -2313,18 +2274,20 @@ def bootstrap_action_mismatch_late(
     policy-structure axis (Theorem 1 Cor 1.1 has explicit
     "argmax-preservation" condition); the framework's three orthogonal
     diagnostic axes are documented in THEORY_bootstrap_dominance.md §11."""
-    try:
-        arr = BOOTSTRAP_ACTION_MISMATCH(record)
-    except KeyError:
+    if window.size == 0:
         return float('nan')
-    if arr.ndim == 0 or arr.shape[0] < 2:
-        return float('nan')
-    return _windowed_mean(arr, 0.5, 1.0)
+    return float(window.mean())
 
 
-@measurable(reads=('q_inter_state_grad_overlap_per_step',))
-def q_inter_state_grad_overlap_late(
-    record: Mapping[str, object],
+bootstrap_action_mismatch_late = _registered('bootstrap_action_mismatch_late')
+
+
+@temporal_reduction(
+    reads=('q_inter_state_grad_overlap_per_step',),
+    late_name='q_inter_state_grad_overlap_late',
+)
+def _q_inter_state_grad_overlap_window_mean(
+    window: npt.NDArray[np.float64],
 ) -> float:
     """Late-window mean of inter-state α — cosine overlap of
     `∂Q(s, a)/∂θ` vs `∂Q(s', a)/∂θ` at paired (s, s') from the
@@ -2342,18 +2305,22 @@ def q_inter_state_grad_overlap_late(
     Probe added 2026-05-13 in `train_phase`; populated by sweeps
     run after that. Pre-existing corpora have NaN for this
     column."""
-    try:
-        arr = Q_INTER_STATE_GRAD_OVERLAP(record)
-    except KeyError:
+    if window.size == 0:
         return float('nan')
-    if arr.ndim == 0 or arr.shape[0] < 2:
-        return float('nan')
-    return _windowed_mean(arr, 0.5, 1.0)
+    return float(window.mean())
 
 
-@measurable(reads=('q_inter_state_grad_overlap_random_per_step',))
-def q_inter_state_grad_overlap_random_late(
-    record: Mapping[str, object],
+q_inter_state_grad_overlap_late = _registered(
+    'q_inter_state_grad_overlap_late',
+)
+
+
+@temporal_reduction(
+    reads=('q_inter_state_grad_overlap_random_per_step',),
+    late_name='q_inter_state_grad_overlap_random_late',
+)
+def _q_inter_state_grad_overlap_random_window_mean(
+    window: npt.NDArray[np.float64],
 ) -> float:
     """Late-window mean of "lag-k" baseline: cosine overlap of
     `∂Q(s, a)/∂θ` vs `∂Q(s_random, a)/∂θ` at paired
@@ -2372,13 +2339,14 @@ def q_inter_state_grad_overlap_random_late(
 
     Probe added 2026-05-22 in `train_phase`; pre-existing corpora
     have NaN."""
-    try:
-        arr = Q_INTER_STATE_GRAD_OVERLAP_RANDOM(record)
-    except KeyError:
+    if window.size == 0:
         return float('nan')
-    if arr.ndim == 0 or arr.shape[0] < 2:
-        return float('nan')
-    return _windowed_mean(arr, 0.5, 1.0)
+    return float(window.mean())
+
+
+q_inter_state_grad_overlap_random_late = _registered(
+    'q_inter_state_grad_overlap_random_late',
+)
 
 
 @measurable(
@@ -2413,8 +2381,11 @@ def q_inter_state_grad_overlap_excess_late(
     return _windowed_mean(adj, 0.5, 1.0) - _windowed_mean(rand, 0.5, 1.0)
 
 
-@measurable(reads=('online_max_q_per_step',))
-def q_autocorr_late(record: Mapping[str, object]) -> float:
+@temporal_reduction(
+    reads=('online_max_q_per_step',),
+    late_name='q_autocorr_late',
+)
+def _q_autocorr_window(window: npt.NDArray[np.float64]) -> float:
     """Lag-1 Pearson autocorrelation of `online_max_q_per_step`
     over the late 50% of training. Proxy for function-approximator
     spatial coherence: how strongly the FA enforces
@@ -2436,23 +2407,23 @@ def q_autocorr_late(record: Mapping[str, object]) -> float:
     through the trunk; high autocorr means that push redistributes
     onto Q(s', a) for s' ≈ s, amplifying spatial bias coverage.
     DDQN's argmax-decorrelation breaks this loop — should help
-    most where autocorr is high."""
-    try:
-        arr = ONLINE_MAX_Q(record)
-    except KeyError:
+    most where autocorr is high.
+
+    Late-only via `@temporal_reduction`: the per-burst sibling
+    `q_autocorr_per_burst` is authored separately with `np.array_
+    split` windowing (different from the decorator's `np.linspace`
+    edges convention)."""
+    if window.size < 2:
         return float('nan')
-    if arr.ndim == 0 or arr.shape[0] < 2:
-        return float('nan')
-    half = arr.shape[0] // 2
-    late = arr[half:]
-    if late.shape[0] < 2:
-        return float('nan')
-    x = late[:-1]
-    y = late[1:]
+    x = window[:-1]
+    y = window[1:]
     if np.std(x) == 0 or np.std(y) == 0:
         return float('nan')
     r = float(np.corrcoef(x, y)[0, 1])
     return r if math.isfinite(r) else float('nan')
+
+
+q_autocorr_late = _registered('q_autocorr_late')
 
 
 @measurable(reads=('predicted_q_per_step', 'active_per_step'))
@@ -3041,8 +3012,11 @@ def argmax_persistence_late(record: Mapping[str, object]) -> float:
     return float(np.mean(matches))
 
 
-@measurable(reads=('online_max_q_per_step',))
-def q_max_temporal_cv_late(record: Mapping[str, object]) -> float:
+@temporal_reduction(
+    reads=('online_max_q_per_step',),
+    late_name='q_max_temporal_cv_late',
+)
+def _q_max_temporal_cv_window(window: npt.NDArray[np.float64]) -> float:
     """Temporal coefficient of variation (std / |mean|) of
     `online_max_q_per_step` over the late 50% of training.
 
@@ -3060,21 +3034,16 @@ def q_max_temporal_cv_late(record: Mapping[str, object]) -> float:
 
     Returns NaN if `online_max_q_per_step` absent or if late-window
     mean is below 1e-9 in magnitude (CV undefined)."""
-    try:
-        arr = ONLINE_MAX_Q(record)
-    except KeyError:
+    if window.size < 2:
         return float('nan')
-    n = arr.shape[0]
-    if n < 4:
-        return float('nan')
-    late = arr[n // 2:]
-    if len(late) < 2:
-        return float('nan')
-    mu = float(np.mean(late))
+    mu = float(np.mean(window))
     if abs(mu) < 1e-9:
         return float('nan')
-    sd = float(np.std(late, ddof=1))
+    sd = float(np.std(window, ddof=1))
     return sd / abs(mu)
+
+
+q_max_temporal_cv_late = _registered('q_max_temporal_cv_late')
 
 
 @measurable(reads=('mc_return',))
@@ -3272,21 +3241,30 @@ def v_vs_max_delta_late(record: Mapping[str, object]) -> float:
     return _windowed_mean(np.abs(mean_q - max_q), 0.5, 1.0)
 
 
-@measurable(reads=('td_error',))
-def td_residual_late(record: Mapping[str, object]) -> float:
+@temporal_reduction(
+    reads=('td_error',),
+    late_name='td_residual_late',
+)
+def _td_residual_window_mean(window: npt.NDArray[np.float64]) -> float:
     """Mean of |TD residual| over the late 50%. TD-convergence
     scalar — Acrobot's r=+0.84 vs GaussianBandit's r=−0.81
     (sign-flip across regimes) is the canonical motivation for
     per-env PC in PAPER §6."""
-    try:
-        arr = TD_ERROR(record)
-    except KeyError:
+    if window.size == 0:
         return float('nan')
-    return _windowed_mean(arr, 0.5, 1.0)
+    return float(window.mean())
 
 
-@measurable(reads=('td_error_within_batch_std',))
-def td_within_batch_var_late(record: Mapping[str, object]) -> float:
+td_residual_late = _registered('td_residual_late')
+
+
+@temporal_reduction(
+    reads=('td_error_within_batch_std',),
+    late_name='td_within_batch_var_late',
+)
+def _td_within_batch_var_window_mean(
+    window: npt.NDArray[np.float64],
+) -> float:
     """Mean of within-batch std(|TD-error|) over the late 50%.
 
     Captures *training-signal heterogeneity*: at each training step,
@@ -3302,11 +3280,12 @@ def td_within_batch_var_late(record: Mapping[str, object]) -> float:
     happened to be in the batch) and *not* a re-encoding of the
     outcome (reads `td_error_within_batch_std`, disjoint from
     `mc_return`)."""
-    try:
-        arr = TD_WB_STD(record)
-    except KeyError:
+    if window.size == 0:
         return float('nan')
-    return _windowed_mean(arr, 0.5, 1.0)
+    return float(window.mean())
+
+
+td_within_batch_var_late = _registered('td_within_batch_var_late')
 
 
 @measurable(reads=('online_argmax_per_step', 'target_argmax_per_step'))

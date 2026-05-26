@@ -1,6 +1,8 @@
 """Tests for `@temporal_reduction` — the pair-registration decorator."""
 from __future__ import annotations
 
+import math
+
 import numpy as np
 import pytest
 
@@ -151,3 +153,146 @@ def test_per_burst_state_hash_n_unique_matches_late_on_equivalent_window() -> No
     assert isinstance(result, np.ndarray)
     # Single burst spans full array (length 20) → 10 unique total
     assert result.tolist() == [10.0]
+
+
+# ============ Refactor-equivalence tests ============
+#
+# Each refactored measurable (`@temporal_reduction(late_name=...)`)
+# preserves the SAME numerical output as the pre-refactor hand-rolled
+# `@measurable` body. The pre-refactor closed forms are reproduced
+# inline here as the ground truth — independent of the decorator's
+# implementation — so any regression in the decorator wiring or in
+# the migrated reduction kernel surfaces as a test failure.
+
+
+def test_argmax_entropy_late_equivalence() -> None:
+    """Refactor of `argmax_entropy_late` via @temporal_reduction
+    preserves the pre-refactor Shannon-entropy output on
+    `online_argmax_per_step`'s late-50% slice."""
+    m = get_registered('argmax_entropy_late')
+    assert m is not None
+    # Per-step argmax stream of length 8 with K=3 actions.
+    # Late half (idx 4..8) = [0, 1, 2, 2] → counts [1, 1, 2]
+    # → p = [1/4, 1/4, 2/4]
+    # → H = -(0.25·ln0.25 + 0.25·ln0.25 + 0.5·ln0.5)
+    #      = 0.5·ln4 + 0.5·ln2 = ln4·0.5 + ln2·0.5 = (3/2)·ln2
+    record = {
+        'online_argmax_per_step': np.array(
+            [0, 0, 1, 1, 0, 1, 2, 2], dtype=np.int64,
+        ),
+    }
+    expected = 0.5 * np.log(4.0) + 0.5 * np.log(2.0)
+    assert math.isclose(m.fn(record), expected, abs_tol=1e-9)
+
+
+def test_argmax_mode_freq_late_equivalence() -> None:
+    """Refactor of `argmax_mode_freq_late` preserves the mode-fraction
+    on the late-50% slice."""
+    m = get_registered('argmax_mode_freq_late')
+    assert m is not None
+    # Per-step argmax of length 8. Late half = [0, 1, 2, 2]
+    # counts [1, 1, 2] → mode_freq = 2/4 = 0.5
+    record = {
+        'online_argmax_per_step': np.array(
+            [0, 0, 1, 1, 0, 1, 2, 2], dtype=np.int64,
+        ),
+    }
+    assert math.isclose(m.fn(record), 0.5, abs_tol=1e-12)
+
+
+def test_td_residual_late_equivalence() -> None:
+    """Refactor of `td_residual_late` preserves late-50% mean of
+    `td_error` (matches the existing closed-form test at
+    `test_late_window_measurables.py::test_td_residual_late_mean_over_late_half`)."""
+    m = get_registered('td_residual_late')
+    assert m is not None
+    # Same record as the pre-existing test.
+    record = {'td_error': np.array([0.5, 0.5, 0.1, 0.1])}
+    assert math.isclose(m.fn(record), 0.1, abs_tol=1e-12)
+
+
+def test_td_within_batch_var_late_equivalence() -> None:
+    """Refactor preserves late-50% mean of `td_error_within_batch_std`."""
+    m = get_registered('td_within_batch_var_late')
+    assert m is not None
+    record = {
+        'td_error_within_batch_std': np.array(
+            [0.2, 0.2, 0.4, 0.4, 0.6, 0.6],
+        ),
+    }
+    # Late half (idx 3..6) = [0.4, 0.6, 0.6] mean = 1.6/3 ≈ 0.5333
+    assert math.isclose(m.fn(record), 1.6 / 3.0, abs_tol=1e-12)
+
+
+def test_q_max_temporal_cv_late_equivalence() -> None:
+    """Refactor preserves std(ddof=1)/|mean| on `online_max_q_per_step`'s
+    late-50% slice."""
+    m = get_registered('q_max_temporal_cv_late')
+    assert m is not None
+    # 8-step series. Late half (idx 4..8) = [1, 3, 1, 3]
+    # mean = 2.0; std(ddof=1) of [1,3,1,3] = √(((-1)²+1²+(-1)²+1²)/3)
+    #   = √(4/3)
+    record = {
+        'online_max_q_per_step': np.array(
+            [10.0, 10.0, 10.0, 10.0, 1.0, 3.0, 1.0, 3.0],
+        ),
+    }
+    expected = math.sqrt(4.0 / 3.0) / 2.0
+    assert math.isclose(m.fn(record), expected, abs_tol=1e-9)
+
+
+def test_q_max_temporal_cv_late_nan_on_zero_mean() -> None:
+    """Pre-refactor returned NaN when |mean| < 1e-9; refactor preserves."""
+    m = get_registered('q_max_temporal_cv_late')
+    assert m is not None
+    record = {
+        'online_max_q_per_step': np.array(
+            [10.0, 10.0, 10.0, 10.0, 1.0, -1.0, 1.0, -1.0],
+        ),
+    }
+    # Late half = [1, -1, 1, -1] mean = 0 → NaN
+    assert math.isnan(m.fn(record))
+
+
+def test_q_autocorr_late_equivalence() -> None:
+    """Refactor preserves lag-1 Pearson autocorrelation on the late-50%
+    slice of `online_max_q_per_step`."""
+    m = get_registered('q_autocorr_late')
+    assert m is not None
+    # Late half (idx 4..8) = [1, 2, 3, 4, 5] → ramp → autocorr = +1
+    record = {
+        'online_max_q_per_step': np.array(
+            [99.0, 99.0, 99.0, 99.0, 1.0, 2.0, 3.0, 4.0, 5.0],
+        ),
+    }
+    assert math.isclose(m.fn(record), 1.0, abs_tol=1e-9)
+
+
+def test_q_autocorr_late_nan_on_constant_window() -> None:
+    """Pre-refactor returned NaN when np.std==0 on either x or y;
+    refactor preserves."""
+    m = get_registered('q_autocorr_late')
+    assert m is not None
+    record = {
+        'online_max_q_per_step': np.array(
+            [1.0, 2.0, 3.0, 4.0, 7.0, 7.0, 7.0, 7.0],
+        ),
+    }
+    assert math.isnan(m.fn(record))
+
+
+def test_refactored_late_names_in_registry() -> None:
+    """All refactored late-only measurables surface under their original
+    public names in the global registry, so downstream `import` paths
+    and `transitive_reads` walks still find them by name."""
+    for name in (
+        'argmax_entropy_late',
+        'argmax_mode_freq_late',
+        'td_residual_late',
+        'td_within_batch_var_late',
+        'q_max_temporal_cv_late',
+        'q_autocorr_late',
+    ):
+        m = get_registered(name)
+        assert m is not None, f'{name} missing from registry'
+        assert m.name == name
