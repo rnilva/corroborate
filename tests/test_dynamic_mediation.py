@@ -27,6 +27,7 @@ import math
 from collections.abc import Mapping
 
 import numpy as np
+import numpy.typing as npt
 import polars as pl
 import pytest
 from scipy.stats import spearmanr
@@ -35,6 +36,9 @@ from corroborate.analyses.dynamic_mediation import (
     DynamicMediationResult,
     TimeAggregationStatus,
     dynamic_partial_spearman,
+)
+from corroborate.analyses.dynamic_mediation import (
+    _classify_status,  # pyright: ignore[reportPrivateUsage]
 )
 
 
@@ -225,10 +229,19 @@ def test_sign_flip_detected_status() -> None:
         f'status={result.aggregation_status!r}; '
         f'rho_marginal={result.rho_marginal}'
     )
-    # SIGN_FLIP → marginal pool is NaN by contract.
+    # SIGN_FLIP → BOTH marginal AND partial pool are NaN by
+    # contract. The partial inherits the same suspect support as
+    # the marginal (computed on the same per-burst (xs, ys, zs)
+    # trios) — if the marginal is incoherent the partial's pool
+    # isn't trustworthy either.
     assert math.isnan(result.rho_marginal_pooled), (
         f'rho_marginal_pooled={result.rho_marginal_pooled!r}; '
         f'must be NaN under SIGN_FLIP_DETECTED'
+    )
+    assert math.isnan(result.rho_partial_pooled), (
+        f'rho_partial_pooled={result.rho_partial_pooled!r}; '
+        f'must be NaN under SIGN_FLIP_DETECTED (partial inherits '
+        f'marginal\'s suspect support)'
     )
 
 
@@ -485,3 +498,504 @@ def test_result_is_frozen_dataclass() -> None:
         # suppresses pyright's "no attribute write" complaint — the
         # test EXISTS to verify that the runtime guard exists.
         result.rho_marginal_pooled = 0.0  # pyright: ignore[reportAttributeAccessIssue]
+
+
+# ============ Sign-flip noise floor (`sign_flip_min_abs_rho`) ============
+
+def test_noise_level_opposite_signs_dont_flip_classifier_unit() -> None:
+    """Unit-level test on the classifier: hand-built ρ trajectory
+    (+0.5, +0.5, -0.02) with the third burst's |ρ| below the
+    default 0.05 noise floor. Classifier must return
+    CONSISTENT_DIRECTION at the default floor.
+
+    Tested via the framework's `_classify_status` directly because
+    `_build_panel`'s seed-coupled noise makes it hard to land the
+    burst-2 empirical ρ in the tight `(-0.05, 0)` window the panel
+    test would need."""
+    status = _classify_status(
+        rho_marginal=(0.5, 0.5, -0.02),
+        n_per_burst=(80, 80, 80),
+        min_n_per_burst=5,
+        weak_time_varying_ratio=2.0,
+        sign_flip_min_abs_rho=0.05,
+    )
+    assert status is TimeAggregationStatus.CONSISTENT_DIRECTION, (
+        f'classifier returned {status!r} on a trajectory whose '
+        f'sole opposite-sign burst is at |ρ|=0.02 < floor=0.05; '
+        f'must treat as noise, not flip'
+    )
+
+
+def test_noise_floor_zero_recovers_legacy_hairtrigger_behaviour() -> None:
+    """Setting `sign_flip_min_abs_rho=0.0` recovers the pre-fix
+    hair-trigger behaviour: any opposite-sign valid burst triggers
+    SIGN_FLIP_DETECTED regardless of magnitude. Pins the
+    direction-of-effect of the new parameter."""
+    status_default = _classify_status(
+        rho_marginal=(0.5, 0.5, -0.02),
+        n_per_burst=(80, 80, 80),
+        min_n_per_burst=5,
+        weak_time_varying_ratio=2.0,
+        sign_flip_min_abs_rho=0.05,
+    )
+    status_zero = _classify_status(
+        rho_marginal=(0.5, 0.5, -0.02),
+        n_per_burst=(80, 80, 80),
+        min_n_per_burst=5,
+        weak_time_varying_ratio=2.0,
+        sign_flip_min_abs_rho=0.0,
+    )
+    assert status_default is TimeAggregationStatus.CONSISTENT_DIRECTION
+    assert status_zero is TimeAggregationStatus.SIGN_FLIP_DETECTED, (
+        f'floor=0 should restore hair-trigger behaviour; got '
+        f'{status_zero!r}'
+    )
+
+
+def test_noise_floor_panel_integration_with_clean_construction() -> None:
+    """Panel-level integration test for the noise-floor gate.
+    Construction: 3 bursts at planted ρ values that produce
+    empirical |ρ|[2] < 0.05 reliably. We over-pad the construction
+    via larger n + tighter planted value so the seed-noise band
+    lands inside the floor with high probability.
+
+    Two assertions:
+      (a) at default floor=0.05, status is CONSISTENT_DIRECTION
+          (the near-zero burst is treated as noise);
+      (b) at floor=0.0, status flips to SIGN_FLIP_DETECTED if and
+          only if burst-2 empirical ρ is below zero.
+    """
+    # Seed=0 produces burst-2 empirical ρ ≈ -0.015 (negative, below
+    # the 0.05 noise floor) — exactly the construction we need to
+    # exercise the noise-floor gate.
+    df = _build_panel(rho_trajectory=(0.5, 0.5, 0.0), seed=0)
+    # Default floor: noise-band burst doesn't trigger flip.
+    res_default = dynamic_partial_spearman.fn(
+        df, arm_field='arm_key',
+        mediator_per_burst='mediator_pb',
+        outcome_per_burst='outcome_pb',
+        stratify_by=('env_name', 'gamma'),
+        sign_flip_min_abs_rho=0.05,
+    )
+    r_default = _get_single_stratum(res_default)
+    # Sanity on construction: burst-2 lands in (-0.05, 0) — below
+    # the default 0.05 floor with opposite (negative) sign.
+    assert -0.05 < r_default.rho_marginal[2] < 0.0, (
+        f'construction failed: burst-2 ρ={r_default.rho_marginal[2]!r} '
+        f'should be in (-0.05, 0) to exercise the noise-floor gate'
+    )
+    assert r_default.aggregation_status is (
+        TimeAggregationStatus.CONSISTENT_DIRECTION
+    ), (
+        f'default floor: noise-level burst should NOT flip; got '
+        f'{r_default.aggregation_status!r} (ρ trajectory='
+        f'{r_default.rho_marginal})'
+    )
+    # At floor=0.0 the same trajectory triggers SIGN_FLIP_DETECTED
+    # because burst-2's opposite-sign ρ counts regardless of
+    # magnitude.
+    res_zero = dynamic_partial_spearman.fn(
+        df, arm_field='arm_key',
+        mediator_per_burst='mediator_pb',
+        outcome_per_burst='outcome_pb',
+        stratify_by=('env_name', 'gamma'),
+        sign_flip_min_abs_rho=0.0,
+    )
+    r_zero = _get_single_stratum(res_zero)
+    assert r_zero.aggregation_status is (
+        TimeAggregationStatus.SIGN_FLIP_DETECTED
+    ), (
+        f'floor=0: opposite-sign burst at any magnitude must flip; '
+        f'got {r_zero.aggregation_status!r}'
+    )
+
+
+def test_sign_flip_above_noise_floor_still_fires() -> None:
+    """A burst at |ρ| > `sign_flip_min_abs_rho` with the opposite
+    sign MUST still trigger SIGN_FLIP_DETECTED. Pins that the
+    noise floor doesn't silently swallow real flips."""
+    df = _build_panel(rho_trajectory=(0.5, 0.5, -0.3), seed=21)
+    results = dynamic_partial_spearman.fn(
+        df, arm_field='arm_key',
+        mediator_per_burst='mediator_pb',
+        outcome_per_burst='outcome_pb',
+        stratify_by=('env_name', 'gamma'),
+        sign_flip_min_abs_rho=0.05,
+    )
+    result = _get_single_stratum(results)
+    # burst-2 empirical ρ should be deeply negative (~-0.3) — well
+    # above the noise floor in magnitude.
+    assert result.rho_marginal[2] < -0.1, (
+        f'burst 2 ρ={result.rho_marginal[2]!r} should be deeply '
+        f'negative (planted -0.3)'
+    )
+    assert result.aggregation_status is (
+        TimeAggregationStatus.SIGN_FLIP_DETECTED
+    )
+
+
+# ============ WEAK_TIME_VARYING robustness to noise bursts ============
+
+def test_weak_time_varying_robust_to_single_noise_burst() -> None:
+    """`WEAK_TIME_VARYING` should be driven by the genuinely
+    time-varying part of the trajectory — NOT by a single
+    near-zero burst inflating the max/min ratio.
+
+    Planted (+0.4, +0.4, +0.4, +0.01): the first three are
+    indistinguishable in |ρ|; the last is noise-level. Pre-fix
+    behaviour would compute max(|ρ|)/min(|ρ|) ≈ 0.4/0.01 = 40, far
+    above the default 2.0 ratio → WEAK_TIME_VARYING. Post-fix
+    behaviour drops noise-level bursts from the ratio → ratio ≈
+    1.0 → CONSISTENT_DIRECTION."""
+    df = _build_panel(rho_trajectory=(0.4, 0.4, 0.4, 0.01), seed=22)
+    results = dynamic_partial_spearman.fn(
+        df, arm_field='arm_key',
+        mediator_per_burst='mediator_pb',
+        outcome_per_burst='outcome_pb',
+        stratify_by=('env_name', 'gamma'),
+        sign_flip_min_abs_rho=0.05,
+    )
+    result = _get_single_stratum(results)
+    # Verify the planted near-zero burst materialised below the
+    # noise floor.
+    assert abs(result.rho_marginal[3]) < 0.10, (
+        f'burst 3 ρ={result.rho_marginal[3]!r} should be near-zero '
+        f'(planted +0.01); construction broken'
+    )
+    assert result.aggregation_status is (
+        TimeAggregationStatus.CONSISTENT_DIRECTION
+    ), (
+        f'status={result.aggregation_status!r}; '
+        f'rho_marginal={result.rho_marginal} — noise-level burst '
+        f'must NOT drive WEAK_TIME_VARYING'
+    )
+
+
+# ============ Boundary tests on `min_n_per_burst` ============
+
+def _build_small_panel(
+    *,
+    n_cells_per_arm: int,
+    seed: int,
+) -> pl.DataFrame:
+    """Tiny-stratum panel for `min_n_per_burst` boundary tests.
+    Single burst; per-burst n = 2 * n_cells_per_arm."""
+    rng = np.random.default_rng(seed)
+    n = 2 * n_cells_per_arm
+    arms = ['treatment'] * n_cells_per_arm + ['baseline'] * n_cells_per_arm
+    outcome = rng.normal(0.0, 1.0, size=n)
+    # Plant a moderate ρ via the arm code so the per-burst ρ is
+    # well-defined when n is sufficient.
+    arm_code = np.asarray(
+        [1.0] * n_cells_per_arm + [0.0] * n_cells_per_arm,
+        dtype=np.float64,
+    )
+    arm_centred = (arm_code - arm_code.mean()) / float(np.std(arm_code))
+    outcome = 0.5 * arm_centred + math.sqrt(0.75) * outcome
+    mediator = rng.normal(0.0, 1.0, size=n)
+    cells: list[Mapping[str, object]] = [
+        {
+            'env_name': 'env_a', 'gamma': 0.99, 'arm_key': arms[i],
+            'mediator_pb': [float(mediator[i])],
+            'outcome_pb': [float(outcome[i])],
+        }
+        for i in range(n)
+    ]
+    return pl.DataFrame(cells)
+
+
+def test_min_n_per_burst_boundary_n_below_floor() -> None:
+    """At n=4 (2 cells per arm) with `min_n_per_burst=5`, the
+    single burst falls below the floor → all per-burst ρ are
+    NaN → status UNDERPOWERED_BURSTS."""
+    df = _build_small_panel(n_cells_per_arm=2, seed=30)  # n=4
+    results = dynamic_partial_spearman.fn(
+        df, arm_field='arm_key',
+        mediator_per_burst='mediator_pb',
+        outcome_per_burst='outcome_pb',
+        stratify_by=('env_name', 'gamma'),
+        min_n_per_burst=5,
+    )
+    result = _get_single_stratum(results)
+    assert result.n_per_burst == (4,)
+    assert math.isnan(result.rho_marginal[0])
+    assert math.isnan(result.rho_partial[0])
+    assert result.aggregation_status is (
+        TimeAggregationStatus.UNDERPOWERED_BURSTS
+    ), (
+        f'n=4 < min_n_per_burst=5 must produce UNDERPOWERED_BURSTS; '
+        f'got {result.aggregation_status!r}'
+    )
+
+
+def test_min_n_per_burst_boundary_n_at_floor() -> None:
+    """At n=6 (3 cells per arm; we use 3 here to stay safely above
+    boundary while keeping n above the closed-form partial floor of
+    n=5) with `min_n_per_burst=5`, the burst meets the floor → ρ
+    computed (non-NaN)."""
+    # n=6 chosen because partial_spearman_rho requires n >= 5 for
+    # the closed-form first-order partial; n=5 sits at the boundary
+    # where partial ρ is well-defined but rho_partial has df=1.
+    df = _build_small_panel(n_cells_per_arm=3, seed=31)  # n=6
+    results = dynamic_partial_spearman.fn(
+        df, arm_field='arm_key',
+        mediator_per_burst='mediator_pb',
+        outcome_per_burst='outcome_pb',
+        stratify_by=('env_name', 'gamma'),
+        min_n_per_burst=5,
+    )
+    result = _get_single_stratum(results)
+    assert result.n_per_burst == (6,)
+    # ρ values defined (not NaN).
+    assert not math.isnan(result.rho_marginal[0]), (
+        f'n=6 >= floor=5: marginal ρ should be defined, got NaN'
+    )
+    assert not math.isnan(result.rho_partial[0]), (
+        f'n=6 >= floor=5: partial ρ should be defined, got NaN'
+    )
+    # Status is NOT UNDERPOWERED_BURSTS — at least one valid burst.
+    assert result.aggregation_status is not (
+        TimeAggregationStatus.UNDERPOWERED_BURSTS
+    ), (
+        f'status={result.aggregation_status!r} — n>=floor should '
+        f'avoid UNDERPOWERED_BURSTS'
+    )
+
+
+# ============ df_offset discriminates marginal vs partial pool ============
+
+def test_df_offset_distinguishes_marginal_and_partial_pools() -> None:
+    """The marginal pool uses df_offset=3 (matching
+    `stratified_spearman_rho`); the partial pool uses df_offset=4
+    (matching `stratified_partial_spearman_rho`). When per-burst
+    `n` is small and uneven, the two df_offsets weight bursts
+    differently → the two pools land at numerically distinct
+    values even when the per-burst marginal and partial ρ's are
+    identical.
+
+    Construction: a stratum with multiple bursts at small n (e.g.
+    n=10), planted so r_marginal[b] = r_partial[b] = 0.5 for all
+    b but with one burst dropped via the partial-floor (n=5 means
+    partial df = 1, weight = 1; marginal df = 7, weight = 7).
+    Different weights → different pooled values.
+
+    Pre-fix code used df_offset=4 for BOTH pools, so this test
+    would assert equality. Post-fix code uses df_offset=3 for
+    marginal, so the pools diverge in the small-n regime."""
+    # Compute directly via fisher_z_pool to verify the framework's
+    # behaviour matches the closed-form for both df_offset values.
+    from corroborate.stats import fisher_z_pool
+    # Two bursts with same ρ but unequal n. At n=5 the marginal
+    # weight is 2 (n-3) and the partial weight is 1 (n-4); at n=20
+    # the marginal weight is 17 and the partial weight is 16. The
+    # POOLED ρ at equal per-burst ρ is the same (both reduce to ρ
+    # via Fisher z), but the test wedge needs UNEQUAL per-burst ρ
+    # to make the weights bite.
+    rs = (0.30, 0.70)  # two bursts
+    ns = (5, 20)
+    rho_marg_3, _ = fisher_z_pool(rs, ns, df_offset=3)
+    rho_marg_4, _ = fisher_z_pool(rs, ns, df_offset=4)
+    # Confirm the two df_offsets land at numerically distinct
+    # pooled values when per-burst ρ varies. (Sanity on the test.)
+    assert abs(rho_marg_3 - rho_marg_4) > 0.005, (
+        f'fisher_z_pool not sensitive to df_offset at this '
+        f'construction: df=3 → {rho_marg_3:.6f}, df=4 → '
+        f'{rho_marg_4:.6f}; bump rho/n spread'
+    )
+    # Now verify the framework's `rho_marginal_pooled` matches
+    # df_offset=3 NOT df_offset=4. Build a panel where both bursts
+    # have ρ ≈ planted (with mediator independent so partial ≈
+    # marginal). We construct a single-stratum panel where burst 0
+    # has small n and burst 1 has large n with the same planted ρ.
+    # Use the ragged-tail semantics: short cells contribute only
+    # to burst 0; long cells contribute to both. n_burst_0 = 5,
+    # n_burst_1 = 20.
+    rng = np.random.default_rng(40)
+    rho_target = 0.5
+    cells: list[Mapping[str, object]] = []
+
+    def _one_cell(arm: str, arm_code: float, n_bursts: int) -> Mapping[str, object]:
+        noise_out = rng.normal(0.0, 1.0, size=n_bursts)
+        outcome = (
+            rho_target * arm_code
+            + math.sqrt(max(1.0 - rho_target ** 2, 0.0)) * noise_out
+        ).tolist()
+        med = rng.normal(0.0, 1.0, size=n_bursts).tolist()
+        return {
+            'env_name': 'env_a', 'gamma': 0.99,
+            'arm_key': arm, 'outcome_pb': outcome,
+            'mediator_pb': med,
+        }
+
+    # Encode arms as centred for the construction to plant ρ;
+    # framework's sorted-unique encoding will recover the same
+    # partition since 'baseline' < 'treatment'.
+    for _ in range(3):  # 3 cells per arm with length-1 trajectory
+        cells.append(_one_cell('treatment', 1.0, 1))
+        cells.append(_one_cell('baseline', -1.0, 1))
+    for _ in range(10):  # 10 cells per arm with length-2 trajectory
+        cells.append(_one_cell('treatment', 1.0, 2))
+        cells.append(_one_cell('baseline', -1.0, 2))
+    df = pl.DataFrame(cells)
+    results = dynamic_partial_spearman.fn(
+        df, arm_field='arm_key',
+        mediator_per_burst='mediator_pb',
+        outcome_per_burst='outcome_pb',
+        stratify_by=('env_name', 'gamma'),
+        min_n_per_burst=5,  # both bursts above floor
+    )
+    result = _get_single_stratum(results)
+    # n_per_burst[0] = 26 (all cells); n_per_burst[1] = 20 (only
+    # the length-2 cells contribute to burst 1).
+    assert result.n_per_burst[0] == 26
+    assert result.n_per_burst[1] == 20
+    # The framework's pool weights are:
+    #   marginal: (26-3, 20-3) = (23, 17)
+    #   partial:  (26-4, 20-4) = (22, 16)
+    # Verify by independently invoking fisher_z_pool with the
+    # framework's reported per-burst ρ values.
+    rho_pb = result.rho_marginal
+    n_pb = result.n_per_burst
+    expected_marg_3, _ = fisher_z_pool(rho_pb, n_pb, df_offset=3)
+    expected_marg_4, _ = fisher_z_pool(rho_pb, n_pb, df_offset=4)
+    # Framework's marginal pool must match df_offset=3, NOT 4.
+    assert abs(result.rho_marginal_pooled - expected_marg_3) < 1e-9, (
+        f'rho_marginal_pooled={result.rho_marginal_pooled} should '
+        f'equal fisher_z_pool with df_offset=3 ({expected_marg_3}); '
+        f'mismatch implies wrong df_offset'
+    )
+    # And NOT match df_offset=4 (proves the fix bit).
+    assert abs(result.rho_marginal_pooled - expected_marg_4) > 1e-9, (
+        f'rho_marginal_pooled={result.rho_marginal_pooled} equals '
+        f'df_offset=4 pool — fix not landed'
+    )
+    # Symmetric assertion on the partial pool: must match
+    # df_offset=4, not df_offset=3.
+    rho_pb_partial = result.rho_partial
+    expected_part_3, _ = fisher_z_pool(rho_pb_partial, n_pb, df_offset=3)
+    expected_part_4, _ = fisher_z_pool(rho_pb_partial, n_pb, df_offset=4)
+    assert abs(result.rho_partial_pooled - expected_part_4) < 1e-9, (
+        f'rho_partial_pooled={result.rho_partial_pooled} should '
+        f'equal fisher_z_pool with df_offset=4 ({expected_part_4})'
+    )
+    assert abs(result.rho_partial_pooled - expected_part_3) > 1e-9, (
+        f'rho_partial_pooled={result.rho_partial_pooled} equals '
+        f'df_offset=3 pool — partial-df accounting wrong'
+    )
+
+
+# ============ Ragged-tail per-burst alignment ============
+
+def test_ragged_tail_uses_max_length_with_decreasing_n_per_burst() -> None:
+    """Cells with shorter trajectories contribute their prefix
+    only; n_per_burst grows past shorter cells' tails as longer
+    cells continue contributing.
+
+    Construction: 6 short cells (3 per arm, length 2) + 8 long
+    cells (4 per arm, length 4). n_bursts = max length = 4.
+    n_per_burst should be: (14, 14, 8, 8) — all 14 cells
+    contribute to bursts 0-1; only 8 long cells contribute to
+    bursts 2-3.
+
+    This pins the "less-information-losing" docstring claim
+    against the pre-fix truncate-to-min behaviour (which would
+    have given n_bursts=2 and discarded bursts 2-3 entirely)."""
+    rng = np.random.default_rng(50)
+    cells: list[Mapping[str, object]] = []
+    for arm, arm_code in (('treatment', 1.0), ('baseline', -1.0)):
+        # 3 short cells per arm.
+        for _ in range(3):
+            cells.append({
+                'env_name': 'env_a', 'gamma': 0.99, 'arm_key': arm,
+                'outcome_pb': (
+                    0.5 * arm_code + rng.normal(0.0, 0.5, size=2)
+                ).tolist(),
+                'mediator_pb': rng.normal(0.0, 1.0, size=2).tolist(),
+            })
+        # 4 long cells per arm.
+        for _ in range(4):
+            cells.append({
+                'env_name': 'env_a', 'gamma': 0.99, 'arm_key': arm,
+                'outcome_pb': (
+                    0.5 * arm_code + rng.normal(0.0, 0.5, size=4)
+                ).tolist(),
+                'mediator_pb': rng.normal(0.0, 1.0, size=4).tolist(),
+            })
+    df = pl.DataFrame(cells)
+    results = dynamic_partial_spearman.fn(
+        df, arm_field='arm_key',
+        mediator_per_burst='mediator_pb',
+        outcome_per_burst='outcome_pb',
+        stratify_by=('env_name', 'gamma'),
+        min_n_per_burst=5,
+    )
+    result = _get_single_stratum(results)
+    assert result.n_bursts == 4, (
+        f'expected n_bursts=4 (max trajectory length); got '
+        f'{result.n_bursts}. Truncate-to-min would have given 2.'
+    )
+    assert result.n_per_burst == (14, 14, 8, 8), (
+        f'n_per_burst={result.n_per_burst} — ragged-tail should '
+        f'give (14, 14, 8, 8): all 14 cells contribute bursts 0-1; '
+        f'only 8 long cells contribute bursts 2-3'
+    )
+
+
+# ============ Measurable input path ============
+
+def test_accepts_measurable_inputs_for_mediator_and_outcome() -> None:
+    """`dynamic_partial_spearman` accepts `Measurable[..., NDArray]`
+    inputs for `mediator_per_burst` / `outcome_per_burst`,
+    mirroring the static `partial_spearman` lazy-evaluation
+    pattern. The Measurable's `.name` is used as the cache-column
+    key (cache-first dispatch via `evaluate_per_burst_source`).
+
+    This test pins that the Measurable path produces the SAME
+    result as the column-name path when the cache column is
+    present — the cache-first read short-circuits Measurable
+    evaluation, so identity is by construction."""
+    from corroborate.measurables import measurable
+
+    @measurable(name='outcome_pb', reads=('outcome_pb',))
+    def outcome_pb_m(cell: Mapping[str, object]) -> npt.NDArray[np.floating]:
+        # Cache-first dispatch should make this body unreachable
+        # when the cell has the cached column — but the function
+        # must be well-typed.
+        raw = cell['outcome_pb']
+        assert isinstance(raw, list)
+        return np.asarray(raw, dtype=np.float64)
+
+    @measurable(name='mediator_pb', reads=('mediator_pb',))
+    def mediator_pb_m(cell: Mapping[str, object]) -> npt.NDArray[np.floating]:
+        raw = cell['mediator_pb']
+        assert isinstance(raw, list)
+        return np.asarray(raw, dtype=np.float64)
+
+    df = _build_panel(rho_trajectory=(0.4, 0.45, 0.5), seed=60)
+    # Column-name baseline.
+    results_str = dynamic_partial_spearman.fn(
+        df, arm_field='arm_key',
+        mediator_per_burst='mediator_pb',
+        outcome_per_burst='outcome_pb',
+        stratify_by=('env_name', 'gamma'),
+    )
+    # Measurable input (cache-first hits the same `outcome_pb` /
+    # `mediator_pb` columns).
+    results_m = dynamic_partial_spearman.fn(
+        df, arm_field='arm_key',
+        mediator_per_burst=mediator_pb_m,
+        outcome_per_burst=outcome_pb_m,
+        stratify_by=('env_name', 'gamma'),
+    )
+    r_str = _get_single_stratum(results_str)
+    r_m = _get_single_stratum(results_m)
+    # Per-burst ρ identical when both paths read the same data.
+    assert r_str.rho_marginal == r_m.rho_marginal, (
+        f'column-name vs Measurable path diverged on rho_marginal: '
+        f'str={r_str.rho_marginal} measurable={r_m.rho_marginal}'
+    )
+    assert r_str.rho_partial == r_m.rho_partial
+    # Provenance: Measurable path stamps mediator_name /
+    # outcome_name from the Measurable's `.name`.
+    assert r_m.mediator_name == 'mediator_pb'
+    assert r_m.outcome_name == 'outcome_pb'

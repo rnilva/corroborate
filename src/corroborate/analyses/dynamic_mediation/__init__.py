@@ -8,11 +8,18 @@ per BURST INDEX and surfaces the trajectory plus a
 burst-pooled aggregate mediation:
 
   - **SIGN_FLIP_DETECTED** — `ρ(arm, outcome)` flips sign across
-    bursts. The Fisher-z burst-pool of opposing-sign per-burst ρ's
-    is a Simpson's-paradox artifact; the primitive returns NaN for
-    `rho_marginal_pooled` to force consumers off the aggregate.
+    bursts AT NON-TRIVIAL MAGNITUDE. The Fisher-z burst-pool of
+    opposing-sign per-burst ρ's is a Simpson's-paradox artifact;
+    the primitive returns NaN for BOTH `rho_marginal_pooled` and
+    `rho_partial_pooled` to force consumers off the aggregate
+    (the partial is computed on the same suspect bursts as the
+    marginal — if the marginal is incoherent, the partial inherits
+    that). Sign-flips at noise-level |ρ| (below
+    `sign_flip_min_abs_rho`) are treated as sampling noise, NOT
+    as flips.
   - **WEAK_TIME_VARYING** — sign-consistent but
-    `max(|ρ|) / min(|ρ|) > weak_time_varying_ratio` across bursts;
+    `max(|ρ|) / min(|ρ|) > weak_time_varying_ratio` across
+    NON-NOISE-LEVEL bursts (|ρ| ≥ `sign_flip_min_abs_rho`);
     the aggregate hides where the effect is concentrated.
   - **UNDERPOWERED_BURSTS** — every burst has `n < min_n_per_burst`;
     diagnosis itself is unreliable, but aggregates are produced
@@ -23,13 +30,21 @@ Inputs are PER-BURST `List(Float64)` columns on `cells` (a
 measurables (see e.g. `bootstrap_gap_magnitude_per_burst` in
 `corroborate_rl.dqn.measurables`). Each cell carries an array of
 length `n_bursts` at the named columns. The primitive aligns by
-burst index across cells within a stratum.
+burst index across cells within a stratum; cells with shorter
+trajectories still contribute their prefix (the per-burst valid
+count `n_per_burst[b]` grows as the longer cells continue
+contributing past shorter cells' tails — "ragged tail"
+semantics, the less-information-losing form vs truncating all
+cells to the shortest stratum length).
 
 Granularity contract:
   - `mediator_per_burst`, `outcome_per_burst`: str column names on
-    `cells` carrying `List[Float64]` of length `n_bursts`. The
-    primitive REQUIRES this shape; scalar columns trigger a
-    structural raise.
+    `cells` carrying `List[Float64]` of length `n_bursts`, OR
+    `Measurable[..., NDArray]` instances (mirroring
+    `partial_spearman`'s lazy-evaluation pattern — the framework
+    reads the Measurable's cached column if present, else
+    evaluates against the cell record). Scalar columns trigger a
+    structural raise via the `_as_float_list` shape contract.
   - `arm_field`: str column name on `cells` carrying a per-cell
     string arm tag. The arm is numerically encoded (sorted-unique
     → integer code) for the rank-based Spearman; only the
@@ -44,8 +59,11 @@ the primitive computes:
     (closed-form first-order partial Spearman)
 
 Bursts that fail the floor contribute NaN to the trajectory; the
-aggregate Fisher-z pool skips them. Aggregate weights are
-`(n_per_burst[b] − 4)` (closed-form partial Spearman df).
+aggregate Fisher-z pool skips them. Pool weights: `(n_per_burst[b]
+− 3)` for `rho_marginal_pooled` (matches `stratified_spearman_rho`
+weighting) and `(n_per_burst[b] − 4)` for `rho_partial_pooled`
+(matches `stratified_partial_spearman_rho`, closed-form first-
+order partial df).
 
 This is the canonical primitive for any mediation analysis on RL
 training trajectories. The static `partial_spearman` should NOT be
@@ -64,12 +82,21 @@ import numpy as np
 import numpy.typing as npt
 import polars as pl
 
-from scipy.stats import spearmanr
-
 from corroborate._internals.polars import to_dicts as _to_dicts
+from corroborate.analyses._cell_value import evaluate_per_burst_source
 from corroborate.bridge.analysis import analysis
-from corroborate.graph.discovery import partial_spearman_rho
+from corroborate.graph.discovery import (
+    _spearman_marginal as _graph_spearman_marginal,  # pyright: ignore[reportPrivateUsage]
+    partial_spearman_rho,
+)
+from corroborate.measurables import Measurable
 from corroborate.stats import fisher_z_pool
+
+
+type _PerBurstMeasurable = Measurable[
+    Mapping[str, object], npt.NDArray[np.floating],
+]
+type _ColumnOrMeasurable = str | _PerBurstMeasurable
 
 
 class TimeAggregationStatus(Enum):
@@ -81,18 +108,23 @@ class TimeAggregationStatus(Enum):
     gotcha. Consumers gate their verdict on this status before
     reading `rho_*_pooled`."""
     CONSISTENT_DIRECTION = auto()
-    """All bursts agree in sign on `rho_marginal`; aggregate is a
-    coherent estimator of the average effect."""
+    """All bursts agree in sign on `rho_marginal` at non-trivial
+    magnitude; aggregate is a coherent estimator of the average
+    effect."""
 
     SIGN_FLIP_DETECTED = auto()
     """At least one burst's `rho_marginal` opposes the majority
-    sign. The pooled estimate is a Simpson's-paradox artifact —
-    `rho_marginal_pooled` is NaN by construction."""
+    sign at magnitude above the noise floor
+    (`sign_flip_min_abs_rho`). Both pooled estimates are NaN by
+    construction — the pool over sign-opposing bursts is a
+    Simpson's-paradox artifact, and the partial inherits the
+    same suspect support."""
 
     WEAK_TIME_VARYING = auto()
-    """Sign-consistent but `max(|ρ|) / min(|ρ|) > weak_time_varying_ratio`
-    across bursts; the aggregate hides where the effect is
-    concentrated. Pooled values produced but flagged."""
+    """Sign-consistent (above noise floor) but `max(|ρ|) / min(|ρ|)
+    > weak_time_varying_ratio` across the non-noise-level valid
+    bursts; the aggregate hides where the effect is concentrated.
+    Pooled values produced but flagged."""
 
     UNDERPOWERED_BURSTS = auto()
     """Per-burst `n` is below `min_n_per_burst` for every burst —
@@ -121,12 +153,15 @@ class DynamicMediationResult:
     fewer than `min_n_per_burst` cells contributed — consumers
     must filter NaN when reading the trajectory.
 
-    `rho_marginal_pooled` is NaN when `aggregation_status` is
-    SIGN_FLIP_DETECTED — the pool over sign-opposing bursts is a
-    structural Simpson's-paradox artifact, not an estimate. For
-    WEAK_TIME_VARYING / UNDERPOWERED_BURSTS the pool is still
-    computed (best-effort) but the status flag warns consumers
-    that the aggregate may not represent the trajectory."""
+    Both `rho_marginal_pooled` AND `rho_partial_pooled` are NaN
+    when `aggregation_status` is SIGN_FLIP_DETECTED — the pool
+    over sign-opposing bursts is a structural Simpson's-paradox
+    artifact, not an estimate. The partial pool inherits the same
+    suspect support as the marginal, so the framework refuses to
+    report either. For WEAK_TIME_VARYING / UNDERPOWERED_BURSTS
+    the pools are still computed (best-effort) but the status flag
+    warns consumers that the aggregate may not represent the
+    trajectory."""
     burst_steps: tuple[int, ...]
     rho_marginal: tuple[float, ...]
     rho_partial: tuple[float, ...]
@@ -146,15 +181,13 @@ class DynamicMediationResult:
 def _marginal_spearman(
     x: npt.NDArray[np.float64], y: npt.NDArray[np.float64],
 ) -> float:
-    """Marginal Spearman ρ. Returns NaN when either side has zero
-    variance or `n < 4` (the smallest n where scipy's
-    `spearmanr` has a well-defined two-sided p-value). Matches the
-    framework's existing `graph.discovery._spearman_marginal`
-    semantics without crossing the private-name boundary."""
-    if len(x) < 4 or float(np.std(x)) == 0.0 or float(np.std(y)) == 0.0:
-        return float('nan')
-    r, _ = spearmanr(x, y)
-    return float(r)
+    """Marginal Spearman ρ. Thin wrapper around
+    `graph.discovery._spearman_marginal` that drops the p-value
+    (we only need ρ here; the Fisher-z pool computes its own pooled
+    p-stat). Kept as a private helper to centralize the import and
+    return-shape narrowing in one place."""
+    rho, _ = _graph_spearman_marginal(x, y)
+    return rho
 
 
 def _encode_arm(arms: Sequence[str]) -> npt.NDArray[np.float64]:
@@ -215,20 +248,59 @@ def _as_float_list(value: object) -> list[float] | None:
     return out
 
 
+def _resolve_per_burst(
+    cell: Mapping[str, object],
+    source: _ColumnOrMeasurable,
+) -> list[float] | None:
+    """Resolve a per-burst source to `list[float]`, dispatching on
+    whether the caller passed a column name (str) or a Measurable
+    instance. Mirrors `partial_spearman`'s lazy-evaluation pattern:
+
+      - str → read the named `List(Float64)` column from the cell
+        record via `_as_float_list`.
+      - Measurable → cache-first via `evaluate_per_burst_source`;
+        falls back to evaluating the Measurable against the raw
+        record if the cache column isn't present.
+
+    Returns None on shape mismatch so the calling stratum-loop can
+    skip the cell silently — the same behaviour as the column-name
+    path's `_as_float_list` returning None for non-list inputs."""
+    if isinstance(source, str):
+        return _as_float_list(cell.get(source))
+    arr = evaluate_per_burst_source(source, cell)
+    if arr.size == 0:
+        return None
+    return [float(v) for v in arr]
+
+
+def _source_name(source: _ColumnOrMeasurable) -> str:
+    """Stable provenance label for a per-burst source — the column
+    name (str input) or the Measurable's `.name` attribute."""
+    return source if isinstance(source, str) else source.name
+
+
 def _classify_status(
     rho_marginal: Sequence[float],
     n_per_burst: Sequence[int],
     min_n_per_burst: int,
     weak_time_varying_ratio: float,
+    sign_flip_min_abs_rho: float,
 ) -> TimeAggregationStatus:
     """Determine the `TimeAggregationStatus` from the trajectory.
 
     Order of checks matters:
       1. UNDERPOWERED_BURSTS — every burst below min n.
       2. SIGN_FLIP_DETECTED — at least one valid burst has sign
-         opposite to the majority of valid bursts.
+         opposite to the majority of valid bursts, with both
+         opposing-sign and majority-sign bursts at |ρ| >=
+         `sign_flip_min_abs_rho`. Bursts at noise-level magnitude
+         are excluded from the sign analysis — opposite signs at
+         |ρ| ≈ 0 are sampling noise, not structural flips.
       3. WEAK_TIME_VARYING — sign-consistent but |ρ| varies more
-         than `weak_time_varying_ratio` across valid bursts.
+         than `weak_time_varying_ratio` across NON-NOISE-LEVEL
+         valid bursts (|ρ| ≥ `sign_flip_min_abs_rho`). Excluding
+         noise bursts makes the ratio robust to a single near-zero
+         burst inflating the max/min spread.
       4. CONSISTENT_DIRECTION — otherwise.
 
     Bursts with NaN ρ or `n < min_n_per_burst` are excluded from
@@ -241,20 +313,29 @@ def _classify_status(
     if not valid_rhos:
         return TimeAggregationStatus.UNDERPOWERED_BURSTS
 
-    n_pos = sum(1 for r in valid_rhos if r > 0)
-    n_neg = sum(1 for r in valid_rhos if r < 0)
+    # Sign-flip detection at the noise floor: a burst only counts
+    # as evidence of a flip if its |ρ| exceeds the noise threshold.
+    above_floor = [r for r in valid_rhos if abs(r) >= sign_flip_min_abs_rho]
+    n_pos = sum(1 for r in above_floor if r > 0)
+    n_neg = sum(1 for r in above_floor if r < 0)
     if n_pos > 0 and n_neg > 0:
-        # Both signs present among valid bursts — sign-flip
-        # regardless of which dominates. The aggregate is
+        # Both signs present among non-noise-level bursts — sign-
+        # flip regardless of which dominates. The aggregate is
         # structurally suspect even if one direction dominates 9:1.
         return TimeAggregationStatus.SIGN_FLIP_DETECTED
 
-    # Sign-consistent path. Check magnitude variation.
-    abs_rhos = [abs(r) for r in valid_rhos if r != 0.0]
-    if len(abs_rhos) < 2:
-        # Single valid burst or all-zero — no magnitude trajectory
-        # to flag.
+    # Sign-consistent path (within the noise floor). Check
+    # magnitude variation across non-noise bursts only — a single
+    # near-zero burst shouldn't drag the framework into
+    # WEAK_TIME_VARYING when the rest of the trajectory is
+    # well-behaved.
+    if len(above_floor) < 2:
+        # One or zero bursts above the noise floor — no magnitude
+        # trajectory to flag. Includes the "all-noise" case, which
+        # is CONSISTENT_DIRECTION by default (the noise IS
+        # consistent in shape, even if uninformative).
         return TimeAggregationStatus.CONSISTENT_DIRECTION
+    abs_rhos = [abs(r) for r in above_floor]
     rho_max = max(abs_rhos)
     rho_min = min(abs_rhos)
     if rho_min > 0.0 and rho_max / rho_min > weak_time_varying_ratio:
@@ -267,11 +348,12 @@ def dynamic_partial_spearman(
     cells: pl.DataFrame,
     *,
     arm_field: str = 'arm_key',
-    mediator_per_burst: str,
-    outcome_per_burst: str,
+    mediator_per_burst: _ColumnOrMeasurable,
+    outcome_per_burst: _ColumnOrMeasurable,
     stratify_by: tuple[str, ...] = ('env_name', 'gamma'),
     min_n_per_burst: int = 5,
     weak_time_varying_ratio: float = 2.0,
+    sign_flip_min_abs_rho: float = 0.05,
 ) -> Mapping[Stratum, DynamicMediationResult]:
     """Trajectory-resolved partial Spearman mediation per stratum.
 
@@ -280,29 +362,55 @@ def dynamic_partial_spearman(
     marginal Spearman `ρ(arm, outcome_per_burst[b])` and partial
     Spearman `ρ(arm, outcome | mediator)[b]` via the closed-form
     first-order partial. Pool across bursts with Fisher-z, weighted
-    by `(n_per_burst[b] − 4)` (closed-form partial df). Compute the
-    `TimeAggregationStatus` from the trajectory.
+    by `(n_per_burst[b] − 3)` for the marginal pool and
+    `(n_per_burst[b] − 4)` for the partial pool (closed-form
+    partial df). Compute the `TimeAggregationStatus` from the
+    trajectory.
 
     `min_n_per_burst` floors each burst's per-cell count; bursts
     below the floor contribute NaN to the trajectory and are
     excluded from the pool. `weak_time_varying_ratio` is the
-    `max(|ρ|)/min(|ρ|)` threshold across valid bursts that triggers
-    the WEAK_TIME_VARYING status.
+    `max(|ρ|)/min(|ρ|)` threshold across non-noise-level valid
+    bursts that triggers the WEAK_TIME_VARYING status.
+    `sign_flip_min_abs_rho` is the noise-floor magnitude below
+    which a per-burst ρ is treated as sampling noise rather than
+    structural signal — bursts below the floor neither flip nor
+    drive the WEAK ratio.
+
+    `mediator_per_burst` and `outcome_per_burst` may be column
+    names (str) for cells that materialise the per-burst array as
+    a `List(Float64)` column, OR `Measurable[..., NDArray]`
+    instances for cells where the array is computed lazily from
+    raw trace columns. The Measurable path uses
+    `evaluate_per_burst_source`'s cache-first dispatch (read the
+    cached column if present, else evaluate against the raw
+    record) — same pattern as the static `partial_spearman`.
 
     Returns a `Mapping[Stratum, DynamicMediationResult]`. Strata
     where no cell contributes (missing arm tag, malformed per-burst
     columns, ...) are absent from the result.
 
-    The aggregate `rho_marginal_pooled` is NaN when status is
-    SIGN_FLIP_DETECTED — the pool over sign-opposing per-burst ρ's
-    is a Simpson's-paradox artifact, not an estimate.
+    Both `rho_marginal_pooled` AND `rho_partial_pooled` are NaN
+    when status is SIGN_FLIP_DETECTED — the pool over sign-
+    opposing per-burst ρ's is a Simpson's-paradox artifact, and
+    the partial inherits the same suspect support.
 
     The input is a `pl.DataFrame` (the canonical corpus shape after
     cache materialisation). Per-burst columns are read as
     `List(Float64)`; scalar columns named at `mediator_per_burst` /
     `outcome_per_burst` cause every cell to be dropped (the
     `_as_float_list` shape contract returns None for non-list
-    inputs)."""
+    inputs).
+
+    Per-burst alignment is "ragged tail": `n_bursts` is the
+    longest trajectory in the stratum, and at each burst index
+    only cells whose trajectory reaches that index contribute.
+    Shorter cells drop off as their trajectory ends, so
+    `n_per_burst[b]` is non-increasing in `b` (subject to NaN
+    handling). This is the less-information-losing semantics — vs
+    truncating ALL cells to the shortest stratum length, which
+    discards every late-training burst a single short cell can
+    cause."""
     # Group cells by stratum. Each entry is the list of cell-dicts
     # contributing to that stratum.
     by_stratum: dict[Stratum, list[Mapping[str, object]]] = {}
@@ -321,6 +429,7 @@ def dynamic_partial_spearman(
             outcome_per_burst=outcome_per_burst,
             min_n_per_burst=min_n_per_burst,
             weak_time_varying_ratio=weak_time_varying_ratio,
+            sign_flip_min_abs_rho=sign_flip_min_abs_rho,
         )
         if result is not None:
             out[stratum] = result
@@ -331,10 +440,11 @@ def _compute_one_stratum(
     cells: Sequence[Mapping[str, object]],
     *,
     arm_field: str,
-    mediator_per_burst: str,
-    outcome_per_burst: str,
+    mediator_per_burst: _ColumnOrMeasurable,
+    outcome_per_burst: _ColumnOrMeasurable,
     min_n_per_burst: int,
     weak_time_varying_ratio: float,
+    sign_flip_min_abs_rho: float,
 ) -> DynamicMediationResult | None:
     """Per-stratum core. Returns None when no per-cell row has
     valid arm + per-burst columns at all."""
@@ -347,8 +457,8 @@ def _compute_one_stratum(
         arm = cell.get(arm_field)
         if not isinstance(arm, str):
             continue
-        med = _as_float_list(cell.get(mediator_per_burst))
-        out_arr = _as_float_list(cell.get(outcome_per_burst))
+        med = _resolve_per_burst(cell, mediator_per_burst)
+        out_arr = _resolve_per_burst(cell, outcome_per_burst)
         if med is None or out_arr is None:
             continue
         arms.append(arm)
@@ -363,11 +473,16 @@ def _compute_one_stratum(
         # stratum gives ρ=NaN at every burst. Skip.
         return None
 
-    # Truncate each cell's per-burst arrays to a shared minimum
-    # length so all cells contribute to the same burst-index axis.
-    # Cells with shorter trajectories still contribute their prefix.
-    n_bursts = min(
-        min(len(m), len(o))
+    # Ragged-tail alignment: take the LONGEST per-cell trajectory
+    # in the stratum as the burst-index axis. Cells with shorter
+    # trajectories contribute only their prefix — they're absent
+    # from late-burst observations and the per-burst NaN filter
+    # naturally excludes them. This preserves late-burst signal
+    # from longer cells (truncate-to-min would discard every burst
+    # past the shortest cell's tail, which is information loss in
+    # the common case of one short cell in a stratum of long ones).
+    n_bursts = max(
+        max(len(m), len(o))
         for m, o in zip(mediator_lists, outcome_lists)
     )
     if n_bursts == 0:
@@ -379,11 +494,15 @@ def _compute_one_stratum(
     rho_part: list[float] = []
     n_per_burst: list[int] = []
     for b in range(n_bursts):
-        # Collect non-NaN rows at this burst.
+        # Collect non-NaN rows at this burst. Cells whose
+        # trajectory is shorter than `b + 1` don't have an entry —
+        # treated as missing (skipped), not as NaN propagation.
         xs: list[float] = []
         ys: list[float] = []
         zs: list[float] = []
         for i in range(len(arms)):
+            if b >= len(outcome_lists[i]) or b >= len(mediator_lists[i]):
+                continue
             yv = outcome_lists[i][b]
             zv = mediator_lists[i][b]
             if math.isnan(yv) or math.isnan(zv):
@@ -408,23 +527,28 @@ def _compute_one_stratum(
     status = _classify_status(
         rho_marg, n_per_burst, min_n_per_burst,
         weak_time_varying_ratio,
+        sign_flip_min_abs_rho,
     )
     # Fisher-z pool over valid bursts. Skip-NaN is handled inside
-    # `fisher_z_pool`.
+    # `fisher_z_pool`. df_offset matches the sibling primitives:
+    # 3 for marginal (`stratified_spearman_rho`), 4 for closed-
+    # form first-order partial (`stratified_partial_spearman_rho`).
     marg_pool, _ = fisher_z_pool(
-        rho_marg, n_per_burst, df_offset=4,
+        rho_marg, n_per_burst, df_offset=3,
     )
     part_pool, _ = fisher_z_pool(
         rho_part, n_per_burst, df_offset=4,
     )
     if status is TimeAggregationStatus.SIGN_FLIP_DETECTED:
-        # NaN the marginal aggregate to force consumers off the
-        # incoherent pool. The partial pool stays — it's a
-        # separate estimand whose sign-coherence isn't determined
-        # by the marginal's. (Empirically partial tends to track
-        # marginal at sign-flipping envs; the partial's status is
-        # a separate question, surfaced via the trajectory.)
+        # NaN BOTH aggregates: the marginal pool is the
+        # Simpson's-paradox artifact directly, and the partial pool
+        # inherits the same suspect support (it's computed on the
+        # same per-burst (xs, ys, zs) trios). If the marginal is
+        # incoherent across bursts, the partial's pool isn't a
+        # trustworthy summary either — consumers must read the
+        # trajectory.
         marg_pool = float('nan')
+        part_pool = float('nan')
 
     return DynamicMediationResult(
         burst_steps=tuple(range(n_bursts)),
@@ -434,8 +558,8 @@ def _compute_one_stratum(
         rho_marginal_pooled=float(marg_pool),
         rho_partial_pooled=float(part_pool),
         aggregation_status=status,
-        mediator_name=mediator_per_burst,
-        outcome_name=outcome_per_burst,
+        mediator_name=_source_name(mediator_per_burst),
+        outcome_name=_source_name(outcome_per_burst),
         arm_field=arm_field,
     )
 
