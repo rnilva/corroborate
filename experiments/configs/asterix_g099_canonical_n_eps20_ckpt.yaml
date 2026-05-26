@@ -1,0 +1,69 @@
+name: asterix_g099_canonical_n_eps20_ckpt
+out_dir: experiments/data/asterix_g099_canonical_n_eps20_ckpt
+env_binding: shared
+archive_remote: s3://corroborate-archive/asterix_g099_canonical_n_eps20_ckpt
+
+# Asterix γ=0.99 cross-regime control for the per-burst mediation
+# dynamics analysis. Same HPs as `asterix_g0999_canonical_n_eps20_ckpt`
+# except γ=0.99 (DDQN HELPS at this γ per prior memory; γ=0.999 HARMS).
+#
+# The dose-response panel showed at γ=0.999 the non-tautological
+# mediator is bg_per_burst (56% absorption); relative anisotropy and
+# state-conditional entSC do NOT mediate. This sweep collects the
+# matching γ=0.99 regime so we can read the SAME mediation dynamics
+# at the help envelope vs the harm envelope.
+#
+# Pre-reg predictions:
+#   - bg_per_burst absorption should be similar magnitude (the wedge
+#     fires at both γ values) but with opposite sign — at γ=0.99,
+#     conditioning on bg_per_burst should attenuate the POSITIVE
+#     ρ(arm, eval).
+#   - rel_aniso_per_burst absorption should remain ≈ 0 (same null).
+#   - state_conditional_entSC_per_burst absorption should remain ≈ 0.
+#
+# Cells: 1 intervention × 2 arms × 1 chunk of 15 seeds = 2 batched
+# cells. Wall: ~2.5h on GPU (matches γ=0.999 canonical_n_eps20_ckpt).
+
+keep_q_checkpoint_per_burst: true
+keep_q_checkpoint_final: true
+keep_q_per_action: true
+
+envs:
+  - {name: Asterix-MinAtar, n_seeds: 15, chunk_size: 15}
+
+defaults:
+  total_steps: 1000000
+  eval_every:  20000
+  n_episodes:  20
+  gamma:       0.99
+  sync_period: 1000
+  n_step:      1
+  replay:
+    class: Replay
+    capacity: 100000
+    batch_size: 32
+  optimizer:
+    fn: warmed_update
+    inner: {fn: adam, lr: 0.0001}
+    warmup_steps: 100
+  action_select:
+    fn: epsilon_greedy
+    schedule:
+      fn: linear_epsilon
+      eps_init: 1.0
+      eps_final: 0.05
+      anneal_steps: 100000
+  q_network:
+    class: CNN
+    obs_shape: [10, 10, 4]
+    channels: [16]
+    kernel_size: 3
+    hidden: [128]
+
+interventions:
+  - name: canonical_g099_n_eps20
+    base: {}
+    arms:
+      - []
+      - - slot_path: bootstrap
+          replacement: {fn: bootstrap, greedification: {fn: double_greedify}}

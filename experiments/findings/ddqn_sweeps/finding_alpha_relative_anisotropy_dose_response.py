@@ -30,29 +30,36 @@ from experiments.findings.ddqn_sweeps.alpha_relative_anisotropy_dose_response im
 )
 
 
-# EMPIRICAL state pending — the α=0.25/0.5/0.75 cells are running.
-# Set to UNDERPOWERED until ingest lands. BLOCKED_ON identifies the
-# specific gap so the renderer flags `[blocked]`.
-EXPECTED: ClusterVerdict = ClusterVerdict.UNDERPOWERED
+# EMPIRICAL state — data landed 2026-05-26 (75-cell panel across
+# canonical_n_eps20_ckpt + dampened_alpha_ckpt + dampened_alpha075_ckpt).
+# Pre-reg outcome: 3/5 bridges HELD, 2/5 REFUTED → cluster REFUTED at
+# the chain mediation step.
+#
+#   Bridge 1 (mech, ρ(α, q_late) = -0.959, p=10⁻⁴¹)             HELD
+#   Bridge 2 (rel_aniso, ρ(α, rel_aniso) = +0.334)                HELD (weak)
+#   Bridge 3 (state-coverage, ρ(α, n_states) = -0.003)            REFUTED (FLAT)
+#   Bridge 4 (outcome, ρ(α, eval) = -0.467, p=10⁻⁵)               HELD
+#   Bridge 5 (rel_aniso mediates α→eval, 2% absorbed)             REFUTED
+#
+# Per-burst Fisher-z pooled partial ρ(α, eval | mediator_per_burst[t])
+# corroborates the refutation: rel_aniso_per_burst absorbs -2%,
+# state_conditional_entSC absorbs 0%, unique_states absorbs +2%. The
+# four candidate mediators (anisotropy + entSC + state coverage +
+# marginal entropy) all sit OFF the channel at every burst. The
+# non-tautological mediator is bg_per_burst (56% absorption) — the
+# operator's own scaling variable. See
+# `findings_dose_response_anisotropy_refuted.md` for the full
+# breakdown.
+EXPECTED: ClusterVerdict = ClusterVerdict.REFUTED
 
 
-BLOCKED_ON: str | None = (
-    "α=0.25/0.5 sweep in flight (`asterix_g0999_dampened_alpha_ckpt`, "
-    "PID 3340856, ~2.5h GPU). α=0.75 queued behind it "
-    "(`asterix_g0999_dampened_alpha075_ckpt`, ~75 min). Cluster "
-    "verdict computable once both corpora ingest. The α=0 / α=1 "
-    "endpoints are already in `asterix_g0999_canonical_n_eps20_ckpt` "
-    "(n=30); intermediate arms complete the 5-point × 15-seed "
-    "dose-response panel."
-)
+BLOCKED_ON: str | None = None
 
 
-# Theoretical prediction (pre-registered): cluster SUPPORTED if
-# Bridges 1+4 (mechanical + outcome) hold (replicates known V/D
-# contrast continuously), Bridge 2 holds (NOVEL relative
-# anisotropy growth), Bridge 3 holds (state-coverage lock-in),
-# Bridge 5 holds (mediation closes the chain). Refuted at any
-# leg → the chain's BROKEN where the refutation lands.
+# The "DDQN induces relative anisotropy → harm" narrative is REFUTED
+# at the per-burst within-corpus level. Cross-env V_entSC ρ=+0.833 is
+# still an env-structural moderator; the within-corpus mediator
+# remains unidentified non-tautologically.
 
 
 BRIDGES: tuple[Bridge, ...] = (
