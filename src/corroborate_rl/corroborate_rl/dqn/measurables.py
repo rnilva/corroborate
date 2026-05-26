@@ -571,6 +571,57 @@ def state_conditional_argmax_entropy_late(
     return _weighted_conditional_entropy(a_late, s_late, unique_s)
 
 
+@measurable(reads=(
+    'online_argmax_per_step', 'state_hash_per_step', 'eval_step_index',
+))
+def state_conditional_argmax_entropy_per_burst(
+    record: Mapping[str, object],
+) -> npt.NDArray[np.float64]:
+    """Per-burst sibling of `state_conditional_argmax_entropy_late`.
+    Returns `(n_bursts,)` — `H(argmax | state)` computed within
+    each eval-burst training window.
+
+    Surfaces the PHASE structure of state-conditional policy
+    decisiveness: at high γ sparse-reward envs, entSC drops
+    monotonically through training as the policy locks onto
+    per-state argmax-actions. The late-50% reduction averages
+    out the build-up; per-burst makes it visible.
+
+    Non-tautological per-burst mediator candidate (cf. the
+    aniso_per_burst's Q-magnitude-tautology caveat in
+    `findings_anisotropy_per_burst_complete_mediator`). Reads
+    are policy + state hash; no Q values enter the calculation."""
+    argmax_arr = record.get('online_argmax_per_step')
+    state_arr = record.get('state_hash_per_step')
+    eval_idx_arr = record.get('eval_step_index')
+    if argmax_arr is None or state_arr is None or eval_idx_arr is None:
+        return np.zeros((0,), dtype=np.float64)
+    a = np.asarray(argmax_arr, dtype=np.int64).flatten()
+    s = np.asarray(state_arr, dtype=np.int64).flatten()
+    eval_idx = np.asarray(eval_idx_arr, dtype=np.int64).flatten()
+    n_bursts = int(eval_idx.shape[0])
+    if n_bursts == 0:
+        return np.zeros((0,), dtype=np.float64)
+    n_steps = int(min(a.size, s.size))
+    if n_steps < 4:
+        return np.zeros((0,), dtype=np.float64)
+    edges = np.linspace(0, n_steps, n_bursts + 1, dtype=np.int64)
+    out = np.zeros((n_bursts,), dtype=np.float64)
+    for i in range(n_bursts):
+        lo, hi = int(edges[i]), int(edges[i + 1])
+        if hi <= lo:
+            out[i] = float('nan')
+            continue
+        a_w = a[lo:hi]
+        s_w = s[lo:hi]
+        unique_s = np.unique(s_w)
+        if unique_s.size < 2:
+            out[i] = float('nan')
+            continue
+        out[i] = _weighted_conditional_entropy(a_w, s_w, unique_s)
+    return out
+
+
 @measurable(reads=('online_argmax_per_step', 'state_hash_per_step'))
 def mutual_info_state_argmax_late(
     record: Mapping[str, object],
