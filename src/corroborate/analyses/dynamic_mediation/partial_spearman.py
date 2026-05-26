@@ -46,12 +46,14 @@ import polars as pl
 
 from corroborate._internals.polars import to_dicts as _to_dicts
 from corroborate.analyses.dynamic_mediation._common import (
+    FisherZDLPool,
     Stratum,
     TimeAggregationStatus,
     _ColumnOrMeasurable,
     _classify_status,
     _collect_arm_and_per_burst,
     _encode_arm,
+    _fisher_z_dl_pool,
     _gather_burst_b,
     _n_bursts,
     _source_name,
@@ -79,21 +81,37 @@ class DynamicMediationResult:
     fewer than `min_n_per_burst` cells contributed — consumers
     must filter NaN when reading the trajectory.
 
-    Both `rho_marginal_pooled` AND `rho_partial_pooled` are NaN
-    when `aggregation_status` is SIGN_FLIP_DETECTED — the pool
-    over sign-opposing bursts is a structural Simpson's-paradox
-    artifact, not an estimate. The partial pool inherits the same
-    suspect support as the marginal, so the framework refuses to
-    report either. For WEAK_TIME_VARYING / UNDERPOWERED_BURSTS
-    the pools are still computed (best-effort) but the status flag
+    Both `rho_marginal_pooled` AND `rho_partial_pooled` (the
+    fixed-effects Fisher-z pool, n-weighted) are NaN when
+    `aggregation_status` is SIGN_FLIP_DETECTED — the pool over
+    sign-opposing bursts is a structural Simpson's-paradox artifact,
+    not an estimate. The partial pool inherits the same suspect
+    support as the marginal, so the framework refuses to report
+    either. For WEAK_TIME_VARYING / UNDERPOWERED_BURSTS the FE
+    pools are still computed (best-effort) but the status flag
     warns consumers that the aggregate may not represent the
-    trajectory."""
+    trajectory.
+
+    `dl_marginal` and `dl_partial` (the DerSimonian-Laird random-
+    effects pool) are NEVER NaN'd by the diagnostic gate. Their
+    `tau2` and `i2` ARE the quantitative signal of the
+    heterogeneity that `aggregation_status` flags qualitatively:
+    SIGN_FLIP → large τ², I² near 1.0; WEAK_TIME_VARYING →
+    moderate τ², I² ∈ [0.5, 1.0]; CONSISTENT_DIRECTION → small
+    τ², I² near 0. The DL pool's `rho_pooled` and PI bounds are
+    inverse-Fisher-z'd back to ρ-units; `se_pooled` stays in
+    Fisher-z units (its scale). Pair the two pools: FE for the
+    point estimate under consistent-direction (its n-weighting is
+    sharper at low τ²), DL for the heterogeneity diagnostic +
+    point estimate under any pool-incoherent regime."""
     burst_steps: tuple[int, ...]
     rho_marginal: tuple[float, ...]
     rho_partial: tuple[float, ...]
     n_per_burst: tuple[int, ...]
     rho_marginal_pooled: float
     rho_partial_pooled: float
+    dl_marginal: FisherZDLPool
+    dl_partial: FisherZDLPool
     aggregation_status: TimeAggregationStatus
     mediator_name: str
     outcome_name: str
@@ -273,7 +291,7 @@ def _compute_one_stratum(
         weak_time_varying_ratio,
         sign_flip_min_abs_rho,
     )
-    # Fisher-z pool over valid bursts. Skip-NaN is handled inside
+    # Fisher-z FE pool over valid bursts. Skip-NaN is handled inside
     # `fisher_z_pool`. df_offset matches the sibling primitives:
     # 3 for marginal (`stratified_spearman_rho`), 4 for closed-
     # form first-order partial (`stratified_partial_spearman_rho`).
@@ -283,14 +301,23 @@ def _compute_one_stratum(
     part_pool, _ = fisher_z_pool(
         rho_part, n_per_burst, df_offset=4,
     )
+    # DerSimonian-Laird random-effects pool — computed on the SAME
+    # per-burst (ρ, n) pairs the FE pool uses, with the same
+    # df_offset accounting. NEVER NaN'd by the diagnostic gate: its
+    # τ² IS the quantitative signal of the heterogeneity that
+    # SIGN_FLIP_DETECTED flags qualitatively.
+    dl_marg = _fisher_z_dl_pool(rho_marg, n_per_burst, df_offset=3)
+    dl_part = _fisher_z_dl_pool(rho_part, n_per_burst, df_offset=4)
     if status is TimeAggregationStatus.SIGN_FLIP_DETECTED:
-        # NaN BOTH aggregates: the marginal pool is the
+        # NaN BOTH FE aggregates: the marginal pool is the
         # Simpson's-paradox artifact directly, and the partial pool
         # inherits the same suspect support (it's computed on the
         # same per-burst (xs, ys, zs) trios). If the marginal is
         # incoherent across bursts, the partial's pool isn't a
         # trustworthy summary either — consumers must read the
         # trajectory.
+        # The DL pool is NOT NaN'd; its τ² + I² are the quantitative
+        # heterogeneity signal — that's the point of having BOTH.
         marg_pool = float('nan')
         part_pool = float('nan')
 
@@ -301,6 +328,8 @@ def _compute_one_stratum(
         n_per_burst=tuple(n_per_burst),
         rho_marginal_pooled=float(marg_pool),
         rho_partial_pooled=float(part_pool),
+        dl_marginal=dl_marg,
+        dl_partial=dl_part,
         aggregation_status=status,
         mediator_name=_source_name(mediator_per_burst),
         outcome_name=_source_name(outcome_per_burst),

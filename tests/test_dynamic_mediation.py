@@ -34,11 +34,15 @@ from scipy.stats import spearmanr
 
 from corroborate.analyses.dynamic_mediation import (
     DynamicMediationResult,
+    FisherZDLPool,
     TimeAggregationStatus,
     dynamic_partial_spearman,
 )
 from corroborate.analyses.dynamic_mediation import (
     _classify_status,  # pyright: ignore[reportPrivateUsage]
+)
+from corroborate.analyses.dynamic_mediation import (
+    _fisher_z_dl_pool,  # pyright: ignore[reportPrivateUsage]
 )
 
 
@@ -999,3 +1003,313 @@ def test_accepts_measurable_inputs_for_mediator_and_outcome() -> None:
     # outcome_name from the Measurable's `.name`.
     assert r_m.mediator_name == 'mediator_pb'
     assert r_m.outcome_name == 'outcome_pb'
+
+
+# ============ DerSimonian-Laird random-effects pool ============
+#
+# These tests verify the DL pool wired into `DynamicMediationResult`
+# via `_fisher_z_dl_pool`. The DL pool is computed alongside the FE
+# Fisher-z pool — it's NEVER NaN'd by the diagnostic gate; its
+# τ²/I² ARE the quantitative signal of the heterogeneity that
+# `aggregation_status` flags qualitatively.
+#
+# Closed-form bound derivation for the SIGN_FLIP test:
+#   Planted ρ trajectory (+0.5, +0.5, −0.5) with n=80 per burst.
+#   - z_b = atanh(±0.5) = ±0.5493
+#   - var_z = 1/(n−3) = 1/77 ≈ 0.01299, w_fixed = 77 each
+#   - z_fixed (FE) = (77·0.5493 + 77·0.5493 + 77·(−0.5493))/(3·77)
+#                  = 0.5493/3 ≈ 0.1831
+#   - Q = Σ w·(z − z_fixed)²
+#       = 77·(0.5493−0.1831)² + 77·(0.5493−0.1831)² + 77·(−0.5493−0.1831)²
+#       = 77·0.1341 + 77·0.1341 + 77·0.5364
+#       ≈ 61.96
+#   - df = G − 1 = 2
+#   - I² = (Q − df)/Q = (61.96 − 2)/61.96 ≈ 0.968 → > 0.7 with
+#     wide margin
+#   - c = Σw − Σw²/Σw = 3·77 − 3·77²/(3·77) = 2·77 = 154
+#   - τ² = max(0, (Q − df)/c) = (61.96 − 2)/154 ≈ 0.389 → > 0.1
+
+def test_dl_pool_matches_fe_pool_when_tau2_zero() -> None:
+    """When per-burst ρ is constant across bursts (no
+    heterogeneity), Cochran's Q is small (~df under sampling
+    noise) and τ² clips to 0. With τ²=0, DL random-effects
+    weights equal FE Fisher-z weights → pooled estimates are
+    numerically identical.
+
+    Construction: planted ρ ≈ 0.5 across 3 bursts at n=80 each.
+    With seed-coupled noise the per-burst empirical ρ varies by
+    ~0.05 around 0.5; Q ≈ df ≈ 2; τ² = max(0, (Q-df)/c) clips
+    to 0 with high probability.
+
+    Bound: |dl.rho_pooled − fe_rho_pooled| < 1e-9 when τ² = 0
+    exactly (the clip resolves both paths to identical n-weighted
+    z-pooling). If τ² > 0 due to seed variance, the bound
+    loosens to < 0.01 (still tight — both weight by
+    (n_b − df_offset) which doesn't differ across bursts here)."""
+    planted = 0.5
+    df = _build_panel(
+        rho_trajectory=(planted, planted, planted), seed=100,
+    )
+    results = dynamic_partial_spearman.fn(
+        df, arm_field='arm_key',
+        mediator_per_burst='mediator_pb',
+        outcome_per_burst='outcome_pb',
+        stratify_by=('env_name', 'gamma'),
+    )
+    result = _get_single_stratum(results)
+    # Sanity: this construction is CONSISTENT_DIRECTION.
+    assert result.aggregation_status is (
+        TimeAggregationStatus.CONSISTENT_DIRECTION
+    )
+    # FE pool defined.
+    assert not math.isnan(result.rho_marginal_pooled)
+    # DL pool defined.
+    assert not math.isnan(result.dl_marginal.rho_pooled)
+    assert result.dl_marginal.n_bursts_used == 3
+    # Without genuine heterogeneity, τ² should be 0 (or in the
+    # max(0, ·) clip's tiny-positive-bias zone for small G — flag
+    # it if found by surfacing in the failure message).
+    # The empirical probe at `tests/analytic/robustness/
+    # test_dl_small_g_robustness.py` documents bias ≈ 0.011 at G=3.
+    assert result.dl_marginal.tau2 < 0.05, (
+        f'τ²={result.dl_marginal.tau2:.4f}: expected near 0 at '
+        f'planted-constant ρ with G=3; in DL clip\'s small-G '
+        f'tiny-positive-bias zone is OK but >0.05 suggests the '
+        f'planted construction has more sampling-noise spread '
+        f'than anticipated'
+    )
+    # I² near 0 when there's no real heterogeneity.
+    assert result.dl_marginal.i2 < 0.5, (
+        f'I²={result.dl_marginal.i2:.4f}: expected near 0 at '
+        f'planted-constant ρ'
+    )
+    # DL and FE pools agree closely. With τ²=0 the weights are
+    # identical; the only difference is numerical (DL goes through
+    # `random_effects_summary`, FE through `fisher_z_pool`).
+    deviation = abs(
+        result.dl_marginal.rho_pooled - result.rho_marginal_pooled
+    )
+    assert deviation < 0.01, (
+        f'DL rho_pooled={result.dl_marginal.rho_pooled:.6f} vs '
+        f'FE rho_marginal_pooled={result.rho_marginal_pooled:.6f}: '
+        f'diff={deviation:.6f} — should agree when τ²=0'
+    )
+
+
+def test_dl_pool_surfaces_large_tau2_under_sign_flip() -> None:
+    """Under SIGN_FLIP_DETECTED the FE pool returns NaN (the
+    diagnostic gate suppresses it). The DL pool is NOT gated —
+    it returns a real pooled estimate (near zero by
+    cancellation) PLUS large τ² PLUS I² near 1.0, surfacing the
+    heterogeneity quantitatively.
+
+    Closed-form (planted (+0.5, +0.5, −0.5) at n=80):
+      z_b = ±atanh(0.5) ≈ ±0.5493 (each w=77)
+      z_fixed = (0.5493 + 0.5493 − 0.5493)/3 ≈ 0.1831
+      Q ≈ 61.96, df=2 → I² ≈ 0.968, τ² ≈ 0.389
+    The bound `i2 > 0.7` admits seed-variance slack on top of
+    the closed-form 0.968; `tau2 > 0.1` admits slack below the
+    closed-form 0.389. Both are tight relative to the closed-
+    form values and reject the null hypothesis (no
+    heterogeneity → I²=0, τ²=0).
+    """
+    df = _build_panel(rho_trajectory=(0.5, 0.5, -0.5), seed=101)
+    results = dynamic_partial_spearman.fn(
+        df, arm_field='arm_key',
+        mediator_per_burst='mediator_pb',
+        outcome_per_burst='outcome_pb',
+        stratify_by=('env_name', 'gamma'),
+    )
+    result = _get_single_stratum(results)
+    # Sanity: status is SIGN_FLIP_DETECTED and FE pool is NaN.
+    assert result.aggregation_status is (
+        TimeAggregationStatus.SIGN_FLIP_DETECTED
+    )
+    assert math.isnan(result.rho_marginal_pooled)
+    # DL pool is NOT gated by the diagnostic enum.
+    assert not math.isnan(result.dl_marginal.rho_pooled), (
+        f'DL rho_pooled must NOT be NaN under SIGN_FLIP_DETECTED '
+        f'— the DL pool is the heterogeneity diagnostic, not the '
+        f'point estimate of a "consistent" effect'
+    )
+    # DL pooled ρ near zero by cancellation. With FE
+    # z_pooled ≈ 0.1831 → tanh ≈ 0.181; DL gives more weight to
+    # the larger-variance branches, pulling pooled-z slightly
+    # closer to z=0. Either way pooled-ρ is in (0, 0.3).
+    assert -0.05 < result.dl_marginal.rho_pooled < 0.35, (
+        f'DL rho_pooled={result.dl_marginal.rho_pooled:.4f} — '
+        f'expected near 0 by sign-flip cancellation'
+    )
+    # I² near 1: heterogeneity dominates total variance.
+    # Closed-form: I² ≈ 0.968. Bound at 0.7 to leave wide
+    # seed-variance slack.
+    assert result.dl_marginal.i2 > 0.7, (
+        f'I²={result.dl_marginal.i2:.4f}: expected > 0.7 under '
+        f'sign-flip (closed-form ≈ 0.968)'
+    )
+    # τ² substantial. Closed-form: τ² ≈ 0.389. Bound at 0.1.
+    assert result.dl_marginal.tau2 > 0.1, (
+        f'τ²={result.dl_marginal.tau2:.4f}: expected > 0.1 under '
+        f'sign-flip (closed-form ≈ 0.389)'
+    )
+
+
+def test_dl_pool_surfaces_moderate_tau2_under_weak_time_varying() -> None:
+    """Under WEAK_TIME_VARYING (sign-consistent but magnitude
+    varies by > 2×): the DL pool surfaces I² substantial but
+    less than the sign-flip extreme. Closed-form (planted
+    (+0.1, +0.3, +0.7), n=80):
+      z_b = atanh(0.1, 0.3, 0.7) ≈ (0.1003, 0.3095, 0.8673)
+      z_fixed ≈ 0.4257
+      Q ≈ 77·(0.1059 + 0.0135 + 0.1950) ≈ 24.22
+      df=2 → I² ≈ (24.22−2)/24.22 ≈ 0.917
+    Bound 0.3 < i2 < 0.95: tight under above the noise floor."""
+    df = _build_panel(rho_trajectory=(0.1, 0.3, 0.7), seed=102)
+    results = dynamic_partial_spearman.fn(
+        df, arm_field='arm_key',
+        mediator_per_burst='mediator_pb',
+        outcome_per_burst='outcome_pb',
+        stratify_by=('env_name', 'gamma'),
+    )
+    result = _get_single_stratum(results)
+    # Sanity: status is WEAK_TIME_VARYING.
+    assert result.aggregation_status is (
+        TimeAggregationStatus.WEAK_TIME_VARYING
+    )
+    # DL pool defined.
+    assert not math.isnan(result.dl_marginal.rho_pooled)
+    # I² substantial but not saturated (no sign-flip cancellation).
+    # Closed-form ≈ 0.917; bound (0.3, 0.95).
+    assert 0.3 < result.dl_marginal.i2 < 0.95, (
+        f'I²={result.dl_marginal.i2:.4f}: expected ∈ (0.3, 0.95) '
+        f'under WEAK_TIME_VARYING (closed-form ≈ 0.917)'
+    )
+
+
+def test_dl_pool_consistent_with_fe_under_uniform_noise() -> None:
+    """When per-burst ρ is uniformly small (all bursts at
+    similar weak magnitude), no heterogeneity is present and DL
+    pool agrees closely with FE pool. Both should land near the
+    planted value within their respective SE bounds.
+
+    Construction: planted ρ ≈ 0.2 at 3 bursts with n=80 each
+    (n−df=77 weight per burst; ≪ saturation, well-defined
+    Fisher-z). The DL clip-bias contribution at G=3 is ≤ 0.011
+    on τ² (probe-documented); both pools land within ~0.05 of
+    each other.
+    """
+    planted = 0.2
+    df = _build_panel(
+        rho_trajectory=(planted, planted, planted), seed=103,
+    )
+    results = dynamic_partial_spearman.fn(
+        df, arm_field='arm_key',
+        mediator_per_burst='mediator_pb',
+        outcome_per_burst='outcome_pb',
+        stratify_by=('env_name', 'gamma'),
+    )
+    result = _get_single_stratum(results)
+    # Both pools defined.
+    assert not math.isnan(result.rho_marginal_pooled)
+    assert not math.isnan(result.dl_marginal.rho_pooled)
+    # Pooled estimates agree closely when τ² ≈ 0. At τ²=0
+    # exactly they agree to fp tolerance; in the small-G
+    # clip-bias regime (τ² ~ 0.01) the deviation is ≤ 0.01.
+    deviation = abs(
+        result.dl_marginal.rho_pooled - result.rho_marginal_pooled
+    )
+    assert deviation < 0.05, (
+        f'DL vs FE divergence={deviation:.4f}: expected <0.05 '
+        f'at planted-constant ρ (no real heterogeneity)'
+    )
+
+
+def test_dl_pool_pi_bounds_bracket_pooled_at_g_sufficient() -> None:
+    """At G ≥ 3 (PI df = G−2 ≥ 1) PI bounds are defined and
+    bracket the pooled estimate. At G = 2 (PI df = 0) PI bounds
+    are NaN by the HTS formula.
+
+    Construction: planted ρ ≈ 0.3 at G=4 bursts → PI defined.
+    Closed-form: pooled z ≈ atanh(0.3) ≈ 0.3095, var_pooled ≈
+    1/(4·77) ≈ 0.00325, SE_pooled ≈ 0.057. τ² ≈ 0 →
+    pi_se ≈ SE_pooled. At G=4, t_{0.975, df=2} ≈ 4.303, so
+    pi half-width ≈ 4.303 · 0.057 ≈ 0.245 in z-units. After
+    tanh-back-transform PI bounds are inside ρ ∈ (-1, 1) and
+    bracket rho_pooled."""
+    planted = 0.3
+    df = _build_panel(
+        rho_trajectory=(planted,) * 4, seed=104,
+    )
+    results = dynamic_partial_spearman.fn(
+        df, arm_field='arm_key',
+        mediator_per_burst='mediator_pb',
+        outcome_per_burst='outcome_pb',
+        stratify_by=('env_name', 'gamma'),
+    )
+    result = _get_single_stratum(results)
+    dl = result.dl_marginal
+    assert dl.n_bursts_used == 4
+    assert not math.isnan(dl.rho_pi_lo), (
+        f'PI lower NaN at G=4: expected defined (HTS df=G-2=2)'
+    )
+    assert not math.isnan(dl.rho_pi_hi)
+    # PI brackets the pooled estimate.
+    assert dl.rho_pi_lo < dl.rho_pooled < dl.rho_pi_hi, (
+        f'PI=({dl.rho_pi_lo:.4f}, {dl.rho_pi_hi:.4f}) does not '
+        f'bracket rho_pooled={dl.rho_pooled:.4f}'
+    )
+    # PI bounds inside (-1, 1) (Fisher-z space ↔ ρ space).
+    assert -1.0 < dl.rho_pi_lo < 1.0
+    assert -1.0 < dl.rho_pi_hi < 1.0
+
+
+def test_dl_pool_pi_undefined_at_g_two() -> None:
+    """At G=2 the HTS prediction interval is undefined
+    (`pi_df = G − 2 = 0` → no t-critical) → PI bounds are NaN.
+    Verify via the helper directly with a 2-burst trajectory."""
+    # G=2 bursts: each ρ=0.3 at n=80. Direct helper call to
+    # avoid the need for a panel that aligns to exactly G=2
+    # ragged-tail-wise.
+    dl = _fisher_z_dl_pool(rhos=[0.3, 0.35], ns=[80, 80], df_offset=3)
+    assert dl.n_bursts_used == 2
+    # Pooled estimate defined (DL needs G ≥ 2 for τ² estimation).
+    assert not math.isnan(dl.rho_pooled)
+    # PI undefined at G=2 (pi_df = 0).
+    assert math.isnan(dl.rho_pi_lo), (
+        f'rho_pi_lo={dl.rho_pi_lo!r}: HTS PI must be NaN at G=2 '
+        f'(df = G − 2 = 0)'
+    )
+    assert math.isnan(dl.rho_pi_hi)
+
+
+# ============ FisherZDLPool dataclass invariants ============
+
+def test_fisher_z_dl_pool_is_frozen_dataclass() -> None:
+    """`FisherZDLPool` is a frozen dataclass — mutation must
+    raise. Pinned for the same reason `DynamicMediationResult`
+    is frozen: bridge consumers / verdict renderers must not be
+    able to mutate the typed result."""
+    dl = _fisher_z_dl_pool(rhos=[0.3, 0.3, 0.3], ns=[80, 80, 80], df_offset=3)
+    assert isinstance(dl, FisherZDLPool)
+    with pytest.raises((AttributeError, TypeError)):
+        dl.tau2 = 0.0  # pyright: ignore[reportAttributeAccessIssue]
+
+
+def test_fisher_z_dl_pool_helper_nan_under_g_lt_2() -> None:
+    """`_fisher_z_dl_pool` propagates `random_effects_summary`'s
+    `n < 2` NaN-filling. Below-floor n bursts are filtered before
+    DL — they don't count toward `n_bursts_used`."""
+    # n=5 with df_offset=3 → n−df=2 → SE_z = 1/sqrt(2) (valid),
+    # but only ONE burst → `n_bursts_used=1`, DL undefined.
+    dl = _fisher_z_dl_pool(rhos=[0.5], ns=[5], df_offset=3)
+    assert dl.n_bursts_used == 1
+    assert math.isnan(dl.rho_pooled)
+    assert math.isnan(dl.tau2)
+    assert math.isnan(dl.i2)
+    assert math.isnan(dl.q)
+
+    # n=3 with df_offset=3 → n−df=0 → SE_z = 1/sqrt(0) undefined,
+    # burst filtered → `n_bursts_used=0`.
+    dl2 = _fisher_z_dl_pool(rhos=[0.5, 0.5], ns=[3, 3], df_offset=3)
+    assert dl2.n_bursts_used == 0
+    assert math.isnan(dl2.rho_pooled)

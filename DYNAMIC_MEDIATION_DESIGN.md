@@ -150,6 +150,90 @@ produced:
   sign-flip detected; force consumers to use the trajectory.
 - `TRAJECTORY_ONLY` — don't pool at all.
 
+### C.1 Aggregator: DerSimonian-Laird random-effects
+
+The fixed-effects Fisher-z pool (n-weighted average of
+per-burst atanh(ρ_b)) is the natural aggregate when bursts
+behave as i.i.d. draws from a single population ρ. The
+trajectory-resolved primitives explicitly contradict that
+assumption — bursts are NOT exchangeable; they're indexed by
+training time, and the structural pathologies (sign-flip,
+weak-time-varying, learning-shoulder peaks) make the burst-
+level dispersion the LOAD-BEARING signal, not noise to be
+averaged out.
+
+The DerSimonian-Laird (DL) random-effects pool is the
+methodologically correct aggregator for this data shape:
+
+1. **Burst-level (ρ_b, n_b) → (z_b, SE_z_b)**: for each burst,
+   `z_b = atanh(ρ_b)` and `SE_z_b = 1 / sqrt(n_b − df_offset)`
+   (df=3 for marginal Spearman, df=4 for closed-form first-
+   order partial — same convention as `fisher_z_pool`).
+
+2. **DL formula** (reused from `stats.effect_size.
+   random_effects_summary`):
+   ```
+   w_fixed_b = 1 / SE_z_b² = n_b − df_offset
+   z_fixed   = Σ w_fixed · z / Σ w_fixed       # FE pool
+   Q         = Σ w_fixed · (z − z_fixed)²       # Cochran's Q
+   c         = Σ w_fixed − Σ w_fixed² / Σ w_fixed
+   τ̂²        = max(0, (Q − (G − 1)) / c)        # DL estimator
+   w_rand_b  = 1 / (SE_z_b² + τ̂²)
+   z_pooled  = Σ w_rand · z / Σ w_rand          # RE pool
+   ```
+
+3. **Heterogeneity statistics**:
+   - **τ̂²** — between-burst variance in z-units. Zero (modulo
+     small-G clip bias) under planted-constant ρ; large under
+     sign-flip / phase-transition trajectories.
+   - **I² = max(0, (Q − (G − 1)) / Q)** — Higgins' fraction of
+     total variance attributable to between-burst heterogeneity.
+   - **HTS PI**: 95% Higgins-Thompson-Spiegelhalter prediction
+     interval `z_pooled ± t_{G−2, 0.975} · sqrt(τ̂² + Var(z_pooled))`.
+     Inverse-Fisher-z'd back to ρ-units. NaN at G < 3.
+
+4. **Inverse Fisher-z back to ρ-units**: pooled estimate
+   `ρ_pooled = tanh(z_pooled)`; PI bounds
+   `ρ_pi_lo = tanh(pi_lo)`, `ρ_pi_hi = tanh(pi_hi)`. The
+   `se_pooled` stays in z-units (its natural scale; ρ-unit SE
+   requires the delta-method `(1 − ρ²) · SE_z` at a specific
+   ρ).
+
+**Why DL alongside FE rather than instead of**: the FE pool
+remains useful as a SHARP point estimate under CONSISTENT_DIRECTION
+(its n-weighting is variance-optimal when τ² = 0). Under the
+diagnostic pathologies (SIGN_FLIP, WEAK_TIME_VARYING) the FE
+pool is structurally suspect (NaN'd by the diagnostic gate
+under SIGN_FLIP). The DL pool is **never** NaN'd by the
+diagnostic gate — its τ̂²/I² ARE the quantitative signal of
+the same heterogeneity the enum flags qualitatively. Consumers
+read both: FE for the magnitude under a coherent trajectory,
+DL τ̂²/I² for the heterogeneity diagnostic. Under SIGN_FLIP,
+expect I² ≈ 1.0 (closed-form ≈ 0.97 at planted ρ trajectory
+(+0.5, +0.5, −0.5) n=80) and large τ̂² (≈ 0.39).
+
+**Typed surface**: `FisherZDLPool` frozen dataclass in
+`analyses.dynamic_mediation._common`. Re-exported through the
+package `__init__.py` for downstream consumption. Fields:
+`rho_pooled`, `se_pooled` (z-units), `tau2`, `i2`, `q`,
+`rho_pi_lo`, `rho_pi_hi` (ρ-units), `n_bursts_used`,
+`assumption_violations` (passed through from the underlying
+DL primitive's `PooledStats.assumption_violations` —
+small-G regime warnings).
+
+Both `DynamicMediationResult` and `DynamicPCResult` carry
+`dl_marginal: FisherZDLPool` and `dl_partial: FisherZDLPool`.
+
+**Small-G caveat**: `random_effects_summary`'s docstring +
+the empirical probe at `tests/analytic/robustness/
+test_dl_small_g_robustness.py` document DL's reliability gap
+at G ≤ 5 (point estimate is approximately unbiased but
+sampling SD is enormous; I² detection power fails below G=10).
+For trajectory-resolved analyses on canonical 50-burst RL
+training trajectories, G is large enough that DL is in its
+well-calibrated regime; the `assumption_violations` field
+surfaces the warning explicitly when G is small.
+
 ### D. Bridge consumers
 
 Existing bridges consume `PartialSpearmanResult.rho` and

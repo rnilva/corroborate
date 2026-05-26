@@ -45,12 +45,14 @@ import polars as pl
 
 from corroborate._internals.polars import to_dicts as _to_dicts
 from corroborate.analyses.dynamic_mediation._common import (
+    FisherZDLPool,
     Stratum,
     TimeAggregationStatus,
     _ColumnOrMeasurable,
     _classify_status,
     _collect_arm_and_per_burst,
     _encode_arm,
+    _fisher_z_dl_pool,
     _gather_burst_b,
     _n_bursts,
     _source_name,
@@ -109,7 +111,19 @@ class DynamicPCResult:
     Bursts where `n_per_burst[b] < min_n_per_burst` flag as
     UNDERPOWERED at that burst: NaN p-values, NaN ρs, all three
     boolean flags False (no edge can be asserted at insufficient
-    n)."""
+    n).
+
+    `dl_marginal` / `dl_partial` carry the DerSimonian-Laird
+    random-effects pool over the per-burst (ρ, n) trajectory —
+    same shape as the sibling `dynamic_partial_spearman`. The DL
+    pool exposes τ² / I² / Q as the quantitative heterogeneity
+    signal (the enum `aggregation_status` flags it
+    qualitatively). Unlike the partial-Spearman sibling, this
+    primitive doesn't expose an FE Fisher-z pool — the PC
+    primitive's primary output is per-burst CI-test edge
+    presence, not a pooled magnitude; the DL pool sits alongside
+    as the trajectory-level magnitude / heterogeneity summary
+    for consumers that want it."""
     burst_steps: tuple[int, ...]
     n_per_burst: tuple[int, ...]
     p_marginal: tuple[float, ...]
@@ -121,6 +135,8 @@ class DynamicPCResult:
     n_bursts_marginal_edge: int
     n_bursts_mediator_dseparates: int
     n_bursts_direct_edge: int
+    dl_marginal: FisherZDLPool
+    dl_partial: FisherZDLPool
     mediator_name: str
     outcome_name: str
     arm_field: str
@@ -305,6 +321,14 @@ def _compute_one_stratum_pc(
         sign_flip_min_abs_rho,
     )
 
+    # DerSimonian-Laird random-effects pool over the per-burst
+    # (ρ, n) trajectory. Same df_offset convention as the sibling
+    # partial-Spearman primitive (df=3 marginal, df=4 partial).
+    # Never gated by `aggregation_status` — τ²/I² are the
+    # quantitative signal the enum flags qualitatively.
+    dl_marg = _fisher_z_dl_pool(rho_marg, n_per_burst, df_offset=3)
+    dl_part = _fisher_z_dl_pool(rho_part, n_per_burst, df_offset=4)
+
     return DynamicPCResult(
         burst_steps=tuple(range(n_bursts)),
         n_per_burst=tuple(n_per_burst),
@@ -317,6 +341,8 @@ def _compute_one_stratum_pc(
         n_bursts_marginal_edge=n_marg_edge,
         n_bursts_mediator_dseparates=n_dsep,
         n_bursts_direct_edge=n_direct,
+        dl_marginal=dl_marg,
+        dl_partial=dl_part,
         mediator_name=_source_name(mediator_per_burst),
         outcome_name=_source_name(outcome_per_burst),
         arm_field=arm_field,

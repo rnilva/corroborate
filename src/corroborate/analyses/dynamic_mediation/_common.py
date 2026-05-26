@@ -22,18 +22,26 @@ Fisher-z CI test) BOTH need:
     `partial_spearman`'s cache-first dispatch pattern via
     `evaluate_per_burst_source`.
   - `_stratum_key` — stratify-by tuple builder.
+  - `FisherZDLPool` + `_fisher_z_dl_pool` — DerSimonian-Laird
+    random-effects pool over per-burst Fisher-z-transformed ρ
+    values. Wraps the framework's general-purpose
+    `random_effects_summary` (the DL implementation lives in
+    `stats.effect_size` — we reuse, never reimplement) on (z_b,
+    SE_z_b) pairs and inverse-transforms the pooled estimate +
+    PI bounds back to ρ-units. Exposes τ²/I²/Q as the *quantitative*
+    measure of the heterogeneity that `TimeAggregationStatus` flags
+    qualitatively.
   - Type aliases (`Stratum`, `_PerBurstMeasurable`,
     `_ColumnOrMeasurable`).
 
-This module has no public API surface; primitives consume it
-internally. The package `__init__.py` exposes only the typed result
-dataclasses + the `@analysis`-decorated primitives + the shared
-`TimeAggregationStatus` enum / `Stratum` type alias.
+The `FisherZDLPool` dataclass is public API (re-exported through
+the package `__init__.py`); the rest are package-internal helpers.
 """
 from __future__ import annotations
 
 import math
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from enum import Enum, auto
 
 import numpy as np
@@ -41,6 +49,7 @@ import numpy.typing as npt
 
 from corroborate.analyses._cell_value import evaluate_per_burst_source
 from corroborate.measurables import Measurable
+from corroborate.stats import random_effects_summary
 
 
 type _PerBurstMeasurable = Measurable[
@@ -341,7 +350,159 @@ def _gather_burst_b(
     )
 
 
+@dataclass(frozen=True, slots=True)
+class FisherZDLPool:
+    """DerSimonian-Laird random-effects pool over per-burst Fisher-z
+    transformed ρ values.
+
+    The framework's existing `random_effects_summary` (in
+    `stats.effect_size`) is the general-purpose DL implementation —
+    this dataclass wraps the outputs after the Fisher-z transform
+    has been applied to per-burst Spearman ρ's. Each (burst, ρ_b,
+    n_b) triple becomes one `(z_b, SE_z_b)` pair fed to the DL
+    estimator: `z_b = atanh(ρ_b)`, `SE_z_b = 1 / sqrt(n_b −
+    df_offset)`. `df_offset = 3` for marginal Spearman, `df_offset
+    = 4` for closed-form first-order partial Spearman (matching
+    the existing `fisher_z_pool` sibling).
+
+    Field semantics:
+
+      - `rho_pooled` — DL-pooled estimate in ρ-units (inverse
+        Fisher-z of the pooled z). The DL pool's POINT estimate;
+        contrast with the FE pool's `rho_marginal_pooled` /
+        `rho_partial_pooled` on the result dataclasses, which use
+        n-weighted Fisher-z averaging without between-burst variance.
+      - `se_pooled` — SE of the pooled estimate in Fisher-z units
+        (the DL formula's natural scale; inverse-transforming SE to
+        ρ-units is meaningful only at a specific ρ via the
+        delta-method `(1 − ρ²) · SE_z`).
+      - `tau2` — between-burst heterogeneity variance in z-units.
+        The QUANTITATIVE measure of the heterogeneity that
+        `TimeAggregationStatus` flags qualitatively: SIGN_FLIP →
+        large τ²; WEAK_TIME_VARYING → moderate τ²; CONSISTENT
+        DIRECTION → small τ² (often clipped to 0 by `max(0, ·)`).
+      - `i2` — Higgins' I² fraction in [0, 1]. The proportion of
+        total variance attributable to between-burst heterogeneity.
+        I² ≥ 0.5 is the conventional "moderate-to-substantial"
+        threshold (`stats.effect_size.I2_THRESHOLD`).
+      - `q` — Cochran's Q statistic. Chi-square distributed with
+        df = G − 1 under the null of no heterogeneity.
+      - `rho_pi_lo`, `rho_pi_hi` — 95% Higgins-Thompson-Spiegelhalter
+        prediction interval bounds INVERSE-TRANSFORMED back to
+        ρ-units (`tanh(pi_z)`). Both NaN at G < 3 (PI undefined).
+      - `n_bursts_used` — number of valid (non-NaN, n ≥ df_offset)
+        bursts contributing.
+      - `assumption_violations` — DL small-G regime warnings
+        passed through from `PooledStats.assumption_violations`
+        (n_cells < 5 unreliable inference, etc.).
+
+    Behavior under `TimeAggregationStatus`:
+
+    Unlike the FE pool (which is NaN'd under SIGN_FLIP_DETECTED
+    because the n-weighted z-average is structurally meaningless on
+    sign-opposing bursts), the DL pool is NEVER NaN'd by the
+    diagnostic gate. Its `tau2` and `i2` ARE the quantitative
+    signal of the heterogeneity the enum flags. Under SIGN_FLIP
+    expect τ² large and I² near 1.0; under WEAK_TIME_VARYING
+    expect moderate τ² and I² ∈ [0.5, 1.0]; under CONSISTENT
+    DIRECTION expect small τ² and I² near 0. Consumers read the
+    DL pool's heterogeneity statistics as first-class metrics
+    rather than treating the enum as the only diagnostic.
+
+    Bursts with `n_b < df_offset + 1` (would give non-positive
+    Fisher-z weight) are dropped from the pool; if fewer than 2
+    bursts remain valid, the pool returns NaN for all numeric
+    fields and `n_bursts_used` = (number that DID survive the n
+    filter, possibly 0 or 1)."""
+    rho_pooled: float
+    se_pooled: float
+    tau2: float
+    i2: float
+    q: float
+    rho_pi_lo: float
+    rho_pi_hi: float
+    n_bursts_used: int
+    assumption_violations: tuple[str, ...] = ()
+
+
+def _fisher_z_dl_pool(
+    rhos: Sequence[float],
+    ns: Sequence[int],
+    df_offset: int,
+) -> FisherZDLPool:
+    """DerSimonian-Laird random-effects pool over per-burst
+    Fisher-z transformed ρ values.
+
+    For each burst with non-NaN ρ_b and `n_b > df_offset`:
+
+      - z_b = atanh(ρ_b) (clipped to |ρ| ≤ 0.999999 to avoid the
+        atanh asymptote — matches `fisher_z_pool`'s convention).
+      - SE_z_b = 1 / sqrt(n_b − df_offset).
+
+    The (z_b, SE_z_b) pairs feed into `random_effects_summary`
+    (the framework's general DL primitive in `stats.effect_size`).
+    The pooled z-estimate + PI bounds are inverse-Fisher-z'd back
+    to ρ-units; τ², I², and Q stay in z-units (their
+    interpretation as heterogeneity measures is scale-free).
+
+    Returns a NaN-filled `FisherZDLPool` when fewer than 2 bursts
+    are valid (DL needs G ≥ 2 for τ² estimation; PI needs G ≥ 3).
+    `n_bursts_used` reflects the actual count fed into the DL
+    pool — the caller can distinguish "no valid bursts" from
+    "DL undefined at G < 2"."""
+    z_se_pairs: list[tuple[float, float]] = []
+    n_valid = 0
+    for r, n in zip(rhos, ns):
+        if math.isnan(r):
+            continue
+        if n - df_offset < 1:
+            continue
+        r_c = max(-0.999999, min(0.999999, r))
+        z = 0.5 * math.log((1 + r_c) / (1 - r_c))
+        se_z = 1.0 / math.sqrt(float(n - df_offset))
+        z_se_pairs.append((z, se_z))
+        n_valid += 1
+
+    pooled = random_effects_summary(z_se_pairs)
+    # `random_effects_summary` returns NaN-filled `PooledStats` when
+    # n < 2. Propagate that through with the rho-side inverse
+    # transforms also as NaN.
+    if math.isnan(pooled.pooled_g):
+        return FisherZDLPool(
+            rho_pooled=float('nan'),
+            se_pooled=float('nan'),
+            tau2=float('nan'),
+            i2=float('nan'),
+            q=float('nan'),
+            rho_pi_lo=float('nan'),
+            rho_pi_hi=float('nan'),
+            n_bursts_used=n_valid,
+            assumption_violations=pooled.assumption_violations,
+        )
+    rho_pooled = math.tanh(pooled.pooled_g)
+    rho_pi_lo = (
+        math.tanh(pooled.pi_lo) if not math.isnan(pooled.pi_lo)
+        else float('nan')
+    )
+    rho_pi_hi = (
+        math.tanh(pooled.pi_hi) if not math.isnan(pooled.pi_hi)
+        else float('nan')
+    )
+    return FisherZDLPool(
+        rho_pooled=rho_pooled,
+        se_pooled=pooled.se_pooled,
+        tau2=pooled.tau2,
+        i2=pooled.I2,
+        q=pooled.Q,
+        rho_pi_lo=rho_pi_lo,
+        rho_pi_hi=rho_pi_hi,
+        n_bursts_used=n_valid,
+        assumption_violations=pooled.assumption_violations,
+    )
+
+
 __all__ = [
+    'FisherZDLPool',
     'Stratum',
     'TimeAggregationStatus',
     '_ColumnOrMeasurable',
@@ -350,6 +511,7 @@ __all__ = [
     '_classify_status',
     '_collect_arm_and_per_burst',
     '_encode_arm',
+    '_fisher_z_dl_pool',
     '_gather_burst_b',
     '_n_bursts',
     '_resolve_per_burst',

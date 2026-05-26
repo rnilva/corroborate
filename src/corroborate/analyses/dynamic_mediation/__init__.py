@@ -65,9 +65,11 @@ from __future__ import annotations
 # (leading-underscore signals that), but the typed enum + Stratum
 # alias are part of the package's public typed contract.
 from corroborate.analyses.dynamic_mediation._common import (
+    FisherZDLPool,
     Stratum,
     TimeAggregationStatus,
     _classify_status as _classify_status,
+    _fisher_z_dl_pool as _fisher_z_dl_pool,
 )
 from corroborate.analyses.dynamic_mediation.partial_spearman import (
     DynamicMediationResult,
@@ -82,6 +84,7 @@ from corroborate.analyses.dynamic_mediation.pc_adjacency import (
 __all__ = [
     'DynamicMediationResult',
     'DynamicPCResult',
+    'FisherZDLPool',
     'Stratum',
     'TimeAggregationStatus',
     'dynamic_partial_spearman',

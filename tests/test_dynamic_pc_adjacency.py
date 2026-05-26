@@ -674,3 +674,64 @@ def test_alpha_threshold_affects_edge_classification() -> None:
         f'edge count; got loose={r_loose.n_bursts_marginal_edge} '
         f'tight={r_tight.n_bursts_marginal_edge}'
     )
+
+
+# ============ DerSimonian-Laird random-effects pool ============
+
+def test_pc_adjacency_exposes_dl_pool_fields() -> None:
+    """The PC primitive's `DynamicPCResult` carries
+    `dl_marginal` / `dl_partial` — same `FisherZDLPool` shape as
+    the partial-Spearman sibling. The DL pool is computed on the
+    per-burst (ρ, n) trajectory the CI tests already produce.
+
+    Construction: 8 bursts of full-mediation DAG (`arm → mediator
+    → outcome`, no direct edge). Per-burst marginal ρ planted
+    near 0.58 (closed-form from `_build_full_mediation_panel`),
+    per-burst partial ρ ≈ 0 (d-separated).
+
+    Bounds:
+      - DL marginal `tau2` finite (not NaN).
+      - DL marginal `i2` ∈ [0, 1].
+      - DL marginal `rho_pooled` finite and positive (planted
+        positive direction).
+      - DL marginal `n_bursts_used` = 8 (every burst above
+        `min_n_per_burst=20` at n=60).
+      - DL partial `rho_pooled` near 0 (planted d-separation).
+    """
+    n_bursts = 8
+    df = _build_full_mediation_panel(n_bursts=n_bursts, seed=200)
+    results = dynamic_pc_adjacency.fn(
+        df, arm_field='arm_key',
+        mediator_per_burst='mediator_pb',
+        outcome_per_burst='outcome_pb',
+        stratify_by=('env_name', 'gamma'),
+    )
+    result = _get_single_stratum(results)
+    dl_m = result.dl_marginal
+    dl_p = result.dl_partial
+    # All 8 bursts contribute (n=60 ≫ df_offset=3).
+    assert dl_m.n_bursts_used == n_bursts
+    assert dl_p.n_bursts_used == n_bursts
+    # τ² finite (not NaN) — DL is defined at G=8.
+    assert not math.isnan(dl_m.tau2), (
+        f'τ² is NaN at G=8: DL should be defined'
+    )
+    # I² in [0, 1] — Higgins' fraction.
+    assert 0.0 <= dl_m.i2 <= 1.0, (
+        f'I²={dl_m.i2} outside [0, 1] — invariant violation'
+    )
+    # Marginal DL pool positive (planted positive direction).
+    assert dl_m.rho_pooled > 0, (
+        f'dl_marginal.rho_pooled={dl_m.rho_pooled:.4f} — expected '
+        f'positive (planted arm → mediator → outcome with '
+        f'positive coefficients)'
+    )
+    # Partial DL pool near zero (d-separated).
+    # Per-burst partial ρ has SE ≈ 1/sqrt(56) ≈ 0.134 in z-units;
+    # DL pooled over 8 bursts with τ²≈0 gives SE_pooled in z-units
+    # ≈ 1/sqrt(8·56) ≈ 0.0472. After tanh-transform on a pool near
+    # zero, SE_rho ≈ SE_z ≈ 0.047. 3σ bound = 0.14.
+    assert abs(dl_p.rho_pooled) < 0.20, (
+        f'dl_partial.rho_pooled={dl_p.rho_pooled:.4f} — expected '
+        f'near 0 under d-separation; |·|<0.20 is 4σ from null'
+    )
