@@ -34,7 +34,7 @@ envs:
 defaults:
   total_steps: 200000
   eval_every:  20000
-  n_episodes:  5
+  n_episodes:  20
   gamma:       0.99
   replay:
     class: Replay
