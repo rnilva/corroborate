@@ -3381,6 +3381,89 @@ def bootstrap_gap_magnitude_per_burst(
     )
 
 
+@measurable(reads=(
+    'target_max_q_per_step', 'target_q_at_online_argmax_per_step',
+    'eval_step_index',
+))
+def bootstrap_disagree_rate_per_burst(
+    record: Mapping[str, object],
+) -> npt.NDArray[np.float64]:
+    """Per-burst fraction of training steps where online and target
+    argmax disagree (operationalized as `target_max −
+    target_q_at_online_argmax > 0.001`). Returns `(n_bursts,)`.
+
+    Decomposes `bootstrap_gap_magnitude_per_burst`:
+        bg_per_burst ≈ disagree_rate_per_burst ×
+                       disagree_gap_conditional_per_burst
+    Separates "how often do they disagree" from "how much value
+    is at stake when they disagree" — the two mechanism axes
+    behind bg-mediation (M1 decomposition).
+
+    If this rate is invariant in arm, the bg-mediation runs
+    through magnitude/trajectory effects, not through
+    self-consistency reducing disagreement events. See sibling
+    `bootstrap_disagree_gap_conditional_per_burst`."""
+    try:
+        target_max = TARGET_MAX_Q(record)
+        target_argonline = TARGET_AT_ARGMAX(record)
+        eval_idx = EVAL_STEP_INDEX(record)
+    except KeyError:
+        return np.zeros((0,), dtype=np.float64)
+    n = min(target_max.shape[0], target_argonline.shape[0])
+    if n == 0:
+        return np.zeros((0,), dtype=np.float64)
+    gap = target_max[:n] - target_argonline[:n]
+    n_bursts = int(eval_idx.shape[0])
+    if n_bursts == 0:
+        return np.zeros((0,), dtype=np.float64)
+    edges = np.linspace(0, n, n_bursts + 1, dtype=np.int64)
+    return np.array(
+        [float((gap[edges[i]:edges[i+1]] > 0.001).mean()) for i in range(n_bursts)],
+        dtype=np.float64,
+    )
+
+
+@measurable(reads=(
+    'target_max_q_per_step', 'target_q_at_online_argmax_per_step',
+    'eval_step_index',
+))
+def bootstrap_disagree_gap_conditional_per_burst(
+    record: Mapping[str, object],
+) -> npt.NDArray[np.float64]:
+    """Per-burst mean wedge magnitude CONDITIONAL on online-target
+    argmax disagreement (`gap > 0.001`). Returns `(n_bursts,)`.
+
+    Bursts where no disagreement events occur receive 0 (rather
+    than NaN) so the array is plottable without masking — but
+    the conditional interpretation depends on
+    `bootstrap_disagree_rate_per_burst > 0` at that burst.
+
+    Together with the rate sibling, this decomposes
+    `bootstrap_gap_magnitude_per_burst` for the M1 mechanism
+    test."""
+    try:
+        target_max = TARGET_MAX_Q(record)
+        target_argonline = TARGET_AT_ARGMAX(record)
+        eval_idx = EVAL_STEP_INDEX(record)
+    except KeyError:
+        return np.zeros((0,), dtype=np.float64)
+    n = min(target_max.shape[0], target_argonline.shape[0])
+    if n == 0:
+        return np.zeros((0,), dtype=np.float64)
+    gap = target_max[:n] - target_argonline[:n]
+    n_bursts = int(eval_idx.shape[0])
+    if n_bursts == 0:
+        return np.zeros((0,), dtype=np.float64)
+    edges = np.linspace(0, n, n_bursts + 1, dtype=np.int64)
+    out = np.zeros((n_bursts,), dtype=np.float64)
+    for i in range(n_bursts):
+        chunk = gap[edges[i]:edges[i+1]]
+        mask = chunk > 0.001
+        if mask.any():
+            out[i] = float(chunk[mask].mean())
+    return out
+
+
 @measurable(reads=('online_argmax_per_step', 'eval_step_index', 'n_actions'))
 def argmax_entropy_per_burst(
     record: Mapping[str, object],
