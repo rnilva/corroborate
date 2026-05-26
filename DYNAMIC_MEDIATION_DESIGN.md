@@ -309,6 +309,60 @@ generalises the i.i.d. bootstrap by respecting cluster
 structure (Davison & Hinkley 1997 §3.8, "blocked bootstrap"
 in the time-series literature).
 
+### C.3 Bootstrap on count outputs
+
+The PC primitive's per-burst edge classification produces an
+INTEGER count triple per stratum:
+`(n_bursts_marginal_edge, n_bursts_mediator_dseparates,
+n_bursts_direct_edge)`. As descriptive statistics these are
+fine, but they admit a natural inferential question: **is the
+classification robust to which cells we sampled?** A 6/32 dsep
+fraction looks different if (a) 6 bursts robustly d-separate
+across any subset of cells vs (b) one outlier cell drives the
+per-burst CI decision at 5 of the 6 bursts. The fragile
+verdict is a publication-risk shape that the count alone hides.
+
+`ClusterBootstrapEdgeCounts` in `_common.py` is the typed
+surface for the bootstrap-on-counts. Same cell-resampling
+pattern as `_cluster_bootstrap_pool`; the inner computation
+differs (recompute per-burst CI decisions + sum to a triple,
+vs DL-pool the per-burst ρ trajectory). For each replica we
+call the SAME `_spearman_marginal` + `partial_spearman_rho`
+primitives the non-bootstrap path uses — guarantees the
+bootstrap distribution centres on the original count by
+construction. Empirical [α/2, 1 − α/2] percentiles of each
+count separately give the CI triple; the median is the robust
+integer point estimate.
+
+Field semantics on `ClusterBootstrapEdgeCounts`:
+`(marg_lower, marg_median, marg_upper)` /
+`(dsep_lower, dsep_median, dsep_upper)` /
+`(direct_lower, direct_median, direct_upper)` — integer-typed
+throughout, with the percentile rounded to the nearest
+integer (the percentile interpolation can land between
+integer counts). Provenance: `n_resamples`, `alpha`, `seed`
+mirror `ClusterBootstrapInterval`.
+
+**Why a separate dataclass from `ClusterBootstrapInterval`**:
+the two answer structurally distinct questions:
+
+| field | question | type |
+|---|---|---|
+| `ClusterBootstrapInterval.rho_lower/upper` | what's the average effect magnitude under bootstrap resampling? | continuous ρ |
+| `ClusterBootstrapEdgeCounts.dsep_lower/upper` | is the edge classification robust to which cells we sampled? | integer count |
+
+Keeping them typed-separately surfaces the question shape at
+the consumer site (`isinstance(x, ClusterBootstrapInterval)`
+narrows on intent). Both populate together when
+`n_bootstrap > 0`; consumers that want only the count CI pay
+the ρ-pool cost too (acceptable — the bootstrap iterations
+dominate runtime, not the inner reductions).
+
+`dynamic_partial_spearman` does NOT get a parallel
+`bootstrap_edge_counts` because it has no integer count
+outputs — its trajectory is continuous ρ, fully covered by
+the `ClusterBootstrapInterval` on the ρ-pool.
+
 ### D. Bridge consumers
 
 Existing bridges consume `PartialSpearmanResult.rho` and

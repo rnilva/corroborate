@@ -700,7 +700,214 @@ def _cluster_bootstrap_pool(
     )
 
 
+@dataclass(frozen=True, slots=True)
+class ClusterBootstrapEdgeCounts:
+    """Empirical CIs on PC edge-classification counts from a cluster
+    bootstrap over cells.
+
+    Conceptually DISTINCT from `ClusterBootstrapInterval` on the
+    ρ-pool: the ρ-pool interval answers "what's the average effect
+    magnitude under bootstrap resampling?" (a continuous quantity);
+    the edge-count interval answers "is the edge classification
+    *robust* to which cells we sampled?" (an integer-count
+    quantity over the per-burst Fisher-z CI decision). A wide CI
+    on the dsep / direct / marginal counts means the verdict is
+    driven by which subset of cells happened to land in the panel
+    — a few outlier cells flip the per-burst CI test from "edge
+    present" to "edge absent" at multiple bursts, so the count
+    triple drifts across resamples.
+
+    Each count's lower / upper bound is the empirical α/2 and
+    1 − α/2 percentile of the count across `n_resamples`
+    cell-resampled panels. `median` is the bootstrap
+    distribution's median (robust integer point estimate). Counts
+    on a resample replica are *that replica's* per-burst CI
+    decisions, recomputed from the resampled per-burst (ρ, n)
+    trajectory — identical machinery to the non-bootstrap path,
+    so the bootstrap distribution centres on the original count
+    by construction.
+
+    Assumption-free under any within-cell autocorrelation
+    structure — the cluster bootstrap resamples whole cells, so
+    bursts within one cell stay together. Same methodological
+    foundation as `ClusterBootstrapInterval` (Deen & de Rooij
+    2020; cluster-robust SE under within-cluster dependence).
+    """
+    # Marginal-edge count CI: how many bursts the marginal CI test
+    # rejects at α across the bootstrap distribution.
+    marg_lower: int
+    marg_median: int
+    marg_upper: int
+    # Mediator-d-separates count CI: how many bursts have marginal
+    # edge present AND conditional edge absent.
+    dsep_lower: int
+    dsep_median: int
+    dsep_upper: int
+    # Direct-edge count CI: how many bursts have both marginal and
+    # conditional edges present.
+    direct_lower: int
+    direct_median: int
+    direct_upper: int
+    # Provenance — mirrors ClusterBootstrapInterval.
+    n_resamples: int
+    alpha: float
+    seed: int
+
+
+def _per_burst_edge_counts_from_subset(
+    *,
+    arm_codes: npt.NDArray[np.float64],
+    mediator_lists: Sequence[Sequence[float]],
+    outcome_lists: Sequence[Sequence[float]],
+    cell_idx: npt.NDArray[np.intp],
+    n_bursts: int,
+    min_n_per_burst: int,
+    alpha: float,
+) -> tuple[int, int, int]:
+    """Recompute the PC edge-classification count triple on a
+    resampled subset of cells. Reuses the SAME primitives the
+    non-bootstrap path uses (`_spearman_marginal` for the depth-0
+    p-value via scipy's `spearmanr` t-approximation;
+    `partial_spearman_rho` for the depth-1 p-value via the
+    closed-form Fisher-z df=n-4 normal CDF). Calling the same
+    primitives guarantees the bootstrap distribution centres on
+    the original count by construction — we'd diverge if we
+    re-derived p-values from ρ analytically.
+
+    Returns `(n_marg, n_dsep, n_direct)` for this subset. Bursts
+    with `n_b < min_n_per_burst` contribute nothing (no edge can
+    be asserted). Single-arm bursts (zero variance on arm under
+    resampling) contribute nothing — `_spearman_marginal` returns
+    (NaN, NaN) at zero variance."""
+    sub_arm_codes = arm_codes[cell_idx]
+    sub_mediator: list[Sequence[float]] = [
+        mediator_lists[int(i)] for i in cell_idx
+    ]
+    sub_outcome: list[Sequence[float]] = [
+        outcome_lists[int(i)] for i in cell_idx
+    ]
+    n_marg, n_dsep, n_direct = 0, 0, 0
+    for b in range(n_bursts):
+        x_np, y_np, z_np = _gather_burst_b(
+            sub_arm_codes, sub_mediator, sub_outcome, b,
+        )
+        n_b = int(x_np.size)
+        if n_b < min_n_per_burst:
+            continue
+        # Skip degenerate single-arm bursts under resampling.
+        if float(np.std(x_np)) == 0.0:
+            continue
+        _, p_m = _graph_spearman_marginal(x_np, y_np)
+        if math.isnan(p_m) or p_m >= alpha:
+            continue
+        n_marg += 1
+        _, p_p = partial_spearman_rho(x_np, y_np, z_np)
+        # NaN p-value (degenerate variance, ill-conditioned
+        # partial) → treated as "no conditional edge" by the
+        # Fisher-z CI test's null convention → dsep at this burst.
+        if math.isnan(p_p) or p_p >= alpha:
+            n_dsep += 1
+        else:
+            n_direct += 1
+    return n_marg, n_dsep, n_direct
+
+
+def _cluster_bootstrap_edge_counts(
+    *,
+    arm_codes: npt.NDArray[np.float64],
+    mediator_lists: Sequence[Sequence[float]],
+    outcome_lists: Sequence[Sequence[float]],
+    n_bursts: int,
+    min_n_per_burst: int,
+    alpha: float,
+    n_resamples: int,
+    bootstrap_alpha: float,
+    seed: int,
+) -> ClusterBootstrapEdgeCounts:
+    """Cluster bootstrap CI on the PC edge-classification count
+    triple. Cells are the resampling unit (each cell = one
+    training trajectory = one independent unit); bursts within a
+    cell stay together.
+
+    For each of `n_resamples` iterations:
+      1. Sample `n_cells` cell indices with replacement.
+      2. Recompute per-burst CI decisions on the resampled subset
+         using the SAME machinery (`_spearman_marginal` +
+         `partial_spearman_rho`) the non-bootstrap path uses; sum
+         to a (n_marg, n_dsep, n_direct) triple.
+      3. Collect.
+
+    Then take empirical [`bootstrap_alpha`/2, 1 − `bootstrap_alpha`/2]
+    percentiles for EACH count separately and the median across
+    replicas. Integer outputs throughout — we round the
+    percentile result to the nearest integer (the percentile
+    interpolation can land between integer counts).
+
+    Sibling to `_cluster_bootstrap_pool` (the ρ-pool variant);
+    same cell-resampling pattern, different inner computation. The
+    two are independent — consumers that want both pay for both
+    via two passes over the resampled panels.
+
+    Deterministic given `seed` via `np.random.default_rng`."""
+    n_cells = arm_codes.size
+    rng = np.random.default_rng(seed)
+    marg_counts: list[int] = []
+    dsep_counts: list[int] = []
+    direct_counts: list[int] = []
+    for _ in range(n_resamples):
+        idx = rng.integers(0, n_cells, size=n_cells)
+        n_m, n_d, n_dir = _per_burst_edge_counts_from_subset(
+            arm_codes=arm_codes,
+            mediator_lists=mediator_lists,
+            outcome_lists=outcome_lists,
+            cell_idx=idx,
+            n_bursts=n_bursts,
+            min_n_per_burst=min_n_per_burst,
+            alpha=alpha,
+        )
+        marg_counts.append(n_m)
+        dsep_counts.append(n_d)
+        direct_counts.append(n_dir)
+
+    if not marg_counts:
+        # Defensive: n_resamples == 0 would yield empty lists.
+        # Surface zeros — the caller's gate (`n_bootstrap > 0`)
+        # is the typed contract.
+        return ClusterBootstrapEdgeCounts(
+            marg_lower=0, marg_median=0, marg_upper=0,
+            dsep_lower=0, dsep_median=0, dsep_upper=0,
+            direct_lower=0, direct_median=0, direct_upper=0,
+            n_resamples=n_resamples,
+            alpha=bootstrap_alpha,
+            seed=seed,
+        )
+
+    lo_q = 100.0 * (bootstrap_alpha / 2.0)
+    hi_q = 100.0 * (1.0 - bootstrap_alpha / 2.0)
+
+    def _ci(counts: list[int]) -> tuple[int, int, int]:
+        arr = np.asarray(counts, dtype=np.float64)
+        lo = int(round(float(np.percentile(arr, lo_q))))
+        hi = int(round(float(np.percentile(arr, hi_q))))
+        med = int(round(float(np.median(arr))))
+        return (lo, med, hi)
+
+    m_lo, m_med, m_hi = _ci(marg_counts)
+    d_lo, d_med, d_hi = _ci(dsep_counts)
+    dir_lo, dir_med, dir_hi = _ci(direct_counts)
+
+    return ClusterBootstrapEdgeCounts(
+        marg_lower=m_lo, marg_median=m_med, marg_upper=m_hi,
+        dsep_lower=d_lo, dsep_median=d_med, dsep_upper=d_hi,
+        direct_lower=dir_lo, direct_median=dir_med, direct_upper=dir_hi,
+        n_resamples=n_resamples,
+        alpha=bootstrap_alpha,
+        seed=seed,
+    )
+
+
 __all__ = [
+    'ClusterBootstrapEdgeCounts',
     'ClusterBootstrapInterval',
     'FisherZDLPool',
     'Stratum',
@@ -709,6 +916,7 @@ __all__ = [
     '_PerBurstMeasurable',
     '_as_float_list',
     '_classify_status',
+    '_cluster_bootstrap_edge_counts',
     '_cluster_bootstrap_pool',
     '_collect_arm_and_per_burst',
     '_encode_arm',
