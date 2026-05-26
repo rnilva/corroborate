@@ -520,6 +520,63 @@ def test_purge_cloud_fallback_refuses_uncovered_row_ids(
     assert (sweep_dir / 'runs.parquet').exists()
 
 
+def test_archive_picks_up_nested_sidecar_tree(
+    sweep_dir: Path, remote_root: str,
+) -> None:
+    """SIDECAR_DIRS walks recurse: nested layouts like
+    `q_checkpoints/<arm_name>/cell*.msgpack` (produced by multi-arm
+    sweeps that namespace ckpts per intervention via the
+    yaml_sweep.py post-merge lift) MUST be picked up by the default
+    file selection, not just direct children of the sidecar dir.
+
+    Regression for the 2026-05-26 substrate-coverage gap: the
+    nested layout used to be silently skipped by `is_file()` on
+    iterdir entries that landed on arm-named subdirs."""
+    msgpack_a = sweep_dir / 'q_checkpoints' / 'arm_a' / 'cell000_0_burst00.msgpack'
+    msgpack_b = sweep_dir / 'q_checkpoints' / 'arm_a' / 'cell000_0_burst01.msgpack'
+    msgpack_c = sweep_dir / 'q_checkpoints' / 'arm_b' / 'cell001_0_final.msgpack'
+    for p in (msgpack_a, msgpack_b, msgpack_c):
+        p.parent.mkdir(parents=True, exist_ok=True)
+        _ = p.write_bytes(b'msgpack-payload-' + p.name.encode())
+
+    # validate=False — msgpacks are below the CI5 1 KiB floor and
+    # have no PAR1 footer.
+    manifest = cloud.archive(sweep_dir, remote_root, validate=False)
+    relpaths = {f.relpath for f in manifest.files}
+    assert 'runs.parquet' in relpaths
+    assert 'traces.parquet' in relpaths
+    assert 'q_checkpoints/arm_a/cell000_0_burst00.msgpack' in relpaths
+    assert 'q_checkpoints/arm_a/cell000_0_burst01.msgpack' in relpaths
+    assert 'q_checkpoints/arm_b/cell001_0_final.msgpack' in relpaths
+    assert len(relpaths) == 5
+
+
+def test_purge_deletes_both_parquets_and_nested_sidecars(
+    sweep_dir: Path, remote_root: str,
+) -> None:
+    """End-to-end downstream of the recursing-sidecar archive:
+    `corroborate purge <sweep_dir>` after archive deletes BOTH
+    the parquets AND the nested-sidecar msgpacks via the unified
+    manifest. This is what makes the substrate's
+    `keep_q_checkpoint_*` opt-in self-cleaning at sweep end."""
+    msgpack = sweep_dir / 'q_checkpoints' / 'arm_a' / 'cell000_0_burst00.msgpack'
+    msgpack.parent.mkdir(parents=True, exist_ok=True)
+    _ = msgpack.write_bytes(b'ckpt-bytes')
+
+    _ = cloud.archive(sweep_dir, remote_root, validate=False)
+    assert msgpack.is_file()
+    deleted = cloud.purge(sweep_dir)
+    # Both parquets + the nested msgpack land in the deletion set.
+    assert set(deleted) == {
+        'runs.parquet', 'traces.parquet',
+        'q_checkpoints/arm_a/cell000_0_burst00.msgpack',
+    }
+    assert not (sweep_dir / 'runs.parquet').exists()
+    assert not msgpack.exists()
+    # Manifest preserved (for restore).
+    assert (sweep_dir / cloud.MANIFEST_NAME).exists()
+
+
 def test_purge_cloud_fallback_uses_direct_manifest_at_sweep_path(
     tmp_path: Path,
 ) -> None:

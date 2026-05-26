@@ -459,8 +459,12 @@ def _default_files(sweep_dir: Path) -> list[str]:
     `SIDECAR_DIRS` whitelist (currently `q_checkpoints/`): a
     substrate writes per-cell auxiliary artifacts here; the
     archive command sweeps them up alongside the parquets so
-    the cloud copy is self-contained. Files are added with
-    relpath `<sidecar_dir>/<filename>`; restore replicates the
+    the cloud copy is self-contained. The walk RECURSES so
+    substrate-authored nested layouts (e.g.
+    `q_checkpoints/<arm_name>/cell*.msgpack` produced by
+    multi-arm sweeps that namespace ckpts per intervention) are
+    picked up. Files are added with relpath
+    `<sidecar_dir>/.../<filename>`; restore replicates the
     subdir layout on download."""
     from corroborate.core.pre_registration import MANIFEST_NAME as PRE_REG
     files = [
@@ -474,9 +478,9 @@ def _default_files(sweep_dir: Path) -> list[str]:
         sidecar_path = sweep_dir / sidecar
         if not sidecar_path.is_dir():
             continue
-        for entry in sidecar_path.iterdir():
+        for entry in sidecar_path.rglob('*'):
             if entry.is_file():
-                files.append(f'{sidecar}/{entry.name}')
+                files.append(entry.relative_to(sweep_dir).as_posix())
     return sorted(files)
 
 

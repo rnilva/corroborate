@@ -772,31 +772,36 @@ def dispatch_sweep(sweep: DQNSweep) -> tuple[Path, Path]:
     # parquets directly so the sweep has its own self-contained
     # local + cloud manifest.
     #
+    # File selection uses cloud._default_files (None) which picks
+    # up: top-level *.parquet + pre_registration.json (if any) +
+    # the entire SIDECAR_DIRS tree (currently q_checkpoints/,
+    # recursed for the nested-by-arm layout). This makes the
+    # top-level manifest self-contained: subsequent
+    # `corroborate purge <sweep_dir>` deletes BOTH the merged
+    # parquets AND the Q-checkpoint msgpacks the sweep produced.
+    #
     # Best-effort: failure is warned (cloud might be transiently
     # down) but doesn't crash the sweep. Sub-corpus archives at
     # `<remote>/<arm>/` are intact and provide a recovery path.
     if sweep.archive_remote is not None:
         from corroborate.corpus.cloud import archive as _cloud_archive
-        top_files = tuple(
-            p.name for p in (final_runs, final_traces) if p.is_file()
-        )
-        if top_files:
-            try:
-                _ = _cloud_archive(
-                    sweep.out_dir,
-                    sweep.archive_remote,
-                    files=top_files,
-                )
-            except (OSError, RuntimeError, ValueError) as exc:
-                import sys
-                sys.stderr.write(
-                    f'run_sweep: WARNING — top-level archive failed: '
-                    f'{exc}\n'
-                    f'  Sub-corpora at {sweep.archive_remote}/<arm>/ '
-                    f'are intact; use\n'
-                    f'  `corroborate purge --remote-prefix <prefix>` '
-                    f'for cloud-fallback purge.\n',
-                )
+        # validate=False — the manifest includes msgpack sidecars
+        # which are below the CI5 1 KiB floor and have no PAR1
+        # footer; CI5 check is parquet-shaped only.
+        try:
+            _ = _cloud_archive(
+                sweep.out_dir, sweep.archive_remote, validate=False,
+            )
+        except (OSError, RuntimeError, ValueError) as exc:
+            import sys
+            sys.stderr.write(
+                f'run_sweep: WARNING — top-level archive failed: '
+                f'{exc}\n'
+                f'  Sub-corpora at {sweep.archive_remote}/<arm>/ '
+                f'are intact; use\n'
+                f'  `corroborate purge --remote-prefix <prefix>` '
+                f'for cloud-fallback purge.\n',
+            )
 
     # Sentinel removed only on successful completion (atomicity:
     # crash → sentinel stays → ingest skips).
