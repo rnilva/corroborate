@@ -64,4 +64,51 @@ REQUIRED_MEASURABLES: tuple[str, ...] = (
     'eval_best_burst_raw_mean',
     'bootstrap_fraction',
     'arm_is_baseline',
+    # Per-burst MC return projections — staged for exploration of
+    # outcome-trajectory dynamics (CV-of-seeds across bursts vs
+    # CV-of-episodes within burst). `mc_return__mean_axis_-1` is
+    # the discounted per-burst mean; `mc_return__std_axis_-1` the
+    # per-burst σ across the K eval episodes (env stochasticity at
+    # fixed policy); `mc_return_episode_cv_per_burst` packages
+    # σ_eps / |μ_eps| per burst, the trajectory analogue of the
+    # scalar `outcome_episode_sigma`. No bridge consumes these yet
+    # — staged via REQUIRED_MEASURABLES per the framework escape
+    # hatch (CLAUDE.md "Optional REQUIRED_MEASURABLES attribute").
+    'mc_return__mean_axis_-1',
+    'mc_return__std_axis_-1',
+    'mc_return_episode_cv_per_burst',
+    'outcome_episode_sigma',
+    # Per-burst non-tautological mediator candidates — required for
+    # `dynamic_partial_spearman` mediation trajectories. `bg` is the
+    # canonical Bellman wedge; `mean_per_state_cumulative_bias` is the
+    # per-state Bellman residual; the two disagree-rate proxies surface
+    # the rate vs magnitude decomposition (cf.
+    # `findings_per_burst_mediation_trajectory`).
+    'bootstrap_gap_magnitude_per_burst',
+    'mean_per_state_cumulative_bias_per_burst',
+    'bootstrap_disagree_rate_per_burst',
+    'greedy_match_per_burst',
+    # Pure (truly non-tautological wrt mc_return) per-burst candidates
+    # surfaced by the earlier per-env mediator audit (see
+    # `experiments/figures/g099_per_env_mediator_and_outcome.png`):
+    # state_repeat_rate is the canonical mediator at Freeway / Asterix /
+    # PacMan; argmax_entropy at Breakout / FourRooms; n_unique +
+    # entropy for state-coverage breadth.
+    'argmax_entropy_per_burst',
+    'state_hash_n_unique_per_burst',
+    'state_hash_entropy_per_burst',
+    'state_repeat_rate_window64_per_burst',
+    # Additional non-tautological per-burst candidates surfaced by the
+    # registered-measurables audit. Q-side (Bellman-tautological wrt
+    # the bias premise but axis-distinct): q_argmax_margin, q_action_std,
+    # q_autocorr, q_lambda_a. State/policy-side: state_conditional
+    # _argmax_entropy. Bellman residual: bootstrap_disagree_gap_conditional.
+    # PC will test whether the expanded set still has pstate_bias
+    # as a sufficient single-Z separator.
+    'q_argmax_margin_per_burst',
+    'q_action_std_per_burst',
+    'q_autocorr_per_burst',
+    'q_lambda_a_per_burst',
+    'state_conditional_argmax_entropy_per_burst',
+    'bootstrap_disagree_gap_conditional_per_burst',
 )

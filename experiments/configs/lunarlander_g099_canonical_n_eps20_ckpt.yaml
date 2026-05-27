@@ -1,0 +1,52 @@
+name: lunarlander_g099_canonical_n_eps20_ckpt
+out_dir: experiments/data/lunarlander_g099_canonical_n_eps20_ckpt
+env_binding: shared
+archive_remote: s3://corroborate-archive/lunarlander_g099_canonical_n_eps20_ckpt
+
+# LunarLander γ=0.99 with FULL Q traces + per-burst Q checkpoints.
+# 1M steps, 50 bursts at eval_every=20k. n_episodes=20 (stochastic
+# terrain init + horizon 1000 dynamics). NOTE: sync_period=1000 per
+# the LL canonical exception in ddqn._scope (sync=100 underlearns at
+# higher γ — see `findings_ll_g0999_canonical_not_hasselt`). The
+# γ=0.99 canonical at LL also uses sync=1000 for cross-γ comparability.
+
+keep_q_checkpoint_per_burst: true
+keep_q_checkpoint_final: true
+keep_q_per_action: true
+
+envs:
+  - {name: LunarLander-v2-jax, n_seeds: 15, chunk_size: 15}
+
+defaults:
+  total_steps: 1000000
+  eval_every:  20000
+  n_episodes:  20
+  gamma:       0.99
+  sync_period: 1000
+  n_step:      1
+  replay:
+    class: Replay
+    capacity: 50000
+    batch_size: 32
+  optimizer:
+    fn: warmed_update
+    inner: {fn: adam, lr: 0.0001}
+    warmup_steps: 100
+  action_select:
+    fn: epsilon_greedy
+    schedule:
+      fn: linear_epsilon
+      eps_init: 1.0
+      eps_final: 0.05
+      anneal_steps: 100000
+  q_network:
+    class: MLP
+    hidden: [64, 64]
+
+interventions:
+  - name: canonical_g099_n_eps20
+    base: {}
+    arms:
+      - []
+      - - slot_path: bootstrap
+          replacement: {fn: bootstrap, greedification: {fn: double_greedify}}

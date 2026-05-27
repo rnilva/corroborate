@@ -4851,6 +4851,7 @@ from corroborate.measurables.reductions import from_key, reduce_axis as _reduce_
 mc_return_per_burst_mean: Measurable[
     Mapping[str, object], npt.NDArray[np.floating],
 ] = _reduce_axis(from_key('mc_return'), axis=-1, op='mean')
+register(mc_return_per_burst_mean)
 
 # Per-burst std across the n_episodes evaluation rollouts. Captures
 # pure environment-stochasticity at a fixed policy (same Q, K
@@ -4864,6 +4865,53 @@ mc_return_per_burst_mean: Measurable[
 mc_return_per_burst_std: Measurable[
     Mapping[str, object], npt.NDArray[np.floating],
 ] = _reduce_axis(from_key('mc_return'), axis=-1, op='std')
+register(mc_return_per_burst_std)
+
+
+# Per-burst σ_eps / |μ_eps| over the K eval episodes within each
+# burst — the **trajectory** of environment stochasticity at a fixed
+# policy snapshot, exposed as an array so consumers can observe how
+# the (algorithm-independent) episode-level dispersion evolves
+# through training. Sibling to `outcome_episode_sigma` (scalar mean
+# across bursts) below — that scalar collapses the trajectory; this
+# array preserves it. Both share the same "env stochasticity, not
+# algorithm noise" interpretation.
+#
+# Deterministic envs (CartPole with fixed init, MountainCar) yield ≈ 0
+# at every burst. Stochastic envs (MinAtar enemy spawn, MetaMaze
+# procedurally-generated mazes) yield substantial nonzero values that
+# can grow with policy quality (longer episodes → more variance
+# accumulating).
+#
+# Reads `mc_return` directly; both the per-burst mean and std are
+# computed inline (NOT via `_reduce_axis` injection) so the closure
+# is signature-stable when downstream changes the reduction order.
+def _mc_return_episode_cv_per_burst_fn(
+    record: Mapping[str, object],
+) -> npt.NDArray[np.floating]:
+    mc_obj = record.get('mc_return')
+    if mc_obj is None:
+        return np.full((0,), float('nan'), dtype=np.float64)
+    arr = np.asarray(mc_obj, dtype=np.float64)
+    if arr.ndim != 2 or arr.size == 0:
+        return np.full((0,), float('nan'), dtype=np.float64)
+    if arr.shape[-1] < 2:
+        return np.zeros(arr.shape[0], dtype=np.float64)
+    mu = arr.mean(axis=-1)
+    sigma = arr.std(axis=-1, ddof=1)
+    eps = 1e-9
+    return (sigma / np.maximum(np.abs(mu), eps)).astype(np.float64)
+
+
+mc_return_episode_cv_per_burst: Measurable[
+    Mapping[str, object], npt.NDArray[np.floating],
+] = Measurable(
+    fn=_mc_return_episode_cv_per_burst_fn,
+    name='mc_return_episode_cv_per_burst',
+    reads=('mc_return',),
+)
+register(mc_return_episode_cv_per_burst)
+
 
 jensen_bias_per_burst_mean: Measurable[
     Mapping[str, object], npt.NDArray[np.floating],

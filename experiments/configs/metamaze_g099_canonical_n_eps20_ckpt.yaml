@@ -1,0 +1,49 @@
+name: metamaze_g099_canonical_n_eps20_ckpt
+out_dir: experiments/data/metamaze_g099_canonical_n_eps20_ckpt
+env_binding: shared
+archive_remote: s3://corroborate-archive/metamaze_g099_canonical_n_eps20_ckpt
+
+# MetaMaze γ=0.99 with FULL Q traces + per-burst Q checkpoints.
+# 1M steps, 50 bursts at eval_every=20k. MetaMaze is procedurally-
+# generated maze per episode → highly stochastic → n_episodes=20.
+
+keep_q_checkpoint_per_burst: true
+keep_q_checkpoint_final: true
+keep_q_per_action: true
+
+envs:
+  - {name: MetaMaze-misc, n_seeds: 15, chunk_size: 15}
+
+defaults:
+  total_steps: 1000000
+  eval_every:  20000
+  n_episodes:  20
+  gamma:       0.99
+  sync_period: 100
+  n_step:      1
+  replay:
+    class: Replay
+    capacity: 50000
+    batch_size: 32
+  optimizer:
+    fn: warmed_update
+    inner: {fn: adam, lr: 0.0001}
+    warmup_steps: 100
+  action_select:
+    fn: epsilon_greedy
+    schedule:
+      fn: linear_epsilon
+      eps_init: 1.0
+      eps_final: 0.05
+      anneal_steps: 100000
+  q_network:
+    class: MLP
+    hidden: [64, 64]
+
+interventions:
+  - name: canonical_g099_n_eps20
+    base: {}
+    arms:
+      - []
+      - - slot_path: bootstrap
+          replacement: {fn: bootstrap, greedification: {fn: double_greedify}}
