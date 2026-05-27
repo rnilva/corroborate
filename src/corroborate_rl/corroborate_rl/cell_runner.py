@@ -42,6 +42,7 @@ import numpy as np
 from corroborate import trace_context
 from corroborate.core import canonical_str
 from corroborate.graph.computation import ComputationGraph, build_computation_graph
+from corroborate_rl.dqn.claims.q_network import Params
 from corroborate_rl.dqn.dqn import default_state_hash
 from corroborate_rl.dqn.invariants import DQNTrajectoryRecord
 from corroborate_rl.dqn.q_checkpoint import (
@@ -355,6 +356,7 @@ def run_dqn_arm(
     wrappers: tuple[EnvWrapper, ...] = (),
     q_checkpoint_dir: Path | None = None,
     cell_idx: int = 0,
+    init_online_params_batched: Params | None = None,
 ) -> ArmResult:
     """Run one (env, arm) arm across `seeds` in parallel via
     `jax.vmap` of the composed `claim`. Returns
@@ -451,20 +453,54 @@ def run_dqn_arm(
     leaf_measurements = _leaf_measurements(configured)
 
     # vmap over seeds (uint32 → dqn derives PRNGKey internally
-    # post-Phase-A0). `seed` is the sole vmap dimension; all other
-    # kwargs (env_name, wrappers, env, ...) are bound in
+    # post-Phase-A0). `seed` is the canonical vmap dimension; all
+    # other kwargs (env_name, wrappers, env, ...) are bound in
     # `configured`.
-    def by_seed(seed: jax.Array) -> dict[str, jax.Array]:
-        return configured(seed=seed)
-
+    #
+    # When `init_online_params_batched` is supplied, vmap also
+    # iterates a per-seed `Params` pytree alongside the seed axis.
+    # Each pytree leaf carries a leading `(len(seeds), *leaf_shape)`
+    # axis built by `load_batched_online_params`; `in_axes=(0, 0)`
+    # threads one seed's slice per call. The dqn claim sees a
+    # single-realisation `init_online_params` per vmap invocation
+    # — the batching is invisible inside the body.
     seeds_arr = jnp.asarray(seeds, dtype=jnp.uint32)
+    if init_online_params_batched is None:
+        def by_seed(seed: jax.Array) -> dict[str, jax.Array]:
+            return configured(seed=seed)
+        with trace_context() as records:
+            batched_record = jax.vmap(by_seed)(seeds_arr)
+    else:
+        # Defensive shape check: every pytree leaf must carry the
+        # seed-axis at position 0 with length matching `seeds`.
+        # Catches caller bugs (e.g., passing a single-seed pytree
+        # by mistake) before JAX's opaque-error path fires.
+        n_seeds = len(seeds)
+        for leaf_key, leaf in init_online_params_batched.items():
+            if leaf.shape[0] != n_seeds:
+                raise ValueError(
+                    f'run_dqn_arm: '
+                    f'init_online_params_batched[{leaf_key!r}].'
+                    f'shape[0]={leaf.shape[0]} != len(seeds)='
+                    f'{n_seeds}',
+                )
+        init_params_batched = init_online_params_batched
+
+        def by_seed_with_params(
+            seed: jax.Array, init_params: Params,
+        ) -> dict[str, jax.Array]:
+            return configured(
+                seed=seed, init_online_params=init_params,
+            )
+        with trace_context() as records:
+            batched_record = jax.vmap(
+                by_seed_with_params, in_axes=(0, 0),
+            )(seeds_arr, init_params_batched)
     # Wrap the vmap call in trace_context so JAX's first-call
     # abstract-trace pass fires @claim records once; that single
     # pass IS the structural graph (per-(theory, intervention),
     # constant across seeds). build_computation_graph derives the
     # static call graph from the records.
-    with trace_context() as records:
-        batched_record = jax.vmap(by_seed)(seeds_arr)
     graph = build_computation_graph(records)
 
     # Side-effect import: registers DDQN measurables (q_mean,
@@ -590,15 +626,20 @@ def run_dqn_cell(
     cycle_id: str | None = None,
     q_checkpoint_dir: Path | None = None,
     cell_idx: int = 0,
+    init_online_params_batched: Params | None = None,
 ) -> CellResult:
     """Run one (env, seed, claim) cell. Thin convenience wrapper
     around `run_dqn_arm` for the single-seed case; multi-seed
     callers should use `run_dqn_arm` directly to avoid per-call
     vmap re-compilation. Discards the graph; callers that want
-    it should use `run_dqn_arm` directly."""
+    it should use `run_dqn_arm` directly.
+
+    `init_online_params_batched` (if provided) carries a single
+    seed-axis-0 stack — its shape[0] must equal 1."""
     arm = run_dqn_arm(
         env_spec, (seed,), claim, arm_key, measurables,
         cycle_id=cycle_id,
         q_checkpoint_dir=q_checkpoint_dir, cell_idx=cell_idx,
+        init_online_params_batched=init_online_params_batched,
     )
     return arm.cells[0]

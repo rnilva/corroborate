@@ -15,6 +15,12 @@ Optional `wrappers: tuple[EnvWrapper, ...]` — env-augmentation
 wrappers applied in order (e.g. ActionDuplicate for |A|
 inflation experiments).
 
+Optional `init_online_params_batched: Params` — per-seed
+stacked online-param pytree consumed by `dqn`'s
+`init_online_params` kwarg. Materialised at sweep-dispatch time
+by `dispatch_sweep` when the sweep's
+`init_q_checkpoint_path_template` is set.
+
 Other keys are an error: HP variation lives in the substrate's
 `base` (substrate's outer loop iterates HP regimes by building
 distinct Hypothesis objects); cell-level exogenous variation
@@ -28,7 +34,10 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import TypeIs
 
+import jax
+
 from corroborate_rl.cell_runner import run_dqn_arm
+from corroborate_rl.dqn.claims.q_network import Params
 from corroborate_rl.dqn.invariants import DQNTrajectoryRecord
 from corroborate_rl.env_catalogue import EnvSpec
 from corroborate.measurables import Measurable
@@ -41,6 +50,20 @@ def _is_tuple_of_int(v: object) -> TypeIs[tuple[int, ...]]:
     return (
         isinstance(v, tuple)
         and all(isinstance(s, int) and not isinstance(s, bool) for s in v)
+    )
+
+
+def _is_params(v: object) -> TypeIs[Params]:
+    """TypeIs narrowing `object` to `Params` (dict[str, jax.Array]).
+    Used to validate `grid_point['init_online_params_batched']`
+    before threading into the vmap. Empty-dict permitted (the
+    sweep dispatcher only emits the key when ckpts are actually
+    loaded; a defensive False at the boundary is enough)."""
+    if not isinstance(v, dict):
+        return False
+    return all(
+        isinstance(k, str) and isinstance(val, jax.Array)
+        for k, val in v.items()
     )
 
 
@@ -115,7 +138,9 @@ class DQNRunner:
             )
         seeds = seeds_v
         unexpected = (
-            set(grid_point) - {'env_name', 'seeds', 'wrappers'}
+            set(grid_point)
+            - {'env_name', 'seeds', 'wrappers',
+               'init_online_params_batched'}
         )
         if unexpected:
             raise ValueError(
@@ -129,6 +154,18 @@ class DQNRunner:
                 f"DQNRunner: grid_point['wrappers'] must be tuple; "
                 f"got {type(wrappers_v).__name__}",
             )
+        init_params_raw = grid_point.get('init_online_params_batched')
+        init_online_params_batched: Params | None
+        if init_params_raw is None:
+            init_online_params_batched = None
+        elif _is_params(init_params_raw):
+            init_online_params_batched = init_params_raw
+        else:
+            raise TypeError(
+                f"DQNRunner: grid_point['init_online_params_batched'] "
+                f"must be Params (dict[str, jax.Array]) or absent; "
+                f"got {type(init_params_raw).__name__}",
+            )
         env_spec = self._envs[env_name]
 
         cell_idx = self._call_count
@@ -138,6 +175,7 @@ class DQNRunner:
             wrappers=wrappers_v,
             q_checkpoint_dir=self._q_checkpoint_dir,
             cell_idx=cell_idx,
+            init_online_params_batched=init_online_params_batched,
         )
         return SweepCellResult(
             runs=tuple(c.run for c in arm.cells),
