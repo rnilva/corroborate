@@ -119,10 +119,80 @@ def ddqn_helps_outcome__consistently_cross_env(
     return Verdict.POWER_INSUFFICIENT, None
 
 
-BRIDGES = (ddqn_helps_outcome__consistently_cross_env,)
+@claim_bridge(
+    source=INTERVENTION,
+    target='eval_late_burst_raw_mean',
+    direction=Direction.DIRECT,
+    tier=Tier.INTERVENTIONAL,
+    scope=(
+        CANONICAL_DORMANCY_SCOPE
+        & PREMISE_ACTIVE_PER_STRATUM
+        & (pl.col('bootstrap_fraction').median().over(['corpus', 'gamma']) > 0.5)
+    ),
+    predicted_direction='a_gt_b',
+)
+def ddqn_helps_outcome__consistently_cross_env__late30(
+    cross_env_probability_of_improvement: CrossEnvProbabilityOfImprovementResult,
+    *,
+    source: str = 'eval_late_burst_raw_mean',
+    treatment_arm: str = DDQN_ARM,
+    baseline_arm: str = VANILLA_ARM,
+    stratify_by: tuple[str, ...] = ('env_name', 'gamma'),
+    min_seeds_per_arm: int = 5,
+    min_strata: int = 5,
+    p_threshold_held: float = 0.05,
+    p_threshold_pi: float = 0.15,
+    p_xy_substantive_delta: float = 0.02,
+) -> tuple[Verdict, RefutationClass | None]:
+    """Late-window sibling of `ddqn_helps_outcome__consistently_cross_env`.
+
+    Same cross-env directional P(D>V) test, but on
+    `eval_late_burst_raw_mean` (last 30% of bursts) instead of
+    `eval_best_burst_raw_mean` (peak burst).
+
+    Why pair the two: the peak version aligns with the DDQN-paper
+    reporting protocol (van Hasselt et al. 2016 follows
+    Mnih 2015 / Nair 2015's best-checkpoint convention). The
+    late30 version aligns with the DDQN paper's STABILITY
+    NARRATIVE ('reducing overestimations can significantly benefit
+    the stability of learning') and matches Agarwal-2021's
+    recommended late-window aggregate.
+
+    The framework refuses to choose for the author. Both verdicts
+    are computed and reported; envs where they disagree are
+    metric-sensitive and the disagreement IS the methodological
+    finding. See REPORT.md §3.4-bis."""
+    del (
+        source, treatment_arm, baseline_arm,
+        stratify_by, min_seeds_per_arm,
+    )
+    if cross_env_probability_of_improvement.n_strata < min_strata:
+        return Verdict.POWER_INSUFFICIENT, None
+    p = cross_env_probability_of_improvement.p_permutation
+    if math.isnan(p):
+        return Verdict.POWER_INSUFFICIENT, None
+    p_xy_mean = cross_env_probability_of_improvement.p_xy_mean
+    substantive_positive = p_xy_mean >= 0.5 + p_xy_substantive_delta
+    substantive_negative = p_xy_mean <= 0.5 - p_xy_substantive_delta
+    if p <= p_threshold_held and substantive_positive:
+        return Verdict.HELD, None
+    if p <= p_threshold_pi:
+        return Verdict.POWER_INSUFFICIENT, None
+    if substantive_negative:
+        return Verdict.NO_EFFECT, RefutationClass.SIGN_FLIP
+    if not substantive_positive and not substantive_negative:
+        return Verdict.NO_EFFECT, RefutationClass.NULL_EFFECT
+    return Verdict.POWER_INSUFFICIENT, None
+
+
+BRIDGES = (
+    ddqn_helps_outcome__consistently_cross_env,
+    ddqn_helps_outcome__consistently_cross_env__late30,
+)
 
 
 __all__ = [
     'BRIDGES',
     'ddqn_helps_outcome__consistently_cross_env',
+    'ddqn_helps_outcome__consistently_cross_env__late30',
 ]

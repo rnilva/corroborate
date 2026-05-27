@@ -100,9 +100,43 @@ def intervention_helps_outcome__pool_inadequate(
     return stratified_arm_diff_pooled.verdict, None
 
 
+@claim_bridge(
+    source=INTERVENTION,
+    target='eval_late_burst_raw_mean',
+    direction=Direction.DIRECT,
+    tier=Tier.INTERVENTIONAL,
+    scope=(
+        CANONICAL_DORMANCY_SCOPE
+        & PREMISE_ACTIVE_PER_STRATUM
+        & (pl.col('bootstrap_fraction').median().over(['corpus']) > 0.5)
+    ),
+    predicted_direction='a_gt_b',
+)
+def intervention_helps_outcome__pool_inadequate__late30(
+    stratified_arm_diff_pooled: StratifiedArmDiffPooledResult,
+    *,
+    source: str = 'eval_late_burst_raw_mean',
+    treatment_arm: str = DDQN_ARM,
+    baseline_arm: str = VANILLA_ARM,
+    stratify_by: tuple[str, ...] = ('env_name', 'gamma'),
+    min_seeds_per_arm: int = 5,
+) -> tuple[Verdict, RefutationClass | None]:
+    """Late-window sibling pool bridge. Same DL random-effects
+    machinery on the late30 outcome; expected to show similar
+    heterogeneity-driven NO_EFFECT, but the verdict + I² are
+    paired with the peak version for the dual-metric audit
+    (REPORT.md §3.4-bis)."""
+    del (
+        source, treatment_arm, baseline_arm,
+        stratify_by, min_seeds_per_arm,
+    )
+    return stratified_arm_diff_pooled.verdict, None
+
+
 BRIDGES = (
     intervention_reduces_bias__pool_inadequate,
     intervention_helps_outcome__pool_inadequate,
+    intervention_helps_outcome__pool_inadequate__late30,
 )
 
 
@@ -110,4 +144,5 @@ __all__ = [
     'BRIDGES',
     'intervention_reduces_bias__pool_inadequate',
     'intervention_helps_outcome__pool_inadequate',
+    'intervention_helps_outcome__pool_inadequate__late30',
 ]

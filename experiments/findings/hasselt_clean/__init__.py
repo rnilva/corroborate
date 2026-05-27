@@ -62,6 +62,13 @@ REQUIRED_MEASURABLES: tuple[str, ...] = (
     'jensen_dormancy_gap',
     'jensen_gap',
     'eval_best_burst_raw_mean',
+    # late30 sibling — last 30% (ceil(n/3)) of bursts' raw-return mean.
+    # Used by the late30-sibling bridges in `chain.py` / `outcome_consistency.py`
+    # so each outcome-using bridge has a verdict under BOTH the peak
+    # metric (DDQN-paper-aligned) AND the late-window metric
+    # (Agarwal-aligned, stability-narrative). See §3.4-bis of the
+    # g099_mediation report.
+    'eval_late_burst_raw_mean',
     'bootstrap_fraction',
     'arm_is_baseline',
     # Per-burst MC return projections — staged for exploration of

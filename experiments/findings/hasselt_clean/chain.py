@@ -206,9 +206,63 @@ def ddqn_reduces_bias__consistently_cross_env(
     return Verdict.POWER_INSUFFICIENT, None
 
 
+# ============================================================
+# B2-late30: Link edge — bias predicts late-window outcome (vanilla)
+# Sibling of `bias_predicts_worse_outcome__vanilla` under the
+# late30 per-run scalar. Identical decision logic; only the
+# outcome column differs. See REPORT.md §3.4-bis for the
+# dual-metric framing.
+# ============================================================
+
+@claim_bridge(
+    source='jensen_gap',
+    target='eval_late_burst_raw_mean',
+    direction=Direction.INVERSE,
+    tier=Tier.ASSOCIATIONAL,
+    scope=CANONICAL_DORMANCY_SCOPE & VANILLA_ONLY,
+    predicted_direction='a_lt_b',
+)
+def bias_predicts_worse_outcome__vanilla__late30(
+    partial_spearman: PartialSpearmanResult,
+    *,
+    x: str = 'jensen_gap',
+    y: str = 'eval_late_burst_raw_mean',
+    conditioning: tuple[str, ...] = (),
+    stratify_by: str = 'env_name',
+    min_stratum_size: int = 30,
+    rho_threshold_held: float = -0.3,
+    p_threshold_held: float = 0.05,
+    null_threshold: float = 0.1,
+    sign_flip_threshold: float = 0.3,
+) -> tuple[Verdict, RefutationClass | None]:
+    """Late-window sibling of `bias_predicts_worse_outcome__vanilla`.
+
+    Uses `eval_late_burst_raw_mean` (last 30% of bursts) as the
+    outcome column instead of `eval_best_burst_raw_mean` (peak
+    burst). The peak version aligns with the DDQN-paper reporting
+    protocol; this late30 version aligns with the DDQN-paper
+    stability narrative ('reducing overestimations can significantly
+    benefit the stability of learning') and Agarwal-2021's
+    late-window aggregate. Both verdicts are reported; their
+    disagreement is the methodological finding."""
+    del x, y, conditioning, stratify_by, min_stratum_size
+    rho = partial_spearman.rho_pooled
+    p = partial_spearman.p_value
+    if math.isnan(rho) or math.isnan(p):
+        return Verdict.POWER_INSUFFICIENT, None
+    if rho <= rho_threshold_held and p <= p_threshold_held:
+        return Verdict.HELD, None
+    if rho >= sign_flip_threshold:
+        return Verdict.NO_EFFECT, RefutationClass.SIGN_FLIP
+    if abs(rho) <= null_threshold:
+        return Verdict.NO_EFFECT, RefutationClass.NULL_EFFECT
+    return Verdict.POWER_INSUFFICIENT, None
+
+
 BRIDGES = (
     hasselt_floor_predicts_observed_bias__vanilla,
     bias_predicts_worse_outcome__vanilla,
+    bias_predicts_worse_outcome__vanilla__late30,
     ddqn_reduces_bias__consistently_cross_env,
 )
 
@@ -217,5 +271,6 @@ __all__ = [
     'BRIDGES',
     'hasselt_floor_predicts_observed_bias__vanilla',
     'bias_predicts_worse_outcome__vanilla',
+    'bias_predicts_worse_outcome__vanilla__late30',
     'ddqn_reduces_bias__consistently_cross_env',
 ]
