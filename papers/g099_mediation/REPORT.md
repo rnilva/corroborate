@@ -333,10 +333,10 @@ The same panel that supports "DDQN improves outcome cross-env directionally" (L1
 
 ## Figures
 
-- `experiments/figures/report_3layer_summary.png` — three-panel L1/L2/L3 summary
-- `experiments/figures/report_asterix_clean.png` — Asterix γ=0.99 per-burst trajectory + CI tests (cleanest case)
-- `experiments/figures/report_dynamic_5envs.png` — per-burst trajectories at the 5 envs with PC-detectable LINK
-- `experiments/figures/report_mediator_attribution.png` — per-env best mediator from the 14-candidate audit
+- `figures/report_3layer_summary.png` — three-panel L1/L2/L3 summary
+- `figures/report_asterix_clean.png` — Asterix γ=0.99 per-burst trajectory + CI tests (cleanest case)
+- `figures/report_dynamic_5envs.png` — per-burst trajectories at the 5 envs with PC-detectable LINK
+- `figures/report_mediator_attribution.png` — per-env best mediator from the 14-candidate audit
 
 ## Appendix: full candidate mediator set (γ=0.99 canonical)
 
