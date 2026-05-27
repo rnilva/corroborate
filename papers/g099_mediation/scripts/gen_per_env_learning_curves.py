@@ -109,6 +109,7 @@ def main() -> None:
         eval_every = int(sub['eval_every'].drop_nulls()[0]) if 'eval_every' in sub.columns else 20000
 
         results = {}
+        env_max_len = 0
         for arm_label, arm_pred, color in [
             ('V', pl.col('arm_key') == VANILLA_ARM, 'steelblue'),
             ('D', pl.col('arm_key') == DDQN_ARM, 'crimson'),
@@ -123,6 +124,7 @@ def main() -> None:
             if not arrs:
                 continue
             max_len = max(len(a) for a in arrs)
+            env_max_len = max(env_max_len, max_len)
             stack = np.full((len(arrs), max_len), np.nan, dtype=np.float64)
             for r, a in enumerate(arrs):
                 stack[r, :len(a)] = a
@@ -137,21 +139,34 @@ def main() -> None:
                     label=f'{arm_label} (n={len(arrs)})')
             ax.plot(x, mn, color=color, linewidth=0.55, alpha=0.55)
             ax.plot(x, mx, color=color, linewidth=0.55, alpha=0.55)
+            # Per-seed peak — both x (best step) and y (best value).
+            # Compute argmax-burst per cell to get a step + value pair.
+            peak_steps: list[float] = []
+            peak_vals: list[float] = []
+            for traj in arrs:
+                if traj.size == 0 or not np.any(np.isfinite(traj)):
+                    continue
+                idx = int(np.nanargmax(traj))
+                peak_steps.append((idx + 1) * eval_every)
+                peak_vals.append(float(traj[idx]))
+            if peak_steps:
+                mean_step = float(np.mean(peak_steps))
+                mean_val = float(np.mean(peak_vals))
+                ax.plot(mean_step, mean_val, marker='D', color=color,
+                        markersize=8, markeredgecolor='black',
+                        markeredgewidth=0.8, zorder=10,
+                        label=f'{arm_label} mean peak')
             results[arm_label] = {'median_last': median[-1], 'n': len(arrs)}
 
         pxy_peak = link_pxy.get(env, 0.5)
         pxy_late = link_late_pxy.get(env, 0.5)
-        # Draw the late-window region as a faint vertical band so the
-        # reader sees what late30 is summarising.
-        if 'V' in results and 'D' in results:
-            x_max = max(results.get('x_max', 0),
-                         results.get('x_max', 0))
-        # Use eval_every × n_bursts × 0.7 as the band start
-        band_left = (1 - LATE_WINDOW_FRAC) * 50 * eval_every
-        band_right = 50 * eval_every
-        ax.axvspan(band_left, band_right, color='goldenrod', alpha=0.07,
-                   zorder=0)
-        # Differential indicator on the title: ≈ if peak and late30 agree on sign
+        # Late-window band — computed from the env's actual trajectory length,
+        # not a hardcoded 50.
+        if env_max_len > 0:
+            band_left = (1 - LATE_WINDOW_FRAC) * env_max_len * eval_every
+            band_right = env_max_len * eval_every
+            ax.axvspan(band_left, band_right, color='goldenrod', alpha=0.10,
+                       zorder=0)
         sign_peak = '+' if pxy_peak > 0.5 else ('−' if pxy_peak < 0.5 else '·')
         sign_late = '+' if pxy_late > 0.5 else ('−' if pxy_late < 0.5 else '·')
         agree = '✓' if sign_peak == sign_late else '↕'
@@ -173,10 +188,11 @@ def main() -> None:
                    if (link_pxy.get(e, 0.5) - 0.5) * (link_late_pxy.get(e, 0.5) - 0.5) >= 0)
     fig.suptitle(
         'γ=0.99 canonical — per-env seed-aggregated learning curves (raw return)\n'
-        'per-burst median across seeds + IQR + 5/95 envelope; gold band = late30 window\n'
+        'per-burst median across seeds + IQR + 5/95 envelope; gold band = late30 window; '
+        '♦ = mean per-seed peak (best_step × best_value)\n'
         f'Title shows P(D>V) under BOTH metrics — peak (best-burst) and late30 (last 30%); '
         f'{n_agree}/{len(envs)} envs agree on sign ✓; rest are ↕ metric-sensitive',
-        fontsize=11,
+        fontsize=10,
     )
     plt.tight_layout(rect=[0, 0, 1, 0.96])
     plt.savefig(OUT, dpi=120, bbox_inches='tight')
