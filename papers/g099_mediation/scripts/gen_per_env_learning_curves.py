@@ -38,6 +38,9 @@ from experiments.findings.ddqn._arms import DDQN_ARM, VANILLA_ARM
 OUT = SCRIPT_DIR.parent / 'figures' / 'report_per_env_learning_curves.png'
 
 
+LATE_WINDOW_FRAC = 0.30  # last 30% of training (15 bursts of 50)
+
+
 def _per_burst_raw_mean(mc_raw_eps_list) -> np.ndarray:
     """Convert `mc_return_raw_episodes` (per-burst K eps) into per-burst
     mean across eps, in RAW return units (not γ-discounted)."""
@@ -54,16 +57,42 @@ def _per_burst_raw_mean(mc_raw_eps_list) -> np.ndarray:
     return np.asarray(out, dtype=np.float64)
 
 
+def _late_window_mean(traj: np.ndarray, frac: float = LATE_WINDOW_FRAC) -> float:
+    """Mean over the last `frac` of bursts."""
+    if traj.size == 0:
+        return float('nan')
+    k = max(1, int(round(traj.size * frac)))
+    return float(np.nanmean(traj[-k:]))
+
+
 def main() -> None:
     df = load_g099_canonical_panel()
+
+    # Build a derived late30 per-cell column matching the panel's row order
+    late_vals = {}
+    for env in df['env_name'].unique():
+        sub = df.filter(pl.col('env_name') == env)
+        for row_id, mc in zip(sub['id'].to_list(),
+                              sub['mc_return_raw_episodes'].to_list()):
+            traj = _per_burst_raw_mean(mc)
+            late_vals[row_id] = _late_window_mean(traj)
+    df = df.with_columns(
+        pl.col('id').map_elements(lambda i: late_vals.get(i, float('nan')),
+                                    return_dtype=pl.Float64).alias('outcome_late30'))
     cells = df.to_dicts()
 
-    link = cross_env_probability_of_improvement.fn(
+    link_peak = cross_env_probability_of_improvement.fn(
         cells, source='eval_best_burst_raw_mean',
         treatment_arm=DDQN_ARM, baseline_arm=VANILLA_ARM,
         stratify_by=('env_name',),
     )
-    link_pxy = {s.stratum_id[0]: s.p_xy for s in link.per_stratum}
+    link_late = cross_env_probability_of_improvement.fn(
+        cells, source='outcome_late30',
+        treatment_arm=DDQN_ARM, baseline_arm=VANILLA_ARM,
+        stratify_by=('env_name',),
+    )
+    link_pxy = {s.stratum_id[0]: s.p_xy for s in link_peak.per_stratum}
+    link_late_pxy = {s.stratum_id[0]: s.p_xy for s in link_late.per_stratum}
 
     envs = sorted(df['env_name'].unique().to_list(),
                   key=lambda e: -link_pxy.get(e, 0.5))
@@ -110,12 +139,25 @@ def main() -> None:
             ax.plot(x, mx, color=color, linewidth=0.55, alpha=0.55)
             results[arm_label] = {'median_last': median[-1], 'n': len(arrs)}
 
-        pxy = link_pxy.get(env, 0.5)
+        pxy_peak = link_pxy.get(env, 0.5)
+        pxy_late = link_late_pxy.get(env, 0.5)
+        # Draw the late-window region as a faint vertical band so the
+        # reader sees what late30 is summarising.
+        if 'V' in results and 'D' in results:
+            x_max = max(results.get('x_max', 0),
+                         results.get('x_max', 0))
+        # Use eval_every × n_bursts × 0.7 as the band start
+        band_left = (1 - LATE_WINDOW_FRAC) * 50 * eval_every
+        band_right = 50 * eval_every
+        ax.axvspan(band_left, band_right, color='goldenrod', alpha=0.07,
+                   zorder=0)
+        # Differential indicator on the title: ≈ if peak and late30 agree on sign
+        sign_peak = '+' if pxy_peak > 0.5 else ('−' if pxy_peak < 0.5 else '·')
+        sign_late = '+' if pxy_late > 0.5 else ('−' if pxy_late < 0.5 else '·')
+        agree = '✓' if sign_peak == sign_late else '↕'
         ax.set_title(
-            f'{env}\n'
-            f'P(D>V)={pxy:.2f}  '
-            f'V={results.get("V", {}).get("median_last", float("nan")):.2f}, '
-            f'D={results.get("D", {}).get("median_last", float("nan")):.2f}',
+            f'{env}  {agree}\n'
+            f'P(D>V)  peak={pxy_peak:.2f}  late30={pxy_late:.2f}',
             fontsize=9,
         )
         ax.set_xlabel('training step', fontsize=8)
@@ -127,10 +169,14 @@ def main() -> None:
     for j in range(n, len(axes_flat)):
         axes_flat[j].set_axis_off()
 
+    n_agree = sum(1 for e in envs
+                   if (link_pxy.get(e, 0.5) - 0.5) * (link_late_pxy.get(e, 0.5) - 0.5) >= 0)
     fig.suptitle(
         'γ=0.99 canonical — per-env seed-aggregated learning curves (raw return)\n'
-        'per-burst median across seeds + IQR fill + 5/95 envelope; envs sorted by P(D>V)',
-        fontsize=12,
+        'per-burst median across seeds + IQR + 5/95 envelope; gold band = late30 window\n'
+        f'Title shows P(D>V) under BOTH metrics — peak (best-burst) and late30 (last 30%); '
+        f'{n_agree}/{len(envs)} envs agree on sign ✓; rest are ↕ metric-sensitive',
+        fontsize=11,
     )
     plt.tight_layout(rect=[0, 0, 1, 0.96])
     plt.savefig(OUT, dpi=120, bbox_inches='tight')
