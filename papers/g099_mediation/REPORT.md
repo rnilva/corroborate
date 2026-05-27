@@ -34,10 +34,12 @@ Hasselt's 2010 claim, stated as a cross-env empirical hypothesis: *DDQN's clip �
 The framework decomposes this into three sub-questions, each with its own typed primitive:
 
 1. **MECH** (cross-env directional): does DDQN reduce Jensen bias `jensen_gap` in the predicted direction at each env?
-2. **LINK** (cross-env directional): does DDQN improve outcome `eval_best_burst_raw_mean` in the predicted direction at each env?
+2. **LINK** (cross-env directional): does DDQN improve outcome in the predicted direction at each env? **Reported under two per-run scalars: `peak` (best-burst, matches DDQN-paper protocol) and `late30` (last-30% window, matches DDQN-paper stability narrative and Agarwal 2021 conventions). The framework refuses to choose for the author — both are valid science answering different questions.** See [§3.4-bis](#34-bis-outcome-scalar-choice--peak-vs-late-window-dual-metric-stance).
 3. **MEDIATION** (causal pathway): is the LINK *carried by* the MECH? Is there a measurable mediator on the arm→outcome path that d-separates the edge?
 
 The framework's deflation primitives ensure each sub-question is answered with its own gate before the next is asked. This report walks through the three layers in order.
+
+**Framing note.** The paper claims neither *DDQN-helps* nor *DDQN-doesn't-help* — it claims the framework can illuminate *which envs are robust to the outcome-scalar choice and which are metric-sensitive*. The dual-metric stance (§3.4-bis) is the substantive demonstration.
 
 ## §2 The framework hierarchy
 
@@ -111,6 +113,37 @@ The L1 binomial dropping to 6/12 envs in the seed-agg robust direction would sti
 3. Flag envs where per-cell and seed-agg disagree in sign as "outcome-aggregation-sensitive."
 
 This is the framework's "fourth refusal gate" at the outcome side, completing the hierarchy.
+
+## §3.4-bis Outcome-scalar choice — peak vs late-window (dual-metric stance)
+
+§3.4 surfaced one outcome-side aggregation axis (per-cell vs seed-aggregated). A second orthogonal axis is the **per-run scalar choice** — given a cell with 50 evaluation bursts, do we report the *best* burst (`peak`) or a *late-window mean* (`late30` = last 15 of 50 bursts)? The framework refuses to choose for the author; it can audit both.
+
+**Two anchor metrics:**
+
+| metric | definition | aligned narrative |
+|---|---|---|
+| `peak` | `max_b (mean_eps mc_return[b, *])` per cell | DDQN paper's "best learned policy" reporting protocol (van Hasselt et al. 2016, following Mnih 2015 / Nair 2015 — best checkpoint during training, no separate re-evaluation buffer). Practitioner-relevant: "what's the best policy this seed produced?" |
+| `late30` | `mean_b in [35, 50) (mean_eps mc_return[b, *])` | The DDQN paper's stability narrative ("reducing overestimations can significantly benefit the stability of learning"). Agarwal et al. 2021's recommended late-window aggregate, robust to max-of-N inflation. |
+
+**Both metrics are valid science**; they answer different questions. The paper makes no DDQN-good or DDQN-bad claim — it claims the framework can surface which envs are robust to the choice and which are metric-sensitive.
+
+**Empirical agreement** (from `figures/report_per_env_learning_curves.png` titles, and `figures/sensitivity_outcome_scalar_pxy.{png,csv}`):
+
+| pattern | envs | reading |
+|---|---|---|
+| ✓ Both > 0.5 (D-favoring under both) | Asterix, PacMan, Freeway, MetaMaze, LL | Robust DDQN-favoring set under any honest metric |
+| ✓ Both < 0.5 (V-favoring under both) | Snake | Robust V-favoring (small effect) |
+| ↕ Peak D, late30 V (peak-collapse) | SI (0.78→0.48), Breakout (0.60→0.40), Acrobot (0.51→0.40), MountainCar (0.56→0.50, borderline) | D overshoots then declines — peak captures the overshoot, late30 captures the post-peak |
+| ↕ Peak V, late30 D (late-stabilization) | FR (0.48→**0.81**), CartPole (0.48→0.55) | D learns slower but ends higher — peak misses the late-training stabilization |
+
+**6/12 envs** are metric-invariant. **5/12 are metric-sensitive** in opposite directions (3 peak-collapse, 2 late-stabilization, 1 borderline). The dual-metric figure (`report_per_env_learning_curves.png`) marks these ✓/↕ per panel and shades the late30 window in gold so the reader can see *what* each metric is summarising on the trajectory.
+
+**Why both columns are reported, not one chosen:**
+- `peak` matches the DDQN-paper reporting protocol exactly (modulo our smaller K_eps per burst — see footnote). A reader comparing to van Hasselt et al. 2016's numerical scores needs `peak` to make sense of the comparison.
+- `late30` matches the DDQN paper's *narrative* about stability and matches modern late-window conventions (Agarwal 2021, RLiable). A reader assessing reproducibility under modern best practices needs `late30`.
+- Where they disagree, the disagreement IS the methodological finding.
+
+**Caveat (re-evaluation buffer):** Mnih 2015 / Nair 2015 / DDQN 2016 evaluate each checkpoint with 30-100 episodes (DDQN's final table: 100 episodes × 18,000 frames × ε=0.05, no-op starts per Mnih 2015 protocol). Our pipeline uses K_eps=20 per burst (K_eps=1 at CartPole and SI), so our `peak` carries a larger max-of-N inflation than DDQN's reported numbers. The DDQN paper still does not do a separate re-evaluation pass — picking-the-best-checkpoint IS the reported number — but their per-checkpoint sample size is larger than ours.
 
 ## §3.5 Tautology audit (the load-bearing correction)
 
