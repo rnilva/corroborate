@@ -345,6 +345,37 @@ class PotentialReward:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class UniformReward:
+    """Wrapper config: discard env's per-step reward, emit a
+    constant `value` at every non-terminal AND terminal step.
+    Optimal policy under this wrapper collapses to "survive
+    longest" (reward is action-invariant within each step).
+
+    Causal-probe lever for the within-episode reward-timing
+    component of the proposed Asterix γ=0.999 deadly-triad
+    (high γ × structured-reward-timing × sharp policy). Original
+    Asterix has rewards cluster late (V's mean r_t/ep_len ≈ 0.57);
+    this wrapper removes that structure entirely. Test prediction
+    (`findings_v_init_continuation_steady_state`): if reward-
+    timing structure is necessary for the harm, swapping Asterix's
+    signal for `UniformReward` should collapse Cohen's d from
+    ~−1.0 (canonical) toward zero. If harm persists, reward-
+    timing isn't the load-bearing condition.
+
+    Value is required (no default) — author must choose a constant
+    matched to the original env's average per-step reward (Asterix
+    canonical: total ~22 over ~750 steps → ~0.03) to keep total
+    reward magnitude comparable across arms."""
+    value: float
+
+    def wrap(self, inner: Env) -> Env:
+        return UniformRewardEnv(inner=inner, value=self.value)
+
+    def measurement_keys(self) -> Mapping[str, float]:
+        return {'uniform_reward_value': float(self.value)}
+
+
 _WRAPPER_REGISTRY: dict[str, type[EnvWrapper]] = {
     'reward_scale': RewardScale,
     'reward_clip': RewardClip,
@@ -354,6 +385,7 @@ _WRAPPER_REGISTRY: dict[str, type[EnvWrapper]] = {
     'reward_densify': RewardDensify,
     'action_noise': ActionNoise,
     'potential_reward': PotentialReward,
+    'uniform_reward': UniformReward,
 }
 """Name → wrapper class. YAML's `wrappers: [{type: <name>, ...}]`
 parses each entry by looking up `<name>` here and instantiating
@@ -775,6 +807,47 @@ class PotentialShapedEnv:
         )
         shaped = reward + gamma_phi_next - phi_curr
         return next_obs, next_state, shaped, done, info
+
+    def observation_space(self, params: EnvParams) -> Box:
+        return self.inner.observation_space(params)
+
+    def action_space(self, params: EnvParams) -> Discrete:
+        return self.inner.action_space(params)
+
+
+@dataclass(frozen=True, slots=True)
+class UniformRewardEnv:
+    """Wraps a gymnax-style env, discarding inner reward and
+    emitting constant `value` at every step (including terminal).
+
+    Optimal policy collapses to "maximize episode length" since
+    reward is action-invariant at each step. Used as a within-γ
+    counterfactual to the structured-reward-timing condition of
+    the proposed Asterix γ=0.999 deadly-triad — see
+    `UniformReward` config dataclass for the full hypothesis."""
+    inner: Env
+    value: float
+
+    def reset(
+        self, rng: jax.Array, params: EnvParams,
+    ) -> tuple[jax.Array, EnvState]:
+        return self.inner.reset(rng, params)
+
+    def step(
+        self,
+        rng: jax.Array,
+        state: EnvState,
+        action: jax.Array,
+        params: EnvParams,
+    ) -> tuple[
+        jax.Array, EnvState, jax.Array, jax.Array, dict[str, object],
+    ]:
+        next_obs, next_state, reward, done, info = self.inner.step(
+            rng, state, action, params,
+        )
+        # Inner reward discarded; constant emitted at every step.
+        constant = jnp.full_like(reward, self.value)
+        return next_obs, next_state, constant, done, info
 
     def observation_space(self, params: EnvParams) -> Box:
         return self.inner.observation_space(params)
