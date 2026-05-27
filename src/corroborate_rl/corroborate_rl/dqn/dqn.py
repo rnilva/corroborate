@@ -39,7 +39,7 @@ from corroborate_rl.dqn.claims.optimizer import (
     OptimizerFactory,
     default_optimizer,
 )
-from corroborate_rl.dqn.claims.q_network import QFunction
+from corroborate_rl.dqn.claims.q_network import Params, QFunction
 from corroborate_rl.dqn.claims.replay import Replay, init_pending_n_step
 from corroborate_rl.dqn.eval import EvalBurstOut, eval_burst, train_with_eval
 from corroborate_rl.dqn.phases import (
@@ -87,6 +87,7 @@ def init_state(
     q_network: QFunction = mlp_q,
     replay: Replay = Replay(),
     state_hash_cardinality: int = 1,
+    init_online_params: Params | None = None,
 ) -> DQNState:
     """Build initial DQNState from a `jax.random.PRNGKey` directly.
 
@@ -101,7 +102,10 @@ def init_state(
     seed-axis). For non-vmap callers, pass
     `rng_key=jax.random.PRNGKey(seed)` directly."""
     init_key, env_key, run_key = jax.random.split(rng_key, 3)
-    online = q_network.init(init_key, obs_shape, n_actions)
+    if init_online_params is not None:
+        online = init_online_params
+    else:
+        online = q_network.init(init_key, obs_shape, n_actions)
     opt_state = optimizer.init(online)
     obs, env_state = env.reset(env_key, env_params)
     # Substrate stores obs at native shape — q_network handles the
@@ -246,6 +250,12 @@ def dqn(
     # sentinel-prefixed checkpoint keys these enable.
     keep_q_checkpoint_final: Annotated[bool, Exogenous] = False,
     keep_q_checkpoint_per_burst: Annotated[bool, Exogenous] = False,
+    # Optional initialization-from-checkpoint override. When set,
+    # replaces the freshly-initialized online_params (and target_params
+    # via copy) inside init_state. Used for "continue training from a
+    # saved policy" interventions. Exogenous because it's per-cell
+    # data, not a theoretical knob.
+    init_online_params: Annotated[Params | None, Exogenous] = None,
     # Cross-cutting HPs (no single Module owns these).
     gamma: float = 0.99,
     sync_period: int = 100,
@@ -375,6 +385,7 @@ def dqn(
         q_network=q_network,
         replay=replay,
         state_hash_cardinality=state_hash_cardinality,
+        init_online_params=init_online_params,
     )
 
     step_fn = partial(
