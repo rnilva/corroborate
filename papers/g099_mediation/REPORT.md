@@ -329,14 +329,25 @@ The reads-set audit identified 13 clean per-burst mediators. Several scalar `_la
 
 **Methodological**: The framework's typed primitives — `cross_env_consistency_binomial`, `stratified_arm_diff_pooled` (DL pool), `discover_adjacency` (PC), `partial_spearman` (per-env), `dynamic_partial_spearman` (TimeAggregationStatus), `dynamic_pc_adjacency` (per-burst PC) — form a graded-refusal hierarchy. Each primitive's typed result encodes the appropriate gate. The mediation question is asked at each granularity (cross-env aggregate / per-env scalar / per-env per-burst) and answered with primitive-specific status enums that prevent over-claiming.
 
-The same panel that supports "DDQN improves outcome cross-env directionally" (L1: p=0.003) supports "but the cross-env magnitude doesn't extrapolate" (L1 DL: verdict=NO_EFFECT) supports "Asterix's mediation channel is `pstate_bias`, FourRooms's is `argmax_ent`, SI's is `q_argmax_margin`" (L3 per-burst PC), and refuses to summarize a single cross-env mediation magnitude — because the structure doesn't admit one.
+The same panel that supports "DDQN improves outcome cross-env directionally" (L1: p=0.003) supports "but the cross-env magnitude doesn't extrapolate" (L1 DL: verdict=NO_EFFECT) supports "Asterix's clean mediation channel is `q_argmax_margin` (the per-state Bellman residual `pstate_bias` is tautological), FourRooms's is `argmax_ent`, MetaMaze's is `bg_magnitude`" (L3 per-burst PC), and refuses to summarize a single cross-env mediation magnitude — because the structure doesn't admit one.
 
 ## Figures
 
-- `figures/report_3layer_summary.png` — three-panel L1/L2/L3 summary
-- `figures/report_asterix_clean.png` — Asterix γ=0.99 per-burst trajectory + CI tests (cleanest case)
-- `figures/report_dynamic_5envs.png` — per-burst trajectories at the 5 envs with PC-detectable LINK
-- `figures/report_mediator_attribution.png` — per-env best mediator from the 14-candidate audit
+All figures regenerated with the tautology-corrected `CLEAN_MEDIATORS` set (MC-reading mediators excluded). Generator scripts at `scripts/` for reproducibility under different mediator-set choices.
+
+- `figures/report_3layer_summary_corrected.png` — three-panel L1 directional × L1 magnitude × L3 per-env best-clean-mediator summary
+- `figures/report_asterix_clean_corrected.png` — Asterix γ=0.99 per-burst trajectory + PC CI tests at the CLEAN best mediator `q_argmax_margin` (59%); title includes the 3-number tautology audit (raw 97%, REDQ-normalized 83%, clean 59%)
+- `figures/report_per_env_best_mediator.png` — per-env best clean mediator bar chart, color-coded by mediator family (Bellman/Q-shape/policy/state-coverage)
+- `figures/outcome_aggregation_raw_g099.png` — per-cell vs seed-aggregated outcome comparison (independent of mediator audit, retained from initial gen)
+- `figures/episode_cv_per_burst.png`, `figures/episode_std_per_burst.png` — outcome dispersion statistics (independent of mediator audit, retained)
+
+**Superseded v1 figures** (generated before tautology audit; preserved at `figures/_v1_superseded/` for revision-history traceability): `report_3layer_summary.png`, `report_asterix_clean.png`, `report_dynamic_5envs.png`, `report_mediator_attribution.png`, `step2_clean_g099.png`, `canonical_g099_consolidation.png`, `dynamic_g099_mediation.png`, `per_env_dynamic_mech_link.png`. These used the tautological `pstate_bias` (`Q − MC` per visited state) as a mediator candidate; the report's revision history flags them as misleading.
+
+**Generator scripts** at `scripts/`:
+- `_common.py` — defines `CLEAN_MEDIATORS` (the tautology-clean set) + the `TAUTOLOGICAL_BLOCKLIST`
+- `gen_3layer_summary.py` — produces `report_3layer_summary_corrected.png`
+- `gen_asterix_clean.py` — produces `report_asterix_clean_corrected.png`
+- `gen_per_env_best_mediator.py` — produces `report_per_env_best_mediator.png`
 
 ## Appendix: full candidate mediator set (γ=0.99 canonical)
 
