@@ -56,9 +56,16 @@ keep_q_checkpoint_final: true
 # Per-seed online-params pytree loaded from this template before
 # the cell's vmap. `{seed}` is the canonical placeholder; each
 # seed in the chunk (0..14) consumes its matching burst25 ckpt.
-# The msgpack carries online + target params; only online is
-# threaded into `dqn.init_online_params` (target is then mirrored
-# from online via `init_state`, matching the from-scratch path).
+# The msgpack carries online + target params; this sweep uses
+# load_target=False (the default) — only online is threaded into
+# `init_override.online_params` and target_params is then mirrored
+# from online via `init_state` (matches the from-scratch path).
+#
+# A sibling sweep that asks the steady-state-operator question
+# (does DDQN's clip relocate a paired (online, target) attractor?)
+# would set `init_q_checkpoint_load_target: true` here so both
+# msgpack fields land in the InitOverride — preserving the
+# τ-step staleness DDQN's bias-reduction premise depends on.
 init_q_checkpoint_path_template: experiments/data/asterix_g0999_canonical_n_eps20_ckpt/q_checkpoints/canonical_n_eps20/cell000_{seed}_burst25.msgpack
 
 envs:

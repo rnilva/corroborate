@@ -144,11 +144,10 @@ class DQNSweep:
     # Path template for "init from saved Q-checkpoint" interventions.
     # When set, every cell loads one msgpack-serialised `QCheckpoint`
     # per seed, stacks the `online_params` pytrees along a leading
-    # seed axis, and injects the batched pytree as `init_online_params`
-    # into the vmap'd `dqn` call. The dqn claim's `init_state`
-    # replaces the freshly-initialised online params with the loaded
-    # ones (target params then mirror online — same as the
-    # from-scratch path).
+    # seed axis, and injects the batched pytree as `init_override`
+    # (via `init_override_batched` on the grid point) into the
+    # vmap'd `dqn` call. The dqn claim's `init_state` replaces the
+    # freshly-initialised online params with the loaded ones.
     #
     # `{seed}` is the placeholder substituted per cell. Paths
     # resolve relative to the sweep's CWD when not absolute. Loads
@@ -166,6 +165,20 @@ class DQNSweep:
     # YAML form:
     #   init_q_checkpoint_path_template: experiments/data/.../q_checkpoints/canonical_n_eps20/cell000_{seed}_burst25.msgpack
     init_q_checkpoint_path_template: str | None = None
+    # When True AND `init_q_checkpoint_path_template` is set, the
+    # loaded `InitOverride` populates BOTH `online_params` AND
+    # `target_params` from the same msgpack file (the QCheckpoint
+    # record carries both). The resumed cell starts with the source-
+    # trajectory's actual (online, target) pair — preserving the
+    # τ-step staleness DDQN's bias-reduction premise depends on.
+    #
+    # Default False = legacy behaviour (target mirrors online, same
+    # as the from-scratch path; matches the running asterix_g0999
+    # _init_v_burst25_continue_ddqn sweep). Set True for experiments
+    # that probe the steady-state operator's effect on a paired
+    # (online, target) attractor — see CHECKPOINT_RESUME_DESIGN.md
+    # §7 step 5 for the experiment-design implication.
+    init_q_checkpoint_load_target: bool = False
 
     def build_interventions(
         self,
@@ -227,6 +240,9 @@ def _build_sweep(node: Mapping[str, object]) -> DQNSweep:
     init_q_checkpoint_path_template = (
         _build_init_q_checkpoint_path_template(node)
     )
+    init_q_checkpoint_load_target = (
+        _build_init_q_checkpoint_load_target(node)
+    )
     interventions_raw = node.get('interventions')
     if not isinstance(interventions_raw, list):
         raise TypeError(
@@ -249,6 +265,7 @@ def _build_sweep(node: Mapping[str, object]) -> DQNSweep:
         merge_top_level=merge_top_level,
         pre_registered_bridges=pre_registered_bridges,
         init_q_checkpoint_path_template=init_q_checkpoint_path_template,
+        init_q_checkpoint_load_target=init_q_checkpoint_load_target,
     )
 
 
@@ -330,6 +347,18 @@ def _build_init_q_checkpoint_path_template(
         raise ValueError(
             f'sweep.init_q_checkpoint_path_template must contain '
             f"'{{seed}}' placeholder; got {v!r}",
+        )
+    return v
+
+
+def _build_init_q_checkpoint_load_target(
+    node: Mapping[str, object],
+) -> bool:
+    v = node.get('init_q_checkpoint_load_target', False)
+    if not isinstance(v, bool):
+        raise TypeError(
+            f'sweep.init_q_checkpoint_load_target must be bool; '
+            f'got {type(v).__name__}',
         )
     return v
 
@@ -666,12 +695,13 @@ def dispatch_sweep(sweep: DQNSweep) -> tuple[Path, Path]:
         intervention = cfg.do_effect
         # Flat grid_points: env × chunk × wrappers. When the
         # sweep's `init_q_checkpoint_path_template` is set, each
-        # grid point carries `init_online_params_batched`: a per-
-        # seed online_params pytree stacked along axis 0. Loaded
-        # eagerly (before dispatch) so a missing checkpoint
-        # raises here, not mid-vmap.
+        # grid point carries `init_override_batched`: an InitOverride
+        # whose online_params (and target_params when load_target=
+        # True) carry per-seed pytrees stacked along axis 0. Loaded
+        # eagerly (before dispatch) so a missing checkpoint raises
+        # here, not mid-vmap.
         from corroborate_rl.dqn.q_checkpoint import (
-            load_batched_online_params,
+            load_batched_init_override,
         )
         grid_points: list[Mapping[str, object]] = []
         for ec in env_configs:
@@ -682,10 +712,13 @@ def dispatch_sweep(sweep: DQNSweep) -> tuple[Path, Path]:
                     'wrappers': ec.wrappers,
                 }
                 if sweep.init_q_checkpoint_path_template is not None:
-                    gp['init_online_params_batched'] = (
-                        load_batched_online_params(
+                    gp['init_override_batched'] = (
+                        load_batched_init_override(
                             sweep.init_q_checkpoint_path_template,
                             chunk,
+                            load_target=(
+                                sweep.init_q_checkpoint_load_target
+                            ),
                         )
                     )
                 grid_points.append(gp)

@@ -52,6 +52,7 @@ import numpy as np
 from flax import serialization as _fs
 
 from corroborate_rl.dqn.claims.q_network import Params
+from corroborate_rl.dqn.init_override import InitOverride
 
 
 # ============ In-record sentinel keys ============
@@ -247,6 +248,43 @@ def _as_jax_array(v: object) -> jax.Array:
 
 # ============ Batched-loading for vmap-over-seeds ============
 
+def _stack_per_seed_params(
+    per_seed: Sequence[Params], *, field_label: str,
+    ref_seed: int, ref_seeds: Sequence[int],
+) -> Params:
+    """Structural-uniformity check + leaf-wise stack along axis 0.
+
+    Shared body of `load_batched_online_params` /
+    `load_batched_init_override` — the param-dict keys + per-key
+    shapes must match across the per-seed loads, otherwise
+    `jnp.stack` would raise an opaque error mid-loop. The
+    `field_label` makes the error message name which override slot
+    (online vs target) diverges."""
+    import jax.numpy as jnp
+    ref_keys = set(per_seed[0].keys())
+    ref_shapes = {k: per_seed[0][k].shape for k in ref_keys}
+    for i, params in enumerate(per_seed[1:], start=1):
+        keys = set(params.keys())
+        if keys != ref_keys:
+            raise ValueError(
+                f'{field_label}: param-dict keys differ between '
+                f'seed {ref_seed} ({sorted(ref_keys)}) '
+                f'and seed {ref_seeds[i]} ({sorted(keys)}). '
+                f"Checkpoints don't share architecture.",
+            )
+        for k in ref_keys:
+            if params[k].shape != ref_shapes[k]:
+                raise ValueError(
+                    f'{field_label}: param {k!r} shape differs '
+                    f'between seed {ref_seed} ({ref_shapes[k]}) '
+                    f'and seed {ref_seeds[i]} ({params[k].shape}).',
+                )
+    return {
+        k: jnp.stack([params[k] for params in per_seed], axis=0)
+        for k in ref_keys
+    }
+
+
 def load_batched_online_params(
     path_template: str, seeds: Sequence[int],
 ) -> Params:
@@ -267,7 +305,6 @@ def load_batched_online_params(
     checkpoint" interventions; the loaded pytree is threaded
     through `grid_point['init_online_params_batched']` to the
     DQN runner."""
-    import jax.numpy as jnp
     if not seeds:
         raise ValueError('seeds must be non-empty')
     per_seed: list[Params] = []
@@ -275,31 +312,63 @@ def load_batched_online_params(
         path = Path(path_template.format(seed=s))
         ckpt = load(path)
         per_seed.append(ckpt.online_params)
-    # Validate structural uniformity before stacking — otherwise
-    # `jnp.stack` would raise an opaque shape error mid-loop.
-    ref_keys = set(per_seed[0].keys())
-    ref_shapes = {k: per_seed[0][k].shape for k in ref_keys}
-    for i, params in enumerate(per_seed[1:], start=1):
-        keys = set(params.keys())
-        if keys != ref_keys:
-            raise ValueError(
-                f'load_batched_online_params: param-dict keys '
-                f'differ between seed {seeds[0]} ({sorted(ref_keys)}) '
-                f'and seed {seeds[i]} ({sorted(keys)}). Checkpoints '
-                f"don't share architecture.",
-            )
-        for k in ref_keys:
-            if params[k].shape != ref_shapes[k]:
-                raise ValueError(
-                    f'load_batched_online_params: param {k!r} shape '
-                    f'differs between seed {seeds[0]} '
-                    f'({ref_shapes[k]}) and seed {seeds[i]} '
-                    f'({params[k].shape}).',
-                )
-    return {
-        k: jnp.stack([params[k] for params in per_seed], axis=0)
-        for k in ref_keys
-    }
+    return _stack_per_seed_params(
+        per_seed, field_label='load_batched_online_params',
+        ref_seed=seeds[0], ref_seeds=seeds,
+    )
+
+
+def load_batched_init_override(
+    path_template: str, seeds: Sequence[int], *, load_target: bool,
+) -> InitOverride:
+    """Load one checkpoint per seed, return an `InitOverride` whose
+    `online_params` (and optionally `target_params`) carry the
+    per-seed pytrees stacked along a leading seed-axis.
+
+    `load_target=False` is the default — produces an InitOverride
+    matching the legacy `load_batched_online_params` semantic
+    (target_params left None, so init_state's "target mirrors
+    online" path fires).
+
+    `load_target=True` populates both fields from the SAME msgpack
+    file's `online_params` + `target_params` entries. The semantic
+    shift: the resumed cell starts with the source-trajectory's
+    actual (online, target) pair preserving the τ-step staleness
+    that DDQN's bias-reduction premise depends on. Use this when
+    the experiment asks about the steady-state operator's effect
+    on a paired (online, target) attractor, not the early-dynamics
+    question (which is answered by load_target=False).
+
+    Architecture-uniformity validation mirrors
+    `load_batched_online_params` — under load_target=True, both
+    online and target are validated independently."""
+    if not seeds:
+        raise ValueError('seeds must be non-empty')
+    per_seed_online: list[Params] = []
+    per_seed_target: list[Params] = []
+    for s in seeds:
+        path = Path(path_template.format(seed=s))
+        ckpt = load(path)
+        per_seed_online.append(ckpt.online_params)
+        if load_target:
+            per_seed_target.append(ckpt.target_params)
+    online_stacked = _stack_per_seed_params(
+        per_seed_online,
+        field_label='load_batched_init_override.online_params',
+        ref_seed=seeds[0], ref_seeds=seeds,
+    )
+    target_stacked = (
+        _stack_per_seed_params(
+            per_seed_target,
+            field_label='load_batched_init_override.target_params',
+            ref_seed=seeds[0], ref_seeds=seeds,
+        )
+        if load_target else None
+    )
+    return InitOverride(
+        online_params=online_stacked,
+        target_params=target_stacked,
+    )
 
 
 __all__ = [
@@ -311,6 +380,7 @@ __all__ = [
     'checkpoint_key',
     'checkpoint_path',
     'load',
+    'load_batched_init_override',
     'load_batched_online_params',
     'parse_checkpoint_key',
     'save',

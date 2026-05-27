@@ -38,6 +38,7 @@ from corroborate_rl.dqn.claims.replay import Replay
 from corroborate_rl.dqn.dqn import dqn
 from corroborate_rl.dqn.q_checkpoint import (
     QCheckpoint,
+    load_batched_init_override,
     load_batched_online_params,
     save,
 )
@@ -229,6 +230,43 @@ def test_init_q_checkpoint_path_template_non_string_rejected(
         _ = load_sweep(p, reg=reg)
 
 
+def test_init_q_checkpoint_load_target_defaults_false(
+    tmp_path: Path, reg: Registry,
+) -> None:
+    """Existing YAMLs without the new flag default to False — keeps
+    the running sweep's "target mirrors online" semantic."""
+    p = tmp_path / 'sweep.yaml'
+    _ = p.write_text(_MINIMAL_BODY)
+    s = load_sweep(p, reg=reg)
+    assert s.init_q_checkpoint_load_target is False
+
+
+def test_init_q_checkpoint_load_target_explicit_true(
+    tmp_path: Path, reg: Registry,
+) -> None:
+    """`init_q_checkpoint_load_target: true` parses through."""
+    p = tmp_path / 'sweep.yaml'
+    _ = p.write_text(
+        _MINIMAL_BODY + 'init_q_checkpoint_load_target: true\n',
+    )
+    s = load_sweep(p, reg=reg)
+    assert s.init_q_checkpoint_load_target is True
+
+
+def test_init_q_checkpoint_load_target_non_bool_rejected(
+    tmp_path: Path, reg: Registry,
+) -> None:
+    """Non-bool YAML values are a schema violation."""
+    p = tmp_path / 'sweep.yaml'
+    _ = p.write_text(
+        _MINIMAL_BODY + 'init_q_checkpoint_load_target: "yes"\n',
+    )
+    with pytest.raises(
+        TypeError, match='init_q_checkpoint_load_target',
+    ):
+        _ = load_sweep(p, reg=reg)
+
+
 # ============ End-to-end: dqn() resumption from ckpt ============
 
 _SLOW_E2E = pytest.mark.slow
@@ -382,6 +420,189 @@ def test_init_override_rejects_both_kwargs() -> None:
             q_network=mlp, replay=_REPLAY_SHORT,
             init_online_params=params,
             init_override=InitOverride(online_params=params),
+        )
+
+
+# ============ Phase 2 target_params decoupling ============
+
+
+def _write_decoupled_ckpts(
+    base_dir: Path, *, seeds: tuple[int, ...],
+    obs_shape: tuple[int, ...] = (4,),
+    n_actions: int = 2,
+) -> str:
+    """Materialise one msgpack per seed with DIFFERENT
+    online_params vs target_params — closed-form basis for the
+    "target_params loaded != online_params" assertion. Uses two
+    distinct PRNGKey draws + a constant target-bias perturbation
+    so EVERY leaf differs (the substrate's MLP biases init to 0
+    so two fresh inits both have b0=b1=b2=0; without the
+    perturbation the test couldn't distinguish target-loaded
+    from target-mirrors-online on bias keys)."""
+    mlp = MLP(hidden=(8, 8))
+    for s in seeds:
+        online = mlp.init(
+            jax.random.PRNGKey(s), obs_shape, n_actions,
+        )
+        target_base = mlp.init(
+            jax.random.PRNGKey(s + 10_000), obs_shape, n_actions,
+        )
+        # Add a constant offset to every target leaf so biases
+        # also differ from online (online biases are all 0).
+        target = {
+            k: v + jnp.float32(0.1) for k, v in target_base.items()
+        }
+        ckpt = QCheckpoint(
+            online_params=online, target_params=target,
+            burst=25, global_step=500_000,
+        )
+        save(base_dir / f'seed{s}.msgpack', ckpt)
+    return str(base_dir / 'seed{seed}.msgpack')
+
+
+def test_load_batched_init_override_load_target_false(
+    tmp_path: Path,
+) -> None:
+    """`load_target=False` returns an InitOverride with online_params
+    populated AND target_params=None — the legacy behaviour where
+    init_state's "target mirrors online" fallback fires."""
+    seeds = (0, 1)
+    template = _write_decoupled_ckpts(tmp_path, seeds=seeds)
+    override = load_batched_init_override(
+        template, seeds, load_target=False,
+    )
+    assert override.online_params is not None
+    assert override.target_params is None
+    # Online-stack shape matches the legacy helper's shape.
+    assert override.online_params['w0'].shape == (2, 4, 8)
+
+
+def test_load_batched_init_override_load_target_true(
+    tmp_path: Path,
+) -> None:
+    """`load_target=True` returns BOTH fields populated from the
+    same msgpack family. Each leaf carries the seed-batch stack."""
+    seeds = (0, 1)
+    template = _write_decoupled_ckpts(tmp_path, seeds=seeds)
+    override = load_batched_init_override(
+        template, seeds, load_target=True,
+    )
+    assert override.online_params is not None
+    assert override.target_params is not None
+    assert override.online_params['w0'].shape == (2, 4, 8)
+    assert override.target_params['w0'].shape == (2, 4, 8)
+
+    # The two stacks MUST differ at every seed — the ckpt-write
+    # helper draws online and target from different PRNGKeys.
+    for s_idx in range(len(seeds)):
+        for k in override.online_params:
+            np.testing.assert_array_equal(
+                np.asarray(override.online_params[k][s_idx]).shape,
+                np.asarray(override.target_params[k][s_idx]).shape,
+                err_msg=f'shape mismatch at seed {s_idx} param {k!r}',
+            )
+            # Verify the two arrays differ — confirms the test
+            # ckpt actually carries decoupled params (otherwise
+            # load_target=True would be indistinguishable from
+            # load_target=False).
+            assert not np.array_equal(
+                np.asarray(override.online_params[k][s_idx]),
+                np.asarray(override.target_params[k][s_idx]),
+            ), (
+                f'test ckpt at seed {s_idx} param {k!r}: online '
+                f'== target; the test fixture is degenerate'
+            )
+
+
+def test_init_state_target_params_decouples_under_load_target_true(
+    tmp_path: Path,
+) -> None:
+    """Closed-form contract: under `load_target=True`,
+    `init_state(init_override=...)` produces a DQNState whose
+    target_params is bit-identical to the msgpack's target_params
+    (NOT the online_params, NOT q_network.init(...)). Under
+    load_target=False, target_params mirrors online_params per
+    the legacy "target = online" fallback."""
+    import optax
+    from corroborate_rl.dqn.dqn import init_state
+    from corroborate_rl.env_catalogue import get, make_env
+    env_spec = get('CartPole-v1')
+    env, env_params = make_env(env_spec)
+    mlp = MLP(hidden=(8, 8))
+    optimizer = optax.adam(1e-3)
+    seeds = (0,)
+    template = _write_decoupled_ckpts(tmp_path, seeds=seeds)
+
+    # load_target=True path: state.target_params must bit-equal
+    # the msgpack's target_params (the seed-0 slice of the batch).
+    override_with_target = load_batched_init_override(
+        template, seeds, load_target=True,
+    )
+    assert override_with_target.target_params is not None
+    # Strip the leading seed-axis (single-seed test) so init_state
+    # sees the same per-seed pytree shape it would under vmap.
+    per_seed_online: Params = {
+        k: v[0] for k, v in override_with_target.online_params.items()
+    } if override_with_target.online_params is not None else {}
+    per_seed_target: Params = {
+        k: v[0] for k, v in override_with_target.target_params.items()
+    }
+    from corroborate_rl.dqn.init_override import InitOverride
+    per_seed_override = InitOverride(
+        online_params=per_seed_online,
+        target_params=per_seed_target,
+    )
+    state = init_state(
+        env=env, env_params=env_params,
+        obs_shape=(4,), n_actions=2,
+        rng_key=jax.random.PRNGKey(0), optimizer=optimizer,
+        q_network=mlp, replay=_REPLAY_SHORT,
+        init_override=per_seed_override,
+    )
+    for k in per_seed_target:
+        np.testing.assert_array_equal(
+            np.asarray(state.target_params[k]),
+            np.asarray(per_seed_target[k]),
+            err_msg=(
+                f'load_target=True: state.target_params[{k!r}] '
+                f'!= msgpack target_params (decoupling broken)'
+            ),
+        )
+        # And state.target_params MUST NOT equal online_params
+        # (the test ckpt's online/target differ by construction).
+        assert not np.array_equal(
+            np.asarray(state.target_params[k]),
+            np.asarray(per_seed_online[k]),
+        ), (
+            f'load_target=True: state.target_params[{k!r}] == '
+            f'online_params; mirror-online path leaked'
+        )
+
+    # load_target=False path: state.target_params mirrors online,
+    # so it equals per_seed_online (not per_seed_target).
+    override_no_target = load_batched_init_override(
+        template, seeds, load_target=False,
+    )
+    assert override_no_target.target_params is None
+    per_seed_online_only_override = InitOverride(
+        online_params=per_seed_online,
+        target_params=None,
+    )
+    state_no_target = init_state(
+        env=env, env_params=env_params,
+        obs_shape=(4,), n_actions=2,
+        rng_key=jax.random.PRNGKey(0), optimizer=optimizer,
+        q_network=mlp, replay=_REPLAY_SHORT,
+        init_override=per_seed_online_only_override,
+    )
+    for k in per_seed_online:
+        np.testing.assert_array_equal(
+            np.asarray(state_no_target.target_params[k]),
+            np.asarray(per_seed_online[k]),
+            err_msg=(
+                f'load_target=False: state.target_params[{k!r}] '
+                f'must mirror online (legacy fallback)'
+            ),
         )
 
 

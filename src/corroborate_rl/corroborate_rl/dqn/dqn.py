@@ -132,6 +132,18 @@ def init_state(
         online = init_override.online_params
     else:
         online = q_network.init(init_key, obs_shape, n_actions)
+    # Same empty-dict guard for the override's target field: a
+    # populated mapping takes the slot, anything else falls back to
+    # "target mirrors online" (the historical default — matches
+    # Phase 1's pre-decoupling semantic).
+    if (
+        init_override is not None
+        and init_override.target_params is not None
+        and init_override.target_params
+    ):
+        target = init_override.target_params
+    else:
+        target = online
     opt_state = optimizer.init(online)
     obs, env_state = env.reset(env_key, env_params)
     # Substrate stores obs at native shape — q_network handles the
@@ -140,7 +152,7 @@ def init_state(
     # shape too, so the rank flowing through training is consistent.
     return DQNState(
         online_params=online,
-        target_params=online,
+        target_params=target,
         opt_state=opt_state,
         replay=replay.init(obs_shape),
         pending_n_step=init_pending_n_step(obs_shape),
