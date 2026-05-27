@@ -376,6 +376,35 @@ class UniformReward:
         return {'uniform_reward_value': float(self.value)}
 
 
+@dataclass(frozen=True, slots=True)
+class EpisodeLengthCap:
+    """Wrapper config: override the inner env's `max_steps_in_episode`
+    by replacing the EnvParams field on every reset/step call.
+
+    Causal-probe lever for the bg-stabilization-failure hypothesis
+    at Asterix γ=0.999 (see `findings_bg_stabilization_mechanism`).
+    The mechanism predicts that when effective horizon 1/(1−γ)
+    ≈ episode length, bootstrap chains rarely hit terminal anchors
+    and the bg-wedge grows unboundedly. Capping ep_len below the
+    effective horizon should restore terminal anchoring, peak-and-
+    decay bg dynamics, and Hasselt-canonical DDQN behaviour.
+
+    Test prediction at Asterix γ=0.999 with max_steps=200
+    (vs default 1000, eff_H=1000): bg should peak early and decay;
+    Cohen's d_raw should shift from canonical −0.68 (harm) toward
+    zero or positive (Hasselt-canonical regime restored).
+
+    Uses gymnax/flax-struct `params.replace(max_steps_in_episode=…)`
+    on every env call — no env_state augmentation needed."""
+    max_steps: int
+
+    def wrap(self, inner: Env) -> Env:
+        return EpisodeLengthCappedEnv(inner=inner, max_steps=self.max_steps)
+
+    def measurement_keys(self) -> Mapping[str, float]:
+        return {'episode_length_cap': float(self.max_steps)}
+
+
 _WRAPPER_REGISTRY: dict[str, type[EnvWrapper]] = {
     'reward_scale': RewardScale,
     'reward_clip': RewardClip,
@@ -386,6 +415,7 @@ _WRAPPER_REGISTRY: dict[str, type[EnvWrapper]] = {
     'action_noise': ActionNoise,
     'potential_reward': PotentialReward,
     'uniform_reward': UniformReward,
+    'episode_length_cap': EpisodeLengthCap,
 }
 """Name → wrapper class. YAML's `wrappers: [{type: <name>, ...}]`
 parses each entry by looking up `<name>` here and instantiating
@@ -813,6 +843,48 @@ class PotentialShapedEnv:
 
     def action_space(self, params: EnvParams) -> Discrete:
         return self.inner.action_space(params)
+
+
+@dataclass(frozen=True, slots=True)
+class EpisodeLengthCappedEnv:
+    """Wraps a gymnax-style env, overriding `max_steps_in_episode`
+    on the EnvParams at every reset/step call. The inner env's
+    terminal-on-timeout logic respects the smaller cap.
+
+    See `EpisodeLengthCap` config dataclass for the hypothesis-test
+    motivation (bg-stabilization at Asterix γ=0.999)."""
+    inner: Env
+    max_steps: int
+
+    def _cap(self, params: EnvParams) -> EnvParams:
+        # gymnax EnvParams is a flax struct — `.replace` returns a
+        # new instance with the field overridden. Cast keeps pyright
+        # happy across env-specific param types.
+        return params.replace(  # type: ignore[attr-defined]
+            max_steps_in_episode=self.max_steps,
+        )
+
+    def reset(
+        self, rng: jax.Array, params: EnvParams,
+    ) -> tuple[jax.Array, EnvState]:
+        return self.inner.reset(rng, self._cap(params))
+
+    def step(
+        self,
+        rng: jax.Array,
+        state: EnvState,
+        action: jax.Array,
+        params: EnvParams,
+    ) -> tuple[
+        jax.Array, EnvState, jax.Array, jax.Array, dict[str, object],
+    ]:
+        return self.inner.step(rng, state, action, self._cap(params))
+
+    def observation_space(self, params: EnvParams) -> Box:
+        return self.inner.observation_space(self._cap(params))
+
+    def action_space(self, params: EnvParams) -> Discrete:
+        return self.inner.action_space(self._cap(params))
 
 
 @dataclass(frozen=True, slots=True)
