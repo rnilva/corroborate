@@ -338,6 +338,7 @@ All figures regenerated with the tautology-corrected `CLEAN_MEDIATORS` set (MC-r
 - `figures/report_3layer_summary_corrected.png` — three-panel L1 directional × L1 magnitude × L3 per-env best-clean-mediator summary
 - `figures/report_asterix_clean_corrected.png` — Asterix γ=0.99 per-burst trajectory + PC CI tests at the CLEAN best mediator `q_argmax_margin` (59%); title includes the 3-number tautology audit (raw 97%, REDQ-normalized 83%, clean 59%)
 - `figures/report_per_env_best_mediator.png` — per-env best clean mediator bar chart, color-coded by mediator family (Bellman/Q-shape/policy/state-coverage)
+- `figures/report_dynamic_per_env_corrected.png` — per-burst dynamic mediation trajectories at the 7 envs with PC-detectable LINK, using each env's best CLEAN mediator (ρ_marg trajectory in blue, ρ_partial in red, absorbed area in gold); shows the per-burst SIGN_FLIP / WEAK_TV / d-sep% structure that the per-env scalar absorption table aggregates
 - `figures/outcome_aggregation_raw_g099.png` — per-cell vs seed-aggregated outcome comparison (independent of mediator audit, retained from initial gen)
 - `figures/episode_cv_per_burst.png`, `figures/episode_std_per_burst.png` — outcome dispersion statistics (independent of mediator audit, retained)
 
@@ -348,6 +349,7 @@ All figures regenerated with the tautology-corrected `CLEAN_MEDIATORS` set (MC-r
 - `gen_3layer_summary.py` — produces `report_3layer_summary_corrected.png`
 - `gen_asterix_clean.py` — produces `report_asterix_clean_corrected.png`
 - `gen_per_env_best_mediator.py` — produces `report_per_env_best_mediator.png`
+- `gen_dynamic_per_env.py` — produces `report_dynamic_per_env_corrected.png` (per-burst ρ trajectories per env with best clean mediator)
 
 ## Appendix: full candidate mediator set (γ=0.99 canonical)
 
