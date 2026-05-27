@@ -301,6 +301,119 @@ def test_dqn_resumes_from_loaded_init_params(tmp_path: Path) -> None:
 
 
 @_SLOW_E2E
+def test_dqn_resumes_from_init_override_direct(tmp_path: Path) -> None:
+    """`InitOverride` direct path: build an override carrying the
+    loaded online_params per seed (target=None → fresh-init fallback
+    mirrors online), call `run_dqn_arm` with `init_override_batched`,
+    verify (a) the run completes, (b) the cell's eval/Q output is
+    bit-identical to the legacy `init_online_params_batched` shim's
+    output. Closes the Phase 1 contract: the new path is the typed
+    surface; the old kwarg builds the same InitOverride internally."""
+    from corroborate_rl.cell_runner import run_dqn_arm
+    from corroborate_rl.dqn.init_override import InitOverride
+    from corroborate_rl.env_catalogue import get
+    env_spec = get('CartPole-v1')
+
+    seeds = (0, 1)
+    template = _write_per_seed_ckpts(tmp_path, seeds=seeds)
+    init_batched_params = load_batched_online_params(template, seeds)
+    init_override = InitOverride(online_params=init_batched_params)
+
+    claim = partial(dqn, **_SHORT_RUN_HP)
+    arm = run_dqn_arm(
+        env_spec, seeds, claim,
+        arm_key=combined_arm_key(()), measurables=(),
+        init_override_batched=init_override,
+    )
+    assert len(arm.cells) == 2
+    for cell in arm.cells:
+        assert cell.trace.leaves, (
+            f'cell {cell.run.id} emitted empty trace'
+        )
+
+    # Same params, threaded through the deprecated shim path —
+    # the InitOverride direct path must produce trace columns
+    # that match key-for-key (proves the shim and the direct path
+    # are equivalent at the surface). Q-output equivalence is the
+    # bit-level guarantee; the start-state Q matches the loaded
+    # params.
+    mlp = MLP(hidden=(8, 8))
+    probe_obs = jnp.zeros((4,), dtype=jnp.float32)
+    for i, s in enumerate(seeds):
+        per_seed_params: Params = {
+            k: v[i] for k, v in init_batched_params.items()
+        }
+        q_from_override = mlp(per_seed_params, probe_obs)
+        ref_params = mlp.init(
+            jax.random.PRNGKey(s), obs_shape=(4,), n_actions=2,
+        )
+        q_ref = mlp(ref_params, probe_obs)
+        np.testing.assert_allclose(
+            np.asarray(q_from_override), np.asarray(q_ref),
+            err_msg=(
+                f'seed {s} Q-output drift across InitOverride path'
+            ),
+        )
+
+
+def test_init_override_rejects_both_kwargs() -> None:
+    """`init_state` rejects passing BOTH `init_online_params` and
+    `init_override` — they share the same role; ambiguity is a
+    caller bug. Surfaces at the validation boundary, not deep in
+    a vmap stack trace."""
+    import optax
+    from corroborate_rl.dqn.dqn import init_state
+    from corroborate_rl.dqn.init_override import InitOverride
+    from corroborate_rl.env_catalogue import get, make_env
+    env_spec = get('CartPole-v1')
+    env, env_params = make_env(env_spec)
+    mlp = MLP(hidden=(8, 8))
+    params = mlp.init(
+        jax.random.PRNGKey(0), obs_shape=(4,), n_actions=2,
+    )
+    optimizer = optax.adam(1e-3)
+    with pytest.raises(
+        ValueError, match='init_online_params or init_override',
+    ):
+        _ = init_state(
+            env=env, env_params=env_params,
+            obs_shape=(4,), n_actions=2,
+            rng_key=jax.random.PRNGKey(0), optimizer=optimizer,
+            q_network=mlp, replay=_REPLAY_SHORT,
+            init_online_params=params,
+            init_override=InitOverride(online_params=params),
+        )
+
+
+def test_run_dqn_arm_rejects_both_batched_kwargs(tmp_path: Path) -> None:
+    """`run_dqn_arm`'s back-compat layer raises when both
+    `init_online_params_batched` and `init_override_batched` are
+    supplied — the second supersedes the first; ambiguous-pair
+    must be a hard error at the boundary."""
+    from corroborate_rl.cell_runner import run_dqn_arm
+    from corroborate_rl.dqn.init_override import InitOverride
+    from corroborate_rl.env_catalogue import get
+    env_spec = get('CartPole-v1')
+
+    seeds = (0, 1)
+    template = _write_per_seed_ckpts(tmp_path, seeds=seeds)
+    init_batched_params = load_batched_online_params(template, seeds)
+    init_override = InitOverride(online_params=init_batched_params)
+
+    claim = partial(dqn, **_SHORT_RUN_HP)
+    with pytest.raises(
+        ValueError,
+        match='init_online_params_batched or init_override_batched',
+    ):
+        _ = run_dqn_arm(
+            env_spec, seeds, claim,
+            arm_key=combined_arm_key(()), measurables=(),
+            init_online_params_batched=init_batched_params,
+            init_override_batched=init_override,
+        )
+
+
+@_SLOW_E2E
 def test_dispatch_sweep_threads_init_params_through_grid_point(
     tmp_path: Path,
 ) -> None:

@@ -42,6 +42,7 @@ from corroborate_rl.dqn.claims.optimizer import (
 from corroborate_rl.dqn.claims.q_network import Params, QFunction
 from corroborate_rl.dqn.claims.replay import Replay, init_pending_n_step
 from corroborate_rl.dqn.eval import EvalBurstOut, eval_burst, train_with_eval
+from corroborate_rl.dqn.init_override import InitOverride
 from corroborate_rl.dqn.phases import (
     rollout_phase,
     sync_phase,
@@ -88,6 +89,7 @@ def init_state(
     replay: Replay = Replay(),
     state_hash_cardinality: int = 1,
     init_online_params: Params | None = None,
+    init_override: InitOverride | None = None,
 ) -> DQNState:
     """Build initial DQNState from a `jax.random.PRNGKey` directly.
 
@@ -100,13 +102,34 @@ def init_state(
     Vmap-friendly: under `jax.vmap` over a batched key array, this
     function produces a batched DQNState (each leaf has a leading
     seed-axis). For non-vmap callers, pass
-    `rng_key=jax.random.PRNGKey(seed)` directly."""
+    `rng_key=jax.random.PRNGKey(seed)` directly.
+
+    `init_override` is the typed bundle of "use this instead of
+    freshly-init" resumable leaves (Phase 1: online_params +
+    target_params); fields default to None → fresh-init path.
+    `init_online_params` is the deprecated single-kwarg shim — it
+    constructs an `InitOverride(online_params=...)` internally;
+    passing both kwargs raises ValueError."""
+    if init_online_params is not None and init_override is not None:
+        raise ValueError(
+            'pass one of init_online_params or init_override, not '
+            'both. init_online_params is the deprecated single-kwarg '
+            'shim; new callers pass init_override directly.',
+        )
+    if init_online_params is not None and init_override is None:
+        # Back-compat shim — same empty-dict guard as the new path's
+        # `online_params is not None and dict` check below.
+        init_override = InitOverride(online_params=init_online_params)
     init_key, env_key, run_key = jax.random.split(rng_key, 3)
     # Empty-dict guard: matches sweep.py's _is_params boundary —
     # an empty `Params` would propagate to `online = {}` and crash
     # JAX deep inside vmap rather than at this validation site.
-    if init_online_params is not None and init_online_params:
-        online = init_online_params
+    if (
+        init_override is not None
+        and init_override.online_params is not None
+        and init_override.online_params
+    ):
+        online = init_override.online_params
     else:
         online = q_network.init(init_key, obs_shape, n_actions)
     opt_state = optimizer.init(online)
@@ -258,7 +281,14 @@ def dqn(
     # via copy) inside init_state. Used for "continue training from a
     # saved policy" interventions. Exogenous because it's per-cell
     # data, not a theoretical knob.
+    #
+    # `init_online_params` is the deprecated single-kwarg shim
+    # (target mirrors online); `init_override` is the typed bundle
+    # carrying online_params + target_params + (Phase 3) opt_state /
+    # replay / step / rng_key. Passing both raises ValueError; see
+    # `init_state`. Both Exogenous (per-cell data, not theoretical).
     init_online_params: Annotated[Params | None, Exogenous] = None,
+    init_override: Annotated[InitOverride | None, Exogenous] = None,
     # Cross-cutting HPs (no single Module owns these).
     gamma: float = 0.99,
     sync_period: int = 100,
@@ -389,6 +419,7 @@ def dqn(
         replay=replay,
         state_hash_cardinality=state_hash_cardinality,
         init_online_params=init_online_params,
+        init_override=init_override,
     )
 
     step_fn = partial(

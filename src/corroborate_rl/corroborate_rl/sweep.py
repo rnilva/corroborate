@@ -17,9 +17,15 @@ inflation experiments).
 
 Optional `init_online_params_batched: Params` — per-seed
 stacked online-param pytree consumed by `dqn`'s
-`init_online_params` kwarg. Materialised at sweep-dispatch time
-by `dispatch_sweep` when the sweep's
-`init_q_checkpoint_path_template` is set.
+`init_online_params` kwarg (deprecated shim).
+
+Optional `init_override_batched: InitOverride` — per-seed
+stacked override bundle (Phase 1: online_params + target_params)
+consumed by `dqn`'s `init_override` kwarg. Materialised at
+sweep-dispatch time by `dispatch_sweep` when the sweep's
+`init_q_checkpoint_path_template` is set; preferred over
+the legacy `init_online_params_batched` (the two are mutually
+exclusive — `run_dqn_arm` raises if both are passed).
 
 Other keys are an error: HP variation lives in the substrate's
 `base` (substrate's outer loop iterates HP regimes by building
@@ -38,6 +44,7 @@ import jax
 
 from corroborate_rl.cell_runner import run_dqn_arm
 from corroborate_rl.dqn.claims.q_network import Params
+from corroborate_rl.dqn.init_override import InitOverride
 from corroborate_rl.dqn.invariants import DQNTrajectoryRecord
 from corroborate_rl.env_catalogue import EnvSpec
 from corroborate.measurables import Measurable
@@ -54,17 +61,22 @@ def _is_tuple_of_int(v: object) -> TypeIs[tuple[int, ...]]:
 
 
 def _is_params(v: object) -> TypeIs[Params]:
-    """TypeIs narrowing `object` to `Params` (dict[str, jax.Array]).
-    Used to validate `grid_point['init_online_params_batched']`
-    before threading into the vmap. Empty-dict permitted (the
-    sweep dispatcher only emits the key when ckpts are actually
-    loaded; a defensive False at the boundary is enough)."""
-    if not isinstance(v, dict):
+    """TypeIs narrowing `object` to `Params` (non-empty
+    `dict[str, jax.Array]`). Empty-dict is rejected: it would
+    propagate to `init_state` → `online = {}` and crash JAX
+    deep inside vmap rather than at this validation boundary."""
+    if not isinstance(v, dict) or not v:
         return False
     return all(
         isinstance(k, str) and isinstance(val, jax.Array)
         for k, val in v.items()
     )
+
+
+def _is_init_override(v: object) -> TypeIs[InitOverride]:
+    """TypeIs narrowing `object` to `InitOverride`. Bare
+    `isinstance` is enough since the dataclass is concrete."""
+    return isinstance(v, InitOverride)
 
 
 class DQNRunner:
@@ -140,7 +152,7 @@ class DQNRunner:
         unexpected = (
             set(grid_point)
             - {'env_name', 'seeds', 'wrappers',
-               'init_online_params_batched'}
+               'init_online_params_batched', 'init_override_batched'}
         )
         if unexpected:
             raise ValueError(
@@ -166,6 +178,18 @@ class DQNRunner:
                 f"must be Params (dict[str, jax.Array]) or absent; "
                 f"got {type(init_params_raw).__name__}",
             )
+        init_override_raw = grid_point.get('init_override_batched')
+        init_override_batched: InitOverride | None
+        if init_override_raw is None:
+            init_override_batched = None
+        elif _is_init_override(init_override_raw):
+            init_override_batched = init_override_raw
+        else:
+            raise TypeError(
+                f"DQNRunner: grid_point['init_override_batched'] "
+                f"must be InitOverride or absent; "
+                f"got {type(init_override_raw).__name__}",
+            )
         env_spec = self._envs[env_name]
 
         cell_idx = self._call_count
@@ -176,6 +200,7 @@ class DQNRunner:
             q_checkpoint_dir=self._q_checkpoint_dir,
             cell_idx=cell_idx,
             init_online_params_batched=init_online_params_batched,
+            init_override_batched=init_override_batched,
         )
         return SweepCellResult(
             runs=tuple(c.run for c in arm.cells),

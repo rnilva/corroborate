@@ -44,6 +44,7 @@ from corroborate.core import canonical_str
 from corroborate.graph.computation import ComputationGraph, build_computation_graph
 from corroborate_rl.dqn.claims.q_network import Params
 from corroborate_rl.dqn.dqn import default_state_hash
+from corroborate_rl.dqn.init_override import InitOverride
 from corroborate_rl.dqn.invariants import DQNTrajectoryRecord
 from corroborate_rl.dqn.q_checkpoint import (
     CHECKPOINT_KEY_PREFIX,
@@ -357,6 +358,7 @@ def run_dqn_arm(
     q_checkpoint_dir: Path | None = None,
     cell_idx: int = 0,
     init_online_params_batched: Params | None = None,
+    init_override_batched: InitOverride | None = None,
 ) -> ArmResult:
     """Run one (env, arm) arm across `seeds` in parallel via
     `jax.vmap` of the composed `claim`. Returns
@@ -452,49 +454,90 @@ def run_dqn_arm(
     # the HP/slot-Claim leaves.
     leaf_measurements = _leaf_measurements(configured)
 
+    # Back-compat shim: collapse the legacy single-pytree kwarg into
+    # the typed `InitOverride` bundle. Both-set raises; downstream
+    # logic only branches on `init_override_batched`.
+    if (
+        init_online_params_batched is not None
+        and init_override_batched is not None
+    ):
+        raise ValueError(
+            'run_dqn_arm: pass one of init_online_params_batched or '
+            'init_override_batched, not both. '
+            'init_online_params_batched is the deprecated single-pytree '
+            'shim; new callers pass init_override_batched directly.',
+        )
+    if (
+        init_online_params_batched is not None
+        and init_override_batched is None
+    ):
+        init_override_batched = InitOverride(
+            online_params=init_online_params_batched,
+        )
+
     # vmap over seeds (uint32 → dqn derives PRNGKey internally
     # post-Phase-A0). `seed` is the canonical vmap dimension; all
     # other kwargs (env_name, wrappers, env, ...) are bound in
     # `configured`.
     #
-    # When `init_online_params_batched` is supplied, vmap also
-    # iterates a per-seed `Params` pytree alongside the seed axis.
-    # Each pytree leaf carries a leading `(len(seeds), *leaf_shape)`
-    # axis built by `load_batched_online_params`; `in_axes=(0, 0)`
-    # threads one seed's slice per call. The dqn claim sees a
-    # single-realisation `init_online_params` per vmap invocation
-    # — the batching is invisible inside the body.
+    # When `init_override_batched` is supplied, vmap also iterates
+    # one InitOverride pytree alongside the seed axis. Each non-None
+    # field carries a leading `(len(seeds), *leaf_shape)` axis built
+    # by `load_batched_online_params` / `load_batched_init_override`;
+    # the matching `in_axes=InitOverride(field=0 or None, ...)`
+    # threads each field's slice per call. The dqn claim sees a
+    # single-realisation `init_override` per vmap invocation — the
+    # batching is invisible inside the body.
     seeds_arr = jnp.asarray(seeds, dtype=jnp.uint32)
-    if init_online_params_batched is None:
+    if init_override_batched is None:
         def by_seed(seed: jax.Array) -> dict[str, jax.Array]:
             return configured(seed=seed)
         with trace_context() as records:
             batched_record = jax.vmap(by_seed)(seeds_arr)
     else:
-        # Defensive shape check: every pytree leaf must carry the
-        # seed-axis at position 0 with length matching `seeds`.
-        # Catches caller bugs (e.g., passing a single-seed pytree
-        # by mistake) before JAX's opaque-error path fires.
+        # Defensive shape check: every non-None field's leaves must
+        # carry the seed-axis at position 0 with length matching
+        # `seeds`. Catches caller bugs (e.g., passing a single-seed
+        # pytree by mistake) before JAX's opaque-error path fires.
         n_seeds = len(seeds)
-        for leaf_key, leaf in init_online_params_batched.items():
-            if leaf.shape[0] != n_seeds:
-                raise ValueError(
-                    f'run_dqn_arm: '
-                    f'init_online_params_batched[{leaf_key!r}].'
-                    f'shape[0]={leaf.shape[0]} != len(seeds)='
-                    f'{n_seeds}',
-                )
+        override_in_axes_kwargs: dict[str, int | None] = {
+            'online_params': None, 'target_params': None,
+        }
+        for field_name, params in (
+            ('online_params', init_override_batched.online_params),
+            ('target_params', init_override_batched.target_params),
+        ):
+            if params is None:
+                continue
+            for leaf_key, leaf in params.items():
+                if leaf.shape[0] != n_seeds:
+                    raise ValueError(
+                        f'run_dqn_arm: '
+                        f'init_override_batched.{field_name}[{leaf_key!r}].'
+                        f'shape[0]={leaf.shape[0]} != len(seeds)='
+                        f'{n_seeds}',
+                    )
+            override_in_axes_kwargs[field_name] = 0
+        # Per-field in_axes pytree: each batched field consumes axis
+        # 0; None-valued fields don't appear as leaves (the dataclass
+        # pytree skips them) — but `in_axes`'s structure has to match
+        # the data's structure, so we mirror the all-fields presence.
+        override_in_axes = InitOverride(
+            online_params=override_in_axes_kwargs['online_params'],
+            target_params=override_in_axes_kwargs['target_params'],
+        )
 
-        def by_seed_with_params(
-            seed: jax.Array, init_params: Params,
+        def by_seed_with_override(
+            seed: jax.Array, init_override: InitOverride,
         ) -> dict[str, jax.Array]:
             return configured(
-                seed=seed, init_online_params=init_params,
+                seed=seed, init_override=init_override,
             )
         with trace_context() as records:
             batched_record = jax.vmap(
-                by_seed_with_params, in_axes=(0, 0),
-            )(seeds_arr, init_online_params_batched)
+                by_seed_with_override,
+                in_axes=(0, override_in_axes),
+            )(seeds_arr, init_override_batched)
     # Both vmap branches above run inside `trace_context()` so JAX's
     # first-call abstract-trace pass fires @claim records once; that
     # single pass IS the structural graph (per-(theory, intervention),
@@ -626,6 +669,7 @@ def run_dqn_cell(
     q_checkpoint_dir: Path | None = None,
     cell_idx: int = 0,
     init_online_params_batched: Params | None = None,
+    init_override_batched: InitOverride | None = None,
 ) -> CellResult:
     """Run one (env, seed, claim) cell. Thin convenience wrapper
     around `run_dqn_arm` for the single-seed case; multi-seed
@@ -633,12 +677,15 @@ def run_dqn_cell(
     vmap re-compilation. Discards the graph; callers that want
     it should use `run_dqn_arm` directly.
 
-    `init_online_params_batched` (if provided) carries a single
-    seed-axis-0 stack — its shape[0] must equal 1."""
+    `init_online_params_batched` and `init_override_batched` (if
+    provided) carry a single seed-axis-0 stack — shape[0] must
+    equal 1. `init_online_params_batched` is the deprecated
+    single-pytree shim; passing both raises."""
     arm = run_dqn_arm(
         env_spec, (seed,), claim, arm_key, measurables,
         cycle_id=cycle_id,
         q_checkpoint_dir=q_checkpoint_dir, cell_idx=cell_idx,
         init_online_params_batched=init_online_params_batched,
+        init_override_batched=init_override_batched,
     )
     return arm.cells[0]
