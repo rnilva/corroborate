@@ -484,7 +484,6 @@ def run_dqn_arm(
                     f'shape[0]={leaf.shape[0]} != len(seeds)='
                     f'{n_seeds}',
                 )
-        init_params_batched = init_online_params_batched
 
         def by_seed_with_params(
             seed: jax.Array, init_params: Params,
@@ -495,12 +494,12 @@ def run_dqn_arm(
         with trace_context() as records:
             batched_record = jax.vmap(
                 by_seed_with_params, in_axes=(0, 0),
-            )(seeds_arr, init_params_batched)
-    # Wrap the vmap call in trace_context so JAX's first-call
-    # abstract-trace pass fires @claim records once; that single
-    # pass IS the structural graph (per-(theory, intervention),
+            )(seeds_arr, init_online_params_batched)
+    # Both vmap branches above run inside `trace_context()` so JAX's
+    # first-call abstract-trace pass fires @claim records once; that
+    # single pass IS the structural graph (per-(theory, intervention),
     # constant across seeds). build_computation_graph derives the
-    # static call graph from the records.
+    # static call graph from the records collected by either branch.
     graph = build_computation_graph(records)
 
     # Side-effect import: registers DDQN measurables (q_mean,

@@ -102,7 +102,10 @@ def init_state(
     seed-axis). For non-vmap callers, pass
     `rng_key=jax.random.PRNGKey(seed)` directly."""
     init_key, env_key, run_key = jax.random.split(rng_key, 3)
-    if init_online_params is not None:
+    # Empty-dict guard: matches sweep.py's _is_params boundary —
+    # an empty `Params` would propagate to `online = {}` and crash
+    # JAX deep inside vmap rather than at this validation site.
+    if init_online_params is not None and init_online_params:
         online = init_online_params
     else:
         online = q_network.init(init_key, obs_shape, n_actions)
