@@ -98,7 +98,8 @@ CANONICAL_G099_CORPORA: tuple[str, ...] = (
     'lunarlander_2M_30seeds_cpu/g099',       # LL γ=0.99 (2M, 30 seeds — supersedes lunarlander_tuned_sync1000_gpu 1M)
     'metamaze_g099_1M_postfix',              # MetaMaze γ=0.99 (n_episodes=5; flag for re-sweep w/ n=20)
     'mountaincar_1M_postfix',                # MountainCar γ=0.99
-    'cartpole_g099_canonical_n_eps20_ckpt',  # CartPole γ=0.99 (NEW: 100k, 15 seeds, full Q traces + ckpts, n_eps=1 — saturated env)
+    'cartpole_g099_canonical_n_eps20_ckpt',  # CartPole γ=0.99 (NEW: 100k, 15 seeds 0-14, full Q traces + ckpts, n_eps=1 — saturated env)
+    'cartpole_g099_canonical_n_eps20_ckpt_seeds15to29',  # CartPole γ=0.99 partner (seeds 15-29) — combined gives n=30
     'snake_1M',                              # Snake γ=0.99 (n_episodes=3 — noisier than rest)
     'pacman_1M_postfix',                     # PacMan γ=0.99 (n_episodes=3, 10 seeds/arm)
 )
