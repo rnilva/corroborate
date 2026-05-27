@@ -89,17 +89,27 @@ CANONICAL_G0999_CORPORA: tuple[str, ...] = (
 # canonical sweep exists for them (MinAtar γ=0.99 only at k=2/k=4;
 # fa_deep_g099 has no jdg).
 CANONICAL_G099_CORPORA: tuple[str, ...] = (
-    'acrobot_gamma_50k_30seeds',             # Acrobot γ=0.99 slice (50k, 30 seeds — outlier-free regime)
-    'fr_gamma_50k_30seeds',                  # FR γ=0.99 slice (50k, 30 seeds — pre-ceiling regime)
+    # 6 MLP envs — all on the NEW full-Q canonical_n_eps20_ckpt surface,
+    # paired with their seeds15to29 partner to reach n=30 per arm.
+    # Replaces the legacy {gamma_50k, _2M, _1M_postfix} entries that
+    # carried only the no-ckpt no-full-Q regime.
+    'acrobot_g099_canonical_n_eps20_ckpt',
+    'acrobot_g099_canonical_n_eps20_ckpt_seeds15to29',
+    'cartpole_g099_canonical_n_eps20_ckpt',
+    'cartpole_g099_canonical_n_eps20_ckpt_seeds15to29',
+    'fr_g099_canonical_n_eps20_ckpt',
+    'fr_g099_canonical_n_eps20_ckpt_seeds15to29',
+    'lunarlander_g099_canonical_n_eps20_ckpt',
+    'lunarlander_g099_canonical_n_eps20_ckpt_seeds15to29/canonical_g099_n_eps20',  # nested (top-level merge skipped on disk pressure)
+    'metamaze_g099_canonical_n_eps20_ckpt',
+    'metamaze_g099_canonical_n_eps20_ckpt_seeds15to29',
+    'mountaincar_g099_canonical_n_eps20_ckpt',
+    'mountaincar_g099_canonical_n_eps20_ckpt_seeds15to29',
+    # MinAtar / Jumanji envs — unchanged (no MLP-side canonical swap)
     'g099_Asterix-MinAtar',                  # MinAtar γ=0.99 v2 (sub-corpus, parent has no runs.parquet)
     'g099_Breakout-MinAtar',
     'g099_Freeway-MinAtar',
     'g099_SpaceInvaders-MinAtar',
-    'lunarlander_2M_30seeds_cpu/g099',       # LL γ=0.99 (2M, 30 seeds — supersedes lunarlander_tuned_sync1000_gpu 1M)
-    'metamaze_g099_1M_postfix',              # MetaMaze γ=0.99 (n_episodes=5; flag for re-sweep w/ n=20)
-    'mountaincar_1M_postfix',                # MountainCar γ=0.99
-    'cartpole_g099_canonical_n_eps20_ckpt',  # CartPole γ=0.99 (NEW: 100k, 15 seeds 0-14, full Q traces + ckpts, n_eps=1 — saturated env)
-    'cartpole_g099_canonical_n_eps20_ckpt_seeds15to29',  # CartPole γ=0.99 partner (seeds 15-29) — combined gives n=30
     'snake_1M',                              # Snake γ=0.99 (n_episodes=3 — noisier than rest)
     'pacman_1M_postfix',                     # PacMan γ=0.99 (n_episodes=3, 10 seeds/arm)
 )
