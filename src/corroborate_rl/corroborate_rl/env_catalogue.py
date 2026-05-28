@@ -91,6 +91,20 @@ has no useful signal there."""
 
 
 @runtime_checkable
+class _TimedEnvState(Protocol):
+    """Structural Protocol for env-state pytrees that publish a
+    `time: jax.Array` step counter. Gymnax's base `EnvState`
+    declares this field (every concrete gymnax env inherits it);
+    pgx `State` / jumanji `State` do NOT. `EpisodeLengthCappedEnv`
+    reads `state.time` to classify cap-triggered done vs natural
+    termination, so it requires the inner env's state to satisfy
+    this Protocol — asserted at `wrap()` time via the
+    `runtime_checkable` `isinstance` check on a freshly-reset
+    state."""
+    time: jax.Array
+
+
+@runtime_checkable
 class EnvWrapper(Protocol):
     """Anything that wraps a gymnax-style `Env` in another `Env`.
     Frozen-dataclass implementations carry their config + a
@@ -395,10 +409,47 @@ class EpisodeLengthCap:
     zero or positive (Hasselt-canonical regime restored).
 
     Uses gymnax/flax-struct `params.replace(max_steps_in_episode=…)`
-    on every env call — no env_state augmentation needed."""
+    on every env call — no env_state augmentation needed.
+
+    **Gymnax-only.** `EpisodeLengthCappedEnv` reads `state.time` to
+    classify cap-triggered done vs natural termination. Pgx
+    `State` (uses `_step_count`) and jumanji `State` don't expose a
+    `time` field, so wrapping a pgx / jumanji env raises at
+    `wrap()` time rather than failing under JIT trace. `wrap()`
+    resets the inner env once with a dummy key to materialise a
+    concrete state, then `isinstance`-checks it against the
+    `_TimedEnvState` Protocol."""
     max_steps: int
 
     def wrap(self, inner: Env) -> Env:
+        # Probe the inner env's state shape. Reset is cheap; the
+        # state is discarded — we only need to verify it carries a
+        # `time` field. Failures here are author-facing
+        # (`EpisodeLengthCap` on a non-gymnax env), so the error
+        # message names the inner env's class for diagnosis.
+        try:
+            params = inner.default_params  # type: ignore[attr-defined]  # gymnax base provides `default_params`; the runtime check below covers misses on non-gymnax adapters
+        except AttributeError:
+            params = None
+        if params is None:
+            raise TypeError(
+                f'EpisodeLengthCap.wrap(): inner env '
+                f'{type(inner).__name__} has no `default_params` — '
+                f'unable to probe its state for the `time` field. '
+                f'EpisodeLengthCap is gymnax-only (reads `state.time` '
+                f'at every step).'
+            )
+        _, probe_state = inner.reset_env(jax.random.PRNGKey(0), params)
+        if not isinstance(probe_state, _TimedEnvState):
+            raise TypeError(
+                f'EpisodeLengthCap.wrap(): inner env '
+                f'{type(inner).__name__} state '
+                f'{type(probe_state).__name__} does not publish a '
+                f'`time: jax.Array` field. EpisodeLengthCap is '
+                f'gymnax-only — pgx envs use `_step_count`, jumanji '
+                f'envs have neither. Wrapping a non-gymnax env would '
+                f'fail under JIT with an AttributeError on `state.time`.'
+            )
         return EpisodeLengthCappedEnv(inner=inner, max_steps=self.max_steps)
 
     def measurement_keys(self) -> Mapping[str, float]:

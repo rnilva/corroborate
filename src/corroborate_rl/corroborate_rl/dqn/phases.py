@@ -165,6 +165,18 @@ def rollout_phase(
     else:
         truncated = jnp.zeros_like(done, dtype=jnp.float32)
 
+    # Invariant: `truncated=1 ⇒ done=1`. If an env emits
+    # `info['truncated']=1` without `done=1` the bootstrap target
+    # silently mis-masks — `terminated = done * (1 - truncated)`
+    # evaluates to 0 either way, but the SEMANTIC contract
+    # (truncated FLAGS A SUBSET of dones) is broken. The cheap
+    # JIT-friendly guard is `truncated * (1 - done)` — zero IFF
+    # the implication holds. We surface it as a diagnostic key
+    # the smoke test asserts on (runtime propagation; pytest's
+    # `-x` flag stops the run rather than a noisy in-scan
+    # `Exception` raise).
+    cross_flag_violation = truncated * (1.0 - done.astype(jnp.float32))
+
     raw_transition = Transition(
         obs=state.obs, action=action,
         reward=reward, next_obs=next_obs_pre, done=done,
@@ -229,9 +241,19 @@ def rollout_phase(
         # envs that don't publish `info['truncated']`. Downstream
         # measurables that need to discriminate "the trajectory
         # continued physically; only the experiment chose to stop"
-        # consume this column; the default `bootstrap_fraction`
-        # measurable continues to read `done` alone (back-compat).
+        # consume this column; the corrected `bootstrap_fraction`
+        # measurable reads `terminated = done * (1 - truncated)`.
         'truncated': truncated,
+        # Cross-flag invariant: `truncated=1 ⇒ done=1`. Value is
+        # `truncated * (1 - done)` — zero IFF the implication
+        # holds. Any nonzero per-step value flags a wrapper that
+        # published `info['truncated']` without `done` — the
+        # bootstrap target's `(1 − terminated)` mask still
+        # evaluates correctly (since 0 * anything = 0), but the
+        # semantic contract is broken and downstream measurables
+        # may silently misread. Smoke tests assert
+        # `cross_flag_violation == 0` across the rollout trace.
+        'cross_flag_violation': cross_flag_violation,
         'max_q': jnp.max(q_values),
         'ep_return': cumulative,
         'action': action.astype(jnp.int32),

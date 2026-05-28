@@ -252,6 +252,77 @@ def test_n_step_return_propagates_truncated_within_window() -> None:
     )
 
 
+def test_n_step_return_natural_terminal_within_window() -> None:
+    """n_step=3 window: a mid-window NATURAL termination
+    (`done=1, truncated=0`) propagates `acc_done=1, acc_truncated=0`
+    to the emitted transition. The bootstrap target then evaluates
+    `terminated = 1 * (1 - 0) = 1` → `target = r` (no bootstrap).
+    Closed-form sibling of `test_n_step_return_propagates_truncated_within_window`."""
+    pending = init_pending_n_step(obs_shape=(1,))
+    txn1 = Transition(
+        obs=jnp.float32([1.0]), action=jnp.int32(0),
+        reward=jnp.float32(1.0), next_obs=jnp.float32([2.0]),
+        done=jnp.float32(0.0), truncated=jnp.float32(0.0),
+    )
+    txn2 = Transition(
+        obs=jnp.float32([2.0]), action=jnp.int32(1),
+        reward=jnp.float32(2.0), next_obs=jnp.float32([3.0]),
+        done=jnp.float32(1.0), truncated=jnp.float32(0.0),
+    )
+    pending, _emitted_1, should_emit_1 = n_step_return(
+        pending=pending, transition=txn1, n_step=3, gamma=0.9,
+    )
+    assert float(should_emit_1) == 0.0
+    _, emitted_2, should_emit_2 = n_step_return(
+        pending=pending, transition=txn2, n_step=3, gamma=0.9,
+    )
+    assert float(should_emit_2) == 1.0
+    # Natural termination: acc_done=1, acc_truncated=0.
+    assert float(emitted_2.done) == 1.0
+    assert float(emitted_2.truncated) == 0.0, (
+        'n-step emit erroneously set truncated for a natural '
+        'termination; the (done=1, truncated=0) pair should emit '
+        '(acc_done=1, acc_truncated=0).'
+    )
+    # Bellman target with this emit: r + γ*(1 - 1*(1-0)) * v(s') = r.
+    # Closed-form accumulated reward: 1 + 0.9·2 = 2.8 (same as
+    # the truncated sibling — only the bootstrap mask differs).
+    assert jnp.allclose(emitted_2.reward, jnp.float32(2.8))
+
+
+def test_n_step_return_full_window_no_terminal() -> None:
+    """n_step=3 window: 3 consecutive non-terminal steps fill the
+    window without emitting early. The third step's emit has
+    `acc_done=0, acc_truncated=0` → bootstrap fully fires
+    (`(1 - terminated) = 1`)."""
+    pending = init_pending_n_step(obs_shape=(1,))
+    txns = [
+        Transition(
+            obs=jnp.float32([float(i)]), action=jnp.int32(0),
+            reward=jnp.float32(1.0),
+            next_obs=jnp.float32([float(i + 1)]),
+            done=jnp.float32(0.0), truncated=jnp.float32(0.0),
+        )
+        for i in range(3)
+    ]
+    emit_masks: list[float] = []
+    emitted_final = None
+    for txn in txns:
+        pending, emitted, should_emit = n_step_return(
+            pending=pending, transition=txn, n_step=3, gamma=0.9,
+        )
+        emit_masks.append(float(should_emit))
+        emitted_final = emitted
+    # Two no-emits, one emit on the third (window full).
+    assert emit_masks == [0.0, 0.0, 1.0]
+    assert emitted_final is not None
+    assert float(emitted_final.done) == 0.0
+    assert float(emitted_final.truncated) == 0.0
+    # Closed-form n-step return: r0 + γ r1 + γ² r2 =
+    # 1 + 0.9 + 0.81 = 2.71.
+    assert jnp.allclose(emitted_final.reward, jnp.float32(2.71))
+
+
 # ============ Pardo 2018 — pre-reset obs in replay (#1) ============
 
 class _StepCounterEnvState(NamedTuple):
@@ -511,6 +582,68 @@ def test_rollout_state_obs_resets_after_truncation() -> None:
         f'(reset to [0.0] then advanced to [1.0]); got {next_obs_after_reset}. '
         f'state.obs did not reset on done — agent is still in the '
         f'terminal state.'
+    )
+
+
+# ============ End-to-end Bellman target on sampled truncated batch (#8) ============
+
+def test_e2e_bellman_target_on_sampled_truncated_batch() -> None:
+    """End-to-end: build a replay with mixed truncated / terminated /
+    non-terminal transitions, sample a batch, run the bellman target,
+    assert per-sample closed-form correctness. Catches any bug in the
+    `batch.truncated` plumbing from replay → train_phase → bootstrap."""
+    q_network = _constant_q_network(value=10.0)
+    replay = Replay(capacity=8, batch_size=8)
+    state = replay.init(obs_shape=(1,))
+
+    # Hand-craft 4 distinct transitions:
+    #  0) done=0, truncated=0 (mid-ep)         → target = 1 + 0.9·10 = 10
+    #  1) done=1, truncated=0 (natural term)   → target = 1
+    #  2) done=1, truncated=1 (truncated)      → target = 1 + 0.9·10 = 10
+    #  3) done=0, truncated=0 (mid-ep again)   → target = 10
+    cases = [
+        (0.0, 0.0),
+        (1.0, 0.0),
+        (1.0, 1.0),
+        (0.0, 0.0),
+    ]
+    for i, (d, t) in enumerate(cases):
+        txn = Transition(
+            obs=jnp.float32([float(i)]),
+            action=jnp.int32(0),
+            reward=jnp.float32(1.0),
+            next_obs=jnp.float32([float(i + 1)]),
+            done=jnp.float32(d),
+            truncated=jnp.float32(t),
+        )
+        state = replay.add(state, txn)
+
+    # Sample. With batch_size=capacity=8 we get 8 draws from
+    # [0, 4) — all 4 slots represented (by pigeon-hole) but with
+    # repetition. We assert the target's per-sample value matches
+    # the closed-form formula for whatever (done, truncated) pair
+    # the row carries.
+    batch = replay.sample_batch(state, jax.random.PRNGKey(0))
+
+    target = bootstrap_claim(
+        online_params={}, target_params={}, q_network=q_network,
+        next_obs=batch.next_obs, reward=batch.reward, done=batch.done,
+        truncated=batch.truncated, gamma=0.9,
+        greedification=max_greedify,
+    )
+
+    # Closed-form expected per-row:
+    #   r + γ · (1 − done · (1 − truncated)) · v(s')
+    # with Q-net returning constant 10, so v(s') = 10 for every row.
+    expected = (
+        batch.reward
+        + 0.9 * (1.0 - batch.done * (1.0 - batch.truncated)) * 10.0
+    )
+    assert jnp.allclose(target, expected, atol=1e-6), (
+        f'end-to-end batch Bellman target mismatched per-sample '
+        f'closed-form; got {target.tolist()}, expected {expected.tolist()}. '
+        f'Plumbing of batch.truncated from replay → train_phase → '
+        f'bootstrap is broken.'
     )
 
 

@@ -157,3 +157,67 @@ def test_no_truncated_flag_on_unwrapped_env() -> None:
         f'truncation-flag plumbing has accidentally leaked into '
         f'unwrapped envs. info keys: {list(info)}'
     )
+
+
+def test_episode_length_cap_rejects_non_gymnax_inner_at_wrap_time() -> None:
+    """`EpisodeLengthCap.wrap()` reads `state.time` at every step,
+    so it requires the inner env's state to satisfy the
+    `_TimedEnvState` Protocol. Wrapping a pgx env (whose State
+    uses `_step_count`) raises TypeError at `wrap()` rather than
+    failing under JIT trace.
+
+    Concrete probe: build a stub env whose state lacks a `time`
+    field, call `wrap()`, expect a typed `TypeError` mentioning
+    `time`."""
+    import dataclasses
+    from corroborate_rl.env_catalogue import EpisodeLengthCap
+
+    @dataclasses.dataclass
+    class _NoTimeState:
+        # No `time` field; mirrors pgx State (which has _step_count)
+        # or jumanji State (which has neither).
+        step_count: jax.Array = dataclasses.field(
+            default_factory=lambda: jnp.int32(0),
+        )
+
+    @dataclasses.dataclass
+    class _NoTimeEnv:
+        @property
+        def default_params(self):  # type: ignore[no-untyped-def]
+            import gymnax.environments.environment as gymnax_env
+            return gymnax_env.EnvParams()
+
+        def reset_env(self, rng: jax.Array, params):  # type: ignore[no-untyped-def]
+            del rng, params
+            return jnp.zeros((1,)), _NoTimeState()
+
+        # Other methods are unused by `wrap()`; declare minimal stubs.
+        def reset(self, rng: jax.Array, params):  # type: ignore[no-untyped-def]
+            return self.reset_env(rng, params)
+
+        def step(self, rng, state, action, params):  # type: ignore[no-untyped-def]
+            raise NotImplementedError
+
+        def step_env(self, rng, state, action, params):  # type: ignore[no-untyped-def]
+            raise NotImplementedError
+
+        def observation_space(self, params):  # type: ignore[no-untyped-def]
+            raise NotImplementedError
+
+        def action_space(self, params):  # type: ignore[no-untyped-def]
+            raise NotImplementedError
+
+    cap = EpisodeLengthCap(max_steps=10)
+    import pytest
+    with pytest.raises(TypeError, match=r'(?i)time'):
+        cap.wrap(_NoTimeEnv())  # type: ignore[arg-type]  # intentional negative test
+
+
+def test_episode_length_cap_accepts_gymnax_inner_at_wrap_time() -> None:
+    """Positive case: real gymnax env (CartPole) is accepted.
+    Sanity-check on the Protocol assertion — should NOT raise."""
+    from corroborate_rl.env_catalogue import EpisodeLengthCap
+    inner, _params = gymnax.make('CartPole-v1')
+    cap = EpisodeLengthCap(max_steps=50)
+    wrapped = cap.wrap(inner)
+    assert wrapped is not None
