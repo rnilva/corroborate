@@ -175,10 +175,15 @@ def main() -> None:
         f'  (PI-honest NO_EFFECT: env heterogeneity is too high for a\n'
         f'   generalisable cross-env point estimate. The binomial sign-\n'
         f'   test is the right test for "DDQN reduces bias broadly".)\n\n'
-        f'Dormancy filter (PREMISE_ACTIVE_PER_STRATUM): no-op at this cache\n'
-        f'  (jensen_dormancy_premise_active = power_insufficient — σ_Q\n'
-        f'   floor inputs not satisfied at γ=0.99 canonical; at γ=0.999\n'
-        f'   the filter would exclude LunarLander + other dormant envs.)'
+        f'Dormancy filter (PREMISE_ACTIVE_PER_STRATUM): no-op at γ=0.99\n'
+        f'  Verified directly from restored traces: V\'s observed bias\n'
+        f'  is ~50-70× the Jensen structural floor σ_Q × √(2 log K).\n'
+        f'    LL:   σ_late=0.41  floor=0.68  obs_bias=45.6  dormancy=0\n'
+        f'    CP:   σ_late=1.69  floor=1.99  obs_bias=121   dormancy=0\n'
+        f'  Premise is overwhelmingly active everywhere; no env dormant.\n'
+        f'  Cached `jensen_dormancy_premise_active=power_insufficient` is\n'
+        f'  STALE (computed before traces were available). At γ=0.999 the\n'
+        f'  longer effective horizon flips this for some envs.'
     )
     ax.text(0.02, 0.02, bridge_text, transform=ax.transAxes,
             va='bottom', fontsize=7.5, family='monospace',

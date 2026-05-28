@@ -55,19 +55,29 @@ The chain.py bridge intentionally uses the binomial sign-test —
 that's the right form for a cross-env consistency claim that
 doesn't require env-exchangeability.
 
-**Dormancy honesty.** The framework's `jensen_dormancy_premise_active`
-invariant returns `power_insufficient` on every cell at this
-cache: the structural Jensen floor (`σ_Q × √(2 log |A|)`) needs
-per-step σ_Q traces that this canonical γ=0.99 sweep did not
-persist (trace-evicted to save disk). The `PREMISE_ACTIVE_PER_STRATUM`
-filter is therefore a no-op pass-through here — every cell makes
-it into the bridge verdict because `jensen_dormancy_gap` defaults
-to 0 when the floor inputs aren't available. At γ=0.999 sweeps
-(where σ_Q traces ARE persisted), the same filter would actively
-exclude dormant envs. The framework surfaces this by exposing the
-`power_insufficient` verdict rather than pretending the filter
-fired meaningfully — exactly the per-stratum honesty the paper is
-about.
+**Dormancy: empirically inactive at γ=0.99.** Verified directly
+from restored cloud traces:
+
+  - LL γ=0.99 cell 0:  σ_late = 0.41 → floor = 0.68; observed bias = 45.6
+  - CP γ=0.99 cell 0:  σ_late = 1.69 → floor = 1.99; observed bias = 121
+
+V's observed overestimation is **50-70× larger than the Jensen
+structural floor** `σ_Q × √(2 log |A|)` in every env, which is
+why `jensen_dormancy_gap = max(0, floor − observed) = 0` for all
+340 cells. The `PREMISE_ACTIVE_PER_STRATUM` scope filter retains
+every env at γ=0.99 because the premise is overwhelmingly active
+— DDQN's Jensen-bias-clipping has plenty to correct, in fact
+substantially more than Jensen alone would predict (the excess is
+argmax-correlation overestimation stacked on top of Jensen variance
+overestimation).
+
+(The cached `jensen_dormancy_premise_active='power_insufficient'`
+string in the parquet is stale from a prior ingest where σ_Q
+traces hadn't been restored; the underlying scalar `jensen_dormancy_gap`
+that the scope filter actually reads is correct. At γ=0.999 with
+its longer effective horizon, the filter actively excludes
+LunarLander + other envs where the bias-vs-floor inequality
+flips.)
 
 → `figures/01_mech_per_env.png` and `.csv`
 
