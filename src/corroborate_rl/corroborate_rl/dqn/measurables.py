@@ -5846,15 +5846,31 @@ def train_episode_length_mean(record: Mapping[str, object]) -> float:
     return float(a.size / n_episodes)
 
 
-@measurable(reads=('done',))
+@measurable(reads=('done', 'truncated'))
 def bootstrap_fraction(record: Mapping[str, object]) -> float:
-    """Fraction of update steps that bootstrap (i.e. don't
-    terminate). `1 - mean(done)` over the per-step trajectory.
+    """Fraction of update steps where the Bellman target bootstraps
+    (i.e. doesn't fully zero on a genuine terminal). After the
+    Sutton-Barto §6.6 / Gymnasium-API truncation-aware refactor
+    (commits 97efd39 + 6b9230a + Pardo 2018 fix), the bootstrap
+    target masks on `terminated = done * (1 - truncated)` — so
+    the bootstrap fires both at non-terminal steps AND at truncated
+    steps (artificial time-limit cutoffs where the trajectory
+    physically continues). The corrected semantic:
+
+        bootstrap_fraction = 1 - mean(terminated)
+                           = 1 - mean(done * (1 - truncated))
+
+    Back-compat: corpora collected before the refactor don't carry
+    a `truncated` column. The measurable defaults `truncated` to 0
+    when absent — `done * (1 - 0) = done`, collapsing the formula
+    to the pre-refactor `1 - mean(done)`. No silent verdict drift
+    on legacy cells.
 
     A bootstrap-fraction of 1.0 means the agent never reaches a
-    terminal state during training (long-horizon envs like
-    Acrobot at high γ); 0.0 means every step terminates (bandit
-    envs where the agent never bootstraps from its own Q
+    genuine terminal state during training (long-horizon envs like
+    Acrobot at high γ, OR cap-only envs where every "done" is a
+    timeout truncation); 0.0 means every step terminates naturally
+    (bandit envs where the agent never bootstraps from its own Q
     estimate). The covariate predicts DDQN-link strength: bias
     compounds along bootstrapped chains, so envs in the high-
     bootstrap regime show stronger Hasselt-mechanism → outcome
@@ -5869,7 +5885,21 @@ def bootstrap_fraction(record: Mapping[str, object]) -> float:
     a = np.asarray(arr, dtype=np.float64)
     if a.size == 0:
         return float('nan')
-    return float(1.0 - a.mean())
+    trunc_obj = record.get('truncated')
+    if trunc_obj is None:
+        # Pre-refactor corpus: no truncated column. Default to 0
+        # so terminated = done * (1 - 0) = done, recovering
+        # pre-refactor semantics on legacy cells.
+        terminated = a
+    else:
+        t = np.asarray(trunc_obj, dtype=np.float64)
+        if t.size != a.size:
+            # Shape mismatch (corrupted trace) — fall back to
+            # done-only semantics rather than silently masking.
+            terminated = a
+        else:
+            terminated = a * (1.0 - t)
+    return float(1.0 - terminated.mean())
 
 
 # ============ Bellman-bound measurable ============

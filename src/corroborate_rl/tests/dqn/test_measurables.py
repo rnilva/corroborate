@@ -130,3 +130,86 @@ def test_plateau_slope_late_zero_on_constant() -> None:
     assert math.isclose(
         plateau_slope_late(rec, frac=0.25), 0.0, abs_tol=1e-6,
     )
+
+
+# ============ bootstrap_fraction (truncation-aware) ============
+
+def test_bootstrap_fraction_truncation_aware_closed_form() -> None:
+    """Closed-form: `done=[1,0,1,0], truncated=[0,0,1,0]` →
+    `terminated=[1,0,0,0]` → `bootstrap_fraction = 1 - 0.25 = 0.75`.
+    The corrected semantic distinguishes a truncated done (where
+    the trajectory physically continues; bootstrap fires) from a
+    genuine terminated done (bootstrap zeros)."""
+    from corroborate_rl.dqn.measurables import bootstrap_fraction
+    rec: Mapping[str, object] = {
+        'done': np.array([1.0, 0.0, 1.0, 0.0], dtype=np.float64),
+        'truncated': np.array([0.0, 0.0, 1.0, 0.0], dtype=np.float64),
+    }
+    result = bootstrap_fraction(rec)
+    # terminated = done * (1 - truncated) = [1, 0, 0, 0]
+    # bootstrap_fraction = 1 - 0.25 = 0.75
+    assert math.isclose(result, 0.75, abs_tol=1e-9), (
+        f'truncation-aware bootstrap_fraction expected 0.75 (one '
+        f'genuine terminal out of 4 steps); got {result}'
+    )
+
+
+def test_bootstrap_fraction_back_compat_no_truncated_column() -> None:
+    """Pre-refactor corpus: no `truncated` column. The measurable
+    defaults `truncated=0`, collapsing the formula to the
+    pre-refactor `1 - mean(done)` semantic. Same record without
+    `truncated` → `1 - mean([1,0,1,0]) = 1 - 0.5 = 0.5`. Confirms
+    legacy cells don't suffer verdict drift."""
+    from corroborate_rl.dqn.measurables import bootstrap_fraction
+    rec: Mapping[str, object] = {
+        'done': np.array([1.0, 0.0, 1.0, 0.0], dtype=np.float64),
+        # Note: NO 'truncated' key.
+    }
+    result = bootstrap_fraction(rec)
+    # Back-compat: truncated default = 0 → terminated = done → 0.5.
+    assert math.isclose(result, 0.5, abs_tol=1e-9), (
+        f'pre-refactor bootstrap_fraction expected 0.5 (legacy '
+        f'done-only semantic); got {result}'
+    )
+
+
+def test_bootstrap_fraction_all_truncated_returns_one() -> None:
+    """Cap-only env where every "done" is a timeout truncation:
+    `done=[1,1,1,1], truncated=[1,1,1,1]` → terminated = 0
+    everywhere → bootstrap fires on every step → fraction = 1.0.
+    The trajectory physically continued past every cap; the
+    Bellman target should never zero on these cells."""
+    from corroborate_rl.dqn.measurables import bootstrap_fraction
+    rec: Mapping[str, object] = {
+        'done': np.ones(4, dtype=np.float64),
+        'truncated': np.ones(4, dtype=np.float64),
+    }
+    assert math.isclose(bootstrap_fraction(rec), 1.0, abs_tol=1e-9)
+
+
+def test_bootstrap_fraction_nan_on_missing_done() -> None:
+    """No `done` key → NaN (the column-erasure-safe path the
+    measurable's `reads=('done', 'truncated')` advertises)."""
+    from corroborate_rl.dqn.measurables import bootstrap_fraction
+    assert math.isnan(bootstrap_fraction({}))
+
+
+def test_bootstrap_fraction_nan_on_empty_done() -> None:
+    """Empty trace → NaN."""
+    from corroborate_rl.dqn.measurables import bootstrap_fraction
+    rec: Mapping[str, object] = {'done': np.array([], dtype=np.float64)}
+    assert math.isnan(bootstrap_fraction(rec))
+
+
+def test_bootstrap_fraction_shape_mismatch_falls_back() -> None:
+    """If `truncated` is present but shape-mismatched with `done`
+    (corrupted trace), fall back to done-only semantics rather
+    than silently masking. The fall-back keeps the value
+    interpretable even on schema drift."""
+    from corroborate_rl.dqn.measurables import bootstrap_fraction
+    rec: Mapping[str, object] = {
+        'done': np.array([1.0, 0.0, 1.0, 0.0], dtype=np.float64),
+        'truncated': np.array([1.0, 0.0], dtype=np.float64),  # wrong size
+    }
+    # Fall-back to 1 - mean(done) = 0.5.
+    assert math.isclose(bootstrap_fraction(rec), 0.5, abs_tol=1e-9)
