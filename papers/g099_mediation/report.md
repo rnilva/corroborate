@@ -152,6 +152,57 @@ the framework's clean Bellman-residual mediator.
 
 → `figures/03_static_mediation.png` and `.csv`
 
+**Companion: per-env best-mediator pipeline (PC + Spearman + DoWhy)**
+(`figures/03b_per_env_best_mediator.png`): the full canonical
+mediation recipe per env. For each env, PC adjacency over a
+candidate scalar set (`bootstrap_action_mismatch_late`,
+`q_trajectory_autocorr_late`, `q_action_grad_overlap_late`,
+`jensen_gap`, `normalized_bias_redq_late`) discovers which nodes
+are adjacent to arm and outcome; partial Spearman picks the
+highest non-sign-flip absorption per env; DoWhy backdoor estimates
+the linear ATE on the inferred (arm → mediator → outcome) DAG with
+placebo + RCC refutations. Headline numbers:
+
+  | env | marg ρ | best mediator (cell-scalar) | absorb | DoWhy ATE | placebo / RCC drift |
+  | --- | ---: | --- | ---: | ---: | --- |
+  | Asterix | +0.73 | jensen_gap *(soft-tautology)* | 56% | +7.13 | 0.00 / 0.02 |
+  | FourRooms | +0.53 | q_trajectory_autocorr | 40% | +0.23 | 0.00 / 0.00 |
+  | MetaMaze | +0.39 | bootstrap_action_mismatch | 69% | +3.45 | 0.00 / 0.03 |
+  | PacMan | +0.28 | — | — | — | PC underpowered |
+  | Freeway | +0.22 | q_action_grad_overlap | 33% | +1.43 | 0.00 / 0.01 |
+  | SpaceInvaders | −0.12 | bootstrap_action_mismatch | 50% | −2.08 | 0.00 / 0.01 |
+  | Breakout | −0.15 | jensen_gap *(soft-tautology)* | 71% | −1.62 | 0.00 / 0.02 |
+  | Snake | −0.21 | — | — | — | PC underpowered |
+  | Acrobot | −0.15 | q_trajectory_autocorr | 54% | −3.19 | 0.00 / 0.03 |
+  | LunarLander | +0.10 | q_trajectory_autocorr | 45% | +20.77 | 0.00 / **0.24** ← RCC flag |
+  | CartPole | +0.06 | (low absorb 19%) | — | — | small marginal |
+  | MountainCar | −0.02 | — | — | — | no signal |
+
+Substantive findings:
+- **No env has a PC-detected mediator** (a candidate adjacent to
+  BOTH arm and outcome under conservative depth-2 conditioning).
+  PC's strict adjacency requirement isn't met for any scalar
+  candidate at any env. The "best by absorption" column reports
+  what would survive an absorption-only rule, but no env's PC
+  panel says "this is the mediator."
+- **Per-env best mediator differs**: Asterix + Breakout pick
+  jensen_gap (soft-tautology — framework's discipline flags this
+  is shared MC with outcome); FourRooms picks q_trajectory_autocorr;
+  MetaMaze picks bootstrap_action_mismatch; LunarLander +
+  Acrobot pick q_trajectory_autocorr. No universal mediator across
+  the panel.
+- **LunarLander is RCC-flagged**: DoWhy ATE = +20.77 but
+  random-common-cause refutation drift = 0.24 (well above the 0.05
+  tolerance) — the linear-mediation estimate is non-robust to
+  synthetic confounders. The framework's RCC gate catches this
+  before it ships.
+
+The framework's per-env panel + refutation gates collectively say:
+"the best mediator depends on the env, no single candidate is the
+universal channel, and the linear-mediation estimate is reliable
+at most envs but breaks at LunarLander." This is per-stratum
+honest in the way Layers 1-3 prepared.
+
 ---
 
 ## Layer 4 — AGGREGATION DANGER (cross-env static): one number doesn't represent any env
