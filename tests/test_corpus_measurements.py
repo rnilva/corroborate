@@ -1072,6 +1072,179 @@ def test_recompute_idempotent_on_drifted_column(tmp_path: Path) -> None:
     assert 'INTENTIONAL-DRIFT-' not in new_sigs['double_x']
 
 
+# ============ check_recoverable_nan + force/recover_nan ============
+#
+# Today's gotcha: a measurable can be sidecar-current (hash
+# matches) AND fully NaN in measurements.parquet (because the
+# original compute happened when its trace input was missing).
+# The standard recompute path skips it as `already_current`.
+# `check_recoverable_nan` surfaces these; `force` / `recover_nan`
+# unblock them.
+
+
+def test_check_recoverable_nan_surfaces_sidecar_current_but_all_nan(
+    tmp_path: Path,
+) -> None:
+    """Pre-state simulating "computed when traces were missing":
+    measurements.parquet has an all-NaN column for x_plus_y, but
+    the sidecar hash matches the registry. With local inputs
+    present (x and y in runs.parquet), `check_recoverable_nan`
+    flags x_plus_y as recoverable."""
+    from corroborate.corpus.measurements import (
+        check_recoverable_nan,
+    )
+    corpus = tmp_path / 'corp'
+    runs = _runs_df_with_traces(4)
+    _write_corpus(corpus, runs)
+    # Build measurements.parquet legitimately first to get a
+    # current sidecar hash for x_plus_y.
+    build_measurements(
+        corpus, required=['double_x', 'x_plus_y'], runs_df=runs,
+    )
+    # Then overwrite the x_plus_y column with all-NaN (simulating
+    # "compute happened with traces missing → values came out
+    # NaN, but the sidecar got stamped current because the gap
+    # was registered-but-unsatisfiable-now-no-longer").
+    meas_path = corpus / 'measurements.parquet'
+    df = pl.read_parquet(meas_path)
+    df = df.with_columns(
+        pl.lit(float('nan'), dtype=pl.Float64).alias('x_plus_y'),
+    )
+    df.write_parquet(meas_path)
+
+    recoverable = check_recoverable_nan(
+        corpus, required=['double_x', 'x_plus_y'],
+    )
+    assert recoverable == ('x_plus_y',), (
+        f'expected x_plus_y to be flagged; got {recoverable}'
+    )
+
+    # Sanity: a column that's fine (double_x has finite values)
+    # is NOT in the recoverable set.
+    df_ok = pl.read_parquet(meas_path)
+    assert df_ok['double_x'].is_finite().all()
+
+
+def test_recover_nan_auto_fixes_stale_nan_columns(
+    tmp_path: Path,
+) -> None:
+    """`recompute_corpus_measurables(..., recover_nan=True)`
+    auto-detects sidecar-current-but-NaN measurables and
+    recomputes them. The recomputed values land in
+    `recovered_nan` of the result (distinct from `recomputed`
+    so the operator audit log can tell stale-NaN fixes from
+    substrate-driven gap-fills)."""
+    corpus = tmp_path / 'corp'
+    runs = _runs_df_with_traces(4)
+    _write_corpus(corpus, runs)
+    build_measurements(
+        corpus, required=['double_x', 'x_plus_y'], runs_df=runs,
+    )
+    # Overwrite x_plus_y with all-NaN — sidecar still says
+    # current.
+    meas_path = corpus / 'measurements.parquet'
+    df = pl.read_parquet(meas_path)
+    df = df.with_columns(
+        pl.lit(float('nan'), dtype=pl.Float64).alias('x_plus_y'),
+    )
+    df.write_parquet(meas_path)
+
+    # Without recover_nan: x_plus_y stays NaN (sidecar-current
+    # path skips it).
+    result_no_recover = recompute_corpus_measurables(
+        corpus, required=['double_x', 'x_plus_y'],
+    )
+    assert result_no_recover.recovered_nan == ()
+    assert result_no_recover.recomputed == ()
+    df_after_no_recover = pl.read_parquet(meas_path)
+    assert not df_after_no_recover['x_plus_y'].is_finite().any()
+
+    # With recover_nan=True: x_plus_y gets recomputed.
+    result = recompute_corpus_measurables(
+        corpus, required=['double_x', 'x_plus_y'], recover_nan=True,
+    )
+    assert result.recovered_nan == ('x_plus_y',), (
+        f'expected x_plus_y in recovered_nan; got {result.recovered_nan}'
+    )
+    assert result.recomputed == ()  # no substrate gap, just NaN recovery
+    df_after = pl.read_parquet(meas_path)
+    assert df_after['x_plus_y'].is_finite().all()
+    # Values match the canonical x + y = 11·i.
+    vals = sorted(zip(df_after['id'].to_list(),
+                       df_after['x_plus_y'].to_list()))
+    assert vals == [
+        ('cell-0', 0.0), ('cell-1', 11.0),
+        ('cell-2', 22.0), ('cell-3', 33.0),
+    ]
+    assert not result.is_clean
+
+
+def test_force_recompute_named_measurable_bypasses_sidecar_current(
+    tmp_path: Path,
+) -> None:
+    """`force=frozenset({'x_plus_y'})` treats x_plus_y as gap even
+    when its sidecar hash matches the live registry. Use case:
+    operator knows a measurable's values are stale (e.g., partial
+    sweep that wrote some cells with bad inputs) and wants to
+    rebuild without invalidating the sidecar manually."""
+    corpus = tmp_path / 'corp'
+    runs = _runs_df_with_traces(3)
+    _write_corpus(corpus, runs)
+    build_measurements(
+        corpus, required=['double_x', 'x_plus_y'], runs_df=runs,
+    )
+
+    # Both columns are sidecar-current. Without force, neither
+    # would be recomputed.
+    baseline = recompute_corpus_measurables(
+        corpus, required=['double_x', 'x_plus_y'],
+    )
+    assert baseline.recomputed == ()
+    assert baseline.recovered_nan == ()
+    assert set(baseline.already_current) == {'double_x', 'x_plus_y'}
+
+    # With force=({'x_plus_y'}): x_plus_y gets recomputed even
+    # though sidecar is current.
+    forced = recompute_corpus_measurables(
+        corpus, required=['double_x', 'x_plus_y'],
+        force=frozenset({'x_plus_y'}),
+    )
+    # Explicit-force names land in `forced_recompute` (audit slot
+    # distinct from `recovered_nan`, which is auto-detection-
+    # driven). Both bypass the sidecar-current gate; both leave
+    # `recomputed` empty when there's no substrate-driven gap.
+    assert forced.forced_recompute == ('x_plus_y',)
+    assert forced.recovered_nan == ()
+    assert forced.recomputed == ()
+    assert 'double_x' in forced.already_current
+    assert not forced.is_clean
+
+
+def test_force_with_unrequired_name_is_silently_ignored(
+    tmp_path: Path,
+) -> None:
+    """Forcing a name that isn't in `required` has no compute
+    pathway (the build_measurements pass only operates on
+    `required`). The function silently drops it — the contract
+    is "force narrows from already_current → gap WITHIN
+    required"."""
+    corpus = tmp_path / 'corp'
+    runs = _runs_df_with_traces(3)
+    _write_corpus(corpus, runs)
+    build_measurements(corpus, required=['double_x'], runs_df=runs)
+
+    result = recompute_corpus_measurables(
+        corpus, required=['double_x'],
+        force=frozenset({'double_x', 'x_plus_y_not_in_required'}),
+    )
+    # `double_x` is forced (its current value gets rebuilt) but
+    # the unknown name doesn't appear anywhere.
+    assert 'x_plus_y_not_in_required' not in result.recomputed
+    assert 'x_plus_y_not_in_required' not in result.recovered_nan
+    assert 'x_plus_y_not_in_required' not in result.forced_recompute
+    assert 'x_plus_y_not_in_required' not in result.already_current
+
+
 # ============ CLI wiring: _recompute_ingest_targets ============
 #
 # Exercises the dispatch helper that resolves the `--ingest`
@@ -1261,3 +1434,56 @@ def test_cli_recompute_targets_directory_walks_one_level(
     # And the gap (`_xy_minus`) was filled on each.
     for name in ('corp_a', 'corp_b'):
         assert '_xy_minus' in current_signatures(root / name)
+
+
+def test_stream_assemble_frames_preserves_data(tmp_path: 'Path') -> None:
+    """P5 fix. `_stream_assemble_frames` writes per-corpus frames
+    to temp parquets, then re-uses `stream_concat_parquets` to
+    merge with bounded RAM. Verify the round-trip preserves row
+    count + schema union vs the original `pl.concat(...,
+    how='diagonal_relaxed')`.
+    """
+    import polars as pl
+
+    from corroborate.runner.runner import _stream_assemble_frames
+
+    frames = [
+        pl.DataFrame({
+            'id': ['a1', 'a2'],
+            'shared': [1.0, 2.0],
+            'only_a': ['x', 'y'],
+        }),
+        pl.DataFrame({
+            'id': ['b1', 'b2', 'b3'],
+            'shared': [3.0, 4.0, 5.0],
+            'only_b': [True, False, True],
+        }),
+        pl.DataFrame({
+            'id': ['c1'],
+            'shared': [6.0],
+        }),
+    ]
+    merged = _stream_assemble_frames(frames, walk_root=tmp_path)
+    # All cells flowed through.
+    assert merged.height == 6
+    # Schema union of all input columns.
+    assert set(merged.columns) == {'id', 'shared', 'only_a', 'only_b'}
+    # Diagonal-relaxed nullpads missing cols.
+    assert merged['only_a'].null_count() == 4
+    assert merged['only_b'].null_count() == 3
+
+
+def test_stream_assemble_frames_single_frame_fast_path(
+    tmp_path: 'Path',
+) -> None:
+    """Single-frame input skips the spill/merge dance — returns
+    the frame unchanged. The empty `walk_root` scratch dir is not
+    created in this branch."""
+    import polars as pl
+
+    from corroborate.runner.runner import _stream_assemble_frames
+
+    single = pl.DataFrame({'id': ['x'], 'val': [1.0]})
+    result = _stream_assemble_frames([single], walk_root=tmp_path)
+    assert result.height == 1
+    assert result.columns == ['id', 'val']

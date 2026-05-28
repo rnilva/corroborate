@@ -20,6 +20,7 @@ Tautology-audit machinery and internal helpers live on the
 submodule path."""
 from corroborate.measurables.measurable import (
     Measurable,
+    audit_measurable_registry,
     compute_missing_columns,
     evaluate_with_measurables,
     get_registered,
@@ -47,6 +48,7 @@ from corroborate.measurables.reductions import (
 
 __all__ = [
     'Measurable',
+    'audit_measurable_registry',
     'compute_missing_columns',
     'cv_safe',
     'evaluate_with_measurables',

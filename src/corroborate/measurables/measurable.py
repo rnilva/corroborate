@@ -469,6 +469,94 @@ def _measurable_param_names(fn: Callable[..., object]) -> tuple[str, ...]:
     return tuple(deps)
 
 
+def _measurable_extra_param_names(fn: Callable[..., object]) -> tuple[str, ...]:
+    """Parameters of `fn` (after the first positional `record`)
+    whose names are NOT registered measurables. Used by the P1+P4
+    startup validator to flag likely typos: an unregistered
+    parameter name is almost always either (a) a typo of a real
+    measurable name, or (b) a leftover from a renamed dep.
+
+    Either way: the framework will raise `TypeError: missing
+    required argument` at call time, but the author wants to know
+    at registration time — not when the bridge eval finally
+    triggers a per-cell call months after the typo landed."""
+    try:
+        sig = inspect.signature(fn)
+    except (ValueError, TypeError):
+        return ()
+    params = list(sig.parameters.values())
+    extras = [
+        p.name for p in params[1:]
+        if p.name not in _REGISTRY
+        # Ignore conventional kwargs that aren't measurable deps.
+        and p.name not in ('record', '_record', 'self')
+    ]
+    return tuple(extras)
+
+
+def audit_measurable_registry(
+    *, strict: bool = False,
+) -> tuple[str, ...]:
+    """P1+P4 startup validator. Returns a tuple of warning
+    messages — one per measurable whose declared `reads` tuple
+    diverges from the framework's auto-derived expectation.
+
+    Three failure modes flagged:
+
+    1. **Empty `reads=()` with no parameter-injected deps**: the
+       measurable reads NOTHING transitively. Usually means it's a
+       constant or has hard-coded values — almost certainly a
+       substrate author bug (the measurable will only ever return
+       the same value regardless of input).
+
+    2. **Parameter-injected name not in registry**: a measurable
+       declares `def fn(record, mc_return_raw_episodes)` but
+       `mc_return_raw_episodes` isn't registered. The framework
+       can't inject; the call will TypeError at runtime. Author
+       likely forgot to import the substrate module that
+       registers the dep, or typo'd the name.
+
+    3. **`reads` declares cols that aren't on any actual record
+       path**: NOT flagged here (would require a corpus to test
+       against). The validator catches structural drift, not
+       cell-level mismatch.
+
+    `strict=True` raises `ValueError` instead of returning
+    warnings — useful from a CLI startup gate.
+
+    Pure read; no side effects. Safe to call multiple times."""
+    warnings: list[str] = []
+    for name in _REGISTRY.names():
+        m = _REGISTRY.get(name)
+        if m is None:
+            continue
+        deps = _measurable_param_names(m.fn)
+        extras = _measurable_extra_param_names(m.fn)
+        if extras:
+            warnings.append(
+                f'measurable {name!r}: parameter(s) {extras!r} '
+                f'are not in the registry — framework cannot inject. '
+                f'Possible causes: typo, or substrate module that '
+                f'registers them not imported. Will TypeError on '
+                f'first call.',
+            )
+        if not deps and not m.reads:
+            # Truly read-nothing measurable. Likely a constant or
+            # an authoring bug. Flag.
+            warnings.append(
+                f'measurable {name!r}: declares `reads=()` AND has '
+                f'no parameter-injected deps — measurable reads '
+                f'nothing transitively. Hard-coded value? Likely a '
+                f'substrate author bug.',
+            )
+    if strict and warnings:
+        raise ValueError(
+            'measurable registry audit failed:\n  '
+            + '\n  '.join(warnings),
+        )
+    return tuple(warnings)
+
+
 def _resolve_one(
     name: str, record: Mapping[str, object],
     cache: dict[str, object],
@@ -476,9 +564,34 @@ def _resolve_one(
     """Resolve one measurable by name; recurses on its deps.
     Memoizes in `cache` so each measurable computes at most once
     per record. Loud KeyError if name isn't registered — caller
-    asked for something that doesn't exist."""
+    asked for something that doesn't exist.
+
+    **P1 fix — record-as-precomputed-cache**: when a measurable's
+    value is already present in `record` (e.g. a list column
+    previously computed and persisted to `measurements.parquet`,
+    then joined onto the cell DataFrame), use that value rather
+    than recomputing from scratch. This is what closes the lie at
+    `_missing_for_restore`: a measurable whose transitive reads
+    are trace cols (cloud-evicted) but whose own value is already
+    in the cache as a list col should be USABLE without re-
+    restoring traces.
+
+    Skips substitution when the cached value is None/NaN (treated
+    as 'not actually computed') — partial-NaN recompute then fires
+    through the normal path."""
     if name in cache:
         return cache[name]
+    # Record-as-precomputed-cache: prefer the persisted value when
+    # present + non-missing. The `is None` short-circuit handles
+    # the None-stamped case from `compute_missing_columns`'s
+    # cell-injection cascade — those entries are sentinels that
+    # the framework couldn't compute on this cell, NOT a real
+    # cached value.
+    if name in record:
+        val = record[name]
+        if val is not None and not _is_scalar_nan(val):
+            cache[name] = val
+            return val
     m = _REGISTRY.get(name)
     if m is None:
         raise KeyError(
@@ -489,6 +602,17 @@ def _resolve_one(
     deps = {d: _resolve_one(d, record, cache) for d in dep_names}
     cache[name] = m(record, **deps)
     return cache[name]
+
+
+def _is_scalar_nan(v: object) -> bool:
+    """True iff `v` is a float NaN scalar. Returns False for any
+    non-float (list / ndarray / mapping / etc.). Used by
+    `_resolve_one` to decide whether a record-side value counts
+    as 'already computed': a NaN scalar is a sentinel, not a real
+    cached value."""
+    if not isinstance(v, float):
+        return False
+    return v != v   # NaN-NaN-self-inequality, the standard idiom
 
 
 def evaluate_with_measurables[T](
@@ -514,6 +638,81 @@ def evaluate_with_measurables[T](
     dep_names = _measurable_param_names(fn)
     deps = {d: _resolve_one(d, record, cache) for d in dep_names}
     return fn(record, **deps)
+
+
+def _topo_sort_pending(
+    pending: list[tuple[
+        str,
+        'Measurable[Mapping[str, object], object]',
+        list[object] | None,
+    ]],
+) -> list[tuple[
+    str,
+    'Measurable[Mapping[str, object], object]',
+    list[object] | None,
+]]:
+    """Topological sort of `pending` by inter-measurable
+    dependencies. A pending name `b` depends on `a` iff `a` is in
+    pending AND `a` appears in `b.reads` directly OR transitively
+    through another pending name. Leaves (no deps within pending)
+    come first.
+
+    The walk uses `m.reads` (authored direct-reads tuple) rather
+    than `_measurable_param_names` — this captures both styles
+    of dep authoring: param-injection (`def fn(record, dep: T)`)
+    AND `record.get('dep')`. The cascade fix targets the latter;
+    param-injected deps additionally cascade via `_resolve_one`
+    in the per-cell evaluator, independent of this ordering.
+
+    Tie-breaking is alphabetical (Kahn's algorithm sorts the
+    leaf-set at each step). When multiple unrelated leaves sit
+    at the same dependency depth, the alphabetical order — not
+    the input order in `pending` — wins. Bridge-author
+    consequence: if downstream resolution depends on tie-break
+    determinism for two name-independent measurables, the order
+    is the alphabetical lexicographic one.
+
+    Falls back to the input order on cycles (defensive; valid
+    `@measurable` graphs are DAGs)."""
+    by_name: dict[str, tuple[
+        str,
+        Measurable[Mapping[str, object], object],
+        list[object] | None,
+    ]] = {n: (n, m, ex) for n, m, ex in pending}
+    pending_names: set[str] = set(by_name)
+    deps: dict[str, set[str]] = {n: set() for n in pending_names}
+    # Transitive closure: walk m.reads recursively, intersecting
+    # with pending_names at every step. Names that aren't
+    # registered or aren't in pending get skipped.
+    for n in pending_names:
+        stack = [n]
+        seen_here: set[str] = set()
+        while stack:
+            cur = stack.pop()
+            cur_m = _REGISTRY.get(cur)
+            if cur_m is None:
+                continue
+            for r in cur_m.reads:
+                if r in pending_names and r != n and r not in seen_here:
+                    seen_here.add(r)
+                    deps[n].add(r)
+                    stack.append(r)
+    # Kahn's algorithm with stable (alphabetical) tie-breaking.
+    ordered: list[str] = []
+    remaining = {n: set(d) for n, d in deps.items()}
+    while remaining:
+        leaves = sorted(n for n, d in remaining.items() if not d)
+        if not leaves:
+            # Cycle — append remaining in stable order (defensive;
+            # @measurable graphs should be DAGs).
+            ordered.extend(sorted(remaining))
+            break
+        ordered.extend(leaves)
+        for leaf in leaves:
+            del remaining[leaf]
+        for d in remaining.values():
+            d -= set(leaves)
+    return [by_name[n] for n in ordered if n in by_name]
 
 
 def compute_missing_columns(
@@ -614,6 +813,24 @@ def compute_missing_columns(
         # nothing to do.
         return df
 
+    # Topologically order `pending` by inter-measurable deps so a
+    # measurable that reads another pending measurable's value
+    # (via param injection OR `record.get(...)`) sees the
+    # just-computed value rather than the pre-pass null/NaN.
+    # Without this, a single `compute_missing_columns` pass with
+    # required={leaf, dependent} leaves the `dependent` reading
+    # the absent column and silently returning NaN — author has
+    # to call build twice in the right order (today's gotcha:
+    # `lambda_a_late` reads `q_action_std_late` /
+    # `q_argmax_margin_late` via `record.get` and didn't
+    # cascade-compute in the same pass).
+    #
+    # Param-injected deps already cascade via `_resolve_one` per
+    # cell; this fixes the `record.get(...)` pattern too. Order
+    # uses `m.reads` (the authored direct-reads tuple); names not
+    # in pending are ignored (they're trace / runs cols already
+    # on the cell dict).
+    pending = _topo_sort_pending(pending)
     cells = cast(list[dict[str, object]], df.to_dicts())
     new_cols: dict[str, list[object]] = {n: [] for n, _, _ in pending}
     # Track measurables that ALWAYS failed across all cells — those
@@ -632,6 +849,9 @@ def compute_missing_columns(
             if existing is not None and existing[i] is not None:
                 # Already filled — preserve.
                 new_cols[name].append(existing[i])
+                # Cascade: downstream pending measurables that read
+                # this via `record.get(...)` need it on the cell dict.
+                cell[name] = existing[i]
                 continue
             eval_counts[name] += 1
             try:
@@ -657,6 +877,12 @@ def compute_missing_columns(
                 fail_counts[name] += 1
                 last_exception[name] = e
             new_cols[name].append(v)
+            # Cascade: inject just-computed value into the cell so
+            # downstream pending measurables that read it via
+            # `record.get(name)` see the new value rather than the
+            # pre-pass null/NaN. Param-injected deps already cascade
+            # via the per-cell evaluator cache.
+            cell[name] = v
     # If a measurable failed for EVERY cell, that's an authoring bug
     # (typo in measurable.fn body, broken signature, etc.) — not
     # "missing inputs on a subset." Emit a stderr warning so it

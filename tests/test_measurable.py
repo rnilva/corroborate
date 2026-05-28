@@ -543,3 +543,111 @@ def test_unknown_dep_in_intermediate_raises_typeerror() -> None:
         raise AssertionError('expected TypeError')
     except TypeError:
         pass
+
+
+# ============ P1 fix — record-as-precomputed-cache ============
+
+def test_resolve_one_prefers_record_precomputed_value() -> None:
+    """P1 fix. When a parameter-injected measurable is already
+    present in the record (e.g., previously computed and joined
+    from `measurements.parquet`), the resolver uses that value
+    rather than recomputing from scratch. Closes the lie at
+    `_missing_for_restore`: a cached list-col satisfies its own
+    transitive reads via this path."""
+    from corroborate.measurables import evaluate_with_measurables
+
+    @measurable
+    def heavy_dep(record: Mapping[str, object]) -> int:
+        del record
+        # Sentinel: if this fires, the cache shortcut wasn't taken.
+        raise RuntimeError('should not be called when record carries heavy_dep')
+
+    def consumer(record: Mapping[str, object], heavy_dep: int) -> int:
+        del record
+        return heavy_dep * 10
+
+    # Record already carries `heavy_dep` as a finite int — resolver
+    # should use it directly and NOT call the fn.
+    result = evaluate_with_measurables(consumer, {'heavy_dep': 7})
+    assert result == 70
+
+
+def test_resolve_one_skips_record_value_when_none() -> None:
+    """P1 fix — sentinel handling. A None value in the record is
+    NOT a cached result; the resolver falls through to recompute.
+    Mirrors the `compute_missing_columns` cascade convention."""
+    from corroborate.measurables import evaluate_with_measurables
+
+    @measurable
+    def fallback_dep(record: Mapping[str, object]) -> int:
+        del record
+        return 42
+
+    def consumer(record: Mapping[str, object], fallback_dep: int) -> int:
+        del record
+        return fallback_dep
+
+    # Record carries None — resolver recomputes via the registered fn.
+    result = evaluate_with_measurables(consumer, {'fallback_dep': None})
+    assert result == 42
+
+
+def test_resolve_one_skips_record_value_when_nan() -> None:
+    """P1 fix — NaN scalar is treated as missing. Mirrors how
+    `_has_missing_values` classifies NaN cells as needing
+    recompute."""
+    from corroborate.measurables import evaluate_with_measurables
+
+    @measurable
+    def fallback_dep(record: Mapping[str, object]) -> float:
+        del record
+        return 1.5
+
+    def consumer(record: Mapping[str, object], fallback_dep: float) -> float:
+        del record
+        return fallback_dep
+
+    result = evaluate_with_measurables(
+        consumer, {'fallback_dep': float('nan')},
+    )
+    assert result == 1.5
+
+
+# ============ P1+P4 startup validator ============
+
+def test_audit_measurable_registry_flags_unregistered_param() -> None:
+    """P1+P4 validator. A measurable declaring a parameter whose
+    name isn't a registered measurable is a likely typo or
+    forgotten-import. The audit returns a non-empty warning list."""
+    from corroborate.measurables import audit_measurable_registry
+
+    # Distinctive name unlikely to clash with substrate measurables.
+    @measurable
+    def __p1p4_audit_typo(
+        record: Mapping[str, object], totally_unregistered_xyz: int,
+    ) -> int:
+        del record, totally_unregistered_xyz
+        return 0
+
+    warnings = audit_measurable_registry()
+    assert any('__p1p4_audit_typo' in w for w in warnings)
+    assert any('totally_unregistered_xyz' in w for w in warnings)
+
+
+def test_audit_strict_mode_raises() -> None:
+    """P1+P4 strict mode. `strict=True` raises ValueError instead
+    of returning warnings — useful from CLI startup gates."""
+    from corroborate.measurables import audit_measurable_registry
+
+    @measurable
+    def __p1p4_strict_typo(
+        record: Mapping[str, object], also_unregistered_xyz: int,
+    ) -> int:
+        del record, also_unregistered_xyz
+        return 0
+
+    try:
+        _ = audit_measurable_registry(strict=True)
+        raise AssertionError('expected ValueError')
+    except ValueError as e:
+        assert 'also_unregistered_xyz' in str(e)

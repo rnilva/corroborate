@@ -167,6 +167,32 @@ def add_args(parser: argparse.ArgumentParser) -> None:
              'stale w.r.t. the substrate (e.g., new @measurable '
              'added; no cloud round-trip wanted).',
     )
+    parser.add_argument(
+        '--force-recompute', action='append', default=[],
+        dest='force_recompute', metavar='NAME',
+        help='Comma- or repeat-flag-separated measurable names to '
+             'force-recompute on every --ingest target corpus, '
+             'bypassing the sidecar\'s "current" check. Use when '
+             'a measurable\'s values are stale-NaN (computed at '
+             'sweep-time before traces were available) but the '
+             'sidecar marks it current. Implies '
+             '--recompute-measurables. Example: '
+             '--force-recompute q_argmax_margin_late,lambda_a_late '
+             '(or --force-recompute q_argmax_margin_late '
+             '--force-recompute lambda_a_late).',
+    )
+    parser.add_argument(
+        '--recover-stale-nan', action='store_true',
+        dest='recover_stale_nan',
+        help='On every --ingest target corpus, auto-detect '
+             'measurables that are sidecar-current but all-NaN in '
+             'measurements.parquet AND whose transitive reads are '
+             'now satisfied locally, and force-recompute them. '
+             'Closes the silent-NaN gap where a measurable was '
+             'computed at sweep-time but its trace input was '
+             'cloud-evicted at the time. Implies '
+             '--recompute-measurables.',
+    )
 
 
 def dispatch(args: argparse.Namespace) -> int:
@@ -356,9 +382,28 @@ def dispatch(args: argparse.Namespace) -> int:
     # rebuilt `measurements.parquet` is then the source-of-truth
     # the cache merge projects from. Only meaningful when an ingest
     # mode resolved to a concrete corpus list.
-    if cast(bool, args.recompute_measurables):
+    #
+    # `--force-recompute` and `--recover-stale-nan` are auxiliary
+    # opt-ins that imply `--recompute-measurables` semantics — they
+    # change which measurables are treated as gap (forced vs
+    # newly-registered).
+    raw_force = cast(list[str], args.force_recompute)
+    force_names: frozenset[str] = frozenset(
+        n.strip()
+        for raw in raw_force
+        for n in raw.split(',')
+        if n.strip()
+    )
+    recover_stale_nan = cast(bool, args.recover_stale_nan)
+    if (
+        cast(bool, args.recompute_measurables)
+        or force_names
+        or recover_stale_nan
+    ):
         _recompute_ingest_targets(
             module_name=module_name, bridges=bridges, data=data,
+            force=force_names or None,
+            recover_nan=recover_stale_nan,
         )
 
     results = run(
@@ -372,6 +417,7 @@ def dispatch(args: argparse.Namespace) -> int:
         report_path=cast(Path | None, args.report_path),
         write_report=write_report,
         bridge_filter=bridge_filter,
+        force_recompute=force_names,
     )
     _print_verdicts(results, bridges, findings)
     return 0
@@ -382,6 +428,8 @@ def _recompute_ingest_targets(
     module_name: str,
     bridges: tuple[Bridge, ...],
     data: Path | str | list[Path] | None,
+    force: frozenset[str] | None = None,
+    recover_nan: bool = False,
 ) -> None:
     """`--recompute-measurables` worker. For each corpus implied
     by the resolved ingest mode, force a local-only
@@ -389,7 +437,14 @@ def _recompute_ingest_targets(
     so the operator sees what was refilled vs skipped (unsatisfiable
     measurables surface separately — those are the ones the user
     would need to re-ingest with cloud restore to materialise).
-    """
+
+    `force`: passed through to `recompute_corpus_measurables` —
+    names that bypass the sidecar's "current" check (from
+    `--force-recompute`).
+
+    `recover_nan`: when True, each per-corpus pass auto-detects
+    sidecar-current-but-NaN measurables and force-recomputes them
+    (from `--recover-stale-nan`)."""
     import sys
     from corroborate.bridge.bridge import measurable_names_for_bridges
     from corroborate.corpus.measurements import (
@@ -472,15 +527,30 @@ def _recompute_ingest_targets(
                 file=sys.stderr,
             )
             continue
-        result = recompute_corpus_measurables(cd, required=required)
-        if result.recomputed:
+        result = recompute_corpus_measurables(
+            cd, required=required, force=force, recover_nan=recover_nan,
+        )
+        if (
+            result.recomputed or result.recovered_nan
+            or result.forced_recompute
+        ):
+            n_total = (
+                len(result.recomputed)
+                + len(result.recovered_nan)
+                + len(result.forced_recompute)
+            )
             print(
-                f'  - {cd}: recomputed {len(result.recomputed)} '
+                f'  - {cd}: recomputed {n_total} '
                 f'measurable(s) → {cd / MEASUREMENTS_FILENAME}',
                 file=sys.stderr,
             )
             for name in result.recomputed:
                 print(f'      + {name}', file=sys.stderr)
+            for name in result.recovered_nan:
+                print(f'      + {name} (recovered stale-NaN)',
+                      file=sys.stderr)
+            for name in result.forced_recompute:
+                print(f'      + {name} (forced)', file=sys.stderr)
         else:
             print(
                 f'  - {cd}: current ({len(result.already_current)} '

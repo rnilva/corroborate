@@ -601,3 +601,90 @@ def test_missing_for_restore_detects_partial_trace_columns(
         f'partial local file lacking col C should trigger restore; '
         f'got {targets!r}'
     )
+
+
+def test_missing_for_restore_narrows_via_measurements_parquet(
+    tmp_path: Path,
+) -> None:
+    """P1 fix. When `measurements.parquet` already carries a
+    registered measurable as a list col, its transitive trace
+    reads are satisfied via the `_resolve_one` record-as-cache
+    path. `_missing_for_restore` should NOT request traces back
+    from cloud just to recompute a measurable whose value is
+    already persisted.
+
+    Setup: trace_reads = {'mc_return_from_step', 'episode_length',
+    'gamma'} (the transitive closure of eval_late_burst_raw_mean).
+    measurements.parquet carries `mc_return_raw_episodes` (the
+    parameter-injected dep). Local traces.parquet exists but
+    lacks those cols — and that's fine because measurements
+    short-circuits the recompute.
+    """
+    import polars as pl
+
+    from corroborate.measurables import measurable
+    from corroborate.runner.runner import _missing_for_restore
+
+    # Register a measurable mc_return_raw_episodes-like shape:
+    # has transitive reads but already cached in measurements.
+    @measurable(reads=(
+        'mc_return_from_step', 'episode_length', 'gamma',
+    ))
+    def __test_p1_mc_return_raw_episodes(
+        record: 'Mapping[str, object]',
+    ) -> list[float]:
+        del record
+        return []
+
+    runs_path = tmp_path / 'runs.parquet'
+    traces_path = tmp_path / 'traces.parquet'
+    manifest_path = tmp_path / '_remote.json'
+    measurements_path = tmp_path / 'measurements.parquet'
+
+    pl.DataFrame({'id': list(range(2000))}).write_parquet(runs_path)
+    # traces.parquet exists locally with NO useful cols (simulating
+    # a partial restore that lacks the trace cols).
+    pl.DataFrame({
+        'id': list(range(2000)),
+        'unrelated_col': list(range(2000)),
+    }).write_parquet(traces_path)
+    # measurements.parquet carries the measurable as a list col.
+    pl.DataFrame({
+        'id': list(range(2000)),
+        '__test_p1_mc_return_raw_episodes': [[1.0, 2.0]] * 2000,
+    }).write_parquet(measurements_path)
+    manifest_path.write_text(
+        '{"remote_root": "s3://bucket/x", "files": ['
+        '{"relpath": "runs.parquet", "size_bytes": 1024, '
+        '"sha256": "abc", "pushed_at": "2026-05-28T00:00:00+00:00", '
+        '"row_ids": []},'
+        '{"relpath": "traces.parquet", "size_bytes": 1024, '
+        '"sha256": "def", "pushed_at": "2026-05-28T00:00:00+00:00", '
+        '"row_ids": []}'
+        ']}',
+    )
+
+    # Without measurements narrowing: would request traces because
+    # the trace_reads aren't on traces.parquet.
+    targets_without = _missing_for_restore(
+        runs_path, traces_path,
+        trace_reads=frozenset({
+            'mc_return_from_step', 'episode_length', 'gamma',
+        }),
+        manifest_path=manifest_path,
+    )
+    assert targets_without == ['traces.parquet']
+
+    # With measurements narrowing: the measurable's transitive
+    # reads are short-circuited via the cached list col → no
+    # restore needed (assuming gamma is on runs.parquet, but we
+    # narrow ALL reads through the measurable's transitive set).
+    targets_with = _missing_for_restore(
+        runs_path, traces_path,
+        trace_reads=frozenset({
+            'mc_return_from_step', 'episode_length', 'gamma',
+        }),
+        manifest_path=manifest_path,
+        measurements_path=measurements_path,
+    )
+    assert targets_with is None

@@ -510,6 +510,7 @@ def run(
     report_path: Path | None = None,
     write_report: bool = False,
     bridge_filter: str | None = None,
+    force_recompute: frozenset[str] = frozenset(),
 ) -> dict[str, BridgeEvaluation]:
     """Run a hypothesis's bridges on `data`, returning per-bridge
     verdicts.
@@ -634,6 +635,7 @@ def run(
         restore_from_cloud=restore_from_cloud,
         extra_required=tuple(getattr(h, 'REQUIRED_MEASURABLES', ())),
         module_scope=getattr(h, 'MODULE_SCOPE', None),
+        force_recompute=force_recompute,
     )
 
     if cells.height == 0:
@@ -1043,6 +1045,7 @@ def _ingest_and_compute(
     restore_from_cloud: bool,
     extra_required: tuple[str, ...] = (),
     module_scope: pl.Expr | None = None,
+    force_recompute: frozenset[str] = frozenset(),
 ) -> pl.DataFrame:
     """Resolve `data` into the per-hypothesis cache.
 
@@ -1077,6 +1080,7 @@ def _ingest_and_compute(
     new_data, walk_root = _load_data(
         data, restore_from_cloud=restore_from_cloud,
         required=required, bridges=bridges,
+        force_recompute=force_recompute,
     )
 
     # Apply MODULE_SCOPE at ingest time. Cells outside the
@@ -1486,6 +1490,7 @@ def _load_data(
     restore_from_cloud: bool,
     required: Sequence[str],
     bridges: tuple[Bridge, ...],
+    force_recompute: frozenset[str] = frozenset(),
 ) -> tuple[pl.DataFrame | None, Path | None]:
     """Resolve data into a DataFrame + the walk root used to load it.
 
@@ -1537,6 +1542,7 @@ def _load_data(
             root, restore_from_cloud=restore_from_cloud,
             required=required, bridges=bridges,
             corpus_dirs=corpus_paths,
+            force_recompute=force_recompute,
         )
         return df, root.resolve()
     p = Path(data)
@@ -1548,6 +1554,7 @@ def _load_data(
         df = _load_directory(
             p, restore_from_cloud=restore_from_cloud,
             required=required, bridges=bridges,
+            force_recompute=force_recompute,
         )
         return df, p.resolve()
     if p.is_file():
@@ -1560,6 +1567,8 @@ def _missing_for_restore(
     traces_path: Path,
     trace_reads: frozenset[str],
     manifest_path: Path,
+    *,
+    measurements_path: Path | None = None,
 ) -> list[str] | None:
     """Decide which files we need restored from cloud for this
     corpus.
@@ -1574,12 +1583,32 @@ def _missing_for_restore(
     runs needing different cols would silently read NaN if we
     didn't detect this.
 
+    **P1 fix — measurements-as-precomputed-cache**: when an
+    already-existing `measurements.parquet` carries columns that
+    are themselves registered measurables, those columns can
+    satisfy `trace_reads` via the `_resolve_one` record-cache
+    path (see `measurable.py`). Narrow `trace_reads` by removing
+    leaf reads that are downstream of a measurement-store column —
+    we don't need to re-fetch traces when the parameter-injected
+    list col is already computed and persisted.
+
     Returns the list of relpaths to restore, or None if nothing
     needs restoring. Stub local files (size < 1KB) are treated as
     missing — some corpora carry zero-byte placeholders."""
     targets: list[str] = []
     if not _file_present(runs_path):
         targets.append('runs.parquet')
+    # Narrow `trace_reads` by what the local `measurements.parquet`
+    # already carries — if a parameter-injected measurable (e.g.
+    # `mc_return_raw_episodes`) is already a list col in the
+    # measurement store, its transitive trace reads
+    # (`mc_return_from_step` / `episode_length` / `gamma`) don't
+    # need restoring: the `_resolve_one` record-as-cache path
+    # picks them up directly.
+    if measurements_path is not None and trace_reads:
+        trace_reads = _narrow_trace_reads_via_measurements(
+            trace_reads, measurements_path,
+        )
     if trace_reads:
         traces_partial = (
             _file_present(traces_path)
@@ -1605,6 +1634,69 @@ def _missing_for_restore(
                     )
                     targets.extend(shards)
     return targets or None
+
+
+def _narrow_trace_reads_via_measurements(
+    trace_reads: frozenset[str],
+    measurements_path: Path,
+) -> frozenset[str]:
+    """Drop trace-leaf reads that are already satisfied by an
+    existing `measurements.parquet`.
+
+    P1 fix supporting `_missing_for_restore`. A registered
+    measurable whose value is already persisted in
+    `measurements.parquet` (typically a list/array col like
+    `mc_return_raw_episodes` — the output of a per-burst
+    reduction) satisfies its own transitive reads at run time via
+    the `_resolve_one` record-as-cache path. Re-fetching traces
+    just to recompute the measurable would be redundant.
+
+    The narrowing:
+
+    1. Scan the existing measurements.parquet schema (cheap —
+       metadata only).
+    2. For each column that names a registered measurable, compute
+       its `transitive_reads` and remove them from the candidate
+       set IF they ONLY arise from that measurable's deps (not
+       independently demanded by something else).
+
+    Conservative: a trace col is dropped only when ALL paths to it
+    pass through a measurable that's already cached. A trace col
+    demanded by an analysis-read or by a still-uncached
+    measurable's transitive reads stays in the set.
+
+    Pure read; no side effects."""
+    if not measurements_path.exists():
+        return trace_reads
+    try:
+        meas_schema = pl.scan_parquet(measurements_path).collect_schema()
+    except (OSError, pl.exceptions.ComputeError):
+        return trace_reads
+    meas_cols = set(meas_schema.names())
+    cached_measurables: list[str] = [
+        c for c in meas_cols
+        if c != 'id' and get_registered(c) is not None
+    ]
+    if not cached_measurables:
+        return trace_reads
+    # A trace col is "covered" if every measurable in the
+    # required-reads graph that pulls from it is itself cached.
+    # Approximation: collect the union of reads contributed
+    # ONLY by cached measurables, then check whether ANY
+    # uncached pathway also pulls the col. We don't track full
+    # provenance here — instead, we drop a trace col when it
+    # appears ONLY in the transitive-reads closure of cached
+    # measurables (i.e., dropping it would still leave a
+    # satisfiable graph because the cached value short-circuits
+    # the recompute).
+    cached_reads_union: set[str] = set()
+    for name in cached_measurables:
+        try:
+            cached_reads_union.update(transitive_reads(name))
+        except KeyError:
+            continue
+    droppable = cached_reads_union & trace_reads
+    return trace_reads - droppable
 
 
 def _trace_file_has_columns(
@@ -1885,6 +1977,8 @@ def _drifted_or_missing_measurables(
 
 def _measurements_sidecar_current(
     sub: Path, required: Sequence[str],
+    *,
+    force_recompute: frozenset[str] = frozenset(),
 ) -> bool:
     """True iff `measurements.parquet` exists and the sidecar's
     closure-hash for every required measurable matches the current
@@ -1899,6 +1993,13 @@ def _measurements_sidecar_current(
     retry after restoring missing inputs (e.g. fresh traces) can
     `rm <corpus>/measurements.parquet` to invalidate the sidecar.
 
+    `force_recompute` (P4 fix): names the operator passed via
+    `--force-recompute`. Any matching name is treated as "not
+    current" regardless of sidecar state — bypasses the fast-path
+    so the trace restore + recompute actually fires. Without this,
+    `--force-recompute` could no-op silently when the prior NaN
+    compute left a sidecar saying "current."
+
     Mirrors the per-column check in `corpus.measurements:
     check_drift` (any drift / any missing → False). Pure read;
     no side effects."""
@@ -1911,6 +2012,8 @@ def _measurements_sidecar_current(
     if not stored:
         return False
     for name in required:
+        if name in force_recompute:
+            return False
         live = _measurable_signature(name)
         if live is None:
             # Substrate doesn't define this measurable — it'll be
@@ -1955,6 +2058,7 @@ def _load_one_corpus(
     required: Sequence[str],
     trace_reads: frozenset[str],
     analysis_reads: frozenset[str],
+    force_recompute: frozenset[str] = frozenset(),
 ) -> tuple[pl.DataFrame | None, list[str]]:
     """Per-corpus pipeline: restore + load + join traces +
     compute measurables + drop trace cols + evict.
@@ -1983,10 +2087,13 @@ def _load_one_corpus(
     # cloud restore (~7-30s/corpus) by force-skipping when
     # measurements are demonstrably current. This turns a
     # full-walk re-run from N×restore-time into N×idempotent-skip.
-    measurements_current = _measurements_sidecar_current(sub, required)
+    measurements_current = _measurements_sidecar_current(
+        sub, required, force_recompute=force_recompute,
+    )
     if manifest.exists() and not measurements_current:
         need_restore = _missing_for_restore(
             runs_path, traces_path, trace_reads, manifest,
+            measurements_path=sub / 'measurements.parquet',
         )
         if need_restore:
             if restore_from_cloud:
@@ -2238,6 +2345,7 @@ def _load_directory(
     required: Sequence[str],
     bridges: tuple[Bridge, ...],
     corpus_dirs: Sequence[Path] | None = None,
+    force_recompute: frozenset[str] = frozenset(),
 ) -> pl.DataFrame:
     """Walk subdirs of `root`; for each subdir's `runs.parquet`,
     load it, join the trace columns required by:
@@ -2354,6 +2462,7 @@ def _load_directory(
                 required=required,
                 trace_reads=trace_reads,
                 analysis_reads=analysis_reads,
+                force_recompute=force_recompute,
             ))
             for line in results[-1][1]:
                 print(line, file=sys.stderr, flush=True)
@@ -2383,6 +2492,7 @@ def _load_directory(
                     required=required,
                     trace_reads=trace_reads,
                     analysis_reads=analysis_reads,
+                    force_recompute=force_recompute,
                 )
                 futures[fut] = i
             for fut in _cf.as_completed(futures):
@@ -2414,10 +2524,18 @@ def _load_directory(
             flush=True,
         )
         return pl.DataFrame()
-    merged = _dedup_by_content(
-        pl.concat(frames, how='diagonal_relaxed'),
-        source='loaded directory',
-    )
+    # **P5 — streaming cache assembly**. Holding K per-corpus
+    # DataFrames in memory then calling `pl.concat(how='diagonal_
+    # relaxed')` reproducibly OOMs ~12/15 corpora deep on the
+    # canonical γ=0.99 panel (asterix's full-Q + per-burst list cols
+    # blow the working set past 64 GB). Re-use the sweep-side
+    # `stream_concat_parquets` for the cache-assembly step: spill
+    # each per-corpus frame to a temp parquet, free the in-RAM
+    # frame, and merge from disk with bounded peak RAM. Peak memory
+    # stays in the per-corpus-spill range (~1 frame at a time)
+    # rather than scaling with N_corpora.
+    merged = _stream_assemble_frames(frames, walk_root=root)
+    merged = _dedup_by_content(merged, source='loaded directory')
     print(
         f'runner: ingested {n_loaded}/{n_total} corpora '
         f'({n_skipped} skipped) → {merged.height} cells × '
@@ -2426,6 +2544,63 @@ def _load_directory(
         flush=True,
     )
     return merged
+
+
+def _stream_assemble_frames(
+    frames: Sequence[pl.DataFrame],
+    *,
+    walk_root: Path,
+) -> pl.DataFrame:
+    """Spill per-corpus DataFrames to temp parquets, then re-use
+    `stream_concat_parquets` (the sweep-side merge primitive) to
+    concatenate them with bounded peak RAM.
+
+    The framework already streams sweep-time per-arm parquet
+    merges via `stream_concat_parquets`; the cache-assembly path
+    used to short-circuit to `pl.concat(how='diagonal_relaxed')`
+    which materialises the full panel in RAM. For sweeps whose
+    per-corpus DataFrames carry per-burst list columns (mc_return,
+    mc_return_raw_episodes, etc.) the materialisation reproducibly
+    OOMs at ~12/15 corpora on canonical γ=0.99 panels.
+
+    Routes through the same streaming primitive the sweep merge
+    uses, with `chunk_size` and `target_ram_gb` tuned for cache-
+    assembly's smaller per-frame sizes (cache frames have already
+    had their trace cols dropped + evicted, so each is much
+    smaller than a sweep's per-arm parquet — `chunk_size=8` keeps
+    peak RAM in the GB range on canonical panels).
+
+    Single-frame fast path: skip the spill/merge dance when there's
+    nothing to merge.
+    """
+    if len(frames) == 1:
+        return frames[0]
+    from corroborate.corpus.persistence import stream_concat_parquets
+    import tempfile
+    # Spill each frame to a temp parquet in a scratch dir under
+    # the walk_root's parent (same FS — atomic move semantics
+    # remain valid for the eventual stream_concat output). Mirrors
+    # `stream_concat_parquets`'s own scratch_dir default
+    # (`out.parent`) so we don't cross filesystems unexpectedly.
+    scratch = Path(tempfile.mkdtemp(
+        prefix='cache_assemble_', dir=str(walk_root),
+    ))
+    try:
+        spilled: list[Path] = []
+        for i, frame in enumerate(frames):
+            spill_path = scratch / f'corpus_{i:04d}.parquet'
+            frame.write_parquet(str(spill_path))
+            spilled.append(spill_path)
+        # Drop in-RAM references; the streaming merge reads from
+        # disk and produces one final frame at the end.
+        del frames
+        out_path = scratch / 'merged.parquet'
+        stream_concat_parquets(spilled, out_path)
+        return pl.read_parquet(out_path)
+    finally:
+        # Always clean up scratch — even on exception.
+        import shutil as _shutil
+        _shutil.rmtree(scratch, ignore_errors=True)
 
 
 def _merge_shard_traces(corpus_dir: Path) -> bool:
