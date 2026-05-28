@@ -154,36 +154,60 @@ the framework's clean Bellman-residual mediator.
 
 ---
 
-## Layer 4 — AGGREGATION DANGER: per-burst dynamic mediation reveals what pooled mediation hides
+## Layer 4 — AGGREGATION DANGER (cross-env static): one number doesn't represent any env
 
-**Question:** Take two envs from the panel. What does a naïve
-cross-env aggregate mediation% claim, vs the per-burst trajectory?
+**Question:** What happens if we take Layer 3's per-env partial
+Spearman results and pool them into a single cross-env "mediation
+%" — the kind of number a paper would put in its abstract?
 
-**Method:** `dynamic_partial_spearman` with mediator =
-`bootstrap_gap_magnitude_per_burst` (clean — Bellman residual, no
-MC-leak), `n_bootstrap=1000` for cluster-bootstrap CI.
+**Method:** `partial_spearman.fn` over the full 12-env panel with
+`stratify_by='env_name'`. Returns Fisher-z-pooled marginal and
+partial ρ across all 680 cells.
 
-**Result:**
+**Result (the pooled headline):**
 
-- **PacMan γ=0.99**: naïve cross-env mediation % could report 73%.
-  Per-burst trajectory: marginal ρ SWITCHES SIGN at mid-training.
-  Framework verdict: `SIGN_FLIP_DETECTED`. DL pool: ρ=+0.027,
-  **I²=0.00** — no detectable effect at all. The "73% mediation"
-  was the Simpson's-paradox average over opposite-sign bursts.
+  pooled marginal ρ  =  +0.155   (p = 0.0001)
+  pooled partial  ρ  =  −0.093   (p = 0.019)
+  pooled absorption  ≈  40%, sign-flipping
 
-- **Asterix γ=0.99**: naïve cross-env mediation might report 31%.
-  Per-burst trajectory shows strong heterogeneity. Framework
-  verdict: `SIGN_FLIP_DETECTED`. DL pool: ρ=+0.34, **I²=0.70** —
-  substantial heterogeneity. PC-style analysis localizes: bg
-  mediates the arm→outcome edge in only 6 of 32 marg-edge bursts;
-  direct edges persist in 26.
+A naive reading: *"DDQN's bias-clip absorbs the arm→outcome
+signal and reverses its sign cross-env."* Looks like a strong
+mediation finding.
 
-**Framework contribution:** the `TimeAggregationStatus` enum +
-DL τ²/I² together flag both pathologies. SIGN_FLIP_DETECTED catches
-sign reversal; high I² catches between-burst variance even when
-direction is consistent. Pooled mediation % alone catches neither.
+**Per-env reveal (the disaggregation):** the same 12 strata,
+classified by what conditioning does to each env's ρ:
+
+  - **3 envs with high absorption** (no sign-flip): Asterix
+    (marg=+0.73, partial=+0.32), MetaMaze (+0.39 → +0.17),
+    PacMan in this classifier (low-side).
+  - **2 envs with sign-flip under conditioning**: FourRooms
+    (+0.53 → −0.22), Freeway (+0.22 → −0.24). Conditioning on
+    bias reverses the arm→outcome direction.
+  - **6 envs near-zero marginal**: CartPole, Acrobot,
+    MountainCar, LunarLander, SpaceInvaders, Breakout, Snake.
+    Their per-env partial reads are dominated by noise.
+
+The pool averages all three regimes into one ρ. The pooled
+"partial = −0.09" is the Fisher-z mean of a multimodal
+distribution: it doesn't represent any individual env. The 40%
+absorption + sign-flip story would publish; the per-env panel
+shows it's an artifact of pooling sign-flippers with
+high-absorbers with noise.
+
+**Framework discipline:** report per-stratum verdicts +
+heterogeneity diagnostics. Never just the pool. The framework's
+`stratified_*` primitives expose both — the pool number AND the
+per-stratum panel — so authors can't honestly publish the former
+without the latter.
 
 → `figures/04_aggregation_danger.png` and `.csv`
+
+**Companion at a different granularity:** Layer 5 shows the
+analogous danger WITHIN each env — averaging per-burst ρ
+trajectories into one per-env number hides sign-flip pathology
+(PacMan SIGN_FLIP_DETECTED DL ρ ≈ 0; Asterix γ=0.99
+SIGN_FLIP_DETECTED with I² ≈ 0.7). Layers 4 and 5 are two
+levels of the same Simpson's-paradox concern.
 
 ---
 

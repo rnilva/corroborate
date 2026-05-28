@@ -54,13 +54,17 @@ papers/g099_mediation/
    is used at Layer 5.
    *Primitive*: `partial_spearman`.
 
-4. **AGGREGATION DANGER** — Two dramatic per-env examples (PacMan
-   + Asterix γ=0.99) where per-burst dynamic mediation reveals
-   what pooled mediation hides. The framework's
-   `TimeAggregationStatus` enum + DL τ²/I² catch SIGN_FLIP_DETECTED
-   pathology where naïve pooled mediation reports a meaningful
-   percent (Simpson's-paradox artifact).
-   *Primitive*: `dynamic_partial_spearman` with `n_bootstrap=1000`.
+4. **AGGREGATION DANGER (cross-env static)** — Pool Layer 3's
+   per-env static mediation results into a single cross-env
+   ρ_marg + ρ_partial; reveal that the headline (e.g., "partial
+   sign-flips to −0.09, 40% absorption") averages over THREE
+   qualitatively different env regimes (high-absorbers,
+   sign-flippers, near-zero-marginals) and doesn't represent any
+   individual env.
+   *Primitive*: `partial_spearman` over the full panel.
+   *Companion at a different granularity*: Layer 5 surfaces the
+   same Simpson's-paradox concern WITHIN each env (per-burst
+   sign-flip).
 
 5. **DYNAMIC mediation + cluster aggregation** — Per-env trajectories
    across all 12 envs with the framework's clean (Bellman-residual)

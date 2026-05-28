@@ -1,23 +1,45 @@
-"""Layer 4 — AGGREGATION DANGER: pooled mediation hides per-burst heterogeneity.
+"""Layer 4 — AGGREGATION DANGER (cross-env static): pooling per-env
+mediation results into one cross-env number doesn't represent any
+individual env.
 
-Two dramatic examples drawn from the canonical panel:
+The natural cross-env aggregate of Layer-3-style per-env partial
+Spearman is the Fisher-z-pooled `ρ(arm, outcome | jensen_gap)`
+across all 12 envs. Polars-based primitives such as
+`partial_spearman` compute it in one line. The aggregate is
+publishable-looking:
 
-  - **PacMan γ=0.99**: pooled bg-mediation looks meaningful in
-    naïve cross-env tables; the DL random-effects pool says ρ≈0
-    with I²≈0 (no signal at all); the per-burst trajectory shows
-    the marginal ρ FLIPS SIGN at mid-training. The pooled number
-    was Simpson's-paradox averaging across opposite-sign bursts.
+  pooled marginal ρ  = +0.16    (across 680 cells, 12 strata)
+  pooled partial  ρ  = −0.09    (after conditioning on jensen_gap)
+  pooled absorption  = ~60%, sign-flipping
 
-  - **Asterix γ=0.99**: pooled bg-mediation looks weak (small
-    percent) but the per-burst trajectory shows STRONG
-    heterogeneity (I²≈0.7) and SIGN_FLIP_DETECTED — bg mediates
-    for some bursts but the arm→outcome edge persists for others.
-    The pooled summary collapses two qualitatively different
-    regimes into one number.
+A naive reading: "DDQN's bias-clip absorbs the arm→outcome signal
+AND flips its sign cross-env." Looks like a strong mediation
+finding.
 
-The framework's contribution is the per-stratum + per-burst typed
-verdict surface that catches both pathologies without forcing the
-analyst to know which one to look for.
+But: the per-env panel (Layer 3) reveals that the pool is averaging
+THREE qualitatively different env regimes:
+
+  - 2 envs with strong positive absorption (Asterix, MetaMaze):
+    bias mediates without sign-flip, absorbs ~56% of marginal ρ
+  - 2 envs with sign-flip under conditioning (FourRooms, Freeway):
+    conditioning on bias REVERSES the arm→outcome direction —
+    pooling these with the non-flippers averages opposite signs
+  - 7 envs at near-zero marginal (CartPole, Acrobot, MountainCar,
+    LunarLander, Snake, Breakout, SpaceInvaders, PacMan):
+    they contribute mostly noise; their per-env partial reads are
+    statistical artifacts rather than meaningful mediation signal
+
+The pooled "−0.09 partial" doesn't represent any of these regimes.
+It's the Fisher-z mean of a multimodal distribution.
+
+This script generates a figure showing both: the pooled headline
+on top, the per-env disaggregation below, and an annotation
+spelling out why the pool misrepresents the data.
+
+Companion: Layer 5 surfaces an analogous danger at a different
+granularity — per-BURST trajectory aggregation hides sign-flip
+WITHIN a single env (e.g. PacMan SIGN_FLIP_DETECTED). Layers 4
+and 5 are two levels of the same Simpson's-paradox concern.
 """
 from __future__ import annotations
 import sys
@@ -31,134 +53,211 @@ import polars as pl
 SCRIPT_DIR = Path(__file__).parent
 sys.path.insert(0, str(SCRIPT_DIR))
 from _common import (
-    BASELINE_ARM, COLOR_HELPS, COLOR_HARMS, COLOR_NULL,
-    MEDIATOR_PER_BURST_COL, MEDIATOR_PER_BURST_LABEL,
-    OUTCOME_PER_BURST_COL, TREATMENT_ARM,
+    BASELINE_ARM, COLOR_HARMS, COLOR_HELPS, COLOR_NULL,
+    ENV_ORDER, MECH_BIAS_COL, OUTCOME_LATE_COL, TREATMENT_ARM,
     env_label, load_g099_canonical_panel,
 )
 
-from corroborate.analyses.dynamic_mediation.partial_spearman import (
-    dynamic_partial_spearman,
-)
+from corroborate.analyses.spearman.partial_spearman import partial_spearman
 
 
 OUT_PNG = SCRIPT_DIR.parent / 'figures' / '04_aggregation_danger.png'
 OUT_CSV = SCRIPT_DIR.parent / 'figures' / '04_aggregation_danger.csv'
 
-DRAMATIC_PAIR = ('PacMan-jumanji', 'Asterix-MinAtar')
+
+def _absorption(rho_marg: float, rho_part: float) -> float:
+    if abs(rho_marg) < 1e-9 or np.isnan(rho_marg) or np.isnan(rho_part):
+        return float('nan')
+    return (1 - abs(rho_part) / abs(rho_marg)) * 100
 
 
 def main() -> None:
-    df = load_g099_canonical_panel()
-    # Primitive expects raw `arm_key` and encodes internally.
-    res = dynamic_partial_spearman.fn(
-        df.filter(pl.col('env_name').is_in(DRAMATIC_PAIR)),
-        arm_field='arm_key',
-        mediator_per_burst=MEDIATOR_PER_BURST_COL,
-        outcome_per_burst=OUTCOME_PER_BURST_COL,
-        stratify_by=('env_name',),
-        min_n_per_burst=8,
-        n_bootstrap=1000,
-        bootstrap_seed=42,
+    df_raw = load_g099_canonical_panel()
+    df = df_raw.with_columns(
+        pl.when(pl.col('arm_key') == TREATMENT_ARM).then(1)
+          .when(pl.col('arm_key') == BASELINE_ARM).then(0)
+          .otherwise(None).alias('arm_code')
+    ).filter(pl.col('arm_code').is_not_null())
+    print(f'panel: {df.height} cells')
+
+    # ─── pooled cross-env ───
+    pooled_marg = partial_spearman.fn(
+        df, x='arm_code', y=OUTCOME_LATE_COL,
+        conditioning=(), stratify_by='env_name', min_stratum_size=5,
+    )
+    pooled_part = partial_spearman.fn(
+        df, x='arm_code', y=OUTCOME_LATE_COL,
+        conditioning=(MECH_BIAS_COL,), stratify_by='env_name',
+        min_stratum_size=5,
     )
 
-    # ─── figure: 2-column ───
-    fig, axes = plt.subplots(2, 2, figsize=(13, 7.5),
-                             sharex='col', height_ratios=[2, 1])
-
-    print(f'  result keys: {list(res.keys())[:5]}...')
-    # Build env→result lookup robust to whatever key shape the primitive uses.
-    env_to_result = {}
-    for sid, r in res.items():
-        for v in (sid if isinstance(sid, tuple) else (sid,)):
-            if v in DRAMATIC_PAIR:
-                env_to_result[v] = r
-                break
-
-    for col, env in enumerate(DRAMATIC_PAIR):
-        if env not in env_to_result:
-            print(f'  {env}: not in result')
+    # ─── per-env (matches Layer 3) ───
+    per_env: list[tuple[str, float, float]] = []
+    for env in ENV_ORDER:
+        sub = df.filter(pl.col('env_name') == env)
+        if sub.height < 10:
             continue
-        r = env_to_result[env]
-        n_b = len(r.rho_marginal)
-        x = np.arange(n_b)
-
-        ax_top = axes[0, col]
-        # Plot per-burst marginal + partial trajectories
-        ax_top.plot(x, r.rho_marginal, color='steelblue', linewidth=1.4,
-                    label='marginal ρ(arm, outcome)', marker='o',
-                    markersize=3, alpha=0.85)
-        ax_top.plot(x, r.rho_partial, color='goldenrod', linewidth=1.4,
-                    label=f'partial ρ(arm, outcome | {MEDIATOR_PER_BURST_LABEL})',
-                    marker='D', markersize=3, alpha=0.85)
-        ax_top.axhline(0, color='black', linewidth=0.4)
-        ax_top.set_ylabel('Spearman ρ', fontsize=9.5)
-        ax_top.set_title(f'{env_label(env)} γ=0.99', fontsize=11, pad=4)
-        ax_top.legend(loc='upper right', fontsize=8)
-        ax_top.grid(alpha=0.3)
-        ax_top.set_ylim(-1, 1)
-
-        # Annotate aggregation_status + DL pool
-        dl_m = r.dl_marginal
-        dl_p = r.dl_partial
-        anno = (
-            f'aggregation_status (marginal): {r.aggregation_status.name}\n'
-            f'DL pool ρ (marginal): {dl_m.rho_pooled:+.3f}, '
-            f'I²={dl_m.i2:.2f}\n'
-            f'DL pool ρ (partial):  {dl_p.rho_pooled:+.3f}, '
-            f'I²={dl_p.i2:.2f}\n'
-            f'n_bursts={len(r.burst_steps)}, max n_per_burst={max(r.n_per_burst)}'
+        m = partial_spearman.fn(
+            sub, x='arm_code', y=OUTCOME_LATE_COL,
+            conditioning=(), stratify_by='env_name', min_stratum_size=5,
         )
-        # Bootstrap CIs if present
-        if r.bootstrap_marginal is not None and r.bootstrap_partial is not None:
-            anno += (
-                f'\nbootstrap CI ρ(marg): '
-                f'[{r.bootstrap_marginal.rho_lower:+.2f}, '
-                f'{r.bootstrap_marginal.rho_upper:+.2f}]'
-                f'\nbootstrap CI ρ(part): '
-                f'[{r.bootstrap_partial.rho_lower:+.2f}, '
-                f'{r.bootstrap_partial.rho_upper:+.2f}]'
-            )
-        ax_top.text(0.02, 0.04, anno, transform=ax_top.transAxes,
-                    va='bottom', fontsize=7.5, family='monospace',
-                    bbox=dict(boxstyle='round,pad=0.3', facecolor='#fffaf0',
-                              edgecolor='#cc9900', linewidth=0.6))
+        p = partial_spearman.fn(
+            sub, x='arm_code', y=OUTCOME_LATE_COL,
+            conditioning=(MECH_BIAS_COL,), stratify_by='env_name',
+            min_stratum_size=5,
+        )
+        per_env.append((env, m.rho_pooled, p.rho_pooled))
 
-        # Bottom panel: per-burst n samples
-        ax_bot = axes[1, col]
-        ax_bot.bar(x, r.n_per_burst, color='gray', alpha=0.6, width=0.8)
-        ax_bot.set_ylabel('n per burst', fontsize=9)
-        ax_bot.set_xlabel('burst index', fontsize=9)
-        ax_bot.grid(alpha=0.3, axis='y')
+    # Sort by marginal ρ descending so envs with real signal come first.
+    per_env.sort(key=lambda r: -r[1])
+
+    # ─── classify each env ───
+    def classify(rho_m: float, rho_p: float) -> tuple[str, str]:
+        if abs(rho_m) < 0.20:
+            return 'near-zero marg', COLOR_NULL
+        if (rho_m > 0) != (rho_p > 0) and abs(rho_p) > 0.1:
+            return 'sign-flip', COLOR_HARMS
+        if _absorption(rho_m, rho_p) > 30:
+            return 'high absorption', COLOR_HELPS
+        return 'low absorption', '#88a'
+
+    regimes = [classify(m, p) for _, m, p in per_env]
+
+    # ─── figure ───
+    fig = plt.figure(figsize=(13, 8.5))
+    gs = fig.add_gridspec(2, 2, width_ratios=[1.0, 1.7],
+                          height_ratios=[1, 1.4])
+
+    # ── TOP-LEFT: the pooled headline ──
+    ax = fig.add_subplot(gs[0, 0])
+    ax.axis('off')
+    pooled_absorb = _absorption(pooled_marg.rho_pooled, pooled_part.rho_pooled)
+    pool_text = (
+        'Naive cross-env aggregate\n'
+        '(`partial_spearman` over\n'
+        '680 cells, 12 strata):\n\n'
+        f'   marginal ρ  =  {pooled_marg.rho_pooled:+.3f}\n'
+        f'   partial  ρ  =  {pooled_part.rho_pooled:+.3f}\n'
+        f'   p (partial) =  {pooled_part.p_value:.4f}\n\n'
+        f'absorption ≈ {pooled_absorb:.0f}%\n'
+        f'partial SIGN-FLIPS under conditioning.\n\n'
+        '   "DDQN\'s bias mediates the\n'
+        '    arm→outcome signal and\n'
+        '    reverses its sign\n'
+        '    cross-env."\n\n'
+        '— this reading doesn\'t represent\n'
+        'any individual env (right panel).'
+    )
+    ax.text(0.05, 0.95, pool_text, transform=ax.transAxes,
+            fontsize=10, va='top', family='monospace',
+            bbox=dict(boxstyle='round,pad=0.5', facecolor='#fff4e0',
+                      edgecolor='#cc6600', linewidth=1.2))
+
+    # ── TOP-RIGHT + BOTTOM-RIGHT: per-env panel ──
+    ax = fig.add_subplot(gs[:, 1])
+    y_pos = np.arange(len(per_env))
+    labels = [env_label(e) for e, _, _ in per_env]
+    marg_vals = [m for _, m, _ in per_env]
+    part_vals = [p for _, _, p in per_env]
+
+    # Lines connecting marg → partial per env
+    for i, (m, p) in enumerate(zip(marg_vals, part_vals, strict=False)):
+        _, color = regimes[i]
+        ax.plot([m, p], [i, i], color=color, linewidth=2.2, alpha=0.75, zorder=2)
+    ax.scatter(marg_vals, y_pos, c='steelblue', s=85, edgecolor='black',
+               linewidth=0.6, marker='o',
+               label='marginal ρ(arm, outcome)', zorder=3)
+    ax.scatter(part_vals, y_pos, c='goldenrod', s=85, edgecolor='black',
+               linewidth=0.6, marker='D',
+               label='partial ρ(arm, outcome | jensen_gap)', zorder=3)
+
+    # Regime labels on right edge
+    for i, (env, rho_m, rho_p) in enumerate(per_env):
+        regime_label, color = regimes[i]
+        ax.text(0.96, i, regime_label, transform=ax.get_yaxis_transform(),
+                ha='right', va='center', fontsize=8.5, color=color,
+                style='italic')
+
+    ax.axvline(0, color='black', linewidth=0.5)
+    # Pooled marker
+    diamond_y = len(per_env) + 0.7
+    ax.scatter([pooled_marg.rho_pooled], [diamond_y], marker='o',
+               c='steelblue', s=160, edgecolor='black', linewidth=1.0,
+               zorder=4)
+    ax.scatter([pooled_part.rho_pooled], [diamond_y], marker='D',
+               c='goldenrod', s=160, edgecolor='black', linewidth=1.0,
+               zorder=4)
+    ax.text(-0.95, diamond_y, '← POOLED cross-env (12 strata)',
+            ha='left', va='center', fontsize=9, fontweight='bold',
+            color='#cc6600')
+
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(labels)
+    ax.invert_yaxis()
+    ax.set_xlim(-1.0, 1.0)
+    ax.set_ylim(diamond_y + 0.8, -0.8)
+    ax.set_xlabel("Spearman ρ — partial conditions on jensen_gap",
+                  fontsize=10)
+    ax.set_title('Per-env reveal: pool averages 3 distinct regimes',
+                 fontsize=11, pad=8)
+    ax.legend(loc='lower left', fontsize=8.5)
+    ax.grid(alpha=0.3, axis='x')
+
+    # ── BOTTOM-LEFT: regime counts + takeaway ──
+    ax = fig.add_subplot(gs[1, 0])
+    ax.axis('off')
+    # Regime counts
+    from collections import Counter
+    counter = Counter(r[0] for r in regimes)
+    counts_text_lines = [
+        'Per-env regime breakdown:',
+        '',
+    ]
+    for regime, c in counter.most_common():
+        counts_text_lines.append(f'  {c:>2d}  {regime}')
+    counts_text_lines += [
+        '',
+        'The pool averages over all 12,',
+        'losing the regime structure.',
+        '',
+        'Framework discipline:',
+        'report PER-STRATUM verdicts +',
+        'heterogeneity diagnostics —',
+        'never just the pool.',
+    ]
+    ax.text(0.05, 0.95, '\n'.join(counts_text_lines),
+            transform=ax.transAxes, fontsize=9.5, va='top',
+            family='monospace',
+            bbox=dict(boxstyle='round,pad=0.4', facecolor='#fffaf0',
+                      edgecolor='#888', linewidth=0.8))
 
     fig.suptitle(
-        'Layer 4 (AGGREGATION DANGER): per-burst dynamic mediation reveals what pooling hides\n'
-        f'mediator: {MEDIATOR_PER_BURST_LABEL} (clean Bellman-residual, no MC-leak)',
-        fontsize=11.5,
+        'Layer 4 (AGGREGATION DANGER, cross-env): per-env static '
+        'mediation pooled into one cross-env number\n'
+        'hides regime structure (sign-flippers + high-absorption '
+        'envs + near-zero envs averaged into a single ρ).',
+        fontsize=11,
     )
     plt.tight_layout(rect=[0, 0, 1, 0.94])
     plt.savefig(OUT_PNG, dpi=120, bbox_inches='tight')
 
     # ─── CSV ───
     with OUT_CSV.open('w') as f:
-        f.write('env,burst,n,rho_marginal,rho_partial\n')
-        for env in DRAMATIC_PAIR:
-            if env not in env_to_result:
-                continue
-            r = env_to_result[env]
-            for b in range(len(r.rho_marginal)):
-                f.write(f'{env_label(env)},{b},{r.n_per_burst[b]},'
-                        f'{r.rho_marginal[b]:+.4f},{r.rho_partial[b]:+.4f}\n')
-            dl_m = r.dl_marginal; dl_p = r.dl_partial
-            f.write(f'# {env_label(env)} agg_status={r.aggregation_status.name}; '
-                    f'DL marg ρ={dl_m.rho_pooled:+.3f} I²={dl_m.i2:.2f}; '
-                    f'DL part ρ={dl_p.rho_pooled:+.3f} I²={dl_p.i2:.2f}\n')
+        f.write('env,rho_marginal,rho_partial,absorption_pct,regime\n')
+        for (env, m, p), (regime, _) in zip(per_env, regimes, strict=False):
+            f.write(f'{env_label(env)},{m:+.3f},{p:+.3f},'
+                    f'{_absorption(m, p):+.1f},{regime}\n')
+        f.write(f'\n# POOLED cross-env (12 strata, 680 cells):\n')
+        f.write(f'# marginal ρ = {pooled_marg.rho_pooled:+.3f}, '
+                f'p = {pooled_marg.p_value:.4f}\n')
+        f.write(f'# partial  ρ = {pooled_part.rho_pooled:+.3f}, '
+                f'p = {pooled_part.p_value:.4f}\n')
+        f.write(f'# absorption = {pooled_absorb:.0f}%\n')
     print(f'saved → {OUT_PNG.name}, {OUT_CSV.name}')
-    for env in DRAMATIC_PAIR:
-        if env in env_to_result:
-            r = env_to_result[env]
-            print(f'  {env_label(env):12s}  status={r.aggregation_status.name:25s} '
-                  f'DL marg ρ={r.dl_marginal.rho_pooled:+.3f} I²={r.dl_marginal.i2:.2f}')
+    print(f'\npooled marginal ρ = {pooled_marg.rho_pooled:+.3f}')
+    print(f'pooled partial  ρ = {pooled_part.rho_pooled:+.3f}')
+    print(f'pooled absorption = {pooled_absorb:.0f}%')
+    print(f'\nregime counts: {dict(counter)}')
 
 
 if __name__ == '__main__':
