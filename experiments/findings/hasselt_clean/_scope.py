@@ -115,7 +115,10 @@ CANONICAL_G099_CORPORA: tuple[str, ...] = (
     'g099_SpaceInvaders-MinAtar',            # MinAtar γ=0.99 v2 SI sibling — kept as a fallback alongside
                                              # `si_g099_canonical_n_eps1_ckpt` for cache-ingest robustness.
     'si_g099_canonical_n_eps1_ckpt',         # SpaceInvaders γ=0.99 (NEW: full-Q canonical_n_eps1_ckpt, n=30, 1M, sync=1000, supersedes g099_SpaceInvaders-MinAtar)
-    'snake_1M',                              # Snake γ=0.99 (n_episodes=3 — noisier than rest)
+    'snake_g099_canonical_3M_ckpt',          # Snake γ=0.99 canonical_3M (3M steps, 30 seeds × 2 arms = 60 cells, n_eps=5,
+                                             # 150 bursts/cell, full-Q ckpts). Supersedes legacy `snake_1M` (1M, n_eps=3, 20 bursts);
+                                             # `snake_1M` is dropped from the canonical set — both shared corpus stamp
+                                             # `Snake-jumanji` so leaving both in produced ragged-burst Snake strata.
     'pacman_1M_postfix',                     # PacMan γ=0.99 (n_episodes=3, 10 seeds/arm)
 )
 

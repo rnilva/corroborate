@@ -62,6 +62,7 @@ from corroborate.analyses.dynamic_mediation.pc_adjacency import (
 # falls back to the pre-rebuild `_g099.parquet` slice (7 candidates,
 # 12 envs at the legacy corpus names) if the canonical isn't there.
 def _load_panel() -> pl.DataFrame:
+    from experiments.findings.hasselt_clean._scope import CANONICAL_G099_CORPORA
     canonical = Path('experiments/data/cache/hasselt_clean.parquet')
     sliced = Path('experiments/data/cache/hasselt_clean_g099.parquet')
     if canonical.exists():
@@ -70,7 +71,10 @@ def _load_panel() -> pl.DataFrame:
         df = pl.read_parquet(sliced)
     else:
         raise SystemExit('no hasselt_clean cache found')
-    return df.filter(pl.col('gamma') == 0.99)
+    return df.filter(
+        (pl.col('gamma') == 0.99)
+        & pl.col('corpus').is_in(CANONICAL_G099_CORPORA)
+    )
 
 
 OUT_PNG = SCRIPT_DIR.parent / 'figures' / '05b_dynamic_best_mediator.png'
