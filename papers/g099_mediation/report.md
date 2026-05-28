@@ -181,7 +181,7 @@ broad-mediator re-ingest):
   | LunarLander | +0.10 | q_mc_calibration_pearson *(soft-taut)* | 71% | +28.21 | 0.00 / **0.88** ← RCC flag |
   | CartPole | +0.06 | state_hash_entropy | 85% | +4.05 | 0.00 / **0.32** ← RCC flag |
   | MountainCar | −0.02 | q_range_to_std | 100% *(near-zero marg)* | −0.49 | 0.00 / 0.05 |
-  | SpaceInvaders | (NaN) | — | — | — | NaN marg ρ (outcome variance) |
+  | SpaceInvaders | (NaN) | — | — | — | `eval_late_burst_raw_mean` not populated in cache (per-corpus measurements.parquet for `g099_SpaceInvaders-MinAtar` is missing this scalar despite `mc_return_raw_episodes` being present; framework's drift-detection classifies the measurable's `mc_return_raw_episodes` parameter as a trace read and skips it when traces.parquet isn't locally restored — known integration issue, not a substantive null) |
 
 Substantive findings:
 - **Asterix is the canonical Hasselt result**: jensen_gap absorbs
