@@ -139,7 +139,7 @@ z=3.02 still passes (margin 0.38σ).
 
   | env | n_marg | `sib_dsep` | `joint_dsep` | n_01 | n_10 | z | disposition |
   | --- | --- | --- | --- | --- | --- | --- | --- |
-  | Asterix | 32 | 47% | 81% | **11** | **0** | **+3.02** | **GENUINE** |
+  | Asterix | 32 | 47% | 81% | **11** | **0** | **+3.30** | **GENUINE** |
   | FR | 44 | 84% | 86% | 2 | 1 | — | UNDERPOWERED_FOR_GENUINE |
   | MetaMaze | 12 | 67% | 83% | 2 | 0 | — | UNDERPOWERED_FOR_GENUINE |
   | SI | 3 | 67% | 100% | 1 | 0 | — | UNDERPOWERED_FOR_GENUINE |
@@ -181,8 +181,10 @@ Bridges using a soft-tautological mediator should:
 1. Call `mediator_leak_adjudication` (in
    `corroborate.analyses.diagnostic`) over the bridge's scope.
 
-2. State the per-stratum disposition (GENUINE / LEAK / HURTS /
-   UNDERPOWERED) alongside the bridge verdict.
+2. State the per-stratum disposition (GENUINE / LEAK /
+   UNDERPOWERED_FOR_GENUINE / UNDERPOWERED) alongside the bridge
+   verdict. Distinguish UNDERPOWERED_FOR_GENUINE ("insufficient
+   evidence") from LEAK ("adequately powered, no effect").
 
 3. Pair the mediator-of-interest with its sibling in
    REQUIRED_MEASURABLES so both columns are cached for the
@@ -206,21 +208,39 @@ is what the partial-Spearman CI tests run on. REDQ may genuinely
 shift the adjudication relative to raw bias and should be
 adjudicated independently if it's the bridge's mediator-of-record.
 
-## Limitations (what the primitive does NOT yet support)
+## Limitations (v4 — what the primitive does NOT yet support)
 
+- **Burst non-independence**: McNemar assumes independent paired
+  observations; adjacent bursts within one cell share training
+  trajectory. The Asterix "11/11 discordant favor joint" pattern
+  is more consistent than 11 independent coin flips even under a
+  real population effect, suggesting strong within-cluster
+  correlation. The primitive's z-score is therefore conditional
+  on the per-burst CI-test sequence; for a within-cluster-robust
+  confidence interval, pair with cluster-bootstrap on cells (the
+  sibling primitive `dynamic_pc_adjacency` already exposes
+  `n_bootstrap`).
 - **Multi-input siblings**: a 3-component mediator like
-  `(Q − target_Q − MC)` needs two siblings + a depth-3 joint test
-  (df = n − 3 − 3). The primitive currently supports only single
-  mediator + single sibling at depth-2.
-- **McNemar/paired test**: SE_Δ uses the independent-binomial form
-  (slightly conservative for paired data — same n_marg cells).
-  Replace with McNemar discordant-pair test when per-burst d-sep
-  booleans are exposed by `dynamic_pc_adjacency` (currently it
-  exposes counts only).
+  `(Q − target_Q − MC)` needs two siblings + a depth-3 joint test.
+  The primitive currently supports only single mediator + single
+  sibling.
+- **Bonferroni denominator counts all candidate strata** (not just
+  the subset with marg-edge bursts). This is conservative-correct
+  because the testable-stratum set is data-dependent — you don't
+  know which strata have ≥`min_marginal_edges` until PC runs. A
+  caller wanting tighter control can pass
+  `n_strata_for_multiplicity=<subset>` to focus on testable strata
+  at the cost of losing the data-dependent-selection adjustment.
 - **Measurable-instance mediators**: must currently pass column
-  names (strings) so the noise-padding can use the column's
-  per-cell array lengths. Bare `Measurable` instances would need
+  names (strings) for the NaN-coupling pre-filter to recover per-
+  cell array finiteness. Bare `Measurable` instances would need
   transitive-reads walking to recover lengths.
+- **Perfect concordance** (n_01 = n_10 = 0) lands in
+  UNDERPOWERED_FOR_GENUINE; a future revision could expose a
+  separate `PERFECT_CONCORDANCE` disposition for the descriptively
+  load-bearing case where bias and sibling agree at every testable
+  burst (Freeway in the case study). For now, inspect
+  `n_discordant_*` fields directly.
 
 ## Cross-references
 
