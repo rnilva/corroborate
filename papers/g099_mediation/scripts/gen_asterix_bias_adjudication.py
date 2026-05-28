@@ -238,11 +238,14 @@ def main() -> None:
         '      Asterix is unique in having the temporal coupling.\n\n'
         'But DDQN is by construction Q-side, so any Q-summary\n'
         '(bias, q_argmax, magnitude) mediates by construction.\n'
-        'The test confirms the Q-channel is active and bias is\n'
-        'ONE admissible summary inside it — not that bias-\n'
-        'reduction is THE Q-property carrying the load. The\n'
-        'bias-vs-other-Q-property question remains open;\n'
-        'multi-input sibling adjudication is the next step.'
+        'Multi-input sibling test (v7) narrows the picture: of\n'
+        'the 4 registered Q-summaries (q_argmax_margin, q_std,\n'
+        'q_autocorr, q_lambda_a), NONE add info beyond (bias +\n'
+        'other three); bias adds info beyond all 4 jointly\n'
+        '(n_01=7, n_10=0, GENUINE Bonferroni-5).\n'
+        'Bias is uniquely pivotal among measured Q-summaries.\n'
+        'Unmeasured Q-property candidates (Q-magnitude, soft-\n'
+        'policy entropy, etc.) remain the explicit frontier.'
     )
     ax.text(0.02, 0.98, caveats, transform=ax.transAxes,
             fontsize=8.7, verticalalignment='top', family='sans-serif',

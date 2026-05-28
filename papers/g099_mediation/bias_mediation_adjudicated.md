@@ -239,6 +239,60 @@ Two limitations remain:
   still candidates and only multi-input sibling adjudication
   will sort them.
 
+### Bias is uniquely pivotal among the Q-summaries we measured
+
+The next falsification step (the bias-vs-other-Q-property
+question) is the multi-input sibling extension to the primitive,
+which we now use to test bias against the four other per-burst
+Q-summaries we have: `q_argmax_margin_per_burst`,
+`q_action_std_per_burst`, `q_autocorr_per_burst`,
+`q_lambda_a_per_burst`.
+
+  | direction (mediator \| sibling-set) | sib alone | joint | n_01 | n_10 | z | verdict |
+  | --- | ---: | ---: | ---: | ---: | ---: | --- |
+  | **bias \| (4 Q-summaries jointly)** | 66% | 88% | **7** | **0** | +2.27 | **GENUINE** |
+  | q_argmax_margin \| (bias + 3 others) | 84% | 88% | 1 | 0 | — | UPFG |
+  | q_action_std \| (bias + 3 others)    | 88% | 88% | 0 | 0 | — | UPFG |
+  | q_autocorr \| (bias + 3 others)      | 88% | 88% | 0 | 0 | — | UPFG |
+  | q_lambda_a \| (bias + 3 others)      | 88% | 88% | 0 | 0 | — | UPFG |
+
+(Bonferroni multiplicity = 5; primitive decides via exact-binomial
+p — at 7/0 discordant pairs p = 2⁻⁷ ≈ 0.008 ≤ adjusted threshold ≈
+0.01, so GENUINE despite z below the normal-approx Bonferroni z.)
+
+**Pass 1**: bias added to the joint set of four other
+Q-summaries (action-gap, action-std, Q autocorrelation, action
+anisotropy) jumps d-separation from 66% → 88%. All 7 informative
+bursts favor adding bias; zero favor the reverse.
+
+**Pass 2**: each individual non-bias Q-summary, when added to
+(bias + the other three), produces 0 or 1 discordant pairs across
+32 marg-edge bursts. Same empirical-null pattern as the
+state-visitation siblings.
+
+The bias-vs-other-Q-property question now has a partial answer:
+**bias is uniquely pivotal among the Q-summaries we measured.**
+None of the four other registered per-burst Q-summaries adds
+information once bias is in the conditioning set; bias adds
+information beyond all four jointly.
+
+This is not "bias-clip is THE mechanism" — the four Q-summaries
+we tested don't span the full space of Q-properties (we haven't
+tested e.g. Q-magnitude, Q-variance, soft-policy entropy, advantage
+sign-consistency). It narrows the live candidate set inside the
+Q-channel from "any Q-property" to "bias, plus whatever Q-property
+we haven't yet operationalised that bias might be a proxy for."
+
+The natural next step is enumerating the unmeasured Q-property
+candidates and bringing them into the multi-input sibling set
+until the bias-GENUINE verdict either flips to LEAK (some
+unmeasured Q-property subsumes bias) or persists across all
+plausible Q-summary axes.
+
+See `figures/report_q_summary_multi_input_test.png` for the
+bar-chart visualization and
+`scripts/gen_q_summary_multi_input_test.py` for reproduction.
+
 See `figures/report_state_visitation_sibling_test.png` for the
 bar-chart visualization and
 `scripts/gen_state_visitation_sibling_test.py` for the

@@ -219,7 +219,7 @@ def mediator_leak_adjudication(
     cells: pl.DataFrame,
     *,
     mediator_per_burst: str,
-    sibling_per_burst: str,
+    sibling_per_burst: str | tuple[str, ...],
     outcome_per_burst: str | Measurable[Mapping[str, object], object],
     arm_field: str = 'arm_key',
     stratify_by: tuple[str, ...] = ('env_name',),
@@ -234,14 +234,22 @@ def mediator_leak_adjudication(
     """Adjudicate a soft-tautological mediator against its outcome-input
     sibling via McNemar paired test on per-burst d-separation booleans.
 
-    `mediator_per_burst` and `sibling_per_burst` must be string column
-    names; the primitive uses them to query `dynamic_pc_adjacency`
-    at depth-1 (sibling alone) and depth-2 (mediator + sibling).
+    `mediator_per_burst` is a single string column name. `sibling_per_burst`
+    is either a single string OR a tuple of strings — the multi-input
+    form lets the test ask "does mediator add info beyond the JOINT
+    sibling set?" (e.g., does bias add info beyond all other Q-summaries
+    jointly?). The sibling-only PC runs at depth-k (k = #siblings);
+    the joint PC runs at depth-(k+1) with (mediator,) + sibling_tuple.
 
     `n_strata_for_multiplicity`: if given, switches `z_genuine` to the
     Bonferroni-adjusted one-sided z corresponding to α / n_strata. Use
     the total number of strata tested across the audit (i.e. NOT just
-    the n_strata that came back GENUINE)."""
+    the n_strata that came back GENUINE).
+
+    Note on df: dynamic_pc_adjacency uses Fisher-z df = n − 3 − k
+    where k is the conditioning-set size. Multi-input sibling tests
+    consume df fast; ensure `min_n_per_burst` is large enough relative
+    to the sibling set size (rule-of-thumb: min_n_per_burst ≥ 8 + k)."""
     # Resolve the effective z_genuine.
     if n_strata_for_multiplicity is not None and n_strata_for_multiplicity > 1:
         alpha_corrected = (1 - stats.norm.cdf(z_genuine)) / n_strata_for_multiplicity
@@ -249,11 +257,29 @@ def mediator_leak_adjudication(
     else:
         z_genuine_eff = z_genuine
 
+    # Normalise sibling to a tuple for downstream construction.
+    if isinstance(sibling_per_burst, str):
+        sibling_tuple: tuple[str, ...] = (sibling_per_burst,)
+    else:
+        sibling_tuple = tuple(sibling_per_burst)
+        if len(sibling_tuple) == 0:
+            raise ValueError(
+                'sibling_per_burst must be a non-empty tuple of column names'
+            )
+    # The joint conditioning set: mediator first, then all siblings.
+    joint_set: tuple[str, ...] = (mediator_per_burst,) + sibling_tuple
+    # Display names: single string stays unwrapped; tuple becomes
+    # parenthesised comma-list, matching how authors will write it.
+    sibling_display: str = (
+        sibling_per_burst if isinstance(sibling_per_burst, str)
+        else '(' + ', '.join(sibling_tuple) + ')'
+    )
+
     if cells.height == 0:
         return MediatorLeakAdjudicationResult(
             per_stratum=(),
             mediator_name=str(mediator_per_burst),
-            sibling_name=str(sibling_per_burst),
+            sibling_name=sibling_display,
             outcome_name=str(outcome_per_burst),
             z_genuine_threshold=z_genuine_eff,
             n_strata_for_multiplicity=n_strata_for_multiplicity,
@@ -269,14 +295,18 @@ def mediator_leak_adjudication(
         alpha=alpha,
         n_bootstrap=n_bootstrap,
     )
+    # Sibling-only run: pass the sibling set as-is to dynamic_pc, which
+    # already accepts tuple-or-string. Single sibling → depth-1; tuple
+    # → depth-k where k = len(tuple).
     sibling_res = dynamic_pc_adjacency.fn(
         cells,
-        mediator_per_burst=sibling_per_burst,
+        mediator_per_burst=sibling_tuple if len(sibling_tuple) > 1 else sibling_tuple[0],
         **common_kwargs,
     )
+    # Joint run: (mediator, *siblings) at depth-(k+1).
     joint_res = dynamic_pc_adjacency.fn(
         cells,
-        mediator_per_burst=(mediator_per_burst, sibling_per_burst),
+        mediator_per_burst=joint_set,
         **common_kwargs,
     )
 
@@ -377,7 +407,7 @@ def mediator_leak_adjudication(
     return MediatorLeakAdjudicationResult(
         per_stratum=tuple(per_stratum),
         mediator_name=str(mediator_per_burst),
-        sibling_name=str(sibling_per_burst),
+        sibling_name=sibling_display,
         outcome_name=str(outcome_per_burst),
         z_genuine_threshold=z_genuine_eff,
         n_strata_for_multiplicity=n_strata_for_multiplicity,
