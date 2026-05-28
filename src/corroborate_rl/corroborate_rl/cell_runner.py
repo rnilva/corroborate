@@ -29,7 +29,7 @@ from __future__ import annotations
 import os
 import subprocess
 import uuid
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
 from functools import lru_cache, partial
 from pathlib import Path
@@ -48,10 +48,12 @@ from corroborate_rl.dqn.init_override import InitOverride
 from corroborate_rl.dqn.invariants import DQNTrajectoryRecord
 from corroborate_rl.dqn.q_checkpoint import (
     CHECKPOINT_KEY_PREFIX,
-    QCheckpoint,
-    checkpoint_path,
     parse_checkpoint_key,
-    save as save_checkpoint,
+)
+from corroborate_rl.dqn.q_checkpoint_bundle import (
+    bundle_path,
+    from_batched_record,
+    save_bundle,
 )
 from corroborate_rl.env_catalogue import EnvSpec, EnvWrapper, make_env
 from corroborate.corpus.schema import MeasurementLeaf, RunRow, TraceLeaf, TraceRow
@@ -219,9 +221,9 @@ def _trajectory_leaves(
 
     Sentinel-prefixed checkpoint keys (`__q_checkpoint__*`) are
     filtered out — their multi-dim parameter shapes don't fit
-    polars `List` columns, and the cell runner persists them as
-    msgpack sidecars via `_save_q_checkpoints` before this helper
-    runs."""
+    polars `List` columns, and the cell runner persists them as a
+    msgpack bundle via `_save_q_checkpoint_bundle` before this
+    helper runs."""
     out: dict[str, TraceLeaf] = {}
     for key, arr in record.items():
         if key.startswith(CHECKPOINT_KEY_PREFIX):
@@ -234,111 +236,37 @@ def _trajectory_leaves(
     return out
 
 
-def _save_q_checkpoints(
-    record: Mapping[str, jax.Array],
+def _save_q_checkpoint_bundle(
+    batched_record: Mapping[str, jax.Array],
     *,
     q_checkpoint_dir: Path,
     cell_idx: int,
-    seed: int,
+    seeds: Sequence[int],
 ) -> int:
     """Extract every `__q_checkpoint__<arm>__<role>__<param_key>`
-    entry from the per-cell record, reconstruct the underlying
-    `QCheckpoint` shapes, and write one msgpack file per snapshot
-    via `q_checkpoint.save`.
+    entry from the batched per-cell record (seed axis 0 + per_burst
+    axis 1) and persist as a single msgpack bundle at
+    `<q_checkpoint_dir>/cell{NNN}.msgpack`.
 
-    Per-burst payloads carry a leading `(n_super_steps, *param_shape)`
-    axis; this function indexes that axis to emit one file per
-    burst. Final payloads carry the bare `(*param_shape)` and emit
-    one file with role `final`. Online + target params for the
-    same snapshot share a file (the `QCheckpoint` record bundles
-    both arms together).
+    Per-PUT RTT dominated archive wall-clock on the legacy per-file
+    layout (765 PUTs per cell at 15 seeds × 51 snapshots). One
+    bundle per cell collapses that to a single PUT; the on-disk
+    payload is shape-equivalent — bundle axis 0 indexes the same
+    seeds the producer vmap'd over.
 
-    Returns the count of msgpack files written. Returns 0 when no
-    sentinel keys are present (the off-by-default path — zero I/O,
-    no parent-dir creation)."""
-    # Partition checkpoint keys by (role, arm) so we can rebuild
-    # the `Params` dicts before serialising.
-    grouped: dict[
-        tuple[str, str],  # (role, arm)
-        dict[str, jax.Array],  # param_key -> array
-    ] = {}
-    for key, arr in record.items():
-        parts = parse_checkpoint_key(key)
-        if parts is None:
-            continue
-        bucket = grouped.setdefault((parts.role, parts.arm), {})
-        bucket[parts.param_key] = arr
-
-    if not grouped:
+    Returns 1 if a bundle was written, 0 when the record carries no
+    checkpoint sentinel keys (the off-by-default path — no I/O, no
+    parent-dir creation)."""
+    bundle = from_batched_record(
+        batched_record, cell_idx=cell_idx, seeds=seeds,
+    )
+    if bundle is None:
         return 0
-
-    # `final` snapshots: both arms must be present (the producer
-    # gates them with a single flag, so partial-emission is a bug).
-    n_written = 0
-    online_final = grouped.get(('final', 'online'))
-    target_final = grouped.get(('final', 'target'))
-    if online_final is not None and target_final is not None:
-        # Use first leaf's leading dim as the global_step proxy —
-        # actually we just pass `-1` and let the consumer derive
-        # the step from training config. `burst=-1` is the
-        # sentinel for "post-final-step" (no burst index applies).
-        ckpt = QCheckpoint(
-            online_params=dict(online_final),
-            target_params=dict(target_final),
-            burst=-1,
-            global_step=-1,
-        )
-        save_checkpoint(
-            checkpoint_path(
-                q_checkpoint_dir, cell_idx=cell_idx, seed=seed,
-                role='final',
-            ),
-            ckpt,
-        )
-        n_written += 1
-    elif (online_final is None) != (target_final is None):
-        # One arm without the other: producer-side bug. Surface
-        # loudly rather than write a half-checkpoint that won't
-        # round-trip.
-        raise ValueError(
-            'q_checkpoint final: one arm present, the other absent '
-            f'(online={online_final is not None}, '
-            f'target={target_final is not None}). Both arms must '
-            'emit together — check train_with_eval gating.',
-        )
-
-    # `per_burst` snapshots: the leading axis is the burst index.
-    online_pb = grouped.get(('per_burst', 'online'))
-    target_pb = grouped.get(('per_burst', 'target'))
-    if online_pb is not None and target_pb is not None:
-        # All leaves under one arm share the same leading dim; we
-        # peek at one to determine `n_super_steps`.
-        first_online_leaf = next(iter(online_pb.values()))
-        n_bursts = int(first_online_leaf.shape[0])
-        for b in range(n_bursts):
-            ckpt = QCheckpoint(
-                online_params={k: v[b] for k, v in online_pb.items()},
-                target_params={k: v[b] for k, v in target_pb.items()},
-                burst=b,
-                global_step=-1,
-            )
-            save_checkpoint(
-                checkpoint_path(
-                    q_checkpoint_dir, cell_idx=cell_idx, seed=seed,
-                    role='per_burst', burst=b,
-                ),
-                ckpt,
-            )
-            n_written += 1
-    elif (online_pb is None) != (target_pb is None):
-        raise ValueError(
-            'q_checkpoint per_burst: one arm present, the other '
-            f'absent (online={online_pb is not None}, '
-            f'target={target_pb is not None}). Both arms must emit '
-            'together — check train_with_eval gating.',
-        )
-
-    return n_written
+    save_bundle(
+        bundle_path(q_checkpoint_dir, cell_idx=cell_idx),
+        bundle,
+    )
+    return 1
 
 
 # `_bridge_result_to_measurements` lives in `aggregate` (the data
@@ -390,8 +318,9 @@ def run_dqn_arm(
     `q_checkpoint_dir` + `cell_idx`: when the bound claim's
     `keep_q_checkpoint_*` flags emit `__q_checkpoint__*` keys in
     the per-cell record, the runner extracts the param arrays and
-    writes them to `<q_checkpoint_dir>/cell<NNN>_<seed>_*.msgpack`
-    via `_save_q_checkpoints`. `cell_idx` is the framework-counted
+    writes them as one bundle to
+    `<q_checkpoint_dir>/cell<NNN>.msgpack` via
+    `_save_q_checkpoint_bundle`. `cell_idx` is the framework-counted
     cell index (matches the `cell{cell_idx:03d}__{tag}` shard
     naming in `run_intervention`); the runner-side `DQNRunner` is
     responsible for threading the right value through. When
@@ -553,25 +482,51 @@ def run_dqn_arm(
     import corroborate_rl.dqn.measurables  # noqa: F401  # pyright: ignore[reportUnusedImport]
     from corroborate.measurables import evaluate_with_measurables
 
+    # Persist Q-network checkpoints as ONE bundle per cell BEFORE
+    # the per-seed trace-leaf projection — `_save_q_checkpoint_bundle`
+    # reads the un-filtered batched record (seed axis 0 + per_burst
+    # axis 1); `_trajectory_leaves` below drops sentinel-prefixed keys
+    # from each seed's trace. The bundle write is outside the per-seed
+    # loop because the bundle stores ALL seeds in a single artifact —
+    # 1 PUT per cell instead of 765 (15 seeds × 51 snapshots) under the
+    # legacy per-file layout. No-op when `q_checkpoint_dir is None` AND
+    # no sentinel keys are present (the default off path, no I/O).
+    has_checkpoint_keys = any(
+        k.startswith(CHECKPOINT_KEY_PREFIX) for k in batched_record
+    )
+    if q_checkpoint_dir is not None:
+        _ = _save_q_checkpoint_bundle(
+            batched_record,
+            q_checkpoint_dir=q_checkpoint_dir,
+            cell_idx=cell_idx,
+            seeds=tuple(int(s) for s in seeds),
+        )
+    elif has_checkpoint_keys:
+        # The dqn claim emitted Q-checkpoint sentinel keys but no
+        # destination dir is wired through — the keys would be
+        # silently filtered by `_trajectory_leaves` and dropped,
+        # producing a sweep that LOOKS like keep_q_checkpoint_*
+        # is honored but writes nothing to disk. This typically
+        # fires when the per-intervention `defaults: {keep_q_*: true}`
+        # is set in YAML but the sweep-level field is False, so
+        # `dispatch_sweep`'s `q_ckpt_enabled = sweep.keep_q_*`
+        # resolves False and `q_checkpoint_dir=None` reaches here.
+        # Raise loudly so the operator notices the config mismatch
+        # before the sweep completes silently.
+        raise ValueError(
+            'cell_runner: dqn claim emitted Q-checkpoint sentinel '
+            "keys but q_checkpoint_dir is None — checkpoints would "
+            'be dropped silently. Lift `keep_q_checkpoint_final` / '
+            '`keep_q_checkpoint_per_burst` to the sweep level so '
+            'the dispatcher wires through a checkpoint directory, '
+            'or remove them from the intervention base.',
+        )
+
     cells: list[CellResult] = []
     for i, seed in enumerate(seeds):
         per_seed_record: dict[str, jax.Array] = {
             k: v[i] for k, v in batched_record.items()
         }
-
-        # Persist Q-network checkpoints (one msgpack per snapshot)
-        # BEFORE the trace-leaf projection — `_save_q_checkpoints`
-        # reads from the un-filtered record, `_trajectory_leaves`
-        # below drops sentinel-prefixed keys from the trace.
-        # No-op when `q_checkpoint_dir is None` or no sentinel keys
-        # are present (the default off path, no I/O).
-        if q_checkpoint_dir is not None:
-            _ = _save_q_checkpoints(
-                per_seed_record,
-                q_checkpoint_dir=q_checkpoint_dir,
-                cell_idx=cell_idx,
-                seed=int(seed),
-            )
 
         # Per-cell measurable cache — shared across `hypothesis.
         # measurables` so dep-measurables (q_mean, q_std, etc.)

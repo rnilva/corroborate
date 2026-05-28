@@ -231,12 +231,14 @@ _SHORT_RUN_HP: dict[str, object] = {
 
 @_SLOW_E2E
 def test_run_dqn_cell_writes_final_checkpoint(tmp_path: Path) -> None:
-    """End-to-end: `keep_q_checkpoint_final=True` on the dqn
-    claim produces exactly one msgpack file at
-    `<q_checkpoint_dir>/cell000_<seed>_final.msgpack`, loadable
-    into a `QCheckpoint` whose param shapes match the configured
-    MLP."""
+    """End-to-end: `keep_q_checkpoint_final=True` produces a single
+    bundle at `<q_checkpoint_dir>/cell000.msgpack` whose `final_*`
+    fields carry the per-seed pytrees. Per-burst fields are absent
+    (the corresponding flag was off)."""
     from corroborate_rl.cell_runner import run_dqn_cell
+    from corroborate_rl.dqn.q_checkpoint_bundle import (
+        extract_qcheckpoint, load_bundle,
+    )
     from corroborate_rl.env_catalogue import get
     env_spec = get('CartPole-v1')
 
@@ -249,32 +251,34 @@ def test_run_dqn_cell_writes_final_checkpoint(tmp_path: Path) -> None:
         q_checkpoint_dir=ckpt_dir, cell_idx=0,
     )
 
-    expected = ckpt_dir / 'cell000_0_final.msgpack'
+    expected = ckpt_dir / 'cell000.msgpack'
     assert expected.is_file(), f'missing {expected}'
-    # Per-burst path should NOT exist when only final is enabled.
-    per_burst_files = list(ckpt_dir.glob('*burst*.msgpack'))
-    assert not per_burst_files, (
-        f'unexpected per-burst files: {per_burst_files}'
-    )
+    # Final-only: bundle's per_burst payload must be absent.
+    bundle = load_bundle(expected)
+    assert bundle.per_burst_online is None
+    assert bundle.per_burst_target is None
+    assert bundle.final_online is not None
 
-    loaded = load(expected)
+    ck = extract_qcheckpoint(bundle, seed=0, role='final')
     # MLP(hidden=(8, 8)) on CartPole (obs_shape=(4,), n_actions=2)
     # produces 3 weight matrices + 3 bias vectors.
-    assert set(loaded.online_params.keys()) == {
+    assert set(ck.online_params.keys()) == {
         'w0', 'b0', 'w1', 'b1', 'w2', 'b2',
     }
-    assert loaded.online_params['w0'].shape == (4, 8)
-    assert loaded.online_params['w2'].shape == (8, 2)
-    # `burst=-1` is the sentinel for the post-final-step snapshot.
-    assert loaded.burst == -1
+    assert ck.online_params['w0'].shape == (4, 8)
+    assert ck.online_params['w2'].shape == (8, 2)
+    assert ck.burst == -1
 
 
 @_SLOW_E2E
 def test_run_dqn_cell_writes_per_burst_checkpoints(tmp_path: Path) -> None:
-    """`keep_q_checkpoint_per_burst=True` writes one msgpack per
-    super-step (eval-burst). For a 60-step run with eval_every=30,
-    expect 2 burst files numbered burst00, burst01."""
+    """`keep_q_checkpoint_per_burst=True` produces a bundle whose
+    `n_bursts` matches `total_steps // eval_every` and per-burst
+    arrays carry shape `(n_seeds, n_bursts, *param_shape)`."""
     from corroborate_rl.cell_runner import run_dqn_cell
+    from corroborate_rl.dqn.q_checkpoint_bundle import (
+        extract_qcheckpoint, load_bundle,
+    )
     from corroborate_rl.env_catalogue import get
     env_spec = get('CartPole-v1')
 
@@ -288,24 +292,22 @@ def test_run_dqn_cell_writes_per_burst_checkpoints(tmp_path: Path) -> None:
         q_checkpoint_dir=ckpt_dir, cell_idx=0,
     )
 
-    burst_files = sorted(ckpt_dir.glob('cell000_0_burst*.msgpack'))
+    expected = ckpt_dir / 'cell000.msgpack'
+    assert expected.is_file(), f'missing {expected}'
+    bundle = load_bundle(expected)
     # n_super_steps = total_steps // eval_every = 60 // 30 = 2.
-    assert len(burst_files) == 2, (
-        f'expected 2 per-burst files, got: {burst_files}'
-    )
-    assert burst_files[0].name == 'cell000_0_burst00.msgpack'
-    assert burst_files[1].name == 'cell000_0_burst01.msgpack'
+    assert bundle.n_bursts == 2
+    assert bundle.per_burst_online is not None
 
-    # Each is loadable + reports the right burst index.
-    loaded_first = load(burst_files[0])
-    assert loaded_first.burst == 0
-    loaded_second = load(burst_files[1])
-    assert loaded_second.burst == 1
-    # Param shapes are the same across burst snapshots (training
+    first = extract_qcheckpoint(bundle, seed=0, role='per_burst', burst=0)
+    second = extract_qcheckpoint(bundle, seed=0, role='per_burst', burst=1)
+    assert first.burst == 0
+    assert second.burst == 1
+    # Param shapes are constant across burst snapshots (training
     # mutates values, not shapes).
     assert (
-        loaded_first.online_params['w0'].shape
-        == loaded_second.online_params['w0'].shape
+        first.online_params['w0'].shape
+        == second.online_params['w0'].shape
     )
 
 
@@ -356,11 +358,14 @@ def test_per_burst_filtered_from_trace_columns(tmp_path: Path) -> None:
         if k.startswith(CHECKPOINT_KEY_PREFIX)
     ]
     assert not leaked, f'sentinel keys leaked into trace: {leaked}'
-    # Also verify both files landed.
-    assert (ckpt_dir / 'cell000_0_final.msgpack').is_file()
-    assert sorted(ckpt_dir.glob('*burst*.msgpack')), (
-        'per-burst files missing'
-    )
+    # Also verify the bundle landed with both payloads (per_burst +
+    # final). One file per cell now (was 1 final + 2 burst = 3 files
+    # under the legacy per-file layout).
+    from corroborate_rl.dqn.q_checkpoint_bundle import load_bundle
+    bundle = load_bundle(ckpt_dir / 'cell000.msgpack')
+    assert bundle.final_online is not None
+    assert bundle.per_burst_online is not None
+    assert bundle.n_bursts >= 1
 
 
 @_SLOW_E2E
@@ -385,7 +390,11 @@ def test_checkpoint_final_recovers_in_memory_params(tmp_path: Path) -> None:
         arm_key=combined_arm_key(()), measurables=(),
         q_checkpoint_dir=ckpt_dir, cell_idx=0,
     )
-    loaded = load(ckpt_dir / 'cell000_0_final.msgpack')
+    from corroborate_rl.dqn.q_checkpoint_bundle import (
+        extract_qcheckpoint, load_bundle,
+    )
+    bundle = load_bundle(ckpt_dir / 'cell000.msgpack')
+    loaded = extract_qcheckpoint(bundle, seed=0, role='final')
 
     # Fresh MLP — same architecture as the trained one. Forward
     # call on an arbitrary obs should produce a finite Q-vector
@@ -471,20 +480,32 @@ def test_dispatch_sweep_preserves_q_checkpoints_through_merge_cleanup(
         f'expected q_checkpoints preserved at {ckpt_root}; '
         f'this is the fix for the 2026-05-25 cleanup-eats-ckpts bug'
     )
-    # 2 arms × 1 seed × 2 bursts (total_steps=60, eval_every=30
-    # → n_super_steps=2) = 4 msgpack files.
-    burst_files = sorted(ckpt_root.glob('cell*_*_burst*.msgpack'))
-    assert len(burst_files) == 4, (
-        f'expected 4 per-burst msgpacks (2 arms × 1 seed × 2 bursts), '
-        f'got {len(burst_files)}: {[f.name for f in burst_files]}'
+    # 2 arms × 1 chunk per arm = 2 bundle files (cell000, cell001).
+    # The bundle layout collapses what the legacy per-file layout
+    # spread across 4 files (2 arms × 1 seed × 2 bursts).
+    from corroborate_rl.dqn.q_checkpoint_bundle import (
+        extract_qcheckpoint, load_bundle,
     )
-    # Each must be loadable into a valid QCheckpoint with the
-    # expected MLP shapes — proves the move didn't corrupt bytes.
-    for f in burst_files:
-        ck = load(f)
-        assert ck.online_params['w0'].shape == (4, 8)
-        assert ck.online_params['w2'].shape == (8, 2)
-        assert ck.burst in (0, 1)
+    bundle_files = sorted(ckpt_root.glob('cell*.msgpack'))
+    assert len(bundle_files) == 2, (
+        f'expected 2 bundle files (2 arms × 1 chunk), got '
+        f'{len(bundle_files)}: {[f.name for f in bundle_files]}'
+    )
+    # Each bundle must round-trip into per-(seed, burst) checkpoints
+    # with the expected MLP shapes — proves the move didn't corrupt
+    # bytes and the bundle indexing aligns with the producer's
+    # seed/burst axes.
+    for f in bundle_files:
+        bundle = load_bundle(f)
+        assert bundle.n_bursts == 2
+        assert bundle.per_burst_online is not None
+        for b in (0, 1):
+            ck = extract_qcheckpoint(
+                bundle, seed=0, role='per_burst', burst=b,
+            )
+            assert ck.online_params['w0'].shape == (4, 8)
+            assert ck.online_params['w2'].shape == (8, 2)
+            assert ck.burst == b
 
 
 @_SLOW_E2E

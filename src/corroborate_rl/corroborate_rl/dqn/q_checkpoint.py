@@ -46,6 +46,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
+from warnings import deprecated
 
 import jax
 import numpy as np
@@ -53,6 +54,15 @@ from flax import serialization as _fs
 
 from corroborate_rl.dqn.claims.q_network import Params
 from corroborate_rl.dqn.init_override import InitOverride
+
+_LEGACY_DEPRECATION = (
+    'Per-(seed, burst|final) msgpack sidecar layout is superseded by '
+    'QCheckpointBundle (one msgpack per cell). The bundle path emits '
+    '~1 PUT per cell instead of ~765 (15 seeds × 51 snapshots), and '
+    'load_bundle / extract_qcheckpoint replace this entry. Use '
+    'corroborate_rl.dqn.q_checkpoint_bundle for new code; this entry '
+    'is kept for backward compatibility with legacy per-file corpora.'
+)
 
 
 # ============ In-record sentinel keys ============
@@ -152,6 +162,7 @@ class QCheckpoint:
 
 # ============ File path conventions ============
 
+@deprecated(_LEGACY_DEPRECATION)
 def checkpoint_path(
     base_dir: Path, *, cell_idx: int, seed: int,
     role: CheckpointRole, burst: int | None = None,
@@ -175,6 +186,7 @@ def checkpoint_path(
 
 # ============ Serialization ============
 
+@deprecated(_LEGACY_DEPRECATION)
 def save(path: Path, ckpt: QCheckpoint) -> None:
     """Write `ckpt` to `path` as msgpack. Creates parent dir if
     needed; atomic via tmp + rename so a crashed write doesn't
@@ -285,6 +297,7 @@ def _stack_per_seed_params(
     }
 
 
+@deprecated(_LEGACY_DEPRECATION)
 def load_batched_online_params(
     path_template: str, seeds: Sequence[int],
 ) -> Params:
@@ -318,6 +331,7 @@ def load_batched_online_params(
     )
 
 
+@deprecated(_LEGACY_DEPRECATION)
 def load_batched_init_override(
     path_template: str, seeds: Sequence[int], *, load_target: bool,
 ) -> InitOverride:

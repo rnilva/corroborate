@@ -47,6 +47,8 @@ from corroborate_rl.dqn.config_loader import (
     is_str_keyed_mapping,
 )
 from corroborate_rl.dqn.collect import EnvConfig
+from corroborate_rl.dqn.q_checkpoint import CheckpointRole
+from corroborate_rl.dqn.q_checkpoint_bundle import QCheckpointBundle
 from corroborate_rl.env_catalogue import EnvSpec, EnvWrapper
 
 
@@ -179,6 +181,23 @@ class DQNSweep:
     # (online, target) attractor — see CHECKPOINT_RESUME_DESIGN.md
     # §7 step 5 for the experiment-design implication.
     init_q_checkpoint_load_target: bool = False
+    # Bundle-format analog of `init_q_checkpoint_path_template`.
+    # When set, the dispatch loader reads ONE per-cell bundle
+    # (`q_checkpoints/cell{NNN}.msgpack`) and slices out the
+    # requested seeds — the new write path (post-bundle migration)
+    # emits this layout instead of the per-(seed, burst) sidecars.
+    #
+    # `init_q_checkpoint_bundle_path` is a direct path to the
+    # bundle file. `init_q_checkpoint_bundle_burst` is either an
+    # int (0-indexed burst → `role='per_burst'`) or the literal
+    # string `"final"` (→ `role='final'`).
+    #
+    # Set EITHER `init_q_checkpoint_path_template` (legacy per-file)
+    # OR these two fields, NOT both — the sweep validator rejects
+    # the conflict at construction. `init_q_checkpoint_load_target`
+    # applies symmetrically to both.
+    init_q_checkpoint_bundle_path: str | None = None
+    init_q_checkpoint_bundle_burst: int | str | None = None
 
     def build_interventions(
         self,
@@ -243,6 +262,19 @@ def _build_sweep(node: Mapping[str, object]) -> DQNSweep:
     init_q_checkpoint_load_target = (
         _build_init_q_checkpoint_load_target(node)
     )
+    init_q_checkpoint_bundle_path, init_q_checkpoint_bundle_burst = (
+        _build_init_q_checkpoint_bundle(node)
+    )
+    if (
+        init_q_checkpoint_path_template is not None
+        and init_q_checkpoint_bundle_path is not None
+    ):
+        raise ValueError(
+            'sweep config: set EITHER init_q_checkpoint_path_template '
+            '(legacy per-file resume) OR init_q_checkpoint_bundle_path '
+            '(bundle-format resume) — not both. The two formats are '
+            "mutually exclusive at the loader's dispatch level.",
+        )
     interventions_raw = node.get('interventions')
     if not isinstance(interventions_raw, list):
         raise TypeError(
@@ -266,6 +298,8 @@ def _build_sweep(node: Mapping[str, object]) -> DQNSweep:
         pre_registered_bridges=pre_registered_bridges,
         init_q_checkpoint_path_template=init_q_checkpoint_path_template,
         init_q_checkpoint_load_target=init_q_checkpoint_load_target,
+        init_q_checkpoint_bundle_path=init_q_checkpoint_bundle_path,
+        init_q_checkpoint_bundle_burst=init_q_checkpoint_bundle_burst,
     )
 
 
@@ -349,6 +383,54 @@ def _build_init_q_checkpoint_path_template(
             f"'{{seed}}' placeholder; got {v!r}",
         )
     return v
+
+
+def _build_init_q_checkpoint_bundle(
+    node: Mapping[str, object],
+) -> tuple[str | None, int | str | None]:
+    """Parse `init_q_checkpoint_bundle_path` + `_bundle_burst` pair.
+
+    Returns `(None, None)` when neither is set (the default / no-op).
+    Requires BOTH when EITHER is set — a bundle path without a burst
+    spec is ambiguous (the bundle holds 50+1 snapshots per seed); a
+    burst spec without a path has nothing to resolve against."""
+    path_raw = node.get('init_q_checkpoint_bundle_path')
+    burst_raw = node.get('init_q_checkpoint_bundle_burst')
+    if path_raw is None and burst_raw is None:
+        return None, None
+    if path_raw is None or burst_raw is None:
+        raise ValueError(
+            'sweep.init_q_checkpoint_bundle_path and '
+            'init_q_checkpoint_bundle_burst must be set together '
+            '(or both absent). The bundle path identifies WHICH '
+            "bundle to load; the burst spec identifies WHICH snapshot "
+            'inside it. Got '
+            f'path={path_raw!r}, burst={burst_raw!r}.',
+        )
+    if not isinstance(path_raw, str):
+        raise TypeError(
+            f'sweep.init_q_checkpoint_bundle_path must be str; got '
+            f'{type(path_raw).__name__}',
+        )
+    # Burst spec: int (0-indexed per_burst) or the literal "final".
+    # Reject booleans up-front — `isinstance(True, int) is True` in
+    # Python so a YAML `true` would otherwise sneak through.
+    if isinstance(burst_raw, bool) or not isinstance(burst_raw, (int, str)):
+        raise TypeError(
+            f'sweep.init_q_checkpoint_bundle_burst must be int or '
+            f'"final"; got {type(burst_raw).__name__}',
+        )
+    if isinstance(burst_raw, str) and burst_raw != 'final':
+        raise ValueError(
+            f'sweep.init_q_checkpoint_bundle_burst string value must '
+            f'be "final"; got {burst_raw!r}',
+        )
+    if isinstance(burst_raw, int) and burst_raw < 0:
+        raise ValueError(
+            f'sweep.init_q_checkpoint_bundle_burst int must be >= 0; '
+            f'got {burst_raw}',
+        )
+    return path_raw, burst_raw
 
 
 def _build_init_q_checkpoint_load_target(
@@ -703,6 +785,45 @@ def dispatch_sweep(sweep: DQNSweep) -> tuple[Path, Path]:
         from corroborate_rl.dqn.q_checkpoint import (
             load_batched_init_override,
         )
+        from corroborate_rl.dqn.q_checkpoint_bundle import (
+            extract_batched_init_override,
+            load_bundle,
+        )
+        # Resolve bundle resume EAGERLY ONCE — load_bundle of a
+        # multi-GB msgpack inside the per-(env, chunk) loop would
+        # re-read + msgpack-decode the same file N times for a
+        # sweep-wide resume target. Bundle role/burst dispatch
+        # happens here too, so the per-chunk loop body only does
+        # the seed-slice work.
+        bundle_resume: tuple[QCheckpointBundle, CheckpointRole, int | None] | None
+        bundle_resume = None
+        if sweep.init_q_checkpoint_bundle_path is not None:
+            burst_spec = sweep.init_q_checkpoint_bundle_burst
+            if burst_spec == 'final':
+                bundle_role: CheckpointRole = 'final'
+                bundle_burst: int | None = None
+            else:
+                bundle_role = 'per_burst'
+                # `isinstance(True, int) is True` in Python — mirror
+                # the loader's explicit bool rejection (yaml_sweep
+                # _build_init_q_checkpoint_bundle line ~417). A direct
+                # DQNSweep(...) construction bypasses the YAML
+                # validator, so we re-guard here.
+                if (
+                    not isinstance(burst_spec, int)
+                    or isinstance(burst_spec, bool)
+                ):
+                    raise TypeError(
+                        'sweep.init_q_checkpoint_bundle_burst '
+                        'must be int or "final" at dispatch; '
+                        f'got {type(burst_spec).__name__}',
+                    )
+                bundle_burst = burst_spec
+            bundle_resume = (
+                load_bundle(Path(sweep.init_q_checkpoint_bundle_path)),
+                bundle_role,
+                bundle_burst,
+            )
         grid_points: list[Mapping[str, object]] = []
         for ec in env_configs:
             for chunk in _chunks(ec):
@@ -716,6 +837,19 @@ def dispatch_sweep(sweep: DQNSweep) -> tuple[Path, Path]:
                         load_batched_init_override(
                             sweep.init_q_checkpoint_path_template,
                             chunk,
+                            load_target=(
+                                sweep.init_q_checkpoint_load_target
+                            ),
+                        )
+                    )
+                elif bundle_resume is not None:
+                    bundle_obj, br_role, br_burst = bundle_resume
+                    gp['init_override_batched'] = (
+                        extract_batched_init_override(
+                            bundle_obj,
+                            chunk,
+                            role=br_role,
+                            burst=br_burst,
                             load_target=(
                                 sweep.init_q_checkpoint_load_target
                             ),
