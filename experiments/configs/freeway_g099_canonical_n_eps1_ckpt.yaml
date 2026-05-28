@@ -1,0 +1,60 @@
+name: freeway_g099_canonical_n_eps1_ckpt
+out_dir: experiments/data/freeway_g099_canonical_n_eps1_ckpt
+env_binding: shared
+archive_remote: s3://corroborate-archive/freeway_g099_canonical_n_eps1_ckpt
+
+# Freeway-MinAtar γ=0.99 canonical with full Q traces + per-burst Q
+# checkpoints, n_episodes=1. Freeway has 6 RNG calls per transition
+# (the most stochastic MinAtar env per the gymnax source) — n_eps=1
+# means single-episode eval; variance will be higher than higher-n_eps
+# runs, but seed pooling (n_seeds=30) is the primary variance reducer.
+#
+# obs_shape=(10, 10, 7) — slightly larger than SI's 6-channel obs;
+# chunk_size=15 to match the SI canonical footprint that fit on the
+# 32-GiB RTX 5090 (29.5 GiB used).
+#
+# Cells: 2 arms × 2 chunks of 15 seeds = 4 batched cells.
+
+keep_q_checkpoint_per_burst: true
+keep_q_checkpoint_final: true
+keep_q_per_action: true
+
+envs:
+  - {name: Freeway-MinAtar, n_seeds: 30, chunk_size: 15}
+
+defaults:
+  total_steps: 1000000
+  eval_every:  20000
+  n_episodes:  1
+  gamma:       0.99
+  sync_period: 1000
+  n_step:      1
+  replay:
+    class: Replay
+    capacity: 100000
+    batch_size: 32
+  optimizer:
+    fn: warmed_update
+    inner: {fn: adam, lr: 0.0001}
+    warmup_steps: 100
+  action_select:
+    fn: epsilon_greedy
+    schedule:
+      fn: linear_epsilon
+      eps_init: 1.0
+      eps_final: 0.05
+      anneal_steps: 100000
+  q_network:
+    class: CNN
+    obs_shape: [10, 10, 7]
+    channels: [16]
+    kernel_size: 3
+    hidden: [128]
+
+interventions:
+  - name: canonical_g099_n_eps1
+    base: {}
+    arms:
+      - []
+      - - slot_path: bootstrap
+          replacement: {fn: bootstrap, greedification: {fn: double_greedify}}
