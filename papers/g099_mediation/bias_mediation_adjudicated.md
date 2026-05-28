@@ -239,55 +239,84 @@ Two limitations remain:
   still candidates and only multi-input sibling adjudication
   will sort them.
 
-### Bias is uniquely pivotal among the Q-summaries we measured
+### Bias-vs-other-Q-property: a sibling-set-sensitive answer
 
-The next falsification step (the bias-vs-other-Q-property
-question) is the multi-input sibling extension to the primitive,
-which we now use to test bias against the four other per-burst
-Q-summaries we have: `q_argmax_margin_per_burst`,
-`q_action_std_per_burst`, `q_autocorr_per_burst`,
-`q_lambda_a_per_burst`.
+The next falsification step uses the multi-input sibling extension
+to test bias against the other Q-derived per-burst summaries.
+
+The sibling set we ran has six entries:
+
+- Q-shape (per-state magnitude / temporal): `q_argmax_margin_per_burst`
+  (action-gap, max Q − 2nd-max Q), `q_action_std_per_burst`,
+  `q_autocorr_per_burst`, `q_lambda_a_per_burst`.
+- Policy-shape (derived from Q via argmax): `argmax_entropy_per_burst`
+  (marginal entropy of the argmax-action distribution),
+  `state_conditional_argmax_entropy_per_burst` (state-conditioned).
 
   | direction (mediator \| sibling-set) | sib alone | joint | n_01 | n_10 | z | verdict |
   | --- | ---: | ---: | ---: | ---: | ---: | --- |
-  | **bias \| (4 Q-summaries jointly)** | 66% | 88% | **7** | **0** | +2.27 | **GENUINE** |
-  | q_argmax_margin \| (bias + 3 others) | 84% | 88% | 1 | 0 | — | UPFG |
-  | q_action_std \| (bias + 3 others)    | 88% | 88% | 0 | 0 | — | UPFG |
-  | q_autocorr \| (bias + 3 others)      | 88% | 88% | 0 | 0 | — | UPFG |
-  | q_lambda_a \| (bias + 3 others)      | 88% | 88% | 0 | 0 | — | UPFG |
+  | **bias \| (6 Q-derived jointly)** | 78% | 91% | 4 | 0 | +1.50 | **UPFG** |
+  | q_argmax_margin \| (bias + 5 others) | 84% | 91% | 2 | 0 | +0.71 | UPFG |
+  | q_action_std \| (bias + 5 others)    | 88% | 91% | 2 | 1 | 0.00 | UPFG |
+  | q_autocorr \| (bias + 5 others)      | 88% | 91% | 1 | 0 | 0.00 | UPFG |
+  | q_lambda_a \| (bias + 5 others)      | 88% | 91% | 2 | 1 | 0.00 | UPFG |
+  | argmax_ent \| (bias + 5 others)      | 91% | 91% | 0 | 0 | — | UPFG |
+  | state_cond_ent \| (bias + 5 others)  | 91% | 91% | 0 | 0 | — | UPFG |
 
-(Bonferroni multiplicity = 5; primitive decides via exact-binomial
-p — at 7/0 discordant pairs p = 2⁻⁷ ≈ 0.008 ≤ adjusted threshold ≈
-0.01, so GENUINE despite z below the normal-approx Bonferroni z.)
+(Multiplicity = 7; exact-binomial p at n_01=4, n_10=0 is
+2⁻⁴ = 0.0625, above the Bonferroni-7 threshold of 0.0071. It is
+also above an unadjusted α = 0.05.)
 
-**Pass 1**: bias added to the joint set of four other
-Q-summaries (action-gap, action-std, Q autocorrelation, action
-anisotropy) jumps d-separation from 66% → 88%. All 7 informative
-bursts favor adding bias; zero favor the reverse.
+**Sensitivity to the sibling set is real.** A prior version of
+this test used only the four Q-shape siblings (no policy-shape
+additions): bias's discordant pairs were n_01=7, n_10=0,
+exact-binomial p = 2⁻⁷ ≈ 0.008, which would have been GENUINE
+under Bonferroni-5. Adding `argmax_entropy_per_burst` and
+`state_conditional_argmax_entropy_per_burst` lifts sibling-only
+d-separation from 66% → 78% (the two policy-shape summaries
+absorb 12pp of arm→outcome signal that the four Q-shape
+summaries miss) and drops bias's incremental discordant pairs
+from 7 to 4. The verdict walks back from GENUINE to UPFG.
 
-**Pass 2**: each individual non-bias Q-summary, when added to
-(bias + the other three), produces 0 or 1 discordant pairs across
-32 marg-edge bursts. Same empirical-null pattern as the
-state-visitation siblings.
+**What this tells us.** The Q-derived information bias picks up
+is partly shared with the policy-shape summaries. Adding
+`argmax_entropy` (marginal policy entropy) and its state-
+conditional sibling brings the joint d-separation to 91% on
+their own — close to the full 91% the seven-summary joint
+achieves. Bias's incremental contribution beyond this combined
+sibling set is small enough that the test cannot rule out null.
 
-The bias-vs-other-Q-property question now has a partial answer:
-**bias is uniquely pivotal among the Q-summaries we measured.**
-None of the four other registered per-burst Q-summaries adds
-information once bias is in the conditioning set; bias adds
-information beyond all four jointly.
+**What it does not tell us.** The data is consistent with two
+scenarios that the test cannot distinguish:
 
-This is not "bias-clip is THE mechanism" — the four Q-summaries
-we tested don't span the full space of Q-properties (we haven't
-tested e.g. Q-magnitude, Q-variance, soft-policy entropy, advantage
-sign-consistency). It narrows the live candidate set inside the
-Q-channel from "any Q-property" to "bias, plus whatever Q-property
-we haven't yet operationalised that bias might be a proxy for."
+- **Bias is genuinely subsumed by (Q-shape + policy-shape)
+  summaries.** Once you condition on action-gap, action spread,
+  Q-autocorrelation, action-anisotropy, and the two policy
+  entropies, bias adds nothing. The earlier "bias is uniquely
+  pivotal" reading was an artifact of an incomplete sibling set.
 
-The natural next step is enumerating the unmeasured Q-property
-candidates and bringing them into the multi-input sibling set
-until the bias-GENUINE verdict either flips to LEAK (some
-unmeasured Q-property subsumes bias) or persists across all
-plausible Q-summary axes.
+- **Bias still carries unique information but at lower
+  granularity than 32 marg-edge bursts can detect.** Four of
+  seven informative bursts favor bias and zero favor the
+  reverse — the *direction* is consistent with bias adding,
+  but the *power* at Bonferroni-7 is below GENUINE.
+
+We do not pretend to resolve this. The honest update to the
+"bias-vs-other-Q-property" question is that **bias survives the
+MC-leak adjudication and the state-visitation siblings, but does
+NOT cleanly survive the joint Q-shape + policy-shape sibling
+set.** Whatever "uniqueness" claim we were making collapses
+once policy-shape mediators are in the conditioning set.
+
+The cumulative picture across all three adjudications is now
+better described as: **bias's d-separation power at Asterix
+γ=0.99 is shared across a cluster of Q-derived summaries
+(Q-shape and policy-shape), with bias adding marginal-but-
+detectable contribution at small-N sibling sets and statistically
+indistinguishable contribution at the full Q-derived sibling
+set.** This is more honest than the prior single-test reading
+and a cleaner null hypothesis than "bias is the unique
+mediator."
 
 See `figures/report_q_summary_multi_input_test.png` for the
 bar-chart visualization and

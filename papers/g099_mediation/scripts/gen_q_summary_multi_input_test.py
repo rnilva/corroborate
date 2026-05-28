@@ -7,17 +7,23 @@ inside the Q-side carries the load?"
 
 Two passes:
 
-**Pass 1: bias against the JOINT Q-summary set**
+**Pass 1: bias against the JOINT Q-summary + policy-shape set**
   mediator = bias
-  sibling  = (q_argmax_margin, q_action_std, q_autocorr, q_lambda_a)
+  sibling  = (q_argmax_margin, q_action_std, q_autocorr, q_lambda_a,
+              argmax_entropy, state_conditional_argmax_entropy)
 
-  GENUINE → bias adds info beyond all four other Q-summaries
-            jointly → bias is uniquely informative among Q-summaries.
+  Q-summaries are Q-shape (per-state magnitude / temporal); policy-
+  shape additions are derived from Q via argmax (marginal entropy
+  + state-conditional entropy).
+
+  GENUINE → bias adds info beyond all six other Q-derived summaries
+            jointly → bias is uniquely informative among them.
   LEAK    → bias is one Q-summary among many equivalents; the joint
             of the others already captures everything bias provides.
 
-**Pass 2: each individual Q-summary against (bias + the other three)**
-  For q_i ∈ {q_argmax_margin, q_action_std, q_autocorr, q_lambda_a}:
+**Pass 2: each individual Q-derived summary against (bias + the other five)**
+  For q_i ∈ {q_argmax_margin, q_action_std, q_autocorr, q_lambda_a,
+             argmax_entropy, state_conditional_argmax_entropy}:
     mediator = q_i
     sibling  = (bias, *(others without q_i))
 
@@ -33,10 +39,10 @@ If Pass 1 = GENUINE and Pass 2 = LEAK for all q_i, bias is the
 unique pivotal Q-summary; other Q-summaries are redundant given
 bias.
 
-Multiplicity: 5 tests (1 + 4), Bonferroni-corrected.
+Multiplicity: 7 tests (1 + 6), Bonferroni-corrected.
 
-Depth budget: at Asterix γ=0.99, 60 cells/burst → depth-5 PC has
-df ≈ 52 (n − 3 − 4). `min_n_per_burst=15` keeps Fisher-z stable.
+Depth budget: at Asterix γ=0.99, 60 cells/burst → depth-7 PC has
+df ≈ 50 (n − 3 − 6). `min_n_per_burst=15` keeps Fisher-z stable.
 """
 from __future__ import annotations
 import sys
@@ -57,15 +63,19 @@ from corroborate.analyses.diagnostic.mediator_leak_adjudication import (
 
 
 Q_SUMMARIES = (
-    ('q_argmax_margin', 'q_argmax_margin_per_burst'),
+    # Q-shape (per-state magnitude / temporal structure)
+    ('q_argmax_margin', 'q_argmax_margin_per_burst'),    # action-gap (Q max − 2nd max)
     ('q_action_std',    'q_action_std_per_burst'),
     ('q_autocorr',      'q_autocorr_per_burst'),
     ('q_lambda_a',      'q_lambda_a_per_burst'),
+    # Policy-shape (downstream of Q via argmax)
+    ('argmax_ent',      'argmax_entropy_per_burst'),
+    ('state_cond_ent',  'state_conditional_argmax_entropy_per_burst'),
 )
 BIAS_TAG = 'bias'
 BIAS_COL = 'mean_per_state_cumulative_bias_per_burst'
 OUTCOME = 'mc_return__mean_axis_-1'
-N_MULTIPLICITY = 5  # 1 main + 4 sibling-direction tests
+N_MULTIPLICITY = 7  # 1 main + 6 sibling-direction tests
 
 OUT_TXT = SCRIPT_DIR.parent / 'figures' / 'report_q_summary_multi_input_test.txt'
 OUT_PNG = SCRIPT_DIR.parent / 'figures' / 'report_q_summary_multi_input_test.png'
@@ -113,7 +123,7 @@ def main() -> None:
     s = next(x for x in res.per_stratum if x.stratum_id[0] == 'Asterix-MinAtar')
     lines.append(_row(s, f'bias | (q_argmax, q_std, q_autocorr, q_lambda_a)'))
     panel_data.append((
-        'bias | {4 Q-summaries}',
+        f'bias | {len(Q_SUMMARIES)} Q-derived',
         s.dsep_sibling_only, s.dsep_joint,
         s.n_discordant_joint_only, s.n_discordant_sibling_only,
         s.z_mcnemar, s.disposition,
@@ -141,7 +151,7 @@ def main() -> None:
         label = f'{tag} | (bias + {len(others)} other Q-summaries)'
         lines.append(_row(s2, label))
         panel_data.append((
-            f'{tag} | (bias + 3 others)',
+            f'{tag} | bias+{len(others)}',
             s2.dsep_sibling_only, s2.dsep_joint,
             s2.n_discordant_joint_only, s2.n_discordant_sibling_only,
             s2.z_mcnemar, s2.disposition,
