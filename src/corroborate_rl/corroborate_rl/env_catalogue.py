@@ -851,8 +851,33 @@ class EpisodeLengthCappedEnv:
     on the EnvParams at every reset/step call. The inner env's
     terminal-on-timeout logic respects the smaller cap.
 
+    Emits `info['truncated']=1` when `done` fires because the cap
+    triggered (artificial time-limit cutoff per Sutton-Barto §6.6 /
+    Gymnasium-API), and `info['truncated']=0` when the inner env
+    naturally terminated. The substrate's `bootstrap` claim
+    consumes this signal: at truncation the trajectory continues
+    bootstrap (`target = r + γ · v(s')`), at natural termination it
+    zeros (`target = r`). Without this distinction, capping at e.g.
+    max_steps=200 on a 1000-step env would change the learned MDP
+    to "the game ends at step 200" rather than "the experiment
+    chose to stop observing at step 200" — the original
+    motivation for adding this wrapper (bg-stabilization at
+    Asterix γ=0.999).
+
+    Detection uses gymnax's `state.time` step counter (declared on
+    the base `EnvState`, present on every concrete env): a step
+    that triggered done with `state.time + 1 >= max_steps` is
+    classified as truncated. **Edge case**: an inner env that
+    naturally terminates at exactly the cap step is incorrectly
+    classified as truncated; the probability is ~ 1/episode_length
+    on naturally-terminating envs and zero on cap-only envs.
+    Cleaner discrimination would require accessing the inner env's
+    `is_terminal()` with relaxed params; not exposed on the
+    `Env` Protocol so the time-based heuristic is the
+    type-honest option.
+
     See `EpisodeLengthCap` config dataclass for the hypothesis-test
-    motivation (bg-stabilization at Asterix γ=0.999)."""
+    motivation."""
     inner: Env
     max_steps: int
 
@@ -878,7 +903,32 @@ class EpisodeLengthCappedEnv:
     ) -> tuple[
         jax.Array, EnvState, jax.Array, jax.Array, dict[str, object],
     ]:
-        return self.inner.step(rng, state, action, self._cap(params))
+        # Pre-step step counter. The inner env increments .time
+        # inside `step_env`; here we snapshot the pre-step value
+        # because gymnax's outer `step()` does auto-reset on done
+        # (post-step state.time goes back to 0). pre+1 is the
+        # logical step index of the action just taken.
+        pre_step_time = state.time
+        next_obs, next_state, reward, done, info = self.inner.step(
+            rng, state, action, self._cap(params),
+        )
+        step_index = pre_step_time + jnp.int32(1)
+        cap_reached = step_index >= jnp.int32(self.max_steps)
+        # `truncated = done AND cap_reached`: cap fired at or past
+        # the limit AND the episode ended this step. For envs
+        # without natural termination at this step, the cap is the
+        # cause; rare edge case is inner env terminating exactly
+        # at the cap (mis-classified — see class docstring).
+        is_done = done.astype(jnp.bool_)
+        truncated = jnp.logical_and(is_done, cap_reached).astype(jnp.float32)
+        # Build new info dict carrying truncated alongside whatever
+        # the inner env emitted. Note: under jax.lax.scan the info
+        # dict's keys are STATIC across iterations — adding our key
+        # here is safe because this wrapper either is or isn't in
+        # the wrapper chain for a given cell; the structure is set
+        # at JIT trace time.
+        out_info: dict[str, object] = {**info, 'truncated': truncated}
+        return next_obs, next_state, reward, done, out_info
 
     def observation_space(self, params: EnvParams) -> Box:
         return self.inner.observation_space(self._cap(params))
