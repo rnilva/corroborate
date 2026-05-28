@@ -172,38 +172,38 @@ def _per_burst_booleans(
     return marg, dsep
 
 
-def _mcnemar_z(
-    n_01: int, n_10: int, *,
-    min_discordant: int = 5,
-    exact_threshold: int = 25,
-) -> float:
-    """One-sided McNemar z for "joint d-separates more often than sibling."
-
-    n_01 = bursts where joint d-sep, sib not. n_10 = the opposite.
-    Returns NaN when discordant pairs < min_discordant.
-
-    At small discordant counts (n_disc < exact_threshold, default 25)
-    the normal approximation breaks down; uses the EXACT one-sided
-    binomial test instead and converts to z-equivalent via probit:
-    `z = Φ⁻¹(1 − p_exact)`. This gives the appropriate small-sample
-    rigor that the standard McNemar literature recommends.
-
-    At n_disc ≥ exact_threshold, uses Edwards continuity-corrected
-    normal approximation:
-      `z = (n_01 − n_10 − sign(Δ)) / sqrt(n_disc)`."""
+def _mcnemar_exact_p_one_sided(n_01: int, n_10: int) -> float:
+    """Exact one-sided McNemar p-value: P(X ≥ n_01 | n_disc, p=0.5)
+    under H₀ that discordant proportions are equal. The one-sided
+    direction tests H₁: joint d-separates strictly MORE than
+    sibling alone."""
     n_disc = n_01 + n_10
-    if n_disc < min_discordant:
+    if n_disc == 0:
         return float('nan')
-    if n_disc < exact_threshold:
-        # Exact one-sided binomial: P(X ≥ n_01 | n_disc, p=0.5). Under
-        # H₀ (population monotonicity → equal discordant proportions),
-        # the larger of (n_01, n_10) is binomial(n_disc, 0.5).
-        from scipy.stats import binom, norm  # pyright: ignore[reportAttributeAccessIssue]
-        p_exact = 1.0 - binom.cdf(n_01 - 1, n_disc, 0.5)
-        # Convert to z via probit. Clip to avoid +/-inf at boundary.
-        p_exact = max(min(p_exact, 1 - 1e-15), 1e-15)
-        return float(norm.ppf(1 - p_exact))
-    return (n_01 - n_10 - (1 if n_01 > n_10 else -1)) / math.sqrt(n_disc)
+    from scipy.stats import binom  # pyright: ignore[reportAttributeAccessIssue]
+    return float(1.0 - binom.cdf(n_01 - 1, n_disc, 0.5))
+
+
+def _mcnemar_z_normal(n_01: int, n_10: int) -> float:
+    """Edwards continuity-corrected normal-approximation McNemar z.
+
+    Reported as the SUMMARY statistic regardless of n_disc; sign
+    matches (n_01 − n_10). Stays well-behaved near 0 when data is
+    consistent with H₀ (in contrast to probit-of-exact-p which
+    blows up to ±∞ at boundary). The disposition decision is made
+    via `_mcnemar_exact_p_one_sided`, not via this z."""
+    n_disc = n_01 + n_10
+    if n_disc == 0:
+        return float('nan')
+    delta = n_01 - n_10
+    if delta == 0:
+        return 0.0
+    sign = 1 if delta > 0 else -1
+    # Subtract the continuity correction toward zero (so the
+    # adjusted |Δ| is one unit smaller; if |Δ|=1 the corrected
+    # delta is 0).
+    corrected = delta - sign
+    return float(corrected) / math.sqrt(n_disc)
 
 
 @analysis
@@ -221,6 +221,7 @@ def mediator_leak_adjudication(
     z_genuine: float = 1.65,
     alpha: float = 0.05,
     n_strata_for_multiplicity: int | None = None,
+    n_bootstrap: int = 0,
 ) -> MediatorLeakAdjudicationResult:
     """Adjudicate a soft-tautological mediator against its outcome-input
     sibling via McNemar paired test on per-burst d-separation booleans.
@@ -250,50 +251,21 @@ def mediator_leak_adjudication(
             n_strata_for_multiplicity=n_strata_for_multiplicity,
         )
 
-    # **NaN-coupling pre-filter** (third-critic-review fix). The
-    # depth-1 sibling-only run drops cells with NaN in `sibling`; the
-    # depth-2 joint run drops cells with NaN in EITHER `sibling` OR
-    # `mediator`. Without pre-filtering, the two runs operate on
-    # different sample sets → different marg-edge bursts → McNemar
-    # pairing assumption violated. Pre-filter to cells where BOTH
-    # columns are entirely finite across the burst axis so the two
-    # runs share a common cell-level domain.
-    import numpy as _np
-    def _all_finite(arr: object) -> bool:
-        if arr is None:
-            return False
-        a = _np.asarray(arr, dtype=_np.float64)
-        if a.size == 0:
-            return False
-        return bool(_np.all(_np.isfinite(a)))
-    med_finite = [_all_finite(x) for x in cells[mediator_per_burst].to_list()]
-    sib_finite = [_all_finite(x) for x in cells[sibling_per_burst].to_list()]
-    both_finite = [m and s for m, s in zip(med_finite, sib_finite, strict=True)]
-    cells_aligned = cells.filter(pl.Series(both_finite))
-    if cells_aligned.height == 0:
-        return MediatorLeakAdjudicationResult(
-            per_stratum=(),
-            mediator_name=str(mediator_per_burst),
-            sibling_name=str(sibling_per_burst),
-            outcome_name=str(outcome_per_burst),
-            z_genuine_threshold=z_genuine_eff,
-            n_strata_for_multiplicity=n_strata_for_multiplicity,
-        )
-
     common_kwargs = dict(
         arm_field=arm_field,
         outcome_per_burst=outcome_per_burst,
         stratify_by=stratify_by,
         min_n_per_burst=min_n_per_burst,
         alpha=alpha,
+        n_bootstrap=n_bootstrap,
     )
     sibling_res = dynamic_pc_adjacency.fn(
-        cells_aligned,
+        cells,
         mediator_per_burst=sibling_per_burst,
         **common_kwargs,
     )
     joint_res = dynamic_pc_adjacency.fn(
-        cells_aligned,
+        cells,
         mediator_per_burst=(mediator_per_burst, sibling_per_burst),
         **common_kwargs,
     )
@@ -303,13 +275,31 @@ def mediator_leak_adjudication(
     for s_id in strata:
         sib_marg, sib_dsep = _per_burst_booleans(sibling_res, s_id, alpha)
         joint_marg, joint_dsep = _per_burst_booleans(joint_res, s_id, alpha)
-        # marg-edge set must be identical across the two runs because
-        # the depth-0 marg test is mediator-independent. Take the
-        # intersection defensively (handles edge cases where one run
-        # had NaN p-value at a burst).
+        # **Per-burst NaN-coupling pre-filter** (v5 fix). The depth-1
+        # sibling-only run drops cells with NaN in `sibling`; the
+        # depth-2 joint run drops cells with NaN in EITHER `sibling`
+        # OR `mediator`, so the two runs may use different cell
+        # subsets at each burst. Intersect via `n_per_burst >=
+        # min_n_per_burst` from both runs to score only the bursts
+        # where both had adequate sample size. Earlier "cell-level"
+        # pre-filter (v4) was overly strict — discarded usable bursts
+        # for a single NaN entry.
+        sib_n = sibling_res[s_id].n_per_burst
+        joint_n = joint_res[s_id].n_per_burst
         n_bursts = min(len(sib_marg), len(joint_marg))
+        valid_burst = [
+            (sib_n[b] >= min_n_per_burst and joint_n[b] >= min_n_per_burst)
+            for b in range(n_bursts)
+        ]
+        # marg-edge intersection — only count a burst as a marg-edge
+        # pair if (a) both runs sampled enough cells, AND (b) the
+        # marg-edge boolean agrees. Since marg is depth-0 and
+        # mediator-independent over the SAME cells, the agreement is
+        # by construction on `valid_burst` bursts; the AND below is
+        # defensive.
         marg_intersect = [
-            sib_marg[b] and joint_marg[b] for b in range(n_bursts)
+            valid_burst[b] and sib_marg[b] and joint_marg[b]
+            for b in range(n_bursts)
         ]
         n_marg = sum(marg_intersect)
         if n_marg < min_marginal_edges:
@@ -341,17 +331,27 @@ def mediator_leak_adjudication(
             for b in range(n_bursts) if marg_intersect[b]
         )
 
-        z = _mcnemar_z(n_01, n_10, min_discordant=min_discordant)
         n_disc = n_01 + n_10
-
-        if math.isnan(z):
-            disposition = LeakAdjudication.UNDERPOWERED_FOR_GENUINE
-        elif z >= z_genuine_eff:
-            disposition = LeakAdjudication.GENUINE
-        elif n_disc < min_discordant:
+        # **Decoupled test vs summary** (v5 fix). Disposition uses the
+        # appropriate test per sample size: exact binomial at small
+        # n_disc, normal-approximation at large. Reported `z_mcnemar`
+        # is ALWAYS Edwards continuity-corrected normal (well-behaved
+        # signed value bounded near zero under H₀), regardless of
+        # which test was used to decide.
+        z_reported = _mcnemar_z_normal(n_01, n_10)
+        if n_disc < min_discordant:
             disposition = LeakAdjudication.UNDERPOWERED_FOR_GENUINE
         else:
-            disposition = LeakAdjudication.LEAK
+            # Convert z_genuine_eff (a one-sided z) into a target
+            # p-value, then compare exact-binomial p to it.
+            p_target = float(1 - stats.norm.cdf(z_genuine_eff))
+            p_exact = _mcnemar_exact_p_one_sided(n_01, n_10)
+            if math.isnan(p_exact):
+                disposition = LeakAdjudication.UNDERPOWERED_FOR_GENUINE
+            elif p_exact <= p_target:
+                disposition = LeakAdjudication.GENUINE
+            else:
+                disposition = LeakAdjudication.LEAK
 
         per_stratum.append(StratumLeakResult(
             stratum_id=s_id,
@@ -360,7 +360,7 @@ def mediator_leak_adjudication(
             dsep_joint=n_joint_dsep / n_marg * 100,
             n_discordant_joint_only=n_01,
             n_discordant_sibling_only=n_10,
-            z_mcnemar=z,
+            z_mcnemar=z_reported,
             disposition=disposition,
         ))
 

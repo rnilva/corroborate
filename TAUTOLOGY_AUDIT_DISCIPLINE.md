@@ -61,10 +61,13 @@ independent-input contribution.
   | `{sibling}` | 1 | rank-monotone outcome-input leak |
   | `{mediator, sibling}` | 2 | joint conditioning |
 
-The depths differ, but the **marg-edge set is identical** across
-the two runs (depth-0 marg test is mediator-independent). So the
-per-burst d-sep booleans are PAIRED — every marg-edge burst
-contributes a `(dsep_sib, dsep_joint)` pair.
+The depths differ. The depth-0 marg test is mediator-independent
+over the SAME cell set, so the per-burst d-sep booleans are
+PAIRED. v5 enforces the cell-set match per-burst via
+`n_per_burst >= min_n_per_burst` intersection on both runs
+(handles cases where mediator and sibling have different NaN
+patterns at some bursts; only bursts with adequate sample size
+in BOTH runs contribute to McNemar).
 
 **Step 3 — McNemar paired test on discordant pairs.**
 Among marg-edge bursts, count discordant pairs:
@@ -139,7 +142,7 @@ z=3.02 still passes (margin 0.38σ).
 
   | env | n_marg | `sib_dsep` | `joint_dsep` | n_01 | n_10 | z | disposition |
   | --- | --- | --- | --- | --- | --- | --- | --- |
-  | Asterix | 32 | 47% | 81% | **11** | **0** | **+3.30** | **GENUINE** |
+  | Asterix | 32 | 47% | 81% | **11** | **0** | **+3.02** | **GENUINE** |
   | FR | 44 | 84% | 86% | 2 | 1 | — | UNDERPOWERED_FOR_GENUINE |
   | MetaMaze | 12 | 67% | 83% | 2 | 0 | — | UNDERPOWERED_FOR_GENUINE |
   | SI | 3 | 67% | 100% | 1 | 0 | — | UNDERPOWERED_FOR_GENUINE |
@@ -208,7 +211,7 @@ is what the partial-Spearman CI tests run on. REDQ may genuinely
 shift the adjudication relative to raw bias and should be
 adjudicated independently if it's the bridge's mediator-of-record.
 
-## Limitations (v4 — what the primitive does NOT yet support)
+## Limitations (v5 — what the primitive does NOT yet support)
 
 - **Burst non-independence**: McNemar assumes independent paired
   observations; adjacent bursts within one cell share training
@@ -217,9 +220,13 @@ adjudicated independently if it's the bridge's mediator-of-record.
   real population effect, suggesting strong within-cluster
   correlation. The primitive's z-score is therefore conditional
   on the per-burst CI-test sequence; for a within-cluster-robust
-  confidence interval, pair with cluster-bootstrap on cells (the
-  sibling primitive `dynamic_pc_adjacency` already exposes
-  `n_bootstrap`).
+  confidence interval, pass `n_bootstrap > 0` (default 0) — the
+  primitive forwards this to `dynamic_pc_adjacency`'s cluster
+  bootstrap on cells, exposed via `bootstrap_marginal` /
+  `bootstrap_partial` / `bootstrap_edge_counts` on the
+  underlying result. McNemar's z itself is not bootstrapped;
+  consumers should read those fields for the cluster-robust CI
+  on d-sep rate.
 - **Multi-input siblings**: a 3-component mediator like
   `(Q − target_Q − MC)` needs two siblings + a depth-3 joint test.
   The primitive currently supports only single mediator + single
