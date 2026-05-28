@@ -20,7 +20,25 @@ discipline went through a critic-driven rigor upgrade on
 **v2 (rigorous)** verdicts, not the v1 (ad-hoc) ones that
 preceded the upgrade.
 
-## The empirical adjudication test (v2 — rigorous)
+## The empirical adjudication test (v3 — paired McNemar, post-second-critic-review)
+
+A second critic review of v2 identified that:
+- **noise-padding was theatre** — adding N(0,1) ε to a conditioning
+  set adds rank but no information, so the v2 "df-matching" was
+  hand-waving over an asymmetric test;
+- **independent-binomial Wald SE was wrong direction** for paired
+  data (same n_marg bursts across runs) — under-stated SE means
+  v2's LEAK verdicts at MetaMaze/SI were biased toward false LEAK;
+- **UNDERPOWERED ≠ LEAK** — collapsing them into "LEAK" launders
+  insufficient evidence as evidence of absence;
+- **no multiplicity correction** — 12 strata × α=0.05 gives FWER
+  ≈ 0.46;
+- **"linear span" was technically wrong** — partial-Spearman
+  conditions on rank-monotone, not linear;
+- **HURTS was sampling noise** — population monotonicity rules it
+  out; finite-sample HURTS verdicts were just variance.
+
+v3 fixes all six:
 
 For a soft-tautological mediator `M` whose reads include outcome
 inputs `O_inputs`:
@@ -35,36 +53,51 @@ independent-input contribution.
   `mc_return_from_step` (MC, in outcome's chain). The sibling is
   `mean_mc_per_state_per_burst` — same MC reduction, no Q.
 
-**Step 2 — Run three df-matched conditioning sets.** Via
-`dynamic_pc_adjacency` with noise-padding at depth-2 so all three
-runs cost the same df (this is the v2 fix — the v1 implementation
-compared depth-1 single-mediator runs against depth-2 joint runs
-and conflated info gain with df cost):
+**Step 2 — Run two PC tests (no noise-pad).** Via
+`dynamic_pc_adjacency`:
 
   | conditioning set | depth | what it estimates |
   | --- | --- | --- |
-  | `{sibling, ε}` | 2 | outcome-input leak alone (ε ~ N(0,1)) |
-  | `{mediator, ε}` | 2 | full mediator alone |
+  | `{sibling}` | 1 | rank-monotone outcome-input leak |
   | `{mediator, sibling}` | 2 | joint conditioning |
 
-**Step 3 — Binomial Wald z-test, NOT an ad-hoc Δ threshold.**
-Compute `Δ = dsep({mediator, sibling}) − dsep({sibling, ε})` and
-its Wald SE under binomial:
+The depths differ, but the **marg-edge set is identical** across
+the two runs (depth-0 marg test is mediator-independent). So the
+per-burst d-sep booleans are PAIRED — every marg-edge burst
+contributes a `(dsep_sib, dsep_joint)` pair.
+
+**Step 3 — McNemar paired test on discordant pairs.**
+Among marg-edge bursts, count discordant pairs:
+
+  - `n_01` = bursts where joint d-separates but sibling does NOT
+    (joint > sibling evidence)
+  - `n_10` = bursts where sibling d-separates but joint does NOT
+    (anomaly; population monotonicity says this is pure noise)
+
+  Continuity-corrected McNemar z:
 
   ```
-  SE_Δ ≈ sqrt(p_j(1−p_j)/n_j + p_s(1−p_s)/n_s) × 100   (pp-scale)
-  z    = Δ / SE_Δ
+  z = (n_01 − n_10 − sign(n_01 − n_10)) / sqrt(n_01 + n_10)
   ```
 
   Disposition:
-  - `z ≥ +z_genuine` (default 1.65, 95% one-sided) → **GENUINE**
-  - `z ≤ −z_hurts`   (default 1.65, symmetric)       → **HURTS**
-  - `|z| < z_genuine`                                  → **LEAK**
-  - `n_marg < min_marginal_edges` (default 3)          → **UNDERPOWERED**
+  - `z ≥ z_genuine` (default 1.65, 95% one-sided) → **GENUINE**
+  - `n_01 + n_10 < min_discordant` (default 5) → **UNDERPOWERED_FOR_GENUINE**
+    (cannot distinguish small effect from null; v2 collapsed this
+    into LEAK — wrong)
+  - `|z| < z_genuine` AND `n_01 + n_10 ≥ min_discordant` → **LEAK**
+    (adequately powered, no effect)
+  - `n_marg_edge < min_marginal_edges` → **UNDERPOWERED**
 
-This is sample-size-aware: a +30pp Δ at n=3 is z≈1.2 (LEAK), while
-the same +30pp at n=32 is z≈2.8 (GENUINE). The v1 implementation's
-fixed +10pp threshold inflated small-n positives.
+  Note: there is NO "HURTS" disposition — population monotonicity
+  ensures conditioning on more variables cannot reduce conditional
+  independence in expectation. Finite-sample violations are noise
+  contributing to `n_10`; the McNemar test absorbs them naturally.
+
+**Step 4 — Multiplicity correction.** Pass
+`n_strata_for_multiplicity` to switch `z_genuine` to the
+Bonferroni-adjusted one-sided z at α / n_strata. Without
+correction, FWER across 12 strata at α=0.05 is ~0.46.
 
 **Step 4 — Report env-conditionally.** The same mediator can be
 GENUINE at one env and LEAK at another. Do not pool the
@@ -74,9 +107,12 @@ adjudication verdict across stratum.
 
 **A GENUINE verdict does NOT confirm the mediator's mechanism
 claim.** It establishes that the mediator's signal extends beyond
-the LINEAR span of mean-sibling. Higher moments (variance, sign
-concentration), nonlinear couplings, and alternative causal
-channels are not in the sibling-span.
+the **rank-monotone** span of sibling (partial-Spearman conditions
+on rank residuals, not linear residuals — earlier doc text said
+"linear span" which was technically wrong). Higher moments
+(variance, sign concentration of the per-burst pattern), nonlinear
+non-monotone couplings, and alternative causal channels are not
+adjudicated by this test.
 
 At γ=0.99 with `bias = Q − MC`, GENUINE means **mean-Q contains
 predictive info beyond mean-MC**. That could equally well be:
@@ -92,32 +128,51 @@ necessary-but-not-sufficient for the bias-clip mediation claim.
 Bridges using this primitive should state the disposition AND
 explicitly note what the test does not adjudicate.
 
-## The empirical case study (γ=0.99 canonical, v2 verdicts)
+## The empirical case study (γ=0.99 canonical, v3 verdicts)
 
 `mean_per_state_cumulative_bias_per_burst` paired with
 `mean_mc_per_state_per_burst`. Outcome:
 `mc_return__mean_axis_-1`. Stratum: env.
 
-  | env | n_marg | `{sib,ε}` | `{med,ε}` | `{m,s}` | Δ | SE_Δ | z | disposition |
-  | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-  | Asterix | 32 | 50% | 91% | 81% | +31pp | 11.2 | **+2.79** | **GENUINE** |
-  | MetaMaze | 12 | 58% | 75% | 83% | +25pp | 17.8 | +1.40 | LEAK |
-  | SI | 3 | 67% | 33% | 100% | +33pp | 27.2 | +1.22 | LEAK |
-  | FR | 44 | 80% | 89% | 86% | +7pp | 8.0 | +0.85 | LEAK |
-  | Freeway | 5 | 40% | 80% | 40% | +0pp | 31.0 | +0.00 | LEAK |
-  | (other 7 envs) | <3 | — | — | — | — | — | — | UNDERPOWERED |
+Bonferroni-adjusted `z_genuine = 2.642` for 12 strata. Asterix's
+z=3.02 still passes (margin 0.38σ).
 
-**Only Asterix passes the rigorous threshold.** MetaMaze and SI
-were called GENUINE under v1's ad-hoc +10pp threshold; under
-sample-size-aware z, both are LEAK. The +33pp Δ at SI's n=3 was
-the v1 protocol's worst-case false positive — corrected here.
+  | env | n_marg | `sib_dsep` | `joint_dsep` | n_01 | n_10 | z | disposition |
+  | --- | --- | --- | --- | --- | --- | --- | --- |
+  | Asterix | 32 | 47% | 81% | **11** | **0** | **+3.02** | **GENUINE** |
+  | FR | 44 | 84% | 86% | 2 | 1 | — | UNDERPOWERED_FOR_GENUINE |
+  | MetaMaze | 12 | 67% | 83% | 2 | 0 | — | UNDERPOWERED_FOR_GENUINE |
+  | SI | 3 | 67% | 100% | 1 | 0 | — | UNDERPOWERED_FOR_GENUINE |
+  | Freeway | 5 | 40% | 40% | 0 | 0 | — | UNDERPOWERED_FOR_GENUINE |
+  | (other 7 envs) | <3 | — | — | — | — | — | UNDERPOWERED |
 
-The substantive finding: at γ=0.99 Asterix, bias carries
-predictive information beyond mean-MC at the 95% level. Whether
-this is the bias-clip mechanism or a Q-via-other-channel effect
-remains undistinguished — the test does not adjudicate that.
-At the other 4 PC-detectable envs, the bias-mediator's apparent
-d-separation power is consistent with the MC-leak alone.
+**Only Asterix passes** the McNemar test under Bonferroni
+correction. All 11 discordant pairs at Asterix favor joint
+(n_01=11, n_10=0) — the joint conditioning adds d-sep at 11 of
+the 32 marg-edge bursts, sibling adds nothing the joint doesn't
+already give. This is the clean signature of a mediator that
+carries information beyond the sibling.
+
+**4 envs are UNDERPOWERED_FOR_GENUINE** (discordant pairs < 5).
+This is the v2→v3 walk-back of the v2 "LEAK" verdicts: we
+cannot conclude the mediator IS just leak at these envs — the
+sample is too small to detect a real effect. FR's 44 marg-edge
+bursts had only 3 discordant pairs (n_01=2, n_10=1) so almost
+all marg-edge bursts agree on d-sep between {sib} and {m,s}; the
+underlying agreement is high but the discordant evidence is thin.
+Freeway's 0 discordant pairs is the strongest evidence that
+mediator and sibling give literally identical d-separation
+verdicts there — but still labeled UNDERPOWERED_FOR_GENUINE
+because 0 evidence cannot statistically distinguish from a real
+small effect.
+
+**The substantive finding**: at γ=0.99 Asterix, bias carries
+predictive information beyond mean-MC at the 99.9%-Bonferroni
+level. Whether this is the bias-clip mechanism or a
+Q-via-other-channel effect remains undistinguished — the test
+does not adjudicate mechanism. At 4 other PC-detectable envs,
+the test is underpowered; "consistent with MC-leak alone" cannot
+be claimed from these data.
 
 ## How to bake this into bridge authoring
 

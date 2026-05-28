@@ -1,5 +1,6 @@
-"""`mediator_leak_adjudication` — env-conditional adjudication for
-soft-tautological mediators.
+"""`mediator_leak_adjudication` v3 — env-conditional adjudication for
+soft-tautological mediators, using paired McNemar test + power-aware
+disposition + multiplicity hook.
 
 The strict `tautology_audit` primitive flags any mediator whose
 `reads` overlap with the outcome's `reads`. That verdict is binary
@@ -10,148 +11,173 @@ The strict `tautology_audit` primitive flags any mediator whose
     INDEPENDENT inputs (e.g. `bias = Q − MC` combines outcome's
     `mc_return` with the independent `predicted_q_per_step`).
 
-This primitive runs the empirical adjudication test laid out in
-`TAUTOLOGY_AUDIT_DISCIPLINE.md` with **rigor upgrades** flagged by
-the 2026-05-28 critic review:
+This primitive runs the empirical adjudication test. v3 supersedes
+v2 (which had structural issues a critic review surfaced: noise-pad
+"df-matching" was theatre, independent-binomial Wald SE under-stated
+SE for paired data, no UNDERPOWERED disposition, no multiplicity
+correction).
 
-  Compare per-stratum d-separation under THREE depth-2 conditioning
-  sets via `dynamic_pc_adjacency`. df-asymmetry (the killer issue in
-  the v1 implementation: depth-1 sibling vs depth-2 joint gave a df
-  cost rather than an info gain) is fixed by padding the single-
-  mediator runs with a noise variate so all three runs are
-  depth-2:
+**v3 design**:
 
-    1. `{sibling, ε}`         — what the outcome-input leak alone
-                                explains (ε ~ N(0,1) per burst)
-    2. `{mediator, ε}`        — what the full mediator alone explains
-    3. `{mediator, sibling}`  — does conditioning on BOTH improve
-                                over sibling alone?
+1. Two PC runs (no noise-pad): `{sibling}` at depth-1 vs
+   `{mediator, sibling}` at depth-2. The runs use the SAME
+   marg-edge bursts (depth-0 marg test is mediator-independent),
+   so per-burst d-sep booleans are paired.
 
-  Per-stratum `Δ = dsep({mediator, sibling}) − dsep({sibling, ε})`.
-  Wald SE on the proportion difference under binomial:
-  `SE_Δ = sqrt(p_j(1−p_j)/n + p_s(1−p_s)/n)` where n = n_marg-edge
-  bursts. Disposition is `z = Δ / SE_Δ`:
+2. **McNemar paired test** on the discordant pairs. Among bursts
+   with marg_edge=True, let `n_01` = #bursts where joint
+   d-separates but sibling does not (joint > sibling evidence),
+   `n_10` = #bursts where sibling d-separates but joint does not
+   (anomaly). Continuity-corrected z:
 
-    z ≥ +z_genuine (default 1.65 → 95% one-sided) → GENUINE
-    z ≤ −z_hurts (default −1.65)                  → HURTS
-    |z| < z_genuine                               → LEAK
-    n_marg < min_marginal_edges                   → UNDERPOWERED
+   ```
+   z = (n_01 − n_10) / sqrt(n_01 + n_10)   if n_01 + n_10 ≥ 5
+   ```
 
-**Interpretation caveat** (per critic review): GENUINE means
-"the mediator's signal extends beyond the LINEAR span of mean-MC
-(the sibling)." It is **necessary-but-not-sufficient** for the
-mediator's claimed causal mechanism. At γ=0.99 canonical with
-`bias = Q − MC`, GENUINE detects Q-information beyond mean-MC,
-which could equally well be (a) the bias-clip mechanism (Hasselt's
-claim) OR (b) Q's independent causal effects via state-visitation
-/ exploration. The test cannot distinguish.
+   This is the correct paired test — the asymmetric-depth concern
+   is rolled into the fact that joint can only add information at
+   the population level, not subtract it; finite-sample violations
+   are pure noise in `n_10`.
 
-Higher moments of the mediator (variance, sign concentration) and
-nonlinear couplings are not in the sibling-span; the test is
-sensitive to the linear part of the MC-leak. Bridges using this
-primitive should report disposition plus the substantive question
-the test does NOT adjudicate.
+3. **Power-aware disposition**:
 
-Reference implementation: `papers/g099_mediation/scripts/
-gen_mc_leak_adjudication.py`."""
+   - `z ≥ z_genuine` (default 1.65, optionally Bonferroni-adjusted
+     via `n_strata_for_multiplicity`): **GENUINE** — mediator
+     carries information beyond sibling's rank-monotone span at
+     this stratum.
+   - `|z| < z_genuine` AND `n_01 + n_10 < min_discordant`: **UNDERPOWERED_FOR_GENUINE**
+     — insufficient discordant pairs to detect a significant
+     effect. Distinguishes "no evidence" from "evidence of no
+     effect."
+   - `|z| < z_genuine` AND `n_01 + n_10 ≥ min_discordant`: **LEAK**
+     — adequately powered to detect Δ, none found. Mediator is
+     consistent with outcome-leak alone.
+   - `n_marg_edge < min_marginal_edges`: **UNDERPOWERED** (the
+     entire stratum has too few marg-edge bursts).
+
+4. **Multiplicity correction (Bonferroni)**: caller can pass
+   `n_strata_for_multiplicity` to switch the GENUINE threshold to
+   `z(1 − α / n_strata)` (one-sided). Conservative; doesn't
+   pre-screen UNDERPOWERED strata from the multiplicity count.
+
+**Interpretation caveat** (preserved from v2): GENUINE means
+"mediator's signal extends beyond the **rank-monotone** span of
+sibling" (partial-Spearman conditions on rank residuals, not
+linear span — v2's "linear span" wording was technically wrong).
+It is necessary-but-not-sufficient for the mediator's claimed
+causal mechanism. At γ=0.99 with `bias = Q − MC`, GENUINE detects
+Q-information beyond mean-MC, which could equally well be (a) the
+bias-clip mechanism OR (b) Q's independent causal effects via
+state-visitation / exploration. The test cannot distinguish.
+
+Reference: see `TAUTOLOGY_AUDIT_DISCIPLINE.md`."""
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
 
-import numpy as np
 import polars as pl
+from scipy import stats
 
 from corroborate.analyses.dynamic_mediation.pc_adjacency import (
-    dynamic_pc_adjacency,
+    DynamicPCResult, dynamic_pc_adjacency,
 )
 from corroborate.bridge.analysis import analysis
 from corroborate.measurables.measurable import Measurable
 
 
-_NOISE_COL = '_leak_adj_noise_per_burst'
-
-
 class LeakAdjudication(Enum):
     """Per-stratum disposition for a soft-tautological mediator.
 
-    GENUINE: joint conditioning adds info beyond the (df-matched)
-      sibling alone at z ≥ z_genuine (default 95% one-sided). The
-      mediator carries independent-input signal not in the linear
-      span of mean(sibling-reads).
-    LEAK: |z| < z_genuine. The mediator is largely outcome-leak at
-      this stratum (within the sibling's linear span).
-    HURTS: joint d-sep DECREASES significantly (z ≤ −z_hurts).
-      Mediator is contaminating the conditioning set; refuse.
-    UNDERPOWERED: fewer than `min_marginal_edges` marg-edge bursts
-      to support the adjudication."""
+    GENUINE: McNemar z ≥ z_genuine. Mediator's discordant pairs
+      favor joint over sibling significantly. Necessary-but-not-
+      sufficient for the mediator's mechanism claim.
+    LEAK: z < z_genuine AND discordant n ≥ min_discordant. The
+      test was adequately powered to detect a real effect and
+      found none.
+    UNDERPOWERED_FOR_GENUINE: z < z_genuine but discordant n <
+      min_discordant. Cannot adjudicate at this n.
+    UNDERPOWERED: n_marg_edge < min_marginal_edges — the entire
+      stratum lacks marg-edge bursts for the test."""
     GENUINE = 'GENUINE'
     LEAK = 'LEAK'
-    HURTS = 'HURTS'
+    UNDERPOWERED_FOR_GENUINE = 'UNDERPOWERED_FOR_GENUINE'
     UNDERPOWERED = 'UNDERPOWERED'
 
 
 @dataclass(frozen=True, slots=True)
 class StratumLeakResult:
-    """Per-stratum adjudication record for one (mediator, sibling) pair.
-
-    All three `dsep_*` fields are computed at **depth-2** conditioning
-    via noise-padding (so df is matched across runs and Δ is an
-    apples-to-apples comparison)."""
+    """Per-stratum adjudication record. The discordant counts
+    `n_discordant_joint_only` / `n_discordant_sibling_only` are the
+    McNemar (b, c) cells; `z_mcnemar` is the paired-test statistic
+    (continuity-corrected for small n)."""
     stratum_id: tuple[object, ...]
     n_marginal_edges: int
-    dsep_mediator_alone: float    # d-sep% under {mediator, ε}
-    dsep_sibling_alone: float     # d-sep% under {sibling, ε}
-    dsep_joint: float             # d-sep% under {mediator, sibling}
-    delta_pp: float               # joint − sibling, in percentage points
-    se_delta_pp: float            # binomial Wald SE on Δ
-    z_score: float                # Δ / SE_Δ
+    dsep_sibling_only: float
+    dsep_joint: float
+    n_discordant_joint_only: int    # joint d-sep, sib does not
+    n_discordant_sibling_only: int  # sib d-sep, joint does not
+    z_mcnemar: float
     disposition: LeakAdjudication
 
 
 @dataclass(frozen=True, slots=True)
 class MediatorLeakAdjudicationResult:
-    """Output of `mediator_leak_adjudication`. Per-stratum dispositions
-    plus the underlying d-sep numbers for transparent inspection."""
     per_stratum: tuple[StratumLeakResult, ...]
     mediator_name: str
     sibling_name: str
     outcome_name: str
+    z_genuine_threshold: float
+    n_strata_for_multiplicity: int | None
 
     def by_disposition(
         self, disposition: LeakAdjudication,
     ) -> tuple[tuple[object, ...], ...]:
-        """Stratum IDs with the given disposition."""
         return tuple(
             s.stratum_id for s in self.per_stratum
             if s.disposition is disposition
         )
 
     def summary(self) -> dict[LeakAdjudication, int]:
-        """Count of strata per disposition."""
         counts: dict[LeakAdjudication, int] = {d: 0 for d in LeakAdjudication}
         for s in self.per_stratum:
             counts[s.disposition] += 1
         return counts
 
 
-def _inject_noise_column(
-    cells: pl.DataFrame, mediator_col: str, *, seed: int,
-) -> pl.DataFrame:
-    """Add a per-burst N(0,1) noise list-column matched in length
-    to `mediator_col`'s per-cell arrays. Used to pad single-mediator
-    runs to depth-2 so df is matched against the joint run."""
-    rng = np.random.default_rng(seed)
-    med_lists = cells[mediator_col].to_list()
-    noise: list[list[float] | None] = []
-    for arr in med_lists:
-        if arr is None:
-            noise.append(None)
+def _per_burst_booleans(
+    result_dict: Mapping[tuple[object, ...], DynamicPCResult],
+    stratum_id: tuple[object, ...],
+    alpha: float,
+) -> tuple[list[bool], list[bool]]:
+    """For a stratum, return (marg_edge_per_burst, dsep_per_burst)
+    booleans. Derived from p_marginal/p_conditional + alpha."""
+    res = result_dict.get(stratum_id)
+    if res is None:
+        return [], []
+    marg = []
+    dsep = []
+    for p_m, p_c in zip(res.p_marginal, res.p_conditional, strict=False):
+        marg_edge = not math.isnan(p_m) and p_m < alpha
+        if marg_edge:
+            # cond CI: edge present iff p_c < alpha. dsep iff edge absent.
+            cond_edge_absent = math.isnan(p_c) or p_c >= alpha
+            dsep_b = cond_edge_absent
         else:
-            n = len(arr)
-            noise.append(rng.standard_normal(n).tolist())
-    return cells.with_columns(pl.Series(_NOISE_COL, noise))
+            dsep_b = False
+        marg.append(marg_edge)
+        dsep.append(dsep_b)
+    return marg, dsep
+
+
+def _mcnemar_z(n_01: int, n_10: int, *, min_discordant: int = 5) -> float:
+    """Continuity-corrected McNemar z. Returns nan if discordant < min."""
+    n_disc = n_01 + n_10
+    if n_disc < min_discordant:
+        return float('nan')
+    return (n_01 - n_10 - (1 if n_01 > n_10 else -1)) / math.sqrt(n_disc)
 
 
 @analysis
@@ -165,50 +191,38 @@ def mediator_leak_adjudication(
     stratify_by: tuple[str, ...] = ('env_name',),
     min_n_per_burst: int = 8,
     min_marginal_edges: int = 3,
-    z_genuine: float = 1.65,    # 95% one-sided (5% Type I)
-    z_hurts: float = 1.65,      # symmetric
+    min_discordant: int = 5,
+    z_genuine: float = 1.65,
     alpha: float = 0.05,
-    noise_seed: int = 0,
+    n_strata_for_multiplicity: int | None = None,
 ) -> MediatorLeakAdjudicationResult:
-    """Adjudicate a soft-tautological mediator against its outcome-
-    input sibling, per stratum, with df-matched conditioning sets +
-    binomial-Wald SE for the Δ.
+    """Adjudicate a soft-tautological mediator against its outcome-input
+    sibling via McNemar paired test on per-burst d-separation booleans.
 
-    `mediator_per_burst` is the candidate mediator (typically a
-    soft-tautology like `mean_per_state_cumulative_bias_per_burst`).
-    `sibling_per_burst` is the matched outcome-input-only column
-    (e.g. `mean_mc_per_state_per_burst` for the bias mediator). The
-    sibling is what would remain if the mediator were "merely
-    tautology" — its reads cover the outcome-overlap but none of
-    the mediator's independent inputs.
+    `mediator_per_burst` and `sibling_per_burst` must be string column
+    names; the primitive uses them to query `dynamic_pc_adjacency`
+    at depth-1 (sibling alone) and depth-2 (mediator + sibling).
 
-    For each stratum we run `dynamic_pc_adjacency` three times, all
-    at depth-2 (df-matched):
+    `n_strata_for_multiplicity`: if given, switches `z_genuine` to the
+    Bonferroni-adjusted one-sided z corresponding to α / n_strata. Use
+    the total number of strata tested across the audit (i.e. NOT just
+    the n_strata that came back GENUINE)."""
+    # Resolve the effective z_genuine.
+    if n_strata_for_multiplicity is not None and n_strata_for_multiplicity > 1:
+        alpha_corrected = (1 - stats.norm.cdf(z_genuine)) / n_strata_for_multiplicity
+        z_genuine_eff = stats.norm.ppf(1 - alpha_corrected)
+    else:
+        z_genuine_eff = z_genuine
 
-      - {mediator, ε} — single-mediator + ε noise pad
-      - {sibling, ε}  — single-sibling + ε noise pad
-      - {mediator, sibling} — joint
-
-    Compares joint d-sep% against sibling d-sep% with binomial-Wald
-    SE on the proportion difference. The z-score classifies per
-    stratum: GENUINE / LEAK / HURTS / UNDERPOWERED.
-
-    Currently requires `mediator_per_burst` and `sibling_per_burst`
-    to be string column names (not bare Measurable instances) so the
-    noise-padding can use the column's per-cell array lengths.
-    Lifting this constraint requires walking the Measurable's
-    transitive reads to recover lengths — left for a follow-up."""
     if cells.height == 0:
         return MediatorLeakAdjudicationResult(
             per_stratum=(),
             mediator_name=str(mediator_per_burst),
             sibling_name=str(sibling_per_burst),
             outcome_name=str(outcome_per_burst),
+            z_genuine_threshold=z_genuine_eff,
+            n_strata_for_multiplicity=n_strata_for_multiplicity,
         )
-
-    cells_aug = _inject_noise_column(
-        cells, mediator_per_burst, seed=noise_seed,
-    )
 
     common_kwargs = dict(
         arm_field=arm_field,
@@ -217,89 +231,80 @@ def mediator_leak_adjudication(
         min_n_per_burst=min_n_per_burst,
         alpha=alpha,
     )
-    mediator_res = dynamic_pc_adjacency.fn(
-        cells_aug,
-        mediator_per_burst=(mediator_per_burst, _NOISE_COL),
-        **common_kwargs,
-    )
     sibling_res = dynamic_pc_adjacency.fn(
-        cells_aug,
-        mediator_per_burst=(sibling_per_burst, _NOISE_COL),
+        cells,
+        mediator_per_burst=sibling_per_burst,
         **common_kwargs,
     )
     joint_res = dynamic_pc_adjacency.fn(
-        cells_aug,
+        cells,
         mediator_per_burst=(mediator_per_burst, sibling_per_burst),
         **common_kwargs,
     )
 
-    strata = sorted(
-        set(mediator_res.keys())
-        & set(sibling_res.keys())
-        & set(joint_res.keys())
-    )
+    strata = sorted(set(sibling_res.keys()) & set(joint_res.keys()))
     per_stratum: list[StratumLeakResult] = []
     for s_id in strata:
-        m = mediator_res[s_id]
-        sib = sibling_res[s_id]
-        joint = joint_res[s_id]
-        marg = m.n_bursts_marginal_edge
-        if marg < min_marginal_edges:
+        sib_marg, sib_dsep = _per_burst_booleans(sibling_res, s_id, alpha)
+        joint_marg, joint_dsep = _per_burst_booleans(joint_res, s_id, alpha)
+        # marg-edge set must be identical across the two runs because
+        # the depth-0 marg test is mediator-independent. Take the
+        # intersection defensively (handles edge cases where one run
+        # had NaN p-value at a burst).
+        n_bursts = min(len(sib_marg), len(joint_marg))
+        marg_intersect = [
+            sib_marg[b] and joint_marg[b] for b in range(n_bursts)
+        ]
+        n_marg = sum(marg_intersect)
+        if n_marg < min_marginal_edges:
             per_stratum.append(StratumLeakResult(
                 stratum_id=s_id,
-                n_marginal_edges=marg,
-                dsep_mediator_alone=float('nan'),
-                dsep_sibling_alone=float('nan'),
+                n_marginal_edges=n_marg,
+                dsep_sibling_only=float('nan'),
                 dsep_joint=float('nan'),
-                delta_pp=float('nan'),
-                se_delta_pp=float('nan'),
-                z_score=float('nan'),
+                n_discordant_joint_only=0,
+                n_discordant_sibling_only=0,
+                z_mcnemar=float('nan'),
                 disposition=LeakAdjudication.UNDERPOWERED,
             ))
             continue
 
-        m_dsep = m.n_bursts_mediator_dseparates / marg * 100
-        sib_marg = sib.n_bursts_marginal_edge
-        joint_marg = joint.n_bursts_marginal_edge
-        sib_dsep = (
-            sib.n_bursts_mediator_dseparates / sib_marg * 100
-            if sib_marg > 0 else 0.0
+        # Restrict to marg-edge bursts; compute paired d-sep counts.
+        n_sib_dsep = sum(
+            sib_dsep[b] for b in range(n_bursts) if marg_intersect[b]
         )
-        joint_dsep = (
-            joint.n_bursts_mediator_dseparates / joint_marg * 100
-            if joint_marg > 0 else 0.0
+        n_joint_dsep = sum(
+            joint_dsep[b] for b in range(n_bursts) if marg_intersect[b]
+        )
+        n_01 = sum(  # joint d-sep, sib does not
+            (joint_dsep[b] and not sib_dsep[b])
+            for b in range(n_bursts) if marg_intersect[b]
+        )
+        n_10 = sum(  # sib d-sep, joint does not
+            (sib_dsep[b] and not joint_dsep[b])
+            for b in range(n_bursts) if marg_intersect[b]
         )
 
-        # Binomial Wald SE on the proportion difference.
-        # SE_Δ = sqrt(p_j(1−p_j)/n_j + p_s(1−p_s)/n_s) — approximate
-        # (paired structure would McNemar-style be tighter; treat as
-        # conservative upper bound on Type-I error).
-        p_j = joint_dsep / 100
-        p_s = sib_dsep / 100
-        n_j = max(joint_marg, 1)
-        n_s = max(sib_marg, 1)
-        se_j = (p_j * (1 - p_j) / n_j) ** 0.5
-        se_s = (p_s * (1 - p_s) / n_s) ** 0.5
-        se_delta_pp = ((se_j ** 2 + se_s ** 2) ** 0.5) * 100
-        delta = joint_dsep - sib_dsep
-        z = delta / se_delta_pp if se_delta_pp > 1e-9 else 0.0
+        z = _mcnemar_z(n_01, n_10, min_discordant=min_discordant)
+        n_disc = n_01 + n_10
 
-        if z >= z_genuine:
+        if math.isnan(z):
+            disposition = LeakAdjudication.UNDERPOWERED_FOR_GENUINE
+        elif z >= z_genuine_eff:
             disposition = LeakAdjudication.GENUINE
-        elif z <= -z_hurts:
-            disposition = LeakAdjudication.HURTS
+        elif n_disc < min_discordant:
+            disposition = LeakAdjudication.UNDERPOWERED_FOR_GENUINE
         else:
             disposition = LeakAdjudication.LEAK
 
         per_stratum.append(StratumLeakResult(
             stratum_id=s_id,
-            n_marginal_edges=marg,
-            dsep_mediator_alone=m_dsep,
-            dsep_sibling_alone=sib_dsep,
-            dsep_joint=joint_dsep,
-            delta_pp=delta,
-            se_delta_pp=se_delta_pp,
-            z_score=z,
+            n_marginal_edges=n_marg,
+            dsep_sibling_only=n_sib_dsep / n_marg * 100,
+            dsep_joint=n_joint_dsep / n_marg * 100,
+            n_discordant_joint_only=n_01,
+            n_discordant_sibling_only=n_10,
+            z_mcnemar=z,
             disposition=disposition,
         ))
 
@@ -308,6 +313,8 @@ def mediator_leak_adjudication(
         mediator_name=str(mediator_per_burst),
         sibling_name=str(sibling_per_burst),
         outcome_name=str(outcome_per_burst),
+        z_genuine_threshold=z_genuine_eff,
+        n_strata_for_multiplicity=n_strata_for_multiplicity,
     )
 
 
