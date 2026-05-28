@@ -1,0 +1,57 @@
+name: asterix_g0999_adamw_wd1e4_ckpt
+out_dir: experiments/data/asterix_g0999_adamw_wd1e4_ckpt
+env_binding: shared
+archive_remote: s3://corroborate-archive/asterix_g0999_adamw_wd1e4_ckpt
+
+# Dose-response point: wd=1e-4 (10× weaker than wd=1e-3 finding).
+# Tests whether wd=1e-3's 77% harm reduction is at a dose-response
+# midpoint or already saturated. wd=1e-4 should sit between canonical
+# (wd=0, d_raw_final = -1.60) and wd=1e-3 (d_raw_final = -0.19).
+#
+# Prediction under "linear dose-response":
+#   d_raw_final(wd=1e-4) ≈ -1.20  (~25% reduction)
+# Prediction under "threshold/saturation at wd=1e-3":
+#   d_raw_final(wd=1e-4) ≈ -1.50  (near-canonical)
+
+keep_q_checkpoint_per_burst: true
+keep_q_checkpoint_final: true
+
+envs:
+  - {name: Asterix-MinAtar, n_seeds: 15, chunk_size: 15}
+
+defaults:
+  total_steps: 1000000
+  eval_every:  20000
+  n_episodes:  20
+  gamma:       0.999
+  sync_period: 1000
+  n_step:      1
+  replay:
+    class: Replay
+    capacity: 100000
+    batch_size: 32
+  optimizer:
+    fn: warmed_update
+    inner: {fn: adam, lr: 0.0001, weight_decay: 0.0001}
+    warmup_steps: 100
+  action_select:
+    fn: epsilon_greedy
+    schedule:
+      fn: linear_epsilon
+      eps_init: 1.0
+      eps_final: 0.05
+      anneal_steps: 100000
+  q_network:
+    class: CNN
+    obs_shape: [10, 10, 4]
+    channels: [16]
+    kernel_size: 3
+    hidden: [128]
+
+interventions:
+  - name: adamw_wd1e4
+    base: {}
+    arms:
+      - []
+      - - slot_path: bootstrap
+          replacement: {fn: bootstrap, greedification: {fn: double_greedify}}
