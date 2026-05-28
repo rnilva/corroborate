@@ -871,3 +871,98 @@ def test_with_traces_skips_source_with_none_data_root(
     assert 'extra_trace_col' in joined.cells.columns
 
 
+
+
+# ============ P6 — measurable availability matrix ============
+
+def test_measurable_availability_matrix_classifies_uniform_partial_unavailable(
+) -> None:
+    """P6 fix. Three classification buckets:
+
+    - `uniform_available`: finite at >0% of cells in EVERY env.
+    - `partial`: finite at >0% of cells in SOME envs, but not all.
+    - `unavailable`: <=1% finite across ALL envs.
+    """
+    import polars as pl
+
+    from corroborate.data import Panel
+    from corroborate.measurables import measurable
+
+    # Register three test measurables so the panel's columns
+    # resolve as registered names. The panel column names must
+    # match registered-measurable names for the matrix.
+    @measurable
+    def __p6_uniform(record: 'Mapping[str, object]') -> float:
+        del record
+        return 1.0
+
+    @measurable
+    def __p6_partial(record: 'Mapping[str, object]') -> float:
+        del record
+        return 1.0
+
+    @measurable
+    def __p6_unavailable(record: 'Mapping[str, object]') -> float:
+        del record
+        return 1.0
+
+    cells = pl.DataFrame({
+        'env_name': ['envA', 'envA', 'envB', 'envB'],
+        # uniform: finite in both envs
+        '__p6_uniform': [1.0, 2.0, 3.0, 4.0],
+        # partial: finite in envA only, NaN in envB
+        '__p6_partial': [1.0, 2.0, float('nan'), float('nan')],
+        # unavailable: NaN everywhere
+        '__p6_unavailable': [float('nan')] * 4,
+    })
+    panel = Panel(cells=cells)
+    matrix = panel.measurable_availability_matrix()
+    assert '__p6_uniform' in matrix.uniform_available
+    assert '__p6_partial' in matrix.partial
+    assert '__p6_unavailable' in matrix.unavailable
+    # Cell counts per env
+    assert matrix.cell_counts['envA'] == 2
+    assert matrix.cell_counts['envB'] == 2
+    # Availability fractions
+    assert matrix.availability['envA']['__p6_uniform'] == 1.0
+    assert matrix.availability['envA']['__p6_partial'] == 1.0
+    assert matrix.availability['envB']['__p6_partial'] == 0.0
+
+
+def test_measurable_availability_matrix_empty_panel() -> None:
+    """Empty panel returns empty matrix."""
+    import polars as pl
+
+    from corroborate.data import Panel
+
+    panel = Panel(cells=pl.DataFrame())
+    matrix = panel.measurable_availability_matrix()
+    assert matrix.availability == {}
+    assert matrix.cell_counts == {}
+    assert matrix.uniform_available == frozenset()
+    assert matrix.partial == frozenset()
+    assert matrix.unavailable == frozenset()
+
+
+def test_measurable_availability_matrix_missing_env_column_falls_back() -> None:
+    """When the env_column doesn't exist on the panel, the whole
+    panel is treated as one env (substrate convenience — panels
+    that haven't been env-stamped still get availability info)."""
+    import polars as pl
+
+    from corroborate.data import Panel
+    from corroborate.measurables import measurable
+
+    @measurable
+    def __p6_no_env_col(record: 'Mapping[str, object]') -> float:
+        del record
+        return 1.0
+
+    cells = pl.DataFrame({
+        '__p6_no_env_col': [1.0, 2.0, 3.0],
+    })
+    panel = Panel(cells=cells)
+    matrix = panel.measurable_availability_matrix()
+    # Single-env fallback group
+    assert len(matrix.cell_counts) == 1
+    assert '__p6_no_env_col' in matrix.uniform_available

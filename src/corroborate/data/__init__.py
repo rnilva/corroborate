@@ -19,6 +19,7 @@ from __future__ import annotations
 from corroborate.data.panel import (
     CorpusSource,
     DerivedSpec,
+    MeasurableAvailability,
     Panel,
     PanelDiagnostics,
 )
@@ -26,6 +27,7 @@ from corroborate.data.panel import (
 __all__ = [
     'CorpusSource',
     'DerivedSpec',
+    'MeasurableAvailability',
     'Panel',
     'PanelDiagnostics',
 ]

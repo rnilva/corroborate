@@ -87,6 +87,122 @@ class DerivedSpec:
 
 
 @dataclass(frozen=True, slots=True)
+class MeasurableAvailability:
+    """P6 — typed per-env-per-measurable availability matrix.
+
+    `availability`: outer key is env value (substrate-specific —
+    typically env_name string); inner key is measurable name;
+    value is the fraction of cells in that env where the column
+    is non-null + non-NaN. Range [0.0, 1.0].
+
+    `uniform_available`: measurable names finite on >0% of cells
+    in EVERY env. These are the names a cross-env analysis can
+    safely require without losing any env.
+
+    `partial`: measurable names finite on >0% of cells in SOME
+    envs but not ALL. Consumers must decide per-env: drop env,
+    drop measurable, impute. The L3b per-env best-mediator script
+    is the canonical example: per-env candidate auto-detection
+    branches on this set.
+
+    `unavailable`: measurable names that are >99% NaN across the
+    ENTIRE panel (every env). Either substrate-unsatisfiable for
+    this corpus set (e.g., reads cloud-evicted traces never
+    locally available), or registered post-sweep with no
+    recompute path.
+
+    `cell_counts`: per-env total cell count — useful denominator
+    when reporting fractional availability."""
+    availability: Mapping[object, Mapping[str, float]]
+    cell_counts: Mapping[object, int]
+    uniform_available: frozenset[str]
+    partial: frozenset[str]
+    unavailable: frozenset[str]
+
+
+def _compute_availability_matrix(
+    cells: pl.DataFrame,
+    names: tuple[str, ...],
+    *,
+    env_column: str,
+) -> MeasurableAvailability:
+    """Internal helper for `Panel.measurable_availability_matrix`.
+
+    Walks each (env, measurable) pair, computes fraction of cells
+    finite-not-null, classifies into uniform / partial /
+    unavailable buckets."""
+    if cells.height == 0 or not names:
+        return MeasurableAvailability(
+            availability={}, cell_counts={},
+            uniform_available=frozenset(),
+            partial=frozenset(),
+            unavailable=frozenset(),
+        )
+    if env_column not in cells.columns:
+        # Treat the whole panel as one env when the stratification
+        # column doesn't exist. Avoids forcing the substrate-author
+        # to special-case panels without env_name.
+        env_values: tuple[object, ...] = ('__panel__',)
+        subs = [cells]
+    else:
+        # Sort env values for deterministic iteration order — the
+        # caller may use this to derive labels.
+        unique_envs = cells[env_column].unique().to_list()
+        # Stable sort: numerics first by value, strings
+        # alphabetically. Mixed-dtype envs fall back to repr.
+        def _sort_key(v: object) -> tuple[int, str]:
+            if v is None:
+                return (0, '')
+            return (1, repr(v))
+        env_values = tuple(sorted(unique_envs, key=_sort_key))
+        subs = [
+            cells.filter(pl.col(env_column) == v)
+            for v in env_values
+        ]
+    availability: dict[object, dict[str, float]] = {}
+    cell_counts: dict[object, int] = {}
+    for env_v, sub in zip(env_values, subs):
+        per_meas: dict[str, float] = {}
+        n_cells = sub.height
+        cell_counts[env_v] = n_cells
+        for name in names:
+            if name not in sub.columns:
+                per_meas[name] = 0.0
+                continue
+            col = sub[name]
+            if col.dtype.is_float():
+                n_ok = int((col.is_not_null() & col.is_finite()).sum())
+            else:
+                n_ok = int(col.is_not_null().sum())
+            per_meas[name] = n_ok / n_cells if n_cells > 0 else 0.0
+        availability[env_v] = per_meas
+    # Classify: a measurable is uniform_available iff every env
+    # has nonzero finite fraction; unavailable iff every env has
+    # <=0.01 finite fraction; partial otherwise.
+    uniform_available: set[str] = set()
+    unavailable: set[str] = set()
+    partial: set[str] = set()
+    for name in names:
+        per_env_fracs = [
+            availability[env_v].get(name, 0.0)
+            for env_v in env_values
+        ]
+        if all(f > 0.0 for f in per_env_fracs):
+            uniform_available.add(name)
+        elif all(f <= 0.01 for f in per_env_fracs):
+            unavailable.add(name)
+        else:
+            partial.add(name)
+    return MeasurableAvailability(
+        availability=availability,
+        cell_counts=cell_counts,
+        uniform_available=frozenset(uniform_available),
+        partial=frozenset(partial),
+        unavailable=frozenset(unavailable),
+    )
+
+
+@dataclass(frozen=True, slots=True)
 class PanelDiagnostics:
     """Typed per-stratum facts. All four diagnostics as
     read-only attribute maps; no assertion methods.
@@ -755,6 +871,59 @@ class Panel:
             required_measurables=self.required_measurables,
         )
 
+    def measurable_availability_matrix(
+        self,
+        names: Sequence[str] | None = None,
+        *,
+        env_column: str = 'env_name',
+    ) -> 'MeasurableAvailability':
+        """**P6 fix** — per-env-per-measurable availability matrix.
+
+        Different corpora carry different subsets of registered
+        measurables (P6 in `FRAMEWORK_INGEST_PITFALLS.md`): a
+        sweep that ran before a measurable was added has it as
+        NaN, while a newer sweep has it populated. The cache
+        silently joins inconsistent stores into a single DataFrame
+        with column-specific NaN — consumers that filter on
+        `is_finite()` accidentally drop entire envs.
+
+        This surface makes the divergence first-class:
+
+        - `availability`: `{env_value: {measurable_name: float}}`
+          — fraction of finite cells per (env, measurable).
+        - `uniform_available`: names finite on >0% of cells in
+          EVERY env (consumers can safely require these).
+        - `partial`: names finite on >0% of cells in SOME envs
+          but not all (operator must decide: drop env / drop
+          measurable / impute).
+        - `unavailable`: names that are >99% NaN across the
+          panel (a measurable that's effectively absent — either
+          unsatisfiable for this corpus set, or registered
+          post-sweep with no recompute path).
+
+        `names`: subset to consider (default: every column on
+        `self.cells` that names a registered `@measurable`).
+
+        `env_column`: stratification key. Defaults to `env_name`;
+        substrate-author may override (`corpus`, `arm_key`, etc.)
+        for finer-grained availability views.
+
+        Pure read; no side effects."""
+        from corroborate.measurables import registered_names
+        measurable_set = frozenset(registered_names())
+        if names is None:
+            candidate_names = tuple(
+                c for c in self.cells.columns
+                if c in measurable_set
+            )
+        else:
+            candidate_names = tuple(
+                n for n in names if n in self.cells.columns
+            )
+        return _compute_availability_matrix(
+            self.cells, candidate_names, env_column=env_column,
+        )
+
     @cached_property
     def diagnostics(self) -> PanelDiagnostics:
         """Typed per-stratum facts. Cached on first access via
@@ -875,6 +1044,7 @@ class Panel:
 __all__ = [
     'CorpusSource',
     'DerivedSpec',
+    'MeasurableAvailability',
     'Panel',
     'PanelDiagnostics',
 ]
