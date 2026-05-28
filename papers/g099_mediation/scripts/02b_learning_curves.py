@@ -177,12 +177,39 @@ def main() -> None:
 
         pk = pxy_peak.get(env, 0.5)
         lt = pxy_late.get(env, 0.5)
+        # Saturation detection: per-env env-cap inferred from the
+        # joint V+D max; if >70% of seeds in EITHER arm peak within
+        # 1% of the joint-cap, the peak metric saturates and its
+        # P(D>V) is a sampling-noise artifact of below-cap outliers,
+        # not a real treatment effect (e.g. CartPole 29/30 V + 28/30
+        # D seeds reach the env cap of 500).
+        peak_vals_all = sub['eval_best_burst_raw_mean'].drop_nulls().to_list()
+        env_cap = max(peak_vals_all) if peak_vals_all else 0.0
+        sat_frac_per_arm: list[float] = []
+        for arm in (BASELINE_ARM, TREATMENT_ARM):
+            arm_peaks = (
+                sub.filter(pl.col('arm_key') == arm)
+                ['eval_best_burst_raw_mean'].drop_nulls().to_list()
+            )
+            if arm_peaks and env_cap > 0:
+                sat_frac_per_arm.append(
+                    sum(1 for v in arm_peaks if v >= 0.99 * env_cap)
+                    / len(arm_peaks)
+                )
+        saturated = bool(sat_frac_per_arm) and max(sat_frac_per_arm) > 0.7
+
         sign_peak = '+' if pk > 0.5 else ('−' if pk < 0.5 else '·')
         sign_late = '+' if lt > 0.5 else ('−' if lt < 0.5 else '·')
-        agree = '✓' if sign_peak == sign_late else '↕'
+        # Don't call ↕ vs ✓ on the peak axis when peak is saturated.
+        if saturated:
+            agree = '⊥'  # saturated: peak metric not informative
+            peak_label = f'peak={pk:.2f} (SAT)'
+        else:
+            agree = '✓' if sign_peak == sign_late else '↕'
+            peak_label = f'peak={pk:.2f}'
         ax.set_title(
             f'{env_label(env)}  {agree}\n'
-            f'P(D>V)  peak={pk:.2f}  late30={lt:.2f}',
+            f'P(D>V)  {peak_label}  late30={lt:.2f}',
             fontsize=9,
         )
         ax.set_xlabel('training step', fontsize=8)
@@ -194,17 +221,41 @@ def main() -> None:
     for j in range(n, len(axes_flat)):
         axes_flat[j].set_axis_off()
 
-    n_agree = sum(
-        1 for e in envs
-        if (pxy_peak.get(e, 0.5) - 0.5) * (pxy_late.get(e, 0.5) - 0.5) >= 0
-    )
+    # Recompute agreement counts with saturation flag.
+    n_agree = 0
+    n_sat = 0
+    n_disagree = 0
+    for e in envs:
+        sub_e = df.filter(pl.col('env_name') == e)
+        peak_vals_all = sub_e['eval_best_burst_raw_mean'].drop_nulls().to_list()
+        env_cap = max(peak_vals_all) if peak_vals_all else 0.0
+        sat_frac_per_arm: list[float] = []
+        for arm in (BASELINE_ARM, TREATMENT_ARM):
+            arm_peaks = (
+                sub_e.filter(pl.col('arm_key') == arm)
+                ['eval_best_burst_raw_mean'].drop_nulls().to_list()
+            )
+            if arm_peaks and env_cap > 0:
+                sat_frac_per_arm.append(
+                    sum(1 for v in arm_peaks if v >= 0.99 * env_cap)
+                    / len(arm_peaks)
+                )
+        if sat_frac_per_arm and max(sat_frac_per_arm) > 0.7:
+            n_sat += 1
+            continue
+        pk = pxy_peak.get(e, 0.5)
+        lt = pxy_late.get(e, 0.5)
+        if (pk - 0.5) * (lt - 0.5) >= 0:
+            n_agree += 1
+        else:
+            n_disagree += 1
     fig.suptitle(
         'Layer 2 companion: per-env learning curves at γ=0.99 canonical (raw return)\n'
         'median across seeds, IQR fill (25-75%), 5/95 envelope; ♦ = mean per-seed peak; '
         'gold band = late-30% window\n'
-        f'Title shows P(D>V) under BOTH metrics — peak (best-burst) and '
-        f'late30 (last 30%); {n_agree}/{len(envs)} envs agree on sign ✓; '
-        'rest are ↕ metric-sensitive',
+        f'Title shows P(D>V) under BOTH metrics — peak / late30. '
+        f'Non-saturating envs: {n_agree} agree ✓, {n_disagree} metric-sensitive ↕; '
+        f'{n_sat} saturated ⊥ (peak P(D>V) is a sampling artifact of below-cap outliers)',
         fontsize=10,
     )
     plt.tight_layout(rect=[0, 0, 1, 0.96])
